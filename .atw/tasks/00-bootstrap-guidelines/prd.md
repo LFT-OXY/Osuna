@@ -26,13 +26,18 @@ the rest conversationally.
 - [ ] Fill guidelines for @getpaseo/plugin
 - [ ] Fill guidelines for @getpaseo/protocol
 - [ ] Fill guidelines for @getpaseo/client
-- [ ] Fill guidelines for @getpaseo/server
-- [ ] Fill guidelines for @getpaseo/app
+- [x] Fill guidelines for @getpaseo/server
+- [x] Fill guidelines for @getpaseo/app
 - [ ] Fill guidelines for @getpaseo/relay
 - [ ] Fill guidelines for @getpaseo/website
 - [ ] Fill guidelines for @getpaseo/desktop
 - [ ] Fill guidelines for @getpaseo/cli
-- [ ] Add code examples
+- [~] Add code examples (server and app done; remaining packages pending)
+
+### Progress notes
+
+- 2026-09-17: `server` and `app` written in English from `docs/` plus source evidence. Scaffold layers that did not match the package were deleted: `spec/server/frontend/` and `spec/app/backend/` are gone, and the file sets were reshaped (`persistence.md`, `rpc-and-protocol.md`, `logging.md`, `testing.md` for server; `styling.md`, `hooks-and-data.md`, `testing.md` for app). Remaining nine packages untouched.
+- Doc conflict found and fixed: `CLAUDE.md` "Platform gating" and `docs/design.md` §14 forbade `onPointerEnter`/`onPointerLeave`, contradicting the canonical envelope in `docs/hover.md`. Both now point at `hover.md` and keep `onHoverIn`/`onHoverOut` only for a `Pressable` styling itself. `docs/design.md` also pointed `SettingsSection` at a path that no longer exists; corrected to `components/settings/headings/settings-section.tsx`.
 
 ---
 

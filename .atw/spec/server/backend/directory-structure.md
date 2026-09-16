@@ -1,54 +1,59 @@
 # Directory Structure
 
-> How backend code is organized in this project.
+All daemon code is under `packages/server/src/`. ESM with `.js` import suffixes on relative paths (`./bootstrap.js`), TypeScript strict, `@getpaseo/*` workspace packages imported by subpath (`@getpaseo/protocol/error-utils`).
 
----
+## Top level
 
-## Overview
+| Directory | Owns |
+|-----------|------|
+| `server/` | The daemon: bootstrap, WebSocket server, session, agent manager, providers, stores, schedules, plugins, hub, speech |
+| `server/session/<domain>/` | Session RPC handlers split by domain: `checkout/`, `files/`, `provider/`, `schedule/`, `voice/`, `workspace-git-observer/`, `owned-subscriptions/`, … |
+| `server/agent/` | Agent lifecycle (`agent-manager.ts`), persistence (`agent-storage.ts`), tool catalog (`tools/`), MCP adapter, `providers/` |
+| `server/test-utils/` | Daemon E2E harness: `paseo-daemon.ts`, `daemon-client.ts`, `fake-agent-client.ts`, `session-stubs.ts`, `temp-github-repo.ts` |
+| `services/` | Git forge adapters: `forge-service.ts` is the port; `github-service.ts`, `gitlab-service.ts`, `gitea-service.ts` are adapters; `forge-registry.ts` / `forge-resolver.ts` pick one |
+| `terminal/` | PTY sessions, output coalescing, shell integration, activity tracking (`docs/terminal-performance.md`, `docs/terminal-activity.md`) |
+| `utils/` | Process and Git primitives: `spawn.ts`, `run-git-command.ts`, `git-process-scheduler.ts`, `tree-kill.ts`, `path.ts`, `worktree.ts` |
+| `tasks/` | Task documents and execution graph for orchestration |
+| `executable-resolution/` | Locating provider binaries, with a Windows variant |
+| `test-utils/` (package root) | `vitest-setup.ts` (loads `.env.test`, sets `PASEO_SUPERVISED=0`), `test-logger.ts`, `platform.ts` |
 
-<!--
-Document your project's backend directory structure here.
+`docs/architecture.md` has the key-modules table with one line per module. Keep that table current when you add a module.
 
-Questions to answer:
-- How are modules/packages organized?
-- Where does business logic live?
-- Where are API endpoints defined?
-- How are utilities and helpers organized?
--->
+## Shape of a domain
 
-(To be filled by the team)
-
----
-
-## Directory Layout
+A domain is a directory with one public surface and colocated tests. `server/session/checkout/` is the reference:
 
 ```
-<!-- Replace with your actual structure -->
-src/
-├── ...
-└── ...
+server/session/checkout/
+  checkout-session.ts          # the handler module the session delegates to
+  checkout-session.test.ts
+  git-metadata-generator.ts
+  git-metadata-generator.test.ts
 ```
 
----
+Rules that the tree enforces by example:
 
-## Module Organization
+- **Path is part of the name.** `server/pagination/cursor.ts`, not `server/pagination-cursor-utils.ts`. Deepen the path before adding a suffix.
+- **No `index.ts` barrels that only re-export.** The few `index.ts` files that exist (`server/session/owned-subscriptions/index.ts`, `server/orchestration-skills/index.ts`, `server/plugins/settings/index.ts`) carry real code. Import from the source file.
+- **Tests sit next to the file:** `pid-lock.ts` + `pid-lock.test.ts`. Variant suffixes route them: `.posix.test.ts`, `.e2e.test.ts`, `.real.e2e.test.ts`, `.local.e2e.test.ts` (see [Testing](./testing.md)).
+- **Daemon E2E specs live in `server/daemon-e2e/`**, named after the behavior they prove (`daemon-restart-resume.e2e.test.ts`, `permissions-codex.e2e.test.ts`), never after execution order.
+- **Session-level tests are split by concern with a dotted name:** `session.workspaces.test.ts`, `session.wait-for-finish.test.ts`, `session.lifecycle-boundary.test.ts`. Follow that when `session.ts` grows a new concern.
 
-<!-- How should new features/modules be organized? -->
+## Where a new thing goes
 
-(To be filled by the team)
+| You are adding | Put it in |
+|----------------|-----------|
+| A session RPC | Schema in `packages/protocol/src/`, then a handler in `server/session/<domain>/` wired from the `switch (msg.type)` in `server/session.ts`. See [RPC and Protocol](./rpc-and-protocol.md). |
+| A persisted record | A store class next to its consumer (`server/agent/agent-storage.ts`, `server/workspace-registry.ts`, `server/daemon-config-store.ts`) with its Zod schema. See [Persistence](./persistence.md). |
+| A forge integration | `services/<forge>-service.ts` + `services/<forge>-facts.ts`, registered in `forge-registry.ts`. `docs/forge-providers.md` has the checklist. |
+| An agent provider | `server/agent/providers/`. `docs/providers.md` is the end-to-end guide. |
+| A process spawn | Go through `utils/spawn.ts`; Git goes through `utils/run-git-command.ts` so it is scheduled and traced. |
+| A file under `$PASEO_HOME` | Document it in `docs/data-model.md` directory layout. |
 
----
+If placement is unclear, say so in the PR or ask. Do not drop a file at `server/` root because it was the nearest directory.
 
-## Naming Conventions
+## Anti-patterns seen in review
 
-<!-- File and folder naming rules -->
-
-(To be filled by the team)
-
----
-
-## Examples
-
-<!-- Link to well-organized modules as examples -->
-
-(To be filled by the team)
+- `*-utils.ts`, `*-helpers.ts`, `*-manager.ts` for new files. `checkout-git-utils.ts` and `terminal-manager.ts` exist; they are not a license.
+- A new module that wraps an existing coordinator instead of editing it (`docs/coding-standards.md` "Refactoring is a bolt-on test").
+- Importing another package's `dist/` or deep internals. Use the package's exported subpaths.
