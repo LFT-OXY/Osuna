@@ -21,22 +21,23 @@ the rest conversationally.
 
 ## Status (update the checkboxes as you complete each item)
 
-- [ ] Fill guidelines for @getpaseo/expo-two-way-audio
-- [ ] Fill guidelines for @getpaseo/highlight
-- [ ] Fill guidelines for @getpaseo/plugin
-- [ ] Fill guidelines for @getpaseo/protocol
-- [ ] Fill guidelines for @getpaseo/client
+- [x] Fill guidelines for @getpaseo/expo-two-way-audio (dropped: scaffold removed, no spec for this package)
+- [x] Fill guidelines for @getpaseo/highlight (dropped: scaffold removed, no spec for this package)
+- [x] Fill guidelines for @getpaseo/plugin (dropped: scaffold removed, no spec for this package)
+- [x] Fill guidelines for @getpaseo/protocol (dropped: scaffold removed, no spec for this package)
+- [x] Fill guidelines for @getpaseo/client (dropped: scaffold removed, no spec for this package)
 - [x] Fill guidelines for @getpaseo/server
 - [x] Fill guidelines for @getpaseo/app
-- [ ] Fill guidelines for @getpaseo/relay
-- [ ] Fill guidelines for @getpaseo/website
-- [ ] Fill guidelines for @getpaseo/desktop
-- [ ] Fill guidelines for @getpaseo/cli
-- [~] Add code examples (server and app done; remaining packages pending)
+- [x] Fill guidelines for @getpaseo/relay (dropped: scaffold removed, no spec for this package)
+- [x] Fill guidelines for @getpaseo/website (dropped: scaffold removed, no spec for this package)
+- [x] Fill guidelines for @getpaseo/desktop (dropped: scaffold removed, no spec for this package)
+- [x] Fill guidelines for @getpaseo/cli (dropped: scaffold removed, no spec for this package)
+- [x] Add code examples (server and app)
 
 ### Progress notes
 
-- 2026-09-17: `server` and `app` written in English from `docs/` plus source evidence. Scaffold layers that did not match the package were deleted: `spec/server/frontend/` and `spec/app/backend/` are gone, and the file sets were reshaped (`persistence.md`, `rpc-and-protocol.md`, `logging.md`, `testing.md` for server; `styling.md`, `hooks-and-data.md`, `testing.md` for app). Remaining nine packages untouched.
+- 2026-09-17: `server` and `app` written in English from `docs/` plus source evidence. Scaffold layers that did not match the package were deleted: `spec/server/frontend/` and `spec/app/backend/` are gone, and the file sets were reshaped (`persistence.md`, `rpc-and-protocol.md`, `logging.md`, `testing.md` for server; `styling.md`, `hooks-and-data.md`, `testing.md` for app). 
+- 2026-09-17: The remaining nine packages were dropped on purpose. Their scaffold directories under `.atw/spec/` were removed; only `server`, `app`, and `guides` carry specs. Add a package directory back only when it earns real conventions.
 - Doc conflict found and fixed: `CLAUDE.md` "Platform gating" and `docs/design.md` §14 forbade `onPointerEnter`/`onPointerLeave`, contradicting the canonical envelope in `docs/hover.md`. Both now point at `hover.md` and keep `onHoverIn`/`onHoverOut` only for a `Pressable` styling itself. `docs/design.md` also pointed `SettingsSection` at a path that no longer exists; corrected to `components/settings/headings/settings-section.tsx`.
 
 ---

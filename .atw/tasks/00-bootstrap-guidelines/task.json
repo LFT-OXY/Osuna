@@ -21,17 +21,8 @@
   "children": [],
   "parent": null,
   "relatedFiles": [
-    ".atw/spec/expo-two-way-audio/",
-    ".atw/spec/highlight/",
-    ".atw/spec/plugin/",
-    ".atw/spec/protocol/",
-    ".atw/spec/client/",
     ".atw/spec/server/",
-    ".atw/spec/app/",
-    ".atw/spec/relay/",
-    ".atw/spec/website/",
-    ".atw/spec/desktop/",
-    ".atw/spec/cli/"
+    ".atw/spec/app/"
   ],
   "notes": "First-time setup task created by atw init (frontend project)",
   "meta": {}
