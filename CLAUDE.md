@@ -192,3 +192,43 @@ The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is
 ## Debugging
 
 Find the complete daemon logs and traces in the $PASEO_HOME/daemon.log
+
+
+
+<!-- ATW:START -->
+
+# ATW Instructions
+
+These instructions are for AI assistants working in this project.
+
+This project is managed by ATW. The working knowledge you need lives under `.atw/`:
+
+- `.atw/workflow.md` — development phases, when to create tasks, skill routing
+- `.atw/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
+- `.atw/workspace/` — per-developer journals and session traces
+- `.atw/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+
+ATW commands are written by bare name throughout `.atw/` — `start`, `continue`, `finish-work`. The prefix that invokes them is your platform's, not ATW's: Claude Code uses `/atw:`, Cursor and Pi `/atw-`, Codex `$`, Copilot a plain `/`, and a few hosts expose them as skills instead. Prefer an available ATW command over manual steps; not every platform exposes every command.
+
+If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
+
+- `.agents/skills/` — reusable ATW skills
+- `.codex/agents/` — optional custom subagents
+
+Managed by ATW. Edits outside this block are preserved; edits inside may be overwritten by a future `atw update`.
+
+<!-- ATW:END -->
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the ATW task directory (`.atw/tasks/<task>/`), local only — no GitHub mirror. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles with default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
