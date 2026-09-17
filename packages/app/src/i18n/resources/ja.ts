@@ -672,6 +672,7 @@ export const ja: TranslationResources = {
         toggle: "サイドパネルを切り替え",
         changes: "変更",
         files: "ファイル",
+        sessions: "セッション履歴",
       },
       toasts: {
         copyFailed: "コピーに失敗しました",
@@ -1871,6 +1872,22 @@ export const ja: TranslationResources = {
       emptyTitle: "プルリクエストはまだありません",
       emptyDescription:
         "このチェックアウトのプルリクエストを作成すると、ここに詳細が表示されます。",
+    },
+    sessionHistory: {
+      label: "セッション履歴",
+      subtitle: "このホストのプロバイダーセッション",
+      tooltip: "プロバイダーセッションをターミナルで再開",
+      loading: "セッションを読み込み中...",
+      empty: {
+        workspace: "このワークスペースにはまだプロバイダーセッションがありません。",
+      },
+      row: {
+        opening: "開いています...",
+      },
+      errors: {
+        loadFailed: "セッションを読み込めませんでした",
+        openFailed: "このセッションのターミナルを開けませんでした",
+      },
     },
     diff: {
       changesLabel: "変更",

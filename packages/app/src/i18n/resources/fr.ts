@@ -672,6 +672,7 @@ export const fr: TranslationResources = {
         toggle: "Basculer le panneau latéral",
         changes: "Changements",
         files: "Fichiers",
+        sessions: "Historique des sessions",
       },
       toasts: {
         copyFailed: "Échec de la copie",
@@ -1904,6 +1905,22 @@ export const fr: TranslationResources = {
       emptyTitle: "Aucune demande de fusion pour le moment",
       emptyDescription:
         "Créez une demande de fusion pour cette copie de travail afin d’afficher ses détails ici.",
+    },
+    sessionHistory: {
+      label: "Historique des sessions",
+      subtitle: "Sessions des fournisseurs sur cet hôte",
+      tooltip: "Reprendre des sessions de fournisseurs dans un terminal",
+      loading: "Chargement des sessions...",
+      empty: {
+        workspace: "Cet espace de travail n'a pas encore de sessions de fournisseurs.",
+      },
+      row: {
+        opening: "Ouverture...",
+      },
+      errors: {
+        loadFailed: "Impossible de charger les sessions",
+        openFailed: "Impossible d'ouvrir un terminal pour cette session",
+      },
     },
     diff: {
       changesLabel: "Modifications",

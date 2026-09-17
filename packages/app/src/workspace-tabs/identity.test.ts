@@ -196,3 +196,14 @@ describe("plugin panel tab identity", () => {
     expect(agent).toBe("plugin_agent_6_review_7_details_7_agent-1");
   });
 });
+
+describe("session history tab identity", () => {
+  it("is a singleton view with a fixed deterministic id", () => {
+    const target = { kind: "session_history" } as const;
+
+    expect(normalizeWorkspaceTabTarget(target)).toEqual(target);
+    expect(workspaceTabTargetsEqual(target, { kind: "session_history" })).toBe(true);
+    expect(workspaceTabTargetsEqual(target, { kind: "files" })).toBe(false);
+    expect(buildDeterministicWorkspaceTabId(target)).toBe("session_history");
+  });
+});

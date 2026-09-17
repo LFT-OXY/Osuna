@@ -667,6 +667,7 @@ export const ko: TranslationResources = {
         toggle: "사이드 패널 토글",
         changes: "변경 사항",
         files: "파일",
+        sessions: "세션 기록",
       },
       toasts: {
         copyFailed: "복사 실패",
@@ -1861,6 +1862,22 @@ export const ko: TranslationResources = {
       subtitle: "풀 리퀘스트 세부 정보",
       emptyTitle: "아직 풀 리퀘스트가 없습니다",
       emptyDescription: "이 체크아웃에 풀 리퀘스트를 만들면 세부 정보가 여기에 표시됩니다.",
+    },
+    sessionHistory: {
+      label: "세션 기록",
+      subtitle: "이 호스트의 프로바이더 세션",
+      tooltip: "터미널에서 프로바이더 세션 재개",
+      loading: "세션을 불러오는 중...",
+      empty: {
+        workspace: "이 워크스페이스에는 아직 프로바이더 세션이 없습니다.",
+      },
+      row: {
+        opening: "여는 중...",
+      },
+      errors: {
+        loadFailed: "세션을 불러올 수 없습니다",
+        openFailed: "이 세션의 터미널을 열 수 없습니다",
+      },
     },
     diff: {
       changesLabel: "변경 사항",

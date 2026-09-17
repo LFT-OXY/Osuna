@@ -662,6 +662,7 @@ export const en = {
         toggle: "Toggle Explorer sidebar",
         changes: "Changes",
         files: "Files",
+        sessions: "Session history",
       },
       toasts: {
         copyFailed: "Copy failed",
@@ -1876,6 +1877,22 @@ export const en = {
       subtitle: "Pull request details",
       emptyTitle: "No pull request yet",
       emptyDescription: "Create a pull request for this checkout to see its details here.",
+    },
+    sessionHistory: {
+      label: "Session history",
+      subtitle: "Provider sessions on this host",
+      tooltip: "Resume provider sessions in a terminal",
+      loading: "Loading sessions...",
+      empty: {
+        workspace: "No provider sessions in this workspace yet.",
+      },
+      row: {
+        opening: "Opening...",
+      },
+      errors: {
+        loadFailed: "Could not load sessions",
+        openFailed: "Could not open a terminal for this session",
+      },
     },
     diff: {
       changesLabel: "Changes",

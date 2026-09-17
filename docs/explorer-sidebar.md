@@ -15,8 +15,9 @@ fixed-target labels and icons from that registration, filter by host, and never 
 panel type for another. Tab moves reject unsupported destinations, and placement resolves only to
 a compatible pane.
 
-Files and Changes are the Explorer defaults and its singleton navigation views. Other compatible
-tabs, including agents, terminals, files, and diffs, can move between Explorer and main panes.
+Files and Changes are the Explorer defaults; Session history is its third singleton navigation
+view and cannot leave Explorer. Other compatible tabs, including agents, terminals, files, and
+diffs, can move between Explorer and main panes.
 Keep panel implementations independent of either shell. `WorkspacePanelHost` owns mounting and
 retention, while each shell owns its tabs, focus, dragging, resizing, and shortcuts.
 
@@ -39,17 +40,28 @@ that pane from the workspace split tree and docks it separately. Persisted ident
 literal `"explorer"` pane id and `explorerPaneIdByWorkspace` key for compatibility.
 
 The tab rail has no inline add or close controls. Its context menu opens a New Tab launcher and
-toggles Files, Changes, and Explorer-compatible workspace-scoped plugin panels from the shared
-launch catalog. Individual tab menus close instances or move compatible tabs to main. Explorer tabs
+toggles Files, Changes, Session history, and Explorer-compatible workspace-scoped plugin panels
+from the shared launch catalog. Individual tab menus close instances or move compatible tabs to main. Explorer tabs
 can be reordered, but the dock cannot be split. Selecting an Explorer tab does not change workspace
 focus.
 
 Cmd+E shows or hides Explorer without changing its selected view. Compact layouts use the combined
-full-screen Explorer overlay for Changes, Files, and pull requests, and close it after a file opens. Compact Changes has no tree rail; its overview is the Jump to file action (`packages/app/src/git/jump-to-file/`), a sheet over the same changed-files tree the desktop rail renders.
+full-screen Explorer overlay for Changes, Files, pull requests, and Session history, and close it
+after a file or a resumed terminal opens. Compact Changes has no tree rail; its overview is the Jump to file action (`packages/app/src/git/jump-to-file/`), a sheet over the same changed-files tree the desktop rail renders.
 Wide native layouts without pane splits use the same combined content in a resizable inline dock;
 opening a file leaves that dock visible. Both presentations keep their selection in the panel store
 and reuse the layout store's per-workspace Explorer width. They do not create a second Explorer
 lifecycle.
+
+## Session history
+
+`packages/app/src/session-history/` owns the view: it lists provider sessions through
+`fetch_recent_provider_sessions` and resumes one by creating a terminal with the provider's
+resume command as `command` and `args` (`packages/app/src/utils/provider-command-templates.ts`).
+Providers without a resume template never appear. The new terminal tab opens in the focused
+main pane through `openTerminalTabFromSessionHistory`; the Explorer pane never holds focus, so
+the same call serves the desktop panel and the compact overlay. Terminology is in
+[glossary.md](glossary.md) under **Provider session** and **Session history**.
 
 ## Side pane
 

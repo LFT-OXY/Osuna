@@ -665,6 +665,7 @@ export const zhCN: TranslationResources = {
         toggle: "切换侧边面板",
         changes: "变更",
         files: "文件",
+        sessions: "会话历史",
       },
       toasts: {
         copyFailed: "复制失败",
@@ -1830,6 +1831,22 @@ export const zhCN: TranslationResources = {
       subtitle: "拉取请求详情",
       emptyTitle: "尚无拉取请求",
       emptyDescription: "为此检出创建拉取请求后，可在此处查看其详情。",
+    },
+    sessionHistory: {
+      label: "会话历史",
+      subtitle: "此主机上的 Provider 会话",
+      tooltip: "在终端中恢复 Provider 会话",
+      loading: "正在加载会话...",
+      empty: {
+        workspace: "此 workspace 还没有 Provider 会话。",
+      },
+      row: {
+        opening: "正在打开...",
+      },
+      errors: {
+        loadFailed: "无法加载会话",
+        openFailed: "无法为此会话打开终端",
+      },
     },
     diff: {
       changesLabel: "更改",

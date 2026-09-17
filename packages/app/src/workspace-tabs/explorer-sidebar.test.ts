@@ -103,6 +103,40 @@ describe("Explorer sidebar", () => {
     expect(activeExplorerTarget).toBe("files");
   });
 
+  it("opens Session history as an Explorer-only tab on desktop", () => {
+    openExplorerSidebarView({
+      isCompact: false,
+      supportsPaneSplits: true,
+      workspaceKey: WORKSPACE_KEY,
+      checkout: CHECKOUT,
+      view: "sessions",
+    });
+
+    const state = useWorkspaceLayoutStore.getState();
+    const layout = state.layoutByWorkspace[WORKSPACE_KEY];
+    const explorerPaneId = selectExplorerSidebarPaneId(state, WORKSPACE_KEY);
+    const explorerPane =
+      layout && explorerPaneId ? findPaneById(layout.root, explorerPaneId) : null;
+    const focusedExplorerTarget =
+      layout && explorerPane
+        ? collectAllTabs(layout.root).find((tab) => tab.tabId === explorerPane.focusedTabId)?.target
+            .kind
+        : null;
+    expect(focusedExplorerTarget).toBe("session_history");
+  });
+
+  it("selects Session history in the compact Explorer", () => {
+    openExplorerSidebarView({
+      isCompact: true,
+      workspaceKey: WORKSPACE_KEY,
+      checkout: CHECKOUT,
+      view: "sessions",
+    });
+
+    expect(usePanelStore.getState().mobilePanel.target).toBe("file-explorer");
+    expect(usePanelStore.getState().explorerTab).toBe("sessions");
+  });
+
   it("toggles the compact Explorer without changing its selected view", () => {
     usePanelStore.getState().setExplorerTabForCheckout({ ...CHECKOUT, tab: "files" });
     const input = {

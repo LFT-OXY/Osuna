@@ -665,6 +665,7 @@ export const ar: TranslationResources = {
         toggle: "تبديل اللوحة الجانبية",
         changes: "التغييرات",
         files: "ملفات",
+        sessions: "سجل الجلسات",
       },
       toasts: {
         copyFailed: "فشل النسخ",
@@ -1851,6 +1852,22 @@ export const ar: TranslationResources = {
       subtitle: "تفاصيل طلب السحب",
       emptyTitle: "لا يوجد طلب سحب بعد",
       emptyDescription: "أنشئ طلب سحب لنسخة العمل هذه لعرض تفاصيله هنا.",
+    },
+    sessionHistory: {
+      label: "سجل الجلسات",
+      subtitle: "جلسات الموفّرين على هذا المضيف",
+      tooltip: "استئناف جلسات الموفّرين في طرفية",
+      loading: "جارٍ تحميل الجلسات...",
+      empty: {
+        workspace: "لا توجد جلسات موفّرين في مساحة العمل هذه بعد.",
+      },
+      row: {
+        opening: "جارٍ الفتح...",
+      },
+      errors: {
+        loadFailed: "تعذّر تحميل الجلسات",
+        openFailed: "تعذّر فتح طرفية لهذه الجلسة",
+      },
     },
     diff: {
       changesLabel: "التغييرات",

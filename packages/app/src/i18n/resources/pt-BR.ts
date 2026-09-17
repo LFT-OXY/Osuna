@@ -670,6 +670,7 @@ export const ptBR: TranslationResources = {
         toggle: "Alternar painel lateral",
         changes: "Alterações",
         files: "Arquivos",
+        sessions: "Histórico de sessões",
       },
       toasts: {
         copyFailed: "Falha ao copiar",
@@ -1884,6 +1885,22 @@ export const ptBR: TranslationResources = {
       subtitle: "Detalhes do pull request",
       emptyTitle: "Ainda não há pull request",
       emptyDescription: "Crie um pull request para este checkout para ver os detalhes aqui.",
+    },
+    sessionHistory: {
+      label: "Histórico de sessões",
+      subtitle: "Sessões de provedores neste host",
+      tooltip: "Retomar sessões de provedores em um terminal",
+      loading: "Carregando sessões...",
+      empty: {
+        workspace: "Este workspace ainda não tem sessões de provedores.",
+      },
+      row: {
+        opening: "Abrindo...",
+      },
+      errors: {
+        loadFailed: "Não foi possível carregar as sessões",
+        openFailed: "Não foi possível abrir um terminal para esta sessão",
+      },
     },
     diff: {
       changesLabel: "Alterações",

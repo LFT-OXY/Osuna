@@ -2,12 +2,12 @@
 
 Four kinds of state, four homes. Pick by what the state is, not by what is convenient.
 
-| State | Home | Reference |
-|-------|------|-----------|
-| Daemon data that arrives over the socket (agents, workspaces, projects, timelines) | The session store and the replica-backed owners in `runtime/` | `stores/session-store.ts`, `runtime/directory-sync/`, `runtime/replica-cache/` |
-| Fetched values with a request/response shape (config, provider snapshots, PR status, file preview) | React Query via `data/query.ts` | [Hooks and Data](./hooks-and-data.md) |
-| UI state shared across surfaces (layout, panels, drafts, shortcuts, sidebar) | A Zustand store in `stores/` | `stores/workspace-layout-store.ts`, `stores/keyboard-shortcuts-store.ts`, `stores/draft-store/` |
-| Stable values provided once (client, toast API, voice, callouts) | React context in `contexts/` | `contexts/session-context.tsx`, `contexts/toast-api-context.tsx` |
+| State                                                                                              | Home                                                          | Reference                                                                                       |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Daemon data that arrives over the socket (agents, workspaces, projects, timelines)                 | The session store and the replica-backed owners in `runtime/` | `stores/session-store.ts`, `runtime/directory-sync/`, `runtime/replica-cache/`                  |
+| Fetched values with a request/response shape (config, provider snapshots, PR status, file preview) | React Query via `data/query.ts`                               | [Hooks and Data](./hooks-and-data.md)                                                           |
+| UI state shared across surfaces (layout, panels, drafts, shortcuts, sidebar)                       | A Zustand store in `stores/`                                  | `stores/workspace-layout-store.ts`, `stores/keyboard-shortcuts-store.ts`, `stores/draft-store/` |
+| Stable values provided once (client, toast API, voice, callouts)                                   | React context in `contexts/`                                  | `contexts/session-context.tsx`, `contexts/toast-api-context.tsx`                                |
 
 Component-local `useState` is for state nobody else reads. Two or more interacting `useState`s become a reducer with a discriminated union.
 
@@ -36,6 +36,25 @@ Context is for values that rarely change: the daemon client for the active sessi
 ## Forms
 
 Forms are a non-React model with an explicit lifecycle (`construct`, `hydrate`, `resolve`, `destroy`) rendered by a thin component. `schedules/schedule-form-model.ts` + `use-schedule-form-model.ts` + `components/schedules/schedule-form-sheet.tsx` is the golden example. `docs/forms.md` lists the anti-patterns rejected on sight: `useEffect` choreography, one mounted instance serving create and edit, `useMemo`-keyed model construction on live-data identity, `isLoading`/`isEmpty` boolean bags where a load-state union belongs.
+
+## Workspace tab kinds
+
+A new `WorkspaceTabTarget` kind is one logical change spread over fixed touchpoints; miss one and the tab persists wrong, shows the wrong label, or cannot be toggled. The Explorer-only singleton `session_history` (`session-history/`, `panels/session-history-panel.tsx`) is the worked example; `pull_request` is the two-host one.
+
+| Touchpoint    | File                                                                                                                                                                                                                 | What to add                                                                                                                         |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Type          | `workspace-tabs/model.ts`                                                                                                                                                                                            | The union member                                                                                                                    |
+| Identity      | `workspace-tabs/identity.ts`                                                                                                                                                                                         | `normalizeSimpleWorkspaceTabTarget` case, the equality branch, `buildDeterministicWorkspaceTabId` (singletons return `target.kind`) |
+| Hosts         | `panels/panel-manifest.ts`                                                                                                                                                                                           | `supportedHosts` (`["explorer"]` keeps it out of main panes and out of "Move to main")                                              |
+| Persistence   | `stores/workspace-layout-storage.ts`                                                                                                                                                                                 | The `strictObject` schema entry; without it the saved layout drops the tab on reload                                                |
+| Panel         | `panels/<kind>-panel.tsx` + `panels/register-panels.ts`                                                                                                                                                              | `definePanel(kind, { component, presentation })`; the launcher and tab rail read `presentation`                                     |
+| Launcher      | `workspace-tabs/launcher/index.tsx`, `launcher/internal/catalog.ts`                                                                                                                                                  | `BUILT_IN_SELECTIONS`, both launch orders, a `builtIns` item; `toggleTarget` set makes the Explorer tab-rail context menu toggle it |
+| Labels        | `screens/workspace/workspace-screen.tsx` (two label objects, two fallback functions), `workspace-desktop-tabs-row.tsx`, `workspace-tab-menu.ts` close test id                                                        | The fallback label and test id                                                                                                      |
+| Explorer view | `workspace-tabs/explorer-sidebar.ts` `VIEW_TARGETS`, `stores/explorer-tab-memory.ts`, `stores/panel-store/state.ts` `ExplorerTabSchema`, `hooks/keyboard-shift-policy.ts`, `components/compact-explorer-sidebar.tsx` | Only when the kind is also a compact Explorer segment                                                                               |
+| Copy          | `i18n/resources/*.ts` (nine files)                                                                                                                                                                                   | `panels.<kind>.label/subtitle/tooltip` and `workspace.tabs.explorerSidebar.<view>`                                                  |
+| Tests         | `panels/panel-manifest.test.ts`, `workspace-tabs/identity.test.ts`, `workspace-tabs/explorer-sidebar.test.ts`, `launcher/internal/catalog.test.ts`                                                                   | Host support, identity, view open, launch order                                                                                     |
+
+Opening a tab from inside an Explorer panel: `usePaneContext().openTab` places into the Explorer pane on desktop (`focusPaneBeforeOpen: true`), so a terminal or agent opened from there would dock in the sidebar. Use `useWorkspaceLayoutStore.getState().openTab({ placement: FOCUSED_PANE_PLACEMENT })` then `focusTab` instead (`session-history/internal/open-terminal-tab.ts`). The store's `focusPane` refuses the Explorer pane id, so the focused pane is always a main pane and the same call serves the compact overlay.
 
 ## Anti-patterns
 

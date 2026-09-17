@@ -672,6 +672,7 @@ export const ru: TranslationResources = {
         toggle: "Переключить боковую панель",
         changes: "Изменения",
         files: "Файлы",
+        sessions: "История сессий",
       },
       toasts: {
         copyFailed: "Не удалось скопировать",
@@ -1884,6 +1885,22 @@ export const ru: TranslationResources = {
       subtitle: "Сведения о PR",
       emptyTitle: "PR пока нет",
       emptyDescription: "Создайте PR для этой рабочей копии, чтобы увидеть здесь сведения о нём.",
+    },
+    sessionHistory: {
+      label: "История сессий",
+      subtitle: "Сессии провайдеров на этом хосте",
+      tooltip: "Возобновить сессии провайдеров в терминале",
+      loading: "Загрузка сессий...",
+      empty: {
+        workspace: "В этом рабочем пространстве пока нет сессий провайдеров.",
+      },
+      row: {
+        opening: "Открытие...",
+      },
+      errors: {
+        loadFailed: "Не удалось загрузить сессии",
+        openFailed: "Не удалось открыть терминал для этой сессии",
+      },
     },
     diff: {
       changesLabel: "Изменения",

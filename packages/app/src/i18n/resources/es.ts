@@ -672,6 +672,7 @@ export const es: TranslationResources = {
         toggle: "Alternar panel lateral",
         changes: "Cambios",
         files: "Archivos",
+        sessions: "Historial de sesiones",
       },
       toasts: {
         copyFailed: "Copia fallida",
@@ -1899,6 +1900,22 @@ export const es: TranslationResources = {
       subtitle: "Detalles de la solicitud de extracción",
       emptyTitle: "Aún no hay ninguna solicitud de extracción",
       emptyDescription: "Crea una solicitud para este checkout y consulta aquí sus detalles.",
+    },
+    sessionHistory: {
+      label: "Historial de sesiones",
+      subtitle: "Sesiones de proveedores en este host",
+      tooltip: "Reanudar sesiones de proveedores en una terminal",
+      loading: "Cargando sesiones...",
+      empty: {
+        workspace: "Este espacio de trabajo aún no tiene sesiones de proveedores.",
+      },
+      row: {
+        opening: "Abriendo...",
+      },
+      errors: {
+        loadFailed: "No se pudieron cargar las sesiones",
+        openFailed: "No se pudo abrir una terminal para esta sesión",
+      },
     },
     diff: {
       changesLabel: "Cambios",

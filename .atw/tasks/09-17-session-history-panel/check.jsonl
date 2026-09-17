@@ -1,0 +1,15 @@
+{"file": ".atw/tasks/09-17-session-history-panel/research/discovery.md", "reason": "访谈事实与已定决策，含 Orca 对照与代码定位"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 前端规范索引"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "作用域偏好、终端映射等状态放置规则"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "react-query 取数与刷新约定"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "面板组件写法"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "组件 + 假 client 的测试写法"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "协议字段扩展跨 protocol/server/app 三层"}
+{"file": "docs/explorer-sidebar.md", "reason": "Explorer sidebar 视图与 panel host 契约"}
+{"file": "docs/architecture.md", "reason": "directory-backed 与 workspace-owned 边界"}
+{"file": "docs/protocol-compatibility.md", "reason": "可选字段、能力位门控、COMPAT 标记"}
+{"file": "docs/agent-lifecycle.md", "reason": "History 导航与归档语义"}
+{"file": "docs/hover.md", "reason": "行内 kebab 与悬停"}
+{"file": "docs/menus.md", "reason": "右键 / 长按菜单"}
+{"file": "docs/i18n.md", "reason": "文案资源与平价测试"}
+{"file": "docs/glossary.md", "reason": "Provider session / Session history 术语"}
