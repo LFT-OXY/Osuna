@@ -34,7 +34,7 @@ Paseo 的应答链路：
 另外三个缺口会让修复不完整：
 
 - Paseo 不处理 `OSC 4 ; n ; ?`（256 色调色板查询），TUI 拿不到 ANSI 色值。
-- Paseo 不回答 `CSI ? 996 n`（color-scheme 查询，Codex/ratatui 系新版会先发这个）。
+- Paseo 不回答 `CSI ? 996 n`（color-scheme 查询）。更正（2026-09-17 验收）：本机 Codex 0.154.0 二进制不含 `?996n` 也不含 `?2031h`，只查 OSC 10/11；含 `?2031h` 的是 Pi 与 opencode。
 - Paseo 不处理 `DECSET 2031`（主题变更订阅），用户在 app 里切换深浅主题时，已运行的 TUI 不会收到 `CSI ? 997 ; 1|2 n`，仍停留在旧配色。
 
 浅色调色板本身还有一个独立缺陷：`packages/app/src/styles/theme.ts:237` 把 ANSI `white` 定义为 `#ffffff`，与白色背景相同，任何用 white 的输出在浅色主题下不可见。客户端 xterm 的 `minimumContrastRatio` 为 1（`terminal-emulator-runtime.ts` 的 Terminal 选项），即关闭了 xterm 的自动对比度修正。
