@@ -37,7 +37,7 @@ import {
 } from "./terminal-restore.js";
 import type { TerminalSession } from "./terminal.js";
 import type { TerminalManager, TerminalsChangedEvent } from "./terminal-manager.js";
-import { applyTerminalSize } from "./terminal-size-ownership.js";
+import { applyTerminalSize, applyTerminalViewAttributes } from "./terminal-size-ownership.js";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import { terminalSubscriptionKey } from "@getpaseo/protocol/terminal-subscription-key";
 
@@ -759,6 +759,10 @@ export class TerminalSessionController {
 
     if (msg.message.type === "resize") {
       applyTerminalSize(session, source, msg.message);
+      return;
+    }
+    if (msg.message.type === "view_attributes") {
+      applyTerminalViewAttributes(session, source, msg.message.attributes);
       return;
     }
 

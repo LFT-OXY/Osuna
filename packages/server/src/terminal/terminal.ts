@@ -41,6 +41,8 @@ const TERMINAL_OSC_COLOR_QUERY_CODES: ReadonlyArray<
   [12, "cursor"],
 ];
 const TERMINAL_COLOR_SCHEME_QUERY_PARAM = 996;
+// DECSET/DECRST 2031：TUI 订阅/退订主题变更通知（CSI ?997;1|2n）。
+const TERMINAL_COLOR_SCHEME_SUBSCRIPTION_MODE = 2031;
 
 export interface TerminalExitInfo {
   exitCode: number | null;
@@ -75,7 +77,8 @@ export interface TerminalSubscribeOptions {
 export type ClientMessage =
   | { type: "input"; data: string }
   | { type: "resize"; rows: number; cols: number }
-  | { type: "mouse"; row: number; col: number; button: number; action: "down" | "up" | "move" };
+  | { type: "mouse"; row: number; col: number; button: number; action: "down" | "up" | "move" }
+  | { type: "view_attributes"; attributes: TerminalViewAttributes };
 
 export type ServerMessage =
   | { type: "output"; data: string; revision?: number }
@@ -914,7 +917,8 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     args = [],
   } = options;
   const resolvedShell = shell ?? resolveDefaultTerminalShell();
-  const viewAttributes = resolveTerminalViewAttributes(options.viewAttributes);
+  let viewAttributes = resolveTerminalViewAttributes(options.viewAttributes);
+  let colorSchemeSubscribed = false;
 
   const id = options.id ?? randomUUID();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -1069,6 +1073,24 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     }
     return false;
   });
+  // 只记录 2031 的开关，始终返回 false 放行给 xterm 处理同一序列里的其它模式。
+  function subscribeColorSchemeIfRequested(params: (number | number[])[]): boolean {
+    if (params.includes(TERMINAL_COLOR_SCHEME_SUBSCRIPTION_MODE)) {
+      colorSchemeSubscribed = true;
+    }
+    return false;
+  }
+  function unsubscribeColorSchemeIfRequested(params: (number | number[])[]): boolean {
+    if (params.includes(TERMINAL_COLOR_SCHEME_SUBSCRIPTION_MODE)) {
+      colorSchemeSubscribed = false;
+    }
+    return false;
+  }
+  terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, subscribeColorSchemeIfRequested);
+  terminal.parser.registerCsiHandler(
+    { prefix: "?", final: "l" },
+    unsubscribeColorSchemeIfRequested,
+  );
   for (const [code, attribute] of TERMINAL_OSC_COLOR_QUERY_CODES) {
     terminal.parser.registerOscHandler(code, (data) => {
       if (data.trim() !== "?") {
@@ -1355,6 +1377,21 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
         // Mouse events can be sent as escape sequences if terminal supports it
         // For now, we'll just ignore them - can be implemented later
         break;
+      case "view_attributes": {
+        const nextAttributes = resolveTerminalViewAttributes(msg.attributes);
+        if (!nextAttributes) {
+          break;
+        }
+        const previousScheme = viewAttributes ? resolveTerminalColorScheme(viewAttributes) : null;
+        const nextScheme = resolveTerminalColorScheme(nextAttributes);
+        viewAttributes = nextAttributes;
+        // 只在深浅分类变化（含从未知变为已知）时通知已订阅 2031 的 TUI；
+        // 同为浅色的两套配色不触发全量重绘。
+        if (colorSchemeSubscribed && previousScheme !== nextScheme) {
+          ptyProcess.write(toColorSchemeReport(nextScheme));
+        }
+        break;
+      }
     }
   }
 

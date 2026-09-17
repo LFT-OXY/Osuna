@@ -3014,6 +3014,11 @@ const TerminalClientMessageSchema = z.discriminatedUnion("type", [
     button: z.number(),
     action: z.enum(["down", "up", "move"]),
   }),
+  // 客户端主题变化或尺寸 claim 之后推送的视图属性；daemon 只接受当前尺寸所有者的消息。
+  z.object({
+    type: z.literal("view_attributes"),
+    attributes: TerminalViewAttributesSchema,
+  }),
 ]);
 
 export const TerminalInputSchema = z.object({

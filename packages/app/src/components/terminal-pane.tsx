@@ -54,6 +54,7 @@ import { usePanelStore } from "@/stores/panel-store";
 import { useBlockMobilePanelOpenGestures } from "@/mobile-panels/provider";
 import { useSessionStore } from "@/stores/session-store";
 import { toXtermTheme } from "@/utils/to-xterm-theme";
+import { toTerminalViewAttributes } from "@/terminal/view-attributes";
 import TerminalEmulator, { type TerminalEmulatorHandle } from "./terminal-emulator";
 import { TerminalFloatingCopyAction, TerminalPasteAction } from "./terminal-copy-paste-actions";
 import {
@@ -217,6 +218,11 @@ export function TerminalPane({
   const { theme } = useUnistyles();
   const { settings } = useAppSettings();
   const xtermTheme = useMemo(() => toXtermTheme(theme.colors.terminal), [theme]);
+  const terminalViewAttributes = useMemo(
+    () => toTerminalViewAttributes(theme.colors.terminal),
+    [theme],
+  );
+  const getTerminalViewAttributes = useStableEvent(() => terminalViewAttributes);
   const terminalFontFamily = useMemo(() => {
     const trimmed = settings.monoFontFamily.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -553,6 +559,7 @@ export function TerminalPane({
       onExit: handleStreamExit,
       getRestoreOptions: getStreamRestoreOptions,
       onStatusChange: handleStreamControllerStatus,
+      getViewAttributes: getTerminalViewAttributes,
     });
 
     streamControllerRef.current = controller;
@@ -567,6 +574,7 @@ export function TerminalPane({
     client,
     getPreferredStreamSize,
     getStreamRestoreOptions,
+    getTerminalViewAttributes,
     handleStreamControllerStatus,
     handleStreamOutput,
     handleStreamRestore,
@@ -574,6 +582,11 @@ export function TerminalPane({
     handleStreamExit,
     isConnected,
   ]);
+
+  // app 切换深浅主题后，把新的终端三色推给 daemon，运行中的 TUI 据此跟随切换。
+  useEffect(() => {
+    streamControllerRef.current?.syncViewAttributes();
+  }, [terminalViewAttributes]);
 
   useEffect(() => {
     pendingTerminalInputRef.current = [];
@@ -798,6 +811,9 @@ export function TerminalPane({
         intent: claim.intent,
       });
       sent = true;
+      if (claim.intent === "claim") {
+        streamControllerRef.current?.syncViewAttributes({ afterClaim: true });
+      }
     }
     const requestedKey = paneFocusResizeClaimRef.current.requestedKey;
     if (requestedKey && claim.intent === "claim") {

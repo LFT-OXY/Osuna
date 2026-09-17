@@ -96,6 +96,71 @@ if (viewAttributes) ptyProcess.write(reply);
 return true; // consume the query either way
 ```
 
+## Scenario: live client push accepted only from the terminal size owner
+
+Reference implementation: `terminal_input.view_attributes` (terminal-theme-bridge ticket 02). Reuse this shape when a per-terminal client message must follow an existing ownership rule instead of adding a new arbiter.
+
+### 1. Scope / Trigger
+
+- A client pushes per-terminal state that several connected clients could disagree on (theme colors). The daemon must pick one without a new arbitration rule.
+
+### 2. Signatures
+
+- Schema: `TerminalClientMessageSchema` branch `{ type: "view_attributes", attributes: TerminalViewAttributesSchema }` in `packages/protocol/src/messages.ts`; travels inside `terminal_input` like `resize`.
+- Daemon: `applyTerminalViewAttributes(terminal, owner, attributes): boolean` in `terminal/terminal-size-ownership.ts`; `TerminalSessionController.handleTerminalInput` routes the branch there before the generic `session.send`. `ClientMessage` in `terminal/terminal.ts` gains the same branch; `send()` updates the session's stored colors.
+- Worker: no new worker protocol type. The `send` request forwards any `ClientMessage`, so the branch reaches the worker session unchanged.
+- Client: `DaemonClient.sendTerminalViewAttributes(terminalId, attributes)` in `packages/client/src/daemon-client.ts`; the feature gate lives here, same flag and COMPAT tag as the create-request field above.
+
+### 3. Contracts
+
+- Ownership: the message is applied only when `owner` is the connection holding the size claim (`terminalSizeOwners` WeakMap). No owner yet, or a different owner, means silently dropped; there is no `intent` on this message, so a client claims size first and pushes colors right after.
+- `DECSET 2031` / `DECRST 2031` from the foreground program toggles `colorSchemeSubscribed` in the session (CSI handlers on the headless parser, always `return false` so xterm still processes the other modes in the same sequence).
+- On each applied push the daemon compares the dark/light classification before and after (`resolveTerminalColorScheme`, relative luminance). Subscribed and changed (including unknown to known) writes one `CSI ?997;1n` or `?997;2n` straight to the PTY; unchanged or unsubscribed writes nothing.
+
+### 4. Validation & Error Matrix
+
+- Malformed color -> `terminal_input` fails schema validation (client filters through `TERMINAL_VIEW_ATTRIBUTE_COLOR_PATTERN` first).
+- Push from a non-owner -> dropped, no reply, no log.
+- Push before any size claim -> dropped.
+- Feature flag not advertised -> `sendTerminalViewAttributes` returns without sending.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Mac pane claims size, pushes light colors; TUI with 2031 enabled gets `?997;2n` when the user switches to dark and the pane pushes again.
+- Base: phone opens the same terminal without focusing it; its colors never reach the PTY. Focus on the phone sends a claim, then the phone's colors apply.
+- Bad: adding a second WeakMap for color ownership, or accepting the push from any subscriber and letting the last writer win.
+
+### 6. Tests Required
+
+- Protocol: `messages.terminal-input-view-attributes.test.ts` (branch parses; old `resize` still parses; malformed color rejected).
+- Ownership: `terminal-size-ownership.test.ts` (no owner / owner / other / after re-claim) and `terminal-session-controller.resize.test.ts` (same through `SessionDelivery` with two sources, asserting the applied backgrounds).
+- Worker: `worker-terminal-manager.test.ts` sends the branch through the real worker and reads the OSC 11 reply via `captureTerminal`.
+- Daemon PTY: `terminal.posix.test.ts` (flip -> `SCHEME_OK:1`; unknown to known -> `SCHEME_OK:2`; same side -> `SCHEME_TIMEOUT`; unsubscribed -> `SCHEME_TIMEOUT`).
+- Client: `daemon-client.test.ts` `test.each([true, false])` on the feature flag.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// daemon: a second arbiter for colors
+const colorOwners = new WeakMap<TerminalSession, object>();
+// daemon: notifying on every push
+if (colorSchemeSubscribed) ptyProcess.write(toColorSchemeReport(nextScheme));
+```
+
+#### Correct
+
+```ts
+// terminal-size-ownership.ts: same owner as the size claim
+if (terminalSizeOwners.get(terminal)?.deref() !== owner) return false;
+terminal.send({ type: "view_attributes", attributes });
+// terminal.ts send(): only classification changes reach the PTY
+if (colorSchemeSubscribed && previousScheme !== nextScheme) {
+  ptyProcess.write(toColorSchemeReport(nextScheme));
+}
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

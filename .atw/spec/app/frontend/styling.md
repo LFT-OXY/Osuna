@@ -37,7 +37,9 @@ export function getCurrentTerminalViewAttributes(): TerminalViewAttributes | und
 }
 ```
 
-The function is deliberately not reactive; a later theme change is a separate message (ticket 02 of terminal-theme-bridge), not a re-render. The Node test stub (`test-stubs/react-native-unistyles.ts`) exposes `UnistylesRuntime.getTheme()` and a `colors.terminal` palette so the snapshot can be asserted against the fixture theme.
+The function is deliberately not reactive; the create request is a one-shot. The Node test stub (`test-stubs/react-native-unistyles.ts`) exposes `UnistylesRuntime.getTheme()` and a `colors.terminal` palette so the snapshot can be asserted against the fixture theme.
+
+The live path is separate and owned by `TerminalStreamController` (`terminal/runtime/terminal-stream-controller.ts`), not by a hook. The pane derives `toTerminalViewAttributes(theme.colors.terminal)` with `useMemo`, hands the controller a `useStableEvent` getter, and calls `controller.syncViewAttributes()` from an effect keyed on that value. The controller sends only when the value differs from what it last sent for this terminal, except `syncViewAttributes({ afterClaim: true })`, which the attach path and the pane-focus size claim call right after a `claim` resize: after a claim the daemon may hold another device's colors, so that push is never deduplicated. The feature-flag gate is inside `DaemonClient.sendTerminalViewAttributes`; the pane and the controller do not read `server_info.features` for this.
 
 ## Rules from the gotcha list
 

@@ -50,6 +50,10 @@ Anything the daemon writes back to the PTY in reply to a terminal query (DA1, DS
 
 Silence is asserted the same way: wait for the helper's `*_TIMEOUT` line and assert no `*_OK` line exists. That costs 2.5s per case, so keep silent cases to one per query kind. Add a mode to an existing helper (argv) before adding a new helper script.
 
+For something the daemon writes on its own initiative (the `CSI ?997n` theme notification after a `view_attributes` push), the helper enables the mode, prints a `*_READY` marker, then waits. The test must `waitForState(session, hasSchemeReadyLine)` before `session.send(...)`: the headless parser handles the `DECSET 2031` asynchronously, and a push that lands before the parser reaches it is silently not a subscriber yet. The READY line is written after the DECSET in the same stream, so its visibility proves the mode was parsed.
+
+Through `createWorkerTerminalManager` the same helper needs two changes. `session.getState()` in the parent is a cached snapshot that does not refresh with output; poll `manager.captureTerminal(session.id)` instead. And the helper must not `process.exit()` after printing: the worker drops the terminal record on exit and `captureTerminal` then reads nothing. Keep it alive with `setInterval(() => {}, 1000)` and let `afterEach` kill it.
+
 ## Running
 
 ```bash

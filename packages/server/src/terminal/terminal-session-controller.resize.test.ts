@@ -21,8 +21,10 @@ function createFixture(): {
   terminal: TerminalSession;
   terminalManager: TerminalManager;
   appliedSizes: string[];
+  appliedBackgrounds: string[];
 } {
   const appliedSizes: string[] = [];
+  const appliedBackgrounds: string[] = [];
   let size = { rows: 24, cols: 80 };
   const state = (): TerminalState => ({
     rows: size.rows,
@@ -37,8 +39,12 @@ function createFixture(): {
     cwd: "/tmp",
     workspaceId: "workspace-1",
     getSize: () => size,
-    send: (message: { type: string; rows?: number; cols?: number }) => {
-      if (message.type !== "resize" || message.rows === undefined || message.cols === undefined) {
+    send: (message: Parameters<TerminalSession["send"]>[0]) => {
+      if (message.type === "view_attributes") {
+        appliedBackgrounds.push(message.attributes.background);
+        return;
+      }
+      if (message.type !== "resize") {
         return;
       }
       size = { rows: message.rows, cols: message.cols };
@@ -51,7 +57,20 @@ function createFixture(): {
     getTerminal: () => terminal,
     getTerminalState: async () => ({ state: state(), revision: 0 }),
   } as unknown as TerminalManager;
-  return { terminal, terminalManager, appliedSizes };
+  return { terminal, terminalManager, appliedSizes, appliedBackgrounds };
+}
+
+function viewAttributesMessage(
+  background: string,
+): Extract<SessionInboundMessage, { type: "terminal_input" }> {
+  return {
+    type: "terminal_input",
+    terminalId: "terminal-1",
+    message: {
+      type: "view_attributes",
+      attributes: { foreground: "#1a1a1e", background, cursor: "#1a1a1e" },
+    },
+  };
 }
 
 function createController(
@@ -137,5 +156,46 @@ describe("terminal session controller size ownership", () => {
 
     await ownership.close();
     expect(appliedSizes).toEqual(["100x30", "101x31", "103x33", "105x35"]);
+  });
+
+  test("applies view attributes only from the connection that owns the terminal size", async () => {
+    const { terminalManager, appliedBackgrounds } = createFixture();
+    const controllerA = createController(terminalManager);
+    const controllerB = createController(terminalManager);
+    const sourceA = {};
+    const sourceB = {};
+    const ownership = new SessionDelivery(() => {});
+    const dispatch = (
+      controller: TerminalSessionController,
+      source: object,
+      message: SessionInboundMessage,
+    ) =>
+      ownership.request(source, message, async () => {
+        await controller.dispatch(message, ownership);
+      });
+
+    // 尚无所有者：忽略。
+    await dispatch(controllerA, sourceA, viewAttributesMessage("#000000"));
+
+    await dispatch(controllerA, sourceA, {
+      type: "terminal_input",
+      terminalId: "terminal-1",
+      message: { type: "resize", rows: 30, cols: 100, intent: "claim" },
+    });
+    await dispatch(controllerA, sourceA, viewAttributesMessage("#ffffff"));
+    // 非所有者：忽略。
+    await dispatch(controllerB, sourceB, viewAttributesMessage("#111111"));
+
+    // B claim 之后成为新所有者，其颜色生效，A 的被忽略。
+    await dispatch(controllerB, sourceB, {
+      type: "terminal_input",
+      terminalId: "terminal-1",
+      message: { type: "resize", rows: 30, cols: 100, intent: "claim" },
+    });
+    await dispatch(controllerB, sourceB, viewAttributesMessage("#222222"));
+    await dispatch(controllerA, sourceA, viewAttributesMessage("#333333"));
+
+    await ownership.close();
+    expect(appliedBackgrounds).toEqual(["#ffffff", "#222222"]);
   });
 });

@@ -5714,6 +5714,15 @@ export class DaemonClient {
     this.sendSessionMessage({ type: "terminal_input", terminalId, message });
   }
 
+  // 尺寸 claim 之后与主题变化时推送终端三色；daemon 只接受当前尺寸所有者的推送。
+  sendTerminalViewAttributes(terminalId: string, attributes: TerminalViewAttributes): void {
+    // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17 once daemon floor >= v0.8.1.
+    if (this.lastServerInfoMessage?.features?.terminalViewAttributes !== true) {
+      return;
+    }
+    this.sendTerminalInput(terminalId, { type: "view_attributes", attributes });
+  }
+
   async killTerminal(terminalId: string, requestId?: string): Promise<KillTerminalPayload> {
     const resolvedRequestId = this.createRequestId(requestId);
     const message = SessionInboundMessageSchema.parse({
