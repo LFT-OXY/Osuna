@@ -4,12 +4,12 @@
 
 ## The two categories in this package
 
-| Category | Suffix | Looks like | Runs with |
-|----------|--------|-----------|-----------|
-| Unit with ports and adapters | `*.test.ts`, `*.posix.test.ts` | Real filesystem in a `mkdtemp` dir, real Git via `execFileSync`, in-memory fakes for the ports the module declares (`ForgeService`, `AgentStorage`, `WorkspaceGitService`) | `npx vitest run <file> --bail=1` |
-| Daemon end-to-end | `*.e2e.test.ts` in `server/daemon-e2e/` | A real daemon on `127.0.0.1:0` in a temp `PASEO_HOME`, driven through `DaemonClient` over a real WebSocket | `npx vitest run <file> --maxWorkers=1 --bail=1` |
-| E2E against a real provider | `*.real.e2e.test.ts` | Same harness plus Claude/Codex/OpenCode/Pi credentials from `packages/server/.env.test` | `npm run test:integration:real` |
-| E2E needing a local-only resource | `*.local.e2e.test.ts` | Same harness plus something only this machine has | `npm run test:integration:local` |
+| Category                          | Suffix                                  | Looks like                                                                                                                                                                 | Runs with                                       |
+| --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Unit with ports and adapters      | `*.test.ts`, `*.posix.test.ts`          | Real filesystem in a `mkdtemp` dir, real Git via `execFileSync`, in-memory fakes for the ports the module declares (`ForgeService`, `AgentStorage`, `WorkspaceGitService`) | `npx vitest run <file> --bail=1`                |
+| Daemon end-to-end                 | `*.e2e.test.ts` in `server/daemon-e2e/` | A real daemon on `127.0.0.1:0` in a temp `PASEO_HOME`, driven through `DaemonClient` over a real WebSocket                                                                 | `npx vitest run <file> --maxWorkers=1 --bail=1` |
+| E2E against a real provider       | `*.real.e2e.test.ts`                    | Same harness plus Claude/Codex/OpenCode/Pi credentials from `packages/server/.env.test`                                                                                    | `npm run test:integration:real`                 |
+| E2E needing a local-only resource | `*.local.e2e.test.ts`                   | Same harness plus something only this machine has                                                                                                                          | `npm run test:integration:local`                |
 
 `server/workspace-archive-service.test.ts` is a good unit reference: a temp repo, a typed `ForgeService` stub built as a plain object, a silent logger, assertions on the resulting files and `ArchiveResult`. `server/daemon-e2e/daemon-restart-resume.e2e.test.ts` and `persistence.e2e.test.ts` are E2E references.
 
@@ -17,16 +17,16 @@
 
 Everything reusable lives in `server/test-utils/`:
 
-| Helper | Use for |
-|--------|---------|
-| `paseo-daemon.ts` → `createTestPaseoDaemon()` | Boot a daemon in a temp home; `daemon.port`, `daemon.close()` cleans up |
-| `daemon-client.ts` → `DaemonClient` | Typed client: `connect`, `fetchAgents({ subscribe: {} })`, RPC helpers, `close` |
-| `daemon-test-context.ts` | Combined daemon + client context for E2E suites |
-| `fake-agent-client.ts` | Deterministic agent provider adapter; the default for unit suites that need an agent |
-| `session-stubs.ts`, `class-mocks.ts`, `workspace-git-service-stub.ts` | Typed stubs for session collaborators |
-| `temp-github-repo.ts` | A throwaway Git repo with a fake remote |
-| `message-collector.ts` | Collect outbound session messages for assertions |
-| `versioned-daemon.ts`, `outdated-daemon-process.ts` | Compatibility tests across daemon versions |
+| Helper                                                                | Use for                                                                              |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `paseo-daemon.ts` → `createTestPaseoDaemon()`                         | Boot a daemon in a temp home; `daemon.port`, `daemon.close()` cleans up              |
+| `daemon-client.ts` → `DaemonClient`                                   | Typed client: `connect`, `fetchAgents({ subscribe: {} })`, RPC helpers, `close`      |
+| `daemon-test-context.ts`                                              | Combined daemon + client context for E2E suites                                      |
+| `fake-agent-client.ts`                                                | Deterministic agent provider adapter; the default for unit suites that need an agent |
+| `session-stubs.ts`, `class-mocks.ts`, `workspace-git-service-stub.ts` | Typed stubs for session collaborators                                                |
+| `temp-github-repo.ts`                                                 | A throwaway Git repo with a fake remote                                              |
+| `message-collector.ts`                                                | Collect outbound session messages for assertions                                     |
+| `versioned-daemon.ts`, `outdated-daemon-process.ts`                   | Compatibility tests across daemon versions                                           |
 
 `docs/ad-hoc-daemon-testing.md` has the full harness walkthrough and seven gotchas. Two that bite most often: `appVersion` on `DaemonClient` gates which providers are visible, and `fetchAgents` must run before most other operations.
 
@@ -39,6 +39,16 @@ Everything reusable lives in `server/test-utils/`:
 - **Cleanup is explicit.** Push temp paths into an array and `rmSync` them in `afterEach`, or use the harness's `close()`. Leaked processes from ACP providers are a known failure mode; kill trees with `utils/tree-kill.ts`.
 - **Assert full shapes.** `expect(result).toEqual({ ok: false, error: { code: "PROVIDER_TIMEOUT", waitedMs: 30000 } })`, not `toBeTruthy`.
 - **Name files after behavior**: `open-project-missing-directory.e2e.test.ts`, never `test-3.ts` or `setup-first.ts`.
+
+## Real-PTY protocol replies
+
+Anything the daemon writes back to the PTY in reply to a terminal query (DA1, DSR, `CSI ?996n`, OSC 10/11/12) is tested at the PTY seam in `terminal/terminal.posix.test.ts`, never by spying on `ptyProcess.write`:
+
+1. Write a small Node script to a temp dir (`writeDsrHelper`, `writeOsc11Helper`). It puts stdin in raw mode, writes the query to stdout, and prints one marker line (`DSR_OK:...`, `OSC11_OK:...`) when the reply arrives on stdin, or `*_TIMEOUT` after 2.5s.
+2. Launch it as the foreground program via `session.send({ type: "input", data: \`${process.execPath} ${helperPath} <mode>\r\` })`.
+3. `waitForState(session, hasXxxOkLine)` and assert the exact marker text, with ESC rendered as `ESC` so the expected bytes are readable (`"OSC11_OK:ESC]11;rgb:ffff/ffff/ffffESC\\"`).
+
+Silence is asserted the same way: wait for the helper's `*_TIMEOUT` line and assert no `*_OK` line exists. That costs 2.5s per case, so keep silent cases to one per query kind. Add a mode to an existing helper (argv) before adding a new helper script.
 
 ## Running
 

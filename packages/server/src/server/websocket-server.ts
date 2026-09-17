@@ -1675,6 +1675,8 @@ export class VoiceAssistantWebSocketServer {
       ...(this.serverCapabilities ? { capabilities: this.serverCapabilities } : {}),
       features: {
         ownedSubscriptions: true,
+        // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17.
+        terminalViewAttributes: true,
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,

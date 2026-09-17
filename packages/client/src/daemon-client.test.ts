@@ -415,6 +415,33 @@ test.each([false, true])(
   },
 );
 
+test.each([true, false])(
+  "create_terminal_request carries view attributes only when the daemon advertises terminalViewAttributes (%s)",
+  async (supported) => {
+    const transport = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "terminal-view-attributes",
+      transportFactory: () => transport.transport,
+      reconnect: { enabled: false },
+    });
+    clients.push(client);
+    const connecting = client.connect();
+    transport.triggerOpen({ features: { terminalViewAttributes: supported } });
+    await connecting;
+    const viewAttributes = { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" };
+    const created = client.createTerminal("/project", undefined, undefined, {
+      workspaceId: "wks_0123456789abcdef",
+      viewAttributes,
+    });
+    void created.catch(() => {});
+    expect(transport.sent).toHaveLength(1);
+    const request = parseSentFrame(transport.sent[0]);
+    expect(request).toMatchObject({ type: "create_terminal_request", cwd: "/project" });
+    expect(request.viewAttributes).toEqual(supported ? viewAttributes : undefined);
+  },
+);
+
 test.each(["agent", "workspace"] as const)(
   "a lost legacy %s response is not automatically replayed on reconnect",
   async (kind) => {

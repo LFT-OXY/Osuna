@@ -579,6 +579,7 @@ export class TerminalSessionController {
         args: msg.args,
         rows: msg.size?.rows,
         cols: msg.size?.cols,
+        ...(msg.viewAttributes ? { viewAttributes: msg.viewAttributes } : {}),
       });
       this.emit({
         type: "create_terminal_response",

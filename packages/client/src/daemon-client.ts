@@ -27,6 +27,7 @@ import {
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
   type ServerInfoStatusPayload,
+  type TerminalViewAttributes,
 } from "@getpaseo/protocol/messages";
 import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outbound";
 import type {
@@ -5585,6 +5586,7 @@ export class DaemonClient {
       args?: string[];
       workspaceId?: string;
       size?: { rows: number; cols: number };
+      viewAttributes?: TerminalViewAttributes;
     },
   ): Promise<CreateTerminalPayload> {
     const resolvedRequestId = this.createRequestId(requestId);
@@ -5597,6 +5599,11 @@ export class DaemonClient {
       args: options?.args,
       ...(options?.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
       ...(options?.size !== undefined ? { size: options.size } : {}),
+      // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17 once daemon floor >= v0.8.1.
+      ...(this.lastServerInfoMessage?.features?.terminalViewAttributes === true &&
+      options?.viewAttributes !== undefined
+        ? { viewAttributes: options.viewAttributes }
+        : {}),
       requestId: resolvedRequestId,
     });
     return this.sendCorrelatedRequest({

@@ -28,6 +28,12 @@ const testTheme = {
       red: { 300: "#fca5a5" },
       white: "#ffffff",
     },
+    // 终端三色：前景/光标沿用浅色主题的 foreground，背景为白。
+    terminal: {
+      foreground: "#1a1a1e",
+      background: "#ffffff",
+      cursor: "#1a1a1e",
+    },
   },
   borderWidth: { 1: 1 },
   spacing: [0, 4, 8, 12, 16, 20, 24, 28, 32],
@@ -96,5 +102,6 @@ export const useUnistyles = () => ({
 
 export const UnistylesRuntime = {
   setTheme: () => undefined,
+  getTheme: () => testTheme,
   themeName: "light",
 };

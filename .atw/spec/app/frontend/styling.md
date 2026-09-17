@@ -26,6 +26,19 @@ New code must not call it. It subscribes the component to every runtime change a
 3. `withUnistyles(Component)` for a third-party prop that must be theme-reactive (`BlurView.tint`, `Image.tintColor`, bottom-sheet `backgroundStyle`). Mind the `> *` child-selector leak.
 4. There is no step 4. File an issue and stop.
 
+## Theme values that leave the app
+
+A theme value that is sent over the wire rather than rendered (the terminal colors the daemon uses to answer TUI color queries) is a one-shot snapshot, not a style. Read it with `UnistylesRuntime.getTheme()` at the moment of use, in a plain function, and keep the mapping pure and unit-tested:
+
+```ts
+// terminal/view-attributes.ts
+export function getCurrentTerminalViewAttributes(): TerminalViewAttributes | undefined {
+  return toTerminalViewAttributes(UnistylesRuntime.getTheme().colors.terminal);
+}
+```
+
+The function is deliberately not reactive; a later theme change is a separate message (ticket 02 of terminal-theme-bridge), not a re-render. The Node test stub (`test-stubs/react-native-unistyles.ts`) exposes `UnistylesRuntime.getTheme()` and a `colors.terminal` palette so the snapshot can be asserted against the fixture theme.
+
 ## Rules from the gotcha list
 
 - Do not materialize styles at module scope (`styles.container` read outside a component); `styles/unistyles-module-scope.test.ts` guards this.

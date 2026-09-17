@@ -77,6 +77,7 @@ import { useFormPreferences } from "@/hooks/use-form-preferences";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { toErrorMessage } from "@/utils/error-messages";
+import { getCurrentTerminalViewAttributes } from "@/terminal/view-attributes";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
   getHostProjectSourceDirectory,
@@ -2199,7 +2200,12 @@ export function NewWorkspaceScreen({
             input.workspaceDirectory,
             input.name,
             undefined,
-            { command: input.command, args: input.args, workspaceId: input.workspaceId },
+            {
+              command: input.command,
+              args: input.args,
+              workspaceId: input.workspaceId,
+              viewAttributes: getCurrentTerminalViewAttributes(),
+            },
           );
           const terminal = createdTerminal.terminal;
           if (!terminal) {

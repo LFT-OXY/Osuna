@@ -345,6 +345,60 @@ describe("terminal-session-controller legacy terminal creation", () => {
       expect.objectContaining({ cwd: "/work/repo", workspaceId: "ws-1", rows: 55, cols: 136 }),
     );
   });
+
+  test("forwards the client-provided view attributes to the terminal manager", async () => {
+    const outboundMessages: SessionOutboundMessage[] = [];
+    const createTerminal = vi.fn(
+      async (options: Parameters<TerminalManager["createTerminal"]>[0]) =>
+        listSession({
+          id: "term-1",
+          name: options.name ?? "Terminal 1",
+          cwd: options.cwd,
+          workspaceId: options.workspaceId,
+        }),
+    );
+    const terminalManager: TerminalManager = {
+      getTerminals: vi.fn(),
+      createTerminal,
+      registerCwdEnv: vi.fn(),
+      validateTerminalActivityToken: vi.fn(() => "unknown"),
+      getTerminal: vi.fn(),
+      getTerminalState: vi.fn(),
+      setTerminalTitle: vi.fn(),
+      setTerminalActivity: vi.fn(),
+      clearTerminalAttention: vi.fn(),
+      killTerminal: vi.fn(),
+      killTerminalAndWait: vi.fn(),
+      captureTerminal: vi.fn(),
+      listDirectories: vi.fn(() => []),
+      killAll: vi.fn(),
+      subscribeTerminalsChanged: vi.fn(() => vi.fn()),
+      subscribeTerminalActivity: vi.fn(() => vi.fn()),
+      subscribeTerminalWorkspaceContributionChanged: vi.fn(() => vi.fn()),
+    };
+    const controller = createController({
+      terminalManager,
+      emit: (message) => outboundMessages.push(message),
+      emitBinary: vi.fn(),
+      hasBinaryChannel: () => true,
+      isPathWithinRoot: isSameOrDescendantPath,
+      sessionLogger: createLogger(),
+      listTerminalWorkspaceRefs: async () => [{ workspaceId: "ws-1", cwd: "/work/repo" }],
+    });
+    const viewAttributes = { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" };
+
+    await controller.dispatch({
+      type: "create_terminal_request",
+      cwd: "/work/repo",
+      workspaceId: "ws-1",
+      viewAttributes,
+      requestId: "req-view",
+    });
+
+    expect(createTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: "/work/repo", workspaceId: "ws-1", viewAttributes }),
+    );
+  });
 });
 
 async function flushMicrotasks(): Promise<void> {

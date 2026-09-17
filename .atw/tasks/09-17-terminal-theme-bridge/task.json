@@ -1,0 +1,28 @@
+{
+  "id": "terminal-theme-bridge",
+  "name": "terminal-theme-bridge",
+  "title": "终端主题桥与对称留白：让 TUI 拿到真实前景/背景色",
+  "description": "daemon 对 OSC 10/11/12 颜色查询写死黑色应答，浅色主题下 Codex/Pi 等 TUI 误判为深色终端；终端宿主无内边距导致左贴边右留白；对比度修正关闭。参考 orca 的 view-attribute bridge 修复。",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "server",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-17",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "1e1d0c19ee55020275f0a0bafc61d92192c33cb6"
+  }
+}

@@ -2907,6 +2907,18 @@ export const UnsubscribeTerminalsRequestSchema = z.object({
   workspaceId: z.string().optional(),
 });
 
+// 客户端终端的前景/背景/光标色（#rrggbb）。daemon 用它回答 TUI 的 OSC 10/11/12
+// 与 CSI ?996n 颜色查询；未收到时 daemon 对这些查询保持沉默。
+// 唯一的颜色格式定义：app 用它过滤主题值，daemon 用它解析通道。
+export const TERMINAL_VIEW_ATTRIBUTE_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const TerminalViewAttributeColorSchema = z.string().regex(TERMINAL_VIEW_ATTRIBUTE_COLOR_PATTERN);
+
+export const TerminalViewAttributesSchema = z.object({
+  foreground: TerminalViewAttributeColorSchema,
+  background: TerminalViewAttributeColorSchema,
+  cursor: TerminalViewAttributeColorSchema,
+});
+
 export const CreateTerminalRequestSchema = z.object({
   type: z.literal("create_terminal_request"),
   cwd: z.string(),
@@ -2915,6 +2927,8 @@ export const CreateTerminalRequestSchema = z.object({
   agentId: z.string().optional(),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
+  // 老客户端不发；daemon 未收到时对颜色查询沉默。
+  viewAttributes: TerminalViewAttributesSchema.optional(),
   // Initial PTY size. Added in v0.1.107; the app no longer sends it (the estimate cache that fed
   // it was removed — the pane-focus resize claim sizes the PTY instead). Kept and honored
   // permanently: released v0.1.107 clients still send it, and programmatic callers may pass an
@@ -3686,6 +3700,9 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
+        // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17.
+        // daemon 接受终端视图属性（前景/背景/光标色）并据此回答 TUI 的颜色查询。
+        terminalViewAttributes: z.boolean().optional(),
       })
       .optional(),
   })
@@ -7315,6 +7332,7 @@ export type ListTerminalsResponse = z.infer<typeof ListTerminalsResponseSchema>;
 export type SubscribeTerminalsRequest = z.infer<typeof SubscribeTerminalsRequestSchema>;
 export type UnsubscribeTerminalsRequest = z.infer<typeof UnsubscribeTerminalsRequestSchema>;
 export type TerminalsChanged = z.infer<typeof TerminalsChangedSchema>;
+export type TerminalViewAttributes = z.infer<typeof TerminalViewAttributesSchema>;
 export type CreateTerminalRequest = z.infer<typeof CreateTerminalRequestSchema>;
 export type CreateTerminalResponse = z.infer<typeof CreateTerminalResponseSchema>;
 export type RenameTerminalRequest = z.infer<typeof RenameTerminalRequestSchema>;
