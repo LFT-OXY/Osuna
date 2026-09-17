@@ -1837,8 +1837,29 @@ export const zhCN: TranslationResources = {
       subtitle: "此主机上的 Provider 会话",
       tooltip: "在终端中恢复 Provider 会话",
       loading: "正在加载会话...",
+      scope: {
+        workspace: "Workspace",
+        project: "项目",
+        host: "主机",
+      },
+      search: {
+        placeholder: "搜索会话",
+        clear: "清除搜索",
+      },
+      actions: {
+        refresh: "刷新",
+        refreshing: "正在刷新...",
+      },
       empty: {
         workspace: "此 workspace 还没有 Provider 会话。",
+        project: "此项目还没有 Provider 会话。",
+        host: "此主机还没有 Provider 会话。",
+        search: "没有匹配的会话。",
+      },
+      providerErrors: {
+        title: "无法列出 {{providers}} 的会话",
+        show: "显示详情",
+        hide: "隐藏详情",
       },
       row: {
         opening: "正在打开...",

@@ -4,15 +4,28 @@
 
 `data/query-client.ts` sets `staleTime: Infinity` and disables refetch on mount, reconnect, and focus. Data does not go stale by time; the daemon pushes changes. So do not call `useQuery` from `@tanstack/react-query` directly in features. Use the wrappers in `data/query.ts`, which encode the two shapes the app has:
 
-| Wrapper | For | What it forces you to declare |
-|---------|-----|-------------------------------|
-| `useReplicaQuery` | A value the daemon pushes over the socket | `pushEvent`: the outbound message that invalidates it |
-| `useFetchQuery` / `useFetchQueries` | A request/response value | `dataShape: "list" \| "value"` and either `staleTimeMs` or `immutableWhen(data)` |
-| `fetchQueryOptions` | Prefetch or imperative reads with the same contract | same as above |
+| Wrapper                             | For                                                 | What it forces you to declare                                                    |
+| ----------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `useReplicaQuery`                   | A value the daemon pushes over the socket           | `pushEvent`: the outbound message that invalidates it                            |
+| `useFetchQuery` / `useFetchQueries` | A request/response value                            | `dataShape: "list" \| "value"` and either `staleTimeMs` or `immutableWhen(data)` |
+| `fetchQueryOptions`                 | Prefetch or imperative reads with the same contract | same as above                                                                    |
 
 References: `hooks/use-agent-commands-query.ts`, `data/providers-snapshot.ts`, `plugins/settings/use-settings.ts`, `projects/icons.ts`. Query keys are built by exported functions (`hooks/agent-history-query-key.ts`) so invalidation and tests share them.
 
 Directory-backed caches (Git status, PR status, file preview) are keyed by `(serverId, cwd)` and are React Query caches, not persisted stores (`docs/data-model.md` "Keying convention").
+
+### Fetches with no push event refresh through `enabled`
+
+Some daemon data has no invalidating message: provider session logs, a file edited outside Paseo. Do not add `focus` / `visibilitychange` / `AppState` listeners that call `refetch()`; `hooks/use-app-visible.ts` already owns those listeners for the whole app, and a second set fires twice per focus (React Query cancels and restarts the in-flight fetch). Gate the query instead:
+
+```ts
+// In the runtime-wired wrapper, never inside the surface:
+const isVisible = useAppActivelyVisible() && useRetainedPanelActive();
+// In the surface:
+useFetchQuery({ ..., staleTimeMs: 0, enabled: isClientReady && isVisible });
+```
+
+Re-enabling a stale query is a fetch, so "window regains focus" and "hidden retained panel comes back" both refresh with no code of their own, and a hidden panel never fans out requests in the background. `file-pane/pane.tsx` (`isFileQueryEnabled`) and `session-history/index.tsx` are the references. The surface takes `isVisible: boolean` as a prop next to `isConnected`, so a jsdom test drives the transition by rerendering, not by patching `document.hasFocus`.
 
 ## Hook shape
 

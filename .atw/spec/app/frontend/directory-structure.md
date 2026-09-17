@@ -20,22 +20,22 @@ workspace-labels/
 
 **Shared layers** hold code used by several features:
 
-| Directory | Owns |
-|-----------|------|
-| `app/` | Expo Router routes only: `_layout.tsx`, `index.tsx`, `h/[serverId]/…`, `settings/`, `new.tsx`, `pair-scan.tsx`. Route files are thin; they render a screen. `docs/expo-router.md` governs ownership. |
-| `screens/` | Screen components and their pure state modules: `settings-screen.tsx`, `projects-screen.tsx`, `workspace/`, `agent/`, `new-workspace-*.ts` |
-| `components/` | Shared components. `components/ui/` is the primitive set (`button.tsx`, `alert.tsx`, `loading-spinner.tsx`, `status-badge.tsx`, `combobox.tsx`, `dropdown-menu.tsx`, `context-menu.tsx`, `form-field.tsx`, `menu/`); `components/headers/`, `components/desktop/`, `components/markdown/` are grouped by surface |
-| `hooks/` | Shared hooks and their pure view-model modules (`sidebar-workspaces-view-model.ts` next to `use-…`) |
-| `stores/` | Zustand stores: `session-store.ts` + `session-store-hooks/`, `workspace-layout-store.ts`, `draft-store/`, `panel-store/`, `navigation-active-workspace-store/` |
-| `contexts/` | React contexts for stable values: `session-context.tsx`, `toast-context.tsx`, `voice-context.tsx`, `sidebar-callout-context.tsx` |
-| `data/` | React Query wiring: `query-client.ts`, `query.ts`, provider snapshot and daemon config queries |
-| `runtime/` | Host runtime: `host-runtime.ts`, `directory-sync/`, `replica-cache/`, `websocket-factory.ts` (+ `.web.ts`), `host-features.ts` |
-| `styles/` | Theme and Unistyles setup: `theme.ts`, `unistyles.ts`, `markdown-styles.ts`, `syntax-token-styles.ts` |
-| `constants/` | `platform.ts` (the four gates), `layout.ts` (breakpoints and fixed heights), `theme.ts` |
-| `i18n/` | i18next setup and `resources/<locale>.ts`; all user-visible copy has a key here |
-| `utils/`, `lib/`, `types/` | Pure helpers (`utils/confirm-dialog.ts`), `lib/overlay-root.ts`, shared types (`types/stream.ts`) |
-| `desktop/` | Electron-only surfaces (updates, browser pane), with `.electron.tsx` variants |
-| `test/` | Test seeds: `seed-session.ts`, `window-local-storage.ts` |
+| Directory                  | Owns                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/`                     | Expo Router routes only: `_layout.tsx`, `index.tsx`, `h/[serverId]/…`, `settings/`, `new.tsx`, `pair-scan.tsx`. Route files are thin; they render a screen. `docs/expo-router.md` governs ownership.                                                                                                             |
+| `screens/`                 | Screen components and their pure state modules: `settings-screen.tsx`, `projects-screen.tsx`, `workspace/`, `agent/`, `new-workspace-*.ts`                                                                                                                                                                       |
+| `components/`              | Shared components. `components/ui/` is the primitive set (`button.tsx`, `alert.tsx`, `loading-spinner.tsx`, `status-badge.tsx`, `combobox.tsx`, `dropdown-menu.tsx`, `context-menu.tsx`, `form-field.tsx`, `menu/`); `components/headers/`, `components/desktop/`, `components/markdown/` are grouped by surface |
+| `hooks/`                   | Shared hooks and their pure view-model modules (`sidebar-workspaces-view-model.ts` next to `use-…`)                                                                                                                                                                                                              |
+| `stores/`                  | Zustand stores: `session-store.ts` + `session-store-hooks/`, `workspace-layout-store.ts`, `draft-store/`, `panel-store/`, `navigation-active-workspace-store/`                                                                                                                                                   |
+| `contexts/`                | React contexts for stable values: `session-context.tsx`, `toast-context.tsx`, `voice-context.tsx`, `sidebar-callout-context.tsx`                                                                                                                                                                                 |
+| `data/`                    | React Query wiring: `query-client.ts`, `query.ts`, provider snapshot and daemon config queries                                                                                                                                                                                                                   |
+| `runtime/`                 | Host runtime: `host-runtime.ts`, `directory-sync/`, `replica-cache/`, `websocket-factory.ts` (+ `.web.ts`), `host-features.ts`                                                                                                                                                                                   |
+| `styles/`                  | Theme and Unistyles setup: `theme.ts`, `unistyles.ts`, `markdown-styles.ts`, `syntax-token-styles.ts`                                                                                                                                                                                                            |
+| `constants/`               | `platform.ts` (the four gates), `layout.ts` (breakpoints and fixed heights), `theme.ts`                                                                                                                                                                                                                          |
+| `i18n/`                    | i18next setup and `resources/<locale>.ts`; all user-visible copy has a key here                                                                                                                                                                                                                                  |
+| `utils/`, `lib/`, `types/` | Pure helpers (`utils/confirm-dialog.ts`), `lib/overlay-root.ts`, shared types (`types/stream.ts`)                                                                                                                                                                                                                |
+| `desktop/`                 | Electron-only surfaces (updates, browser pane), with `.electron.tsx` variants                                                                                                                                                                                                                                    |
+| `test/`                    | Test seeds: `seed-session.ts`, `window-local-storage.ts`                                                                                                                                                                                                                                                         |
 
 ## Platform variants are files, not branches
 
@@ -57,14 +57,15 @@ desktop/browser/pane/index.tsx / .web.tsx / .electron.tsx
 
 ## Where a new thing goes
 
-| You are adding | Put it in |
-|----------------|-----------|
-| A new capability with its own state | A new feature module directory with an `index.ts` surface and `internal/`; not five files across `components/`, `hooks/`, `stores/` |
-| A route | `app/…` under the layout that directly owns it, then re-read `docs/expo-router.md` and its checklist |
-| A reusable control | `components/ui/` only if two surfaces need it now; otherwise inside the feature |
-| A persisted per-viewer preference | A Zustand store in `stores/` with AsyncStorage persistence, keyed per `docs/data-model.md` "Keying convention" |
-| A fetched daemon value | A query hook in `data/` or the feature, built on `data/query.ts` |
-| User-visible copy | A key in `i18n/resources/en.ts` plus the other locales |
+| You are adding                                          | Put it in                                                                                                                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A new capability with its own state                     | A new feature module directory with an `index.ts` surface and `internal/`; not five files across `components/`, `hooks/`, `stores/`                                       |
+| A route                                                 | `app/…` under the layout that directly owns it, then re-read `docs/expo-router.md` and its checklist                                                                      |
+| A reusable control                                      | `components/ui/` only if two surfaces need it now; otherwise inside the feature                                                                                           |
+| A persisted per-viewer preference several surfaces read | A Zustand store in `stores/` with AsyncStorage persistence, keyed per `docs/data-model.md` "Keying convention"                                                            |
+| A persisted preference one feature owns                 | The same store shape inside that feature's `internal/` (`session-history/internal/scope-store.ts`); `stores/` cannot import a feature's `internal/`, see State Management |
+| A fetched daemon value                                  | A query hook in `data/` or the feature, built on `data/query.ts`                                                                                                          |
+| User-visible copy                                       | A key in `i18n/resources/en.ts` plus the other locales                                                                                                                    |
 
 ## Anti-patterns
 

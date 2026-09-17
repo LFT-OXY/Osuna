@@ -6,19 +6,19 @@
 
 Before writing markup, find the canonical surface in `docs/design.md` §15 and copy its shape. The primitives in `components/ui/`:
 
-| Need | Use | Not |
-|------|-----|-----|
-| A button | `components/ui/button.tsx` | `<Pressable>` wrapping `<Text>` |
-| A loading state | `components/ui/loading-spinner.tsx` | `ActivityIndicator` imported directly |
-| A status pill | `components/ui/status-badge.tsx` | A bespoke pill |
-| A focused modal task | `components/adaptive-modal-sheet.tsx` | Raw `Modal` |
-| A page-level alert | `components/ui/alert.tsx` | `Alert.alert()` (a no-op on web) or a console line |
-| A destructive confirmation | `utils/confirm-dialog.ts` → `confirmDialog()` | An unguarded action |
-| A picker | `components/ui/combobox.tsx` | A custom list |
-| A trigger-anchored menu | `components/ui/dropdown-menu.tsx`; right-click/long-press `components/ui/context-menu.tsx` | An ad hoc popover (`docs/menus.md`) |
-| A settings section | `components/settings/headings/settings-section.tsx` | Bare `<Text>` headers |
-| A form field | `components/ui/form-field.tsx` with the model from `docs/forms.md` | `useEffect` choreography |
-| A header | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx` | A hand-rolled bar |
+| Need                       | Use                                                                                        | Not                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| A button                   | `components/ui/button.tsx`                                                                 | `<Pressable>` wrapping `<Text>`                    |
+| A loading state            | `components/ui/loading-spinner.tsx`                                                        | `ActivityIndicator` imported directly              |
+| A status pill              | `components/ui/status-badge.tsx`                                                           | A bespoke pill                                     |
+| A focused modal task       | `components/adaptive-modal-sheet.tsx`                                                      | Raw `Modal`                                        |
+| A page-level alert         | `components/ui/alert.tsx`                                                                  | `Alert.alert()` (a no-op on web) or a console line |
+| A destructive confirmation | `utils/confirm-dialog.ts` → `confirmDialog()`                                              | An unguarded action                                |
+| A picker                   | `components/ui/combobox.tsx`                                                               | A custom list                                      |
+| A trigger-anchored menu    | `components/ui/dropdown-menu.tsx`; right-click/long-press `components/ui/context-menu.tsx` | An ad hoc popover (`docs/menus.md`)                |
+| A settings section         | `components/settings/headings/settings-section.tsx`                                        | Bare `<Text>` headers                              |
+| A form field               | `components/ui/form-field.tsx` with the model from `docs/forms.md`                         | `useEffect` choreography                           |
+| A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`               | A hand-rolled bar                                  |
 
 ## Fallible actions own their three states
 
@@ -46,6 +46,7 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 - Retained native panels use `RetainedPanel` / `RetainedPanelActivity`, keep a stable sibling order, and gate effects through `useRetainedPanelActive` (`docs/mobile-panels.md`).
 - Anchored panels go through the portal and lifecycle gates in `docs/floating-panels.md`; the flash and the Android hit-test bug are both documented there.
 - `key` is a stable id, never an index (lint enforces `react/no-array-index-key`).
+- JSX never travels through a prop, not even via a local variable (`react-perf/jsx-no-jsx-as-prop`; `components/tree-rail.tsx` documents the same wall). `Alert`'s `description` is typed `ReactNode`, but the lint rule rejects JSX there, so a list of raw lines is `lines.join("\n")`; richer content goes in `children` or a sibling element. The same plugin's `jsx-no-new-function-as-prop` makes every handler passed to a component a `useCallback`, which is the one case where the "only for memoized children" rule in Hooks and Data yields to the linter.
 
 ## Forbidden (from `docs/design.md` §14, enforced in review)
 

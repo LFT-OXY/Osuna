@@ -1891,8 +1891,29 @@ export const ptBR: TranslationResources = {
       subtitle: "Sessões de provedores neste host",
       tooltip: "Retomar sessões de provedores em um terminal",
       loading: "Carregando sessões...",
+      scope: {
+        workspace: "Workspace",
+        project: "Projeto",
+        host: "Host",
+      },
+      search: {
+        placeholder: "Buscar sessões",
+        clear: "Limpar busca",
+      },
+      actions: {
+        refresh: "Atualizar",
+        refreshing: "Atualizando...",
+      },
       empty: {
         workspace: "Este workspace ainda não tem sessões de provedores.",
+        project: "Este projeto ainda não tem sessões de provedor.",
+        host: "Este host ainda não tem sessões de provedor.",
+        search: "Nenhuma sessão corresponde à sua busca.",
+      },
+      providerErrors: {
+        title: "Não foi possível listar as sessões de {{providers}}",
+        show: "Mostrar detalhes",
+        hide: "Ocultar detalhes",
       },
       row: {
         opening: "Abrindo...",

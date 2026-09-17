@@ -1883,8 +1883,29 @@ export const en = {
       subtitle: "Provider sessions on this host",
       tooltip: "Resume provider sessions in a terminal",
       loading: "Loading sessions...",
+      scope: {
+        workspace: "Workspace",
+        project: "Project",
+        host: "Host",
+      },
+      search: {
+        placeholder: "Search sessions",
+        clear: "Clear search",
+      },
+      actions: {
+        refresh: "Refresh",
+        refreshing: "Refreshing...",
+      },
       empty: {
         workspace: "No provider sessions in this workspace yet.",
+        project: "No provider sessions in this project yet.",
+        host: "No provider sessions on this host yet.",
+        search: "No sessions match your search.",
+      },
+      providerErrors: {
+        title: "Could not list sessions from {{providers}}",
+        show: "Show details",
+        hide: "Hide details",
       },
       row: {
         opening: "Opening...",

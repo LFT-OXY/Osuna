@@ -24,6 +24,7 @@ Some PRDs name "component + fake `DaemonClient`" as the test seam (`components/i
 
 - **JSX is the classic runtime under Vitest.** A component rendered in jsdom, and every shared component it renders (`components/ui/alert.tsx`), needs `import React from "react"` or it throws `React is not defined`. Metro uses the automatic runtime, so nothing else catches this.
 - **i18n has no instance until something imports it.** `useTranslation()` logs `NO_I18NEXT_INSTANCE` and returns keys. Import `{ i18n } from "@/i18n/i18next"` in the test and assert through `i18n.t(...)`, which also satisfies the no-unassigned-import lint rule.
+- **Rendered tests run from `packages/app`, not the repo root.** The root has no Vitest config, so a root-run `npx vitest run packages/app/src/x.test.tsx` gets Vitest's defaults: no `resolve.extensions` for `.web.tsx`, no transform for `react-native-reanimated`. Pure tests happen to survive that; a component that reaches `components/ui/tooltip.tsx` → `ui/floating.tsx` → reanimated dies at load with `SyntaxError: Unexpected token 'typeof'` and reports "no tests", which a reviewer reads as a broken suite. `cd packages/app && npx vitest run src/session-history` is the command; CI runs `vitest run` inside the workspace too.
 - **The `browser` project cannot load the layout store.** `stores/workspace-layout-store.ts` reaches `@react-native-async-storage/async-storage` → `expo-modules-core` → `TurboModuleRegistry`, which react-native-web does not export; `vitest.setup.ts` shims that only for the `unit` project. A component that opens tabs stays a jsdom test with the async-storage `vi.mock` copied from `workspace-tabs/explorer-sidebar.test.ts`, or its tab-opening moves behind an injected callback so the surface itself has no store import.
 
 Keep the surface's props the seam: `client: Pick<DaemonClient, ...> | null`, `isConnected`, and callbacks for what the shell decides (`onTerminalCreated`). The fake client is a plain object of `vi.fn` implementations typed from `DaemonClient`; nothing else is mocked except `@/components/provider-icons`, whose SVG icons have no Node behavior.
@@ -42,7 +43,8 @@ Every action that can fail needs behavioral coverage for success and for failure
 ## Running
 
 ```bash
-npx vitest run packages/app/src/stores/session-store.test.ts --bail=1
+npx vitest run packages/app/src/stores/session-store.test.ts --bail=1   # pure tests survive a root run
+cd packages/app && npx vitest run src/session-history --bail=1          # rendered tests need the app config
 npm run test:browser --workspace=@getpaseo/app                  # all *.browser.test; small set
 cd packages/app && npx playwright test --project=browser e2e/browser/agent-message-submission.spec.ts
 ```

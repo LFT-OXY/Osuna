@@ -63,6 +63,16 @@ main pane through `openTerminalTabFromSessionHistory`; the Explorer pane never h
 the same call serves the desktop panel and the compact overlay. Terminology is in
 [glossary.md](glossary.md) under **Provider session** and **Session history**.
 
+The listing is directory-backed, keyed by `(serverId, scope, cwds)`, not by workspace. The
+scope (`workspace` / `project` / `host`) is one per-device preference in
+`packages/app/src/session-history/internal/scope-store.ts`, not a workspace setting: the user
+picks how wide to look and that choice follows them across projects. The daemon has no push
+event for provider logs, so the query pauses while the app or the panel is hidden and React
+Query refetches when either comes back or on the refresh button; search filters the fetched
+rows on the client and never reaches the daemon. Outside `workspace` scope each row shows its
+directory relative to the project root; Paseo worktrees live under `$PASEO_HOME/worktrees`,
+outside the root, so they show in full.
+
 ## Side pane
 
 `packages/app/src/workspace-tabs/open-beside.ts` owns content opened beside the user's work. The

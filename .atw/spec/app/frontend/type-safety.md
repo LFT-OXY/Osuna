@@ -4,15 +4,15 @@ TypeScript is strict and `typecheck` runs `tsgo --noEmit` for the package. The r
 
 ## Where types come from
 
-| Concept | Source | Do not |
-|---------|--------|--------|
-| Anything on the wire | `@getpaseo/protocol/*` subpaths (`agent-lifecycle`, `messages`, `workspace-labels`, `forge-manifest`) | Redeclare a wire shape locally |
-| Client API | `@getpaseo/client/internal/daemon-client` (`DaemonClient`) | Type the client as `any` in tests |
-| Stream and timeline items | `types/stream.ts`, `types/shared.ts`, `types/agent-directory.ts` | Add a parallel `StreamItem`-like union |
-| Store state | The `interface … State` next to `create<State>()` | Export `ReturnType<typeof useStore.getState>` |
-| Composer attachments | `attachments/types.ts` | Inline `{ id: string; mimeType: string }` |
+| Concept                   | Source                                                                                                | Do not                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Anything on the wire      | `@getpaseo/protocol/*` subpaths (`agent-lifecycle`, `messages`, `workspace-labels`, `forge-manifest`) | Redeclare a wire shape locally                |
+| Client API                | `@getpaseo/client/internal/daemon-client` (`DaemonClient`)                                            | Type the client as `any` in tests             |
+| Stream and timeline items | `types/stream.ts`, `types/shared.ts`, `types/agent-directory.ts`                                      | Add a parallel `StreamItem`-like union        |
+| Store state               | The `interface … State` next to `create<State>()`                                                     | Export `ReturnType<typeof useStore.getState>` |
+| Composer attachments      | `attachments/types.ts`                                                                                | Inline `{ id: string; mimeType: string }`     |
 
-If a Zod schema exists (protocol, persisted settings, plugin manifests), the type is `z.infer<typeof Schema>`.
+If a Zod schema exists (protocol, persisted settings, plugin manifests), the type is `z.infer<typeof Schema>`. A slice of a wire message is derived, not retyped: `Pick<FetchRecentProviderSessionsResponseMessage["payload"], "entries" | "providerErrors">` for a sub-object, `NonNullable<Payload["providerErrors"]>[number]` for an element of an optional array (`session-history/internal/model.ts`). A hand-written `interface { provider: string; message: string }` that mirrors the schema drifts the day the schema gains a field.
 
 ## Model states, not flags
 

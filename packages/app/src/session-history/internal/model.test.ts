@@ -4,6 +4,10 @@ import {
   buildResumeTerminalLaunch,
   buildSessionHistoryQueryKey,
   buildSessionHistoryRows,
+  filterSessionHistoryRows,
+  formatSessionHistoryDirectory,
+  mergeSessionHistoryPayloads,
+  resolveSessionHistoryCwds,
   resolveSessionHistoryTitle,
 } from "./model";
 
@@ -70,5 +74,94 @@ describe("buildSessionHistoryQueryKey", () => {
     expect(
       buildSessionHistoryQueryKey({ serverId: "s1", scope: "workspace", cwds: ["/repo/app"] }),
     ).toEqual(["session-history", "s1", "workspace", ["/repo/app"]]);
+  });
+});
+
+describe("resolveSessionHistoryCwds", () => {
+  const input = {
+    workspaceDirectory: "/repo/app",
+    projectWorkspaceDirectories: ["/repo/wt-b", "/repo/app", "/repo/wt-a", "/repo/wt-b"],
+  };
+
+  it("asks for the workspace directory alone in workspace scope", () => {
+    expect(resolveSessionHistoryCwds("workspace", input)).toEqual(["/repo/app"]);
+  });
+
+  it("asks for every active project workspace once, sorted, in project scope", () => {
+    expect(resolveSessionHistoryCwds("project", input)).toEqual([
+      "/repo/app",
+      "/repo/wt-a",
+      "/repo/wt-b",
+    ]);
+  });
+
+  it("includes the current workspace in project scope even before the store lists it", () => {
+    expect(
+      resolveSessionHistoryCwds("project", { ...input, projectWorkspaceDirectories: [] }),
+    ).toEqual(["/repo/app"]);
+  });
+
+  it("asks for the whole host with no directory in host scope", () => {
+    expect(resolveSessionHistoryCwds("host", input)).toEqual([]);
+  });
+});
+
+describe("mergeSessionHistoryPayloads", () => {
+  it("concatenates entries and keeps one copy of each provider error", () => {
+    const merged = mergeSessionHistoryPayloads([
+      {
+        entries: [entry({ providerHandleId: "a" })],
+        providerErrors: [{ provider: "codex", message: "timed out" }],
+      },
+      {
+        entries: [entry({ providerHandleId: "b" })],
+        providerErrors: [
+          { provider: "codex", message: "timed out" },
+          { provider: "opencode", message: "not installed" },
+        ],
+      },
+      { entries: [] },
+    ]);
+
+    expect(merged.entries.map((item) => item.providerHandleId)).toEqual(["a", "b"]);
+    expect(merged.providerErrors).toEqual([
+      { provider: "codex", message: "timed out" },
+      { provider: "opencode", message: "not installed" },
+    ]);
+  });
+});
+
+describe("filterSessionHistoryRows", () => {
+  const rows = buildSessionHistoryRows([
+    entry({ providerHandleId: "1", title: "Fix Login", firstPromptPreview: "auth bug" }),
+    entry({ providerHandleId: "2", title: "Refactor", lastPromptPreview: "rename LOGIN helper" }),
+    entry({ providerHandleId: "3", title: "Docs" }),
+  ]);
+
+  it("returns every row for a blank query", () => {
+    expect(filterSessionHistoryRows(rows, "   ")).toBe(rows);
+  });
+
+  it("matches title, first prompt and last prompt case-insensitively", () => {
+    expect(filterSessionHistoryRows(rows, "login").map((row) => row.providerHandleId)).toEqual([
+      "1",
+      "2",
+    ]);
+    expect(filterSessionHistoryRows(rows, "AUTH").map((row) => row.providerHandleId)).toEqual([
+      "1",
+    ]);
+    expect(filterSessionHistoryRows(rows, "nothing")).toEqual([]);
+  });
+});
+
+describe("formatSessionHistoryDirectory", () => {
+  it("shows the path under the project root, nothing at the root, the full path outside", () => {
+    expect(formatSessionHistoryDirectory("/repo/app/packages/web", "/repo/app")).toBe(
+      "packages/web",
+    );
+    expect(formatSessionHistoryDirectory("/repo/app", "/repo/app/")).toBeNull();
+    expect(formatSessionHistoryDirectory("/repo/app-other", "/repo/app")).toBe("/repo/app-other");
+    expect(formatSessionHistoryDirectory("/tmp/wt", "/repo/app")).toBe("/tmp/wt");
+    expect(formatSessionHistoryDirectory("/tmp/wt", null)).toBeNull();
   });
 });

@@ -23,3 +23,10 @@
 - 审查处置：WebView 内边距按 PRD 排除；WebView 会随共享运行时得到对比度修正，已写进 PRD Out of Scope；深浅判定口径写进 PRD 与工单。留白放运行时而非组件是判断题，保留（PRD 把几何测试钉在 runtime 浏览器测试）。
 - 环境：本机原缺 Playwright Chromium，已 `npx playwright install chromium`；runtime 浏览器测试不加载 xterm.css，`.xterm-screen` 几何无意义。
 - 待人工验收：留白肉眼对称、浅色下 ANSI white 可读、深色高亮无变化。
+
+## 2026-09-18 工单 02 实现：作用域三档、搜索与刷新
+
+- 作用域 store 放在 `session-history/internal/scope-store.ts`（feature 自有偏好，`stores/` 不能反向引 `internal/`）；project 作用域用新选择器 `useProjectWorkspaceDirectories` 按 map 身份记忆。
+- 刷新不自写监听：`isVisible = useAppActivelyVisible() && useRetainedPanelActive()` 门控 `enabled`，React Query 重新启用即刷新。
+- 渲染型测试必须在 `packages/app` 下跑；从仓库根跑会因 reanimated 未转译报 `SyntaxError: Unexpected token 'typeof'`（HEAD 上工单 01 的测试同样如此）。
+- 审查处置：providerErrors 标题用 provider id（显示名需拉 providers snapshot，超出接缝）；目录显示按 PRD 字面（根目录空白、worktree 全路径），daemon 是等价匹配所以 project 作用域几乎不会出现相对路径——交用户决定。

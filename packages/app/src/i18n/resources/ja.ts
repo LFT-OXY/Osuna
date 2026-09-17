@@ -1878,8 +1878,29 @@ export const ja: TranslationResources = {
       subtitle: "このホストのプロバイダーセッション",
       tooltip: "プロバイダーセッションをターミナルで再開",
       loading: "セッションを読み込み中...",
+      scope: {
+        workspace: "ワークスペース",
+        project: "プロジェクト",
+        host: "ホスト",
+      },
+      search: {
+        placeholder: "セッションを検索",
+        clear: "検索をクリア",
+      },
+      actions: {
+        refresh: "更新",
+        refreshing: "更新中...",
+      },
       empty: {
         workspace: "このワークスペースにはまだプロバイダーセッションがありません。",
+        project: "このプロジェクトにはまだプロバイダーセッションがありません。",
+        host: "このホストにはまだプロバイダーセッションがありません。",
+        search: "検索に一致するセッションはありません。",
+      },
+      providerErrors: {
+        title: "{{providers}} のセッションを一覧できませんでした",
+        show: "詳細を表示",
+        hide: "詳細を隠す",
       },
       row: {
         opening: "開いています...",

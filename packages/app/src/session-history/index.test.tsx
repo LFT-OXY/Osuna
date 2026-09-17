@@ -18,7 +18,11 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
     removeItem: vi.fn(async () => undefined),
   },
 }));
-import { SessionHistorySurface, type SessionHistoryClient } from "@/session-history";
+import {
+  SessionHistorySurface,
+  type SessionHistoryClient,
+  type SessionHistoryScope,
+} from "@/session-history";
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
 
 vi.mock("@/components/provider-icons", () => ({
@@ -61,25 +65,45 @@ function createdTerminal(id: string): CreateTerminalPayload {
 
 function renderSurface(
   client: SessionHistoryClient | null,
-  options?: { isConnected?: boolean; onTerminalCreated?: (terminalId: string) => void },
+  options?: {
+    isConnected?: boolean;
+    onTerminalCreated?: (terminalId: string) => void;
+    scope?: SessionHistoryScope;
+    onScopeChange?: (scope: SessionHistoryScope) => void;
+    projectWorkspaceDirectories?: string[];
+    isVisible?: boolean;
+  },
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const onTerminalCreated = options?.onTerminalCreated ?? vi.fn();
-  const view = render(
+  const onScopeChange = options?.onScopeChange ?? vi.fn();
+  const surface = (isVisible: boolean) => (
     <QueryClientProvider client={queryClient}>
       <SessionHistorySurface
         serverId="server-1"
         workspaceId="ws-1"
         workspaceDirectory="/repo/app"
+        projectRootPath="/repo/app"
+        projectWorkspaceDirectories={options?.projectWorkspaceDirectories ?? ["/repo/app"]}
+        scope={options?.scope ?? "workspace"}
+        onScopeChange={onScopeChange}
         client={client}
         isConnected={options?.isConnected ?? true}
+        isVisible={isVisible}
         onTerminalCreated={onTerminalCreated}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { ...view, queryClient, onTerminalCreated };
+  const view = render(surface(options?.isVisible ?? true));
+  return {
+    ...view,
+    queryClient,
+    onTerminalCreated,
+    onScopeChange,
+    setVisible: (isVisible: boolean) => view.rerender(surface(isVisible)),
+  };
 }
 
 function createClient(input: {
@@ -149,7 +173,9 @@ describe("SessionHistorySurface", () => {
     renderSurface(createClient({ fetchRecentProviderSessions }));
 
     await screen.findByText("Fix login");
-    const labels = screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"));
+    const labels = screen
+      .getAllByTestId(/^session-history-row-/)
+      .map((button) => button.getAttribute("aria-label"));
     expect(labels).toEqual(["Fix login", "Codex", "older prompt"]);
     expect(screen.queryByText("Not resumable")).toBeNull();
   });
@@ -237,6 +263,160 @@ describe("SessionHistorySurface", () => {
 
     await screen.findByText("codex app-server unavailable");
     fireEvent.click(screen.getByTestId("session-history-retry"));
+    await screen.findByText("Fix login");
+  });
+
+  it("fans out one request per project workspace and merges the answers without duplicates", async () => {
+    const fetchRecentProviderSessionsMock = vi.fn(async (options: { cwd?: string }) => ({
+      requestId: "recent",
+      entries:
+        options.cwd === "/repo/app"
+          ? [entry({ providerHandleId: "shared" }), entry({ providerHandleId: "root-only" })]
+          : [entry({ providerHandleId: "shared", cwd: options.cwd ?? "" })],
+    }));
+    const fetchRecentProviderSessions =
+      fetchRecentProviderSessionsMock as unknown as FetchRecentProviderSessions;
+
+    renderSurface(createClient({ fetchRecentProviderSessions }), {
+      scope: "project",
+      projectWorkspaceDirectories: ["/tmp/wt", "/repo/app"],
+    });
+
+    await screen.findAllByText("Fix login");
+    expect(fetchRecentProviderSessionsMock.mock.calls.map((call) => call[0])).toEqual([
+      { cwd: "/repo/app", limit: 200 },
+      { cwd: "/tmp/wt", limit: 200 },
+    ]);
+    expect(screen.getAllByRole("button", { name: "Fix login" })).toHaveLength(2);
+  });
+
+  it("asks for the whole host without a directory in host scope", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries: [entry({})],
+    })) as unknown as FetchRecentProviderSessions;
+
+    renderSurface(createClient({ fetchRecentProviderSessions }), { scope: "host" });
+
+    await screen.findByText("Fix login");
+    expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
+    expect(fetchRecentProviderSessions).toHaveBeenCalledWith({ limit: 200 });
+  });
+
+  it("shows where a session lives relative to the project root outside workspace scope", async () => {
+    const entries = [
+      entry({ providerHandleId: "root", cwd: "/repo/app" }),
+      entry({ providerHandleId: "nested", cwd: "/repo/app/packages/web" }),
+      entry({ providerHandleId: "outside", cwd: "/tmp/wt" }),
+    ];
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries,
+    })) as unknown as FetchRecentProviderSessions;
+
+    const projectView = renderSurface(createClient({ fetchRecentProviderSessions }), {
+      scope: "project",
+    });
+    await screen.findByText("packages/web");
+    expect(screen.getByText("/tmp/wt")).toBeTruthy();
+    expect(screen.queryByText("/repo/app")).toBeNull();
+    projectView.unmount();
+
+    renderSurface(createClient({ fetchRecentProviderSessions }), { scope: "workspace" });
+    await screen.findAllByText("Fix login");
+    expect(screen.queryByText("packages/web")).toBeNull();
+  });
+
+  it("reports the chosen scope to the shell", async () => {
+    const onScopeChange = vi.fn();
+    renderSurface(createClient({}), { onScopeChange });
+
+    await screen.findByText(i18n.t("panels.sessionHistory.empty.workspace"));
+    fireEvent.click(screen.getByTestId("session-history-scope-host"));
+
+    expect(onScopeChange).toHaveBeenCalledWith("host");
+  });
+
+  it("filters rows by title and prompt previews without asking the daemon again", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries: [
+        entry({ providerHandleId: "1", title: "Fix login", firstPromptPreview: "auth bug" }),
+        entry({ providerHandleId: "2", title: "Refactor", lastPromptPreview: "rename login" }),
+        entry({ providerHandleId: "3", title: "Docs", firstPromptPreview: null }),
+      ],
+    })) as unknown as FetchRecentProviderSessions;
+
+    renderSurface(createClient({ fetchRecentProviderSessions }));
+    await screen.findByText("Docs");
+
+    fireEvent.change(screen.getByTestId("session-history-search"), {
+      target: { value: "LOGIN" },
+    });
+    await waitFor(() => expect(screen.queryByText("Docs")).toBeNull());
+    expect(screen.getByText("Fix login")).toBeTruthy();
+    expect(screen.getByText("Refactor")).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId("session-history-search"), {
+      target: { value: "nothing here" },
+    });
+    await screen.findByText(i18n.t("panels.sessionHistory.empty.search"));
+    expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the good providers' sessions and names the failed ones", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries: [entry({})],
+      providerErrors: [{ provider: "codex", message: "codex app-server unavailable" }],
+    })) as unknown as FetchRecentProviderSessions;
+
+    renderSurface(createClient({ fetchRecentProviderSessions }));
+
+    await screen.findByText("Fix login");
+    expect(screen.getByTestId("session-history-provider-errors")).toBeTruthy();
+    expect(
+      screen.getByText(
+        i18n.t("panels.sessionHistory.providerErrors.title", { providers: "codex" }),
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("codex: codex app-server unavailable")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("session-history-provider-errors-toggle"));
+    expect(screen.queryByText("codex: codex app-server unavailable")).toBeNull();
+  });
+
+  it("refetches on the refresh button and when the panel becomes visible again", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries: [entry({})],
+    })) as unknown as FetchRecentProviderSessions;
+
+    const { setVisible } = renderSurface(createClient({ fetchRecentProviderSessions }));
+    await screen.findByText("Fix login");
+    expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("session-history-refresh"));
+    await waitFor(() => expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(2));
+
+    setVisible(false);
+    setVisible(true);
+    await waitFor(() => expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(3));
+    expect(screen.getByText("Fix login")).toBeTruthy();
+  });
+
+  it("waits until the panel is visible before listing", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries: [entry({})],
+    })) as unknown as FetchRecentProviderSessions;
+
+    const { setVisible } = renderSurface(createClient({ fetchRecentProviderSessions }), {
+      isVisible: false,
+    });
+    expect(fetchRecentProviderSessions).not.toHaveBeenCalled();
+
+    setVisible(true);
     await screen.findByText("Fix login");
   });
 });

@@ -1906,8 +1906,29 @@ export const es: TranslationResources = {
       subtitle: "Sesiones de proveedores en este host",
       tooltip: "Reanudar sesiones de proveedores en una terminal",
       loading: "Cargando sesiones...",
+      scope: {
+        workspace: "Espacio de trabajo",
+        project: "Proyecto",
+        host: "Host",
+      },
+      search: {
+        placeholder: "Buscar sesiones",
+        clear: "Borrar búsqueda",
+      },
+      actions: {
+        refresh: "Actualizar",
+        refreshing: "Actualizando...",
+      },
       empty: {
         workspace: "Este espacio de trabajo aún no tiene sesiones de proveedores.",
+        project: "Este proyecto aún no tiene sesiones de proveedor.",
+        host: "Este host aún no tiene sesiones de proveedor.",
+        search: "Ninguna sesión coincide con tu búsqueda.",
+      },
+      providerErrors: {
+        title: "No se pudieron listar las sesiones de {{providers}}",
+        show: "Mostrar detalles",
+        hide: "Ocultar detalles",
       },
       row: {
         opening: "Abriendo...",

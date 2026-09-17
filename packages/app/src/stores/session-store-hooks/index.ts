@@ -3,6 +3,7 @@ import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
 import {
   composeWorkspaceStructure,
+  createProjectWorkspaceDirectoriesSelector,
   createWorkspaceStructureProjectsSelector,
   selectHasHydratedWorkspaces,
   selectHydratedWorkspaceServerIds,
@@ -129,6 +130,17 @@ export function useWorkspaceStructure(serverIds: string[]): WorkspaceStructure {
       }),
     [projectOrder, projects, workspaceOrderByScope],
   );
+}
+
+export function useProjectWorkspaceDirectories(
+  serverId: string | null,
+  projectId: string | null,
+): string[] {
+  const selectDirectories = useMemo(
+    () => createProjectWorkspaceDirectoriesSelector(serverId, projectId),
+    [serverId, projectId],
+  );
+  return useStoreWithEqualityFn(useSessionStore, selectDirectories, workspaceEqualityFns.deep);
 }
 
 export function useWorkspaceKeys(serverId: string | null): string[] {

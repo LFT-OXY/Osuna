@@ -1868,8 +1868,29 @@ export const ko: TranslationResources = {
       subtitle: "이 호스트의 프로바이더 세션",
       tooltip: "터미널에서 프로바이더 세션 재개",
       loading: "세션을 불러오는 중...",
+      scope: {
+        workspace: "워크스페이스",
+        project: "프로젝트",
+        host: "호스트",
+      },
+      search: {
+        placeholder: "세션 검색",
+        clear: "검색 지우기",
+      },
+      actions: {
+        refresh: "새로고침",
+        refreshing: "새로고침 중...",
+      },
       empty: {
         workspace: "이 워크스페이스에는 아직 프로바이더 세션이 없습니다.",
+        project: "이 프로젝트에는 아직 프로바이더 세션이 없습니다.",
+        host: "이 호스트에는 아직 프로바이더 세션이 없습니다.",
+        search: "검색과 일치하는 세션이 없습니다.",
+      },
+      providerErrors: {
+        title: "{{providers}}의 세션을 나열할 수 없습니다",
+        show: "세부 정보 표시",
+        hide: "세부 정보 숨기기",
       },
       row: {
         opening: "여는 중...",

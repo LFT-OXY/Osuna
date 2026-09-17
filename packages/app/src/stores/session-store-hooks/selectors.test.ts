@@ -4,11 +4,13 @@ import { createProjectViewKey } from "@/projects/workspace-structure";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import {
   composeWorkspaceStructure,
+  createProjectWorkspaceDirectoriesSelector,
   createWorkspaceStructureProjectsSelector,
   selectHasWorkspaces,
   selectHydratedWorkspaceServerIds,
   selectWorkspaceDirectoryServerIds,
   selectProjectOrder,
+  selectProjectWorkspaceDirectories,
   selectRecommendedProjectPaths,
   selectWorkspace,
   selectWorkspaceDirectory,
@@ -617,5 +619,48 @@ describe("selectWorkspaceStatusesForBadges", () => {
     expect(tracked.current).toEqual(["failed", "attention"]);
 
     tracked.stop();
+  });
+});
+
+describe("selectProjectWorkspaceDirectories", () => {
+  afterEach(() => {
+    useSessionStore.setState({ sessions: {} });
+  });
+
+  it("lists the distinct directories of the project's workspaces, sorted", () => {
+    initializeWorkspaces([
+      createWorkspace({ id: "ws-b", workspaceDirectory: "/repo/wt-b" }),
+      createWorkspace({ id: "ws-main", workspaceDirectory: "/repo" }),
+      createWorkspace({ id: "ws-dup", workspaceDirectory: "/repo" }),
+      createWorkspace({ id: "ws-other", projectId: "project-2", workspaceDirectory: "/other" }),
+      createWorkspace({ id: "ws-blank", workspaceDirectory: "" }),
+    ]);
+
+    expect(
+      selectProjectWorkspaceDirectories(useSessionStore.getState(), SERVER_ID, "project-1"),
+    ).toEqual(["/repo", "/repo/wt-b"]);
+    expect(selectProjectWorkspaceDirectories(useSessionStore.getState(), SERVER_ID, null)).toEqual(
+      [],
+    );
+    expect(
+      selectProjectWorkspaceDirectories(useSessionStore.getState(), "missing", "project-1"),
+    ).toEqual([]);
+  });
+
+  it("returns the same array until the workspaces map changes", () => {
+    initializeWorkspaces([createWorkspace({ id: "ws-main", workspaceDirectory: "/repo" })]);
+    const select = createProjectWorkspaceDirectoriesSelector(SERVER_ID, "project-1");
+
+    const first = select(useSessionStore.getState());
+    expect(select(useSessionStore.getState())).toBe(first);
+
+    useSessionStore.getState().setWorkspaces(
+      SERVER_ID,
+      new Map([
+        ["ws-main", createWorkspace({ id: "ws-main", workspaceDirectory: "/repo" })],
+        ["ws-wt", createWorkspace({ id: "ws-wt", workspaceDirectory: "/repo/wt" })],
+      ]),
+    );
+    expect(select(useSessionStore.getState())).toEqual(["/repo", "/repo/wt"]);
   });
 });

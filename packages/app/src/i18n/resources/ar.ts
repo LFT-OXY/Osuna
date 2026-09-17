@@ -1858,8 +1858,29 @@ export const ar: TranslationResources = {
       subtitle: "جلسات الموفّرين على هذا المضيف",
       tooltip: "استئناف جلسات الموفّرين في طرفية",
       loading: "جارٍ تحميل الجلسات...",
+      scope: {
+        workspace: "مساحة العمل",
+        project: "المشروع",
+        host: "المضيف",
+      },
+      search: {
+        placeholder: "البحث في الجلسات",
+        clear: "مسح البحث",
+      },
+      actions: {
+        refresh: "تحديث",
+        refreshing: "جارٍ التحديث...",
+      },
       empty: {
         workspace: "لا توجد جلسات موفّرين في مساحة العمل هذه بعد.",
+        project: "لا توجد جلسات موفّرين في هذا المشروع بعد.",
+        host: "لا توجد جلسات موفّرين على هذا المضيف بعد.",
+        search: "لا توجد جلسات مطابقة لبحثك.",
+      },
+      providerErrors: {
+        title: "تعذّر سرد الجلسات من {{providers}}",
+        show: "عرض التفاصيل",
+        hide: "إخفاء التفاصيل",
       },
       row: {
         opening: "جارٍ الفتح...",
