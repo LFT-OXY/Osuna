@@ -21,8 +21,10 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 import {
   SessionHistorySurface,
   type SessionHistoryClient,
+  type SessionHistoryImportResult,
   type SessionHistoryScope,
 } from "@/session-history";
+import { resetResumeTerminalsForTests } from "@/session-history/internal/resume-terminals";
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
 
 vi.mock("@/components/provider-icons", () => ({
@@ -32,6 +34,9 @@ vi.mock("@/components/provider-icons", () => ({
 type FetchRecentProviderSessions = DaemonClient["fetchRecentProviderSessions"];
 type CreateTerminal = DaemonClient["createTerminal"];
 type CreateTerminalPayload = Awaited<ReturnType<CreateTerminal>>;
+type ListTerminals = DaemonClient["listTerminals"];
+type ImportAgent = DaemonClient["importAgent"];
+type ImportedAgentPayload = Awaited<ReturnType<ImportAgent>>;
 
 function entry(
   overrides: Partial<FetchRecentProviderSessionEntry>,
@@ -63,25 +68,72 @@ function createdTerminal(id: string): CreateTerminalPayload {
   };
 }
 
+function listedTerminals(...ids: string[]): Awaited<ReturnType<ListTerminals>> {
+  return {
+    requestId: "list-terminals",
+    cwd: "/repo/app",
+    terminals: ids.map((id) => ({
+      id,
+      name: id,
+      cwd: "/repo/app",
+      workspaceId: "ws-1",
+      activity: null,
+    })),
+  };
+}
+
+function importedAgent(overrides: Partial<ImportedAgentPayload>): ImportedAgentPayload {
+  return {
+    id: "agent-imported",
+    provider: "claude",
+    cwd: "/repo/app",
+    workspaceId: "ws-1",
+    model: null,
+    createdAt: "2026-09-17T10:00:00.000Z",
+    updatedAt: "2026-09-17T10:00:00.000Z",
+    lastUserMessageAt: null,
+    status: "idle",
+    capabilities: {
+      supportsStreaming: false,
+      supportsSessionPersistence: true,
+      supportsDynamicModes: false,
+      supportsMcpServers: false,
+      supportsReasoningStream: false,
+      supportsToolInvocations: false,
+    },
+    currentModeId: null,
+    availableModes: [],
+    pendingPermissions: [],
+    persistence: null,
+    title: "Fix login",
+    labels: {},
+    ...overrides,
+  };
+}
+
 function renderSurface(
   client: SessionHistoryClient | null,
   options?: {
     isConnected?: boolean;
-    onTerminalCreated?: (terminalId: string) => void;
+    onOpenTerminal?: (terminalId: string) => void;
     scope?: SessionHistoryScope;
     onScopeChange?: (scope: SessionHistoryScope) => void;
     projectWorkspaceDirectories?: string[];
     isVisible?: boolean;
     isSupported?: boolean;
     onOpenAgent?: (agentId: string, workspaceId: string | null) => void;
+    onCopyResumeCommand?: (command: string) => void;
+    onImported?: (result: SessionHistoryImportResult) => void;
   },
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const onTerminalCreated = options?.onTerminalCreated ?? vi.fn();
+  const onOpenTerminal = options?.onOpenTerminal ?? vi.fn();
   const onScopeChange = options?.onScopeChange ?? vi.fn();
   const onOpenAgent = options?.onOpenAgent ?? vi.fn();
+  const onCopyResumeCommand = options?.onCopyResumeCommand ?? vi.fn();
+  const onImported = options?.onImported ?? vi.fn();
   const surface = (isVisible: boolean) => (
     <QueryClientProvider client={queryClient}>
       <SessionHistorySurface
@@ -96,8 +148,10 @@ function renderSurface(
         isConnected={options?.isConnected ?? true}
         isSupported={options?.isSupported ?? true}
         isVisible={isVisible}
-        onTerminalCreated={onTerminalCreated}
+        onOpenTerminal={onOpenTerminal}
         onOpenAgent={onOpenAgent}
+        onCopyResumeCommand={onCopyResumeCommand}
+        onImported={onImported}
       />
     </QueryClientProvider>
   );
@@ -105,9 +159,11 @@ function renderSurface(
   return {
     ...view,
     queryClient,
-    onTerminalCreated,
+    onOpenTerminal,
     onScopeChange,
     onOpenAgent,
+    onCopyResumeCommand,
+    onImported,
     setVisible: (isVisible: boolean) => view.rerender(surface(isVisible)),
   };
 }
@@ -115,6 +171,8 @@ function renderSurface(
 function createClient(input: {
   fetchRecentProviderSessions?: FetchRecentProviderSessions;
   createTerminal?: CreateTerminal;
+  listTerminals?: ListTerminals;
+  importAgent?: ImportAgent;
 }): SessionHistoryClient {
   return {
     fetchRecentProviderSessions:
@@ -126,6 +184,10 @@ function createClient(input: {
     createTerminal:
       input.createTerminal ??
       (vi.fn(async () => createdTerminal("term-1")) as unknown as CreateTerminal),
+    listTerminals:
+      input.listTerminals ?? (vi.fn(async () => listedTerminals()) as unknown as ListTerminals),
+    importAgent:
+      input.importAgent ?? (vi.fn(async () => importedAgent({})) as unknown as ImportAgent),
   };
 }
 
@@ -133,6 +195,7 @@ describe("SessionHistorySurface", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    resetResumeTerminalsForTests();
   });
 
   it("asks the daemon for the workspace directory at the protocol limit", async () => {
@@ -194,7 +257,7 @@ describe("SessionHistorySurface", () => {
     const createTerminal = vi.fn(async () =>
       createdTerminal("term-9"),
     ) as unknown as CreateTerminal;
-    const onTerminalCreated = vi.fn();
+    const onOpenTerminal = vi.fn();
     const { queryClient } = renderSurface(
       createClient({
         fetchRecentProviderSessions: vi.fn(async () => ({
@@ -203,12 +266,12 @@ describe("SessionHistorySurface", () => {
         })) as unknown as FetchRecentProviderSessions,
         createTerminal,
       }),
-      { onTerminalCreated },
+      { onOpenTerminal },
     );
 
     fireEvent.click(await screen.findByTestId("session-history-row-codex-handle-1"));
 
-    await waitFor(() => expect(onTerminalCreated).toHaveBeenCalledWith("term-9"));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledWith("term-9"));
     expect(createTerminal).toHaveBeenCalledWith("/repo/worktree", "Fix login", undefined, {
       command: "codex",
       args: ["resume", "handle-1"],
@@ -227,7 +290,7 @@ describe("SessionHistorySurface", () => {
       terminal: null,
       error: "spawn codex ENOENT",
     })) as unknown as CreateTerminal;
-    const { onTerminalCreated } = renderSurface(
+    const { onOpenTerminal } = renderSurface(
       createClient({
         fetchRecentProviderSessions: vi.fn(async () => ({
           requestId: "recent",
@@ -241,14 +304,14 @@ describe("SessionHistorySurface", () => {
 
     await screen.findByText("spawn codex ENOENT");
     expect(screen.getByTestId("session-history-open-error")).toBeTruthy();
-    expect(onTerminalCreated).not.toHaveBeenCalled();
+    expect(onOpenTerminal).not.toHaveBeenCalled();
     expect(screen.getByText("Fix login")).toBeTruthy();
   });
 
   it("marks sessions Paseo owns and opens their agent instead of a terminal", async () => {
     const createTerminal = vi.fn() as unknown as CreateTerminal;
     const onOpenAgent = vi.fn();
-    const { onTerminalCreated } = renderSurface(
+    const { onOpenTerminal } = renderSurface(
       createClient({
         fetchRecentProviderSessions: vi.fn(async () => ({
           requestId: "recent",
@@ -277,7 +340,7 @@ describe("SessionHistorySurface", () => {
 
     expect(onOpenAgent).toHaveBeenCalledWith("agent-7", "ws-9");
     expect(createTerminal).not.toHaveBeenCalled();
-    expect(onTerminalCreated).not.toHaveBeenCalled();
+    expect(onOpenTerminal).not.toHaveBeenCalled();
   });
 
   it("opens a legacy agent without a workspace through the same callback", async () => {
@@ -491,5 +554,210 @@ describe("SessionHistorySurface", () => {
 
     setVisible(true);
     await screen.findByText("Fix login");
+  });
+
+  it("focuses the terminal it already opened for a session instead of resuming it twice", async () => {
+    const createTerminal = vi.fn(async () =>
+      createdTerminal("term-9"),
+    ) as unknown as CreateTerminal;
+    const listTerminals = vi.fn(async () => listedTerminals("term-9")) as unknown as ListTerminals;
+    const { onOpenTerminal } = renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({})],
+        })) as unknown as FetchRecentProviderSessions,
+        createTerminal,
+        listTerminals,
+      }),
+    );
+
+    fireEvent.click(await screen.findByTestId("session-history-row-claude-handle-1"));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledWith("term-9"));
+    expect(listTerminals).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("session-history-row-claude-handle-1"));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledTimes(2));
+
+    expect(listTerminals).toHaveBeenCalledWith("/repo/app", undefined, { workspaceId: "ws-1" });
+    expect(createTerminal).toHaveBeenCalledTimes(1);
+    expect(onOpenTerminal).toHaveBeenLastCalledWith("term-9");
+  });
+
+  it("focuses a terminal that lives outside the workspace directory by workspace id", async () => {
+    const createTerminal = vi.fn<CreateTerminal>(async () => createdTerminal("term-far"));
+    // The daemon answers a workspaceId-scoped listing from every directory, so
+    // a resume terminal started in another worktree still shows up here.
+    const listTerminals = vi.fn(async () =>
+      listedTerminals("term-far"),
+    ) as unknown as ListTerminals;
+    const { onOpenTerminal } = renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({ cwd: "/tmp/other-worktree" })],
+        })) as unknown as FetchRecentProviderSessions,
+        createTerminal,
+        listTerminals,
+      }),
+      { scope: "host" },
+    );
+
+    fireEvent.click(await screen.findByTestId("session-history-row-claude-handle-1"));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledWith("term-far"));
+    fireEvent.click(screen.getByTestId("session-history-row-claude-handle-1"));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledTimes(2));
+
+    expect(createTerminal).toHaveBeenCalledTimes(1);
+    expect(createTerminal.mock.calls[0]?.[0]).toBe("/tmp/other-worktree");
+    expect(listTerminals).toHaveBeenCalledWith("/repo/app", undefined, { workspaceId: "ws-1" });
+  });
+
+  it("opens a new terminal when the remembered one is gone from the daemon", async () => {
+    const createTerminal = vi
+      .fn()
+      .mockResolvedValueOnce(createdTerminal("term-9"))
+      .mockResolvedValueOnce(createdTerminal("term-10")) as unknown as CreateTerminal;
+    const listTerminals = vi.fn(async () => listedTerminals("other")) as unknown as ListTerminals;
+    const { onOpenTerminal } = renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({})],
+        })) as unknown as FetchRecentProviderSessions,
+        createTerminal,
+        listTerminals,
+      }),
+    );
+
+    fireEvent.click(await screen.findByTestId("session-history-row-claude-handle-1"));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledWith("term-9"));
+    fireEvent.click(screen.getByTestId("session-history-row-claude-handle-1"));
+    await waitFor(() => expect(onOpenTerminal).toHaveBeenCalledWith("term-10"));
+
+    expect(createTerminal).toHaveBeenCalledTimes(2);
+  });
+
+  it("copies the provider's full resume command from the row menu", async () => {
+    const { onCopyResumeCommand } = renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({ providerId: "codex", providerLabel: "Codex" })],
+        })) as unknown as FetchRecentProviderSessions,
+      }),
+    );
+
+    fireEvent.click(await screen.findByTestId("session-history-kebab-codex:handle-1"));
+    fireEvent.click(
+      await screen.findByTestId("session-history-menu-copy-resume-command-codex:handle-1"),
+    );
+
+    await waitFor(() => expect(onCopyResumeCommand).toHaveBeenCalledWith("codex resume handle-1"));
+  });
+
+  it("imports an external session into this workspace from the context menu and relists", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries: [entry({})],
+    })) as unknown as FetchRecentProviderSessions;
+    const importAgent = vi.fn(async () =>
+      importedAgent({ id: "agent-new", workspaceId: "ws-1" }),
+    ) as unknown as ImportAgent;
+    const { onImported, onOpenTerminal } = renderSurface(
+      createClient({ fetchRecentProviderSessions, importAgent }),
+    );
+
+    fireEvent.contextMenu(await screen.findByTestId("session-history-row-claude-handle-1"));
+    fireEvent.click(await screen.findByTestId("session-history-menu-import-claude:handle-1"));
+
+    await waitFor(() =>
+      expect(onImported).toHaveBeenCalledWith({
+        agentId: "agent-new",
+        cwd: "/repo/app",
+        workspaceId: "ws-1",
+        crossWorkspace: false,
+      }),
+    );
+    expect(importAgent).toHaveBeenCalledWith({
+      providerId: "claude",
+      providerHandleId: "handle-1",
+      cwd: "/repo/app",
+      workspaceId: "ws-1",
+    });
+    expect(onOpenTerminal).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(2));
+  });
+
+  it("imports a session from another directory without claiming it for this workspace", async () => {
+    const importAgent = vi.fn(async () =>
+      importedAgent({ id: "agent-far", cwd: "/tmp/elsewhere", workspaceId: undefined }),
+    ) as unknown as ImportAgent;
+    const { onImported } = renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({ cwd: "/tmp/elsewhere" })],
+        })) as unknown as FetchRecentProviderSessions,
+        importAgent,
+      }),
+      { scope: "host" },
+    );
+
+    fireEvent.click(await screen.findByTestId("session-history-kebab-claude:handle-1"));
+    fireEvent.click(await screen.findByTestId("session-history-menu-import-claude:handle-1"));
+
+    await waitFor(() =>
+      expect(onImported).toHaveBeenCalledWith({
+        agentId: "agent-far",
+        cwd: "/tmp/elsewhere",
+        workspaceId: null,
+        crossWorkspace: true,
+      }),
+    );
+    expect(importAgent).toHaveBeenCalledWith({
+      providerId: "claude",
+      providerHandleId: "handle-1",
+      cwd: "/tmp/elsewhere",
+    });
+  });
+
+  it("offers no import for a session Paseo already owns", async () => {
+    renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({ importedAgentId: "agent-7", importedAgentWorkspaceId: "ws-9" })],
+        })) as unknown as FetchRecentProviderSessions,
+      }),
+    );
+
+    fireEvent.click(await screen.findByTestId("session-history-kebab-claude:handle-1"));
+
+    await screen.findByTestId("session-history-menu-copy-resume-command-claude:handle-1");
+    expect(screen.queryByTestId("session-history-menu-import-claude:handle-1")).toBeNull();
+  });
+
+  it("keeps the list and shows the daemon's reason when the import fails", async () => {
+    const importAgent = vi.fn(async () => {
+      throw new Error("session log is unreadable");
+    }) as unknown as ImportAgent;
+    const { onImported } = renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({})],
+        })) as unknown as FetchRecentProviderSessions,
+        importAgent,
+      }),
+    );
+
+    fireEvent.contextMenu(await screen.findByTestId("session-history-row-claude-handle-1"));
+    fireEvent.click(await screen.findByTestId("session-history-menu-import-claude:handle-1"));
+
+    await screen.findByText("session log is unreadable");
+    expect(screen.getByTestId("session-history-import-error")).toBeTruthy();
+    expect(onImported).not.toHaveBeenCalled();
+    expect(screen.getByText("Fix login")).toBeTruthy();
   });
 });

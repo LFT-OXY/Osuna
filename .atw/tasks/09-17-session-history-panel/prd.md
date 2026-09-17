@@ -91,7 +91,8 @@
 
 - 菜单入口遵循 `docs/hover.md` 与 `docs/menus.md`：桌面端悬停显示 kebab、右键打开；原生端长按。
 - "复制 resume 命令"：复制模板生成的完整命令。
-- "导入为 Paseo agent"：复用现有导入流程（同一个 RPC 与导入后导航），`importedAgentId` 存在时不显示。
+- "导入为 Paseo agent"：复用现有导入 RPC 与 `resolveImportTarget`（workspace 作用域视为 scoped listing），`importedAgentId` 存在时不显示。导入后去向：跨 workspace 与 Import session 面板相同（`useNavigateToImportedAgent`）；本 workspace 走本面板打开 agent 的同一条路（`navigateToAgent` 带 `workspaceId` 与 `pin: true`），与 Import session 面板的 `openWorkspaceTabFocused + navigateToTabId` 结果相同但不依赖 workspace screen 的局部回调。导入成功后重新拉取列表，让该行换上"Paseo"标记。
+- 终端映射键用 `providerId:providerHandleId`（行 key），比单独的 handle id 更严格；点击时先向 daemon 列出本 workspace 的终端（`list_terminals_request` 带 `workspaceId` 时 daemon 聚合全部目录再按 workspaceId 过滤，所以会话 cwd 不在 workspace 目录下也能命中），终端已不存在则清理映射并新建。
 
 ### 状态
 

@@ -1919,10 +1919,15 @@ export const ru: TranslationResources = {
       row: {
         opening: "Открытие...",
         paseo: "Paseo",
+        menu: "Действия с сессией",
+        copyResumeCommand: "Копировать команду возобновления",
+        importAsAgent: "Импортировать как агента Paseo",
+        importing: "Импорт...",
       },
       errors: {
         loadFailed: "Не удалось загрузить сессии",
         openFailed: "Не удалось открыть терминал для этой сессии",
+        importFailed: "Не удалось импортировать эту сессию",
       },
     },
     diff: {

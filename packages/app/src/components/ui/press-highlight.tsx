@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import React, { forwardRef } from "react";
 import { Pressable } from "react-native";
 import type { View } from "react-native";
 import type { PressHighlightProps } from "./press-highlight.types";

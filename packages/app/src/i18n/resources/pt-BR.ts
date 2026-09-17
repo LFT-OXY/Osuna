@@ -1919,10 +1919,15 @@ export const ptBR: TranslationResources = {
       row: {
         opening: "Abrindo...",
         paseo: "Paseo",
+        menu: "Ações da sessão",
+        copyResumeCommand: "Copiar comando de retomada",
+        importAsAgent: "Importar como agente do Paseo",
+        importing: "Importando...",
       },
       errors: {
         loadFailed: "Não foi possível carregar as sessões",
         openFailed: "Não foi possível abrir um terminal para esta sessão",
+        importFailed: "Não foi possível importar esta sessão",
       },
     },
     diff: {

@@ -1886,10 +1886,15 @@ export const ar: TranslationResources = {
       row: {
         opening: "جارٍ الفتح...",
         paseo: "Paseo",
+        menu: "إجراءات الجلسة",
+        copyResumeCommand: "نسخ أمر الاستئناف",
+        importAsAgent: "استيراد كوكيل Paseo",
+        importing: "جارٍ الاستيراد...",
       },
       errors: {
         loadFailed: "تعذّر تحميل الجلسات",
         openFailed: "تعذّر فتح طرفية لهذه الجلسة",
+        importFailed: "تعذّر استيراد هذه الجلسة",
       },
     },
     diff: {

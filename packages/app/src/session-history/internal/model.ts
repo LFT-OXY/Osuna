@@ -1,6 +1,10 @@
 import type { FetchRecentProviderSessionEntry } from "@getpaseo/client/internal/daemon-client";
 import type { FetchRecentProviderSessionsResponseMessage } from "@getpaseo/protocol/messages";
-import { buildProviderCommandArgv, hasProviderCommand } from "@/utils/provider-command-templates";
+import {
+  buildProviderCommand,
+  buildProviderCommandArgv,
+  hasProviderCommand,
+} from "@/utils/provider-command-templates";
 
 /** The protocol ceiling on `limit`; the panel asks for the whole list and filters locally. */
 export const SESSION_HISTORY_FETCH_LIMIT = 200;
@@ -176,6 +180,15 @@ export function buildResumeTerminalLaunch(row: SessionHistoryRow): ResumeTermina
     return null;
   }
   return { cwd: row.cwd, name: row.title, command: argv.command, args: argv.args };
+}
+
+/** The resume command as one line, for pasting into a terminal Paseo does not own. */
+export function buildResumeCommand(row: SessionHistoryRow): string | null {
+  return buildProviderCommand({
+    provider: row.providerId,
+    id: "resume",
+    sessionId: row.providerHandleId,
+  });
 }
 
 /** Client-side search over title and prompt previews; a blank query is no filter. */

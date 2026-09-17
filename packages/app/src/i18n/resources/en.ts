@@ -1911,10 +1911,15 @@ export const en = {
       row: {
         opening: "Opening...",
         paseo: "Paseo",
+        menu: "Session actions",
+        copyResumeCommand: "Copy resume command",
+        importAsAgent: "Import as Paseo agent",
+        importing: "Importing...",
       },
       errors: {
         loadFailed: "Could not load sessions",
         openFailed: "Could not open a terminal for this session",
+        importFailed: "Could not import this session",
       },
     },
     diff: {

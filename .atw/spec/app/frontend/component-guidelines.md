@@ -28,6 +28,8 @@ Every user action that can fail renders pending, success, and failure in the sam
 
 Read `docs/hover.md` and copy the workspace row in `components/sidebar-workspace-list.tsx`: a plain `View` with `onPointerEnter` / `onPointerLeave` as the hover envelope, a separate inner `Pressable` for press only, fixed `minHeight` so revealed content does not shift layout. Hover only fires on web, so anything hover-revealed is gated `isHovered || isNative || isCompact` so native and phones always see it.
 
+A list row that needs a hover kebab **and** a right-click / long-press menu is `SessionHistoryRowItem` in `session-history/index.tsx`: the plain `View` envelope holds `isHovered` and `contextMenuOpen`; `ContextMenuTrigger` is the inner press target (press opens, right click and native long press open the menu); the kebab sits in a fixed-width trailing slot hidden by `opacity: 0` + `pointerEvents="none"`, never unmounted; `useOpenKebabMenuVisibility(isHovered || isNative || isCompact)` keeps it mounted while its menu is up. Both menus render one `…MenuItems` component switched by a `surface: "context" | "dropdown"` prop (`session-history/internal/row-menu.tsx`, the same shape as `components/sidebar/sidebar-workspace-menu.tsx`) so the two cannot drift; an action the row cannot offer (import for a Paseo-owned session) is passed as `null`, not hidden by a boolean.
+
 `onHoverIn` / `onHoverOut` has one legitimate use: a `Pressable` styling itself (`components/ui/button.tsx`), preferably through the render-prop `style={({ hovered }) => …}`. The moment hover state is read by anything else, use the envelope. Never put both handler kinds on one element.
 
 ## Platform gates

@@ -1906,10 +1906,15 @@ export const ja: TranslationResources = {
       row: {
         opening: "開いています...",
         paseo: "Paseo",
+        menu: "セッション操作",
+        copyResumeCommand: "再開コマンドをコピー",
+        importAsAgent: "Paseo エージェントとしてインポート",
+        importing: "インポート中...",
       },
       errors: {
         loadFailed: "セッションを読み込めませんでした",
         openFailed: "このセッションのターミナルを開けませんでした",
+        importFailed: "このセッションをインポートできませんでした",
       },
     },
     diff: {

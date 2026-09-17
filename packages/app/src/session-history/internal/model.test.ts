@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FetchRecentProviderSessionEntry } from "@getpaseo/client/internal/daemon-client";
 import {
+  buildResumeCommand,
   buildResumeTerminalLaunch,
   buildSessionHistoryQueryKey,
   buildSessionHistoryRows,
@@ -84,6 +85,15 @@ describe("buildResumeTerminalLaunch", () => {
       command: "codex",
       args: ["resume", "handle-1"],
     });
+  });
+});
+
+describe("buildResumeCommand", () => {
+  it("renders the provider's resume command as one line", () => {
+    const [row] = buildSessionHistoryRows([
+      entry({ providerId: "copilot", providerLabel: "Copilot" }),
+    ]);
+    expect(row && buildResumeCommand(row)).toBe("copilot --resume=handle-1");
   });
 });
 

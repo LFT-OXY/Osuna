@@ -1896,10 +1896,15 @@ export const ko: TranslationResources = {
       row: {
         opening: "여는 중...",
         paseo: "Paseo",
+        menu: "세션 작업",
+        copyResumeCommand: "재개 명령 복사",
+        importAsAgent: "Paseo 에이전트로 가져오기",
+        importing: "가져오는 중...",
       },
       errors: {
         loadFailed: "세션을 불러올 수 없습니다",
         openFailed: "이 세션의 터미널을 열 수 없습니다",
+        importFailed: "이 세션을 가져올 수 없습니다",
       },
     },
     diff: {

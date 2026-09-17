@@ -1939,10 +1939,15 @@ export const fr: TranslationResources = {
       row: {
         opening: "Ouverture...",
         paseo: "Paseo",
+        menu: "Actions de la session",
+        copyResumeCommand: "Copier la commande de reprise",
+        importAsAgent: "Importer comme agent Paseo",
+        importing: "Importation...",
       },
       errors: {
         loadFailed: "Impossible de charger les sessions",
         openFailed: "Impossible d'ouvrir un terminal pour cette session",
+        importFailed: "Impossible d'importer cette session",
       },
     },
     diff: {

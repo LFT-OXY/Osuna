@@ -1865,10 +1865,15 @@ export const zhCN: TranslationResources = {
       row: {
         opening: "正在打开...",
         paseo: "Paseo",
+        menu: "会话操作",
+        copyResumeCommand: "复制 resume 命令",
+        importAsAgent: "导入为 Paseo agent",
+        importing: "正在导入...",
       },
       errors: {
         loadFailed: "无法加载会话",
         openFailed: "无法为此会话打开终端",
+        importFailed: "无法导入此会话",
       },
     },
     diff: {

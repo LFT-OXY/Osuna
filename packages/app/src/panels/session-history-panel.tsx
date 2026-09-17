@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import invariant from "tiny-invariant";
 import { usePaneContext } from "@/panels/pane-context";
 import { definePanel, type PanelPresentation } from "@/panels/panel-registry";
-import { SessionHistoryView, openTerminalTabFromSessionHistory } from "@/session-history";
+import { openTerminalTabFromSessionHistory } from "@/session-history";
+import { SessionHistoryView } from "@/session-history/view";
 import { useWorkspaceDirectory } from "@/stores/session-store-hooks";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 
@@ -26,7 +27,7 @@ function SessionHistoryPanel() {
     "SessionHistoryPanel requires session_history target",
   );
   const workspaceDirectory = useWorkspaceDirectory(serverId, workspaceId);
-  const handleTerminalCreated = useCallback(
+  const handleOpenTerminal = useCallback(
     (terminalId: string) => {
       const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
       if (!workspaceKey) return;
@@ -48,7 +49,7 @@ function SessionHistoryPanel() {
       serverId={serverId}
       workspaceId={workspaceId}
       workspaceDirectory={workspaceDirectory}
-      onTerminalCreated={handleTerminalCreated}
+      onOpenTerminal={handleOpenTerminal}
     />
   );
 }

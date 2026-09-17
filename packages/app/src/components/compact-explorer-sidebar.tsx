@@ -47,7 +47,7 @@ import {
 import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { mutedIconColorMapping } from "@/components/ui/icon-button-chrome";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { SessionHistoryView } from "@/session-history";
+import { SessionHistoryView } from "@/session-history/view";
 
 const ThemedX = withUnistyles(X);
 
@@ -535,7 +535,7 @@ function SessionsPane({
   onOpenTerminal,
 }: Pick<SidebarContentProps, "serverId" | "workspaceId" | "workspaceRoot" | "onOpenTerminal">) {
   const { t } = useTranslation();
-  const handleTerminalCreated = useCallback(
+  const handleOpenTerminal = useCallback(
     (terminalId: string) => onOpenTerminal?.(terminalId),
     [onOpenTerminal],
   );
@@ -551,7 +551,7 @@ function SessionsPane({
       serverId={serverId}
       workspaceId={workspaceId}
       workspaceDirectory={workspaceRoot}
-      onTerminalCreated={handleTerminalCreated}
+      onOpenTerminal={handleOpenTerminal}
     />
   );
 }

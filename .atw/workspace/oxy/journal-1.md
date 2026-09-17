@@ -39,3 +39,14 @@
 - 审查处置：两轮共 5 项硬性（对象参数、收紧 `agentId`、命名返回类型与 candidates、workspaceId）已修；判断项采纳合并 owner 循环、去中间层、行模型 `string | null`、COMPAT 标签移到早返回块；未采纳双参数改对象、`as StoredAgentRecord` 沿用既有。
 - 坑：client 的 vitest 从 protocol `dist` 解析，加字段后必须 `npm run build:client`；zsh 变量传文件列表不分词，改用 xargs。
 - 待人工验收：点击"Paseo"行是否真的打开 tab 取决于前置任务 09-17-history-open-archived-agent。
+
+## 2026-09-18 工单 04 实现：聚焦已有终端与行菜单
+
+- 终端映射是 feature 自有的内存 zustand store（`session-history/internal/resume-terminals.ts`），键为 `serverId:workspaceId` → `providerId:providerHandleId`；点击时先 `listTerminals(cwd, undefined, { workspaceId })` 确认终端还在，不在就 forget 再新建。`onTerminalCreated` 改名 `onOpenTerminal`，因为 reveal 语义对新建与聚焦都成立（`revealTargetInLayout` 会找已有 tab）。
+- 行改成 docs/hover.md 的外壳：plain View 管 hover，`ContextMenuTrigger` 当内层按压目标（右键 / 长按开菜单），kebab 固定槽位 opacity 隐藏；两个菜单共用 `row-menu.tsx` 的 items（`surface` 开关），与 sidebar-workspace-menu 同形。
+- 导入复用 `importAgent` + `resolveImportTarget`（workspace 作用域视为 scoped listing），导入后同 workspace 走 `navigateToAgent(pin)`、跨 workspace 走 `useNavigateToImportedAgent`；复制走 `copyToClipboard` + 现有 `resumeCommandCopiedLabel` toast，两者都在 view 层。
+- 坑一：`SessionHistoryView` 从 `index.tsx` 拆到 `view.tsx`——`copy-to-clipboard`（expo-clipboard）与 `use-import-session`（host-chooser、import-session-sheet）在 unit runner 下无法解析，surface 测试导入入口就整文件挂掉；用探针测试逐模块定位。
+- 坑二：菜单引擎在 jsdom 里能真实渲染（bottom-sheet/safe-area 已 alias），但引擎的 9 个共享文件缺 `import React`，按 testing.md 的既定修法补上；不再像旧测试那样 mock dropdown-menu。
+- 坑三：oxlint `complexity` 上限 20，surface 抽出 `resolveRowStatus` 与 `ActionErrorAlert` 才过。
+- 遗留：index.tsx 第 249 行 `ReadonlyArray<…>` 的 eslint warning 来自工单 02，未动。
+- 审查处置：规格轴"跨目录终端不在列表里"经核实为误报（daemon 带 workspaceId 时 `getAllTerminalSessions` 聚合全部目录再过滤），补了会话 cwd 不在 workspace 目录下的用例；本 workspace 导入后用 `navigateToAgent(pin)` 而非 workspace screen 的 `openWorkspaceTabFocused` 属判断项，已写进 PRD。标准轴无硬性违规；采纳 zustand → 模块 Map、去掉 `?? workspaceId` 兜底、测试 helper 去 `as`（改用 `vi.fn<CreateTerminal>` 与完整 capabilities）；未采纳 view.tsx 回并（桩 app 代码违反 testing.md）与 kebab 触发器抽到 components/ui（超出本票）。

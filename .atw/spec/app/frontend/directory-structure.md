@@ -18,6 +18,8 @@ workspace-labels/
 
 `index.ts` here is a real module with a store and hooks, not a re-export barrel. `composer/index.tsx` is the same idea for the composer. Screens and panels integrate a feature from its entry; they do not reach into `internal/` or drop feature internals into `components/`, `hooks/`, or `screens/`.
 
+A feature whose entry is rendered by a jsdom test may carry a second public file, `view.tsx`, for the runtime-wired wrapper (`session-history/view.tsx`). The entry then holds the surface and pure exports only. The reason is the unit runner, not layering: `utils/copy-to-clipboard` (expo-clipboard), `hosts/host-chooser`, and `components/import-session-sheet` ship code Vite cannot parse in the `unit` project, and one such import anywhere under `index.tsx` fails the whole test file at load. Shells import the view from `@/session-history/view`; nothing else changes.
+
 **Shared layers** hold code used by several features:
 
 | Directory                  | Owns                                                                                                                                                                                                                                                                                                             |

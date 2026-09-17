@@ -1,11 +1,13 @@
 import React, { useCallback, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
+import { ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { History, RotateCw } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { resolveImportTarget } from "@/components/import-session-sheet-view-model";
 import { getProviderIcon, type ProviderIconProps } from "@/components/provider-icons";
+import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { extraMutedIconColorMapping, mutedIconColorMapping } from "@/components/ui/icon-color";
@@ -21,21 +23,17 @@ import { SearchField } from "@/components/ui/search-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { isNative } from "@/constants/platform";
 import { useFetchQuery } from "@/data/query";
-import { useRetainedPanelActive } from "@/components/retained-panel";
-import { useAppActivelyVisible } from "@/hooks/use-app-visible";
-import { useHostFeature } from "@/runtime/host-features";
-import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import {
   buildTerminalsQueryKey,
   upsertCreatedTerminalPayload,
   type ListTerminalsPayload,
 } from "@/screens/workspace/terminals/state";
-import { useProjectWorkspaceDirectories, useWorkspaceFields } from "@/stores/session-store-hooks";
 import { getCurrentTerminalViewAttributes } from "@/terminal/view-attributes";
-import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { formatTimeAgo } from "@/utils/time";
 import {
+  buildResumeCommand,
   buildResumeTerminalLaunch,
   buildSessionHistoryQueryKey,
   buildSessionHistoryRows,
@@ -49,7 +47,12 @@ import {
   type SessionHistoryRow,
   type SessionHistoryScope,
 } from "./internal/model";
-import { useSessionHistoryScopeStore } from "./internal/scope-store";
+import {
+  forgetResumeTerminal,
+  lookupResumeTerminal,
+  rememberResumeTerminal,
+} from "./internal/resume-terminals";
+import { SessionHistoryRowContextMenu, SessionHistoryRowMenu } from "./internal/row-menu";
 
 export type { SessionHistoryRow, SessionHistoryScope } from "./internal/model";
 export { buildSessionHistoryQueryKey } from "./internal/model";
@@ -57,8 +60,16 @@ export { openTerminalTabFromSessionHistory } from "./internal/open-terminal-tab"
 
 export type SessionHistoryClient = Pick<
   DaemonClient,
-  "fetchRecentProviderSessions" | "createTerminal"
+  "fetchRecentProviderSessions" | "createTerminal" | "listTerminals" | "importAgent"
 >;
+
+/** What the import RPC answered, plus whether the agent landed outside this workspace. */
+export interface SessionHistoryImportResult {
+  agentId: string;
+  cwd: string;
+  workspaceId: string | null;
+  crossWorkspace: boolean;
+}
 
 export interface SessionHistorySurfaceProps {
   serverId: string;
@@ -81,10 +92,14 @@ export interface SessionHistorySurfaceProps {
    * refetches on its own when the panel comes back.
    */
   isVisible: boolean;
-  /** The terminal exists on the daemon; the caller decides which pane shows it. */
-  onTerminalCreated: (terminalId: string) => void;
+  /** The terminal exists on the daemon, new or already open; the caller shows its tab. */
+  onOpenTerminal: (terminalId: string) => void;
   /** A session Paseo owns was chosen; the shell opens that agent the way History does. */
   onOpenAgent: (agentId: string, workspaceId: string | null) => void;
+  /** The full resume command line; the shell owns the clipboard and the toast. */
+  onCopyResumeCommand: (command: string) => void;
+  /** The session is now a Paseo agent; the shell navigates the way the import sheet does. */
+  onImported: (result: SessionHistoryImportResult) => void;
 }
 
 function ProviderIconSlot({
@@ -110,69 +125,158 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ROW_ICON_SIZE = 16;
 const EMPTY_ICON_SIZE = 24;
 
+type SessionHistoryRowStatus = "idle" | "opening" | "importing";
+
+/** One mutation runs at a time per row; the row shows which. */
+function resolveRowStatus(
+  rowKey: string,
+  pending: { openingRowKey: string | null; importingRowKey: string | null },
+): SessionHistoryRowStatus {
+  if (pending.openingRowKey === rowKey) {
+    return "opening";
+  }
+  if (pending.importingRowKey === rowKey) {
+    return "importing";
+  }
+  return "idle";
+}
+
 function SessionHistoryRowItem({
   serverId,
   row,
   directory,
-  disabled,
-  opening,
+  status,
   onPress,
+  onCopyResumeCommand,
+  onImport,
 }: {
   serverId: string;
   row: SessionHistoryRow;
   /** Where the session lives, when the scope spans more than one directory. */
   directory: string | null;
-  disabled: boolean;
-  opening: boolean;
+  status: SessionHistoryRowStatus;
   onPress: (row: SessionHistoryRow) => void;
+  onCopyResumeCommand: (row: SessionHistoryRow) => void;
+  onImport: (row: SessionHistoryRow) => void;
 }) {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
   const ProviderIcon = getProviderIcon(row.providerId, serverId);
+  const disabled = status !== "idle";
+  // docs/hover.md: hover on a plain View; press on the trigger inside it.
+  const [isHovered, setIsHovered] = useState(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const handlePointerEnter = useCallback(() => {
+    if (!contextMenuOpen) setIsHovered(true);
+  }, [contextMenuOpen]);
+  const handlePointerLeave = useCallback(() => setIsHovered(false), []);
+  const handleContextMenuOpenChange = useCallback((open: boolean) => {
+    setContextMenuOpen(open);
+    if (open) setIsHovered(false);
+  }, []);
+  const kebab = useOpenKebabMenuVisibility(isHovered || isNative || isCompact);
+
   const handlePress = useCallback(() => onPress(row), [onPress, row]);
-  const pressableStyle = useCallback(
-    ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
+  const handleCopyResumeCommand = useCallback(
+    () => onCopyResumeCommand(row),
+    [onCopyResumeCommand, row],
+  );
+  const handleImport = useCallback(() => onImport(row), [onImport, row]);
+  const triggerStyle = useCallback(
+    ({ pressed }: PressableStateCallbackType) => [
       styles.row,
-      Boolean(hovered) && styles.rowHovered,
+      isHovered && styles.rowHovered,
       pressed && styles.rowPressed,
     ],
-    [],
+    [isHovered],
   );
   const accessibilityState = useMemo(() => ({ disabled }), [disabled]);
+  const menuActions = {
+    rowKey: row.key,
+    onCopyResumeCommand: handleCopyResumeCommand,
+    // Paseo already owns the session: importing it again would make a second agent.
+    onImport: row.importedAgentId ? null : handleImport,
+    importStatus: status === "importing" ? ("pending" as const) : ("idle" as const),
+  };
+
+  let meta: string;
+  if (status === "opening") {
+    meta = t("panels.sessionHistory.row.opening");
+  } else if (status === "importing") {
+    meta = t("panels.sessionHistory.row.importing");
+  } else {
+    meta = formatTimeAgo(new Date(row.lastActivityAt));
+  }
 
   return (
-    <Pressable
-      disabled={disabled}
-      onPress={handlePress}
-      accessibilityRole="button"
-      accessibilityLabel={row.title}
-      accessibilityState={accessibilityState}
-      style={pressableStyle}
-      testID={`session-history-row-${row.providerId}-${row.providerHandleId}`}
+    <View
+      style={styles.rowContainer}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
     >
-      <View style={styles.rowIcon}>
-        <ThemedProviderIcon
-          Icon={ProviderIcon}
-          size={ROW_ICON_SIZE}
-          uniProps={mutedIconColorMapping}
-        />
-      </View>
-      <View style={styles.rowBody}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {row.title}
-        </Text>
-        {directory ? (
-          <Text style={styles.rowDirectory} numberOfLines={1}>
-            {directory}
+      <SessionHistoryRowContextMenu
+        {...menuActions}
+        open={contextMenuOpen}
+        onOpenChange={handleContextMenuOpenChange}
+        disabled={disabled}
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={row.title}
+        accessibilityState={accessibilityState}
+        style={triggerStyle}
+        testID={`session-history-row-${row.providerId}-${row.providerHandleId}`}
+      >
+        <View style={styles.rowIcon}>
+          <ThemedProviderIcon
+            Icon={ProviderIcon}
+            size={ROW_ICON_SIZE}
+            uniProps={mutedIconColorMapping}
+          />
+        </View>
+        <View style={styles.rowBody}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {row.title}
           </Text>
-        ) : null}
-      </View>
-      {row.importedAgentId ? <StatusBadge label={t("panels.sessionHistory.row.paseo")} /> : null}
-      <Text style={styles.rowMeta} numberOfLines={1}>
-        {opening
-          ? t("panels.sessionHistory.row.opening")
-          : formatTimeAgo(new Date(row.lastActivityAt))}
-      </Text>
-    </Pressable>
+          {directory ? (
+            <Text style={styles.rowDirectory} numberOfLines={1}>
+              {directory}
+            </Text>
+          ) : null}
+        </View>
+        {row.importedAgentId ? <StatusBadge label={t("panels.sessionHistory.row.paseo")} /> : null}
+        <Text style={styles.rowMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+        {/* A fixed slot: hidden by opacity, never unmounted, so revealing it moves nothing. */}
+        <View
+          style={[styles.kebabSlot, !kebab.showKebab && styles.kebabSlotHidden]}
+          pointerEvents={kebab.showKebab ? "auto" : "none"}
+        >
+          <SessionHistoryRowMenu {...menuActions} {...kebab.menuProps} />
+        </View>
+      </SessionHistoryRowContextMenu>
+    </View>
+  );
+}
+
+/** A failed row action, shown above the list until the next attempt replaces it. */
+function ActionErrorAlert({
+  title,
+  error,
+  testID,
+}: {
+  title: string;
+  /** The mutation's error; null while idle or after a success. */
+  error: unknown;
+  testID: string;
+}) {
+  if (!error) {
+    return null;
+  }
+  return (
+    <View style={styles.alertRegion}>
+      <Alert variant="error" title={title} description={errorMessage(error)} testID={testID} />
+    </View>
   );
 }
 
@@ -224,8 +328,10 @@ export function SessionHistorySurface({
   isConnected,
   isSupported,
   isVisible,
-  onTerminalCreated,
+  onOpenTerminal,
   onOpenAgent,
+  onCopyResumeCommand,
+  onImported,
 }: SessionHistorySurfaceProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -305,6 +411,16 @@ export function SessionHistorySurface({
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
+      const ref = { serverId, workspaceId, sessionKey: row.key };
+      const knownTerminalId = lookupResumeTerminal(ref);
+      if (knownTerminalId) {
+        // The daemon may have reaped it since; only a listed terminal is worth focusing.
+        const listed = await client.listTerminals(workspaceDirectory, undefined, { workspaceId });
+        if (listed.terminals.some((terminal) => terminal.id === knownTerminalId)) {
+          return { terminalId: knownTerminalId, created: null };
+        }
+        forgetResumeTerminal(ref);
+      }
       const launch = buildResumeTerminalLaunch(row);
       if (!launch) {
         throw new Error(t("workspace.tabs.toasts.resumeCommandUnavailable"));
@@ -318,18 +434,54 @@ export function SessionHistorySurface({
       if (!payload.terminal) {
         throw new Error(payload.error ?? t("panels.sessionHistory.errors.openFailed"));
       }
-      return payload.terminal;
+      rememberResumeTerminal({ ...ref, terminalId: payload.terminal.id });
+      return { terminalId: payload.terminal.id, created: payload.terminal };
     },
-    onSuccess: (terminal) => {
-      queryClient.setQueryData<ListTerminalsPayload>(terminalsQueryKey, (current) =>
-        upsertCreatedTerminalPayload({ current, terminal, workspaceDirectory }),
-      );
-      void queryClient.invalidateQueries({ queryKey: terminalsQueryKey });
-      onTerminalCreated(terminal.id);
+    onSuccess: ({ terminalId, created }) => {
+      if (created) {
+        queryClient.setQueryData<ListTerminalsPayload>(terminalsQueryKey, (current) =>
+          upsertCreatedTerminalPayload({ current, terminal: created, workspaceDirectory }),
+        );
+        void queryClient.invalidateQueries({ queryKey: terminalsQueryKey });
+      }
+      onOpenTerminal(terminalId);
+    },
+  });
+  const importMutation = useMutation({
+    mutationFn: async (row: SessionHistoryRow): Promise<SessionHistoryImportResult> => {
+      if (!client) {
+        throw new Error(t("workspace.terminal.hostDisconnected"));
+      }
+      // Workspace scope lists only rows the daemon matched to this directory by realpath.
+      const target = resolveImportTarget({
+        entryCwd: row.cwd,
+        workspaceCwd: workspaceDirectory,
+        workspaceId,
+        isScopedListing: scope === "workspace",
+      });
+      const agent = await client.importAgent({
+        providerId: row.providerId,
+        providerHandleId: row.providerHandleId,
+        cwd: row.cwd,
+        ...(target.workspaceId ? { workspaceId: target.workspaceId } : {}),
+      });
+      return {
+        agentId: agent.id,
+        cwd: agent.cwd,
+        workspaceId: agent.workspaceId ?? null,
+        crossWorkspace: target.crossWorkspace,
+      };
+    },
+    onSuccess: (result) => {
+      // The row now belongs to Paseo; relist so it wears the badge and loses the import action.
+      void queryClient.invalidateQueries({ queryKey });
+      onImported(result);
     },
   });
   const openingRowKey =
     openMutation.isPending && openMutation.variables ? openMutation.variables.key : null;
+  const importingRowKey =
+    importMutation.isPending && importMutation.variables ? importMutation.variables.key : null;
   const handleRowPress = useCallback(
     (row: SessionHistoryRow) => {
       // A session Paseo owns has one owner: its agent. Never resume it in a second process.
@@ -340,6 +492,21 @@ export function SessionHistorySurface({
       openMutation.mutate(row);
     },
     [onOpenAgent, openMutation],
+  );
+  const handleCopyResumeCommand = useCallback(
+    (row: SessionHistoryRow) => {
+      const command = buildResumeCommand(row);
+      if (command) {
+        onCopyResumeCommand(command);
+      }
+    },
+    [onCopyResumeCommand],
+  );
+  const handleImport = useCallback(
+    (row: SessionHistoryRow) => {
+      importMutation.mutate(row);
+    },
+    [importMutation],
   );
 
   if (!isClientReady) {
@@ -396,16 +563,16 @@ export function SessionHistorySurface({
     body = (
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
         {providerErrors.length > 0 ? <ProviderErrorsNotice errors={providerErrors} /> : null}
-        {openMutation.isError ? (
-          <View style={styles.alertRegion}>
-            <Alert
-              variant="error"
-              title={t("panels.sessionHistory.errors.openFailed")}
-              description={errorMessage(openMutation.error)}
-              testID="session-history-open-error"
-            />
-          </View>
-        ) : null}
+        <ActionErrorAlert
+          title={t("panels.sessionHistory.errors.openFailed")}
+          error={openMutation.error}
+          testID="session-history-open-error"
+        />
+        <ActionErrorAlert
+          title={t("panels.sessionHistory.errors.importFailed")}
+          error={importMutation.error}
+          testID="session-history-import-error"
+        />
         {rows.length === 0 ? (
           <View style={styles.centerState} testID="session-history-empty">
             <ThemedHistory
@@ -424,9 +591,10 @@ export function SessionHistorySurface({
               directory={
                 showDirectories ? formatSessionHistoryDirectory(row.cwd, projectRootPath) : null
               }
-              disabled={openingRowKey === row.key}
-              opening={openingRowKey === row.key}
+              status={resolveRowStatus(row.key, { openingRowKey, importingRowKey })}
               onPress={handleRowPress}
+              onCopyResumeCommand={handleCopyResumeCommand}
+              onImport={handleImport}
             />
           ))
         )}
@@ -492,61 +660,6 @@ export function SessionHistorySurface({
   );
 }
 
-export interface SessionHistoryViewProps {
-  serverId: string;
-  workspaceId: string;
-  workspaceDirectory: string;
-  onTerminalCreated: (terminalId: string) => void;
-}
-
-/** The surface wired to the host runtime and stores; the shells only decide where a new terminal tab goes. */
-export function SessionHistoryView({
-  serverId,
-  workspaceId,
-  workspaceDirectory,
-  onTerminalCreated,
-}: SessionHistoryViewProps) {
-  const client = useHostRuntimeClient(serverId);
-  const isConnected = useHostRuntimeIsConnected(serverId);
-  const isSupported = useHostFeature(serverId, "sessionHistory");
-  const isAppVisible = useAppActivelyVisible();
-  const isPanelActive = useRetainedPanelActive();
-  const scope = useSessionHistoryScopeStore((state) => state.scope);
-  const setScope = useSessionHistoryScopeStore((state) => state.setScope);
-  const project = useWorkspaceFields(serverId, workspaceId, (workspace) => ({
-    projectId: workspace.projectId,
-    projectRootPath: workspace.projectRootPath,
-  }));
-  const projectWorkspaceDirectories = useProjectWorkspaceDirectories(
-    serverId,
-    project?.projectId ?? null,
-  );
-  // 与左栏 History 同一条打开逻辑：导航到该 agent 并固定 tab，归档与否都由它处理。
-  const handleOpenAgent = useCallback(
-    (agentId: string, agentWorkspaceId: string | null) => {
-      navigateToAgent({ serverId, agentId, workspaceId: agentWorkspaceId, pin: true });
-    },
-    [serverId],
-  );
-  return (
-    <SessionHistorySurface
-      serverId={serverId}
-      workspaceId={workspaceId}
-      workspaceDirectory={workspaceDirectory}
-      projectRootPath={project?.projectRootPath ?? null}
-      projectWorkspaceDirectories={projectWorkspaceDirectories}
-      scope={scope}
-      onScopeChange={setScope}
-      client={client}
-      isConnected={isConnected}
-      isSupported={isSupported}
-      isVisible={isAppVisible && isPanelActive}
-      onTerminalCreated={onTerminalCreated}
-      onOpenAgent={handleOpenAgent}
-    />
-  );
-}
-
 const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
@@ -585,13 +698,17 @@ const styles = StyleSheet.create((theme) => ({
   alertRegion: {
     padding: theme.spacing[3],
   },
+  rowContainer: {
+    position: "relative",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
     minHeight: 32,
     paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[3],
+    paddingLeft: theme.spacing[3],
+    paddingRight: theme.spacing[2],
   },
   rowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,
@@ -619,5 +736,13 @@ const styles = StyleSheet.create((theme) => ({
   rowMeta: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  kebabSlot: {
+    width: ROW_ICON_SIZE + theme.spacing[1],
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  kebabSlotHidden: {
+    opacity: 0,
   },
 }));
