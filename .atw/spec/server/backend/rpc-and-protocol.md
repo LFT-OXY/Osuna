@@ -202,6 +202,14 @@ consumer while every old consumer keeps the filtered result.
 - Owner resolution: active in-memory agents first, then active stored records, then archived
   records, first writer wins per handle key (`sessionId` and `nativeHandle` both map). An archived
   twin therefore never shadows a live agent.
+- `providerErrors` only names providers that are installed and still failed to list (ticket 05).
+  `AgentManager.listImportableSessions` runs `getProviderAvailability(provider)` on every
+  candidate before the listing fan-out and drops the unavailable ones — no rows, no error entry.
+  A probe that throws is logged at `warn` and counts as unavailable. "Unavailable" is whatever
+  `client.isAvailable()` says, so a misconfigured custom `command` path is skipped the same way
+  as a missing CLI; the provider diagnostic screen owns that report, not this listing. Always go
+  through `getProviderAvailability`, never a hand-rolled `try { client.isAvailable() }` — the
+  helper already carries the catch-and-warn contract and the two would drift.
 - The daemon never reads `features`; the flag exists because the field and the flag shipped
   together, so an old daemon silently ignores `includeImported` and would answer with the filtered
   list — the app refuses to show that instead of listing it.
@@ -212,6 +220,9 @@ consumer while every old consumer keeps the filtered result.
 - Field sent to an old daemon -> cannot happen from the app (query disabled without the flag);
   a hand-built request just gets the filtered list.
 - Descriptor without `importedAgentId` -> parses; the row is external.
+- `client.isAvailable()` returns `false` or throws -> provider skipped, absent from both `sessions`
+  and `providerErrors`. Available but `listImportableSessions` throws or exceeds the 90 s timeout
+  -> `providerErrors` entry, other providers' rows still returned.
 
 ### 5. Good/Base/Bad Cases
 
@@ -232,6 +243,10 @@ consumer while every old consumer keeps the filtered result.
   `limit`; a live agent and an archived record sharing one handle report the live agent; `false`
   returns the archived row unmarked. `agent-projections.test.ts` — the field appears only when
   supplied.
+- Daemon availability gate: `agent-manager.test.ts` — one unavailable provider, one whose probe
+  throws, and one available-but-failing provider in the same manager; assert the full
+  `{ sessions, providerErrors }` shape holds only the healthy rows and the failing provider's
+  error, and that the two skipped clients' listing was never called.
 - Client: `daemon-client.test.ts` — the sent frame carries `includeImported`.
 - App: `session-history/index.test.tsx` — requests carry `includeImported: true`; an owned row
   badges and calls `onOpenAgent(agentId, workspaceId)` without `createTerminal`;
@@ -246,6 +261,8 @@ consumer while every old consumer keeps the filtered result.
 case "session_history.list.request": ...
 // app: falling back to the filtered list on an old host
 const rows = supportsSessionHistory ? owned.concat(external) : external;
+// daemon: re-probing availability by hand next to the fan-out
+try { available = await client.isAvailable(); } catch { available = false; }
 ```
 
 #### Correct

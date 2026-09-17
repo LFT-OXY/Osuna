@@ -10693,6 +10693,54 @@ test("listImportableSessions returns healthy rows alongside thrown and timed-out
   }
 });
 
+test("listImportableSessions skips unavailable providers without reporting them as errors", async () => {
+  const healthyClient = new RecordingPersistedAgentsClient("claude");
+  const failingClient = new RecordingPersistedAgentsClient("codex");
+  failingClient.listImportableSessions = async () => {
+    throw new Error("codex listing failed");
+  };
+  const uninstalledClient = new RecordingPersistedAgentsClient("copilot");
+  uninstalledClient.isAvailable = async () => false;
+  const brokenProbeClient = new RecordingPersistedAgentsClient("pi");
+  brokenProbeClient.isAvailable = async () => {
+    throw new Error("pi: command not found");
+  };
+  const manager = new AgentManager({
+    clients: {
+      claude: healthyClient,
+      codex: failingClient,
+      copilot: uninstalledClient,
+      pi: brokenProbeClient,
+    },
+    providerDefinitions: {
+      claude: { enabled: true, derivedFromProviderId: null },
+      codex: { enabled: true, derivedFromProviderId: null },
+      copilot: { enabled: true, derivedFromProviderId: null },
+      pi: { enabled: true, derivedFromProviderId: null },
+    },
+    logger,
+  });
+
+  const result = await manager.listImportableSessions();
+
+  expect(uninstalledClient.calls).toBe(0);
+  expect(brokenProbeClient.calls).toBe(0);
+  expect(result).toEqual({
+    sessions: [
+      {
+        provider: "claude",
+        providerHandleId: "claude-session",
+        cwd: "/tmp/recent",
+        title: null,
+        lastActivityAt: new Date("2026-01-01T00:00:00Z"),
+        firstPromptPreview: null,
+        lastPromptPreview: null,
+      },
+    ],
+    providerErrors: [{ provider: "codex", message: "codex listing failed" }],
+  });
+});
+
 test("listImportableSessions searches every provider result before global ranking", async () => {
   const client = new RecordingPersistedAgentsClient("claude");
   client.listImportableSessions = async () => [

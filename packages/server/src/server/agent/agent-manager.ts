@@ -969,12 +969,23 @@ export class AgentManager {
   async listImportableSessions(
     options?: ImportablePersistedAgentQueryOptions,
   ): Promise<ManagedImportableSessionsResult> {
-    const providerEntries = Array.from(this.clients.entries()).filter(
+    const candidateEntries = Array.from(this.clients.entries()).filter(
       ([provider, client]) =>
         client.capabilities.supportsSessionListing &&
         !!client.listImportableSessions &&
         this.isProviderImportable(provider, options?.providerFilter),
     );
+    // 未安装的 Provider 的会话无法 resume，列出来没有意义；"没装"对不用它的用户也不是错误，
+    // 所以这里直接跳过，不进 providerErrors。探测本身抛错同样按不可用处理。
+    const availableEntries = await Promise.all(
+      candidateEntries.map(async (entry) => ({
+        entry,
+        available: (await this.getProviderAvailability(entry[0])).available,
+      })),
+    );
+    const providerEntries = availableEntries
+      .filter((candidate) => candidate.available)
+      .map((candidate) => candidate.entry);
     const providerResults = await Promise.all(
       providerEntries.map(async ([provider, client]) => {
         try {

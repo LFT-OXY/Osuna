@@ -31,7 +31,7 @@
 16. 作为用户，我想列表按最后活动时间倒序，以便最近的对话在最上面。
 17. 作为用户，我想打开视图、切回窗口时列表自动刷新，并有手动刷新按钮，以便看到刚在终端里结束的会话。
 18. 作为用户，我想在 host 断开或 daemon 版本过旧时看到明确提示，以便知道该更新 host 还是等重连。
-19. 作为用户，我想在某个 Provider 查询失败时仍看到其他 Provider 的会话，并被告知哪个失败了，以便不因 codex 没装就整个面板空白。
+19. 作为用户，我想在某个已安装的 Provider 查询失败时仍看到其他 Provider 的会话，并被告知哪个失败了；没装的 Provider（如 copilot）不该出现在提示里，以便不用的 Provider 不打扰我。
 20. 作为用户，我想在手机的紧凑布局下同样从 Explorer 覆盖层进入会话历史，以便手机上也能恢复会话。
 21. 作为中文用户，我想面板里的全部界面文案都是中文，以便与其他界面一致。
 
@@ -48,7 +48,8 @@
 ### Daemon
 
 - `listImportableProviderSessions` 按 `includeImported` 决定是否过滤，已导入的会话把 agent id 与 workspace id 写进 descriptor。已导入集合的采集逻辑复用现有实现；已归档记录也算主人，但活 agent 与归档记录共用同一 handle 时报活 agent。
-- 其余行为（cwd realpath 匹配、`since`、metadata 会话剔除、limit、providerErrors）不变。
+- 扇出前先过一遍 `client.isAvailable()`：未安装的 Provider 直接跳过，既不列会话也不进 `providerErrors`；已安装但列出失败的仍进 `providerErrors`。理由：CLI 没装的会话无法 resume，列出来没有意义，而"没装"对不用它的用户不是错误。Import session 面板同一条 RPC，同样受益。
+- 其余行为（cwd realpath 匹配、`since`、metadata 会话剔除、limit）不变。
 
 ### 客户端：视图与壳
 
@@ -99,7 +100,7 @@
 - host 未连接：复用现有"host 已断开"包装态。
 - 能力位缺失：显示"更新 host"提示。
 - 列表为空：空态文案区分"该作用域没有会话"与"搜索无结果"。
-- `providerErrors` 非空：列表上方一条可收起的警示，逐个列出 Provider 名与原始错误；不翻译原始错误。
+- `providerErrors` 非空：列表上方一条可收起的警示，逐个列出 Provider 名与原始错误；不翻译原始错误。未安装的 Provider 不会出现在这里（daemon 侧已跳过）。
 
 ### 文案
 
@@ -131,7 +132,8 @@
 
 ## Further Notes
 
-- **Codex 的可见性**依赖那台 host 装有 codex CLI：daemon 通过起 app-server 查询线程列表。没装时它出现在 providerErrors 里而不是静默消失。
+- **Codex 的可见性**依赖那台 host 装有 codex CLI：daemon 通过起 app-server 查询线程列表。没装时 daemon 跳过它，面板不列会话也不提示。
+- **"未安装"的判定就是 `client.isAvailable()`**：它同时覆盖 CLI 不在 PATH 与自定义 command 路径配错两种情况，后者也会被静默跳过。理由：两者都无法 resume，而 Provider 配置错误已有"设置 → Provider 诊断"这条专门通道，不该由会话历史面板来报。
 - **终端映射不持久化**的原因：终端本身在 daemon 侧存活并可跨重启恢复，但把 `providerHandleId → terminalId` 写进持久化布局需要在终端被 daemon 回收时同步清理，成本高于收益。重启后再开一个终端是可接受的退化。
 - **同一会话双主人**的规避：Paseo 曾拥有的会话一律走 Paseo 打开逻辑，避免 Paseo 与终端同时 resume 同一个 Claude 会话导致两份日志互不可见。
 - 术语见 `docs/glossary.md` 的 **Provider session** 与 **Session history**；本任务的发现与决策记录在 `research/discovery.md`。
@@ -146,7 +148,7 @@
 - [ ] 已导入的会话带"Paseo"标记，点击打开其 Paseo tab。
 - [ ] 右键 / 长按菜单可复制 resume 命令、可导入为 Paseo agent。
 - [ ] 搜索按标题与提示词预览过滤；列表按最后活动倒序。
-- [ ] 某 Provider 失败时其他 Provider 的会话仍显示，并可看到失败原因。
+- [ ] 某已安装 Provider 失败时其他 Provider 的会话仍显示，并可看到失败原因；未安装的 Provider 不出现在警示里。
 - [ ] 旧版 daemon 下显示"更新 host"提示，无报错。
 - [ ] 中文界面下面板文案全部为中文；资源平价测试通过。
 - [ ] `npm run typecheck`、`npm run lint` 通过；上述接缝 1 与 2 的测试通过。
