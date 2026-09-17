@@ -16,8 +16,8 @@
 
 ## 验收
 
-- [ ] macOS desktop 上终端内容左右留白肉眼一致；两分栏时左右边缘对齐。（待人工验收）
-- [ ] 浅色主题下 `printf` 一段 ANSI white 与 brightWhite 文本可读。（待人工验收）
-- [ ] 深色主题下现有语法高亮颜色无明显变化。（待人工验收）
+- [x] macOS desktop 上终端内容左右留白肉眼一致；两分栏时左右边缘对齐。（2026-09-17 人工验收通过）
+- [x] 浅色主题下 `printf` 一段 ANSI white 与 brightWhite 文本可读。（2026-09-17 人工验收通过）
+- [x] 深色主题下现有语法高亮颜色无明显变化。（2026-09-17 人工验收通过）
 - [x] 浏览器测试：浅色主题挂载后最小对比度为 4.5，深色为 3，切主题后仅在变化时写入；宿主内框相对外框四边等距，且行列按内框计算（`terminal-emulator-runtime.browser.test.ts`）。另有 `terminal-contrast.test.ts` 守护深浅判定与浅色 white/brightWhite ≥ 3:1。
 - [x] `npm run typecheck`、`npm run lint` 通过。

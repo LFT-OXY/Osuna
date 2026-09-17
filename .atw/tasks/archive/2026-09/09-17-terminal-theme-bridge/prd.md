@@ -105,12 +105,12 @@
 
 ## Acceptance Criteria
 
-- [ ] 浅色主题下通过 Terminal profile 启动 Codex，输入框为浅色底、文字可读；Pi 的提示文字对比度正常。
-- [ ] 深色主题下上述 TUI 表现与修改前一致。
-- [ ] 运行中且订阅了 `DECSET 2031` 的 TUI 在 app 切换深浅主题后跟随切换（以 Pi 或 opencode 为验证对象；Codex 与 Claude Code 不订阅，重启后按新主题取色即可）。
-- [ ] 老客户端连接新 daemon：终端功能不变，daemon 对颜色查询沉默。
-- [ ] 新客户端连接老 daemon：不发送视图属性，终端不断开。
-- [ ] 终端内容四周留白相等；多分栏时左右边缘对齐。
-- [ ] 浅色主题下 ANSI white 与 brightWhite 输出可读。
-- [ ] Testing Decisions 列出的六类测试缝隙中第 1 至 5 项各有新增用例且通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过；入站校验代码已重新生成。
+- [x] 浅色主题下通过 Terminal profile 启动 Codex，输入框为浅色底、文字可读；Pi 的提示文字对比度正常。
+- [x] 深色主题下上述 TUI 表现与修改前一致。
+- [x] 运行中且订阅了 `DECSET 2031` 的 TUI 在 app 切换深浅主题后跟随切换（以 Pi 或 opencode 为验证对象；Codex 与 Claude Code 不订阅，重启后按新主题取色即可）。
+- [x] 老客户端连接新 daemon：终端功能不变，daemon 对颜色查询沉默。
+- [x] 新客户端连接老 daemon：不发送视图属性，终端不断开。
+- [x] 终端内容四周留白相等；多分栏时左右边缘对齐。
+- [x] 浅色主题下 ANSI white 与 brightWhite 输出可读。
+- [x] Testing Decisions 列出的六类测试缝隙中第 1 至 5 项各有新增用例且通过。
+- [x] `npm run typecheck`、`npm run lint` 通过；入站校验代码已重新生成。
