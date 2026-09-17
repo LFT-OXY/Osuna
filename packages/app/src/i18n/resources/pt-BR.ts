@@ -1891,6 +1891,7 @@ export const ptBR: TranslationResources = {
       subtitle: "Sessões de provedores neste host",
       tooltip: "Retomar sessões de provedores em um terminal",
       loading: "Carregando sessões...",
+      updateHost: "Atualize o host para listar as sessões de provedores.",
       scope: {
         workspace: "Workspace",
         project: "Projeto",
@@ -1917,6 +1918,7 @@ export const ptBR: TranslationResources = {
       },
       row: {
         opening: "Abrindo...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "Não foi possível carregar as sessões",

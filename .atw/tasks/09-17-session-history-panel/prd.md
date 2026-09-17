@@ -41,12 +41,13 @@
 
 - `fetch_recent_provider_sessions_request` 新增可选布尔字段 `includeImported`。为 true 时 daemon 不再剔除已导入的会话。
 - `RecentProviderSessionDescriptorPayload` 新增可选字段 `importedAgentId`：该 Provider session 对应的 Paseo agent id，未导入则缺省。daemon 在 `includeImported` 为 true 时填写。
+- 同时新增可选字段 `importedAgentWorkspaceId`：该 agent 所属 workspace。History 的打开逻辑靠它落到 workspace tab 并固定；缺了它，已归档（不在 session store 里的）agent 会退到 host 级详情路由并丢掉 pin。ownership 标记之前的旧 agent 没有 workspace，此时缺省。
 - `server_info.features` 新增能力位 `sessionHistory`。客户端一次性门控：能力位为假时视图显示"请更新 host"，不做回退路径。
 - 不新增 RPC，沿用现有 flat 名称，因为这是已有 RPC 的字段扩展。
 
 ### Daemon
 
-- `listImportableProviderSessions` 按 `includeImported` 决定是否过滤，已导入的会话把 agent id 写进 descriptor。已导入集合的采集逻辑复用现有实现。
+- `listImportableProviderSessions` 按 `includeImported` 决定是否过滤，已导入的会话把 agent id 与 workspace id 写进 descriptor。已导入集合的采集逻辑复用现有实现；已归档记录也算主人，但活 agent 与归档记录共用同一 handle 时报活 agent。
 - 其余行为（cwd realpath 匹配、`since`、metadata 会话剔除、limit、providerErrors）不变。
 
 ### 客户端：视图与壳
@@ -79,7 +80,7 @@
 
 ### 点击行为
 
-- 有 `importedAgentId`：调用与左栏 History 相同的打开逻辑（导航到该 agent 并固定 tab），不起终端。这依赖前置 bug 任务修好。
+- 有 `importedAgentId`：调用与左栏 History 相同的打开逻辑（`navigateToAgent` 带 `workspaceId` 与 `pin: true`），不起终端。已归档 agent 的 tab 能否真正出现依赖前置 bug 任务修好。
 - 无 `importedAgentId`：
   - 若本 workspace 已为该会话创建过终端且该终端仍在 daemon 的终端列表中，聚焦那个 tab。
   - 否则用现有终端创建通道创建终端：`cwd` 为会话的 cwd，`command` 与 `args` 来自模板表的 resume 项，终端名为会话标题，并携带当前主题的 view attributes。创建后记录 `providerHandleId → terminalId` 的映射。

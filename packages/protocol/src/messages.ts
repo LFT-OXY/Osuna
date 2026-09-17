@@ -919,6 +919,10 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   firstPromptPreview: z.string().nullable(),
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
+  // 该 Provider session 对应的 Paseo agent id；只有请求带 includeImported 时 daemon 才填写。
+  importedAgentId: z.string().optional(),
+  // 该 agent 所属 workspace；打开它时要带上，否则已归档 agent 会退到 host 级详情路由。
+  importedAgentWorkspaceId: z.string().optional(),
 });
 
 export type RecentProviderSessionDescriptorPayload = z.infer<
@@ -1383,6 +1387,8 @@ export const FetchRecentProviderSessionsRequestMessageSchema = z.object({
   since: z.string().optional(),
   limit: z.number().int().positive().max(200).optional(),
   query: z.string().optional(),
+  // 为 true 时不剔除已被 Paseo 导入的会话，并在 descriptor 上标出其 agent id。
+  includeImported: z.boolean().optional(),
 });
 
 export const FetchAgentRequestMessageSchema = z.object({
@@ -3708,6 +3714,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17.
         // daemon 接受终端视图属性（前景/背景/光标色）并据此回答 TUI 的颜色查询。
         terminalViewAttributes: z.boolean().optional(),
+        // COMPAT(sessionHistory): added in v0.8.1, remove gate after 2027-03-18.
+        // daemon 理解 fetch_recent_provider_sessions 的 includeImported，并回填 importedAgentId 与 importedAgentWorkspaceId。
+        sessionHistory: z.boolean().optional(),
       })
       .optional(),
   })

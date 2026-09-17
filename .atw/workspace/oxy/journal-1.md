@@ -30,3 +30,12 @@
 - 刷新不自写监听：`isVisible = useAppActivelyVisible() && useRetainedPanelActive()` 门控 `enabled`，React Query 重新启用即刷新。
 - 渲染型测试必须在 `packages/app` 下跑；从仓库根跑会因 reanimated 未转译报 `SyntaxError: Unexpected token 'typeof'`（HEAD 上工单 01 的测试同样如此）。
 - 审查处置：providerErrors 标题用 provider id（显示名需拉 providers snapshot，超出接缝）；目录显示按 PRD 字面（根目录空白、worktree 全路径），daemon 是等价匹配所以 project 作用域几乎不会出现相对路径——交用户决定。
+
+## 2026-09-18 工单 03 实现：Paseo 曾拥有的会话
+
+- 协议只加不改：请求 `includeImported`、descriptor `importedAgentId` + `importedAgentWorkspaceId`、能力位 `sessionHistory`（v0.8.1，COMPAT 到 2027-03-18）。workspaceId 是审查后补的：History 的 `navigateToAgent` 靠它落 workspace tab 并 pin，已归档 agent 不在 session store，缺了它会退到 host 详情路由丢 pin。PRD 已同步。
+- daemon 所有者收集顺序：活 agent → 未归档记录 → 已归档记录，首写者胜，`sessionId` 与 `nativeHandle` 都建键；`includeImported` 缺省时过滤分支与取数 limit 原样不动。
+- app 门控在 runtime-wired wrapper（`useHostFeature`）里，surface 只收 `isSupported` 与 `onOpenAgent(agentId, workspaceId)` 回调，测试不碰 router。
+- 审查处置：两轮共 5 项硬性（对象参数、收紧 `agentId`、命名返回类型与 candidates、workspaceId）已修；判断项采纳合并 owner 循环、去中间层、行模型 `string | null`、COMPAT 标签移到早返回块；未采纳双参数改对象、`as StoredAgentRecord` 沿用既有。
+- 坑：client 的 vitest 从 protocol `dist` 解析，加字段后必须 `npm run build:client`；zsh 变量传文件列表不分词，改用 xargs。
+- 待人工验收：点击"Paseo"行是否真的打开 tab 取决于前置任务 09-17-history-open-archived-agent。

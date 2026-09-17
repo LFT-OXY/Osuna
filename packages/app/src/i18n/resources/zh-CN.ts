@@ -1837,6 +1837,7 @@ export const zhCN: TranslationResources = {
       subtitle: "此主机上的 Provider 会话",
       tooltip: "在终端中恢复 Provider 会话",
       loading: "正在加载会话...",
+      updateHost: "请更新主机以列出 Provider 会话。",
       scope: {
         workspace: "Workspace",
         project: "项目",
@@ -1863,6 +1864,7 @@ export const zhCN: TranslationResources = {
       },
       row: {
         opening: "正在打开...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "无法加载会话",

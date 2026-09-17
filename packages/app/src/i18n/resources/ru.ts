@@ -1891,6 +1891,7 @@ export const ru: TranslationResources = {
       subtitle: "Сессии провайдеров на этом хосте",
       tooltip: "Возобновить сессии провайдеров в терминале",
       loading: "Загрузка сессий...",
+      updateHost: "Обновите хост, чтобы показать сессии провайдеров.",
       scope: {
         workspace: "Рабочее пространство",
         project: "Проект",
@@ -1917,6 +1918,7 @@ export const ru: TranslationResources = {
       },
       row: {
         opening: "Открытие...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "Не удалось загрузить сессии",

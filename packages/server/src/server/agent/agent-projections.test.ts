@@ -504,6 +504,38 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
     expect(payload).not.toHaveProperty("nativeHandle");
   });
 
+  it("carries the owning Paseo agent id only when the caller supplies one", () => {
+    const session: ImportableProviderSession & { provider: string } = {
+      provider: "claude",
+      providerHandleId: "provider-session-id",
+      cwd: "/tmp/project",
+      title: null,
+      lastActivityAt: new Date("2026-04-30T12:34:56.000Z"),
+      firstPromptPreview: null,
+      lastPromptPreview: null,
+    };
+
+    const owned = toRecentProviderSessionDescriptorPayload(session, {
+      providerLabel: "Claude",
+      importedAgentId: "agent-1",
+      importedAgentWorkspaceId: "workspace-1",
+    });
+    expect(owned.importedAgentId).toBe("agent-1");
+    expect(owned.importedAgentWorkspaceId).toBe("workspace-1");
+
+    const ownedWithoutWorkspace = toRecentProviderSessionDescriptorPayload(session, {
+      providerLabel: "Claude",
+      importedAgentId: "agent-1",
+    });
+    expect(ownedWithoutWorkspace).not.toHaveProperty("importedAgentWorkspaceId");
+
+    const external = toRecentProviderSessionDescriptorPayload(session, {
+      providerLabel: "Claude",
+    });
+    expect(external).not.toHaveProperty("importedAgentId");
+    expect(external).not.toHaveProperty("importedAgentWorkspaceId");
+  });
+
   it("preserves null prompt previews", () => {
     const session: ImportableProviderSession & { provider: string } = {
       provider: "claude-custom",

@@ -1883,6 +1883,7 @@ export const en = {
       subtitle: "Provider sessions on this host",
       tooltip: "Resume provider sessions in a terminal",
       loading: "Loading sessions...",
+      updateHost: "Update the host to list provider sessions.",
       scope: {
         workspace: "Workspace",
         project: "Project",
@@ -1909,6 +1910,7 @@ export const en = {
       },
       row: {
         opening: "Opening...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "Could not load sessions",

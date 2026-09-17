@@ -47,6 +47,9 @@ npx vitest run packages/app/src/stores/session-store.test.ts --bail=1   # pure t
 cd packages/app && npx vitest run src/session-history --bail=1          # rendered tests need the app config
 npm run test:browser --workspace=@getpaseo/app                  # all *.browser.test; small set
 cd packages/app && npx playwright test --project=browser e2e/browser/agent-message-submission.spec.ts
+git diff --name-only | grep -E '\.(ts|tsx)$' | xargs npm run lint --   # zsh does not word-split $FILES
 ```
+
+A schema edit is invisible to client and app tests until `npm run build:client` runs (`CLAUDE.md` "Build workspace packages"); the symptom is a passing protocol test next to a client test that cannot see the new field.
 
 Never run the whole Playwright suite locally; it is CI's job. Never `npm run test` for the workspace. Metro readiness for Playwright means `/status` returns `packager-status:running` and the bundle has been fetched; the global setup handles it.

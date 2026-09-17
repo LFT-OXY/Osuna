@@ -73,6 +73,18 @@ rows on the client and never reaches the daemon. Outside `workspace` scope each 
 directory relative to the project root; Paseo worktrees live under `$PASEO_HOME/worktrees`,
 outside the root, so they show in full.
 
+The view asks with `includeImported: true`, so sessions Paseo already owns stay in the list with
+their `importedAgentId` and `importedAgentWorkspaceId`. Such a row carries a Paseo badge and
+opens that agent through `navigateToAgent` with the workspace id and `pin`, the same call the
+History list makes; it never starts a terminal, because a provider session resumed in two
+processes writes two logs that cannot see each other. The workspace id travels on the wire
+because an archived agent is not in the session store, and without it `navigateToAgent` falls
+back to the host-level agent route and drops the pin. Archived agents count as owners too: the
+daemon reports the archived record and History's open logic decides what an archived agent
+looks like. Both the request field and the `server_info.features.sessionHistory` flag arrived
+together, so the view gates once on the flag and shows an update prompt on an older host
+instead of listing.
+
 ## Side pane
 
 `packages/app/src/workspace-tabs/open-beside.ts` owns content opened beside the user's work. The

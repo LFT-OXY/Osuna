@@ -92,6 +92,10 @@ export interface SessionHistoryRow {
   cwd: string;
   title: string;
   lastActivityAt: string;
+  /** The Paseo agent that owns this session; such a row opens the agent, never a terminal. */
+  importedAgentId: string | null;
+  /** That agent's workspace, so opening it lands in a workspace tab even when the agent is archived. */
+  importedAgentWorkspaceId: string | null;
   /** Lower-cased title and prompt previews; what the search box matches against. */
   searchText: string;
 }
@@ -139,6 +143,8 @@ export function buildSessionHistoryRows(
       cwd: entry.cwd,
       title,
       lastActivityAt: entry.lastActivityAt,
+      importedAgentId: entry.importedAgentId ?? null,
+      importedAgentWorkspaceId: entry.importedAgentWorkspaceId ?? null,
       searchText: [title, entry.firstPromptPreview, entry.lastPromptPreview]
         .filter((text): text is string => Boolean(text))
         .join("\n")

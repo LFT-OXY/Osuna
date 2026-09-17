@@ -1868,6 +1868,7 @@ export const ko: TranslationResources = {
       subtitle: "이 호스트의 프로바이더 세션",
       tooltip: "터미널에서 프로바이더 세션 재개",
       loading: "세션을 불러오는 중...",
+      updateHost: "프로바이더 세션을 표시하려면 호스트를 업데이트하세요.",
       scope: {
         workspace: "워크스페이스",
         project: "프로젝트",
@@ -1894,6 +1895,7 @@ export const ko: TranslationResources = {
       },
       row: {
         opening: "여는 중...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "세션을 불러올 수 없습니다",

@@ -1677,6 +1677,8 @@ export class VoiceAssistantWebSocketServer {
         ownedSubscriptions: true,
         // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17.
         terminalViewAttributes: true,
+        // COMPAT(sessionHistory): added in v0.8.1, remove gate after 2027-03-18.
+        sessionHistory: true,
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,

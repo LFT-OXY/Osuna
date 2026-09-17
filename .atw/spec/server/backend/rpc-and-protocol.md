@@ -161,6 +161,106 @@ if (colorSchemeSubscribed && previousScheme !== nextScheme) {
 }
 ```
 
+## Scenario: optional request field that widens a listing, gated in the app
+
+Reference implementation: `fetch_recent_provider_sessions_request.includeImported` and
+`RecentProviderSessionDescriptorPayload.importedAgentId` (session-history-panel ticket 03,
+v0.8.1). Reuse this shape when an existing listing RPC must stop hiding rows for one new
+consumer while every old consumer keeps the filtered result.
+
+### 1. Scope / Trigger
+
+- The import sheet needs the daemon to hide sessions Paseo already owns; the Session history
+  view needs them shown and marked. One RPC, two consumers, no second RPC.
+
+### 2. Signatures
+
+- Schema: `packages/protocol/src/messages.ts` — `FetchRecentProviderSessionsRequestMessageSchema.includeImported?: boolean`,
+  `RecentProviderSessionDescriptorPayloadSchema.importedAgentId?: string` and
+  `importedAgentWorkspaceId?: string`, `server_info.features.sessionHistory`.
+- Daemon: `listImportableProviderSessions({ request, ... })` in `server/agent/import-sessions.ts`;
+  `toRecentProviderSessionDescriptorPayload(session, { providerLabel, importedAgentId?, importedAgentWorkspaceId? })`
+  in `server/agent/agent-projections.ts`.
+- Client: `DaemonClient.fetchRecentProviderSessions({ ..., includeImported? })` passes the field
+  through unchanged; it carries no gate of its own.
+- App: `session-history/index.tsx` — `SessionHistoryView` reads `useHostFeature(serverId, "sessionHistory")`
+  once and hands the surface `isSupported`; the surface disables the query and renders the
+  update prompt. The COMPAT tag sits on that gate.
+
+### 3. Contracts
+
+- `includeImported` absent or `false`: identical to before — rows owned by an active (non-archived)
+  Paseo agent are dropped and counted in `filteredAlreadyImportedCount`; no descriptor carries
+  `importedAgentId`; the provider listing is asked for `limit + importedCount` rows so the filter
+  can still fill `limit`.
+- `includeImported: true`: nothing is dropped, `filteredAlreadyImportedCount` is `0`, the listing
+  is asked for exactly `limit` rows, and every row Paseo ever owned carries `importedAgentId` plus
+  `importedAgentWorkspaceId` when the record has one (legacy agents predate ownership stamping).
+  The workspace id is not optional sugar: the app opens the row through `navigateToAgent`, which
+  falls back to the host-level agent route (no `pin`) for an agent it cannot find in the session
+  store, and archived agents are never there.
+- Owner resolution: active in-memory agents first, then active stored records, then archived
+  records, first writer wins per handle key (`sessionId` and `nativeHandle` both map). An archived
+  twin therefore never shadows a live agent.
+- The daemon never reads `features`; the flag exists because the field and the flag shipped
+  together, so an old daemon silently ignores `includeImported` and would answer with the filtered
+  list — the app refuses to show that instead of listing it.
+
+### 4. Validation & Error Matrix
+
+- `includeImported` not a boolean -> request fails schema validation.
+- Field sent to an old daemon -> cannot happen from the app (query disabled without the flag);
+  a hand-built request just gets the filtered list.
+- Descriptor without `importedAgentId` -> parses; the row is external.
+
+### 5. Good/Base/Bad Cases
+
+- Good: new app + new daemon; the view lists external and owned sessions, owned rows badge and
+  open their agent, the import sheet (no field) still hides owned rows.
+- Base: old app + new daemon; no field, filtered list, old import sheet unchanged.
+- Bad: keying the owner map only on `sessionId` (Codex rows carry the native handle), filling
+  `importedAgentId` when the field is absent (old app would still parse it, but the import sheet
+  would then offer to import a session it already owns), or shipping the agent id without its
+  workspace id and letting the client "look it up" — the client has nothing to look in.
+
+### 6. Tests Required
+
+- Protocol: `messages.workspaces.test.ts` — request with and without the field, descriptor with
+  and without `importedAgentId`, `server_info` with and without the flag.
+- Daemon: `import-sessions.test.ts` — `includeImported: true` returns live / stored / archived /
+  external rows with the right agent and workspace ids and `listImportableSessions` asked for
+  `limit`; a live agent and an archived record sharing one handle report the live agent; `false`
+  returns the archived row unmarked. `agent-projections.test.ts` — the field appears only when
+  supplied.
+- Client: `daemon-client.test.ts` — the sent frame carries `includeImported`.
+- App: `session-history/index.test.tsx` — requests carry `includeImported: true`; an owned row
+  badges and calls `onOpenAgent(agentId, workspaceId)` without `createTerminal`;
+  `isSupported: false` renders the update prompt and never fetches.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// daemon: a parallel RPC for the same listing
+case "session_history.list.request": ...
+// app: falling back to the filtered list on an old host
+const rows = supportsSessionHistory ? owned.concat(external) : external;
+```
+
+#### Correct
+
+```ts
+// daemon (import-sessions.ts): one flag, one branch, old path untouched
+if (!includeImported && importedHandles.has(handleKey)) {
+  filteredAlreadyImportedCount += 1;
+  continue;
+}
+// app (session-history/index.tsx)
+// COMPAT(sessionHistory): added in v0.8.1, remove gate after 2027-03-18.
+const canList = isClientReady && isSupported;
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

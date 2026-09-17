@@ -4971,6 +4971,7 @@ test("fetches scoped recent provider sessions", async () => {
     since: "2026-04-30T00:00:00.000Z",
     limit: 25,
     query: "invoice",
+    includeImported: true,
   });
 
   expect(mock.sent).toHaveLength(1);
@@ -4984,6 +4985,7 @@ test("fetches scoped recent provider sessions", async () => {
       since?: string;
       limit?: number;
       query?: string;
+      includeImported?: boolean;
     };
   };
   expect(request.message).toMatchObject({
@@ -4993,6 +4995,7 @@ test("fetches scoped recent provider sessions", async () => {
     since: "2026-04-30T00:00:00.000Z",
     limit: 25,
     query: "invoice",
+    includeImported: true,
   });
 
   mock.triggerMessage(

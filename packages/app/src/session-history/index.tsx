@@ -19,10 +19,12 @@ import {
 } from "@/components/ui/pane-content-toolbar";
 import { SearchField } from "@/components/ui/search-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useFetchQuery } from "@/data/query";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
+import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import {
   buildTerminalsQueryKey,
@@ -31,6 +33,7 @@ import {
 } from "@/screens/workspace/terminals/state";
 import { useProjectWorkspaceDirectories, useWorkspaceFields } from "@/stores/session-store-hooks";
 import { getCurrentTerminalViewAttributes } from "@/terminal/view-attributes";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { formatTimeAgo } from "@/utils/time";
 import {
   buildResumeTerminalLaunch,
@@ -70,6 +73,8 @@ export interface SessionHistorySurfaceProps {
   onScopeChange: (scope: SessionHistoryScope) => void;
   client: SessionHistoryClient | null;
   isConnected: boolean;
+  /** The host advertises `server_info.features.sessionHistory`; without it the view only asks for an update. */
+  isSupported: boolean;
   /**
    * The app is in the foreground and this panel is the one on screen. Provider
    * logs have no push event, so the query pauses while hidden and React Query
@@ -78,6 +83,8 @@ export interface SessionHistorySurfaceProps {
   isVisible: boolean;
   /** The terminal exists on the daemon; the caller decides which pane shows it. */
   onTerminalCreated: (terminalId: string) => void;
+  /** A session Paseo owns was chosen; the shell opens that agent the way History does. */
+  onOpenAgent: (agentId: string, workspaceId: string | null) => void;
 }
 
 function ProviderIconSlot({
@@ -159,6 +166,7 @@ function SessionHistoryRowItem({
           </Text>
         ) : null}
       </View>
+      {row.importedAgentId ? <StatusBadge label={t("panels.sessionHistory.row.paseo")} /> : null}
       <Text style={styles.rowMeta} numberOfLines={1}>
         {opening
           ? t("panels.sessionHistory.row.opening")
@@ -214,13 +222,16 @@ export function SessionHistorySurface({
   onScopeChange,
   client,
   isConnected,
+  isSupported,
   isVisible,
   onTerminalCreated,
+  onOpenAgent,
 }: SessionHistorySurfaceProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const isCompact = useIsCompactFormFactor();
   const isClientReady = Boolean(client) && isConnected;
+  const canList = isClientReady && isSupported;
   const [searchQuery, setSearchQuery] = useState("");
   const cwds = useMemo(
     () => resolveSessionHistoryCwds(scope, { workspaceDirectory, projectWorkspaceDirectories }),
@@ -234,7 +245,7 @@ export function SessionHistorySurface({
     queryKey,
     dataShape: "list",
     staleTimeMs: 0,
-    enabled: isClientReady && isVisible,
+    enabled: canList && isVisible,
     // A dead provider stays dead until the user asks again; retrying only stacks requests.
     retry: false,
     queryFn: async () => {
@@ -243,9 +254,18 @@ export function SessionHistorySurface({
       }
       const requests =
         cwds.length === 0
-          ? [client.fetchRecentProviderSessions({ limit: SESSION_HISTORY_FETCH_LIMIT })]
+          ? [
+              client.fetchRecentProviderSessions({
+                limit: SESSION_HISTORY_FETCH_LIMIT,
+                includeImported: true,
+              }),
+            ]
           : cwds.map((cwd) =>
-              client.fetchRecentProviderSessions({ cwd, limit: SESSION_HISTORY_FETCH_LIMIT }),
+              client.fetchRecentProviderSessions({
+                cwd,
+                limit: SESSION_HISTORY_FETCH_LIMIT,
+                includeImported: true,
+              }),
             );
       return mergeSessionHistoryPayloads(await Promise.all(requests));
     },
@@ -312,15 +332,29 @@ export function SessionHistorySurface({
     openMutation.isPending && openMutation.variables ? openMutation.variables.key : null;
   const handleRowPress = useCallback(
     (row: SessionHistoryRow) => {
+      // A session Paseo owns has one owner: its agent. Never resume it in a second process.
+      if (row.importedAgentId) {
+        onOpenAgent(row.importedAgentId, row.importedAgentWorkspaceId);
+        return;
+      }
       openMutation.mutate(row);
     },
-    [openMutation],
+    [onOpenAgent, openMutation],
   );
 
   if (!isClientReady) {
     return (
       <View style={styles.centerState} testID="session-history-disconnected">
         <Text style={styles.stateText}>{t("workspace.terminal.hostDisconnected")}</Text>
+      </View>
+    );
+  }
+
+  // COMPAT(sessionHistory): added in v0.8.1, remove this gate and `isSupported` after 2027-03-18.
+  if (!isSupported) {
+    return (
+      <View style={styles.centerState} testID="session-history-unsupported">
+        <Text style={styles.stateText}>{t("panels.sessionHistory.updateHost")}</Text>
       </View>
     );
   }
@@ -474,6 +508,7 @@ export function SessionHistoryView({
 }: SessionHistoryViewProps) {
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
+  const isSupported = useHostFeature(serverId, "sessionHistory");
   const isAppVisible = useAppActivelyVisible();
   const isPanelActive = useRetainedPanelActive();
   const scope = useSessionHistoryScopeStore((state) => state.scope);
@@ -486,6 +521,13 @@ export function SessionHistoryView({
     serverId,
     project?.projectId ?? null,
   );
+  // 与左栏 History 同一条打开逻辑：导航到该 agent 并固定 tab，归档与否都由它处理。
+  const handleOpenAgent = useCallback(
+    (agentId: string, agentWorkspaceId: string | null) => {
+      navigateToAgent({ serverId, agentId, workspaceId: agentWorkspaceId, pin: true });
+    },
+    [serverId],
+  );
   return (
     <SessionHistorySurface
       serverId={serverId}
@@ -497,8 +539,10 @@ export function SessionHistoryView({
       onScopeChange={setScope}
       client={client}
       isConnected={isConnected}
+      isSupported={isSupported}
       isVisible={isAppVisible && isPanelActive}
       onTerminalCreated={onTerminalCreated}
+      onOpenAgent={handleOpenAgent}
     />
   );
 }

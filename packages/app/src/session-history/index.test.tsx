@@ -72,6 +72,8 @@ function renderSurface(
     onScopeChange?: (scope: SessionHistoryScope) => void;
     projectWorkspaceDirectories?: string[];
     isVisible?: boolean;
+    isSupported?: boolean;
+    onOpenAgent?: (agentId: string, workspaceId: string | null) => void;
   },
 ) {
   const queryClient = new QueryClient({
@@ -79,6 +81,7 @@ function renderSurface(
   });
   const onTerminalCreated = options?.onTerminalCreated ?? vi.fn();
   const onScopeChange = options?.onScopeChange ?? vi.fn();
+  const onOpenAgent = options?.onOpenAgent ?? vi.fn();
   const surface = (isVisible: boolean) => (
     <QueryClientProvider client={queryClient}>
       <SessionHistorySurface
@@ -91,8 +94,10 @@ function renderSurface(
         onScopeChange={onScopeChange}
         client={client}
         isConnected={options?.isConnected ?? true}
+        isSupported={options?.isSupported ?? true}
         isVisible={isVisible}
         onTerminalCreated={onTerminalCreated}
+        onOpenAgent={onOpenAgent}
       />
     </QueryClientProvider>
   );
@@ -102,6 +107,7 @@ function renderSurface(
     queryClient,
     onTerminalCreated,
     onScopeChange,
+    onOpenAgent,
     setVisible: (isVisible: boolean) => view.rerender(surface(isVisible)),
   };
 }
@@ -138,7 +144,11 @@ describe("SessionHistorySurface", () => {
     renderSurface(createClient({ fetchRecentProviderSessions }));
 
     await screen.findByText("Fix login");
-    expect(fetchRecentProviderSessions).toHaveBeenCalledWith({ cwd: "/repo/app", limit: 200 });
+    expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
+      cwd: "/repo/app",
+      limit: 200,
+      includeImported: true,
+    });
   });
 
   it("lists resumable sessions newest first with the title fallback chain", async () => {
@@ -235,6 +245,69 @@ describe("SessionHistorySurface", () => {
     expect(screen.getByText("Fix login")).toBeTruthy();
   });
 
+  it("marks sessions Paseo owns and opens their agent instead of a terminal", async () => {
+    const createTerminal = vi.fn() as unknown as CreateTerminal;
+    const onOpenAgent = vi.fn();
+    const { onTerminalCreated } = renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [
+            entry({
+              providerHandleId: "owned",
+              title: "Owned",
+              importedAgentId: "agent-7",
+              importedAgentWorkspaceId: "ws-9",
+            }),
+            entry({ providerHandleId: "external", title: "External" }),
+          ],
+        })) as unknown as FetchRecentProviderSessions,
+        createTerminal,
+      }),
+      { onOpenAgent },
+    );
+
+    await screen.findByText("External");
+    expect(screen.getAllByText(i18n.t("panels.sessionHistory.row.paseo"))).toHaveLength(1);
+    expect(screen.getByTestId("session-history-row-claude-owned").textContent).toContain(
+      i18n.t("panels.sessionHistory.row.paseo"),
+    );
+
+    fireEvent.click(screen.getByTestId("session-history-row-claude-owned"));
+
+    expect(onOpenAgent).toHaveBeenCalledWith("agent-7", "ws-9");
+    expect(createTerminal).not.toHaveBeenCalled();
+    expect(onTerminalCreated).not.toHaveBeenCalled();
+  });
+
+  it("opens a legacy agent without a workspace through the same callback", async () => {
+    const onOpenAgent = vi.fn();
+    renderSurface(
+      createClient({
+        fetchRecentProviderSessions: vi.fn(async () => ({
+          requestId: "recent",
+          entries: [entry({ providerHandleId: "legacy", importedAgentId: "agent-legacy" })],
+        })) as unknown as FetchRecentProviderSessions,
+      }),
+      { onOpenAgent },
+    );
+
+    fireEvent.click(await screen.findByTestId("session-history-row-claude-legacy"));
+
+    expect(onOpenAgent).toHaveBeenCalledWith("agent-legacy", null);
+  });
+
+  it("asks for a host update instead of listing when the daemon predates session history", () => {
+    const fetchRecentProviderSessions = vi.fn() as unknown as FetchRecentProviderSessions;
+
+    renderSurface(createClient({ fetchRecentProviderSessions }), { isSupported: false });
+
+    expect(screen.getByTestId("session-history-unsupported").textContent).toBe(
+      i18n.t("panels.sessionHistory.updateHost"),
+    );
+    expect(fetchRecentProviderSessions).not.toHaveBeenCalled();
+  });
+
   it("shows the empty state when the workspace has no sessions", async () => {
     renderSurface(createClient({}));
 
@@ -284,8 +357,8 @@ describe("SessionHistorySurface", () => {
 
     await screen.findAllByText("Fix login");
     expect(fetchRecentProviderSessionsMock.mock.calls.map((call) => call[0])).toEqual([
-      { cwd: "/repo/app", limit: 200 },
-      { cwd: "/tmp/wt", limit: 200 },
+      { cwd: "/repo/app", limit: 200, includeImported: true },
+      { cwd: "/tmp/wt", limit: 200, includeImported: true },
     ]);
     expect(screen.getAllByRole("button", { name: "Fix login" })).toHaveLength(2);
   });
@@ -300,7 +373,7 @@ describe("SessionHistorySurface", () => {
 
     await screen.findByText("Fix login");
     expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
-    expect(fetchRecentProviderSessions).toHaveBeenCalledWith({ limit: 200 });
+    expect(fetchRecentProviderSessions).toHaveBeenCalledWith({ limit: 200, includeImported: true });
   });
 
   it("shows where a session lives relative to the project root outside workspace scope", async () => {

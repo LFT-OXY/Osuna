@@ -1906,6 +1906,7 @@ export const es: TranslationResources = {
       subtitle: "Sesiones de proveedores en este host",
       tooltip: "Reanudar sesiones de proveedores en una terminal",
       loading: "Cargando sesiones...",
+      updateHost: "Actualiza el host para listar las sesiones de proveedores.",
       scope: {
         workspace: "Espacio de trabajo",
         project: "Proyecto",
@@ -1932,6 +1933,7 @@ export const es: TranslationResources = {
       },
       row: {
         opening: "Abriendo...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "No se pudieron cargar las sesiones",

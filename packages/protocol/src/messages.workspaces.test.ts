@@ -2,6 +2,7 @@ import { z } from "zod";
 import { describe, expect, test } from "vitest";
 import {
   RecentProviderSessionDescriptorPayloadSchema,
+  ServerInfoStatusPayloadSchema,
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
   WorkspaceCreateRequestSchema,
@@ -362,6 +363,83 @@ describe("workspace message schemas", () => {
         },
       ],
     });
+  });
+
+  test("parses includeImported requests and importedAgentId descriptors, both optional", () => {
+    const request = SessionInboundMessageSchema.parse({
+      type: "fetch_recent_provider_sessions_request",
+      requestId: "req-session-history",
+      cwd: "/tmp/repo",
+      limit: 200,
+      includeImported: true,
+    });
+    const response = SessionOutboundMessageSchema.parse({
+      type: "fetch_recent_provider_sessions_response",
+      payload: {
+        requestId: "req-session-history",
+        entries: [
+          {
+            providerId: "claude",
+            providerLabel: "Claude Code",
+            providerHandleId: "thread-1",
+            cwd: "/tmp/repo",
+            title: "Owned by Paseo",
+            firstPromptPreview: null,
+            lastPromptPreview: null,
+            lastActivityAt: "2026-04-30T12:34:56.000Z",
+            importedAgentId: "agent-1",
+            importedAgentWorkspaceId: "workspace-1",
+          },
+          {
+            providerId: "claude",
+            providerLabel: "Claude Code",
+            providerHandleId: "thread-2",
+            cwd: "/tmp/repo",
+            title: "External",
+            firstPromptPreview: null,
+            lastPromptPreview: null,
+            lastActivityAt: "2026-04-30T12:34:56.000Z",
+          },
+        ],
+      },
+    });
+
+    if (request.type !== "fetch_recent_provider_sessions_request") {
+      throw new Error("expected fetch_recent_provider_sessions_request");
+    }
+    expect(request.includeImported).toBe(true);
+    if (response.type !== "fetch_recent_provider_sessions_response") {
+      throw new Error("expected fetch_recent_provider_sessions_response");
+    }
+    expect(response.payload.entries[0]?.importedAgentId).toBe("agent-1");
+    expect(response.payload.entries[0]?.importedAgentWorkspaceId).toBe("workspace-1");
+    expect(response.payload.entries[1]).not.toHaveProperty("importedAgentId");
+    expect(response.payload.entries[1]).not.toHaveProperty("importedAgentWorkspaceId");
+
+    const legacyRequest = SessionInboundMessageSchema.parse({
+      type: "fetch_recent_provider_sessions_request",
+      requestId: "req-legacy",
+    });
+    if (legacyRequest.type !== "fetch_recent_provider_sessions_request") {
+      throw new Error("expected fetch_recent_provider_sessions_request");
+    }
+    expect(legacyRequest.includeImported).toBeUndefined();
+  });
+
+  test("parses server_info with and without the sessionHistory feature", () => {
+    const withFeature = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "server-1",
+      features: { sessionHistory: true },
+    });
+    const withoutFeature = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "server-1",
+      features: {},
+    });
+
+    expect(withFeature.features?.sessionHistory).toBe(true);
+    expect(withoutFeature.features?.sessionHistory).toBeUndefined();
   });
 
   test("parses session import search requests and per-provider errors", () => {

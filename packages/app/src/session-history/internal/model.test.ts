@@ -53,6 +53,24 @@ describe("buildSessionHistoryRows", () => {
 
     expect(rows.map((row) => row.key)).toEqual(["claude:new", "claude:old"]);
   });
+
+  it("carries the owning Paseo agent id through to the row", () => {
+    const rows = buildSessionHistoryRows([
+      entry({
+        providerHandleId: "owned",
+        importedAgentId: "agent-1",
+        importedAgentWorkspaceId: "ws-1",
+      }),
+      entry({ providerHandleId: "legacy", importedAgentId: "agent-2" }),
+      entry({ providerHandleId: "external" }),
+    ]);
+
+    expect(rows.map((row) => [row.importedAgentId, row.importedAgentWorkspaceId])).toEqual([
+      ["agent-1", "ws-1"],
+      ["agent-2", null],
+      [null, null],
+    ]);
+  });
 });
 
 describe("buildResumeTerminalLaunch", () => {

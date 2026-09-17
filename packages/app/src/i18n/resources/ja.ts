@@ -1878,6 +1878,7 @@ export const ja: TranslationResources = {
       subtitle: "このホストのプロバイダーセッション",
       tooltip: "プロバイダーセッションをターミナルで再開",
       loading: "セッションを読み込み中...",
+      updateHost: "プロバイダーセッションを一覧表示するにはホストを更新してください。",
       scope: {
         workspace: "ワークスペース",
         project: "プロジェクト",
@@ -1904,6 +1905,7 @@ export const ja: TranslationResources = {
       },
       row: {
         opening: "開いています...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "セッションを読み込めませんでした",

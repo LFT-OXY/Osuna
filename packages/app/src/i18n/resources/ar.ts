@@ -1858,6 +1858,7 @@ export const ar: TranslationResources = {
       subtitle: "جلسات الموفّرين على هذا المضيف",
       tooltip: "استئناف جلسات الموفّرين في طرفية",
       loading: "جارٍ تحميل الجلسات...",
+      updateHost: "حدّث المضيف لعرض جلسات الموفّرين.",
       scope: {
         workspace: "مساحة العمل",
         project: "المشروع",
@@ -1884,6 +1885,7 @@ export const ar: TranslationResources = {
       },
       row: {
         opening: "جارٍ الفتح...",
+        paseo: "Paseo",
       },
       errors: {
         loadFailed: "تعذّر تحميل الجلسات",
