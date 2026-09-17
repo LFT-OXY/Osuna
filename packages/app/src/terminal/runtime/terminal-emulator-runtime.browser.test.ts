@@ -1,5 +1,6 @@
 import { page } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ITheme } from "@xterm/xterm";
 import type { TerminalInputModeState } from "@getpaseo/protocol/terminal-input-mode";
 import { encodeTerminalOutput, TerminalEmulatorRuntime } from "./terminal-emulator-runtime";
 
@@ -28,6 +29,7 @@ interface TerminalKeyRecord {
 
 type BrowserTerminal = TerminalSize & {
   input: (data: string, wasUserInput?: boolean) => void;
+  options: Record<string, unknown>;
   refresh: (start: number, end: number) => void;
   reset: () => void;
 };
@@ -72,10 +74,24 @@ function settleMountRefits(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 2_600));
 }
 
+const DARK_THEME: ITheme = {
+  background: "#0b0b0b",
+  foreground: "#e6e6e6",
+  cursor: "#e6e6e6",
+};
+
+const LIGHT_THEME: ITheme = {
+  background: "#ffffff",
+  foreground: "#1a1a1e",
+  cursor: "#1a1a1e",
+};
+
 function createTerminalHost(input: {
   width: number;
   height: number;
   scrollback?: number;
+  theme?: ITheme;
+  contentInset?: number;
 }): MountedTerminal {
   const root = document.createElement("div");
   root.style.width = `${input.width}px`;
@@ -117,11 +133,8 @@ function createTerminalHost(input: {
     host,
     initialSnapshot: null,
     scrollback: input.scrollback ?? 10_000,
-    theme: {
-      background: "#0b0b0b",
-      foreground: "#e6e6e6",
-      cursor: "#e6e6e6",
-    },
+    theme: input.theme ?? DARK_THEME,
+    ...(input.contentInset === undefined ? {} : { contentInset: input.contentInset }),
   });
 
   const mounted = { host, root, runtime, inputs, sizes, terminalKeys, inputModeChanges };
@@ -152,6 +165,25 @@ function expectNoForcedSameSizeClaim(input: {
         size.forceClaim,
     );
   expect(forcedSameSizeClaims).toEqual([]);
+}
+
+// xterm 每次写入 minimumContrastRatio 都会清缓存并全量重绘，所以要观察写入次数而不只是终值。
+function observeMinimumContrastRatioWrites(): number[] {
+  const options = getBrowserTerminal().options as Record<string, unknown>;
+  const descriptor = Object.getOwnPropertyDescriptor(options, "minimumContrastRatio");
+  if (!descriptor?.get || !descriptor.set) {
+    throw new Error("Expected xterm to expose minimumContrastRatio as an accessor option");
+  }
+  const writes: number[] = [];
+  Object.defineProperty(options, "minimumContrastRatio", {
+    configurable: true,
+    get: descriptor.get,
+    set: (value: number) => {
+      writes.push(value);
+      descriptor.set?.call(options, value);
+    },
+  });
+  return writes;
 }
 
 function getBrowserTerminal(): BrowserTerminal {
@@ -220,6 +252,75 @@ describe("terminal emulator runtime in a real browser", () => {
 
     expect(window.__paseoTerminal).toBe(terminal);
     expect(window.__paseoTerminal?.options.scrollback).toBe(42_000);
+  });
+
+  it("raises xterm's minimum contrast ratio to 4.5 on a light terminal background", async () => {
+    await page.viewport(900, 600);
+    createTerminalHost({ width: 720, height: 360, theme: LIGHT_THEME });
+
+    await waitFor({ predicate: () => window.__paseoTerminal !== undefined });
+
+    expect(window.__paseoTerminal?.options.minimumContrastRatio).toBe(4.5);
+  });
+
+  it("uses a 3 minimum contrast ratio on a dark terminal background", async () => {
+    await page.viewport(900, 600);
+    createTerminalHost({ width: 720, height: 360, theme: DARK_THEME });
+
+    await waitFor({ predicate: () => window.__paseoTerminal !== undefined });
+
+    expect(window.__paseoTerminal?.options.minimumContrastRatio).toBe(3);
+  });
+
+  it("rewrites the minimum contrast ratio only when a theme change crosses light and dark", async () => {
+    await page.viewport(900, 600);
+    const mounted = createTerminalHost({ width: 720, height: 360, theme: DARK_THEME });
+
+    await waitFor({ predicate: () => window.__paseoTerminal !== undefined });
+    const writes = observeMinimumContrastRatioWrites();
+
+    mounted.runtime.setTheme({
+      theme: { background: "#181b1a", foreground: "#e6e6e6", cursor: "#e6e6e6" },
+    });
+    expect(writes).toEqual([]);
+
+    mounted.runtime.setTheme({ theme: LIGHT_THEME });
+    expect(writes).toEqual([4.5]);
+
+    mounted.runtime.setTheme({
+      theme: { background: "#fafafa", foreground: "#1a1a1e", cursor: "#1a1a1e" },
+    });
+    expect(writes).toEqual([4.5]);
+    expect(window.__paseoTerminal?.options.minimumContrastRatio).toBe(4.5);
+  });
+
+  it("insets the xterm host from the root by the content inset on all four sides", async () => {
+    await page.viewport(900, 600);
+    const baseline = createTerminalHost({ width: 720, height: 360 });
+    await waitFor({ predicate: () => baseline.sizes.length > 0 });
+    const baselineSize = latestSize(baseline.sizes);
+    baseline.runtime.unmount();
+
+    const mounted = createTerminalHost({ width: 720, height: 360, contentInset: 8 });
+    await waitFor({ predicate: () => mounted.sizes.length > 0 });
+
+    const rootRect = mounted.root.getBoundingClientRect();
+    const hostRect = mounted.host.getBoundingClientRect();
+    expect({
+      top: hostRect.top - rootRect.top,
+      left: hostRect.left - rootRect.left,
+      right: rootRect.right - hostRect.right,
+      bottom: rootRect.bottom - hostRect.bottom,
+    }).toEqual({ top: 8, left: 8, right: 8, bottom: 8 });
+
+    // 行列按扣除内边距后的内框计算，而不是按 root 的外框。
+    const size = latestSize(mounted.sizes);
+    const rowHeight =
+      mounted.host.querySelector(".xterm-rows > div")?.getBoundingClientRect().height ?? 0;
+    expect(rowHeight).toBeGreaterThan(0);
+    expect(size.rows * rowHeight).toBeLessThanOrEqual(hostRect.height);
+    expect(size.rows).toBeLessThan(baselineSize.rows);
+    expect(size.cols).toBeLessThan(baselineSize.cols);
   });
 
   it("does not claim PTY ownership from passive mount refits", async () => {

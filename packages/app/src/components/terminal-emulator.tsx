@@ -44,6 +44,7 @@ import {
   prepareDroppedPathsForTerminal,
 } from "../terminal/drop/terminal-file-drop";
 import { getDesktopHost } from "@/desktop/host";
+import { SPACING } from "@/styles/theme";
 
 export interface TerminalEmulatorHandle {
   find?: TerminalFindHandle;
@@ -57,6 +58,9 @@ export interface TerminalEmulatorHandle {
   showKeyboard: () => void;
   blur: () => void;
 }
+
+// 终端内容与面板边缘的四边等距留白；fit 余量落在右侧，没有这层基线时第一列会贴边。
+const TERMINAL_CONTENT_INSET_PX = SPACING[2];
 
 const HOST_DIV_STYLE: CSSProperties = {
   flex: 1,
@@ -482,6 +486,7 @@ export default function TerminalEmulator({
       theme: mountedThemeRef.current,
       fontFamily: fontFamilyRef.current,
       fontSize: fontSizeRef.current,
+      contentInset: TERMINAL_CONTENT_INSET_PX,
     });
     onRendererReadyChangeRef.current?.({ streamKey, isReady: true });
 

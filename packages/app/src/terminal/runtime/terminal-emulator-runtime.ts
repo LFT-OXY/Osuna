@@ -28,6 +28,7 @@ import {
   type TerminalLocalFileLinkSource,
   type TerminalLocalFileLinkTarget,
 } from "../local-links/terminal-local-link-provider";
+import { resolveTerminalMinimumContrastRatio } from "./terminal-contrast";
 import { isMac, isFindShortcut } from "./terminal-find-shortcut";
 import { resolveTerminalFontFamily, resolveTerminalFontSize } from "./terminal-font";
 
@@ -56,6 +57,9 @@ export interface TerminalEmulatorRuntimeMountInput {
   theme: ITheme;
   fontFamily?: string;
   fontSize?: number;
+  // root 四边的内边距（px）。FitAddon 只量 host，所以 host 被 root 的内边距缩进后，
+  // 行列数自然按内框计算；内边距区域由 root 的主题背景色填充。
+  contentInset?: number;
 }
 
 export interface TerminalEmulatorRuntimeCallbacks {
@@ -121,6 +125,7 @@ interface TerminalEmulatorRuntimeDisposables {
   removeTouchListeners: () => void;
   restoreDocumentStyles: () => void;
   restoreViewportStyles: () => void;
+  restoreContentInsetStyles: () => void;
   disposeFitAddon: () => void;
   disposeWebglAddon: () => void;
   disposeTerminal: () => void;
@@ -442,7 +447,7 @@ export class TerminalEmulatorRuntime {
       fontSize: resolveTerminalFontSize(input.fontSize),
       lineHeight: 1.0,
       macOptionIsMeta: true,
-      minimumContrastRatio: 1,
+      minimumContrastRatio: resolveTerminalMinimumContrastRatio(input.theme),
       rescaleOverlappingGlyphs: true,
       scrollbar: {
         width: 8,
@@ -570,6 +575,10 @@ export class TerminalEmulatorRuntime {
     });
     const restoreViewportStyles = this.applyViewportTouchStyles({
       host: input.host,
+    });
+    const restoreContentInsetStyles = this.applyContentInsetStyles({
+      root: input.root,
+      contentInset: input.contentInset,
     });
 
     this.terminal = terminal;
@@ -724,6 +733,7 @@ export class TerminalEmulatorRuntime {
       removeTouchListeners,
       restoreDocumentStyles,
       restoreViewportStyles,
+      restoreContentInsetStyles,
       disposeFitAddon: () => {
         fitAddon.dispose();
       },
@@ -756,6 +766,7 @@ export class TerminalEmulatorRuntime {
       disposables.disposeTerminal();
       disposables.restoreDocumentStyles();
       disposables.restoreViewportStyles();
+      disposables.restoreContentInsetStyles();
     };
   }
 
@@ -833,6 +844,7 @@ export class TerminalEmulatorRuntime {
 
     try {
       terminal.options.theme = withOverviewRulerBorderHidden(input.theme);
+      this.applyMinimumContrastRatio(terminal, input.theme);
     } catch {
       // ignore
       return;
@@ -840,6 +852,14 @@ export class TerminalEmulatorRuntime {
 
     this.applyThemeBackground(input.theme);
     this.refreshVisibleRows();
+  }
+
+  // 只在值变化时写入：xterm 每次收到该选项都会清空对比度颜色缓存并全量重绘。
+  private applyMinimumContrastRatio(terminal: Terminal, theme: ITheme): void {
+    const next = resolveTerminalMinimumContrastRatio(theme);
+    if (terminal.options.minimumContrastRatio !== next) {
+      terminal.options.minimumContrastRatio = next;
+    }
   }
 
   setScrollback(input: { lines: number }): void {
@@ -1205,6 +1225,25 @@ export class TerminalEmulatorRuntime {
         rootContainer.style.width = previousRootWidth;
         rootContainer.style.height = previousRootHeight;
       }
+    };
+  }
+
+  private applyContentInsetStyles(input: {
+    root: HTMLDivElement;
+    contentInset: number | undefined;
+  }): () => void {
+    if (input.contentInset === undefined) {
+      return () => {};
+    }
+    const root = input.root;
+    const previousPadding = root.style.padding;
+    const previousBoxSizing = root.style.boxSizing;
+    // border-box 让内边距向内收，root 自身尺寸不变，只有 host 的内框缩小。
+    root.style.padding = `${input.contentInset}px`;
+    root.style.boxSizing = "border-box";
+    return () => {
+      root.style.padding = previousPadding;
+      root.style.boxSizing = previousBoxSizing;
     };
   }
 

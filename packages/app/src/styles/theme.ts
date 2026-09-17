@@ -227,6 +227,8 @@ export interface LightThemeConfig {
   ring: string;
 }
 
+// white / brightWhite 不能与白底同色：ANSI white 输出（如 ls 的部分条目）会直接消失。
+// 两者都取对白底不低于 3:1 的灰，brightWhite 仍比 white 更亮以保留层级。
 const lightTerminalAnsi = {
   red: "#dc2626",
   green: "#16a34a",
@@ -234,14 +236,14 @@ const lightTerminalAnsi = {
   blue: "#2563eb",
   magenta: "#9333ea",
   cyan: "#0891b2",
-  white: "#ffffff",
+  white: "#71717a",
   brightRed: "#ef4444",
   brightGreen: "#22c55e",
   brightYellow: "#f59e0b",
   brightBlue: "#3b82f6",
   brightMagenta: "#a855f7",
   brightCyan: "#06b6d4",
-  brightWhite: "#fafafa",
+  brightWhite: "#8a8a92",
 } as const;
 
 export function buildLightSemanticColors(tint: LightThemeConfig) {

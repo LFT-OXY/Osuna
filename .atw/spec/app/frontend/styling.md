@@ -41,6 +41,16 @@ The function is deliberately not reactive; the create request is a one-shot. The
 
 The live path is separate and owned by `TerminalStreamController` (`terminal/runtime/terminal-stream-controller.ts`), not by a hook. The pane derives `toTerminalViewAttributes(theme.colors.terminal)` with `useMemo`, hands the controller a `useStableEvent` getter, and calls `controller.syncViewAttributes()` from an effect keyed on that value. The controller sends only when the value differs from what it last sent for this terminal, except `syncViewAttributes({ afterClaim: true })`, which the attach path and the pane-focus size claim call right after a `claim` resize: after a claim the daemon may hold another device's colors, so that push is never deduplicated. The feature-flag gate is inside `DaemonClient.sendTerminalViewAttributes`; the pane and the controller do not read `server_info.features` for this.
 
+## Terminal contrast and content inset
+
+Both live in the shared xterm runtime (`terminal/runtime/terminal-emulator-runtime.ts`), not in the pane or the DOM host component, because the runtime is the only layer that both mounts xterm and owns the fit.
+
+- **Minimum contrast ratio** is derived from the `ITheme` by `resolveTerminalMinimumContrastRatio` (`terminal/runtime/terminal-contrast.ts`): 4.5 on a light background, 3 on a dark one, 1 (xterm's "off") when the theme colors are not `#rrggbb`. Light versus dark is the daemon's rule for `CSI ?996n` (background luminance below foreground means dark), not the app's theme switch and not a luminance threshold, so a TUI told "dark" by the daemon and the xterm that renders it never disagree. The runtime resolves it at mount and again in `setTheme`, and writes `terminal.options.minimumContrastRatio` only when the value changes: every write clears xterm's contrast color cache and repaints, so a light-to-light theme change must not write.
+- **Content inset** is a `mount({ contentInset })` value in px. The runtime puts it on the root as `padding` with `box-sizing: border-box`, so the root keeps its size, the host shrinks, and the FitAddon (which only measures the host) computes rows and columns from the inner box. The web host component passes `SPACING[2]` as a static import (the token is static, so no theme subscription); the WebView entry passes nothing and gets no inset. The padding area is painted by the root's theme background, which the runtime already owns.
+- The light palette's `white` and `brightWhite` are grays that clear 3:1 on the light terminal background; `terminal-contrast.test.ts` guards the ratio, so retune the hexes freely as long as it holds.
+
+`terminal-emulator-runtime.browser.test.ts` does not load `xterm.css`, so `.xterm-screen` geometry is meaningless there. Assert inset through the host's rect against the root's, and assert the fit through `rows * rowHeight <= host height` and rows/cols against an uninset baseline. To assert "written only when changed" on an xterm option, redefine the accessor on `terminal.options` (it is configurable) and count setter calls; do not assert on runtime internals.
+
 ## Rules from the gotcha list
 
 - Do not materialize styles at module scope (`styles.container` read outside a component); `styles/unistyles-module-scope.test.ts` guards this.
