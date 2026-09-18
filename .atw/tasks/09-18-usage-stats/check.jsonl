@@ -1,0 +1,18 @@
+{"file": ".atw/spec/guides/index.md", "reason": "共享思考指南：跨层数据流与复用检查"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "server 包编码规范入口"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "UsageStore 与 scan-state 落盘遵守 Store Surface Rule 与原子写"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "usage.* RPC 与广播的命名、schema 纯净与 COMPAT 标签"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "接缝 1 / 2 的测试形态"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "解析失败、截断、fetch 失败的处理与日志级别"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 包编码规范入口"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "i18n 纯函数返回 {key, params}、hover、平台门控"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "按主机取数与 React Query 用法"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "接缝 3 Playwright 与纯函数单测形态"}
+{"file": ".atw/tasks/09-18-usage-stats/research/interview-decisions.md", "reason": "需求边界，三轮访谈结论"}
+{"file": ".atw/tasks/09-18-usage-stats/research/claude-log-format.md", "reason": "Claude 日志字段表、去重与轮次规则、脱敏样例"}
+{"file": ".atw/tasks/09-18-usage-stats/research/codex-rollout-format.md", "reason": "Codex rollout 字段与 token_count / token_usage_record 规则"}
+{"file": ".atw/tasks/09-18-usage-stats/research/pi-omp-log-format.md", "reason": "Pi/OMP 字段、跨文件去重、目录解析真值"}
+{"file": ".atw/tasks/09-18-usage-stats/research/litellm-pricing.md", "reason": "价格表结构、匹配规则、许可与出站策略"}
+{"file": ".atw/tasks/09-18-usage-stats/research/backfill-volume.md", "reason": "回填量级、流式读与 U+2028 切行坑"}
+{"file": ".atw/tasks/09-18-usage-stats/research/file-observer-fit.md", "reason": "为何不接 watcher、游标与指纹注意点"}
+{"file": ".atw/tasks/09-18-usage-stats/research/paseo-usage-facts.md", "reason": "Paseo 现状：Plan usage、AgentUsage、会话扫描与 handle 语义"}

@@ -1,0 +1,673 @@
+<!--
+  PROTOTYPE — 可丢弃。「用量」页原型，UI 照抄参考项目 TokenTracker 的 dashboard
+  （dashboard/src/ui/dashboard/{views/DashboardView,components/UsageOverview,StatsPanel,ActivityHeatmap,TrendMonitor,DataDetails,UsageLimitsPanel}.jsx、pages/SessionsPage.jsx）。
+  布局：左 4 / 右 8 栅格；左列 = 统计面板 + 热力图 + 使用趋势 + Plan usage；右列 = 用量总览（周期、大数字、来源卡片）+ 数据明细（每日细目/按月/项目用量）。价格表挪到主机设置页（用户 2026-09-18 决定），不在本页。
+  在参考项目之外补的东西：Host 筛选、回填进度、每日细目展开会话。
+  数据全部为假数据，按 map-issues/08 的 usage.report.get 响应形状生成。
+  底部浮动条：桌面/手机宽度、亮/暗、回填状态。
+-->
+<title>Paseo 用量页原型</title>
+<style>
+  :root {
+    color-scheme: light;
+    /* 参考项目 tailwind.config.cjs 的 oai 灰阶（静态中性灰，卡片/描边/文字都走这套） */
+    --g50: #fafafa; --g100: #f5f5f5; --g200: #e5e5e5; --g300: #d4d4d4; --g400: #a3a3a3; --g500: #737373; --g600: #525252; --g700: #404040; --g800: #262626; --g900: #171717;
+    --page: #eef0ee;           /* 窗口底色（styles.css --oai-gray-100 绿调灰，截图里的外框） */
+    --sidebar-fg: #4d594d;
+    --card: #ffffff; --card-border: var(--g200); --card-border-hover: var(--g300);
+    --ink: #0a0a0a; --ink-muted: var(--g500); --ink-faint: var(--g400); --ink-2: var(--g600); --ink-3: var(--g700);
+    --tile: var(--g50); --row-hover: rgba(250,250,250,.5); --divider: var(--g100); --divider-2: var(--g200);
+    --brand: #059669; --brand-dark: #047857;
+    --amber-bg: #fffbeb; --amber-border: rgba(252,211,77,.7); --amber-fg: #b45309;
+    --sky-bg: #f0f9ff; --sky-fg: #0369a1; --emerald-bg: #ecfdf5; --emerald-fg: #047857;
+    --heat0: #ebedf0; --heat1: #a7f3d0; --heat2: #6ee7b7; --heat3: #34d399; --heat4: #10b981;
+    --thumb: #ffffff; --seg-bg: var(--g100); --seg-border: var(--g200);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+    --sans: 'OpenAI Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    --mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0a0a0a; --sidebar-fg: #a3a3a3;
+    --card: #171717; --card-border: #262626; --card-border-hover: #404040;
+    --ink: #fafafa; --ink-muted: #d4d4d4; --ink-faint: #a3a3a3; --ink-2: #d4d4d4; --ink-3: #e5e5e5;
+    --tile: #262626; --row-hover: rgba(38,38,38,.5); --divider: #262626; --divider-2: #404040;
+    --brand: #10b981; --brand-dark: #34d399;
+    --amber-bg: rgba(245,158,11,.1); --amber-border: rgba(245,158,11,.3); --amber-fg: #fcd34d;
+    --sky-bg: rgba(14,165,233,.1); --sky-fg: #7dd3fc; --emerald-bg: rgba(16,185,129,.1); --emerald-fg: #6ee7b7;
+    --heat0: #121212; --heat1: #065f46; --heat2: #059669; --heat3: #10b981; --heat4: #34d399;
+    --thumb: #404040; --seg-bg: #262626; --seg-border: #404040;
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.5), 0 4px 6px -4px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--mono); }
+  svg.i { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* ---- 外壳：参考项目 Mac 原生壳（灰底 + 白色圆角主卡） ---- */
+  #frame { display: flex; height: 100vh; margin: 0 auto; overflow: hidden; }
+  #frame.mobile { max-width: 390px; }
+  .sidebar { width: 260px; flex: none; padding: 20px 12px 12px; display: flex; flex-direction: column; gap: 2px; color: var(--sidebar-fg); }
+  #frame.mobile .sidebar { display: none; }
+  .sidebar .brand { display: flex; align-items: center; gap: 8px; padding: 0 8px 14px; font-weight: 600; color: var(--ink); font-size: 14px; }
+  .sidebar .brand .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--ink); color: var(--page); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+  .sidebar .grp { padding: 16px 12px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--g500); }
+  .sidebar .grp:first-of-type { padding-top: 8px; }
+  .nav { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; color: var(--sidebar-fg); }
+  .nav.sel { background: rgba(120,130,120,.18); color: var(--ink); font-weight: 500; }
+  :root[data-theme="dark"] .nav.sel { background: #262626; }
+  .nav .ic { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; }
+  .main { flex: 1; min-width: 0; margin: 12px 12px 12px 0; background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  #frame.mobile .main { margin: 0; border-radius: 0; border: 0; }
+  .topbar { display: none; align-items: center; gap: 8px; height: 56px; padding: 0 12px; border-bottom: 1px solid var(--card-border); }
+  #frame.mobile .topbar { display: flex; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  .page { padding: 24px; }
+  #frame.mobile .page { padding: 12px; }
+  .grid12 { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+  .col4 { grid-column: span 4; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .col8 { grid-column: span 8; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .col4 > .card:last-child, .col8 > .card:last-child { flex: 1; }
+  .col8 > .card:last-child { display: flex; flex-direction: column; min-height: 0; }
+  .col8 > .card:last-child .tablewrap { flex: 1; max-height: none; min-height: 384px; }
+  #frame.mobile .grid12 { grid-template-columns: 1fr; }
+  #frame.mobile .col4, #frame.mobile .col8 { grid-column: span 1; }
+  #frame.mobile .col4 { order: 2; } #frame.mobile .col8 { order: 1; }
+
+  /* ---- Card（ui/components/Card.jsx） ---- */
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px; transition: border-color .15s; }
+  .card:hover { border-color: var(--card-border-hover); }
+  .ctitle { font-size: 14px; font-weight: 500; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .025em; margin: 0; }
+  .chead { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .cap { font-size: 12px; color: var(--ink-faint); }
+
+  /* ---- 分段/页签（UsageOverview tabClass、SegmentedControl） ---- */
+  .tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; white-space: nowrap; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 6px; color: var(--ink-muted); transition: color .15s, background .15s; }
+  .tab:hover { color: var(--ink); background: var(--g50); }
+  :root[data-theme="dark"] .tab:hover { background: #262626; }
+  .tab.on { color: var(--ink); background: var(--g100); }
+  :root[data-theme="dark"] .tab.on { background: #262626; }
+  .seg { position: relative; display: inline-flex; height: 32px; align-items: center; gap: 4px; border-radius: 6px; border: 1px solid var(--seg-border); background: var(--seg-bg); padding: 3px; }
+  .seg button { height: 24px; padding: 0 10px; border-radius: 4px; font-size: 12px; font-weight: 500; color: var(--ink-muted); }
+  .seg button.on { background: var(--thumb); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .seg.tiny { height: auto; padding: 2px; border-radius: 6px; }
+  .seg.tiny button { height: auto; padding: 2px 8px; font-size: 10px; }
+  .obtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; font-size: 12px; font-weight: 500; border-radius: 6px; border: 1px solid var(--g300); background: var(--card); color: var(--ink); transition: color .15s, border-color .15s; white-space: nowrap; }
+  :root[data-theme="dark"] .obtn { border-color: #404040; }
+  .obtn:hover { border-color: var(--brand); color: var(--brand); }
+  .obtn.sq { width: 32px; padding: 0; }
+  .obtn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .obtn.ghost { border: 0; color: var(--ink-faint); }
+  .obtn.ghost:hover { background: var(--g100); color: var(--ink-3); }
+  .pillamber { position: relative; display: inline-flex; align-items: center; gap: 6px; max-width: 360px; border-radius: 999px; border: 1px solid var(--amber-border); background: var(--amber-bg); padding: 6px 12px; font-size: 12px; color: var(--amber-fg); white-space: nowrap; }
+  .pillamber .dot { position: relative; width: 6px; height: 6px; flex: none; }
+  .pillamber .dot::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #fbbf24; opacity: .75; animation: ping 1.2s cubic-bezier(0,0,.2,1) infinite; }
+  .pillamber .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #f59e0b; }
+  @keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .pillamber .dot::before { animation: none; } }
+  .tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 500; white-space: nowrap; line-height: 1.4; }
+  .tag.sky { background: var(--sky-bg); color: var(--sky-fg); }
+  .tag.em { background: var(--emerald-bg); color: var(--emerald-fg); }
+  .tag.amb { background: var(--amber-bg); color: var(--amber-fg); border: 1px solid var(--amber-border); }
+  .tag.gray { border: 1px solid var(--g200); color: var(--ink-2); }
+  :root[data-theme="dark"] .tag.gray { border-color: #404040; }
+  .menu { position: absolute; top: 36px; right: 0; z-index: 30; min-width: 240px; padding: 4px 0; border-radius: 8px; border: 1px solid var(--card-border); background: var(--card); box-shadow: var(--shadow-lg); display: none; }
+  .menu.open { display: block; }
+  .menu .item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; font-size: 13px; text-align: left; color: var(--ink-2); }
+  .menu .item:hover:not([disabled]) { background: var(--g100); color: var(--ink); }
+  :root[data-theme="dark"] .menu .item:hover:not([disabled]) { background: #262626; }
+  .menu .item[disabled] { cursor: default; color: var(--ink-faint); }
+  .menu .item .sp { flex: 1; }
+  .menu .item .d { width: 6px; height: 6px; border-radius: 50%; background: var(--g400); }
+  .menu .item .d.ok { background: #10b981; }
+
+  /* ---- 统计面板（StatsPanel） ---- */
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  #frame.mobile .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; background: var(--tile); border-radius: 8px; min-width: 0; }
+  .tile .v { font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .tile .k { font-size: 10px; color: var(--ink-faint); margin-top: 2px; white-space: nowrap; }
+  .rank { display: flex; align-items: center; padding: 8px 0; }
+  .rank + .rank { border-top: 1px solid var(--divider); }
+  .rank .n { width: 20px; height: 20px; border-radius: 50%; background: var(--g100); color: var(--ink-muted); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  :root[data-theme="dark"] .rank .n { background: #262626; }
+  .rank .name { flex: 1; padding: 0 10px; font-size: 14px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank .pct { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .sep { border-top: 1px solid var(--divider); margin-top: 16px; padding-top: 12px; }
+  .foot { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--ink-faint); }
+  .foot b { font-weight: 400; color: var(--ink-muted); margin-left: 6px; }
+
+  /* ---- 用量总览（UsageOverview） ---- */
+  .ovhead { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+  .ovhead .r { display: flex; align-items: center; gap: 6px; flex: none; position: relative; }
+  .hero { text-align: center; margin-bottom: 32px; }
+  .hero .lbl { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
+  .hero .big { font-size: 72px; line-height: 1; font-weight: 700; letter-spacing: -.025em; color: var(--ink); }
+  #frame.mobile .hero .big { font-size: 48px; }
+  .hero .cost { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; font-size: 20px; font-weight: 700; color: var(--brand); }
+  .hero .cost svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; opacity: .8; }
+  .hero .rng { margin-top: 12px; font-size: 11px; line-height: 1.35; color: var(--ink-faint); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .dist { height: 6px; width: 100%; border-radius: 999px; overflow: hidden; display: flex; background: var(--g100); margin-bottom: 24px; }
+  :root[data-theme="dark"] .dist { background: #262626; }
+  .dist i { display: block; height: 100%; }
+  .srcgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .srccard { min-width: 0; text-align: left; padding: 12px; border-radius: 8px; border: 1px solid var(--card-border); transition: border-color .2s, background .2s; }
+  :root[data-theme="dark"] .srccard { border-color: #404040; }
+  .srccard:hover { border-color: var(--g300); }
+  .srccard.on { border-color: var(--g300); background: var(--g50); }
+  :root[data-theme="dark"] .srccard.on { border-color: #525252; background: #262626; }
+  .srccard .h { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; min-width: 0; }
+  .srccard .h span { font-size: 14px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srccard .pct { font-size: 18px; font-weight: 600; color: var(--ink); }
+  .srccard .mc { margin-top: 2px; font-size: 11px; color: var(--ink-faint); }
+  .pi { width: 15px; height: 15px; flex: none; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; line-height: 1; }
+  .pi svg { width: 15px; height: 15px; }
+  .models { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--divider-2); }
+  .models .mh { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 14px; font-weight: 500; color: var(--ink); }
+  .mrow { margin-bottom: 12px; }
+  .mrow .l { display: grid; grid-template-columns: minmax(0,1fr) minmax(8rem,max-content) minmax(5.5rem,max-content) 4rem; gap: 0 12px; align-items: baseline; margin-bottom: 6px; font-size: 14px; }
+  .mrow .l .n { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mrow .l .t, .mrow .l .c { text-align: right; white-space: nowrap; color: var(--ink-faint); }
+  .mrow .l .p { text-align: right; color: var(--ink); }
+  .mrow .bar { height: 3px; border-radius: 999px; background: var(--g100); overflow: hidden; }
+  :root[data-theme="dark"] .mrow .bar { background: #262626; }
+  .mrow .bar i { display: block; height: 100%; transition: width .5s ease-out; }
+  #frame.mobile .mrow .l { grid-template-columns: minmax(0,1fr) auto 4rem; }
+  #frame.mobile .mrow .l .c { display: none; }
+
+  /* ---- 热力图（ActivityHeatmap） ---- */
+  .heatwrap { overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; scrollbar-width: thin; }
+  .heat { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; }
+  .heat .wd { display: grid; grid-template-rows: repeat(7, 11px); gap: 3px; font-size: 10px; color: var(--ink-faint); line-height: 11px; position: sticky; left: 0; background: var(--card); padding-right: 6px; }
+  .heat .mo { grid-column: 2; display: grid; gap: 3px; font-size: 10px; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px; white-space: nowrap; }
+  .heat .cells { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 11px); gap: 3px; }
+  .heat .c { width: 11px; height: 11px; border-radius: 2px; transition: transform .1s; cursor: pointer; }
+  .heat .c:hover { transform: scale(1.25); position: relative; z-index: 1; }
+  .heatleg { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; font-size: 10px; color: var(--ink-faint); }
+  .heatleg .swl { display: flex; gap: 2px; } .heatleg .swl i { width: 10px; height: 10px; border-radius: 1px; display: inline-block; }
+
+  /* ---- 使用趋势（TrendMonitor） ---- */
+  .trend { position: relative; height: 160px; display: flex; align-items: flex-end; gap: 2px; }
+  .trend .gl { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+  .trend .gl i { display: block; width: 100%; border-top: 1px solid var(--divider); }
+  .tb { position: relative; flex: 1; align-self: stretch; display: flex; flex-direction: column-reverse; justify-content: flex-start; cursor: pointer; }
+  .tb:hover::before { content: ""; position: absolute; inset: 0; background: rgba(120,120,120,.08); pointer-events: none; }
+  .tb i { display: block; width: 100%; }
+  .tb i:last-child { border-radius: 2px 2px 0 0; }
+  .tb.future i { background: var(--g100); opacity: .5; border-radius: 2px 2px 0 0; }
+  :root[data-theme="dark"] .tb.future i { background: #262626; }
+  .tlabels { display: flex; gap: 2px; user-select: none; margin-top: 4px; }
+  .tlabels span { flex: 1; min-width: 0; font-size: 9px; color: var(--ink-faint); font-family: var(--mono); white-space: nowrap; }
+  .tleg { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 10px; font-weight: 500; color: var(--ink-faint); margin-top: 6px; }
+  .tleg i { width: 12px; height: 10px; border-radius: 2px; background: var(--g100); opacity: .5; display: inline-block; }
+  .tfoot { display: flex; justify-content: space-between; font-size: 12px; font-weight: 500; color: var(--ink-muted); padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--divider); }
+
+  /* ---- 数据明细（DataDetails） ---- */
+  .tablewrap { overflow: auto; max-height: 384px; margin: 0 -16px; scrollbar-width: thin; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { position: sticky; top: 0; z-index: 2; }
+  th { text-align: left; padding: 8px 12px; font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--ink-2); background: var(--card); border-bottom: 1px solid var(--divider-2); white-space: nowrap; }
+  th .si { color: var(--ink-faint); margin-left: 4px; }
+  td { padding: 8px 12px; font-size: 14px; color: var(--ink-2); border-bottom: 1px solid var(--divider); white-space: nowrap; }
+  tr.dayrow { cursor: pointer; transition: background .15s; }
+  tr.dayrow:hover td { background: var(--row-hover); }
+  td.date { color: var(--ink-muted); }
+  td.tot { font-weight: 500; color: var(--ink); }
+  tr.sub td { padding: 0; background: var(--g50); }
+  :root[data-theme="dark"] tr.sub td { background: #1f1f1f; }
+  .chev { width: 12px; height: 12px; stroke: var(--ink-faint); fill: none; stroke-width: 2; margin-right: 6px; transition: transform .15s; vertical-align: -1px; }
+  tr.dayrow.open .chev { transform: rotate(90deg); }
+  /* 会话行（SessionsPage li） */
+  .sess { list-style: none; margin: 0; padding: 4px 16px; }
+  .sess li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--divider); }
+  .sess li:last-child { border-bottom: 0; }
+  .sess .lt { display: flex; min-width: 0; flex: 1; gap: 10px; align-items: flex-start; }
+  .sess .lt .ic { margin-top: 2px; color: var(--ink-faint); }
+  .sess .t1 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .sess .t1 .n { font-weight: 500; color: var(--ink); white-space: normal; }
+  .sess .t2 { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 12px; color: var(--ink-muted); white-space: normal; }
+  .sess .t3 { margin-top: 4px; font-size: 11px; color: var(--ink-faint); }
+  .sess dl { display: flex; gap: 24px; margin: 0; text-align: right; }
+  .sess dl div { display: flex; flex-direction: column-reverse; width: 64px; }
+  .sess dl div.w10 { width: 40px; }
+  .sess dt { font-size: 11px; color: var(--ink-faint); }
+  .sess dd { margin: 0; font-size: 14px; font-weight: 500; color: var(--ink); }
+  .sess .rt { display: flex; align-items: center; gap: 20px; flex: none; }
+  .resume { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; border: 1px solid var(--g200); padding: 2px 8px; font-size: 11px; font-weight: 500; color: var(--ink-2); }
+  :root[data-theme="dark"] .resume { border-color: #404040; }
+  .resume:hover { background: var(--g100); color: var(--ink); }
+  .resume svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  #frame.mobile .sess dl div.w10, #frame.mobile .resume span { display: none; }
+  /* 项目行（DataDetails ProjectRow） */
+  .prow { display: flex; width: 100%; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; text-align: left; transition: background .15s; }
+  .prow:hover { background: var(--g50); }
+  :root[data-theme="dark"] .prow:hover { background: rgba(38,38,38,.5); }
+  .pav { width: 32px; height: 32px; border-radius: 8px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 14px; }
+  .prow .pn { font-size: 14px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow .po { font-size: 12px; color: var(--ink-faint); }
+  .prow .ps { margin-top: 2px; display: flex; align-items: center; gap: 4px; color: var(--ink-faint); }
+  .prow .pr { width: 96px; flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .prow .pr b { font-size: 14px; font-weight: 500; color: var(--ink); }
+  .prow .pr .bar { width: 100%; height: 4px; border-radius: 999px; background: var(--g100); overflow: hidden; }
+  :root[data-theme="dark"] .prow .pr .bar { background: #262626; }
+  .prow .pr .bar i { display: block; height: 100%; background: #10b981; border-radius: 999px; }
+  .cwds { margin: 0 0 4px 52px; padding: 0 0 0 12px; border-left: 2px solid var(--g200); font-size: 12px; color: var(--ink-muted); }
+  :root[data-theme="dark"] .cwds { border-color: #404040; }
+  .cwds div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .cwds .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hostb { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-faint); }
+  .hostb svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* ---- Plan usage（UsageLimitsPanel） ---- */
+  .lim .ph { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: var(--ink); }
+  .lim .grpx + .grpx { margin-top: 16px; }
+  .lrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .lrow .k { font-size: 11px; color: var(--ink-muted); width: 40px; flex: none; white-space: nowrap; }
+  .lrow .tr { position: relative; flex: 1; height: 6px; border-radius: 999px; background: var(--g100); overflow: hidden; }
+  :root[data-theme="dark"] .lrow .tr { background: rgba(64,64,64,.5); }
+  .lrow .tr i { display: block; height: 100%; border-radius: 999px; }
+  .lrow .tr .pace { position: absolute; top: 0; height: 100%; width: 2px; background: #10b981; }
+  .lrow .tr .pace.over { background: #ef4444; }
+  .lrow .pct { font-size: 11px; color: var(--ink-muted); width: 36px; text-align: right; flex: none; }
+  .lrow .rs { font-size: 10px; color: var(--ink-faint); width: 24px; text-align: right; flex: none; }
+  .lim .rlab { margin-top: 4px; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .025em; color: var(--ink-faint); }
+  .lim .stale { font-size: 11px; color: var(--ink-faint); margin-top: 6px; }
+  .em { background: #10b981; } .am { background: #f59e0b; } .rd { background: #ef4444; } .gy { background: var(--g400); }
+
+  /* ---- 输入框（自定义区间） ---- */
+  .oinput { height: 32px; width: 72px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--g300); background: var(--card); color: var(--ink); font: inherit; font-size: 12px; text-align: right; }
+  :root[data-theme="dark"] .oinput { border-color: #404040; }
+  .oinput:focus { outline: none; border-color: var(--brand); }
+
+  .tip { position: fixed; z-index: 60; pointer-events: none; display: none; min-width: 160px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--card-border); background: var(--card); box-shadow: var(--shadow-lg); font-size: 11px; }
+  .tip .h { display: flex; justify-content: space-between; border-bottom: 1px solid var(--divider); padding-bottom: 6px; margin-bottom: 6px; font-weight: 600; color: var(--ink-muted); }
+  .tip .big { font-size: 18px; font-weight: 700; color: var(--ink); line-height: 1; }
+  .tip .u { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); font-weight: 600; margin-left: 4px; }
+  .tip .l { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; color: var(--ink-muted); }
+  .tip .l b { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+  .empty { font-size: 14px; color: var(--ink-muted); padding: 16px 0; }
+
+  /* ---- 浮动条（不属于设计本身） ---- */
+  #switcher { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 6px; background: #111; color: #fff; border-radius: 999px; padding: 6px 8px; box-shadow: 0 6px 20px rgba(0,0,0,.35); font-size: 12px; font-family: var(--mono); }
+  #switcher button { color: #fff; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.08); }
+  #switcher button.on { background: #fff; color: #111; }
+  #switcher .sp { width: 1px; height: 16px; background: rgba(255,255,255,.25); margin: 0 2px; }
+</style>
+
+<div id="frame" class="desktop">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">P</span>Paseo</div>
+    <div class="grp">主机</div>
+    <div class="nav"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h18"/></svg></span>工作区</div>
+    <div class="nav"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>项目</div>
+    <div class="nav"><span class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>计划</div>
+    <div class="nav"><span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>历史</div>
+    <div class="nav sel"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M4 19V10M10 19V5M16 19v-7M22 19H2"/></svg></span>用量</div>
+    <div class="grp">Osuna</div>
+    <div class="nav" style="padding-left:20px">usage-stats map</div>
+    <div class="nav" style="padding-left:20px">schedules-i18n</div>
+    <div class="grp">paseo-relay</div>
+    <div class="nav" style="padding-left:20px">rate-limit fix</div>
+  </aside>
+  <div class="main">
+    <div class="topbar"><svg class="i" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M3 6h18M3 12h18M3 18h18"/></svg><b style="font-weight:600">用量</b></div>
+    <div class="scroll"><div class="page" id="page"></div></div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+<div id="switcher">
+  <button id="wDesktop" class="on">桌面</button><button id="wMobile">手机</button>
+  <span class="sp"></span>
+  <button id="thLight" class="on">亮</button><button id="thDark">暗</button>
+  <span class="sp"></span>
+  <button id="bfToggle">回填: 进行中</button>
+</div>
+
+<script>
+// ============ 假数据（按 08 号票的 usage.report.get 形状） ============
+const TODAY = '2026-09-18';
+const DAYS_BACK = 200;
+let seed = 20260918;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+const pick = (arr, w) => { let r = rnd() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < arr.length; i++) { r -= w[i]; if (r <= 0) return arr[i]; } return arr[arr.length - 1]; };
+
+const HOSTS = [
+  { id: 'mbp', name: 'MacBook Pro', state: 'ok' },
+  { id: 'mini', name: 'mini', state: 'ok' },
+  { id: 'studio', name: 'studio', state: 'needs-update' },
+  { id: 'homelab', name: 'homelab', state: 'offline' },
+];
+// 来源配色：参考项目 UsageOverview PROVIDER_COLORS（CLAUDE #d97757、CODEX #3b82f6），其余 hsl(150+idx*40,60%,45%)
+const SOURCES = [
+  { key: 'claude', label: 'Claude Code', kind: 'claude', color: '#d97757', w: 52, models: [['claude-opus-5', 55], ['claude-sonnet-5', 35], ['claude-haiku-4-5-20251001', 10]] },
+  { key: 'codex', label: 'Codex', kind: 'codex', color: '#3b82f6', w: 18, models: [['gpt-5.3-codex', 75], ['gpt-5.3-codex-mini', 25]] },
+  { key: 'pi-anthropic', label: 'Pi · Anthropic', kind: 'pi', color: 'hsl(150,60%,45%)', w: 12, models: [['claude-sonnet-5', 80], ['claude-haiku-4-5-20251001', 20]] },
+  { key: 'pi-openai', label: 'Pi · OpenAI', kind: 'pi', color: 'hsl(190,60%,45%)', w: 7, models: [['gpt-5.3', 100]] },
+  { key: 'omp-openai', label: 'OMP · OpenAI', kind: 'omp', color: 'hsl(230,60%,45%)', w: 6, models: [['gpt-5.3-codex', 100]] },
+  { key: 'omp-ollama', label: 'OMP · Ollama', kind: 'omp', color: 'hsl(270,60%,45%)', w: 5, models: [['qwen3-coder:30b', 70], ['gpt-oss:20b', 30]] },
+];
+const PRICES = {
+  'claude-opus-5': [15, 1.5, 18.75, 75], 'claude-sonnet-5': [3, 0.3, 3.75, 15], 'claude-haiku-4-5-20251001': [1, 0.1, 1.25, 5],
+  'gpt-5.3-codex': [1.75, 0.175, 0, 14], 'gpt-5.3-codex-mini': [0.25, 0.025, 0, 2], 'gpt-5.3': [1.25, 0.125, 0, 10],
+  'qwen3-coder:30b': null, 'gpt-oss:20b': null,
+};
+const AV = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#14b8a6', '#6366f1', '#ec4899', '#f97316', '#64748b', '#a78bfa'];
+const PROJECTS = [
+  { rootPath: '/Users/oxy/Documents/code/My/Osuna', displayName: 'Osuna', owner: 'oxy', kind: 'git', serverId: 'mbp', w: 40, cwds: ['', '/packages/app', '/packages/server'] },
+  { rootPath: '/Users/oxy/Documents/code/My/paseo-relay', displayName: 'paseo-relay', owner: 'oxy', kind: 'git', serverId: 'mbp', w: 12, cwds: [''] },
+  { rootPath: '/Users/oxy/dotfiles', displayName: 'dotfiles', owner: 'oxy', kind: 'git', serverId: 'mbp', w: 5, cwds: [''] },
+  { rootPath: '/Users/oxy/Documents/Configuration/dev-environment/demo/源码/TokenTracker', displayName: 'TokenTracker', owner: 'demo', kind: 'git', serverId: 'mbp', w: 6, cwds: ['', '/dashboard'] },
+  { rootPath: '/Users/oxy/notes', displayName: 'notes', owner: '', kind: 'directory', serverId: 'mbp', w: 3, cwds: [''] },
+  { rootPath: '/Users/oxy/Documents/code/My/Osuna', displayName: 'Osuna', owner: 'oxy', kind: 'git', serverId: 'mini', w: 14, cwds: ['', '/packages/website'] },
+  { rootPath: '/srv/my-blog', displayName: 'my-blog', owner: 'oxy', kind: 'git', serverId: 'mini', w: 8, cwds: [''] },
+  { rootPath: '/srv/infra', displayName: 'infra', owner: 'oxy', kind: 'git', serverId: 'mini', w: 6, cwds: ['', '/k8s'] },
+  { rootPath: '/home/oxy/scratch', displayName: 'scratch', owner: '', kind: 'non_git', serverId: 'mini', w: 3, cwds: [''] },
+  { rootPath: '/Users/oxy/Documents/code/oss/expo-router', displayName: 'expo-router', owner: 'expo', kind: 'git', serverId: 'mbp', w: 2, cwds: [''] },
+  { rootPath: '/Users/oxy/Documents/code/oss/react-native-svg', displayName: 'react-native-svg', owner: 'software-mansion', kind: 'git', serverId: 'mbp', w: 1, cwds: [''] },
+].map((p, i) => ({ ...p, av: AV[i % AV.length] }));
+
+function addDays(iso, n) { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function dow(iso) { return (new Date(iso + 'T00:00:00Z').getUTCDay() + 6) % 7; } // 0 = 周一（Q20）
+function cost(model, t) { const p = PRICES[model]; if (!p) return 0; return (t.input * p[0] + t.cachedInput * p[1] + t.cacheWrite * p[2] + t.output * p[3]) / 1e6; }
+function zero() { return { input: 0, cachedInput: 0, cacheWrite: 0, output: 0, reasoning: 0 }; }
+function add(a, b) { for (const k in a) a[k] += b[k]; return a; }
+function total(t) { return t.input + t.cachedInput + t.cacheWrite + t.output; }
+
+const SESSIONS = [];
+let sid = 0;
+for (let i = DAYS_BACK; i >= 0; i--) {
+  const day = addDays(TODAY, -i);
+  const weekend = dow(day) >= 5;
+  if (weekend && rnd() < 0.55) continue;
+  if (rnd() < 0.08) continue;
+  const n = Math.round((weekend ? 2 : 4) + rnd() * (weekend ? 4 : 9));
+  for (let s = 0; s < n; s++) {
+    const src = pick(SOURCES, SOURCES.map(x => x.w));
+    const model = pick(src.models.map(m => m[0]), src.models.map(m => m[1]));
+    const proj = pick(PROJECTS, PROJECTS.map(p => p.w));
+    const cwd = proj.rootPath + proj.cwds[Math.floor(rnd() * proj.cwds.length)];
+    const turns = 1 + Math.floor(rnd() * rnd() * 30);
+    const size = (0.15 + rnd() * rnd() * 4) * 1e6 * (turns / 8 + 0.5);
+    const t = { input: size * 0.06, cachedInput: size * 0.78, cacheWrite: size * 0.09, output: size * 0.07, reasoning: size * 0.012 };
+    for (const k in t) t[k] = Math.round(t[k]);
+    const startH = 8 + Math.floor(rnd() * 14);
+    const durationMs = Math.round(turns * (20 + rnd() * 120) * 1000);
+    const firstAt = `${day}T${String(startH).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`;
+    const title = pick(['修复 schedules i18n 缺失键', '用量页原型', '调研 file-observer', 'relay 限流回归', '整理 dotfiles', '写 PRD', 'k8s 清单升级', '博客构建修复', 'usage 存储 schema', '解析 Codex rollout'], [1,1,1,1,1,1,1,1,1,1]);
+    SESSIONS.push({ id: 'sess-' + (++sid), title, day, hour: startH, src, model, proj, cwd, serverId: proj.serverId, tokens: t, estimatedCost: cost(model, t), turns, durationMs, firstAt, lastAt: firstAt });
+  }
+}
+
+function buildReport({ from, to, hostId }) {
+  const rows = SESSIONS.filter(s => (from == null || s.day >= from) && s.day <= to && (hostId === 'all' || s.serverId === hostId));
+  const sum = list => { const t = zero(); let c = 0; for (const s of list) { add(t, s.tokens); c += s.estimatedCost; } return { totals: t, estimatedCost: c }; };
+  const days = new Map(), months = new Map(), sources = new Map(), models = new Map(), projects = new Map();
+  for (const s of rows) {
+    const d = days.get(s.day) || { day: s.day, totals: zero(), estimatedCost: 0, sessionCount: 0, turns: 0, sessions: [] };
+    add(d.totals, s.tokens); d.estimatedCost += s.estimatedCost; d.sessionCount++; d.turns += s.turns; d.sessions.push(s); days.set(s.day, d);
+    const mk = s.day.slice(0, 7);
+    const m = months.get(mk) || { month: mk, totals: zero(), estimatedCost: 0, sessionCount: 0 };
+    add(m.totals, s.tokens); m.estimatedCost += s.estimatedCost; m.sessionCount++; months.set(mk, m);
+    const sr = sources.get(s.src.key) || { ...s.src, totals: zero(), estimatedCost: 0, modelSet: new Set() };
+    add(sr.totals, s.tokens); sr.estimatedCost += s.estimatedCost; sr.modelSet.add(s.model); sources.set(s.src.key, sr);
+    const mdk = s.model + '|' + s.src.key;
+    const md = models.get(mdk) || { model: s.model, src: s.src, totals: zero(), estimatedCost: 0, priced: PRICES[s.model] != null };
+    add(md.totals, s.tokens); md.estimatedCost += s.estimatedCost; models.set(mdk, md);
+    const pk = s.proj.rootPath + '|' + s.serverId;
+    const p = projects.get(pk) || { ...s.proj, totals: zero(), estimatedCost: 0, cwdMap: new Map(), srcSet: new Set() };
+    add(p.totals, s.tokens); p.estimatedCost += s.estimatedCost; p.srcSet.add(s.src.key);
+    const c = p.cwdMap.get(s.cwd) || { cwd: s.cwd, totals: zero(), estimatedCost: 0 }; add(c.totals, s.tokens); c.estimatedCost += s.estimatedCost; p.cwdMap.set(s.cwd, c);
+    projects.set(pk, p);
+  }
+  const all = sum(rows); const grand = total(all.totals) || 1;
+  const hostOk = s => hostId === 'all' || s.serverId === hostId;
+  const last7 = sum(SESSIONS.filter(s => s.day > addDays(TODAY, -7) && hostOk(s)));
+  const last30list = SESSIONS.filter(s => s.day > addDays(TODAY, -30) && hostOk(s));
+  const last30 = sum(last30list);
+  const active30 = new Set(last30list.map(s => s.day)).size || 1;
+  const allDays = [...new Set(SESSIONS.filter(hostOk).map(s => s.day))].sort();
+  return {
+    summary: { ...all, sessionCount: rows.length, last7Days: last7, last30Days: last30, avgPerActiveDay: total(last30.totals) / active30, firstDay: allDays[0], activeDays: allDays.length },
+    sources: [...sources.values()].map(s => ({ ...s, modelCount: s.modelSet.size, share: total(s.totals) / grand })).sort((a, b) => total(b.totals) - total(a.totals)),
+    models: [...models.values()].sort((a, b) => total(b.totals) - total(a.totals)),
+    days: [...days.values()].sort((a, b) => a.day < b.day ? 1 : -1),
+    months: [...months.values()].sort((a, b) => a.month < b.month ? 1 : -1),
+    projects: [...projects.values()].map(p => ({ ...p, sources: [...p.srcSet].map(k => SOURCES.find(s => s.key === k)), cwds: [...p.cwdMap.values()].sort((a, b) => total(b.totals) - total(a.totals)) })).sort((a, b) => total(b.totals) - total(a.totals)),
+  };
+}
+function heatDays(hostId) { const m = new Map(); for (const s of SESSIONS) { if (hostId !== 'all' && s.serverId !== hostId) continue; m.set(s.day, (m.get(s.day) || 0) + total(s.tokens)); } return m; }
+
+// ============ 格式化 ============
+const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+const fmtFull = n => Math.round(n).toLocaleString('en-US');
+const fmtUsd = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPct = n => (n * 100).toFixed(2) + '%';
+const fmtDur = ms => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
+const fmtMonth = k => { const [y, m] = k.split('-'); return `${y}年${Number(m)}月`; };
+const fmtDateCn = iso => { const [y, m, d] = iso.split('-'); return `${y}年${Number(m)}月${Number(d)}日`; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// 来源图标：参考项目 ProviderIcon 用各家品牌 SVG，这里用近似字形
+function srcIcon(src, size) {
+  const s = size || 15; const c = src.color;
+  const g = {
+    claude: `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="${c}"><path d="M12 2l1.8 6.2L20 6l-4.4 4.6L22 13l-6.3.4L18 20l-6-3.2L6 20l2.3-6.6L2 13l6.4-2.4L4 6l6.2 2.2z"/></svg>`,
+    codex: `<svg viewBox="0 0 24 24" width="${s}" height="${s}"><circle cx="12" cy="12" r="10" fill="${c}"/><path d="M9 8.5a3.5 3.5 0 1 0 0 7M15 8.5a3.5 3.5 0 1 1 0 7" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>`,
+    pi: `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="${c}"><path d="M4 6h16v3h-3v9h-3V9h-4v9H7V9H4z"/></svg>`,
+    omp: `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h16M9 6v12M15 6v12M4 18h16"/></svg>`,
+  }[src.kind];
+  return `<span class="pi" style="width:${s}px;height:${s}px">${g}</span>`;
+}
+const allIcon = `<span class="pi" style="color:var(--brand)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.6 23 7.4 12 13.2 1 7.4 12 1.6Z"/><path d="m4 10.3-3 1.5 11 5.5 11-5.5-3-1.5-8 4-8-4Z" opacity=".72"/><path d="m4 14.6-3 1.5 11 5.5 11-5.5-3-1.5-8 4-8-4Z" opacity=".45"/></svg></span>`;
+const hostBadge = id => { const h = HOSTS.find(x => x.id === id); return `<span class="hostb"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/></svg>${esc(h.name)}</span>`; };
+
+// ============ 状态 ============
+const state = { period: 'month', anchor: TODAY, custom: { from: '2026-09-01', to: TODAY }, hostId: 'all', srcPick: null, detailTab: 'daily', projLimit: 10, backfill: 'running', width: 'desktop', openDays: new Set(), openProjects: new Set() };
+function range() {
+  const a = state.anchor;
+  if (state.period === 'day') return { from: a, to: a, label: fmtDateCn(a) };
+  if (state.period === 'week') { const f = addDays(a, -dow(a)); return { from: f, to: addDays(f, 6), label: `${fmtDateCn(f)} — ${fmtDateCn(addDays(f, 6))}` }; }
+  if (state.period === 'month') { const f = a.slice(0, 7) + '-01'; const nx = addDays(f, 32).slice(0, 7) + '-01'; return { from: f, to: addDays(nx, -1), label: `${Number(f.slice(5, 7))}月 1 — ${Number(f.slice(5, 7))}月 ${addDays(nx, -1).slice(8)}` }; }
+  if (state.period === 'custom') return { from: state.custom.from, to: state.custom.to, label: `${state.custom.from} — ${state.custom.to}` };
+  return { from: null, to: TODAY, label: '全部历史' };
+}
+const backfill = () => state.backfill === 'running' ? { state: 'running', filesTotal: 1859, filesDone: 312 } : { state: 'done', filesTotal: 1859, filesDone: 1859 };
+
+// ============ 区块 ============
+function statsPanel(r) {
+  const s = r.summary; const top = r.models.slice(0, 3); const grand = total(s.totals) || 1;
+  return `<div class="card">
+    <div class="tiles">
+      <div class="tile"><span class="v num">${fmtTok(total(s.last7Days.totals))}</span><span class="k">7 天</span></div>
+      <div class="tile"><span class="v num">${fmtTok(total(s.last30Days.totals))}</span><span class="k">30 天</span></div>
+      <div class="tile"><span class="v num">${fmtTok(s.avgPerActiveDay)}</span><span class="k">平均</span></div>
+      <div class="tile"><span class="v num">${s.sessionCount}</span><span class="k">会话</span></div>
+    </div>
+    <div class="sep">${top.map((m, i) => `<div class="rank"><span class="n">${i + 1}</span><span class="name" title="${esc(m.model)}">${esc(m.model)}</span><span class="pct num">${(total(m.totals) / grand * 100).toFixed(1)}%</span></div>`).join('')}</div>
+    <div class="sep foot"><span>开始使用<b class="num">${s.firstDay || '—'}</b></span><span>活跃天数<b class="num">${s.activeDays} 天</b></span></div>
+  </div>`;
+}
+function heatmap(hostId) {
+  const m = heatDays(hostId); const WKS = state.width === 'mobile' ? 20 : 26;
+  const startMon = addDays(TODAY, -dow(TODAY) - 7 * (WKS - 1));
+  const vals = [...m.values()].sort((a, b) => a - b); const q = f => vals[Math.floor(f * (vals.length - 1))] || 1;
+  const level = v => v === 0 ? 0 : v < q(.25) ? 1 : v < q(.5) ? 2 : v < q(.75) ? 3 : 4;
+  let cells = ''; const months = []; let lastM = '';
+  for (let w = 0; w < WKS; w++) for (let d = 0; d < 7; d++) {
+    const day = addDays(startMon, w * 7 + d);
+    if (day > TODAY) { cells += `<span></span>`; continue; }
+    const v = m.get(day) || 0;
+    cells += `<span class="c" style="background:var(--heat${level(v)})" data-tip="heat" data-day="${day}" data-v="${v}"></span>`;
+    if (d === 0 && day.slice(0, 7) !== lastM) { lastM = day.slice(0, 7); months.push([w, `${Number(day.slice(5, 7))}月`]); }
+  }
+  return `<div class="card">
+    <div class="chead"><h3 class="ctitle" style="text-transform:none">热力图</h3><div style="display:flex;align-items:center;gap:8px"><span class="seg tiny"><button class="on">2D</button><button>3D</button></span><span class="cap">UTC+08:00</span></div></div>
+    <div class="heatwrap"><div class="heat">
+      <span></span><div class="mo" style="grid-template-columns:repeat(${WKS},11px)">${months.map(([w, l]) => `<span style="grid-column-start:${w + 1}">${l}</span>`).join('')}</div>
+      <div class="wd">${['一', '二', '三', '四', '五', '六', '日'].map(t => `<span>${t}</span>`).join('')}</div>
+      <div class="cells">${cells}</div>
+    </div></div>
+    <div class="heatleg"><span>少</span><span class="swl"><i style="background:var(--heat0)"></i><i style="background:var(--heat1)"></i><i style="background:var(--heat2)"></i><i style="background:var(--heat3)"></i><i style="background:var(--heat4)"></i></span><span>多</span></div>
+  </div>`;
+}
+function trend(r) {
+  const rg = range();
+  const from = rg.from ?? r.days[r.days.length - 1]?.day ?? TODAY;
+  const keys = []; for (let d = from; d <= rg.to; d = addDays(d, 1)) keys.push(d);
+  if (keys.length > 62) { // 全部：按月
+    const ms = [...new Set(keys.map(k => k.slice(0, 7)))]; keys.length = 0; keys.push(...ms);
+  }
+  const isMonth = keys[0].length === 7;
+  const byKey = new Map();
+  for (const s of SESSIONS) { if (state.hostId !== 'all' && s.serverId !== state.hostId) continue; const k = isMonth ? s.day.slice(0, 7) : s.day; if (!keys.includes(k)) continue; const p = byKey.get(k) || {}; p[s.src.key] = (p[s.src.key] || 0) + total(s.tokens); byKey.set(k, p); }
+  const max = Math.max(1, ...[...byKey.values()].map(p => Object.values(p).reduce((a, b) => a + b, 0)));
+  const bars = keys.map(k => {
+    const future = k > TODAY; const p = byKey.get(k);
+    if (future || !p) return `<div class="tb future" data-tip="trend" data-key="${k}"><i style="height:${future ? 22 : 0}%"></i></div>`;
+    return `<div class="tb" data-tip="trend" data-key="${k}">${SOURCES.filter(s => p[s.key]).map(s => `<i style="height:${(p[s.key] / max * 100).toFixed(1)}%;background:${s.color}"></i>`).join('')}</div>`;
+  }).join('');
+  const every = Math.ceil(keys.length / 6);
+  const labels = keys.map((k, i) => `<span>${i % every === 0 ? (isMonth ? k.slice(2).replace('-', '/') : k.slice(8)) : ''}</span>`).join('');
+  return `<div class="card">
+    <div class="chead"><div><h3 class="ctitle" style="text-transform:none">使用趋势</h3></div><button class="obtn ghost sq" title="放大"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button></div>
+    <div class="trend"><div class="gl"><i></i><i></i><i></i><i></i></div>${bars}</div>
+    <div class="tlabels">${labels}</div>
+    <div class="tleg"><i></i>~ 预测值</div>
+    <div class="tfoot num"><span>${isMonth ? fmtMonth(keys[0]) : fmtDateCn(keys[0])}</span><span>${isMonth ? fmtMonth(keys[keys.length - 1]) : fmtDateCn(keys[keys.length - 1])}</span></div>
+  </div>`;
+}
+function planUsage() {
+  const bar = (k, pct, tone, pace, reset) => `<div class="lrow"><span class="k">${k}</span><span class="tr"><i class="${tone}" style="width:${pct}%"></i>${pace != null ? `<span class="pace ${pace < pct ? 'over' : ''}" style="left:${pace}%"></span>` : ''}</span><span class="pct num">${pct}%</span><span class="rs num">${reset}</span></div>`;
+  return `<div class="card lim">
+    <div class="chead"><h3 class="ctitle" style="text-transform:none">Plan usage · 已用</h3><span class="cap">3 分钟前</span></div>
+    <div class="grpx"><div class="ph">${srcIcon(SOURCES[0], 14)}Claude Max</div>${bar('5h', 7, 'em', 25, '3h')}${bar('7d', 34, 'em', 52, '3d')}${bar('Fable', 62, 'em', 52, '3d')}</div>
+    <div class="grpx"><div class="ph">${srcIcon(SOURCES[1], 14)}Codex Pro</div>${bar('7d', 77, 'am', 48, '3d')}<div class="rlab">重置</div>${bar('重置 1', 55, 'gy', null, '10/5')}</div>
+  </div>`;
+}
+function hostFilter() {
+  const sel = state.hostId === 'all' ? '全部主机' : HOSTS.find(h => h.id === state.hostId).name;
+  const item = h => {
+    const dim = h.state !== 'ok';
+    const badge = h.state === 'needs-update' ? '<span class="tag amb">需要更新主机</span>' : h.state === 'offline' ? '<span class="tag gray">未计入</span>' : '';
+    return `<button class="item" data-host="${h.id}" ${dim ? 'disabled' : ''}><span class="d ${h.state === 'offline' ? '' : 'ok'}"></span>${esc(h.name)}<span class="sp"></span>${badge}</button>`;
+  };
+  return `<button class="obtn" id="hostPill"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/></svg>${esc(sel)}<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="menu" id="hostMenu"><button class="item" data-host="all"><span class="d ok"></span>全部主机<span class="sp"></span><span class="tag gray">2 台计入</span></button>${HOSTS.map(item).join('')}</div>`;
+}
+function overview(r) {
+  const rg = range(); const s = r.summary; const b = backfill();
+  const P = [['day', '日'], ['week', '周'], ['month', '月'], ['all', '总计'], ['custom', state.period === 'custom' ? `${state.custom.from.slice(5).replace('-', '/')} — ${state.custom.to.slice(5).replace('-', '/')}` : '自定义']];
+  const tabs = `<div class="tabs">${P.map(([k, l]) => `<button class="tab ${state.period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
+  const nav = state.period === 'all' || state.period === 'custom' ? '' : `<button class="obtn ghost sq" data-shift="-1" title="上一个"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><button class="obtn ghost sq" data-shift="1" title="下一个" ${state.anchor >= TODAY ? 'disabled style="opacity:.4"' : ''}><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>`;
+  const bf = b.state === 'running' ? `<span class="pillamber num" title="已读取 ${b.filesDone} / ${b.filesTotal} 个日志文件，最近的日期先补齐"><span class="dot"></span>回填中 ${b.filesDone.toLocaleString()} / ${b.filesTotal.toLocaleString()}</span>` : '';
+  const dist = `<div class="dist">${r.sources.map(x => `<i style="width:${(x.share * 100).toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtPct(x.share)}"></i>`).join('')}</div>`;
+  const cards = `<div class="srcgrid">
+    <button class="srccard ${state.srcPick === 'all' ? 'on' : ''}" data-src="all"><div class="h">${allIcon}<span>全部</span></div><div class="pct num">100.00%</div><div class="mc num">${new Set(r.models.map(m => m.model)).size} 个模型</div></button>
+    ${r.sources.map(x => `<button class="srccard ${state.srcPick === x.key ? 'on' : ''}" data-src="${x.key}"><div class="h">${srcIcon(x)}<span title="${esc(x.label)}">${esc(x.label)}</span></div><div class="pct num">${x.share < 0.0001 ? '<0.01%' : fmtPct(x.share)}</div><div class="mc num">${x.modelCount} 个模型</div></button>`).join('')}
+  </div>`;
+  let models = '';
+  if (state.srcPick) {
+    const list = state.srcPick === 'all' ? r.models : r.models.filter(m => m.src.key === state.srcPick);
+    const src = state.srcPick === 'all' ? null : SOURCES.find(x => x.key === state.srcPick);
+    const denom = list.reduce((a, m) => a + total(m.totals), 0) || 1; const max = total(list[0]?.totals || zero()) || 1;
+    models = `<div class="models"><div class="mh">${src ? srcIcon(src, 14) : allIcon}${src ? esc(src.label) : '全部'} · 模型明细</div>
+      ${list.map(m => `<div class="mrow"><div class="l"><span class="n" title="${esc(m.model)}">${esc(m.model)}${m.priced ? '' : ' <span class="tag amb">无价格数据</span>'}</span><span class="t num">${fmtTok(total(m.totals))} tokens</span><span class="c num">${fmtUsd(m.estimatedCost)}</span><span class="p num">${(total(m.totals) / denom * 100).toFixed(1)}%</span></div><div class="bar"><i style="width:${(total(m.totals) / max * 100).toFixed(1)}%;background:${src ? src.color : m.src.color}"></i></div></div>`).join('')}</div>`;
+  }
+  return `<div class="card">
+    <div class="ovhead">${tabs}<div class="r">${nav}${bf}${hostFilter()}<button class="obtn sq" title="刷新"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg></button></div></div>
+    ${state.period === 'custom' ? `<div style="display:flex;justify-content:center;gap:8px;margin:-8px 0 16px"><input class="oinput" style="width:130px;text-align:left" type="date" id="cFrom" value="${state.custom.from}" max="${TODAY}"><input class="oinput" style="width:130px;text-align:left" type="date" id="cTo" value="${state.custom.to}" max="${TODAY}"></div>` : ''}
+    <div class="hero"><div class="lbl">Token 总数</div><div class="big num" title="${fmtFull(total(s.totals))}">${fmtFull(total(s.totals))}</div>
+      <div><span class="cost num">${fmtUsd(s.estimatedCost)}<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span></div>
+      <div class="rng num"><span>${rg.label}</span><span>估算成本 · 按公开 API 价格计算</span></div></div>
+    ${dist}${cards}${models}
+  </div>`;
+}
+function sessionList(d) {
+  return `<ul class="sess">${d.sessions.slice().sort((a, b) => a.firstAt < b.firstAt ? 1 : -1).map(s => `<li>
+    <div class="lt"><span class="ic">${srcIcon(s.src, 14)}</span><div style="min-width:0;flex:1">
+      <div class="t1"><span class="n">${esc(s.title)}</span><span class="tag ${s.src.kind === 'claude' ? 'em' : 'sky'}">${esc(s.src.label)}</span>${state.hostId === 'all' ? hostBadge(s.serverId) : ''}</div>
+      <div class="t2"><span>${esc(s.proj.displayName)}</span><span class="mono">${esc(s.model)}</span><span class="num">${s.firstAt.slice(5).replace('T', ' ').replace('-', '/')}</span><span class="num">${fmtDur(s.durationMs)}</span></div>
+      <div class="t3 num">↑ ${fmtFull(s.tokens.input + s.tokens.cachedInput + s.tokens.cacheWrite)} · ↓ ${fmtFull(s.tokens.output)} · 缓存 ${fmtFull(s.tokens.cachedInput)}</div>
+    </div></div>
+    <div class="rt"><dl><div><dd class="num">${fmtTok(total(s.tokens))}</dd><dt>Token</dt></div><div><dd class="num">${fmtUsd(s.estimatedCost)}</dd><dt>成本</dt></div><div class="w10"><dd class="num">${s.turns}</dd><dt>轮次</dt></div></dl><button class="resume"><svg viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8"/></svg><span>打开</span></button></div>
+  </li>`).join('')}</ul>`;
+}
+function details(r) {
+  const T = [['daily', '每日细目'], ['monthly', '按月'], ['projects', '项目用量']];
+  const tabs = `<div class="tabs" style="flex:none">${T.map(([k, l]) => `<button class="tab ${state.detailTab === k ? 'on' : ''}" data-dtab="${k}">${l}</button>`).join('')}</div>`;
+  let body = '';
+  if (state.detailTab === 'daily') {
+    body = r.days.length ? `<div class="tablewrap"><table><thead><tr><th>日期 <span class="si">▼</span></th><th>总计</th><th>输入</th><th>输出</th><th>缓存</th><th>推理</th><th>会话</th><th>估算成本</th></tr></thead><tbody>
+      ${r.days.map(d => { const open = state.openDays.has(d.day); return `<tr class="dayrow ${open ? 'open' : ''}" data-day="${d.day}"><td class="date num"><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>${d.day}</td><td class="tot num">${fmtFull(total(d.totals))}</td><td class="num">${fmtFull(d.totals.input)}</td><td class="num">${fmtFull(d.totals.output)}</td><td class="num">${fmtFull(d.totals.cachedInput)}</td><td class="num">${fmtFull(d.totals.reasoning)}</td><td class="num">${d.sessionCount}</td><td class="num">${fmtUsd(d.estimatedCost)}</td></tr>${open ? `<tr class="sub"><td colspan="8">${sessionList(d)}</td></tr>` : ''}`; }).join('')}
+    </tbody></table></div>` : '<div class="empty">此周期没有用量</div>';
+  } else if (state.detailTab === 'monthly') {
+    body = r.months.length ? `<div class="tablewrap"><table><thead><tr><th>月份</th><th>总计</th><th>输入</th><th>输出</th><th>缓存</th><th>会话</th><th>估算成本</th></tr></thead><tbody>
+      ${r.months.map(m => `<tr><td class="date num">${m.month}</td><td class="tot num">${fmtFull(total(m.totals))}</td><td class="num">${fmtFull(m.totals.input)}</td><td class="num">${fmtFull(m.totals.output)}</td><td class="num">${fmtFull(m.totals.cachedInput)}</td><td class="num">${m.sessionCount}</td><td class="num">${fmtUsd(m.estimatedCost)}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="empty">此周期没有用量</div>';
+  } else {
+    const list = r.projects.slice(0, state.projLimit); const max = total(list[0]?.totals || zero()) || 1; const multi = state.hostId === 'all';
+    body = list.length ? `<div style="display:flex;flex-direction:column;gap:4px">${list.map(p => { const k = p.rootPath + '|' + p.serverId; const open = state.openProjects.has(k); return `<button class="prow" data-proj="${esc(k)}"><span class="pav" style="background:${p.av}">${esc(p.displayName[0].toUpperCase())}</span><div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:0;min-width:0">${p.owner ? `<span class="po">${esc(p.owner)}/</span>` : ''}<span class="pn">${esc(p.displayName)}</span>${multi ? `<span style="margin-left:8px">${hostBadge(p.serverId)}</span>` : ''}${p.kind !== 'git' ? `<span class="tag gray" style="margin-left:8px">${p.kind === 'directory' ? '目录' : '非 git'}</span>` : ''}</div><div class="ps">${p.sources.map(s => srcIcon(s, 12)).join('')}</div></div><div class="pr"><b class="num">${fmtTok(total(p.totals))}</b><span class="bar"><i style="width:${Math.max(2, total(p.totals) / max * 100).toFixed(1)}%"></i></span></div></button>${open ? `<div class="cwds">${p.cwds.map(c => `<div><span class="mono">${esc(c.cwd)}</span><span class="num">${fmtTok(total(c.totals))} · ${fmtUsd(c.estimatedCost)}</span></div>`).join('')}</div>` : ''}`; }).join('')}</div>` : '<div class="empty">此周期没有用量</div>';
+  }
+  const right = state.detailTab === 'projects' ? `<span class="seg tiny"><button data-plim="3" class="${state.projLimit === 3 ? 'on' : ''}">前 3</button><button data-plim="6" class="${state.projLimit === 6 ? 'on' : ''}">前 6</button><button data-plim="10" class="${state.projLimit === 10 ? 'on' : ''}">前 10</button></span>` : '';
+  return `<div class="card"><div class="chead" style="margin-bottom:${state.detailTab === 'projects' ? 16 : 0}px;align-items:center">${tabs}${right}</div>${body}</div>`;
+}
+
+function render() {
+  const r = buildReport({ ...range(), hostId: state.hostId });
+  document.getElementById('page').innerHTML = `<div class="grid12">
+    <div class="col4">${statsPanel(r)}${heatmap(state.hostId)}${trend(r)}${planUsage()}</div>
+    <div class="col8">${overview(r)}${details(r)}</div>
+  </div>`;
+  document.getElementById('bfToggle').textContent = `回填: ${state.backfill === 'running' ? '进行中' : '已完成'}`;
+  document.getElementById('wDesktop').classList.toggle('on', state.width === 'desktop');
+  document.getElementById('wMobile').classList.toggle('on', state.width === 'mobile');
+  document.getElementById('frame').className = state.width;
+  window.__report = r;
+}
+
+// ============ 交互 ============
+const page = document.getElementById('page');
+page.addEventListener('click', e => {
+  const t = e.target.closest('[data-period],[data-shift],[data-host],[data-src],[data-dtab],[data-plim],[data-day],[data-proj],#hostPill');
+  if (!t) return;
+  if (t.dataset.period) { state.period = t.dataset.period; if (state.period !== 'custom') state.anchor = TODAY; render(); return; }
+  if (t.dataset.shift) { const d = Number(t.dataset.shift); if (state.period === 'day') state.anchor = addDays(state.anchor, d); else if (state.period === 'week') state.anchor = addDays(state.anchor, 7 * d); else { const f = state.anchor.slice(0, 7) + '-01'; state.anchor = d > 0 ? addDays(f, 32).slice(0, 7) + '-01' : addDays(f, -1).slice(0, 7) + '-01'; } if (state.anchor > TODAY) state.anchor = TODAY; render(); return; }
+  if (t.dataset.host) { state.hostId = t.dataset.host; render(); return; }
+  if (t.dataset.src) { state.srcPick = state.srcPick === t.dataset.src ? null : t.dataset.src; render(); return; }
+  if (t.dataset.dtab) { state.detailTab = t.dataset.dtab; render(); return; }
+  if (t.dataset.plim) { state.projLimit = Number(t.dataset.plim); render(); return; }
+  if (t.dataset.day) { const k = t.dataset.day; state.openDays.has(k) ? state.openDays.delete(k) : state.openDays.add(k); render(); return; }
+  if (t.dataset.proj) { const k = t.dataset.proj; state.openProjects.has(k) ? state.openProjects.delete(k) : state.openProjects.add(k); render(); return; }
+  if (t.id === 'hostPill') { document.getElementById('hostMenu').classList.toggle('open'); }
+});
+page.addEventListener('change', e => { if (e.target.id === 'cFrom') { state.custom.from = e.target.value; render(); } if (e.target.id === 'cTo') { state.custom.to = e.target.value; render(); } });
+document.addEventListener('click', e => { if (!e.target.closest('#hostPill')) document.getElementById('hostMenu')?.classList.remove('open'); });
+const tip = document.getElementById('tip');
+page.addEventListener('mousemove', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tip.style.display = 'none'; return; }
+  let html = '';
+  if (t.dataset.tip === 'heat') { const v = Number(t.dataset.v); html = `<div class="h"><span>${t.dataset.day}</span></div><div class="big num">${v ? fmtFull(v) : '0'}<span class="u">tokens</span></div>`; }
+  else {
+    const k = t.dataset.key; const isMonth = k.length === 7; const p = {};
+    for (const s of SESSIONS) { if (state.hostId !== 'all' && s.serverId !== state.hostId) continue; if ((isMonth ? s.day.slice(0, 7) : s.day) !== k) continue; p[s.src.key] = (p[s.src.key] || 0) + total(s.tokens); }
+    const tot = Object.values(p).reduce((a, b) => a + b, 0);
+    html = `<div class="h"><span>${k}</span><span style="font-weight:400">${k > TODAY ? '预测' : ''}</span></div><div class="big num">${fmtFull(tot)}<span class="u">tokens</span></div>${SOURCES.filter(s => p[s.key]).map(s => `<div class="l"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:6px"></span>${esc(s.label)}</span><b class="num">${fmtTok(p[s.key])}</b></div>`).join('')}`;
+  }
+  tip.innerHTML = html; tip.style.display = 'block';
+  tip.style.left = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8) + 'px';
+  tip.style.top = Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 8) + 'px';
+});
+page.addEventListener('mouseleave', () => tip.style.display = 'none');
+document.getElementById('wDesktop').onclick = () => { state.width = 'desktop'; render(); };
+document.getElementById('wMobile').onclick = () => { state.width = 'mobile'; render(); };
+const setTheme = t => { document.documentElement.setAttribute('data-theme', t); document.getElementById('thLight').classList.toggle('on', t === 'light'); document.getElementById('thDark').classList.toggle('on', t === 'dark'); };
+document.getElementById('thLight').onclick = () => setTheme('light');
+document.getElementById('thDark').onclick = () => setTheme('dark');
+document.getElementById('bfToggle').onclick = () => { state.backfill = state.backfill === 'running' ? 'done' : 'running'; render(); };
+setTheme('light');
+render();
+</script>

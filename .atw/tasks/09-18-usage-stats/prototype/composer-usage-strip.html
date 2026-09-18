@@ -1,0 +1,307 @@
+<!--
+  PROTOTYPE — 可丢弃。map-issues/13：两处会话内用量呈现的原型（第二版，按用户 2026-09-18 反馈重做）。
+  1) turn footer：每轮的 token 与估算成本，紧跟现有 "Worked for 2m 14s"（packages/app/src/components/message.tsx AssistantTurnFooter）。
+  2) composer 工具条环形表位置：只管上下文占用——环 + 「已用 / 上限」文字（packages/app/src/components/context-window-meter.tsx 的 showPercentage 槽位扩成文字）。
+  颜色/字号来自 packages/app/src/styles/theme.ts（Paseo 亮/暗 tint）；footer 元数据字号 13px（STREAM_METADATA_FONT_SIZE）。
+  变体（?variant=A|B|C）：
+    A  footer 常显 "Worked for 2m 14s · ↑12.3K ↓4.1K · $0.16"；composer "◔ 84K / 200K"
+    B  footer 常显只 "$0.16"，hover 才展开 token；composer "◔ 42% · 84K/200K"
+    C  footer 用两枚细 pill；composer "◔ 84K of 200K"
+  浮动条切 桌面·手机 / 亮·暗 / 数据状态 / token 格式 / 会话合计是否放进环形弹层 / 钉住弹层。
+  数据为假数据；每轮数据形状 { model, input, cachedInput, cacheWrite, output, reasoning, estimatedCost, durationMs }。
+-->
+<title>会话内用量原型</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface0:#ffffff; --surface1:#fafafa; --surface2:#f4f4f5; --surface3:#e4e4e7;
+    --fg:#1a1a1e; --muted:#71717a; --xmuted:#a1a1aa; --border:#e4e4e7; --border-accent:#ececf1;
+    --accent:#20744A; --destructive:#b04138;
+    --amber:#f59e0b; --amber-fg:#b45309; --amber-bg:#fffbeb;
+    --hl:rgba(0,0,0,.06); --popover:#ffffff; --pane:#f6f7f6;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --mono:"SF Mono",SFMono-Regular,ui-monospace,Menlo,Consolas,monospace;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface0:#181B1A; --surface1:#1E2120; --surface2:#272A29; --surface3:#434645;
+    --fg:#ECEEED; --muted:#A1A5A4; --xmuted:#717574; --border:#252B2A; --border-accent:#2F3534;
+    --accent:#20744A; --destructive:#c64f43;
+    --amber:#f59e0b; --amber-fg:#fcd34d; --amber-bg:rgba(245,158,11,.12);
+    --hl:rgba(255,255,255,.08); --popover:#272A29; --pane:#141716;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--pane); color:var(--fg); font:14px/1.45 var(--sans); -webkit-font-smoothing:antialiased; }
+  button { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }
+  .num { font-variant-numeric:tabular-nums; }
+  svg.i { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+
+  #frame { height:calc(100vh - 96px); margin:0 auto; display:flex; flex-direction:column; background:var(--surface0); max-width:960px; border-left:1px solid var(--border); border-right:1px solid var(--border); }
+  #frame.mobile { max-width:390px; }
+  .hdr { height:44px; display:flex; align-items:center; gap:8px; padding:0 16px; border-bottom:1px solid var(--border); color:var(--muted); font-size:14px; font-weight:300; }
+  .hdr b { color:var(--fg); font-weight:400; }
+  .stream { flex:1; overflow:auto; padding:24px 16px 0; }
+  .stream .inner { max-width:720px; margin:0 auto; }
+  .msg.user { display:flex; justify-content:flex-end; margin-bottom:20px; }
+  .msg.user .bubble { background:var(--surface2); border-radius:12px; padding:10px 14px; max-width:80%; font-size:15px; }
+  .msg.assistant { font-size:15px; line-height:1.6; margin-bottom:12px; }
+  .msg.assistant code { font:12px var(--mono); background:var(--surface2); padding:1px 5px; border-radius:4px; }
+
+  /* ---- turn footer：现有 = [复制][分叉] Worked for Xm Ys；新增段落跟在其后 ---- */
+  .tf { position:relative; display:flex; align-items:center; gap:8px; min-height:24px; margin:13px 0 32px; color:var(--muted); font-size:13px; flex-wrap:nowrap; }
+  .tf .icons { display:flex; gap:10px; color:var(--xmuted); margin-left:-4px; }
+  .tf .icons svg.i { width:15px; height:15px; }
+  .tf .loader { width:14px; height:14px; border-radius:50%; border:2px solid var(--surface3); border-top-color:var(--fg); animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .tf .worked { white-space:nowrap; }
+  .tf .u { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; border-radius:6px; padding:2px 4px; margin-left:-4px; cursor:default; }
+  .tf .u:hover, .tf.pinned .u { background:var(--hl); color:var(--fg); }
+  .tf .u .k { display:inline-flex; align-items:center; gap:2px; }
+  .tf .u .k svg.i { width:11px; height:11px; stroke-width:2; }
+  .tf .u .dot { color:var(--xmuted); }
+  .tf .u .hid { display:none; }
+  .tf .u:hover .hid, .tf.pinned .u .hid { display:inline-flex; }
+  .tf .u .pill { display:inline-flex; align-items:center; gap:3px; padding:0 7px; border-radius:9999px; border:1px solid var(--border); background:var(--surface1); font-size:12px; line-height:18px; color:var(--muted); }
+  .tf .u:hover .pill, .tf.pinned .u .pill { color:var(--fg); border-color:var(--border-accent); }
+  .tf .u .skel { width:64px; height:12px; border-radius:9999px; background:var(--surface3); }
+  .tf .u .unpriced { text-decoration:underline dotted; text-underline-offset:2px; color:var(--xmuted); }
+  .tf .u .live { color:var(--fg); }
+  #frame.mobile .tf { flex-wrap:wrap; row-gap:4px; }
+
+  /* ---- composer ---- */
+  .composer { padding:0 16px 16px; }
+  .composer .inner { max-width:720px; margin:0 auto; }
+  .input-frame { border:1px solid var(--border); border-radius:16px; background:var(--surface0); padding:12px 12px 8px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .input-frame textarea { width:100%; border:0; outline:0; resize:none; background:transparent; color:var(--fg); font:15px/1.5 var(--sans); min-height:44px; }
+  .input-frame textarea::placeholder { color:var(--xmuted); }
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:4px; min-height:28px; }
+  .left, .right { display:flex; align-items:center; gap:4px; min-width:0; }
+  .right { flex:none; }
+  .lbl { display:flex; align-items:center; gap:4px; padding:4px; border-radius:6px; font-size:12px; color:var(--muted); white-space:nowrap; }
+  .lbl:hover { background:var(--hl); color:var(--fg); }
+  .lbl svg.i { width:12px; height:12px; }
+  .glyph { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:9999px; color:var(--muted); flex:none; }
+  .glyph:hover { background:var(--surface2); color:var(--fg); }
+  .send { width:28px; height:28px; border-radius:9999px; background:var(--fg); color:var(--surface0); display:flex; align-items:center; justify-content:center; }
+  .send.stop { background:var(--destructive); color:#fff; }
+  #frame.mobile .left .lbl.hide-m { display:none; }
+
+  /* ---- 上下文表：环 + 文字（现有 showPercentage 槽位） ---- */
+  .ctx { position:relative; display:flex; align-items:center; gap:4px; height:28px; padding:0 6px 0 0; border-radius:9999px; color:var(--muted); font-size:12px; white-space:nowrap; cursor:default; }
+  .ctx:hover, .ctx.pinned { color:var(--fg); }
+  .ctx .ring-slot { width:28px; height:28px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .ctx .ring { width:16px; height:16px; transform:rotate(-90deg); }
+  .ctx .txt { display:inline-flex; align-items:center; gap:4px; }
+  .ctx .txt .pct { color:var(--fg); }
+  .ctx .txt .sep { color:var(--xmuted); }
+  .ctx .skel { width:52px; height:12px; border-radius:9999px; background:var(--surface3); }
+  #frame.mobile .ctx.compact-hide .txt { display:none; }
+
+  /* ---- 弹层 ---- */
+  .pop { position:absolute; min-width:220px; background:var(--popover); border:1px solid var(--border-accent); border-radius:8px; padding:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); display:none; z-index:10; font-size:12px; line-height:1.4; color:var(--muted); }
+  .ctx .pop { bottom:calc(100% + 8px); right:0; }
+  .tf .pop { top:calc(100% + 6px); left:60px; }
+  .ctx:hover .pop, .ctx.pinned .pop, .tf .u:hover + .pop, .tf.pinned .pop { display:block; }
+  #frame.mobile .ctx .pop { right:-60px; }
+  .pop .t { color:var(--fg); font-size:14px; margin-bottom:2px; }
+  .pop .l { color:var(--fg); font-size:14px; }
+  .pop .d { color:var(--muted); font-size:12px; }
+  .pop .div { height:1px; background:var(--border-accent); margin:8px -8px; }
+  .pop table { width:100%; border-collapse:collapse; font-size:12px; margin-top:4px; }
+  .pop th { text-align:right; color:var(--xmuted); font-weight:400; padding:0 0 3px 8px; white-space:nowrap; }
+  .pop th:first-child, .pop td:first-child { text-align:left; padding-left:0; }
+  .pop td { text-align:right; padding:2px 0 2px 8px; color:var(--muted); white-space:nowrap; }
+  .pop td.m { color:var(--fg); font-family:var(--mono); font-size:11px; }
+  .pop tr.total td { border-top:1px solid var(--border-accent); color:var(--fg); padding-top:4px; }
+  .pop .kv { display:flex; justify-content:space-between; gap:12px; margin-top:3px; }
+  .pop .kv .v { color:var(--fg); }
+  .pop .pill { display:inline-flex; align-items:center; gap:4px; padding:0 6px; border-radius:9999px; font-size:11px; background:var(--amber-bg); color:var(--amber-fg); border:1px solid rgba(245,158,11,.35); line-height:16px; }
+  .pop .pill.gray { background:var(--surface2); color:var(--muted); border-color:var(--border-accent); }
+  .pop .note { margin-top:6px; font-size:12px; color:var(--muted); }
+  .pop .plan .row { display:flex; justify-content:space-between; align-items:center; margin-top:4px; }
+  .pop .plan .bar { height:4px; border-radius:2px; background:var(--surface3); overflow:hidden; margin-top:3px; }
+  .pop .plan .bar i { display:block; height:100%; background:var(--accent); }
+
+  #bar { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); background:#1a1a1e; color:#e5e5e5; border-radius:12px; padding:8px 10px; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; font-size:12px; box-shadow:0 8px 30px rgba(0,0,0,.35); z-index:99; max-width:calc(100vw - 24px); }
+  #bar .g { display:flex; align-items:center; gap:4px; }
+  #bar .g span { color:#a3a3a3; margin-right:2px; }
+  #bar button { padding:3px 8px; border-radius:6px; background:#2a2a2e; color:#e5e5e5; }
+  #bar button.on { background:#e5e5e5; color:#1a1a1e; }
+  #desc { position:fixed; left:12px; top:12px; width:300px; background:var(--popover); border:1px solid var(--border-accent); border-radius:8px; padding:10px 12px; font-size:12px; color:var(--muted); box-shadow:0 8px 24px rgba(0,0,0,.12); z-index:98; }
+  #desc b { color:var(--fg); font-weight:500; display:block; margin-bottom:4px; font-size:13px; }
+  #desc p { margin:4px 0; }
+  @media (max-width:1100px) { #desc { display:none; } }
+</style>
+
+<div id="desc"></div>
+
+<div id="frame">
+  <div class="hdr">
+    <svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    <b>usage-stats</b> · 13 号票 会话内用量
+  </div>
+  <div class="stream"><div class="inner" id="stream"></div></div>
+
+  <div class="composer"><div class="inner">
+    <div class="input-frame">
+      <textarea placeholder="输入消息…" rows="2"></textarea>
+      <div class="toolbar">
+        <div class="left">
+          <div class="lbl"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/></svg>Fable 5.1 <svg class="i" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="lbl hide-m">Default <svg class="i" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="lbl hide-m">Thinking: high <svg class="i" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="glyph"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></div>
+        </div>
+        <div class="right">
+          <div class="ctx" id="ctx"></div>
+          <div class="glyph" id="voice"><svg class="i" viewBox="0 0 24 24"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg></div>
+          <div class="send" id="send"></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<div id="bar">
+  <div class="g"><span>变体</span><button data-k="variant" data-v="A">A 文字常显</button><button data-k="variant" data-v="B">B 只显成本</button><button data-k="variant" data-v="C">C 细 pill</button></div>
+  <div class="g"><span>宽度</span><button data-k="w" data-v="desktop">桌面</button><button data-k="w" data-v="mobile">手机 390</button></div>
+  <div class="g"><span>主题</span><button data-k="theme" data-v="light">亮</button><button data-k="theme" data-v="dark">暗</button></div>
+  <div class="g"><span>状态</span>
+    <button data-k="state" data-v="ready">已结算</button>
+    <button data-k="state" data-v="running">运行中</button>
+    <button data-k="state" data-v="pending">待结算</button>
+    <button data-k="state" data-v="unpriced">无价格</button>
+    <button data-k="state" data-v="oldhost">旧主机</button>
+  </div>
+  <div class="g"><span>token</span><button data-k="fmt" data-v="1dp">12.3K</button><button data-k="fmt" data-v="legacy">12k</button></div>
+  <div class="g"><span>环形弹层</span><button data-k="sum" data-v="on">带会话合计</button><button data-k="sum" data-v="off">只上下文</button></div>
+  <div class="g"><button data-k="pin" data-v="toggle">钉住弹层</button></div>
+</div>
+
+<script>
+// ---------- 假数据 ----------
+const TURNS = [
+  { user: "把 context-window-meter 旁边加一条本会话用量，先给我个原型看看。",
+    assistant: "已定位 <code>packages/app/src/components/context-window-meter.tsx</code> 与 composer 右侧控件槽，先按环形表右侧加条的思路做了三个变体。",
+    durationMs: 134_000, byModel: [ { model: "claude-opus-4-1", input: 8_120, cachedInput: 61_400, cacheWrite: 4_010, output: 2_930, reasoning: 880, estimatedCost: 0.1124 } ] },
+  { user: "你理解错了。token 和时间应该在 Worked for 后面；composer 那里只放上下文占用，我还要看到上限和已用量。",
+    assistant: "明白，位置放反了。每轮 token 与估算成本归 turn footer，composer 环形表位置扩成「环 + 已用 / 上限」。下面是重做后的三个变体。",
+    durationMs: 372_000, byModel: [ { model: "claude-opus-4-1", input: 12_340, cachedInput: 88_210, cacheWrite: 6_020, output: 4_118, reasoning: 1_204, estimatedCost: 0.1638 }, { model: "claude-haiku-4-5", input: 2_010, cachedInput: 0, cacheWrite: 0, output: 512, reasoning: 0, estimatedCost: 0.0046 } ] },
+];
+const CTX = { used: 84_000, max: 200_000 };
+const SESSION = { turns: 7, durationMs: 1_012_000, spanMs: 83 * 60_000 };
+
+const q = new URLSearchParams(location.search);
+const S = { variant: q.get("variant") || "A", w: q.get("w") || "desktop", theme: q.get("theme") || "light", state: q.get("state") || "ready", fmt: q.get("fmt") || "1dp", sum: q.get("sum") || "on", pin: q.get("pin") === "1" };
+
+const DESC = {
+  A: ["A · 文字常显", "footer：Worked for 6m 12s · ↑14.3K ↓4.6K · $0.17，与现有元数据同色同字号，一行读完。hover 弹层给按模型明细。", "composer：◔ 84K / 200K。手机上 footer 换行，composer 只留环。"],
+  B: ["B · 只显成本", "footer：Worked for 6m 12s · $0.17；hover 才在后面展开 ↑↓ token。最安静。", "composer：◔ 42% · 84K/200K（百分比深色、量浅色）。"],
+  C: ["C · 细 pill", "footer：Worked for 6m 12s 后跟两枚 18px 细 pill「↑14.3K ↓4.6K」「$0.17」，把用量与耗时视觉分层。", "composer：◔ 84K of 200K。手机保留文字。"],
+};
+
+// ---------- 格式 ----------
+function fmtTok(n) {
+  if (S.fmt === "legacy") { if (n >= 1e6) return Math.round(n / 1e6) + "m"; if (n >= 1e3) return Math.round(n / 1e3) + "k"; return String(Math.round(n)); }
+  const f = (v, s) => (v).toFixed(1).replace(/\.0$/, "") + s;
+  if (n >= 1e9) return f(n / 1e9, "B"); if (n >= 1e6) return f(n / 1e6, "M"); if (n >= 1e3) return f(n / 1e3, "K"); return String(Math.round(n));
+}
+function fmtCost(v) { if (!(v > 0)) return "$0.00"; if (v < 0.01) return "$" + v.toFixed(4); return "$" + v.toFixed(2); }
+function fmtDur(ms) { const s = Math.floor(ms / 1000); if (s < 60) return s + "s"; const m = Math.floor(s / 60); if (m < 60) return s % 60 === 0 ? m + "m" : `${m}m ${s % 60}s`; const h = Math.floor(m / 60); return m % 60 === 0 ? h + "h" : `${h}h ${m % 60}m`; }
+const I = {
+  up: '<svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  down: '<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
+  copy: '<svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  fork: '<svg class="i" viewBox="0 0 24 24"><path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/></svg>',
+};
+const sum = (arr, k) => arr.reduce((a, m) => a + m[k], 0);
+
+// ---------- turn footer ----------
+let runStart = null;
+function turnUsageHtml(turn, idx, last) {
+  const st = S.state, v = S.variant;
+  if (st === "oldhost") return "";                       // 旧 daemon：只剩 Worked for
+  if (st === "pending" && last) return `<span class="u"><span class="skel"></span></span>`; // 轮已完成、日志行未到
+  const models = turn.byModel.map(m => ({ ...m }));
+  if (st === "unpriced" && last) { models[0].model = "glm-4.6-experimental"; models[0].estimatedCost = 0; models[0].unpriced = true; }
+  const inp = sum(models, "input"), out = sum(models, "output"), cost = sum(models, "estimatedCost");
+  const costCls = models.some(m => m.unpriced) ? "unpriced" : "";
+  const tok = `<span class="k">${I.up}${fmtTok(inp)}</span><span class="k">${I.down}${fmtTok(out)}</span>`;
+  const costK = `<span class="k ${costCls}">${fmtCost(cost)}</span>`;
+  let body;
+  if (v === "A") body = `<span class="dot">·</span>${tok}<span class="dot">·</span>${costK}`;
+  if (v === "B") body = `<span class="dot">·</span>${costK}<span class="hid" style="gap:6px"><span class="dot">·</span>${tok}</span>`;
+  if (v === "C") body = `<span class="pill">${tok}</span><span class="pill ${costCls}">${fmtCost(cost)}</span>`;
+  // 弹层：本轮按模型明细
+  let pop = `<div class="t">本轮用量</div><table><tr><th>模型</th><th>输入</th><th>缓存</th><th>输出</th><th>估算成本</th></tr>`;
+  for (const m of models) pop += `<tr><td class="m">${m.model}${m.unpriced ? ` <span class="pill">无价格数据</span>` : ""}</td><td class="num">${fmtTok(m.input)}</td><td class="num">${fmtTok(m.cachedInput + m.cacheWrite)}</td><td class="num">${fmtTok(m.output)}${m.reasoning ? `<span style="color:var(--xmuted)"> (${fmtTok(m.reasoning)} 推理)</span>` : ""}</td><td class="num">${fmtCost(m.estimatedCost)}</td></tr>`;
+  if (models.length > 1) pop += `<tr class="total"><td>合计</td><td class="num">${fmtTok(inp)}</td><td class="num">${fmtTok(sum(models, "cachedInput") + sum(models, "cacheWrite"))}</td><td class="num">${fmtTok(out)}</td><td class="num">${fmtCost(cost)}</td></tr>`;
+  pop += `</table><div class="kv"><span>耗时</span><span class="v num">${fmtDur(turn.durationMs)}</span></div><div class="note">估算成本 · 按公开 API 价格计算</div>`;
+  return `<span class="u">${body}</span><div class="pop">${pop}</div>`;
+}
+
+function streamHtml(running, liveMs) {
+  let h = "";
+  TURNS.forEach((t, i) => {
+    const last = i === TURNS.length - 1;
+    h += `<div class="msg user"><div class="bubble">${t.user}</div></div>`;
+    if (running && last) {
+      h += `<div class="msg assistant">明白，位置放反了。每轮 token 与估算成本归 turn footer，composer 环形表位置扩成「环 + 已用 / 上限」……</div>`;
+      h += `<div class="tf"><span class="loader"></span><span class="num">${fmtDur(liveMs)}</span></div>`;
+      return;
+    }
+    h += `<div class="msg assistant">${t.assistant}</div>`;
+    h += `<div class="tf ${S.pin && last ? "pinned" : ""}"><span class="icons">${I.copy}${I.fork}</span><span class="worked">Worked for ${fmtDur(t.durationMs)}</span>${turnUsageHtml(t, i, last)}</div>`;
+  });
+  return h;
+}
+
+// ---------- composer 上下文表 ----------
+function ring(pct) {
+  const r = 7, c = 2 * Math.PI * r, off = c - (pct / 100) * c;
+  const color = pct > 90 ? "var(--destructive)" : pct >= 70 ? "var(--amber)" : "currentColor";
+  return `<svg class="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="${r}" fill="none" stroke="var(--surface3)" stroke-width="2"/><circle cx="8" cy="8" r="${r}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
+}
+function ctxHtml(running) {
+  const pct = Math.round(CTX.used / CTX.max * 100);
+  const used = fmtTok(CTX.used), max = fmtTok(CTX.max);
+  let txt;
+  if (S.variant === "A") txt = `<span class="num">${used}</span><span class="sep">/</span><span class="num">${max}</span>`;
+  if (S.variant === "B") txt = `<span class="pct num">${pct}%</span><span class="sep">·</span><span class="num">${used}/${max}</span>`;
+  if (S.variant === "C") txt = `<span class="num">${used}</span><span class="sep">of</span><span class="num">${max}</span>`;
+  const compactHide = S.variant === "A" ? "compact-hide" : "";
+  let pop = `<div class="t">上下文窗口</div><div class="l">已用 ${pct}%</div><div class="d">${used} / ${max} tokens · Fable 5.1</div>`;
+  if (S.sum === "on") {
+    const models = TURNS.flatMap(t => t.byModel);
+    const inp = sum(models, "input"), out = sum(models, "output"), cost = sum(models, "estimatedCost");
+    pop += `<div class="div"></div><div class="t">本会话合计</div>`;
+    if (S.state === "oldhost") pop += `<div class="note"><span class="pill gray">需要更新主机</span> 此主机的 daemon 不提供用量统计。</div>`;
+    else pop += `<div class="kv"><span>Token</span><span class="v num">↑${fmtTok(inp)} ↓${fmtTok(out)}</span></div><div class="kv"><span>估算成本</span><span class="v num">${fmtCost(cost)}</span></div><div class="kv"><span>轮次</span><span class="v num">${SESSION.turns}${running ? " + 进行中" : ""}</span></div><div class="kv"><span>Agent 运行</span><span class="v num">${fmtDur(SESSION.durationMs)}</span></div><div class="kv"><span>会话跨度</span><span class="v num">${fmtDur(SESSION.spanMs)}</span></div>`;
+  }
+  pop += `<div class="div"></div><div class="plan"><div class="t" style="font-size:12px;color:var(--muted)">Plan usage · Claude Max</div><div class="row"><span>5 小时窗口</span><span class="v num" style="color:var(--fg)">38%</span></div><div class="bar"><i style="width:38%"></i></div><div class="row"><span>7 天窗口</span><span class="v num" style="color:var(--fg)">61%</span></div><div class="bar"><i style="width:61%"></i></div></div>`;
+  return { cls: compactHide, html: `<span class="ring-slot">${ring(pct)}</span><span class="txt">${txt}</span><div class="pop">${pop}</div>` };
+}
+
+function render() {
+  document.documentElement.dataset.theme = S.theme;
+  document.getElementById("frame").className = S.w === "mobile" ? "mobile" : "";
+  const running = S.state === "running";
+  if (running && !runStart) runStart = Date.now(); if (!running) runStart = null;
+  const liveMs = running ? Date.now() - runStart : 0;
+  document.getElementById("stream").innerHTML = streamHtml(running, liveMs);
+  const c = ctxHtml(running);
+  const el = document.getElementById("ctx"); el.className = `ctx ${c.cls} ${S.pin ? "pinned" : ""}`; el.innerHTML = c.html;
+  const send = document.getElementById("send");
+  send.innerHTML = running ? '<svg class="i" viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>' : '<svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+  send.className = "send" + (running ? " stop" : "");
+  document.getElementById("voice").style.display = running ? "none" : "";
+  for (const b of document.querySelectorAll("#bar button[data-k]")) b.classList.toggle("on", b.dataset.k === "pin" ? S.pin : S[b.dataset.k] === b.dataset.v);
+  const [t, p1, p2] = DESC[S.variant];
+  document.getElementById("desc").innerHTML = `<b>${t}</b><p>${p1}</p><p>${p2}</p><p style="color:var(--xmuted)">悬停 footer 用量段 / composer 环形表看弹层；「钉住弹层」同时钉住两处（真机手机是点按打开）。</p>`;
+  try { history.replaceState(null, "", "?" + new URLSearchParams({ variant: S.variant, w: S.w, theme: S.theme, state: S.state, fmt: S.fmt, sum: S.sum, pin: S.pin ? "1" : "0" })); } catch {}
+  const s = document.querySelector(".stream"); s.scrollTop = s.scrollHeight;
+}
+document.getElementById("bar").addEventListener("click", (e) => { const b = e.target.closest("button[data-k]"); if (!b) return; if (b.dataset.k === "pin") S.pin = !S.pin; else S[b.dataset.k] = b.dataset.v; render(); });
+render();
+setInterval(() => { if (S.state === "running") render(); }, 1000);
+</script>
