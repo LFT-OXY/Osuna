@@ -98,7 +98,7 @@ daemon 直接解析四个 CLI 留在本机的会话日志，把每条 assistant 
 ### 1. 采集范围与日志根目录
 
 - 只采集 Claude Code、Codex、Pi、OMP。OpenCode、Copilot 不做。
-- 根目录按各 CLI 自己的规则解析：Claude `$CLAUDE_CONFIG_DIR` 或 `~/.claude/projects`（含每个会话目录下的 `subagents/`）；Codex `$CODEX_HOME` 或 `~/.codex` 下的 `sessions` 与 `archived_sessions`；Pi 沿用现有 Pi session 目录解析；OMP 按上游 `PI_CONFIG_DIR` / `OMP_PROFILE` / `PI_PROFILE` / `PI_CODING_AGENT_DIR` / `$XDG_DATA_HOME/omp/sessions` 规则解析，**不再使用** Paseo 自造的 `OMP_AGENT_DIR` / `OMP_SESSION_DIR`，并修正 OMP provider 配置里让后续分支不可达的默认字面量。
+- 根目录按各 CLI 自己的规则解析：Claude `$CLAUDE_CONFIG_DIR` 或 `~/.claude/projects`（含每个会话目录下的 `subagents/`）；Codex `$CODEX_HOME` 或 `~/.codex` 下的 `sessions` 与 `archived_sessions`；Pi 沿用现有 Pi session 目录解析；OMP 按上游 `PI_CONFIG_DIR` / `OMP_PROFILE` / `PI_PROFILE` / `PI_CODING_AGENT_DIR` / `$XDG_DATA_HOME/omp/sessions` 规则解析，**不再使用** Paseo 自造的 `OMP_AGENT_DIR` / `OMP_SESSION_DIR`，并修正 OMP provider 配置里让后续分支不可达的默认字面量。扫描侧**只按环境变量解析**，不读 OMP `settings.json` 的 `sessionDir`（读它的是 import 侧的 `resolveImportSessionsDir`）：口径与本节「由入口按环境解析出默认值」一致，代价是用 `settings.json` 搬走 sessions 的用户该来源为空，在 `docs/usage.md` 写明。
 - 只认 `.jsonl`；`.log` / `.json` / `.zst` 忽略。`.jsonl.zst` 跳过并记一次 info —— 计数对四个根目录一视同仁（只有 Codex 会压缩，但没必要为它开特例），info 每个 daemon 生命周期只发一次。按「什么是好测试」的不断言日志行，测试只验证它没被计入报表。
 - 根目录不存在静默跳过，下轮扫描再试。
 - 四个根目录、扫描间隔、价格表拉取的 fetch 实现都是 daemon 运行时配置的一部分，由入口按上述规则从环境解析出默认值；这是测试注入点（见测试决策）。

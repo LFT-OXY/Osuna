@@ -18,5 +18,5 @@
 
 **票 01 实现与审查时发现** —— 两条关于 01 号票解析函数的注意事项：
 
-- `resolveOmpSessionPaths`（`providers/omp/provider-config.ts`）只按上游环境变量解析，**不读** `settings.json` 的 `sessionDir`；读它的是 import 侧的 `resolveImportSessionsDir`。用 `settings.json` 把 sessions 搬走的用户，用量扫描会扫空。若沿用 spec 实现决策第 1 节「由入口按环境解析出默认值」的口径，这是已知取舍，值得在 `docs/usage.md`（14 号票）写明；若要覆盖，扫描侧需要自己再读一次 settings.json。
+- `resolveOmpSessionPaths`（`providers/omp/provider-config.ts`）只按上游环境变量解析，**不读** `settings.json` 的 `sessionDir`；读它的是 import 侧的 `resolveImportSessionsDir`。用 `settings.json` 把 sessions 搬走的用户，用量扫描会扫空。**已定（2026-09-19，用户）：按票面现状走，扫描侧不读 settings.json。** 口径与 spec 实现决策第 1 节「由入口按环境解析出默认值」一致，已写进 prd.md 第 1 节；代价是用 `settings.json` 搬走 sessions 的用户该来源为空，由 14 号票在 `docs/usage.md` 写明。本票不要顺手补读。
 - 未复刻上游 `normalizeProfileName`（`pi-utils/dirs.ts`）：`..`、尾点、Windows 保留名在上游会退回默认 profile，Paseo 直接把 profile 名拼进路径。只影响只读扫描，边界极窄。
