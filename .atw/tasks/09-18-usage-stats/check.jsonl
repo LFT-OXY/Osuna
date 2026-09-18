@@ -16,4 +16,4 @@
 {"file": ".atw/tasks/09-18-usage-stats/research/backfill-volume.md", "reason": "回填量级、流式读与 U+2028 切行坑"}
 {"file": ".atw/tasks/09-18-usage-stats/research/file-observer-fit.md", "reason": "为何不接 watcher、游标与指纹注意点"}
 {"file": ".atw/tasks/09-18-usage-stats/research/paseo-usage-facts.md", "reason": "Paseo 现状：Plan usage、AgentUsage、会话扫描与 handle 语义"}
-{"file": ".atw/tasks/09-18-usage-stats/issues/02-claude-usage-report-tracer.md", "reason": "ATW current ticket"}
+{"file": ".atw/tasks/09-18-usage-stats/issues/03-codex-parser.md", "reason": "ATW current ticket"}
