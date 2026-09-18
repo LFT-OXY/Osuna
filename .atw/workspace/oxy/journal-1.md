@@ -73,3 +73,26 @@
 ### Status
 
 [OK] **Completed**
+
+## Session 2: 实现并归档 more-ui-themes：13 套深浅色主题变体、终端 ANSI 随主题、跟随系统配对
+
+<!-- atw-session: v=2 fp=76beaa9bf2d0fa47 -->
+
+**Date**: 2026-09-18
+**Task**: 实现并归档 more-ui-themes：13 套深浅色主题变体、终端 ANSI 随主题、跟随系统配对
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+按 PRD 实现 13 套 UI 主题变体（8 深 5 浅），THEME_OPTIONS 分组改为 primary/dark/light；主题配置新增可选 terminalAnsi/terminalSelectionBackground；AppSettings 新增 autoDarkTheme/autoLightTheme，外观 provider 改为纯函数 resolveActiveTheme + useColorScheme 显式 setTheme；设置页 System 下出现深浅色配对两行，九语言补标签；快捷键只在三主值轮转。双维度审查两轮，裁决：深色 14 彩色键照抄、black/brightBlack 来自 tint 并要求 1.5/2:1；Solarized Light 文本三档下移一档；浅色 brightBlack 纳入 3:1。Playwright 接 Electron CDP 留设置页截图证据；TUI 观感未验收。styling.md 与 PRD 已同步。
+
+### Git Commits
+
+| Hash        | Message                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `8eadc588b` | feat(theme): 新增 13 套深浅色 UI 主题变体，终端 ANSI 随主题派生，跟随系统可分别配对深浅色主题 |
+
+### Status
+
+[OK] **Completed**
