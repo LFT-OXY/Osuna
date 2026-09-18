@@ -31,16 +31,18 @@ import {
   sanitizeFontFamily,
   useAppSettings,
   type AppSettings,
-  DEFAULT_THEME_PREFERENCE,
 } from "@/hooks/use-settings";
+import { toBuiltInPreference, type BuiltInThemePreference } from "@/appearance/resolve-theme";
 import {
+  DARK_THEME_NAMES,
   DEFAULT_MONO_FONT_STACK,
   DEFAULT_UI_FONT_STACK,
   ICON_SIZE,
-  PLUGIN_THEME_PREFERENCE,
+  LIGHT_THEME_NAMES,
   THEME_OPTIONS,
   THEME_SWATCHES,
   type Theme,
+  type ThemeName,
 } from "@/styles/theme";
 import { isNative } from "@/constants/platform";
 import type { PluginThemeOption } from "@/plugins/themes";
@@ -60,8 +62,6 @@ const ThemedMonitor = withUnistyles(Monitor);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-
-type BuiltInThemePreference = Exclude<AppSettings["theme"], typeof PLUGIN_THEME_PREFERENCE>;
 
 function getThemeLabel(t: TFunction, value: BuiltInThemePreference): string {
   return t(`settings.appearance.theme.options.${value}`);
@@ -117,13 +117,17 @@ function ThemeSwatch({ color }: ThemeSwatchProps) {
   return <View style={swatchStyle} />;
 }
 
-interface ThemeMenuItemProps {
-  themeValue: BuiltInThemePreference;
+interface ThemeMenuItemProps<T extends BuiltInThemePreference> {
+  themeValue: T;
   selected: boolean;
-  onChange: (theme: BuiltInThemePreference) => void;
+  onChange: (theme: T) => void;
 }
 
-function ThemeMenuItem({ themeValue, selected, onChange }: ThemeMenuItemProps) {
+function ThemeMenuItem<T extends BuiltInThemePreference>({
+  themeValue,
+  selected,
+  onChange,
+}: ThemeMenuItemProps<T>) {
   const { t } = useTranslation();
   const handleSelect = useCallback(() => {
     onChange(themeValue);
@@ -171,7 +175,7 @@ function ThemeRow({
 }: ThemeRowProps) {
   const { t } = useTranslation();
   // A selected contribution that is no longer installed shows the fallback the app renders.
-  const builtInValue = value === PLUGIN_THEME_PREFERENCE ? DEFAULT_THEME_PREFERENCE : value;
+  const builtInValue = toBuiltInPreference(value);
   const selectedLabel = selectedPluginTheme
     ? selectedPluginTheme.name
     : getThemeLabel(t, builtInValue);
@@ -218,6 +222,53 @@ function ThemeRow({
               option={option}
               selected={selectedPluginTheme?.id === option.id}
               onSelect={onSelectPluginTheme}
+            />
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </View>
+  );
+}
+
+interface SystemPairingRowProps<T extends ThemeName> {
+  title: string;
+  options: readonly T[];
+  value: T;
+  onChange: (theme: T) => void;
+}
+
+// "System" 的深色 / 浅色配对行：只列出对应色系的内置主题，插件主题不参与配对。
+function SystemPairingRow<T extends ThemeName>({
+  title,
+  options,
+  value,
+  onChange,
+}: SystemPairingRowProps<T>) {
+  const { t } = useTranslation();
+  const selectedLabel = getThemeLabel(t, value);
+  return (
+    <View style={styles.rowWithBorder}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+      </View>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          style={dropdownTriggerStyle}
+          accessibilityLabel={t("settings.appearance.theme.accessibilityLabel", {
+            value: selectedLabel,
+          })}
+        >
+          <ThemeLeading themeValue={value} />
+          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="bottom" align="end" width={200}>
+          {options.map((option) => (
+            <ThemeMenuItem
+              key={option}
+              themeValue={option}
+              selected={value === option}
+              onChange={onChange}
             />
           ))}
         </DropdownMenuContent>
@@ -549,6 +600,25 @@ export function AppearanceSection() {
     [selectPluginTheme],
   );
 
+  const handleAutoDarkThemeChange = useCallback(
+    (autoDarkTheme: AppSettings["autoDarkTheme"]) => {
+      void updateSettings({ autoDarkTheme });
+    },
+    [updateSettings],
+  );
+
+  const handleAutoLightThemeChange = useCallback(
+    (autoLightTheme: AppSettings["autoLightTheme"]) => {
+      void updateSettings({ autoLightTheme });
+    },
+    [updateSettings],
+  );
+
+  // A selected contribution that is no longer installed renders as System, so the
+  // pairing rows follow what the app actually renders rather than the stored value.
+  const showSystemPairing =
+    selectedPluginTheme === null && toBuiltInPreference(settings.theme) === "auto";
+
   const handleSyntaxThemeChange = useCallback(
     (syntaxTheme: SyntaxThemeId) => {
       void updateSettings({ syntaxTheme });
@@ -678,6 +748,22 @@ export function AppearanceSection() {
             onChange={handleThemeChange}
             onSelectPluginTheme={handlePluginThemeChange}
           />
+          {showSystemPairing ? (
+            <>
+              <SystemPairingRow
+                title={t("settings.appearance.theme.autoDark.title")}
+                options={DARK_THEME_NAMES}
+                value={settings.autoDarkTheme}
+                onChange={handleAutoDarkThemeChange}
+              />
+              <SystemPairingRow
+                title={t("settings.appearance.theme.autoLight.title")}
+                options={LIGHT_THEME_NAMES}
+                value={settings.autoLightTheme}
+                onChange={handleAutoLightThemeChange}
+              />
+            </>
+          ) : null}
         </View>
       </SettingsSection>
       <SettingsSection title={t("settings.appearance.detailLevel.title")}>

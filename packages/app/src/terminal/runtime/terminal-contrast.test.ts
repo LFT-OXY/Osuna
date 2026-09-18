@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { lightTheme, THEME_OPTIONS } from "@/styles/theme";
+import { THEME_OPTIONS } from "@/styles/theme";
 import { contrastRatio, resolveTerminalMinimumContrastRatio } from "./terminal-contrast";
 
 describe("resolveTerminalMinimumContrastRatio", () => {
@@ -44,10 +44,79 @@ describe("resolveTerminalMinimumContrastRatio", () => {
   });
 });
 
-describe("light terminal palette", () => {
-  it("keeps ANSI white and brightWhite at least 3:1 against the terminal background", () => {
-    const { background, white, brightWhite } = lightTheme.colors.terminal;
-    expect(contrastRatio(white, background)).toBeGreaterThanOrEqual(3);
-    expect(contrastRatio(brightWhite, background)).toBeGreaterThanOrEqual(3);
+const BUILT_IN_THEMES = THEME_OPTIONS.flatMap((option) =>
+  "theme" in option ? [{ name: option.name, theme: option.theme }] : [],
+);
+const LIGHT_THEMES = BUILT_IN_THEMES.filter(({ theme }) => theme.colorScheme === "light");
+// 2026-09 之前的深色主题把 ANSI black 放在底色同阶，作为既有行为保留；
+// 之后加入的每一套深色变体都要让 black / brightBlack 在底色上可见。
+const LEGACY_DARK_THEME_NAMES = new Set([
+  "dark",
+  "zinc",
+  "midnight",
+  "claude",
+  "ghostty",
+  "pureBlack",
+]);
+const PALETTE_DARK_THEMES = BUILT_IN_THEMES.filter(
+  ({ name, theme }) => theme.colorScheme === "dark" && !LEGACY_DARK_THEME_NAMES.has(name),
+);
+
+describe("built-in terminal palettes", () => {
+  it("covers every light variant and every palette dark variant", () => {
+    expect(LIGHT_THEMES.map(({ name }) => name)).toEqual([
+      "light",
+      "catppuccinLatte",
+      "solarizedLight",
+      "oneLight",
+      "rosePineDawn",
+      "githubLight",
+    ]);
+    expect(PALETTE_DARK_THEMES.map(({ name }) => name)).toEqual([
+      "dracula",
+      "nord",
+      "tokyoNight",
+      "catppuccinMocha",
+      "gruvboxDark",
+      "solarizedDark",
+      "oneDark",
+      "rosePine",
+    ]);
+  });
+
+  it.each(LIGHT_THEMES)(
+    "keeps ANSI white, brightWhite, black and brightBlack at least 3:1 on the $name light background",
+    ({ theme }) => {
+      const { background, white, brightWhite, black, brightBlack } = theme.colors.terminal;
+      for (const color of [white, brightWhite, black, brightBlack]) {
+        expect(contrastRatio(color, background)).toBeGreaterThanOrEqual(3);
+      }
+    },
+  );
+
+  it.each(PALETTE_DARK_THEMES)(
+    "keeps ANSI black and brightBlack visible on the $name dark background",
+    ({ theme }) => {
+      const { background, black, brightBlack } = theme.colors.terminal;
+      expect(contrastRatio(black, background)).toBeGreaterThanOrEqual(1.5);
+      expect(contrastRatio(brightBlack, background)).toBeGreaterThanOrEqual(2);
+    },
+  );
+
+  it.each(BUILT_IN_THEMES)(
+    "keeps $name body text above the minimum ratio for its scheme",
+    ({ theme }) => {
+      const minimum = theme.colorScheme === "light" ? 4.5 : 3;
+      const { surface0, foreground, foregroundMuted } = theme.colors;
+      expect(contrastRatio(foreground, surface0)).toBeGreaterThanOrEqual(minimum);
+      expect(contrastRatio(foregroundMuted, surface0)).toBeGreaterThanOrEqual(minimum);
+    },
+  );
+
+  it.each(BUILT_IN_THEMES)("hands the daemon bridge pure #rrggbb colors for $name", ({ theme }) => {
+    const { background, foreground, cursor } = theme.colors.terminal;
+    for (const color of [background, foreground, cursor]) {
+      expect(color).toMatch(/^#[0-9a-f]{6}$/i);
+    }
   });
 });

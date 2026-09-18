@@ -15,9 +15,13 @@ import {
 } from "@/components/sidebar/display-preferences/row-items";
 import { isNative } from "@/constants/platform";
 import {
+  DARK_THEME_NAMES,
   FONT_SIZE,
+  LIGHT_THEME_NAMES,
   PLUGIN_THEME_PREFERENCE,
   THEME_OPTIONS,
+  type DarkThemeName,
+  type LightThemeName,
   type ThemePreference,
 } from "@/styles/theme";
 import { z } from "zod";
@@ -42,6 +46,11 @@ const ThemePreferenceSchema = z.enum([
 ]);
 /** Where the theme picker lands when the persisted preference cannot be honoured. */
 export const DEFAULT_THEME_PREFERENCE = "auto" satisfies ThemePreference;
+/** The pair "System" resolves to until the user changes it; matches today's Light / Dark. */
+export const DEFAULT_AUTO_DARK_THEME = "dark" satisfies DarkThemeName;
+export const DEFAULT_AUTO_LIGHT_THEME = "light" satisfies LightThemeName;
+const AutoDarkThemeSchema = z.enum(DARK_THEME_NAMES);
+const AutoLightThemeSchema = z.enum(LIGHT_THEME_NAMES);
 export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 10_000;
 export const MIN_TERMINAL_SCROLLBACK_LINES = 0;
 export const MAX_TERMINAL_SCROLLBACK_LINES = 1_000_000;
@@ -68,6 +77,10 @@ export interface AppSettings {
   theme: ThemePreference;
   /** Which contributed theme `theme: "plugin"` selects. */
   pluginThemeId: string | null;
+  /** Which built-in theme `theme: "auto"` renders while the system is dark. */
+  autoDarkTheme: DarkThemeName;
+  /** Which built-in theme `theme: "auto"` renders while the system is light. */
+  autoLightTheme: LightThemeName;
   language: AppLanguage;
   sendBehavior: SendBehavior;
   serviceUrlBehavior: ServiceUrlBehavior;
@@ -122,6 +135,8 @@ export interface Settings extends AppSettings {
 export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   theme: DEFAULT_THEME_PREFERENCE,
   pluginThemeId: null,
+  autoDarkTheme: DEFAULT_AUTO_DARK_THEME,
+  autoLightTheme: DEFAULT_AUTO_LIGHT_THEME,
   language: "system",
   sendBehavior: "steer",
   serviceUrlBehavior: "ask",
@@ -195,6 +210,8 @@ const StoredAppSettingsSchema = z
   .looseObject({
     theme: ThemePreferenceSchema.catch(DEFAULT_THEME_PREFERENCE),
     pluginThemeId: z.string().nullable().catch(null),
+    autoDarkTheme: AutoDarkThemeSchema.catch(DEFAULT_AUTO_DARK_THEME),
+    autoLightTheme: AutoLightThemeSchema.catch(DEFAULT_AUTO_LIGHT_THEME),
     language: z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),

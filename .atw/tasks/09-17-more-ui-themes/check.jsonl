@@ -1,0 +1,10 @@
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 前端规范入口与命令"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 主题取值、终端色快照与对比度规则、token 约束"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "设置页原语复用、i18n 标签、design 禁止项"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "AppSettings 字段新增与持久化 schema 约定"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "主题目录与设置存储的单测放置与运行方式"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "app 专属检查项与验证命令"}
+{"file": ".atw/spec/guides/index.md", "reason": "共享思考指南入口"}
+{"file": "docs/design.md", "reason": "§6 picker 与 §14 禁止新增颜色 token / 写死 hex"}
+{"file": "docs/unistyles.md", "reason": "useUnistyles 禁用与主题切换 gotcha"}
+{"file": ".atw/tasks/09-17-more-ui-themes/research/discovery.md", "reason": "核实的代码位置、Orca 调色板来源与 8 条实现假设"}
