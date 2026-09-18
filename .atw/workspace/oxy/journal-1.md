@@ -96,3 +96,26 @@
 ### Status
 
 [OK] **Completed**
+
+## Session 3: 计划（Schedules）功能面文案接入 i18n，补齐 9 种语言
+
+<!-- atw-session: v=2 fp=c186bddcf88843d2 -->
+
+**Date**: 2026-09-18
+**Task**: 计划（Schedules）功能面文案接入 i18n，补齐 9 种语言
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+计划列表页、新建/编辑表单、列表行、删除确认、频率预设与 cron 派生描述全部改为 t() 取值；schedule-format 纯函数改为返回 ScheduleDescription（翻译键+参数/原文）由组件层渲染；新增顶层 schedules 命名空间，9 种语言键集一致，en 与原硬编码逐字相同；Schedule=计划、Heartbeat=心跳 记入 glossary；模式写入 .atw/spec component-guidelines Copy 小节。验证：typecheck/lint、84 个单测、e2e schedules-project-target 4/4、dev 桌面端 zh-CN 截图。教训：不要跑全仓 npm run format；task.py archive 自动提交会被 task.json 缺尾换行挡住。
+
+### Git Commits
+
+| Hash        | Message                                                 |
+| ----------- | ------------------------------------------------------- |
+| `f994fdea9` | feat(schedules): 计划功能面文案接入 i18n，补齐 9 种语言 |
+
+### Status
+
+[OK] **Completed**
