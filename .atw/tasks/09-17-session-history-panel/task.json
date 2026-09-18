@@ -3,7 +3,7 @@
   "name": "session-history-panel",
   "title": "会话历史面板：Explorer sidebar 列出项目内的 Provider session 并在终端恢复",
   "description": "在 Explorer sidebar 新增会话历史视图，按 workspace/project/全部三档作用域列出当前 host 上与该项目相关的外部 Provider session（Claude/Codex/OpenCode/Pi/OMP 等），点击新开终端 tab 执行 resume 命令；已在 Paseo 打开的会话显示状态并跳转到原 tab。参考 Orca AI Vault。",
-  "status": "accept",
+  "status": "implement",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -23,6 +23,6 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "d19d1648449383eee2c76ee759554e50f6426391"
+    "implementation_base_sha": "1bad014d6f7f375b7631a96ca37db00d2db47073"
   }
 }

@@ -58,6 +58,29 @@ A new `WorkspaceTabTarget` kind is one logical change spread over fixed touchpoi
 
 Opening a tab from inside an Explorer panel: `usePaneContext().openTab` places into the Explorer pane on desktop (`focusPaneBeforeOpen: true`), so a terminal or agent opened from there would dock in the sidebar. Use `useWorkspaceLayoutStore.getState().openTab({ placement: FOCUSED_PANE_PLACEMENT })` then `focusTab` instead (`session-history/internal/open-terminal-tab.ts`). The store's `focusPane` refuses the Explorer pane id, so the focused pane is always a main pane and the same call serves the compact overlay.
 
+### Making a tab an Explorer default
+
+Explorer defaults are one list: `DEFAULT_EXPLORER_SIDEBAR_TARGETS` in `stores/workspace-layout-actions.ts` (Files, Changes, Session history). Every path that births an Explorer pane (`createWorkspaceLayoutWithExplorerSidebar`, `restoreEmptyPanesInNode`, the v1 migration's `createExplorerSidebarNode`) goes through `createDefaultExplorerSidebarPane`, which pins focus on Changes; `createPaneNode` focuses the last tab by default, so appending a default without that pin changes the opening view.
+
+A default added after layouts were already being saved needs a backfill, and a backfill needs a marker or a closed tab comes back on every launch:
+
+| Piece                | Where                                                                                                                                           | Contract                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Marker               | `explorerSidebarSeededTabKindsByWorkspace: Record<workspaceKey, kind[]>` in `workspace-layout-storage.ts`, optional                             | Kinds already offered to that workspace. Missing field or key = none offered.                                                       |
+| Which kinds backfill | `EXPLORER_SIDEBAR_SEEDED_TAB_KINDS` (actions)                                                                                                   | Only kinds that post-date persisted layouts. Files and Changes are not in it: pre-marker users who closed them would get them back. |
+| Backfill             | `seedExplorerSidebarTabs({ layout, explorerSidebarPaneId, kinds })`, called from the store's `merge` after `ensurePersistedExplorerSidebarPane` | Inserts after the last earlier default still open, keeps focus, no-ops when the kind is open anywhere.                              |
+| Writing the marker   | `partialize` writes the full list for every key in `layoutByWorkspace`                                                                          | Invariant: a layout in memory was born with or backfilled to the current defaults, so the marker never needs its own state.         |
+
+Cases:
+
+- Good: v2 payload, explorer pane `[changes_tree, files, file]`, no marker → `[changes_tree, files, session_history, file]`, focus unchanged; next save writes `["session_history"]`.
+- Base: new workspace never persisted → default layout already has the tab; the first save writes the marker.
+- Bad handled: marker present, tab absent → left absent (user closed it). v1 payload → migration rebuilds the Explorer pane from the defaults, so the backfill is a no-op; `migrateVersionOneWorkspaceLayout` treats every default kind as Explorer furniture via `isDefaultExplorerSidebarTabKind`, never as a user tab to move into a side pane.
+
+Tests live in `stores/workspace-layout-store.test.ts` ("backfills Session history once…", "leaves Session history closed…", "keeps Session history closed across reloads…"): assert the pane's tab kinds and focus after `persist.rehydrate()`, and the persisted marker after the next save. Every assertion of the seed list in that file changes when the list does; `contentTabs` filters the defaults out.
+
+Wrong: bump `WORKSPACE_LAYOUT_PERSIST_VERSION` and add the tab in `migrate`. Correct: optional marker field plus `merge` backfill. The schema is `strictObject`, and a version bump re-runs the v1 migration path for every user while still lacking the "user closed it" signal.
+
 ## Anti-patterns
 
 - A component that subscribes to the entire session store or the entire agent object.

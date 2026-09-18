@@ -3,10 +3,10 @@
 The Explorer sidebar and the side pane share panel implementations, but they have different shell
 contracts.
 
-| Surface          | Purpose                      | Lifecycle                                  |
-| ---------------- | ---------------------------- | ------------------------------------------ |
-| Explorer sidebar | Files and Changes navigation | Cmd+E shows or hides the dedicated dock    |
-| Side pane        | Ordinary workspace content   | Created and closed like any workspace pane |
+| Surface          | Purpose                                        | Lifecycle                                  |
+| ---------------- | ---------------------------------------------- | ------------------------------------------ |
+| Explorer sidebar | Files, Changes, and Session history navigation | Cmd+E shows or hides the dedicated dock    |
+| Side pane        | Ordinary workspace content                     | Created and closed like any workspace pane |
 
 ## Panel host contract
 
@@ -15,9 +15,12 @@ fixed-target labels and icons from that registration, filter by host, and never 
 panel type for another. Tab moves reject unsupported destinations, and placement resolves only to
 a compatible pane.
 
-Files and Changes are the Explorer defaults; Session history is its third singleton navigation
-view and cannot leave Explorer. Other compatible tabs, including agents, terminals, files, and
-diffs, can move between Explorer and main panes.
+Files, Changes, and Session history are the Explorer defaults: every workspace is born with the
+three, Changes focused. Session history arrived after layouts were already being saved, so a
+saved layout gets it once on load and `explorerSidebarSeededTabKindsByWorkspace`
+(`packages/app/src/stores/workspace-layout-storage.ts`) records the offer; a user who closes it
+does not find it back. Session history cannot leave Explorer. Other compatible tabs, including
+agents, terminals, files, and diffs, can move between Explorer and main panes.
 Keep panel implementations independent of either shell. `WorkspacePanelHost` owns mounting and
 retention, while each shell owns its tabs, focus, dragging, resizing, and shortcuts.
 

@@ -54,6 +54,7 @@
 ### 客户端：视图与壳
 
 - `ExplorerSidebarView` 新增 `"sessions"`，对应新的 tab target `session_history`。Panel manifest 标为仅 explorer 宿主、单例。
+- 会话历史是 Explorer sidebar 的默认 tab 之一，与 Files / Changes 并列，不需要用户手动打开：新 workspace 的 explorer pane 种子里带它；已保存的旧布局在加载时补上（只补一次，用户关掉后不再自动出现）。
 - 桌面端 tab rail 的上下文菜单、New Tab 启动器、紧凑布局的 Explorer 覆盖层分段控件都加入该视图，与 Files / Changes 同一目录来源。
 - 视图是 directory-backed surface 的变体：数据按 `(serverId, 作用域, cwd 列表)` 取，不按 workspaceId；但"哪个终端 tab 属于哪条会话"是 workspace-owned 状态。
 
@@ -140,7 +141,7 @@
 
 ## 验收标准
 
-- [ ] 桌面端 Explorer sidebar 可切到"会话历史"，紧凑布局的 Explorer 覆盖层同样可达。
+- [ ] 桌面端 Explorer sidebar 默认就有"会话历史"tab（新 workspace 与旧布局都有），紧凑布局的 Explorer 覆盖层同样可达。
 - [ ] 作用域三档可切换并在重启后保留；默认 project。
 - [ ] project 作用域列出该 project 在当前 host 上所有活动 workspace 的会话，无重复。
 - [ ] 在终端里直接跑的 `claude` 会话出现在列表中；点击后当前 workspace 出现新终端 tab，进程为 `claude --resume <id>`，cwd 为会话目录。
