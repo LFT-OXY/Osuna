@@ -3,7 +3,7 @@
 **What to build:** Paseo 解析 OMP 会话目录的方式与 OMP 上游一致：`PI_CONFIG_DIR` / `OMP_PROFILE` / `PI_PROFILE` / `PI_CODING_AGENT_DIR` / `$XDG_DATA_HOME/omp/sessions`，不再读 Paseo 自造的 `OMP_AGENT_DIR` / `OMP_SESSION_DIR`；provider 配置里让后续分支不可达的默认字面量被修正。用量扫描器（04 号票）与 Session history 共用同一个解析函数，用户设置了上游环境变量后两处都能找到会话。
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 **Blocked by:** None — can start immediately
 
