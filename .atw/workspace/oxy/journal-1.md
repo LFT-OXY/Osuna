@@ -50,3 +50,26 @@
 - 坑三：oxlint `complexity` 上限 20，surface 抽出 `resolveRowStatus` 与 `ActionErrorAlert` 才过。
 - 遗留：index.tsx 第 249 行 `ReadonlyArray<…>` 的 eslint warning 来自工单 02，未动。
 - 审查处置：规格轴"跨目录终端不在列表里"经核实为误报（daemon 带 workspaceId 时 `getAllTerminalSessions` 聚合全部目录再过滤），补了会话 cwd 不在 workspace 目录下的用例；本 workspace 导入后用 `navigateToAgent(pin)` 而非 workspace screen 的 `openWorkspaceTabFocused` 属判断项，已写进 PRD。标准轴无硬性违规；采纳 zustand → 模块 Map、去掉 `?? workspaceId` 兜底、测试 helper 去 `as`（改用 `vi.fn<CreateTerminal>` 与完整 capabilities）；未采纳 view.tsx 回并（桩 app 代码违反 testing.md）与 kebab 触发器抽到 components/ui（超出本票）。
+
+## Session 1: 会话历史面板工单 06：Explorer sidebar 默认 tab 与旧布局补齐，任务验收归档
+
+<!-- atw-session: v=2 fp=516188da9ea7e674 -->
+
+**Date**: 2026-09-18
+**Task**: 会话历史面板工单 06：Explorer sidebar 默认 tab 与旧布局补齐，任务验收归档
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+实现工单 06：session_history 加入 Explorer 种子并保持 Changes 为初始视图；持久化新增 explorerSidebarSeededTabKindsByWorkspace 标记，merge 时对旧布局补一次、用户关掉后不再出现；v1 迁移用 isDefaultExplorerSidebarTabKind 统一判定默认 kind。两轴审查 3 处硬违规已修（as 强转、readonly string[] 改字面量联合、文档表格与段落不一致）。规范回填 state-management.md 新增 Making a tab an Explorer default。dev 桌面端手测通过后完成 12 条验收（第 6 条归档 agent 分支由前置任务 09-17-history-open-archived-agent 承接），任务归档。
+
+### Git Commits
+
+| Hash        | Message                                                                           |
+| ----------- | --------------------------------------------------------------------------------- |
+| `00a6b9a39` | feat(session-history): 会话历史成为 Explorer sidebar 默认 tab，旧布局加载时补一次 |
+
+### Status
+
+[OK] **Completed**
