@@ -15,3 +15,10 @@
 - [ ] zh-CN 走查截图：「用量」页、footer、弹层、价格表区块。
 - [ ] iOS / Android 真机 Intl 冒烟各一张截图（千分位、日期区间、星期短名）。
 - [ ] 资源测试通过；`npm run typecheck`、`npm run lint`、`npm run format:check` 通过。
+
+## Comments
+
+**票 01 实现与审查时发现** —— 两处被票 01 落下的文档陈述，收口时一并改：
+
+- `docs/providers.md:83`「imports terminal-started sessions from `~/.omp/agent/sessions`」：现在这只是默认分支，`PI_CONFIG_DIR` / `OMP_PROFILE` / `PI_CODING_AGENT_DIR` / `XDG_DATA_HOME` 都会改写它。
+- `docs/custom-providers.md` 的 `omp-work` 示例与其后一段：示例 `env` 只设 `XDG_CONFIG_HOME` / `XDG_STATE_HOME`，而上游按 `XDG_DATA_HOME` 定 sessions 目录，示例里的 `params.sessionDir` 因此指向 OMP 不会写入的位置；provider `env` 的值也不展开 `~`。段落里「If `command` or XDG env vars move OMP's state directory, set `params.sessionDir`」的 `XDG_DATA_HOME` 一支现已自动解析，适用范围变窄。票 01 曾试改这段，因与紧邻示例自相矛盾被审查打回并整段还原——改之前先把示例本身修对。

@@ -3,7 +3,7 @@
 **What to build:** daemon 启动后扫描本机 Claude Code 会话日志，把每条 assistant 消息的五列 token 与每轮的轮次 / 耗时归到 (来源, 模型, 会话, 目录, UTC 15 分钟桶)，落盘到 `$PASEO_HOME/usage/`，重启后不重复计数；客户端通过 `usage.report.get` 拿到按本地时区分组的完整报表（汇总、来源、模型、日、月、趋势、热力图、项目、回填状态），并通过 `usage.backfill.progress` 看到回填进度；`server_info.features.usage` 为 true。估算成本本票一律为 0、`priced=false`（计价归 05 号票）。
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 **Blocked by:** None — can start immediately
 
