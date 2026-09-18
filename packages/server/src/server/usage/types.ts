@@ -73,7 +73,31 @@ export const CLAUDE_PARSER_STATE_SCHEMA = z.object({
 });
 export type ClaudeParserState = z.infer<typeof CLAUDE_PARSER_STATE_SCHEMA>;
 
-export const USAGE_PARSER_STATE_SCHEMA = z.discriminatedUnion("kind", [CLAUDE_PARSER_STATE_SCHEMA]);
+/**
+ * Codex keeps one thread per file. `usesUsageRecords` latches on the first
+ * `token_usage_record`: from 0.153.2 the same response is written twice, once
+ * as a record and once as a `token_count`, and counting both doubles it.
+ * `lastUsageKey` is the previous response's id or usage signature, which is how
+ * an adjacent repeat is dropped.
+ */
+export const CODEX_PARSER_STATE_SCHEMA = z.object({
+  kind: z.literal("codex"),
+  sessionId: z.string().nullable(),
+  cwd: z.string().nullable(),
+  subagent: z.boolean(),
+  /** A subagent file replays the parent's `session_meta`; only the first one is this file. */
+  metaSeen: z.boolean(),
+  model: z.string().nullable(),
+  usesUsageRecords: z.boolean(),
+  lastUsageKey: z.string().nullable(),
+  openTurn: USAGE_OPEN_TURN_SCHEMA.nullable(),
+});
+export type CodexParserState = z.infer<typeof CODEX_PARSER_STATE_SCHEMA>;
+
+export const USAGE_PARSER_STATE_SCHEMA = z.discriminatedUnion("kind", [
+  CLAUDE_PARSER_STATE_SCHEMA,
+  CODEX_PARSER_STATE_SCHEMA,
+]);
 export type UsageParserState = z.infer<typeof USAGE_PARSER_STATE_SCHEMA>;
 
 /** One scanned file. The map of these is also the sessionId to path index. */

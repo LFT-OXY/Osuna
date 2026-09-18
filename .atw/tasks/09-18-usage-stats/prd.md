@@ -99,13 +99,13 @@ daemon 直接解析四个 CLI 留在本机的会话日志，把每条 assistant 
 
 - 只采集 Claude Code、Codex、Pi、OMP。OpenCode、Copilot 不做。
 - 根目录按各 CLI 自己的规则解析：Claude `$CLAUDE_CONFIG_DIR` 或 `~/.claude/projects`（含每个会话目录下的 `subagents/`）；Codex `$CODEX_HOME` 或 `~/.codex` 下的 `sessions` 与 `archived_sessions`；Pi 沿用现有 Pi session 目录解析；OMP 按上游 `PI_CONFIG_DIR` / `OMP_PROFILE` / `PI_PROFILE` / `PI_CODING_AGENT_DIR` / `$XDG_DATA_HOME/omp/sessions` 规则解析，**不再使用** Paseo 自造的 `OMP_AGENT_DIR` / `OMP_SESSION_DIR`，并修正 OMP provider 配置里让后续分支不可达的默认字面量。
-- 只认 `.jsonl`；`.log` / `.json` / `.zst` 忽略。Codex `.jsonl.zst` 跳过并记一次 info。
+- 只认 `.jsonl`；`.log` / `.json` / `.zst` 忽略。`.jsonl.zst` 跳过并记一次 info —— 计数对四个根目录一视同仁（只有 Codex 会压缩，但没必要为它开特例），info 每个 daemon 生命周期只发一次。按「什么是好测试」的不断言日志行，测试只验证它没被计入报表。
 - 根目录不存在静默跳过，下轮扫描再试。
 - 四个根目录、扫描间隔、价格表拉取的 fetch 实现都是 daemon 运行时配置的一部分，由入口按上述规则从环境解析出默认值；这是测试注入点（见测试决策）。
 
 ### 2. 四家日志的解析规则
 
-四个解析器是纯函数：输入一段字节与上次的解析状态，输出桶行增量、每轮行增量、新状态。它们不碰文件系统。共同规则：
+四个解析器是纯函数：输入一段字节与上次的解析状态，输出桶行增量、每轮行增量、新状态。它们不碰文件系统。切行、JSON 解析、时间区间、轮次计数与结算这些共通部分在 `usage/parse.ts`，每个解析器只写自己的行处理。共同规则：
 
 - 按 `\n` 字节自行切行，不用 Node `readline`（它把 JSON 字符串里的 U+2028/2029 当换行）。
 - 只消费到最后一个完整 `\n`，半行留到下次。
@@ -126,7 +126,8 @@ Codex：
 - 0.153.2 起优先消费 `token_usage_record`（带 `turn_id` / `response_id`），旧文件回退 `token_count.info.last_token_usage`；**只计 last，不做 total 差分**（total 是进程内累计、resume 后归零）；相邻重复签名去重；`info=null` 跳过。
 - `input_tokens` 含 cached，`input` = input − cached；reasoning 含在 output 内，计价记 0；`cache_write` 缺失按 0。
 - model 只来自最近一条在前的 `turn_context.payload.model`，没有时记 `unknown`。cwd 取 `session_meta`，按 `turn_context` 逐轮覆盖。
-- 轮 = `task_started{turn_id}` 到 `task_complete` / `turn_aborted`；轮起点 = `task_started` ts；轮键 = `turn_id`。子线程文件（`session_meta.source.subagent`）不计轮，≥0.153.2 用 `turn_context.root_turn_id` 归父轮。
+- 轮 = `task_started{turn_id}` 到 `task_complete` / `turn_aborted`；轮起点 = `task_started` ts；轮键 = `turn_id`。轮内每一行（含没有用量的 `response_item`）都推进轮的终点，所以被杀掉的进程留下的轮量到自己最后一行而不是最后一次响应；终止事件结算后立即关闭该轮，后续行属于下一轮（Codex 没有 Claude 那种 stop hook 续跑，轮 id 不会重开）。子线程文件（`session_meta.source.subagent`）不计轮，用量按 `parent_thread_id` 归父会话，≥0.153.2 用 `turn_context.root_turn_id` 归父轮。
+- 游标键与 sessionId 兜底取文件名末尾的 thread id（`rollout-<本地时间>-<thread id>[_<rollout id>]`），首条 `session_meta` 覆盖它。
 
 Pi 与 OMP：
 
@@ -159,7 +160,7 @@ Pi 与 OMP：
 
 - 一个用量服务，一个串行 worker，两条队列：定向解析优先、扫描其次；按 `(cli, sessionId)` 去重，后台队列中的文件被定向触发时提升。每处理完一个文件 `await setImmediate()` 让路。
 - **定向解析**：服务全局订阅 agent 事件流，只消费 `turn_completed` / `turn_failed` / `turn_canceled`。文件定位取该 agent Backing sessions 末项：Claude 按 cwd 编码的项目目录 + sessionId；Pi/OMP 用 persistence 里的原生路径；Codex 先查游标索引，未命中在今天与昨天的本地日期目录下按 thread id 找，仍未命中交给周期扫描。读到 EOF 而 `openTurn` 未闭合 → 2 秒后重试一次、再 10 秒一次，之后交给周期扫描。
-- **周期扫描**：每 60 秒对四个根递归 readdir + stat 全部 `.jsonl`，与游标的 `(size, mtimeMs)` 比对，变化或新增入队；同轮执行 10 分钟静止结算。间隔为常量，环境变量 `PASEO_USAGE_SCAN_INTERVAL_MS` 覆盖，不进 daemon 配置、无 UI。定时器用 `setInterval` + `unref` + 注入时钟。不接 file-observer watcher（事件类型不可信、消费者仍需 stat + 续读，v1 不值得）。
+- **周期扫描**：每 60 秒对四个根递归 readdir + stat 全部 `.jsonl`，与游标的 `(size, mtimeMs)` 比对，变化或新增入队；同轮执行 10 分钟静止结算。同一 `(cli, sessionId)` 在多个根下各有一份时（Codex 归档副本）只读**更完整的那份**：先比字节数、再比 mtime、最后比路径；不靠根目录数组顺序定胜负，否则 `log-roots.ts` 里换个次序就会让活跃文件被归档旧副本顶掉。间隔为常量，环境变量 `PASEO_USAGE_SCAN_INTERVAL_MS` 覆盖，不进 daemon 配置、无 UI。定时器用 `setInterval` + `unref` + 注入时钟。不接 file-observer watcher（事件类型不可信、消费者仍需 stat + 续读，v1 不值得）。
 - **回填 = 启动后的第一轮扫描**。启动时 `loadRows()` + `loadScanState()` 同步完成（RPC 随即可用），启动轮在后台按文件 mtime **倒序**处理。`backfill.state`：`idle` 启动轮未开始、`running` 队列未清空、`done` 已清空；`filesTotal / filesDone / startedAt` 只统计启动轮。重启后只剩无游标或有变化的文件，"可中断续跑"不需要额外机制。不做手动暂停 / 取消，不做采集开关。
 - **落盘顺序**：每 20 个文件或 500 毫秒一批，批内先 `appendRows` 再 `saveScanState`。两步之间崩溃 → 重启后重复计数（窗口 ≤ 500 毫秒），不做永久漏计的"先游标后行"。
 - **广播**：启动轮期间只发 `usage.backfill.progress`（≥ 1 秒一次），不发 `usage.updated`；`done` 后页面重拉。之后每批落盘后按受影响的 `(cli, sessionId)` 各发一条 `usage.updated { cli, sessionId, agentId? }`，`agentId` 由定向触发带上或反查 Backing sessions 含该 id 的 agent。服务端不节流，客户端去抖。

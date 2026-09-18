@@ -76,6 +76,7 @@ export class UsageService {
     startedAt: null,
   };
   private lastError: string | null = null;
+  private compressedLogged = false;
   private timer: NodeJS.Timeout | null = null;
   private round: Promise<void> | null = null;
   private disposed = false;
@@ -207,16 +208,19 @@ export class UsageService {
   }
 
   private async discoverFiles(): Promise<DiscoveredFile[]> {
-    const files: DiscoveredFile[] = [];
+    const files = new Map<string, DiscoveredFile>();
+    let compressed = 0;
     for (const [cli, adapter] of Object.entries(USAGE_SOURCE_ADAPTERS)) {
       if (!adapter) continue;
       for (const root of this.roots[cli as UsageCli]) {
-        for (const filePath of await listJsonlFiles(root)) {
+        const listing = await listUsageFiles(root);
+        compressed += listing.compressed;
+        for (const filePath of listing.files) {
           const identity = adapter.identify(root, filePath);
           if (!identity) continue;
           const stats = await statFile(filePath);
           if (!stats) continue;
-          files.push({
+          const candidate: DiscoveredFile = {
             cli: adapter.cli,
             adapter,
             cursorKey: identity.cursorKey,
@@ -225,11 +229,21 @@ export class UsageService {
             size: stats.size,
             mtimeMs: stats.mtimeMs,
             inode: stats.ino,
-          });
+          };
+          const existing = files.get(identity.cursorKey);
+          if (existing && !supersedes(candidate, existing)) continue;
+          files.set(identity.cursorKey, candidate);
         }
       }
     }
-    return files;
+    if (compressed > 0 && !this.compressedLogged) {
+      this.compressedLogged = true;
+      this.logger.info(
+        { count: compressed },
+        "Skipping compressed session logs; their usage is not counted",
+      );
+    }
+    return Array.from(files.values());
   }
 
   private hasChanged(file: DiscoveredFile): boolean {
@@ -365,25 +379,47 @@ function resolveScanIntervalMs(config: UsageConfig | undefined): number {
   return Number.isInteger(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_USAGE_SCAN_INTERVAL_MS;
 }
 
-async function listJsonlFiles(root: string): Promise<string[]> {
+/**
+ * Two paths can hold the same session — a Codex thread copied into
+ * `archived_sessions/` — and reading both would count it twice. The fuller copy
+ * wins whichever root it came from, so which one the scanner follows does not
+ * depend on the order the roots happen to be listed in.
+ */
+function supersedes(candidate: DiscoveredFile, existing: DiscoveredFile): boolean {
+  if (candidate.size !== existing.size) return candidate.size > existing.size;
+  if (candidate.mtimeMs !== existing.mtimeMs) return candidate.mtimeMs > existing.mtimeMs;
+  return candidate.filePath < existing.filePath;
+}
+
+interface UsageFileListing {
+  files: string[];
+  /** Rollouts Codex compressed to `.jsonl.zst`, which the scanner cannot read. */
+  compressed: number;
+}
+
+async function listUsageFiles(root: string): Promise<UsageFileListing> {
+  const listing: UsageFileListing = { files: [], compressed: 0 };
   let entries: Dirent[];
   try {
     entries = await fs.readdir(root, { withFileTypes: true });
   } catch (error) {
     // A CLI that is not installed has no root; the next round tries again.
-    if (isMissingPathError(error)) return [];
+    if (isMissingPathError(error)) return listing;
     throw error;
   }
-  const files: string[] = [];
   for (const entry of entries) {
     const full = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      files.push(...(await listJsonlFiles(full)));
+      const nested = await listUsageFiles(full);
+      listing.files.push(...nested.files);
+      listing.compressed += nested.compressed;
       continue;
     }
-    if (entry.isFile() && entry.name.endsWith(".jsonl")) files.push(full);
+    if (!entry.isFile()) continue;
+    if (entry.name.endsWith(".jsonl")) listing.files.push(full);
+    else if (entry.name.endsWith(".jsonl.zst")) listing.compressed += 1;
   }
-  return files;
+  return listing;
 }
 
 async function statFile(

@@ -7,6 +7,9 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
 
 const FIXTURE_DIR = new URL("../usage/fixtures/claude/", import.meta.url);
+const CODEX_FIXTURE_DIR = new URL("../usage/fixtures/codex/", import.meta.url);
+const CODEX_THREAD = "01a0a8e9-9f4c-7bd2-8a11-0d3c6f2b5e70";
+const CODEX_ROLLOUT = `rollout-2026-09-18T17-30-00-${CODEX_THREAD}.jsonl`;
 const PROJECT_DIR = "-work-demo";
 const SESSION_ID = "sess-1";
 const SCAN_INTERVAL_MS = 50;
@@ -373,6 +376,103 @@ describe("usage bucket files", () => {
         },
       ]);
       expect(await countBucketLines(usageDir)).toBe(2);
+    } finally {
+      await client.close();
+      await daemon.close();
+    }
+  });
+});
+
+describe("usage report with two sources", () => {
+  const temps: string[] = [];
+  const codexTotals = totals(800, 2400, 300, 390, 80);
+  const bothTotals = totals(818, 77_560, 27_484, 2350, 566);
+  // Reasoning is a subset of output, so a share counts the other four columns.
+  const claudeBillable = 18 + 75_160 + 27_184 + 1960;
+  const codexBillable = 800 + 2400 + 300 + 390;
+  const billable = claudeBillable + codexBillable;
+
+  afterEach(async () => {
+    await Promise.all(temps.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  /**
+   * Codex keeps a thread under `sessions/YYYY/MM/DD/` and moves it to
+   * `archived_sessions/` later; a copy in both places is still one thread. The
+   * compressed rollout next to it is one the scanner cannot read.
+   */
+  async function seedCodexRoot(): Promise<{ sessions: string; archived: string }> {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-codex-"));
+    temps.push(root);
+    const sessions = path.join(root, "sessions");
+    const archived = path.join(root, "archived_sessions");
+    const day = path.join(sessions, "2026", "09", "18");
+    await mkdir(day, { recursive: true });
+    await mkdir(archived, { recursive: true });
+    const rollout = await readFile(new URL("codex-session.jsonl", CODEX_FIXTURE_DIR), "utf8");
+    await writeFile(path.join(day, CODEX_ROLLOUT), rollout);
+    await writeFile(path.join(archived, CODEX_ROLLOUT), rollout);
+    await writeFile(path.join(day, `${CODEX_ROLLOUT}.zst`), "<compressed>");
+    return { sessions, archived };
+  }
+
+  test("counts an archived Codex thread once and leaves the compressed one alone", async () => {
+    const claudeRoot = await seedClaudeRoot();
+    temps.push(claudeRoot);
+    const codexRoot = await seedCodexRoot();
+    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
+    temps.push(paseoHomeRoot, staticDir);
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot,
+      staticDir,
+      cleanup: false,
+      usage: {
+        roots: {
+          claude: [claudeRoot],
+          codex: [codexRoot.sessions, codexRoot.archived],
+          pi: [],
+          omp: [],
+        },
+        scanIntervalMs: SCAN_INTERVAL_MS,
+        now: () => NOW,
+      },
+    });
+    const client = await connect(daemon);
+
+    try {
+      const report = await waitForReport(
+        client,
+        { from: DAY, to: DAY, timezone: "UTC" },
+        backfilled,
+      );
+
+      // Two Claude transcripts and one Codex thread: not its archived copy, not
+      // the compressed rollout.
+      expect(report.backfill.filesTotal).toBe(3);
+      expect(report.summary.totals).toEqual(bothTotals);
+      expect(report.summary.sessionCount).toBe(2);
+      expect(report.sources).toEqual([
+        {
+          cli: "claude",
+          backend: null,
+          totals: ALL_TOTALS,
+          estimatedCost: 0,
+          modelCount: 2,
+          share: claudeBillable / billable,
+        },
+        {
+          cli: "codex",
+          backend: null,
+          totals: codexTotals,
+          estimatedCost: 0,
+          modelCount: 2,
+          share: codexBillable / billable,
+        },
+      ]);
+      expect(report.days).toEqual([
+        { day: DAY, totals: bothTotals, estimatedCost: 0, sessionCount: 2, turns: 4 },
+      ]);
     } finally {
       await client.close();
       await daemon.close();

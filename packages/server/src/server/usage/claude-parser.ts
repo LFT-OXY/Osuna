@@ -1,15 +1,23 @@
 import {
-  emptyBucketRow,
-  mergeBucketRow,
+  asCount,
+  asString,
+  asTimestamp,
+  countOpenTurn,
+  parseChunk,
+  recordSpan,
+  settleOpenTurn,
+  type TimestampSpan,
+  type UsageRowIdentity,
+  type UsageTokenColumns,
+} from "./parse.js";
+import {
   toBucketStart,
   type ClaudeParserState,
   type UsageBucketRow,
   type UsageLastMessage,
-  type UsageOpenTurn,
   type UsageParseResult,
 } from "./types.js";
 
-const NEWLINE = 0x0a;
 const SYNTHETIC_MODEL = "<synthetic>";
 
 export function createClaudeParserState(input: { subagent: boolean }): ClaudeParserState {
@@ -24,42 +32,13 @@ export function createClaudeParserState(input: { subagent: boolean }): ClaudePar
   };
 }
 
-/**
- * Parse a slice of a Claude Code transcript.
- *
- * Lines are split on the `\n` byte rather than with `readline`, which treats
- * U+2028 and U+2029 inside JSON strings as line breaks. Only bytes up to the
- * last complete newline are consumed; the caller keeps the rest for the next
- * read.
- */
+/** Parse a slice of a Claude Code transcript. */
 export function parseClaudeChunk(bytes: Buffer, state: ClaudeParserState): UsageParseResult {
-  const lastNewline = bytes.lastIndexOf(NEWLINE);
-  if (lastNewline < 0) {
-    return { rows: [], state, consumedBytes: 0, firstAt: null, lastAt: null };
-  }
-
-  const next: ClaudeParserState = { ...state };
-  const rows: UsageBucketRow[] = [];
-  const span: TimestampSpan = { firstAt: null, lastAt: null };
-  const text = bytes.subarray(0, lastNewline).toString("utf8");
-  for (const line of text.split("\n")) {
-    if (line.length === 0) continue;
-    const entry = parseLine(line);
-    if (entry) consumeEntry(entry, next, rows, span);
-  }
-
-  return {
-    rows: mergeRows(rows),
-    state: next,
-    consumedBytes: lastNewline + 1,
-    firstAt: span.firstAt,
-    lastAt: span.lastAt,
-  };
-}
-
-interface TimestampSpan {
-  firstAt: string | null;
-  lastAt: string | null;
+  return parseChunk<ClaudeParserState, ClaudeEntry>({
+    bytes,
+    state: { ...state },
+    consumeEntry,
+  });
 }
 
 /**
@@ -70,7 +49,7 @@ interface TimestampSpan {
 export function settleClaudeOpenTurn(state: ClaudeParserState): UsageParseResult {
   const rows: UsageBucketRow[] = [];
   const next: ClaudeParserState = { ...state };
-  settleOpenTurn(next, rows);
+  settleTurn(next, rows);
   return { rows, state: next, consumedBytes: 0, firstAt: null, lastAt: null };
 }
 
@@ -93,15 +72,6 @@ interface ClaudeEntry {
     stop_reason?: unknown;
     usage?: Record<string, unknown> | null;
   } | null;
-}
-
-function parseLine(line: string): ClaudeEntry | null {
-  try {
-    const value: unknown = JSON.parse(line);
-    return typeof value === "object" && value !== null ? (value as ClaudeEntry) : null;
-  } catch {
-    return null;
-  }
 }
 
 function consumeEntry(
@@ -145,7 +115,7 @@ function consumeUserEntry(
   if (!turnKey || timestamp === null) return;
   if (state.openTurn?.turnKey === turnKey) return;
 
-  settleOpenTurn(state, rows);
+  settleTurn(state, rows);
   state.openTurn = {
     turnKey,
     startedAt: new Date(timestamp).toISOString(),
@@ -192,22 +162,16 @@ function consumeAssistantEntry(
 
   state.openTurn = { ...openTurn, lastAt: new Date(timestamp).toISOString() };
   if (!openTurn.model) {
-    state.openTurn = { ...state.openTurn, model };
-    rows.push({
-      ...emptyBucketRow({
-        cli: "claude",
-        backend: null,
-        model,
-        sessionId: state.sessionId ?? "",
-        cwd: state.cwd ?? "",
-        bucket: openTurn.bucket,
-      }),
-      turns: 1,
+    state.openTurn = countOpenTurn({
+      identity: identityOf(state),
+      openTurn: state.openTurn,
+      model,
+      rows,
     });
   }
 
   const stopReason = asString(message.stop_reason);
-  if (stopReason && stopReason !== "tool_use") settleOpenTurn(state, rows);
+  if (stopReason && stopReason !== "tool_use") settleTurn(state, rows);
 }
 
 interface RecordUsageInput {
@@ -265,13 +229,7 @@ function toRow(message: UsageLastMessage, sessionId: string, sign: 1 | -1): Usag
   };
 }
 
-function readUsageColumns(usage: Record<string, unknown>): {
-  input: number;
-  cachedInput: number;
-  cacheWrite: number;
-  output: number;
-  reasoning: number;
-} {
+function readUsageColumns(usage: Record<string, unknown>): UsageTokenColumns {
   const details = usage.output_tokens_details;
   const thinking =
     typeof details === "object" && details !== null
@@ -287,28 +245,21 @@ function readUsageColumns(usage: Record<string, unknown>): {
   };
 }
 
-function settleOpenTurn(state: ClaudeParserState, rows: UsageBucketRow[]): void {
-  const openTurn = state.openTurn;
-  if (!openTurn?.model) return;
-  const pending = elapsedMs(openTurn) - openTurn.settledMs;
-  if (pending <= 0) return;
-
-  rows.push({
-    ...emptyBucketRow({
-      cli: "claude",
-      backend: null,
-      model: openTurn.model,
-      sessionId: state.sessionId ?? "",
-      cwd: state.cwd ?? "",
-      bucket: openTurn.bucket,
-    }),
-    durationMs: pending,
+function settleTurn(state: ClaudeParserState, rows: UsageBucketRow[]): void {
+  state.openTurn = settleOpenTurn({
+    identity: identityOf(state),
+    openTurn: state.openTurn,
+    rows,
   });
-  state.openTurn = { ...openTurn, settledMs: openTurn.settledMs + pending };
 }
 
-function elapsedMs(openTurn: UsageOpenTurn): number {
-  return Date.parse(openTurn.lastAt) - Date.parse(openTurn.startedAt);
+function identityOf(state: ClaudeParserState): UsageRowIdentity {
+  return {
+    cli: "claude",
+    backend: null,
+    sessionId: state.sessionId ?? "",
+    cwd: state.cwd ?? "",
+  };
 }
 
 function isToolResultMessage(content: unknown): boolean {
@@ -319,39 +270,4 @@ function isToolResultMessage(content: unknown): boolean {
       block !== null &&
       (block as { type?: unknown }).type === "tool_result",
   );
-}
-
-function mergeRows(rows: UsageBucketRow[]): UsageBucketRow[] {
-  const merged = new Map<string, UsageBucketRow>();
-  for (const row of rows) mergeBucketRow(merged, row);
-  return Array.from(merged.values()).filter(
-    (row) =>
-      row.input !== 0 ||
-      row.cachedInput !== 0 ||
-      row.cacheWrite !== 0 ||
-      row.output !== 0 ||
-      row.reasoning !== 0 ||
-      row.turns !== 0 ||
-      row.durationMs !== 0,
-  );
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function asCount(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 0;
-}
-
-function recordSpan(span: TimestampSpan, timestamp: string | null): void {
-  if (!timestamp) return;
-  if (span.firstAt === null || timestamp < span.firstAt) span.firstAt = timestamp;
-  if (span.lastAt === null || timestamp > span.lastAt) span.lastAt = timestamp;
-}
-
-function asTimestamp(value: unknown): number | null {
-  if (typeof value !== "string") return null;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? null : parsed;
 }
