@@ -1,0 +1,428 @@
+import { mkdir, mkdtemp, readFile, readdir, rm, truncate, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { DaemonClient } from "../test-utils/daemon-client.js";
+import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+
+const FIXTURE_DIR = new URL("../usage/fixtures/claude/", import.meta.url);
+const PROJECT_DIR = "-work-demo";
+const SESSION_ID = "sess-1";
+const SCAN_INTERVAL_MS = 50;
+// The daemon's clock is pinned to the fixtures' own day, so "today", the
+// trailing windows, the heatmap and the backfill stamp are all fixed values.
+const NOW = Date.parse("2026-09-18T23:00:00.000Z");
+const DAY = "2026-09-18";
+
+const tempRoots: string[] = [];
+
+function totals(
+  input: number,
+  cachedInput: number,
+  cacheWrite: number,
+  output: number,
+  reasoning: number,
+): UsageTokenTotals {
+  return { input, cachedInput, cacheWrite, output, reasoning };
+}
+
+const FABLE_TOTALS = totals(7, 74_560, 26_884, 1010, 186);
+const OPUS_TOTALS = totals(11, 600, 300, 950, 300);
+const ALL_TOTALS = totals(18, 75_160, 27_184, 1960, 486);
+
+function shiftDay(day: string, offset: number): string {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, date! + offset)).toISOString().slice(0, 10);
+}
+
+/** Lay the fixtures out the way Claude Code does, under a throwaway projects root. */
+async function seedClaudeRoot(): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-claude-"));
+  tempRoots.push(root);
+  const projectDir = path.join(root, PROJECT_DIR);
+  await mkdir(path.join(projectDir, SESSION_ID, "subagents"), { recursive: true });
+  await writeFile(
+    path.join(projectDir, `${SESSION_ID}.jsonl`),
+    await readFile(new URL("claude-session.jsonl", FIXTURE_DIR), "utf8"),
+  );
+  await writeFile(
+    path.join(projectDir, SESSION_ID, "subagents", "agent-7.jsonl"),
+    await readFile(new URL("claude-subagent.jsonl", FIXTURE_DIR), "utf8"),
+  );
+  return root;
+}
+
+function usageConfig(
+  root: string,
+): NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["usage"] {
+  return {
+    roots: { claude: [root], codex: [], pi: [], omp: [] },
+    scanIntervalMs: SCAN_INTERVAL_MS,
+    now: () => NOW,
+  };
+}
+
+async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  await client.connect();
+  await client.fetchAgents({ subscribe: {} });
+  return client;
+}
+
+async function waitForReport(
+  client: DaemonClient,
+  request: { from: string | null; to: string | null; timezone: string },
+  accept: (report: UsageReport) => boolean,
+): Promise<UsageReport> {
+  const deadline = Date.now() + 15_000;
+  let last: UsageReport | null = null;
+  while (Date.now() < deadline) {
+    const { requestId: _requestId, ...report } = await client.usageReportGet(request);
+    last = report;
+    if (accept(report)) return report;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Usage report never matched: ${JSON.stringify(last)}`);
+}
+
+function backfilled(report: UsageReport): boolean {
+  return report.backfill.state === "done";
+}
+
+describe("usage report over the daemon RPC", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let claudeRoot: string;
+  let homeRoot: string;
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  beforeEach(async () => {
+    claudeRoot = await seedClaudeRoot();
+    homeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
+    tempRoots.push(homeRoot, staticDir);
+    // The restart case reuses this home, so the harness must not delete it.
+    daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: homeRoot,
+      staticDir,
+      cleanup: false,
+      usage: usageConfig(claudeRoot),
+    });
+    client = await connect(daemon);
+  });
+
+  test("backfills both transcripts into one report", async () => {
+    const report = await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
+
+    expect(report.backfill).toEqual({
+      state: "done",
+      filesTotal: 2,
+      filesDone: 2,
+      startedAt: "2026-09-18T23:00:00.000Z",
+    });
+    expect(report.error).toBe(null);
+    expect(report.summary).toEqual({
+      totals: ALL_TOTALS,
+      estimatedCost: 0,
+      sessionCount: 1,
+      last7Days: { totals: ALL_TOTALS, estimatedCost: 0 },
+      last30Days: { totals: ALL_TOTALS, estimatedCost: 0 },
+    });
+    expect(report.sources).toEqual([
+      {
+        cli: "claude",
+        backend: null,
+        totals: ALL_TOTALS,
+        estimatedCost: 0,
+        modelCount: 2,
+        share: 1,
+      },
+    ]);
+    expect(report.models).toEqual([
+      {
+        model: "claude-fable-5-1",
+        cli: "claude",
+        backend: null,
+        totals: FABLE_TOTALS,
+        estimatedCost: 0,
+        priced: false,
+      },
+      {
+        model: "claude-opus-5",
+        cli: "claude",
+        backend: null,
+        totals: OPUS_TOTALS,
+        estimatedCost: 0,
+        priced: false,
+      },
+    ]);
+    expect(report.days).toEqual([
+      { day: DAY, totals: ALL_TOTALS, estimatedCost: 0, sessionCount: 1, turns: 2 },
+    ]);
+    expect(report.months).toEqual([
+      { month: DAY.slice(0, 7), totals: ALL_TOTALS, estimatedCost: 0, sessionCount: 1, turns: 2 },
+    ]);
+    expect(report.projects).toEqual([
+      {
+        rootPath: "/work/demo",
+        displayName: "demo",
+        kind: "directory",
+        totals: ALL_TOTALS,
+        estimatedCost: 0,
+        cwds: [{ cwd: "/work/demo", totals: ALL_TOTALS, estimatedCost: 0 }],
+      },
+    ]);
+    expect(report.trend).toEqual({
+      granularity: "hour",
+      stackBy: "source",
+      points: [
+        {
+          key: `${DAY}T09`,
+          groups: { claude: { totals: totals(8, 75_060, 26_984, 1910, 486), estimatedCost: 0 } },
+        },
+        {
+          key: `${DAY}T10`,
+          groups: { claude: { totals: totals(10, 100, 200, 50, 0), estimatedCost: 0 } },
+        },
+      ],
+    });
+    expect(report.heatmapDays).toHaveLength(182);
+    expect(report.heatmapDays[0]).toEqual({
+      day: shiftDay(DAY, -181),
+      totals: totals(0, 0, 0, 0, 0),
+    });
+    expect(report.heatmapDays[181]).toEqual({ day: DAY, totals: ALL_TOTALS });
+  });
+
+  test("splits the same buckets across local days in a far-ahead timezone", async () => {
+    await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
+
+    // Kiritimati is UTC+14, so the 10:00 UTC bucket lands on the next local day.
+    const report = await waitForReport(
+      client,
+      { from: DAY, to: shiftDay(DAY, 1), timezone: "Pacific/Kiritimati" },
+      backfilled,
+    );
+
+    expect(report.days).toEqual([
+      {
+        day: DAY,
+        totals: totals(8, 75_060, 26_984, 1910, 486),
+        estimatedCost: 0,
+        sessionCount: 1,
+        turns: 1,
+      },
+      {
+        day: shiftDay(DAY, 1),
+        totals: totals(10, 100, 200, 50, 0),
+        estimatedCost: 0,
+        sessionCount: 1,
+        turns: 1,
+      },
+    ]);
+  });
+
+  test("keeps the same buckets on one local day at +05:30", async () => {
+    const report = await waitForReport(
+      client,
+      { from: DAY, to: shiftDay(DAY, 1), timezone: "Asia/Kolkata" },
+      backfilled,
+    );
+
+    expect(report.days).toEqual([
+      { day: DAY, totals: ALL_TOTALS, estimatedCost: 0, sessionCount: 1, turns: 2 },
+    ]);
+  });
+
+  test("counts only the appended lines when a transcript grows", async () => {
+    const before = await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
+    expect(before.summary.totals).toEqual(ALL_TOTALS);
+
+    const transcript = path.join(claudeRoot, PROJECT_DIR, `${SESSION_ID}.jsonl`);
+    await writeFile(transcript, `${appendedTurn()}\n`, { flag: "a" });
+
+    const after = await waitForReport(
+      client,
+      { from: DAY, to: DAY, timezone: "UTC" },
+      (report) => report.summary.totals.input === ALL_TOTALS.input + 3,
+    );
+    expect(after.summary.totals).toEqual(totals(21, 75_167, 27_189, 1971, 486));
+    expect(after.days).toEqual([
+      {
+        day: DAY,
+        totals: totals(21, 75_167, 27_189, 1971, 486),
+        estimatedCost: 0,
+        sessionCount: 1,
+        turns: 3,
+      },
+    ]);
+  });
+
+  test("recounts from the top when a transcript is truncated", async () => {
+    await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
+
+    const transcript = path.join(claudeRoot, PROJECT_DIR, `${SESSION_ID}.jsonl`);
+    const firstTwoLines = (await readFile(transcript, "utf8")).split("\n").slice(0, 2).join("\n");
+    await truncate(transcript, Buffer.byteLength(`${firstTwoLines}\n`, "utf8"));
+
+    // The rewritten file replays its first response, so the report holds the
+    // truncated transcript's usage twice plus the untouched subagent file.
+    const report = await waitForReport(
+      client,
+      { from: DAY, to: DAY, timezone: "UTC" },
+      (candidate) => candidate.summary.totals.output === 1960 + 408,
+    );
+    expect(report.summary.totals).toEqual(totals(20, 109_720, 54_068, 2368, 570));
+  });
+
+  test("keeps the same totals after a restart and writes no new rows", async () => {
+    await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
+    const usageDir = path.join(daemon.paseoHome, "usage");
+    const linesBefore = await countBucketLines(usageDir);
+
+    await client.close();
+    await daemon.close();
+
+    daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: homeRoot,
+      cleanup: false,
+      usage: usageConfig(claudeRoot),
+    });
+    client = await connect(daemon);
+
+    const report = await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
+    expect(report.summary.totals).toEqual(ALL_TOTALS);
+    expect(report.backfill.filesTotal).toBe(0);
+    expect(await countBucketLines(usageDir)).toBe(linesBefore);
+  });
+});
+
+describe("usage bucket files", () => {
+  const homes: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(homes.splice(0).map((home) => rm(home, { recursive: true, force: true })));
+  });
+
+  test("rewrites a month whose rows outgrew its keys", async () => {
+    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
+    homes.push(paseoHomeRoot, staticDir);
+    const usageDir = path.join(paseoHomeRoot, ".paseo", "usage");
+    await mkdir(usageDir, { recursive: true });
+    const bucket = "2026-03-04T09:30:00.000Z";
+    const row = (model: string, output: number) => ({
+      cli: "claude",
+      backend: null,
+      model,
+      sessionId: "sess-9",
+      cwd: "/work/demo",
+      bucket,
+      input: 1,
+      cachedInput: 0,
+      cacheWrite: 0,
+      output,
+      reasoning: 0,
+      turns: 0,
+      durationMs: 0,
+    });
+    const lines = [
+      row("claude-opus-5", 10),
+      row("claude-opus-5", 10),
+      row("claude-opus-5", 10),
+      row("claude-sonnet-5", 4),
+      row("claude-sonnet-5", 4),
+    ];
+    await writeFile(
+      path.join(usageDir, "buckets-2026-03.jsonl"),
+      `${lines.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+    );
+
+    const daemon = await createTestPaseoDaemon({ paseoHomeRoot, staticDir, cleanup: false });
+    const client = await connect(daemon);
+    try {
+      const { requestId: _requestId, ...report } = await client.usageReportGet({
+        from: null,
+        to: null,
+        timezone: "UTC",
+      });
+      expect(report.models).toEqual([
+        {
+          model: "claude-opus-5",
+          cli: "claude",
+          backend: null,
+          totals: { input: 3, cachedInput: 0, cacheWrite: 0, output: 30, reasoning: 0 },
+          estimatedCost: 0,
+          priced: false,
+        },
+        {
+          model: "claude-sonnet-5",
+          cli: "claude",
+          backend: null,
+          totals: { input: 2, cachedInput: 0, cacheWrite: 0, output: 8, reasoning: 0 },
+          estimatedCost: 0,
+          priced: false,
+        },
+      ]);
+      expect(await countBucketLines(usageDir)).toBe(2);
+    } finally {
+      await client.close();
+      await daemon.close();
+    }
+  });
+});
+
+async function countBucketLines(usageDir: string): Promise<number> {
+  const names = await readdir(usageDir);
+  let count = 0;
+  for (const name of names) {
+    if (!name.startsWith("buckets-")) continue;
+    const raw = await readFile(path.join(usageDir, name), "utf8");
+    count += raw.split("\n").filter((line) => line.length > 0).length;
+  }
+  return count;
+}
+
+/** One more turn on the fable model, in the same UTC 15-minute bucket as the first. */
+function appendedTurn(): string {
+  const user = {
+    type: "user",
+    promptId: "p3",
+    uuid: "u11",
+    timestamp: `${DAY}T09:40:00.000Z`,
+    cwd: "/work/demo",
+    sessionId: SESSION_ID,
+    message: { role: "user", content: "<prompt text>" },
+  };
+  const assistant = {
+    type: "assistant",
+    uuid: "u12",
+    timestamp: `${DAY}T09:40:10.000Z`,
+    cwd: "/work/demo",
+    sessionId: SESSION_ID,
+    requestId: "req_04",
+    message: {
+      id: "msg_d",
+      model: "claude-fable-5-1",
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "<redacted>" }],
+      stop_reason: "end_turn",
+      usage: {
+        input_tokens: 3,
+        cache_creation_input_tokens: 5,
+        cache_read_input_tokens: 7,
+        output_tokens: 11,
+      },
+    },
+  };
+  return `${JSON.stringify(user)}\n${JSON.stringify(assistant)}`;
+}

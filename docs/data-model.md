@@ -66,6 +66,9 @@ $PASEO_HOME/
 ├── plugins/
 │   ├── sources.json                      # Git origin, ref, commit, and managed checkout ownership
 │   └── {pluginId}/{version}/checkout/    # Source checkout for one installed Git commit
+├── usage/
+│   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
+│   └── scan-state.json                   # One cursor per scanned CLI log file
 └── push-tokens.json                     # Expo push notification tokens
 ```
 
@@ -546,7 +549,60 @@ Simple set of Expo push notification tokens. Loaded with permissive parsing (fil
 
 ---
 
-## 7. Daemon meta files
+## 7. Usage
+
+The daemon parses the local Claude Code / Codex / Pi / OMP session logs into token
+buckets.
+
+### Bucket row (`usage/buckets-YYYY-MM.jsonl`)
+
+Append-only, one file per UTC month, one JSON object per line.
+
+| Field                                                           | Type                                   | Notes                                                                 |
+| --------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                       |
+| `backend`                                                       | `string \| null`                       | Pi/OMP route to a backend; null for Claude and Codex. Part of the key |
+| `model`                                                         | `string`                               | As the log spells it. Part of the key                                 |
+| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                |
+| `cwd`                                                           | `string`                               | First cwd seen in the file. Part of the key                           |
+| `bucket`                                                        | `string`                               | ISO start of a **UTC 15-minute** bucket. Part of the key              |
+| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | `input` is uncached input; `reasoning` is a subset of `output`        |
+| `turns`                                                         | `number`                               | Counted at the bucket the user message fell in                        |
+| `durationMs`                                                    | `number`                               | Wall clock, appended in segments as a turn settles                    |
+
+A row is an **increment**, not a total: one parse pass writes what it just read for a
+key, and startup sums same-key rows. Token columns can be negative — a response is
+split across lines that each repeat the usage, and a later line correcting the group
+is written as a delta. A month file whose line count passes twice its unique key count
+is rewritten at load as one line per key.
+
+Estimated cost is never stored. It is computed per query from the current price table,
+so a custom price applies to history immediately.
+
+### Scan cursor (`usage/scan-state.json`)
+
+`{ version: 1, cursors: Record<cursorKey, cursor> }`, written atomically. The key is the
+file's identity — `claude <sessionId>` for a transcript, `claude <sessionId> <agentId>`
+for a subagent file — which makes this map the session-id to path index as well.
+
+| Field                                 | Type                    | Notes                                                                                                                                                          |
+| ------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli`                                 | usage source            |                                                                                                                                                                |
+| `path` / `inode` / `size` / `mtimeMs` |                         | Change detection; a path change with the same inode is a move                                                                                                  |
+| `offset`                              | `number`                | Bytes consumed, always at a line boundary                                                                                                                      |
+| `firstAt` / `lastAt`                  | `string \| null`        | Entry timestamps seen so far                                                                                                                                   |
+| `parser`                              | discriminated on `kind` | Per-CLI parse state: session id, cwd, whether the file is a subagent transcript, the resumed-from session id, the open turn, and the last deduplicated message |
+
+`size < offset` or a changed inode means the file was rewritten: the cursor resets to
+zero and the file is read again, which double counts what it still holds. That is
+deliberate — the alternative loses everything written after the rewrite.
+
+Rows are flushed before the cursor. A crash between the two recounts at most one batch;
+the other order would drop it permanently.
+
+---
+
+## 8. Daemon meta files
 
 These small files are not validated as full Zod schemas but are persisted under `$PASEO_HOME` for daemon identity and runtime coordination.
 

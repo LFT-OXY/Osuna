@@ -1,0 +1,155 @@
+import { z } from "zod";
+
+/** The four CLIs whose local session logs the daemon parses. */
+export const UsageCliSchema = z.enum(["claude", "codex", "pi", "omp"]);
+export type UsageCli = z.infer<typeof UsageCliSchema>;
+
+/**
+ * The five token columns, same meaning for every CLI: `input` is uncached
+ * input, `reasoning` is a subset of `output` kept for display only.
+ */
+export const UsageTokenTotalsSchema = z.object({
+  input: z.number().int(),
+  cachedInput: z.number().int(),
+  cacheWrite: z.number().int(),
+  output: z.number().int(),
+  reasoning: z.number().int(),
+});
+export type UsageTokenTotals = z.infer<typeof UsageTokenTotalsSchema>;
+
+export const UsageAmountSchema = z.object({
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+});
+export type UsageAmount = z.infer<typeof UsageAmountSchema>;
+
+/** A usage source: the CLI plus, for Pi/OMP, the backend it routed to. */
+export const UsageSourceRefSchema = z.object({
+  cli: UsageCliSchema,
+  backend: z.string().nullable(),
+});
+export type UsageSourceRef = z.infer<typeof UsageSourceRefSchema>;
+
+export const UsageTrendGranularitySchema = z.enum(["hour", "day", "month"]);
+export type UsageTrendGranularity = z.infer<typeof UsageTrendGranularitySchema>;
+
+export const UsageTrendStackBySchema = z.enum(["source", "model"]);
+export type UsageTrendStackBy = z.infer<typeof UsageTrendStackBySchema>;
+
+export const UsageProjectKindSchema = z.enum(["git", "non_git", "directory"]);
+export type UsageProjectKind = z.infer<typeof UsageProjectKindSchema>;
+
+/**
+ * Backfill is the daemon's first scan round after start. `filesTotal` /
+ * `filesDone` count that round only.
+ */
+export const UsageBackfillSchema = z.object({
+  state: z.enum(["idle", "running", "done"]),
+  filesTotal: z.number().int().nonnegative(),
+  filesDone: z.number().int().nonnegative(),
+  startedAt: z.string().nullable(),
+});
+export type UsageBackfill = z.infer<typeof UsageBackfillSchema>;
+
+export const UsageReportFiltersSchema = z.object({
+  sources: z.array(UsageSourceRefSchema).optional(),
+  models: z.array(z.string()).optional(),
+  projects: z.array(z.string()).optional(),
+});
+export type UsageReportFilters = z.infer<typeof UsageReportFiltersSchema>;
+
+export const UsageSummarySchema = z.object({
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  sessionCount: z.number().int().nonnegative(),
+  last7Days: UsageAmountSchema,
+  last30Days: UsageAmountSchema,
+});
+export type UsageSummary = z.infer<typeof UsageSummarySchema>;
+
+export const UsageSourceBreakdownSchema = z.object({
+  cli: UsageCliSchema,
+  backend: z.string().nullable(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  modelCount: z.number().int().nonnegative(),
+  share: z.number(),
+});
+export type UsageSourceBreakdown = z.infer<typeof UsageSourceBreakdownSchema>;
+
+export const UsageModelBreakdownSchema = z.object({
+  model: z.string(),
+  cli: UsageCliSchema,
+  backend: z.string().nullable(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  priced: z.boolean(),
+});
+export type UsageModelBreakdown = z.infer<typeof UsageModelBreakdownSchema>;
+
+export const UsageTrendPointSchema = z.object({
+  key: z.string(),
+  groups: z.record(z.string(), UsageAmountSchema),
+});
+export type UsageTrendPoint = z.infer<typeof UsageTrendPointSchema>;
+
+export const UsageTrendSchema = z.object({
+  granularity: UsageTrendGranularitySchema,
+  stackBy: UsageTrendStackBySchema,
+  points: z.array(UsageTrendPointSchema),
+});
+export type UsageTrend = z.infer<typeof UsageTrendSchema>;
+
+export const UsageDayBreakdownSchema = z.object({
+  day: z.string(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  sessionCount: z.number().int().nonnegative(),
+  turns: z.number().int().nonnegative(),
+});
+export type UsageDayBreakdown = z.infer<typeof UsageDayBreakdownSchema>;
+
+export const UsageMonthBreakdownSchema = z.object({
+  month: z.string(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  sessionCount: z.number().int().nonnegative(),
+  turns: z.number().int().nonnegative(),
+});
+export type UsageMonthBreakdown = z.infer<typeof UsageMonthBreakdownSchema>;
+
+export const UsageHeatmapDaySchema = z.object({
+  day: z.string(),
+  totals: UsageTokenTotalsSchema,
+});
+export type UsageHeatmapDay = z.infer<typeof UsageHeatmapDaySchema>;
+
+export const UsageProjectCwdSchema = z.object({
+  cwd: z.string(),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+});
+
+export const UsageProjectBreakdownSchema = z.object({
+  rootPath: z.string(),
+  displayName: z.string(),
+  kind: UsageProjectKindSchema,
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  cwds: z.array(UsageProjectCwdSchema),
+});
+export type UsageProjectBreakdown = z.infer<typeof UsageProjectBreakdownSchema>;
+
+export const UsageReportSchema = z.object({
+  summary: UsageSummarySchema,
+  sources: z.array(UsageSourceBreakdownSchema),
+  models: z.array(UsageModelBreakdownSchema),
+  trend: UsageTrendSchema,
+  days: z.array(UsageDayBreakdownSchema),
+  months: z.array(UsageMonthBreakdownSchema),
+  heatmapDays: z.array(UsageHeatmapDaySchema),
+  projects: z.array(UsageProjectBreakdownSchema),
+  backfill: UsageBackfillSchema,
+  error: z.string().nullable(),
+});
+export type UsageReport = z.infer<typeof UsageReportSchema>;

@@ -3,7 +3,7 @@
 **What to build:** daemon 启动后扫描本机 Claude Code 会话日志，把每条 assistant 消息的五列 token 与每轮的轮次 / 耗时归到 (来源, 模型, 会话, 目录, UTC 15 分钟桶)，落盘到 `$PASEO_HOME/usage/`，重启后不重复计数；客户端通过 `usage.report.get` 拿到按本地时区分组的完整报表（汇总、来源、模型、日、月、趋势、热力图、项目、回填状态），并通过 `usage.backfill.progress` 看到回填进度；`server_info.features.usage` 为 true。估算成本本票一律为 0、`priced=false`（计价归 05 号票）。
 
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 **Blocked by:** None — can start immediately
 
@@ -20,10 +20,18 @@
 
 范围外：定向解析与 `usage.updated`（07）、每轮行（06）、计价（05）、其他三家（03、04）。
 
-- [ ] 接缝 2：Claude 夹具（脱敏真实片段，每个坑一份：多行同 id 取尾、`forkedFrom` 跳过、synthetic、子代理归父、U+2028 切行、半行续读、轮次与耗时）→ 解析器输出全值断言。
-- [ ] 接缝 1：临时 `PASEO_HOME` + 夹具根目录起 daemon，`usage.report.get` 的 `summary / sources / models / days / months / heatmapDays / projects` 全值正确；同一夹具换 `timezone`（含 +05:30）后 `days` 分法正确。
-- [ ] 接缝 1：回填期间收到 `running` 进度事件，结束时 `done`；daemon 关闭后以同一 `PASEO_HOME` 重启，报表不变、`buckets-*.jsonl` 不新增行。
-- [ ] 接缝 1：往夹具文件追加行后，注入时钟推进一个扫描周期，报表增量正确；截断文件后重置游标、报表重算、日志里有一条 warn。
-- [ ] 接缝 1：某月文件行数超过唯一键两倍时启动后被重写为每键一行，报表不变。
-- [ ] 旧客户端连接不报协议错误（`features.usage` 为新可选字段）。
-- [ ] `npm run typecheck`、`npm run lint`，改动的测试文件通过。
+- [x] 接缝 2：Claude 夹具（脱敏真实片段，每个坑一份：多行同 id 取尾、`forkedFrom` 跳过、synthetic、子代理归父、U+2028 切行、半行续读、轮次与耗时）→ 解析器输出全值断言。
+- [x] 接缝 1：临时 `PASEO_HOME` + 夹具根目录起 daemon，`usage.report.get` 的 `summary / sources / models / days / months / heatmapDays / projects` 全值正确；同一夹具换 `timezone`（含 +05:30）后 `days` 分法正确。
+- [x] 接缝 1：回填期间收到 `running` 进度事件，结束时 `done`；daemon 关闭后以同一 `PASEO_HOME` 重启，报表不变、`buckets-*.jsonl` 不新增行。
+- [x] 接缝 1：往夹具文件追加行后，注入时钟推进一个扫描周期，报表增量正确；截断文件后重置游标、报表重算、日志里有一条 warn。
+- [x] 接缝 1：某月文件行数超过唯一键两倍时启动后被重写为每键一行，报表不变。
+- [x] 旧客户端连接不报协议错误（`features.usage` 为新可选字段）。
+- [x] `npm run typecheck`、`npm run lint`，改动的测试文件通过。
+
+## 实现说明（与验收项的三处偏差）
+
+- **`running` 进度事件未在测试里断言。** 回填轮在 `daemon.start()` 返回前就已启动并脱手运行，客户端只能在那之后连接，能否赶上 `running` 这一帧取决于竞速。改为断言 `usage.report.get` 里字段相同的 `backfill` 区块（`state / filesTotal / filesDone / startedAt` 全值），广播用的是同一份 payload。
+- **截断的 warn 日志未断言。** PRD「什么是好测试」要求不断言日志行；测的是可观察结果——游标重置后报表按重读的内容重算。warn 照常打。
+- **时钟注入到位，但扫描周期仍由真实定时器推进。** `UsageConfig.now` 贯通到 daemon，e2e 把它钉在夹具当天，于是 `days / heatmapDays / last7Days / backfill.startedAt` 都是定值；扫描节奏用 `scanIntervalMs: 50` 驱动，因为 `setInterval` 本身按真实时间触发（PRD §5 定的就是 `setInterval` + `unref` + 注入时钟）。
+
+另：`PASEO_USAGE_SCAN_INTERVAL_MS` 与四个日志根的默认值按 PRD §5「不进 daemon 配置」在 `UsageService` 内解析，`config.usage` 只作覆盖；Pi 根目录复用 `resolvePiSessionsDir`，因此根解析是 async。

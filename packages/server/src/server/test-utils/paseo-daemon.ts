@@ -50,6 +50,7 @@ interface TestPaseoDaemonOptions {
   autoArchiveAfterMerge?: boolean;
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
   plugins?: PaseoDaemonConfig["plugins"];
+  usage?: PaseoDaemonConfig["usage"];
 }
 
 export interface TestPaseoDaemon {
@@ -203,6 +204,9 @@ async function prepareTestDaemonConfig(
     autoArchiveAfterMerge: options.autoArchiveAfterMerge,
     pluginsEnabled: options.pluginsEnabled,
     plugins: options.plugins,
+    // Default to no log roots so a test daemon never scans the developer's
+    // real Claude/Codex/Pi/OMP transcripts.
+    usage: options.usage ?? { roots: { claude: [], codex: [], pi: [], omp: [] } },
   };
   return { config, paseoHomeRoot, paseoHome, staticDir };
 }

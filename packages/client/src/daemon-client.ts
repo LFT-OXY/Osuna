@@ -538,6 +538,21 @@ type SubscribeTerminalPayload = SubscribeTerminalResponse["payload"];
 type CloseItemsPayload = CloseItemsResponse["payload"];
 type KillTerminalPayload = KillTerminalResponse["payload"];
 type CaptureTerminalPayload = CaptureTerminalResponse["payload"];
+type UsageReportPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.report.get.response" }
+>["payload"];
+
+export interface UsageReportOptions {
+  /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
+  from: string | null;
+  to: string | null;
+  timezone: string;
+  filters?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["filters"];
+  trend?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["trend"];
+  requestId?: string;
+}
+
 type ScheduleCreatePayload = Extract<
   SessionOutboundMessage,
   { type: "schedule/create/response" }
@@ -5796,6 +5811,21 @@ export class DaemonClient {
         ...(typeof options.runOnCreate === "boolean" ? { runOnCreate: options.runOnCreate } : {}),
       },
       responseType: "schedule/create/response",
+    });
+  }
+
+  async usageReportGet(options: UsageReportOptions): Promise<UsageReportPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "usage.report.get.request",
+        from: options.from,
+        to: options.to,
+        timezone: options.timezone,
+        ...(options.filters ? { filters: options.filters } : {}),
+        ...(options.trend ? { trend: options.trend } : {}),
+      },
+      responseType: "usage.report.get.response",
     });
   }
 

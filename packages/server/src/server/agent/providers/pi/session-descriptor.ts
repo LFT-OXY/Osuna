@@ -106,7 +106,8 @@ export async function readPiImportSessionConfig(filePath: string): Promise<PiImp
   return toPiImportSessionConfig(descriptor);
 }
 
-async function resolvePiSessionsDir(options: PiSessionDescriptorOptions): Promise<string> {
+/** Where Pi itself keeps sessions. Shared with the usage scanner so both look in one place. */
+export async function resolvePiSessionsDir(options: PiSessionDescriptorOptions): Promise<string> {
   const env = options.env ?? process.env;
   const homeDir = options.homeDir ?? homedir();
   const baseDir = options.cwd ?? process.cwd();

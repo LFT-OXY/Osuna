@@ -177,6 +177,8 @@ import {
   createGitMetadataGenerator,
 } from "./session/checkout/git-metadata-generator.js";
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
+import { createUsageSession, type UsageSession } from "./session/usage/usage-session.js";
+import type { UsageService } from "./usage/service.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
@@ -464,6 +466,7 @@ export interface SessionOptions {
   workspaceLabelService?: WorkspaceLabelService;
   filesystem?: SessionFileSystem;
   scheduleService: ScheduleService;
+  usageService?: UsageService;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -773,6 +776,7 @@ export class Session {
   private readonly voiceSessions: VoiceSessions;
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
+  private readonly usageSession: UsageSession | null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
@@ -810,6 +814,7 @@ export class Session {
       workspaceLabelService,
       filesystem,
       scheduleService,
+      usageService,
       checkoutDiffManager,
       github,
       renameCurrentBranch,
@@ -945,6 +950,11 @@ export class Session {
     this.scheduleSession = new ScheduleSession({
       host: { emit: (msg) => this.emit(msg) },
       scheduleService,
+      logger: this.sessionLogger,
+    });
+    this.usageSession = createUsageSession({
+      host: { emit: (msg) => this.emit(msg) },
+      usageService,
       logger: this.sessionLogger,
     });
     this.providerCatalogSession = new ProviderCatalogSession({
@@ -3018,6 +3028,9 @@ export class Session {
       case "list_commands_request":
         await this.handleListCommandsRequest(msg);
         return;
+      case "usage.report.get.request":
+        await this.handleUsageReportGetRequest(msg);
+        return;
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
         return;
@@ -3032,6 +3045,25 @@ export class Session {
         });
         return;
     }
+  }
+
+  /** Fail closed: a client that ignored the absent `usage` flag gets an error, not silence. */
+  private async handleUsageReportGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>,
+  ): Promise<void> {
+    if (!this.usageSession) {
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: "Usage tracking is not enabled on this daemon",
+          code: "usage_unavailable",
+        },
+      });
+      return;
+    }
+    await this.usageSession.handleUsageReportGetRequest(msg);
   }
 
   public resetPeakInflight(): void {

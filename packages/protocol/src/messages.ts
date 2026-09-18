@@ -44,6 +44,11 @@ import {
   ScheduleUpdateResponseSchema,
 } from "./schedule/rpc-schemas.js";
 import {
+  UsageReportGetRequestSchema,
+  UsageReportGetResponseSchema,
+  UsageBackfillProgressMessageSchema,
+} from "./usage/rpc-schemas.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -3378,6 +3383,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  UsageReportGetRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3717,6 +3723,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(sessionHistory): added in v0.8.1, remove gate after 2027-03-18.
         // daemon 理解 fetch_recent_provider_sessions 的 includeImported，并回填 importedAgentId 与 importedAgentWorkspaceId。
         sessionHistory: z.boolean().optional(),
+        // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
+        // daemon 解析本机 CLI 会话日志并回答 usage.* 查询。
+        usage: z.boolean().optional(),
       })
       .optional(),
   })
@@ -6922,6 +6931,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopStopResponseSchema,
   DaemonUpdateProgressMessageSchema,
   DaemonUpdateResponseSchema,
+  UsageReportGetResponseSchema,
+  UsageBackfillProgressMessageSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;
