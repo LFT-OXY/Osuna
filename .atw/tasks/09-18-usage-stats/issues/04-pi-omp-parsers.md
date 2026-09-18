@@ -3,7 +3,7 @@
 **What to build:** Pi 与 OMP 的会话出现在用量报表里，来源按路由到的后端拆分（`{cli:"pi", backend:"anthropic"}`、`{cli:"omp", backend:"openai"}`），OMP 分支 / 续接复制的父条目不重复计数，子 agent 归父会话。
 
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 **Blocked by:** 01, 02
 

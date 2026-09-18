@@ -3,7 +3,7 @@
 **What to build:** 用量报表里每行都有估算成本：daemon 内置 LiteLLM 价格快照，启动 30 秒后与之后每 24 小时用条件 GET 拉最新表（可用配置关闭），用户通过 `set_daemon_config` 写自定义价格后成本立即重算；`usage.pricing.list` 列出用量里出现过的全部模型及其定价状态，`usage.pricing.refresh` 手动刷新，`usage.pricing.updated` 在表或覆盖变化后广播；未知模型成本 0、`priced=false`。
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 **Blocked by:** 02
 
