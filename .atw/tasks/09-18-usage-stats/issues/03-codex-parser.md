@@ -3,7 +3,7 @@
 **What to build:** 本机 `~/.codex/sessions`（含 `archived_sessions/`）里的 Codex 会话出现在用量报表的 Codex 来源下，token、轮次、耗时、cwd、model 都正确；`.jsonl.zst` 被跳过并只记一次 info。
 
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 **Blocked by:** 02
 
