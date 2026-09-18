@@ -40,6 +40,14 @@ Import from `constants/platform.ts`: `isWeb` for DOM APIs, `isNative` for native
 
 All user-visible strings go through i18next: `const { t } = useTranslation()` and `t("agentList.dateSections.today")` (`components/agent-list.tsx`). Keys live in `i18n/resources/en.ts` and the other nine locales; add the key to every locale file. The word in UI is "workspace", never "checkout" (`docs/glossary.md`).
 
+`i18n/resources.test.ts` is the contract for a new namespace: every locale carries the same key set, fewer than 25% of a locale's strings may equal English, and each key's `{{placeholders}}` must match English exactly. Those three checks shape how you key things:
+
+- **A pure module never imports i18n or returns English.** It returns a description the component renders: `ScheduleDescription = { key, params? } | { text }` in `utils/schedule-format.ts`, rendered by `renderScheduleDescription(t, desc)`; params may nest another description (`"{{day}} at {{time}}"` with `day` itself a key). `{ text }` is for verbatim values (a raw cron expression, an agent title). The pure tests assert the structure; a second set renders through `i18n.t` in `en` and asserts the exact previous English, which is the guard that a refactor changed no user-visible word.
+- **Vary by key, not by interpolated noun.** "Edit schedule" / "Edit heartbeat" is `schedules.row.menu.edit.{schedule,heartbeat}` and the component assembles the key from a `"schedule" | "heartbeat"` identifier. `"Edit {{product}}"` breaks the moment one locale needs an article, a case ending, or the noun capitalized differently, and the placeholder-parity test forbids a locale from dropping the placeholder. Singular/plural is two keys with `{{count}}` (`interval.minuteOne` / `interval.minuteMany`), matching `modelSelector.modelCountPlural`, not i18next plural suffixes.
+- **Keys assembled at runtime get an existence test.** `t()` returns the key string when it is missing, so a renamed family fails silently; `utils/schedule-format.test.ts` asserts `i18n.exists()` for every `family.product` and state key the components build.
+- **English stays byte-identical to what it replaced.** Playwright specs locate controls by English accessible name (`getByLabel("Schedule name")`, `getByRole("button", { name: "Create schedule" })`); the e2e run is the proof the migration changed nothing. When a localized wrapper has nothing to add in English, the English value is the bare placeholder (`schedules.cadence.errors.invalid: "{{detail}}"` wraps the cron library's English reason; zh-CN is `"无效的 cron 表达式：{{detail}}"`).
+- **`utils/time.ts` `formatTimeAgo` ("5m ago") is deliberately English** and shared app-wide; localize the prefix around it (`"Created {{ago}}"`), not the value.
+
 ## React rules that matter most here
 
 - Components render and dispatch. Transitions live in reducers, stores, or the form model.

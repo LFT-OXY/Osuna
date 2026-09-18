@@ -2,18 +2,28 @@ import { describe, expect, it } from "vitest";
 import {
   CADENCE_PRESET_OPTIONS,
   normalizeScheduleFormCadence,
+  resolveCronPresetDisplay,
   resolveCronPresetId,
 } from "./schedule-cadence-options";
 
 describe("schedule cadence form options", () => {
   it("offers the approved cron preset vocabulary", () => {
-    expect(CADENCE_PRESET_OPTIONS.map((option) => option.label)).toEqual([
-      "Every minute",
-      "Every hour",
-      "Daily 9:00",
-      "Weekdays 9:00",
-      "Mondays 9:00",
+    expect(CADENCE_PRESET_OPTIONS.map((option) => option.labelKey)).toEqual([
+      "schedules.cadence.presets.everyMinute",
+      "schedules.cadence.presets.everyHour",
+      "schedules.cadence.presets.daily9",
+      "schedules.cadence.presets.weekdays9",
+      "schedules.cadence.presets.mondays9",
     ]);
+  });
+
+  it("labels a matched preset by its key and everything else as custom cron", () => {
+    expect(resolveCronPresetDisplay({ type: "cron", expression: "0 9 * * 1-5" })).toEqual({
+      labelKey: "schedules.cadence.presets.weekdays9",
+    });
+    expect(resolveCronPresetDisplay({ type: "cron", expression: "*/5 * * * *" })).toEqual({
+      labelKey: "schedules.cadence.presets.custom",
+    });
   });
 
   it("maps interval cadences to cron cadences for the form", () => {

@@ -100,7 +100,8 @@ export interface ScheduleFormState {
   projectDisplay: ScheduleFormDisplay | null;
   selectedProjectOptionId: string;
   selectedModelDisplay: ScheduleFormDisplay | null;
-  selectedModeDisplay: ScheduleFormDisplay;
+  /** null 表示 provider 默认模式，由表单组件渲染本地化文案。 */
+  selectedModeDisplay: ScheduleFormDisplay | null;
   selectedThinkingDisplay: ScheduleFormDisplay | null;
   modelSelectorProviders: ProviderSelectorProvider[];
   modeOptions: AgentMode[];
@@ -295,10 +296,10 @@ function resolveModelDisplay(input: {
 function resolveModeDisplay(input: {
   modeOptions: readonly AgentMode[];
   modeId: string;
-}): ScheduleFormDisplay {
+}): ScheduleFormDisplay | null {
   const modeId = input.modeId.trim();
   if (!modeId) {
-    return { label: "Default mode" };
+    return null;
   }
   return { label: input.modeOptions.find((mode) => mode.id === modeId)?.label ?? modeId };
 }
@@ -413,9 +414,9 @@ function buildInitialModelDisplay(modelId: string): ScheduleFormDisplay | null {
   return { label: modelId };
 }
 
-function buildInitialModeDisplay(modeId: string): ScheduleFormDisplay {
+function buildInitialModeDisplay(modeId: string): ScheduleFormDisplay | null {
   if (!modeId) {
-    return { label: "Default mode" };
+    return null;
   }
   return { label: modeId };
 }
@@ -908,7 +909,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       modeOptions: [],
       availableThinkingOptions: [],
       selectedModelDisplay: null,
-      selectedModeDisplay: { label: "Default mode" },
+      selectedModeDisplay: null,
       selectedThinkingDisplay: null,
       providerSnapshotRequest: null,
     };

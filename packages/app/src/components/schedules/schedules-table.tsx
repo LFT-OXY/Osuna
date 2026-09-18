@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactElement } from "react";
+import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { ScheduleRow, type ScheduleRowPending } from "@/components/schedules/schedule-row";
@@ -7,7 +8,7 @@ import type { AggregatedSchedule } from "@/hooks/use-schedules";
 import type { ScheduleDerivedState } from "@/schedules/schedule-derivation";
 import { settingsStyles } from "@/styles/settings";
 import { confirmDialog } from "@/utils/confirm-dialog";
-import { resolveScheduleTitle, scheduleProductName } from "@/utils/schedule-format";
+import { resolveScheduleDisplayTitle, scheduleProductName } from "@/utils/schedule-format";
 
 /** A schedule plus the client-derived fields the row renders. */
 export interface ScheduleRowView {
@@ -71,6 +72,7 @@ function SchedulesTableRow({
   isFirst: boolean;
   onEditSchedule: (schedule: AggregatedSchedule) => void;
 }): ReactElement {
+  const { t } = useTranslation();
   const { schedule } = row;
   const { id, serverId } = schedule;
   const mutations = useScheduleMutations({ serverId });
@@ -113,11 +115,10 @@ function SchedulesTableRow({
 
   const handleDelete = useCallback(() => {
     void (async () => {
-      const productName = scheduleProductName(schedule);
       const confirmed = await confirmDialog({
-        title: `Delete ${productName.toLowerCase()}`,
-        message: `Delete "${resolveScheduleTitle(schedule)}"? This cannot be undone.`,
-        confirmLabel: "Delete",
+        title: t(`schedules.delete.title.${scheduleProductName(schedule)}`),
+        message: t("schedules.delete.message", { title: resolveScheduleDisplayTitle(t, schedule) }),
+        confirmLabel: t("schedules.delete.confirm"),
         destructive: true,
       });
       if (!confirmed) {
@@ -125,7 +126,7 @@ function SchedulesTableRow({
       }
       await runAction("delete", () => mutations.deleteSchedule(id));
     })();
-  }, [runAction, mutations, id, schedule]);
+  }, [runAction, mutations, id, schedule, t]);
 
   return (
     <ScheduleRow

@@ -1,5 +1,7 @@
 import { MoreVertical, Pause, Pencil, Play, RotateCw, Trash2 } from "lucide-react-native";
 import { useCallback, useState, type ReactElement } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
@@ -19,7 +21,8 @@ import type { ScheduleDerivedState } from "@/schedules/schedule-derivation";
 import {
   formatCadence,
   formatNextRun,
-  resolveScheduleTitle,
+  renderScheduleDescription,
+  resolveScheduleDisplayTitle,
   scheduleProductName,
 } from "@/utils/schedule-format";
 import { formatTimeAgo } from "@/utils/time";
@@ -76,20 +79,20 @@ interface ScheduleRowProps extends ScheduleRowActions {
 }
 
 function stateBadge(state: ScheduleDerivedState): {
-  label: string;
+  labelKey: string;
   variant: "success" | "error" | "muted";
 } {
   switch (state) {
     case "active":
-      return { label: "Active", variant: "success" };
+      return { labelKey: "schedules.row.state.active", variant: "success" };
     case "paused":
-      return { label: "Paused", variant: "muted" };
+      return { labelKey: "schedules.row.state.paused", variant: "muted" };
     case "expired":
-      return { label: "Expired", variant: "muted" };
+      return { labelKey: "schedules.row.state.expired", variant: "muted" };
     case "finished":
-      return { label: "Finished", variant: "muted" };
+      return { labelKey: "schedules.row.state.finished", variant: "muted" };
     case "targetGone":
-      return { label: "Target gone", variant: "error" };
+      return { labelKey: "schedules.row.state.targetGone", variant: "error" };
   }
 }
 
@@ -97,20 +100,24 @@ function stateBadge(state: ScheduleDerivedState): {
 // was created, when it last ran, and (only while it can still run) when it runs
 // next. Status lives on the badge, never repeated here.
 function buildMeta(
+  t: TFunction,
   schedule: ScheduleSummary,
   state: ScheduleDerivedState,
   serverName: string | undefined,
   singleHost: boolean,
 ): string {
+  // formatTimeAgo（"5m ago"）是全局共用且有意保留英文的，这里只本地化「创建于」「上次运行」前缀。
   const parts = [
-    formatCadence(schedule.cadence),
-    `Created ${formatTimeAgo(new Date(schedule.createdAt))}`,
-    schedule.lastRunAt ? `Last run ${formatTimeAgo(new Date(schedule.lastRunAt))}` : "Never run",
+    renderScheduleDescription(t, formatCadence(schedule.cadence)),
+    t("schedules.row.created", { ago: formatTimeAgo(new Date(schedule.createdAt)) }),
+    schedule.lastRunAt
+      ? t("schedules.row.lastRun", { ago: formatTimeAgo(new Date(schedule.lastRunAt)) })
+      : t("schedules.row.neverRun"),
   ];
   if (state === "active") {
     const next = formatNextRun(schedule.nextRunAt);
     if (next) {
-      parts.push(`Next run ${next}`);
+      parts.push(t("schedules.row.nextRun", { when: renderScheduleDescription(t, next) }));
     }
   }
   if (serverName && !singleHost) {
@@ -160,15 +167,16 @@ export function ScheduleRow({
   onRunNow,
   onDelete,
 }: ScheduleRowProps): ReactElement {
+  const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const [isHovered, setIsHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
 
-  const title = resolveScheduleTitle(schedule);
-  const productName = scheduleProductName(schedule);
+  const product = scheduleProductName(schedule);
+  const title = resolveScheduleDisplayTitle(t, schedule);
   const badge = stateBadge(state);
-  const meta = buildMeta(schedule, state, serverName, singleHost ?? false);
+  const meta = buildMeta(t, schedule, state, serverName, singleHost ?? false);
   const canRun = schedule.target.type === "new-agent" && (state === "active" || state === "paused");
 
   const rowStyle = useCallback(
@@ -192,7 +200,7 @@ export function ScheduleRow({
         style={rowStyle}
         onPress={onEdit}
         accessibilityRole="button"
-        accessibilityLabel={`Edit ${productName.toLowerCase()} ${title}`}
+        accessibilityLabel={t(`schedules.row.editAccessibility.${product}`, { title })}
         testID={`schedule-row-${schedule.id}`}
       >
         <View style={styles.main}>
@@ -213,7 +221,7 @@ export function ScheduleRow({
         </View>
 
         <View style={styles.trailing}>
-          <StatusBadge label={badge.label} variant={badge.variant} />
+          <StatusBadge label={t(badge.labelKey)} variant={badge.variant} />
           <ScheduleKebabMenu
             schedule={schedule}
             canRun={canRun}
@@ -246,6 +254,7 @@ function ScheduleExecutionMenuItems({
 }: Pick<ScheduleRowProps, "schedule" | "pending" | "onPause" | "onResume" | "onRunNow"> & {
   canRun: boolean;
 }): ReactElement | null {
+  const { t } = useTranslation();
   if (schedule.target.type === "agent") {
     return null;
   }
@@ -257,11 +266,11 @@ function ScheduleExecutionMenuItems({
         leading={resumeLeading}
         disabled={!canRun}
         status={pending?.resume ? "pending" : "idle"}
-        pendingLabel="Resuming..."
+        pendingLabel={t("schedules.row.menu.resuming")}
         onSelect={onResume}
         testID={`schedule-menu-resume-${schedule.id}`}
       >
-        Resume schedule
+        {t("schedules.row.menu.resume")}
       </DropdownMenuItem>
     );
   } else {
@@ -270,11 +279,11 @@ function ScheduleExecutionMenuItems({
         leading={pauseLeading}
         disabled={schedule.status === "completed" || !canRun}
         status={pending?.pause ? "pending" : "idle"}
-        pendingLabel="Pausing..."
+        pendingLabel={t("schedules.row.menu.pausing")}
         onSelect={onPause}
         testID={`schedule-menu-pause-${schedule.id}`}
       >
-        Pause schedule
+        {t("schedules.row.menu.pause")}
       </DropdownMenuItem>
     );
   }
@@ -286,11 +295,11 @@ function ScheduleExecutionMenuItems({
         leading={runLeading}
         disabled={!canRun}
         status={pending?.runNow ? "pending" : "idle"}
-        pendingLabel="Starting..."
+        pendingLabel={t("schedules.row.menu.starting")}
         onSelect={onRunNow}
         testID={`schedule-menu-run-${schedule.id}`}
       >
-        Run now
+        {t("schedules.row.menu.runNow")}
       </DropdownMenuItem>
     </>
   );
@@ -320,15 +329,15 @@ function ScheduleKebabMenu({
 > & {
   canRun: boolean;
 }): ReactElement {
-  const productName = scheduleProductName(schedule);
-  const productNameLower = productName.toLowerCase();
+  const { t } = useTranslation();
+  const product = scheduleProductName(schedule);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         hitSlop={8}
         style={kebabTriggerStyle}
         accessibilityRole={isNative ? "button" : undefined}
-        accessibilityLabel={`${productName} actions`}
+        accessibilityLabel={t(`schedules.row.actionsAccessibility.${product}`)}
         testID={`schedule-kebab-${schedule.id}`}
       >
         {renderKebabTriggerIcon}
@@ -339,7 +348,7 @@ function ScheduleKebabMenu({
           onSelect={onEdit}
           testID={`schedule-menu-edit-${schedule.id}`}
         >
-          Edit {productNameLower}
+          {t(`schedules.row.menu.edit.${product}`)}
         </DropdownMenuItem>
         <ScheduleExecutionMenuItems
           schedule={schedule}
@@ -354,11 +363,11 @@ function ScheduleKebabMenu({
           leading={deleteLeading}
           destructive
           status={pending?.delete ? "pending" : "idle"}
-          pendingLabel="Deleting..."
+          pendingLabel={t("schedules.row.menu.deleting")}
           onSelect={onDelete}
           testID={`schedule-menu-delete-${schedule.id}`}
         >
-          Delete {productNameLower}
+          {t(`schedules.row.menu.delete.${product}`)}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
