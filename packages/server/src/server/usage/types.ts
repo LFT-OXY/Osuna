@@ -94,9 +94,44 @@ export const CODEX_PARSER_STATE_SCHEMA = z.object({
 });
 export type CodexParserState = z.infer<typeof CODEX_PARSER_STATE_SCHEMA>;
 
+/**
+ * Pi and OMP write the same transcript format — OMP is a fork of Pi — so one
+ * parser reads both and the `kind` says which CLI the file belongs to.
+ * `copiedBefore` is set on a branch or `--continue`: those files repeat the
+ * parent's entries ahead of their own, every copy stamped before the header.
+ * `turnBackend` is the backend the open turn was counted against, kept apart
+ * from `backend` so a mid-turn provider switch cannot move the turn's row.
+ */
+const PI_LIKE_PARSER_FIELDS = {
+  sessionId: z.string().nullable(),
+  cwd: z.string().nullable(),
+  subagent: z.boolean(),
+  headerSeen: z.boolean(),
+  copiedBefore: z.string().nullable(),
+  backend: z.string().nullable(),
+  turnBackend: z.string().nullable(),
+  openTurn: USAGE_OPEN_TURN_SCHEMA.nullable(),
+};
+
+export const PI_PARSER_STATE_SCHEMA = z.object({
+  kind: z.literal("pi"),
+  ...PI_LIKE_PARSER_FIELDS,
+});
+
+export const OMP_PARSER_STATE_SCHEMA = z.object({
+  kind: z.literal("omp"),
+  ...PI_LIKE_PARSER_FIELDS,
+});
+
+export type PiLikeParserState =
+  | z.infer<typeof PI_PARSER_STATE_SCHEMA>
+  | z.infer<typeof OMP_PARSER_STATE_SCHEMA>;
+
 export const USAGE_PARSER_STATE_SCHEMA = z.discriminatedUnion("kind", [
   CLAUDE_PARSER_STATE_SCHEMA,
   CODEX_PARSER_STATE_SCHEMA,
+  PI_PARSER_STATE_SCHEMA,
+  OMP_PARSER_STATE_SCHEMA,
 ]);
 export type UsageParserState = z.infer<typeof USAGE_PARSER_STATE_SCHEMA>;
 

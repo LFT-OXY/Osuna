@@ -134,8 +134,9 @@ Pi 与 OMP：
 - header `type:"session"`（Pi 第 1 行、OMP 第 2 行）给出 id、cwd、timestamp、`parentSession`。cwd 必须读 header，不从目录名推。
 - 每条 assistant 消息都带 `message.provider`（后端）与 `message.model`；后端值小写归一化后作 `backend`。
 - usage 四列同名；推理列 Pi 叫 `reasoning`、OMP 叫 `reasoningTokens`，两者都读。
-- 去重键 = 顶层 8 位 hex `entry.id`，**跨文件**：OMP 子文件按 `parentSession` 临时读父文件的 id 集合来跳过复制条目。
-- 轮 = user 条目到下一 user 条目；轮键 = 开轮 user 条目 `entry.id`。子 agent 在与主文件同名的同级目录（Pi `tasks/`、嵌套 run 目录，OMP `<Agent>.jsonl` 与子目录），同 cwd 同来源，不计轮，按 header `timestamp` 落在父会话哪一轮的 `[startedAt, lastAt]` 内归哪轮；匹配不上的只进桶行。
+- OMP 的分支 / 续接子文件会把父会话条目原样复制进来，父文件里已经算过一遍。解析器保持纯函数不读父文件，改按 header 时间戳切：header 带 `parentSession` 时，**早于 header `timestamp` 的条目一律跳过**。依据是本机全量样本——5 个 OMP 分支文件的 263 条副本全部命中、0 条自己的条目被误伤，595 个 Pi 文件没有一条消息早于自己的 header。Pi 也写 `parentSession` 但不复制条目，规则只对 OMP 生效。代价：父文件不在被扫描的根下（换 profile、被 `settings.json` 搬走、已删除）时这批副本少计，在 `docs/usage.md` 写明。
+- 轮 = user 条目到下一 user 条目；轮键 = 开轮 user 条目 `entry.id`。轮的终点只由消息条目推进，`model_change` / `credential_pin` / `session_exit` 这些记账行不算——它们在轮结束后还会写很久。`stopReason` 非 `toolUse` 时结算一段，轮不关闭：同轮之后再出现 assistant 再追加一段；`stopReason` 缺失不当作终止。
+- 子 agent 在与主文件同名的同级目录（Pi `tasks/`、嵌套 run 目录，OMP `<Agent>.jsonl` 与子目录）：日志根下相对路径超过两段即子 agent，父会话 id 取第二段目录名里 `_` 之后的部分——Pi 的嵌套 run 目录不写 `parentSession`，只有路径说得出归属。同 cwd 同来源，不计轮，按 header `timestamp` 落在父会话哪一轮的 `[startedAt, lastAt]` 内归哪轮；匹配不上的只进桶行。
 
 ### 3. 每轮耗时与轮次结算
 

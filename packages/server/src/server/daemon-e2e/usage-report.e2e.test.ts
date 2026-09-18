@@ -8,6 +8,12 @@ import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/typ
 
 const FIXTURE_DIR = new URL("../usage/fixtures/claude/", import.meta.url);
 const CODEX_FIXTURE_DIR = new URL("../usage/fixtures/codex/", import.meta.url);
+const PI_FIXTURE_DIR = new URL("../usage/fixtures/pi/", import.meta.url);
+const OMP_FIXTURE_DIR = new URL("../usage/fixtures/omp/", import.meta.url);
+const PI_SESSION = "01a0b317-1111-7000-8000-000000000001";
+const PI_SUBAGENT = "01a0b317-1112-7000-8000-000000000011";
+const OMP_SESSION = "01a0953b-2222-7000-8000-000000000002";
+const OMP_CHILD = "01a0953b-3333-7000-8000-000000000003";
 const CODEX_THREAD = "01a0a8e9-9f4c-7bd2-8a11-0d3c6f2b5e70";
 const CODEX_ROLLOUT = `rollout-2026-09-18T17-30-00-${CODEX_THREAD}.jsonl`;
 const PROJECT_DIR = "-work-demo";
@@ -472,6 +478,208 @@ describe("usage report with two sources", () => {
       ]);
       expect(report.days).toEqual([
         { day: DAY, totals: bothTotals, estimatedCost: 0, sessionCount: 2, turns: 4 },
+      ]);
+    } finally {
+      await client.close();
+      await daemon.close();
+    }
+  });
+});
+
+describe("usage report across Pi and OMP backends", () => {
+  const temps: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(temps.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  /**
+   * Pi encodes the cwd as `--<path>--` and keeps a session's subagents in a
+   * directory named after the session file.
+   */
+  async function seedPiRoot(): Promise<string> {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-pi-"));
+    temps.push(root);
+    const sessionName = `2026-09-18T09-30-00-000Z_${PI_SESSION}`;
+    const projectDir = path.join(root, "--work-demo--");
+    await mkdir(path.join(projectDir, sessionName, "tasks"), { recursive: true });
+    await writeFile(
+      path.join(projectDir, `${sessionName}.jsonl`),
+      await readFile(new URL("pi-session.jsonl", PI_FIXTURE_DIR), "utf8"),
+    );
+    await writeFile(
+      path.join(projectDir, sessionName, "tasks", `2026-09-18T09-31-00-000Z_${PI_SUBAGENT}.jsonl`),
+      await readFile(new URL("pi-subagent.jsonl", PI_FIXTURE_DIR), "utf8"),
+    );
+    // A workflow run nests one level deeper again and names nobody its parent,
+    // so only the directory says whose session it belongs to.
+    await mkdir(path.join(projectDir, sessionName, "a9832612", "run-0"), { recursive: true });
+    await writeFile(
+      path.join(projectDir, sessionName, "a9832612", "run-0", "session.jsonl"),
+      await readFile(new URL("pi-workflow-run.jsonl", PI_FIXTURE_DIR), "utf8"),
+    );
+    return root;
+  }
+
+  /**
+   * OMP encodes the cwd differently, names a subagent after the agent rather
+   * than a stamp, and drops tool output as `.log` next to the transcripts.
+   */
+  async function seedOmpRoot(): Promise<string> {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-omp-"));
+    temps.push(root);
+    const sessionName = `2026-09-18T10-00-00-000Z_${OMP_SESSION}`;
+    const projectDir = path.join(root, "-work-omp-demo");
+    await mkdir(path.join(projectDir, sessionName), { recursive: true });
+    await writeFile(
+      path.join(projectDir, `${sessionName}.jsonl`),
+      await readFile(new URL("omp-session.jsonl", OMP_FIXTURE_DIR), "utf8"),
+    );
+    await writeFile(
+      path.join(projectDir, `2026-09-18T10-20-00-000Z_${OMP_CHILD}.jsonl`),
+      await readFile(new URL("omp-child-copies-parent-entries.jsonl", OMP_FIXTURE_DIR), "utf8"),
+    );
+    await writeFile(
+      path.join(projectDir, sessionName, "ResearchAgent.jsonl"),
+      await readFile(new URL("omp-subagent.jsonl", OMP_FIXTURE_DIR), "utf8"),
+    );
+    await writeFile(path.join(projectDir, sessionName, "shell.bash.log"), "<tool output>\n");
+    return root;
+  }
+
+  test("splits both CLIs by backend and folds subagents into their session", async () => {
+    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
+    temps.push(paseoHomeRoot, staticDir);
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot,
+      staticDir,
+      cleanup: false,
+      usage: {
+        roots: { claude: [], codex: [], pi: [await seedPiRoot()], omp: [await seedOmpRoot()] },
+        scanIntervalMs: SCAN_INTERVAL_MS,
+        now: () => NOW,
+      },
+    });
+    const client = await connect(daemon);
+
+    try {
+      const report = await waitForReport(
+        client,
+        { from: DAY, to: DAY, timezone: "UTC" },
+        backfilled,
+      );
+
+      // Three Pi transcripts and three OMP ones: the `.log` beside them is not
+      // a transcript, and the branch copied its parent's entries rather than
+      // producing new ones.
+      expect(report.backfill.filesTotal).toBe(6);
+      expect(report.summary.totals).toEqual(totals(1687, 2350, 120, 633, 208));
+      expect(report.summary.sessionCount).toBe(3);
+      expect(report.sources).toEqual([
+        {
+          cli: "pi",
+          backend: "anthropic",
+          totals: totals(20, 1150, 50, 350, 115),
+          estimatedCost: 0,
+          modelCount: 2,
+          share: 1570 / 4790,
+        },
+        {
+          cli: "omp",
+          backend: "3oxy-openai",
+          totals: totals(907, 200, 0, 133, 48),
+          estimatedCost: 0,
+          modelCount: 1,
+          share: 1240 / 4790,
+        },
+        {
+          cli: "omp",
+          backend: "anthropic",
+          totals: totals(60, 1000, 70, 90, 5),
+          estimatedCost: 0,
+          modelCount: 1,
+          share: 1220 / 4790,
+        },
+        {
+          cli: "pi",
+          backend: "openai-codex",
+          totals: totals(700, 0, 0, 60, 40),
+          estimatedCost: 0,
+          modelCount: 1,
+          share: 760 / 4790,
+        },
+      ]);
+      expect(report.models).toEqual([
+        {
+          model: "claude-opus-5",
+          cli: "pi",
+          backend: "anthropic",
+          totals: totals(15, 1000, 50, 300, 100),
+          estimatedCost: 0,
+          priced: false,
+        },
+        {
+          model: "gpt-5.6-sol",
+          cli: "omp",
+          backend: "3oxy-openai",
+          totals: totals(907, 200, 0, 133, 48),
+          estimatedCost: 0,
+          priced: false,
+        },
+        {
+          model: "claude-opus-5",
+          cli: "omp",
+          backend: "anthropic",
+          totals: totals(60, 1000, 70, 90, 5),
+          estimatedCost: 0,
+          priced: false,
+        },
+        {
+          model: "gpt-6-astra",
+          cli: "pi",
+          backend: "openai-codex",
+          totals: totals(700, 0, 0, 60, 40),
+          estimatedCost: 0,
+          priced: false,
+        },
+        {
+          model: "claude-fable-5-1",
+          cli: "pi",
+          backend: "anthropic",
+          totals: totals(5, 150, 0, 50, 15),
+          estimatedCost: 0,
+          priced: false,
+        },
+      ]);
+      expect(report.days).toEqual([
+        {
+          day: DAY,
+          totals: totals(1687, 2350, 120, 633, 208),
+          estimatedCost: 0,
+          sessionCount: 3,
+          turns: 5,
+        },
+      ]);
+      expect(report.projects).toEqual([
+        {
+          rootPath: "/work/omp-demo",
+          displayName: "omp-demo",
+          kind: "directory",
+          totals: totals(967, 1200, 70, 223, 53),
+          estimatedCost: 0,
+          cwds: [
+            { cwd: "/work/omp-demo", totals: totals(967, 1200, 70, 223, 53), estimatedCost: 0 },
+          ],
+        },
+        {
+          rootPath: "/work/demo",
+          displayName: "demo",
+          kind: "directory",
+          totals: totals(720, 1150, 50, 410, 155),
+          estimatedCost: 0,
+          cwds: [{ cwd: "/work/demo", totals: totals(720, 1150, 50, 410, 155), estimatedCost: 0 }],
+        },
       ]);
     } finally {
       await client.close();
