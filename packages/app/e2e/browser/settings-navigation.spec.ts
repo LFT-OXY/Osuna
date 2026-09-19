@@ -120,7 +120,7 @@ test.describe("Settings sidebar navigation", () => {
 
     await test.step("a dropdown owns Escape", async () => {
       await openSettingsSection(page, "appearance");
-      await page.getByLabel(/Theme:/).click();
+      await page.getByLabel("Theme: System", { exact: true }).click();
       await expect(page.getByRole("menuitem", { name: "System", exact: true })).toBeVisible();
 
       await page.keyboard.press("Escape");

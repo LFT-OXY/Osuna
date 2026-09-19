@@ -10773,11 +10773,23 @@ test("listImportableSessions reports unavailable config-declared providers as er
 
   expect(brokenAcpClient.calls).toBe(0);
   expect(brokenProfileClient.calls).toBe(0);
-  expect(result.sessions.map((session) => session.provider)).toEqual(["claude"]);
-  expect(result.providerErrors).toEqual([
-    { provider: "broken-acp", message: "Provider 'broken-acp' is not available" },
-    { provider: "zai", message: "zai: command not found" },
-  ]);
+  expect(result).toEqual({
+    sessions: [
+      {
+        provider: "claude",
+        providerHandleId: "claude-session",
+        cwd: "/tmp/recent",
+        title: null,
+        lastActivityAt: new Date("2026-01-01T00:00:00Z"),
+        firstPromptPreview: null,
+        lastPromptPreview: null,
+      },
+    ],
+    providerErrors: [
+      { provider: "broken-acp", message: "Provider 'broken-acp' is not available" },
+      { provider: "zai", message: "zai: command not found" },
+    ],
+  });
 });
 
 test("listImportableSessions searches every provider result before global ranking", async () => {

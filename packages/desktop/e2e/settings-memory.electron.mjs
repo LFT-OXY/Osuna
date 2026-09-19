@@ -25,7 +25,7 @@ const SETTINGS_DESTINATIONS = [
   "Metadata",
   "Workspaces",
   "Providers",
-  "Usage",
+  "Price table",
   "Terminals",
   "Plugins",
 ];

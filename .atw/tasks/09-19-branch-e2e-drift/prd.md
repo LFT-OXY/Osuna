@@ -75,13 +75,20 @@ Provider 是他要的 —— `command` 打错一个字母就静默返回空列�
   （`provider-registry.ts` 的定义注释写明了这一点），分不出这两类。
 - 实现落定：`AgentManager` 直接查 protocol 侧 provider manifest 导出的内置集合，
   不在 `providerDefinitions` 上加标志位 —— server 里已有同样的写法可以对齐。
+- 内置集合 = `BUILTIN_PROVIDER_IDS` ∪ `DEV_AGENT_PROVIDER_DEFINITIONS` 的 id。dev 的 `mock`
+  也是 Paseo 自带的，判定问的是「这个 Provider 是不是用户自己要来的」，不是「有没有上生产」。
+- 由此，插件贡献的 Provider 也落在「非内置」一侧：它起不来会进 `providerErrors`。
+  插件是用户装的，和 config 里声明的同属「他要的」，与本条的立意一致。
+  这条对外契约已写进 `docs/providers.md` 的 provider session import 段。
 - 协议不动，客户端不动。`providerErrors` 的形状和语义不变，变的只是哪些 Provider 会进去。
 - 这条改动同时影响 Import session 面板和会话历史列表 —— 它们走同一个 RPC。
 
 ### 测试改动
 
 - Explorer rail 菜单：期望列表补入 `Session history`，位置在 `Files` 之后、插件面板之前。
-  顺带让这条断言表达「内置视图在前、插件面板在后」的分组意图，而不是纯字符串清单。
+  分组意图落成 `builtInViews` / `pluginPanels` 两个具名数组拼出的**精确**清单，
+  而不是「内置侧只查存在性」—— 后者会丢掉顺序与全集覆盖，撞上本 PRD 自己的
+  「不靠弱化断言变绿」。代价是新增内置视图时仍要补一行，这是本任务接受的取舍。
 - 设置页 Escape：主题下拉的定位改成指明行的精确标签，与同目录既有 e2e 的写法一致。
 - 插件主题夹具：两套贡献主题改用不会和内置主题撞名的名字，随之更新文字选择器与
   `Theme: {{name}}` 断言。夹具的配色值不用改 —— 这条测试验的是贡献的语义 token

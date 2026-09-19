@@ -19,7 +19,10 @@ import {
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
-import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
+import {
+  BUILTIN_PROVIDER_IDS,
+  DEV_AGENT_PROVIDER_DEFINITIONS,
+} from "@getpaseo/protocol/provider-manifest";
 import { z } from "zod";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
 
@@ -95,6 +98,12 @@ import { withTimeout } from "../../utils/promise-timeout.js";
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
 const IMPORTABLE_SESSION_LIST_TIMEOUT_MS = 90_000;
+// Paseo 自带的 Provider 集合。dev 的 mock 也算自带 —— 判定问的是「这个 Provider 是不是用户
+// 自己在 config 里要来的」，而不是「它有没有上生产」。
+const BUILTIN_PROVIDER_ID_SET: ReadonlySet<string> = new Set([
+  ...BUILTIN_PROVIDER_IDS,
+  ...DEV_AGENT_PROVIDER_DEFINITIONS.map((definition) => definition.id),
+]);
 const STORED_AGENT_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: false,
   supportsSessionPersistence: true,
@@ -1011,6 +1020,7 @@ export class AgentManager {
     // —— 后者对内置 Provider 和泛型 ACP 自定义 Provider 同样是 null。
     const probedEntries = await Promise.all(
       candidateEntries.map(async (entry) => ({
+        provider: entry[0],
         entry,
         availability: await this.getProviderAvailability(entry[0]),
       })),
@@ -1020,12 +1030,12 @@ export class AgentManager {
       .map((candidate) => candidate.entry);
     const unavailableErrors = probedEntries
       .filter(
-        ({ entry, availability }) =>
-          !availability.available && !BUILTIN_PROVIDER_IDS.includes(entry[0]),
+        ({ provider, availability }) =>
+          !availability.available && !BUILTIN_PROVIDER_ID_SET.has(provider),
       )
-      .map(({ entry, availability }) => ({
-        provider: entry[0],
-        message: availability.error ?? `Provider '${entry[0]}' is not available`,
+      .map(({ provider, availability }) => ({
+        provider,
+        message: availability.error ?? `Provider '${provider}' is not available`,
       }));
     const providerResults = await Promise.all(
       providerEntries.map(async ([provider, client]) => {

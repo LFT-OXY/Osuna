@@ -36,6 +36,29 @@ Keep the surface's props the seam: `client: Pick<DaemonClient, ...> | null`, `is
 
 Every action that can fail needs behavioral coverage for success and for failure, and the failure test asserts what the user can see and do afterwards, not a state field. RPC-backed UI uses a Playwright spec with the real daemon. Distinct timeout and disconnect cases get their own tests when the recovery differs.
 
+## Assertions that outlived their feature
+
+A spec fails because the product legitimately grew, and the cheap fix loosens the assertion so the
+next growth cannot break it. That trade is not available here — `docs/testing.md` "Assert the full
+intended behavior, not fragments" outranks the wish for a test nobody has to touch again.
+
+- A list assertion stays a list. Turning `toHaveText([...])` into `expect.poll` +
+  `expect.arrayContaining` drops order and stops noticing extra items. When the list has real
+  groups, name them and compare the concatenation exactly:
+  `toHaveText([...builtInViews, ...pluginPanels])` (`e2e/support/helpers/explorer-plugin-menu.ts`)
+  keeps the full check and still says which half a new entry belongs in.
+- A locator that hits one row today and three tomorrow gets the exact label, not a regex.
+  `getByLabel(/Theme:/)` broke the moment the appearance section grew its system-pairing rows;
+  `getByLabel("Theme: System", { exact: true })` says which row it meant.
+- When an assertion uses a concrete value as a proxy for a defect ("white can only come from the
+  browser"), and the product makes that value legitimate, pin the input instead of relaxing the
+  assertion. `terminal-protocol-query.spec.ts` seeds `theme: "dark"` through
+  `localStorage.setItem("@paseo:app-settings", …)` in `addInitScript` before the first navigation,
+  then asserts the dark theme's real terminal background — so "no pure white" means leakage again.
+- Prove a rewritten assertion still bites: break the production path once, watch the test fail on
+  the line you rewrote, restore. A test that only verifies the setting the test itself seeded
+  passes for the wrong reason.
+
 ## Fixtures and isolation
 
 - Playwright gives every worker its own daemon and `PASEO_HOME`; specs in one file share it. Helpers that create projects or workspaces own them until cleanup, and a fixture fails any test that leaks a project record. Deleting the temp directory is not cleanup.

@@ -103,15 +103,11 @@ export async function openWorkspacePanelFromExplorerMenu(
     body: await page.screenshot({ path: testInfo.outputPath("explorer-panel-menu.png") }),
     contentType: "image/png",
   });
-  await expect(menu.getByRole("menuitem")).toHaveText([
-    "New tab",
-    "Changes",
-    "Files",
-    "Other review",
-    "Other review summary",
-    "Review",
-    "Review summary",
-  ]);
+  // 菜单分两组：内置视图在前，插件贡献的面板在后。两组各自精确比对，
+  // 新增内置视图时补进 builtInViews 即可，插件那组的边界不会跟着松动。
+  const builtInViews = ["New tab", "Changes", "Files", "Session history"];
+  const pluginPanels = ["Other review", "Other review summary", "Review", "Review summary"];
+  await expect(menu.getByRole("menuitem")).toHaveText([...builtInViews, ...pluginPanels]);
   await expect(menu.getByRole("menuitem", { name: "Review", exact: true })).toHaveAttribute(
     "aria-checked",
     "false",

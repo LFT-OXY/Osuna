@@ -202,14 +202,22 @@ consumer while every old consumer keeps the filtered result.
 - Owner resolution: active in-memory agents first, then active stored records, then archived
   records, first writer wins per handle key (`sessionId` and `nativeHandle` both map). An archived
   twin therefore never shadows a live agent.
-- `providerErrors` only names providers that are installed and still failed to list (ticket 05).
-  `AgentManager.listImportableSessions` runs `getProviderAvailability(provider)` on every
-  candidate before the listing fan-out and drops the unavailable ones — no rows, no error entry.
-  A probe that throws is logged at `warn` and counts as unavailable. "Unavailable" is whatever
-  `client.isAvailable()` says, so a misconfigured custom `command` path is skipped the same way
-  as a missing CLI; the provider diagnostic screen owns that report, not this listing. Always go
-  through `getProviderAvailability`, never a hand-rolled `try { client.isAvailable() }` — the
-  helper already carries the catch-and-warn contract and the two would drift.
+- `AgentManager.listImportableSessions` runs `getProviderAvailability(provider)` on every
+  candidate before the listing fan-out, and what an unavailable provider gets depends on who
+  asked for it. A Paseo-shipped provider the user never installed is dropped silently — no rows,
+  no error entry; nobody wants a Codex error for not having Codex. Anything else — a provider
+  declared in daemon config, a plugin-contributed one — becomes a `providerErrors` entry and is
+  never listed, so a typo in `command` surfaces as an error with Retry instead of an empty list.
+  The signal is membership in `BUILTIN_PROVIDER_IDS` plus the ids in
+  `DEV_AGENT_PROVIDER_DEFINITIONS` (dev's `mock` is Paseo's, not the user's), never
+  `derivedFromProviderId` — that is `null` for built-ins and for generic ACP custom providers
+  alike. A probe that returns `false` with no error text synthesises
+  `Provider '<id>' is not available`; the error path must not rely on the listing call throwing,
+  or an ACP client that answers an empty list for a missing binary swallows the failure again.
+  A probe that throws is logged at `warn` and counts as unavailable. Always go through
+  `getProviderAvailability`, never a hand-rolled `try { client.isAvailable() }` — the helper
+  already carries the catch-and-warn contract and the two would drift. `docs/providers.md`
+  states the same contract for provider authors.
 - The daemon never reads `features`; the flag exists because the field and the flag shipped
   together, so an old daemon silently ignores `includeImported` and would answer with the filtered
   list — the app refuses to show that instead of listing it.
@@ -220,9 +228,12 @@ consumer while every old consumer keeps the filtered result.
 - Field sent to an old daemon -> cannot happen from the app (query disabled without the flag);
   a hand-built request just gets the filtered list.
 - Descriptor without `importedAgentId` -> parses; the row is external.
-- `client.isAvailable()` returns `false` or throws -> provider skipped, absent from both `sessions`
-  and `providerErrors`. Available but `listImportableSessions` throws or exceeds the 90 s timeout
-  -> `providerErrors` entry, other providers' rows still returned.
+- `client.isAvailable()` returns `false` or throws for a Paseo-shipped provider -> skipped,
+  absent from both `sessions` and `providerErrors`. Same for a config-declared or
+  plugin-contributed provider -> no rows, one `providerErrors` entry carrying the probe's error
+  text or the synthesised `Provider '<id>' is not available`. Available but
+  `listImportableSessions` throws or exceeds the 90 s timeout -> `providerErrors` entry, other
+  providers' rows still returned.
 
 ### 5. Good/Base/Bad Cases
 
@@ -246,7 +257,9 @@ consumer while every old consumer keeps the filtered result.
 - Daemon availability gate: `agent-manager.test.ts` — one unavailable provider, one whose probe
   throws, and one available-but-failing provider in the same manager; assert the full
   `{ sessions, providerErrors }` shape holds only the healthy rows and the failing provider's
-  error, and that the two skipped clients' listing was never called.
+  error, and that the two skipped clients' listing was never called. A second test covers the
+  declared side: an unavailable generic ACP provider and one whose probe throws both appear in
+  `providerErrors` while an unavailable built-in stays silent.
 - Client: `daemon-client.test.ts` — the sent frame carries `includeImported`.
 - App: `session-history/index.test.tsx` — requests carry `includeImported: true`; an owned row
   badges and calls `onOpenAgent(agentId, workspaceId)` without `createTerminal`;

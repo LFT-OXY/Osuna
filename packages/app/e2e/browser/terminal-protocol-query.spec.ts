@@ -26,6 +26,10 @@ process.stdin.on("data", (chunk) => {
 setTimeout(finish, 700);
 `;
 
+// 深色主题 terminal.background 是 styles/theme.ts 里 paseoDarkColors.surface0 = #181B1A，
+// daemon 按 OSC 11 的 rgb:rrrr/gggg/bbbb 形式回答。
+const DARK_TERMINAL_BACKGROUND_REPLY = "rgb:1818/1b1b/1a1a";
+
 test.describe("Terminal protocol queries", () => {
   let harness: TerminalE2EHarness;
 
@@ -41,6 +45,11 @@ test.describe("Terminal protocol queries", () => {
   test("does not send browser OSC 11 color-query replies back to the PTY", async ({ page }) => {
     const terminalInstance = await harness.createTerminal({ name: "osc11-query" });
     try {
+      // daemon 按 app 上报的真实主题回答 OSC 11。跟随系统时 e2e 浏览器是浅色，底色合法地就是白，
+      // 这条测试就分不出「正常的白」和「浏览器的回复漏回 PTY」。钉死深色主题，白重新只有一种解释。
+      await page.addInitScript(() => {
+        localStorage.setItem("@paseo:app-settings", JSON.stringify({ theme: "dark" }));
+      });
       await harness.openTerminal(page, { terminalId: terminalInstance.id });
       await harness.setupPrompt(page);
 
@@ -52,7 +61,7 @@ test.describe("Terminal protocol queries", () => {
 
       const text = await getTerminalBufferText(page);
 
-      expect(text).toContain("rgb:0b0b/0b0b/0b0b");
+      expect(text).toContain(DARK_TERMINAL_BACKGROUND_REPLY);
       expect(text).not.toContain("rgb:ffff/ffff/ffff");
     } finally {
       await harness.killTerminal(terminalInstance.id);
