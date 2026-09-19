@@ -53,8 +53,12 @@ app 端消费这三个事件用的是 `client.observeEvents([...])`（`use-usage
 抽查过 `import-session-flow`：失败在 provider 报错横幅缺失，与 usage、与侧栏改动都
 不沾边，倾向既有问题，但不靠倾向下结论，等基线。
 
-`format`（154 文件）与 `lint`（28 条）已知是既有欠账，全在 `.pi/extensions/atw/index.ts`
-与两份 `oxy-learning-hub/assets/course.js`，不在 `packages/` 内。本任务不碰，单独记账。
+`format` 与 `lint` 起初被记为「既有欠账」，**这是错的**。main 的基线（run 35445391971）
+两项都绿：那批文件在 main 上根本不存在，是本分支的 `d1cfc4c3e`（引入 ATW 工作流）带进来的。
+152 个格式问题里 137 个在 `.claude/` `.agents/` `.pi/`、12 个在 `.atw/`、2 个在
+`docs/agents/`，全部由 ATW 管理；28 条 lint 错误全在 `.pi/extensions/atw/index.ts`
+与两份 `course.js`。剩下 1 个是 `docs/design.md` —— Paseo 自己的文档，被分支提交
+`e2b139b28` 弄乱的，直接格式化即可。
 
 ## 不做的
 
@@ -62,7 +66,10 @@ app 端消费这三个事件用的是 `client.observeEvents([...])`（`use-usage
   （`COMPAT(ownedSubscriptions): added in v0.8.0, remove implicit event delivery after 2027-03-09`）
   管着一批真有老客户端的事件，到期一起拆，不在这里提前动。
 - 不动协议：三个事件的 schema、`sessionEventCategory()` 的登记都不变。
-- 不修既有的 format / lint 欠账。
+- 不把 ATW 管理的文件改成符合本仓风格。`atw update` 会按上游写回来，下次更新 CI 照旧红，
+  而 28 条 lint 里 `complexity of 40`、`Too many nested callbacks (5)` 这类等于重写
+  `.pi/extensions/atw/index.ts`，那是 fork 上游。改为让 `.oxfmtrc.json` 与 `.oxlintrc.json`
+  忽略这些目录。
 - daemon 侧是否移除 `trend` 聚合，是另一个决定（记在 `09-18-usage-stats` 的 10 号票）。
 
 ## 验收标准

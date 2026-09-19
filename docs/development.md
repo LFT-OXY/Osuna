@@ -524,6 +524,16 @@ patch every build the consumers use: Metro resolves the `react-native` field of 
 (`src/*.ts` for `react-native-svg`), while Node and Vitest resolve `main`/`module`
 (`lib/commonjs`, `lib/module`). Patching only `lib/` leaves the app bundle unfixed.
 
+## Agent-tooling directories
+
+`.atw/`, `.agents/`, `.claude/`, `.pi/`, and `docs/agents/` hold the agent
+workflow's own files. They are checked in but they are not this repo's code:
+`atw update` rewrites them from upstream. Both `.oxfmtrc.json` and
+`.oxlintrc.json` ignore them, because formatting them to this repo's style is
+undone by the next update — and the lint rules there are aimed at product code,
+not at a vendored tool. Leave them out of both lists; a file under those paths
+failing a check is a sign it belongs somewhere else, not a reason to reformat it.
+
 ## ACP provider catalog versions
 
 The in-app ACP provider catalog pins package-runner entries (`npx`, `npm exec`,

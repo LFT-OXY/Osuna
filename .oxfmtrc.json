@@ -15,6 +15,11 @@
     "*.lock",
     "**/*.gen.ts",
     "**/*.gen.tsx",
-    "packages/server/src/server/usage/pricing/snapshot.json"
+    "packages/server/src/server/usage/pricing/snapshot.json",
+    ".atw/**",
+    ".agents/**",
+    ".claude/**",
+    ".pi/**",
+    "docs/agents/**"
   ]
 }
