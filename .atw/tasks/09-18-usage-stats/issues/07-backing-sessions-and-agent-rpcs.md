@@ -3,7 +3,7 @@
 **What to build:** Paseo 自己的 agent 一轮结束后几秒内，其用量就能通过 `usage.agent.get`（本会话合计）与 `usage.agent.turns.list`（每轮明细，带 Paseo `turnId`）查到；agent 记录记住它用过的全部 provider session id（Claude 每次 resume 追加），旧记录读时补全；每批落盘后按会话广播 `usage.updated { cli, sessionId, agentId? }`。
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 **Blocked by:** 05, 06
 
