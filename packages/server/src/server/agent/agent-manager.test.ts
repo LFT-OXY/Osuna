@@ -10741,6 +10741,45 @@ test("listImportableSessions skips unavailable providers without reporting them 
   });
 });
 
+test("listImportableSessions reports unavailable config-declared providers as errors", async () => {
+  const healthyClient = new RecordingPersistedAgentsClient("claude");
+  const uninstalledBuiltinClient = new RecordingPersistedAgentsClient("copilot");
+  uninstalledBuiltinClient.isAvailable = async () => false;
+  // 泛型 ACP 自定义 Provider：derivedFromProviderId 与内置 Provider 一样是 null，
+  // 判定只能靠 id 不在内置集合里。
+  const brokenAcpClient = new RecordingPersistedAgentsClient("broken-acp");
+  brokenAcpClient.isAvailable = async () => false;
+  const brokenProfileClient = new RecordingPersistedAgentsClient("zai");
+  brokenProfileClient.isAvailable = async () => {
+    throw new Error("zai: command not found");
+  };
+  const manager = new AgentManager({
+    clients: {
+      claude: healthyClient,
+      copilot: uninstalledBuiltinClient,
+      "broken-acp": brokenAcpClient,
+      zai: brokenProfileClient,
+    },
+    providerDefinitions: {
+      claude: { enabled: true, derivedFromProviderId: null },
+      copilot: { enabled: true, derivedFromProviderId: null },
+      "broken-acp": { enabled: true, derivedFromProviderId: null },
+      zai: { enabled: true, derivedFromProviderId: "claude" },
+    },
+    logger,
+  });
+
+  const result = await manager.listImportableSessions();
+
+  expect(brokenAcpClient.calls).toBe(0);
+  expect(brokenProfileClient.calls).toBe(0);
+  expect(result.sessions.map((session) => session.provider)).toEqual(["claude"]);
+  expect(result.providerErrors).toEqual([
+    { provider: "broken-acp", message: "Provider 'broken-acp' is not available" },
+    { provider: "zai", message: "zai: command not found" },
+  ]);
+});
+
 test("listImportableSessions searches every provider result before global ranking", async () => {
   const client = new RecordingPersistedAgentsClient("claude");
   client.listImportableSessions = async () => [

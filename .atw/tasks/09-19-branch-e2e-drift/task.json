@@ -3,7 +3,7 @@
   "name": "branch-e2e-drift",
   "title": "分支 e2e 漂移收口",
   "description": "feat/usage-stats 上会话历史面板、13 套 UI 主题、终端主题桥接三个功能改了行为，断言旧行为的 e2e 没跟着更新；另有 desktop-tests browser-tabs 两轮 CI 均超时未归因。逐条判断是测试过时还是功能改错，把分支 CI 弄绿。",
-  "status": "discover",
+  "status": "implement",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -12,7 +12,7 @@
   "assignee": "oxy",
   "createdAt": "2026-09-19",
   "completedAt": null,
-  "branch": null,
+  "branch": "feat/usage-stats",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
@@ -22,5 +22,7 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "3803865f32644a036c847f106cfccf9f8ec54769"
+  }
 }

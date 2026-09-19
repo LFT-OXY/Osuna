@@ -1,0 +1,8 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "server 包编码规范入口"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "AgentManager 单元测试的形态与真实依赖优先原则"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "providerErrors 属于对用户可见的错误上报，遵守既有错误处理约定"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "app 侧 e2e 的组织方式与断言习惯"}
+{"file": "docs/testing.md", "reason": "只验外部行为、不为绿灯弱化断言的仓库级基准"}
+{"file": "docs/providers.md", "reason": "Provider 注册、内置与自定义 Provider 的区分"}
+{"file": "docs/custom-providers.md", "reason": "config 声明的自定义 ACP Provider 正是本次功能改动针对的人群"}
+{"file": ".atw/tasks/09-19-branch-e2e-drift/research/failure-attribution.md", "reason": "六条失败的逐条归因与决策依据"}

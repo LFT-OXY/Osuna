@@ -19,6 +19,7 @@ import {
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
+import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
 import { z } from "zod";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
 
@@ -1003,17 +1004,29 @@ export class AgentManager {
         !!client.listImportableSessions &&
         this.isProviderImportable(provider, options?.providerFilter),
     );
-    // 未安装的 Provider 的会话无法 resume，列出来没有意义；"没装"对不用它的用户也不是错误，
-    // 所以这里直接跳过，不进 providerErrors。探测本身抛错同样按不可用处理。
-    const availableEntries = await Promise.all(
+    // 没装的内置 Provider 的会话无法 resume，列出来没有意义；"没装"对不用它的用户也不是错误，
+    // 所以直接跳过，不进 providerErrors。探测本身抛错同样按不可用处理。
+    // 用户在 config 里亲手声明的 Provider 是另一回事：他要的就是这个 Provider，起不来必须说出来，
+    // 否则 command 里一个拼写错误只会表现为列表为空。判定用内置集合，不能用 derivedFromProviderId
+    // —— 后者对内置 Provider 和泛型 ACP 自定义 Provider 同样是 null。
+    const probedEntries = await Promise.all(
       candidateEntries.map(async (entry) => ({
         entry,
-        available: (await this.getProviderAvailability(entry[0])).available,
+        availability: await this.getProviderAvailability(entry[0]),
       })),
     );
-    const providerEntries = availableEntries
-      .filter((candidate) => candidate.available)
+    const providerEntries = probedEntries
+      .filter((candidate) => candidate.availability.available)
       .map((candidate) => candidate.entry);
+    const unavailableErrors = probedEntries
+      .filter(
+        ({ entry, availability }) =>
+          !availability.available && !BUILTIN_PROVIDER_IDS.includes(entry[0]),
+      )
+      .map(({ entry, availability }) => ({
+        provider: entry[0],
+        message: availability.error ?? `Provider '${entry[0]}' is not available`,
+      }));
     const providerResults = await Promise.all(
       providerEntries.map(async ([provider, client]) => {
         try {
@@ -1055,7 +1068,10 @@ export class AgentManager {
       sessions: sessions
         .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
         .slice(0, limit),
-      providerErrors: providerResults.flatMap((result) => (result.error ? [result.error] : [])),
+      providerErrors: [
+        ...unavailableErrors,
+        ...providerResults.flatMap((result) => (result.error ? [result.error] : [])),
+      ],
     };
   }
 
