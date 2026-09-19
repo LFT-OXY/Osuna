@@ -136,19 +136,19 @@ Catppuccin 变成内置之后把插件主题挤掉，用户选中的主题会毫
 
 ## Acceptance Criteria
 
-- [ ] 装了贡献同名主题的插件时，主题下拉里那两条能被区分：插件那条带插件 id 副标题。
-- [ ] 不撞名的插件主题行保持单行，没有副标题。
-- [ ] 两个插件贡献同名主题时，两条都带各自的插件 id。
-- [ ] 同一个插件贡献两个同名主题时，限定词退化为主题 id，两行文字不同。
-- [ ] 同一个主题出现在多个 host 上不会被判成重名。
-- [ ] 选中撞名的插件主题后，触发器文字与 `Theme: {{value}}` 无障碍标签都是明确的。
-- [ ] 撞名判断随 app 语言变化：换一套内置主题显示名，判定跟着变。
-- [ ] 与内置主题重名的插件主题**仍然可选、仍然生效**，没有被丢弃。
-- [ ] `plugin-theme.spec.ts` 的夹具改回 `Catppuccin Mocha` / `Catppuccin Latte`，
+- [x] 装了贡献同名主题的插件时，主题下拉里那两条能被区分：插件那条带插件 id 副标题。
+- [x] 不撞名的插件主题行保持单行，没有副标题。
+- [x] 两个插件贡献同名主题时，两条都带各自的插件 id。
+- [x] 同一个插件贡献两个同名主题时，限定词退化为主题 id，两行文字不同。
+- [x] 同一个主题出现在多个 host 上不会被判成重名。
+- [x] 选中撞名的插件主题后，触发器文字与 `Theme: {{value}}` 无障碍标签都是明确的。
+- [x] 撞名判断随 app 语言变化：换一套内置主题显示名，判定跟着变。
+- [x] 与内置主题重名的插件主题**仍然可选、仍然生效**，没有被丢弃。
+- [x] `plugin-theme.spec.ts` 的夹具改回 `Catppuccin Mocha` / `Catppuccin Latte`，
       该文件断言两条同名行能各自定位。
-- [ ] 插件主题 id、持久化形状、协议、`addTheme` 契约均未改动。
-- [ ] `docs/plugins.md` 的「Contribute a theme」写明撞名会被限定、且不会被拒绝。
-- [ ] `npm run typecheck` 与 `npm run lint` 通过。
+- [x] 插件主题 id、持久化形状、协议、`addTheme` 契约均未改动。
+- [x] `docs/plugins.md` 的「Contribute a theme」写明撞名会被限定、且不会被拒绝。
+- [x] `npm run typecheck` 与 `npm run lint` 通过。
 
 ## Further Notes
 
