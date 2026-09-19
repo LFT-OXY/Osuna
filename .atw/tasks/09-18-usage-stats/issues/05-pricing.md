@@ -11,9 +11,9 @@
 
 范围内：快照精简脚本与 LICENSE 原文、`PricingTable` 形状、缓存文件与新旧择取、调度（30 秒 / 24 小时 / 15 秒超时 / 失败 1 小时退避 / 304 只更 `fetchedAt`）、`features.usage.pricing.{autoUpdate, overrides}` 进可变配置 schema 与 `PASEO_USAGE_PRICING_AUTO_UPDATE`、`PricingOverride` 校验（精确匹配、每百万存储、唯一、非负、0 算已定价）、匹配顺序与结果缓存、三个 RPC / 广播、报表与 `models[].priced` 填值、`docs/release.md` 完成清单一行、`docs/usage.md` 的出站请求与隐私说明段。
 
-- [ ] 接缝 2：匹配函数用例——覆盖表优先、原样 / 小写、Claude 归一化（`claude-sonnet-4.5` → `claude-sonnet-4-5`、`sonnet-4-5` 补前缀）、去日期后缀、剥 provider 路径、`/<末段>` 偏好序、未命中 `priced=false`；成本公式四列相乘、reasoning 不计价；表或覆盖变化后负缓存被清。
-- [ ] 接缝 1：注入 fetch 返回固定 JSON → `usage.pricing.refresh` 结果 `updated`、缓存文件为四列精简格式；返回 304 → `not_modified` 且只更新 `fetchedAt`；抛错 / 非法 JSON → `failed` 且缓存不变。`autoUpdate=false` 时启动后推进时钟 24 小时不发请求；`=true` 时启动 30 秒后发一次、24 小时后再发一次。
-- [ ] 接缝 1：`set_daemon_config` 写一条自定义价格 → 收到 `usage.pricing.updated`，`usage.report.get` 的 `estimatedCost` 立即按新价变化，`usage.pricing.list` 该模型 `priceSource="override"`；填 0 时 `priced=true`。
-- [ ] 接缝 1：`usage.pricing.list` 的排序为 `priced=false` 在前、再按 `lastSeenAt` 倒序。
-- [ ] 快照文件旁有 LiteLLM MIT LICENSE；刷新脚本可运行并产出与内置格式一致的文件。
-- [ ] `npm run typecheck`、`npm run lint`，改动的测试文件通过。
+- [x] 接缝 2：匹配函数用例——覆盖表优先、原样 / 小写、Claude 归一化（`claude-sonnet-4.5` → `claude-sonnet-4-5`、`sonnet-4-5` 补前缀）、去日期后缀、剥 provider 路径、`/<末段>` 偏好序、未命中 `priced=false`；成本公式四列相乘、reasoning 不计价；表或覆盖变化后负缓存被清。
+- [x] 接缝 1：注入 fetch 返回固定 JSON → `usage.pricing.refresh` 结果 `updated`、缓存文件为四列精简格式；返回 304 → `not_modified` 且只更新 `fetchedAt`；抛错 / 非法 JSON → `failed` 且缓存不变。`autoUpdate=false` 时启动后推进时钟 24 小时不发请求；`=true` 时启动 30 秒后发一次、24 小时后再发一次。
+- [x] 接缝 1：`set_daemon_config` 写一条自定义价格 → 收到 `usage.pricing.updated`，`usage.report.get` 的 `estimatedCost` 立即按新价变化，`usage.pricing.list` 该模型 `priceSource="override"`；填 0 时 `priced=true`。
+- [x] 接缝 1：`usage.pricing.list` 的排序为 `priced=false` 在前、再按 `lastSeenAt` 倒序。
+- [x] 快照文件旁有 LiteLLM MIT LICENSE；刷新脚本可运行并产出与内置格式一致的文件。
+- [x] `npm run typecheck`、`npm run lint`，改动的测试文件通过。
