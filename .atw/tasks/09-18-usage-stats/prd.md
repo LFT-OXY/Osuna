@@ -299,6 +299,8 @@ Pi 与 OMP：
 
 解析器夹具是**脱敏的真实日志片段**：从本机四个目录截取，每个片段十几到几十行，覆盖一条规则，文件名说明覆盖的行为（如 `claude-multiline-message-id.jsonl`、`codex-total-reset-after-resume.jsonl`、`omp-child-copies-parent-entries/`）。脱敏规则：cwd 替换为 `/work/<project>`，消息内容替换为占位，id / 时间戳 / usage 数字保留。夹具与解析器同目录存放，接缝 1 与接缝 3 复用同一批夹具（接缝 3 的夹具目录布局要与真实目录结构一致：Claude 的编码项目目录名、Codex 的 `YYYY/MM/DD`、Pi/OMP 的 header）。不写生成脚本，手工整理一次。
 
+夹具文件里的日期是写死的一天，**接缝 3 拷贝时把它改写成「今天 − 2 天」**（`packages/app/e2e/support/helpers/usage-fixtures.ts`，日期由 `createUsageFixtureRoots` 返回，spec 从它派生标签）。报表里近 7 天 / 近 30 天 / 热力图 182 天都是相对今天的滑动窗口，夹具日期写死的话，这些断言会在某一天静默失效；改写成相对日期后，「近 N 天」「活跃天数」「热力图格子层级」都能稳定断言。留 2 天是给浏览器与 daemon 各自的时区边界留余量。接缝 1 不改写：它自己注入 `now`。
+
 ### 先例
 
 - 进程内 daemon + `DaemonClient`：`docs/ad-hoc-daemon-testing.md`，现有 `*.e2e.test.ts`（owned-subscriptions、daemon-client）。

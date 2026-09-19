@@ -18,16 +18,25 @@ const FIXTURE_TOKENS = "180,248";
 const COST_PATTERN = /^\$\d+\.\d{2}$/;
 
 /**
- * Every fixture line is stamped on the same day, which the derived panels all
- * read. The statistics footer and the heatmap count the report's trailing
- * 26-week window, so these assertions hold until the fixture day ages out of it.
+ * Every fixture line lands on one day, which the derived panels all read. The
+ * helper restamps that day relative to today, so the labels are formatted here
+ * rather than written out: a fixed date would drop out of the report's trailing
+ * windows and take the statistics footer and the heatmap with it.
  */
-const FIXTURE_DAY = "2026-09-18";
-const FIXTURE_DAY_LABEL = "Sep 18, 2026";
-const FIXTURE_MONTH = "2026-09";
-const FIXTURE_MONTH_LABEL = "Sep 2026";
+const FIXTURE_DAY = fixtures.day;
+const FIXTURE_QUIET_DAY = shiftDay(FIXTURE_DAY, -1);
+const FIXTURE_MONTH = FIXTURE_DAY.slice(0, 7);
+const FIXTURE_DAY_LABEL = formatUtc(FIXTURE_DAY, {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+const FIXTURE_MONTH_LABEL = formatUtc(FIXTURE_DAY, { year: "numeric", month: "short" });
 
 const FIXTURE_SESSIONS = "13";
+
+/** Every fixture line falls inside both trailing windows, so all three read the same. */
+const FIXTURE_TOKENS_COMPACT = "180.2K";
 
 /** The three models the statistics panel ranks, largest first. */
 const FIXTURE_TOP_MODELS = ["claude-fable-5-1", "gpt-5.5", "gpt-5.6-luna"] as const;
@@ -53,6 +62,18 @@ const SOURCE_CARDS = [
   ["omp:anthropic", "OMP · Anthropic", "0.68%", "1 model"],
   ["pi:openai-codex", "Pi · OpenAI Codex", "0.42%", "1 model"],
 ] as const;
+
+function shiftDay(day: string, offset: number): string {
+  const at = new Date(`${day}T00:00:00.000Z`);
+  at.setUTCDate(at.getUTCDate() + offset);
+  return at.toISOString().slice(0, 10);
+}
+
+function formatUtc(day: string, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat("en", { timeZone: "UTC", ...options }).format(
+    new Date(`${day}T00:00:00.000Z`),
+  );
+}
 
 test.describe("Usage page", () => {
   test("owner reads the fixture totals, sources and model breakdown", async ({ page }) => {
@@ -115,8 +136,8 @@ test.describe("Usage page", () => {
 
     await test.step("a custom range covering the fixtures restores the full total", async () => {
       await page.getByTestId("usage-period-tab-custom").click();
-      await page.getByTestId("usage-custom-from").fill("2026-01-01");
-      await page.getByTestId("usage-custom-to").fill("2026-12-31");
+      await page.getByTestId("usage-custom-from").fill(`${FIXTURE_DAY.slice(0, 4)}-01-01`);
+      await page.getByTestId("usage-custom-to").fill(`${FIXTURE_DAY.slice(0, 4)}-12-31`);
       await expect(page.getByTestId("usage-period-tab-custom")).toHaveText("1/1 – 12/31");
       await waitForUsageTotal(page, FIXTURE_TOKENS);
     });
@@ -132,6 +153,10 @@ test.describe("Usage page", () => {
     await waitForUsageTotal(page, FIXTURE_TOKENS);
 
     await test.step("the statistics panel counts the sessions and ranks the models", async () => {
+      await expect(page.getByTestId("usage-stat-last-7-days")).toHaveText(FIXTURE_TOKENS_COMPACT);
+      await expect(page.getByTestId("usage-stat-last-30-days")).toHaveText(FIXTURE_TOKENS_COMPACT);
+      // One active day in the window, so the average is that day.
+      await expect(page.getByTestId("usage-stat-average")).toHaveText(FIXTURE_TOKENS_COMPACT);
       await expect(page.getByTestId("usage-stat-sessions")).toHaveText(FIXTURE_SESSIONS);
       const topModels = page.getByTestId("usage-stats-top-models");
       for (const model of FIXTURE_TOP_MODELS) {
@@ -148,7 +173,7 @@ test.describe("Usage page", () => {
         "background-color",
         "rgb(16, 185, 129)",
       );
-      await expect(page.getByTestId("usage-heatmap-cell-2026-09-17")).toHaveCSS(
+      await expect(page.getByTestId(`usage-heatmap-cell-${FIXTURE_QUIET_DAY}`)).toHaveCSS(
         "background-color",
         "rgb(235, 237, 240)",
       );
@@ -162,7 +187,9 @@ test.describe("Usage page", () => {
     });
 
     await test.step("the trend stacks the fixture month by source", async () => {
-      await expect(page.getByTestId("usage-trend-last")).toHaveText(FIXTURE_MONTH_LABEL);
+      // The axis runs from the first month with usage to the month the viewer is
+      // in, and those are the same month except for a couple of days a month.
+      await expect(page.getByTestId("usage-trend-first")).toHaveText(FIXTURE_MONTH_LABEL);
       for (const source of FIXTURE_TREND_SOURCES) {
         await expect(
           page.getByTestId(`usage-trend-segment-${FIXTURE_MONTH}-${source}`),
