@@ -3,7 +3,7 @@
 **What to build:** 四家解析器在桶行之外为每一轮各输出一份每轮行（键 `(cli, backend, sessionId, turnKey, model)`，五列 token + `startedAt` / `lastAt` / `userMessageIds` / `turnId?`），落盘到 `usage/turns-YYYY-MM.jsonl`，与桶行同批写、同压缩规则、启动全量进内存并建 `(cli, sessionId) → 轮列表` 索引；子代理 usage 归入父轮。本票只到存储与内存索引，RPC 归 07。
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 **Blocked by:** 03, 04
 
