@@ -3,7 +3,7 @@
 **What to build:** 「用量」页右列「数据明细」卡三页签可用。每日细目表（日期 / 总计 / 输入 / 输出 / 缓存 / 推理 / 会话 / 估算成本）点行展开当天会话列表（来源图标、标题、来源 pill、多主机时主机徽标、项目 · 模型 · 时间 · 时长、↑↓缓存明细、Token / 成本 / 轮次、「打开」按钮：已导入打开 agent，否则像 Session history 一样终端 resume）；按月表；项目用量（前 3 / 6 / 10 分段、首字母头像、非 git 标签、主机徽标、来源小图标、点行展开 cwd）。服务端补 `usage.sessions.list`。
 
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 **Blocked by:** 07, 08
 

@@ -8,10 +8,10 @@ import { MenuHeader } from "@/components/headers/menu-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollView } from "@/components/ui/scroll-view";
-import { UsagePlaceholderCard } from "@/components/usage/usage-card";
 import { UsageDetailsCard } from "@/components/usage/usage-details-card";
 import { UsageHeatmapCard } from "@/components/usage/usage-heatmap-card";
 import { UsageOverviewCard } from "@/components/usage/usage-overview-card";
+import { UsagePlanCard } from "@/components/usage/usage-plan-card";
 import { UsageStatsCard } from "@/components/usage/usage-stats-card";
 import { UsageTrendCard } from "@/components/usage/usage-trend-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -144,11 +144,7 @@ function UsageScreenContent(): ReactElement {
           stackBy={stackBy}
           onStackByChange={setStackBy}
         />
-        <UsagePlaceholderCard
-          title={t("usage.planUsage.title")}
-          message={t("usage.common.comingSoon")}
-          testID="usage-plan-usage-card"
-        />
+        <UsagePlanCard hosts={hostSelection.hosts} isMultiHost={hostSelection.countedCount > 1} />
       </View>
     );
     const mainColumn = (

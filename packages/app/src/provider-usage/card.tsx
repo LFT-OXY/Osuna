@@ -1,11 +1,13 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { getProviderIcon } from "@/components/provider-icons";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Theme } from "@/styles/theme";
+import { renderUsageText } from "@/usage/text";
 import { ProviderUsageBalanceBar } from "./balance-bar";
-import { formatAgo } from "./format";
+import { describeFooterParts, describeStatus } from "./format";
 import type { ProviderUsage } from "./types";
 import { ProviderUsageWindowBar } from "./window-bar";
 
@@ -24,35 +26,17 @@ const ThemedProviderUsageIcon = withUnistyles(ProviderUsageIcon);
 
 const mutedIconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-function statusText(usage: ProviderUsage): string | null {
-  if (usage.status === "available") return null;
-  return usage.status === "error" ? "Error" : "Unavailable";
-}
-
-function footerText(usage: ProviderUsage): string | null {
-  const updated = formatAgo(usage.fetchedAt);
-  const parts = [usage.sourceLabel, updated ? `Updated ${updated}` : null].filter(
-    (part): part is string => typeof part === "string" && part.length > 0,
-  );
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
-
-export function ProviderUsageCard({
-  usage,
-  compact = false,
-}: {
-  usage: ProviderUsage;
-  compact?: boolean;
-}) {
-  const status = statusText(usage);
-  const footer = footerText(usage);
+/** 外壳由调用方给（「用量」页的 `UsageCard`、环形表弹层），卡片自己不带内边距。 */
+export function ProviderUsageCard({ usage }: { usage: ProviderUsage }) {
+  const { t } = useTranslation();
+  const statusDescription = describeStatus(usage.status);
+  const status = statusDescription ? renderUsageText(t, statusDescription) : null;
+  const footerParts = describeFooterParts(usage, Date.now());
+  const footer =
+    footerParts.length > 0 ? footerParts.map((part) => renderUsageText(t, part)).join(" · ") : null;
   const balances = usage.balances ?? [];
   const details = usage.details ?? [];
 
-  const containerStyle = useMemo(
-    () => [styles.container, compact ? styles.containerCompact : styles.containerPadded],
-    [compact],
-  );
   const dotStyle = useMemo(
     () => [
       styles.statusDot,
@@ -63,7 +47,7 @@ export function ProviderUsageCard({
   );
 
   return (
-    <View style={containerStyle}>
+    <View style={styles.container}>
       <View style={styles.header}>
         <ThemedProviderUsageIcon iconKey={usage.providerId} size={14} uniProps={mutedIconColor} />
         <Text style={styles.name} numberOfLines={1}>
@@ -122,14 +106,6 @@ export function ProviderUsageCard({
 
 const styles = StyleSheet.create((theme) => ({
   container: {
-    gap: theme.spacing[3],
-  },
-  containerPadded: {
-    gap: theme.spacing[4],
-    paddingVertical: theme.spacing[4],
-    paddingHorizontal: theme.spacing[4],
-  },
-  containerCompact: {
     gap: theme.spacing[3],
   },
   header: {

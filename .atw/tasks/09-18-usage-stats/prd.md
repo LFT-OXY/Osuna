@@ -241,6 +241,8 @@ Pi 与 OMP：
 - 部分主机答不上来时页面照常渲染其余主机的合计，并在顶部一条琥珀横幅里逐台点名（沿用 History / 计划两页的做法）；全部失败才整页报错。没有任何可问的主机时停在加载态，不渲染零值——零会被读成「你没用过」，那是客户端给不出的结论。
 - 来源显示名里的后端名走客户端常量表；未登记的后端保留用户自己起的名字并大写首字母。
 - 价格表**不在**本页；主机设置页保留价格表区块。
+- 套餐用量卡片跟随本页的主机筛选取数，计入主机多于一台时按主机分组；页面本身是多主机合计，只显示其中一台的套餐会和上面的大数字自相矛盾。卡片标题用 `usage.planUsage.title`（英文 "Plan usage"），不是原型里的 "Plan usage · 已用"——§12 要求这 10 条英文逐字不变，而英文是 Playwright 的定位锚点。头部除相对时间外保留刷新按钮（原型没画），否则「刷新重拉计数」无从验证。
+- **代价（已知，不修）**：套餐用量从主机设置页搬走后，只有 `features.usage=true` 的主机才进本页的主机集合，所以连着旧 daemon 的用户在设置页和本页都看不到套餐用量，只剩会话内环形表弹层那一处。`provider.usage.list` 比 `features.usage` 早得多，两者并不同期上线。
 
 ### 10. 会话内两处
 
@@ -260,6 +262,8 @@ Pi 与 OMP：
 - 顶层新建 `usage` 命名空间，按区块分组：`overview`（含 `period.*`、`range` / `rangeSingle`、a11y）/ `stats` / `heatmap` / `trend` / `planUsage` / `details.{daily, monthly, projects}` / `sessionRow` / `hostFilter` / `backfill` / `columns`（共用列名）/ `common`（仅跨区块且不属任何表列的词）。不按类型分；重试用 `common.actions.retry`；**不往 `common` 加新词**。
 - turn footer 键在 `message.turnUsage.*`（自带 `columns.*`），"Worked for" 一并迁为 `message.workedFor: "Worked for {{duration}}"`。环形表弹层新段在 `contextWindow.sessionTotal.*`；同时把现有 `sessionCost` 英文改为 "Estimated cost {{cost}}"、zh-CN「估算成本 {{cost}}」，`contextWindow.accessibility` 扩成含已用 / 上限。
 - 价格表键 `settings.host.priceTable.*`。
+- 套餐用量原有 copy 共 11 条，其中 `retry`（"Try again"）并入 `common.actions.retry`（"Retry"），故迁入 `usage.planUsage.*` 的是 10 条。这一条英文因此不是逐字不变，是「不往 `common` 加新词、重试用 `common.actions.retry`」的直接结果。
+- 相对时间的键放在跨区块的 `usage.common.time.*`：套餐用量卡片与价格表副标题都要用它。它**不委托** `utils/time.ts`：`formatShortDuration` 算的是距重置还有多久（`utils/time.ts` 没有对应物），`describeTimeAgo` 的分桶也没有「超过一周改显绝对日期」那一支，委托过去会把「10 天前」变成「Jun 9」并要求本地化日期分支。两者的阈值也不同：`formatTimeAgo` 只在 10 秒内说 "just now"、10–59 秒显示 "42s"，而 `describeTimeAgo` 整个一分钟内都说 "just now"（沿用原 `formatAgo`，正是逐字不变要求的）。英文下两者在 ≥1 分钟且 ≤7 天时逐字相同，差异只在不足一分钟和超过一周两处可见。代价是本页显示「5 分钟前」而应用其余地方仍是 `formatTimeAgo` 的英文 "5m ago"——这是票面要求本地化的直接结果，不是疏漏。
 - 套餐用量模块原有 10 条英文迁到 `usage.planUsage.*` 后删除 copy 文件；相对时间与 "left" 改为纯函数返回 `{ key, params }`、组件层渲染；单位缩写（"3h"）保持英文。英文值逐字不变。
 - 来源显示名与后端名表不进 i18n，是客户端常量（Claude Code / Codex / Pi / OMP；anthropic → Anthropic、openai → OpenAI、xai → xAI、github → GitHub Copilot…；未知首字母大写；" · " 分隔）。
 - 9 语言各自内联、一次写齐，不留英文占位；zh-CN 由用户校对，其余以资源测试为守卫。单复数用 `{one, many}` 两键并由组件选键（`modelCountOne` / `modelCountMany`），不用 i18next 的 `_one` / `_other` 后缀——后缀形式在 ru / ar 下会回落成英文，而资源测试拦不住；运行时拼键的地方加 `i18n.exists()` 测试；四处图形（热力图格、趋势柱、来源卡、环形表）建 a11y 键。
@@ -295,11 +299,12 @@ Pi 与 OMP：
 - `usage.sessions.list` 的 (会话, 日) 拆行、Claude resume 链合并为一行、`handle` 字段、已导入会话带 `importedAgentId`。**每天 500 行截断改在接缝 2 验**（`buildUsageSessions` 的纯函数用例）：在接缝 1 上造这一条要写 501 份真实 transcript 夹具，夹具的代价远超它证明的东西。
 - 用假 agent client 创建 agent，其 persistence sessionId 指向某个夹具会话 → `usage.agent.get` / `usage.agent.turns.list` 的求和、`complete`、`turnId` 打标（假 client 发 `turn_completed` 后定向解析），旧记录无 `providerSessionIds` 时的补全。
 - `set_daemon_config` 写自定义价格 → `usage.pricing.updated` 广播、报表成本立即重算、`usage.pricing.list` 的 `priceSource`；`usage.pricing.refresh` 在 fetch 返回 200 / 304 / 失败时的三种结果与缓存文件内容；`autoUpdate=false` 时不发请求。
+- `PASEO_USAGE_PRICING_AUTO_UPDATE` 必须列进 `config-environment.ts` 的 `DAEMON_SETTING_ENV_KEYS`：`configurationEnvironment` 按白名单重建 env，不在表里的变量会被静默丢掉，于是 `autoUpdate` 永远回落成 true，每台 E2E worker daemon 在启动 30 秒后真的去 GitHub 拉价格表。回归断言走 `loadConfig` 这个公开边界（off / on / unset 三态），不去断言白名单数组本身。
 - 未支持根目录不存在、Codex `.zst` 存在时的静默跳过。
 
 **接缝 2：解析器与计价匹配的纯函数单元测试。** 四个解析器是 `(bytes, state) → { bucketRows, turnRows, state }` 的纯函数，价格匹配是 `(model, table, overrides) → 结果`，客户端的跨主机合并、热力图分级、轮次对齐、数字格式化、来源显示名、i18n 键存在性也是纯函数。它们的输入是夹具行，输出全值断言。这个接缝存在的理由：四家日志的每个坑（Claude 同 id 多行取尾、`forkedFrom` 跳过、`<synthetic>`；Codex total 归零、相邻重复签名、`token_usage_record` 优先；Pi/OMP 跨文件 id 复制、header 行号、推理列名；U+2028 切行、半行续读）在接缝 1 上只能看到总数对不对，看不出是哪条规则错了。
 
-**接缝 3：app Playwright 浏览器 spec。** worker daemon 通过现有 `e2eDaemonEnvironment` 选项把四个根目录环境变量指到 spec 自带的夹具目录、把扫描间隔调短。验证「用量」页首屏文字与卡片、周期切换与翻页、来源卡展开、每日细目展开会话行与「打开」跳转（`usage-page-details.spec.ts` 覆盖三页签与展开；`usage-page-session-open.spec.ts` 用 `withWorkspace()` 建一个真 workspace，再往夹具根里写一份 cwd 指向它的 transcript——`createUsageFixtureRoots` 的 `claudeProjectDir` 与 `writeUsageClaudeSession` 就是为此加的——点「打开」断言真的开出终端。**「已导入会话切到该 agent」这一支不在浏览器里验**：要在真 daemon 上造一个带用量的已导入 agent 就得跑真 Claude，接缝 1 已断言 `importedAgentId` 回传、接缝 2 已断言该分支走 `navigateToAgent`）、主机筛选（两台真 daemon，参照现有双主机 spec；旧 daemon 参照现有旧 daemon spec 的「需要更新主机」pill）、回填 pill 出现与消失、价格表区块填自定义价格后成本刷新、套餐用量卡片在新位置（改现有 spec 的路由）。turn footer 与环形表弹层的真实链路用 `*.real.spec.ts` 跑一轮 Claude（`CLAUDE_CONFIG_DIR` 指到临时目录），断言 footer 出现 `↑ ↓ $` 段与弹层内容；非 real 的 footer 覆盖靠接缝 1 的 `usage.agent.turns.list` 加接缝 2 的对齐函数。
+**接缝 3：app Playwright 浏览器 spec。** worker daemon 通过现有 `e2eDaemonEnvironment` 选项把四个根目录环境变量指到 spec 自带的夹具目录、把扫描间隔调短。验证「用量」页首屏文字与卡片、周期切换与翻页、来源卡展开、每日细目展开会话行与「打开」跳转（`usage-page-details.spec.ts` 覆盖三页签与展开；`usage-page-session-open.spec.ts` 用 `withWorkspace()` 建一个真 workspace，再往夹具根里写一份 cwd 指向它的 transcript——`createUsageFixtureRoots` 的 `claudeProjectDir` 与 `writeUsageClaudeSession` 就是为此加的——点「打开」断言真的开出终端。**「已导入会话切到该 agent」这一支不在浏览器里验**：要在真 daemon 上造一个带用量的已导入 agent 就得跑真 Claude，接缝 1 已断言 `importedAgentId` 回传、接缝 2 已断言该分支走 `navigateToAgent`）、主机筛选（两台真 daemon，参照现有双主机 spec；旧 daemon 参照现有旧 daemon spec 的「需要更新主机」pill）、回填 pill 出现与消失、价格表区块填自定义价格后成本刷新、套餐用量卡片在新位置（改现有 spec 的路由）。价格表的「立即刷新」在这一层只验按钮对 daemon 回答的三种结果各自的表现（成功后不留错误、失败时点名原因），**不验真的出网刷新**：`pricing.fetch` 是接缝 1 的进程内注入端口，worker daemon 只吃环境变量，配置里没有 pricing fetch 的 URL 注入点，为一条 UI 断言新增一个出站注入点不划算。daemon 侧 200 / 304 / 失败三态由接缝 1 的 `usage-pricing.e2e.test.ts` 覆盖。turn footer 与环形表弹层的真实链路用 `*.real.spec.ts` 跑一轮 Claude（`CLAUDE_CONFIG_DIR` 指到临时目录），断言 footer 出现 `↑ ↓ $` 段与弹层内容；非 real 的 footer 覆盖靠接缝 1 的 `usage.agent.turns.list` 加接缝 2 的对齐函数。
 
 三个接缝之外不再加：不为 `UsageStore` 单独写 store 测试（它的行为从接缝 1 的重启与压缩用例可见），不为 React 组件写挂载测试。
 

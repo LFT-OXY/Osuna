@@ -1,30 +1,10 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { clampPct, formatAmount, formatResetLabel } from "./format";
+import { renderUsageText } from "@/usage/text";
+import { clampPct, describeReset, resolveBalanceAmount } from "./format";
 import type { ProviderUsageBalance, ProviderUsageTone } from "./types";
-
-interface ResolvedBalance {
-  amountText: string;
-  usedPct: number | null;
-}
-
-function resolveBalance(balance: ProviderUsageBalance): ResolvedBalance {
-  const { used, remaining, limit, unit } = balance;
-  if (limit != null && limit > 0) {
-    const usedAmount = used ?? (remaining != null ? limit - remaining : null);
-    const usedPct = usedAmount != null ? (usedAmount / limit) * 100 : null;
-    const usedText = usedAmount != null ? formatAmount(usedAmount, unit) : "—";
-    return { amountText: `${usedText} / ${formatAmount(limit, unit)}`, usedPct };
-  }
-  if (remaining != null) {
-    return { amountText: `${formatAmount(remaining, unit)} left`, usedPct: null };
-  }
-  if (used != null) {
-    return { amountText: formatAmount(used, unit), usedPct: null };
-  }
-  return { amountText: "—", usedPct: null };
-}
 
 function fillToneStyle(tone: ProviderUsageTone) {
   switch (tone) {
@@ -40,9 +20,11 @@ function fillToneStyle(tone: ProviderUsageTone) {
 }
 
 export function ProviderUsageBalanceBar({ balance }: { balance: ProviderUsageBalance }) {
-  const { amountText, usedPct } = resolveBalance(balance);
+  const { t } = useTranslation();
+  const now = Date.now();
+  const { amount, usedPct } = resolveBalanceAmount(balance);
   const tone = balance.tone ?? "default";
-  const resetLabel = formatResetLabel(balance.resetsAt);
+  const reset = describeReset(balance.resetsAt, now);
 
   const fillStyle = useMemo<StyleProp<ViewStyle>>(
     () => [styles.fill, fillToneStyle(tone), { width: `${clampPct(usedPct ?? 0)}%` }],
@@ -56,8 +38,8 @@ export function ProviderUsageBalanceBar({ balance }: { balance: ProviderUsageBal
           {balance.label}
         </Text>
         <Text style={styles.value}>
-          {amountText}
-          {resetLabel ? <Text style={styles.reset}>{` · ${resetLabel}`}</Text> : null}
+          {renderUsageText(t, amount)}
+          {reset ? <Text style={styles.reset}>{` · ${renderUsageText(t, reset)}`}</Text> : null}
         </Text>
       </View>
       {usedPct != null ? (

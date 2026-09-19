@@ -110,7 +110,7 @@ import {
   HostAgentsPage,
   HostSettingsPage,
   HostProvidersPage,
-  HostUsagePage,
+  HostPriceTablePage,
   HostWorkspacesPage,
   HostTerminalsPage,
 } from "@/screens/settings/host-page";
@@ -222,7 +222,7 @@ function renderHostSettingsContent(
     case "providers":
       return <HostProvidersPage serverId={view.serverId} />;
     case "usage":
-      return <HostUsagePage serverId={view.serverId} />;
+      return <HostPriceTablePage serverId={view.serverId} />;
     case "terminals":
       return <HostTerminalsPage serverId={view.serverId} />;
     case "plugins":

@@ -38,25 +38,6 @@ export function UsageCard({
   );
 }
 
-/** A card whose contents belong to a later ticket; it still holds its slot. */
-export function UsagePlaceholderCard({
-  title,
-  message,
-  style,
-  testID,
-}: {
-  title: string;
-  message: string;
-  style?: StyleProp<ViewStyle>;
-  testID?: string;
-}) {
-  return (
-    <UsageCard title={title} style={style} testID={testID}>
-      <Text style={styles.placeholder}>{message}</Text>
-    </UsageCard>
-  );
-}
-
 const styles = StyleSheet.create((theme) => {
   const palette = theme.colors.usage;
   return {
@@ -79,11 +60,6 @@ const styles = StyleSheet.create((theme) => {
       fontWeight: theme.fontWeight.medium,
       color: palette.inkMuted,
       letterSpacing: 0.35,
-    },
-    placeholder: {
-      fontSize: 13,
-      color: palette.inkFaint,
-      paddingVertical: theme.spacing[4],
     },
   };
 });

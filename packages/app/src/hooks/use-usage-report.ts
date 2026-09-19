@@ -122,6 +122,8 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
 
 /**
  * `usage.updated` means new rows landed, so the report is refetched (debounced).
+ * `usage.pricing.updated` leaves the rows alone but changes what they cost, and
+ * cost is computed at query time, so it refetches the same way.
  * `usage.backfill.progress` only moves the pill until it reports `done`, which
  * is also new rows.
  */
@@ -150,11 +152,15 @@ function useUsageLiveEvents(input: {
     const observations = serverIds.flatMap((serverId) => {
       const client = runtime.getClient(serverId);
       if (!client) return [];
-      const observation = client.observeEvents(["usage.updated", "usage.backfill.progress"]);
+      const observation = client.observeEvents([
+        "usage.updated",
+        "usage.pricing.updated",
+        "usage.backfill.progress",
+      ]);
       observation.subscribe({
         snapshot: () => {},
         update: (message) => {
-          if (message.type === "usage.updated") {
+          if (message.type === "usage.updated" || message.type === "usage.pricing.updated") {
             scheduleRefetch();
             return;
           }

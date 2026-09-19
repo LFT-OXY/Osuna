@@ -27,6 +27,21 @@ describe("server config", () => {
     expect(standaloneConfig.desktopManaged).toBe(false);
   });
 
+  test("the price-table auto-update switch is readable from the environment", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-usage-pricing-"));
+    roots.push(paseoHome);
+
+    // The env name only works if it is in the daemon-setting allowlist; without
+    // that entry every E2E worker daemon quietly fetches the price table.
+    const off = loadConfig(paseoHome, { env: { PASEO_USAGE_PRICING_AUTO_UPDATE: "0" } });
+    const on = loadConfig(paseoHome, { env: { PASEO_USAGE_PRICING_AUTO_UPDATE: "1" } });
+    const unset = loadConfig(paseoHome, { env: {} });
+
+    expect(off.usage?.pricing?.autoUpdate).toBe(false);
+    expect(on.usage?.pricing?.autoUpdate).toBe(true);
+    expect(unset.usage?.pricing?.autoUpdate).toBe(true);
+  });
+
   test("loads the provider catalog refresh timeout", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-provider-timeout-"));
     roots.push(paseoHome);

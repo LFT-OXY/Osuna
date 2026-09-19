@@ -1,16 +1,21 @@
 import { expect, test } from "../support/fixtures";
-import { gotoAppShell, openSettings } from "../support/helpers/app";
+import { gotoAppShell } from "../support/helpers/app";
 import { installProviderUsageFixture } from "../support/helpers/provider-usage";
-import { getServerId } from "../support/helpers/server-id";
-import { openSettingsHostSection } from "../support/helpers/settings";
+import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
+import { openUsagePageFromShell } from "../support/helpers/usage-page";
 
-test.describe("provider usage settings", () => {
+// The card moved to the usage page, so the page has to render: point the daemon
+// at the usage fixtures rather than at whatever logs the machine happens to have.
+const fixtures = createUsageFixtureRoots("paseo-plan-usage-");
+
+test.use({ e2eDaemonEnvironment: fixtures.environment });
+
+test.describe("plan usage on the usage page", () => {
   test("renders every provider returned by the daemon usage RPC", async ({ page }) => {
     test.setTimeout(120_000);
-    const serverId = getServerId();
     const usageFixture = await installProviderUsageFixture(page, [
       {
-        fetchedAt: "2026-06-19T00:00:00.000Z",
+        fetchedAt: new Date().toISOString(),
         providers: [
           {
             providerId: "claude",
@@ -47,12 +52,11 @@ test.describe("provider usage settings", () => {
     ]);
 
     await gotoAppShell(page);
-    await openSettings(page);
     expect(usageFixture.requestCount()).toBe(0);
-    await openSettingsHostSection(page, serverId, "usage");
+    await openUsagePageFromShell(page);
     await usageFixture.waitForRequestCount(1);
 
-    const card = page.getByTestId("provider-usage-card");
+    const card = page.getByTestId("usage-plan-usage-card");
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card.getByText("Claude", { exact: true })).toBeVisible();
     await expect(card.getByText("Codex", { exact: true })).toBeVisible();
@@ -71,10 +75,9 @@ test.describe("provider usage settings", () => {
 
   test("refresh invalidates and refetches usage", async ({ page }) => {
     test.setTimeout(120_000);
-    const serverId = getServerId();
     const usageFixture = await installProviderUsageFixture(page, [
       {
-        fetchedAt: "2026-06-19T00:00:00.000Z",
+        fetchedAt: new Date().toISOString(),
         providers: [
           {
             providerId: "glm",
@@ -86,7 +89,7 @@ test.describe("provider usage settings", () => {
         ],
       },
       {
-        fetchedAt: "2026-06-19T00:01:00.000Z",
+        fetchedAt: new Date().toISOString(),
         providers: [
           {
             providerId: "glm",
@@ -100,24 +103,26 @@ test.describe("provider usage settings", () => {
     ]);
 
     await gotoAppShell(page);
-    await openSettings(page);
-    await openSettingsHostSection(page, serverId, "usage");
+    await openUsagePageFromShell(page);
     await usageFixture.waitForRequestCount(1);
-    await expect(page.getByText("23%")).toBeVisible({ timeout: 10_000 });
 
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    // The overview's own refresh control carries the same label, so both the
+    // assertion and the click stay inside the plan usage card.
+    const card = page.getByTestId("usage-plan-usage-card");
+    await expect(card.getByText("23%", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    await card.getByRole("button", { name: "Refresh", exact: true }).click();
     await usageFixture.waitForRequestCount(2);
 
     expect(usageFixture.requestCount()).toBe(2);
-    await expect(page.getByText("64%")).toBeVisible();
+    await expect(card.getByText("64%", { exact: true })).toBeVisible();
   });
 
   test("one provider error does not collapse the usage list", async ({ page }) => {
     test.setTimeout(120_000);
-    const serverId = getServerId();
     await installProviderUsageFixture(page, [
       {
-        fetchedAt: "2026-06-19T00:00:00.000Z",
+        fetchedAt: new Date().toISOString(),
         providers: [
           {
             providerId: "claude",
@@ -139,10 +144,9 @@ test.describe("provider usage settings", () => {
     ]);
 
     await gotoAppShell(page);
-    await openSettings(page);
-    await openSettingsHostSection(page, serverId, "usage");
+    await openUsagePageFromShell(page);
 
-    const card = page.getByTestId("provider-usage-card");
+    const card = page.getByTestId("usage-plan-usage-card");
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card.getByText("Error", { exact: true })).toBeVisible();
     await expect(card.getByText("Claude auth expired", { exact: true })).toBeVisible();
