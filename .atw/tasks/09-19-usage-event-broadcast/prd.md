@@ -82,3 +82,45 @@ app 端消费这三个事件用的是 `client.observeEvents([...])`（`use-usage
 4. 其余 7 条各有归属：新增的已修且绿，既有的写进本任务的收尾记录，含 main 基线
    run 的编号作为依据。
 5. `npm run typecheck` 通过；改动文件 `lint` / `format` 通过。
+
+## 收尾记录
+
+### 广播语义
+
+`legacyWantsEvent()`（`packages/server/src/server/session.ts`）里三个 usage 事件显式返回
+`false`。提交 `a13091a8e`。
+
+验证走了弯路，记在这里：第一版用例用 `DaemonClient` 起了个「不订阅」的客户端，带修复
+和不带修复**都是绿的** —— `DaemonClient` 总会声明 `owned_subscriptions`，`wantsEvent()`
+在 `session.ts:8298` 因 `isModern` 提前返回，根本走不到 legacy 分支。Hub 的 socket 恰恰
+不声明该能力。改用 `LegacyPeer`（裸 `ws`，hello 不带该能力）后：带修复绿，去掉修复报
+`expected [ 'usage.pricing.updated' ] to deeply equal []`。**给这类兼容分支写测试，必须先确认
+用例真的走到了那个分支。**
+
+### format / lint
+
+见「背景」一节的更正。`.oxfmtrc.json` 与 `.oxlintrc.json` 的 `ignorePatterns` 加上
+`.atw/** .agents/** .claude/** .pi/**`（格式再加 `docs/agents/**`），`docs/design.md`
+格式化。理由写进了 `docs/development.md` 的「Agent-tooling directories」一节。提交 `e14d01ec8`。
+
+### 七条失败的归属
+
+两轮分支 CI（35444049119、35447883355）与 main 基线（35445391971）对比后：
+
+| 失败 | 归属 |
+| --- | --- |
+| `server-tests (ubuntu)` ×2 | 本功能回归，已修 |
+| `format` / `lint` | 分支 `d1cfc4c3e` 带入 ATW 文件，已解 |
+| `cli-tests (shard 3/3)` | **不稳定用例**。main 基线红、分支第二轮绿，同一份代码两种结果 |
+| `explorer-plugin-menu:10` | `00a6b9a39` 会话历史成为 Explorer 默认 tab，菜单多一项 |
+| `settings-navigation:115` | `8eadc588b` 13 套主题，`Theme:` 控件从 1 个变 3 个 |
+| `plugin-theme:51` | 同上，主题名出现两次 |
+| `terminal-protocol-query:41` | 同上，期望深色 `0b0b` 实得白色 `ffff` |
+| `import-session-flow:125` | `1bad014d6` 故意让未安装 Provider 不再进 `providerErrors` |
+| `desktop-tests (ubuntu)` | 未归因，两轮均红，`TimeoutError` |
+
+后六条与 usage 无关，转入新任务。两条已在本地复现，与 CI 表现一致，是真漂移不是环境问题。
+
+**流程结论**：这个 fork 的 Actions 今天才启用，会话历史面板、13 套主题、终端主题桥接、
+计划文案 i18n 四个任务都在「CI 从未运行」的状态下完成了验收。仓库规矩是本地只跑改动
+到的单个测试文件、全量交给 CI，于是四批 e2e 漂移攒到一起才暴露。安全网当时没接上。
