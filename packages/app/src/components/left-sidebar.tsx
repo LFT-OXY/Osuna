@@ -410,15 +410,15 @@ function SidebarFooter({
 
   return (
     <View style={styles.sidebarFooter}>
-      <FooterIconButton
-        onPress={handleOpenProject}
-        testID="sidebar-add-project"
-        label={labels.addProject}
-        icon={Plus}
-        shortcutKeys={newAgentKeys}
-        theme={theme}
-      />
       <View style={styles.footerIconRow}>
+        <FooterIconButton
+          onPress={handleOpenProject}
+          testID="sidebar-add-project"
+          label={labels.addProject}
+          icon={Plus}
+          shortcutKeys={newAgentKeys}
+          theme={theme}
+        />
         <SidebarHostPicker
           theme={theme}
           label={labels.hosts}
@@ -875,7 +875,6 @@ const styles = StyleSheet.create((theme) => ({
   sidebarFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[3],
