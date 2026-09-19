@@ -68,6 +68,7 @@ $PASEO_HOME/
 │   └── {pluginId}/{version}/checkout/    # Source checkout for one installed Git commit
 ├── usage/
 │   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
+│   ├── turns-YYYY-MM.jsonl               # Token increments per (source, session, turn, model)
 │   ├── scan-state.json                   # One cursor per scanned CLI log file
 │   └── pricing-table.json                # Last price table fetched from LiteLLM
 └── push-tokens.json                     # Expo push notification tokens
@@ -554,7 +555,7 @@ Simple set of Expo push notification tokens. Loaded with permissive parsing (fil
 ## 7. Usage
 
 The daemon parses the local Claude Code / Codex / Pi / OMP session logs into token
-buckets.
+buckets, and the same pass into one row per turn.
 
 ### Bucket row (`usage/buckets-YYYY-MM.jsonl`)
 
@@ -581,19 +582,53 @@ is rewritten at load as one line per key.
 Estimated cost is never stored. It is computed per query from the current price table,
 so a custom price applies to history immediately.
 
+### Turn row (`usage/turns-YYYY-MM.jsonl`)
+
+Append-only, one file per UTC month of the turn's **start**, one JSON object per line.
+The page groups sessions and days; this file answers "what did this one turn cost".
+
+| Field                                                           | Type                                   | Notes                                                                   |
+| --------------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------- |
+| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                         |
+| `backend`                                                       | `string \| null`                       | Part of the key                                                         |
+| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                  |
+| `turnKey`                                                       | `string`                               | The CLI's own turn id. Part of the key                                  |
+| `model`                                                         | `string`                               | Part of the key, so a turn that switched models has a row per model     |
+| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | Same columns as a bucket row                                            |
+| `startedAt` / `lastAt`                                          | `string`                               | The turn's span. **No duration is stored** — `lastAt - startedAt` is it |
+| `userMessageIds`                                                | `string[]`                             | What a client matches its own timeline rows against; empty for Codex    |
+| `turnId`                                                        | `string?`                              | Paseo's own turn id, stamped by the parse a finished turn triggered     |
+
+`turnKey` is the CLI's: Claude's `promptId`, Codex's `turn_id`, the id of the Pi/OMP
+entry that opened the turn. A subagent's tokens join the turn that spawned it and start
+no turn of their own — Claude repeats the parent's `promptId`, Codex writes
+`root_turn_id`, and Pi/OMP say nothing, so the subagent file's header stamp is matched
+against the parent session's turn spans and its tokens stay in the bucket rows alone
+when nothing covers it.
+
+Rows are **increments** like bucket rows, and startup sums same-key rows: tokens add,
+`startedAt` takes the minimum, `lastAt` the maximum, `userMessageIds` union, `turnId`
+the first non-empty. Compaction is the same rule as bucket rows. Both kinds are appended
+in one batch, so a crash cannot leave one ahead of the other.
+
+Summing the turn spans of a session and summing the `durationMs` its bucket rows settled
+give the same number, by construction. The one exception is a subagent still writing
+after its parent's last message — in its own file or inline as a sidechain — which
+widens the turn past what the buckets counted.
+
 ### Scan cursor (`usage/scan-state.json`)
 
 `{ version: 1, cursors: Record<cursorKey, cursor> }`, written atomically. The key is the
 file's identity — `claude <sessionId>` for a transcript, `claude <sessionId> <agentId>`
 for a subagent file — which makes this map the session-id to path index as well.
 
-| Field                                 | Type                    | Notes                                                                                                                                                          |
-| ------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cli`                                 | usage source            |                                                                                                                                                                |
-| `path` / `inode` / `size` / `mtimeMs` |                         | Change detection; a path change with the same inode is a move                                                                                                  |
-| `offset`                              | `number`                | Bytes consumed, always at a line boundary                                                                                                                      |
-| `firstAt` / `lastAt`                  | `string \| null`        | Entry timestamps seen so far                                                                                                                                   |
-| `parser`                              | discriminated on `kind` | Per-CLI parse state: session id, cwd, whether the file is a subagent transcript, the resumed-from session id, the open turn, and the last deduplicated message |
+| Field                                 | Type                    | Notes                                                                                                                                                                                                     |
+| ------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli`                                 | usage source            |                                                                                                                                                                                                           |
+| `path` / `inode` / `size` / `mtimeMs` |                         | Change detection; a path change with the same inode is a move                                                                                                                                             |
+| `offset`                              | `number`                | Bytes consumed, always at a line boundary                                                                                                                                                                 |
+| `firstAt` / `lastAt`                  | `string \| null`        | Entry timestamps seen so far                                                                                                                                                                              |
+| `parser`                              | discriminated on `kind` | Per-CLI parse state: session id, cwd, whether the file is a subagent transcript, the resumed-from session id, the open turn, the last deduplicated message, and how a subagent file names its parent turn |
 
 `size < offset` or a changed inode means the file was rewritten: the cursor resets to
 zero and the file is read again, which double counts what it still holds. That is
@@ -618,8 +653,8 @@ column. This file is a cache, not a source of truth — the daemon ships the sam
 a snapshot and takes whichever of the two has the newer `fetchedAt`. A file that fails to
 parse is deleted rather than repaired; the snapshot always works.
 
-Cost is never stored. Bucket rows hold tokens only and a report multiplies them at query
-time, so a corrected or newly added price reprices everything already recorded, with no
+Cost is never stored. Bucket and turn rows hold tokens only and a report multiplies them
+at query time, so a corrected or newly added price reprices everything already recorded, with no
 migration and no backfill. `docs/usage.md` covers the refresh schedule, the single outbound
 request, and how user prices match.
 

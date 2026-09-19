@@ -1,4 +1,5 @@
 import type { UsageCli } from "@getpaseo/protocol/usage/types";
+import { mergeTurnDrafts } from "./turn-rows.js";
 import {
   emptyBucketRow,
   mergeBucketRow,
@@ -6,6 +7,7 @@ import {
   type UsageOpenTurn,
   type UsageParseResult,
   type UsageParserState,
+  type UsageTurnRowDraft,
 } from "./types.js";
 
 const NEWLINE = 0x0a;
@@ -29,6 +31,76 @@ export type UsageTokenColumns = Pick<
   "input" | "cachedInput" | "cacheWrite" | "output" | "reasoning"
 >;
 
+/** What one read window produces: both kinds of row, and the span it saw. */
+export interface UsageParseSink {
+  rows: UsageBucketRow[];
+  turnRows: UsageTurnRowDraft[];
+  span: TimestampSpan;
+}
+
+/**
+ * The turn a line's tokens belong to. A main-thread line has the open turn; a
+ * subagent line has whatever its file says about the turn that spawned it,
+ * which is either a key or only its own start to be matched against the
+ * parent's turns.
+ */
+export interface TurnAttachment {
+  turnKey: string | null;
+  attachAt: string | null;
+  /** Null for a subagent line, which knows no clock but its own. */
+  startedAt: string | null;
+  userMessageIds: readonly string[];
+}
+
+/**
+ * Where the line being read attaches. A main-thread line joins the open turn;
+ * a subagent line joins whatever its file says about the turn that spawned it,
+ * and nothing at all when the file says neither — its tokens then stay in the
+ * bucket rows alone. `parentTurnKey` is passed in by a source that reads the
+ * key off the line rather than off its state, which is what Codex does.
+ */
+export function turnAttachmentOf(
+  state: {
+    subagent: boolean;
+    openTurn: UsageOpenTurn | null;
+    parentTurnKey?: string | null;
+    attachAt?: string | null;
+  },
+  parentTurnKey: string | null = null,
+): TurnAttachment | null {
+  if (!state.subagent) {
+    return state.openTurn ? openTurnAttachment(state.openTurn) : null;
+  }
+  const turnKey = parentTurnKey ?? state.parentTurnKey ?? null;
+  const attachAt = state.attachAt ?? null;
+  if (!turnKey && !attachAt) return null;
+  return { turnKey, attachAt, startedAt: null, userMessageIds: [] };
+}
+
+function openTurnAttachment(openTurn: UsageOpenTurn): TurnAttachment {
+  return {
+    turnKey: openTurn.turnKey,
+    attachAt: null,
+    startedAt: openTurn.startedAt,
+    userMessageIds: openTurn.userMessageIds,
+  };
+}
+
+/** What a parser returns when it settled an idle turn instead of reading bytes. */
+export function idleParseResult<S extends UsageParserState>(
+  sink: UsageParseSink,
+  state: S,
+): UsageParseResult {
+  return {
+    rows: sink.rows,
+    turnRows: sink.turnRows,
+    state,
+    consumedBytes: 0,
+    firstAt: null,
+    lastAt: null,
+  };
+}
+
 /**
  * Drive one read window: split it into lines, hand every entry to the source's
  * own consumer, and report what was consumed. `state` is mutated in place, so
@@ -37,28 +109,39 @@ export type UsageTokenColumns = Pick<
 export function parseChunk<S extends UsageParserState, E>(input: {
   bytes: Buffer;
   state: S;
-  consumeEntry: (entry: E, state: S, rows: UsageBucketRow[], span: TimestampSpan) => void;
+  consumeEntry: (entry: E, state: S, sink: UsageParseSink) => void;
 }): UsageParseResult {
   const { lines, consumedBytes } = takeCompleteLines(input.bytes);
   if (consumedBytes === 0) {
-    return { rows: [], state: input.state, consumedBytes: 0, firstAt: null, lastAt: null };
+    return {
+      rows: [],
+      turnRows: [],
+      state: input.state,
+      consumedBytes: 0,
+      firstAt: null,
+      lastAt: null,
+    };
   }
 
-  const rows: UsageBucketRow[] = [];
-  const span: TimestampSpan = { firstAt: null, lastAt: null };
+  const sink = emptySink();
   for (const line of lines) {
     if (line.length === 0) continue;
     const entry = parseJsonLine<E>(line);
-    if (entry) input.consumeEntry(entry, input.state, rows, span);
+    if (entry) input.consumeEntry(entry, input.state, sink);
   }
 
   return {
-    rows: mergeRows(rows),
+    rows: mergeRows(sink.rows),
+    turnRows: mergeTurnDrafts(sink.turnRows),
     state: input.state,
     consumedBytes,
-    firstAt: span.firstAt,
-    lastAt: span.lastAt,
+    firstAt: sink.span.firstAt,
+    lastAt: sink.span.lastAt,
   };
+}
+
+export function emptySink(): UsageParseSink {
+  return { rows: [], turnRows: [], span: { firstAt: null, lastAt: null } };
 }
 
 /**
@@ -129,6 +212,36 @@ export function mergeRows(rows: UsageBucketRow[]): UsageBucketRow[] {
 }
 
 /**
+ * Add what one response contributed to the turn it ran in. `at` is the
+ * response's own timestamp, which both ends the turn row's span and starts it
+ * for a subagent row that knows nothing earlier.
+ */
+export function pushTurnUsage(input: {
+  sink: UsageParseSink;
+  identity: UsageRowIdentity;
+  attachment: TurnAttachment | null;
+  model: string;
+  at: string;
+  amounts: UsageTokenColumns;
+}): void {
+  const { attachment, identity } = input;
+  if (!attachment || !identity.sessionId) return;
+  const startedAt = attachment.startedAt ?? input.at;
+  input.sink.turnRows.push({
+    cli: identity.cli,
+    backend: identity.backend,
+    sessionId: identity.sessionId,
+    turnKey: attachment.turnKey,
+    attachAt: attachment.attachAt,
+    model: input.model,
+    ...input.amounts,
+    startedAt: startedAt < input.at ? startedAt : input.at,
+    lastAt: input.at,
+    userMessageIds: [...attachment.userMessageIds],
+  });
+}
+
+/**
  * Count a turn the moment its model becomes known, against the bucket the turn
  * started in rather than the one its first response landed in.
  */
@@ -154,20 +267,21 @@ export function countOpenTurn(input: {
 
 /**
  * Append the wall clock a turn has run beyond what already reached a bucket
- * row. A turn whose model is still unknown never counted, so it settles
- * nothing.
+ * row, and carry the same end into its turn row so the two agree by
+ * construction. A turn whose model is still unknown never counted, so it
+ * settles nothing.
  */
 export function settleOpenTurn(input: {
   identity: UsageRowIdentity;
   openTurn: UsageOpenTurn | null;
-  rows: UsageBucketRow[];
+  sink: UsageParseSink;
 }): UsageOpenTurn | null {
   const openTurn = input.openTurn;
   if (!openTurn?.model) return openTurn;
   const pending = Date.parse(openTurn.lastAt) - Date.parse(openTurn.startedAt) - openTurn.settledMs;
   if (pending <= 0) return openTurn;
 
-  input.rows.push({
+  input.sink.rows.push({
     ...emptyBucketRow({
       cli: input.identity.cli,
       backend: input.identity.backend,
@@ -177,6 +291,14 @@ export function settleOpenTurn(input: {
       bucket: openTurn.bucket,
     }),
     durationMs: pending,
+  });
+  pushTurnUsage({
+    sink: input.sink,
+    identity: input.identity,
+    attachment: openTurnAttachment(openTurn),
+    model: openTurn.model,
+    at: openTurn.lastAt,
+    amounts: { input: 0, cachedInput: 0, cacheWrite: 0, output: 0, reasoning: 0 },
   });
   return { ...openTurn, settledMs: openTurn.settledMs + pending };
 }

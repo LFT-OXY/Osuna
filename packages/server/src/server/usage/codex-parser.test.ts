@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { createCodexParserState, parseCodexChunk, settleCodexOpenTurn } from "./codex-parser.js";
-import { addBucketRow, bucketRowKey, type UsageBucketRow } from "./types.js";
+import {
+  addBucketRow,
+  bucketRowKey,
+  type UsageBucketRow,
+  type UsageTurnRowDraft,
+} from "./types.js";
 
 const THREAD = "01a0a8e9-9f4c-7bd2-8a11-0d3c6f2b5e70";
 
@@ -67,12 +72,49 @@ const SESSION_ROWS: UsageBucketRow[] = [
   },
 ];
 
+/** A rollout names no id for the prompt that opened a turn. */
+const SESSION_TURNS: UsageTurnRowDraft[] = [
+  {
+    cli: "codex",
+    backend: null,
+    sessionId: THREAD,
+    turnKey: "turn-1",
+    attachAt: null,
+    model: "gpt-5.6-luna",
+    input: 300,
+    cachedInput: 2400,
+    cacheWrite: 300,
+    output: 350,
+    reasoning: 80,
+    startedAt: "2026-09-18T09:30:10.000Z",
+    lastAt: "2026-09-18T09:30:50.000Z",
+    userMessageIds: [],
+  },
+  {
+    cli: "codex",
+    backend: null,
+    sessionId: THREAD,
+    turnKey: "turn-2",
+    attachAt: null,
+    model: "gpt-6-astra",
+    input: 500,
+    cachedInput: 0,
+    cacheWrite: 0,
+    output: 40,
+    reasoning: 0,
+    startedAt: "2026-09-18T09:46:00.000Z",
+    lastAt: "2026-09-18T09:46:30.000Z",
+    userMessageIds: [],
+  },
+];
+
 describe("parseCodexChunk", () => {
   test("reads a whole rollout: usage records, repeats, model and cwd per turn, turn wall clock", () => {
     const bytes = fixture("codex-session.jsonl");
     const result = parseCodexChunk(bytes, createCodexParserState({ threadId: THREAD }));
 
     expect(result.rows).toEqual(SESSION_ROWS);
+    expect(result.turnRows).toEqual(SESSION_TURNS);
     expect(result.consumedBytes).toBe(bytes.length);
     expect(result.firstAt).toBe("2026-09-18T09:30:00.000Z");
     expect(result.lastAt).toBe("2026-09-18T09:46:30.000Z");
@@ -87,6 +129,7 @@ describe("parseCodexChunk", () => {
       lastUsageKey: "resp_3",
       // `turn_aborted` settled and closed the turn, so nothing stays open.
       openTurn: null,
+      attachAt: null,
     });
   });
 
@@ -205,6 +248,25 @@ describe("parseCodexChunk", () => {
         reasoning: 20,
         turns: 0,
         durationMs: 0,
+      },
+    ]);
+    // From 0.153.2 a subagent's record names the parent's turn outright.
+    expect(result.turnRows).toEqual([
+      {
+        cli: "codex",
+        backend: null,
+        sessionId: THREAD,
+        turnKey: "turn-1",
+        attachAt: "2026-09-18T10:05:00.000Z",
+        model: "gpt-5.6-luna",
+        input: 100,
+        cachedInput: 200,
+        cacheWrite: 50,
+        output: 80,
+        reasoning: 20,
+        startedAt: "2026-09-18T10:05:30.000Z",
+        lastAt: "2026-09-18T10:05:30.000Z",
+        userMessageIds: [],
       },
     ]);
     expect(result.state.subagent).toBe(true);

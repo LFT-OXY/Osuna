@@ -22,7 +22,8 @@ import {
 import { UsageProjectResolver } from "./project-attribution.js";
 import { buildUsageReport, type UsageReportRequest } from "./report.js";
 import { USAGE_SOURCE_ADAPTERS, type UsageSourceAdapter } from "./sources.js";
-import { UsageStore } from "./store.js";
+import { UsageStore, type UsageRowSet } from "./store.js";
+import { UsageTurnIndex, resolveTurnRows } from "./turn-rows.js";
 import {
   emptyScanState,
   isMissingPathError,
@@ -32,6 +33,8 @@ import {
   type UsageParserState,
   type UsageScanCursor,
   type UsageScanState,
+  type UsageTurnRow,
+  type UsageTurnRowDraft,
 } from "./types.js";
 
 export const DEFAULT_USAGE_SCAN_INTERVAL_MS = 60_000;
@@ -39,6 +42,12 @@ const SCAN_INTERVAL_ENV = "PASEO_USAGE_SCAN_INTERVAL_MS";
 
 /** How long a file must stay untouched before an unfinished turn is settled. */
 const IDLE_TURN_SETTLE_MS = 10 * 60 * 1000;
+/**
+ * A subagent draft waiting on a parent turn is given up on after this. The real
+ * stop condition is a later turn having begun; this only keeps a session that
+ * never ran another turn from holding its drafts forever, so it is generous.
+ */
+const PENDING_TURN_ROW_TTL_MS = 6 * 60 * 60 * 1000;
 const FLUSH_EVERY_FILES = 20;
 const FLUSH_EVERY_MS = 500;
 const PROGRESS_INTERVAL_MS = 1000;
@@ -86,6 +95,9 @@ export class UsageService {
 
   private roots: UsageLogRoots = { claude: [], codex: [], pi: [], omp: [] };
   private rows = new Map<string, UsageBucketRow>();
+  private readonly turns = new UsageTurnIndex();
+  /** Subagent rows whose parent turn had not grown far enough to cover them. */
+  private pendingTurnDrafts: UsageTurnRowDraft[] = [];
   private scanState: UsageScanState = emptyScanState();
   private backfill: UsageBackfill = {
     state: "idle",
@@ -128,7 +140,9 @@ export class UsageService {
   /** Loads what is already on disk, then starts the backfill round in the background. */
   async start(): Promise<void> {
     this.roots = this.config?.roots ?? (await resolveUsageLogRoots());
-    this.applyRows(await this.store.loadRows());
+    const stored = await this.store.loadRows();
+    this.applyRows(stored.buckets);
+    this.turns.addAll(stored.turns);
     this.scanState = await this.store.loadScanState();
     await this.pricing.start();
     this.startRound({ backfill: true });
@@ -209,7 +223,12 @@ export class UsageService {
     const discovered = await this.discoverFiles();
     const changed = discovered.filter((file) => this.hasChanged(file));
     // The backfill works newest first so the days people look at fill in first.
-    changed.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    // A subagent file that names no turn is matched against the turns of the
+    // session that spawned it, so every main-thread file is read ahead of them.
+    changed.sort(
+      (a, b) =>
+        Number(a.freshParser.subagent) - Number(b.freshParser.subagent) || b.mtimeMs - a.mtimeMs,
+    );
 
     if (options.backfill) {
       this.backfill = {
@@ -221,7 +240,7 @@ export class UsageService {
       this.onBackfillProgress(this.backfill);
     }
 
-    let pendingRows: UsageBucketRow[] = [];
+    let pendingRows: UsageRowSet = { buckets: [], turns: [] };
     let filesSinceFlush = 0;
     let lastFlushAt = this.now();
     let lastProgressAt = 0;
@@ -229,11 +248,11 @@ export class UsageService {
 
     const flush = async (): Promise<void> => {
       if (!cursorDirty) return;
-      if (pendingRows.length > 0) {
+      if (pendingRows.buckets.length > 0 || pendingRows.turns.length > 0) {
         // Rows before the cursor: a crash between the two recounts at most one
         // batch, where the other order would lose it for good.
         await this.store.appendRows(pendingRows);
-        pendingRows = [];
+        pendingRows = { buckets: [], turns: [] };
       }
       await this.store.saveScanState(this.scanState);
       cursorDirty = false;
@@ -243,7 +262,7 @@ export class UsageService {
 
     for (const file of changed) {
       if (this.disposed) break;
-      pendingRows.push(...(await this.consumeFile(file)));
+      appendRowSet(pendingRows, await this.consumeFile(file));
       cursorDirty = true;
       filesSinceFlush += 1;
       if (options.backfill) {
@@ -260,8 +279,14 @@ export class UsageService {
     }
 
     const settled = this.settleIdleTurns(discovered);
-    if (settled.length > 0) {
-      pendingRows.push(...settled);
+    if (settled.buckets.length > 0 || settled.turns.length > 0) {
+      appendRowSet(pendingRows, settled);
+      cursorDirty = true;
+    }
+    // Last, so the retry sees every turn this round grew or closed.
+    const retried = this.retryPendingTurnRows();
+    if (retried.length > 0) {
+      pendingRows.turns.push(...retried);
       cursorDirty = true;
     }
     await flush();
@@ -319,18 +344,18 @@ export class UsageService {
     return cursor.size !== file.size || cursor.mtimeMs !== file.mtimeMs;
   }
 
-  private async consumeFile(file: DiscoveredFile): Promise<UsageBucketRow[]> {
+  private async consumeFile(file: DiscoveredFile): Promise<UsageRowSet> {
     const cursor = this.resolveCursor(file);
     let handle: FileHandle;
     try {
       handle = await fs.open(file.filePath, "r");
     } catch (error) {
       // The CLI can delete or roll a transcript between readdir and open.
-      if (isMissingPathError(error)) return [];
+      if (isMissingPathError(error)) return { buckets: [], turns: [] };
       throw error;
     }
 
-    const rows: UsageBucketRow[] = [];
+    const rows: UsageRowSet = { buckets: [], turns: [] };
     let state = cursor.parser;
     let position = cursor.offset;
     let firstAt = cursor.firstAt;
@@ -348,7 +373,12 @@ export class UsageService {
             ? Buffer.concat([pending, buffer.subarray(0, bytesRead)])
             : Buffer.from(buffer.subarray(0, bytesRead));
         const result = file.adapter.parse(chunk, state);
-        rows.push(...result.rows);
+        rows.buckets.push(...result.rows);
+        // Main-thread files are read first, so a subagent draft usually finds
+        // its turn right here; one whose parent turn is still short waits.
+        const resolved = resolveTurnRows(result.turnRows, this.turns);
+        rows.turns.push(...resolved.rows);
+        this.pendingTurnDrafts.push(...resolved.pending);
         state = result.state;
         if (result.firstAt && (firstAt === null || result.firstAt < firstAt)) {
           firstAt = result.firstAt;
@@ -377,7 +407,8 @@ export class UsageService {
         },
       },
     };
-    this.applyRows(rows);
+    this.applyRows(rows.buckets);
+    this.turns.addAll(rows.turns);
     return rows;
   }
 
@@ -410,10 +441,10 @@ export class UsageService {
     return existing;
   }
 
-  private settleIdleTurns(discovered: DiscoveredFile[]): UsageBucketRow[] {
+  private settleIdleTurns(discovered: DiscoveredFile[]): UsageRowSet {
     const cutoff = this.now() - IDLE_TURN_SETTLE_MS;
     const byKey = new Map(discovered.map((file) => [file.cursorKey, file]));
-    const rows: UsageBucketRow[] = [];
+    const rows: UsageRowSet = { buckets: [], turns: [] };
     for (const [cursorKey, cursor] of Object.entries(this.scanState.cursors)) {
       const file = byKey.get(cursorKey);
       if (!file || file.mtimeMs > cutoff) continue;
@@ -421,19 +452,50 @@ export class UsageService {
       if (!adapter) continue;
       const result = adapter.settleIdle(cursor.parser);
       if (result.rows.length === 0) continue;
-      rows.push(...result.rows);
+      rows.buckets.push(...result.rows);
+      const resolved = resolveTurnRows(result.turnRows, this.turns);
+      rows.turns.push(...resolved.rows);
+      this.pendingTurnDrafts.push(...resolved.pending);
       this.scanState = {
         ...this.scanState,
         cursors: { ...this.scanState.cursors, [cursorKey]: { ...cursor, parser: result.state } },
       };
     }
-    this.applyRows(rows);
+    this.applyRows(rows.buckets);
+    this.turns.addAll(rows.turns);
     return rows;
+  }
+
+  /**
+   * Try the subagent drafts no turn covered when they were read. A draft is let
+   * go once a later turn of its session has begun — nothing earlier can still
+   * grow over it — and, for a session that never ran another turn, once it has
+   * waited out `PENDING_TURN_ROW_TTL_MS`. The buffer is memory only: a restart
+   * inside that window loses the drafts, and their tokens stay in the bucket
+   * rows alone.
+   */
+  private retryPendingTurnRows(): UsageTurnRow[] {
+    if (this.pendingTurnDrafts.length === 0) return [];
+    const resolved = resolveTurnRows(this.pendingTurnDrafts, this.turns);
+    const cutoff = new Date(this.now() - PENDING_TURN_ROW_TTL_MS).toISOString();
+    this.pendingTurnDrafts = resolved.pending.filter(
+      (draft) =>
+        draft.attachAt !== null &&
+        draft.attachAt >= cutoff &&
+        !this.turns.hasTurnAfter(draft.cli, draft.sessionId, draft.attachAt),
+    );
+    this.turns.addAll(resolved.rows);
+    return resolved.rows;
   }
 
   private applyRows(rows: UsageBucketRow[]): void {
     for (const row of rows) mergeBucketRow(this.rows, row);
   }
+}
+
+function appendRowSet(target: UsageRowSet, source: UsageRowSet): void {
+  target.buckets.push(...source.buckets);
+  target.turns.push(...source.turns);
 }
 
 /**

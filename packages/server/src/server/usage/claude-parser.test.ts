@@ -5,7 +5,12 @@ import {
   parseClaudeChunk,
   settleClaudeOpenTurn,
 } from "./claude-parser.js";
-import { addBucketRow, bucketRowKey, type UsageBucketRow } from "./types.js";
+import {
+  addBucketRow,
+  bucketRowKey,
+  type UsageBucketRow,
+  type UsageTurnRowDraft,
+} from "./types.js";
 
 function fixture(name: string): Buffer {
   return readFileSync(new URL(`./fixtures/claude/${name}`, import.meta.url));
@@ -73,12 +78,50 @@ const SESSION_ROWS: UsageBucketRow[] = [
   },
 ];
 
+/** One row per model of each turn; the subagent's tokens join its parent's. */
+const SESSION_TURNS: UsageTurnRowDraft[] = [
+  {
+    cli: "claude",
+    backend: null,
+    sessionId: "sess-1",
+    turnKey: "p1",
+    attachAt: null,
+    model: "claude-fable-5-1",
+    input: 7,
+    cachedInput: 74_560,
+    cacheWrite: 26_884,
+    output: 1010,
+    reasoning: 186,
+    startedAt: "2026-09-18T09:44:42.587Z",
+    lastAt: "2026-09-18T09:46:00.000Z",
+    // The tool_result line repeats the prompt id but is not a user message.
+    userMessageIds: ["u1"],
+  },
+  {
+    cli: "claude",
+    backend: null,
+    sessionId: "sess-1",
+    turnKey: "p2",
+    attachAt: null,
+    model: "claude-opus-5",
+    input: 10,
+    cachedInput: 100,
+    cacheWrite: 200,
+    output: 50,
+    reasoning: 0,
+    startedAt: "2026-09-18T10:01:00.000Z",
+    lastAt: "2026-09-18T10:01:30.000Z",
+    userMessageIds: ["u9"],
+  },
+];
+
 describe("parseClaudeChunk", () => {
   test("reads a whole session: multi-line message groups, skipped rows, turns and duration", () => {
     const bytes = fixture("claude-session.jsonl");
     const result = parseClaudeChunk(bytes, createClaudeParserState({ subagent: false }));
 
     expect(result.rows).toEqual(SESSION_ROWS);
+    expect(result.turnRows).toEqual(SESSION_TURNS);
     expect(result.consumedBytes).toBe(bytes.length);
     expect(result.firstAt).toBe("2026-09-18T09:44:42.587Z");
     expect(result.lastAt).toBe("2026-09-18T10:01:30.000Z");
@@ -95,7 +138,9 @@ describe("parseClaudeChunk", () => {
         lastAt: "2026-09-18T10:01:30.000Z",
         settledMs: 30_000,
         model: "claude-opus-5",
+        userMessageIds: ["u9"],
       },
+      parentTurnKey: null,
       lastMessage: {
         id: "msg_c",
         model: "claude-opus-5",
@@ -148,6 +193,26 @@ describe("parseClaudeChunk", () => {
         reasoning: 300,
         turns: 0,
         durationMs: 0,
+      },
+    ]);
+    // The task prompt repeats the parent turn's prompt id, so the tokens land
+    // on that turn without any matching by time.
+    expect(result.turnRows).toEqual([
+      {
+        cli: "claude",
+        backend: null,
+        sessionId: "sess-1",
+        turnKey: "p1",
+        attachAt: null,
+        model: "claude-opus-5",
+        input: 1,
+        cachedInput: 500,
+        cacheWrite: 100,
+        output: 900,
+        reasoning: 300,
+        startedAt: "2026-09-18T09:45:20.000Z",
+        lastAt: "2026-09-18T09:45:25.000Z",
+        userMessageIds: [],
       },
     ]);
     expect(result.state.openTurn).toBe(null);

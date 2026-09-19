@@ -28,10 +28,55 @@ export const USAGE_BUCKET_ROW_SCHEMA = z.object({
 export type UsageBucketRow = z.infer<typeof USAGE_BUCKET_ROW_SCHEMA>;
 
 /**
+ * One turn's usage, split by the model that produced it. Like a bucket row it
+ * is an increment: a turn read across two passes leaves two rows that the
+ * loader sums. It carries no cost and no duration — `lastAt - startedAt` is the
+ * duration, derived where it is read.
+ */
+export const USAGE_TURN_ROW_SCHEMA = z.object({
+  cli: UsageCliSchema,
+  backend: z.string().nullable(),
+  sessionId: z.string(),
+  /** The CLI's own turn id: Claude `promptId`, Codex `turn_id`, Pi/OMP entry id. */
+  turnKey: z.string(),
+  model: z.string(),
+  input: z.number().int(),
+  cachedInput: z.number().int(),
+  cacheWrite: z.number().int(),
+  output: z.number().int(),
+  reasoning: z.number().int(),
+  startedAt: z.string(),
+  lastAt: z.string(),
+  userMessageIds: z.array(z.string()),
+  /** Paseo's own turn id, stamped by the parse a finished turn triggered. */
+  turnId: z.string().optional(),
+});
+export type UsageTurnRow = z.infer<typeof USAGE_TURN_ROW_SCHEMA>;
+
+/**
+ * A turn row before the scanner has named its turn. A main-thread file always
+ * knows the key; a subagent file either reads it off the line (Claude
+ * `promptId`, Codex `root_turn_id`) or leaves `attachAt` for the scanner to
+ * match against the parent session's turns. A draft that ends up with neither
+ * is dropped, and its tokens are only in the bucket rows.
+ */
+export interface UsageTurnRowDraft extends Omit<UsageTurnRow, "turnKey"> {
+  turnKey: string | null;
+  attachAt: string | null;
+}
+
+/** The five fields that identify a turn row. */
+export type UsageTurnKey = Pick<
+  UsageTurnRow,
+  "cli" | "backend" | "sessionId" | "turnKey" | "model"
+>;
+
+/**
  * A turn that has not been settled yet. `settledMs` is how much of its wall
  * clock already reached a bucket row, so a later settlement appends only the
  * remainder. `model` is null until the first assistant message, which is also
- * what makes the turn count.
+ * what makes the turn count. `userMessageIds` is what a client matches its own
+ * timeline rows against; a cursor written before turn rows existed has none.
  */
 export const USAGE_OPEN_TURN_SCHEMA = z.object({
   turnKey: z.string(),
@@ -40,6 +85,7 @@ export const USAGE_OPEN_TURN_SCHEMA = z.object({
   lastAt: z.string(),
   settledMs: z.number().int().nonnegative(),
   model: z.string().nullable(),
+  userMessageIds: z.array(z.string()).default([]),
 });
 export type UsageOpenTurn = z.infer<typeof USAGE_OPEN_TURN_SCHEMA>;
 
@@ -62,6 +108,16 @@ export const USAGE_LAST_MESSAGE_SCHEMA = z.object({
 });
 export type UsageLastMessage = z.infer<typeof USAGE_LAST_MESSAGE_SCHEMA>;
 
+// How a subagent file names the turn its tokens belong to. Both default so a
+// cursor written by an earlier daemon still parses; a scan state that fails to
+// parse replays every log file and doubles the report.
+
+/** A Claude subagent repeats the parent turn's prompt id in its task prompt. */
+const PARENT_TURN_KEY_FIELD = { parentTurnKey: z.string().nullable().default(null) };
+
+/** The other three name no turn, so the file's own start is matched instead. */
+const ATTACH_AT_FIELD = { attachAt: z.string().nullable().default(null) };
+
 export const CLAUDE_PARSER_STATE_SCHEMA = z.object({
   kind: z.literal("claude"),
   sessionId: z.string().nullable(),
@@ -70,6 +126,7 @@ export const CLAUDE_PARSER_STATE_SCHEMA = z.object({
   forkedFromSessionId: z.string().nullable(),
   openTurn: USAGE_OPEN_TURN_SCHEMA.nullable(),
   lastMessage: USAGE_LAST_MESSAGE_SCHEMA.nullable(),
+  ...PARENT_TURN_KEY_FIELD,
 });
 export type ClaudeParserState = z.infer<typeof CLAUDE_PARSER_STATE_SCHEMA>;
 
@@ -91,6 +148,7 @@ export const CODEX_PARSER_STATE_SCHEMA = z.object({
   usesUsageRecords: z.boolean(),
   lastUsageKey: z.string().nullable(),
   openTurn: USAGE_OPEN_TURN_SCHEMA.nullable(),
+  ...ATTACH_AT_FIELD,
 });
 export type CodexParserState = z.infer<typeof CODEX_PARSER_STATE_SCHEMA>;
 
@@ -111,6 +169,7 @@ const PI_LIKE_PARSER_FIELDS = {
   backend: z.string().nullable(),
   turnBackend: z.string().nullable(),
   openTurn: USAGE_OPEN_TURN_SCHEMA.nullable(),
+  ...ATTACH_AT_FIELD,
 };
 
 export const PI_PARSER_STATE_SCHEMA = z.object({
@@ -163,6 +222,8 @@ export type UsageBucketKey = Pick<
 
 export interface UsageParseResult {
   rows: UsageBucketRow[];
+  /** Turn rows a subagent file cannot key yet; the scanner resolves them. */
+  turnRows: UsageTurnRowDraft[];
   state: UsageParserState;
   consumedBytes: number;
   /** Entry timestamps seen in this slice, for the cursor's session span. */
@@ -187,7 +248,7 @@ export function toBucketStart(timestampMs: number): string {
 
 // cwd and model can hold anything a path or a vendor model id can, so the
 // separator has to be a byte neither of them can contain.
-const KEY_SEPARATOR = "\u0000";
+export const KEY_SEPARATOR = "\u0000";
 
 export function bucketRowKey(row: UsageBucketKey): string {
   return [row.cli, row.backend ?? "", row.model, row.sessionId, row.cwd, row.bucket].join(
@@ -200,9 +261,18 @@ export function modelRowKey(row: Pick<UsageBucketRow, "cli" | "backend" | "model
   return [row.cli, row.backend ?? "", row.model].join(KEY_SEPARATOR);
 }
 
-/** The `buckets-YYYY-MM.jsonl` a row belongs to, by its UTC bucket. */
-export function bucketMonth(bucket: string): string {
-  return bucket.slice(0, 7);
+/** The `<kind>-YYYY-MM.jsonl` a row belongs to: its bucket, or a turn's start. */
+export function rowMonth(timestamp: string): string {
+  return timestamp.slice(0, 7);
+}
+
+export function turnRowKey(row: UsageTurnKey): string {
+  return [row.cli, row.backend ?? "", row.sessionId, row.turnKey, row.model].join(KEY_SEPARATOR);
+}
+
+/** Identifies the turn a row belongs to, across the models it ran. */
+export function turnKeyOf(row: Pick<UsageTurnRow, "cli" | "sessionId" | "turnKey">): string {
+  return [row.cli, row.sessionId, row.turnKey].join(KEY_SEPARATOR);
 }
 
 export function emptyBucketRow(key: UsageBucketKey): UsageBucketRow {
@@ -242,4 +312,38 @@ export function mergeBucketRow(into: Map<string, UsageBucketRow>, row: UsageBuck
     return;
   }
   into.set(key, { ...row });
+}
+
+/** What a turn row carries beyond its key, which a draft carries too. */
+export type UsageTurnAmounts = Omit<
+  UsageTurnRow,
+  "cli" | "backend" | "sessionId" | "turnKey" | "model"
+>;
+
+/**
+ * Fold an increment into the row it belongs to. Tokens add; the span widens to
+ * hold both; the id lists union; a Paseo turn id is kept once it is known.
+ */
+export function addTurnRow(target: UsageTurnAmounts, source: UsageTurnAmounts): void {
+  target.input += source.input;
+  target.cachedInput += source.cachedInput;
+  target.cacheWrite += source.cacheWrite;
+  target.output += source.output;
+  target.reasoning += source.reasoning;
+  if (source.startedAt < target.startedAt) target.startedAt = source.startedAt;
+  if (source.lastAt > target.lastAt) target.lastAt = source.lastAt;
+  for (const id of source.userMessageIds) {
+    if (!target.userMessageIds.includes(id)) target.userMessageIds.push(id);
+  }
+  if (!target.turnId && source.turnId) target.turnId = source.turnId;
+}
+
+export function mergeTurnRow(into: Map<string, UsageTurnRow>, row: UsageTurnRow): void {
+  const key = turnRowKey(row);
+  const existing = into.get(key);
+  if (existing) {
+    addTurnRow(existing, row);
+    return;
+  }
+  into.set(key, { ...row, userMessageIds: [...row.userMessageIds] });
 }

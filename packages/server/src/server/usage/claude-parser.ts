@@ -3,17 +3,21 @@ import {
   asString,
   asTimestamp,
   countOpenTurn,
+  emptySink,
+  idleParseResult,
   parseChunk,
+  pushTurnUsage,
   recordSpan,
   settleOpenTurn,
-  type TimestampSpan,
+  turnAttachmentOf,
+  type TurnAttachment,
+  type UsageParseSink,
   type UsageRowIdentity,
   type UsageTokenColumns,
 } from "./parse.js";
 import {
   toBucketStart,
   type ClaudeParserState,
-  type UsageBucketRow,
   type UsageLastMessage,
   type UsageParseResult,
 } from "./types.js";
@@ -29,6 +33,7 @@ export function createClaudeParserState(input: { subagent: boolean }): ClaudePar
     forkedFromSessionId: null,
     openTurn: null,
     lastMessage: null,
+    parentTurnKey: null,
   };
 }
 
@@ -47,15 +52,16 @@ export function parseClaudeChunk(bytes: Buffer, state: ClaudeParserState): Usage
  * another segment on top.
  */
 export function settleClaudeOpenTurn(state: ClaudeParserState): UsageParseResult {
-  const rows: UsageBucketRow[] = [];
+  const sink = emptySink();
   const next: ClaudeParserState = { ...state };
-  settleTurn(next, rows);
-  return { rows, state: next, consumedBytes: 0, firstAt: null, lastAt: null };
+  settleTurn(next, sink);
+  return idleParseResult(sink, next);
 }
 
 interface ClaudeEntry {
   type?: unknown;
   timestamp?: unknown;
+  uuid?: unknown;
   sessionId?: unknown;
   cwd?: unknown;
   promptId?: unknown;
@@ -74,12 +80,7 @@ interface ClaudeEntry {
   } | null;
 }
 
-function consumeEntry(
-  entry: ClaudeEntry,
-  state: ClaudeParserState,
-  rows: UsageBucketRow[],
-  span: TimestampSpan,
-): void {
+function consumeEntry(entry: ClaudeEntry, state: ClaudeParserState, sink: UsageParseSink): void {
   // A resumed session copies the whole previous transcript into the new file.
   // The old file already counted those lines; only the link is worth keeping.
   if (entry.forkedFrom) {
@@ -90,46 +91,63 @@ function consumeEntry(
 
   if (!state.sessionId) state.sessionId = asString(entry.sessionId);
   if (!state.cwd) state.cwd = asString(entry.cwd);
-  recordSpan(span, asString(entry.timestamp));
+  // A Claude subagent is keyed by the prompt id its task prompt repeats, so
+  // there is no fallback to matching by time.
+  recordSpan(sink.span, asString(entry.timestamp));
 
   if (entry.type === "user") {
-    consumeUserEntry(entry, state, rows);
+    consumeUserEntry(entry, state, sink);
     return;
   }
   if (entry.type === "assistant") {
-    consumeAssistantEntry(entry, state, rows);
+    consumeAssistantEntry(entry, state, sink);
   }
 }
 
 function consumeUserEntry(
   entry: ClaudeEntry,
   state: ClaudeParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
 ): void {
-  if (state.subagent || entry.isSidechain === true) return;
   if (entry.isCompactSummary === true) return;
   if (isToolResultMessage(entry.message?.content)) return;
-
   const turnKey = asString(entry.promptId);
+
+  if (state.subagent) {
+    // The task prompt repeats the prompt id of the turn that spawned it, which
+    // is the only place the link to the parent turn is written down.
+    if (turnKey && !state.parentTurnKey) state.parentTurnKey = turnKey;
+    return;
+  }
+  if (entry.isSidechain === true) return;
+
   const timestamp = asTimestamp(entry.timestamp);
   if (!turnKey || timestamp === null) return;
-  if (state.openTurn?.turnKey === turnKey) return;
+  // A prompt can be written as several user lines — the prompt itself plus the
+  // meta lines around it — and a client matches its timeline against all of them.
+  if (state.openTurn?.turnKey === turnKey) {
+    state.openTurn = withUserMessageId(state.openTurn, asString(entry.uuid));
+    return;
+  }
 
-  settleTurn(state, rows);
+  settleTurn(state, sink);
+  const startedAt = new Date(timestamp).toISOString();
+  const uuid = asString(entry.uuid);
   state.openTurn = {
     turnKey,
-    startedAt: new Date(timestamp).toISOString(),
+    startedAt,
     bucket: toBucketStart(timestamp),
-    lastAt: new Date(timestamp).toISOString(),
+    lastAt: startedAt,
     settledMs: 0,
     model: null,
+    userMessageIds: uuid ? [uuid] : [],
   };
 }
 
 function consumeAssistantEntry(
   entry: ClaudeEntry,
   state: ClaudeParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
 ): void {
   const message = entry.message;
   const model = asString(message?.model);
@@ -145,10 +163,11 @@ function consumeAssistantEntry(
     if (cwd && sessionId) {
       recordUsage({
         state,
-        rows,
+        sink,
         sessionId,
         cwd,
         model,
+        at: new Date(timestamp).toISOString(),
         bucket: toBucketStart(timestamp),
         messageId: asString(message.id),
         usage,
@@ -166,27 +185,28 @@ function consumeAssistantEntry(
       identity: identityOf(state),
       openTurn: state.openTurn,
       model,
-      rows,
+      rows: sink.rows,
     });
   }
 
   const stopReason = asString(message.stop_reason);
-  if (stopReason && stopReason !== "tool_use") settleTurn(state, rows);
+  if (stopReason && stopReason !== "tool_use") settleTurn(state, sink);
 }
 
 interface RecordUsageInput {
   state: ClaudeParserState;
-  rows: UsageBucketRow[];
+  sink: UsageParseSink;
   sessionId: string;
   cwd: string;
   model: string;
+  at: string;
   bucket: string;
   messageId: string | null;
   usage: Record<string, unknown>;
 }
 
 function recordUsage(input: RecordUsageInput): void {
-  const { state, rows } = input;
+  const { state } = input;
   const amounts = readUsageColumns(input.usage);
   const recorded: UsageLastMessage = {
     id: input.messageId ?? "",
@@ -195,38 +215,57 @@ function recordUsage(input: RecordUsageInput): void {
     bucket: input.bucket,
     ...amounts,
   };
+  // Every line of one response group falls inside the turn the group started
+  // in, so the correction below reverses against the same turn it counted.
+  const attachment = turnAttachmentOf(state);
 
   // One API response is split into a line per content block, each repeating the
   // usage; the first blocks carry a start-of-stream snapshot and the last one
   // the final numbers. Replace what the previous line of the group contributed.
   const previous = state.lastMessage;
   if (input.messageId && previous && previous.id === input.messageId) {
-    rows.push(toRow(previous, input.sessionId, -1));
-    rows.push(toRow(recorded, input.sessionId, 1));
+    pushUsage(input, attachment, previous, -1);
+    pushUsage(input, attachment, recorded, 1);
     state.lastMessage = recorded;
     return;
   }
 
-  rows.push(toRow(recorded, input.sessionId, 1));
+  pushUsage(input, attachment, recorded, 1);
   state.lastMessage = input.messageId ? recorded : previous;
 }
 
-function toRow(message: UsageLastMessage, sessionId: string, sign: 1 | -1): UsageBucketRow {
-  return {
-    cli: "claude",
-    backend: null,
-    model: message.model,
-    sessionId,
-    cwd: message.cwd,
-    bucket: message.bucket,
+function pushUsage(
+  input: RecordUsageInput,
+  attachment: TurnAttachment | null,
+  message: UsageLastMessage,
+  sign: 1 | -1,
+): void {
+  const amounts: UsageTokenColumns = {
     input: message.input * sign,
     cachedInput: message.cachedInput * sign,
     cacheWrite: message.cacheWrite * sign,
     output: message.output * sign,
     reasoning: message.reasoning * sign,
+  };
+  input.sink.rows.push({
+    cli: "claude",
+    backend: null,
+    model: message.model,
+    sessionId: input.sessionId,
+    cwd: message.cwd,
+    bucket: message.bucket,
+    ...amounts,
     turns: 0,
     durationMs: 0,
-  };
+  });
+  pushTurnUsage({
+    sink: input.sink,
+    identity: { cli: "claude", backend: null, sessionId: input.sessionId, cwd: message.cwd },
+    attachment,
+    model: message.model,
+    at: input.at,
+    amounts,
+  });
 }
 
 function readUsageColumns(usage: Record<string, unknown>): UsageTokenColumns {
@@ -245,12 +284,20 @@ function readUsageColumns(usage: Record<string, unknown>): UsageTokenColumns {
   };
 }
 
-function settleTurn(state: ClaudeParserState, rows: UsageBucketRow[]): void {
+function settleTurn(state: ClaudeParserState, sink: UsageParseSink): void {
   state.openTurn = settleOpenTurn({
     identity: identityOf(state),
     openTurn: state.openTurn,
-    rows,
+    sink,
   });
+}
+
+function withUserMessageId(
+  openTurn: NonNullable<ClaudeParserState["openTurn"]>,
+  uuid: string | null,
+): NonNullable<ClaudeParserState["openTurn"]> {
+  if (!uuid || openTurn.userMessageIds.includes(uuid)) return openTurn;
+  return { ...openTurn, userMessageIds: [...openTurn.userMessageIds, uuid] };
 }
 
 function identityOf(state: ClaudeParserState): UsageRowIdentity {

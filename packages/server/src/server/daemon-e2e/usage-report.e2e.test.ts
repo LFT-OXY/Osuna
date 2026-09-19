@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import { mergeTurnRow, turnRowKey, type UsageTurnRow } from "../usage/types.js";
 
 const FIXTURE_DIR = new URL("../usage/fixtures/claude/", import.meta.url);
 const CODEX_FIXTURE_DIR = new URL("../usage/fixtures/codex/", import.meta.url);
@@ -310,7 +311,9 @@ describe("usage report over the daemon RPC", () => {
   test("keeps the same totals after a restart and writes no new rows", async () => {
     await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
     const usageDir = path.join(daemon.paseoHome, "usage");
-    const linesBefore = await countBucketLines(usageDir);
+    const bucketLinesBefore = await countRowLines(usageDir, "buckets-");
+    const turnLinesBefore = await countRowLines(usageDir, "turns-");
+    expect(turnLinesBefore).toBeGreaterThan(0);
 
     await client.close();
     await daemon.close();
@@ -325,11 +328,54 @@ describe("usage report over the daemon RPC", () => {
     const report = await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
     expect(report.summary.totals).toEqual(ALL_TOTALS);
     expect(report.backfill.filesTotal).toBe(0);
-    expect(await countBucketLines(usageDir)).toBe(linesBefore);
+    expect(await countRowLines(usageDir, "buckets-")).toBe(bucketLinesBefore);
+    expect(await countRowLines(usageDir, "turns-")).toBe(turnLinesBefore);
+  });
+
+  test("writes a turn row per model and folds the subagent into its parent turn", async () => {
+    await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
+
+    const rows = await readTurnRows(path.join(daemon.paseoHome, "usage"));
+    expect(rows).toEqual([
+      {
+        cli: "claude",
+        backend: null,
+        sessionId: SESSION_ID,
+        turnKey: "p1",
+        model: "claude-fable-5-1",
+        ...totals(7, 74_560, 26_884, 1010, 186),
+        startedAt: "2026-09-18T09:44:42.587Z",
+        lastAt: "2026-09-18T09:46:00.000Z",
+        userMessageIds: ["u1"],
+      },
+      {
+        cli: "claude",
+        backend: null,
+        sessionId: SESSION_ID,
+        turnKey: "p1",
+        // The subagent ran a model of its own inside the turn that spawned it.
+        model: "claude-opus-5",
+        ...totals(1, 500, 100, 900, 300),
+        startedAt: "2026-09-18T09:45:20.000Z",
+        lastAt: "2026-09-18T09:45:25.000Z",
+        userMessageIds: [],
+      },
+      {
+        cli: "claude",
+        backend: null,
+        sessionId: SESSION_ID,
+        turnKey: "p2",
+        model: "claude-opus-5",
+        ...totals(10, 100, 200, 50, 0),
+        startedAt: "2026-09-18T10:01:00.000Z",
+        lastAt: "2026-09-18T10:01:30.000Z",
+        userMessageIds: ["u9"],
+      },
+    ]);
   });
 });
 
-describe("usage bucket files", () => {
+describe("usage row files", () => {
   const homes: string[] = [];
 
   afterEach(async () => {
@@ -401,7 +447,59 @@ describe("usage bucket files", () => {
           priced: false,
         },
       ]);
-      expect(await countBucketLines(usageDir)).toBe(2);
+      expect(await countRowLines(usageDir, "buckets-")).toBe(2);
+    } finally {
+      await client.close();
+      await daemon.close();
+    }
+  });
+
+  test("rewrites a month of turn rows whose increments outgrew their keys", async () => {
+    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
+    homes.push(paseoHomeRoot, staticDir);
+    const usageDir = path.join(paseoHomeRoot, ".paseo", "usage");
+    await mkdir(usageDir, { recursive: true });
+    const increment = (turnKey: string, output: number, lastAt: string) => ({
+      cli: "claude",
+      backend: null,
+      sessionId: "sess-9",
+      turnKey,
+      model: "claude-opus-5",
+      input: 1,
+      cachedInput: 0,
+      cacheWrite: 0,
+      output,
+      reasoning: 0,
+      startedAt: "2026-03-04T09:30:00.000Z",
+      lastAt,
+      userMessageIds: [turnKey === "p1" ? "u1" : "u2"],
+    });
+    const lines = [
+      increment("p1", 10, "2026-03-04T09:30:10.000Z"),
+      increment("p1", 10, "2026-03-04T09:30:20.000Z"),
+      increment("p1", 10, "2026-03-04T09:30:30.000Z"),
+      increment("p2", 4, "2026-03-04T09:31:00.000Z"),
+      increment("p2", 4, "2026-03-04T09:31:10.000Z"),
+    ];
+    await writeFile(
+      path.join(usageDir, "turns-2026-03.jsonl"),
+      `${lines.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+    );
+
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot,
+      staticDir,
+      cleanup: false,
+      usage: { roots: { claude: [], codex: [], pi: [], omp: [] }, pricing: UNPRICED },
+    });
+    const client = await connect(daemon);
+    try {
+      expect(await readTurnRows(usageDir)).toEqual([
+        { ...increment("p1", 30, "2026-03-04T09:30:30.000Z"), input: 3 },
+        { ...increment("p2", 8, "2026-03-04T09:31:10.000Z"), input: 2 },
+      ]);
+      expect(await countRowLines(usageDir, "turns-")).toBe(2);
     } finally {
       await client.close();
       await daemon.close();
@@ -710,15 +808,34 @@ describe("usage report across Pi and OMP backends", () => {
   });
 });
 
-async function countBucketLines(usageDir: string): Promise<number> {
+async function countRowLines(usageDir: string, prefix: string): Promise<number> {
   const names = await readdir(usageDir);
   let count = 0;
   for (const name of names) {
-    if (!name.startsWith("buckets-")) continue;
+    if (!name.startsWith(prefix)) continue;
     const raw = await readFile(path.join(usageDir, name), "utf8");
     count += raw.split("\n").filter((line) => line.length > 0).length;
   }
   return count;
+}
+
+/**
+ * The turn rows on disk, folded exactly the way the daemon loads them back and
+ * ordered by when each turn ran, so the assertions do not depend on the order
+ * the scanner happened to reach the files in.
+ */
+async function readTurnRows(usageDir: string): Promise<UsageTurnRow[]> {
+  const merged = new Map<string, UsageTurnRow>();
+  for (const name of await readdir(usageDir)) {
+    if (!name.startsWith("turns-")) continue;
+    const raw = await readFile(path.join(usageDir, name), "utf8");
+    for (const line of raw.split("\n")) {
+      if (line.length > 0) mergeTurnRow(merged, JSON.parse(line) as UsageTurnRow);
+    }
+  }
+  return Array.from(merged.values()).sort(
+    (a, b) => a.startedAt.localeCompare(b.startedAt) || turnRowKey(a).localeCompare(turnRowKey(b)),
+  );
 }
 
 /** One more turn on the fable model, in the same UTC 15-minute bucket as the first. */

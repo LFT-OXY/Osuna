@@ -118,7 +118,7 @@ Claude Code：
 - 去重键 `message.id`，同一 id 拆多行时**取组内最后一行**（前几行可能是流式快照）。
 - resume 生成的新文件整段复制旧历史并带 `forkedFrom`：**跳过带 `forkedFrom` 的行**，记录 `forkedFrom.sessionId` 用于串链。
 - 轮键 = user 行 `promptId`；轮起点 = 该组首条 user 行 ts；跳过 `isCompactSummary`、tool_result 型 user 行、`<synthetic>` model、所有非 user/assistant 类型行。
-- 子代理文件在 `<sessionId>/subagents/`，计 usage 归父 session / cwd、按自身 model，不计轮；其首条 user 行 `promptId` 即父轮键。
+- 子代理文件在 `<sessionId>/subagents/`，计 usage 归父 session / cwd、按自身 model，不计轮；其首条 user 行 `promptId` 即父轮键。Claude **只**按这个键归轮，不做 Codex 旧文件与 Pi/OMP 那套按时间匹配的兜底：拿不到 `promptId` 的子代理文件只进桶行。
 
 Codex：
 
@@ -162,7 +162,9 @@ Pi 与 OMP：
 - 一个用量服务，一个串行 worker，两条队列：定向解析优先、扫描其次；按 `(cli, sessionId)` 去重，后台队列中的文件被定向触发时提升。每处理完一个文件 `await setImmediate()` 让路。
 - **定向解析**：服务全局订阅 agent 事件流，只消费 `turn_completed` / `turn_failed` / `turn_canceled`。文件定位取该 agent Backing sessions 末项：Claude 按 cwd 编码的项目目录 + sessionId；Pi/OMP 用 persistence 里的原生路径；Codex 先查游标索引，未命中在今天与昨天的本地日期目录下按 thread id 找，仍未命中交给周期扫描。读到 EOF 而 `openTurn` 未闭合 → 2 秒后重试一次、再 10 秒一次，之后交给周期扫描。
 - **周期扫描**：每 60 秒对四个根递归 readdir + stat 全部 `.jsonl`，与游标的 `(size, mtimeMs)` 比对，变化或新增入队；同轮执行 10 分钟静止结算。同一 `(cli, sessionId)` 在多个根下各有一份时（Codex 归档副本）只读**更完整的那份**：先比字节数、再比 mtime、最后比路径；不靠根目录数组顺序定胜负，否则 `log-roots.ts` 里换个次序就会让活跃文件被归档旧副本顶掉。间隔为常量，环境变量 `PASEO_USAGE_SCAN_INTERVAL_MS` 覆盖，不进 daemon 配置、无 UI。定时器用 `setInterval` + `unref` + 注入时钟。不接 file-observer watcher（事件类型不可信、消费者仍需 stat + 续读，v1 不值得）。
-- **回填 = 启动后的第一轮扫描**。启动时 `loadRows()` + `loadScanState()` 同步完成（RPC 随即可用），启动轮在后台按文件 mtime **倒序**处理。`backfill.state`：`idle` 启动轮未开始、`running` 队列未清空、`done` 已清空；`filesTotal / filesDone / startedAt` 只统计启动轮。重启后只剩无游标或有变化的文件，"可中断续跑"不需要额外机制。不做手动暂停 / 取消，不做采集开关。
+- **一轮内的文件顺序**：主线文件全部排在子代理文件之前，其余按文件 mtime **倒序**。子代理的每轮行要在父会话的轮里找归属（见第 2 节），父文件先读才找得到；不这么排，`log-roots.ts` 或 readdir 的顺序就会决定子代理的 token 进不进得了每轮行。
+- **回填 = 启动后的第一轮扫描**。启动时 `loadRows()` + `loadScanState()` 同步完成（RPC 随即可用），启动轮在后台按上一条的顺序处理。`backfill.state`：`idle` 启动轮未开始、`running` 队列未清空、`done` 已清空；`filesTotal / filesDone / startedAt` 只统计启动轮。重启后只剩无游标或有变化的文件，"可中断续跑"不需要额外机制。不做手动暂停 / 取消，不做采集开关。
+- **未挂靠的每轮行留在内存重试**。Pi/OMP 子会话的 header 时间戳总是晚于父轮当时写下的最后一行，一轮扫描落在「子会话已写完用量、父轮还没结束」的窗口里时按时间就套不上，而子文件的游标已经推过去了——丢弃等于实时会话里这批 token 系统性进不了每轮行。所以解析器交回的 draft 分两路：套得上的直接落盘，套不上的进内存缓冲，在**每轮扫描末尾**（文件全部消费完、静止结算跑过之后）重试一次。放弃条件：该会话已经开了一轮更晚的轮（轮不重叠，能覆盖它的那轮已关闭），或 draft 已等过 6 小时（只防会话再没开过轮时的泄漏）。缓冲只在内存，daemon 在窗口内重启则这批 draft 丢失、token 只留在桶行——与「匹配不上只进桶行」同一档代价。
 - **落盘顺序**：每 20 个文件或 500 毫秒一批，批内先 `appendRows` 再 `saveScanState`。两步之间崩溃 → 重启后重复计数（窗口 ≤ 500 毫秒），不做永久漏计的"先游标后行"。
 - **广播**：启动轮期间只发 `usage.backfill.progress`（≥ 1 秒一次），不发 `usage.updated`；`done` 后页面重拉。之后每批落盘后按受影响的 `(cli, sessionId)` 各发一条 `usage.updated { cli, sessionId, agentId? }`，`agentId` 由定向触发带上或反查 Backing sessions 含该 id 的 agent。服务端不节流，客户端去抖。
 - 接线在 ScheduleService 之后、需要 wsServer 已创建；关闭在 ScheduleService 停止之后、wsServer 关闭之前，`dispose()` 等当前文件处理完并落一次游标。

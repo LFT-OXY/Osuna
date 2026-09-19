@@ -35,6 +35,32 @@ variant is not** — every cursor written by the previous daemon version fails t
 parse at once. Give new fields a default, or accept them as optional and fill
 them in the parser.
 
+### Gotcha: the cursor moves even when a derived row was dropped
+
+A scan cursor records _bytes consumed_, not _rows produced_. So any row derived
+from those bytes that can fail to be produced is lost for good the moment the
+cursor advances — the lines are never read again.
+
+`UsageService` hits this with turn rows: a Pi/OMP subagent names no turn, so its
+rows are matched against the parent session's turn spans, and a scan that lands
+while the parent turn is still open finds a span too short. Dropping the misses
+looked correct (the spec allows unattached tokens to stay in the bucket rows)
+but made it the _normal_ outcome for live sessions rather than an edge case.
+
+Two rules follow for anything shaped like this:
+
+- **Order the work so the dependency is read first.** `runRound` sorts every
+  main-thread file ahead of every subagent file, rather than trusting the root
+  order or mtime.
+- **Buffer the misses in memory and retry them, with an explicit give-up
+  condition.** `retryPendingTurnRows` retries at the end of each round and lets
+  a draft go only when its turn provably cannot still grow — a later turn has
+  begun — or after a generous TTL that only guards against a leak.
+
+The buffer is memory only, so state it in the docs: a restart inside the window
+loses those rows. That is a deliberate trade against persisting a second
+unresolved-row file.
+
 ### Wiring a runtime-safe `config.json` field
 
 A field users can change while the daemon runs needs five edits, and missing any one of them fails quietly rather than loudly (`features.usage.pricing.*` is the worked example):

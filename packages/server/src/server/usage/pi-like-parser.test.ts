@@ -5,7 +5,7 @@ import {
   parsePiLikeChunk,
   settlePiLikeOpenTurn,
 } from "./pi-like-parser.js";
-import type { PiLikeParserState } from "./types.js";
+import type { PiLikeParserState, UsageTurnRowDraft } from "./types.js";
 
 const PI_SESSION = "01a0b317-1111-7000-8000-000000000001";
 const RETRY_SESSION = "01a0b317-1114-7000-8000-000000000033";
@@ -33,6 +33,42 @@ function parse(
     createPiLikeParserState({ cli, sessionId: input.sessionId, subagent: input.subagent ?? false }),
   );
 }
+
+/** The entry that opened a turn is both its key and the id a client matches. */
+const PI_SESSION_TURNS: UsageTurnRowDraft[] = [
+  {
+    cli: "pi",
+    backend: "anthropic",
+    sessionId: PI_SESSION,
+    turnKey: "aa000001",
+    attachAt: null,
+    model: "claude-opus-5",
+    input: 15,
+    cachedInput: 1000,
+    cacheWrite: 50,
+    output: 300,
+    reasoning: 100,
+    startedAt: "2026-09-18T09:30:05.000Z",
+    lastAt: "2026-09-18T09:30:35.000Z",
+    userMessageIds: ["aa000001"],
+  },
+  {
+    cli: "pi",
+    backend: "openai-codex",
+    sessionId: PI_SESSION,
+    turnKey: "aa000006",
+    attachAt: null,
+    model: "gpt-6-astra",
+    input: 700,
+    cachedInput: 0,
+    cacheWrite: 0,
+    output: 60,
+    reasoning: 40,
+    startedAt: "2026-09-18T09:47:00.000Z",
+    lastAt: "2026-09-18T09:47:40.000Z",
+    userMessageIds: ["aa000006"],
+  },
+];
 
 describe("parsePiLikeChunk on a Pi transcript", () => {
   test("splits a session by the backend each turn routed to", () => {
@@ -75,6 +111,7 @@ describe("parsePiLikeChunk on a Pi transcript", () => {
         durationMs: 40_000,
       },
     ]);
+    expect(result.turnRows).toEqual(PI_SESSION_TURNS);
     expect(result.consumedBytes).toBe(bytes.length);
     expect(result.firstAt).toBe("2026-09-18T09:30:00.000Z");
     expect(result.lastAt).toBe("2026-09-18T09:47:40.000Z");
@@ -96,7 +133,9 @@ describe("parsePiLikeChunk on a Pi transcript", () => {
         lastAt: "2026-09-18T09:47:40.000Z",
         settledMs: 40_000,
         model: "gpt-6-astra",
+        userMessageIds: ["aa000006"],
       },
+      attachAt: null,
     });
   });
 
@@ -118,6 +157,26 @@ describe("parsePiLikeChunk on a Pi transcript", () => {
         reasoning: 10,
         turns: 0,
         durationMs: 0,
+      },
+    ]);
+    // Neither CLI writes down the turn a subagent ran inside, so the draft
+    // carries the header stamp and the scanner matches it against the parent.
+    expect(result.turnRows).toEqual([
+      {
+        cli: "pi",
+        backend: "anthropic",
+        sessionId: PI_SESSION,
+        turnKey: null,
+        attachAt: "2026-09-18T09:31:00.000Z",
+        model: "claude-fable-5-1",
+        input: 3,
+        cachedInput: 100,
+        cacheWrite: 0,
+        output: 30,
+        reasoning: 10,
+        startedAt: "2026-09-18T09:31:10.000Z",
+        lastAt: "2026-09-18T09:31:10.000Z",
+        userMessageIds: [],
       },
     ]);
   });
@@ -268,6 +327,24 @@ describe("parsePiLikeChunk on an OMP transcript", () => {
         reasoning: 3,
         turns: 0,
         durationMs: 0,
+      },
+    ]);
+    expect(result.turnRows).toEqual([
+      {
+        cli: "omp",
+        backend: "3oxy-openai",
+        sessionId: OMP_SESSION,
+        turnKey: null,
+        attachAt: "2026-09-18T10:05:00.000Z",
+        model: "gpt-5.6-sol",
+        input: 7,
+        cachedInput: 0,
+        cacheWrite: 0,
+        output: 13,
+        reasoning: 3,
+        startedAt: "2026-09-18T10:05:20.000Z",
+        lastAt: "2026-09-18T10:05:20.000Z",
+        userMessageIds: [],
       },
     ]);
   });

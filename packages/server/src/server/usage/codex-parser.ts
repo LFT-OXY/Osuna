@@ -4,19 +4,18 @@ import {
   asString,
   asTimestamp,
   countOpenTurn,
+  emptySink,
+  idleParseResult,
   parseChunk,
+  pushTurnUsage,
   recordSpan,
   settleOpenTurn,
-  type TimestampSpan,
+  turnAttachmentOf,
+  type UsageParseSink,
   type UsageRowIdentity,
   type UsageTokenColumns,
 } from "./parse.js";
-import {
-  toBucketStart,
-  type CodexParserState,
-  type UsageBucketRow,
-  type UsageParseResult,
-} from "./types.js";
+import { toBucketStart, type CodexParserState, type UsageParseResult } from "./types.js";
 
 /** A rollout with no `turn_context` before its first response names no model. */
 const UNKNOWN_MODEL = "unknown";
@@ -32,6 +31,7 @@ export function createCodexParserState(input: { threadId: string | null }): Code
     usesUsageRecords: false,
     lastUsageKey: null,
     openTurn: null,
+    attachAt: null,
   };
 }
 
@@ -46,10 +46,10 @@ export function parseCodexChunk(bytes: Buffer, state: CodexParserState): UsagePa
 
 /** Append the wall clock of a turn whose file has gone quiet. */
 export function settleCodexOpenTurn(state: CodexParserState): UsageParseResult {
-  const rows: UsageBucketRow[] = [];
+  const sink = emptySink();
   const next: CodexParserState = { ...state };
-  settleTurn(next, rows);
-  return { rows, state: next, consumedBytes: 0, firstAt: null, lastAt: null };
+  settleTurn(next, sink);
+  return idleParseResult(sink, next);
 }
 
 interface CodexEntry {
@@ -58,20 +58,18 @@ interface CodexEntry {
   payload?: unknown;
 }
 
-function consumeEntry(
-  entry: CodexEntry,
-  state: CodexParserState,
-  rows: UsageBucketRow[],
-  span: TimestampSpan,
-): void {
+function consumeEntry(entry: CodexEntry, state: CodexParserState, sink: UsageParseSink): void {
   // File names carry a local-time stamp and no zone; every time comes from the
   // line itself, which is UTC.
-  recordSpan(span, asString(entry.timestamp));
+  recordSpan(sink.span, asString(entry.timestamp));
   const payload = asRecord(entry.payload);
   if (!payload) return;
   const timestamp = asTimestamp(entry.timestamp);
 
-  consumeItem(entry.type, payload, state, rows, timestamp);
+  consumeItem(entry.type, payload, state, sink, timestamp);
+  // A rollout written before 0.153.2 names no root turn, so a subagent file
+  // falls back to when it started and the scanner matches that to a turn.
+  if (state.subagent && !state.attachAt) state.attachAt = asString(entry.timestamp);
   // Every line inside a turn moves its end forward, so a turn the CLI never
   // finished still measures to its own last line rather than its last response.
   // A `task_started` has just opened the turn this extends to its own start.
@@ -82,7 +80,7 @@ function consumeItem(
   type: unknown,
   payload: Record<string, unknown>,
   state: CodexParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
   timestamp: number | null,
 ): void {
   switch (type) {
@@ -95,10 +93,10 @@ function consumeItem(
       state.cwd = asString(payload.cwd) ?? state.cwd;
       return;
     case "token_usage_record":
-      consumeUsageRecord(payload, state, rows, timestamp);
+      consumeUsageRecord(payload, state, sink, timestamp);
       return;
     case "event_msg":
-      consumeEventMessage(payload, state, rows, timestamp);
+      consumeEventMessage(payload, state, sink, timestamp);
       return;
     default:
       return;
@@ -140,19 +138,19 @@ function readParentThreadId(payload: Record<string, unknown>): string | null {
 function consumeEventMessage(
   payload: Record<string, unknown>,
   state: CodexParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
   timestamp: number | null,
 ): void {
   switch (payload.type) {
     case "token_count":
-      consumeTokenCount(payload, state, rows, timestamp);
+      consumeTokenCount(payload, state, sink, timestamp);
       return;
     case "task_started":
-      startTurn(payload, state, rows, timestamp);
+      startTurn(payload, state, sink, timestamp);
       return;
     case "task_complete":
     case "turn_aborted":
-      endTurn(payload, state, rows, timestamp);
+      endTurn(payload, state, sink, timestamp);
       return;
     default:
       return;
@@ -162,7 +160,7 @@ function consumeEventMessage(
 function consumeUsageRecord(
   payload: Record<string, unknown>,
   state: CodexParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
   timestamp: number | null,
 ): void {
   const usage = asRecord(payload.usage);
@@ -170,17 +168,20 @@ function consumeUsageRecord(
   state.usesUsageRecords = true;
   recordUsage({
     state,
-    rows,
+    sink,
     at: timestamp,
     usage,
     key: asString(payload.response_id) ?? usageSignature(usage),
+    // From 0.153.2 a subagent's record names the turn of the thread that
+    // spawned it outright, so it needs no matching by time.
+    rootTurnId: asString(payload.root_turn_id),
   });
 }
 
 function consumeTokenCount(
   payload: Record<string, unknown>,
   state: CodexParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
   timestamp: number | null,
 ): void {
   // From 0.153.2 the same response already arrived as a `token_usage_record`.
@@ -191,17 +192,18 @@ function consumeTokenCount(
   if (!usage || timestamp === null) return;
   // `total_token_usage` is a per-process running sum that restarts at zero on
   // resume, so each event counts its own `last` instead of a difference.
-  recordUsage({ state, rows, at: timestamp, usage, key: usageSignature(usage) });
+  recordUsage({ state, sink, at: timestamp, usage, key: usageSignature(usage), rootTurnId: null });
 }
 
 function recordUsage(input: {
   state: CodexParserState;
-  rows: UsageBucketRow[];
+  sink: UsageParseSink;
   at: number;
   usage: Record<string, unknown>;
   key: string;
+  rootTurnId: string | null;
 }): void {
-  const { state, rows } = input;
+  const { state, sink } = input;
   // Codex repeats an identical usage event now and then; two responses that
   // truly match to the token are rare enough to lose.
   if (state.lastUsageKey === input.key) return;
@@ -209,20 +211,29 @@ function recordUsage(input: {
 
   const model = state.model ?? UNKNOWN_MODEL;
   const identity = identityOf(state);
+  const amounts = readUsageColumns(input.usage);
   if (identity.sessionId && identity.cwd) {
-    rows.push({
+    sink.rows.push({
       ...identity,
       model,
       bucket: toBucketStart(input.at),
-      ...readUsageColumns(input.usage),
+      ...amounts,
       turns: 0,
       durationMs: 0,
     });
   }
+  pushTurnUsage({
+    sink,
+    identity,
+    attachment: turnAttachmentOf(state, input.rootTurnId),
+    model,
+    at: new Date(input.at).toISOString(),
+    amounts,
+  });
 
   const openTurn = state.openTurn;
   if (!openTurn || openTurn.model) return;
-  state.openTurn = countOpenTurn({ identity, openTurn, model, rows });
+  state.openTurn = countOpenTurn({ identity, openTurn, model, rows: sink.rows });
 }
 
 function readUsageColumns(usage: Record<string, unknown>): UsageTokenColumns {
@@ -253,12 +264,12 @@ function usageSignature(usage: Record<string, unknown>): string {
 function startTurn(
   payload: Record<string, unknown>,
   state: CodexParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
   timestamp: number | null,
 ): void {
   // A subagent runs inside a turn of the thread that spawned it.
   if (state.subagent || timestamp === null) return;
-  settleTurn(state, rows);
+  settleTurn(state, sink);
   const startedAt = new Date(timestamp).toISOString();
   state.openTurn = {
     turnKey: asString(payload.turn_id) ?? startedAt,
@@ -267,13 +278,15 @@ function startTurn(
     lastAt: startedAt,
     settledMs: 0,
     model: null,
+    // A rollout records no id for the prompt that opened the turn.
+    userMessageIds: [],
   };
 }
 
 function endTurn(
   payload: Record<string, unknown>,
   state: CodexParserState,
-  rows: UsageBucketRow[],
+  sink: UsageParseSink,
   timestamp: number | null,
 ): void {
   const openTurn = state.openTurn;
@@ -281,13 +294,13 @@ function endTurn(
   const turnId = asString(payload.turn_id);
   if (turnId && turnId !== openTurn.turnKey) return;
   state.openTurn = { ...openTurn, lastAt: new Date(timestamp).toISOString() };
-  settleTurn(state, rows);
+  settleTurn(state, sink);
   // A thread never reopens a turn id, so later lines belong to the next turn.
   state.openTurn = null;
 }
 
-function settleTurn(state: CodexParserState, rows: UsageBucketRow[]): void {
-  state.openTurn = settleOpenTurn({ identity: identityOf(state), openTurn: state.openTurn, rows });
+function settleTurn(state: CodexParserState, sink: UsageParseSink): void {
+  state.openTurn = settleOpenTurn({ identity: identityOf(state), openTurn: state.openTurn, sink });
 }
 
 function identityOf(state: CodexParserState): UsageRowIdentity {
