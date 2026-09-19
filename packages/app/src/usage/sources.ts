@@ -86,7 +86,8 @@ export function usageSourceColor(ref: UsageSourceRef): string {
   return `hsl(${fallbackHue(ref.backend)}, 60%, 45%)`;
 }
 
-const USAGE_CLIS = new Set<string>(["claude", "codex", "pi", "omp"]);
+/** Derived from the label table so a new CLI in the protocol cannot be missed here. */
+const USAGE_CLIS = new Set<string>(Object.keys(CLI_LABELS));
 
 /** Inverse of `usageSourceKey`, for the group keys the trend response carries. */
 export function usageSourceRefFromKey(key: string): UsageSourceRef | null {
@@ -108,10 +109,4 @@ export function usageTrendGroupColor(group: string, stackBy: UsageTrendStackBy):
   if (stackBy === "model") return usageModelColor(group);
   const ref = usageSourceRefFromKey(group);
   return ref ? usageSourceColor(ref) : usageModelColor(group);
-}
-
-export function usageTrendGroupLabel(group: string, stackBy: UsageTrendStackBy): string {
-  if (stackBy === "model") return group;
-  const ref = usageSourceRefFromKey(group);
-  return ref ? usageSourceLabel(ref) : group;
 }

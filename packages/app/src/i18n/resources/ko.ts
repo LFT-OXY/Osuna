@@ -2993,6 +2993,7 @@ export const ko: TranslationResources = {
       activeDays: "활동 일수",
       dayCountOne: "1일",
       dayCountMany: "{{count}}일",
+      none: "—",
     },
     heatmap: {
       title: "히트맵",
@@ -3018,7 +3019,6 @@ export const ko: TranslationResources = {
     },
     common: {
       comingSoon: "곧 제공됩니다",
-      noValue: "—",
       loadError: "사용량을 불러오지 못했습니다.",
       hostLoadError: "{{host}}에서 사용량을 불러오지 못했습니다.",
     },

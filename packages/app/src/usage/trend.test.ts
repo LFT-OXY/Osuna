@@ -115,6 +115,28 @@ describe("buildUsageTrendSeries", () => {
     ]);
   });
 
+  it("spans every day of a two-day hourly range", () => {
+    const series = buildUsageTrendSeries({
+      trend: trend("hour", [
+        point("2026-09-18T20", { claude: 10 }),
+        point("2026-09-19T08", { claude: 20 }),
+      ]),
+      range: { from: "2026-09-18", to: "2026-09-19" },
+      now: NOW,
+    });
+
+    expect(series.bars).toHaveLength(48);
+    expect(series.bars[0]?.key).toBe("2026-09-18T00");
+    expect(series.bars[47]?.key).toBe("2026-09-19T23");
+    expect(series.bars[20]).toEqual({
+      key: "2026-09-18T20",
+      segments: [{ group: "claude", tokens: 10 }],
+      total: 10,
+      isFuture: false,
+    });
+    expect(series.max).toBe(20);
+  });
+
   it("runs an open range of months from the first month with usage to this one", () => {
     const series = buildUsageTrendSeries({
       trend: trend("month", [point("2026-07", { claude: 10 }), point("2026-09", { claude: 30 })]),

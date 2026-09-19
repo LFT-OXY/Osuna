@@ -3047,6 +3047,7 @@ export const fr: TranslationResources = {
       activeDays: "Jours actifs",
       dayCountOne: "1 jour",
       dayCountMany: "{{count}} jours",
+      none: "—",
     },
     heatmap: {
       title: "Carte de chaleur",
@@ -3072,7 +3073,6 @@ export const fr: TranslationResources = {
     },
     common: {
       comingSoon: "Bientôt disponible",
-      noValue: "—",
       loadError: "Impossible de charger la consommation.",
       hostLoadError: "Impossible de charger la consommation depuis {{host}}.",
     },

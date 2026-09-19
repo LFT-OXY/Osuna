@@ -64,7 +64,7 @@ export function UsageStatsCard({ report, today }: UsageStatsCardProps) {
           <Text style={styles.footerValue}>
             {stats.firstActiveDay
               ? formatUsageDay(stats.firstActiveDay, locale)
-              : t("usage.common.noValue")}
+              : t("usage.stats.none")}
           </Text>
         </View>
         <View style={styles.footerItem} testID="usage-stat-active-days">

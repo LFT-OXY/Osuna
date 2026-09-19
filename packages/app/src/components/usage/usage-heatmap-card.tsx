@@ -18,6 +18,7 @@ import {
   type UsageHeatmapCell,
   type UsageHeatmapLevel,
 } from "@/usage/heatmap";
+import { formatUsageTimeZoneLabel } from "@/usage/period";
 import { formatUsageDay } from "@/usage/range-label";
 
 const CELL_SIZE = 11;
@@ -54,9 +55,10 @@ export function UsageHeatmapCard({ heatmapDays, today, timezone }: UsageHeatmapC
     [weeks],
   );
 
+  const timezoneLabel = useMemo(() => formatUsageTimeZoneLabel(timezone), [timezone]);
   const renderTimezone = useCallback(
-    () => <Text style={styles.timezone}>{timezone}</Text>,
-    [timezone],
+    () => <Text style={styles.timezone}>{timezoneLabel}</Text>,
+    [timezoneLabel],
   );
   const describeCell = useCallback(
     (cell: UsageHeatmapCell) =>

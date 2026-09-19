@@ -2978,6 +2978,7 @@ export const ar: TranslationResources = {
       activeDays: "الأيام النشطة",
       dayCountOne: "يوم واحد",
       dayCountMany: "{{count}} أيام",
+      none: "—",
     },
     heatmap: {
       title: "الخريطة الحرارية",
@@ -3003,7 +3004,6 @@ export const ar: TranslationResources = {
     },
     common: {
       comingSoon: "قريبًا",
-      noValue: "—",
       loadError: "تعذر تحميل الاستهلاك.",
       hostLoadError: "تعذر تحميل الاستهلاك من {{host}}.",
     },

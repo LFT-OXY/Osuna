@@ -3103,6 +3103,7 @@ export const en = {
       activeDays: "Active days",
       dayCountOne: "1 day",
       dayCountMany: "{{count}} days",
+      none: "—",
     },
     heatmap: {
       title: "Heatmap",
@@ -3128,7 +3129,6 @@ export const en = {
     },
     common: {
       comingSoon: "Coming soon",
-      noValue: "—",
       loadError: "Could not load usage.",
       hostLoadError: "Could not load usage from {{host}}.",
     },

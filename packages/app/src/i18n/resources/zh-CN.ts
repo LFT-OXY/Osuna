@@ -2946,6 +2946,7 @@ export const zhCN: TranslationResources = {
       activeDays: "活跃天数",
       dayCountOne: "1 天",
       dayCountMany: "{{count}} 天",
+      none: "—",
     },
     heatmap: {
       title: "热力图",
@@ -2971,7 +2972,6 @@ export const zhCN: TranslationResources = {
     },
     common: {
       comingSoon: "即将推出",
-      noValue: "—",
       loadError: "无法加载用量数据。",
       hostLoadError: "无法从 {{host}} 加载用量数据。",
     },

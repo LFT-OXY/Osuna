@@ -3031,6 +3031,7 @@ export const ru: TranslationResources = {
       activeDays: "Активных дней",
       dayCountOne: "1 день",
       dayCountMany: "{{count}} дн.",
+      none: "—",
     },
     heatmap: {
       title: "Тепловая карта",
@@ -3056,7 +3057,6 @@ export const ru: TranslationResources = {
     },
     common: {
       comingSoon: "Скоро",
-      noValue: "—",
       loadError: "Не удалось загрузить расход.",
       hostLoadError: "Не удалось загрузить расход с {{host}}.",
     },

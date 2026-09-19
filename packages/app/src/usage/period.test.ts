@@ -4,6 +4,7 @@ import {
   addUsageMonths,
   canShiftUsageRangeForward,
   endOfUsageMonth,
+  formatUsageTimeZoneLabel,
   resolveUsageNow,
   resolveUsageRange,
   resolveUsageTrendGranularity,
@@ -157,5 +158,18 @@ describe("resolveUsageNow", () => {
       day: "2026-09-19",
       hour: "2026-09-19T15",
     });
+  });
+});
+
+describe("formatUsageTimeZoneLabel", () => {
+  it("names the zone by its offset from UTC", () => {
+    const at = new Date("2026-09-19T12:00:00.000Z");
+
+    expect([
+      formatUsageTimeZoneLabel("UTC", at),
+      formatUsageTimeZoneLabel("Asia/Shanghai", at),
+      formatUsageTimeZoneLabel("America/New_York", at),
+      formatUsageTimeZoneLabel("Asia/Kolkata", at),
+    ]).toEqual(["UTC+00:00", "UTC+08:00", "UTC-04:00", "UTC+05:30"]);
   });
 });

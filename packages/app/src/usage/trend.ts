@@ -55,34 +55,45 @@ function maxKey(a: string, b: string): string {
 }
 
 /**
+ * The days the axis has to cover, whatever the bar unit is. An open-ended range
+ * falls back to the reported periods, and always reaches today so "all time"
+ * ends on the month the user is in rather than the last one they worked.
+ */
+function resolveAxisDays(input: UsageTrendSeriesInput): { from: string; to: string } {
+  const points = input.trend.points;
+  const firstPoint = points[0]?.key.slice(0, 10);
+  const lastPoint = points[points.length - 1]?.key.slice(0, 10);
+  return {
+    from: input.range.from ?? firstPoint ?? input.now.day,
+    to: input.range.to ?? maxKey(lastPoint ?? input.now.day, input.now.day),
+  };
+}
+
+/**
  * The daemon only sends the periods that had usage, so the axis is rebuilt from
  * the selected range: a quiet Tuesday has to be a gap in the chart, not a
- * missing column that shifts every bar after it.
+ * missing column that shifts every bar after it. An hourly range spans up to
+ * two days, so it runs the clock once per day rather than once.
  */
 function buildKeys(input: UsageTrendSeriesInput): string[] {
-  const points = input.trend.points;
-  const firstPoint = points[0]?.key;
-  const lastPoint = points[points.length - 1]?.key;
+  const { from, to } = resolveAxisDays(input);
   const keys: string[] = [];
 
-  if (input.trend.granularity === "hour") {
-    const day = input.range.from ?? firstPoint?.slice(0, 10) ?? input.now.day;
+  if (input.trend.granularity === "month") {
+    const last = to.slice(0, 7);
+    for (let month = from.slice(0, 7); month <= last; month = nextMonth(month)) keys.push(month);
+    return keys;
+  }
+
+  for (let day = from; day <= to; day = addUsageDays(day, 1)) {
+    if (input.trend.granularity === "day") {
+      keys.push(day);
+      continue;
+    }
     for (let hour = 0; hour < HOURS_PER_DAY; hour += 1) {
       keys.push(`${day}T${String(hour).padStart(2, "0")}`);
     }
-    return keys;
   }
-
-  if (input.trend.granularity === "day") {
-    const from = input.range.from ?? firstPoint ?? input.now.day;
-    const to = input.range.to ?? maxKey(lastPoint ?? input.now.day, input.now.day);
-    for (let day = from; day <= to; day = addUsageDays(day, 1)) keys.push(day);
-    return keys;
-  }
-
-  const from = (input.range.from ?? firstPoint ?? input.now.day).slice(0, 7);
-  const to = (input.range.to ?? maxKey(lastPoint ?? input.now.day, input.now.day)).slice(0, 7);
-  for (let month = from; month <= to; month = nextMonth(month)) keys.push(month);
   return keys;
 }
 

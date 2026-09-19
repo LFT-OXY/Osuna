@@ -3039,6 +3039,7 @@ export const es: TranslationResources = {
       activeDays: "Días activos",
       dayCountOne: "1 día",
       dayCountMany: "{{count}} días",
+      none: "—",
     },
     heatmap: {
       title: "Mapa de calor",
@@ -3064,7 +3065,6 @@ export const es: TranslationResources = {
     },
     common: {
       comingSoon: "Próximamente",
-      noValue: "—",
       loadError: "No se pudo cargar el uso.",
       hostLoadError: "No se pudo cargar el uso desde {{host}}.",
     },

@@ -27,7 +27,7 @@ export interface UsageHeatmapMonthLabel {
 }
 
 export interface UsageHeatmapMatrix {
-  weeks: number;
+  /** The Monday the first column opens on. */
   startDay: string;
   cells: UsageHeatmapCell[];
   monthLabels: UsageHeatmapMonthLabel[];
@@ -85,7 +85,6 @@ export function buildUsageHeatmap(input: UsageHeatmapInput): UsageHeatmapMatrix 
     .sort((a, b) => a - b);
 
   return {
-    weeks: input.weeks,
     startDay,
     cells: placed.map((cell) => ({
       day: cell.day,

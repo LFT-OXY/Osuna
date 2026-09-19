@@ -31,7 +31,6 @@ describe("buildUsageHeatmap", () => {
     });
 
     expect(matrix.startDay).toBe("2026-09-07");
-    expect(matrix.weeks).toBe(2);
     expect(matrix.monthLabels).toEqual([{ week: 0, month: "2026-09" }]);
     expect(matrix.cells).toEqual([
       { day: "2026-09-07", tokens: 0, level: 0, week: 0, weekday: 0 },

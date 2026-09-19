@@ -141,6 +141,19 @@ test.describe("Usage page", () => {
       await expect(page.getByTestId("usage-stat-active-days")).toContainText("1 day");
     });
 
+    await test.step("the fixture day is the darkest step and a quiet day the lightest", async () => {
+      // The level is only visible as a colour, so the light-theme heat scale is
+      // what the assertion can reach: step 4 for the only day with usage.
+      await expect(page.getByTestId(`usage-heatmap-cell-${FIXTURE_DAY}`)).toHaveCSS(
+        "background-color",
+        "rgb(16, 185, 129)",
+      );
+      await expect(page.getByTestId("usage-heatmap-cell-2026-09-17")).toHaveCSS(
+        "background-color",
+        "rgb(235, 237, 240)",
+      );
+    });
+
     await test.step("hovering the fixture day names it and its token count", async () => {
       await page.getByTestId(`usage-heatmap-cell-${FIXTURE_DAY}`).hover();
       await expect(page.getByTestId("usage-heatmap-caption")).toHaveText(

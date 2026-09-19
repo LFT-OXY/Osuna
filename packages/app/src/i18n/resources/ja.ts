@@ -3006,6 +3006,7 @@ export const ja: TranslationResources = {
       activeDays: "アクティブ日数",
       dayCountOne: "1日",
       dayCountMany: "{{count}}日",
+      none: "—",
     },
     heatmap: {
       title: "ヒートマップ",
@@ -3031,7 +3032,6 @@ export const ja: TranslationResources = {
     },
     common: {
       comingSoon: "近日公開",
-      noValue: "—",
       loadError: "使用量を読み込めませんでした。",
       hostLoadError: "{{host}} から使用量を読み込めませんでした。",
     },

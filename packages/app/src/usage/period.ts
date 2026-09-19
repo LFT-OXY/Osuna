@@ -48,6 +48,21 @@ export function resolveUsageNow(timezone: string, at: Date = new Date()): UsageN
   return { day, hour: `${day}T${find("hour")}` };
 }
 
+/**
+ * The heatmap header names the zone the grid is bucketed by as an offset
+ * (`UTC+08:00`), not as an IANA id: the id says nothing about how far the day
+ * boundary is from the reader's own.
+ */
+export function formatUsageTimeZoneLabel(timezone: string, at: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    timeZoneName: "longOffset",
+  }).formatToParts(at);
+  const offset = parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+  if (offset === "GMT") return "UTC+00:00";
+  return offset.startsWith("GMT") ? `UTC${offset.slice(3)}` : offset;
+}
+
 function toUtc(day: string): Date {
   return new Date(`${day}T00:00:00.000Z`);
 }

@@ -2,7 +2,7 @@ import type { UsageTrend, UsageTrendStackBy } from "@getpaseo/protocol/usage/typ
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View, type LayoutChangeEvent } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import Svg, { Line, Rect } from "react-native-svg";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
@@ -10,6 +10,14 @@ import { formatGroupedNumber } from "@/usage/format";
 import type { UsageNow, UsageRange } from "@/usage/period";
 import { usageTrendGroupColor } from "@/usage/sources";
 import { buildUsageTrendSeries, formatUsageTrendKey, type UsageTrendBar } from "@/usage/trend";
+
+/**
+ * `stroke` and `fill` are not `style`, so Unistyles does not track them: without
+ * the wrapper these two keep the colour they were first painted with when the
+ * theme changes under a card that does not re-render.
+ */
+const ThemedGridLine = withUnistyles(Line, (theme) => ({ stroke: theme.colors.usage.divider }));
+const ThemedFutureBar = withUnistyles(Rect, (theme) => ({ fill: theme.colors.usage.track }));
 
 const CHART_HEIGHT = 160;
 const BAR_GAP = 2;
@@ -86,13 +94,12 @@ export function UsageTrendCard({
             {Array.from({ length: GRID_LINES }, (_, index) => {
               const y = (CHART_HEIGHT - 1) * (index / (GRID_LINES - 1)) + 0.5;
               return (
-                <Line
+                <ThemedGridLine
                   key={`grid-${index}`}
                   x1={0}
                   y1={y}
                   x2={width}
                   y2={y}
-                  stroke={styles.gridLine.color}
                   strokeWidth={1}
                 />
               );
@@ -105,8 +112,7 @@ export function UsageTrendCard({
                 total={series.bars.length}
                 max={series.max}
                 width={width}
-                stackBy={stackBy}
-                futureColor={styles.futureBar.color}
+                stackBy={series.stackBy}
                 label={t("usage.trend.bar", {
                   period: formatUsageTrendKey(bar.key, series.granularity, locale),
                   tokens: formatGroupedNumber(bar.total, locale),
@@ -139,7 +145,6 @@ function UsageTrendColumn({
   max,
   width,
   stackBy,
-  futureColor,
   label,
 }: {
   bar: UsageTrendBar;
@@ -147,8 +152,8 @@ function UsageTrendColumn({
   total: number;
   max: number;
   width: number;
+  /** The report's own stacking, not the tab: the two differ while a switch is in flight. */
   stackBy: UsageTrendStackBy;
-  futureColor: string;
   label: string;
 }) {
   const barWidth = Math.max(1, (width - BAR_GAP * (total - 1)) / total);
@@ -157,13 +162,12 @@ function UsageTrendColumn({
   if (bar.isFuture) {
     const height = CHART_HEIGHT * FUTURE_BAR_RATIO;
     return (
-      <Rect
+      <ThemedFutureBar
         x={x}
         y={CHART_HEIGHT - height}
         width={barWidth}
         height={height}
         rx={2}
-        fill={futureColor}
         opacity={0.5}
         accessibilityLabel={label}
       />
@@ -207,12 +211,6 @@ const styles = StyleSheet.create((theme) => {
   return {
     chart: {
       height: CHART_HEIGHT,
-    },
-    gridLine: {
-      color: palette.divider,
-    },
-    futureBar: {
-      color: palette.track,
     },
     legend: {
       flexDirection: "row",
