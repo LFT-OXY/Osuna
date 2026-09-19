@@ -4,7 +4,7 @@ import type {
   UsageTrendStackBy,
 } from "@getpaseo/protocol/usage/types";
 import { addUsageDays, type UsageNow, type UsageRange } from "./period";
-import { formatUsageDay } from "./range-label";
+import { formatUsageDay, formatUsageMonth } from "./range-label";
 import { totalUsageTokens } from "./totals";
 
 /**
@@ -169,9 +169,5 @@ export function formatUsageTrendKey(
     }).format(new Date(`${key}:00:00.000Z`));
   }
   if (granularity === "day") return formatUsageDay(key, locale);
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: "UTC",
-    year: "numeric",
-    month: "short",
-  }).format(new Date(`${key}-01T00:00:00.000Z`));
+  return formatUsageMonth(key, locale);
 }

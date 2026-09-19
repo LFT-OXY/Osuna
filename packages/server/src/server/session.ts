@@ -3029,6 +3029,7 @@ export class Session {
         await this.handleListCommandsRequest(msg);
         return;
       case "usage.report.get.request":
+      case "usage.sessions.list.request":
       case "usage.pricing.list.request":
       case "usage.pricing.refresh.request":
       case "usage.agent.get.request":
@@ -3058,6 +3059,7 @@ export class Session {
       {
         type:
           | "usage.report.get.request"
+          | "usage.sessions.list.request"
           | "usage.pricing.list.request"
           | "usage.pricing.refresh.request"
           | "usage.agent.get.request"
@@ -3076,6 +3078,10 @@ export class Session {
           code: "usage_unavailable",
         },
       });
+      return;
+    }
+    if (msg.type === "usage.sessions.list.request") {
+      await usageSession.handleUsageSessionsListRequest(msg);
       return;
     }
     if (msg.type === "usage.pricing.list.request") {

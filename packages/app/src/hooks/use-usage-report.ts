@@ -1,4 +1,5 @@
 import type { UsageBackfill, UsageTrendStackBy } from "@getpaseo/protocol/usage/types";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetchQuery } from "@/data/query";
 import { getHostRuntimeStore, useHostRuntimeConnectionStatuses } from "@/runtime/host-runtime";
@@ -8,6 +9,7 @@ import {
   type UsageHostError,
   type UsageHostInput,
 } from "@/usage/aggregated-usage";
+import { usageSessionsQueryBaseKey } from "@/usage/aggregated-sessions";
 import { EMPTY_USAGE_REPORT, mergeUsageBackfill, type MergedUsageReport } from "@/usage/merge";
 import type { UsageRange } from "@/usage/period";
 
@@ -85,9 +87,13 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
     staleTimeMs: 5_000,
   });
 
+  const queryClient = useQueryClient();
   const refetch = useCallback(() => {
     void query.refetch();
-  }, [query]);
+    // An expanded day lists the same rows the report just recounted, so it goes
+    // stale with it; the card refetches whichever days are open.
+    void queryClient.invalidateQueries({ queryKey: usageSessionsQueryBaseKey });
+  }, [query, queryClient]);
 
   const liveBackfill = useUsageLiveEvents({ serverIds, onUsageUpdated: refetch });
 

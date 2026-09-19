@@ -169,8 +169,21 @@ export interface ResumeTerminalLaunch {
   args: string[];
 }
 
+/**
+ * What a resumable provider session is, wherever it is listed: Session history
+ * rows and the usage page's session rows both satisfy it.
+ */
+export interface ResumableProviderSession {
+  providerId: string;
+  providerHandleId: string;
+  cwd: string;
+  title: string;
+}
+
 /** What to hand `create_terminal_request` so the new tab is the provider's own resumed session. */
-export function buildResumeTerminalLaunch(row: SessionHistoryRow): ResumeTerminalLaunch | null {
+export function buildResumeTerminalLaunch(
+  row: ResumableProviderSession,
+): ResumeTerminalLaunch | null {
   const argv = buildProviderCommandArgv({
     provider: row.providerId,
     id: "resume",

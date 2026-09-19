@@ -9,12 +9,14 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { UsagePlaceholderCard } from "@/components/usage/usage-card";
+import { UsageDetailsCard } from "@/components/usage/usage-details-card";
 import { UsageHeatmapCard } from "@/components/usage/usage-heatmap-card";
 import { UsageOverviewCard } from "@/components/usage/usage-overview-card";
 import { UsageStatsCard } from "@/components/usage/usage-stats-card";
 import { UsageTrendCard } from "@/components/usage/usage-trend-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport } from "@/hooks/use-usage-report";
+import type { UsageHostsView } from "@/usage/details";
 import { EMPTY_USAGE_REPORT } from "@/usage/merge";
 import {
   resolveUsageNow,
@@ -84,6 +86,15 @@ function UsageScreenContent(): ReactElement {
   }, []);
 
   const report = loadState.status === "loaded" ? loadState.data : EMPTY_USAGE_REPORT;
+  const detailsHosts = useMemo<UsageHostsView>(
+    () => ({
+      hosts: hostSelection.hosts,
+      labels: new Map(hostOptions.map((option) => [option.serverId, option.serverName])),
+      isMultiHost: hostSelection.countedCount > 1,
+      timezone,
+    }),
+    [hostOptions, hostSelection.countedCount, hostSelection.hosts, timezone],
+  );
 
   let body: ReactElement;
   if (loadState.status !== "loaded" && !isError) {
@@ -143,11 +154,7 @@ function UsageScreenContent(): ReactElement {
     const mainColumn = (
       <View style={styles.mainColumn}>
         {overview}
-        <UsagePlaceholderCard
-          title={t("usage.details.title")}
-          message={t("usage.common.comingSoon")}
-          testID="usage-details-card"
-        />
+        <UsageDetailsCard report={report} hosts={detailsHosts} />
       </View>
     );
 

@@ -11,6 +11,7 @@ import type {
   UsagePricingModel,
   UsagePricingTableInfo,
   UsageReport,
+  UsageSessionHandle,
   UsageTokenTotals,
 } from "@getpaseo/protocol/usage/types";
 import type { PersistedProjectRecord } from "../workspace-registry.js";
@@ -26,6 +27,12 @@ import {
 import { UsageProjectResolver } from "./project-attribution.js";
 import { buildAgentSummary, buildAgentTurns, type AgentReportInput } from "./agent-report.js";
 import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
+import { buildUsageSessionChains } from "./session-chains.js";
+import {
+  buildUsageSessions,
+  type UsageSessionsRequest,
+  type UsageSessionsResult,
+} from "./sessions.js";
 import { locateSessionFile } from "./session-files.js";
 import { USAGE_SOURCE_ADAPTERS, sessionCursorKey, type UsageSourceAdapter } from "./sources.js";
 import { UsageStore, type UsageRowSet } from "./store.js";
@@ -213,15 +220,46 @@ export class UsageService {
   async getReport(request: UsageReportRequest): Promise<UsageReport> {
     const rows = Array.from(this.rows.values());
     const attributions = await this.projects.resolveAll(new Set(rows.map((row) => row.cwd)));
+    const chains = buildUsageSessionChains(this.scanState);
     return buildUsageReport({
       rows,
       request,
       projects: attributions,
       pricing: this.reportPricing(),
+      canonicalSessionId: (cli, sessionId) => chains.canonical(cli, sessionId),
       backfill: this.backfill,
       error: this.lastError,
       now: this.now(),
     });
+  }
+
+  /** One row per session and local day, for the page's daily detail table. */
+  async listSessions(request: UsageSessionsRequest): Promise<UsageSessionsResult> {
+    const rows = Array.from(this.rows.values());
+    const attributions = await this.projects.resolveAll(new Set(rows.map((row) => row.cwd)));
+    return buildUsageSessions({
+      rows,
+      turns: this.turns,
+      request,
+      projects: attributions,
+      pricing: this.reportPricing(),
+      chains: buildUsageSessionChains(this.scanState),
+      handleOf: (cli, sessionId) => this.sessionHandle(cli, sessionId),
+      owners: await this.agents.listSessionOwners(),
+    });
+  }
+
+  /**
+   * How Session history resumes this session. Claude and Codex resume by id;
+   * Pi and OMP take the transcript path, which is only known once the scanner
+   * has seen the file.
+   */
+  private sessionHandle(cli: UsageCli, sessionId: string): UsageSessionHandle | null {
+    if (cli === "claude" || cli === "codex") {
+      return { providerId: cli, providerHandleId: sessionId };
+    }
+    const cursor = this.scanState.cursors[sessionCursorKey(cli, sessionId)];
+    return cursor ? { providerId: cli, providerHandleId: cursor.path } : null;
   }
 
   /** Every model the rows have ever carried, newest use first. */

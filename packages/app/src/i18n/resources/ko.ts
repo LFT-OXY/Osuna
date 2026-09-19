@@ -3016,6 +3016,32 @@ export const ko: TranslationResources = {
     },
     details: {
       title: "데이터 상세",
+      tabs: {
+        daily: "일별",
+        monthly: "월별",
+        projects: "프로젝트",
+      },
+      empty: "이 기간에는 사용량이 없습니다",
+      topProjects: "상위 {{count}}",
+      projectLimit: "표시할 프로젝트 수",
+      projectKind: {
+        non_git: "git 아님",
+        directory: "디렉터리",
+      },
+    },
+    sessionRow: {
+      open: "열기",
+      opening: "여는 중",
+      empty: "이 날짜에는 세션이 없습니다",
+      loadError: "이 날짜의 세션을 불러오지 못했습니다.",
+      hostLoadError: "{{host}}의 세션을 나열하지 못했습니다.",
+      truncated: "이 날짜의 최근 세션 {{count}}개만 표시합니다",
+      breakdown: "↑ {{input}} · ↓ {{output}} · 캐시 {{cache}}",
+      errors: {
+        noWorkspace: "이 디렉터리의 workspace를 열어야 이 세션을 이어갈 수 있습니다",
+        noHandle: "이 세션은 더 이상 이어갈 수 없습니다",
+        openFailed: "이 세션을 열지 못했습니다",
+      },
     },
     common: {
       comingSoon: "곧 제공됩니다",
@@ -3034,6 +3060,8 @@ export const ko: TranslationResources = {
       reasoning: "추론",
       sessions: "세션",
       turns: "턴",
+      date: "날짜",
+      month: "월",
     },
   },
 };

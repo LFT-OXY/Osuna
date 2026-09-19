@@ -57,6 +57,23 @@ export class UsageSession {
     });
   }
 
+  async handleUsageSessionsListRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.sessions.list.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.sessions.list.response",
+      payload: {
+        requestId: request.requestId,
+        ...(await this.usageService.listSessions({
+          from: request.from,
+          to: request.to,
+          timezone: request.timezone,
+          filters: request.filters,
+        })),
+      },
+    }));
+  }
+
   async handleUsagePricingListRequest(
     request: Extract<SessionInboundMessage, { type: "usage.pricing.list.request" }>,
   ): Promise<void> {

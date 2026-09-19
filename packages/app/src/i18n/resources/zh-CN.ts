@@ -2969,6 +2969,32 @@ export const zhCN: TranslationResources = {
     },
     details: {
       title: "数据明细",
+      tabs: {
+        daily: "每日细目",
+        monthly: "按月",
+        projects: "项目用量",
+      },
+      empty: "此周期没有用量",
+      topProjects: "前 {{count}}",
+      projectLimit: "显示多少个项目",
+      projectKind: {
+        non_git: "非 git",
+        directory: "目录",
+      },
+    },
+    sessionRow: {
+      open: "打开",
+      opening: "打开中",
+      empty: "这一天没有会话",
+      loadError: "无法加载这一天的会话。",
+      hostLoadError: "无法列出 {{host}} 的会话。",
+      truncated: "只显示这一天最近的 {{count}} 个会话",
+      breakdown: "↑ {{input}} · ↓ {{output}} · 缓存 {{cache}}",
+      errors: {
+        noWorkspace: "先在该目录下打开一个 workspace，才能恢复这个会话",
+        noHandle: "这个会话已经无法恢复",
+        openFailed: "无法打开这个会话",
+      },
     },
     common: {
       comingSoon: "即将推出",
@@ -2987,6 +3013,8 @@ export const zhCN: TranslationResources = {
       reasoning: "推理",
       sessions: "会话",
       turns: "轮次",
+      date: "日期",
+      month: "月份",
     },
   },
 };

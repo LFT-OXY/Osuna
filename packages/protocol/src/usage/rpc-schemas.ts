@@ -9,6 +9,7 @@ import {
   UsagePricingTableInfoSchema,
   UsageReportFiltersSchema,
   UsageReportSchema,
+  UsageSessionRowSchema,
   UsageTrendGranularitySchema,
   UsageTrendStackBySchema,
 } from "./types.js";
@@ -39,6 +40,31 @@ export const UsageReportGetResponseSchema = z.object({
 });
 export type UsageReportGetResponse = z.infer<typeof UsageReportGetResponseSchema>;
 export type UsageReportGetPayload = UsageReportGetResponse["payload"];
+
+/** The same window as the report, answered as one row per session and local day. */
+export const UsageSessionsListRequestSchema = z.object({
+  type: z.literal("usage.sessions.list.request"),
+  requestId: z.string(),
+  from: z.string().nullable(),
+  to: z.string().nullable(),
+  timezone: z.string().min(1),
+  filters: UsageReportFiltersSchema.optional(),
+});
+export type UsageSessionsListRequest = z.infer<typeof UsageSessionsListRequestSchema>;
+
+/**
+ * Newest activity first. `truncated` says a day held more sessions than the
+ * per-day cap, so the tail of that day is missing.
+ */
+export const UsageSessionsListResponseSchema = z.object({
+  type: z.literal("usage.sessions.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    sessions: z.array(UsageSessionRowSchema),
+    truncated: z.boolean(),
+  }),
+});
+export type UsageSessionsListResponse = z.infer<typeof UsageSessionsListResponseSchema>;
 
 export const UsageBackfillProgressMessageSchema = z.object({
   type: z.literal("usage.backfill.progress"),

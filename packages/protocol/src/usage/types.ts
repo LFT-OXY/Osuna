@@ -130,12 +130,19 @@ export const UsageProjectCwdSchema = z.object({
   estimatedCost: z.number(),
 });
 
-export const UsageProjectBreakdownSchema = z.object({
+/** Which project a cwd was attributed to; the identity without the amounts. */
+export const UsageProjectRefSchema = z.object({
   rootPath: z.string(),
   displayName: z.string(),
   kind: UsageProjectKindSchema,
+});
+export type UsageProjectRef = z.infer<typeof UsageProjectRefSchema>;
+
+export const UsageProjectBreakdownSchema = UsageProjectRefSchema.extend({
   totals: UsageTokenTotalsSchema,
   estimatedCost: z.number(),
+  /** Which CLIs and backends ran here, largest first; the row wears their marks. */
+  sources: z.array(UsageSourceRefSchema),
   cwds: z.array(UsageProjectCwdSchema),
 });
 export type UsageProjectBreakdown = z.infer<typeof UsageProjectBreakdownSchema>;
@@ -206,6 +213,43 @@ export type UsagePricingRefreshResult = z.infer<typeof UsagePricingRefreshResult
 /** One model's share of a turn or of an agent's total — a report row minus its source. */
 export const UsageModelAmountSchema = UsageModelBreakdownSchema.omit({ cli: true, backend: true });
 export type UsageModelAmount = z.infer<typeof UsageModelAmountSchema>;
+
+/**
+ * How the Session history panel names the same session: the CLI plus the id it
+ * resumes by. Claude and Codex resume by session id; Pi and OMP take the
+ * transcript path, which only the scanner's cursors know.
+ */
+export const UsageSessionHandleSchema = z.object({
+  providerId: z.string(),
+  providerHandleId: z.string(),
+});
+export type UsageSessionHandle = z.infer<typeof UsageSessionHandleSchema>;
+
+/**
+ * One session's usage on one local day. A session that ran past midnight has a
+ * row per day, each holding only that day's tokens. A Claude resume chain is
+ * one session here, reported under the id it last used.
+ */
+export const UsageSessionRowSchema = z.object({
+  day: z.string(),
+  cli: UsageCliSchema,
+  backend: z.string().nullable(),
+  sessionId: z.string(),
+  cwd: z.string(),
+  project: UsageProjectRefSchema,
+  models: z.array(UsageModelAmountSchema),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  turns: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  firstAt: z.string(),
+  lastAt: z.string(),
+  /** Null when the transcript is no longer where the cursor last saw it. */
+  handle: UsageSessionHandleSchema.nullable(),
+  importedAgentId: z.string().optional(),
+  importedAgentWorkspaceId: z.string().optional(),
+});
+export type UsageSessionRow = z.infer<typeof UsageSessionRowSchema>;
 
 /**
  * One turn of a Paseo agent. `turnId` is Paseo's own id, present once a turn

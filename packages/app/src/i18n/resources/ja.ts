@@ -3029,6 +3029,32 @@ export const ja: TranslationResources = {
     },
     details: {
       title: "データ明細",
+      tabs: {
+        daily: "日別",
+        monthly: "月別",
+        projects: "プロジェクト",
+      },
+      empty: "この期間の使用量はありません",
+      topProjects: "上位 {{count}}",
+      projectLimit: "表示するプロジェクト数",
+      projectKind: {
+        non_git: "git 以外",
+        directory: "ディレクトリ",
+      },
+    },
+    sessionRow: {
+      open: "開く",
+      opening: "開いています",
+      empty: "この日のセッションはありません",
+      loadError: "この日のセッションを読み込めませんでした。",
+      hostLoadError: "{{host}} のセッションを一覧できませんでした。",
+      truncated: "この日の直近 {{count}} 件のセッションのみ表示しています",
+      breakdown: "↑ {{input}} · ↓ {{output}} · キャッシュ {{cache}}",
+      errors: {
+        noWorkspace: "このディレクトリの workspace を開くと、このセッションを再開できます",
+        noHandle: "このセッションはもう再開できません",
+        openFailed: "このセッションを開けませんでした",
+      },
     },
     common: {
       comingSoon: "近日公開",
@@ -3047,6 +3073,8 @@ export const ja: TranslationResources = {
       reasoning: "推論",
       sessions: "セッション",
       turns: "ターン",
+      date: "日付",
+      month: "月",
     },
   },
 } as const;

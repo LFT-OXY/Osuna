@@ -176,7 +176,8 @@ Pi 与 OMP：
 - Paseo 的 Fork 是新 agent、自带新列表；CLI 自己的分支（Codex `forked_from_id`、Pi/OMP `parentSession`）不纳入链。
 - 「已导入」判定扩展到 Backing sessions 任一 id。
 - `usage.agent.get` / `usage.agent.turns.list` 求和范围 = 列表（含反推链）内每个 `(cli, sessionId)` 的全部行，跨 cwd、含子代理行。`complete = 回填不处于 running 且列表内每个 sessionId 都有游标`。
-- 会话行（`usage.sessions.list`）里 Claude resume 链合并为一行、归到最新 id，`sessionCount` 按链计 1。
+- 会话行（`usage.sessions.list`）里 Claude resume 链合并为一行、归到最新 id，`sessionCount` 按链计 1。链的方向由游标里的 `forkedFromSessionId` 反推：一个父会话被 fork 两次时，`lastAt` 更晚的那个子会话赢，输的那支自成一条链，父会话的行不会被算两次。
+- 按链计是整份报表的口径，不只是 `summary`：`days[].sessionCount` / `months[].sessionCount` 用同一个 canonical id，否则每日细目表的「会话」列会比它展开出来的行数多。
 
 ### 7. 协议
 
@@ -189,9 +190,12 @@ Pi 与 OMP：
   - `trend: { granularity, stackBy, points: [{ key, groups: Record<string, {totals, estimatedCost}> }] }`
   - `days: [{ day, totals, estimatedCost, sessionCount, turns }]`、`months: [...]`
   - `heatmapDays: [{ day, totals }]` 固定最近 182 天，独立于 from/to。
-  - `projects: [{ rootPath, displayName, kind: "git"|"non_git"|"directory", totals, estimatedCost, cwds: [{ cwd, totals, estimatedCost }] }]` 全量（上限 200）降序。
+  - `projects: [{ rootPath, displayName, kind: "git"|"non_git"|"directory", totals, estimatedCost, sources: [{cli, backend}], cwds: [{ cwd, totals, estimatedCost }] }]` 全量（上限 200）降序。`sources` 是这个项目下出现过的来源，按各自 token 降序，供项目行画来源小图标——项目行是唯一需要它的地方，客户端从 `models` 反推不出来（模型不带 cwd）。
   - `backfill: { state, filesTotal, filesDone, startedAt }`、`error: string | null`
-- **`usage.sessions.list`**：请求同上的 `{ from, to, timezone, filters }`。一行一 (会话, 本地日)，同一会话跨天多行、token 只算当天：`{ day, cli, backend, sessionId, cwd, project, models: [{model, 五列, estimatedCost}], totals, estimatedCost, turns, durationMs, firstAt, lastAt, handle: { providerId, providerHandleId } | null, importedAgentId?, importedAgentWorkspaceId? }`，按 `lastAt` 倒序，每天最多 500 行、超出 `truncated: true`。`handle` 与 Session history 的描述符同名：Claude/Codex 为 sessionId，Pi/OMP 为游标索引反查的文件路径。
+- **`usage.sessions.list`**：请求同上的 `{ from, to, timezone, filters }`。一行一 (会话, 本地日)，同一会话跨天多行、token 只算当天：`{ day, cli, backend, sessionId, cwd, project: { rootPath, displayName, kind }, models: [{model, 五列, estimatedCost, priced}], totals, estimatedCost, turns, durationMs, firstAt, lastAt, handle: { providerId, providerHandleId } | null, importedAgentId?, importedAgentWorkspaceId? }`，响应为 `{ sessions, truncated }`，按 `lastAt` 倒序，每天最多 500 行、任一天超出则 `truncated: true`。`handle` 与 Session history 的描述符同名：Claude/Codex 为 sessionId，Pi/OMP 为游标索引反查的文件路径。
+  - **行里没有标题**：daemon 的解析器只记 token，不落任何消息文本，会话标题在存储里无处可取；客户端的会话行改为以项目名领头（来源色点 + 项目名 + 来源 pill + 多主机徽标）。要标题就得让解析器存用户消息，那是另一个决定。
+  - `backend` 与 `cwd` 取当天 token 最多的那个：一个会话可以中途换后端或换目录，而行只画一个。
+  - `firstAt` / `lastAt` 取当天有落在这一天的轮次行的 `startedAt` / `lastAt`（跨午夜的轮次分别归到它开始与结束的那天，所以两个时间戳都不会落到本行的日期之外）；该天没有轮次行时回落到当天最早 / 最晚的 15 分钟桶起点，时间列因此最多早 15 分钟。决策票 10 的「用游标条目、不用桶起点」说的是 `usage.agent.get` 的整段跨度，按天切开的会话行拿不到那个值。
 - **`usage.agent.get { agentId }`**：`{ byModel, totals, estimatedCost, turns, durationMs, firstAt, lastAt, complete }`。客户端不接触 provider session id 列表。
 - **`usage.agent.turns.list { agentId }`**：`{ turns: [{ cli, backend, sessionId, turnKey, turnId: string | null, userMessageIds, startedAt, endedAt, durationMs, byModel: [{ model, 五列, estimatedCost, priced }], totals, estimatedCost, priced }], complete }`，按 `startedAt` 升序，不分页、无 `since`。Codex 历史轮无 `turnId` 时 daemon 按 durable timeline 的 user_message 时间戳与 `startedAt` 在 ±30 秒内最近匹配补上；Claude/Pi/OMP 不做时间匹配。
 - **`usage.pricing.list`**（无参）：`{ table: { fetchedAt, source: "cache"|"snapshot", autoUpdate }, models: [{ model, cli, backend, priced, priceSource: "override"|"table"|null, matchedKey, pricePerMillion | null, lastSeenAt }] }`，`priced=false` 在前、再按 `lastSeenAt` 倒序。
@@ -221,7 +225,11 @@ Pi 与 OMP：
   - 热力图固定 26 周（手机 20 周）、周一起、5 级绿阶、悬停日期与 token；只做 2D。悬停文案用卡片内一行固定高度的说明行（只在 web 渲染），不做逐格浮层；这行必须占位，见第 10 节末的布局跳动。
   - 趋势按来源堆叠柱，卡片标题右侧 tiny 分段控件切「按来源 / 按模型」；未来日画灰色矮柱。x 轴只画页脚首尾两个标签，不画逐柱刻度。堆叠顺序按各组在整段区间内的 token 总量降序、同量按组名，这样一个组在每根柱子里都在同一层。粒度由 daemon 的 `trend.granularity` 决定，客户端只负责按粒度补齐空 key 并标出未来段；区间过长时只保留最近 372 根柱子。
   - 套餐用量卡片沿用现有组件的窗口条 / 余额条样式，标题右侧显示更新时间。
-  - 数据明细三页签：每日细目（可展开会话行，「打开」走 Session history 的打开 / 导入逻辑）/ 按月 / 项目用量（前 3 / 6 / 10 分段，行展开 cwd）。
+  - 数据明细三页签：每日细目（可展开会话行，「打开」走 Session history 的打开 / 导入逻辑）/ 按月 / 项目用量（前 3 / 6 / 10 分段，行展开 cwd）。日行与项目行各自独立展开，可同时开多行。
+  - **会话按天取**：展开某一天才对当前计入的主机发一次 `usage.sessions.list`（`from = to = 该天`），每个展开的日行一条 React Query；`usage.updated` 到达时和报表一起失效，展开着的那几天自己重拉。整段区间一次性取会话行会在「总计」下变成无上限的响应。
+  - 会话行不跨主机合并，每行带 `serverId`；某台主机列举失败时在该天的列表顶部逐台点名，其余主机的行照常显示。
+  - 「打开」：已导入 → `navigateToAgent`（带 `importedAgentWorkspaceId`，归档的 agent 也能落到 workspace 里）；否则在**包含该会话 cwd 的 workspace**（最深的那个）里 resume 一个终端并跳过去，终端的 cwd 仍是会话自己的目录。Session history 是在它所在的 workspace 里 resume、不比对目录，用量页没有所在 workspace，所以改用「谁包含它」来选。该主机没有任何 workspace 包含这个目录时，行内提示让用户先打开一个。
+  - 打开逻辑与 Session history 共用同一份实现：`buildResumeTerminalLaunch`（启动命令）、`sessionHistoryRowKey`（终端记忆的 key）、`resumeProviderSessionTerminal`（查已开终端 → 建终端 → 记住）。两处必须一致，否则同一个会话会被 resume 两次。
   - 主机筛选：只有一台主机时不显示；下拉首项「全部主机」带「N 台计入」pill；不支持的主机灰字不可选 + 「需要更新主机」pill；未连接灰点不可选 + 「未计入」pill。触发按钮、状态点与 pill 照原型画，下拉本体用共享菜单引擎（`components/ui/dropdown-menu`），不照抄原型那个自绘菜单——`docs/menus.md` 禁止第三套菜单实现，Android portal 与 iOS 选中时序都在引擎里。
   - 主机的三态由 `(连接状态, features.usage)` 定：在线且 `true` 计入；在线但 `false` 是「需要更新主机」；未连接、或连上了还没发来 `server_info`（标志未知，说不出它旧）都是「未计入」。
   - 选中的主机不再计入时（掉线或降级），筛选自动退回「全部主机」：选择跟着一台答不上来的机器走，只会让页面停在加载态。该主机回来后选择自行恢复。
@@ -284,14 +292,14 @@ Pi 与 OMP：
 - 四家日志各一份夹具 → `usage.report.get` 的 `summary` / `sources` / `models` / `days` / `projects` 全值；同一夹具在不同 `timezone` 下 `days` 的分法。
 - 回填进度事件序列（`running` → `done`）、`backfill` 字段；daemon 关闭再以同一 `PASEO_HOME` 重启后不重复计数、报表不变。
 - 往夹具文件追加行后（模拟 CLI 写盘）触发扫描 → `usage.updated` 到达、报表增量正确；截断文件 → 重置游标、warn。
-- `usage.sessions.list` 的 (会话, 日) 拆行、Claude resume 链合并为一行、`handle` 字段、每天 500 行截断。
+- `usage.sessions.list` 的 (会话, 日) 拆行、Claude resume 链合并为一行、`handle` 字段、已导入会话带 `importedAgentId`。**每天 500 行截断改在接缝 2 验**（`buildUsageSessions` 的纯函数用例）：在接缝 1 上造这一条要写 501 份真实 transcript 夹具，夹具的代价远超它证明的东西。
 - 用假 agent client 创建 agent，其 persistence sessionId 指向某个夹具会话 → `usage.agent.get` / `usage.agent.turns.list` 的求和、`complete`、`turnId` 打标（假 client 发 `turn_completed` 后定向解析），旧记录无 `providerSessionIds` 时的补全。
 - `set_daemon_config` 写自定义价格 → `usage.pricing.updated` 广播、报表成本立即重算、`usage.pricing.list` 的 `priceSource`；`usage.pricing.refresh` 在 fetch 返回 200 / 304 / 失败时的三种结果与缓存文件内容；`autoUpdate=false` 时不发请求。
 - 未支持根目录不存在、Codex `.zst` 存在时的静默跳过。
 
 **接缝 2：解析器与计价匹配的纯函数单元测试。** 四个解析器是 `(bytes, state) → { bucketRows, turnRows, state }` 的纯函数，价格匹配是 `(model, table, overrides) → 结果`，客户端的跨主机合并、热力图分级、轮次对齐、数字格式化、来源显示名、i18n 键存在性也是纯函数。它们的输入是夹具行，输出全值断言。这个接缝存在的理由：四家日志的每个坑（Claude 同 id 多行取尾、`forkedFrom` 跳过、`<synthetic>`；Codex total 归零、相邻重复签名、`token_usage_record` 优先；Pi/OMP 跨文件 id 复制、header 行号、推理列名；U+2028 切行、半行续读）在接缝 1 上只能看到总数对不对，看不出是哪条规则错了。
 
-**接缝 3：app Playwright 浏览器 spec。** worker daemon 通过现有 `e2eDaemonEnvironment` 选项把四个根目录环境变量指到 spec 自带的夹具目录、把扫描间隔调短。验证「用量」页首屏文字与卡片、周期切换与翻页、来源卡展开、每日细目展开会话行与「打开」跳转、主机筛选（两台真 daemon，参照现有双主机 spec；旧 daemon 参照现有旧 daemon spec 的「需要更新主机」pill）、回填 pill 出现与消失、价格表区块填自定义价格后成本刷新、套餐用量卡片在新位置（改现有 spec 的路由）。turn footer 与环形表弹层的真实链路用 `*.real.spec.ts` 跑一轮 Claude（`CLAUDE_CONFIG_DIR` 指到临时目录），断言 footer 出现 `↑ ↓ $` 段与弹层内容；非 real 的 footer 覆盖靠接缝 1 的 `usage.agent.turns.list` 加接缝 2 的对齐函数。
+**接缝 3：app Playwright 浏览器 spec。** worker daemon 通过现有 `e2eDaemonEnvironment` 选项把四个根目录环境变量指到 spec 自带的夹具目录、把扫描间隔调短。验证「用量」页首屏文字与卡片、周期切换与翻页、来源卡展开、每日细目展开会话行与「打开」跳转（`usage-page-details.spec.ts` 覆盖三页签与展开；`usage-page-session-open.spec.ts` 用 `withWorkspace()` 建一个真 workspace，再往夹具根里写一份 cwd 指向它的 transcript——`createUsageFixtureRoots` 的 `claudeProjectDir` 与 `writeUsageClaudeSession` 就是为此加的——点「打开」断言真的开出终端。**「已导入会话切到该 agent」这一支不在浏览器里验**：要在真 daemon 上造一个带用量的已导入 agent 就得跑真 Claude，接缝 1 已断言 `importedAgentId` 回传、接缝 2 已断言该分支走 `navigateToAgent`）、主机筛选（两台真 daemon，参照现有双主机 spec；旧 daemon 参照现有旧 daemon spec 的「需要更新主机」pill）、回填 pill 出现与消失、价格表区块填自定义价格后成本刷新、套餐用量卡片在新位置（改现有 spec 的路由）。turn footer 与环形表弹层的真实链路用 `*.real.spec.ts` 跑一轮 Claude（`CLAUDE_CONFIG_DIR` 指到临时目录），断言 footer 出现 `↑ ↓ $` 段与弹层内容；非 real 的 footer 覆盖靠接缝 1 的 `usage.agent.turns.list` 加接缝 2 的对齐函数。
 
 三个接缝之外不再加：不为 `UsageStore` 单独写 store 测试（它的行为从接缝 1 的重启与压缩用例可见），不为 React 组件写挂载测试。
 

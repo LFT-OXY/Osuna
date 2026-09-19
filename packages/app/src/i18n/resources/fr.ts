@@ -3070,6 +3070,32 @@ export const fr: TranslationResources = {
     },
     details: {
       title: "Détail des données",
+      tabs: {
+        daily: "Par jour",
+        monthly: "Par mois",
+        projects: "Projets",
+      },
+      empty: "Aucune utilisation sur cette période",
+      topProjects: "Top {{count}}",
+      projectLimit: "Nombre de projets",
+      projectKind: {
+        non_git: "Hors git",
+        directory: "Répertoire",
+      },
+    },
+    sessionRow: {
+      open: "Ouvrir",
+      opening: "Ouverture",
+      empty: "Aucune session ce jour-là",
+      loadError: "Impossible de charger les sessions de ce jour.",
+      hostLoadError: "Impossible de lister les sessions de {{host}}.",
+      truncated: "Seules les {{count}} sessions les plus récentes de ce jour sont affichées",
+      breakdown: "↑ {{input}} · ↓ {{output}} · cache {{cache}}",
+      errors: {
+        noWorkspace: "Ouvrez un workspace dans ce répertoire pour reprendre cette session",
+        noHandle: "Cette session ne peut plus être reprise",
+        openFailed: "Impossible d'ouvrir cette session",
+      },
     },
     common: {
       comingSoon: "Bientôt disponible",
@@ -3088,6 +3114,8 @@ export const fr: TranslationResources = {
       reasoning: "Raisonnement",
       sessions: "Sessions",
       turns: "Tours",
+      date: "Date",
+      month: "Mois",
     },
   },
 };

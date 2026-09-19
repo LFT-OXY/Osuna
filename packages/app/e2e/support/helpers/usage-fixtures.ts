@@ -16,6 +16,8 @@ const DAYS_AGO = 2;
 
 export interface UsageFixtureRoots {
   root: string;
+  /** Where the Claude fixtures were copied; a spec adds its own transcripts here. */
+  claudeProjectDir: string;
   /**
    * The local day every fixture line lands on. The server fixtures carry a fixed
    * date, so the copies are restamped relative to today: an assertion about the
@@ -59,6 +61,7 @@ export function createUsageFixtureRoots(prefix: string): UsageFixtureRoots {
 
   return {
     root,
+    claudeProjectDir: claudeProjects,
     day,
     environment: {
       CLAUDE_CONFIG_DIR: path.join(root, "claude"),
@@ -71,6 +74,55 @@ export function createUsageFixtureRoots(prefix: string): UsageFixtureRoots {
       PASEO_USAGE_PRICING_AUTO_UPDATE: "0",
     },
   };
+}
+
+export interface UsageSessionFixture {
+  roots: UsageFixtureRoots;
+  sessionId: string;
+  /** The directory the session ran in; the usage page resumes it from there. */
+  cwd: string;
+  output: number;
+}
+
+/**
+ * One finished Claude turn, written where the scanner will find it. A spec uses
+ * this when the session has to run in a directory only the test knows — a
+ * workspace it just created — which a checked-in fixture cannot name.
+ */
+export function writeUsageClaudeSession(input: UsageSessionFixture): void {
+  const { roots, sessionId, cwd, output } = input;
+  const user = {
+    type: "user",
+    sessionId,
+    cwd,
+    promptId: "p1",
+    uuid: "u-p1",
+    timestamp: `${roots.day}T09:00:00.000Z`,
+    message: { role: "user", content: "hi" },
+  };
+  const assistant = {
+    type: "assistant",
+    sessionId,
+    cwd,
+    uuid: "a-msg-1",
+    timestamp: `${roots.day}T09:00:05.000Z`,
+    message: {
+      id: "msg-1",
+      role: "assistant",
+      model: "claude-opus-5",
+      stop_reason: "end_turn",
+      usage: {
+        input_tokens: 1,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        output_tokens: output,
+      },
+    },
+  };
+  writeFileSync(
+    path.join(roots.claudeProjectDir, `${sessionId}.jsonl`),
+    `${JSON.stringify(user)}\n${JSON.stringify(assistant)}\n`,
+  );
 }
 
 function copyJsonl(from: string, to: string, day: string): void {

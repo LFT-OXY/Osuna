@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { UsageCli } from "@getpaseo/protocol/usage/types";
 import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
 import { emptyBucketRow, type UsageBucketRow } from "./types.js";
@@ -48,12 +49,14 @@ function build(
   rows: UsageBucketRow[],
   request: UsageReportRequest,
   pricing: UsageReportPricing = UNPRICED,
+  canonicalSessionId: (cli: UsageCli, sessionId: string) => string = (_cli, sessionId) => sessionId,
 ) {
   return buildUsageReport({
     rows,
     request,
     projects: PROJECTS,
     pricing,
+    canonicalSessionId,
     backfill: { state: "done", filesTotal: 0, filesDone: 0, startedAt: null },
     error: null,
     now: NOW,
@@ -204,6 +207,7 @@ describe("filters", () => {
         kind: "non_git",
         totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 4, reasoning: 0 },
         estimatedCost: 0,
+        sources: [{ cli: "claude", backend: null }],
         cwds: [
           {
             cwd: "/work/other/pkg",
@@ -260,6 +264,7 @@ describe("estimated cost", () => {
         kind: "git",
         totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 65, reasoning: 0 },
         estimatedCost: 40,
+        sources: [{ cli: "claude", backend: null }],
         cwds: [
           {
             cwd: "/work/demo",

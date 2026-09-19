@@ -202,6 +202,7 @@ describe("usage report over the daemon RPC", () => {
         kind: "directory",
         totals: ALL_TOTALS,
         estimatedCost: 0,
+        sources: [{ cli: "claude", backend: null }],
         cwds: [{ cwd: "/work/demo", totals: ALL_TOTALS, estimatedCost: 0 }],
       },
     ]);
@@ -788,6 +789,10 @@ describe("usage report across Pi and OMP backends", () => {
           kind: "directory",
           totals: totals(967, 1200, 70, 223, 53),
           estimatedCost: 0,
+          sources: [
+            { cli: "omp", backend: "3oxy-openai" },
+            { cli: "omp", backend: "anthropic" },
+          ],
           cwds: [
             { cwd: "/work/omp-demo", totals: totals(967, 1200, 70, 223, 53), estimatedCost: 0 },
           ],
@@ -798,6 +803,10 @@ describe("usage report across Pi and OMP backends", () => {
           kind: "directory",
           totals: totals(720, 1150, 50, 410, 155),
           estimatedCost: 0,
+          sources: [
+            { cli: "pi", backend: "anthropic" },
+            { cli: "pi", backend: "openai-codex" },
+          ],
           cwds: [{ cwd: "/work/demo", totals: totals(720, 1150, 50, 410, 155), estimatedCost: 0 }],
         },
       ]);

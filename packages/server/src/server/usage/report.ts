@@ -10,11 +10,18 @@ import type {
   UsageReport,
   UsageReportFilters,
   UsageSourceBreakdown,
+  UsageSourceRef,
   UsageTokenTotals,
   UsageTrend,
   UsageTrendGranularity,
   UsageTrendStackBy,
 } from "@getpaseo/protocol/usage/types";
+import {
+  createLocalTimeResolver,
+  dayDifference,
+  shiftDay,
+  type LocalTimeResolver,
+} from "./local-time.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
 import { addTotals, emptyTotals, modelRowKey, type UsageBucketRow } from "./types.js";
 
@@ -43,6 +50,11 @@ export interface BuildUsageReportInput {
   request: UsageReportRequest;
   projects: Map<string, UsageProjectAttribution>;
   pricing: UsageReportPricing;
+  /**
+   * The id a session is counted under. A Claude resume chain is one session in
+   * every count on the page, which is also how the session listing rows it.
+   */
+  canonicalSessionId: (cli: UsageCli, sessionId: string) => string;
   backfill: UsageBackfill;
   error: string | null;
   now: number;
@@ -53,7 +65,7 @@ export interface BuildUsageReportInput {
  * block have two prices, and adding their dollars is the only way to get one
  * number for both.
  */
-type PricedRow = UsageBucketRow & { cost: number };
+type PricedRow = UsageBucketRow & { cost: number; canonicalSessionId: string };
 
 export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
   const { request } = input;
@@ -61,8 +73,12 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
   const today = local.day(input.now);
   const filtered: PricedRow[] = [];
   for (const row of input.rows) {
-    if (!matchesFilters(row, request.filters, input.projects)) continue;
-    filtered.push({ ...row, cost: input.pricing.estimateCost(row, row.model) });
+    if (!matchesUsageFilters(row, request.filters, input.projects)) continue;
+    filtered.push({
+      ...row,
+      cost: input.pricing.estimateCost(row, row.model),
+      canonicalSessionId: input.canonicalSessionId(row.cli, row.sessionId),
+    });
   }
 
   const inRange = filtered.filter((row) => {
@@ -100,7 +116,7 @@ function buildSummary(
   const sessions = new Set<string>();
   for (const row of inRange) {
     addRow(amount, row);
-    sessions.add(row.sessionId);
+    sessions.add(row.canonicalSessionId);
   }
   return {
     totals: amount.totals,
@@ -263,7 +279,7 @@ function groupByPeriod(
       periods.set(key, bucket);
     }
     addRow(bucket.amount, row);
-    bucket.sessions.add(row.sessionId);
+    bucket.sessions.add(row.canonicalSessionId);
     bucket.turns += row.turns;
   }
   return Array.from(periods.entries()).sort(([a], [b]) => compareKeys(a, b));
@@ -306,6 +322,7 @@ function buildProjects(
       attribution: UsageProjectAttribution;
       amount: UsageAmount;
       cwds: Map<string, UsageAmount>;
+      sources: Map<string, { source: UsageSourceRef; tokens: number }>;
     }
   >();
   for (const row of rows) {
@@ -313,7 +330,7 @@ function buildProjects(
     if (!attribution) continue;
     let entry = byProject.get(attribution.rootPath);
     if (!entry) {
-      entry = { attribution, amount: emptyAmount(), cwds: new Map() };
+      entry = { attribution, amount: emptyAmount(), cwds: new Map(), sources: new Map() };
       byProject.set(attribution.rootPath, entry);
     }
     addRow(entry.amount, row);
@@ -323,6 +340,13 @@ function buildProjects(
       entry.cwds.set(row.cwd, cwdAmount);
     }
     addRow(cwdAmount, row);
+    const key = `${row.cli}\u0000${row.backend ?? ""}`;
+    const source = entry.sources.get(key) ?? {
+      source: { cli: row.cli, backend: row.backend },
+      tokens: 0,
+    };
+    source.tokens += billableTokens(row);
+    entry.sources.set(key, source);
   }
 
   return Array.from(byProject.values())
@@ -332,6 +356,9 @@ function buildProjects(
       kind: entry.attribution.kind,
       totals: entry.amount.totals,
       estimatedCost: entry.amount.estimatedCost,
+      sources: Array.from(entry.sources.values())
+        .sort((a, b) => b.tokens - a.tokens)
+        .map((source) => source.source),
       cwds: Array.from(entry.cwds.entries())
         .map(([cwd, amount]) => ({
           cwd,
@@ -344,7 +371,8 @@ function buildProjects(
     .slice(0, PROJECT_LIMIT);
 }
 
-function matchesFilters(
+/** The same source / model / project narrowing the session listing applies. */
+export function matchesUsageFilters(
   row: UsageBucketRow,
   filters: UsageReportFilters | undefined,
   attributions: Map<string, UsageProjectAttribution>,
@@ -413,55 +441,4 @@ function emptyAmount(): UsageAmount {
 function addRow(target: UsageAmount, row: PricedRow): void {
   addTotals(target.totals, row);
   target.estimatedCost += row.cost;
-}
-
-interface LocalTimeResolver {
-  day(at: number): string;
-  hour(at: number): string;
-  month(at: number): string;
-}
-
-/**
- * Buckets are stored in UTC and reported in the client's zone, so every bucket
- * is formatted once per report and reused across the blocks.
- */
-function createLocalTimeResolver(timezone: string): LocalTimeResolver {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    hourCycle: "h23",
-  });
-  const cache = new Map<number, string>();
-  const hourKey = (at: number): string => {
-    const cached = cache.get(at);
-    if (cached !== undefined) return cached;
-    const parts = formatter.formatToParts(new Date(at));
-    const find = (type: Intl.DateTimeFormatPartTypes): string =>
-      parts.find((part) => part.type === type)?.value ?? "";
-    const key = `${find("year")}-${find("month")}-${find("day")}T${find("hour")}`;
-    cache.set(at, key);
-    return key;
-  };
-  return {
-    hour: hourKey,
-    day: (at) => hourKey(at).slice(0, 10),
-    month: (at) => hourKey(at).slice(0, 7),
-  };
-}
-
-function shiftDay(day: string, offset: number): string {
-  const [year, month, date] = day.split("-").map(Number);
-  const shifted = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, (date ?? 1) + offset));
-  return shifted.toISOString().slice(0, 10);
-}
-
-function dayDifference(from: string, to: string): number {
-  const parse = (day: string): number => {
-    const [year, month, date] = day.split("-").map(Number);
-    return Date.UTC(year ?? 1970, (month ?? 1) - 1, date ?? 1);
-  };
-  return Math.round((parse(to) - parse(from)) / 86_400_000);
 }

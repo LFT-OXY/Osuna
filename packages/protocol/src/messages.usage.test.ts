@@ -80,6 +80,69 @@ describe("usage.report.get", () => {
   });
 });
 
+describe("usage.sessions.list", () => {
+  const SESSION_ROW = {
+    day: "2026-09-18",
+    cli: "claude" as const,
+    backend: null,
+    sessionId: "sess-1",
+    cwd: "/work/demo",
+    project: { rootPath: "/work/demo", displayName: "demo", kind: "git" as const },
+    models: [{ model: "claude-opus-5", totals: EMPTY_TOTALS, estimatedCost: 0, priced: true }],
+    totals: EMPTY_TOTALS,
+    estimatedCost: 0,
+    turns: 2,
+    durationMs: 5_000,
+    firstAt: "2026-09-18T09:00:00.000Z",
+    lastAt: "2026-09-18T09:30:00.000Z",
+    handle: { providerId: "claude", providerHandleId: "sess-1" },
+  };
+
+  it("parses a request with only the required range fields", () => {
+    const message = {
+      type: "usage.sessions.list.request" as const,
+      requestId: "req-1",
+      from: null,
+      to: null,
+      timezone: "UTC",
+    };
+    expect(SessionInboundMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it("parses a request carrying filters", () => {
+    const message = {
+      type: "usage.sessions.list.request" as const,
+      requestId: "req-2",
+      from: "2026-09-18",
+      to: "2026-09-18",
+      timezone: "Asia/Kolkata",
+      filters: { projects: ["/work/demo"] },
+    };
+    expect(SessionInboundMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it("parses a row whose session Paseo owns, and one it does not", () => {
+    const message = {
+      type: "usage.sessions.list.response" as const,
+      payload: {
+        requestId: "req-1",
+        sessions: [
+          SESSION_ROW,
+          {
+            ...SESSION_ROW,
+            sessionId: "sess-2",
+            handle: null,
+            importedAgentId: "agent-1",
+            importedAgentWorkspaceId: "workspace-1",
+          },
+        ],
+        truncated: true,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
+  });
+});
+
 describe("usage.backfill.progress", () => {
   it("parses a progress broadcast", () => {
     const message = {

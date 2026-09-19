@@ -3,6 +3,7 @@ import type { AgentManagerEvent, ManagedAgent } from "../agent/agent-manager.js"
 import type { AgentTimelineRow } from "../agent/agent-timeline-store-types.js";
 import { restoreProviderSessionIds, type StoredAgentRecord } from "../agent/agent-storage.js";
 import type { AgentTurnTimestamp } from "./codex-turn-match.js";
+import { usageSessionOwnerKey, type UsageSessionOwner } from "./sessions.js";
 
 /** The CLI sessions one Paseo agent has run in. */
 export interface UsageAgentBacking {
@@ -32,6 +33,12 @@ export interface UsageAgentBridge {
   getBacking(agentId: string): Promise<UsageAgentBacking | null>;
   /** The agent a parsed session belongs to, for the `usage.updated` payload. */
   findAgentIdForSession(cli: UsageCli, sessionId: string): Promise<string | null>;
+  /**
+   * Every provider session Paseo owns, keyed by `usageSessionOwnerKey`. The
+   * session listing marks hundreds of rows at once, so it reads the whole index
+   * rather than asking per row.
+   */
+  listSessionOwners(): Promise<Map<string, UsageSessionOwner>>;
   /** When each of the agent's turns began, for Codex history with no turn id. */
   listTurnTimestamps(agentId: string): Promise<AgentTurnTimestamp[]>;
   /** Fires on `turn_completed`, `turn_failed` and `turn_canceled`. */
@@ -98,6 +105,28 @@ export function createUsageAgentBridge(options: {
         }
       }
       return null;
+    },
+    async listSessionOwners() {
+      const owners = new Map<string, UsageSessionOwner>();
+      // A live agent is the current owner of its ids; a stored record only
+      // answers for the ids no live agent claims.
+      const record = (
+        agent: ManagedAgent | StoredAgentRecord,
+        sessionIds: readonly string[],
+      ): void => {
+        const cli = usageCliForProvider(agent.provider);
+        if (!cli) return;
+        for (const sessionId of sessionIds) {
+          const key = usageSessionOwnerKey(cli, sessionId);
+          if (owners.has(key)) continue;
+          owners.set(key, { agentId: agent.id, workspaceId: agent.workspaceId ?? null });
+        }
+      };
+      for (const agent of agentManager.listAgents()) record(agent, agent.providerSessionIds);
+      for (const stored of await agentStorage.list()) {
+        record(stored, restoreProviderSessionIds(stored));
+      }
+      return owners;
     },
     async listTurnTimestamps(agentId) {
       // Only a loaded agent has a timeline; a closed one is matched by nothing.

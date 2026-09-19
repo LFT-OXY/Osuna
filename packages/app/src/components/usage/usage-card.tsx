@@ -4,6 +4,11 @@ import { StyleSheet } from "react-native-unistyles";
 
 interface UsageCardProps {
   title?: string;
+  /**
+   * The header's left slot when a card leads with controls instead of a name.
+   * `title` and this are the same slot, and a `title` wins — pass one.
+   */
+  renderHeaderLeft?: () => ReactNode;
   /** A render function, not a node: `react-perf` rejects JSX travelling through a prop. */
   renderHeaderRight?: () => ReactNode;
   children?: ReactNode;
@@ -12,12 +17,19 @@ interface UsageCardProps {
 }
 
 /** The one card shell for the usage page. */
-export function UsageCard({ title, renderHeaderRight, children, style, testID }: UsageCardProps) {
+export function UsageCard({
+  title,
+  renderHeaderLeft,
+  renderHeaderRight,
+  children,
+  style,
+  testID,
+}: UsageCardProps) {
   return (
     <View style={[styles.card, style]} testID={testID}>
-      {title || renderHeaderRight ? (
+      {title || renderHeaderLeft || renderHeaderRight ? (
         <View style={styles.header}>
-          {title ? <Text style={styles.title}>{title}</Text> : <View />}
+          {title ? <Text style={styles.title}>{title}</Text> : (renderHeaderLeft?.() ?? <View />)}
           {renderHeaderRight?.()}
         </View>
       ) : null}

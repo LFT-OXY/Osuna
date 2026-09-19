@@ -3001,6 +3001,32 @@ export const ar: TranslationResources = {
     },
     details: {
       title: "تفاصيل البيانات",
+      tabs: {
+        daily: "يومي",
+        monthly: "شهري",
+        projects: "المشاريع",
+      },
+      empty: "لا يوجد استخدام في هذه الفترة",
+      topProjects: "أفضل {{count}}",
+      projectLimit: "عدد المشاريع",
+      projectKind: {
+        non_git: "بدون git",
+        directory: "مجلد",
+      },
+    },
+    sessionRow: {
+      open: "فتح",
+      opening: "جارٍ الفتح",
+      empty: "لا توجد جلسات في هذا اليوم",
+      loadError: "تعذر تحميل جلسات هذا اليوم.",
+      hostLoadError: "تعذر سرد جلسات {{host}}.",
+      truncated: "يتم عرض أحدث {{count}} جلسة في هذا اليوم",
+      breakdown: "↑ {{input}} · ↓ {{output}} · ذاكرة مؤقتة {{cache}}",
+      errors: {
+        noWorkspace: "افتح workspace في هذا المجلد لمتابعة هذه الجلسة",
+        noHandle: "لم يعد بالإمكان متابعة هذه الجلسة",
+        openFailed: "تعذر فتح هذه الجلسة",
+      },
     },
     common: {
       comingSoon: "قريبًا",
@@ -3019,6 +3045,8 @@ export const ar: TranslationResources = {
       reasoning: "الاستدلال",
       sessions: "الجلسات",
       turns: "الجولات",
+      date: "التاريخ",
+      month: "الشهر",
     },
   },
 };

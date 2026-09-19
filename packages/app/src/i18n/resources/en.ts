@@ -3126,6 +3126,32 @@ export const en = {
     },
     details: {
       title: "Data details",
+      tabs: {
+        daily: "Daily",
+        monthly: "Monthly",
+        projects: "Projects",
+      },
+      empty: "No usage in this period",
+      topProjects: "Top {{count}}",
+      projectLimit: "How many projects",
+      projectKind: {
+        non_git: "Not git",
+        directory: "Directory",
+      },
+    },
+    sessionRow: {
+      open: "Open",
+      opening: "Opening",
+      empty: "No sessions on this day",
+      loadError: "Could not load this day's sessions.",
+      hostLoadError: "Could not list sessions from {{host}}.",
+      truncated: "Showing the {{count}} most recent sessions of this day",
+      breakdown: "↑ {{input}} · ↓ {{output}} · cache {{cache}}",
+      errors: {
+        noWorkspace: "Open a workspace in this directory to resume this session",
+        noHandle: "This session can no longer be resumed",
+        openFailed: "Could not open this session",
+      },
     },
     common: {
       comingSoon: "Coming soon",
@@ -3144,6 +3170,8 @@ export const en = {
       reasoning: "Reasoning",
       sessions: "Sessions",
       turns: "Turns",
+      date: "Date",
+      month: "Month",
     },
   },
 } as const;

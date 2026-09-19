@@ -23,6 +23,15 @@ export function formatUsageDay(day: string, locale: string): string {
   }).format(asUtcDate(day));
 }
 
+/** `2026-09` as the month and its year, for the monthly table and the trend axis. */
+export function formatUsageMonth(month: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "short",
+  }).format(new Date(`${month}-01T00:00:00.000Z`));
+}
+
 export function formatUsageDayShort(day: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     timeZone: "UTC",

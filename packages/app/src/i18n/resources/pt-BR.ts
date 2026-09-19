@@ -3044,6 +3044,32 @@ export const ptBR: TranslationResources = {
     },
     details: {
       title: "Detalhes dos dados",
+      tabs: {
+        daily: "Por dia",
+        monthly: "Por mês",
+        projects: "Projetos",
+      },
+      empty: "Sem uso neste período",
+      topProjects: "Top {{count}}",
+      projectLimit: "Quantos projetos",
+      projectKind: {
+        non_git: "Sem git",
+        directory: "Diretório",
+      },
+    },
+    sessionRow: {
+      open: "Abrir",
+      opening: "Abrindo",
+      empty: "Sem sessões neste dia",
+      loadError: "Não foi possível carregar as sessões deste dia.",
+      hostLoadError: "Não foi possível listar as sessões de {{host}}.",
+      truncated: "Mostrando as {{count}} sessões mais recentes deste dia",
+      breakdown: "↑ {{input}} · ↓ {{output}} · cache {{cache}}",
+      errors: {
+        noWorkspace: "Abra um workspace neste diretório para retomar esta sessão",
+        noHandle: "Esta sessão não pode mais ser retomada",
+        openFailed: "Não foi possível abrir esta sessão",
+      },
     },
     common: {
       comingSoon: "Em breve",
@@ -3062,6 +3088,8 @@ export const ptBR: TranslationResources = {
       reasoning: "Raciocínio",
       sessions: "Sessões",
       turns: "Turnos",
+      date: "Data",
+      month: "Mês",
     },
   },
 };

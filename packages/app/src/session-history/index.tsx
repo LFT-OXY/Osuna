@@ -30,7 +30,6 @@ import {
   upsertCreatedTerminalPayload,
   type ListTerminalsPayload,
 } from "@/screens/workspace/terminals/state";
-import { getCurrentTerminalViewAttributes } from "@/terminal/view-attributes";
 import { formatTimeAgo } from "@/utils/time";
 import {
   buildResumeCommand,
@@ -47,16 +46,17 @@ import {
   type SessionHistoryRow,
   type SessionHistoryScope,
 } from "./internal/model";
-import {
-  forgetResumeTerminal,
-  lookupResumeTerminal,
-  rememberResumeTerminal,
-} from "./internal/resume-terminals";
+import { resumeProviderSessionTerminal } from "./internal/resume-session";
 import { SessionHistoryRowContextMenu, SessionHistoryRowMenu } from "./internal/row-menu";
 
 export type { SessionHistoryRow, SessionHistoryScope } from "./internal/model";
 export { buildSessionHistoryQueryKey } from "./internal/model";
 export { openTerminalTabFromSessionHistory } from "./internal/open-terminal-tab";
+// The usage page lists the same provider sessions, so it resumes them through
+// the same launch, the same terminal memory, and the same key.
+export { buildResumeTerminalLaunch, sessionHistoryRowKey } from "./internal/model";
+export type { ResumableProviderSession, ResumeTerminalLaunch } from "./internal/model";
+export { resumeProviderSessionTerminal } from "./internal/resume-session";
 
 export type SessionHistoryClient = Pick<
   DaemonClient,
@@ -411,31 +411,17 @@ export function SessionHistorySurface({
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
-      const ref = { serverId, workspaceId, sessionKey: row.key };
-      const knownTerminalId = lookupResumeTerminal(ref);
-      if (knownTerminalId) {
-        // The daemon may have reaped it since; only a listed terminal is worth focusing.
-        const listed = await client.listTerminals(workspaceDirectory, undefined, { workspaceId });
-        if (listed.terminals.some((terminal) => terminal.id === knownTerminalId)) {
-          return { terminalId: knownTerminalId, created: null };
-        }
-        forgetResumeTerminal(ref);
-      }
       const launch = buildResumeTerminalLaunch(row);
       if (!launch) {
         throw new Error(t("workspace.tabs.toasts.resumeCommandUnavailable"));
       }
-      const payload = await client.createTerminal(launch.cwd, launch.name, undefined, {
-        command: launch.command,
-        args: launch.args,
-        workspaceId,
-        viewAttributes: getCurrentTerminalViewAttributes(),
+      return await resumeProviderSessionTerminal({
+        client,
+        ref: { serverId, workspaceId, sessionKey: row.key },
+        launch,
+        workspaceDirectory,
+        openFailedMessage: t("panels.sessionHistory.errors.openFailed"),
       });
-      if (!payload.terminal) {
-        throw new Error(payload.error ?? t("panels.sessionHistory.errors.openFailed"));
-      }
-      rememberResumeTerminal({ ...ref, terminalId: payload.terminal.id });
-      return { terminalId: payload.terminal.id, created: payload.terminal };
     },
     onSuccess: ({ terminalId, created }) => {
       if (created) {

@@ -3054,6 +3054,32 @@ export const ru: TranslationResources = {
     },
     details: {
       title: "Детализация",
+      tabs: {
+        daily: "По дням",
+        monthly: "По месяцам",
+        projects: "Проекты",
+      },
+      empty: "За этот период нет использования",
+      topProjects: "Топ {{count}}",
+      projectLimit: "Сколько проектов",
+      projectKind: {
+        non_git: "Без git",
+        directory: "Каталог",
+      },
+    },
+    sessionRow: {
+      open: "Открыть",
+      opening: "Открываем",
+      empty: "В этот день сессий не было",
+      loadError: "Не удалось загрузить сессии этого дня.",
+      hostLoadError: "Не удалось получить список сессий с {{host}}.",
+      truncated: "Показаны последние {{count}} сессий этого дня",
+      breakdown: "↑ {{input}} · ↓ {{output}} · кэш {{cache}}",
+      errors: {
+        noWorkspace: "Откройте workspace в этом каталоге, чтобы продолжить сессию",
+        noHandle: "Эту сессию больше нельзя продолжить",
+        openFailed: "Не удалось открыть эту сессию",
+      },
     },
     common: {
       comingSoon: "Скоро",
@@ -3072,6 +3098,8 @@ export const ru: TranslationResources = {
       reasoning: "Рассуждения",
       sessions: "Сессии",
       turns: "Ходы",
+      date: "Дата",
+      month: "Месяц",
     },
   },
 };
