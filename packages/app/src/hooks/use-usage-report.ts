@@ -1,4 +1,4 @@
-import type { UsageBackfill, UsageTrendStackBy } from "@getpaseo/protocol/usage/types";
+import type { UsageBackfill } from "@getpaseo/protocol/usage/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetchQuery } from "@/data/query";
@@ -24,7 +24,6 @@ export type UsageReportLoadState =
 export interface UseUsageReportInput {
   hosts: readonly UsageHostInput[];
   range: UsageRange;
-  stackBy: UsageTrendStackBy;
   timezone: string;
 }
 
@@ -42,7 +41,6 @@ export interface UseUsageReportResult {
 export function usageReportQueryKey(input: {
   serverIds: readonly string[];
   range: UsageRange;
-  stackBy: UsageTrendStackBy;
   timezone: string;
 }) {
   return [
@@ -50,7 +48,6 @@ export function usageReportQueryKey(input: {
     [...input.serverIds].sort().join("|"),
     input.range.from ?? "all",
     input.range.to ?? "all",
-    input.stackBy,
     input.timezone,
   ] as const;
 }
@@ -70,7 +67,6 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
       ...usageReportQueryKey({
         serverIds,
         range: input.range,
-        stackBy: input.stackBy,
         timezone: input.timezone,
       }),
       connectionStatusKey,
@@ -80,7 +76,6 @@ export function useUsageReport(input: UseUsageReportInput): UseUsageReportResult
         hosts,
         runtime,
         range: input.range,
-        stackBy: input.stackBy,
         timezone: input.timezone,
       }),
     dataShape: "list",

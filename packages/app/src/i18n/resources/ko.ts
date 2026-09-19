@@ -3063,16 +3063,6 @@ export const ko: TranslationResources = {
       more: "많음",
       cell: "{{day}} · {{tokens}} 토큰",
     },
-    trend: {
-      title: "사용량 추이",
-      stackBy: {
-        label: "누적 기준",
-        source: "소스별",
-        model: "모델별",
-      },
-      future: "예정",
-      bar: "{{period}} · {{tokens}} 토큰",
-    },
     planUsage: {
       title: "플랜 사용량",
       refresh: "새로고침",

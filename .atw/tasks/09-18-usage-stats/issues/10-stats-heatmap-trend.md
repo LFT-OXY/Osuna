@@ -15,3 +15,13 @@
 - [x] 热力图格、趋势柱有 a11y 键；`usage.stats / usage.heatmap / usage.trend` 键 9 语言；资源测试通过。
 - [x] 暗色主题截图证据。
 - [x] `npm run typecheck`、`npm run lint`，改动的测试与 Playwright spec 通过。
+
+**验收时被移除：** 用户判定「使用趋势」卡片不需要，整卡连同只服务它的客户端代码一起删了
+（`usage-trend-card.tsx`、`usage/trend.ts`、`usageTrendGroupColor` / `usageModelColor` /
+`usageSourceRefFromKey`、`resolveUsageTrendGranularity`、`stackBy` 请求参数与查询键、
+`merge.ts` 的 trend 合并、9 语言的 `usage.trend.*`、e2e 的趋势步骤）。本票另两张卡
+（统计面板、热力图）不受影响，验收项保持原样。
+
+daemon 侧没动：`UsageReportSchema.trend` 是必填响应字段，`packages/server/src/server/usage/report.ts`
+仍在算趋势点。要不要一并从协议和 daemon 里拿掉是另一个决定 —— 那是删必填响应字段，
+得按 `docs/protocol-compatibility.md` 单独过一遍。

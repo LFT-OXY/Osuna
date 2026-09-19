@@ -3173,16 +3173,6 @@ export const en = {
       more: "More",
       cell: "{{day}} · {{tokens}} tokens",
     },
-    trend: {
-      title: "Usage trend",
-      stackBy: {
-        label: "Stack by",
-        source: "By source",
-        model: "By model",
-      },
-      future: "Upcoming",
-      bar: "{{period}} · {{tokens}} tokens",
-    },
     planUsage: {
       title: "Plan usage",
       refresh: "Refresh",

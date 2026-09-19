@@ -1,5 +1,4 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { UsageTrendStackBy } from "@getpaseo/protocol/usage/types";
 import { toErrorMessage } from "@/utils/error-messages";
 import { mergeUsageReports, type MergedUsageReport } from "./merge";
 import type { UsageRange } from "./period";
@@ -34,7 +33,6 @@ export interface FetchUsageReportInput {
   runtime: UsageRuntime;
   range: UsageRange;
   timezone: string;
-  stackBy: UsageTrendStackBy;
 }
 
 export type FetchUsageReportState =
@@ -74,7 +72,6 @@ export async function fetchUsageReport(
           from: input.range.from,
           to: input.range.to,
           timezone: input.timezone,
-          trend: { stackBy: input.stackBy },
         });
         reports.push({ serverId: host.serverId, report: payload });
       } catch (error) {

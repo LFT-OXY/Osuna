@@ -3101,16 +3101,6 @@ export const ru: TranslationResources = {
       more: "Больше",
       cell: "{{day}} · {{tokens}} токенов",
     },
-    trend: {
-      title: "Динамика расхода",
-      stackBy: {
-        label: "Группировка",
-        source: "По источнику",
-        model: "По модели",
-      },
-      future: "Впереди",
-      bar: "{{period}} · {{tokens}} токенов",
-    },
     planUsage: {
       title: "Расход по тарифу",
       refresh: "Обновить",

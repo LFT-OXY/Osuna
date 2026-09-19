@@ -176,7 +176,6 @@ describe("mergeUsageReports", () => {
       },
       sources: [],
       models: [],
-      trend: { granularity: "day", stackBy: "source", points: [] },
       days: [],
       months: [],
       heatmapDays: [],
@@ -236,20 +235,6 @@ describe("mergeUsageReports", () => {
           priced: false,
         },
       ],
-      trend: {
-        granularity: "day",
-        stackBy: "source",
-        points: [
-          {
-            key: "2026-09-17",
-            groups: { "pi:anthropic": { totals: totals(80, 8), estimatedCost: 0.8 } },
-          },
-          {
-            key: "2026-09-18",
-            groups: { claude: { totals: totals(220, 22), estimatedCost: 2.2 } },
-          },
-        ],
-      },
       days: [
         { day: "2026-09-17", totals: totals(80, 8), estimatedCost: 0.8, sessionCount: 1, turns: 1 },
         {

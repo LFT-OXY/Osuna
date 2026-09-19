@@ -10,8 +10,6 @@ import type {
   UsageSourceBreakdown,
   UsageSummary,
   UsageTokenTotals,
-  UsageTrend,
-  UsageTrendPoint,
 } from "@getpaseo/protocol/usage/types";
 import { totalUsageTokens, usageSourceKey } from "./totals";
 
@@ -20,7 +18,7 @@ export interface MergedUsageProject extends UsageProjectBreakdown {
   serverId: string;
 }
 
-export interface MergedUsageReport extends Omit<UsageReport, "projects"> {
+export interface MergedUsageReport extends Omit<UsageReport, "projects" | "trend"> {
   projects: MergedUsageProject[];
 }
 
@@ -131,15 +129,6 @@ function combineHeatmapDays(a: UsageHeatmapDay, b: UsageHeatmapDay): UsageHeatma
   return { day: a.day, totals: addUsageTotals(a.totals, b.totals) };
 }
 
-function combineTrendPoints(a: UsageTrendPoint, b: UsageTrendPoint): UsageTrendPoint {
-  const groups: Record<string, UsageAmount> = { ...a.groups };
-  for (const [group, amount] of Object.entries(b.groups)) {
-    const previous = groups[group];
-    groups[group] = previous ? addAmounts(previous, amount) : amount;
-  }
-  return { key: a.key, groups };
-}
-
 /** `modelCount` is the count of distinct merged models, never a sum of per-host counts. */
 function resolveSources(
   sources: Map<string, UsageSourceBreakdown>,
@@ -184,25 +173,16 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
   const days = new Map<string, UsageDayBreakdown>();
   const months = new Map<string, UsageMonthBreakdown>();
   const heatmapDays = new Map<string, UsageHeatmapDay>();
-  const trendPoints = new Map<string, UsageTrendPoint>();
   const projects: MergedUsageProject[] = [];
-  let trend: Pick<UsageTrend, "granularity" | "stackBy"> = {
-    granularity: "day",
-    stackBy: "source",
-  };
   let error: string | null = null;
 
-  for (const [index, { serverId, report }] of inputs.entries()) {
+  for (const { serverId, report } of inputs) {
     summary = combineSummaries(summary, report.summary);
     foldRows(models, report.models, (row) => `${usageSourceKey(row)} ${row.model}`, combineModels);
     foldRows(sources, report.sources, usageSourceKey, combineSources);
     foldRows(days, report.days, (row) => row.day, combineDays);
     foldRows(months, report.months, (row) => row.month, combineMonths);
     foldRows(heatmapDays, report.heatmapDays, (row) => row.day, combineHeatmapDays);
-    foldRows(trendPoints, report.trend.points, (row) => row.key, combineTrendPoints);
-    if (index === 0) {
-      trend = { granularity: report.trend.granularity, stackBy: report.trend.stackBy };
-    }
     for (const project of report.projects) {
       projects.push({ ...project, serverId });
     }
@@ -215,10 +195,6 @@ export function mergeUsageReports(inputs: readonly UsageHostReport[]): MergedUsa
     summary,
     sources: resolveSources(sources, mergedModels, totalUsageTokens(summary.totals)),
     models: mergedModels,
-    trend: {
-      ...trend,
-      points: [...trendPoints.values()].sort((a, b) => byKeyAsc(a.key, b.key)),
-    },
     days: [...days.values()].sort((a, b) => byKeyAsc(a.day, b.day)),
     months: [...months.values()].sort((a, b) => byKeyAsc(a.month, b.month)),
     heatmapDays: [...heatmapDays.values()].sort((a, b) => byKeyAsc(a.day, b.day)),

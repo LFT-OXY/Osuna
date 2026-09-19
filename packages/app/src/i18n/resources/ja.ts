@@ -3076,16 +3076,6 @@ export const ja: TranslationResources = {
       more: "多",
       cell: "{{day}} · {{tokens}} トークン",
     },
-    trend: {
-      title: "使用量の推移",
-      stackBy: {
-        label: "積み上げ",
-        source: "ソース別",
-        model: "モデル別",
-      },
-      future: "今後",
-      bar: "{{period}} · {{tokens}} トークン",
-    },
     planUsage: {
       title: "プラン使用量",
       refresh: "更新",

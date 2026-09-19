@@ -1,5 +1,4 @@
 import { useIsFocused } from "@react-navigation/native";
-import type { UsageTrendStackBy } from "@getpaseo/protocol/usage/types";
 import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
@@ -13,7 +12,6 @@ import { UsageHeatmapCard } from "@/components/usage/usage-heatmap-card";
 import { UsageOverviewCard } from "@/components/usage/usage-overview-card";
 import { UsagePlanCard } from "@/components/usage/usage-plan-card";
 import { UsageStatsCard } from "@/components/usage/usage-stats-card";
-import { UsageTrendCard } from "@/components/usage/usage-trend-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport } from "@/hooks/use-usage-report";
 import type { UsageHostsView } from "@/usage/details";
@@ -52,7 +50,6 @@ function UsageScreenContent(): ReactElement {
   const [custom, setCustom] = useState<UsageCustomRange>({ from: today, to: today });
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
-  const [stackBy, setStackBy] = useState<UsageTrendStackBy>("source");
 
   const { options: hostOptions, selection: hostSelection } = useUsageHosts(selectedServerId);
   const range = useMemo(
@@ -62,7 +59,6 @@ function UsageScreenContent(): ReactElement {
   const { loadState, hostErrors, backfill, isError, isRefetching, refetch } = useUsageReport({
     hosts: hostSelection.hosts,
     range,
-    stackBy,
     timezone,
   });
 
@@ -137,13 +133,6 @@ function UsageScreenContent(): ReactElement {
       <View style={styles.sideColumn}>
         <UsageStatsCard report={report} today={today} />
         <UsageHeatmapCard heatmapDays={report.heatmapDays} today={today} timezone={timezone} />
-        <UsageTrendCard
-          trend={report.trend}
-          range={range}
-          now={now}
-          stackBy={stackBy}
-          onStackByChange={setStackBy}
-        />
         <UsagePlanCard hosts={hostSelection.hosts} isMultiHost={hostSelection.countedCount > 1} />
       </View>
     );

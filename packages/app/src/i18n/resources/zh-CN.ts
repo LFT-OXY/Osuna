@@ -3016,16 +3016,6 @@ export const zhCN: TranslationResources = {
       more: "多",
       cell: "{{day}} · {{tokens}} token",
     },
-    trend: {
-      title: "使用趋势",
-      stackBy: {
-        label: "堆叠方式",
-        source: "按来源",
-        model: "按模型",
-      },
-      future: "未来",
-      bar: "{{period}} · {{tokens}} token",
-    },
     planUsage: {
       title: "套餐用量",
       refresh: "刷新",

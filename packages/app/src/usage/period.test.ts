@@ -7,7 +7,6 @@ import {
   formatUsageTimeZoneLabel,
   resolveUsageNow,
   resolveUsageRange,
-  resolveUsageTrendGranularity,
   shiftUsageAnchor,
   startOfUsageWeek,
 } from "./period";
@@ -115,23 +114,6 @@ describe("canShiftUsageRangeForward", () => {
     expect(
       canShiftUsageRangeForward({ period: "custom", anchor: "2026-01-01", today: "2026-09-19" }),
     ).toBe(false);
-  });
-});
-
-describe("resolveUsageTrendGranularity", () => {
-  it("uses hours for one or two days", () => {
-    expect(resolveUsageTrendGranularity({ from: "2026-09-19", to: "2026-09-19" })).toBe("hour");
-    expect(resolveUsageTrendGranularity({ from: "2026-09-18", to: "2026-09-19" })).toBe("hour");
-  });
-
-  it("uses days up to 92 days", () => {
-    expect(resolveUsageTrendGranularity({ from: "2026-09-17", to: "2026-09-19" })).toBe("day");
-    expect(resolveUsageTrendGranularity({ from: "2026-06-20", to: "2026-09-19" })).toBe("day");
-  });
-
-  it("uses months beyond 92 days and for all time", () => {
-    expect(resolveUsageTrendGranularity({ from: "2026-06-19", to: "2026-09-19" })).toBe("month");
-    expect(resolveUsageTrendGranularity({ from: null, to: null })).toBe("month");
   });
 });
 

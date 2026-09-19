@@ -3117,16 +3117,6 @@ export const fr: TranslationResources = {
       more: "Plus",
       cell: "{{day}} · {{tokens}} jetons",
     },
-    trend: {
-      title: "Tendance d'utilisation",
-      stackBy: {
-        label: "Empiler par",
-        source: "Par source",
-        model: "Par modèle",
-      },
-      future: "À venir",
-      bar: "{{period}} · {{tokens}} jetons",
-    },
     planUsage: {
       title: "Consommation du forfait",
       refresh: "Actualiser",

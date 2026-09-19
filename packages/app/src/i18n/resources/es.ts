@@ -3110,16 +3110,6 @@ export const es: TranslationResources = {
       more: "Más",
       cell: "{{day}} · {{tokens}} tokens",
     },
-    trend: {
-      title: "Tendencia de uso",
-      stackBy: {
-        label: "Apilar por",
-        source: "Por fuente",
-        model: "Por modelo",
-      },
-      future: "Próximo",
-      bar: "{{period}} · {{tokens}} tokens",
-    },
     planUsage: {
       title: "Uso del plan",
       refresh: "Actualizar",

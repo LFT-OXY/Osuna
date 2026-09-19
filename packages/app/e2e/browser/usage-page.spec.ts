@@ -25,14 +25,11 @@ const COST_PATTERN = /^\$\d+\.\d{2}$/;
  */
 const FIXTURE_DAY = fixtures.day;
 const FIXTURE_QUIET_DAY = shiftDay(FIXTURE_DAY, -1);
-const FIXTURE_MONTH = FIXTURE_DAY.slice(0, 7);
 const FIXTURE_DAY_LABEL = formatUtc(FIXTURE_DAY, {
   year: "numeric",
   month: "short",
   day: "numeric",
 });
-const FIXTURE_MONTH_LABEL = formatUtc(FIXTURE_DAY, { year: "numeric", month: "short" });
-
 const FIXTURE_SESSIONS = "13";
 
 /** Every fixture line falls inside both trailing windows, so all three read the same. */
@@ -40,16 +37,6 @@ const FIXTURE_TOKENS_COMPACT = "180.2K";
 
 /** The three models the statistics panel ranks, largest first. */
 const FIXTURE_TOP_MODELS = ["claude-fable-5-1", "gpt-5.5", "gpt-5.6-luna"] as const;
-
-/** Trend group keys by source: the CLI, plus the backend where Pi and OMP have one. */
-const FIXTURE_TREND_SOURCES = [
-  "claude",
-  "codex",
-  "pi:anthropic",
-  "omp:3oxy-openai",
-  "omp:anthropic",
-  "pi:openai-codex",
-] as const;
 
 /** `(testID suffix, label, share, model count)` for every fixture source, in rendered order. */
 const SOURCE_CARDS = [
@@ -148,7 +135,7 @@ test.describe("Usage page", () => {
     });
   });
 
-  test("owner reads the statistics panel, the heatmap and the trend", async ({ page }) => {
+  test("owner reads the statistics panel and the heatmap", async ({ page }) => {
     await openUsagePage(page);
     await waitForUsageTotal(page, FIXTURE_TOKENS);
 
@@ -184,33 +171,6 @@ test.describe("Usage page", () => {
       await expect(page.getByTestId("usage-heatmap-caption")).toHaveText(
         `${FIXTURE_DAY_LABEL} · ${FIXTURE_TOKENS} tokens`,
       );
-    });
-
-    await test.step("the trend stacks the fixture month by source", async () => {
-      // The axis runs from the first month with usage to the month the viewer is
-      // in, and those are the same month except for a couple of days a month.
-      await expect(page.getByTestId("usage-trend-first")).toHaveText(FIXTURE_MONTH_LABEL);
-      for (const source of FIXTURE_TREND_SOURCES) {
-        await expect(
-          page.getByTestId(`usage-trend-segment-${FIXTURE_MONTH}-${source}`),
-        ).toBeAttached();
-      }
-    });
-
-    await test.step("switching the stack to By model bands the same bar by model", async () => {
-      await page.getByTestId("usage-trend-stack-model").click();
-      for (const model of FIXTURE_TOP_MODELS) {
-        await expect(
-          page.getByTestId(`usage-trend-segment-${FIXTURE_MONTH}-${model}`),
-        ).toBeAttached();
-      }
-      await expect(page.getByTestId(`usage-trend-segment-${FIXTURE_MONTH}-claude`)).toHaveCount(0);
-    });
-
-    await test.step("the Day period turns the trend axis into hours", async () => {
-      await page.getByTestId("usage-period-tab-day").click();
-      await expect(page.getByTestId("usage-trend-first")).toHaveText("00:00");
-      await expect(page.getByTestId("usage-trend-last")).toHaveText("23:00");
     });
   });
 });

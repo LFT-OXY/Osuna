@@ -67,7 +67,6 @@ function fetchFrom(hosts: readonly FakeHost[]) {
     runtime: runtimeOf(hosts),
     range: RANGE,
     timezone: "Europe/Madrid",
-    stackBy: "source",
   });
 }
 

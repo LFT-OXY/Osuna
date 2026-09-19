@@ -3091,16 +3091,6 @@ export const ptBR: TranslationResources = {
       more: "Mais",
       cell: "{{day}} · {{tokens}} tokens",
     },
-    trend: {
-      title: "Tendência de uso",
-      stackBy: {
-        label: "Empilhar por",
-        source: "Por origem",
-        model: "Por modelo",
-      },
-      future: "A seguir",
-      bar: "{{period}} · {{tokens}} tokens",
-    },
     planUsage: {
       title: "Uso do plano",
       refresh: "Atualizar",

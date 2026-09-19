@@ -21,7 +21,7 @@ export interface UsageFixtureRoots {
   /**
    * The local day every fixture line lands on. The server fixtures carry a fixed
    * date, so the copies are restamped relative to today: an assertion about the
-   * statistics footer, the heatmap or the trend would otherwise start failing on
+   * statistics footer or the heatmap would otherwise start failing on
    * the day that date fell out of the report's trailing windows.
    */
   day: string;

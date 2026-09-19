@@ -1,5 +1,3 @@
-import type { UsageTrendGranularity } from "@getpaseo/protocol/usage/types";
-
 /** The period tabs in the overview header. `all` asks the daemon for everything. */
 export type UsagePeriod = "day" | "week" | "month" | "all" | "custom";
 
@@ -151,17 +149,4 @@ export function canShiftUsageRangeForward(input: {
     custom: { from: input.today, to: input.today },
   });
   return range.to !== null && range.to < input.today;
-}
-
-/**
- * The daemon applies the same rule when `trend.granularity` is omitted; the client
- * computes it too so the trend card can label its axis before the response lands.
- */
-export function resolveUsageTrendGranularity(range: UsageRange): UsageTrendGranularity {
-  if (!range.from || !range.to) return "month";
-  const days =
-    Math.round((toUtc(range.to).getTime() - toUtc(range.from).getTime()) / MS_PER_DAY) + 1;
-  if (days <= 2) return "hour";
-  if (days <= 92) return "day";
-  return "month";
 }

@@ -3048,16 +3048,6 @@ export const ar: TranslationResources = {
       more: "أكثر",
       cell: "{{day}} · {{tokens}} رمز",
     },
-    trend: {
-      title: "اتجاه الاستهلاك",
-      stackBy: {
-        label: "التجميع حسب",
-        source: "حسب المصدر",
-        model: "حسب النموذج",
-      },
-      future: "قادم",
-      bar: "{{period}} · {{tokens}} رمز",
-    },
     planUsage: {
       title: "استهلاك الخطة",
       refresh: "تحديث",
