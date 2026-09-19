@@ -117,6 +117,7 @@ Provider 是他要的 —— `command` 打错一个字母就静默返回空列�
 
 - **插件贡献的主题与内置主题重名时的消歧。** 真实用户也会撞上（选择器里两条一模一样的
   文字），但它能独立验收、独立上线，属于另一个任务。本任务只把夹具改名绕开。
+  已立项：`.atw/tasks/09-19-plugin-theme-name-collision`。
 - `cli-tests (shard 3/3)` 的 flaky —— 上游代码自己的问题，基线红、本分支绿。
 - 把本地 `main` 的 55 个 commit 推上去各自过一遍 CI。
 - usage 任务遗留的三项：iOS / Android 真机 `Intl` 冒烟、turn footer 与环形表的
@@ -133,7 +134,7 @@ Provider 是他要的 —— `command` 打错一个字母就静默返回空列�
       `providerErrors`；`1bad014d6` 那条内置 Provider 的断言保持通过。
 - [ ] OSC 11 那条测试在去掉终端主题桥接后会失败（即它仍在验真实行为）。
 - [ ] `typecheck` 与 `lint` 通过。
-- [ ] 「插件主题与内置主题重名」作为后续记录在案。
+- [x] 「插件主题与内置主题重名」作为后续记录在案 —— `.atw/tasks/09-19-plugin-theme-name-collision`。
 
 ## Further Notes
 

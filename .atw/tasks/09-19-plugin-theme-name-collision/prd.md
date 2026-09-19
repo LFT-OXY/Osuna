@@ -1,0 +1,19 @@
+# 插件主题与内置主题重名的消歧
+
+## Goal
+
+插件贡献的主题和内置主题同名时，主题选择器里就是两条一模一样的文字，用户分不出选的是哪个。09-19-branch-e2e-drift 里 Catppuccin Mocha / Latte 成为内置主题后，插件主题 e2e 的夹具就撞上了；那次只把夹具改名绕开，真实用户仍然会撞上。需要决定消歧方式（加来源标注、按插件分组、还是拒绝重名）并实现。
+
+## Requirements
+
+- TBD
+
+## Acceptance Criteria
+
+- [ ] TBD
+
+## Notes
+
+- Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
+- Lightweight tasks can remain PRD-only.
+- For complex tasks, slice the work into `issues/NN-slug.md` tickets before `task.py start`.
