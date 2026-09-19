@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
+import { USAGE_DARK_PALETTE, USAGE_LIGHT_PALETTE } from "./usage-palette";
 
 export const baseColors = {
   // Base colors
@@ -709,6 +710,9 @@ export function buildDarkTheme(semanticColors: ReturnType<typeof buildDarkSemant
       ...semanticColors,
       palette: baseColors,
       syntax: darkHighlightColors,
+      // The usage page is a visual island with its own neutral scale; it rides
+      // on the theme so Unistyles tracks it like any other token.
+      usage: USAGE_DARK_PALETTE,
     },
     shadow: darkShadow,
     ...commonTheme,
@@ -1096,6 +1100,7 @@ export function buildLightTheme(semanticColors: ReturnType<typeof buildLightSema
       ...semanticColors,
       palette: baseColors,
       syntax: lightHighlightColors,
+      usage: USAGE_LIGHT_PALETTE,
     },
     shadow: lightShadow,
     ...commonTheme,

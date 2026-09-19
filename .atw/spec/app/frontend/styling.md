@@ -61,6 +61,7 @@ Terminal ANSI colors are per theme only when the config provides `terminalAnsi` 
 
 ## Rules from the gotcha list
 
+- A style factory is theme-reactive only where it reads a token; branching on `theme.colorScheme` is not tracked. A page with its own palette (the usage page) puts that palette on the theme as `theme.colors.usage`. See `docs/unistyles.md`.
 - Do not materialize styles at module scope (`styles.container` read outside a component); `styles/unistyles-module-scope.test.ts` guards this.
 - Dynamic pixel values on web and inline styles go through `styles/unistyles-inline-style.ts` and its platform variants.
 - `contentContainerStyle` and other non-`style` props do not get tracked; see the fix patterns in `docs/unistyles.md`.

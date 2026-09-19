@@ -224,10 +224,12 @@ Pi 与 OMP：
   - 数据明细三页签：每日细目（可展开会话行，「打开」走 Session history 的打开 / 导入逻辑）/ 按月 / 项目用量（前 3 / 6 / 10 分段，行展开 cwd）。
   - 主机筛选：只有一台主机时不显示；下拉首项「全部主机」带「N 台计入」pill；不支持的主机灰字不可选 + 「需要更新主机」pill；未连接灰点不可选 + 「未计入」pill。
   - 回填：总览头部一枚琥珀 pill「回填中 M / N」带呼吸点，悬停提示"最近的日期先补齐"；无横幅；`done` 后消失。
-  - 配色：来源固定色表（Claude Code `#d97757`、Codex `#3b82f6`、Pi/OMP 按后端取表、未知后端 hsl 兜底、同一后端在 Pi 与 OMP 下同色）；热力图明 / 暗两套绿阶；品牌绿 `#059669`。
+  - 配色：来源固定色表（Claude Code `#d97757`、Codex `#3b82f6`、Pi/OMP 按后端取表、未知后端按后端名散列出 hsl 兜底、同一后端在 Pi 与 OMP 下同色）；热力图明 / 暗两套绿阶；品牌绿 `#059669`。本页自己的中性灰阶明 / 暗两套挂在 `theme.colors.usage`（`styles/usage-palette.ts`），不是模块常量：Unistyles 只对读到 token 的样式值按主题重算，工厂里按 `theme.colorScheme` 选调色板算一次就定死，暗色下会出浅色卡片（见 `docs/unistyles.md`）。
   - 数字：总览大数字与表格千分位全量；统计四格、来源展开、项目、会话用 K/M/B 一位小数；成本两位小数。
 - 图表用 `react-native-svg` 自绘，不引入图表库。
 - 数据获取：向每个已连接且支持的主机发同一请求（主机筛选决定发给谁），客户端做跨主机相加：`summary` 的 token / 成本 / 会话数直加；`days` / `months` / `trend` / `heatmapDays` 按 key 相加；`sources` / `models` 按 `(cli, backend[, model])` 合并后重排；**项目不跨主机合并**，每行带 `serverId`；Top 10 合并后再截。会话行每行带 `serverId`，handle 归属该主机。`usage.updated` 到达后去抖重拉报表；`backfill.progress` 只更新 pill，`done` 时重拉。
+- 部分主机答不上来时页面照常渲染其余主机的合计，并在顶部一条琥珀横幅里逐台点名（沿用 History / 计划两页的做法）；全部失败才整页报错。没有任何可问的主机时停在加载态，不渲染零值——零会被读成「你没用过」，那是客户端给不出的结论。
+- 来源显示名里的后端名走客户端常量表；未登记的后端保留用户自己起的名字并大写首字母。
 - 价格表**不在**本页；主机设置页保留价格表区块。
 
 ### 10. 会话内两处
@@ -250,7 +252,7 @@ Pi 与 OMP：
 - 价格表键 `settings.host.priceTable.*`。
 - 套餐用量模块原有 10 条英文迁到 `usage.planUsage.*` 后删除 copy 文件；相对时间与 "left" 改为纯函数返回 `{ key, params }`、组件层渲染；单位缩写（"3h"）保持英文。英文值逐字不变。
 - 来源显示名与后端名表不进 i18n，是客户端常量（Claude Code / Codex / Pi / OMP；anthropic → Anthropic、openai → OpenAI、xai → xAI、github → GitHub Copilot…；未知首字母大写；" · " 分隔）。
-- 9 语言各自内联、一次写齐，不留英文占位；zh-CN 由用户校对，其余以资源测试为守卫。单复数用 `{one, many}` 两键；运行时拼键的地方加 `i18n.exists()` 测试；四处图形（热力图格、趋势柱、来源卡、环形表）建 a11y 键。
+- 9 语言各自内联、一次写齐，不留英文占位；zh-CN 由用户校对，其余以资源测试为守卫。单复数用 `{one, many}` 两键并由组件选键（`modelCountOne` / `modelCountMany`），不用 i18next 的 `_one` / `_other` 后缀——后缀形式在 ru / ar 下会回落成英文，而资源测试拦不住；运行时拼键的地方加 `i18n.exists()` 测试；四处图形（热力图格、趋势柱、来源卡、环形表）建 a11y 键。
 - 千分位、百分比、日期、月份、星期短名按 UI 语言走 `Intl.NumberFormat` / `Intl.DateTimeFormat`；K/M/B、`$`、成本小数位固定。日期区间用两端各自格式化 + `range` 键拼，不用 `formatRange`。iOS / Android 真机各做一次 Intl 冒烟。
 - zh-CN 术语：用量 / 来源 / 套餐用量 / 估算成本 / 价格表 / 自定义价格 / 轮次（「第 N 轮」作序数）/ 热力图 / 回填；Token 保留拉丁字。
 

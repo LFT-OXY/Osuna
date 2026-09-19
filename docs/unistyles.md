@@ -58,6 +58,38 @@ For standard React Native components, the [Unistyles Babel plugin](https://www.u
 
 The important detail: the automatic native path tracks `props.style`. It does not generally track every prop that happens to carry style-like values.
 
+### `theme.colorScheme` Is Not A Tracked Dependency
+
+A style factory is re-run per theme only when it reads a theme _token_ — something under
+`theme.colors` and the other token groups. Branching on `theme.colorScheme` does not count, even
+though it is a read off `theme`:
+
+```tsx
+// Wrong: nothing here reads a token, so these styles are computed once, against whichever theme
+// was active at the time, and never follow a theme change.
+const styles = StyleSheet.create((theme) => {
+  const palette = pickPalette(theme.colorScheme);
+  return { card: { backgroundColor: palette.card } };
+});
+```
+
+Inlining the call into each value (`pickPalette(theme.colorScheme).card`) changes nothing. The
+usage page shipped light cards on a dark background for exactly this reason.
+
+Put the palette on the theme and read it as a token instead. A page with its own palette — a
+visual island, in `docs/design.md` terms — still rides on the theme:
+
+```tsx
+// styles/theme.ts, one entry in each of the two builders so every variant carries it.
+colors: { ...semanticColors, usage: USAGE_DARK_PALETTE },
+
+// The factory then reads a token, and a local alias for it is fine.
+const styles = StyleSheet.create((theme) => {
+  const palette = theme.colors.usage;
+  return { card: { backgroundColor: palette.card } };
+});
+```
+
 ### Do Not Materialize Styles At Module Scope
 
 Never read a Unistyles style property into a module-level constant. This includes cached arrays:
