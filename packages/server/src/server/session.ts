@@ -8585,6 +8585,17 @@ function legacyWantsEvent(
       return !capabilities.has(CLIENT_CAPS.explicitEventSubscriptions);
     case "agent.provider_subagents.update":
       return capabilities.has(CLIENT_CAPS.providerSubagents);
+    // These three arrived with the usage feature in v0.8.2, so no client ever
+    // received them without asking and none can be broken by withholding them.
+    // The app subscribes (`useUsageReport`), and the implicit delivery above is
+    // for events that predate subscriptions. Left in the default branch they
+    // reach every socket, including ones that only ever send RPCs: a backfill
+    // progress push landing between a request and its response is what broke
+    // the Hub relationship tests.
+    case "usage.backfill.progress":
+    case "usage.updated":
+    case "usage.pricing.updated":
+      return false;
     default:
       return true;
   }

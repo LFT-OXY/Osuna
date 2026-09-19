@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { WebSocket } from "ws";
 import type { UsagePricingModel, UsageReport } from "@getpaseo/protocol/usage/types";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -25,6 +26,77 @@ const LATER_ISO = "2027-06-01T12:00:00.000Z";
 const ONE_DOLLAR_PER_TOKEN = { input: 1e6, cachedInput: 1e6, cacheWrite: 1e6, output: 1e6 };
 const FREE = { input: 0, cachedInput: 0, cacheWrite: 0, output: 0 };
 const FABLE_BILLABLE = 7 + 74_560 + 26_884 + 1010;
+
+const USAGE_EVENTS = new Set(["usage.backfill.progress", "usage.updated", "usage.pricing.updated"]);
+
+/**
+ * A socket that does not declare `owned_subscriptions`, which is what makes it
+ * legacy on the daemon side and routes its events through the implicit-delivery
+ * fallback. `DaemonClient` always declares the capability, so it never reaches
+ * that branch and cannot show this.
+ */
+class LegacyPeer {
+  readonly frames: { type: string; message?: { type: string; payload?: unknown } }[] = [];
+
+  private constructor(private readonly socket: WebSocket) {
+    socket.on("message", (data, binary) => {
+      if (!binary) this.frames.push(JSON.parse(data.toString()));
+    });
+  }
+
+  static async connect(port: number): Promise<LegacyPeer> {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const peer = new LegacyPeer(socket);
+    await new Promise<void>((resolve, reject) => {
+      socket.once("open", resolve);
+      socket.once("error", reject);
+    });
+    socket.send(
+      JSON.stringify({
+        type: "hello",
+        clientType: "browser",
+        clientId: "clid_legacy_usage_peer",
+        protocolVersion: 1,
+        appVersion: "0.7.2",
+        capabilities: {},
+      }),
+    );
+    await expect
+      .poll(() =>
+        peer.frames.some((frame) => frame.type === "session" && frame.message?.type === "status"),
+      )
+      .toBe(true);
+    peer.frames.length = 0;
+    return peer;
+  }
+
+  async request(message: Record<string, unknown> & { requestId: string }): Promise<void> {
+    this.socket.send(JSON.stringify({ type: "session", message }));
+    await expect
+      .poll(() =>
+        this.frames.some((frame) => {
+          const payload = frame.message?.payload;
+          return (
+            frame.type === "session" &&
+            typeof payload === "object" &&
+            payload !== null &&
+            (payload as { requestId?: string }).requestId === message.requestId
+          );
+        }),
+      )
+      .toBe(true);
+  }
+
+  eventTypes(): string[] {
+    return this.frames
+      .map((frame) => frame.message?.type)
+      .filter((type): type is string => type !== undefined && USAGE_EVENTS.has(type));
+  }
+
+  close(): void {
+    this.socket.close();
+  }
+}
 
 const tempRoots: string[] = [];
 
@@ -354,6 +426,42 @@ describe("custom prices", () => {
       ["claude-fable-5-1", FABLE_BILLABLE, true],
       ["claude-opus-5", 0, true],
     ]);
+  });
+
+  test("sends the usage events only to the sockets that asked for them", async () => {
+    await start();
+
+    const legacy = await LegacyPeer.connect(daemon.port);
+    try {
+      const subscribed = new Promise<void>((resolve) => {
+        client.on("usage.pricing.updated", () => resolve());
+      });
+      await client.patchDaemonConfig({
+        usage: {
+          pricing: {
+            overrides: [{ model: "claude-opus-5", pricePerMillion: ONE_DOLLAR_PER_TOKEN }],
+          },
+        },
+      });
+
+      // The subscribing socket still gets it. Without this half, the assertion
+      // below also passes when the event is never published at all.
+      await subscribed;
+
+      // A round trip on the quiet socket: whatever the daemon had already
+      // queued for it was written before this response was.
+      await legacy.request({
+        type: "usage.report.get.request",
+        requestId: "req-quiet",
+        from: null,
+        to: null,
+        timezone: "UTC",
+      });
+
+      expect(legacy.eventTypes()).toEqual([]);
+    } finally {
+      legacy.close();
+    }
   });
 
   test("lists a zero override as priced and says where each price came from", async () => {
