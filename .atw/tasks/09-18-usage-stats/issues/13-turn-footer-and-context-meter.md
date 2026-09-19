@@ -3,7 +3,7 @@
 **What to build:** Paseo 里跑一轮 agent，轮结束后 footer 在 "Worked for 6m 12s" 后同行追加 `· ↑14.3K ↓4.6K · $0.17`，hover / 手机点按弹层「本轮用量」按模型列出输入 / 缓存 / 输出（推理另注）/ 估算成本，多模型加合计行，下方耗时与 "估算成本 · 按公开 API 价格计算"；运行中的一轮仍只显示 loader 与秒表；轮完成但行未到显示骨架条；无价格显示 `$0.00` 点下划线 + 弹层琥珀 pill；手机上用量段落到第二行。composer 上下文环形表右侧显示 `84K / 200K`（手机只留环），弹层三段：上下文窗口 → 本会话合计（Token ↑↓、估算成本、轮次、Agent 运行、会话跨度，`complete=false` 标「不完整」，运行中一轮秒表叠加）→ 套餐用量。旧 daemon：footer 无用量段，弹层本段显示「需要更新主机」。token 缩写全 app 统一为 K/M/B 一位小数，"Worked for" 迁入 i18n。
 
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 **Blocked by:** 07
 
