@@ -4,6 +4,84 @@ The daemon reads the session logs the local CLIs already write, turns them into
 token counts, and prices them. Nothing is sent anywhere; the one exception is
 the price table, below.
 
+## What gets scanned
+
+Every CLI decides where its own logs live, and the scanner resolves the same
+paths that CLI would:
+
+| Source      | Root                                                                                |
+| ----------- | ----------------------------------------------------------------------------------- |
+| Claude Code | `$CLAUDE_CONFIG_DIR/projects`, else `~/.claude/projects`                            |
+| Codex       | `sessions` and `archived_sessions` under `$CODEX_HOME`, else `~/.codex`             |
+| Pi          | Pi's own rule, its `settings.json` included                                         |
+| OMP         | `PI_CONFIG_DIR`, `OMP_PROFILE`/`PI_PROFILE`, `PI_CODING_AGENT_DIR`, `XDG_DATA_HOME` |
+
+Those variables are read from the **daemon's own environment**, once at start. A
+per-provider `env` in `config.json` moves the CLI Paseo launches and not the
+scanner, so logs written to a relocated directory are counted nowhere. Put the
+variable in the daemon's environment if you want the numbers to follow.
+`params.sessionDir` is not read here either — that one belongs to session import
+([custom-providers.md](custom-providers.md#omp-profiles-and-pi-compatible-forks)).
+
+OMP is resolved from environment variables alone; its `settings.json` is not
+read, while Pi's is. An OMP install whose sessions were moved that way reports
+nothing. The roots are resolved once from the environment, and reading a CLI's
+config files there would mean owning their reload story too.
+
+Codex can compress a rollout to `.jsonl.zst`. Those are skipped, and the daemon
+says so once per run at `info`.
+
+## The scan
+
+One worker reads files, serially. The round that runs at start is the backfill;
+after it, a timer starts the same round every 60 seconds
+(`PASEO_USAGE_SCAN_INTERVAL_MS`). Both rounds are the same code over every file
+no cursor has finished — only the first reports progress. Cursors are on disk,
+so a restart resumes mid-file and a second start has almost nothing left to do.
+
+Inside a round, main-thread transcripts are read before subagent ones, newest
+first: a subagent that names no parent turn is matched against the turn spans of
+the session that spawned it, and recent days are what people look at.
+
+[data-model.md](data-model.md#7-usage) holds the row formats, the cursor fields,
+and what a rewritten file costs.
+
+## What each log makes hard
+
+Traps in the raw logs that the parsers have to carry, each of them spanning CLI
+versions.
+
+- **Claude Code** writes one API response as several lines that each repeat the
+  same `usage`, and a resume copies the whole previous transcript into a new
+  file under a new session id. Summing lines double counts, and so does summing
+  files. `forkedFrom` is what stitches a resume chain back into one session.
+- **Codex** keeps `total_token_usage` as a per-process running sum that restarts
+  at zero on resume, so reading it as a total and reading it as a difference are
+  both wrong; each event's own `last` is the safe field. From 0.153.2 the same
+  response arrives a second time as a `token_usage_record`, so a reader that
+  accepts both counts it twice.
+- **Pi and OMP** share a transcript format but not its details: Pi writes the
+  header first, OMP puts a rewritable title line ahead of it, and the two name
+  the reasoning column differently. An OMP branch or `--continue` copies the
+  parent's entries into the child file.
+- **All four** may carry a raw U+2028 or U+2029 inside a JSON string, which is
+  legal there and which Node's `readline` treats as a line terminator. The
+  scanner splits on `\n` bytes for that reason; a reader built on `readline`
+  drops those lines with no error. One machine's logs held 44 and 3 of them
+  across 13 files.
+
+## Where the numbers fall short
+
+- The entries an OMP child file copied from its parent are skipped by their
+  stamps and counted from the parent instead. When that parent is no longer
+  under a scanned root — another profile, moved by `settings.json`, deleted —
+  the copied stretch is counted in neither file.
+- A subagent transcript that names no parent turn and started outside every turn
+  span of its session keeps its tokens in the session totals and in no turn, so
+  per-turn numbers can sum to less than the session.
+- A `.jsonl.zst` rollout counts as zero.
+- Prices themselves are estimates; see [Known undercounts](#known-undercounts).
+
 ## The price table
 
 Prices come from LiteLLM's public `model_prices_and_context_window.json`. The

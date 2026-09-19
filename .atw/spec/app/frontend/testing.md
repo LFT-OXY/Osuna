@@ -42,6 +42,7 @@ Every action that can fail needs behavioral coverage for success and for failure
 - Tests about daemon-global state (empty history, restart) start a dedicated host explicitly.
 - Retained-panel geometry is tested through a real retained surface across hide and reveal (`docs/coding-standards.md` "Retained panel measurements").
 - Filenames describe product behavior (`add-changed-file-to-chat.spec.ts`), never order or isolation mechanics.
+- A seeded agent route does not survive a reload or a second navigation: startup restore bounces it to "Workspace unavailable". Anything a spec wants to change before reaching the agent (app language, settings) has to be in place before the first navigation, or be changed from inside the loaded app without navigating.
 
 ## Running
 
