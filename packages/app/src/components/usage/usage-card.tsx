@@ -4,20 +4,21 @@ import { StyleSheet } from "react-native-unistyles";
 
 interface UsageCardProps {
   title?: string;
-  headerRight?: ReactNode;
+  /** A render function, not a node: `react-perf` rejects JSX travelling through a prop. */
+  renderHeaderRight?: () => ReactNode;
   children?: ReactNode;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
 
 /** The one card shell for the usage page. */
-export function UsageCard({ title, headerRight, children, style, testID }: UsageCardProps) {
+export function UsageCard({ title, renderHeaderRight, children, style, testID }: UsageCardProps) {
   return (
     <View style={[styles.card, style]} testID={testID}>
-      {title || headerRight ? (
+      {title || renderHeaderRight ? (
         <View style={styles.header}>
           {title ? <Text style={styles.title}>{title}</Text> : <View />}
-          {headerRight}
+          {renderHeaderRight?.()}
         </View>
       ) : null}
       {children}

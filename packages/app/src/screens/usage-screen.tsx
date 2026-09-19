@@ -9,11 +9,15 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { UsagePlaceholderCard } from "@/components/usage/usage-card";
+import { UsageHeatmapCard } from "@/components/usage/usage-heatmap-card";
 import { UsageOverviewCard } from "@/components/usage/usage-overview-card";
+import { UsageStatsCard } from "@/components/usage/usage-stats-card";
+import { UsageTrendCard } from "@/components/usage/usage-trend-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport } from "@/hooks/use-usage-report";
 import { EMPTY_USAGE_REPORT } from "@/usage/merge";
 import {
+  resolveUsageNow,
   resolveUsageRange,
   shiftUsageAnchor,
   type UsageCustomRange,
@@ -23,19 +27,6 @@ import { useUsageHosts } from "@/usage/use-usage-hosts";
 import { getDeviceTimeZone } from "@/utils/device-timezone";
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/** The trend card owns the by-source / by-model switch; until then it stacks by source. */
-const TREND_STACK_BY: UsageTrendStackBy = "source";
-
-/** Today in the viewer's own timezone, which is also what the report is bucketed by. */
-function resolveToday(timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 export function UsageScreen(): ReactElement {
   const isFocused = useIsFocused();
@@ -51,13 +42,15 @@ function UsageScreenContent(): ReactElement {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const timezone = useMemo(() => getDeviceTimeZone(), []);
-  const today = useMemo(() => resolveToday(timezone), [timezone]);
+  const now = useMemo(() => resolveUsageNow(timezone), [timezone]);
+  const today = now.day;
 
   const [period, setPeriod] = useState<UsagePeriod>("all");
   const [anchor, setAnchor] = useState(today);
   const [custom, setCustom] = useState<UsageCustomRange>({ from: today, to: today });
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const [stackBy, setStackBy] = useState<UsageTrendStackBy>("source");
 
   const { options: hostOptions, selection: hostSelection } = useUsageHosts(selectedServerId);
   const range = useMemo(
@@ -67,7 +60,7 @@ function UsageScreenContent(): ReactElement {
   const { loadState, hostErrors, backfill, isError, isRefetching, refetch } = useUsageReport({
     hosts: hostSelection.hosts,
     range,
-    stackBy: TREND_STACK_BY,
+    stackBy,
     timezone,
   });
 
@@ -131,20 +124,14 @@ function UsageScreenContent(): ReactElement {
     );
     const sideColumn = (
       <View style={styles.sideColumn}>
-        <UsagePlaceholderCard
-          title={t("usage.stats.title")}
-          message={t("usage.common.comingSoon")}
-          testID="usage-stats-card"
-        />
-        <UsagePlaceholderCard
-          title={t("usage.heatmap.title")}
-          message={t("usage.common.comingSoon")}
-          testID="usage-heatmap-card"
-        />
-        <UsagePlaceholderCard
-          title={t("usage.trend.title")}
-          message={t("usage.common.comingSoon")}
-          testID="usage-trend-card"
+        <UsageStatsCard report={report} today={today} />
+        <UsageHeatmapCard heatmapDays={report.heatmapDays} today={today} timezone={timezone} />
+        <UsageTrendCard
+          trend={report.trend}
+          range={range}
+          now={now}
+          stackBy={stackBy}
+          onStackByChange={setStackBy}
         />
         <UsagePlaceholderCard
           title={t("usage.planUsage.title")}

@@ -25,6 +25,29 @@ export interface UsageRangeInput {
 
 const MS_PER_DAY = 86_400_000;
 
+/** "Now" in the viewer's own zone, which is the zone the report is bucketed by. */
+export interface UsageNow {
+  /** `YYYY-MM-DD`. */
+  day: string;
+  /** `YYYY-MM-DDTHH`, the same shape the daemon uses for hourly trend keys. */
+  hour: string;
+}
+
+export function resolveUsageNow(timezone: string, at: Date = new Date()): UsageNow {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const find = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const day = `${find("year")}-${find("month")}-${find("day")}`;
+  return { day, hour: `${day}T${find("hour")}` };
+}
+
 function toUtc(day: string): Date {
   return new Date(`${day}T00:00:00.000Z`);
 }

@@ -1,4 +1,4 @@
-import type { UsageCli, UsageSourceRef } from "@getpaseo/protocol/usage/types";
+import type { UsageCli, UsageSourceRef, UsageTrendStackBy } from "@getpaseo/protocol/usage/types";
 
 /**
  * Source names are product names, not copy: they stay identical in every UI
@@ -84,4 +84,34 @@ export function usageSourceColor(ref: UsageSourceRef): string {
   const known = BACKEND_COLORS[ref.backend];
   if (known) return known;
   return `hsl(${fallbackHue(ref.backend)}, 60%, 45%)`;
+}
+
+const USAGE_CLIS = new Set<string>(["claude", "codex", "pi", "omp"]);
+
+/** Inverse of `usageSourceKey`, for the group keys the trend response carries. */
+export function usageSourceRefFromKey(key: string): UsageSourceRef | null {
+  const separator = key.indexOf(":");
+  const cli = separator === -1 ? key : key.slice(0, separator);
+  if (!USAGE_CLIS.has(cli)) return null;
+  return {
+    cli: cli as UsageCli,
+    backend: separator === -1 ? null : key.slice(separator + 1),
+  };
+}
+
+/** A model keeps one colour per name, so the same model reads the same in every bar. */
+export function usageModelColor(model: string): string {
+  return `hsl(${fallbackHue(model)}, 55%, 50%)`;
+}
+
+export function usageTrendGroupColor(group: string, stackBy: UsageTrendStackBy): string {
+  if (stackBy === "model") return usageModelColor(group);
+  const ref = usageSourceRefFromKey(group);
+  return ref ? usageSourceColor(ref) : usageModelColor(group);
+}
+
+export function usageTrendGroupLabel(group: string, stackBy: UsageTrendStackBy): string {
+  if (stackBy === "model") return group;
+  const ref = usageSourceRefFromKey(group);
+  return ref ? usageSourceLabel(ref) : group;
 }

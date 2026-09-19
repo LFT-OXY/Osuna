@@ -4,6 +4,7 @@ import {
   addUsageMonths,
   canShiftUsageRangeForward,
   endOfUsageMonth,
+  resolveUsageNow,
   resolveUsageRange,
   resolveUsageTrendGranularity,
   shiftUsageAnchor,
@@ -140,5 +141,21 @@ describe("date helpers", () => {
 
   it("finds the last day of a month", () => {
     expect(endOfUsageMonth("2026-12-05")).toBe("2026-12-31");
+  });
+});
+
+describe("resolveUsageNow", () => {
+  it("reads the day and the hour in the viewer's own zone", () => {
+    const at = new Date("2026-09-19T22:30:00.000Z");
+
+    expect(resolveUsageNow("UTC", at)).toEqual({ day: "2026-09-19", hour: "2026-09-19T22" });
+    expect(resolveUsageNow("Asia/Shanghai", at)).toEqual({
+      day: "2026-09-20",
+      hour: "2026-09-20T06",
+    });
+    expect(resolveUsageNow("America/Los_Angeles", at)).toEqual({
+      day: "2026-09-19",
+      hour: "2026-09-19T15",
+    });
   });
 });

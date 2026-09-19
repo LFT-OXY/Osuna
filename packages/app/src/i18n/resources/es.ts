@@ -3031,12 +3031,30 @@ export const es: TranslationResources = {
     },
     stats: {
       title: "Estadísticas",
+      last7Days: "7 días",
+      last30Days: "30 días",
+      average: "Promedio",
+      sessions: "Sesiones",
+      firstUsed: "Primer uso",
+      activeDays: "Días activos",
+      dayCountOne: "1 día",
+      dayCountMany: "{{count}} días",
     },
     heatmap: {
       title: "Mapa de calor",
+      less: "Menos",
+      more: "Más",
+      cell: "{{day}} · {{tokens}} tokens",
     },
     trend: {
       title: "Tendencia de uso",
+      stackBy: {
+        label: "Apilar por",
+        source: "Por fuente",
+        model: "Por modelo",
+      },
+      future: "Próximo",
+      bar: "{{period}} · {{tokens}} tokens",
     },
     planUsage: {
       title: "Uso del plan",
@@ -3046,6 +3064,7 @@ export const es: TranslationResources = {
     },
     common: {
       comingSoon: "Próximamente",
+      noValue: "—",
       loadError: "No se pudo cargar el uso.",
       hostLoadError: "No se pudo cargar el uso desde {{host}}.",
     },

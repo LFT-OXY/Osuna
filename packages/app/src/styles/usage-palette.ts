@@ -15,16 +15,22 @@ export interface UsagePalette {
   inkMuted: string;
   inkFaint: string;
   tile: string;
+  divider: string;
   divider2: string;
+  rankBadge: string;
   brand: string;
   amberBg: string;
   amberBorder: string;
   amberFg: string;
   amberDot: string;
   segBg: string;
+  segBorder: string;
+  segThumb: string;
   track: string;
   controlBorder: string;
   statusOnline: string;
+  /** Five steps, index 0 = no usage. The heatmap reads levels straight out of this. */
+  heat: readonly [string, string, string, string, string];
 }
 
 export const USAGE_LIGHT_PALETTE: UsagePalette = {
@@ -37,16 +43,21 @@ export const USAGE_LIGHT_PALETTE: UsagePalette = {
   inkMuted: "#737373",
   inkFaint: "#a3a3a3",
   tile: "#fafafa",
+  divider: "#f5f5f5",
   divider2: "#e5e5e5",
+  rankBadge: "#f5f5f5",
   brand: "#059669",
   amberBg: "#fffbeb",
   amberBorder: "#fcd34d",
   amberFg: "#b45309",
   amberDot: "#f59e0b",
   segBg: "#f5f5f5",
+  segBorder: "#e5e5e5",
+  segThumb: "#ffffff",
   track: "#f5f5f5",
   controlBorder: "#d4d4d4",
   statusOnline: "#10b981",
+  heat: ["#ebedf0", "#a7f3d0", "#6ee7b7", "#34d399", "#10b981"],
 };
 
 export const USAGE_DARK_PALETTE: UsagePalette = {
@@ -59,14 +70,19 @@ export const USAGE_DARK_PALETTE: UsagePalette = {
   inkMuted: "#d4d4d4",
   inkFaint: "#a3a3a3",
   tile: "#262626",
+  divider: "#262626",
   divider2: "#404040",
+  rankBadge: "#262626",
   brand: "#10b981",
   amberBg: "rgba(245,158,11,0.1)",
   amberBorder: "rgba(245,158,11,0.3)",
   amberFg: "#fcd34d",
   amberDot: "#f59e0b",
   segBg: "#262626",
+  segBorder: "#404040",
+  segThumb: "#404040",
   track: "#262626",
   controlBorder: "#404040",
   statusOnline: "#10b981",
+  heat: ["#121212", "#065f46", "#059669", "#10b981", "#34d399"],
 };

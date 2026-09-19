@@ -2970,12 +2970,30 @@ export const ar: TranslationResources = {
     },
     stats: {
       title: "الإحصائيات",
+      last7Days: "7 أيام",
+      last30Days: "30 يومًا",
+      average: "المتوسط",
+      sessions: "الجلسات",
+      firstUsed: "أول استخدام",
+      activeDays: "الأيام النشطة",
+      dayCountOne: "يوم واحد",
+      dayCountMany: "{{count}} أيام",
     },
     heatmap: {
       title: "الخريطة الحرارية",
+      less: "أقل",
+      more: "أكثر",
+      cell: "{{day}} · {{tokens}} رمز",
     },
     trend: {
       title: "اتجاه الاستهلاك",
+      stackBy: {
+        label: "التجميع حسب",
+        source: "حسب المصدر",
+        model: "حسب النموذج",
+      },
+      future: "قادم",
+      bar: "{{period}} · {{tokens}} رمز",
     },
     planUsage: {
       title: "استهلاك الخطة",
@@ -2985,6 +3003,7 @@ export const ar: TranslationResources = {
     },
     common: {
       comingSoon: "قريبًا",
+      noValue: "—",
       loadError: "تعذر تحميل الاستهلاك.",
       hostLoadError: "تعذر تحميل الاستهلاك من {{host}}.",
     },

@@ -2938,12 +2938,30 @@ export const zhCN: TranslationResources = {
     },
     stats: {
       title: "统计面板",
+      last7Days: "7 天",
+      last30Days: "30 天",
+      average: "平均",
+      sessions: "会话数",
+      firstUsed: "开始使用",
+      activeDays: "活跃天数",
+      dayCountOne: "1 天",
+      dayCountMany: "{{count}} 天",
     },
     heatmap: {
       title: "热力图",
+      less: "少",
+      more: "多",
+      cell: "{{day}} · {{tokens}} token",
     },
     trend: {
       title: "使用趋势",
+      stackBy: {
+        label: "堆叠方式",
+        source: "按来源",
+        model: "按模型",
+      },
+      future: "未来",
+      bar: "{{period}} · {{tokens}} token",
     },
     planUsage: {
       title: "套餐用量",
@@ -2953,6 +2971,7 @@ export const zhCN: TranslationResources = {
     },
     common: {
       comingSoon: "即将推出",
+      noValue: "—",
       loadError: "无法加载用量数据。",
       hostLoadError: "无法从 {{host}} 加载用量数据。",
     },

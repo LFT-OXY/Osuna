@@ -3023,12 +3023,30 @@ export const ru: TranslationResources = {
     },
     stats: {
       title: "Статистика",
+      last7Days: "7 дней",
+      last30Days: "30 дней",
+      average: "Среднее",
+      sessions: "Сессии",
+      firstUsed: "Первое использование",
+      activeDays: "Активных дней",
+      dayCountOne: "1 день",
+      dayCountMany: "{{count}} дн.",
     },
     heatmap: {
       title: "Тепловая карта",
+      less: "Меньше",
+      more: "Больше",
+      cell: "{{day}} · {{tokens}} токенов",
     },
     trend: {
       title: "Динамика расхода",
+      stackBy: {
+        label: "Группировка",
+        source: "По источнику",
+        model: "По модели",
+      },
+      future: "Впереди",
+      bar: "{{period}} · {{tokens}} токенов",
     },
     planUsage: {
       title: "Расход по тарифу",
@@ -3038,6 +3056,7 @@ export const ru: TranslationResources = {
     },
     common: {
       comingSoon: "Скоро",
+      noValue: "—",
       loadError: "Не удалось загрузить расход.",
       hostLoadError: "Не удалось загрузить расход с {{host}}.",
     },

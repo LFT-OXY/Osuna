@@ -3039,12 +3039,30 @@ export const fr: TranslationResources = {
     },
     stats: {
       title: "Statistiques",
+      last7Days: "7 jours",
+      last30Days: "30 jours",
+      average: "Moyenne",
+      sessions: "Sessions",
+      firstUsed: "Première utilisation",
+      activeDays: "Jours actifs",
+      dayCountOne: "1 jour",
+      dayCountMany: "{{count}} jours",
     },
     heatmap: {
       title: "Carte de chaleur",
+      less: "Moins",
+      more: "Plus",
+      cell: "{{day}} · {{tokens}} jetons",
     },
     trend: {
       title: "Tendance d'utilisation",
+      stackBy: {
+        label: "Empiler par",
+        source: "Par source",
+        model: "Par modèle",
+      },
+      future: "À venir",
+      bar: "{{period}} · {{tokens}} jetons",
     },
     planUsage: {
       title: "Consommation du forfait",
@@ -3054,6 +3072,7 @@ export const fr: TranslationResources = {
     },
     common: {
       comingSoon: "Bientôt disponible",
+      noValue: "—",
       loadError: "Impossible de charger la consommation.",
       hostLoadError: "Impossible de charger la consommation depuis {{host}}.",
     },

@@ -2985,12 +2985,30 @@ export const ko: TranslationResources = {
     },
     stats: {
       title: "통계",
+      last7Days: "7일",
+      last30Days: "30일",
+      average: "평균",
+      sessions: "세션",
+      firstUsed: "첫 사용",
+      activeDays: "활동 일수",
+      dayCountOne: "1일",
+      dayCountMany: "{{count}}일",
     },
     heatmap: {
       title: "히트맵",
+      less: "적음",
+      more: "많음",
+      cell: "{{day}} · {{tokens}} 토큰",
     },
     trend: {
       title: "사용량 추이",
+      stackBy: {
+        label: "누적 기준",
+        source: "소스별",
+        model: "모델별",
+      },
+      future: "예정",
+      bar: "{{period}} · {{tokens}} 토큰",
     },
     planUsage: {
       title: "플랜 사용량",
@@ -3000,6 +3018,7 @@ export const ko: TranslationResources = {
     },
     common: {
       comingSoon: "곧 제공됩니다",
+      noValue: "—",
       loadError: "사용량을 불러오지 못했습니다.",
       hostLoadError: "{{host}}에서 사용량을 불러오지 못했습니다.",
     },

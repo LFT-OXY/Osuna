@@ -3095,12 +3095,30 @@ export const en = {
     },
     stats: {
       title: "Statistics",
+      last7Days: "7 days",
+      last30Days: "30 days",
+      average: "Average",
+      sessions: "Sessions",
+      firstUsed: "First used",
+      activeDays: "Active days",
+      dayCountOne: "1 day",
+      dayCountMany: "{{count}} days",
     },
     heatmap: {
       title: "Heatmap",
+      less: "Less",
+      more: "More",
+      cell: "{{day}} · {{tokens}} tokens",
     },
     trend: {
       title: "Usage trend",
+      stackBy: {
+        label: "Stack by",
+        source: "By source",
+        model: "By model",
+      },
+      future: "Upcoming",
+      bar: "{{period}} · {{tokens}} tokens",
     },
     planUsage: {
       title: "Plan usage",
@@ -3110,6 +3128,7 @@ export const en = {
     },
     common: {
       comingSoon: "Coming soon",
+      noValue: "—",
       loadError: "Could not load usage.",
       hostLoadError: "Could not load usage from {{host}}.",
     },

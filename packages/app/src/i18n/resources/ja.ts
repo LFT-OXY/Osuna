@@ -2998,12 +2998,30 @@ export const ja: TranslationResources = {
     },
     stats: {
       title: "統計",
+      last7Days: "7日間",
+      last30Days: "30日間",
+      average: "平均",
+      sessions: "セッション",
+      firstUsed: "利用開始",
+      activeDays: "アクティブ日数",
+      dayCountOne: "1日",
+      dayCountMany: "{{count}}日",
     },
     heatmap: {
       title: "ヒートマップ",
+      less: "少",
+      more: "多",
+      cell: "{{day}} · {{tokens}} トークン",
     },
     trend: {
       title: "使用量の推移",
+      stackBy: {
+        label: "積み上げ",
+        source: "ソース別",
+        model: "モデル別",
+      },
+      future: "今後",
+      bar: "{{period}} · {{tokens}} トークン",
     },
     planUsage: {
       title: "プラン使用量",
@@ -3013,6 +3031,7 @@ export const ja: TranslationResources = {
     },
     common: {
       comingSoon: "近日公開",
+      noValue: "—",
       loadError: "使用量を読み込めませんでした。",
       hostLoadError: "{{host}} から使用量を読み込めませんでした。",
     },
