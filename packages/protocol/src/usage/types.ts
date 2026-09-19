@@ -153,3 +153,52 @@ export const UsageReportSchema = z.object({
   error: z.string().nullable(),
 });
 export type UsageReport = z.infer<typeof UsageReportSchema>;
+
+/** Dollars per million tokens — what a user types, and what the price table shows. */
+export const UsagePricePerMillionSchema = z.object({
+  input: z.number().nonnegative(),
+  cachedInput: z.number().nonnegative(),
+  cacheWrite: z.number().nonnegative(),
+  output: z.number().nonnegative(),
+});
+export type UsagePricePerMillion = z.infer<typeof UsagePricePerMillionSchema>;
+
+/**
+ * A user-set price for one model. `model` matches the stored model id exactly,
+ * ignoring case and surrounding space; all four columns are required so a
+ * half-filled override cannot silently price part of a turn. Zero is a price,
+ * not "unknown".
+ */
+export const UsagePricingOverrideSchema = z.object({
+  model: z.string().min(1),
+  pricePerMillion: UsagePricePerMillionSchema,
+  note: z.string().optional(),
+});
+export type UsagePricingOverride = z.infer<typeof UsagePricingOverrideSchema>;
+
+export const UsagePricingSourceSchema = z.enum(["override", "table"]);
+export type UsagePricingSource = z.infer<typeof UsagePricingSourceSchema>;
+
+/** Where the loaded table came from and whether the daemon will refresh it. */
+export const UsagePricingTableInfoSchema = z.object({
+  fetchedAt: z.string(),
+  source: z.enum(["cache", "snapshot"]),
+  autoUpdate: z.boolean(),
+});
+export type UsagePricingTableInfo = z.infer<typeof UsagePricingTableInfoSchema>;
+
+/** One model seen in the usage rows, with the price it resolves to today. */
+export const UsagePricingModelSchema = z.object({
+  model: z.string(),
+  cli: UsageCliSchema,
+  backend: z.string().nullable(),
+  priced: z.boolean(),
+  priceSource: UsagePricingSourceSchema.nullable(),
+  matchedKey: z.string().nullable(),
+  pricePerMillion: UsagePricePerMillionSchema.nullable(),
+  lastSeenAt: z.string(),
+});
+export type UsagePricingModel = z.infer<typeof UsagePricingModelSchema>;
+
+export const UsagePricingRefreshResultSchema = z.enum(["updated", "not_modified", "failed"]);
+export type UsagePricingRefreshResult = z.infer<typeof UsagePricingRefreshResultSchema>;

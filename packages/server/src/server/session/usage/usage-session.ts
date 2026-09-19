@@ -42,7 +42,7 @@ export class UsageSession {
   async handleUsageReportGetRequest(
     request: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>,
   ): Promise<void> {
-    try {
+    await this.respond(request, async () => {
       const report = await this.usageService.getReport({
         from: request.from,
         to: request.to,
@@ -50,13 +50,41 @@ export class UsageSession {
         filters: request.filters,
         trend: request.trend,
       });
-      this.host.emit({
+      return {
         type: "usage.report.get.response",
         payload: { requestId: request.requestId, ...report },
-      });
+      };
+    });
+  }
+
+  async handleUsagePricingListRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.pricing.list.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.pricing.list.response",
+      payload: { requestId: request.requestId, ...this.usageService.listPricing() },
+    }));
+  }
+
+  async handleUsagePricingRefreshRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.pricing.refresh.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.pricing.refresh.response",
+      payload: { requestId: request.requestId, ...(await this.usageService.refreshPricing()) },
+    }));
+  }
+
+  /** One failure shape for the whole namespace, so every handler stays two lines. */
+  private async respond(
+    request: { type: string; requestId: string },
+    run: () => Promise<SessionOutboundMessage>,
+  ): Promise<void> {
+    try {
+      this.host.emit(await run());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error({ err: error, requestType: request.type }, "Usage report request failed");
+      this.logger.error({ err: error, requestType: request.type }, "Usage request failed");
       this.host.emit({
         type: "rpc_error",
         payload: {

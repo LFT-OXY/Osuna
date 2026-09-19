@@ -3029,7 +3029,9 @@ export class Session {
         await this.handleListCommandsRequest(msg);
         return;
       case "usage.report.get.request":
-        await this.handleUsageReportGetRequest(msg);
+      case "usage.pricing.list.request":
+      case "usage.pricing.refresh.request":
+        await this.handleUsageRequest(msg);
         return;
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
@@ -3048,10 +3050,19 @@ export class Session {
   }
 
   /** Fail closed: a client that ignored the absent `usage` flag gets an error, not silence. */
-  private async handleUsageReportGetRequest(
-    msg: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>,
+  private async handleUsageRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      {
+        type:
+          | "usage.report.get.request"
+          | "usage.pricing.list.request"
+          | "usage.pricing.refresh.request";
+      }
+    >,
   ): Promise<void> {
-    if (!this.usageSession) {
+    const usageSession = this.usageSession;
+    if (!usageSession) {
       this.emit({
         type: "rpc_error",
         payload: {
@@ -3063,7 +3074,15 @@ export class Session {
       });
       return;
     }
-    await this.usageSession.handleUsageReportGetRequest(msg);
+    if (msg.type === "usage.pricing.list.request") {
+      await usageSession.handleUsagePricingListRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.pricing.refresh.request") {
+      await usageSession.handleUsagePricingRefreshRequest(msg);
+      return;
+    }
+    await usageSession.handleUsageReportGetRequest(msg);
   }
 
   public resetPeakInflight(): void {
@@ -8505,20 +8524,28 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "activity_log":
     case "hub.execution.agent.update":
     case "hub.execution.agent.stream":
+    case "usage.backfill.progress":
+    case "usage.pricing.updated":
       return message.type;
     case "status":
-      switch (message.payload.status) {
-        case "server_info":
-          return "status.server_info";
-        case "daemon_config_changed":
-          return "status.daemon_config_changed";
-        case "plugin_catalog_changed":
-          return "status.plugin_catalog_changed";
-        case "plugin_settings_changed":
-          return "status.plugin_settings_changed";
-        default:
-          return null;
-      }
+      return statusEventCategory(message.payload.status);
+    default:
+      return null;
+  }
+}
+
+type StatusPayload = Extract<SessionOutboundMessage, { type: "status" }>["payload"];
+
+function statusEventCategory(status: StatusPayload["status"]): SessionEventSubscription | null {
+  switch (status) {
+    case "server_info":
+      return "status.server_info";
+    case "daemon_config_changed":
+      return "status.daemon_config_changed";
+    case "plugin_catalog_changed":
+      return "status.plugin_catalog_changed";
+    case "plugin_settings_changed":
+      return "status.plugin_settings_changed";
     default:
       return null;
   }

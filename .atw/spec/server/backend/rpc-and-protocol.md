@@ -278,6 +278,80 @@ if (!includeImported && importedHandles.has(handleKey)) {
 const canList = isClientReady && isSupported;
 ```
 
+## Scenario: a broadcast that must reach modern clients
+
+Reference implementation: `usage.pricing.updated` (usage ticket 05, v0.8.2). Reuse this shape for any new daemon-initiated message that is not a reply.
+
+### 1. Scope / Trigger
+
+- The daemon wants to tell every connected client that something changed, outside any request it is answering.
+
+### 2. Signatures
+
+- Schema: a member of `SessionOutboundMessageSchema` in `packages/protocol/src/messages.ts`.
+- Category: the same literal added to `SessionEventSubscriptionSchema` (same file).
+- Routing: the same `case` added to `sessionEventCategory()` in `server/session.ts`.
+- Permission: an entry in `OUTBOUND_PERMISSION` in `server/authorization/operation-permissions.ts`.
+- Client: `DaemonClient.observeEvents([...])` in `packages/client/src/daemon-client.ts`.
+
+### 3. Contracts
+
+- **`wsServer.broadcast()` alone does not deliver it.** For a client with the `ownedSubscriptions` capability, `SessionDelivery.permits()` drops every message that has no owning subscription (`server/session/owned-subscriptions/index.ts`). A broadcast with no event category reaches only pre-v0.8.0 clients — silently, with no log line and no error.
+- `sessionEventCategory()` returning the type is what routes it to `emitSubscribedEvent()`, which fans it out to the subscriptions that asked for that category. A client that did not subscribe receives nothing; that is the point.
+- The client subscribes with `observeEvents`, gated on the feature flag that owns the message. `SessionEventSubscriptionSchema` is a `z.enum`, so an old daemon rejects the whole `session.events.set_subscription.request` if it sees a name it does not know — never send a new category name to a daemon that has not advertised the feature.
+- **Carry no `payload` with a `requestId` unless the message really is a reply.** `replies.ts` classifies every correlated outbound message and fails typecheck until it is declared in `exceptions`. A pure notification takes no `payload` at all.
+
+### 4. Validation & Error Matrix
+
+- Broadcast with no event category, modern client -> silently dropped by `permits()`.
+- Broadcast with a category, client never subscribed -> not delivered; no error.
+- New category name sent to a daemon that predates it -> the subscription request fails schema validation, so the client loses every category in that call.
+- Message carries `payload.requestId` but is not a reply -> `Record<ExceptionalReply, …>` in `replies.ts` fails to typecheck.
+
+### 5. Good/Base/Bad Cases
+
+- Good: new app + new daemon; the app subscribes once behind the feature gate and re-reads on each notification.
+- Base: pre-v0.8.0 client; the legacy path in `emitSubscribedEvent()` delivers by capability instead of subscription.
+- Bad: shipping the broadcast without the category and testing only by polling the matching RPC — the poll passes, the push never worked.
+
+### 6. Tests Required
+
+- Daemon E2E: `observeEvents([...])`, trigger the change, assert the handler fired. `usage-pricing.e2e.test.ts` "reprices history the moment an override is saved" is the reference.
+- Protocol: the category parses inside `session.events.set_subscription.request`, and the message parses in the outbound union.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// The message exists, is authorized, and never arrives.
+wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
+// ...and nothing else.
+```
+
+#### Correct
+
+```ts
+// packages/protocol/src/messages.ts
+export const SessionEventSubscriptionSchema = z.enum([
+  // ...
+  // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
+  "usage.pricing.updated",
+]);
+
+// server/session.ts
+function sessionEventCategory(message: SessionOutboundMessage) {
+  switch (message.type) {
+    // ...
+    case "usage.pricing.updated":
+      return message.type;
+  }
+}
+
+// client, behind the feature gate that owns the message
+await client.observeEvents(["usage.pricing.updated"]);
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  MutableDaemonConfigPatchSchema,
+  MutableDaemonConfigSchema,
   ServerInfoStatusPayloadSchema,
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
@@ -110,5 +112,124 @@ describe("server_info usage feature", () => {
       features: { usage: true },
     });
     expect(parsed.features?.usage).toBe(true);
+  });
+});
+
+// 价格表 RPC、广播与自定义价格配置。价格写在可变 daemon 配置里，走
+// set_daemon_config，不另起 RPC。
+const PRICE = { input: 3, cachedInput: 0.3, cacheWrite: 3.75, output: 15 };
+
+describe("usage.pricing", () => {
+  it("parses the list request and its response", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "usage.pricing.list.request",
+        requestId: "req-1",
+      }),
+    ).toEqual({ type: "usage.pricing.list.request", requestId: "req-1" });
+
+    const response = {
+      type: "usage.pricing.list.response" as const,
+      payload: {
+        requestId: "req-1",
+        table: {
+          fetchedAt: "2026-09-18T09:00:00.000Z",
+          source: "cache" as const,
+          autoUpdate: true,
+        },
+        models: [
+          {
+            model: "claude-opus-5",
+            cli: "claude" as const,
+            backend: null,
+            priced: true,
+            priceSource: "table" as const,
+            matchedKey: "claude-opus-5",
+            pricePerMillion: PRICE,
+            lastSeenAt: "2026-09-18T09:00:00.000Z",
+          },
+          {
+            model: "gpt-6-astra",
+            cli: "pi" as const,
+            backend: "openai",
+            priced: false,
+            priceSource: null,
+            matchedKey: null,
+            pricePerMillion: null,
+            lastSeenAt: "2026-09-17T09:00:00.000Z",
+          },
+        ],
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses each refresh result", () => {
+    for (const result of ["updated", "not_modified", "failed"] as const) {
+      const message = {
+        type: "usage.pricing.refresh.response" as const,
+        payload: {
+          requestId: "req-2",
+          result,
+          fetchedAt: "2026-09-18T09:00:00.000Z",
+          error: result === "failed" ? "fetch failed" : null,
+        },
+      };
+      expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
+    }
+  });
+
+  it("parses the updated broadcast, which carries nothing", () => {
+    const message = { type: "usage.pricing.updated" as const };
+    expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it("subscribes to the usage broadcasts by name", () => {
+    const message = {
+      type: "session.events.set_subscription.request" as const,
+      requestId: "req-3",
+      events: ["usage.backfill.progress" as const, "usage.pricing.updated" as const],
+    };
+    expect(SessionInboundMessageSchema.parse(message)).toEqual(message);
+  });
+});
+
+describe("usage pricing config", () => {
+  it("defaults auto-update on when the section omits it", () => {
+    const config = MutableDaemonConfigSchema.parse({
+      mcp: { injectIntoAgents: true },
+      usage: { pricing: { overrides: [] } },
+    });
+    expect(config.usage).toEqual({ pricing: { autoUpdate: true, overrides: [] } });
+  });
+
+  it("keeps auto-update untouched when a patch only edits prices", () => {
+    const patch = MutableDaemonConfigPatchSchema.parse({
+      usage: {
+        pricing: { overrides: [{ model: "claude-opus-5", pricePerMillion: PRICE, note: "mine" }] },
+      },
+    });
+    expect(patch.usage).toEqual({
+      pricing: {
+        overrides: [{ model: "claude-opus-5", pricePerMillion: PRICE, note: "mine" }],
+      },
+    });
+  });
+
+  it("rejects a negative price", () => {
+    expect(() =>
+      MutableDaemonConfigPatchSchema.parse({
+        usage: {
+          pricing: {
+            overrides: [{ model: "claude-opus-5", pricePerMillion: { ...PRICE, input: -1 } }],
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("parses a daemon config written before the section existed", () => {
+    const config = MutableDaemonConfigSchema.parse({ mcp: { injectIntoAgents: true } });
+    expect(config.usage).toBeUndefined();
   });
 });

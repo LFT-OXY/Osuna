@@ -47,7 +47,13 @@ import {
   UsageReportGetRequestSchema,
   UsageReportGetResponseSchema,
   UsageBackfillProgressMessageSchema,
+  UsagePricingListRequestSchema,
+  UsagePricingListResponseSchema,
+  UsagePricingRefreshRequestSchema,
+  UsagePricingRefreshResponseSchema,
+  UsagePricingUpdatedMessageSchema,
 } from "./usage/rpc-schemas.js";
+import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
@@ -220,6 +226,39 @@ export const AgentSkillSelectionSchema = z.discriminatedUnion("mode", [
 ]);
 export type AgentSkillSelection = z.infer<typeof AgentSkillSelectionSchema>;
 
+/**
+ * The usage feature's runtime-safe settings. Only the price table is here: the
+ * log roots and the scan interval are startup-resolved and have no UI.
+ */
+const MutableUsagePricingConfigSchema = z
+  .object({
+    autoUpdate: z.boolean().default(true),
+    overrides: z.array(UsagePricingOverrideSchema).optional(),
+  })
+  .passthrough();
+
+const MutableUsageConfigSchema = z
+  .object({
+    pricing: MutableUsagePricingConfigSchema.optional(),
+  })
+  .passthrough();
+
+/**
+ * The same section as a patch. `autoUpdate` carries no default here: filling it
+ * in would switch auto-update back on for anyone who only edited a price.
+ */
+const MutableUsageConfigPatchSchema = z
+  .object({
+    pricing: z
+      .object({
+        autoUpdate: z.boolean().optional(),
+        overrides: z.array(UsagePricingOverrideSchema).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -257,6 +296,7 @@ export const MutableDaemonConfigSchema = z
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    usage: MutableUsageConfigSchema.optional(),
   })
   .passthrough();
 
@@ -277,6 +317,7 @@ export const MutableDaemonConfigPatchSchema = z
     agentProfiles: z.array(AgentProfileSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    usage: MutableUsageConfigPatchSchema.optional(),
   })
   .partial()
   .passthrough();
@@ -3145,6 +3186,11 @@ export const SessionEventSubscriptionSchema = z.enum([
   "activity_log",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
+  // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19. A client only
+  // asks for these once `features.usage` is advertised; an older daemon would
+  // reject the whole subscription request.
+  "usage.backfill.progress",
+  "usage.pricing.updated",
 ]);
 export type SessionEventSubscription = z.infer<typeof SessionEventSubscriptionSchema>;
 export const SessionEventsSetSubscriptionRequestSchema = z.object({
@@ -3384,6 +3430,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
   UsageReportGetRequestSchema,
+  UsagePricingListRequestSchema,
+  UsagePricingRefreshRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -6933,6 +6981,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DaemonUpdateResponseSchema,
   UsageReportGetResponseSchema,
   UsageBackfillProgressMessageSchema,
+  UsagePricingListResponseSchema,
+  UsagePricingRefreshResponseSchema,
+  UsagePricingUpdatedMessageSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

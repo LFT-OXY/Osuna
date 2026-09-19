@@ -542,6 +542,14 @@ type UsageReportPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.report.get.response" }
 >["payload"];
+type UsagePricingListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.pricing.list.response" }
+>["payload"];
+type UsagePricingRefreshPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.pricing.refresh.response" }
+>["payload"];
 
 export interface UsageReportOptions {
   /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
@@ -5826,6 +5834,22 @@ export class DaemonClient {
         ...(options.trend ? { trend: options.trend } : {}),
       },
       responseType: "usage.report.get.response",
+    });
+  }
+
+  async usagePricingList(requestId?: string): Promise<UsagePricingListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.pricing.list.request" },
+      responseType: "usage.pricing.list.response",
+    });
+  }
+
+  async usagePricingRefresh(requestId?: string): Promise<UsagePricingRefreshPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.pricing.refresh.request" },
+      responseType: "usage.pricing.refresh.response",
     });
   }
 

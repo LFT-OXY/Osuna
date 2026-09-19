@@ -16,6 +16,7 @@ import {
   PluginSourceSchema,
   TerminalProfileSchema,
 } from "@getpaseo/protocol/messages";
+import { UsagePricingOverrideSchema } from "@getpaseo/protocol/usage/types";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -71,6 +72,22 @@ const OpenAiProviderSchema = z
 const LocalSpeechProviderSchema = z
   .object({
     modelsDir: z.string().min(1).optional(),
+  })
+  .strict();
+
+/**
+ * The usage feature's persisted settings. Only the price table is here: the log
+ * roots and the scan interval are constants with environment escape hatches.
+ */
+const FeatureUsageSchema = z
+  .object({
+    pricing: z
+      .object({
+        autoUpdate: z.boolean().optional(),
+        overrides: z.array(UsagePricingOverrideSchema).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -327,6 +344,7 @@ export const PersistedConfigSchema = z
         dictation: FeatureDictationSchema.optional(),
         voiceMode: FeatureVoiceModeSchema.optional(),
         webUi: FeatureWebUiSchema.optional(),
+        usage: FeatureUsageSchema.optional(),
       })
       .strict()
       .optional(),

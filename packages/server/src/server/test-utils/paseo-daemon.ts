@@ -206,7 +206,13 @@ async function prepareTestDaemonConfig(
     plugins: options.plugins,
     // Default to no log roots so a test daemon never scans the developer's
     // real Claude/Codex/Pi/OMP transcripts.
-    usage: options.usage ?? { roots: { claude: [], codex: [], pi: [], omp: [] } },
+    usage: {
+      roots: { claude: [], codex: [], pi: [], omp: [] },
+      ...options.usage,
+      // No test daemon reaches out for a price table on its own; a suite about
+      // the refresh schedule turns it back on.
+      pricing: { autoUpdate: false, ...options.usage?.pricing },
+    },
   };
   return { config, paseoHomeRoot, paseoHome, staticDir };
 }

@@ -16,10 +16,8 @@ import type {
   UsageTrendStackBy,
 } from "@getpaseo/protocol/usage/types";
 import type { UsageProjectAttribution } from "./project-attribution.js";
-import type { UsageBucketRow } from "./types.js";
+import { modelRowKey, type UsageBucketRow } from "./types.js";
 
-/** Estimated cost lands with the price table; until then every amount is unpriced. */
-const UNPRICED_COST = 0;
 const HEATMAP_DAYS = 182;
 const PROJECT_LIMIT = 200;
 
@@ -31,20 +29,41 @@ export interface UsageReportRequest {
   trend?: { granularity?: UsageTrendGranularity; stackBy: UsageTrendStackBy };
 }
 
+/**
+ * What one model costs and whether the table knows it. The report asks per
+ * model, not per row, because the answer is memoized behind this port.
+ */
+export interface UsageReportPricing {
+  estimateCost(totals: UsageTokenTotals, model: string): number;
+  isPriced(model: string): boolean;
+}
+
 export interface BuildUsageReportInput {
   rows: UsageBucketRow[];
   request: UsageReportRequest;
   projects: Map<string, UsageProjectAttribution>;
+  pricing: UsageReportPricing;
   backfill: UsageBackfill;
   error: string | null;
   now: number;
 }
 
+/**
+ * Cost is summed per row, not derived from a block's totals: two models in one
+ * block have two prices, and adding their dollars is the only way to get one
+ * number for both.
+ */
+type PricedRow = UsageBucketRow & { cost: number };
+
 export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
   const { request } = input;
   const local = createLocalTimeResolver(request.timezone);
   const today = local.day(input.now);
-  const filtered = input.rows.filter((row) => matchesFilters(row, request.filters, input.projects));
+  const filtered: PricedRow[] = [];
+  for (const row of input.rows) {
+    if (!matchesFilters(row, request.filters, input.projects)) continue;
+    filtered.push({ ...row, cost: input.pricing.estimateCost(row, row.model) });
+  }
 
   const inRange = filtered.filter((row) => {
     const day = local.day(Date.parse(row.bucket));
@@ -60,7 +79,7 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
   return {
     summary: buildSummary(inRange, filtered, local, today),
     sources: buildSources(inRange),
-    models: buildModels(inRange),
+    models: buildModels(inRange, input.pricing),
     trend: buildTrend(inRange, local, granularity, stackBy),
     days: buildDays(inRange, local),
     months: buildMonths(inRange, local),
@@ -72,20 +91,20 @@ export function buildUsageReport(input: BuildUsageReportInput): UsageReport {
 }
 
 function buildSummary(
-  inRange: UsageBucketRow[],
-  filtered: UsageBucketRow[],
+  inRange: PricedRow[],
+  filtered: PricedRow[],
   local: LocalTimeResolver,
   today: string,
 ): UsageReport["summary"] {
-  const totals = emptyTotals();
+  const amount = emptyAmount();
   const sessions = new Set<string>();
   for (const row of inRange) {
-    addTotals(totals, row);
+    addRow(amount, row);
     sessions.add(row.sessionId);
   }
   return {
-    totals,
-    estimatedCost: UNPRICED_COST,
+    totals: amount.totals,
+    estimatedCost: amount.estimatedCost,
     sessionCount: sessions.size,
     last7Days: trailingDays(filtered, local, today, 7),
     last30Days: trailingDays(filtered, local, today, 30),
@@ -93,66 +112,66 @@ function buildSummary(
 }
 
 function trailingDays(
-  rows: UsageBucketRow[],
+  rows: PricedRow[],
   local: LocalTimeResolver,
   today: string,
   days: number,
 ): UsageAmount {
   const from = shiftDay(today, -(days - 1));
-  const totals = emptyTotals();
+  const amount = emptyAmount();
   for (const row of rows) {
     const day = local.day(Date.parse(row.bucket));
     if (day < from || day > today) continue;
-    addTotals(totals, row);
+    addRow(amount, row);
   }
-  return { totals, estimatedCost: UNPRICED_COST };
+  return amount;
 }
 
-function buildSources(rows: UsageBucketRow[]): UsageSourceBreakdown[] {
+function buildSources(rows: PricedRow[]): UsageSourceBreakdown[] {
   const bySource = new Map<
     string,
-    { cli: UsageCli; backend: string | null; totals: UsageTokenTotals; models: Set<string> }
+    { cli: UsageCli; backend: string | null; amount: UsageAmount; models: Set<string> }
   >();
   for (const row of rows) {
     const key = `${row.cli}\u0000${row.backend ?? ""}`;
     let entry = bySource.get(key);
     if (!entry) {
-      entry = { cli: row.cli, backend: row.backend, totals: emptyTotals(), models: new Set() };
+      entry = { cli: row.cli, backend: row.backend, amount: emptyAmount(), models: new Set() };
       bySource.set(key, entry);
     }
-    addTotals(entry.totals, row);
+    addRow(entry.amount, row);
     entry.models.add(row.model);
   }
 
   const grandTotal = Array.from(bySource.values()).reduce(
-    (sum, entry) => sum + billableTokens(entry.totals),
+    (sum, entry) => sum + billableTokens(entry.amount.totals),
     0,
   );
   return Array.from(bySource.values())
     .map((entry) => ({
       cli: entry.cli,
       backend: entry.backend,
-      totals: entry.totals,
-      estimatedCost: UNPRICED_COST,
+      totals: entry.amount.totals,
+      estimatedCost: entry.amount.estimatedCost,
       modelCount: entry.models.size,
-      share: grandTotal > 0 ? billableTokens(entry.totals) / grandTotal : 0,
+      share: grandTotal > 0 ? billableTokens(entry.amount.totals) / grandTotal : 0,
     }))
     .sort(byTokensDescending);
 }
 
-function buildModels(rows: UsageBucketRow[]): UsageModelBreakdown[] {
+function buildModels(rows: PricedRow[], pricing: UsageReportPricing): UsageModelBreakdown[] {
   const byModel = new Map<
     string,
-    { model: string; cli: UsageCli; backend: string | null; totals: UsageTokenTotals }
+    { model: string; cli: UsageCli; backend: string | null; amount: UsageAmount }
   >();
   for (const row of rows) {
-    const key = `${row.cli}\u0000${row.backend ?? ""}\u0000${row.model}`;
+    const key = modelRowKey(row);
     let entry = byModel.get(key);
     if (!entry) {
-      entry = { model: row.model, cli: row.cli, backend: row.backend, totals: emptyTotals() };
+      entry = { model: row.model, cli: row.cli, backend: row.backend, amount: emptyAmount() };
       byModel.set(key, entry);
     }
-    addTotals(entry.totals, row);
+    addRow(entry.amount, row);
   }
   return Array.from(byModel.values())
     .map(
@@ -160,21 +179,21 @@ function buildModels(rows: UsageBucketRow[]): UsageModelBreakdown[] {
         model: entry.model,
         cli: entry.cli,
         backend: entry.backend,
-        totals: entry.totals,
-        estimatedCost: UNPRICED_COST,
-        priced: false,
+        totals: entry.amount.totals,
+        estimatedCost: entry.amount.estimatedCost,
+        priced: pricing.isPriced(entry.model),
       }),
     )
     .sort(byTokensDescending);
 }
 
 function buildTrend(
-  rows: UsageBucketRow[],
+  rows: PricedRow[],
   local: LocalTimeResolver,
   granularity: UsageTrendGranularity,
   stackBy: UsageTrendStackBy,
 ): UsageTrend {
-  const points = new Map<string, Map<string, UsageTokenTotals>>();
+  const points = new Map<string, Map<string, UsageAmount>>();
   const periodOf = periodResolver(local, granularity);
   for (const row of rows) {
     const key = periodOf(Date.parse(row.bucket));
@@ -184,12 +203,12 @@ function buildTrend(
       groups = new Map();
       points.set(key, groups);
     }
-    let totals = groups.get(group);
-    if (!totals) {
-      totals = emptyTotals();
-      groups.set(group, totals);
+    let amount = groups.get(group);
+    if (!amount) {
+      amount = emptyAmount();
+      groups.set(group, amount);
     }
-    addTotals(totals, row);
+    addRow(amount, row);
   }
 
   return {
@@ -197,36 +216,28 @@ function buildTrend(
     stackBy,
     points: Array.from(points.entries())
       .sort(([a], [b]) => compareKeys(a, b))
-      .map(([key, groups]) => ({
-        key,
-        groups: Object.fromEntries(
-          Array.from(groups.entries()).map(([group, totals]) => [
-            group,
-            { totals, estimatedCost: UNPRICED_COST },
-          ]),
-        ),
-      })),
+      .map(([key, groups]) => ({ key, groups: Object.fromEntries(groups) })),
   };
 }
 
-function buildDays(rows: UsageBucketRow[], local: LocalTimeResolver): UsageDayBreakdown[] {
+function buildDays(rows: PricedRow[], local: LocalTimeResolver): UsageDayBreakdown[] {
   return groupByPeriod(rows, (row) => local.day(Date.parse(row.bucket))).map(
     ([day, bucket]): UsageDayBreakdown => ({
       day,
-      totals: bucket.totals,
-      estimatedCost: UNPRICED_COST,
+      totals: bucket.amount.totals,
+      estimatedCost: bucket.amount.estimatedCost,
       sessionCount: bucket.sessions.size,
       turns: bucket.turns,
     }),
   );
 }
 
-function buildMonths(rows: UsageBucketRow[], local: LocalTimeResolver): UsageMonthBreakdown[] {
+function buildMonths(rows: PricedRow[], local: LocalTimeResolver): UsageMonthBreakdown[] {
   return groupByPeriod(rows, (row) => local.month(Date.parse(row.bucket))).map(
     ([month, bucket]): UsageMonthBreakdown => ({
       month,
-      totals: bucket.totals,
-      estimatedCost: UNPRICED_COST,
+      totals: bucket.amount.totals,
+      estimatedCost: bucket.amount.estimatedCost,
       sessionCount: bucket.sessions.size,
       turns: bucket.turns,
     }),
@@ -234,24 +245,24 @@ function buildMonths(rows: UsageBucketRow[], local: LocalTimeResolver): UsageMon
 }
 
 interface PeriodBucket {
-  totals: UsageTokenTotals;
+  amount: UsageAmount;
   sessions: Set<string>;
   turns: number;
 }
 
 function groupByPeriod(
-  rows: UsageBucketRow[],
-  keyOf: (row: UsageBucketRow) => string,
+  rows: PricedRow[],
+  keyOf: (row: PricedRow) => string,
 ): Array<[string, PeriodBucket]> {
   const periods = new Map<string, PeriodBucket>();
   for (const row of rows) {
     const key = keyOf(row);
     let bucket = periods.get(key);
     if (!bucket) {
-      bucket = { totals: emptyTotals(), sessions: new Set(), turns: 0 };
+      bucket = { amount: emptyAmount(), sessions: new Set(), turns: 0 };
       periods.set(key, bucket);
     }
-    addTotals(bucket.totals, row);
+    addRow(bucket.amount, row);
     bucket.sessions.add(row.sessionId);
     bucket.turns += row.turns;
   }
@@ -260,7 +271,7 @@ function groupByPeriod(
 
 /** The heatmap always shows the same trailing window, whatever range is selected. */
 function buildHeatmap(
-  rows: UsageBucketRow[],
+  rows: PricedRow[],
   local: LocalTimeResolver,
   today: string,
 ): UsageHeatmapDay[] {
@@ -286,15 +297,15 @@ function buildHeatmap(
 }
 
 function buildProjects(
-  rows: UsageBucketRow[],
+  rows: PricedRow[],
   attributions: Map<string, UsageProjectAttribution>,
 ): UsageProjectBreakdown[] {
   const byProject = new Map<
     string,
     {
       attribution: UsageProjectAttribution;
-      totals: UsageTokenTotals;
-      cwds: Map<string, UsageTokenTotals>;
+      amount: UsageAmount;
+      cwds: Map<string, UsageAmount>;
     }
   >();
   for (const row of rows) {
@@ -302,16 +313,16 @@ function buildProjects(
     if (!attribution) continue;
     let entry = byProject.get(attribution.rootPath);
     if (!entry) {
-      entry = { attribution, totals: emptyTotals(), cwds: new Map() };
+      entry = { attribution, amount: emptyAmount(), cwds: new Map() };
       byProject.set(attribution.rootPath, entry);
     }
-    addTotals(entry.totals, row);
-    let cwdTotals = entry.cwds.get(row.cwd);
-    if (!cwdTotals) {
-      cwdTotals = emptyTotals();
-      entry.cwds.set(row.cwd, cwdTotals);
+    addRow(entry.amount, row);
+    let cwdAmount = entry.cwds.get(row.cwd);
+    if (!cwdAmount) {
+      cwdAmount = emptyAmount();
+      entry.cwds.set(row.cwd, cwdAmount);
     }
-    addTotals(cwdTotals, row);
+    addRow(cwdAmount, row);
   }
 
   return Array.from(byProject.values())
@@ -319,10 +330,14 @@ function buildProjects(
       rootPath: entry.attribution.rootPath,
       displayName: entry.attribution.displayName,
       kind: entry.attribution.kind,
-      totals: entry.totals,
-      estimatedCost: UNPRICED_COST,
+      totals: entry.amount.totals,
+      estimatedCost: entry.amount.estimatedCost,
       cwds: Array.from(entry.cwds.entries())
-        .map(([cwd, totals]) => ({ cwd, totals, estimatedCost: UNPRICED_COST }))
+        .map(([cwd, amount]) => ({
+          cwd,
+          totals: amount.totals,
+          estimatedCost: amount.estimatedCost,
+        }))
         .sort(byTokensDescending),
     }))
     .sort(byTokensDescending)
@@ -395,12 +410,21 @@ function emptyTotals(): UsageTokenTotals {
   return { input: 0, cachedInput: 0, cacheWrite: 0, output: 0, reasoning: 0 };
 }
 
+function emptyAmount(): UsageAmount {
+  return { totals: emptyTotals(), estimatedCost: 0 };
+}
+
 function addTotals(target: UsageTokenTotals, row: UsageTokenTotals): void {
   target.input += row.input;
   target.cachedInput += row.cachedInput;
   target.cacheWrite += row.cacheWrite;
   target.output += row.output;
   target.reasoning += row.reasoning;
+}
+
+function addRow(target: UsageAmount, row: PricedRow): void {
+  addTotals(target.totals, row);
+  target.estimatedCost += row.cost;
 }
 
 interface LocalTimeResolver {

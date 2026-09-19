@@ -194,7 +194,7 @@ Pi 与 OMP：
 - **`usage.agent.turns.list { agentId }`**：`{ turns: [{ cli, backend, sessionId, turnKey, turnId: string | null, userMessageIds, startedAt, endedAt, durationMs, byModel: [{ model, 五列, estimatedCost, priced }], totals, estimatedCost, priced }], complete }`，按 `startedAt` 升序，不分页、无 `since`。Codex 历史轮无 `turnId` 时 daemon 按 durable timeline 的 user_message 时间戳与 `startedAt` 在 ±30 秒内最近匹配补上；Claude/Pi/OMP 不做时间匹配。
 - **`usage.pricing.list`**（无参）：`{ table: { fetchedAt, source: "cache"|"snapshot", autoUpdate }, models: [{ model, cli, backend, priced, priceSource: "override"|"table"|null, matchedKey, pricePerMillion | null, lastSeenAt }] }`，`priced=false` 在前、再按 `lastSeenAt` 倒序。
 - **`usage.pricing.refresh`**（无参）：`{ result: "updated"|"not_modified"|"failed", fetchedAt, error | null }`，忽略 `autoUpdate` 开关。
-- 广播：`usage.backfill.progress`（字段同 `backfill`）、`usage.updated { cli, sessionId, agentId? }`、`usage.pricing.updated`（无 payload）。
+- 广播：`usage.backfill.progress`（字段同 `backfill`）、`usage.updated { cli, sessionId, agentId? }`、`usage.pricing.updated`（无 payload）。三条都必须同时是 `SessionEventSubscriptionSchema` 的事件类别并在 `sessionEventCategory()` 里返回自身，客户端用 `observeEvents([...])` 订阅——否则带 `ownedSubscriptions` 能力的客户端会被 `SessionDelivery.permits()` 静默丢弃，`broadcast()` 看不出任何异常。客户端发这几个类别名前要过 `features.usage` 门控：`SessionEventSubscriptionSchema` 是 `z.enum`，老 daemon 见到不认识的名字会整条订阅请求失败。`usage.pricing.updated` 不带 payload，因为带 `requestId` 的 payload 会被会话的回复分类器（`session/owned-subscriptions/replies.ts`）当成回复，必须在 `exceptions` 表里登记才编译得过。
 - 写价格配置走现有 `set_daemon_config`，不另起 RPC。
 - 项目归属：行只有 cwd，顺序为项目注册表（cwd 在某 `projectRootPath` 之下）→ 向上找 git 根（按 cwd 缓存）→ cwd 本身（目录已不存在也落这里）。
 - 客户端 inbound 校验由 zod-aot 生成，新 schema 遵守 `docs/protocol-validation.md` 的纯净规则（无 transform / catch / preprocess，默认值只在原始叶子上）。
@@ -203,8 +203,8 @@ Pi 与 OMP：
 
 - 内置快照放在用量服务的 pricing 子目录，同目录附 LiteLLM 的 MIT LICENSE 原文。快照与缓存共用 `PricingTable = { _meta: { source, fetchedAt, etag, license }, models: { <key>: { input, cachedInput, cacheWrite, output } } }`，单价为美元 / 每 token 原值；精简规则：跳过 `sample_spec`、只留四列、四列全空丢弃、缺列 `null` 计价按 0。精简后约 3700 条、444KB。
 - 快照刷新是手动脚本，发版前跑，`docs/release.md` 完成清单加一行。不做 CI 自动提交。
-- 自动更新：启动后延迟 30 秒检查（缓存缺失或 `fetchedAt` 超 24 小时才发请求），之后每 24 小时；`If-None-Match` 条件 GET，304 只更新 `fetchedAt`；超时 15 秒；失败 1 小时后再试、只记 info；响应非法 JSON 或形状异常视同失败、不覆盖缓存。启动时取缓存与快照中 `fetchedAt` 较新者，缓存解析失败则删除并用快照。这是 daemon 唯一自发的出站请求，文档必须写明。
-- 配置字段 `features.usage.pricing.autoUpdate: boolean`（默认 true）与 `features.usage.pricing.overrides: PricingOverride[]`，环境变量 `PASEO_USAGE_PRICING_AUTO_UPDATE=0|1` 启动时覆盖。两者是运行时安全字段，进可变配置 schema。
+- 自动更新：启动后延迟 30 秒检查（缓存缺失或 `fetchedAt` 超 24 小时才发请求，「缓存缺失」即当前表来自内置快照——快照日期再新也算没联过网），之后每 24 小时；`If-None-Match` 条件 GET，304 只更新 `fetchedAt`（表内容与来源都不动：被确认为最新的快照仍然是快照，`usage.pricing.list` 的 `table.source` 不能因此翻成 `cache`）；超时 15 秒；失败 1 小时后再试、只记 info；响应非法 JSON 或形状异常视同失败、不覆盖缓存。启动时取缓存与快照中 `fetchedAt` 较新者，缓存解析失败则删除并用快照。这是 daemon 唯一自发的出站请求，文档必须写明。
+- 配置字段 `features.usage.pricing.autoUpdate: boolean`（默认 true）与 `features.usage.pricing.overrides: PricingOverride[]`，环境变量 `PASEO_USAGE_PRICING_AUTO_UPDATE=0|1` 启动时覆盖。两者是运行时安全字段，进可变配置 schema：持久化路径 `features.usage.pricing.*` ↔ 可变配置路径 `usage.pricing.*`，两张表（`RELOADABLE_PATHS`、`PERSISTED_TO_MUTABLE_PATH`）都要登记，并在 `features.*` 下补一个落盘合并分支。补丁 schema 里 `autoUpdate` 不带默认值，否则只改价格的一次 `set_daemon_config` 会把自动更新重新打开。运行期唯一真值是可变配置，服务通过一个 `resolveUsagePricingSettings` 读，不在各调用点重复 `?? 默认值`。
 - `PricingOverride = { model: string, pricePerMillion: { input, cachedInput, cacheWrite, output }, note?: string }`：精确匹配（trim + 不分大小写）、不限来源、存每百万 token；`model` 在数组内唯一，重复后者为准；四列非负，0 算已定价；删除 = 从数组移除。
 - 成本 = input × 输入价 + cachedInput × 缓存读价 + cacheWrite × 缓存写价 + output × 输出价；reasoning 不单独计价。长上下文分档、Claude 1 小时缓存写入加价、OpenAI 服务档位一律不算，记为已知偏差。
 - 匹配顺序（命中即停，按 model 缓存结果，表或覆盖变化时清空含负缓存）：覆盖表精确 → 原始 id（原样 / 小写）→ Claude 归一化（点转横线、`sonnet-4-5` 补 `claude-`）→ 去 `-YYYYMMDD` 后缀 → 剥 provider 路径取末段再走前两步 → 在所有以 `/<末段>` 结尾的键里按固定偏好序挑（anthropic, openai, gemini, deepseek, zai, moonshot, xai, mistral, groq, openrouter，都不在则字典序最小）→ 未命中四列 0、`priced=false`。不做反向子串、不按 Pi/OMP 后端名拼前缀、不剥推理档位后缀。存储与展示永远用原始 model id。
@@ -273,7 +273,7 @@ Pi 与 OMP：
 
 ### 测试接缝（三个，高到低）
 
-**接缝 1（主）：daemon 的 WebSocket RPC 边界，进程内真 daemon。** 用现有 `createTestPaseoDaemon` / `createDaemonTestContext` + `DaemonClient` 起一个 daemon，`PASEO_HOME` 为临时目录，四个日志根指向临时目录里预先放好的夹具日志，扫描间隔与时钟注入，价格表 fetch 注入为内存适配器（返回固定 JSON / 304 / 失败）。为此 daemon 运行时配置新增 `usage` 段（根目录、扫描间隔、pricing fetch、autoUpdate），测试 daemon 选项透传，这是唯一新增的注入点。在这个接缝上验证：
+**接缝 1（主）：daemon 的 WebSocket RPC 边界，进程内真 daemon。** 用现有 `createTestPaseoDaemon` / `createDaemonTestContext` + `DaemonClient` 起一个 daemon，`PASEO_HOME` 为临时目录，四个日志根指向临时目录里预先放好的夹具日志，扫描间隔与时钟注入，价格表 fetch 注入为内存适配器（返回固定 JSON / 304 / 失败）。为此 daemon 运行时配置新增 `usage` 段（根目录、扫描间隔、`now`、`pricing.{autoUpdate, overrides, fetch, timers, snapshot}`），测试 daemon 选项透传，这是唯一新增的注入点。其中 `pricing.timers` 把刷新调度的 `setTimeout` 换成返回取消函数的端口，配合注入的 `now` 就能在进程内把时钟推进一天；`pricing.snapshot` 顶替内置快照，与计价无关的套件传一张空表，这样内置快照每次发版刷新都不会改动它们的期望值。测试 harness 默认 `pricing.autoUpdate: false`，app 的 Playwright worker daemon 默认带 `PASEO_USAGE_PRICING_AUTO_UPDATE=0`：否则每个 daemon 都会在启动 30 秒后真的去 GitHub 拉价格表。在这个接缝上验证：
 
 - 四家日志各一份夹具 → `usage.report.get` 的 `summary` / `sources` / `models` / `days` / `projects` 全值；同一夹具在不同 `timezone` 下 `days` 的分法。
 - 回填进度事件序列（`running` → `done`）、`backfill` 字段；daemon 关闭再以同一 `PASEO_HOME` 重启后不重复计数、报表不变。

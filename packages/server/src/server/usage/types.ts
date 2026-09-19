@@ -195,6 +195,11 @@ export function bucketRowKey(row: UsageBucketKey): string {
   );
 }
 
+/** Identifies one model as a report or the price table groups it. */
+export function modelRowKey(row: Pick<UsageBucketRow, "cli" | "backend" | "model">): string {
+  return [row.cli, row.backend ?? "", row.model].join(KEY_SEPARATOR);
+}
+
 /** The `buckets-YYYY-MM.jsonl` a row belongs to, by its UTC bucket. */
 export function bucketMonth(bucket: string): string {
   return bucket.slice(0, 7);

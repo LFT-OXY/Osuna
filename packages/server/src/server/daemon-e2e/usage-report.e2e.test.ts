@@ -26,6 +26,20 @@ const DAY = "2026-09-18";
 
 const tempRoots: string[] = [];
 
+/**
+ * This suite is about aggregation, so nothing is priced: the built-in snapshot
+ * would otherwise move these numbers every time it is refreshed.
+ */
+const UNPRICED: NonNullable<
+  NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["usage"]
+>["pricing"] = {
+  autoUpdate: false,
+  snapshot: {
+    _meta: { source: "test", fetchedAt: "2026-09-18T00:00:00.000Z", etag: null, license: "MIT" },
+    models: {},
+  },
+};
+
 function totals(
   input: number,
   cachedInput: number,
@@ -69,6 +83,7 @@ function usageConfig(
     roots: { claude: [root], codex: [], pi: [], omp: [] },
     scanIntervalMs: SCAN_INTERVAL_MS,
     now: () => NOW,
+    pricing: UNPRICED,
   };
 }
 
@@ -355,7 +370,12 @@ describe("usage bucket files", () => {
       `${lines.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     );
 
-    const daemon = await createTestPaseoDaemon({ paseoHomeRoot, staticDir, cleanup: false });
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot,
+      staticDir,
+      cleanup: false,
+      usage: { roots: { claude: [], codex: [], pi: [], omp: [] }, pricing: UNPRICED },
+    });
     const client = await connect(daemon);
     try {
       const { requestId: _requestId, ...report } = await client.usageReportGet({
@@ -442,6 +462,7 @@ describe("usage report with two sources", () => {
         },
         scanIntervalMs: SCAN_INTERVAL_MS,
         now: () => NOW,
+        pricing: UNPRICED,
       },
     });
     const client = await connect(daemon);
@@ -559,6 +580,7 @@ describe("usage report across Pi and OMP backends", () => {
         roots: { claude: [], codex: [], pi: [await seedPiRoot()], omp: [await seedOmpRoot()] },
         scanIntervalMs: SCAN_INTERVAL_MS,
         now: () => NOW,
+        pricing: UNPRICED,
       },
     });
     const client = await connect(daemon);

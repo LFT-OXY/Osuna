@@ -149,7 +149,7 @@ import {
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { UsageService } from "./usage/service.js";
-import type { UsageConfig } from "./usage/config.js";
+import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
@@ -527,6 +527,11 @@ function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | stri
   return config.trustedProxies ?? ["loopback"];
 }
 
+function resolveMutableUsageSection(config: PaseoDaemonConfig): MutableDaemonConfig["usage"] {
+  const { autoUpdate, overrides } = resolveUsagePricingSettings(config.usage?.pricing);
+  return { pricing: { autoUpdate, overrides: [...overrides] } };
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
@@ -555,6 +560,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
+    usage: resolveMutableUsageSection(config),
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -1361,7 +1367,12 @@ export async function createPaseoDaemon(
         wrapSessionMessage({ type: "usage.backfill.progress", payload: backfill }),
       );
     },
+    getPricingConfig: () => resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing),
+    onPricingUpdated: () => {
+      wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
+    },
   });
+  daemonConfigStore.onChange(() => usageService.applyPricingConfig());
   logger.info({ elapsed: elapsed() }, "Loading persisted agent registry");
   const persistedRecords = await agentStorage.list();
   logger.info(

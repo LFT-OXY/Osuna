@@ -3,10 +3,22 @@ import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import type { Logger } from "pino";
-import type { UsageBackfill, UsageCli, UsageReport } from "@getpaseo/protocol/usage/types";
+import type {
+  UsageBackfill,
+  UsageCli,
+  UsagePricingModel,
+  UsagePricingTableInfo,
+  UsageReport,
+  UsageTokenTotals,
+} from "@getpaseo/protocol/usage/types";
 import type { PersistedProjectRecord } from "../workspace-registry.js";
-import type { UsageConfig } from "./config.js";
+import type { UsageConfig, UsagePricingSettings } from "./config.js";
 import { resolveUsageLogRoots, type UsageLogRoots } from "./log-roots.js";
+import {
+  UsagePricingService,
+  type UsagePricingModelRef,
+  type UsagePricingRefreshOutcome,
+} from "./pricing/service.js";
 import { UsageProjectResolver } from "./project-attribution.js";
 import { buildUsageReport, type UsageReportRequest } from "./report.js";
 import { USAGE_SOURCE_ADAPTERS, type UsageSourceAdapter } from "./sources.js";
@@ -15,6 +27,7 @@ import {
   emptyScanState,
   isMissingPathError,
   mergeBucketRow,
+  modelRowKey,
   type UsageBucketRow,
   type UsageParserState,
   type UsageScanCursor,
@@ -37,6 +50,9 @@ export interface UsageServiceOptions {
   logger: Logger;
   listProjects: () => Promise<PersistedProjectRecord[]>;
   onBackfillProgress: (backfill: UsageBackfill) => void;
+  /** Reads the live price settings from the daemon config, which owns them. */
+  getPricingConfig: () => UsagePricingSettings;
+  onPricingUpdated: () => void;
 }
 
 interface DiscoveredFile {
@@ -65,6 +81,8 @@ export class UsageService {
   private readonly projects: UsageProjectResolver;
   private readonly onBackfillProgress: (backfill: UsageBackfill) => void;
   private readonly now: () => number;
+  private readonly pricing: UsagePricingService;
+  private readonly getPricingConfig: () => UsagePricingSettings;
 
   private roots: UsageLogRoots = { claude: [], codex: [], pi: [], omp: [] };
   private rows = new Map<string, UsageBucketRow>();
@@ -92,6 +110,19 @@ export class UsageService {
     this.projects = new UsageProjectResolver({ listProjects: options.listProjects });
     this.onBackfillProgress = options.onBackfillProgress;
     this.now = options.config?.now ?? (() => Date.now());
+    this.getPricingConfig = options.getPricingConfig;
+    const pricingConfig = options.getPricingConfig();
+    this.pricing = new UsagePricingService({
+      store: this.store,
+      logger: this.logger,
+      now: this.now,
+      autoUpdate: pricingConfig.autoUpdate,
+      overrides: pricingConfig.overrides,
+      fetch: options.config?.pricing?.fetch,
+      timers: options.config?.pricing?.timers,
+      snapshot: options.config?.pricing?.snapshot,
+      onUpdated: options.onPricingUpdated,
+    });
   }
 
   /** Loads what is already on disk, then starts the backfill round in the background. */
@@ -99,6 +130,7 @@ export class UsageService {
     this.roots = this.config?.roots ?? (await resolveUsageLogRoots());
     this.applyRows(await this.store.loadRows());
     this.scanState = await this.store.loadScanState();
+    await this.pricing.start();
     this.startRound({ backfill: true });
     this.timer = setInterval(() => this.startRound({ backfill: false }), this.scanIntervalMs);
     this.timer.unref();
@@ -106,6 +138,7 @@ export class UsageService {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.pricing.dispose();
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -120,10 +153,44 @@ export class UsageService {
       rows,
       request,
       projects: attributions,
+      pricing: {
+        estimateCost: (totals: UsageTokenTotals, model: string) =>
+          this.pricing.estimateCost(totals, model),
+        isPriced: (model: string) => this.pricing.priceFor(model).priced,
+      },
       backfill: this.backfill,
       error: this.lastError,
       now: this.now(),
     });
+  }
+
+  /** Every model the rows have ever carried, newest use first. */
+  listPricing(): { table: UsagePricingTableInfo; models: UsagePricingModel[] } {
+    const seen = new Map<string, UsagePricingModelRef>();
+    for (const row of this.rows.values()) {
+      const key = modelRowKey(row);
+      const existing = seen.get(key);
+      if (existing && existing.lastSeenAt >= row.bucket) continue;
+      seen.set(key, {
+        model: row.model,
+        cli: row.cli,
+        backend: row.backend,
+        lastSeenAt: row.bucket,
+      });
+    }
+    return {
+      table: this.pricing.getTableInfo(),
+      models: this.pricing.list(Array.from(seen.values())),
+    };
+  }
+
+  refreshPricing(): Promise<UsagePricingRefreshOutcome> {
+    return this.pricing.refresh();
+  }
+
+  /** Called when the daemon config changed; a no-op when the price settings did not. */
+  applyPricingConfig(): void {
+    this.pricing.applyConfig(this.getPricingConfig());
   }
 
   private startRound(options: { backfill: boolean }): void {

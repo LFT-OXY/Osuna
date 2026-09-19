@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { Logger } from "pino";
 import { writeFileAtomic, writeJsonFileAtomic } from "../atomic-file.js";
+import { PRICING_TABLE_SCHEMA, type PricingTable } from "./pricing/table.js";
 import {
   USAGE_BUCKET_ROW_SCHEMA,
   USAGE_SCAN_STATE_SCHEMA,
@@ -16,6 +17,7 @@ import {
 const BUCKET_FILE_PREFIX = "buckets-";
 const BUCKET_FILE_SUFFIX = ".jsonl";
 const SCAN_STATE_FILE = "scan-state.json";
+const PRICING_CACHE_FILE = "pricing-table.json";
 
 /**
  * Owns `$PASEO_HOME/usage/`. Bucket rows are append-only increments in a file
@@ -102,6 +104,37 @@ export class UsageStore {
 
   async saveScanState(state: UsageScanState): Promise<void> {
     await writeJsonFileAtomic(path.join(this.dir, SCAN_STATE_FILE), state);
+  }
+
+  /**
+   * The last table pulled from LiteLLM, or null when there is none to use. A
+   * cache that no longer parses is deleted rather than repaired: the built-in
+   * snapshot is always a valid fallback.
+   */
+  async loadPricingTable(): Promise<PricingTable | null> {
+    const filePath = path.join(this.dir, PRICING_CACHE_FILE);
+    let raw: string;
+    try {
+      raw = await fs.readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    const parsed = PRICING_TABLE_SCHEMA.safeParse(parseRow(raw));
+    if (!parsed.success) {
+      this.logger.warn({ err: parsed.error }, "Cached price table is unreadable; removing it");
+      await fs.rm(filePath, { force: true });
+      return null;
+    }
+    return parsed.data;
+  }
+
+  /** Written minified: the table is half a megabyte, and nobody hand-edits it. */
+  async savePricingTable(table: PricingTable): Promise<void> {
+    await writeFileAtomic(
+      path.join(this.dir, PRICING_CACHE_FILE),
+      JSON.stringify(PRICING_TABLE_SCHEMA.parse(table)),
+    );
   }
 
   private async listMonths(): Promise<string[]> {

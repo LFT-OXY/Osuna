@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildUsageReport, type UsageReportRequest } from "./report.js";
+import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
 import { emptyBucketRow, type UsageBucketRow } from "./types.js";
 
@@ -33,11 +33,27 @@ function row(input: {
   };
 }
 
-function build(rows: UsageBucketRow[], request: UsageReportRequest) {
+/** One dollar per output token for Opus, nothing known about anything else. */
+const PRICING: UsageReportPricing = {
+  estimateCost: (totals, model) => (model === "claude-opus-5" ? totals.output : 0),
+  isPriced: (model) => model === "claude-opus-5",
+};
+
+const UNPRICED: UsageReportPricing = {
+  estimateCost: () => 0,
+  isPriced: () => false,
+};
+
+function build(
+  rows: UsageBucketRow[],
+  request: UsageReportRequest,
+  pricing: UsageReportPricing = UNPRICED,
+) {
   return buildUsageReport({
     rows,
     request,
     projects: PROJECTS,
+    pricing,
     backfill: { state: "done", filesTotal: 0, filesDone: 0, startedAt: null },
     error: null,
     now: NOW,
@@ -193,6 +209,62 @@ describe("filters", () => {
             cwd: "/work/other/pkg",
             totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 4, reasoning: 0 },
             estimatedCost: 0,
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("estimated cost", () => {
+  const rows = [
+    row({ bucket: "2026-09-19T10:00:00.000Z", model: "claude-opus-5", output: 40, turns: 1 }),
+    row({ bucket: "2026-09-19T10:00:00.000Z", model: "mystery-model", output: 25, turns: 1 }),
+  ];
+
+  test("sums the priced model and leaves the unknown one at zero", () => {
+    const report = build(rows, { from: TODAY, to: TODAY, timezone: "UTC" }, PRICING);
+
+    expect(report.summary.estimatedCost).toBe(40);
+    expect(report.models).toEqual([
+      {
+        model: "claude-opus-5",
+        cli: "claude",
+        backend: null,
+        totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 40, reasoning: 0 },
+        estimatedCost: 40,
+        priced: true,
+      },
+      {
+        model: "mystery-model",
+        cli: "claude",
+        backend: null,
+        totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 25, reasoning: 0 },
+        estimatedCost: 0,
+        priced: false,
+      },
+    ]);
+    expect(report.days).toEqual([
+      {
+        day: TODAY,
+        totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 65, reasoning: 0 },
+        estimatedCost: 40,
+        sessionCount: 1,
+        turns: 2,
+      },
+    ]);
+    expect(report.projects).toEqual([
+      {
+        rootPath: "/work/demo",
+        displayName: "demo",
+        kind: "git",
+        totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 65, reasoning: 0 },
+        estimatedCost: 40,
+        cwds: [
+          {
+            cwd: "/work/demo",
+            totals: { input: 0, cachedInput: 0, cacheWrite: 0, output: 65, reasoning: 0 },
+            estimatedCost: 40,
           },
         ],
       },

@@ -68,7 +68,8 @@ $PASEO_HOME/
 │   └── {pluginId}/{version}/checkout/    # Source checkout for one installed Git commit
 ├── usage/
 │   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
-│   └── scan-state.json                   # One cursor per scanned CLI log file
+│   ├── scan-state.json                   # One cursor per scanned CLI log file
+│   └── pricing-table.json                # Last price table fetched from LiteLLM
 └── push-tokens.json                     # Expo push notification tokens
 ```
 
@@ -245,7 +246,8 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
   plugins: Record<pluginId, { source: "directory", path: string, enabled?: boolean }>,
   features: {
     dictation: { enabled, stt: { provider, model, language, confidenceThreshold } },
-    voiceMode: { enabled, llm, stt: { provider, model, language }, turnDetection, tts: { provider, model, voice, speakerId, speed } }
+    voiceMode: { enabled, llm, stt: { provider, model, language }, turnDetection, tts: { provider, model, voice, speakerId, speed } },
+    usage: { pricing: { autoUpdate, overrides: [{ model, pricePerMillion: { input, cachedInput, cacheWrite, output }, note }] } }
   },
   log: {
     level, format,
@@ -599,6 +601,27 @@ deliberate — the alternative loses everything written after the rewrite.
 
 Rows are flushed before the cursor. A crash between the two recounts at most one batch;
 the other order would drop it permanently.
+
+### Price table (`usage/pricing-table.json`)
+
+Written minified, validated with `PRICING_TABLE_SCHEMA`:
+
+```
+{
+  _meta: { source, fetchedAt, etag, license },
+  models: { "<model key>": { input, cachedInput, cacheWrite, output } }
+}
+```
+
+Four columns in US dollars per token; `null` means the vendor does not charge for that
+column. This file is a cache, not a source of truth — the daemon ships the same shape as
+a snapshot and takes whichever of the two has the newer `fetchedAt`. A file that fails to
+parse is deleted rather than repaired; the snapshot always works.
+
+Cost is never stored. Bucket rows hold tokens only and a report multiplies them at query
+time, so a corrected or newly added price reprices everything already recorded, with no
+migration and no backfill. `docs/usage.md` covers the refresh schedule, the single outbound
+request, and how user prices match.
 
 ---
 
