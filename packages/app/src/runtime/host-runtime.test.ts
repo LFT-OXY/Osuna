@@ -19,7 +19,10 @@ import { queryClient } from "@/data/query-client";
 import {
   HostRuntimeController,
   HostRuntimeStore,
+  readHostConnectionStatuses,
   readInitialDaemonConnectionHint,
+  type HostConnectionStatusSource,
+  type HostRuntimeConnectionStatus,
   type HostRuntimeControllerDeps,
   type HostRuntimeStorage,
 } from "./host-runtime";
@@ -3692,5 +3695,44 @@ describe("HostRuntimeStore initial connection hint bootstrap", () => {
 
     expect(seenProbes).not.toContainEqual(expect.objectContaining({ endpoint: "metro-host:8081" }));
     expect(store.getHosts()).toHaveLength(0);
+  });
+});
+
+describe("readHostConnectionStatuses", () => {
+  function fakeStore(
+    statuses: Record<string, HostRuntimeConnectionStatus>,
+  ): HostConnectionStatusSource {
+    return {
+      getSnapshot: (serverId: string) =>
+        statuses[serverId] === undefined ? null : { connectionStatus: statuses[serverId] },
+    };
+  }
+
+  it("keeps the same map while every status holds", () => {
+    const store = fakeStore({ a: "online", b: "offline" });
+    const first = readHostConnectionStatuses(store, ["a", "b"], null);
+    const second = readHostConnectionStatuses(store, ["a", "b"], first);
+    expect(second).toBe(first);
+    expect([...second.statuses]).toEqual([
+      ["a", "online"],
+      ["b", "offline"],
+    ]);
+  });
+
+  // The whole point: a frozen map left four screens reading a status from the
+  // render they first mounted on.
+  it("rebuilds the map when a host changes status", () => {
+    const statuses: Record<string, HostRuntimeConnectionStatus> = { a: "connecting" };
+    const store = fakeStore(statuses);
+    const first = readHostConnectionStatuses(store, ["a"], null);
+    statuses.a = "online";
+    const second = readHostConnectionStatuses(store, ["a"], first);
+    expect(second).not.toBe(first);
+    expect(second.statuses.get("a")).toBe("online");
+  });
+
+  it("reads a host the store has never seen as connecting", () => {
+    const snapshot = readHostConnectionStatuses(fakeStore({}), ["ghost"], null);
+    expect(snapshot.statuses.get("ghost")).toBe("connecting");
   });
 });

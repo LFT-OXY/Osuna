@@ -2986,6 +2986,16 @@ export const ja: TranslationResources = {
       pill: "取り込み中 {{done}} / {{total}}",
       hint: "新しい日付から順に取り込みます",
     },
+    hostFilter: {
+      label: "ホストで絞り込む",
+      allHosts: "すべてのホスト",
+      countedOne: "1 台を集計",
+      countedMany: "{{count}} 台を集計",
+      status: {
+        unsupported: "ホストの更新が必要",
+        disconnected: "集計対象外",
+      },
+    },
     stats: {
       title: "統計",
     },

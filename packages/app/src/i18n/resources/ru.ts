@@ -3011,6 +3011,16 @@ export const ru: TranslationResources = {
       pill: "Дозагрузка {{done}} / {{total}}",
       hint: "Сначала обрабатываются недавние дни",
     },
+    hostFilter: {
+      label: "Фильтр по хосту",
+      allHosts: "Все хосты",
+      countedOne: "Учтён 1 хост",
+      countedMany: "Учтено хостов: {{count}}",
+      status: {
+        unsupported: "Требуется обновление хоста",
+        disconnected: "Не учитывается",
+      },
+    },
     stats: {
       title: "Статистика",
     },

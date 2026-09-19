@@ -3001,6 +3001,16 @@ export const ptBR: TranslationResources = {
       pill: "Preenchendo {{done}} / {{total}}",
       hint: "Os dias mais recentes são preenchidos primeiro",
     },
+    hostFilter: {
+      label: "Filtrar por host",
+      allHosts: "Todos os hosts",
+      countedOne: "1 host contado",
+      countedMany: "{{count}} hosts contados",
+      status: {
+        unsupported: "Atualize o host",
+        disconnected: "Sem contar",
+      },
+    },
     stats: {
       title: "Estatísticas",
     },

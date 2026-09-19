@@ -57,14 +57,15 @@ function UsageScreenContent(): ReactElement {
   const [anchor, setAnchor] = useState(today);
   const [custom, setCustom] = useState<UsageCustomRange>({ from: today, to: today });
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
 
-  const { hosts } = useUsageHosts();
+  const { options: hostOptions, selection: hostSelection } = useUsageHosts(selectedServerId);
   const range = useMemo(
     () => resolveUsageRange({ period, anchor, custom }),
     [anchor, custom, period],
   );
   const { loadState, hostErrors, backfill, isError, isRefetching, refetch } = useUsageReport({
-    hosts,
+    hosts: hostSelection.hosts,
     range,
     stackBy: TREND_STACK_BY,
     timezone,
@@ -118,10 +119,13 @@ function UsageScreenContent(): ReactElement {
         today={today}
         selectedSourceKey={selectedSourceKey}
         isRefreshing={isRefetching}
+        hostOptions={hostOptions}
+        hostSelection={hostSelection}
         onPeriodChange={handlePeriodChange}
         onShift={handleShift}
         onCustomChange={handleCustomChange}
         onSelectSource={setSelectedSourceKey}
+        onSelectHost={setSelectedServerId}
         onRefresh={refetch}
       />
     );

@@ -2973,6 +2973,16 @@ export const ko: TranslationResources = {
       pill: "백필 중 {{done}} / {{total}}",
       hint: "최근 날짜부터 채웁니다",
     },
+    hostFilter: {
+      label: "호스트로 필터",
+      allHosts: "모든 호스트",
+      countedOne: "호스트 1대 집계",
+      countedMany: "호스트 {{count}}대 집계",
+      status: {
+        unsupported: "호스트 업데이트 필요",
+        disconnected: "집계 제외",
+      },
+    },
     stats: {
       title: "통계",
     },

@@ -2958,6 +2958,16 @@ export const ar: TranslationResources = {
       pill: "جارٍ التعبئة {{done}} / {{total}}",
       hint: "تُعبَّأ الأيام الأحدث أولاً",
     },
+    hostFilter: {
+      label: "تصفية حسب المضيف",
+      allHosts: "كل المضيفين",
+      countedOne: "مضيف واحد محتسب",
+      countedMany: "{{count}} مضيف محتسب",
+      status: {
+        unsupported: "يلزم تحديث المضيف",
+        disconnected: "غير محتسب",
+      },
+    },
     stats: {
       title: "الإحصائيات",
     },

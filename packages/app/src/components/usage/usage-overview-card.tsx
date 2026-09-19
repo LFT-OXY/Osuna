@@ -10,12 +10,14 @@ import { Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { FormTextInput } from "@/components/ui/form-field";
 import { UsageCard } from "@/components/usage/usage-card";
+import { UsageHostFilter } from "@/components/usage/usage-host-filter";
 import {
   formatUsageCost,
   formatUsageShare,
   formatUsageTokensCompact,
   formatGroupedNumber,
 } from "@/usage/format";
+import type { UsageHostOption, UsageHostSelection } from "@/usage/host-options";
 import type { MergedUsageReport } from "@/usage/merge";
 import {
   canShiftUsageRangeForward,
@@ -41,10 +43,13 @@ interface UsageOverviewCardProps {
   today: string;
   selectedSourceKey: string | null;
   isRefreshing: boolean;
+  hostOptions: readonly UsageHostOption[];
+  hostSelection: UsageHostSelection;
   onPeriodChange: (period: UsagePeriod) => void;
   onShift: (delta: -1 | 1) => void;
   onCustomChange: (custom: UsageCustomRange) => void;
   onSelectSource: (key: string | null) => void;
+  onSelectHost: (serverId: string | null) => void;
   onRefresh: () => void;
 }
 
@@ -69,8 +74,11 @@ export function UsageOverviewCard(props: UsageOverviewCardProps) {
         today={props.today}
         backfill={props.backfill}
         isRefreshing={props.isRefreshing}
+        hostOptions={props.hostOptions}
+        hostSelection={props.hostSelection}
         onPeriodChange={props.onPeriodChange}
         onShift={props.onShift}
+        onSelectHost={props.onSelectHost}
         onRefresh={props.onRefresh}
       />
       {props.period === "custom" ? (
@@ -129,8 +137,11 @@ function UsageOverviewHeader({
   today,
   backfill,
   isRefreshing,
+  hostOptions,
+  hostSelection,
   onPeriodChange,
   onShift,
+  onSelectHost,
   onRefresh,
 }: Pick<
   UsageOverviewCardProps,
@@ -140,8 +151,11 @@ function UsageOverviewHeader({
   | "today"
   | "backfill"
   | "isRefreshing"
+  | "hostOptions"
+  | "hostSelection"
   | "onPeriodChange"
   | "onShift"
+  | "onSelectHost"
   | "onRefresh"
 >) {
   const { t, i18n } = useTranslation();
@@ -188,6 +202,7 @@ function UsageOverviewHeader({
           </>
         ) : null}
         <UsageBackfillPill backfill={backfill} />
+        <UsageHostFilter options={hostOptions} selection={hostSelection} onSelect={onSelectHost} />
         <UsageIconButton
           accessibilityLabel={t("usage.overview.refresh")}
           onPress={onRefresh}

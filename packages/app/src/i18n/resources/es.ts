@@ -3019,6 +3019,16 @@ export const es: TranslationResources = {
       pill: "Rellenando {{done}} / {{total}}",
       hint: "Primero se completan los días más recientes",
     },
+    hostFilter: {
+      label: "Filtrar por host",
+      allHosts: "Todos los hosts",
+      countedOne: "1 host contado",
+      countedMany: "{{count}} hosts contados",
+      status: {
+        unsupported: "Actualiza el host",
+        disconnected: "Sin contar",
+      },
+    },
     stats: {
       title: "Estadísticas",
     },

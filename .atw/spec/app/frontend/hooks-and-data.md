@@ -46,6 +46,34 @@ hooks/use-sidebar-workspaces.ts             # subscribes, calls the pure functio
 - `useRef` holds DOM nodes and non-rendering identities (timer ids, `AbortController`, latest-callback caches). If it affects what renders, it is state.
 - Handlers get `useCallback` only when a memoized child depends on them; `useMemo` only for derived structures that cross a `memo` boundary or feed a dependency array.
 
+### Don't: a store subscription whose value is a `useMemo` over a version counter
+
+Metro builds this app with the React Compiler (`[metro] React Compiler enabled`). The compiler re-derives a `useMemo`'s dependencies from the callback body and ignores the written dependency array, so a counter that is read only to be discarded is dead code and drops out of the memo's key.
+
+```ts
+// Don't — froze for every caller that passed a stable `serverIds`.
+const version = useSyncExternalStore(store.subscribeAll, () => store.getVersion(), …);
+return useMemo(() => {
+  void version; // the reactivity "trigger" the compiler deletes
+  return new Map(serverIds.map((id) => [id, store.getSnapshot(id)?.connectionStatus ?? "connecting"]));
+}, [serverIds, store, version]);
+```
+
+The bug is invisible in tests that pass a fresh array each render — `serverIds` then changes identity every render and carries the recompute by accident. It only shows once a caller memoizes the argument, and it shows as stale data, not as a crash: the usage page sat on a spinner forever because its hosts read `connecting` from the render they mounted on.
+
+```ts
+// Do — the value itself is the snapshot, cached so the reference is stable.
+const cacheRef = useRef<HostConnectionStatusesSnapshot | null>(null);
+const read = useCallback(() => {
+  const snapshot = readHostConnectionStatuses(store, serverIds, cacheRef.current);
+  cacheRef.current = snapshot;
+  return snapshot.statuses;
+}, [serverIds, store]);
+return useSyncExternalStore(store.subscribeAll, read, read);
+```
+
+`useSyncExternalStore` requires `getSnapshot` to return the same reference while nothing has moved, so the cache is not an optimization — it is the contract. Keep the compare-and-reuse in a plain exported function (`readHostConnectionStatuses` in `runtime/host-runtime.ts`) taking a narrow port (`HostConnectionStatusSource`), so a test asserts both halves — same reference while statuses hold, new map when one changes — with no renderer.
+
 ## Host runtime
 
 `runtime/host-runtime.ts` (`HostRuntimeController`) owns saved hosts, reconnection, and per-host runtime state. `runtime/host-features.ts` is where a feature checks `server_info.features.*` once and either runs or tells the user to update the host. No fallback branches for old daemons in components.

@@ -3027,6 +3027,16 @@ export const fr: TranslationResources = {
       pill: "Reprise {{done}} / {{total}}",
       hint: "Les jours récents sont traités en premier",
     },
+    hostFilter: {
+      label: "Filtrer par hôte",
+      allHosts: "Tous les hôtes",
+      countedOne: "1 hôte compté",
+      countedMany: "{{count}} hôtes comptés",
+      status: {
+        unsupported: "Mettre à jour l’hôte",
+        disconnected: "Non compté",
+      },
+    },
     stats: {
       title: "Statistiques",
     },

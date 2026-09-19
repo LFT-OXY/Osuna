@@ -10,6 +10,7 @@ export interface UsagePalette {
   cardBorder: string;
   cardBorderHover: string;
   ink: string;
+  ink2: string;
   ink3: string;
   inkMuted: string;
   inkFaint: string;
@@ -23,6 +24,7 @@ export interface UsagePalette {
   segBg: string;
   track: string;
   controlBorder: string;
+  statusOnline: string;
 }
 
 export const USAGE_LIGHT_PALETTE: UsagePalette = {
@@ -30,6 +32,7 @@ export const USAGE_LIGHT_PALETTE: UsagePalette = {
   cardBorder: "#e5e5e5",
   cardBorderHover: "#d4d4d4",
   ink: "#0a0a0a",
+  ink2: "#525252",
   ink3: "#404040",
   inkMuted: "#737373",
   inkFaint: "#a3a3a3",
@@ -43,6 +46,7 @@ export const USAGE_LIGHT_PALETTE: UsagePalette = {
   segBg: "#f5f5f5",
   track: "#f5f5f5",
   controlBorder: "#d4d4d4",
+  statusOnline: "#10b981",
 };
 
 export const USAGE_DARK_PALETTE: UsagePalette = {
@@ -50,6 +54,7 @@ export const USAGE_DARK_PALETTE: UsagePalette = {
   cardBorder: "#262626",
   cardBorderHover: "#404040",
   ink: "#fafafa",
+  ink2: "#d4d4d4",
   ink3: "#e5e5e5",
   inkMuted: "#d4d4d4",
   inkFaint: "#a3a3a3",
@@ -63,4 +68,5 @@ export const USAGE_DARK_PALETTE: UsagePalette = {
   segBg: "#262626",
   track: "#262626",
   controlBorder: "#404040",
+  statusOnline: "#10b981",
 };

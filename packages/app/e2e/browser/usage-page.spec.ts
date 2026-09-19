@@ -1,7 +1,6 @@
-import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures";
-import { gotoAppShell } from "../support/helpers/app";
 import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
+import { openUsagePage, waitForUsageTotal } from "../support/helpers/usage-page";
 
 const fixtures = createUsageFixtureRoots("paseo-usage-page-");
 
@@ -30,30 +29,12 @@ const SOURCE_CARDS = [
   ["pi:openai-codex", "Pi · OpenAI Codex", "0.42%", "1 model"],
 ] as const;
 
-async function openUsagePage(page: Page): Promise<void> {
-  await gotoAppShell(page);
-  const sidebarRow = page.locator('[data-testid="sidebar-usage"]:visible').first();
-  await expect(sidebarRow).toBeVisible({ timeout: 30_000 });
-  await sidebarRow.click();
-  await expect(page).toHaveURL(/\/usage$/);
-  await expect(page.getByTestId("usage-overview")).toBeVisible({ timeout: 30_000 });
-}
-
-async function heroTokens(page: Page): Promise<string> {
-  return (await page.getByTestId("usage-total-tokens").textContent()) ?? "";
-}
-
-/** The scan is periodic, so the hero starts at zero and fills in. */
-async function waitForFixtureScan(page: Page): Promise<void> {
-  await expect.poll(() => heroTokens(page), { timeout: 30_000 }).toBe(FIXTURE_TOKENS);
-}
-
 test.describe("Usage page", () => {
   test("owner reads the fixture totals, sources and model breakdown", async ({ page }) => {
     await openUsagePage(page);
 
     await test.step("the overview totals every fixture source", async () => {
-      await waitForFixtureScan(page);
+      await waitForUsageTotal(page, FIXTURE_TOKENS);
       await expect(page.getByTestId("usage-total-cost")).toHaveText(COST_PATTERN);
       await expect(page.getByTestId("usage-range")).toHaveText("All time");
       await expect(page.getByTestId("usage-unpriced-summary")).toHaveText(
@@ -91,7 +72,7 @@ test.describe("Usage page", () => {
 
   test("owner narrows the period and pages back through it", async ({ page }) => {
     await openUsagePage(page);
-    await waitForFixtureScan(page);
+    await waitForUsageTotal(page, FIXTURE_TOKENS);
 
     await test.step("switching to Day narrows the range to today", async () => {
       await page.getByTestId("usage-period-tab-day").click();
@@ -112,12 +93,12 @@ test.describe("Usage page", () => {
       await page.getByTestId("usage-custom-from").fill("2026-01-01");
       await page.getByTestId("usage-custom-to").fill("2026-12-31");
       await expect(page.getByTestId("usage-period-tab-custom")).toHaveText("1/1 – 12/31");
-      await waitForFixtureScan(page);
+      await waitForUsageTotal(page, FIXTURE_TOKENS);
     });
 
     await test.step("refresh keeps the same totals", async () => {
       await page.getByTestId("usage-refresh").click();
-      await waitForFixtureScan(page);
+      await waitForUsageTotal(page, FIXTURE_TOKENS);
     });
   });
 });

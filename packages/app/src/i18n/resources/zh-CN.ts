@@ -2926,6 +2926,16 @@ export const zhCN: TranslationResources = {
       pill: "回填中 {{done}} / {{total}}",
       hint: "最近的日期先补齐",
     },
+    hostFilter: {
+      label: "按主机筛选",
+      allHosts: "全部主机",
+      countedOne: "1 台计入",
+      countedMany: "{{count}} 台计入",
+      status: {
+        unsupported: "需要更新主机",
+        disconnected: "未计入",
+      },
+    },
     stats: {
       title: "统计面板",
     },

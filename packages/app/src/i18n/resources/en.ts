@@ -3083,6 +3083,16 @@ export const en = {
       pill: "Backfilling {{done}} / {{total}}",
       hint: "Recent days are filled in first",
     },
+    hostFilter: {
+      label: "Filter by host",
+      allHosts: "All hosts",
+      countedOne: "1 host counted",
+      countedMany: "{{count}} hosts counted",
+      status: {
+        unsupported: "Update host",
+        disconnected: "Not counted",
+      },
+    },
     stats: {
       title: "Statistics",
     },
