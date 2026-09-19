@@ -2232,6 +2232,7 @@ export const ja: TranslationResources = {
       theme: {
         title: "テーマ",
         accessibilityLabel: "テーマ: {{value}}",
+        qualifiedValue: "{{name}}（{{qualifier}}）",
         options: {
           light: "ライト",
           dark: "ダーク",

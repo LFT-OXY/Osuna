@@ -2248,6 +2248,7 @@ export const ptBR: TranslationResources = {
       theme: {
         title: "Tema",
         accessibilityLabel: "Tema: {{value}}",
+        qualifiedValue: "{{name}} ({{qualifier}})",
         options: {
           light: "Claro",
           dark: "Escuro",

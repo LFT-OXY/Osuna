@@ -2333,6 +2333,7 @@ export const en = {
       theme: {
         title: "Theme",
         accessibilityLabel: "Theme: {{value}}",
+        qualifiedValue: "{{name}} ({{qualifier}})",
         options: {
           light: "Light",
           dark: "Dark",

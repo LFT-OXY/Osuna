@@ -2213,6 +2213,7 @@ export const ar: TranslationResources = {
       theme: {
         title: "سمة",
         accessibilityLabel: "الموضوع:{{value}}",
+        qualifiedValue: "{{name}} ({{qualifier}})",
         options: {
           light: "ضوء",
           dark: "مظلم",

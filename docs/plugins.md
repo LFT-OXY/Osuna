@@ -492,6 +492,14 @@ contract. Unistyles needs every theme name at `StyleSheet.configure` time, so
 provider rewrites the matching slot when the selection changes. See [unistyles.md](unistyles.md)
 for the runtime-patching rules the appearance settings share.
 
+Display names are not reserved. A plugin theme may carry the same name as a built-in theme or as
+another plugin's, and nothing is rejected or dropped for it — the picker disambiguates instead: a
+plugin row whose name collides gets the contributing plugin's id as a second line, and the
+appearance trigger repeats the qualifier. Rows that collide with nothing stay single-line. The
+comparison runs against the built-in names in the user's current language, so a name can collide in
+one language and not another. Pick a name you want shown, not one you hope is unique; the built-in
+list grows and you cannot see it from a plugin.
+
 `addTheme` is a client registration and belongs in `index.client.tsx`. A client that predates it
 cannot evaluate that entry. Daemons advertise
 `features.pluginThemes` in `server_info`; the plugin theme catalog is the one place the app reads it, and

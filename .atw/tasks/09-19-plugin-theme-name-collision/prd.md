@@ -68,8 +68,14 @@ Catppuccin 变成内置之后把插件主题挤掉，用户选中的主题会毫
 
 - 内置主题的显示名是 i18n 的（`settings.appearance.theme.options.*`），而
   `collectPluginThemes` 现在不碰 i18n。把「已解析好的内置主题显示名集合」作为入参传进去，
-  函数保持纯的、可单测的；由 `usePluginThemeCatalog` 用 `useTranslation` 解析后传入。
+  函数保持纯的、可单测的；由 `usePluginThemeCatalog` 解析后传入。
 - 由此撞名判断随 app 语言变化。这是对的：用户看到的是哪一套文字，撞不撞就按哪一套算。
+- 解析这一步落在 `appearance/theme-labels.ts`：`getBuiltInThemeLabel(t, name)` 是菜单行和
+  对照集合共用的那一个 key 路径，`collectBuiltInThemeNames(t)` 按它铺开 `THEME_OPTIONS`，
+  `useBuiltInThemeNames()` 是给 `usePluginThemeCatalog` 用的 hook 包装。两处各自拼 key 会在
+  下一次改键名时静默失配 —— 谁都撞不上，功能无声停摆。设置页原来私有的 `getThemeLabel`
+  就是这个函数，移过去后 `SystemPairingRow` 一并改用它。
+- 「System」（`auto`）也算进对照集合。它在同一个下拉里占一行，插件主题叫这个名字一样分不清。
 
 ### 同一个插件内部撞名
 
@@ -81,6 +87,9 @@ Catppuccin 变成内置之后把插件主题挤掉，用户选中的主题会毫
 - 选中的插件主题带限定词时，触发器的可见文字与 `settings.appearance.theme.accessibilityLabel`
   的 `value` 都用限定后的写法。触发器是单行窄控件，限定后的文本按既有的截断规则处理，
   不为此改版式。
+- 限定后的写法是新键 `settings.appearance.theme.qualifiedValue`（英文 `"{{name}} ({{qualifier}})"`，
+  中日文用全角括号），九个 locale 都补齐。限定只加在插件那一侧：内置那条保持裸名，于是
+  `Theme: Catppuccin Mocha (catppuccin)` 与 `Theme: Catppuccin Mocha` 各指一个。
 - `SystemPairingRow`（跟随系统的深浅配对行）只列内置主题，插件主题不参与配对，
   不受本次影响。
 
@@ -89,7 +98,9 @@ Catppuccin 变成内置之后把插件主题挤掉，用户选中的主题会毫
 - 插件主题 id（`<pluginId>/theme/<themeId>`）、`theme: "plugin"` + `pluginThemeId` 的持久化
   形状、`rememberPluginContributionHost` 的 host 记忆、`features.pluginThemes` 的能力门，
   全部不变。
-- 协议不动，daemon 不动，`@getpaseo/plugin` 的 `addTheme` 契约不动。
+- 协议不动，daemon 不动，`@getpaseo/plugin` 的 `addTheme` 契约不动。契约没变，但显示名撞名
+  之后会发生什么是插件作者从代码里看不出来的约定，写进 `docs/plugins.md` 的
+  「Contribute a theme」（那一节是 `addTheme` 的 owner）。
 - 不新增菜单组件、不加分组标题。
 
 ## Testing Decisions
@@ -106,7 +117,10 @@ Catppuccin 变成内置之后把插件主题挤掉，用户选中的主题会毫
   `09-19-branch-e2e-drift` 为了绕开问题而改掉的名字，改回来这条测试就从「绕开」变成
   「验证已解决」。断言两条同名行能各自定位（撞名的那条带插件 id 副标题），
   且选中插件那条后触发器指向插件主题。
-- 不引入新接缝，不新增 npm script、不新增 CI job。
+- `appearance/theme-labels.test.ts` 守住上面那条共用解析路径：对照集合的大小等于
+  `THEME_OPTIONS` 的行数，且没有一条是没解析出来的 i18n key —— i18n 没初始化时 `t()` 原样
+  返回 key，那样集合里全是 key、谁都撞不上，正是会静默失效的那一种。
+- 不新增 npm script、不新增 CI job。
 - 本地只跑改到的单个文件；全量由 CI 验证。
 
 ## Out of Scope
@@ -133,6 +147,7 @@ Catppuccin 变成内置之后把插件主题挤掉，用户选中的主题会毫
 - [ ] `plugin-theme.spec.ts` 的夹具改回 `Catppuccin Mocha` / `Catppuccin Latte`，
       该文件断言两条同名行能各自定位。
 - [ ] 插件主题 id、持久化形状、协议、`addTheme` 契约均未改动。
+- [ ] `docs/plugins.md` 的「Contribute a theme」写明撞名会被限定、且不会被拒绝。
 - [ ] `npm run typecheck` 与 `npm run lint` 通过。
 
 ## Further Notes

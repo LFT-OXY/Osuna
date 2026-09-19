@@ -2224,6 +2224,7 @@ export const ko: TranslationResources = {
       theme: {
         title: "테마",
         accessibilityLabel: "테마: {{value}}",
+        qualifiedValue: "{{name}} ({{qualifier}})",
         options: {
           light: "라이트",
           dark: "다크",

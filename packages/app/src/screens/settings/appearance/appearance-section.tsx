@@ -33,6 +33,7 @@ import {
   type AppSettings,
 } from "@/hooks/use-settings";
 import { toBuiltInPreference, type BuiltInThemePreference } from "@/appearance/resolve-theme";
+import { getBuiltInThemeLabel } from "@/appearance/theme-labels";
 import {
   DARK_THEME_NAMES,
   DEFAULT_MONO_FONT_STACK,
@@ -63,8 +64,14 @@ const ThemedChevronDown = withUnistyles(ChevronDown);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-function getThemeLabel(t: TFunction, value: BuiltInThemePreference): string {
-  return t(`settings.appearance.theme.options.${value}`);
+// 撞名的插件主题在触发器上也要带限定：目录只在插件这一侧算限定词，内置那条保持原样，
+// 于是 "Theme: Catppuccin Mocha (catppuccin)" 与裸的 "Theme: Catppuccin Mocha" 各指一个。
+function getPluginThemeLabel(t: TFunction, option: PluginThemeOption): string {
+  if (!option.qualifier) return option.name;
+  return t("settings.appearance.theme.qualifiedValue", {
+    name: option.name,
+    qualifier: option.qualifier,
+  });
 }
 
 // Platform default stacks can be the bare native tokens ("normal"/"monospace");
@@ -135,7 +142,7 @@ function ThemeMenuItem<T extends BuiltInThemePreference>({
   const leading = useMemo(() => <ThemeLeading themeValue={themeValue} />, [themeValue]);
   return (
     <DropdownMenuItem selected={selected} onSelect={handleSelect} leading={leading}>
-      {getThemeLabel(t, themeValue)}
+      {getBuiltInThemeLabel(t, themeValue)}
     </DropdownMenuItem>
   );
 }
@@ -152,7 +159,12 @@ function PluginThemeMenuItem({ option, selected, onSelect }: PluginThemeMenuItem
   }, [onSelect, option]);
   const leading = useMemo(() => <ThemeSwatch color={option.swatch} />, [option.swatch]);
   return (
-    <DropdownMenuItem selected={selected} onSelect={handleSelect} leading={leading}>
+    <DropdownMenuItem
+      selected={selected}
+      onSelect={handleSelect}
+      leading={leading}
+      description={option.qualifier ?? undefined}
+    >
       {option.name}
     </DropdownMenuItem>
   );
@@ -177,8 +189,8 @@ function ThemeRow({
   // A selected contribution that is no longer installed shows the fallback the app renders.
   const builtInValue = toBuiltInPreference(value);
   const selectedLabel = selectedPluginTheme
-    ? selectedPluginTheme.name
-    : getThemeLabel(t, builtInValue);
+    ? getPluginThemeLabel(t, selectedPluginTheme)
+    : getBuiltInThemeLabel(t, builtInValue);
   return (
     <View style={settingsStyles.row}>
       <View style={settingsStyles.rowContent}>
@@ -245,7 +257,7 @@ function SystemPairingRow<T extends ThemeName>({
   onChange,
 }: SystemPairingRowProps<T>) {
   const { t } = useTranslation();
-  const selectedLabel = getThemeLabel(t, value);
+  const selectedLabel = getBuiltInThemeLabel(t, value);
   return (
     <View style={styles.rowWithBorder}>
       <View style={settingsStyles.rowContent}>

@@ -2251,6 +2251,7 @@ export const ru: TranslationResources = {
       theme: {
         title: "Тема",
         accessibilityLabel: "Тема: {{value}}",
+        qualifiedValue: "{{name}} ({{qualifier}})",
         options: {
           light: "Светлая",
           dark: "Тёмная",

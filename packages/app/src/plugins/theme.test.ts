@@ -43,9 +43,16 @@ const LATTE: PluginThemeContribution = {
   },
 };
 
-function installed(serverId: string, themes: PluginThemeContribution[]): InstalledPlugin {
+const NO_BUILT_INS: ReadonlySet<string> = new Set<string>();
+const BUILT_IN_NAMES: ReadonlySet<string> = new Set(["Catppuccin Mocha", "Catppuccin Latte"]);
+
+function installed(
+  serverId: string,
+  themes: PluginThemeContribution[],
+  pluginId = "catppuccin",
+): InstalledPlugin {
   return {
-    id: "catppuccin",
+    id: pluginId,
     cleanup: () => undefined,
     serverId,
     clientBundle: serverId,
@@ -86,7 +93,11 @@ describe("toPluginTheme", () => {
 
 describe("plugin theme palettes", () => {
   it("expands a contributed palette onto the semantic and terminal tokens", () => {
-    const option = collectPluginThemes([installed("host-a", [MOCHA])], new Set(["host-a"]))[0];
+    const option = collectPluginThemes(
+      [installed("host-a", [MOCHA])],
+      new Set(["host-a"]),
+      NO_BUILT_INS,
+    )[0];
     const theme = option.theme;
 
     expect(theme.colorScheme).toBe("dark");
@@ -116,22 +127,33 @@ describe("plugin theme palettes", () => {
   it("carries the accent on the foreground when no accent is given", () => {
     const { accent: _accent, ...colors } = MOCHA.colors;
     const contribution = { ...MOCHA, colors };
-    const theme = collectPluginThemes([installed("host-a", [contribution])], new Set(["host-a"]))[0]
-      .theme;
+    const theme = collectPluginThemes(
+      [installed("host-a", [contribution])],
+      new Set(["host-a"]),
+      NO_BUILT_INS,
+    )[0].theme;
 
     expect(theme.colors.accent).toBe("#cdd6f4");
     expect(theme.colors.accentBright).toBe("#cdd6f4");
   });
 
   it("keeps the status and syntax tokens the built-in dark themes use", () => {
-    const theme = collectPluginThemes([installed("host-a", [MOCHA])], new Set(["host-a"]))[0].theme;
+    const theme = collectPluginThemes(
+      [installed("host-a", [MOCHA])],
+      new Set(["host-a"]),
+      NO_BUILT_INS,
+    )[0].theme;
 
     expect(theme.colors.statusDanger).toBe(darkTheme.colors.statusDanger);
     expect(theme.colors.syntax).toEqual(darkTheme.colors.syntax);
   });
 
   it("derives a complete light theme from the same palette contract", () => {
-    const theme = collectPluginThemes([installed("host-a", [LATTE])], new Set(["host-a"]))[0].theme;
+    const theme = collectPluginThemes(
+      [installed("host-a", [LATTE])],
+      new Set(["host-a"]),
+      NO_BUILT_INS,
+    )[0].theme;
 
     expect(theme.colorScheme).toBe("light");
     expect(theme.colors).toMatchObject({
@@ -161,6 +183,7 @@ describe("collectPluginThemes", () => {
     const options = collectPluginThemes(
       [installed("host-a", [MOCHA]), installed("host-b", [MOCHA])],
       new Set(["host-a", "host-b"]),
+      NO_BUILT_INS,
     );
 
     expect(options.map((option) => option.id)).toEqual(["catppuccin/theme/mocha"]);
@@ -169,13 +192,16 @@ describe("collectPluginThemes", () => {
   // COMPAT(pluginThemes): a daemon without the capability keeps `addTheme` in the server bundle
   // it compiles, so its themes are not offered at all.
   it("drops themes from a host that predates the pluginThemes capability", () => {
-    expect(collectPluginThemes([installed("old-host", [MOCHA])], new Set())).toEqual([]);
+    expect(collectPluginThemes([installed("old-host", [MOCHA])], new Set(), NO_BUILT_INS)).toEqual(
+      [],
+    );
   });
 
   it("keeps themes from the supported host when one peer is too old", () => {
     const options = collectPluginThemes(
       [installed("new-host", [MOCHA]), installed("old-host", [MOCHA])],
       new Set(["new-host"]),
+      NO_BUILT_INS,
     );
 
     expect(options.map((option) => option.id)).toEqual(["catppuccin/theme/mocha"]);
@@ -189,6 +215,7 @@ describe("collectPluginThemes", () => {
       collectPluginThemes(
         [installed("host-a", [MOCHA]), installed("host-z", [MOCHA_FORK])],
         SUPPORTED,
+        NO_BUILT_INS,
       );
 
     const beforePick = bothHosts();
@@ -196,7 +223,11 @@ describe("collectPluginThemes", () => {
     expect(beforePick[0]?.serverId).toBe("host-a");
     expect(beforePick[0]?.theme.colors.surface0).toBe("#1e1e2e");
 
-    const onlyHostZ = collectPluginThemes([installed("host-z", [MOCHA_FORK])], SUPPORTED);
+    const onlyHostZ = collectPluginThemes(
+      [installed("host-z", [MOCHA_FORK])],
+      SUPPORTED,
+      NO_BUILT_INS,
+    );
     expect(onlyHostZ[0]).toBeDefined();
     rememberPluginThemeHost(onlyHostZ[0]);
 
@@ -205,8 +236,84 @@ describe("collectPluginThemes", () => {
     expect(afterPick[0]?.serverId).toBe("host-z");
     expect(afterPick[0]?.theme.colors.surface0).toBe("#11111b");
 
-    const withoutHostZ = collectPluginThemes([installed("host-a", [MOCHA])], SUPPORTED);
+    const withoutHostZ = collectPluginThemes(
+      [installed("host-a", [MOCHA])],
+      SUPPORTED,
+      NO_BUILT_INS,
+    );
     expect(withoutHostZ[0]?.serverId).toBe("host-a");
     expect(withoutHostZ[0]?.theme.colors.surface0).toBe("#1e1e2e");
+  });
+
+  it("leaves a theme unqualified when no other row carries its name", () => {
+    const options = collectPluginThemes(
+      [installed("host-a", [MOCHA, LATTE])],
+      new Set(["host-a"]),
+      NO_BUILT_INS,
+    );
+
+    expect(options.map((option) => [option.name, option.qualifier])).toEqual([
+      ["Catppuccin Mocha", null],
+      ["Catppuccin Latte", null],
+    ]);
+  });
+
+  it("qualifies a theme that shares a built-in theme's name with its plugin id", () => {
+    const options = collectPluginThemes(
+      [installed("host-a", [MOCHA, LATTE])],
+      new Set(["host-a"]),
+      BUILT_IN_NAMES,
+    );
+
+    expect(options.map((option) => [option.id, option.qualifier])).toEqual([
+      ["catppuccin/theme/mocha", "catppuccin"],
+      ["catppuccin/theme/latte", "catppuccin"],
+    ]);
+  });
+
+  it("qualifies both rows when two plugins contribute the same name", () => {
+    const options = collectPluginThemes(
+      [installed("host-a", [MOCHA]), installed("host-a", [MOCHA_FORK], "mocha-remix")],
+      new Set(["host-a"]),
+      NO_BUILT_INS,
+    );
+
+    expect(options.map((option) => [option.id, option.qualifier])).toEqual([
+      ["catppuccin/theme/mocha", "catppuccin"],
+      ["mocha-remix/theme/mocha", "mocha-remix"],
+    ]);
+  });
+
+  it("falls back to the theme id when one plugin contributes the name twice", () => {
+    const twin = { ...MOCHA, id: "mocha-alt" };
+    const options = collectPluginThemes(
+      [installed("host-a", [MOCHA, twin])],
+      new Set(["host-a"]),
+      BUILT_IN_NAMES,
+    );
+
+    expect(options.map((option) => option.qualifier)).toEqual(["mocha", "mocha-alt"]);
+  });
+
+  it("does not read one theme served by two hosts as a collision", () => {
+    const options = collectPluginThemes(
+      [installed("host-a", [MOCHA]), installed("host-b", [MOCHA])],
+      new Set(["host-a", "host-b"]),
+      NO_BUILT_INS,
+    );
+
+    expect(options).toHaveLength(1);
+    expect(options[0]?.qualifier).toBeNull();
+  });
+
+  // 内置主题名是 i18n 的，换一套就是换一种语言：撞不撞按用户当前看到的那套文字算。
+  it("follows the built-in names it is handed when the app language changes", () => {
+    const plugins = [installed("host-a", [MOCHA])];
+    const hosts = new Set(["host-a"]);
+
+    expect(
+      collectPluginThemes(plugins, hosts, new Set(["卡布奇诺 摩卡"]))[0]?.qualifier,
+    ).toBeNull();
+    expect(collectPluginThemes(plugins, hosts, BUILT_IN_NAMES)[0]?.qualifier).toBe("catppuccin");
   });
 });

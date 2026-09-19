@@ -2269,6 +2269,7 @@ export const fr: TranslationResources = {
       theme: {
         title: "Thème",
         accessibilityLabel: "Thème:{{value}}",
+        qualifiedValue: "{{name}} ({{qualifier}})",
         options: {
           light: "Lumière",
           dark: "Sombre",

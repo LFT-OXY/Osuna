@@ -8,12 +8,13 @@ import { openSettingsSection } from "../support/helpers/settings";
 
 const PLUGIN_ID = "plugin-theme-e2e";
 
-// 配色取自 Catppuccin Mocha / Latte 的 base, text, surface0, surface1, mauve, subtext0, overlay0，
-// 但显示名必须是夹具自己的 —— 这两套 Catppuccin 现在是内置主题，同名会让文字选择器撞车。
+// 配色取自 Catppuccin Mocha / Latte 的 base, text, surface0, surface1, mauve, subtext0, overlay0。
+// 显示名也故意用真名和内置主题撞上：这正是装了 Catppuccin 插件的用户看到的，选择器要靠插件 id
+// 副标题把两条分开，而不是靠夹具改名绕开。
 const PLUGIN_SOURCE = `export default function contribute(plugin) {
   plugin.addTheme({
     id: "mocha",
-    name: "Plugin Fixture Dark",
+    name: "Catppuccin Mocha",
     appearance: "dark",
     colors: {
       background: "#1e1e2e",
@@ -28,7 +29,7 @@ const PLUGIN_SOURCE = `export default function contribute(plugin) {
   });
   plugin.addTheme({
     id: "latte",
-    name: "Plugin Fixture Light",
+    name: "Catppuccin Latte",
     appearance: "light",
     colors: {
       background: "#eff1f5",
@@ -48,6 +49,10 @@ const PLUGIN_SOURCE = `export default function contribute(plugin) {
 // contributed palette reached the semantic tokens rather than just the swatch.
 const DARK_FIXTURE_MUTED_FOREGROUND = "rgb(166, 173, 200)";
 const LIGHT_FIXTURE_MUTED_FOREGROUND = "rgb(108, 111, 133)";
+
+// 撞名时触发器也要带限定，否则无障碍标签仍然指向两个主题。
+const QUALIFIED_DARK = `Catppuccin Mocha (${PLUGIN_ID})`;
+const QUALIFIED_LIGHT = `Catppuccin Latte (${PLUGIN_ID})`;
 
 test("applies a contributed theme and falls back when its plugin is gone", async ({
   page,
@@ -70,8 +75,14 @@ test("applies a contributed theme and falls back when its plugin is gone", async
 
     const sectionTitle = page.getByText("Theme", { exact: true }).first();
     await page.getByLabel("Theme: System", { exact: true }).click();
-    const darkFixtureItem = page.getByText("Plugin Fixture Dark", { exact: true });
+    // 两条 "Catppuccin Mocha" 同时在菜单里，插件那条靠插件 id 副标题被单独指认。
+    const mochaItems = page.getByRole("menuitem").filter({ hasText: "Catppuccin Mocha" });
+    const darkFixtureItem = mochaItems.filter({ hasText: PLUGIN_ID });
+    const builtInMochaItem = mochaItems.filter({ hasNotText: PLUGIN_ID });
     await expect(darkFixtureItem).toBeVisible({ timeout: 30_000 });
+    await expect(mochaItems).toHaveCount(2);
+    await expect(darkFixtureItem).toHaveCount(1);
+    await expect(builtInMochaItem).toHaveCount(1);
     await page.screenshot({
       path: testInfo.outputPath("plugin-theme-picker.png"),
       animations: "disabled",
@@ -79,14 +90,18 @@ test("applies a contributed theme and falls back when its plugin is gone", async
     });
 
     await test.step("a contributed light theme uses the light palette", async () => {
-      await page.getByText("Plugin Fixture Light", { exact: true }).click();
-      await expect(page.getByLabel("Theme: Plugin Fixture Light", { exact: true })).toBeVisible();
+      await page
+        .getByRole("menuitem")
+        .filter({ hasText: "Catppuccin Latte" })
+        .filter({ hasText: PLUGIN_ID })
+        .click();
+      await expect(page.getByLabel(`Theme: ${QUALIFIED_LIGHT}`, { exact: true })).toBeVisible();
       await expect(sectionTitle).toHaveCSS("color", LIGHT_FIXTURE_MUTED_FOREGROUND);
-      await page.getByLabel("Theme: Plugin Fixture Light", { exact: true }).click();
+      await page.getByLabel(`Theme: ${QUALIFIED_LIGHT}`, { exact: true }).click();
     });
 
     await darkFixtureItem.click();
-    await expect(page.getByLabel("Theme: Plugin Fixture Dark", { exact: true })).toBeVisible();
+    await expect(page.getByLabel(`Theme: ${QUALIFIED_DARK}`, { exact: true })).toBeVisible();
     await expect(sectionTitle).toHaveCSS("color", DARK_FIXTURE_MUTED_FOREGROUND);
     await page.screenshot({
       path: testInfo.outputPath("plugin-theme-applied.png"),
@@ -95,7 +110,7 @@ test("applies a contributed theme and falls back when its plugin is gone", async
 
     await test.step("the selection survives a reload", async () => {
       await page.reload();
-      await expect(page.getByLabel("Theme: Plugin Fixture Dark", { exact: true })).toBeVisible({
+      await expect(page.getByLabel(`Theme: ${QUALIFIED_DARK}`, { exact: true })).toBeVisible({
         timeout: 30_000,
       });
       await expect(sectionTitle).toHaveCSS("color", DARK_FIXTURE_MUTED_FOREGROUND);
