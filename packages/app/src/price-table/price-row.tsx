@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { renderUsageText } from "@/usage/text";
+import { PRICE_COLUMN_GAP, priceColumns } from "./price-columns";
 import {
   PRICE_COLUMNS,
   describePriceSource,
@@ -54,7 +55,9 @@ export function PriceRow({
             {modelId}
           </Text>
           {model.priced ? null : (
-            <StatusBadge label={t("settings.host.priceTable.unpriced")} variant="warning" />
+            <View style={styles.badgeRow}>
+              <StatusBadge label={t("settings.host.priceTable.unpriced")} variant="warning" />
+            </View>
           )}
         </View>
         {PRICE_COLUMNS.map((column) => (
@@ -160,34 +163,34 @@ const styles = StyleSheet.create((theme) => ({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: PRICE_COLUMN_GAP,
   },
+  // The badge takes its own line: beside a long model id it left no room for the
+  // id itself, and the settings column caps at 720.
   modelCell: {
-    width: 220,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
+    ...priceColumns.model,
+    gap: theme.spacing[1],
   },
   model: {
-    flexShrink: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
   },
-  priceCell: {
-    width: 92,
+  badgeRow: {
+    flexDirection: "row",
   },
+  priceCell: priceColumns.price,
   price: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     textAlign: "right",
   },
   sourceCell: {
-    width: 80,
+    ...priceColumns.source,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
   actionsCell: {
-    width: 150,
+    ...priceColumns.actions,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],

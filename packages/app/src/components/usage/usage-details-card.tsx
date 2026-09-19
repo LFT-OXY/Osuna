@@ -40,6 +40,12 @@ const DETAILS_MIN_HEIGHT = 320;
  */
 const TABLE_CONTENT_STYLE: ViewStyle = { flexGrow: 1 };
 
+/**
+ * Keeps the last column clear of the vertical scrollbar, which sits hard against
+ * it otherwise. Plain for the same reason as `TABLE_CONTENT_STYLE`.
+ */
+const SCROLL_CONTENT_STYLE: ViewStyle = { paddingRight: 12 };
+
 /** Shared empty set so a card that has expanded nothing keeps one identity. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
@@ -161,7 +167,12 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
       {isCompact ? (
         body
       ) : (
-        <ScrollView style={scrollStyle} nestedScrollEnabled testID="usage-details-scroll">
+        <ScrollView
+          style={scrollStyle}
+          contentContainerStyle={SCROLL_CONTENT_STYLE}
+          nestedScrollEnabled
+          testID="usage-details-scroll"
+        >
           {body}
         </ScrollView>
       )}
@@ -484,7 +495,7 @@ const styles = StyleSheet.create((theme) => {
     row: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: theme.spacing[2],
+      paddingVertical: theme.spacing[3],
       borderBottomWidth: 1,
       borderBottomColor: palette.divider,
     },

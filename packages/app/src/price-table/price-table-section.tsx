@@ -14,6 +14,7 @@ import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
 import { describeTimeAgo } from "@/usage/relative-time";
 import { renderUsageText } from "@/usage/text";
+import { PRICE_COLUMN_GAP, priceColumns } from "./price-columns";
 import { PriceRow } from "./price-row";
 import {
   EMPTY_PRICE_DRAFT,
@@ -287,7 +288,7 @@ function PriceTableBody(props: PriceTableBodyProps): ReactNode {
 
   return (
     // 七列在手机上放不下，整张表横向滚动，而不是把列折成两行。
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <ScrollView horizontal>
       <View style={styles.table}>
         <View style={styles.headerRow}>
           <Text style={[styles.headerCell, styles.modelHeader]}>
@@ -360,30 +361,24 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[2],
   },
   table: {
-    paddingHorizontal: theme.spacing[4],
+    paddingHorizontal: theme.spacing[3],
     paddingBottom: theme.spacing[2],
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: PRICE_COLUMN_GAP,
     paddingVertical: theme.spacing[2],
   },
   headerCell: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
-  modelHeader: {
-    width: 220,
-  },
+  modelHeader: priceColumns.model,
   priceHeader: {
-    width: 92,
+    ...priceColumns.price,
     textAlign: "right",
   },
-  sourceHeader: {
-    width: 80,
-  },
-  actionsHeader: {
-    width: 150,
-  },
+  sourceHeader: priceColumns.source,
+  actionsHeader: priceColumns.actions,
 }));
