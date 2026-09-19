@@ -1,6 +1,9 @@
 import { z } from "zod";
 import {
+  UsageAgentSummarySchema,
+  UsageAgentTurnSchema,
   UsageBackfillSchema,
+  UsageCliSchema,
   UsagePricingModelSchema,
   UsagePricingRefreshResultSchema,
   UsagePricingTableInfoSchema,
@@ -86,3 +89,49 @@ export const UsagePricingUpdatedMessageSchema = z.object({
   type: z.literal("usage.pricing.updated"),
 });
 export type UsagePricingUpdatedMessage = z.infer<typeof UsagePricingUpdatedMessageSchema>;
+
+export const UsageAgentGetRequestSchema = z.object({
+  type: z.literal("usage.agent.get.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+export type UsageAgentGetRequest = z.infer<typeof UsageAgentGetRequestSchema>;
+
+export const UsageAgentGetResponseSchema = z.object({
+  type: z.literal("usage.agent.get.response"),
+  payload: UsageAgentSummarySchema.extend({ requestId: z.string() }),
+});
+export type UsageAgentGetResponse = z.infer<typeof UsageAgentGetResponseSchema>;
+
+/** Every turn of the agent, oldest first. Small enough that it does not page. */
+export const UsageAgentTurnsListRequestSchema = z.object({
+  type: z.literal("usage.agent.turns.list.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+});
+export type UsageAgentTurnsListRequest = z.infer<typeof UsageAgentTurnsListRequestSchema>;
+
+export const UsageAgentTurnsListResponseSchema = z.object({
+  type: z.literal("usage.agent.turns.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    turns: z.array(UsageAgentTurnSchema),
+    complete: z.boolean(),
+  }),
+});
+export type UsageAgentTurnsListResponse = z.infer<typeof UsageAgentTurnsListResponseSchema>;
+
+/**
+ * Sent after each batch of parsed rows reaches disk, once per affected session.
+ * `agentId` is there when the session backs a Paseo agent, so a screen showing
+ * that agent can refetch without matching session ids itself.
+ */
+export const UsageUpdatedMessageSchema = z.object({
+  type: z.literal("usage.updated"),
+  payload: z.object({
+    cli: UsageCliSchema,
+    sessionId: z.string(),
+    agentId: z.string().optional(),
+  }),
+});
+export type UsageUpdatedMessage = z.infer<typeof UsageUpdatedMessageSchema>;

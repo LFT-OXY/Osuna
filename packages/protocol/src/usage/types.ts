@@ -202,3 +202,47 @@ export type UsagePricingModel = z.infer<typeof UsagePricingModelSchema>;
 
 export const UsagePricingRefreshResultSchema = z.enum(["updated", "not_modified", "failed"]);
 export type UsagePricingRefreshResult = z.infer<typeof UsagePricingRefreshResultSchema>;
+
+/** One model's share of a turn or of an agent's total — a report row minus its source. */
+export const UsageModelAmountSchema = UsageModelBreakdownSchema.omit({ cli: true, backend: true });
+export type UsageModelAmount = z.infer<typeof UsageModelAmountSchema>;
+
+/**
+ * One turn of a Paseo agent. `turnId` is Paseo's own id, present once a turn
+ * the daemon watched closed; `turnKey` is the CLI's id and is always there.
+ * A turn still running is reported like any other — the client adds the
+ * stopwatch.
+ */
+export const UsageAgentTurnSchema = z.object({
+  cli: UsageCliSchema,
+  backend: z.string().nullable(),
+  sessionId: z.string(),
+  turnKey: z.string(),
+  turnId: z.string().nullable(),
+  userMessageIds: z.array(z.string()),
+  startedAt: z.string(),
+  endedAt: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  byModel: z.array(UsageModelAmountSchema),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  priced: z.boolean(),
+});
+export type UsageAgentTurn = z.infer<typeof UsageAgentTurnSchema>;
+
+/**
+ * What one agent spent across every provider session it ran in. `complete` is
+ * false while the backfill is still running or while one of those sessions has
+ * not been scanned yet, which is how the client knows the number can still grow.
+ */
+export const UsageAgentSummarySchema = z.object({
+  byModel: z.array(UsageModelAmountSchema),
+  totals: UsageTokenTotalsSchema,
+  estimatedCost: z.number(),
+  turns: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  firstAt: z.string().nullable(),
+  lastAt: z.string().nullable(),
+  complete: z.boolean(),
+});
+export type UsageAgentSummary = z.infer<typeof UsageAgentSummarySchema>;

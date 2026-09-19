@@ -148,6 +148,7 @@ import {
 } from "./workspace-registry.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
+import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -1370,6 +1371,10 @@ export async function createPaseoDaemon(
     getPricingConfig: () => resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing),
     onPricingUpdated: () => {
       wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
+    },
+    agents: createUsageAgentBridge({ agentManager, agentStorage }),
+    onUsageUpdated: (payload) => {
+      wsServer?.broadcast(wrapSessionMessage({ type: "usage.updated", payload }));
     },
   });
   daemonConfigStore.onChange(() => usageService.applyPricingConfig());

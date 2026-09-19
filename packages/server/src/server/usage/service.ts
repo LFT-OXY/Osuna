@@ -4,6 +4,8 @@ import path from "node:path";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import type { Logger } from "pino";
 import type {
+  UsageAgentSummary,
+  UsageAgentTurn,
   UsageBackfill,
   UsageCli,
   UsagePricingModel,
@@ -12,6 +14,8 @@ import type {
   UsageTokenTotals,
 } from "@getpaseo/protocol/usage/types";
 import type { PersistedProjectRecord } from "../workspace-registry.js";
+import type { UsageAgentBridge, UsageAgentTurnEvent } from "./agent-sessions.js";
+import { stampCodexTurnIds } from "./codex-turn-match.js";
 import type { UsageConfig, UsagePricingSettings } from "./config.js";
 import { resolveUsageLogRoots, type UsageLogRoots } from "./log-roots.js";
 import {
@@ -20,8 +24,10 @@ import {
   type UsagePricingRefreshOutcome,
 } from "./pricing/service.js";
 import { UsageProjectResolver } from "./project-attribution.js";
-import { buildUsageReport, type UsageReportRequest } from "./report.js";
-import { USAGE_SOURCE_ADAPTERS, type UsageSourceAdapter } from "./sources.js";
+import { buildAgentSummary, buildAgentTurns, type AgentReportInput } from "./agent-report.js";
+import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
+import { locateSessionFile } from "./session-files.js";
+import { USAGE_SOURCE_ADAPTERS, sessionCursorKey, type UsageSourceAdapter } from "./sources.js";
 import { UsageStore, type UsageRowSet } from "./store.js";
 import { UsageTurnIndex, resolveTurnRows } from "./turn-rows.js";
 import {
@@ -48,6 +54,11 @@ const IDLE_TURN_SETTLE_MS = 10 * 60 * 1000;
  * never ran another turn from holding its drafts forever, so it is generous.
  */
 const PENDING_TURN_ROW_TTL_MS = 6 * 60 * 60 * 1000;
+/**
+ * A turn the targeted parse found still open is retried on these delays; after
+ * the last one the periodic scan picks the file up like any other.
+ */
+const TARGETED_RETRY_DELAYS_MS = [2_000, 10_000];
 const FLUSH_EVERY_FILES = 20;
 const FLUSH_EVERY_MS = 500;
 const PROGRESS_INTERVAL_MS = 1000;
@@ -62,6 +73,18 @@ export interface UsageServiceOptions {
   /** Reads the live price settings from the daemon config, which owns them. */
   getPricingConfig: () => UsagePricingSettings;
   onPricingUpdated: () => void;
+  agents: UsageAgentBridge;
+  onUsageUpdated: (event: { cli: UsageCli; sessionId: string; agentId?: string }) => void;
+}
+
+/** A file a finished turn asked for, ahead of whatever the scan queued. */
+interface TargetedFile {
+  file: DiscoveredFile;
+  agentId: string;
+  turnId: string | null;
+  /** When the turn ended, which bounds the turn its id may be stamped on. */
+  endedAt: string;
+  attempt: number;
 }
 
 interface DiscoveredFile {
@@ -110,6 +133,21 @@ export class UsageService {
   private timer: NodeJS.Timeout | null = null;
   private round: Promise<void> | null = null;
   private disposed = false;
+  private readonly agents: UsageAgentBridge;
+  private readonly onUsageUpdated: (event: {
+    cli: UsageCli;
+    sessionId: string;
+    agentId?: string;
+  }) => void;
+  private unsubscribeTurns: (() => void) | null = null;
+  /** Files a finished turn asked for, keyed like the cursors so they dedupe. */
+  private readonly targeted = new Map<string, TargetedFile>();
+  private readonly retryTimers = new Set<NodeJS.Timeout>();
+  /** Sessions this round changed, drained into `usage.updated` on each flush. */
+  private readonly touchedSessions = new Map<
+    string,
+    { cli: UsageCli; sessionId: string; agentId?: string }
+  >();
 
   constructor(options: UsageServiceOptions) {
     this.logger = options.logger.child({ module: "usage" });
@@ -123,6 +161,8 @@ export class UsageService {
     this.onBackfillProgress = options.onBackfillProgress;
     this.now = options.config?.now ?? (() => Date.now());
     this.getPricingConfig = options.getPricingConfig;
+    this.agents = options.agents;
+    this.onUsageUpdated = options.onUsageUpdated;
     const pricingConfig = options.getPricingConfig();
     this.pricing = new UsagePricingService({
       store: this.store,
@@ -145,14 +185,24 @@ export class UsageService {
     this.turns.addAll(stored.turns);
     this.scanState = await this.store.loadScanState();
     await this.pricing.start();
-    this.startRound({ backfill: true });
-    this.timer = setInterval(() => this.startRound({ backfill: false }), this.scanIntervalMs);
+    this.unsubscribeTurns = this.agents.subscribeTurnEnd((event) => {
+      void this.onAgentTurnEnded(event);
+    });
+    this.startRound({ backfill: true, discover: true });
+    this.timer = setInterval(
+      () => this.startRound({ backfill: false, discover: true }),
+      this.scanIntervalMs,
+    );
     this.timer.unref();
   }
 
   async dispose(): Promise<void> {
     this.disposed = true;
     this.pricing.dispose();
+    this.unsubscribeTurns?.();
+    this.unsubscribeTurns = null;
+    for (const timer of this.retryTimers) clearTimeout(timer);
+    this.retryTimers.clear();
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -167,11 +217,7 @@ export class UsageService {
       rows,
       request,
       projects: attributions,
-      pricing: {
-        estimateCost: (totals: UsageTokenTotals, model: string) =>
-          this.pricing.estimateCost(totals, model),
-        isPriced: (model: string) => this.pricing.priceFor(model).priced,
-      },
+      pricing: this.reportPricing(),
       backfill: this.backfill,
       error: this.lastError,
       now: this.now(),
@@ -198,6 +244,37 @@ export class UsageService {
     };
   }
 
+  /** What one agent spent across every provider session it has run in. */
+  async getAgentUsage(agentId: string): Promise<UsageAgentSummary> {
+    return buildAgentSummary(await this.agentReportInput(agentId));
+  }
+
+  /** The agent's turns, oldest first, with Paseo's turn id where it is known. */
+  async listAgentTurns(agentId: string): Promise<{ turns: UsageAgentTurn[]; complete: boolean }> {
+    const { turns, complete } = buildAgentTurns(await this.agentReportInput(agentId));
+    const timeline = await this.agents.listTurnTimestamps(agentId);
+    return { turns: stampCodexTurnIds(turns, timeline), complete };
+  }
+
+  private async agentReportInput(agentId: string): Promise<AgentReportInput> {
+    return {
+      backing: await this.agents.getBacking(agentId),
+      rows: this.rows.values(),
+      turns: this.turns,
+      scanState: this.scanState,
+      backfill: this.backfill,
+      pricing: this.reportPricing(),
+    };
+  }
+
+  private reportPricing(): UsageReportPricing {
+    return {
+      estimateCost: (totals: UsageTokenTotals, model: string) =>
+        this.pricing.estimateCost(totals, model),
+      isPriced: (model: string) => this.pricing.priceFor(model).priced,
+    };
+  }
+
   refreshPricing(): Promise<UsagePricingRefreshOutcome> {
     return this.pricing.refresh();
   }
@@ -207,7 +284,7 @@ export class UsageService {
     this.pricing.applyConfig(this.getPricingConfig());
   }
 
-  private startRound(options: { backfill: boolean }): void {
+  private startRound(options: { backfill: boolean; discover: boolean }): void {
     if (this.disposed || this.round) return;
     const round = this.runRound(options).catch((error: unknown) => {
       this.lastError = error instanceof Error ? error.message : String(error);
@@ -215,12 +292,16 @@ export class UsageService {
     });
     this.round = round;
     void round.finally(() => {
-      if (this.round === round) this.round = null;
+      if (this.round !== round) return;
+      this.round = null;
+      // A turn that ended while this round was settling would otherwise wait
+      // for the next 60-second tick, which is not what "targeted" means.
+      if (this.targeted.size > 0) this.startRound({ backfill: false, discover: false });
     });
   }
 
-  private async runRound(options: { backfill: boolean }): Promise<void> {
-    const discovered = await this.discoverFiles();
+  private async runRound(options: { backfill: boolean; discover: boolean }): Promise<void> {
+    const discovered = options.discover ? await this.discoverFiles() : [];
     const changed = discovered.filter((file) => this.hasChanged(file));
     // The backfill works newest first so the days people look at fill in first.
     // A subagent file that names no turn is matched against the turns of the
@@ -258,14 +339,22 @@ export class UsageService {
       cursorDirty = false;
       filesSinceFlush = 0;
       lastFlushAt = this.now();
+      await this.emitTouchedSessions(options.backfill);
     };
 
-    for (const file of changed) {
-      if (this.disposed) break;
-      appendRowSet(pendingRows, await this.consumeFile(file));
+    // One serial worker over two queues: a file a finished turn asked for goes
+    // first, and a file already waiting in the scan queue is not read twice.
+    const consumed = new Set<string>();
+    const scanQueue = [...changed];
+    while (!this.disposed) {
+      const targeted = this.takeTargeted();
+      const file = targeted?.file ?? takeUnconsumed(scanQueue, consumed);
+      if (!file) break;
+      consumed.add(file.cursorKey);
+      appendRowSet(pendingRows, await this.consumeFile(file, targeted ?? undefined));
       cursorDirty = true;
       filesSinceFlush += 1;
-      if (options.backfill) {
+      if (options.backfill && !targeted) {
         this.backfill = { ...this.backfill, filesDone: this.backfill.filesDone + 1 };
         if (this.now() - lastProgressAt >= PROGRESS_INTERVAL_MS) {
           lastProgressAt = this.now();
@@ -344,7 +433,7 @@ export class UsageService {
     return cursor.size !== file.size || cursor.mtimeMs !== file.mtimeMs;
   }
 
-  private async consumeFile(file: DiscoveredFile): Promise<UsageRowSet> {
+  private async consumeFile(file: DiscoveredFile, targeted?: TargetedFile): Promise<UsageRowSet> {
     const cursor = this.resolveCursor(file);
     let handle: FileHandle;
     try {
@@ -407,9 +496,131 @@ export class UsageService {
         },
       },
     };
+    if (targeted?.turnId) {
+      const stamped = stampClosedTurn(rows.turns, state, targeted);
+      // The CLI had not finished writing the turn out; read it again shortly.
+      if (stamped === null) this.scheduleTargetedRetry(targeted);
+      else rows.turns.push(...stamped);
+    }
+    const sessionId = state.sessionId;
+    if (sessionId && (rows.buckets.length > 0 || rows.turns.length > 0)) {
+      this.touchedSessions.set(sessionCursorKey(file.cli, sessionId), {
+        cli: file.cli,
+        sessionId,
+        ...(targeted ? { agentId: targeted.agentId } : {}),
+      });
+    }
     this.applyRows(rows.buckets);
     this.turns.addAll(rows.turns);
     return rows;
+  }
+
+  /** A finished turn puts its own transcript at the head of the worker's queue. */
+  private async onAgentTurnEnded(event: UsageAgentTurnEvent): Promise<void> {
+    if (this.disposed) return;
+    try {
+      const backing = await this.agents.getBacking(event.agentId);
+      const filePath = backing
+        ? await locateSessionFile({
+            backing,
+            roots: this.roots,
+            scanState: this.scanState,
+            now: this.now,
+          })
+        : null;
+      const file = filePath ? await this.describeFile(backing!.cli, filePath) : null;
+      // A Codex rollout we cannot place yet is left to the periodic scan.
+      if (!file) return;
+      this.enqueueTargeted({
+        file,
+        agentId: event.agentId,
+        turnId: event.turnId,
+        // The turn ended now, so nothing that starts later can be the one it named.
+        endedAt: new Date(this.now()).toISOString(),
+        attempt: 0,
+      });
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: event.agentId }, "Targeted usage parse failed");
+    }
+  }
+
+  private enqueueTargeted(entry: TargetedFile): void {
+    if (this.disposed) return;
+    this.targeted.set(entry.file.cursorKey, entry);
+    this.startRound({ backfill: false, discover: false });
+  }
+
+  private takeTargeted(): TargetedFile | null {
+    for (const [key, entry] of this.targeted) {
+      this.targeted.delete(key);
+      return entry;
+    }
+    return null;
+  }
+
+  private scheduleTargetedRetry(entry: TargetedFile): void {
+    const delay = TARGETED_RETRY_DELAYS_MS[entry.attempt];
+    if (delay === undefined || this.disposed) return;
+    const timer = setTimeout(() => {
+      this.retryTimers.delete(timer);
+      void this.retryTargeted({ ...entry, attempt: entry.attempt + 1 });
+    }, delay);
+    timer.unref();
+    this.retryTimers.add(timer);
+  }
+
+  private async retryTargeted(entry: TargetedFile): Promise<void> {
+    const stats = await statFile(entry.file.filePath);
+    if (!stats) return;
+    this.enqueueTargeted({
+      ...entry,
+      file: { ...entry.file, size: stats.size, mtimeMs: stats.mtimeMs, inode: stats.ino },
+    });
+  }
+
+  private async describeFile(cli: UsageCli, filePath: string): Promise<DiscoveredFile | null> {
+    const adapter = USAGE_SOURCE_ADAPTERS[cli];
+    if (!adapter) return null;
+    const root = this.roots[cli].find(
+      (candidate) => filePath === candidate || filePath.startsWith(`${candidate}${path.sep}`),
+    );
+    if (root === undefined) return null;
+    const identity = adapter.identify(root, filePath);
+    if (!identity) return null;
+    const stats = await statFile(filePath);
+    if (!stats) return null;
+    return {
+      cli,
+      adapter,
+      cursorKey: identity.cursorKey,
+      freshParser: identity.parser,
+      filePath,
+      size: stats.size,
+      mtimeMs: stats.mtimeMs,
+      inode: stats.ino,
+    };
+  }
+
+  /**
+   * One `usage.updated` per session each batch touched. The backfill stays
+   * silent — the page reloads once it reports `done` — and an agent id the
+   * targeted parse did not carry is looked up from the backing sessions.
+   */
+  private async emitTouchedSessions(backfill: boolean): Promise<void> {
+    const touched = Array.from(this.touchedSessions.values());
+    this.touchedSessions.clear();
+    if (backfill) return;
+    for (const entry of touched) {
+      const agentId =
+        entry.agentId ??
+        (await this.agents.findAgentIdForSession(entry.cli, entry.sessionId)) ??
+        undefined;
+      this.onUsageUpdated({
+        cli: entry.cli,
+        sessionId: entry.sessionId,
+        ...(agentId ? { agentId } : {}),
+      });
+    }
   }
 
   /**
@@ -493,9 +704,83 @@ export class UsageService {
   }
 }
 
+/** The next scan-queue file the targeted queue has not already read this round. */
+function takeUnconsumed(
+  queue: DiscoveredFile[],
+  consumed: ReadonlySet<string>,
+): DiscoveredFile | null {
+  while (queue.length > 0) {
+    const file = queue.shift();
+    if (file && !consumed.has(file.cursorKey)) return file;
+  }
+  return null;
+}
+
 function appendRowSet(target: UsageRowSet, source: UsageRowSet): void {
   target.buckets.push(...source.buckets);
   target.turns.push(...source.turns);
+}
+
+/**
+ * Stamp Paseo's turn id on the turn the targeted parse was asked about — the
+ * newest one in the file. Returns null when the CLI is mid-turn, which is what
+ * tells the caller to read the file again in a moment: a turn whose wall clock
+ * is not fully settled has not seen its closing line yet.
+ *
+ * The extra rows it returns cover the retry that finds nothing new to parse:
+ * the turn closed on an earlier pass, so the id rides in on a zero row that
+ * merges into what is already stored.
+ */
+function stampClosedTurn(
+  turns: UsageTurnRow[],
+  state: UsageParserState,
+  targeted: TargetedFile,
+): UsageTurnRow[] | null {
+  const turnId = targeted.turnId;
+  if (!turnId) return [];
+  const openTurn = state.openTurn;
+  if (openTurn && unsettledMs(openTurn) > 0) return null;
+  // The turn that ended began before the event did; a later one is a turn the
+  // CLI has since started, and stamping it would misname both.
+  let closed: { turnKey: string; startedAt: string } | null = null;
+  for (const row of turns) {
+    if (row.startedAt > targeted.endedAt) continue;
+    if (closed && closed.startedAt > row.startedAt) continue;
+    closed = { turnKey: row.turnKey, startedAt: row.startedAt };
+  }
+  if (closed) {
+    for (const row of turns) {
+      if (row.turnKey === closed.turnKey) row.turnId = turnId;
+    }
+    return [];
+  }
+  // A retry that found nothing new still has to deliver the id: the turn closed
+  // on an earlier pass, so it rides in on a zero row that merges into what is
+  // already stored.
+  if (!openTurn?.model || !state.sessionId || openTurn.startedAt > targeted.endedAt) return null;
+  return [
+    {
+      cli: state.kind,
+      backend: "turnBackend" in state ? state.turnBackend : null,
+      sessionId: state.sessionId,
+      turnKey: openTurn.turnKey,
+      model: openTurn.model,
+      input: 0,
+      cachedInput: 0,
+      cacheWrite: 0,
+      output: 0,
+      reasoning: 0,
+      startedAt: openTurn.startedAt,
+      lastAt: openTurn.lastAt,
+      userMessageIds: [...openTurn.userMessageIds],
+      turnId,
+    },
+  ];
+}
+
+/** Wall clock of the open turn that no bucket row has accounted for yet. */
+function unsettledMs(openTurn: NonNullable<UsageParserState["openTurn"]>): number {
+  return Date.parse(openTurn.lastAt) - Date.parse(openTurn.startedAt) - openTurn.settledMs;
 }
 
 /**

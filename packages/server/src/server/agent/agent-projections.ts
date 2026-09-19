@@ -90,6 +90,7 @@ export function toStoredAgentRecord(
     runtimeInfo,
     features: normalizeFeatures(agent.features),
     persistence,
+    providerSessionIds: agent.providerSessionIds.length > 0 ? agent.providerSessionIds : undefined,
     lastError: agent.lastError ?? undefined,
     requiresAttention: agent.attention.requiresAttention,
     attentionReason: agent.attention.requiresAttention ? agent.attention.attentionReason : null,

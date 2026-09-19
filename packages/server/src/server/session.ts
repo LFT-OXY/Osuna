@@ -3031,6 +3031,8 @@ export class Session {
       case "usage.report.get.request":
       case "usage.pricing.list.request":
       case "usage.pricing.refresh.request":
+      case "usage.agent.get.request":
+      case "usage.agent.turns.list.request":
         await this.handleUsageRequest(msg);
         return;
       case "register_push_token":
@@ -3057,7 +3059,9 @@ export class Session {
         type:
           | "usage.report.get.request"
           | "usage.pricing.list.request"
-          | "usage.pricing.refresh.request";
+          | "usage.pricing.refresh.request"
+          | "usage.agent.get.request"
+          | "usage.agent.turns.list.request";
       }
     >,
   ): Promise<void> {
@@ -3080,6 +3084,14 @@ export class Session {
     }
     if (msg.type === "usage.pricing.refresh.request") {
       await usageSession.handleUsagePricingRefreshRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.agent.get.request") {
+      await usageSession.handleUsageAgentGetRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.agent.turns.list.request") {
+      await usageSession.handleUsageAgentTurnsListRequest(msg);
       return;
     }
     await usageSession.handleUsageReportGetRequest(msg);
@@ -8525,6 +8537,7 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "hub.execution.agent.update":
     case "hub.execution.agent.stream":
     case "usage.backfill.progress":
+    case "usage.updated":
     case "usage.pricing.updated":
       return message.type;
     case "status":

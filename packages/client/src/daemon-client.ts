@@ -550,6 +550,14 @@ type UsagePricingRefreshPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.pricing.refresh.response" }
 >["payload"];
+type UsageAgentGetPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.agent.get.response" }
+>["payload"];
+type UsageAgentTurnsListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.agent.turns.list.response" }
+>["payload"];
 
 export interface UsageReportOptions {
   /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
@@ -5842,6 +5850,25 @@ export class DaemonClient {
       requestId,
       message: { type: "usage.pricing.list.request" },
       responseType: "usage.pricing.list.response",
+    });
+  }
+
+  async usageAgentGet(agentId: string, requestId?: string): Promise<UsageAgentGetPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.agent.get.request", agentId },
+      responseType: "usage.agent.get.response",
+    });
+  }
+
+  async usageAgentTurnsList(
+    agentId: string,
+    requestId?: string,
+  ): Promise<UsageAgentTurnsListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.agent.turns.list.request", agentId },
+      responseType: "usage.agent.turns.list.response",
     });
   }
 

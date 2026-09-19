@@ -299,7 +299,7 @@ Reference implementation: `usage.pricing.updated` (usage ticket 05, v0.8.2). Reu
 - **`wsServer.broadcast()` alone does not deliver it.** For a client with the `ownedSubscriptions` capability, `SessionDelivery.permits()` drops every message that has no owning subscription (`server/session/owned-subscriptions/index.ts`). A broadcast with no event category reaches only pre-v0.8.0 clients — silently, with no log line and no error.
 - `sessionEventCategory()` returning the type is what routes it to `emitSubscribedEvent()`, which fans it out to the subscriptions that asked for that category. A client that did not subscribe receives nothing; that is the point.
 - The client subscribes with `observeEvents`, gated on the feature flag that owns the message. `SessionEventSubscriptionSchema` is a `z.enum`, so an old daemon rejects the whole `session.events.set_subscription.request` if it sees a name it does not know — never send a new category name to a daemon that has not advertised the feature.
-- **Carry no `payload` with a `requestId` unless the message really is a reply.** `replies.ts` classifies every correlated outbound message and fails typecheck until it is declared in `exceptions`. A pure notification takes no `payload` at all.
+- **Carry no `requestId` unless the message really is a reply.** `replies.ts` classifies every correlated outbound message and fails typecheck until it is declared in `exceptions`. A payload is fine on its own — `usage.updated` carries `{ cli, sessionId, agentId? }` so a screen can tell whether the change was its own — it is the `requestId` that makes the classifier call it a reply. A notification with nothing to say takes no `payload` at all.
 
 ### 4. Validation & Error Matrix
 

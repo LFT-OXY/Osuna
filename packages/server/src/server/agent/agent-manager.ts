@@ -54,6 +54,7 @@ import {
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
+import { restoreProviderSessionIds } from "./agent-storage.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
@@ -397,6 +398,12 @@ interface ManagedAgentBase {
   inFlightPermissionResponses: Set<string>;
   pendingReplacement: boolean;
   persistence: AgentPersistenceHandle | null;
+  /**
+   * Every provider session this agent has run in, oldest first. Claude hands
+   * back a new id on every resume, so the usage service needs the whole list to
+   * add up what the agent actually spent.
+   */
+  providerSessionIds: string[];
   historyPrimed: boolean;
   lastUserMessageAt: Date | null;
   activeTurnId: string | null;
@@ -539,6 +546,27 @@ function attachPersistenceCwd(
       cwd,
     },
   };
+}
+
+/**
+ * The one place a provider session id reaches an agent. Every handle refresh
+ * goes through here, so `providerSessionIds` grows by exactly the ids the agent
+ * really ran in — a Claude resume appends, everything else re-sets the same id.
+ */
+function applyPersistenceHandle(
+  agent: ManagedAgentBase,
+  handle: AgentPersistenceHandle | null,
+): void {
+  const next = attachPersistenceCwd(handle, agent.cwd);
+  if (!next) return;
+  agent.persistence = next;
+  rememberProviderSessionId(agent, next.sessionId);
+}
+
+function rememberProviderSessionId(agent: ManagedAgentBase, sessionId: string): void {
+  if (!sessionId) return;
+  if (agent.providerSessionIds.includes(sessionId)) return;
+  agent.providerSessionIds.push(sessionId);
 }
 
 interface SubscriptionRecord {
@@ -1886,6 +1914,7 @@ export class AgentManager {
         finalizedForegroundTurnIds: new Set(),
         unsubscribeSession: null,
         persistence: record.persistence ?? null,
+        providerSessionIds: restoreProviderSessionIds(record),
         historyPrimed: true,
         lastUserMessageAt: record.lastUserMessageAt ? new Date(record.lastUserMessageAt) : null,
         lastUsage: undefined,
@@ -2601,7 +2630,7 @@ export class AgentManager {
         ? { provider: mutableAgent.provider, sessionId: mutableAgent.runtimeInfo.sessionId }
         : null);
     if (persistenceHandle) {
-      mutableAgent.persistence = attachPersistenceCwd(persistenceHandle, mutableAgent.cwd);
+      applyPersistenceHandle(mutableAgent, persistenceHandle);
     }
     this.logger.trace(
       {
@@ -3584,6 +3613,10 @@ export class AgentManager {
       | undefined;
   }): ActiveManagedAgent {
     const { resolvedAgentId, session, config, now, durableTimelineHasRows, options } = params;
+    const persistence = attachPersistenceCwd(
+      options?.persistence ?? session.describePersistence(),
+      config.cwd,
+    );
     return {
       id: resolvedAgentId,
       provider: config.provider,
@@ -3609,10 +3642,8 @@ export class AgentManager {
       foregroundTurnWaiters: new Set<ForegroundTurnWaiter>(),
       finalizedForegroundTurnIds: new Set<string>(),
       unsubscribeSession: null,
-      persistence: attachPersistenceCwd(
-        options?.persistence ?? session.describePersistence(),
-        config.cwd,
-      ),
+      persistence,
+      providerSessionIds: persistence ? [persistence.sessionId] : [],
       historyPrimed: options?.historyPrimed ?? durableTimelineHasRows,
       lastUserMessageAt: options?.lastUserMessageAt ?? null,
       lastUsage: options?.lastUsage,
@@ -3896,10 +3927,7 @@ export class AgentManager {
         newInfo.modeId !== agent.runtimeInfo?.modeId;
       agent.runtimeInfo = newInfo;
       if (!agent.persistence && newInfo.sessionId) {
-        agent.persistence = attachPersistenceCwd(
-          { provider: agent.provider, sessionId: newInfo.sessionId },
-          agent.cwd,
-        );
+        applyPersistenceHandle(agent, { provider: agent.provider, sessionId: newInfo.sessionId });
       }
       // Emit state if runtimeInfo changed so clients get the updated model
       if (changed && options?.emit !== false) {
@@ -4239,10 +4267,10 @@ export class AgentManager {
       case "model_changed":
         agent.runtimeInfo = event.runtimeInfo;
         if (!agent.persistence && event.runtimeInfo.sessionId) {
-          agent.persistence = attachPersistenceCwd(
-            { provider: agent.provider, sessionId: event.runtimeInfo.sessionId },
-            agent.cwd,
-          );
+          applyPersistenceHandle(agent, {
+            provider: agent.provider,
+            sessionId: event.runtimeInfo.sessionId,
+          });
         }
         agent.currentModeId = event.runtimeInfo.modeId ?? agent.currentModeId;
         flags.shouldDispatchEvent = false;
@@ -4313,10 +4341,7 @@ export class AgentManager {
   }
 
   private refreshSessionPersistence(agent: ActiveManagedAgent): void {
-    const handle = agent.session.describePersistence();
-    if (handle) {
-      agent.persistence = attachPersistenceCwd(handle, agent.cwd);
-    }
+    applyPersistenceHandle(agent, agent.session.describePersistence());
   }
 
   private async onStreamTimelineEvent(params: {

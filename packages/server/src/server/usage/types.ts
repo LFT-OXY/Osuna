@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UsageCliSchema } from "@getpaseo/protocol/usage/types";
+import { UsageCliSchema, type UsageTokenTotals } from "@getpaseo/protocol/usage/types";
 
 /** UTC bucket width. Fifteen minutes keeps a year of rows in the thousands. */
 export const USAGE_BUCKET_MS = 15 * 60 * 1000;
@@ -273,6 +273,18 @@ export function turnRowKey(row: UsageTurnKey): string {
 /** Identifies the turn a row belongs to, across the models it ran. */
 export function turnKeyOf(row: Pick<UsageTurnRow, "cli" | "sessionId" | "turnKey">): string {
   return [row.cli, row.sessionId, row.turnKey].join(KEY_SEPARATOR);
+}
+
+export function emptyTotals(): UsageTokenTotals {
+  return { input: 0, cachedInput: 0, cacheWrite: 0, output: 0, reasoning: 0 };
+}
+
+export function addTotals(target: UsageTokenTotals, source: UsageTokenTotals): void {
+  target.input += source.input;
+  target.cachedInput += source.cachedInput;
+  target.cacheWrite += source.cacheWrite;
+  target.output += source.output;
+  target.reasoning += source.reasoning;
 }
 
 export function emptyBucketRow(key: UsageBucketKey): UsageBucketRow {

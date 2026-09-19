@@ -37,6 +37,7 @@ Everything reusable lives in `server/test-utils/`:
 - **No auth checks, env gates, or conditional skips in tests.** Providers own their auth; if it fails, the test fails.
 - **Global env shims go in `src/test-utils/vitest-setup.ts`** (loads `.env.test`, sets `PASEO_SUPERVISED=0`, disables Git/SSH prompts), not in individual files.
 - **Cleanup is explicit.** Push temp paths into an array and `rmSync` them in `afterEach`, or use the harness's `close()`. Leaked processes from ACP providers are a known failure mode; kill trees with `utils/tree-kill.ts`.
+- **Observe a transient phase from the service's own callback, not from a poll.** A state that exists only while a background round runs — `backfill.state === "running"` — cannot be caught reliably by a loop racing that round. `usage/service.agent.test.ts` reads the agent's usage from inside `onBackfillProgress`, which only fires from within the round, so the assertion is deterministic instead of timing-dependent.
 - **Assert full shapes.** `expect(result).toEqual({ ok: false, error: { code: "PROVIDER_TIMEOUT", waitedMs: 30000 } })`, not `toBeTruthy`.
 - **Name files after behavior**: `open-project-missing-directory.e2e.test.ts`, never `test-3.ts` or `setup-first.ts`.
 

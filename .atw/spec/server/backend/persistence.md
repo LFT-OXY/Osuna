@@ -22,6 +22,29 @@ Rules the stores share:
 - **Boundary returns answer the caller's question.** `listByWorkspace(workspaceId)` exists so callers do not repeat `list().filter(...)`.
 - **No migrations framework.** Schemas accept old shapes with optional fields and defaults; a record that fails to parse is treated as invalid, not migrated in place. `server/workspace-registry-bootstrap-legacy.ts` is what a deliberate one-off upgrade looks like when one is unavoidable.
 
+### Adding a field that records history the old records never kept
+
+`providerSessionIds` on the agent record (usage ticket 07, v0.8.2) is the shape:
+a list of every provider session an agent has run in, where the old records hold
+only the last handle. Three rules make it safe without a migration.
+
+- **One write point.** Every place that refreshed `agent.persistence` now goes
+  through `applyPersistenceHandle` in `server/agent/agent-manager.ts`, which sets
+  the handle and appends its id. Five assignment sites meant five chances for the
+  list to miss an id; one function means the list is exactly the ids the agent ran
+  in.
+- **Read the fallback through one exported function.** `restoreProviderSessionIds`
+  in `agent-storage.ts` derives `[persistence.sessionId]` when the field is
+  absent, and both consumers — the manager restoring an agent and the usage
+  bridge reading a record off disk — call it. A second inline `?? [handle]` is
+  where the two answers start to diverge.
+- **Never write the derived value back.** The record stays as it was until
+  something real changes it; a read-time backfill would rewrite every file in
+  `$PASEO_HOME` on the first start after an upgrade.
+
+Add the field to `docs/data-model.md` in the same change, including the sentence
+that says what readers do when it is missing.
+
 ### Gotcha: a cursor file that fails to parse replays everything
 
 `UsageStore.loadScanState()` drops the whole file and returns an empty state when

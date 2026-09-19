@@ -75,6 +75,30 @@ export class UsageSession {
     }));
   }
 
+  async handleUsageAgentGetRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.agent.get.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.agent.get.response",
+      payload: {
+        requestId: request.requestId,
+        ...(await this.usageService.getAgentUsage(request.agentId)),
+      },
+    }));
+  }
+
+  async handleUsageAgentTurnsListRequest(
+    request: Extract<SessionInboundMessage, { type: "usage.agent.turns.list.request" }>,
+  ): Promise<void> {
+    await this.respond(request, async () => ({
+      type: "usage.agent.turns.list.response",
+      payload: {
+        requestId: request.requestId,
+        ...(await this.usageService.listAgentTurns(request.agentId)),
+      },
+    }));
+  }
+
   /** One failure shape for the whole namespace, so every handler stays two lines. */
   private async respond(
     request: { type: string; requestId: string },

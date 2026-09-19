@@ -13,6 +13,20 @@ import {
 } from "./pi-like-parser.js";
 import type { PiLikeParserState, UsageParserState, UsageParseResult } from "./types.js";
 
+/**
+ * The cursor key of a session's own transcript. A subagent file of that session
+ * appends a segment, so this is also the prefix its files share.
+ */
+export function sessionCursorKey(cli: UsageCli, sessionId: string): string {
+  return `${cli} ${sessionId}`;
+}
+
+/** Whether a cursor key names this session's transcript or one of its subagents. */
+export function cursorKeyOfSession(key: string, cli: UsageCli, sessionId: string): boolean {
+  const prefix = sessionCursorKey(cli, sessionId);
+  return key === prefix || key.startsWith(`${prefix} `);
+}
+
 export interface UsageFileIdentity {
   /** Identifies the file across renames; also the `(cli, sessionId)` cursor key. */
   cursorKey: string;
@@ -43,14 +57,14 @@ const claudeAdapter: UsageSourceAdapter = {
       const agentFile = segments[segments.length - 1];
       if (!sessionId || !agentFile) return null;
       return {
-        cursorKey: `claude ${sessionId} ${stripJsonlExtension(agentFile)}`,
+        cursorKey: `${sessionCursorKey("claude", sessionId)} ${stripJsonlExtension(agentFile)}`,
         parser: createClaudeParserState({ subagent: true }),
       };
     }
     const fileName = segments[segments.length - 1];
     if (!fileName) return null;
     return {
-      cursorKey: `claude ${stripJsonlExtension(fileName)}`,
+      cursorKey: sessionCursorKey("claude", stripJsonlExtension(fileName)),
       parser: createClaudeParserState({ subagent: false }),
     };
   },
@@ -70,7 +84,7 @@ const codexAdapter: UsageSourceAdapter = {
     // Archiving a thread moves its file under `archived_sessions/`; keying on
     // the thread id rather than the path is what keeps it one file to scan.
     return {
-      cursorKey: `codex ${threadId ?? fileName}`,
+      cursorKey: sessionCursorKey("codex", threadId ?? fileName),
       parser: createCodexParserState({ threadId }),
     };
   },
@@ -100,7 +114,7 @@ function piLikeAdapter(cli: PiLikeParserState["kind"]): UsageSourceAdapter {
       if (segments.length > 2 && sessionDir) {
         const sessionId = sessionIdFromName(sessionDir);
         return {
-          cursorKey: `${cli} ${sessionId} ${segments.slice(2).join("/")}`,
+          cursorKey: `${sessionCursorKey(cli, sessionId)} ${segments.slice(2).join("/")}`,
           parser: createPiLikeParserState({ cli, sessionId, subagent: true }),
         };
       }
@@ -108,7 +122,7 @@ function piLikeAdapter(cli: PiLikeParserState["kind"]): UsageSourceAdapter {
       // before it gets there.
       const sessionId = sessionIdFromName(stripJsonlExtension(fileName));
       return {
-        cursorKey: `${cli} ${sessionId}`,
+        cursorKey: sessionCursorKey(cli, sessionId),
         parser: createPiLikeParserState({ cli, sessionId, subagent: false }),
       };
     },

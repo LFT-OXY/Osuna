@@ -16,7 +16,7 @@ import type {
   UsageTrendStackBy,
 } from "@getpaseo/protocol/usage/types";
 import type { UsageProjectAttribution } from "./project-attribution.js";
-import { modelRowKey, type UsageBucketRow } from "./types.js";
+import { addTotals, emptyTotals, modelRowKey, type UsageBucketRow } from "./types.js";
 
 const HEATMAP_DAYS = 182;
 const PROJECT_LIMIT = 200;
@@ -406,20 +406,8 @@ function byTokensDescending(
   return billableTokens(b.totals) - billableTokens(a.totals);
 }
 
-function emptyTotals(): UsageTokenTotals {
-  return { input: 0, cachedInput: 0, cacheWrite: 0, output: 0, reasoning: 0 };
-}
-
 function emptyAmount(): UsageAmount {
   return { totals: emptyTotals(), estimatedCost: 0 };
-}
-
-function addTotals(target: UsageTokenTotals, row: UsageTokenTotals): void {
-  target.input += row.input;
-  target.cachedInput += row.cachedInput;
-  target.cacheWrite += row.cacheWrite;
-  target.output += row.output;
-  target.reasoning += row.reasoning;
 }
 
 function addRow(target: UsageAmount, row: PricedRow): void {

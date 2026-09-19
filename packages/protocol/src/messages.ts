@@ -44,9 +44,14 @@ import {
   ScheduleUpdateResponseSchema,
 } from "./schedule/rpc-schemas.js";
 import {
+  UsageAgentGetRequestSchema,
+  UsageAgentGetResponseSchema,
+  UsageAgentTurnsListRequestSchema,
+  UsageAgentTurnsListResponseSchema,
   UsageReportGetRequestSchema,
   UsageReportGetResponseSchema,
   UsageBackfillProgressMessageSchema,
+  UsageUpdatedMessageSchema,
   UsagePricingListRequestSchema,
   UsagePricingListResponseSchema,
   UsagePricingRefreshRequestSchema,
@@ -3190,6 +3195,7 @@ export const SessionEventSubscriptionSchema = z.enum([
   // asks for these once `features.usage` is advertised; an older daemon would
   // reject the whole subscription request.
   "usage.backfill.progress",
+  "usage.updated",
   "usage.pricing.updated",
 ]);
 export type SessionEventSubscription = z.infer<typeof SessionEventSubscriptionSchema>;
@@ -3432,6 +3438,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UsageReportGetRequestSchema,
   UsagePricingListRequestSchema,
   UsagePricingRefreshRequestSchema,
+  UsageAgentGetRequestSchema,
+  UsageAgentTurnsListRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -6981,9 +6989,12 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DaemonUpdateResponseSchema,
   UsageReportGetResponseSchema,
   UsageBackfillProgressMessageSchema,
+  UsageUpdatedMessageSchema,
   UsagePricingListResponseSchema,
   UsagePricingRefreshResponseSchema,
   UsagePricingUpdatedMessageSchema,
+  UsageAgentGetResponseSchema,
+  UsageAgentTurnsListResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

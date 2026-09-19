@@ -24,6 +24,11 @@ export async function claudeProjectDir(
   return join(projectsRoot, encode(canonical));
 }
 
+/** Just the directory name, for callers that already know the projects root. */
+export function claudeProjectDirNameSync(cwd: string): string {
+  return encode(canonicalizeSync(cwd));
+}
+
 export function claudeProjectDirSync(cwd: string, options?: ClaudeProjectDirOptions): string {
   const canonical = canonicalizeSync(cwd);
   const projectsRoot = join(resolveConfigDir(options), "projects");

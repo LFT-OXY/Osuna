@@ -90,6 +90,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
       modeId: "plan",
     },
     persistence: { ...basePersistence },
+    providerSessionIds: [basePersistence.sessionId],
     lastUsage: undefined,
     lastError: lastErrorValue,
     historyPrimed: true,

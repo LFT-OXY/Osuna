@@ -188,6 +188,8 @@ const INBOUND_PERMISSION = {
   unsubscribe_terminals_request: "workspace.read",
   update_agent_request: "workspace.write",
   "usage.report.get.request": "daemon.read",
+  "usage.agent.get.request": "daemon.read",
+  "usage.agent.turns.list.request": "daemon.read",
   "usage.pricing.list.request": "daemon.read",
   // Refreshing reaches the network and rewrites the cached table, like any other
   // daemon-level setting change.
@@ -414,9 +416,12 @@ const OUTBOUND_PERMISSION = {
   update_agent_response: "workspace.write",
   "usage.backfill.progress": "daemon.read",
   "usage.report.get.response": "daemon.read",
+  "usage.agent.get.response": "daemon.read",
+  "usage.agent.turns.list.response": "daemon.read",
   "usage.pricing.list.response": "daemon.read",
   "usage.pricing.refresh.response": "daemon.manage",
   "usage.pricing.updated": "daemon.read",
+  "usage.updated": "daemon.read",
   validate_branch_response: "workspace.read",
   voice_input_state: "workspace.write",
   wait_for_finish_response: "workspace.read",

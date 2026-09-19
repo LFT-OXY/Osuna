@@ -68,6 +68,11 @@ const STORED_AGENT_SCHEMA = z.object({
     .optional(),
   features: z.array(AgentFeatureSchema).optional(),
   persistence: PERSISTENCE_HANDLE_SCHEMA,
+  /**
+   * Every provider session the agent has run in, oldest first. Absent on
+   * records written before the field existed; readers fall back to the handle.
+   */
+  providerSessionIds: z.array(z.string()).optional(),
   lastError: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
@@ -90,6 +95,17 @@ export type SerializableAgentConfig = Pick<
 >;
 
 export type StoredAgentRecord = z.infer<typeof STORED_AGENT_SCHEMA>;
+
+/** A record written before `providerSessionIds` existed knows only its handle. */
+export function restoreProviderSessionIds(record: {
+  providerSessionIds?: string[];
+  persistence?: { sessionId: string } | null;
+}): string[] {
+  if (record.providerSessionIds && record.providerSessionIds.length > 0) {
+    return [...record.providerSessionIds];
+  }
+  return record.persistence?.sessionId ? [record.persistence.sessionId] : [];
+}
 export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
   return STORED_AGENT_SCHEMA.parse(value);
 }
@@ -135,7 +151,10 @@ export class AgentStorage {
       (record) =>
         record.persistence?.provider === provider &&
         (record.persistence.sessionId === providerHandleId ||
-          record.persistence.nativeHandle === providerHandleId),
+          record.persistence.nativeHandle === providerHandleId ||
+          // A Claude resume leaves the old id behind; the session it names is
+          // still this agent's, so importing it again would duplicate it.
+          record.providerSessionIds?.includes(providerHandleId) === true),
     );
   }
 

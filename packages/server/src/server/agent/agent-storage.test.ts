@@ -5,7 +5,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { promises as fs } from "node:fs";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
-import { AgentStorage } from "./agent-storage.js";
+import { AgentStorage, restoreProviderSessionIds } from "./agent-storage.js";
 import { buildConfigOverrides, buildSessionConfig } from "../persistence-hooks.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type {
@@ -125,6 +125,9 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
         sessionId: overrides.sessionId ?? "session-123",
       }),
     persistence: overrides.persistence ?? null,
+    providerSessionIds:
+      overrides.providerSessionIds ??
+      (overrides.persistence ? [overrides.persistence.sessionId] : []),
     historyPrimed: overrides.historyPrimed ?? true,
     lastUserMessageAt: overrides.lastUserMessageAt ?? core.now,
     lastUsage: overrides.lastUsage,
@@ -460,6 +463,34 @@ describe("AgentStorage", () => {
     await expect(storage.listByProviderSession("codex", "thread-1")).resolves.toMatchObject([
       { id: "matching-session" },
     ]);
+  });
+
+  test("finds an agent by a session it has since been resumed away from", async () => {
+    await storage.applySnapshot(
+      createManagedAgent({
+        id: "resumed-agent",
+        provider: "claude",
+        persistence: { provider: "claude", sessionId: "session-new" },
+        providerSessionIds: ["session-old", "session-new"],
+      }),
+    );
+
+    await expect(storage.listByProviderSession("claude", "session-old")).resolves.toMatchObject([
+      { id: "resumed-agent" },
+    ]);
+  });
+
+  test("a record written before the field existed falls back to its handle", () => {
+    expect(restoreProviderSessionIds({ persistence: { sessionId: "session-1" } })).toEqual([
+      "session-1",
+    ]);
+    expect(restoreProviderSessionIds({ persistence: null })).toEqual([]);
+    expect(
+      restoreProviderSessionIds({
+        providerSessionIds: ["session-0", "session-1"],
+        persistence: { sessionId: "session-1" },
+      }),
+    ).toEqual(["session-0", "session-1"]);
   });
 
   test("queries agents by workspace", async () => {
