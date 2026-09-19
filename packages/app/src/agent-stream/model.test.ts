@@ -73,6 +73,8 @@ describe("buildAgentStreamRenderModel", () => {
     expect(model.turnTiming.byAssistantId.get("visible-a")).toEqual({
       completedAt: tail[3]?.timestamp,
       durationMs: 1000,
+      turnId: null,
+      userMessageId: null,
     });
   });
 
@@ -204,6 +206,8 @@ describe("buildAgentStreamRenderModel", () => {
     expect(model.turnTiming.byAssistantId.get("live-a")).toEqual({
       completedAt: head[0]?.timestamp,
       durationMs: 3000,
+      turnId: null,
+      userMessageId: null,
     });
   });
 
@@ -223,6 +227,8 @@ describe("buildAgentStreamRenderModel", () => {
     expect(model.turnTiming.byAssistantId.get("a1")).toEqual({
       completedAt: tail[1]?.timestamp,
       durationMs: 3000,
+      turnId: null,
+      userMessageId: null,
     });
   });
 

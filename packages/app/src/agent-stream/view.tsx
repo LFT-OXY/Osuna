@@ -106,6 +106,7 @@ import { recordRenderProfileReasons } from "@/utils/render-profiler";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins/timeline";
+import { AgentUsageScopeProvider } from "@/usage/agent-scope";
 
 function renderLiveAuxiliaryNode(input: {
   pendingPermissions: ReactNode;
@@ -1091,7 +1092,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       () => [...effectiveStreamItems, ...(effectiveStreamHead ?? [])],
       [effectiveStreamItems, effectiveStreamHead],
     );
-    return (
+    const streamSurface = (
       <ChatFind
         agentId={agentId}
         serverId={resolvedServerId}
@@ -1150,6 +1151,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           </AssistantSelectionCopySurface>
         </ToolCallSheetProvider>
       </ChatFind>
+    );
+    return (
+      <AgentUsageScopeProvider serverId={resolvedServerId} agentId={agentId}>
+        {streamSurface}
+      </AgentUsageScopeProvider>
     );
   },
 );

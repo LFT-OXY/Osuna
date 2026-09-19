@@ -38,6 +38,22 @@ export function useHostFeature(
   return useSessionStore((state) => selectHostFeature(state, normalizedServerId, feature));
 }
 
+/**
+ * `true` / `false` once the host has sent `server_info`, `null` while it has
+ * not — a disconnected host is not an outdated one, and the two read the same
+ * through `useHostFeature`.
+ */
+export function useHostFeatureAvailability(
+  serverId: string | null | undefined,
+  feature: HostFeatureName,
+): boolean | null {
+  const normalizedServerId = serverId?.trim() ?? "";
+  return useSessionStore((state) => {
+    const serverInfo = state.sessions[normalizedServerId]?.serverInfo;
+    return serverInfo ? hostSupportsFeature(serverInfo, feature) : null;
+  });
+}
+
 export function useHostFeatureMap(
   serverIds: readonly string[],
   feature: HostFeatureName,

@@ -12,6 +12,8 @@
 
 References: `hooks/use-agent-commands-query.ts`, `data/providers-snapshot.ts`, `plugins/settings/use-settings.ts`, `projects/icons.ts`. Query keys are built by exported functions (`hooks/agent-history-query-key.ts`) so invalidation and tests share them.
 
+When a replica query needs an `observeEvents` subscription of its own (`price-table/use-price-table.ts`, `usage/use-agent-usage.ts`), that subscription belongs to the surface that mounts the query, not to a sibling that happens to mount beside it. Two surfaces reading the same agent — the stream's turn footers and the composer's context meter — each own one, even though that costs a second subscription: a meter whose freshness depends on a stream view being mounted next to it is correct only by accident, and the accident is invisible until someone renders one without the other.
+
 Directory-backed caches (Git status, PR status, file preview) are keyed by `(serverId, cwd)` and are React Query caches, not persisted stores (`docs/data-model.md` "Keying convention").
 
 ### Fetches with no push event refresh through `enabled`
@@ -79,6 +81,10 @@ return useSyncExternalStore(store.subscribeAll, read, read);
 `runtime/host-runtime.ts` (`HostRuntimeController`) owns saved hosts, reconnection, and per-host runtime state. `runtime/host-features.ts` is where a feature checks `server_info.features.*` once and either runs or tells the user to update the host. No fallback branches for old daemons in components.
 
 The check lives in the runtime-wired wrapper, not the surface: `SessionHistoryView` calls `useHostFeature(serverId, "sessionHistory")` and passes `isSupported` down; `SessionHistorySurface` folds it into the query's `enabled` and renders the update prompt after the disconnected state (a disconnected host has no `server_info`, so its flag reads false and would otherwise show the wrong message). The `// COMPAT(name): added in vX, remove after <date>` tag goes on that one line in the surface, and the jsdom test drives the state through the prop. The same wrapper owns any navigation the surface triggers (`navigateToAgent` for a Paseo-owned row) so the surface stays a plain-props seam with no router import.
+
+A surface that shows the update prompt inline — no disconnected state of its own to render first — takes the three-state read instead: `useHostFeatureAvailability(serverId, feature)` is `true` / `false` once `server_info` has arrived and `null` while it has not. `null` renders nothing, because a host that has not answered is not an outdated one, and `useHostFeature`'s boolean cannot tell them apart. `ContextWindowMeter`'s session-total section is the reference; `usage/host-options.ts` applies the same three states across a list of hosts.
+
+**A feature flag says the daemon can answer, not that it has an answer for this object.** `usage.agent.get` / `usage.agent.turns.list` report `complete: false` and zero rows forever for an agent whose CLI the scanner never reads — a mock agent, OpenCode, Copilot — because "not finished scanning" and "nothing to scan" are the same field. A placeholder or an empty state keyed on `complete` alone therefore becomes permanent furniture on those agents, and zeroes read as "you spent nothing", which is not what the daemon said. Separate the two cases on the client: `usage/sources.ts` `isUsageTrackedProvider` says whether this agent's provider produces rows at all, so an empty report from one of the four scanned CLIs shows the section marked incomplete while an empty report from anything else shows nothing. Where no provider is in hand, fall back to evidence that rows exist (`usage/turn-usage.ts`: `isTurnUsagePending` wants a row already, `hasAgentUsage` wants a turn or a first timestamp).
 
 ## Anti-patterns
 

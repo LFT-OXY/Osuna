@@ -316,6 +316,23 @@ export const ru: TranslationResources = {
     },
   },
   message: {
+    workedFor: "Работа заняла {{duration}}",
+    turnUsage: {
+      title: "Расход за ход",
+      total: "Итого",
+      duration: "Длительность",
+      note: "Оценочная стоимость · по публичным тарифам API",
+      unpriced: "Нет данных о цене",
+      reasoning: "({{tokens}} на рассуждение)",
+      accessibility: "Расход за ход: ввод {{input}}, вывод {{output}}, {{cost}}",
+      columns: {
+        model: "Модель",
+        input: "Ввод",
+        cache: "Кэш",
+        output: "Вывод",
+        cost: "Стоимость",
+      },
+    },
     diagram: {
       diagram: "Диаграмма",
       zoomIn: "Увеличить масштаб",
@@ -1989,8 +2006,19 @@ export const ru: TranslationResources = {
     title: "Контекстное окно",
     used: "Использовано: {{percentage}}%",
     tokens: "Токены: {{used}} / {{max}}",
-    sessionCost: "Стоимость сессии: {{cost}}",
-    accessibility: "Использовано {{percentage}}% контекстного окна",
+    sessionCost: "Оценочная стоимость: {{cost}}",
+    accessibility: "Использовано {{percentage}}% контекстного окна, {{used}} из {{max}}",
+    sessionTotal: {
+      title: "Итого за сессию",
+      tokens: "Токены",
+      estimatedCost: "Оценочная стоимость",
+      turns: "Ходы",
+      turnsRunning: "{{turns}} + выполняется",
+      agentRuntime: "Время работы агента",
+      sessionSpan: "Продолжительность сессии",
+      incomplete: "Неполные данные",
+      hostUpgradeRequired: "Обновите хост",
+    },
   },
   review: {
     comment: {

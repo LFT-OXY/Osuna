@@ -1,4 +1,4 @@
-import { formatTokenCount } from "@/components/context-window-meter.utils";
+import { formatUsageTokensCompact } from "@/usage/format";
 import { describeTimeAgo, formatShortDuration } from "@/usage/relative-time";
 import type { UsageText } from "@/usage/text";
 import type {
@@ -42,7 +42,7 @@ export function formatAmount(value: number, unit: ProviderUsageBalanceUnit): str
     case "usd":
       return `$${value.toFixed(2)}`;
     case "tokens":
-      return formatTokenCount(value);
+      return formatUsageTokensCompact(value);
     default:
       return value.toLocaleString();
   }

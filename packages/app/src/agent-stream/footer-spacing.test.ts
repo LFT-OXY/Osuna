@@ -67,6 +67,8 @@ function timingFor(assistantId: string): Map<string, TurnTiming> {
       {
         completedAt: new Date("2026-08-22T10:00:02.000Z"),
         durationMs: 2_000,
+        turnId: null,
+        userMessageId: null,
       },
     ],
   ]);

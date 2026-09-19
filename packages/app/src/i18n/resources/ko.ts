@@ -313,6 +313,23 @@ export const ko: TranslationResources = {
     },
   },
   message: {
+    workedFor: "작업 시간 {{duration}}",
+    turnUsage: {
+      title: "이번 턴 사용량",
+      total: "합계",
+      duration: "소요 시간",
+      note: "추정 비용 · 공개 API 요금 기준",
+      unpriced: "가격 정보 없음",
+      reasoning: "(추론 {{tokens}})",
+      accessibility: "이번 턴 사용량: 입력 {{input}}, 출력 {{output}}, {{cost}}",
+      columns: {
+        model: "모델",
+        input: "입력",
+        cache: "캐시",
+        output: "출력",
+        cost: "비용",
+      },
+    },
     diagram: {
       diagram: "다이어그램",
       zoomIn: "확대",
@@ -1966,8 +1983,19 @@ export const ko: TranslationResources = {
     title: "컨텍스트 윈도우",
     used: "{{percentage}}% 사용됨",
     tokens: "{{used}} / {{max}} 토큰",
-    sessionCost: "세션 비용 {{cost}}",
-    accessibility: "컨텍스트 윈도우 {{percentage}}% 사용됨",
+    sessionCost: "추정 비용 {{cost}}",
+    accessibility: "컨텍스트 윈도우 {{percentage}}% 사용됨, {{used}} / {{max}}",
+    sessionTotal: {
+      title: "세션 합계",
+      tokens: "토큰",
+      estimatedCost: "추정 비용",
+      turns: "턴 수",
+      turnsRunning: "{{turns}} + 진행 중",
+      agentRuntime: "에이전트 실행 시간",
+      sessionSpan: "세션 기간",
+      incomplete: "불완전",
+      hostUpgradeRequired: "호스트 업데이트",
+    },
   },
   review: {
     comment: {

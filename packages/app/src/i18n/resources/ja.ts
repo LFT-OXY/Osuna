@@ -317,6 +317,23 @@ export const ja: TranslationResources = {
     },
   },
   message: {
+    workedFor: "作業時間 {{duration}}",
+    turnUsage: {
+      title: "このターンの使用量",
+      total: "合計",
+      duration: "所要時間",
+      note: "推定コスト · 公開 API 料金で算出",
+      unpriced: "料金データなし",
+      reasoning: "（推論 {{tokens}}）",
+      accessibility: "このターンの使用量: 入力 {{input}}、出力 {{output}}、{{cost}}",
+      columns: {
+        model: "モデル",
+        input: "入力",
+        cache: "キャッシュ",
+        output: "出力",
+        cost: "コスト",
+      },
+    },
     diagram: {
       diagram: "図",
       zoomIn: "拡大",
@@ -1976,8 +1993,19 @@ export const ja: TranslationResources = {
     title: "コンテキストウィンドウ",
     used: "{{percentage}}%使用",
     tokens: "{{used}} / {{max}}トークン",
-    sessionCost: "セッションコスト: {{cost}}",
-    accessibility: "コンテキストウィンドウ{{percentage}}%使用",
+    sessionCost: "推定コスト {{cost}}",
+    accessibility: "コンテキストウィンドウ {{percentage}}% 使用、{{used}} / {{max}}",
+    sessionTotal: {
+      title: "セッション合計",
+      tokens: "トークン",
+      estimatedCost: "推定コスト",
+      turns: "ターン数",
+      turnsRunning: "{{turns}} + 実行中",
+      agentRuntime: "エージェント稼働時間",
+      sessionSpan: "セッション期間",
+      incomplete: "不完全",
+      hostUpgradeRequired: "ホストを更新",
+    },
   },
   review: {
     comment: {

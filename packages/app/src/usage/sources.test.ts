@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isUsageTrackedProvider,
   usageBackendLabel,
   usageModelColor,
   usageSourceColor,
@@ -8,6 +9,29 @@ import {
   usageTrendGroupColor,
 } from "./sources";
 import { usageSourceKey } from "./totals";
+
+describe("isUsageTrackedProvider", () => {
+  it("names the four CLIs whose logs the scanner reads", () => {
+    expect(["claude", "codex", "pi", "omp"].map(isUsageTrackedProvider)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("leaves out every provider that produces no usage rows", () => {
+    expect(["opencode", "copilot", "kiro", "zai", ""].map(isUsageTrackedProvider)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(isUsageTrackedProvider(null)).toBe(false);
+    expect(isUsageTrackedProvider(undefined)).toBe(false);
+  });
+});
 
 describe("usageSourceRefFromKey", () => {
   it("round-trips every shape `usageSourceKey` produces", () => {

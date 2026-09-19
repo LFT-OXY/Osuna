@@ -318,6 +318,23 @@ export const fr: TranslationResources = {
     },
   },
   message: {
+    workedFor: "A travaillé pendant {{duration}}",
+    turnUsage: {
+      title: "Utilisation du tour",
+      total: "Total",
+      duration: "Durée",
+      note: "Coût estimé · selon les tarifs publics de l'API",
+      unpriced: "Aucune donnée tarifaire",
+      reasoning: "({{tokens}} de raisonnement)",
+      accessibility: "Utilisation du tour : {{input}} en entrée, {{output}} en sortie, {{cost}}",
+      columns: {
+        model: "Modèle",
+        input: "Entrée",
+        cache: "Cache",
+        output: "Sortie",
+        cost: "Coût",
+      },
+    },
     diagram: {
       diagram: "Diagramme",
       zoomIn: "Zoomer",
@@ -2009,8 +2026,19 @@ export const fr: TranslationResources = {
     title: "Fenêtre contextuelle",
     used: "{{percentage}}% utilisé",
     tokens: "Jetons{{used}}/{{max}}",
-    sessionCost: "Coût de la séance{{cost}}",
-    accessibility: "Fenêtre contextuelle{{percentage}}% utilisé",
+    sessionCost: "Coût estimé {{cost}}",
+    accessibility: "Fenêtre contextuelle {{percentage}}% utilisée, {{used}} sur {{max}}",
+    sessionTotal: {
+      title: "Total de la session",
+      tokens: "Jetons",
+      estimatedCost: "Coût estimé",
+      turns: "Tours",
+      turnsRunning: "{{turns}} + en cours",
+      agentRuntime: "Temps de l'agent",
+      sessionSpan: "Durée de la session",
+      incomplete: "Incomplet",
+      hostUpgradeRequired: "Mettre à jour l'hôte",
+    },
   },
   review: {
     comment: {

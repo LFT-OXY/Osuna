@@ -51,6 +51,7 @@ import { ContextWindowMeter } from "@/components/context-window-meter";
 import { KeyboardTranslateView } from "@/components/keyboard-translate-view";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
 import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useFilePicker } from "@/hooks/use-file-picker";
 import { useFileDrop } from "@/components/file-drop/use-file-drop";
 import type { DroppedItem } from "@/components/file-drop/types";
@@ -275,39 +276,53 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
   };
 }
 
-function renderContextWindowMeter(
-  contextWindowMaxTokens: number | null,
-  contextWindowUsedTokens: number | null,
-  totalCostUsd: number | null,
-  showPercentage: boolean,
-  serverId: string,
-  provider: string | null,
-  pending: boolean,
-  glyphSize: number,
-): ReactElement | null {
-  const hasData = contextWindowMaxTokens !== null && contextWindowUsedTokens !== null;
-  if (!hasData && !pending) {
+interface ContextWindowMeterArgs {
+  maxTokens: number | null;
+  usedTokens: number | null;
+  totalCostUsd: number | null;
+  serverId: string;
+  agentId: string;
+  provider: string | null;
+  pending: boolean;
+  glyphSize: number;
+  usageSupport: boolean | null;
+  runningTurnStartedAt: Date | null;
+  showTokenLabel: boolean;
+}
+
+function renderContextWindowMeter(args: ContextWindowMeterArgs): ReactElement | null {
+  const hasData = args.maxTokens !== null && args.usedTokens !== null;
+  if (!hasData && !args.pending) {
     return null;
   }
   return (
     <ContextWindowMeter
-      maxTokens={contextWindowMaxTokens}
-      usedTokens={contextWindowUsedTokens}
-      totalCostUsd={totalCostUsd}
-      showPercentage={showPercentage}
-      serverId={serverId}
-      provider={provider}
-      pending={pending}
-      glyphSize={glyphSize}
+      maxTokens={args.maxTokens}
+      usedTokens={args.usedTokens}
+      totalCostUsd={args.totalCostUsd}
+      showPercentage={false}
+      serverId={args.serverId}
+      agentId={args.agentId}
+      provider={args.provider}
+      pending={args.pending}
+      glyphSize={args.glyphSize}
+      usageSupport={args.usageSupport}
+      runningTurnStartedAt={args.runningTurnStartedAt}
+      showTokenLabel={args.showTokenLabel}
     />
   );
 }
 
-function resolveContextWindowPlacement(
-  meter: ReactElement | null,
-  reserveSlot: boolean,
-): ReactNode {
-  return reserveSlot ? <View style={styles.contextWindowMeterSlot}>{meter}</View> : null;
+function resolveContextWindowPlacement(input: {
+  meter: ReactElement | null;
+  reserveSlot: boolean;
+  showTokenLabel: boolean;
+}): ReactNode {
+  if (!input.reserveSlot) return null;
+  const slotStyle = input.showTokenLabel
+    ? styles.contextWindowMeterLabelSlot
+    : styles.contextWindowMeterSlot;
+  return <View style={slotStyle}>{input.meter}</View>;
 }
 
 interface RenderLeftContentArgs {
@@ -2067,20 +2082,31 @@ function ComposerContentImpl({
 
   const contextWindowPending = agentState.status === "initializing" || isAgentRunning;
   const contextWindowMeterGlyphSize = isCompactLayout ? ICON_SIZE.md : buttonIconSize;
+  // A phone keeps the ring alone; the toolbar has no room for `84K / 200K`.
+  const showContextWindowTokenLabel = !isCompactLayout;
+  // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
+  const usageSupport = useHostFeatureAvailability(serverId, "usage");
+  const runningTurnStartedAt = useSessionStore(
+    (state) => selectAgentTurnPresentation(state.sessions[serverId], agentId).startedAt,
+  );
 
   const contextWindowMeter = useMemo(
     () =>
-      renderContextWindowMeter(
-        contextWindowMaxTokens,
-        contextWindowUsedTokens,
-        agentState.totalCostUsd,
-        false,
+      renderContextWindowMeter({
+        maxTokens: contextWindowMaxTokens,
+        usedTokens: contextWindowUsedTokens,
+        totalCostUsd: agentState.totalCostUsd,
         serverId,
-        agentState.provider,
-        contextWindowPending,
-        contextWindowMeterGlyphSize,
-      ),
+        agentId,
+        provider: agentState.provider,
+        pending: contextWindowPending,
+        glyphSize: contextWindowMeterGlyphSize,
+        usageSupport,
+        runningTurnStartedAt,
+        showTokenLabel: showContextWindowTokenLabel,
+      }),
     [
+      agentId,
       contextWindowMaxTokens,
       contextWindowUsedTokens,
       agentState.totalCostUsd,
@@ -2088,11 +2114,19 @@ function ComposerContentImpl({
       agentState.provider,
       contextWindowPending,
       contextWindowMeterGlyphSize,
+      runningTurnStartedAt,
+      showContextWindowTokenLabel,
+      usageSupport,
     ],
   );
   const beforeVoiceContent = useMemo(
-    () => resolveContextWindowPlacement(contextWindowMeter, hasAgent),
-    [contextWindowMeter, hasAgent],
+    () =>
+      resolveContextWindowPlacement({
+        meter: contextWindowMeter,
+        reserveSlot: hasAgent,
+        showTokenLabel: showContextWindowTokenLabel,
+      }),
+    [contextWindowMeter, hasAgent, showContextWindowTokenLabel],
   );
 
   const hasGithubAttachment = useMemo(
@@ -2555,6 +2589,14 @@ const styles = StyleSheet.create((theme: Theme) => ({
   },
   contextWindowMeterSlot: {
     width: 28,
+    height: 28,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Same slot, sized by its content once the `84K / 200K` label rides along.
+  contextWindowMeterLabelSlot: {
+    minWidth: 28,
     height: 28,
     flexShrink: 0,
     alignItems: "center",

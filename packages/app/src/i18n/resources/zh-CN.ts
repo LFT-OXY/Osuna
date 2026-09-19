@@ -312,6 +312,23 @@ export const zhCN: TranslationResources = {
     },
   },
   message: {
+    workedFor: "已工作 {{duration}}",
+    turnUsage: {
+      title: "本轮用量",
+      total: "合计",
+      duration: "耗时",
+      note: "估算成本 · 按公开 API 价格计算",
+      unpriced: "无价格数据",
+      reasoning: "（{{tokens}} 推理）",
+      accessibility: "本轮用量：输入 {{input}}，输出 {{output}}，{{cost}}",
+      columns: {
+        model: "模型",
+        input: "输入",
+        cache: "缓存",
+        output: "输出",
+        cost: "估算成本",
+      },
+    },
     diagram: {
       diagram: "图表",
       zoomIn: "放大",
@@ -1935,8 +1952,19 @@ export const zhCN: TranslationResources = {
     title: "上下文窗口",
     used: "已使用 {{percentage}}%",
     tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "会话费用 {{cost}}",
-    accessibility: "上下文窗口已使用 {{percentage}}%",
+    sessionCost: "估算成本 {{cost}}",
+    accessibility: "上下文窗口已使用 {{percentage}}%，{{used}} / {{max}}",
+    sessionTotal: {
+      title: "本会话合计",
+      tokens: "Token",
+      estimatedCost: "估算成本",
+      turns: "轮次",
+      turnsRunning: "{{turns}} + 进行中",
+      agentRuntime: "Agent 运行",
+      sessionSpan: "会话跨度",
+      incomplete: "不完整",
+      hostUpgradeRequired: "需要更新主机",
+    },
   },
   review: {
     comment: {

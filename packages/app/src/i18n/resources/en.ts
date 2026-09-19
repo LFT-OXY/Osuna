@@ -309,6 +309,23 @@ export const en = {
     },
   },
   message: {
+    workedFor: "Worked for {{duration}}",
+    turnUsage: {
+      title: "Turn usage",
+      total: "Total",
+      duration: "Duration",
+      note: "Estimated cost · priced at public API rates",
+      unpriced: "No price data",
+      reasoning: "({{tokens}} reasoning)",
+      accessibility: "Turn usage: {{input}} in, {{output}} out, {{cost}}",
+      columns: {
+        model: "Model",
+        input: "Input",
+        cache: "Cache",
+        output: "Output",
+        cost: "Cost",
+      },
+    },
     diagram: {
       diagram: "Diagram",
       zoomIn: "Zoom in",
@@ -1981,8 +1998,19 @@ export const en = {
     title: "Context window",
     used: "{{percentage}}% used",
     tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "Session cost {{cost}}",
-    accessibility: "Context window {{percentage}}% used",
+    sessionCost: "Estimated cost {{cost}}",
+    accessibility: "Context window {{percentage}}% used, {{used}} of {{max}}",
+    sessionTotal: {
+      title: "Session total",
+      tokens: "Tokens",
+      estimatedCost: "Estimated cost",
+      turns: "Turns",
+      turnsRunning: "{{turns}} + running",
+      agentRuntime: "Agent runtime",
+      sessionSpan: "Session span",
+      incomplete: "Incomplete",
+      hostUpgradeRequired: "Update host",
+    },
   },
   review: {
     comment: {

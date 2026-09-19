@@ -1,5 +1,6 @@
 /**
- * Number shapes for the usage page. Thousands separators, percent signs and
+ * Number shapes for usage figures wherever they appear — the usage page, the
+ * turn footer, the context meter. Thousands separators, percent signs and
  * decimal marks follow the UI language; `K` / `M` / `B` and `$` do not, so the
  * same abbreviation reads the same in every language on the same screen.
  */
@@ -18,6 +19,22 @@ export function formatUsageTokensCompact(value: number): string {
   if (magnitude >= 1_000_000) return `${sign}${(magnitude / 1_000_000).toFixed(1)}M`;
   if (magnitude >= 1_000) return `${sign}${(magnitude / 1_000).toFixed(1)}K`;
   return `${sign}${magnitude}`;
+}
+
+/** `↑14.3K ↓4.6K` — uncached input in, output out. One shape, two surfaces. */
+export function formatTokenArrows(input: number, output: number): string {
+  return `↑${formatUsageTokensCompact(input)} ↓${formatUsageTokensCompact(output)}`;
+}
+
+/**
+ * Session and turn cost: four decimals under a cent, two above. A model the
+ * price table does not know reads `$0.00`, which the surrounding UI marks as
+ * "no price data" rather than as free.
+ */
+export function formatSessionCost(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "$0.00";
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(2)}`;
 }
 
 /** Two decimals, always. An unpriced model reads `$0.00`, never a blank. */

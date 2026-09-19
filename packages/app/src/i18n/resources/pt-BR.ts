@@ -316,6 +316,23 @@ export const ptBR: TranslationResources = {
     },
   },
   message: {
+    workedFor: "Trabalhou por {{duration}}",
+    turnUsage: {
+      title: "Uso do turno",
+      total: "Total",
+      duration: "Duração",
+      note: "Custo estimado · pelos preços públicos da API",
+      unpriced: "Sem dados de preço",
+      reasoning: "({{tokens}} de raciocínio)",
+      accessibility: "Uso do turno: {{input}} de entrada, {{output}} de saída, {{cost}}",
+      columns: {
+        model: "Modelo",
+        input: "Entrada",
+        cache: "Cache",
+        output: "Saída",
+        cost: "Custo",
+      },
+    },
     diagram: {
       diagram: "Diagrama",
       zoomIn: "Aproximar",
@@ -1989,8 +2006,19 @@ export const ptBR: TranslationResources = {
     title: "Janela de contexto",
     used: "{{percentage}}% usado",
     tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "Custo da sessão {{cost}}",
-    accessibility: "Janela de contexto {{percentage}}% usada",
+    sessionCost: "Custo estimado {{cost}}",
+    accessibility: "Janela de contexto {{percentage}}% usada, {{used}} de {{max}}",
+    sessionTotal: {
+      title: "Total da sessão",
+      tokens: "Tokens",
+      estimatedCost: "Custo estimado",
+      turns: "Turnos",
+      turnsRunning: "{{turns}} + em andamento",
+      agentRuntime: "Tempo do agente",
+      sessionSpan: "Duração da sessão",
+      incomplete: "Incompleto",
+      hostUpgradeRequired: "Atualize o host",
+    },
   },
   review: {
     comment: {

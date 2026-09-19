@@ -312,6 +312,23 @@ export const ar: TranslationResources = {
     },
   },
   message: {
+    workedFor: "استغرق {{duration}}",
+    turnUsage: {
+      title: "استهلاك هذه الجولة",
+      total: "الإجمالي",
+      duration: "المدة",
+      note: "التكلفة التقديرية · بأسعار واجهة البرمجة العلنية",
+      unpriced: "لا توجد بيانات تسعير",
+      reasoning: "({{tokens}} للاستدلال)",
+      accessibility: "استهلاك هذه الجولة: {{input}} إدخال، {{output}} إخراج، {{cost}}",
+      columns: {
+        model: "النموذج",
+        input: "الإدخال",
+        cache: "التخزين المؤقت",
+        output: "الإخراج",
+        cost: "التكلفة",
+      },
+    },
     diagram: {
       diagram: "مخطط",
       zoomIn: "تكبير",
@@ -1956,8 +1973,19 @@ export const ar: TranslationResources = {
     title: "نافذة السياق",
     used: "تم استخدام{{percentage}}%",
     tokens: "رموز{{used}}/{{max}}",
-    sessionCost: "تكلفة الجلسة{{cost}}",
-    accessibility: "تم استخدام نافذة السياق{{percentage}}%",
+    sessionCost: "التكلفة التقديرية {{cost}}",
+    accessibility: "نافذة السياق مستخدمة بنسبة {{percentage}}%، {{used}} من {{max}}",
+    sessionTotal: {
+      title: "إجمالي الجلسة",
+      tokens: "الرموز",
+      estimatedCost: "التكلفة التقديرية",
+      turns: "الجولات",
+      turnsRunning: "{{turns}} + قيد التنفيذ",
+      agentRuntime: "مدة تشغيل الوكيل",
+      sessionSpan: "امتداد الجلسة",
+      incomplete: "غير مكتمل",
+      hostUpgradeRequired: "حدّث المضيف",
+    },
   },
   review: {
     comment: {

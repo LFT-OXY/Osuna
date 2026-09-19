@@ -92,6 +92,8 @@ describe("canonical turn membership", () => {
     expect(completed.layout.auxiliaryTurnFooter?.timing).toEqual({
       completedAt: at(6),
       durationMs: null,
+      turnId: "turn-3",
+      userMessageId: null,
     });
   });
 

@@ -12,6 +12,19 @@ const CLI_LABELS: Record<UsageCli, string> = {
 };
 
 /**
+ * The four CLIs whose logs the scanner reads. A Paseo provider id outside this
+ * set — OpenCode, Copilot, an ACP agent, a custom binary — never produces usage
+ * rows, so an empty report for it means "nothing to read", not "not read yet".
+ * Custom providers that wrap one of the four carry their own id and fall
+ * outside too; their usage shows up once rows land.
+ */
+const USAGE_TRACKED_PROVIDERS = new Set<string>(["claude", "codex", "pi", "omp"]);
+
+export function isUsageTrackedProvider(provider: string | null | undefined): boolean {
+  return provider !== null && provider !== undefined && USAGE_TRACKED_PROVIDERS.has(provider);
+}
+
+/**
  * Pi and OMP route to a backend the user names themselves, lowercased by the
  * parsers. Known names get their vendor spelling; anything else keeps the
  * user's own name with a capital first letter.

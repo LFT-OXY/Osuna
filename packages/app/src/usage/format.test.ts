@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatSessionCost,
+  formatTokenArrows,
   formatUsageCost,
   formatUsageShare,
   formatUsageTokensCompact,
@@ -37,6 +39,30 @@ describe("formatUsageCost", () => {
     expect(formatUsageCost(0)).toBe("$0.00");
     expect(formatUsageCost(0.174)).toBe("$0.17");
     expect(formatUsageCost(1234.5)).toBe("$1234.50");
+  });
+});
+
+describe("formatTokenArrows", () => {
+  it("reads as uncached input in, output out", () => {
+    expect(formatTokenArrows(14_300, 4_600)).toBe("↑14.3K ↓4.6K");
+    expect(formatTokenArrows(0, 0)).toBe("↑0 ↓0");
+  });
+});
+
+describe("formatSessionCost", () => {
+  it("keeps four decimals under a cent so a real cost is never $0.00", () => {
+    expect(formatSessionCost(0.0004)).toBe("$0.0004");
+    expect(formatSessionCost(0.0099)).toBe("$0.0099");
+  });
+
+  it("shows two decimals from a cent up", () => {
+    expect(formatSessionCost(0.01)).toBe("$0.01");
+    expect(formatSessionCost(0.174)).toBe("$0.17");
+  });
+
+  it("reads an unpriced turn as zero rather than blank", () => {
+    expect(formatSessionCost(0)).toBe("$0.00");
+    expect(formatSessionCost(Number.NaN)).toBe("$0.00");
   });
 });
 

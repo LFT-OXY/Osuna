@@ -18,6 +18,7 @@ import {
 } from "@/components/message";
 import type { TurnFooterHost } from "./layout";
 import { AssistantForkMenu } from "@/components/assistant-fork-menu";
+import { TurnUsageSegment } from "./turn-usage-segment";
 import { SyncedLoader } from "@/components/synced-loader";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 
@@ -186,6 +187,14 @@ function CompletedTurnFooter({
     startIndex,
     supportsTimelineCursor,
   });
+  // A turn the daemon can name: without either id the usage rows cannot be
+  // matched to it, and a segment that can never resolve would sit on a skeleton.
+  const turnId = timing?.turnId ?? null;
+  const userMessageId = timing?.userMessageId ?? null;
+  const renderUsage = useCallback(
+    () => <TurnUsageSegment turnId={turnId} userMessageId={userMessageId} />,
+    [turnId, userMessageId],
+  );
   const handleFork = useCallback(
     (target: AssistantForkTarget) => {
       if (!boundary) {
@@ -202,6 +211,7 @@ function CompletedTurnFooter({
         completedAt={timing?.completedAt}
         durationMs={timing?.durationMs}
         onFork={boundary && onForkAssistantTurn ? handleFork : undefined}
+        renderUsage={turnId !== null || userMessageId !== null ? renderUsage : undefined}
       />
     </View>
   );
