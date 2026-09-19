@@ -66,3 +66,25 @@
 - `npm run format:check` 全仓报 154 个文件，`npm run lint` 报 28 条错误，全部落在
   `.pi/extensions/atw/index.ts` 与 `.claude|.agents/skills/oxy-learning-hub/assets/course.js`，
   不在 `packages/` 内，本票未动。
+
+**验收实测发现，已修（桌面端 Electron 实机）：**
+
+- 「用量」页整页没有侧栏，进去出不来。`app/_layout.tsx` 的 `shouldShowAppChrome`
+  逐条列举启用 app chrome 的路由，新增 `/usage` 时漏了这一条，于是 `chromeEnabled`
+  为 false —— 侧栏不挂载，`SidebarMenuToggle` 在桌面端也返回 null，没有任何返回入口。
+  修法是把 `/usage` 补进那张列表；回归断言写在 `e2e/support/helpers/usage-page.ts`
+  的 `openUsagePageFromShell`（导航后侧栏仍可见）。
+- 页面左右不留边距，内容贴着窗框。`usage-screen.tsx` 把 padding 放在
+  `ScrollView.contentContainerStyle` 上，而 Unistyles 在 web 上会整个丢掉这个 prop
+  （`docs/unistyles.md`「Main Gotcha: `contentContainerStyle`」已记过这条坑）。
+  padding 挪到 ScrollView 内的一层普通 `View` 上。
+- 「用量明细」随数据无限变高，整页越拉越长。表格改为在卡片内部纵向滚动，
+  上限跟视口走（`max(320, 55% 视口高)`），只在非 compact 生效 —— 手机上整页滚动才
+  是对的，嵌套同向滚动也不该在 native 上出现。
+- 顺带修掉同一张卡里的两处渲染问题：数字列 `minWidth` 64 装不下九位分组数字
+  （905,342,168 约 76px），单元格折行把行撑成两行，改为 84、`TABLE_MIN_WIDTH`
+  随之 560 → 672；表格 `flexGrow: 1` 之前不生效（同样是 `contentContainerStyle`
+  这条坑），卡片右侧空出一大块，改用普通对象传 `contentContainerStyle`。
+
+`e2e/browser/usage-page*.spec.ts` 12 条全绿；`npm run typecheck`、改动文件的
+`lint` / `format` 通过。

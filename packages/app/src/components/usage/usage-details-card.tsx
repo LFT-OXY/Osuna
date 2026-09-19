@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { UsageCard } from "@/components/usage/usage-card";
 import { UsageSegmentedControl } from "@/components/usage/usage-segmented-control";
 import { UsageSessionList } from "@/components/usage/usage-session-list";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   topUsageProjects,
   USAGE_DETAILS_TABS,
@@ -21,7 +22,23 @@ import { usageSourceColor, usageSourceLabel } from "@/usage/sources";
 import { totalUsageTokens } from "@/usage/totals";
 
 /** Below this the table scrolls sideways rather than squeezing its columns. */
-const TABLE_MIN_WIDTH = 560;
+const TABLE_MIN_WIDTH = 672;
+
+/**
+ * The rows scroll inside the card instead of growing it: a month of days would
+ * otherwise push the page several screens long and drag the side column with it.
+ * The cap follows the viewport so a tall window still fills, with a floor for
+ * short ones.
+ */
+const DETAILS_VIEWPORT_FRACTION = 0.55;
+const DETAILS_MIN_HEIGHT = 320;
+
+/**
+ * Lets the table stretch past its minimum to fill the card. Plain, not a
+ * Unistyles style: `contentContainerStyle` never reaches the DOM on web
+ * (docs/unistyles.md).
+ */
+const TABLE_CONTENT_STYLE: ViewStyle = { flexGrow: 1 };
 
 /** Shared empty set so a card that has expanded nothing keeps one identity. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -41,6 +58,17 @@ interface UsageDetailsCardProps {
 export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const isCompact = useIsCompactFormFactor();
+  const { height: viewportHeight } = useWindowDimensions();
+  const scrollStyle = useMemo(
+    () => ({
+      maxHeight: Math.max(
+        DETAILS_MIN_HEIGHT,
+        Math.round(viewportHeight * DETAILS_VIEWPORT_FRACTION),
+      ),
+    }),
+    [viewportHeight],
+  );
   const [tab, setTab] = useState<UsageDetailsTab>("daily");
   const [projectLimit, setProjectLimit] = useState<UsageProjectLimit>(10);
   const [openDays, setOpenDays] = useState<ReadonlySet<string>>(EMPTY_KEYS);
@@ -130,7 +158,13 @@ export function UsageDetailsCard({ report, hosts }: UsageDetailsCardProps) {
       renderHeaderRight={renderHeaderRight}
       testID="usage-details-card"
     >
-      {body}
+      {isCompact ? (
+        body
+      ) : (
+        <ScrollView style={scrollStyle} nestedScrollEnabled testID="usage-details-scroll">
+          {body}
+        </ScrollView>
+      )}
     </UsageCard>
   );
 }
@@ -154,7 +188,11 @@ function UsageDailyTable({
   if (days.length === 0) return <UsageDetailsEmpty testID="usage-details-daily-empty" />;
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={TABLE_CONTENT_STYLE}
+    >
       <View style={styles.table} testID="usage-details-daily">
         <View style={styles.headRow}>
           <Text style={[styles.headCell, styles.firstColumn]}>{t("usage.columns.date")}</Text>
@@ -251,7 +289,11 @@ function UsageMonthlyTable({ report, locale }: { report: MergedUsageReport; loca
   if (months.length === 0) return <UsageDetailsEmpty testID="usage-details-monthly-empty" />;
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={TABLE_CONTENT_STYLE}
+    >
       <View style={styles.table} testID="usage-details-monthly">
         <View style={styles.headRow}>
           <Text style={[styles.headCell, styles.firstColumn]}>{t("usage.columns.month")}</Text>
@@ -457,7 +499,9 @@ const styles = StyleSheet.create((theme) => {
       flexGrow: 1,
       flexShrink: 1,
       flexBasis: 0,
-      minWidth: 64,
+      // A nine-digit grouped count is ~76px at this size; below that it wraps
+      // onto a second line instead of letting the table scroll sideways.
+      minWidth: 84,
       textAlign: "right",
     },
     smallColumn: {

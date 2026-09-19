@@ -155,33 +155,32 @@ function UsageScreenContent(): ReactElement {
     );
 
     body = (
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        testID="usage-page"
-      >
-        {hostErrors.length > 0 ? (
-          <View style={styles.errorsBanner} testID="usage-host-errors">
-            {hostErrors.map((error) => (
-              <Text key={error.serverId} style={styles.errorsBannerText}>
-                {t("usage.common.hostLoadError", { host: error.serverName })}
-              </Text>
-            ))}
+      // The page padding lives on this inner View, not on `contentContainerStyle`:
+      // Unistyles drops that prop on web. See docs/unistyles.md.
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} testID="usage-page">
+        <View style={styles.content}>
+          {hostErrors.length > 0 ? (
+            <View style={styles.errorsBanner} testID="usage-host-errors">
+              {hostErrors.map((error) => (
+                <Text key={error.serverId} style={styles.errorsBannerText}>
+                  {t("usage.common.hostLoadError", { host: error.serverName })}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+          <View style={styles.grid}>
+            {isCompact ? (
+              <>
+                {mainColumn}
+                {sideColumn}
+              </>
+            ) : (
+              <>
+                {sideColumn}
+                {mainColumn}
+              </>
+            )}
           </View>
-        ) : null}
-        <View style={styles.grid}>
-          {isCompact ? (
-            <>
-              {mainColumn}
-              {sideColumn}
-            </>
-          ) : (
-            <>
-              {sideColumn}
-              {mainColumn}
-            </>
-          )}
         </View>
       </ScrollView>
     );
@@ -206,7 +205,7 @@ const styles = StyleSheet.create((theme) => {
       flex: 1,
       minHeight: 0,
     },
-    scrollContent: {
+    content: {
       padding: { xs: theme.spacing[3], md: theme.spacing[6] },
       gap: theme.spacing[4],
     },

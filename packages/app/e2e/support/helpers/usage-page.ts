@@ -20,6 +20,10 @@ export async function openUsagePageFromShell(page: Page): Promise<void> {
   }
   await expect(page).toHaveURL(/\/usage$/);
   await expect(page.getByTestId("usage-overview")).toBeVisible({ timeout: 30_000 });
+  // The app chrome has to survive the navigation. While "/usage" was missing
+  // from the route list that enables it, the page landed with no sidebar and no
+  // way back out.
+  await expect(page.locator('[data-testid="sidebar-usage"]:visible').first()).toBeVisible();
 }
 
 async function usageHeroTokens(page: Page): Promise<string> {
