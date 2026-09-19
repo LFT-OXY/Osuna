@@ -119,3 +119,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: 插件主题与内置主题重名的消歧
+<!-- atw-session: v=2 fp=2c1a970fa93fe1e3 -->
+
+**Date**: 2026-09-20
+**Task**: 插件主题与内置主题重名的消歧
+**Package**: app
+**Branch**: `feat/usage-stats`
+
+### Summary
+
+撞名的插件主题行带上贡献插件的 id 作副标题，触发器与无障碍标签同样限定。判定放在 collectPluginThemes 的跨 host 合并之后，撞内置名或撞目录内另一条插件主题名都算；同一插件内部撞名退化为主题 id。内置主题名由新的 appearance/theme-labels.ts 按当前语言解析后传入，菜单行与对照集合共用同一条 key 路径，判定因此随语言变化。不做注册期拒绝。e2e 夹具改回真名 Catppuccin Mocha / Latte，并验证过改写后的断言仍会咬。两轴审查的发现全部处理：lint no-map-spread、docs/plugins.md 的 addTheme 约定、复合键与参数团抽成 NameCollisionIndex、theme-labels 补纯函数与测试；拒绝了把 qualifier 改成判别联合的提议（为不存在的需求做抽象）。CI 上四个 playwright 分片与 app-tests 全绿，唯一红的 cli-tests shard 3/3 是既有 flake，同一用例在本分支更早提交上以相同方式红过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `45fe656ab` | feat(app): 撞名的插件主题行带上来源插件 id |
+
+### Status
+
+[OK] **Completed**
