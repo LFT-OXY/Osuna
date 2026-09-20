@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { DesktopPlatform, MobilePlatform } from "~/platform";
+import type { DesktopPlatform } from "~/platform";
 
 export function releaseBase(version: string) {
   return `https://github.com/getpaseo/paseo/releases/download/v${version}`;
@@ -16,20 +16,15 @@ export function downloadUrls(release: ReleaseAssetInfo) {
   const { version, linuxAppImageAsset, windowsX64Asset, windowsArm64Asset } = release;
   const base = releaseBase(version);
   return {
-    macAppleSilicon: `${base}/Paseo-${version}-arm64.dmg`,
-    macIntel: `${base}/Paseo-${version}-x64.dmg`,
+    macAppleSilicon: `${base}/Osuna-${version}-arm64.dmg`,
+    macIntel: `${base}/Osuna-${version}-x64.dmg`,
     linuxAppImage: `${base}/${linuxAppImageAsset}`,
-    linuxDeb: `${base}/Paseo-${version}-amd64.deb`,
-    linuxRpm: `${base}/Paseo-${version}-x86_64.rpm`,
+    linuxDeb: `${base}/Osuna-${version}-amd64.deb`,
+    linuxRpm: `${base}/Osuna-${version}-x86_64.rpm`,
     windowsExeX64: `${base}/${windowsX64Asset ?? `Osuna-Setup-${version}.exe`}`,
     windowsExeArm64: windowsArm64Asset ? `${base}/${windowsArm64Asset}` : null,
-    androidApk: `${base}/paseo-v${version}-android.apk`,
   };
 }
-
-export const appStoreUrl = "https://apps.apple.com/app/paseo-pocket-engineer/id6758887924";
-export const playStoreUrl = "https://play.google.com/store/apps/details?id=sh.paseo";
-export const webAppUrl = "https://app.paseo.sh";
 
 export interface PrimaryDownload {
   label: string;
@@ -51,11 +46,6 @@ export function getDesktopDownload(
       return { label: "Mac", href: urls.macAppleSilicon, icon: AppleIcon };
   }
 }
-
-export const MOBILE_STORES: Record<MobilePlatform, PrimaryDownload> = {
-  ios: { label: "iPhone", href: appStoreUrl, icon: AppleIcon },
-  android: { label: "Android", href: playStoreUrl, icon: PlayStoreIcon },
-};
 
 export function AppleIcon(props: React.SVGProps<SVGSVGElement>) {
   return (

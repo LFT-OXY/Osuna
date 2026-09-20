@@ -4,18 +4,7 @@ import { changelogLink } from "~/changelog";
 import { CodeBlock } from "~/components/code-block";
 import { SiteShell } from "~/components/site-shell";
 import { pageMeta } from "~/meta";
-import {
-  downloadUrls,
-  appStoreUrl,
-  playStoreUrl,
-  webAppUrl,
-  AppleIcon,
-  AndroidIcon,
-  WindowsIcon,
-  LinuxIcon,
-  TerminalIcon,
-  GlobeIcon,
-} from "~/downloads";
+import { downloadUrls, AppleIcon, WindowsIcon, LinuxIcon, TerminalIcon } from "~/downloads";
 import { useBetaRelease, useRelease } from "~/routes/__root";
 import "~/styles.css";
 
@@ -122,52 +111,6 @@ function Download() {
       </section>
 
       {/* Mobile */}
-      <section className="rounded-xl border border-border bg-card/40 p-6 md:p-8 mb-6">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-semibold">Mobile</h2>
-          <PhoneIcon className="h-5 w-5 text-muted-foreground" />
-        </div>
-
-        <div className="divide-y divide-border">
-          <PlatformRow icon={AndroidIcon} label="Android">
-            <PillGroup>
-              {!onBeta && <DownloadPill href={playStoreUrl} label="Play Store" external />}
-              <DownloadPill href={urls.androidApk} label="APK" />
-            </PillGroup>
-          </PlatformRow>
-
-          {!onBeta && (
-            <PlatformRow icon={AppleIcon} label="iOS">
-              <PillGroup>
-                <DownloadPill href={appStoreUrl} label="App Store" external />
-              </PillGroup>
-            </PlatformRow>
-          )}
-        </div>
-      </section>
-
-      {/* Web */}
-      {!onBeta && (
-        <section className="rounded-xl border border-border bg-card/40 p-6 md:p-8 mb-6">
-          <div className="flex items-start justify-between mb-8">
-            <div>
-              <h2 className="text-2xl font-semibold">Web</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Connect to a server from any browser
-              </p>
-            </div>
-            <GlobeIcon className="h-5 w-5 text-muted-foreground mt-1.5" />
-          </div>
-
-          <div className="divide-y divide-border">
-            <PlatformRow icon={GlobeIcon} label="Web App">
-              <PillGroup>
-                <DownloadPill href={webAppUrl} label="Open" external />
-              </PillGroup>
-            </PlatformRow>
-          </div>
-        </section>
-      )}
 
       {/* Server */}
       <section className="rounded-xl border border-border bg-card/40 p-6 md:p-8">
@@ -345,25 +288,6 @@ function MonitorIcon(props: React.SVGProps<SVGSVGElement>) {
       <rect width="20" height="14" x="2" y="3" rx="2" />
       <line x1="8" x2="16" y1="21" y2="21" />
       <line x1="12" x2="12" y1="17" y2="21" />
-    </svg>
-  );
-}
-
-function PhoneIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      {...props}
-    >
-      <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
-      <path d="M12 18h.01" />
     </svg>
   );
 }

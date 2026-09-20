@@ -54,16 +54,8 @@ const PHONE_PERSPECTIVE_STYLE = { minHeight: 480, perspective: 700 };
 import { CursorFieldProvider } from "~/components/butterfly";
 import { CommandDialog } from "~/components/command-dialog";
 import { AGENT_PAGES } from "~/data/agent-pages";
-import {
-  appStoreUrl,
-  playStoreUrl,
-  getDesktopDownload,
-  MOBILE_STORES,
-  AppleIcon,
-  PlayStoreIcon,
-  TerminalIcon,
-} from "~/downloads";
-import type { DesktopPlatform, MobilePlatform } from "~/platform";
+import { getDesktopDownload, TerminalIcon } from "~/downloads";
+import type { DesktopPlatform } from "~/platform";
 import { isMobilePlatform } from "~/platform";
 import { useRelease, useVisitorPlatform } from "~/routes/__root";
 import { HeroMockup } from "~/components/hero-mockup";
@@ -881,13 +873,13 @@ function GetStarted() {
           buttons never wrap and orphan one of themselves onto a line alone. It
           still hugs its label rather than stretching across the row. */}
       <div className="mx-auto flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+        {/* 本 fork 没有上架移动端商店：手机访客也走 /download，不再给出商店入口 */}
         {isMobilePlatform(platform) ? (
-          <StoreButton platform={platform} />
+          <DesktopAppLink />
         ) : (
           <DesktopDownloadButton platform={platform} />
         )}
         <div className="flex items-center justify-center gap-3">
-          {isMobilePlatform(platform) ? <DesktopAppLink /> : <StoreIconLinks />}
           <ServerInstallButton />
         </div>
       </div>
@@ -927,17 +919,6 @@ function DesktopDownloadButton({ platform }: { platform: DesktopPlatform }) {
   );
 }
 
-function StoreButton({ platform }: { platform: MobilePlatform }) {
-  const store = MOBILE_STORES[platform];
-  const Icon = store.icon;
-  return (
-    <a href={store.href} target="_blank" rel="noopener noreferrer" className={PRIMARY_CTA_CLASS}>
-      <Icon className="h-4 w-4" />
-      Get the {store.label} app
-    </a>
-  );
-}
-
 // On a phone the desktop build is the secondary path, so it points at /download
 // instead of handing the visitor a .dmg they cannot open.
 function DesktopAppLink() {
@@ -946,31 +927,6 @@ function DesktopAppLink() {
       <Monitor className="h-4 w-4" strokeWidth={1.5} />
       Desktop app
     </a>
-  );
-}
-
-function StoreIconLinks() {
-  return (
-    <>
-      <a
-        href={appStoreUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={SECONDARY_CTA_CLASS}
-        aria-label="App Store"
-      >
-        <AppleIcon className="h-5 w-5" />
-      </a>
-      <a
-        href={playStoreUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={SECONDARY_CTA_CLASS}
-        aria-label="Google Play"
-      >
-        <PlayStoreIcon className="h-5 w-5" />
-      </a>
-    </>
   );
 }
 
