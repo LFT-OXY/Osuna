@@ -1824,7 +1824,7 @@ test("workspace mark unread selects the newest finished workspace root", async (
         cwd: REPO_CWD,
         workspaceId: workspace.workspaceId,
         updatedAt: "2026-03-30T17:00:00.000Z",
-        labels: { "paseo.parent-agent-id": "root-agent" },
+        labels: { "osuna.parent-agent-id": "root-agent" },
       }),
     ],
   ]);

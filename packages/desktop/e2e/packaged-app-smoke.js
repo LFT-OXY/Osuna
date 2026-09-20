@@ -617,7 +617,7 @@ async function smokeCliShim({ appPath, env }) {
 
 async function smokeColdCliDaemonStart({ appPath }) {
   const home = createTempDir("paseo-smoke-cli-daemon-home-");
-  const pidPath = path.join(home, "paseo.pid");
+  const pidPath = path.join(home, "osuna.pid");
   const port = await reserveLocalTcpPort();
   const listen = `127.0.0.1:${port}`;
   const env = createDefaultDaemonEnv({ HOME: home, USERPROFILE: home });

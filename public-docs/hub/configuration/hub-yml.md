@@ -80,7 +80,7 @@ environments:
 
 One execution is one step run, so two steps selecting the same environment get separate branches.
 
-`${{ paseo.execution.id }}` is the only expression `newBranch` accepts. `paseo.prompt`, `paseo.context`, `osuna.inputs.*`, `values.*`, `steps.<id>.outputs.*`, and provider event fields are unavailable here, and each one fails bundle activation at the authored field, such as `.osuna/hub.yml.environments.review.worktree.newBranch`.
+`${{ paseo.execution.id }}` is the only expression `newBranch` accepts. `paseo.prompt`, `paseo.context`, `paseo.inputs.*`, `values.*`, `steps.<id>.outputs.*`, and provider event fields are unavailable here, and each one fails bundle activation at the authored field, such as `.osuna/hub.yml.environments.review.worktree.newBranch`.
 
 `${{ paseo.execution.id }}` fails activation the same way anywhere else in a bundle. `branch` and `prNumber` take literal values.
 
@@ -119,7 +119,7 @@ inputs:
     choices: [osuna, hub]
 steps:
   - id: inspect
-    environment: ${{ osuna.inputs.repo }}
+    environment: ${{ paseo.inputs.repo }}
     max_runtime: 30m
     idle_timeout: 5m
     agent: codex-safe
@@ -182,7 +182,7 @@ values:
   selected_agent: ${{ steps.classify.outputs.agent }}
 ```
 
-Expressions may read declared `osuna.inputs`, earlier `steps.<id>.outputs`, and `values`. The grammar supports paths, JSON literals, parentheses, `!`, `==`, `!=`, `&&`, `||`, and `??`.
+Expressions may read declared `paseo.inputs`, earlier `steps.<id>.outputs`, and `values`. The grammar supports paths, JSON literals, parentheses, `!`, `==`, `!=`, `&&`, `||`, and `??`.
 
 An environment or dynamic named-agent expression must have a finite set of possible string results at activation. Every result must name a configured resource. Runtime selection never falls back to another environment or agent.
 
@@ -264,7 +264,7 @@ Self-contained dashboard trigger documents accept `run.continuation`:
 | Value                                                    | Behavior                                                                                                                |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `{mode: conversation}`                                   | Default. Reuse the project's agent for the event's conversation; create a new agent when the event has no conversation. |
-| `{mode: key, key: "support-${{ osuna.inputs.ticket }}"}` | Reuse the project's agent for the evaluated custom key.                                                                 |
+| `{mode: key, key: "support-${{ paseo.inputs.ticket }}"}` | Reuse the project's agent for the evaluated custom key.                                                                 |
 | `{mode: new}`                                            | Create a new agent for each arrival.                                                                                    |
 
 Keys use the existing expression syntax and must resolve to a non-empty string of at most 512 characters. Custom keys and provider conversation identities occupy separate namespaces. The same key in different projects does not share an agent.

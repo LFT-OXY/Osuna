@@ -52,7 +52,7 @@ const append = defineRpc({
 
 export default function contribute(server: PluginServerContext) {
   server.handle(create, async ({ path }, { osuna }) => {
-    const workspace = await paseo.workspaces.create({
+    const workspace = await osuna.workspaces.create({
       source: { kind: "directory", path },
       title: "Plugin workspace",
     });
@@ -63,11 +63,11 @@ export default function contribute(server: PluginServerContext) {
     return { workspaceId: workspace.id, agentId: agent.id };
   });
   server.handle(list, async (_input, { osuna }) => {
-    const result = await paseo.agents.list({ page: { limit: 100 } });
+    const result = await osuna.agents.list({ page: { limit: 100 } });
     return { agentIds: result.entries.map((entry) => entry.agent.id) };
   });
   server.handle(append, ({ agentId, status }, { osuna }) =>
-    paseo.agents.ref(agentId).timeline.append({
+    osuna.agents.ref(agentId).timeline.append({
       type: "plugin",
       id: "review-1",
       kind: "review",
@@ -277,7 +277,7 @@ export default function contribute(server: PluginServerContext) {
   let reconnected = Promise.resolve();
   let release: (() => Promise<void>) | undefined;
   server.handle(defineRpc({ name: "observe", input: z.object({}), output: z.string() }), async (_, { osuna }) => {
-    const { subscription } = await paseo.workspaces.list({ subscribe: {} });
+    const { subscription } = await osuna.workspaces.list({ subscribe: {} });
     subscription.subscribe({
       snapshot: (snapshot) => {
         const id = snapshot.subscriptionId!;
@@ -307,7 +307,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(defineRpc({ name: "state", input: z.object({}), output: z.object({ snapshots: z.array(z.string()), names: z.array(z.string()) }) }), () => ({ snapshots, names }));
   server.handle(defineRpc({ name: "probe", input: z.object({}), output: z.object({ pid: z.number(), projectIds: z.array(z.string()) }) }), async (_, { osuna }) => {
     await reconnected;
-    return { pid: process.pid, projectIds: (await paseo.projects.list()).projects.map((project) => project.projectId) };
+    return { pid: process.pid, projectIds: (await osuna.projects.list()).projects.map((project) => project.projectId) };
   });
   server.handle(defineRpc({ name: "release", input: z.object({}), output: z.null() }), async () => {
     await release?.();
@@ -317,14 +317,14 @@ export default function contribute(server: PluginServerContext) {
     // Inject a protocol violation through real IPC. The real daemon closes the
     // active socket, and the worker's normal transport must observe that close.
     function closed(message: { type: string }) {
-      if (message.type !== "paseo_close") return;
+      if (message.type !== "osuna_close") return;
       process.off("message", closed);
       resolve(null);
     }
     process.on("message", closed);
     reconnected = new Promise<void>((connected) => {
       function ready(message: { type: string; data?: unknown }) {
-        if (message.type !== "paseo_frame" || typeof message.data !== "string") return;
+        if (message.type !== "osuna_frame" || typeof message.data !== "string") return;
         const frame = JSON.parse(message.data);
         if (frame.type !== "session" || frame.message.type !== "status" || frame.message.payload.status !== "server_info") return;
         process.off("message", ready);
@@ -332,7 +332,7 @@ export default function contribute(server: PluginServerContext) {
       }
       process.on("message", ready);
     });
-    process.send!({ type: "paseo_frame", isBinary: false, data: JSON.stringify({
+    process.send!({ type: "osuna_frame", isBinary: false, data: JSON.stringify({
       type: "hello", clientId: "plugin:reconnecting", clientType: "cli", protocolVersion: 1,
     }) });
   }));

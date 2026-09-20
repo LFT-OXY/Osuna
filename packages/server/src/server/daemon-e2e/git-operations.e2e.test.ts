@@ -400,7 +400,7 @@ test("runs osuna.json setup asynchronously and reports status via timeline tool_
   const completed = await waitForTimelineToolCall(
     collector.messages,
     agent.id,
-    (item) => item.name === "paseo_worktree_setup" && item.status === "completed",
+    (item) => item.name === "osuna_worktree_setup" && item.status === "completed",
     20000,
   );
 
@@ -490,13 +490,13 @@ test("bootstraps configured worktree terminals after setup succeeds", async () =
     await waitForTimelineToolCall(
       collector.messages,
       agent.id,
-      (item) => item.name === "paseo_worktree_setup" && item.status === "completed",
+      (item) => item.name === "osuna_worktree_setup" && item.status === "completed",
       20000,
     );
     const terminalsBootstrapToolCall = await waitForTimelineToolCall(
       collector.messages,
       agent.id,
-      (item) => item.name === "paseo_worktree_terminals" && item.status === "completed",
+      (item) => item.name === "osuna_worktree_terminals" && item.status === "completed",
       30000,
     );
     const bootstrappedTerminals = getWorktreeTerminalBootstrapEntries(terminalsBootstrapToolCall);
@@ -624,7 +624,7 @@ test("reports failures via timeline tool_call without deleting the created workt
   const started = await waitForTimelineToolCall(
     collector.messages,
     agent.id,
-    (item) => item.name === "paseo_worktree_setup" && item.status === "running",
+    (item) => item.name === "osuna_worktree_setup" && item.status === "running",
     10000,
   );
 
@@ -632,7 +632,7 @@ test("reports failures via timeline tool_call without deleting the created workt
     collector.messages,
     agent.id,
     (item) =>
-      item.name === "paseo_worktree_setup" &&
+      item.name === "osuna_worktree_setup" &&
       item.callId === started.callId &&
       item.status === "failed",
     20000,

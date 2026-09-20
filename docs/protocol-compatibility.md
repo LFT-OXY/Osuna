@@ -20,6 +20,14 @@ And in batch 3, the plugin contract:
 
 - `PluginRequirementsSchema`'s only key: `requirements.paseo` → `requirements.osuna` (`packages/protocol/src/messages.ts`). This one is a field _removal_, not just an addition — it ships on the wire inside `PluginCatalogGetResponseSchema`, and zod strips the old key, so a plugin manifest or catalog still declaring `paseo` now parses as declaring no requirements at all. That is the intended outcome: it makes upstream Paseo plugins fail the range check instead of half-loading. See the `COMPAT(plugin-requirements)` note in `packages/protocol/src/plugin-requirements.ts`.
 
+And in batch 8, three cross-process identifiers that had been missed:
+
+- Plugin subprocess IPC message types: `paseo_frame` / `paseo_close` → `osuna_frame` / `osuna_close` (`packages/server/src/server/plugins/plugin-process-protocol.ts` and both ends around it). Both ends ship inside the daemon — the child is forked from the daemon's own `dist` — so this one carries no version skew. It is listed here because third-party plugin code _can_ observe it through a raw `process.on("message")` handler, which makes it an undocumented but reachable surface.
+- The synthetic worktree-bootstrap timeline step names `paseo_worktree_setup` and `paseo_worktree_terminals` → `osuna_*` (`packages/server/src/server/worktree-bootstrap.ts`). Every app-side consumer dispatches on `detail.type`, never on `name`, so stored history keeps rendering; the one visible difference is that `..._terminals` has `detail.type: "unknown"` and so falls back to humanizing its raw name.
+- Agent label keys `paseo.parent-agent-id`, `paseo.open-agent-tab.<client-id>`, `paseo.worktree` → `osuna.*` (`packages/protocol/src/agent-labels.ts`). These land in agent snapshots read by the CLI and the app; labels stored under the old keys stop being found.
+
+The daemon PID lock file was renamed in the same batch (`paseo.pid` → `osuna.pid`) but is **not** in this list, because it did not use the window: it carries a tagged `COMPAT(pid-lock-paseo-name)` read-only shim in `packages/server/src/server/pid-lock.ts`. A lock file is not a wire identifier — it is the interlock that stops two daemons sharing one home, so a missed detection starts a second daemon on the same port and agent store rather than failing a parse.
+
 **The window closes at the first tagged Osuna release.** After that, every rule below applies without exception, and a rename of any wire identifier needs a tagged `COMPAT(...)` shim like any other compatibility concern. If you are reading this after a release exists, treat the list above as history, not as precedent.
 
 ## The protocol contract: always compatible

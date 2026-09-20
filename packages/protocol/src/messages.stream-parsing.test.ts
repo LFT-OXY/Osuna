@@ -98,7 +98,7 @@ describe("shared messages stream parsing", () => {
             item: {
               type: "tool_call",
               callId: "setup-1",
-              name: "paseo_worktree_setup",
+              name: "osuna_worktree_setup",
               status: "completed",
               detail: {
                 type: "worktree_setup",

@@ -584,7 +584,7 @@ describe("create-agent worktree setup boundary", () => {
 
       await vi.waitFor(() => {
         expect(appendedItems).toContainEqual({
-          name: "paseo_worktree_setup",
+          name: "osuna_worktree_setup",
           status: "completed",
         });
       });

@@ -90,7 +90,7 @@ A field users can change while the daemon runs needs five edits, and missing any
 
 1. `PersistedConfigSchema` in `server/persisted-config.ts` — the file shape. It is `.strict()`, so an unknown key makes the whole config unreadable.
 2. `MutableDaemonConfigSchema` in `packages/protocol/src/messages.ts` — the live shape, and a **separate** patch shape in `MutableDaemonConfigPatchSchema`. A `.default()` in the patch shape resurrects the default whenever someone edits a sibling field: patch `{ overrides }` and a defaulted `autoUpdate: true` rides along and switches auto-update back on. Defaults belong to the full schema only.
-3. `RELOADABLE_PATHS` **and** `PERSISTED_TO_MUTABLE_PATH` in `server/daemon-config-store.ts` — without both, `paseo reload` reports the path as restart-required.
+3. `RELOADABLE_PATHS` **and** `PERSISTED_TO_MUTABLE_PATH` in `server/daemon-config-store.ts` — without both, `osuna reload` reports the path as restart-required.
 4. A merge branch that writes the patch back into the persisted file. `mergeMutableDaemonPatch` covers `daemon.*` and `mergeMutableAgentPatch` covers `agents.*`; a field under `features.*` needs its own.
 5. Startup resolution in `server/config.ts`, plus the env override's path in `resolveOverrideControlledPaths` so the UI can tell the user why their edit will not stick.
 
@@ -101,7 +101,7 @@ Owners read the live value through one resolver rather than repeating `?? defaul
 ## Files and secrets
 
 - Keypairs and other private files go through `server/private-files.ts` (mode `0600`).
-- `paseo.pid` is a lock and endpoint record owned by the supervisor; read it, never write it from a feature (`docs/architecture.md` "Storage").
+- `osuna.pid` is a lock and endpoint record owned by the supervisor; read it, never write it from a feature (`docs/architecture.md` "Storage"). `acquirePidLock` additionally reads the pre-rename `paseo.pid` once, behind the tagged `COMPAT(pid-lock-paseo-name)` shim: a live lock under the old name counts as "an instance is already running". That read is the one place where being unable to read a lock must not be collapsed into "no lock" — `readPidLock` returns `null` only for ENOENT and throws for everything else, and the throw has to propagate, because a lock you cannot read is not proof that no daemon holds it. Never write, migrate, or delete the old file.
 - Temporary directories in tests come from `mkdtemp` and are removed in `afterEach`; the harness in `server/test-utils/paseo-daemon.ts` does this for you.
 
 ## Anti-patterns

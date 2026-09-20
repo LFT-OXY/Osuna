@@ -57,7 +57,7 @@ async function fixture() {
     });
     for (const home of homes) {
       try {
-        const lock = JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
+        const lock = JSON.parse(await readFile(path.join(home, "osuna.pid"), "utf8"));
         owned.set(home, lock);
       } catch {
         /* No acquired launch. */
@@ -98,7 +98,7 @@ async function fixture() {
   async function close() {
     for (const [home, captured] of owned) {
       try {
-        const lock = JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
+        const lock = JSON.parse(await readFile(path.join(home, "osuna.pid"), "utf8"));
         if (lock.pid === captured.pid && lock.startedAt === captured.startedAt) {
           await run(["daemon", "stop", "--home", home, "--force", "--timeout", "2"]);
         }
@@ -303,9 +303,9 @@ test.skipIf(process.platform === "win32")(
       const beforeA = await f.liveStatus(a);
       expect((await f.liveStatus(b)).serverId).toBe("live-b");
       await f.ok(["restart", "--home", b, "--timeout", "30"]);
-      const bLock = JSON.parse(await readFile(path.join(b, "paseo.pid"), "utf8"));
+      const bLock = JSON.parse(await readFile(path.join(b, "osuna.pid"), "utf8"));
       await writeFile(
-        path.join(b, "paseo.pid"),
+        path.join(b, "osuna.pid"),
         JSON.stringify({ ...bLock, listen: beforeA.listen }),
       );
       await writeFile(path.join(b, "server-id"), beforeA.serverId);
@@ -338,9 +338,9 @@ test.skipIf(process.platform === "win32").each([["start"], ["daemon", "run"]])(
       });
       const exited = new Promise((resolve) => child!.once("exit", resolve));
       await expect
-        .poll(async () => existsSync(path.join(home, "paseo.pid")), { timeout: 10_000 })
+        .poll(async () => existsSync(path.join(home, "osuna.pid")), { timeout: 10_000 })
         .toBe(true);
-      const lock = JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
+      const lock = JSON.parse(await readFile(path.join(home, "osuna.pid"), "utf8"));
       await f.ok(["status", "--home", home]);
       child.kill("SIGINT");
       await exited;
@@ -400,7 +400,7 @@ test("empty explicit selectors never select the ambient daemon or create local s
       expect(refused.code).toBe(1);
       expect(refused.stderr).toContain("TARGET_INVALID");
       expect((await f.liveStatus(home)).workerPid).toBe(before.workerPid);
-      expect(existsSync(path.join(f.root, "paseo.pid"))).toBe(false);
+      expect(existsSync(path.join(f.root, "osuna.pid"))).toBe(false);
       expect(existsSync(path.join(f.root, "config.json"))).toBe(false);
     }
   } finally {

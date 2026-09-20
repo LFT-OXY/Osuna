@@ -115,7 +115,7 @@ try {
 
   assert(ownerProcess.pid, "owner pid should exist");
   await writeFile(
-    join(paseoHome, "paseo.pid"),
+    join(paseoHome, "osuna.pid"),
     JSON.stringify({
       pid: ownerProcess.pid,
       hostname: "test",

@@ -76,7 +76,7 @@ describe("tool-call-display", () => {
 
   it("builds display model from worktree setup detail", () => {
     const display = buildToolCallDisplayModel({
-      name: "paseo_worktree_setup",
+      name: "osuna_worktree_setup",
       status: "running",
       error: null,
       detail: {

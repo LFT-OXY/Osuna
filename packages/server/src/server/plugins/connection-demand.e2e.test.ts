@@ -8,7 +8,10 @@ import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
 test("an RPC-only plugin receives no agent, project or provider data", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "paseo-quiet-plugin-"));
-  await writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "quiet" }));
+  await writeFile(
+    path.join(directory, "osuna-plugin.json"),
+    JSON.stringify({ id: "quiet", requirements: { osuna: ">=0.8.0" } }),
+  );
   await writeFile(
     path.join(directory, "index.server.ts"),
     `
@@ -17,7 +20,7 @@ import { z } from "zod";
 export default function contribute(server) {
   const counts = {};
   const observe = message => {
-    if (message.type !== "paseo_frame" || typeof message.data !== "string") return;
+    if (message.type !== "osuna_frame" || typeof message.data !== "string") return;
     const frame = JSON.parse(message.data);
     const type = frame.message?.type;
     if (type) counts[type] = (counts[type] ?? 0) + 1;

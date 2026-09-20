@@ -133,7 +133,7 @@ function logFilePath(): string {
 export function isDesktopManagedDaemonRunningSync(): boolean {
   if (!ownedLaunch) return false;
   try {
-    const lock = JSON.parse(readFileSync(path.join(ownedLaunch.home, "paseo.pid"), "utf8"));
+    const lock = JSON.parse(readFileSync(path.join(ownedLaunch.home, "osuna.pid"), "utf8"));
     return isSameDaemonInstance(lock, ownedLaunch.instance) && isProcessRunning(lock.pid);
   } catch {
     return false;

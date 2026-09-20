@@ -123,6 +123,8 @@ function triggerDocument(input: {
   agent: { provider: string; model: string; mode?: string };
   reply?: "slack.reply" | "discord.reply";
 }): object {
+  // `paseo.*` 表达式命名空间属于 Hub 服务端，不在本仓库内求值，因此不随本 fork 改名。
+  // 改名这些表达式只会让生成的 workflow 在 Hub 的 bundle activation 阶段被拒。
   const replyInstruction = input.reply === undefined ? "" : "Answer with hub.reply, then ";
   return {
     name: input.name,

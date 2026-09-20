@@ -1841,14 +1841,14 @@ export default function contribute(plugin: any) {
     // Standing a socket up for one would leave it unspoken to until the host's
     // hello timeout closed it, and that close would stand up another.
     child.emitMessage({
-      type: "paseo_frame",
+      type: "osuna_frame",
       data: JSON.stringify({ type: "session", message: { type: "ping" } }),
       isBinary: false,
     });
     expect(sessions.active.size).toBe(0);
 
     child.emitMessage({
-      type: "paseo_frame",
+      type: "osuna_frame",
       data: JSON.stringify({
         type: "hello",
         clientId: "plugin:lazy-reattach",
@@ -1917,7 +1917,7 @@ export default function contribute(plugin: any) {
       const first = [...sessions.active][0] as PluginSessionSocket;
       first.close();
       child.emitMessage({
-        type: "paseo_frame",
+        type: "osuna_frame",
         data: JSON.stringify({ type: "hello" }),
         isBinary: false,
       });
@@ -1930,7 +1930,7 @@ export default function contribute(plugin: any) {
       expect(sessions.hellos).toEqual([]);
       expect(runtime.catalog()).toEqual([]);
       child.emitMessage({
-        type: "paseo_frame",
+        type: "osuna_frame",
         data: JSON.stringify({ type: "hello" }),
         isBinary: false,
       });

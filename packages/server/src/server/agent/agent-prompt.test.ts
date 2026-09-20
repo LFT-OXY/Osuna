@@ -131,7 +131,7 @@ function createFinishNotificationScenario(
         options?.childParentAgentId === undefined ? "caller-agent" : options.childParentAgentId;
       return {
         title: "Child Agent",
-        labels: parentAgentId ? { "paseo.parent-agent-id": parentAgentId } : {},
+        labels: parentAgentId ? { "osuna.parent-agent-id": parentAgentId } : {},
       };
     }
     return null;

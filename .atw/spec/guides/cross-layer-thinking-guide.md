@@ -425,6 +425,38 @@ found a missed `DEFAULT_HUB_ORIGIN = "https://hub.paseo.sh"` that the ticket's "
 defaults" item had asked for and the implementation had skipped. **The documentation sweep is a
 consistency check on the code**, not a cosmetic pass over it.
 
+### A ticket that cites line numbers renames only those lines
+
+Batch 8's ticket said: rename the timeline step name at `worktree-bootstrap.ts:360,371,381`. All
+three were renamed, and the sweep for that exact literal came back clean. Thirty lines below,
+`buildTerminalsTimelineItem` emitted `paseo_worktree_terminals` from the same file, built the same
+kind of synthetic `tool_call`, and went untouched — the ticket had never named it, and a grep for
+the literal the ticket *did* name cannot find it.
+
+It was the worse of the two to miss. `..._setup` carries a typed `detail.type`, so every app-side
+consumer dispatches on that and never reads `name`; `..._terminals` has `detail.type: "unknown"`,
+so `buildToolCallDisplayModel` falls back to `humanizeToolName(name)` and renders the raw string.
+The user would have seen "Paseo worktree terminals" sitting next to a renamed "Osuna worktree
+setup" in one bootstrap flow.
+
+**Grep the shape, not the string.** When a ticket names line numbers, treat them as an entry point:
+read the whole producer, and search for siblings by their *construction* (here, `name: "` inside a
+`type: "tool_call"` literal) before trusting that the named lines were all of them.
+
+### "Cannot read it" is not "it is not there"
+
+The same batch added a read-only shim so a renamed daemon would still notice a lock file left under
+the old name. The first draft wrote `await readPidLock(legacyPath).catch(() => null)` — which
+`.atw/spec/server/backend/error-handling.md` forbids verbatim ("`catch (e) { return null }` is
+forbidden"), and which defeated the shim precisely where it mattered: `readPidLock` returns `null`
+only for ENOENT and *throws* for EACCES, a truncate window, or corrupt JSON. A lock you cannot read
+is not proof that nobody holds it, so the catch turned the one case the shim existed for into
+"no instance running" and would have started a second daemon on the same port and agent store.
+
+An interlock must fail closed. When a shim's whole job is to detect something, the unreadable case
+belongs with "detected", not with "absent" — and it needs its own test, or the branch is both
+untested and wrong at the same time, each hiding the other.
+
 ### A renamed file leaves a live orphan in `dist/`
 
 Renaming `paseo-config-schema.ts` → `osuna-config-schema.ts` left `dist/paseo-config-schema.js`

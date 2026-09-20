@@ -64,7 +64,7 @@ inputs:
     choices: [osuna, hub]
 steps:
   - id: work
-    environment: ${{ osuna.inputs.repo }}
+    environment: ${{ paseo.inputs.repo }}
     max_runtime: 30m
     idle_timeout: 5m
     agent: codex
@@ -108,12 +108,12 @@ steps:
     environment: osuna
     max_runtime: 30m
     idle_timeout: 5m
-    agent: ${{ osuna.inputs.agent }}
+    agent: ${{ paseo.inputs.agent }}
     prompt:
       - text: ${{ paseo.prompt }}
 ```
 
-If `codex-safe` contains structured sandbox options in `hub.yml`, selecting it carries those options unchanged. A dynamic inline object such as `provider: ${{ osuna.inputs.agent }}` is rejected.
+If `codex-safe` contains structured sandbox options in `hub.yml`, selecting it carries those options unchanged. A dynamic inline object such as `provider: ${{ paseo.inputs.agent }}` is rejected.
 
 ## Route from a classifier
 

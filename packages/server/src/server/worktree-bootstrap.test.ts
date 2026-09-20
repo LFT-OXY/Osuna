@@ -134,7 +134,7 @@ describe("runAsyncWorktreeBootstrap", () => {
     ).resolves.toBeUndefined();
 
     const persistedSetupItems = persisted.filter(
-      (item) => item.type === "tool_call" && item.name === "paseo_worktree_setup",
+      (item) => item.type === "tool_call" && item.name === "osuna_worktree_setup",
     );
     expect(persistedSetupItems).toHaveLength(1);
     if (persistedSetupItems[0]?.type === "tool_call") {
@@ -183,7 +183,7 @@ describe("runAsyncWorktreeBootstrap", () => {
 
     const persistedSetupItem = persisted.find(
       (item): item is Extract<AgentTimelineItem, { type: "tool_call" }> =>
-        item.type === "tool_call" && item.name === "paseo_worktree_setup",
+        item.type === "tool_call" && item.name === "osuna_worktree_setup",
     );
     expect(persistedSetupItem).toBeDefined();
     expect(persistedSetupItem?.detail.type).toBe("worktree_setup");

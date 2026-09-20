@@ -174,6 +174,22 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
   真实 git 仓库**里，改名后 Osuna 不显示、也不提供一键恢复。它们没有丢：`git stash list`
   仍能看到，`git stash apply` 仍能取回。选择保持改名而不是双前缀读取，是为了守住「不保留
   任何读取旧名的兼容路径」这条前提；代价记在这里，不是默默接受。
+- **`paseo.pid` 是「不保留任何读取旧名的兼容路径」这条前提的唯一例外**（批次 8）。
+  `packages/server/src/server/pid-lock.ts` 里有一条 tagged 的 `COMPAT(pid-lock-paseo-name)`
+  只读 shim：启动前读一次旧文件名，发现旧锁且进程还活着就按「已有实例在跑」拒绝启动。
+  为什么这里破例而 stash 前缀不破例 —— 两者的失效代价不同量级：stash 是用户数据，改名后
+  Osuna 不显示，但 `git stash list` / `git stash apply` 仍能取回，损失可逆；pid 锁是**互锁**，
+  漏检的后果是同一个 home 起出两个 daemon，抢同一个端口与同一份 agent 存储，损失不可逆。
+  触发条件只有一个：`OSUNA_HOME` 被指向上游的 `~/.paseo`（默认 `~/.osuna`，两边互不相干）。
+  shim 只读不写、不迁移、不删除旧文件，且读不出来（权限/损坏）时按失败处理而不是放行。
+- **Hub workflow 的表达式命名空间** `paseo.prompt` / `paseo.inputs` / `paseo.context` /
+  `paseo.execution.id`（文档 52 处，代码生产点一处：`packages/cli/src/commands/hub/init-plan.ts`）。
+  这个命名空间由 **Hub 服务端**拥有，而 Hub 不在本仓库里（`packages/` 下没有 hub 包，
+  `public-docs/hub/index.md` 写明本 fork 不运营自己的 Hub）。全仓没有任何 `${{ }}` 求值器 ——
+  CLI 只生成 YAML，求值在 Hub 那边。改名只会让生成的 workflow 在 Hub 的 bundle activation
+  阶段被拒，因此**不改**，与「wire 标识符归首发前窗口一次改完」不是一回事：那条规则的前提是
+  两端都在本仓库。批次 4 的文档扫描曾把 7 处 `paseo.inputs` 误改成 `osuna.inputs`（同族 41 处
+  未动，`hub-yml.md:83` 一句话里自相矛盾），已在批次 8 回滚，并在生产点留注释。
 - scheme 字面量没有单一 owner（`agent-deep-link.ts` / desktop `APP_SCHEME` /
   server CORS / `app.config.js` / `electron-builder.yml` 各自硬编码）、app 与 server
   诊断脱敏链重复、`cli-install/paths.ts` 的重复三元表达式 —— 都是改名前就存在的结构，

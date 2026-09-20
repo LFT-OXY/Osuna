@@ -1,4 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { mkdtemp, open, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -12,6 +14,13 @@ import {
   releasePidLock,
   updatePidLock,
 } from "./pid-lock.js";
+
+/** 取一个确定已退出的 PID，用来构造一把被遗弃的锁。 */
+function exitedProcessPid(): number {
+  const child = spawnSync(process.execPath, ["-e", ""]);
+  if (typeof child.pid !== "number") throw new Error("could not spawn a throwaway process");
+  return child.pid;
+}
 
 describe("pid-lock ownership", () => {
   test("writes and releases lock for explicit owner pid", async () => {
@@ -68,7 +77,7 @@ describe("pid-lock ownership", () => {
     const replacementOwnerPid = process.pid + 10_000;
 
     try {
-      const pidPath = join(paseoHome, "paseo.pid");
+      const pidPath = join(paseoHome, "osuna.pid");
       await writeFile(
         pidPath,
         JSON.stringify({
@@ -87,7 +96,7 @@ describe("pid-lock ownership", () => {
       await expect(isLocked(paseoHome)).resolves.toMatchObject({ locked: true });
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: replacementOwnerPid }),
-      ).rejects.toThrow("Another Paseo daemon is already running");
+      ).rejects.toThrow("Another Osuna daemon is already running");
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -101,7 +110,7 @@ describe("pid-lock ownership", () => {
     const replacementOwnerPid = process.pid + 10_000;
 
     try {
-      const pidPath = join(paseoHome, "paseo.pid");
+      const pidPath = join(paseoHome, "osuna.pid");
       await writeFile(
         pidPath,
         JSON.stringify({
@@ -119,7 +128,7 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: replacementOwnerPid }),
-      ).rejects.toThrow("Another Paseo daemon is already running");
+      ).rejects.toThrow("Another Osuna daemon is already running");
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -131,7 +140,7 @@ describe("pid-lock ownership", () => {
 
   test("keeps a stale live lock written by a pre-heartbeat daemon", async () => {
     const paseoHome = await mkdtemp(join(tmpdir(), "paseo-pid-lock-legacy-live-"));
-    const pidPath = join(paseoHome, "paseo.pid");
+    const pidPath = join(paseoHome, "osuna.pid");
 
     try {
       await writeFile(
@@ -150,7 +159,7 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: process.pid + 10_000 }),
-      ).rejects.toThrow("Another Paseo daemon is already running");
+      ).rejects.toThrow("Another Osuna daemon is already running");
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -162,7 +171,7 @@ describe("pid-lock ownership", () => {
   test("preserves a stale live legacy desktop lock", async () => {
     const paseoHome = await mkdtemp(join(tmpdir(), "paseo-pid-lock-legacy-desktop-"));
     const replacementOwnerPid = process.pid + 10_000;
-    const pidPath = join(paseoHome, "paseo.pid");
+    const pidPath = join(paseoHome, "osuna.pid");
 
     try {
       await writeFile(
@@ -181,7 +190,7 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: replacementOwnerPid }),
-      ).rejects.toThrow("Another Paseo daemon is already running");
+      ).rejects.toThrow("Another Osuna daemon is already running");
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -207,7 +216,7 @@ describe("pid-lock ownership", () => {
 
   test("retries a heartbeat refresh while its owner is rewriting the lock", async () => {
     const paseoHome = await mkdtemp(join(tmpdir(), "paseo-pid-lock-refresh-rewrite-"));
-    const pidPath = join(paseoHome, "paseo.pid");
+    const pidPath = join(paseoHome, "osuna.pid");
 
     try {
       await acquirePidLock(paseoHome, null, { ownerPid: process.pid });
@@ -233,7 +242,7 @@ describe("pid-lock ownership", () => {
 
     try {
       await writeFile(
-        join(paseoHome, "paseo.pid"),
+        join(paseoHome, "osuna.pid"),
         JSON.stringify({
           pid: process.pid,
           startedAt: new Date().toISOString(),
@@ -247,11 +256,83 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: process.pid + 10_000 }),
-      ).rejects.toThrow("Another Paseo daemon is already running");
+      ).rejects.toThrow("Another Osuna daemon is already running");
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
       expect(lock?.listen).toBe("127.0.0.1:6767");
+    } finally {
+      await rm(paseoHome, { recursive: true, force: true });
+    }
+  });
+  test("refuses to start while a legacy paseo.pid lock is still alive", async () => {
+    const paseoHome = await mkdtemp(join(tmpdir(), "paseo-pid-lock-old-name-live-"));
+
+    try {
+      await writeFile(
+        join(paseoHome, "paseo.pid"),
+        JSON.stringify({
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+          hostname: "old-host",
+          uid: process.getuid?.() ?? 0,
+          listen: "127.0.0.1:6767",
+          heartbeat: true,
+        }),
+      );
+
+      await expect(
+        acquirePidLock(paseoHome, null, { ownerPid: process.pid + 10_000 }),
+      ).rejects.toThrow("A pre-rename Paseo daemon is still running in this home");
+
+      expect(existsSync(join(paseoHome, "osuna.pid"))).toBe(false);
+    } finally {
+      await rm(paseoHome, { recursive: true, force: true });
+    }
+  });
+
+  test("starts normally when the legacy paseo.pid lock is abandoned", async () => {
+    const paseoHome = await mkdtemp(join(tmpdir(), "paseo-pid-lock-old-name-dead-"));
+    const legacyPath = join(paseoHome, "paseo.pid");
+    const deadPid = exitedProcessPid();
+
+    try {
+      await writeFile(
+        legacyPath,
+        JSON.stringify({
+          pid: deadPid,
+          startedAt: new Date().toISOString(),
+          hostname: "old-host",
+          uid: process.getuid?.() ?? 0,
+          listen: "127.0.0.1:6767",
+          heartbeat: true,
+        }),
+      );
+
+      await expect(
+        acquirePidLock(paseoHome, null, { ownerPid: process.pid }),
+      ).resolves.toBeUndefined();
+
+      const lock = await getPidLockInfo(paseoHome);
+      expect(lock?.pid).toBe(process.pid);
+      // 旧文件不属于本产品，不迁移也不删除。
+      expect(existsSync(legacyPath)).toBe(true);
+    } finally {
+      await rm(paseoHome, { recursive: true, force: true });
+    }
+  });
+  test("refuses to start when the legacy paseo.pid lock cannot be read", async () => {
+    const paseoHome = await mkdtemp(join(tmpdir(), "paseo-pid-lock-old-name-unreadable-"));
+
+    try {
+      // 读不出来不等于不存在：无法证明旧 daemon 没在跑，就不能放行第二个实例。
+      await writeFile(join(paseoHome, "paseo.pid"), "{ this is not json");
+
+      await expect(
+        acquirePidLock(paseoHome, null, { ownerPid: process.pid }),
+      ).rejects.toBeInstanceOf(PidLockError);
+
+      expect(existsSync(join(paseoHome, "osuna.pid"))).toBe(false);
     } finally {
       await rm(paseoHome, { recursive: true, force: true });
     }

@@ -299,7 +299,7 @@ async function shutdown(): Promise<void> {
   await Promise.all([...providerConnections.keys()].map(closeProviderConnection));
   await releaseApi;
   await daemonClient?.close().catch(() => undefined);
-  await sendAndWait({ type: "paseo_close" });
+  await sendAndWait({ type: "osuna_close" });
   daemonClient = null;
   osuna = null;
   process.disconnect();
@@ -405,7 +405,7 @@ process.on("message", (rawMessage: unknown) => {
     });
     return;
   }
-  if (message.type === "paseo_frame" || message.type === "paseo_close") return;
+  if (message.type === "osuna_frame" || message.type === "osuna_close") return;
   if (isHookMessage(message)) {
     handleHookMessage(message);
     return;

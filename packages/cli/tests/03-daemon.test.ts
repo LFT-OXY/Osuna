@@ -220,7 +220,7 @@ try {
       relay: { ...config.daemon?.relay, enabled: false },
     };
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
-    // A supervised daemon owns and heartbeats paseo.pid. Launch the worker
+    // A supervised daemon owns and heartbeats osuna.pid. Launch the worker
     // directly so this fixture naturally has a reachable daemon without a PID file.
     const workerEntry = resolveDaemonWorkerEntry();
     const workerArgs = workerEntry.endsWith(".ts")

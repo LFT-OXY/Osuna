@@ -174,13 +174,13 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       const liveSetupItems = live.filter(
         (item) =>
           item.type === "tool_call" &&
-          item.name === "paseo_worktree_setup" &&
+          item.name === "osuna_worktree_setup" &&
           item.status === "running",
       );
       expect(liveSetupItems.length).toBeGreaterThan(0);
 
       const persistedSetupItems = persisted.filter(
-        (item) => item.type === "tool_call" && item.name === "paseo_worktree_setup",
+        (item) => item.type === "tool_call" && item.name === "osuna_worktree_setup",
       );
       expect(persistedSetupItems).toHaveLength(1);
       expect(persistedSetupItems[0]?.type).toBe("tool_call");
@@ -285,7 +285,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
 
       const persistedSetupItem = persisted.find(
         (item): item is Extract<AgentTimelineItem, { type: "tool_call" }> =>
-          item.type === "tool_call" && item.name === "paseo_worktree_setup",
+          item.type === "tool_call" && item.name === "osuna_worktree_setup",
       );
       expect(persistedSetupItem?.detail.type).toBe("worktree_setup");
       if (!persistedSetupItem || persistedSetupItem.detail.type !== "worktree_setup") {
@@ -408,7 +408,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       const terminalToolCall = persisted.find(
         (item): item is Extract<AgentTimelineItem, { type: "tool_call" }> =>
           item.type === "tool_call" &&
-          item.name === "paseo_worktree_terminals" &&
+          item.name === "osuna_worktree_terminals" &&
           item.status === "completed",
       );
       expect(terminalToolCall?.status).toBe("completed");

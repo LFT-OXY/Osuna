@@ -49,8 +49,25 @@ export function isPidRunning(pid: number): boolean {
   }
 }
 
+const PID_LOCK_FILENAME = "osuna.pid";
+// COMPAT(pid-lock-paseo-name): added 2026-09-20, remove after 2027-03-20 once the first
+// Osuna release is over six months old. 只读不写。触发条件只有一个：OSUNA_HOME 被指向上游
+// 的 ~/.paseo（默认是 ~/.osuna，两边互不相干）。此时旧 daemon 持有的是 paseo.pid，只看
+// osuna.pid 会判定没有实例在跑，于是起出第二个 daemon 抢同一个端口与同一份 agent 存储。
+const PASEO_PID_LOCK_FILENAME = "paseo.pid";
+
 function getPidFilePath(paseoHome: string): string {
-  return join(paseoHome, "paseo.pid");
+  return join(paseoHome, PID_LOCK_FILENAME);
+}
+
+/**
+ * 改名前的 daemon 仍在跑时返回它的锁，否则返回 null。
+ * 注意「读不出来」不等于「不存在」：`readPidLock` 只在文件缺失时返回 null，权限不足或内容
+ * 损坏一律抛出。那种情况下无法证明旧 daemon 没在跑，必须让启动失败而不是放行第二个实例。
+ */
+async function readLivePaseoPidLock(paseoHome: string): Promise<PidLockInfo | null> {
+  const lock = await readPidLock(join(paseoHome, PASEO_PID_LOCK_FILENAME));
+  return lock && isPidRunning(lock.pid) ? lock : null;
 }
 
 async function touchPidLockFile(pidPath: string): Promise<void> {
@@ -95,7 +112,14 @@ export function isSamePidLock(left: PidLockInfo, right: PidLockInfo): boolean {
 
 function createLockHeldError(lock: PidLockInfo): PidLockError {
   return new PidLockError(
-    `Another Paseo daemon is already running (PID ${lock.pid}, started ${lock.startedAt})`,
+    `Another Osuna daemon is already running (PID ${lock.pid}, started ${lock.startedAt})`,
+    lock,
+  );
+}
+
+function createPaseoLockHeldError(paseoHome: string, lock: PidLockInfo): PidLockError {
+  return new PidLockError(
+    `A pre-rename Paseo daemon is still running in this home (PID ${lock.pid}, started ${lock.startedAt}, lock file ${join(paseoHome, PASEO_PID_LOCK_FILENAME)}). Stop it, or start Osuna with a different OSUNA_HOME.`,
     lock,
   );
 }
@@ -138,7 +162,7 @@ async function writeNewPidLock(pidPath: string, lockInfo: PidLockInfo): Promise<
     const raceLock = await readPidLock(pidPath);
     if (raceLock) {
       throw new PidLockError(
-        `Another Paseo daemon is already running (PID ${raceLock.pid})`,
+        `Another Osuna daemon is already running (PID ${raceLock.pid})`,
         raceLock,
       );
     }
@@ -168,6 +192,9 @@ export async function acquirePidLock(
       return;
     }
   }
+
+  const paseoLock = await readLivePaseoPidLock(paseoHome);
+  if (paseoLock) throw createPaseoLockHeldError(paseoHome, paseoLock);
 
   // Create new lock with exclusive flag
   const lockInfo: PidLockInfo = {
