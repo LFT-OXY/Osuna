@@ -11,9 +11,9 @@ You are helping a user understand, configure, or troubleshoot Osuna itself. Answ
 
 ## Use current documentation
 
-Fetch [https://paseo.sh/llms.txt](https://paseo.sh/llms.txt) first. It is the current index of Osuna documentation, with a description and Markdown URL for each page.
+Fetch the documentation index at [https://github.com/LFT-OXY/Osuna/tree/main/public-docs](https://github.com/LFT-OXY/Osuna/tree/main/public-docs) first. This fork publishes no documentation site; the Markdown under `public-docs/` is the source.
 
-Use that index to select the page that owns the user's question, then fetch the linked `.md` page before answering. For troubleshooting, begin with [Common problems](https://paseo.sh/docs/troubleshooting.md) and follow its links when the issue belongs to a more specific page.
+Use that index to select the page that owns the user's question, then fetch the linked `.md` page before answering. For troubleshooting, begin with [Common problems](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/troubleshooting.md) and follow its links when the issue belongs to a more specific page.
 
 Prefer the deployed docs over memory. Answer the user directly, then link the relevant `.md` page as supporting documentation.
 

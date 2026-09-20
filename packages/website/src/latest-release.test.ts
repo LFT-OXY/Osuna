@@ -35,8 +35,8 @@ function desktopRelease({
   return {
     tag_name: `v${version}`,
     assets: [
-      { name: `Paseo-${version}-arm64.dmg` },
-      { name: "Paseo-x86_64.AppImage" },
+      { name: `Osuna-${version}-arm64.dmg` },
+      { name: "Osuna-x86_64.AppImage" },
       { name: `Osuna-Setup-${version}-x64.exe` },
       { name: `Osuna-Setup-${version}-arm64.exe` },
     ],

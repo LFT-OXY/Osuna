@@ -18,7 +18,7 @@ This is the basis for product decisions. A familiar feature from another develop
 
 The default experience should be lean, polished, and understandable to someone who has never run a server or configured a VPN.
 
-With a supported coding agent installed and authenticated, you can open the desktop app and start working. The app manages its local daemon. To connect your phone through the optional Osuna relay, enable pairing and scan a QR code. You do not need to configure a VPN or understand the networking behind it.
+With a supported coding agent installed and authenticated, you can open the desktop app and start working. The app manages its local daemon. To connect your phone through the optional relay, enable pairing and scan a QR code. You do not need to configure a VPN or understand the networking behind it.
 
 You should not need to know that plugins exist to get a useful, complete experience. Extra capability should become discoverable when it helps with something you want to do.
 

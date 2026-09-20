@@ -116,7 +116,7 @@ and updating `next`, integrating it after a release, and releasing a hotfix from
 
 ## Critical rules
 
-- **NEVER restart a running daemon without permission** — it manages all running agents, and if you're an agent, restarting it kills your own process. This covers Osuna's installed daemon on `6777` and dev daemon on `6778`, and the upstream Osuna daemon on `6767`/`6768` that this machine still runs.
+- **NEVER restart a running daemon without permission** — it manages all running agents, and if you're an agent, restarting it kills your own process. This covers Osuna's installed daemon on `6777` and dev daemon on `6778`, and the upstream Paseo daemon on `6767`/`6768` that this machine still runs.
 - **NEVER assume a timeout means the service needs restarting** — timeouts can be transient.
 - **NEVER add auth checks to tests** — agent providers handle their own auth.
 - **Before changing app routes, startup routing, remembered workspace restore, or active workspace selection, read [docs/expo-router.md](docs/expo-router.md).**

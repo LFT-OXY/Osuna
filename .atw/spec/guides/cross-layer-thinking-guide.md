@@ -392,11 +392,62 @@ never will. Half-renamed identifiers are worse than either endpoint because they
 deliberate. Replace whole known compounds (full URLs, package names, scoped names) **before**
 running any generic rule, so the generic rule never sees them.
 
+That advice was written down and then broken again in batch 4, by an author who had just read
+it. A `paseo` → `osuna` pass over the docs produced, in one run: `github.com/getosuna/osuna`
+(an organization that has never existed), the domains `osuna.sh`, `app.osuna.sh` and
+`hub.osuna.sh` (none registered), a doc calling the **upstream** relay repo "the official Osuna
+relay", and a README fork notice reading *"Osuna is a fork of Osuna"*. Every one of them
+typechecks, lints and reads fluently. The lesson is not "be careful" — it is mechanical:
+
+- **Protect before you sweep.** Substitute every must-not-change token for a placeholder first,
+  run the generic rule, then restore. The protect list is the interesting artifact: it holds the
+  old name's *legitimate* appearances, and writing it forces you to enumerate them.
+- **Three kinds belong on that list**: text whose subject is the old name (a fork notice, a
+  rename changelog, this guide); factual references to upstream assets (their repo, their issue
+  links, their hosted services); and docs describing code that **still** carries the old name,
+  where renaming the doc makes it a lie.
+- **Grep for what the sweep could have invented**, not only for what it should have changed. A
+  rename is finished when both `rg <old>` and `rg <new-org>/<new-repo>`-style probes for
+  fabricated compounds come back clean.
+
+### Docs cannot be renamed ahead of the code they describe
+
+A doc citing `paseo.pid` or `paseoHome` is *correct* while the code still spells them that way.
+Sweeping the doc "for consistency" produces a document that describes software nobody is
+running, and the error is invisible: nothing links docs to identifiers. Before renaming any
+identifier inside prose, grep the code for both spellings and rename the doc only where the code
+has already moved. In batch 4 this check reversed the direction of the work twice — 89 `PASEO_*`
+environment variables in docs were stale and had to move, while `paseo.pid`,
+`paseo.parent-agent-id` and `paseoHome` were current and had to stay.
+
+Run the check the other way too: a doc citing a value the code no longer has is how batch 4
+found a missed `DEFAULT_HUB_ORIGIN = "https://hub.paseo.sh"` that the ticket's "relay / Hub
+defaults" item had asked for and the implementation had skipped. **The documentation sweep is a
+consistency check on the code**, not a cosmetic pass over it.
+
+### A renamed file leaves a live orphan in `dist/`
+
+Renaming `paseo-config-schema.ts` → `osuna-config-schema.ts` left `dist/paseo-config-schema.js`
+behind: `tsc` writes new output but never deletes stale output, and `dist/` is gitignored, so
+every source-level check passed. Five CLI test files then failed with
+`Cannot read properties of undefined (reading 'optional')` — the orphan was still being loaded
+and still exporting the old names. `rg` over tracked files reported the rename as complete.
+
+**A source-level sweep cannot prove runtime correctness**: an unversioned build artifact sits
+between them. After renaming or deleting any file whose output ships, run the package's
+`build:clean` (or delete `dist/`) before trusting a test run, and treat
+`ls dist | grep <old-name>` as part of the acceptance.
+
 ### Tool pitfalls when scripting the sweep
 
 - `git grep -E` is POSIX ERE: **`\b` does not work**. A file list built with
   `git grep -l -E '\bfoo\b'` comes back silently empty, so the replace appears to
   succeed while touching nothing. Use `git grep -P`, or grep the bare name and filter.
+- **zsh does not word-split unquoted parameters.** `python3 rename.py $TOKENS` passes all 78
+  tokens as one argument under zsh (it works under bash), so every `\b<ident>\b` pattern is a
+  single impossible string and the script reports `0 处改动` instead of failing. Silent false
+  success again. Pass a token *file* (`@tokens.txt`) rather than relying on the shell's
+  splitting rules, and make the script print how many tokens it parsed.
 - `xargs sed -i ''` aborts the whole batch on the first unusable path. A symlink
   (`AGENTS.md` → `CLAUDE.md`) stopped a 379-file rename after 7 files. Loop per file, skip
   symlinks, and count what you changed.

@@ -11,10 +11,10 @@ Build or manage the requested plugin directly. Use the current public docs to ca
 
 ## Check current documentation
 
-Fetch [https://paseo.sh/llms.txt](https://paseo.sh/llms.txt) first. Select and fetch the current plugin Markdown pages from that index before changing a plugin:
+Fetch the documentation index at [https://github.com/LFT-OXY/Osuna/tree/main/public-docs](https://github.com/LFT-OXY/Osuna/tree/main/public-docs) first. Select and fetch the current plugin Markdown pages from `public-docs/` before changing a plugin:
 
-- [Plugin quickstart](https://paseo.sh/docs/plugins.md) ([browser page](https://paseo.sh/docs/plugins))
-- [Plugin reference](https://paseo.sh/docs/plugins/v0.8/reference.md) ([browser page](https://paseo.sh/docs/plugins/v0.8/reference))
+- [Plugin quickstart](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/plugins.md)
+- [Plugin reference](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/plugins/v0.8/reference.md)
 
 Use the deployed docs when they disagree with this skill. Do not send the user away to read them instead of completing the work.
 
@@ -26,21 +26,21 @@ public docs; this skill indexes the references and examples.
 
 Pick the contribution that matches the request. Each row names the registration, when it fits, and where the full contract lives. Most plugins combine several: a slash command that calls an RPC, which appends a timeline row, which a renderer draws.
 
-| Contribution              | Registration                                     | Use it when                                                                                                   | Reference                                                                                          |
-| ------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Sidebar surface           | `addSurface` + `addSidebarItem`                  | A full screen of plugin UI reachable from the sidebar                                                         | reference.md → Surfaces and sidebar items; `plugin-examples/local-plugin`                          |
-| Workspace panel           | `addWorkspacePanel`                              | UI that lives as a tab beside agents, terminals, files, and diffs; `locations: ["explorer"]` for the Explorer | reference.md → Workspace panels                                                                    |
-| Command Center item       | `addCommandCenterItem`                           | A global, workspace, or agent action reachable from ⌘K                                                        | reference.md → Command Center items                                                                |
-| Client slash command      | `addSlashCommand`                                | A `/command args` in the composer that runs plugin code instead of prompting the agent                        | reference.md → Client slash commands                                                               |
-| Composer pill             | `addComposerPill`                                | A per-agent button in the composer track bar next to Tasks and Subagents                                      | reference.md → Composer pills                                                                      |
-| Timeline transformer      | `addTimelineTransformer` + `addTimelineRenderer` | Replace, explode, or hide a built-in timeline item, including while it streams                                | reference.md → Timeline items; `plugin-examples/timeline-items`, `plugin-examples/inline-thinking` |
-| Timeline row              | `osuna.agents.ref(id).timeline.append(...)`      | Push a plugin-owned row into an agent timeline from a server handler and update it later                      | reference.md → Append a timeline row from the daemon                                               |
-| Attachment source         | `client.addAttachmentSource` + `server.handle`   | Let the user attach a searchable external resource, such as an issue, to a prompt                             | reference.md → Add a composer attachment source; `plugin-examples/linear`                          |
-| Theme                     | `addTheme`                                       | A light or dark palette under Settings → Appearance                                                           | reference.md → Contribute a theme; `plugin-examples/catppuccin`                                    |
-| Plugin RPC                | `defineRpc` + `server.handle` + `useRpc`         | Daemon-side work that is not a normal Osuna operation: vendor APIs, credentials, local files                  | reference.md → Add plugin-specific backend behavior                                                |
-| Lifecycle events          | `server.on`                                      | Observe agent/workspace lifecycle, inspect ended turns, and answer permission requests                        | [Lifecycle hooks](https://paseo.sh/docs/plugins/v0.8/reference.md#lifecycle-hooks)                 |
-| Creation and launch hooks | `server.before`                                  | Change agent config, provider options, MCP servers, environment, or workspace isolation before the operation  | [Before hooks](https://paseo.sh/docs/plugins/v0.8/reference.md#before-hooks)                       |
-| Osuna SDK                 | `useOsuna()` / handler `{ osuna }`               | Normal Osuna operations: workspaces, agents, providers, config                                                | reference.md → Use the Osuna SDK                                                                   |
+| Contribution              | Registration                                     | Use it when                                                                                                   | Reference                                                                                                           |
+| ------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Sidebar surface           | `addSurface` + `addSidebarItem`                  | A full screen of plugin UI reachable from the sidebar                                                         | reference.md → Surfaces and sidebar items; `plugin-examples/local-plugin`                                           |
+| Workspace panel           | `addWorkspacePanel`                              | UI that lives as a tab beside agents, terminals, files, and diffs; `locations: ["explorer"]` for the Explorer | reference.md → Workspace panels                                                                                     |
+| Command Center item       | `addCommandCenterItem`                           | A global, workspace, or agent action reachable from ⌘K                                                        | reference.md → Command Center items                                                                                 |
+| Client slash command      | `addSlashCommand`                                | A `/command args` in the composer that runs plugin code instead of prompting the agent                        | reference.md → Client slash commands                                                                                |
+| Composer pill             | `addComposerPill`                                | A per-agent button in the composer track bar next to Tasks and Subagents                                      | reference.md → Composer pills                                                                                       |
+| Timeline transformer      | `addTimelineTransformer` + `addTimelineRenderer` | Replace, explode, or hide a built-in timeline item, including while it streams                                | reference.md → Timeline items; `plugin-examples/timeline-items`, `plugin-examples/inline-thinking`                  |
+| Timeline row              | `osuna.agents.ref(id).timeline.append(...)`      | Push a plugin-owned row into an agent timeline from a server handler and update it later                      | reference.md → Append a timeline row from the daemon                                                                |
+| Attachment source         | `client.addAttachmentSource` + `server.handle`   | Let the user attach a searchable external resource, such as an issue, to a prompt                             | reference.md → Add a composer attachment source; `plugin-examples/linear`                                           |
+| Theme                     | `addTheme`                                       | A light or dark palette under Settings → Appearance                                                           | reference.md → Contribute a theme; `plugin-examples/catppuccin`                                                     |
+| Plugin RPC                | `defineRpc` + `server.handle` + `useRpc`         | Daemon-side work that is not a normal Osuna operation: vendor APIs, credentials, local files                  | reference.md → Add plugin-specific backend behavior                                                                 |
+| Lifecycle events          | `server.on`                                      | Observe agent/workspace lifecycle, inspect ended turns, and answer permission requests                        | [Lifecycle hooks](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/plugins/v0.8/reference.md#lifecycle-hooks) |
+| Creation and launch hooks | `server.before`                                  | Change agent config, provider options, MCP servers, environment, or workspace isolation before the operation  | [Before hooks](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/plugins/v0.8/reference.md#before-hooks)       |
+| Osuna SDK                 | `useOsuna()` / handler `{ osuna }`               | Normal Osuna operations: workspaces, agents, providers, config                                                | reference.md → Use the Osuna SDK                                                                                    |
 
 | Lifecycle task                                                      | Example                                                                                               |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -83,7 +83,7 @@ by the CLI version. Raise the minimum when adopting newer APIs; add an upper bou
 Osuna release is incompatible. Use npm semver ranges and explicitly include beta versions when
 targeting betas. Missing requirements mean `<0.8.0`; complete the 0.8 entry migration before adding
 `>=0.8.0`. Verify compatibility with both the daemon and the app running client contributions.
-See [requirements](https://paseo.sh/docs/plugins/v0.8/reference#requirements).
+See [requirements](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/plugins/v0.8/reference.md#requirements).
 
 Each runtime has its own optional entry. A plugin must have at least one. Both entries accept
 `.ts` or `.tsx`; use `.tsx` when an entry imports components.
@@ -105,7 +105,7 @@ Default-export one contribution function from each entry and return cleanup:
 
 ```tsx
 // index.client.tsx
-import type { PluginClientContext } from "@getpaseo/plugin/client";
+import type { PluginClientContext } from "@osuna/plugin/client";
 
 export default function contribute(client: PluginClientContext) {
   // Register components and client callbacks here.
@@ -115,7 +115,7 @@ export default function contribute(client: PluginClientContext) {
 
 ```ts
 // index.server.ts
-import type { PluginServerContext } from "@getpaseo/plugin/server";
+import type { PluginServerContext } from "@osuna/plugin/server";
 
 export default function contribute(server: PluginServerContext) {
   // Register daemon-side RPC handlers here.
@@ -139,7 +139,7 @@ import {
   type PluginClientContext,
   type PluginWorkspacePanelProps,
   useWorkspace,
-} from "@getpaseo/plugin/client";
+} from "@osuna/plugin/client";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -195,7 +195,7 @@ the active workspace or agent. Command callbacks receive the selected host's `os
 Plugin surfaces use React Native primitives and work across desktop, browser, iOS, and Android. Register the surface before its sidebar item. Color text from `theme.colors` and pad from `layout.compact`.
 
 ```tsx
-import type { PluginClientContext, PluginSurfaceProps } from "@getpaseo/plugin/client";
+import type { PluginClientContext, PluginSurfaceProps } from "@osuna/plugin/client";
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -245,9 +245,9 @@ export default function contribute(client: PluginClientContext) {
 Icons are Lucide icon names. `theme` is a typed `PluginTheme` on every surface and panel. Primary text uses `theme.colors.foreground`; labels use `theme.colors.foregroundMuted`; the root view uses `theme.colors.surface0`. `layout.compact` is true on mobile and narrow windows. Osuna owns the route, header, host picker, close action, error boundary, and per-installation query client.
 
 Before writing imports, classify each module as shared, client, or server. Follow the
-[SDK import boundaries](https://paseo.sh/docs/plugins/v0.8/reference.md#runtime-modules), including
+[SDK import boundaries](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/plugins/v0.8/reference.md#runtime-modules), including
 transitive and type dependencies. The root is shared-only; hooks and client contexts belong to
-`@getpaseo/plugin/client`, server contexts to `/server`, and host UI to `/client/react-native` or `/client/ui`.
+`@osuna/plugin/client`, server contexts to `/server`, and host UI to `/client/react-native` or `/client/ui`.
 Install dependencies locally for typechecking; Osuna supplies host runtime modules. JSX uses the
 automatic runtime. Do not import `/client/host` from plugin code.
 
@@ -280,7 +280,7 @@ Use the existing Osuna SDK for normal Osuna operations. Use plugin RPC only for 
 `useOsuna()` borrows the selected host's current connection. Never create another client inside a surface.
 
 ```tsx
-import { useOsuna } from "@getpaseo/plugin/client";
+import { useOsuna } from "@osuna/plugin/client";
 
 function PullRequestAction() {
   const osuna = useOsuna();
@@ -306,7 +306,7 @@ function PullRequestAction() {
 }
 ```
 
-The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because Osuna owns the connection. Consult the current [SDK reference](https://paseo.sh/docs/sdk/reference.md) for method details.
+The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because Osuna owns the connection. Consult the current [SDK reference](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/sdk/reference.md) for method details.
 
 ### Add daemon-side behavior
 
@@ -315,7 +315,7 @@ call it from client code with `useRpc()`:
 
 ```ts
 // shared/greeting.ts
-import { defineRpc } from "@getpaseo/plugin";
+import { defineRpc } from "@osuna/plugin";
 import { z } from "zod";
 
 const greeting = defineRpc({
@@ -327,7 +327,7 @@ const greeting = defineRpc({
 
 ```ts
 // server/greeting.ts
-import type { RpcInput } from "@getpaseo/plugin";
+import type { RpcInput } from "@osuna/plugin";
 import { greeting } from "../shared/greeting";
 
 export async function createGreeting({ name }: RpcInput<typeof greeting>) {
@@ -337,7 +337,7 @@ export async function createGreeting({ name }: RpcInput<typeof greeting>) {
 
 ```ts
 // index.server.ts
-import type { PluginServerContext } from "@getpaseo/plugin/server";
+import type { PluginServerContext } from "@osuna/plugin/server";
 import { createGreeting } from "./server/greeting";
 import { greeting } from "./shared/greeting";
 
@@ -349,7 +349,7 @@ export default function contribute(server: PluginServerContext) {
 
 ```tsx
 // client/greeting.tsx
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "@osuna/plugin/client";
 import { greeting } from "../shared/greeting";
 
 function Greeting() {
@@ -388,7 +388,7 @@ the client:
 
 ```ts
 // shared/issues.ts
-import { defineAttachmentSource, defineRpc } from "@getpaseo/plugin";
+import { defineAttachmentSource, defineRpc } from "@osuna/plugin";
 import { z } from "zod";
 
 const searchIssues = defineRpc({
@@ -421,7 +421,7 @@ const issues = defineAttachmentSource({
 
 ```ts
 // index.server.ts
-import type { PluginServerContext } from "@getpaseo/plugin/server";
+import type { PluginServerContext } from "@osuna/plugin/server";
 import { searchIssues } from "./shared/issues";
 
 export default function contribute(server: PluginServerContext) {
@@ -432,7 +432,7 @@ export default function contribute(server: PluginServerContext) {
 
 ```tsx
 // index.client.tsx
-import type { PluginClientContext } from "@getpaseo/plugin/client";
+import type { PluginClientContext } from "@osuna/plugin/client";
 import { issues } from "./shared/issues";
 
 export default function contribute(client: PluginClientContext) {
@@ -518,7 +518,7 @@ client.addTimelineRenderer({
 });
 ```
 
-Transformers run while the render model is built, on fetched history and on every live update, so `phase` is `"streaming"` for a loading thought or running tool call. Identity comes from the source item, so a streaming item keeps its mounted component; set an output `id` when one source explodes into several items. Transformers must be synchronous and deterministic, `data` must be JSON, and a transformer that throws is logged and skipped. Use `useRevealedText(text, phase)` from `@getpaseo/plugin/client/react-native` to pace streaming text. `plugin-examples/inline-thinking` replaces the thinking row with inline text; `plugin-examples/timeline-items` replaces a Pi todo tool call with a task card.
+Transformers run while the render model is built, on fetched history and on every live update, so `phase` is `"streaming"` for a loading thought or running tool call. Identity comes from the source item, so a streaming item keeps its mounted component; set an output `id` when one source explodes into several items. Transformers must be synchronous and deterministic, `data` must be JSON, and a transformer that throws is logged and skipped. Use `useRevealedText(text, phase)` from `@osuna/plugin/client/react-native` to pace streaming text. `plugin-examples/inline-thinking` replaces the thinking row with inline text; `plugin-examples/timeline-items` replaces a Pi todo tool call with a task card.
 
 ## Append a timeline row from the daemon
 
@@ -614,7 +614,7 @@ Use `--host <url>` when managing a daemon other than the CLI default. A Git sour
 
 Do not restart the daemon to load source changes. Restarting it can kill the agent performing the work.
 
-For an old mixed entry, follow the standalone [v0.8 runtime-entry migration guide](https://paseo.sh/docs/plugins/v0.8/migration) mechanically.
+For an old mixed entry, follow the standalone [v0.8 runtime-entry migration guide](https://github.com/LFT-OXY/Osuna/tree/main/public-docs/plugins/v0.8/migration.md) mechanically.
 
 ## Verify the outcome
 

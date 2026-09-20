@@ -159,7 +159,7 @@ in
       default = { };
       example = lib.literalExpression ''
         {
-          OSUNA_RELAY_ENDPOINT = "relay.paseo.sh:443";
+          OSUNA_RELAY_ENDPOINT = "";
         }
       '';
       description = "Extra environment variables for the Osuna daemon.";

@@ -46,7 +46,10 @@
 `~/.config/opencode/plugins/` 里会同时存在新旧两个插件，两个都被 OpenCode 加载，
 同一个事件上报两次。改名必须连带删除旧文件名，并加一条回归。
 
-- [ ] 验收：全仓 `rg -i paseo` 排除 `CHANGELOG.md`、`LICENSE` 原版权行、版本锁定历史文档后无命中
+- [ ] 验收：全仓 `rg -i paseo` 排除下列后无命中 —— `CHANGELOG.md`、`LICENSE` 原版权行、
+      版本锁定的历史文档、`docs/protocol-compatibility.md`、指向上游的事实性链接，以及
+      **`.atw/spec/guides/cross-layer-thinking-guide.md`**：那份指南整章在记录这次改名
+      踩过的坑，旧名与被造出来的错名都是它的论据，扫掉就没有内容了
 - [ ] 验收：装一次 CLI 起一个终端，agent hook 状态上报仍通（票 06 的链路没被改名碰坏）
 - [ ] 验收：老插件文件存在时安装一次，确认旧文件被删、不会双份上报
 - [ ] `npm run typecheck`、`npm run lint`、全量单测通过

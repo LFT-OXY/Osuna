@@ -25,15 +25,15 @@ export interface ReleaseChannels {
 }
 
 const LINUX_APPIMAGE_ASSET_PATTERN =
-  /^Paseo-(?:\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)-)?x86_64\.AppImage$/;
+  /^Osuna-(?:\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)-)?x86_64\.AppImage$/;
 
 const REQUIRED_ASSET_PATTERNS = [
-  /Paseo-.*-arm64\.dmg$/,
+  /Osuna-.*-arm64\.dmg$/,
   LINUX_APPIMAGE_ASSET_PATTERN,
   /Osuna-Setup-.*\.exe$/,
 ];
 
-const GITHUB_RELEASES_URL = "https://api.github.com/repos/getpaseo/paseo/releases?per_page=10";
+const GITHUB_RELEASES_URL = "https://api.github.com/repos/LFT-OXY/Osuna/releases?per_page=10";
 const RELEASE_CACHE_KEY = "github-release:v2";
 const ANDROID_RELEASE_CACHE_KEY = "github-android-release:v1";
 
@@ -143,7 +143,7 @@ export function getLatestAndroidVersionFromReleases(releases: GitHubRelease[]): 
     const version = versionFromTag(candidate.tag_name);
     if (!/^\d+\.\d+\.\d+$/.test(version)) return false;
     return candidate.assets.some(
-      (asset) => asset.name === `paseo-${candidate.tag_name}-android.apk`,
+      (asset) => asset.name === `osuna-${candidate.tag_name}-android.apk`,
     );
   });
   if (!release) throw new Error("no stable GitHub release with an Android APK found");
