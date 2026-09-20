@@ -92,7 +92,7 @@ describe("daemon relay config", () => {
     },
   );
 
-  test("loads relay TLS from env, persisted config, and hosted relay fallback", async () => {
+  test("loads relay TLS from env and persisted config, defaulting off without an endpoint", async () => {
     const persistedHome = await createPaseoHome({
       version: 1,
       daemon: {
@@ -115,17 +115,18 @@ describe("daemon relay config", () => {
     });
     expect(loadConfig(envHome, { env: { OSUNA_RELAY_USE_TLS: "true" } }).relayUseTls).toBe(true);
 
-    const hostedHome = await createPaseoHome({
+    // 没有托管 relay 可回退，端点缺省时按自建假定，TLS 不再默认打开
+    const unconfiguredHome = await createPaseoHome({
       version: 1,
       daemon: { relay: {} },
     });
-    expect(loadConfig(hostedHome, { env: {} }).relayUseTls).toBe(true);
+    expect(loadConfig(unconfiguredHome, { env: {} }).relayUseTls).toBe(false);
   });
 
   test("relayPublicUseTls falls back to relayUseTls when unset", async () => {
     const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
-    // Default: both true (hosted relay)
-    expect(loadConfig(home, { env: {} }).relayPublicUseTls).toBe(true);
+    // 公共侧跟随 relayUseTls，后者在无端点时为 false
+    expect(loadConfig(home, { env: {} }).relayPublicUseTls).toBe(false);
   });
 
   test("OSUNA_RELAY_PUBLIC_USE_TLS overrides relayUseTls for public side", async () => {
