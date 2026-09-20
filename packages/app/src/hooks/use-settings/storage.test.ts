@@ -24,7 +24,7 @@ import {
 } from "@/components/sidebar/display-preferences/row-items";
 import { DARK_THEME_NAMES, LIGHT_THEME_NAMES, THEME_OPTIONS } from "@/styles/theme";
 
-const LEGACY_SETTINGS_KEY = "@paseo:settings";
+const LEGACY_SETTINGS_KEY = "@osuna:settings";
 
 function makeDeps(
   overrides: {
@@ -45,7 +45,7 @@ describe("loadAppSettingsFromStorage", () => {
   it("preserves a persisted steer send behavior", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
-        "@paseo:app-settings": JSON.stringify({ sendBehavior: "steer" }),
+        "@osuna:app-settings": JSON.stringify({ sendBehavior: "steer" }),
       }),
     });
     expect((await loadAppSettingsFromStorage(deps)).sendBehavior).toBe("steer");

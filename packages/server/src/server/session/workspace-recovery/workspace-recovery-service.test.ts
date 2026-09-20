@@ -63,7 +63,7 @@ function createWorkspace(
     title: "TDD reproduction",
     branch: "diagnose-repro-tdd",
     worktreeRoot: "/worktrees/trigger-1525443412986298439",
-    isPaseoOwnedWorktree: true,
+    isOsunaOwnedWorktree: true,
     mainRepoRoot: "/repo",
     createdAt: NOW,
     updatedAt: NOW,
@@ -84,7 +84,7 @@ function createHarness(input?: {
   const directories = new Set(input?.directories ?? ["/repo"]);
   const unarchived: string[] = [];
   const service = createWorkspaceRecoveryService({
-    paseoHome: input?.paseoHome ?? "/paseo-home",
+    paseoHome: input?.paseoHome ?? "/osuna-home",
     worktreesRoot: input?.worktreesRoot ?? "/worktrees",
     getWorkspace: async (workspaceId) =>
       workspace?.workspaceId === workspaceId ? workspace : null,
@@ -147,7 +147,7 @@ describe("workspace recovery", () => {
     execFileSync("git", ["commit", "-m", "add app"], { cwd: repoDir, stdio: "pipe" });
     execFileSync("git", ["branch", branch], { cwd: repoDir, stdio: "pipe" });
 
-    const paseoHome = join(tempDir, "paseo-home");
+    const paseoHome = join(tempDir, "osuna-home");
     const worktreesRoot = join(tempDir, "worktrees");
     const created = await createWorktree({
       cwd: repoDir,
@@ -203,7 +203,7 @@ describe("workspace recovery", () => {
     const { tempDir, repoDir } = createGitRepository();
     const branch = "feature/without-subproject";
     execFileSync("git", ["branch", branch], { cwd: repoDir, stdio: "pipe" });
-    const paseoHome = join(tempDir, "paseo-home");
+    const paseoHome = join(tempDir, "osuna-home");
     const worktreesRoot = join(tempDir, "worktrees");
     const created = await createWorktree({
       cwd: repoDir,
@@ -297,7 +297,7 @@ function createGitRepository(): { tempDir: string; repoDir: string } {
 
 async function createBaseRecoveryFixture(baseBranch: string | null) {
   const { tempDir, repoDir } = createGitRepository();
-  const paseoHome = join(tempDir, "paseo-home");
+  const paseoHome = join(tempDir, "osuna-home");
   const created = await createWorktree({
     cwd: repoDir,
     paseoHome,

@@ -38,7 +38,7 @@ async function tempDir(prefix: string): Promise<string> {
 /** A project whose root holds no discoverable icon, over an in-memory registry. */
 async function project() {
   const rootPath = await tempDir("paseo-project-root-");
-  const paseoHome = await tempDir("paseo-home-");
+  const paseoHome = await tempDir("osuna-home-");
   let record = createPersistedProjectRecord({
     projectId: "project-a",
     rootPath,

@@ -43,7 +43,7 @@ test("real OpenCode server shares one process while shell.env stays session-scop
       { provider: "opencode", cwd: firstCwd, model: "opencode/big-pickle", modeId: "build" },
       {
         agentId: "real-agent-one",
-        env: { PASEO_AGENT_ID: "real-agent-one", PASEO_AGENT_CWD: firstCwd },
+        env: { OSUNA_AGENT_ID: "real-agent-one", OSUNA_AGENT_CWD: firstCwd },
         paseoTools: firstTools,
       },
       { persistSession: false },
@@ -52,7 +52,7 @@ test("real OpenCode server shares one process while shell.env stays session-scop
       { provider: "opencode", cwd: secondCwd },
       {
         agentId: "real-agent-two",
-        env: { PASEO_AGENT_ID: "real-agent-two", PASEO_AGENT_CWD: secondCwd },
+        env: { OSUNA_AGENT_ID: "real-agent-two", OSUNA_AGENT_CWD: secondCwd },
         paseoTools: secondTools,
       },
       { persistSession: false },
@@ -65,13 +65,13 @@ test("real OpenCode server shares one process while shell.env stays session-scop
         sessionID: requireSessionId(first),
         directory: firstCwd,
         agent: "build",
-        command: 'printf "%s|%s" "$PASEO_AGENT_ID" "$PASEO_AGENT_CWD"',
+        command: 'printf "%s|%s" "$OSUNA_AGENT_ID" "$OSUNA_AGENT_CWD"',
       }),
       sdk.session.shell({
         sessionID: requireSessionId(second),
         directory: secondCwd,
         agent: "build",
-        command: 'printf "%s|%s" "$PASEO_AGENT_ID" "$PASEO_AGENT_CWD"',
+        command: 'printf "%s|%s" "$OSUNA_AGENT_ID" "$OSUNA_AGENT_CWD"',
       }),
     ]);
 
@@ -83,7 +83,7 @@ test("real OpenCode server shares one process while shell.env stays session-scop
 
     const agentResult = await first.run(
       [
-        "Use the bash tool to run: env | grep -E '^(PASEO_AGENT_ID|PASEO_AGENT_CWD)='",
+        "Use the bash tool to run: env | grep -E '^(OSUNA_AGENT_ID|OSUNA_AGENT_CWD)='",
         "Then report both values in your response:",
         "AGENT=real-agent-one",
         `CWD=${firstCwd}`,

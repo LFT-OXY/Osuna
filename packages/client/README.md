@@ -9,7 +9,7 @@ npm install @osuna/client
 ```ts
 import { createPaseoClient } from "@osuna/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:6777/ws" });
 await client.connect();
 
 const agent = await client.agents.create({
@@ -32,7 +32,7 @@ Read the [SDK documentation](../../public-docs/sdk/index.md) for agents, workspa
 
 The client needs a WebSocket implementation. Modern browsers and Node.js 22 provide one globally.
 
-Use a WebSocket URL ending in `/ws`, such as `ws://127.0.0.1:6767/ws`. Pass `password` when the daemon requires authentication.
+Use a WebSocket URL ending in `/ws`, such as `ws://127.0.0.1:6777/ws`. Pass `password` when the daemon requires authentication.
 
 The client advertises its supported protocol capabilities by default. Optional `capabilities`
 overrides extend or override that declaration; browser hosting must be supplied by the caller.

@@ -7,7 +7,7 @@ export PATH="$ROOT_DIR/node_modules/.bin:$PATH"
 
 source "$SCRIPT_DIR/dev-home.sh"
 
-export PASEO_LISTEN="${PASEO_LISTEN:-127.0.0.1:6768}"
+export OSUNA_LISTEN="${OSUNA_LISTEN:-127.0.0.1:6778}"
 configure_dev_paseo_home
 
 EXPO_PORT="${EXPO_PORT:-8081}"
@@ -19,12 +19,12 @@ echo "  Paseo App Dev"
 echo "══════════════════════════════════════════════════════"
 echo "  Metro:   http://localhost:${EXPO_PORT}"
 echo "  Daemon:  ${DAEMON_ENDPOINT}"
-echo "  Home:    ${PASEO_HOME}"
+echo "  Home:    ${OSUNA_HOME}"
 echo "══════════════════════════════════════════════════════"
 
 exec cross-env \
   BROWSER="${BROWSER:-none}" \
   APP_VARIANT=development \
-  EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL="$DEV_BUILD_LABEL" \
+  EXPO_PUBLIC_OSUNA_DEV_BUILD_LABEL="$DEV_BUILD_LABEL" \
   EXPO_PUBLIC_LOCAL_DAEMON="$DAEMON_ENDPOINT" \
   npm run start:expo --workspace=@osuna/app -- --port "$EXPO_PORT"

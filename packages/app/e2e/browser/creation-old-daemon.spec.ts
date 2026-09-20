@@ -162,9 +162,9 @@ for (const version of ["0.2.5", "0.7.2", "0.8.0"]) {
       });
       await page.addInitScript(
         ({ seededHost, preferences }) => {
-          localStorage.setItem("@paseo:e2e", "1");
-          localStorage.setItem("@paseo:daemon-registry", JSON.stringify([seededHost]));
-          localStorage.setItem("@paseo:create-agent-preferences", JSON.stringify(preferences));
+          localStorage.setItem("@osuna:e2e", "1");
+          localStorage.setItem("@osuna:daemon-registry", JSON.stringify([seededHost]));
+          localStorage.setItem("@osuna:create-agent-preferences", JSON.stringify(preferences));
         },
         { seededHost: host, preferences: buildCreateAgentPreferences() },
       );

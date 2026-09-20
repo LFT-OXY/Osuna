@@ -43,7 +43,7 @@ describe("daemon bearer auth", () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
-    process.env = { ...originalEnv, PASEO_SUPERVISED: "0" };
+    process.env = { ...originalEnv, OSUNA_SUPERVISED: "0" };
   });
 
   test("leaves HTTP and WebSocket open when no password is configured", async () => {
@@ -136,16 +136,16 @@ describe("daemon bearer auth", () => {
       });
       await expectWebSocketCloses({
         port: daemonHandle.port,
-        protocol: "paseo.bearer.wrong-password",
+        protocol: "osuna.bearer.wrong-password",
         code: 4401,
         reason: "Incorrect password",
       });
 
       const { ws, protocol } = await connectWebSocket({
         port: daemonHandle.port,
-        protocol: "paseo.bearer.correct-password",
+        protocol: "osuna.bearer.correct-password",
       });
-      expect(protocol).toBe("paseo.bearer.correct-password");
+      expect(protocol).toBe("osuna.bearer.correct-password");
       ws.close();
     } finally {
       await daemonHandle.close();

@@ -28,7 +28,7 @@ function makeGitRepo(config?: PaseoConfigRaw): string {
 }
 
 function writeConfig(repoRoot: string, config: PaseoConfigRaw): void {
-  writeFileSync(join(repoRoot, "paseo.json"), `${JSON.stringify(config, null, 2)}\n`);
+  writeFileSync(join(repoRoot, "osuna.json"), `${JSON.stringify(config, null, 2)}\n`);
 }
 
 describe("worktree setup commit status", () => {
@@ -50,7 +50,7 @@ describe("worktree setup commit status", () => {
       true,
     );
 
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoRoot });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoRoot });
     await expect(hasUncommittedWorktreeSetupChanges({ repoRoot, currentConfig })).resolves.toBe(
       true,
     );
@@ -81,12 +81,12 @@ describe("worktree setup commit status", () => {
     );
   });
 
-  test("resolves paseo.json relative to a nested project root", async () => {
+  test("resolves osuna.json relative to a nested project root", async () => {
     const repoRoot = makeGitRepo();
     const projectRoot = join(repoRoot, "packages", "app");
     mkdirSync(projectRoot, { recursive: true });
     writeConfig(projectRoot, { worktree: { setup: "npm ci" } });
-    execFileSync("git", ["add", "packages/app/paseo.json"], { cwd: repoRoot });
+    execFileSync("git", ["add", "packages/app/osuna.json"], { cwd: repoRoot });
     execFileSync("git", ["commit", "-m", "add nested config"], { cwd: repoRoot });
     const currentConfig = { worktree: { setup: "npm install" } };
     writeConfig(projectRoot, currentConfig);

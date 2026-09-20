@@ -1,0 +1,32 @@
+{
+  "worktree": {
+    "setup": [
+      "npm ci",
+      "node ./scripts/seed-ios-native-cache.mjs",
+      "node ./scripts/seed-worktree-dev-state.mjs",
+      "npm run build:server",
+      "npm run build --workspace=@osuna/expo-two-way-audio"
+    ]
+  },
+  "scripts": {
+    "daemon": {
+      "type": "service",
+      "command": "OSUNA_DEV_MANAGED_HOME=1 OSUNA_DEV_ROOT=\"${OSUNA_WORKTREE_PATH:-$PWD}\" OSUNA_HOME=\"${OSUNA_WORKTREE_PATH:-$PWD}/.dev/osuna-home\" OSUNA_SKIP_DEV_SERVER_BUILD=1 OSUNA_LISTEN=0.0.0.0:${OSUNA_PORT:-6778} ./scripts/dev-daemon.sh"
+    },
+    "app": {
+      "type": "service",
+      "command": "OSUNA_DEV_MANAGED_HOME=1 OSUNA_DEV_ROOT=\"${OSUNA_WORKTREE_PATH:-$PWD}\" OSUNA_HOME=\"${OSUNA_WORKTREE_PATH:-$PWD}/.dev/osuna-home\" OSUNA_LISTEN=0.0.0.0:${OSUNA_SERVICE_DAEMON_PORT:-6778} OSUNA_DEV_DAEMON_ENDPOINT=localhost:${OSUNA_SERVICE_DAEMON_PORT:-6778} EXPO_PORT=${OSUNA_PORT:-} ./scripts/dev-app.sh"
+    },
+    "desktop": {
+      "type": "service",
+      "command": "OSUNA_DEV_MANAGED_HOME=1 OSUNA_DEV_ROOT=\"${OSUNA_WORKTREE_PATH:-$PWD}\" OSUNA_HOME=\"${OSUNA_WORKTREE_PATH:-$PWD}/.dev/osuna-home\" OSUNA_LISTEN=0.0.0.0:${OSUNA_SERVICE_DAEMON_PORT:-6778} OSUNA_DEV_DAEMON_ENDPOINT=localhost:${OSUNA_SERVICE_DAEMON_PORT:-6778} EXPO_PORT=${OSUNA_PORT:-} exec ./packages/desktop/scripts/dev.sh"
+    },
+    "ios-simulator": {
+      "type": "service",
+      "command": "OSUNA_DEV_MANAGED_HOME=1 OSUNA_DEV_ROOT=\"$PWD\" OSUNA_HOME=\"$PWD/.dev/osuna-home\" OSUNA_LISTEN=0.0.0.0:${OSUNA_SERVICE_DAEMON_PORT} OSUNA_DEV_DAEMON_ENDPOINT=localhost:${OSUNA_SERVICE_DAEMON_PORT} ./scripts/paseo-ios-simulator-service.sh"
+    },
+    "typecheck": {
+      "command": "npm run typecheck"
+    }
+  }
+}

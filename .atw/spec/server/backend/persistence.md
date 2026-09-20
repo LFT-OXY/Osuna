@@ -1,6 +1,6 @@
 # Persistence
 
-There is no database. Daemon state is JSON files under `$PASEO_HOME` (`~/.paseo` in production, `.dev/paseo-home` in this checkout). `docs/data-model.md` is the authority for every record, its schema, and the directory layout; keep it current when you add a file.
+There is no database. Daemon state is JSON files under `$OSUNA_HOME` (`~/.osuna` in production, `.dev/osuna-home` in this checkout). `docs/data-model.md` is the authority for every record, its schema, and the directory layout; keep it current when you add a file.
 
 ## The store shape
 
@@ -40,7 +40,7 @@ only the last handle. Three rules make it safe without a migration.
   where the two answers start to diverge.
 - **Never write the derived value back.** The record stays as it was until
   something real changes it; a read-time backfill would rewrite every file in
-  `$PASEO_HOME` on the first start after an upgrade.
+  `$OSUNA_HOME` on the first start after an upgrade.
 
 Add the field to `docs/data-model.md` in the same change, including the sentence
 that says what readers do when it is missing.

@@ -9,7 +9,7 @@ interface Message {
   data?: string;
 }
 interface TerminalFrameWindow extends Window {
-  __PASEO_TERMINAL_WEBVIEW_RECEIVE__(message: unknown): void;
+  __OSUNA_TERMINAL_WEBVIEW_RECEIVE__(message: unknown): void;
   __paseoTerminal?: Terminal;
 }
 let frame: HTMLIFrameElement;
@@ -30,7 +30,7 @@ test("the generated WebView searches its mounted stream and keeps Find commands 
   win.document.close();
   await expect.poll(() => messages.some((m) => m.type === "bridgeReady")).toBe(true);
   const send = (message: object) =>
-    win.__PASEO_TERMINAL_WEBVIEW_RECEIVE__({ streamKey: "owned", ...message });
+    win.__OSUNA_TERMINAL_WEBVIEW_RECEIVE__({ streamKey: "owned", ...message });
   send({
     type: "mount",
     initialSnapshot: null,

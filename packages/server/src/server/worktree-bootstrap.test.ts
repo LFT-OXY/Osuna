@@ -73,7 +73,7 @@ describe("runAsyncWorktreeBootstrap", () => {
     realTerminalManagers = [];
     tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-bootstrap-test-")));
     repoDir = join(tempDir, "repo");
-    paseoHome = join(tempDir, "paseo-home");
+    paseoHome = join(tempDir, "osuna-home");
 
     mkdirSync(repoDir, { recursive: true });
     execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "pipe" });
@@ -94,14 +94,14 @@ describe("runAsyncWorktreeBootstrap", () => {
 
   it("does not fail setup when live timeline emission throws", async () => {
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         worktree: {
           setup: ['echo "ok"'],
         },
       }),
     );
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add setup"], {
       cwd: repoDir,
       stdio: "pipe",
@@ -146,14 +146,14 @@ describe("runAsyncWorktreeBootstrap", () => {
     const largeOutputCommand =
       "node -e \"process.stdout.write('prefix-'); process.stdout.write('x'.repeat(70000)); process.stdout.write('-suffix')\"";
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         worktree: {
           setup: [largeOutputCommand],
         },
       }),
     );
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add large output setup"], {
       cwd: repoDir,
       stdio: "pipe",
@@ -204,7 +204,7 @@ describe("runAsyncWorktreeBootstrap", () => {
 
   it("waits for terminal output before sending bootstrap commands", async () => {
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         worktree: {
           terminals: [
@@ -216,7 +216,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         },
       }),
     );
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync(
       "git",
       ["-c", "commit.gpgsign=false", "commit", "-m", "add terminal bootstrap config"],
@@ -441,15 +441,15 @@ describe("runAsyncWorktreeBootstrap", () => {
     expect(createTerminalCalls[0]?.name).toBe("api");
     expect(terminalRecords[0]?.sentInputs).toEqual(["npm run api\r"]);
     expect(createTerminalCalls[0]?.env).not.toHaveProperty("PORT");
-    expect(createTerminalCalls[0]?.env?.PASEO_PORT).toEqual(expect.any(String));
+    expect(createTerminalCalls[0]?.env?.OSUNA_PORT).toEqual(expect.any(String));
     expect(createTerminalCalls[0]?.env?.HOST).toBe("127.0.0.1");
-    expect(createTerminalCalls[0]?.env?.PASEO_URL).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_URL).toBe(
       "http://api--feature-socket-service--repo.localhost:6767",
     );
-    expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_API_PORT).toBe(
-      createTerminalCalls[0]?.env?.PASEO_PORT,
+    expect(createTerminalCalls[0]?.env?.OSUNA_SERVICE_API_PORT).toBe(
+      createTerminalCalls[0]?.env?.OSUNA_PORT,
     );
-    expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_API_URL).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_SERVICE_API_URL).toBe(
       "http://api--feature-socket-service--repo.localhost:6767",
     );
   }
@@ -470,10 +470,10 @@ describe("runAsyncWorktreeBootstrap", () => {
     if (plannedAppServerPort === undefined) {
       throw new Error("Expected app-server to be present in the service port plan");
     }
-    expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_APP_SERVER_PORT).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_SERVICE_APP_SERVER_PORT).toBe(
       String(plannedAppServerPort),
     );
-    expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_APP_SERVER_URL).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_SERVICE_APP_SERVER_URL).toBe(
       "http://app-server--feature-socket-service--repo.localhost:6767",
     );
   }
@@ -494,8 +494,8 @@ describe("runAsyncWorktreeBootstrap", () => {
     scripts: Record<string, { command: string; type?: "script" | "service" }>,
     message = "add script config",
   ): void {
-    writeFileSync(join(repoDir, "paseo.json"), JSON.stringify({ scripts }));
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    writeFileSync(join(repoDir, "osuna.json"), JSON.stringify({ scripts }));
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", message], {
       cwd: repoDir,
       stdio: "pipe",
@@ -880,20 +880,20 @@ describe("runAsyncWorktreeBootstrap", () => {
       workspaceId: repoDir,
       scriptName: "api",
     });
-    expect(createTerminalCalls[0]?.env?.PASEO_URL).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_URL).toBe(
       "https://api--feature-public-service--repo.services.example.com",
     );
-    expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_API_URL).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_SERVICE_API_URL).toBe(
       "https://api--feature-public-service--repo.services.example.com",
     );
-    expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_APP_SERVER_URL).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_SERVICE_APP_SERVER_URL).toBe(
       "https://app-server--feature-public-service--repo.services.example.com",
     );
   });
 
   it("refreshes a stopped service port on respawn and updates the route", async () => {
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         scripts: {
           api: {
@@ -907,7 +907,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         },
       }),
     );
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync(
       "git",
       ["-c", "commit.gpgsign=false", "commit", "-m", "add respawn service script config"],
@@ -988,7 +988,7 @@ describe("runAsyncWorktreeBootstrap", () => {
     }
     expect(secondPort).not.toBe(firstPort);
     expect(secondPort).toEqual(expect.any(Number));
-    expect(createTerminalCalls[2]?.env?.PASEO_SERVICE_WORKER_PORT).toBe(String(workerPort));
+    expect(createTerminalCalls[2]?.env?.OSUNA_SERVICE_WORKER_PORT).toBe(String(workerPort));
     expect(routeStore.getRouteEntry("api--feature-respawn-service--repo.localhost")).toMatchObject({
       hostname: "api--feature-respawn-service--repo.localhost",
       port: secondPort,
@@ -1000,7 +1000,7 @@ describe("runAsyncWorktreeBootstrap", () => {
 
   it("removes the current service route on exit after a branch rename", async () => {
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         scripts: {
           api: {
@@ -1010,7 +1010,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         },
       }),
     );
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync(
       "git",
       ["-c", "commit.gpgsign=false", "commit", "-m", "add renamed service script config"],
@@ -1062,7 +1062,7 @@ describe("runAsyncWorktreeBootstrap", () => {
 
   it("fails normalized service env name collisions before terminal creation", async () => {
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         scripts: {
           "app-server": {
@@ -1076,7 +1076,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         },
       }),
     );
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync(
       "git",
       ["-c", "commit.gpgsign=false", "commit", "-m", "add colliding service config"],
@@ -1111,7 +1111,7 @@ describe("runAsyncWorktreeBootstrap", () => {
     ).toBeNull();
 
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         scripts: {
           "app-server": {
@@ -1148,13 +1148,13 @@ describe("runAsyncWorktreeBootstrap", () => {
 
     expect(Array.from(plan.keys())).toEqual(["app-server", "worker"]);
     expect(createTerminalCalls).toHaveLength(1);
-    expect(createTerminalCalls[0]?.env).toHaveProperty("PASEO_SERVICE_APP_SERVER_PORT");
-    expect(createTerminalCalls[0]?.env).toHaveProperty("PASEO_SERVICE_WORKER_PORT");
+    expect(createTerminalCalls[0]?.env).toHaveProperty("OSUNA_SERVICE_APP_SERVER_PORT");
+    expect(createTerminalCalls[0]?.env).toHaveProperty("OSUNA_SERVICE_WORKER_PORT");
   });
 
   it("binds services to the network when the daemon listens on a non-loopback host", async () => {
     writeFileSync(
-      join(repoDir, "paseo.json"),
+      join(repoDir, "osuna.json"),
       JSON.stringify({
         scripts: {
           web: {
@@ -1164,7 +1164,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         },
       }),
     );
-    execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
     execFileSync(
       "git",
       ["-c", "commit.gpgsign=false", "commit", "-m", "add remote service script config"],
@@ -1193,7 +1193,7 @@ describe("runAsyncWorktreeBootstrap", () => {
 
     expect(createTerminalCalls).toHaveLength(1);
     expect(createTerminalCalls[0]?.env?.HOST).toBe("0.0.0.0");
-    expect(createTerminalCalls[0]?.env?.PASEO_URL).toBe(
+    expect(createTerminalCalls[0]?.env?.OSUNA_URL).toBe(
       "http://web--feature-remote-service--repo.localhost:6767",
     );
   });

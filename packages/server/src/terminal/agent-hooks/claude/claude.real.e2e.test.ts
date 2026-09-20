@@ -164,9 +164,9 @@ describe.skipIf(!claudeAvailability.available)(
             cwd,
             env: {
               ...process.env,
-              PASEO_TERMINAL_ID: terminalId,
-              PASEO_ACTIVITY_TOKEN: token,
-              PASEO_TERMINAL_ACTIVITY_URL: recorder.url,
+              OSUNA_TERMINAL_ID: terminalId,
+              OSUNA_ACTIVITY_TOKEN: token,
+              OSUNA_TERMINAL_ACTIVITY_URL: recorder.url,
               PATH: [paseoCliBinDir, process.env.PATH].filter(isString).join(delimiter),
             },
           },
@@ -213,9 +213,9 @@ describe.skipIf(!claudeAvailability.available)(
           args: ["--settings", join(configDir, "settings.json")],
           env: {
             ...process.env,
-            PASEO_TERMINAL_ID: terminalId,
-            PASEO_ACTIVITY_TOKEN: token,
-            PASEO_TERMINAL_ACTIVITY_URL: recorder.url,
+            OSUNA_TERMINAL_ID: terminalId,
+            OSUNA_ACTIVITY_TOKEN: token,
+            OSUNA_TERMINAL_ACTIVITY_URL: recorder.url,
             PATH: [paseoCliBinDir, process.env.PATH].filter(isString).join(delimiter),
           },
         });

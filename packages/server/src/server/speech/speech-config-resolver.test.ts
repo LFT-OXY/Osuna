@@ -7,7 +7,7 @@ import { resolveSpeechConfig } from "./speech-config-resolver.js";
 
 describe("resolveSpeechConfig", () => {
   test("resolves local-first defaults without env overrides", () => {
-    const paseoHome = "/tmp/paseo-home";
+    const paseoHome = "/tmp/osuna-home";
     const persisted = PersistedConfigSchema.parse({});
     const env = {} as NodeJS.ProcessEnv;
 
@@ -70,22 +70,22 @@ describe("resolveSpeechConfig", () => {
       },
     });
     const env = {
-      PASEO_DICTATION_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
-      PASEO_VOICE_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
-      PASEO_VOICE_LOCAL_TTS_MODEL: "kokoro-en-v0_19",
-      PASEO_VOICE_LOCAL_TTS_SPEAKER_ID: "5",
-      PASEO_VOICE_LOCAL_TTS_SPEED: "1.35",
-      PASEO_DICTATION_LANGUAGE: "es",
-      PASEO_VOICE_LANGUAGE: "pt",
-      PASEO_LOCAL_MODELS_DIR: "/tmp/models",
+      OSUNA_DICTATION_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
+      OSUNA_VOICE_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
+      OSUNA_VOICE_LOCAL_TTS_MODEL: "kokoro-en-v0_19",
+      OSUNA_VOICE_LOCAL_TTS_SPEAKER_ID: "5",
+      OSUNA_VOICE_LOCAL_TTS_SPEED: "1.35",
+      OSUNA_DICTATION_LANGUAGE: "es",
+      OSUNA_VOICE_LANGUAGE: "pt",
+      OSUNA_LOCAL_MODELS_DIR: "/tmp/models",
       OPENAI_API_KEY: "env-key",
-      PASEO_VOICE_STT_PROVIDER: "openai",
-      PASEO_DICTATION_STT_PROVIDER: "local",
-      PASEO_VOICE_TTS_PROVIDER: "local",
+      OSUNA_VOICE_STT_PROVIDER: "openai",
+      OSUNA_DICTATION_STT_PROVIDER: "local",
+      OSUNA_VOICE_TTS_PROVIDER: "local",
     } as NodeJS.ProcessEnv;
 
     const result = resolveSpeechConfig({
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       env,
       persisted,
     });
@@ -151,10 +151,10 @@ describe("resolveSpeechConfig", () => {
     });
 
     const result = resolveSpeechConfig({
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       env: {
-        PASEO_DICTATION_LANGUAGE: "es",
-        PASEO_VOICE_LANGUAGE: "  ",
+        OSUNA_DICTATION_LANGUAGE: "es",
+        OSUNA_VOICE_LANGUAGE: "  ",
       } as NodeJS.ProcessEnv,
       persisted,
     });
@@ -174,7 +174,7 @@ describe("resolveSpeechConfig", () => {
     });
 
     const result = resolveSpeechConfig({
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       env: {} as NodeJS.ProcessEnv,
       persisted,
     });

@@ -12,8 +12,8 @@ const cleanupClients = new Set<DaemonClient>();
 let previousSupervised: string | undefined;
 
 beforeEach(() => {
-  previousSupervised = process.env.PASEO_SUPERVISED;
-  process.env.PASEO_SUPERVISED = "0";
+  previousSupervised = process.env.OSUNA_SUPERVISED;
+  process.env.OSUNA_SUPERVISED = "0";
 });
 
 afterEach(async () => {
@@ -30,11 +30,11 @@ afterEach(async () => {
 
 function restoreSupervisedEnv(): void {
   if (previousSupervised === undefined) {
-    delete process.env.PASEO_SUPERVISED;
+    delete process.env.OSUNA_SUPERVISED;
     return;
   }
 
-  process.env.PASEO_SUPERVISED = previousSupervised;
+  process.env.OSUNA_SUPERVISED = previousSupervised;
 }
 
 // Repro for the "project flashes in the sidebar then disappears" report.
@@ -81,7 +81,7 @@ test("openProject expands tilde before creating the workspace", async () => {
   await client.fetchWorkspaces({ subscribe: {} });
 
   const home = process.env.HOME || os.homedir();
-  const workspacePath = await mkdtemp(path.join(home, ".paseo-open-project-"));
+  const workspacePath = await mkdtemp(path.join(home, ".osuna-open-project-"));
   cleanupPaths.add(workspacePath);
   const queryPath = `~/${path.relative(home, workspacePath)}`;
 

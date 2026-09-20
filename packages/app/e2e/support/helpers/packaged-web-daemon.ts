@@ -59,13 +59,13 @@ export async function startPackagedWebDaemon(input: {
   const serverId = `relay-deployment-${Date.now().toString(36)}`;
   const paseo = path.resolve(__dirname, "../../../../../node_modules/.bin/osuna");
   const env: NodeJS.ProcessEnv = {
-    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_"))),
+    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_"))),
     HOME: home,
     USERPROFILE: home,
     CI: "true",
     NODE_ENV: "development",
-    PASEO_NODE_ENV: "development",
-    PASEO_SERVER_ID: serverId,
+    OSUNA_NODE_ENV: "development",
+    OSUNA_SERVER_ID: serverId,
   };
 
   try {

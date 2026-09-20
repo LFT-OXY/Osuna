@@ -4,7 +4,7 @@
 
 ## Daemon-specific rules
 
-- **Validate at the boundary, then trust the type.** Boundaries here are the WebSocket (zod-aot generated validation), `$PASEO_HOME` files (Zod in the store), process output (`utils/run-git-command.ts`, `utils/tool-call-parsers.ts`), and plugin/MCP inputs. Past those, no `?.`, no `??`, no re-checking.
+- **Validate at the boundary, then trust the type.** Boundaries here are the WebSocket (zod-aot generated validation), `$OSUNA_HOME` files (Zod in the store), process output (`utils/run-git-command.ts`, `utils/tool-call-parsers.ts`), and plugin/MCP inputs. Past those, no `?.`, no `??`, no re-checking.
 - **Spawn through `utils/spawn.ts`; run Git through `utils/run-git-command.ts`.** Git is scheduled by `utils/git-process-scheduler.ts` under the limits in daemon config (`docs/data-model.md` "Git process limits") and traced by `utils/git-command-trace.ts`. A raw `child_process.spawn("git", …)` bypasses all of that.
 - **Path handling goes through `utils/path.ts`** (`createRealpathAwarePathMatcher`, normalization) and `server/path-utils.ts`. Workspace ids are opaque; never derive a path from one.
 - **Kill process trees**, not processes: `utils/tree-kill.ts`.
@@ -25,7 +25,7 @@
 - `process.exit` from a feature module.
 - A new flat RPC name, or a `.request` without `.response`.
 - Untagged back-compat. Every shim carries `// COMPAT(name): added in vX, remove after <date>`.
-- Restarting the daemon on port 6767 without permission.
+- Restarting a running daemon without permission (Osuna 6777/6778, upstream Paseo 6767/6768).
 - `npm run test` for the whole workspace.
 - Adding auth checks or env gates to tests.
 - Hand-written types that duplicate a Zod schema or a protocol type.

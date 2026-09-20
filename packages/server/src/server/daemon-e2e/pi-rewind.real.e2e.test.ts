@@ -65,7 +65,7 @@ function expectPiSessionId(value: string): void {
 
 function piPrompt(input: { promptToken: string; doneToken: string }): string {
   return [
-    `PASEO_PI_REWIND_PROMPT_${input.promptToken}.`,
+    `OSUNA_PI_REWIND_PROMPT_${input.promptToken}.`,
     "Remember this marker for the conversation.",
     `Reply exactly: ${input.doneToken}`,
   ].join(" ");

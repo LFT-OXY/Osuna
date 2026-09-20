@@ -1,8 +1,8 @@
 /**
  * Reproducible terminal latency benchmark (Node-only, isolated daemon).
  *
- * Boots its OWN isolated daemon subprocess (fresh mkdtemp PASEO_HOME, random
- * port) — it NEVER touches the developer daemon on port 6767 — and measures:
+ * Boots its OWN isolated daemon subprocess (fresh mkdtemp OSUNA_HOME, random
+ * port) — it NEVER touches a real daemon (6777/6778 Osuna, 6767/6768 upstream) — and measures:
  *   A) terminal echo latency  (single-byte input -> first echoed output frame)
  *   B) terminal output jitter (inter-frame gaps while a command drains ~2MB)
  *   C) RPC ping RTT at 10Hz (proxy for daemon main-loop delay)
@@ -176,8 +176,11 @@ interface BootedDaemon {
 
 async function bootDaemon(): Promise<BootedDaemon> {
   const port = await getFreePort();
-  if (port === 6767) {
-    throw new Error("Refusing to use port 6767 (the developer daemon)");
+  // Osuna's installed (6777) and dev (6778) daemons, plus the upstream Paseo
+  // daemon (6767) and its dev daemon (6768) this fork coexists with. None may be
+  // borrowed for a benchmark daemon.
+  if ([6777, 6778, 6767, 6768].includes(port)) {
+    throw new Error(`Refusing to use port ${port} (a real daemon listens there)`);
   }
   const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-bench-home-"));
   const tsxBin = execSync("which tsx").toString().trim();
@@ -186,10 +189,10 @@ async function bootDaemon(): Promise<BootedDaemon> {
     cwd: SERVER_DIR,
     env: {
       ...process.env,
-      PASEO_HOME: paseoHome,
-      PASEO_SERVER_ID: "srv_terminal_bench",
-      PASEO_LISTEN: `127.0.0.1:${port}`,
-      PASEO_NODE_ENV: "development",
+      OSUNA_HOME: paseoHome,
+      OSUNA_SERVER_ID: "srv_terminal_bench",
+      OSUNA_LISTEN: `127.0.0.1:${port}`,
+      OSUNA_NODE_ENV: "development",
       NODE_ENV: "development",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -667,7 +670,7 @@ function getCommitHash(): string {
 async function main(): Promise<void> {
   const commit = getCommitHash();
   console.log(`Terminal latency benchmark — commit ${commit}`);
-  console.log("Booting isolated daemon (random port, fresh PASEO_HOME)...");
+  console.log("Booting isolated daemon (random port, fresh OSUNA_HOME)...");
 
   let daemon: BootedDaemon | null = null;
   let client: DaemonClientLike | null = null;

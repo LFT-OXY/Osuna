@@ -57,8 +57,8 @@ describe("daemon Git process config", () => {
     expect(
       loadConfig(home, {
         env: {
-          PASEO_GIT_MAX_PROCESSES_PER_SECOND: "12",
-          PASEO_GIT_MAX_PROCESS_CONCURRENCY: "6",
+          OSUNA_GIT_MAX_PROCESSES_PER_SECOND: "12",
+          OSUNA_GIT_MAX_PROCESS_CONCURRENCY: "6",
         },
       }).git,
     ).toEqual({
@@ -67,21 +67,21 @@ describe("daemon Git process config", () => {
     });
   });
 
-  test("accepts legacy PASEO_GIT_CONCURRENCY below the renamed variable", async () => {
+  test("accepts legacy OSUNA_GIT_CONCURRENCY below the renamed variable", async () => {
     const home = await createHome();
 
     expect(
       loadConfig(home, {
         env: {
-          PASEO_GIT_CONCURRENCY: "3",
+          OSUNA_GIT_CONCURRENCY: "3",
         },
       }).git?.maxProcessConcurrency,
     ).toBe(3);
     expect(
       loadConfig(home, {
         env: {
-          PASEO_GIT_CONCURRENCY: "3",
-          PASEO_GIT_MAX_PROCESS_CONCURRENCY: "7",
+          OSUNA_GIT_CONCURRENCY: "3",
+          OSUNA_GIT_MAX_PROCESS_CONCURRENCY: "7",
         },
       }).git?.maxProcessConcurrency,
     ).toBe(7);

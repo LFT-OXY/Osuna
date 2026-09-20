@@ -3,7 +3,7 @@
 /**
  * Phase 2: Daemon Command Tests
  *
- * Tests daemon commands with an isolated PASEO_HOME.
+ * Tests daemon commands with an isolated OSUNA_HOME.
  *
  * Tests:
  * - daemon --help shows subcommands
@@ -34,7 +34,7 @@ const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
 const require = createRequire(import.meta.url);
 
 function daemonCommand(args: string[]) {
-  return runLocalPaseo(["daemon", ...args], { PASEO_HOME: paseoHome });
+  return runLocalPaseo(["daemon", ...args], { OSUNA_HOME: paseoHome });
 }
 
 async function stopChildProcess(child: ChildProcess): Promise<void> {
@@ -177,7 +177,7 @@ try {
 
   {
     const result = await runLocalPaseo(["--host", "127.0.0.1:1", "daemon", "status", "--json"], {
-      PASEO_HOME: paseoHome,
+      OSUNA_HOME: paseoHome,
     });
     assert.strictEqual(result.exitCode, 1, "an explicit endpoint must not report local status");
     assert.match(result.stderr, /127.0.0.1:1/);
@@ -230,11 +230,11 @@ try {
       cwd: join(import.meta.dirname, ".."),
       env: {
         ...process.env,
-        PASEO_HOME: paseoHome,
-        PASEO_LISTEN: listen,
-        PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
-        PASEO_DICTATION_ENABLED: "0",
-        PASEO_VOICE_MODE_ENABLED: "0",
+        OSUNA_HOME: paseoHome,
+        OSUNA_LISTEN: listen,
+        OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
+        OSUNA_DICTATION_ENABLED: "0",
+        OSUNA_VOICE_MODE_ENABLED: "0",
         CI: "true",
       },
       stdio: "ignore",
@@ -300,7 +300,7 @@ try {
       reloadConfig.daemon.browserTools.enabled = false;
       await writeFile(configPath, `${JSON.stringify(reloadConfig, null, 2)}\n`, "utf-8");
       const aliasReload = await runLocalPaseo(["reload", "--host", listen, "--json"], {
-        PASEO_HOME: paseoHome,
+        OSUNA_HOME: paseoHome,
       });
       assert.strictEqual(aliasReload.exitCode, 0, aliasReload.stderr);
       assert.deepStrictEqual(JSON.parse(aliasReload.stdout), {
@@ -331,7 +331,7 @@ try {
         );
         const foreignPairing = await runLocalPaseo(
           ["daemon", "pair", "--home", foreignHome, "--json"],
-          { PASEO_HOME: foreignHome },
+          { OSUNA_HOME: foreignHome },
         );
         assert.strictEqual(foreignPairing.exitCode, 1);
         assert.match(foreignPairing.stderr, /RELAY_DISABLED/);

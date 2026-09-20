@@ -79,7 +79,7 @@ function gitService() {
         currentBranch: worktreeRoot ? (gitBranches.get(worktreeRoot) ?? "main") : null,
         remoteUrl: null,
         worktreeRoot,
-        isPaseoOwnedWorktree: false,
+        isOsunaOwnedWorktree: false,
         mainRepoRoot: null,
       };
     },
@@ -174,7 +174,7 @@ test("re-opening refreshes mutable checkout metadata without renaming the worksp
     branch: "feature/refresh",
     displayName: first.displayName,
     title: "Pinned work",
-    isPaseoOwnedWorktree: false,
+    isOsunaOwnedWorktree: false,
     mainRepoRoot: null,
   });
   expect(await workspaceRegistry.get(first.workspaceId)).toEqual(refreshed);
@@ -195,7 +195,7 @@ test("persists manual worktree ownership separately from its workspace kind", as
         currentBranch: "feature/manual",
         remoteUrl: null,
         worktreeRoot: cwd,
-        isPaseoOwnedWorktree: false,
+        isOsunaOwnedWorktree: false,
         mainRepoRoot,
       }),
     }),
@@ -205,7 +205,7 @@ test("persists manual worktree ownership separately from its workspace kind", as
 
   expect(workspace).toMatchObject({
     kind: "worktree",
-    isPaseoOwnedWorktree: false,
+    isOsunaOwnedWorktree: false,
     mainRepoRoot,
   });
 });
@@ -257,7 +257,7 @@ test("reopening archived exact-root records restores the fresh Git project", asy
         currentBranch: "main",
         remoteUrl: "https://github.com/acme/new-repo.git",
         worktreeRoot: cwd,
-        isPaseoOwnedWorktree: false,
+        isOsunaOwnedWorktree: false,
         mainRepoRoot: null,
       }),
     }),

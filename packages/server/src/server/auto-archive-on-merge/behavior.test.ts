@@ -43,7 +43,7 @@ async function createWorkspaceJourney() {
   run(repoDir, ["add", "README.md"]);
   run(repoDir, ["-c", "commit.gpgsign=false", "commit", "-m", "initial"]);
 
-  const paseoHome = path.join(tempDir, ".paseo");
+  const paseoHome = path.join(tempDir, ".osuna");
   const worktree = await createWorktree({
     cwd: repoDir,
     worktreeSlug: "workspace",
@@ -70,7 +70,7 @@ async function createWorkspaceJourney() {
         mainRepoRoot: repoDir,
         currentBranch: branch,
         remoteUrl: "https://github.com/acme/repo.git",
-        isPaseoOwnedWorktree: true,
+        isOsunaOwnedWorktree: true,
         isDirty: false,
         baseRef: "main",
         aheadBehind: { ahead: 0, behind: 0 },

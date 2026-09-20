@@ -22,7 +22,7 @@ async function resolveConfigGitPath(repoRoot: string): Promise<string> {
     cwd: repoRoot,
     envOverlay: READ_ONLY_GIT_ENV,
   });
-  return `${stdout.trim()}paseo.json`;
+  return `${stdout.trim()}osuna.json`;
 }
 
 async function readCommittedConfig(

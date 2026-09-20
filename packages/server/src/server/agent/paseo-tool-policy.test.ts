@@ -12,11 +12,11 @@ describe("Paseo tool policy", () => {
 
     expect(
       resolvePaseoToolPolicy("custom-claude", {
-        claude: { paseoTools: { enabled: false } },
-        "custom-claude": { paseoTools: customPolicy },
+        claude: { osunaTools: { enabled: false } },
+        "custom-claude": { osunaTools: customPolicy },
       }),
     ).toBe(customPolicy);
-    expect(resolvePaseoToolPolicy("other-custom", { claude: { paseoTools: customPolicy } })).toBe(
+    expect(resolvePaseoToolPolicy("other-custom", { claude: { osunaTools: customPolicy } })).toBe(
       undefined,
     );
     expect(isPaseoToolEnabled(undefined, "list_agents")).toBe(true);

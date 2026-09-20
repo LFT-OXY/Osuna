@@ -61,7 +61,7 @@ intended behavior, not fragments" outranks the wish for a test nobody has to tou
 
 ## Fixtures and isolation
 
-- Playwright gives every worker its own daemon and `PASEO_HOME`; specs in one file share it. Helpers that create projects or workspaces own them until cleanup, and a fixture fails any test that leaks a project record. Deleting the temp directory is not cleanup.
+- Playwright gives every worker its own daemon and `OSUNA_HOME`; specs in one file share it. Helpers that create projects or workspaces own them until cleanup, and a fixture fails any test that leaks a project record. Deleting the temp directory is not cleanup.
 - Tests about daemon-global state (empty history, restart) start a dedicated host explicitly.
 - Retained-panel geometry is tested through a real retained surface across hide and reveal (`docs/coding-standards.md` "Retained panel measurements").
 - Filenames describe product behavior (`add-changed-file-to-chat.spec.ts`), never order or isolation mechanics.

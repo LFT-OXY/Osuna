@@ -53,10 +53,10 @@ interface CapturedDirectory {
 
 const MANIFEST_OWNER = "paseo-skills-transaction";
 const MANIFEST_FILENAME = "transaction.json";
-const TRANSACTION_PREFIX = ".paseo-skills-transaction-";
-const RECOVERED_PREFIX = ".paseo-skills-recovered-";
+const TRANSACTION_PREFIX = ".osuna-skills-transaction-";
+const RECOVERED_PREFIX = ".osuna-skills-recovered-";
 const BACKUP_DIRNAME = "backup";
-const MANAGED_FILES_MANIFEST = ".paseo-managed-files.json";
+const MANAGED_FILES_MANIFEST = ".osuna-managed-files.json";
 
 async function isDirectory(target: string): Promise<boolean> {
   const info = await stat(target).catch(() => null);

@@ -420,25 +420,25 @@ describe("DaemonConfigStore", () => {
     store.patch({
       providers: {
         claude: {
-          paseoTools: { enabled: true, disabledTools: ["list_agents"] },
+          osunaTools: { enabled: true, disabledTools: ["list_agents"] },
         },
       },
     });
     store.patch({
       providers: {
         claude: {
-          paseoTools: { disabledTools: ["create_agent"] },
+          osunaTools: { disabledTools: ["create_agent"] },
         },
       },
     });
 
     expect(store.get().providers.claude).toEqual({
       enabled: false,
-      paseoTools: { enabled: true, disabledTools: ["create_agent"] },
+      osunaTools: { enabled: true, disabledTools: ["create_agent"] },
     });
     expect(loadPersistedConfig(paseoHome).agents?.providers?.claude).toEqual({
       enabled: false,
-      paseoTools: { enabled: true, disabledTools: ["create_agent"] },
+      osunaTools: { enabled: true, disabledTools: ["create_agent"] },
     });
   });
 

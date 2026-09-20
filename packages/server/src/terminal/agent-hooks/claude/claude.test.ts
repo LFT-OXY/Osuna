@@ -80,7 +80,7 @@ describe("Claude terminal agent hooks", () => {
       );
       expect(paseoCommands).toHaveLength(1);
       expect(paseoCommands[0]).toBe(
-        `if [ -n "$PASEO_TERMINAL_ID" ]; then "\${PASEO_HOOK_CLI:-paseo}" hooks ${provider.id} ${event.event}; fi`,
+        `if [ -n "$OSUNA_TERMINAL_ID" ]; then "\${OSUNA_HOOK_CLI:-paseo}" hooks ${provider.id} ${event.event}; fi`,
       );
     }
     expect(registeredAgentHooksAreInstalled({ configDir })).toBe(true);
@@ -145,18 +145,18 @@ describe("Claude terminal agent hooks", () => {
     const command = buildAgentHookShellCommand(provider, provider.events[0]);
 
     expect(command).toBe(
-      'if [ -n "$PASEO_TERMINAL_ID" ]; then "${PASEO_HOOK_CLI:-paseo}" hooks claude UserPromptSubmit; fi',
+      'if [ -n "$OSUNA_TERMINAL_ID" ]; then "${OSUNA_HOOK_CLI:-paseo}" hooks claude UserPromptSubmit; fi',
     );
   });
 
   it.skipIf(isPlatform("win32")).each(AGENT_HOOK_PROVIDERS.claude.events)(
-    "$event hook command exits 0 when PASEO_TERMINAL_ID is unset",
+    "$event hook command exits 0 when OSUNA_TERMINAL_ID is unset",
     (event) => {
       const provider = AGENT_HOOK_PROVIDERS.claude;
       const command = buildAgentHookShellCommand(provider, event);
 
       const result = spawnSync("/bin/sh", ["-c", command], {
-        env: { PATH: process.env.PATH ?? "", PASEO_HOOK_CLI: "paseo" },
+        env: { PATH: process.env.PATH ?? "", OSUNA_HOOK_CLI: "paseo" },
         stdio: "ignore",
       });
 
@@ -187,7 +187,7 @@ describe("Claude terminal agent hooks", () => {
     });
 
     expect(env.PATH?.split(delimiter)).toEqual([cliBinDir, "/usr/bin", "/bin"]);
-    expect(env.PASEO_HOOK_CLI).toBe(hookCliPath);
+    expect(env.OSUNA_HOOK_CLI).toBe(hookCliPath);
   });
 
   it("leaves terminal PATH unchanged when the CLI directory cannot be resolved", () => {

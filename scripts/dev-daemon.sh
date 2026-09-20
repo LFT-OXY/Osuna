@@ -6,26 +6,26 @@ export PATH="$SCRIPT_DIR/../node_modules/.bin:$PATH"
 
 source "$SCRIPT_DIR/dev-home.sh"
 
-export PASEO_LISTEN="${PASEO_LISTEN:-127.0.0.1:6768}"
+export OSUNA_LISTEN="${OSUNA_LISTEN:-127.0.0.1:6778}"
 configure_dev_paseo_home
 
-if [ -z "${PASEO_LOCAL_MODELS_DIR}" ]; then
-  export PASEO_LOCAL_MODELS_DIR="$HOME/.paseo/models/local-speech"
-  mkdir -p "$PASEO_LOCAL_MODELS_DIR"
+if [ -z "${OSUNA_LOCAL_MODELS_DIR}" ]; then
+  export OSUNA_LOCAL_MODELS_DIR="$HOME/.osuna/models/local-speech"
+  mkdir -p "$OSUNA_LOCAL_MODELS_DIR"
 fi
 
 echo "══════════════════════════════════════════════════════"
 echo "  Paseo Dev Daemon"
 echo "══════════════════════════════════════════════════════"
-echo "  Home:    ${PASEO_HOME}"
-echo "  Models:  ${PASEO_LOCAL_MODELS_DIR}"
-echo "  Listen:  ${PASEO_LISTEN}"
+echo "  Home:    ${OSUNA_HOME}"
+echo "  Models:  ${OSUNA_LOCAL_MODELS_DIR}"
+echo "  Listen:  ${OSUNA_LISTEN}"
 echo "══════════════════════════════════════════════════════"
 
-export PASEO_CORS_ORIGINS="${PASEO_CORS_ORIGINS:-*}"
-export PASEO_NODE_INSPECT="${PASEO_NODE_INSPECT:---inspect=0}"
+export OSUNA_CORS_ORIGINS="${OSUNA_CORS_ORIGINS:-*}"
+export OSUNA_NODE_INSPECT="${OSUNA_NODE_INSPECT:---inspect=0}"
 
-if [ "${PASEO_SKIP_DEV_SERVER_BUILD:-0}" = "1" ]; then
+if [ "${OSUNA_SKIP_DEV_SERVER_BUILD:-0}" = "1" ]; then
   exec npm run dev:server:watch
 fi
 

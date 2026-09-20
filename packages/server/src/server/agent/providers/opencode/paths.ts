@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { resolvePaseoHome } from "../../../paseo-home.js";
+import { resolvePaseoHome } from "../../../osuna-home.js";
 
 const OPENCODE_HOME_DIRNAME = "opencode-home";
 

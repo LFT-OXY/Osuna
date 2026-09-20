@@ -12,7 +12,7 @@ import { PARENT_AGENT_ID_LABEL } from "@osuna/protocol/agent-labels";
 // local-backed createWorkspace for a cwd mints a fresh, distinct workspace,
 // createAgent stamps the agent with the workspaceId it is given, and attaching
 // to an existing workspace by id creates no new record. The CLI's own flag
-// precedence (--workspace > $PASEO_WORKSPACE_ID > --worktree > bare) is covered
+// precedence (--workspace > $OSUNA_WORKSPACE_ID > --worktree > bare) is covered
 // in packages/cli/src/commands/agent/run.test.ts; this test only proves the
 // daemon behaviors the CLI builds on.
 
@@ -76,7 +76,7 @@ test("daemon resolves human and managed CLI workspace ownership", async () => {
     expect(idsAfterTwoMints).toContain(secondWorkspaceId);
 
     // Attaching to an existing workspace by id (how --workspace and
-    // $PASEO_WORKSPACE_ID land a run) creates no new workspace record: the
+    // $OSUNA_WORKSPACE_ID land a run) creates no new workspace record: the
     // agent lands in the named workspace and the workspace set is unchanged.
     const idsBeforeAttach = await workspaceIds(client);
     const attachedAgent = await client.createAgent({

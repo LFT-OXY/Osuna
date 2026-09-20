@@ -47,7 +47,7 @@ try {
   {
     console.log("Test 2: agent archive requires ID argument");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive`.nothrow();
     assert.notStrictEqual(result.exitCode, 0, "should fail without id");
     const output = result.stdout + result.stderr;
     const hasError =
@@ -62,7 +62,7 @@ try {
   {
     console.log("Test 3: agent archive handles daemon not running");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive abc123`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive abc123`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -78,7 +78,7 @@ try {
   {
     console.log("Test 4: agent archive --force flag is accepted");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive abc123 --force`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive abc123 --force`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --force flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -89,7 +89,7 @@ try {
   {
     console.log("Test 5: agent archive with ID and --host flag is accepted");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive abc123 --host localhost:${port}`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent archive abc123 --host localhost:${port}`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --host flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -109,7 +109,7 @@ try {
   {
     console.log("Test 7: -q (quiet) flag is accepted with agent archive");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} -q agent archive abc123`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} -q agent archive abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -q flag");
     assert(!output.includes("error: option"), "should not have option parsing error");

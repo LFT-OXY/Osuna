@@ -72,7 +72,7 @@ console.log("=== CLI IPC Target Helpers ===\n");
 
 {
   console.log("Test 5b: Windows absolute paths are NOT treated as unix sockets");
-  assert.strictEqual(normalizeDaemonHost("C:\\Users\\foo\\.paseo\\paseo.sock"), null);
+  assert.strictEqual(normalizeDaemonHost("C:\\Users\\foo\\.osuna\\osuna.sock"), null);
   assert.strictEqual(normalizeDaemonHost("D:\\project\\socket"), null);
   console.log("✓ Windows absolute paths are not treated as unix sockets\n");
 }
@@ -80,11 +80,11 @@ console.log("=== CLI IPC Target Helpers ===\n");
 {
   const target = selectDaemonTarget(
     { home: "/tmp/selected-home" },
-    { PASEO_HOST: "ignored:12345", PASEO_LISTEN: "ignored:23456" },
+    { OSUNA_HOST: "ignored:12345", OSUNA_LISTEN: "ignored:23456" },
   );
   assert.deepStrictEqual(target, { kind: "instance", home: "/tmp/selected-home" });
   assert.strictEqual(getDaemonHost({ target }), "home /tmp/selected-home");
-  assert.throws(() => selectDaemonTarget({}, { PASEO_HOME: "/tmp/a", PASEO_HOST: "unused:12345" }));
+  assert.throws(() => selectDaemonTarget({}, { OSUNA_HOME: "/tmp/a", OSUNA_HOST: "unused:12345" }));
 }
 
 {
@@ -95,9 +95,9 @@ console.log("=== CLI IPC Target Helpers ===\n");
 
 {
   console.log("Test 10: daemon password resolution prefers TCP URI query, falls back to env");
-  const previousEnv = process.env.PASEO_PASSWORD;
+  const previousEnv = process.env.OSUNA_PASSWORD;
   try {
-    delete process.env.PASEO_PASSWORD;
+    delete process.env.OSUNA_PASSWORD;
     assert.strictEqual(
       resolveDaemonPassword("tcp://example.com:6767?ssl=true&password=query-secret"),
       "query-secret",
@@ -105,7 +105,7 @@ console.log("=== CLI IPC Target Helpers ===\n");
     assert.strictEqual(resolveDaemonPassword("tcp://missing.example:6767"), undefined);
     assert.strictEqual(resolveDaemonPassword("example.com:6767"), undefined);
 
-    process.env.PASEO_PASSWORD = "env-secret";
+    process.env.OSUNA_PASSWORD = "env-secret";
     assert.strictEqual(
       resolveDaemonPassword("tcp://example.com:6767?ssl=true&password=query-secret"),
       "query-secret",
@@ -123,7 +123,7 @@ console.log("=== CLI IPC Target Helpers ===\n");
     );
     assert.strictEqual(resolveDaemonPassword("localhost:6767"), "env-secret");
 
-    process.env.PASEO_PASSWORD = "";
+    process.env.OSUNA_PASSWORD = "";
     assert.strictEqual(
       resolveDaemonPassword("localhost:6767"),
       undefined,
@@ -131,9 +131,9 @@ console.log("=== CLI IPC Target Helpers ===\n");
     );
   } finally {
     if (previousEnv === undefined) {
-      delete process.env.PASEO_PASSWORD;
+      delete process.env.OSUNA_PASSWORD;
     } else {
-      process.env.PASEO_PASSWORD = previousEnv;
+      process.env.OSUNA_PASSWORD = previousEnv;
     }
   }
   console.log("✓ daemon password resolution prefers TCP URI query, falls back to env\n");

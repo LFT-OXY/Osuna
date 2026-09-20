@@ -47,9 +47,9 @@ test("a host without the usage feature keeps the plain footer and asks to be upd
 
     await page.addInitScript(
       ({ seededHost, preferences }) => {
-        localStorage.setItem("@paseo:e2e", "1");
-        localStorage.setItem("@paseo:daemon-registry", JSON.stringify([seededHost]));
-        localStorage.setItem("@paseo:create-agent-preferences", JSON.stringify(preferences));
+        localStorage.setItem("@osuna:e2e", "1");
+        localStorage.setItem("@osuna:daemon-registry", JSON.stringify([seededHost]));
+        localStorage.setItem("@osuna:create-agent-preferences", JSON.stringify(preferences));
       },
       {
         seededHost: buildSeededHost({

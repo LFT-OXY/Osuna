@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import net from "node:net";
 import dotenv from "dotenv";
+import { RESERVED_DAEMON_PORTS } from "./helpers/daemon-port";
 
 export interface WaitForServerOptions {
   host?: string;
@@ -18,8 +19,7 @@ export interface WaitForServerOptions {
 type ServerProbe = (host: string, port: number) => Promise<void>;
 
 const RESERVED_LOCAL_PORTS = new Set([
-  6767, // Installed daemon.
-  6768, // Developer daemon.
+  ...RESERVED_DAEMON_PORTS,
   61680, // OpenCode's default local server.
 ]);
 
@@ -134,7 +134,7 @@ function startMetro(port: number, buffer: ReturnType<typeof createLineBuffer>): 
     env: {
       ...process.env,
       BROWSER: "none",
-      ...(process.env.E2E_DESKTOP_RUNTIME === "1" ? { PASEO_WEB_PLATFORM: "electron" } : {}),
+      ...(process.env.E2E_DESKTOP_RUNTIME === "1" ? { OSUNA_WEB_PLATFORM: "electron" } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,
@@ -156,9 +156,9 @@ async function loadHarnessEnvironment(repoRoot: string): Promise<void> {
 }
 
 export default async function globalSetup() {
-  if (process.env.PASEO_REPLICA_CACHE_MEASUREMENT === "1") {
-    if (!process.env.PASEO_REPLICA_CACHE_MEASUREMENT_URL) {
-      throw new Error("PASEO_REPLICA_CACHE_MEASUREMENT_URL must be set for live measurement");
+  if (process.env.OSUNA_REPLICA_CACHE_MEASUREMENT === "1") {
+    if (!process.env.OSUNA_REPLICA_CACHE_MEASUREMENT_URL) {
+      throw new Error("OSUNA_REPLICA_CACHE_MEASUREMENT_URL must be set for live measurement");
     }
     return;
   }

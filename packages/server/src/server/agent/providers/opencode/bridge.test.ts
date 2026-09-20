@@ -103,8 +103,8 @@ describe("OpenCodeBridge", () => {
     const release = bridge.bindSession({
       sessionId: "ses_one",
       env: {
-        PASEO_AGENT_ID: "agent-one",
-        PASEO_AGENT_CWD: "/workspace/one",
+        OSUNA_AGENT_ID: "agent-one",
+        OSUNA_AGENT_CWD: "/workspace/one",
         CUSTOM_VALUE: "one",
       },
       tools: catalog,
@@ -125,8 +125,8 @@ describe("OpenCodeBridge", () => {
       });
       expect(await context.json()).toEqual({
         env: {
-          PASEO_AGENT_ID: "agent-one",
-          PASEO_AGENT_CWD: "/workspace/one",
+          OSUNA_AGENT_ID: "agent-one",
+          OSUNA_AGENT_CWD: "/workspace/one",
           CUSTOM_VALUE: "one",
         },
       });

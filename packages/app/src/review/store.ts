@@ -150,7 +150,7 @@ export const useReviewDraftStore = create<ReviewDraftStore>()(
       },
     }),
     {
-      name: "@paseo:review-draft-store",
+      name: "@osuna:review-draft-store",
       version: STORE_VERSION,
       storage: createValidatedPersistStorage(AsyncStorage, SerializedReviewDraftStateSchema),
       partialize: (state) => serializeReviewDraftState(state),

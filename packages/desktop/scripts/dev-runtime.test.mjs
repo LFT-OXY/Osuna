@@ -33,7 +33,7 @@ describe("desktop dev runtime isolation", () => {
 
   test("lets Chromium atomically allocate the default CDP port", async () => {
     const runtime = await resolveDevRuntime({
-      PASEO_DEV_RUNTIME_FALLBACK_ROOT: "/checkouts/paseo",
+      OSUNA_DEV_RUNTIME_FALLBACK_ROOT: "/checkouts/paseo",
     });
 
     expect(runtime.electronFlags).toBe("--remote-debugging-port=0");
@@ -41,8 +41,8 @@ describe("desktop dev runtime isolation", () => {
 
   test("honors an explicit CDP port without silently changing it", async () => {
     const runtime = await resolveDevRuntime({
-      PASEO_DEV_RUNTIME_FALLBACK_ROOT: "/checkouts/paseo",
-      PASEO_ELECTRON_REMOTE_DEBUGGING_PORT: "9333",
+      OSUNA_DEV_RUNTIME_FALLBACK_ROOT: "/checkouts/paseo",
+      OSUNA_ELECTRON_REMOTE_DEBUGGING_PORT: "9333",
     });
 
     expect(runtime.electronFlags).toBe("--remote-debugging-port=9333");

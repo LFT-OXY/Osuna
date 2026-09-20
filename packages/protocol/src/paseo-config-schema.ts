@@ -67,7 +67,9 @@ export const PaseoMetadataGenerationSchema = z
     pullRequest: PaseoMetadataGenerationEntrySchema.optional(),
   })
   // COMPAT(projectMetadataAgentTitle): `agentTitle` project metadata prompts were removed
-  // in v0.1.96; keep legacy paseo.json parseable until 2026-12-16.
+  // in v0.1.96; keep config files that still carry it parseable until 2026-12-16. Those
+  // files predate the Osuna rename, so on disk they are named `paseo.json`, not
+  // `osuna.json` — this shim is about the unknown key, not the filename.
   .passthrough()
   .catch({});
 

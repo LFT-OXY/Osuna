@@ -255,7 +255,7 @@ async function ensureLogin(
           message: "Custom Hub URL",
           initialValue:
             activeOrigin === undefined || activeOrigin === DEFAULT_HUB_ORIGIN
-              ? environment.env.PASEO_HUB_URL
+              ? environment.env.OSUNA_HUB_URL
               : activeOrigin,
           validate(value) {
             try {
@@ -625,8 +625,8 @@ async function writeScaffold(
 
 async function prepareScaffoldDestination(cwd: string, triggerPath: string): Promise<boolean> {
   const root = path.resolve(cwd);
-  await requireSafeScaffoldDirectory(path.join(root, ".paseo"), ".paseo");
-  await requireSafeScaffoldDirectory(path.join(root, ".paseo", "triggers"), ".paseo/triggers");
+  await requireSafeScaffoldDirectory(path.join(root, ".osuna"), ".osuna");
+  await requireSafeScaffoldDirectory(path.join(root, ".osuna", "triggers"), ".osuna/triggers");
   const destination = path.join(root, triggerPath);
   try {
     const stats = await lstat(destination);

@@ -51,7 +51,7 @@ hooks/image-attachment-picker.ts / .native.ts
 desktop/browser/pane/index.tsx / .web.tsx / .electron.tsx
 ```
 
-`.electron.*` wins over `.web.*` when `PASEO_WEB_PLATFORM=electron`. Reserve inline `if (isWeb)` for a line or a few props (`CLAUDE.md` "Platform gating").
+`.electron.*` wins over `.web.*` when `OSUNA_WEB_PLATFORM=electron`. Reserve inline `if (isWeb)` for a line or a few props (`CLAUDE.md` "Platform gating").
 
 ## Tests sit next to code
 

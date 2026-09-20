@@ -160,7 +160,7 @@ test("measures an overview heading that becomes loading after its idle mount", a
   test.setTimeout(120_000);
   await page.addInitScript(() => {
     localStorage.setItem(
-      "@paseo:app-settings",
+      "@osuna:app-settings",
       JSON.stringify({ toolCallDetailLevel: "overview" }),
     );
   });

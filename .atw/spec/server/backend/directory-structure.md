@@ -15,7 +15,7 @@ All daemon code is under `packages/server/src/`. ESM with `.js` import suffixes 
 | `utils/`                     | Process and Git primitives: `spawn.ts`, `run-git-command.ts`, `git-process-scheduler.ts`, `tree-kill.ts`, `path.ts`, `worktree.ts`                                                |
 | `tasks/`                     | Task documents and execution graph for orchestration                                                                                                                              |
 | `executable-resolution/`     | Locating provider binaries, with a Windows variant                                                                                                                                |
-| `test-utils/` (package root) | `vitest-setup.ts` (loads `.env.test`, sets `PASEO_SUPERVISED=0`), `test-logger.ts`, `platform.ts`                                                                                 |
+| `test-utils/` (package root) | `vitest-setup.ts` (loads `.env.test`, sets `OSUNA_SUPERVISED=0`), `test-logger.ts`, `platform.ts`                                                                                 |
 
 `docs/architecture.md` has the key-modules table with one line per module. Keep that table current when you add a module.
 
@@ -49,7 +49,7 @@ Rules that the tree enforces by example:
 | An agent provider                                       | `server/agent/providers/`. `docs/providers.md` is the end-to-end guide.                                                                                                                                                                                                                                                                               |
 | A process spawn                                         | Go through `utils/spawn.ts`; Git goes through `utils/run-git-command.ts` so it is scheduled and traced.                                                                                                                                                                                                                                               |
 | A usage source (a CLI whose logs feed the usage report) | A pure parser `server/usage/<cli>-parser.ts`, its state variant in `USAGE_PARSER_STATE_SCHEMA`, an adapter entry in `server/usage/sources.ts`, and redacted log fragments under `server/usage/fixtures/<cli>/`. Line splitting, JSON parsing, turn counting and settlement are already in `server/usage/parse.ts` — write only the per-line handling. |
-| A file under `$PASEO_HOME`                              | Document it in `docs/data-model.md` directory layout.                                                                                                                                                                                                                                                                                                 |
+| A file under `$OSUNA_HOME`                              | Document it in `docs/data-model.md` directory layout.                                                                                                                                                                                                                                                                                                 |
 
 If placement is unclear, say so in the PR or ask. Do not drop a file at `server/` root because it was the nearest directory.
 

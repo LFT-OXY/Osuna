@@ -1,6 +1,6 @@
 # Logging
 
-The daemon logs with [pino](https://getpino.io). Output goes to `$PASEO_HOME/daemon.log` (rotated) and, in development, pretty-printed to the terminal. When debugging, read that file first.
+The daemon logs with [pino](https://getpino.io). Output goes to `$OSUNA_HOME/daemon.log` (rotated) and, in development, pretty-printed to the terminal. When debugging, read that file first.
 
 ## Creating loggers
 

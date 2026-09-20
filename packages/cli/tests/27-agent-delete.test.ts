@@ -23,7 +23,7 @@ const port = await getAvailablePort();
 const paseoHome = await mkdtemp(join(tmpdir(), "paseo-delete-test-home-"));
 
 async function runCli(args: string[]) {
-  return runLocalPaseo(["--host", `localhost:${port}`, ...args], { PASEO_HOME: paseoHome });
+  return runLocalPaseo(["--host", `localhost:${port}`, ...args], { OSUNA_HOME: paseoHome });
 }
 
 async function runDelete(args: string[]) {

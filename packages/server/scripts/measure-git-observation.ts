@@ -191,7 +191,7 @@ async function closeMeasuredService(input: {
 async function main(): Promise<void> {
   const tempDir = mkdtempSync(path.join(tmpdir(), "paseo-git-observation-measurement-"));
   const repoDir = path.join(tempDir, "repo");
-  const paseoHome = path.join(tempDir, "paseo-home");
+  const paseoHome = path.join(tempDir, "osuna-home");
   const trackedPath = path.join(repoDir, "tracked.txt");
   const ignoredDir = path.join(repoDir, "build");
   mkdirSync(repoDir, { recursive: true });
@@ -390,7 +390,7 @@ async function main(): Promise<void> {
       generatedAt: new Date().toISOString(),
       phases,
     };
-    const outputPath = process.env.PASEO_GIT_OBSERVATION_REPORT?.trim();
+    const outputPath = process.env.OSUNA_GIT_OBSERVATION_REPORT?.trim();
     if (outputPath) {
       await writeFile(path.resolve(outputPath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
     }

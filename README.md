@@ -76,14 +76,14 @@ Run the Osuna daemon and self-hosted web UI in Docker:
 
 ```bash
 docker run -d --name osuna \
-  -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
+  -p 6777:6777 \
+  -e OSUNA_PASSWORD=change-me \
+  -v "$PWD/osuna-home:/home/osuna" \
   -v "$PWD:/workspace" \
   ghcr.io/lft-oxy/osuna:latest
 ```
 
-Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
+Open `http://localhost:6777` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/osuna` volume. See the [Docker documentation](docs/docker.md) for full setup details.
 
 ## CLI
 
@@ -98,7 +98,7 @@ osuna attach abc123                # stream live output
 osuna send abc123 "also add tests" # follow-up task
 
 # run on a remote daemon; --cwd is a path on that host
-osuna run --host workstation.local:6767 --cwd /workspace "run the full test suite"
+osuna run --host workstation.local:6777 --cwd /workspace "run the full test suite"
 ```
 
 See the [full CLI reference](public-docs/cli.md) for more.
@@ -110,7 +110,7 @@ Build issue integrations, dashboards, and orchestration services with `@osuna/cl
 ```ts
 import { createPaseoClient } from "@osuna/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:6777/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

@@ -79,7 +79,7 @@ describe("daemon E2E - persistence", () => {
 
   test("timeline survives daemon restart", async () => {
     const cwd = tmpCwd();
-    const paseoHomeRoot = mkdtempSync(path.join(tmpdir(), "paseo-home-root-"));
+    const paseoHomeRoot = mkdtempSync(path.join(tmpdir(), "osuna-home-root-"));
     try {
       // Start daemon with a stable on-disk home so "restart" can observe persisted timeline.
       await ctx.cleanup();

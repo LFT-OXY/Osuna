@@ -22,9 +22,9 @@ import { getAvailablePort } from "./helpers/network.ts";
 
 const pollIntervalMs = 100;
 const testEnv = {
-  PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
-  PASEO_DICTATION_ENABLED: process.env.PASEO_DICTATION_ENABLED ?? "0",
-  PASEO_VOICE_MODE_ENABLED: process.env.PASEO_VOICE_MODE_ENABLED ?? "0",
+  OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
+  OSUNA_DICTATION_ENABLED: process.env.OSUNA_DICTATION_ENABLED ?? "0",
+  OSUNA_VOICE_MODE_ENABLED: process.env.OSUNA_VOICE_MODE_ENABLED ?? "0",
 };
 
 function sleep(ms: number): Promise<void> {
@@ -99,7 +99,7 @@ import('node:fs').then(({appendFileSync}) => {
       }),
     );
   }
-  console.log("Test 1: start supervisor-entrypoint in dev mode with isolated PASEO_HOME");
+  console.log("Test 1: start supervisor-entrypoint in dev mode with isolated OSUNA_HOME");
 
   supervisorProcess = spawn(
     process.execPath,
@@ -108,14 +108,14 @@ import('node:fs').then(({appendFileSync}) => {
       cwd: cliRoot,
       env: {
         ...Object.fromEntries(
-          Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_")),
+          Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_")),
         ),
         HOME: paseoHome,
         USERPROFILE: paseoHome,
         ...testEnv,
-        PASEO_HOME: paseoHome,
-        PASEO_LISTEN: host,
-        PASEO_RELAY_ENABLED: "false",
+        OSUNA_HOME: paseoHome,
+        OSUNA_LISTEN: host,
+        OSUNA_RELAY_ENABLED: "false",
         CI: "true",
       },
       stdio: ["ignore", "pipe", "pipe"],

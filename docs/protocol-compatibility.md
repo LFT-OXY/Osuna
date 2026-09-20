@@ -6,6 +6,18 @@ In development both sides are always the same version, which is why this is the 
 
 Two contracts follow from it.
 
+## The one window where breaking the wire is allowed: before the first release
+
+Everything below assumes versions of this project are in the wild. Osuna is a fork of Paseo that has not shipped a release of its own yet, so until the first Osuna release exists there is no old app and no old daemon to stay compatible with, and a breaking wire change costs nothing.
+
+That window was used once, deliberately, in the Paseo → Osuna rename (task `09-20-rebrand-to-osuna`, batch 2). Renamed with no shim:
+
+- WebSocket message `type` literals: `paseo_worktree_list_request` / `_response`, `paseo_worktree_archive_request` / `_response`, `create_paseo_worktree_request` / `_response` → `osuna_*` / `create_osuna_worktree_*`.
+- Wire field names: `isPaseoOwnedWorktree` → `isOsunaOwnedWorktree`, `paseoTools` → `osunaTools`.
+- The WebSocket bearer subprotocol: `paseo.bearer.<password>` → `osuna.bearer.<password>` (parsed segment-wise in `packages/server/src/server/auth.ts`, so both the producer and that parser have to move together).
+
+**The window closes at the first tagged Osuna release.** After that, every rule below applies without exception, and a rename of any wire identifier needs a tagged `COMPAT(...)` shim like any other compatibility concern. If you are reading this after a release exists, treat the list above as history, not as precedent.
+
 ## The protocol contract: always compatible
 
 A schema change must not break parsing in either direction. An old app still parses messages from a new daemon. A new daemon still parses messages from an old app.

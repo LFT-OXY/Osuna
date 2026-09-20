@@ -108,7 +108,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       realTerminalManagers = [];
       tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-bootstrap-test-")));
       repoDir = join(tempDir, "repo");
-      paseoHome = join(tempDir, "paseo-home");
+      paseoHome = join(tempDir, "osuna-home");
 
       mkdirSync(repoDir, { recursive: true });
       execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "pipe" });
@@ -131,14 +131,14 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
     });
     it("streams running setup updates live and persists only a final setup timeline row", async () => {
       writeFileSync(
-        join(repoDir, "paseo.json"),
+        join(repoDir, "osuna.json"),
         JSON.stringify({
           worktree: {
             setup: ['echo "line-one"; echo "line-two" 1>&2', 'echo "line-three"'],
           },
         }),
       );
-      execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+      execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add setup"], {
         cwd: repoDir,
         stdio: "pipe",
@@ -242,7 +242,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
 
     it("keeps only the final carriage-return-updated content in command logs", async () => {
       writeFileSync(
-        join(repoDir, "paseo.json"),
+        join(repoDir, "osuna.json"),
         JSON.stringify({
           worktree: {
             setup: [
@@ -251,7 +251,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
           },
         }),
       );
-      execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+      execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
       execFileSync(
         "git",
         ["-c", "commit.gpgsign=false", "commit", "-m", "add carriage return setup"],
@@ -300,10 +300,10 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
 
     it("shares the same worktree runtime port across setup and bootstrap terminals", async () => {
       writeFileSync(
-        join(repoDir, "paseo.json"),
+        join(repoDir, "osuna.json"),
         JSON.stringify({
           worktree: {
-            setup: ['echo "$PASEO_WORKTREE_PORT" > setup-port.txt'],
+            setup: ['echo "$OSUNA_WORKTREE_PORT" > setup-port.txt'],
             terminals: [
               {
                 name: "Port Terminal",
@@ -313,7 +313,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
           },
         }),
       );
-      execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+      execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
       execFileSync(
         "git",
         ["-c", "commit.gpgsign=false", "commit", "-m", "add port setup and terminals"],
@@ -400,9 +400,9 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       expect(setupPort.length).toBeGreaterThan(0);
       expect(registeredEnvs).toHaveLength(1);
       expect(registeredEnvs[0]?.cwd).toBe(worktreeBootstrap.worktree.worktreePath);
-      expect(registeredEnvs[0]?.env.PASEO_WORKTREE_PORT).toBe(setupPort);
+      expect(registeredEnvs[0]?.env.OSUNA_WORKTREE_PORT).toBe(setupPort);
       expect(createTerminalEnvs.length).toBeGreaterThan(0);
-      expect(createTerminalEnvs[0]?.PASEO_WORKTREE_PORT).toBe(setupPort);
+      expect(createTerminalEnvs[0]?.OSUNA_WORKTREE_PORT).toBe(setupPort);
       expect(createTerminalWorkspaceIds).toEqual(["ws-shared-runtime-port"]);
 
       const terminalToolCall = persisted.find(
@@ -416,7 +416,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
 
     it("injects real peer service env into terminal-backed services", async () => {
       writeFileSync(
-        join(repoDir, "paseo.json"),
+        join(repoDir, "osuna.json"),
         JSON.stringify({
           scripts: {
             api: {
@@ -432,7 +432,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
           },
         }),
       );
-      execFileSync("git", ["add", "paseo.json"], { cwd: repoDir, stdio: "pipe" });
+      execFileSync("git", ["add", "osuna.json"], { cwd: repoDir, stdio: "pipe" });
       execFileSync(
         "git",
         ["-c", "commit.gpgsign=false", "commit", "-m", "add real peer env services"],
@@ -471,32 +471,32 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       const apiEnv = readEnvFile(apiEnvPath);
       const webEnv = readEnvFile(webEnvPath);
 
-      expect(apiEnv.PASEO_SERVICE_API_URL).toBe(
+      expect(apiEnv.OSUNA_SERVICE_API_URL).toBe(
         "http://api--feature-peer-env--repo.localhost:6767",
       );
-      expect(apiEnv.PASEO_SERVICE_WEB_URL).toBe(
+      expect(apiEnv.OSUNA_SERVICE_WEB_URL).toBe(
         "http://web--feature-peer-env--repo.localhost:6767",
       );
-      expect(apiEnv.PASEO_SERVICE_API_PORT).toEqual(expect.stringMatching(/^\d+$/));
-      expect(apiEnv.PASEO_SERVICE_WEB_PORT).toEqual(expect.stringMatching(/^\d+$/));
-      expect(apiEnv.PASEO_URL).toBe(apiEnv.PASEO_SERVICE_API_URL);
-      expect(apiEnv.PASEO_PORT).toBe(apiEnv.PASEO_SERVICE_API_PORT);
+      expect(apiEnv.OSUNA_SERVICE_API_PORT).toEqual(expect.stringMatching(/^\d+$/));
+      expect(apiEnv.OSUNA_SERVICE_WEB_PORT).toEqual(expect.stringMatching(/^\d+$/));
+      expect(apiEnv.OSUNA_URL).toBe(apiEnv.OSUNA_SERVICE_API_URL);
+      expect(apiEnv.OSUNA_PORT).toBe(apiEnv.OSUNA_SERVICE_API_PORT);
       expect(apiEnv).not.toHaveProperty("PORT");
 
-      expect(webEnv.PASEO_SERVICE_API_URL).toBe(
+      expect(webEnv.OSUNA_SERVICE_API_URL).toBe(
         "http://api--feature-peer-env--repo.localhost:6767",
       );
-      expect(webEnv.PASEO_SERVICE_WEB_URL).toBe(
+      expect(webEnv.OSUNA_SERVICE_WEB_URL).toBe(
         "http://web--feature-peer-env--repo.localhost:6767",
       );
-      expect(webEnv.PASEO_SERVICE_API_PORT).toBe(apiEnv.PASEO_SERVICE_API_PORT);
-      expect(webEnv.PASEO_SERVICE_WEB_PORT).toBe(apiEnv.PASEO_SERVICE_WEB_PORT);
-      expect(webEnv.PASEO_URL).toBe(webEnv.PASEO_SERVICE_WEB_URL);
-      expect(webEnv.PASEO_PORT).toBe(webEnv.PASEO_SERVICE_WEB_PORT);
+      expect(webEnv.OSUNA_SERVICE_API_PORT).toBe(apiEnv.OSUNA_SERVICE_API_PORT);
+      expect(webEnv.OSUNA_SERVICE_WEB_PORT).toBe(apiEnv.OSUNA_SERVICE_WEB_PORT);
+      expect(webEnv.OSUNA_URL).toBe(webEnv.OSUNA_SERVICE_WEB_URL);
+      expect(webEnv.OSUNA_PORT).toBe(webEnv.OSUNA_SERVICE_WEB_PORT);
       expect(webEnv).not.toHaveProperty("PORT");
 
-      const apiPort = Number(apiEnv.PASEO_SERVICE_API_PORT);
-      const webPort = Number(apiEnv.PASEO_SERVICE_WEB_PORT);
+      const apiPort = Number(apiEnv.OSUNA_SERVICE_API_PORT);
+      const webPort = Number(apiEnv.OSUNA_SERVICE_WEB_PORT);
       expect(Number.isInteger(apiPort)).toBe(true);
       expect(Number.isInteger(webPort)).toBe(true);
       expect(routeStore.listRoutes()).toEqual([

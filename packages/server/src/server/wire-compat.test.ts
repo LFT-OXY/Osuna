@@ -221,7 +221,7 @@ function createSessionForWireCompatTest(options?: {
     logger: pino({ level: "silent" }),
     downloadTokenStore: {} as SessionOptions["downloadTokenStore"],
     pushNotifications: {} as SessionOptions["pushNotifications"],
-    paseoHome: "/tmp/paseo-home",
+    paseoHome: "/tmp/osuna-home",
     agentManager: new InMemoryAgentManager(
       options?.rows ?? rows,
     ) as unknown as SessionOptions["agentManager"],
@@ -461,7 +461,7 @@ describe("wire compatibility", () => {
     const workflow = new InMemoryWorktreeWorkflow();
 
     const dependencies = {
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       describeWorkspaceRecord: async () =>
         ({
           id: "ws-1",
@@ -482,7 +482,7 @@ describe("wire compatibility", () => {
     };
 
     const legacyRequest = SessionInboundMessageSchema.parse({
-      type: "create_paseo_worktree_request",
+      type: "create_osuna_worktree_request",
       requestId: "req-legacy",
       cwd: "/tmp/repo",
       worktreeSlug: "legacy-worktree",
@@ -499,7 +499,7 @@ describe("wire compatibility", () => {
     });
 
     const newRequest = SessionInboundMessageSchema.parse({
-      type: "create_paseo_worktree_request",
+      type: "create_osuna_worktree_request",
       requestId: "req-new",
       cwd: "/tmp/repo",
       worktreeSlug: "legacy-worktree",
@@ -517,10 +517,10 @@ describe("wire compatibility", () => {
       },
     });
 
-    if (legacyRequest.type !== "create_paseo_worktree_request") {
+    if (legacyRequest.type !== "create_osuna_worktree_request") {
       throw new Error("Expected legacy worktree request");
     }
-    if (newRequest.type !== "create_paseo_worktree_request") {
+    if (newRequest.type !== "create_osuna_worktree_request") {
       throw new Error("Expected new worktree request");
     }
 
@@ -548,7 +548,7 @@ describe("wire compatibility", () => {
       action: undefined,
       githubPrNumber: undefined,
       runSetup: false,
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
     });
   });
 });

@@ -58,7 +58,7 @@ The reusable pieces live in `flows/`:
 Compose new workspace scenarios out of these primitives instead of copying the
 old full flow. The shell scripts render the top-level flows and every `flows/*.yaml`
 file into the same temp directory, so nested `runFlow: flows/...` paths keep
-working with `${PASEO_MAESTRO_*}` placeholders.
+working with `${OSUNA_MAESTRO_*}` placeholders.
 
 The flow is intentionally strict. It must:
 
@@ -77,8 +77,8 @@ the wrong route. The header assertion and the `New workspace` negative assertion
 are what prove the redirect actually completed.
 
 The scripts assume a development build with package id `com.chinhae.osuna.debug`, an
-already-running local daemon on `127.0.0.1:6767`, and a connected Android device
-or emulator. They call `adb reverse tcp:6767 tcp:6767`; they do not restart the
+already-running local daemon on `127.0.0.1:6777`, and a connected Android device
+or emulator. They call `adb reverse tcp:6777 tcp:6777`; they do not restart the
 daemon.
 
 ```bash
@@ -89,8 +89,8 @@ bash packages/app/maestro/record-workspace-create-android-focus.sh
 Optional environment:
 
 ```bash
-PASEO_MAESTRO_APP_ID=com.chinhae.osuna.debug
-PASEO_MAESTRO_DIRECT_ENDPOINT=127.0.0.1:6767
-PASEO_MAESTRO_DAEMON_WS_URL=ws://127.0.0.1:6767/ws
-PASEO_MAESTRO_PROJECT_PATH=/path/to/git/repo
+OSUNA_MAESTRO_APP_ID=com.chinhae.osuna.debug
+OSUNA_MAESTRO_DIRECT_ENDPOINT=127.0.0.1:6777
+OSUNA_MAESTRO_DAEMON_WS_URL=ws://127.0.0.1:6777/ws
+OSUNA_MAESTRO_PROJECT_PATH=/path/to/git/repo
 ```

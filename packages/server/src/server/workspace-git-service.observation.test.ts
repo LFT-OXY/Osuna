@@ -65,7 +65,7 @@ function createCheckoutFacts(cwd: string): CheckoutSnapshotFacts {
     remoteUrl: null,
     absoluteGitDir: path.join(cwd, ".git"),
     gitCommonDir: path.join(cwd, ".git"),
-    paseoWorktree: { isPaseoOwnedWorktree: false },
+    paseoWorktree: { isOsunaOwnedWorktree: false },
     storedBaseRef: null,
     resolvedBaseRef: "main",
     mainRepoRoot: null,
@@ -104,7 +104,7 @@ function createCheckoutStatus(
     behindOfOrigin: null,
     hasRemote: false,
     remoteUrl: null,
-    isPaseoOwnedWorktree: false,
+    isOsunaOwnedWorktree: false,
     ...overrides,
   };
 }
@@ -164,7 +164,7 @@ function createService(
     defaultGetCheckoutShortstat;
   return new WorkspaceGitServiceImpl({
     logger,
-    paseoHome: "/tmp/paseo-home",
+    paseoHome: "/tmp/osuna-home",
     fileObserver,
     deps: {
       subscribe: watcher.subscribe,
@@ -400,7 +400,7 @@ describe("WorkspaceGitService checkout observation", () => {
     });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const summaryListener = vi.fn();
@@ -1174,7 +1174,7 @@ describe("WorkspaceGitService checkout observation", () => {
     });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const summaryListener = vi.fn();
@@ -1229,7 +1229,7 @@ describe("WorkspaceGitService checkout observation", () => {
     const service = createService(watcher, { getCheckoutDiff, getCheckoutWorktreeState });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const diffSubscription = await diffManager.subscribe(
@@ -2191,7 +2191,7 @@ describe("WorkspaceGitService checkout observation", () => {
     });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/paseo-home",
+      paseoHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const listener = vi.fn();

@@ -56,7 +56,7 @@ export async function withTimelinePlugin(
   info.setTimeout(120_000);
   await page.addInitScript(() => {
     localStorage.setItem(
-      "@paseo:app-settings",
+      "@osuna:app-settings",
       JSON.stringify({ toolCallDetailLevel: "overview" }),
     );
   });

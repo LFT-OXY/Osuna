@@ -175,7 +175,7 @@ describe("OpenCode terminal agent hooks", () => {
   });
 
   it("prefers OPENCODE_CONFIG_DIR over the XDG config home", () => {
-    const homeDir = createTempDir("paseo-home-");
+    const homeDir = createTempDir("osuna-home-");
     const configDir = createTempDir("paseo-opencode-override-");
     const xdgConfigHome = createTempDir("paseo-xdg-config-");
 
@@ -188,7 +188,7 @@ describe("OpenCode terminal agent hooks", () => {
   });
 
   it("uses the XDG config home for the default OpenCode config dir", () => {
-    const homeDir = createTempDir("paseo-home-");
+    const homeDir = createTempDir("osuna-home-");
     const xdgConfigHome = createTempDir("paseo-xdg-config-");
 
     const configPath = resolveAgentHookConfigPath(opencodeAgentHookProvider, {
@@ -202,7 +202,7 @@ describe("OpenCode terminal agent hooks", () => {
   });
 
   it("falls back to the home .config OpenCode dir without an XDG config home", () => {
-    const homeDir = createTempDir("paseo-home-");
+    const homeDir = createTempDir("osuna-home-");
 
     const configPath = resolveAgentHookConfigPath(opencodeAgentHookProvider, {
       env: {},
@@ -254,7 +254,7 @@ function loadInstalledPlugin(terminalId = "terminal-1", exited = Promise.resolve
     source.replace("export default", "globalThis.plugin ="),
     {
       AbortController,
-      process: { env: { PASEO_TERMINAL_ID: terminalId } },
+      process: { env: { OSUNA_TERMINAL_ID: terminalId } },
       Bun: {
         spawn(command: string[]) {
           commands.push(command);

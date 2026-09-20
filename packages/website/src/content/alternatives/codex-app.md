@@ -55,7 +55,7 @@ Both tools support Git worktrees for parallel work.
 
 Codex App creates Codex-managed worktrees under `$CODEX_HOME/worktrees` and supports local environment setup scripts and project actions through `.codex` configuration.
 
-Paseo creates worktrees under `$PASEO_HOME/worktrees`, runs setup and teardown hooks from `paseo.json`, and gives each worktree its own dev server URLs like `web.fix-auth.my-app.localhost` so parallel services don't fight for ports.
+Paseo creates worktrees under `$OSUNA_HOME/worktrees`, runs setup and teardown hooks from `osuna.json`, and gives each worktree its own dev server URLs like `web.fix-auth.my-app.localhost` so parallel services don't fight for ports.
 
 ## GitHub and review
 

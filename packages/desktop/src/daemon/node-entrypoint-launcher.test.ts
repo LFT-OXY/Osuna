@@ -36,7 +36,7 @@ describe("node-entrypoint-launcher", () => {
         env: {
           PATH: "/usr/bin",
           ELECTRON_RUN_AS_NODE: "1",
-          PASEO_NODE_ENV: "production",
+          OSUNA_NODE_ENV: "production",
         },
       });
     });
@@ -50,7 +50,7 @@ describe("node-entrypoint-launcher", () => {
           entrypoint: CLI_ENTRYPOINT,
           argvMode: "node-script",
           args: ["ls"],
-          baseEnv: { PATH: "/usr/bin", PASEO_NODE_ENV: "production" },
+          baseEnv: { PATH: "/usr/bin", OSUNA_NODE_ENV: "production" },
         }),
       ).toEqual({
         command: "/opt/homebrew/bin/electron",
@@ -58,7 +58,7 @@ describe("node-entrypoint-launcher", () => {
         env: {
           PATH: "/usr/bin",
           ELECTRON_RUN_AS_NODE: "1",
-          PASEO_NODE_ENV: "development",
+          OSUNA_NODE_ENV: "development",
         },
       });
     });
@@ -79,7 +79,7 @@ describe("node-entrypoint-launcher", () => {
         PATH: "/usr/bin",
         ELECTRON_RUN_AS_NODE: "1",
         NODE_ENV: "development",
-        PASEO_NODE_ENV: "production",
+        OSUNA_NODE_ENV: "production",
       });
     });
 
@@ -107,7 +107,7 @@ describe("node-entrypoint-launcher", () => {
         env: {
           PATH: "/usr/bin",
           ELECTRON_RUN_AS_NODE: "1",
-          PASEO_NODE_ENV: "production",
+          OSUNA_NODE_ENV: "production",
         },
       });
     });

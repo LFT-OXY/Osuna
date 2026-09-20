@@ -12,11 +12,11 @@ describe("project-placement", () => {
   });
 
   it("normalizes paseo worktree paths into the parent repo key", () => {
-    const placement = deriveProjectPlacementFromCwd("/Users/test/repo/.paseo/worktrees/feature-x");
+    const placement = deriveProjectPlacementFromCwd("/Users/test/repo/.osuna/worktrees/feature-x");
 
     expect(placement.projectKey).toBe("/Users/test/repo");
     expect(placement.projectName).toBe("repo");
-    expect(placement.checkout.cwd).toBe("/Users/test/repo/.paseo/worktrees/feature-x");
+    expect(placement.checkout.cwd).toBe("/Users/test/repo/.osuna/worktrees/feature-x");
   });
 
   it("prefers an existing placement when present", () => {
@@ -29,7 +29,7 @@ describe("project-placement", () => {
         currentBranch: "main",
         remoteUrl: "https://github.com/acme/repo.git",
         worktreeRoot: "/Users/test/repo",
-        isPaseoOwnedWorktree: false as const,
+        isOsunaOwnedWorktree: false as const,
         mainRepoRoot: null,
       },
     };

@@ -64,7 +64,7 @@ function createHarness(input: {
           currentBranch: null,
           remoteUrl: null,
           worktreeRoot: null,
-          isPaseoOwnedWorktree: false,
+          isOsunaOwnedWorktree: false,
           mainRepoRoot: null,
         };
       }
@@ -74,7 +74,7 @@ function createHarness(input: {
         currentBranch: "main",
         remoteUrl: null,
         worktreeRoot: root,
-        isPaseoOwnedWorktree: false,
+        isOsunaOwnedWorktree: false,
         mainRepoRoot: null,
       };
     },

@@ -79,7 +79,7 @@ test("history search filters before pagination and keeps newest matches first", 
   let daemon: TestPaseoDaemon | null = null;
   let client: DaemonClient | null = null;
   try {
-    const agentsDir = path.join(fixture.paseoHomeRoot, ".paseo", "agents");
+    const agentsDir = path.join(fixture.paseoHomeRoot, ".osuna", "agents");
     const template = JSON.parse(
       readFileSync(path.join(agentsDir, `${fixture.healthyAgentId}.json`), "utf8"),
     );
@@ -121,7 +121,7 @@ function seedStaleAgentFixture(): StaleAgentFixture {
   const healthyCwd = mkdtempSync(path.join(os.tmpdir(), "paseo-healthy-agent-"));
   const orphanCwd = mkdtempSync(path.join(os.tmpdir(), "paseo-orphan-agent-"));
   const paseoHomeRoot = mkdtempSync(path.join(os.tmpdir(), "paseo-orphan-agent-home-"));
-  const paseoHome = path.join(paseoHomeRoot, ".paseo");
+  const paseoHome = path.join(paseoHomeRoot, ".osuna");
   const projectsDir = path.join(paseoHome, "projects");
   const agentsDir = path.join(paseoHome, "agents");
   const healthyProjectId = "proj-healthy-agent-rpc";

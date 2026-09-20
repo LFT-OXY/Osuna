@@ -173,7 +173,7 @@ function makeCheckoutSession(options?: {
     checkoutDiffManager:
       options?.diff ?? createFakeDiffSubscriber({ cwd: "", files: [], error: null }).subscriber,
     gitMetadataGenerator,
-    paseoHome: options?.paseoHome ?? "/tmp/paseo-home",
+    paseoHome: options?.paseoHome ?? "/tmp/osuna-home",
     worktreesRoot: undefined,
     logger: pino({ level: "silent" }),
   });
@@ -209,7 +209,7 @@ function createGitSnapshot(
       mainRepoRoot: cwd,
       currentBranch,
       remoteUrl: null,
-      isPaseoOwnedWorktree: false,
+      isOsunaOwnedWorktree: false,
       isDirty: overrides?.isDirty ?? false,
       baseRef: null,
       aheadBehind: null,

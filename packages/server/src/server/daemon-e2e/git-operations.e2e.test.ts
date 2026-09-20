@@ -342,7 +342,7 @@ test("returns isGit false for non-git directory", async () => {
   rmSync(cwd, { recursive: true, force: true });
 }, 60000); // 1 minute timeout
 
-test("runs paseo.json setup asynchronously and reports status via timeline tool_call", async () => {
+test("runs osuna.json setup asynchronously and reports status via timeline tool_call", async () => {
   const repoRoot = tmpCwd();
 
   const { execSync } = await import("child_process");
@@ -362,13 +362,13 @@ test("runs paseo.json setup asynchronously and reports status via timeline tool_
   execSync("git branch -M main", { cwd: repoRoot, stdio: "pipe" });
 
   const setupCommand =
-    'while [ ! -f "$PASEO_WORKTREE_PATH/allow-setup" ]; do sleep 0.05; done; echo "done" > "$PASEO_WORKTREE_PATH/setup-done.txt"';
+    'while [ ! -f "$OSUNA_WORKTREE_PATH/allow-setup" ]; do sleep 0.05; done; echo "done" > "$OSUNA_WORKTREE_PATH/setup-done.txt"';
   writeFileSync(
-    path.join(repoRoot, "paseo.json"),
+    path.join(repoRoot, "osuna.json"),
     JSON.stringify({ worktree: { setup: [setupCommand] } }),
   );
-  execSync("git add paseo.json", { cwd: repoRoot, stdio: "pipe" });
-  execSync("git -c commit.gpgsign=false commit -m 'add paseo.json'", {
+  execSync("git add osuna.json", { cwd: repoRoot, stdio: "pipe" });
+  execSync("git -c commit.gpgsign=false commit -m 'add osuna.json'", {
     cwd: repoRoot,
     stdio: "pipe",
   });
@@ -392,7 +392,7 @@ test("runs paseo.json setup asynchronously and reports status via timeline tool_
     label: "createAgent should not block on setup",
   });
 
-  expect(agent.cwd).toContain(path.join(".paseo", "worktrees"));
+  expect(agent.cwd).toContain(path.join(".osuna", "worktrees"));
   expect(existsSync(path.join(agent.cwd, "setup-done.txt"))).toBe(false);
 
   writeFileSync(path.join(agent.cwd, "allow-setup"), "ok\n");
@@ -437,9 +437,9 @@ test("bootstraps configured worktree terminals after setup succeeds", async () =
     execSync("git branch -M main", { cwd: repoRoot, stdio: "pipe" });
 
     const setupCommand =
-      'while [ ! -f "$PASEO_WORKTREE_PATH/allow-setup" ]; do sleep 0.05; done; echo "done" > "$PASEO_WORKTREE_PATH/setup-done.txt"; echo "$PASEO_WORKTREE_PORT" > "$PASEO_WORKTREE_PATH/setup-port.txt"';
+      'while [ ! -f "$OSUNA_WORKTREE_PATH/allow-setup" ]; do sleep 0.05; done; echo "done" > "$OSUNA_WORKTREE_PATH/setup-done.txt"; echo "$OSUNA_WORKTREE_PORT" > "$OSUNA_WORKTREE_PATH/setup-port.txt"';
     writeFileSync(
-      path.join(repoRoot, "paseo.json"),
+      path.join(repoRoot, "osuna.json"),
       JSON.stringify({
         worktree: {
           setup: [setupCommand],
@@ -455,7 +455,7 @@ test("bootstraps configured worktree terminals after setup succeeds", async () =
         },
       }),
     );
-    execSync("git add paseo.json", { cwd: repoRoot, stdio: "pipe" });
+    execSync("git add osuna.json", { cwd: repoRoot, stdio: "pipe" });
     execSync("git -c commit.gpgsign=false commit -m 'add setup and terminals'", {
       cwd: repoRoot,
       stdio: "pipe",
@@ -480,7 +480,7 @@ test("bootstraps configured worktree terminals after setup succeeds", async () =
       label: "createAgent should not block on setup",
     });
 
-    expect(agent.cwd).toContain(path.join(".paseo", "worktrees"));
+    expect(agent.cwd).toContain(path.join(".osuna", "worktrees"));
     expect(existsSync(path.join(agent.cwd, "setup-done.txt"))).toBe(false);
     expect(existsSync(path.join(agent.cwd, "dev-terminal.txt"))).toBe(false);
     expect(existsSync(path.join(agent.cwd, "lint-terminal.txt"))).toBe(false);
@@ -540,7 +540,7 @@ test("bootstraps configured worktree terminals after setup succeeds", async () =
     }
     ctx.client.sendTerminalInput(manualTerminalId, {
       type: "input",
-      data: 'echo "$PASEO_WORKTREE_PORT" > "$PASEO_WORKTREE_PATH/manual-terminal-port.txt"\r',
+      data: 'echo "$OSUNA_WORKTREE_PORT" > "$OSUNA_WORKTREE_PATH/manual-terminal-port.txt"\r',
     });
     await waitForPathExists({
       targetPath: path.join(agent.cwd, "manual-terminal-port.txt"),
@@ -578,9 +578,9 @@ test("reports failures via timeline tool_call without deleting the created workt
   execSync("git branch -M main", { cwd: repoRoot, stdio: "pipe" });
 
   const setupCommand =
-    'echo "started" > "$PASEO_WORKTREE_PATH/setup-start.txt"; sleep 0.1; echo "boom" 1>&2; exit 7';
+    'echo "started" > "$OSUNA_WORKTREE_PATH/setup-start.txt"; sleep 0.1; echo "boom" 1>&2; exit 7';
   writeFileSync(
-    path.join(repoRoot, "paseo.json"),
+    path.join(repoRoot, "osuna.json"),
     JSON.stringify({
       worktree: {
         setup: [setupCommand],
@@ -593,7 +593,7 @@ test("reports failures via timeline tool_call without deleting the created workt
       },
     }),
   );
-  execSync("git add paseo.json", { cwd: repoRoot, stdio: "pipe" });
+  execSync("git add osuna.json", { cwd: repoRoot, stdio: "pipe" });
   execSync("git -c commit.gpgsign=false commit -m 'add failing setup'", {
     cwd: repoRoot,
     stdio: "pipe",
@@ -618,7 +618,7 @@ test("reports failures via timeline tool_call without deleting the created workt
     label: "createAgent should not block on failing setup",
   });
 
-  expect(agent.cwd).toContain(path.join(".paseo", "worktrees"));
+  expect(agent.cwd).toContain(path.join(".osuna", "worktrees"));
   expect(existsSync(agent.cwd)).toBe(true);
 
   const started = await waitForTimelineToolCall(
@@ -652,7 +652,7 @@ test("reports failures via timeline tool_call without deleting the created workt
   rmSync(repoRoot, { recursive: true, force: true });
 }, 60000);
 
-test("creates agent in ~/.paseo/worktrees/{hash} when worktree is requested", async () => {
+test("creates agent in ~/.osuna/worktrees/{hash} when worktree is requested", async () => {
   const cwd = tmpCwd();
   const projectHash = await deriveWorktreeProjectHash(cwd);
 
@@ -716,7 +716,7 @@ test("archiving a worktree shuts down its terminals but leaves the worktree on d
 
   const teardownMarkerPath = path.join(repoRoot, "teardown-marker.txt");
   writeFileSync(
-    path.join(repoRoot, "paseo.json"),
+    path.join(repoRoot, "osuna.json"),
     JSON.stringify({
       worktree: {
         terminals: [
@@ -725,11 +725,11 @@ test("archiving a worktree shuts down its terminals but leaves the worktree on d
             command: 'echo "dev-server" > dev-terminal.txt; tail -f /dev/null',
           },
         ],
-        teardown: [`echo "$PASEO_WORKTREE_PATH" > "${teardownMarkerPath}"`],
+        teardown: [`echo "$OSUNA_WORKTREE_PATH" > "${teardownMarkerPath}"`],
       },
     }),
   );
-  execSync("git add paseo.json", { cwd: repoRoot, stdio: "pipe" });
+  execSync("git add osuna.json", { cwd: repoRoot, stdio: "pipe" });
   execSync("git -c commit.gpgsign=false commit -m 'add worktree terminal + teardown'", {
     cwd: repoRoot,
     stdio: "pipe",

@@ -114,8 +114,8 @@ describe("allocateWorkspaceServicePort", () => {
   function createContextPortScript(tempDir: string, port: number): string {
     const contents =
       process.platform === "win32"
-        ? `@echo off\r\n<nul set /p "=%CD%" > cwd\r\n<nul set /p "=%~1|%~2|%~3|%~4" > argv\r\n<nul set /p "=%PASEO_SCRIPTNAME%|%PASEO_WORKSPACE_ID%|%PASEO_BRANCH_NAME%|%PASEO_WORKTREE_PATH%" > env\r\necho ${port}\r\n`
-        : `#!/bin/sh\nprintf '%s' "$PWD" > cwd\nprintf '%s|%s|%s|%s' "$1" "$2" "$3" "$4" > argv\nprintf '%s|%s|%s|%s' "$PASEO_SCRIPTNAME" "$PASEO_WORKSPACE_ID" "$PASEO_BRANCH_NAME" "$PASEO_WORKTREE_PATH" > env\nprintf '${port}\\n'\n`;
+        ? `@echo off\r\n<nul set /p "=%CD%" > cwd\r\n<nul set /p "=%~1|%~2|%~3|%~4" > argv\r\n<nul set /p "=%OSUNA_SCRIPTNAME%|%OSUNA_WORKSPACE_ID%|%OSUNA_BRANCH_NAME%|%OSUNA_WORKTREE_PATH%" > env\r\necho ${port}\r\n`
+        : `#!/bin/sh\nprintf '%s' "$PWD" > cwd\nprintf '%s|%s|%s|%s' "$1" "$2" "$3" "$4" > argv\nprintf '%s|%s|%s|%s' "$OSUNA_SCRIPTNAME" "$OSUNA_WORKSPACE_ID" "$OSUNA_BRANCH_NAME" "$OSUNA_WORKTREE_PATH" > env\nprintf '${port}\\n'\n`;
     return writePortScript(tempDir, contents);
   }
 

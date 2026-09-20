@@ -16,7 +16,7 @@ const child = await agent(
   `First use Bash to run this command and wait for it to exit:
 while [ ! -f ${JSON.stringify(gatePath)} ]; do sleep 0.2; done
 
-Then return exactly this JSON object and do nothing else: {"marker":"PASEO_WORKFLOW_ROW_OK"}`,
+Then return exactly this JSON object and do nothing else: {"marker":"OSUNA_WORKFLOW_ROW_OK"}`,
   {
     label: "workflow-row-child",
     phase: "Verify",

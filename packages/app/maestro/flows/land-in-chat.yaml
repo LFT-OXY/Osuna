@@ -22,11 +22,11 @@ appId: com.chinhae.osuna
 - tapOn:
     id: "direct-host-input"
 - eraseText
-- inputText: "127.0.0.1:6767"
+- inputText: "127.0.0.1:6777"
 
 - assertVisible:
     id: "direct-host-input"
-    text: "127.0.0.1:6767"
+    text: "127.0.0.1:6777"
 
 - tapOn:
     id: "direct-host-submit"

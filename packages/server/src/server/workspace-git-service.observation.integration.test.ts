@@ -26,7 +26,7 @@ function createFacts(cwd: string): CheckoutSnapshotFacts {
     remoteUrl: null,
     absoluteGitDir: path.join(cwd, ".git"),
     gitCommonDir: path.join(cwd, ".git"),
-    paseoWorktree: { isPaseoOwnedWorktree: false },
+    paseoWorktree: { isOsunaOwnedWorktree: false },
     storedBaseRef: null,
     resolvedBaseRef: "main",
     mainRepoRoot: null,
@@ -50,7 +50,7 @@ function createStatus(cwd: string): CheckoutStatusGit {
     behindOfOrigin: null,
     hasRemote: false,
     remoteUrl: null,
-    isPaseoOwnedWorktree: false,
+    isOsunaOwnedWorktree: false,
   };
 }
 
@@ -171,7 +171,7 @@ test("recursive observation updates tracked state and prunes ignored storms", as
   });
   const service = new WorkspaceGitServiceImpl({
     logger: createLogger(),
-    paseoHome: path.join(tempDir, "paseo-home"),
+    paseoHome: path.join(tempDir, "osuna-home"),
     fileObserver,
     deps: {
       getCheckoutSnapshotFacts,
@@ -184,7 +184,7 @@ test("recursive observation updates tracked state and prunes ignored storms", as
   });
   const diffManager = new CheckoutDiffManager({
     logger: createLogger(),
-    paseoHome: path.join(tempDir, "paseo-home"),
+    paseoHome: path.join(tempDir, "osuna-home"),
     workspaceGitService: service,
   });
   const summaryListener = vi.fn();

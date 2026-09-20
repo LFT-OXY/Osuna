@@ -30,12 +30,12 @@ export interface RealDaemonState {
 /**
  * Reads live state from the running E2E test daemon: version from the HTTP
  * status endpoint, PID from the paseo.pid lock file, log path from the
- * E2E_PASEO_HOME directory. Call this in Node test code (not in the browser).
+ * E2E_OSUNA_HOME directory. Call this in Node test code (not in the browser).
  */
 export async function loadRealDaemonState(): Promise<RealDaemonState> {
   const port = getE2EDaemonPort();
-  const paseoHome = process.env.E2E_PASEO_HOME;
-  if (!paseoHome) throw new Error("E2E_PASEO_HOME not set — the worker fixture must run first");
+  const paseoHome = process.env.E2E_OSUNA_HOME;
+  if (!paseoHome) throw new Error("E2E_OSUNA_HOME not set — the worker fixture must run first");
 
   const resp = await fetch(`http://127.0.0.1:${port}/api/status`);
   const data: DaemonApiStatus = await resp.json();

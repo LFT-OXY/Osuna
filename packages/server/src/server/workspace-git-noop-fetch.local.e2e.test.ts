@@ -105,7 +105,7 @@ function seedFetchFixture(): {
   cleanupPaths.push(fixtureRoot);
   const repoRoot = join(fixtureRoot, "repo");
   const originRoot = join(fixtureRoot, "origin.git");
-  const paseoHome = join(fixtureRoot, "paseo-home");
+  const paseoHome = join(fixtureRoot, "osuna-home");
   const worktreesRoot = join(fixtureRoot, "worktrees");
   mkdirSync(repoRoot, { recursive: true });
   mkdirSync(paseoHome, { recursive: true });

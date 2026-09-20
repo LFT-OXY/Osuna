@@ -17,14 +17,14 @@ async function port() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const value = (server.address() as net.AddressInfo).port;
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (value === 6767 || value === 6768) throw new Error("Unsafe test port");
+  if ([6777, 6778, 6767, 6768].includes(value)) throw new Error("Unsafe test port");
   return value;
 }
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "osuna lifecycle "));
   const env = {
-    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_"))),
+    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_"))),
     HOME: root,
     USERPROFILE: root,
   };
@@ -122,12 +122,12 @@ test("managed two-home restart retains its supervisor and never routes ordinary 
     await f.configure(b, `127.0.0.1:${portB}`);
     const launchA = await f.ok(["start", "--home", a, "--timeout", "30"]);
     const poisoned = {
-      PASEO_HOME: a,
-      PASEO_HOST: `127.0.0.1:${portA}`,
-      PASEO_LISTEN: `127.0.0.1:${portA}`,
+      OSUNA_HOME: a,
+      OSUNA_HOST: `127.0.0.1:${portA}`,
+      OSUNA_LISTEN: `127.0.0.1:${portA}`,
       PORT: String(portA),
-      PASEO_WEB_UI_ENABLED: "true",
-      PASEO_RELAY_ENABLED: "true",
+      OSUNA_WEB_UI_ENABLED: "true",
+      OSUNA_RELAY_ENABLED: "true",
     };
     const launchB = await f.ok(["daemon", "start", "--home", b, "--timeout", "30"], poisoned);
     expect(launchA.listen).toBe(`127.0.0.1:${portA}`);
@@ -135,7 +135,7 @@ test("managed two-home restart retains its supervisor and never routes ordinary 
     const beforeA = await f.liveStatus(a);
     const beforeB = await f.liveStatus(b, poisoned);
     if (process.platform !== "win32") {
-      for (const home of [a, b, path.join(f.root, ".paseo")])
+      for (const home of [a, b, path.join(f.root, ".osuna")])
         expect((await stat(home)).mode & 0o777).toBe(0o700);
     }
 
@@ -271,15 +271,15 @@ test("worker restart preserves an already-running legacy supervisor's launch fla
         "--no-relay",
         "--no-web-ui",
       ],
-      // The legacy CLI translated --port into PASEO_LISTEN before spawning.
-      env: { ...f.env, PASEO_LISTEN: `127.0.0.1:${launchPort}` },
+      // The legacy CLI translated --port into OSUNA_LISTEN before spawning.
+      env: { ...f.env, OSUNA_LISTEN: `127.0.0.1:${launchPort}` },
       mode: "deployment",
       timeoutMs: 30_000,
     });
     const before = await f.liveStatus(home);
     expect(before.listen).toBe(`127.0.0.1:${launchPort}`);
     const restarted = await f.ok(["restart", "--home", home, "--timeout", "30"], {
-      PASEO_LISTEN: `127.0.0.1:${filePort}`,
+      OSUNA_LISTEN: `127.0.0.1:${filePort}`,
     });
     expect(restarted.supervisorPid).toBe(launch.instance.pid);
     expect(restarted.workerPid).not.toBe(before.workerPid);
@@ -299,7 +299,7 @@ test.skipIf(process.platform === "win32")(
       await f.configure(b, `127.0.0.1:${await port()}`);
       await writeFile(path.join(b, "server-id"), "saved-b");
       await f.ok(["start", "--home", a, "--timeout", "30"]);
-      await f.ok(["start", "--home", b, "--timeout", "30"], { PASEO_SERVER_ID: "live-b" });
+      await f.ok(["start", "--home", b, "--timeout", "30"], { OSUNA_SERVER_ID: "live-b" });
       const beforeA = await f.liveStatus(a);
       expect((await f.liveStatus(b)).serverId).toBe("live-b");
       await f.ok(["restart", "--home", b, "--timeout", "30"]);
@@ -396,7 +396,7 @@ test("empty explicit selectors never select the ambient daemon or create local s
       ["start", "--home", ""],
       ["daemon", "config", "set", "daemon.relay.enabled", "true", "--home", ""],
     ]) {
-      const refused = await f.run(["--json", ...args], { PASEO_HOME: home });
+      const refused = await f.run(["--json", ...args], { OSUNA_HOME: home });
       expect(refused.code).toBe(1);
       expect(refused.stderr).toContain("TARGET_INVALID");
       expect((await f.liveStatus(home)).workerPid).toBe(before.workerPid);
@@ -457,7 +457,7 @@ test("raw log following subscribes to a stored agent that exists only in B", asy
       [cli, "logs", agentId, "--follow", "--tail", "0", "--home", b],
       {
         cwd: f.root,
-        env: { ...f.env, PASEO_HOME: a, PASEO_HOST: launchA.listen },
+        env: { ...f.env, OSUNA_HOME: a, OSUNA_HOST: launchA.listen },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -511,7 +511,7 @@ test("foreground deployment retains environment until its owner ends the launch;
     await f.configure(home, fileEndpoint);
     deployment = spawn(process.execPath, [cli, "daemon", "run", "--home", home], {
       cwd: f.root,
-      env: { ...f.env, PASEO_LISTEN: deploymentEndpoint, PASEO_RELAY_ENABLED: "false" },
+      env: { ...f.env, OSUNA_LISTEN: deploymentEndpoint, OSUNA_RELAY_ENABLED: "false" },
       stdio: "ignore",
     });
     await expect
@@ -534,7 +534,7 @@ test("foreground deployment retains environment until its owner ends the launch;
       home,
     ]);
     expect(changed.overrideControlledPaths).toContain("daemon.listen");
-    const restarted = await f.ok(["restart", "--home", home], { PASEO_LISTEN: fileEndpoint });
+    const restarted = await f.ok(["restart", "--home", home], { OSUNA_LISTEN: fileEndpoint });
     expect(restarted.supervisorPid).toBe(before.pid);
     expect((await f.ok(["status", "--home", home])).listen).toBe(deploymentEndpoint);
     const exited = new Promise((resolve) => deployment!.once("exit", resolve));

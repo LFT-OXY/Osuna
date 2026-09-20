@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { forkPaseoHomeMetadata, resolvePaseoHomePath } from "./paseo-home-fork";
+import { forkPaseoHomeMetadata, resolvePaseoHomePath } from "./osuna-home-fork";
 import { startIsolatedHostDaemon } from "./isolated-host-daemon";
 
 export interface E2EWorker {
@@ -20,7 +20,7 @@ export interface E2EWorkerOptions {
 function resolveOptionalHome(value: string | undefined): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
-  return resolvePaseoHomePath(trimmed === "current" ? "~/.paseo" : trimmed);
+  return resolvePaseoHomePath(trimmed === "current" ? "~/.osuna" : trimmed);
 }
 
 async function createFakeEditorBin(): Promise<string> {
@@ -43,7 +43,7 @@ async function createFakeEditorBin(): Promise<string> {
   const fakeEditorSource = `#!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
-const recordPath = process.env.PASEO_E2E_EDITOR_RECORD_PATH;
+const recordPath = process.env.OSUNA_E2E_EDITOR_RECORD_PATH;
 if (recordPath) {
   fs.appendFileSync(recordPath, JSON.stringify({
     command: path.basename(process.argv[1]),
@@ -134,11 +134,11 @@ process.exit(result.status ?? 1);
 }
 
 async function applyMetadataFork(targetHome: string, providerIds: string[]): Promise<void> {
-  const sourceHome = resolveOptionalHome(process.env.E2E_FORK_PASEO_HOME_FROM);
+  const sourceHome = resolveOptionalHome(process.env.E2E_FORK_OSUNA_HOME_FROM);
   if (!sourceHome) return;
   const result = await forkPaseoHomeMetadata({ sourceHome, targetHome });
-  process.env.E2E_FORK_SOURCE_PASEO_HOME = result.sourceHome;
-  process.env.E2E_FORK_TARGET_PASEO_HOME = result.targetHome;
+  process.env.E2E_FORK_SOURCE_OSUNA_HOME = result.sourceHome;
+  process.env.E2E_FORK_TARGET_OSUNA_HOME = result.targetHome;
   process.env.E2E_FORK_COPIED_FILES = String(result.copiedFiles);
   process.env.E2E_FORK_COPIED_BYTES = String(result.copiedBytes);
 
@@ -167,11 +167,11 @@ export async function startE2EWorker(
   workerIndex: number,
   options: E2EWorkerOptions = {},
 ): Promise<E2EWorker> {
-  const requestedRoot = resolveOptionalHome(process.env.E2E_PASEO_HOME);
+  const requestedRoot = resolveOptionalHome(process.env.E2E_OSUNA_HOME);
   const paseoHome = requestedRoot
     ? path.join(requestedRoot, `worker-${workerIndex}`)
     : await mkdtemp(path.join(tmpdir(), `paseo-e2e-worker-${workerIndex}-`));
-  const preserveHome = Boolean(requestedRoot) || process.env.E2E_KEEP_PASEO_HOME === "1";
+  const preserveHome = Boolean(requestedRoot) || process.env.E2E_KEEP_OSUNA_HOME === "1";
   const fakeEditorBin = await createFakeEditorBin();
   const editorRecordPath = path.join(paseoHome, "editor-open-records.jsonl");
   const serverId = `srv_e2e_worker_${workerIndex}`;
@@ -195,17 +195,17 @@ export async function startE2EWorker(
       environment: {
         NODE_ENV: "development",
         PATH: `${fakeEditorBin}${path.delimiter}${process.env.PATH ?? ""}`,
-        PASEO_E2E_EDITOR_RECORD_PATH: editorRecordPath,
+        OSUNA_E2E_EDITOR_RECORD_PATH: editorRecordPath,
         // Worker daemons stay offline: the price table is the one thing the
         // daemon would otherwise fetch on its own half a minute after start.
-        PASEO_USAGE_PRICING_AUTO_UPDATE: "0",
+        OSUNA_USAGE_PRICING_AUTO_UPDATE: "0",
         ...options.environment,
       },
     });
 
     process.env.E2E_DAEMON_PORT = String(daemon.port);
     process.env.E2E_SERVER_ID = daemon.serverId;
-    process.env.E2E_PASEO_HOME = daemon.paseoHome;
+    process.env.E2E_OSUNA_HOME = daemon.paseoHome;
     process.env.E2E_EDITOR_RECORD_PATH = editorRecordPath;
     delete process.env.E2E_RELAY_PORT;
     delete process.env.E2E_RELAY_DAEMON_PUBLIC_KEY;

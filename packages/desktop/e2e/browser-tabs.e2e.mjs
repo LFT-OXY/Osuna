@@ -1012,11 +1012,11 @@ async function runRegression({
 
 async function main() {
   const artifactDir =
-    process.env.PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR ??
+    process.env.OSUNA_DESKTOP_BROWSER_E2E_ARTIFACT_DIR ??
     fs.mkdtempSync(path.join(os.tmpdir(), "paseo-desktop-browser-e2e-artifacts-"));
   const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "paseo-desktop-browser-e2e-"));
   fs.mkdirSync(artifactDir, { recursive: true });
-  const paseoHome = path.join(runtimeDir, "paseo-home");
+  const paseoHome = path.join(runtimeDir, "osuna-home");
   const userData = path.join(runtimeDir, "electron-user-data");
   const workspaceRoot = path.join(runtimeDir, "workspaces");
   fs.mkdirSync(paseoHome, { recursive: true });
@@ -1037,13 +1037,13 @@ async function main() {
   try {
     const commonEnv = {
       ...process.env,
-      PASEO_HOME: paseoHome,
-      PASEO_LISTEN: listen,
-      PASEO_DAEMON_ENDPOINT: `localhost:${daemonPort}`,
-      PASEO_CORS_ORIGINS: "*",
-      PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
-      PASEO_DICTATION_ENABLED: "0",
-      PASEO_VOICE_MODE_ENABLED: "0",
+      OSUNA_HOME: paseoHome,
+      OSUNA_LISTEN: listen,
+      OSUNA_DAEMON_ENDPOINT: `localhost:${daemonPort}`,
+      OSUNA_CORS_ORIGINS: "*",
+      OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
+      OSUNA_DICTATION_ENABLED: "0",
+      OSUNA_VOICE_MODE_ENABLED: "0",
       FORCE_COLOR: "0",
       NO_COLOR: "1",
     };
@@ -1051,7 +1051,7 @@ async function main() {
       "daemon",
       process.execPath,
       ["--import", "tsx", path.join(rootDir, "packages/server/scripts/dev-runner.ts")],
-      { cwd: rootDir, env: { ...commonEnv, PASEO_NODE_ENV: "development" } },
+      { cwd: rootDir, env: { ...commonEnv, OSUNA_NODE_ENV: "development" } },
       artifactDir,
     );
     children.push(daemon.child);
@@ -1078,9 +1078,9 @@ async function main() {
           ...commonEnv,
           EXPO_PORT: String(expoPort),
           EXPO_DEV_URL: `http://localhost:${expoPort}`,
-          PASEO_ELECTRON_REMOTE_DEBUGGING_PORT: String(cdpPort),
-          PASEO_ELECTRON_USER_DATA_DIR: userData,
-          PASEO_ELECTRON_FLAGS: `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
+          OSUNA_ELECTRON_REMOTE_DEBUGGING_PORT: String(cdpPort),
+          OSUNA_ELECTRON_USER_DATA_DIR: userData,
+          OSUNA_ELECTRON_FLAGS: `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
         },
       },
       artifactDir,
@@ -1093,7 +1093,7 @@ async function main() {
     const status = await waitForDesktopStatus(page);
 
     const settingsMemory = await runSettingsMemoryRegression(page);
-    if (process.env.PASEO_DESKTOP_SETTINGS_MEMORY_ONLY === "1") {
+    if (process.env.OSUNA_DESKTOP_SETTINGS_MEMORY_ONLY === "1") {
       writeJson(path.join(artifactDir, "result.json"), { settingsMemory });
       console.log(
         `Desktop Settings memory regression passed: ${settingsMemory.detachedAfterWarmRound} detached panes after warm and stress rotations.`,

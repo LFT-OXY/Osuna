@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { STTManager } from "../src/server/agent/stt-manager.js";
 import { createRootLogger } from "../src/server/logger.js";
-import { resolvePaseoHome } from "../src/server/paseo-home.js";
+import { resolvePaseoHome } from "../src/server/osuna-home.js";
 import {
   DEFAULT_LOCAL_STT_MODEL,
   DEFAULT_LOCAL_TTS_MODEL,
@@ -29,7 +29,7 @@ function usage(): string {
     "  npm run speech:transcribe:local -- ./sample.wav --out ./tmp/sample.transcript.txt",
     "",
     "Env fallbacks:",
-    "  PASEO_LOCAL_MODELS_DIR",
+    "  OSUNA_LOCAL_MODELS_DIR",
   ].join("\n");
 }
 
@@ -45,7 +45,7 @@ function parseArgs(argv: string[]): CliOptions {
 
   const paseoHome = resolvePaseoHome();
   const defaultModelsDir =
-    process.env.PASEO_LOCAL_MODELS_DIR ?? path.join(paseoHome, "models", "local-speech");
+    process.env.OSUNA_LOCAL_MODELS_DIR ?? path.join(paseoHome, "models", "local-speech");
 
   const positional: string[] = [];
   let outPath: string | undefined;

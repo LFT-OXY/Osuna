@@ -223,7 +223,7 @@ function withoutTrailingSlash(path: string): string {
 /**
  * Where a session lives, relative to the project root. Null at the root itself;
  * the full path when the directory is outside the project (Paseo worktrees live
- * under `$PASEO_HOME/worktrees`, so they show in full).
+ * under `$OSUNA_HOME/worktrees`, so they show in full).
  */
 export function formatSessionHistoryDirectory(
   cwd: string,

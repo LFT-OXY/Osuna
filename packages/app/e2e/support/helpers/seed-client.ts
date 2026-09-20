@@ -187,7 +187,7 @@ export interface SeedDaemonClient {
 
 export async function connectSeedClient(options?: {
   port?: number;
-  /** Use only with a private host whose teardown removes its entire PASEO_HOME. */
+  /** Use only with a private host whose teardown removes its entire OSUNA_HOME. */
   projectOwnership?: "client" | "host";
 }): Promise<SeedDaemonClient> {
   const client = await connectDaemonClient<SeedDaemonClient>({

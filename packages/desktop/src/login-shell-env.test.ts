@@ -362,7 +362,7 @@ describe("login shell env retry behavior", () => {
   it("uses the configured shell env timeout", () => {
     const env = {
       ...createEnv(fakeHome),
-      PASEO_SHELL_ENV_TIMEOUT_MS: "1234",
+      OSUNA_SHELL_ENV_TIMEOUT_MS: "1234",
     };
     const logger = new RecordingLoginShellLogger();
     const clock = createTestClock();
@@ -492,13 +492,13 @@ describeIfZsh("login shell env", () => {
   it("loads the user's zshrc while resolving the login shell env", async () => {
     const home = await createShellHome();
     homes.add(home);
-    await writeFile(path.join(home, ".zshrc"), "export PASEO_TEST_ZSHRC_LOADED=1\n");
+    await writeFile(path.join(home, ".zshrc"), "export OSUNA_TEST_ZSHRC_LOADED=1\n");
     const env = createEnv(home);
     const logger = new RecordingLoginShellLogger();
 
     inheritLoginShellEnv({ env, logger });
 
-    expect(env.PASEO_TEST_ZSHRC_LOADED).toBe("1");
+    expect(env.OSUNA_TEST_ZSHRC_LOADED).toBe("1");
     expect(logger.infos.map((entry) => entry.message)).toEqual([
       "[login-shell-env] start",
       "[login-shell-env] attempt applied",

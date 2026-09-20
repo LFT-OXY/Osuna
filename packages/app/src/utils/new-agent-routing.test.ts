@@ -13,23 +13,23 @@ describe("resolveNewAgentWorkingDir", () => {
   });
 
   it("falls back to repo root when checkout metadata is unavailable", () => {
-    expect(resolveNewAgentWorkingDir("/repo/.paseo/worktrees/feature", null)).toBe("/repo");
+    expect(resolveNewAgentWorkingDir("/repo/.osuna/worktrees/feature", null)).toBe("/repo");
   });
 
   it("supports windows-style paseo worktree paths without checkout metadata", () => {
-    expect(resolveNewAgentWorkingDir("C:\\Users\\me\\repo\\.paseo\\worktrees\\feature", null)).toBe(
+    expect(resolveNewAgentWorkingDir("C:\\Users\\me\\repo\\.osuna\\worktrees\\feature", null)).toBe(
       "C:\\Users\\me\\repo",
     );
   });
 
   it("returns the main repo root for paseo-owned worktrees", () => {
     const checkout = {
-      isPaseoOwnedWorktree: true,
-      worktreeRoot: "/repo/.paseo/worktrees/feature",
+      isOsunaOwnedWorktree: true,
+      worktreeRoot: "/repo/.osuna/worktrees/feature",
       mainRepoRoot: "/repo/main",
     } as unknown as CheckoutStatusPayload;
 
-    expect(resolveNewAgentWorkingDir("/repo/.paseo/worktrees/feature", checkout)).toBe(
+    expect(resolveNewAgentWorkingDir("/repo/.osuna/worktrees/feature", checkout)).toBe(
       "/repo/main",
     );
   });

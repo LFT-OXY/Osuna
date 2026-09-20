@@ -22,10 +22,10 @@ import { OpenCodeAgentClient } from "./opencode-agent.js";
 import { OpenCodeServerManager } from "./opencode/server-manager.js";
 
 const MODEL = "openai/gpt-5.4";
-const NORMAL_SENTINEL = "PASEO_NORMAL_RECOVERY_SENTINEL_7F31";
-const ROOT_SENTINEL = "PASEO_ROOT_RECOVERY_SENTINEL_8C42";
-const CHILD_SENTINEL = "PASEO_CHILD_RECOVERY_SENTINEL_5A19";
-const PARENT_SENTINEL = "PASEO_PARENT_RECOVERY_SENTINEL_6B20";
+const NORMAL_SENTINEL = "OSUNA_NORMAL_RECOVERY_SENTINEL_7F31";
+const ROOT_SENTINEL = "OSUNA_ROOT_RECOVERY_SENTINEL_8C42";
+const CHILD_SENTINEL = "OSUNA_CHILD_RECOVERY_SENTINEL_5A19";
+const PARENT_SENTINEL = "OSUNA_PARENT_RECOVERY_SENTINEL_6B20";
 const TIMEOUT_MS = 240_000;
 
 describe.sequential("OpenCode real event recovery", () => {
@@ -155,7 +155,7 @@ async function createRealHarness() {
     const isolatedEnv = {
       ...process.env,
       HOME: home,
-      PASEO_HOME: paseoHome,
+      OSUNA_HOME: paseoHome,
       XDG_CONFIG_HOME: xdgConfig,
       XDG_DATA_HOME: xdgData,
       XDG_CACHE_HOME: xdgCache,
@@ -300,7 +300,7 @@ function createDisposableRuntime(
     runtimeDir = mkdtempSync(path.join(os.tmpdir(), "paseo-opencode-runtime-"));
     onCreate?.(runtimeDir);
     const home = path.join(runtimeDir, "home");
-    const paseoHome = path.join(runtimeDir, "paseo-home");
+    const paseoHome = path.join(runtimeDir, "osuna-home");
     const xdgConfig = path.join(runtimeDir, "xdg-config");
     const xdgData = path.join(runtimeDir, "xdg-data");
     const xdgCache = path.join(runtimeDir, "xdg-cache");

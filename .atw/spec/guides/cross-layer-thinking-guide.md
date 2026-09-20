@@ -287,6 +287,51 @@ packaged artifact, or in CI, or in a user's install.
 - [ ] **Published package READMEs** — they ship to npm with the package, so they are
       part of the identity, not docs.
 
+### The forms a search-and-replace misses
+
+A replace rule written around "what character comes before the name" misses every
+escaped or line-anchored spelling of it. In the Paseo → Osuna rename these got through a
+rule that required the name to follow `/`, `"`, `'` or a backtick, and only tests and a
+failed build caught them — two of them were **production regressions**:
+
+- **Regex-escaped** — `/[/\\]\.paseo[/\\]worktrees[/\\]/` in `checkout-git.ts` and
+  `/(^|\/)\.paseo\/worktrees(\/|$)/` in `agent-working-directory-suggestions.ts`. The
+  daemon had already moved to `.osuna/worktrees`, so worktree ownership silently stopped
+  matching. Also `/Failed to parse paseo\.json at .*paseo\.json/` in a test, and
+  `s/^appId: sh\.paseo$/` in a Maestro shell script.
+- **Windows backslash paths** — `"C:\\Users\\me\\repo\\.paseo\\worktrees"`,
+  `$env:USERPROFILE\.paseo\models\local-speech`.
+- **Line-anchored** — `.paseo/` alone on a line in `.gitignore`. Nothing precedes it, so
+  the daemon's new `.osuna/worktrees` briefly stopped being ignored.
+- **Inside prose strings** — `"Could not deploy .paseo/triggers/z-help.yml"`,
+  `"- .paseo/triggers/slack-help.yml"`, where a space or `- ` precedes the name.
+- **Segment-wise parsing** — `packages/server/src/server/auth.ts` splits the WebSocket
+  subprotocol and compares `segments[0] === "paseo"`, so replacing the joined string
+  `paseo.bearer.` in the *producer* silently broke password auth until the parser moved too.
+- **Object keys in schemas, not just string literals** — `isPaseoOwnedWorktree` and
+  `paseoTools` are wire field names in `packages/protocol/src/messages.ts`. A sweep for
+  `"paseo"` string literals reports the protocol package as clean.
+- **Files with no extension** — `docker/base/rootfs/usr/local/bin/osuna-docker-entrypoint`
+  was skipped by a glob list of `*.ts`, `*.yml`, `Dockerfile*`, so the container kept
+  defaulting to the old port while the image published the new one.
+
+Conversely, do **not** blind-replace in generated or minified assets: `6767` appears in
+`mermaid/runtime/html.gen.ts` as a font metric (`.86767`) and a colour
+(`peachpuff:16767673`), and in `terminal-emulator-webview-html.ts` as SVG path
+coordinates. Replacing those corrupts the bundle.
+
+### Tool pitfalls when scripting the sweep
+
+- `git grep -E` is POSIX ERE: **`\b` does not work**. A file list built with
+  `git grep -l -E '\bfoo\b'` comes back silently empty, so the replace appears to
+  succeed while touching nothing. Use `git grep -P`, or grep the bare name and filter.
+- `xargs sed -i ''` aborts the whole batch on the first unusable path. A symlink
+  (`AGENTS.md` → `CLAUDE.md`) stopped a 379-file rename after 7 files. Loop per file, skip
+  symlinks, and count what you changed.
+- An audit that compares removed vs added diff lines proves the lines you *did* change are
+  brand-only. It cannot see a line you failed to change — `.gitignore` passed that audit
+  while still holding `.paseo/`. Pair it with a full-text sweep for the old name.
+
 ### The rule
 
 For any identity string that more than one TypeScript layer reads, export it once from

@@ -48,9 +48,9 @@ describe("daemon bearer validator", () => {
   });
 
   test("extracts WebSocket paseo bearer subprotocol tokens", () => {
-    const protocol = extractWsBearerProtocol("chat, paseo.bearer.secret.with.dots");
+    const protocol = extractWsBearerProtocol("chat, osuna.bearer.secret.with.dots");
 
-    expect(protocol).toBe("paseo.bearer.secret.with.dots");
+    expect(protocol).toBe("osuna.bearer.secret.with.dots");
     expect(extractWsBearerToken(protocol)).toBe("secret.with.dots");
     expect(extractWsBearerToken("paseo.other.secret")).toBeNull();
   });

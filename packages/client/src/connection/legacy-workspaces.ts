@@ -150,7 +150,7 @@ function workspaceId(entry: AgentEntry): string {
 
 function workspaceKind(checkout: AgentEntry["project"]["checkout"]): Workspace["workspaceKind"] {
   if (!checkout.isGit) return "directory";
-  if (checkout.isPaseoOwnedWorktree) return "worktree";
+  if (checkout.isOsunaOwnedWorktree) return "worktree";
   return "checkout";
 }
 
@@ -167,7 +167,7 @@ function gitRuntime(checkout: AgentEntry["project"]["checkout"]): Workspace["git
   return {
     currentBranch: checkout.currentBranch,
     remoteUrl: checkout.remoteUrl,
-    isPaseoOwnedWorktree: checkout.isPaseoOwnedWorktree,
+    isOsunaOwnedWorktree: checkout.isOsunaOwnedWorktree,
     isDirty: null,
     aheadBehind: null,
     aheadOfOrigin: null,

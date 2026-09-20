@@ -27,9 +27,9 @@ test("Sessions shows an empty placeholder when the host has no history", async (
     });
     await page.addInitScript(
       ({ seededHost, preferences }) => {
-        localStorage.setItem("@paseo:e2e", "1");
-        localStorage.setItem("@paseo:daemon-registry", JSON.stringify([seededHost]));
-        localStorage.setItem("@paseo:create-agent-preferences", JSON.stringify(preferences));
+        localStorage.setItem("@osuna:e2e", "1");
+        localStorage.setItem("@osuna:daemon-registry", JSON.stringify([seededHost]));
+        localStorage.setItem("@osuna:create-agent-preferences", JSON.stringify(preferences));
       },
       { seededHost: host, preferences: buildCreateAgentPreferences() },
     );

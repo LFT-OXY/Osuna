@@ -30,8 +30,8 @@ afterEach(async () => {
 });
 
 test("openProject preserves a worktree's exact-root project without rehoming it", async () => {
-  const previousSupervised = process.env.PASEO_SUPERVISED;
-  process.env.PASEO_SUPERVISED = "0";
+  const previousSupervised = process.env.OSUNA_SUPERVISED;
+  process.env.OSUNA_SUPERVISED = "0";
   try {
     const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), "paseo-open-project-repo-")));
     const worktreeRoot = realpathSync(
@@ -56,7 +56,7 @@ test("openProject preserves a worktree's exact-root project without rehoming it"
       stdio: "pipe",
     });
 
-    const paseoHome = path.join(paseoHomeRoot, ".paseo");
+    const paseoHome = path.join(paseoHomeRoot, ".osuna");
     const projectsPath = path.join(paseoHome, "projects", "projects.json");
     const workspacesPath = path.join(paseoHome, "projects", "workspaces.json");
     const timestamp = "2026-04-24T09:46:43.146Z";
@@ -121,7 +121,7 @@ test("openProject preserves a worktree's exact-root project without rehoming it"
       persistedWorkspaces.find((workspace) => workspace.workspaceId === worktreeRoot)?.projectId,
     ).toBe(worktreeRoot);
   } finally {
-    process.env.PASEO_SUPERVISED = previousSupervised;
+    process.env.OSUNA_SUPERVISED = previousSupervised;
   }
 }, 30_000);
 

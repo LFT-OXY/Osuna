@@ -45,24 +45,24 @@ describe("OpenCode bridge adapter", () => {
       { provider: "opencode", cwd: "/workspace/one" },
       {
         agentId: "agent-one",
-        env: { PASEO_AGENT_ID: "agent-one", PASEO_AGENT_CWD: "/workspace/one" },
+        env: { OSUNA_AGENT_ID: "agent-one", OSUNA_AGENT_CWD: "/workspace/one" },
       },
     );
     const second = await client.createSession(
       { provider: "opencode", cwd: "/workspace/two" },
       {
         agentId: "agent-two",
-        env: { PASEO_AGENT_ID: "agent-two", PASEO_AGENT_CWD: "/workspace/two" },
+        env: { OSUNA_AGENT_ID: "agent-two", OSUNA_AGENT_CWD: "/workspace/two" },
       },
     );
 
     expect(client.capabilities.supportsNativePaseoTools).toBe(true);
     expect(runtime.acquisitions.map(({ kind }) => kind)).toEqual(["current", "current"]);
     await expect(readBridgeContext(bridge, "ses_first")).resolves.toEqual({
-      env: { PASEO_AGENT_ID: "agent-one", PASEO_AGENT_CWD: "/workspace/one" },
+      env: { OSUNA_AGENT_ID: "agent-one", OSUNA_AGENT_CWD: "/workspace/one" },
     });
     await expect(readBridgeContext(bridge, "ses_second")).resolves.toEqual({
-      env: { PASEO_AGENT_ID: "agent-two", PASEO_AGENT_CWD: "/workspace/two" },
+      env: { OSUNA_AGENT_ID: "agent-two", OSUNA_AGENT_CWD: "/workspace/two" },
     });
 
     await first.close();
@@ -90,7 +90,7 @@ describe("OpenCode bridge adapter", () => {
 
     const customEnv = await client.createSession(
       { provider: "opencode", cwd: "/workspace/one" },
-      { env: { PASEO_AGENT_ID: "one", CUSTOM_TOKEN: "secret" } },
+      { env: { OSUNA_AGENT_ID: "one", CUSTOM_TOKEN: "secret" } },
     );
     const customMcp = await client.createSession(
       {
@@ -98,7 +98,7 @@ describe("OpenCode bridge adapter", () => {
         cwd: "/workspace/two",
         mcpServers: { custom: { transport: "http", url: "http://127.0.0.1:9999/mcp" } },
       },
-      { env: { PASEO_AGENT_ID: "two" } },
+      { env: { OSUNA_AGENT_ID: "two" } },
     );
 
     expect(runtime.acquisitions.map(({ kind }) => kind)).toEqual(["dedicated", "dedicated"]);

@@ -5,7 +5,7 @@ const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
 const EXECUTABLE_NAME = "Osuna";
 
 exports.default = async function afterSign(context) {
-  if (process.env.PASEO_DESKTOP_SMOKE !== "1") {
+  if (process.env.OSUNA_DESKTOP_SMOKE !== "1") {
     return;
   }
 

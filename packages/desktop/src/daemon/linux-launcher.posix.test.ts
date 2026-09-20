@@ -57,7 +57,7 @@ async function launch(
         FORCE_COLOR: undefined,
         PATH: `${commands}:${process.env.PATH}`,
         APPIMAGE: "/tmp/Paseo.AppImage",
-        PASEO_DESKTOP_SMOKE: "0",
+        OSUNA_DESKTOP_SMOKE: "0",
         ...options.env,
       },
     });
@@ -116,8 +116,8 @@ it("does not depend on APPIMAGE being present for an extracted portable app", as
 it("applies a debugging environment sandbox override before Chromium starts", async () => {
   const result = await launch({
     namespaces: true,
-    env: { PASEO_ELECTRON_FLAGS: "--disable-gpu\t--no-sandbox" },
+    env: { OSUNA_ELECTRON_FLAGS: "--disable-gpu\t--no-sandbox" },
   });
   expect(result.args).toEqual(["--no-sandbox", ...result.input]);
-  expect(result.stderr).toContain("requested by PASEO_ELECTRON_FLAGS");
+  expect(result.stderr).toContain("requested by OSUNA_ELECTRON_FLAGS");
 });

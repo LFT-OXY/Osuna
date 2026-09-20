@@ -28,7 +28,7 @@ const { sherpaPlatformPackageName } = await import(
   ).href
 );
 
-const traceDesktop = process.env.PASEO_TRACE_DESKTOP === "1";
+const traceDesktop = process.env.OSUNA_TRACE_DESKTOP === "1";
 
 // Daemon entry points. Workers forked into their own Node processes have
 // independent require trees; nft does not follow fork boundaries, so trace

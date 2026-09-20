@@ -1388,7 +1388,7 @@ export class HubRelationshipHarness {
 
   private async createHome(): Promise<void> {
     this.root = await mkdtemp(path.join(tmpdir(), "paseo-hub-relationship-"));
-    this.paseoHome = path.join(this.root, ".paseo");
+    this.paseoHome = path.join(this.root, ".osuna");
     const staticDir = path.join(this.root, "static");
     await Promise.all([mkdir(this.paseoHome, { recursive: true }), mkdir(staticDir)]);
     execFileSync("git", ["init", "-b", "main", this.root], { stdio: "ignore" });

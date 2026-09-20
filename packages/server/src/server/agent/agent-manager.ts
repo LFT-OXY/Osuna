@@ -5197,8 +5197,8 @@ export class AgentManager {
       agentId,
       env: {
         ...env,
-        PASEO_AGENT_ID: agentId,
-        PASEO_AGENT_CWD: cwd,
+        OSUNA_AGENT_ID: agentId,
+        OSUNA_AGENT_CWD: cwd,
       },
     };
     if (

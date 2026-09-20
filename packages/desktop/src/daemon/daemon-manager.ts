@@ -305,7 +305,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
       home,
       timeoutMs: 30_000,
       ...invocation,
-      env: { ...invocation.env, PASEO_CLI: getBundledCliShimPath() },
+      env: { ...invocation.env, OSUNA_CLI: getBundledCliShimPath() },
       mode: "managed",
       desktopManaged: true,
       onAcquired: (instance) => {
@@ -412,7 +412,7 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     desktop_sandbox_diagnostics: () =>
       describeSandbox({
         disabled: app.commandLine.hasSwitch("no-sandbox"),
-        launcherReason: process.env.PASEO_DESKTOP_SANDBOX_REASON,
+        launcherReason: process.env.OSUNA_DESKTOP_SANDBOX_REASON,
       }),
     desktop_app_logs: () => getDesktopAppLogs(),
     desktop_update_diagnostics: () => getDesktopUpdaterDiagnostics(),

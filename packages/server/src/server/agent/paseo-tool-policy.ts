@@ -1,14 +1,14 @@
 import type { ProviderPaseoToolsPolicy } from "@osuna/protocol/provider-config";
 
 interface ProviderPaseoToolSettings {
-  paseoTools?: ProviderPaseoToolsPolicy;
+  osunaTools?: ProviderPaseoToolsPolicy;
 }
 
 export function resolvePaseoToolPolicy(
   providerId: string,
   providerSettings: Readonly<Record<string, ProviderPaseoToolSettings>> | undefined,
 ): ProviderPaseoToolsPolicy | undefined {
-  return providerSettings?.[providerId]?.paseoTools;
+  return providerSettings?.[providerId]?.osunaTools;
 }
 
 export function isPaseoToolEnabled(

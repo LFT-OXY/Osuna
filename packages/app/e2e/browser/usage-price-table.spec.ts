@@ -146,7 +146,7 @@ test.describe("Price table", () => {
 
     const toggle = page.getByTestId("price-table-auto-update-switch");
     await expect(toggle).toBeVisible({ timeout: 30_000 });
-    // The worker daemon starts with PASEO_USAGE_PRICING_AUTO_UPDATE=0.
+    // The worker daemon starts with OSUNA_USAGE_PRICING_AUTO_UPDATE=0.
     expect(await readAutoUpdate()).toBe(false);
     await expect(toggle).not.toBeChecked();
 

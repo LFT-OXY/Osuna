@@ -38,7 +38,7 @@ function createWorkspaceSnapshot(
       mainRepoRoot: null,
       currentBranch: "feature",
       remoteUrl: "https://github.com/acme/repo.git",
-      isPaseoOwnedWorktree: false,
+      isOsunaOwnedWorktree: false,
       isDirty: false,
       baseRef: "main",
       aheadBehind: { ahead: 1, behind: 0 },

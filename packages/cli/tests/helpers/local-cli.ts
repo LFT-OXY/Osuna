@@ -18,7 +18,7 @@ export function runLocalPaseo(
     cwd,
     env: {
       ...Object.fromEntries(
-        Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_")),
+        Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_")),
       ),
       ...env,
       HOME: cliHome,

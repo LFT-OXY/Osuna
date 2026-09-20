@@ -335,7 +335,7 @@ describe("file explorer service", () => {
   });
 
   it("expands a ~ prefix in relative paths against the user home directory", async () => {
-    const root = await createHomeTempDir(".paseo-file-explorer-home-");
+    const root = await createHomeTempDir(".osuna-file-explorer-home-");
 
     try {
       const filePath = path.join(root, "sample.txt");
@@ -355,7 +355,7 @@ describe("file explorer service", () => {
   });
 
   it("allows home to be the scoped root for tilde file previews", async () => {
-    const root = await createHomeTempDir(".paseo-file-explorer-home-root-");
+    const root = await createHomeTempDir(".osuna-file-explorer-home-root-");
 
     try {
       const filePath = path.join(root, "sample.txt");

@@ -13,7 +13,7 @@ import { CodexAppServerAgentClient } from "../agent/providers/codex-app-server-a
 import { startHubActionSink, type HubActionSink } from "./test-utils/hub-action-sink.js";
 import { HubRelationshipHarness } from "./test-utils/relationship-harness.js";
 
-const RUN_REAL_HUB_POLICY = process.env.PASEO_REAL_HUB_POLICY === "1";
+const RUN_REAL_HUB_POLICY = process.env.OSUNA_REAL_HUB_POLICY === "1";
 const REAL_TURN_TIMEOUT_MS = 180_000;
 const HUB_MCP_SERVER = "hub_execution";
 

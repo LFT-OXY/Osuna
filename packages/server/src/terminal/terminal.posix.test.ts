@@ -334,14 +334,14 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
     const resolvedEnv = buildTerminalEnvironment({
       shell: "/bin/zsh",
       env: {
-        HOME: "/tmp/paseo-home",
+        HOME: "/tmp/osuna-home",
         ZDOTDIR: "/tmp/paseo-zdotdir",
       },
     });
 
     expect(resolvedEnv.TERM).toBe("xterm-256color");
     expect(resolvedEnv.TERM_PROGRAM).toBe("kitty");
-    expect(resolvedEnv.PASEO_ZSH_ZDOTDIR).toBe("/tmp/paseo-zdotdir");
+    expect(resolvedEnv.OSUNA_ZSH_ZDOTDIR).toBe("/tmp/paseo-zdotdir");
     expect(resolvedEnv.ZDOTDIR).toBe(
       join(tmpdir(), `${userInfo().username || "unknown"}-paseo-zsh-${process.pid}`),
     );
@@ -453,14 +453,14 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
       temporaryDirs.push(homeDir);
       const realZdotdir = join(homeDir, ".config", "zsh");
       mkdirSync(realZdotdir, { recursive: true });
-      writeFileSync(join(realZdotdir, ".zshenv"), "export PASEO_TEST_REAL_ZDOTDIR=1\n");
+      writeFileSync(join(realZdotdir, ".zshenv"), "export OSUNA_TEST_REAL_ZDOTDIR=1\n");
 
       const session = trackSession(
         await createTerminal({
           workspaceId: "ws-test",
           cwd: homeDir,
           command: "/bin/zsh",
-          args: ["-c", 'printf \'%s\\n%s\\n\' "${ZDOTDIR-}" "${PASEO_TEST_REAL_ZDOTDIR-}"'],
+          args: ["-c", 'printf \'%s\\n%s\\n\' "${ZDOTDIR-}" "${OSUNA_TEST_REAL_ZDOTDIR-}"'],
           env: {
             HOME: homeDir,
             ZDOTDIR: realZdotdir,
@@ -685,7 +685,7 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
     it.skipIf(!hasZsh)("loads the user's zsh prompt when the integration dir is packaged", () => {
       const homeDir = mkdtempSync(join(tmpdir(), "terminal-zsh-packaged-home-"));
       temporaryDirs.push(homeDir);
-      writeFileSync(join(homeDir, ".zshrc"), "PS1='PASEO_CUSTOM_PROMPT> '\n");
+      writeFileSync(join(homeDir, ".zshrc"), "PS1='OSUNA_CUSTOM_PROMPT> '\n");
 
       const fakeAppRoot = join(homeDir, "Paseo.app", "Contents", "Resources");
       const inaccessiblePackagedIntegrationDir = join(
@@ -731,7 +731,7 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
       });
 
       expect(result.status).toBe(0);
-      expect(result.stdout.split(/\r?\n/)).toContain("PASEO_CUSTOM_PROMPT> ");
+      expect(result.stdout.split(/\r?\n/)).toContain("OSUNA_CUSTOM_PROMPT> ");
     });
 
     it.skipIf(!hasZsh)("emits zsh shell integration command completion", async () => {

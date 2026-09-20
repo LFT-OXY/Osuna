@@ -153,7 +153,7 @@ test.describe("Desktop daemon management", () => {
     }) => {
       const serverId = getServerId();
       const realState = await loadRealDaemonState();
-      const daemonHome = process.env.E2E_PASEO_HOME!;
+      const daemonHome = process.env.E2E_OSUNA_HOME!;
       await installDesktopRuntime(page, {
         serverId,
         daemonPid: realState.pid,

@@ -338,7 +338,7 @@ describe("Hub commands", () => {
       {
         code: "HUB_API_KEY_REQUIRED",
         message:
-          "No stored Hub login matches https://hub.paseo.sh. Run `osuna hub login https://hub.paseo.sh`, pass --api-key <secret>, or set PASEO_HUB_API_KEY.",
+          "No stored Hub login matches https://hub.paseo.sh. Run `osuna hub login https://hub.paseo.sh`, pass --api-key <secret>, or set OSUNA_HUB_API_KEY.",
       },
     );
 
@@ -356,7 +356,7 @@ describe("Hub commands", () => {
     const result = await runHubProjects(
       { hub: "https://explicit.test", apiKey: "explicit-secret", json: true },
       {
-        env: { PASEO_HUB_URL: "https://env.test", PASEO_HUB_API_KEY: "env-secret" },
+        env: { OSUNA_HUB_URL: "https://env.test", OSUNA_HUB_API_KEY: "env-secret" },
         credentials,
         hub: {
           listProjects: async (origin, credential) => {

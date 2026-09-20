@@ -3,7 +3,7 @@ import {
   createWorktree as createWorktreePrimitive,
   deriveWorktreeProjectHash,
   deletePaseoWorktree,
-  isPaseoOwnedWorktreeCwd,
+  isOsunaOwnedWorktreeCwd,
   mapWorkspaceCwdToWorktree,
   slugify,
   type CreateWorktreeOptions,
@@ -60,7 +60,7 @@ describe("paseo worktree manager", () => {
   beforeEach(() => {
     tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-manager-test-")));
     repoDir = join(tempDir, "test-repo");
-    paseoHome = join(tempDir, "paseo-home");
+    paseoHome = join(tempDir, "osuna-home");
 
     mkdirSync(repoDir, { recursive: true });
     execFileSync("git", ["init", "-b", "main"], { cwd: repoDir });
@@ -94,10 +94,10 @@ describe("paseo worktree manager", () => {
     });
     expect(existsSync(created.worktreePath)).toBe(true);
 
-    const ownership = await isPaseoOwnedWorktreeCwd(created.worktreePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { paseoHome });
     expect(ownership.allowed).toBe(true);
     await expect(
-      isPaseoOwnedWorktreeCwd(join(created.worktreePath, "packages", "app"), { paseoHome }),
+      isOsunaOwnedWorktreeCwd(join(created.worktreePath, "packages", "app"), { paseoHome }),
     ).resolves.toMatchObject({
       allowed: true,
       worktreePath: created.worktreePath,
@@ -105,10 +105,10 @@ describe("paseo worktree manager", () => {
   });
 
   it("rejects paths that are not under the paseo worktrees root", async () => {
-    const outsidePath = join(tempDir, "outside-paseo-home");
+    const outsidePath = join(tempDir, "outside-osuna-home");
     mkdirSync(outsidePath, { recursive: true });
 
-    const ownership = await isPaseoOwnedWorktreeCwd(outsidePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(outsidePath, { paseoHome });
 
     expect(ownership.allowed).toBe(false);
   });
@@ -122,7 +122,7 @@ describe("paseo worktree manager", () => {
       paseoHome,
     });
 
-    const ownership = await isPaseoOwnedWorktreeCwd(created.worktreePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { paseoHome });
 
     expect(ownership.allowed).toBe(true);
     expect(createRealpathAwarePathMatcher(repoDir)(ownership.repoRoot ?? "")).toBe(true);
@@ -185,10 +185,10 @@ describe("paseo worktree manager", () => {
     const projectHashDir = join(worktreesRoot, projectHash);
     mkdirSync(projectHashDir, { recursive: true });
 
-    await expect(isPaseoOwnedWorktreeCwd(worktreesRoot, { paseoHome })).resolves.toMatchObject({
+    await expect(isOsunaOwnedWorktreeCwd(worktreesRoot, { paseoHome })).resolves.toMatchObject({
       allowed: false,
     });
-    await expect(isPaseoOwnedWorktreeCwd(projectHashDir, { paseoHome })).resolves.toMatchObject({
+    await expect(isOsunaOwnedWorktreeCwd(projectHashDir, { paseoHome })).resolves.toMatchObject({
       allowed: false,
     });
   });
@@ -248,7 +248,7 @@ describe("paseo worktree manager", () => {
       paseoHome,
     });
 
-    const ownership = await isPaseoOwnedWorktreeCwd(created.worktreePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { paseoHome });
     expect(ownership.allowed).toBe(true);
     expect(ownership.worktreeRoot).toBeTruthy();
 

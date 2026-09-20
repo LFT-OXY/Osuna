@@ -200,7 +200,7 @@ async function waitForCapturedLog(
       "--show-interactive-dev-session=false",
     ];
     if (options.useLocalRelay) {
-      relayArgs.push("--var", "PASEO_RELAY_UPSTREAM:");
+      relayArgs.push("--var", "OSUNA_RELAY_UPSTREAM:");
     }
     relayProcess = spawn("npx", relayArgs, {
       cwd: relayDir,
@@ -242,7 +242,7 @@ async function waitForCapturedLog(
   };
 
   test("daemon connects to relay and client ping/pong works through relay", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    process.env.OSUNA_PRIMARY_LAN_IP = "192.168.1.12";
 
     const { logger, lines } = createCapturingLogger();
     await startRelay();
@@ -383,7 +383,7 @@ async function waitForCapturedLog(
   }, 90000);
 
   test("daemon closes a relay client that sends an unsupported handshake key", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    process.env.OSUNA_PRIMARY_LAN_IP = "192.168.1.12";
 
     const { logger, lines } = createCapturingLogger();
     await startRelay({ useLocalRelay: true });
@@ -499,7 +499,7 @@ async function waitForCapturedLog(
   }, 90000);
 
   test("daemon keeps relay socket open while idle (no handshake timeout loop)", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    process.env.OSUNA_PRIMARY_LAN_IP = "192.168.1.12";
 
     const { logger, lines } = createCapturingLogger();
     await startRelay();
@@ -645,7 +645,7 @@ async function waitForCapturedLog(
   }, 90000);
 
   test("daemon accepts a relay client that pipelines app hello after E2EE hello", async () => {
-    process.env.PASEO_PRIMARY_LAN_IP = "192.168.1.12";
+    process.env.OSUNA_PRIMARY_LAN_IP = "192.168.1.12";
 
     const { logger, lines } = createCapturingLogger();
     await startRelay();

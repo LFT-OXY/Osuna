@@ -7,8 +7,8 @@ const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
-const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
-const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
+const isFdroidBuild = process.env.OSUNA_FDROID_BUILD === "1";
+const isProfileBuild = process.env.OSUNA_PROFILE_BUILD === "1";
 
 const buildProfile = isFdroidBuild
   ? {

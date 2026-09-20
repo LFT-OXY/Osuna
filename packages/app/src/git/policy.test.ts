@@ -70,7 +70,7 @@ function createInput(
     pullRequestMergeable: "UNKNOWN",
     mergeCapability: deriveMergeCapability(pullRequestGithub),
     hasRemote: false,
-    isPaseoOwnedWorktree: false,
+    isOsunaOwnedWorktree: false,
     isOnBaseBranch: true,
     hasUncommittedChanges: false,
     baseRefAvailable: true,
@@ -211,7 +211,7 @@ describe("git-actions-policy", () => {
     const actions = buildGitActions(
       createInput({
         hasRemote: true,
-        isPaseoOwnedWorktree: true,
+        isOsunaOwnedWorktree: true,
         isOnBaseBranch: false,
         aheadCount: 1,
         aheadOfOrigin: null,
@@ -420,7 +420,7 @@ describe("git-actions-policy", () => {
   it("offers archive workspace for Git checkouts and worktrees", () => {
     const localCheckout = buildGitActions(createInput({ hasUncommittedChanges: true }));
     const worktree = buildGitActions(
-      createInput({ hasUncommittedChanges: true, isPaseoOwnedWorktree: true }),
+      createInput({ hasUncommittedChanges: true, isOsunaOwnedWorktree: true }),
     );
 
     expect(localCheckout.secondary.some((action) => action.id === "archive-workspace")).toBe(true);
@@ -435,7 +435,7 @@ describe("git-actions-policy", () => {
   });
 
   it("still promotes archive as primary for an idle Paseo-owned worktree", () => {
-    const actions = buildGitActions(createInput({ isPaseoOwnedWorktree: true }));
+    const actions = buildGitActions(createInput({ isOsunaOwnedWorktree: true }));
 
     expect(actions.primary).toMatchObject({ id: "archive-workspace" });
   });
@@ -1061,7 +1061,7 @@ describe("git-actions-policy", () => {
         pullRequestState: "open",
         pullRequestMergeable: "MERGEABLE",
         pullRequestGithub: githubStatus(),
-        isPaseoOwnedWorktree: true,
+        isOsunaOwnedWorktree: true,
       }),
     );
 

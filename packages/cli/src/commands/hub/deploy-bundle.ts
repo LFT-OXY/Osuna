@@ -3,9 +3,11 @@ import path from "node:path";
 import YAML from "yaml";
 import { HubCommandError } from "./error.js";
 
-const HUB_RESOURCE_PATH = ".paseo/hub.yml";
-const LEGACY_TOML_PATH = ".paseo/hub.toml";
-const WORKFLOW_DIRECTORY = ".paseo/workflows";
+const HUB_RESOURCE_PATH = ".osuna/hub.yml";
+// TOML was never a supported Osuna format; this guard turns a hand-written
+// `.osuna/hub.toml` into a clear error instead of a confusing "no bundle found".
+const UNSUPPORTED_TOML_PATH = ".osuna/hub.toml";
+const WORKFLOW_DIRECTORY = ".osuna/workflows";
 const PARTIAL_DIRECTORY = `${WORKFLOW_DIRECTORY}/partials`;
 const PROJECT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
@@ -28,7 +30,7 @@ interface DiscoverHubBundleInput {
 export async function discoverHubBundle(input: DiscoverHubBundleInput): Promise<HubDeployBundle> {
   const projectSlug = requireProjectSlug(input.project);
   const root = path.resolve(input.cwd);
-  await rejectLegacyToml(root);
+  await rejectUnsupportedToml(root);
   const resource = await readBundleFile(root, HUB_RESOURCE_PATH, {
     missingCode: "HUB_RESOURCE_MISSING",
     missingMessage: `${HUB_RESOURCE_PATH} does not exist. Run this command from the project root.`,
@@ -60,16 +62,16 @@ function requireProjectSlug(project: string | undefined): string {
   return project;
 }
 
-async function rejectLegacyToml(root: string): Promise<void> {
+async function rejectUnsupportedToml(root: string): Promise<void> {
   try {
-    await lstat(path.join(root, LEGACY_TOML_PATH));
+    await lstat(path.join(root, UNSUPPORTED_TOML_PATH));
   } catch (error) {
     if (errorCode(error) === "ENOENT") return;
-    throw unreadablePath(LEGACY_TOML_PATH);
+    throw unreadablePath(UNSUPPORTED_TOML_PATH);
   }
   throw new HubCommandError(
     "HUB_CONFIGURATION_EXTENSION_UNSUPPORTED",
-    `${LEGACY_TOML_PATH} is not supported. Use ${HUB_RESOURCE_PATH}.`,
+    `${UNSUPPORTED_TOML_PATH} is not supported. Use ${HUB_RESOURCE_PATH}.`,
   );
 }
 

@@ -79,7 +79,7 @@ export const createTempGitRepo = async (
   await writeFile(path.join(repoPath, "README.md"), "# Temp Repo\n");
   if (options?.paseoConfig) {
     await writeFile(
-      path.join(repoPath, "paseo.json"),
+      path.join(repoPath, "osuna.json"),
       JSON.stringify(options.paseoConfig, null, 2),
     );
   }
@@ -90,7 +90,7 @@ export const createTempGitRepo = async (
   }
   execSync("git add README.md", { cwd: repoPath, stdio: "ignore" });
   if (options?.paseoConfig) {
-    execSync("git add paseo.json", { cwd: repoPath, stdio: "ignore" });
+    execSync("git add osuna.json", { cwd: repoPath, stdio: "ignore" });
   }
   for (const file of options?.files ?? []) {
     execSync(`git add ${JSON.stringify(file.path)}`, { cwd: repoPath, stdio: "ignore" });
@@ -106,7 +106,7 @@ export const createTempGitRepo = async (
         stdio: "ignore",
       });
     }
-    const markerPath = `.paseo-e2e-${branch.replace(/[^a-zA-Z0-9._-]/g, "-")}.txt`;
+    const markerPath = `.osuna-e2e-${branch.replace(/[^a-zA-Z0-9._-]/g, "-")}.txt`;
     await writeFile(path.join(repoPath, markerPath), `branch ${branch}\n`);
     execSync(`git add ${JSON.stringify(markerPath)}`, { cwd: repoPath, stdio: "ignore" });
     execSync(`git commit -m ${JSON.stringify(`Add ${branch} marker`)}`, {

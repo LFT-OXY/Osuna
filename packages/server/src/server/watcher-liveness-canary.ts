@@ -15,7 +15,7 @@ export function createWatcherLivenessCanary(
   watchRoot: string,
   options: { timeoutMs?: number } = {},
 ): WatcherLivenessCanary {
-  const canaryPath = join(watchRoot, `.paseo-watcher-canary-${randomUUID()}`);
+  const canaryPath = join(watchRoot, `.osuna-watcher-canary-${randomUUID()}`);
   const timeoutMs = options.timeoutMs ?? WATCHER_LIVENESS_CANARY_TIMEOUT_MS;
   let reportCanary!: () => void;
   const reported = new Promise<void>((resolve) => {

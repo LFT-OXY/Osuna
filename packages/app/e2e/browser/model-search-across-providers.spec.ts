@@ -190,8 +190,8 @@ async function setRuntimeCatalog(client: DaemonClient, count: number, cwd: strin
 async function reloadSavedDraft(page: Page) {
   await page.evaluate(() =>
     localStorage.setItem(
-      "@paseo:e2e-disable-default-seed-once",
-      localStorage.getItem("@paseo:e2e-seed-nonce")!,
+      "@osuna:e2e-disable-default-seed-once",
+      localStorage.getItem("@osuna:e2e-seed-nonce")!,
     ),
   );
   await page.reload();

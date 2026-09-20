@@ -183,9 +183,9 @@ async function backupArtifacts(targets: SkillTargets): Promise<string[][]> {
       const rootEntries = await readdir(dir).catch(() => []);
       return [
         ...parentEntries.filter(
-          (entry) => entry !== path.basename(dir) && !entry.startsWith(".paseo-skills-recovered-"),
+          (entry) => entry !== path.basename(dir) && !entry.startsWith(".osuna-skills-recovered-"),
         ),
-        ...rootEntries.filter((entry) => entry.startsWith(".paseo-skills-transaction-")),
+        ...rootEntries.filter((entry) => entry.startsWith(".osuna-skills-transaction-")),
       ].sort();
     }),
   );
@@ -195,7 +195,7 @@ async function waitForTransactionDirectory(parent: string): Promise<void> {
   const events = watch(parent);
   try {
     for await (const event of events) {
-      if (event.filename?.startsWith(".paseo-skills-transaction-")) return;
+      if (event.filename?.startsWith(".osuna-skills-transaction-")) return;
     }
   } finally {
     await events.return?.();
@@ -606,7 +606,7 @@ describe("skills controller", () => {
       { kind: "delete", name: "paseo-loop" },
     ]);
     const codexStage = (await readdir(harness.targets.codexDir)).find((entry) =>
-      entry.startsWith(".paseo-skills-transaction-"),
+      entry.startsWith(".osuna-skills-transaction-"),
     );
     expect(codexStage).toBeDefined();
     await rm(path.join(harness.targets.codexDir, codexStage!, "paseo-loop"), {
@@ -644,7 +644,7 @@ describe("skills controller", () => {
 
     expect(await readFile(live, "utf8")).toBe("external replacement");
     const recovered = (await readdir(harness.targets.codexDir)).find((entry) =>
-      entry.startsWith(".paseo-skills-recovered-"),
+      entry.startsWith(".osuna-skills-recovered-"),
     );
     expect(recovered).toBeDefined();
     expect(
@@ -681,7 +681,7 @@ describe("skills controller", () => {
     expect(await readFile(path.join(live, "SKILL.md"), "utf8")).toBe("external skill");
     expect(await readFile(path.join(live, "notes", "mine.md"), "utf8")).toBe("external notes");
     const recovered = (await readdir(harness.targets.codexDir)).find((entry) =>
-      entry.startsWith(".paseo-skills-recovered-paseo-loop-"),
+      entry.startsWith(".osuna-skills-recovered-paseo-loop-"),
     );
     expect(recovered).toBeDefined();
     expect(
@@ -719,7 +719,7 @@ describe("skills controller", () => {
     expect(await readFile(replacedAdd, "utf8")).toBe("external add replacement");
     const recoveryParent = path.dirname(harness.targets.agentsDir);
     const recovered = (await readdir(recoveryParent)).find((entry) =>
-      entry.startsWith(".paseo-skills-recovered-paseo-"),
+      entry.startsWith(".osuna-skills-recovered-paseo-"),
     );
     expect(recovered).toBeDefined();
     expect(await readFile(path.join(recoveryParent, recovered!, "notes", "mine.md"), "utf8")).toBe(
@@ -748,7 +748,7 @@ describe("skills controller", () => {
     ]);
     const transactionParent = path.dirname(harness.targets.agentsDir);
     const transactionName = (await readdir(transactionParent)).find((entry) =>
-      entry.startsWith(".paseo-skills-transaction-"),
+      entry.startsWith(".osuna-skills-transaction-"),
     );
     expect(transactionName).toBeDefined();
     const transactionDir = path.join(transactionParent, transactionName!);
@@ -762,7 +762,7 @@ describe("skills controller", () => {
     const backup = path.join(transactionDir, entry!.backupPath!);
     const recovered = path.join(
       transactionParent,
-      `.paseo-skills-recovered-paseo-${transactionName!.replace(".paseo-skills-transaction-", "")}`,
+      `.osuna-skills-recovered-paseo-${transactionName!.replace(".osuna-skills-transaction-", "")}`,
     );
     await rm(entry!.livePath, { recursive: true, force: true });
     await writeFile(entry!.livePath, "external replacement");
@@ -797,7 +797,7 @@ describe("skills controller", () => {
 
     expect(await readFile(path.join(live, "external.md"), "utf8")).toBe("external directory");
     const recovered = (await readdir(path.dirname(harness.targets.agentsDir))).find((entry) =>
-      entry.startsWith(".paseo-skills-recovered-paseo-"),
+      entry.startsWith(".osuna-skills-recovered-paseo-"),
     );
     expect(recovered).toBeDefined();
     expect(
@@ -1030,7 +1030,7 @@ describe("skills controller", () => {
   it("does not delete an unrelated file that resembles transaction staging", async () => {
     const unrelated = path.join(
       path.dirname(harness.targets.agentsDir),
-      ".paseo-skills-transaction-my-notes",
+      ".osuna-skills-transaction-my-notes",
     );
     await mkdir(unrelated, { recursive: true });
     await writeFile(path.join(unrelated, "mine.md"), "keep me");

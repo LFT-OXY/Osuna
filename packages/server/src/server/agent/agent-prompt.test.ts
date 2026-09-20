@@ -158,7 +158,7 @@ function createFinishNotificationScenario(
         description: "Write the QA sentinel",
         input: {
           file_path: "/tmp/permission-qa.txt",
-          content: "PASEO_PERMISSION_NOTIFY_QA_OK\n",
+          content: "OSUNA_PERMISSION_NOTIFY_QA_OK\n",
         },
       });
       subscriber?.({
@@ -333,7 +333,7 @@ test("finish notifications survive permission responses", async () => {
       description: "Write the QA sentinel",
       input: {
         file_path: "/tmp/permission-qa.txt",
-        content: "PASEO_PERMISSION_NOTIFY_QA_OK\n",
+        content: "OSUNA_PERMISSION_NOTIFY_QA_OK\n",
       },
     },
   });

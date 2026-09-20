@@ -36,7 +36,7 @@ export async function verifyAttachedDaemonControls({ repo, root, env, home, port
         ...env,
         EXPO_NO_DOTENV: "1",
         CI: "1",
-        PASEO_WEB_PLATFORM: "electron",
+        OSUNA_WEB_PLATFORM: "electron",
         EXPO_PUBLIC_LOCAL_DAEMON: `127.0.0.1:${port}`,
       },
     },
@@ -64,13 +64,13 @@ export async function verifyAttachedDaemonControls({ repo, root, env, home, port
       env: {
         ...env,
         EXPO_DEV_URL: `http://127.0.0.1:${metroPort}`,
-        PASEO_DISABLE_SINGLE_INSTANCE_LOCK: "1",
-        PASEO_ELECTRON_USER_DATA_DIR: path.join(root, "renderer-user-data"),
+        OSUNA_DISABLE_SINGLE_INSTANCE_LOCK: "1",
+        OSUNA_ELECTRON_USER_DATA_DIR: path.join(root, "renderer-user-data"),
       },
     });
     page = await desktop.firstWindow();
     page.on("pageerror", (error) => console.log("Renderer error:", error.message));
-    await page.route(/:(6767|6768)\b/, (route) => route.abort());
+    await page.route(/:(6777|6778|6767|6768)\b/, (route) => route.abort());
     await page.getByRole("button", { name: "Settings", exact: true }).click({ timeout: 90_000 });
     await page.getByRole("button", { name: "Enable built-in daemon", exact: true }).click();
     await expect(page.getByText("Attached to an existing daemon", { exact: true })).toBeVisible();

@@ -13,34 +13,34 @@ describe("provider Paseo-tool policy", () => {
       disabledTools: ["future_tool", "browser_future_tool"],
     });
     expect(ProviderPaseoToolsPolicySchema.parse({})).toEqual({});
-    expect(ProviderOverrideSchema.parse({}).paseoTools).toBeUndefined();
+    expect(ProviderOverrideSchema.parse({}).osunaTools).toBeUndefined();
   });
 
-  test("accepts paseoTools on persisted provider overrides", () => {
+  test("accepts osunaTools on persisted provider overrides", () => {
     expect(
       ProviderOverrideSchema.parse({
         extends: "claude",
-        paseoTools: {
+        osunaTools: {
           enabled: false,
           disabledTools: ["create_workspace"],
         },
-      }).paseoTools,
+      }).osunaTools,
     ).toEqual({
       enabled: false,
       disabledTools: ["create_workspace"],
     });
   });
 
-  test("accepts paseoTools when reading and patching mutable daemon providers", () => {
+  test("accepts osunaTools when reading and patching mutable daemon providers", () => {
     expect(
       MutableDaemonConfigSchema.parse({
         mcp: { injectIntoAgents: true },
         providers: {
           codex: {
-            paseoTools: { enabled: false, disabledTools: ["future_tool"] },
+            osunaTools: { enabled: false, disabledTools: ["future_tool"] },
           },
         },
-      }).providers.codex?.paseoTools,
+      }).providers.codex?.osunaTools,
     ).toEqual({
       enabled: false,
       disabledTools: ["future_tool"],
@@ -50,10 +50,10 @@ describe("provider Paseo-tool policy", () => {
       MutableDaemonConfigPatchSchema.parse({
         providers: {
           codex: {
-            paseoTools: { disabledTools: ["browser_future_tool"] },
+            osunaTools: { disabledTools: ["browser_future_tool"] },
           },
         },
-      }).providers?.codex?.paseoTools,
+      }).providers?.codex?.osunaTools,
     ).toEqual({ disabledTools: ["browser_future_tool"] });
   });
 });

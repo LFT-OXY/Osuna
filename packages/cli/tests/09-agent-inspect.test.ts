@@ -49,7 +49,7 @@ try {
   {
     console.log("Test 2: inspect requires id argument");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} inspect`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} inspect`.nothrow();
     assert.notStrictEqual(result.exitCode, 0, "should fail without id");
     const output = result.stdout + result.stderr;
     // Commander should complain about missing argument
@@ -65,7 +65,7 @@ try {
   {
     console.log("Test 3: inspect handles daemon not running");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} inspect abc123`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} inspect abc123`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -81,7 +81,7 @@ try {
   {
     console.log("Test 4: inspect --host flag is accepted");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna inspect --host localhost:${port} abc123`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna inspect --host localhost:${port} abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --host flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -92,7 +92,7 @@ try {
   {
     console.log("Test 5: -q (quiet) flag is accepted with inspect");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} -q inspect abc123`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} -q inspect abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -q flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -103,7 +103,7 @@ try {
   {
     console.log("Test 6: --json flag is accepted with inspect");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} inspect abc123 --json`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} inspect abc123 --json`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --json flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -114,7 +114,7 @@ try {
   {
     console.log("Test 7: --format yaml flag is accepted with inspect");
     const result =
-      await $`PASEO_HOME=${paseoHome} npx osuna --host localhost:${port} --format yaml inspect abc123`.nothrow();
+      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} --format yaml inspect abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --format yaml flag");
     assert(!output.includes("error: option"), "should not have option parsing error");

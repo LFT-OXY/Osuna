@@ -51,7 +51,7 @@ import {
 } from "./types.js";
 
 export const DEFAULT_USAGE_SCAN_INTERVAL_MS = 60_000;
-const SCAN_INTERVAL_ENV = "PASEO_USAGE_SCAN_INTERVAL_MS";
+const SCAN_INTERVAL_ENV = "OSUNA_USAGE_SCAN_INTERVAL_MS";
 
 /** How long a file must stay untouched before an unfinished turn is settled. */
 const IDLE_TURN_SETTLE_MS = 10 * 60 * 1000;

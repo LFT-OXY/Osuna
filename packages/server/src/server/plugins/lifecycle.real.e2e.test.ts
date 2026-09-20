@@ -199,7 +199,7 @@ test.skipIf(process.platform !== "linux")(
       proof.deniedRequestId = deniedId;
       proof.canaryPreserved = true;
 
-      const envCommand = 'printf \'%s|%s\' "$PASEO_HOOK_CREATE_EXAMPLE" "$PASEO_HOOK_OPEN_EXAMPLE"';
+      const envCommand = 'printf \'%s|%s\' "$OSUNA_HOOK_CREATE_EXAMPLE" "$OSUNA_HOOK_OPEN_EXAMPLE"';
       await client.sendMessage(
         agent.id,
         `Call Bash with exactly this command: ${envCommand}. Reply with its exact output only.`,

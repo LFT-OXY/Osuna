@@ -101,7 +101,7 @@ async function expectContextAfterWorkspaceRestore(legacyNativeArchive: boolean):
 }
 
 // Opt in: real Codex requests using local authentication.
-test.runIf(process.env.PASEO_NATIVE_ARCHIVE_QA === "1").each([false, true])(
+test.runIf(process.env.OSUNA_NATIVE_ARCHIVE_QA === "1").each([false, true])(
   "Codex recalls context after workspace restore (legacy native archive: %s)",
   async (legacyNativeArchive) => {
     await expectContextAfterWorkspaceRestore(legacyNativeArchive);

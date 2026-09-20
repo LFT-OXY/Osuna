@@ -242,12 +242,12 @@ async function startRestartDaemon(input: {
     cwd: serverDir,
     env: withDisabledE2ESpeechEnv({
       ...process.env,
-      PASEO_HOME: input.paseoHome,
-      PASEO_SERVER_ID: SERVER_ID,
-      PASEO_LISTEN: `127.0.0.1:${port}`,
-      PASEO_CORS_ORIGINS: input.origin,
-      PASEO_RELAY_ENABLED: "0",
-      PASEO_NODE_ENV: "development",
+      OSUNA_HOME: input.paseoHome,
+      OSUNA_SERVER_ID: SERVER_ID,
+      OSUNA_LISTEN: `127.0.0.1:${port}`,
+      OSUNA_CORS_ORIGINS: input.origin,
+      OSUNA_RELAY_ENABLED: "0",
+      OSUNA_NODE_ENV: "development",
       NODE_ENV: "development",
     }),
     stdio: ["ignore", "ignore", "pipe"],
@@ -327,10 +327,10 @@ async function seedBrowserForDaemon(page: Page, input: { serverId: string; port:
   });
   await page.evaluate(
     ({ daemon, preferences }) => {
-      localStorage.setItem("@paseo:e2e", "1");
-      localStorage.setItem("@paseo:daemon-registry", JSON.stringify([daemon]));
-      localStorage.removeItem("@paseo:settings");
-      localStorage.setItem("@paseo:create-agent-preferences", JSON.stringify(preferences));
+      localStorage.setItem("@osuna:e2e", "1");
+      localStorage.setItem("@osuna:daemon-registry", JSON.stringify([daemon]));
+      localStorage.removeItem("@osuna:settings");
+      localStorage.setItem("@osuna:create-agent-preferences", JSON.stringify(preferences));
     },
     {
       daemon: host,

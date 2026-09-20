@@ -19,7 +19,7 @@ describe("git command trace", () => {
     const directory = await mkdtemp(path.join(tmpdir(), "paseo-git-trace-"));
     tempDirectories.push(directory);
     const tracePath = path.join(directory, "git.jsonl");
-    vi.stubEnv("PASEO_GIT_TRACE_FILE", tracePath);
+    vi.stubEnv("OSUNA_GIT_TRACE_FILE", tracePath);
 
     await runGitCommand(["--version"], { cwd: directory });
     await flushGitCommandTrace();

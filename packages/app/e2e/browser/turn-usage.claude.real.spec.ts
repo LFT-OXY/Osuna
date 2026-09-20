@@ -26,8 +26,8 @@ test.use({
     CLAUDE_CONFIG_DIR: claudeConfigDirectory,
     // The footer waits on `usage.updated`; a one-second scan keeps that wait
     // inside a test's patience instead of the default idle cadence.
-    PASEO_USAGE_SCAN_INTERVAL_MS: "1000",
-    PASEO_USAGE_PRICING_AUTO_UPDATE: "0",
+    OSUNA_USAGE_SCAN_INTERVAL_MS: "1000",
+    OSUNA_USAGE_PRICING_AUTO_UPDATE: "0",
   },
 });
 

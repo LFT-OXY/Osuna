@@ -1,4 +1,4 @@
-import { resolvePaseoHome } from "../src/server/paseo-home.js";
+import { resolvePaseoHome } from "../src/server/osuna-home.js";
 import { createRootLogger } from "../src/server/logger.js";
 import {
   DEFAULT_LOCAL_STT_MODEL,
@@ -9,7 +9,7 @@ import {
 
 function parseArgs(argv: string[]): { modelsDir: string; modelIds: LocalSpeechModelId[] } {
   const home = resolvePaseoHome();
-  let modelsDir = process.env.PASEO_LOCAL_MODELS_DIR || `${home}/models/local-speech`;
+  let modelsDir = process.env.OSUNA_LOCAL_MODELS_DIR || `${home}/models/local-speech`;
   const modelIds: LocalSpeechModelId[] = [];
 
   for (let i = 0; i < argv.length; i++) {

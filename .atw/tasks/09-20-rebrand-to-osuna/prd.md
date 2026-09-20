@@ -88,6 +88,18 @@ README 外链策略：Osuna 没有域名、社群、ghcr 镜像与 skills 源，
 | dev 端口（`package.json:39,42,93`、`scripts/dev-daemon.sh:9`） | `6768` | `6778`（同时避开本机 Orca 占用） |
 | dev home | `.dev/paseo-home` | `.dev/osuna-home` |
 | nix 打包（`nix/package.nix`、`nix/module.nix`、`flake.nix`） | `pname: paseo`、`bin/paseo`、`bin/paseo-server`、`bin/paseo-desktop`、`mainProgram`、`homepage`、flake 输出名、`services.paseo`、service user/group | 对应 `osuna*`、`services.osuna`、`LFT-OXY/Osuna` |
+| 项目配置文件（用户仓库根目录） | `paseo.json` | `osuna.json`（含 9 个语言文件里约 56 条提示这个文件名的 UI 文案，以及本仓库自己的那份） |
+| docker 容器身份 | user/group `paseo`、`/home/paseo`、`paseo-docker-entrypoint`、compose 服务名与镜像名 | 对应 `osuna*`、`ghcr.io/lft-oxy/osuna` |
+| app 持久化键 | `@paseo:*`（`daemon-registry`、`settings`、`app-settings`、`create-agent-preferences`、`review-draft-store` 等 21 个） | `@osuna:*` |
+| git 自动 stash 前缀 | `paseo-auto-stash:` | `osuna-auto-stash:`（代价见「不改」一节） |
+| wire schema 标识符 | 消息 `type`（`paseo_worktree_*_request/response`、`create_paseo_worktree_*`）、字段名（`isPaseoOwnedWorktree`、`paseoTools`）、WS 子协议 `paseo.bearer.*` | 对应 `osuna*`（见下方规则） |
+
+**wire 标识符的批次归属规则**：wire schema 标识符（消息 `type` 字面量、序列化后的字段名、
+WebSocket 子协议）归本批次；TypeScript 导出名（`PaseoWorktreeListRequestSchema` 这类
+schema/type/函数名）与 agent 可见的 MCP 工具名（`paseo_list_worktrees` 等）归批次 4。
+理由：前者是跨版本契约，`docs/protocol-compatibility.md` 新增的「首发前唯一窗口」一节
+说明了为什么必须在首个 tag 之前一次改完；后者只是本地标识符，晚改不产生协议锁定。
+`paseoTools` 同时也是持久化的 daemon provider 配置键，同一个窗口一起改。
 
 nix 归到本批次而非批次 1：待改内容大半是运行时标识（service user/group、
 StateDirectory、源过滤里的 `.paseo`、端口、`PASEO_*`），CLI wrapper 名与 flake 输出名
@@ -144,6 +156,12 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
   Windows 的 `.cmd` 设。这是上游 commit `0110302b6` 造成的既有不对称（已安装的 0.8.0
   产物里 POSIX shim 还带着它，说明是上游发版后的回归）。重命名如实保留 HEAD 状态；
   要不要补回来是独立的 daemon 行为问题，不在本改名任务内。
+- **旧的 `paseo-auto-stash:` stash 条目不再在 Osuna 界面里可见。** 批次 2 把前缀改成
+  `osuna-auto-stash:`，而 `WorkspaceGitService.listStashes` 默认只列前缀匹配的条目
+  （`paseoOnly` 默认 true）。6767 上那个上游 daemon 过去自动 stash 出来的条目写在**用户
+  真实 git 仓库**里，改名后 Osuna 不显示、也不提供一键恢复。它们没有丢：`git stash list`
+  仍能看到，`git stash apply` 仍能取回。选择保持改名而不是双前缀读取，是为了守住「不保留
+  任何读取旧名的兼容路径」这条前提；代价记在这里，不是默默接受。
 - scheme 字面量没有单一 owner（`agent-deep-link.ts` / desktop `APP_SCHEME` /
   server CORS / `app.config.js` / `electron-builder.yml` 各自硬编码）、app 与 server
   诊断脱敏链重复、`cli-install/paths.ts` 的重复三元表达式 —— 都是改名前就存在的结构，
@@ -186,6 +204,22 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
    - `packages/website/src/latest-release.ts`、`downloads.tsx` 里的 `Paseo-Setup-*`
      产物名正则与 `sh.paseo`（website 本批次移出 workspace，一并处理）
    - `fastlane/metadata/` 按「删」处理
+   **批次 2 又让下列文档事实失效**：
+   - `SECURITY.md` 的 `PASEO_PASSWORD` 与 `Sec-WebSocket-Protocol: paseo.bearer.<password>`
+     —— 后者是 daemon 现在会直接拒绝的子协议，安全文档描述了一个不存在的认证机制
+   - `docs/` 各篇里的 `PASEO_*` 环境变量、`~/.paseo`、`.dev/paseo-home`、`.paseo/`、
+     6767/6768、`paseo.json`、`isPaseoOwnedWorktree`
+   - `public-docs/` 同上（`docker.md`、`configuration.md`、`cli.md`、`web-ui.md`、
+     `troubleshooting.md`、`hub/**`、`worktrees.md`、`voice.md` 等）
+   - `skills/paseo-help/SKILL.md` 与 `skills/paseo/SKILL.md` 的 `PASEO_HOME`、`~/.paseo`、
+     安装路径（这两个目录本身由批次 3 改名）
+   - `docs/development.md` 指向 `packages/server/src/server/paseo-home.ts`，该文件已改名
+     `osuna-home.ts`
+   - i18n 的产品名文案：`appName: "Paseo"`、`paseo: "Paseo"`（作为 StatusBadge 渲染）等
+     与批次 2 已改的 `osuna.json` 文案同处一文件，现在互相矛盾
+   - `docs/data-model.md` 的 `isPaseoOwnedWorktree` 字段表、`@paseo:review-draft-store` 键名
+   注：`.atw/spec/**` 与 `CLAUDE.md` 里的同类事实不归本批次 —— 它们是各批次 spec 回写
+   环节自己的责任，批次 1 与 2 已各自更新过。
 5. **签名配置与发布演练** — 关公证、改 workflow、推测试 tag 走一遍 GitHub Release。
    验收：Release 产出可下载、可安装、能被 electron-updater 识别；顺带在 Linux 产物里
    核对批次 1 的 `maintainer: chinhae <autuhae@gmail.com>`。

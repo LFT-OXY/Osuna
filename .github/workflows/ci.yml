@@ -215,7 +215,7 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: xvfb-run -a --server-args="-screen 0 1280x800x24" npm run test:e2e:lifecycle --workspace=@osuna/desktop
         env:
-          PASEO_DESKTOP_LIFECYCLE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-lifecycle
+          OSUNA_DESKTOP_LIFECYCLE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-lifecycle
 
       - name: Upload desktop lifecycle screenshots
         uses: actions/upload-artifact@v4
@@ -238,7 +238,7 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: npm run test:e2e:browser-tabs --workspace=@osuna/desktop
         env:
-          PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR: ${{ runner.temp }}/desktop-browser-e2e
+          OSUNA_DESKTOP_BROWSER_E2E_ARTIFACT_DIR: ${{ runner.temp }}/desktop-browser-e2e
 
       - name: Upload desktop browser diagnostics
         uses: actions/upload-artifact@v4
@@ -430,11 +430,11 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.cli != 'false') }}
     runs-on: ubuntu-latest
     env:
-      PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
-      PASEO_DICTATION_ENABLED: "0"
-      PASEO_VOICE_MODE_ENABLED: "0"
-      PASEO_CLI_TEST_SHARD: "1"
-      PASEO_CLI_TEST_SHARD_TOTAL: "3"
+      OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
+      OSUNA_DICTATION_ENABLED: "0"
+      OSUNA_VOICE_MODE_ENABLED: "0"
+      OSUNA_CLI_TEST_SHARD: "1"
+      OSUNA_CLI_TEST_SHARD_TOTAL: "3"
     steps: &cli_test_steps
       - uses: actions/checkout@v4
 
@@ -453,10 +453,10 @@ jobs:
       - name: Run CLI E2E tests
         run: npm run test:local --workspace=@osuna/cli
 
-      # Source tests do not read PASEO_CLI_TEST_SHARD. Run them once, on the
+      # Source tests do not read OSUNA_CLI_TEST_SHARD. Run them once, on the
       # shortest E2E shard, after its runner has built the server stack.
       - name: Run CLI source tests
-        if: ${{ env.PASEO_CLI_TEST_SHARD == '3' }}
+        if: ${{ env.OSUNA_CLI_TEST_SHARD == '3' }}
         run: npm run test:unit --workspace=@osuna/cli
 
   cli-tests-2:
@@ -465,11 +465,11 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.cli != 'false') }}
     runs-on: ubuntu-latest
     env:
-      PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
-      PASEO_DICTATION_ENABLED: "0"
-      PASEO_VOICE_MODE_ENABLED: "0"
-      PASEO_CLI_TEST_SHARD: "2"
-      PASEO_CLI_TEST_SHARD_TOTAL: "3"
+      OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
+      OSUNA_DICTATION_ENABLED: "0"
+      OSUNA_VOICE_MODE_ENABLED: "0"
+      OSUNA_CLI_TEST_SHARD: "2"
+      OSUNA_CLI_TEST_SHARD_TOTAL: "3"
     steps: *cli_test_steps
 
   cli-tests-3:
@@ -478,9 +478,9 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.cli != 'false') }}
     runs-on: ubuntu-latest
     env:
-      PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
-      PASEO_DICTATION_ENABLED: "0"
-      PASEO_VOICE_MODE_ENABLED: "0"
-      PASEO_CLI_TEST_SHARD: "3"
-      PASEO_CLI_TEST_SHARD_TOTAL: "3"
+      OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
+      OSUNA_DICTATION_ENABLED: "0"
+      OSUNA_VOICE_MODE_ENABLED: "0"
+      OSUNA_CLI_TEST_SHARD: "3"
+      OSUNA_CLI_TEST_SHARD_TOTAL: "3"
     steps: *cli_test_steps

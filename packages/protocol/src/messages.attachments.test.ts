@@ -356,7 +356,7 @@ describe("shared messages attachments", () => {
 
   it("keeps known firstAgentContext attachments and drops unknown ones", () => {
     const parsed = CreatePaseoWorktreeRequestSchema.parse({
-      type: "create_paseo_worktree_request",
+      type: "create_osuna_worktree_request",
       requestId: "req-3",
       cwd: "/tmp/repo",
       firstAgentContext: {
@@ -392,13 +392,13 @@ describe("shared messages attachments", () => {
 
   it("parses worktree-create payloads without a firstAgentContext", () => {
     const parsed = CreatePaseoWorktreeRequestSchema.parse({
-      type: "create_paseo_worktree_request",
+      type: "create_osuna_worktree_request",
       requestId: "req-4",
       cwd: "/tmp/repo",
     });
 
     expect(parsed).toEqual({
-      type: "create_paseo_worktree_request",
+      type: "create_osuna_worktree_request",
       requestId: "req-4",
       cwd: "/tmp/repo",
     });
@@ -406,7 +406,7 @@ describe("shared messages attachments", () => {
 
   it("accepts and strips create-worktree intent fields compatibly", () => {
     const parsed = CreatePaseoWorktreeRequestSchema.parse({
-      type: "create_paseo_worktree_request",
+      type: "create_osuna_worktree_request",
       requestId: "req-5",
       cwd: "/tmp/repo",
       action: "checkout",
@@ -416,7 +416,7 @@ describe("shared messages attachments", () => {
     });
 
     expect(parsed).toEqual({
-      type: "create_paseo_worktree_request",
+      type: "create_osuna_worktree_request",
       requestId: "req-5",
       cwd: "/tmp/repo",
       action: "checkout",

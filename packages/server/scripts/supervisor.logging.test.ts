@@ -104,7 +104,7 @@ async function runSupervisorFixture(options: {
 
 describe("supervisor durable logging", () => {
   test("resolves rotation defaults", () => {
-    const paseoHome = path.join(path.sep, "tmp", "paseo-home");
+    const paseoHome = path.join(path.sep, "tmp", "osuna-home");
     const logFile = resolveSupervisorLogFile(paseoHome, {}, {});
 
     expect(logFile).toEqual({
@@ -114,7 +114,7 @@ describe("supervisor durable logging", () => {
   });
 
   test("lets persisted rotation override env rotation defaults", () => {
-    const paseoHome = path.join(path.sep, "tmp", "paseo-home");
+    const paseoHome = path.join(path.sep, "tmp", "osuna-home");
     const logFile = resolveSupervisorLogFile(
       paseoHome,
       {
@@ -126,8 +126,8 @@ describe("supervisor durable logging", () => {
         },
       },
       {
-        PASEO_LOG_ROTATE_SIZE: "200m",
-        PASEO_LOG_ROTATE_COUNT: "12",
+        OSUNA_LOG_ROTATE_SIZE: "200m",
+        OSUNA_LOG_ROTATE_COUNT: "12",
       },
     );
 
@@ -138,13 +138,13 @@ describe("supervisor durable logging", () => {
   });
 
   test("uses env rotation when persisted rotation is absent", () => {
-    const paseoHome = path.join(path.sep, "tmp", "paseo-home");
+    const paseoHome = path.join(path.sep, "tmp", "osuna-home");
     const logFile = resolveSupervisorLogFile(
       paseoHome,
       {},
       {
-        PASEO_LOG_ROTATE_SIZE: "50m",
-        PASEO_LOG_ROTATE_COUNT: "8",
+        OSUNA_LOG_ROTATE_SIZE: "50m",
+        OSUNA_LOG_ROTATE_COUNT: "8",
       },
     );
 

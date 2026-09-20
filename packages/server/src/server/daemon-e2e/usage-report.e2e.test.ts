@@ -387,7 +387,7 @@ describe("usage row files", () => {
     const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
     homes.push(paseoHomeRoot, staticDir);
-    const usageDir = path.join(paseoHomeRoot, ".paseo", "usage");
+    const usageDir = path.join(paseoHomeRoot, ".osuna", "usage");
     await mkdir(usageDir, { recursive: true });
     const bucket = "2026-03-04T09:30:00.000Z";
     const row = (model: string, output: number) => ({
@@ -459,7 +459,7 @@ describe("usage row files", () => {
     const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
     homes.push(paseoHomeRoot, staticDir);
-    const usageDir = path.join(paseoHomeRoot, ".paseo", "usage");
+    const usageDir = path.join(paseoHomeRoot, ".osuna", "usage");
     await mkdir(usageDir, { recursive: true });
     const increment = (turnKey: string, output: number, lastAt: string) => ({
       cli: "claude",

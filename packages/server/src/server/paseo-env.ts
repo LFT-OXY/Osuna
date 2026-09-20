@@ -1,10 +1,10 @@
-const PASEO_NODE_ENV = "PASEO_NODE_ENV";
+const OSUNA_NODE_ENV = "OSUNA_NODE_ENV";
 const ELECTRON_RUN_AS_NODE = "ELECTRON_RUN_AS_NODE";
 
 const RUNTIME_CONTROL_ENV_KEYS = [
-  PASEO_NODE_ENV,
-  "PASEO_DESKTOP_MANAGED",
-  "PASEO_SUPERVISED",
+  OSUNA_NODE_ENV,
+  "OSUNA_DESKTOP_MANAGED",
+  "OSUNA_SUPERVISED",
   ELECTRON_RUN_AS_NODE,
   "ELECTRON_NO_ATTACH_CONSOLE",
   "ESBUILD_BINARY_PATH",
@@ -77,6 +77,6 @@ export function buildSelfNodeCommand(
 }
 
 export function resolvePaseoNodeEnv(env: NodeJS.ProcessEnv): PaseoNodeEnv | undefined {
-  const value = env[PASEO_NODE_ENV];
+  const value = env[OSUNA_NODE_ENV];
   return value === "development" || value === "production" || value === "test" ? value : undefined;
 }

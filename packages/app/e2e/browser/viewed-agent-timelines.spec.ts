@@ -120,7 +120,7 @@ async function observeToastReplacement(page: Page) {
 async function countChatCommits(page: Page, agentId: string) {
   return page.evaluate(
     (id) =>
-      (globalThis.__PASEO_RENDER_PROFILE__ ?? []).filter(
+      (globalThis.__OSUNA_RENDER_PROFILE__ ?? []).filter(
         (sample) => sample.id === `AgentStreamSection:${id}`,
       ).length,
     agentId,

@@ -67,7 +67,7 @@ export async function bootstrapWorkspaceRegistries(options: {
   for (const workspace of await options.workspaceRegistry.list()) {
     if (
       workspace.archivedAt ||
-      !workspace.isPaseoOwnedWorktree ||
+      !workspace.isOsunaOwnedWorktree ||
       !workspace.worktreeRoot ||
       !workspace.branch
     ) {

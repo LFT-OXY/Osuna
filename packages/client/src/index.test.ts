@@ -472,7 +472,7 @@ test("agent actions list the daemon directory without exposing the low-level cli
                 isGit: false,
                 currentBranch: null,
                 remoteUrl: null,
-                isPaseoOwnedWorktree: false,
+                isOsunaOwnedWorktree: false,
                 mainRepoRoot: null,
               },
             },
@@ -1664,7 +1664,7 @@ test("canceled timeline handles and captured state are collectible while their A
     for (const result of Object.values(disposed)) assert.deepEqual(result, { handles: 0, states: 0 });
   `;
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !/^(PASEO_|EXPO_|E2E_|AGENT_BROWSER_)/.test(key)),
+    Object.entries(process.env).filter(([key]) => !/^(OSUNA_|EXPO_|E2E_|AGENT_BROWSER_)/.test(key)),
   );
   const result = await promisify(execFile)(
     process.execPath,

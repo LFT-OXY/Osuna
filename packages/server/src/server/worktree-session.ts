@@ -188,7 +188,7 @@ interface HandleCreatePaseoWorktreeRequestDependencies {
 }
 
 function normalizeFirstAgentContext(
-  request: Extract<SessionInboundMessage, { type: "create_paseo_worktree_request" }>,
+  request: Extract<SessionInboundMessage, { type: "create_osuna_worktree_request" }>,
 ): FirstAgentContext | undefined {
   if (request.firstAgentContext) {
     return request.firstAgentContext;
@@ -414,13 +414,13 @@ export async function handlePaseoWorktreeListRequest(
     paseoHome?: string;
     workspaceGitService: WorkspaceGitService;
   },
-  msg: Extract<SessionInboundMessage, { type: "paseo_worktree_list_request" }>,
+  msg: Extract<SessionInboundMessage, { type: "osuna_worktree_list_request" }>,
 ): Promise<void> {
   const { requestId } = msg;
   const cwd = msg.repoRoot ?? msg.cwd;
   if (!cwd) {
     dependencies.emit({
-      type: "paseo_worktree_list_response",
+      type: "osuna_worktree_list_response",
       payload: {
         worktrees: [],
         error: { code: "UNKNOWN", message: "cwd or repoRoot is required" },
@@ -436,7 +436,7 @@ export async function handlePaseoWorktreeListRequest(
       { cwd },
     );
     dependencies.emit({
-      type: "paseo_worktree_list_response",
+      type: "osuna_worktree_list_response",
       payload: {
         worktrees: worktrees.map((entry) => ({
           worktreePath: entry.path,
@@ -450,7 +450,7 @@ export async function handlePaseoWorktreeListRequest(
     });
   } catch (error) {
     dependencies.emit({
-      type: "paseo_worktree_list_response",
+      type: "osuna_worktree_list_response",
       payload: {
         worktrees: [],
         error: toCheckoutError(error),
@@ -469,7 +469,7 @@ export async function handlePaseoWorktreeArchiveRequest(
     workspaceGitService: Pick<WorkspaceGitService, "getSnapshot" | "listWorktrees">;
     emitWorkspaceUpdatesForWorkspaceIds: (workspaceIds: Iterable<string>) => Promise<void>;
   },
-  msg: Extract<SessionInboundMessage, { type: "paseo_worktree_archive_request" }>,
+  msg: Extract<SessionInboundMessage, { type: "osuna_worktree_archive_request" }>,
 ): Promise<void> {
   const { requestId } = msg;
 
@@ -484,7 +484,7 @@ export async function handlePaseoWorktreeArchiveRequest(
     });
     if (!result.ok) {
       dependencies.emit({
-        type: "paseo_worktree_archive_response",
+        type: "osuna_worktree_archive_response",
         payload: {
           success: false,
           removedAgents: result.removedAgents,
@@ -499,7 +499,7 @@ export async function handlePaseoWorktreeArchiveRequest(
     }
 
     dependencies.emit({
-      type: "paseo_worktree_archive_response",
+      type: "osuna_worktree_archive_response",
       payload: {
         success: true,
         removedAgents: result.removedAgents,
@@ -509,7 +509,7 @@ export async function handlePaseoWorktreeArchiveRequest(
     });
   } catch (error) {
     dependencies.emit({
-      type: "paseo_worktree_archive_response",
+      type: "osuna_worktree_archive_response",
       payload: {
         success: false,
         removedAgents: [],
@@ -522,7 +522,7 @@ export async function handlePaseoWorktreeArchiveRequest(
 
 export async function handleCreatePaseoWorktreeRequest(
   dependencies: HandleCreatePaseoWorktreeRequestDependencies,
-  request: Extract<SessionInboundMessage, { type: "create_paseo_worktree_request" }>,
+  request: Extract<SessionInboundMessage, { type: "create_osuna_worktree_request" }>,
 ): Promise<void> {
   try {
     const commandResult = await createPaseoWorktreeCommand(
@@ -549,7 +549,7 @@ export async function handleCreatePaseoWorktreeRequest(
         "Failed to create worktree",
       );
       dependencies.emit({
-        type: "create_paseo_worktree_response",
+        type: "create_osuna_worktree_response",
         payload: {
           workspace: null,
           error: commandResult.error.message,
@@ -564,7 +564,7 @@ export async function handleCreatePaseoWorktreeRequest(
     const createdWorktree = commandResult.createdWorktree;
     const descriptor = await dependencies.describeWorkspaceRecord(createdWorktree);
     dependencies.emit({
-      type: "create_paseo_worktree_response",
+      type: "create_osuna_worktree_response",
       payload: {
         workspace: descriptor,
         error: null,
@@ -593,7 +593,7 @@ export async function handleCreatePaseoWorktreeRequest(
       "Failed to create worktree",
     );
     dependencies.emit({
-      type: "create_paseo_worktree_response",
+      type: "create_osuna_worktree_response",
       payload: {
         workspace: null,
         error: wireError.message,

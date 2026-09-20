@@ -36,21 +36,21 @@ const server = createServer((request, response) => {
 });
 
 try {
-  const workflows = path.join(cwd, ".paseo", "workflows");
+  const workflows = path.join(cwd, ".osuna", "workflows");
   await mkdir(path.join(workflows, "partials"), { recursive: true });
   const files = [
     {
-      path: ".paseo/hub.yml",
+      path: ".osuna/hub.yml",
       content:
         "environments:\n  studio:\n    kind: daemon\n    daemon: local\n    cwd: /workspace\nagents:\n  codex-safe:\n    provider: codex\n    options:\n      sandbox_workspace_write:\n        writable_roots: [/var/cache/npm]\n        network_access: false\n",
     },
     {
-      path: ".paseo/workflows/run.yml",
+      path: ".osuna/workflows/run.yml",
       content:
         "name: run\non: manual.run\nmax_runtime: 1h\ninputs:\n  repo:\n    type: string\n    choices: [studio]\n  agent:\n    type: string\n    choices: [codex-safe]\nsteps:\n  - id: work\n    environment: ${{ paseo.inputs.repo }}\n    max_runtime: 30m\n    idle_timeout: 5m\n    agent: ${{ paseo.inputs.agent }}\n    prompt:\n      - include: partials/instructions.md\n      - text: ${{ paseo.prompt }}\n",
     },
     {
-      path: ".paseo/workflows/partials/instructions.md",
+      path: ".osuna/workflows/partials/instructions.md",
       content: "Keep structured provider options unchanged.\n",
     },
   ];

@@ -408,7 +408,7 @@ export class FakePiSession implements PiRuntimeSession {
       type: "extension_ui_request",
       id: `submitted-user-${entry.id}`,
       method: "notify",
-      message: `PASEO_SUBMITTED_USER_ENTRY ${JSON.stringify({ entry })}`,
+      message: `OSUNA_SUBMITTED_USER_ENTRY ${JSON.stringify({ entry })}`,
     });
   }
 
@@ -450,7 +450,7 @@ export class FakePiSession implements PiRuntimeSession {
       type: "extension_ui_request",
       id: `capture-${requestId ?? reason}`,
       method: "notify",
-      message: `PASEO_ENTRY_CAPTURE ${JSON.stringify({
+      message: `OSUNA_ENTRY_CAPTURE ${JSON.stringify({
         reason,
         requestId,
         entries: this.capturedUserEntries,
@@ -466,7 +466,7 @@ export class FakePiSession implements PiRuntimeSession {
       type: "extension_ui_request",
       id: `command-${requestId}`,
       method: "notify",
-      message: `PASEO_COMMAND_RESULT ${JSON.stringify({ requestId, ...result })}`,
+      message: `OSUNA_COMMAND_RESULT ${JSON.stringify({ requestId, ...result })}`,
     });
   }
 }

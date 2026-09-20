@@ -2849,11 +2849,11 @@ export class Session {
         return this.handleFetchWorkspacesRequest(msg);
       case "project.list.request":
         return this.handleProjectListRequest(msg);
-      case "paseo_worktree_list_request":
+      case "osuna_worktree_list_request":
         return this.handlePaseoWorktreeListRequest(msg);
-      case "paseo_worktree_archive_request":
+      case "osuna_worktree_archive_request":
         return this.handlePaseoWorktreeArchiveRequest(msg);
-      case "create_paseo_worktree_request":
+      case "create_osuna_worktree_request":
         return this.handleCreatePaseoWorktreeRequest(msg);
       // COMPAT(desktopEditorBridge): added in v0.1.88, remove after 2026-12-03 once old clients no longer call daemon editor RPCs.
       case "list_available_editors_request":
@@ -5119,7 +5119,7 @@ export class Session {
   }
 
   private async handlePaseoWorktreeListRequest(
-    msg: Extract<SessionInboundMessage, { type: "paseo_worktree_list_request" }>,
+    msg: Extract<SessionInboundMessage, { type: "osuna_worktree_list_request" }>,
   ): Promise<void> {
     return handleWorktreeListRequest(
       {
@@ -5132,7 +5132,7 @@ export class Session {
   }
 
   private async handlePaseoWorktreeArchiveRequest(
-    msg: Extract<SessionInboundMessage, { type: "paseo_worktree_archive_request" }>,
+    msg: Extract<SessionInboundMessage, { type: "osuna_worktree_archive_request" }>,
   ): Promise<void> {
     return handleWorktreeArchiveRequest(
       {
@@ -5544,7 +5544,7 @@ export class Session {
     }
 
     const worktreeSlug =
-      workspace.isPaseoOwnedWorktree && workspace.worktreeRoot
+      workspace.isOsunaOwnedWorktree && workspace.worktreeRoot
         ? basename(workspace.worktreeRoot)
         : undefined;
 
@@ -5589,7 +5589,7 @@ export class Session {
     return {
       currentBranch: snapshot.git.currentBranch,
       remoteUrl: snapshot.git.remoteUrl,
-      isPaseoOwnedWorktree: snapshot.git.isPaseoOwnedWorktree,
+      isOsunaOwnedWorktree: snapshot.git.isOsunaOwnedWorktree,
       isDirty: snapshot.git.isDirty,
       aheadBehind: snapshot.git.aheadBehind,
       aheadOfOrigin: snapshot.git.aheadOfOrigin,
@@ -5668,7 +5668,7 @@ export class Session {
       gitRuntime: {
         currentBranch: result.worktree.branchName || null,
         remoteUrl: null,
-        isPaseoOwnedWorktree: true,
+        isOsunaOwnedWorktree: true,
         isDirty: false,
         aheadBehind: null,
         aheadOfOrigin: null,
@@ -5901,7 +5901,7 @@ export class Session {
         cwd: workspace.cwd,
         kind: workspace.kind,
         worktreeRoot: workspace.worktreeRoot,
-        isPaseoOwnedWorktree: workspace.isPaseoOwnedWorktree,
+        isOsunaOwnedWorktree: workspace.isOsunaOwnedWorktree,
         mainRepoRoot: workspace.mainRepoRoot,
       }));
   }
@@ -7052,7 +7052,7 @@ export class Session {
         }
       }
 
-      const cloneStagingPath = await mkdtemp(resolve(targetParent, ".paseo-clone-"));
+      const cloneStagingPath = await mkdtemp(resolve(targetParent, ".osuna-clone-"));
       try {
         await runGitCommand(["clone", repo.cloneUrl, cloneStagingPath], {
           cwd: targetParent,
@@ -7228,7 +7228,7 @@ export class Session {
   }
 
   private async handleCreatePaseoWorktreeRequest(
-    request: Extract<SessionInboundMessage, { type: "create_paseo_worktree_request" }>,
+    request: Extract<SessionInboundMessage, { type: "create_osuna_worktree_request" }>,
   ): Promise<void> {
     return handleCreateWorktreeRequest(
       {

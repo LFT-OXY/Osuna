@@ -33,8 +33,8 @@ afterEach(async () => {
 });
 
 test("project.add creates a project without creating a workspace", async () => {
-  const previousSupervised = process.env.PASEO_SUPERVISED;
-  process.env.PASEO_SUPERVISED = "0";
+  const previousSupervised = process.env.OSUNA_SUPERVISED;
+  process.env.OSUNA_SUPERVISED = "0";
   try {
     const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), "paseo-add-project-repo-")));
     const paseoHomeRoot = realpathSync(
@@ -78,13 +78,13 @@ test("project.add creates a project without creating a workspace", async () => {
       }),
     ]);
   } finally {
-    restoreEnv("PASEO_SUPERVISED", previousSupervised);
+    restoreEnv("OSUNA_SUPERVISED", previousSupervised);
   }
 }, 30_000);
 
 test("archiving the last workspace leaves the project parent with no workspaces", async () => {
-  const previousSupervised = process.env.PASEO_SUPERVISED;
-  process.env.PASEO_SUPERVISED = "0";
+  const previousSupervised = process.env.OSUNA_SUPERVISED;
+  process.env.OSUNA_SUPERVISED = "0";
   try {
     const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), "paseo-empty-project-repo-")));
     const paseoHomeRoot = realpathSync(
@@ -100,7 +100,7 @@ test("archiving the last workspace leaves the project parent with no workspaces"
     execSync("git add README.md", { cwd: repoRoot, stdio: "pipe" });
     execSync("git -c commit.gpgSign=false commit -m 'initial'", { cwd: repoRoot, stdio: "pipe" });
 
-    const paseoHome = path.join(paseoHomeRoot, ".paseo");
+    const paseoHome = path.join(paseoHomeRoot, ".osuna");
     const projectsPath = path.join(paseoHome, "projects", "projects.json");
 
     const daemon = await createTestPaseoDaemon({ paseoHomeRoot, cleanup: false });
@@ -137,6 +137,6 @@ test("archiving the last workspace leaves the project parent with no workspaces"
       persistedProjects.find((project) => project.projectId === projectId)?.archivedAt,
     ).toBeNull();
   } finally {
-    restoreEnv("PASEO_SUPERVISED", previousSupervised);
+    restoreEnv("OSUNA_SUPERVISED", previousSupervised);
   }
 }, 30_000);

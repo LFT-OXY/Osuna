@@ -11,10 +11,10 @@ RELAY_EXPORTS="$REPO_ROOT/node_modules/@osuna/relay/dist/e2ee.js"
 FIXTURE_ROOT=""
 PROJECT_IDS_FILE="$OUT_DIR/project-ids.json"
 
-export PASEO_MAESTRO_APP_ID="${PASEO_MAESTRO_APP_ID:-com.chinhae.osuna.debug}"
-export PASEO_MAESTRO_DIRECT_ENDPOINT="${PASEO_MAESTRO_DIRECT_ENDPOINT:-127.0.0.1:6767}"
-export PASEO_MAESTRO_DAEMON_WS_URL="${PASEO_MAESTRO_DAEMON_WS_URL:-ws://127.0.0.1:6767/ws}"
-export PASEO_MAESTRO_DAEMON_HEALTH_URL="${PASEO_MAESTRO_DAEMON_HEALTH_URL:-http://127.0.0.1:6767/api/health}"
+export OSUNA_MAESTRO_APP_ID="${OSUNA_MAESTRO_APP_ID:-com.chinhae.osuna.debug}"
+export OSUNA_MAESTRO_DIRECT_ENDPOINT="${OSUNA_MAESTRO_DIRECT_ENDPOINT:-127.0.0.1:6777}"
+export OSUNA_MAESTRO_DAEMON_WS_URL="${OSUNA_MAESTRO_DAEMON_WS_URL:-ws://127.0.0.1:6777/ws}"
+export OSUNA_MAESTRO_DAEMON_HEALTH_URL="${OSUNA_MAESTRO_DAEMON_HEALTH_URL:-http://127.0.0.1:6777/api/health}"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -36,21 +36,21 @@ if [ ! -f "$CLIENT_EXPORTS" ] || [ ! -f "$RELAY_EXPORTS" ]; then
   exit 1
 fi
 
-if ! curl --fail --silent --show-error --max-time 3 "$PASEO_MAESTRO_DAEMON_HEALTH_URL" >/dev/null; then
-  echo "Paseo daemon is unavailable at $PASEO_MAESTRO_DAEMON_HEALTH_URL" >&2
+if ! curl --fail --silent --show-error --max-time 3 "$OSUNA_MAESTRO_DAEMON_HEALTH_URL" >/dev/null; then
+  echo "Paseo daemon is unavailable at $OSUNA_MAESTRO_DAEMON_HEALTH_URL" >&2
   exit 1
 fi
 
 FIXTURE_ROOT="$(mktemp -d /tmp/paseo-sidebar-drag-fixture-XXXXXX)"
-export PASEO_MAESTRO_DRAG_A_NAME="000-paseo-drag-a-$(basename "$FIXTURE_ROOT")"
-export PASEO_MAESTRO_DRAG_B_NAME="001-paseo-drag-b-$(basename "$FIXTURE_ROOT")"
-export PASEO_MAESTRO_DRAG_Z_NAME="zzz-paseo-drag-z-$(basename "$FIXTURE_ROOT")"
+export OSUNA_MAESTRO_DRAG_A_NAME="000-paseo-drag-a-$(basename "$FIXTURE_ROOT")"
+export OSUNA_MAESTRO_DRAG_B_NAME="001-paseo-drag-b-$(basename "$FIXTURE_ROOT")"
+export OSUNA_MAESTRO_DRAG_Z_NAME="zzz-paseo-drag-z-$(basename "$FIXTURE_ROOT")"
 
 mkdir -p "$OUT_DIR/flows"
 
-if [ -z "${PASEO_MAESTRO_IOS_UDID:-}" ]; then
-  export PASEO_MAESTRO_IOS_UDID
-  PASEO_MAESTRO_IOS_UDID="$({ xcrun simctl list devices booted -j || true; } | node -e '
+if [ -z "${OSUNA_MAESTRO_IOS_UDID:-}" ]; then
+  export OSUNA_MAESTRO_IOS_UDID
+  OSUNA_MAESTRO_IOS_UDID="$({ xcrun simctl list devices booted -j || true; } | node -e '
     let input = "";
     process.stdin.on("data", (chunk) => (input += chunk));
     process.stdin.on("end", () => {
@@ -61,7 +61,7 @@ if [ -z "${PASEO_MAESTRO_IOS_UDID:-}" ]; then
   ')"
 fi
 
-if [ -z "$PASEO_MAESTRO_IOS_UDID" ]; then
+if [ -z "$OSUNA_MAESTRO_IOS_UDID" ]; then
   echo "No booted iOS simulator found." >&2
   exit 1
 fi
@@ -70,19 +70,19 @@ render_flow() {
   local source="$1"
   local target="$2"
   perl -0pe '
-    s/^appId: sh\.paseo$/appId: $ENV{PASEO_MAESTRO_APP_ID}/m;
-    s/\$\{PASEO_MAESTRO_APP_ID\}/$ENV{PASEO_MAESTRO_APP_ID}/g;
-    s/\$\{PASEO_MAESTRO_DIRECT_ENDPOINT\}/$ENV{PASEO_MAESTRO_DIRECT_ENDPOINT}/g;
-    s/\$\{PASEO_MAESTRO_DRAG_A_NAME\}/$ENV{PASEO_MAESTRO_DRAG_A_NAME}/g;
-    s/\$\{PASEO_MAESTRO_DRAG_B_NAME\}/$ENV{PASEO_MAESTRO_DRAG_B_NAME}/g;
-    s/\$\{PASEO_MAESTRO_DRAG_Z_NAME\}/$ENV{PASEO_MAESTRO_DRAG_Z_NAME}/g;
+    s/^appId: com\.chinhae\.osuna$/appId: $ENV{OSUNA_MAESTRO_APP_ID}/m;
+    s/\$\{OSUNA_MAESTRO_APP_ID\}/$ENV{OSUNA_MAESTRO_APP_ID}/g;
+    s/\$\{OSUNA_MAESTRO_DIRECT_ENDPOINT\}/$ENV{OSUNA_MAESTRO_DIRECT_ENDPOINT}/g;
+    s/\$\{OSUNA_MAESTRO_DRAG_A_NAME\}/$ENV{OSUNA_MAESTRO_DRAG_A_NAME}/g;
+    s/\$\{OSUNA_MAESTRO_DRAG_B_NAME\}/$ENV{OSUNA_MAESTRO_DRAG_B_NAME}/g;
+    s/\$\{OSUNA_MAESTRO_DRAG_Z_NAME\}/$ENV{OSUNA_MAESTRO_DRAG_Z_NAME}/g;
   ' "$source" > "$target"
 }
 
 for project_name in \
-  "$PASEO_MAESTRO_DRAG_A_NAME" \
-  "$PASEO_MAESTRO_DRAG_B_NAME" \
-  "$PASEO_MAESTRO_DRAG_Z_NAME"; do
+  "$OSUNA_MAESTRO_DRAG_A_NAME" \
+  "$OSUNA_MAESTRO_DRAG_B_NAME" \
+  "$OSUNA_MAESTRO_DRAG_Z_NAME"; do
   project_path="$FIXTURE_ROOT/$project_name"
   mkdir -p "$project_path"
   git -C "$project_path" init >/dev/null
@@ -105,7 +105,7 @@ const moduleUrl = pathToFileURL(`${process.env.REPO_ROOT}/packages/client/dist/d
 const { DaemonClient } = await import(moduleUrl);
 const projectIds = JSON.parse(await readFile(process.env.PROJECT_IDS_FILE, "utf8"));
 const client = new DaemonClient({
-  url: process.env.PASEO_MAESTRO_DAEMON_WS_URL,
+  url: process.env.OSUNA_MAESTRO_DAEMON_WS_URL,
   clientId: `maestro-sidebar-drag-cleanup-${Date.now()}`,
   clientType: "cli",
   webSocketFactory: (url, options) => new WebSocket(url, { headers: options?.headers }),
@@ -133,12 +133,12 @@ import WebSocket from "ws";
 const moduleUrl = pathToFileURL(`${process.env.REPO_ROOT}/packages/client/dist/daemon-client.js`).href;
 const { DaemonClient } = await import(moduleUrl);
 const projectNames = [
-  process.env.PASEO_MAESTRO_DRAG_A_NAME,
-  process.env.PASEO_MAESTRO_DRAG_B_NAME,
-  process.env.PASEO_MAESTRO_DRAG_Z_NAME,
+  process.env.OSUNA_MAESTRO_DRAG_A_NAME,
+  process.env.OSUNA_MAESTRO_DRAG_B_NAME,
+  process.env.OSUNA_MAESTRO_DRAG_Z_NAME,
 ];
 const client = new DaemonClient({
-  url: process.env.PASEO_MAESTRO_DAEMON_WS_URL,
+  url: process.env.OSUNA_MAESTRO_DAEMON_WS_URL,
   clientId: `maestro-sidebar-drag-setup-${Date.now()}`,
   clientType: "cli",
   webSocketFactory: (url, options) => new WebSocket(url, { headers: options?.headers }),
@@ -165,6 +165,6 @@ render_flow "$FLOW_TEMPLATE" "$FLOW"
 render_flow "$FLOW_TEMPLATE_DIR/flows/dev-client.yaml" "$OUT_DIR/flows/dev-client.yaml"
 render_flow "$FLOW_TEMPLATE_DIR/flows/connect-direct-if-welcome.yaml" "$OUT_DIR/flows/connect-direct-if-welcome.yaml"
 
-echo "Running sidebar drag cancellation regression on $PASEO_MAESTRO_IOS_UDID"
+echo "Running sidebar drag cancellation regression on $OSUNA_MAESTRO_IOS_UDID"
 echo "Artifacts: $OUT_DIR"
-(cd "$OUT_DIR" && maestro test "$FLOW" --udid "$PASEO_MAESTRO_IOS_UDID")
+(cd "$OUT_DIR" && maestro test "$FLOW" --udid "$OSUNA_MAESTRO_IOS_UDID")

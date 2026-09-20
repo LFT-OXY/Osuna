@@ -788,13 +788,13 @@ describe("relative typed-entry configuration", () => {
   });
 
   it("suffix mode resolves explicit hidden file paths without broad hidden traversal", async () => {
-    const targetPath = path.join(workspaceDir, ".dev", "paseo-home", "daemon.log");
+    const targetPath = path.join(workspaceDir, ".dev", "osuna-home", "daemon.log");
     mkdirSync(path.dirname(targetPath), { recursive: true });
     writeFileSync(targetPath, "daemon log\n");
 
     const results = await searchRelativeDirectoryEntries({
       cwd: workspaceDir,
-      query: ".dev/paseo-home/daemon.log",
+      query: ".dev/osuna-home/daemon.log",
       limit: 20,
       includeFiles: true,
       includeDirectories: false,
@@ -802,7 +802,7 @@ describe("relative typed-entry configuration", () => {
       maxEntriesScanned: 1,
     });
 
-    expect(results).toEqual([{ path: ".dev/paseo-home/daemon.log", kind: "file" }]);
+    expect(results).toEqual([{ path: ".dev/osuna-home/daemon.log", kind: "file" }]);
   });
 
   it("resolves an exact gitignored path while keeping it out of discovery results", async () => {

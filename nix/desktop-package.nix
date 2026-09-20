@@ -13,12 +13,12 @@
   buildVersion,
   # Reuse the daemon's prebuilt npm-deps FOD. Same lockfile, same content —
   # without this, the desktop drv produces a separately-named store path
-  # (`paseo-desktop-<v>-npm-deps`) and refetches the entire registry. Override
-  # the upstream hash via `paseo.override { npmDepsHash = "..."; }`.
-  paseo,
+  # (`osuna-desktop-<v>-npm-deps`) and refetches the entire registry. Override
+  # the upstream hash via `osuna.override { npmDepsHash = "..."; }`.
+  osuna,
 }:
 buildNpmPackage {
-  pname = "paseo-desktop";
+  pname = "osuna-desktop";
   version = (builtins.fromJSON (builtins.readFile ../package.json)).version;
 
   src = lib.cleanSourceWith {
@@ -52,13 +52,13 @@ buildNpmPackage {
       && !(lib.hasSuffix ".e2e.test.ts" baseName)
       && baseName != "node_modules"
       && baseName != ".git"
-      && baseName != ".paseo"
+      && baseName != ".osuna"
       && baseName != ".DS_Store"
       && baseName != "release";
   };
 
   nodejs = nodejs_22;
-  inherit (paseo) npmDeps;
+  inherit (osuna) npmDeps;
 
   # Prevent onnxruntime-node's install script from running during automatic
   # npm rebuild. We manually rebuild only node-pty in buildPhase.
@@ -101,7 +101,7 @@ buildNpmPackage {
     npm run build --workspace=@osuna/expo-two-way-audio
 
     # Expo web export for the Electron renderer
-    ( cd packages/app && PASEO_WEB_PLATFORM=electron npx expo export --platform web )
+    ( cd packages/app && OSUNA_WEB_PLATFORM=electron npx expo export --platform web )
 
     # Desktop main process
     npm run build:main --workspace=@osuna/desktop
@@ -143,61 +143,61 @@ buildNpmPackage {
     mkdir -p $out/bin
 
     ${lib.optionalString stdenv.hostPlatform.isLinux ''
-      mkdir -p $out/share/paseo-desktop
+      mkdir -p $out/share/osuna-desktop
 
       # Materialize only the desktop and daemon runtime graphs. Copying the
       # complete monorepo used to ship every build-time dependency (including
       # Electron, Expo tooling, and cross-platform builder binaries), making the
       # desktop output larger than 2 GiB.
-      PASEO_TRACE_DESKTOP=1 node scripts/trace-daemon.mjs > desktop-files.txt
+      OSUNA_TRACE_DESKTOP=1 node scripts/trace-daemon.mjs > desktop-files.txt
 
       while IFS= read -r path; do
         [ -z "$path" ] && continue
-        mkdir -p "$out/share/paseo-desktop/$(dirname "$path")"
-        cp -a "$path" "$out/share/paseo-desktop/$path"
+        mkdir -p "$out/share/osuna-desktop/$(dirname "$path")"
+        cp -a "$path" "$out/share/osuna-desktop/$path"
       done < desktop-files.txt
 
       # Keep the same unpackaged monorepo layout expected by main.js.
-      cp package.json $out/share/paseo-desktop/
-      mkdir -p $out/share/paseo-desktop/packages/app
-      cp -a packages/app/dist $out/share/paseo-desktop/packages/app/
+      cp package.json $out/share/osuna-desktop/
+      mkdir -p $out/share/osuna-desktop/packages/app
+      cp -a packages/app/dist $out/share/osuna-desktop/packages/app/
 
       for runtime_path in \
         packages/desktop/dist/main.js \
         packages/desktop/dist/preload.js \
         packages/desktop/dist/features/browser-keyboard/guest-preload.js \
         packages/desktop/package.json; do
-        if [ ! -e "$out/share/paseo-desktop/$runtime_path" ]; then
+        if [ ! -e "$out/share/osuna-desktop/$runtime_path" ]; then
           echo "desktop runtime trace omitted $runtime_path" >&2
           exit 1
         fi
       done
 
-      if [ -e $out/share/paseo-desktop/node_modules/electron ]; then
+      if [ -e $out/share/osuna-desktop/node_modules/electron ]; then
         echo "desktop runtime trace included npm Electron" >&2
         exit 1
       fi
 
       # Hicolor icon for desktop environments
       install -Dm644 packages/desktop/assets/icon.png \
-        $out/share/icons/hicolor/512x512/apps/paseo-desktop.png
+        $out/share/icons/hicolor/512x512/apps/osuna-desktop.png
 
       # Electron derives Wayland's toplevel app_id from the package name in the
-      # app root it launches. Point it at a one-file app named "paseo-desktop"
+      # app root it launches. Point it at a one-file app named "osuna-desktop"
       # so shells can match the window to the desktop entry and hicolor icon.
-      mkdir -p $out/share/paseo-desktop/electron-app
-      printf '%s\n' "{ \"name\": \"paseo-desktop\", \"version\": \"$version\", \"main\": \"index.js\" }" \
-        > $out/share/paseo-desktop/electron-app/package.json
+      mkdir -p $out/share/osuna-desktop/electron-app
+      printf '%s\n' "{ \"name\": \"osuna-desktop\", \"version\": \"$version\", \"main\": \"index.js\" }" \
+        > $out/share/osuna-desktop/electron-app/package.json
       printf '%s\n' 'require("../packages/desktop/dist/main.js");' \
-        > $out/share/paseo-desktop/electron-app/index.js
+        > $out/share/osuna-desktop/electron-app/index.js
 
       # Chromium's setuid sandbox cannot live in the immutable Nix store.
-      makeWrapper ${electron}/bin/electron $out/bin/paseo-desktop \
-        --add-flags "$out/share/paseo-desktop/electron-app" \
+      makeWrapper ${electron}/bin/electron $out/bin/osuna-desktop \
+        --add-flags "$out/share/osuna-desktop/electron-app" \
         --add-flags "--no-sandbox" \
-        --add-flags "--class=paseo-desktop" \
+        --add-flags "--class=osuna-desktop" \
         --set EXPO_DEV_URL "osuna://app/" \
-        --set CHROME_DESKTOP "paseo-desktop.desktop"
+        --set CHROME_DESKTOP "osuna-desktop.desktop"
 
       copyDesktopItems
     ''}
@@ -210,7 +210,7 @@ buildNpmPackage {
       fi
       mkdir -p "$out/Applications"
       cp -R "$app" "$out/Applications/Osuna.app"
-      ln -s ../Applications/Osuna.app/Contents/MacOS/Osuna "$out/bin/paseo-desktop"
+      ln -s ../Applications/Osuna.app/Contents/MacOS/Osuna "$out/bin/osuna-desktop"
     ''}
 
     runHook postInstall
@@ -218,18 +218,18 @@ buildNpmPackage {
 
   desktopItems = lib.optionals stdenv.hostPlatform.isLinux [
     (makeDesktopItem {
-      name = "paseo-desktop";
+      name = "osuna-desktop";
       desktopName = "Osuna";
       genericName = "AI Coding Agents";
       comment = "Self-hosted daemon for AI coding agents";
-      exec = "paseo-desktop";
-      icon = "paseo-desktop";
+      exec = "osuna-desktop";
+      icon = "osuna-desktop";
       categories = ["Development"];
-      startupWMClass = "paseo-desktop";
+      startupWMClass = "osuna-desktop";
     })
     # Hidden alias entry. Which of the two names Electron ends up publishing as
     # the Wayland app_id depends on the Electron version: 41 uses the app-root
-    # package.json `name` ("paseo-desktop"), 38 uses the runtime app name that
+    # package.json `name` ("osuna-desktop"), 38 uses the runtime app name that
     # main.ts sets ("Osuna"). Ship a NoDisplay entry for the second spelling so
     # the icon resolves either way without a duplicate launcher item.
     (makeDesktopItem {
@@ -237,8 +237,8 @@ buildNpmPackage {
       desktopName = "Osuna";
       genericName = "AI Coding Agents";
       comment = "Self-hosted daemon for AI coding agents";
-      exec = "paseo-desktop";
-      icon = "paseo-desktop";
+      exec = "osuna-desktop";
+      icon = "osuna-desktop";
       categories = [ "Development" ];
       startupWMClass = "Osuna";
       noDisplay = true;
@@ -247,9 +247,9 @@ buildNpmPackage {
 
   meta = {
     description = "Osuna desktop app (Electron wrapper)";
-    homepage = "https://github.com/getpaseo/paseo";
+    homepage = "https://github.com/LFT-OXY/Osuna";
     license = lib.licenses.asl20;
-    mainProgram = "paseo-desktop";
+    mainProgram = "osuna-desktop";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
   };
 }

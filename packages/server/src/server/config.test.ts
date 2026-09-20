@@ -19,7 +19,7 @@ describe("server config", () => {
     roots.push(paseoHome);
 
     const desktopConfig = loadConfig(paseoHome, {
-      env: { PASEO_DESKTOP_MANAGED: "1" },
+      env: { OSUNA_DESKTOP_MANAGED: "1" },
     });
     const standaloneConfig = loadConfig(paseoHome, { env: {} });
 
@@ -33,8 +33,8 @@ describe("server config", () => {
 
     // The env name only works if it is in the daemon-setting allowlist; without
     // that entry every E2E worker daemon quietly fetches the price table.
-    const off = loadConfig(paseoHome, { env: { PASEO_USAGE_PRICING_AUTO_UPDATE: "0" } });
-    const on = loadConfig(paseoHome, { env: { PASEO_USAGE_PRICING_AUTO_UPDATE: "1" } });
+    const off = loadConfig(paseoHome, { env: { OSUNA_USAGE_PRICING_AUTO_UPDATE: "0" } });
+    const on = loadConfig(paseoHome, { env: { OSUNA_USAGE_PRICING_AUTO_UPDATE: "1" } });
     const unset = loadConfig(paseoHome, { env: {} });
 
     expect(off.usage?.pricing?.autoUpdate).toBe(false);
@@ -78,13 +78,13 @@ describe("server config", () => {
     roots.push(paseoHome);
     const config = loadConfig(paseoHome, {
       env: {
-        PASEO_LISTEN: "127.0.0.1:7000",
-        PASEO_PASSWORD: "secret",
-        PASEO_RELAY_ENDPOINT: "relay.example.test:443",
-        PASEO_TRUSTED_PROXIES: "true",
-        PASEO_WEB_UI_ENABLED: "true",
-        PASEO_LOG_FILE_PATH: "custom.log",
-        PASEO_VOICE_LLM_PROVIDER: "codex",
+        OSUNA_LISTEN: "127.0.0.1:7000",
+        OSUNA_PASSWORD: "secret",
+        OSUNA_RELAY_ENDPOINT: "relay.example.test:443",
+        OSUNA_TRUSTED_PROXIES: "true",
+        OSUNA_WEB_UI_ENABLED: "true",
+        OSUNA_LOG_FILE_PATH: "custom.log",
+        OSUNA_VOICE_LLM_PROVIDER: "codex",
       },
       cli: { relayUseTls: false },
     });
@@ -153,9 +153,9 @@ describe("server config", () => {
       {
         env: {
           OPENAI_API_KEY: "test-api-key",
-          PASEO_DICTATION_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
-          PASEO_VOICE_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
-          PASEO_VOICE_LOCAL_TTS_MODEL: "kokoro-en-v0_19",
+          OSUNA_DICTATION_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
+          OSUNA_VOICE_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
+          OSUNA_VOICE_LOCAL_TTS_MODEL: "kokoro-en-v0_19",
           STT_CONFIDENCE_THRESHOLD: "0.5",
           STT_MODEL: "whisper-1",
           TTS_MODEL: "tts-1",

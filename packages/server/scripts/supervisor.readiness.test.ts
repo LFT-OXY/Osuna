@@ -30,11 +30,11 @@ async function runWorker(worker: string, publicationDelay = 0) {
   `,
   );
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_")),
+    Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_")),
   );
   const child = spawn(process.execPath, ["--import", "tsx", runnerPath], {
     cwd: fileURLToPath(new URL("../../../", import.meta.url)),
-    env: { ...env, HOME: home, PASEO_HOME: home },
+    env: { ...env, HOME: home, OSUNA_HOME: home },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";

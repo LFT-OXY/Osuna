@@ -166,7 +166,7 @@ async function assertAgentNotRunning(options: {
 
 describe("agent MCP end-to-end (offline)", () => {
   test("create_agent runs initial prompt and affects filesystem", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
@@ -236,7 +236,7 @@ describe("agent MCP end-to-end (offline)", () => {
   }, 30_000);
 
   test("password-protected daemon authorizes the agent MCP via the capability token", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
@@ -306,7 +306,7 @@ describe("agent MCP end-to-end (offline)", () => {
   }, 30_000);
 
   test("create_agent auto-injects paseo MCP by default and can be disabled", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
@@ -329,7 +329,7 @@ describe("agent MCP end-to-end (offline)", () => {
 
     const client = await createMcpClient(`http://127.0.0.1:${port}/mcp/agents`);
 
-    const disabledPaseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-disabled-"));
+    const disabledPaseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-disabled-"));
     const disabledStaticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-disabled-"));
     const disabledAgentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-disabled-"));
     const disabledPort = await getAvailablePort();
@@ -418,7 +418,7 @@ describe("agent MCP end-to-end (offline)", () => {
   }, 30_000);
 
   test("create_agent injects a loopback MCP URL when the daemon listens on all interfaces", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
@@ -479,7 +479,7 @@ describe("agent MCP end-to-end (offline)", () => {
   }, 30_000);
 
   test("create_agent with background initialPrompt reflects running state once the first turn starts", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
@@ -657,7 +657,7 @@ describe("agent MCP end-to-end (offline)", () => {
       }
     }
 
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
@@ -724,7 +724,7 @@ describe("agent MCP end-to-end (offline)", () => {
   }, 30_000);
 
   test("create_agent with worktree is async and boots terminals only after setup success", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "osuna-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const repoRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-worktree-repo-"));
     const port = await getAvailablePort();
@@ -757,9 +757,9 @@ describe("agent MCP end-to-end (offline)", () => {
       execSync("git -c commit.gpgsign=false commit -m 'initial'", { cwd: repoRoot, stdio: "pipe" });
 
       const setupCommand =
-        'while [ ! -f "$PASEO_WORKTREE_PATH/allow-setup" ]; do sleep 0.05; done; echo "done" > "$PASEO_WORKTREE_PATH/setup-done.txt"';
+        'while [ ! -f "$OSUNA_WORKTREE_PATH/allow-setup" ]; do sleep 0.05; done; echo "done" > "$OSUNA_WORKTREE_PATH/setup-done.txt"';
       await writeFile(
-        path.join(repoRoot, "paseo.json"),
+        path.join(repoRoot, "osuna.json"),
         JSON.stringify({
           worktree: {
             setup: [setupCommand],
@@ -773,7 +773,7 @@ describe("agent MCP end-to-end (offline)", () => {
         }),
         "utf8",
       );
-      execSync("git add paseo.json", { cwd: repoRoot, stdio: "pipe" });
+      execSync("git add osuna.json", { cwd: repoRoot, stdio: "pipe" });
       execSync("git -c commit.gpgsign=false commit -m 'add worktree config'", {
         cwd: repoRoot,
         stdio: "pipe",

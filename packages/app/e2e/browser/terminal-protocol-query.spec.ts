@@ -8,7 +8,7 @@ const OSC11_CAPTURE_SCRIPT = `
 let captured = Buffer.alloc(0);
 
 function finish() {
-  process.stdout.write("PASEO_OSC11_CAPTURE:" + JSON.stringify(captured.toString("latin1")) + "\\n");
+  process.stdout.write("OSUNA_OSC11_CAPTURE:" + JSON.stringify(captured.toString("latin1")) + "\\n");
   process.exit(0);
 }
 
@@ -48,7 +48,7 @@ test.describe("Terminal protocol queries", () => {
       // daemon 按 app 上报的真实主题回答 OSC 11。跟随系统时 e2e 浏览器是浅色，底色合法地就是白，
       // 这条测试就分不出「正常的白」和「浏览器的回复漏回 PTY」。钉死深色主题，白重新只有一种解释。
       await page.addInitScript(() => {
-        localStorage.setItem("@paseo:app-settings", JSON.stringify({ theme: "dark" }));
+        localStorage.setItem("@osuna:app-settings", JSON.stringify({ theme: "dark" }));
       });
       await harness.openTerminal(page, { terminalId: terminalInstance.id });
       await harness.setupPrompt(page);
@@ -56,7 +56,7 @@ test.describe("Terminal protocol queries", () => {
       const terminal = harness.terminalSurface(page);
       await terminal.pressSequentially("node osc11-capture.cjs\n", { delay: 0 });
 
-      await waitForTerminalContent(page, (text) => text.includes("PASEO_OSC11_CAPTURE:"), 10_000);
+      await waitForTerminalContent(page, (text) => text.includes("OSUNA_OSC11_CAPTURE:"), 10_000);
       await page.waitForTimeout(500);
 
       const text = await getTerminalBufferText(page);

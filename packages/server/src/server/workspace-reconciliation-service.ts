@@ -515,7 +515,7 @@ export class WorkspaceReconciliationService {
         currentBranch: null,
         remoteUrl: null,
         worktreeRoot: null,
-        isPaseoOwnedWorktree: false as const,
+        isOsunaOwnedWorktree: false as const,
         mainRepoRoot: null,
       };
     }

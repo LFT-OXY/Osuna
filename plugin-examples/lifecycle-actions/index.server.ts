@@ -60,7 +60,7 @@ export default function contribute(server: PluginServerContext) {
       ...request,
       env: {
         ...request.env,
-        PASEO_HOOK_CREATE_EXAMPLE: "created",
+        OSUNA_HOOK_CREATE_EXAMPLE: "created",
       },
     };
   });
@@ -86,7 +86,7 @@ export default function contribute(server: PluginServerContext) {
       ...request,
       env: {
         ...request.env,
-        PASEO_HOOK_OPEN_EXAMPLE: "opened",
+        OSUNA_HOOK_OPEN_EXAMPLE: "opened",
       },
     };
   });

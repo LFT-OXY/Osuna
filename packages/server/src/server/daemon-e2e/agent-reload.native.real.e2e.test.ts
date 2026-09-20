@@ -115,7 +115,7 @@ async function withNativeConversation(
 
 // Opt in: real requests using local Claude/Codex auth and the OpenRouter test setup.
 test
-  .runIf(process.env.PASEO_NATIVE_RELOAD_QA === "1")
+  .runIf(process.env.OSUNA_NATIVE_RELOAD_QA === "1")
   .each(["claude", "codex", "opencode"] as const)(
   "%s retains its session and conversation through repeated refresh RPCs",
   async (provider) => {

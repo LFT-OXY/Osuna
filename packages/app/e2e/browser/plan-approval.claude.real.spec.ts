@@ -56,7 +56,7 @@ async function expectClaudeReply(page: Page, marker: string): Promise<void> {
 
 async function restartIsolatedDaemon(): Promise<void> {
   const port = Number(getE2EDaemonPort());
-  expect([6767, 6768]).not.toContain(port);
+  expect([6777, 6778, 6767, 6768]).not.toContain(port);
   const client = await connectDaemonClient<{
     connect(): Promise<void>;
     close(): Promise<void>;

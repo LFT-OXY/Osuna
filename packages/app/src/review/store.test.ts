@@ -117,16 +117,16 @@ describe("normalizePersistedState", () => {
       activeModesByScope: { "review:scope": "base" },
     };
     backing.values.set(
-      "@paseo:review-draft-store",
+      "@osuna:review-draft-store",
       JSON.stringify({ state: legacyState, version: 1 }),
     );
     const storage = createValidatedPersistStorage(backing, SerializedReviewDraftStateSchema);
 
-    const stored = await storage.getItem("@paseo:review-draft-store");
+    const stored = await storage.getItem("@osuna:review-draft-store");
     const normalized = normalizePersistedState(stored?.state);
 
     expect(normalized.drafts["review:key"]).toEqual([makeComment()]);
-    expect(backing.values.has("@paseo:review-draft-store")).toBe(true);
+    expect(backing.values.has("@osuna:review-draft-store")).toBe(true);
   });
 
   it("rejects the complete payload when any draft comment or field is invalid", () => {

@@ -4,7 +4,7 @@
  * Critical rules from design doc:
  * 1. Port: Random port via 10000 + Math.floor(Math.random() * 50000) - NEVER 6767
  * 2. Protocol: WebSocket ONLY - daemon has no HTTP endpoints
- * 3. Temp dirs: Create temp directories for PASEO_HOME and agent --cwd
+ * 3. Temp dirs: Create temp directories for OSUNA_HOME and agent --cwd
  * 4. Model: Always --provider claude with haiku model for agent tests
  * 5. Cleanup: Kill daemon and remove temp dirs after each test
  */
@@ -15,16 +15,16 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 const TEST_ENV_DEFAULTS = {
-  PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
-  PASEO_DICTATION_ENABLED: process.env.PASEO_DICTATION_ENABLED ?? "0",
-  PASEO_VOICE_MODE_ENABLED: process.env.PASEO_VOICE_MODE_ENABLED ?? "0",
+  OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
+  OSUNA_DICTATION_ENABLED: process.env.OSUNA_DICTATION_ENABLED ?? "0",
+  OSUNA_VOICE_MODE_ENABLED: process.env.OSUNA_VOICE_MODE_ENABLED ?? "0",
 };
 
 function testEnvironment(paseoHome: string): NodeJS.ProcessEnv {
   return {
-    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_"))),
+    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_"))),
     ...TEST_ENV_DEFAULTS,
-    PASEO_HOME: paseoHome,
+    OSUNA_HOME: paseoHome,
     HOME: paseoHome,
     USERPROFILE: paseoHome,
   };
@@ -60,7 +60,7 @@ function killPidTree(pid: number, signal: NodeJS.Signals): void {
 export interface TestContext {
   /** Random port for test daemon (never 6767) */
   port: number;
-  /** Temp directory for PASEO_HOME */
+  /** Temp directory for OSUNA_HOME */
   paseoHome: string;
   /** Temp directory for agent working directory */
   workDir: string;
@@ -129,8 +129,8 @@ export async function startDaemon(port: number, paseoHome: string): Promise<Proc
   const daemon = $({
     env: {
       ...testEnvironment(paseoHome),
-      PASEO_LISTEN: `127.0.0.1:${port}`,
-      PASEO_RELAY_ENABLED: "false",
+      OSUNA_LISTEN: `127.0.0.1:${port}`,
+      OSUNA_RELAY_ENABLED: "false",
       CI: "true",
     },
   })`osuna daemon run`.nothrow();

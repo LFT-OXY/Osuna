@@ -11,7 +11,7 @@ import type { PricingTable } from "./pricing/table.js";
 export interface UsageConfig {
   /** Where each CLI keeps its session logs. Defaults to the real per-CLI paths. */
   roots?: UsageLogRoots;
-  /** Overrides the constant and `PASEO_USAGE_SCAN_INTERVAL_MS`. */
+  /** Overrides the constant and `OSUNA_USAGE_SCAN_INTERVAL_MS`. */
   scanIntervalMs?: number;
   /** Clock for bucket-to-local-day resolution, backfill stamps and idle settling. */
   now?: () => number;

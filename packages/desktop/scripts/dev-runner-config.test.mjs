@@ -9,7 +9,7 @@ import {
 describe("desktop dev process ownership", () => {
   test("makes the signal-handling runner the workspace terminal process", () => {
     const paseoConfig = JSON.parse(
-      readFileSync(new URL("../../../paseo.json", import.meta.url), "utf8"),
+      readFileSync(new URL("../../../osuna.json", import.meta.url), "utf8"),
     );
     const devScript = readFileSync(new URL("./dev.sh", import.meta.url), "utf8");
 
