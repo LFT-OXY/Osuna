@@ -53,6 +53,39 @@ desktop/browser/pane/index.tsx / .web.tsx / .electron.tsx
 
 `.electron.*` wins over `.web.*` when `OSUNA_WEB_PLATFORM=electron`. Reserve inline `if (isWeb)` for a line or a few props (`CLAUDE.md` "Platform gating").
 
+## Local native modules live outside `src/`
+
+`packages/app/modules/<name>/` holds the app's own Expo modules (`osuna-word-stream`,
+`osuna-native-trace`, `osuna-hardware-keyboard`, `osuna-diff-prototype`). Expo autolinking
+finds them because `nativeModulesDir` defaults to `<appRoot>/modules`; nothing in
+`app.config.js` lists them. A module's **`package.json` `name`** — not its directory name —
+becomes the Gradle project name, and the **podspec filename** — not `s.name` — becomes the
+pod and Swift module name.
+
+Nothing in that chain is typed, so one identity is spelled in seven places that cannot
+import each other:
+
+| Site                                            | Must agree with                                              |
+| ----------------------------------------------- | ------------------------------------------------------------ |
+| directory name                                  | `package.json` `name`                                         |
+| `expo-module.config.json` `android.modules`     | the Kotlin FQCN — source path, `package` decl, and class name |
+| `build.gradle` `namespace` / `group`            | the Kotlin package prefix                                     |
+| `expo-module.config.json` `ios`/`apple.modules` | a `class` declared in `ios/*.swift`                           |
+| podspec filename                                | `s.name`                                                      |
+| `CMakeLists.txt` `project()` / `add_library()`  | `System.loadLibrary(…)` in Kotlin                             |
+| `cpp/jni.cpp` `#define METHOD(name) Java_…`     | the Kotlin package + class, underscore-separated              |
+| `Name("…")` in Kotlin **and** Swift             | the literal `requireNativeModule` / `requireOptionalNativeModule` / `requireNativeViewManager` passes |
+
+`packages/app/src/native/local-native-modules.test.ts` asserts every row, data-driven over
+`modules/*`, so a new module is covered without touching the test. It is the native
+counterpart to `packages/desktop/src/daemon/desktop-packaging.test.ts` (see
+[Product Identity Literals](../../guides/cross-layer-thinking-guide.md#product-identity-literals)).
+
+The row that needs the cross-platform assertion is the last one: change `Name(…)` on only
+one platform and the other platform's declaration still satisfies the TypeScript lookup, so
+the module breaks on one OS and nothing else notices. The test compares the Kotlin and Swift
+name sets whenever a module ships both.
+
 ## Tests sit next to code
 
 `thing.ts` + `thing.test.ts`; DOM-needing tests are `thing.browser.test.tsx`. Playwright specs live in `packages/app/e2e/browser/`, shared harness in `packages/app/e2e/support/` (no specs there). See [Testing](./testing.md).

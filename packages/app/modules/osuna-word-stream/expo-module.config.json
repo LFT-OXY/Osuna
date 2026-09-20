@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "apple"],
+  "android": {
+    "modules": ["com.chinhae.osuna.wordstream.WordStreamModule"]
+  },
+  "apple": {
+    "modules": ["WordStreamModule"]
+  }
+}

@@ -286,6 +286,15 @@ packaged artifact, or in CI, or in a user's install.
       stale names and then stop describing reality.
 - [ ] **Published package READMEs** — they ship to npm with the package, so they are
       part of the identity, not docs.
+- [ ] **Local Expo modules under `packages/app/modules/`** — seven sites per module, none
+      of them typed: Gradle project name (from `package.json` `name`, not the directory),
+      `namespace`/`group`, the Kotlin source path against its `package` declaration, the
+      `expo-module.config.json` class lists, the podspec **filename** (that, not `s.name`,
+      is the Swift module name), the CMake target against `System.loadLibrary`, the JNI
+      `METHOD` macro prefix, and `Name("…")` on *every* platform the module ships against
+      the literal the app's TypeScript looks up. The contract table and the test that
+      enforces it are in
+      [app/frontend Directory Structure](../app/frontend/directory-structure.md#local-native-modules-live-outside-src).
 
 ### The forms a search-and-replace misses
 
@@ -502,6 +511,13 @@ the lowest shared package and import it. Static config (YAML, Expo JS, Gradle) c
 import, so it stays hardcoded — which means **a test must assert the config and the code
 agree**. `packages/desktop/src/daemon/desktop-packaging.test.ts` is the model: it reads
 `electron-builder.yml` and asserts the scheme and protocol name.
+`packages/app/src/native/local-native-modules.test.ts` is the same shape for Gradle, CMake,
+JNI, podspecs and `expo-module.config.json`.
+
+Write the assertion data-driven over the directory, not per known name. Both tests above
+enumerate what is on disk, so a module or artifact added later is covered without anyone
+remembering to extend the test — and the assertion stays a contract rather than a snapshot
+of today's names.
 
 **Real-world example**: renaming Paseo to Osuna. `productName` changed in
 `electron-builder.yml`, but `after-pack.js` and `after-sign.js` still had
