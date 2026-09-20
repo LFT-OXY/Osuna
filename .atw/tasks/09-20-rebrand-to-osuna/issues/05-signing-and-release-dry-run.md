@@ -19,4 +19,12 @@
       承载更新；移动端上架与 F-Droid 相关段落删除或标注为后续任务
 - [ ] 验收：推一个测试 tag，CI 产出可下载的 mac/win/linux 包；本地装上后应用名为
       Osuna，且 electron-updater 能从 `LFT-OXY/Osuna` 的 Release 识别到版本
+- [ ] **验收（从票 09 并过来）**：同一个 tag 会触发 `android-apk-release.yml`
+      （触发条件 `v*` / `android-v*`）。确认这一跑产出 APK，且票 09 改名后的四个原生模块
+      被 autolink 到位 —— 构建日志里应出现 `:osuna-word-stream`、`:osuna-native-trace`、
+      `:osuna-diff-prototype` 三个 Gradle 工程，不应出现任何 `:paseo-*`。
+      并过来的理由：09 的这项验收本来就需要一次 tag 构建，而推 tag 是本票的动作，
+      为它单独搭一套安卓工具链不划算。**装到设备确认功能可用（word-stream 淡入、
+      native trace、iOS 硬件键盘提交）CI 给不了，仍需一台真机或模拟器**，那部分不在
+      本票，留给后续的设备回归。
 - [ ] `npm run typecheck`、`npm run lint` 通过

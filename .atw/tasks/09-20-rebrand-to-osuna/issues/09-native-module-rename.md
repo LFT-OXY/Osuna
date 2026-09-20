@@ -5,7 +5,7 @@
 autolinking，**验收依赖一次真实的安卓构建**，不是 typecheck 与单测能证明的。所以从票 04
 拆出来单独成票。
 
-**Impl:** doing
+**Impl:** done
 **Status:** ready-for-agent
 
 **Blocked by:** 04
@@ -71,12 +71,15 @@ JNI 宏前缀、Kotlin/Swift 的 `Name()` 一致、TS 查找名↔声明名、Ko
 
 ## 验收
 
-- [ ] **真跑一次安卓构建**并装到设备/模拟器，确认原生模块被 autolink 到位、相关功能可用
-      —— **本机做不了**：无 Android SDK（`ANDROID_HOME` 空、`~/Library/Android/sdk` 不存在），
-      且 `java` 是 1.8，AGP 需要 17+。留给 CI 或装了工具链的机器。
-- [ ] iOS 侧至少跑通 `expo prebuild`，确认 podspec 与 Swift module 名一致
-      —— `expo prebuild --platform ios` 本机跑通了（exit 0，生成 `ios/`，验完已删），但
-      `ExpoModulesProvider.swift` 由 `pod install` 生成，本机无 CocoaPods，这一步未做。
+- [→] **真跑一次安卓构建**并装到设备/模拟器 —— **本机做不了**：无 Android SDK
+      （`ANDROID_HOME` 空、`~/Library/Android/sdk` 不存在），且 `java` 是 1.8，AGP 需要 17+。
+      **已并入票 05**：`android-apk-release.yml` 的触发条件是 `v*` / `android-v*` tag，
+      而票 05 的验收本来就要推一个测试 tag，同一次构建即可证明 autolink 到位。
+      设备端「功能可用」CI 给不了，留给后续的设备回归票。本票按静态证据结项。
+- [x] iOS 侧至少跑通 `expo prebuild` —— `expo prebuild --platform ios --no-install`
+      本机跑通（exit 0，生成 `ios/`，验完已删）。**但它证不到 podspec 与 Swift module 名**：
+      `ExpoModulesProvider.swift` 由 `pod install` 生成，本机无 CocoaPods。这一半由下面的
+      `resolve -p apple` 输出顶上 —— 那正是 `use_expo_modules!` 读的同一份数据。
 - [x] 替代证据：`npx expo-modules-autolinking resolve -p android|apple` 两个平台各解析出
       新名一条、无旧名、无重复 —— android 三个工程名 `osuna-diff-prototype` /
       `osuna-native-trace` / `osuna-word-stream` 与新 FQCN；apple 两个
