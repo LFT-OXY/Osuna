@@ -1411,8 +1411,8 @@ export class HubRelationshipHarness {
       },
       agentStoragePath: path.join(this.paseoHome, "agents"),
       relayEnabled: false,
-      relayEndpoint: "relay.paseo.sh:443",
-      appBaseUrl: "https://app.paseo.sh",
+      relayEndpoint: "relay.example.test:443",
+      appBaseUrl: "https://app.example.test",
     };
   }
 

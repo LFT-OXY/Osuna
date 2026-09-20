@@ -20,8 +20,9 @@ export interface DaemonRuntimeConfig {
   desktopManaged?: boolean;
   getRelayConfig(): {
     enabled: boolean;
-    endpoint: string;
-    publicEndpoint: string;
+    // relay 端点没有可回退的默认值：未显式配置时为 undefined，由消费方决定如何呈现
+    endpoint: string | undefined;
+    publicEndpoint: string | undefined;
     useTls: boolean;
     publicUseTls: boolean;
   } | null;

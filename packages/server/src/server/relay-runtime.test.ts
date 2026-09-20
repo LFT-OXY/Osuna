@@ -61,4 +61,38 @@ describe("RelayRuntime", () => {
     expect(() => runtime.setEnabled(true)).toThrow("Invalid relay endpoint");
     expect(runtime.getConfig().enabled).toBe(false);
   });
+
+  // 旧配置省略了 relay.enabled，按 COMPAT 规则会解析成启用；此时若抛错，daemon 根本起不来。
+  test("stays offline and says what to configure when enabled without an endpoint", () => {
+    const starts: string[] = [];
+    const warnings: string[] = [];
+    const logger = pino({ level: "silent" });
+    logger.warn = ((message: string) => {
+      warnings.push(message);
+    }) as typeof logger.warn;
+
+    const runtime = createRelayRuntime({
+      config: {
+        enabled: true,
+        endpoint: undefined,
+        publicEndpoint: undefined,
+        useTls: false,
+        publicUseTls: false,
+      },
+      logger,
+      attachSocket: async () => undefined,
+      serverId: "relay-runtime-no-endpoint",
+      daemonKeyPair: generateKeyPair(),
+      startTransport: (options) => {
+        starts.push(options.relayEndpoint);
+        return { stop: async () => undefined } satisfies RelayTransportController;
+      },
+    });
+
+    expect(starts).toEqual([]);
+    expect(warnings).toEqual([
+      "Relay is enabled but no endpoint is configured; staying offline. Set OSUNA_RELAY_ENDPOINT or daemon.relay.endpoint.",
+    ]);
+    expect(runtime.getConfig().enabled).toBe(true);
+  });
 });

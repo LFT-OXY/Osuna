@@ -447,7 +447,7 @@ describe("paseo daemon bootstrap", () => {
       agentClients: createTestAgentClients(),
       agentStoragePath: path.join(paseoHome, "agents"),
       relayEnabled: false,
-      appBaseUrl: "https://app.paseo.sh",
+      appBaseUrl: "https://app.example.test",
       openai: undefined,
       speech: undefined,
       serviceProxy: {
@@ -562,7 +562,7 @@ describe("paseo daemon bootstrap", () => {
       relayEnabled: false,
       relayEndpoint: "127.0.0.1:9",
       relayUseTls: false,
-      appBaseUrl: "https://app.paseo.sh",
+      appBaseUrl: "https://app.example.test",
       openai: undefined,
       speech: undefined,
     };
@@ -698,7 +698,7 @@ export default function contribute(plugin: unknown) {
       agentClients: createTestAgentClients(),
       agentStoragePath: path.join(paseoHome, "agents"),
       relayEnabled: false,
-      appBaseUrl: "https://app.paseo.sh",
+      appBaseUrl: "https://app.example.test",
       openai: undefined,
       speech: undefined,
       serviceProxy: { standaloneListen: `127.0.0.1:${standalonePort}` },
@@ -787,7 +787,7 @@ export default function contribute(plugin: unknown) {
       agentClients: createTestAgentClients(),
       agentStoragePath: path.join(paseoHome, "agents"),
       relayEnabled: false,
-      appBaseUrl: "https://app.paseo.sh",
+      appBaseUrl: "https://app.example.test",
       openai: undefined,
       speech: {
         providers: {
@@ -925,7 +925,7 @@ export default function contribute(plugin: unknown) {
         relayEnabled: true,
         relayEndpoint: "127.0.0.1:9",
         relayPublicEndpoint: "127.0.0.1:9",
-        appBaseUrl: "https://app.paseo.sh",
+        appBaseUrl: "https://app.example.test",
         openai: undefined,
         speech: undefined,
       };
@@ -939,11 +939,21 @@ export default function contribute(plugin: unknown) {
           relayEnabled: true,
           relayEndpoint: "127.0.0.1:9",
           relayPublicEndpoint: "127.0.0.1:9",
-          appBaseUrl: "https://app.paseo.sh",
+          appBaseUrl: "https://app.example.test",
           includeQr: false,
         });
         expect(pairing.relayEnabled).toBe(true);
-        expect(pairing.url?.startsWith("https://app.paseo.sh/#offer=")).toBe(true);
+        expect(pairing.url?.startsWith("https://app.example.test/#offer=")).toBe(true);
+
+        // 本 fork 不托管 web app：没有显式配置就不出链接，而不是拼一个上游地址
+        const unconfigured = await generateLocalPairingOffer({
+          paseoHome,
+          relayEnabled: true,
+          relayEndpoint: "127.0.0.1:9",
+          relayPublicEndpoint: "127.0.0.1:9",
+          includeQr: false,
+        });
+        expect(unconfigured).toEqual({ relayEnabled: true, url: null, qr: null });
       } finally {
         await daemon.stop().catch(() => undefined);
         await daemon.agentManager.flush().catch(() => undefined);

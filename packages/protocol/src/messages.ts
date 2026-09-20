@@ -5032,8 +5032,9 @@ export const DaemonGetStatusResponseSchema = z.object({
       relay: z
         .object({
           enabled: z.boolean(),
-          endpoint: z.string(),
-          publicEndpoint: z.string(),
+          // 本 fork 不托管 relay：未显式配置端点时这两个字段缺省
+          endpoint: z.string().optional(),
+          publicEndpoint: z.string().optional(),
           useTls: z.boolean(),
           publicUseTls: z.boolean(),
         })

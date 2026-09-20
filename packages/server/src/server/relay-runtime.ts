@@ -9,8 +9,8 @@ import {
 
 export interface RelayRuntimeConfig {
   enabled: boolean;
-  endpoint: string;
-  publicEndpoint: string;
+  endpoint: string | undefined;
+  publicEndpoint: string | undefined;
   useTls: boolean;
   publicUseTls: boolean;
 }
@@ -37,10 +37,19 @@ export function createRelayRuntime(options: RelayRuntimeOptions): RelayRuntime {
 
   function start(): void {
     if (transport) return;
+    const relayEndpoint = config.endpoint;
+    // 没有托管 relay 可回退。端点缺失时保持不连接并说清该配什么：连一个不存在的
+    // 地址更难排查，而在启动路径上抛错会让省略了 relay.enabled 的旧配置起不来。
+    if (!relayEndpoint) {
+      options.logger.warn(
+        "Relay is enabled but no endpoint is configured; staying offline. Set OSUNA_RELAY_ENDPOINT or daemon.relay.endpoint.",
+      );
+      return;
+    }
     transport = startTransport({
       logger: options.logger,
       attachSocket: options.attachSocket,
-      relayEndpoint: config.endpoint,
+      relayEndpoint,
       relayUseTls: config.useTls,
       serverId: options.serverId,
       daemonKeyPair: options.daemonKeyPair,

@@ -28,8 +28,6 @@ import { resolveGitProcessPolicy } from "../utils/git-process-scheduler.js";
 import type { UsageConfig } from "./usage/config.js";
 
 const DEFAULT_PORT = 6777;
-const DEFAULT_RELAY_ENDPOINT = "relay.paseo.sh:443";
-const DEFAULT_APP_BASE_URL = "https://app.paseo.sh";
 const DEFAULT_TRUSTED_PROXIES = ["loopback"];
 
 interface ResolveBundledWebUiDistDirInput {
@@ -267,8 +265,10 @@ interface ResolveRelayInput {
 interface ResolvedRelay {
   enabled: boolean;
   enabledMutable: boolean;
-  endpoint: string;
-  publicEndpoint: string;
+  // 本 fork 不托管 relay，没有可回退的地址：启用 relay 就必须显式配置端点。
+  // 指向一个不存在的域名比直接报错更难排查。
+  endpoint: string | null;
+  publicEndpoint: string | null;
   useTls: boolean;
   publicUseTls: boolean;
 }
@@ -299,20 +299,14 @@ function resolveRelayConfig(input: ResolveRelayInput): ResolvedRelay {
     input.persisted.daemon?.relay?.enabled ??
     input.enabledFallback;
   const endpoint =
-    input.env.OSUNA_RELAY_ENDPOINT ??
-    input.persisted.daemon?.relay?.endpoint ??
-    DEFAULT_RELAY_ENDPOINT;
+    input.env.OSUNA_RELAY_ENDPOINT ?? input.persisted.daemon?.relay?.endpoint ?? null;
   const publicEndpoint =
     input.env.OSUNA_RELAY_PUBLIC_ENDPOINT ??
     input.persisted.daemon?.relay?.publicEndpoint ??
     endpoint;
   const useTls =
     input.cliRelayUseTls ??
-    resolveTlsFromEnv(
-      input.env.OSUNA_RELAY_USE_TLS,
-      input.persisted.daemon?.relay?.useTls,
-      endpoint === DEFAULT_RELAY_ENDPOINT,
-    );
+    resolveTlsFromEnv(input.env.OSUNA_RELAY_USE_TLS, input.persisted.daemon?.relay?.useTls, false);
   const publicUseTls = resolveTlsFromEnv(
     input.env.OSUNA_RELAY_PUBLIC_USE_TLS,
     input.persisted.daemon?.relay?.publicUseTls,
@@ -555,7 +549,7 @@ function resolveStaticLoadConfigSettings(
       cli?.hostnames,
     ]),
     trustedProxies: resolveTrustedProxiesConfig(env, persisted),
-    appBaseUrl: env.OSUNA_APP_BASE_URL ?? persisted.app?.baseUrl ?? DEFAULT_APP_BASE_URL,
+    appBaseUrl: env.OSUNA_APP_BASE_URL ?? persisted.app?.baseUrl ?? null,
   };
 }
 
@@ -641,13 +635,13 @@ export function resolveConfigFromPersisted(
     agentClients: {},
     relayEnabled: relay.enabled,
     relayEnabledMutable: relay.enabledMutable,
-    relayEndpoint: relay.endpoint,
-    relayPublicEndpoint: relay.publicEndpoint,
+    relayEndpoint: relay.endpoint ?? undefined,
+    relayPublicEndpoint: relay.publicEndpoint ?? undefined,
     relayUseTls: relay.useTls,
     relayPublicUseTls: relay.publicUseTls,
     serviceProxy,
     webUi,
-    appBaseUrl,
+    appBaseUrl: appBaseUrl ?? undefined,
     auth: resolveAuthConfig(env, persisted),
     openai,
     speech,

@@ -31,11 +31,17 @@ export async function generateLocalPairingOffer(args: {
     };
   }
 
-  const relayEndpoint = args.relayEndpoint ?? "relay.paseo.sh:443";
+  // 没有托管的 relay 与 web app，这两个地址无处可回退：缺任何一个都只能不出链接，
+  // 而不是拼出一个指向上游或不存在域名的 URL。
+  const relayEndpoint = args.relayEndpoint;
+  const appBaseUrl = args.appBaseUrl;
+  if (!relayEndpoint || !appBaseUrl) {
+    return { relayEnabled: true, url: null, qr: null };
+  }
+
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
-  const relayUseTls = args.relayUseTls ?? relayEndpoint === "relay.paseo.sh:443";
+  const relayUseTls = args.relayUseTls ?? false;
   const relayPublicUseTls = args.relayPublicUseTls ?? relayUseTls;
-  const appBaseUrl = args.appBaseUrl ?? "https://app.paseo.sh";
   const serverId = getOrCreateServerId(args.paseoHome, { logger: args.logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(args.paseoHome, args.logger);
   const offer = await createConnectionOfferV2({
