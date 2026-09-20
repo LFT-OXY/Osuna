@@ -7,7 +7,7 @@
 **Impl:** ready
 **Status:** ready-for-agent
 
-**Blocked by:** 07
+**Blocked by:** 08
 
 - [ ] `packages/desktop/electron-builder.yml`：去掉 `notarize: true`、
       `hardenedRuntime: true` 与 `entitlements` / `entitlementsInherit` 两行；

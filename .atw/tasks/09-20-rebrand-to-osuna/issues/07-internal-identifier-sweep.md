@@ -8,7 +8,7 @@
 **Impl:** ready
 **Status:** ready-for-agent
 
-**Blocked by:** 04
+**Blocked by:** 08
 
 ## 为什么值得单独做一遍，而不是「谁碰到谁顺手改」
 
