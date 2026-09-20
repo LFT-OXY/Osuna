@@ -338,6 +338,36 @@ A sweep cannot tell the difference; only reading the hit can.
   code character for character, so it moves only when the code's string moves — and it moves
   *with* it, or the table stops matching anything.
 
+### A binary name has no compile-time consumer
+
+Renaming the CLI binary (`paseo` → `osuna` in `packages/cli/package.json`'s `bin`) changed
+nothing the type system checks: every consumer *spawns* it by name. Typecheck, lint and the
+whole suite stayed green while terminal activity reporting for OpenCode was dead. Four shapes,
+all from the same rename:
+
+- **A generated runtime template, half migrated.** `agent-hooks/opencode/opencode-plugin.ts`
+  builds the plugin OpenCode loads. An earlier batch updated the env var it reads
+  (`OSUNA_TERMINAL_ID`) but left `Bun.spawn(["paseo", …])` two lines below. A modern literal
+  sitting next to a stale one in the same template looks deliberate, and nothing makes them
+  agree. Read the whole generated body, not the line you came for.
+- **The tests pinned the broken behaviour.** `opencode.test.ts` asserted the spawn argv was
+  `["paseo", "hooks", …]` and `claude.test.ts` wrote a fake binary *named* `paseo`. Updating
+  those assertions is not evidence of a fix — see the default-branch rule in
+  `.atw/spec/server/backend/testing.md`.
+- **A fallback nothing executes.** `"${OSUNA_HOOK_CLI:-paseo}"` and the cmd branch
+  `else (paseo …)` in `agent-hook-installer.ts` only run when the daemon did not inject
+  `OSUNA_HOOK_CLI` — which the common path always does, so the stale name sat behind a branch
+  no test entered.
+- **Silent degradation, no failure.** `paseoCliShimNames()` returned names npm would never
+  create in `node_modules/.bin`, so `findNpmBinDir` returned null forever and
+  `resolveOsunaCliExecutablePath` fell through to the package entrypoint. Nothing broke; the
+  shim preference simply stopped existing.
+
+Today the contract is one env key with one fallback name, written in three languages that
+cannot import each other — POSIX sh and cmd in `agent-hook-installer.ts`, and generated
+JavaScript in `opencode-plugin.ts`. A rename has to move all three, plus
+`osunaCliShimNames()` and `OSUNA_CLI_BIN_ENTRY` in `terminal/terminal.ts`.
+
 ### One message, two producers
 
 `requirements.osuna` rejections are raised in two places: `plugin-requirements.ts` (range check)

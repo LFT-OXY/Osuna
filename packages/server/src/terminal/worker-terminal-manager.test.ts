@@ -12,7 +12,7 @@ import type {
 } from "./terminal-manager.js";
 import {
   resolvePaseoCliBinDir,
-  resolvePaseoCliExecutablePath,
+  resolveOsunaCliExecutablePath,
   type TerminalSession,
 } from "./terminal.js";
 import type { TerminalState } from "@osuna/protocol/messages";
@@ -530,7 +530,7 @@ it("injects parent-minted terminal activity env through the worker", async () =>
     path?: string;
   };
   const paseoCliBinDir = resolvePaseoCliBinDir();
-  const paseoCliPath = resolvePaseoCliExecutablePath();
+  const paseoCliPath = resolveOsunaCliExecutablePath();
   expect(paseoCliBinDir).not.toBeNull();
   expect(paseoCliPath).not.toBeNull();
   expect(env.terminalId).toBe(session.id);

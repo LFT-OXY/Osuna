@@ -137,7 +137,7 @@ export function buildAgentHookShellCommand<TConfig>(
   provider: AgentHookProvider<TConfig>,
   event: AgentHookEventDefinition,
 ): string {
-  const hookCommand = `"\${OSUNA_HOOK_CLI:-paseo}" hooks ${shellToken(provider.id)} ${shellToken(event.event)}`;
+  const hookCommand = `"\${OSUNA_HOOK_CLI:-osuna}" hooks ${shellToken(provider.id)} ${shellToken(event.event)}`;
   return `if [ -n "$OSUNA_TERMINAL_ID" ]; then ${hookCommand}; fi`;
 }
 
@@ -146,7 +146,7 @@ export function buildAgentHookWindowsCommand<TConfig>(
   event: AgentHookEventDefinition,
 ): string {
   const hookArgs = `hooks ${windowsToken(provider.id)} ${windowsToken(event.event)}`;
-  return `if defined OSUNA_TERMINAL_ID (if defined OSUNA_HOOK_CLI ("%OSUNA_HOOK_CLI%" ${hookArgs}) else (paseo ${hookArgs})) else (exit /b 0)`;
+  return `if defined OSUNA_TERMINAL_ID (if defined OSUNA_HOOK_CLI ("%OSUNA_HOOK_CLI%" ${hookArgs}) else (osuna ${hookArgs})) else (exit /b 0)`;
 }
 
 function installAgentHookPluginFile(

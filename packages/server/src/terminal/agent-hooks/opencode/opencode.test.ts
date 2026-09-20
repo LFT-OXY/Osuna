@@ -1,6 +1,6 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { addAbortSignal, PassThrough, Readable } from "node:stream";
 import { finished } from "node:stream/promises";
 import { runInNewContext } from "node:vm";
@@ -57,8 +57,8 @@ describe("OpenCode terminal agent hooks", () => {
       dispose();
 
       expect(commands).toEqual([
-        ["paseo", "hooks", "opencode", "session.status.busy"],
-        ["paseo", "hooks", "opencode", "session.status.idle"],
+        ["osuna", "hooks", "opencode", "session.status.busy"],
+        ["osuna", "hooks", "opencode", "session.status.idle"],
       ]);
     },
   );
@@ -80,11 +80,11 @@ describe("OpenCode terminal agent hooks", () => {
 
     expect(plugin.id).toBe("paseo-terminal-activity");
     expect(commands).toEqual([
-      ["paseo", "hooks", "opencode", "session.status.busy"],
-      ["paseo", "hooks", "opencode", "permission.asked"],
-      ["paseo", "hooks", "opencode", "permission.replied"],
-      ["paseo", "hooks", "opencode", "session.status.retry"],
-      ["paseo", "hooks", "opencode", "session.status.idle"],
+      ["osuna", "hooks", "opencode", "session.status.busy"],
+      ["osuna", "hooks", "opencode", "permission.asked"],
+      ["osuna", "hooks", "opencode", "permission.replied"],
+      ["osuna", "hooks", "opencode", "session.status.retry"],
+      ["osuna", "hooks", "opencode", "session.status.idle"],
     ]);
   });
 
@@ -102,8 +102,8 @@ describe("OpenCode terminal agent hooks", () => {
     dispose();
 
     expect(commands).toEqual([
-      ["paseo", "hooks", "opencode", "permission.asked"],
-      ["paseo", "hooks", "opencode", "permission.replied"],
+      ["osuna", "hooks", "opencode", "permission.asked"],
+      ["osuna", "hooks", "opencode", "permission.replied"],
     ]);
   });
 
@@ -122,13 +122,13 @@ describe("OpenCode terminal agent hooks", () => {
       event: { type: "session.status", properties: { status: { type: "idle" } } },
     });
     await Promise.resolve();
-    expect(commands).toEqual([["paseo", "hooks", "opencode", "session.status.busy"]]);
+    expect(commands).toEqual([["osuna", "hooks", "opencode", "session.status.busy"]]);
 
     finishFirstHook();
     await Promise.all([working, idle]);
     expect(commands).toEqual([
-      ["paseo", "hooks", "opencode", "session.status.busy"],
-      ["paseo", "hooks", "opencode", "session.status.idle"],
+      ["osuna", "hooks", "opencode", "session.status.busy"],
+      ["osuna", "hooks", "opencode", "session.status.idle"],
     ]);
   });
 
@@ -160,6 +160,31 @@ describe("OpenCode terminal agent hooks", () => {
     dispose();
 
     expect(commands).toEqual([]);
+  });
+
+  it("spawns the hook CLI resolved by the daemon when OSUNA_HOOK_CLI is set", async () => {
+    const hookCli = join("/opt", "osuna", "bin", "osuna");
+    const { plugin, commands } = loadInstalledPlugin("terminal-1", Promise.resolve(0), hookCli);
+
+    await plugin.server().event({
+      event: { type: "session.status", properties: { status: { type: "busy" } } },
+    });
+
+    expect(commands).toEqual([[hookCli, "hooks", "opencode", "session.status.busy"]]);
+  });
+
+  // An upgrade finds the previous release's plugin already on disk; OpenCode loads
+  // whatever file is there, so a stale one has to be overwritten, not left alone.
+  it("replaces an out-of-date plugin file", () => {
+    const configDir = createTempDir("paseo-opencode-stale-");
+    const configPath = resolveAgentHookConfigPath(opencodeAgentHookProvider, { configDir });
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(configPath, PRE_RENAME_PLUGIN_SOURCE);
+
+    const result = installAgentHooks(opencodeAgentHookProvider, { configDir });
+
+    expect(result.changed).toBe(true);
+    expect(readFileSync(configPath, "utf8")).toBe(OPENCODE_PLUGIN_SOURCE);
   });
 
   it("uninstalls the OpenCode plugin file", () => {
@@ -230,6 +255,32 @@ describe("OpenCode terminal agent hooks", () => {
   });
 });
 
+// The shape shipped before the CLI binary was renamed: a hard-coded `paseo` with
+// no environment override, which is what an upgraded install still has on disk.
+const PRE_RENAME_PLUGIN_SOURCE = [
+  "let pendingHook = Promise.resolve();",
+  "",
+  "function runPaseoHook(event) {",
+  "  if (!process.env.OSUNA_TERMINAL_ID) return;",
+  "  pendingHook = pendingHook.then(async () => {",
+  "    try {",
+  '      const child = Bun.spawn(["paseo", "hooks", "opencode", event], {',
+  '        stdin: "ignore",',
+  '        stdout: "ignore",',
+  '        stderr: "ignore",',
+  "      });",
+  "      await child.exited;",
+  "    } catch {}",
+  "  });",
+  "  return pendingHook;",
+  "}",
+  "",
+  "export default {",
+  '  id: "paseo-terminal-activity",',
+  "};",
+  "",
+].join("\n");
+
 interface OpenCodeEvent {
   type: string;
   properties?: { status: { type: string } };
@@ -244,7 +295,11 @@ interface InstalledPlugin {
   }): () => void;
 }
 
-function loadInstalledPlugin(terminalId = "terminal-1", exited = Promise.resolve(0)) {
+function loadInstalledPlugin(
+  terminalId = "terminal-1",
+  exited = Promise.resolve(0),
+  hookCli: string | undefined = undefined,
+) {
   const configDir = createTempDir("paseo-opencode-runtime-");
   const { configPath } = installAgentHooks(opencodeAgentHookProvider, { configDir });
   const source = readFileSync(configPath, "utf8");
@@ -254,7 +309,12 @@ function loadInstalledPlugin(terminalId = "terminal-1", exited = Promise.resolve
     source.replace("export default", "globalThis.plugin ="),
     {
       AbortController,
-      process: { env: { OSUNA_TERMINAL_ID: terminalId } },
+      process: {
+        env: {
+          OSUNA_TERMINAL_ID: terminalId,
+          ...(hookCli === undefined ? {} : { OSUNA_HOOK_CLI: hookCli }),
+        },
+      },
       Bun: {
         spawn(command: string[]) {
           commands.push(command);

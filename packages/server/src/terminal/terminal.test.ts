@@ -9,6 +9,7 @@ import {
   humanizeProcessTitle,
   normalizeProcessTitle,
   resolveZshShellIntegrationDir,
+  resolveOsunaCliExecutablePath,
   type TerminalSession,
 } from "./terminal.js";
 import {
@@ -24,10 +25,11 @@ import {
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import * as pty from "node-pty";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
+import { fileURLToPath } from "node:url";
 
 const hasZsh = existsSync("/bin/zsh");
 
@@ -183,6 +185,29 @@ async function waitForScheduledTimers(expectedTimerCount: number): Promise<void>
 
   throw new Error(`Expected ${expectedTimerCount} scheduled timers, got ${vi.getTimerCount()}`);
 }
+
+const workspaceNpmBinDir = join(
+  fileURLToPath(new URL("../../../..", import.meta.url)),
+  "node_modules",
+  ".bin",
+);
+
+// The daemon hands agent hooks the CLI it resolves here, so the npm shim has to
+// win over the raw bin entrypoint: only the shim is executable on every platform.
+describe("Osuna CLI resolution", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("prefers the npm bin shim over the package bin entrypoint", () => {
+    vi.stubEnv("OSUNA_CLI", "");
+
+    const resolved = resolveOsunaCliExecutablePath();
+
+    expect(dirname(resolved ?? "")).toBe(workspaceNpmBinDir);
+    expect(basename(resolved ?? "")).toMatch(/^osuna(\.cmd|\.exe)?$/);
+  });
+});
 
 describe("createTerminal", () => {
   it("keeps full process titles while stripping path prefixes", () => {

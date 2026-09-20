@@ -22,5 +22,7 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "f87527871fad70e391e92f5d4380e4e2fc2900f8"
+  }
 }

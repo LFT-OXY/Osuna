@@ -410,17 +410,17 @@ function resolveExternalProcessPath(filePath: string): string {
 }
 
 export function resolvePaseoCliBinDir(): string | null {
-  const cliExecutable = resolvePaseoCliExecutablePath();
+  const cliExecutable = resolveOsunaCliExecutablePath();
   return cliExecutable ? dirname(cliExecutable) : null;
 }
 
-export function resolvePaseoCliExecutablePath(): string | null {
+export function resolveOsunaCliExecutablePath(): string | null {
   const configuredCli = process.env.OSUNA_CLI?.trim();
   if (configuredCli) {
     return resolvePath(configuredCli);
   }
 
-  const cliEntrypoint = resolvePaseoCliBinEntrypoint();
+  const cliEntrypoint = resolveOsunaCliBinEntrypoint();
   if (!cliEntrypoint) {
     return null;
   }
@@ -428,7 +428,7 @@ export function resolvePaseoCliExecutablePath(): string | null {
   const externalCliEntrypoint = resolveExternalProcessPath(cliEntrypoint);
   const npmBinDir = findNpmBinDir(dirname(externalCliEntrypoint));
   if (npmBinDir) {
-    const shim = resolvePaseoCliShim(npmBinDir);
+    const shim = resolveOsunaCliShim(npmBinDir);
     if (shim) {
       return shim;
     }
@@ -437,7 +437,7 @@ export function resolvePaseoCliExecutablePath(): string | null {
   return externalCliEntrypoint;
 }
 
-function resolvePaseoCliBinEntrypoint(): string | null {
+function resolveOsunaCliBinEntrypoint(): string | null {
   try {
     return require.resolve(OSUNA_CLI_BIN_ENTRY);
   } catch {
@@ -449,7 +449,7 @@ function findNpmBinDir(startPath: string): string | null {
   let current = startPath;
   while (true) {
     const candidate = join(current, "node_modules", ".bin");
-    if (hasPaseoCliShim(candidate)) {
+    if (hasOsunaCliShim(candidate)) {
       return candidate;
     }
 
@@ -461,12 +461,12 @@ function findNpmBinDir(startPath: string): string | null {
   }
 }
 
-function hasPaseoCliShim(binDir: string): boolean {
-  return resolvePaseoCliShim(binDir) !== null;
+function hasOsunaCliShim(binDir: string): boolean {
+  return resolveOsunaCliShim(binDir) !== null;
 }
 
-function resolvePaseoCliShim(binDir: string): string | null {
-  for (const name of paseoCliShimNames()) {
+function resolveOsunaCliShim(binDir: string): string | null {
+  for (const name of osunaCliShimNames()) {
     const candidate = join(binDir, name);
     if (existsSync(candidate)) {
       return candidate;
@@ -475,8 +475,8 @@ function resolvePaseoCliShim(binDir: string): string | null {
   return null;
 }
 
-function paseoCliShimNames(): string[] {
-  return process.platform === "win32" ? ["paseo.cmd", "paseo.exe", "paseo"] : ["paseo"];
+function osunaCliShimNames(): string[] {
+  return process.platform === "win32" ? ["osuna.cmd", "osuna.exe", "osuna"] : ["osuna"];
 }
 
 function resolveZshShellIntegrationRuntimeDir(): string {
@@ -518,7 +518,7 @@ export function buildTerminalEnvironment(
   );
   const envWithHookCli = injectPaseoHookCli(
     envWithAgentHooks,
-    input.paseoHookCliPath === undefined ? resolvePaseoCliExecutablePath() : input.paseoHookCliPath,
+    input.paseoHookCliPath === undefined ? resolveOsunaCliExecutablePath() : input.paseoHookCliPath,
   );
 
   if (basename(input.shell) !== "zsh") {

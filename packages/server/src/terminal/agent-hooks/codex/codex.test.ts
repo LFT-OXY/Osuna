@@ -68,8 +68,8 @@ describe("Codex terminal agent hooks", () => {
     for (const event of codexAgentHookProvider.events) {
       expect(commandHooks(config, event.event)).toEqual([
         {
-          command: `if [ -n "$OSUNA_TERMINAL_ID" ]; then "\${OSUNA_HOOK_CLI:-paseo}" hooks codex ${event.event}; fi`,
-          commandWindows: `if defined OSUNA_TERMINAL_ID (if defined OSUNA_HOOK_CLI ("%OSUNA_HOOK_CLI%" hooks codex ${event.event}) else (paseo hooks codex ${event.event})) else (exit /b 0)`,
+          command: `if [ -n "$OSUNA_TERMINAL_ID" ]; then "\${OSUNA_HOOK_CLI:-osuna}" hooks codex ${event.event}; fi`,
+          commandWindows: `if defined OSUNA_TERMINAL_ID (if defined OSUNA_HOOK_CLI ("%OSUNA_HOOK_CLI%" hooks codex ${event.event}) else (osuna hooks codex ${event.event})) else (exit /b 0)`,
         },
       ]);
     }
@@ -102,7 +102,7 @@ describe("Codex terminal agent hooks", () => {
     const stopCommands = commandHooks(readHooksFile(configDir), "Stop").map((hook) => hook.command);
     expect(stopCommands).toEqual([
       "say codex done",
-      'if [ -n "$OSUNA_TERMINAL_ID" ]; then "${OSUNA_HOOK_CLI:-paseo}" hooks codex Stop; fi',
+      'if [ -n "$OSUNA_TERMINAL_ID" ]; then "${OSUNA_HOOK_CLI:-osuna}" hooks codex Stop; fi',
     ]);
   });
 

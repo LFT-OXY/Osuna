@@ -31,11 +31,14 @@ export const OPENCODE_PLUGIN_SOURCE = [
   // Both entrypoints enqueue reports so an older busy report cannot overwrite idle.
   "let pendingHook = Promise.resolve();",
   "",
+  // The daemon injects OSUNA_HOOK_CLI with the CLI path it already resolved; the
+  // bare name works because that CLI's bin dir is prepended to the terminal PATH.
   "function runPaseoHook(event) {",
   "  if (!process.env.OSUNA_TERMINAL_ID) return;",
   "  pendingHook = pendingHook.then(async () => {",
   "    try {",
-  '      const child = Bun.spawn(["paseo", "hooks", "opencode", event], {',
+  '      const cli = process.env.OSUNA_HOOK_CLI || "osuna";',
+  '      const child = Bun.spawn([cli, "hooks", "opencode", event], {',
   '        stdin: "ignore",',
   '        stdout: "ignore",',
   '        stderr: "ignore",',

@@ -29,7 +29,7 @@ function createTempDir(prefix: string): string {
 
 function createFakeCliBinDir(): string {
   const dir = createTempDir("paseo-cli-bin-");
-  writeFileSync(join(dir, "paseo"), "");
+  writeFileSync(join(dir, "osuna"), "");
   return dir;
 }
 
@@ -80,7 +80,7 @@ describe("Claude terminal agent hooks", () => {
       );
       expect(paseoCommands).toHaveLength(1);
       expect(paseoCommands[0]).toBe(
-        `if [ -n "$OSUNA_TERMINAL_ID" ]; then "\${OSUNA_HOOK_CLI:-paseo}" hooks ${provider.id} ${event.event}; fi`,
+        `if [ -n "$OSUNA_TERMINAL_ID" ]; then "\${OSUNA_HOOK_CLI:-osuna}" hooks ${provider.id} ${event.event}; fi`,
       );
     }
     expect(registeredAgentHooksAreInstalled({ configDir })).toBe(true);
@@ -145,7 +145,7 @@ describe("Claude terminal agent hooks", () => {
     const command = buildAgentHookShellCommand(provider, provider.events[0]);
 
     expect(command).toBe(
-      'if [ -n "$OSUNA_TERMINAL_ID" ]; then "${OSUNA_HOOK_CLI:-paseo}" hooks claude UserPromptSubmit; fi',
+      'if [ -n "$OSUNA_TERMINAL_ID" ]; then "${OSUNA_HOOK_CLI:-osuna}" hooks claude UserPromptSubmit; fi',
     );
   });
 
@@ -156,11 +156,37 @@ describe("Claude terminal agent hooks", () => {
       const command = buildAgentHookShellCommand(provider, event);
 
       const result = spawnSync("/bin/sh", ["-c", command], {
-        env: { PATH: process.env.PATH ?? "", OSUNA_HOOK_CLI: "paseo" },
+        env: { PATH: process.env.PATH ?? "", OSUNA_HOOK_CLI: "osuna" },
         stdio: "ignore",
       });
 
       expect(result.status).toBe(0);
+    },
+  );
+
+  // OSUNA_HOOK_CLI is only set for terminals the daemon starts; everywhere else
+  // the hook has to find the CLI by name on PATH, so run the real command line.
+  it.skipIf(isPlatform("win32"))(
+    "falls back to the CLI name on PATH without OSUNA_HOOK_CLI",
+    () => {
+      const provider = AGENT_HOOK_PROVIDERS.claude;
+      const binDir = createTempDir("osuna-hook-fallback-bin-");
+      const argvPath = join(binDir, "argv.txt");
+      writeFileSync(join(binDir, "osuna"), `#!/bin/sh\nprintf '%s' "$*" > ${argvPath}\n`, {
+        mode: 0o755,
+      });
+
+      const result = spawnSync(
+        "/bin/sh",
+        ["-c", buildAgentHookShellCommand(provider, provider.events[0])],
+        {
+          env: { PATH: binDir, OSUNA_TERMINAL_ID: "terminal-1" },
+          stdio: "ignore",
+        },
+      );
+
+      expect(result.status).toBe(0);
+      expect(readFileSync(argvPath, "utf8")).toBe("hooks claude UserPromptSubmit");
     },
   );
 
@@ -175,9 +201,9 @@ describe("Claude terminal agent hooks", () => {
     }
   });
 
-  it("prepends the paseo CLI directory and injects the hook CLI path", () => {
+  it("prepends the Osuna CLI directory and injects the hook CLI path", () => {
     const cliBinDir = createFakeCliBinDir();
-    const hookCliPath = join(cliBinDir, "paseo");
+    const hookCliPath = join(cliBinDir, "osuna");
 
     const env = buildTerminalEnvironment({
       shell: "/bin/sh",
