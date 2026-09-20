@@ -13,7 +13,7 @@ import { withGlobalOptions } from "../utils/command-options.js";
 import type { CommandOptions } from "../output/index.js";
 import { launchLocalDaemon, parseTimeoutMs } from "./daemon/local-daemon.js";
 import { connectToDaemon } from "../utils/client.js";
-import { formatPairingInstructions } from "../output/pairing.js";
+import { describePairingUnavailable, formatPairingInstructions } from "../output/pairing.js";
 import {
   confirmRelayPairing,
   printDirectConnectionGuidance,
@@ -297,7 +297,9 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   }
 
   if (!pairing.url) {
-    log.warn("Relay pairing URL is unavailable for this daemon configuration.");
+    const notice = describePairingUnavailable(pairing.unavailableReason ?? "unknown");
+    log.warn(notice.message);
+    log.message(notice.action);
     printNextSteps(null, paseoHome, richUi);
     if (richUi) {
       outro("Osuna daemon is running.");

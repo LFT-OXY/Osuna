@@ -953,7 +953,12 @@ export default function contribute(plugin: unknown) {
           relayPublicEndpoint: "127.0.0.1:9",
           includeQr: false,
         });
-        expect(unconfigured).toEqual({ relayEnabled: true, url: null, qr: null });
+        expect(unconfigured).toEqual({
+          relayEnabled: true,
+          url: null,
+          qr: null,
+          unavailableReason: "app_base_url_unset",
+        });
       } finally {
         await daemon.stop().catch(() => undefined);
         await daemon.agentManager.flush().catch(() => undefined);

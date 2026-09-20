@@ -191,6 +191,8 @@ async function waitForDaemonRelayRegistered(offerUrl: string, timeoutMs = 30_000
       relayEnabled: true,
       relayEndpoint,
       relayPublicEndpoint: relayEndpoint,
+      // app 地址没有默认值，不传就没有配对链接可供后续断言
+      appBaseUrl: "https://app.example.test",
       includeQr: false,
     });
     if (!offer.url) throw new Error("generateLocalPairingOffer returned no URL");

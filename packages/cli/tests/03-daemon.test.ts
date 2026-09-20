@@ -232,6 +232,9 @@ try {
         ...process.env,
         OSUNA_HOME: paseoHome,
         OSUNA_LISTEN: listen,
+        // relay 端点与 app 地址没有默认值，缺任一项这个 daemon 就出不了配对链接
+        OSUNA_RELAY_ENDPOINT: "127.0.0.1:9",
+        OSUNA_APP_BASE_URL: "https://app.example.test",
         OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
         OSUNA_DICTATION_ENABLED: "0",
         OSUNA_VOICE_MODE_ENABLED: "0",
@@ -352,8 +355,10 @@ try {
     const config = JSON.parse(await readFile(configPath, "utf-8"));
     config.daemon = {
       ...config.daemon,
-      relay: { ...config.daemon?.relay, enabled: false },
+      // relay 端点与 app 地址没有默认值，要出配对链接必须显式配置
+      relay: { ...config.daemon?.relay, enabled: false, endpoint: "127.0.0.1:9" },
     };
+    config.app = { ...config.app, baseUrl: "https://app.example.test" };
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 
     const pairing = await daemonCommand(["pair", "--relay", "--json"]);

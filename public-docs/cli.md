@@ -371,7 +371,7 @@ osuna daemon pair --relay  # enables relay without prompting
 osuna daemon pair --json   # structured output; never prompts
 ```
 
-Relay is off for new installations. A disabled relay returns a `RELAY_DISABLED` error; pass `--relay` to provide explicit consent. For a stopped home, pairing is labelled offline; `--relay` saves relay enablement and the offer includes a start instruction. A live but unreachable home never falls back to an offline identity. Relay pairing is end-to-end encrypted. See [Security](/docs/security).
+Relay is off for new installations. A disabled relay returns a `RELAY_DISABLED` error; pass `--relay` to provide explicit consent. Relay alone is not enough for a link: the daemon also needs a relay endpoint and an app base URL, neither of which has a default. Without them `--json` returns `RELAY_ENDPOINT_UNSET` or `APP_BASE_URL_UNSET` (`DAEMON_RESTART_REQUIRED` when both are saved but the running daemon predates them — `daemon.relay.endpoint` needs a restart, not a reload; `PAIRING_LINK_UNAVAILABLE` when the CLI is talking to a remote daemon and cannot tell which is missing), and each error names the `osuna daemon config set` command that fixes it. For a stopped home, pairing is labelled offline; `--relay` saves relay enablement and the offer includes a start instruction. A live but unreachable home never falls back to an offline identity. Relay pairing is end-to-end encrypted. See [Security](/docs/security).
 
 Use it from anywhere:
 

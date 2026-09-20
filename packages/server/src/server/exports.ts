@@ -10,7 +10,11 @@ export {
   type PersistedConfig,
 } from "./persisted-config.js";
 export { hashDaemonPassword, isBearerTokenValid } from "./auth.js";
-export { generateLocalPairingOffer, type LocalPairingOffer } from "./pairing-offer.js";
+export {
+  generateLocalPairingOffer,
+  type LocalPairingOffer,
+  type PairingOfferUnavailableReason,
+} from "./pairing-offer.js";
 export {
   ConnectionOfferSchema,
   decodeOfferFragmentPayload,

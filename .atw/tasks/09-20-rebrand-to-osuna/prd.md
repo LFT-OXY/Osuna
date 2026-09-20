@@ -297,3 +297,23 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
 - iOS / Android 上架与 F-Droid 元数据重写。
 - 域名购买、官网部署、relay 与 Hub 的线上服务。relay/Hub 默认地址本任务只留空并要求
   显式配置 —— 指向一个不存在的 `osuna.sh` 比报错更难排查。
+
+### 地址留空的下游收尾（票 10 决定）
+
+`appBaseUrl` 与 relay endpoint 一起留空，让配对链接从「总是有」变成「可能没有」。
+唯一的消费方是 `osuna daemon pair`，决定取 **A：承认「没有链接」是正常状态**，
+由 CLI 承接，而不是报错（B）或给一个本仓库默认地址（C）。
+
+- `generateLocalPairingOffer` 的返回值带上 `unavailableReason`，区分
+  `relay_disabled` / `relay_endpoint_unset` / `app_base_url_unset`，
+  把「为什么没有链接」从三选一的猜测变成事实。CLI 侧再加两种它自己能判出的状态：
+  `config_not_applied`（配置已配齐但 daemon 还没吃到 —— `daemon.relay.endpoint`
+  要求重启而不是 reload，daemon 自己会这么警告）与 `unknown`（远端 daemon）。
+- 文案一律先给 `osuna daemon config set <path> <value>`。离线配对解析配置时显式屏蔽
+  进程环境（`resolveLocalPairingOffer` 传 `env: {}`），只说「设置 `OSUNA_APP_BASE_URL`」
+  在这条路径上照做无效，环境变量只作为「起 daemon 前设置」的补充提到。
+- daemon RPC 不扩协议：`daemon.get_pairing_offer.response` 只有 `url` 与 `relayEnabled`。
+  daemon 已在跑是装完后的默认状态，`osuna daemon pair` 与 `osuna onboard` 都走 RPC，
+  所以不能让这条路径一律退到兜底——本机 daemon 读的是同一个 home，CLI 按它的持久化配置
+  自行判定缺哪一项。只有真正的远端 daemon（以及配置已改但 daemon 未重载）才退到
+  `PAIRING_LINK_UNAVAILABLE`。换协议字段不值得，等有域名后这条路径自然消失。

@@ -3,7 +3,7 @@
 **What to build:** 决定「没有配置 app base URL 时，`osuna daemon pair` 应该给出什么」，
 然后让代码与测试一致。现在两者矛盾：代码返回 `url: null`，测试断言 `url` 里含 `offer=`。
 
-**Impl:** ready
+**Impl:** done
 **Status:** ready-for-agent
 
 **Blocked by:** None — 与改名的其余批次无依赖

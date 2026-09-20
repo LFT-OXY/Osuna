@@ -5,10 +5,20 @@ import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
 import { renderPairingQr } from "./pairing-qr.js";
 import { getOrCreateServerId } from "./server-id.js";
 
+/**
+ * 没有出配对链接时，缺的是哪一项配置。本 fork 不托管 relay 与 web app，两者都要求
+ * 显式配置，所以「没有链接」是常态而不是异常，调用方需要凭这个值给出可操作的提示。
+ */
+export type PairingOfferUnavailableReason =
+  | "relay_disabled"
+  | "relay_endpoint_unset"
+  | "app_base_url_unset";
+
 export interface LocalPairingOffer {
   relayEnabled: boolean;
   url: string | null;
   qr: string | null;
+  unavailableReason: PairingOfferUnavailableReason | null;
 }
 
 export async function generateLocalPairingOffer(args: {
@@ -28,6 +38,7 @@ export async function generateLocalPairingOffer(args: {
       relayEnabled: false,
       url: null,
       qr: null,
+      unavailableReason: "relay_disabled",
     };
   }
 
@@ -35,8 +46,11 @@ export async function generateLocalPairingOffer(args: {
   // 而不是拼出一个指向上游或不存在域名的 URL。
   const relayEndpoint = args.relayEndpoint;
   const appBaseUrl = args.appBaseUrl;
-  if (!relayEndpoint || !appBaseUrl) {
-    return { relayEnabled: true, url: null, qr: null };
+  if (!relayEndpoint) {
+    return { relayEnabled: true, url: null, qr: null, unavailableReason: "relay_endpoint_unset" };
+  }
+  if (!appBaseUrl) {
+    return { relayEnabled: true, url: null, qr: null, unavailableReason: "app_base_url_unset" };
   }
 
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
@@ -56,6 +70,7 @@ export async function generateLocalPairingOffer(args: {
       relayEnabled: true,
       url,
       qr: null,
+      unavailableReason: null,
     };
   }
 
@@ -70,5 +85,6 @@ export async function generateLocalPairingOffer(args: {
     relayEnabled: true,
     url,
     qr,
+    unavailableReason: null,
   };
 }

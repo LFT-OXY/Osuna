@@ -98,6 +98,16 @@ A field users can change while the daemon runs needs five edits, and missing any
 
 Owners read the live value through one resolver rather than repeating `?? default` at each call site; `resolveUsagePricingSettings` in `server/usage/config.ts` is the shape.
 
+### Config values this fork ships with no default
+
+`daemon.relay.endpoint` (`OSUNA_RELAY_ENDPOINT`) and `app.baseUrl` (`OSUNA_APP_BASE_URL`) both resolve to `null` when unset — see `resolveRelayConfig` and `resolveStaticLoadConfigSettings` in `server/config.ts`. The fork hosts neither a relay nor a web app, so there is nothing to fall back to, and pointing at a domain nobody owns is harder to diagnose than an empty value.
+
+Three consequences that are not visible from the field declarations:
+
+- **`generateLocalPairingOffer` returns `url: null` when either is unset.** It reports which one through `unavailableReason`, so callers name the missing setting instead of printing one message for every way pairing can fail. Any fixture that asserts on a pairing link has to configure both — see [Testing](./testing.md).
+- **Offline pairing ignores the process environment.** `resolveLocalPairingOffer` in `packages/cli/src/commands/daemon/pair.ts` passes `{ env: {} }` to `resolveConfigFromPersisted`, so user-facing copy has to lead with `osuna daemon config set <path> <value>`; telling the user to export an env var is advice that does nothing on that path.
+- **`daemon.relay.endpoint` is restart-required, not reloadable.** It is absent from `RELOADABLE_PATHS`, so `osuna daemon reload` warns and changes nothing. A running daemon that still has no pairing link after both values are saved needs a restart, and that is a distinct state worth its own message.
+
 ## Files and secrets
 
 - Keypairs and other private files go through `server/private-files.ts` (mode `0600`).

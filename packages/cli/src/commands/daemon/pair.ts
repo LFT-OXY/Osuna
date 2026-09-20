@@ -11,7 +11,11 @@ import {
 import { connectToDaemon } from "../../utils/client.js";
 import type { DaemonTarget } from "../../utils/daemon-target.js";
 import { addJsonAndDaemonHostOptions, withGlobalOptions } from "../../utils/command-options.js";
-import { formatPairingInstructions } from "../../output/pairing.js";
+import {
+  describePairingUnavailable,
+  formatPairingInstructions,
+  type PairingUnavailableReason,
+} from "../../output/pairing.js";
 
 interface PairOptions {
   daemonTarget: DaemonTarget;
@@ -32,6 +36,8 @@ export interface PairingOffer {
   relayEnabled: boolean;
   url: string | null;
   qr: string | null;
+  /** 远端 daemon 不回这个值，此时为 null，输出层退到「不知道缺哪个」的兜底文案。 */
+  unavailableReason: PairingUnavailableReason | null;
 }
 
 const PAIRING_DAEMON_RPC_TIMEOUT_MS = 1500;
@@ -131,10 +137,33 @@ async function resolveDaemonPairingOffer(
       relayEnabled: offer.relayEnabled,
       url: offer.url || null,
       qr: offer.qr ?? null,
+      unavailableReason: resolveDaemonUnavailableReason(target, offer),
     };
   } finally {
     await client.close().catch(() => undefined);
   }
+}
+
+/**
+ * RPC 不回「缺哪一项配置」。本机 daemon 读的是同一个 home，这里按它的持久化配置补判；
+ * 配置已配齐却仍没有链接，说明 daemon 还没吃到这份配置（`daemon.relay.endpoint`
+ * 明确要求重启）。真正的远端 daemon 落回 null，由输出层给兜底文案。
+ */
+function resolveDaemonUnavailableReason(
+  target: DaemonTarget,
+  offer: { relayEnabled: boolean; url: string },
+): PairingUnavailableReason | null {
+  if (!offer.relayEnabled) return "relay_disabled";
+  if (offer.url) return null;
+  if (target.kind !== "instance") return null;
+  const config = resolveConfigFromPersisted(
+    target.home,
+    readPersistedConfig(target.home, { defaultsIfMissing: true }),
+    { env: {} },
+  );
+  if (!config.relayEndpoint) return "relay_endpoint_unset";
+  if (!config.appBaseUrl) return "app_base_url_unset";
+  return "config_not_applied";
 }
 
 export async function confirmRelayPairing(): Promise<boolean> {
@@ -173,23 +202,18 @@ export async function runPairCommand(options: PairOptions): Promise<void> {
   outputPairingResult(pairing, options, output);
 }
 
-function outputPairingResult(
+export function outputPairingResult(
   pairing: PairingOffer,
   options: PairOptions,
   output: PairCommandOutput,
 ): void {
   if (!pairing.relayEnabled || !pairing.url) {
+    const notice = describePairingUnavailable(pairing.unavailableReason ?? "unknown");
     if (options.json) {
-      output.writeStderr(
-        `${JSON.stringify({
-          code: "RELAY_DISABLED",
-          message: "Relay pairing is disabled for this daemon.",
-          action: "Run osuna daemon pair --relay --json to enable it explicitly.",
-        })}\n`,
-      );
+      output.writeStderr(`${JSON.stringify(notice)}\n`);
     } else {
-      output.writeStderr(`${chalk.red("Relay pairing is disabled for this daemon.")}\n`);
-      output.writeStderr(`${chalk.yellow("Run osuna daemon pair --relay to enable it.")}\n`);
+      output.writeStderr(`${chalk.red(notice.message)}\n`);
+      output.writeStderr(`${chalk.yellow(notice.action)}\n`);
     }
     output.setExitCode(1);
     return;
