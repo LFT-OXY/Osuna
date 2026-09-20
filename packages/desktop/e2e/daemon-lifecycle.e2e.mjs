@@ -12,7 +12,7 @@ import {
   startDaemonInstance,
   stopDaemonInstance,
   readDaemonInstance,
-} from "@getpaseo/server";
+} from "@osuna/server";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
 const root = await mkdtemp(path.join(tmpdir(), "paseo desktop lifecycle "));

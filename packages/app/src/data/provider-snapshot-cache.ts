@@ -3,14 +3,14 @@ import { Buffer } from "buffer";
 import {
   normalizeAgentModelCatalog,
   type ProviderSnapshotEntry,
-} from "@getpaseo/protocol/agent-types";
+} from "@osuna/protocol/agent-types";
 import {
   expandProviderSnapshot,
   type CompactProviderSnapshot,
-} from "@getpaseo/protocol/provider-snapshot-codec";
-import { CompactProviderSnapshotSchema } from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/provider-snapshot-codec";
+import { CompactProviderSnapshotSchema } from "@osuna/protocol/messages";
 import { z } from "zod";
-import type { GetProvidersSnapshotResponseMessage } from "@getpaseo/protocol/messages";
+import type { GetProvidersSnapshotResponseMessage } from "@osuna/protocol/messages";
 type SnapshotPayload = GetProvidersSnapshotResponseMessage["payload"];
 
 const CACHE_VERSION = 2;

@@ -8,7 +8,7 @@ import {
   readDaemonInstance,
   waitForDaemonReady,
   type PersistedConfig,
-} from "@getpaseo/server";
+} from "@osuna/server";
 import { withGlobalOptions } from "../utils/command-options.js";
 import type { CommandOptions } from "../output/index.js";
 import { launchLocalDaemon, parseTimeoutMs } from "./daemon/local-daemon.js";
@@ -116,18 +116,17 @@ function printNextSteps(pairingUrl: string | null, paseoHome: string, richUi: bo
   const daemonLogPath = path.join(paseoHome, "daemon.log");
   const nextStepsLines = [
     pairingUrl
-      ? "1. Open Paseo and scan the QR code above, or paste the pairing link."
-      : "1. Open Paseo and connect to your daemon.",
-    "2. Web app: https://app.paseo.sh",
-    "3. Desktop app: https://github.com/getpaseo/paseo/releases/latest",
-    "4. Docs: https://paseo.sh/docs",
-    `5. Example: paseo run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
+      ? "1. Open Osuna and scan the QR code above, or paste the pairing link."
+      : "1. Open Osuna and connect to your daemon.",
+    "2. Desktop app: https://github.com/LFT-OXY/Osuna/releases/latest",
+    "3. Docs: https://github.com/LFT-OXY/Osuna/tree/main/public-docs",
+    `4. Example: osuna run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
   ];
   const quickReferenceLines = [
-    "1. paseo --help",
-    `2. paseo ls --home ${JSON.stringify(paseoHome)}`,
-    `3. paseo run --home ${JSON.stringify(paseoHome)} "your prompt"`,
-    `4. paseo status --home ${JSON.stringify(paseoHome)}`,
+    "1. osuna --help",
+    `2. osuna ls --home ${JSON.stringify(paseoHome)}`,
+    `3. osuna run --home ${JSON.stringify(paseoHome)} "your prompt"`,
+    `4. osuna status --home ${JSON.stringify(paseoHome)}`,
     `5. Daemon logs: ${daemonLogPath}`,
   ];
 
@@ -249,7 +248,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   const alreadyRunning = await readDaemonInstance(paseoHome);
   persistSetupChoices(paseoHome, options);
   if (richUi) {
-    renderNote(paseoHome, "Paseo home");
+    renderNote(paseoHome, "Osuna home");
   }
 
   const voiceEnabled = await resolveAndPersistVoice(paseoHome, options);

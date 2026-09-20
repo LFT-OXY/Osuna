@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { createPaseoApi } from "@getpaseo/client";
-import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { createPaseoApi } from "@osuna/client";
+import { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { PluginRegistry } from "./registry";
 
 function registry() {

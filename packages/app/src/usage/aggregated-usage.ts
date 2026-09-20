@@ -1,4 +1,4 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { toErrorMessage } from "@/utils/error-messages";
 import { mergeUsageReports, type MergedUsageReport } from "./merge";
 import type { UsageRange } from "./period";

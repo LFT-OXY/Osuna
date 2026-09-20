@@ -1,4 +1,4 @@
-import type { UsagePricingModel, UsagePricingOverride } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingModel, UsagePricingOverride } from "@osuna/protocol/usage/types";
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { describeTimeAgo } from "@/usage/relative-time";

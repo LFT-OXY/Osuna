@@ -15,9 +15,9 @@ import {
   PluginIdSchema,
   PluginSourceSchema,
   TerminalProfileSchema,
-} from "@getpaseo/protocol/messages";
-import { UsagePricingOverrideSchema } from "@getpaseo/protocol/usage/types";
-import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
+} from "@osuna/protocol/messages";
+import { UsagePricingOverrideSchema } from "@osuna/protocol/usage/types";
+import { PaseoServicePortAllocationSchema } from "@osuna/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
 export const LogFormatSchema = z.enum(["pretty", "json"]);

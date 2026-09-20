@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type { UsageReport, UsageTokenTotals } from "@osuna/protocol/usage/types";
 import { mergeTurnRow, turnRowKey, type UsageTurnRow } from "../usage/types.js";
 
 const FIXTURE_DIR = new URL("../usage/fixtures/claude/", import.meta.url);

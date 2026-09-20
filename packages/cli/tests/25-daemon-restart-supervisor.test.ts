@@ -15,8 +15,8 @@ import {
   DaemonClient,
   DaemonConnectionError,
   type WebSocketLike,
-} from "@getpaseo/client/internal/daemon-client";
-import { readDaemonInstance, isSameDaemonInstance } from "@getpaseo/server";
+} from "@osuna/client/internal/daemon-client";
+import { readDaemonInstance, isSameDaemonInstance } from "@osuna/server";
 import { runLocalPaseo } from "./helpers/local-cli.ts";
 import { getAvailablePort } from "./helpers/network.ts";
 

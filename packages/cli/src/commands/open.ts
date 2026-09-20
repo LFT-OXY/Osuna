@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { spawnProcess } from "@getpaseo/server";
-import { buildAgentDeepLink, type AgentDeepLinkTarget } from "@getpaseo/protocol/agent-deep-link";
+import { spawnProcess } from "@osuna/server";
+import { buildAgentDeepLink, type AgentDeepLinkTarget } from "@osuna/protocol/agent-deep-link";
 
 function findDesktopApp(): string | null {
   if (process.platform === "darwin") {
     const candidates = [
-      "/Applications/Paseo.app",
-      path.join(homedir(), "Applications", "Paseo.app"),
+      "/Applications/Osuna.app",
+      path.join(homedir(), "Applications", "Osuna.app"),
     ];
 
     for (const candidate of candidates) {
@@ -22,9 +22,9 @@ function findDesktopApp(): string | null {
 
   if (process.platform === "linux") {
     const candidates = [
-      "/usr/bin/Paseo",
-      "/opt/Paseo/Paseo",
-      path.join(homedir(), "Applications", "Paseo.AppImage"),
+      "/usr/bin/Osuna",
+      "/opt/Osuna/Osuna",
+      path.join(homedir(), "Applications", "Osuna.AppImage"),
     ];
 
     for (const candidate of candidates) {
@@ -42,7 +42,7 @@ function findDesktopApp(): string | null {
       return null;
     }
 
-    const candidate = path.join(localAppData, "Programs", "Paseo", "Paseo.exe");
+    const candidate = path.join(localAppData, "Programs", "Osuna", "Osuna.exe");
     return existsSync(candidate) ? candidate : null;
   }
 

@@ -1,9 +1,9 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { PaseoApiProvider, PluginRpcProvider } from "@getpaseo/plugin/client/host";
+import { PaseoApiProvider, PluginRpcProvider } from "@osuna/plugin/client/host";
 import type { ReactNode } from "react";
 import type { InstalledPlugin } from "./types";
 import { usePluginSurfaceRuntime } from "./surface-runtime";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 
 export function PluginRuntimeBoundary({
   plugin,

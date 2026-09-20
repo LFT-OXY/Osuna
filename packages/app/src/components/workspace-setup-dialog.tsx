@@ -1,5 +1,5 @@
-import type { CreateWorkspaceRequestOptions } from "@getpaseo/client/internal/daemon-client";
-import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import type { CreateWorkspaceRequestOptions } from "@osuna/client/internal/daemon-client";
+import type { AgentSnapshotPayload } from "@osuna/protocol/messages";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
@@ -28,10 +28,7 @@ import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
 } from "@/composer/attachments/submit";
-import type {
-  CreateAgentRequestOptions,
-  DaemonClient,
-} from "@getpaseo/client/internal/daemon-client";
+import type { CreateAgentRequestOptions, DaemonClient } from "@osuna/client/internal/daemon-client";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";

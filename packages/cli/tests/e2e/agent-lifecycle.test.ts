@@ -8,12 +8,12 @@
  *
  * Test flow:
  * 1. Start daemon on random port
- * 2. Create agent with `paseo run "say hello" --provider claude`
- * 3. List agents with `paseo ls`
- * 4. Wait for agent with `paseo wait <id>`
- * 5. Inspect agent with `paseo inspect <id>`
- * 6. Stop agent with `paseo stop <id>` and verify it remains inspectable
- * 7. Delete agent with `paseo delete <id>`
+ * 2. Create agent with `osuna run "say hello" --provider claude`
+ * 3. List agents with `osuna ls`
+ * 4. Wait for agent with `osuna wait <id>`
+ * 5. Inspect agent with `osuna inspect <id>`
+ * 6. Stop agent with `osuna stop <id>` and verify it remains inspectable
+ * 7. Delete agent with `osuna delete <id>`
  * 8. Cleanup: stop daemon, remove temp dirs
  *
  * CRITICAL RULES:

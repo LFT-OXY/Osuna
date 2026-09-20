@@ -2,7 +2,7 @@ import type {
   UsageHeatmapDay,
   UsageModelBreakdown,
   UsageSummary,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import { addUsageDays } from "./period";
 import { totalUsageTokens } from "./totals";
 

@@ -1,7 +1,7 @@
 import * as pluginUiRuntime from "./react-native/ui";
 import { useSettings } from "./settings/use-settings";
-import * as pluginSharedRuntime from "@getpaseo/plugin";
-import * as pluginClientRuntime from "@getpaseo/plugin/client";
+import * as pluginSharedRuntime from "@osuna/plugin";
+import * as pluginClientRuntime from "@osuna/plugin/client";
 import * as React from "react";
 import * as ReactJsxRuntime from "react/jsx-runtime";
 // eslint-disable-next-line no-restricted-imports -- plugin client runtime injects host ReactNative.
@@ -13,7 +13,7 @@ import {
   type PluginAttachmentSourceContribution,
   type PluginCleanup,
   type PluginThemeContribution,
-} from "@getpaseo/plugin";
+} from "@osuna/plugin";
 import {
   type PluginCommandCenterItemContribution,
   type PluginClientContext,
@@ -24,7 +24,7 @@ import {
   type PluginTimelineTransformerContribution,
   type PluginWorkspacePanelContribution,
   type PluginButtonRegistration,
-} from "@getpaseo/plugin/client";
+} from "@osuna/plugin/client";
 import type { EvaluatedPlugin } from "./types";
 import type { ComponentType } from "react";
 import { resolvePluginIcon } from "./icons";
@@ -369,13 +369,13 @@ export function runPluginClientBundle(
     },
   };
   const runtimeRequire = (name: string): unknown => {
-    if (name === "@getpaseo/plugin/client/ui") return pluginUiRuntime;
+    if (name === "@osuna/plugin/client/ui") return pluginUiRuntime;
     if (name === "react") return React;
     if (name === "react/jsx-runtime") return ReactJsxRuntime;
     if (name === "react-native") return ReactNative;
-    if (name === "@getpaseo/plugin") return pluginSharedRuntime;
-    if (name === "@getpaseo/plugin/client") return { ...pluginClientRuntime, useSettings };
-    if (name === "@getpaseo/plugin/client/react-native") {
+    if (name === "@osuna/plugin") return pluginSharedRuntime;
+    if (name === "@osuna/plugin/client") return { ...pluginClientRuntime, useSettings };
+    if (name === "@osuna/plugin/client/react-native") {
       return pluginReactNativeRuntime;
     }
     if (name === "@tanstack/react-query") return ReactQuery;

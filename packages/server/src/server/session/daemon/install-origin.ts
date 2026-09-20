@@ -59,7 +59,7 @@ function globalNodeModulesPath(globalRootPath: string): string {
 }
 
 function resolveCurrentServerPackageRoot(): string | null {
-  return resolvePackageRootFrom(fileURLToPath(import.meta.url), "@getpaseo/server");
+  return resolvePackageRootFrom(fileURLToPath(import.meta.url), "@osuna/server");
 }
 
 function resolvePackageRootFrom(startPath: string, packageName: string): string | null {

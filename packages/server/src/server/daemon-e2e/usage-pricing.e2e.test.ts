@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { WebSocket } from "ws";
-import type { UsagePricingModel, UsageReport } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingModel, UsageReport } from "@osuna/protocol/usage/types";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import type { UsagePricingTimers } from "../usage/pricing/service.js";

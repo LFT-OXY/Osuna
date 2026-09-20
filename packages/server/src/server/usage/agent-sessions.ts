@@ -1,4 +1,4 @@
-import type { UsageCli } from "@getpaseo/protocol/usage/types";
+import type { UsageCli } from "@osuna/protocol/usage/types";
 import type { AgentManagerEvent, ManagedAgent } from "../agent/agent-manager.js";
 import type { AgentTimelineRow } from "../agent/agent-timeline-store-types.js";
 import { restoreProviderSessionIds, type StoredAgentRecord } from "../agent/agent-storage.js";

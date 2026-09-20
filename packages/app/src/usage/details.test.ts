@@ -1,4 +1,4 @@
-import type { UsageProjectKind, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type { UsageProjectKind, UsageTokenTotals } from "@osuna/protocol/usage/types";
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { topUsageProjects, USAGE_DETAILS_TABS } from "./details";

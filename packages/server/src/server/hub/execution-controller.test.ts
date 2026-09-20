@@ -4,7 +4,7 @@ import type {
   HubExecutionAgentCreateRequest,
   HubExecutionAgentValidateRequest,
   SessionOutboundMessage,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 
 import type {
   HubExecutionAgents,

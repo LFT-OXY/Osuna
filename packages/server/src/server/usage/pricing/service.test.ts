@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
-import type { UsagePricingOverride, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingOverride, UsageTokenTotals } from "@osuna/protocol/usage/types";
 import { UsageStore } from "../store.js";
 import { UsagePricingService } from "./service.js";
 import type { PricingTable } from "./table.js";

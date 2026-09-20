@@ -1,4 +1,4 @@
-import type { UsageReport, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type { UsageReport, UsageTokenTotals } from "@osuna/protocol/usage/types";
 import { describe, expect, it } from "vitest";
 import {
   ALL_USAGE_HOSTS_FAILED_MESSAGE,

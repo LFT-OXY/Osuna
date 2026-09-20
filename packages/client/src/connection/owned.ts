@@ -1,4 +1,4 @@
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { SessionOutboundMessage } from "@osuna/protocol/messages";
 
 export type SubscriptionSnapshot<T> = T & { subscriptionId: string };
 

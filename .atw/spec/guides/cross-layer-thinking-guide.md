@@ -251,6 +251,60 @@ When a CLI auto-detects a mode by probing a remote resource (e.g., checking if `
 
 ---
 
+## Product Identity Literals
+
+A product's own name, bundle id, URL scheme and CLI binary name are a cross-layer
+contract with no type system behind it. Each one is hardcoded as a plain string in
+layers that cannot import each other — TypeScript source, a YAML packaging config, an
+Expo JS config, shell shims, CI workflow steps, a Nix derivation, native Gradle/podspec
+metadata. Change one site and the build still succeeds; the failure shows up only in the
+packaged artifact, or in CI, or in a user's install.
+
+### Checklist: Before changing a display name, bundle id, URL scheme, or binary name
+
+- [ ] **Packaging config** — `electron-builder.yml` (`appId`, `productName`,
+      `executableName`, `protocols`, every `artifactName`, `executableArgs`,
+      `extraResources`), `packages/app/app.config.js`, `eas.json`.
+- [ ] **Runtime code that must agree with the artifact** — Electron `app.setName` /
+      `setDesktopName` / `--class`, the deep-link scheme constant, the daemon's CORS
+      allowlist for the packaged renderer, diagnostics redaction regexes.
+- [ ] **Names derived by a third party from your id** — Squirrel's
+      `<appId>.ShipIt` cache directory, the deb/rpm package name derived from
+      `productName`, `Contents/Frameworks/<productName> Helper.app`, the
+      `<executableName>.desktop` entry.
+- [ ] **Build hooks** — `afterPack` / `afterSign` scripts that locate the bundle by
+      name, Linux launcher installers.
+- [ ] **Shell shims and their bundle lookups** — `packages/desktop/bin/*`,
+      `packages/cli/bin/*`, and the code that resolves `<pkg>/bin/<name>` at runtime.
+- [ ] **CI steps that name the artifact** — bundle assertions, `dpkg --remove <pkg>`,
+      release asset names, release titles.
+- [ ] **Nix derivations** — `pname`, wrapper binary names, `mainProgram`, desktop items,
+      `startupWMClass`, the `Foo.app` search in the darwin install phase.
+- [ ] **Device automation** — maestro flows and agent-device specs target the installed
+      app id; they silently target a nonexistent app after a `packageId` change.
+- [ ] **Tests whose fixtures model the real bundle layout** — they keep passing with
+      stale names and then stop describing reality.
+- [ ] **Published package READMEs** — they ship to npm with the package, so they are
+      part of the identity, not docs.
+
+### The rule
+
+For any identity string that more than one TypeScript layer reads, export it once from
+the lowest shared package and import it. Static config (YAML, Expo JS, Gradle) cannot
+import, so it stays hardcoded — which means **a test must assert the config and the code
+agree**. `packages/desktop/src/daemon/desktop-packaging.test.ts` is the model: it reads
+`electron-builder.yml` and asserts the scheme and protocol name.
+
+**Real-world example**: renaming Paseo to Osuna. `productName` changed in
+`electron-builder.yml`, but `after-pack.js` and `after-sign.js` still had
+`const EXECUTABLE_NAME = "Paseo"`, so the local desktop build would have failed at the
+pack hook, and `desktop-packages.yml`'s `dpkg --remove paseo` would have failed in CI.
+The URL scheme lived in five places across protocol, desktop, server, Expo config and
+the packaging YAML; changing only the YAML would have shipped a packaged app whose
+renderer the daemon's CORS allowlist rejects.
+
+---
+
 ## When to Create Flow Documentation
 
 Create detailed flow docs when:

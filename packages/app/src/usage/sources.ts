@@ -1,4 +1,4 @@
-import type { UsageCli, UsageSourceRef } from "@getpaseo/protocol/usage/types";
+import type { UsageCli, UsageSourceRef } from "@osuna/protocol/usage/types";
 
 /**
  * Source names are product names, not copy: they stay identical in every UI

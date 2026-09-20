@@ -543,7 +543,7 @@ function FaqSection() {
           </p>
         </FAQItem>
         <FAQItem question="Can I run it myself?">
-          Yes. Run <code>npx @getpaseo/hub</code> and complete setup in the browser. The source is
+          Yes. Run <code>npx @osuna/hub</code> and complete setup in the browser. The source is
           available on{" "}
           <a href="https://github.com/getpaseo/hub" className={LINK_CLASS}>
             GitHub

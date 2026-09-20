@@ -1,4 +1,4 @@
-import type { UsageSourceRef, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type { UsageSourceRef, UsageTokenTotals } from "@osuna/protocol/usage/types";
 
 /**
  * The one number the page calls "tokens". `reasoning` is a subset of `output`,

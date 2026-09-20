@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { FileTransferOpcode, type FileTransferFrame } from "@getpaseo/protocol/binary-frames/index";
-import { getErrorMessage } from "@getpaseo/protocol/error-utils";
+import { FileTransferOpcode, type FileTransferFrame } from "@osuna/protocol/binary-frames/index";
+import { getErrorMessage } from "@osuna/protocol/error-utils";
 import type { FileUploadRequest, FileUploadResponse } from "../messages.js";
 
 interface FileUploadStoreOptions {

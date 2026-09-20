@@ -1,6 +1,6 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PluginIdSchema } from "@getpaseo/protocol/messages";
+import { PluginIdSchema } from "@osuna/protocol/messages";
 import { resolveCliVersion } from "../../version.js";
 
 const TSCONFIG = {
@@ -20,7 +20,7 @@ const TSCONFIG = {
   include: ["**/*.ts", "**/*.tsx"],
 };
 
-const CLIENT_ENTRY = `import type { PluginClientContext } from "@getpaseo/plugin/client";
+const CLIENT_ENTRY = `import type { PluginClientContext } from "@osuna/plugin/client";
 import { GreetingSurface } from "./client/greeting";
 
 export default function contribute(client: PluginClientContext) {
@@ -35,7 +35,7 @@ export default function contribute(client: PluginClientContext) {
 }
 `;
 
-const SERVER_ENTRY = `import type { PluginServerContext } from "@getpaseo/plugin/server";
+const SERVER_ENTRY = `import type { PluginServerContext } from "@osuna/plugin/server";
 import { createGreeting } from "./server/greeting";
 import { greetingRpc } from "./shared/greeting";
 
@@ -45,7 +45,7 @@ export default function contribute(server: PluginServerContext) {
 }
 `;
 
-const SHARED_GREETING = `import { defineRpc } from "@getpaseo/plugin";
+const SHARED_GREETING = `import { defineRpc } from "@osuna/plugin";
 import { z } from "zod";
 
 export const greetingRpc = defineRpc({
@@ -55,7 +55,7 @@ export const greetingRpc = defineRpc({
 });
 `;
 
-const SERVER_GREETING = `import type { RpcInput } from "@getpaseo/plugin";
+const SERVER_GREETING = `import type { RpcInput } from "@osuna/plugin";
 import { greetingRpc } from "../shared/greeting";
 
 export function createGreeting({ name }: RpcInput<typeof greetingRpc>) {
@@ -63,8 +63,8 @@ export function createGreeting({ name }: RpcInput<typeof greetingRpc>) {
 }
 `;
 
-const CLIENT_GREETING = `import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { useRpc } from "@getpaseo/plugin/client";
+const CLIENT_GREETING = `import type { PluginSurfaceProps } from "@osuna/plugin/client";
+import { useRpc } from "@osuna/plugin/client";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -149,7 +149,7 @@ export async function scaffoldPluginDirectory(
     version: "0.0.0",
     scripts: { typecheck: "tsc --noEmit" },
     devDependencies: {
-      "@getpaseo/plugin": version,
+      "@osuna/plugin": version,
       "@tanstack/react-query": "^5.90.11",
       "@types/react": "~19.2.0",
       react: "19.1.0",

@@ -3,9 +3,9 @@ setlocal
 
 set "SCRIPT_DIR=%~dp0"
 set "RESOURCES_DIR=%SCRIPT_DIR%.."
-set "APP_EXECUTABLE=%RESOURCES_DIR%\..\Paseo.exe"
+set "APP_EXECUTABLE=%RESOURCES_DIR%\..\Osuna.exe"
 if not exist "%APP_EXECUTABLE%" (
-  echo Bundled Paseo executable not found at %APP_EXECUTABLE% 1>&2
+  echo Bundled Osuna executable not found at %APP_EXECUTABLE% 1>&2
   exit /b 1
 )
 
@@ -15,5 +15,5 @@ rem PASEO_DESKTOP_MANAGED marks daemons started through this bundled CLI as
 rem desktop-managed, so the desktop app restarts them when it upgrades.
 set "PASEO_DESKTOP_MANAGED=1"
 set "PASEO_CLI=%~f0"
-"%APP_EXECUTABLE%" --disable-warning=DEP0040 "%RESOURCES_DIR%\app.asar.unpacked\dist\daemon\node-entrypoint-runner.js" node-script "%RESOURCES_DIR%\app.asar\node_modules\@getpaseo\cli\dist\index.js" %*
+"%APP_EXECUTABLE%" --disable-warning=DEP0040 "%RESOURCES_DIR%\app.asar.unpacked\dist\daemon\node-entrypoint-runner.js" node-script "%RESOURCES_DIR%\app.asar\node_modules\@osuna\cli\dist\index.js" %*
 exit /b %errorlevel%

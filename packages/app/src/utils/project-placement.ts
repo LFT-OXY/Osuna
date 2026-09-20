@@ -1,4 +1,4 @@
-import type { ProjectPlacementPayload } from "@getpaseo/protocol/messages";
+import type { ProjectPlacementPayload } from "@osuna/protocol/messages";
 import { deriveProjectKey, deriveProjectName } from "@/utils/agent-grouping";
 
 function normalizeWorkingDirectory(cwd: string): string {

@@ -1,5 +1,5 @@
-import type { WorkspaceLabelDefinition } from "@getpaseo/protocol/workspace-labels";
-import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
+import type { WorkspaceLabelDefinition } from "@osuna/protocol/workspace-labels";
+import { workspaceLabelKey } from "@osuna/protocol/workspace-labels";
 
 export interface HostLabelCatalog {
   serverId: string;

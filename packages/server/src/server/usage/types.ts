@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UsageCliSchema, type UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import { UsageCliSchema, type UsageTokenTotals } from "@osuna/protocol/usage/types";
 
 /** UTC bucket width. Fifteen minutes keeps a year of rows in the thousands. */
 export const USAGE_BUCKET_MS = 15 * 60 * 1000;

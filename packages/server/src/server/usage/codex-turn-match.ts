@@ -1,4 +1,4 @@
-import type { UsageCli } from "@getpaseo/protocol/usage/types";
+import type { UsageCli } from "@osuna/protocol/usage/types";
 
 /** When one of the agent's turns began, as its durable timeline recorded it. */
 export interface AgentTurnTimestamp {

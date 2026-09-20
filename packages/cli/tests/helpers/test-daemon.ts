@@ -166,7 +166,7 @@ export async function createTempDirs(): Promise<{ paseoHome: string; workDir: st
 }
 
 /**
- * Wait for daemon to be ready by running `paseo agent ls`
+ * Wait for daemon to be ready by running `osuna agent ls`
  * This connects via WebSocket and ensures the daemon is responsive
  */
 async function probeDaemonReady(

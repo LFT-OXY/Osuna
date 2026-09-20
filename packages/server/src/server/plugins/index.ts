@@ -2,7 +2,7 @@ import type { PluginLifecycle } from "./lifecycle/index.js";
 import path from "node:path";
 import { stat, rm } from "node:fs/promises";
 import type pino from "pino";
-import type { ProviderRegistration } from "@getpaseo/plugin/server/provider";
+import type { ProviderRegistration } from "@osuna/plugin/server/provider";
 import {
   PluginIdSchema,
   type PluginLogEntry,
@@ -10,10 +10,10 @@ import {
   type PluginSource,
   type PluginSourceStatusItem,
   type PluginSourceUpdateItem,
-} from "@getpaseo/protocol/messages";
-import { parsePluginSourceReference } from "@getpaseo/protocol/plugin-source-reference";
-import { assertPluginCompatibility } from "@getpaseo/protocol/plugin-requirements";
-import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
+} from "@osuna/protocol/messages";
+import { parsePluginSourceReference } from "@osuna/protocol/plugin-source-reference";
+import { assertPluginCompatibility } from "@osuna/protocol/plugin-requirements";
+import { BUILTIN_PROVIDER_IDS } from "@osuna/protocol/provider-manifest";
 import type { DaemonConfigStore } from "../daemon-config-store.js";
 import { type ManagedPluginCandidate, ManagedPluginSources } from "./managed-source.js";
 import { readPluginManifest } from "./manifest.js";

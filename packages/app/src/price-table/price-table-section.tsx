@@ -1,6 +1,6 @@
 import { RefreshCw } from "lucide-react-native";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import type { UsagePricingModel } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingModel } from "@osuna/protocol/usage/types";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";

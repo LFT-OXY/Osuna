@@ -1,4 +1,4 @@
-import type { UsagePricingOverride } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingOverride } from "@osuna/protocol/usage/types";
 import type { UsageLogRoots } from "./log-roots.js";
 import type { UsagePricingTimers } from "./pricing/service.js";
 import type { PricingTable } from "./pricing/table.js";

@@ -1,14 +1,14 @@
 import { execFileSync } from "node:child_process";
 import type { z } from "zod";
 import { WebSocket } from "ws";
-import { SessionInboundMessageSchema, WSOutboundMessageSchema } from "@getpaseo/protocol/messages";
+import { SessionInboundMessageSchema, WSOutboundMessageSchema } from "@osuna/protocol/messages";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import pino from "pino";
-import type { CreationSnapshot, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { CreationSnapshot, SessionOutboundMessage } from "@osuna/protocol/messages";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { UsageCli, UsageSessionRow } from "@getpaseo/protocol/usage/types";
+import type { UsageCli, UsageSessionRow } from "@osuna/protocol/usage/types";
 import type { UsageProjectAttribution } from "./project-attribution.js";
 import type { UsageReportPricing } from "./report.js";
 import { buildUsageSessionChains, type UsageSessionChains } from "./session-chains.js";

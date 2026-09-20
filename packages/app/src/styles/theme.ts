@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
+import { darkHighlightColors, lightHighlightColors } from "@osuna/highlight";
 import { USAGE_DARK_PALETTE, USAGE_LIGHT_PALETTE } from "./usage-palette";
 
 export const baseColors = {

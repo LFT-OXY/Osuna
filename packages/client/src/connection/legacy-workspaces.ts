@@ -1,9 +1,9 @@
-import { AgentSnapshotPayloadSchema } from "@getpaseo/protocol/messages";
-import type { AgentSnapshotPayload, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import { AgentSnapshotPayloadSchema } from "@osuna/protocol/messages";
+import type { AgentSnapshotPayload, SessionOutboundMessage } from "@osuna/protocol/messages";
 import {
   deriveAgentStateBucket,
   getWorkspaceStateBucketPriority,
-} from "@getpaseo/protocol/agent-state-bucket";
+} from "@osuna/protocol/agent-state-bucket";
 
 type AgentEntry = Extract<
   SessionOutboundMessage,

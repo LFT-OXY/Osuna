@@ -1,5 +1,5 @@
 import type { DaemonTarget } from "../../utils/daemon-target.js";
-import { createPaseoApi } from "@getpaseo/client";
+import { createPaseoApi } from "@osuna/client";
 import { connectToDaemon, getDaemonHost } from "../../utils/client.js";
 import type { CommandError, CommandOptions } from "../../output/index.js";
 
@@ -23,7 +23,7 @@ export async function connectTerminalClient(target: DaemonTarget) {
     const error: CommandError = {
       code: "DAEMON_NOT_RUNNING",
       message: `Cannot connect to daemon at ${daemonHost}: ${message}`,
-      details: "Start the daemon with: paseo daemon start",
+      details: "Start the daemon with: osuna daemon start",
     };
     throw error;
   }

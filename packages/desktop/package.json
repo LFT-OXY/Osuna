@@ -1,17 +1,16 @@
 {
-  "name": "@getpaseo/desktop",
+  "name": "@osuna/desktop",
   "version": "0.8.0",
   "private": true,
-  "description": "Paseo desktop app (Electron wrapper)",
-  "homepage": "https://paseo.sh",
+  "description": "Osuna desktop app (Electron wrapper)",
   "license": "Apache-2.0",
   "author": {
-    "name": "Mohamed Boudra",
-    "email": "hello@moboudra.com"
+    "name": "chinhae",
+    "email": "autuhae@gmail.com"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/getpaseo/paseo.git"
+    "url": "https://github.com/LFT-OXY/Osuna.git"
   },
   "main": "dist/main.js",
   "scripts": {
@@ -28,8 +27,8 @@
     "test:e2e:lifecycle": "npm run build:main && node ./e2e/daemon-lifecycle.e2e.mjs"
   },
   "dependencies": {
-    "@getpaseo/cli": "*",
-    "@getpaseo/server": "*",
+    "@osuna/cli": "*",
+    "@osuna/server": "*",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.6.2",
     "ws": "^8.14.2",

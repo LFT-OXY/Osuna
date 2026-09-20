@@ -1,4 +1,4 @@
-import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
+import type { ProviderPaseoToolsPolicy } from "@osuna/protocol/provider-config";
 
 interface ProviderPaseoToolSettings {
   paseoTools?: ProviderPaseoToolsPolicy;

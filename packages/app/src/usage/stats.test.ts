@@ -3,7 +3,7 @@ import type {
   UsageModelBreakdown,
   UsageSummary,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import { describe, expect, it } from "vitest";
 import { deriveUsageStats } from "./stats";
 

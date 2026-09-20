@@ -1,5 +1,5 @@
-import type { FetchRecentProviderSessionEntry } from "@getpaseo/client/internal/daemon-client";
-import type { FetchRecentProviderSessionsResponseMessage } from "@getpaseo/protocol/messages";
+import type { FetchRecentProviderSessionEntry } from "@osuna/client/internal/daemon-client";
+import type { FetchRecentProviderSessionsResponseMessage } from "@osuna/protocol/messages";
 import {
   buildProviderCommand,
   buildProviderCommandArgv,

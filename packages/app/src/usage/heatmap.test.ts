@@ -1,4 +1,4 @@
-import type { UsageHeatmapDay, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type { UsageHeatmapDay, UsageTokenTotals } from "@osuna/protocol/usage/types";
 import { describe, expect, it } from "vitest";
 import { buildUsageHeatmap, formatUsageMonthLabel, usageHeatmapWeekdayLabels } from "./heatmap";
 

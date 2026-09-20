@@ -1,4 +1,4 @@
-import type { PluginBeforeRequests, PluginLifecycleEvents } from "@getpaseo/plugin/server";
+import type { PluginBeforeRequests, PluginLifecycleEvents } from "@osuna/plugin/server";
 import { validateBeforeRequest, validateBeforeResult } from "./lifecycle/index.js";
 import { fork } from "node:child_process";
 import { stat } from "node:fs/promises";
@@ -14,12 +14,12 @@ import {
   type ProviderConnection,
   type ProviderEvent,
   type ProviderInput,
-} from "@getpaseo/plugin/server/provider";
-import type { PluginLogEntry } from "@getpaseo/protocol/messages";
+} from "@osuna/plugin/server/provider";
+import type { PluginLogEntry } from "@osuna/protocol/messages";
 import { compilePlugin } from "./compiler.js";
 import { readPluginManifest } from "./manifest.js";
-import type { PluginRequirements } from "@getpaseo/protocol/messages";
-import { assertPluginCompatibility } from "@getpaseo/protocol/plugin-requirements";
+import type { PluginRequirements } from "@osuna/protocol/messages";
+import { assertPluginCompatibility } from "@osuna/protocol/plugin-requirements";
 import type {
   PluginProcessMessage,
   PluginProcessRequest,

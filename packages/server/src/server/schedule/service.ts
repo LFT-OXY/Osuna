@@ -26,8 +26,8 @@ import type {
   StoredSchedule,
   UpdateScheduleInput,
   UpdateScheduleNewAgentConfig,
-} from "@getpaseo/protocol/schedule/types";
-import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/schedule/types";
+import type { FirstAgentContext } from "@osuna/protocol/messages";
 
 const SCHEDULE_TICK_INTERVAL_MS = 1000;
 

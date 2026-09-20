@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
-import { createPaseoApi } from "@getpaseo/client";
-import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { createPaseoApi } from "@osuna/client";
+import { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { PluginRegistry } from "./registry";
 
 const client = new DaemonClient({ url: "ws://unused.test", clientId: "plugin-requirements-test" });

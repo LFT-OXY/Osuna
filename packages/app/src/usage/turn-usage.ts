@@ -2,7 +2,7 @@ import type {
   UsageAgentSummary,
   UsageAgentTurn,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 
 /**
  * How a rendered turn names itself to the daemon's turn rows. `turnId` is

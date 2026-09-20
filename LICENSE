@@ -1,10 +1,15 @@
+Copyright (c) 2026-present chinhae
 Copyright (c) 2025-present Mohamed Boudra
+
+Osuna is a modified fork of Paseo (https://github.com/getpaseo/paseo).
+Files throughout this repository have been changed from the original,
+including a project-wide rename from "Paseo" to "Osuna".
 
 Portions of this software are licensed as follows:
 
-* Third-party components incorporated into Paseo remain licensed under
+* Third-party components incorporated into Osuna remain licensed under
   the licenses provided by their respective copyright holders.
-* Except for those third-party components, Paseo is licensed under the
+* Except for those third-party components, Osuna is licensed under the
   Apache License, Version 2.0, reproduced below.
 
 

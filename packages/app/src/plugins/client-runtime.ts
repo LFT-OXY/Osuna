@@ -1,5 +1,5 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { PluginClientOpenPanelOptions } from "@getpaseo/plugin/client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
+import type { PluginClientOpenPanelOptions } from "@osuna/plugin/client";
 import {
   createPluginAgentActionContext,
   createPluginCapabilities,

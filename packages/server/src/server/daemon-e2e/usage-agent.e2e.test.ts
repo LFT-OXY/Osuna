@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { SessionOutboundMessage } from "@osuna/protocol/messages";
 import { claudeProjectDirNameSync } from "../agent/providers/claude/project-dir.js";
 import { claudeAssistantLine, claudeUserLine } from "../usage/fixtures/claude-transcript.js";
 import {

@@ -1,13 +1,13 @@
-# @getpaseo/client
+# @osuna/client
 
-TypeScript SDK for building integrations on top of a Paseo daemon.
+TypeScript SDK for building integrations on top of an Osuna daemon.
 
 ```bash
-npm install @getpaseo/client
+npm install @osuna/client
 ```
 
 ```ts
-import { createPaseoClient } from "@getpaseo/client";
+import { createPaseoClient } from "@osuna/client";
 
 const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
 await client.connect();
@@ -24,9 +24,9 @@ console.log(result.lastMessage);
 await client.close();
 ```
 
-The public API is the package root. Imports under `@getpaseo/client/internal/*` are unsupported implementation details used by Paseo's own packages.
+The public API is the package root. Imports under `@osuna/client/internal/*` are unsupported implementation details used by Osuna's own packages.
 
-Read the [SDK documentation](https://paseo.sh/docs/sdk) for agents, workspaces, terminals, provider discovery, events, recipes, and the API reference. Runnable TypeScript patterns also live in [`examples/`](./examples/README.md).
+Read the [SDK documentation](../../public-docs/sdk/index.md) for agents, workspaces, terminals, provider discovery, events, recipes, and the API reference. Runnable TypeScript patterns also live in [`examples/`](./examples/README.md).
 
 ## Runtime
 
@@ -37,8 +37,8 @@ Use a WebSocket URL ending in `/ws`, such as `ws://127.0.0.1:6767/ws`. Pass `pas
 The client advertises its supported protocol capabilities by default. Optional `capabilities`
 overrides extend or override that declaration; browser hosting must be supplied by the caller.
 Connecting alone does not subscribe to agent timelines or catalog events. See the
-[event guide](https://paseo.sh/docs/sdk/events) for subscription lifetimes and timeline replacements.
+[event guide](../../public-docs/sdk/events.md) for subscription lifetimes and timeline replacements.
 
 ## Stability
 
-The high-level API exported from `@getpaseo/client` is the supported SDK surface. The SDK and daemon remain protocol-compatible across versions, but newly added capabilities can require a newer daemon.
+The high-level API exported from `@osuna/client` is the supported SDK surface. The SDK and daemon remain protocol-compatible across versions, but newly added capabilities can require a newer daemon.

@@ -1,4 +1,4 @@
-import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import type { ScheduleSummary } from "@osuna/protocol/schedule/types";
 import { describeScheduleCwd } from "@/schedules/schedule-project-targets";
 import type { ScheduleDescription } from "@/utils/schedule-format";
 

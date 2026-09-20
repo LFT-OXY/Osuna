@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pino from "pino";
-import type { ProviderEvent, ProviderRegistration } from "@getpaseo/plugin/server/provider";
+import type { ProviderEvent, ProviderRegistration } from "@osuna/plugin/server/provider";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentStreamEvent } from "../agent/agent-sdk-types.js";
 import { PluginAgentClientRegistry } from "../agent/plugin-provider.js";
@@ -230,8 +230,8 @@ afterEach(async () => {
 
 describe("PluginRuntime", () => {
   it.each([
-    { specifier: "@getpaseo/plugin", moduleDirectory: "shared" },
-    { specifier: "@getpaseo/plugin", moduleDirectory: "server" },
+    { specifier: "@osuna/plugin", moduleDirectory: "shared" },
+    { specifier: "@osuna/plugin", moduleDirectory: "server" },
   ])(
     "loads $specifier contracts without React in the subprocess module graph",
     async ({ specifier, moduleDirectory }) => {
@@ -334,8 +334,8 @@ register(${JSON.stringify(guardUrl)});`;
   it("runs a provider connection through the real plugin subprocess boundary", async () => {
     const directory = await createPlugin(
       "provider-round-trip",
-      `import type { PluginServerContext } from "@getpaseo/plugin/server";
-import type { ProviderEvent, ProviderRegistration } from "@getpaseo/plugin/server/provider";
+      `import type { PluginServerContext } from "@osuna/plugin/server";
+import type { ProviderEvent, ProviderRegistration } from "@osuna/plugin/server/provider";
 
 const provider: ProviderRegistration = {
   id: "direct-example",
@@ -542,8 +542,8 @@ export default function contribute(server: PluginServerContext) {
     );
     const directory = await createPlugin(
       "provider-acp-round-trip",
-      `import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { runAcpProvider } from "@getpaseo/plugin/server/acp";
+      `import type { PluginServerContext } from "@osuna/plugin/server";
+import { runAcpProvider } from "@osuna/plugin/server/acp";
 import { vendorEditTransformer } from "./server/vendor-edit.js";
 
 export default function contribute(server: PluginServerContext) {
@@ -679,7 +679,7 @@ lines.on("line", (line) => {
   it("rejects a malformed provider event from a real plugin subprocess", async () => {
     const directory = await createPlugin(
       "malicious-provider",
-      `import type { ProviderEvent, ProviderRegistration } from "@getpaseo/plugin/server/provider";
+      `import type { ProviderEvent, ProviderRegistration } from "@osuna/plugin/server/provider";
 let connectionId = "";
 process.on("message", (message: unknown) => {
   const value = message as { type?: string; connectionId?: string };
@@ -746,7 +746,7 @@ export default function contribute(server: any) { server.registerProvider(provid
   it("emits runtime failure for live sessions when a real plugin process dies", async () => {
     const directory = await createPlugin(
       "dying-provider",
-      `import type { ProviderEvent, ProviderRegistration } from "@getpaseo/plugin/server/provider";
+      `import type { ProviderEvent, ProviderRegistration } from "@osuna/plugin/server/provider";
 const provider: ProviderRegistration = {
   id: "dying",
   label: "Dying",
@@ -1047,7 +1047,7 @@ export default function contribute(plugin: unknown) {
     const directory = await createPlugin(
       "shutdown-connect",
       `import { writeFile } from "node:fs/promises";
-import type { ProviderRegistration } from "@getpaseo/plugin/server/provider";
+import type { ProviderRegistration } from "@osuna/plugin/server/provider";
 
 const provider: ProviderRegistration = {
   id: "delayed",
@@ -1458,7 +1458,7 @@ export default function contribute(server: { registerProvider(provider: Provider
       path.join(directory, "index.client.tsx"),
       `import React from "react";
 import { Text } from "react-native";
-import { defineAttachmentSource } from "@getpaseo/plugin";
+import { defineAttachmentSource } from "@osuna/plugin";
 import { greetRpc } from "./shared/greet";
 
 const attachments = defineAttachmentSource({
@@ -1490,7 +1490,7 @@ export default function contribute(client: any) {
     await writeFile(
       path.join(directory, "shared", "greet.ts"),
       `import { z } from "zod";
-import { defineRpc } from "@getpaseo/plugin";
+import { defineRpc } from "@osuna/plugin";
 export const greetRpc = defineRpc({
   name: "greet",
   input: z.object({ name: z.string() }),
@@ -1546,7 +1546,7 @@ export default function contribute(server: any) {
       ),
       writeFile(
         path.join(directory, "index.client.tsx"),
-        `import type { PluginClientContext } from "@getpaseo/plugin/client";
+        `import type { PluginClientContext } from "@osuna/plugin/client";
 import { Surface } from "./client/surface";
 export default function contribute(client: PluginClientContext) {
   client.addSurface("main", Surface);
@@ -1556,7 +1556,7 @@ export default function contribute(client: PluginClientContext) {
       ),
       writeFile(
         path.join(directory, "index.server.ts"),
-        `import type { PluginServerContext } from "@getpaseo/plugin/server";
+        `import type { PluginServerContext } from "@osuna/plugin/server";
 import { inspectRpc } from "./shared/inspect";
 import { inspectHost } from "./server/inspect";
 export default function contribute(server: PluginServerContext) {
@@ -1579,7 +1579,7 @@ export function Surface() {
       ),
       writeFile(
         path.join(directory, "shared", "inspect.ts"),
-        `import { defineRpc } from "@getpaseo/plugin";
+        `import { defineRpc } from "@osuna/plugin";
 import { z } from "zod";
 
 export const inspectRpc = defineRpc({
@@ -1629,7 +1629,7 @@ export function inspectHost(_input: z.input<typeof inspectRpc.input>) {
       ),
       writeFile(
         path.join(directory, "index.client.tsx"),
-        `import type { PluginClientContext } from "@getpaseo/plugin/client";
+        `import type { PluginClientContext } from "@osuna/plugin/client";
 import { Surface } from "./client/surface";
 
 export default function contribute(client: PluginClientContext) {
@@ -1674,7 +1674,7 @@ export function Surface() { return readSecret(); }`,
       ),
       writeFile(
         path.join(directory, "index.server.ts"),
-        `import type { PluginServerContext } from "@getpaseo/plugin/server";
+        `import type { PluginServerContext } from "@osuna/plugin/server";
 import { inspect } from "./server/inspect";
 import { inspectRpc } from "./shared/inspect";
 
@@ -1686,7 +1686,7 @@ export default function contribute(server: PluginServerContext) {
       ),
       writeFile(
         path.join(directory, "shared", "inspect.ts"),
-        `import { defineRpc } from "@getpaseo/plugin";
+        `import { defineRpc } from "@osuna/plugin";
 import { z } from "zod";
 export const inspectRpc = defineRpc({
   name: "inspect",
@@ -1719,7 +1719,7 @@ export function inspect() { void Surface; return {}; }`,
     const directory = await createPlugin(
       "invalid-output",
       `import { z } from "zod";
-import { defineRpc } from "@getpaseo/plugin";
+import { defineRpc } from "@osuna/plugin";
 const brokenRpc = defineRpc({
   name: "broken",
   input: z.object({}),

@@ -1,4 +1,4 @@
-import { waitForDaemonReady, resolvePaseoHome, type DaemonInstance } from "@getpaseo/server";
+import { waitForDaemonReady, resolvePaseoHome, type DaemonInstance } from "@osuna/server";
 import { describeDaemonTarget, type DaemonTarget } from "./daemon-target.js";
 export type { DaemonTarget } from "./daemon-target.js";
 import {
@@ -7,13 +7,13 @@ import {
   normalizeHostPort,
   parseConnectionUri,
   shouldUseTlsForDefaultHostedRelay,
-} from "@getpaseo/protocol/daemon-endpoints";
+} from "@osuna/protocol/daemon-endpoints";
 import {
   parseConnectionOfferFromUrl,
   type ConnectionOffer,
-} from "@getpaseo/protocol/connection-offer";
-import { parseSshTransportUri } from "@getpaseo/protocol/ssh-transport";
-import { DaemonClient, type WebSocketLike } from "@getpaseo/client/internal/daemon-client";
+} from "@osuna/protocol/connection-offer";
+import { parseSshTransportUri } from "@osuna/protocol/ssh-transport";
+import { DaemonClient, type WebSocketLike } from "@osuna/client/internal/daemon-client";
 import { WebSocket } from "ws";
 import { getOrCreateCliClientId } from "./client-id.js";
 import { resolveCliVersion } from "../version.js";
@@ -50,7 +50,7 @@ export function buildDaemonConnectionCommandError(options: ConnectOptions & { er
     message: `Cannot connect to daemon at ${describeDaemonTarget(options.target)}: ${message}`,
     details:
       options.target.kind === "instance"
-        ? `Start with: paseo daemon start --home ${JSON.stringify(options.target.home)}`
+        ? `Start with: osuna daemon start --home ${JSON.stringify(options.target.home)}`
         : "Check the selected endpoint and credentials. SSH transport does not install or start the daemon.",
   };
 }

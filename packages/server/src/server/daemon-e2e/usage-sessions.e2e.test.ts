@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import type { UsageSessionRow } from "@getpaseo/protocol/usage/types";
+import type { UsageSessionRow } from "@osuna/protocol/usage/types";
 import { claudeProjectDirNameSync } from "../agent/providers/claude/project-dir.js";
 import {
   claudeAssistantLine,

@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
-import { isBearerTokenValid } from "@getpaseo/server";
+import { isBearerTokenValid } from "@osuna/server";
 import {
   runSetPasswordCommand,
   setDaemonPasswordInConfig,
@@ -53,7 +53,7 @@ try {
     assert.strictEqual(result.configPath, join(paseoHome, "config.json"));
     assert.strictEqual(
       result.restartCommand,
-      `paseo daemon restart --home ${JSON.stringify(paseoHome)}`,
+      `osuna daemon restart --home ${JSON.stringify(paseoHome)}`,
     );
     assert.strictEqual(config.daemon.listen, "127.0.0.1:9999");
     assert.strictEqual(config.daemon.relay.enabled, false);

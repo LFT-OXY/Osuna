@@ -1,4 +1,4 @@
-import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type { AgentAttachment } from "@osuna/protocol/messages";
 import type {
   UserComposerAttachment,
   WorkspaceFileComposerAttachment,

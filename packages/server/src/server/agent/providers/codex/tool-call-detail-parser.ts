@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { ToolCallDetail } from "../../agent-sdk-types.js";
-import { stripCwdPrefix } from "@getpaseo/protocol/path-utils";
+import { stripCwdPrefix } from "@osuna/protocol/path-utils";
 import {
   ToolEditInputSchema,
   ToolEditOutputSchema,

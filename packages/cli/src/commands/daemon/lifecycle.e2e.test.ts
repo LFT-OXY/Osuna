@@ -5,7 +5,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { startDaemonInstance, readDaemonInstance } from "@getpaseo/server";
+import { startDaemonInstance, readDaemonInstance } from "@osuna/server";
 import { expect, test } from "vitest";
 import { connectToDaemon } from "../../utils/client.js";
 
@@ -22,7 +22,7 @@ async function port() {
 }
 
 async function fixture() {
-  const root = await mkdtemp(path.join(tmpdir(), "paseo lifecycle "));
+  const root = await mkdtemp(path.join(tmpdir(), "osuna lifecycle "));
   const env = {
     ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_"))),
     HOME: root,

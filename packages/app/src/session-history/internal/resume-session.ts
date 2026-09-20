@@ -1,4 +1,4 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { getCurrentTerminalViewAttributes } from "@/terminal/view-attributes";
 import type { ResumeTerminalLaunch } from "./model";
 import {

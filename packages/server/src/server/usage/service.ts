@@ -13,7 +13,7 @@ import type {
   UsageReport,
   UsageSessionHandle,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import type { PersistedProjectRecord } from "../workspace-registry.js";
 import type { UsageAgentBridge, UsageAgentTurnEvent } from "./agent-sessions.js";
 import { stampCodexTurnIds } from "./codex-turn-match.js";

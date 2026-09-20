@@ -1,4 +1,4 @@
-import type { TerminalViewAttributes } from "@getpaseo/protocol/messages";
+import type { TerminalViewAttributes } from "@osuna/protocol/messages";
 
 import type { TerminalSession } from "./terminal.js";
 

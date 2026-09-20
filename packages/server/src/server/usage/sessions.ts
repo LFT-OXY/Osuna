@@ -6,7 +6,7 @@ import type {
   UsageSessionHandle,
   UsageSessionRow,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import { createLocalTimeResolver, type LocalTimeResolver } from "./local-time.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
 import { matchesUsageFilters, type UsageReportPricing } from "./report.js";

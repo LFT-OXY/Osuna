@@ -1,7 +1,7 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { PaseoApi } from "@getpaseo/client";
-import { PaseoApiProvider } from "@getpaseo/plugin/client/host";
-import { usePaseo } from "@getpaseo/plugin/client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
+import type { PaseoApi } from "@osuna/client";
+import { PaseoApiProvider } from "@osuna/plugin/client/host";
+import { usePaseo } from "@osuna/plugin/client";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";

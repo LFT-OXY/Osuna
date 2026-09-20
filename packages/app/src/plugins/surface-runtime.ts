@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { InstalledPlugin } from "./types";
-import { createPaseoApi, type PaseoApi } from "@getpaseo/client";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { createPaseoApi, type PaseoApi } from "@osuna/client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 
 export interface PluginSurfaceRuntime {
   paseo: PaseoApi;

@@ -314,10 +314,10 @@ function runtimeSpecifierError(
   importer: string,
 ): OnResolveResult | null {
   let kind: string | null = null;
-  if (specifier === "@getpaseo/plugin/client/host") kind = "host-private";
+  if (specifier === "@osuna/plugin/client/host") kind = "host-private";
   else if (
-    (specifier === "@getpaseo/plugin" ||
-      specifier.startsWith("@getpaseo/plugin/") ||
+    (specifier === "@osuna/plugin" ||
+      specifier.startsWith("@osuna/plugin/") ||
       specifier === "@paseo/plugin" ||
       specifier.startsWith("@paseo/plugin/")) &&
     !(PLUGIN_SDK_SPECIFIERS as readonly string[]).includes(specifier)

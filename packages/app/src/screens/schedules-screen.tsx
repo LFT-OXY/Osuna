@@ -40,7 +40,7 @@ import {
   buildScheduleProjectTargets,
 } from "@/schedules/schedule-project-targets";
 import { renderScheduleDescription } from "@/utils/schedule-format";
-import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import type { ScheduleSummary } from "@osuna/protocol/schedule/types";
 
 type FormState =
   | { mode: "closed" }

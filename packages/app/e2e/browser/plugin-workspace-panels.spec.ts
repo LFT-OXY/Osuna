@@ -30,8 +30,8 @@ function isSettledWorkspaceUrl(url: URL): boolean {
 function pluginClientSource(input: { workspaceId: string; agentId: string }): string {
   return `import React, { useRef } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useAgent, useWorkspace } from "@getpaseo/plugin/client";
+import { Icon } from "@osuna/plugin/client/react-native";
+import { useAgent, useWorkspace } from "@osuna/plugin/client";
 import { recordComposerOpen } from "./shared/rpc";
 
 function WorkspacePanel({ workspaceId, host, layout }) {
@@ -127,7 +127,7 @@ export default function contribute(client) {
 }`;
 }
 
-const pluginSharedSource = `import { defineRpc } from "@getpaseo/plugin";
+const pluginSharedSource = `import { defineRpc } from "@osuna/plugin";
 import { z } from "zod";
 
 export const recordComposerOpen = defineRpc({

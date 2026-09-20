@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   DaemonClient,
   FetchRecentProviderSessionEntry,
-} from "@getpaseo/client/internal/daemon-client";
+} from "@osuna/client/internal/daemon-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n/i18next";
 

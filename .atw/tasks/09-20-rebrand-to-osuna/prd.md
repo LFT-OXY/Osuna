@@ -51,11 +51,28 @@
 | `packages/app/app.config.js` | `name: Paseo` / `Paseo Debug` | `Osuna` / `Osuna Debug` |
 | 同上 | `packageId: sh.paseo` / `sh.paseo.debug` | `com.chinhae.osuna` / `com.chinhae.osuna.debug` |
 | 同上 | `scheme: paseo` | `osuna` |
-| 同上 | `owner: getpaseo`、`eas.projectId: 0e7f65ce-...` | 本人 EAS 账号与新建 project |
+| 同上 | `owner: getpaseo`、`eas.projectId: 0e7f65ce-...` | **两个字段都删除**（见下） |
 | `packages/app/eas.json` | `ascAppId: 6758887924` | 移除（上游的 App Store 应用，无权使用） |
 | `packages/cli/package.json` | bin `paseo` | `osuna` |
 | 11 个 workspace | `@getpaseo/*` | `@osuna/*`（registry 已确认 404，可用） |
 | 根 `package.json` | `name: paseo`、`author`、`homepage: paseo.sh`、`repository` | `osuna`、`chinhae`、留空、`LFT-OXY/Osuna` |
+
+EAS 身份：本任务**删除** `owner` 与 `extra.eas.projectId`，不填替代值。prd 已把
+「EAS project、开发者账号、商店元数据」列为后续独立任务，本批次无法创建 EAS project；
+删掉后 `eas build` 会明确报错要求配置，与「relay/Hub 默认地址留空并要求显式配置，
+指向一个不存在的地址比报错更难排查」同一条原则。`expo export`、桌面构建、CI 都不读
+这两个字段。代码里没有任何位置读 `extra.eas.projectId`（已 grep 确认）。
+
+`homepage` 的「留空」按删除键处理 —— package.json 里留空字符串会让 npm 页面显示一个
+空链接，不如没有这个字段。
+
+README 外链策略：Osuna 没有域名、社群、ghcr 镜像与 skills 源，因此
+`paseo.sh/docs/*` 一律改指仓内 `public-docs/*`（用户文档）与 `docs/*`（开发文档），
+上游社群徽章（Discord / Reddit / X）与 Related projects 段删除，stars/release 徽章指
+`LFT-OXY/Osuna`，docker 段改 `ghcr.io/lft-oxy/osuna`（`docker.yml` 的镜像名按
+`github.repository_owner` 推导，本批次一并改掉写死的 `paseo` 后缀），skills 源改
+`LFT-OXY/Osuna`，顶部加 fork 溯源段。同一条规则也适用于 CLI 的 onboarding 文案：
+`osuna` 的下一步提示不再指向上游专属的 `app.paseo.sh`，文档指向仓内 `public-docs`。
 
 ### 运行时标识（与上游同机共存）
 
@@ -70,6 +87,13 @@
 | 默认端口 `packages/protocol/src/ssh-transport.ts:1` 等 | `6767` | `6777` |
 | dev 端口（`package.json:39,42,93`、`scripts/dev-daemon.sh:9`） | `6768` | `6778`（同时避开本机 Orca 占用） |
 | dev home | `.dev/paseo-home` | `.dev/osuna-home` |
+| nix 打包（`nix/package.nix`、`nix/module.nix`、`flake.nix`） | `pname: paseo`、`bin/paseo`、`bin/paseo-server`、`bin/paseo-desktop`、`mainProgram`、`homepage`、flake 输出名、`services.paseo`、service user/group | 对应 `osuna*`、`services.osuna`、`LFT-OXY/Osuna` |
+
+nix 归到本批次而非批次 1：待改内容大半是运行时标识（service user/group、
+StateDirectory、源过滤里的 `.paseo`、端口、`PASEO_*`），CLI wrapper 名与 flake 输出名
+跟着一起改最省事。批次 1 只改了被 `productName` 连带打断的部分（`Osuna.app`、
+`MacOS/Osuna`、desktop item 名、`nix.yml` 的 bundle 断言），其余留给这里。
+nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
 
 ### 插件契约（不留兼容读取）
 
@@ -81,6 +105,11 @@
 
 - 导出的函数名与类型名改（`createPaseoClient`、`PaseoClient` 等）。**内部私有变量名
   不专门改** —— 只有维护者看得见，不值得为它承担一次巨大的无意义 diff。
+- `packages/app/modules/paseo-{word-stream,native-trace,diff-prototype}` 的原生命名归本
+  批次：Kotlin 包名 `sh.paseo.*`、`build.gradle` 的 group/namespace、
+  `expo-module.config.json`、podspec、以及模块目录名。它们与 app 的 `applicationId`
+  无关（Android 允许两者不同），所以没有被批次 1 的应用 ID 改动连带。改动要 `git mv`
+  Kotlin 源树，验收需真跑一次安卓构建，不能只靠 typecheck。
 - `docs/` 26 篇 + `CLAUDE.md` + `CONTRIBUTING.md` + `SECURITY.md` 全改。它们是后续 AI
   的工作依据，名字不一致会持续误导。
 - `README.md` 改，并在顶部加 fork 溯源段：本项目 fork 自 Paseo
@@ -108,7 +137,17 @@
 - `LICENSE` 原版权行保留，其上追加 `Copyright (c) 2026-present chinhae`。
 - `CHANGELOG.md` 历史条目 —— 那是已发生的事实，改了等于伪造历史，保留来源痕迹对
   Apache-2.0 合规有利。新名从本 fork 的第一个版本起用。
-- 内部私有变量名。
+- 内部私有变量名，以及内部 IPC 通道名（`paseo:invoke` 等）、DOM 属性名
+  （`data-paseo-browser-id` 等）、测试临时目录前缀、e2e 里的假 git 邮箱
+  （`test@getpaseo.local`）。
+- `packages/desktop/bin/osuna`（POSIX shim）**不设** `PASEO_DESKTOP_MANAGED=1`，
+  Windows 的 `.cmd` 设。这是上游 commit `0110302b6` 造成的既有不对称（已安装的 0.8.0
+  产物里 POSIX shim 还带着它，说明是上游发版后的回归）。重命名如实保留 HEAD 状态；
+  要不要补回来是独立的 daemon 行为问题，不在本改名任务内。
+- scheme 字面量没有单一 owner（`agent-deep-link.ts` / desktop `APP_SCHEME` /
+  server CORS / `app.config.js` / `electron-builder.yml` 各自硬编码）、app 与 server
+  诊断脱敏链重复、`cli-install/paths.ts` 的重复三元表达式 —— 都是改名前就存在的结构，
+  改名让它们更显眼但没有引入它们。抽常量属于独立重构，不搭本任务的车。
 - 本机 `~/.paseo`：**不迁移、不自动搬运、不重启 6767 daemon**（那会杀掉正在运行的
   agent）。新 daemon 在 `~/.osuna` 从零起、重新配对，仅 `models/` 值得手动 `cp`。
   旧目录由本人在确认新环境可用后自行删除。
@@ -120,18 +159,42 @@
 
 1. **身份与打包面** — desktop/app/cli 配置、publish、署名、LICENSE、README 溯源。
    验收：本地出一个桌面包，产物里确认应用名、appId、安装包文件名三项拼写。
-2. **运行时标识** — `OSUNA_*`、`~/.osuna`、`.osuna/`、端口、dev home。
-   验收：起 dev daemon，CLI 连通，跑 server 受影响的测试文件（单文件 `--bail=1`）。
+   已完成（2026-09-20）。产物核对：`CFBundleIdentifier=com.chinhae.osuna.desktop`、
+   `CFBundleName`/`CFBundleExecutable=Osuna`、URL scheme `osuna`、
+   `Osuna-0.8.0-arm64.dmg`/`.zip`、`Contents/Frameworks/Osuna Helper.app`、
+   `Contents/Resources/bin/osuna`。
+   **`maintainer` 这一项验不到**：它是 electron-builder 的 Linux-only 字段，macOS 产物
+   里不存在，本机也无法产出 deb/rpm（要 fpm 或 docker）。只在 `electron-builder.yml`
+   里核对了 `chinhae <autuhae@gmail.com>`，实际产物验证顺延到批次 5 的发布演练。
+2. **运行时标识** — `OSUNA_*`、`~/.osuna`、`.osuna/`、端口、dev home、nix 打包。
+   验收：起 dev daemon，CLI 连通，跑 server 受影响的测试文件（单文件 `--bail=1`）；
+   nix 部分推 CI 跑 `nix.yml`。
 3. **插件契约** — 清单文件名、`requirements` 字段、示例、skills。
    验收：`plugin scaffold` 与 plugin-lifecycle e2e。
-4. **公开 API 与文档清理** — 导出名、docs、删多语言 README、移出 website。
-   验收：`npm run typecheck` + `npm run lint` + 构建通过。
+4. **公开 API 与文档清理** — 导出名、docs、删多语言 README、移出 website、
+   `packages/app/modules/paseo-*` 的原生命名。
+   验收：`npm run typecheck` + `npm run lint` + 构建通过；原生命名改动要真跑安卓构建。
+   **批次 1 已让下列文档事实失效，本批次必须一并改正**（不是单纯改名，是错误指令）：
+   - `docs/testing.md`、`docs/development.md` 里的 `paseo://` 深链 → `osuna://`
+   - `docs/mobile-testing.md`、`docs/android.md` 里的 `sh.paseo` / `sh.paseo.debug`
+     → `com.chinhae.osuna` / `com.chinhae.osuna.debug`
+   - `skills/paseo-help/SKILL.md` 里的 `/Applications/Paseo.app/.../bin/paseo` 安装路径
+   - `docs/development.md` 的 `Applications/Paseo.app` 与 `paseo-desktop` 启动器
+   - `CONTRIBUTING.md`、`SECURITY.md`、`CLAUDE.md` 的投稿/安全/仓库指向，以及
+     `.github/ISSUE_TEMPLATE/*`（批次 1 曾改过后回退，就是为了与 CONTRIBUTING.md
+     一起改，避免两处投稿目的地互相矛盾）
+   - `packages/website/src/latest-release.ts`、`downloads.tsx` 里的 `Paseo-Setup-*`
+     产物名正则与 `sh.paseo`（website 本批次移出 workspace，一并处理）
+   - `fastlane/metadata/` 按「删」处理
 5. **签名配置与发布演练** — 关公证、改 workflow、推测试 tag 走一遍 GitHub Release。
-   验收：Release 产出可下载、可安装、能被 electron-updater 识别。
+   验收：Release 产出可下载、可安装、能被 electron-updater 识别；顺带在 Linux 产物里
+   核对批次 1 的 `maintainer: chinhae <autuhae@gmail.com>`。
 
 ## 完成的标准
 
-- `rg -i paseo` 在排除 `CHANGELOG.md` 历史条目与 `LICENSE` 原版权行后无命中。
+- `rg -i paseo` 在排除下列各项后无命中：`CHANGELOG.md` 历史条目、`LICENSE` 的原版权行
+  与 fork 溯源段、README 的 fork 溯源段、`不改` 一节列出的内部标识（IPC 通道名、DOM
+  属性名、测试临时目录前缀、e2e 假 git 邮箱）。
 - 桌面包以 Osuna 之名构建、安装、启动，appId 为 `com.chinhae.osuna.desktop`。
 - daemon 在 `~/.osuna` + 6777 上运行，与本机 6767 的上游 daemon 互不干扰。
 - `npm run typecheck`、`npm run lint` 全绿。

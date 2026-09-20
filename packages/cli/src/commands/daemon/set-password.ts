@@ -7,7 +7,7 @@ import {
   resolvePaseoHome,
   savePersistedConfig,
   type PersistedConfig,
-} from "@getpaseo/server";
+} from "@osuna/server";
 import type {
   CommandError,
   CommandOptions,
@@ -100,8 +100,8 @@ export async function setDaemonPasswordInConfig(
   return {
     action: "password_set",
     configPath,
-    restartCommand: `paseo daemon restart --home ${JSON.stringify(paseoHome)}`,
-    message: `Password written to ${configPath}\nRestart the daemon for the change to take effect.\nRun: paseo daemon restart --home ${JSON.stringify(paseoHome)}`,
+    restartCommand: `osuna daemon restart --home ${JSON.stringify(paseoHome)}`,
+    message: `Password written to ${configPath}\nRestart the daemon for the change to take effect.\nRun: osuna daemon restart --home ${JSON.stringify(paseoHome)}`,
   };
 }
 

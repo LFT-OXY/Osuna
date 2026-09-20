@@ -2,7 +2,7 @@ import { UnistylesRuntime } from "react-native-unistyles";
 import {
   TERMINAL_VIEW_ATTRIBUTE_COLOR_PATTERN,
   type TerminalViewAttributes,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 
 import type { Theme } from "@/styles/theme";
 

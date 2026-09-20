@@ -4,11 +4,11 @@ import type {
   PluginListItem,
   PluginLogEntry,
   PluginSourceUpdateItem,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 import {
   formatPluginSourceReference,
   parsePluginSourceReference,
-} from "@getpaseo/protocol/plugin-source-reference";
+} from "@osuna/protocol/plugin-source-reference";
 import type { CommandOptions, ListResult, OutputSchema, SingleResult } from "../../output/index.js";
 import { withOutput } from "../../output/index.js";
 import { addJsonAndDaemonHostOptions, addJsonOption } from "../../utils/command-options.js";

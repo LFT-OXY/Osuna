@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { DaemonClient, FetchAgentsEntry } from "@getpaseo/client/internal/daemon-client";
-import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import type { DaemonClient, FetchAgentsEntry } from "@osuna/client/internal/daemon-client";
+import type { AgentSnapshotPayload } from "@osuna/protocol/messages";
 import {
   selectAgentTimelineState,
   selectAgentTurnPresentation,

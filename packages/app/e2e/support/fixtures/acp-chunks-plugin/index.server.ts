@@ -1,5 +1,5 @@
-import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { runAcpProvider, type AcpStreamMessage } from "@getpaseo/plugin/server/acp";
+import type { PluginServerContext } from "@osuna/plugin/server";
+import { runAcpProvider, type AcpStreamMessage } from "@osuna/plugin/server/acp";
 
 function connect() {
   let controller: ReadableStreamDefaultController<AcpStreamMessage>;
