@@ -21,5 +21,8 @@
 - [ ] relay / Hub 的默认地址留空并要求显式配置，**不要**指向尚不存在的 `osuna.sh`
       —— 指向不存在的域名比报错更难排查
 - [ ] `CHANGELOG.md` 历史条目保持原样，不改
-- [ ] 验收：`rg -i paseo` 在排除 `CHANGELOG.md` 与 `LICENSE` 原版权行后无命中
+- [ ] 验收：`rg -i paseo docs/ CLAUDE.md CONTRIBUTING.md SECURITY.md packages/client`
+      无命中，且根 `README.md`、`packages/*/README.md` 无命中。**全仓 `rg -i paseo`
+      无命中这条挪到票 07** —— 本票的 What to build 明确把内部私有名排除在外，
+      两者不可能同时成立（实测点名面 939 处 / 51 文件，其余约 10600 处 / 1200 文件）
 - [ ] `npm run typecheck`、`npm run lint`、构建通过
