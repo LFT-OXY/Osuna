@@ -93,6 +93,54 @@
   合并会波及文档里所有引用点。
 - `docs/mobile-testing.md:388` 仍按「App Store 安装」推理 —— 属测试文档，留给设备回归。
 
+## 发布演练结果（tag `v0.8.1-beta.1`，2026-09-21）
+
+推的是裸 tag（`git tag` + `git push`），没走 `release:beta:*` —— 后者会先 `npm version`
+改版本号，而演练的目的是验 CI，不是真发版。这个选择本身带出一条结论，见 Docker 一行。
+
+| workflow | 结果 | 原因 |
+|---|---|---|
+| Release Notes Sync | ✅ | — |
+| Desktop / Linux | ✅ | deb / rpm / AppImage / tar.gz 齐全 |
+| Desktop / macOS arm64 | ✅ | 见下，本票的核心验证 |
+| Desktop / macOS x64 | ❌ | `expo export --platform web` JS 堆 OOM（5138 模块，~2GB 上限）。与签名无关，发生在 electron-builder 之前 |
+| Desktop / Windows | ❌ | 下载 `nsis-3.0.4.1.7z` 时 GitHub 返回 **500**。瞬时故障，重推即可 |
+| finalize-rollout | ❌ | 两个平台失败 → Release 如设计般停在 draft |
+| Docker | ❌ | Dockerfile 断言 `package.json` 版本 == tag 版本（0.8.0 ≠ 0.8.1-beta.1）。**裸 tag 方法的产物，不是仓库缺陷** —— 真实路径先 `version:all:beta:*` 再打 tag 就会过 |
+| Android APK | ❌ | 见下，**推翻了票面前提** |
+
+**macOS arm64 日志验证了本票的全部论断**：
+
+```
+• falling back to ad-hoc signature for macOS application code signing
+• signing  file=release/mac-arm64/Osuna.app identityName=- identityHash=none
+• skipped macOS notarization  reason=`notarize` options were unable to be generated
+Packaged desktop smoke passed: real renderer and preload loaded;
+  renderer-started desktop daemon pid 38940, listen 127.0.0.1:49225;
+  CLI shim daemon status and terminal smoke succeeded
+```
+
+即：ad-hoc 兜底签名触发、公证跳过、`afterSign` 确实触发、**未签名的包能正常启动**
+（渲染进程 + preload 加载、daemon 起来、CLI shim 与终端都通）。
+
+**prd 批次 5 的 Linux 产物核对通过**：`Maintainer: chinhae <autuhae@gmail.com>`、
+`Vendor: Osuna`、`Package: osuna`、`Homepage: .../LFT-OXY/Osuna#readme`。
+
+### 硬发现：`android-apk-release.yml` 不在本地构建，它是 EAS 的包装
+
+job 跑的是 `eas build --platform android --profile production-apk --wait`，然后下载产物。
+Gradle 在 EAS 服务器上跑，**永远不会出现在 Actions 日志里**。两个后果：
+
+1. 没有 `EXPO_TOKEN` 和已连接的 EAS 项目，job 直接死在
+   `An Expo user account is required to proceed`。而 prd 批次 1 已删掉 `eas.json` 的
+   `owner` 与 `extra.eas.projectId`，所以**本 fork 目前没有任何可用的安卓发布路径**。
+2. **从票 09 并过来的那条验收无法通过这条 workflow 达成** —— 「构建日志里应出现
+   `:osuna-word-stream` 等三个 Gradle 工程」需要 Gradle 真的在 runner 上跑。
+   要么本地 `./gradlew assembleRelease`，要么把 workflow 改成在 runner 上构建。
+
+这一条需要决定，不是本票能自行解决的。文档（`docs/release.md`、`docs/android.md`）
+已按事实改正，不再声称 workflow 自己构建 APK。
+
 ## 遗留（不属本票，需另行决定）
 
 - `IS_SMOKE_TAG` / `gha-smoke` 不可达（见上）。要么让 `normalizeReleaseTag` 接受这类

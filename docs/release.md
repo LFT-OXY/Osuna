@@ -286,11 +286,16 @@ identity, and no F-Droid metadata — `fastlane/metadata/` was removed with the 
 Store distribution is a separate future task; it needs developer accounts, an EAS project,
 and store listings before any of it can work.
 
-What does ship is the Android APK. `.github/workflows/android-apk-release.yml` builds it on
-every `v*` and `android-v*` tag and attaches it to the GitHub Release; users sideload it.
+**Android has no working release path right now either.**
+`.github/workflows/android-apk-release.yml` looks like an in-repo APK build, but it only
+wraps `eas build --platform android --profile production-apk`: the Gradle build runs on EAS
+servers, not on the runner. Without `EXPO_TOKEN` and a linked EAS project it fails at
+`An Expo user account is required to proceed`, which is what the `v0.8.1-beta.1` dry run hit.
+Making Android ship means either provisioning EAS, or rewriting that workflow to run Gradle
+in GitHub Actions. Until then no tag produces an APK.
+
 Version codes still come from `packages/app/native-release-version.js`, so the F-Droid ABI
-math in [docs/android.md](android.md) stays authoritative for the build profile even though
-nothing is submitted to F-Droid.
+math in [docs/android.md](android.md) stays authoritative for the build profile.
 
 iOS has no release path. Run it from a local Expo build.
 

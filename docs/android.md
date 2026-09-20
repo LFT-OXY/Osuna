@@ -168,16 +168,23 @@ adb exec-out screencap -p > screenshot.png
 ## Tag-triggered Android builds
 
 `v*` and `android-v*` tag pushes trigger `.github/workflows/android-apk-release.yml`, which
-attaches an APK to the GitHub Release. That is the only Android release path this fork has —
-see [release.md](release.md#mobile-builds). `android-v*` ships an APK without cutting a full
+attaches an APK to the GitHub Release. `android-v*` ships an APK without cutting a full
 release, and the workflow takes a `workflow_dispatch` `tag` input so you can rebuild one
-without a new tag. Beta tags like `v0.1.1-beta.1` attach the APK to a GitHub prerelease.
+without a new tag.
 
-`packages/app/eas.json` no longer describes a runnable build. The rebrand removed `owner` and
-`extra.eas.projectId` with no replacement, so `eas build` errors out until someone configures a
-project, and the `.eas/workflows/` files the EAS GitHub app would have read on a `v*` tag are
-deleted. The remaining profiles are a starting point for store releases, not something that
-runs today.
+**It does not build the APK itself.** The job runs
+`eas build --platform android --profile production-apk --wait` and then downloads the
+artifact, so Gradle runs on EAS servers and never appears in the Actions log. Two consequences:
+
+- Without `EXPO_TOKEN` and a linked EAS project the job dies at `An Expo user account is
+required to proceed`. The rebrand removed `owner` and `extra.eas.projectId` from
+  `eas.json` with no replacement, so that is the state today — verified by the
+  `v0.8.1-beta.1` dry run.
+- You cannot verify native module autolinking from this workflow's log. Checking that the
+  Gradle projects are named `:osuna-*` needs either a local
+  `./gradlew assembleRelease` or a workflow that builds on the runner.
+
+See [release.md](release.md#mobile-builds) for where this sits in the release flow.
 
 ### Watching a tagged APK build
 
