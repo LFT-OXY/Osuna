@@ -37,8 +37,8 @@ async function tempDir(prefix: string): Promise<string> {
 
 /** A project whose root holds no discoverable icon, over an in-memory registry. */
 async function project() {
-  const rootPath = await tempDir("paseo-project-root-");
-  const paseoHome = await tempDir("osuna-home-");
+  const rootPath = await tempDir("osuna-project-root-");
+  const osunaHome = await tempDir("osuna-home-");
   let record = createPersistedProjectRecord({
     projectId: "project-a",
     rootPath,
@@ -54,19 +54,19 @@ async function project() {
       return record;
     },
   } as unknown as ProjectRegistry;
-  const reader = new ProjectIconReader(paseoHome);
+  const reader = new ProjectIconReader(osunaHome);
 
   return {
-    paseoHome,
+    osunaHome,
     rootPath,
     set: (source: ProjectIconSource) =>
-      setProjectCustomIcon({ paseoHome, projectId: "project-a", source, projects }),
-    read: () => readProjectIcon({ paseoHome, project: record }),
-    snapshot: () => readProjectIconSnapshot({ paseoHome, project: record }),
+      setProjectCustomIcon({ osunaHome, projectId: "project-a", source, projects }),
+    read: () => readProjectIcon({ osunaHome, project: record }),
+    snapshot: () => readProjectIconSnapshot({ osunaHome, project: record }),
     advertisedSnapshot: () => reader.snapshot(record),
     readAdvertised: () => reader.read(record),
     revision: () => record.customIconRevision,
-    remove: () => removeProjectCustomIcon({ paseoHome, projectId: "project-a" }),
+    remove: () => removeProjectCustomIcon({ osunaHome, projectId: "project-a" }),
   };
 }
 
@@ -145,7 +145,7 @@ describe("project custom icon", () => {
     await target.remove();
 
     await expect(
-      readProjectIcon({ paseoHome: target.paseoHome, project: stored }),
+      readProjectIcon({ osunaHome: target.osunaHome, project: stored }),
     ).resolves.toBeNull();
   });
 

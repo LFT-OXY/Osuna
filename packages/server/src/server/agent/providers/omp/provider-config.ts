@@ -156,7 +156,7 @@ export interface OmpSessionPaths {
 
 /**
  * Where OMP itself keeps sessions, derived from the environment exactly as upstream
- * `pi-utils/dirs.ts` does. Paseo-side overrides (provider params, `settings.json`) are applied by
+ * `pi-utils/dirs.ts` does. Osuna-side overrides (provider params, `settings.json`) are applied by
  * the caller before falling back here.
  */
 export function resolveOmpSessionPaths(options: OmpDirectoryOptions = {}): OmpSessionPaths {

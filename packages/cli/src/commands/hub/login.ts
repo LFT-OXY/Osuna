@@ -60,7 +60,7 @@ export function addHubLoginCommand(parent: Command, dependencies: HubLoginDepend
     addHubResolutionHelp(
       parent
         .command("login")
-        .description("Log in to a Osuna Hub for CLI access")
+        .description("Log in to an Osuna Hub for CLI access")
         .argument("[origin]", "Osuna Hub origin"),
     ),
   ).action(

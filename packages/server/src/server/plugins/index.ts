@@ -39,7 +39,7 @@ interface PluginRuntimePort {
   stopPluginById(pluginId: string): Promise<boolean>;
   stopAll(): Promise<void>;
   subscribe(listener: (pluginId: string, error?: string) => void): () => void;
-  bindPaseoSessionHost(sessionHost: Parameters<PluginRuntime["bindPaseoSessionHost"]>[0]): void;
+  bindOsunaSessionHost(sessionHost: Parameters<PluginRuntime["bindOsunaSessionHost"]>[0]): void;
 }
 
 interface PluginServiceDependencies {
@@ -115,8 +115,8 @@ export class PluginService {
     return () => this.listeners.delete(listener);
   }
 
-  bindPaseoSessionHost(sessionHost: Parameters<PluginRuntime["bindPaseoSessionHost"]>[0]): void {
-    this.runtime.bindPaseoSessionHost(sessionHost);
+  bindOsunaSessionHost(sessionHost: Parameters<PluginRuntime["bindOsunaSessionHost"]>[0]): void {
+    this.runtime.bindOsunaSessionHost(sessionHost);
   }
 
   getProviderRegistrations(): readonly ProviderRegistration[] {

@@ -94,11 +94,11 @@ export interface SessionHistorySurfaceProps {
   isVisible: boolean;
   /** The terminal exists on the daemon, new or already open; the caller shows its tab. */
   onOpenTerminal: (terminalId: string) => void;
-  /** A session Paseo owns was chosen; the shell opens that agent the way History does. */
+  /** A session Osuna owns was chosen; the shell opens that agent the way History does. */
   onOpenAgent: (agentId: string, workspaceId: string | null) => void;
   /** The full resume command line; the shell owns the clipboard and the toast. */
   onCopyResumeCommand: (command: string) => void;
-  /** The session is now a Paseo agent; the shell navigates the way the import sheet does. */
+  /** The session is now an Osuna agent; the shell navigates the way the import sheet does. */
   onImported: (result: SessionHistoryImportResult) => void;
 }
 
@@ -194,7 +194,7 @@ function SessionHistoryRowItem({
   const menuActions = {
     rowKey: row.key,
     onCopyResumeCommand: handleCopyResumeCommand,
-    // Paseo already owns the session: importing it again would make a second agent.
+    // Osuna already owns the session: importing it again would make a second agent.
     onImport: row.importedAgentId ? null : handleImport,
     importStatus: status === "importing" ? ("pending" as const) : ("idle" as const),
   };
@@ -243,7 +243,7 @@ function SessionHistoryRowItem({
             </Text>
           ) : null}
         </View>
-        {row.importedAgentId ? <StatusBadge label={t("panels.sessionHistory.row.paseo")} /> : null}
+        {row.importedAgentId ? <StatusBadge label={t("panels.sessionHistory.row.osuna")} /> : null}
         <Text style={styles.rowMeta} numberOfLines={1}>
           {meta}
         </Text>
@@ -459,7 +459,7 @@ export function SessionHistorySurface({
       };
     },
     onSuccess: (result) => {
-      // The row now belongs to Paseo; relist so it wears the badge and loses the import action.
+      // The row now belongs to Osuna; relist so it wears the badge and loses the import action.
       void queryClient.invalidateQueries({ queryKey });
       onImported(result);
     },
@@ -470,7 +470,7 @@ export function SessionHistorySurface({
     importMutation.isPending && importMutation.variables ? importMutation.variables.key : null;
   const handleRowPress = useCallback(
     (row: SessionHistoryRow) => {
-      // A session Paseo owns has one owner: its agent. Never resume it in a second process.
+      // A session Osuna owns has one owner: its agent. Never resume it in a second process.
       if (row.importedAgentId) {
         onOpenAgent(row.importedAgentId, row.importedAgentWorkspaceId);
         return;

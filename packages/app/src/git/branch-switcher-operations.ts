@@ -6,7 +6,7 @@ import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 export function createBranchSwitcherOperations(client: DaemonClient, cwd: string) {
   return {
     getBranchSuggestions: (limit: number) => client.getBranchSuggestions({ cwd, limit }),
-    listPaseoStashes: () => client.stashList(cwd, { osunaOnly: true }),
+    listOsunaStashes: () => client.stashList(cwd, { osunaOnly: true }),
     saveStash: (branch: string | undefined) => client.stashSave(cwd, { branch }),
     popStash: (stashIndex: number) => client.stashPop(cwd, stashIndex),
     switchBranch: (branch: string) => client.checkoutSwitchBranch(cwd, branch),

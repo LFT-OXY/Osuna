@@ -17,7 +17,7 @@ import {
   buildStringCommandShellInvocation,
   createStringCommandShellEnv,
 } from "./string-command-shell.js";
-import { readPaseoConfigJson, resolvePaseoConfigPath } from "./paseo-config-file.js";
+import { readOsunaConfigJson, resolveOsunaConfigPath } from "./osuna-config-file.js";
 export {
   OsunaConfigRawSchema,
   OsunaLifecycleCommandRawSchema,
@@ -29,19 +29,19 @@ export {
 } from "@osuna/protocol/osuna-config-schema";
 import { OsunaConfigSchema, type OsunaConfig } from "@osuna/protocol/osuna-config-schema";
 import {
-  createPaseoWorktreeChangeRequestHint,
+  createOsunaWorktreeChangeRequestHint,
   normalizeBaseRefName,
   isQualifiedRef,
-  type PaseoWorktreeChangeRequestHint,
-  readPaseoWorktreeMetadata,
-  readPaseoWorktreeRuntimePort,
-  writePaseoWorktreeMetadata,
-  writePaseoWorktreeRuntimeMetadata,
+  type OsunaWorktreeChangeRequestHint,
+  readOsunaWorktreeMetadata,
+  readOsunaWorktreeRuntimePort,
+  writeOsunaWorktreeMetadata,
+  writeOsunaWorktreeRuntimeMetadata,
 } from "./worktree-metadata.js";
 import { runGitCommand } from "./run-git-command.js";
 import { spawnProcess } from "./spawn.js";
 import { resolveOsunaHome } from "../server/osuna-home.js";
-import { createExternalProcessEnv } from "../server/paseo-env.js";
+import { createExternalProcessEnv } from "../server/osuna-env.js";
 import { parseGitRevParsePath, resolveGitRevParsePath } from "./git-rev-parse-path.js";
 import { expandTilde, getRealpathAwareRelativePath, isPathInsideRoot } from "./path.js";
 import { terminateWithTreeKill } from "./tree-kill.js";
@@ -154,26 +154,26 @@ export class WorktreeTeardownError extends Error {
   }
 }
 
-export interface PaseoWorktreeInfo {
+export interface OsunaWorktreeInfo {
   path: string;
   createdAt: string;
   branchName?: string;
   head?: string;
 }
 
-export interface PaseoWorktreeOwnership {
+export interface OsunaWorktreeOwnership {
   allowed: boolean;
   repoRoot?: string;
   worktreeRoot?: string;
   worktreePath?: string;
 }
 
-export interface PaseoWorktreeOwnershipOptions extends WorktreeRootOptions {
+export interface OsunaWorktreeOwnershipOptions extends WorktreeRootOptions {
   knownGitCommonDir?: string | null;
 }
 
 export interface WorktreeRootOptions {
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
 }
 
@@ -216,7 +216,7 @@ export interface CreateWorktreeOptions {
   worktreeSlug: string;
   source: WorktreeSource;
   runSetup: boolean;
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
 }
 
@@ -252,47 +252,47 @@ export class InvalidGitBranchNameError extends Error {
   }
 }
 
-export type ReadPaseoConfigResult =
+export type ReadOsunaConfigResult =
   | { ok: true; config: OsunaConfig | null }
   | { ok: false; configPath: string; error: unknown };
 
-export function readPaseoConfig(repoRoot: string): ReadPaseoConfigResult {
+export function readOsunaConfig(repoRoot: string): ReadOsunaConfigResult {
   try {
-    const json = readPaseoConfigJson(repoRoot);
+    const json = readOsunaConfigJson(repoRoot);
     if (json === null) {
       return { ok: true, config: null };
     }
     return { ok: true, config: OsunaConfigSchema.parse(json) };
   } catch (error) {
-    return { ok: false, configPath: resolvePaseoConfigPath(repoRoot), error };
+    return { ok: false, configPath: resolveOsunaConfigPath(repoRoot), error };
   }
 }
 
-export function paseoConfigParseError(failure: { configPath: string; error: unknown }): Error {
+export function osunaConfigParseError(failure: { configPath: string; error: unknown }): Error {
   const detail = failure.error instanceof Error ? failure.error.message : String(failure.error);
   return new Error(`Failed to parse osuna.json at ${failure.configPath}: ${detail}`, {
     cause: failure.error,
   });
 }
 
-function readPaseoConfigOrThrow(repoRoot: string): OsunaConfig | null {
-  const result = readPaseoConfig(repoRoot);
+function readOsunaConfigOrThrow(repoRoot: string): OsunaConfig | null {
+  const result = readOsunaConfig(repoRoot);
   if (!result.ok) {
-    throw paseoConfigParseError(result);
+    throw osunaConfigParseError(result);
   }
   return result.config;
 }
 
 export function getWorktreeSetupCommands(repoRoot: string): string[] {
-  return readPaseoConfigOrThrow(repoRoot)?.worktree?.setup ?? [];
+  return readOsunaConfigOrThrow(repoRoot)?.worktree?.setup ?? [];
 }
 
 export function getWorktreeTeardownCommands(repoRoot: string): string[] {
-  return readPaseoConfigOrThrow(repoRoot)?.worktree?.teardown ?? [];
+  return readOsunaConfigOrThrow(repoRoot)?.worktree?.teardown ?? [];
 }
 
 export function getWorktreeTerminalSpecs(repoRoot: string): WorktreeTerminalConfig[] {
-  const terminals = readPaseoConfigOrThrow(repoRoot)?.worktree?.terminals;
+  const terminals = readOsunaConfigOrThrow(repoRoot)?.worktree?.terminals;
   if (!Array.isArray(terminals) || terminals.length === 0) {
     return [];
   }
@@ -728,12 +728,12 @@ export async function resolveWorktreeRuntimeEnv(options: {
   const branchName =
     options.branchName ?? (await resolveBranchNameForWorktreePath(options.worktreePath));
 
-  let worktreePort = readPaseoWorktreeRuntimePort(options.worktreePath);
+  let worktreePort = readOsunaWorktreeRuntimePort(options.worktreePath);
   if (worktreePort === null) {
     worktreePort = await getAvailablePort();
-    const metadata = readPaseoWorktreeMetadata(options.worktreePath);
+    const metadata = readOsunaWorktreeMetadata(options.worktreePath);
     if (metadata) {
-      writePaseoWorktreeRuntimeMetadata(options.worktreePath, { worktreePort });
+      writeOsunaWorktreeRuntimeMetadata(options.worktreePath, { worktreePort });
     }
   } else {
     await assertPortAvailable(worktreePort);
@@ -771,7 +771,7 @@ export async function runWorktreeTeardownCommands(options: {
     options.repoRootPath ?? (await inferRepoRootPathFromWorktreePath(options.worktreePath));
   const branchName =
     options.branchName ?? (await resolveBranchNameForWorktreePath(options.worktreePath));
-  const worktreePort = readPaseoWorktreeRuntimePort(options.worktreePath);
+  const worktreePort = readOsunaWorktreeRuntimePort(options.worktreePath);
 
   const teardownEnv: NodeJS.ProcessEnv = createStringCommandShellEnv(
     createExternalProcessEnv(process.env, {
@@ -806,7 +806,7 @@ export async function runWorktreeTeardownCommands(options: {
   return results;
 }
 
-export async function seedPaseoConfigFile(options: {
+export async function seedOsunaConfigFile(options: {
   sourceCwd: string;
   targetCwd: string;
 }): Promise<void> {
@@ -857,26 +857,26 @@ export async function deriveWorktreeProjectHash(cwd: string): Promise<string> {
   }
 }
 
-export function resolvePaseoWorktreesBaseRoot(options?: WorktreeRootOptions): string {
+export function resolveOsunaWorktreesBaseRoot(options?: WorktreeRootOptions): string {
   if (options?.worktreesRoot) {
     const expandedRoot = expandTilde(options.worktreesRoot);
     if (isAbsolute(expandedRoot)) {
       return resolve(expandedRoot);
     }
-    const home = options.paseoHome ? resolve(options.paseoHome) : resolveOsunaHome();
+    const home = options.osunaHome ? resolve(options.osunaHome) : resolveOsunaHome();
     return resolve(home, expandedRoot);
   }
 
-  const home = options?.paseoHome ? resolve(options.paseoHome) : resolveOsunaHome();
+  const home = options?.osunaHome ? resolve(options.osunaHome) : resolveOsunaHome();
   return join(home, "worktrees");
 }
 
-export async function getPaseoWorktreesRoot(
+export async function getOsunaWorktreesRoot(
   cwd: string,
-  paseoHome?: string,
+  osunaHome?: string,
   worktreesRoot?: string,
 ): Promise<string> {
-  const baseRoot = resolvePaseoWorktreesBaseRoot({ paseoHome, worktreesRoot });
+  const baseRoot = resolveOsunaWorktreesBaseRoot({ osunaHome, worktreesRoot });
   const projectHash = await deriveWorktreeProjectHash(cwd);
   return join(baseRoot, projectHash);
 }
@@ -884,10 +884,10 @@ export async function getPaseoWorktreesRoot(
 export async function computeWorktreePath(
   cwd: string,
   slug: string,
-  paseoHome?: string,
+  osunaHome?: string,
   worktreesRoot?: string,
 ): Promise<string> {
-  const projectWorktreesRoot = await getPaseoWorktreesRoot(cwd, paseoHome, worktreesRoot);
+  const projectWorktreesRoot = await getOsunaWorktreesRoot(cwd, osunaHome, worktreesRoot);
   return join(projectWorktreesRoot, slug);
 }
 
@@ -938,8 +938,8 @@ function resolveRepoRootFromGitCommonDir(commonDir: string): string {
 
 export async function isOsunaOwnedWorktreeCwd(
   cwd: string,
-  options?: PaseoWorktreeOwnershipOptions,
-): Promise<PaseoWorktreeOwnership> {
+  options?: OsunaWorktreeOwnershipOptions,
+): Promise<OsunaWorktreeOwnership> {
   const resolvedCwd = normalizePathForOwnership(cwd);
 
   // repoRoot is best-effort: git may be unreachable from the worktree (e.g. a
@@ -957,11 +957,11 @@ export async function isOsunaOwnedWorktreeCwd(
     }
   }
 
-  const worktreesBaseRoot = resolvePaseoWorktreesBaseRoot(options);
+  const worktreesBaseRoot = resolveOsunaWorktreesBaseRoot(options);
   const relativePath = getRealpathAwareRelativePath(worktreesBaseRoot, resolvedCwd);
 
   // Ownership is defined by the path living under <worktrees-root>/<hash>/<slug>[/...].
-  // The <hash>/<slug> prefix is Paseo-private — nothing else writes there — so the
+  // The <hash>/<slug> prefix is Osuna-private — nothing else writes there — so the
   // path shape alone is sufficient proof of ownership, even when git has already
   // forgotten about the worktree.
   if (relativePath === null) {
@@ -990,11 +990,11 @@ export async function isOsunaOwnedWorktreeCwd(
   };
 }
 
-type ParsedPaseoWorktreeInfo = Omit<PaseoWorktreeInfo, "createdAt">;
+type ParsedOsunaWorktreeInfo = Omit<OsunaWorktreeInfo, "createdAt">;
 
-function parseWorktreeList(output: string): ParsedPaseoWorktreeInfo[] {
-  const entries: ParsedPaseoWorktreeInfo[] = [];
-  let current: ParsedPaseoWorktreeInfo | null = null;
+function parseWorktreeList(output: string): ParsedOsunaWorktreeInfo[] {
+  const entries: ParsedOsunaWorktreeInfo[] = [];
+  let current: ParsedOsunaWorktreeInfo | null = null;
 
   for (const line of output.split("\n")) {
     if (line.startsWith("worktree ")) {
@@ -1041,16 +1041,16 @@ function resolveWorktreeCreatedAtIso(worktreePath: string): string {
   }
 }
 
-export async function listPaseoWorktrees({
+export async function listOsunaWorktrees({
   cwd,
-  paseoHome,
+  osunaHome,
   worktreesRoot,
 }: {
   cwd: string;
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
-}): Promise<PaseoWorktreeInfo[]> {
-  const projectWorktreesRoot = await getPaseoWorktreesRoot(cwd, paseoHome, worktreesRoot);
+}): Promise<OsunaWorktreeInfo[]> {
+  const projectWorktreesRoot = await getOsunaWorktreesRoot(cwd, osunaHome, worktreesRoot);
   const { stdout } = await runGitCommand(["worktree", "list", "--porcelain"], {
     cwd,
     envOverlay: READ_ONLY_GIT_ENV,
@@ -1064,25 +1064,25 @@ export async function listPaseoWorktrees({
     );
 }
 
-export interface DeletePaseoWorktreeOptions {
+export interface DeleteOsunaWorktreeOptions {
   cwd: string | null;
   worktreePath?: string;
   teardownCwds?: string[];
   worktreeSlug?: string;
   worktreesRoot?: string;
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesBaseRoot?: string;
 }
 
-export async function deletePaseoWorktree({
+export async function deleteOsunaWorktree({
   cwd,
   worktreePath,
   teardownCwds,
   worktreeSlug,
   worktreesRoot,
-  paseoHome,
+  osunaHome,
   worktreesBaseRoot,
-}: DeletePaseoWorktreeOptions): Promise<void> {
+}: DeleteOsunaWorktreeOptions): Promise<void> {
   if (!worktreePath && !worktreeSlug) {
     throw new Error("worktreePath or worktreeSlug is required");
   }
@@ -1094,15 +1094,15 @@ export async function deletePaseoWorktree({
   if (worktreesRoot) {
     resolvedWorktreesRoot = worktreesRoot;
   } else if (cwd) {
-    resolvedWorktreesRoot = await getPaseoWorktreesRoot(cwd, paseoHome, worktreesBaseRoot);
+    resolvedWorktreesRoot = await getOsunaWorktreesRoot(cwd, osunaHome, worktreesBaseRoot);
   } else {
-    throw new Error("cwd or worktreesRoot is required to delete a Paseo worktree");
+    throw new Error("cwd or worktreesRoot is required to delete an Osuna worktree");
   }
 
   const requestedPath = worktreePath ?? join(resolvedWorktreesRoot, worktreeSlug!);
   const resolvedRequested = normalizePathForOwnership(requestedPath);
   const ownership = await isOsunaOwnedWorktreeCwd(requestedPath, {
-    paseoHome,
+    osunaHome,
     worktreesRoot: worktreesBaseRoot,
   });
   const resolvedWorktree =
@@ -1113,7 +1113,7 @@ export async function deletePaseoWorktree({
     resolvedWorktree,
   );
   if (relativeWorktreePath === null || relativeWorktreePath === "") {
-    throw new Error("Refusing to delete non-Paseo worktree");
+    throw new Error("Refusing to delete non-Osuna worktree");
   }
 
   if (await pathExists(resolvedWorktree)) {
@@ -1150,13 +1150,13 @@ export async function deletePaseoWorktree({
   }
 }
 
-export async function rollbackCreatedPaseoWorktree(
-  options: DeletePaseoWorktreeOptions,
+export async function rollbackCreatedOsunaWorktree(
+  options: DeleteOsunaWorktreeOptions,
   cause: unknown,
 ): Promise<never> {
   let cleanupError: unknown;
   try {
-    await deletePaseoWorktree(options);
+    await deleteOsunaWorktree(options);
   } catch (error) {
     cleanupError = error;
   }
@@ -1220,11 +1220,11 @@ export const createWorktree = async ({
   source,
   worktreeSlug,
   runSetup,
-  paseoHome,
+  osunaHome,
   worktreesRoot,
 }: CreateWorktreeOptions): Promise<CreatedWorktree> => {
   const sourcePlan = await resolveWorktreeSourcePlan({ cwd, source, desiredSlug: worktreeSlug });
-  let worktreePath = join(await getPaseoWorktreesRoot(cwd, paseoHome, worktreesRoot), worktreeSlug);
+  let worktreePath = join(await getOsunaWorktreesRoot(cwd, osunaHome, worktreesRoot), worktreeSlug);
   mkdirSync(dirname(worktreePath), { recursive: true });
 
   // Also handle worktree path collision
@@ -1257,7 +1257,7 @@ export const createWorktree = async ({
     });
   }
 
-  writePaseoWorktreeMetadata(worktreePath, {
+  writeOsunaWorktreeMetadata(worktreePath, {
     baseRefName: sourcePlan.metadataBaseRefName,
     ...(sourcePlan.metadataBaseRef ? { baseRef: sourcePlan.metadataBaseRef } : {}),
     ...(sourcePlan.changeRequestLookupTarget
@@ -1265,7 +1265,7 @@ export const createWorktree = async ({
       : {}),
   });
 
-  await seedPaseoConfigFile({ sourceCwd: cwd, targetCwd: worktreePath });
+  await seedOsunaConfigFile({ sourceCwd: cwd, targetCwd: worktreePath });
 
   if (runSetup) {
     await runWorktreeSetupCommands({
@@ -1298,7 +1298,7 @@ interface WorktreeSourcePlan {
   // upstream — so comparisons and actions read the ref and the UI reads the name.
   metadataBaseRefName: string;
   metadataBaseRef?: string;
-  changeRequestLookupTarget?: PaseoWorktreeChangeRequestHint;
+  changeRequestLookupTarget?: OsunaWorktreeChangeRequestHint;
   addArguments: string[];
   pushRemote?: {
     name: string;
@@ -1333,7 +1333,7 @@ async function resolveRestoredWorktreeSourcePlan(
     branchName: source.branchName,
     metadataBaseRefName: normalizeRequiredBaseBranch(source.baseRef ?? source.branchName),
     ...(exactBase ? { metadataBaseRef: exactBase } : {}),
-    changeRequestLookupTarget: createPaseoWorktreeChangeRequestHint({
+    changeRequestLookupTarget: createOsunaWorktreeChangeRequestHint({
       headRef: source.branchName,
       localBranchName: source.branchName,
     }),
@@ -1359,7 +1359,7 @@ async function resolveBranchOffWorktreeSourcePlan(
     branchName: newBranchName,
     metadataBaseRefName: normalizedBaseBranch,
     metadataBaseRef: resolvedBaseBranch,
-    changeRequestLookupTarget: createPaseoWorktreeChangeRequestHint({
+    changeRequestLookupTarget: createOsunaWorktreeChangeRequestHint({
       headRef: newBranchName,
       localBranchName: newBranchName,
     }),
@@ -1385,7 +1385,7 @@ async function resolveWorktreeSourcePlan({
         return {
           branchName,
           metadataBaseRefName: source.branchName,
-          changeRequestLookupTarget: createPaseoWorktreeChangeRequestHint({
+          changeRequestLookupTarget: createOsunaWorktreeChangeRequestHint({
             headRef: branchName,
             localBranchName: branchName,
           }),
@@ -1396,7 +1396,7 @@ async function resolveWorktreeSourcePlan({
       return {
         branchName: source.branchName,
         metadataBaseRefName: source.branchName,
-        changeRequestLookupTarget: createPaseoWorktreeChangeRequestHint({
+        changeRequestLookupTarget: createOsunaWorktreeChangeRequestHint({
           headRef: source.branchName,
           localBranchName: source.branchName,
         }),
@@ -1428,7 +1428,7 @@ async function resolveWorktreeSourcePlan({
         : undefined;
       const remotePlan: Pick<WorktreeSourcePlan, "pushRemote" | "trackingRemote"> = {};
       if (source.pushRemoteUrl) {
-        const remoteName = `paseo-pr-${changeRequestNumber}`;
+        const remoteName = `osuna-pr-${changeRequestNumber}`;
         remotePlan.pushRemote = {
           name: remoteName,
           url: source.pushRemoteUrl,
@@ -1439,7 +1439,7 @@ async function resolveWorktreeSourcePlan({
         const originUrl = await getWorktreeRemotePushUrl(cwd, "origin");
         if (originUrl) {
           remotePlan.pushRemote = {
-            name: `paseo-pr-${changeRequestNumber}`,
+            name: `osuna-pr-${changeRequestNumber}`,
             url: originUrl,
             headRef: source.headRef,
             track: false,
@@ -1453,7 +1453,7 @@ async function resolveWorktreeSourcePlan({
       return {
         branchName: localBranchName,
         metadataBaseRefName: normalizedBaseRefName,
-        changeRequestLookupTarget: createPaseoWorktreeChangeRequestHint({
+        changeRequestLookupTarget: createOsunaWorktreeChangeRequestHint({
           headRef: source.headRef,
           ...(source.headRepositoryOwner
             ? { headRepositoryOwner: source.headRepositoryOwner }
@@ -1642,10 +1642,10 @@ async function validateGitBranchName(cwd: string, branchName: string): Promise<v
 function normalizeRequiredBaseBranch(baseBranch: string): string {
   const normalizedBaseBranch = normalizeBaseRefName(baseBranch);
   if (!normalizedBaseBranch) {
-    throw new Error("Base branch is required when creating a Paseo worktree");
+    throw new Error("Base branch is required when creating an Osuna worktree");
   }
   if (normalizedBaseBranch === "HEAD") {
-    throw new Error("Base branch cannot be HEAD when creating a Paseo worktree");
+    throw new Error("Base branch cannot be HEAD when creating an Osuna worktree");
   }
   return normalizedBaseBranch;
 }

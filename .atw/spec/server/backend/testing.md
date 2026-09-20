@@ -19,7 +19,7 @@ Everything reusable lives in `server/test-utils/`:
 
 | Helper                                                                | Use for                                                                              |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `paseo-daemon.ts` → `createTestPaseoDaemon()`                         | Boot a daemon in a temp home; `daemon.port`, `daemon.close()` cleans up              |
+| `osuna-daemon.ts` → `createTestOsunaDaemon()`                         | Boot a daemon in a temp home; `daemon.port`, `daemon.close()` cleans up              |
 | `daemon-client.ts` → `DaemonClient`                                   | Typed client: `connect`, `fetchAgents({ subscribe: {} })`, RPC helpers, `close`      |
 | `daemon-test-context.ts`                                              | Combined daemon + client context for E2E suites                                      |
 | `fake-agent-client.ts`                                                | Deterministic agent provider adapter; the default for unit suites that need an agent |

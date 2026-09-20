@@ -55,7 +55,7 @@ describe("buildSessionHistoryRows", () => {
     expect(rows.map((row) => row.key)).toEqual(["claude:new", "claude:old"]);
   });
 
-  it("carries the owning Paseo agent id through to the row", () => {
+  it("carries the owning Osuna agent id through to the row", () => {
     const rows = buildSessionHistoryRows([
       entry({
         providerHandleId: "owned",

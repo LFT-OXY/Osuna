@@ -6,7 +6,7 @@ import { expect, onTestFinished, test } from "vitest";
 import { z } from "zod";
 import { defineRpc, settingsRpc } from "@osuna/plugin";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 test("server reads saved settings after daemon restart before any client connects", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "settings-restart-"));
@@ -41,7 +41,7 @@ export default function(server) {
 }`,
   );
   const options = {
-    paseoHomeRoot: path.join(root, "daemon"),
+    osunaHomeRoot: path.join(root, "daemon"),
     staticDir: path.join(root, "static"),
     cleanup: false,
     pluginsEnabled: true,
@@ -49,7 +49,7 @@ export default function(server) {
       "settings-startup": { source: "directory" as const, path: directory, enabled: true },
     },
   };
-  const first = await createTestPaseoDaemon(options);
+  const first = await createTestOsunaDaemon(options);
   onTestFinished(() => first.close());
   const rpc = settingsRpc("display");
   const readStartup = async () =>
@@ -75,7 +75,7 @@ export default function(server) {
   await first.close();
   await rm(startupReport);
 
-  const restarted = await createTestPaseoDaemon(options);
+  const restarted = await createTestOsunaDaemon(options);
   onTestFinished(() => restarted.close());
   // No client is created for this daemon: the report comes from server startup alone.
   await expect.poll(readStartup).toEqual(persisted);
@@ -83,7 +83,7 @@ export default function(server) {
 
 test("two clients share settings, observe changes, and preserve values through plugin lifecycle", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "settings-plugin-"));
-  const daemon = await createTestPaseoDaemon();
+  const daemon = await createTestOsunaDaemon();
   const first = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.7.2" });
   const second = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.7.2" });
   const rpc = settingsRpc("display");

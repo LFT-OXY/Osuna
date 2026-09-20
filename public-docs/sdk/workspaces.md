@@ -35,7 +35,7 @@ const workspace = await client.workspaces.create({
 });
 ```
 
-Create a Osuna-owned worktree when concurrent work needs an isolated checkout:
+Create an Osuna-owned worktree when concurrent work needs an isolated checkout:
 
 ```ts
 const workspace = await client.workspaces.create({

@@ -9,9 +9,9 @@ source "$ROOT_DIR/scripts/dev-home.sh"
 
 export PATH="$ROOT_DIR/node_modules/.bin:$PATH"
 export OSUNA_LISTEN="${OSUNA_LISTEN:-127.0.0.1:6778}"
-configure_dev_paseo_home
+configure_dev_osuna_home
 
-DEV_ROOT="${OSUNA_DEV_ROOT:-$(default_dev_paseo_root)}"
+DEV_ROOT="${OSUNA_DEV_ROOT:-$(default_dev_osuna_root)}"
 export OSUNA_DEV_ROOT="$DEV_ROOT"
 export OSUNA_DEV_RUNTIME_FALLBACK_ROOT="$DEV_ROOT"
 DEV_RUNTIME="$(node "$SCRIPT_DIR/dev-runtime.mjs")"

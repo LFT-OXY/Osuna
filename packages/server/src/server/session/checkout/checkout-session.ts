@@ -126,7 +126,7 @@ export interface CheckoutSessionOptions {
   github: ForgeService;
   checkoutDiffManager: CheckoutDiffSubscriber;
   gitMetadataGenerator: GitMetadataGenerator;
-  paseoHome: string;
+  osunaHome: string;
   worktreesRoot: string | undefined;
   logger: pino.Logger;
 }
@@ -153,7 +153,7 @@ export class CheckoutSession {
   private readonly github: ForgeService;
   private readonly checkoutDiffManager: CheckoutDiffSubscriber;
   private readonly gitMetadataGenerator: GitMetadataGenerator;
-  private readonly paseoHome: string;
+  private readonly osunaHome: string;
   private readonly worktreesRoot: string | undefined;
   private readonly logger: pino.Logger;
   private readonly statusUpdateFingerprints = new Map<string, string>();
@@ -165,7 +165,7 @@ export class CheckoutSession {
     this.github = options.github;
     this.checkoutDiffManager = options.checkoutDiffManager;
     this.gitMetadataGenerator = options.gitMetadataGenerator;
-    this.paseoHome = options.paseoHome;
+    this.osunaHome = options.osunaHome;
     this.worktreesRoot = options.worktreesRoot;
     this.logger = options.logger;
   }
@@ -276,7 +276,7 @@ export class CheckoutSession {
     try {
       const { baseRef, commits } = await listCheckoutCommits({
         cwd: expandTilde(cwd),
-        context: { paseoHome: this.paseoHome, worktreesRoot: this.worktreesRoot },
+        context: { osunaHome: this.osunaHome, worktreesRoot: this.worktreesRoot },
       });
       this.host.emit({
         type: "checkout.commits.list.response",
@@ -810,7 +810,7 @@ export class CheckoutSession {
           baseRef,
           mode: msg.strategy === "squash" ? "squash" : "merge",
         },
-        { paseoHome: this.paseoHome, worktreesRoot: this.worktreesRoot },
+        { osunaHome: this.osunaHome, worktreesRoot: this.worktreesRoot },
       );
       await Promise.all([
         this.gitMutation.notifyGitMutation(mutatedCwd, "merge-to-base", { invalidateForge: true }),
@@ -859,7 +859,7 @@ export class CheckoutSession {
           baseRef: msg.baseRef,
           requireCleanTarget: msg.requireCleanTarget ?? true,
         },
-        { paseoHome: this.paseoHome, worktreesRoot: this.worktreesRoot },
+        { osunaHome: this.osunaHome, worktreesRoot: this.worktreesRoot },
       );
       await this.gitMutation.notifyGitMutation(cwd, "merge-from-base", { invalidateForge: true });
       this.scheduleDiffRefresh(cwd);
@@ -972,7 +972,7 @@ export class CheckoutSession {
           base: msg.baseRef,
         },
         service,
-        { paseoHome: this.paseoHome, worktreesRoot: this.worktreesRoot },
+        { osunaHome: this.osunaHome, worktreesRoot: this.worktreesRoot },
       );
       await this.gitMutation.notifyGitMutation(cwd, "create-pr", { invalidateForge: true });
 

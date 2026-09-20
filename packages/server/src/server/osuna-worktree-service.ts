@@ -12,16 +12,16 @@ import {
 } from "./worktree-core.js";
 import {
   mapWorkspaceRelativeCwdToWorktree,
-  rollbackCreatedPaseoWorktree,
-  seedPaseoConfigFile,
+  rollbackCreatedOsunaWorktree,
+  seedOsunaConfigFile,
   validateBranchSlug,
   type WorktreeConfig,
 } from "../utils/worktree.js";
 import { getCurrentBranch, localBranchExists, renameCurrentBranch } from "../utils/checkout-git.js";
 import {
-  markPaseoWorktreeFirstAgentBranchAutoNameAttempted,
-  readPaseoWorktreeMetadata,
-  writePaseoWorktreeFirstAgentBranchAutoNameMetadata,
+  markOsunaWorktreeFirstAgentBranchAutoNameAttempted,
+  readOsunaWorktreeMetadata,
+  writeOsunaWorktreeFirstAgentBranchAutoNameMetadata,
 } from "../utils/worktree-metadata.js";
 import type { WorktreeCreationIntent } from "./resolve-worktree-creation-intent.js";
 import { resolveFirstAgentPromptTitle } from "./agent/create-agent-title.js";
@@ -35,7 +35,7 @@ export interface CreateOsunaWorktreeInput extends CreateWorktreeCoreInput {
   title?: string;
 }
 
-export interface CreatePaseoWorktreeResult {
+export interface CreateOsunaWorktreeResult {
   worktree: WorktreeConfig;
   intent: WorktreeCreationIntent;
   workspace: PersistedWorkspaceRecord;
@@ -43,12 +43,12 @@ export interface CreatePaseoWorktreeResult {
   created: boolean;
 }
 
-export type CreatePaseoWorktreeFn = (
+export type CreateOsunaWorktreeFn = (
   input: CreateOsunaWorktreeInput,
   options?: {
     resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
   },
-) => Promise<CreatePaseoWorktreeResult>;
+) => Promise<CreateOsunaWorktreeResult>;
 
 export interface AttemptFirstAgentBranchAutoNameResult {
   attempted: boolean;
@@ -56,22 +56,22 @@ export interface AttemptFirstAgentBranchAutoNameResult {
   branchName: string | null;
 }
 
-export interface CreatePaseoWorktreeDeps extends CreateWorktreeCoreDeps {
+export interface CreateOsunaWorktreeDeps extends CreateWorktreeCoreDeps {
   workspaceGitService: WorkspaceGitService;
   workspaceProvisioning: Pick<WorkspaceProvisioningService, "createWorkspaceForWorktree">;
 }
 
 export async function createOsunaWorktree(
   input: CreateOsunaWorktreeInput,
-  deps: CreatePaseoWorktreeDeps,
-): Promise<CreatePaseoWorktreeResult> {
-  return runWithGitCommandPriority("high", () => createPaseoWorktreeWithPriority(input, deps));
+  deps: CreateOsunaWorktreeDeps,
+): Promise<CreateOsunaWorktreeResult> {
+  return runWithGitCommandPriority("high", () => createOsunaWorktreeWithPriority(input, deps));
 }
 
-async function createPaseoWorktreeWithPriority(
+async function createOsunaWorktreeWithPriority(
   input: CreateOsunaWorktreeInput,
-  deps: CreatePaseoWorktreeDeps,
-): Promise<CreatePaseoWorktreeResult> {
+  deps: CreateOsunaWorktreeDeps,
+): Promise<CreateOsunaWorktreeResult> {
   const workspaceCwdPlan = await planWorkspaceCwdForWorktree(input.cwd, deps.workspaceGitService);
   const createdWorktree = await createWorktreeCore(input, deps);
   try {
@@ -85,7 +85,7 @@ async function createPaseoWorktreeWithPriority(
     }
 
     if (createdWorktree.created) {
-      await seedPaseoConfigFile({
+      await seedOsunaConfigFile({
         sourceCwd: workspaceCwdPlan.inputCwd,
         targetCwd: workspaceCwd,
       });
@@ -127,12 +127,12 @@ async function createPaseoWorktreeWithPriority(
     if (!createdWorktree.created) {
       throw error;
     }
-    return rollbackCreatedPaseoWorktree(
+    return rollbackCreatedOsunaWorktree(
       {
         cwd: createdWorktree.repoRoot,
         worktreePath: createdWorktree.worktree.worktreePath,
         ...(input.runSetup === false ? { teardownCwds: [] } : {}),
-        paseoHome: input.paseoHome,
+        osunaHome: input.osunaHome,
         worktreesBaseRoot: input.worktreesRoot,
       },
       error,
@@ -178,9 +178,9 @@ export async function attemptFirstAgentBranchAutoName(options: {
     return { attempted: false, renamed: false, branchName: null };
   }
 
-  let metadata: ReturnType<typeof readPaseoWorktreeMetadata>;
+  let metadata: ReturnType<typeof readOsunaWorktreeMetadata>;
   try {
-    metadata = readPaseoWorktreeMetadata(options.cwd);
+    metadata = readOsunaWorktreeMetadata(options.cwd);
   } catch {
     return { attempted: false, renamed: false, branchName: null };
   }
@@ -195,11 +195,11 @@ export async function attemptFirstAgentBranchAutoName(options: {
   const getCurrentBranchImpl = options.getCurrentBranch ?? getCurrentBranch;
   const placeholderBranchName = metadata.firstAgentBranchAutoName.placeholderBranchName;
   if ((await getCurrentBranchImpl(options.cwd)) !== placeholderBranchName) {
-    markPaseoWorktreeFirstAgentBranchAutoNameAttempted(options.cwd);
+    markOsunaWorktreeFirstAgentBranchAutoNameAttempted(options.cwd);
     return { attempted: true, renamed: false, branchName: null };
   }
 
-  markPaseoWorktreeFirstAgentBranchAutoNameAttempted(options.cwd);
+  markOsunaWorktreeFirstAgentBranchAutoNameAttempted(options.cwd);
 
   const branchName = await options.generateBranchNameFromContext({
     cwd: options.cwd,
@@ -268,7 +268,7 @@ function maybeMarkFirstAgentBranchAutoNameEligible(options: {
     return;
   }
 
-  writePaseoWorktreeFirstAgentBranchAutoNameMetadata(createdWorktree.worktree.worktreePath, {
+  writeOsunaWorktreeFirstAgentBranchAutoNameMetadata(createdWorktree.worktree.worktreePath, {
     placeholderBranchName: createdWorktree.worktree.branchName,
   });
 }

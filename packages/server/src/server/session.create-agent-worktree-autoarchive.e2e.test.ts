@@ -29,11 +29,11 @@ function createGitRepo(): string {
   tempRoots.push(tempRoot);
   const repoDir = path.join(tempRoot, "repo");
   execFileSync("git", ["init", "-b", "main", repoDir], { stdio: "pipe" });
-  execFileSync("git", ["config", "user.email", "test@getpaseo.local"], {
+  execFileSync("git", ["config", "user.email", "test@osuna.local"], {
     cwd: repoDir,
     stdio: "pipe",
   });
-  execFileSync("git", ["config", "user.name", "Paseo Test"], { cwd: repoDir, stdio: "pipe" });
+  execFileSync("git", ["config", "user.name", "Osuna Test"], { cwd: repoDir, stdio: "pipe" });
   writeFileSync(path.join(repoDir, "README.md"), "hello\n");
   execFileSync("git", ["add", "README.md"], { cwd: repoDir, stdio: "pipe" });
   execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "initial"], {
@@ -168,7 +168,7 @@ test("create_agent_request creates a worktree and auto-archives both after the f
   await expectAgentPresentInActiveList(subsequent.id);
 }, 30000);
 
-test("create_agent_request auto-archives a nested workspace from an existing Paseo worktree", async () => {
+test("create_agent_request auto-archives a nested workspace from an existing Osuna worktree", async () => {
   const repoDir = createGitRepoWithNestedDirectory();
   const source = await createAgentInBranchOffWorktree({ branchName: "nested-source", repoDir });
   await ctx.client.waitForFinish(source.agentId, 10000);

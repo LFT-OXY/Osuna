@@ -8,14 +8,14 @@ export interface AgentTurnTimestamp {
 
 /**
  * How far a rollout turn's start may sit from the user message that opened it.
- * Codex stamps the rollout when it begins writing, Paseo when it accepts the
+ * Codex stamps the rollout when it begins writing, Osuna when it accepts the
  * prompt, and the gap is seconds; half a minute covers it without letting the
  * neighbouring turn win.
  */
 const MATCH_WINDOW_MS = 30_000;
 
 /**
- * Give the Codex turns Paseo watched close no id, and the ones it did not — the
+ * Give the Codex turns Osuna watched close no id, and the ones it did not — the
  * history a backfill read — the id of the nearest user message. Claude, Pi and
  * OMP name their turn in the log, so nothing is guessed for them.
  */

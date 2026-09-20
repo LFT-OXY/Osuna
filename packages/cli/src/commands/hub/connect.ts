@@ -62,7 +62,7 @@ export function addHubConnectCommand(parent: Command, dependencies: HubConnectDe
     addHubResolutionHelp(
       parent
         .command("connect")
-        .description("Enroll this daemon with a Osuna Hub")
+        .description("Enroll this daemon with an Osuna Hub")
         .argument("[origin]", "Osuna Hub origin")
         .option("--api-key <secret>", "Organization API key")
         .option("--permission <permission...>", "Grant daemon permission during connection"),

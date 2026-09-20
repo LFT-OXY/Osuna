@@ -17,10 +17,10 @@ import { createTestLogger } from "../test-utils/test-logger.js";
 import {
   attemptFirstAgentBranchAutoName,
   createOsunaWorktree,
-  type CreatePaseoWorktreeDeps,
-} from "./paseo-worktree-service.js";
-import { readPaseoWorktreeMetadata } from "../utils/worktree-metadata.js";
-import { createWorktree, getPaseoWorktreesRoot } from "../utils/worktree.js";
+  type CreateOsunaWorktreeDeps,
+} from "./osuna-worktree-service.js";
+import { readOsunaWorktreeMetadata } from "../utils/worktree-metadata.js";
+import { createWorktree, getOsunaWorktreesRoot } from "../utils/worktree.js";
 import { isPlatform } from "../test-utils/platform.js";
 import { areEquivalentPaths, createRealpathAwarePathMatcher } from "../utils/path.js";
 import { deriveProjectKey } from "./project-key.js";
@@ -60,7 +60,7 @@ test("creates a worktree and registers it in the source workspace project withou
       worktreeSlug: "feature-one",
       title: "Feature One",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -115,7 +115,7 @@ test("refreshes a source project that became Git while creating a worktree", asy
       cwd: repoDir,
       worktreeSlug: "project-became-git",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -149,7 +149,7 @@ test("repairs a legacy source workspace whose project record is missing", async 
       cwd: repoDir,
       worktreeSlug: "repaired-source",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -193,7 +193,7 @@ test("uses an equivalent source workspace path when creating a worktree", async 
       cwd: sourceDir,
       worktreeSlug: "equivalent-source",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -222,7 +222,7 @@ test("creates a worktree workspace at the selected project subdirectory", async 
       projectId: project.projectId,
       worktreeSlug: "selected-subdirectory",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -250,7 +250,7 @@ test("seeds an uncommitted exact-project config into the mapped worktree directo
       cwd: sourceDir,
       worktreeSlug: "seed-nested-config",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     createDeps(),
   );
@@ -278,7 +278,7 @@ test("does not overwrite a committed exact-project config with source checkout e
       cwd: sourceDir,
       worktreeSlug: "preserve-nested-config",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     createDeps(),
   );
@@ -301,9 +301,9 @@ test("removes a new worktree when its ref does not contain the selected project 
   writeFileSync(path.join(sourceDir, "package.json"), "{}\n");
   commitAll(repoDir, "add subproject");
   const deps = createDeps();
-  const paseoHome = path.join(tempDir, ".osuna");
+  const osunaHome = path.join(tempDir, ".osuna");
   const worktreePath = path.join(
-    await getPaseoWorktreesRoot(repoDir, paseoHome),
+    await getOsunaWorktreesRoot(repoDir, osunaHome),
     "missing-subproject",
   );
 
@@ -315,7 +315,7 @@ test("removes a new worktree when its ref does not contain the selected project 
         refName: "without-subproject",
         worktreeSlug: "missing-subproject",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       },
       deps,
     ),
@@ -333,9 +333,9 @@ test("removes a new worktree when its ref does not contain the selected project 
 test("removes a new worktree when workspace persistence fails", async () => {
   const { repoDir, tempDir } = createGitRepo();
   cleanupPaths.push(tempDir);
-  const paseoHome = path.join(tempDir, ".osuna");
+  const osunaHome = path.join(tempDir, ".osuna");
   const worktreePath = path.join(
-    await getPaseoWorktreesRoot(repoDir, paseoHome),
+    await getOsunaWorktreesRoot(repoDir, osunaHome),
     "persistence-failure",
   );
 
@@ -346,7 +346,7 @@ test("removes a new worktree when workspace persistence fails", async () => {
         projectId: "missing-project",
         worktreeSlug: "persistence-failure",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       },
       createDeps(),
     ),
@@ -360,10 +360,10 @@ test("removes a new worktree when workspace persistence fails", async () => {
   ).toBe(false);
 });
 
-test("maps a nested cwd from an existing Paseo worktree into the next worktree", async () => {
+test("maps a nested cwd from an existing Osuna worktree into the next worktree", async () => {
   const { repoDir, tempDir } = createGitRepo();
   cleanupPaths.push(tempDir);
-  const paseoHome = path.join(tempDir, ".osuna");
+  const osunaHome = path.join(tempDir, ".osuna");
   const projectDir = path.join(repoDir, "packages", "app");
   mkdirSync(projectDir, { recursive: true });
   writeFileSync(path.join(projectDir, "package.json"), "{}\n");
@@ -374,7 +374,7 @@ test("maps a nested cwd from an existing Paseo worktree into the next worktree",
       cwd: repoDir,
       worktreeSlug: "source-worktree",
       runSetup: false,
-      paseoHome,
+      osunaHome,
     },
     deps,
   );
@@ -385,7 +385,7 @@ test("maps a nested cwd from an existing Paseo worktree into the next worktree",
       cwd: sourceCwd,
       worktreeSlug: "nested-worktree",
       runSetup: false,
-      paseoHome,
+      osunaHome,
     },
     deps,
   );
@@ -397,7 +397,7 @@ test("maps a nested cwd from an existing Paseo worktree into the next worktree",
 test("rejects source checkout planning before creating a worktree", async () => {
   const { repoDir, tempDir } = createGitRepo();
   cleanupPaths.push(tempDir);
-  const paseoHome = path.join(tempDir, ".osuna");
+  const osunaHome = path.join(tempDir, ".osuna");
   const deps = createDeps();
   deps.workspaceGitService.getCheckout = async () => {
     throw new Error("source checkout unavailable");
@@ -409,13 +409,13 @@ test("rejects source checkout planning before creating a worktree", async () => 
         cwd: repoDir,
         worktreeSlug: "must-not-create",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       },
       deps,
     ),
   ).rejects.toThrow("source checkout unavailable");
 
-  expect(existsSync(path.join(paseoHome, "worktrees"))).toBe(false);
+  expect(existsSync(path.join(osunaHome, "worktrees"))).toBe(false);
   expect(Array.from(deps.workspaces.values())).toEqual([]);
 });
 
@@ -444,7 +444,7 @@ test("registers a new worktree in the existing root project after the main check
       projectId: sourceProject.projectId,
       worktreeSlug: "second-worktree",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -473,7 +473,7 @@ test("an explicit project FK remains unchanged when its worktree comes from anot
       projectId: project.projectId,
       worktreeSlug: "attached-worktree",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -496,14 +496,14 @@ test.skipIf(isPlatform("win32"))(
   async () => {
     const { repoDir, tempDir } = createGitRepo();
     cleanupPaths.push(tempDir);
-    const paseoHome = path.join(tempDir, ".osuna");
+    const osunaHome = path.join(tempDir, ".osuna");
     const firstDeps = createDeps();
     const first = await createOsunaWorktree(
       {
         cwd: repoDir,
         worktreeSlug: "reuse-me",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       },
       firstDeps,
     );
@@ -519,7 +519,7 @@ test.skipIf(isPlatform("win32"))(
         cwd: repoDir,
         worktreeSlug: "reuse-me",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       },
       deps,
     );
@@ -542,13 +542,13 @@ test("renames an eligible unnamed branch-off worktree once on first agent contex
       cwd: repoDir,
       worktreeSlug: "dazzling-yak",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
 
   expect(created.worktree.branchName).toBe("dazzling-yak");
-  expect(readPaseoWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
+  expect(readOsunaWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
     version: 2,
     firstAgentBranchAutoName: {
       status: "pending",
@@ -575,7 +575,7 @@ test("renames an eligible unnamed branch-off worktree once on first agent contex
     branchName: "renamed-from-agent-context",
   });
   expect(branchAfterFirst).toBe("renamed-from-agent-context");
-  expect(readPaseoWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
+  expect(readOsunaWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
     version: 2,
     firstAgentBranchAutoName: {
       status: "attempted",
@@ -611,7 +611,7 @@ test("falls back to a numeric suffix when the desired branch name already exists
       cwd: repoDir,
       worktreeSlug: "dazzling-yak",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     createDeps(),
   );
@@ -648,7 +648,7 @@ test("renames the branch even when the app supplies a random placeholder slug", 
       worktreeSlug: "dazzling-yak",
       firstAgentContext: { prompt: "Investigate the failing login flow" },
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -696,7 +696,7 @@ test("renames the branch from a github_pr attachment when no prompt is supplied"
         ],
       },
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     deps,
   );
@@ -741,7 +741,7 @@ test("leaves the branch alone when generated branch text is invalid", async () =
       worktreeSlug: "dazzling-yak",
       firstAgentContext: { prompt: "Name this branch" },
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     createDeps(),
   );
@@ -762,7 +762,7 @@ test("leaves the branch alone when generated branch text is invalid", async () =
       .toString()
       .trim(),
   ).toBe("dazzling-yak");
-  expect(readPaseoWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
+  expect(readOsunaWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
     version: 2,
     firstAgentBranchAutoName: {
       status: "attempted",
@@ -786,12 +786,12 @@ test("does not mark checkout branch worktrees as eligible for first-agent rename
       action: "checkout",
       refName: "dev",
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     createDeps(),
   );
 
-  expect(readPaseoWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
+  expect(readOsunaWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
     version: 1,
     baseRefName: "dev",
   });
@@ -825,12 +825,12 @@ test("does not mark GitHub PR checkout worktrees as eligible for first-agent ren
       action: "checkout",
       githubPrNumber: 123,
       runSetup: false,
-      paseoHome: path.join(tempDir, ".osuna"),
+      osunaHome: path.join(tempDir, ".osuna"),
     },
     createDeps(),
   );
 
-  expect(readPaseoWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
+  expect(readOsunaWorktreeMetadata(created.worktree.worktreePath)).toMatchObject({
     version: 1,
     baseRefName: "main",
   });
@@ -852,7 +852,7 @@ test("does not mark GitHub PR checkout worktrees as eligible for first-agent ren
 });
 
 test("does not mutate registries or broadcast when core worktree creation fails", async () => {
-  const tempDir = mkdtempSync(path.join(tmpdir(), "paseo-worktree-service-"));
+  const tempDir = mkdtempSync(path.join(tmpdir(), "osuna-worktree-service-"));
   cleanupPaths.push(tempDir);
   const deps = createDeps();
 
@@ -862,7 +862,7 @@ test("does not mutate registries or broadcast when core worktree creation fails"
         cwd: tempDir,
         worktreeSlug: "not-git",
         runSetup: false,
-        paseoHome: path.join(tempDir, ".osuna"),
+        osunaHome: path.join(tempDir, ".osuna"),
       },
       deps,
     ),
@@ -872,14 +872,14 @@ test("does not mutate registries or broadcast when core worktree creation fails"
   expect(deps.workspaces.size).toBe(0);
 });
 
-// Worktree restore (Unit 3): recreate a deleted Paseo-owned worktree from its
+// Worktree restore (Unit 3): recreate a deleted Osuna-owned worktree from its
 // kept branch via createWorktree's checkout-branch source.
 test.skipIf(isPlatform("win32"))(
   "recreates a deleted worktree on the same kept branch without creating a suffixed branch",
   async () => {
     const { repoDir, tempDir } = createGitRepo();
     cleanupPaths.push(tempDir);
-    const paseoHome = path.join(tempDir, ".osuna");
+    const osunaHome = path.join(tempDir, ".osuna");
 
     execFileSync("git", ["branch", "restore-me"], { cwd: repoDir, stdio: "pipe" });
 
@@ -888,7 +888,7 @@ test.skipIf(isPlatform("win32"))(
       worktreeSlug: "restore-me",
       source: { kind: "checkout-branch", branchName: "restore-me" },
       runSetup: false,
-      paseoHome,
+      osunaHome,
     });
     expect(existsSync(created.worktreePath)).toBe(true);
 
@@ -903,7 +903,7 @@ test.skipIf(isPlatform("win32"))(
       worktreeSlug: "restore-me",
       source: { kind: "checkout-branch", branchName: "restore-me" },
       runSetup: false,
-      paseoHome,
+      osunaHome,
     });
 
     expect(recreated.worktreePath).toBe(created.worktreePath);
@@ -929,7 +929,7 @@ test.skipIf(isPlatform("win32"))(
 );
 
 // The default archive path (scope "workspace", worktreePath only) resolves
-// repoRoot=null, so deletePaseoWorktree's `git worktree remove`/`prune` is
+// repoRoot=null, so deleteOsunaWorktree's `git worktree remove`/`prune` is
 // skipped: the directory is rm-ed but the admin registration survives, pinning
 // the branch as "already checked out". Restore must self-heal by pruning the
 // stale registration before recreating, regardless of how it was archived.
@@ -938,7 +938,7 @@ test.skipIf(isPlatform("win32"))(
   async () => {
     const { repoDir, tempDir } = createGitRepo();
     cleanupPaths.push(tempDir);
-    const paseoHome = path.join(tempDir, ".osuna");
+    const osunaHome = path.join(tempDir, ".osuna");
 
     execFileSync("git", ["branch", "restore-me"], { cwd: repoDir, stdio: "pipe" });
 
@@ -947,7 +947,7 @@ test.skipIf(isPlatform("win32"))(
       worktreeSlug: "restore-me",
       source: { kind: "checkout-branch", branchName: "restore-me" },
       runSetup: false,
-      paseoHome,
+      osunaHome,
     });
     expect(existsSync(created.worktreePath)).toBe(true);
 
@@ -970,7 +970,7 @@ test.skipIf(isPlatform("win32"))(
         worktreeSlug: "restore-me",
         source: { kind: "checkout-branch", branchName: "restore-me" },
         runSetup: false,
-        paseoHome,
+        osunaHome,
       }),
     ).rejects.toThrow("missing but already registered worktree");
 
@@ -982,7 +982,7 @@ test.skipIf(isPlatform("win32"))(
       worktreeSlug: "restore-me",
       source: { kind: "checkout-branch", branchName: "restore-me" },
       runSetup: false,
-      paseoHome,
+      osunaHome,
     });
 
     expect(recreated.worktreePath).toBe(created.worktreePath);
@@ -1010,7 +1010,7 @@ test.skipIf(isPlatform("win32"))(
         worktreeSlug: "gone-branch",
         source: { kind: "checkout-branch", branchName: "gone-branch" },
         runSetup: false,
-        paseoHome: path.join(tempDir, ".osuna"),
+        osunaHome: path.join(tempDir, ".osuna"),
       }),
     ).rejects.toMatchObject({ name: "UnknownBranchError" });
   },
@@ -1021,7 +1021,7 @@ test.skipIf(isPlatform("win32"))(
   async () => {
     const { repoDir, tempDir } = createGitRepo();
     cleanupPaths.push(tempDir);
-    const paseoHome = path.join(tempDir, ".osuna");
+    const osunaHome = path.join(tempDir, ".osuna");
 
     execFileSync("git", ["branch", "busy-branch"], { cwd: repoDir, stdio: "pipe" });
     const first = await createWorktree({
@@ -1029,7 +1029,7 @@ test.skipIf(isPlatform("win32"))(
       worktreeSlug: "busy-branch",
       source: { kind: "checkout-branch", branchName: "busy-branch" },
       runSetup: false,
-      paseoHome,
+      osunaHome,
     });
     expect(existsSync(first.worktreePath)).toBe(true);
 
@@ -1038,7 +1038,7 @@ test.skipIf(isPlatform("win32"))(
       worktreeSlug: "busy-branch-again",
       source: { kind: "checkout-branch", branchName: "busy-branch" },
       runSetup: false,
-      paseoHome,
+      osunaHome,
     });
 
     expect(second.branchName).toBe("busy-branch-1");
@@ -1046,7 +1046,7 @@ test.skipIf(isPlatform("win32"))(
   },
 );
 
-interface TestDeps extends CreatePaseoWorktreeDeps {
+interface TestDeps extends CreateOsunaWorktreeDeps {
   projects: Map<string, PersistedProjectRecord>;
   workspaces: Map<string, PersistedWorkspaceRecord>;
 }
@@ -1314,7 +1314,7 @@ function createWorkspaceGitSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {
 }
 
 function createGitRepo(): { tempDir: string; repoDir: string } {
-  const tempDir = mkdtempSync(path.join(tmpdir(), "paseo-worktree-service-"));
+  const tempDir = mkdtempSync(path.join(tmpdir(), "osuna-worktree-service-"));
   const repoDir = path.join(tempDir, "repo");
   execFileSync("git", ["init", repoDir], { stdio: "pipe" });
   execFileSync("git", ["config", "user.email", "test@example.com"], {

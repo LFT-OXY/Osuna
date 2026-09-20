@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, test } from "vitest";
 import pino from "pino";
 import { ProjectConfigSession, type ProjectConfigSessionHost } from "./project-config-session.js";
-import { statPaseoConfigPath } from "../../../utils/paseo-config-file.js";
+import { statOsunaConfigPath } from "../../../utils/osuna-config-file.js";
 import type { PersistedProjectRecord } from "../../workspace-registry.js";
 import type { SessionOutboundMessage } from "../../messages.js";
 
@@ -228,7 +228,7 @@ describe("ProjectConfigSession", () => {
       requestId: "write-uncommitted-setup",
       repoRoot,
       config: { worktree: { setup: "npm install" } },
-      expectedRevision: statPaseoConfigPath(repoRoot),
+      expectedRevision: statOsunaConfigPath(repoRoot),
     });
 
     expect(emitted).toEqual([

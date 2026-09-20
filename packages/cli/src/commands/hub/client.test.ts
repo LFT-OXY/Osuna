@@ -63,7 +63,7 @@ describe("Hub HTTP client", () => {
             projects: [
               {
                 id: "a50e05af-4f20-4c8f-8dcc-58e5ea360663",
-                slug: "paseo",
+                slug: "osuna",
                 name: "Osuna",
               },
             ],
@@ -83,7 +83,7 @@ describe("Hub HTTP client", () => {
     const projects = await hub.listProjects(origin, "human-secret");
     const token = await hub.issueEnrollmentToken(origin, "human-secret");
 
-    assert.equal(projects[0]?.slug, "paseo");
+    assert.equal(projects[0]?.slug, "osuna");
     assert.equal(token, "one-time-enrollment-token-with-enough-length");
     assert.deepEqual(
       requests.map((request) => request.url),
@@ -160,15 +160,15 @@ describe("Hub HTTP client", () => {
           daemons: [{ id: "a50e05af-4f20-4c8f-8dcc-58e5ea360663", slug: "macbook" }],
           github: [
             {
-              slug: "getpaseo",
-              accountLogin: "getpaseo",
+              slug: "lft-oxy",
+              accountLogin: "lft-oxy",
               accountType: "Organization",
-              repositories: ["getpaseo/paseo"],
+              repositories: ["lft-oxy/osuna"],
             },
           ],
-          discord: [{ slug: "paseo", guildName: "Osuna" }],
-          slack: [{ slug: "paseo", teamName: "Osuna" }],
-          linear: [{ slug: "paseo-linear", organizationName: "Osuna" }],
+          discord: [{ slug: "osuna", guildName: "Osuna" }],
+          slack: [{ slug: "osuna", teamName: "Osuna" }],
+          linear: [{ slug: "osuna-linear", organizationName: "Osuna" }],
         },
       }),
       requests,
@@ -177,8 +177,8 @@ describe("Hub HTTP client", () => {
     const resources = await new HubHttpClient().listConfigurationResources(origin, "secret");
 
     assert.equal(resources.daemons[0]?.slug, "macbook");
-    assert.equal(resources.discord[0]?.slug, "paseo");
-    assert.equal(resources.linear[0]?.slug, "paseo-linear");
+    assert.equal(resources.discord[0]?.slug, "osuna");
+    assert.equal(resources.linear[0]?.slug, "osuna-linear");
     assert.equal(requests[0]?.url, "/api/v1/configuration-resources");
   });
 

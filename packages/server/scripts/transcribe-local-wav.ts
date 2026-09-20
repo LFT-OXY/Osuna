@@ -43,9 +43,9 @@ function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Missing <wavPath>\n\n${usage()}`);
   }
 
-  const paseoHome = resolveOsunaHome();
+  const osunaHome = resolveOsunaHome();
   const defaultModelsDir =
-    process.env.OSUNA_LOCAL_MODELS_DIR ?? path.join(paseoHome, "models", "local-speech");
+    process.env.OSUNA_LOCAL_MODELS_DIR ?? path.join(osunaHome, "models", "local-speech");
 
   const positional: string[] = [];
   let outPath: string | undefined;

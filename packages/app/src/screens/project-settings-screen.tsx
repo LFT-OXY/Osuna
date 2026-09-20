@@ -87,7 +87,7 @@ const METADATA_PROMPT_FIELDS: Record<MetadataPromptKey, MetadataPromptField> = {
   },
 };
 
-const WORKTREE_DOCS_URL = "https://paseo.sh/docs/worktrees";
+const WORKTREE_DOCS_URL = "https://github.com/LFT-OXY/Osuna/blob/main/public-docs/worktrees.md";
 
 type ReadProjectConfigData = Awaited<ReturnType<DaemonClient["readProjectConfig"]>>;
 

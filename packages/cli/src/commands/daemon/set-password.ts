@@ -81,9 +81,9 @@ export async function setDaemonPasswordInConfig(
   newPassword: string,
   options: SetPasswordOptions = {},
 ): Promise<SetPasswordResult> {
-  const paseoHome = resolveOsunaHome({ OSUNA_HOME: options.home });
-  const configPath = path.join(paseoHome, CONFIG_FILENAME);
-  const persisted = readPersistedConfig(paseoHome);
+  const osunaHome = resolveOsunaHome({ OSUNA_HOME: options.home });
+  const configPath = path.join(osunaHome, CONFIG_FILENAME);
+  const persisted = readPersistedConfig(osunaHome);
   const nextConfig: PersistedConfig = {
     ...persisted,
     daemon: {
@@ -95,13 +95,13 @@ export async function setDaemonPasswordInConfig(
     },
   };
 
-  savePersistedConfig(paseoHome, nextConfig);
+  savePersistedConfig(osunaHome, nextConfig);
 
   return {
     action: "password_set",
     configPath,
-    restartCommand: `osuna daemon restart --home ${JSON.stringify(paseoHome)}`,
-    message: `Password written to ${configPath}\nRestart the daemon for the change to take effect.\nRun: osuna daemon restart --home ${JSON.stringify(paseoHome)}`,
+    restartCommand: `osuna daemon restart --home ${JSON.stringify(osunaHome)}`,
+    message: `Password written to ${configPath}\nRestart the daemon for the change to take effect.\nRun: osuna daemon restart --home ${JSON.stringify(osunaHome)}`,
   };
 }
 

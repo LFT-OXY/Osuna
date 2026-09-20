@@ -5,7 +5,7 @@ import { restoreProviderSessionIds, type StoredAgentRecord } from "../agent/agen
 import type { AgentTurnTimestamp } from "./codex-turn-match.js";
 import { usageSessionOwnerKey, type UsageSessionOwner } from "./sessions.js";
 
-/** The CLI sessions one Paseo agent has run in. */
+/** The CLI sessions one Osuna agent has run in. */
 export interface UsageAgentBacking {
   cli: UsageCli;
   /**
@@ -20,7 +20,7 @@ export interface UsageAgentBacking {
 
 export interface UsageAgentTurnEvent {
   agentId: string;
-  /** Paseo's own turn id, absent when the provider ended a turn it never named. */
+  /** Osuna's own turn id, absent when the provider ended a turn it never named. */
   turnId: string | null;
 }
 
@@ -34,7 +34,7 @@ export interface UsageAgentBridge {
   /** The agent a parsed session belongs to, for the `usage.updated` payload. */
   findAgentIdForSession(cli: UsageCli, sessionId: string): Promise<string | null>;
   /**
-   * Every provider session Paseo owns, keyed by `usageSessionOwnerKey`. The
+   * Every provider session Osuna owns, keyed by `usageSessionOwnerKey`. The
    * session listing marks hundreds of rows at once, so it reads the whole index
    * rather than asking per row.
    */

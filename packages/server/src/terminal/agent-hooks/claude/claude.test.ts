@@ -28,7 +28,7 @@ function createTempDir(prefix: string): string {
 }
 
 function createFakeCliBinDir(): string {
-  const dir = createTempDir("paseo-cli-bin-");
+  const dir = createTempDir("osuna-cli-bin-");
   writeFileSync(join(dir, "osuna"), "");
   return dir;
 }
@@ -66,7 +66,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 describe("Claude terminal agent hooks", () => {
   it("installs registered provider hooks idempotently", () => {
-    const configDir = createTempDir("paseo-claude-config-");
+    const configDir = createTempDir("osuna-claude-config-");
     const provider = AGENT_HOOK_PROVIDERS.claude;
     const install = provider.install;
 
@@ -75,11 +75,11 @@ describe("Claude terminal agent hooks", () => {
 
     const settings = readSettings(configDir);
     for (const event of provider.events) {
-      const paseoCommands = hookCommands(settings, event.event).filter((command) =>
+      const osunaCommands = hookCommands(settings, event.event).filter((command) =>
         command.includes(install.hookMarker),
       );
-      expect(paseoCommands).toHaveLength(1);
-      expect(paseoCommands[0]).toBe(
+      expect(osunaCommands).toHaveLength(1);
+      expect(osunaCommands[0]).toBe(
         `if [ -n "$OSUNA_TERMINAL_ID" ]; then "\${OSUNA_HOOK_CLI:-osuna}" hooks ${provider.id} ${event.event}; fi`,
       );
     }
@@ -87,7 +87,7 @@ describe("Claude terminal agent hooks", () => {
   });
 
   it("preserves unrelated user hooks", () => {
-    const configDir = createTempDir("paseo-claude-config-preserve-");
+    const configDir = createTempDir("osuna-claude-config-preserve-");
     writeFileSync(
       join(configDir, "settings.json"),
       `${JSON.stringify(
@@ -118,7 +118,7 @@ describe("Claude terminal agent hooks", () => {
   });
 
   it("uninstalls only marker-matched hooks", () => {
-    const configDir = createTempDir("paseo-claude-config-uninstall-");
+    const configDir = createTempDir("osuna-claude-config-uninstall-");
     installRegisteredAgentHooks({ configDir });
     const settings = readSettings(configDir);
     settings.hooks = {
@@ -208,8 +208,8 @@ describe("Claude terminal agent hooks", () => {
     const env = buildTerminalEnvironment({
       shell: "/bin/sh",
       env: { PATH: ["/usr/bin", "/bin"].join(delimiter) },
-      paseoCliBinDir: cliBinDir,
-      paseoHookCliPath: hookCliPath,
+      osunaCliBinDir: cliBinDir,
+      osunaHookCliPath: hookCliPath,
     });
 
     expect(env.PATH?.split(delimiter)).toEqual([cliBinDir, "/usr/bin", "/bin"]);
@@ -220,7 +220,7 @@ describe("Claude terminal agent hooks", () => {
     const env = buildTerminalEnvironment({
       shell: "/bin/sh",
       env: { PATH: ["/usr/bin", "/bin"].join(delimiter) },
-      paseoCliBinDir: null,
+      osunaCliBinDir: null,
     });
 
     expect(env.PATH?.split(delimiter)).toEqual(["/usr/bin", "/bin"]);

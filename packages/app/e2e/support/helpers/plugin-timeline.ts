@@ -60,7 +60,7 @@ export async function withTimelinePlugin(
       JSON.stringify({ toolCallDetailLevel: "overview" }),
     );
   });
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-timeline-plugin-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-timeline-plugin-"));
   const agent = await seedMockAgentWorkspace({
     repoPrefix: "timeline-plugin-",
     title: "Timeline plugin regression",

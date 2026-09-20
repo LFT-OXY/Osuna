@@ -5,7 +5,7 @@ describe("desktop agent navigation", () => {
   it("finds an agent deep link among Electron launch arguments", () => {
     expect(
       parseAgentDeepLinkFromArgv([
-        "/Applications/Paseo.app/Contents/MacOS/Paseo",
+        "/Applications/Osuna.app/Contents/MacOS/Osuna",
         "--no-sandbox",
         "osuna://h/server-1/agent/agent-2",
       ]),

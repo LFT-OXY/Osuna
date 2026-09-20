@@ -38,18 +38,18 @@ const daemonTest = metroTest.extend<
     e2eDaemonConfig: Record<string, unknown> | undefined;
     e2eDaemonEnvironment: Record<string, string>;
     e2eForkProviders: string[];
-    e2eInjectPaseoTools: boolean;
+    e2eInjectOsunaTools: boolean;
     e2eWorker: void;
     e2eWorkerClient: SeedDaemonClient;
   }
 >({
   e2eForkProviders: [[], { scope: "worker", option: true }],
-  e2eInjectPaseoTools: [false, { scope: "worker", option: true }],
+  e2eInjectOsunaTools: [false, { scope: "worker", option: true }],
   e2eDaemonConfig: [undefined, { scope: "worker", option: true }],
   e2eDaemonEnvironment: [{}, { scope: "worker", option: true }],
   e2eWorker: [
     async (
-      { e2eDaemonConfig, e2eDaemonEnvironment, e2eForkProviders, e2eInjectPaseoTools },
+      { e2eDaemonConfig, e2eDaemonEnvironment, e2eForkProviders, e2eInjectOsunaTools },
       provide,
       workerInfo,
     ) => {
@@ -57,7 +57,7 @@ const daemonTest = metroTest.extend<
         daemonConfig: e2eDaemonConfig,
         environment: e2eDaemonEnvironment,
         forkProviders: e2eForkProviders,
-        injectPaseoTools: e2eInjectPaseoTools,
+        injectOsunaTools: e2eInjectOsunaTools,
       });
       try {
         await provide();
@@ -106,14 +106,14 @@ const daemonTest = metroTest.extend<
 });
 
 const test = daemonTest.extend<{
-  paseoE2ESetup: void;
+  osunaE2ESetup: void;
   outdatedDaemon: OutdatedDaemon;
   desktopManagedOutdatedDaemon: OutdatedDaemon;
   relayConfigOutdatedDaemon: OutdatedDaemon;
   projectPickerFixture: TrackedProjectPickerFixture;
   withWorkspace: WithWorkspace;
 }>({
-  paseoE2ESetup: [
+  osunaE2ESetup: [
     async ({ page }, provide, testInfo) => {
       const daemonPort = getE2EDaemonPort();
       const metroPort = process.env.E2E_METRO_PORT;

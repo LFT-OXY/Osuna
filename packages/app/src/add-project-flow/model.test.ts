@@ -89,8 +89,8 @@ describe("Add Project navigation", () => {
   it("restores the GitHub destination query and active parent when reopening a repository", () => {
     const repository = {
       id: "repo-1",
-      nameWithOwner: "getpaseo/paseo",
-      cloneUrl: "git@github.com:getpaseo/paseo.git",
+      nameWithOwner: "lft-oxy/osuna",
+      cloneUrl: "git@github.com:lft-oxy/osuna.git",
       description: null,
       visibility: "public",
       updatedAt: null,
@@ -149,39 +149,39 @@ describe("Add Project options", () => {
   });
 
   it("offers manual URL and protocol-specific owner/repo clone choices", () => {
-    expect(buildManualGithubRepositoryChoices("git@github.com:getpaseo/paseo.git")).toEqual([
+    expect(buildManualGithubRepositoryChoices("git@github.com:lft-oxy/osuna.git")).toEqual([
       expect.objectContaining({
-        id: "manual:git@github.com:getpaseo/paseo.git",
-        nameWithOwner: "getpaseo/paseo",
-        cloneUrl: "git@github.com:getpaseo/paseo.git",
+        id: "manual:git@github.com:lft-oxy/osuna.git",
+        nameWithOwner: "lft-oxy/osuna",
+        cloneUrl: "git@github.com:lft-oxy/osuna.git",
       }),
     ]);
-    expect(buildManualGithubRepositoryChoices("getpaseo/paseo")).toEqual([
-      expect.objectContaining({ cloneProtocol: "https", cloneUrl: "getpaseo/paseo" }),
-      expect.objectContaining({ cloneProtocol: "ssh", cloneUrl: "getpaseo/paseo" }),
+    expect(buildManualGithubRepositoryChoices("lft-oxy/osuna")).toEqual([
+      expect.objectContaining({ cloneProtocol: "https", cloneUrl: "lft-oxy/osuna" }),
+      expect.objectContaining({ cloneProtocol: "ssh", cloneUrl: "lft-oxy/osuna" }),
     ]);
-    expect(buildManualGithubRepositoryChoices("paseo")).toEqual([]);
+    expect(buildManualGithubRepositoryChoices("osuna")).toEqual([]);
   });
 
   it("shows final clone paths while retaining parent paths as values", () => {
     expect(
       buildCloneLocationOptions({
         parents: ["~/dev", "~/workspace"],
-        repositoryName: "paseo",
-        existingPaths: ["~/workspace/paseo"],
+        repositoryName: "osuna",
+        existingPaths: ["~/workspace/osuna"],
       }),
     ).toEqual([
       {
         id: "~/dev",
         path: "~/dev",
-        displayPath: "~/dev/paseo",
+        displayPath: "~/dev/osuna",
         secondaryText: "Parent directory: ~/dev",
         disabled: false,
       },
       {
         id: "~/workspace",
         path: "~/workspace",
-        displayPath: "~/workspace/paseo",
+        displayPath: "~/workspace/osuna",
         secondaryText: "Already exists",
         disabled: true,
       },

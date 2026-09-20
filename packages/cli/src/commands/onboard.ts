@@ -112,21 +112,21 @@ async function resolveVoiceSelection(mode: OnboardOptions["voice"]): Promise<boo
   return answer;
 }
 
-function printNextSteps(pairingUrl: string | null, paseoHome: string, richUi: boolean): void {
-  const daemonLogPath = path.join(paseoHome, "daemon.log");
+function printNextSteps(pairingUrl: string | null, osunaHome: string, richUi: boolean): void {
+  const daemonLogPath = path.join(osunaHome, "daemon.log");
   const nextStepsLines = [
     pairingUrl
       ? "1. Open Osuna and scan the QR code above, or paste the pairing link."
       : "1. Open Osuna and connect to your daemon.",
     "2. Desktop app: https://github.com/LFT-OXY/Osuna/releases/latest",
     "3. Docs: https://github.com/LFT-OXY/Osuna/tree/main/public-docs",
-    `4. Example: osuna run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
+    `4. Example: osuna run --home ${JSON.stringify(osunaHome)} --output-schema schema.json "extract fields"`,
   ];
   const quickReferenceLines = [
     "1. osuna --help",
-    `2. osuna ls --home ${JSON.stringify(paseoHome)}`,
-    `3. osuna run --home ${JSON.stringify(paseoHome)} "your prompt"`,
-    `4. osuna status --home ${JSON.stringify(paseoHome)}`,
+    `2. osuna ls --home ${JSON.stringify(osunaHome)}`,
+    `3. osuna run --home ${JSON.stringify(osunaHome)} "your prompt"`,
+    `4. osuna status --home ${JSON.stringify(osunaHome)}`,
     `5. Daemon logs: ${daemonLogPath}`,
   ];
 
@@ -175,10 +175,10 @@ export function onboardCommand(): Command {
 }
 
 async function resolveAndPersistVoice(
-  paseoHome: string,
+  osunaHome: string,
   options: OnboardOptions,
 ): Promise<boolean> {
-  let persisted = loadPersistedConfig(paseoHome) as OnboardPersistedConfig;
+  let persisted = loadPersistedConfig(osunaHome) as OnboardPersistedConfig;
   const persistedVoiceSelection = resolvePersistedVoiceSelection(persisted);
   const shouldPrompt = options.voice === "ask" || options.voice === undefined;
   let voiceEnabled: boolean;
@@ -200,12 +200,12 @@ async function resolveAndPersistVoice(
   }
 
   persisted = applyVoiceSelection(persisted, voiceEnabled);
-  savePersistedConfig(paseoHome, persisted);
+  savePersistedConfig(osunaHome, persisted);
   return voiceEnabled;
 }
 
-function persistSetupChoices(paseoHome: string, options: OnboardOptions): void {
-  const persisted = loadPersistedConfig(paseoHome, { defaultsIfMissing: true });
+function persistSetupChoices(osunaHome: string, options: OnboardOptions): void {
+  const persisted = loadPersistedConfig(osunaHome, { defaultsIfMissing: true });
   if (options.listen || options.port) {
     persisted.daemon = {
       ...persisted.daemon,
@@ -227,7 +227,7 @@ function persistSetupChoices(paseoHome: string, options: OnboardOptions): void {
       ...persisted.daemon,
       hostnames: options.hostnames === "true" ? true : options.hostnames.split(","),
     };
-  savePersistedConfig(paseoHome, persisted);
+  savePersistedConfig(osunaHome, persisted);
 }
 
 export async function runOnboard(options: OnboardOptions): Promise<void> {
@@ -244,14 +244,14 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   const timeoutMs = parseTimeoutMs(options.timeout);
 
   if (options.daemonTarget.kind !== "instance") throw new Error("Onboarding requires a local home");
-  const paseoHome = options.daemonTarget.home;
-  const alreadyRunning = await readDaemonInstance(paseoHome);
-  persistSetupChoices(paseoHome, options);
+  const osunaHome = options.daemonTarget.home;
+  const alreadyRunning = await readDaemonInstance(osunaHome);
+  persistSetupChoices(osunaHome, options);
   if (richUi) {
-    renderNote(paseoHome, "Osuna home");
+    renderNote(osunaHome, "Osuna home");
   }
 
-  const voiceEnabled = await resolveAndPersistVoice(paseoHome, options);
+  const voiceEnabled = await resolveAndPersistVoice(osunaHome, options);
   log.message(
     voiceEnabled
       ? "Voice features enabled. Local speech models will be downloaded automatically if missing."
@@ -267,20 +267,20 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
       await client.close();
     }
   } else {
-    await launchLocalDaemon({ home: paseoHome, timeoutMs });
+    await launchLocalDaemon({ home: osunaHome, timeoutMs });
   }
-  const ready = await waitForDaemonReady(paseoHome, { timeoutMs });
+  const ready = await waitForDaemonReady(osunaHome, { timeoutMs });
   log.message(`Daemon ready on ${ready.listen}`);
 
   if (options.relay === false) {
     log.message("Relay pairing skipped because --no-relay was provided.");
-    printNextSteps(null, paseoHome, richUi);
+    printNextSteps(null, osunaHome, richUi);
     if (richUi) outro("Osuna daemon is running.");
     return;
   }
 
   let pairing = await resolveLocalPairingOffer({
-    paseoHome,
+    osunaHome,
     enableRelay: options.relay === true,
   });
 
@@ -288,11 +288,11 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
     const shouldEnable = richUi ? await confirmRelayPairing() : false;
     if (!shouldEnable) {
       printDirectConnectionGuidance();
-      printNextSteps(null, paseoHome, richUi);
+      printNextSteps(null, osunaHome, richUi);
       if (richUi) outro("Osuna daemon is running.");
       return;
     }
-    pairing = await resolveLocalPairingOffer({ paseoHome, enableRelay: true });
+    pairing = await resolveLocalPairingOffer({ osunaHome, enableRelay: true });
     log.success("Relay enabled");
   }
 
@@ -300,7 +300,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
     const notice = describePairingUnavailable(pairing.unavailableReason ?? "unknown");
     log.warn(notice.message);
     log.message(notice.action);
-    printNextSteps(null, paseoHome, richUi);
+    printNextSteps(null, osunaHome, richUi);
     if (richUi) {
       outro("Osuna daemon is running.");
     }
@@ -314,7 +314,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
       columns: process.stdout.columns,
     }),
   );
-  printNextSteps(pairing.url, paseoHome, richUi);
+  printNextSteps(pairing.url, osunaHome, richUi);
   if (richUi) {
     outro("Osuna is ready!");
   }

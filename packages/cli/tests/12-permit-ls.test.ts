@@ -29,7 +29,7 @@ console.log("=== Permit LS Command Tests ===\n");
 
 // Allocate an unused endpoint for connection-error and argument-validation checks.
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
 
 try {
   // Test 1: permit --help shows subcommands
@@ -56,7 +56,7 @@ try {
   {
     console.log("Test 3: permit ls handles daemon not running");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} permit ls`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} permit ls`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -72,7 +72,7 @@ try {
   {
     console.log("Test 4: permit ls --json handles errors");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} permit ls --json`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} permit ls --json`.nothrow();
     // Should still fail (daemon not running)
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     // But output should be valid JSON if present
@@ -94,7 +94,7 @@ try {
   {
     console.log("Test 5: -q (quiet) flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} -q permit ls`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} -q permit ls`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -q flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -102,7 +102,7 @@ try {
   }
 } finally {
   // Clean up temp directory
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All permit ls tests passed ===");

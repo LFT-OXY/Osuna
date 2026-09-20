@@ -10,7 +10,7 @@ import type { PluginBeforeRequests, PluginLifecycleEvents } from "@osuna/plugin/
 import { ClaudeAgentClient } from "../agent/providers/claude/agent.js";
 import { CodexAppServerAgentClient } from "../agent/providers/codex-app-server-agent.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 type RecordedHook =
   | {
@@ -82,7 +82,7 @@ test.skipIf(process.platform !== "linux")(
   "all lifecycle hooks and the example actions work with a real Claude agent on an isolated daemon",
   async () => {
     await mkdir(evidenceDirectory, { recursive: true });
-    const fixture = await mkdtemp(path.join(tmpdir(), "paseo-real-hooks-"));
+    const fixture = await mkdtemp(path.join(tmpdir(), "osuna-real-hooks-"));
     const project = path.join(fixture, "project");
     await mkdir(path.join(project, ".claude"), { recursive: true });
     await writeFile(
@@ -110,7 +110,7 @@ test.skipIf(process.platform !== "linux")(
       sync: true,
     });
     const logger = pino({ level: "info" }, destination);
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       daemonVersion: "0.8.0",
       logger,
       agentClients: {
@@ -125,7 +125,7 @@ test.skipIf(process.platform !== "linux")(
     });
     const proof: Record<string, unknown> = {
       port: daemon.port,
-      paseoHome: daemon.paseoHome,
+      osunaHome: daemon.osunaHome,
       startedAt: new Date().toISOString(),
     };
     try {

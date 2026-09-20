@@ -12,7 +12,7 @@ The daemon logs with [pino](https://getpino.io). Output goes to `$OSUNA_HOME/dae
   ```
 
   `server/workspace-git-service.ts`, `server/relay-transport.ts`, and `server/web-ui.ts` all do this. There are 50+ call sites; match them.
-- Loggers are **injected**, never imported as a singleton. Constructors and factories take `logger` in their options object (`new AgentStorage(baseDir, logger)`, `createPaseoDaemon(config, logger)`). This is what lets tests pass a silent logger.
+- Loggers are **injected**, never imported as a singleton. Constructors and factories take `logger` in their options object (`new AgentStorage(baseDir, logger)`, `createOsunaDaemon(config, logger)`). This is what lets tests pass a silent logger.
 
 ## Writing log lines
 
@@ -24,7 +24,7 @@ The daemon logs with [pino](https://getpino.io). Output goes to `$OSUNA_HOME/dae
 ## In tests
 
 - Unit tests: `createTestLogger()` from `src/test-utils/test-logger.ts` returns `pino({ level: "silent" })`. Some suites build the same thing inline with `vi.spyOn` on `info`/`warn`/`error` to assert that a warning was logged (`server/workspace-archive-service.test.ts`); prefer the shared helper unless you assert on log calls.
-- Daemon E2E: `createTestPaseoDaemon` wires its own logger; pass `{ level: "warn" }` when you need to see failures from a script (`docs/ad-hoc-daemon-testing.md`).
+- Daemon E2E: `createTestOsunaDaemon` wires its own logger; pass `{ level: "warn" }` when you need to see failures from a script (`docs/ad-hoc-daemon-testing.md`).
 
 ## Anti-patterns
 

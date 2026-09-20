@@ -74,7 +74,7 @@ describe("workspace message schemas", () => {
             kind: "change_request",
             forge: "github",
             number: 42,
-            headRepository: "contributor/paseo",
+            headRepository: "contributor/osuna",
           },
         },
       }),
@@ -383,7 +383,7 @@ describe("workspace message schemas", () => {
             providerLabel: "Claude Code",
             providerHandleId: "thread-1",
             cwd: "/tmp/repo",
-            title: "Owned by Paseo",
+            title: "Owned by Osuna",
             firstPromptPreview: null,
             lastPromptPreview: null,
             lastActivityAt: "2026-04-30T12:34:56.000Z",
@@ -682,9 +682,9 @@ describe("workspace message schemas", () => {
           scripts: [
             {
               scriptName: "web",
-              hostname: "web.paseo.localhost",
+              hostname: "web.osuna.localhost",
               port: 3000,
-              proxyUrl: "http://web.paseo.localhost:6767",
+              proxyUrl: "http://web.osuna.localhost:6767",
               lifecycle: "running",
               health: "healthy",
             },
@@ -701,9 +701,9 @@ describe("workspace message schemas", () => {
       {
         scriptName: "web",
         type: "service",
-        hostname: "web.paseo.localhost",
+        hostname: "web.osuna.localhost",
         port: 3000,
-        proxyUrl: "http://web.paseo.localhost:6767",
+        proxyUrl: "http://web.osuna.localhost:6767",
         lifecycle: "running",
         health: "healthy",
         exitCode: null,
@@ -740,13 +740,13 @@ describe("workspace message schemas", () => {
     expect(parsed.payload.workspace.worktreeSlug).toBeUndefined();
   });
 
-  test("preserves a Paseo-owned worktree slug", () => {
+  test("preserves an Osuna-owned worktree slug", () => {
     const parsed = WorkspaceDescriptorPayloadSchema.parse({
       id: "owned-worktree",
       projectId: "project",
       projectDisplayName: "repo",
       projectRootPath: "/repo",
-      workspaceDirectory: "/paseo/worktrees/project/feature/packages/app",
+      workspaceDirectory: "/osuna/worktrees/project/feature/packages/app",
       worktreeSlug: "feature",
       projectKind: "git",
       workspaceKind: "worktree",
@@ -924,7 +924,7 @@ describe("workspace message schemas", () => {
         scripts: [
           {
             scriptName: "web",
-            hostname: "web.paseo.localhost",
+            hostname: "web.osuna.localhost",
             port: null,
             proxyUrl: null,
             lifecycle: "stopped",

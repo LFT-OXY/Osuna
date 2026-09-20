@@ -1,6 +1,6 @@
-# @getpaseo/app — Client Guidelines
+# @osuna/app — Client Guidelines
 
-The app is one Expo / React Native codebase under `packages/app/src/` that runs on iOS, Android, browser web, and Electron desktop. It connects to one or more daemons over the `@getpaseo/client` WebSocket client, keeps a durable replica of directory and timeline data, and renders everything with a Unistyles theme. Cross-platform is the default; platform gates are the exception.
+The app is one Expo / React Native codebase under `packages/app/src/` that runs on iOS, Android, browser web, and Electron desktop. It connects to one or more daemons over the `@osuna/client` WebSocket client, keeps a durable replica of directory and timeline data, and renders everything with a Unistyles theme. Cross-platform is the default; platform gates are the exception.
 
 Read these repo docs before the guides. The guides distill them and add the app's concrete shapes.
 
@@ -37,7 +37,7 @@ npm run typecheck
 npm run lint
 npm run format                                              # before committing
 npx vitest run packages/app/src/<file>.test.ts --bail=1
-npm run test:browser --workspace=@getpaseo/app              # only *.browser.test files
+npm run test:browser --workspace=@osuna/app              # only *.browser.test files
 npx playwright test --project=browser e2e/browser/<spec>    # from packages/app, targeted only
 npm run build:client                                        # when protocol/client types look stale
 ```

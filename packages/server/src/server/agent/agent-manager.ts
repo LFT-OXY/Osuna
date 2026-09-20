@@ -84,10 +84,10 @@ import {
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
-import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
+import { stripInternalOsunaMcpServer, withRuntimeOsunaMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
-import type { PaseoToolCatalogFactory } from "./tools/types.js";
-import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
+import type { OsunaToolCatalogFactory } from "./tools/types.js";
+import { isOsunaToolPolicyEnabled } from "./osuna-tool-policy.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -98,7 +98,7 @@ import { withTimeout } from "../../utils/promise-timeout.js";
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
 const IMPORTABLE_SESSION_LIST_TIMEOUT_MS = 90_000;
-// Paseo 自带的 Provider 集合。dev 的 mock 也算自带 —— 判定问的是「这个 Provider 是不是用户
+// Osuna 自带的 Provider 集合。dev 的 mock 也算自带 —— 判定问的是「这个 Provider 是不是用户
 // 自己在 config 里要来的」，而不是「它有没有上生产」。
 const BUILTIN_PROVIDER_ID_SET: ReadonlySet<string> = new Set([
   ...BUILTIN_PROVIDER_IDS,
@@ -152,7 +152,7 @@ export type AgentRunCancellationResult =
 interface PreparedSessionConfig {
   storedConfig: AgentSessionConfig;
   launchConfig: AgentSessionConfig;
-  paseoToolPolicy: ProviderOsunaToolsPolicy | undefined;
+  osunaToolPolicy: ProviderOsunaToolsPolicy | undefined;
 }
 
 interface NormalizeConfigOptions {
@@ -194,7 +194,7 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
     config.systemPrompt = record.config.systemPrompt;
   }
   if (record.config.mcpServers != null) config.mcpServers = record.config.mcpServers;
-  return stripInternalPaseoMcpServer(config);
+  return stripInternalOsunaMcpServer(config);
 }
 
 export { AGENT_LIFECYCLE_STATUSES, type AgentLifecycleStatus };
@@ -313,9 +313,9 @@ export interface AgentManagerOptions {
   terminalManager?: TerminalManager | null;
   mcpBaseUrl?: string;
   mcpAuthToken?: string;
-  paseoToolsEnabled?: boolean;
-  paseoToolCatalogFactory?: PaseoToolCatalogFactory;
-  resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderOsunaToolsPolicy | undefined;
+  osunaToolsEnabled?: boolean;
+  osunaToolCatalogFactory?: OsunaToolCatalogFactory;
+  resolveOsunaToolPolicy?: (provider: AgentProvider) => ProviderOsunaToolsPolicy | undefined;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
@@ -754,10 +754,10 @@ export class AgentManager {
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
   private readonly mcpAuthToken: string | null;
-  private paseoToolsEnabled = true;
-  private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
-  private readonly paseoToolPolicies = new Map<string, ProviderOsunaToolsPolicy | undefined>();
-  private readonly resolvePaseoToolPolicy: (
+  private osunaToolsEnabled = true;
+  private osunaToolCatalogFactory: OsunaToolCatalogFactory | null = null;
+  private readonly osunaToolPolicies = new Map<string, ProviderOsunaToolsPolicy | undefined>();
+  private readonly resolveOsunaToolPolicy: (
     provider: AgentProvider,
   ) => ProviderOsunaToolsPolicy | undefined;
   private appendSystemPrompt: string;
@@ -778,8 +778,8 @@ export class AgentManager {
     this.onWorkspaceStateMayHaveChanged = options?.onWorkspaceStateMayHaveChanged;
     this.mcpBaseUrl = options?.mcpBaseUrl ?? null;
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
-    this.configurePaseoTools(options);
-    this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
+    this.configureOsunaTools(options);
+    this.resolveOsunaToolPolicy = options.resolveOsunaToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.rescueTimeouts = {
@@ -803,9 +803,9 @@ export class AgentManager {
     });
   }
 
-  private configurePaseoTools(options: AgentManagerOptions): void {
-    this.paseoToolsEnabled = options.paseoToolsEnabled ?? true;
-    this.paseoToolCatalogFactory = options.paseoToolCatalogFactory ?? null;
+  private configureOsunaTools(options: AgentManagerOptions): void {
+    this.osunaToolsEnabled = options.osunaToolsEnabled ?? true;
+    this.osunaToolCatalogFactory = options.osunaToolCatalogFactory ?? null;
   }
 
   registerClient(provider: AgentProvider, client: AgentClient): void {
@@ -866,16 +866,16 @@ export class AgentManager {
     this.acceptingAgentRegistrations = false;
   }
 
-  setPaseoToolsEnabled(enabled: boolean): void {
-    this.paseoToolsEnabled = enabled;
+  setOsunaToolsEnabled(enabled: boolean): void {
+    this.osunaToolsEnabled = enabled;
   }
 
-  setPaseoToolCatalogFactory(factory: PaseoToolCatalogFactory | null): void {
-    this.paseoToolCatalogFactory = factory;
+  setOsunaToolCatalogFactory(factory: OsunaToolCatalogFactory | null): void {
+    this.osunaToolCatalogFactory = factory;
   }
 
-  getPaseoToolPolicy(agentId: string): ProviderOsunaToolsPolicy | undefined {
-    return this.paseoToolPolicies.get(agentId);
+  getOsunaToolPolicy(agentId: string): ProviderOsunaToolsPolicy | undefined {
+    return this.osunaToolPolicies.get(agentId);
   }
 
   /**
@@ -1290,7 +1290,7 @@ export class AgentManager {
       options = { ...options, env: request.env };
     }
     await this.deleteAgentState(resolvedAgentId);
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+    const { storedConfig, launchConfig, osunaToolPolicy } = await this.prepareSessionConfig(
       config,
       resolvedAgentId,
       options?.env,
@@ -1299,12 +1299,12 @@ export class AgentManager {
     const client = await this.requireAvailableClient({
       provider: storedConfig.provider,
     });
-    this.paseoToolPolicies.set(resolvedAgentId, paseoToolPolicy);
+    this.osunaToolPolicies.set(resolvedAgentId, osunaToolPolicy);
     const launchContext = await this.buildLaunchContext(
       resolvedAgentId,
       client,
       storedConfig.cwd,
-      paseoToolPolicy,
+      osunaToolPolicy,
       options?.env,
       { reason: "create", purpose: "interactive", workspaceId: options.workspaceId ?? null },
     );
@@ -1393,7 +1393,7 @@ export class AgentManager {
       ...overrides,
       provider: handle.provider,
     } as AgentSessionConfig;
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+    const { storedConfig, launchConfig, osunaToolPolicy } = await this.prepareSessionConfig(
       mergedConfig,
       resolvedAgentId,
     );
@@ -1411,12 +1411,12 @@ export class AgentManager {
         `Provider '${handle.provider}' is not available. Please ensure the CLI is installed.`,
       );
     }
-    this.paseoToolPolicies.set(resolvedAgentId, paseoToolPolicy);
+    this.osunaToolPolicies.set(resolvedAgentId, osunaToolPolicy);
     const launchContext = await this.buildLaunchContext(
       resolvedAgentId,
       client,
       storedConfig.cwd,
-      paseoToolPolicy,
+      osunaToolPolicy,
       undefined,
       {
         reason: "resume",
@@ -1464,19 +1464,19 @@ export class AgentManager {
       throw new Error(`Provider '${input.provider}' does not support importing sessions`);
     }
 
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+    const { storedConfig, launchConfig, osunaToolPolicy } = await this.prepareSessionConfig(
       {
         provider: input.provider,
         cwd: input.cwd,
       },
       resolvedAgentId,
     );
-    this.paseoToolPolicies.set(resolvedAgentId, paseoToolPolicy);
+    this.osunaToolPolicies.set(resolvedAgentId, osunaToolPolicy);
     const launchContext = await this.buildLaunchContext(
       resolvedAgentId,
       client,
       storedConfig.cwd,
-      paseoToolPolicy,
+      osunaToolPolicy,
       undefined,
       { reason: "import", purpose: "interactive", workspaceId: input.workspaceId },
     );
@@ -1491,7 +1491,7 @@ export class AgentManager {
     let handedToRegistration = false;
     try {
       const importedConfig = await this.normalizeConfig(
-        stripInternalPaseoMcpServer(imported.config),
+        stripInternalOsunaMcpServer(imported.config),
       );
       const timelineRows = buildImportedTimelineRows(imported.timeline);
       const initialTitle = resolveImportedAgentTitle(importedConfig, timelineRows);
@@ -1524,7 +1524,7 @@ export class AgentManager {
   // config swaps). When `rehydrateFromDisk` is set, the timeline is wiped so a
   // new epoch is minted and provider history is re-streamed — this is what the
   // user-facing "Reload agent" action wants when the on-disk session was
-  // mutated outside Paseo.
+  // mutated outside Osuna.
   reloadAgentSession(
     agentId: string,
     overrides?: Partial<AgentSessionConfig>,
@@ -1561,17 +1561,17 @@ export class AgentManager {
       ...overrides,
       provider,
     } as AgentSessionConfig;
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+    const { storedConfig, launchConfig, osunaToolPolicy } = await this.prepareSessionConfig(
       refreshConfig,
       agentId,
     );
-    const hadPreviousPaseoToolPolicy = this.paseoToolPolicies.has(agentId);
-    const previousPaseoToolPolicy = this.paseoToolPolicies.get(agentId);
+    const hadPreviousOsunaToolPolicy = this.osunaToolPolicies.has(agentId);
+    const previousOsunaToolPolicy = this.osunaToolPolicies.get(agentId);
     const launchContext = await this.buildLaunchContext(
       agentId,
       client,
       storedConfig.cwd,
-      paseoToolPolicy,
+      osunaToolPolicy,
       undefined,
       { reason: "refresh", purpose: "interactive", workspaceId: existing.workspaceId },
     );
@@ -1595,7 +1595,7 @@ export class AgentManager {
       await this.persistSnapshot(closedExisting);
       this.assertAcceptingAgentRegistrations();
 
-      this.paseoToolPolicies.set(agentId, paseoToolPolicy);
+      this.osunaToolPolicies.set(agentId, osunaToolPolicy);
       session = handle
         ? await client.resumeSession(handle, providerLaunchConfig, launchContext)
         : await client.createSession(providerLaunchConfig, launchContext);
@@ -1636,10 +1636,10 @@ export class AgentManager {
       throw error;
     } finally {
       if (!handedToRegistration) {
-        if (hadPreviousPaseoToolPolicy) {
-          this.paseoToolPolicies.set(agentId, previousPaseoToolPolicy);
+        if (hadPreviousOsunaToolPolicy) {
+          this.osunaToolPolicies.set(agentId, previousOsunaToolPolicy);
         } else {
-          this.paseoToolPolicies.delete(agentId);
+          this.osunaToolPolicies.delete(agentId);
         }
         if (session) {
           await this.closeUnregisteredSession(session);
@@ -3730,7 +3730,7 @@ export class AgentManager {
 
   private discardRetainedAgentState(agentId: string): void {
     this.timelineStore.delete(agentId);
-    this.paseoToolPolicies.delete(agentId);
+    this.osunaToolPolicies.delete(agentId);
     for (const event of this.providerSubagents.deleteParent(agentId)) {
       this.dispatch({ type: "provider_subagent", event });
     }
@@ -5137,22 +5137,22 @@ export class AgentManager {
     agentId: string,
     env?: Record<string, string>,
   ): Promise<PreparedSessionConfig> {
-    const storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), { env });
-    const paseoToolPolicy = this.paseoToolsEnabled
-      ? this.resolvePaseoToolPolicy(storedConfig.provider)
+    const storedConfig = await this.normalizeConfig(stripInternalOsunaMcpServer(config), { env });
+    const osunaToolPolicy = this.osunaToolsEnabled
+      ? this.resolveOsunaToolPolicy(storedConfig.provider)
       : { enabled: false };
     const launchConfig = this.applyDaemonAppendSystemPrompt(
-      withRuntimePaseoMcpServer({
+      withRuntimeOsunaMcpServer({
         config: storedConfig,
         agentId,
         mcpBaseUrl:
-          this.paseoToolsEnabled && isPaseoToolPolicyEnabled(paseoToolPolicy)
+          this.osunaToolsEnabled && isOsunaToolPolicyEnabled(osunaToolPolicy)
             ? this.mcpBaseUrl
             : null,
         mcpAuthToken: this.mcpAuthToken,
       }),
     );
-    return { storedConfig, launchConfig, paseoToolPolicy };
+    return { storedConfig, launchConfig, osunaToolPolicy };
   }
 
   private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
@@ -5172,7 +5172,7 @@ export class AgentManager {
     agentId: string,
     client: AgentClient,
     cwd: string,
-    paseoToolPolicy: ProviderOsunaToolsPolicy | undefined,
+    osunaToolPolicy: ProviderOsunaToolsPolicy | undefined,
     env?: Record<string, string>,
     opening?: {
       reason: PluginSessionOpenRequest["reason"];
@@ -5202,14 +5202,14 @@ export class AgentManager {
       },
     };
     if (
-      this.paseoToolsEnabled &&
-      isPaseoToolPolicyEnabled(paseoToolPolicy) &&
-      client.capabilities.supportsNativePaseoTools &&
-      this.paseoToolCatalogFactory
+      this.osunaToolsEnabled &&
+      isOsunaToolPolicyEnabled(osunaToolPolicy) &&
+      client.capabilities.supportsNativeOsunaTools &&
+      this.osunaToolCatalogFactory
     ) {
-      context.paseoTools = await this.paseoToolCatalogFactory({
+      context.osunaTools = await this.osunaToolCatalogFactory({
         callerAgentId: agentId,
-        paseoToolPolicy,
+        osunaToolPolicy,
       });
     }
     return context;
@@ -5219,7 +5219,7 @@ export class AgentManager {
     launchConfig: AgentSessionConfig,
     launchContext: AgentLaunchContext,
   ): AgentSessionConfig {
-    return launchContext.paseoTools ? stripInternalPaseoMcpServer(launchConfig) : launchConfig;
+    return launchContext.osunaTools ? stripInternalOsunaMcpServer(launchConfig) : launchConfig;
   }
 
   private async requireAvailableClient(options: { provider: AgentProvider }): Promise<AgentClient> {

@@ -12,7 +12,7 @@ import { createFakeCodexAppServer } from "./providers/codex/test-utils/fake-app-
 import type { AgentClient } from "./agent-sdk-types.js";
 
 test("projects Codex child history and confines old-client degradation to the child transcript", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "paseo-projected-contract-"));
+  const cwd = await mkdtemp(join(tmpdir(), "osuna-projected-contract-"));
   const app = createFakeCodexAppServer();
   const session = new CodexAppServerAgentSession(
     { provider: "codex", cwd },

@@ -364,7 +364,7 @@ function createObserver(): FileObserver {
 }
 
 async function createRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "paseo-file-observer-"));
+  const root = await mkdtemp(join(tmpdir(), "osuna-file-observer-"));
   roots.add(root);
   return root;
 }

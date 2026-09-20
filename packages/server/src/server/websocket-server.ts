@@ -545,7 +545,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly workspaceGitService: WorkspaceGitService;
   private readonly workspaceAutoName: WorkspaceAutoName;
   private readonly downloadTokenStore: DownloadTokenStore;
-  private readonly paseoHome: string;
+  private readonly osunaHome: string;
   private readonly worktreesRoot: string | undefined;
   private readonly daemonConfigStore: DaemonConfigStore;
   private readonly pushNotifications: PushNotifications;
@@ -617,7 +617,7 @@ export class VoiceAssistantWebSocketServer {
     agentManager: AgentManager,
     agentStorage: AgentStorage,
     downloadTokenStore: DownloadTokenStore,
-    paseoHome: string,
+    osunaHome: string,
     daemonConfigStore: DaemonConfigStore,
     mcpBaseUrl: string | null,
     wsConfig: WebSocketServerConfig,
@@ -675,12 +675,12 @@ export class VoiceAssistantWebSocketServer {
     this.orchestrationSkills = orchestrationSkills;
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
-    this.messageReceipts = new MessageReceipts(join(paseoHome, "agent-requests"));
+    this.messageReceipts = new MessageReceipts(join(osunaHome, "agent-requests"));
     this.creationService = new CreationService(
-      join(paseoHome, "creations"),
+      join(osunaHome, "creations"),
       this.logger.child({ module: "creation" }),
       (snapshot) => this.validateCompletedCreation(snapshot),
-      join(paseoHome, "agent-requests"),
+      join(osunaHome, "agent-requests"),
     );
     this.projectRegistry = projectRegistry ?? createNoopProjectRegistry();
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
@@ -696,7 +696,7 @@ export class VoiceAssistantWebSocketServer {
     this.workspaceGitService = workspaceGitService ?? createFallbackWorkspaceGitService();
     this.workspaceAutoName = workspaceAutoName;
     this.downloadTokenStore = downloadTokenStore;
-    this.paseoHome = paseoHome;
+    this.osunaHome = osunaHome;
     this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
     this.daemonConfigStore = daemonConfigStore;
     this.mcpBaseUrl = mcpBaseUrl;
@@ -740,7 +740,7 @@ export class VoiceAssistantWebSocketServer {
     const pushLogger = this.logger.child({ module: "push" });
     this.pushNotifications = createPushNotifications({
       logger: pushLogger,
-      filePath: join(paseoHome, "push-tokens.json"),
+      filePath: join(osunaHome, "push-tokens.json"),
     });
     this.pushNotificationSender = pushNotificationSender ?? this.pushNotifications;
 
@@ -1454,7 +1454,7 @@ export class VoiceAssistantWebSocketServer {
       },
       downloadTokenStore: this.downloadTokenStore,
       pushNotifications: this.pushNotifications,
-      paseoHome: this.paseoHome,
+      osunaHome: this.osunaHome,
       worktreesRoot: this.worktreesRoot,
       agentManager: this.agentManager,
       agentStorage: this.agentStorage,

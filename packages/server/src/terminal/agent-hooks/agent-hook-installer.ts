@@ -45,6 +45,10 @@ export interface AgentHookConfigFileInstallStrategy<TConfig> extends AgentHookIn
 export interface AgentHookPluginFileInstallStrategy extends AgentHookInstallStrategyBase {
   kind: "plugin-file";
   source: string;
+  // Plugin files this strategy wrote under an earlier name. The agent discovers plugins by
+  // scanning its directory, so a renamed file leaves the old one loaded alongside the new one
+  // and every event gets reported twice. Install and uninstall both delete them.
+  legacyConfigFiles?: readonly string[];
 }
 
 export interface AgentHookConfigFormat<TConfig> {
@@ -154,6 +158,7 @@ function installAgentHookPluginFile(
   options: AgentHookInstallOptions,
 ): AgentHookInstallResult {
   const configPath = resolveAgentHookInstallPath(install, options);
+  const removedLegacy = removeLegacyPluginFiles(install, options);
   const currentRaw = existsSync(configPath) ? readFileSync(configPath, "utf8") : null;
   const nextRaw = normalizeRawConfig(install.source);
 
@@ -162,7 +167,7 @@ function installAgentHookPluginFile(
     return { configPath, changed: true };
   }
 
-  return { configPath, changed: false };
+  return { configPath, changed: removedLegacy };
 }
 
 function uninstallAgentHookPluginFile(
@@ -170,12 +175,30 @@ function uninstallAgentHookPluginFile(
   options: AgentHookInstallOptions,
 ): AgentHookInstallResult {
   const configPath = resolveAgentHookInstallPath(install, options);
+  const removedLegacy = removeLegacyPluginFiles(install, options);
   if (!existsSync(configPath)) {
-    return { configPath, changed: false };
+    return { configPath, changed: removedLegacy };
   }
 
   rmSync(configPath, { force: true });
   return { configPath, changed: true };
+}
+
+function removeLegacyPluginFiles(
+  install: AgentHookPluginFileInstallStrategy,
+  options: AgentHookInstallOptions,
+): boolean {
+  let removed = false;
+  for (const legacyConfigFile of install.legacyConfigFiles ?? []) {
+    const legacyPath = resolveAgentHookInstallPath(
+      { ...install, configFile: legacyConfigFile },
+      options,
+    );
+    if (!existsSync(legacyPath)) continue;
+    rmSync(legacyPath, { force: true });
+    removed = true;
+  }
+  return removed;
 }
 
 function updateAgentHookConfig<TConfig>(

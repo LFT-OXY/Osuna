@@ -47,12 +47,12 @@ describe("daemon bearer validator", () => {
     expect(extractHttpBearerToken(undefined)).toBeNull();
   });
 
-  test("extracts WebSocket paseo bearer subprotocol tokens", () => {
+  test("extracts WebSocket osuna bearer subprotocol tokens", () => {
     const protocol = extractWsBearerProtocol("chat, osuna.bearer.secret.with.dots");
 
     expect(protocol).toBe("osuna.bearer.secret.with.dots");
     expect(extractWsBearerToken(protocol)).toBe("secret.with.dots");
-    expect(extractWsBearerToken("paseo.other.secret")).toBeNull();
+    expect(extractWsBearerToken("osuna.other.secret")).toBeNull();
   });
 
   test("bypasses bearer auth for preflight, liveness, and capability-token routes", () => {

@@ -162,9 +162,9 @@ describe("resolveWorktreeCreationIntent", () => {
       number: 1790,
       baseRefName: "main",
       headRefName: "daemon-shutdown-diagnostics",
-      headOwnerLogin: "getpaseo",
-      headRepositorySshUrl: "git@github.com:getpaseo/paseo.git",
-      headRepositoryUrl: "https://github.com/getpaseo/paseo",
+      headOwnerLogin: "lft-oxy",
+      headRepositorySshUrl: "git@github.com:lft-oxy/osuna.git",
+      headRepositoryUrl: "https://github.com/lft-oxy/osuna",
       isCrossRepository: false,
     });
 
@@ -189,8 +189,8 @@ describe("resolveWorktreeCreationIntent", () => {
       baseRefName: "main",
       headRefName: "main",
       headOwnerLogin: "therainisme",
-      headRepositorySshUrl: "git@github.com:therainisme/paseo.git",
-      headRepositoryUrl: "https://github.com/therainisme/paseo",
+      headRepositorySshUrl: "git@github.com:therainisme/osuna.git",
+      headRepositoryUrl: "https://github.com/therainisme/osuna",
       isCrossRepository: true,
     });
 
@@ -204,9 +204,9 @@ describe("resolveWorktreeCreationIntent", () => {
       baseRefName: "main",
       checkoutRefs: [{ remoteName: "origin", remoteRef: "refs/pull/526/head" }],
       headRepositoryOwner: "therainisme",
-      headRepository: "therainisme/paseo",
+      headRepository: "therainisme/osuna",
       localBranchName: "therainisme/main",
-      pushRemoteUrl: "git@github.com:therainisme/paseo.git",
+      pushRemoteUrl: "git@github.com:therainisme/osuna.git",
     });
     expect(deps.headRefLookups).toEqual([]);
   });

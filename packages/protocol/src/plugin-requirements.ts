@@ -26,7 +26,7 @@ export function assertPluginCompatibility(input: PluginCompatibilityInput): void
   // stable core. Since the Osuna rename this default is also what rejects plugins written for
   // upstream Paseo: they declare `requirements.paseo`, never `requirements.osuna`, so they land
   // here and fail the range check. That rejection is intended — see the task's plugin-contract
-  // batch — so do not add a `requirements.paseo` fallback to make them install.
+  // batch — so do not add a `requirements.osuna` fallback to make them install.
   const range = input.requirements?.osuna ?? "<0.8.0";
   const version = input.version ? parse(input.version) : null;
   if (!version) {

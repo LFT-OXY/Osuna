@@ -38,7 +38,7 @@ export function resolveSelectedAgentForNewAgent(input: {
   return parseHostAgentRouteFromPathname(input.pathname) ?? parseAgentKey(input.selectedAgentId);
 }
 
-function inferMainRepoRootFromPaseoWorktreePath(cwd: string): string | null {
+function inferMainRepoRootFromOsunaWorktreePath(cwd: string): string | null {
   const normalizedPath = cwd.replace(/\\/g, "/");
   const marker = "/.osuna/worktrees";
   const markerIndex = normalizedPath.indexOf(marker);
@@ -65,5 +65,5 @@ export function resolveNewAgentWorkingDir(
     return explicitMainRepoRoot;
   }
 
-  return inferMainRepoRootFromPaseoWorktreePath(cwd) ?? cwd;
+  return inferMainRepoRootFromOsunaWorktreePath(cwd) ?? cwd;
 }

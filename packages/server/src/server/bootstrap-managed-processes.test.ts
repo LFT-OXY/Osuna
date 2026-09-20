@@ -27,21 +27,21 @@ afterEach(async () => {
 
 describe("daemon managed process bootstrap", () => {
   test("reaps stale helper process records during daemon bootstrap", async () => {
-    tempRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-managed-bootstrap-"));
-    staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
-    const paseoHome = path.join(tempRoot, ".osuna");
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-managed-bootstrap-"));
+    staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-static-"));
+    const osunaHome = path.join(tempRoot, ".osuna");
     const managedProcesses = new FakeManagedProcesses();
     const daemon = await createOsunaDaemon(
       {
         listen: "127.0.0.1:0",
-        paseoHome,
+        osunaHome,
         corsAllowedOrigins: [],
         hostnames: true,
         mcpEnabled: false,
         staticDir,
         mcpDebug: false,
         agentClients: createTestAgentClients(),
-        agentStoragePath: path.join(paseoHome, "agents"),
+        agentStoragePath: path.join(osunaHome, "agents"),
         relayEnabled: false,
         appBaseUrl: "https://app.example.test",
         managedProcesses,

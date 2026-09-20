@@ -3,12 +3,12 @@ import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-const cliHome = mkdtempSync(join(tmpdir(), "paseo-test-cli-os-home-"));
+const cliHome = mkdtempSync(join(tmpdir(), "osuna-test-cli-os-home-"));
 process.once("exit", () => rmSync(cliHome, { recursive: true, force: true }));
 
 const CLI_ENTRY = join(import.meta.dirname, "..", "..", "dist", "index.js");
 
-export function runLocalPaseo(
+export function runLocalOsuna(
   args: string[],
   env: NodeJS.ProcessEnv = {},
   cwd = process.cwd(),

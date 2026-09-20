@@ -29,12 +29,12 @@ describe("resolveFilePreviewReadTarget", () => {
   it("uses the filesystem root for absolute paths outside the workspace", () => {
     expect(
       resolveFilePreviewReadTarget({
-        path: "/tmp/paseo-preview.txt",
+        path: "/tmp/osuna-preview.txt",
         workspaceRoot: "/Users/test/project",
       }),
     ).toEqual({
       cwd: "/",
-      path: "/tmp/paseo-preview.txt",
+      path: "/tmp/osuna-preview.txt",
     });
   });
 

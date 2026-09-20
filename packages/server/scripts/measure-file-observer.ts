@@ -90,7 +90,7 @@ async function measureInChild(run: number): Promise<Measurement> {
 }
 
 async function measure(run: number): Promise<Measurement> {
-  const base = await mkdtemp(join(tmpdir(), "paseo-watch-"));
+  const base = await mkdtemp(join(tmpdir(), "osuna-watch-"));
   const observer = createFileObserver();
   const roots: FixtureRoot[] = [];
   for (let rootIndex = 0; rootIndex < ROOT_COUNT; rootIndex += 1) {

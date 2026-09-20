@@ -1,7 +1,7 @@
 import type { ToolCallDetail, ToolCallIconName } from "@osuna/protocol/agent-types";
 import { isOsunaToolName } from "@osuna/protocol/tool-name-normalization";
 
-export type ToolCallIcon = ToolCallIconName | "paseo";
+export type ToolCallIcon = ToolCallIconName | "osuna";
 
 const TOOL_DETAIL_ICON_NAMES: Record<ToolCallDetail["type"], ToolCallIcon> = {
   shell: "square_terminal",
@@ -32,7 +32,7 @@ export function resolveToolCallIconName(toolName: string, detail?: ToolCallDetai
     return "mic_vocal";
   }
   if (isOsunaToolName(lowerName)) {
-    return "paseo";
+    return "osuna";
   }
   if (lowerName === "task") {
     return "bot";

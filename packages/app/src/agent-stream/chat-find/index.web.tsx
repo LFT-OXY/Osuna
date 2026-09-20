@@ -53,7 +53,7 @@ export function ChatFind({
   const root = useRef<HTMLDivElement>(null);
   const bindings = useRef({ viewportRef, revealLoadedItem, visibleItemIds });
   bindings.current = { viewportRef, revealLoadedItem, visibleItemIds };
-  const [highlightName] = useState(() => `paseo-chat-find-${++nextHighlightId}`);
+  const [highlightName] = useState(() => `osuna-chat-find-${++nextHighlightId}`);
   const { isInteractive } = usePaneFocus();
   const active = useRetainedPanelActive();
   const model = useMemo(

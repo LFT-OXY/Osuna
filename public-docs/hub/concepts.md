@@ -1,6 +1,6 @@
 ---
 title: How Hub works
-description: How a provider event reaches a workflow and a Osuna daemon.
+description: How a provider event reaches a workflow and an Osuna daemon.
 nav: How it works
 order: 62
 category: Hub

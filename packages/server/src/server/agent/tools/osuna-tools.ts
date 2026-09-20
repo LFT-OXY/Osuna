@@ -37,7 +37,7 @@ import type { FirstAgentContext } from "../../messages.js";
 import { everyMsToFiveFieldCron } from "@osuna/protocol/schedule/cadence";
 import { expandUserPath, isSameOrDescendantPath, resolvePathFromBase } from "../../path-utils.js";
 import type { TerminalManager } from "../../../terminal/terminal-manager.js";
-import type { CreatePaseoWorktreeWorkflowFn } from "../../worktree-session.js";
+import type { CreateOsunaWorktreeWorkflowFn } from "../../worktree-session.js";
 import type { ScheduleService } from "../../schedule/service.js";
 import {
   ScheduleRunSchema,
@@ -80,22 +80,22 @@ import { resolveWorktreeSourceCwd } from "../../workspace-source.js";
 import type { WorkspaceScriptsService } from "../../session/workspace-scripts/workspace-scripts-service.js";
 import {
   type ArchiveCommandDependencies,
-  type CreatePaseoWorktreeCommandInput,
-  createPaseoWorktreeCommand,
+  type CreateOsunaWorktreeCommandInput,
+  createOsunaWorktreeCommand,
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
 import type {
-  PaseoToolCatalog,
-  PaseoToolConfig,
-  PaseoToolDefinition,
-  PaseoToolExecutionContext,
-  PaseoToolResult,
+  OsunaToolCatalog,
+  OsunaToolConfig,
+  OsunaToolDefinition,
+  OsunaToolExecutionContext,
+  OsunaToolResult,
 } from "./types.js";
 import type { ProviderOsunaToolsPolicy } from "@osuna/protocol/provider-config";
-import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
+import { isOsunaToolEnabled } from "../osuna-tool-policy.js";
 
-export interface PaseoToolHostDependencies {
+export interface OsunaToolHostDependencies {
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   terminalManager?: TerminalManager | null;
@@ -122,7 +122,7 @@ export interface PaseoToolHostDependencies {
   workspaceScripts?: Pick<WorkspaceScriptsService, "list" | "launch" | "stop">;
   markWorkspaceArchiving?: ArchiveDependencies["markWorkspaceArchiving"];
   clearWorkspaceArchiving?: ArchiveDependencies["clearWorkspaceArchiving"];
-  createOsunaWorktree?: CreatePaseoWorktreeWorkflowFn;
+  createOsunaWorktree?: CreateOsunaWorktreeWorkflowFn;
   // Mints a fresh directory workspace for a cwd and returns its id.
   ensureWorkspaceForCreate?: (
     cwd: string,
@@ -130,8 +130,8 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
-  paseoToolPolicy?: ProviderOsunaToolsPolicy;
-  paseoHome?: string;
+  osunaToolPolicy?: ProviderOsunaToolsPolicy;
+  osunaHome?: string;
   worktreesRoot?: string;
   /**
    * ID of the agent that is using this tool catalog.
@@ -210,7 +210,7 @@ interface WorkspaceWorktreeOptions {
 }
 
 type WorkspaceWorktreeTarget = Pick<
-  CreatePaseoWorktreeCommandInput,
+  CreateOsunaWorktreeCommandInput,
   "action" | "branchName" | "refName" | "checkoutSource"
 >;
 
@@ -541,7 +541,7 @@ function resolveTerminalKeyToken(key: string, literal: boolean): string {
   }
 }
 
-export function createPaseoToolCatalog(options: PaseoToolHostDependencies): PaseoToolCatalog {
+export function createOsunaToolCatalog(options: OsunaToolHostDependencies): OsunaToolCatalog {
   const {
     agentManager,
     agentStorage,
@@ -555,10 +555,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     resolveCallerContext,
     logger,
   } = options;
-  const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
+  const childLogger = logger.child({ module: "agent", component: "osuna-tool-catalog" });
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
 
-  const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
+  const parseToolInput = async (tool: OsunaToolDefinition, input: unknown): Promise<unknown> => {
     const inputSchema = tool.inputSchema;
     if (!inputSchema) {
       return input;
@@ -572,14 +572,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     return schema.parseAsync(input);
   };
 
-  const tools = new Map<string, PaseoToolDefinition>();
+  const tools = new Map<string, OsunaToolDefinition>();
   const registerTool = (
     name: string,
-    config: PaseoToolConfig,
+    config: OsunaToolConfig,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tool handlers are schema-validated at registration boundaries.
-    handler: (input: any, context: PaseoToolExecutionContext) => Promise<PaseoToolResult>,
+    handler: (input: any, context: OsunaToolExecutionContext) => Promise<OsunaToolResult>,
   ) => {
-    if (!isPaseoToolEnabled(options.paseoToolPolicy, name)) {
+    if (!isOsunaToolEnabled(options.osunaToolPolicy, name)) {
       return;
     }
     tools.set(name, {
@@ -588,22 +588,22 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       description: config.description ?? name,
       inputSchema: config.inputSchema,
       outputSchema: config.outputSchema,
-      handler: handler as PaseoToolDefinition["handler"],
+      handler: handler as OsunaToolDefinition["handler"],
     });
   };
-  const toCatalog = (): PaseoToolCatalog => ({
+  const toCatalog = (): OsunaToolCatalog => ({
     tools,
-    getTool(name: string): PaseoToolDefinition | undefined {
+    getTool(name: string): OsunaToolDefinition | undefined {
       return tools.get(name);
     },
     async executeTool(
       name: string,
       input: unknown,
-      context: PaseoToolExecutionContext = {},
-    ): Promise<PaseoToolResult> {
+      context: OsunaToolExecutionContext = {},
+    ): Promise<OsunaToolResult> {
       const tool = tools.get(name);
       if (!tool) {
-        throw new Error(`Paseo tool not found: ${name}`);
+        throw new Error(`Osuna tool not found: ${name}`);
       }
       return tool.handler(await parseToolInput(tool, input), context);
     },
@@ -902,7 +902,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           .string()
           .min(1)
           .optional()
-          .describe("Optional worktree slug/path label. Omit to let Paseo generate one."),
+          .describe("Optional worktree slug/path label. Omit to let Osuna generate one."),
         branchName: z
           .string()
           .min(1)
@@ -915,21 +915,21 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           .describe("Optional base branch. Defaults to the repository default branch."),
       })
       .strict()
-      .describe("Create a new branch in a new Paseo worktree."),
+      .describe("Create a new branch in a new Osuna worktree."),
     z
       .object({
         kind: z.literal("checkout-branch"),
         branch: z.string().min(1).describe("Existing branch to check out."),
       })
       .strict()
-      .describe("Check out an existing branch in a new Paseo worktree."),
+      .describe("Check out an existing branch in a new Osuna worktree."),
     z
       .object({
         kind: z.literal("checkout-pr"),
         githubPrNumber: z.number().int().positive().describe("GitHub pull request number."),
       })
       .strict()
-      .describe("Check out a GitHub pull request in a new Paseo worktree."),
+      .describe("Check out a GitHub pull request in a new Osuna worktree."),
   ]);
   const AgentWorkspaceInputSchema = z.discriminatedUnion("kind", [
     z
@@ -1219,7 +1219,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create workspace",
       description:
-        "Create a workspace using an existing local checkout or a new Paseo-managed worktree.",
+        "Create a workspace using an existing local checkout or a new Osuna-managed worktree.",
       inputSchema: {
         isolation: z.enum(["local", "worktree"]),
         path: z
@@ -1311,11 +1311,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           prNumber,
           forge,
         });
-        const result = await createPaseoWorktreeCommand(
+        const result = await createOsunaWorktreeCommand(
           {
-            paseoHome: options.paseoHome,
+            osunaHome: options.osunaHome,
             worktreesRoot: options.worktreesRoot,
-            createPaseoWorktreeWorkflow: options.createOsunaWorktree,
+            createOsunaWorktreeWorkflow: options.createOsunaWorktree,
           },
           {
             cwd,
@@ -1446,7 +1446,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           agentManager,
           agentStorage,
           logger: childLogger,
-          paseoHome: options.paseoHome,
+          osunaHome: options.osunaHome,
           worktreesRoot: options.worktreesRoot,
           terminalManager,
           providerSnapshotManager,
@@ -2269,7 +2269,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Start workspace script",
       description:
-        "Start one configured workspace script through Paseo's managed workspace-script launcher.",
+        "Start one configured workspace script through Osuna's managed workspace-script launcher.",
       inputSchema: {
         workspaceId: z.string().describe("Workspace ID containing the configured script."),
         scriptName: z.string().min(1).describe("Configured osuna.json script name to start."),
@@ -3170,7 +3170,7 @@ interface ArchiveWorktreeCommandContext {
 }
 
 function archiveWorktreeDependencies(
-  options: PaseoToolHostDependencies,
+  options: OsunaToolHostDependencies,
   context: ArchiveWorktreeCommandContext,
 ): ArchiveCommandDependencies {
   if (!options.github) {
@@ -3198,8 +3198,8 @@ function archiveWorktreeDependencies(
     throw new Error("Workspace archiving clearer is required to archive worktrees");
   }
   return {
-    paseoHome: options.paseoHome,
-    paseoWorktreesBaseRoot: options.worktreesRoot,
+    osunaHome: options.osunaHome,
+    osunaWorktreesBaseRoot: options.worktreesRoot,
     github: options.github,
     workspaceGitService: options.workspaceGitService,
     agentManager: context.agentManager,

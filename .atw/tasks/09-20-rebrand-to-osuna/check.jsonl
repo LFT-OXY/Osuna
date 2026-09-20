@@ -1,3 +1,4 @@
 {"file": ".atw/tasks/09-20-rebrand-to-osuna/prd.md", "reason": "改名映射表、许可证约束、不可逆项与分批验收的唯一权威"}
 {"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "改名跨 protocol/server/client/app/cli/desktop 六层，边界处最易漏改"}
 {"file": "docs/protocol-compatibility.md", "reason": "本次不留兼容 shim 的决定与协议兼容规则的交界，改 protocol 前必读"}
+{"file": ".atw/tasks/09-20-rebrand-to-osuna/issues/07-internal-identifier-sweep.md", "reason": "ATW current ticket"}

@@ -972,7 +972,7 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   firstPromptPreview: z.string().nullable(),
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
-  // 该 Provider session 对应的 Paseo agent id；只有请求带 includeImported 时 daemon 才填写。
+  // 该 Provider session 对应的 Osuna agent id；只有请求带 includeImported 时 daemon 才填写。
   importedAgentId: z.string().optional(),
   // 该 agent 所属 workspace；打开它时要带上，否则已归档 agent 会退到 host 级详情路由。
   importedAgentWorkspaceId: z.string().optional(),
@@ -1162,7 +1162,7 @@ export const GitHubPrAttachmentSchema = z.object({
 
 export const ForgeChangeRequestAttachmentSchema = z.object({
   type: z.literal("forge_change_request"),
-  mimeType: z.literal("application/paseo-forge-change-request"),
+  mimeType: z.literal("application/osuna-forge-change-request"),
   forge: z.string().optional().default("github"),
   number: z.number().int().positive(),
   title: z.string(),
@@ -1187,7 +1187,7 @@ export const GitHubIssueAttachmentSchema = z.object({
 
 export const ForgeIssueAttachmentSchema = z.object({
   type: z.literal("forge_issue"),
-  mimeType: z.literal("application/paseo-forge-issue"),
+  mimeType: z.literal("application/osuna-forge-issue"),
   forge: z.string().optional().default("github"),
   number: z.number().int().positive(),
   title: z.string(),
@@ -1241,7 +1241,7 @@ export const ReviewAttachmentCommentSchema = z.object({
 
 export const ReviewAttachmentSchema = z.object({
   type: z.literal("review"),
-  mimeType: z.literal("application/paseo-review"),
+  mimeType: z.literal("application/osuna-review"),
   cwd: z.string(),
   mode: z.enum(["uncommitted", "base"]),
   baseRef: z.string().nullable().optional(),
@@ -1440,7 +1440,7 @@ export const FetchRecentProviderSessionsRequestMessageSchema = z.object({
   since: z.string().optional(),
   limit: z.number().int().positive().max(200).optional(),
   query: z.string().optional(),
-  // 为 true 时不剔除已被 Paseo 导入的会话，并在 descriptor 上标出其 agent id。
+  // 为 true 时不剔除已被 Osuna 导入的会话，并在 descriptor 上标出其 agent id。
   includeImported: z.boolean().optional(),
 });
 
@@ -2436,7 +2436,7 @@ export const StashPopRequestSchema = z.object({
 export const StashListRequestSchema = z.object({
   type: z.literal("stash_list_request"),
   cwd: z.string(),
-  /** If true, only return paseo-created stashes. Default true. */
+  /** If true, only return osuna-created stashes. Default true. */
   osunaOnly: z.boolean().optional(),
   requestId: z.string(),
 });
@@ -2535,7 +2535,7 @@ export const OsunaWorktreeArchiveRequestSchema = z.object({
   // Scope of the archive operation. "workspace" archives a single workspace record
   // (today's default UI behavior). "worktree" archives every active workspace whose
   // cwd resolves to the target directory, then removes the directory if it is
-  // Paseo-owned. Omitted/unknown values default to "workspace" for old-client safety.
+  // Osuna-owned. Omitted/unknown values default to "workspace" for old-client safety.
   scope: z.enum(["workspace", "worktree"]).optional().default("workspace"),
   // COMPAT(worktreeDiskDeletion): added in v0.1.97, ignored as of v0.1.97
   // (disk removal derived from scope + last-reference + ownership); field
@@ -2652,7 +2652,7 @@ export const ArchiveWorkspaceRequestSchema = z.object({
 
 // Create a new workspace record. Unlike open_project, this never deduplicates by
 // directory: it always produces a fresh workspace. The source discriminates
-// between an existing local directory and a newly created paseo worktree.
+// between an existing local directory and a newly created osuna worktree.
 export const WorkspaceCreateRequestSchema = z.object({
   type: z.literal("workspace.create.request"),
   workspaceId: z
@@ -4072,7 +4072,7 @@ export const WorkspaceDescriptorPayloadSchema = z
     projectRootPath: z.string(),
     workspaceDirectory: z.string().optional(),
     // COMPAT(worktreeSlug): added in v0.2.6, remove optional after 2027-01-31.
-    // Present only for Paseo-owned worktrees; this is the basename of their root directory.
+    // Present only for Osuna-owned worktrees; this is the basename of their root directory.
     worktreeSlug: z.string().optional(),
     projectKind: z.enum(["git", "non_git", "directory"]),
     // COMPAT(workspaces): keep legacy directory workspace kind parseable.

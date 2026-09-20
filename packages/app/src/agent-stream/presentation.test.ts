@@ -15,7 +15,7 @@ import { createStreamPresentation } from "./presentation";
 import { buildAgentStreamRenderModel } from "./model";
 
 const runtime = {
-  paseo: {},
+  osuna: {},
   async rpc() {},
   openSettings() {},
   openSurface() {},

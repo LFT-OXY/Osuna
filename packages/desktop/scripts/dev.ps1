@@ -46,7 +46,7 @@ Remove-Item Env:\OSUNA_DEV_RUNTIME_FALLBACK_ROOT -ErrorAction SilentlyContinue
 # the daemon binds to localhost and this script is never used for production.
 $env:OSUNA_CORS_ORIGINS = "*"
 
-# Fully isolate the dev instance from a production Paseo install so `npm run dev`
+# Fully isolate the dev instance from a production Osuna install so `npm run dev`
 # works while the installed app is open. Without this the dev build loses the
 # Electron single-instance lock to the installed app and quits, and ends up
 # pointed at the production daemon, whose CORS allowlist rejects the Metro origin.
@@ -56,9 +56,9 @@ $env:OSUNA_CORS_ORIGINS = "*"
 $DevStateDir = "$DesktopDir\.dev"
 if (-not $env:OSUNA_HOME) {
     $env:OSUNA_HOME = "$DevStateDir\osuna-home"
-    $PaseoHomeManaged = $true
+    $OsunaHomeManaged = $true
 } else {
-    $PaseoHomeManaged = $false
+    $OsunaHomeManaged = $false
 }
 New-Item -ItemType Directory -Force -Path $env:OSUNA_HOME, $env:OSUNA_ELECTRON_USER_DATA_DIR | Out-Null
 
@@ -73,7 +73,7 @@ if (-not $env:OSUNA_LISTEN) { $env:OSUNA_LISTEN = "127.0.0.1:$DevDaemonPort" }
 # the dev port + wildcard CORS in the file so the dev app starts its OWN daemon.
 # ONLY seed the script-managed home: never rewrite a user-supplied OSUNA_HOME
 # (that could clobber a production config.json with the dev port + wildcard CORS).
-if ($PaseoHomeManaged) {
+if ($OsunaHomeManaged) {
     $env:TMP_CFG_PATH = "$($env:OSUNA_HOME)/config.json"
     $env:TMP_CFG_PORT = $DevDaemonPort
     $TmpScript = [System.IO.Path]::GetTempFileName() + ".js"

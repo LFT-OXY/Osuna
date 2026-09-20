@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildOsunaToolDetailSections } from "./osuna-tool-call-detail.js";
 
-describe("Paseo tool-call detail presentation", () => {
+describe("Osuna tool-call detail presentation", () => {
   it.each(["mcp__osuna__create_agent", "osuna.create_agent", "osuna_remote.create_agent"])(
     "shares one create-agent mapping for %s",
     (toolName) => {
@@ -119,7 +119,7 @@ describe("Paseo tool-call detail presentation", () => {
     });
   });
 
-  it("uses readable fallback fields for newly added Paseo tools", () => {
+  it("uses readable fallback fields for newly added Osuna tools", () => {
     expect(
       buildOsunaToolDetailSections(
         "mcp__osuna__future_tool",
@@ -143,7 +143,7 @@ describe("Paseo tool-call detail presentation", () => {
     ]);
   });
 
-  it("leaves non-Paseo tools alone", () => {
+  it("leaves non-Osuna tools alone", () => {
     expect(buildOsunaToolDetailSections("mcp__github__create_issue", {}, {})).toBeNull();
   });
 });

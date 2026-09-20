@@ -6,13 +6,13 @@ import { afterEach, describe, expect, test } from "vitest";
 import { loadConfig } from "./config.js";
 
 const roots: string[] = [];
-async function createPaseoHome(config: unknown): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-config-web-ui-"));
+async function createOsunaHome(config: unknown): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "osuna-config-web-ui-"));
   roots.push(root);
-  const paseoHome = path.join(root, ".osuna");
-  await mkdir(paseoHome, { recursive: true });
-  await writeFile(path.join(paseoHome, "config.json"), JSON.stringify(config, null, 2));
-  return paseoHome;
+  const osunaHome = path.join(root, ".osuna");
+  await mkdir(osunaHome, { recursive: true });
+  await writeFile(path.join(osunaHome, "config.json"), JSON.stringify(config, null, 2));
+  return osunaHome;
 }
 
 function expectBundledWebUiDistDir(distDir: string | null): void {
@@ -27,7 +27,7 @@ describe("daemon web UI config", () => {
   });
 
   test("web UI is disabled by default", async () => {
-    const home = await createPaseoHome({ version: 1 });
+    const home = await createOsunaHome({ version: 1 });
 
     const config = loadConfig(home, { env: {} });
 
@@ -36,7 +36,7 @@ describe("daemon web UI config", () => {
   });
 
   test("enables web UI from persisted config", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       features: { webUi: { enabled: true } },
     });
@@ -48,7 +48,7 @@ describe("daemon web UI config", () => {
   });
 
   test("OSUNA_WEB_UI_ENABLED overrides persisted setting", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       features: { webUi: { enabled: true } },
     });
@@ -59,7 +59,7 @@ describe("daemon web UI config", () => {
   });
 
   test("OSUNA_WEB_UI_ENABLED=true enables web UI", async () => {
-    const home = await createPaseoHome({ version: 1 });
+    const home = await createOsunaHome({ version: 1 });
 
     const config = loadConfig(home, { env: { OSUNA_WEB_UI_ENABLED: "true" } });
 
@@ -67,7 +67,7 @@ describe("daemon web UI config", () => {
   });
 
   test("CLI web UI enable override wins over env and persisted config", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       features: { webUi: { enabled: false } },
     });
@@ -81,7 +81,7 @@ describe("daemon web UI config", () => {
   });
 
   test("CLI web UI disable override wins over env and persisted config", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       features: { webUi: { enabled: true } },
     });
@@ -95,8 +95,8 @@ describe("daemon web UI config", () => {
   });
 
   test("resolves OSUNA_WEB_UI_DIST_DIR as absolute path", async () => {
-    const home = await createPaseoHome({ version: 1 });
-    const distDir = path.join(os.tmpdir(), "paseo-web-ui-dist");
+    const home = await createOsunaHome({ version: 1 });
+    const distDir = path.join(os.tmpdir(), "osuna-web-ui-dist");
 
     const config = loadConfig(home, { env: { OSUNA_WEB_UI_DIST_DIR: distDir } });
 
@@ -104,7 +104,7 @@ describe("daemon web UI config", () => {
   });
 
   test("resolves relative persisted distDir against OSUNA_HOME", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       features: { webUi: { distDir: "web-ui-dist" } },
     });
@@ -115,7 +115,7 @@ describe("daemon web UI config", () => {
   });
 
   test("OSUNA_WEB_UI_DIST_DIR overrides persisted distDir", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       features: { webUi: { distDir: "/persisted/dist" } },
     });

@@ -34,15 +34,15 @@ export interface RealDaemonState {
  */
 export async function loadRealDaemonState(): Promise<RealDaemonState> {
   const port = getE2EDaemonPort();
-  const paseoHome = process.env.E2E_OSUNA_HOME;
-  if (!paseoHome) throw new Error("E2E_OSUNA_HOME not set — the worker fixture must run first");
+  const osunaHome = process.env.E2E_OSUNA_HOME;
+  if (!osunaHome) throw new Error("E2E_OSUNA_HOME not set — the worker fixture must run first");
 
   const resp = await fetch(`http://127.0.0.1:${port}/api/status`);
   const data: DaemonApiStatus = await resp.json();
 
   let pid: number | null = null;
   try {
-    const raw = readFileSync(`${paseoHome}/osuna.pid`, "utf8");
+    const raw = readFileSync(`${osunaHome}/osuna.pid`, "utf8");
     const pidContent: PidFileContent = JSON.parse(raw);
     pid = pidContent.pid ?? null;
   } catch (err) {
@@ -50,7 +50,7 @@ export async function loadRealDaemonState(): Promise<RealDaemonState> {
     console.warn("[desktop-updates] osuna.pid not found:", err);
   }
 
-  return { version: data.version, pid, logPath: `${paseoHome}/daemon.log` };
+  return { version: data.version, pid, logPath: `${osunaHome}/daemon.log` };
 }
 
 export interface DesktopRuntimeConfig {
@@ -116,7 +116,7 @@ declare global {
 }
 
 /**
- * Injects window.paseoDesktop before app load so all Electron-gated code
+ * Injects window.osunaDesktop before app load so all Electron-gated code
  * activates. The update-check IPC is mocked at the boundary so the real
  * auto-updater never fires. Daemon start/stop commands are stateful: the mock
  * tracks running state and assigns a fresh PID on each start, letting tests
@@ -312,7 +312,7 @@ export async function installDesktopRuntime(
     }
 
     window.__capturedDialogOpenCalls = [];
-    (window as unknown as { paseoDesktop: unknown }).paseoDesktop = desktopBridge;
+    (window as unknown as { osunaDesktop: unknown }).osunaDesktop = desktopBridge;
   }, config);
 }
 

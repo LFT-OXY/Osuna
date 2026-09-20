@@ -24,12 +24,12 @@ async function git(cwd: string, args: string[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-cli-e2e-"));
-  const gitDirectory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-git-cli-e2e-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-cli-e2e-"));
+  const gitDirectory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-git-cli-e2e-"));
   const context = await createE2ETestContext({ timeout: 45_000 });
   try {
     const scaffold = path.join(context.workDir, "authored-plugin");
-    const init = await context.paseo(["plugin", "init", scaffold, "--json"]);
+    const init = await context.osuna(["plugin", "init", scaffold, "--json"]);
     assert.equal(init.exitCode, 0, init.stderr);
     const manifestPath = path.join(scaffold, "osuna-plugin.json");
     const manifest = await readPluginManifest(scaffold);
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     );
     await writeFile(path.join(directory, "index.server.ts"), pluginSource);
 
-    const install = await context.paseo(["plugin", "install", directory, "--json"]);
+    const install = await context.osuna(["plugin", "install", directory, "--json"]);
     assert.equal(install.exitCode, 0, install.stderr);
     assert.equal(JSON.parse(install.stdout).id, "cli-e2e");
 
@@ -54,23 +54,23 @@ async function main(): Promise<void> {
       manifestPath,
       JSON.stringify({ ...manifest, requirements: { osuna: ">=999.0.0" } }),
     );
-    const incompatibleInstall = await context.paseo(["plugin", "install", scaffold, "--json"]);
+    const incompatibleInstall = await context.osuna(["plugin", "install", scaffold, "--json"]);
     assert.equal(incompatibleInstall.exitCode, 1);
     assert.match(incompatibleInstall.stderr, /requires Osuna >=999.0.0/);
-    const afterRejection = await context.paseo(["plugin", "ls", "--json"]);
+    const afterRejection = await context.osuna(["plugin", "ls", "--json"]);
     assert.equal(afterRejection.exitCode, 0, afterRejection.stderr);
     assert.deepEqual(
       JSON.parse(afterRejection.stdout).map((plugin: { id: string }) => plugin.id),
       ["cli-e2e"],
     );
     await writeFile(manifestPath, JSON.stringify(manifest));
-    const scaffoldInstall = await context.paseo(["plugin", "install", scaffold, "--json"]);
+    const scaffoldInstall = await context.osuna(["plugin", "install", scaffold, "--json"]);
     assert.equal(scaffoldInstall.exitCode, 0, scaffoldInstall.stderr);
     assert.equal(JSON.parse(scaffoldInstall.stdout).status, "running");
 
     await git(gitDirectory, ["init", "-b", "main"]);
-    await git(gitDirectory, ["config", "user.name", "Paseo Tests"]);
-    await git(gitDirectory, ["config", "user.email", "paseo@example.test"]);
+    await git(gitDirectory, ["config", "user.name", "Osuna Tests"]);
+    await git(gitDirectory, ["config", "user.email", "osuna@example.test"]);
     await writeFile(
       path.join(gitDirectory, "osuna-plugin.json"),
       JSON.stringify({ id: "git-cli-e2e", requirements: { osuna: `>=${resolveCliVersion()}` } }),
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     await git(gitDirectory, ["add", "-A"]);
     await git(gitDirectory, ["commit", "-m", "initial"]);
 
-    const gitInstall = await context.paseo([
+    const gitInstall = await context.osuna([
       "plugin",
       "add",
       pathToFileURL(gitDirectory).href,
@@ -94,12 +94,12 @@ async function main(): Promise<void> {
     );
     await git(gitDirectory, ["add", "-A"]);
     await git(gitDirectory, ["commit", "-m", "update"]);
-    const status = await context.paseo(["plugin", "status", "git-cli-e2e", "--json"]);
+    const status = await context.osuna(["plugin", "status", "git-cli-e2e", "--json"]);
     assert.equal(status.exitCode, 0, status.stderr);
     assert.equal(JSON.parse(status.stdout)[0].status, "running");
     assert.equal(JSON.parse(status.stdout)[0].commit, JSON.parse(gitInstall.stdout).commit);
 
-    const update = await context.paseo(["plugin", "update", "git-cli-e2e", "--json"]);
+    const update = await context.osuna(["plugin", "update", "git-cli-e2e", "--json"]);
     assert.equal(update.exitCode, 0, update.stderr);
     assert.equal(JSON.parse(update.stdout)[0].updated, true);
 
@@ -121,16 +121,16 @@ async function main(): Promise<void> {
       }),
     );
     await git(gitDirectory, ["add", "-A"]);
-    await git(gitDirectory, ["commit", "-m", "requires a future Paseo"]);
-    const incompatibleUpdate = await context.paseo(["plugin", "update", "git-cli-e2e", "--json"]);
+    await git(gitDirectory, ["commit", "-m", "requires a future Osuna"]);
+    const incompatibleUpdate = await context.osuna(["plugin", "update", "git-cli-e2e", "--json"]);
     assert.equal(incompatibleUpdate.exitCode, 1);
     assert.match(incompatibleUpdate.stderr, /requires Osuna >=999.0.0/);
     await assert.rejects(readFile(buildMarker), { code: "ENOENT" });
-    const retained = await context.paseo(["plugin", "ls", "git-cli-e2e", "--json"]);
+    const retained = await context.osuna(["plugin", "ls", "git-cli-e2e", "--json"]);
     assert.equal(retained.exitCode, 0, retained.stderr);
     assert.equal(JSON.parse(retained.stdout)[0].commit, installedCommit);
     assert.equal(JSON.parse(retained.stdout)[0].status, "running");
-    const incompatibleAdd = await context.paseo([
+    const incompatibleAdd = await context.osuna([
       "plugin",
       "add",
       pathToFileURL(gitDirectory).href,
@@ -142,25 +142,25 @@ async function main(): Promise<void> {
     assert.match(incompatibleAdd.stderr, /requires Osuna >=999.0.0/);
     await assert.rejects(readFile(buildMarker), { code: "ENOENT" });
 
-    const reload = await context.paseo(["plugin", "reload", "cli-e2e", "--json"]);
+    const reload = await context.osuna(["plugin", "reload", "cli-e2e", "--json"]);
     assert.equal(reload.exitCode, 0, reload.stderr);
     assert.equal(JSON.parse(reload.stdout).status, "running");
 
-    const disable = await context.paseo(["plugin", "disable", "cli-e2e", "--json"]);
+    const disable = await context.osuna(["plugin", "disable", "cli-e2e", "--json"]);
     assert.equal(disable.exitCode, 0, disable.stderr);
     assert.equal(JSON.parse(disable.stdout).status, "disabled");
 
-    const enable = await context.paseo(["plugin", "enable", "cli-e2e", "--json"]);
+    const enable = await context.osuna(["plugin", "enable", "cli-e2e", "--json"]);
     assert.equal(enable.exitCode, 0, enable.stderr);
     assert.equal(JSON.parse(enable.stdout).status, "running");
 
-    const remove = await context.paseo(["plugin", "remove", "cli-e2e", "--json"]);
+    const remove = await context.osuna(["plugin", "remove", "cli-e2e", "--json"]);
     assert.equal(remove.exitCode, 0, remove.stderr);
-    const removeGit = await context.paseo(["plugin", "remove", "git-cli-e2e", "--json"]);
+    const removeGit = await context.osuna(["plugin", "remove", "git-cli-e2e", "--json"]);
     assert.equal(removeGit.exitCode, 0, removeGit.stderr);
-    const removeScaffold = await context.paseo(["plugin", "remove", "authored-plugin", "--json"]);
+    const removeScaffold = await context.osuna(["plugin", "remove", "authored-plugin", "--json"]);
     assert.equal(removeScaffold.exitCode, 0, removeScaffold.stderr);
-    const list = await context.paseo(["plugin", "ls", "--json"]);
+    const list = await context.osuna(["plugin", "ls", "--json"]);
     assert.equal(list.exitCode, 0, list.stderr);
     assert.deepEqual(JSON.parse(list.stdout), []);
   } finally {

@@ -1,4 +1,4 @@
-# @getpaseo/server — Daemon Guidelines
+# @osuna/server — Daemon Guidelines
 
 The daemon is a single Node.js process under `packages/server/src/`. It owns agent lifecycle, the WebSocket session API, file-based persistence in `$OSUNA_HOME`, terminals, and the MCP/tool catalog. There is no HTTP REST API and no database: clients talk over one WebSocket session, and state is JSON on disk.
 

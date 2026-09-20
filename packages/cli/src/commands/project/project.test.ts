@@ -10,7 +10,7 @@ const project = {
   projectId: "project-1",
   projectDisplayName: "Osuna",
   projectCustomName: null,
-  projectRootPath: "/tmp/paseo",
+  projectRootPath: "/tmp/osuna",
   projectKind: "git" as const,
 };
 const addProject = vi.fn(async () => ({ project, error: null }));
@@ -58,7 +58,7 @@ describe("project commands", () => {
       projectId: "project-1",
       name: "Osuna",
       kind: "git",
-      path: "/tmp/paseo",
+      path: "/tmp/osuna",
     });
     expect(close).toHaveBeenCalled();
   });

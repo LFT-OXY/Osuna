@@ -8,7 +8,7 @@ import {
 } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 
-import type { PaseoToolDefinition, PaseoToolResult } from "./types.js";
+import type { OsunaToolDefinition, OsunaToolResult } from "./types.js";
 
 const EMPTY_OBJECT_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -47,7 +47,7 @@ function formatStructuredContentForModel(structuredContent: unknown): string {
   return summary.length > 0 ? `${summary.join("\n")}\n\n${json}` : json;
 }
 
-export function addModelVisibleStructuredContent(result: PaseoToolResult): PaseoToolResult {
+export function addModelVisibleStructuredContent(result: OsunaToolResult): OsunaToolResult {
   if (result.structuredContent === undefined || result.content.length > 0) {
     return result;
   }
@@ -63,8 +63,8 @@ export function addModelVisibleStructuredContent(result: PaseoToolResult): Paseo
   };
 }
 
-export function serializePaseoToolInputParameters(
-  tool: PaseoToolDefinition,
+export function serializeOsunaToolInputParameters(
+  tool: OsunaToolDefinition,
 ): Record<string, unknown> {
   const schema = normalizeObjectSchema(
     tool.inputSchema as AnySchema | ZodRawShapeCompat | undefined,

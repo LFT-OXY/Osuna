@@ -6,7 +6,7 @@ import { openUsagePageFromShell } from "../support/helpers/usage-page";
 
 // The card moved to the usage page, so the page has to render: point the daemon
 // at the usage fixtures rather than at whatever logs the machine happens to have.
-const fixtures = createUsageFixtureRoots("paseo-plan-usage-");
+const fixtures = createUsageFixtureRoots("osuna-plan-usage-");
 
 test.use({ e2eDaemonEnvironment: fixtures.environment });
 

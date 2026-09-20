@@ -15,7 +15,7 @@ import {
 } from "@osuna/server";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
-const root = await mkdtemp(path.join(tmpdir(), "paseo desktop lifecycle "));
+const root = await mkdtemp(path.join(tmpdir(), "osuna desktop lifecycle "));
 const home = path.join(root, "daemon");
 const env = Object.fromEntries(
   Object.entries(process.env).filter(
@@ -203,7 +203,7 @@ try {
     await stopDaemonInstance(home, { instance: captured, force: true, timeoutMs: 2_000 });
   const artifacts =
     process.env.OSUNA_DESKTOP_LIFECYCLE_ARTIFACT_DIR ??
-    (await mkdtemp(path.join(tmpdir(), "paseo-desktop-lifecycle-artifacts-")));
+    (await mkdtemp(path.join(tmpdir(), "osuna-desktop-lifecycle-artifacts-")));
   await mkdir(artifacts, { recursive: true });
   for (const name of await readdir(root))
     if (name.endsWith(".png") || name === "metro.log")

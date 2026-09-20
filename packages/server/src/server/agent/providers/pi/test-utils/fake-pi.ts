@@ -413,7 +413,7 @@ export class FakePiSession implements PiRuntimeSession {
   }
 
   private handleTreeNavigationCommand(message: string): void {
-    const prefix = "/paseo_tree ";
+    const prefix = "/osuna_tree ";
     if (!message.startsWith(prefix)) {
       return;
     }
@@ -429,7 +429,7 @@ export class FakePiSession implements PiRuntimeSession {
   }
 
   private handleEntryCaptureCommand(message: string): void {
-    const prefix = "/paseo_capture_entries ";
+    const prefix = "/osuna_capture_entries ";
     if (!message.startsWith(prefix)) {
       return;
     }

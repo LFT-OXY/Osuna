@@ -54,7 +54,7 @@ function fakeGitService() {
     isGit: true,
     repoRoot: "/tmp/repo",
     currentBranch: "feature/scripts",
-    remoteUrl: "https://github.com/getpaseo/paseo.git",
+    remoteUrl: "https://github.com/lft-oxy/osuna.git",
     hasRemote: true,
   };
 
@@ -276,7 +276,7 @@ describe("start", () => {
   test("refuses to start a script while repository automation is blocked", async () => {
     const { service, emitted, spawnCalls } = buildService({
       automationError: new Error(
-        "Scripts are blocked for PR #42 from contributor/paseo. Run setup to allow them.",
+        "Scripts are blocked for PR #42 from contributor/osuna. Run setup to allow them.",
       ),
     });
 
@@ -290,7 +290,7 @@ describe("start", () => {
         workspaceId: "ws-1",
         scriptName: "app",
         terminalId: null,
-        error: "Scripts are blocked for PR #42 from contributor/paseo. Run setup to allow them.",
+        error: "Scripts are blocked for PR #42 from contributor/osuna. Run setup to allow them.",
       },
     });
   });
@@ -339,7 +339,7 @@ describe("start", () => {
     expect(spawnCalls[0]).toMatchObject({
       repoRoot: "/tmp/repo",
       workspaceId: "ws-1",
-      projectSlug: "paseo",
+      projectSlug: "osuna",
       branchName: "feature/scripts",
       scriptName: "app",
       daemonPort: 6767,

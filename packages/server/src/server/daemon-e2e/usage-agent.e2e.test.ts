@@ -10,7 +10,7 @@ import {
   type FakeAgentSessionControl,
 } from "../test-utils/fake-agent-client.js";
 import { createMessageCollector, type MessageCollector } from "../test-utils/message-collector.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 const FIRST_SESSION = "sess-live-1";
@@ -31,7 +31,7 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 describe("agent usage after a turn finishes", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let collector: MessageCollector;
   let eventSubscription: { release: () => Promise<void> } | null = null;
@@ -40,17 +40,17 @@ describe("agent usage after a turn finishes", () => {
   let projectDir: string;
 
   beforeEach(async () => {
-    claudeRoot = await tempDir("paseo-usage-agent-root-");
-    cwd = await tempDir("paseo-usage-agent-cwd-");
+    claudeRoot = await tempDir("osuna-usage-agent-root-");
+    cwd = await tempDir("osuna-usage-agent-cwd-");
     projectDir = path.join(claudeRoot, claudeProjectDirNameSync(cwd));
     await mkdir(projectDir, { recursive: true });
     sessionIds = [FIRST_SESSION, SECOND_SESSION];
     onTurnStart = null;
     liveSession = null;
-    const homeRoot = await tempDir("paseo-usage-agent-home-");
-    const staticDir = await tempDir("paseo-usage-agent-static-");
-    daemon = await createTestPaseoDaemon({
-      paseoHomeRoot: homeRoot,
+    const homeRoot = await tempDir("osuna-usage-agent-home-");
+    const staticDir = await tempDir("osuna-usage-agent-static-");
+    daemon = await createTestOsunaDaemon({
+      osunaHomeRoot: homeRoot,
       staticDir,
       cleanup: false,
       agentClients: {
@@ -109,7 +109,7 @@ describe("agent usage after a turn finishes", () => {
 
   /** What the agent record on disk says about the sessions it has run in. */
   async function storedProviderSessionIds(agentId: string): Promise<string[] | undefined> {
-    const agentsDir = path.join(daemon.paseoHome, "agents");
+    const agentsDir = path.join(daemon.osunaHome, "agents");
     for (const entry of await readdir(agentsDir, { withFileTypes: true, recursive: true })) {
       if (!entry.isFile() || entry.name !== `${agentId}.json`) continue;
       const record = JSON.parse(await readFile(path.join(entry.parentPath, entry.name), "utf8"));

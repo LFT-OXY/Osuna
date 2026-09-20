@@ -8,37 +8,37 @@ describe("starter trigger connections", () => {
         {
           github: [
             {
-              slug: "github-getpaseo",
-              accountLogin: "getpaseo",
+              slug: "github-lft-oxy",
+              accountLogin: "lft-oxy",
               accountType: "Organization",
-              repositories: ["getpaseo/paseo"],
+              repositories: ["lft-oxy/osuna"],
             },
           ],
-          slack: [{ slug: "paseo", teamName: "Osuna" }],
-          discord: [{ slug: "paseo-discord", guildName: "Osuna Discord" }],
+          slack: [{ slug: "osuna", teamName: "Osuna" }],
+          discord: [{ slug: "osuna-discord", guildName: "Osuna Discord" }],
           daemons: [],
           linear: [],
         },
-        "getpaseo/paseo",
+        "lft-oxy/osuna",
       ),
     ).toEqual([
       {
-        id: "github:getpaseo/paseo",
-        label: "GitHub — getpaseo/paseo",
+        id: "github:lft-oxy/osuna",
+        label: "GitHub — lft-oxy/osuna",
         provider: "github",
-        filters: { connection: "github-getpaseo", repo: "getpaseo/paseo" },
+        filters: { connection: "github-lft-oxy", repo: "lft-oxy/osuna" },
       },
       {
-        id: "slack:paseo",
+        id: "slack:osuna",
         label: "Slack — Osuna",
         provider: "slack",
-        filters: { connection: "paseo" },
+        filters: { connection: "osuna" },
       },
       {
-        id: "discord:paseo-discord",
+        id: "discord:osuna-discord",
         label: "Discord — Osuna Discord",
         provider: "discord",
-        filters: { connection: "paseo-discord" },
+        filters: { connection: "osuna-discord" },
       },
     ]);
   });
@@ -49,10 +49,10 @@ describe("starter trigger connections", () => {
         {
           github: [
             {
-              slug: "github-getpaseo",
-              accountLogin: "getpaseo",
+              slug: "github-lft-oxy",
+              accountLogin: "lft-oxy",
               accountType: "Organization",
-              repositories: ["getpaseo/hub"],
+              repositories: ["lft-oxy/hub"],
             },
           ],
           slack: [],
@@ -60,7 +60,7 @@ describe("starter trigger connections", () => {
           daemons: [],
           linear: [],
         },
-        "getpaseo/paseo",
+        "lft-oxy/osuna",
       ),
     ).toEqual([]);
   });

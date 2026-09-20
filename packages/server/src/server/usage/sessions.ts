@@ -28,7 +28,7 @@ export interface UsageSessionsRequest {
   filters?: UsageReportFilters;
 }
 
-/** The Paseo agent that owns a provider session, if one imported it. */
+/** The Osuna agent that owns a provider session, if one imported it. */
 export interface UsageSessionOwner {
   agentId: string;
   workspaceId: string | null;

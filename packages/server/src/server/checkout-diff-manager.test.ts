@@ -91,7 +91,7 @@ function createPendingManager() {
   const logger = { child: () => logger, warn: () => {} };
   const manager = new CheckoutDiffManager({
     logger: logger as unknown as pino.Logger,
-    paseoHome: "/tmp/paseo-test",
+    osunaHome: "/tmp/osuna-test",
     workspaceGitService,
   });
   return { manager, watches };
@@ -148,7 +148,7 @@ describe("CheckoutDiffManager", () => {
 
     const manager = new CheckoutDiffManager({
       logger: logger as unknown as pino.Logger,
-      paseoHome: "/tmp/paseo-test",
+      osunaHome: "/tmp/osuna-test",
       workspaceGitService: workspaceGitService as unknown as WorkspaceGitService,
     });
 

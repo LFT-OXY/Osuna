@@ -15,7 +15,7 @@ export function createWorktreeCommand(): Command {
   addJsonAndDaemonHostOptions(
     worktree
       .command("create")
-      .description("Create a Osuna-managed git worktree")
+      .description("Create an Osuna-managed git worktree")
       .option("--mode <mode>", "Creation mode: branch-off, checkout-branch, or checkout-pr")
       .option("--new-branch <name>", "New branch name (--mode branch-off)")
       .option(

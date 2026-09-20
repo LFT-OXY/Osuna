@@ -15,7 +15,7 @@ import { claudeProjectDir, claudeProjectDirSync } from "./project-dir.js";
 // the SDK finds it, our encoding matches theirs for that input.
 
 const workspaceRoot = join(homedir(), ".osuna-claude-parity-tests");
-const tmpWorkspaceRoot = join(tmpdir(), "paseo-claude-parity");
+const tmpWorkspaceRoot = join(tmpdir(), "osuna-claude-parity");
 const createdSessionFiles: string[] = [];
 
 interface ParityCase {

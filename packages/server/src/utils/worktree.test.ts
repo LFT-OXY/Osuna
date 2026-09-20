@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   createWorktree as createWorktreePrimitive,
   deriveWorktreeProjectHash,
-  deletePaseoWorktree,
+  deleteOsunaWorktree,
   isOsunaOwnedWorktreeCwd,
   mapWorkspaceCwdToWorktree,
   slugify,
@@ -29,7 +29,7 @@ interface LegacyCreateWorktreeTestOptions {
   baseBranch: string;
   worktreeSlug: string;
   runSetup?: boolean;
-  paseoHome?: string;
+  osunaHome?: string;
 }
 
 function createLegacyWorktreeForTest(
@@ -48,19 +48,19 @@ function createLegacyWorktreeForTest(
       branchName: options.branchName,
     },
     runSetup: options.runSetup ?? true,
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
   });
 }
 
-describe("paseo worktree manager", () => {
+describe("osuna worktree manager", () => {
   let tempDir: string;
   let repoDir: string;
-  let paseoHome: string;
+  let osunaHome: string;
 
   beforeEach(() => {
     tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-manager-test-")));
     repoDir = join(tempDir, "test-repo");
-    paseoHome = join(tempDir, "osuna-home");
+    osunaHome = join(tempDir, "osuna-home");
 
     mkdirSync(repoDir, { recursive: true });
     execFileSync("git", ["init", "-b", "main"], { cwd: repoDir });
@@ -77,13 +77,13 @@ describe("paseo worktree manager", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("treats a worktree as paseo-owned even when its .git admin is missing", async () => {
+  it("treats a worktree as osuna-owned even when its .git admin is missing", async () => {
     const created = await createLegacyWorktreeForTest({
       branchName: "orphan-admin-branch",
       cwd: repoDir,
       baseBranch: "main",
       worktreeSlug: "orphan-admin",
-      paseoHome,
+      osunaHome,
     });
 
     // Simulate a previous archive attempt that removed git's admin dir but left
@@ -94,21 +94,21 @@ describe("paseo worktree manager", () => {
     });
     expect(existsSync(created.worktreePath)).toBe(true);
 
-    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { osunaHome });
     expect(ownership.allowed).toBe(true);
     await expect(
-      isOsunaOwnedWorktreeCwd(join(created.worktreePath, "packages", "app"), { paseoHome }),
+      isOsunaOwnedWorktreeCwd(join(created.worktreePath, "packages", "app"), { osunaHome }),
     ).resolves.toMatchObject({
       allowed: true,
       worktreePath: created.worktreePath,
     });
   });
 
-  it("rejects paths that are not under the paseo worktrees root", async () => {
+  it("rejects paths that are not under the osuna worktrees root", async () => {
     const outsidePath = join(tempDir, "outside-osuna-home");
     mkdirSync(outsidePath, { recursive: true });
 
-    const ownership = await isOsunaOwnedWorktreeCwd(outsidePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(outsidePath, { osunaHome });
 
     expect(ownership.allowed).toBe(false);
   });
@@ -119,10 +119,10 @@ describe("paseo worktree manager", () => {
       cwd: repoDir,
       baseBranch: "main",
       worktreeSlug: "placement-root",
-      paseoHome,
+      osunaHome,
     });
 
-    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { osunaHome });
 
     expect(ownership.allowed).toBe(true);
     expect(createRealpathAwarePathMatcher(repoDir)(ownership.repoRoot ?? "")).toBe(true);
@@ -181,14 +181,14 @@ describe("paseo worktree manager", () => {
 
   it("rejects the worktrees root itself and the per-repo hash dir", async () => {
     const projectHash = await deriveWorktreeProjectHash(repoDir);
-    const worktreesRoot = join(paseoHome, "worktrees");
+    const worktreesRoot = join(osunaHome, "worktrees");
     const projectHashDir = join(worktreesRoot, projectHash);
     mkdirSync(projectHashDir, { recursive: true });
 
-    await expect(isOsunaOwnedWorktreeCwd(worktreesRoot, { paseoHome })).resolves.toMatchObject({
+    await expect(isOsunaOwnedWorktreeCwd(worktreesRoot, { osunaHome })).resolves.toMatchObject({
       allowed: false,
     });
-    await expect(isOsunaOwnedWorktreeCwd(projectHashDir, { paseoHome })).resolves.toMatchObject({
+    await expect(isOsunaOwnedWorktreeCwd(projectHashDir, { osunaHome })).resolves.toMatchObject({
       allowed: false,
     });
   });
@@ -199,7 +199,7 @@ describe("paseo worktree manager", () => {
       cwd: repoDir,
       baseBranch: "main",
       worktreeSlug: "orphan-delete",
-      paseoHome,
+      osunaHome,
     });
 
     rmSync(join(repoDir, ".git", "worktrees", "orphan-delete"), {
@@ -208,10 +208,10 @@ describe("paseo worktree manager", () => {
     });
     expect(existsSync(created.worktreePath)).toBe(true);
 
-    await deletePaseoWorktree({
+    await deleteOsunaWorktree({
       cwd: repoDir,
       worktreePath: created.worktreePath,
-      paseoHome,
+      osunaHome,
     });
 
     expect(existsSync(created.worktreePath)).toBe(false);
@@ -223,19 +223,19 @@ describe("paseo worktree manager", () => {
       cwd: repoDir,
       baseBranch: "main",
       worktreeSlug: "idempotent-delete",
-      paseoHome,
+      osunaHome,
     });
 
-    await deletePaseoWorktree({
+    await deleteOsunaWorktree({
       cwd: repoDir,
       worktreePath: created.worktreePath,
-      paseoHome,
+      osunaHome,
     });
     expect(existsSync(created.worktreePath)).toBe(false);
 
     // Second call — nothing left on disk and no admin entry — must not throw.
     await expect(
-      deletePaseoWorktree({ cwd: repoDir, worktreePath: created.worktreePath, paseoHome }),
+      deleteOsunaWorktree({ cwd: repoDir, worktreePath: created.worktreePath, osunaHome }),
     ).resolves.toBeUndefined();
   });
 
@@ -245,20 +245,20 @@ describe("paseo worktree manager", () => {
       cwd: repoDir,
       baseBranch: "main",
       worktreeSlug: "no-cwd",
-      paseoHome,
+      osunaHome,
     });
 
-    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { paseoHome });
+    const ownership = await isOsunaOwnedWorktreeCwd(created.worktreePath, { osunaHome });
     expect(ownership.allowed).toBe(true);
     expect(ownership.worktreeRoot).toBeTruthy();
 
     // Simulate the handler path when git has forgotten about the worktree:
     // caller forwards the path-derived worktreesRoot from the ownership check.
-    await deletePaseoWorktree({
+    await deleteOsunaWorktree({
       cwd: null,
       worktreePath: created.worktreePath,
       worktreesRoot: ownership.worktreeRoot,
-      paseoHome,
+      osunaHome,
     });
 
     expect(existsSync(created.worktreePath)).toBe(false);

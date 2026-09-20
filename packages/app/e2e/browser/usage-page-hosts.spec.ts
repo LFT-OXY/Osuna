@@ -11,8 +11,8 @@ import {
   waitForUsageTotal,
 } from "../support/helpers/usage-page";
 
-const primaryFixtures = createUsageFixtureRoots("paseo-usage-hosts-primary-");
-const secondaryFixtures = createUsageFixtureRoots("paseo-usage-hosts-secondary-");
+const primaryFixtures = createUsageFixtureRoots("osuna-usage-hosts-primary-");
+const secondaryFixtures = createUsageFixtureRoots("osuna-usage-hosts-secondary-");
 
 test.use({ e2eDaemonEnvironment: primaryFixtures.environment });
 

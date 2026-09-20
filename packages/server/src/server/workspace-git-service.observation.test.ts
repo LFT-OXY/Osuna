@@ -7,12 +7,12 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import type { FileObserver } from "./file-observer/index.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
 
-const REPO_CWD = path.resolve("/tmp/paseo-observation-repo");
+const REPO_CWD = path.resolve("/tmp/osuna-observation-repo");
 const GIT_DIR = path.join(REPO_CWD, ".git");
 // Checkout observation must not depend on installed forge CLIs or host-auth probes.
 const REMOTE_URL = pathToFileURL(path.join(REPO_CWD, "remote.git")).href;
-const WORKTREE_A = path.resolve("/tmp/paseo-observation-worktree-a");
-const WORKTREE_B = path.resolve("/tmp/paseo-observation-worktree-b");
+const WORKTREE_A = path.resolve("/tmp/osuna-observation-worktree-a");
+const WORKTREE_B = path.resolve("/tmp/osuna-observation-worktree-b");
 
 interface WatchEvent {
   path: string;
@@ -65,7 +65,7 @@ function createCheckoutFacts(cwd: string): CheckoutSnapshotFacts {
     remoteUrl: null,
     absoluteGitDir: path.join(cwd, ".git"),
     gitCommonDir: path.join(cwd, ".git"),
-    paseoWorktree: { isOsunaOwnedWorktree: false },
+    osunaWorktree: { isOsunaOwnedWorktree: false },
     storedBaseRef: null,
     resolvedBaseRef: "main",
     mainRepoRoot: null,
@@ -164,7 +164,7 @@ function createService(
     defaultGetCheckoutShortstat;
   return new WorkspaceGitServiceImpl({
     logger,
-    paseoHome: "/tmp/osuna-home",
+    osunaHome: "/tmp/osuna-home",
     fileObserver,
     deps: {
       subscribe: watcher.subscribe,
@@ -400,7 +400,7 @@ describe("WorkspaceGitService checkout observation", () => {
     });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/osuna-home",
+      osunaHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const summaryListener = vi.fn();
@@ -1174,7 +1174,7 @@ describe("WorkspaceGitService checkout observation", () => {
     });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/osuna-home",
+      osunaHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const summaryListener = vi.fn();
@@ -1229,7 +1229,7 @@ describe("WorkspaceGitService checkout observation", () => {
     const service = createService(watcher, { getCheckoutDiff, getCheckoutWorktreeState });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/osuna-home",
+      osunaHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const diffSubscription = await diffManager.subscribe(
@@ -1376,9 +1376,9 @@ describe("WorkspaceGitService checkout observation", () => {
       await fetch.promise;
       return { changes: [], error: null };
     });
-    const commonGitDir = path.resolve("/tmp/paseo-shared-repository.git");
+    const commonGitDir = path.resolve("/tmp/osuna-shared-repository.git");
     const worktrees = Array.from({ length: 10 }, (_, index) =>
-      path.resolve(`/tmp/paseo-shared-worktree-${index}`),
+      path.resolve(`/tmp/osuna-shared-worktree-${index}`),
     );
     const getCheckoutSnapshotFacts = vi.fn(
       async (cwd: string): Promise<CheckoutSnapshotFacts> => ({
@@ -1645,7 +1645,7 @@ describe("WorkspaceGitService checkout observation", () => {
       {
         getCheckoutStatus,
         createWatcherLivenessCanary: vi.fn(() => ({
-          path: path.join(GIT_DIR, "paseo", ".watcher-canary-timeout"),
+          path: path.join(GIT_DIR, "osuna", ".watcher-canary-timeout"),
           filterEvents: (events: WatchEvent[]) => events,
           verify: verifyCanary,
         })),
@@ -2191,7 +2191,7 @@ describe("WorkspaceGitService checkout observation", () => {
     });
     const diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome: "/tmp/osuna-home",
+      osunaHome: "/tmp/osuna-home",
       workspaceGitService: service,
     });
     const listener = vi.fn();

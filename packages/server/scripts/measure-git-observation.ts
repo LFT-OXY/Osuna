@@ -114,14 +114,14 @@ function createTrackedSubscriber(failWorktreeRoot: string | null) {
 
 function createMeasuredService(input: {
   repoDir: string;
-  paseoHome: string;
+  osunaHome: string;
   failWorktreeWatch?: boolean;
 }) {
   const counts: ProducerCounts = { structural: 0, worktree: 0, detailedDiff: 0 };
   const watcher = createTrackedSubscriber(input.failWorktreeWatch ? input.repoDir : null);
   const service = new WorkspaceGitServiceImpl({
     logger: createLogger(),
-    paseoHome: input.paseoHome,
+    osunaHome: input.osunaHome,
     deps: {
       subscribe: watcher.subscribe,
       getWorkspaceGitSelfHealPhaseMs: () => 60_000,
@@ -189,9 +189,9 @@ async function closeMeasuredService(input: {
 }
 
 async function main(): Promise<void> {
-  const tempDir = mkdtempSync(path.join(tmpdir(), "paseo-git-observation-measurement-"));
+  const tempDir = mkdtempSync(path.join(tmpdir(), "osuna-git-observation-measurement-"));
   const repoDir = path.join(tempDir, "repo");
-  const paseoHome = path.join(tempDir, "osuna-home");
+  const osunaHome = path.join(tempDir, "osuna-home");
   const trackedPath = path.join(repoDir, "tracked.txt");
   const ignoredDir = path.join(repoDir, "build");
   mkdirSync(repoDir, { recursive: true });
@@ -200,8 +200,8 @@ async function main(): Promise<void> {
   writeFileSync(path.join(repoDir, ".gitignore"), "build/\n");
   writeFileSync(trackedPath, "base\n");
   runGit(repoDir, ["init", "-b", "main"]);
-  runGit(repoDir, ["config", "user.email", "measurement@paseo.local"]);
-  runGit(repoDir, ["config", "user.name", "Paseo Measurement"]);
+  runGit(repoDir, ["config", "user.email", "measurement@osuna.local"]);
+  runGit(repoDir, ["config", "user.name", "Osuna Measurement"]);
   runGit(repoDir, ["add", ".gitignore", "tracked.txt"]);
   runGit(repoDir, ["commit", "-m", "fixture"]);
   runGit(repoDir, ["checkout", "-b", "feature"]);
@@ -214,7 +214,7 @@ async function main(): Promise<void> {
   let diffManager: CheckoutDiffManager | null = null;
 
   try {
-    healthy = createMeasuredService({ repoDir, paseoHome });
+    healthy = createMeasuredService({ repoDir, osunaHome });
     let latestSummary: WorkspaceGitRuntimeSnapshot | null = null;
     let latestDiffAdditions = 0;
 
@@ -226,7 +226,7 @@ async function main(): Promise<void> {
     });
     diffManager = new CheckoutDiffManager({
       logger: createLogger(),
-      paseoHome,
+      osunaHome,
       workspaceGitService: healthy.service,
     });
     const openedDiff = await diffManager.subscribe(
@@ -346,7 +346,7 @@ async function main(): Promise<void> {
     });
     healthy = null;
 
-    degraded = createMeasuredService({ repoDir, paseoHome, failWorktreeWatch: true });
+    degraded = createMeasuredService({ repoDir, osunaHome, failWorktreeWatch: true });
     startGitCommandMetrics();
     const degradedBootstrapStartedAtMs = Date.now();
     const degradedBootstrapCounts = snapshotCounts(degraded.counts);

@@ -7,13 +7,13 @@ import { loadConfig, resolveConfigFromPersisted } from "./config.js";
 
 const roots: string[] = [];
 
-async function createPaseoHome(config: unknown): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-config-relay-"));
+async function createOsunaHome(config: unknown): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "osuna-config-relay-"));
   roots.push(root);
-  const paseoHome = path.join(root, ".osuna");
-  await mkdir(paseoHome, { recursive: true });
-  await writeFile(path.join(paseoHome, "config.json"), JSON.stringify(config, null, 2));
-  return paseoHome;
+  const osunaHome = path.join(root, ".osuna");
+  await mkdir(osunaHome, { recursive: true });
+  await writeFile(path.join(osunaHome, "config.json"), JSON.stringify(config, null, 2));
+  return osunaHome;
 }
 
 describe("daemon relay config", () => {
@@ -22,12 +22,12 @@ describe("daemon relay config", () => {
   });
 
   test("preserves implicit relay-on for a legacy config without enabled", async () => {
-    const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
+    const home = await createOsunaHome({ version: 1, daemon: { relay: {} } });
     expect(loadConfig(home, { env: {} }).relayEnabled).toBe(true);
   });
 
   test("keeps explicit persisted relay state and marks it mutable", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: { relay: { enabled: false } },
     });
@@ -37,7 +37,7 @@ describe("daemon relay config", () => {
   });
 
   test("removing enabled from a modern config keeps relay disabled", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: { relay: { enabled: false } },
     });
@@ -55,7 +55,7 @@ describe("daemon relay config", () => {
   });
 
   test("legacy configs retain relay-on compatibility when enabled remains absent", async () => {
-    const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
+    const home = await createOsunaHome({ version: 1, daemon: { relay: {} } });
     const startup = loadConfig(home, { env: {} });
     const reloaded = resolveConfigFromPersisted(
       home,
@@ -70,7 +70,7 @@ describe("daemon relay config", () => {
   });
 
   test("marks environment relay overrides immutable", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: { relay: { enabled: false } },
     });
@@ -82,7 +82,7 @@ describe("daemon relay config", () => {
   test.each(["", "treu"])(
     "ignores invalid relay override %j without locking config",
     async (value) => {
-      const home = await createPaseoHome({
+      const home = await createOsunaHome({
         version: 1,
         daemon: { relay: { enabled: false } },
       });
@@ -93,7 +93,7 @@ describe("daemon relay config", () => {
   );
 
   test("loads relay TLS from env and persisted config, defaulting off without an endpoint", async () => {
-    const persistedHome = await createPaseoHome({
+    const persistedHome = await createOsunaHome({
       version: 1,
       daemon: {
         relay: {
@@ -104,7 +104,7 @@ describe("daemon relay config", () => {
     });
     expect(loadConfig(persistedHome, { env: {} }).relayUseTls).toBe(true);
 
-    const envHome = await createPaseoHome({
+    const envHome = await createOsunaHome({
       version: 1,
       daemon: {
         relay: {
@@ -116,7 +116,7 @@ describe("daemon relay config", () => {
     expect(loadConfig(envHome, { env: { OSUNA_RELAY_USE_TLS: "true" } }).relayUseTls).toBe(true);
 
     // 没有托管 relay 可回退，端点缺省时按自建假定，TLS 不再默认打开
-    const unconfiguredHome = await createPaseoHome({
+    const unconfiguredHome = await createOsunaHome({
       version: 1,
       daemon: { relay: {} },
     });
@@ -124,13 +124,13 @@ describe("daemon relay config", () => {
   });
 
   test("relayPublicUseTls falls back to relayUseTls when unset", async () => {
-    const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
+    const home = await createOsunaHome({ version: 1, daemon: { relay: {} } });
     // 公共侧跟随 relayUseTls，后者在无端点时为 false
     expect(loadConfig(home, { env: {} }).relayPublicUseTls).toBe(false);
   });
 
   test("OSUNA_RELAY_PUBLIC_USE_TLS overrides relayUseTls for public side", async () => {
-    const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
+    const home = await createOsunaHome({ version: 1, daemon: { relay: {} } });
     const config = loadConfig(home, {
       env: { OSUNA_RELAY_USE_TLS: "false", OSUNA_RELAY_PUBLIC_USE_TLS: "true" },
     });
@@ -139,14 +139,14 @@ describe("daemon relay config", () => {
   });
 
   test("relayPublicUseTls falls back to relayUseTls when only OSUNA_RELAY_USE_TLS is set", async () => {
-    const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
+    const home = await createOsunaHome({ version: 1, daemon: { relay: {} } });
     const config = loadConfig(home, { env: { OSUNA_RELAY_USE_TLS: "false" } });
     expect(config.relayUseTls).toBe(false);
     expect(config.relayPublicUseTls).toBe(false);
   });
 
   test("persisted publicUseTls overrides relayUseTls fallback", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: { relay: { useTls: false, publicUseTls: true } },
     });
@@ -162,7 +162,7 @@ describe("daemon service proxy config", () => {
   });
 
   test("loads public base URL from env before persisted config", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: {
         serviceProxy: {
@@ -182,7 +182,7 @@ describe("daemon service proxy config", () => {
   });
 
   test("does not synthesize a standalone service listener from enabled true", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: { serviceProxy: { enabled: true } },
     });
@@ -194,7 +194,7 @@ describe("daemon service proxy config", () => {
   });
 
   test("enabled false suppresses optional service proxy layers only", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: {
         serviceProxy: {
@@ -212,7 +212,7 @@ describe("daemon service proxy config", () => {
   });
 
   test("rejects invalid OSUNA_SERVICE_PROXY_PUBLIC_BASE_URL values", async () => {
-    const home = await createPaseoHome({ version: 1 });
+    const home = await createOsunaHome({ version: 1 });
 
     expect(() =>
       loadConfig(home, {
@@ -228,13 +228,13 @@ describe("daemon trusted proxy config", () => {
   });
 
   test("trusts loopback proxies by default", async () => {
-    const home = await createPaseoHome({ version: 1 });
+    const home = await createOsunaHome({ version: 1 });
 
     expect(loadConfig(home, { env: {} }).trustedProxies).toEqual(["loopback"]);
   });
 
   test("loads trusted proxies from persisted config", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: {
         trustedProxies: ["loopback", "10.0.0.0/8"],
@@ -245,7 +245,7 @@ describe("daemon trusted proxy config", () => {
   });
 
   test("OSUNA_TRUSTED_PROXIES overrides persisted config", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       daemon: {
         trustedProxies: ["loopback"],
@@ -260,12 +260,12 @@ describe("daemon trusted proxy config", () => {
   });
 
   test("OSUNA_TRUSTED_PROXIES supports explicit trust-all and trust-none modes", async () => {
-    const trustAllHome = await createPaseoHome({ version: 1 });
+    const trustAllHome = await createOsunaHome({ version: 1 });
     expect(
       loadConfig(trustAllHome, { env: { OSUNA_TRUSTED_PROXIES: "true" } }).trustedProxies,
     ).toBe(true);
 
-    const trustNoneHome = await createPaseoHome({ version: 1 });
+    const trustNoneHome = await createOsunaHome({ version: 1 });
     expect(
       loadConfig(trustNoneHome, { env: { OSUNA_TRUSTED_PROXIES: "false" } }).trustedProxies,
     ).toEqual([]);
@@ -278,7 +278,7 @@ describe("daemon worktree root config", () => {
   });
 
   test("resolves relative worktrees.root against OSUNA_HOME", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
       worktrees: { root: "custom-worktrees" },
     });
@@ -287,13 +287,13 @@ describe("daemon worktree root config", () => {
   });
 
   test("keeps absolute worktrees.root absolute", async () => {
-    const home = await createPaseoHome({
+    const home = await createOsunaHome({
       version: 1,
-      worktrees: { root: path.join(os.tmpdir(), "paseo-custom-worktrees") },
+      worktrees: { root: path.join(os.tmpdir(), "osuna-custom-worktrees") },
     });
 
     expect(loadConfig(home, { env: {} }).worktreesRoot).toBe(
-      path.join(os.tmpdir(), "paseo-custom-worktrees"),
+      path.join(os.tmpdir(), "osuna-custom-worktrees"),
     );
   });
 });

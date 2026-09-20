@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { DaemonClient } from "./test-utils/index.js";
-import { createTestPaseoDaemon } from "./test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "./test-utils/osuna-daemon.js";
 import { getFullAccessConfig } from "./daemon-e2e/agent-configs.js";
 import { PARENT_AGENT_ID_LABEL } from "@osuna/protocol/agent-labels";
 
-// The daemon-level workspace contract that `paseo run` depends on: each
+// The daemon-level workspace contract that `osuna run` depends on: each
 // local-backed createWorkspace for a cwd mints a fresh, distinct workspace,
 // createAgent stamps the agent with the workspaceId it is given, and attaching
 // to an existing workspace by id creates no new record. The CLI's own flag
@@ -30,9 +30,9 @@ async function mintLocalWorkspace(client: DaemonClient, cwd: string): Promise<st
 }
 
 test("daemon resolves human and managed CLI workspace ownership", async () => {
-  const daemon = await createTestPaseoDaemon();
-  const cwd = mkdtempSync(path.join(tmpdir(), "paseo-cli-run-cwd-"));
-  const otherCwd = mkdtempSync(path.join(tmpdir(), "paseo-cli-run-other-cwd-"));
+  const daemon = await createTestOsunaDaemon();
+  const cwd = mkdtempSync(path.join(tmpdir(), "osuna-cli-run-cwd-"));
+  const otherCwd = mkdtempSync(path.join(tmpdir(), "osuna-cli-run-other-cwd-"));
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
     appVersion: "0.1.82",

@@ -17,7 +17,7 @@ Clients talk to the daemon over one WebSocket session. Every inbound message is 
    ```
 
 5. **Gate the feature, not the message.** If an old app must not see the new behavior, advertise it once in `server_info.features.*` (built in `server/websocket-server.ts`) and let the client branch on that. The server-side check stays fail-closed: an advertised capability means the runtime can do it now, not that a handler exists (`docs/coding-standards.md` "Errors").
-6. **Cover it with a daemon E2E** in `server/daemon-e2e/` using `createTestPaseoDaemon` + `DaemonClient` (see [Testing](./testing.md)) when the behavior crosses the wire, and a protocol test in `packages/protocol/src/messages.<domain>.test.ts` for schema acceptance of both old and new shapes.
+6. **Cover it with a daemon E2E** in `server/daemon-e2e/` using `createTestOsunaDaemon` + `DaemonClient` (see [Testing](./testing.md)) when the behavior crosses the wire, and a protocol test in `packages/protocol/src/messages.<domain>.test.ts` for schema acceptance of both old and new shapes.
 
 ## Compatibility rules
 
@@ -170,7 +170,7 @@ consumer while every old consumer keeps the filtered result.
 
 ### 1. Scope / Trigger
 
-- The import sheet needs the daemon to hide sessions Paseo already owns; the Session history
+- The import sheet needs the daemon to hide sessions Osuna already owns; the Session history
   view needs them shown and marked. One RPC, two consumers, no second RPC.
 
 ### 2. Signatures
@@ -190,11 +190,11 @@ consumer while every old consumer keeps the filtered result.
 ### 3. Contracts
 
 - `includeImported` absent or `false`: identical to before — rows owned by an active (non-archived)
-  Paseo agent are dropped and counted in `filteredAlreadyImportedCount`; no descriptor carries
+  Osuna agent are dropped and counted in `filteredAlreadyImportedCount`; no descriptor carries
   `importedAgentId`; the provider listing is asked for `limit + importedCount` rows so the filter
   can still fill `limit`.
 - `includeImported: true`: nothing is dropped, `filteredAlreadyImportedCount` is `0`, the listing
-  is asked for exactly `limit` rows, and every row Paseo ever owned carries `importedAgentId` plus
+  is asked for exactly `limit` rows, and every row Osuna ever owned carries `importedAgentId` plus
   `importedAgentWorkspaceId` when the record has one (legacy agents predate ownership stamping).
   The workspace id is not optional sugar: the app opens the row through `navigateToAgent`, which
   falls back to the host-level agent route (no `pin`) for an agent it cannot find in the session
@@ -204,12 +204,12 @@ consumer while every old consumer keeps the filtered result.
   twin therefore never shadows a live agent.
 - `AgentManager.listImportableSessions` runs `getProviderAvailability(provider)` on every
   candidate before the listing fan-out, and what an unavailable provider gets depends on who
-  asked for it. A Paseo-shipped provider the user never installed is dropped silently — no rows,
+  asked for it. An Osuna-shipped provider the user never installed is dropped silently — no rows,
   no error entry; nobody wants a Codex error for not having Codex. Anything else — a provider
   declared in daemon config, a plugin-contributed one — becomes a `providerErrors` entry and is
   never listed, so a typo in `command` surfaces as an error with Retry instead of an empty list.
   The signal is membership in `BUILTIN_PROVIDER_IDS` plus the ids in
-  `DEV_AGENT_PROVIDER_DEFINITIONS` (dev's `mock` is Paseo's, not the user's), never
+  `DEV_AGENT_PROVIDER_DEFINITIONS` (dev's `mock` is Osuna's, not the user's), never
   `derivedFromProviderId` — that is `null` for built-ins and for generic ACP custom providers
   alike. A probe that returns `false` with no error text synthesises
   `Provider '<id>' is not available`; the error path must not rely on the listing call throwing,
@@ -228,7 +228,7 @@ consumer while every old consumer keeps the filtered result.
 - Field sent to an old daemon -> cannot happen from the app (query disabled without the flag);
   a hand-built request just gets the filtered list.
 - Descriptor without `importedAgentId` -> parses; the row is external.
-- `client.isAvailable()` returns `false` or throws for a Paseo-shipped provider -> skipped,
+- `client.isAvailable()` returns `false` or throws for an Osuna-shipped provider -> skipped,
   absent from both `sessions` and `providerErrors`. Same for a config-declared or
   plugin-contributed provider -> no rows, one `providerErrors` entry carrying the probe's error
   text or the synthesised `Provider '<id>' is not available`. Available but

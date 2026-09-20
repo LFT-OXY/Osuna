@@ -92,17 +92,17 @@ describe("merging two increments of one turn row", () => {
     ...overrides,
   });
 
-  test("unions the user message ids and keeps the first Paseo turn id", () => {
+  test("unions the user message ids and keeps the first Osuna turn id", () => {
     const index = new UsageTurnIndex();
     index.add(increment({}));
     index.add(
       increment({
         userMessageIds: ["u1", "u2"],
         lastAt: "2026-09-18T09:00:30.000Z",
-        turnId: "paseo-turn-7",
+        turnId: "osuna-turn-7",
       }),
     );
-    index.add(increment({ turnId: "paseo-turn-9" }));
+    index.add(increment({ turnId: "osuna-turn-9" }));
 
     expect(index.listSession("claude", "sess-1").get("p1")).toEqual([
       increment({
@@ -110,7 +110,7 @@ describe("merging two increments of one turn row", () => {
         output: 6,
         lastAt: "2026-09-18T09:00:30.000Z",
         userMessageIds: ["u1", "u2"],
-        turnId: "paseo-turn-7",
+        turnId: "osuna-turn-7",
       }),
     ]);
   });

@@ -4,7 +4,7 @@ import assert from "node:assert";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runLocalPaseo } from "./helpers/local-cli.ts";
+import { runLocalOsuna } from "./helpers/local-cli.ts";
 import { startTestDaemon } from "./helpers/test-daemon.ts";
 
 console.log("=== Daemon Status Auth ===\n");
@@ -16,8 +16,8 @@ const daemon = await startTestDaemon({
 try {
   {
     console.log("Test 1: status reports password requirement without marking daemon unreachable");
-    const result = await runLocalPaseo(["daemon", "status", "--json"], {
-      OSUNA_HOME: daemon.paseoHome,
+    const result = await runLocalOsuna(["daemon", "status", "--json"], {
+      OSUNA_HOME: daemon.osunaHome,
       OSUNA_HOST: "",
       OSUNA_PASSWORD: "",
     });
@@ -36,8 +36,8 @@ try {
 
   {
     console.log("Test 2: status reports rejected supplied password separately");
-    const result = await runLocalPaseo(["daemon", "status", "--json"], {
-      OSUNA_HOME: daemon.paseoHome,
+    const result = await runLocalOsuna(["daemon", "status", "--json"], {
+      OSUNA_HOME: daemon.osunaHome,
       OSUNA_HOST: "",
       OSUNA_PASSWORD: "wrong-secret",
     });
@@ -54,8 +54,8 @@ try {
 
   {
     console.log("Test 3: status reaches the same daemon when password is supplied");
-    const result = await runLocalPaseo(["daemon", "status", "--json"], {
-      OSUNA_HOME: daemon.paseoHome,
+    const result = await runLocalOsuna(["daemon", "status", "--json"], {
+      OSUNA_HOME: daemon.osunaHome,
       OSUNA_HOST: "",
       OSUNA_PASSWORD: "shared-secret",
     });
@@ -102,12 +102,12 @@ import('node:fs').then(({appendFileSync}) => {
       }),
     );
     slowDaemon = await startTestDaemon({
-      paseoHome: home,
+      osunaHome: home,
       workDir,
       env: { OSUNA_PASSWORD: "shared-secret" },
     });
     console.log("Test 4: local status separates authenticated reachability from slow details");
-    const local = await runLocalPaseo(["daemon", "status", "--home", home, "--json"], {
+    const local = await runLocalOsuna(["daemon", "status", "--home", home, "--json"], {
       OSUNA_PASSWORD: "shared-secret",
     });
     assert.strictEqual(local.exitCode, 0, local.stderr);
@@ -127,7 +127,7 @@ import('node:fs').then(({appendFileSync}) => {
     console.log("✓ local authenticated connection remains reachable when details time out\n");
 
     console.log("Test 5: explicit endpoint status remains an error when details time out");
-    const remote = await runLocalPaseo(
+    const remote = await runLocalOsuna(
       ["daemon", "status", "--host", `127.0.0.1:${slowDaemon.port}`, "--json"],
       { OSUNA_PASSWORD: "shared-secret" },
     );

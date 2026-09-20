@@ -1,6 +1,6 @@
 # Directory Structure
 
-All daemon code is under `packages/server/src/`. ESM with `.js` import suffixes on relative paths (`./bootstrap.js`), TypeScript strict, `@getpaseo/*` workspace packages imported by subpath (`@getpaseo/protocol/error-utils`).
+All daemon code is under `packages/server/src/`. ESM with `.js` import suffixes on relative paths (`./bootstrap.js`), TypeScript strict, `@osuna/*` workspace packages imported by subpath (`@osuna/protocol/error-utils`).
 
 ## Top level
 
@@ -9,7 +9,7 @@ All daemon code is under `packages/server/src/`. ESM with `.js` import suffixes 
 | `server/`                    | The daemon: bootstrap, WebSocket server, session, agent manager, providers, stores, schedules, plugins, hub, speech                                                               |
 | `server/session/<domain>/`   | Session RPC handlers split by domain: `checkout/`, `files/`, `provider/`, `schedule/`, `voice/`, `workspace-git-observer/`, `owned-subscriptions/`, …                             |
 | `server/agent/`              | Agent lifecycle (`agent-manager.ts`), persistence (`agent-storage.ts`), tool catalog (`tools/`), MCP adapter, `providers/`                                                        |
-| `server/test-utils/`         | Daemon E2E harness: `paseo-daemon.ts`, `daemon-client.ts`, `fake-agent-client.ts`, `session-stubs.ts`, `temp-github-repo.ts`                                                      |
+| `server/test-utils/`         | Daemon E2E harness: `osuna-daemon.ts`, `daemon-client.ts`, `fake-agent-client.ts`, `session-stubs.ts`, `temp-github-repo.ts`                                                      |
 | `services/`                  | Git forge adapters: `forge-service.ts` is the port; `github-service.ts`, `gitlab-service.ts`, `gitea-service.ts` are adapters; `forge-registry.ts` / `forge-resolver.ts` pick one |
 | `terminal/`                  | PTY sessions, output coalescing, shell integration, activity tracking (`docs/terminal-performance.md`, `docs/terminal-activity.md`)                                               |
 | `utils/`                     | Process and Git primitives: `spawn.ts`, `run-git-command.ts`, `git-process-scheduler.ts`, `tree-kill.ts`, `path.ts`, `worktree.ts`                                                |

@@ -7,7 +7,7 @@ import { afterEach, expect, test } from "vitest";
 import type { WorkspaceDescriptorPayload } from "@osuna/protocol/messages";
 
 import { DaemonClient } from "./test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "./test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "./test-utils/osuna-daemon.js";
 import { getWorkspaceGitSelfHealPhaseMs } from "./workspace-git-service.js";
 import {
   configureGitProcessPolicy,
@@ -23,7 +23,7 @@ const SIBLING_COUNT = 100;
 const CREATED_AT = "2026-08-07T00:00:00.000Z";
 const originalMaxProcessesPerSecond = process.env.OSUNA_GIT_MAX_PROCESSES_PER_SECOND;
 
-let daemon: TestPaseoDaemon | null = null;
+let daemon: TestOsunaDaemon | null = null;
 let client: DaemonClient | null = null;
 const cleanupPaths: string[] = [];
 
@@ -57,16 +57,16 @@ function git(cwd: string, ...args: string[]): string {
 
 function seedFixture(siblingCount = SIBLING_COUNT): {
   repoRoot: string;
-  paseoHomeRoot: string;
+  osunaHomeRoot: string;
   projectId: string;
   siblingWorktrees: string[];
 } {
-  const fixtureRoot = mkdtempSync(join(tmpdir(), "paseo-workspace-create-fanout-"));
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "osuna-workspace-create-fanout-"));
   cleanupPaths.push(fixtureRoot);
   const repoRoot = join(fixtureRoot, "repo");
   const worktreesRoot = join(fixtureRoot, "siblings");
-  const paseoHomeRoot = join(fixtureRoot, "home");
-  const projectsDir = join(paseoHomeRoot, ".osuna", "projects");
+  const osunaHomeRoot = join(fixtureRoot, "home");
+  const projectsDir = join(osunaHomeRoot, ".osuna", "projects");
   mkdirSync(repoRoot, { recursive: true });
   mkdirSync(worktreesRoot, { recursive: true });
   mkdirSync(projectsDir, { recursive: true });
@@ -130,13 +130,13 @@ function seedFixture(siblingCount = SIBLING_COUNT): {
     ]),
   );
   writeFileSync(join(projectsDir, "workspaces.json"), JSON.stringify(workspaces));
-  return { repoRoot, paseoHomeRoot, projectId, siblingWorktrees };
+  return { repoRoot, osunaHomeRoot, projectId, siblingWorktrees };
 }
 
 async function startObservedFixture(siblingCount: number): Promise<ReturnType<typeof seedFixture>> {
   const fixture = seedFixture(siblingCount);
-  daemon = await createTestPaseoDaemon({
-    paseoHomeRoot: fixture.paseoHomeRoot,
+  daemon = await createTestOsunaDaemon({
+    osunaHomeRoot: fixture.osunaHomeRoot,
     cleanup: false,
     mcpEnabled: false,
   });
@@ -616,8 +616,8 @@ test("records the Git command ledger for repository metadata business rules", as
 test("workspace archive is admitted while 52 sibling observations hydrate", async () => {
   configureGitProcessPolicy({ maxProcessConcurrency: 8, maxProcessesPerSecond: 64 });
   const fixture = seedFixture(52);
-  daemon = await createTestPaseoDaemon({
-    paseoHomeRoot: fixture.paseoHomeRoot,
+  daemon = await createTestOsunaDaemon({
+    osunaHomeRoot: fixture.osunaHomeRoot,
     cleanup: false,
     mcpEnabled: false,
   });
@@ -658,8 +658,8 @@ test("workspace create is admitted while 100 sibling observations hydrate", asyn
   process.env.OSUNA_GIT_MAX_PROCESSES_PER_SECOND = "64";
   configureGitProcessPolicy({ maxProcessConcurrency: 8, maxProcessesPerSecond: 64 });
   const fixture = seedFixture();
-  daemon = await createTestPaseoDaemon({
-    paseoHomeRoot: fixture.paseoHomeRoot,
+  daemon = await createTestOsunaDaemon({
+    osunaHomeRoot: fixture.osunaHomeRoot,
     cleanup: false,
     mcpEnabled: false,
   });

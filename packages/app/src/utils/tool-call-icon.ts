@@ -11,7 +11,7 @@ import {
   Wrench,
 } from "lucide-react-native";
 import type { ToolCallDetail } from "@osuna/protocol/agent-types";
-import { PaseoLogo } from "@/components/icons/paseo-logo";
+import { OsunaLogo } from "@/components/icons/osuna-logo";
 import { resolveToolCallIconName, type ToolCallIcon } from "./tool-call-icon-name";
 
 export type ToolCallIconComponent = ComponentType<{ size?: number; color?: string }>;
@@ -26,7 +26,7 @@ const ICON_COMPONENTS: Record<ToolCallIcon, ToolCallIconComponent> = {
   sparkles: Sparkles,
   brain: Brain,
   mic_vocal: MicVocal,
-  paseo: PaseoLogo,
+  osuna: OsunaLogo,
 };
 
 export function componentForToolCallIcon(name: ToolCallIcon): ToolCallIconComponent {

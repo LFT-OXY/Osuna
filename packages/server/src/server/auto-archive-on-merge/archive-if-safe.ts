@@ -18,8 +18,8 @@ import { isOsunaOwnedWorktreeCwd } from "../../utils/worktree.js";
 import type { WorkspaceArchiveContext } from "../workspace-registry.js";
 
 export interface AutoArchiveArchiveOptions {
-  paseoHome: string;
-  paseoWorktreesBaseRoot?: string;
+  osunaHome: string;
+  osunaWorktreesBaseRoot?: string;
   daemonConfigStore: DaemonConfigStore;
   workspaceGitService: WorkspaceGitServiceImpl;
   github: ForgeService;
@@ -70,8 +70,8 @@ export async function archiveIfSafe(input: {
   }
 
   const ownership = await deps.isOsunaOwnedWorktreeCwd(cwd, {
-    paseoHome: options.paseoHome,
-    worktreesRoot: options.paseoWorktreesBaseRoot,
+    osunaHome: options.osunaHome,
+    worktreesRoot: options.osunaWorktreesBaseRoot,
   });
   if (!ownership.allowed) {
     return;
@@ -85,8 +85,8 @@ export async function archiveIfSafe(input: {
 
     await deps.archiveByScope(
       {
-        paseoHome: options.paseoHome,
-        paseoWorktreesBaseRoot: options.paseoWorktreesBaseRoot,
+        osunaHome: options.osunaHome,
+        osunaWorktreesBaseRoot: options.osunaWorktreesBaseRoot,
         github: options.github,
         workspaceGitService: options.workspaceGitService,
         agentManager: options.agentManager,

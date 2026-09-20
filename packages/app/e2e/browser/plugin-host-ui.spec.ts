@@ -116,7 +116,7 @@ async function savePluginIssue(page: Page): Promise<void> {
 }
 
 test("plugin modal adapts its presentation and preserves host contexts", async ({ page }) => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-host-ui-e2e-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-host-ui-e2e-"));
   const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
   const previousConfig = await client.getDaemonConfig();
   await writeFile(

@@ -155,7 +155,7 @@ export class ProviderCatalogSession {
     const snapshotHash = createHash("sha256")
       .update(
         JSON.stringify([
-          "paseo.providers-snapshot/1",
+          "osuna.providers-snapshot/1",
           references ? "references" : "embedded",
           customModeIcons ? "icons" : "legacy-icons",
           records.map(({ entry, contentHash }) => [

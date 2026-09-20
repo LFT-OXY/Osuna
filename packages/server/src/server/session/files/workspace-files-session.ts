@@ -52,7 +52,7 @@ export interface WorkspaceFilesSessionHost {
 export interface WorkspaceFilesSessionOptions {
   host: WorkspaceFilesSessionHost;
   downloadTokenStore: DownloadTokenStore;
-  paseoHome: string;
+  osunaHome: string;
   logger: pino.Logger;
   fileObserver?: FileObserver;
 }
@@ -75,7 +75,7 @@ export class WorkspaceFilesSession {
     this.host = options.host;
     this.downloadTokenStore = options.downloadTokenStore;
     this.logger = options.logger;
-    this.fileUploads = new FileUploadStore({ paseoHome: options.paseoHome });
+    this.fileUploads = new FileUploadStore({ osunaHome: options.osunaHome });
     this.fileObserver = options.fileObserver ?? workspaceFileObserver;
   }
 

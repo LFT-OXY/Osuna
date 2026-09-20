@@ -10,7 +10,7 @@ import {
   installPricingRefreshFixture,
 } from "../support/helpers/usage-pricing";
 
-const fixtures = createUsageFixtureRoots("paseo-price-table-");
+const fixtures = createUsageFixtureRoots("osuna-price-table-");
 
 test.use({ e2eDaemonEnvironment: fixtures.environment });
 

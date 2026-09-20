@@ -51,7 +51,7 @@ interface CapturedDirectory {
   backupPath: string | null;
 }
 
-const MANIFEST_OWNER = "paseo-skills-transaction";
+const MANIFEST_OWNER = "osuna-skills-transaction";
 const MANIFEST_FILENAME = "transaction.json";
 const TRANSACTION_PREFIX = ".osuna-skills-transaction-";
 const RECOVERED_PREFIX = ".osuna-skills-recovered-";

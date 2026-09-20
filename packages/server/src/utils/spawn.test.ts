@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { buildSelfNodeCommand } from "../server/paseo-env.js";
+import { buildSelfNodeCommand } from "../server/osuna-env.js";
 import { execCommand, spawnProcess } from "./spawn.js";
 
 const printEnvScript = `
@@ -159,7 +159,7 @@ describe("execCommand", () => {
     });
   });
 
-  test("internal env mode preserves Paseo-owned launcher env", async () => {
+  test("internal env mode preserves Osuna-owned launcher env", async () => {
     const result = await execCommand(process.execPath, ["-e", printEnvScript], {
       envMode: "internal",
       baseEnv: {

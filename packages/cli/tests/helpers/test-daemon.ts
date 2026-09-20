@@ -1,7 +1,7 @@
 /**
  * Test Daemon Helper
  *
- * Provides utilities for launching real Paseo daemons in E2E tests.
+ * Provides utilities for launching real Osuna daemons in E2E tests.
  * Each test gets an isolated daemon on an available local port with its own OSUNA_HOME.
  *
  * CRITICAL RULES (from design doc):
@@ -26,7 +26,7 @@ export interface TestDaemonContext {
   /** WebSocket URL for connecting to daemon */
   wsUrl: string;
   /** Temp directory for OSUNA_HOME */
-  paseoHome: string;
+  osunaHome: string;
   /** Temp directory for agent working directory */
   workDir: string;
   /** Running daemon process */
@@ -154,15 +154,15 @@ export function getRandomPort(): number {
 /**
  * Create isolated temp directories for testing
  */
-export async function createTempDirs(): Promise<{ paseoHome: string; workDir: string }> {
-  const paseoHome = await mkdtemp(join(tmpdir(), "paseo-e2e-home-"));
-  const workDir = await mkdtemp(join(tmpdir(), "paseo-e2e-work-"));
+export async function createTempDirs(): Promise<{ osunaHome: string; workDir: string }> {
+  const osunaHome = await mkdtemp(join(tmpdir(), "osuna-e2e-home-"));
+  const workDir = await mkdtemp(join(tmpdir(), "osuna-e2e-work-"));
 
   // Create the agents directory that the daemon expects
-  const agentsDir = join(paseoHome, "agents");
+  const agentsDir = join(osunaHome, "agents");
   await mkdir(agentsDir, { recursive: true });
 
-  return { paseoHome, workDir };
+  return { osunaHome, workDir };
 }
 
 /**
@@ -171,15 +171,15 @@ export async function createTempDirs(): Promise<{ paseoHome: string; workDir: st
  */
 async function probeDaemonReady(
   port: number,
-  paseoHome: string,
+  osunaHome: string,
   env?: NodeJS.ProcessEnv,
 ): Promise<boolean> {
   try {
-    const { exitCode } = await runPaseoCli(
+    const { exitCode } = await runOsunaCli(
       {
         port,
         wsUrl: `ws://${TEST_DAEMON_HOST}:${port}`,
-        paseoHome,
+        osunaHome,
         workDir: "",
         process: null,
         isReady: false,
@@ -196,14 +196,14 @@ async function probeDaemonReady(
 
 async function waitForDaemonReady(
   port: number,
-  paseoHome: string,
+  osunaHome: string,
   timeout = 30000,
   env?: NodeJS.ProcessEnv,
 ): Promise<void> {
   const deadline = Date.now() + timeout;
 
   async function poll(): Promise<void> {
-    if (await probeDaemonReady(port, paseoHome, env)) return;
+    if (await probeDaemonReady(port, osunaHome, env)) return;
     if (Date.now() >= deadline) {
       throw new Error(`Daemon failed to become ready on port ${port} within ${timeout}ms`);
     }
@@ -226,15 +226,15 @@ function sleep(ms: number): Promise<void> {
  */
 export async function startTestDaemon(options?: {
   port?: number;
-  paseoHome?: string;
+  osunaHome?: string;
   workDir?: string;
   timeout?: number;
   env?: NodeJS.ProcessEnv;
 }): Promise<TestDaemonContext> {
   const port = options?.port ?? (await getAvailablePort());
-  const { paseoHome, workDir } =
-    options?.paseoHome && options?.workDir
-      ? { paseoHome: options.paseoHome, workDir: options.workDir }
+  const { osunaHome, workDir } =
+    options?.osunaHome && options?.workDir
+      ? { osunaHome: options.osunaHome, workDir: options.workDir }
       : await createTempDirs();
   const timeout = options?.timeout ?? 30000;
 
@@ -251,13 +251,13 @@ export async function startTestDaemon(options?: {
         Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_")),
       ),
       ...TEST_DAEMON_ENV_DEFAULTS,
-      OSUNA_HOME: paseoHome,
+      OSUNA_HOME: osunaHome,
       OSUNA_LISTEN: `${TEST_DAEMON_HOST}:${port}`,
       // Force no TTY to prevent QR code output
       CI: "true",
       ...options?.env,
-      HOME: paseoHome,
-      USERPROFILE: paseoHome,
+      HOME: osunaHome,
+      USERPROFILE: osunaHome,
     },
     stdio: ["ignore", "pipe", "pipe"],
     detached: process.platform !== "win32",
@@ -281,8 +281,8 @@ export async function startTestDaemon(options?: {
 
     // Clean up temp directories
     try {
-      if (existsSync(paseoHome)) {
-        await rm(paseoHome, { recursive: true, force: true });
+      if (existsSync(osunaHome)) {
+        await rm(osunaHome, { recursive: true, force: true });
       }
     } catch {
       // Ignore cleanup errors
@@ -315,7 +315,7 @@ export async function startTestDaemon(options?: {
   const ctx: TestDaemonContext = {
     port,
     wsUrl,
-    paseoHome,
+    osunaHome,
     workDir,
     process: daemonProcess,
     isReady: false,
@@ -324,7 +324,7 @@ export async function startTestDaemon(options?: {
 
   // Wait for daemon to be ready
   try {
-    await waitForDaemonReady(port, paseoHome, timeout, options?.env);
+    await waitForDaemonReady(port, osunaHome, timeout, options?.env);
     ctx.isReady = true;
   } catch (err) {
     // Daemon failed to start - clean up and rethrow
@@ -340,12 +340,12 @@ export async function startTestDaemon(options?: {
 }
 
 /**
- * Run a paseo CLI command against a test daemon
+ * Run a osuna CLI command against a test daemon
  *
  * This is a helper that sets the correct environment variables
  * to point at the test daemon.
  */
-export async function runPaseoCli(
+export async function runOsunaCli(
   ctx: TestDaemonContext,
   args: string[],
   options?: {
@@ -367,10 +367,10 @@ export async function runPaseoCli(
           Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_")),
         ),
         ...TEST_DAEMON_ENV_DEFAULTS,
-        OSUNA_HOME: ctx.paseoHome,
+        OSUNA_HOME: ctx.osunaHome,
         ...options?.env,
-        HOME: ctx.paseoHome,
-        USERPROFILE: ctx.paseoHome,
+        HOME: ctx.osunaHome,
+        USERPROFILE: ctx.osunaHome,
       },
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
@@ -392,7 +392,7 @@ export async function runPaseoCli(
       if (proc.pid) {
         signalProcessTree(proc.pid, "SIGKILL");
       }
-      reject(new Error(`CLI command timed out after ${timeout}ms: paseo ${args.join(" ")}`));
+      reject(new Error(`CLI command timed out after ${timeout}ms: osuna ${args.join(" ")}`));
     }, timeout);
 
     proc.on("exit", (code) => {
@@ -422,8 +422,8 @@ export async function createE2ETestContext(options?: {
   env?: NodeJS.ProcessEnv;
 }): Promise<
   TestDaemonContext & {
-    /** Run a paseo CLI command against this daemon */
-    paseo: (
+    /** Run a osuna CLI command against this daemon */
+    osuna: (
       args: string[],
       opts?: { timeout?: number; cwd?: string; env?: NodeJS.ProcessEnv },
     ) => Promise<{
@@ -435,13 +435,13 @@ export async function createE2ETestContext(options?: {
 > {
   const ctx = await startTestDaemon({ timeout: options?.timeout, env: options?.env });
 
-  const paseo = (
+  const osuna = (
     args: string[],
     opts?: { timeout?: number; cwd?: string; env?: NodeJS.ProcessEnv },
-  ) => runPaseoCli(ctx, args, opts);
+  ) => runOsunaCli(ctx, args, opts);
 
   return {
     ...ctx,
-    paseo,
+    osuna,
   };
 }

@@ -14,33 +14,33 @@ console.log("=== CLI IPC Target Helpers ===\n");
 
 {
   console.log("Test 1: unix hosts resolve to ws+unix URLs");
-  const target = resolveDaemonTarget("unix:///tmp/paseo.sock");
+  const target = resolveDaemonTarget("unix:///tmp/osuna.sock");
   assert.deepStrictEqual(target, {
     type: "ipc",
-    url: "ws+unix:///tmp/paseo.sock:/ws",
-    socketPath: "/tmp/paseo.sock",
+    url: "ws+unix:///tmp/osuna.sock:/ws",
+    socketPath: "/tmp/osuna.sock",
   });
   console.log("✓ unix hosts resolve to ws+unix URLs\n");
 }
 
 {
   console.log("Test 1b: bare unix socket paths resolve at the connection boundary");
-  const target = resolveDaemonTarget("/tmp/paseo.sock");
+  const target = resolveDaemonTarget("/tmp/osuna.sock");
   assert.deepStrictEqual(target, {
     type: "ipc",
-    url: "ws+unix:///tmp/paseo.sock:/ws",
-    socketPath: "/tmp/paseo.sock",
+    url: "ws+unix:///tmp/osuna.sock:/ws",
+    socketPath: "/tmp/osuna.sock",
   });
   console.log("✓ bare unix socket paths resolve at the connection boundary\n");
 }
 
 {
   console.log("Test 2: pipe hosts preserve the Node socketPath transport form");
-  const target = resolveDaemonTarget("pipe://\\\\.\\pipe\\paseo-managed-test");
+  const target = resolveDaemonTarget("pipe://\\\\.\\pipe\\osuna-managed-test");
   assert.deepStrictEqual(target, {
     type: "ipc",
     url: "ws://localhost/ws",
-    socketPath: "\\\\.\\pipe\\paseo-managed-test",
+    socketPath: "\\\\.\\pipe\\osuna-managed-test",
   });
   console.log("✓ pipe hosts preserve Node socketPath transport form\n");
 }
@@ -66,7 +66,7 @@ console.log("=== CLI IPC Target Helpers ===\n");
 
 {
   console.log("Test 5: local unix socket paths normalize into IPC daemon targets");
-  assert.strictEqual(normalizeDaemonHost("/tmp/paseo.sock"), "unix:///tmp/paseo.sock");
+  assert.strictEqual(normalizeDaemonHost("/tmp/osuna.sock"), "unix:///tmp/osuna.sock");
   console.log("✓ local unix socket paths normalize into IPC daemon targets\n");
 }
 

@@ -8,7 +8,7 @@ import { OSUNA_BROWSER_PROFILE_PARTITION } from "./features/browser-profile.js";
 // The preload runs inside Electron's sandbox and is tsc-compiled (not bundled), so at
 // runtime it may only load Electron's sandbox allowlist. Any other module (local or
 // third-party) emits a require() that the sandbox rejects synchronously, aborting the
-// preload before contextBridge.exposeInMainWorld runs and leaving window.paseoDesktop
+// preload before contextBridge.exposeInMainWorld runs and leaving window.osunaDesktop
 // undefined. That regression (0.1.108, #2103) is what this test guards against.
 const SANDBOX_ALLOWLIST = new Set(["electron"]);
 

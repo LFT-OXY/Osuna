@@ -21,7 +21,7 @@ import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js
 import type { AgentTimelineRow } from "./agent/agent-manager.js";
 import { InMemoryAgentTimelineStore } from "./agent/agent-timeline-store.js";
 import type { AgentTimelineFetchOptions } from "./agent/agent-timeline-store-types.js";
-import { handleCreatePaseoWorktreeRequest } from "./worktree-session.js";
+import { handleCreateOsunaWorktreeRequest } from "./worktree-session.js";
 import { createPersistedProjectRecord } from "./workspace-registry.js";
 
 const LegacyTimelineEntryPayloadSchema = z.object({
@@ -221,7 +221,7 @@ function createSessionForWireCompatTest(options?: {
     logger: pino({ level: "silent" }),
     downloadTokenStore: {} as SessionOptions["downloadTokenStore"],
     pushNotifications: {} as SessionOptions["pushNotifications"],
-    paseoHome: "/tmp/osuna-home",
+    osunaHome: "/tmp/osuna-home",
     agentManager: new InMemoryAgentManager(
       options?.rows ?? rows,
     ) as unknown as SessionOptions["agentManager"],
@@ -461,7 +461,7 @@ describe("wire compatibility", () => {
     const workflow = new InMemoryWorktreeWorkflow();
 
     const dependencies = {
-      paseoHome: "/tmp/osuna-home",
+      osunaHome: "/tmp/osuna-home",
       describeWorkspaceRecord: async () =>
         ({
           id: "ws-1",
@@ -478,7 +478,7 @@ describe("wire compatibility", () => {
         }) as never,
       emit() {},
       sessionLogger: pino({ level: "silent" }),
-      createPaseoWorktreeWorkflow: workflow.create.bind(workflow),
+      createOsunaWorktreeWorkflow: workflow.create.bind(workflow),
     };
 
     const legacyRequest = SessionInboundMessageSchema.parse({
@@ -493,7 +493,7 @@ describe("wire compatibility", () => {
           mimeType: "application/github-issue",
           number: 55,
           title: "Improve startup error details",
-          url: "https://github.com/getpaseo/paseo/issues/55",
+          url: "https://github.com/lft-oxy/osuna/issues/55",
         },
       ],
     });
@@ -511,7 +511,7 @@ describe("wire compatibility", () => {
             mimeType: "application/github-issue",
             number: 55,
             title: "Improve startup error details",
-            url: "https://github.com/getpaseo/paseo/issues/55",
+            url: "https://github.com/lft-oxy/osuna/issues/55",
           },
         ],
       },
@@ -524,8 +524,8 @@ describe("wire compatibility", () => {
       throw new Error("Expected new worktree request");
     }
 
-    await handleCreatePaseoWorktreeRequest(dependencies, legacyRequest);
-    await handleCreatePaseoWorktreeRequest(dependencies, newRequest);
+    await handleCreateOsunaWorktreeRequest(dependencies, legacyRequest);
+    await handleCreateOsunaWorktreeRequest(dependencies, newRequest);
 
     expect(workflow.capturedInputs).toHaveLength(2);
     expect(workflow.capturedInputs[0]).toEqual(workflow.capturedInputs[1]);
@@ -540,7 +540,7 @@ describe("wire compatibility", () => {
             mimeType: "application/github-issue",
             number: 55,
             title: "Improve startup error details",
-            url: "https://github.com/getpaseo/paseo/issues/55",
+            url: "https://github.com/lft-oxy/osuna/issues/55",
           },
         ],
       },
@@ -548,7 +548,7 @@ describe("wire compatibility", () => {
       action: undefined,
       githubPrNumber: undefined,
       runSetup: false,
-      paseoHome: "/tmp/osuna-home",
+      osunaHome: "/tmp/osuna-home",
     });
   });
 });
@@ -620,7 +620,7 @@ test("setup progress is adapted per socket without changing the canonical snapsh
         ...message.payload,
         status: "failed",
         error:
-          "Workspace setup is blocked pending approval of code from a fork pull request. Update Paseo to review and run setup.",
+          "Workspace setup is blocked pending approval of code from a fork pull request. Update Osuna to review and run setup.",
       },
     },
   ]);
@@ -633,7 +633,7 @@ test("setup progress is adapted per socket without changing the canonical snapsh
       payload: {
         ...message.payload,
         status: "failed",
-        error: expect.stringContaining("Update Paseo"),
+        error: expect.stringContaining("Update Osuna"),
         subscriptionId: expect.any(String),
       },
     },

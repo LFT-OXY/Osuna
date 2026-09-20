@@ -16,7 +16,7 @@ import {
  * transcript the usage scanner can find is the one this test just produced —
  * the developer's own history never enters the numbers being asserted.
  */
-const claudeConfigDirectory = mkdtempSync(path.join(tmpdir(), "paseo-turn-usage-claude-"));
+const claudeConfigDirectory = mkdtempSync(path.join(tmpdir(), "osuna-turn-usage-claude-"));
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
 const PROMPT = "Reply with exactly TURN_USAGE_OK and nothing else. Do not use any tools.";
@@ -49,7 +49,7 @@ test.describe("turn usage from a real Claude turn", () => {
     page,
   }, testInfo) => {
     const provider = "claude" satisfies RewindFlowProvider;
-    const cwd = realpathSync(mkdtempSync(path.join(tmpdir(), "paseo-turn-usage-")));
+    const cwd = realpathSync(mkdtempSync(path.join(tmpdir(), "osuna-turn-usage-")));
     let handle: AgentHandle | undefined;
 
     try {

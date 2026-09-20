@@ -18,23 +18,23 @@ const FDROID_ABI_VERSION_CODE_ENTRIES = Object.entries(FDROID_ABI_VERSION_CODE_S
   .map(([abi, suffix]) => `    "${abi}": ${suffix},`)
   .join("\n");
 
-const FDROID_ABI_VERSION_CODE_BLOCK = `// Paseo F-Droid single-ABI version codes
-def paseoAbiVersionCodes = [
+const FDROID_ABI_VERSION_CODE_BLOCK = `// Osuna F-Droid single-ABI version codes
+def osunaAbiVersionCodes = [
 ${FDROID_ABI_VERSION_CODE_ENTRIES}
 ]
-def paseoArchitectures = (findProperty("reactNativeArchitectures") ?: "")
+def osunaArchitectures = (findProperty("reactNativeArchitectures") ?: "")
     .toString()
     .split(",")
     .collect { it.trim() }
     .findAll { !it.isEmpty() }
 
-if (paseoArchitectures.size() == 1) {
-    def paseoAbi = paseoArchitectures[0]
-    def paseoAbiVersionCode = paseoAbiVersionCodes[paseoAbi]
-    if (paseoAbiVersionCode == null) {
-        throw new GradleException("Unsupported Paseo Android ABI: " + paseoAbi)
+if (osunaArchitectures.size() == 1) {
+    def osunaAbi = osunaArchitectures[0]
+    def osunaAbiVersionCode = osunaAbiVersionCodes[osunaAbi]
+    if (osunaAbiVersionCode == null) {
+        throw new GradleException("Unsupported Osuna Android ABI: " + osunaAbi)
     }
-    android.defaultConfig.versionCode = android.defaultConfig.versionCode * 10 + paseoAbiVersionCode
+    android.defaultConfig.versionCode = android.defaultConfig.versionCode * 10 + osunaAbiVersionCode
 }
 `;
 
@@ -53,7 +53,7 @@ function configureFdroidAppBuildGradle(contents) {
     );
   }
 
-  if (!configuredContents.includes("// Paseo F-Droid single-ABI version codes")) {
+  if (!configuredContents.includes("// Osuna F-Droid single-ABI version codes")) {
     configuredContents = `${configuredContents.trimEnd()}\n\n${FDROID_ABI_VERSION_CODE_BLOCK}`;
   }
 

@@ -12,8 +12,8 @@ describe("agent skills protocol", () => {
       AgentSkillsSaveSelectionRequestSchema.parse({
         type: "agent.skills.save_selection.request",
         requestId: "request-1",
-        selection: { mode: "custom", skills: ["paseo"] },
-        confirmedRemovals: ["paseo-loop"],
+        selection: { mode: "custom", skills: ["osuna"] },
+        confirmedRemovals: ["osuna-loop"],
       }),
     ).toMatchObject({ requestId: "request-1" });
     expect(
@@ -31,8 +31,8 @@ describe("agent skills protocol", () => {
         payload: {
           requestId: "request-3",
           state: "not-installed",
-          ops: [{ kind: "add", name: "paseo" }],
-          available: ["paseo"],
+          ops: [{ kind: "add", name: "osuna" }],
+          available: ["osuna"],
           installed: [],
           selection: { mode: "all" },
         },

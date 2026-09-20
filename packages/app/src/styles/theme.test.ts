@@ -202,7 +202,7 @@ describe("Pure black theme", () => {
     expect(darkPureBlackTheme.colors.terminal.background).toBe("#000000");
   });
 
-  it("uses Paseo's muted green accent", () => {
+  it("uses Osuna's muted green accent", () => {
     expect(darkPureBlackTheme.colors.accent).toBe("#20744A");
     expect(darkPureBlackTheme.colors.accentBright).toBe("#7ccba0");
   });

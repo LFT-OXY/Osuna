@@ -21,7 +21,7 @@ describe("node-entrypoint-runner", () => {
     const originalRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
     const originalNoAttachConsole = process.env.ELECTRON_NO_ATTACH_CONSOLE;
     const originalFixture = globalThis.__OSUNA_NODE_ENTRYPOINT_RUNNER_FIXTURE__;
-    const fixtureDir = mkdtempSync(path.join(tmpdir(), "paseo-node-entrypoint-runner-"));
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "osuna-node-entrypoint-runner-"));
     const fixturePath = path.join(fixtureDir, "fixture.mjs");
     writeFileSync(
       fixturePath,
@@ -34,7 +34,7 @@ globalThis.__OSUNA_NODE_ENTRYPOINT_RUNNER_FIXTURE__ = {
 `,
     );
 
-    process.argv = ["Paseo", "runner", "node-script", fixturePath, "daemon", "start"];
+    process.argv = ["Osuna", "runner", "node-script", fixturePath, "daemon", "start"];
     process.env.ELECTRON_RUN_AS_NODE = "1";
     process.env.ELECTRON_NO_ATTACH_CONSOLE = "1";
     delete globalThis.__OSUNA_NODE_ENTRYPOINT_RUNNER_FIXTURE__;
@@ -43,7 +43,7 @@ globalThis.__OSUNA_NODE_ENTRYPOINT_RUNNER_FIXTURE__ = {
       await main();
 
       expect(globalThis.__OSUNA_NODE_ENTRYPOINT_RUNNER_FIXTURE__).toEqual({
-        argv: ["Paseo", fixturePath, "daemon", "start"],
+        argv: ["Osuna", fixturePath, "daemon", "start"],
         electronRunAsNode: "1",
         electronNoAttachConsole: "1",
       });

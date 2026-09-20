@@ -79,13 +79,13 @@ if (process.platform === "win32") {
   process.exit(0);
 }
 
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-stop-tree-kill-"));
-const childPidPath = join(paseoHome, "descendant.pid");
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-stop-tree-kill-"));
+const childPidPath = join(osunaHome, "descendant.pid");
 let ownerProcess: ChildProcess | null = null;
 let descendantPid: number | null = null;
 
 try {
-  await mkdir(paseoHome, { recursive: true });
+  await mkdir(osunaHome, { recursive: true });
 
   console.log("Test 1: start daemon-owner fixture with a detached descendant");
   ownerProcess = spawn(
@@ -115,7 +115,7 @@ try {
 
   assert(ownerProcess.pid, "owner pid should exist");
   await writeFile(
-    join(paseoHome, "osuna.pid"),
+    join(osunaHome, "osuna.pid"),
     JSON.stringify({
       pid: ownerProcess.pid,
       hostname: "test",
@@ -141,7 +141,7 @@ try {
 
   console.log("Test 2: forced daemon stop kills owner and separate-PGID descendant");
   const stopResult =
-    await $`OSUNA_HOME=${paseoHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${paseoHome} --json --timeout 1 --force --kill-timeout 2`.nothrow();
+    await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${osunaHome} --json --timeout 1 --force --kill-timeout 2`.nothrow();
   assert.strictEqual(stopResult.exitCode, 0, `stop should succeed: ${stopResult.stderr}`);
   const parsed = JSON.parse(stopResult.stdout) as {
     action?: unknown;
@@ -174,7 +174,7 @@ try {
 } finally {
   killIfRunning(ownerProcess?.pid ?? null);
   killIfRunning(descendantPid);
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== Daemon stop tree kill regression test passed ===");

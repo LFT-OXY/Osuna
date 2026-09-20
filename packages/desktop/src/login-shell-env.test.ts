@@ -10,7 +10,7 @@ import { inheritLoginShellEnv } from "./login-shell-env";
 const zsh = "/bin/zsh";
 const describeIfZsh = existsSync(zsh) ? describe : describe.skip;
 const basePath = "/usr/bin:/bin:/usr/sbin:/sbin";
-const fakeHome = path.join(os.tmpdir(), "paseo-login-shell-env-fake-home");
+const fakeHome = path.join(os.tmpdir(), "osuna-login-shell-env-fake-home");
 type LoginShellEnvInput = NonNullable<Parameters<typeof inheritLoginShellEnv>[0]>;
 type LoginShellSpawnSync = NonNullable<LoginShellEnvInput["spawnSync"]>;
 
@@ -55,8 +55,8 @@ class RecordingLoginShellLogger {
 function createEnv(home: string): NodeJS.ProcessEnv {
   return {
     HOME: home,
-    USER: "paseo-test",
-    LOGNAME: "paseo-test",
+    USER: "osuna-test",
+    LOGNAME: "osuna-test",
     SHELL: zsh,
     PATH: basePath,
   };
@@ -108,7 +108,7 @@ function expectNoRawStdout(fields: Record<string, unknown>): void {
 }
 
 async function createShellHome(): Promise<string> {
-  return await mkdtemp(path.join(os.tmpdir(), "paseo-login-shell-env-"));
+  return await mkdtemp(path.join(os.tmpdir(), "osuna-login-shell-env-"));
 }
 
 describe("login shell env retry behavior", () => {

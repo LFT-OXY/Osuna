@@ -4,10 +4,10 @@ import path from "node:path";
 import { expect, test } from "vitest";
 import { createOsunaApi } from "@osuna/client";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 test("an RPC-only plugin receives no agent, project or provider data", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-quiet-plugin-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-quiet-plugin-"));
   await writeFile(
     path.join(directory, "osuna-plugin.json"),
     JSON.stringify({ id: "quiet", requirements: { osuna: ">=0.8.0" } }),
@@ -30,7 +30,7 @@ export default function contribute(server) {
   return () => process.off("message", observe);
 }`,
   );
-  const daemon = await createTestPaseoDaemon();
+  const daemon = await createTestOsunaDaemon();
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   const idle = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   const legacy = new DaemonClient({

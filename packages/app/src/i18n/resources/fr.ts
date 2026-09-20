@@ -782,7 +782,7 @@ export const fr: TranslationResources = {
       },
       routes: {
         public: "Proxy inverse",
-        paseo: "Memorable",
+        osuna: "Memorable",
         direct: "Directe",
       },
       states: {
@@ -907,7 +907,7 @@ export const fr: TranslationResources = {
           mergePrNoGithub:
             "La fusionPRn'est pas disponible pour le moment carGitHubn'est pas connecté",
           archiveNotWorktree:
-            "L'archive n'est pas disponible ici car cet espace de travail n'a pas été créé en tant qu'arbre de travailPaseo",
+            "L'archive n'est pas disponible ici car cet espace de travail n'a pas été créé en tant qu'arbre de travailOsuna",
           mergePrNoForge:
             "La fusion {{noun}} n'est pas disponible pour le moment car {{brand}} n'est pas connecté",
           mergePrMissing:
@@ -1207,7 +1207,7 @@ export const fr: TranslationResources = {
       discord: "Discord",
       github: "Créer un ticket GitHub",
       whatsNew: "Nouveautés",
-      appName: "Paseo",
+      appName: "Osuna",
     },
     sections: {
       sessions: "Historique",
@@ -1355,7 +1355,7 @@ export const fr: TranslationResources = {
       close: "Fermer la fenêtre",
     },
     quitting: {
-      title: "QuitterPaseo...",
+      title: "QuitterOsuna...",
       detail: "Arrêt du démon local.",
     },
     daemon: {
@@ -1370,20 +1370,20 @@ export const fr: TranslationResources = {
       },
       management: {
         title: "Gérer le démon intégré",
-        hint: "LaissezPaseodémarrer et arrêter le démon intégré",
+        hint: "LaissezOsunadémarrer et arrêter le démon intégré",
         pauseTitle: "Suspendre le démon intégré",
         pauseMessage:
           "Cela arrêtera immédiatement le démon intégré. Les agents en cours d'exécution et les terminaux connectés au démon intégré seront arrêtés.",
         pauseAndStop: "Pause et arrêt",
         registrationFailed:
-          "Built-in daemon started, but Paseo could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.",
+          "Built-in daemon started, but Osuna could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.",
         pausedStopFailed:
-          "La gestion du démon intégré a été suspendue, maisPaseon'a ​​pas pu arrêter le démon.",
+          "La gestion du démon intégré a été suspendue, maisOsunan'a ​​pas pu arrêter le démon.",
         updateFailed: "Impossible de mettre à jour la gestion des démons intégrés.",
       },
       keepRunning: {
         title: "Laisser le démon fonctionner après avoir quitté",
-        hint: "Daemoncontinue de fonctionner lorsque vous quittezPaseo",
+        hint: "Daemoncontinue de fonctionner lorsque vous quittezOsuna",
       },
       logs: {
         title: "Fichier journal",
@@ -1398,7 +1398,7 @@ export const fr: TranslationResources = {
       fullStatus: {
         title: "Statut complet",
         modalTitle: "StatutDaemon",
-        hint: "Exécute`paseo daemon status`et affiche la sortie",
+        hint: "Exécute`osuna daemon status`et affiche la sortie",
         view: "Afficher l'état",
         copied: "Statut copié dans le presse-papiers.",
         fetchFailed: "Échec de la récupération de l'état du démon:{{message}}",
@@ -1453,7 +1453,7 @@ export const fr: TranslationResources = {
     },
     rosetta: {
       title: "Téléchargez la versionApple Silicon",
-      runningIntel: "Vous exécutez la versionInteldePaseosousRosettasurApple Silicon.",
+      runningIntel: "Vous exécutez la versionInteldeOsunasousRosettasurApple Silicon.",
       highCpu:
         "Cela entraîne une utilisation élevée du processeur. Téléchargez la versionApple Siliconpour le réparer.",
       download: "Télécharger",
@@ -1503,7 +1503,7 @@ export const fr: TranslationResources = {
         microphone: "L'état du microphone n'a pas encore été vérifié.",
       },
       testNotification: {
-        title: "Test de notificationPaseo",
+        title: "Test de notificationOsuna",
         body: "Si vous pouvez voir cela, les notifications sur le bureau fonctionnent.",
         notDelivered:
           "La notification n'a pas été délivrée. Vérifiez Paramètres système > Notifications.",
@@ -1513,12 +1513,12 @@ export const fr: TranslationResources = {
     integrations: {
       cli: {
         statusFailed: "Impossible de vérifier l'état de l'installation deCLI.",
-        installFailed: "Impossible d'installer lePaseoCLI.",
+        installFailed: "Impossible d'installer leOsunaCLI.",
       },
     },
   },
   rootError: {
-    title: "Paseo a rencontré un problème.",
+    title: "Osuna a rencontré un problème.",
     body: "Réessayez pour recharger l'application. Si cela continue, joignez les détails ci-dessous au signalement.",
     details: "Détails",
   },
@@ -1614,7 +1614,7 @@ export const fr: TranslationResources = {
     },
   },
   onboarding: {
-    title: "Bienvenue surPaseo",
+    title: "Bienvenue surOsuna",
     subtitle: "Connectez votre ordinateur pour commencer",
     actions: {
       settings: "Paramètres",
@@ -1702,7 +1702,7 @@ export const fr: TranslationResources = {
     },
     direct: {
       title: "Connexion directe",
-      helper: "Saisissez l'adresse d'un serveurPaseo.",
+      helper: "Saisissez l'adresse d'un serveurOsuna.",
       fields: {
         host: "Host",
         port: "Port",
@@ -1745,7 +1745,7 @@ export const fr: TranslationResources = {
     },
     remoteSsh: {
       title: "SSH distant",
-      helper: "Connectez-vous à un daemon Paseo sur l’hôte distant.",
+      helper: "Connectez-vous à un daemon Osuna sur l’hôte distant.",
       fields: {
         target: "Hôte SSH",
       },
@@ -1802,15 +1802,15 @@ export const fr: TranslationResources = {
       enableDescription:
         "Le relais permet à cet appareil de se connecter depuis n’importe où. Le trafic de couplage est chiffré de bout en bout.",
       relayDocs: "Fonctionnement du relais",
-      relayDocsAccessibility: "Lire comment fonctionne le relais Paseo",
+      relayDocsAccessibility: "Lire comment fonctionne le relais Osuna",
       enableRelay: "Activer le relais",
       enablingRelay: "Activation...",
       notNow: "Pas maintenant",
       directConnectionHint:
         "Sans relais, connectez-vous directement via TCP, Tailscale ou un autre VPN. Aucun code QR n’est créé.",
-      updateRequired: "Mettez à jour l’hôte pour activer le relais depuis Paseo Desktop.",
+      updateRequired: "Mettez à jour l’hôte pour activer le relais depuis Osuna Desktop.",
       unavailable: "Offre de jumelage indisponible.",
-      hint: "Scannez ce codeQRavecPaseosur votre téléphone ou copiez le lien ci-dessous.",
+      hint: "Scannez ce codeQRavecOsunasur votre téléphone ou copiez le lien ci-dessous.",
       securityWarning:
         "Traitez ce lien d’association comme un mot de passe. Toute personne qui le possède peut accéder à ce daemon.",
       qrUnavailable: "CodeQRindisponible.",
@@ -1845,7 +1845,7 @@ export const fr: TranslationResources = {
   serviceUrl: {
     title: "Service ouvertURL",
     message: "Ouvrir{{url}}?",
-    inPaseo: "DansPaseo",
+    inOsuna: "DansOsuna",
     externalBrowser: "Navigateur externe",
     dontAskAgain: "Ne demande plus",
   },
@@ -1956,10 +1956,10 @@ export const fr: TranslationResources = {
       },
       row: {
         opening: "Ouverture...",
-        paseo: "Paseo",
+        osuna: "Osuna",
         menu: "Actions de la session",
         copyResumeCommand: "Copier la commande de reprise",
-        importAsAgent: "Importer comme agent Paseo",
+        importAsAgent: "Importer comme agent Osuna",
         importing: "Importation...",
       },
       errors: {
@@ -2103,7 +2103,7 @@ export const fr: TranslationResources = {
       send: "Envoyer",
       sending: "Envoi...",
       sentTitle: "Notification de test envoyée",
-      sentDescription: "Paseo a transmis la notification au système d’exploitation.",
+      sentDescription: "Osuna a transmis la notification au système d’exploitation.",
       sendFailedTitle: "Impossible d’envoyer la notification de test",
     },
     hostSections: {
@@ -2122,14 +2122,14 @@ export const fr: TranslationResources = {
     metadataGeneration: {
       title: "Génération de métadonnées",
       description:
-        "Choisissez le modèle utilisé par Paseo pour les titres d’espaces de travail, les noms de branches, les messages de commit et les brouillons de pull request",
+        "Choisissez le modèle utilisé par Osuna pour les titres d’espaces de travail, les noms de branches, les messages de commit et les brouillons de pull request",
       selection: "Sélection du modèle",
       automatic: "Automatique",
       preferred: "Manuel",
-      automaticHint: "Paseo choisit un modèle rapide disponible",
-      preferredHint: "Choisissez le modèle utilisé par Paseo",
+      automaticHint: "Osuna choisit un modèle rapide disponible",
+      preferredHint: "Choisissez le modèle utilisé par Osuna",
       model: "Modèle",
-      fallbackHint: "S’il est indisponible, Paseo utilise un autre modèle disponible",
+      fallbackHint: "S’il est indisponible, Osuna utilise un autre modèle disponible",
       docs: "Documentation",
       saveError: "Impossible de mettre à jour la génération de métadonnées",
     },
@@ -2139,7 +2139,7 @@ export const fr: TranslationResources = {
         title: "Données du navigateur",
         siteData: "Cookies et données des sites",
         description:
-          "Les onglets du navigateur partagent les connexions et les données des sites dans Paseo.",
+          "Les onglets du navigateur partagent les connexions et les données des sites dans Osuna.",
         clear: "Effacer les données du navigateur",
         clearing: "Effacement...",
         confirmTitle: "Effacer les données du navigateur ?",
@@ -2168,7 +2168,7 @@ export const fr: TranslationResources = {
         description: "Où ouvrir les URL à partir de scripts en cours d'exécution",
         options: {
           ask: "Demander",
-          inApp: "DansPaseo",
+          inApp: "DansOsuna",
           external: "Navigateur externe",
         },
       },
@@ -2254,7 +2254,7 @@ export const fr: TranslationResources = {
         label: "Mises à jour de l'application",
         readyToInstall: "Prêt à installer:{{version}}",
         installTitle: "Installer la mise à jour du bureau",
-        installMessage: "Cela met à jourPaseosur cet ordinateur",
+        installMessage: "Cela met à jourOsunasur cet ordinateur",
         installConfirm: "Installer la mise à jour",
         update: "Mise à jour",
         updateTo: "Mise à jour vers{{version}}",
@@ -2506,11 +2506,11 @@ export const fr: TranslationResources = {
         title: "Compétences en orchestration",
         description: "Apprenez à vos agents à orchestrer via leCLI",
         updateAvailable: "Mise à jour disponible",
-        updateTitle: "Mettre à jour les compétencesPaseo?",
+        updateTitle: "Mettre à jour les compétencesOsuna?",
         updateFallback: "Synchronisez les compétences regroupées sur votre machine.",
-        uninstallTitle: "Désinstaller les compétencesPaseo?",
+        uninstallTitle: "Désinstaller les compétencesOsuna?",
         uninstallMessage:
-          "Supprime toutes les compétences d'orchestrationPaseode ~/.agents, ~/.claude, ~/.codex.",
+          "Supprime toutes les compétences d'orchestrationOsunade ~/.agents, ~/.claude, ~/.codex.",
         choose: "Choisir les compétences",
         chooseAll: "Toutes les compétences",
         chooseAllHint:
@@ -2548,9 +2548,9 @@ export const fr: TranslationResources = {
         title: "Orchestration",
         unavailable: "Connectez-vous à cet hôte pour gérer l'orchestration",
         enableTools: {
-          title: "Activer les outilsPaseo",
+          title: "Activer les outilsOsuna",
           hint: "Les agents pourront gérer les arbres de travail, les agents et les horaires",
-          accessibilityLabel: "Injecter les outilsPaseo",
+          accessibilityLabel: "Injecter les outilsOsuna",
         },
         systemPrompt: {
           title: "Invite système",
@@ -2656,16 +2656,16 @@ export const fr: TranslationResources = {
             "Cet hôte n'est pas connecté. Attendez qu'il soit en ligne avant de redémarrer.",
           offlineTitle: "Hosthors ligne",
           offlineMessage:
-            "Cet hôte est hors ligne.Paseose reconnecte automatiquement: attendez qu'il soit de nouveau en ligne avant de redémarrer.",
+            "Cet hôte est hors ligne.Osunase reconnecte automatiquement: attendez qu'il soit de nouveau en ligne avant de redémarrer.",
           requestFailedTitle: "Erreur",
           requestFailedMessage:
-            "Échec de l'envoi de la demande de redémarrage.Paseose reconnecte automatiquement - réessayez une fois que l'hôte apparaît comme en ligne.",
+            "Échec de l'envoi de la demande de redémarrage.Osunase reconnecte automatiquement - réessayez une fois que l'hôte apparaît comme en ligne.",
           dialogFailedMessage:
             "Impossible d'ouvrir la boîte de dialogue de confirmation de redémarrage.",
         },
         update: {
           desktopManagedHint:
-            "Ce daemon est géré par Paseo Desktop. Mettez à jour Paseo Desktop sur l’hôte.",
+            "Ce daemon est géré par Osuna Desktop. Mettez à jour Osuna Desktop sur l’hôte.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",
@@ -2860,7 +2860,7 @@ export const fr: TranslationResources = {
         newScript: "Nouveau scénario",
         editScript: "Modifier{{name}}",
         runAsService: "Exécuter en tant que service",
-        serviceHint: "Paseosupervise le processus et attribue un port via $OSUNA_PORT",
+        serviceHint: "Osunasupervise le processus et attribue un port via $OSUNA_PORT",
         actions: {
           add: "Ajouter un script",
           edit: "Modifier",
@@ -2869,7 +2869,7 @@ export const fr: TranslationResources = {
       },
       metadata: {
         title: "Génération de métadonnées",
-        info: "Instructions spécifiques au projet injectées dans les invites de l'IA quePaseoutilise pour générer des métadonnées: utilisez-les pour appliquer les conventions de votre équipe telles que la dénomination des branches, le style de validation ou le formatPR.",
+        info: "Instructions spécifiques au projet injectées dans les invites de l'IA queOsunautilise pour générer des métadonnées: utilisez-les pour appliquer les conventions de votre équipe telles que la dénomination des branches, le style de validation ou le formatPR.",
         branchName: "Noms des succursales",
         branchNamePlaceholder:
           "Préfixez les branches avec feat/ ou fix/, mb/ pour les branches personnelles",

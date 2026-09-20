@@ -7,7 +7,7 @@ import type { AgentStorage, StoredAgentRecord } from "./agent/agent-storage.js";
 import type { WorkspaceGitService } from "./workspace-git-service.js";
 import type { ForgeService } from "../services/forge-service.js";
 import {
-  deletePaseoWorktree,
+  deleteOsunaWorktree,
   isOsunaOwnedWorktreeCwd,
   runWorktreeTeardownCommands,
   WorktreeTeardownError,
@@ -28,9 +28,9 @@ export type ActiveWorkspaceRef = Pick<
 >;
 
 export interface ArchiveDependencies {
-  paseoHome?: string;
+  osunaHome?: string;
   // Base directory that may hold worktrees across repositories.
-  paseoWorktreesBaseRoot?: string;
+  osunaWorktreesBaseRoot?: string;
   github: ForgeService;
   workspaceGitService: Pick<WorkspaceGitService, "getSnapshot">;
   agentManager: Pick<AgentManager, "listAgents" | "getAgent" | "archiveAgent" | "archiveSnapshot">;
@@ -93,7 +93,7 @@ interface BackingDirectory {
   path: string;
   isOsunaOwnedWorktree: boolean;
   mainRepoRoot: string | null;
-  paseoWorktreesRoot: string | null;
+  osunaWorktreesRoot: string | null;
 }
 
 interface ArchiveTarget {
@@ -119,7 +119,7 @@ export async function resolveWorkspaceIdAtPath(
 
 // Resolves the in-scope record set, tears each down
 // (agents + terminals + record), then removes the backing directory iff it is
-// Paseo-owned AND no active workspace still references it.
+// Osuna-owned AND no active workspace still references it.
 export async function archiveByScope(
   dependencies: ArchiveDependencies,
   request: ArchiveByScopeRequest,
@@ -269,14 +269,14 @@ async function stopWorkspaceSetups(
 
 async function resolveWorkspaceBackingDirectory(
   workspace: ActiveWorkspaceRef,
-  dependencies: Pick<ArchiveDependencies, "paseoHome" | "paseoWorktreesBaseRoot">,
+  dependencies: Pick<ArchiveDependencies, "osunaHome" | "osunaWorktreesBaseRoot">,
 ): Promise<BackingDirectory> {
   if (workspace.isOsunaOwnedWorktree && workspace.worktreeRoot && workspace.mainRepoRoot) {
     return {
       path: resolve(workspace.worktreeRoot),
       isOsunaOwnedWorktree: true,
       mainRepoRoot: workspace.mainRepoRoot,
-      paseoWorktreesRoot: null,
+      osunaWorktreesRoot: null,
     };
   }
   if (workspace.kind !== "worktree") {
@@ -284,7 +284,7 @@ async function resolveWorkspaceBackingDirectory(
       path: resolve(workspace.cwd),
       isOsunaOwnedWorktree: false,
       mainRepoRoot: workspace.mainRepoRoot ?? null,
-      paseoWorktreesRoot: null,
+      osunaWorktreesRoot: null,
     };
   }
 
@@ -299,18 +299,18 @@ async function resolveWorkspaceBackingDirectory(
 
 async function resolveBackingDirectory(
   cwd: string,
-  dependencies: Pick<ArchiveDependencies, "paseoHome" | "paseoWorktreesBaseRoot">,
+  dependencies: Pick<ArchiveDependencies, "osunaHome" | "osunaWorktreesBaseRoot">,
 ): Promise<BackingDirectory> {
   const options = {
-    paseoHome: dependencies.paseoHome,
-    worktreesRoot: dependencies.paseoWorktreesBaseRoot,
+    osunaHome: dependencies.osunaHome,
+    worktreesRoot: dependencies.osunaWorktreesBaseRoot,
   };
   const ownership = await isOsunaOwnedWorktreeCwd(cwd, options);
   return {
     path: resolve(ownership.allowed && ownership.worktreePath ? ownership.worktreePath : cwd),
     isOsunaOwnedWorktree: ownership.allowed,
     mainRepoRoot: ownership.repoRoot ?? null,
-    paseoWorktreesRoot: ownership.worktreeRoot ?? null,
+    osunaWorktreesRoot: ownership.worktreeRoot ?? null,
   };
 }
 
@@ -400,13 +400,13 @@ async function maybeRemoveDirectory(
   }
 
   try {
-    await deletePaseoWorktree({
+    await deleteOsunaWorktree({
       cwd: backing.mainRepoRoot,
       worktreePath: backing.path,
       teardownCwds: [],
-      worktreesRoot: backing.paseoWorktreesRoot ?? undefined,
-      paseoHome: dependencies.paseoHome,
-      worktreesBaseRoot: dependencies.paseoWorktreesBaseRoot,
+      worktreesRoot: backing.osunaWorktreesRoot ?? undefined,
+      osunaHome: dependencies.osunaHome,
+      worktreesBaseRoot: dependencies.osunaWorktreesBaseRoot,
     });
     dependencies.github.invalidate({ cwd: backing.path });
     return true;
@@ -519,7 +519,7 @@ async function isDirectoryUnreferenced(
   activeWorkspaces: ActiveWorkspaceRef[],
   targetDir: string,
   archivedWorkspaceIds: ReadonlySet<string>,
-  dependencies: Pick<ArchiveDependencies, "paseoHome" | "paseoWorktreesBaseRoot">,
+  dependencies: Pick<ArchiveDependencies, "osunaHome" | "osunaWorktreesBaseRoot">,
 ): Promise<boolean> {
   const target = resolve(targetDir);
   const matchesTarget = createRealpathAwarePathMatcher(target);

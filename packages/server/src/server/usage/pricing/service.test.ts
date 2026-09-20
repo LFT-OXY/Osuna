@@ -45,7 +45,7 @@ interface Started {
 }
 
 async function start(overrides: UsagePricingOverride[] = []): Promise<Started> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "paseo-pricing-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "osuna-pricing-"));
   temps.push(dir);
   const logger = pino({ level: "silent" });
   let updates = 0;

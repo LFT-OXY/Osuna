@@ -252,7 +252,7 @@ export const UsageSessionRowSchema = z.object({
 export type UsageSessionRow = z.infer<typeof UsageSessionRowSchema>;
 
 /**
- * One turn of a Paseo agent. `turnId` is Paseo's own id, present once a turn
+ * One turn of an Osuna agent. `turnId` is Osuna's own id, present once a turn
  * the daemon watched closed; `turnKey` is the CLI's id and is always there.
  * A turn still running is reported like any other — the client adds the
  * stopwatch.

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
 async function runWorker(worker: string, publicationDelay = 0) {
-  const home = await mkdtemp(path.join(tmpdir(), "paseo-readiness-"));
+  const home = await mkdtemp(path.join(tmpdir(), "osuna-readiness-"));
   const workerPath = path.join(home, "worker.mjs");
   const runnerPath = path.join(home, "runner.mjs");
   const eventsPath = path.join(home, "events.jsonl");
@@ -90,10 +90,10 @@ test("a replacement worker must independently reach ready", async () => {
     if (existsSync(marker)) process.exit(0);
     writeFileSync(marker, "started");
     process.on("message", message => {
-      if (message.type === "paseo:graceful-shutdown") process.exit(0);
+      if (message.type === "osuna:graceful-shutdown") process.exit(0);
     });
-    process.send({ type: "paseo:ready", listen: "test-endpoint" });
-    process.send({ type: "paseo:restart" });
+    process.send({ type: "osuna:ready", listen: "test-endpoint" });
+    process.send({ type: "osuna:restart" });
   `);
   expect(result.code).toBe(1);
   expect(result.events, result.output).toEqual(["test-endpoint", null, null]);
@@ -102,7 +102,7 @@ test("a replacement worker must independently reach ready", async () => {
 test("exit clears publication after an in-flight ready write", async () => {
   const result = await runWorker(
     `
-    process.send({ type: "paseo:ready", listen: "test-endpoint" }, () => process.exit(0));
+    process.send({ type: "osuna:ready", listen: "test-endpoint" }, () => process.exit(0));
   `,
     100,
   );
@@ -113,9 +113,9 @@ test("exit clears publication after an in-flight ready write", async () => {
 test("requested shutdown before first readiness exits successfully", async () => {
   const result = await runWorker(`
     process.on("message", message => {
-      if (message.type === "paseo:graceful-shutdown") process.exit(0);
+      if (message.type === "osuna:graceful-shutdown") process.exit(0);
     });
-    process.send({ type: "paseo:shutdown", reason: "cancelled_start" });
+    process.send({ type: "osuna:shutdown", reason: "cancelled_start" });
   `);
   expect(result.code).toBe(0);
   expect(result.events).toEqual([null]);

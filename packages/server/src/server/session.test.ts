@@ -214,7 +214,7 @@ const gitCommandMocks = vi.hoisted(() => ({
   runGitCommand: vi.fn(),
 }));
 
-const paseoWorktreeServiceMocks = vi.hoisted(() => ({
+const osunaWorktreeServiceMocks = vi.hoisted(() => ({
   createOsunaWorktree: vi.fn(),
 }));
 
@@ -254,11 +254,11 @@ vi.mock("../utils/checkout-git.js", async (importOriginal) => {
   };
 });
 
-vi.mock("./paseo-worktree-service.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./paseo-worktree-service.js")>();
+vi.mock("./osuna-worktree-service.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./osuna-worktree-service.js")>();
   return {
     ...actual,
-    createOsunaWorktree: paseoWorktreeServiceMocks.createOsunaWorktree,
+    createOsunaWorktree: osunaWorktreeServiceMocks.createOsunaWorktree,
   };
 });
 
@@ -320,7 +320,7 @@ interface SessionForTestOptions {
   hubExecutionAgents?: SessionOptions["hubExecutionAgents"];
   stt?: SessionOptions["stt"];
   voice?: SessionOptions["voice"];
-  paseoHome?: string;
+  osunaHome?: string;
   serverId?: SessionOptions["serverId"];
   daemonVersion?: SessionOptions["daemonVersion"];
   daemonRuntimeConfig?: SessionOptions["daemonRuntimeConfig"];
@@ -384,7 +384,7 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     logger,
     downloadTokenStore: options.downloadTokenStore ?? asDownloadTokenStore(),
     pushNotifications: options.pushNotifications ?? asPushNotifications(),
-    paseoHome: options.paseoHome ?? "/tmp/osuna-home",
+    osunaHome: options.osunaHome ?? "/tmp/osuna-home",
     agentManager: asAgentManager({
       listAgents: vi.fn(() => []),
       listProviderSubagentActivity: vi.fn(() => []),
@@ -449,8 +449,8 @@ test("routes host-scoped agent skills requests through the daemon owner", async 
   const status = {
     state: "up-to-date" as const,
     ops: [],
-    available: ["paseo"],
-    installed: ["paseo"],
+    available: ["osuna"],
+    installed: ["osuna"],
     selection: { mode: "all" as const },
   };
   const orchestrationSkills: NonNullable<SessionOptions["orchestrationSkills"]> = {
@@ -469,13 +469,13 @@ test("routes host-scoped agent skills requests through the daemon owner", async 
   await session.handleMessage({
     type: "agent.skills.save_selection.request",
     requestId: "save-skills",
-    selection: { mode: "custom", skills: ["paseo"] },
-    confirmedRemovals: ["paseo-loop"],
+    selection: { mode: "custom", skills: ["osuna"] },
+    confirmedRemovals: ["osuna-loop"],
   });
 
   expect(orchestrationSkills.saveSelection).toHaveBeenCalledWith(
-    { mode: "custom", skills: ["paseo"] },
-    ["paseo-loop"],
+    { mode: "custom", skills: ["osuna"] },
+    ["osuna-loop"],
   );
   expect(messages).toContainEqual({
     type: "agent.skills.save_selection.response",
@@ -845,27 +845,27 @@ describe("project command-center RPCs", () => {
     const messages: SessionOutboundMessage[] = [];
     const searchRepositories = vi.fn().mockResolvedValue([
       {
-        id: "R_paseo",
-        name: "paseo",
-        nameWithOwner: "getpaseo/paseo",
+        id: "R_osuna",
+        name: "osuna",
+        nameWithOwner: "lft-oxy/osuna",
         description: "Development environment in your pocket",
         visibility: "public",
         updatedAt: "2026-07-15T10:00:00Z",
-        cloneUrl: "git@github.com:getpaseo/paseo.git",
+        cloneUrl: "git@github.com:lft-oxy/osuna.git",
       },
     ]);
     const session = createSessionForTest({ messages, github: { searchRepositories } });
 
     await session.handleMessage({
       type: "workspace.github.search_repositories.request",
-      query: "paseo",
+      query: "osuna",
       limit: 10,
       requestId: "req-repositories",
     });
 
     expect(searchRepositories).toHaveBeenCalledWith({
       cwd: expect.any(String),
-      query: "paseo",
+      query: "osuna",
       limit: 10,
     });
     expect(messages).toEqual([
@@ -876,13 +876,13 @@ describe("project command-center RPCs", () => {
           requestId: "req-repositories",
           repositories: [
             {
-              id: "R_paseo",
-              name: "paseo",
-              nameWithOwner: "getpaseo/paseo",
+              id: "R_osuna",
+              name: "osuna",
+              nameWithOwner: "lft-oxy/osuna",
               description: "Development environment in your pocket",
               visibility: "public",
               updatedAt: "2026-07-15T10:00:00Z",
-              cloneUrl: "git@github.com:getpaseo/paseo.git",
+              cloneUrl: "git@github.com:lft-oxy/osuna.git",
             },
           ],
           available: true,
@@ -916,7 +916,7 @@ describe("project command-center RPCs", () => {
     },
     {
       error: new GitHubCommandError({
-        args: ["search", "repos", "paseo"],
+        args: ["search", "repos", "osuna"],
         cwd: "/tmp",
         exitCode: 1,
         stderr: "GitHub API unavailable",
@@ -938,7 +938,7 @@ describe("project command-center RPCs", () => {
 
     await session.handleMessage({
       type: "workspace.github.search_repositories.request",
-      query: "paseo",
+      query: "osuna",
       requestId: "req-repositories-error",
     });
 
@@ -951,7 +951,7 @@ describe("project command-center RPCs", () => {
   });
 
   test("creates a directory and returns its normalized Project descriptor", async () => {
-    const parentDirectory = realpathSync(mkdtempSync(join(tmpdir(), "paseo-project-session-")));
+    const parentDirectory = realpathSync(mkdtempSync(join(tmpdir(), "osuna-project-session-")));
     const directoryPath = join(parentDirectory, "new-project");
     const messages: SessionOutboundMessage[] = [];
     const projectAllocation = vi.fn(async (input) =>
@@ -1029,7 +1029,7 @@ describe("project command-center RPCs", () => {
   });
 
   test("rolls back the directory when Project registration fails", async () => {
-    const parentDirectory = realpathSync(mkdtempSync(join(tmpdir(), "paseo-project-session-")));
+    const parentDirectory = realpathSync(mkdtempSync(join(tmpdir(), "osuna-project-session-")));
     const directoryPath = join(parentDirectory, "unregistered");
     const messages: SessionOutboundMessage[] = [];
     const session = createSessionForTest({
@@ -1317,9 +1317,9 @@ describe("workspace file access (behavior preservation)", () => {
   });
 
   test("file upload round-trips bytes through binary frames", async () => {
-    const paseoHome = makeDir("file-access-upload-");
+    const osunaHome = makeDir("file-access-upload-");
     const messages: SessionOutboundMessage[] = [];
-    const session = createSessionForTest({ messages, paseoHome });
+    const session = createSessionForTest({ messages, osunaHome });
 
     const source = {};
     await session.handleMessage(
@@ -1957,7 +1957,7 @@ describe("daemon status + pairing RPC", () => {
     const messages: unknown[] = [];
     const session = createSessionForTest({
       messages,
-      paseoHome: makeHome(),
+      osunaHome: makeHome(),
       serverId: "srv-test",
       daemonVersion: "9.9.9",
       daemonRuntimeConfig: { listen: "127.0.0.1:6767", getRelayConfig: () => null },
@@ -1996,7 +1996,7 @@ describe("daemon status + pairing RPC", () => {
     const messages: unknown[] = [];
     const session = createSessionForTest({
       messages,
-      paseoHome: makeHome(),
+      osunaHome: makeHome(),
       serverId: "srv-test",
       daemonVersion: "9.9.9",
       daemonRuntimeConfig: { listen: "127.0.0.1:6767", getRelayConfig: () => null },
@@ -2032,7 +2032,7 @@ describe("daemon status + pairing RPC", () => {
     const messages: unknown[] = [];
     const session = createSessionForTest({
       messages,
-      paseoHome: makeHome(),
+      osunaHome: makeHome(),
       daemonRuntimeConfig: {
         listen: "127.0.0.1:6767",
         getRelayConfig: () => ({
@@ -2078,7 +2078,7 @@ function createWorkspaceGitSnapshot(
       repoRoot: cwd,
       mainRepoRoot: null,
       currentBranch: "feature/service",
-      remoteUrl: "https://github.com/getpaseo/paseo.git",
+      remoteUrl: "https://github.com/lft-oxy/osuna.git",
       isOsunaOwnedWorktree: false,
       isDirty: true,
       baseRef: "main",
@@ -2378,7 +2378,7 @@ describe("session checkout merge handling", () => {
         baseRef: "main",
         mode: "merge",
       },
-      { paseoHome: "/tmp/osuna-home" },
+      { osunaHome: "/tmp/osuna-home" },
     );
     expect(workspaceGitService.getSnapshot).toHaveBeenCalledWith("/tmp/base-worktree", {
       force: true,
@@ -2463,7 +2463,7 @@ describe("session checkout merge handling", () => {
         baseRef: "main",
         requireCleanTarget: true,
       },
-      { paseoHome: "/tmp/osuna-home", worktreesRoot: undefined },
+      { osunaHome: "/tmp/osuna-home", worktreesRoot: undefined },
     );
     expect(workspaceGitService.getSnapshot).toHaveBeenCalledWith("/tmp/request-worktree", {
       force: true,
@@ -2839,7 +2839,7 @@ diff --git a/file.txt b/file.txt
       body: "Updates file.",
     });
     checkoutGitMocks.createPullRequest.mockResolvedValue({
-      url: "https://github.com/getpaseo/paseo/pull/1",
+      url: "https://github.com/lft-oxy/osuna/pull/1",
       number: 1,
     });
     const session = createSessionForTest({ workspaceGitService });
@@ -2884,7 +2884,7 @@ diff --git a/file.txt b/file.txt
       body: "Updates file.",
     });
     checkoutGitMocks.createPullRequest.mockResolvedValue({
-      url: "https://github.com/getpaseo/paseo/pull/1",
+      url: "https://github.com/lft-oxy/osuna/pull/1",
       number: 1,
     });
     const session = createSessionForTest({ workspaceGitService, messages });
@@ -2921,13 +2921,13 @@ diff --git a/file.txt b/file.txt
         base: "main",
       },
       expect.anything(),
-      { paseoHome: "/tmp/osuna-home", worktreesRoot: undefined },
+      { osunaHome: "/tmp/osuna-home", worktreesRoot: undefined },
     );
     expect(messages).toContainEqual({
       type: "checkout_pr_create_response",
       payload: {
         cwd: "/tmp/request-worktree",
-        url: "https://github.com/getpaseo/paseo/pull/1",
+        url: "https://github.com/lft-oxy/osuna/pull/1",
         number: 1,
         error: null,
         requestId: "request-generated-pr",
@@ -3024,7 +3024,7 @@ diff --git a/file.txt b/file.txt
       new StructuredAgentFallbackError([]),
     );
     checkoutGitMocks.createPullRequest.mockResolvedValue({
-      url: "https://github.com/getpaseo/paseo/pull/9",
+      url: "https://github.com/lft-oxy/osuna/pull/9",
       number: 9,
     });
     const session = createSessionForTest({ workspaceGitService, messages });
@@ -3042,17 +3042,17 @@ diff --git a/file.txt b/file.txt
       "/tmp/request-worktree",
       {
         title: "Update changes",
-        body: "Automated PR generated by Paseo.",
+        body: "Automated PR generated by Osuna.",
         base: "main",
       },
       expect.anything(),
-      { paseoHome: "/tmp/osuna-home", worktreesRoot: undefined },
+      { osunaHome: "/tmp/osuna-home", worktreesRoot: undefined },
     );
     expect(messages).toContainEqual({
       type: "checkout_pr_create_response",
       payload: {
         cwd: "/tmp/request-worktree",
-        url: "https://github.com/getpaseo/paseo/pull/9",
+        url: "https://github.com/lft-oxy/osuna/pull/9",
         number: 9,
         error: null,
         requestId: "request-generated-pr-fallback",
@@ -3067,7 +3067,7 @@ diff --git a/file.txt b/file.txt
       getSnapshot: vi.fn().mockResolvedValue({}),
     };
     checkoutGitMocks.createPullRequest.mockResolvedValue({
-      url: "https://github.com/getpaseo/paseo/pull/2",
+      url: "https://github.com/lft-oxy/osuna/pull/2",
       number: 2,
     });
     const session = createSessionForTest({ github, workspaceGitService, messages });
@@ -3090,7 +3090,7 @@ diff --git a/file.txt b/file.txt
       type: "checkout_pr_create_response",
       payload: {
         cwd: "/tmp/request-worktree",
-        url: "https://github.com/getpaseo/paseo/pull/2",
+        url: "https://github.com/lft-oxy/osuna/pull/2",
         number: 2,
         error: null,
         requestId: "request-pr-create",
@@ -3922,7 +3922,7 @@ describe("session checkout status handling", () => {
         behindOfOrigin: 1,
         upstreamRef: null,
         hasRemote: true,
-        remoteUrl: "https://github.com/getpaseo/paseo.git",
+        remoteUrl: "https://github.com/lft-oxy/osuna.git",
         isOsunaOwnedWorktree: false,
         error: null,
         requestId: "request-status",
@@ -4224,7 +4224,7 @@ describe("session branch validation", () => {
   });
 
   test("does not validate tags as branches", async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "paseo-session-branch-validation-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "osuna-session-branch-validation-"));
     const repoDir = join(tempDir, "repo");
 
     try {
@@ -4669,20 +4669,20 @@ describe("session stash mutation handling", () => {
   });
 });
 
-describe("session paseo worktree creation handling", () => {
+describe("session osuna worktree creation handling", () => {
   test("forces workspace git refreshes for the source repo and created worktree", async () => {
     const workspaceGitService = { getSnapshot: vi.fn().mockResolvedValue({}) };
     const session = createSessionForTest({ workspaceGitService });
-    paseoWorktreeServiceMocks.createOsunaWorktree.mockResolvedValue({
+    osunaWorktreeServiceMocks.createOsunaWorktree.mockResolvedValue({
       repoRoot: "/tmp/repo",
       worktree: {
         branchName: "feature/new-worktree",
-        worktreePath: "/tmp/paseo/worktrees/new-worktree",
+        worktreePath: "/tmp/osuna/worktrees/new-worktree",
       },
       workspace: {
         workspaceId: "workspace-new-worktree",
         projectId: "project-repo",
-        cwd: "/tmp/paseo/worktrees/new-worktree",
+        cwd: "/tmp/osuna/worktrees/new-worktree",
         kind: "worktree",
         displayName: "feature/new-worktree",
       },
@@ -4700,7 +4700,7 @@ describe("session paseo worktree creation handling", () => {
       reason: "create-worktree",
     });
     expect(workspaceGitService.getSnapshot).toHaveBeenCalledWith(
-      "/tmp/paseo/worktrees/new-worktree",
+      "/tmp/osuna/worktrees/new-worktree",
       {
         force: true,
         reason: "create-worktree",
@@ -4715,12 +4715,12 @@ describe("session workspace script handling", () => {
     const snapshot = createWorkspaceGitSnapshot("/tmp/repo", {
       git: {
         currentBranch: "feature/service-scripts",
-        remoteUrl: "https://github.com/getpaseo/paseo.git",
+        remoteUrl: "https://github.com/lft-oxy/osuna.git",
       },
     });
     const workspaceGitService = {
       peekSnapshot: vi.fn(() => snapshot),
-      getProjectSlug: vi.fn().mockResolvedValue("paseo"),
+      getProjectSlug: vi.fn().mockResolvedValue("osuna"),
     };
     const workspaceRegistry = {
       get: vi.fn().mockResolvedValue({
@@ -4757,7 +4757,7 @@ describe("session workspace script handling", () => {
       expect.objectContaining({
         repoRoot: "/tmp/repo",
         workspaceId: "workspace-1",
-        projectSlug: "paseo",
+        projectSlug: "osuna",
         branchName: "feature/service-scripts",
         scriptName: "api",
         daemonPort: 6767,
@@ -4790,7 +4790,7 @@ describe("session pull request timeline handling", () => {
             forge: "github",
             number: 42,
             title: "Ship search",
-            url: "https://github.com/getpaseo/paseo/pull/42",
+            url: "https://github.com/lft-oxy/osuna/pull/42",
             state: "OPEN",
             body: null,
             labels: [],
@@ -4838,7 +4838,7 @@ describe("session pull request timeline handling", () => {
             forge: "github",
             number: 42,
             title: "Ship search",
-            url: "https://github.com/getpaseo/paseo/pull/42",
+            url: "https://github.com/lft-oxy/osuna/pull/42",
             state: "OPEN",
             body: null,
             labels: [],
@@ -4895,8 +4895,8 @@ describe("session pull request timeline handling", () => {
       isAuthenticated: vi.fn().mockResolvedValue(true),
       getPullRequestTimeline: vi.fn().mockResolvedValue({
         prNumber: 42,
-        repoOwner: "getpaseo",
-        repoName: "paseo",
+        repoOwner: "lft-oxy",
+        repoName: "osuna",
         items: [
           {
             id: "review-1",
@@ -4906,7 +4906,7 @@ describe("session pull request timeline handling", () => {
             avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
             body: "Looks good",
             createdAt: 1710000000000,
-            url: "https://github.com/getpaseo/paseo/pull/42#pullrequestreview-1",
+            url: "https://github.com/lft-oxy/osuna/pull/42#pullrequestreview-1",
             reviewState: "approved",
           },
         ],
@@ -4920,16 +4920,16 @@ describe("session pull request timeline handling", () => {
       type: "pull_request_timeline_request",
       cwd: "/tmp/repo",
       prNumber: 42,
-      repoOwner: "getpaseo",
-      repoName: "paseo",
+      repoOwner: "lft-oxy",
+      repoName: "osuna",
       requestId: "request-1",
     });
 
     expect(github.getPullRequestTimeline).toHaveBeenCalledWith({
       cwd: "/tmp/repo",
       prNumber: 42,
-      repoOwner: "getpaseo",
-      repoName: "paseo",
+      repoOwner: "lft-oxy",
+      repoName: "osuna",
     });
     expect(messages).toContainEqual({
       type: "pull_request_timeline_response",
@@ -4945,7 +4945,7 @@ describe("session pull request timeline handling", () => {
             avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
             body: "Looks good",
             createdAt: 1710000000000,
-            url: "https://github.com/getpaseo/paseo/pull/42#pullrequestreview-1",
+            url: "https://github.com/lft-oxy/osuna/pull/42#pullrequestreview-1",
             reviewState: "approved",
           },
         ],
@@ -4958,14 +4958,14 @@ describe("session pull request timeline handling", () => {
   });
 
   test.each([
-    { prNumber: 0, repoOwner: "getpaseo", repoName: "paseo" },
-    { prNumber: -1, repoOwner: "getpaseo", repoName: "paseo" },
-    { prNumber: 42, repoOwner: "get paseo", repoName: "paseo" },
-    { prNumber: 42, repoOwner: "getpaseo/cli", repoName: "paseo" },
-    { prNumber: 42, repoOwner: "get$paseo", repoName: "paseo" },
-    { prNumber: 42, repoOwner: "getpaseo", repoName: "pa seo" },
-    { prNumber: 42, repoOwner: "getpaseo", repoName: "paseo/app" },
-    { prNumber: 42, repoOwner: "getpaseo", repoName: "paseo!" },
+    { prNumber: 0, repoOwner: "lft-oxy", repoName: "osuna" },
+    { prNumber: -1, repoOwner: "lft-oxy", repoName: "osuna" },
+    { prNumber: 42, repoOwner: "get osuna", repoName: "osuna" },
+    { prNumber: 42, repoOwner: "lft-oxy/cli", repoName: "osuna" },
+    { prNumber: 42, repoOwner: "get$osuna", repoName: "osuna" },
+    { prNumber: 42, repoOwner: "lft-oxy", repoName: "pa seo" },
+    { prNumber: 42, repoOwner: "lft-oxy", repoName: "osuna/app" },
+    { prNumber: 42, repoOwner: "lft-oxy", repoName: "osuna!" },
   ])("returns an unknown error when request identity is invalid: %j", async (identity) => {
     const messages: unknown[] = [];
     const github = {
@@ -5014,8 +5014,8 @@ describe("session pull request timeline handling", () => {
       type: "pull_request_timeline_request",
       cwd: "/tmp/repo",
       prNumber: 42,
-      repoOwner: "getpaseo",
-      repoName: "paseo",
+      repoOwner: "lft-oxy",
+      repoName: "osuna",
       requestId: "request-3",
     });
 
@@ -5052,8 +5052,8 @@ describe("session pull request timeline handling", () => {
       name: "server-tests",
       status: "completed",
       conclusion: "failure",
-      url: "https://github.com/getpaseo/paseo/actions/runs/456/job/789",
-      detailsUrl: "https://github.com/getpaseo/paseo/actions/runs/456/job/789",
+      url: "https://github.com/lft-oxy/osuna/actions/runs/456/job/789",
+      detailsUrl: "https://github.com/lft-oxy/osuna/actions/runs/456/job/789",
       output: { title: "Tests failed", summary: "1 failure", text: "Assertion failed" },
       annotations: [],
       failedJobs: [],
@@ -5080,8 +5080,8 @@ describe("session pull request timeline handling", () => {
     await session.handleMessage({
       type: "checkout.forge.get_check_details.request",
       cwd: "/tmp/repo",
-      repoOwner: "getpaseo",
-      repoName: "paseo",
+      repoOwner: "lft-oxy",
+      repoName: "osuna",
       checkRunId: 12345,
       workflowRunId: 456,
       requestId: "request-check-details",
@@ -5090,8 +5090,8 @@ describe("session pull request timeline handling", () => {
     expect(checkDetailRequests).toEqual([
       {
         cwd: "/tmp/repo",
-        repoOwner: "getpaseo",
-        repoName: "paseo",
+        repoOwner: "lft-oxy",
+        repoName: "osuna",
         checkRunId: 12345,
         workflowRunId: 456,
       },
@@ -5108,8 +5108,8 @@ describe("session pull request timeline handling", () => {
           name: "server-tests",
           status: "completed",
           conclusion: "failure",
-          url: "https://github.com/getpaseo/paseo/actions/runs/456/job/789",
-          detailsUrl: "https://github.com/getpaseo/paseo/actions/runs/456/job/789",
+          url: "https://github.com/lft-oxy/osuna/actions/runs/456/job/789",
+          detailsUrl: "https://github.com/lft-oxy/osuna/actions/runs/456/job/789",
           output: { title: "Tests failed", summary: "1 failure", text: "Assertion failed" },
           annotations: [],
           failedJobs: [],

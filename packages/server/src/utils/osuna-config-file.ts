@@ -16,26 +16,26 @@ export {
 
 export const OSUNA_CONFIG_FILE_NAME = "osuna.json";
 
-export type ReadPaseoConfigForEditResult =
+export type ReadOsunaConfigForEditResult =
   | { ok: true; config: OsunaConfigRaw | null; revision: OsunaConfigRevision | null }
   | { ok: false; error: ProjectConfigRpcError };
 
-export type WritePaseoConfigForEditResult =
+export type WriteOsunaConfigForEditResult =
   | { ok: true; config: OsunaConfigRaw; revision: OsunaConfigRevision }
   | { ok: false; error: ProjectConfigRpcError };
 
-export interface WritePaseoConfigForEditInput {
+export interface WriteOsunaConfigForEditInput {
   repoRoot: string;
   config: OsunaConfigRaw;
   expectedRevision: OsunaConfigRevision | null;
 }
 
-export function resolvePaseoConfigPath(repoRoot: string): string {
+export function resolveOsunaConfigPath(repoRoot: string): string {
   return join(repoRoot, OSUNA_CONFIG_FILE_NAME);
 }
 
-export function statPaseoConfigPath(repoRoot: string): OsunaConfigRevision | null {
-  const configPath = resolvePaseoConfigPath(repoRoot);
+export function statOsunaConfigPath(repoRoot: string): OsunaConfigRevision | null {
+  const configPath = resolveOsunaConfigPath(repoRoot);
   if (!existsSync(configPath)) {
     return null;
   }
@@ -46,24 +46,24 @@ export function statPaseoConfigPath(repoRoot: string): OsunaConfigRevision | nul
   };
 }
 
-export function readPaseoConfigJson(repoRoot: string): unknown {
-  const configPath = resolvePaseoConfigPath(repoRoot);
+export function readOsunaConfigJson(repoRoot: string): unknown {
+  const configPath = resolveOsunaConfigPath(repoRoot);
   if (!existsSync(configPath)) {
     return null;
   }
   return JSON.parse(readFileSync(configPath, "utf8"));
 }
 
-export function readPaseoConfigForEdit(repoRoot: string): ReadPaseoConfigForEditResult {
+export function readOsunaConfigForEdit(repoRoot: string): ReadOsunaConfigForEditResult {
   try {
-    const json = readPaseoConfigJson(repoRoot);
+    const json = readOsunaConfigJson(repoRoot);
     if (json === null) {
       return { ok: true, config: null, revision: null };
     }
     return {
       ok: true,
       config: OsunaConfigRawSchema.parse(json),
-      revision: statPaseoConfigPath(repoRoot),
+      revision: statOsunaConfigPath(repoRoot),
     };
   } catch {
     return {
@@ -73,15 +73,15 @@ export function readPaseoConfigForEdit(repoRoot: string): ReadPaseoConfigForEdit
   }
 }
 
-export function writePaseoConfigForEdit(
-  input: WritePaseoConfigForEditInput,
-): WritePaseoConfigForEditResult {
+export function writeOsunaConfigForEdit(
+  input: WriteOsunaConfigForEditInput,
+): WriteOsunaConfigForEditResult {
   const parsed = OsunaConfigRawSchema.safeParse(input.config);
   if (!parsed.success) {
     return { ok: false, error: { code: "invalid_project_config" } };
   }
 
-  const configPath = resolvePaseoConfigPath(input.repoRoot);
+  const configPath = resolveOsunaConfigPath(input.repoRoot);
   const tempPath = join(
     input.repoRoot,
     `.${OSUNA_CONFIG_FILE_NAME}.${process.pid}.${randomUUID()}.tmp`,
@@ -89,9 +89,9 @@ export function writePaseoConfigForEdit(
 
   try {
     writeFileSync(tempPath, `${JSON.stringify(parsed.data, null, 2)}\n`);
-    const currentRevision = statPaseoConfigPath(input.repoRoot);
-    if (!paseoConfigRevisionsEqual(currentRevision, input.expectedRevision)) {
-      removeTempPaseoConfig(tempPath);
+    const currentRevision = statOsunaConfigPath(input.repoRoot);
+    if (!osunaConfigRevisionsEqual(currentRevision, input.expectedRevision)) {
+      removeTempOsunaConfig(tempPath);
       return {
         ok: false,
         error: { code: "stale_project_config", currentRevision },
@@ -99,18 +99,18 @@ export function writePaseoConfigForEdit(
     }
 
     renameSync(tempPath, configPath);
-    const revision = statPaseoConfigPath(input.repoRoot);
+    const revision = statOsunaConfigPath(input.repoRoot);
     if (!revision) {
       return { ok: false, error: { code: "write_failed" } };
     }
     return { ok: true, config: parsed.data, revision };
   } catch {
-    removeTempPaseoConfig(tempPath);
+    removeTempOsunaConfig(tempPath);
     return { ok: false, error: { code: "write_failed" } };
   }
 }
 
-function paseoConfigRevisionsEqual(
+function osunaConfigRevisionsEqual(
   left: OsunaConfigRevision | null,
   right: OsunaConfigRevision | null,
 ): boolean {
@@ -120,7 +120,7 @@ function paseoConfigRevisionsEqual(
   return left.mtimeMs === right.mtimeMs && left.size === right.size;
 }
 
-function removeTempPaseoConfig(tempPath: string): void {
+function removeTempOsunaConfig(tempPath: string): void {
   try {
     rmSync(tempPath, { force: true });
   } catch {

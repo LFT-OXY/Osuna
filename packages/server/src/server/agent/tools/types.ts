@@ -1,47 +1,47 @@
 import type { z } from "zod";
 import type { ProviderOsunaToolsPolicy } from "@osuna/protocol/provider-config";
 
-export interface PaseoToolExecutionContext {
+export interface OsunaToolExecutionContext {
   signal?: AbortSignal;
-  sendUpdate?: (update: PaseoToolResult) => void;
+  sendUpdate?: (update: OsunaToolResult) => void;
 }
 
-export interface PaseoToolResult {
+export interface OsunaToolResult {
   content: Array<{ type: string; text?: string; [key: string]: unknown }>;
   structuredContent?: unknown;
   isError?: boolean;
 }
 
-export interface PaseoToolConfig {
+export interface OsunaToolConfig {
   title?: string;
   description?: string;
   inputSchema?: z.ZodRawShape | z.ZodType;
   outputSchema?: z.ZodRawShape;
 }
 
-export interface PaseoToolDefinition extends PaseoToolConfig {
+export interface OsunaToolDefinition extends OsunaToolConfig {
   name: string;
   description: string;
-  handler: (input: unknown, context: PaseoToolExecutionContext) => Promise<PaseoToolResult>;
+  handler: (input: unknown, context: OsunaToolExecutionContext) => Promise<OsunaToolResult>;
 }
 
-export interface PaseoToolCatalog {
-  tools: ReadonlyMap<string, PaseoToolDefinition>;
-  getTool(name: string): PaseoToolDefinition | undefined;
+export interface OsunaToolCatalog {
+  tools: ReadonlyMap<string, OsunaToolDefinition>;
+  getTool(name: string): OsunaToolDefinition | undefined;
   executeTool(
     name: string,
     input: unknown,
-    context?: PaseoToolExecutionContext,
-  ): Promise<PaseoToolResult>;
+    context?: OsunaToolExecutionContext,
+  ): Promise<OsunaToolResult>;
 }
 
-export interface PaseoToolRuntimeContext {
+export interface OsunaToolRuntimeContext {
   callerAgentId?: string;
-  paseoToolPolicy?: ProviderOsunaToolsPolicy;
+  osunaToolPolicy?: ProviderOsunaToolsPolicy;
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
 }
 
-export type PaseoToolCatalogFactory = (
-  context: PaseoToolRuntimeContext,
-) => PaseoToolCatalog | Promise<PaseoToolCatalog>;
+export type OsunaToolCatalogFactory = (
+  context: OsunaToolRuntimeContext,
+) => OsunaToolCatalog | Promise<OsunaToolCatalog>;

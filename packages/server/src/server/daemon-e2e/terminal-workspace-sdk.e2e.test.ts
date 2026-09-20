@@ -5,16 +5,16 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { createOsunaClient, type OsunaClient } from "@osuna/client";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
-let daemon: TestPaseoDaemon;
+let daemon: TestOsunaDaemon;
 let client: DaemonClient;
 let cwd: string;
 let sdk: OsunaClient;
 
 beforeEach(async () => {
   cwd = await mkdtemp(path.join(tmpdir(), "terminal-workspace-sdk-"));
-  daemon = await createTestPaseoDaemon();
+  daemon = await createTestOsunaDaemon();
   client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await client.connect();
   sdk = createOsunaClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });

@@ -1,4 +1,4 @@
-import { readPaseoConfigJson } from "./paseo-config-file.js";
+import { readOsunaConfigJson } from "./osuna-config-file.js";
 import {
   OsunaConfigSchema,
   type OsunaMetadataGeneration,
@@ -52,7 +52,7 @@ async function readProjectMetadataOverrides(
   }
   try {
     const repoRoot = await options.workspaceGitService.resolveRepoRoot(options.cwd);
-    const json = readPaseoConfigJson(repoRoot);
+    const json = readOsunaConfigJson(repoRoot);
     return OsunaConfigSchema.parse(json).metadataGeneration;
   } catch {
     return undefined;

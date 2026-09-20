@@ -30,7 +30,7 @@ console.log("=== Stop Command Tests ===\n");
 
 // Allocate an unused endpoint for connection-error and argument-validation checks.
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
 
 try {
   // Test 1: stop --help shows options
@@ -49,7 +49,7 @@ try {
   {
     console.log("Test 2: stop requires ID, --all, or --cwd");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} stop`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} stop`.nothrow();
     assert.notStrictEqual(result.exitCode, 0, "should fail without id, --all, or --cwd");
     const output = result.stdout + result.stderr;
     const hasError =
@@ -65,7 +65,7 @@ try {
   {
     console.log("Test 3: stop handles daemon not running");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} stop abc123`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} stop abc123`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -81,7 +81,7 @@ try {
   {
     console.log("Test 4: stop --all flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} stop --all`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} stop --all`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --all flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -92,7 +92,7 @@ try {
   {
     console.log("Test 5: stop --cwd flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} stop --cwd /tmp`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} stop --cwd /tmp`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --cwd flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -103,7 +103,7 @@ try {
   {
     console.log("Test 6: stop with ID and --host flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} stop abc123 --host localhost:${port}`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} stop abc123 --host localhost:${port}`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --host flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -123,7 +123,7 @@ try {
   {
     console.log("Test 8: -q (quiet) flag is accepted with stop");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} -q stop abc123`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} -q stop abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -q flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -131,7 +131,7 @@ try {
   }
 } finally {
   // Clean up temp directory
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All stop tests passed ===");

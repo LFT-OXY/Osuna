@@ -77,7 +77,7 @@ directory relative to the project root; Osuna worktrees live under `$OSUNA_HOME/
 outside the root, so they show in full.
 
 The view asks with `includeImported: true`, so sessions Osuna already owns stay in the list with
-their `importedAgentId` and `importedAgentWorkspaceId`. Such a row carries a Osuna badge and
+their `importedAgentId` and `importedAgentWorkspaceId`. Such a row carries an Osuna badge and
 opens that agent through `navigateToAgent` with the workspace id and `pin`, the same call the
 History list makes; it never starts a terminal, because a provider session resumed in two
 processes writes two logs that cannot see each other. The workspace id travels on the wire

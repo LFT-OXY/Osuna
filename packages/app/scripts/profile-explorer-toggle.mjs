@@ -9,7 +9,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const appUrl = process.env.OSUNA_PROFILE_APP_URL ?? "http://127.0.0.1:8081";
 const daemonPort = Number(process.env.OSUNA_PROFILE_DAEMON_PORT ?? 6778);
 const workspaceCwd = process.env.OSUNA_PROFILE_WORKSPACE_CWD ?? repoRoot;
-const workspaceId = process.env.OSUNA_PROFILE_WORKSPACE_ID ?? resolvePaseoWorkspaceId();
+const workspaceId = process.env.OSUNA_PROFILE_WORKSPACE_ID ?? resolveOsunaWorkspaceId();
 const serverId =
   process.env.OSUNA_PROFILE_SERVER_ID ??
   (await readFile(resolve(repoRoot, ".dev/osuna-home/server-id"), "utf8")).trim();
@@ -30,17 +30,17 @@ function numberFromEnv(name, fallback) {
   return value;
 }
 
-function resolvePaseoWorkspaceId() {
+function resolveOsunaWorkspaceId() {
   const output = execFileSync("npm", ["run", "cli", "--", "workspace", "ls", "--json"], {
     cwd: repoRoot,
     encoding: "utf8",
     env: { ...process.env, FORCE_COLOR: "0" },
   });
   const jsonStart = output.indexOf("[\n");
-  if (jsonStart < 0) throw new Error("Could not parse `paseo workspace ls --json`");
+  if (jsonStart < 0) throw new Error("Could not parse `osuna workspace ls --json`");
   const workspaces = JSON.parse(output.slice(jsonStart));
   const candidates = workspaces.filter((workspace) => workspace.cwd === workspaceCwd);
-  const workspace = candidates.find((candidate) => candidate.name === "Paseo") ?? candidates[0];
+  const workspace = candidates.find((candidate) => candidate.name === "Osuna") ?? candidates[0];
   if (!workspace?.workspaceId) {
     throw new Error(`No active workspace found for ${workspaceCwd}`);
   }
@@ -139,8 +139,8 @@ async function installMeasurementProbe(page) {
     const onKeyDown = (event) => {
       if (!event.metaKey || event.code !== "KeyE") return;
       const sequence = state.events.length;
-      performance.mark(`paseo:explorer-toggle:keydown:${sequence}`);
-      console.timeStamp(`paseo:explorer-toggle:keydown:${sequence}`);
+      performance.mark(`osuna:explorer-toggle:keydown:${sequence}`);
+      console.timeStamp(`osuna:explorer-toggle:keydown:${sequence}`);
       state.events.push({
         sequence,
         inputTime: event.timeStamp,

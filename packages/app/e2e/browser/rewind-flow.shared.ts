@@ -32,7 +32,7 @@ export function defineRewindFlowSpec(input: RewindFlowCase): void {
 
     test("rewinds conversation and file-write turns without transcript drift", async ({ page }) => {
       const cwd = realpathSync(
-        mkdtempSync(path.join(tmpdir(), `paseo-rewind-flow-${input.provider}-`)),
+        mkdtempSync(path.join(tmpdir(), `osuna-rewind-flow-${input.provider}-`)),
       );
       let handle: AgentHandle | undefined;
 

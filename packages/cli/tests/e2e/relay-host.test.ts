@@ -187,7 +187,7 @@ async function waitForDaemonRelayRegistered(offerUrl: string, timeoutMs = 30_000
     });
 
     const offer = await generateLocalPairingOffer({
-      paseoHome: ctx.paseoHome,
+      osunaHome: ctx.osunaHome,
       relayEnabled: true,
       relayEndpoint,
       relayPublicEndpoint: relayEndpoint,
@@ -215,12 +215,12 @@ async function waitForDaemonRelayRegistered(offerUrl: string, timeoutMs = 30_000
   it("runs `osuna --host <offer-url> ls` over the relay and matches direct ls output", async () => {
     if (!ctx) throw new Error("test context not initialized");
 
-    const direct = await ctx.paseo(["ls", "--json"]);
+    const direct = await ctx.osuna(["ls", "--json"]);
     expect(direct.exitCode, `direct ls failed: ${direct.stderr}`).toBe(0);
     const directAgents = JSON.parse(direct.stdout.trim() || "[]");
     expect(Array.isArray(directAgents)).toBe(true);
 
-    const relay = await ctx.paseo(["ls", "--json", "--host", offerUrl], {
+    const relay = await ctx.osuna(["ls", "--json", "--host", offerUrl], {
       timeout: 30_000,
       env: { OSUNA_HOST: offerUrl },
     });

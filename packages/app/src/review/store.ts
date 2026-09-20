@@ -246,7 +246,7 @@ export function buildReviewAttachmentSnapshot(
 
   const attachment: ReviewAttachment = {
     type: "review",
-    mimeType: "application/paseo-review",
+    mimeType: "application/osuna-review",
     cwd: input.cwd,
     mode: input.mode,
     baseRef: normalizeBaseRef(input.baseRef) || null,

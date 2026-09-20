@@ -27,7 +27,7 @@ function entry(
     providerId: "claude",
     providerLabel: "Claude Code",
     providerHandleId: "thread-1",
-    cwd: "/repo/paseo",
+    cwd: "/repo/osuna",
     title: null,
     firstPromptPreview: null,
     lastPromptPreview: null,
@@ -245,23 +245,23 @@ describe("hasMoreSessions", () => {
 
 describe("resolveDirectoryLabel", () => {
   const projects = [
-    { rootPath: "/home/me/paseo", name: "paseo" },
-    { rootPath: "/home/me/paseo/packages/app", name: "paseo app" },
+    { rootPath: "/home/me/osuna", name: "osuna" },
+    { rootPath: "/home/me/osuna/packages/app", name: "osuna app" },
   ];
 
   it("names the project root after the project alone", () => {
-    expect(resolveDirectoryLabel("/home/me/paseo", projects)).toEqual({ name: "paseo" });
+    expect(resolveDirectoryLabel("/home/me/osuna", projects)).toEqual({ name: "osuna" });
   });
 
   it("qualifies a worktree under the project with its path below the root", () => {
     expect(
-      resolveDirectoryLabel("/home/me/paseo/.dev/worktrees/abc/zebra", [projects[0]!]),
-    ).toEqual({ name: "paseo", detail: ".dev/worktrees/abc/zebra" });
+      resolveDirectoryLabel("/home/me/osuna/.dev/worktrees/abc/zebra", [projects[0]!]),
+    ).toEqual({ name: "osuna", detail: ".dev/worktrees/abc/zebra" });
   });
 
   it("tells two worktrees of the same project apart", () => {
-    const zebra = resolveDirectoryLabel("/home/me/paseo/.dev/worktrees/abc/zebra", [projects[0]!]);
-    const otter = resolveDirectoryLabel("/home/me/paseo/.dev/worktrees/def/otter", [projects[0]!]);
+    const zebra = resolveDirectoryLabel("/home/me/osuna/.dev/worktrees/abc/zebra", [projects[0]!]);
+    const otter = resolveDirectoryLabel("/home/me/osuna/.dev/worktrees/def/otter", [projects[0]!]);
     expect(zebra).not.toEqual(otter);
     expect([zebra.detail, otter.detail]).toEqual([
       ".dev/worktrees/abc/zebra",
@@ -270,21 +270,21 @@ describe("resolveDirectoryLabel", () => {
   });
 
   it("picks the most specific project root containing the directory", () => {
-    expect(resolveDirectoryLabel("/home/me/paseo/packages/app/src", projects)).toEqual({
-      name: "paseo app",
+    expect(resolveDirectoryLabel("/home/me/osuna/packages/app/src", projects)).toEqual({
+      name: "osuna app",
       detail: "src",
     });
   });
 
   it("ignores trailing slashes on both sides", () => {
     expect(
-      resolveDirectoryLabel("/home/me/paseo/", [{ rootPath: "/home/me/paseo/", name: "p" }]),
+      resolveDirectoryLabel("/home/me/osuna/", [{ rootPath: "/home/me/osuna/", name: "p" }]),
     ).toEqual({ name: "p" });
   });
 
   it("does not match a project root that is only a string prefix", () => {
-    expect(resolveDirectoryLabel("/home/me/paseo-fork", projects)).toEqual({
-      name: "/home/me/paseo-fork",
+    expect(resolveDirectoryLabel("/home/me/osuna-fork", projects)).toEqual({
+      name: "/home/me/osuna-fork",
     });
   });
 
@@ -295,12 +295,12 @@ describe("resolveDirectoryLabel", () => {
 
 describe("formatDirectoryLabel", () => {
   it("shows the project name alone at its root", () => {
-    expect(formatDirectoryLabel({ name: "paseo" })).toBe("paseo");
+    expect(formatDirectoryLabel({ name: "osuna" })).toBe("osuna");
   });
 
   it("appends the path under the root so worktrees of one project read apart", () => {
-    expect(formatDirectoryLabel({ name: "paseo", detail: ".dev/worktrees/zebra" })).toBe(
-      "paseo · .dev/worktrees/zebra",
+    expect(formatDirectoryLabel({ name: "osuna", detail: ".dev/worktrees/zebra" })).toBe(
+      "osuna · .dev/worktrees/zebra",
     );
   });
 });
@@ -309,8 +309,8 @@ describe("resolveImportTarget", () => {
   it("trusts a scoped listing, whose rows the daemon already matched realpath-aware", () => {
     expect(
       resolveImportTarget({
-        entryCwd: "/private/repo/paseo",
-        workspaceCwd: "/repo/paseo",
+        entryCwd: "/private/repo/osuna",
+        workspaceCwd: "/repo/osuna",
         workspaceId: "ws-1",
         isScopedListing: true,
       }),
@@ -320,8 +320,8 @@ describe("resolveImportTarget", () => {
   it("keeps the current workspace for a Show-all row in that workspace's directory", () => {
     expect(
       resolveImportTarget({
-        entryCwd: "/repo/paseo/",
-        workspaceCwd: "/repo/paseo",
+        entryCwd: "/repo/osuna/",
+        workspaceCwd: "/repo/osuna",
         workspaceId: "ws-1",
         isScopedListing: false,
       }),
@@ -332,7 +332,7 @@ describe("resolveImportTarget", () => {
     expect(
       resolveImportTarget({
         entryCwd: "/repo/other",
-        workspaceCwd: "/repo/paseo",
+        workspaceCwd: "/repo/osuna",
         workspaceId: "ws-1",
         isScopedListing: false,
       }),
@@ -340,7 +340,7 @@ describe("resolveImportTarget", () => {
   });
 
   it("treats a sheet with no workspace as cross-workspace", () => {
-    expect(resolveImportTarget({ entryCwd: "/repo/paseo", isScopedListing: false })).toEqual({
+    expect(resolveImportTarget({ entryCwd: "/repo/osuna", isScopedListing: false })).toEqual({
       crossWorkspace: true,
     });
   });

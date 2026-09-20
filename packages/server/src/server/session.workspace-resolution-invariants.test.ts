@@ -101,7 +101,7 @@ function createHarness(input: {
     logger: createStub<SessionOptions["logger"]>(logger),
     downloadTokenStore: createStub<SessionOptions["downloadTokenStore"]>({}),
     pushNotifications: createStub<SessionOptions["pushNotifications"]>({}),
-    paseoHome: mkdtempSync(path.join(tmpdir(), "paseo-invariant-test-")),
+    osunaHome: mkdtempSync(path.join(tmpdir(), "osuna-invariant-test-")),
     agentManager: createStub<SessionOptions["agentManager"]>({
       subscribe: () => () => {},
       listAgents: () => [],

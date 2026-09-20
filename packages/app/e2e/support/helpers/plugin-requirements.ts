@@ -15,7 +15,7 @@ export const test = base.extend<{
 }>({
   requirementHost: async ({ e2eWorker }, provide) => {
     void e2eWorker;
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-requirement-ui-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-requirement-ui-"));
     await writeRequirements(directory, "^99.0.0");
     await writeFile(
       path.join(directory, "index.client.ts"),

@@ -18,8 +18,8 @@ export interface MatchOptions {
   /** Omit or pass null to match exactly. `fuzzyPolicyForToken` picks a policy. */
   fuzzy?: FuzzyPolicy | null;
   /**
-   * Match characters in order within one whitespace-delimited word, so `pasbab`
-   * finds `paseo-babysit`, but `labdes` cannot join "Label as Design". Defaults to on.
+   * Match characters in order within one whitespace-delimited word, so `osubab`
+   * finds `osuna-babysit`, but `labdes` cannot join "Label as Design". Defaults to on.
    */
   subsequence?: boolean;
 }

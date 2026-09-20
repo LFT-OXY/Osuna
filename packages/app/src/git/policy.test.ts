@@ -207,7 +207,7 @@ describe("git-actions-policy", () => {
     });
   });
 
-  it("keeps push available for a no-upstream Paseo worktree with local commits", () => {
+  it("keeps push available for a no-upstream Osuna worktree with local commits", () => {
     const actions = buildGitActions(
       createInput({
         hasRemote: true,
@@ -434,7 +434,7 @@ describe("git-actions-policy", () => {
     expect(actions.secondary.some((action) => action.id === "archive-workspace")).toBe(true);
   });
 
-  it("still promotes archive as primary for an idle Paseo-owned worktree", () => {
+  it("still promotes archive as primary for an idle Osuna-owned worktree", () => {
     const actions = buildGitActions(createInput({ isOsunaOwnedWorktree: true }));
 
     expect(actions.primary).toMatchObject({ id: "archive-workspace" });

@@ -24,7 +24,7 @@ function createFakeMacBundle(options: { includeHelper: boolean }): {
   root: string;
   shimPath: string;
 } {
-  const root = mkdtempSync(join(tmpdir(), "paseo-cli-shim-test-"));
+  const root = mkdtempSync(join(tmpdir(), "osuna-cli-shim-test-"));
   const appPath = join(root, "Osuna.app");
   const contentsPath = join(appPath, "Contents");
   const resourcesPath = join(contentsPath, "Resources");

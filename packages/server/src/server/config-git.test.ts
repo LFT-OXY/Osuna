@@ -8,7 +8,7 @@ import { loadConfig } from "./config.js";
 const roots: string[] = [];
 
 async function createHome(config: object = {}): Promise<string> {
-  const home = await mkdtemp(path.join(os.tmpdir(), "paseo-config-git-"));
+  const home = await mkdtemp(path.join(os.tmpdir(), "osuna-config-git-"));
   roots.push(home);
   await writeFile(path.join(home, "config.json"), JSON.stringify(config));
   return home;

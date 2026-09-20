@@ -1,7 +1,7 @@
 export const meta = {
-  name: "paseo-workflow-row-qa",
+  name: "osuna-workflow-row-qa",
   description: "Verify the workflow row lifecycle",
-  whenToUse: "Paseo real-provider QA only",
+  whenToUse: "Osuna real-provider QA only",
   phases: [{ title: "Verify", detail: "one child returns a fixed marker" }],
 };
 

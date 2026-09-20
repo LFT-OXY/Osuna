@@ -89,7 +89,7 @@ test.describe("Worktree restore after daemon restart", () => {
   test("after archiving a worktree and restarting the daemon, History shows the worktree branch (not main) and restores its committed changes", async ({
     page,
   }) => {
-    // A paseo worktree is cut on its own branch named after the slug, and the
+    // A osuna worktree is cut on its own branch named after the slug, and the
     // worktree workspace is displayed under the same name. These are the values
     // the History table cells must show after restore — never "main".
     const worktreeSlug = `restart-restore-${randomUUID().slice(0, 8)}`;

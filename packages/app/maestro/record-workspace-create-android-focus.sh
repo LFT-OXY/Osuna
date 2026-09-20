@@ -11,10 +11,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 FLOW_TEMPLATE_DIR="$REPO_ROOT/packages/app/maestro"
 SETUP_TEMPLATE="$REPO_ROOT/packages/app/maestro/workspace-create-android-ready-sidebar.yaml"
 FOCUS_TEMPLATE="$REPO_ROOT/packages/app/maestro/workspace-create-android-create-focused.yaml"
-OUT_DIR="/tmp/paseo-workspace-create-android-focus-$(date +%s)"
-VIDEO_DIR="/tmp/paseo-maestro-videos"
-DEVICE_VIDEO="/sdcard/paseo-maestro-workspace-create-focused.mp4"
-LOCAL_VIDEO="$VIDEO_DIR/paseo-maestro-workspace-create-focused.mp4"
+OUT_DIR="/tmp/osuna-workspace-create-android-focus-$(date +%s)"
+VIDEO_DIR="/tmp/osuna-maestro-videos"
+DEVICE_VIDEO="/sdcard/osuna-maestro-workspace-create-focused.mp4"
+LOCAL_VIDEO="$VIDEO_DIR/osuna-maestro-workspace-create-focused.mp4"
 CLIENT_EXPORTS="$REPO_ROOT/packages/client/dist/daemon-client.js"
 
 export OSUNA_MAESTRO_APP_ID="${OSUNA_MAESTRO_APP_ID:-com.chinhae.osuna.debug}"
@@ -63,14 +63,14 @@ if [ ! -f "$CLIENT_EXPORTS" ]; then
 fi
 
 if [ -z "${OSUNA_MAESTRO_PROJECT_PATH:-}" ]; then
-  PROJECT_PARENT="$(mktemp -d /tmp/paseo-maestro-project-XXXXXX)"
+  PROJECT_PARENT="$(mktemp -d /tmp/osuna-maestro-project-XXXXXX)"
   PROJECT_BASENAME="aaa-workspace-create-android-$(basename "$PROJECT_PARENT")"
   export OSUNA_MAESTRO_PROJECT_PATH="$PROJECT_PARENT/$PROJECT_BASENAME"
   mkdir -p "$OSUNA_MAESTRO_PROJECT_PATH"
   git -C "$OSUNA_MAESTRO_PROJECT_PATH" init >/dev/null
   git -C "$OSUNA_MAESTRO_PROJECT_PATH" checkout -b main >/dev/null 2>&1 || true
-  git -C "$OSUNA_MAESTRO_PROJECT_PATH" config user.name "Paseo Maestro"
-  git -C "$OSUNA_MAESTRO_PROJECT_PATH" config user.email "maestro@getpaseo.local"
+  git -C "$OSUNA_MAESTRO_PROJECT_PATH" config user.name "Osuna Maestro"
+  git -C "$OSUNA_MAESTRO_PROJECT_PATH" config user.email "maestro@osuna.local"
   printf "# Workspace create Android focused recording\n" > "$OSUNA_MAESTRO_PROJECT_PATH/README.md"
   git -C "$OSUNA_MAESTRO_PROJECT_PATH" add README.md
   git -C "$OSUNA_MAESTRO_PROJECT_PATH" commit -m "Initial commit" >/dev/null

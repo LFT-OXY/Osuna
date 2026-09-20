@@ -6,10 +6,10 @@ import pino from "pino";
 import { expect, test } from "vitest";
 import { CodexAppServerAgentClient } from "../agent/providers/codex-app-server-agent.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 async function expectContextAfterWorkspaceRestore(legacyNativeArchive: boolean): Promise<void> {
-  const root = mkdtempSync(path.join(tmpdir(), "paseo-archive-codex-"));
+  const root = mkdtempSync(path.join(tmpdir(), "osuna-archive-codex-"));
   const cwd = path.join(root, "repo");
   mkdirSync(cwd);
   execFileSync("git", ["init", "-b", "main", cwd]);
@@ -31,10 +31,10 @@ async function expectContextAfterWorkspaceRestore(legacyNativeArchive: boolean):
   );
   const logger = pino({ level: "warn" });
   const provider = new CodexAppServerAgentClient(logger);
-  let daemon: TestPaseoDaemon | undefined;
+  let daemon: TestOsunaDaemon | undefined;
   let client: DaemonClient | undefined;
   try {
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       agentClients: { codex: provider },
       logger,
       pluginsEnabled: false,
@@ -62,7 +62,7 @@ async function expectContextAfterWorkspaceRestore(legacyNativeArchive: boolean):
     const handle = manager.getAgent(agent.id)!.persistence!;
     await client.archiveWorkspace(agent.workspaceId!);
     expect(existsSync(agent.cwd)).toBe(false);
-    // Older daemons marked Paseo archived while native archive failed against its writer.
+    // Older daemons marked Osuna archived while native archive failed against its writer.
     if (legacyNativeArchive) await provider.unarchiveNativeSession(handle);
     await client.restoreWorkspace(agent.workspaceId!);
     expect(existsSync(agent.cwd)).toBe(true);

@@ -91,8 +91,8 @@ import {
 const PI_PROVIDER = "pi";
 const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = "medium";
 const PI_BINARY_COMMAND = process.env.PI_COMMAND ?? process.env.PI_ACP_PI_COMMAND ?? "pi";
-const OSUNA_PI_TREE_EXTENSION_COMMAND = "paseo_tree";
-const OSUNA_PI_CAPTURE_EXTENSION_COMMAND = "paseo_capture_entries";
+const OSUNA_PI_TREE_EXTENSION_COMMAND = "osuna_tree";
+const OSUNA_PI_CAPTURE_EXTENSION_COMMAND = "osuna_capture_entries";
 const OSUNA_PI_ENTRY_CAPTURE_MARKER = "OSUNA_ENTRY_CAPTURE";
 const OSUNA_PI_SUBMITTED_USER_ENTRY_MARKER = "OSUNA_SUBMITTED_USER_ENTRY";
 const OSUNA_PI_COMMAND_RESULT_MARKER = "OSUNA_COMMAND_RESULT";
@@ -515,7 +515,7 @@ function buildResumeStartInput(input: {
   sessionFile: string;
   launchContext: AgentLaunchContext | undefined;
   mcpConfig: PiMcpConfigFile | null;
-  paseoExtension: PiTempFile | null;
+  osunaExtension: PiTempFile | null;
 }): PiStartSessionInput {
   return {
     cwd: input.resumeConfig.cwd,
@@ -524,7 +524,7 @@ function buildResumeStartInput(input: {
     model: input.resumeConfig.model,
     thinkingOptionId: normalizePiThinkingOption(input.resumeConfig.thinkingOptionId) ?? undefined,
     mcpConfigPath: input.mcpConfig?.path,
-    extensionPaths: input.paseoExtension ? [input.paseoExtension.path] : undefined,
+    extensionPaths: input.osunaExtension ? [input.osunaExtension.path] : undefined,
   };
 }
 
@@ -600,7 +600,7 @@ function createPiMcpConfigFile(
     mcpServers[name] = toPiMcpConfig(serverConfig);
   }
 
-  const dir = mkdtempSync(join(tmpdir(), "paseo-pi-mcp-"));
+  const dir = mkdtempSync(join(tmpdir(), "osuna-pi-mcp-"));
   const filePath = join(dir, "mcp.json");
   const mergedConfig: Record<string, unknown> = { ...globalConfig, mcpServers };
   delete mergedConfig["mcp-servers"];
@@ -614,9 +614,9 @@ function createPiMcpConfigFile(
   };
 }
 
-function createPiPaseoExtensionFile(systemPrompt?: string): PiTempFile {
-  const dir = mkdtempSync(join(tmpdir(), "paseo-pi-extension-"));
-  const filePath = join(dir, "paseo-integration.mjs");
+function createPiOsunaExtensionFile(systemPrompt?: string): PiTempFile {
+  const dir = mkdtempSync(join(tmpdir(), "osuna-pi-extension-"));
+  const filePath = join(dir, "osuna-integration.mjs");
   writeFileSync(
     filePath,
     `
@@ -667,7 +667,7 @@ function createPiPaseoExtensionFile(systemPrompt?: string): PiTempFile {
 	  );
 	}
 
-	export default function paseoIntegration(pi) {
+	export default function osunaIntegration(pi) {
 	  const submittedUserMessages = [];
 
 	  function emitSubmittedUserEntries(ctx) {
@@ -722,7 +722,7 @@ function createPiPaseoExtensionFile(systemPrompt?: string): PiTempFile {
 	  });
 
 	  pi.registerCommand("${OSUNA_PI_CAPTURE_EXTENSION_COMMAND}", {
-	    description: "Internal Paseo entry capture bridge",
+	    description: "Internal Osuna entry capture bridge",
 	    handler: async (args, ctx) => {
 	      const payload = decodePayload(args.trim());
 	      emitEntryCapture(ctx, "command", payload.requestId);
@@ -730,7 +730,7 @@ function createPiPaseoExtensionFile(systemPrompt?: string): PiTempFile {
 	  });
 
 	  pi.registerCommand("${OSUNA_PI_TREE_EXTENSION_COMMAND}", {
-	    description: "Internal Paseo tree navigation bridge",
+	    description: "Internal Osuna tree navigation bridge",
 	    handler: async (args, ctx) => {
 	      const payload = decodePayload(args.trim());
 	      try {
@@ -2534,7 +2534,7 @@ export class PiRpcAgentClient implements AgentClient {
       ...launchContext?.env,
     };
     const mcpConfig = await this.prepareMcpConfig(config.cwd, config.mcpServers, mcpEnv);
-    const paseoExtension = createPiPaseoExtensionFile(
+    const osunaExtension = createPiOsunaExtensionFile(
       composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
     );
     let runtimeSession: PiRuntimeSession;
@@ -2547,11 +2547,11 @@ export class PiRpcAgentClient implements AgentClient {
         noSession: config.internal === true,
         env: launchContext?.env,
         mcpConfigPath: mcpConfig?.path,
-        extensionPaths: paseoExtension ? [paseoExtension.path] : undefined,
+        extensionPaths: osunaExtension ? [osunaExtension.path] : undefined,
       });
     } catch (error) {
       mcpConfig?.cleanup();
-      paseoExtension?.cleanup();
+      osunaExtension?.cleanup();
       throw error;
     }
     try {
@@ -2560,7 +2560,7 @@ export class PiRpcAgentClient implements AgentClient {
         config,
         initialState: await runtimeSession.getState(),
         capabilities: capabilitiesForSession(mcpConfig !== null),
-        cleanup: combineCleanup([mcpConfig?.cleanup, paseoExtension?.cleanup]),
+        cleanup: combineCleanup([mcpConfig?.cleanup, osunaExtension?.cleanup]),
         extensionTimeoutMs: this.providerParams.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
@@ -2568,7 +2568,7 @@ export class PiRpcAgentClient implements AgentClient {
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
       mcpConfig?.cleanup();
-      paseoExtension?.cleanup();
+      osunaExtension?.cleanup();
       throw error;
     }
   }
@@ -2595,7 +2595,7 @@ export class PiRpcAgentClient implements AgentClient {
       resumeConfig.config.mcpServers,
       mcpEnv,
     );
-    const paseoExtension = createPiPaseoExtensionFile(
+    const osunaExtension = createPiOsunaExtensionFile(
       composeSystemPromptParts(
         resumeConfig.config.systemPrompt,
         resumeConfig.config.daemonAppendSystemPrompt,
@@ -2609,12 +2609,12 @@ export class PiRpcAgentClient implements AgentClient {
           sessionFile,
           launchContext,
           mcpConfig,
-          paseoExtension,
+          osunaExtension,
         }),
       );
     } catch (error) {
       mcpConfig?.cleanup();
-      paseoExtension?.cleanup();
+      osunaExtension?.cleanup();
       throw error;
     }
     try {
@@ -2623,7 +2623,7 @@ export class PiRpcAgentClient implements AgentClient {
         config: resumeConfig.config,
         initialState: await runtimeSession.getState(),
         capabilities: capabilitiesForSession(mcpConfig !== null),
-        cleanup: combineCleanup([mcpConfig?.cleanup, paseoExtension?.cleanup]),
+        cleanup: combineCleanup([mcpConfig?.cleanup, osunaExtension?.cleanup]),
         extensionTimeoutMs: this.providerParams.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
@@ -2631,7 +2631,7 @@ export class PiRpcAgentClient implements AgentClient {
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
       mcpConfig?.cleanup();
-      paseoExtension?.cleanup();
+      osunaExtension?.cleanup();
       throw error;
     }
   }

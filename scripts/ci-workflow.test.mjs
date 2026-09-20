@@ -240,7 +240,7 @@ test("browser and desktop tests have exclusive, directory-owned suites", () => {
   for (const path of browserSpecs) {
     assert.doesNotMatch(
       readFileSync(new URL(path, repoRoot), "utf8"),
-      /paseoDesktop|injectDesktopBridge/,
+      /osunaDesktop|injectDesktopBridge/,
     );
   }
   for (const path of desktopSpecs) {

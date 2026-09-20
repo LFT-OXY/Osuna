@@ -46,9 +46,9 @@ describe("Hub init planning", () => {
 
 describe("Hub init scaffold", () => {
   it.each([
-    ["github", { connection: "github-getpaseo", repo: "getpaseo/paseo", user: "boudra" }],
-    ["slack", { connection: "slack-paseo", user: "U123456" }],
-    ["discord", { connection: "discord-paseo", user: "987654321" }],
+    ["github", { connection: "github-lft-oxy", repo: "lft-oxy/osuna", user: "boudra" }],
+    ["slack", { connection: "slack-osuna", user: "U123456" }],
+    ["discord", { connection: "discord-osuna", user: "987654321" }],
   ] satisfies readonly [HubInitProvider, Record<string, string>][])(
     "creates a self-contained %s organization trigger",
     (provider, providerFilters) => {
@@ -89,9 +89,9 @@ describe("Hub init scaffold", () => {
       ]);
       const event = Object.values(parsed.on)[0]!;
       expect(event.filters.from_users).toEqual([providerFilters.user]);
-      if (provider === "github") expect(event.connection).toBe("github-getpaseo");
-      if (provider === "slack") expect(event.connection).toBe("slack-paseo");
-      if (provider === "discord") expect(event.connection).toBe("discord-paseo");
+      if (provider === "github") expect(event.connection).toBe("github-lft-oxy");
+      if (provider === "slack") expect(event.connection).toBe("slack-osuna");
+      if (provider === "discord") expect(event.connection).toBe("discord-osuna");
       expect(event.filters.channels).toBeUndefined();
       expect(parsed.run).toMatchObject({
         target: { daemon: "build-studio", cwd: "/workspace" },
@@ -111,10 +111,10 @@ describe("Hub init scaffold", () => {
 
 describe("GitHub origin detection", () => {
   it.each([
-    ["git@github.com:getpaseo/paseo.git", "getpaseo/paseo"],
-    ["ssh://git@github.com/getpaseo/paseo.git", "getpaseo/paseo"],
-    ["https://github.com/getpaseo/paseo.git", "getpaseo/paseo"],
-    ["https://gitlab.com/getpaseo/paseo.git", undefined],
+    ["git@github.com:lft-oxy/osuna.git", "lft-oxy/osuna"],
+    ["ssh://git@github.com/lft-oxy/osuna.git", "lft-oxy/osuna"],
+    ["https://github.com/lft-oxy/osuna.git", "lft-oxy/osuna"],
+    ["https://gitlab.com/lft-oxy/osuna.git", undefined],
   ])("resolves %s", (remote, expected) => {
     expect(githubRepositoryFromRemote(remote)).toBe(expected);
   });

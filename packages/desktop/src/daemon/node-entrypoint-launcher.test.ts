@@ -5,7 +5,7 @@ import {
 } from "./node-entrypoint-launcher";
 
 const CLI_ENTRYPOINT: NodeEntrypointSpec = {
-  entryPath: "/tmp/paseo-cli.js",
+  entryPath: "/tmp/osuna-cli.js",
   execArgv: ["--import", "tsx"],
 };
 
@@ -29,7 +29,7 @@ describe("node-entrypoint-launcher", () => {
           "--disable-warning=DEP0040",
           "/Applications/Osuna.app/Contents/Resources/app.asar/dist/daemon/node-entrypoint-runner.js",
           "node-script",
-          "/tmp/paseo-cli.js",
+          "/tmp/osuna-cli.js",
           "ls",
           "--json",
         ],
@@ -54,7 +54,7 @@ describe("node-entrypoint-launcher", () => {
         }),
       ).toEqual({
         command: "/opt/homebrew/bin/electron",
-        args: ["--import", "tsx", "/tmp/paseo-cli.js", "ls"],
+        args: ["--import", "tsx", "/tmp/osuna-cli.js", "ls"],
         env: {
           PATH: "/usr/bin",
           ELECTRON_RUN_AS_NODE: "1",
@@ -101,7 +101,7 @@ describe("node-entrypoint-launcher", () => {
           "--disable-warning=DEP0040",
           "/Applications/Osuna.app/Contents/Resources/app.asar/dist/daemon/node-entrypoint-runner.js",
           "node-script",
-          "/tmp/paseo-cli.js",
+          "/tmp/osuna-cli.js",
           "--dev",
         ],
         env: {

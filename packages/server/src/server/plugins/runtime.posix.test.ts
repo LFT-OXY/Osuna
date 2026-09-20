@@ -19,7 +19,7 @@ function hasCompletedAgentTurn(events: readonly AgentStreamEvent[]): boolean {
 }
 
 async function createPlugin(id: string, source: string): Promise<string> {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-"));
   temporaryDirectories.push(directory);
   await writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id }), "utf8");
   await writeFile(path.join(directory, "index.server.ts"), source, "utf8");
@@ -603,14 +603,14 @@ lines.on("line", (line) => {
     await connection.send({
       type: "session.open",
       requestId: "open-acp",
-      sessionId: "paseo-1",
+      sessionId: "osuna-1",
       config: { cwd: directory, env: {}, mcpServers: {}, settings: {}, persist: true },
       history: "skip",
     });
     await expect.poll(() => hasReadyRequest(events, "open-acp")).toBe(true);
     await connection.send({
       type: "session.prompt",
-      sessionId: "paseo-1",
+      sessionId: "osuna-1",
       prompt: {
         clientMessageId: "client-acp",
         delivery: "auto",
@@ -819,10 +819,10 @@ export default function contribute(server: any) { server.registerProvider(provid
     expect(
       runtime.getLogs("lifecycle").map(({ stream, message }) => ({ stream, message })),
     ).toEqual([
-      { stream: "stdout", message: "[paseo] Loading plugin" },
-      { stream: "stdout", message: "[paseo] Plugin ready" },
-      { stream: "stdout", message: "[paseo] Stopping plugin" },
-      { stream: "stdout", message: "[paseo] Plugin stopped" },
+      { stream: "stdout", message: "[osuna] Loading plugin" },
+      { stream: "stdout", message: "[osuna] Plugin ready" },
+      { stream: "stdout", message: "[osuna] Stopping plugin" },
+      { stream: "stdout", message: "[osuna] Plugin stopped" },
     ]);
   });
 
@@ -844,7 +844,7 @@ export default function contribute(server: any) { server.registerProvider(provid
     const logs = runtime.getLogs("output");
     expect(
       logs
-        .filter((entry) => !entry.message.startsWith("[paseo]"))
+        .filter((entry) => !entry.message.startsWith("[osuna]"))
         .map(({ stream, message }) => ({ stream, message })),
     ).toEqual([
       { stream: "stdout", message: "first" },
@@ -966,7 +966,7 @@ export default function contribute(server: any) { server.registerProvider(provid
     ).toEqual([
       {
         stream: "stdout",
-        message: "[paseo] Loading plugin",
+        message: "[osuna] Loading plugin",
       },
       {
         stream: "stderr",
@@ -1019,7 +1019,7 @@ export default function contribute(server: any) { server.registerProvider(provid
   });
 
   it("waits for asynchronous plugin cleanup before stopping", async () => {
-    const cleanupFile = path.join(tmpdir(), `paseo-plugin-cleanup-${Date.now()}`);
+    const cleanupFile = path.join(tmpdir(), `osuna-plugin-cleanup-${Date.now()}`);
     const directory = await createPlugin(
       "async-cleanup",
       `import { writeFile } from "node:fs/promises";
@@ -1042,8 +1042,8 @@ export default function contribute(plugin: unknown) {
 
   it("closes a provider connection that resolves during plugin shutdown", async () => {
     const suffix = `${process.pid}-${Date.now()}`;
-    const startedFile = path.join(tmpdir(), `paseo-provider-connect-started-${suffix}`);
-    const closedFile = path.join(tmpdir(), `paseo-provider-connect-closed-${suffix}`);
+    const startedFile = path.join(tmpdir(), `osuna-provider-connect-started-${suffix}`);
+    const closedFile = path.join(tmpdir(), `osuna-provider-connect-closed-${suffix}`);
     const directory = await createPlugin(
       "shutdown-connect",
       `import { writeFile } from "node:fs/promises";
@@ -1412,8 +1412,8 @@ export default function contribute(server: { registerProvider(provider: Provider
     await runtime.stopAll();
   });
 
-  it("explains that an index.ts plugin was made for an older Paseo version", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
+  it("explains that an index.ts plugin was made for an older Osuna version", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-"));
     temporaryDirectories.push(directory);
     await Promise.all([
       writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "legacy" })),
@@ -1427,7 +1427,7 @@ export default function contribute(server: { registerProvider(provider: Provider
   });
 
   it("loads a client-only plugin without spawning a subprocess", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-"));
     temporaryDirectories.push(directory);
     await Promise.all([
       writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "theme" })),
@@ -1450,7 +1450,7 @@ export default function contribute(server: { registerProvider(provider: Provider
   });
 
   it("loads separate entries, exposes the client bundle, and invokes the server RPC", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-"));
     temporaryDirectories.push(directory);
     await mkdir(path.join(directory, "shared"));
     await writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "hello" }));
@@ -1522,8 +1522,8 @@ export default function contribute(server: any) {
     expect(catalog[0]?.clientBundle).toContain("Open review");
     expect(catalog[0]?.clientBundle).not.toContain("node:os");
     expect(catalog[0]?.clientBundle).not.toContain("get: () => from[key]");
-    await expect(runtime.invoke("hello", "greet", { name: "Paseo" })).resolves.toMatchObject({
-      message: "Hello, Paseo",
+    await expect(runtime.invoke("hello", "greet", { name: "Osuna" })).resolves.toMatchObject({
+      message: "Hello, Osuna",
     });
     await expect(runtime.invoke("hello", "greet", { name: 7 })).rejects.toThrow();
 
@@ -1531,7 +1531,7 @@ export default function contribute(server: any) {
   });
 
   it("keeps client and server modules in their target runtime", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-"));
     temporaryDirectories.push(directory);
     await Promise.all([
       mkdir(path.join(directory, "client")),
@@ -1615,7 +1615,7 @@ export function inspectHost(_input: z.input<typeof inspectRpc.input>) {
   });
 
   it("rejects server imports from client-only modules", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-"));
     temporaryDirectories.push(directory);
     await Promise.all([
       mkdir(path.join(directory, "client")),
@@ -1659,7 +1659,7 @@ export function Surface() { return readSecret(); }`,
   });
 
   it("rejects client imports from server-only modules", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-"));
     temporaryDirectories.push(directory);
     await Promise.all([
       mkdir(path.join(directory, "client")),
@@ -1878,7 +1878,7 @@ export default function contribute(plugin: any) {
     await runtime.stopPluginById("stopping");
 
     expect(runtime.getLogs("stopping").map((entry) => entry.message)).not.toContain(
-      "[paseo] Re-attached plugin session",
+      "[osuna] Re-attached plugin session",
     );
     expect(sessions.active.size).toBe(0);
   });

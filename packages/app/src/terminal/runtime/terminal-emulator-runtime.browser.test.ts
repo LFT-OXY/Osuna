@@ -187,7 +187,7 @@ function observeMinimumContrastRatioWrites(): number[] {
 }
 
 function getBrowserTerminal(): BrowserTerminal {
-  const terminal = window.__paseoTerminal as BrowserTerminal | undefined;
+  const terminal = window.__osunaTerminal as BrowserTerminal | undefined;
   if (!terminal) {
     throw new Error("Expected xterm to be exposed for browser test inspection");
   }
@@ -233,10 +233,10 @@ describe("terminal emulator runtime in a real browser", () => {
     createTerminalHost({ width: 720, height: 360, scrollback: 42_000 });
 
     await waitFor({
-      predicate: () => window.__paseoTerminal !== undefined,
+      predicate: () => window.__osunaTerminal !== undefined,
     });
 
-    expect(window.__paseoTerminal?.options.scrollback).toBe(42_000);
+    expect(window.__osunaTerminal?.options.scrollback).toBe(42_000);
   });
 
   it("updates scrollback on the mounted xterm", async () => {
@@ -244,39 +244,39 @@ describe("terminal emulator runtime in a real browser", () => {
     const mounted = createTerminalHost({ width: 720, height: 360, scrollback: 10_000 });
 
     await waitFor({
-      predicate: () => window.__paseoTerminal !== undefined,
+      predicate: () => window.__osunaTerminal !== undefined,
     });
-    const terminal = window.__paseoTerminal;
+    const terminal = window.__osunaTerminal;
 
     mounted.runtime.setScrollback({ lines: 42_000 });
 
-    expect(window.__paseoTerminal).toBe(terminal);
-    expect(window.__paseoTerminal?.options.scrollback).toBe(42_000);
+    expect(window.__osunaTerminal).toBe(terminal);
+    expect(window.__osunaTerminal?.options.scrollback).toBe(42_000);
   });
 
   it("raises xterm's minimum contrast ratio to 4.5 on a light terminal background", async () => {
     await page.viewport(900, 600);
     createTerminalHost({ width: 720, height: 360, theme: LIGHT_THEME });
 
-    await waitFor({ predicate: () => window.__paseoTerminal !== undefined });
+    await waitFor({ predicate: () => window.__osunaTerminal !== undefined });
 
-    expect(window.__paseoTerminal?.options.minimumContrastRatio).toBe(4.5);
+    expect(window.__osunaTerminal?.options.minimumContrastRatio).toBe(4.5);
   });
 
   it("uses a 3 minimum contrast ratio on a dark terminal background", async () => {
     await page.viewport(900, 600);
     createTerminalHost({ width: 720, height: 360, theme: DARK_THEME });
 
-    await waitFor({ predicate: () => window.__paseoTerminal !== undefined });
+    await waitFor({ predicate: () => window.__osunaTerminal !== undefined });
 
-    expect(window.__paseoTerminal?.options.minimumContrastRatio).toBe(3);
+    expect(window.__osunaTerminal?.options.minimumContrastRatio).toBe(3);
   });
 
   it("rewrites the minimum contrast ratio only when a theme change crosses light and dark", async () => {
     await page.viewport(900, 600);
     const mounted = createTerminalHost({ width: 720, height: 360, theme: DARK_THEME });
 
-    await waitFor({ predicate: () => window.__paseoTerminal !== undefined });
+    await waitFor({ predicate: () => window.__osunaTerminal !== undefined });
     const writes = observeMinimumContrastRatioWrites();
 
     mounted.runtime.setTheme({
@@ -291,7 +291,7 @@ describe("terminal emulator runtime in a real browser", () => {
       theme: { background: "#fafafa", foreground: "#1a1a1e", cursor: "#1a1a1e" },
     });
     expect(writes).toEqual([4.5]);
-    expect(window.__paseoTerminal?.options.minimumContrastRatio).toBe(4.5);
+    expect(window.__osunaTerminal?.options.minimumContrastRatio).toBe(4.5);
   });
 
   it("insets the xterm host from the root by the content inset on all four sides", async () => {

@@ -21,7 +21,7 @@ interface LegacyCreateWorktreeTestOptions {
   baseBranch: string;
   worktreeSlug: string;
   runSetup?: boolean;
-  paseoHome?: string;
+  osunaHome?: string;
 }
 
 function createLegacyWorktreeForTest(
@@ -40,7 +40,7 @@ function createLegacyWorktreeForTest(
       branchName: options.branchName,
     },
     runSetup: options.runSetup ?? true,
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
   });
 }
 
@@ -64,11 +64,11 @@ const testWithGitHubCliAuth = hasGitHubCliAuth() ? test : test.skip;
 
 function initGitRepo(repoDir: string): void {
   execSync("git init -b main", { cwd: repoDir, stdio: "pipe" });
-  execSync("git config user.email 'paseo-test@example.com'", {
+  execSync("git config user.email 'osuna-test@example.com'", {
     cwd: repoDir,
     stdio: "pipe",
   });
-  execSync("git config user.name 'Paseo Test'", {
+  execSync("git config user.name 'Osuna Test'", {
     cwd: repoDir,
     stdio: "pipe",
   });
@@ -146,7 +146,7 @@ describe("daemon checkout ship loop", () => {
           cwd: repoDir,
           baseBranch: "main",
           worktreeSlug: "ship-loop",
-          paseoHome: ctx.daemon.paseoHome,
+          osunaHome: ctx.daemon.osunaHome,
         });
 
         const agent = await ctx.client.createAgent({
@@ -295,7 +295,7 @@ describe("daemon checkout ship loop", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "merge-from-base",
-        paseoHome: ctx.daemon.paseoHome,
+        osunaHome: ctx.daemon.osunaHome,
       });
 
       const agent = await ctx.client.createAgent({

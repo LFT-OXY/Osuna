@@ -3,7 +3,7 @@ import type { AgentSessionConfig, McpServerConfig } from "./agent-sdk-types.js";
 const OSUNA_MCP_SERVER_NAME = "osuna";
 const OSUNA_MCP_PATHNAME = "/mcp/agents";
 
-export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSessionConfig {
+export function stripInternalOsunaMcpServer(config: AgentSessionConfig): AgentSessionConfig {
   const mcpServers = config.mcpServers;
   if (!mcpServers) {
     return config;
@@ -12,7 +12,7 @@ export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSe
   // Claim the entry by its URL, not by its key: configs stored before the CLI
   // rename hold this same server under the old name, and a key-based lookup
   // would leave it in the user's config pointing at a daemon address long gone.
-  const kept = Object.entries(mcpServers).filter(([, server]) => !isInternalPaseoMcpServer(server));
+  const kept = Object.entries(mcpServers).filter(([, server]) => !isInternalOsunaMcpServer(server));
   if (kept.length === Object.keys(mcpServers).length) {
     return config;
   }
@@ -26,7 +26,7 @@ export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSe
   return next;
 }
 
-export function withRuntimePaseoMcpServer(params: {
+export function withRuntimeOsunaMcpServer(params: {
   config: AgentSessionConfig;
   agentId: string;
   mcpBaseUrl: string | null;
@@ -37,7 +37,7 @@ export function withRuntimePaseoMcpServer(params: {
    */
   mcpAuthToken: string | null;
 }): AgentSessionConfig {
-  const storedConfig = stripInternalPaseoMcpServer(params.config);
+  const storedConfig = stripInternalOsunaMcpServer(params.config);
   if (!params.mcpBaseUrl || storedConfig.mcpServers?.[OSUNA_MCP_SERVER_NAME]) {
     return storedConfig;
   }
@@ -57,7 +57,7 @@ export function withRuntimePaseoMcpServer(params: {
   };
 }
 
-function isInternalPaseoMcpServer(config: McpServerConfig): boolean {
+function isInternalOsunaMcpServer(config: McpServerConfig): boolean {
   if (config.type !== "http" && config.type !== "sse") {
     return false;
   }

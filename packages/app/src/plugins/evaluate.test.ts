@@ -494,7 +494,7 @@ describe("evaluatePluginClientBundle", () => {
     expect(element).toMatchObject({ props: { size: 18, color: "#123456" } });
   });
 
-  it("provides Paseo UI through @osuna/plugin/client/react-native", () => {
+  it("provides Osuna UI through @osuna/plugin/client/react-native", () => {
     const plugin = evaluatePluginClientBundle(
       "example",
       `(function(require) {

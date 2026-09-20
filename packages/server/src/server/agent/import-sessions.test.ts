@@ -280,7 +280,7 @@ test("listImportableProviderSessions filters, sorts, limits, and projects import
   });
 });
 
-test("listImportableProviderSessions keeps imported rows and names their Paseo agent when includeImported is set", async () => {
+test("listImportableProviderSessions keeps imported rows and names their Osuna agent when includeImported is set", async () => {
   const cwd = "/tmp/project";
   const liveAgentId = "00000000-0000-4000-8000-000000000641";
   const storedAgentId = "00000000-0000-4000-8000-000000000642";
@@ -555,7 +555,7 @@ test("listImportableProviderSessions requests a bounded deep scan for search res
   ]);
 });
 
-test("listImportableProviderSessions includes a provider session after its Paseo agent is archived", async () => {
+test("listImportableProviderSessions includes a provider session after its Osuna agent is archived", async () => {
   const cwd = "/tmp/project";
   const archivedSession = makeImportableSession({
     provider: "claude",
@@ -676,7 +676,7 @@ test("listImportableProviderSessions filters out metadata generation sessions", 
 });
 
 test("listImportableProviderSessions keeps realpath-equivalent cwd matches", async () => {
-  const root = mkdtempSync(path.join(tmpdir(), "paseo-import-cwd-"));
+  const root = mkdtempSync(path.join(tmpdir(), "osuna-import-cwd-"));
   const realCwd = path.join(root, "real-project");
   const linkedCwd = path.join(root, "linked-project");
   mkdirSync(realCwd, { recursive: true });

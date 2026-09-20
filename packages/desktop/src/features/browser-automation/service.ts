@@ -1404,7 +1404,7 @@ async function executeUpload(
     }
     const evaluated = (await target.contents.sendDebugCommand("Runtime.evaluate", {
       expression,
-      objectGroup: "paseo-browser-automation",
+      objectGroup: "osuna-browser-automation",
       returnByValue: false,
     })) as CdpRuntimeEvaluateResult;
     const objectId = evaluated.result?.objectId;

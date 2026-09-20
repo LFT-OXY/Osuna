@@ -5,7 +5,7 @@ import {
   maybePersistDictationDebugAudio,
   type DictationDebugChunkWriter,
 } from "../agent/dictation-debug.js";
-import { isPaseoDictationDebugEnabled } from "../agent/recordings-debug.js";
+import { isOsunaDictationDebugEnabled } from "../agent/recordings-debug.js";
 import { Pcm16MonoResampler } from "../agent/pcm16-resampler.js";
 import type {
   SpeechToTextProvider,
@@ -496,7 +496,7 @@ export class DictationStreamManager {
   }
 
   private async maybePersistDictationStreamAudio(dictationId: string): Promise<string | null> {
-    if (!isPaseoDictationDebugEnabled()) {
+    if (!isOsunaDictationDebugEnabled()) {
       return null;
     }
 

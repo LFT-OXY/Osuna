@@ -3,11 +3,11 @@ import {
   buildSelfNodeCommand,
   createExternalCommandProcessEnv,
   createExternalProcessEnv,
-  createPaseoInternalEnv,
-  resolvePaseoNodeEnv,
-} from "./paseo-env.js";
+  createOsunaInternalEnv,
+  resolveOsunaNodeEnv,
+} from "./osuna-env.js";
 
-describe("paseo env contract", () => {
+describe("osuna env contract", () => {
   const ELECTRON_RUN_AS_NODE = "ELECTRON_RUN_AS_NODE";
   const OSUNA_NODE_ENV = "OSUNA_NODE_ENV";
   const baseEnv = {
@@ -19,7 +19,7 @@ describe("paseo env contract", () => {
     OSUNA_DESKTOP_MANAGED: "1",
     [OSUNA_NODE_ENV]: "production",
     OSUNA_SUPERVISED: "1",
-    ESBUILD_BINARY_PATH: "/Applications/Paseo.app/Contents/Resources/app.asar.unpacked/esbuild",
+    ESBUILD_BINARY_PATH: "/Applications/Osuna.app/Contents/Resources/app.asar.unpacked/esbuild",
   };
   const runtimeControlEnvKeys = [
     "ELECTRON_RUN_AS_NODE",
@@ -31,7 +31,7 @@ describe("paseo env contract", () => {
   ] as const;
 
   test("builds internal daemon child env by preserving pass-through and control vars", () => {
-    const env = createPaseoInternalEnv(baseEnv);
+    const env = createOsunaInternalEnv(baseEnv);
 
     expect(env).toMatchObject({
       [ELECTRON_RUN_AS_NODE]: "1",
@@ -111,11 +111,11 @@ describe("paseo env contract", () => {
     expect(env[ELECTRON_RUN_AS_NODE]).toBeUndefined();
   });
 
-  test("does not use user NODE_ENV as Paseo runtime mode", () => {
-    expect(resolvePaseoNodeEnv({ NODE_ENV: "development" })).toBeUndefined();
-    expect(resolvePaseoNodeEnv({ NODE_ENV: "development", OSUNA_NODE_ENV: "production" })).toBe(
+  test("does not use user NODE_ENV as Osuna runtime mode", () => {
+    expect(resolveOsunaNodeEnv({ NODE_ENV: "development" })).toBeUndefined();
+    expect(resolveOsunaNodeEnv({ NODE_ENV: "development", OSUNA_NODE_ENV: "production" })).toBe(
       "production",
     );
-    expect(resolvePaseoNodeEnv({ NODE_ENV: "test", OSUNA_NODE_ENV: "local" })).toBeUndefined();
+    expect(resolveOsunaNodeEnv({ NODE_ENV: "test", OSUNA_NODE_ENV: "local" })).toBeUndefined();
   });
 });

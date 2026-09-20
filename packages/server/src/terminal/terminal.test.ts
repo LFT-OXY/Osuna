@@ -911,7 +911,7 @@ describe.skipIf(isPlatform("win32"))("terminal title", () => {
     temporaryDirs.push(homeDir);
     writeFileSync(join(homeDir, ".zshrc"), "PS1='OSUNA_CUSTOM_PROMPT> '\n");
 
-    const fakeAppRoot = join(homeDir, "Paseo.app", "Contents", "Resources");
+    const fakeAppRoot = join(homeDir, "Osuna.app", "Contents", "Resources");
     const inaccessiblePackagedIntegrationDir = join(
       fakeAppRoot,
       "app.asar",
@@ -1293,7 +1293,7 @@ describe.runIf(isPlatform("win32"))(".cmd shim argv round-trip on Windows", () =
   const argvMarker = "__OSUNA_ARGV__";
 
   function writeArgvEchoShim(): { dir: string; cmdPath: string } {
-    const dir = mkdtempSync(join(tmpdir(), "paseo-cmd-shim-"));
+    const dir = mkdtempSync(join(tmpdir(), "osuna-cmd-shim-"));
     temporaryDirs.push(dir);
     const cmdPath = join(dir, "echoargv.cmd");
     const scriptPath = join(dir, "echoargv.js");

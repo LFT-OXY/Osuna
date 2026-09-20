@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, truncate, writeFile } from "node
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import type { UsageReport, UsageTokenTotals } from "@osuna/protocol/usage/types";
 import { mergeTurnRow, turnRowKey, type UsageTurnRow } from "../usage/types.js";
@@ -32,7 +32,7 @@ const tempRoots: string[] = [];
  * would otherwise move these numbers every time it is refreshed.
  */
 const UNPRICED: NonNullable<
-  NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["usage"]
+  NonNullable<Parameters<typeof createTestOsunaDaemon>[0]>["usage"]
 >["pricing"] = {
   autoUpdate: false,
   snapshot: {
@@ -62,7 +62,7 @@ function shiftDay(day: string, offset: number): string {
 
 /** Lay the fixtures out the way Claude Code does, under a throwaway projects root. */
 async function seedClaudeRoot(): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-claude-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-claude-"));
   tempRoots.push(root);
   const projectDir = path.join(root, PROJECT_DIR);
   await mkdir(path.join(projectDir, SESSION_ID, "subagents"), { recursive: true });
@@ -79,7 +79,7 @@ async function seedClaudeRoot(): Promise<string> {
 
 function usageConfig(
   root: string,
-): NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["usage"] {
+): NonNullable<Parameters<typeof createTestOsunaDaemon>[0]>["usage"] {
   return {
     roots: { claude: [root], codex: [], pi: [], omp: [] },
     scanIntervalMs: SCAN_INTERVAL_MS,
@@ -88,7 +88,7 @@ function usageConfig(
   };
 }
 
-async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+async function connect(daemon: TestOsunaDaemon): Promise<DaemonClient> {
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await client.connect();
   await client.fetchAgents({ subscribe: {} });
@@ -116,7 +116,7 @@ function backfilled(report: UsageReport): boolean {
 }
 
 describe("usage report over the daemon RPC", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let claudeRoot: string;
   let homeRoot: string;
@@ -131,12 +131,12 @@ describe("usage report over the daemon RPC", () => {
 
   beforeEach(async () => {
     claudeRoot = await seedClaudeRoot();
-    homeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
-    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
+    homeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-static-"));
     tempRoots.push(homeRoot, staticDir);
     // The restart case reuses this home, so the harness must not delete it.
-    daemon = await createTestPaseoDaemon({
-      paseoHomeRoot: homeRoot,
+    daemon = await createTestOsunaDaemon({
+      osunaHomeRoot: homeRoot,
       staticDir,
       cleanup: false,
       usage: usageConfig(claudeRoot),
@@ -311,7 +311,7 @@ describe("usage report over the daemon RPC", () => {
 
   test("keeps the same totals after a restart and writes no new rows", async () => {
     await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
-    const usageDir = path.join(daemon.paseoHome, "usage");
+    const usageDir = path.join(daemon.osunaHome, "usage");
     const bucketLinesBefore = await countRowLines(usageDir, "buckets-");
     const turnLinesBefore = await countRowLines(usageDir, "turns-");
     expect(turnLinesBefore).toBeGreaterThan(0);
@@ -319,8 +319,8 @@ describe("usage report over the daemon RPC", () => {
     await client.close();
     await daemon.close();
 
-    daemon = await createTestPaseoDaemon({
-      paseoHomeRoot: homeRoot,
+    daemon = await createTestOsunaDaemon({
+      osunaHomeRoot: homeRoot,
       cleanup: false,
       usage: usageConfig(claudeRoot),
     });
@@ -336,7 +336,7 @@ describe("usage report over the daemon RPC", () => {
   test("writes a turn row per model and folds the subagent into its parent turn", async () => {
     await waitForReport(client, { from: DAY, to: DAY, timezone: "UTC" }, backfilled);
 
-    const rows = await readTurnRows(path.join(daemon.paseoHome, "usage"));
+    const rows = await readTurnRows(path.join(daemon.osunaHome, "usage"));
     expect(rows).toEqual([
       {
         cli: "claude",
@@ -384,10 +384,10 @@ describe("usage row files", () => {
   });
 
   test("rewrites a month whose rows outgrew its keys", async () => {
-    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
-    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
-    homes.push(paseoHomeRoot, staticDir);
-    const usageDir = path.join(paseoHomeRoot, ".osuna", "usage");
+    const osunaHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-static-"));
+    homes.push(osunaHomeRoot, staticDir);
+    const usageDir = path.join(osunaHomeRoot, ".osuna", "usage");
     await mkdir(usageDir, { recursive: true });
     const bucket = "2026-03-04T09:30:00.000Z";
     const row = (model: string, output: number) => ({
@@ -417,8 +417,8 @@ describe("usage row files", () => {
       `${lines.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     );
 
-    const daemon = await createTestPaseoDaemon({
-      paseoHomeRoot,
+    const daemon = await createTestOsunaDaemon({
+      osunaHomeRoot,
       staticDir,
       cleanup: false,
       usage: { roots: { claude: [], codex: [], pi: [], omp: [] }, pricing: UNPRICED },
@@ -456,10 +456,10 @@ describe("usage row files", () => {
   });
 
   test("rewrites a month of turn rows whose increments outgrew their keys", async () => {
-    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
-    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
-    homes.push(paseoHomeRoot, staticDir);
-    const usageDir = path.join(paseoHomeRoot, ".osuna", "usage");
+    const osunaHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-static-"));
+    homes.push(osunaHomeRoot, staticDir);
+    const usageDir = path.join(osunaHomeRoot, ".osuna", "usage");
     await mkdir(usageDir, { recursive: true });
     const increment = (turnKey: string, output: number, lastAt: string) => ({
       cli: "claude",
@@ -488,8 +488,8 @@ describe("usage row files", () => {
       `${lines.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     );
 
-    const daemon = await createTestPaseoDaemon({
-      paseoHomeRoot,
+    const daemon = await createTestOsunaDaemon({
+      osunaHomeRoot,
       staticDir,
       cleanup: false,
       usage: { roots: { claude: [], codex: [], pi: [], omp: [] }, pricing: UNPRICED },
@@ -527,7 +527,7 @@ describe("usage report with two sources", () => {
    * compressed rollout next to it is one the scanner cannot read.
    */
   async function seedCodexRoot(): Promise<{ sessions: string; archived: string }> {
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-codex-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-codex-"));
     temps.push(root);
     const sessions = path.join(root, "sessions");
     const archived = path.join(root, "archived_sessions");
@@ -545,11 +545,11 @@ describe("usage report with two sources", () => {
     const claudeRoot = await seedClaudeRoot();
     temps.push(claudeRoot);
     const codexRoot = await seedCodexRoot();
-    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
-    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
-    temps.push(paseoHomeRoot, staticDir);
-    const daemon = await createTestPaseoDaemon({
-      paseoHomeRoot,
+    const osunaHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-static-"));
+    temps.push(osunaHomeRoot, staticDir);
+    const daemon = await createTestOsunaDaemon({
+      osunaHomeRoot,
       staticDir,
       cleanup: false,
       usage: {
@@ -618,7 +618,7 @@ describe("usage report across Pi and OMP backends", () => {
    * directory named after the session file.
    */
   async function seedPiRoot(): Promise<string> {
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-pi-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-pi-"));
     temps.push(root);
     const sessionName = `2026-09-18T09-30-00-000Z_${PI_SESSION}`;
     const projectDir = path.join(root, "--work-demo--");
@@ -646,7 +646,7 @@ describe("usage report across Pi and OMP backends", () => {
    * than a stamp, and drops tool output as `.log` next to the transcripts.
    */
   async function seedOmpRoot(): Promise<string> {
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-omp-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-omp-"));
     temps.push(root);
     const sessionName = `2026-09-18T10-00-00-000Z_${OMP_SESSION}`;
     const projectDir = path.join(root, "-work-omp-demo");
@@ -668,11 +668,11 @@ describe("usage report across Pi and OMP backends", () => {
   }
 
   test("splits both CLIs by backend and folds subagents into their session", async () => {
-    const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-home-"));
-    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-usage-static-"));
-    temps.push(paseoHomeRoot, staticDir);
-    const daemon = await createTestPaseoDaemon({
-      paseoHomeRoot,
+    const osunaHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-usage-static-"));
+    temps.push(osunaHomeRoot, staticDir);
+    const daemon = await createTestOsunaDaemon({
+      osunaHomeRoot,
       staticDir,
       cleanup: false,
       usage: {

@@ -5,7 +5,7 @@ import {
   type DaemonSelfUpdateRuntime,
   type DaemonSelfUpdatePhase,
 } from "./daemon-self-updater.js";
-import type { CommandResult, NpmGlobalPaseoInstall } from "./npm-global-cli.js";
+import type { CommandResult, NpmGlobalOsunaInstall } from "./npm-global-cli.js";
 
 interface TestLogger {
   errors: Array<{ obj: object; msg?: string }>;
@@ -14,7 +14,7 @@ interface TestLogger {
   warn(obj: object, msg?: string): void;
 }
 
-type Inspection = NpmGlobalPaseoInstall | Error;
+type Inspection = NpmGlobalOsunaInstall | Error;
 type RuntimeCall = "inspect" | "installLatest";
 
 const globalRoot = "/global/lib";
@@ -23,10 +23,10 @@ const cliPackagePath = `${globalNodeModules}/@osuna/cli`;
 const npmServerPackageRoot = `${cliPackagePath}/node_modules/@osuna/server`;
 const sourceServerPackageRoot = "/repo/packages/server";
 
-function npmGlobalPaseoInstall(
+function npmGlobalOsunaInstall(
   version: string,
   options?: { linked?: boolean },
-): NpmGlobalPaseoInstall {
+): NpmGlobalOsunaInstall {
   return {
     version,
     packagePath: cliPackagePath,
@@ -108,7 +108,7 @@ describe("DaemonSelfUpdater", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "This daemon is managed by Paseo Desktop. Update Paseo Desktop on the host.",
+      error: "This daemon is managed by Osuna Desktop. Update Osuna Desktop on the host.",
       newVersion: null,
     });
     expect(phases).toEqual([]);
@@ -119,7 +119,7 @@ describe("DaemonSelfUpdater", () => {
     const calls: RuntimeCall[] = [];
     const runtime = createRuntime({
       calls,
-      inspections: [npmGlobalPaseoInstall("0.1.15"), npmGlobalPaseoInstall("0.1.96")],
+      inspections: [npmGlobalOsunaInstall("0.1.15"), npmGlobalOsunaInstall("0.1.96")],
     });
 
     const { result, phases } = await runUpdate({ runtime });
@@ -152,7 +152,7 @@ describe("DaemonSelfUpdater", () => {
     const calls: RuntimeCall[] = [];
     const runtime = createRuntime({
       calls,
-      inspections: [npmGlobalPaseoInstall("0.1.15")],
+      inspections: [npmGlobalOsunaInstall("0.1.15")],
     });
 
     const { result } = await runUpdate({ runtime, daemonVersion: "0.1.96" });
@@ -171,7 +171,7 @@ describe("DaemonSelfUpdater", () => {
     const runtime = createRuntime({
       calls,
       currentServerPackageRoot: sourceServerPackageRoot,
-      inspections: [npmGlobalPaseoInstall("0.1.15")],
+      inspections: [npmGlobalOsunaInstall("0.1.15")],
     });
 
     const { result } = await runUpdate({ runtime });
@@ -186,7 +186,7 @@ describe("DaemonSelfUpdater", () => {
 
   test("does not update linked global installs", async () => {
     const runtime = createRuntime({
-      inspections: [npmGlobalPaseoInstall("0.1.15", { linked: true })],
+      inspections: [npmGlobalOsunaInstall("0.1.15", { linked: true })],
     });
 
     const { result } = await runUpdate({ runtime });
@@ -210,7 +210,7 @@ describe("DaemonSelfUpdater", () => {
       npm: {
         async inspect() {
           calls.push("inspect");
-          return npmGlobalPaseoInstall("0.1.15");
+          return npmGlobalOsunaInstall("0.1.15");
         },
         async installLatest() {
           calls.push("installLatest");

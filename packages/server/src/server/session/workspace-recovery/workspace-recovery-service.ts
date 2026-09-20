@@ -6,7 +6,7 @@ import {
   createWorktree,
   isOsunaOwnedWorktreeCwd,
   mapWorkspaceCwdToWorktree,
-  rollbackCreatedPaseoWorktree,
+  rollbackCreatedOsunaWorktree,
 } from "../../../utils/worktree.js";
 import { WorktreeRequestError, toWorktreeRequestError } from "../../worktree-errors.js";
 import {
@@ -59,7 +59,7 @@ type RecoveryPlan =
 type UnavailableRecoveryState = Extract<WorkspaceRecoveryState, { kind: "unavailable" }>;
 
 export function createWorkspaceRecoveryService(deps: {
-  paseoHome: string;
+  osunaHome: string;
   worktreesRoot?: string;
   getWorkspace: (workspaceId: string) => Promise<PersistedWorkspaceRecord | null>;
   getProject: (projectId: string) => Promise<PersistedProjectRecord | null>;
@@ -176,7 +176,7 @@ export function createWorkspaceRecoveryService(deps: {
       // COMPAT(worktreeRestoreMissingWorktreeRoot): records created before v0.1.110
       // lack durable backing placement; remove filesystem discovery after 2027-01-17.
       const ownership = await isOsunaOwnedWorktreeCwd(workspace.cwd, {
-        paseoHome: deps.paseoHome,
+        osunaHome: deps.osunaHome,
         worktreesRoot: deps.worktreesRoot,
       });
       previousWorktreePath = ownership.allowed
@@ -191,7 +191,7 @@ export function createWorkspaceRecoveryService(deps: {
         worktreeSlug: basename(previousWorktreePath),
         source: { kind: "restore", branchName: branch, baseRef: workspace.baseBranch },
         runSetup: false,
-        paseoHome: deps.paseoHome,
+        osunaHome: deps.osunaHome,
         worktreesRoot: deps.worktreesRoot,
       });
       recreatedWorktreePath = result.worktreePath;
@@ -218,12 +218,12 @@ export function createWorkspaceRecoveryService(deps: {
         });
       }
     } catch (error) {
-      return rollbackCreatedPaseoWorktree(
+      return rollbackCreatedOsunaWorktree(
         {
           cwd: sourceRepoRoot,
           worktreePath: recreatedWorktreePath,
           teardownCwds: [],
-          paseoHome: deps.paseoHome,
+          osunaHome: deps.osunaHome,
           worktreesBaseRoot: deps.worktreesRoot,
         },
         error,

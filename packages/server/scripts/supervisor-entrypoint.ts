@@ -14,7 +14,7 @@ import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
 import { applySherpaLoaderEnv } from "../src/server/speech/providers/local/sherpa/sherpa-runtime-env.js";
 
-process.title = "Paseo Supervisor";
+process.title = "Osuna Supervisor";
 
 interface DaemonRunnerConfig {
   devMode: boolean;
@@ -75,7 +75,7 @@ function resolveWorkerExecArgv(workerEntry: string, devMode: boolean): string[] 
     "--heapsnapshot-near-heap-limit=3",
     "--max-old-space-size=3072",
     "--report-on-fatalerror",
-    "--report-directory=/tmp/paseo-reports",
+    "--report-directory=/tmp/osuna-reports",
   ];
   const inspectArg = process.env.OSUNA_NODE_INSPECT ?? "--inspect";
   if (inspectArg !== "0" && inspectArg !== "false" && inspectArg !== "off") {
@@ -108,12 +108,12 @@ async function main(): Promise<void> {
 
   applySherpaLoaderEnv(workerEnv);
 
-  const paseoHome = resolveOsunaHome(workerEnv);
-  const persistedConfig = loadPersistedConfig(paseoHome);
-  const supervisorLogFile = resolveSupervisorLogFile(paseoHome, persistedConfig, workerEnv);
+  const osunaHome = resolveOsunaHome(workerEnv);
+  const persistedConfig = loadPersistedConfig(osunaHome);
+  const supervisorLogFile = resolveSupervisorLogFile(osunaHome, persistedConfig, workerEnv);
 
   try {
-    await acquirePidLock(paseoHome, null, {
+    await acquirePidLock(osunaHome, null, {
       ownerPid: process.pid,
     });
   } catch (error) {
@@ -127,7 +127,7 @@ async function main(): Promise<void> {
 
   let lockReleased = false;
   let requestSupervisorShutdown: ((reason: string) => void) | null = null;
-  const stopLockHeartbeat = startPidLockHeartbeat(paseoHome, {
+  const stopLockHeartbeat = startPidLockHeartbeat(osunaHome, {
     ownerPid: process.pid,
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -143,7 +143,7 @@ async function main(): Promise<void> {
     }
     lockReleased = true;
     stopLockHeartbeat();
-    await releasePidLock(paseoHome, {
+    await releasePidLock(osunaHome, {
       ownerPid: process.pid,
     });
   };
@@ -173,9 +173,9 @@ async function main(): Promise<void> {
     restartOnCrash: true,
     logFile: supervisorLogFile,
     onWorkerReady: async ({ listen }) => {
-      await updatePidLock(paseoHome, { listen }, { ownerPid: process.pid });
+      await updatePidLock(osunaHome, { listen }, { ownerPid: process.pid });
     },
-    onWorkerExit: () => updatePidLock(paseoHome, { listen: null }, { ownerPid: process.pid }),
+    onWorkerExit: () => updatePidLock(osunaHome, { listen: null }, { ownerPid: process.pid }),
     onSupervisorExit: releaseLock,
   });
   requestSupervisorShutdown = supervisor.requestShutdown;

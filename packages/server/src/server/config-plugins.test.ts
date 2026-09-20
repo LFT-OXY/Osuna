@@ -6,13 +6,13 @@ import { loadConfig } from "./config.js";
 
 const roots: string[] = [];
 
-async function createPaseoHome(config: unknown): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-config-plugins-"));
+async function createOsunaHome(config: unknown): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "osuna-config-plugins-"));
   roots.push(root);
-  const paseoHome = path.join(root, ".osuna");
-  await mkdir(paseoHome, { recursive: true });
-  await writeFile(path.join(paseoHome, "config.json"), JSON.stringify(config, null, 2));
-  return paseoHome;
+  const osunaHome = path.join(root, ".osuna");
+  await mkdir(osunaHome, { recursive: true });
+  await writeFile(path.join(osunaHome, "config.json"), JSON.stringify(config, null, 2));
+  return osunaHome;
 }
 
 describe("daemon plugin config", () => {
@@ -21,13 +21,13 @@ describe("daemon plugin config", () => {
   });
 
   test("defaults plugins off when config is absent", async () => {
-    const home = await createPaseoHome({ version: 1 });
+    const home = await createOsunaHome({ version: 1 });
 
     expect(loadConfig(home, { env: {} }).pluginsEnabled).toBe(false);
   });
 
   test("loads the explicit plugin opt-in", async () => {
-    const home = await createPaseoHome({ version: 1, pluginsEnabled: true });
+    const home = await createOsunaHome({ version: 1, pluginsEnabled: true });
 
     expect(loadConfig(home, { env: {} }).pluginsEnabled).toBe(true);
   });

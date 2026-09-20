@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "./test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "./test-utils/osuna-daemon.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 import type { AgentStreamEventPayload } from "@osuna/protocol/messages";
 import type { AgentSnapshotPayload } from "./messages.js";
@@ -35,14 +35,14 @@ describe("client activity tracking", () => {
   const TEST_PROVIDER = "claude";
   const TEST_MODEL = "haiku";
   const TEST_CWD = "/tmp";
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client1: DaemonClient;
   let client2: DaemonClient;
   let pushNotifications: RecordingPushNotificationSender;
 
   beforeEach(async () => {
     pushNotifications = new RecordingPushNotificationSender();
-    daemon = await createTestPaseoDaemon({ pushNotificationSender: pushNotifications });
+    daemon = await createTestOsunaDaemon({ pushNotificationSender: pushNotifications });
   });
 
   afterEach(async () => {

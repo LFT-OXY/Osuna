@@ -308,7 +308,7 @@ describe("SessionHistorySurface", () => {
     expect(screen.getByText("Fix login")).toBeTruthy();
   });
 
-  it("marks sessions Paseo owns and opens their agent instead of a terminal", async () => {
+  it("marks sessions Osuna owns and opens their agent instead of a terminal", async () => {
     const createTerminal = vi.fn() as unknown as CreateTerminal;
     const onOpenAgent = vi.fn();
     const { onOpenTerminal } = renderSurface(
@@ -331,9 +331,9 @@ describe("SessionHistorySurface", () => {
     );
 
     await screen.findByText("External");
-    expect(screen.getAllByText(i18n.t("panels.sessionHistory.row.paseo"))).toHaveLength(1);
+    expect(screen.getAllByText(i18n.t("panels.sessionHistory.row.osuna"))).toHaveLength(1);
     expect(screen.getByTestId("session-history-row-claude-owned").textContent).toContain(
-      i18n.t("panels.sessionHistory.row.paseo"),
+      i18n.t("panels.sessionHistory.row.osuna"),
     );
 
     fireEvent.click(screen.getByTestId("session-history-row-claude-owned"));
@@ -722,7 +722,7 @@ describe("SessionHistorySurface", () => {
     });
   });
 
-  it("offers no import for a session Paseo already owns", async () => {
+  it("offers no import for a session Osuna already owns", async () => {
     renderSurface(
       createClient({
         fetchRecentProviderSessions: vi.fn(async () => ({

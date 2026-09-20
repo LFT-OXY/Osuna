@@ -16,13 +16,13 @@ describe("resolveNewAgentWorkingDir", () => {
     expect(resolveNewAgentWorkingDir("/repo/.osuna/worktrees/feature", null)).toBe("/repo");
   });
 
-  it("supports windows-style paseo worktree paths without checkout metadata", () => {
+  it("supports windows-style osuna worktree paths without checkout metadata", () => {
     expect(resolveNewAgentWorkingDir("C:\\Users\\me\\repo\\.osuna\\worktrees\\feature", null)).toBe(
       "C:\\Users\\me\\repo",
     );
   });
 
-  it("returns the main repo root for paseo-owned worktrees", () => {
+  it("returns the main repo root for osuna-owned worktrees", () => {
     const checkout = {
       isOsunaOwnedWorktree: true,
       worktreeRoot: "/repo/.osuna/worktrees/feature",

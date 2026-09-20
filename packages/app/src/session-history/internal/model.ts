@@ -96,7 +96,7 @@ export interface SessionHistoryRow {
   cwd: string;
   title: string;
   lastActivityAt: string;
-  /** The Paseo agent that owns this session; such a row opens the agent, never a terminal. */
+  /** The Osuna agent that owns this session; such a row opens the agent, never a terminal. */
   importedAgentId: string | null;
   /** That agent's workspace, so opening it lands in a workspace tab even when the agent is archived. */
   importedAgentWorkspaceId: string | null;
@@ -195,7 +195,7 @@ export function buildResumeTerminalLaunch(
   return { cwd: row.cwd, name: row.title, command: argv.command, args: argv.args };
 }
 
-/** The resume command as one line, for pasting into a terminal Paseo does not own. */
+/** The resume command as one line, for pasting into a terminal Osuna does not own. */
 export function buildResumeCommand(row: SessionHistoryRow): string | null {
   return buildProviderCommand({
     provider: row.providerId,
@@ -222,7 +222,7 @@ function withoutTrailingSlash(path: string): string {
 
 /**
  * Where a session lives, relative to the project root. Null at the root itself;
- * the full path when the directory is outside the project (Paseo worktrees live
+ * the full path when the directory is outside the project (Osuna worktrees live
  * under `$OSUNA_HOME/worktrees`, so they show in full).
  */
 export function formatSessionHistoryDirectory(

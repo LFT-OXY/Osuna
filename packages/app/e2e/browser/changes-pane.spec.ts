@@ -1403,7 +1403,7 @@ async function holdBrowserFontLoads(page: Page): Promise<void> {
       },
     });
     Object.assign(window, {
-      __releasePaseoDiffFontLoads() {
+      __releaseOsunaDiffFontLoads() {
         released = true;
         for (const release of pending.splice(0)) release();
       },
@@ -1414,8 +1414,8 @@ async function holdBrowserFontLoads(page: Page): Promise<void> {
 async function releaseBrowserFontLoads(page: Page): Promise<void> {
   await page.evaluate(() => {
     (
-      window as typeof window & { __releasePaseoDiffFontLoads: () => void }
-    ).__releasePaseoDiffFontLoads();
+      window as typeof window & { __releaseOsunaDiffFontLoads: () => void }
+    ).__releaseOsunaDiffFontLoads();
   });
 }
 

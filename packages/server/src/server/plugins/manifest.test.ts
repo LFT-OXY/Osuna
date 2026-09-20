@@ -25,7 +25,7 @@ describe("plugin manifest", () => {
   });
 
   it("reads and validates requirements before any plugin code runs", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-manifest-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-manifest-"));
     directories.push(directory);
     const manifest = path.join(directory, "osuna-plugin.json");
     await writeFile(manifest, JSON.stringify({ id: "example", requirements: { osuna: "^0.8.0" } }));
@@ -46,7 +46,7 @@ describe("plugin manifest", () => {
   });
 
   it("accepts only non-empty argv arrays for build commands", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-manifest-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-manifest-"));
     directories.push(directory);
     const manifest = path.join(directory, "osuna-plugin.json");
 

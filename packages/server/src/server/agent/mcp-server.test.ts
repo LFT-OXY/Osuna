@@ -37,12 +37,12 @@ import type {
 import type { ScheduleService } from "../schedule/service.js";
 import type { WorkspaceGitService } from "../workspace-git-service.js";
 import {
-  createOsunaWorktree as createPaseoWorktreeService,
+  createOsunaWorktree as createOsunaWorktreeService,
   type CreateOsunaWorktreeInput,
-} from "../paseo-worktree-service.js";
+} from "../osuna-worktree-service.js";
 import {
-  createPaseoWorktreeWorkflow,
-  type CreatePaseoWorktreeWorkflowFn,
+  createOsunaWorktreeWorkflow,
+  type CreateOsunaWorktreeWorkflowFn,
 } from "../worktree-session.js";
 import { WorkspaceGitServiceImpl } from "../workspace-git-service.js";
 import { WorkspaceAutoName } from "../workspace-auto-name.js";
@@ -56,7 +56,7 @@ import { MutableDaemonConfigSchema, type AgentProfile } from "@osuna/protocol/me
 import type { DaemonConfigStore } from "../daemon-config-store.js";
 import type { BrowserToolsBroker, BrowserToolsExecuteInput } from "../browser-tools/broker.js";
 import type { BrowserToolsResponsePayload } from "../browser-tools/errors.js";
-import { readPaseoWorktreeMetadata } from "../../utils/worktree-metadata.js";
+import { readOsunaWorktreeMetadata } from "../../utils/worktree-metadata.js";
 import { createWorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 
 const REPO_CWD = resolvePath("/tmp/repo");
@@ -339,7 +339,7 @@ function configureOpenCodeProviderStub(
   const opencodeModes: AgentMode[] = [
     { id: "build", label: "Build", description: "Can edit" },
     { id: "plan", label: "Plan", description: "Read-only" },
-    { id: "paseo-custom", label: "Paseo Custom", description: "Custom OpenCode agent" },
+    { id: "osuna-custom", label: "Osuna Custom", description: "Custom OpenCode agent" },
   ];
   const entries: ProviderSnapshotEntry[] = [
     buildSnapshotEntry({
@@ -366,7 +366,7 @@ function configureOpenCodeProviderStub(
   ];
   const customOpenCodeModes: AgentMode[] = [
     ...opencodeModes,
-    { id: "paseo-custom", label: "Paseo Custom" },
+    { id: "osuna-custom", label: "Osuna Custom" },
   ];
   if (options.customOpenCodeProvider) {
     entries.push(
@@ -616,7 +616,7 @@ class BoundaryProviderSnapshotManagerFake {
 }
 
 async function connectInMemoryMcpClient(server: Awaited<ReturnType<typeof createAgentMcpServer>>) {
-  const client = new Client({ name: "paseo-test-client", version: "0.0.0" });
+  const client = new Client({ name: "osuna-test-client", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   await client.connect(clientTransport);
@@ -660,21 +660,21 @@ function createArchiveWorkspaceRecordMutator(
   };
 }
 
-function createPaseoWorktreeForMcpTest(options: {
-  paseoHome: string;
+function createOsunaWorktreeForMcpTest(options: {
+  osunaHome: string;
   broadcasts: string[];
   createdWorkspaceIds?: string[];
   workspaceRecords?: Map<string, PersistedWorkspaceRecord>;
   generateWorkspaceName?: () => Promise<GeneratedWorkspaceName | null>;
   setupContinuations?: Array<"workspace" | "agent" | undefined>;
   startedAgentSetupIds?: string[];
-}): CreatePaseoWorktreeWorkflowFn {
+}): CreateOsunaWorktreeWorkflowFn {
   const projects = new Map<string, PersistedProjectRecord>();
   const workspaces = options.workspaceRecords ?? new Map<string, PersistedWorkspaceRecord>();
   const github = createGitHubServiceStub();
   const workspaceGitService = new WorkspaceGitServiceImpl({
     logger: createTestLogger(),
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
     deps: { forgeOverrides: { github } },
   });
   const projectRegistry: ProjectRegistry = {
@@ -763,11 +763,11 @@ function createPaseoWorktreeForMcpTest(options: {
 
   return async (input, serviceOptions) => {
     options.setupContinuations?.push(serviceOptions?.setupContinuation?.kind);
-    const result = await createPaseoWorktreeWorkflow(
+    const result = await createOsunaWorktreeWorkflow(
       {
-        paseoHome: options.paseoHome,
+        osunaHome: options.osunaHome,
         createOsunaWorktree: (workflowInput, workflowOptions) =>
-          createPaseoWorktreeService(workflowInput, {
+          createOsunaWorktreeService(workflowInput, {
             github,
             ...(workflowOptions?.resolveDefaultBranch
               ? { resolveDefaultBranch: workflowOptions.resolveDefaultBranch }
@@ -1001,7 +1001,7 @@ describe("browser MCP tools", () => {
       browserToolsEnabled: true,
       browserToolsBroker: broker as BrowserToolsBroker,
       callerAgentId: "agent-1",
-      paseoToolPolicy: { disabledTools: ["browser_list_tabs"] },
+      osunaToolPolicy: { disabledTools: ["browser_list_tabs"] },
       logger,
     });
 
@@ -1025,7 +1025,7 @@ describe("browser MCP tools", () => {
       browserToolsEnabled: true,
       browserToolsBroker: broker as BrowserToolsBroker,
       callerAgentId: "agent-1",
-      paseoToolPolicy: { disabledTools: ["list_agents", "browser_list_tabs"] },
+      osunaToolPolicy: { disabledTools: ["list_agents", "browser_list_tabs"] },
       logger,
     });
     const client = await connectInMemoryMcpClient(server);
@@ -1086,7 +1086,7 @@ describe("browser MCP tools", () => {
     expect(response.content).toEqual([
       {
         type: "text",
-        text: "No Paseo browser tabs are open. Call browser_new_tab to create one.",
+        text: "No Osuna browser tabs are open. Call browser_new_tab to create one.",
       },
     ]);
     expect(response.structuredContent).toEqual({
@@ -1121,7 +1121,7 @@ describe("browser MCP tools", () => {
     expect(response.content).toEqual([
       {
         type: "text",
-        text: "This browser tool needs a workspace. Start the agent from a Paseo workspace before calling browser_new_tab or browser_list_tabs.",
+        text: "This browser tool needs a workspace. Start the agent from an Osuna workspace before calling browser_new_tab or browser_list_tabs.",
       },
     ]);
     expect(response.structuredContent).toEqual({
@@ -1129,7 +1129,7 @@ describe("browser MCP tools", () => {
       error: {
         code: "browser_denied",
         message:
-          "This browser tool needs a workspace. Start the agent from a Paseo workspace before calling browser_new_tab or browser_list_tabs.",
+          "This browser tool needs a workspace. Start the agent from an Osuna workspace before calling browser_new_tab or browser_list_tabs.",
         retryable: false,
       },
       context: { agentId: "agent-1", cwd: REPO_CWD },
@@ -1782,9 +1782,9 @@ describe("create_agent MCP tool", () => {
 
   it("registers and broadcasts a workspace when create_agent creates a worktree", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-worktree-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-worktree-"));
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
     const broadcasts: string[] = [];
     const createdWorkspaceIds: string[] = [];
     const setupContinuations: Array<"workspace" | "agent" | undefined> = [];
@@ -1819,9 +1819,9 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({
-          paseoHome,
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({
+          osunaHome,
           broadcasts,
           createdWorkspaceIds,
           setupContinuations,
@@ -1872,9 +1872,9 @@ describe("create_agent MCP tool", () => {
 
   it("creates a create_agent branch-off worktree without invoking the legacy metadata branch rename", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-agent-worktree-name-context-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-agent-worktree-name-context-"));
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
     const broadcasts: string[] = [];
     const workspaceGitService = {
       getSnapshot: vi.fn(async () => {
@@ -1911,8 +1911,8 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({ paseoHome, broadcasts }),
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({ osunaHome, broadcasts }),
         workspaceGitService: workspaceGitService as unknown as Pick<
           WorkspaceGitService,
           "getSnapshot" | "listWorktrees"
@@ -1950,9 +1950,9 @@ describe("create_agent MCP tool", () => {
 
   it("auto-titles and renames an agent-created branch-off worktree from the initial prompt", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-agent-worktree-auto-title-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-agent-worktree-auto-title-"));
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
     const broadcasts: string[] = [];
     const createdWorkspaceIds: string[] = [];
     const workspaceRecords = new Map<string, PersistedWorkspaceRecord>();
@@ -1986,9 +1986,9 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({
-          paseoHome,
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({
+          osunaHome,
           broadcasts,
           createdWorkspaceIds,
           workspaceRecords,
@@ -2022,7 +2022,7 @@ describe("create_agent MCP tool", () => {
       })
         .toString()
         .trim();
-      const metadata = readPaseoWorktreeMetadata(agentCwd);
+      const metadata = readOsunaWorktreeMetadata(agentCwd);
 
       expect(metadata).toMatchObject({
         version: 2,
@@ -2043,9 +2043,9 @@ describe("create_agent MCP tool", () => {
 
   it("keeps a manual workspace title when agent-created worktree naming finishes later", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-agent-worktree-manual-title-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-agent-worktree-manual-title-"));
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
     const broadcasts: string[] = [];
     const createdWorkspaceIds: string[] = [];
     const workspaceRecords = new Map<string, PersistedWorkspaceRecord>();
@@ -2079,9 +2079,9 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({
-          paseoHome,
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({
+          osunaHome,
           broadcasts,
           createdWorkspaceIds,
           workspaceRecords,
@@ -2142,9 +2142,9 @@ describe("create_agent MCP tool", () => {
 
   it("uses create_agent title for the agent while still auto-titling the worktree workspace", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-agent-title-workspace-title-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-agent-title-workspace-title-"));
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
     const broadcasts: string[] = [];
     const createdWorkspaceIds: string[] = [];
     const workspaceRecords = new Map<string, PersistedWorkspaceRecord>();
@@ -2178,9 +2178,9 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({
-          paseoHome,
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({
+          osunaHome,
           broadcasts,
           createdWorkspaceIds,
           workspaceRecords,
@@ -2225,13 +2225,13 @@ describe("create_agent MCP tool", () => {
 
   it("auto-titles an agent-created directory workspace from the initial prompt", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-agent-directory-auto-title-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-agent-directory-auto-title-"));
     const workspaceDir = join(tempDir, "workspace");
     const workspaceRecords = new Map<string, PersistedWorkspaceRecord>();
     const broadcasts: string[] = [];
     const workspaceGitService = new WorkspaceGitServiceImpl({
       logger: createTestLogger(),
-      paseoHome: join(tempDir, ".osuna"),
+      osunaHome: join(tempDir, ".osuna"),
       deps: { github: createGitHubServiceStub() },
     });
     const workspaceAutoName = new WorkspaceAutoName({
@@ -2336,9 +2336,9 @@ describe("create_agent MCP tool", () => {
 
   it("auto-titles without renaming a create_agent checkout worktree from the initial prompt", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-agent-checkout-name-context-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-agent-checkout-name-context-"));
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
     const broadcasts: string[] = [];
     const createdWorkspaceIds: string[] = [];
     const workspaceRecords = new Map<string, PersistedWorkspaceRecord>();
@@ -2386,9 +2386,9 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({
-          paseoHome,
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({
+          osunaHome,
           broadcasts,
           createdWorkspaceIds,
           workspaceRecords,
@@ -2434,7 +2434,7 @@ describe("create_agent MCP tool", () => {
         title: "Generated Checkout Workspace Title",
         branch: "existing-feature",
       });
-      expect(readPaseoWorktreeMetadata(agentCwd)).toMatchObject({
+      expect(readOsunaWorktreeMetadata(agentCwd)).toMatchObject({
         version: 1,
         baseRefName: "existing-feature",
       });
@@ -2452,7 +2452,7 @@ describe("create_agent MCP tool", () => {
     const createOsunaWorktree = vi.fn(
       async (
         input: CreateOsunaWorktreeInput,
-        options?: Parameters<CreatePaseoWorktreeWorkflowFn>[1],
+        options?: Parameters<CreateOsunaWorktreeWorkflowFn>[1],
       ) => ({
         worktree: {
           branchName: "pr-123",
@@ -2546,9 +2546,9 @@ describe("create_agent MCP tool", () => {
 
   it("creates a worktree-isolated workspace", async () => {
     const { agentManager, agentStorage } = createTestDeps();
-    const tempDir = await mkdtemp(join(tmpdir(), "paseo-mcp-create-worktree-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "osuna-mcp-create-worktree-"));
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
     const broadcasts: string[] = [];
     const setupContinuations: Array<"workspace" | "agent" | undefined> = [];
 
@@ -2577,9 +2577,9 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({
-          paseoHome,
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({
+          osunaHome,
           broadcasts,
           setupContinuations,
         }),
@@ -2621,7 +2621,7 @@ describe("create_agent MCP tool", () => {
       updatedAt: "2026-07-18T00:00:00.000Z",
     });
     const receivedInputs: CreateOsunaWorktreeInput[] = [];
-    const createOsunaWorktree: CreatePaseoWorktreeWorkflowFn = async (input) => {
+    const createOsunaWorktree: CreateOsunaWorktreeWorkflowFn = async (input) => {
       receivedInputs.push(input);
       return {
         worktree: { branchName: "project-worktree", worktreePath: TARGET_CWD },
@@ -2756,10 +2756,10 @@ describe("create_agent MCP tool", () => {
   it("archives a worktree-isolated workspace by workspace id", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const tempDir = realpathSync.native(
-      await mkdtemp(join(tmpdir(), "paseo-mcp-archive-worktree-")),
+      await mkdtemp(join(tmpdir(), "osuna-mcp-archive-worktree-")),
     );
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
 
     try {
       execFileSync("git", ["init", repoDir], { stdio: "pipe" });
@@ -2791,8 +2791,8 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({ paseoHome, broadcasts: [] }),
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({ osunaHome, broadcasts: [] }),
         workspaceGitService: workspaceGitService as unknown as Pick<
           WorkspaceGitService,
           "getSnapshot" | "listWorktrees" | "resolveRepoRoot"
@@ -2863,10 +2863,10 @@ describe("create_agent MCP tool", () => {
   it("keeps an owned worktree while another workspace still references it", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const tempDir = realpathSync.native(
-      await mkdtemp(join(tmpdir(), "paseo-mcp-archive-worktree-multi-")),
+      await mkdtemp(join(tmpdir(), "osuna-mcp-archive-worktree-multi-")),
     );
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
 
     try {
       execFileSync("git", ["init", repoDir], { stdio: "pipe" });
@@ -2904,8 +2904,8 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({ paseoHome, broadcasts: [] }),
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({ osunaHome, broadcasts: [] }),
         workspaceGitService: workspaceGitService as unknown as Pick<
           WorkspaceGitService,
           "getSnapshot" | "listWorktrees" | "resolveRepoRoot"
@@ -2951,10 +2951,10 @@ describe("create_agent MCP tool", () => {
   it("does not expose worktree path or slug operations", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const tempDir = realpathSync.native(
-      await mkdtemp(join(tmpdir(), "paseo-mcp-archive-worktree-slug-")),
+      await mkdtemp(join(tmpdir(), "osuna-mcp-archive-worktree-slug-")),
     );
     const repoDir = join(tempDir, "repo");
-    const paseoHome = join(tempDir, ".osuna");
+    const osunaHome = join(tempDir, ".osuna");
 
     try {
       execFileSync("git", ["init", repoDir], { stdio: "pipe" });
@@ -2981,8 +2981,8 @@ describe("create_agent MCP tool", () => {
         agentManager,
         agentStorage,
         providerSnapshotManager: createOpenCodeManager().manager,
-        paseoHome,
-        createOsunaWorktree: createPaseoWorktreeForMcpTest({ paseoHome, broadcasts: [] }),
+        osunaHome,
+        createOsunaWorktree: createOsunaWorktreeForMcpTest({ osunaHome, broadcasts: [] }),
         workspaceGitService: workspaceGitService as unknown as Pick<
           WorkspaceGitService,
           "getSnapshot" | "listWorktrees" | "resolveRepoRoot"
@@ -3008,7 +3008,7 @@ describe("create_agent MCP tool", () => {
     const workspace = createPersistedWorkspaceRecord({
       workspaceId: "ws-feature",
       projectId: "project-1",
-      cwd: "/tmp/paseo/worktrees/repo/feature",
+      cwd: "/tmp/osuna/worktrees/repo/feature",
       kind: "worktree",
       displayName: "feature",
       createdAt: "2026-07-17T00:00:00.000Z",
@@ -3057,7 +3057,7 @@ describe("create_agent MCP tool", () => {
 
   it("allows caller agents to override cwd and applies caller context labels", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
-    const baseDir = await mkdtemp(join(tmpdir(), "paseo-mcp-test-"));
+    const baseDir = await mkdtemp(join(tmpdir(), "osuna-mcp-test-"));
     const subdir = join(baseDir, "subdir");
     await mkdir(subdir, { recursive: true });
     spies.agentManager.getAgent.mockReturnValue({

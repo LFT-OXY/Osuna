@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Issues are only for bugs. Product discussions go in [GitHub Discussions](https://github.com/getpaseo/paseo/discussions) or `#product` in [Discord](https://discord.gg/jz8T2uahpH) — feature requests opened as issues get closed automatically.
+        Issues are only for bugs. Product discussions go in [GitHub Discussions](https://github.com/LFT-OXY/Osuna/discussions) or `#product` in [Discord](https://discord.gg/jz8T2uahpH) — feature requests opened as issues get closed automatically.
 
         Before opening, please:
 
@@ -54,10 +54,10 @@ body:
       required: true
 
   - type: input
-    id: paseo-version
+    id: osuna-version
     attributes:
-      label: Paseo version
-      description: Settings → About in the app, or `paseo --version` from the CLI.
+      label: Osuna version
+      description: Settings → About in the app, or `osuna --version` from the CLI.
       placeholder: "0.1.71"
     validations:
       required: true
@@ -101,9 +101,9 @@ body:
         Paste relevant log output. Strongly preferred for crashes and daemon issues.
 
         - **Daemon log:** `~/.osuna/daemon.log` (override with `$OSUNA_HOME`)
-        - **Electron log (macOS):** `~/Library/Logs/Paseo/main.log`
-        - **Electron log (Windows):** `%APPDATA%\Paseo\logs\main.log`
-        - **Electron log (Linux):** `~/.config/Paseo/logs/main.log`
+        - **Electron log (macOS):** `~/Library/Logs/Osuna/main.log`
+        - **Electron log (Windows):** `%APPDATA%\Osuna\logs\main.log`
+        - **Electron log (Linux):** `~/.config/Osuna/logs/main.log`
 
         Paste the **full log around the time of the bug**, not a summary. If you used an AI to investigate, paste the raw log it read, not the AI's interpretation. AI summaries skew the signal and waste my time.
       render: text

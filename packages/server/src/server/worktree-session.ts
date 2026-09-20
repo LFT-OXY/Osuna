@@ -39,14 +39,14 @@ import {
 import { toCheckoutError } from "./checkout-git-utils.js";
 import type {
   CreateOsunaWorktreeInput,
-  CreatePaseoWorktreeResult,
-} from "./paseo-worktree-service.js";
+  CreateOsunaWorktreeResult,
+} from "./osuna-worktree-service.js";
 import type { ArchiveDependencies } from "./workspace-archive-service.js";
 import { toWorktreeWireError } from "./worktree-errors.js";
 import {
   archiveCommand,
-  createPaseoWorktreeCommand,
-  listPaseoWorktreesCommand,
+  createOsunaWorktreeCommand,
+  listOsunaWorktreesCommand,
 } from "./worktree/commands.js";
 import type { WorkspaceSetupOperation } from "./workspace-setup-runtime.js";
 import {
@@ -81,7 +81,7 @@ type AgentWorktreeSetupTimelineWriter = (input: {
 }) => Promise<boolean>;
 
 interface BuildAgentSessionConfigDependencies {
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
   sessionLogger: Logger;
   workspaceGitService?: WorkspaceGitService;
@@ -89,9 +89,9 @@ interface BuildAgentSessionConfigDependencies {
     input: CreateOsunaWorktreeInput,
     options?: {
       resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
-      setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
+      setupContinuation?: CreateOsunaWorktreeSetupContinuationInput;
     },
-  ) => Promise<CreatePaseoWorktreeWorkflowResult>;
+  ) => Promise<CreateOsunaWorktreeWorkflowResult>;
   checkoutExistingBranch: (cwd: string, branch: string) => Promise<CheckoutExistingBranchResult>;
   createBranchFromBase: (params: {
     cwd: string;
@@ -100,8 +100,8 @@ interface BuildAgentSessionConfigDependencies {
   }) => Promise<void>;
 }
 
-interface CreatePaseoWorktreeInBackgroundDependencies {
-  paseoHome?: string;
+interface CreateOsunaWorktreeInBackgroundDependencies {
+  osunaHome?: string;
   worktreesRoot?: string;
   emitWorkspaceUpdateForWorkspaceId: (workspaceId: string) => Promise<void>;
   cacheWorkspaceSetupSnapshot: (workspaceId: string, snapshot: WorkspaceSetupSnapshot) => void;
@@ -117,13 +117,13 @@ interface CreatePaseoWorktreeInBackgroundDependencies {
   onScriptsChanged: ((workspaceId: string, workspaceDirectory: string) => void) | null;
 }
 
-interface CreatePaseoWorktreeWorkflowDependencies extends CreatePaseoWorktreeInBackgroundDependencies {
+interface CreateOsunaWorktreeWorkflowDependencies extends CreateOsunaWorktreeInBackgroundDependencies {
   createOsunaWorktree: (
     input: CreateOsunaWorktreeInput,
     options?: {
       resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
     },
-  ) => Promise<CreatePaseoWorktreeResult>;
+  ) => Promise<CreateOsunaWorktreeResult>;
   warmWorkspaceGitData: (workspace: PersistedWorkspaceRecord) => Promise<void>;
   autoNameWorkspaceBranchForFirstAgent: (input: {
     workspace: PersistedWorkspaceRecord;
@@ -141,7 +141,7 @@ interface AgentWorktreeSetupContinuationInput {
   logger: Logger;
 }
 
-export type CreatePaseoWorktreeSetupContinuationInput =
+export type CreateOsunaWorktreeSetupContinuationInput =
   | { kind: "workspace" }
   | AgentWorktreeSetupContinuationInput;
 
@@ -150,17 +150,17 @@ export interface AgentWorktreeSetupContinuation {
   startAfterAgentCreate: (input: { agentId: string }) => void;
 }
 
-export type CreatePaseoWorktreeWorkflowResult = CreatePaseoWorktreeResult & {
+export type CreateOsunaWorktreeWorkflowResult = CreateOsunaWorktreeResult & {
   setupContinuation?: AgentWorktreeSetupContinuation;
 };
 
-export type CreatePaseoWorktreeWorkflowFn = (
+export type CreateOsunaWorktreeWorkflowFn = (
   input: CreateOsunaWorktreeInput,
   options?: {
     resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
-    setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
+    setupContinuation?: CreateOsunaWorktreeSetupContinuationInput;
   },
-) => Promise<CreatePaseoWorktreeWorkflowResult>;
+) => Promise<CreateOsunaWorktreeWorkflowResult>;
 
 interface HandleWorkspaceSetupStatusRequestDependencies {
   emit: EmitSessionMessage;
@@ -168,23 +168,23 @@ interface HandleWorkspaceSetupStatusRequestDependencies {
   getWorkspace: (workspaceId: string) => Promise<PersistedWorkspaceRecord | null>;
 }
 
-interface HandleWorkspaceSetupRunRequestDependencies extends CreatePaseoWorktreeInBackgroundDependencies {
+interface HandleWorkspaceSetupRunRequestDependencies extends CreateOsunaWorktreeInBackgroundDependencies {
   getWorkspace: (workspaceId: string) => Promise<PersistedWorkspaceRecord | null>;
   clearAutomationBlock: (workspaceId: string) => Promise<boolean>;
   startWorkspaceSetup: (workspaceId: string, operation: WorkspaceSetupOperation) => void;
 }
 
-interface HandleCreatePaseoWorktreeRequestDependencies {
-  paseoHome?: string;
+interface HandleCreateOsunaWorktreeRequestDependencies {
+  osunaHome?: string;
   worktreesRoot?: string;
   describeWorkspaceRecord: (
-    result: CreatePaseoWorktreeResult,
+    result: CreateOsunaWorktreeResult,
   ) => Promise<WorkspaceDescriptorPayload>;
   emit: EmitSessionMessage;
   sessionLogger: Logger;
-  createPaseoWorktreeWorkflow: (
+  createOsunaWorktreeWorkflow: (
     input: CreateOsunaWorktreeInput,
-  ) => Promise<CreatePaseoWorktreeWorkflowResult>;
+  ) => Promise<CreateOsunaWorktreeWorkflowResult>;
 }
 
 function normalizeFirstAgentContext(
@@ -245,7 +245,7 @@ export async function buildAgentSessionConfig(
         githubPrNumber: normalized.githubPrNumber,
         firstAgentContext,
         runSetup: false,
-        paseoHome: dependencies.paseoHome,
+        osunaHome: dependencies.osunaHome,
         worktreesRoot: dependencies.worktreesRoot,
       },
       {
@@ -255,7 +255,7 @@ export async function buildAgentSessionConfig(
               resolveGitCreateBaseBranch(
                 repoRoot,
                 dependencies.workspaceGitService,
-                dependencies.paseoHome,
+                dependencies.osunaHome,
               ),
       },
     );
@@ -268,7 +268,7 @@ export async function buildAgentSessionConfig(
       (await resolveGitCreateBaseBranch(
         cwd,
         dependencies.workspaceGitService,
-        dependencies.paseoHome,
+        dependencies.osunaHome,
       ));
     await dependencies.createBranchFromBase({
       cwd,
@@ -399,7 +399,7 @@ export function assertSafeGitRef(ref: string, label: string): void {
 export async function resolveGitCreateBaseBranch(
   cwd: string,
   workspaceGitService?: WorkspaceGitService,
-  _paseoHome?: string,
+  _osunaHome?: string,
 ): Promise<string> {
   if (!workspaceGitService) {
     throw new Error("WorkspaceGitService is required to resolve the repository root");
@@ -408,10 +408,10 @@ export async function resolveGitCreateBaseBranch(
   return workspaceGitService.resolveDefaultBranch(cwd);
 }
 
-export async function handlePaseoWorktreeListRequest(
+export async function handleOsunaWorktreeListRequest(
   dependencies: {
     emit: EmitSessionMessage;
-    paseoHome?: string;
+    osunaHome?: string;
     workspaceGitService: WorkspaceGitService;
   },
   msg: Extract<SessionInboundMessage, { type: "osuna_worktree_list_request" }>,
@@ -431,7 +431,7 @@ export async function handlePaseoWorktreeListRequest(
   }
 
   try {
-    const worktrees = await listPaseoWorktreesCommand(
+    const worktrees = await listOsunaWorktreesCommand(
       { workspaceGitService: dependencies.workspaceGitService },
       { cwd },
     );
@@ -460,7 +460,7 @@ export async function handlePaseoWorktreeListRequest(
   }
 }
 
-export async function handlePaseoWorktreeArchiveRequest(
+export async function handleOsunaWorktreeArchiveRequest(
   dependencies: Omit<
     ArchiveDependencies,
     "emitWorkspaceUpdatesForWorkspaceIds" | "workspaceGitService"
@@ -520,16 +520,16 @@ export async function handlePaseoWorktreeArchiveRequest(
   }
 }
 
-export async function handleCreatePaseoWorktreeRequest(
-  dependencies: HandleCreatePaseoWorktreeRequestDependencies,
+export async function handleCreateOsunaWorktreeRequest(
+  dependencies: HandleCreateOsunaWorktreeRequestDependencies,
   request: Extract<SessionInboundMessage, { type: "create_osuna_worktree_request" }>,
 ): Promise<void> {
   try {
-    const commandResult = await createPaseoWorktreeCommand(
+    const commandResult = await createOsunaWorktreeCommand(
       {
-        paseoHome: dependencies.paseoHome,
+        osunaHome: dependencies.osunaHome,
         worktreesRoot: dependencies.worktreesRoot,
-        createPaseoWorktreeWorkflow: dependencies.createPaseoWorktreeWorkflow,
+        createOsunaWorktreeWorkflow: dependencies.createOsunaWorktreeWorkflow,
       },
       {
         cwd: request.cwd,
@@ -605,19 +605,19 @@ export async function handleCreatePaseoWorktreeRequest(
   }
 }
 
-export async function createPaseoWorktreeWorkflow(
-  dependencies: CreatePaseoWorktreeWorkflowDependencies,
+export async function createOsunaWorktreeWorkflow(
+  dependencies: CreateOsunaWorktreeWorkflowDependencies,
   input: CreateOsunaWorktreeInput,
   options?: {
     resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
-    setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
+    setupContinuation?: CreateOsunaWorktreeSetupContinuationInput;
   },
-): Promise<CreatePaseoWorktreeWorkflowResult> {
+): Promise<CreateOsunaWorktreeWorkflowResult> {
   const createdWorktree = await dependencies.createOsunaWorktree(
     {
       ...input,
       runSetup: false,
-      paseoHome: input.paseoHome ?? dependencies.paseoHome,
+      osunaHome: input.osunaHome ?? dependencies.osunaHome,
       worktreesRoot: input.worktreesRoot ?? dependencies.worktreesRoot,
     },
     options?.resolveDefaultBranch
@@ -809,7 +809,7 @@ export async function handleWorkspaceSetupRunRequest(
 }
 
 export async function runWorktreeSetupInBackground(
-  dependencies: CreatePaseoWorktreeInBackgroundDependencies,
+  dependencies: CreateOsunaWorktreeInBackgroundDependencies,
   options: {
     requestCwd: string;
     repoRoot: string;

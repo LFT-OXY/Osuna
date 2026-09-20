@@ -10,7 +10,7 @@ const RUNTIME_CONTROL_ENV_KEYS = [
   "ESBUILD_BINARY_PATH",
 ] as const;
 
-export type PaseoNodeEnv = "development" | "production" | "test";
+export type OsunaNodeEnv = "development" | "production" | "test";
 export type ProcessEnvRecord = Record<string, string | undefined>;
 export type ExternalProcessEnv = NodeJS.ProcessEnv & Record<string, string>;
 
@@ -34,7 +34,7 @@ function buildExternalProcessEnv(
   return sanitized as ExternalProcessEnv;
 }
 
-export function createPaseoInternalEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function createOsunaInternalEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return buildInternalProcessEnv(baseEnv);
 }
 
@@ -76,7 +76,7 @@ export function buildSelfNodeCommand(
   };
 }
 
-export function resolvePaseoNodeEnv(env: NodeJS.ProcessEnv): PaseoNodeEnv | undefined {
+export function resolveOsunaNodeEnv(env: NodeJS.ProcessEnv): OsunaNodeEnv | undefined {
   const value = env[OSUNA_NODE_ENV];
   return value === "development" || value === "production" || value === "test" ? value : undefined;
 }

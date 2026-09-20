@@ -14,8 +14,8 @@ import type { GetProvidersSnapshotResponseMessage } from "@osuna/protocol/messag
 type SnapshotPayload = GetProvidersSnapshotResponseMessage["payload"];
 
 const CACHE_VERSION = 2;
-const CACHE_KEY_PREFIX = "@paseo/provider-snapshot/v2";
-const CACHE_INDEX_KEY = "@paseo/provider-snapshot-index/v2";
+const CACHE_KEY_PREFIX = "@osuna/provider-snapshot/v2";
+const CACHE_INDEX_KEY = "@osuna/provider-snapshot-index/v2";
 const DEFAULT_MAX_CACHE_BYTES = 4 * 1024 * 1024;
 
 interface ProviderSnapshotStorage {
@@ -143,8 +143,8 @@ export function createProviderSnapshotCache(
     // COMPAT(providerSnapshotCache): added in v0.7.2, remove legacy cleanup after 2027-03-06.
     const legacyKeys = allKeys.filter(
       (key) =>
-        key.startsWith("@paseo/provider-snapshot/v1:") ||
-        key === "@paseo/provider-snapshot-index/v1" ||
+        key.startsWith("@osuna/provider-snapshot/v1:") ||
+        key === "@osuna/provider-snapshot-index/v1" ||
         key === CACHE_INDEX_KEY,
     );
     if (legacyKeys.length) await storage.multiRemove(legacyKeys);

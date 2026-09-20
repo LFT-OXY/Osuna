@@ -631,20 +631,20 @@ function buildUnknownSections(detail: UnknownDetail, ds: DetailStyles, t: TFunct
   return out;
 }
 
-function PaseoDetailSection({ section }: { section: OsunaToolDetailSection }) {
+function OsunaDetailSection({ section }: { section: OsunaToolDetailSection }) {
   return (
-    <View style={styles.paseoSection}>
-      <Text style={styles.paseoSectionTitle}>{section.title}</Text>
+    <View style={styles.osunaSection}>
+      <Text style={styles.osunaSectionTitle}>{section.title}</Text>
       {section.kind === "prose" ? (
-        <Text selectable style={styles.paseoProse}>
+        <Text selectable style={styles.osunaProse}>
           {section.text}
         </Text>
       ) : (
-        <View style={styles.paseoFields}>
+        <View style={styles.osunaFields}>
           {section.fields.map((field) => (
-            <View key={field.label} style={styles.paseoFieldRow}>
-              <Text style={styles.paseoFieldLabel}>{field.label}</Text>
-              <Text selectable style={styles.paseoFieldValue}>
+            <View key={field.label} style={styles.osunaFieldRow}>
+              <Text style={styles.osunaFieldLabel}>{field.label}</Text>
+              <Text selectable style={styles.osunaFieldValue}>
                 {field.value}
               </Text>
             </View>
@@ -655,14 +655,14 @@ function PaseoDetailSection({ section }: { section: OsunaToolDetailSection }) {
   );
 }
 
-function buildPaseoUnknownSections(
+function buildOsunaUnknownSections(
   toolName: string | undefined,
   detail: UnknownDetail,
 ): ReactNode[] | null {
   if (!toolName) return null;
   const sections = buildOsunaToolDetailSections(toolName, detail.input, detail.output);
   if (!sections) return null;
-  return sections.map((section) => <PaseoDetailSection key={section.title} section={section} />);
+  return sections.map((section) => <OsunaDetailSection key={section.title} section={section} />);
 }
 
 function buildDetailSections(
@@ -741,7 +741,7 @@ function buildDetailSections(
     return [<ScrollablePlainTextSection key="plain-text" text={detail.text} ds={ds} />];
   }
   if (detail.type === "unknown") {
-    return buildPaseoUnknownSections(toolName, detail) ?? buildUnknownSections(detail, ds, t);
+    return buildOsunaUnknownSections(toolName, detail) ?? buildUnknownSections(detail, ds, t);
   }
   return [];
 }
@@ -837,39 +837,39 @@ const styles = StyleSheet.create((theme) => {
       fontSize: theme.fontSize.base,
       fontWeight: theme.fontWeight.normal,
     },
-    paseoSection: {
+    osunaSection: {
       gap: theme.spacing[3],
       paddingHorizontal: theme.spacing[4],
       paddingVertical: theme.spacing[4],
       borderBottomWidth: theme.borderWidth[1],
       borderBottomColor: theme.colors.border,
     },
-    paseoSectionTitle: {
+    osunaSectionTitle: {
       color: theme.colors.foreground,
       fontSize: theme.fontSize.base,
       fontWeight: theme.fontWeight.medium,
     },
-    paseoProse: {
+    osunaProse: {
       color: theme.colors.foreground,
       fontSize: theme.fontSize.content,
       lineHeight: Math.round(theme.fontSize.content * 1.5),
       overflowWrap: "anywhere",
     },
-    paseoFields: {
+    osunaFields: {
       gap: theme.spacing[3],
     },
-    paseoFieldRow: {
+    osunaFieldRow: {
       flexDirection: "row",
       alignItems: "flex-start",
       gap: theme.spacing[4],
     },
-    paseoFieldLabel: {
+    osunaFieldLabel: {
       width: 120,
       color: theme.colors.foregroundMuted,
       fontSize: theme.fontSize.sm,
       lineHeight: Math.round(theme.fontSize.base * 1.5),
     },
-    paseoFieldValue: {
+    osunaFieldValue: {
       flex: 1,
       minWidth: 0,
       color: theme.colors.foreground,

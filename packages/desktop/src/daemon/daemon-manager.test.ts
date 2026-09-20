@@ -7,7 +7,7 @@ import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
 import { createDaemonCommandHandlers } from "./daemon-manager";
 
 const mocks = vi.hoisted(() => ({
-  paseoHome: "",
+  osunaHome: "",
   settings: {
     releaseChannel: "stable",
     daemon: {
@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({
   app: {
-    getPath: vi.fn(() => mocks.paseoHome),
+    getPath: vi.fn(() => mocks.osunaHome),
     getVersion: vi.fn(() => "1.2.3"),
     isPackaged: true,
   },
@@ -52,7 +52,7 @@ vi.mock("electron-log/main", () => ({
 }));
 
 vi.mock("@osuna/server", () => ({
-  resolveOsunaHome: vi.fn(() => mocks.paseoHome),
+  resolveOsunaHome: vi.fn(() => mocks.osunaHome),
   spawnProcess: mocks.spawnProcess,
 }));
 
@@ -67,7 +67,7 @@ vi.mock("../settings/desktop-settings-electron.js", () => ({
 vi.mock("./runtime-paths.js", () => ({
   createNodeEntrypointInvocation: mocks.createNodeEntrypointInvocation,
   resolveDaemonRunnerEntrypoint: vi.fn(() => ({
-    entryPath: path.join(mocks.paseoHome, "daemon.js"),
+    entryPath: path.join(mocks.osunaHome, "daemon.js"),
     execArgv: [],
   })),
 }));
@@ -81,8 +81,8 @@ describe("daemon-manager commands", () => {
   let fixtureRoot: string;
 
   beforeEach(() => {
-    fixtureRoot = mkdtempSync(path.join(tmpdir(), "paseo daemon manager "));
-    mocks.paseoHome = path.join(fixtureRoot, "home");
+    fixtureRoot = mkdtempSync(path.join(tmpdir(), "osuna daemon manager "));
+    mocks.osunaHome = path.join(fixtureRoot, "home");
     mocks.appLogPath = path.join(fixtureRoot, "main.log");
     mocks.settings = DEFAULT_DESKTOP_SETTINGS;
     mocks.runExternalCliJsonCommand.mockReset();

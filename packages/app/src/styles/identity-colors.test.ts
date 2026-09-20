@@ -25,6 +25,7 @@ describe("identity colors", () => {
   });
 
   it("derives the same color a project key had before the palette moved", () => {
+    // 输入是调色板重构前记录的原值，换掉就只能按现行实现重新推导期望值，回归随之失效。
     expect(identityColor(deriveIdentityColorName("paseo"))).toBe("#368080");
     expect(identityColor(deriveIdentityColorName("my-project"))).toBe("#7a6aa8");
     expect(identityColor(deriveIdentityColorName("a"))).toBe("#b06260");

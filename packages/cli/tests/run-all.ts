@@ -1,7 +1,7 @@
 #!/usr/bin/env npx zx
 
 /**
- * Test runner for Paseo CLI E2E tests
+ * Test runner for Osuna CLI E2E tests
  *
  * Runs all test phases as separate subprocesses with a bounded worker pool
  * so independent tests run concurrently. Each test file already isolates
@@ -122,7 +122,7 @@ async function writeJsonSummary({
   );
 }
 
-console.log("🧪 Paseo CLI E2E Test Runner\n");
+console.log("🧪 Osuna CLI E2E Test Runner\n");
 console.log("=".repeat(50));
 
 // Discover all test files
@@ -195,8 +195,8 @@ async function runSingleTest(testFile: string): Promise<TestOutcome> {
   const testPath = join(__dirname, testFile);
   const testName = testFile.replace(/\.test\.ts$/, "");
   const startedAt = Date.now();
-  const npmCache = await mkdtemp(join(tmpdir(), "paseo-cli-test-npm-cache-"));
-  const osHome = await mkdtemp(join(tmpdir(), "paseo-cli-test-os-home-"));
+  const npmCache = await mkdtemp(join(tmpdir(), "osuna-cli-test-npm-cache-"));
+  const osHome = await mkdtemp(join(tmpdir(), "osuna-cli-test-os-home-"));
 
   try {
     return await new Promise<TestOutcome>((resolve) => {

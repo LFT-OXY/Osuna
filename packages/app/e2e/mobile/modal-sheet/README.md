@@ -82,7 +82,7 @@ agent-device test packages/app/e2e/mobile/modal-sheet/model-tablet.android.ad \
   --env AGENT_TITLE="$MODEL_QA_AGENT_TITLE" \
   --env PROVIDER_ID=codex --env MODEL_ID="$MODEL_QA_MODEL_ID" \
   --env MODEL_LABEL="$MODEL_QA_MODEL_LABEL" --env LAST_MODEL_ID="$MODEL_QA_LAST_MODEL_ID" \
-  --artifacts-dir /tmp/paseo-model-tablet-qa
+  --artifacts-dir /tmp/osuna-model-tablet-qa
 ```
 
 The existing-agent journey needs the sidebar pinned so its composer stays narrow. Start each run with no modal open;

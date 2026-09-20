@@ -31,14 +31,14 @@ async function runSupervisorFixture(options: {
   stdout: string;
   stderr: string;
 }> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "paseo-supervisor-log-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "osuna-supervisor-log-"));
   const logPath = path.join(tempDir, "daemon.log");
   const workerPath = path.join(tempDir, "worker.mjs");
   const runnerPath = path.join(tempDir, "runner.mjs");
 
   await writeFile(
     workerPath,
-    `process.send?.({ type: "paseo:ready", listen: "fixture" });\n${options.workerSource}`,
+    `process.send?.({ type: "osuna:ready", listen: "fixture" });\n${options.workerSource}`,
   );
   await writeFile(
     runnerPath,
@@ -104,19 +104,19 @@ async function runSupervisorFixture(options: {
 
 describe("supervisor durable logging", () => {
   test("resolves rotation defaults", () => {
-    const paseoHome = path.join(path.sep, "tmp", "osuna-home");
-    const logFile = resolveSupervisorLogFile(paseoHome, {}, {});
+    const osunaHome = path.join(path.sep, "tmp", "osuna-home");
+    const logFile = resolveSupervisorLogFile(osunaHome, {}, {});
 
     expect(logFile).toEqual({
-      path: path.join(paseoHome, "daemon.log"),
+      path: path.join(osunaHome, "daemon.log"),
       rotate: { maxSize: "10m", maxFiles: 3 },
     });
   });
 
   test("lets persisted rotation override env rotation defaults", () => {
-    const paseoHome = path.join(path.sep, "tmp", "osuna-home");
+    const osunaHome = path.join(path.sep, "tmp", "osuna-home");
     const logFile = resolveSupervisorLogFile(
-      paseoHome,
+      osunaHome,
       {
         log: {
           file: {
@@ -132,15 +132,15 @@ describe("supervisor durable logging", () => {
     );
 
     expect(logFile).toEqual({
-      path: path.resolve(paseoHome, "logs", "daemon.log"),
+      path: path.resolve(osunaHome, "logs", "daemon.log"),
       rotate: { maxSize: "25m", maxFiles: 4 },
     });
   });
 
   test("uses env rotation when persisted rotation is absent", () => {
-    const paseoHome = path.join(path.sep, "tmp", "osuna-home");
+    const osunaHome = path.join(path.sep, "tmp", "osuna-home");
     const logFile = resolveSupervisorLogFile(
-      paseoHome,
+      osunaHome,
       {},
       {
         OSUNA_LOG_ROTATE_SIZE: "50m",
@@ -149,7 +149,7 @@ describe("supervisor durable logging", () => {
     );
 
     expect(logFile).toEqual({
-      path: path.join(paseoHome, "daemon.log"),
+      path: path.join(osunaHome, "daemon.log"),
       rotate: { maxSize: "50m", maxFiles: 8 },
     });
   });
@@ -188,9 +188,9 @@ describe("supervisor durable logging", () => {
     const result = await runSupervisorFixture({
       workerSource: `
         process.on("message", (message) => {
-          if (message?.type === "paseo:graceful-shutdown") process.exit(0);
+          if (message?.type === "osuna:graceful-shutdown") process.exit(0);
         });
-        process.send?.({ type: "paseo:shutdown", reason: "client_shutdown_rpc" });
+        process.send?.({ type: "osuna:shutdown", reason: "client_shutdown_rpc" });
         setInterval(() => {}, 1000);
       `,
     });
@@ -217,7 +217,7 @@ describe("supervisor durable logging", () => {
         process.stdout.write(\`DESCENDANT_PID=\${descendant.pid}\\n\`);
 
         process.on("message", (message) => {
-          if (message?.type !== "paseo:graceful-shutdown") return;
+          if (message?.type !== "osuna:graceful-shutdown") return;
           descendant.once("exit", () => {
             process.stdout.write("GRACEFUL_CLEANUP_RAN\\n");
             process.exit(0);
@@ -225,7 +225,7 @@ describe("supervisor durable logging", () => {
           descendant.kill("SIGTERM");
         });
 
-        process.send?.({ type: "paseo:shutdown", reason: "descendant_cleanup_probe" });
+        process.send?.({ type: "osuna:shutdown", reason: "descendant_cleanup_probe" });
         setInterval(() => {}, 1000);
       `,
     });
@@ -252,17 +252,17 @@ describe("supervisor durable logging", () => {
         import { existsSync, writeFileSync } from "node:fs";
 
         process.on("message", (message) => {
-          if (message?.type === "paseo:graceful-shutdown") process.exit(0);
+          if (message?.type === "osuna:graceful-shutdown") process.exit(0);
         });
         const marker = process.argv[1] + ".started";
         if (!existsSync(marker)) {
           writeFileSync(marker, "started");
           setTimeout(() => {
-            process.send?.({ type: "paseo:shutdown", reason: "silent_worker_test_complete" });
+            process.send?.({ type: "osuna:shutdown", reason: "silent_worker_test_complete" });
           }, 16_000);
           setInterval(() => {}, 1_000);
         } else {
-          process.send?.({ type: "paseo:shutdown", reason: "unexpected_silent_worker_restart" });
+          process.send?.({ type: "osuna:shutdown", reason: "unexpected_silent_worker_restart" });
           setInterval(() => {}, 1_000);
         }
       `,
@@ -279,7 +279,7 @@ describe("supervisor durable logging", () => {
     const result = await runSupervisorFixture({
       timeoutMs: 15_000,
       workerSource: `
-          process.send?.({ type: "paseo:shutdown", reason: "stalled_worker_shutdown" });
+          process.send?.({ type: "osuna:shutdown", reason: "stalled_worker_shutdown" });
           setInterval(() => {}, 1_000);
         `,
     });
@@ -302,7 +302,7 @@ describe("supervisor durable logging", () => {
           import { existsSync, writeFileSync } from "node:fs";
 
           process.on("message", (message) => {
-            if (message?.type === "paseo:graceful-shutdown") process.exit(0);
+            if (message?.type === "osuna:graceful-shutdown") process.exit(0);
           });
           const marker = process.argv[1] + ".started";
           if (!existsSync(marker)) {
@@ -313,10 +313,10 @@ describe("supervisor durable logging", () => {
               { detached: true, stdio: ["ignore", "inherit", "inherit"] },
             );
             descendant.unref();
-            process.send?.({ type: "paseo:restart", reason: "stdio_descendant" });
+            process.send?.({ type: "osuna:restart", reason: "stdio_descendant" });
             setInterval(() => {}, 1000);
           } else {
-            process.send?.({ type: "paseo:shutdown", reason: "stdio_restart_complete" });
+            process.send?.({ type: "osuna:shutdown", reason: "stdio_restart_complete" });
             setInterval(() => {}, 1000);
           }
         `,

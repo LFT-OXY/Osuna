@@ -340,7 +340,7 @@ function SchedulesEmptyState({
         <Text style={styles.emptyTitle}>{t("schedules.screen.emptyTitle")}</Text>
         <Text style={styles.emptyDescription}>{t("schedules.screen.emptyDescription")}</Text>
         <ExternalLink
-          href="https://paseo.sh/docs/schedules"
+          href="https://github.com/LFT-OXY/Osuna/blob/main/public-docs/schedules.md"
           label={t("schedules.screen.seeDocs")}
         />
       </View>

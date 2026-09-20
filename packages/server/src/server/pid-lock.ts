@@ -56,8 +56,8 @@ const PID_LOCK_FILENAME = "osuna.pid";
 // osuna.pid 会判定没有实例在跑，于是起出第二个 daemon 抢同一个端口与同一份 agent 存储。
 const PASEO_PID_LOCK_FILENAME = "paseo.pid";
 
-function getPidFilePath(paseoHome: string): string {
-  return join(paseoHome, PID_LOCK_FILENAME);
+function getPidFilePath(osunaHome: string): string {
+  return join(osunaHome, PID_LOCK_FILENAME);
 }
 
 /**
@@ -65,8 +65,8 @@ function getPidFilePath(paseoHome: string): string {
  * 注意「读不出来」不等于「不存在」：`readPidLock` 只在文件缺失时返回 null，权限不足或内容
  * 损坏一律抛出。那种情况下无法证明旧 daemon 没在跑，必须让启动失败而不是放行第二个实例。
  */
-async function readLivePaseoPidLock(paseoHome: string): Promise<PidLockInfo | null> {
-  const lock = await readPidLock(join(paseoHome, PASEO_PID_LOCK_FILENAME));
+async function readLivePaseoPidLock(osunaHome: string): Promise<PidLockInfo | null> {
+  const lock = await readPidLock(join(osunaHome, PASEO_PID_LOCK_FILENAME));
   return lock && isPidRunning(lock.pid) ? lock : null;
 }
 
@@ -117,9 +117,9 @@ function createLockHeldError(lock: PidLockInfo): PidLockError {
   );
 }
 
-function createPaseoLockHeldError(paseoHome: string, lock: PidLockInfo): PidLockError {
+function createPaseoLockHeldError(osunaHome: string, lock: PidLockInfo): PidLockError {
   return new PidLockError(
-    `A pre-rename Paseo daemon is still running in this home (PID ${lock.pid}, started ${lock.startedAt}, lock file ${join(paseoHome, PASEO_PID_LOCK_FILENAME)}). Stop it, or start Osuna with a different OSUNA_HOME.`,
+    `A pre-rename Paseo daemon is still running in this home (PID ${lock.pid}, started ${lock.startedAt}, lock file ${join(osunaHome, PASEO_PID_LOCK_FILENAME)}). Stop it, or start Osuna with a different OSUNA_HOME.`,
     lock,
   );
 }
@@ -173,13 +173,13 @@ async function writeNewPidLock(pidPath: string, lockInfo: PidLockInfo): Promise<
 }
 
 export async function acquirePidLock(
-  paseoHome: string,
+  osunaHome: string,
   listen: string | null,
   options?: AcquirePidLockOptions,
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
 
-  ensurePrivateDirectory(paseoHome);
+  ensurePrivateDirectory(osunaHome);
 
   // Try to read existing lock
   const existingLock = await readPidLock(pidPath);
@@ -193,8 +193,8 @@ export async function acquirePidLock(
     }
   }
 
-  const paseoLock = await readLivePaseoPidLock(paseoHome);
-  if (paseoLock) throw createPaseoLockHeldError(paseoHome, paseoLock);
+  const paseoLock = await readLivePaseoPidLock(osunaHome);
+  if (paseoLock) throw createPaseoLockHeldError(osunaHome, paseoLock);
 
   // Create new lock with exclusive flag
   const lockInfo: PidLockInfo = {
@@ -211,10 +211,10 @@ export async function acquirePidLock(
 }
 
 export async function refreshPidLock(
-  paseoHome: string,
+  osunaHome: string,
   options?: { ownerPid?: number },
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
   const lockOwnerPid = resolveOwnerPid(options?.ownerPid);
   let fd;
   try {
@@ -269,7 +269,7 @@ async function readPidLockFromHandleWithRetry(fd: FileHandle): Promise<PidLockIn
 }
 
 export function startPidLockHeartbeat(
-  paseoHome: string,
+  osunaHome: string,
   options?: {
     ownerPid?: number;
     intervalMs?: number;
@@ -284,7 +284,7 @@ export function startPidLockHeartbeat(
       return;
     }
     refreshing = true;
-    refreshPidLock(paseoHome, { ownerPid: options?.ownerPid })
+    refreshPidLock(osunaHome, { ownerPid: options?.ownerPid })
       .catch((error) => {
         if (options?.onError) {
           options.onError(error);
@@ -303,11 +303,11 @@ export function startPidLockHeartbeat(
 }
 
 export async function updatePidLock(
-  paseoHome: string,
+  osunaHome: string,
   patch: { listen: string | null },
   options?: { ownerPid?: number },
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
   const lockOwnerPid = resolveOwnerPid(options?.ownerPid);
   const fd = await open(pidPath, "r+");
   try {
@@ -334,10 +334,10 @@ export async function updatePidLock(
 }
 
 export async function releasePidLock(
-  paseoHome: string,
+  osunaHome: string,
   options?: { ownerPid?: number; startedAt?: string },
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
   const lockOwnerPid = resolveOwnerPid(options?.ownerPid);
   try {
     // Only remove if it's our lock
@@ -354,15 +354,15 @@ export async function releasePidLock(
   }
 }
 
-export async function getPidLockInfo(paseoHome: string): Promise<PidLockInfo | null> {
-  const pidPath = getPidFilePath(paseoHome);
+export async function getPidLockInfo(osunaHome: string): Promise<PidLockInfo | null> {
+  const pidPath = getPidFilePath(osunaHome);
   return readPidLock(pidPath);
 }
 
 export async function isLocked(
-  paseoHome: string,
+  osunaHome: string,
 ): Promise<{ locked: boolean; info?: PidLockInfo }> {
-  const info = await getPidLockInfo(paseoHome);
+  const info = await getPidLockInfo(osunaHome);
   if (!info) {
     return { locked: false };
   }

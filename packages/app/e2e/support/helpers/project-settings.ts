@@ -244,11 +244,11 @@ export async function removeProjectScript(page: Page, scriptName: string): Promi
 
 // --- File manipulation ---
 
-export async function corruptPaseoConfig(repoPath: string): Promise<void> {
+export async function corruptOsunaConfig(repoPath: string): Promise<void> {
   await writeFile(path.join(repoPath, "osuna.json"), "{not valid json}");
 }
 
-export async function bumpPaseoConfigOnDisk(repoPath: string): Promise<void> {
+export async function bumpOsunaConfigOnDisk(repoPath: string): Promise<void> {
   const configPath = path.join(repoPath, "osuna.json");
   const raw = await readFile(configPath, "utf8");
   const config = JSON.parse(raw) as Record<string, unknown>;
@@ -256,25 +256,25 @@ export async function bumpPaseoConfigOnDisk(repoPath: string): Promise<void> {
   await writeFile(configPath, JSON.stringify(config, null, 2) + "\n");
 }
 
-export async function restorePaseoConfig(
+export async function restoreOsunaConfig(
   repoPath: string,
   config: Record<string, unknown>,
 ): Promise<void> {
   await writeFile(path.join(repoPath, "osuna.json"), JSON.stringify(config, null, 2) + "\n");
 }
 
-export function commitPaseoConfig(repoPath: string): void {
+export function commitOsunaConfig(repoPath: string): void {
   execFileSync("git", ["add", "osuna.json"], { cwd: repoPath });
   execFileSync("git", ["commit", "-m", "Update project config"], { cwd: repoPath });
 }
 
 // The daemon writes atomically via a temp file + rename, so blocking writes requires
 // removing write permission from the *directory*, not just the file.
-export async function blockPaseoConfigWrites(repoPath: string): Promise<void> {
+export async function blockOsunaConfigWrites(repoPath: string): Promise<void> {
   await chmod(repoPath, 0o555);
 }
 
-export async function unblockPaseoConfigWrites(repoPath: string): Promise<void> {
+export async function unblockOsunaConfigWrites(repoPath: string): Promise<void> {
   await chmod(repoPath, 0o755);
 }
 

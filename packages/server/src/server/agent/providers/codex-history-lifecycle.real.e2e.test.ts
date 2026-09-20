@@ -16,7 +16,7 @@ async function readNativeThreadPath(threadId: string): Promise<string> {
   );
   try {
     await client.request("initialize", {
-      clientInfo: { name: "paseo-archive-regression", version: "1.0.0" },
+      clientInfo: { name: "osuna-archive-regression", version: "1.0.0" },
     });
     client.notify("initialized", {});
     const response = await client.request("thread/read", { threadId });
@@ -27,7 +27,7 @@ async function readNativeThreadPath(threadId: string): Promise<string> {
 }
 
 // Real native processes and a real completion. The second case represents records
-// archived by older Paseo versions whose best-effort native archive failed.
+// archived by older Osuna versions whose best-effort native archive failed.
 test.runIf(process.env.OSUNA_NATIVE_ARCHIVE_QA === "1").each([true, false])(
   "Codex history releases its process and leaves native archive unchanged (native archived: %s)",
   async (nativeArchived) => {

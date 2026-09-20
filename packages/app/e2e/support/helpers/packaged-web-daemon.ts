@@ -55,9 +55,9 @@ export async function startPackagedWebDaemon(input: {
   relayEndpoint: string;
 }): Promise<PackagedWebDaemon> {
   const port = await availablePort();
-  const home = await mkdtemp(path.join(tmpdir(), "paseo-relay-deployment-e2e-"));
+  const home = await mkdtemp(path.join(tmpdir(), "osuna-relay-deployment-e2e-"));
   const serverId = `relay-deployment-${Date.now().toString(36)}`;
-  const paseo = path.resolve(__dirname, "../../../../../node_modules/.bin/osuna");
+  const osuna = path.resolve(__dirname, "../../../../../node_modules/.bin/osuna");
   const env: NodeJS.ProcessEnv = {
     ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_"))),
     HOME: home,
@@ -89,7 +89,7 @@ export async function startPackagedWebDaemon(input: {
         },
       }),
     );
-    await execFileAsync(paseo, ["daemon", "start", "--home", home], { env });
+    await execFileAsync(osuna, ["daemon", "start", "--home", home], { env });
     const origin = `http://127.0.0.1:${port}`;
     await waitForWebUi(origin, home);
 
@@ -100,7 +100,7 @@ export async function startPackagedWebDaemon(input: {
       serverId,
       pairingOfferUrl: async () => {
         const { stdout } = await execFileAsync(
-          paseo,
+          osuna,
           ["daemon", "pair", "--home", home, "--relay", "--json"],
           { env },
         );
@@ -111,14 +111,14 @@ export async function startPackagedWebDaemon(input: {
         return result.url;
       },
       close: async () => {
-        await execFileAsync(paseo, ["daemon", "stop", "--home", home], { env }).catch(
+        await execFileAsync(osuna, ["daemon", "stop", "--home", home], { env }).catch(
           () => undefined,
         );
         await rm(home, { recursive: true, force: true });
       },
     };
   } catch (error) {
-    await execFileAsync(paseo, ["daemon", "stop", "--home", home], { env }).catch(() => undefined);
+    await execFileAsync(osuna, ["daemon", "stop", "--home", home], { env }).catch(() => undefined);
     await rm(home, { recursive: true, force: true });
     throw error;
   }

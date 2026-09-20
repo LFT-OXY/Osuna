@@ -84,7 +84,7 @@ describe("searchDirectoryEntries", () => {
   beforeEach(() => {
     configuredSearchRoot = mkdtempSync(path.join(tmpdir(), "directory-search-"));
     searchRoot = realpathSync.native(configuredSearchRoot);
-    mkdirSync(path.join(searchRoot, "projects", "paseo-desktop"), { recursive: true });
+    mkdirSync(path.join(searchRoot, "projects", "osuna-desktop"), { recursive: true });
     mkdirSync(path.join(searchRoot, "src", "components"), { recursive: true });
     mkdirSync(path.join(searchRoot, ".hidden", "secret"), { recursive: true });
     writeFileSync(path.join(searchRoot, "src", "components", "message-renderer.tsx"), "");
@@ -113,7 +113,7 @@ describe("searchDirectoryEntries", () => {
     expect({ directories, files }).toEqual({
       directories: [
         {
-          path: path.join(searchRoot, "projects", "paseo-desktop"),
+          path: path.join(searchRoot, "projects", "osuna-desktop"),
           kind: "directory",
         },
       ],
@@ -239,7 +239,7 @@ describe("searchDirectoryEntries", () => {
     const expected = [
       { path: "pso-root", kind: "directory" },
       { path: "nested/pso-global", kind: "directory" },
-      { path: "projects/paseo-desktop", kind: "directory" },
+      { path: "projects/osuna-desktop", kind: "directory" },
     ];
 
     await expect(searchDirectoryEntries({ ...common, query: "~/pso" })).resolves.toEqual(expected);
@@ -270,7 +270,7 @@ describe("searchDirectoryEntries", () => {
       ],
       projectEntries: [
         { path: "projects", kind: "directory" },
-        { path: "projects/paseo-desktop", kind: "directory" },
+        { path: "projects/osuna-desktop", kind: "directory" },
       ],
     });
   });
@@ -314,7 +314,7 @@ describe("searchDirectoryEntries", () => {
 
   it("does not spend the scan budget on excluded entry kinds", async () => {
     const budgetRoot = path.join(searchRoot, "kind-budget");
-    const target = path.join(budgetRoot, "z-projects", "paseo-target");
+    const target = path.join(budgetRoot, "z-projects", "osuna-target");
     mkdirSync(target, { recursive: true });
     for (let index = 0; index < 10; index += 1) {
       writeFileSync(path.join(budgetRoot, `a-noise-${index}.txt`), "");
@@ -323,13 +323,13 @@ describe("searchDirectoryEntries", () => {
     await expect(
       searchDirectoryEntries({
         root: budgetRoot,
-        query: "paseo-target",
+        query: "osuna-target",
         pathFormat: "relative",
         includeFiles: false,
         includeDirectories: true,
         maxEntriesScanned: 2,
       }),
-    ).resolves.toEqual([{ path: "z-projects/paseo-target", kind: "directory" }]);
+    ).resolves.toEqual([{ path: "z-projects/osuna-target", kind: "directory" }]);
   });
 
   it("applies ignored-directory policy to parent-scoped queries", async () => {
@@ -482,7 +482,7 @@ describe("absolute directory-path configuration", () => {
     homeDir = realpathSync.native(homeDir);
     outsideDir = realpathSync.native(outsideDir);
 
-    mkdirSync(path.join(homeDir, "projects", "paseo"), { recursive: true });
+    mkdirSync(path.join(homeDir, "projects", "osuna"), { recursive: true });
     mkdirSync(path.join(homeDir, "projects", "playground"), { recursive: true });
     mkdirSync(path.join(homeDir, "documents", "plans"), { recursive: true });
     mkdirSync(path.join(homeDir, ".hidden", "cache"), { recursive: true });
@@ -511,7 +511,7 @@ describe("absolute directory-path configuration", () => {
 
   it("shares the scan budget fairly between nested sibling branches", async () => {
     const budgetHome = path.join(tempRoot, "nested-budget-home");
-    const projectPath = path.join(budgetHome, "work", "client", "team", "paseo-desktop");
+    const projectPath = path.join(budgetHome, "work", "client", "team", "osuna-desktop");
     mkdirSync(projectPath, { recursive: true });
     for (let index = 0; index < 10; index += 1) {
       mkdirSync(
@@ -522,7 +522,7 @@ describe("absolute directory-path configuration", () => {
 
     const results = await searchAbsoluteDirectoryPaths({
       homeDir: budgetHome,
-      query: "paseo-desktop",
+      query: "osuna-desktop",
       limit: 10,
       maxDirectoriesScanned: 8,
     });
@@ -535,7 +535,7 @@ describe("absolute directory-path configuration", () => {
   it.skipIf(isWindows)("does not let a queued symlink hide the direct project branch", async () => {
     const symlinkHome = path.join(tempRoot, "symlink-budget-home");
     const projectRoot = path.join(symlinkHome, "b-projects", "project-root");
-    const projectPath = path.join(projectRoot, "paseo-desktop");
+    const projectPath = path.join(projectRoot, "osuna-desktop");
     const noisyBranch = path.join(symlinkHome, "a-noisy");
     mkdirSync(projectPath, { recursive: true });
     for (let index = 0; index < 10; index += 1) {
@@ -549,7 +549,7 @@ describe("absolute directory-path configuration", () => {
 
     const results = await searchAbsoluteDirectoryPaths({
       homeDir: symlinkHome,
-      query: "paseo-desktop",
+      query: "osuna-desktop",
       limit: 10,
       maxDirectoriesScanned: 6,
     });
@@ -561,7 +561,7 @@ describe("absolute directory-path configuration", () => {
 
   it.skipIf(isWindows)("follows visible directory symlinks that stay inside home", async () => {
     const symlinkHome = path.join(tempRoot, "internal-symlink-home");
-    const projectPath = path.join(symlinkHome, ".linked", "project-root", "paseo-desktop");
+    const projectPath = path.join(symlinkHome, ".linked", "project-root", "osuna-desktop");
     mkdirSync(projectPath, { recursive: true });
     symlinkSync(path.dirname(projectPath), path.join(symlinkHome, "linked-project"));
 
@@ -580,14 +580,14 @@ describe("absolute directory-path configuration", () => {
     const symlinkHome = path.join(tempRoot, "visible-symlink-home");
     const projectsPath = path.join(symlinkHome, "projects");
     const targetPath = path.join(symlinkHome, "work", "current");
-    const visibleProjectPath = path.join(projectsPath, "paseo");
+    const visibleProjectPath = path.join(projectsPath, "osuna");
     mkdirSync(projectsPath, { recursive: true });
     mkdirSync(targetPath, { recursive: true });
     symlinkSync(targetPath, visibleProjectPath);
 
     const results = await searchAbsoluteDirectoryPaths({
       homeDir: symlinkHome,
-      query: "paseo",
+      query: "osuna",
       limit: 10,
     });
 
@@ -622,12 +622,11 @@ describe("absolute directory-path configuration", () => {
   it("supports home-relative path query syntax", async () => {
     const result = await searchAbsoluteDirectoryPaths({
       homeDir,
-      query: "~/projects/pa",
+      query: "~/projects/pl",
       limit: 10,
     });
 
     expect(result.map((entry) => realpathSync.native(entry))).toEqual([
-      realpathSync.native(path.join(homeDir, "projects", "paseo")),
       realpathSync.native(path.join(homeDir, "projects", "playground")),
     ]);
   });
@@ -688,7 +687,7 @@ describe("relative typed-entry configuration", () => {
     });
     mkdirSync(path.join(workspaceDir, "docs"), { recursive: true });
 
-    writeFileSync(path.join(workspaceDir, "README.md"), "# paseo\n");
+    writeFileSync(path.join(workspaceDir, "README.md"), "# osuna\n");
     writeFileSync(
       path.join(workspaceDir, "src", "components", "chat-input.tsx"),
       "export const ChatInput = null;\n",
@@ -726,7 +725,7 @@ describe("relative typed-entry configuration", () => {
     mkdirSync(path.join(workspaceDir, "packages", "app", "src"), { recursive: true });
     writeFileSync(path.join(workspaceDir, "src", "file.ts"), "");
     writeFileSync(path.join(workspaceDir, "packages", "app", "src", "file.ts"), "");
-    writeFileSync(path.join(workspaceDir, "src", "paseo-config-file.ts"), "");
+    writeFileSync(path.join(workspaceDir, "src", "osuna-config-file.ts"), "");
 
     const basenameResults = await searchRelativeDirectoryEntries({
       cwd: workspaceDir,
@@ -917,7 +916,7 @@ describe("relative typed-entry configuration", () => {
       "something",
       "something-else",
       "skills",
-      "paseo-advisor",
+      "osuna-advisor",
       "SKILL.md",
     );
     mkdirSync(path.dirname(targetPath), { recursive: true });
@@ -933,7 +932,7 @@ describe("relative typed-entry configuration", () => {
 
     expect(results).toEqual([
       {
-        path: "something/something-else/skills/paseo-advisor/SKILL.md",
+        path: "something/something-else/skills/osuna-advisor/SKILL.md",
         kind: "file",
       },
     ]);

@@ -128,7 +128,7 @@ function resolveScheduleTarget(args: {
     if (!currentAgentId) {
       throw {
         code: "INVALID_TARGET",
-        message: "--target self requires running inside a Osuna agent",
+        message: "--target self requires running inside an Osuna agent",
       } satisfies CommandError;
     }
     return { type: "self", agentId: currentAgentId };

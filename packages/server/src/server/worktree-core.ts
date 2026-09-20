@@ -26,7 +26,7 @@ export interface CreateWorktreeCoreInput {
   checkoutSource?: ChangeRequestCheckoutSource;
   githubPrNumber?: number;
   firstAgentContext?: FirstAgentContext;
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
   runSetup?: boolean;
 }
@@ -121,7 +121,7 @@ async function createWorktreeCoreWithPriority(
       worktreeSlug: normalizedSlug,
       source: intent,
       runSetup: input.runSetup ?? true,
-      paseoHome: input.paseoHome,
+      osunaHome: input.osunaHome,
       worktreesRoot: input.worktreesRoot,
     }),
     intent,
@@ -160,7 +160,7 @@ async function resolveDefaultBranch(
 }
 
 export async function resolveWorktreeRepoRoot(
-  input: Pick<CreateWorktreeCoreInput, "cwd" | "paseoHome">,
+  input: Pick<CreateWorktreeCoreInput, "cwd" | "osunaHome">,
   workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">,
 ): Promise<string> {
   if (!workspaceGitService) {

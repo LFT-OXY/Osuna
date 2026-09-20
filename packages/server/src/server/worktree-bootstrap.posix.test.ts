@@ -30,7 +30,7 @@ interface CreateAgentWorktreeTestOptions {
   branchName: string;
   baseBranch: string;
   worktreeSlug: string;
-  paseoHome?: string;
+  osunaHome?: string;
 }
 
 interface CreateAgentWorktreeTestResult {
@@ -66,7 +66,7 @@ async function createBootstrapWorktreeForTest(
       branchName: options.branchName,
     },
     runSetup: false,
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
   });
   return { worktree, shouldBootstrap: true };
 }
@@ -75,7 +75,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
   describe("runAsyncWorktreeBootstrap", () => {
     let tempDir: string;
     let repoDir: string;
-    let paseoHome: string;
+    let osunaHome: string;
     let realTerminalManagers: TerminalManager[];
 
     async function waitForPathExists(targetPath: string, timeoutMs = 10000): Promise<void> {
@@ -108,7 +108,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       realTerminalManagers = [];
       tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-bootstrap-test-")));
       repoDir = join(tempDir, "repo");
-      paseoHome = join(tempDir, "osuna-home");
+      osunaHome = join(tempDir, "osuna-home");
 
       mkdirSync(repoDir, { recursive: true });
       execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "pipe" });
@@ -149,7 +149,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
         branchName: "feature-streaming-setup",
         baseBranch: "main",
         worktreeSlug: "feature-streaming-setup",
-        paseoHome,
+        osunaHome,
       });
 
       const persisted: AgentTimelineItem[] = [];
@@ -266,7 +266,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
         branchName: "feature-carriage-return",
         baseBranch: "main",
         worktreeSlug: "feature-carriage-return",
-        paseoHome,
+        osunaHome,
       });
 
       const persisted: AgentTimelineItem[] = [];
@@ -328,7 +328,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
         branchName: "feature-shared-runtime-port",
         baseBranch: "main",
         worktreeSlug: "feature-shared-runtime-port",
-        paseoHome,
+        osunaHome,
       });
 
       const registeredEnvs: Array<{ cwd: string; env: Record<string, string> }> = [];

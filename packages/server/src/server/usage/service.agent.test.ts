@@ -55,10 +55,10 @@ async function startService(options: {
   /** Reads the agent's usage from inside the first progress tick. */
   probeAgentId?: string;
 }): Promise<StartedService> {
-  const paseoHome = await tempDir("paseo-usage-agent-home-");
+  const osunaHome = await tempDir("osuna-usage-agent-home-");
   let duringBackfill: Promise<{ complete: boolean }> | null = null;
   const service = new UsageService({
-    paseoHome,
+    osunaHome,
     config: {
       roots: { claude: [options.claudeRoot], codex: [], pi: [], omp: [] },
       // Long enough that the backfill is the only round this suite sees.
@@ -112,7 +112,7 @@ function backingOf(sessionIds: string[], cli: UsageCli = "claude"): UsageAgentBa
 
 describe("agent usage over its backing sessions", () => {
   test("adds up every session the agent ran in", async () => {
-    const root = await tempDir("paseo-usage-agent-claude-");
+    const root = await tempDir("osuna-usage-agent-claude-");
     await seedSession(
       root,
       "sess-a",
@@ -142,7 +142,7 @@ describe("agent usage over its backing sessions", () => {
   });
 
   test("an old record names one session and the fork link finds the rest", async () => {
-    const root = await tempDir("paseo-usage-agent-fork-");
+    const root = await tempDir("osuna-usage-agent-fork-");
     await seedSession(
       root,
       "sess-old",
@@ -190,7 +190,7 @@ describe("agent usage over its backing sessions", () => {
   });
 
   test("a session with no cursor leaves the answer incomplete", async () => {
-    const root = await tempDir("paseo-usage-agent-partial-");
+    const root = await tempDir("osuna-usage-agent-partial-");
     await seedSession(
       root,
       "sess-a",
@@ -211,7 +211,7 @@ describe("agent usage over its backing sessions", () => {
   });
 
   test("a subagent cursor alone does not make the session scanned", async () => {
-    const root = await tempDir("paseo-usage-agent-subagent-");
+    const root = await tempDir("osuna-usage-agent-subagent-");
     const dir = path.join(root, PROJECT_DIR, "sess-a", "subagents");
     await mkdir(dir, { recursive: true });
     await writeFile(
@@ -230,7 +230,7 @@ describe("agent usage over its backing sessions", () => {
   });
 
   test("a backfill still running is reported as incomplete", async () => {
-    const root = await tempDir("paseo-usage-agent-backfill-");
+    const root = await tempDir("osuna-usage-agent-backfill-");
     for (let index = 0; index < 20; index += 1) {
       await seedSession(
         root,
@@ -258,7 +258,7 @@ describe("agent usage over its backing sessions", () => {
   });
 
   test("an agent nobody knows reports nothing, and says so", async () => {
-    const root = await tempDir("paseo-usage-agent-unknown-");
+    const root = await tempDir("osuna-usage-agent-unknown-");
     const { service } = await startService({ claudeRoot: root, agents: bridge(null) });
 
     const summary = await service.getAgentUsage("agent-gone");

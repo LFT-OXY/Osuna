@@ -6,17 +6,17 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { expect, test } from "vitest";
 
 import { createTestLogger } from "../../../test-utils/test-logger.js";
-import type { PaseoToolCatalog } from "../tools/types.js";
+import type { OsunaToolCatalog } from "../tools/types.js";
 import { OpenCodeAgentClient } from "./opencode-agent.js";
 import { OpenCodeBridge } from "./opencode/bridge.js";
 import { OpenCodeServerManager } from "./opencode/server-manager.js";
 
 test("real OpenCode server shares one process while shell.env stays session-scoped", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-opencode-real-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "osuna-opencode-real-"));
   const firstCwd = path.join(root, "first");
   const secondCwd = path.join(root, "second");
   const logger = createTestLogger();
-  const bridge = new OpenCodeBridge({ paseoHome: root, logger });
+  const bridge = new OpenCodeBridge({ osunaHome: root, logger });
   await bridge.start();
   const firstTools = createCallerCatalog("real-agent-one");
   const secondTools = createCallerCatalog("real-agent-two");
@@ -44,7 +44,7 @@ test("real OpenCode server shares one process while shell.env stays session-scop
       {
         agentId: "real-agent-one",
         env: { OSUNA_AGENT_ID: "real-agent-one", OSUNA_AGENT_CWD: firstCwd },
-        paseoTools: firstTools,
+        osunaTools: firstTools,
       },
       { persistSession: false },
     );
@@ -53,7 +53,7 @@ test("real OpenCode server shares one process while shell.env stays session-scop
       {
         agentId: "real-agent-two",
         env: { OSUNA_AGENT_ID: "real-agent-two", OSUNA_AGENT_CWD: secondCwd },
-        paseoTools: secondTools,
+        osunaTools: secondTools,
       },
       { persistSession: false },
     );
@@ -100,7 +100,7 @@ test("real OpenCode server shares one process while shell.env stays session-scop
 
     const callerResult = await first.run(
       [
-        "Use the paseo_report_caller_agent_id tool to read your Paseo caller agent ID.",
+        "Use the osuna_report_caller_agent_id tool to read your Osuna caller agent ID.",
         "Then report that ID in your response.",
       ].join("\n"),
     );
@@ -108,7 +108,7 @@ test("real OpenCode server shares one process while shell.env stays session-scop
       expect.arrayContaining([
         expect.objectContaining({
           type: "tool_call",
-          name: "paseo_report_caller_agent_id",
+          name: "osuna_report_caller_agent_id",
           status: "completed",
         }),
       ]),
@@ -129,11 +129,11 @@ function requireSessionId(session: { id: string | null }): string {
   return session.id;
 }
 
-function createCallerCatalog(callerAgentId: string): PaseoToolCatalog {
+function createCallerCatalog(callerAgentId: string): OsunaToolCatalog {
   const tool = {
     name: "report_caller_agent_id",
-    title: "Report Paseo caller agent ID",
-    description: "Returns the caller agent ID assigned by Paseo.",
+    title: "Report Osuna caller agent ID",
+    description: "Returns the caller agent ID assigned by Osuna.",
     inputSchema: {},
     async handler() {
       return { content: [{ type: "text", text: callerAgentId }] };

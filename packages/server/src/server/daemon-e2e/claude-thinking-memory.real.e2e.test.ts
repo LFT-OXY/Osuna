@@ -6,7 +6,7 @@ import pino from "pino";
 
 import type { AgentTimelineItem } from "../agent/agent-sdk-types.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import {
   canRunRealProvider,
   createRealProviderClients,
@@ -63,7 +63,7 @@ describe("daemon E2E (real claude) - thinking effort memory", () => {
   test("changing thinking effort preserves the previous conversation", async () => {
     const logger = pino({ level: "silent" });
     const cwd = tmpCwd();
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       agentClients: createRealProviderClients(["claude"], logger),
       logger,
     });
@@ -108,7 +108,7 @@ describe("daemon E2E (real claude) - thinking effort memory", () => {
       expect(secondFinish.final?.lastError).toBeUndefined();
 
       const assistantText = await getAssistantText(client, agent.id);
-      expect(compactText(assistantText)).toContain("paseo_memory_56");
+      expect(compactText(assistantText)).toContain("osuna_memory_56");
     } finally {
       await client.close().catch(() => undefined);
       await daemon.close().catch(() => undefined);

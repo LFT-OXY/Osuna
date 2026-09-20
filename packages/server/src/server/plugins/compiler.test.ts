@@ -83,7 +83,7 @@ async function createSplitPlugin(): Promise<{
 }> {
   // Keep the platform's original spelling (including Windows short names) in symlink
   // targets. Only diagnostic expectations use canonical paths.
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-compiler-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-compiler-"));
   temporaryDirectories.push(directory);
   await Promise.all([
     mkdir(path.join(directory, "client")),
@@ -130,7 +130,7 @@ export default function contribute(server) {
 }
 
 async function createRootAlias(directory: string): Promise<string> {
-  const aliases = await mkdtemp(path.join(tmpdir(), "paseo-plugin-root-alias-"));
+  const aliases = await mkdtemp(path.join(tmpdir(), "osuna-plugin-root-alias-"));
   temporaryDirectories.push(aliases);
   const rootAlias = path.join(aliases, "plugin");
   await symlink(directory, rootAlias, process.platform === "win32" ? "junction" : "dir");
@@ -526,7 +526,7 @@ export default function contribute() { void value; return () => undefined; }`,
   });
 
   it("rejects relative imports that escape the plugin root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "paseo-plugin-compiler-parent-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "osuna-plugin-compiler-parent-"));
     temporaryDirectories.push(parent);
     const pluginDirectory = path.join(parent, "plugin");
     const server = path.join(pluginDirectory, "index.server.ts");
@@ -547,7 +547,7 @@ export default function contribute() { void secret; return () => undefined; }`,
 
   it("rejects absolute imports from outside the plugin root", async () => {
     const entries = await createSplitPlugin();
-    const outsideDirectory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-outside-"));
+    const outsideDirectory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-outside-"));
     temporaryDirectories.push(outsideDirectory);
     const outside = path.join(outsideDirectory, "secret.ts");
     await writeFile(outside, `export const secret = "outside";`);
@@ -563,7 +563,7 @@ export default function contribute() { void secret; return () => undefined; }`,
   });
 
   it("rejects plugin-authored relative imports that escape into node_modules", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "paseo-plugin-node-modules-parent-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "osuna-plugin-node-modules-parent-"));
     temporaryDirectories.push(parent);
     const pluginDirectory = path.join(parent, "plugin");
     const server = path.join(pluginDirectory, "index.server.ts");
@@ -780,7 +780,7 @@ export default function contribute() { void handler; return () => undefined; }`,
 
   it("allows linked dependencies to resolve within their own package root", async () => {
     const entries = await createSplitPlugin();
-    const linkedPackage = await mkdtemp(path.join(tmpdir(), "paseo-plugin-linked-dependency-"));
+    const linkedPackage = await mkdtemp(path.join(tmpdir(), "osuna-plugin-linked-dependency-"));
     temporaryDirectories.push(linkedPackage);
     await mkdir(path.join(entries.directory, "node_modules"));
     await Promise.all([
@@ -841,7 +841,7 @@ export default function contribute() { void secret; return () => undefined; }`,
 
   it("does not let remembered linked roots hide plugin-local runtime boundaries", async () => {
     const entries = await createSplitPlugin();
-    const linkedPackage = await mkdtemp(path.join(tmpdir(), "paseo-plugin-linked-boundary-"));
+    const linkedPackage = await mkdtemp(path.join(tmpdir(), "osuna-plugin-linked-boundary-"));
     temporaryDirectories.push(linkedPackage);
     await mkdir(path.join(entries.directory, "node_modules"));
     await Promise.all([

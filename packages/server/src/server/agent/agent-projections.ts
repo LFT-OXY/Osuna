@@ -30,7 +30,7 @@ interface ProjectionOptions {
 
 interface RecentProviderSessionProjectionOptions {
   providerLabel: string;
-  /** The Paseo agent that owns this provider session, when the caller resolved one. */
+  /** The Osuna agent that owns this provider session, when the caller resolved one. */
   importedAgentId?: string;
   /** That agent's workspace; absent for legacy agents created before ownership stamping. */
   importedAgentWorkspaceId?: string;

@@ -19,7 +19,7 @@ assert.equal(isPathLikeArg("foo"), false);
 console.log("  ✅ path-like detection matches the expected prefixes");
 
 console.log("  Testing existing directory detection and command precedence...");
-const existingProject = join(await mkdtemp(join(tmpdir(), "paseo-open-project-")), "project");
+const existingProject = join(await mkdtemp(join(tmpdir(), "osuna-open-project-")), "project");
 await mkdir(existingProject);
 const originalCwd = process.cwd();
 process.chdir(join(existingProject, ".."));

@@ -36,7 +36,7 @@ jobs:
           OSUNA_HOME="$(mktemp -d)"
           export OSUNA_LISTEN=127.0.0.1:6777
 
-          WRAPPER_LOG="$OSUNA_HOME/paseo-server-wrapper.log"
+          WRAPPER_LOG="$OSUNA_HOME/osuna-server-wrapper.log"
 
           cleanup() {
             if [[ -n "${DAEMON_PID:-}" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
@@ -47,12 +47,12 @@ jobs:
           }
           trap cleanup EXIT
 
-          OSUNA_WEB_UI_ENABLED=true ./result/bin/paseo-server --no-relay >"$WRAPPER_LOG" 2>&1 &
+          OSUNA_WEB_UI_ENABLED=true ./result/bin/osuna-server --no-relay >"$WRAPPER_LOG" 2>&1 &
           DAEMON_PID=$!
 
           deadline=$((SECONDS + 30))
           while (( SECONDS < deadline )); do
-            if STATUS_JSON="$(./result/bin/paseo daemon status --json)" \
+            if STATUS_JSON="$(./result/bin/osuna daemon status --json)" \
               && jq -e '.connectedDaemon == "reachable"' <<<"$STATUS_JSON" >/dev/null; then
               echo "$STATUS_JSON"
               curl --fail --silent --show-error http://127.0.0.1:6777/ >"$OSUNA_HOME/web-ui.html"
@@ -72,12 +72,12 @@ jobs:
           cat "$OSUNA_HOME/daemon.log" 2>/dev/null || echo "<missing>"
           echo "::endgroup::"
 
-          echo "::group::paseo-server stdout/stderr"
+          echo "::group::osuna-server stdout/stderr"
           cat "$WRAPPER_LOG" 2>/dev/null || echo "<missing>"
           echo "::endgroup::"
 
-          echo "::group::paseo daemon status"
-          ./result/bin/paseo daemon status || true
+          echo "::group::osuna daemon status"
+          ./result/bin/osuna daemon status || true
           echo "::endgroup::"
 
           exit 1
@@ -103,6 +103,6 @@ jobs:
 
           app="result-desktop/Applications/Osuna.app"
           test -x "$app/Contents/MacOS/Osuna"
-          test -L result-desktop/bin/paseo-desktop
+          test -L result-desktop/bin/osuna-desktop
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.chinhae.osuna.desktop"
           find "$app" -name Info.plist -print0 | xargs -0 -n 1 plutil -lint

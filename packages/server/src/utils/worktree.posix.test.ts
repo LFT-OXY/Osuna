@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   createWorktree as createWorktreePrimitive,
   deriveWorktreeProjectHash,
-  deletePaseoWorktree,
+  deleteOsunaWorktree,
   InvalidGitBranchNameError,
   getScriptConfigs,
   getWorktreeSetupCommands,
@@ -12,8 +12,8 @@ import {
   getWorktreeTeardownCommands,
   isServiceScript,
   isOsunaOwnedWorktreeCwd,
-  listPaseoWorktrees,
-  readPaseoConfig,
+  listOsunaWorktrees,
+  readOsunaConfig,
   resolveWorktreeRuntimeEnv,
   type WorktreeSetupCommandProgressEvent,
   runWorktreeSetupCommands,
@@ -21,7 +21,7 @@ import {
   type WorktreeConfig,
 } from "./worktree";
 import type { OsunaConfig } from "@osuna/protocol/osuna-config-schema";
-import { getPaseoWorktreeMetadataPath, readPaseoWorktreeMetadata } from "./worktree-metadata.js";
+import { getOsunaWorktreeMetadataPath, readOsunaWorktreeMetadata } from "./worktree-metadata.js";
 import {
   getCheckoutDiff,
   getCheckoutStatus,
@@ -49,7 +49,7 @@ import { tmpdir } from "os";
 import net from "node:net";
 
 function loadConfigForTest(repoRoot: string): OsunaConfig | null {
-  const result = readPaseoConfig(repoRoot);
+  const result = readOsunaConfig(repoRoot);
   return result.ok ? result.config : null;
 }
 
@@ -59,7 +59,7 @@ interface LegacyCreateWorktreeTestOptions {
   baseBranch: string;
   worktreeSlug: string;
   runSetup?: boolean;
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
 }
 
@@ -79,7 +79,7 @@ function createLegacyWorktreeForTest(
       branchName: options.branchName,
     },
     runSetup: options.runSetup ?? true,
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
     worktreesRoot: options.worktreesRoot,
   });
 }
@@ -88,13 +88,13 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
   describe("createWorktree", () => {
     let tempDir: string;
     let repoDir: string;
-    let paseoHome: string;
+    let osunaHome: string;
 
     beforeEach(() => {
       // Use realpathSync to resolve symlinks (e.g., /var -> /private/var on macOS)
       tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-test-")));
       repoDir = join(tempDir, "test-repo");
-      paseoHome = join(tempDir, "osuna-home");
+      osunaHome = join(tempDir, "osuna-home");
 
       // Create a git repo with an initial commit
       mkdirSync(repoDir, { recursive: true });
@@ -119,13 +119,13 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "hello-world",
-        paseoHome,
+        osunaHome,
       });
 
-      expect(result.worktreePath).toBe(join(paseoHome, "worktrees", projectHash, "hello-world"));
+      expect(result.worktreePath).toBe(join(osunaHome, "worktrees", projectHash, "hello-world"));
       expect(existsSync(result.worktreePath)).toBe(true);
       expect(existsSync(join(result.worktreePath, "file.txt"))).toBe(true);
-      const metadataPath = getPaseoWorktreeMetadataPath(result.worktreePath);
+      const metadataPath = getOsunaWorktreeMetadataPath(result.worktreePath);
       expect(existsSync(metadataPath)).toBe(true);
       const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
       expect(metadata).toMatchObject({
@@ -143,36 +143,36 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "custom-root",
-        paseoHome,
+        osunaHome,
         worktreesRoot,
       });
 
       expect(result.worktreePath).toBe(join(worktreesRoot, projectHash, "custom-root"));
       await expect(
-        isOsunaOwnedWorktreeCwd(result.worktreePath, { paseoHome, worktreesRoot }),
+        isOsunaOwnedWorktreeCwd(result.worktreePath, { osunaHome, worktreesRoot }),
       ).resolves.toMatchObject({ allowed: true, worktreeRoot: join(worktreesRoot, projectHash) });
       await expect(
-        isOsunaOwnedWorktreeCwd(result.worktreePath, { paseoHome }),
+        isOsunaOwnedWorktreeCwd(result.worktreePath, { osunaHome }),
       ).resolves.toMatchObject({ allowed: false });
 
-      const worktrees = await listPaseoWorktrees({ cwd: repoDir, paseoHome, worktreesRoot });
+      const worktrees = await listOsunaWorktrees({ cwd: repoDir, osunaHome, worktreesRoot });
       expect(worktrees.map((entry) => entry.path)).toContain(result.worktreePath);
 
-      await deletePaseoWorktree({
+      await deleteOsunaWorktree({
         cwd: repoDir,
         worktreePath: result.worktreePath,
-        paseoHome,
+        osunaHome,
         worktreesBaseRoot: worktreesRoot,
       });
       expect(existsSync(result.worktreePath)).toBe(false);
     });
 
-    it.skip("detects paseo-owned worktrees across realpath differences (macOS /var vs /private/var)", async () => {
+    it.skip("detects osuna-owned worktrees across realpath differences (macOS /var vs /private/var)", async () => {
       // Intentionally create repo using the non-realpath tmpdir() variant (often /var/... on macOS).
       const varTempDir = mkdtempSync(join(tmpdir(), "worktree-realpath-test-"));
       const privateTempDir = realpathSync(varTempDir);
       const varRepoDir = join(varTempDir, "test-repo");
-      const varPaseoHome = join(varTempDir, "osuna-home");
+      const varOsunaHome = join(varTempDir, "osuna-home");
       mkdirSync(varRepoDir, { recursive: true });
       execFileSync("git", ["init", "-b", "main"], { cwd: varRepoDir });
       execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: varRepoDir });
@@ -188,7 +188,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: varRepoDir,
         baseBranch: "main",
         worktreeSlug: "realpath-test",
-        paseoHome: varPaseoHome,
+        osunaHome: varOsunaHome,
       });
 
       const projectHash = await deriveWorktreeProjectHash(varRepoDir);
@@ -202,23 +202,23 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
       expect(existsSync(privateWorktreePath)).toBe(true);
 
       const ownership = await isOsunaOwnedWorktreeCwd(privateWorktreePath, {
-        paseoHome: varPaseoHome,
+        osunaHome: varOsunaHome,
       });
       expect(ownership.allowed).toBe(true);
 
       rmSync(varTempDir, { recursive: true, force: true });
     });
 
-    it("reports repoRoot as the repository root for paseo-owned worktrees", async () => {
+    it("reports repoRoot as the repository root for osuna-owned worktrees", async () => {
       const result = await createLegacyWorktreeForTest({
         branchName: "main",
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "repo-root-check",
-        paseoHome,
+        osunaHome,
       });
 
-      const ownership = await isOsunaOwnedWorktreeCwd(result.worktreePath, { paseoHome });
+      const ownership = await isOsunaOwnedWorktreeCwd(result.worktreePath, { osunaHome });
       expect(ownership.allowed).toBe(true);
       expect(ownership.repoRoot).toBe(repoDir);
     });
@@ -227,7 +227,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
       const nonGitDir = join(tempDir, "not-a-repo");
       mkdirSync(nonGitDir, { recursive: true });
 
-      const ownership = await isOsunaOwnedWorktreeCwd(nonGitDir, { paseoHome });
+      const ownership = await isOsunaOwnedWorktreeCwd(nonGitDir, { osunaHome });
 
       expect(ownership.allowed).toBe(false);
       expect(ownership.worktreePath).toBe(realpathSync(nonGitDir));
@@ -240,10 +240,10 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         worktreeSlug: "my-feature",
         source: { kind: "branch-off", baseBranch: "main", branchName: "feature/x" },
         runSetup: true,
-        paseoHome,
+        osunaHome,
       });
 
-      expect(result.worktreePath).toBe(join(paseoHome, "worktrees", projectHash, "my-feature"));
+      expect(result.worktreePath).toBe(join(osunaHome, "worktrees", projectHash, "my-feature"));
       expect(existsSync(result.worktreePath)).toBe(true);
 
       const currentBranch = execFileSync("git", ["branch", "--show-current"], {
@@ -256,7 +256,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: result.worktreePath,
       });
 
-      const metadataPath = getPaseoWorktreeMetadataPath(result.worktreePath);
+      const metadataPath = getOsunaWorktreeMetadataPath(result.worktreePath);
       const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
       expect(metadata).toMatchObject({
         version: 1,
@@ -273,7 +273,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         worktreeSlug: "dev-worktree",
         source: { kind: "checkout-branch", branchName: "dev" },
         runSetup: true,
-        paseoHome,
+        osunaHome,
       });
 
       expect(existsSync(result.worktreePath)).toBe(true);
@@ -284,7 +284,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         .trim();
       expect(currentBranch).toBe("dev");
 
-      const metadataPath = getPaseoWorktreeMetadataPath(result.worktreePath);
+      const metadataPath = getOsunaWorktreeMetadataPath(result.worktreePath);
       const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
       expect(metadata).toMatchObject({
         version: 1,
@@ -301,7 +301,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         worktreeSlug: "release-worktree",
         source: { kind: "checkout-branch", branchName: "release/1.1.15" },
         runSetup: true,
-        paseoHome,
+        osunaHome,
       });
 
       expect(existsSync(result.worktreePath)).toBe(true);
@@ -319,12 +319,12 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         worktreeSlug: "dev-worktree",
         source: { kind: "checkout-branch", branchName: "main" },
         runSetup: true,
-        paseoHome,
+        osunaHome,
       });
 
       expect(result.branchName).toBe("main-1");
       expect(existsSync(result.worktreePath)).toBe(true);
-      expect(readPaseoWorktreeMetadata(result.worktreePath)?.changeRequestLookupTarget).toEqual({
+      expect(readOsunaWorktreeMetadata(result.worktreePath)?.changeRequestLookupTarget).toEqual({
         headRef: "main-1",
         localBranchName: "main-1",
       });
@@ -365,7 +365,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           baseRefName: "main",
         },
         runSetup: true,
-        paseoHome,
+        osunaHome,
       });
 
       expect(readFileSync(join(result.worktreePath, "file.txt"), "utf8")).toBe("from-pr\n");
@@ -377,7 +377,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         .trim();
       expect(currentBranch).toBe("user/feature");
 
-      const metadataPath = getPaseoWorktreeMetadataPath(result.worktreePath);
+      const metadataPath = getOsunaWorktreeMetadataPath(result.worktreePath);
       const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
       expect(metadata).toMatchObject({ baseRefName: "main" });
     });
@@ -413,7 +413,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           baseRefName: "main",
         },
         runSetup: true,
-        paseoHome,
+        osunaHome,
       });
 
       expect(readFileSync(join(result.worktreePath, "file.txt"), "utf8")).toBe(
@@ -459,7 +459,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "refs/heads/main",
         worktreeSlug: "prefer-local-feature",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
       const originResult = await createLegacyWorktreeForTest({
         branchName: "prefer-origin-feature",
@@ -467,24 +467,24 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "refs/remotes/origin/main",
         worktreeSlug: "prefer-origin-feature",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       expect(readFileSync(join(localResult.worktreePath, "file.txt"), "utf8")).toBe("from-local\n");
-      const localStatus = await getCheckoutStatus(localResult.worktreePath, { paseoHome });
+      const localStatus = await getCheckoutStatus(localResult.worktreePath, { osunaHome });
       expect(localStatus.isGit).toBe(true);
       if (!localStatus.isGit) {
         return;
       }
       expect(localStatus.aheadBehind).toEqual({ ahead: 0, behind: 0 });
       await expect(
-        getCheckoutDiff(localResult.worktreePath, { mode: "base", baseRef: "main" }, { paseoHome }),
+        getCheckoutDiff(localResult.worktreePath, { mode: "base", baseRef: "main" }, { osunaHome }),
       ).resolves.toMatchObject({ diff: "" });
       expect(readFileSync(join(originResult.worktreePath, "file.txt"), "utf8")).toBe(
         "from-origin\n",
       );
       expect(
-        JSON.parse(readFileSync(getPaseoWorktreeMetadataPath(originResult.worktreePath), "utf8")),
+        JSON.parse(readFileSync(getOsunaWorktreeMetadataPath(originResult.worktreePath), "utf8")),
       ).toMatchObject({ baseRefName: "main" });
     });
 
@@ -517,7 +517,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "refs/remotes/upstream/main",
         worktreeSlug: "fork-base-feature",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       expect(readFileSync(join(result.worktreePath, "file.txt"), "utf8")).toBe("from-upstream\n");
@@ -525,12 +525,12 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
       // to the commit the worktree was cut from: "main" resolves local-first, which here is
       // a different commit than the fork's upstream.
       expect(
-        JSON.parse(readFileSync(getPaseoWorktreeMetadataPath(result.worktreePath), "utf8")),
+        JSON.parse(readFileSync(getOsunaWorktreeMetadataPath(result.worktreePath), "utf8")),
       ).toMatchObject({ baseRefName: "main", baseRef: "refs/remotes/upstream/main" });
 
       // An untouched child must report no work of its own. Comparing against the wrong base
       // shows the upstream-only commit as if the workspace had written it.
-      const status = await getCheckoutStatus(result.worktreePath, { paseoHome });
+      const status = await getCheckoutStatus(result.worktreePath, { osunaHome });
       expect(status.isGit).toBe(true);
       if (!status.isGit) {
         return;
@@ -543,7 +543,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         getCheckoutDiff(
           result.worktreePath,
           { mode: "base", baseRef: "refs/remotes/origin/main" },
-          { paseoHome },
+          { osunaHome },
         ),
       ).rejects.toThrow(
         "Base ref mismatch: stored refs/remotes/upstream/main, requested refs/remotes/origin/main",
@@ -552,16 +552,16 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         await getCheckoutDiff(
           result.worktreePath,
           { mode: "base", baseRef: "main" },
-          { paseoHome },
+          { osunaHome },
         ),
       ).toMatchObject({ diff: "" });
       const history = await listCheckoutCommits({
         cwd: result.worktreePath,
-        context: { paseoHome },
+        context: { osunaHome },
       });
       expect(history.commits.every((commit) => commit.isOnBase)).toBe(true);
       await expect(
-        mergeToBase(result.worktreePath, { baseRef: "main" }, { paseoHome }),
+        mergeToBase(result.worktreePath, { baseRef: "main" }, { osunaHome }),
       ).rejects.toThrow(
         "No local merge target is recorded for base ref refs/remotes/upstream/main",
       );
@@ -576,20 +576,20 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
       });
       execFileSync("git", ["push", "origin", "main"], { cwd: forkCloneDir });
       execFileSync("git", ["fetch", "upstream"], { cwd: result.worktreePath });
-      await mergeFromBase(result.worktreePath, { baseRef: "main" }, { paseoHome });
+      await mergeFromBase(result.worktreePath, { baseRef: "main" }, { osunaHome });
       expect(readFileSync(join(result.worktreePath, "later.txt"), "utf8")).toBe("later\n");
 
       execFileSync("git", ["update-ref", "-d", "refs/remotes/upstream/main"], {
         cwd: result.worktreePath,
       });
       await expect(
-        getCheckoutDiff(result.worktreePath, { mode: "base", baseRef: "main" }, { paseoHome }),
+        getCheckoutDiff(result.worktreePath, { mode: "base", baseRef: "main" }, { osunaHome }),
       ).rejects.toThrow("Base ref not found: refs/remotes/upstream/main");
       await expect(
-        mergeFromBase(result.worktreePath, { baseRef: "main" }, { paseoHome }),
+        mergeFromBase(result.worktreePath, { baseRef: "main" }, { osunaHome }),
       ).rejects.toThrow("Base ref not found: refs/remotes/upstream/main");
       await expect(
-        listCheckoutCommits({ cwd: result.worktreePath, context: { paseoHome } }),
+        listCheckoutCommits({ cwd: result.worktreePath, context: { osunaHome } }),
       ).rejects.toThrow("Base ref not found: refs/remotes/upstream/main");
     });
 
@@ -608,11 +608,11 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "refs/remotes/upstream/release+hotfix",
         worktreeSlug: "release-hotfix-feature",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       expect(
-        JSON.parse(readFileSync(getPaseoWorktreeMetadataPath(result.worktreePath), "utf8")),
+        JSON.parse(readFileSync(getOsunaWorktreeMetadataPath(result.worktreePath), "utf8")),
       ).toMatchObject({
         baseRefName: "release+hotfix",
         baseRef: "refs/remotes/upstream/release+hotfix",
@@ -636,7 +636,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "main",
         worktreeSlug: "prefer-local-fallback-feature",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       expect(readFileSync(join(result.worktreePath, "file.txt"), "utf8")).toBe("from-local-only\n");
@@ -650,7 +650,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           baseBranch: "does-not-exist",
           worktreeSlug: "missing-base-feature",
           runSetup: false,
-          paseoHome,
+          osunaHome,
         }),
       ).rejects.toThrow("Base branch not found: does-not-exist");
     });
@@ -674,7 +674,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           worktreeSlug: "invalid-existing-branch",
           source: { kind: "checkout-branch", branchName: "bad..name" },
           runSetup: true,
-          paseoHome,
+          osunaHome,
         });
       } catch (error) {
         caughtError = error;
@@ -692,7 +692,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           worktreeSlug: "invalid-option-like-branch",
           source: { kind: "checkout-branch", branchName: "-bad" },
           runSetup: true,
-          paseoHome,
+          osunaHome,
         });
       } catch (error) {
         caughtError = error;
@@ -712,11 +712,11 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "hello",
-        paseoHome,
+        osunaHome,
       });
 
       // Should create branch "hello-1" since "hello" exists
-      expect(result.worktreePath).toBe(join(paseoHome, "worktrees", projectHash, "hello"));
+      expect(result.worktreePath).toBe(join(osunaHome, "worktrees", projectHash, "hello"));
       expect(existsSync(result.worktreePath)).toBe(true);
 
       const branches = execFileSync("git", ["branch"], { cwd: repoDir }).toString();
@@ -733,7 +733,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "hello",
-        paseoHome,
+        osunaHome,
       });
 
       expect(existsSync(result.worktreePath)).toBe(true);
@@ -744,7 +744,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
 
     it("runs setup commands from osuna.json", async () => {
       // Create osuna.json with setup commands
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           setup: [
             'echo "source=$OSUNA_SOURCE_CHECKOUT_PATH" > setup.log',
@@ -755,7 +755,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           ],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add osuna.json"], {
         cwd: repoDir,
@@ -766,7 +766,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "setup-test",
-        paseoHome,
+        osunaHome,
       });
 
       expect(existsSync(result.worktreePath)).toBe(true);
@@ -785,12 +785,12 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
     });
 
     it("runs string setup scripts from osuna.json as a single shell command", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           setup: 'greeting="hello from string setup"\necho "$greeting" > setup.log',
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add string setup"], {
         cwd: repoDir,
@@ -801,7 +801,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "string-setup-test",
-        paseoHome,
+        osunaHome,
       });
 
       expect(getWorktreeSetupCommands(result.worktreePath)).toEqual([
@@ -818,7 +818,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
       mkdirSync(home);
       mkdirSync(binDir);
 
-      const shimPath = join(binDir, "paseo-shim");
+      const shimPath = join(binDir, "osuna-shim");
       writeFileSync(shimPath, "#!/bin/sh\nprintf 'shim:%s\\n' \"$1\"\n");
       chmodSync(shimPath, 0o755);
       writeFileSync(join(home, ".bash_profile"), "export PATH=/usr/bin:/bin\n");
@@ -828,7 +828,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         join(repoDir, "osuna.json"),
         JSON.stringify({
           worktree: {
-            setup: "command -v paseo-shim >/dev/null && paseo-shim ok > setup-path.log",
+            setup: "command -v osuna-shim >/dev/null && osuna-shim ok > setup-path.log",
           },
         }),
       );
@@ -921,12 +921,12 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
     });
 
     it("does not run setup commands when runSetup=false", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           setup: ['echo "setup ran" > setup.log'],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add osuna.json"], {
         cwd: repoDir,
@@ -938,7 +938,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "main",
         worktreeSlug: "no-setup-test",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       expect(existsSync(result.worktreePath)).toBe(true);
@@ -946,12 +946,12 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
     });
 
     it("streams setup command progress events while commands are executing", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           setup: ['echo "first line"; echo "second line" 1>&2'],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add streaming setup"], {
         cwd: repoDir,
@@ -980,7 +980,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "main",
         worktreeSlug: "runtime-env-port-reuse",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       const first = await resolveWorktreeRuntimeEnv({
@@ -1002,7 +1002,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         baseBranch: "main",
         worktreeSlug: "runtime-env-port-conflict",
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       const env = await resolveWorktreeRuntimeEnv({
@@ -1037,18 +1037,18 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
 
     it("cleans up worktree if setup command fails", async () => {
       // Create osuna.json with failing setup command
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           setup: ["exit 1"],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add osuna.json"], {
         cwd: repoDir,
       });
 
-      const expectedWorktreePath = join(paseoHome, "worktrees", "test-repo", "fail-test");
+      const expectedWorktreePath = join(osunaHome, "worktrees", "test-repo", "fail-test");
 
       await expect(
         createLegacyWorktreeForTest({
@@ -1056,7 +1056,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           cwd: repoDir,
           baseBranch: "main",
           worktreeSlug: "fail-test",
-          paseoHome,
+          osunaHome,
         }),
       ).rejects.toThrow("Worktree setup command failed");
 
@@ -1065,7 +1065,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
     });
 
     it("reads worktree terminal specs from osuna.json with optional name", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           terminals: [
             { name: "Dev Server", command: "npm run dev" },
@@ -1073,7 +1073,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           ],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
 
       expect(getWorktreeTerminalSpecs(repoDir)).toEqual([
         { name: "Dev Server", command: "npm run dev" },
@@ -1082,7 +1082,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
     });
 
     it("filters invalid worktree terminal specs", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           terminals: [
             null,
@@ -1093,7 +1093,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           ],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
 
       expect(getWorktreeTerminalSpecs(repoDir)).toEqual([
         { name: "Watch", command: "npm run watch" },
@@ -1197,7 +1197,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         worktreeSlug: "seed-uncommitted",
         source: { kind: "branch-off", baseBranch: "main", branchName: "feature/seed" },
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       const worktreeConfigPath = join(result.worktreePath, "osuna.json");
@@ -1243,7 +1243,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           branchName: "feature/upstream-config",
         },
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       const worktreeConfigPath = join(result.worktreePath, "osuna.json");
@@ -1283,7 +1283,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           branchName: "feature/symlink-config",
         },
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       const worktreeConfigPath = join(result.worktreePath, "osuna.json");
@@ -1304,22 +1304,22 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         worktreeSlug: "no-config",
         source: { kind: "branch-off", baseBranch: "main", branchName: "feature/no-config" },
         runSetup: false,
-        paseoHome,
+        osunaHome,
       });
 
       expect(existsSync(join(result.worktreePath, "osuna.json"))).toBe(false);
     });
   });
 
-  describe("paseo worktree manager", () => {
+  describe("osuna worktree manager", () => {
     let tempDir: string;
     let repoDir: string;
-    let paseoHome: string;
+    let osunaHome: string;
 
     beforeEach(() => {
       tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-manager-test-")));
       repoDir = join(tempDir, "test-repo");
-      paseoHome = join(tempDir, "osuna-home");
+      osunaHome = join(tempDir, "osuna-home");
 
       mkdirSync(repoDir, { recursive: true });
       execFileSync("git", ["init", "-b", "main"], { cwd: repoDir });
@@ -1357,75 +1357,75 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoA,
         baseBranch: "main",
         worktreeSlug: "alpha",
-        paseoHome,
+        osunaHome,
       });
       const fromRepoB = await createLegacyWorktreeForTest({
         branchName: "main",
         cwd: repoB,
         baseBranch: "main",
         worktreeSlug: "alpha",
-        paseoHome,
+        osunaHome,
       });
 
       expect(dirname(fromRepoA.worktreePath)).not.toBe(dirname(fromRepoB.worktreePath));
       expect(fromRepoA.worktreePath.endsWith("alpha-1")).toBe(false);
       expect(fromRepoB.worktreePath.endsWith("alpha-1")).toBe(false);
 
-      const repoAWorktrees = await listPaseoWorktrees({ cwd: repoA, paseoHome });
-      const repoBWorktrees = await listPaseoWorktrees({ cwd: repoB, paseoHome });
+      const repoAWorktrees = await listOsunaWorktrees({ cwd: repoA, osunaHome });
+      const repoBWorktrees = await listOsunaWorktrees({ cwd: repoB, osunaHome });
 
       expect(repoAWorktrees.map((entry) => entry.path)).toEqual([fromRepoA.worktreePath]);
       expect(repoBWorktrees.map((entry) => entry.path)).toEqual([fromRepoB.worktreePath]);
     });
 
-    it("lists and deletes paseo worktrees under ~/.osuna/worktrees/{hash}", async () => {
+    it("lists and deletes osuna worktrees under ~/.osuna/worktrees/{hash}", async () => {
       const first = await createLegacyWorktreeForTest({
         branchName: "main",
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "alpha",
-        paseoHome,
+        osunaHome,
       });
       const second = await createLegacyWorktreeForTest({
         branchName: "main",
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "beta",
-        paseoHome,
+        osunaHome,
       });
 
-      const worktrees = await listPaseoWorktrees({ cwd: repoDir, paseoHome });
+      const worktrees = await listOsunaWorktrees({ cwd: repoDir, osunaHome });
       const paths = worktrees.map((worktree) => worktree.path).sort();
       expect(paths).toEqual([first.worktreePath, second.worktreePath].sort());
 
-      await deletePaseoWorktree({ cwd: repoDir, worktreePath: first.worktreePath, paseoHome });
+      await deleteOsunaWorktree({ cwd: repoDir, worktreePath: first.worktreePath, osunaHome });
       expect(existsSync(first.worktreePath)).toBe(false);
 
-      const remaining = await listPaseoWorktrees({ cwd: repoDir, paseoHome });
+      const remaining = await listOsunaWorktrees({ cwd: repoDir, osunaHome });
       expect(remaining.map((worktree) => worktree.path)).toEqual([second.worktreePath]);
     });
 
-    it("deletes a paseo worktree even when given a subdirectory path", async () => {
+    it("deletes a osuna worktree even when given a subdirectory path", async () => {
       const created = await createLegacyWorktreeForTest({
         branchName: "main",
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "alpha",
-        paseoHome,
+        osunaHome,
       });
 
       const nestedDir = join(created.worktreePath, "nested", "dir");
       mkdirSync(nestedDir, { recursive: true });
 
-      await deletePaseoWorktree({ cwd: repoDir, worktreePath: nestedDir, paseoHome });
+      await deleteOsunaWorktree({ cwd: repoDir, worktreePath: nestedDir, osunaHome });
       expect(existsSync(created.worktreePath)).toBe(false);
 
-      const remaining = await listPaseoWorktrees({ cwd: repoDir, paseoHome });
+      const remaining = await listOsunaWorktrees({ cwd: repoDir, osunaHome });
       expect(remaining.some((worktree) => worktree.path === created.worktreePath)).toBe(false);
     });
 
     it("runs teardown commands from osuna.json before deleting a worktree", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           teardown: [
             'echo "source=$OSUNA_SOURCE_CHECKOUT_PATH" > "$OSUNA_SOURCE_CHECKOUT_PATH/teardown.log"',
@@ -1436,7 +1436,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           ],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add teardown commands"], {
         cwd: repoDir,
@@ -1447,14 +1447,14 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "teardown-test",
-        paseoHome,
+        osunaHome,
       });
       const runtimeEnv = await resolveWorktreeRuntimeEnv({
         worktreePath: created.worktreePath,
         branchName: created.branchName,
       });
 
-      await deletePaseoWorktree({ cwd: repoDir, worktreePath: created.worktreePath, paseoHome });
+      await deleteOsunaWorktree({ cwd: repoDir, worktreePath: created.worktreePath, osunaHome });
       expect(existsSync(created.worktreePath)).toBe(false);
 
       const teardownLog = readFileSync(join(repoDir, "teardown.log"), "utf8");
@@ -1466,13 +1466,13 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
     });
 
     it("runs string teardown scripts from osuna.json as a single shell command", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           teardown:
             'cleanup_message="teardown string"\necho "$cleanup_message" > "$OSUNA_SOURCE_CHECKOUT_PATH/teardown.log"',
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add string teardown"], {
         cwd: repoDir,
@@ -1483,10 +1483,10 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "teardown-string-test",
-        paseoHome,
+        osunaHome,
       });
 
-      await deletePaseoWorktree({ cwd: repoDir, worktreePath: created.worktreePath, paseoHome });
+      await deleteOsunaWorktree({ cwd: repoDir, worktreePath: created.worktreePath, osunaHome });
 
       expect(getWorktreeTeardownCommands(repoDir)).toEqual([
         'cleanup_message="teardown string"\necho "$cleanup_message" > "$OSUNA_SOURCE_CHECKOUT_PATH/teardown.log"',
@@ -1495,14 +1495,14 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
     });
 
     it("omits OSUNA_WORKTREE_PORT from teardown env when runtime metadata is missing", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           teardown: [
             'echo "port=${OSUNA_WORKTREE_PORT-unset}" > "$OSUNA_SOURCE_CHECKOUT_PATH/teardown-port.log"',
           ],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync(
         "git",
@@ -1515,17 +1515,17 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "teardown-port-missing-test",
-        paseoHome,
+        osunaHome,
       });
 
-      await deletePaseoWorktree({ cwd: repoDir, worktreePath: created.worktreePath, paseoHome });
+      await deleteOsunaWorktree({ cwd: repoDir, worktreePath: created.worktreePath, osunaHome });
 
       expect(readFileSync(join(repoDir, "teardown-port.log"), "utf8").trim()).toBe("port=unset");
       expect(existsSync(created.worktreePath)).toBe(false);
     });
 
     it("does not remove worktree when a teardown command fails", async () => {
-      const paseoConfig = {
+      const osunaConfig = {
         worktree: {
           teardown: [
             'echo "started" > "$OSUNA_SOURCE_CHECKOUT_PATH/teardown-start.log"',
@@ -1533,7 +1533,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
           ],
         },
       };
-      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(paseoConfig));
+      writeFileSync(join(repoDir, "osuna.json"), JSON.stringify(osunaConfig));
       execFileSync("git", ["add", "osuna.json"], { cwd: repoDir });
       execFileSync(
         "git",
@@ -1546,11 +1546,11 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
         cwd: repoDir,
         baseBranch: "main",
         worktreeSlug: "teardown-failure-test",
-        paseoHome,
+        osunaHome,
       });
 
       await expect(
-        deletePaseoWorktree({ cwd: repoDir, worktreePath: created.worktreePath, paseoHome }),
+        deleteOsunaWorktree({ cwd: repoDir, worktreePath: created.worktreePath, osunaHome }),
       ).rejects.toThrow("Worktree teardown command failed");
 
       expect(existsSync(created.worktreePath)).toBe(true);

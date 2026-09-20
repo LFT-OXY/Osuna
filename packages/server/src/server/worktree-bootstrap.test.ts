@@ -22,7 +22,7 @@ interface CreateAgentWorktreeTestOptions {
   branchName: string;
   baseBranch: string;
   worktreeSlug: string;
-  paseoHome?: string;
+  osunaHome?: string;
 }
 
 interface CreateAgentWorktreeTestResult {
@@ -58,7 +58,7 @@ async function createBootstrapWorktreeForTest(
       branchName: options.branchName,
     },
     runSetup: false,
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
   });
   return { worktree, shouldBootstrap: true };
 }
@@ -66,14 +66,14 @@ async function createBootstrapWorktreeForTest(
 describe("runAsyncWorktreeBootstrap", () => {
   let tempDir: string;
   let repoDir: string;
-  let paseoHome: string;
+  let osunaHome: string;
   let realTerminalManagers: TerminalManager[];
 
   beforeEach(() => {
     realTerminalManagers = [];
     tempDir = realpathSync(mkdtempSync(join(tmpdir(), "worktree-bootstrap-test-")));
     repoDir = join(tempDir, "repo");
-    paseoHome = join(tempDir, "osuna-home");
+    osunaHome = join(tempDir, "osuna-home");
 
     mkdirSync(repoDir, { recursive: true });
     execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "pipe" });
@@ -112,7 +112,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-live-failure",
       baseBranch: "main",
       worktreeSlug: "feature-live-failure",
-      paseoHome,
+      osunaHome,
     });
 
     const persisted: AgentTimelineItem[] = [];
@@ -164,7 +164,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-large-output",
       baseBranch: "main",
       worktreeSlug: "feature-large-output",
-      paseoHome,
+      osunaHome,
     });
 
     const persisted: AgentTimelineItem[] = [];
@@ -231,7 +231,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-terminal-readiness",
       baseBranch: "main",
       worktreeSlug: "feature-terminal-readiness",
-      paseoHome,
+      osunaHome,
     });
 
     let readyAt = 0;
@@ -490,7 +490,7 @@ describe("runAsyncWorktreeBootstrap", () => {
     });
   }
 
-  function commitPaseoScripts(
+  function commitOsunaScripts(
     scripts: Record<string, { command: string; type?: "script" | "service" }>,
     message = "add script config",
   ): void {
@@ -503,7 +503,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   }
 
   it("spawns plain scripts in persistent shell terminals without env injection or routes", async () => {
-    commitPaseoScripts({
+    commitOsunaScripts({
       web: {
         command: "npm run dev",
       },
@@ -543,7 +543,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   });
 
   it("records plain script exit codes from shell command completion without terminal exit", async () => {
-    commitPaseoScripts(
+    commitOsunaScripts(
       {
         typecheck: {
           command: 'node -e "process.exit(7)"',
@@ -582,7 +582,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   });
 
   it("reuses a live terminal when rerunning after plain script completion", async () => {
-    commitPaseoScripts(
+    commitOsunaScripts(
       {
         typecheck: {
           command: "npm run typecheck",
@@ -648,7 +648,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   });
 
   it("tracks command completion when reusing a live terminal from a stopped plain script entry", async () => {
-    commitPaseoScripts(
+    commitOsunaScripts(
       {
         typecheck: {
           command: "npm run typecheck",
@@ -703,7 +703,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   });
 
   it("uses terminal exit as a fallback before shell command completion", async () => {
-    commitPaseoScripts(
+    commitOsunaScripts(
       {
         typecheck: {
           command: "npm run typecheck",
@@ -741,7 +741,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   });
 
   it("rejects duplicate plain script starts while running", async () => {
-    commitPaseoScripts(
+    commitOsunaScripts(
       {
         typecheck: {
           command: 'node -e "setTimeout(() => {}, 30000)"',
@@ -784,7 +784,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   });
 
   it("spawns services with route registration and injected peer service env vars", async () => {
-    commitPaseoScripts(
+    commitOsunaScripts(
       {
         api: {
           type: "service",
@@ -838,7 +838,7 @@ describe("runAsyncWorktreeBootstrap", () => {
   });
 
   it("spawns services with public aliases and public service URLs", async () => {
-    commitPaseoScripts(
+    commitOsunaScripts(
       {
         api: {
           type: "service",

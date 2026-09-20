@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 FLOW_TEMPLATE="$REPO_ROOT/packages/app/maestro/sidebar-drag-cancellation-regression.yaml"
 FLOW_TEMPLATE_DIR="$REPO_ROOT/packages/app/maestro"
-OUT_DIR="/tmp/paseo-sidebar-drag-cancellation-$(date +%s)"
+OUT_DIR="/tmp/osuna-sidebar-drag-cancellation-$(date +%s)"
 CLIENT_EXPORTS="$REPO_ROOT/packages/client/dist/daemon-client.js"
 RELAY_EXPORTS="$REPO_ROOT/node_modules/@osuna/relay/dist/e2ee.js"
 FIXTURE_ROOT=""
@@ -37,14 +37,14 @@ if [ ! -f "$CLIENT_EXPORTS" ] || [ ! -f "$RELAY_EXPORTS" ]; then
 fi
 
 if ! curl --fail --silent --show-error --max-time 3 "$OSUNA_MAESTRO_DAEMON_HEALTH_URL" >/dev/null; then
-  echo "Paseo daemon is unavailable at $OSUNA_MAESTRO_DAEMON_HEALTH_URL" >&2
+  echo "Osuna daemon is unavailable at $OSUNA_MAESTRO_DAEMON_HEALTH_URL" >&2
   exit 1
 fi
 
-FIXTURE_ROOT="$(mktemp -d /tmp/paseo-sidebar-drag-fixture-XXXXXX)"
-export OSUNA_MAESTRO_DRAG_A_NAME="000-paseo-drag-a-$(basename "$FIXTURE_ROOT")"
-export OSUNA_MAESTRO_DRAG_B_NAME="001-paseo-drag-b-$(basename "$FIXTURE_ROOT")"
-export OSUNA_MAESTRO_DRAG_Z_NAME="zzz-paseo-drag-z-$(basename "$FIXTURE_ROOT")"
+FIXTURE_ROOT="$(mktemp -d /tmp/osuna-sidebar-drag-fixture-XXXXXX)"
+export OSUNA_MAESTRO_DRAG_A_NAME="000-osuna-drag-a-$(basename "$FIXTURE_ROOT")"
+export OSUNA_MAESTRO_DRAG_B_NAME="001-osuna-drag-b-$(basename "$FIXTURE_ROOT")"
+export OSUNA_MAESTRO_DRAG_Z_NAME="zzz-osuna-drag-z-$(basename "$FIXTURE_ROOT")"
 
 mkdir -p "$OUT_DIR/flows"
 
@@ -87,8 +87,8 @@ for project_name in \
   mkdir -p "$project_path"
   git -C "$project_path" init >/dev/null
   git -C "$project_path" checkout -b main >/dev/null 2>&1 || true
-  git -C "$project_path" config user.name "Paseo Maestro"
-  git -C "$project_path" config user.email "maestro@getpaseo.local"
+  git -C "$project_path" config user.name "Osuna Maestro"
+  git -C "$project_path" config user.email "maestro@osuna.local"
   printf '# Sidebar drag cancellation fixture\n' > "$project_path/README.md"
   git -C "$project_path" add README.md
   git -C "$project_path" commit -m "Initial commit" >/dev/null

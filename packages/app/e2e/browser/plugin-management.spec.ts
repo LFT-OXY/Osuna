@@ -42,7 +42,7 @@ import { Text } from "react-native";
 export default function contribute(plugin) {
   function Surface() {
     ${renderError ? `throw new Error(${JSON.stringify(renderError)});` : ""}
-    const cleanups = Number(globalThis.sessionStorage?.getItem("paseo-plugin-cleanups") || "0");
+    const cleanups = Number(globalThis.sessionStorage?.getItem("osuna-plugin-cleanups") || "0");
     return <Text>${title} cleanup {cleanups}</Text>;
   }
   plugin.addSurface("main", Surface);
@@ -57,8 +57,8 @@ export default function contribute(plugin) {
   return () => {
     const storage = globalThis.sessionStorage;
     if (storage) {
-      const cleanups = Number(storage.getItem("paseo-plugin-cleanups") || "0");
-      storage.setItem("paseo-plugin-cleanups", String(cleanups + 1));
+      const cleanups = Number(storage.getItem("osuna-plugin-cleanups") || "0");
+      storage.setItem("osuna-plugin-cleanups", String(cleanups + 1));
     }
   };
 }`;
@@ -118,7 +118,7 @@ async function expectContributionRemoved(page: Page, title: string): Promise<voi
 test("installs, reloads, recovers, disables, and removes a trusted local plugin", async ({
   page,
 }) => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-e2e-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-e2e-"));
   const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
   const previous = await client.getDaemonConfig();
   await writeFile(

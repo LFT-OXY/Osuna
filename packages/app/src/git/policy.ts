@@ -347,7 +347,7 @@ function getPrimaryActionId(input: BuildGitActionsInput): GitActionId | null {
     return "pr";
   }
 
-  // Only Paseo-owned worktrees get Archive as a fallback primary action.
+  // Only Osuna-owned worktrees get Archive as a fallback primary action.
   // Regular Git checkouts should not show the destructive archive CTA by default.
   if (input.isOsunaOwnedWorktree) {
     return "archive-workspace";
@@ -521,7 +521,7 @@ function hasPushableCommits(input: BuildGitActionsInput): boolean {
   if ((input.aheadOfOrigin ?? 0) > 0) {
     return true;
   }
-  // No-upstream Paseo worktrees are first-pushable: the daemon push sets upstream with `git push -u`.
+  // No-upstream Osuna worktrees are first-pushable: the daemon push sets upstream with `git push -u`.
   // Do not fold this into aheadOfOrigin; null also covers deleted/pruned upstream branches.
   return input.isOsunaOwnedWorktree && input.aheadOfOrigin === null && input.aheadCount > 0;
 }

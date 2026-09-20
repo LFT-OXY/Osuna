@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { PaseoBrowserWebviewRegistry } from "../browser-webviews/registry.js";
+import { OsunaBrowserWebviewRegistry } from "../browser-webviews/registry.js";
 import {
   type BrowserKeyboardPolicy,
   classifyBrowserReservedShortcut,
@@ -11,12 +11,12 @@ import {
 
 export type { BrowserKeyboardPolicy } from "./policy.js";
 
-const POLICY_INPUT_CHANNEL = "paseo:browser:set-shortcut-policy";
-const POLICY_OUTPUT_CHANNEL = "paseo:browser-keyboard-policy";
-const POLICY_REQUEST_CHANNEL = "paseo:browser-keyboard-policy-request";
-const SHORTCUT_INPUT_CHANNEL = "paseo:browser-shortcut-input";
-const SHORTCUT_OUTPUT_CHANNEL = "paseo:event:browser-shortcut-input";
-const RESERVED_SHORTCUT_OUTPUT_CHANNEL = "paseo:event:browser-shortcut";
+const POLICY_INPUT_CHANNEL = "osuna:browser:set-shortcut-policy";
+const POLICY_OUTPUT_CHANNEL = "osuna:browser-keyboard-policy";
+const POLICY_REQUEST_CHANNEL = "osuna:browser-keyboard-policy-request";
+const SHORTCUT_INPUT_CHANNEL = "osuna:browser-shortcut-input";
+const SHORTCUT_OUTPUT_CHANNEL = "osuna:event:browser-shortcut-input";
+const RESERVED_SHORTCUT_OUTPUT_CHANNEL = "osuna:event:browser-shortcut";
 
 interface BrowserKeyboardContentsIdentity {
   readonly id: number;
@@ -61,7 +61,7 @@ export class BrowserKeyboard {
   private readonly attachedGuestsByWebContentsId = new Map<number, BrowserKeyboardGuest>();
   private readonly policiesByHostWebContentsId = new Map<number, BrowserKeyboardPolicy>();
 
-  public constructor(private readonly browserRegistry: PaseoBrowserWebviewRegistry) {}
+  public constructor(private readonly browserRegistry: OsunaBrowserWebviewRegistry) {}
 
   public registerIpc(): void {
     ipcMain.handle(POLICY_INPUT_CHANNEL, (event, rawPolicy: unknown) => {

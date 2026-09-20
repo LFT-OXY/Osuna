@@ -6,9 +6,9 @@ import {
   getScriptConfigs,
   getWorktreeTerminalSpecs,
   isServiceScript,
-  paseoConfigParseError,
+  osunaConfigParseError,
   processCarriageReturns,
-  readPaseoConfig,
+  readOsunaConfig,
   resolveWorktreeRuntimeEnv,
   runWorktreeSetupCommands,
   WorktreeSetupError,
@@ -903,9 +903,9 @@ export async function spawnWorkspaceScript(
     logger,
     onLifecycleChanged,
   } = options;
-  const configResult = readPaseoConfig(repoRoot);
+  const configResult = readOsunaConfig(repoRoot);
   if (!configResult.ok) {
-    throw paseoConfigParseError(configResult);
+    throw osunaConfigParseError(configResult);
   }
   const scriptConfigs = getScriptConfigs(configResult.config);
   const config = scriptConfigs.get(scriptName);

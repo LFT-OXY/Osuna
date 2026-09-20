@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { PersistedConfig } from "../persisted-config.js";
-import type { PaseoOpenAIConfig, PaseoSpeechConfig } from "../bootstrap.js";
+import type { OsunaOpenAIConfig, OsunaSpeechConfig } from "../bootstrap.js";
 import { resolveLocalSpeechConfig } from "./providers/local/config.js";
 import { resolveOpenAiSpeechConfig } from "./providers/openai/config.js";
 import {
@@ -144,12 +144,12 @@ function resolveRequestedSpeechProviders(params: {
 }
 
 export function resolveSpeechConfig(params: {
-  paseoHome: string;
+  osunaHome: string;
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
 }): {
-  openai: PaseoOpenAIConfig | undefined;
-  speech: PaseoSpeechConfig;
+  openai: OsunaOpenAIConfig | undefined;
+  speech: OsunaSpeechConfig;
 } {
   const providers = resolveRequestedSpeechProviders({
     env: params.env,
@@ -157,7 +157,7 @@ export function resolveSpeechConfig(params: {
   });
 
   const local = resolveLocalSpeechConfig({
-    paseoHome: params.paseoHome,
+    osunaHome: params.osunaHome,
     env: params.env,
     persisted: params.persisted,
     providers,

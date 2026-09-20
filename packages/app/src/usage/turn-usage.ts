@@ -6,7 +6,7 @@ import type {
 
 /**
  * How a rendered turn names itself to the daemon's turn rows. `turnId` is
- * Paseo's own id and only exists for turns the daemon watched close;
+ * Osuna's own id and only exists for turns the daemon watched close;
  * `userMessageId` is the provider id of the turn's first user message, which
  * is what Claude, Pi and OMP rows carry.
  */

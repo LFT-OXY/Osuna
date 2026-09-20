@@ -199,7 +199,7 @@ test.describe("plugin workspace panels and Command Center", () => {
   test("follows workspace, agent, host, compact, and unavailable state", async ({
     page,
   }, testInfo) => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-workspace-panel-e2e-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-workspace-panel-e2e-"));
     const primaryClient = await connectNewWorkspaceDaemonClient({ ownProjects: false });
     const previousConfig = await primaryClient.getDaemonConfig();
     const primary = await seedWorkspace({ repoPrefix: "plugin-panel-primary-" });

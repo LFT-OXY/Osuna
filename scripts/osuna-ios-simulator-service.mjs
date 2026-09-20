@@ -6,15 +6,15 @@ import { spawn, spawnSync } from "node:child_process";
 
 const rootDir = resolvePath(import.meta.dirname, "..");
 const appDir = join(rootDir, "packages/app");
-const appProductName = "PaseoDebug";
-const appScheme = "paseo";
+const appProductName = "OsunaDebug";
+const appScheme = "osuna";
 const preferredSimulatorType = process.env.OSUNA_IOS_DEVICE_TYPE || "iPhone 16 Pro";
-const paseoPort = requiredEnv("OSUNA_PORT");
+const osunaPort = requiredEnv("OSUNA_PORT");
 const worktreePath = process.env.OSUNA_WORKTREE_PATH || rootDir;
 const worktreeName = process.env.OSUNA_BRANCH_NAME || basename(worktreePath);
 const worktreeHash = createHash("sha1").update(worktreePath).digest("hex").slice(0, 8);
 const simulatorName =
-  process.env.OSUNA_IOS_SIMULATOR_NAME || `Paseo ${worktreeName} ${worktreeHash}`;
+  process.env.OSUNA_IOS_SIMULATOR_NAME || `Osuna ${worktreeName} ${worktreeHash}`;
 const daemonEndpoint =
   process.env.OSUNA_DEV_DAEMON_ENDPOINT ||
   `localhost:${process.env.OSUNA_SERVICE_DAEMON_PORT || "6778"}`;
@@ -52,8 +52,8 @@ async function main() {
   hideNativeSimulatorApp();
 
   metro = startMetro();
-  await waitForUrl(`http://127.0.0.1:${paseoPort}/.sim`);
-  console.log(`iOS preview: ${process.env.OSUNA_URL || `http://127.0.0.1:${paseoPort}`}/.sim`);
+  await waitForUrl(`http://127.0.0.1:${osunaPort}/.sim`);
+  console.log(`iOS preview: ${process.env.OSUNA_URL || `http://127.0.0.1:${osunaPort}`}/.sim`);
 
   console.log("Building app dependencies...");
   try {
@@ -106,7 +106,7 @@ function installApp(nativeProject) {
 }
 
 function launchApp() {
-  const metroUrl = encodeURIComponent(`http://127.0.0.1:${paseoPort}`);
+  const metroUrl = encodeURIComponent(`http://127.0.0.1:${osunaPort}`);
   run(
     "xcrun",
     ["simctl", "openurl", simulatorUdid, `${appScheme}://expo-development-client/?url=${metroUrl}`],
@@ -115,7 +115,7 @@ function launchApp() {
 }
 
 function startMetro() {
-  const child = spawn("npx", ["expo", "start", "--port", paseoPort, "--localhost"], {
+  const child = spawn("npx", ["expo", "start", "--port", osunaPort, "--localhost"], {
     cwd: appDir,
     env: {
       ...env,
@@ -335,7 +335,7 @@ function simulatorSlug() {
 
 function requiredEnv(name) {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is required; run this as a Paseo service.`);
+  if (!value) throw new Error(`${name} is required; run this as an Osuna service.`);
   return value;
 }
 

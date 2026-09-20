@@ -45,7 +45,7 @@ function borrowFromAppProvider(osuna: OsunaApi): OsunaApi {
       <PluginSurface />
     </OsunaApiProvider>,
   );
-  if (!borrowed) throw new Error("Plugin surface did not receive Paseo API");
+  if (!borrowed) throw new Error("Plugin surface did not receive Osuna API");
   return borrowed;
 }
 

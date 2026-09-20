@@ -32,7 +32,7 @@ export function createWatcherLivenessCanary(
       return filtered;
     },
     async verify(signal) {
-      await writeFile(canaryPath, "paseo watcher liveness canary\n", { flag: "wx" });
+      await writeFile(canaryPath, "osuna watcher liveness canary\n", { flag: "wx" });
       let timeout: NodeJS.Timeout | null = null;
       let removeAbortListener = () => {};
       try {

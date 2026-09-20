@@ -41,9 +41,9 @@ const {
     },
   };
 
-  const routePreferenceByServerId: Record<string, "public" | "paseo" | "direct"> = {};
+  const routePreferenceByServerId: Record<string, "public" | "osuna" | "direct"> = {};
   const routePreferenceListeners = new Set<() => void>();
-  const setPreferredRoute = vi.fn((serverId: string, kind: "public" | "paseo" | "direct") => {
+  const setPreferredRoute = vi.fn((serverId: string, kind: "public" | "osuna" | "direct") => {
     routePreferenceByServerId[serverId] = kind;
     for (const listener of routePreferenceListeners) listener();
   });
@@ -389,7 +389,7 @@ describe("WorkspaceScriptsButton", () => {
       script({
         scriptName: "web",
         type: "service",
-        hostname: "web.paseo.localhost",
+        hostname: "web.osuna.localhost",
         lifecycle: "running",
         health: "healthy",
         port: 3000,
@@ -397,7 +397,7 @@ describe("WorkspaceScriptsButton", () => {
       script({
         scriptName: "api",
         type: "service",
-        hostname: "api.paseo.localhost",
+        hostname: "api.osuna.localhost",
         lifecycle: "running",
         health: "unhealthy",
         port: 4000,
@@ -405,7 +405,7 @@ describe("WorkspaceScriptsButton", () => {
       script({
         scriptName: "worker",
         type: "service",
-        hostname: "worker.paseo.localhost",
+        hostname: "worker.osuna.localhost",
         lifecycle: "running",
         health: null,
         port: 5000,
@@ -413,7 +413,7 @@ describe("WorkspaceScriptsButton", () => {
       script({
         scriptName: "old-service",
         type: "service",
-        hostname: "old-service.paseo.localhost",
+        hostname: "old-service.osuna.localhost",
         lifecycle: "stopped",
         exitCode: 1,
       }),

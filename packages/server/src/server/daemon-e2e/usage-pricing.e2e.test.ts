@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { WebSocket } from "ws";
 import type { UsagePricingModel, UsageReport } from "@osuna/protocol/usage/types";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { PRICING_TABLE_SCHEMA, type PricingTable } from "../usage/pricing/table.js";
@@ -179,7 +179,7 @@ async function settle(): Promise<void> {
 }
 
 async function seedClaudeRoot(): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-pricing-claude-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "osuna-pricing-claude-"));
   tempRoots.push(root);
   const projectDir = path.join(root, PROJECT_DIR);
   await mkdir(projectDir, { recursive: true });
@@ -191,12 +191,12 @@ async function seedClaudeRoot(): Promise<string> {
 }
 
 async function emptyRoot(): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-pricing-empty-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "osuna-pricing-empty-"));
   tempRoots.push(root);
   return root;
 }
 
-async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+async function connect(daemon: TestOsunaDaemon): Promise<DaemonClient> {
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await client.connect();
   await client.fetchAgents({ subscribe: {} });
@@ -204,8 +204,8 @@ async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
   return client;
 }
 
-async function readCache(daemon: TestPaseoDaemon): Promise<PricingTable> {
-  const raw = await readFile(path.join(daemon.paseoHome, "usage", "pricing-table.json"), "utf8");
+async function readCache(daemon: TestOsunaDaemon): Promise<PricingTable> {
+  const raw = await readFile(path.join(daemon.osunaHome, "usage", "pricing-table.json"), "utf8");
   return PRICING_TABLE_SCHEMA.parse(JSON.parse(raw));
 }
 
@@ -233,7 +233,7 @@ afterEach(async () => {
 });
 
 describe("price table refresh", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let schedule: FakeSchedule;
 
@@ -242,7 +242,7 @@ describe("price table refresh", () => {
     fetch: typeof globalThis.fetch;
   }): Promise<void> {
     schedule = new FakeSchedule();
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       usage: {
         roots: { claude: [await emptyRoot()], codex: [], pi: [], omp: [] },
         scanIntervalMs: SCAN_INTERVAL_MS,
@@ -370,7 +370,7 @@ describe("price table refresh", () => {
 });
 
 describe("custom prices", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
 
   afterEach(async () => {
@@ -379,7 +379,7 @@ describe("custom prices", () => {
   });
 
   async function start(): Promise<UsageReport> {
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       usage: {
         roots: { claude: [await seedClaudeRoot()], codex: [], pi: [], omp: [] },
         scanIntervalMs: SCAN_INTERVAL_MS,

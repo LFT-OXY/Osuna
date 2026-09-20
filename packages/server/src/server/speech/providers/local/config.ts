@@ -136,19 +136,19 @@ function buildLocalSpeechLanguageResolutionInput(params: {
 }
 
 function buildLocalSpeechResolutionInput(params: {
-  paseoHome: string;
+  osunaHome: string;
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
   providers: RequestedSpeechProviders;
   includeProviderConfig: boolean;
 }): Record<string, unknown> {
-  const { paseoHome, env, persisted, providers, includeProviderConfig } = params;
+  const { osunaHome, env, persisted, providers, includeProviderConfig } = params;
   return {
     includeProviderConfig,
     modelsDir: firstDefinedValue<string>([
       env.OSUNA_LOCAL_MODELS_DIR,
       persisted.providers?.local?.modelsDir,
-      path.join(paseoHome, DEFAULT_LOCAL_MODELS_SUBDIR),
+      path.join(osunaHome, DEFAULT_LOCAL_MODELS_SUBDIR),
     ]),
     dictationLocalSttModel: firstDefinedValue<string>([
       env.OSUNA_DICTATION_LOCAL_STT_MODEL,
@@ -190,7 +190,7 @@ function buildLocalSpeechResolutionInput(params: {
 }
 
 export function resolveLocalSpeechConfig(params: {
-  paseoHome: string;
+  osunaHome: string;
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
   providers: RequestedSpeechProviders;

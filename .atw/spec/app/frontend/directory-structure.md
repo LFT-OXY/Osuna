@@ -1,6 +1,6 @@
 # Directory Structure
 
-Everything is under `packages/app/src/`, imported through the `@/` alias (`@/stores/session-store`). Workspace packages come in by subpath (`@getpaseo/protocol/agent-lifecycle`, `@getpaseo/client/internal/daemon-client`).
+Everything is under `packages/app/src/`, imported through the `@/` alias (`@/stores/session-store`). Workspace packages come in by subpath (`@osuna/protocol/agent-lifecycle`, `@osuna/client/internal/daemon-client`).
 
 ## Two kinds of directories
 

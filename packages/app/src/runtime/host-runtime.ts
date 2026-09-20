@@ -2444,7 +2444,7 @@ export class HostRuntimeStore {
 }
 
 let singletonHostRuntimeStore: HostRuntimeStore | null = null;
-const HOST_RUNTIME_STORE_GLOBAL_KEY = "__paseoHostRuntimeStore";
+const HOST_RUNTIME_STORE_GLOBAL_KEY = "__osunaHostRuntimeStore";
 
 export function getHostRuntimeStore(): HostRuntimeStore {
   if (singletonHostRuntimeStore) {

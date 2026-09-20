@@ -267,7 +267,7 @@ function createServer(options?: {
     }),
     createStub<AgentStorage>({}),
     createStub<DownloadTokenStore>({}),
-    "/tmp/paseo-test",
+    "/tmp/osuna-test",
     createStub<DaemonConfigStore>(daemonConfigStore),
     null,
     { allowedOrigins: new Set(), startPaused: options?.startPaused },

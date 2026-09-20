@@ -288,7 +288,7 @@ older daemon.
 `claude`, `codex`, `copilot`, `opencode`, `pi`, and `omp`. Custom provider IDs are their literal
 configuration keys, such as `my-claude` or `zai`, not the provider named by `extends`.
 
-Each entry may include a Osuna-tool policy:
+Each entry may include an Osuna-tool policy:
 
 ```json
 {

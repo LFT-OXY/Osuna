@@ -12,7 +12,7 @@ import { ensureExplorerSidebar } from "./workspace-tabs";
 type ExplorerPanelWorkspace = Awaited<ReturnType<typeof seedWorkspace>>;
 
 async function writePanelPlugin(id: string, title: string) {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-explorer-menu-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-explorer-menu-"));
   await writeFile(
     path.join(directory, "osuna-plugin.json"),
     JSON.stringify({ id, requirements: pluginRequirements }),

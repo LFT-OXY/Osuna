@@ -869,9 +869,9 @@ export const WorkspaceScreen = memo(function WorkspaceScreen({
 }: WorkspaceScreenProps) {
   const navigationFocused = useIsFocused();
   useEffect(() => {
-    traceInstant("paseo.workspace.mount", { serverId, workspaceId });
+    traceInstant("osuna.workspace.mount", { serverId, workspaceId });
     return () => {
-      traceInstant("paseo.workspace.unmount", { serverId, workspaceId });
+      traceInstant("osuna.workspace.unmount", { serverId, workspaceId });
     };
   }, [serverId, workspaceId]);
   return (

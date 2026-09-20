@@ -15,7 +15,7 @@
  * Optional:
  *   BENCH_INCLUDE_L3=1   include the L3 level (L2 + a second noisy terminal)
  *
- * Output: pretty table to stdout + JSON to /tmp/paseo-terminal-bench/<ts>.json
+ * Output: pretty table to stdout + JSON to /tmp/osuna-terminal-bench/<ts>.json
  *
  * Requires built client/protocol dist (packages/client/dist). Build with:
  *   npm run build:client
@@ -170,7 +170,7 @@ async function waitForPort(port: number, child: ChildProcess, timeoutMs: number)
 interface BootedDaemon {
   child: ChildProcess;
   port: number;
-  paseoHome: string;
+  osunaHome: string;
   pid: number;
 }
 
@@ -182,14 +182,14 @@ async function bootDaemon(): Promise<BootedDaemon> {
   if ([6777, 6778, 6767, 6768].includes(port)) {
     throw new Error(`Refusing to use port ${port} (a real daemon listens there)`);
   }
-  const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-bench-home-"));
+  const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-bench-home-"));
   const tsxBin = execSync("which tsx").toString().trim();
 
   const child = spawn(tsxBin, ["scripts/supervisor-entrypoint.ts", "--dev"], {
     cwd: SERVER_DIR,
     env: {
       ...process.env,
-      OSUNA_HOME: paseoHome,
+      OSUNA_HOME: osunaHome,
       OSUNA_SERVER_ID: "srv_terminal_bench",
       OSUNA_LISTEN: `127.0.0.1:${port}`,
       OSUNA_NODE_ENV: "development",
@@ -213,7 +213,7 @@ async function bootDaemon(): Promise<BootedDaemon> {
   });
 
   await waitForPort(port, child, 30_000);
-  return { child, port, paseoHome, pid: child.pid ?? -1 };
+  return { child, port, osunaHome, pid: child.pid ?? -1 };
 }
 
 async function loadDaemonClientCtor(): Promise<DaemonClientCtor> {
@@ -679,12 +679,12 @@ async function main(): Promise<void> {
 
   try {
     daemon = await bootDaemon();
-    console.log(`Daemon ready: pid=${daemon.pid} port=${daemon.port} home=${daemon.paseoHome}`);
+    console.log(`Daemon ready: pid=${daemon.pid} port=${daemon.port} home=${daemon.osunaHome}`);
 
     const ctor = await loadDaemonClientCtor();
     client = await connectClient(ctor, daemon.port);
 
-    workspaceDir = await mkdtemp(path.join(os.tmpdir(), "paseo-bench-ws-"));
+    workspaceDir = await mkdtemp(path.join(os.tmpdir(), "osuna-bench-ws-"));
     const opened = await client.openProject(workspaceDir);
     if (!opened.workspace) {
       throw new Error(`Failed to open project: ${opened.error}`);
@@ -714,7 +714,7 @@ async function main(): Promise<void> {
 
     printTable(results);
 
-    const outDir = "/tmp/paseo-terminal-bench";
+    const outDir = "/tmp/osuna-terminal-bench";
     await mkdir(outDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const outPath = path.join(outDir, `${timestamp}.json`);
@@ -725,7 +725,7 @@ async function main(): Promise<void> {
           commit,
           daemonPid: daemon.pid,
           port: daemon.port,
-          paseoHome: daemon.paseoHome,
+          osunaHome: daemon.osunaHome,
           node: process.version,
           platform: `${os.platform()} ${os.arch()}`,
           createdAt: new Date().toISOString(),
@@ -752,7 +752,7 @@ async function main(): Promise<void> {
       if (daemon.child.exitCode === null && daemon.child.signalCode === null) {
         daemon.child.kill("SIGKILL");
       }
-      await rm(daemon.paseoHome, { recursive: true, force: true }).catch(() => undefined);
+      await rm(daemon.osunaHome, { recursive: true, force: true }).catch(() => undefined);
     }
     if (workspaceDir) {
       await rm(workspaceDir, { recursive: true, force: true }).catch(() => undefined);

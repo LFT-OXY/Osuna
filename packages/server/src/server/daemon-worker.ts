@@ -7,24 +7,24 @@ import { createRootLogger } from "./logger.js";
 import type { DaemonLifecycleIntent } from "./bootstrap.js";
 import { getProcessDiagnostics } from "./process-diagnostics.js";
 
-process.title = "Paseo Daemon";
+process.title = "Osuna Daemon";
 
 type SupervisorLifecycleMessage =
   | {
-      type: "paseo:shutdown";
+      type: "osuna:shutdown";
       reason: string;
     }
   | {
-      type: "paseo:ready";
+      type: "osuna:ready";
       listen: string;
     }
   | {
-      type: "paseo:restart";
+      type: "osuna:restart";
       reason?: string;
     };
 
 interface BootstrapResult {
-  paseoHome: string;
+  osunaHome: string;
   logger: ReturnType<typeof createRootLogger>;
   config: ReturnType<typeof loadConfig>;
 }
@@ -42,12 +42,12 @@ function isPidAlive(pid: number): boolean {
 }
 
 function writeWorkerLifecycleLog(
-  paseoHome: string,
+  osunaHome: string,
   message: string,
   fields: Record<string, unknown> = {},
 ): void {
   try {
-    const logPath = path.join(paseoHome, "daemon.log");
+    const logPath = path.join(osunaHome, "daemon.log");
     mkdirSync(path.dirname(logPath), { recursive: true });
     appendFileSync(
       logPath,
@@ -68,10 +68,10 @@ function writeWorkerLifecycleLog(
 
 function bootstrapFromEnvironment(): BootstrapResult {
   try {
-    const paseoHome = resolveOsunaHome();
-    const config = loadConfig(paseoHome);
-    const logger = createRootLogger({ log: config.log }, { paseoHome, file: false });
-    return { paseoHome, logger, config };
+    const osunaHome = resolveOsunaHome();
+    const config = loadConfig(osunaHome);
+    const logger = createRootLogger({ log: config.log }, { osunaHome, file: false });
+    return { osunaHome, logger, config };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`${message}\n`);
@@ -128,7 +128,7 @@ function applyCliFlagOverrides(config: ReturnType<typeof loadConfig>): void {
 }
 
 async function main() {
-  const { paseoHome, logger, config } = bootstrapFromEnvironment();
+  const { osunaHome, logger, config } = bootstrapFromEnvironment();
   let daemon: Awaited<ReturnType<typeof createOsunaDaemon>> | null = null;
   let shutdownPromise: Promise<number> | null = null;
   let exitHookInstalled = false;
@@ -213,7 +213,7 @@ async function main() {
         { clientId: intent.clientId, requestId: intent.requestId, reason: intent.reason },
         "Shutdown requested via websocket",
       );
-      if (sendSupervisorLifecycleMessage({ type: "paseo:shutdown", reason: intent.reason })) {
+      if (sendSupervisorLifecycleMessage({ type: "osuna:shutdown", reason: intent.reason })) {
         return;
       }
       beginShutdown("shutdown lifecycle intent", { reason: intent.reason });
@@ -226,7 +226,7 @@ async function main() {
     );
     if (
       sendSupervisorLifecycleMessage({
-        type: "paseo:restart",
+        type: "osuna:restart",
         ...(intent.reason ? { reason: intent.reason } : {}),
       })
     ) {
@@ -252,7 +252,7 @@ async function main() {
       }
       supervisorExitRequested = true;
 
-      writeWorkerLifecycleLog(paseoHome, "Supervisor liveness lost; worker exiting", {
+      writeWorkerLifecycleLog(osunaHome, "Supervisor liveness lost; worker exiting", {
         reason,
         ...getProcessDiagnostics(),
         supervisorPid,
@@ -272,11 +272,11 @@ async function main() {
         return;
       }
       const type = (message as { type?: unknown }).type;
-      if (type === "paseo:supervisor-heartbeat") {
+      if (type === "osuna:supervisor-heartbeat") {
         lastSupervisorHeartbeatAt = Date.now();
         return;
       }
-      if (type === "paseo:graceful-shutdown") {
+      if (type === "osuna:graceful-shutdown") {
         const reason = (message as { reason?: unknown }).reason;
         beginShutdown("Supervisor shutdown request", {
           reason: typeof reason === "string" ? reason : "supervisor_requested_shutdown",
@@ -327,7 +327,7 @@ async function main() {
     if (!listen) {
       throw new Error("Daemon did not expose a listen target after startup");
     }
-    sendSupervisorLifecycleMessage({ type: "paseo:ready", listen });
+    sendSupervisorLifecycleMessage({ type: "osuna:ready", listen });
   } catch (err) {
     logger.fatal({ err }, "Daemon failed to start listening");
     throw err;

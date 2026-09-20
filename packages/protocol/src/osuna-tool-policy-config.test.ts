@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { MutableDaemonConfigPatchSchema, MutableDaemonConfigSchema } from "./messages.js";
 import { ProviderOverrideSchema, ProviderOsunaToolsPolicySchema } from "./provider-config.js";
 
-describe("provider Paseo-tool policy", () => {
+describe("provider Osuna-tool policy", () => {
   test("accepts arbitrary tool IDs and leaves an empty policy enabled by default", () => {
     expect(
       ProviderOsunaToolsPolicySchema.parse({

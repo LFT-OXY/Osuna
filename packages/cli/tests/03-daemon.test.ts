@@ -24,17 +24,17 @@ import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import YAML from "yaml";
-import { runLocalPaseo } from "./helpers/local-cli.ts";
+import { runLocalOsuna } from "./helpers/local-cli.ts";
 
 console.log("=== Daemon Commands ===\n");
 
 // Keep restart off default 6767 to avoid collisions with any existing daemon.
 const port = 10000 + Math.floor(Math.random() * 50000);
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
 const require = createRequire(import.meta.url);
 
 function daemonCommand(args: string[]) {
-  return runLocalPaseo(["daemon", ...args], { OSUNA_HOME: paseoHome });
+  return runLocalOsuna(["daemon", ...args], { OSUNA_HOME: osunaHome });
 }
 
 async function stopChildProcess(child: ChildProcess): Promise<void> {
@@ -78,7 +78,7 @@ function resolveDaemonWorkerEntry(): string {
 
 async function tailDaemonLog(): Promise<string> {
   try {
-    const log = await readFile(join(paseoHome, "daemon.log"), "utf-8");
+    const log = await readFile(join(osunaHome, "daemon.log"), "utf-8");
     return log.split("\n").slice(-30).join("\n");
   } catch {
     return "<daemon log unavailable>";
@@ -111,7 +111,7 @@ try {
   // Test 1: daemon --help shows subcommands
   {
     console.log("Test 1: daemon --help shows subcommands");
-    const result = await runLocalPaseo(["daemon", "--help"]);
+    const result = await runLocalOsuna(["daemon", "--help"]);
     assert.strictEqual(result.exitCode, 0, "daemon --help should exit 0");
     assert(result.stdout.includes("start"), "help should mention start");
     assert(result.stdout.includes("status"), "help should mention status");
@@ -166,7 +166,7 @@ try {
     const status = JSON.parse(result.stdout);
     assert.strictEqual(status.serverId, undefined, "stopped observation must not invent identity");
     assert.strictEqual(status.localDaemon, "stopped", "json status should report stopped");
-    assert.strictEqual(status.home, paseoHome, "json status should reflect the isolated home");
+    assert.strictEqual(status.home, osunaHome, "json status should reflect the isolated home");
     assert.strictEqual(
       status.hostname,
       null,
@@ -176,8 +176,8 @@ try {
   }
 
   {
-    const result = await runLocalPaseo(["--host", "127.0.0.1:1", "daemon", "status", "--json"], {
-      OSUNA_HOME: paseoHome,
+    const result = await runLocalOsuna(["--host", "127.0.0.1:1", "daemon", "status", "--json"], {
+      OSUNA_HOME: osunaHome,
     });
     assert.strictEqual(result.exitCode, 1, "an explicit endpoint must not report local status");
     assert.match(result.stderr, /127.0.0.1:1/);
@@ -210,9 +210,9 @@ try {
     console.log("Test 8: daemon status probes live relay state over local IPC");
     const listen =
       process.platform === "win32"
-        ? `\\\\.\\pipe\\paseo-status-${process.pid}-${Date.now()}`
-        : join(paseoHome, "status.sock");
-    const configPath = join(paseoHome, "config.json");
+        ? `\\\\.\\pipe\\osuna-status-${process.pid}-${Date.now()}`
+        : join(osunaHome, "status.sock");
+    const configPath = join(osunaHome, "config.json");
     const config = JSON.parse(await readFile(configPath, "utf-8"));
     config.daemon = {
       ...config.daemon,
@@ -230,7 +230,7 @@ try {
       cwd: join(import.meta.dirname, ".."),
       env: {
         ...process.env,
-        OSUNA_HOME: paseoHome,
+        OSUNA_HOME: osunaHome,
         OSUNA_LISTEN: listen,
         // relay 端点与 app 地址没有默认值，缺任一项这个 daemon 就出不了配对链接
         OSUNA_RELAY_ENDPOINT: "127.0.0.1:9",
@@ -302,8 +302,8 @@ try {
 
       reloadConfig.daemon.browserTools.enabled = false;
       await writeFile(configPath, `${JSON.stringify(reloadConfig, null, 2)}\n`, "utf-8");
-      const aliasReload = await runLocalPaseo(["reload", "--host", listen, "--json"], {
-        OSUNA_HOME: paseoHome,
+      const aliasReload = await runLocalOsuna(["reload", "--host", listen, "--json"], {
+        OSUNA_HOME: osunaHome,
       });
       assert.strictEqual(aliasReload.exitCode, 0, aliasReload.stderr);
       assert.deepStrictEqual(JSON.parse(aliasReload.stdout), {
@@ -325,14 +325,14 @@ try {
       const humanReload = await daemonCommand(["reload", "--host", listen]);
       assert.match(humanReload.stdout, /Configuration reloaded\./);
 
-      const foreignHome = await mkdtemp(join(tmpdir(), "paseo-test-foreign-home-"));
+      const foreignHome = await mkdtemp(join(tmpdir(), "osuna-test-foreign-home-"));
       try {
         await writeFile(
           join(foreignHome, "config.json"),
           `${JSON.stringify({ daemon: { listen, relay: { enabled: false } } }, null, 2)}\n`,
           "utf-8",
         );
-        const foreignPairing = await runLocalPaseo(
+        const foreignPairing = await runLocalOsuna(
           ["daemon", "pair", "--home", foreignHome, "--json"],
           { OSUNA_HOME: foreignHome },
         );
@@ -351,7 +351,7 @@ try {
   // Test 9: explicit offline relay consent persists for subsequent pairing
   {
     console.log("Test 9: daemon pair --relay persists offline relay consent");
-    const configPath = join(paseoHome, "config.json");
+    const configPath = join(osunaHome, "config.json");
     const config = JSON.parse(await readFile(configPath, "utf-8"));
     config.daemon = {
       ...config.daemon,
@@ -383,7 +383,7 @@ try {
   // Best-effort daemon cleanup in case assertions fail before explicit stop.
   await daemonCommand(["stop", "--force"]);
   // Clean up temp directory
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All daemon tests passed ===");

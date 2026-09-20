@@ -6,8 +6,8 @@ TypeScript is strict and `typecheck` runs `tsgo --noEmit` for the package. The r
 
 | Concept                   | Source                                                                                                | Do not                                        |
 | ------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Anything on the wire      | `@getpaseo/protocol/*` subpaths (`agent-lifecycle`, `messages`, `workspace-labels`, `forge-manifest`) | Redeclare a wire shape locally                |
-| Client API                | `@getpaseo/client/internal/daemon-client` (`DaemonClient`)                                            | Type the client as `any` in tests             |
+| Anything on the wire      | `@osuna/protocol/*` subpaths (`agent-lifecycle`, `messages`, `workspace-labels`, `forge-manifest`) | Redeclare a wire shape locally                |
+| Client API                | `@osuna/client/internal/daemon-client` (`DaemonClient`)                                            | Type the client as `any` in tests             |
 | Stream and timeline items | `types/stream.ts`, `types/shared.ts`, `types/agent-directory.ts`                                      | Add a parallel `StreamItem`-like union        |
 | Store state               | The `interface … State` next to `create<State>()`                                                     | Export `ReturnType<typeof useStore.getState>` |
 | Composer attachments      | `attachments/types.ts`                                                                                | Inline `{ id: string; mimeType: string }`     |
@@ -23,7 +23,7 @@ If a Zod schema exists (protocol, persisted settings, plugin manifests), the typ
 
 ## Boundaries
 
-Validate at the edges: the socket (protocol schemas), AsyncStorage / IndexedDB / SQLite rows (`runtime/replica-cache` parses and drops invalid rows), pasted or picked files (`hooks/picked-image-normalizer.ts`), deep links (`@getpaseo/protocol/agent-deep-link`). After the parse, no `?.` on fields the type guarantees.
+Validate at the edges: the socket (protocol schemas), AsyncStorage / IndexedDB / SQLite rows (`runtime/replica-cache` parses and drops invalid rows), pasted or picked files (`hooks/picked-image-normalizer.ts`), deep links (`@osuna/protocol/agent-deep-link`). After the parse, no `?.` on fields the type guarantees.
 
 Platform capability is also a type boundary: `constants/platform.ts` exports `isWeb`, `isNative`, `isDev`, `getIsElectron()`. Inside an `isWeb` block, DOM types are fine; outside it, casting a RN ref to `HTMLElement` is the red flag reviewers look for.
 

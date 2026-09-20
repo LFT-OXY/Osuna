@@ -43,8 +43,8 @@ interface PidLockState {
   pid: number | null;
 }
 
-async function readPidLockState(paseoHome: string): Promise<PidLockState> {
-  const pidPath = join(paseoHome, "osuna.pid");
+async function readPidLockState(osunaHome: string): Promise<PidLockState> {
+  const pidPath = join(osunaHome, "osuna.pid");
 
   try {
     const content = await readFile(pidPath, "utf-8");
@@ -64,9 +64,9 @@ interface DaemonStatus {
   pid: number | null;
 }
 
-async function readDaemonStatus(paseoHome: string): Promise<DaemonStatus> {
+async function readDaemonStatus(osunaHome: string): Promise<DaemonStatus> {
   const result =
-    await $`OSUNA_HOME=${paseoHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon status --home ${paseoHome} --json`.nothrow();
+    await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon status --home ${osunaHome} --json`.nothrow();
   if (result.exitCode !== 0) {
     return { localDaemon: null, pid: null };
   }
@@ -84,8 +84,8 @@ async function readDaemonStatus(paseoHome: string): Promise<DaemonStatus> {
   }
 }
 
-async function readCapturedSupervisorLogs(paseoHome: string, recentLogs: string): Promise<string> {
-  const durableLogs = await readFile(join(paseoHome, "daemon.log"), "utf8").catch(() => "");
+async function readCapturedSupervisorLogs(osunaHome: string, recentLogs: string): Promise<string> {
+  const durableLogs = await readFile(join(osunaHome, "daemon.log"), "utf8").catch(() => "");
   return `${recentLogs}\n${durableLogs}`;
 }
 
@@ -109,7 +109,7 @@ async function waitFor(
 console.log("=== Daemon Stop (supervisor regression) ===\n");
 
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-stop-supervisor-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-stop-supervisor-"));
 const cliRoot = join(import.meta.dirname, "..");
 
 let supervisorProcess: ChildProcess | null = null;
@@ -126,7 +126,7 @@ try {
       env: {
         ...process.env,
         ...testEnv,
-        OSUNA_HOME: paseoHome,
+        OSUNA_HOME: osunaHome,
         OSUNA_LISTEN: `127.0.0.1:${port}`,
         OSUNA_RELAY_ENABLED: "false",
         CI: "true",
@@ -144,7 +144,7 @@ try {
 
   await waitFor(
     async () => {
-      const status = await readDaemonStatus(paseoHome);
+      const status = await readDaemonStatus(osunaHome);
       return (
         status.localDaemon === "running" && status.pid !== null && isProcessRunning(status.pid)
       );
@@ -153,7 +153,7 @@ try {
     "daemon did not become running in time",
   );
 
-  const statusBeforeStop = await readDaemonStatus(paseoHome);
+  const statusBeforeStop = await readDaemonStatus(osunaHome);
   const daemonPid = statusBeforeStop.pid;
   assert.strictEqual(
     statusBeforeStop.localDaemon,
@@ -162,7 +162,7 @@ try {
   );
   assert(daemonPid !== null, "daemon pid should exist once daemon starts");
   assert(isProcessRunning(daemonPid), "daemon process should be running");
-  const pidLockBeforeStop = await readPidLockState(paseoHome);
+  const pidLockBeforeStop = await readPidLockState(osunaHome);
   assert.strictEqual(pidLockBeforeStop.pid, daemonPid, "pid lock should match status pid");
   assert.strictEqual(
     daemonPid,
@@ -173,14 +173,14 @@ try {
 
   console.log("Test 2: `osuna daemon stop` should stop without respawn");
   const stopResult =
-    await $`OSUNA_HOME=${paseoHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${paseoHome} --json`.nothrow();
+    await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${osunaHome} --json`.nothrow();
   assert.strictEqual(stopResult.exitCode, 0, `stop should succeed: ${stopResult.stderr}`);
   const stopJson = JSON.parse(stopResult.stdout) as { action?: unknown };
   assert.strictEqual(stopJson.action, "stopped", "stop should report stopped action");
 
   await waitFor(
     async () => {
-      const status = await readDaemonStatus(paseoHome);
+      const status = await readDaemonStatus(osunaHome);
       return status.localDaemon === "stopped";
     },
     15000,
@@ -197,7 +197,7 @@ try {
 
   await sleep(1000);
 
-  const pidAfterStop = await readPidLockState(paseoHome);
+  const pidAfterStop = await readPidLockState(osunaHome);
   const respawned = pidAfterStop.pid !== null && isProcessRunning(pidAfterStop.pid);
   assert.strictEqual(
     respawned,
@@ -205,13 +205,13 @@ try {
     `daemon respawned after stop (pid: ${pidAfterStop.pid ?? "unknown"})`,
   );
 
-  const statusAfterStop = await readDaemonStatus(paseoHome);
+  const statusAfterStop = await readDaemonStatus(osunaHome);
   assert.strictEqual(
     statusAfterStop.localDaemon,
     "stopped",
     "daemon should remain stopped after stop command",
   );
-  const capturedSupervisorLogs = await readCapturedSupervisorLogs(paseoHome, recentSupervisorLogs);
+  const capturedSupervisorLogs = await readCapturedSupervisorLogs(osunaHome, recentSupervisorLogs);
   assert(
     process.platform === "win32"
       ? capturedSupervisorLogs.includes('"reason":"client_shutdown_rpc"')
@@ -243,8 +243,8 @@ try {
     });
   }
 
-  await $`OSUNA_HOME=${paseoHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${paseoHome} --force`.nothrow();
-  await rm(paseoHome, { recursive: true, force: true });
+  await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${osunaHome} --force`.nothrow();
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 if (recentSupervisorLogs.trim().length === 0) {

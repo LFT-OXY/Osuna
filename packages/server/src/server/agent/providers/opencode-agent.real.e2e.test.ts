@@ -141,9 +141,9 @@ describe.sequential("OpenCode real event recovery", () => {
 });
 
 async function createRealHarness() {
-  const artifactDir = mkdtempSync(path.join(os.tmpdir(), "paseo-opencode-recovery-"));
+  const artifactDir = mkdtempSync(path.join(os.tmpdir(), "osuna-opencode-recovery-"));
   const runtime = createDisposableRuntime();
-  const { runtimeDir, home, paseoHome, xdgConfig, xdgData, xdgCache, xdgState, workspace } =
+  const { runtimeDir, home, osunaHome, xdgConfig, xdgData, xdgCache, xdgState, workspace } =
     runtime;
 
   let setupManager: OpenCodeServerManager | null = null;
@@ -155,7 +155,7 @@ async function createRealHarness() {
     const isolatedEnv = {
       ...process.env,
       HOME: home,
-      OSUNA_HOME: paseoHome,
+      OSUNA_HOME: osunaHome,
       XDG_CONFIG_HOME: xdgConfig,
       XDG_DATA_HOME: xdgData,
       XDG_CACHE_HOME: xdgCache,
@@ -297,16 +297,16 @@ function createDisposableRuntime(
 ) {
   let runtimeDir: string | null = null;
   try {
-    runtimeDir = mkdtempSync(path.join(os.tmpdir(), "paseo-opencode-runtime-"));
+    runtimeDir = mkdtempSync(path.join(os.tmpdir(), "osuna-opencode-runtime-"));
     onCreate?.(runtimeDir);
     const home = path.join(runtimeDir, "home");
-    const paseoHome = path.join(runtimeDir, "osuna-home");
+    const osunaHome = path.join(runtimeDir, "osuna-home");
     const xdgConfig = path.join(runtimeDir, "xdg-config");
     const xdgData = path.join(runtimeDir, "xdg-data");
     const xdgCache = path.join(runtimeDir, "xdg-cache");
     const xdgState = path.join(runtimeDir, "xdg-state");
     const workspace = path.join(runtimeDir, "workspace");
-    for (const directory of [home, paseoHome, xdgConfig, xdgData, xdgCache, xdgState, workspace]) {
+    for (const directory of [home, osunaHome, xdgConfig, xdgData, xdgCache, xdgState, workspace]) {
       mkdirSync(directory, { recursive: true });
     }
     const isolatedAuthDirectory = path.join(xdgData, "opencode");
@@ -315,7 +315,7 @@ function createDisposableRuntime(
       path.join(os.homedir(), ".local", "share", "opencode", "auth.json"),
       path.join(isolatedAuthDirectory, "auth.json"),
     );
-    return { runtimeDir, home, paseoHome, xdgConfig, xdgData, xdgCache, xdgState, workspace };
+    return { runtimeDir, home, osunaHome, xdgConfig, xdgData, xdgCache, xdgState, workspace };
   } catch (error) {
     if (runtimeDir) {
       rmSync(runtimeDir, { recursive: true, force: true });

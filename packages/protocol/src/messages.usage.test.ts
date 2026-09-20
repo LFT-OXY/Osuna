@@ -121,7 +121,7 @@ describe("usage.sessions.list", () => {
     expect(SessionInboundMessageSchema.parse(message)).toEqual(message);
   });
 
-  it("parses a row whose session Paseo owns, and one it does not", () => {
+  it("parses a row whose session Osuna owns, and one it does not", () => {
     const message = {
       type: "usage.sessions.list.response" as const,
       payload: {

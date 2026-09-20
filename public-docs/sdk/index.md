@@ -8,7 +8,7 @@ category: TypeScript SDK
 
 # TypeScript SDK
 
-`@osuna/client` is a TypeScript library that drives a Osuna daemon from your own program. You pick a provider and model, give an agent a prompt and a directory, and wait for the answer.
+`@osuna/client` is a TypeScript library that drives an Osuna daemon from your own program. You pick a provider and model, give an agent a prompt and a directory, and wait for the answer.
 
 The daemon does the work: it launches the provider CLI, keeps the session alive, and streams it to the Osuna app. Your program is a client. Agents you create show up in Osuna next to the ones you started by hand, and they stay there after your program exits.
 

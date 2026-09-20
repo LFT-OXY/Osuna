@@ -106,7 +106,7 @@ it("still requires entry migration when an old plugin adds a compatible requirem
 it("rejects Git install and update before build commands, preserving the running revision", async () => {
   const repository = await directory();
   await runGitCommand(["init", "-b", "main"], { cwd: repository });
-  await runGitCommand(["config", "user.name", "Paseo Tests"], { cwd: repository });
+  await runGitCommand(["config", "user.name", "Osuna Tests"], { cwd: repository });
   await runGitCommand(["config", "user.email", "tests@example.test"], { cwd: repository });
   const commit = async () => {
     await runGitCommand(["add", "-A"], { cwd: repository });

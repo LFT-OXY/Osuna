@@ -7,7 +7,7 @@ import appPackage from "../../../package.json";
 export const pluginRequirements = { osuna: `>=${appPackage.version}` };
 
 export async function copyPluginExample(name: string) {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-example-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-example-"));
   try {
     await cp(path.resolve(__dirname, "../../../../../plugin-examples", name), directory, {
       recursive: true,

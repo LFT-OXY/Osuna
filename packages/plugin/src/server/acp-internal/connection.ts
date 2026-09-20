@@ -407,7 +407,7 @@ class AcpRuntime {
           runtime.connection.initialize({
             protocolVersion: PROTOCOL_VERSION,
             clientCapabilities: {},
-            clientInfo: { name: "paseo", version: "1" },
+            clientInfo: { name: "osuna", version: "1" },
           }),
         ),
         options.options.acpOptions?.startupTimeoutMs ?? 10_000,
@@ -473,7 +473,7 @@ class AcpRuntime {
     const mcpServers = toAcpMcpServers(input.config);
     const nativeSessionId = readNativeSessionId(input.persistence);
     const metadata = {
-      _paseo: {
+      _osuna: {
         systemPrompt: input.config.systemPrompt,
         providerOptions: input.config.providerOptions,
         toolPolicy: input.config.toolPolicy,
@@ -1207,7 +1207,7 @@ function ownConnectorStream(source: Stream): {
       if (closed) return;
       closed = true;
       await Promise.allSettled([
-        reader.cancel(new Error("Paseo closed the ACP connector")),
+        reader.cancel(new Error("Osuna closed the ACP connector")),
         writer.close(),
       ]);
     },

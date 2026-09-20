@@ -1,6 +1,6 @@
 ---
 title: SDK quickstart
-description: Connect to a Osuna daemon, run one coding agent, and read its reply.
+description: Connect to an Osuna daemon, run one coding agent, and read its reply.
 nav: Quickstart
 order: 51
 category: TypeScript SDK

@@ -193,8 +193,8 @@ describe.skipIf(!RUN_REAL_HUB_POLICY)("Hub provider policy (real providers)", ()
     "codex: resolved workspace-write policy honors one explicit writable root",
     async () => {
       const sink = await startHubActionSink();
-      const allowedRoot = await mkdtemp(path.join(tmpdir(), "paseo-codex-allowed-"));
-      const deniedRoot = await mkdtemp(path.join(tmpdir(), "paseo-codex-denied-"));
+      const allowedRoot = await mkdtemp(path.join(tmpdir(), "osuna-codex-allowed-"));
+      const deniedRoot = await mkdtemp(path.join(tmpdir(), "osuna-codex-denied-"));
       const allowedFile = path.join(allowedRoot, "allowed.txt");
       const deniedFile = path.join(deniedRoot, "denied.txt");
       const providerOptions = {
@@ -257,8 +257,8 @@ describe.skipIf(!RUN_REAL_HUB_POLICY)("Hub provider policy (real providers)", ()
     "claude: sandboxed Bash auto-approval remains contained by native filesystem rules",
     async () => {
       const sink = await startHubActionSink();
-      const allowedRoot = await mkdtemp(path.join(tmpdir(), "paseo-claude-allowed-"));
-      const deniedRoot = await mkdtemp(path.join(tmpdir(), "paseo-claude-denied-"));
+      const allowedRoot = await mkdtemp(path.join(tmpdir(), "osuna-claude-allowed-"));
+      const deniedRoot = await mkdtemp(path.join(tmpdir(), "osuna-claude-denied-"));
       const allowedFile = path.join(allowedRoot, "allowed.txt");
       const deniedFile = path.join(deniedRoot, "denied.txt");
       const providerOptions = {

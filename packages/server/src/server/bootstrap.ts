@@ -121,9 +121,9 @@ import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
 import { createWorkspaceLabelService } from "./workspace-labels/index.js";
 import { createGitHubService } from "../services/github-service.js";
-import { createOsunaWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
+import { createOsunaWorktree as createRegisteredOsunaWorktree } from "./osuna-worktree-service.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
-import { createPaseoWorktreeWorkflow } from "./worktree-session.js";
+import { createOsunaWorktreeWorkflow } from "./worktree-session.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import type { OpenAiSpeechProviderConfig } from "./speech/providers/openai/config.js";
 import type { LocalSpeechProviderConfig } from "./speech/providers/local/config.js";
@@ -134,10 +134,10 @@ import { AgentStorage } from "./agent/agent-storage.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import {
-  createPaseoToolCatalog,
-  type PaseoToolHostDependencies,
-} from "./agent/tools/paseo-tools.js";
-import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
+  createOsunaToolCatalog,
+  type OsunaToolHostDependencies,
+} from "./agent/tools/osuna-tools.js";
+import type { OsunaToolRuntimeContext } from "./agent/tools/types.js";
 import { createAgentProviderRuntime } from "./agent/provider-runtime.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
@@ -154,7 +154,7 @@ import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
-import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
+import { resolveOsunaToolPolicy } from "./agent/osuna-tool-policy.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
@@ -358,18 +358,18 @@ function describeMcpDebugPayload(value: unknown): Record<string, unknown> {
   };
 }
 
-export type PaseoOpenAIConfig = OpenAiSpeechProviderConfig;
-export type PaseoLocalSpeechConfig = LocalSpeechProviderConfig;
+export type OsunaOpenAIConfig = OpenAiSpeechProviderConfig;
+export type OsunaLocalSpeechConfig = LocalSpeechProviderConfig;
 
-export interface PaseoSpeechSttLanguages {
+export interface OsunaSpeechSttLanguages {
   dictation: string;
   voice: string;
 }
 
-export interface PaseoSpeechConfig {
+export interface OsunaSpeechConfig {
   providers: RequestedSpeechProviders;
-  sttLanguages?: PaseoSpeechSttLanguages;
-  local?: PaseoLocalSpeechConfig;
+  sttLanguages?: OsunaSpeechSttLanguages;
+  local?: OsunaLocalSpeechConfig;
 }
 
 export type DaemonLifecycleIntent =
@@ -388,7 +388,7 @@ export type DaemonLifecycleIntent =
 
 export interface OsunaDaemonConfig {
   listen: string;
-  paseoHome: string;
+  osunaHome: string;
   daemonVersion?: string;
   desktopManaged?: boolean;
   worktreesRoot?: string;
@@ -432,8 +432,8 @@ export interface OsunaDaemonConfig {
   };
   appBaseUrl?: string;
   auth?: DaemonAuthConfig;
-  openai?: PaseoOpenAIConfig;
-  speech?: PaseoSpeechConfig;
+  openai?: OsunaOpenAIConfig;
+  speech?: OsunaSpeechConfig;
   voiceLlmProvider?: AgentProvider | null;
   voiceLlmProviderExplicit?: boolean;
   voiceLlmModel?: string | null;
@@ -476,7 +476,7 @@ export interface OsunaDaemon {
   getListenTarget(): ListenTarget | null;
 }
 
-export interface PaseoDaemonDependencies {
+export interface OsunaDaemonDependencies {
   hubRelationshipRemote?: HubRelationshipRemote;
   hubRelationshipClock?: HubRelationshipClock;
   hubRelationshipRetryPolicy?: HubRelationshipRetryPolicy;
@@ -488,7 +488,7 @@ export interface PaseoDaemonDependencies {
 }
 
 function createBootstrapManagedProcessRegistry(
-  config: Pick<OsunaDaemonConfig, "paseoHome" | "managedProcesses">,
+  config: Pick<OsunaDaemonConfig, "osunaHome" | "managedProcesses">,
   logger: Logger,
 ): ManagedProcessRegistry {
   if (config.managedProcesses) {
@@ -496,7 +496,7 @@ function createBootstrapManagedProcessRegistry(
   }
 
   return createManagedProcessRegistry({
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     processTable: createSystemManagedProcessTable(),
     terminateProcess: terminateWithTreeKill,
     logger,
@@ -578,11 +578,11 @@ function createInitialMutableDaemonConfig(config: OsunaDaemonConfig): MutableDae
 export async function createOsunaDaemon(
   config: OsunaDaemonConfig,
   rootLogger: Logger,
-  dependencies: PaseoDaemonDependencies = {},
+  dependencies: OsunaDaemonDependencies = {},
 ): Promise<OsunaDaemon> {
   configureGitProcessPolicy(config.git ?? resolveGitProcessPolicy({ env: process.env }));
   const logger = rootLogger.child({ module: "bootstrap" });
-  const obsoleteTimelineDirectory = path.join(config.paseoHome, "agent-timelines");
+  const obsoleteTimelineDirectory = path.join(config.osunaHome, "agent-timelines");
   await rm(obsoleteTimelineDirectory, { recursive: true, force: true }).catch((error) => {
     logger.warn(
       { err: error, path: obsoleteTimelineDirectory },
@@ -593,12 +593,12 @@ export async function createOsunaDaemon(
   const elapsed = () => `${(performance.now() - bootstrapStart).toFixed(0)}ms`;
   const daemonVersion = config.daemonVersion ?? resolveDaemonVersion(import.meta.url);
   const initialMutableConfig = createInitialMutableDaemonConfig(config);
-  const daemonConfigStore = new DaemonConfigStore(config.paseoHome, initialMutableConfig, logger, {
+  const daemonConfigStore = new DaemonConfigStore(config.osunaHome, initialMutableConfig, logger, {
     relayEnabledMutable: config.relayEnabledMutable ?? true,
     startupPersisted: config.configReload?.startupPersisted,
     reloadSource: {
       resolve: (persisted) => {
-        const reloaded = resolveConfigFromPersisted(config.paseoHome, persisted, {
+        const reloaded = resolveConfigFromPersisted(config.osunaHome, persisted, {
           env: config.configReload?.env ?? process.env,
           cli: config.configReload?.cli,
           relayEnabledFallback: config.configReload?.relayEnabledFallback,
@@ -617,12 +617,12 @@ export async function createOsunaDaemon(
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
   const pluginRuntime = new PluginService(logger, daemonConfigStore, daemonVersion, {
-    managedSources: new ManagedPluginSources(config.paseoHome),
-    settingsDirectory: path.join(config.paseoHome, "plugin-settings"),
+    managedSources: new ManagedPluginSources(config.osunaHome),
+    settingsDirectory: path.join(config.osunaHome, "plugin-settings"),
   });
 
-  const serverId = getOrCreateServerId(config.paseoHome, { logger });
-  const daemonKeyPair = await loadOrCreateDaemonKeyPair(config.paseoHome, logger);
+  const serverId = getOrCreateServerId(config.osunaHome, { logger });
+  const daemonKeyPair = await loadOrCreateDaemonKeyPair(config.osunaHome, logger);
   const managedProcesses = createBootstrapManagedProcessRegistry(config, logger);
   // Reconcile the helper-process ledger in the background so it never blocks the
   // daemon from coming up; terminating a live leftover can take a few seconds.
@@ -868,21 +868,21 @@ export async function createOsunaDaemon(
 
   const agentStorage = new AgentStorage(config.agentStoragePath, logger);
   const projectRegistry = new FileBackedProjectRegistry(
-    path.join(config.paseoHome, "projects", "projects.json"),
+    path.join(config.osunaHome, "projects", "projects.json"),
     logger,
   );
   workspaceRegistry = new FileBackedWorkspaceRegistry(
-    path.join(config.paseoHome, "projects", "workspaces.json"),
+    path.join(config.osunaHome, "projects", "workspaces.json"),
     logger,
   );
   const workspaceLabelService = createWorkspaceLabelService({
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     workspaceRegistry,
   });
   const github = createGitHubService();
   const workspaceGitService = new WorkspaceGitServiceImpl({
     logger,
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     worktreesRoot: config.worktreesRoot,
     deps: {
       forgeOverrides: { github },
@@ -904,7 +904,7 @@ export async function createOsunaDaemon(
     logger,
   });
   const agentProviderRuntime = await createAgentProviderRuntime({
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     logger,
     snapshotManager: {
       refreshTimeoutMs: config.providerCatalogRefreshTimeoutMs,
@@ -939,8 +939,8 @@ export async function createOsunaDaemon(
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
     },
     mcpAuthToken: agentMcpAuthToken,
-    resolvePaseoToolPolicy: (provider) =>
-      resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
+    resolveOsunaToolPolicy: (provider) =>
+      resolveOsunaToolPolicy(provider, daemonConfigStore.get().providers),
     logger,
   });
   const syncPluginProviders = () => {
@@ -960,7 +960,7 @@ export async function createOsunaDaemon(
   logger.info({ elapsed: elapsed() }, "Agent storage initialized");
   await bootstrapWorkspaceRegistries({
     serverId,
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     agentStorage,
     projectRegistry,
     workspaceRegistry,
@@ -995,7 +995,7 @@ export async function createOsunaDaemon(
   });
   const checkoutDiffManager = new CheckoutDiffManager({
     logger,
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     workspaceGitService,
   });
   const archiveWorkspaceRecordExternal = async (
@@ -1098,8 +1098,8 @@ export async function createOsunaDaemon(
   });
 
   setupAutoArchiveOnMerge({
-    paseoHome: config.paseoHome,
-    paseoWorktreesBaseRoot: config.worktreesRoot,
+    osunaHome: config.osunaHome,
+    osunaWorktreesBaseRoot: config.worktreesRoot,
     daemonConfigStore,
     workspaceGitService,
     github,
@@ -1117,16 +1117,16 @@ export async function createOsunaDaemon(
     emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
   });
 
-  const createPaseoWorktreeForTools = async (
-    input: Parameters<typeof createPaseoWorktreeWorkflow>[1],
-    serviceOptions?: Parameters<typeof createPaseoWorktreeWorkflow>[2],
+  const createOsunaWorktreeForTools = async (
+    input: Parameters<typeof createOsunaWorktreeWorkflow>[1],
+    serviceOptions?: Parameters<typeof createOsunaWorktreeWorkflow>[2],
   ) => {
-    return createPaseoWorktreeWorkflow(
+    return createOsunaWorktreeWorkflow(
       {
-        paseoHome: config.paseoHome,
+        osunaHome: config.osunaHome,
         worktreesRoot: config.worktreesRoot,
         createOsunaWorktree: async (workflowInput, workflowOptions) => {
-          return createRegisteredPaseoWorktree(workflowInput, {
+          return createRegisteredOsunaWorktree(workflowInput, {
             github,
             ...(workflowOptions?.resolveDefaultBranch
               ? {
@@ -1174,11 +1174,11 @@ export async function createOsunaDaemon(
     agentManager,
     agentStorage,
     logger,
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     worktreesRoot: config.worktreesRoot,
     terminalManager,
     providerSnapshotManager,
-    createOsunaWorktree: createPaseoWorktreeForTools,
+    createOsunaWorktree: createOsunaWorktreeForTools,
     ensureWorkspaceForCreate: ensureWorkspaceForCreateAndBroadcastExternal,
   };
   const createAgent = (input: Parameters<typeof createAgentCommand>[1]) =>
@@ -1186,8 +1186,8 @@ export async function createOsunaDaemon(
   const archiveWorkspaceByIdExternal = (workspaceId: string, requestId: string) =>
     archiveByScope(
       {
-        paseoHome: config.paseoHome,
-        paseoWorktreesBaseRoot: config.worktreesRoot,
+        osunaHome: config.osunaHome,
+        osunaWorktreesBaseRoot: config.worktreesRoot,
         github,
         workspaceGitService,
         agentManager,
@@ -1209,13 +1209,13 @@ export async function createOsunaDaemon(
       { scope: { kind: "workspace", workspaceId }, requestId },
     );
   const hubAgentLifecycle = new CreateAgentLifecycleDispatch({
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     worktreesRoot: config.worktreesRoot,
     agentManager,
     agentStorage,
     github,
     workspaceGitService,
-    createPaseoWorktreeWorkflow: createPaseoWorktreeForTools,
+    createOsunaWorktreeWorkflow: createOsunaWorktreeForTools,
     archiveAgentForClose: (agentId) =>
       archiveAgentCommand({ agentManager, agentStorage, logger }, agentId),
     findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
@@ -1231,7 +1231,7 @@ export async function createOsunaDaemon(
     logger,
   });
   const hubRelationships = new HubRelationshipController({
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     hostname: getHostname(),
     serverId,
     daemonPublicKey: daemonKeyPair.publicKeyB64,
@@ -1293,11 +1293,11 @@ export async function createOsunaDaemon(
     await emitWorkspaceUpdatesExternal([workspace.workspaceId]);
     return workspace;
   };
-  const createSchedulePaseoWorktreeExternal = async (input: {
+  const createScheduleOsunaWorktreeExternal = async (input: {
     cwd: string;
     firstAgentContext: FirstAgentContext;
   }) => {
-    const result = await createPaseoWorktreeForTools({
+    const result = await createOsunaWorktreeForTools({
       cwd: input.cwd,
       firstAgentContext: input.firstAgentContext,
     });
@@ -1307,8 +1307,8 @@ export async function createOsunaDaemon(
   const archiveScheduleWorkspaceExternal = async (workspaceId: string) => {
     await archiveByScope(
       {
-        paseoHome: config.paseoHome,
-        paseoWorktreesBaseRoot: config.worktreesRoot,
+        osunaHome: config.osunaHome,
+        osunaWorktreesBaseRoot: config.worktreesRoot,
         github,
         workspaceGitService,
         agentManager,
@@ -1340,13 +1340,13 @@ export async function createOsunaDaemon(
     );
   };
   const scheduleService = new ScheduleService({
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     logger,
     agentManager,
     agentStorage,
     createAgent,
     createDirectoryWorkspace: createScheduleLocalWorkspaceExternal,
-    createPaseoWorktreeWorkspace: createSchedulePaseoWorktreeExternal,
+    createOsunaWorktreeWorkspace: createScheduleOsunaWorktreeExternal,
     archiveWorkspace: archiveScheduleWorkspaceExternal,
   });
   await scheduleService.start();
@@ -1359,7 +1359,7 @@ export async function createOsunaDaemon(
   });
   logger.info({ elapsed: elapsed() }, "Schedule service initialized");
   const usageService = new UsageService({
-    paseoHome: config.paseoHome,
+    osunaHome: config.osunaHome,
     config: config.usage,
     logger,
     listProjects: () => projectRegistry.list(),
@@ -1390,8 +1390,8 @@ export async function createOsunaDaemon(
   logger.info({ elapsed: elapsed() }, "Preparing voice and MCP runtime");
 
   const createAgentToolHostDependencies = (
-    runtime: PaseoToolRuntimeContext,
-  ): PaseoToolHostDependencies => ({
+    runtime: OsunaToolRuntimeContext,
+  ): OsunaToolHostDependencies => ({
     agentManager,
     agentStorage,
     terminalManager,
@@ -1434,7 +1434,7 @@ export async function createOsunaDaemon(
       spawnWorkspaceScript,
       assertAutomationAllowed: (workspaceId) =>
         assertWorkspaceAutomationAllowedForWorkspace(workspaceRegistry, workspaceId),
-      globalServicePorts: loadPersistedConfig(config.paseoHome).worktrees?.servicePorts,
+      globalServicePorts: loadPersistedConfig(config.osunaHome).worktrees?.servicePorts,
     }),
     markWorkspaceArchiving: markWorkspaceArchivingExternal,
     clearWorkspaceArchiving: clearWorkspaceArchivingExternal,
@@ -1442,10 +1442,10 @@ export async function createOsunaDaemon(
     createOsunaWorktree: createAgentCommandDependencies.createOsunaWorktree,
     browserToolsEnabled: browserToolsPolicy.isEnabled(),
     browserToolsBroker,
-    paseoToolPolicy:
-      runtime.paseoToolPolicy ??
-      (runtime.callerAgentId ? agentManager.getPaseoToolPolicy(runtime.callerAgentId) : undefined),
-    paseoHome: config.paseoHome,
+    osunaToolPolicy:
+      runtime.osunaToolPolicy ??
+      (runtime.callerAgentId ? agentManager.getOsunaToolPolicy(runtime.callerAgentId) : undefined),
+    osunaHome: config.osunaHome,
     worktreesRoot: config.worktreesRoot,
     callerAgentId: runtime.callerAgentId,
     enableVoiceTools: runtime.enableVoiceTools,
@@ -1454,13 +1454,13 @@ export async function createOsunaDaemon(
     resolveCallerContext: (agentId) => wsServer?.resolveVoiceCallerContext(agentId) ?? null,
     logger,
   });
-  const createAgentToolCatalog = (runtime: PaseoToolRuntimeContext) =>
-    createPaseoToolCatalog(createAgentToolHostDependencies(runtime));
+  const createAgentToolCatalog = (runtime: OsunaToolRuntimeContext) =>
+    createOsunaToolCatalog(createAgentToolHostDependencies(runtime));
   const setAgentProviderToolsEnabled = (enabled: boolean) => {
-    agentProviderRuntime.setPaseoToolCatalog(enabled ? createAgentToolCatalog({}) : null);
+    agentProviderRuntime.setOsunaToolCatalog(enabled ? createAgentToolCatalog({}) : null);
   };
-  agentManager.setPaseoToolCatalogFactory(createAgentToolCatalog);
-  agentManager.setPaseoToolsEnabled(config.mcpInjectIntoAgents !== false);
+  agentManager.setOsunaToolCatalogFactory(createAgentToolCatalog);
+  agentManager.setOsunaToolsEnabled(config.mcpInjectIntoAgents !== false);
   setAgentProviderToolsEnabled(config.mcpEnabled !== false && config.mcpInjectIntoAgents !== false);
 
   let mcpEnabled = config.mcpEnabled ?? true;
@@ -1472,8 +1472,8 @@ export async function createOsunaDaemon(
       const agentMcpServer = await createAgentMcpServer(
         createAgentToolHostDependencies({
           callerAgentId,
-          paseoToolPolicy: callerAgentId
-            ? agentManager.getPaseoToolPolicy(callerAgentId)
+          osunaToolPolicy: callerAgentId
+            ? agentManager.getOsunaToolPolicy(callerAgentId)
             : undefined,
         }),
       );
@@ -1633,17 +1633,17 @@ export async function createOsunaDaemon(
             agentMcpBaseUrl =
               !mcpEnabled || config.mcpInjectIntoAgents === false ? null : mcpBaseUrl;
             agentManager.setMcpBaseUrl(agentMcpBaseUrl);
-            agentManager.setPaseoToolsEnabled(mcpEnabled && config.mcpInjectIntoAgents !== false);
+            agentManager.setOsunaToolsEnabled(mcpEnabled && config.mcpInjectIntoAgents !== false);
             daemonConfigStore.onFieldChange("mcp.enabled", (value) => {
               mcpEnabled = value !== false;
               const inject = daemonConfigStore.get().mcp.injectIntoAgents !== false;
               agentManager.setMcpBaseUrl(mcpEnabled && inject ? mcpBaseUrl : null);
-              agentManager.setPaseoToolsEnabled(mcpEnabled && inject);
+              agentManager.setOsunaToolsEnabled(mcpEnabled && inject);
               setAgentProviderToolsEnabled(mcpEnabled && inject);
             });
             daemonConfigStore.onFieldChange("mcp.injectIntoAgents", (value) => {
               agentManager.setMcpBaseUrl(mcpEnabled && value ? mcpBaseUrl : null);
-              agentManager.setPaseoToolsEnabled(mcpEnabled && value !== false);
+              agentManager.setOsunaToolsEnabled(mcpEnabled && value !== false);
               setAgentProviderToolsEnabled(mcpEnabled && value !== false);
             });
             daemonConfigStore.onFieldChange("appendSystemPrompt", (value) => {
@@ -1685,7 +1685,7 @@ export async function createOsunaDaemon(
               agentManager,
               agentStorage,
               downloadTokenStore,
-              config.paseoHome,
+              config.osunaHome,
               daemonConfigStore,
               mcpBaseUrl,
               {
@@ -1749,7 +1749,7 @@ export async function createOsunaDaemon(
               workspaceLabelService,
               usageService,
             );
-            pluginRuntime.bindPaseoSessionHost(wsServer);
+            pluginRuntime.bindOsunaSessionHost(wsServer);
             await pluginRuntime.start();
             wsServer.beginAcceptingConnections();
             relayRuntime = createRelayRuntime({

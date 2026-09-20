@@ -60,11 +60,11 @@ const testWithGitHubCliAuth = hasRequiredGitHubCliAuth ? test : test.skip;
 
 function initGitRepo(repoDir: string): void {
   execSync("git init -b main", { cwd: repoDir, stdio: "pipe" });
-  execSync("git config user.email 'paseo-test@example.com'", {
+  execSync("git config user.email 'osuna-test@example.com'", {
     cwd: repoDir,
     stdio: "pipe",
   });
-  execSync("git config user.name 'Paseo Test'", {
+  execSync("git config user.name 'Osuna Test'", {
     cwd: repoDir,
     stdio: "pipe",
   });
@@ -216,7 +216,7 @@ describe("daemon checkout PR merge loop", () => {
             branchName: "merge-pr-squash",
           },
           runSetup: true,
-          paseoHome: ctx.daemon.paseoHome,
+          osunaHome: ctx.daemon.osunaHome,
         });
         worktreePath = worktree.worktreePath;
 

@@ -22,17 +22,17 @@ async function launch(
     rerun?: boolean;
   } = {},
 ) {
-  const root = mkdtempSync(join(tmpdir(), "paseo-launcher-"));
+  const root = mkdtempSync(join(tmpdir(), "osuna-launcher-"));
   try {
     const app = join(root, "app with spaces");
     const commands = join(root, "commands");
     mkdirSync(app);
     mkdirSync(commands);
     writeFileSync(
-      join(app, "Paseo"),
+      join(app, "Osuna"),
       `#!${process.execPath}\nconsole.log(JSON.stringify(process.argv.slice(2)));\n`,
     );
-    chmodSync(join(app, "Paseo"), 0o755);
+    chmodSync(join(app, "Osuna"), 0o755);
     // The command interface represents the host's userns policy, independent of CI's host.
     writeFileSync(join(commands, "unshare"), `#!/bin/sh\nexit ${options.namespaces ? 0 : 1}\n`);
     chmodSync(join(commands, "unshare"), 0o755);
@@ -47,8 +47,8 @@ async function launch(
     chmodSync(join(app, "chrome-sandbox"), 0o755);
     await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
     if (options.rerun) await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
-    const executablePath = options.symlink ? join(root, "paseo") : join(app, "Paseo");
-    if (options.symlink) symlinkSync(join(app, "Paseo"), executablePath);
+    const executablePath = options.symlink ? join(root, "osuna") : join(app, "Osuna");
+    if (options.symlink) symlinkSync(join(app, "Osuna"), executablePath);
     const args = options.args ?? ["path with spaces", "$(touch never)", "semi;colon", "*.txt"];
     const result = spawnSync(executablePath, args, {
       encoding: "utf8",
@@ -56,7 +56,7 @@ async function launch(
         ...process.env,
         FORCE_COLOR: undefined,
         PATH: `${commands}:${process.env.PATH}`,
-        APPIMAGE: "/tmp/Paseo.AppImage",
+        APPIMAGE: "/tmp/Osuna.AppImage",
         OSUNA_DESKTOP_SMOKE: "0",
         ...options.env,
       },

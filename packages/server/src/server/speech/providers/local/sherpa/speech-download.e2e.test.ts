@@ -87,8 +87,8 @@ downloadTest(
   async () => {
     const logger = pino({ level: "silent" });
 
-    const paseoHomeRoot = mkdtempSync(path.join(tmpdir(), "paseo-speech-download-"));
-    const modelsDir = path.join(paseoHomeRoot, ".osuna", "models", "local-speech");
+    const osunaHomeRoot = mkdtempSync(path.join(tmpdir(), "osuna-speech-download-"));
+    const modelsDir = path.join(osunaHomeRoot, ".osuna", "models", "local-speech");
 
     await ensureSherpaOnnxModels({
       modelsDir,
@@ -97,7 +97,7 @@ downloadTest(
     });
 
     const ctx = await createDaemonTestContext({
-      paseoHomeRoot,
+      osunaHomeRoot,
       dictationFinalTimeoutMs: 8000,
       speech: {
         providers: {

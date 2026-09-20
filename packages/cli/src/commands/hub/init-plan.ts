@@ -87,8 +87,8 @@ function providerScaffold(
       name: "github-help",
       event: "github.issue_comment",
       connection,
-      filters: { repo, contains: "@paseo", from_users: [user] },
-      testAction: `Comment \`@paseo have a look\` on ${repo}.`,
+      filters: { repo, contains: "@osuna", from_users: [user] },
+      testAction: `Comment \`@osuna have a look\` on ${repo}.`,
     };
   }
 

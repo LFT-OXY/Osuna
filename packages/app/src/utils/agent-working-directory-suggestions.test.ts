@@ -21,7 +21,7 @@ describe("collectAgentWorkingDirectorySuggestions", () => {
     expect(results).toEqual(["/Users/me/project-alpha", "/Users/me/project-beta"]);
   });
 
-  it("excludes Paseo-owned worktree paths", () => {
+  it("excludes Osuna-owned worktree paths", () => {
     const results = collectAgentWorkingDirectorySuggestions([
       {
         cwd: "/Users/me/repo/.osuna/worktrees/feature-a",

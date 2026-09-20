@@ -53,7 +53,7 @@ import {
   type RunGitCommand,
 } from "../utils/run-git-command.js";
 import { branchNameFromRef } from "../utils/worktree-metadata.js";
-import { listPaseoWorktrees, type PaseoWorktreeInfo } from "../utils/worktree.js";
+import { listOsunaWorktrees, type OsunaWorktreeInfo } from "../utils/worktree.js";
 import { READ_ONLY_GIT_ENV } from "./checkout-git-utils.js";
 import { classifyGitMetadataPath, getPrunedGitMetadataPaths } from "./git-metadata-event-rules.js";
 import {
@@ -283,7 +283,7 @@ export interface WorkspaceGitStashEntry {
 
 export type WorkspaceGitBranchValidationResult = BranchCheckoutResolution;
 export type WorkspaceGitBranchSuggestion = BranchSuggestion;
-export type WorkspaceGitWorktreeInfo = PaseoWorktreeInfo;
+export type WorkspaceGitWorktreeInfo = OsunaWorktreeInfo;
 
 export type WorkspaceGitSnapshotOptions =
   | {
@@ -342,7 +342,7 @@ interface WorkspaceGitServiceDependencies {
   resolveBranchCheckout: typeof resolveBranchCheckout;
   resolveRepositoryDefaultBranch: typeof resolveRepositoryDefaultBranch;
   listBranchSuggestions: typeof listBranchSuggestions;
-  listPaseoWorktrees: typeof listPaseoWorktrees;
+  listOsunaWorktrees: typeof listOsunaWorktrees;
   /**
    * Adapter instances to bind by forge id instead of building from the registry
    * — the injection seam for the daemon's shared GitHub adapter and for test
@@ -364,7 +364,7 @@ interface WorkspaceGitServiceDependencies {
 
 interface WorkspaceGitServiceOptions {
   logger: pino.Logger;
-  paseoHome: string;
+  osunaHome: string;
   worktreesRoot?: string;
   fileObserver?: FileObserver;
   deps?: Partial<WorkspaceGitServiceDependencies>;
@@ -498,7 +498,7 @@ function buildDefaultWorkspaceGitServiceDeps(
     resolveBranchCheckout,
     resolveRepositoryDefaultBranch,
     listBranchSuggestions,
-    listPaseoWorktrees,
+    listOsunaWorktrees,
     resolveAbsoluteGitDir,
     hasOriginRemote,
     runGitFetch: fetchWorkspaceGitRemote,
@@ -518,7 +518,7 @@ function resolveWorkspaceGitServiceDeps(
 
 export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private readonly logger: pino.Logger;
-  private readonly paseoHome: string;
+  private readonly osunaHome: string;
   private readonly worktreesRoot: string | undefined;
   private readonly fileObserver: FileObserver;
   private readonly deps: WorkspaceGitServiceDependencies;
@@ -569,7 +569,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private watcherErrorCallbackCount = 0;
   constructor(options: WorkspaceGitServiceOptions) {
     this.logger = options.logger.child({ module: "workspace-git-service" });
-    this.paseoHome = options.paseoHome;
+    this.osunaHome = options.osunaHome;
     this.worktreesRoot = options.worktreesRoot;
     this.fileObserver = options.fileObserver ?? createFileObserver();
     this.deps = resolveWorkspaceGitServiceDeps(
@@ -693,7 +693,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.assertNotDisposed();
     const normalizedCwd = resolve(cwd);
     const status = await this.deps.getCheckoutStatus(normalizedCwd, {
-      paseoHome: this.paseoHome,
+      osunaHome: this.osunaHome,
       worktreesRoot: this.worktreesRoot,
       logger: this.logger,
     });
@@ -740,7 +740,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       ...readOptions,
       load: () =>
         this.deps.getCheckoutDiff(normalizedCwd, normalizedOptions, {
-          paseoHome: this.paseoHome,
+          osunaHome: this.osunaHome,
           worktreesRoot: this.worktreesRoot,
         }),
     });
@@ -832,9 +832,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const repoRoot = await this.resolveRepoRoot(cwdOrRepoRoot, options);
     const key = JSON.stringify(["worktrees", repoRoot]);
     return this.readAuxiliaryCache(this.worktreeListCache, key, options, () =>
-      this.deps.listPaseoWorktrees({
+      this.deps.listOsunaWorktrees({
         cwd: repoRoot,
-        paseoHome: this.paseoHome,
+        osunaHome: this.osunaHome,
         worktreesRoot: this.worktreesRoot,
       }),
     );
@@ -1233,7 +1233,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       return target.latestFacts;
     }
     return this.loadCheckoutFacts(target, {
-      paseoHome: this.paseoHome,
+      osunaHome: this.osunaHome,
       logger: this.logger,
     });
   }
@@ -2554,7 +2554,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       target.latestFacts?.isGit && target.latestFacts.currentBranch === git.currentBranch
         ? target.latestFacts.pullRequestLookupTarget
         : null;
-    if (target.latestFacts?.isGit && target.latestFacts.paseoWorktree.isOsunaOwnedWorktree) {
+    if (target.latestFacts?.isGit && target.latestFacts.osunaWorktree.isOsunaOwnedWorktree) {
       return lookupTarget;
     }
     if (lookupTarget) {
@@ -2875,7 +2875,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       { aheadBehind: latestGit.aheadBehind, diffStat: latestGit.diffStat },
       movedRemoteRefs,
       {
-        paseoHome: this.paseoHome,
+        osunaHome: this.osunaHome,
         worktreesRoot: this.worktreesRoot,
         logger: this.logger,
         facts,
@@ -2907,7 +2907,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
 
     target.lastShellOutAtMs = this.deps.now().getTime();
     const context: CheckoutContext = {
-      paseoHome: this.paseoHome,
+      osunaHome: this.osunaHome,
       worktreesRoot: this.worktreesRoot,
       logger: this.logger,
       facts,
@@ -2934,7 +2934,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const cwd = target.cwd;
     const previousForgePrStatusPollKey = this.getForgePrStatusPollKey(target);
     const baseContext: CheckoutContext = {
-      paseoHome: this.paseoHome,
+      osunaHome: this.osunaHome,
       worktreesRoot: this.worktreesRoot,
       logger: this.logger,
       runGitCommand: runRefreshGitCommand,

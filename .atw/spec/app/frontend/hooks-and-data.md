@@ -18,7 +18,7 @@ Directory-backed caches (Git status, PR status, file preview) are keyed by `(ser
 
 ### Fetches with no push event refresh through `enabled`
 
-Some daemon data has no invalidating message: provider session logs, a file edited outside Paseo. Do not add `focus` / `visibilitychange` / `AppState` listeners that call `refetch()`; `hooks/use-app-visible.ts` already owns those listeners for the whole app, and a second set fires twice per focus (React Query cancels and restarts the in-flight fetch). Gate the query instead:
+Some daemon data has no invalidating message: provider session logs, a file edited outside Osuna. Do not add `focus` / `visibilitychange` / `AppState` listeners that call `refetch()`; `hooks/use-app-visible.ts` already owns those listeners for the whole app, and a second set fires twice per focus (React Query cancels and restarts the in-flight fetch). Gate the query instead:
 
 ```ts
 // In the runtime-wired wrapper, never inside the surface:
@@ -80,7 +80,7 @@ return useSyncExternalStore(store.subscribeAll, read, read);
 
 `runtime/host-runtime.ts` (`HostRuntimeController`) owns saved hosts, reconnection, and per-host runtime state. `runtime/host-features.ts` is where a feature checks `server_info.features.*` once and either runs or tells the user to update the host. No fallback branches for old daemons in components.
 
-The check lives in the runtime-wired wrapper, not the surface: `SessionHistoryView` calls `useHostFeature(serverId, "sessionHistory")` and passes `isSupported` down; `SessionHistorySurface` folds it into the query's `enabled` and renders the update prompt after the disconnected state (a disconnected host has no `server_info`, so its flag reads false and would otherwise show the wrong message). The `// COMPAT(name): added in vX, remove after <date>` tag goes on that one line in the surface, and the jsdom test drives the state through the prop. The same wrapper owns any navigation the surface triggers (`navigateToAgent` for a Paseo-owned row) so the surface stays a plain-props seam with no router import.
+The check lives in the runtime-wired wrapper, not the surface: `SessionHistoryView` calls `useHostFeature(serverId, "sessionHistory")` and passes `isSupported` down; `SessionHistorySurface` folds it into the query's `enabled` and renders the update prompt after the disconnected state (a disconnected host has no `server_info`, so its flag reads false and would otherwise show the wrong message). The `// COMPAT(name): added in vX, remove after <date>` tag goes on that one line in the surface, and the jsdom test drives the state through the prop. The same wrapper owns any navigation the surface triggers (`navigateToAgent` for an Osuna-owned row) so the surface stays a plain-props seam with no router import.
 
 A surface that shows the update prompt inline — no disconnected state of its own to render first — takes the three-state read instead: `useHostFeatureAvailability(serverId, feature)` is `true` / `false` once `server_info` has arrived and `null` while it has not. `null` renders nothing, because a host that has not answered is not an outdated one, and `useHostFeature`'s boolean cannot tell them apart. `ContextWindowMeter`'s session-total section is the reference; `usage/host-options.ts` applies the same three states across a list of hosts.
 

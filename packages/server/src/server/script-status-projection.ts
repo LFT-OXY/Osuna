@@ -5,7 +5,7 @@ import type {
   WorkspaceScriptPayload,
 } from "@osuna/protocol/messages";
 import type { OsunaConfig } from "@osuna/protocol/osuna-config-schema";
-import { getScriptConfigs, isServiceScript, readPaseoConfig } from "../utils/worktree.js";
+import { getScriptConfigs, isServiceScript, readOsunaConfig } from "../utils/worktree.js";
 import { deriveProjectSlug } from "./workspace-git-metadata.js";
 import type { ScriptHealthEntry, ScriptHealthState } from "./script-health-monitor.js";
 import type {
@@ -21,7 +21,7 @@ interface SessionEmitter {
 interface BuildWorkspaceScriptPayloadsOptions {
   workspaceId: string;
   workspaceDirectory: string;
-  paseoConfig: OsunaConfig | null;
+  osunaConfig: OsunaConfig | null;
   serviceProxy: ServiceProxySubsystem;
   runtimeStore: WorkspaceScriptRuntimeStore;
   daemonPort: number | null;
@@ -33,11 +33,11 @@ interface BuildWorkspaceScriptPayloadsOptions {
   resolveHealth?: (hostname: string) => ScriptHealthState | null;
 }
 
-export function readPaseoConfigForProjection(
+export function readOsunaConfigForProjection(
   workspaceDirectory: string,
   logger: Logger,
 ): OsunaConfig | null {
-  const result = readPaseoConfig(workspaceDirectory);
+  const result = readOsunaConfig(workspaceDirectory);
   if (result.ok) {
     return result.config;
   }
@@ -218,7 +218,7 @@ export function buildWorkspaceScriptPayloads(
   const workspaceDirectory = options.workspaceDirectory;
   const projectSlug = options.gitMetadata?.projectSlug ?? deriveProjectSlug(workspaceDirectory);
   const branchName = options.gitMetadata?.currentBranch ?? null;
-  const scriptConfigs = getScriptConfigs(options.paseoConfig);
+  const scriptConfigs = getScriptConfigs(options.osunaConfig);
   const runtimeEntries = new Map(
     options.runtimeStore
       .listForWorkspace(workspaceId)
@@ -304,7 +304,7 @@ export function createScriptStatusEmitter({
       const projected = buildWorkspaceScriptPayloads({
         workspaceId,
         workspaceDirectory,
-        paseoConfig: readPaseoConfigForProjection(workspaceDirectory, logger),
+        osunaConfig: readOsunaConfigForProjection(workspaceDirectory, logger),
         serviceProxy,
         runtimeStore,
         daemonPort: resolvedDaemonPort,

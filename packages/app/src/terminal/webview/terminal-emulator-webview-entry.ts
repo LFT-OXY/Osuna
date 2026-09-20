@@ -106,7 +106,7 @@ const sendToNative = (message: OutboundMessage): void => {
   window.ReactNativeWebView?.postMessage?.(JSON.stringify(message));
 };
 
-const TERMINAL_BACKGROUND_CSS_VAR = "--paseo-terminal-background";
+const TERMINAL_BACKGROUND_CSS_VAR = "--osuna-terminal-background";
 const DEFAULT_TERMINAL_BACKGROUND = "#0b0b0b";
 const TERMINAL_TAP_MOVE_TOLERANCE_PX = 8;
 

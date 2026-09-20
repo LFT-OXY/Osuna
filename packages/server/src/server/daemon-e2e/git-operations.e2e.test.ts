@@ -687,7 +687,7 @@ test("creates agent in ~/.osuna/worktrees/{hash} when worktree is requested", as
   expect(agent.id).toBeTruthy();
   expect(agent.status).toBe("idle");
   expect(realpathSync(agent.cwd)).toBe(
-    realpathSync(path.join(ctx.daemon.paseoHome, "worktrees", projectHash, "worktree-test")),
+    realpathSync(path.join(ctx.daemon.osunaHome, "worktrees", projectHash, "worktree-test")),
   );
   expect(existsSync(agent.cwd)).toBe(true);
 

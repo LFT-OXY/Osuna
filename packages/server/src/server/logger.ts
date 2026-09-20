@@ -29,7 +29,7 @@ interface LegacyLogConfig {
 type LoggerConfigInput = PersistedConfig | LegacyLogConfig | undefined;
 
 interface ResolveLogConfigOptions {
-  paseoHome?: string;
+  osunaHome?: string;
   file?: boolean;
 }
 
@@ -61,8 +61,8 @@ const REDACT_PATHS = [
   "req.headers.Sec-WebSocket-Protocol",
 ];
 
-function resolveFilePath(paseoHome: string, configuredPath: string | undefined): string {
-  const fallback = path.join(paseoHome, DEFAULT_DAEMON_LOG_FILENAME);
+function resolveFilePath(osunaHome: string, configuredPath: string | undefined): string {
+  const fallback = path.join(osunaHome, DEFAULT_DAEMON_LOG_FILENAME);
   if (!configuredPath) {
     return fallback;
   }
@@ -71,7 +71,7 @@ function resolveFilePath(paseoHome: string, configuredPath: string | undefined):
     return configuredPath;
   }
 
-  return path.resolve(paseoHome, configuredPath);
+  return path.resolve(osunaHome, configuredPath);
 }
 
 function minLogLevel(levels: LogLevel[]): LogLevel {
@@ -86,9 +86,9 @@ function minLogLevel(levels: LogLevel[]): LogLevel {
   return minLevel;
 }
 
-function resolveConfiguredPaseoHome(options: ResolveLogConfigOptions | undefined): string {
-  if (options?.paseoHome) {
-    return options.paseoHome;
+function resolveConfiguredOsunaHome(options: ResolveLogConfigOptions | undefined): string {
+  if (options?.osunaHome) {
+    return options.osunaHome;
   }
   return resolveOsunaHome();
 }
@@ -140,7 +140,7 @@ export function resolveLogConfig(
   options?: ResolveLogConfigOptions,
 ): ResolvedLogConfig {
   const persistedConfig = normalizeLoggerConfigInput(configInput);
-  const paseoHome = resolveConfiguredPaseoHome(options);
+  const osunaHome = resolveConfiguredOsunaHome(options);
   const persistedLog = persistedConfig?.log;
 
   const { consoleLevel, fileLevel, consoleFormat } = resolveLogLevelsAndFormat(persistedLog);
@@ -148,7 +148,7 @@ export function resolveLogConfig(
     options?.file !== false && persistedLog?.file
       ? {
           level: fileLevel ?? DEFAULT_FILE_LEVEL,
-          path: resolveFilePath(paseoHome, persistedLog.file.path),
+          path: resolveFilePath(osunaHome, persistedLog.file.path),
         }
       : undefined;
 

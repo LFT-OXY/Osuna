@@ -102,7 +102,7 @@ When enabled, Osuna installs provider hooks globally:
 - Codex hooks are written to `~/.codex/hooks.json` (or `CODEX_HOME/hooks.json` when that override is set). Codex supports a native `commandWindows`, so each Osuna hook includes both POSIX and Windows commands. Non-managed Codex hooks are trust-gated by Codex; users may see Codex's hook review prompt before the hook runs.
 - OpenCode gets a self-contained plugin at `$XDG_CONFIG_HOME/opencode/plugins/osuna-terminal-activity.js` (or `~/.config/opencode/plugins/osuna-terminal-activity.js` when XDG is unset; `OPENCODE_CONFIG_DIR` still wins when set).
 
-Installation is marker-based/idempotent for config hooks and exact-file/idempotent for the OpenCode plugin. Osuna preserves user hooks, removes only its own marker-matched command hooks, and leaves hooks installed across daemon shutdown. Outside a Osuna terminal they are inert because the command or plugin is gated on `OSUNA_TERMINAL_ID`.
+Installation is marker-based/idempotent for config hooks and exact-file/idempotent for the OpenCode plugin. Osuna preserves user hooks, removes only its own marker-matched command hooks, and leaves hooks installed across daemon shutdown. Outside an Osuna terminal they are inert because the command or plugin is gated on `OSUNA_TERMINAL_ID`.
 
 Provider variation lives in `AGENT_HOOK_PROVIDERS`: provider id, installed events, config install metadata, and runtime event-to-activity resolution. The daemon calls `installRegisteredAgentHooks()` once; the CLI calls `resolveHookActivity(provider, event, input)`. Adding a provider should add one provider entry and register it in `AGENT_HOOK_PROVIDERS`, without editing the generic CLI command or daemon bootstrap.
 

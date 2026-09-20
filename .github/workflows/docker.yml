@@ -132,8 +132,8 @@ jobs:
           tags: ${{ needs.setup.outputs.check_tag }}
           push: false
           provenance: false
-          cache-from: type=gha,scope=paseo
-          cache-to: type=gha,scope=paseo,mode=max
+          cache-from: type=gha,scope=osuna
+          cache-to: type=gha,scope=osuna,mode=max
 
   publish:
     needs: setup
@@ -165,5 +165,5 @@ jobs:
           tags: ${{ needs.setup.outputs.publish_tags }}
           push: true
           provenance: false
-          cache-from: type=gha,scope=paseo
-          cache-to: type=gha,scope=paseo,mode=max
+          cache-from: type=gha,scope=osuna
+          cache-to: type=gha,scope=osuna,mode=max

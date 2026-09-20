@@ -64,7 +64,7 @@ export async function startLocalElixirRelay(): Promise<LocalElixirRelay> {
   }
 
   const relayRoot =
-    process.env.OSUNA_RELAY_CHECKOUT ?? path.resolve(__dirname, "../../../../../..", "paseo-relay");
+    process.env.OSUNA_RELAY_CHECKOUT ?? path.resolve(__dirname, "../../../../../..", "osuna-relay");
   if (!existsSync(path.join(relayRoot, "mix.exs"))) {
     throw new Error(
       `Expected the Elixir relay checkout at ${relayRoot}. Set OSUNA_RELAY_CHECKOUT to override it.`,

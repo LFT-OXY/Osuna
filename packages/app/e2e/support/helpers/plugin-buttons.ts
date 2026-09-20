@@ -114,7 +114,7 @@ export default function contribute(client) {
 async function installShowcase(workspaceId: string, agentId: string) {
   const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
   const config = await client.getDaemonConfig();
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-buttons-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-buttons-"));
   await mkdir(path.join(directory, "shared"));
   await writeFile(
     path.join(directory, "osuna-plugin.json"),

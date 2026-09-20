@@ -94,8 +94,9 @@ in
         description = ''
           How the daemon reaches the relay when `relay.enable = true`:
 
-          - `"hosted"` (default): use the upstream `app.paseo.sh` relay.
-            Preserves the current behavior; no extra options needed.
+          - `"hosted"` (default): leave `OSUNA_RELAY_ENDPOINT` unset and let the
+            daemon use whatever relay it is configured with. This fork operates
+            no managed relay, so an unconfigured daemon has none.
           - `"remote"`: connect to a self-hosted relay at
             `relay.host:relay.port`. Sets `OSUNA_RELAY_ENDPOINT` and
             `OSUNA_RELAY_USE_TLS` for the daemon.

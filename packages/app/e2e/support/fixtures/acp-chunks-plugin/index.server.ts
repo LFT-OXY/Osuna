@@ -18,7 +18,7 @@ function connect() {
         if (message.method === "session/prompt") {
           for (const text of [
             "- **Current tem",
-            "perature**: 25°C. Read [Paseo ",
+            "perature**: 25°C. Read [Osuna ",
             "docs](https://example.com/docs).",
           ]) {
             controller.enqueue({

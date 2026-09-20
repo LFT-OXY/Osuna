@@ -363,7 +363,7 @@ class FakeAgentSession implements AgentSession {
     this.onStartTurn = options.onStartTurn;
     this.historyPath = path.join(
       tmpdir(),
-      "paseo-fake-provider-history",
+      "osuna-fake-provider-history",
       this.providerName,
       `${this.id}.jsonl`,
     );

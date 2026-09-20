@@ -71,7 +71,7 @@ export function createCli(): Command {
   addJsonAndDaemonHostOptions(
     program
       .command("clone")
-      .description("Clone a GitHub repo and register it as a Osuna workspace")
+      .description("Clone a GitHub repo and register it as an Osuna workspace")
       .argument("<repo>", "GitHub repo in owner/repo format or a full git remote URL")
       .requiredOption("--dir <path>", "Parent directory to clone into (for example: ~/workspace)"),
   )

@@ -59,7 +59,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 describe("Codex terminal agent hooks", () => {
   it("installs POSIX and Windows hook commands idempotently", () => {
-    const configDir = createTempDir("paseo-codex-config-");
+    const configDir = createTempDir("osuna-codex-config-");
 
     installAgentHooks(codexAgentHookProvider, { configDir });
     const secondInstall = installAgentHooks(codexAgentHookProvider, { configDir });
@@ -78,7 +78,7 @@ describe("Codex terminal agent hooks", () => {
   });
 
   it("preserves unrelated user hooks", () => {
-    const configDir = createTempDir("paseo-codex-config-preserve-");
+    const configDir = createTempDir("osuna-codex-config-preserve-");
     writeFileSync(
       join(configDir, "hooks.json"),
       `${JSON.stringify(
@@ -107,7 +107,7 @@ describe("Codex terminal agent hooks", () => {
   });
 
   it("uninstalls only marker-matched hooks", () => {
-    const configDir = createTempDir("paseo-codex-config-uninstall-");
+    const configDir = createTempDir("osuna-codex-config-uninstall-");
     installAgentHooks(codexAgentHookProvider, { configDir });
     const config = readHooksFile(configDir);
     config.hooks = {

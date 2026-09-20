@@ -10,7 +10,7 @@ import {
   claudeUserLine,
 } from "../usage/fixtures/claude-transcript.js";
 import { createTestAgentClient } from "../test-utils/fake-agent-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 /** The session the fake Claude client hands the agent it creates. */
@@ -24,7 +24,7 @@ const tempDirs: string[] = [];
  * a real price would move these numbers on a schedule of its own.
  */
 const UNPRICED: NonNullable<
-  NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["usage"]
+  NonNullable<Parameters<typeof createTestOsunaDaemon>[0]>["usage"]
 >["pricing"] = {
   autoUpdate: false,
   snapshot: {
@@ -40,20 +40,20 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 describe("usage.sessions.list over the daemon RPC", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let claudeRoot: string;
   let cwd: string;
   let projectDir: string;
 
   beforeEach(async () => {
-    claudeRoot = await tempDir("paseo-usage-sessions-root-");
-    cwd = await tempDir("paseo-usage-sessions-cwd-");
+    claudeRoot = await tempDir("osuna-usage-sessions-root-");
+    cwd = await tempDir("osuna-usage-sessions-cwd-");
     projectDir = path.join(claudeRoot, claudeProjectDirNameSync(cwd));
     await mkdir(projectDir, { recursive: true });
-    daemon = await createTestPaseoDaemon({
-      paseoHomeRoot: await tempDir("paseo-usage-sessions-home-"),
-      staticDir: await tempDir("paseo-usage-sessions-static-"),
+    daemon = await createTestOsunaDaemon({
+      osunaHomeRoot: await tempDir("osuna-usage-sessions-home-"),
+      staticDir: await tempDir("osuna-usage-sessions-static-"),
       cleanup: false,
       agentClients: {
         claude: createTestAgentClient("claude", { nextSessionId: () => AGENT_SESSION }),
@@ -231,7 +231,7 @@ describe("usage.sessions.list over the daemon RPC", () => {
     expect(report.days.map((day) => [day.day, day.sessionCount])).toEqual([["2026-09-18", 1]]);
   });
 
-  test("marks the session a Paseo agent owns with the agent to open", async () => {
+  test("marks the session an Osuna agent owns with the agent to open", async () => {
     const agent = await client.createAgent({ provider: "claude", cwd, title: "Usage agent" });
     await writeTranscript(
       AGENT_SESSION,

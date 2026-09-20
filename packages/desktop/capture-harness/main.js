@@ -28,7 +28,7 @@ const PRODUCTION_BROWSER_WEBVIEW_REGISTRY_PATH = path.join(
   "browser-webviews",
   "registry.js",
 );
-const BROWSER_SHORTCUT_INPUT_CHANNEL = "paseo:browser-shortcut-input";
+const BROWSER_SHORTCUT_INPUT_CHANNEL = "osuna:browser-shortcut-input";
 const VIEWPORT_WIDTH = 1280;
 const VIEWPORT_HEIGHT = 800;
 const FULL_PAGE_HEIGHT = 1600;
@@ -2100,8 +2100,8 @@ async function verifyBrowserKeyboardIsolation({ guest, win, browserId, usesMeta,
 async function runAutomationGroup() {
   const results = [];
   const { BrowserKeyboard } = require(PRODUCTION_BROWSER_KEYBOARD_PATH);
-  const { PaseoBrowserWebviewRegistry } = require(PRODUCTION_BROWSER_WEBVIEW_REGISTRY_PATH);
-  const browserRegistry = new PaseoBrowserWebviewRegistry();
+  const { OsunaBrowserWebviewRegistry } = require(PRODUCTION_BROWSER_WEBVIEW_REGISTRY_PATH);
+  const browserRegistry = new OsunaBrowserWebviewRegistry();
   const browserKeyboard = new BrowserKeyboard(browserRegistry);
   browserKeyboard.registerIpc();
   const browserKeyboardSentinels = installBrowserKeyboardSentinels();
@@ -2414,7 +2414,7 @@ async function runAutomationGroup() {
     }
     const evaluated = await guest.debugger.sendCommand("Runtime.evaluate", {
       expression: `(() => window.__OSUNA_BROWSER_AUTOMATION__.resolve(${JSON.stringify(uploadRef.ref)}, ${JSON.stringify(uploadRef.fingerprint)}).element)()`,
-      objectGroup: "paseo-browser-automation",
+      objectGroup: "osuna-browser-automation",
       returnByValue: false,
     });
     const described = await guest.debugger.sendCommand("DOM.describeNode", {
@@ -2514,7 +2514,7 @@ async function createBrowserProfileHarnessWindow(partition, sourceUrl) {
 async function readBrowserProfileFixture(guest) {
   return await guest.executeJavaScript(`({
     cookie: document.cookie,
-    localStorage: localStorage.getItem("paseo-browser-profile")
+    localStorage: localStorage.getItem("osuna-browser-profile")
   })`);
 }
 
@@ -2522,7 +2522,7 @@ function assertBrowserProfileFixture(state, expectedValue, label) {
   if (state.localStorage !== expectedValue) {
     fail(`${label} localStorage mismatch ${JSON.stringify(state)}`);
   }
-  if (!state.cookie.split("; ").includes(`paseo-browser-profile=${expectedValue}`)) {
+  if (!state.cookie.split("; ").includes(`osuna-browser-profile=${expectedValue}`)) {
     fail(`${label} cookie mismatch ${JSON.stringify(state)}`);
   }
 }
@@ -2574,8 +2574,8 @@ async function prepareBrowserProfileValue(firstGuest, profileSession) {
   const profileValue = `profile-${Date.now()}-${process.pid}`;
   await firstGuest.executeJavaScript(`(() => {
     const value = ${JSON.stringify(profileValue)};
-    localStorage.setItem("paseo-browser-profile", value);
-    document.cookie = "paseo-browser-profile=" + value + "; Max-Age=86400; SameSite=Lax";
+    localStorage.setItem("osuna-browser-profile", value);
+    document.cookie = "osuna-browser-profile=" + value + "; Max-Age=86400; SameSite=Lax";
   })()`);
   if (BROWSER_PROFILE_PHASE === "write") {
     await fsp.writeFile(BROWSER_PROFILE_VALUE_FILE, `${profileValue}\n`);
@@ -2588,7 +2588,7 @@ async function runBrowserProfileGroup() {
   if (!["write", "read"].includes(BROWSER_PROFILE_PHASE)) {
     fail(`unknown browser profile phase ${BROWSER_PROFILE_PHASE}`);
   }
-  const partition = "persist:paseo-browser-profile-harness-restart";
+  const partition = "persist:osuna-browser-profile-harness-restart";
   const profileSession = session.fromPartition(partition);
   const fixture = await startBrowserProfileServer();
   const windows = [];

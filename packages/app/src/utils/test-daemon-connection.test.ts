@@ -46,9 +46,9 @@ class FakeDaemonProbe {
     createDesktopTransportFactory: () => null,
     buildDesktopTransportUrl: (target) => {
       if (target.transportType === "ssh") {
-        return `paseo+desktop://ssh?host=${encodeURIComponent(target.host)}`;
+        return `osuna+desktop://ssh?host=${encodeURIComponent(target.host)}`;
       }
-      return `paseo+desktop://${target.transportType}?path=${encodeURIComponent(target.transportPath)}`;
+      return `osuna+desktop://${target.transportType}?path=${encodeURIComponent(target.transportPath)}`;
     },
     createClient: (config) => {
       const client = new FakeDaemonClient(this, config);
@@ -132,16 +132,16 @@ describe("test-daemon-connection connectToDaemon", () => {
     const { connectToDaemon } = await import("./test-daemon-connection");
     const result = await connectToDaemon(
       {
-        id: "socket:/tmp/paseo.sock",
+        id: "socket:/tmp/osuna.sock",
         type: "directSocket",
-        path: "/tmp/paseo.sock",
+        path: "/tmp/osuna.sock",
       },
       undefined,
       probe.deps,
     );
     await result.client.close();
 
-    expect(probe.createdConfigs()[0]?.url).toBe("paseo+desktop://socket?path=%2Ftmp%2Fpaseo.sock");
+    expect(probe.createdConfigs()[0]?.url).toBe("osuna+desktop://socket?path=%2Ftmp%2Fosuna.sock");
   });
 
   it("uses the desktop transport for Remote SSH connections", async () => {
@@ -149,7 +149,7 @@ describe("test-daemon-connection connectToDaemon", () => {
     const transportFactory = vi.fn();
     const result = await connectToDaemon(
       {
-        id: "ssh:deploy%40example.com:2222:%2Fkeys%2Fpaseo",
+        id: "ssh:deploy%40example.com:2222:%2Fkeys%2Fosuna",
         type: "remoteSsh",
         host: "deploy@example.com",
         sshPort: 2222,
@@ -164,7 +164,7 @@ describe("test-daemon-connection connectToDaemon", () => {
     await result.client.close();
 
     expect(probe.createdConfigs()[0]).toMatchObject({
-      url: "paseo+desktop://ssh?host=deploy%40example.com",
+      url: "osuna+desktop://ssh?host=deploy%40example.com",
       transportFactory,
     });
   });
@@ -224,9 +224,9 @@ describe("test-daemon-connection connectToDaemon", () => {
 
     const plainResult = await connectToDaemon(
       {
-        id: "relay:relay.paseo.sh:443",
+        id: "relay:relay.example.com:443",
         type: "relay",
-        relayEndpoint: "relay.paseo.sh:443",
+        relayEndpoint: "relay.example.com:443",
         useTls: false,
         daemonPublicKeyB64: "pubkey",
       },
@@ -236,7 +236,7 @@ describe("test-daemon-connection connectToDaemon", () => {
     await plainResult.client.close();
 
     expect(probe.createdConfigs()[0]?.url).toMatch(/^wss:\/\/\[::1\]\/ws\?/);
-    expect(probe.createdConfigs()[1]?.url).toMatch(/^ws:\/\/relay\.paseo\.sh:443\/ws\?/);
+    expect(probe.createdConfigs()[1]?.url).toMatch(/^ws:\/\/relay\.example\.com:443\/ws\?/);
   });
 
   it("surfaces auth rejection as an incorrect password", async () => {

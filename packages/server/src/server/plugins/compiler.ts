@@ -169,7 +169,7 @@ function createRuntimeBoundaryPlugin(target: PluginBuildTarget, pluginDirectory:
   const boundaryResolution = {};
   const linkedDependencyRoots = new Set<string>();
   return {
-    name: `paseo-plugin-${target}-runtime-boundary`,
+    name: `osuna-plugin-${target}-runtime-boundary`,
     setup(buildContext) {
       const checked = new Set<string>();
       const imports = createPluginImportReader(pluginDirectory);
@@ -316,6 +316,8 @@ function runtimeSpecifierError(
   let kind: string | null = null;
   if (specifier === "@osuna/plugin/client/host") kind = "host-private";
   else if (
+    // `@paseo/plugin` is the pre-0.8 SDK scope. It is not resolvable here, but naming it
+    // keeps the diagnostic instead of an opaque esbuild resolution failure.
     (specifier === "@osuna/plugin" ||
       specifier.startsWith("@osuna/plugin/") ||
       specifier === "@paseo/plugin" ||

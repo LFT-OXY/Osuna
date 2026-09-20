@@ -4,21 +4,21 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { copyAttachmentFileToManagedStorage } from "./attachments";
 
-const originalPaseoHome = process.env.OSUNA_HOME;
+const originalOsunaHome = process.env.OSUNA_HOME;
 let testHome: string | null = null;
 
-async function useTempPaseoHome(): Promise<string> {
-  testHome = await mkdtemp(path.join(os.tmpdir(), "paseo-desktop-attachments-"));
+async function useTempOsunaHome(): Promise<string> {
+  testHome = await mkdtemp(path.join(os.tmpdir(), "osuna-desktop-attachments-"));
   process.env.OSUNA_HOME = testHome;
   return testHome;
 }
 
 describe("desktop attachment files", () => {
   afterEach(async () => {
-    if (originalPaseoHome === undefined) {
+    if (originalOsunaHome === undefined) {
       delete process.env.OSUNA_HOME;
     } else {
-      process.env.OSUNA_HOME = originalPaseoHome;
+      process.env.OSUNA_HOME = originalOsunaHome;
     }
 
     if (testHome) {
@@ -28,8 +28,8 @@ describe("desktop attachment files", () => {
   });
 
   it("accepts dot-prefixed picker extensions for managed copies", async () => {
-    const paseoHome = await useTempPaseoHome();
-    const sourcePath = path.join(paseoHome, "report.md");
+    const osunaHome = await useTempOsunaHome();
+    const sourcePath = path.join(osunaHome, "report.md");
     await writeFile(sourcePath, "# Report\n");
 
     const result = await copyAttachmentFileToManagedStorage({
@@ -39,15 +39,15 @@ describe("desktop attachment files", () => {
     });
 
     expect(result).toEqual({
-      path: path.join(paseoHome, "desktop-attachments", "att_markdown.md"),
+      path: path.join(osunaHome, "desktop-attachments", "att_markdown.md"),
       byteSize: 9,
     });
     await expect(readFile(result.path, "utf8")).resolves.toBe("# Report\n");
   });
 
   it("normalizes legacy bare extensions for managed copies", async () => {
-    const paseoHome = await useTempPaseoHome();
-    const sourcePath = path.join(paseoHome, "report.md");
+    const osunaHome = await useTempOsunaHome();
+    const sourcePath = path.join(osunaHome, "report.md");
     await writeFile(sourcePath, "# Report\n");
 
     const result = await copyAttachmentFileToManagedStorage({
@@ -57,7 +57,7 @@ describe("desktop attachment files", () => {
     });
 
     expect(result).toEqual({
-      path: path.join(paseoHome, "desktop-attachments", "att_markdown_legacy.md"),
+      path: path.join(osunaHome, "desktop-attachments", "att_markdown_legacy.md"),
       byteSize: 9,
     });
     await expect(readFile(result.path, "utf8")).resolves.toBe("# Report\n");

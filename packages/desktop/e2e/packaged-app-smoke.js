@@ -313,8 +313,8 @@ async function writeSmokeArtifacts({ page, stdout, stderr, userData, daemonHome,
         rootChildCount: document.querySelector("#root")?.childElementCount ?? 0,
         rootText: document.querySelector("#root")?.textContent?.trim().slice(0, 2_000) ?? "",
         bridgeKeys:
-          typeof window.paseoDesktop === "object" && window.paseoDesktop !== null
-            ? Object.keys(window.paseoDesktop)
+          typeof window.osunaDesktop === "object" && window.osunaDesktop !== null
+            ? Object.keys(window.osunaDesktop)
             : [],
       }))
       .catch((evaluationError) => ({ evaluationError: String(evaluationError) }));
@@ -457,8 +457,8 @@ async function assertPackagedRendererLoaded(page, deadline) {
   );
 
   const bridgeKeys = await page.evaluate(() =>
-    typeof window.paseoDesktop === "object" && window.paseoDesktop !== null
-      ? Object.keys(window.paseoDesktop)
+    typeof window.osunaDesktop === "object" && window.osunaDesktop !== null
+      ? Object.keys(window.osunaDesktop)
       : [],
   );
   const missingBridgeKeys = REQUIRED_DESKTOP_BRIDGE_KEYS.filter((key) => !bridgeKeys.includes(key));
@@ -483,7 +483,7 @@ async function waitForRendererStartedDaemon({
 
   while (Date.now() < deadline) {
     try {
-      lastStatus = await page.evaluate(() => window.paseoDesktop.invoke("desktop_daemon_status"));
+      lastStatus = await page.evaluate(() => window.osunaDesktop.invoke("desktop_daemon_status"));
       if (
         lastStatus?.status === "running" &&
         lastStatus.desktopManaged === true &&
@@ -616,7 +616,7 @@ async function smokeCliShim({ appPath, env }) {
 }
 
 async function smokeColdCliDaemonStart({ appPath }) {
-  const home = createTempDir("paseo-smoke-cli-daemon-home-");
+  const home = createTempDir("osuna-smoke-cli-daemon-home-");
   const pidPath = path.join(home, "osuna.pid");
   const port = await reserveLocalTcpPort();
   const listen = `127.0.0.1:${port}`;
@@ -681,8 +681,8 @@ function assertCleanDaemonStatusOutput(output) {
 }
 
 async function smokeCliTerminal({ appPath, env }) {
-  const cwd = createTempDir("paseo-smoke-terminal-cwd-");
-  const marker = `paseo-packaged-terminal-smoke-${Date.now()}`;
+  const cwd = createTempDir("osuna-smoke-terminal-cwd-");
+  const marker = `osuna-packaged-terminal-smoke-${Date.now()}`;
   const name = `packaged-smoke-${process.pid}-${Date.now()}`;
   let terminalId = null;
 
@@ -788,7 +788,7 @@ async function openSmokeWorkspace({ appPath, env, page, daemonHome }) {
 
 async function assertSandboxState({ browser, page, expectedSandbox, stdout, stderr }) {
   const diagnostics = await page.evaluate(() =>
-    window.paseoDesktop.invoke("desktop_sandbox_diagnostics"),
+    window.osunaDesktop.invoke("desktop_sandbox_diagnostics"),
   );
   if (diagnostics.enabled !== expectedSandbox) {
     throw new Error(
@@ -844,8 +844,8 @@ async function smokePackagedDesktopApp({
   assertLinuxDesktopIdentity(appPath);
   await smokeColdCliDaemonStart({ appPath });
 
-  const userData = createTempDir("paseo-smoke-user-data-");
-  const daemonHome = createTempDir("paseo-smoke-daemon-home-");
+  const userData = createTempDir("osuna-smoke-user-data-");
+  const daemonHome = createTempDir("osuna-smoke-daemon-home-");
   const daemonPort = await reserveLocalTcpPort();
   let cdpPort = await reserveLocalTcpPort();
   for (let attempt = 0; cdpPort === daemonPort && attempt < 10; attempt += 1) {

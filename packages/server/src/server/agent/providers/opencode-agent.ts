@@ -1416,7 +1416,7 @@ export class OpenCodeAgentClient implements AgentClient {
     this.bridge = deps.bridge;
     this.capabilities = {
       ...OPENCODE_CAPABILITIES,
-      ...(this.bridge ? { supportsNativePaseoTools: true } : {}),
+      ...(this.bridge ? { supportsNativeOsunaTools: true } : {}),
     };
     this.runtimeSettings = runtimeSettings;
     this.createOpenCodeClient = deps.createClient ?? createSdkOpenCodeClient;
@@ -1570,7 +1570,7 @@ export class OpenCodeAgentClient implements AgentClient {
     return this.bridge.bindSession({
       sessionId,
       env: launchContext.env ?? {},
-      tools: launchContext.paseoTools,
+      tools: launchContext.osunaTools,
     });
   }
 

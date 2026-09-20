@@ -16,8 +16,8 @@ function getLogger(logger: LoggerLike | undefined): LoggerLike | undefined {
   return logger?.child({ module: "server-id" });
 }
 
-function getServerIdPath(paseoHome: string): string {
-  return path.join(paseoHome, SERVER_ID_FILENAME);
+function getServerIdPath(osunaHome: string): string {
+  return path.join(osunaHome, SERVER_ID_FILENAME);
 }
 
 function generateServerId(): string {
@@ -33,12 +33,12 @@ function generateServerId(): string {
  * - Can be overridden via `OSUNA_SERVER_ID` (useful for tests)
  */
 export function getOrCreateServerId(
-  paseoHome: string,
+  osunaHome: string,
   options?: { env?: NodeJS.ProcessEnv; logger?: LoggerLike },
 ): string {
   const env = options?.env ?? process.env;
   const log = getLogger(options?.logger);
-  const serverIdPath = getServerIdPath(paseoHome);
+  const serverIdPath = getServerIdPath(osunaHome);
 
   const envOverride =
     typeof env.OSUNA_SERVER_ID === "string" && env.OSUNA_SERVER_ID.trim().length > 0

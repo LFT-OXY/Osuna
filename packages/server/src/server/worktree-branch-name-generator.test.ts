@@ -8,12 +8,12 @@ import type { StructuredAgentGenerationWithFallbackOptions } from "./agent/agent
 import {
   attemptFirstAgentBranchAutoName,
   type AttemptFirstAgentBranchAutoNameResult,
-} from "./paseo-worktree-service.js";
+} from "./osuna-worktree-service.js";
 import { createNoopWorkspaceGitService } from "./test-utils/workspace-git-service-stub.js";
 import { generateBranchNameFromFirstAgentContext } from "./worktree-branch-name-generator.js";
 import {
-  writePaseoWorktreeFirstAgentBranchAutoNameMetadata,
-  writePaseoWorktreeMetadata,
+  writeOsunaWorktreeFirstAgentBranchAutoNameMetadata,
+  writeOsunaWorktreeMetadata,
 } from "../utils/worktree-metadata.js";
 
 const cleanupPaths: string[] = [];
@@ -291,11 +291,11 @@ describe("generateBranchNameFromFirstAgentContext", () => {
   });
 
   test("keeps the branch slug validator fallback when instructions are present", async () => {
-    const repoRoot = createTempDir("paseo-branch-config-");
-    const worktreeRoot = createTempDir("paseo-branch-worktree-");
+    const repoRoot = createTempDir("osuna-branch-config-");
+    const worktreeRoot = createTempDir("osuna-branch-worktree-");
     mkdirSync(path.join(worktreeRoot, ".git"));
-    writePaseoWorktreeMetadata(worktreeRoot, { baseRefName: "main" });
-    writePaseoWorktreeFirstAgentBranchAutoNameMetadata(worktreeRoot, {
+    writeOsunaWorktreeMetadata(worktreeRoot, { baseRefName: "main" });
+    writeOsunaWorktreeFirstAgentBranchAutoNameMetadata(worktreeRoot, {
       placeholderBranchName: "dazzling-yak",
     });
     writeConfig(repoRoot, {
@@ -338,7 +338,7 @@ describe("generateBranchNameFromFirstAgentContext", () => {
 });
 
 async function generateBranchPromptWithConfig(config: unknown): Promise<{ prompt: string }> {
-  const repoRoot = createTempDir("paseo-branch-config-");
+  const repoRoot = createTempDir("osuna-branch-config-");
   if (typeof config === "string") {
     writeFileSync(path.join(repoRoot, "osuna.json"), config);
   } else if (config !== undefined) {

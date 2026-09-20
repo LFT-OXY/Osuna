@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 // Worktree setup runs through a stable script shell: bash on macOS/Linux, but PowerShell
 // on Windows. POSIX-only command strings (`VAR=1 cmd` env prefixes, `$VAR` expansion, `cp`,
 // `./scripts/*.sh`) cannot express this step portably, so the seeding lives in Node — the
-// one interpreter every Paseo checkout already depends on.
+// one interpreter every Osuna checkout already depends on.
 
 const sourceRoot = process.env.OSUNA_SOURCE_CHECKOUT_PATH;
 const targetRoot = process.env.OSUNA_WORKTREE_PATH || process.cwd();
@@ -14,10 +14,10 @@ if (!sourceRoot || sourceRoot === targetRoot) {
   process.exit(0);
 }
 
-seedPaseoHome();
+seedOsunaHome();
 copyServerEnv();
 
-function seedPaseoHome() {
+function seedOsunaHome() {
   const source = process.env.OSUNA_DEV_SEED_HOME || join(sourceRoot, ".dev/osuna-home");
   const target = join(targetRoot, ".dev/osuna-home");
 

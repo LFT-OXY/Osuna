@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { getPaseoWorktreesRoot, isOsunaOwnedWorktreeCwd } from "../../utils/worktree.js";
+import { getOsunaWorktreesRoot, isOsunaOwnedWorktreeCwd } from "../../utils/worktree.js";
 import {
   archiveByScope,
   resolveWorkspaceIdAtPath,
@@ -9,23 +9,23 @@ import {
 } from "../workspace-archive-service.js";
 import type {
   CreateOsunaWorktreeInput,
-  CreatePaseoWorktreeResult,
-} from "../paseo-worktree-service.js";
+  CreateOsunaWorktreeResult,
+} from "../osuna-worktree-service.js";
 import { toWorktreeWireError, type WorktreeWireError } from "../worktree-errors.js";
 import type { WorkspaceGitService, WorkspaceGitWorktreeInfo } from "../workspace-git-service.js";
 
-export interface ListPaseoWorktreesCommandDependencies {
+export interface ListOsunaWorktreesCommandDependencies {
   workspaceGitService: Pick<WorkspaceGitService, "listWorktrees">;
 }
 
-export interface ListPaseoWorktreesCommandInput {
+export interface ListOsunaWorktreesCommandInput {
   cwd: string;
   reason?: string;
 }
 
-export async function listPaseoWorktreesCommand(
-  dependencies: ListPaseoWorktreesCommandDependencies,
-  input: ListPaseoWorktreesCommandInput,
+export async function listOsunaWorktreesCommand(
+  dependencies: ListOsunaWorktreesCommandDependencies,
+  input: ListOsunaWorktreesCommandInput,
 ): Promise<WorkspaceGitWorktreeInfo[]> {
   if (input.reason) {
     return dependencies.workspaceGitService.listWorktrees(input.cwd, { reason: input.reason });
@@ -33,27 +33,27 @@ export async function listPaseoWorktreesCommand(
   return dependencies.workspaceGitService.listWorktrees(input.cwd);
 }
 
-type CreatePaseoWorktreeWorkflow<Result extends CreatePaseoWorktreeResult> = (
+type CreateOsunaWorktreeWorkflow<Result extends CreateOsunaWorktreeResult> = (
   input: CreateOsunaWorktreeInput,
 ) => Promise<Result>;
 
-export interface CreatePaseoWorktreeCommandDependencies<
-  Result extends CreatePaseoWorktreeResult = CreatePaseoWorktreeResult,
+export interface CreateOsunaWorktreeCommandDependencies<
+  Result extends CreateOsunaWorktreeResult = CreateOsunaWorktreeResult,
 > {
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
-  createPaseoWorktreeWorkflow?: CreatePaseoWorktreeWorkflow<Result>;
+  createOsunaWorktreeWorkflow?: CreateOsunaWorktreeWorkflow<Result>;
 }
 
-export type CreatePaseoWorktreeCommandInput = Omit<
+export type CreateOsunaWorktreeCommandInput = Omit<
   CreateOsunaWorktreeInput,
-  "paseoHome" | "runSetup"
+  "osunaHome" | "runSetup"
 > & {
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
 };
 
-export type CreatePaseoWorktreeCommandResult<Result extends CreatePaseoWorktreeResult> =
+export type CreateOsunaWorktreeCommandResult<Result extends CreateOsunaWorktreeResult> =
   | {
       ok: true;
       createdWorktree: Result;
@@ -64,19 +64,19 @@ export type CreatePaseoWorktreeCommandResult<Result extends CreatePaseoWorktreeR
       cause: unknown;
     };
 
-export async function createPaseoWorktreeCommand<Result extends CreatePaseoWorktreeResult>(
-  dependencies: CreatePaseoWorktreeCommandDependencies<Result>,
-  input: CreatePaseoWorktreeCommandInput,
-): Promise<CreatePaseoWorktreeCommandResult<Result>> {
+export async function createOsunaWorktreeCommand<Result extends CreateOsunaWorktreeResult>(
+  dependencies: CreateOsunaWorktreeCommandDependencies<Result>,
+  input: CreateOsunaWorktreeCommandInput,
+): Promise<CreateOsunaWorktreeCommandResult<Result>> {
   try {
-    if (!dependencies.createPaseoWorktreeWorkflow) {
-      throw new Error("Paseo worktree service is not configured");
+    if (!dependencies.createOsunaWorktreeWorkflow) {
+      throw new Error("Osuna worktree service is not configured");
     }
 
-    const createdWorktree = await dependencies.createPaseoWorktreeWorkflow({
+    const createdWorktree = await dependencies.createOsunaWorktreeWorkflow({
       ...input,
       runSetup: false,
-      paseoHome: input.paseoHome ?? dependencies.paseoHome,
+      osunaHome: input.osunaHome ?? dependencies.osunaHome,
       worktreesRoot: input.worktreesRoot ?? dependencies.worktreesRoot,
     });
     return { ok: true, createdWorktree };
@@ -125,8 +125,8 @@ export async function archiveCommand(
   const targetPath = await resolveArchiveTarget(dependencies, input);
   const scope = input.scope ?? "workspace";
   const ownership = await isOsunaOwnedWorktreeCwd(targetPath, {
-    paseoHome: dependencies.paseoHome,
-    worktreesRoot: dependencies.paseoWorktreesBaseRoot,
+    osunaHome: dependencies.osunaHome,
+    worktreesRoot: dependencies.osunaWorktreesBaseRoot,
   });
 
   if (scope === "worktree") {
@@ -134,7 +134,7 @@ export async function archiveCommand(
       return {
         ok: false,
         code: "NOT_ALLOWED",
-        message: "Worktree is not a Paseo-owned worktree",
+        message: "Worktree is not an Osuna-owned worktree",
         removedAgents: [],
       };
     }
@@ -195,7 +195,7 @@ async function resolveArchiveTarget(
     const worktrees = await dependencies.workspaceGitService.listWorktrees(repoRoot);
     const match = worktrees.find((entry) => entry.branchName === input.branchName);
     if (!match) {
-      throw new Error(`Paseo worktree not found for branch ${input.branchName}`);
+      throw new Error(`Osuna worktree not found for branch ${input.branchName}`);
     }
     return match.path;
   }
@@ -208,10 +208,10 @@ async function resolveWorktreeSlugPath(
   repoRoot: string,
   worktreeSlug: string,
 ): Promise<string> {
-  const worktreesRoot = await getPaseoWorktreesRoot(
+  const worktreesRoot = await getOsunaWorktreesRoot(
     repoRoot,
-    dependencies.paseoHome,
-    dependencies.paseoWorktreesBaseRoot,
+    dependencies.osunaHome,
+    dependencies.osunaWorktreesBaseRoot,
   );
   return join(worktreesRoot, worktreeSlug);
 }

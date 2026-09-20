@@ -9,7 +9,7 @@ import pino from "pino";
 import { OpenCodeAgentClient } from "../agent/providers/opencode-agent.js";
 import { OpenCodeServerManager } from "../agent/providers/opencode/server-manager.js";
 import { terminateWithTreeKill } from "../../utils/tree-kill.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 const PINNED_OPENCODE_VERSION = "1.18.9";
@@ -21,7 +21,7 @@ const COMMAND_TIMEOUT_MS = 180_000;
 interface RuntimePaths {
   root: string;
   home: string;
-  paseoHomeRoot: string;
+  osunaHomeRoot: string;
   xdgConfig: string;
   xdgData: string;
   xdgCache: string;
@@ -45,7 +45,7 @@ interface CommandInput {
 
 export interface OpenCodeOmoRealRuntime {
   client: DaemonClient;
-  daemon: TestPaseoDaemon;
+  daemon: TestOsunaDaemon;
   model: string;
   workspace: string;
   artifacts: string;
@@ -147,14 +147,14 @@ export async function createOpenCodeOmoRealRuntime(): Promise<OpenCodeOmoRealRun
     });
   }
 
-  const previousPaseoHome = process.env.OSUNA_HOME;
+  const previousOsunaHome = process.env.OSUNA_HOME;
   let traceDestination: ReturnType<typeof pino.destination> | null = null;
   let closeTrace: (() => void) | null = null;
   let serverManager: OpenCodeServerManager | null = null;
-  let daemon: TestPaseoDaemon | null = null;
+  let daemon: TestOsunaDaemon | null = null;
   let client: DaemonClient | null = null;
   try {
-    process.env.OSUNA_HOME = path.join(paths.paseoHomeRoot, ".osuna");
+    process.env.OSUNA_HOME = path.join(paths.osunaHomeRoot, ".osuna");
     traceDestination = pino.destination({
       dest: path.join(paths.artifacts, "daemon.log"),
       sync: true,
@@ -178,10 +178,10 @@ export async function createOpenCodeOmoRealRuntime(): Promise<OpenCodeOmoRealRun
       resolveHomeDir: () => paths.home,
     });
     const openCodeClient = new OpenCodeAgentClient(logger, runtimeSettings, { serverManager });
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       agentClients: { opencode: openCodeClient },
       logger,
-      paseoHomeRoot: paths.paseoHomeRoot,
+      osunaHomeRoot: paths.osunaHomeRoot,
       staticDir: path.join(paths.root, "static"),
       cleanup: false,
     });
@@ -205,7 +205,7 @@ export async function createOpenCodeOmoRealRuntime(): Promise<OpenCodeOmoRealRun
             rmSync(paths.root, { recursive: true, force: true });
           }
         } finally {
-          restoreEnvironment("OSUNA_HOME", previousPaseoHome);
+          restoreEnvironment("OSUNA_HOME", previousOsunaHome);
         }
       },
     };
@@ -220,18 +220,18 @@ export async function createOpenCodeOmoRealRuntime(): Promise<OpenCodeOmoRealRun
         traceDestination?.end();
       }
     } finally {
-      restoreEnvironment("OSUNA_HOME", previousPaseoHome);
+      restoreEnvironment("OSUNA_HOME", previousOsunaHome);
     }
     throw withArtifactLocation(error, paths.artifacts);
   }
 }
 
 function createRuntimePaths(): RuntimePaths {
-  const root = mkdtempSync(path.join(tmpdir(), "paseo-real-opencode-omo-"));
+  const root = mkdtempSync(path.join(tmpdir(), "osuna-real-opencode-omo-"));
   const paths: RuntimePaths = {
     root,
     home: path.join(root, "home"),
-    paseoHomeRoot: path.join(root, "osuna-home"),
+    osunaHomeRoot: path.join(root, "osuna-home"),
     xdgConfig: path.join(root, "xdg", "config"),
     xdgData: path.join(root, "xdg", "data"),
     xdgCache: path.join(root, "xdg", "cache"),
@@ -273,7 +273,7 @@ function buildRuntimeEnv(paths: RuntimePaths, openRouterApiKey: string | null): 
     SSL_CERT_DIR: process.env.SSL_CERT_DIR,
     HOME: paths.home,
     ...(process.platform === "win32" ? resolveWindowsHomeEnv(paths.home, paths.temporary) : {}),
-    OSUNA_HOME: path.join(paths.paseoHomeRoot, ".osuna"),
+    OSUNA_HOME: path.join(paths.osunaHomeRoot, ".osuna"),
     XDG_CONFIG_HOME: paths.xdgConfig,
     XDG_DATA_HOME: paths.xdgData,
     XDG_CACHE_HOME: paths.xdgCache,

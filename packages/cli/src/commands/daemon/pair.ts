@@ -41,7 +41,7 @@ export interface PairingOffer {
 }
 
 const PAIRING_DAEMON_RPC_TIMEOUT_MS = 1500;
-const RELAY_DOCS_URL = "https://paseo.sh/docs/security";
+const RELAY_DOCS_URL = "https://github.com/LFT-OXY/Osuna/blob/main/public-docs/security.md";
 
 function createProcessOutput(): PairCommandOutput {
   return {
@@ -72,25 +72,25 @@ export function pairCommand(): Command {
 }
 
 export async function resolveLocalPairingOffer(options: {
-  paseoHome: string;
+  osunaHome: string;
   enableRelay?: boolean;
 }): Promise<PairingOffer> {
-  const instance = await readDaemonInstance(options.paseoHome);
+  const instance = await readDaemonInstance(options.osunaHome);
   if (instance)
     return resolveDaemonPairingOffer(
-      { kind: "instance", home: options.paseoHome },
+      { kind: "instance", home: options.osunaHome },
       options.enableRelay,
     );
   if (options.enableRelay)
-    editPersistedConfig(options.paseoHome, "daemon.relay.enabled", { value: true });
+    editPersistedConfig(options.osunaHome, "daemon.relay.enabled", { value: true });
   const config = resolveConfigFromPersisted(
-    options.paseoHome,
-    readPersistedConfig(options.paseoHome, { defaultsIfMissing: true }),
+    options.osunaHome,
+    readPersistedConfig(options.osunaHome, { defaultsIfMissing: true }),
     { env: {} },
   );
 
   return generateLocalPairingOffer({
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
     relayEnabled: config.relayEnabled,
     relayEndpoint: config.relayEndpoint,
     relayPublicEndpoint: config.relayPublicEndpoint,
@@ -189,7 +189,7 @@ export async function runPairCommand(options: PairOptions): Promise<void> {
   const target = options.daemonTarget;
   const resolveOffer = (enableRelay: boolean) =>
     target.kind === "instance"
-      ? resolveLocalPairingOffer({ paseoHome: target.home, enableRelay })
+      ? resolveLocalPairingOffer({ osunaHome: target.home, enableRelay })
       : resolveDaemonPairingOffer(target, enableRelay);
   const offline = target.kind === "instance" && !(await readDaemonInstance(target.home));
   const pairing = await resolveOffer(options.relay === true);

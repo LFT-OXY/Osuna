@@ -367,8 +367,8 @@ describe("shared messages stream parsing", () => {
     const responseParsed = SessionOutboundMessageSchema.safeParse({
       type: "directory_suggestions_response",
       payload: {
-        directories: ["/Users/test/projects/paseo"],
-        entries: [{ path: "/Users/test/projects/paseo", kind: "directory" }],
+        directories: ["/Users/test/projects/osuna"],
+        entries: [{ path: "/Users/test/projects/osuna", kind: "directory" }],
         error: null,
         requestId: "req-dir-1",
       },

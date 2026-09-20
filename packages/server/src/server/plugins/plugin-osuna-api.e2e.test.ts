@@ -6,7 +6,7 @@ import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { z } from "zod";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { createTestAgentClient, createTestAgentClients } from "../test-utils/fake-agent-client.js";
 
 const roots: string[] = [];
@@ -15,14 +15,14 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-test("plugin handlers create workspaces and agents through their Paseo API", async () => {
-  const pluginDirectory = await mkdtemp(path.join(tmpdir(), "paseo-api-plugin-"));
-  const workspaceDirectory = await mkdtemp(path.join(tmpdir(), "paseo-api-workspace-"));
+test("plugin handlers create workspaces and agents through their Osuna API", async () => {
+  const pluginDirectory = await mkdtemp(path.join(tmpdir(), "osuna-api-plugin-"));
+  const workspaceDirectory = await mkdtemp(path.join(tmpdir(), "osuna-api-workspace-"));
   roots.push(pluginDirectory, workspaceDirectory);
   await writeFile(
     path.join(pluginDirectory, "osuna-plugin.json"),
     JSON.stringify({
-      id: "paseo-api",
+      id: "osuna-api",
       requirements: { osuna: `>=${resolveDaemonVersion(import.meta.url)}` },
     }),
   );
@@ -79,7 +79,7 @@ export default function contribute(server: PluginServerContext) {
 }`,
   );
 
-  const daemon = await createTestPaseoDaemon({
+  const daemon = await createTestOsunaDaemon({
     agentClients: { ...createTestAgentClients(), pi: createTestAgentClient("pi") },
   });
   const client = new DaemonClient({
@@ -91,11 +91,11 @@ export default function contribute(server: PluginServerContext) {
     await client.connect();
     await client.patchDaemonConfig({ pluginsEnabled: true });
     await expect(client.installDirectoryPlugin(pluginDirectory)).resolves.toMatchObject({
-      id: "paseo-api",
+      id: "osuna-api",
       status: "running",
     });
 
-    const created = await client.invokePluginRpc("paseo-api", "create", {
+    const created = await client.invokePluginRpc("osuna-api", "create", {
       path: workspaceDirectory,
     });
 
@@ -106,27 +106,27 @@ export default function contribute(server: PluginServerContext) {
     if (typeof created !== "object" || created === null) {
       throw new Error("Plugin returned an invalid creation result");
     }
-    const listed = await client.invokePluginRpc("paseo-api", "list", {});
+    const listed = await client.invokePluginRpc("osuna-api", "list", {});
     expect(listed).toEqual({
       agentIds: expect.arrayContaining([Reflect.get(created, "agentId")]),
     });
     const agentId = Reflect.get(created, "agentId");
     await expect(
-      client.invokePluginRpc("paseo-api", "append", { agentId, status: "running" }),
+      client.invokePluginRpc("osuna-api", "append", { agentId, status: "running" }),
     ).resolves.toEqual({ seq: expect.any(Number), epoch: expect.any(String) });
-    await client.invokePluginRpc("paseo-api", "append", { agentId, status: "complete" });
+    await client.invokePluginRpc("osuna-api", "append", { agentId, status: "complete" });
     const timeline = await client.fetchAgentTimeline(agentId, { projection: "projected" });
     expect(timeline.entries.filter((entry) => entry.item.type === "plugin")).toEqual([
       expect.objectContaining({
         item: expect.objectContaining({
           type: "plugin",
           id: "review-1",
-          pluginId: "paseo-api",
+          pluginId: "osuna-api",
           data: { status: "complete" },
         }),
       }),
     ]);
-    await client.removePlugin("paseo-api");
+    await client.removePlugin("osuna-api");
     const workspaces = await client.fetchWorkspaces();
     const agents = await client.fetchAgents();
     expect(workspaces.entries.map((workspace) => workspace.id)).toContain(
@@ -142,10 +142,10 @@ export default function contribute(server: PluginServerContext) {
 }, 60_000);
 
 test("daemon config reload enables and disables configured plugins without restarting", async () => {
-  const pluginDirectory = await mkdtemp(path.join(tmpdir(), "paseo-reload-plugin-"));
-  const paseoHomeRoot = await mkdtemp(path.join(tmpdir(), "paseo-reload-home-"));
-  const paseoHome = path.join(paseoHomeRoot, ".osuna");
-  roots.push(pluginDirectory, paseoHomeRoot);
+  const pluginDirectory = await mkdtemp(path.join(tmpdir(), "osuna-reload-plugin-"));
+  const osunaHomeRoot = await mkdtemp(path.join(tmpdir(), "osuna-reload-home-"));
+  const osunaHome = path.join(osunaHomeRoot, ".osuna");
+  roots.push(pluginDirectory, osunaHomeRoot);
   await writeFile(
     path.join(pluginDirectory, "osuna-plugin.json"),
     JSON.stringify({
@@ -164,13 +164,13 @@ test("daemon config reload enables and disables configured plugins without resta
   const plugins = {
     "reloadable-plugin": { source: "directory" as const, path: pluginDirectory, enabled: true },
   };
-  await mkdir(paseoHome, { recursive: true });
+  await mkdir(osunaHome, { recursive: true });
   await writeFile(
-    path.join(paseoHome, "config.json"),
+    path.join(osunaHome, "config.json"),
     `${JSON.stringify({ version: 1, pluginsEnabled: false, plugins }, null, 2)}\n`,
   );
-  const daemon = await createTestPaseoDaemon({
-    paseoHomeRoot,
+  const daemon = await createTestOsunaDaemon({
+    osunaHomeRoot,
     cleanup: false,
     pluginsEnabled: false,
     plugins,
@@ -179,7 +179,7 @@ test("daemon config reload enables and disables configured plugins without resta
     url: `ws://127.0.0.1:${daemon.port}/ws`,
     appVersion: "0.4.0",
   });
-  const configPath = path.join(daemon.paseoHome, "config.json");
+  const configPath = path.join(daemon.osunaHome, "config.json");
   const catalogChanges = new EventEmitter();
 
   async function setPluginsEnabled(enabled: boolean): Promise<void> {
@@ -255,8 +255,8 @@ async function readReconnectingPluginState(client: DaemonClient) {
 }
 
 test("plugin host APIs and observations recover after repeated daemon-side socket closes", async () => {
-  const pluginDirectory = await mkdtemp(path.join(tmpdir(), "paseo-reconnecting-plugin-"));
-  const workspaceDirectory = await mkdtemp(path.join(tmpdir(), "paseo-reconnecting-workspace-"));
+  const pluginDirectory = await mkdtemp(path.join(tmpdir(), "osuna-reconnecting-plugin-"));
+  const workspaceDirectory = await mkdtemp(path.join(tmpdir(), "osuna-reconnecting-workspace-"));
   roots.push(pluginDirectory, workspaceDirectory);
   await writeFile(
     path.join(pluginDirectory, "osuna-plugin.json"),
@@ -339,7 +339,7 @@ export default function contribute(server: PluginServerContext) {
   return async () => { await release?.(); };
 }`,
   );
-  const daemon = await createTestPaseoDaemon();
+  const daemon = await createTestOsunaDaemon();
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   let projectId: string | undefined;
   try {

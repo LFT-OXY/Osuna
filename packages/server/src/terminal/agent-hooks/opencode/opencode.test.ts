@@ -29,14 +29,22 @@ function createTempDir(prefix: string): string {
   return dir;
 }
 
+// The plugin file an install from before the rename left behind, at its old path.
+function writePreRenamePlugin(configDir: string): string {
+  const legacyPath = join(configDir, "plugins", "paseo-terminal-activity.js");
+  mkdirSync(dirname(legacyPath), { recursive: true });
+  writeFileSync(legacyPath, PRE_RENAME_PLUGIN_SOURCE);
+  return legacyPath;
+}
+
 describe("OpenCode terminal agent hooks", () => {
   it("installs a self-contained OpenCode plugin idempotently", () => {
-    const configDir = createTempDir("paseo-opencode-config-");
+    const configDir = createTempDir("osuna-opencode-config-");
 
     const firstInstall = installAgentHooks(opencodeAgentHookProvider, { configDir });
     const secondInstall = installAgentHooks(opencodeAgentHookProvider, { configDir });
 
-    expect(firstInstall.configPath).toBe(join(configDir, "plugins", "paseo-terminal-activity.js"));
+    expect(firstInstall.configPath).toBe(join(configDir, "plugins", "osuna-terminal-activity.js"));
     expect(firstInstall.changed).toBe(true);
     expect(secondInstall.changed).toBe(false);
     expect(readFileSync(firstInstall.configPath, "utf8")).toBe(OPENCODE_PLUGIN_SOURCE);
@@ -78,7 +86,7 @@ describe("OpenCode terminal agent hooks", () => {
       await hooks.event({ event });
     }
 
-    expect(plugin.id).toBe("paseo-terminal-activity");
+    expect(plugin.id).toBe("osuna-terminal-activity");
     expect(commands).toEqual([
       ["osuna", "hooks", "opencode", "session.status.busy"],
       ["osuna", "hooks", "opencode", "permission.asked"],
@@ -146,7 +154,7 @@ describe("OpenCode terminal agent hooks", () => {
     expect(commands).toEqual([]);
   });
 
-  it("keeps both generations inert outside Paseo terminals", async () => {
+  it("keeps both generations inert outside Osuna terminals", async () => {
     const { plugin, commands } = loadInstalledPlugin("");
     await plugin.server().event({
       event: { type: "session.status", properties: { status: { type: "busy" } } },
@@ -176,7 +184,7 @@ describe("OpenCode terminal agent hooks", () => {
   // An upgrade finds the previous release's plugin already on disk; OpenCode loads
   // whatever file is there, so a stale one has to be overwritten, not left alone.
   it("replaces an out-of-date plugin file", () => {
-    const configDir = createTempDir("paseo-opencode-stale-");
+    const configDir = createTempDir("osuna-opencode-stale-");
     const configPath = resolveAgentHookConfigPath(opencodeAgentHookProvider, { configDir });
     mkdirSync(dirname(configPath), { recursive: true });
     writeFileSync(configPath, PRE_RENAME_PLUGIN_SOURCE);
@@ -188,7 +196,7 @@ describe("OpenCode terminal agent hooks", () => {
   });
 
   it("uninstalls the OpenCode plugin file", () => {
-    const configDir = createTempDir("paseo-opencode-config-uninstall-");
+    const configDir = createTempDir("osuna-opencode-config-uninstall-");
     const configPath = resolveAgentHookConfigPath(opencodeAgentHookProvider, { configDir });
     installAgentHooks(opencodeAgentHookProvider, { configDir });
 
@@ -199,22 +207,55 @@ describe("OpenCode terminal agent hooks", () => {
     expect(agentHooksAreInstalled(opencodeAgentHookProvider, { configDir })).toBe(false);
   });
 
+  it("removes the pre-rename plugin file so OpenCode cannot load both", () => {
+    const configDir = createTempDir("osuna-opencode-legacy-");
+    const legacyPath = writePreRenamePlugin(configDir);
+
+    const result = installAgentHooks(opencodeAgentHookProvider, { configDir });
+
+    expect(existsSync(legacyPath)).toBe(false);
+    expect(readFileSync(result.configPath, "utf8")).toBe(OPENCODE_PLUGIN_SOURCE);
+  });
+
+  it("reports a change when only the pre-rename plugin file had to go", () => {
+    const configDir = createTempDir("osuna-opencode-legacy-");
+    installAgentHooks(opencodeAgentHookProvider, { configDir });
+    const legacyPath = writePreRenamePlugin(configDir);
+
+    const result = installAgentHooks(opencodeAgentHookProvider, { configDir });
+
+    expect(result.changed).toBe(true);
+    expect(existsSync(legacyPath)).toBe(false);
+  });
+
+  // Uninstall with no current plugin file on disk: `changed` can only come from the
+  // pre-rename file, so it fails if the legacy cleanup stops running.
+  it("removes a pre-rename plugin file that outlived the current one", () => {
+    const configDir = createTempDir("osuna-opencode-legacy-");
+    const legacyPath = writePreRenamePlugin(configDir);
+
+    const result = uninstallAgentHooks(opencodeAgentHookProvider, { configDir });
+
+    expect(result.changed).toBe(true);
+    expect(existsSync(legacyPath)).toBe(false);
+  });
+
   it("prefers OPENCODE_CONFIG_DIR over the XDG config home", () => {
     const homeDir = createTempDir("osuna-home-");
-    const configDir = createTempDir("paseo-opencode-override-");
-    const xdgConfigHome = createTempDir("paseo-xdg-config-");
+    const configDir = createTempDir("osuna-opencode-override-");
+    const xdgConfigHome = createTempDir("osuna-xdg-config-");
 
     const configPath = resolveAgentHookConfigPath(opencodeAgentHookProvider, {
       env: { OPENCODE_CONFIG_DIR: configDir, XDG_CONFIG_HOME: xdgConfigHome },
       homeDir,
     });
 
-    expect(configPath).toBe(join(configDir, "plugins", "paseo-terminal-activity.js"));
+    expect(configPath).toBe(join(configDir, "plugins", "osuna-terminal-activity.js"));
   });
 
   it("uses the XDG config home for the default OpenCode config dir", () => {
     const homeDir = createTempDir("osuna-home-");
-    const xdgConfigHome = createTempDir("paseo-xdg-config-");
+    const xdgConfigHome = createTempDir("osuna-xdg-config-");
 
     const configPath = resolveAgentHookConfigPath(opencodeAgentHookProvider, {
       env: { XDG_CONFIG_HOME: xdgConfigHome },
@@ -222,7 +263,7 @@ describe("OpenCode terminal agent hooks", () => {
     });
 
     expect(configPath).toBe(
-      join(xdgConfigHome, "opencode", "plugins", "paseo-terminal-activity.js"),
+      join(xdgConfigHome, "opencode", "plugins", "osuna-terminal-activity.js"),
     );
   });
 
@@ -235,7 +276,7 @@ describe("OpenCode terminal agent hooks", () => {
     });
 
     expect(configPath).toBe(
-      join(homeDir, ".config", "opencode", "plugins", "paseo-terminal-activity.js"),
+      join(homeDir, ".config", "opencode", "plugins", "osuna-terminal-activity.js"),
     );
   });
 
@@ -300,7 +341,7 @@ function loadInstalledPlugin(
   exited = Promise.resolve(0),
   hookCli: string | undefined = undefined,
 ) {
-  const configDir = createTempDir("paseo-opencode-runtime-");
+  const configDir = createTempDir("osuna-opencode-runtime-");
   const { configPath } = installAgentHooks(opencodeAgentHookProvider, { configDir });
   const source = readFileSync(configPath, "utf8");
   const commands: string[][] = [];

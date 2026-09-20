@@ -16,12 +16,12 @@ if (-not $env:OSUNA_HOME) {
         $env:OSUNA_HOME = "$env:USERPROFILE\.osuna-$WorktreeName"
         New-Item -ItemType Directory -Force -Path $env:OSUNA_HOME | Out-Null
     } else {
-        $env:OSUNA_HOME = Join-Path ([System.IO.Path]::GetTempPath()) "paseo-dev-$([System.Guid]::NewGuid().ToString('N').Substring(0,6))"
+        $env:OSUNA_HOME = Join-Path ([System.IO.Path]::GetTempPath()) "osuna-dev-$([System.Guid]::NewGuid().ToString('N').Substring(0,6))"
         New-Item -ItemType Directory -Force -Path $env:OSUNA_HOME | Out-Null
         # Register cleanup on exit
-        $TempPaseoHome = $env:OSUNA_HOME
+        $TempOsunaHome = $env:OSUNA_HOME
         Register-EngineEvent PowerShell.Exiting -Action {
-            Remove-Item -Recurse -Force $TempPaseoHome -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $TempOsunaHome -ErrorAction SilentlyContinue
         } | Out-Null
     }
 }
@@ -34,7 +34,7 @@ if (-not $env:OSUNA_LOCAL_MODELS_DIR) {
 
 Write-Host @"
 ======================================================
-  Paseo Dev (Windows)
+  Osuna Dev (Windows)
 ======================================================
   Home:    $($env:OSUNA_HOME)
   Models:  $($env:OSUNA_LOCAL_MODELS_DIR)

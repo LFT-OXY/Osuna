@@ -23,7 +23,7 @@
     },
     "ios-simulator": {
       "type": "service",
-      "command": "OSUNA_DEV_MANAGED_HOME=1 OSUNA_DEV_ROOT=\"$PWD\" OSUNA_HOME=\"$PWD/.dev/osuna-home\" OSUNA_LISTEN=0.0.0.0:${OSUNA_SERVICE_DAEMON_PORT} OSUNA_DEV_DAEMON_ENDPOINT=localhost:${OSUNA_SERVICE_DAEMON_PORT} ./scripts/paseo-ios-simulator-service.sh"
+      "command": "OSUNA_DEV_MANAGED_HOME=1 OSUNA_DEV_ROOT=\"$PWD\" OSUNA_HOME=\"$PWD/.dev/osuna-home\" OSUNA_LISTEN=0.0.0.0:${OSUNA_SERVICE_DAEMON_PORT} OSUNA_DEV_DAEMON_ENDPOINT=localhost:${OSUNA_SERVICE_DAEMON_PORT} ./scripts/osuna-ios-simulator-service.sh"
     },
     "typecheck": {
       "command": "npm run typecheck"

@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert";
-import { runLocalPaseo } from "./helpers/local-cli.ts";
+import { runLocalOsuna } from "./helpers/local-cli.ts";
 import { getAvailablePort } from "./helpers/network.ts";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
@@ -20,10 +20,10 @@ import { join } from "path";
 console.log("=== Delete Command Tests ===\n");
 
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-delete-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-delete-test-home-"));
 
 async function runCli(args: string[]) {
-  return runLocalPaseo(["--host", `localhost:${port}`, ...args], { OSUNA_HOME: paseoHome });
+  return runLocalOsuna(["--host", `localhost:${port}`, ...args], { OSUNA_HOME: osunaHome });
 }
 
 async function runDelete(args: string[]) {
@@ -113,7 +113,7 @@ try {
     console.log("✓ -q (quiet) flag is accepted with delete\n");
   }
 } finally {
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All delete tests passed ===");

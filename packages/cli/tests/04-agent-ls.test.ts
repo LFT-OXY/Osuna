@@ -24,19 +24,19 @@ import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { getAvailablePort } from "./helpers/network.ts";
-import { runLocalPaseo } from "./helpers/local-cli.ts";
+import { runLocalOsuna } from "./helpers/local-cli.ts";
 
 console.log("=== LS Command Tests ===\n");
 
 // Allocate an unused endpoint for connection-error and argument-validation checks.
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
 
 try {
   // Test 1: osuna --help shows ls command
   {
     console.log("Test 1: osuna --help shows ls command");
-    const result = await runLocalPaseo(["--help"]);
+    const result = await runLocalOsuna(["--help"]);
     assert.strictEqual(result.exitCode, 0, "osuna --help should exit 0");
     assert(result.stdout.includes("ls"), "help should mention ls command");
     console.log("✓ osuna --help shows ls command\n");
@@ -45,7 +45,7 @@ try {
   // Test 2: osuna ls --help shows options
   {
     console.log("Test 2: osuna ls --help shows options");
-    const result = await runLocalPaseo(["ls", "--help"]);
+    const result = await runLocalOsuna(["ls", "--help"]);
     assert.strictEqual(result.exitCode, 0, "osuna ls --help should exit 0");
     assert(result.stdout.includes("-a"), "help should mention -a flag");
     assert(result.stdout.includes("--all"), "help should mention --all flag");
@@ -61,7 +61,7 @@ try {
   // Test 3: osuna ls returns error when no daemon running
   {
     console.log("Test 3: osuna ls handles daemon not running");
-    const result = await runLocalPaseo(["ls"], {
+    const result = await runLocalOsuna(["ls"], {
       OSUNA_HOST: `localhost:${port}`,
     });
     // Should fail because daemon not running
@@ -83,7 +83,7 @@ try {
   // Test 4: osuna ls --json returns valid JSON error
   {
     console.log("Test 4: osuna ls --json handles errors");
-    const result = await runLocalPaseo(["ls", "--json"], {
+    const result = await runLocalOsuna(["ls", "--json"], {
       OSUNA_HOST: `localhost:${port}`,
     });
     // Should still fail (daemon not running)
@@ -106,7 +106,7 @@ try {
   // Test 5: osuna ls -a flag is accepted
   {
     console.log("Test 5: osuna ls -a flag is accepted");
-    const result = await runLocalPaseo(["ls", "-a"], {
+    const result = await runLocalOsuna(["ls", "-a"], {
       OSUNA_HOST: `localhost:${port}`,
     });
     // Will fail due to no daemon, but flag should be parsed without error
@@ -120,7 +120,7 @@ try {
   // Test 6: osuna ls -g flag is accepted
   {
     console.log("Test 6: osuna ls -g flag is accepted");
-    const result = await runLocalPaseo(["ls", "-g"], {
+    const result = await runLocalOsuna(["ls", "-g"], {
       OSUNA_HOST: `localhost:${port}`,
     });
     const output = result.stdout + result.stderr;
@@ -132,7 +132,7 @@ try {
   // Test 7: osuna ls -ag combined flags are accepted
   {
     console.log("Test 7: osuna ls -ag combined flags are accepted");
-    const result = await runLocalPaseo(["ls", "-ag"], {
+    const result = await runLocalOsuna(["ls", "-ag"], {
       OSUNA_HOST: `localhost:${port}`,
     });
     const output = result.stdout + result.stderr;
@@ -144,7 +144,7 @@ try {
   // Test 8: -q (quiet) flag is accepted globally
   {
     console.log("Test 8: -q (quiet) flag is accepted");
-    const result = await runLocalPaseo(["-q", "ls"], {
+    const result = await runLocalOsuna(["-q", "ls"], {
       OSUNA_HOST: `localhost:${port}`,
     });
     const output = result.stdout + result.stderr;
@@ -156,7 +156,7 @@ try {
   // Test 9: osuna ls --ui is rejected (flag removed)
   {
     console.log("Test 9: osuna ls --ui is rejected");
-    const result = await runLocalPaseo(["ls", "--ui"], {
+    const result = await runLocalOsuna(["ls", "--ui"], {
       OSUNA_HOST: `localhost:${port}`,
     });
     assert.notStrictEqual(result.exitCode, 0, "should fail for removed --ui flag");
@@ -169,9 +169,9 @@ try {
   {
     console.log("Test 10: global --host targets the requested daemon");
     const host = `localhost:${port}`;
-    const result = await runLocalPaseo(["--host", host, "ls"], {
+    const result = await runLocalOsuna(["--host", host, "ls"], {
       OSUNA_HOST: "localhost:1",
-      OSUNA_HOME: paseoHome,
+      OSUNA_HOME: osunaHome,
     });
     const output = result.stdout + result.stderr;
     assert.notStrictEqual(result.exitCode, 0, "should fail when the selected daemon is absent");
@@ -184,7 +184,7 @@ try {
     console.log("Test 11: conflicting explicit --host selectors are rejected");
     const firstHost = `localhost:${port}`;
     const lastHost = `localhost:${await getAvailablePort()}`;
-    const result = await runLocalPaseo(["--host", firstHost, "ls", "--host", lastHost]);
+    const result = await runLocalOsuna(["--host", firstHost, "ls", "--host", lastHost]);
     const output = result.stdout + result.stderr;
     assert.notStrictEqual(result.exitCode, 0, "should reject conflicting explicit selectors");
     assert(
@@ -199,7 +199,7 @@ try {
   }
 } finally {
   // Clean up temp directory
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All ls tests passed ===");

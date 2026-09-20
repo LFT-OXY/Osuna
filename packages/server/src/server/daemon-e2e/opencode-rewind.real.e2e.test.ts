@@ -7,7 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest"
 import type { AgentTimelineItem } from "../agent/agent-sdk-types.js";
 import type { AgentLifecycleStatus } from "@osuna/protocol/agent-lifecycle";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import {
   canRunRealProvider,
   createRealProviderClients,
@@ -24,7 +24,7 @@ import {
 
 interface OpenCodeRewindHarness {
   client: DaemonClient;
-  daemon: TestPaseoDaemon;
+  daemon: TestOsunaDaemon;
 }
 
 interface OpenCodeRewindSession {
@@ -47,11 +47,11 @@ async function launchOpenCodeRewindSession(
   const cwd = tmpRewindCwd("daemon-real-opencode-rewind-", { realpath: true });
   const scratchPath = path.join(cwd, "rewind-scratch.txt");
   execFileSync("git", ["init"], { cwd, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "paseo-test@example.com"], {
+  execFileSync("git", ["config", "user.email", "osuna-test@example.com"], {
     cwd,
     stdio: "ignore",
   });
-  execFileSync("git", ["config", "user.name", "Paseo Test"], { cwd, stdio: "ignore" });
+  execFileSync("git", ["config", "user.name", "Osuna Test"], { cwd, stdio: "ignore" });
   await writeFile(scratchPath, "BASE\n", "utf8");
   execFileSync("git", ["add", "rewind-scratch.txt"], { cwd, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "base"], { cwd, stdio: "ignore" });
@@ -224,7 +224,7 @@ describe("daemon E2E (real opencode) - rewind", () => {
       return;
     }
     const logger = pino({ level: "silent" });
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       agentClients: createRealProviderClients(["opencode"], logger),
       logger,
     });

@@ -52,7 +52,7 @@ async function waitForRunning(pid: number, timeoutMs: number): Promise<void> {
 
 console.log("=== Daemon Stop Ownership Regression ===\n");
 
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-stop-ownership-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-stop-ownership-"));
 let decoyProcess: ChildProcess | null = null;
 
 try {
@@ -69,7 +69,7 @@ try {
     {
       env: {
         ...process.env,
-        OSUNA_HOME: paseoHome,
+        OSUNA_HOME: osunaHome,
       },
       stdio: "ignore",
       detached: process.platform !== "win32",
@@ -85,7 +85,7 @@ try {
   console.log("Test 2: daemon stop should report not_running and leave decoy untouched");
 
   const stopResult =
-    await $`OSUNA_HOME=${paseoHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${paseoHome} --json`.nothrow();
+    await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${osunaHome} --json`.nothrow();
   assert.strictEqual(stopResult.exitCode, 0, `stop should succeed: ${stopResult.stderr}`);
 
   const parsed = JSON.parse(stopResult.stdout) as { action?: unknown };
@@ -114,8 +114,8 @@ try {
     }
   }
 
-  await $`OSUNA_HOME=${paseoHome} npx osuna daemon stop --home ${paseoHome} --force`.nothrow();
-  await rm(paseoHome, { recursive: true, force: true });
+  await $`OSUNA_HOME=${osunaHome} npx osuna daemon stop --home ${osunaHome} --force`.nothrow();
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== Daemon stop ownership regression test passed ===");

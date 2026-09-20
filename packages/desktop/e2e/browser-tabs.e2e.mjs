@@ -84,7 +84,7 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function seedPaseoHome(paseoHome, listen, workspaceRoot) {
+function seedOsunaHome(osunaHome, listen, workspaceRoot) {
   const timestamp = "2026-01-01T00:00:00.000Z";
   const projects = workspaceIds.map((workspaceId, index) => {
     const cwd = path.join(workspaceRoot, `workspace-${index + 1}`);
@@ -115,7 +115,7 @@ function seedPaseoHome(paseoHome, listen, workspaceRoot) {
     pinnedAt: null,
   }));
 
-  writeJson(path.join(paseoHome, "config.json"), {
+  writeJson(path.join(osunaHome, "config.json"), {
     version: 1,
     daemon: {
       listen,
@@ -125,8 +125,8 @@ function seedPaseoHome(paseoHome, listen, workspaceRoot) {
       cors: { allowedOrigins: ["*"] },
     },
   });
-  writeJson(path.join(paseoHome, "projects", "projects.json"), projects);
-  writeJson(path.join(paseoHome, "projects", "workspaces.json"), workspaces);
+  writeJson(path.join(osunaHome, "projects", "projects.json"), projects);
+  writeJson(path.join(osunaHome, "projects", "workspaces.json"), workspaces);
 }
 
 function spawnLogged(name, command, args, options, logDir) {
@@ -178,8 +178,8 @@ async function waitForDesktopStatus(page) {
   while (Date.now() < deadline) {
     try {
       const status = await page.evaluate(async () => {
-        if (typeof window.paseoDesktop?.invoke !== "function") return null;
-        return await window.paseoDesktop.invoke("desktop_daemon_status");
+        if (typeof window.osunaDesktop?.invoke !== "function") return null;
+        return await window.osunaDesktop.invoke("desktop_daemon_status");
       });
       if (typeof status?.serverId === "string") return status;
     } catch (error) {
@@ -245,7 +245,7 @@ async function waitForGuestSelector(client, browserId) {
   while (Date.now() < deadline) {
     const evaluated = await callBrowserTool(client, "browser_evaluate", {
       browserId,
-      function: "() => Boolean(globalThis.__paseoSelector)",
+      function: "() => Boolean(globalThis.__osunaSelector)",
     });
     if (JSON.parse(evaluated.resultJson) === true) {
       return true;
@@ -306,7 +306,7 @@ async function createCallerAgent(daemonPort) {
 
 async function readGuest(page, browserId) {
   return await page.evaluate((id) => {
-    const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+    const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
     if (!(webview instanceof HTMLElement) || typeof webview.getWebContentsId !== "function") {
       return null;
     }
@@ -321,12 +321,12 @@ async function readGuest(page, browserId) {
 
 async function readPresentation(page, browserId) {
   return await page.evaluate((id) => {
-    const surface = document.querySelector(`[data-paseo-browser-surface="${id}"]`);
+    const surface = document.querySelector(`[data-osuna-browser-surface="${id}"]`);
     const clip = document.querySelector(`[data-testid="browser-webview-clip-${id}"]`);
     if (!(surface instanceof HTMLElement) || !(clip instanceof HTMLElement)) return null;
     const surfaceRect = surface.getBoundingClientRect();
     const clipRect = clip.getBoundingClientRect();
-    const webview = surface.querySelector(`[data-paseo-browser-id="${id}"]`);
+    const webview = surface.querySelector(`[data-osuna-browser-id="${id}"]`);
     if (!(webview instanceof HTMLElement)) return null;
     const webviewRect = webview.getBoundingClientRect();
     const outsidePoint = {
@@ -377,7 +377,7 @@ async function clickGuestElement(page, client, browserId, selector) {
   });
   const elementRect = JSON.parse(evaluated.resultJson);
   assert(elementRect, `Guest element ${selector} was unavailable`);
-  await page.locator(`[data-paseo-browser-id="${browserId}"]`).click({
+  await page.locator(`[data-osuna-browser-id="${browserId}"]`).click({
     position: {
       x: elementRect.x + elementRect.width / 2,
       y: elementRect.y + elementRect.height / 2,
@@ -595,7 +595,7 @@ async function runRegression({
   await originalDeck.getByTestId(`workspace-tab-browser_${browserId}`).click();
   await page.waitForFunction(
     (id) => {
-      const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+      const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
       const surface = webview?.parentElement;
       return (
         surface?.getAttribute("aria-hidden") === "false" && surface.style.pointerEvents === "auto"
@@ -619,7 +619,7 @@ async function runRegression({
     "Physical browser click did not focus the guest input",
   );
   const focusedGuest = await page.evaluate(
-    (id) => window.paseoDesktop?.browser?.focus?.(id),
+    (id) => window.osunaDesktop?.browser?.focus?.(id),
     browserId,
   );
   assert(focusedGuest === true, "Electron did not focus the registered browser guest");
@@ -664,7 +664,7 @@ async function runRegression({
   );
   await page.waitForFunction(
     ({ id, width, height }) => {
-      const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+      const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
       return (
         webview instanceof HTMLElement &&
         Math.round(webview.getBoundingClientRect().width) === width &&
@@ -708,9 +708,9 @@ async function runRegression({
   await originalDeck.getByTestId(`workspace-tab-agent_${callerAgentId}`).click();
   await page.waitForFunction(
     ({ id, webContentsId }) => {
-      const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+      const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
       return (
-        webview?.parentElement?.getAttribute("data-paseo-browser-surface") === id &&
+        webview?.parentElement?.getAttribute("data-osuna-browser-surface") === id &&
         webview.parentElement.style.width === "1px" &&
         webview.parentElement.style.pointerEvents === "none" &&
         webview.getWebContentsId() === webContentsId
@@ -734,19 +734,19 @@ async function runRegression({
   await callBrowserTool(client, "browser_evaluate", {
     browserId,
     function: `() => {
-      globalThis.__paseoFocusContinuity = ${JSON.stringify(focusContinuitySentinel)};
-      globalThis.__paseoViewportTransitions = [{ width: innerWidth, height: innerHeight }];
+      globalThis.__osunaFocusContinuity = ${JSON.stringify(focusContinuitySentinel)};
+      globalThis.__osunaViewportTransitions = [{ width: innerWidth, height: innerHeight }];
       addEventListener('resize', () => {
-        globalThis.__paseoViewportTransitions.push({ width: innerWidth, height: innerHeight });
+        globalThis.__osunaViewportTransitions.push({ width: innerWidth, height: innerHeight });
       });
-      return globalThis.__paseoFocusContinuity;
+      return globalThis.__osunaFocusContinuity;
     }`,
   });
   await page.evaluate((id) => {
-    const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+    const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
     if (!webview) throw new Error(`Browser webview ${id} was unavailable`);
     const events = [];
-    globalThis.__paseoBrowserReactivationEvents = events;
+    globalThis.__osunaBrowserReactivationEvents = events;
     for (const name of [
       "did-start-loading",
       "did-navigate-in-page",
@@ -766,9 +766,9 @@ async function runRegression({
   await originalDeck.getByTestId(`workspace-tab-browser_${browserId}`).click();
   await page.waitForFunction(
     ({ id, webContentsId }) => {
-      const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+      const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
       return (
-        webview?.parentElement?.getAttribute("data-paseo-browser-surface") === id &&
+        webview?.parentElement?.getAttribute("data-osuna-browser-surface") === id &&
         webview.parentElement.style.pointerEvents === "auto" &&
         webview.getWebContentsId() === webContentsId
       );
@@ -778,7 +778,7 @@ async function runRegression({
   );
   await page.waitForTimeout(1_500);
   const reactivationEvents = await page.evaluate(
-    () => globalThis.__paseoBrowserReactivationEvents ?? [],
+    () => globalThis.__osunaBrowserReactivationEvents ?? [],
   );
   const unexpectedReactivationCommits = reactivationEvents.filter(
     (event) => event.name === "did-navigate-in-page" || event.name === "load-commit",
@@ -789,7 +789,7 @@ async function runRegression({
   );
   const viewportTransitionsResult = await callBrowserTool(client, "browser_evaluate", {
     browserId,
-    function: "() => globalThis.__paseoViewportTransitions ?? []",
+    function: "() => globalThis.__osunaViewportTransitions ?? []",
   });
   const viewportTransitions = JSON.parse(viewportTransitionsResult.resultJson);
   const collapsedViewport = viewportTransitions.find(
@@ -801,7 +801,7 @@ async function runRegression({
   );
   const continuityResult = await callBrowserTool(client, "browser_evaluate", {
     browserId,
-    function: "() => globalThis.__paseoFocusContinuity ?? null",
+    function: "() => globalThis.__osunaFocusContinuity ?? null",
   });
   const continuityValue = JSON.parse(continuityResult.resultJson);
   if (continuityValue !== focusContinuitySentinel) {
@@ -819,9 +819,9 @@ async function runRegression({
 
   await page.waitForFunction(
     ({ id, previousWebContentsId }) => {
-      const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+      const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
       return (
-        webview?.parentElement?.getAttribute("data-paseo-browser-surface") === id &&
+        webview?.parentElement?.getAttribute("data-osuna-browser-surface") === id &&
         webview.parentElement.style.width === "1px" &&
         typeof webview.getWebContentsId === "function" &&
         webview.getWebContentsId() === previousWebContentsId
@@ -860,9 +860,9 @@ async function runRegression({
   await originalDeck.getByTestId(`workspace-tab-browser_${browserId}`).click();
   await page.waitForFunction(
     ({ id, webContentsId }) => {
-      const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+      const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
       return (
-        webview?.parentElement?.getAttribute("data-paseo-browser-surface") === id &&
+        webview?.parentElement?.getAttribute("data-osuna-browser-surface") === id &&
         webview.parentElement.style.pointerEvents === "auto" &&
         webview.getWebContentsId() === webContentsId
       );
@@ -879,9 +879,9 @@ async function runRegression({
 
   const annotateButton = originalDeck.getByRole("button", { name: "Annotate element" });
   await page.evaluate((id) => {
-    const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+    const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
     if (!(webview instanceof HTMLElement)) throw new Error(`Browser webview ${id} was unavailable`);
-    globalThis.__paseoOriginalIsLoadingDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis.__osunaOriginalIsLoadingDescriptor = Object.getOwnPropertyDescriptor(
       webview,
       "isLoading",
     );
@@ -898,7 +898,7 @@ async function runRegression({
   );
   const selectorDuringLoad = await callBrowserTool(client, "browser_evaluate", {
     browserId,
-    function: "() => Boolean(globalThis.__paseoSelector)",
+    function: "() => Boolean(globalThis.__osunaSelector)",
   });
   assert(
     JSON.parse(selectorDuringLoad.resultJson) === false,
@@ -909,12 +909,12 @@ async function runRegression({
     "Element selector loading failure was not visible",
   );
   await page.evaluate((id) => {
-    const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+    const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
     if (!(webview instanceof HTMLElement)) throw new Error(`Browser webview ${id} was unavailable`);
-    const descriptor = globalThis.__paseoOriginalIsLoadingDescriptor;
+    const descriptor = globalThis.__osunaOriginalIsLoadingDescriptor;
     if (descriptor) Object.defineProperty(webview, "isLoading", descriptor);
     else delete webview.isLoading;
-    delete globalThis.__paseoOriginalIsLoadingDescriptor;
+    delete globalThis.__osunaOriginalIsLoadingDescriptor;
   }, browserId);
 
   const readyStateResult = await callBrowserTool(client, "browser_evaluate", {
@@ -928,7 +928,7 @@ async function runRegression({
   // Reproduce the report's mismatch: the guest is complete, but the pane's
   // last loading signal says it is not ready.
   await page.evaluate((id) => {
-    const webview = document.querySelector(`[data-paseo-browser-id="${id}"]`);
+    const webview = document.querySelector(`[data-osuna-browser-id="${id}"]`);
     if (!(webview instanceof HTMLElement)) {
       throw new Error(`Browser webview ${id} was unavailable`);
     }
@@ -953,7 +953,7 @@ async function runRegression({
   await delay(20_500);
   const selectorAfterPriorTimeout = await callBrowserTool(client, "browser_evaluate", {
     browserId,
-    function: "() => Boolean(globalThis.__paseoSelector)",
+    function: "() => Boolean(globalThis.__osunaSelector)",
   });
   if (JSON.parse(selectorAfterPriorTimeout.resultJson) !== true) {
     failures.push("a previous selector timeout does not destroy the current selector session");
@@ -1013,13 +1013,13 @@ async function runRegression({
 async function main() {
   const artifactDir =
     process.env.OSUNA_DESKTOP_BROWSER_E2E_ARTIFACT_DIR ??
-    fs.mkdtempSync(path.join(os.tmpdir(), "paseo-desktop-browser-e2e-artifacts-"));
-  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "paseo-desktop-browser-e2e-"));
+    fs.mkdtempSync(path.join(os.tmpdir(), "osuna-desktop-browser-e2e-artifacts-"));
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "osuna-desktop-browser-e2e-"));
   fs.mkdirSync(artifactDir, { recursive: true });
-  const paseoHome = path.join(runtimeDir, "osuna-home");
+  const osunaHome = path.join(runtimeDir, "osuna-home");
   const userData = path.join(runtimeDir, "electron-user-data");
   const workspaceRoot = path.join(runtimeDir, "workspaces");
-  fs.mkdirSync(paseoHome, { recursive: true });
+  fs.mkdirSync(osunaHome, { recursive: true });
 
   const [daemonPort, expoPort, cdpPort, inspectorPort] = await Promise.all([
     reservePort(),
@@ -1028,7 +1028,7 @@ async function main() {
     reservePort(),
   ]);
   const listen = `127.0.0.1:${daemonPort}`;
-  seedPaseoHome(paseoHome, listen, workspaceRoot);
+  seedOsunaHome(osunaHome, listen, workspaceRoot);
   const target = await startTargetPage();
   const children = [];
   let browser = null;
@@ -1037,7 +1037,7 @@ async function main() {
   try {
     const commonEnv = {
       ...process.env,
-      OSUNA_HOME: paseoHome,
+      OSUNA_HOME: osunaHome,
       OSUNA_LISTEN: listen,
       OSUNA_DAEMON_ENDPOINT: `localhost:${daemonPort}`,
       OSUNA_CORS_ORIGINS: "*",

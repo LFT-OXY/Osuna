@@ -363,7 +363,7 @@ describe("Hub commands", () => {
             return [
               {
                 id: "a50e05af-4f20-4c8f-8dcc-58e5ea360663",
-                slug: "paseo",
+                slug: "osuna",
                 name: "Osuna",
               },
             ];
@@ -381,7 +381,7 @@ describe("Hub commands", () => {
       projects: [
         {
           id: "a50e05af-4f20-4c8f-8dcc-58e5ea360663",
-          slug: "paseo",
+          slug: "osuna",
           name: "Osuna",
         },
       ],

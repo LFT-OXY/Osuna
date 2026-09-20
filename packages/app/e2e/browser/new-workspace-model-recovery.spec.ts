@@ -46,7 +46,7 @@ async function setProviderAvailability(client: DaemonClient, cwd: string, availa
   await client.patchDaemonConfig({
     providers: {
       [PROVIDER]: {
-        command: [available ? process.execPath : "/missing-paseo-diagnostic-provider"],
+        command: [available ? process.execPath : "/missing-osuna-diagnostic-provider"],
       },
     },
   });

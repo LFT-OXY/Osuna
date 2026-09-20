@@ -505,7 +505,7 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
     expect(payload).not.toHaveProperty("nativeHandle");
   });
 
-  it("carries the owning Paseo agent id only when the caller supplies one", () => {
+  it("carries the owning Osuna agent id only when the caller supplies one", () => {
     const session: ImportableProviderSession & { provider: string } = {
       provider: "claude",
       providerHandleId: "provider-session-id",

@@ -6,7 +6,7 @@ STATE_DIR="${OSUNA_COMPOSER_KEYBOARD_STATE_DIR:-${REPO_ROOT}/.dev/agent-device-c
 ARTIFACTS_DIR="${REPO_ROOT}/.dev/agent-device-artifacts/composer-keyboard-android"
 SESSION="${OSUNA_COMPOSER_KEYBOARD_SESSION:-composer-keyboard-android}"
 APP_ID="${OSUNA_COMPOSER_KEYBOARD_APP_ID:-com.chinhae.osuna.debug}"
-DEVICE="${OSUNA_COMPOSER_KEYBOARD_DEVICE:-paseo-api35}"
+DEVICE="${OSUNA_COMPOSER_KEYBOARD_DEVICE:-osuna-api35}"
 HELPER_IME="com.callstack.agentdevice.imehelper/.TestInputMethodService"
 GBOARD_IME="com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
 ASSERT="${REPO_ROOT}/packages/app/e2e/mobile/composer-keyboard/assert-composer-keyboard.mjs"
@@ -44,7 +44,7 @@ snapshot_json() {
 
 capture_ui_xml() {
   local output_path="$1"
-  local device_path="/sdcard/paseo-composer-keyboard-window.xml"
+  local device_path="/sdcard/osuna-composer-keyboard-window.xml"
   # Android exposes one UI Automation connection at a time. Release the
   # persistent agent-device snapshot helper before asking uiautomator for the
   # app and IME windows; agent-device reconnects it on the next interaction.
@@ -288,7 +288,7 @@ node "${ASSERT}" xml-composer-contained \
 # report: grow to the cap, close and reopen the keyboard, hold delete from the middle of the
 # draft, jump to the end, hold delete again. The first hold-delete must start mid-draft: from
 # the end, the pre-fix input also returns to baseline. Backspace sits on Gboard's third key
-# row on the paseo-api35 layout.
+# row on the osuna-api35 layout.
 adb shell ime set "${HELPER_IME}" >/dev/null
 ad fill 'editable=true' "${BLANK_LINE_DRAFT}" --settle
 open_gboard "${input_x}" "${input_y}"

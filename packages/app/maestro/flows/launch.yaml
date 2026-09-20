@@ -27,6 +27,6 @@ appId: com.chinhae.osuna
 
 - runFlow:
     when:
-      visible: "Welcome to Paseo"
+      visible: "Welcome to Osuna"
     commands:
-      - assertVisible: "Welcome to Paseo"
+      - assertVisible: "Welcome to Osuna"

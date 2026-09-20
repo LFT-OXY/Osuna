@@ -30,7 +30,7 @@ console.log("=== Logs Command Tests ===\n");
 
 // Allocate an unused endpoint for connection-error and argument-validation checks.
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
 
 try {
   // Test 1: logs --help shows options
@@ -52,7 +52,7 @@ try {
   {
     console.log("Test 2: logs requires ID argument");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} logs`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} logs`.nothrow();
     assert.notStrictEqual(result.exitCode, 0, "should fail without id");
     const output = result.stdout + result.stderr;
     const hasError =
@@ -68,7 +68,7 @@ try {
   {
     console.log("Test 3: logs handles daemon not running");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} logs abc123`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} logs abc123`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -85,7 +85,7 @@ try {
     console.log("Test 4: logs -f (follow) flag is accepted");
     // Use timeout to avoid hanging on follow mode
     const result =
-      await $`timeout 1 bash -c 'OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} logs -f abc123' || true`.nothrow();
+      await $`timeout 1 bash -c 'OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} logs -f abc123' || true`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -f flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -96,7 +96,7 @@ try {
   {
     console.log("Test 5: logs --follow flag is accepted");
     const result =
-      await $`timeout 1 bash -c 'OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} logs --follow abc123' || true`.nothrow();
+      await $`timeout 1 bash -c 'OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} logs --follow abc123' || true`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --follow flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -107,7 +107,7 @@ try {
   {
     console.log("Test 6: logs --tail flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} logs --tail 50 abc123`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} logs --tail 50 abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --tail flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -118,7 +118,7 @@ try {
   {
     console.log("Test 7: logs with ID and --host flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} logs abc123 --host localhost:${port}`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} logs abc123 --host localhost:${port}`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --host flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -138,7 +138,7 @@ try {
   {
     console.log("Test 9: -q (quiet) flag is accepted with logs");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} -q logs abc123`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} -q logs abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -q flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -146,7 +146,7 @@ try {
   }
 } finally {
   // Clean up temp directory
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All logs tests passed ===");

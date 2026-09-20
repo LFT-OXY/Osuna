@@ -22,7 +22,7 @@ import type {
 } from "../../worktree-bootstrap.js";
 import {
   buildWorkspaceScriptPayloads,
-  readPaseoConfigForProjection,
+  readOsunaConfigForProjection,
 } from "../../script-status-projection.js";
 import { deriveProjectServiceSlug, deriveProjectSlug } from "../../workspace-git-metadata.js";
 import type { OsunaServicePortAllocation } from "@osuna/protocol/osuna-config-schema";
@@ -119,7 +119,7 @@ export function createWorkspaceScriptsService(deps: {
     return buildWorkspaceScriptPayloads({
       workspaceId: workspace.workspaceId,
       workspaceDirectory: workspace.cwd,
-      paseoConfig: readPaseoConfigForProjection(workspace.cwd, logger),
+      osunaConfig: readOsunaConfigForProjection(workspace.cwd, logger),
       serviceProxy,
       runtimeStore: scriptRuntimeStore,
       daemonPort: getDaemonTcpPort?.() ?? null,

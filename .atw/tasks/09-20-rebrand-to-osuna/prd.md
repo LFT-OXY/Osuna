@@ -127,8 +127,11 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
 
 ### 公开 API 与文档
 
-- 导出的函数名与类型名改（`createPaseoClient`、`PaseoClient` 等）。**内部私有变量名
-  不专门改** —— 只有维护者看得见，不值得为它承担一次巨大的无意义 diff。
+- 导出的函数名与类型名改（`createPaseoClient`、`PaseoClient` 等）。
+  ~~**内部私有变量名不专门改**~~ —— 这条在批次 4 落地时与它自己的验收
+  （`rg -i paseo` 归零）互相矛盾，**已由票 07 推翻**：内部私有名、入参名、文件名、
+  测试临时目录前缀与 fixture 字符串一并扫掉。理由见票 07：半改的标识符比两端都糟，
+  而「谁碰到谁顺手改」会把品牌改动混进每一个功能 diff。
 - `packages/app/modules/paseo-{word-stream,native-trace,diff-prototype}` 的原生命名归本
   批次：Kotlin 包名 `sh.paseo.*`、`build.gradle` 的 group/namespace、
   `expo-module.config.json`、podspec、以及模块目录名。它们与 app 的 `applicationId`
@@ -161,9 +164,13 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
 - `LICENSE` 原版权行保留，其上追加 `Copyright (c) 2026-present chinhae`。
 - `CHANGELOG.md` 历史条目 —— 那是已发生的事实，改了等于伪造历史，保留来源痕迹对
   Apache-2.0 合规有利。新名从本 fork 的第一个版本起用。
-- 内部私有变量名，以及内部 IPC 通道名（`paseo:invoke` 等）、DOM 属性名
+- ~~内部私有变量名，以及内部 IPC 通道名（`paseo:invoke` 等）、DOM 属性名
   （`data-paseo-browser-id` 等）、测试临时目录前缀、e2e 里的假 git 邮箱
-  （`test@getpaseo.local`）。
+  （`test@getpaseo.local`）。~~ **票 07 已全部改掉**（`osuna:invoke`、
+  `data-osuna-browser-id`、`createTempDir("osuna-…")`、`test@osuna.local`）。
+  这些标识两端都在本仓库内，没有外部消费方，改名不产生契约风险。
+  真正保留旧名的那份清单见票 07「落地时确认下来的排除清单」，其判据是
+  **谁拥有这个标识**（上游 / Hub 服务端 / 主语就是旧名 / 金标输入），不是它是否私有。
 - `packages/desktop/bin/osuna`（POSIX shim）**不设** `PASEO_DESKTOP_MANAGED=1`，
   Windows 的 `.cmd` 设。这是上游 commit `0110302b6` 造成的既有不对称（已安装的 0.8.0
   产物里 POSIX shim 还带着它，说明是上游发版后的回归）。重命名如实保留 HEAD 状态；
@@ -282,9 +289,11 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
 
 ## 完成的标准
 
-- `rg -i paseo` 在排除下列各项后无命中：`CHANGELOG.md` 历史条目、`LICENSE` 的原版权行
-  与 fork 溯源段、README 的 fork 溯源段、`不改` 一节列出的内部标识（IPC 通道名、DOM
-  属性名、测试临时目录前缀、e2e 假 git 邮箱）。
+- `rg -i paseo` 在排除票 07「落地时确认下来的排除清单」后无命中。该清单取代了本 prd
+  原先按「是否私有」划的那条线：保留的是上游拥有的资产、Hub 服务端拥有的标识、
+  主语就是旧名的文字、金标值的输入，以及票 09 的原生模块。
+  正向（查残留）、反向（查造出来的错名）、第三向（查被折叠的刻意对比）三种探针都要归零 ——
+  第三向的判据见票 07，前两向查不出它。
 - 桌面包以 Osuna 之名构建、安装、启动，appId 为 `com.chinhae.osuna.desktop`。
 - daemon 在 `~/.osuna` + 6777 上运行，与本机 6767 的上游 daemon 互不干扰。
 - `npm run typecheck`、`npm run lint` 全绿。

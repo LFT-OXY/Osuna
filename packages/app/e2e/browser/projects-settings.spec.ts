@@ -3,14 +3,14 @@ import path from "node:path";
 import { expect, test as base, type Page } from "../support/fixtures";
 import { connectSeedClient, seedWorkspace } from "../support/helpers/seed-client";
 import {
-  blockPaseoConfigWrites,
-  bumpPaseoConfigOnDisk,
+  blockOsunaConfigWrites,
+  bumpOsunaConfigOnDisk,
   chooseProjectIconImage,
   clickReloadProjectSettings,
   clickRetryProjectSettingsSave,
   clickSaveProjectSettings,
-  commitPaseoConfig,
-  corruptPaseoConfig,
+  commitOsunaConfig,
+  corruptOsunaConfig,
   editWorktreeSetup,
   expectEmptyScriptList,
   expectProjectHostContextHidden,
@@ -39,10 +39,10 @@ import {
   openProjectSettings,
   openProjects,
   removeProjectScript,
-  restorePaseoConfig,
+  restoreOsunaConfig,
   returnToProjectsList,
   saveProjectEdits,
-  unblockPaseoConfigWrites,
+  unblockOsunaConfigWrites,
 } from "../support/helpers/project-settings";
 import { gotoAppShell } from "../support/helpers/app";
 import { openCompactSettings } from "../support/helpers/settings";
@@ -77,7 +77,7 @@ interface ProjectsSettingsFixtures {
   gitlabRemoteProject: ProjectsSettingsProject;
 }
 
-const initialPaseoConfig = {
+const initialOsunaConfig = {
   worktree: {
     setup: ["echo initial setup"],
     teardown: "echo cleanup",
@@ -98,7 +98,7 @@ const test = base.extend<ProjectsSettingsFixtures>({
   editableProject: async ({ page: _page }, provide) => {
     const workspace = await seedWorkspace({
       repoPrefix: "projects-settings-",
-      repo: { paseoConfig: initialPaseoConfig },
+      repo: { osunaConfig: initialOsunaConfig },
     });
 
     await provide({
@@ -115,7 +115,7 @@ const test = base.extend<ProjectsSettingsFixtures>({
     const workspace = await seedWorkspace({
       repoPrefix: "projects-settings-gitlab-",
       repo: {
-        paseoConfig: initialPaseoConfig,
+        osunaConfig: initialOsunaConfig,
         originUrl: "https://gitlab.com/acme/app.git",
       },
     });
@@ -143,18 +143,18 @@ async function expectProjectConfigSaved(project: ProjectsSettingsProject): Promi
     .toMatchObject({
       worktree: {
         setup: updatedSetup,
-        teardown: initialPaseoConfig.worktree.teardown,
-        customWorktreeField: initialPaseoConfig.worktree.customWorktreeField,
+        teardown: initialOsunaConfig.worktree.teardown,
+        customWorktreeField: initialOsunaConfig.worktree.customWorktreeField,
       },
       scripts: {
         dev: {
-          command: initialPaseoConfig.scripts.dev.command,
-          type: initialPaseoConfig.scripts.dev.type,
-          port: initialPaseoConfig.scripts.dev.port,
-          customScriptField: initialPaseoConfig.scripts.dev.customScriptField,
+          command: initialOsunaConfig.scripts.dev.command,
+          type: initialOsunaConfig.scripts.dev.type,
+          port: initialOsunaConfig.scripts.dev.port,
+          customScriptField: initialOsunaConfig.scripts.dev.customScriptField,
         },
       },
-      customTopLevelField: initialPaseoConfig.customTopLevelField,
+      customTopLevelField: initialOsunaConfig.customTopLevelField,
     });
 
   const savedConfig = await readProjectConfigFile(project);
@@ -232,7 +232,7 @@ test.describe("Projects settings", () => {
     await expectProjectConfigSaved(editableProject);
     await expectUncommittedSetupWarning(page);
 
-    commitPaseoConfig(editableProject.path);
+    commitOsunaConfig(editableProject.path);
     await returnToProjectsList(page);
     await openProjectSettings(page, editableProject.name);
     await expectNoUncommittedSetupWarning(page);
@@ -364,7 +364,7 @@ test.describe("Projects settings — error UX", () => {
     await openProjectSettings(page, editableProject.name);
 
     // Bump the file on disk so the daemon detects a revision mismatch on save.
-    await bumpPaseoConfigOnDisk(editableProject.path);
+    await bumpOsunaConfigOnDisk(editableProject.path);
 
     await clickSaveProjectSettings(page);
 
@@ -381,7 +381,7 @@ test.describe("Projects settings — error UX", () => {
     page,
     editableProject,
   }) => {
-    await corruptPaseoConfig(editableProject.path);
+    await corruptOsunaConfig(editableProject.path);
 
     await openProjects(page);
     await navigateToProjectSettings(page, editableProject.name);
@@ -390,7 +390,7 @@ test.describe("Projects settings — error UX", () => {
     await expectProjectSettingsFormHidden(page);
 
     // Restore a valid config so the reload succeeds.
-    await restorePaseoConfig(editableProject.path, initialPaseoConfig);
+    await restoreOsunaConfig(editableProject.path, initialOsunaConfig);
 
     await clickReloadProjectSettings(page);
 
@@ -405,7 +405,7 @@ test.describe("Projects settings — error UX", () => {
     await openProjects(page);
     await openProjectSettings(page, editableProject.name);
 
-    await blockPaseoConfigWrites(editableProject.path);
+    await blockOsunaConfigWrites(editableProject.path);
 
     await clickSaveProjectSettings(page);
 
@@ -415,7 +415,7 @@ test.describe("Projects settings — error UX", () => {
     await clickRetryProjectSettingsSave(page);
     await expectProjectSettingsError(page, "write_failed");
 
-    await unblockPaseoConfigWrites(editableProject.path);
+    await unblockOsunaConfigWrites(editableProject.path);
     await clickReloadProjectSettings(page);
     await expectNoProjectSettingsError(page, "write_failed");
     await expectProjectSettingsFormVisible(page);

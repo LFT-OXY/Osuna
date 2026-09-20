@@ -53,7 +53,7 @@ intended behavior, not fragments" outranks the wish for a test nobody has to tou
 - When an assertion uses a concrete value as a proxy for a defect ("white can only come from the
   browser"), and the product makes that value legitimate, pin the input instead of relaxing the
   assertion. `terminal-protocol-query.spec.ts` seeds `theme: "dark"` through
-  `localStorage.setItem("@paseo:app-settings", …)` in `addInitScript` before the first navigation,
+  `localStorage.setItem("@osuna:app-settings", …)` in `addInitScript` before the first navigation,
   then asserts the dark theme's real terminal background — so "no pure white" means leakage again.
 - Prove a rewritten assertion still bites: break the production path once, watch the test fail on
   the line you rewrote, restore. A test that only verifies the setting the test itself seeded

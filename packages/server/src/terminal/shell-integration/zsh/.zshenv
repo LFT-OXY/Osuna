@@ -14,4 +14,4 @@ elif [[ -f "${HOME}/.zshenv" ]]; then
   source "${HOME}/.zshenv"
 fi
 
-source "${OSUNA_SHELL_INTEGRATION_DIR}/paseo-integration.zsh"
+source "${OSUNA_SHELL_INTEGRATION_DIR}/osuna-integration.zsh"

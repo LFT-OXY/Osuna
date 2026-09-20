@@ -3,7 +3,7 @@
 /**
  * Phase 14: Worktree Command Tests
  *
- * Tests the worktree commands for managing Paseo-managed git worktrees.
+ * Tests the worktree commands for managing Osuna-managed git worktrees.
  * Since daemon may not be running, we test both:
  * - Help and argument parsing
  * - Graceful error handling when daemon not running
@@ -31,7 +31,7 @@ console.log("=== Worktree Command Tests ===\n");
 
 // Allocate an unused endpoint for connection-error and argument-validation checks.
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
 
 try {
   // Test 1: worktree --help shows subcommands
@@ -57,7 +57,7 @@ try {
   {
     console.log("Test 3: worktree ls handles daemon not running");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} worktree ls`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} worktree ls`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -73,7 +73,7 @@ try {
   {
     console.log("Test 4: worktree ls with --host flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} worktree ls --host localhost:${port}`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} worktree ls --host localhost:${port}`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --host flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -94,7 +94,7 @@ try {
   {
     console.log("Test 6: worktree archive requires name argument");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} worktree archive`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} worktree archive`.nothrow();
     assert.notStrictEqual(result.exitCode, 0, "should fail without name");
     const output = result.stdout + result.stderr;
     const hasError =
@@ -109,7 +109,7 @@ try {
   {
     console.log("Test 7: worktree archive handles daemon not running");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} worktree archive test-worktree`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} worktree archive test-worktree`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -125,7 +125,7 @@ try {
   {
     console.log("Test 8: worktree archive with name and --host flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} worktree archive test-worktree --host localhost:${port}`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} worktree archive test-worktree --host localhost:${port}`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --host flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -136,7 +136,7 @@ try {
   {
     console.log("Test 9: -q (quiet) flag is accepted with worktree ls");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} -q worktree ls`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} -q worktree ls`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -q flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -147,7 +147,7 @@ try {
   {
     console.log("Test 10: --json flag is accepted with worktree ls");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} worktree ls --json`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} worktree ls --json`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --json flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -164,7 +164,7 @@ try {
   }
 } finally {
   // Clean up temp directory
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All worktree tests passed ===");

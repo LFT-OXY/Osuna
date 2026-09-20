@@ -33,7 +33,7 @@ export type UsageSessionTarget = Pick<
 >;
 
 /**
- * A session Paseo owns has one owner — its agent — so it opens that agent and
+ * A session Osuna owns has one owner — its agent — so it opens that agent and
  * is never resumed a second time. Anything else resumes in a terminal, which
  * needs a workspace on that host to hold the tab: the usage page is host-wide
  * and has no workspace of its own, so it takes the workspace the session ran

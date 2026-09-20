@@ -191,7 +191,7 @@ describe("Hub CLI credentials", () => {
 });
 
 function temporaryHome(): string {
-  const directory = mkdtempSync(path.join(tmpdir(), "paseo-hub-credentials-"));
+  const directory = mkdtempSync(path.join(tmpdir(), "osuna-hub-credentials-"));
   temporaryDirectories.push(directory);
   return directory;
 }

@@ -37,10 +37,10 @@ export interface SkillTargets {
 // Names the bundle used to ship. They are never selectable, but every scan still
 // covers them so an older install's copies get cleaned up.
 export const LEGACY_SKILL_NAMES = [
-  "paseo-chat",
-  "paseo-epic",
-  "paseo-orchestrate",
-  "paseo-orchestrator",
+  "osuna-chat",
+  "osuna-epic",
+  "osuna-orchestrate",
+  "osuna-orchestrator",
 ] as const;
 
 type SkillFiles = Map<string, string>;
@@ -58,7 +58,7 @@ async function listBundledSkills(sourceDir: string): Promise<string[]> {
     .sort(compareStrings);
 }
 
-/** Every name Paseo owns on disk: what it ships now plus what it used to ship. */
+/** Every name Osuna owns on disk: what it ships now plus what it used to ship. */
 function managedSkillNames(available: readonly string[]): string[] {
   return [...new Set([...available, ...LEGACY_SKILL_NAMES])].sort(compareStrings);
 }
@@ -126,7 +126,7 @@ function diff(
   return ops;
 }
 
-function hasInstalledPaseoSkill(disks: readonly TargetSkills[]): boolean {
+function hasInstalledOsunaSkill(disks: readonly TargetSkills[]): boolean {
   return disks.some((disk) => disk.size > 0);
 }
 
@@ -167,7 +167,7 @@ export async function getSkillsStatus(
   const ops = diff(bundle, disks, names, resolveDesiredSkills(selection, available));
   const installed = installedSkillNames(disks, names);
 
-  if (!hasInstalledPaseoSkill(disks)) return { state: "not-installed", ops, available, installed };
+  if (!hasInstalledOsunaSkill(disks)) return { state: "not-installed", ops, available, installed };
   if (ops.length === 0) return { state: "up-to-date", ops, available, installed };
   return { state: "drift", ops, available, installed };
 }

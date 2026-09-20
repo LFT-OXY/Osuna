@@ -153,7 +153,7 @@ function createCheckoutSnapshotFacts(cwd: string): CheckoutSnapshotFacts {
     remoteUrl: "https://github.com/acme/repo.git",
     absoluteGitDir: join(cwd, ".git"),
     gitCommonDir: join(cwd, ".git"),
-    paseoWorktree: { isOsunaOwnedWorktree: false },
+    osunaWorktree: { isOsunaOwnedWorktree: false },
     storedBaseRef: null,
     resolvedBaseRef: "main",
     mainRepoRoot: null,
@@ -318,7 +318,7 @@ function createService(options?: CreateServiceTestOptions) {
     });
   return new WorkspaceGitServiceImpl({
     logger: createLogger() as unknown as pino.Logger,
-    paseoHome: "/tmp/paseo-test",
+    osunaHome: "/tmp/osuna-test",
     deps,
   });
 }
@@ -437,7 +437,7 @@ describe("WorkspaceGitServiceImpl", () => {
   test("getSnapshot keeps plain git classification when shortstat lookup fails", async () => {
     const getCheckoutShortstat = vi.fn(async () => {
       throw new Error(
-        "Missing Paseo worktree base metadata: /tmp/repo/.git/worktrees/feature/paseo/worktree.json",
+        "Missing Osuna worktree base metadata: /tmp/repo/.git/worktrees/feature/osuna/worktree.json",
       );
     });
     const service = createService({
@@ -1399,7 +1399,7 @@ describe("WorkspaceGitServiceImpl", () => {
 
     expect(getCheckoutWorktreeState).toHaveBeenCalledWith(
       REPO_CWD,
-      expect.objectContaining({ paseoHome: "/tmp/paseo-test" }),
+      expect.objectContaining({ osunaHome: "/tmp/osuna-test" }),
     );
     expect(workspaceListener).toHaveBeenCalledWith(
       createSnapshot(REPO_CWD, {

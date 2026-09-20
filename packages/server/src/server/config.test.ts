@@ -14,28 +14,28 @@ describe("server config", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  test("records when the daemon is managed by Paseo Desktop", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-desktop-managed-"));
-    roots.push(paseoHome);
+  test("records when the daemon is managed by Osuna Desktop", async () => {
+    const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-config-desktop-managed-"));
+    roots.push(osunaHome);
 
-    const desktopConfig = loadConfig(paseoHome, {
+    const desktopConfig = loadConfig(osunaHome, {
       env: { OSUNA_DESKTOP_MANAGED: "1" },
     });
-    const standaloneConfig = loadConfig(paseoHome, { env: {} });
+    const standaloneConfig = loadConfig(osunaHome, { env: {} });
 
     expect(desktopConfig.desktopManaged).toBe(true);
     expect(standaloneConfig.desktopManaged).toBe(false);
   });
 
   test("the price-table auto-update switch is readable from the environment", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-usage-pricing-"));
-    roots.push(paseoHome);
+    const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-config-usage-pricing-"));
+    roots.push(osunaHome);
 
     // The env name only works if it is in the daemon-setting allowlist; without
     // that entry every E2E worker daemon quietly fetches the price table.
-    const off = loadConfig(paseoHome, { env: { OSUNA_USAGE_PRICING_AUTO_UPDATE: "0" } });
-    const on = loadConfig(paseoHome, { env: { OSUNA_USAGE_PRICING_AUTO_UPDATE: "1" } });
-    const unset = loadConfig(paseoHome, { env: {} });
+    const off = loadConfig(osunaHome, { env: { OSUNA_USAGE_PRICING_AUTO_UPDATE: "0" } });
+    const on = loadConfig(osunaHome, { env: { OSUNA_USAGE_PRICING_AUTO_UPDATE: "1" } });
+    const unset = loadConfig(osunaHome, { env: {} });
 
     expect(off.usage?.pricing?.autoUpdate).toBe(false);
     expect(on.usage?.pricing?.autoUpdate).toBe(true);
@@ -43,40 +43,40 @@ describe("server config", () => {
   });
 
   test("loads the provider catalog refresh timeout", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-provider-timeout-"));
-    roots.push(paseoHome);
+    const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-config-provider-timeout-"));
+    roots.push(osunaHome);
     await writeFile(
-      path.join(paseoHome, "config.json"),
+      path.join(osunaHome, "config.json"),
       JSON.stringify({ agents: { catalogRefreshTimeoutMs: 180_000 } }),
     );
 
-    const config = loadConfig(paseoHome, { env: {} });
+    const config = loadConfig(osunaHome, { env: {} });
 
     expect(config.providerCatalogRefreshTimeoutMs).toBe(180_000);
   });
 
   test("resolves reload state from the supplied validated snapshot", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-snapshot-"));
-    roots.push(paseoHome);
-    const snapshot = loadPersistedConfig(paseoHome);
+    const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-config-snapshot-"));
+    roots.push(osunaHome);
+    const snapshot = loadPersistedConfig(osunaHome);
     await writeFile(
-      path.join(paseoHome, "config.json"),
+      path.join(osunaHome, "config.json"),
       JSON.stringify({
         ...snapshot,
         daemon: { ...snapshot.daemon, browserTools: { enabled: true } },
       }),
     );
 
-    expect(resolveConfigFromPersisted(paseoHome, snapshot, { env: {} }).browserToolsEnabled).toBe(
+    expect(resolveConfigFromPersisted(osunaHome, snapshot, { env: {} }).browserToolsEnabled).toBe(
       false,
     );
-    expect(loadConfig(paseoHome, { env: {} }).browserToolsEnabled).toBe(true);
+    expect(loadConfig(osunaHome, { env: {} }).browserToolsEnabled).toBe(true);
   });
 
   test("records mutable and startup launch overrides by persisted leaf", async () => {
-    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-overrides-"));
-    roots.push(paseoHome);
-    const config = loadConfig(paseoHome, {
+    const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-config-overrides-"));
+    roots.push(osunaHome);
+    const config = loadConfig(osunaHome, {
       env: {
         OSUNA_LISTEN: "127.0.0.1:7000",
         OSUNA_PASSWORD: "secret",
@@ -138,7 +138,7 @@ describe("server config", () => {
     },
   ])("classifies speech overrides for $name", ({ providers, expected }) => {
     const config = resolveConfigFromPersisted(
-      "/tmp/paseo-speech-override-classification",
+      "/tmp/osuna-speech-override-classification",
       {
         version: 1,
         features: {
@@ -179,7 +179,7 @@ describe("server config", () => {
   });
 
   test("resolves bundled web UI path from globally installed compiled modules", async () => {
-    const packageRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-config-compiled-"));
+    const packageRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-config-compiled-"));
     roots.push(packageRoot);
     await mkdir(path.join(packageRoot, "dist", "server", "web-ui"), { recursive: true });
 
@@ -191,7 +191,7 @@ describe("server config", () => {
   });
 
   test("resolves packaged desktop web UI path from resources app-dist", async () => {
-    const packageRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-config-packaged-"));
+    const packageRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-config-packaged-"));
     roots.push(packageRoot);
     await mkdir(path.join(packageRoot, "app-dist"), { recursive: true });
 

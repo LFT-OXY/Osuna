@@ -155,11 +155,11 @@ test("Hub returns path-specific structured provider option feedback", async () =
   });
 });
 
-test("new Hub executions cannot override the daemon-owned Paseo MCP server", async () => {
+test("new Hub executions cannot override the daemon-owned Osuna MCP server", async () => {
   const hub = await launchRelationship();
   hub.beginOwnedCreate("reserved-mcp-create", "reserved-mcp-execution", {
     mcpServers: {
-      paseo: { type: "http", url: "https://hub.test/replace-paseo" },
+      osuna: { type: "http", url: "https://hub.test/replace-osuna" },
     },
   });
 
@@ -179,7 +179,7 @@ test("new Hub executions cannot override the daemon-owned Paseo MCP server", asy
   expect(await hub.durableOwnedAgentIds()).toEqual([]);
 });
 
-test("reserved Paseo MCP input does not invalidate replay of an owned execution", async () => {
+test("reserved Osuna MCP input does not invalidate replay of an owned execution", async () => {
   const hub = await launchRelationship();
   hub.beginOwnedCreate("original-create", "replayed-execution");
   const original = await hub.ownedCreateResult("original-create");
@@ -191,7 +191,7 @@ test("reserved Paseo MCP input does not invalidate replay of an owned execution"
 
   hub.beginOwnedCreate("replay-create", "replayed-execution", {
     mcpServers: {
-      paseo: { type: "http", url: "https://hub.test/replace-paseo" },
+      osuna: { type: "http", url: "https://hub.test/replace-osuna" },
     },
   });
   const replay = await hub.ownedCreateResult("replay-create");

@@ -29,7 +29,7 @@ console.log("=== Agent Mode Command Tests ===\n");
 
 // Allocate an unused endpoint for connection-error and argument-validation checks.
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
 
 try {
   // Test 1: agent mode --help shows options
@@ -48,7 +48,7 @@ try {
   {
     console.log("Test 2: agent mode requires id argument");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent mode`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} agent mode`.nothrow();
     assert.notStrictEqual(result.exitCode, 0, "should fail without id");
     const output = result.stdout + result.stderr;
     const hasError =
@@ -64,7 +64,7 @@ try {
   {
     console.log("Test 3: agent mode handles daemon not running");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent mode abc123 bypass`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} agent mode abc123 bypass`.nothrow();
     // Should fail because daemon not running
     assert.notStrictEqual(result.exitCode, 0, "should fail when daemon not running");
     const output = result.stdout + result.stderr;
@@ -80,7 +80,7 @@ try {
   {
     console.log("Test 4: agent mode --list flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent mode --list abc123`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} agent mode --list abc123`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --list flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -91,7 +91,7 @@ try {
   {
     console.log("Test 5: agent mode with ID and --host flag is accepted");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent mode abc123 plan --host localhost:${port}`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} agent mode abc123 plan --host localhost:${port}`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept --host flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -111,7 +111,7 @@ try {
   {
     console.log("Test 7: -q (quiet) flag is accepted with agent mode");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} -q agent mode abc123 bypass`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} -q agent mode abc123 bypass`.nothrow();
     const output = result.stdout + result.stderr;
     assert(!output.includes("unknown option"), "should accept -q flag");
     assert(!output.includes("error: option"), "should not have option parsing error");
@@ -122,7 +122,7 @@ try {
   {
     console.log("Test 8: agent mode requires mode argument when not using --list");
     const result =
-      await $`OSUNA_HOME=${paseoHome} npx osuna --host localhost:${port} agent mode abc123`.nothrow();
+      await $`OSUNA_HOME=${osunaHome} npx osuna --host localhost:${port} agent mode abc123`.nothrow();
     // Should fail because mode is required unless --list is specified
     assert.notStrictEqual(result.exitCode, 0, "should fail without mode argument");
     const output = result.stdout + result.stderr;
@@ -134,7 +134,7 @@ try {
   }
 } finally {
   // Clean up temp directory
-  await rm(paseoHome, { recursive: true, force: true });
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== All agent mode tests passed ===");

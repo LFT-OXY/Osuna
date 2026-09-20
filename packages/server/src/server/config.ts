@@ -2,7 +2,7 @@ import { configurationEnvironment } from "./config-environment.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolvePaseoNodeEnv } from "./paseo-env.js";
+import { resolveOsunaNodeEnv } from "./osuna-env.js";
 import { z } from "zod";
 import { expandTilde } from "../utils/path.js";
 
@@ -369,7 +369,7 @@ interface ResolvedWebUi {
 }
 
 function resolveWebUiConfig(
-  paseoHome: string,
+  osunaHome: string,
   env: NodeJS.ProcessEnv,
   cli: CliConfigOverrides | undefined,
   persisted: ReturnType<typeof loadPersistedConfig>,
@@ -382,7 +382,7 @@ function resolveWebUiConfig(
   const rawDistDir = env.OSUNA_WEB_UI_DIST_DIR ?? persisted.features?.webUi?.distDir;
   const trimmedDistDir = rawDistDir?.trim();
   const distDir = trimmedDistDir
-    ? path.resolve(path.isAbsolute(trimmedDistDir) ? trimmedDistDir : paseoHome, trimmedDistDir)
+    ? path.resolve(path.isAbsolute(trimmedDistDir) ? trimmedDistDir : osunaHome, trimmedDistDir)
     : BUNDLED_WEB_UI_DIST_DIR;
   return {
     enabled,
@@ -481,7 +481,7 @@ function resolveAuthConfig(
 }
 
 function resolveWorktreesRoot(
-  paseoHome: string,
+  osunaHome: string,
   persisted: ReturnType<typeof loadPersistedConfig>,
 ): string | undefined {
   const configuredRoot = persisted.worktrees?.root?.trim();
@@ -492,7 +492,7 @@ function resolveWorktreesRoot(
   const expandedRoot = expandTilde(configuredRoot);
   return path.isAbsolute(expandedRoot)
     ? path.resolve(expandedRoot)
-    : path.resolve(paseoHome, expandedRoot);
+    : path.resolve(osunaHome, expandedRoot);
 }
 
 /**
@@ -560,7 +560,7 @@ interface ResolveConfigFromPersistedOptions {
 }
 
 export function resolveConfigFromPersisted(
-  paseoHome: string,
+  osunaHome: string,
   persisted: PersistedConfig,
   options?: ResolveConfigFromPersistedOptions,
 ): OsunaDaemonConfig {
@@ -592,10 +592,10 @@ export function resolveConfigFromPersisted(
     enabledFallback: relayEnabledFallback,
   });
   const serviceProxy = resolveServiceProxyConfig(env, persisted);
-  const webUi = resolveWebUiConfig(paseoHome, env, cli, persisted);
+  const webUi = resolveWebUiConfig(osunaHome, env, cli, persisted);
 
   const { openai, speech } = resolveSpeechConfig({
-    paseoHome,
+    osunaHome,
     env,
     persisted,
   });
@@ -609,9 +609,9 @@ export function resolveConfigFromPersisted(
 
   return {
     listen,
-    paseoHome,
+    osunaHome,
     desktopManaged: env.OSUNA_DESKTOP_MANAGED === "1",
-    worktreesRoot: resolveWorktreesRoot(paseoHome, persisted),
+    worktreesRoot: resolveWorktreesRoot(osunaHome, persisted),
     corsAllowedOrigins: resolveCorsAllowedOrigins(env, persisted),
     hostnames,
     trustedProxies,
@@ -629,8 +629,8 @@ export function resolveConfigFromPersisted(
     plugins: persisted.plugins,
     usage: { pricing: resolveUsagePricingConfig(env, persisted) },
     mcpDebug: env.MCP_DEBUG === "1",
-    isDev: resolvePaseoNodeEnv(env) === "development",
-    agentStoragePath: path.join(paseoHome, "agents"),
+    isDev: resolveOsunaNodeEnv(env) === "development",
+    agentStoragePath: path.join(osunaHome, "agents"),
     staticDir: "public",
     agentClients: {},
     relayEnabled: relay.enabled,
@@ -664,11 +664,11 @@ export function resolveConfigFromPersisted(
 }
 
 export function loadConfig(
-  paseoHome: string,
+  osunaHome: string,
   options?: Omit<ResolveConfigFromPersistedOptions, "relayEnabledFallback">,
 ): OsunaDaemonConfig {
-  const persisted = loadPersistedConfig(paseoHome);
-  return resolveConfigFromPersisted(paseoHome, persisted, options);
+  const persisted = loadPersistedConfig(osunaHome);
+  return resolveConfigFromPersisted(osunaHome, persisted, options);
 }
 
 function parsePositiveGitOverride(value: string | undefined): boolean {

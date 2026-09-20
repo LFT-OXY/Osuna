@@ -274,7 +274,7 @@ describe("diagnostics message contract", () => {
       type: "diagnostics.response",
       payload: {
         requestId: "diag-2",
-        diagnostic: "Paseo diagnostics\n  Status: ok",
+        diagnostic: "Osuna diagnostics\n  Status: ok",
       },
     });
 
@@ -437,7 +437,7 @@ describe("file explorer request compatibility", () => {
   });
 });
 
-describe("paseo worktree archive request compatibility", () => {
+describe("osuna worktree archive request compatibility", () => {
   test("omitted scope defaults to workspace", () => {
     const parsed = OsunaWorktreeArchiveRequestSchema.parse({
       type: "osuna_worktree_archive_request",

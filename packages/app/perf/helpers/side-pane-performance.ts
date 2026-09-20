@@ -71,7 +71,7 @@ export function resolveProfileTarget(): ProfileTarget {
     process.env.OSUNA_PROFILE_SERVER_ID ??
     readFileSync(resolve(repoRoot, ".dev/osuna-home/server-id"), "utf8")
   ).trim();
-  const requestedName = process.env.OSUNA_PROFILE_WORKSPACE_NAME?.trim() || "Paseo";
+  const requestedName = process.env.OSUNA_PROFILE_WORKSPACE_NAME?.trim() || "Osuna";
   const requestedWorkspaceId = process.env.OSUNA_PROFILE_WORKSPACE_ID?.trim();
   if (requestedWorkspaceId) return { serverId, workspaceId: requestedWorkspaceId };
 
@@ -86,7 +86,7 @@ export function resolveProfileTarget(): ProfileTarget {
     (candidate) => candidate.name === requestedName && candidate.cwd === repoRoot,
   );
   if (!workspace) {
-    throw new Error(`No Paseo workspace named ${requestedName} points at ${repoRoot}`);
+    throw new Error(`No Osuna workspace named ${requestedName} points at ${repoRoot}`);
   }
   return { serverId, workspaceId: workspace.workspaceId };
 }

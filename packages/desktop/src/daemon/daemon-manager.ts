@@ -122,12 +122,12 @@ function parseDesktopDaemonStopReason(
 // Utilities
 // ---------------------------------------------------------------------------
 
-function getPaseoHome(): string {
+function getOsunaHome(): string {
   return resolveOsunaHome(process.env);
 }
 
 function logFilePath(): string {
-  return path.join(getPaseoHome(), DAEMON_LOG_FILENAME);
+  return path.join(getOsunaHome(), DAEMON_LOG_FILENAME);
 }
 
 export function isDesktopManagedDaemonRunningSync(): boolean {
@@ -220,7 +220,7 @@ function resolveDesktopAppVersion(): string {
 // ---------------------------------------------------------------------------
 
 export async function resolveDesktopDaemonStatus(): Promise<DesktopDaemonStatus> {
-  const home = getPaseoHome();
+  const home = getOsunaHome();
 
   try {
     const payload = (await runExternalCliJsonCommand([
@@ -293,7 +293,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     }
   }
 
-  const home = getPaseoHome();
+  const home = getOsunaHome();
   const invocation = createNodeEntrypointInvocation({
     entrypoint: resolveDaemonRunnerEntrypoint(),
     argvMode: "node-script",
@@ -322,7 +322,7 @@ export async function stopDesktopDaemon(
   reason: DesktopDaemonStopReason = DEFAULT_DESKTOP_DAEMON_STOP_REASON,
   confirmedInstance?: { pid: number; startedAt: string },
 ): Promise<DesktopDaemonStatus> {
-  const home = getPaseoHome();
+  const home = getOsunaHome();
   const instance = await readDaemonInstance(home);
   const owned = Boolean(
     instance &&
@@ -354,7 +354,7 @@ export async function stopDesktopDaemon(
 }
 
 async function restartDaemon(): Promise<DesktopDaemonStatus> {
-  await runExternalCliJsonCommand(["daemon", "restart", "--home", getPaseoHome(), "--json"]);
+  await runExternalCliJsonCommand(["daemon", "restart", "--home", getOsunaHome(), "--json"]);
   return resolveDesktopDaemonStatus();
 }
 
@@ -367,7 +367,7 @@ function getDaemonLogs(): DesktopDaemonLogs {
 }
 
 async function getCliDaemonStatus(): Promise<string> {
-  return await runExternalCliTextCommand(["daemon", "status", "--home", getPaseoHome()]);
+  return await runExternalCliTextCommand(["daemon", "status", "--home", getOsunaHome()]);
 }
 
 async function getLocalDaemonVersion(): Promise<{ version: string | null; error: string | null }> {
@@ -466,7 +466,7 @@ export function registerDaemonManager(): void {
   const handlers = createDaemonCommandHandlers();
 
   ipcMain.handle(
-    "paseo:invoke",
+    "osuna:invoke",
     async (_event, command: string, args?: Record<string, unknown>) => {
       const handler = handlers[command];
       if (!handler) {

@@ -2,7 +2,7 @@ import { parseHostPort } from "@osuna/protocol/daemon-endpoints";
 import type { WorkspaceScriptPayload } from "@osuna/protocol/messages";
 import type { ActiveConnection } from "@/runtime/host-runtime";
 
-export type WorkspaceScriptLinkKind = "public" | "paseo" | "direct";
+export type WorkspaceScriptLinkKind = "public" | "osuna" | "direct";
 
 export interface WorkspaceScriptLinkTarget {
   kind: WorkspaceScriptLinkKind;
@@ -85,7 +85,7 @@ export function resolveWorkspaceScriptLink(input: {
 
   const targets: WorkspaceScriptLinkTarget[] = [];
   addTarget(targets, "public", publicProxyUrl);
-  addTarget(targets, "paseo", localProxyUrl);
+  addTarget(targets, "osuna", localProxyUrl);
   addTarget(targets, "direct", buildDirectServiceUrl(activeConnection, script.port));
 
   return { primary: targets[0] ?? null, targets };

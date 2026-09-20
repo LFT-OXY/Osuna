@@ -1862,7 +1862,7 @@ describe("executeAutomationCommand", () => {
         command: "Runtime.evaluate",
         params: {
           expression: expect.stringContaining('"@e1"'),
-          objectGroup: "paseo-browser-automation",
+          objectGroup: "osuna-browser-automation",
           returnByValue: false,
         },
       },
@@ -1909,7 +1909,7 @@ describe("executeAutomationCommand", () => {
         command: "Runtime.evaluate",
         params: {
           expression: expect.stringContaining('"@e1"'),
-          objectGroup: "paseo-browser-automation",
+          objectGroup: "osuna-browser-automation",
           returnByValue: false,
         },
       },
@@ -1948,7 +1948,7 @@ describe("executeAutomationCommand", () => {
         command: "Runtime.evaluate",
         params: {
           expression: expect.stringContaining('"@e1"'),
-          objectGroup: "paseo-browser-automation",
+          objectGroup: "osuna-browser-automation",
           returnByValue: false,
         },
       },

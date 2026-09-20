@@ -12,10 +12,10 @@ import {
 } from "./pair.js";
 
 test("offline pairing requires relay consent and saves it in the selected home", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "paseo-offline-pair-"));
+  const root = await mkdtemp(path.join(tmpdir(), "osuna-offline-pair-"));
   const home = path.join(root, "home");
   try {
-    expect(await resolveLocalPairingOffer({ paseoHome: home })).toEqual({
+    expect(await resolveLocalPairingOffer({ osunaHome: home })).toEqual({
       relayEnabled: false,
       url: null,
       qr: null,
@@ -27,7 +27,7 @@ test("offline pairing requires relay consent and saves it in the selected home",
     editPersistedConfig(home, "daemon.relay.endpoint", { value: "127.0.0.1:9" });
     editPersistedConfig(home, "app.baseUrl", { value: "https://app.example.test" });
 
-    const offer = await resolveLocalPairingOffer({ paseoHome: home, enableRelay: true });
+    const offer = await resolveLocalPairingOffer({ osunaHome: home, enableRelay: true });
     expect(offer.relayEnabled).toBe(true);
     expect(offer.url).toContain("offer=");
     expect(offer.unavailableReason).toBeNull();
@@ -47,7 +47,7 @@ test("relay pairing without an app base URL names the missing setting", async ()
   try {
     editPersistedConfig(home, "daemon.relay.endpoint", { value: "127.0.0.1:9" });
 
-    expect(await resolveLocalPairingOffer({ paseoHome: home, enableRelay: true })).toEqual({
+    expect(await resolveLocalPairingOffer({ osunaHome: home, enableRelay: true })).toEqual({
       relayEnabled: true,
       url: null,
       qr: null,
@@ -64,7 +64,7 @@ test("relay pairing without a relay endpoint names the missing setting", async (
   try {
     editPersistedConfig(home, "app.baseUrl", { value: "https://app.example.test" });
 
-    expect(await resolveLocalPairingOffer({ paseoHome: home, enableRelay: true })).toEqual({
+    expect(await resolveLocalPairingOffer({ osunaHome: home, enableRelay: true })).toEqual({
       relayEnabled: true,
       url: null,
       qr: null,

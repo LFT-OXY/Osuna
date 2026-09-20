@@ -27,7 +27,7 @@ describe("bootstrap provider availability", () => {
 
   test("loads a persisted Codex record without spawning a missing Codex binary", async () => {
     const { createOsunaDaemon } = await import("./bootstrap.js");
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-bootstrap-provider-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-bootstrap-provider-"));
     tempRoots.push(root);
     const gitPath = execFileSync(process.platform === "win32" ? "where" : "which", ["git"], {
       encoding: "utf8",
@@ -36,9 +36,9 @@ describe("bootstrap provider availability", () => {
       .trim();
     process.env.PATH = path.dirname(gitPath);
     expect(execFileSync("git", ["--version"], { encoding: "utf8" })).toMatch(/git version/i);
-    const paseoHome = path.join(root, ".osuna");
+    const osunaHome = path.join(root, ".osuna");
     const staticDir = path.join(root, "static");
-    const agentStoragePath = path.join(paseoHome, "agents");
+    const agentStoragePath = path.join(osunaHome, "agents");
     const now = new Date("2026-04-16T00:00:00.000Z").toISOString();
     const agentId = "11111111-1111-4111-8111-111111111111";
     await mkdir(agentStoragePath, { recursive: true });
@@ -70,7 +70,7 @@ describe("bootstrap provider availability", () => {
 
     const config: OsunaDaemonConfig = {
       listen: "127.0.0.1:0",
-      paseoHome,
+      osunaHome,
       corsAllowedOrigins: [],
       hostnames: true,
       mcpEnabled: false,

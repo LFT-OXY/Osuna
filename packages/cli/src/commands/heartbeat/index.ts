@@ -35,7 +35,7 @@ const heartbeatDeleteSchema: OutputSchema<HeartbeatDeleteRow> = {
 function requireCallerAgentId(): string {
   const agentId = process.env.OSUNA_AGENT_ID?.trim();
   if (!agentId) {
-    throw new Error("Heartbeat commands must run inside a Osuna agent");
+    throw new Error("Heartbeat commands must run inside an Osuna agent");
   }
   return agentId;
 }

@@ -8,7 +8,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { Buffer } from "node:buffer";
 
 import { generateLocalPairingOffer } from "../pairing-offer.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { createClientChannel, type Transport } from "@osuna/relay/e2ee";
 import {
   deriveSharedKey,
@@ -38,14 +38,14 @@ function createCapturingLogger() {
 }
 
 async function getPairingOfferUrl(args: {
-  paseoHome: string;
+  osunaHome: string;
   relayEnabled?: boolean;
   relayEndpoint?: string;
   relayPublicEndpoint?: string;
   appBaseUrl?: string;
 }): Promise<string> {
   const pairing = await generateLocalPairingOffer({
-    paseoHome: args.paseoHome,
+    osunaHome: args.osunaHome,
     relayEnabled: args.relayEnabled,
     relayEndpoint: args.relayEndpoint,
     relayPublicEndpoint: args.relayPublicEndpoint,
@@ -247,7 +247,7 @@ async function waitForCapturedLog(
     const { logger, lines } = createCapturingLogger();
     await startRelay();
 
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       listen: "127.0.0.1",
       logger,
       relayEnabled: true,
@@ -256,7 +256,7 @@ async function waitForCapturedLog(
 
     try {
       const offerUrl = await getPairingOfferUrl({
-        paseoHome: daemon.paseoHome,
+        osunaHome: daemon.osunaHome,
         relayEnabled: daemon.config.relayEnabled,
         relayEndpoint: daemon.config.relayEndpoint,
         relayPublicEndpoint: daemon.config.relayPublicEndpoint,
@@ -388,7 +388,7 @@ async function waitForCapturedLog(
     const { logger, lines } = createCapturingLogger();
     await startRelay({ useLocalRelay: true });
 
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       listen: "127.0.0.1",
       logger,
       relayEnabled: true,
@@ -397,7 +397,7 @@ async function waitForCapturedLog(
 
     try {
       const offerUrl = await getPairingOfferUrl({
-        paseoHome: daemon.paseoHome,
+        osunaHome: daemon.osunaHome,
         relayEnabled: daemon.config.relayEnabled,
         relayEndpoint: daemon.config.relayEndpoint,
         relayPublicEndpoint: daemon.config.relayPublicEndpoint,
@@ -504,7 +504,7 @@ async function waitForCapturedLog(
     const { logger, lines } = createCapturingLogger();
     await startRelay();
 
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       listen: "127.0.0.1",
       logger,
       relayEnabled: true,
@@ -513,7 +513,7 @@ async function waitForCapturedLog(
 
     try {
       const offerUrl = await getPairingOfferUrl({
-        paseoHome: daemon.paseoHome,
+        osunaHome: daemon.osunaHome,
         relayEnabled: daemon.config.relayEnabled,
         relayEndpoint: daemon.config.relayEndpoint,
         relayPublicEndpoint: daemon.config.relayPublicEndpoint,
@@ -650,7 +650,7 @@ async function waitForCapturedLog(
     const { logger, lines } = createCapturingLogger();
     await startRelay();
 
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       listen: "127.0.0.1",
       logger,
       relayEnabled: true,
@@ -659,7 +659,7 @@ async function waitForCapturedLog(
 
     try {
       const offerUrl = await getPairingOfferUrl({
-        paseoHome: daemon.paseoHome,
+        osunaHome: daemon.osunaHome,
         relayEnabled: daemon.config.relayEnabled,
         relayEndpoint: daemon.config.relayEndpoint,
         relayPublicEndpoint: daemon.config.relayPublicEndpoint,

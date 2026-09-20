@@ -14,7 +14,7 @@ import { performance } from "node:perf_hooks";
 
 import { startGitCommandMetrics, stopGitCommandMetrics } from "../src/utils/run-git-command.js";
 import { DaemonClient } from "../src/server/test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "../src/server/test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../src/server/test-utils/osuna-daemon.js";
 
 type Scenario = "snapshotOnly" | "legacyPrFanout";
 
@@ -77,7 +77,7 @@ function copyJsonTree(sourceDir: string, targetDir: string): void {
 }
 
 async function freezeHome(sourceHome: string, requestedRoot: string | null): Promise<string> {
-  const frozenHomeRoot = requestedRoot ?? mkdtempSync(path.join(os.tmpdir(), "paseo-real-home-"));
+  const frozenHomeRoot = requestedRoot ?? mkdtempSync(path.join(os.tmpdir(), "osuna-real-home-"));
   if (process.env.OSUNA_BENCHMARK_REUSE_FROZEN_HOME === "1") {
     return frozenHomeRoot;
   }
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
   const cpuBefore = process.cpuUsage();
   const memoryBefore = process.memoryUsage();
   const startedAt = performance.now();
-  const daemon = await createTestPaseoDaemon({ paseoHomeRoot: frozenHomeRoot, cleanup: false });
+  const daemon = await createTestOsunaDaemon({ osunaHomeRoot: frozenHomeRoot, cleanup: false });
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
     appVersion: "0.1.90",

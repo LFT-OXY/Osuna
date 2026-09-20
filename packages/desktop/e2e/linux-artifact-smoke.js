@@ -11,7 +11,7 @@ async function main() {
   const portableSandbox = process.argv[3] === "enabled";
   const artifactRoot = process.env.OSUNA_DESKTOP_SMOKE_ARTIFACT_DIR;
   const installedOnly = process.argv.includes("--installed-only");
-  const extracted = fs.mkdtempSync(path.join(os.tmpdir(), "paseo-linux-artifacts-"));
+  const extracted = fs.mkdtempSync(path.join(os.tmpdir(), "osuna-linux-artifacts-"));
   const findArtifact = (suffix) => {
     const matches = fs.readdirSync(release).filter((file) => file.endsWith(suffix));
     if (matches.length !== 1) throw new Error(`Expected one ${suffix} in ${release}: ${matches}`);

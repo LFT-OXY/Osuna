@@ -112,7 +112,7 @@ Three consequences that are not visible from the field declarations:
 
 - Keypairs and other private files go through `server/private-files.ts` (mode `0600`).
 - `osuna.pid` is a lock and endpoint record owned by the supervisor; read it, never write it from a feature (`docs/architecture.md` "Storage"). `acquirePidLock` additionally reads the pre-rename `paseo.pid` once, behind the tagged `COMPAT(pid-lock-paseo-name)` shim: a live lock under the old name counts as "an instance is already running". That read is the one place where being unable to read a lock must not be collapsed into "no lock" — `readPidLock` returns `null` only for ENOENT and throws for everything else, and the throw has to propagate, because a lock you cannot read is not proof that no daemon holds it. Never write, migrate, or delete the old file.
-- Temporary directories in tests come from `mkdtemp` and are removed in `afterEach`; the harness in `server/test-utils/paseo-daemon.ts` does this for you.
+- Temporary directories in tests come from `mkdtemp` and are removed in `afterEach`; the harness in `server/test-utils/osuna-daemon.ts` does this for you.
 
 ## Anti-patterns
 

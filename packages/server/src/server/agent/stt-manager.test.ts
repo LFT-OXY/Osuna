@@ -98,7 +98,7 @@ class SequencedFakeStt implements SpeechToTextProvider {
 describe("STTManager", () => {
   function resolveVoiceLanguage(params: { env?: NodeJS.ProcessEnv; persisted?: unknown }): string {
     const result = resolveSpeechConfig({
-      paseoHome: "/tmp/osuna-home",
+      osunaHome: "/tmp/osuna-home",
       env: params.env ?? ({} as NodeJS.ProcessEnv),
       persisted: PersistedConfigSchema.parse(params.persisted ?? {}),
     });

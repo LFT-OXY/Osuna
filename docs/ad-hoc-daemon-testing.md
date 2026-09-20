@@ -17,22 +17,22 @@ import { createOsunaDaemon } from "./bootstrap.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 
 const logger = pino({ level: "warn" });
-const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-test-"));
-const paseoHome = path.join(paseoHomeRoot, ".osuna");
-await mkdir(paseoHome, { recursive: true });
+const osunaHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-test-"));
+const osunaHome = path.join(osunaHomeRoot, ".osuna");
+await mkdir(osunaHome, { recursive: true });
 const staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-static-"));
 
 const daemon = await createOsunaDaemon(
   {
     listen: "127.0.0.1:0", // OS picks a free port
-    paseoHome,
+    osunaHome,
     corsAllowedOrigins: [],
     hostnames: true,
     mcpEnabled: false,
     staticDir,
     mcpDebug: false,
     agentClients: {},
-    agentStoragePath: path.join(paseoHome, "agents"),
+    agentStoragePath: path.join(osunaHome, "agents"),
     relayEnabled: false,
     relayEndpoint: "relay.example.test:443",
     appBaseUrl: "https://app.example.test",
@@ -57,7 +57,7 @@ await client.fetchAgents({ subscribe: {} });
 
 await client.close();
 await daemon.stop();
-await rm(paseoHomeRoot, { recursive: true, force: true });
+await rm(osunaHomeRoot, { recursive: true, force: true });
 await rm(staticDir, { recursive: true, force: true });
 ```
 
@@ -156,7 +156,7 @@ try {
 } finally {
   await client.close();
   await daemon.stop().catch(() => undefined);
-  await rm(paseoHomeRoot, { recursive: true, force: true });
+  await rm(osunaHomeRoot, { recursive: true, force: true });
 }
 ```
 

@@ -11,7 +11,7 @@ import type {
   AgentTimelineItem,
 } from "../agent/agent-sdk-types.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import {
   canRunRealProvider,
   createRealProviderClient,
@@ -53,7 +53,7 @@ function createPiClient(): AgentClient {
 
 function createPiToolDaemon() {
   const logger = pino({ level: "silent" });
-  return createTestPaseoDaemon({
+  return createTestOsunaDaemon({
     agentClients: createRealProviderClients(["pi"], logger),
     logger,
   });
@@ -106,7 +106,7 @@ async function waitForTimelineItem(
 }
 
 async function withConnectedPiDaemon(
-  run: (context: { client: DaemonClient; daemon: TestPaseoDaemon }) => Promise<void>,
+  run: (context: { client: DaemonClient; daemon: TestOsunaDaemon }) => Promise<void>,
 ): Promise<void> {
   const daemon = await createPiToolDaemon();
   const client = new DaemonClient({
@@ -139,7 +139,7 @@ beforeEach((context) => {
 });
 
 test(
-  "real Pi daemon composes project and Paseo system prompts",
+  "real Pi daemon composes project and Osuna system prompts",
   async () => {
     const cwd = tmpCwd("pi-system-prompts-");
 
@@ -184,7 +184,7 @@ test(
 );
 
 test(
-  "real Pi daemon lists Paseo-handled compact slash commands",
+  "real Pi daemon lists Osuna-handled compact slash commands",
   async () => {
     const cwd = tmpCwd("pi-compact-commands-");
 

@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest"
 
 import type { AgentTimelineItem } from "../agent/agent-sdk-types.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import {
   canRunRealProvider,
   createRealProviderClients,
@@ -22,7 +22,7 @@ import {
 
 interface CodexRewindHarness {
   client: DaemonClient;
-  daemon: TestPaseoDaemon;
+  daemon: TestOsunaDaemon;
 }
 
 interface CodexRewindSession {
@@ -154,7 +154,7 @@ describe("daemon E2E (real codex) - rewind", () => {
       return;
     }
     const logger = pino({ level: "silent" });
-    const daemon = await createTestPaseoDaemon({
+    const daemon = await createTestOsunaDaemon({
       agentClients: createRealProviderClients(["codex"], logger),
       logger,
     });

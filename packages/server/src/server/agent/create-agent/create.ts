@@ -1,14 +1,14 @@
 import type { Logger } from "pino";
 
 import type { TerminalManager } from "../../../terminal/terminal-manager.js";
-import type { CreateOsunaWorktreeInput } from "../../paseo-worktree-service.js";
+import type { CreateOsunaWorktreeInput } from "../../osuna-worktree-service.js";
 import { expandUserPath, resolvePathFromBase } from "../../path-utils.js";
 import { toWorktreeRequestError } from "../../worktree-errors.js";
 import type {
   AgentWorktreeSetupContinuation,
-  CreatePaseoWorktreeSetupContinuationInput,
-  CreatePaseoWorktreeWorkflowFn,
-  CreatePaseoWorktreeWorkflowResult,
+  CreateOsunaWorktreeSetupContinuationInput,
+  CreateOsunaWorktreeWorkflowFn,
+  CreateOsunaWorktreeWorkflowResult,
 } from "../../worktree-session.js";
 import type { AgentAttachment, FirstAgentContext, GitSetupOptions } from "../../messages.js";
 import type { AgentManager, CreateAgentOptions, ManagedAgent } from "../agent-manager.js";
@@ -39,11 +39,11 @@ export interface CreateAgentCommandDependencies {
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   logger: Logger;
-  paseoHome?: string;
+  osunaHome?: string;
   worktreesRoot?: string;
   terminalManager?: TerminalManager | null;
   providerSnapshotManager: Pick<ProviderSnapshotManager, "resolveCreateConfig">;
-  createOsunaWorktree?: CreatePaseoWorktreeWorkflowFn;
+  createOsunaWorktree?: CreateOsunaWorktreeWorkflowFn;
   // Mints a fresh directory workspace for a cwd and returns its id.
   ensureWorkspaceForCreate?: EnsureWorkspaceForCreate;
 }
@@ -100,9 +100,9 @@ export interface CreateAgentFromMcpInput {
   env?: Record<string, string>;
   onCreated?: (created: {
     agentId: string;
-    createdWorktree: CreatePaseoWorktreeWorkflowResult | null;
+    createdWorktree: CreateOsunaWorktreeWorkflowResult | null;
   }) => void;
-  onWorktreeCreated?: (createdWorktree: CreatePaseoWorktreeWorkflowResult) => void;
+  onWorktreeCreated?: (createdWorktree: CreateOsunaWorktreeWorkflowResult) => void;
   callerAgentId?: string;
   callerContext?: {
     lockedCwd?: string;
@@ -128,7 +128,7 @@ export interface CreateAgentCommandResult {
   background: boolean;
   initialPromptStarted: boolean;
   initialPromptError: unknown | null;
-  createdWorktree?: CreatePaseoWorktreeWorkflowResult;
+  createdWorktree?: CreateOsunaWorktreeWorkflowResult;
 }
 
 export type BoundCreateAgentCommand = (
@@ -169,7 +169,7 @@ interface ResolvedCreateAgent {
   background: boolean;
   promptFailure: CreateAgentPromptFailureMode;
   promptLogger?: Logger;
-  createdWorktree?: CreatePaseoWorktreeWorkflowResult;
+  createdWorktree?: CreateOsunaWorktreeWorkflowResult;
 }
 
 export async function createAgentCommand(
@@ -515,7 +515,7 @@ async function resolveMcpCwd(params: {
   resolvedCwd: string;
   setupContinuation?: AgentWorktreeSetupContinuation;
   createdWorkspaceId?: string;
-  createdWorktree?: CreatePaseoWorktreeWorkflowResult;
+  createdWorktree?: CreateOsunaWorktreeWorkflowResult;
 }> {
   const { dependencies, worktree } = params;
   if (!worktree) {
@@ -547,7 +547,7 @@ async function resolveMcpCwd(params: {
       githubPrNumber: worktree.githubPrNumber,
       firstAgentContext: { prompt: params.initialPrompt },
       runSetup: false,
-      paseoHome: dependencies.paseoHome,
+      osunaHome: dependencies.osunaHome,
       worktreesRoot: dependencies.worktreesRoot,
     },
     createOsunaWorktree: dependencies.createOsunaWorktree,
@@ -580,17 +580,17 @@ async function resolveMcpCwd(params: {
 
 interface CreateMcpWorktreeOptions {
   input: CreateOsunaWorktreeInput;
-  createOsunaWorktree: CreatePaseoWorktreeWorkflowFn | undefined;
+  createOsunaWorktree: CreateOsunaWorktreeWorkflowFn | undefined;
   resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
-  setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
+  setupContinuation?: CreateOsunaWorktreeSetupContinuationInput;
 }
 
 async function createMcpWorktree(
   options: CreateMcpWorktreeOptions,
-): Promise<CreatePaseoWorktreeWorkflowResult> {
+): Promise<CreateOsunaWorktreeWorkflowResult> {
   try {
     if (!options.createOsunaWorktree) {
-      throw new Error("Paseo worktree service is not configured");
+      throw new Error("Osuna worktree service is not configured");
     }
     return await options.createOsunaWorktree(options.input, {
       ...(options.resolveDefaultBranch

@@ -46,7 +46,7 @@ test.describe("Workspace setup streaming", () => {
   test("does not seed the setup tab while workspace setup is running", async ({ page }) => {
     const client = await connectWorkspaceSetupClient();
     const repo = await createTempGitRepo("setup-open-", {
-      paseoConfig: {
+      osunaConfig: {
         worktree: {
           setup: [
             "sh -c 'echo starting setup; for i in $(seq 1 30); do echo tick $i; sleep 1; done; echo setup complete'",
@@ -74,7 +74,7 @@ test.describe("Workspace setup streaming", () => {
   test("runs setup through the sidebar and leaves the workspace usable", async ({ page }) => {
     const client = await connectWorkspaceSetupClient();
     const repo = await createTempGitRepo("setup-ui-flow-", {
-      paseoConfig: {
+      osunaConfig: {
         worktree: {
           setup: [
             "sh -c 'echo starting setup; sleep 1; echo loading dependencies; sleep 1; echo setup complete'",
@@ -119,7 +119,7 @@ test.describe("Workspace setup streaming", () => {
   daemonTest("streams running and completed setup snapshots for a successful setup", async () => {
     const client = await connectWorkspaceSetupClient();
     const repo = await createTempGitRepo("setup-success-", {
-      paseoConfig: {
+      osunaConfig: {
         worktree: {
           setup: ["sh -c 'echo starting setup; sleep 2; echo setup complete'"],
         },
@@ -164,7 +164,7 @@ test.describe("Workspace setup streaming", () => {
   test("seeds a failed setup tab once in the main pane", async ({ page }) => {
     const client = await connectWorkspaceSetupClient();
     const repo = await createTempGitRepo("setup-failure-", {
-      paseoConfig: {
+      osunaConfig: {
         worktree: {
           setup: ["sh -c 'echo starting setup; sleep 2; echo setup failed 1>&2; exit 1'"],
         },
@@ -236,7 +236,7 @@ test.describe("Workspace setup streaming", () => {
     test.setTimeout(90_000);
     const client = await connectWorkspaceSetupClient();
     const repo = await createTempGitRepo("setup-svc-ui-", {
-      paseoConfig: {
+      osunaConfig: {
         worktree: {
           setup: ["sh -c 'echo bootstrapping; sleep 1; echo setup complete'"],
         },
@@ -285,7 +285,7 @@ test.describe("Workspace setup streaming", () => {
   daemonTest("launches workspace scripts through an explicit daemon request", async () => {
     const client = await connectWorkspaceSetupClient();
     const repo = await createTempGitRepo("setup-scripts-", {
-      paseoConfig: {
+      osunaConfig: {
         worktree: {
           setup: ["sh -c 'echo bootstrapping; sleep 1; echo setup complete'"],
         },

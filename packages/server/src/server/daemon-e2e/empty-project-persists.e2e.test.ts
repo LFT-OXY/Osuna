@@ -6,11 +6,11 @@ import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { type PersistedProjectRecord } from "../workspace-registry.js";
 
 const cleanupPaths = new Set<string>();
-const cleanupDaemons = new Set<TestPaseoDaemon>();
+const cleanupDaemons = new Set<TestOsunaDaemon>();
 const cleanupClients = new Set<DaemonClient>();
 
 function restoreEnv(name: string, previous: string | undefined): void {
@@ -36,21 +36,21 @@ test("project.add creates a project without creating a workspace", async () => {
   const previousSupervised = process.env.OSUNA_SUPERVISED;
   process.env.OSUNA_SUPERVISED = "0";
   try {
-    const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), "paseo-add-project-repo-")));
-    const paseoHomeRoot = realpathSync(
-      mkdtempSync(path.join(os.tmpdir(), "paseo-add-project-home-")),
+    const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), "osuna-add-project-repo-")));
+    const osunaHomeRoot = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "osuna-add-project-home-")),
     );
     cleanupPaths.add(repoRoot);
-    cleanupPaths.add(paseoHomeRoot);
+    cleanupPaths.add(osunaHomeRoot);
 
     execSync("git init -b main", { cwd: repoRoot, stdio: "pipe" });
-    execSync("git config user.email 'test@getpaseo.dev'", { cwd: repoRoot, stdio: "pipe" });
-    execSync("git config user.name 'Paseo Test'", { cwd: repoRoot, stdio: "pipe" });
+    execSync("git config user.email 'test@osuna.dev'", { cwd: repoRoot, stdio: "pipe" });
+    execSync("git config user.name 'Osuna Test'", { cwd: repoRoot, stdio: "pipe" });
     writeFileSync(path.join(repoRoot, "README.md"), "# repo\n", "utf8");
     execSync("git add README.md", { cwd: repoRoot, stdio: "pipe" });
     execSync("git -c commit.gpgSign=false commit -m 'initial'", { cwd: repoRoot, stdio: "pipe" });
 
-    const daemon = await createTestPaseoDaemon({ paseoHomeRoot, cleanup: false });
+    const daemon = await createTestOsunaDaemon({ osunaHomeRoot, cleanup: false });
     cleanupDaemons.add(daemon);
     const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
     cleanupClients.add(client);
@@ -86,24 +86,24 @@ test("archiving the last workspace leaves the project parent with no workspaces"
   const previousSupervised = process.env.OSUNA_SUPERVISED;
   process.env.OSUNA_SUPERVISED = "0";
   try {
-    const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), "paseo-empty-project-repo-")));
-    const paseoHomeRoot = realpathSync(
-      mkdtempSync(path.join(os.tmpdir(), "paseo-empty-project-home-")),
+    const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), "osuna-empty-project-repo-")));
+    const osunaHomeRoot = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "osuna-empty-project-home-")),
     );
     cleanupPaths.add(repoRoot);
-    cleanupPaths.add(paseoHomeRoot);
+    cleanupPaths.add(osunaHomeRoot);
 
     execSync("git init -b main", { cwd: repoRoot, stdio: "pipe" });
-    execSync("git config user.email 'test@getpaseo.dev'", { cwd: repoRoot, stdio: "pipe" });
-    execSync("git config user.name 'Paseo Test'", { cwd: repoRoot, stdio: "pipe" });
+    execSync("git config user.email 'test@osuna.dev'", { cwd: repoRoot, stdio: "pipe" });
+    execSync("git config user.name 'Osuna Test'", { cwd: repoRoot, stdio: "pipe" });
     writeFileSync(path.join(repoRoot, "README.md"), "# repo\n", "utf8");
     execSync("git add README.md", { cwd: repoRoot, stdio: "pipe" });
     execSync("git -c commit.gpgSign=false commit -m 'initial'", { cwd: repoRoot, stdio: "pipe" });
 
-    const paseoHome = path.join(paseoHomeRoot, ".osuna");
-    const projectsPath = path.join(paseoHome, "projects", "projects.json");
+    const osunaHome = path.join(osunaHomeRoot, ".osuna");
+    const projectsPath = path.join(osunaHome, "projects", "projects.json");
 
-    const daemon = await createTestPaseoDaemon({ paseoHomeRoot, cleanup: false });
+    const daemon = await createTestOsunaDaemon({ osunaHomeRoot, cleanup: false });
     cleanupDaemons.add(daemon);
     const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
     cleanupClients.add(client);

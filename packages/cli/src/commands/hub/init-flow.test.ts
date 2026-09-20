@@ -346,7 +346,7 @@ function setupEnvironment(
           daemons: [{ id: "daemon-1", slug: "macbook" }],
           github: [],
           discord: [],
-          slack: [{ slug: "paseo", teamName: "Osuna" }],
+          slack: [{ slug: "osuna", teamName: "Osuna" }],
           linear: [],
         }
       );
@@ -536,7 +536,7 @@ function disconnectedStatus(): HubStatus {
 }
 
 async function temporaryDirectory(): Promise<string> {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-hub-init-flow-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-hub-init-flow-"));
   directories.push(directory);
   return directory;
 }

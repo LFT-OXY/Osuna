@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { OsunaConfigRawSchema, OsunaConfigSchema } from "@osuna/protocol/osuna-config-schema";
 
-describe("paseo config schema", () => {
+describe("osuna config schema", () => {
   it("parses an empty config without metadata generation", () => {
     const parsed = OsunaConfigSchema.parse({});
 

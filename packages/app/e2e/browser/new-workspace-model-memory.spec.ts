@@ -63,7 +63,7 @@ for (const hostStatus of ["ready", "unavailable"] as const) {
   }) => {
     test.setTimeout(150_000);
     const workspace = await seedWorkspace({ repoPrefix: "model-memory-scope-" });
-    const binDir = await mkdtemp(path.join(tmpdir(), "paseo-model-memory-bin-"));
+    const binDir = await mkdtemp(path.join(tmpdir(), "osuna-model-memory-bin-"));
     const executable = path.join(binDir, "provider-node");
     await symlink(process.execPath, executable);
     const provider = await seedModelProvider({

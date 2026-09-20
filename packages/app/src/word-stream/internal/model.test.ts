@@ -38,7 +38,7 @@ describe("word streaming", () => {
   });
 
   it("preserves whitespace, Markdown, and Unicode exactly", () => {
-    const text = "**café**\n\n- 🇺🇸\t[link](https://paseo.sh)  العربية ";
+    const text = "**café**\n\n- 🇺🇸\t[link](https://example.com)  العربية ";
     const stream = new WordStream("");
     for (let end = 1; end <= text.length; end++) {
       stream.receive(text.slice(0, end), true);

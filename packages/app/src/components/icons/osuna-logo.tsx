@@ -1,12 +1,12 @@
 import Svg, { Path } from "react-native-svg";
 import { useUnistyles } from "react-native-unistyles";
 
-interface PaseoLogoProps {
+interface OsunaLogoProps {
   size?: number;
   color?: string;
 }
 
-export function PaseoLogo({ size = 64, color }: PaseoLogoProps) {
+export function OsunaLogo({ size = 64, color }: OsunaLogoProps) {
   const { theme } = useUnistyles();
   const fill = color ?? theme.colors.foreground;
 

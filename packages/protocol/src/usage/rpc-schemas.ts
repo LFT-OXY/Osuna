@@ -149,7 +149,7 @@ export type UsageAgentTurnsListResponse = z.infer<typeof UsageAgentTurnsListResp
 
 /**
  * Sent after each batch of parsed rows reaches disk, once per affected session.
- * `agentId` is there when the session backs a Paseo agent, so a screen showing
+ * `agentId` is there when the session backs an Osuna agent, so a screen showing
  * that agent can refetch without matching session ids itself.
  */
 export const UsageUpdatedMessageSchema = z.object({

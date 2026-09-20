@@ -12,7 +12,7 @@ function content(html: string) {
 }
 it("finds each actual occurrence across inline formatting with original Unicode offsets", () => {
   const row = content(
-    '<div data-paseo-markdown-tag="p">İ😀hello <strong>world</strong> then <em>hello</em> world</div>',
+    '<div data-osuna-markdown-tag="p">İ😀hello <strong>world</strong> then <em>hello</em> world</div>',
   );
   const matches = findRenderedMatches(row, "hello world");
   expect(matches.map((range) => range.toString())).toEqual(["hello world", "hello world"]);
@@ -21,14 +21,14 @@ it("finds each actual occurrence across inline formatting with original Unicode 
 });
 it("ignores controls, keeps block boundaries, and preserves literal code punctuation", () => {
   const row = content(
-    '<div data-paseo-markdown-tag="p">first</div><div data-paseo-markdown-tag="p">second</div><div data-paseo-markdown-tag="pre"><span>const a</span><span>.b</span><button>copy a.b</button><span data-paseo-markdown-ignore="true">a.b</span></div>',
+    '<div data-osuna-markdown-tag="p">first</div><div data-osuna-markdown-tag="p">second</div><div data-osuna-markdown-tag="pre"><span>const a</span><span>.b</span><button>copy a.b</button><span data-osuna-markdown-ignore="true">a.b</span></div>',
   );
   expect(findRenderedMatches(row, "firstsecond")).toEqual([]);
   expect(findRenderedMatches(row, "a.b").map((range) => range.toString())).toEqual(["a.b"]);
 });
 it("matches whitespace across text nodes without inspecting hidden link destinations", () => {
   const row = content(
-    '<div data-paseo-markdown-tag="p"><a href="https://example.com/hidden">hello &amp; world</a>\nline</div>',
+    '<div data-osuna-markdown-tag="p"><a href="https://example.com/hidden">hello &amp; world</a>\nline</div>',
   );
   expect(findRenderedMatches(row, "hidden")).toEqual([]);
   expect(findRenderedMatches(row, "world line").map((range) => range.toString())).toEqual([

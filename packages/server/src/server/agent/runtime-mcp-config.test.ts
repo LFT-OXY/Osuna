@@ -1,16 +1,16 @@
 import { describe, expect, test } from "vitest";
 
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
-import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
+import { stripInternalOsunaMcpServer, withRuntimeOsunaMcpServer } from "./runtime-mcp-config.js";
 
 const BASE_CONFIG: AgentSessionConfig = {
   provider: "claude",
   cwd: "/tmp/agent",
 };
 
-describe("withRuntimePaseoMcpServer", () => {
+describe("withRuntimeOsunaMcpServer", () => {
   test("injects the osuna MCP server with a bearer header when a token is provided", () => {
-    const result = withRuntimePaseoMcpServer({
+    const result = withRuntimeOsunaMcpServer({
       config: BASE_CONFIG,
       agentId: "agent-1",
       mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
@@ -25,7 +25,7 @@ describe("withRuntimePaseoMcpServer", () => {
   });
 
   test("omits the header when no token is available", () => {
-    const result = withRuntimePaseoMcpServer({
+    const result = withRuntimeOsunaMcpServer({
       config: BASE_CONFIG,
       agentId: "agent-1",
       mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
@@ -39,7 +39,7 @@ describe("withRuntimePaseoMcpServer", () => {
   });
 
   test("does not inject when no MCP base URL is configured", () => {
-    const result = withRuntimePaseoMcpServer({
+    const result = withRuntimeOsunaMcpServer({
       config: BASE_CONFIG,
       agentId: "agent-1",
       mcpBaseUrl: null,
@@ -50,15 +50,15 @@ describe("withRuntimePaseoMcpServer", () => {
   });
 });
 
-describe("stripInternalPaseoMcpServer", () => {
+describe("stripInternalOsunaMcpServer", () => {
   // Configs stored before the rename hold the daemon's own MCP server under the
   // old key. Keying the lookup off the current name leaves it in the user's
   // config, where the agent would dial a daemon address that is long gone.
   test("drops the daemon's own MCP server whatever key it was stored under", () => {
-    const result = stripInternalPaseoMcpServer({
+    const result = stripInternalOsunaMcpServer({
       ...BASE_CONFIG,
       mcpServers: {
-        paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1" },
+        osuna: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1" },
         docs: { type: "http", url: "https://example.com/mcp" },
       },
     });

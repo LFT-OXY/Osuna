@@ -15,7 +15,7 @@ import {
 // to a directory on disk. A directory can back multiple workspaces, so archiving
 // one must never tear down a sibling's agents/terminals, and must never delete a
 // directory another workspace still references. On-disk worktree removal is
-// derived from scope + last-reference + Paseo ownership; there is no caller-
+// derived from scope + last-reference + Osuna ownership; there is no caller-
 // supplied disk flag.
 
 let ctx: DaemonTestContext;
@@ -42,11 +42,11 @@ function createGitRepo(): string {
   const tempRoot = makeTempDir("workspace-archive-repo-");
   const repoDir = path.join(tempRoot, "repo");
   execFileSync("git", ["init", "-b", "main", repoDir], { stdio: "pipe" });
-  execFileSync("git", ["config", "user.email", "test@getpaseo.local"], {
+  execFileSync("git", ["config", "user.email", "test@osuna.local"], {
     cwd: repoDir,
     stdio: "pipe",
   });
-  execFileSync("git", ["config", "user.name", "Paseo Test"], { cwd: repoDir, stdio: "pipe" });
+  execFileSync("git", ["config", "user.name", "Osuna Test"], { cwd: repoDir, stdio: "pipe" });
   execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "initial"], {
     cwd: repoDir,
     stdio: "pipe",

@@ -57,7 +57,7 @@ const QUALIFIED_LIGHT = `Catppuccin Latte (${PLUGIN_ID})`;
 test("applies a contributed theme and falls back when its plugin is gone", async ({
   page,
 }, testInfo) => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-theme-e2e-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-theme-e2e-"));
   const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
   const previousConfig = await client.getDaemonConfig();
   await writeFile(

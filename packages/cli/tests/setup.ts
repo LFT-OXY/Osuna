@@ -1,5 +1,5 @@
 /**
- * Test setup utilities for Paseo CLI E2E tests
+ * Test setup utilities for Osuna CLI E2E tests
  *
  * Critical rules from design doc:
  * 1. Port: Random port via 10000 + Math.floor(Math.random() * 50000) - NEVER 6767
@@ -20,13 +20,13 @@ const TEST_ENV_DEFAULTS = {
   OSUNA_VOICE_MODE_ENABLED: process.env.OSUNA_VOICE_MODE_ENABLED ?? "0",
 };
 
-function testEnvironment(paseoHome: string): NodeJS.ProcessEnv {
+function testEnvironment(osunaHome: string): NodeJS.ProcessEnv {
   return {
     ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OSUNA_"))),
     ...TEST_ENV_DEFAULTS,
-    OSUNA_HOME: paseoHome,
-    HOME: paseoHome,
-    USERPROFILE: paseoHome,
+    OSUNA_HOME: osunaHome,
+    HOME: osunaHome,
+    USERPROFILE: osunaHome,
   };
 }
 
@@ -61,13 +61,13 @@ export interface TestContext {
   /** Random port for test daemon (never 6767) */
   port: number;
   /** Temp directory for OSUNA_HOME */
-  paseoHome: string;
+  osunaHome: string;
   /** Temp directory for agent working directory */
   workDir: string;
   /** Running daemon process */
   daemon: ProcessPromise | null;
-  /** Run a paseo CLI command against the test daemon */
-  paseo: (args: string[]) => ProcessPromise;
+  /** Run a osuna CLI command against the test daemon */
+  osuna: (args: string[]) => ProcessPromise;
   /** Clean up all resources */
   cleanup: () => Promise<void>;
 }
@@ -83,20 +83,20 @@ export function getRandomPort(): number {
 /**
  * Create isolated temp directories for testing
  */
-export async function createTempDirs(): Promise<{ paseoHome: string; workDir: string }> {
-  const paseoHome = await mkdtemp(join(tmpdir(), "paseo-test-home-"));
-  const workDir = await mkdtemp(join(tmpdir(), "paseo-test-work-"));
-  return { paseoHome, workDir };
+export async function createTempDirs(): Promise<{ osunaHome: string; workDir: string }> {
+  const osunaHome = await mkdtemp(join(tmpdir(), "osuna-test-home-"));
+  const workDir = await mkdtemp(join(tmpdir(), "osuna-test-work-"));
+  return { osunaHome, workDir };
 }
 
 /**
  * Wait for daemon to be ready by testing WebSocket connection
  * Uses `osuna agent ls` which connects via WebSocket
  */
-async function probeDaemon(port: number, paseoHome: string): Promise<boolean> {
+async function probeDaemon(port: number, osunaHome: string): Promise<boolean> {
   try {
     const result = await $({
-      env: testEnvironment(paseoHome),
+      env: testEnvironment(osunaHome),
     })`osuna agent ls --host localhost:${port}`.nothrow();
     return result.exitCode === 0;
   } catch {
@@ -106,12 +106,12 @@ async function probeDaemon(port: number, paseoHome: string): Promise<boolean> {
 
 export async function waitForDaemon(
   port: number,
-  paseoHome: string,
+  osunaHome: string,
   timeout = 30000,
 ): Promise<void> {
   const deadline = Date.now() + timeout;
   async function poll(): Promise<void> {
-    if (await probeDaemon(port, paseoHome)) return;
+    if (await probeDaemon(port, osunaHome)) return;
     if (Date.now() >= deadline) {
       throw new Error(`Daemon failed to start on port ${port} within ${timeout}ms`);
     }
@@ -124,11 +124,11 @@ export async function waitForDaemon(
 /**
  * Start an isolated test daemon
  */
-export async function startDaemon(port: number, paseoHome: string): Promise<ProcessPromise> {
+export async function startDaemon(port: number, osunaHome: string): Promise<ProcessPromise> {
   $.verbose = false;
   const daemon = $({
     env: {
-      ...testEnvironment(paseoHome),
+      ...testEnvironment(osunaHome),
       OSUNA_LISTEN: `127.0.0.1:${port}`,
       OSUNA_RELAY_ENABLED: "false",
       CI: "true",
@@ -142,12 +142,12 @@ export async function startDaemon(port: number, paseoHome: string): Promise<Proc
  */
 export async function createTestContext(): Promise<TestContext> {
   const port = getRandomPort();
-  const { paseoHome, workDir } = await createTempDirs();
+  const { osunaHome, workDir } = await createTempDirs();
 
   // Helper to run CLI commands against test daemon
-  const paseo = (args: string[]): ProcessPromise => {
+  const osuna = (args: string[]): ProcessPromise => {
     $.verbose = false;
-    return $({ env: testEnvironment(paseoHome) })`osuna --home ${paseoHome} ${args}`.nothrow();
+    return $({ env: testEnvironment(osunaHome) })`osuna --home ${osunaHome} ${args}`.nothrow();
   };
 
   // Cleanup function
@@ -161,16 +161,16 @@ export async function createTestContext(): Promise<TestContext> {
         ctx.daemon.kill();
       }
     }
-    await rm(paseoHome, { recursive: true, force: true });
+    await rm(osunaHome, { recursive: true, force: true });
     await rm(workDir, { recursive: true, force: true });
   };
 
   const ctx: TestContext = {
     port,
-    paseoHome,
+    osunaHome,
     workDir,
     daemon: null,
-    paseo,
+    osuna,
     cleanup,
   };
 
@@ -183,8 +183,8 @@ export async function createTestContext(): Promise<TestContext> {
  */
 export async function createTestContextWithDaemon(): Promise<TestContext> {
   const ctx = await createTestContext();
-  ctx.daemon = await startDaemon(ctx.port, ctx.paseoHome);
-  await waitForDaemon(ctx.port, ctx.paseoHome);
+  ctx.daemon = await startDaemon(ctx.port, ctx.osunaHome);
+  await waitForDaemon(ctx.port, ctx.osunaHome);
   return ctx;
 }
 

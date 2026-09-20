@@ -22,7 +22,7 @@ export interface LocalPairingOffer {
 }
 
 export async function generateLocalPairingOffer(args: {
-  paseoHome: string;
+  osunaHome: string;
   relayEnabled?: boolean;
   relayEndpoint?: string;
   relayPublicEndpoint?: string;
@@ -56,8 +56,8 @@ export async function generateLocalPairingOffer(args: {
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
   const relayUseTls = args.relayUseTls ?? false;
   const relayPublicUseTls = args.relayPublicUseTls ?? relayUseTls;
-  const serverId = getOrCreateServerId(args.paseoHome, { logger: args.logger });
-  const daemonKeyPair = await loadOrCreateDaemonKeyPair(args.paseoHome, args.logger);
+  const serverId = getOrCreateServerId(args.osunaHome, { logger: args.logger });
+  const daemonKeyPair = await loadOrCreateDaemonKeyPair(args.osunaHome, args.logger);
   const offer = await createConnectionOfferV2({
     serverId,
     daemonPublicKeyB64: daemonKeyPair.publicKeyB64,

@@ -11,9 +11,9 @@ import { buildPluginCommandCenterContributions } from "./contributions";
 const workspace: PluginWorkspaceSnapshot = {
   id: "workspace-1",
   projectId: "project-1",
-  projectDisplayName: "Paseo",
-  projectRootPath: "/repo/paseo",
-  directory: "/repo/paseo/review",
+  projectDisplayName: "Osuna",
+  projectRootPath: "/repo/osuna",
+  directory: "/repo/osuna/review",
   projectKind: "git",
   kind: "worktree",
   name: "Review",
@@ -175,11 +175,11 @@ describe("plugin Command Center contributions", () => {
   it("supplies the direct API, typed RPC, snapshots, and narrow navigation", async () => {
     const opened: string[] = [];
     let rpcValue = 0;
-    let receivedPaseo: OsunaApi | null = null;
+    let receivedOsuna: OsunaApi | null = null;
     const installed = plugin(async (context) => {
       expect(context.workspace).toBe(workspace);
       expect(context.agent).toBe(agent);
-      receivedPaseo = context.osuna;
+      receivedOsuna = context.osuna;
       rpcValue = (await context.rpc(inspect, { value: 4 })).value;
       context.openSurface("main");
       context.openPanel("details", { location: "explorer" });
@@ -211,7 +211,7 @@ describe("plugin Command Center contributions", () => {
     await actions.find((action) => action.id === "review:agent")?.run();
 
     expect(rpcValue).toBe(5);
-    expect(receivedPaseo).toBe(runtime.osuna);
+    expect(receivedOsuna).toBe(runtime.osuna);
     expect(opened).toEqual(["review/surface/main", "review/agent/details/agent-1/explorer"]);
   });
 

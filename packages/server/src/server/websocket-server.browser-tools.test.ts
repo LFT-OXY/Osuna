@@ -301,7 +301,7 @@ function createVoiceAssistantWebSocketServer(params: {
     createStub<AgentManager>(agentManager),
     createStub<AgentStorage>({}),
     createStub<DownloadTokenStore>({}),
-    "/tmp/paseo-browser-tools-websocket-test",
+    "/tmp/osuna-browser-tools-websocket-test",
     createStub<DaemonConfigStore>(daemonConfigStore),
     null,
     { allowedOrigins: new Set(["*"]) },
