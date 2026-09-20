@@ -39,12 +39,12 @@ After Hub verifies the App, choose **Install on GitHub**. Select the account or 
 
 Start from Hub rather than GitHub's own install button. The round trip binds the installation to the active Hub organization.
 
-The connection appears with a slug derived from the account. An installation on `getpaseo`, for example, becomes `getpaseo-github`. Connect as many installations as the Hub organization needs.
+The connection appears with a slug derived from the account. An installation on `acme`, for example, becomes `acme-github`. Connect as many installations as the Hub organization needs.
 
 ## What the connection provides
 
 - **Events:** issues, comments, reviews, and pushes from repositories the installation can see. See [GitHub triggers](/docs/hub/triggers/github).
-- **Configuration sync:** a repository can hold the canonical `.paseo` bundle. See [Configuration](/docs/hub/configuration).
+- **Configuration sync:** a repository can hold the canonical `.osuna` bundle. See [Configuration](/docs/hub/configuration).
 - **Execution credentials:** Hub mints scoped GitHub App tokens for workflow steps that explicitly request GitHub authority.
 
 An authenticated `gh` CLI on the daemon does not configure Hub's GitHub integration. It can still serve agents outside Hub's scoped GitHub authority, subject to the daemon and provider's own environment and permission policy.

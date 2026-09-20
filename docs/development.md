@@ -15,7 +15,7 @@ npm run dev:desktop
 
 Root checkout dev is intentionally split across terminals:
 
-- `npm run dev:server` runs the daemon on `127.0.0.1:6768`.
+- `npm run dev:server` runs the daemon on `127.0.0.1:6778`.
 - `npm run dev:app` runs Expo on `http://localhost:8081` and connects to the dev daemon.
 - `npm run dev:desktop` runs its own Electron-flavored Expo server on the first free port from `8082` through `8089`. It never claims port `8081`.
 
@@ -27,7 +27,7 @@ The web and desktop dev launchers pass the current Git branch to Metro as
 `EXPO_PUBLIC_OSUNA_DEV_BUILD_LABEL`. The expanded desktop sidebar shows it in
 the titlebar row. Production builds leave the variable unset and show no label.
 
-`npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:6767` for the packaged app and production-style `~/.osuna` state.
+`npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:6777` for the packaged app and production-style `~/.osuna` state.
 
 ## Nix desktop package
 
@@ -62,11 +62,11 @@ OSUNA_DEV_RESET_HOME=1 npm run dev            # clear and reseed the derived wor
 
 ### Daemon endpoints
 
-- Stable daemon launched by the desktop app: `localhost:6767`.
-- Root checkout dev daemon: `localhost:6768`.
+- Stable daemon launched by the desktop app: `localhost:6777`.
+- Root checkout dev daemon: `localhost:6778`.
 - Root checkout Expo: `http://localhost:8081`.
 - Root checkout desktop dev Expo: first free port from `8082` through `8089`.
-- `npm run dev` (Windows): `localhost:6767` for the daemon.
+- `npm run dev` (Windows): `localhost:6777` for the daemon.
 
 In Osuna-managed worktree services, use the injected service environment rather than hardcoded root checkout ports.
 
@@ -106,11 +106,11 @@ npm run ios        # → expo run:ios (packages/app): builds and launches the ap
 
 `expo run:ios` starts its own Metro and gives you the normal Simulator.app window (full speed, native touch, no stream).
 
-**Pointing the app at a daemon.** The client resolves its local daemon from `EXPO_PUBLIC_LOCAL_DAEMON` (`packages/app/src/runtime/host-runtime.ts`); when unset it falls back to `localhost:6767`, the production `~/.osuna` daemon. To target a worktree's dev daemon instead, set it on the build command:
+**Pointing the app at a daemon.** The client resolves its local daemon from `EXPO_PUBLIC_LOCAL_DAEMON` (`packages/app/src/runtime/host-runtime.ts`); when unset it falls back to `localhost:6777`, the production `~/.osuna` daemon. To target a worktree's dev daemon instead, set it on the build command:
 
 ```bash
 EXPO_PUBLIC_LOCAL_DAEMON=localhost:${OSUNA_SERVICE_DAEMON_PORT} npm run ios   # worktree daemon running as a Osuna service
-EXPO_PUBLIC_LOCAL_DAEMON=localhost:6768 npm run ios                          # standalone `npm run dev:server`
+EXPO_PUBLIC_LOCAL_DAEMON=localhost:6778 npm run ios                          # standalone `npm run dev:server`
 ```
 
 The iOS simulator shares the Mac's loopback, so `localhost:<port>` reaches the host daemon directly.
@@ -248,7 +248,7 @@ For the desktop Explorer sidebar toggle, run the app against the root checkout's
 npm run profile:explorer-toggle --workspace=@osuna/app
 ```
 
-The harness verifies port `6768`, opens the Osuna workspace, creates and warms the Explorer pane,
+The harness verifies port `6778`, opens the Osuna workspace, creates and warms the Explorer pane,
 records an idle control, then measures settled and 50 ms burst Cmd+E toggles. It reports
 input-to-DOM and input-to-paint latency, React commits, mounts, unmounts, and DOM mutations. Set
 `OSUNA_PROFILE_TRACE_PATH=/tmp/explorer-toggle.trace.json` or
@@ -469,9 +469,9 @@ Or persist it in `config.json`:
 }
 ```
 
-When enabled, opening the daemon HTTP origin (for example `http://localhost:6767/`) serves the web app. The same HTTP server continues to serve `/api/*`, `/mcp/*`, `/public/*`, the WebSocket upgrade, and service-proxy routes. Static files load without daemon bearer auth; API and WebSocket calls still enforce auth.
+When enabled, opening the daemon HTTP origin (for example `http://localhost:6777/`) serves the web app. The same HTTP server continues to serve `/api/*`, `/mcp/*`, `/public/*`, the WebSocket upgrade, and service-proxy routes. Static files load without daemon bearer auth; API and WebSocket calls still enforce auth.
 
-The served app auto-bootstraps a connection to the same origin, so opening `http://localhost:6767/` directly usually skips the Add Host step.
+The served app auto-bootstraps a connection to the same origin, so opening `http://localhost:6777/` directly usually skips the Add Host step.
 
 Build the artifact for packaging or measurement with:
 
@@ -577,7 +577,7 @@ npm run cli -- --host ssh://user@host ls -a
 Set `OSUNA_HOST` to use the same target across invocations. An explicit
 selector overrides both environment selectors. With both `OSUNA_HOME` and `OSUNA_HOST` set, pass an explicit selector. See [CLI target selection](../public-docs/cli.md#select-one-daemon).
 
-In an SSH URI, the URL port is the SSH server port. The remote daemon defaults to `127.0.0.1:6767`; use `?daemonPort=7777` to override it. The transport runs non-interactively through the local OpenSSH client and never installs, starts, or configures the remote daemon. User-facing setup and troubleshooting live in [public-docs/connectivity.md](../public-docs/connectivity.md#ssh).
+In an SSH URI, the URL port is the SSH server port. The remote daemon defaults to `127.0.0.1:6777`; use `?daemonPort=7777` to override it. The transport runs non-interactively through the local OpenSSH client and never installs, starts, or configures the remote daemon. User-facing setup and troubleshooting live in [public-docs/connectivity.md](../public-docs/connectivity.md#ssh).
 
 Desktop integrations can focus an existing agent without creating one or
 sending a message. Use `osuna://h/<server-id>/agent/<agent-id>`, or run

@@ -333,7 +333,7 @@ test.each([
           mimeType: "application/github-pr",
           number: 123,
           title: "Review this PR",
-          url: "https://github.com/getpaseo/paseo/pull/123",
+          url: "https://github.com/LFT-OXY/Osuna/pull/123",
         },
       ],
       ...(structured ? { outputSchema: { type: "object" } } : {}),
@@ -3034,7 +3034,7 @@ test("sends structured attachments with create_agent_request", async () => {
         mimeType: "application/github-pr",
         number: 123,
         title: "Fix race in worktree setup",
-        url: "https://github.com/getpaseo/paseo/pull/123",
+        url: "https://github.com/LFT-OXY/Osuna/pull/123",
         baseRefName: "main",
         headRefName: "fix/worktree-race",
       },
@@ -3049,7 +3049,7 @@ test("sends structured attachments with create_agent_request", async () => {
       mimeType: "application/github-pr",
       number: 123,
       title: "Fix race in worktree setup",
-      url: "https://github.com/getpaseo/paseo/pull/123",
+      url: "https://github.com/LFT-OXY/Osuna/pull/123",
       baseRefName: "main",
       headRefName: "fix/worktree-race",
     },
@@ -3210,7 +3210,7 @@ test("sends structured first-agent context attachments with create_osuna_worktre
           mimeType: "application/github-pr",
           number: 123,
           title: "Fix race in worktree setup",
-          url: "https://github.com/getpaseo/paseo/pull/123",
+          url: "https://github.com/LFT-OXY/Osuna/pull/123",
         },
       ],
     },
@@ -3227,7 +3227,7 @@ test("sends structured first-agent context attachments with create_osuna_worktre
       mimeType: "application/github-pr",
       number: 123,
       title: "Fix race in worktree setup",
-      url: "https://github.com/getpaseo/paseo/pull/123",
+      url: "https://github.com/LFT-OXY/Osuna/pull/123",
     },
   ]);
 
@@ -3363,12 +3363,12 @@ test("searches GitHub repositories through the dotted RPC", async () => {
   await connectPromise;
 
   const searchPromise = client.searchGithubRepositories(
-    { query: "paseo", limit: 10 },
+    { query: "osuna", limit: 10 },
     "req-repositories",
   );
   expect(parseSentFrame(mock.sent[0])).toEqual({
     type: "workspace.github.search_repositories.request",
-    query: "paseo",
+    query: "osuna",
     limit: 10,
     requestId: "req-repositories",
   });
@@ -3381,13 +3381,13 @@ test("searches GitHub repositories through the dotted RPC", async () => {
         requestId: "req-repositories",
         repositories: [
           {
-            id: "R_paseo",
-            name: "paseo",
-            nameWithOwner: "getpaseo/paseo",
+            id: "R_osuna",
+            name: "Osuna",
+            nameWithOwner: "LFT-OXY/Osuna",
             description: "Development environment in your pocket",
             visibility: "public",
             updatedAt: "2026-07-15T10:00:00Z",
-            cloneUrl: "git@github.com:getpaseo/paseo.git",
+            cloneUrl: "git@github.com:LFT-OXY/Osuna.git",
           },
         ],
         available: true,
@@ -3401,13 +3401,13 @@ test("searches GitHub repositories through the dotted RPC", async () => {
     requestId: "req-repositories",
     repositories: [
       {
-        id: "R_paseo",
-        name: "paseo",
-        nameWithOwner: "getpaseo/paseo",
+        id: "R_osuna",
+        name: "Osuna",
+        nameWithOwner: "LFT-OXY/Osuna",
         description: "Development environment in your pocket",
         visibility: "public",
         updatedAt: "2026-07-15T10:00:00Z",
-        cloneUrl: "git@github.com:getpaseo/paseo.git",
+        cloneUrl: "git@github.com:LFT-OXY/Osuna.git",
       },
     ],
     available: true,
@@ -4237,7 +4237,7 @@ test("requests directory suggestions via RPC", async () => {
       message: {
         type: "directory_suggestions_response",
         payload: {
-          directories: ["/Users/test/projects/paseo"],
+          directories: ["/Users/test/projects/osuna"],
           entries: [{ path: "README.md", kind: "file" }],
           error: null,
           requestId: "req-directories",
@@ -4247,7 +4247,7 @@ test("requests directory suggestions via RPC", async () => {
   );
 
   await expect(promise).resolves.toEqual({
-    directories: ["/Users/test/projects/paseo"],
+    directories: ["/Users/test/projects/osuna"],
     entries: [{ path: "README.md", kind: "file" }],
     error: null,
     requestId: "req-directories",
@@ -4440,8 +4440,8 @@ test("requests GitHub check details via namespaced RPC", async () => {
   const promise = client.checkoutGithubGetCheckDetails(
     {
       cwd: "/tmp/project",
-      repoOwner: "getpaseo",
-      repoName: "paseo",
+      repoOwner: "LFT-OXY",
+      repoName: "Osuna",
       checkRunId: 12345,
       workflowRunId: 456,
     },
@@ -4453,8 +4453,8 @@ test("requests GitHub check details via namespaced RPC", async () => {
   expect(request).toMatchObject({
     type: "checkout.github.get_check_details.request",
     cwd: "/tmp/project",
-    repoOwner: "getpaseo",
-    repoName: "paseo",
+    repoOwner: "LFT-OXY",
+    repoName: "Osuna",
     checkRunId: 12345,
     workflowRunId: 456,
     requestId: "req-check-details",

@@ -1,6 +1,6 @@
 ---
 title: SDK API reference
-description: Public configuration, methods, handles, results, defaults, and lifecycle behavior for @getpaseo/client.
+description: Public configuration, methods, handles, results, defaults, and lifecycle behavior for @osuna/client.
 nav: API reference
 order: 58
 category: TypeScript SDK
@@ -8,7 +8,7 @@ category: TypeScript SDK
 
 # SDK API reference
 
-Import every supported runtime value and TypeScript type from `@getpaseo/client`.
+Import every supported runtime value and TypeScript type from `@osuna/client`.
 
 ## `createOsunaClient(config)`
 
@@ -33,7 +33,7 @@ Common optional configuration:
 | `reconnect.maxDelayMs`  | `number`      | Client default | Maximum reconnect delay.                         |
 | `logger`                | `OsunaLogger` | Unset          | Debug, info, warning, and error sink.            |
 
-Relay E2EE clients can also pass `e2ee.enabled` and `e2ee.daemonPublicKeyB64`. `appVersion`, `runtimeGeneration`, and runtime-metrics options exist for Paseo client surfaces; ordinary integrations can omit them.
+Relay E2EE clients can also pass `e2ee.enabled` and `e2ee.daemonPublicKeyB64`. `appVersion`, `runtimeGeneration`, and runtime-metrics options exist for Osuna client surfaces; ordinary integrations can omit them.
 
 ## Client lifecycle
 
@@ -127,7 +127,7 @@ See [events](./events.md#follow-provider-catalog-changes) for explicit event obs
 | ------------------------ | ----------------------------- | ---------------------------------------------------------------------------------------------- |
 | `list(options?)`         | `OsunaWorkspaceListResult`    | Lists, filters, pages, or subscribes to the workspace directory.                               |
 | `open(cwd)`              | `OsunaWorkspaceHandle`        | Reuses the active workspace for a directory or creates one.                                    |
-| `create(options)`        | `OsunaWorkspaceHandle`        | Always creates a fresh directory-backed or Paseo-worktree workspace.                           |
+| `create(options)`        | `OsunaWorkspaceHandle`        | Always creates a fresh directory-backed or Osuna-worktree workspace.                           |
 | `ref(workspaceOrId)`     | `OsunaWorkspaceHandle`        | Creates a local handle.                                                                        |
 | `archive(workspaceOrId)` | `OsunaWorkspaceArchiveResult` | Archives without first creating a handle.                                                      |
 | `subscribe(handler)`     | Unsubscribe function          | Local listener for this API instance. Requires an owned `list({ subscribe: {} })` observation. |

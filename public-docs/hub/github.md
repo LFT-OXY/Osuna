@@ -16,7 +16,7 @@ on: github.issue_comment
 max_runtime: 2h
 filters:
   repo: example/project
-  contains: "@paseo"
+  contains: "@osuna"
   from_users: [maintainer]
 steps:
   - id: implement
@@ -70,7 +70,7 @@ Connection values for other integrations remain explicit step environment values
 
 ```yaml
 env:
-  SOME_TOKEN: "${{ paseo.connections.some-connection.token }}"
+  SOME_TOKEN: "${{ osuna.connections.some-connection.token }}"
 ```
 
 Hub resolves the value when it prepares the agent's environment. See [Hub security](/docs/hub/security) for provider and host boundaries.

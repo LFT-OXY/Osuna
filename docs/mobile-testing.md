@@ -157,7 +157,7 @@ Two reusable flows handle Expo dev client screens after launch:
 
 ### Reach the composer
 
-`flows/land-in-chat.yaml` is the canonical "get into a chat" primitive. It `clearState`s, runs `launch.yaml`, taps the welcome screen's direct-connection option, types `127.0.0.1:6767`, submits, and waits for `message-input-root`. Compose any composer-level fixture on top of it:
+`flows/land-in-chat.yaml` is the canonical "get into a chat" primitive. It `clearState`s, runs `launch.yaml`, taps the welcome screen's direct-connection option, types `127.0.0.1:6777`, submits, and waits for `message-input-root`. Compose any composer-level fixture on top of it:
 
 ```yaml
 appId: com.chinhae.osuna
@@ -168,7 +168,7 @@ appId: com.chinhae.osuna
 
 See `image-picker-repro.yaml` for an example.
 
-**Prefer direct connection over relay pairing for local E2E.** Relay needs a 400+ character pairing URL typed into an input; direct needs `127.0.0.1:6767`. The daemon listens on 6767 and the simulator can reach it directly.
+**Prefer direct connection over relay pairing for local E2E.** Relay needs a 400+ character pairing URL typed into an input; direct needs `127.0.0.1:6777`. The daemon listens on 6777 and the simulator can reach it directly.
 
 ### New Workspace Creation
 

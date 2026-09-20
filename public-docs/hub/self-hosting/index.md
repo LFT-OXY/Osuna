@@ -20,12 +20,12 @@ Follow the [quickstart](/docs/hub/quickstart) to connect Slack over Socket Mode 
 
 ## Local data
 
-Without `DATABASE_URL`, Hub stores an embedded PGlite database and its generated authentication secret under `$XDG_DATA_HOME/paseo-hub`. If `XDG_DATA_HOME` is not set to an absolute path, Hub uses `~/.local/share/paseo-hub`. Both survive restarts.
+Without `DATABASE_URL`, Hub stores an embedded PGlite database and its generated authentication secret under `$XDG_DATA_HOME/osuna-hub`. If `XDG_DATA_HOME` is not set to an absolute path, Hub uses `~/.local/share/osuna-hub`. Both survive restarts.
 
 Set a different location explicitly with:
 
 ```sh
-PASEO_HUB_DATA_DIR=/path/to/paseo-hub-data npx @getpaseo/hub
+OSUNA_HUB_DATA_DIR=/path/to/osuna-hub-data npx @getpaseo/hub
 ```
 
 Embedded mode supports one Hub process per data directory. It is intended for a personal or single-process Hub. Back up the whole data directory before upgrading or moving it.
@@ -49,13 +49,13 @@ Changing the public origin requires updating callback and webhook settings in th
 Set `DATABASE_URL` to use PostgreSQL instead of the embedded database:
 
 ```sh
-DATABASE_URL=postgres://paseo:password@localhost:5432/paseo_hub \
+DATABASE_URL=postgres://osuna:password@localhost:5432/osuna_hub \
   npx @getpaseo/hub
 ```
 
 Use PostgreSQL for a durable server deployment, more than one Hub process, or an existing database backup and operations setup. Migrations run automatically at startup. Hub does not start listening when a migration fails.
 
-The database also stores Hub's generated authentication secret. Set `PASEO_HUB_AUTH_SECRET` only when the deployment must supply that secret from a platform secret store. While the override is set, Hub uses it without replacing the stored secret. Changing the effective secret signs everyone out of the dashboard; execution credentials already issued remain valid until their execution ends.
+The database also stores Hub's generated authentication secret. Set `OSUNA_HUB_AUTH_SECRET` only when the deployment must supply that secret from a platform secret store. While the override is set, Hub uses it without replacing the stored secret. Changing the effective secret signs everyone out of the dashboard; execution credentials already issued remain valid until their execution ends.
 
 ## App configuration
 
@@ -97,12 +97,12 @@ See [GitHub](/docs/hub/self-hosting/github-app), [Slack](/docs/hub/self-hosting/
 Browser setup is the default for a fresh database. An unattended deployment can create the first operator from environment variables instead:
 
 ```dotenv
-PASEO_BOOTSTRAP_ORGANIZATION=My organization
-PASEO_BOOTSTRAP_OWNER_EMAIL=me@example.com
-PASEO_BOOTSTRAP_OWNER_PASSWORD=replace-with-a-temporary-password
+OSUNA_BOOTSTRAP_ORGANIZATION=My organization
+OSUNA_BOOTSTRAP_OWNER_EMAIL=me@example.com
+OSUNA_BOOTSTRAP_OWNER_PASSWORD=replace-with-a-temporary-password
 ```
 
-The password must be at least 12 characters. Sign in once, replace it in the dashboard, then remove `PASEO_BOOTSTRAP_OWNER_PASSWORD`. Hub keeps the account and organization.
+The password must be at least 12 characters. Sign in once, replace it in the dashboard, then remove `OSUNA_BOOTSTRAP_OWNER_PASSWORD`. Hub keeps the account and organization.
 
 ## Docker Compose
 
@@ -135,7 +135,7 @@ Then set in `.env`:
 
 ```dotenv
 PASEO_HUB_APP_URL=https://hub.example.com
-PASEO_HUB_TRUSTED_CLIENT_IP_HEADER=x-forwarded-for
+OSUNA_HUB_TRUSTED_CLIENT_IP_HEADER=x-forwarded-for
 ```
 
 To keep port `3000` off the public interface, change the `hub` port in `compose.yml` to `"127.0.0.1:3000:3000"`.

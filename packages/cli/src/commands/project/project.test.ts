@@ -8,7 +8,7 @@ import { resolveProjectName, runRenameCommand } from "./rename.js";
 
 const project = {
   projectId: "project-1",
-  projectDisplayName: "Paseo",
+  projectDisplayName: "Osuna",
   projectCustomName: null,
   projectRootPath: "/tmp/paseo",
   projectKind: "git" as const,
@@ -56,7 +56,7 @@ describe("project commands", () => {
     expect(addProject).toHaveBeenCalledWith(path.resolve("relative/project"));
     expect(result.data).toEqual({
       projectId: "project-1",
-      name: "Paseo",
+      name: "Osuna",
       kind: "git",
       path: "/tmp/paseo",
     });

@@ -8,11 +8,11 @@ category: Hub
 
 # Hub workflows
 
-A workflow file contains one trigger and the ordered steps it starts. Files are discovered from `.paseo/workflows/*.yml`.
+A workflow file contains one trigger and the ordered steps it starts. Files are discovered from `.osuna/workflows/*.yml`.
 
 ## Your first workflow
 
-Assume `.paseo/hub.yml` defines an environment named `dev` and an agent named `codex`. Add `.paseo/workflows/slack-help.yml`:
+Assume `.osuna/hub.yml` defines an environment named `dev` and an agent named `codex`. Add `.osuna/workflows/slack-help.yml`:
 
 ```yaml
 name: slack-help
@@ -61,10 +61,10 @@ inputs:
   repo:
     type: string
     required: true
-    choices: [paseo, hub]
+    choices: [osuna, hub]
 steps:
   - id: work
-    environment: ${{ paseo.inputs.repo }}
+    environment: ${{ osuna.inputs.repo }}
     max_runtime: 30m
     idle_timeout: 5m
     agent: codex
@@ -105,15 +105,15 @@ inputs:
     choices: [codex-safe, claude]
 steps:
   - id: work
-    environment: paseo
+    environment: osuna
     max_runtime: 30m
     idle_timeout: 5m
-    agent: ${{ paseo.inputs.agent }}
+    agent: ${{ osuna.inputs.agent }}
     prompt:
       - text: ${{ paseo.prompt }}
 ```
 
-If `codex-safe` contains structured sandbox options in `hub.yml`, selecting it carries those options unchanged. A dynamic inline object such as `provider: ${{ paseo.inputs.agent }}` is rejected.
+If `codex-safe` contains structured sandbox options in `hub.yml`, selecting it carries those options unchanged. A dynamic inline object such as `provider: ${{ osuna.inputs.agent }}` is rejected.
 
 ## Route from a classifier
 
@@ -143,7 +143,7 @@ steps:
         type: object
         required: [environment, agent]
         properties:
-          environment: { enum: [paseo, hub] }
+          environment: { enum: [osuna, hub] }
           agent: { enum: [codex-safe, claude] }
         additionalProperties: false
   - id: work
@@ -159,7 +159,7 @@ steps:
       - { type: discord.reply, max: 1, required: true }
 ```
 
-`.paseo/workflows/partials/classify.md`:
+`.osuna/workflows/partials/classify.md`:
 
 ```text
 Choose one configured repository environment and one complete named agent configuration.
@@ -200,7 +200,7 @@ filters:
   from_users: [automation]
 steps:
   - id: inspect
-    environment: paseo
+    environment: osuna
     max_runtime: 10m
     idle_timeout: 2m
     agent: codex-safe
@@ -215,7 +215,7 @@ steps:
         additionalProperties: false
   - id: review
     if: ${{ steps.inspect.outputs.needs_review == true }}
-    environment: paseo
+    environment: osuna
     max_runtime: 30m
     idle_timeout: 5m
     agent: claude

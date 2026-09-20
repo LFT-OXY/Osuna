@@ -102,7 +102,7 @@ export async function runArchiveCommandWithDeps(
     }
 
     // Archive the worktree. scope:"worktree" archives every active workspace on
-    // the directory and then removes the directory (Paseo-owned gated).
+    // the directory and then removes the directory (Osuna-owned gated).
     const response = await client.archiveOsunaWorktree({
       worktreePath: worktree.worktreePath,
       scope: "worktree",

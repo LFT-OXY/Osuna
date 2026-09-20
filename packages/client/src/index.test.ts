@@ -261,9 +261,9 @@ test("createOsunaApi borrows daemon capabilities without exposing connection own
     reconnect: { enabled: false },
   });
 
-  const paseo = createOsunaApi(daemonClient);
+  const osuna = createOsunaApi(daemonClient);
 
-  expect(Object.keys(paseo).sort()).toEqual([
+  expect(Object.keys(osuna).sort()).toEqual([
     "agents",
     "config",
     "dispose",
@@ -273,9 +273,9 @@ test("createOsunaApi borrows daemon capabilities without exposing connection own
     "terminals",
     "workspaces",
   ]);
-  expect("connect" in paseo).toBe(false);
-  expect("close" in paseo).toBe(false);
-  expect("skills" in paseo.agents).toBe(false);
+  expect("connect" in osuna).toBe(false);
+  expect("close" in osuna).toBe(false);
+  expect("skills" in osuna.agents).toBe(false);
 });
 
 test("agent handles send permission responses for their agent", async () => {

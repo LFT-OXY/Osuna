@@ -23,6 +23,9 @@
 ## 范围（实测，票 04 完成后需重新计数）
 
 当前（票 06 已提交）约 10600 处 / 1200 文件，其中 `.ts` 8700 处 / 959 文件是主体。
+不含票 09 的原生模块目录名，也不含 `packages/website` 里 canonical URL、changelog
+标题等仍指向旧域名的文案 —— website 已移出 workspace 不再构建，那部分随 website
+的去留一起定。
 
 - [ ] `packages/server/src/terminal/`：票 06 有意留下的一串 ——
       `resolvePaseoCliBinDir`、`injectPaseoHookCli`、`prependPaseoCliToPath`、

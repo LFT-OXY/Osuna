@@ -12,23 +12,23 @@ The official image:
 
 - builds `@osuna/server` and `@osuna/cli` from source-built workspace tarballs
 - runs the daemon as the non-root `osuna` user
-- listens on `0.0.0.0:6767` inside the container
+- listens on `0.0.0.0:6777` inside the container
 - enables the bundled daemon web UI with `OSUNA_WEB_UI_ENABLED=true`
 - stores daemon state and agent credentials under `/home/osuna`
 - leaves agent CLIs out of the base image
 
-Open the container's HTTP origin, for example `http://localhost:6767`, to load
+Open the container's HTTP origin, for example `http://localhost:6777`, to load
 the web UI. The served app receives a same-origin connection hint and connects
 back to that daemon. Static UI files load without daemon auth; API and
 WebSocket requests still require `OSUNA_PASSWORD` when one is configured.
 
-Host-side CLI commands select the container explicitly, for example `osuna project ls --host 127.0.0.1:6767`. Without an endpoint selector the CLI looks for a local home’s supervisor. Container environment settings are deployment overrides; worker restart preserves them. Your container manager owns full supervisor replacement.
+Host-side CLI commands select the container explicitly, for example `osuna project ls --host 127.0.0.1:6777`. Without an endpoint selector the CLI looks for a local home’s supervisor. Container environment settings are deployment overrides; worker restart preserves them. Your container manager owns full supervisor replacement.
 
 ## Quick Start
 
 ```bash
 docker run -d --name osuna \
-  -p 6767:6767 \
+  -p 6777:6777 \
   -e OSUNA_PASSWORD=change-me \
   -v "$PWD/osuna-home:/home/osuna" \
   -v "$PWD:/workspace" \
@@ -38,7 +38,7 @@ docker run -d --name osuna \
 Then open:
 
 ```text
-http://localhost:6767
+http://localhost:6777
 ```
 
 If you set `OSUNA_PASSWORD`, enter the same password when adding the direct
@@ -62,7 +62,7 @@ services:
     image: ghcr.io/lft-oxy/osuna:latest
     restart: unless-stopped
     ports:
-      - "6767:6767"
+      - "6777:6777"
     environment:
       OSUNA_PASSWORD: "change-me"
     volumes:
@@ -126,7 +126,7 @@ The image defaults:
 | -------------- | -------------------- |
 | `HOME`         | `/home/osuna`        |
 | `OSUNA_HOME`   | `/home/osuna/.osuna` |
-| `OSUNA_LISTEN` | `0.0.0.0:6767`       |
+| `OSUNA_LISTEN` | `0.0.0.0:6777`       |
 
 If you bind-mount host directories on Linux, make sure the container user can
 write them. The built-in `osuna` user has uid/gid `1000:1000`. For a different
@@ -142,7 +142,7 @@ Caddy example:
 
 ```caddy
 osuna.example.com {
-  reverse_proxy 127.0.0.1:6767
+  reverse_proxy 127.0.0.1:6777
 }
 ```
 
@@ -154,7 +154,7 @@ server {
     server_name osuna.example.com;
 
     location / {
-        proxy_pass http://127.0.0.1:6767;
+        proxy_pass http://127.0.0.1:6777;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

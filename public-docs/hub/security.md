@@ -14,7 +14,7 @@ Hub authenticates triggers, selects workflows, and dispatches agents. It does no
 external event → Hub → daemon → provider process → cwd, filesystem, network
 ```
 
-The host, provider credentials, filesystem, network, and resulting actions remain under your control. See [Paseo security](/docs/security) for daemon authentication, pairing, and relay boundaries.
+The host, provider credentials, filesystem, network, and resulting actions remain under your control. See [Osuna security](/docs/security) for daemon authentication, pairing, and relay boundaries.
 
 ## Choose daemon authority
 
@@ -55,7 +55,7 @@ prompt:
 
 ## Protect configuration authority
 
-Protect push access to the repository containing the `.paseo` bundle. A change can select connections, daemons, working directories, complete named agents, and output capabilities.
+Protect push access to the repository containing the `.osuna` bundle. A change can select connections, daemons, working directories, complete named agents, and output capabilities.
 
 The file boundary does not reduce authority: `hub.yml` owns resources, and each workflow owns one trigger and its steps. Review them as one bundle.
 
@@ -126,7 +126,7 @@ The finite enums let activation prove every environment and agent result. Runtim
 
 ## Provider-native controls
 
-Hub defines no common sandbox abstraction. Put provider-owned settings in a complete named agent under `.paseo/hub.yml`:
+Hub defines no common sandbox abstraction. Put provider-owned settings in a complete named agent under `.osuna/hub.yml`:
 
 ```yaml
 environments:

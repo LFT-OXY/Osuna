@@ -42,7 +42,8 @@ describe("Hub commands", () => {
       },
     });
     connect?.outputHelp();
-    assert.match(help, /active stored login.*https:\/\/hub\.paseo\.sh/u);
+    // 已无托管回退：帮助文本要说清这一点，而不是印一个上游地址
+    assert.match(help, /active stored login\. There is no hosted fallback\./u);
   });
 
   it("login stores the durable credential and marks its normalized origin active", async () => {
@@ -363,7 +364,7 @@ describe("Hub commands", () => {
               {
                 id: "a50e05af-4f20-4c8f-8dcc-58e5ea360663",
                 slug: "paseo",
-                name: "Paseo",
+                name: "Osuna",
               },
             ];
           },
@@ -381,7 +382,7 @@ describe("Hub commands", () => {
         {
           id: "a50e05af-4f20-4c8f-8dcc-58e5ea360663",
           slug: "paseo",
-          name: "Paseo",
+          name: "Osuna",
         },
       ],
     });

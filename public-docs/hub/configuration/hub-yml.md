@@ -11,7 +11,7 @@ category: Hub
 Hub accepts YAML in this layout:
 
 ```text
-.paseo/
+.osuna/
 ├── hub.yml
 └── workflows/
     ├── <workflow>.yml
@@ -19,18 +19,18 @@ Hub accepts YAML in this layout:
         └── <partial>.md
 ```
 
-Only direct `.yml` children of `.paseo/workflows/` are workflows. Each file contains one trigger and its ordered steps. There is no manifest, `includes`, `uses`, reusable step, workflow call, or inheritance.
+Only direct `.yml` children of `.osuna/workflows/` are workflows. Each file contains one trigger and its ordered steps. There is no manifest, `includes`, `uses`, reusable step, workflow call, or inheritance.
 
 ## `hub.yml`
 
-`.paseo/hub.yml` contains named project resources. Names are map keys and are not repeated inside each object.
+`.osuna/hub.yml` contains named project resources. Names are map keys and are not repeated inside each object.
 
 ```yaml
 environments:
-  paseo:
+  osuna:
     kind: daemon
     daemon: laptop
-    cwd: /Users/you/code/paseo
+    cwd: /Users/you/code/osuna
   hub:
     kind: daemon
     daemon: devbox
@@ -80,7 +80,7 @@ environments:
 
 One execution is one step run, so two steps selecting the same environment get separate branches.
 
-`${{ paseo.execution.id }}` is the only expression `newBranch` accepts. `paseo.prompt`, `paseo.context`, `paseo.inputs.*`, `values.*`, `steps.<id>.outputs.*`, and provider event fields are unavailable here, and each one fails bundle activation at the authored field, such as `.paseo/hub.yml.environments.review.worktree.newBranch`.
+`${{ paseo.execution.id }}` is the only expression `newBranch` accepts. `paseo.prompt`, `paseo.context`, `osuna.inputs.*`, `values.*`, `steps.<id>.outputs.*`, and provider event fields are unavailable here, and each one fails bundle activation at the authored field, such as `.osuna/hub.yml.environments.review.worktree.newBranch`.
 
 `${{ paseo.execution.id }}` fails activation the same way anywhere else in a bundle. `branch` and `prNumber` take literal values.
 
@@ -94,17 +94,17 @@ Each agent is one complete provider configuration:
 | ------------------ | -------- | ---------------------------------------------------------------- |
 | `provider`         | yes      | Provider ID.                                                     |
 | `model`            | no       | Provider model ID.                                               |
-| `mode`             | no       | Paseo mode ID.                                                   |
+| `mode`             | no       | Osuna mode ID.                                                   |
 | `thinkingOptionId` | no       | Provider thinking option.                                        |
 | `options`          | no       | JSON-safe provider-native options, preserving names and nesting. |
 
 A named selection preserves the complete object, including structured options. Named agents have no parent, patch, or per-step override.
 
-Hub passes `model`, `mode`, `thinkingOptionId`, and `options` to the Paseo daemon without renaming or flattening provider fields. The selected daemon validates them against its current provider schema; Hub does not translate provider-native options.
+Hub passes `model`, `mode`, `thinkingOptionId`, and `options` to the Osuna daemon without renaming or flattening provider fields. The selected daemon validates them against its current provider schema; Hub does not translate provider-native options.
 
 ## Workflow files
 
-`.paseo/workflows/review.yml`:
+`.osuna/workflows/review.yml`:
 
 ```yaml
 name: review
@@ -116,10 +116,10 @@ inputs:
   repo:
     type: string
     required: true
-    choices: [paseo, hub]
+    choices: [osuna, hub]
 steps:
   - id: inspect
-    environment: ${{ paseo.inputs.repo }}
+    environment: ${{ osuna.inputs.repo }}
     max_runtime: 30m
     idle_timeout: 5m
     agent: codex-safe
@@ -182,7 +182,7 @@ values:
   selected_agent: ${{ steps.classify.outputs.agent }}
 ```
 
-Expressions may read declared `paseo.inputs`, earlier `steps.<id>.outputs`, and `values`. The grammar supports paths, JSON literals, parentheses, `!`, `==`, `!=`, `&&`, `||`, and `??`.
+Expressions may read declared `osuna.inputs`, earlier `steps.<id>.outputs`, and `values`. The grammar supports paths, JSON literals, parentheses, `!`, `==`, `!=`, `&&`, `||`, and `??`.
 
 An environment or dynamic named-agent expression must have a finite set of possible string results at activation. Every result must name a configured resource. Runtime selection never falls back to another environment or agent.
 
@@ -232,7 +232,7 @@ prompt:
 
 `${{ paseo.context }}` opts that step into provider context materialization and renders the result as JSON in the prompt. It is available only in prompt text. Hub does not inject it unless the workflow authors that expression.
 
-Includes resolve relative to `.paseo/workflows/`, so shared partials use `partials/<name>.md`. Missing files, absolute or traversing paths, symlinks, content mismatches, and files outside the partial tree are rejected.
+Includes resolve relative to `.osuna/workflows/`, so shared partials use `partials/<name>.md`. Missing files, absolute or traversing paths, symlinks, content mismatches, and files outside the partial tree are rejected.
 
 ### Output capabilities
 
@@ -251,7 +251,7 @@ Every step receives `hub.finish_execution`. The prompt must tell the agent when 
 
 ## Migrating a monolithic file
 
-Keep `environments` in `hub.yml`, convert the environment list to a named map, and move each former trigger into its own `.paseo/workflows/<name>.yml` file. Move shared prompt files to `.paseo/workflows/partials/`. Define complete named agent configurations under `agents` and replace dynamic provider fields with finite named-agent selection.
+Keep `environments` in `hub.yml`, convert the environment list to a named map, and move each former trigger into its own `.osuna/workflows/<name>.yml` file. Move shared prompt files to `.osuna/workflows/partials/`. Define complete named agent configurations under `agents` and replace dynamic provider fields with finite named-agent selection.
 
 Hub does not read TOML or a monolithic `triggers` section, and the CLI does not rewrite either format.
 
@@ -264,7 +264,7 @@ Self-contained dashboard trigger documents accept `run.continuation`:
 | Value                                                    | Behavior                                                                                                                |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `{mode: conversation}`                                   | Default. Reuse the project's agent for the event's conversation; create a new agent when the event has no conversation. |
-| `{mode: key, key: "support-${{ paseo.inputs.ticket }}"}` | Reuse the project's agent for the evaluated custom key.                                                                 |
+| `{mode: key, key: "support-${{ osuna.inputs.ticket }}"}` | Reuse the project's agent for the evaluated custom key.                                                                 |
 | `{mode: new}`                                            | Create a new agent for each arrival.                                                                                    |
 
 Keys use the existing expression syntax and must resolve to a non-empty string of at most 512 characters. Custom keys and provider conversation identities occupy separate namespaces. The same key in different projects does not share an agent.
@@ -275,7 +275,7 @@ A follow-up steers the active agent without extending its runtime deadline or cr
 
 ### Upgrading
 
-Upgrade the connected Paseo daemons before enabling the new Hub version. Hub requires the daemon's ordinary agent RPC and request receipt capabilities; an older host produces an actionable dispatch error.
+Upgrade the connected Osuna daemons before enabling the new Hub version. Hub requires the daemon's ordinary agent RPC and request receipt capabilities; an older host produces an actionable dispatch error.
 
 Hub's database migration adds sessions and nullable execution associations. Existing executions retain their saved launch contract and execution-specific MCP endpoint until they finish. New arrivals for existing self-contained trigger documents use the conversation default. Historical agents are not backfilled into sessions.
 
