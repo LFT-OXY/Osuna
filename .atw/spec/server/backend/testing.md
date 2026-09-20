@@ -55,6 +55,26 @@ For something the daemon writes on its own initiative (the `CSI ?997n` theme not
 
 Through `createWorkerTerminalManager` the same helper needs two changes. `session.getState()` in the parent is a cached snapshot that does not refresh with output; poll `manager.captureTerminal(session.id)` instead. And the helper must not `process.exit()` after printing: the worker drops the terminal record on exit and `captureTerminal` then reads nothing. Keep it alive with `setInterval(() => {}, 1000)` and let `afterEach` kill it.
 
+## Test files are outside the type checker and the linter
+
+`packages/server/tsconfig.server.json` excludes `src/**/*.test.ts(x)`, `src/**/*.spec.ts(x)`,
+`src/server/daemon-e2e/**` and `src/server/**/*.e2e.ts(x)`, and the typecheck script inherits
+that exclude list through `tsconfig.server.typecheck.json`. oxlint's `no-undef` is off, as it
+normally is for TypeScript projects that let the compiler own that check. The two together
+leave a hole: **an undefined identifier inside a server test file is reported by neither
+`npm run typecheck` nor `npm run lint`.** Verified by adding `const __probe = notDefinedAnywhere;`
+to a test file — both gates stayed green.
+
+What follows from it:
+
+- Never treat green typecheck + lint as evidence that server test files compile. Only running
+  them proves that. A refactor that renames a symbol used in tests looks finished and is not.
+- A mechanical rename is the common way to hit this. A parameter renamed in the signature but
+  not in the body, or the reverse, becomes an undefined identifier or — worse — object property
+  shorthand that binds to a *different* value in scope and makes the test assert something
+  nobody intended, still silently.
+- After touching anything server tests reference, run the affected test files, not just the gates.
+
 ## Running
 
 ```bash

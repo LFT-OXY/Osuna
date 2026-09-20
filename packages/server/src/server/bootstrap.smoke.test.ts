@@ -672,7 +672,7 @@ describe("paseo daemon bootstrap", () => {
     if (!isPlatform("win32")) {
       await mkdir(pluginDirectory);
       await writeFile(
-        path.join(pluginDirectory, "paseo-plugin.json"),
+        path.join(pluginDirectory, "osuna-plugin.json"),
         JSON.stringify({
           id: "startup-rollback",
           requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },

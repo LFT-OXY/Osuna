@@ -17,7 +17,7 @@ const COMPACT = { width: 390, height: 844 };
 function clientSource(workspaceId: string, agentId: string): string {
   return `import React from "react";
 import { Text, View, Pressable } from "react-native";
-import { useWorkspace, useRpc, usePaseo } from "@osuna/plugin/client";
+import { useWorkspace, useRpc, useOsuna } from "@osuna/plugin/client";
 import { useQuery } from "@tanstack/react-query";
 import { summary } from "./shared/rpc";
 
@@ -27,7 +27,7 @@ function StatusIcon({ size, theme }) {
 
 function Details({ workspaceId, theme, layout, close }) {
   const workspace = useWorkspace(workspaceId, (workspace) => workspace.name);
-  const paseo = usePaseo();
+  const paseo = useOsuna();
   const [ownerId, setOwnerId] = React.useState("");
   const [updates, setUpdates] = React.useState(0);
   const [failed, setFailed] = React.useState(false);
@@ -101,7 +101,7 @@ export default function contribute(client) {
     deploy.update({ visible: workspace.name !== "Compact checks" });
     pillMenu.update({ visible: workspace.name !== "Hide composer menu" });
   };
-  void client.paseo.workspaces.list({ subscribe: {}, signal: lifetime.signal }).then(({ subscription }) => {
+  void client.osuna.workspaces.list({ subscribe: {}, signal: lifetime.signal }).then(({ subscription }) => {
     subscription.subscribe({
       snapshot({ entries }) { for (const workspace of entries) applyWorkspace(workspace); },
       update(message) { if (message.type === "workspace_update" && message.payload.kind === "upsert") applyWorkspace(message.payload.workspace); },
@@ -117,7 +117,7 @@ async function installShowcase(workspaceId: string, agentId: string) {
   const directory = await mkdtemp(path.join(tmpdir(), "paseo-buttons-"));
   await mkdir(path.join(directory, "shared"));
   await writeFile(
-    path.join(directory, "paseo-plugin.json"),
+    path.join(directory, "osuna-plugin.json"),
     JSON.stringify({ id: PLUGIN_ID, requirements: pluginRequirements }),
   );
   await writeFile(path.join(directory, "index.client.tsx"), clientSource(workspaceId, agentId));

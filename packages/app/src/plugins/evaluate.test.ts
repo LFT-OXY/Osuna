@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runPluginClientBundle, type PluginClientRuntime } from "./evaluate";
 
 const runtime = {
-  paseo: {},
+  osuna: {},
   async rpc() {},
   openSettings() {},
   openSurface() {},
@@ -343,7 +343,7 @@ describe("evaluatePluginClientBundle", () => {
     const plugin = evaluatePluginClientBundle(
       "review",
       bundle(`
-        if (!plugin.paseo || !plugin.rpc || !plugin.openSurface || !plugin.openPanel || !plugin.addComposerPill) {
+        if (!plugin.osuna || !plugin.rpc || !plugin.openSurface || !plugin.openPanel || !plugin.addComposerPill) {
           throw new Error("missing client runtime");
         }
       `),
@@ -521,7 +521,7 @@ describe("evaluatePluginClientBundle", () => {
         `(function(require) {
       const shared = require("@osuna/plugin");
       const client = require("@osuna/plugin/client");
-      for (const name of ["usePaseo", "useRpc", "useSettings", "useAgent", "useWorkspace"]) {
+      for (const name of ["useOsuna", "useRpc", "useSettings", "useAgent", "useWorkspace"]) {
         if (name in shared || typeof client[name] !== "function") throw new Error(name);
       }
       if ("Icon" in shared || typeof shared.PluginAttachmentItemSchema.parse !== "function") throw new Error("shared exports");

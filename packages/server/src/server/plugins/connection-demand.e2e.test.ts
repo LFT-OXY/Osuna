@@ -2,13 +2,13 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { createPaseoApi } from "@osuna/client";
+import { createOsunaApi } from "@osuna/client";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
 test("an RPC-only plugin receives no agent, project or provider data", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "paseo-quiet-plugin-"));
-  await writeFile(path.join(directory, "paseo-plugin.json"), JSON.stringify({ id: "quiet" }));
+  await writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "quiet" }));
   await writeFile(
     path.join(directory, "index.server.ts"),
     `
@@ -49,7 +49,7 @@ export default function contribute(server) {
     await client.patchDaemonConfig({ pluginsEnabled: true });
     await client.installDirectoryPlugin(directory);
     const agent = await client.createAgent({ provider: "claude", cwd: directory });
-    const api = createPaseoApi(client);
+    const api = createOsunaApi(client);
     const received: string[] = [];
     const release = api.agents
       .ref(agent.id)

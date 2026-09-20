@@ -77,7 +77,7 @@ export async function withTimelinePlugin(
   const previous = await pluginClient.getDaemonConfig();
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
+      path.join(directory, "osuna-plugin.json"),
       JSON.stringify({ id: PLUGIN_ID, requirements: pluginRequirements }),
     );
     await writeFile(path.join(directory, "index.client.tsx"), CLIENT_SOURCE);

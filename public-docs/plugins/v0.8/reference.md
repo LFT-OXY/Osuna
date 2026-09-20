@@ -32,7 +32,7 @@ Plugin code is trusted and unsandboxed. Client surfaces run in the Paseo app. Ba
 
 ```text
 my-plugin/
-  paseo-plugin.json
+  osuna-plugin.json
   index.client.tsx
   index.server.ts
   client/greeting.tsx
@@ -42,16 +42,16 @@ my-plugin/
   tsconfig.json
 ```
 
-The required root manifest is `paseo-plugin.json`. It contains the default plugin ID and supported Paseo versions:
+The required root manifest is `osuna-plugin.json`. It contains the default plugin ID and supported Paseo versions:
 
 ```json
-{ "id": "my-plugin", "requirements": { "paseo": ">=0.8.0" } }
+{ "id": "my-plugin", "requirements": { "osuna": ">=0.8.0" } }
 ```
 
 ### Requirements
 
-`requirements` is an optional object. Its currently supported key, `paseo`, accepts an npm semver
-range. An omitted `requirements.paseo` means `<0.8.0`: the plugin predates the first breaking
+`requirements` is an optional object. Its currently supported key, `osuna`, accepts an npm semver
+range. An omitted `requirements.osuna` means `<0.8.0`: the plugin predates the first breaking
 plugin release. Paseo 0.8 and later reject it with a link to the [migration guide](migration).
 Empty strings, invalid ranges, and unknown manifest requirement keys are rejected.
 
@@ -124,7 +124,7 @@ Paseo provides these modules to client code:
 | `@getpaseo/plugin`                     | Shared data, `defineRpc`, `defineSettings`, `defineAttachmentSource`, `RpcInput`, and `RpcOutput` |
 | `@getpaseo/plugin/client/ui`           | Named, composable settings components                                                             |
 | `@getpaseo/plugin/client/react-native` | Paseo UI components and UI hooks                                                                  |
-| `@getpaseo/plugin/client`              | Client contribution contexts, `usePaseo`, `useRpc`, `useSettings`, and data hooks                 |
+| `@getpaseo/plugin/client`              | Client contribution contexts, `useOsuna`, `useRpc`, `useSettings`, and data hooks                 |
 | `@tanstack/react-query`                | Request state and caching                                                                         |
 | `react`                                | Components and hooks                                                                              |
 | `react/jsx-runtime`                    | Compiled JSX                                                                                      |
@@ -704,7 +704,7 @@ and wide tablets.
 The close button, backdrop, platform back action, web Escape key, and compact sheet gesture dismiss
 the modal. Dismissal calls `onOpenChange(false)`; the plugin must update `open` to close it.
 
-Modal children keep the plugin runtime context. `usePaseo`, `useRpc`, `useWorkspace`, and
+Modal children keep the plugin runtime context. `useOsuna`, `useRpc`, `useWorkspace`, and
 `useAgent` work inside them.
 
 ### Scrolling
@@ -877,7 +877,7 @@ A server handler can add a plugin-owned row to canonical history:
 ```ts
 import type { PluginHandlerContext } from "@getpaseo/plugin/server";
 
-async function publishReview(agentId: string, { paseo }: PluginHandlerContext) {
+async function publishReview(agentId: string, { osuna }: PluginHandlerContext) {
   await paseo.agents.ref(agentId).timeline.append({
     type: "plugin",
     id: "review",
@@ -1282,14 +1282,14 @@ Every callback receives:
 | Field                     | Context             | Meaning                                                                                                         |
 | ------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `context`                 | All                 | Matching discriminator.                                                                                         |
-| `paseo`                   | All                 | Selected host's existing `PaseoApi`.                                                                            |
+| `osuna`                   | All                 | Selected host's existing `OsunaApi`.                                                                            |
 | `rpc(contract, input)`    | All                 | Typed call to this installation's daemon-side plugin handler.                                                   |
 | `openSurface(id)`         | All                 | Opens one of this plugin's registered global surfaces.                                                          |
 | `workspace`               | Workspace and agent | Synchronous workspace snapshot.                                                                                 |
 | `agent`                   | Agent               | Synchronous matching agent snapshot.                                                                            |
 | `openPanel(id, options?)` | Workspace and agent | Opens a registered panel in the callback's current context. Pass `{ location: "explorer" }` to target Explorer. |
 
-An agent callback may open either an agent panel or a workspace panel. A workspace callback may open only a workspace panel. Unknown surface and panel IDs fail visibly. Use `paseo` for normal workspace, agent, provider, and daemon-config operations. Use `rpc` for plugin-specific filesystem, credential, vendor, or daemon-local work.
+An agent callback may open either an agent panel or a workspace panel. A workspace callback may open only a workspace panel. Unknown surface and panel IDs fail visibly. Use `osuna` for normal workspace, agent, provider, and daemon-config operations. Use `rpc` for plugin-specific filesystem, credential, vendor, or daemon-local work.
 
 ## Slash commands
 
@@ -1413,7 +1413,7 @@ type PluginButtonBehavior =
 ```
 
 An action runs on the client. Paseo marks the button busy until its promise settles, blocks repeated
-presses, and shows failures in a toast. A failed action can be retried. Use the client's `paseo` for
+presses, and shows failures in a toast. A failed action can be retried. Use the client's `osuna` for
 ordinary operations and `rpc` for plugin-specific backend work.
 
 Menus and popovers open anchored surfaces on wide layouts and bottom sheets on compact layouts.
@@ -1462,7 +1462,7 @@ owns all pointer interaction. The icon component can use plugin hooks.
 
 `PluginButtonContentProps` contains `theme`, `host`, `layout`, the target context, and `close()`.
 Render the body only; Paseo owns anchoring, scrolling, padding, and sheet presentation. Content can
-use `usePaseo`, `useRpc`, `useWorkspace`, `useAgent`, and the installation's React Query cache.
+use `useOsuna`, `useRpc`, `useWorkspace`, `useAgent`, and the installation's React Query cache.
 
 The target context is one of:
 
@@ -1492,14 +1492,14 @@ your subscriptions, timers, and other resources.
 
 ## Use the Paseo SDK
 
-Use `usePaseo()` for ordinary Paseo operations from a surface. It borrows the selected host's existing connection; do not create another client.
+Use `useOsuna()` for ordinary Osuna operations from a surface. It borrows the selected host's existing connection; do not create another client.
 
 ```tsx
-import { type PluginSurfaceProps, usePaseo } from "@getpaseo/plugin/client";
+import { type PluginSurfaceProps, useOsuna } from "@getpaseo/plugin/client";
 import { Pressable, Text } from "react-native";
 
 function PullRequestAction({ theme }: PluginSurfaceProps) {
-  const paseo = usePaseo();
+  const osuna = useOsuna();
 
   async function createReviewWorkspace() {
     const workspace = await paseo.workspaces.create({
@@ -1597,7 +1597,7 @@ export default function contribute(server: PluginServerContext) {
 
 Inputs and outputs are validated on both sides. RPC names start with a lowercase letter and contain lowercase letters, numbers, dots, hyphens, or underscores. `useRpc()` returns a typed async function. Use TanStack Query for request state, caching, and mutations.
 
-Backend handlers receive the same `PaseoApi` as `{ paseo }`. Their connection belongs to the subprocess and closes when the plugin stops. It does not subscribe to timelines or catalog events until plugin code subscribes. Follow the [SDK event contract](../../sdk/events.md) for cleanup and timeline replacements. Backend code can use Node APIs and dependencies installed in the plugin directory.
+Backend handlers receive the same `OsunaApi` as `{ osuna }`. Their connection belongs to the subprocess and closes when the plugin stops. It does not subscribe to timelines or catalog events until plugin code subscribes. Follow the [SDK event contract](../../sdk/events.md) for cleanup and timeline replacements. Backend code can use Node APIs and dependencies installed in the plugin directory.
 
 ## Debug backend output
 
@@ -1763,7 +1763,7 @@ step:
 ```json
 {
   "id": "review",
-  "requirements": { "paseo": ">=0.8.0" },
+  "requirements": { "osuna": ">=0.8.0" },
   "build": [
     ["npm", "ci"],
     ["npm", "run", "build"]

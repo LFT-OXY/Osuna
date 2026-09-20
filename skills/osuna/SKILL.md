@@ -1,52 +1,52 @@
 ---
-name: paseo
-description: Paseo reference for managing projects, workspaces, workspace scripts, agents, schedules, and heartbeats.
+name: osuna
+description: Osuna reference for managing projects, workspaces, workspace scripts, agents, schedules, and heartbeats.
 ---
 
-Paseo is a remote daemon that manages coding agents, terminals. Control it through MCP tools or the CLI.
+Osuna is a remote daemon that manages coding agents, terminals. Control it through MCP tools or the CLI.
 
 ## Projects
 
 Manage the daemon's project registry through the CLI:
 
 ```bash
-paseo project create [path]
-paseo project ls
-paseo project rename <project-id> <name>
-paseo project rename <project-id> --reset
-paseo project delete <project-id>
+osuna project create [path]
+osuna project ls
+osuna project rename <project-id> <name>
+osuna project rename <project-id> --reset
+osuna project delete <project-id>
 ```
 
-For a local daemon, `project create` defaults to the current directory and resolves relative paths on the CLI machine. With `--host` or `PASEO_HOST`, always provide a path; the target daemon interprets it on its own machine. Deleting a project archives its active workspaces and removes the project from Paseo without deleting the project directory.
+For a local daemon, `project create` defaults to the current directory and resolves relative paths on the CLI machine. With `--host` or `OSUNA_HOST`, always provide a path; the target daemon interprets it on its own machine. Deleting a project archives its active workspaces and removes the project from Osuna without deleting the project directory.
 
 ## Workspaces
 
 **`create_workspace`** — create a workspace independently of any agent. Required: `isolation` (`local` or `worktree`). Worktree isolation supports `mode: "branch-off" | "checkout-branch" | "checkout-pr"`: use `branchName`/`baseBranch` for a new branch, `branch` for an existing branch, or `prNumber` plus optional `forge`/`projectPath` for a change request. `worktreeSlug` controls the managed path. Returns the workspace descriptor centered on `workspaceId`.
 
-Choose `baseBranch` explicitly: `origin/main` selects the remote-tracking branch; `refs/heads/main` selects local main. Bare `main` prefers local main when it exists, otherwise origin/main. Paseo retains the resolved ref for workspace comparisons, even after rebasing the branch or changing its PR target.
+Choose `baseBranch` explicitly: `origin/main` selects the remote-tracking branch; `refs/heads/main` selects local main. Bare `main` prefers local main when it exists, otherwise origin/main. Osuna retains the resolved ref for workspace comparisons, even after rebasing the branch or changing its PR target.
 
 **`list_workspaces`** — list active workspaces.
 
-**`archive_workspace`** — `{ workspaceId }`. Archives the workspace, its agents, and its terminals. Local directories remain; Paseo removes an owned worktree only after its final active workspace reference is archived.
+**`archive_workspace`** — `{ workspaceId }`. Archives the workspace, its agents, and its terminals. Local directories remain; Osuna removes an owned worktree only after its final active workspace reference is archived.
 
 **`rename_workspace`** — `{ workspaceId, name }`. Rename workspace.
 
 ## Workspace scripts
 
-Configured `paseo.json` scripts use the same supervised lifecycle from tools and the CLI.
+Configured `osuna.json` scripts use the same supervised lifecycle from tools and the CLI.
 
 **`list_workspace_scripts`** — `{ workspaceId }`. Lists configured scripts with lifecycle, service port, proxy URLs, health, exit code, and terminal ID.
 
-**`start_workspace_script`** — `{ workspaceId, scriptName }`. Starts one configured script through Paseo's managed workspace-script launcher and returns its status metadata.
+**`start_workspace_script`** — `{ workspaceId, scriptName }`. Starts one configured script through Osuna's managed workspace-script launcher and returns its status metadata.
 
 **`stop_workspace_script`** — `{ workspaceId, scriptName }`. Stops a running script through its supervised terminal and returns the stopped status metadata.
 
 The matching CLI surface accepts either an explicit workspace ID or resolves the current directory:
 
 ```bash
-paseo script ls [--cwd <path> | --workspace <workspace-id>]
-paseo script start <name> [--cwd <path> | --workspace <workspace-id>]
-paseo script stop <name> [--cwd <path> | --workspace <workspace-id>]
+osuna script ls [--cwd <path> | --workspace <workspace-id>]
+osuna script start <name> [--cwd <path> | --workspace <workspace-id>]
+osuna script stop <name> [--cwd <path> | --workspace <workspace-id>]
 ```
 
 ## Agents
@@ -115,17 +115,17 @@ Don't poll `list_agents` or `get_agent_status` to "check on" a running agent. Th
 The CLI and tools use the same ownership semantics even where their syntax differs:
 
 ```bash
-paseo workspace create --isolation worktree --mode branch-off --new-branch fix-x --base origin/main
-paseo workspace create --isolation worktree --mode checkout-branch --branch existing-work
-paseo workspace create --isolation worktree --mode checkout-pr --pr-number 42
-paseo run --provider codex/gpt-5.4 --mode full-access --workspace <workspace-id> "<prompt>"
-paseo run --provider codex/gpt-5.4 --mode full-access --new-workspace worktree --worktree-mode branch-off --new-branch fix-x --base origin/main "<prompt>"
-paseo send <agent-id> "<follow-up>"
-paseo ls
-paseo schedule create --cron "*/15 * * * *" "ping main build"
-paseo heartbeat create --cron "*/15 * * * *" "check the build"
+osuna workspace create --isolation worktree --mode branch-off --new-branch fix-x --base origin/main
+osuna workspace create --isolation worktree --mode checkout-branch --branch existing-work
+osuna workspace create --isolation worktree --mode checkout-pr --pr-number 42
+osuna run --provider codex/gpt-5.4 --mode full-access --workspace <workspace-id> "<prompt>"
+osuna run --provider codex/gpt-5.4 --mode full-access --new-workspace worktree --worktree-mode branch-off --new-branch fix-x --base origin/main "<prompt>"
+osuna send <agent-id> "<follow-up>"
+osuna ls
+osuna schedule create --cron "*/15 * * * *" "ping main build"
+osuna heartbeat create --cron "*/15 * * * *" "check the build"
 ```
 
-Discover with `paseo --help` and `paseo <cmd> --help`.
+Discover with `osuna --help` and `osuna <cmd> --help`.
 
-For product questions, setup, logs, version problems, or troubleshooting, use the **paseo-help** skill.
+For product questions, setup, logs, version problems, or troubleshooting, use the **osuna-help** skill.

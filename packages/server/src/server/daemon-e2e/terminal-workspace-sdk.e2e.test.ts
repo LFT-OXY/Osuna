@@ -114,7 +114,7 @@ test("plugin handlers operate terminals through their host-owned Paseo API", asy
   const pluginDirectory = path.join(cwd, "plugin");
   await mkdir(pluginDirectory);
   await writeFile(
-    path.join(pluginDirectory, "paseo-plugin.json"),
+    path.join(pluginDirectory, "osuna-plugin.json"),
     JSON.stringify({
       id: "terminal-sdk",
       requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
@@ -136,7 +136,7 @@ async function waitForTerminalOutput(terminal, text) {
   throw new Error("Timed out waiting for plugin terminal output: " + text);
 }
 export default function contribute(server) {
-  server.handle(operate, async ({ workspaceId, command }, { paseo }) => {
+  server.handle(operate, async ({ workspaceId, command }, { osuna }) => {
     const workspace = paseo.workspaces.ref(workspaceId);
     const terminal = await workspace.terminals.create({ command, args: ["-e", "process.stdin.setRawMode(true); process.stdin.resume(); console.log('PLUGIN READY'); let hex = ''; process.stdin.on('data', data => { hex += data.toString('hex'); console.log('PLUGIN:' + hex); });"] });
     try {

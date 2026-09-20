@@ -15,7 +15,7 @@ type TestPluginRuntime = NonNullable<ConstructorParameters<typeof PluginService>
 async function createPlugin(id: string, source: string): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-service-"));
   roots.push(directory);
-  await writeFile(path.join(directory, "paseo-plugin.json"), JSON.stringify({ id }));
+  await writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id }));
   await writeFile(path.join(directory, "index.server.ts"), source);
   return directory;
 }
@@ -329,7 +329,7 @@ describe("PluginService", () => {
     const pluginDirectory = path.join(repository, "plugins", "review");
     await mkdir(pluginDirectory, { recursive: true });
     await writeFile(
-      path.join(pluginDirectory, "paseo-plugin.json"),
+      path.join(pluginDirectory, "osuna-plugin.json"),
       JSON.stringify({ id: "local-monorepo" }),
     );
     await writeFile(
@@ -354,7 +354,7 @@ describe("PluginService", () => {
     await runGitCommand(["config", "user.name", "Paseo Tests"], { cwd: repository });
     await runGitCommand(["config", "user.email", "paseo@example.test"], { cwd: repository });
     await writeFile(
-      path.join(repository, "paseo-plugin.json"),
+      path.join(repository, "osuna-plugin.json"),
       JSON.stringify({ id: "git-update" }),
     );
     await writeFile(
@@ -376,7 +376,7 @@ describe("PluginService", () => {
     const installedCommit = installed.commit;
 
     await writeFile(
-      path.join(repository, "paseo-plugin.json"),
+      path.join(repository, "osuna-plugin.json"),
       JSON.stringify({
         id: "git-update",
         build: [
@@ -416,7 +416,7 @@ describe("PluginService", () => {
     await runGitCommand(["config", "user.name", "Paseo Tests"], { cwd: repository });
     await runGitCommand(["config", "user.email", "paseo@example.test"], { cwd: repository });
     await writeFile(
-      path.join(repository, "paseo-plugin.json"),
+      path.join(repository, "osuna-plugin.json"),
       JSON.stringify({
         id: "prepared-git-plugin",
         build: [
@@ -470,7 +470,7 @@ describe("PluginService", () => {
     await expect(stat(path.join(installed.path, "shell-injection"))).rejects.toThrow();
 
     await writeFile(
-      path.join(repository, "paseo-plugin.json"),
+      path.join(repository, "osuna-plugin.json"),
       JSON.stringify({
         id: "prepared-git-plugin",
         build: [
@@ -501,7 +501,7 @@ describe("PluginService", () => {
     await runGitCommand(["config", "user.name", "Paseo Tests"], { cwd: repository });
     await runGitCommand(["config", "user.email", "paseo@example.test"], { cwd: repository });
     await writeFile(
-      path.join(repository, "paseo-plugin.json"),
+      path.join(repository, "osuna-plugin.json"),
       JSON.stringify({ id: "failed-update" }),
     );
     await writeFile(path.join(repository, "index.server.ts"), "export default () => () => {};\n");
@@ -743,7 +743,7 @@ export default function contribute(plugin: unknown) {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
     roots.push(home);
     const invalid = await createPlugin("valid-before-corruption", "export default () => () => {};");
-    await writeFile(path.join(invalid, "paseo-plugin.json"), JSON.stringify({}));
+    await writeFile(path.join(invalid, "osuna-plugin.json"), JSON.stringify({}));
     const missingEntry = await createPlugin("missing-entry", "export default () => () => {};");
     await rm(path.join(missingEntry, "index.server.ts"));
     const legacy = await createPlugin("legacy-plugin", "export default () => () => {};");
@@ -761,7 +761,7 @@ export default function contribute(plugin: unknown) {
       "Plugin entry points are missing",
     );
     await expect(service.installDirectory({ path: legacy })).rejects.toThrow(
-      "This plugin was made for an older version of Paseo and cannot run on Paseo v0.8. Ask its author to update it. Plugin authors can follow the migration guide: https://paseo.sh/docs/plugins/v0.8/migration",
+      "This plugin was made for Paseo or an older version of Osuna and cannot run on Osuna v0.8. Ask its author to update it. Plugin authors can follow the migration guide: https://github.com/LFT-OXY/Osuna/blob/main/public-docs/plugins/v0.8/migration.md",
     );
     await expect(service.installDirectory({ path: startupFailure })).rejects.toThrow(
       "startup exploded",
@@ -771,7 +771,7 @@ export default function contribute(plugin: unknown) {
         id: "legacy-plugin",
         status: "failed",
         error:
-          "This plugin was made for an older version of Paseo and cannot run on Paseo v0.8. Ask its author to update it. Plugin authors can follow the migration guide: https://paseo.sh/docs/plugins/v0.8/migration",
+          "This plugin was made for Paseo or an older version of Osuna and cannot run on Osuna v0.8. Ask its author to update it. Plugin authors can follow the migration guide: https://github.com/LFT-OXY/Osuna/blob/main/public-docs/plugins/v0.8/migration.md",
       }),
       expect.objectContaining({
         id: "missing-entry",

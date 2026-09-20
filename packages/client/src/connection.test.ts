@@ -153,9 +153,9 @@ test("a plain client advertises every protocol capability and no browser host", 
 });
 
 test("SDK timelines have independent lifetimes and fresh IDs on reconnect", async () => {
-  const { createPaseoApi } = await import("./index");
+  const { createOsunaApi } = await import("./index");
   const h = connection();
-  const api = createPaseoApi(h.client);
+  const api = createOsunaApi(h.client);
   try {
     const connecting = h.client.connect();
     h.open();
@@ -187,14 +187,14 @@ test("SDK timelines have independent lifetimes and fresh IDs on reconnect", asyn
 });
 
 test("SDK subscribers receive timeline replacement instead of silently losing history", async () => {
-  const { createPaseoApi } = await import("./index");
+  const { createOsunaApi } = await import("./index");
   const h = connection();
   const received: unknown[] = [];
   try {
     const ready = h.client.connect();
     h.open();
     await ready;
-    const off = createPaseoApi(h.client)
+    const off = createOsunaApi(h.client)
       .agents.ref("agent")
       .timeline.subscribe((event) => received.push(event));
     await off.ready;
@@ -501,9 +501,9 @@ test.each([
   { name: "legacy selective", ownedSubscriptions: false, broadcasts: false },
   { name: "legacy broadcast", ownedSubscriptions: false, broadcasts: true },
 ])("$name timelines restore live delivery without requesting history", async (mode) => {
-  const { createPaseoApi } = await import("./index");
+  const { createOsunaApi } = await import("./index");
   const h = connection(mode);
-  const api = createPaseoApi(h.client);
+  const api = createOsunaApi(h.client);
   const received: import("./index").PaseoAgentTimelineEvent[][] = [[], [], []];
   try {
     const connected = h.client.connect();
@@ -561,9 +561,9 @@ test.each([
 });
 
 test("a consumer chooses its recovery cursor and a failed read leaves live delivery active", async () => {
-  const { createPaseoApi } = await import("./index");
+  const { createOsunaApi } = await import("./index");
   const h = connection({ acknowledgeTimelineReads: false });
-  const api = createPaseoApi(h.client);
+  const api = createOsunaApi(h.client);
   const received: import("./index").PaseoAgentTimelineEvent[] = [];
   let read: Promise<unknown> | undefined;
   try {

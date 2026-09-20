@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createPaseoApi } from "@osuna/client";
+import { createOsunaApi } from "@osuna/client";
 import { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { PluginRegistry } from "./registry";
 
@@ -9,9 +9,9 @@ function registry() {
   const plugins = new PluginRegistry({
     version: "0.8.0",
     createRuntime: (installation) => {
-      const api = createPaseoApi(client);
+      const api = createOsunaApi(client);
       return {
-        paseo: {
+        osuna: {
           ...api,
           dispose: async () => {
             released.push(installation.id);
@@ -35,7 +35,7 @@ function registry() {
 function catalog(id: string, body: string) {
   return {
     id,
-    requirements: { paseo: ">=0.8.0" },
+    requirements: { osuna: ">=0.8.0" },
     clientBundle: `(function() { return { default: function(plugin) { ${body} } }; })`,
   };
 }

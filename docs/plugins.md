@@ -46,7 +46,7 @@ directories, and local typechecking support. At least one entry is required.
 
 ```text
 my-plugin/
-  paseo-plugin.json
+  osuna-plugin.json
   package.json
   tsconfig.json
   index.client.tsx
@@ -63,7 +63,7 @@ runtime modules, so consumers do not install these packages when adding the plug
 ```json
 {
   "id": "my-plugin",
-  "requirements": { "paseo": ">=0.8.0" }
+  "requirements": { "osuna": ">=0.8.0" }
 }
 ```
 
@@ -116,7 +116,7 @@ step:
 ```json
 {
   "id": "review",
-  "requirements": { "paseo": ">=0.8.0" },
+  "requirements": { "osuna": ">=0.8.0" },
   "build": [
     ["npm", "ci"],
     ["npm", "run", "build"]
@@ -246,9 +246,9 @@ RPC contracts validate inputs and outputs in both the app and plugin subprocess.
 typed async function. Use the host-provided `@tanstack/react-query` for request state and caching;
 Paseo gives each plugin installation its own query client.
 
-`usePaseo()` and the handler's `{ paseo }` context expose the same `PaseoApi`: projects,
+`useOsuna()` and the handler's `{ osuna }` context expose the same `OsunaApi`: projects,
 workspaces, agents, terminals, providers, and daemon config. They do not expose connection lifecycle. A surface borrows the
-selected host's existing connection; switching the screen's host changes both `usePaseo()` and
+selected host's existing connection; switching the screen's host changes both `useOsuna()` and
 `useRpc()` to that host. An offline selected host fails there and never falls through to another
 installation. A server handler owns an IPC-backed daemon session for the life of its subprocess.
 Use plugin RPC for plugin-specific backend behavior that is not a normal Paseo operation.
@@ -277,7 +277,7 @@ workspace only. Location controls hosting, not context. An agent panel target ke
 when moved between hosts. Explorer configuration can create workspace-context panels and remove
 existing agent-context instances, but it cannot create an agent panel without an agent-aware command.
 
-Command Center callbacks use the selected host's existing `PaseoApi` for normal Paseo operations.
+Command Center callbacks use the selected host's existing `OsunaApi` for normal Osuna operations.
 They use typed plugin RPC only for plugin-specific backend work. Surface and panel props expose
 optional client-owned agent and workspace navigation; its absence is the compatibility gate for
 older clients. Other navigation remains limited to registered global surfaces and workspace panels.
@@ -413,7 +413,7 @@ be rendered intact. The daemon advertises this RPC through
 
 `addSlashCommand` registers an agent- or workspace-context command in the composer. The
 callback runs in the app, receives the trimmed text after the command name as `args`, and receives
-the same `paseo`, `rpc`, `openSurface`, workspace, agent, and `openPanel` capabilities as the matching
+the same `osuna`, `rpc`, `openSurface`, workspace, agent, and `openPanel` capabilities as the matching
 Command Center callback.
 
 ```ts

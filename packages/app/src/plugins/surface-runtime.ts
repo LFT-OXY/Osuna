@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import type { InstalledPlugin } from "./types";
-import { createPaseoApi, type PaseoApi } from "@osuna/client";
+import { createOsunaApi, type OsunaApi } from "@osuna/client";
 import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 
 export interface PluginSurfaceRuntime {
-  paseo: PaseoApi;
+  osuna: OsunaApi;
   invoke(method: string, input: unknown): Promise<unknown>;
 }
 
@@ -14,7 +14,7 @@ export function createPluginSurfaceRuntime(
 ): PluginSurfaceRuntime | null {
   if (!client || plugin.lifetime.signal.aborted) return null;
   return {
-    paseo: createPaseoApi(client, { signal: plugin.lifetime.signal }),
+    osuna: createOsunaApi(client, { signal: plugin.lifetime.signal }),
     invoke: (method, input) => client.invokePluginRpc(plugin.id, method, input),
   };
 }
@@ -35,7 +35,7 @@ export function usePluginSurfaceRuntime(
     if (!runtime) return;
     setMounted({ client, plugin, runtime });
     return () => {
-      void runtime.paseo
+      void runtime.osuna
         .dispose()
         .catch((error) => console.warn(`[Plugins] Surface cleanup failed for ${plugin.id}`, error));
     };

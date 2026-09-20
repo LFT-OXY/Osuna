@@ -1,5 +1,5 @@
 import { MockLoadTestAgentClient } from "./agent/providers/mock-load-test-agent.js";
-import { createPaseoApi } from "@osuna/client";
+import { createOsunaApi } from "@osuna/client";
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -1734,7 +1734,7 @@ test("legacy event subscribers retain notifications without the new notification
 test("public project subscriptions request updates and release their producer demand", async () => {
   const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
-  const api = createPaseoApi(client);
+  const api = createOsunaApi(client);
   try {
     await client.connect();
     const updates: unknown[] = [];

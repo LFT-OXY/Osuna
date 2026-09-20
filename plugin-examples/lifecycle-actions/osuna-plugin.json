@@ -1,6 +1,6 @@
 {
   "id": "lifecycle-actions",
   "requirements": {
-    "paseo": ">=0.8.0"
+    "osuna": ">=0.8.0"
   }
 }

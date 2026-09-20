@@ -139,7 +139,7 @@ export const recordComposerOpen = defineRpc({
 const pluginServerSource = `import { recordComposerOpen } from "./shared/rpc";
 
 export default function contribute(server) {
-  server.handle(recordComposerOpen, async ({ workspaceId }, { paseo }) => {
+  server.handle(recordComposerOpen, async ({ workspaceId }, { osuna }) => {
     await paseo.workspaces.ref(workspaceId).setTitle("Opened from composer pill");
     return { opened: true };
   });
@@ -209,7 +209,7 @@ test.describe("plugin workspace panels and Command Center", () => {
       port: secondaryDaemon.port,
     });
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
+      path.join(directory, "osuna-plugin.json"),
       JSON.stringify({ id: PLUGIN_ID, requirements: pluginRequirements }),
     );
     await writePluginSources(directory, {

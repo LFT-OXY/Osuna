@@ -9,7 +9,7 @@ vi.mock("../navigation", () => ({
 }));
 vi.mock("../client-runtime", () => ({
   createPluginClientRuntime: () => ({
-    paseo: {},
+    osuna: {},
     rpc: async () => undefined,
     openSurface: () => undefined,
     openPanel: () => undefined,
@@ -34,7 +34,7 @@ function install(locations: readonly ("workspace" | "explorer")[]) {
   })`;
   pluginRegistry.installCatalog(
     "host-1",
-    [{ id: "review", requirements: { paseo: `>=${appPackage.version}` }, clientBundle: bundle }],
+    [{ id: "review", requirements: { osuna: `>=${appPackage.version}` }, clientBundle: bundle }],
     {
       client: {} as DaemonClient,
     },

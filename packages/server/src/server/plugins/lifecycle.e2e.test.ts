@@ -11,8 +11,8 @@ test("a plugin transforms workspace creation once across receipt replays and obs
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "lifecycle", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "lifecycle", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),
@@ -78,8 +78,8 @@ test("plugins observe turns, answer permissions, and observe archive without blo
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "turn-hooks", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "turn-hooks", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),
@@ -93,7 +93,7 @@ export default function contribute(server) {
   });
   server.on("agent.permission_requested", async (event, context) => {
     console.log(JSON.stringify({ hook: "agent.permission_requested", event }));
-    await context.paseo.agents.ref(event.agent.id).respondToPermission({
+    await context.osuna.agents.ref(event.agent.id).respondToPermission({
       requestId: event.request.id,
       response: { behavior: "deny", message: "Declined by plugin" },
     });
@@ -170,8 +170,8 @@ test("agent creation hooks change the provider and environment before the sessio
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "agent-hooks", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "agent-hooks", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),
@@ -233,8 +233,8 @@ test("invalid output from an untyped plugin rejects creation before later callba
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "invalid-hook", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "invalid-hook", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),

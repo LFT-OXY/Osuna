@@ -74,7 +74,7 @@ export function buildPluginCommandCenterContributions(
         } catch (error) {
           source.reportError(error);
         } finally {
-          await runtime.paseo.dispose().catch(source.reportError);
+          await runtime.osuna.dispose().catch(source.reportError);
         }
       };
       contributions.push({

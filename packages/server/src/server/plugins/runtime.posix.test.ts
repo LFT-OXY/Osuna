@@ -21,7 +21,7 @@ function hasCompletedAgentTurn(events: readonly AgentStreamEvent[]): boolean {
 async function createPlugin(id: string, source: string): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
   temporaryDirectories.push(directory);
-  await writeFile(path.join(directory, "paseo-plugin.json"), JSON.stringify({ id }), "utf8");
+  await writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id }), "utf8");
   await writeFile(path.join(directory, "index.server.ts"), source, "utf8");
   return directory;
 }
@@ -1416,13 +1416,13 @@ export default function contribute(server: { registerProvider(provider: Provider
     const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
     temporaryDirectories.push(directory);
     await Promise.all([
-      writeFile(path.join(directory, "paseo-plugin.json"), JSON.stringify({ id: "legacy" })),
+      writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "legacy" })),
       writeFile(path.join(directory, "index.ts"), "export default function contribute() {}"),
     ]);
     const runtime = createTestRuntime();
 
     await expect(runtime.startPlugin("legacy", directory)).rejects.toThrow(
-      "This plugin was made for an older version of Paseo and cannot run on Paseo v0.8. Ask its author to update it. Plugin authors can follow the migration guide: https://paseo.sh/docs/plugins/v0.8/migration",
+      "This plugin was made for Paseo or an older version of Osuna and cannot run on Osuna v0.8. Ask its author to update it. Plugin authors can follow the migration guide: https://github.com/LFT-OXY/Osuna/blob/main/public-docs/plugins/v0.8/migration.md",
     );
   });
 
@@ -1430,7 +1430,7 @@ export default function contribute(server: { registerProvider(provider: Provider
     const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
     temporaryDirectories.push(directory);
     await Promise.all([
-      writeFile(path.join(directory, "paseo-plugin.json"), JSON.stringify({ id: "theme" })),
+      writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "theme" })),
       writeFile(
         path.join(directory, "index.client.tsx"),
         `export default function contribute(client: any) {
@@ -1453,7 +1453,7 @@ export default function contribute(server: { registerProvider(provider: Provider
     const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-"));
     temporaryDirectories.push(directory);
     await mkdir(path.join(directory, "shared"));
-    await writeFile(path.join(directory, "paseo-plugin.json"), JSON.stringify({ id: "hello" }));
+    await writeFile(path.join(directory, "osuna-plugin.json"), JSON.stringify({ id: "hello" }));
     await writeFile(
       path.join(directory, "index.client.tsx"),
       `import React from "react";
@@ -1540,7 +1540,7 @@ export default function contribute(server: any) {
     ]);
     await Promise.all([
       writeFile(
-        path.join(directory, "paseo-plugin.json"),
+        path.join(directory, "osuna-plugin.json"),
         JSON.stringify({ id: "split-runtime" }),
         "utf8",
       ),
@@ -1623,7 +1623,7 @@ export function inspectHost(_input: z.input<typeof inspectRpc.input>) {
     ]);
     await Promise.all([
       writeFile(
-        path.join(directory, "paseo-plugin.json"),
+        path.join(directory, "osuna-plugin.json"),
         JSON.stringify({ id: "cross-runtime-import" }),
         "utf8",
       ),
@@ -1668,7 +1668,7 @@ export function Surface() { return readSecret(); }`,
     ]);
     await Promise.all([
       writeFile(
-        path.join(directory, "paseo-plugin.json"),
+        path.join(directory, "osuna-plugin.json"),
         JSON.stringify({ id: "cross-runtime-import" }),
         "utf8",
       ),

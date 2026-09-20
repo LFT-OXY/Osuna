@@ -15,10 +15,10 @@ test("server reads saved settings after daemon restart before any client connect
   const startupReport = path.join(root, "startup.json");
   await mkdir(path.join(directory, "server"), { recursive: true });
   await writeFile(
-    path.join(directory, "paseo-plugin.json"),
+    path.join(directory, "osuna-plugin.json"),
     JSON.stringify({
       id: "settings-startup",
-      requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
+      requirements: { osuna: `>=${resolveDaemonVersion(import.meta.url)}` },
     }),
   );
   await writeFile(
@@ -102,10 +102,10 @@ test("two clients share settings, observe changes, and preserve values through p
   const changed: string[] = [];
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
+      path.join(directory, "osuna-plugin.json"),
       JSON.stringify({
         id: "settings-test",
-        requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
+        requirements: { osuna: `>=${resolveDaemonVersion(import.meta.url)}` },
       }),
     );
     await writeFile(

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, expect, test, vi } from "vitest";
-import { createPaseoApi, createPaseoClient } from "./index.js";
+import { createOsunaApi, createPaseoClient } from "./index.js";
 import { DaemonClient } from "./daemon-client.js";
 import type { PaseoAgent, PaseoClient, PaseoWorkspace } from "./index.js";
 
@@ -254,14 +254,14 @@ test("createPaseoClient exposes workspace list through the daemon client", async
   await client.close();
 });
 
-test("createPaseoApi borrows daemon capabilities without exposing connection ownership", () => {
+test("createOsunaApi borrows daemon capabilities without exposing connection ownership", () => {
   const daemonClient = new DaemonClient({
     url: "ws://daemon.test",
     clientId: "borrowed-api",
     reconnect: { enabled: false },
   });
 
-  const paseo = createPaseoApi(daemonClient);
+  const paseo = createOsunaApi(daemonClient);
 
   expect(Object.keys(paseo).sort()).toEqual([
     "agents",
@@ -1618,14 +1618,14 @@ test("agent config requires provider/model syntax", async () => {
 test("canceled timeline handles and captured state are collectible while their API stays alive", async () => {
   const source = `
     import assert from "node:assert/strict";
-    import { createPaseoApi } from ${JSON.stringify(new URL("./index.ts", import.meta.url).href)};
+    import { createOsunaApi } from ${JSON.stringify(new URL("./index.ts", import.meta.url).href)};
     import { DaemonClient } from ${JSON.stringify(new URL("./daemon-client.ts", import.meta.url).href)};
     const drivers = [], apis = [];
     let errors = 0;
     async function batch(mode) {
       const driver = new DaemonClient({ url: "ws://127.0.0.1:1/ws", clientId: mode, reconnect: { enabled: false } });
       const scope = new AbortController();
-      const api = createPaseoApi(driver, { signal: scope.signal });
+      const api = createOsunaApi(driver, { signal: scope.signal });
       drivers.push(driver); apis.push(api);
       const refs = [], ready = [];
       for (let i = 0; i < 100; i++) {

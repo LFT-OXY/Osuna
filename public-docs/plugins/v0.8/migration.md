@@ -19,7 +19,7 @@ Start from the old shape:
 
 ```text
 my-plugin/
-  paseo-plugin.json
+  osuna-plugin.json
   package.json
   tsconfig.json
   index.ts
@@ -32,7 +32,7 @@ The finished shape is:
 
 ```text
 my-plugin/
-  paseo-plugin.json
+  osuna-plugin.json
   package.json
   tsconfig.json
   index.client.tsx
@@ -55,7 +55,7 @@ Apply these rules exactly:
 4. Move every `name.shared.ts` or `name.shared.tsx` to `shared/name.ts` or `shared/name.tsx`.
 5. Preserve nested feature directories under the matching runtime directory.
 6. Update relative imports after every move.
-7. Keep `paseo-plugin.json`, `package.json`, and `tsconfig.json` at the root.
+7. Keep `osuna-plugin.json`, `package.json`, and `tsconfig.json` at the root.
 8. Delete the old root entry. Paseo does not load it.
 
 The directories are the compiler boundaries. A file beneath `client/` compiles only into the app
@@ -126,7 +126,7 @@ show chevrons. See [buttons](./reference.md#button-descriptor) for menus, popove
 
 ## 4. Separate imports
 
-Move hooks (`usePaseo`, `useRpc`, `useSettings`, `useAgent`, `useWorkspace`) and client contribution
+Move hooks (`useOsuna`, `useRpc`, `useSettings`, `useAgent`, `useWorkspace`) and client contribution
 types from `@getpaseo/plugin` to `@getpaseo/plugin/client`. Move `Icon` to
 `@getpaseo/plugin/client/react-native`. Import server contexts and lifecycle contracts from
 `@getpaseo/plugin/server`. Shared helpers (`defineRpc`, `defineSettings`, `defineAttachmentSource`),
@@ -154,8 +154,8 @@ its registration; that registration belongs in the client entry.
 
 | Compiler or load error                                                                                                     | Meaning and fix                                                                                                           |
 | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `This plugin has no requirements.paseo`                                                                                    | Complete the migration and declare the range in step 7.                                                                   |
-| `This plugin was made for an older version of Paseo`                                                                       | The directory still has only the old root entry. Create a runtime entry, move registrations, then delete the old file.    |
+| `This plugin declares no requirements.osuna`                                                                               | Complete the migration and declare the range in step 7.                                                                   |
+| `This plugin was made for Paseo or an older version of Osuna`                                                              | The directory still has only the old root entry. Create a runtime entry, move registrations, then delete the old file.    |
 | `Plugin entry points are missing: expected index.client.ts or index.client.tsx and/or index.server.ts or index.server.tsx` | No supported entry exists. Add at least one exact filename.                                                               |
 | `server-only module cannot be imported into the plugin client bundle: <file>`                                              | A client import reaches `server/`. Move the call behind an RPC and import its contract from `shared/`.                    |
 | `client-only module cannot be imported into the plugin server bundle: <file>`                                              | A server import reaches `client/`. Move that registration and import to the client entry.                                 |
@@ -276,16 +276,16 @@ pills or subscriptions keeps that code; only the wrapper goes away.
 
 ## 7. Declare the Paseo requirement
 
-After migrating the entries and imports, add the minimum runtime version to `paseo-plugin.json`:
+After migrating the entries and imports, add the minimum runtime version to `osuna-plugin.json`:
 
 ```json
 {
   "id": "my-plugin",
-  "requirements": { "paseo": ">=0.8.0" }
+  "requirements": { "osuna": ">=0.8.0" }
 }
 ```
 
-Keep your existing ID and build commands. Missing `requirements.paseo` means `<0.8.0`, so Paseo 0.8
+Keep your existing ID and build commands. Missing `requirements.osuna` means `<0.8.0`, so Osuna 0.8
 rejects the plugin even if its files have been moved. Adding the field alone does not migrate the
 code. Update the local `@getpaseo/plugin` development dependency to the version you target and
 reinstall dependencies before typechecking.

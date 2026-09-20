@@ -71,7 +71,7 @@ function requireId(value: string, label: string): string {
 
 export type PluginClientRuntime = Pick<
   PluginClientContext,
-  | "paseo"
+  | "osuna"
   | "rpc"
   | "openSettings"
   | "openSurface"

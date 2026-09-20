@@ -20,10 +20,10 @@ test("plugin handlers create workspaces and agents through their Paseo API", asy
   const workspaceDirectory = await mkdtemp(path.join(tmpdir(), "paseo-api-workspace-"));
   roots.push(pluginDirectory, workspaceDirectory);
   await writeFile(
-    path.join(pluginDirectory, "paseo-plugin.json"),
+    path.join(pluginDirectory, "osuna-plugin.json"),
     JSON.stringify({
       id: "paseo-api",
-      requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
+      requirements: { osuna: `>=${resolveDaemonVersion(import.meta.url)}` },
     }),
   );
   await writeFile(
@@ -51,7 +51,7 @@ const append = defineRpc({
 });
 
 export default function contribute(server: PluginServerContext) {
-  server.handle(create, async ({ path }, { paseo }) => {
+  server.handle(create, async ({ path }, { osuna }) => {
     const workspace = await paseo.workspaces.create({
       source: { kind: "directory", path },
       title: "Plugin workspace",
@@ -62,11 +62,11 @@ export default function contribute(server: PluginServerContext) {
     });
     return { workspaceId: workspace.id, agentId: agent.id };
   });
-  server.handle(list, async (_input, { paseo }) => {
+  server.handle(list, async (_input, { osuna }) => {
     const result = await paseo.agents.list({ page: { limit: 100 } });
     return { agentIds: result.entries.map((entry) => entry.agent.id) };
   });
-  server.handle(append, ({ agentId, status }, { paseo }) =>
+  server.handle(append, ({ agentId, status }, { osuna }) =>
     paseo.agents.ref(agentId).timeline.append({
       type: "plugin",
       id: "review-1",
@@ -147,10 +147,10 @@ test("daemon config reload enables and disables configured plugins without resta
   const paseoHome = path.join(paseoHomeRoot, ".osuna");
   roots.push(pluginDirectory, paseoHomeRoot);
   await writeFile(
-    path.join(pluginDirectory, "paseo-plugin.json"),
+    path.join(pluginDirectory, "osuna-plugin.json"),
     JSON.stringify({
       id: "reloadable-plugin",
-      requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
+      requirements: { osuna: `>=${resolveDaemonVersion(import.meta.url)}` },
     }),
   );
   await writeFile(
@@ -259,8 +259,8 @@ test("plugin host APIs and observations recover after repeated daemon-side socke
   const workspaceDirectory = await mkdtemp(path.join(tmpdir(), "paseo-reconnecting-workspace-"));
   roots.push(pluginDirectory, workspaceDirectory);
   await writeFile(
-    path.join(pluginDirectory, "paseo-plugin.json"),
-    JSON.stringify({ id: "reconnecting", requirements: { paseo: ">=0.8.0" } }),
+    path.join(pluginDirectory, "osuna-plugin.json"),
+    JSON.stringify({ id: "reconnecting", requirements: { osuna: ">=0.8.0" } }),
   );
   await writeFile(
     path.join(pluginDirectory, "index.server.ts"),
@@ -276,7 +276,7 @@ export default function contribute(server: PluginServerContext) {
   const nameWaiters = new Map<string, (name: string) => void>();
   let reconnected = Promise.resolve();
   let release: (() => Promise<void>) | undefined;
-  server.handle(defineRpc({ name: "observe", input: z.object({}), output: z.string() }), async (_, { paseo }) => {
+  server.handle(defineRpc({ name: "observe", input: z.object({}), output: z.string() }), async (_, { osuna }) => {
     const { subscription } = await paseo.workspaces.list({ subscribe: {} });
     subscription.subscribe({
       snapshot: (snapshot) => {
@@ -305,7 +305,7 @@ export default function contribute(server: PluginServerContext) {
     return names.includes(name) ? name : new Promise<string>((resolve) => nameWaiters.set(name, resolve));
   });
   server.handle(defineRpc({ name: "state", input: z.object({}), output: z.object({ snapshots: z.array(z.string()), names: z.array(z.string()) }) }), () => ({ snapshots, names }));
-  server.handle(defineRpc({ name: "probe", input: z.object({}), output: z.object({ pid: z.number(), projectIds: z.array(z.string()) }) }), async (_, { paseo }) => {
+  server.handle(defineRpc({ name: "probe", input: z.object({}), output: z.object({ pid: z.number(), projectIds: z.array(z.string()) }) }), async (_, { osuna }) => {
     await reconnected;
     return { pid: process.pid, projectIds: (await paseo.projects.list()).projects.map((project) => project.projectId) };
   });

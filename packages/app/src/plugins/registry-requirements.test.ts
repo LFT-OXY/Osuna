@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { createPaseoApi } from "@osuna/client";
+import { createOsunaApi } from "@osuna/client";
 import { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { PluginRegistry } from "./registry";
 
@@ -13,7 +13,7 @@ function registry(version: string) {
     createRuntime() {
       starts++;
       return {
-        paseo: createPaseoApi(client),
+        osuna: createOsunaApi(client),
         rpc: async () => {
           throw new Error("No RPC in this plugin");
         },
@@ -43,7 +43,7 @@ it("checks the app version before creating a runtime or evaluating plugin code",
     [
       {
         id: "example",
-        requirements: { paseo: ">=0.9.0" },
+        requirements: { osuna: ">=0.9.0" },
         clientBundle: "throw new Error('executed')",
       },
     ],
@@ -52,7 +52,7 @@ it("checks the app version before creating a runtime or evaluating plugin code",
   expect(starts()).toBe(0);
   expect(result.getSnapshot()).toEqual([]);
   expect(result.getEvaluationError("host", "example")).toBe(
-    'Plugin "example" requires Paseo >=0.9.0. Your app is 0.8.0. Use a compatible plugin version or update the app.',
+    'Plugin "example" requires Osuna >=0.9.0. Your app is 0.8.0. Use a compatible plugin version or update the app.',
   );
 });
 
@@ -61,14 +61,14 @@ it("rejects catalogs without requirements from pre-0.8 daemons", () => {
   result.installCatalog("host", [{ id: "example", clientBundle }], { client });
   expect(starts()).toBe(0);
   expect(result.getEvaluationError("host", "example")).toContain(
-    "https://paseo.sh/docs/plugins/v0.8/migration",
+    "https://github.com/LFT-OXY/Osuna/blob/main/public-docs/plugins/v0.8/migration.md",
   );
 });
 
 it("unloads on a requirement-only edit and recovers after correction", () => {
   const { result, starts, cleanups } = registry("0.8.0");
-  const install = (paseo: string) =>
-    result.installCatalog("host", [{ id: "example", clientBundle, requirements: { paseo } }], {
+  const install = (osuna: string) =>
+    result.installCatalog("host", [{ id: "example", clientBundle, requirements: { osuna } }], {
       client,
     });
   install("^0.8.0");
@@ -79,7 +79,7 @@ it("unloads on a requirement-only edit and recovers after correction", () => {
   expect(cleanups()).toBe(1);
   expect(starts()).toBe(1);
   expect(result.getSnapshot()).toEqual([]);
-  expect(result.getEvaluationError("host", "example")).toContain("requires Paseo >=0.9.0");
+  expect(result.getEvaluationError("host", "example")).toContain("requires Osuna >=0.9.0");
   install(">=0.8.0");
   expect(starts()).toBe(2);
   expect(result.getSnapshot().map(({ id }) => id)).toEqual(["example"]);

@@ -31,12 +31,12 @@ async function main(): Promise<void> {
     const scaffold = path.join(context.workDir, "authored-plugin");
     const init = await context.paseo(["plugin", "init", scaffold, "--json"]);
     assert.equal(init.exitCode, 0, init.stderr);
-    const manifestPath = path.join(scaffold, "paseo-plugin.json");
+    const manifestPath = path.join(scaffold, "osuna-plugin.json");
     const manifest = await readPluginManifest(scaffold);
-    assert.deepEqual(manifest.requirements, { paseo: `>=${resolveCliVersion()}` });
+    assert.deepEqual(manifest.requirements, { osuna: `>=${resolveCliVersion()}` });
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "cli-e2e", requirements: { paseo: `>=${resolveCliVersion()}` } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "cli-e2e", requirements: { osuna: `>=${resolveCliVersion()}` } }),
     );
     await writeFile(path.join(directory, "index.server.ts"), pluginSource);
 
@@ -52,11 +52,11 @@ async function main(): Promise<void> {
 
     await writeFile(
       manifestPath,
-      JSON.stringify({ ...manifest, requirements: { paseo: ">=999.0.0" } }),
+      JSON.stringify({ ...manifest, requirements: { osuna: ">=999.0.0" } }),
     );
     const incompatibleInstall = await context.paseo(["plugin", "install", scaffold, "--json"]);
     assert.equal(incompatibleInstall.exitCode, 1);
-    assert.match(incompatibleInstall.stderr, /requires Paseo >=999.0.0/);
+    assert.match(incompatibleInstall.stderr, /requires Osuna >=999.0.0/);
     const afterRejection = await context.paseo(["plugin", "ls", "--json"]);
     assert.equal(afterRejection.exitCode, 0, afterRejection.stderr);
     assert.deepEqual(
@@ -72,8 +72,8 @@ async function main(): Promise<void> {
     await git(gitDirectory, ["config", "user.name", "Paseo Tests"]);
     await git(gitDirectory, ["config", "user.email", "paseo@example.test"]);
     await writeFile(
-      path.join(gitDirectory, "paseo-plugin.json"),
-      JSON.stringify({ id: "git-cli-e2e", requirements: { paseo: `>=${resolveCliVersion()}` } }),
+      path.join(gitDirectory, "osuna-plugin.json"),
+      JSON.stringify({ id: "git-cli-e2e", requirements: { osuna: `>=${resolveCliVersion()}` } }),
     );
     await writeFile(path.join(gitDirectory, "index.server.ts"), pluginSource);
     await git(gitDirectory, ["add", "-A"]);
@@ -106,10 +106,10 @@ async function main(): Promise<void> {
     const installedCommit = JSON.parse(update.stdout)[0].currentCommit;
     const buildMarker = path.join(context.workDir, "incompatible-build-ran");
     await writeFile(
-      path.join(gitDirectory, "paseo-plugin.json"),
+      path.join(gitDirectory, "osuna-plugin.json"),
       JSON.stringify({
         id: "git-cli-e2e",
-        requirements: { paseo: ">=999.0.0" },
+        requirements: { osuna: ">=999.0.0" },
         build: [
           [
             process.execPath,
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     await git(gitDirectory, ["commit", "-m", "requires a future Paseo"]);
     const incompatibleUpdate = await context.paseo(["plugin", "update", "git-cli-e2e", "--json"]);
     assert.equal(incompatibleUpdate.exitCode, 1);
-    assert.match(incompatibleUpdate.stderr, /requires Paseo >=999.0.0/);
+    assert.match(incompatibleUpdate.stderr, /requires Osuna >=999.0.0/);
     await assert.rejects(readFile(buildMarker), { code: "ENOENT" });
     const retained = await context.paseo(["plugin", "ls", "git-cli-e2e", "--json"]);
     assert.equal(retained.exitCode, 0, retained.stderr);
@@ -139,7 +139,7 @@ async function main(): Promise<void> {
       "--json",
     ]);
     assert.equal(incompatibleAdd.exitCode, 1);
-    assert.match(incompatibleAdd.stderr, /requires Paseo >=999.0.0/);
+    assert.match(incompatibleAdd.stderr, /requires Osuna >=999.0.0/);
     await assert.rejects(readFile(buildMarker), { code: "ENOENT" });
 
     const reload = await context.paseo(["plugin", "reload", "cli-e2e", "--json"]);

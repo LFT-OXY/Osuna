@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { PaseoApiProvider, PluginRpcProvider } from "@osuna/plugin/client/host";
+import { OsunaApiProvider, PluginRpcProvider } from "@osuna/plugin/client/host";
 import type { ReactNode } from "react";
 import type { InstalledPlugin } from "./types";
 import { usePluginSurfaceRuntime } from "./surface-runtime";
@@ -18,9 +18,9 @@ export function PluginRuntimeBoundary({
   if (!runtime) return null;
   return (
     <QueryClientProvider client={plugin.queryClient}>
-      <PaseoApiProvider paseo={runtime.paseo}>
+      <OsunaApiProvider osuna={runtime.osuna}>
         <PluginRpcProvider invoke={runtime.invoke}>{children}</PluginRpcProvider>
-      </PaseoApiProvider>
+      </OsunaApiProvider>
     </QueryClientProvider>
   );
 }

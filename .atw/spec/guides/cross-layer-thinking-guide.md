@@ -320,6 +320,48 @@ Conversely, do **not** blind-replace in generated or minified assets: `6767` app
 (`peachpuff:16767673`), and in `terminal-emulator-webview-html.ts` as SVG path
 coordinates. Replacing those corrupts the bundle.
 
+### The sweep corrupts text whose subject is the old name
+
+Some text is *about* the old name, so replacing it destroys the meaning instead of updating it.
+A sweep cannot tell the difference; only reading the hit can.
+
+- **A comment written to explain the old name.** The `COMPAT(plugin-requirements)` note in
+  `packages/protocol/src/plugin-requirements.ts` explained that plugins declaring
+  `requirements.paseo` get rejected. After the sweep it read "they declare `requirements.osuna`,
+  never `requirements.osuna`" and told the reader not to add a `requirements.osuna` fallback —
+  a tautology plus a warning against the field the code already reads. Negative information.
+- **Version-pinned historical docs, where the old name is correct.** `public-docs/plugins/v0.7/`
+  documents Paseo v0.7. The sweep changed two lines to `osuna-plugin.json`, making the doc claim
+  v0.7 required a manifest that only exists in the fork. Reverted, not renamed.
+- **Docs quoting an error string verbatim** so users can grep for it. The half-migration table in
+  `public-docs/plugins/v0.8/migration.md` quotes runtime error text. The quote has to match the
+  code character for character, so it moves only when the code's string moves — and it moves
+  *with* it, or the table stops matching anything.
+
+### One message, two producers
+
+`requirements.osuna` rejections are raised in two places: `plugin-requirements.ts` (range check)
+and `plugins/runtime.ts` (pre-0.8 entry layout). Renaming one left the other emitting the old
+product name and the old migration URL, and three test files asserting the old string kept
+passing because they matched the stale producer. Before rewriting user-facing error text, grep
+for the URL or a distinctive phrase from it — not for the identifier you are renaming.
+
+### Renaming a file moves more than its imports
+
+`plugin-paseo-api.e2e.test.ts` → `plugin-osuna-api.e2e.test.ts` has no importers, so typecheck
+and lint stayed green. `packages/server/package.json`'s `test:integration` script names the file
+as a literal path; the rename alone would have broken it silently, since that script is not part
+of the default suite. Grep the bare filename across `package.json`, CI YAML and docs, not just
+the import graph.
+
+### A generic rule can invent an identifier worse than either name
+
+A rule keyed on "a letter precedes the name" turned `github.com/getpaseo/paseo` into
+`github.com/getpaseo/osuna` — upstream owner, new repo name, a URL that has never existed and
+never will. Half-renamed identifiers are worse than either endpoint because they look
+deliberate. Replace whole known compounds (full URLs, package names, scoped names) **before**
+running any generic rule, so the generic rule never sees them.
+
 ### Tool pitfalls when scripting the sweep
 
 - `git grep -E` is POSIX ERE: **`\b` does not work**. A file list built with
@@ -331,6 +373,14 @@ coordinates. Replacing those corrupts the bundle.
 - An audit that compares removed vs added diff lines proves the lines you *did* change are
   brand-only. It cannot see a line you failed to change — `.gitignore` passed that audit
   while still holding `.paseo/`. Pair it with a full-text sweep for the old name.
+- A batch loop that calls `read_text()` dies on the first binary file. PNG screenshots under
+  `plugin-examples/` raised `UnicodeDecodeError` mid-loop and abandoned the rest of the batch
+  with no summary. Catch per file, skip, and report what was skipped.
+- Object property shorthand hides a rename. `requirements: paseo === undefined ? undefined : { osuna }`
+  typechecks wherever *some* `osuna` is in scope and silently asserts the wrong value; where
+  nothing is, it is an undefined identifier that neither typecheck nor lint reports in a server
+  test file (see `.atw/spec/server/backend/testing.md`). Rename the parameter and the shorthand
+  in one edit.
 
 ### The rule
 

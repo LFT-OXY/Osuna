@@ -4,7 +4,7 @@ import { z } from "zod";
 import { PluginIdSchema, PluginRequirementsSchema } from "@osuna/protocol/messages";
 import { validatePluginRequirements } from "@osuna/protocol/plugin-requirements";
 
-const MANIFEST_FILENAME = "paseo-plugin.json";
+const MANIFEST_FILENAME = "osuna-plugin.json";
 const PluginBuildCommandSchema = z
   .array(z.string().refine((argument) => argument.trim().length > 0))
   .min(1);

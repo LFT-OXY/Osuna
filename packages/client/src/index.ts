@@ -485,7 +485,7 @@ export interface PaseoConfigActions {
   ): Promise<{ requestId: string; config: MutableDaemonConfig }>;
 }
 
-export interface PaseoApi {
+export interface OsunaApi {
   dispose(): Promise<void>;
   observeEvents: DaemonClient["observeEvents"];
   readonly terminals: PaseoTerminalActions;
@@ -496,7 +496,7 @@ export interface PaseoApi {
   readonly config: PaseoConfigActions;
 }
 
-export interface PaseoClient extends PaseoApi {
+export interface PaseoClient extends OsunaApi {
   connect(): Promise<void>;
   close(): Promise<void>;
   ensureConnected(): void;
@@ -509,7 +509,7 @@ export function createPaseoClient(config: PaseoClientConfig): PaseoClient {
     clientId: config.clientId ?? createGeneratedClientId(),
     clientType: "cli",
   });
-  const api = createPaseoApi(daemonClient);
+  const api = createOsunaApi(daemonClient);
   return {
     ...api,
     connect: () => daemonClient.connect(),
@@ -548,10 +548,10 @@ function toDaemonAgentCreateOptions(
   };
 }
 
-export function createPaseoApi(
+export function createOsunaApi(
   daemonClient: DaemonClient,
   scopeOptions?: { signal?: AbortSignal },
-): PaseoApi {
+): OsunaApi {
   const handles = new Set<{ release(): Promise<void> }>();
   const agentListeners = new Set<PaseoAgentUpdateHandler>();
   const workspaceListeners = new Set<PaseoWorkspaceUpdateHandler>();

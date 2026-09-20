@@ -195,7 +195,7 @@ export class PluginHookHandlers implements PluginLifecycleRegistration {
     kind: "event" | "before",
     name: string,
     input: unknown,
-    paseo: PluginHookContext["paseo"],
+    osuna: PluginHookContext["osuna"],
   ): Promise<unknown> {
     const controller = new AbortController();
     this.active.set(id, controller);
@@ -214,7 +214,7 @@ export class PluginHookHandlers implements PluginLifecycleRegistration {
           controller.signal.throwIfAborted();
           const result = await handler(
             { request: structuredClone(request) },
-            { paseo, signal: controller.signal },
+            { osuna, signal: controller.signal },
           );
           if (result !== undefined) {
             request = validateBeforeResult(hookName, request, result);
@@ -225,7 +225,7 @@ export class PluginHookHandlers implements PluginLifecycleRegistration {
       for (const handler of this.events.get(name) ?? []) {
         controller.signal.throwIfAborted();
         try {
-          await handler(structuredClone(input), { paseo, signal: controller.signal });
+          await handler(structuredClone(input), { osuna, signal: controller.signal });
         } catch (error) {
           console.error(`Lifecycle hook ${name} failed`, error);
         }

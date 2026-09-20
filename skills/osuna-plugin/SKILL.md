@@ -1,9 +1,9 @@
 ---
-name: paseo-plugin
-description: Build and manage trusted local Paseo plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Paseo plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a native surface, sidebar item, or workspace panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Paseo from plugin code; or add plugin RPCs.
+name: osuna-plugin
+description: Build and manage trusted local Osuna plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Osuna plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a native surface, sidebar item, or workspace panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Osuna from plugin code; or add plugin RPCs.
 ---
 
-# Paseo plugins
+# Osuna plugins
 
 Build or manage the requested plugin directly. Use the current public docs to catch contract changes, but keep working from this skill if the network is unavailable.
 
@@ -18,7 +18,7 @@ Fetch [https://paseo.sh/llms.txt](https://paseo.sh/llms.txt) first. Select and f
 
 Use the deployed docs when they disagree with this skill. Do not send the user away to read them instead of completing the work.
 
-In the Paseo repository, use `public-docs/plugins/v0.8/reference.md` for the checkout's API, including
+In the Osuna repository, use `public-docs/plugins/v0.8/reference.md` for the checkout's API, including
 unreleased changes. Use `docs/plugins.md` for maintainer guidance. Complete contracts belong in the
 public docs; this skill indexes the references and examples.
 
@@ -34,26 +34,26 @@ Pick the contribution that matches the request. Each row names the registration,
 | Client slash command      | `addSlashCommand`                                | A `/command args` in the composer that runs plugin code instead of prompting the agent                        | reference.md → Client slash commands                                                               |
 | Composer pill             | `addComposerPill`                                | A per-agent button in the composer track bar next to Tasks and Subagents                                      | reference.md → Composer pills                                                                      |
 | Timeline transformer      | `addTimelineTransformer` + `addTimelineRenderer` | Replace, explode, or hide a built-in timeline item, including while it streams                                | reference.md → Timeline items; `plugin-examples/timeline-items`, `plugin-examples/inline-thinking` |
-| Timeline row              | `paseo.agents.ref(id).timeline.append(...)`      | Push a plugin-owned row into an agent timeline from a server handler and update it later                      | reference.md → Append a timeline row from the daemon                                               |
+| Timeline row              | `osuna.agents.ref(id).timeline.append(...)`      | Push a plugin-owned row into an agent timeline from a server handler and update it later                      | reference.md → Append a timeline row from the daemon                                               |
 | Attachment source         | `client.addAttachmentSource` + `server.handle`   | Let the user attach a searchable external resource, such as an issue, to a prompt                             | reference.md → Add a composer attachment source; `plugin-examples/linear`                          |
 | Theme                     | `addTheme`                                       | A light or dark palette under Settings → Appearance                                                           | reference.md → Contribute a theme; `plugin-examples/catppuccin`                                    |
-| Plugin RPC                | `defineRpc` + `server.handle` + `useRpc`         | Daemon-side work that is not a normal Paseo operation: vendor APIs, credentials, local files                  | reference.md → Add plugin-specific backend behavior                                                |
+| Plugin RPC                | `defineRpc` + `server.handle` + `useRpc`         | Daemon-side work that is not a normal Osuna operation: vendor APIs, credentials, local files                  | reference.md → Add plugin-specific backend behavior                                                |
 | Lifecycle events          | `server.on`                                      | Observe agent/workspace lifecycle, inspect ended turns, and answer permission requests                        | [Lifecycle hooks](https://paseo.sh/docs/plugins/v0.8/reference.md#lifecycle-hooks)                 |
 | Creation and launch hooks | `server.before`                                  | Change agent config, provider options, MCP servers, environment, or workspace isolation before the operation  | [Before hooks](https://paseo.sh/docs/plugins/v0.8/reference.md#before-hooks)                       |
-| Paseo SDK                 | `usePaseo()` / handler `{ paseo }`               | Normal Paseo operations: workspaces, agents, providers, config                                                | reference.md → Use the Paseo SDK                                                                   |
+| Osuna SDK                 | `useOsuna()` / handler `{ osuna }`               | Normal Osuna operations: workspaces, agents, providers, config                                                | reference.md → Use the Osuna SDK                                                                   |
 
-| Lifecycle task                                                      | Example                                                                                                |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Log all eleven hooks                                                | [lifecycle-logger](https://github.com/getpaseo/paseo/tree/main/plugin-examples/lifecycle-logger)       |
-| Follow-ups, permissions, environment, provider switching, worktrees | [lifecycle-actions](https://github.com/getpaseo/paseo/tree/main/plugin-examples/lifecycle-actions)     |
-| Inject MCP servers and change Codex sandbox/approval options        | [agent-configuration](https://github.com/getpaseo/paseo/tree/main/plugin-examples/agent-configuration) |
+| Lifecycle task                                                      | Example                                                                                               |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Log all eleven hooks                                                | [lifecycle-logger](https://github.com/LFT-OXY/Osuna/tree/main/plugin-examples/lifecycle-logger)       |
+| Follow-ups, permissions, environment, provider switching, worktrees | [lifecycle-actions](https://github.com/LFT-OXY/Osuna/tree/main/plugin-examples/lifecycle-actions)     |
+| Inject MCP servers and change Codex sandbox/approval options        | [agent-configuration](https://github.com/LFT-OXY/Osuna/tree/main/plugin-examples/agent-configuration) |
 
 ## Create the project
 
 Use an absolute path on the daemon machine. `init` writes files but does not install packages.
 
 ```bash
-paseo plugin init /absolute/path/to/my-plugin
+osuna plugin init /absolute/path/to/my-plugin
 cd /absolute/path/to/my-plugin
 npm install
 ```
@@ -62,7 +62,7 @@ The generated project contains:
 
 ```text
 my-plugin/
-  paseo-plugin.json
+  osuna-plugin.json
   package.json
   tsconfig.json
   index.client.tsx
@@ -72,15 +72,15 @@ my-plugin/
   shared/greeting.ts
 ```
 
-The manifest supplies the default install ID and supported Paseo versions:
+The manifest supplies the default install ID and supported Osuna versions:
 
 ```json
-{ "id": "my-plugin", "requirements": { "paseo": ">=0.8.0" } }
+{ "id": "my-plugin", "requirements": { "osuna": ">=0.8.0" } }
 ```
 
-Keep `requirements.paseo` correct whenever creating or editing a plugin. `init` uses `>=` followed
+Keep `requirements.osuna` correct whenever creating or editing a plugin. `init` uses `>=` followed
 by the CLI version. Raise the minimum when adopting newer APIs; add an upper bound when a later
-Paseo release is incompatible. Use npm semver ranges and explicitly include beta versions when
+Osuna release is incompatible. Use npm semver ranges and explicitly include beta versions when
 targeting betas. Missing requirements mean `<0.8.0`; complete the 0.8 entry migration before adding
 `>=0.8.0`. Verify compatibility with both the daemon and the app running client contributions.
 See [requirements](https://paseo.sh/docs/plugins/v0.8/reference#requirements).
@@ -124,14 +124,14 @@ export default function contribute(server: PluginServerContext) {
 ```
 
 Cleanup can be async. Use it for timers, watchers, sockets, subscriptions, and other resources
-created by plugin code. Every client `add*` method returns an idempotent remover. Paseo calls the
+created by plugin code. Every client `add*` method returns an idempotent remover. Osuna calls the
 entry cleanup first, removes registrations that remain, rejects pending RPCs, closes the plugin
 session, and stops the subprocess when the plugin stops.
 
 ## Add a workspace panel
 
 Workspace panels live beside agents, terminals, files, and diffs. Plugins run on desktop and
-mobile, and Paseo has multiple themes. Every `Text` must take its color from `theme.colors`.
+mobile, and Osuna has multiple themes. Every `Text` must take its color from `theme.colors`.
 Use `layout.compact` for padding and stacking. Unstyled text is black and fails in dark themes.
 
 ```tsx
@@ -187,7 +187,7 @@ export default function contribute(client: PluginClientContext) {
 
 Use `useWorkspace(id, selector)` and `useAgent(id, selector)`. Selectors are required
 and their results use shallow equality. Never select the whole snapshot or add an RPC to discover
-the active workspace or agent. Command callbacks receive the selected host's `paseo`, typed
+the active workspace or agent. Command callbacks receive the selected host's `osuna`, typed
 `rpc(contract, input)`, `openSurface(id)`, and contextual `openPanel(id)` capabilities.
 
 ## Add a sidebar surface
@@ -242,13 +242,13 @@ export default function contribute(client: PluginClientContext) {
 }
 ```
 
-Icons are Lucide icon names. `theme` is a typed `PluginTheme` on every surface and panel. Primary text uses `theme.colors.foreground`; labels use `theme.colors.foregroundMuted`; the root view uses `theme.colors.surface0`. `layout.compact` is true on mobile and narrow windows. Paseo owns the route, header, host picker, close action, error boundary, and per-installation query client.
+Icons are Lucide icon names. `theme` is a typed `PluginTheme` on every surface and panel. Primary text uses `theme.colors.foreground`; labels use `theme.colors.foregroundMuted`; the root view uses `theme.colors.surface0`. `layout.compact` is true on mobile and narrow windows. Osuna owns the route, header, host picker, close action, error boundary, and per-installation query client.
 
 Before writing imports, classify each module as shared, client, or server. Follow the
 [SDK import boundaries](https://paseo.sh/docs/plugins/v0.8/reference.md#runtime-modules), including
 transitive and type dependencies. The root is shared-only; hooks and client contexts belong to
 `@getpaseo/plugin/client`, server contexts to `/server`, and host UI to `/client/react-native` or `/client/ui`.
-Install dependencies locally for typechecking; Paseo supplies host runtime modules. JSX uses the
+Install dependencies locally for typechecking; Osuna supplies host runtime modules. JSX uses the
 automatic runtime. Do not import `/client/host` from plugin code.
 
 ## Works on mobile
@@ -273,20 +273,20 @@ A hit outside `client/web.ts` is a bug.
 
 ## Choose the correct API
 
-Use the existing Paseo SDK for normal Paseo operations. Use plugin RPC only for plugin-specific backend behavior.
+Use the existing Osuna SDK for normal Osuna operations. Use plugin RPC only for plugin-specific backend behavior.
 
-### Call Paseo from a surface
+### Call Osuna from a surface
 
-`usePaseo()` borrows the selected host's current connection. Never create another client inside a surface.
+`useOsuna()` borrows the selected host's current connection. Never create another client inside a surface.
 
 ```tsx
-import { usePaseo } from "@getpaseo/plugin/client";
+import { useOsuna } from "@getpaseo/plugin/client";
 
 function PullRequestAction() {
-  const paseo = usePaseo();
+  const osuna = useOsuna();
 
   async function createReviewWorkspace() {
-    const workspace = await paseo.workspaces.create({
+    const workspace = await osuna.workspaces.create({
       title: "Review PR 42",
       source: {
         kind: "worktree",
@@ -306,7 +306,7 @@ function PullRequestAction() {
 }
 ```
 
-The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because Paseo owns the connection. Consult the current [SDK reference](https://paseo.sh/docs/sdk/reference.md) for method details.
+The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because Osuna owns the connection. Consult the current [SDK reference](https://paseo.sh/docs/sdk/reference.md) for method details.
 
 ### Add daemon-side behavior
 
@@ -359,21 +359,21 @@ function Greeting() {
 }
 ```
 
-Inputs and outputs are validated on both sides. Backend handlers receive the same `PaseoApi` as `{ paseo }`; their IPC-backed daemon session lives exactly as long as the subprocess. Backend code can use Node APIs and installed dependencies. Keep credentials, filesystem access, shell commands, and vendor API calls in the handler rather than the client surface.
+Inputs and outputs are validated on both sides. Backend handlers receive the same `OsunaApi` as `{ osuna }`; their IPC-backed daemon session lives exactly as long as the subprocess. Backend code can use Node APIs and installed dependencies. Keep credentials, filesystem access, shell commands, and vendor API calls in the handler rather than the client surface.
 
 Use TanStack Query for async request state, caching, and mutations.
 
 ### Debug daemon-side behavior
 
 Backend contributions can use normal Node logging. `console.log()` writes to the plugin's stdout;
-`console.error()` writes to stderr. Paseo captures both streams without interfering with plugin IPC.
+`console.error()` writes to stderr. Osuna captures both streams without interfering with plugin IPC.
 
 Inspect recent output after install, reload, an RPC failure, or a subprocess crash:
 
 ```bash
-paseo plugin logs my-plugin
-paseo plugin logs my-plugin --json
-paseo plugin logs my-plugin --host <url>
+osuna plugin logs my-plugin
+osuna plugin logs my-plugin --json
+osuna plugin logs my-plugin --host <url>
 ```
 
 The same tail is available from **Settings → Plugins → Logs**. It includes initialization, handler,
@@ -441,7 +441,7 @@ export default function contribute(client: PluginClientContext) {
 }
 ```
 
-Return complete text snapshots. Paseo owns the composer menu, picker, pills, drafts, and submission. Credentials and vendor calls stay in the daemon handler.
+Return complete text snapshots. Osuna owns the composer menu, picker, pills, drafts, and submission. Credentials and vendor calls stay in the daemon handler.
 
 ## Add a client slash command
 
@@ -460,7 +460,7 @@ client.addSlashCommand({
 });
 ```
 
-The callback receives the same context as the matching Command Center item plus `args`. Paseo owns the autocomplete row, input clearing, and the error toast; put pending UI in a pill or panel. Precedence is built-in client commands, then plugin commands, then provider commands; a lower-precedence collision is dropped. Commands do not run while the composer has attachments. Server-side slash commands do not exist.
+The callback receives the same context as the matching Command Center item plus `args`. Osuna owns the autocomplete row, input clearing, and the error toast; put pending UI in a pill or panel. Precedence is built-in client commands, then plugin commands, then provider commands; a lower-precedence collision is dropped. Commands do not run while the composer has attachments. Server-side slash commands do not exist.
 
 ## Add a composer pill
 
@@ -469,7 +469,7 @@ A pill is a per-agent button in the composer track bar next to Tasks and Subagen
 ```tsx
 export function contributeClient(client: PluginClientContext) {
   const pills = new Map<string, () => void>();
-  const unsubscribe = client.paseo.agents.subscribe((update) => {
+  const unsubscribe = client.osuna.agents.subscribe((update) => {
     if (update.kind !== "upsert" || !update.agent.workspaceId) return;
     const { id: agentId, workspaceId } = update.agent;
     pills.get(agentId)?.();
@@ -494,7 +494,7 @@ export function contributeClient(client: PluginClientContext) {
 }
 ```
 
-Call `contributeClient(client)` from `index.client.tsx`, or move its body into that entry. The component owns its icon and text; Paseo owns the pressable, chrome, pending state, error reporting, and placement. Removal functions are idempotent, and Paseo removes every pill when the plugin, client entrypoint, or host connection is torn down.
+Call `contributeClient(client)` from `index.client.tsx`, or move its body into that entry. The component owns its icon and text; Osuna owns the pressable, chrome, pending state, error reporting, and placement. Removal functions are idempotent, and Osuna removes every pill when the plugin, client entrypoint, or host connection is torn down.
 
 ## Transform and render timeline items
 
@@ -525,8 +525,8 @@ Transformers run while the render model is built, on fetched history and on ever
 A server handler can push a plugin-owned row into any agent timeline. The same renderer registration draws it.
 
 ```ts
-server.handle(publishReview, async ({ agentId, verdict }, { paseo }) => {
-  await paseo.agents.ref(agentId).timeline.append({
+server.handle(publishReview, async ({ agentId, verdict }, { osuna }) => {
+  await osuna.agents.ref(agentId).timeline.append({
     type: "plugin",
     id: "review",
     kind: "review-result",
@@ -541,7 +541,7 @@ The daemon stamps `pluginId` from the plugin session, so only plugin code can ca
 
 ## Contribute a theme
 
-`addTheme` takes a small light or dark palette; Paseo expands it into the full token set. Every color is a hex string.
+`addTheme` takes a small light or dark palette; Osuna expands it into the full token set. Every color is a hex string.
 
 ```ts
 client.addTheme({
@@ -565,30 +565,30 @@ It appears under Settings → Appearance. A client that predates `addTheme` cann
 
 ## Hosts and trust
 
-Plugins are installed per daemon and are trusted, unsandboxed code. Backend code can access files, processes, credentials, and network services on the daemon machine. Client contributions run inside the Paseo app. Do not install a plugin the user has not authorized or source code you have not inspected.
+Plugins are installed per daemon and are trusted, unsandboxed code. Backend code can access files, processes, credentials, and network services on the daemon machine. Client contributions run inside the Osuna app. Do not install a plugin the user has not authorized or source code you have not inspected.
 
 ### Check the global switch before installing
 
-Identify the target daemon and inspect its root `pluginsEnabled` value in `config.json`. For the local daemon, `paseo daemon status --json` reports its `home`; the file is `<home>/config.json`. Treat a missing field as `false`. Do not infer the global value from a plugin's `disabled` status, because an individual plugin can also be disabled.
+Identify the target daemon and inspect its root `pluginsEnabled` value in `config.json`. For the local daemon, `osuna daemon status --json` reports its `home`; the file is `<home>/config.json`. Treat a missing field as `false`. Do not infer the global value from a plugin's `disabled` status, because an individual plugin can also be disabled.
 
 If `pluginsEnabled` is already `true`, continue without asking the user to enable it.
 
 If it is false or absent, stop and ask the user for explicit permission before editing or enabling anything. Include this warning in the request:
 
-> Plugins are trusted, unsandboxed code. Backend plugin code can access your daemon machine, including files, processes, credentials, and network services. Client plugin code runs inside the Paseo app. May I enable plugins on this daemon?
+> Plugins are trusted, unsandboxed code. Backend plugin code can access your daemon machine, including files, processes, credentials, and network services. Client plugin code runs inside the Osuna app. May I enable plugins on this daemon?
 
 Do not continue unless the user agrees. After permission:
 
 1. Preserve the rest of `config.json` and set the root `pluginsEnabled` field to `true`.
-2. Run `paseo reload --json` against that daemon.
+2. Run `osuna reload --json` against that daemon.
 3. Require `pluginsEnabled` in `appliedPaths`, or accept an empty `appliedPaths` only after re-reading the file and confirming the live plugin catalog is enabled.
-4. Run `paseo plugin ls` and verify the intended plugin reaches `running` after installation.
+4. Run `osuna plugin ls` and verify the intended plugin reaches `running` after installation.
 
-If the user asks to disable the global switch, set `pluginsEnabled` to `false`, run `paseo reload --json`, and verify configured plugins report `disabled`.
+If the user asks to disable the global switch, set `pluginsEnabled` to `false`, run `osuna reload --json`, and verify configured plugins report `disabled`.
 
-Do not edit a local config when the target is a remote daemon. Perform the edit on the daemon machine, or ask the user to use **Settings → Plugins → Enable plugins**. `paseo reload --host <url>` reloads the remote daemon's own file but does not edit it.
+Do not edit a local config when the target is a remote daemon. Perform the edit on the daemon machine, or ask the user to use **Settings → Plugins → Enable plugins**. `osuna reload --host <url>` reloads the remote daemon's own file but does not edit it.
 
-When the same sidebar contribution exists on several connected hosts, Paseo shows it once with a host picker. The selected host owns the bundle, SDK calls, RPCs, and query cache. An offline selected host does not fall through to another host. Attachment sources stay scoped to the composer's host.
+When the same sidebar contribution exists on several connected hosts, Osuna shows it once with a host picker. The selected host owns the bundle, SDK calls, RPCs, and query cache. An offline selected host does not fall through to another host. Attachment sources stay scoped to the composer's host.
 
 ## Typecheck and manage
 
@@ -596,21 +596,21 @@ Always typecheck before install or reload:
 
 ```bash
 npm run typecheck
-paseo plugin install /absolute/path/to/plugin
-paseo plugin install /absolute/path/to/plugin --id another-runtime-id
-paseo plugin add owner/repository              # Git source; append :path for a monorepo subdirectory
-paseo plugin add owner/repository --ref main   # branches track, tags and commits pin
-paseo plugin status
-paseo plugin update my-plugin
-paseo plugin ls
-paseo plugin reload my-plugin
-paseo plugin logs my-plugin
-paseo plugin disable my-plugin
-paseo plugin enable my-plugin
-paseo plugin remove my-plugin
+osuna plugin install /absolute/path/to/plugin
+osuna plugin install /absolute/path/to/plugin --id another-runtime-id
+osuna plugin add owner/repository              # Git source; append :path for a monorepo subdirectory
+osuna plugin add owner/repository --ref main   # branches track, tags and commits pin
+osuna plugin status
+osuna plugin update my-plugin
+osuna plugin ls
+osuna plugin reload my-plugin
+osuna plugin logs my-plugin
+osuna plugin disable my-plugin
+osuna plugin enable my-plugin
+osuna plugin remove my-plugin
 ```
 
-Use `--host <url>` when managing a daemon other than the CLI default. A Git source that must install or generate something declares `build` in `paseo-plugin.json` as a list of argv arrays; Paseo runs them without a shell on install and update and keeps the old version if one fails. Plugin source edits require `paseo plugin reload`; config changes to the global switch require `paseo reload`. A failed plugin reload stays failed; inspect `paseo plugin ls` for the load error and `paseo plugin logs <id>` for subprocess output, fix the source, typecheck, and reload again. `remove` deletes configuration, never the source directory.
+Use `--host <url>` when managing a daemon other than the CLI default. A Git source that must install or generate something declares `build` in `osuna-plugin.json` as a list of argv arrays; Osuna runs them without a shell on install and update and keeps the old version if one fails. Plugin source edits require `osuna plugin reload`; config changes to the global switch require `osuna reload`. A failed plugin reload stays failed; inspect `osuna plugin ls` for the load error and `osuna plugin logs <id>` for subprocess output, fix the source, typecheck, and reload again. `remove` deletes configuration, never the source directory.
 
 Do not restart the daemon to load source changes. Restarting it can kill the agent performing the work.
 
@@ -622,7 +622,7 @@ After a change:
 
 1. Run `npm run typecheck`.
 2. Install or reload the exact runtime ID.
-3. Run `paseo plugin ls` and require `running` with no error.
+3. Run `osuna plugin ls` and require `running` with no error.
 4. Confirm the contribution on the intended host. Open the Command Center with **⌘K** (macOS) or **Ctrl+K** (Windows/Linux). Type `/` in the composer for slash commands. For timeline work, run an agent turn that produces the source item and watch it while it streams, not only after it completes. For UI work, check a wide desktop window and a compact/mobile client, and switch theme to confirm text still uses `foreground` / `foregroundMuted`.
 5. Exercise the changed action or RPC, including its error state.
 
@@ -630,9 +630,9 @@ Common failures:
 
 - Missing sidebar item: wrong host, plugin not `running`, invalid Lucide icon, or sidebar item points to a missing surface.
 - Unavailable client module: client bundles can use only the host-provided modules listed above.
-- RPC rejection: input or output failed its Zod schema, or the handler threw. Inspect `paseo plugin logs <id>` for handler output.
-- Plugin exits or reload fails: inspect `paseo plugin ls` for status and `paseo plugin logs <id>` for initialization, cleanup, or crash output.
-- Stale UI: source was edited without `paseo plugin reload <id>`.
+- RPC rejection: input or output failed its Zod schema, or the handler threw. Inspect `osuna plugin logs <id>` for handler output.
+- Plugin exits or reload fails: inspect `osuna plugin ls` for status and `osuna plugin logs <id>` for initialization, cleanup, or crash output.
+- Stale UI: source was edited without `osuna plugin reload <id>`.
 - Timeline item shows "Plugin timeline item unavailable": no renderer registered for that `kind` and `version`, the renderer schema rejected `data`, or the plugin is not running on that host.
 - Transformer has no effect: `query.itemType` does not match the source type, the transform returned `undefined`, or it threw and was skipped; check the app console for `[Plugins] Timeline transformer failed`.
 - Slash command not offered: name collides with a built-in or another plugin, the context is `agent` on a draft, or the composer has attachments.

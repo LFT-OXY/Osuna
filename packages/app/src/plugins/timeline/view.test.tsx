@@ -21,7 +21,7 @@ vi.mock("../navigation", () => ({
 }));
 vi.mock("../client-runtime", () => ({
   createPluginClientRuntime: () => ({
-    paseo: {},
+    osuna: {},
     dispose: () => {},
     rpc: async () => undefined,
     openSurface: () => undefined,
@@ -118,7 +118,7 @@ describe("PluginTimelineItemView", () => {
   it("validates and renders the matching plugin component", async () => {
     pluginRegistry.installCatalog(
       "host-1",
-      [{ id: "reports", requirements: { paseo: `>=${appPackage.version}` }, clientBundle: bundle }],
+      [{ id: "reports", requirements: { osuna: `>=${appPackage.version}` }, clientBundle: bundle }],
       {
         client: daemonClient,
       },
@@ -144,7 +144,7 @@ describe("PluginTimelineItemView", () => {
       [
         {
           id: "reports",
-          requirements: { paseo: `>=${appPackage.version}` },
+          requirements: { osuna: `>=${appPackage.version}` },
           clientBundle: failingBundle,
         },
       ],
@@ -181,7 +181,7 @@ describe("PluginTimelineItemView", () => {
       [
         {
           id: "reports",
-          requirements: { paseo: `>=${appPackage.version}` },
+          requirements: { osuna: `>=${appPackage.version}` },
           clientBundle: recoveringBundle,
         },
       ],
@@ -281,10 +281,10 @@ it("releases a crashed renderer's observations and recovers a fresh scope in Str
   selectedHost.client = client;
   const liveBundle = `(function(require) {
     const React = require("react");
-    const { usePaseo } = require("@osuna/plugin/client");
+    const { useOsuna } = require("@osuna/plugin/client");
     return { default(plugin) {
       function Card(props) {
-        const paseo = usePaseo();
+        const osuna = useOsuna();
         const failed = React.useRef(false);
         failed.current = props.item.data.label === "explode";
         React.useEffect(() => {
@@ -307,7 +307,7 @@ it("releases a crashed renderer's observations and recovers a fresh scope in Str
     [
       {
         id: "reports",
-        requirements: { paseo: `>=${appPackage.version}` },
+        requirements: { osuna: `>=${appPackage.version}` },
         clientBundle: liveBundle,
       },
     ],

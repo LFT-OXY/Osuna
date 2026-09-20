@@ -113,6 +113,18 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
 `skills/paseo-plugin`、`skills/paseo-help` → `osuna-*`；`plugin-examples/` 下 10 个示例
 同步。后果已知并接受：为上游写的第三方插件不再能装到 Osuna 上，反之亦然。
 
+**落地时的归属调整（批次 3 实施后补记）：**
+
+- **插件 SDK 的 API 名从批次 4 提前到本批次**：`PaseoApi` → `OsunaApi`、`usePaseo` →
+  `useOsuna`、`ctx.paseo` → `ctx.osuna`、`PluginHandlerContext.paseo` → `.osuna`，以及
+  `paseo-context.tsx` → `osuna-context.tsx`。理由：它们与 `requirements.osuna` 是同一份
+  对插件作者的契约，分两批改等于发一版「清单叫 Osuna、代码里却是 `ctx.paseo`」的半改名
+  契约，比一次改完更糟。批次 4 仍拥有 `createPaseoClient` 等**宿主**导出名 —— 那些面向
+  SDK 使用者，不是插件契约。
+- **6 个 skills 目录全部改名，不是票里写的 2 个**：`skills/paseo{,-advisor,-committee,-handoff,-help,-plugin}`
+  → `osuna-*`。只改 2 个会让 `/paseo-handoff` 这类命令名与目录名对不上。
+- `plugin-examples/` 实际是 **14 个**清单文件（含 e2e 夹具），不是 10 个。
+
 ### 公开 API 与文档
 
 - 导出的函数名与类型名改（`createPaseoClient`、`PaseoClient` 等）。**内部私有变量名
@@ -211,13 +223,35 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
      6767/6768、`paseo.json`、`isPaseoOwnedWorktree`
    - `public-docs/` 同上（`docker.md`、`configuration.md`、`cli.md`、`web-ui.md`、
      `troubleshooting.md`、`hub/**`、`worktrees.md`、`voice.md` 等）
-   - `skills/paseo-help/SKILL.md` 与 `skills/paseo/SKILL.md` 的 `PASEO_HOME`、`~/.paseo`、
-     安装路径（这两个目录本身由批次 3 改名）
+   - ~~`skills/paseo-help/SKILL.md` 与 `skills/paseo/SKILL.md` 的 `PASEO_HOME`、`~/.paseo`、
+     安装路径~~ —— 批次 3 改名这两个目录时一并做完了（`PASEO_HOME`/`PASEO_HOST` 已无读取方，
+     且 `osuna-help` 里探测端口仍写 6767 会把 agent 指向**上游** daemon，不能留到下一批）
    - `docs/development.md` 指向 `packages/server/src/server/paseo-home.ts`，该文件已改名
      `osuna-home.ts`
    - i18n 的产品名文案：`appName: "Paseo"`、`paseo: "Paseo"`（作为 StatusBadge 渲染）等
      与批次 2 已改的 `osuna.json` 文案同处一文件，现在互相矛盾
    - `docs/data-model.md` 的 `isPaseoOwnedWorktree` 字段表、`@paseo:review-draft-store` 键名
+   **批次 3 又让下列事实失效**：
+   - `skills/osuna-plugin/SKILL.md` 里 14 处 `@getpaseo/plugin` 导入 —— 包名在批次 1 已改
+     `@osuna/plugin`，这些 import 解析不到任何东西，而该文件会打进 `dist/server/skills`，
+     agent 照抄就写出坏代码。同类问题遍布 `docs/plugins.md`、`public-docs/plugins/v0.8/**`
+     （几十处），一并归本批次
+   - `skills/` 下 11 处 `paseo.sh` 文档 URL，与 `public-docs/skills.md` 的 15 处
+     （`/paseo`、`/paseo-handoff` 等命令名 + `npx skills add getpaseo/paseo`）—— 目录名已由
+     批次 3 改成 `osuna-*`，这些命令名现在指向不存在的 skill
+   - `CONTRIBUTING.md` 的「Build a plugin」把插件作者指向 `paseo.sh/docs/plugins` 与
+     `getpaseo/paseo` Discussions，而代码里的报错已指向 `LFT-OXY/Osuna`，同一条作者路径
+     两个目的地
+   - `ProviderPaseoToolsPolicySchema` 类型名 —— 它的 wire 字段已在批次 2 改成 `osunaTools`，
+     只剩类型名没动（导出名归本批次）
+   **需要先做决定、不能机械改的两项（本批次刻意没动）**：
+   - `packages/plugin/src/server/acp-internal/connection.ts:410` 的
+     `clientInfo: { name: "paseo", version: "1" }` 与 `:476` 的 `_paseo` 元数据命名空间。
+     两者都是**只有产出方、全仓无读取方**的标识：它们发给外部 ACP agent 进程
+     （Claude Code、Codex 等）。如果某个 agent 对 `paseo` 有特判行为，改名就是行为变更而非
+     改名。落地前需确认：我们是否在意外部 agent 看到的自我标识。
+   - `packages/server/src/server/worktree-session.ts:402` 的 `_paseoHome` 形参名（内部私有名，
+     按 prd「内部私有变量名不专门改」本可不动，列出仅为免得下次搜索时以为是漏项）
    注：`.atw/spec/**` 与 `CLAUDE.md` 里的同类事实不归本批次 —— 它们是各批次 spec 回写
    环节自己的责任，批次 1 与 2 已各自更新过。
 5. **签名配置与发布演练** — 关公证、改 workflow、推测试 tag 走一遍 GitHub Release。

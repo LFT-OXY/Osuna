@@ -94,17 +94,17 @@ export function GreetingSurface({ theme, layout }: PluginSurfaceProps) {
         accessibilityRole="button"
         accessibilityLabel="Create greeting"
         style={styles.button}
-        onPress={() => greeting.mutate({ name: "Paseo" })}
+        onPress={() => greeting.mutate({ name: "Osuna" })}
       >
         <Text style={styles.buttonText}>Create greeting</Text>
       </Pressable>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel="Open the Paseo website"
+        accessibilityLabel="Open the Osuna repository"
         style={styles.button}
-        onPress={() => openExternal("https://paseo.sh")}
+        onPress={() => openExternal("https://github.com/LFT-OXY/Osuna")}
       >
-        <Text style={styles.buttonText}>Open paseo.sh</Text>
+        <Text style={styles.buttonText}>Open the Osuna repository</Text>
       </Pressable>
     </View>
   );
@@ -160,8 +160,8 @@ export async function scaffoldPluginDirectory(
   };
   const files = new Map<string, string>([
     [
-      "paseo-plugin.json",
-      `${JSON.stringify({ id, requirements: { paseo: `>=${version}` } }, null, 2)}\n`,
+      "osuna-plugin.json",
+      `${JSON.stringify({ id, requirements: { osuna: `>=${version}` } }, null, 2)}\n`,
     ],
     ["package.json", `${JSON.stringify(packageJson, null, 2)}\n`],
     ["tsconfig.json", `${JSON.stringify(TSCONFIG, null, 2)}\n`],

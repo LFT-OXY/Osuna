@@ -137,9 +137,9 @@ npx skills add LFT-OXY/Osuna
 
 Then use them in any agent conversation:
 
-- `/paseo-handoff` — hand off work between agents. Plan with one agent, then hand off to another to implement.
-- `/paseo-advisor` — spin up a single agent as an advisor for a second opinion, without delegating the work itself.
-- `/paseo-committee` — form a committee of two contrasting agents to step back, do root cause analysis, and produce a plan.
+- `/osuna-handoff` — hand off work between agents. Plan with one agent, then hand off to another to implement.
+- `/osuna-advisor` — spin up a single agent as an advisor for a second opinion, without delegating the work itself.
+- `/osuna-committee` — form a committee of two contrasting agents to step back, do root cause analysis, and produce a plan.
 
 ## Development
 

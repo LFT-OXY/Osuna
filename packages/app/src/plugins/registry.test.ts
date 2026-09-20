@@ -8,7 +8,7 @@ vi.mock("./navigation", () => ({
 }));
 vi.mock("./client-runtime", () => ({
   createPluginClientRuntime: () => ({
-    paseo: { dispose: async () => {} },
+    osuna: { dispose: async () => {} },
     rpc: async () => undefined,
     openSurface: () => undefined,
     openPanel: () => undefined,
@@ -29,7 +29,7 @@ const pluginRegistry = {
   ) {
     return registry.installCatalog(
       serverId,
-      catalog.map((entry) => ({ ...entry, requirements: { paseo: `>=${appPackage.version}` } })),
+      catalog.map((entry) => ({ ...entry, requirements: { osuna: `>=${appPackage.version}` } })),
       { ...options, client: daemonClient },
     );
   },

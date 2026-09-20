@@ -77,10 +77,10 @@ export const test = base.extend<{
   },
 });
 
-async function writeRequirements(directory: string, paseo: string) {
+async function writeRequirements(directory: string, osuna: string) {
   await writeFile(
-    path.join(directory, "paseo-plugin.json"),
-    JSON.stringify({ id: "requirements-example", requirements: { paseo } }),
+    path.join(directory, "osuna-plugin.json"),
+    JSON.stringify({ id: "requirements-example", requirements: { osuna } }),
   );
 }
 
@@ -95,12 +95,12 @@ export async function openRequirementHost(page: Page, host: { serverId: string; 
 export async function expectAppMismatch(page: Page) {
   await expect(page.getByLabel("requirements-example failed", { exact: true })).toBeVisible();
   await expect(
-    page.getByText(/Plugin "requirements-example" requires Paseo \^99.0.0. Your app is/),
+    page.getByText(/Plugin "requirements-example" requires Osuna \^99.0.0. Your app is/),
   ).toBeVisible();
 }
 
 export async function correctRequirementAndReload(page: Page, directory: string) {
-  await writeRequirements(directory, pluginRequirements.paseo);
+  await writeRequirements(directory, pluginRequirements.osuna);
   await page.getByRole("button", { name: "Reload", exact: true }).click();
   await expect(page.getByLabel("requirements-example running", { exact: true })).toBeVisible();
   await expect(page.getByText(/Your app is/)).toHaveCount(0);

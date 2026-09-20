@@ -12,14 +12,14 @@ import {
 
 const PLUGIN_ID = "plugin-host-ui-e2e";
 
-const PLUGIN_SOURCE = `import { usePaseo } from "@osuna/plugin/client";
+const PLUGIN_SOURCE = `import { useOsuna } from "@osuna/plugin/client";
 import { Icon, Modal, useToast } from "@osuna/plugin/client/react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 function ModalBody({ onSaved }) {
-  usePaseo();
+  useOsuna();
   useQueryClient();
   const toast = useToast();
 
@@ -120,7 +120,7 @@ test("plugin modal adapts its presentation and preserves host contexts", async (
   const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
   const previousConfig = await client.getDaemonConfig();
   await writeFile(
-    path.join(directory, "paseo-plugin.json"),
+    path.join(directory, "osuna-plugin.json"),
     JSON.stringify({ id: PLUGIN_ID, requirements: pluginRequirements }),
   );
   await writeFile(path.join(directory, "index.client.tsx"), PLUGIN_SOURCE);

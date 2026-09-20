@@ -28,7 +28,7 @@ export function createPluginCapabilities(
   navigation: PluginNavigation,
 ): PluginCommandCapabilities {
   return {
-    paseo: runtime.paseo,
+    osuna: runtime.osuna,
     rpc: (contract, input) => callPluginRpc(contract, runtime.invoke, input),
     openSettings(screenId) {
       if (!plugin.settingsScreens.some((screen) => screen.id === screenId))

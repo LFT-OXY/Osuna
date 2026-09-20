@@ -4,7 +4,7 @@ import {
   type WebSocketLike,
 } from "@osuna/client/internal/daemon-client";
 import { expect, test } from "vitest";
-import { createPaseoApi } from "@osuna/client";
+import { createOsunaApi } from "@osuna/client";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "./test-utils/paseo-daemon.js";
 
@@ -16,8 +16,8 @@ test("two SDK facades own combined agent lists and disposal preserves the other 
     capabilities: { owned_subscriptions: true },
   });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
-  const app = createPaseoApi(client);
-  const plugin = createPaseoApi(client);
+  const app = createOsunaApi(client);
+  const plugin = createOsunaApi(client);
   try {
     await admin.connect();
     await client.connect();
@@ -87,7 +87,7 @@ test("public SDK scope cancellation during bootstrap releases the returned ID", 
   const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   const lifetime = new AbortController();
-  const api = createPaseoApi(client, { signal: lifetime.signal });
+  const api = createOsunaApi(client, { signal: lifetime.signal });
   try {
     await client.connect();
     const listing = api.agents.list({ subscribe: {} });
@@ -123,7 +123,7 @@ test("a restored public SDK timeline leaves missed history to the consumer", asy
     });
   const observer = makeClient(true);
   const actor = makeClient(false);
-  const api = createPaseoApi(observer);
+  const api = createOsunaApi(observer);
   const received: unknown[] = [];
   try {
     await actor.connect();

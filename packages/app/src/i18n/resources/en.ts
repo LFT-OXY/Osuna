@@ -2141,7 +2141,7 @@ export const en = {
       directoryLabel: "Plugin directory",
       directoryPlaceholder: "/absolute/path/on/host",
       idLabel: "Plugin installation ID",
-      idHint: "Leave blank to use paseo-plugin.json",
+      idHint: "Leave blank to use osuna-plugin.json",
       idPlaceholder: "Manifest default",
       install: "Install directory",
       installing: "Installing…",

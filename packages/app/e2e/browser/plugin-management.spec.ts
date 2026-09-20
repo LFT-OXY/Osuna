@@ -122,7 +122,7 @@ test("installs, reloads, recovers, disables, and removes a trusted local plugin"
   const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
   const previous = await client.getDaemonConfig();
   await writeFile(
-    path.join(directory, "paseo-plugin.json"),
+    path.join(directory, "osuna-plugin.json"),
     JSON.stringify({ id: "e2e-plugin", requirements: pluginRequirements }),
   );
   await writeFile(path.join(directory, "index.client.tsx"), pluginSource("Plugin v1"));

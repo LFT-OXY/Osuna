@@ -12,12 +12,12 @@ This is a demonstration plugin: installing it enables all these behaviors on its
 alongside `lifecycle-logger` on a test daemon with plugins enabled:
 
 ```bash
-paseo plugin install /absolute/path/to/plugin-examples/lifecycle-actions
-paseo plugin install /absolute/path/to/plugin-examples/lifecycle-logger
-paseo plugin logs lifecycle-logger
+osuna plugin install /absolute/path/to/plugin-examples/lifecycle-actions
+osuna plugin install /absolute/path/to/plugin-examples/lifecycle-logger
+osuna plugin logs lifecycle-logger
 ```
 
-Outside the Paseo repository, `server/inspect.ts` needs `@osuna/protocol` installed for its
+Outside the Osuna repository, `server/inspect.ts` needs `@osuna/protocol` installed for its
 type imports. Add it to your plugin development dependencies at the same version as
 `@osuna/plugin` before installing this example.
 

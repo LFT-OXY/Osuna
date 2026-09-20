@@ -52,7 +52,7 @@ export class PluginRegistry {
           plugin.id !== options.replacePluginId &&
           plugin.id === entry.id &&
           plugin.clientBundle === entry.clientBundle &&
-          plugin.requirements?.paseo === entry.requirements?.paseo,
+          plugin.requirements?.osuna === entry.requirements?.osuna,
       );
       return existing ? [existing] : [];
     });
@@ -101,9 +101,9 @@ export class PluginRegistry {
           this.publish(),
         );
         Object.assign(installation, evaluated);
-        const paseo = runtime.paseo;
+        const osuna = runtime.osuna;
         installation.cleanup = async () => {
-          const results = await Promise.allSettled([paseo.dispose(), evaluated.cleanup()]);
+          const results = await Promise.allSettled([osuna.dispose(), evaluated.cleanup()]);
           const failures = results.filter((result) => result.status === "rejected");
           if (failures.length)
             throw new AggregateError(
@@ -115,7 +115,7 @@ export class PluginRegistry {
         return [installation];
       } catch (error) {
         lifetime?.abort();
-        void runtime?.paseo
+        void runtime?.osuna
           .dispose()
           .catch((failure) => console.warn(`[Plugins] API cleanup failed for ${key}`, failure));
         this.evaluationErrors.set(key, error instanceof Error ? error.message : String(error));

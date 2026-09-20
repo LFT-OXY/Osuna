@@ -78,8 +78,8 @@ export function createButtonExamples(
   let refreshes = 0;
 
   async function refreshWorkspace() {
-    // Return the real operation's promise: Paseo supplies pending, double-press prevention, and errors.
-    await client.paseo.workspaces.ref(workspaceId).refresh();
+    // Return the real operation's promise: Osuna supplies pending, double-press prevention, and errors.
+    await client.osuna.workspaces.ref(workspaceId).refresh();
     refreshes += 1;
     if (mode === "action") {
       header.update({ title: `Refresh workspace (${refreshes})` });

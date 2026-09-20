@@ -1,17 +1,17 @@
 import { useCallback, type ReactNode } from "react";
 import { PluginClientStateProvider, usePluginClientStateSource } from "./client-state.js";
-import { PaseoApiProvider, usePaseoContextValue } from "./paseo-context.js";
+import { OsunaApiProvider, useOsunaContextValue } from "./osuna-context.js";
 import { PluginRpcProvider, usePluginRpcContextValue } from "./rpc-context.js";
 
 export type PluginRuntimeContextBridge = (children: ReactNode) => ReactNode;
 
 /** Rebuilds plugin runtime contexts inside React Native portal hosts. */
 export function usePluginRuntimeContextBridge(): PluginRuntimeContextBridge {
-  const paseo = usePaseoContextValue();
+  const osuna = useOsunaContextValue();
   const rpc = usePluginRpcContextValue();
   const state = usePluginClientStateSource();
 
-  if (!paseo || !rpc) {
+  if (!osuna || !rpc) {
     throw new Error("Plugin UI must run inside a contributed plugin surface");
   }
 
@@ -23,11 +23,11 @@ export function usePluginRuntimeContextBridge(): PluginRuntimeContextBridge {
         children
       );
       return (
-        <PaseoApiProvider paseo={paseo}>
+        <OsunaApiProvider osuna={osuna}>
           <PluginRpcProvider invoke={rpc.invoke}>{content}</PluginRpcProvider>
-        </PaseoApiProvider>
+        </OsunaApiProvider>
       );
     },
-    [paseo, rpc, state],
+    [osuna, rpc, state],
   );
 }

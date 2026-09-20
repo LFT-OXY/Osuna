@@ -1,7 +1,7 @@
 import type { DaemonClient } from "@osuna/client/internal/daemon-client";
-import type { PaseoApi } from "@osuna/client";
-import { PaseoApiProvider } from "@osuna/plugin/client/host";
-import { usePaseo } from "@osuna/plugin/client";
+import type { OsunaApi } from "@osuna/client";
+import { OsunaApiProvider } from "@osuna/plugin/client/host";
+import { useOsuna } from "@osuna/plugin/client";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -34,23 +34,23 @@ function clientWithWorkspace(id: string) {
   };
 }
 
-function borrowFromAppProvider(paseo: PaseoApi): PaseoApi {
-  let borrowed: PaseoApi | null = null;
+function borrowFromAppProvider(osuna: OsunaApi): OsunaApi {
+  let borrowed: OsunaApi | null = null;
   function PluginSurface() {
-    borrowed = usePaseo();
+    borrowed = useOsuna();
     return null;
   }
   renderToStaticMarkup(
-    <PaseoApiProvider paseo={paseo}>
+    <OsunaApiProvider osuna={osuna}>
       <PluginSurface />
-    </PaseoApiProvider>,
+    </OsunaApiProvider>,
   );
   if (!borrowed) throw new Error("Plugin surface did not receive Paseo API");
   return borrowed;
 }
 
 describe("plugin surface host runtime", () => {
-  it("creates a PR worktree and agent through usePaseo on the selected app host", async () => {
+  it("creates a PR worktree and agent through useOsuna on the selected app host", async () => {
     const selected = clientWithWorkspace("workspace-a");
     const runtime = createPluginSurfaceRuntime(selected.client, {
       id: "workspace-plugin",
@@ -58,8 +58,8 @@ describe("plugin surface host runtime", () => {
     });
     if (!runtime) throw new Error("Expected selected host runtime");
 
-    const paseo = borrowFromAppProvider(runtime.paseo);
-    const workspace = await paseo.workspaces.create({
+    const osuna = borrowFromAppProvider(runtime.osuna);
+    const workspace = await osuna.workspaces.create({
       source: {
         kind: "worktree",
         cwd: "/tmp/repository",
@@ -92,7 +92,7 @@ describe("plugin surface host runtime", () => {
     if (!first || !second) throw new Error("Expected online host runtimes");
 
     await first.invoke("host", {});
-    await borrowFromAppProvider(second.paseo).workspaces.create({
+    await borrowFromAppProvider(second.osuna).workspaces.create({
       source: { kind: "directory", path: "/tmp/workspace-b" },
     });
 

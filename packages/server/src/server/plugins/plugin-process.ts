@@ -16,7 +16,7 @@ import {
   type ProviderConnection,
   type ProviderRegistration,
 } from "@osuna/plugin/server/provider";
-import { createPaseoApi, type PaseoApi } from "@osuna/client";
+import { createOsunaApi, type OsunaApi } from "@osuna/client";
 import { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { createPluginDaemonTransportFactory } from "./daemon-transport.js";
 import { isPluginClientOnlySdkSpecifier } from "./plugin-sdk-specifiers.js";
@@ -56,7 +56,7 @@ const providerConnections = new Map<
 const pendingProviderConnections = new Map<string, { tombstoned: boolean }>();
 let cleanup: (() => void | Promise<void>) | null = null;
 let daemonClient: DaemonClient | null = null;
-let paseo: PaseoApi | null = null;
+let osuna: OsunaApi | null = null;
 let stopping = false;
 const nodeRequire = createRequire(import.meta.url);
 
@@ -263,7 +263,7 @@ async function initialize(message: Extract<PluginProcessRequest, { type: "initia
     reconnect: { enabled: true },
     transportFactory,
   });
-  paseo = createPaseoApi(daemonClient);
+  osuna = createOsunaApi(daemonClient);
   await daemonClient.connect();
   settingsStore = message.settingsDirectory
     ? new PluginSettingsStore(message.settingsDirectory, (settingsId) =>
@@ -284,7 +284,7 @@ async function initialize(message: Extract<PluginProcessRequest, { type: "initia
 async function shutdown(): Promise<void> {
   if (stopping) return;
   stopping = true;
-  const releaseApi = paseo
+  const releaseApi = osuna
     ?.dispose()
     .catch((error) => console.error("Plugin API cleanup failed", error));
   hooks.close();
@@ -301,7 +301,7 @@ async function shutdown(): Promise<void> {
   await daemonClient?.close().catch(() => undefined);
   await sendAndWait({ type: "paseo_close" });
   daemonClient = null;
-  paseo = null;
+  osuna = null;
   process.disconnect();
 }
 
@@ -327,7 +327,7 @@ process.on("message", (rawMessage: unknown) => {
   if (message.type === "initialize") {
     void initialize(message).catch(async (error) => {
       send({ type: "fatal", error: describeError(error) });
-      await paseo
+      await osuna
         ?.dispose()
         .catch((failure) => console.error("Plugin API cleanup failed", failure));
       await daemonClient?.close().catch(() => undefined);
@@ -422,8 +422,8 @@ process.on("message", (rawMessage: unknown) => {
   void registered.contract.input
     .parseAsync(message.input)
     .then((input) => {
-      if (!paseo) throw new Error("Plugin Paseo API is unavailable");
-      return registered.handler(input, { paseo });
+      if (!osuna) throw new Error("Plugin Osuna API is unavailable");
+      return registered.handler(input, { osuna });
     })
     .then((output) => registered.contract.output.parseAsync(output))
     .then(
@@ -440,15 +440,15 @@ function handleHookMessage(
     return;
   }
   if (message.type === "hook") {
-    if (!paseo) {
+    if (!osuna) {
       send({
         type: "error",
         requestId: message.requestId,
-        error: "Plugin Paseo API is unavailable",
+        error: "Plugin Osuna API is unavailable",
       });
       return;
     }
-    void hooks.invoke(message.requestId, message.kind, message.name, message.input, paseo).then(
+    void hooks.invoke(message.requestId, message.kind, message.name, message.input, osuna).then(
       (output) => {
         return send({ type: "result", requestId: message.requestId, output });
       },

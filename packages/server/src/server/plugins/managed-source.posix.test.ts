@@ -19,7 +19,7 @@ async function createRepository(): Promise<string> {
   await runGitCommand(["config", "user.name", "Paseo Tests"], { cwd: repository });
   await runGitCommand(["config", "user.email", "paseo@example.test"], { cwd: repository });
   await writeFile(
-    path.join(repository, "paseo-plugin.json"),
+    path.join(repository, "osuna-plugin.json"),
     JSON.stringify({ id: "managed-example" }),
   );
   await writeFile(path.join(repository, "index.server.ts"), "export default () => () => {};\n");
