@@ -1,6 +1,7 @@
 {
   "name": "@osuna/relay",
   "version": "0.8.0",
+  "private": true,
   "description": "Osuna relay for bridging daemon and client connections",
   "files": [
     "dist",

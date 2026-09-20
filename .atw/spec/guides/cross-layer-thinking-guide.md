@@ -273,7 +273,14 @@ packaged artifact, or in CI, or in a user's install.
       `productName`, `Contents/Frameworks/<productName> Helper.app`, the
       `<executableName>.desktop` entry.
 - [ ] **Build hooks** — `afterPack` / `afterSign` scripts that locate the bundle by
-      name, Linux launcher installers.
+      name, Linux launcher installers. **`afterSign` does not run when no signing
+      happened** — electron-builder's `doSignAfterPack` only emits it when `signApp`
+      returns true, and otherwise just logs a warning. Anything you hang off `afterSign`
+      (the macOS packaged smoke lives there) silently stops running on an unsigned build.
+      macOS arm64 still fires it because electron-builder ad-hoc signs arm64 as a
+      fallback; x64 does not. Moving the work to `afterPack` is **not** a fix: `afterPack`
+      runs before that ad-hoc signature, when the arm64 bundle's own signature is already
+      broken by packaging and the binary will not launch.
 - [ ] **Shell shims and their bundle lookups** — `packages/desktop/bin/*`,
       `packages/cli/bin/*`, and the code that resolves `<pkg>/bin/<name>` at runtime.
 - [ ] **CI steps that name the artifact** — bundle assertions, `dpkg --remove <pkg>`,
@@ -285,7 +292,10 @@ packaged artifact, or in CI, or in a user's install.
 - [ ] **Tests whose fixtures model the real bundle layout** — they keep passing with
       stale names and then stop describing reality.
 - [ ] **Published package READMEs** — they ship to npm with the package, so they are
-      part of the identity, not docs.
+      part of the identity, not docs. In this fork nothing is published: the seven
+      `@osuna/*` packages carry `"private": true` and a release is a GitHub Release plus a
+      Docker image. Install instructions in a README or under `public-docs/` that say
+      `npm install` are wrong. Owner: [docs/release.md](../../../docs/release.md).
 - [ ] **Local Expo modules under `packages/app/modules/`** — seven sites per module, none
       of them typed: Gradle project name (from `package.json` `name`, not the directory),
       `namespace`/`group`, the Kotlin source path against its `package` declaration, the

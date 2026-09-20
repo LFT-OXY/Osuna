@@ -146,11 +146,29 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
 
 无 Apple 开发者账号，因此 `electron-builder.yml` 去掉 `notarize: true`、
 `hardenedRuntime: true` 与两行 entitlements；`.github/workflows/desktop-release.yml`
-去掉四个 Apple secrets 引用（`CSC_LINK` / `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` /
-`APPLE_TEAM_ID`，:157-161）。README 写明 macOS 首次打开需右键→打开。
+去掉 Apple secrets 引用（票 05 落地时确认是**五行**，本段原先漏了 `CSC_KEY_PASSWORD`）。
+README 写明 macOS 首次打开需右键→打开。
 
 不选「有 secrets 才签名」的条件化方案：那会让同一条发布流程在有无 secret 时产出行为
 不同的包，差异只在用户装不上时才暴露。
+
+去签名的一个连带后果（票 05 查实）：electron-builder 在没发生签名时会跳过 `afterSign`
+钩子，而 macOS 的打包冒烟就挂在那里。mac arm64 靠 ad-hoc 签名兜底仍会跑，x64 不跑。
+这是本 fork 无 secrets 时的既有状态，不是去公证造成的回归。细节见票 05。
+
+### 发布渠道：不发 npm（票 05 决定）
+
+`@osuna/*` 在 npm 上不存在，本仓库也不打算注册该 scope。**一次发布 = 一个 GitHub
+Release + 一个 Docker 镜像**，没有别的。据此：
+
+- 八条 `release:*` 链路不再经过 `npm publish`，四条 publish 脚本删除。
+- 七个可发布包加 `"private": true`，把这条约束从散文变成机制。
+- README 与 `public-docs/` 里的 `npm install -g @osuna/cli` / `npm install @osuna/client`
+  改成源码构建路径；CLI 的正式入口是桌面端 Settings → Integrations → Command line。
+- 移动端不上架：无 EAS 项目、无商店身份，`.eas/workflows/` 已删。安卓只出 APK 资产。
+
+这条与「wire 标识符归首发前窗口一次改完」不冲突：npm 包名没有外部消费方，将来真要发
+只是把 `private` 翻回去。
 
 ### 删
 

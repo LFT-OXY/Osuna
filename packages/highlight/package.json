@@ -1,6 +1,7 @@
 {
   "name": "@osuna/highlight",
   "version": "0.8.0",
+  "private": true,
   "files": [
     "dist",
     "!dist/**/*.map",

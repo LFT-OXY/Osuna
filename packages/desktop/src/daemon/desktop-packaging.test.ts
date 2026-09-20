@@ -79,6 +79,27 @@ describe("desktop packaging", () => {
     expect(config).toContain('minimumSystemVersion: "13.0.0"');
   });
 
+  it("ships macOS unsigned, with no hardened runtime to break the bundled node", () => {
+    const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
+
+    // Anchor the negatives: without this the assertions below also pass when the
+    // whole `mac:` block is gone.
+    expect(config).toContain("mac:");
+    expect(config).toContain("icon: assets/icon.icns");
+
+    // There is no Apple Developer account. `notarize: true` would silently no-op
+    // without credentials, and `hardenedRuntime: true` under the ad-hoc signature
+    // electron-builder applies to arm64 blocks the bundled Node runtime at launch.
+    for (const signingKey of [
+      "notarize",
+      "hardenedRuntime",
+      "entitlements",
+      "entitlementsInherit",
+    ]) {
+      expect(config).not.toContain(`${signingKey}:`);
+    }
+  });
+
   it("unpacks server zsh shell integration files for external shells", () => {
     const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
 

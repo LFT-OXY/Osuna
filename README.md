@@ -14,7 +14,7 @@
 > **Fork notice.** Osuna is a fork of [Paseo](https://github.com/getpaseo/paseo), licensed under
 > Apache-2.0. It has been renamed and otherwise modified, and it is maintained independently of
 > upstream. The original copyright notice is kept in [LICENSE](LICENSE). Under section 6 of the
-> license, the names "Osuna" and "Osuna" and their logos are not covered by the license grant.
+> license, the names "Paseo" and "Osuna" and their logos are not covered by the license grant.
 
 Run agents in parallel on your own machines. Ship from your phone or your desk.
 
@@ -51,15 +51,19 @@ You need at least one agent CLI installed and configured with your credentials:
 
 Download it from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases). Open the app and the daemon starts automatically. Nothing else to install.
 
+**macOS:** the builds are unsigned and not notarized, so double-clicking gets you "Osuna is damaged" or "cannot be opened because the developer cannot be verified". Right-click the app in Applications and choose **Open**, then confirm. You only do this once. If Gatekeeper still refuses, run `xattr -dr com.apple.quarantine /Applications/Osuna.app` and open it again.
+
 To connect from your phone, open **Settings → your host → Pair Device**.
 
 ### CLI / headless
 
-Install the CLI and start Osuna:
+This fork publishes no npm packages. The desktop app ships the `osuna` CLI and installs it into your PATH from **Settings → Integrations → Command line → Install**. On a headless machine, use the Docker image below or build from source:
 
 ```bash
-npm install -g @osuna/cli
-osuna
+git clone https://github.com/LFT-OXY/Osuna.git
+cd Osuna
+npm ci && npm run build:server
+node packages/cli/bin/osuna
 ```
 
 Osuna starts locally, then asks whether to enable the end-to-end encrypted relay for device pairing. If you decline, connect directly over TCP, Tailscale, or another VPN. This path is useful for servers and remote machines.
@@ -105,7 +109,7 @@ See the [full CLI reference](public-docs/cli.md) for more.
 
 ## TypeScript SDK
 
-Build issue integrations, dashboards, and orchestration services with `@osuna/client`:
+Build issue integrations, dashboards, and orchestration services with `@osuna/client`. It is not on npm — consume it from a checkout of this repository:
 
 ```ts
 import { createOsunaClient } from "@osuna/client";

@@ -60,11 +60,9 @@ In the desktop app:
 
 The app will check for beta updates from then on.
 
-## App stores
+## Mobile
 
-Desktop releases and the CLI are usually available first. App Store and Play Store releases can lag behind because they go through review.
-
-There is no beta channel in the app stores right now — only stable builds are submitted. If you want early Android builds, download the APK from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases).
+This fork submits nothing to the App Store or Play Store. Android ships as an APK attached to every release — download it from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases) and sideload it. Beta releases carry an APK too. iOS has no distribution path.
 
 ## What to do if something breaks
 

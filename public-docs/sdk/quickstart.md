@@ -8,11 +8,15 @@ category: TypeScript SDK
 
 # SDK quickstart
 
+`@osuna/client` is not published to npm. Consume it from a checkout of this repository:
+
 ```bash
-npm install @osuna/client
+git clone https://github.com/LFT-OXY/Osuna.git
+cd Osuna
+npm ci && npm run build:client
 ```
 
-Requires Node.js 22 or newer.
+Then point your project at `packages/client`. Requires Node.js 22 or newer.
 
 ## Connect
 

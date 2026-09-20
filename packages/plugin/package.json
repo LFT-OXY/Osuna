@@ -1,6 +1,7 @@
 {
   "name": "@osuna/plugin",
   "version": "0.8.0",
+  "private": true,
   "description": "Osuna plugin SDK package",
   "files": [
     "dist",

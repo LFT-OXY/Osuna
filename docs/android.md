@@ -149,34 +149,11 @@ The EAS `production-apk` profile uses the large Android resource class. Release 
 
 ### F-Droid store metadata
 
-F-Droid reads the store listing from `fastlane/metadata/android/<locale>/` **at the repo root**. This location provides the best compatibility with the F-Droid release process.
-
-```text
-fastlane/metadata/android/
-├── en-US/                      (F-Droid fallback locale, mandatory)
-│   ├── title.txt               (<=50 chars)
-│   ├── short_description.txt   (<=80 chars)
-│   ├── full_description.txt    (<=4000 chars, limited HTML)
-│   ├── images/
-│   │   ├── icon.png            (512x512)
-│   │   ├── featureGraphic.png  (1024x500)
-│   │   └── phoneScreenshots/   (1.png, 2.png, ...)
-│   └── changelogs/             (generated — see below)
-├── ja/
-└── zh-CN/
-```
-
-Locale directories generally match `packages/app/src/i18n/locales.ts`, but note that `en` becomes `en-US`.
-
-F-Droid changelogs are generated from `CHANGELOG.md`. Run `npm run fdroid:changelogs`; `npm run fdroid:changelogs:check` verifies without writing. It is wired into the npm `version` lifecycle, so a release picks it up automatically and `git add -A` stages the result.
-
-One changelog must be generated per-ABI-split, so each version will create **four** identical version-coded entries. F-Droid caps changelogs at 500 characters, so the generator strips some content and adds a link to the full notes.
-
-Stable sync fails loudly if `CHANGELOG.md` has no entry for the version being cut. That is intentional — the release checklist requires the entry to be committed first, so an abort here means the checklist was skipped.
-
-Because the generator runs off the version in `package.json`, it must run **before** the tag is created: fdroidserver only reads metadata from the tag it builds, so the file for version N has to exist in the commit N points at.
-
-Beta releases are an explicit no-op: they do not create or rewrite F-Droid changelog files. Stable releases and promotions generate the four ABI entries from their final changelog.
+There is none. `fastlane/metadata/` and the `fdroid:changelogs` generator were removed with
+the rebrand, and nothing in the npm `version` lifecycle regenerates them any more. The build
+profile above still works and is what a source-only builder would use; submitting to F-Droid
+means writing the store listing and the per-ABI changelog generator again, and that is a
+future task. See [release.md](release.md#mobile-builds).
 
 ### React version lockstep
 
@@ -188,32 +165,27 @@ Keep `react` and `react-dom` pinned to the React version embedded by the current
 adb exec-out screencap -p > screenshot.png
 ```
 
-## Cloud build + submit (EAS)
+## Tag-triggered Android builds
 
-Stable tag pushes like `v0.1.0` trigger:
+`v*` and `android-v*` tag pushes trigger `.github/workflows/android-apk-release.yml`, which
+attaches an APK to the GitHub Release. That is the only Android release path this fork has —
+see [release.md](release.md#mobile-builds). `android-v*` ships an APK without cutting a full
+release, and the workflow takes a `workflow_dispatch` `tag` input so you can rebuild one
+without a new tag. Beta tags like `v0.1.1-beta.1` attach the APK to a GitHub prerelease.
 
-- The EAS GitHub app on Expo servers (iOS + Android production builds + store submit). There is no workflow file in this repo for it.
-- `.github/workflows/android-apk-release.yml` on GitHub Actions (APK asset on GitHub Release).
+`packages/app/eas.json` no longer describes a runnable build. The rebrand removed `owner` and
+`extra.eas.projectId` with no replacement, so `eas build` errors out until someone configures a
+project, and the `.eas/workflows/` files the EAS GitHub app would have read on a `v*` tag are
+deleted. The remaining profiles are a starting point for store releases, not something that
+runs today.
 
-iOS auto-submits to App Store review via a Fastlane lane after EAS uploads to TestFlight. Android auto-submits to the Play Store via EAS-managed credentials.
-
-Beta tags like `v0.1.1-beta.1` only trigger the GitHub APK workflow. They publish a GitHub prerelease APK for testing and do not submit to the stores.
-
-`android-v*` tags also trigger only the GitHub APK workflow — useful when you want to ship an APK without going through stores. The GitHub APK workflow supports `workflow_dispatch` with an existing `tag` input so you can rebuild without cutting a new tag.
-
-### Useful commands
+### Watching a tagged APK build
 
 ```bash
-cd packages/app
-
-# Recent builds
-npx eas build:list --limit 10 --non-interactive --json | jq '.[] | {platform, status, appVersion, gitCommitHash}'
-
-# Inspect a build (the printed `Logs` URL opens the build's Expo dashboard page,
-# which has a Submissions section showing the auto-submit to the Play Store).
-npx eas build:view <build-id>
+gh run list --workflow android-apk-release.yml --limit 5
+gh run watch <run-id>
 ```
 
-The Play Console (Internal testing → Production tracks) is the final confirmation that the binary reached the store.
-
-See [docs/release.md](release.md) for the full mobile-build babysitting flow.
+The GitHub Release assets are the final confirmation: the APK is attached only after the
+build job succeeds. See [docs/release.md](release.md#mobile-builds) for where this sits in
+the release flow.

@@ -2,9 +2,9 @@
 
 TypeScript SDK for building integrations on top of an Osuna daemon.
 
-```bash
-npm install @osuna/client
-```
+Not published to npm. Build it from a checkout of
+[LFT-OXY/Osuna](https://github.com/LFT-OXY/Osuna) with `npm ci && npm run build:client`,
+then point your project at `packages/client`.
 
 ```ts
 import { createOsunaClient } from "@osuna/client";

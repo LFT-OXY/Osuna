@@ -39,11 +39,13 @@ Osuna checks sandbox availability each time it launches. AppImage and extracted 
 
 ## Server / CLI
 
-For headless machines, dev boxes, or any setup where you want the daemon running without the desktop UI:
+For headless machines, dev boxes, or any setup where you want the daemon running without the desktop UI. This fork publishes no npm packages, so build from source:
 
 ```bash
-npm install -g @osuna/cli
-osuna
+git clone https://github.com/LFT-OXY/Osuna.git
+cd Osuna
+npm ci && npm run build:server
+node packages/cli/bin/osuna
 ```
 
 Osuna starts the daemon locally, then asks whether to enable the end-to-end encrypted relay and print a pairing QR code. If you decline, enter the daemon address manually over TCP, Tailscale, or another VPN.

@@ -1,6 +1,7 @@
 {
   "name": "@osuna/cli",
   "version": "0.8.0",
+  "private": true,
   "description": "Osuna CLI - control your AI coding agents from the command line",
   "bin": {
     "osuna": "bin/osuna"

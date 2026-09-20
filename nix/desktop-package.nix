@@ -118,8 +118,9 @@ buildNpmPackage {
       chmod -R u+w "$electron_dist/Electron.app"
       (
         cd packages/desktop
-        # The Nix output is not a distributable DMG, so leave it unsigned and
-        # disable the hardened runtime that requires a matching signature.
+        # The Nix output is not a distributable DMG, so leave it unsigned.
+        # electron-builder.yml already ships without hardened runtime,
+        # entitlements, or notarization.
         CSC_IDENTITY_AUTO_DISCOVERY=false \
           ../../node_modules/.bin/electron-builder \
             --config electron-builder.yml \
@@ -128,9 +129,7 @@ buildNpmPackage {
             --publish never \
             --config.electronDist="$electron_dist" \
             --config.buildVersion=${lib.escapeShellArg buildVersion} \
-            --config.mac.identity=null \
-            --config.mac.hardenedRuntime=false \
-            --config.mac.notarize=false
+            --config.mac.identity=null
       )
     ''}
 

@@ -4,27 +4,100 @@
 真实的 GitHub Release 验证前四票的成果。不采用「有 secrets 才签名」的条件化方案：
 那会让同一条发布流程在有无 secret 时产出行为不同的包，差异只在用户装不上时才暴露。
 
-**Impl:** ready
+**Impl:** doing
 **Status:** ready-for-agent
 
 **Blocked by:** 08
 
-- [ ] `packages/desktop/electron-builder.yml`：去掉 `notarize: true`、
+- [x] `packages/desktop/electron-builder.yml`：去掉 `notarize: true`、
       `hardenedRuntime: true` 与 `entitlements` / `entitlementsInherit` 两行；
-      相应清理 `scripts/after-sign.js` 里已无意义的公证逻辑
-- [ ] `.github/workflows/desktop-release.yml:157-161`：去掉 `CSC_LINK`、`APPLE_ID`、
-      `APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 四个 secrets 引用
-- [ ] `README.md` 写明 macOS 首次打开需右键→打开（未签名包会被 Gatekeeper 拦下）
-- [ ] `docs/release.md` 更新为本 fork 的实际发布路径：只发桌面，GitHub Release
-      承载更新；移动端上架与 F-Droid 相关段落删除或标注为后续任务
+      ~~相应清理 `scripts/after-sign.js` 里已无意义的公证逻辑~~ —— 票面写错，见下
+- [x] `.github/workflows/desktop-release.yml`：去掉 Apple secrets 引用。实际是**五行**
+      不是四行（票面漏了 `CSC_KEY_PASSWORD`）
+- [x] `README.md` 写明 macOS 首次打开需右键→打开（未签名包会被 Gatekeeper 拦下）
+- [x] `docs/release.md` 更新为本 fork 的实际发布路径
 - [ ] 验收：推一个测试 tag，CI 产出可下载的 mac/win/linux 包；本地装上后应用名为
       Osuna，且 electron-updater 能从 `LFT-OXY/Osuna` 的 Release 识别到版本
 - [ ] **验收（从票 09 并过来）**：同一个 tag 会触发 `android-apk-release.yml`
-      （触发条件 `v*` / `android-v*`）。确认这一跑产出 APK，且票 09 改名后的四个原生模块
+      （触发条件 `v*` / `android-v*`）。确认这一跑产出 APK，且票 09 改名后的原生模块
       被 autolink 到位 —— 构建日志里应出现 `:osuna-word-stream`、`:osuna-native-trace`、
       `:osuna-diff-prototype` 三个 Gradle 工程，不应出现任何 `:paseo-*`。
-      并过来的理由：09 的这项验收本来就需要一次 tag 构建，而推 tag 是本票的动作，
-      为它单独搭一套安卓工具链不划算。**装到设备确认功能可用（word-stream 淡入、
-      native trace、iOS 硬件键盘提交）CI 给不了，仍需一台真机或模拟器**，那部分不在
-      本票，留给后续的设备回归。
-- [ ] `npm run typecheck`、`npm run lint` 通过
+      落地时核对过：模块是**四个**，但 `osuna-hardware-keyboard` 只有 `ios/` 目录、
+      没有 `android/`，所以安卓侧确实只应出现三个 Gradle 工程，票面清单无误。
+      **装到设备确认功能可用（word-stream 淡入、native trace、iOS 硬件键盘提交）
+      CI 给不了，仍需一台真机或模拟器**，那部分不在本票，留给后续的设备回归。
+- [x] `npm run typecheck`、`npm run lint` 通过
+
+## 落地时确认下来的事实（票面写错或没写的）
+
+- **`after-sign.js` 里没有公证逻辑可清。** 文件里只有 macOS 打包冒烟
+  （`OSUNA_DESKTOP_SMOKE=1` 时跑 `smokePackagedDesktopApp`），所以**不动**。
+  连带确认的一件事：electron-builder 在没发生签名时会**跳过 `afterSign` 钩子**
+  （`platformPackager.js` `doSignAfterPack`：`didSign` 为假就只打一行 warn）。
+  mac arm64 仍会跑冒烟，因为 electron-builder 对 arm64 有 ad-hoc 签名兜底
+  （`macPackager.js` `fallBackToAdhoc`）；**x64 不跑**。这是本 fork 没有 secrets 时
+  的既有状态，不是去公证造成的回归 —— 去掉 `CSC_LINK` 之前它就已经这样了。
+  Linux/Windows 的冒烟走 `after-pack.js`，不受影响。
+  **没有把冒烟挪到 `afterPack`**：`afterPack` 跑在 ad-hoc 签名之前，此时 arm64 的
+  bundle 签名已被打包改动破坏，根本起不来。
+
+- **`release:*` 整条链路原本是断的。** `package.json` 的 `version` 生命周期还在调
+  `npm run fdroid:changelogs`，而该脚本与 `fastlane/` 已在前面的票里删掉。
+  `version:all:*` 内部走 `npm version`，会触发这个钩子直接 "Missing script" 失败。
+  已从钩子里摘掉。
+
+- **`IS_SMOKE_TAG` / `gha-smoke` 是死路，不可达。**
+  `emit-release-env.mjs` 用 `sourceTag.includes("gha-smoke")` 判定，但
+  `normalizeReleaseTag` → `parseReleaseVersion` 只接受 `beta.N` 形式的预发布号，
+  任何含 `gha-smoke` 的 tag 在解析阶段就抛错。所以「推个冒烟 tag 只验构建、不建
+  Release」这条路走不通，演练只能推真 tag。**本票未修**，见「遗留」。
+
+## 落地时做的决定：本 fork 不发 npm
+
+`@osuna/*` 在 npm 上不存在（`npm view @osuna/cli` 为 404），本机也未登录。
+`release:patch` 里的 `release:publish` 必然失败。用户决定**不发 npm**，据此：
+
+- `package.json`：删掉 `release:publish`、`release:publish:beta` 与两条 `:dry-run`，
+  八条 `release:*` 链路不再经过 npm。`release:check` 保留 —— `npm pack --dry-run`
+  在 `private: true` 下仍然工作，它验的是 `files`/`exports` 打包面。
+- 七个包（highlight / relay / protocol / client / plugin / server / cli）加
+  `"private": true`，把「不发 npm」从散文变成机制：`npm publish` 会跳过并 warn。
+  `publishConfig.access` 保留，记录将来恢复发布时的意图。
+- `README.md`、`public-docs/index.md`、`public-docs/sdk/{index,quickstart}.md`、
+  `packages/client/README.md` 的 npm 安装指引改成源码构建路径。
+- CLI 的真实安装入口是桌面端 **Settings → Integrations → Command line → Install**
+  （按 glossary「UI label wins」核对过 `en.ts` 的实际文案）。
+
+## 评审查出并修掉的
+
+- `docs/docker.md:214` 有一句「without rebuilding desktop, APK, or **EAS mobile release
+  artifacts**」，是 `release.md` 里那句的孪生，跟着修。
+- `docs/android.md` 我原先写「EAS profiles 留作本地 `eas build` 用」是**错的**：
+  prd 批次 1 已删掉 `owner` 与 `extra.eas.projectId` 且不填替代值，`eas build` 会直接
+  报错。改成如实陈述。三个 `.eas/workflows/*.yml` 一并删除 —— 它们正是 EAS GitHub app
+  在 `v*` tag 上会读的文件，留着与「没有 EAS 项目」自相矛盾。
+- `docs/release.md` 的 **Website behavior** 整段是虚构：它说站点由 `Deploy Website`
+  （Cloudflare Workers）部署，但 `.github/workflows/` 下没有这个 workflow，
+  `packages/website` 也已移出 workspace、无域名。整段改写，并清掉散落的
+  `/download` Stable/Beta 开关、Homebrew、「changelog 显示在 Osuna 主页」等断言。
+- `public-docs/updates.md` 的「App stores」段承诺 App Store / Play Store 发布，改写。
+- 新增的打包回归原本四条都是 `not.toContain`，整个 `mac:` 块被删时也会通过；
+  补了 `mac:` 与 icon 行的锚点断言。
+
+## 刻意不做
+
+- **`packages/website` 的 442 处 `paseo` 残留不扫**（55 个文件）。票 07 已把它列进
+  排除清单：「已移出 workspace，随 website 去留一起定」。半扫一个被有意留白的包，
+  正是票 07 自己写下的「半改的标识符比两端都糟」。
+- **八条 `release:*` 脚本去掉 publish 后只剩 mode 不同，不合并。** 命令名是对外契约，
+  合并会波及文档里所有引用点。
+- `docs/mobile-testing.md:388` 仍按「App Store 安装」推理 —— 属测试文档，留给设备回归。
+
+## 遗留（不属本票，需另行决定）
+
+- `IS_SMOKE_TAG` / `gha-smoke` 不可达（见上）。要么让 `normalizeReleaseTag` 接受这类
+  tag，要么把这条死路删掉。现状是一段永远不会真的保护任何东西的分支。
+- `packages/website` 的去留，以及随之而来的 442 处改名。
+- `.github/workflows/desktop-release.yml` 的 `setup-node` 仍带上游的
+  `registry-url: npm.pkg.github.com` + `scope: "@boudra"`。全仓已无 `@boudra` 依赖，
+  属无害残留，但既然不发 npm 了，这两行可以一并去掉。

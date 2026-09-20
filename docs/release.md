@@ -18,7 +18,7 @@ A release has exactly two steps. The agent does the first, the user authorizes t
 **Go-ahead** (user says "go ahead"):
 
 - commit the approved release inputs locally
-- run the release, which publishes npm and pushes the prepared branch and tag
+- run the release, which pushes the prepared branch and tag
 - create the release heartbeat immediately and babysit it to completion
 
 Rules that apply to both steps:
@@ -95,15 +95,11 @@ release push as the changelog and version commit.
 There are two supported release paths:
 
 1. **Direct stable release**: you are ready to ship the resolved release source to everyone immediately (default `origin/main`).
-2. **Beta flow**: release candidates on the `beta` channel. Each beta carries its own changelog entry, publishes npm only on the explicit `beta` dist-tag, and stays behind the Stable/Beta switch on `/download`.
+2. **Beta flow**: release candidates on the `beta` channel. Each beta carries its own changelog entry, and ships as a GitHub prerelease.
 
-Osuna has one linear release track even though npm dist-tags are independent
-pointers. The npm invariant is:
-
-- A beta release moves only `beta`; `latest` remains on the newest stable.
-- A stable release moves both `latest` and `beta` to that stable version. This
-  keeps users who install `@osuna/cli@beta` on the newest Osuna release after
-  a beta is promoted or superseded by a direct stable release.
+This fork publishes no npm packages. A release is the GitHub Release plus the
+Docker image. Desktop clients read their update manifests off that release, so a
+release stuck in draft delivers nothing.
 
 ## Release version decision
 
@@ -142,21 +138,7 @@ npm run release:patch
 npm run release:minor
 ```
 
-This bumps the version across all workspaces, runs checks, publishes to npm, and pushes the branch + tag. The tag push triggers `Desktop Release`, `Android APK Release`, `Docker`, and `Release Notes Sync` on GitHub Actions. The workflows create the GitHub Release as a draft while builds and release-note sync run. EAS picks up the same tag via the EAS GitHub app and starts the iOS + Android store builds in parallel (see "Mobile builds (EAS)" below) — there is no mobile-release workflow under `.github/workflows`.
-
-After the stable release succeeds, move npm's `beta` pointer to the new stable
-version for every published package. This changes dist-tags only; do not
-republish the packages:
-
-```bash
-OSUNA_VERSION=$(node -p "require('./package.json').version")
-for package in highlight relay protocol client plugin server cli; do
-  npm dist-tag add "@osuna/$package@$OSUNA_VERSION" beta
-done
-```
-
-Verify both npm tags now resolve to `OSUNA_VERSION` before considering the
-stable release complete.
+This bumps the version across all workspaces, runs checks, and pushes the branch + tag. The tag push triggers `Desktop Release`, `Android APK Release`, `Docker`, and `Release Notes Sync` on GitHub Actions. The workflows create the GitHub Release as a draft while builds and release-note sync run, and `finalize-rollout` publishes it once every desktop manifest is attached.
 
 The Docker workflow builds images from the checked-out source tree on pull requests and on `main` as non-publishing checks. Stable `vX.Y.Z` tag pushes publish `ghcr.io/lft-oxy/osuna:X.Y.Z` and `ghcr.io/lft-oxy/osuna:latest`; beta `vX.Y.Z-beta.N` tag pushes publish only `ghcr.io/lft-oxy/osuna:X.Y.Z-beta.N` and never move `latest`.
 
@@ -172,9 +154,7 @@ npm run release:check        # Typecheck, build, dry-run pack
 # Run exactly one approved version command:
 npm run version:all:patch
 npm run version:all:minor
-npm run release:publish      # Publish to npm
 npm run release:push         # Push HEAD + tag (triggers CI workflows)
-# Then move npm's beta dist-tag to this stable version using the command above.
 ```
 
 ## Beta flow
@@ -188,8 +168,7 @@ npm run release:promote          # Promote X.Y.Z-beta.N to stable X.Y.Z
 ```
 
 - Beta tags are published GitHub prereleases like `v0.1.41-beta.1`
-- Betas publish npm packages with `--tag beta`, so `npm install @osuna/cli@beta` opts in while plain `npm install @osuna/cli` stays on `latest`
-- Betas publish desktop assets and APKs for testing. They also build iOS, upload it to TestFlight, add it to the `Osuna Beta` external group, and submit it for Beta App Review. They do not submit mobile builds to the production stores.
+- Betas publish desktop assets and the Android APK for testing. There is no iOS build and no store submission; see **Mobile builds**
 - `release:promote` creates a fresh stable tag like `v0.1.41`; the final release never reuses the beta tag
 - Desktop assets now come from the Electron package at `packages/desktop`
 - Require the Linux artifact CI checks with both restricted and usable user namespaces to pass before publication; see [packaged desktop smoke](testing.md#packaged-desktop-smoke). Keep the installed-package and AppImage checks together.
@@ -300,72 +279,26 @@ macOS 13 maps to Darwin 22. The two values use different version domains; do not
 - **Bootstrap caveat.** Clients running a build older than the rollout feature ignore `rolloutHours` and admit immediately. Rollout protection only applies to clients running the rollout-aware version or later.
 - **Up to ~30 min automatic admission latency.** Renderer polls every 30 minutes, so a stable user may take up to that long to be evaluated against the rollout window. Clicking **Check** is manual and bypasses rollout admission.
 
-## Mobile builds (EAS)
+## Mobile builds
 
-iOS and Android store builds are not in `.github/workflows`. They are triggered by the EAS GitHub app the moment the `v*` tag is pushed:
+This fork ships no store releases. There is no EAS project, no App Store or Play Store
+identity, and no F-Droid metadata — `fastlane/metadata/` was removed with the rebrand.
+Store distribution is a separate future task; it needs developer accounts, an EAS project,
+and store listings before any of it can work.
 
-- **Android (Play Store)** — EAS builds with profile `production` and auto-submits to the Play Store via `eas submit` (EAS-managed credentials, no Fastlane).
-- **iOS (TestFlight + App Store)** — EAS builds with profile `production`, uploads to TestFlight, and a Fastlane lane submits the build for App Store review.
-- **Android APK (GitHub Release asset)** — separate, via `.github/workflows/android-apk-release.yml`. This is the only Android-related workflow that lives in this repo.
+What does ship is the Android APK. `.github/workflows/android-apk-release.yml` builds it on
+every `v*` and `android-v*` tag and attaches it to the GitHub Release; users sideload it.
+Version codes still come from `packages/app/native-release-version.js`, so the F-Droid ABI
+math in [docs/android.md](android.md) stays authoritative for the build profile even though
+nothing is submitted to F-Droid.
 
-EAS uses the local app version source. `packages/app/app.config.js` derives the native version from the package version. Android `versionCode` is `major * 1_000_000 + minor * 1_000 + patch`. iOS reserves 1,000 build slots per app version: beta `N` uses slot `N`, and stable uses slot `999`. For example, `0.2.6-beta.2` appears in App Store Connect as version `0.2.6` build `2006002`; stable uses build `2006999`. Rebuilding the same tag produces the same native build number; if a store has already accepted a binary and you need a different binary, cut the next beta or patch instead of relying on EAS remote auto-increment.
-
-Beta tags run `Release iOS Beta`. The workflow uploads the build to TestFlight, distributes it to the persistent `Osuna Beta` external group, and submits it for Beta App Review. Testers and the group are managed once in App Store Connect; releases require no dashboard action.
-
-There is no mobile-release workflow under `.github/workflows`. The EAS GitHub app reads the workflows under `packages/app/.eas/workflows` and handles tag triggering directly.
-
-### Watching mobile builds from the terminal
-
-Use the EAS CLI from `packages/app/`:
-
-```bash
-cd packages/app
-
-# Recent builds (newest first). Pipe to jq for status only.
-npx eas build:list --limit 8 --non-interactive --json | jq '.[] | {platform, status, appVersion, gitCommitHash}'
-
-# Recent EAS workflow runs. This is the source of truth for submit/review jobs.
-npx eas workflow:runs --json | jq '.[] | {status, workflowName, trigger, gitCommitHash, startedAt, finishedAt}'
-
-# Filter by platform.
-npx eas build:list --platform ios --limit 5 --non-interactive --json
-npx eas build:list --platform android --limit 5 --non-interactive --json
-
-# Inspect a specific build.
-npx eas build:view <build-id>
-
-# Inspect the full release workflow, including submit_ios, submit_android,
-# and submit_ios_for_review.
-npx eas workflow:view <workflow-run-id> --json
-
-# Read failed submit/review job logs.
-npx eas workflow:logs <workflow-job-id> --all-steps --non-interactive
-
-# Stream logs for a build.
-npx eas build:view <build-id> --json | jq '.logFiles[]'
-```
-
-A build's `gitCommitHash` must match the release tag commit. `status` walks through `NEW` → `IN_QUEUE` → `IN_PROGRESS` → `FINISHED` (or `ERRORED`/`CANCELED`). The EAS workflow run's `gitCommitHash` and `trigger` must also match the release tag.
-
-Once a build is `FINISHED`, EAS still has release-critical work to do: Android must submit to the Play Store, and iOS must upload to TestFlight **and** submit the build for App Store review. The release is not done until all platforms are on their way through the stores.
-
-For the `Release Mobile` EAS workflow, these jobs must pass:
-
-- `build_ios` — iOS binary built
-- `submit_ios` — iOS binary uploaded to App Store Connect/TestFlight
-- `submit_ios_for_review` — iOS build submitted for App Store review via Fastlane
-- `build_android` — Android store binary built
-- `submit_android` — Android binary submitted to the Play Store
-
-Do not treat `build_ios: SUCCESS` or `submit_ios: SUCCESS` as a completed iOS release. `submit_ios_for_review: FAILURE` means the iOS release is blocked even if the build is visible in TestFlight.
-
-To confirm the submission landed, inspect the EAS workflow with `npx eas workflow:view <workflow-run-id> --json`. App Store Connect (review state for the matching version/build) and the Play Console track are the final ground truth.
+iOS has no release path. Run it from a local Expo build.
 
 ## Release completion and heartbeat
 
-A release is **in progress** after npm publication and tag push. Report it as
-**shipped** only after every applicable build, publication, asset, manifest, and
-store submission passes the completion checklist.
+A release is **in progress** after the tag push. Report it as **shipped** only
+after every applicable build, asset, and manifest passes the completion
+checklist.
 
 Immediately after every beta, stable, or promotion tag push, create a heartbeat
 that resumes the release in the current conversation. Create it automatically
@@ -373,18 +306,15 @@ with `create_heartbeat`. The heartbeat owns the release until it either reaches
 the completion checklist or finds a failure that needs new user authority.
 
 Each heartbeat checks the release tag commit, all GitHub Actions runs for the
-release branch and tag, npm dist-tags, the GitHub Release body and assets,
-desktop updater manifests, the published Docker image, and the applicable EAS
-workflow. Inspect the GitHub Release itself and confirm that the macOS, Linux,
-Windows, and Android APK assets are present along with the channel manifests
-(`latest-mac.yml`, `latest-linux.yml`, and `latest.yml` for stable;
-`beta-mac.yml`, `beta-linux.yml`, and `beta.yml` for beta).
+release branch and tag, the GitHub Release body and assets, desktop updater
+manifests, and the published Docker image. Inspect the GitHub Release itself and
+confirm that the macOS, Linux, Windows, and Android APK assets are present along
+with the channel manifests (`latest-mac.yml`, `latest-linux.yml`, and
+`latest.yml` for stable; `beta-mac.yml`, `beta-linux.yml`, and `beta.yml` for
+beta).
 
-For stable releases, also confirm every required mobile build, upload, store
-submission, and review-submission job for the release commit. For betas, confirm
-the beta EAS workflow completed its TestFlight distribution and Beta App Review
-path. Delete the heartbeat only after every applicable checklist item passes,
-then report the release as shipped.
+Delete the heartbeat only after every applicable checklist item passes, then
+report the release as shipped.
 
 Pattern:
 
@@ -396,7 +326,7 @@ Pattern:
   "timezone": "UTC",
   "maxRuns": 120,
   "expiresIn": "24h",
-  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check npm tags; every GitHub Actions run for the release branch and tag; the published GitHub Release body, expected desktop/APK assets, and channel manifests; the Docker image; and the matching EAS workflow. Completion requires every applicable checklist item. For stable, require build_ios, submit_ios, submit_ios_for_review, build_android, and submit_android to succeed. For beta, require the beta TestFlight distribution and Beta App Review path. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
+  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check every GitHub Actions run for the release branch and tag; the published GitHub Release body, expected desktop/APK assets, and channel manifests; and the Docker image. Completion requires every applicable checklist item. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
 }
 ```
 
@@ -409,13 +339,13 @@ The GitHub Release body is populated automatically by the `Release Notes Sync` w
 
 ## Website behavior
 
-- The website download page defaults to GitHub's latest published **stable** release.
-- A published beta prerelease is offered behind the Stable/Beta switch on `/download` (`?channel=beta`), never as the default. The switch only appears while the newest prerelease leads stable on its core version, so promoting `X.Y.Z-beta.N` to `X.Y.Z` retires the beta channel from the page until the next beta line opens.
-- Homebrew has no beta; the Beta view drops that row rather than showing an inert "stable only" placeholder. This fork publishes no mobile or hosted web builds, so `packages/website/src/routes/download.tsx` no longer carries Mobile or Web sections at all. When a surface gains a release path, add its row back there.
-- The default download target only moves when you publish the final stable release tag like `v0.1.41`.
-- The public `/changelog` page renders `CHANGELOG.md` as-is, so the in-flight `-beta.N` entry shows there once it lands on `main` — that's intended, it's where beta users check what's coming. Only the **default download target** stays pinned to the latest stable; the download links read GitHub's releases API, not the changelog, so a `-beta.N` heading on top never affects them.
-- The download page's "What's new" link deep-links the **minor group** anchor (`/changelog#release-0.3`), not the exact entry: promotion collapses the beta entries into one stable entry, so the minor group remains the durable target. A version with no entry in the bundled changelog — a tag whose changelog commit hasn't redeployed the site yet — links the plain `/changelog` instead of a dead anchor.
-- The website itself is deployed by `Deploy Website` (Cloudflare Workers), which redeploys on the `release: published` event emitted when a stable draft is published and on pushes to `main` that touch `CHANGELOG.md` or `packages/website/**`. Its job condition excludes beta prereleases.
+There is no website. `packages/website` is out of the npm workspaces, has no domain, and no
+workflow deploys it — the `Deploy Website` job the upstream flow relied on does not exist here.
+Download links are the GitHub Release assets.
+
+`packages/website/src/routes/download.tsx` and the changelog page still carry upstream's
+channel-switch and Homebrew logic. They are dead until someone decides to host the site; when
+that happens, this section owns the behaviour again.
 
 ## Fixing a failed release build
 
@@ -424,8 +354,8 @@ The GitHub Release body is populated automatically by the `Release Notes Sync` w
 **Do not rely on `workflow_dispatch` for tagged code fixes.** The `workflow_dispatch` trigger runs the workflow file from the default branch but checks out the code at the tag ref (`ref: ${{ inputs.tag }}`). That means fixes committed to `main` won't change the tagged source tree being built. `workflow_dispatch` only helps when the fix lives in the workflow file itself.
 
 For Docker-only retries, **do not push or force-push a `v*` release tag**.
-`v*` tag pushes rebuild desktop assets, the Android APK, Docker, release notes,
-and EAS mobile release builds. Use the Docker workflow dispatch instead:
+`v*` tag pushes rebuild desktop assets, the Android APK, Docker, and release
+notes. Use the Docker workflow dispatch instead:
 
 ```bash
 gh workflow run docker.yml \
@@ -434,8 +364,8 @@ gh workflow run docker.yml \
   -f publish=true
 ```
 
-This replaces `ghcr.io/lft-oxy/osuna:X.Y.Z-beta.N` in place without touching
-desktop, APK, or EAS release builders. The Docker exception is safe because the
+This replaces `ghcr.io/lft-oxy/osuna:X.Y.Z-beta.N` in place without touching the
+desktop or APK builders. The Docker exception is safe because the
 dispatch runs from `--ref main` and uses the explicit `osuna_version`; it does
 not check out or move the `v*` release tag.
 
@@ -499,12 +429,8 @@ intentionally unavailable to desktop updater clients.
 ## Notes
 
 - `version:all:*` bumps root + syncs workspace versions and `@osuna/*` dependency versions
-- The npm `version` lifecycle regenerates F-Droid changelog files from `CHANGELOG.md` for stable releases only (`npm run fdroid:changelogs`) and stages them, so the release tag carries them. Betas are a no-op. A stable run **aborts the release** if `CHANGELOG.md` has no entry for the version being cut — commit the changelog entry first. See [docs/android.md](android.md) for why these files are generated per ABI.
 - `release:prepare` refreshes workspace `node_modules` links to prevent stale types
 - `npm run dev:desktop` and `npm run build:desktop` target the Electron desktop package in `packages/desktop`
-- If `release:publish` partially fails, re-run it — npm skips already-published versions
-- If `release:publish:beta` partially fails, re-run it — npm skips already-published versions and keeps prereleases off `latest` because every publish uses `--tag beta`
-- The website uses GitHub's latest published release API for download links, so published beta prereleases do not replace the stable download target.
 
 ## Changelog format
 
@@ -535,8 +461,8 @@ No prefix (`v`), no extra text. `Release Notes Sync` matches the `## X.Y.Z` (or 
 
 ## Changelog wording
 
-The changelog is shown on the Osuna homepage. Each bullet is a compact factual record of
-product behavior that changed.
+The changelog ships in the app's **What's new** sheet. Each bullet is a compact factual
+record of product behavior that changed.
 
 - **Name the exact change.** Prefer `Added <capability>`, `Removed <behavior>`,
   `Changed <behavior>`, or `Fixed <failure> when <condition>`.
@@ -649,14 +575,12 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
 - [ ] `npm run release:beta:patch`, `npm run release:beta:minor`, or `npm run release:beta:next` completes successfully
 - [ ] Every GitHub Actions run for the complete release commit and tag is green
-- [ ] npm shows the version under the `beta` dist-tag, not `latest`
 - [ ] The GitHub prerelease was published only after the three beta manifests were uploaded, and it has the changelog body and every expected macOS, Linux, Windows, and Android APK asset
 - [ ] GitHub `Desktop Release` workflow for the `v*-beta.N` tag is green
 - [ ] The GitHub prerelease contains `beta-mac.yml`, `beta-linux.yml`, and `beta.yml`
 - [ ] GitHub `Android APK Release` workflow for the same tag is green
 - [ ] GitHub `Docker` workflow is green and the versioned beta image is published without moving `latest`
 - [ ] GitHub `Release Notes Sync` mirrored the beta entry into the prerelease body
-- [ ] EAS `Release iOS Beta` completed its build, TestFlight distribution, external beta group, and Beta App Review path
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed
 
 ### Stable release (or promotion)
@@ -673,7 +597,6 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
 - [ ] `npm run release:patch`, `npm run release:minor`, or `npm run release:promote` completes successfully
 - [ ] Every GitHub Actions run for the complete release commit and tag is green
-- [ ] Move npm's `beta` dist-tag to the new stable version for every published package and verify both `latest` and `beta` resolve to it
 - [ ] The GitHub Release was published only after the three stable manifests were uploaded, and it has the changelog body and every expected macOS, Linux, Windows, and Android APK asset
 - [ ] GitHub `Desktop Release` workflow for the `v*` tag is green
 - [ ] The GitHub Release contains `latest-mac.yml`, `latest-linux.yml`, and `latest.yml`
@@ -681,10 +604,4 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] GitHub `Android APK Release` workflow for the same tag is green
 - [ ] GitHub `Docker` workflow is green and both the versioned and `latest` images are published
 - [ ] GitHub `Release Notes Sync` is green and the release body matches the stable changelog entry
-- [ ] EAS `Release Mobile` workflow for the same tag is green
-- [ ] EAS iOS `build_ios` completes for the same tag
-- [ ] EAS iOS `submit_ios` succeeds, uploading the build to App Store Connect/TestFlight
-- [ ] EAS iOS `submit_ios_for_review` succeeds, putting the build into App Store review
-- [ ] EAS Android `build_android` completes for the same tag
-- [ ] EAS Android `submit_android` succeeds, putting the build on its Play Store track
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed

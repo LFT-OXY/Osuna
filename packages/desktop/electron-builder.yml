@@ -40,10 +40,10 @@ mac:
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns
-  hardenedRuntime: true
-  notarize: true
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # No Apple Developer account, so the app ships unsigned: no hardened runtime,
+  # no entitlements, no notarization. electron-builder still ad-hoc signs arm64
+  # because macOS refuses to launch an unsigned arm64 binary. Users have to
+  # right-click -> Open on first launch; see README.
   extraResources:
     - from: bin/osuna
       to: bin/osuna

@@ -21,8 +21,11 @@ Use it to:
 
 ## Start a daemon
 
+Run the desktop app, or start the daemon from a checkout (see the
+[quickstart](quickstart.md) — this fork publishes no npm packages):
+
 ```bash
-npx @osuna/cli
+node packages/cli/bin/osuna
 ```
 
 It listens on `ws://127.0.0.1:6777/ws`.
