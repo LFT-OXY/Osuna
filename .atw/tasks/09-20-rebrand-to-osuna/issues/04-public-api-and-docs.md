@@ -7,7 +7,7 @@
 **Impl:** ready
 **Status:** ready-for-agent
 
-**Blocked by:** 03
+**Blocked by:** 06
 
 - [ ] 导出的函数名与类型名改名（`createPaseoClient`、`PaseoClient` 及同类），同步
       `packages/client/README.md` 与 `packages/client/examples/quickstart.ts` 的示例
