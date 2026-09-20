@@ -75,7 +75,7 @@ out of the timed runs. Software-rendered emulator results are comparative
 evidence, not physical-device frame-rate guarantees. Native instrumentation
 tests in the module check pixels, append/replacement behavior, and cleanup.
 
-- **Smoothness (user-perceived):** `packages/app/e2e/browser/agent-stream-smoothness.spec.ts`, gated behind `PASEO_AGENT_STREAM_PERF_E2E=1`. Drives the mock provider's `bursty-stream` model and reports coefficient of variation of characters painted per frame (smoothness) plus p95 gap between visible updates (stalls). Both numbers are needed: a stalled stream is perfectly smooth.
+- **Smoothness (user-perceived):** `packages/app/e2e/browser/agent-stream-smoothness.spec.ts`, gated behind `OSUNA_AGENT_STREAM_PERF_E2E=1`. Drives the mock provider's `bursty-stream` model and reports coefficient of variation of characters painted per frame (smoothness) plus p95 gap between visible updates (stalls). Both numbers are needed: a stalled stream is perfectly smooth.
 - **Reproducing bursty arrival:** the `bursty-stream` model in `mock-load-test-agent.ts` emits uneven runs of tokens separated by idle gaps. Burst sizes come from a seeded generator, so a run repeats exactly.
 - **Rate policy in isolation:** `packages/app/src/word-stream/internal/model.test.ts` checks the shared word scheduler without a renderer.
 - **Fade behavior:** `word-stream-fade.spec.ts` checks web direction, layout stability, selection, and tail cleanup. Native tests in `modules/paseo-word-stream` drive the host view React mounts with the same range props the bridge sends, advance frame time through the host's injected frame clock, and check rendered pixels and animation completion on Android and iOS.

@@ -1684,7 +1684,7 @@ export class DaemonClient {
   }
 
   private sendJsonMessage(envelopeType: string, messageType: string, message: unknown): void {
-    this.traceInstant("paseo.ws.message.outbound", {
+    this.traceInstant("osuna.ws.message.outbound", {
       envelopeType,
       messageType,
     });
@@ -1695,7 +1695,7 @@ export class DaemonClient {
     if (!this.transport) {
       throw new DaemonConnectionError("Transport not connected");
     }
-    const isOpen = this.beginTraceSection("paseo.ws.frame.outbound", {
+    const isOpen = this.beginTraceSection("osuna.ws.frame.outbound", {
       kind: typeof frame === "string" ? "text" : "binary",
       size: String(getTransportFrameSize(frame)),
     });
@@ -1737,7 +1737,7 @@ export class DaemonClient {
       throw new Error(`Transport not connected (status: ${this.connectionState.status})`);
     }
     try {
-      this.traceInstant("paseo.ws.message.outbound", {
+      this.traceInstant("osuna.ws.message.outbound", {
         envelopeType: "binary",
         messageType: "binary",
       });
@@ -6151,7 +6151,7 @@ export class DaemonClient {
 
     const rawBytes = asUint8Array(rawData);
     const isOpen = this.beginTraceSection(
-      "paseo.ws.frame.inbound",
+      "osuna.ws.frame.inbound",
       describeInboundTransportFrame(rawData, rawBytes),
     );
     try {
@@ -6172,7 +6172,7 @@ export class DaemonClient {
     const bytes = rawBytesLength ?? payload.length;
     const startMs = perfNow();
     let parsedJson: unknown;
-    const parseTraceOpen = this.beginTraceSection("paseo.ws.json.parse", {
+    const parseTraceOpen = this.beginTraceSection("osuna.ws.json.parse", {
       size: String(bytes),
     });
     try {
@@ -6207,7 +6207,7 @@ export class DaemonClient {
     this.consecutiveLivenessFailures = 0;
 
     if (parsed.data.type === "pong") {
-      this.traceInstant("paseo.ws.message.inbound", {
+      this.traceInstant("osuna.ws.message.inbound", {
         envelopeType: "pong",
         messageType: "pong",
       });
@@ -6216,7 +6216,7 @@ export class DaemonClient {
       return;
     }
 
-    this.traceInstant("paseo.ws.message.inbound", {
+    this.traceInstant("osuna.ws.message.inbound", {
       envelopeType: "session",
       messageType: parsed.data.message.type,
     });
@@ -6231,7 +6231,7 @@ export class DaemonClient {
   private tryHandleBinaryFrame(rawBytes: Uint8Array): boolean {
     const fileFrame = decodeFileTransferFrame(rawBytes);
     if (fileFrame) {
-      this.traceInstant("paseo.ws.message.inbound", {
+      this.traceInstant("osuna.ws.message.inbound", {
         envelopeType: "binary",
         messageType: "file",
         opcode: String(fileFrame.opcode),
@@ -6246,7 +6246,7 @@ export class DaemonClient {
     if (!frame) {
       return false;
     }
-    this.traceInstant("paseo.ws.message.inbound", {
+    this.traceInstant("osuna.ws.message.inbound", {
       envelopeType: "binary",
       messageType: "terminal",
       opcode: String(frame.opcode),

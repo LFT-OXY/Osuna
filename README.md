@@ -14,7 +14,7 @@
 > **Fork notice.** Osuna is a fork of [Paseo](https://github.com/getpaseo/paseo), licensed under
 > Apache-2.0. It has been renamed and otherwise modified, and it is maintained independently of
 > upstream. The original copyright notice is kept in [LICENSE](LICENSE). Under section 6 of the
-> license, the names "Paseo" and "Osuna" and their logos are not covered by the license grant.
+> license, the names "Osuna" and "Osuna" and their logos are not covered by the license grant.
 
 Run agents in parallel on your own machines. Ship from your phone or your desk.
 

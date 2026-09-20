@@ -17,10 +17,10 @@ import { createOsunaDaemon } from "./bootstrap.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 
 const logger = pino({ level: "warn" });
-const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-test-"));
-const paseoHome = path.join(paseoHomeRoot, ".paseo");
+const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-test-"));
+const paseoHome = path.join(paseoHomeRoot, ".osuna");
 await mkdir(paseoHome, { recursive: true });
-const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
+const staticDir = await mkdtemp(path.join(os.tmpdir(), "osuna-static-"));
 
 const daemon = await createOsunaDaemon(
   {
@@ -34,8 +34,8 @@ const daemon = await createOsunaDaemon(
     agentClients: {},
     agentStoragePath: path.join(paseoHome, "agents"),
     relayEnabled: false,
-    relayEndpoint: "relay.paseo.sh:443",
-    appBaseUrl: "https://app.paseo.sh",
+    relayEndpoint: "relay.example.test:443",
+    appBaseUrl: "https://app.example.test",
     // Add custom config here, e.g.:
     // providerOverrides: { ... },
   },
@@ -69,13 +69,13 @@ npx tsx packages/server/src/server/your-script.ts
 
 ## Using the test helper
 
-For simpler cases, `createTestPaseoDaemon` + `DaemonClient` handles temp dirs and port selection:
+For simpler cases, `createTestOsunaDaemon` + `DaemonClient` handles temp dirs and port selection:
 
 ```typescript
-import { createTestPaseoDaemon } from "./test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "./test-utils/osuna-daemon.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 
-const daemon = await createTestPaseoDaemon();
+const daemon = await createTestOsunaDaemon();
 const client = new DaemonClient({
   url: `ws://127.0.0.1:${daemon.port}/ws`,
   appVersion: "0.1.70",

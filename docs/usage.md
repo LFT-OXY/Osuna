@@ -17,7 +17,7 @@ paths that CLI would:
 | OMP         | `PI_CONFIG_DIR`, `OMP_PROFILE`/`PI_PROFILE`, `PI_CODING_AGENT_DIR`, `XDG_DATA_HOME` |
 
 Those variables are read from the **daemon's own environment**, once at start. A
-per-provider `env` in `config.json` moves the CLI Paseo launches and not the
+per-provider `env` in `config.json` moves the CLI Osuna launches and not the
 scanner, so logs written to a relocated directory are counted nowhere. Put the
 variable in the daemon's environment if you want the numbers to follow.
 `params.sessionDir` is not read here either — that one belongs to session import
@@ -35,7 +35,7 @@ says so once per run at `info`.
 
 One worker reads files, serially. The round that runs at start is the backfill;
 after it, a timer starts the same round every 60 seconds
-(`PASEO_USAGE_SCAN_INTERVAL_MS`). Both rounds are the same code over every file
+(`OSUNA_USAGE_SCAN_INTERVAL_MS`). Both rounds are the same code over every file
 no cursor has finished — only the first reports progress. Cursors are on disk,
 so a restart resumes mid-file and a second start has almost nothing left to do.
 
@@ -132,7 +132,7 @@ MB. It times out after 15 seconds; a failure is logged at `info`, retried an
 hour later, and never replaces the table you already have.
 
 Turn it off with `features.usage.pricing.autoUpdate: false` in `config.json`, or
-`PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices from
+`OSUNA_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices from
 the built-in snapshot and your own prices, and never reaches the network —
 including on a host that has no network at all. The switch covers the automatic
 check only: "Refresh now" in the price table still fetches when you press it.

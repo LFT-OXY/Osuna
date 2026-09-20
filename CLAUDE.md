@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Paseo is a mobile app for monitoring and controlling your local AI coding agents from anywhere. Your dev environment, in your pocket. Connects directly to your actual development environment — your code stays on your machine.
+Osuna is a mobile app for monitoring and controlling your local AI coding agents from anywhere. Your dev environment, in your pocket. Connects directly to your actual development environment — your code stays on your machine.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, and Pi.
 
@@ -10,10 +10,10 @@ This is an npm workspace monorepo:
 
 - `packages/server` — Daemon: agent lifecycle, WebSocket API, MCP server
 - `packages/app` — Mobile + web client (Expo)
-- `packages/cli` — Docker-style CLI (`paseo run/ls/logs/wait`)
+- `packages/cli` — Docker-style CLI (`osuna run/ls/logs/wait`)
 - `packages/relay` — E2E encrypted relay for remote access
 - `packages/desktop` — Electron desktop wrapper
-- `packages/website` — Marketing site (paseo.sh)
+- `packages/website` — Marketing site (no domain; outside the npm workspaces)
 
 ## Docs
 
@@ -23,7 +23,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 
 | Doc                                                                  | What's in it                                                                                                                   |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [docs/product.md](docs/product.md)                                   | What Paseo is, who it's for, where it's going                                                                                  |
+| [docs/product.md](docs/product.md)                                   | What Osuna is, who it's for, where it's going                                                                                  |
 | [docs/architecture.md](docs/architecture.md)                         | System design, package layering, WebSocket protocol, agent lifecycle, data flow                                                |
 | [docs/agent-lifecycle.md](docs/agent-lifecycle.md)                   | Agent states, parent/child relationships, archive semantics, tabs vs archive, subagents track                                  |
 | [docs/data-model.md](docs/data-model.md)                             | File-based JSON persistence, Zod schemas, atomic writes, no migrations                                                         |
@@ -116,7 +116,7 @@ and updating `next`, integrating it after a release, and releasing a hotfix from
 
 ## Critical rules
 
-- **NEVER restart a running daemon without permission** — it manages all running agents, and if you're an agent, restarting it kills your own process. This covers Osuna's installed daemon on `6777` and dev daemon on `6778`, and the upstream Paseo daemon on `6767`/`6768` that this machine still runs.
+- **NEVER restart a running daemon without permission** — it manages all running agents, and if you're an agent, restarting it kills your own process. This covers Osuna's installed daemon on `6777` and dev daemon on `6778`, and the upstream Osuna daemon on `6767`/`6768` that this machine still runs.
 - **NEVER assume a timeout means the service needs restarting** — timeouts can be transient.
 - **NEVER add auth checks to tests** — agent providers handle their own auth.
 - **Before changing app routes, startup routing, remembered workspace restore, or active workspace selection, read [docs/expo-router.md](docs/expo-router.md).**
@@ -176,7 +176,7 @@ The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is
     use-audio-recorder.native.ts ← uses expo-audio
   ```
   Import as `@/hooks/use-audio-recorder` — Metro picks the right file automatically.
-- **Use `.electron.ts` / `.electron.tsx` for Electron-only web modules.** Electron is still the Metro `web` platform, but desktop dev/build sets `PASEO_WEB_PLATFORM=electron`, so Metro first looks for `.electron.*` files and falls back to normal `.web.*` files. Use this when the implementation depends on Electron-only behavior such as `webviewTag`, desktop preload APIs, or the Electron bridge. Keep plain browser web in `.web.*`, and keep native fallbacks in the base file or `.native.*`.
+- **Use `.electron.ts` / `.electron.tsx` for Electron-only web modules.** Electron is still the Metro `web` platform, but desktop dev/build sets `OSUNA_WEB_PLATFORM=electron`, so Metro first looks for `.electron.*` files and falls back to normal `.web.*` files. Use this when the implementation depends on Electron-only behavior such as `webviewTag`, desktop preload APIs, or the Electron bridge. Keep plain browser web in `.web.*`, and keep native fallbacks in the base file or `.native.*`.
   ```
   desktop/browser/pane/
     index.electron.tsx ← Electron <webview> implementation

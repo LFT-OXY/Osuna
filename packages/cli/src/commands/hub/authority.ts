@@ -13,12 +13,17 @@ interface ResolveHubInput {
   credentials: HubCredentialStore;
 }
 
-export const DEFAULT_HUB_ORIGIN = "https://hub.paseo.sh";
-
 export function resolveHubOrigin(input: ResolveHubInput): string {
-  const configuredOrigin = input.options.origin ?? input.env.OSUNA_HUB_URL;
+  // 本 fork 不托管 Hub：没有可回退的 origin，未配置时直接说清怎么配，
+  // 而不是默认连向上游的 hub.paseo.sh。
   const selectedOrigin =
-    configuredOrigin ?? input.credentials.active()?.origin ?? DEFAULT_HUB_ORIGIN;
+    input.options.origin ?? input.env.OSUNA_HUB_URL ?? input.credentials.active()?.origin;
+  if (selectedOrigin === undefined) {
+    throw new HubCommandError(
+      "HUB_ORIGIN_REQUIRED",
+      "No Hub URL configured. Pass --hub <url>, set OSUNA_HUB_URL, or run `osuna hub login <url>`.",
+    );
+  }
   return normalizeHubOrigin(selectedOrigin);
 }
 

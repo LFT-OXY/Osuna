@@ -21,8 +21,17 @@
 - [ ] relay / Hub 的默认地址留空并要求显式配置，**不要**指向尚不存在的 `osuna.sh`
       —— 指向不存在的域名比报错更难排查
 - [ ] `CHANGELOG.md` 历史条目保持原样，不改
-- [ ] 验收：`rg -i paseo docs/ CLAUDE.md CONTRIBUTING.md SECURITY.md packages/client`
-      无命中，且根 `README.md`、`packages/*/README.md` 无命中。**全仓 `rg -i paseo`
-      无命中这条挪到票 07** —— 本票的 What to build 明确把内部私有名排除在外，
-      两者不可能同时成立（实测点名面 939 处 / 51 文件，其余约 10600 处 / 1200 文件）
+- [x] 验收：`rg -i paseo docs/ CLAUDE.md CONTRIBUTING.md SECURITY.md packages/client`
+      与根 `README.md`、`packages/*/README.md` 无命中，**下列三类除外**（实测后确认，
+      改掉反而让文档变错）：
+      1. `docs/protocol-compatibility.md` 整篇 —— 主语就是这次改名本身
+      2. 指向上游的事实性链接：`getpaseo/paseo-relay`（上游的 relay 实现）、
+         `getpaseo/paseo/issues/3196` 与 `pull/794`（历史 issue/PR）
+      3. 文档在描述代码里**现在仍是旧名**的标识符：`paseo.pid`、
+         `paseo.parent-agent-id`、`paseo.open-agent-tab.*`（票 08），以及
+         `docs/ad-hoc-daemon-testing.md` 代码样例里的 `paseoHome` /
+         `paseoHomeRoot` 配置字段名（票 07）—— 代码改完文档再跟着改
+      **全仓 `rg -i paseo` 无命中这条挪到票 07** —— 本票的 What to build 明确把内部
+      私有名排除在外，两者不可能同时成立（实测点名面 939 处 / 51 文件，其余约
+      10600 处 / 1200 文件）
 - [ ] `npm run typecheck`、`npm run lint`、构建通过

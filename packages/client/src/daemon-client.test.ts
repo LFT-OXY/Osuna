@@ -201,30 +201,30 @@ test("traces WebSocket frames, message types, and JSON parse duration", async ()
   expect(recorder.records).toEqual([
     {
       phase: "begin",
-      name: "paseo.ws.message.outbound",
+      name: "osuna.ws.message.outbound",
       args: { envelopeType: "hello", messageType: "hello" },
     },
     { phase: "end" },
     {
       phase: "begin",
-      name: "paseo.ws.frame.outbound",
+      name: "osuna.ws.frame.outbound",
       args: { kind: "text", size: expect.any(String) },
     },
     { phase: "end" },
     {
       phase: "begin",
-      name: "paseo.ws.frame.inbound",
+      name: "osuna.ws.frame.inbound",
       args: { kind: "text", size: expect.any(String) },
     },
     {
       phase: "begin",
-      name: "paseo.ws.json.parse",
+      name: "osuna.ws.json.parse",
       args: { size: expect.any(String) },
     },
     { phase: "end" },
     {
       phase: "begin",
-      name: "paseo.ws.message.inbound",
+      name: "osuna.ws.message.inbound",
       args: { envelopeType: "session", messageType: "status" },
     },
     { phase: "end" },
@@ -235,7 +235,7 @@ test("traces WebSocket frames, message types, and JSON parse duration", async ()
 test("does not infer browser automation capabilities from Electron runtime", async () => {
   vi.stubGlobal("navigator", {
     userAgent:
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Paseo/0.1.89 Chrome/146 Electron/41.2.0 Safari/537.36",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Osuna/0.1.89 Chrome/146 Electron/41.2.0 Safari/537.36",
   });
   const mock = createMockTransport();
   const client = new DaemonClient({
@@ -2802,7 +2802,7 @@ test("uploadFile sends metadata request and file bytes as binary chunks", async 
           fileName: "notes.txt",
           mimeType: "text/plain",
           size: 11,
-          path: "/tmp/paseo-uploads/upload_req-upload/notes.txt",
+          path: "/tmp/osuna-uploads/upload_req-upload/notes.txt",
         },
         error: null,
       },
@@ -2817,7 +2817,7 @@ test("uploadFile sends metadata request and file bytes as binary chunks", async 
       fileName: "notes.txt",
       mimeType: "text/plain",
       size: 11,
-      path: "/tmp/paseo-uploads/upload_req-upload/notes.txt",
+      path: "/tmp/osuna-uploads/upload_req-upload/notes.txt",
     },
     error: null,
   });
