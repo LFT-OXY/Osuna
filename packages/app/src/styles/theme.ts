@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
+import { USAGE_DARK_PALETTE, USAGE_LIGHT_PALETTE } from "./usage-palette";
 
 export const baseColors = {
   // Base colors
@@ -203,6 +204,25 @@ const darkStatusDotColors = {
   statusDotRunning: "#5caaf6",
 };
 
+// 终端的 14 个彩色 ANSI 槽位。black / brightBlack 不在其中：它们随界面表面走
+// （terminalBlack / terminalBrightBlack），以保证在该主题的终端底色上仍可见。
+export interface TerminalAnsiPalette {
+  red: string;
+  green: string;
+  yellow: string;
+  blue: string;
+  magenta: string;
+  cyan: string;
+  white: string;
+  brightRed: string;
+  brightGreen: string;
+  brightYellow: string;
+  brightBlue: string;
+  brightMagenta: string;
+  brightCyan: string;
+  brightWhite: string;
+}
+
 export interface LightThemeConfig {
   surface0: string;
   surface1: string;
@@ -224,9 +244,14 @@ export interface LightThemeConfig {
   destructive: string;
   terminalBlack: string;
   terminalBrightBlack: string;
+  /** Palette-specific ANSI colors; omitted themes share `lightTerminalAnsi`. */
+  terminalAnsi?: TerminalAnsiPalette;
+  terminalSelectionBackground?: string;
   ring: string;
 }
 
+// white / brightWhite 不能与白底同色：ANSI white 输出（如 ls 的部分条目）会直接消失。
+// 两者都取对白底不低于 3:1 的灰，brightWhite 仍比 white 更亮以保留层级。
 const lightTerminalAnsi = {
   red: "#dc2626",
   green: "#16a34a",
@@ -234,14 +259,14 @@ const lightTerminalAnsi = {
   blue: "#2563eb",
   magenta: "#9333ea",
   cyan: "#0891b2",
-  white: "#ffffff",
+  white: "#71717a",
   brightRed: "#ef4444",
   brightGreen: "#22c55e",
   brightYellow: "#f59e0b",
   brightBlue: "#3b82f6",
   brightMagenta: "#a855f7",
   brightCyan: "#06b6d4",
-  brightWhite: "#fafafa",
+  brightWhite: "#8a8a92",
 } as const;
 
 export function buildLightSemanticColors(tint: LightThemeConfig) {
@@ -296,10 +321,10 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
       foreground: tint.foreground,
       cursor: tint.foreground,
       cursorAccent: tint.surface0,
-      selectionBackground: "rgba(0, 0, 0, 0.15)",
+      selectionBackground: tint.terminalSelectionBackground ?? "rgba(0, 0, 0, 0.15)",
       selectionForeground: tint.foreground,
       black: tint.terminalBlack,
-      ...lightTerminalAnsi,
+      ...(tint.terminalAnsi ?? lightTerminalAnsi),
       brightBlack: tint.terminalBrightBlack,
     },
   };
@@ -351,6 +376,9 @@ export interface DarkThemeConfig {
   destructive: string;
   terminalBlack: string;
   terminalBrightBlack: string;
+  /** Palette-specific ANSI colors; omitted themes share `darkTerminalAnsi`. */
+  terminalAnsi?: TerminalAnsiPalette;
+  terminalSelectionBackground?: string;
   foreground?: string;
   ring?: string;
 }
@@ -427,10 +455,10 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
       foreground,
       cursor: foreground,
       cursorAccent: tint.surface0,
-      selectionBackground: "rgba(255, 255, 255, 0.2)",
+      selectionBackground: tint.terminalSelectionBackground ?? "rgba(255, 255, 255, 0.2)",
       selectionForeground: foreground,
       black: tint.terminalBlack,
-      ...darkTerminalAnsi,
+      ...(tint.terminalAnsi ?? darkTerminalAnsi),
       brightBlack: tint.terminalBrightBlack,
     },
   };
@@ -682,6 +710,9 @@ export function buildDarkTheme(semanticColors: ReturnType<typeof buildDarkSemant
       ...semanticColors,
       palette: baseColors,
       syntax: darkHighlightColors,
+      // The usage page is a visual island with its own neutral scale; it rides
+      // on the theme so Unistyles tracks it like any other token.
+      usage: USAGE_DARK_PALETTE,
     },
     shadow: darkShadow,
     ...commonTheme,
@@ -716,6 +747,331 @@ const pureBlackDarkColors = buildDarkSemanticColors({
 
 export const darkPureBlackTheme = buildDarkTheme(pureBlackDarkColors);
 
+// Dark palette variants. Surfaces and text tiers come from each palette's own
+// scale (interpolated where the palette has no tier that clears 3:1 on surface0);
+// the 14 colored ANSI slots are the palette's terminal colors verbatim.
+// black / brightBlack are the palette's gray tiers that stay visible on its
+// background, and destructive is the palette red darkened enough for white text.
+
+export const darkDraculaTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#282a36",
+    surface1: "#2e303e",
+    surface2: "#343746",
+    surface3: "#44475a",
+    surface4: "#565971",
+    surfaceDiffEmpty: "#30323f",
+    surfaceSidebar: "#21222c",
+    foreground: "#f8f8f2",
+    foregroundMuted: "#a9adc6",
+    foregroundExtraMuted: "#6272a4",
+    border: "#363948",
+    borderAccent: "#44475a",
+    accent: "#bd93f9",
+    accentBright: "#d6acff",
+    accentForeground: "#282a36",
+    destructive: "#d84f4f",
+    terminalBlack: "#44475a",
+    terminalBrightBlack: "#6272a4",
+    terminalSelectionBackground: "#44475a",
+    terminalAnsi: {
+      red: "#ff5555",
+      green: "#50fa7b",
+      yellow: "#f1fa8c",
+      blue: "#bd93f9",
+      magenta: "#ff79c6",
+      cyan: "#8be9fd",
+      white: "#f8f8f2",
+      brightRed: "#ff6e6e",
+      brightGreen: "#69ff94",
+      brightYellow: "#ffffa5",
+      brightBlue: "#d6acff",
+      brightMagenta: "#ff92df",
+      brightCyan: "#a4ffff",
+      brightWhite: "#ffffff",
+    },
+  }),
+);
+
+export const darkNordTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#2e3440",
+    surface1: "#333a48",
+    surface2: "#3b4252",
+    surface3: "#434c5e",
+    surface4: "#4c566a",
+    surfaceDiffEmpty: "#353c4a",
+    surfaceSidebar: "#272c36",
+    foreground: "#d8dee9",
+    foregroundMuted: "#b4bccb",
+    foregroundExtraMuted: "#7b8698",
+    border: "#3b4252",
+    borderAccent: "#434c5e",
+    accent: "#81a1c1",
+    accentBright: "#88c0d0",
+    accentForeground: "#2e3440",
+    destructive: "#bf616a",
+    terminalBlack: "#4c566a",
+    terminalBrightBlack: "#616e88",
+    terminalSelectionBackground: "#434c5e",
+    terminalAnsi: {
+      red: "#bf616a",
+      green: "#a3be8c",
+      yellow: "#ebcb8b",
+      blue: "#81a1c1",
+      magenta: "#b48ead",
+      cyan: "#88c0d0",
+      white: "#e5e9f0",
+      brightRed: "#bf616a",
+      brightGreen: "#a3be8c",
+      brightYellow: "#ebcb8b",
+      brightBlue: "#81a1c1",
+      brightMagenta: "#b48ead",
+      brightCyan: "#8fbcbb",
+      brightWhite: "#eceff4",
+    },
+  }),
+);
+
+export const darkTokyoNightTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#1a1b26",
+    surface1: "#1f2030",
+    surface2: "#24283b",
+    surface3: "#292e42",
+    surface4: "#414868",
+    surfaceDiffEmpty: "#222536",
+    surfaceSidebar: "#16161e",
+    foreground: "#c0caf5",
+    foregroundMuted: "#9aa5ce",
+    foregroundExtraMuted: "#565f89",
+    border: "#292e42",
+    borderAccent: "#3b4261",
+    accent: "#7aa2f7",
+    accentBright: "#7dcfff",
+    accentForeground: "#1a1b26",
+    destructive: "#db4b4b",
+    terminalBlack: "#414868",
+    terminalBrightBlack: "#565f89",
+    terminalSelectionBackground: "#33467c",
+    terminalAnsi: {
+      red: "#f7768e",
+      green: "#9ece6a",
+      yellow: "#e0af68",
+      blue: "#7aa2f7",
+      magenta: "#bb9af7",
+      cyan: "#7dcfff",
+      white: "#a9b1d6",
+      brightRed: "#f7768e",
+      brightGreen: "#9ece6a",
+      brightYellow: "#e0af68",
+      brightBlue: "#7aa2f7",
+      brightMagenta: "#bb9af7",
+      brightCyan: "#7dcfff",
+      brightWhite: "#c0caf5",
+    },
+  }),
+);
+
+export const darkCatppuccinMochaTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#1e1e2e",
+    surface1: "#24243a",
+    surface2: "#313244",
+    surface3: "#45475a",
+    surface4: "#585b70",
+    surfaceDiffEmpty: "#292a3c",
+    surfaceSidebar: "#181825",
+    foreground: "#cdd6f4",
+    foregroundMuted: "#a6adc8",
+    foregroundExtraMuted: "#7f849c",
+    border: "#313244",
+    borderAccent: "#45475a",
+    accent: "#cba6f7",
+    accentBright: "#b4befe",
+    accentForeground: "#1e1e2e",
+    destructive: "#d95a7f",
+    terminalBlack: "#45475a",
+    terminalBrightBlack: "#585b70",
+    terminalSelectionBackground: "#585b70",
+    terminalAnsi: {
+      red: "#f38ba8",
+      green: "#a6e3a1",
+      yellow: "#f9e2af",
+      blue: "#89b4fa",
+      magenta: "#f5c2e7",
+      cyan: "#94e2d5",
+      white: "#bac2de",
+      brightRed: "#f38ba8",
+      brightGreen: "#a6e3a1",
+      brightYellow: "#f9e2af",
+      brightBlue: "#89b4fa",
+      brightMagenta: "#f5c2e7",
+      brightCyan: "#94e2d5",
+      brightWhite: "#a6adc8",
+    },
+  }),
+);
+
+export const darkGruvboxTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#282828",
+    surface1: "#32302f",
+    surface2: "#3c3836",
+    surface3: "#504945",
+    surface4: "#665c54",
+    surfaceDiffEmpty: "#302e2c",
+    surfaceSidebar: "#1d2021",
+    foreground: "#ebdbb2",
+    foregroundMuted: "#bdae93",
+    foregroundExtraMuted: "#928374",
+    border: "#3c3836",
+    borderAccent: "#504945",
+    accent: "#d79921",
+    accentBright: "#fabd2f",
+    accentForeground: "#282828",
+    destructive: "#cc241d",
+    terminalBlack: "#504945",
+    terminalBrightBlack: "#928374",
+    terminalSelectionBackground: "#504945",
+    terminalAnsi: {
+      red: "#cc241d",
+      green: "#98971a",
+      yellow: "#d79921",
+      blue: "#458588",
+      magenta: "#b16286",
+      cyan: "#689d6a",
+      white: "#a89984",
+      brightRed: "#fb4934",
+      brightGreen: "#b8bb26",
+      brightYellow: "#fabd2f",
+      brightBlue: "#83a598",
+      brightMagenta: "#d3869b",
+      brightCyan: "#8ec07c",
+      brightWhite: "#ebdbb2",
+    },
+  }),
+);
+
+export const darkSolarizedTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#002b36",
+    surface1: "#03303c",
+    surface2: "#073642",
+    surface3: "#0f424f",
+    surface4: "#1c4f5c",
+    surfaceDiffEmpty: "#05323e",
+    surfaceSidebar: "#00252f",
+    foreground: "#839496",
+    foregroundMuted: "#657b83",
+    foregroundExtraMuted: "#586e75",
+    border: "#073642",
+    borderAccent: "#0f424f",
+    accent: "#268bd2",
+    accentBright: "#2aa198",
+    destructive: "#dc322f",
+    terminalBlack: "#586e75",
+    terminalBrightBlack: "#657b83",
+    terminalSelectionBackground: "#073642",
+    terminalAnsi: {
+      red: "#dc322f",
+      green: "#859900",
+      yellow: "#b58900",
+      blue: "#268bd2",
+      magenta: "#d33682",
+      cyan: "#2aa198",
+      white: "#eee8d5",
+      brightRed: "#cb4b16",
+      brightGreen: "#586e75",
+      brightYellow: "#657b83",
+      brightBlue: "#839496",
+      brightMagenta: "#6c71c4",
+      brightCyan: "#93a1a1",
+      brightWhite: "#fdf6e3",
+    },
+  }),
+);
+
+export const darkOneDarkTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#282c34",
+    surface1: "#2c323c",
+    surface2: "#353b45",
+    surface3: "#3e4451",
+    surface4: "#4b5263",
+    surfaceDiffEmpty: "#2f353f",
+    surfaceSidebar: "#21252b",
+    foreground: "#abb2bf",
+    foregroundMuted: "#8b93a1",
+    foregroundExtraMuted: "#5c6370",
+    border: "#353b45",
+    borderAccent: "#3e4451",
+    accent: "#61afef",
+    accentBright: "#56b6c2",
+    accentForeground: "#282c34",
+    destructive: "#d55b63",
+    terminalBlack: "#4b5263",
+    terminalBrightBlack: "#5c6370",
+    terminalSelectionBackground: "#3e4451",
+    terminalAnsi: {
+      red: "#e06c75",
+      green: "#98c379",
+      yellow: "#e5c07b",
+      blue: "#61afef",
+      magenta: "#c678dd",
+      cyan: "#56b6c2",
+      white: "#abb2bf",
+      brightRed: "#e06c75",
+      brightGreen: "#98c379",
+      brightYellow: "#e5c07b",
+      brightBlue: "#61afef",
+      brightMagenta: "#c678dd",
+      brightCyan: "#56b6c2",
+      brightWhite: "#ffffff",
+    },
+  }),
+);
+
+export const darkRosePineTheme = buildDarkTheme(
+  buildDarkSemanticColors({
+    surface0: "#191724",
+    surface1: "#1f1d2e",
+    surface2: "#26233a",
+    surface3: "#403d52",
+    surface4: "#524f67",
+    surfaceDiffEmpty: "#21202e",
+    surfaceSidebar: "#14121d",
+    foreground: "#e0def4",
+    foregroundMuted: "#908caa",
+    foregroundExtraMuted: "#6e6a86",
+    border: "#26233a",
+    borderAccent: "#403d52",
+    accent: "#c4a7e7",
+    accentBright: "#ebbcba",
+    accentForeground: "#191724",
+    destructive: "#d9527a",
+    terminalBlack: "#524f67",
+    terminalBrightBlack: "#6e6a86",
+    terminalSelectionBackground: "#403d52",
+    terminalAnsi: {
+      red: "#eb6f92",
+      green: "#31748f",
+      yellow: "#f6c177",
+      blue: "#9ccfd8",
+      magenta: "#c4a7e7",
+      cyan: "#ebbcba",
+      white: "#e0def4",
+      brightRed: "#eb6f92",
+      brightGreen: "#31748f",
+      brightYellow: "#f6c177",
+      brightBlue: "#9ccfd8",
+      brightMagenta: "#c4a7e7",
+      brightCyan: "#ebbcba",
+      brightWhite: "#e0def4",
+    },
+  }),
+);
+
 const lightShadow = {
   sm: {
     shadowColor: "rgba(0, 0, 0, 0.02)",
@@ -744,6 +1100,7 @@ export function buildLightTheme(semanticColors: ReturnType<typeof buildLightSema
       ...semanticColors,
       palette: baseColors,
       syntax: lightHighlightColors,
+      usage: USAGE_LIGHT_PALETTE,
     },
     shadow: lightShadow,
     ...commonTheme,
@@ -751,6 +1108,229 @@ export function buildLightTheme(semanticColors: ReturnType<typeof buildLightSema
 }
 
 export const lightTheme = buildLightTheme(lightSemanticColors);
+
+// Light palette variants. Same rules as the dark variants, plus the light
+// terminal rule: white / brightWhite / black must clear 3:1 on the terminal
+// background, so a palette's near-background whites are swapped for its
+// closest gray tier that still reads.
+
+export const lightCatppuccinLatteTheme = buildLightTheme(
+  buildLightSemanticColors({
+    surface0: "#eff1f5",
+    surface1: "#e6e9ef",
+    surface2: "#dce0e8",
+    surface3: "#ccd0da",
+    surface4: "#bcc0cc",
+    surfaceDiffEmpty: "#e9ecf1",
+    surfaceSidebar: "#e6e9ef",
+    foreground: "#4c4f69",
+    foregroundMuted: "#5c5f77",
+    foregroundExtraMuted: "#8c8fa1",
+    border: "#dce0e8",
+    borderAccent: "#ccd0da",
+    accent: "#8839ef",
+    accentBright: "#7287fd",
+    accentForeground: "#ffffff",
+    primary: "#4c4f69",
+    primaryForeground: "#eff1f5",
+    destructive: "#d20f39",
+    terminalBlack: "#5c5f77",
+    terminalBrightBlack: "#6c6f85",
+    terminalSelectionBackground: "#acb0be",
+    terminalAnsi: {
+      red: "#d20f39",
+      green: "#40a02b",
+      yellow: "#df8e1d",
+      blue: "#1e66f5",
+      magenta: "#ea76cb",
+      cyan: "#179299",
+      white: "#7c7f93",
+      brightRed: "#d20f39",
+      brightGreen: "#40a02b",
+      brightYellow: "#df8e1d",
+      brightBlue: "#1e66f5",
+      brightMagenta: "#ea76cb",
+      brightCyan: "#179299",
+      brightWhite: "#838799",
+    },
+    ring: "#4c4f69",
+  }),
+);
+
+export const lightSolarizedTheme = buildLightTheme(
+  buildLightSemanticColors({
+    surface0: "#fdf6e3",
+    surface1: "#f7efd9",
+    surface2: "#eee8d5",
+    surface3: "#e3dcc6",
+    surface4: "#d3cbb7",
+    surfaceDiffEmpty: "#f6eedb",
+    surfaceSidebar: "#eee8d5",
+    // Shifted one tier darker than the palette (base02 / base01 / base00): the palette
+    // foreground base00 sits at 4.0:1 on base3, so body text takes base02 and the muted
+    // tiers keep their hierarchy at 4.99 and 4.13.
+    foreground: "#073642",
+    foregroundMuted: "#586e75",
+    foregroundExtraMuted: "#657b83",
+    border: "#e6dfca",
+    borderAccent: "#d9d2bd",
+    accent: "#268bd2",
+    accentBright: "#2aa198",
+    accentForeground: "#ffffff",
+    primary: "#073642",
+    primaryForeground: "#fdf6e3",
+    destructive: "#dc322f",
+    terminalBlack: "#073642",
+    terminalBrightBlack: "#002b36",
+    terminalSelectionBackground: "#eee8d5",
+    terminalAnsi: {
+      red: "#dc322f",
+      green: "#859900",
+      yellow: "#b58900",
+      blue: "#268bd2",
+      magenta: "#d33682",
+      cyan: "#2aa198",
+      white: "#586e75",
+      brightRed: "#cb4b16",
+      brightGreen: "#586e75",
+      brightYellow: "#657b83",
+      brightBlue: "#839496",
+      brightMagenta: "#6c71c4",
+      brightCyan: "#93a1a1",
+      brightWhite: "#657b83",
+    },
+    ring: "#586e75",
+  }),
+);
+
+export const lightOneLightTheme = buildLightTheme(
+  buildLightSemanticColors({
+    surface0: "#fafafa",
+    surface1: "#f0f0f1",
+    surface2: "#eaeaeb",
+    surface3: "#dbdbdc",
+    surface4: "#c9c9cb",
+    surfaceDiffEmpty: "#f2f2f2",
+    surfaceSidebar: "#eaeaeb",
+    foreground: "#383a42",
+    foregroundMuted: "#696c77",
+    foregroundExtraMuted: "#a0a1a7",
+    border: "#dbdbdc",
+    borderAccent: "#e5e5e6",
+    accent: "#4078f2",
+    accentBright: "#0184bc",
+    accentForeground: "#ffffff",
+    primary: "#383a42",
+    primaryForeground: "#fafafa",
+    destructive: "#e45649",
+    terminalBlack: "#383a42",
+    terminalBrightBlack: "#696c77",
+    terminalSelectionBackground: "#e5e5e6",
+    terminalAnsi: {
+      red: "#e45649",
+      green: "#50a14f",
+      yellow: "#c18401",
+      blue: "#4078f2",
+      magenta: "#a626a4",
+      cyan: "#0184bc",
+      white: "#7f8188",
+      brightRed: "#e45649",
+      brightGreen: "#50a14f",
+      brightYellow: "#c18401",
+      brightBlue: "#4078f2",
+      brightMagenta: "#a626a4",
+      brightCyan: "#0184bc",
+      brightWhite: "#8a8c93",
+    },
+    ring: "#383a42",
+  }),
+);
+
+export const lightRosePineDawnTheme = buildLightTheme(
+  buildLightSemanticColors({
+    surface0: "#faf4ed",
+    surface1: "#f4ede8",
+    surface2: "#f2e9e1",
+    surface3: "#dfdad9",
+    surface4: "#cecacd",
+    surfaceDiffEmpty: "#f6efe8",
+    surfaceSidebar: "#f2e9e1",
+    foreground: "#575279",
+    foregroundMuted: "#6e6a8b",
+    foregroundExtraMuted: "#9893a5",
+    border: "#dfdad9",
+    borderAccent: "#e4dfdc",
+    accent: "#907aa9",
+    accentBright: "#d7827e",
+    accentForeground: "#ffffff",
+    primary: "#575279",
+    primaryForeground: "#faf4ed",
+    destructive: "#b4637a",
+    terminalBlack: "#575279",
+    terminalBrightBlack: "#797593",
+    terminalSelectionBackground: "#dfdad9",
+    terminalAnsi: {
+      red: "#b4637a",
+      green: "#286983",
+      yellow: "#ea9d34",
+      blue: "#56949f",
+      magenta: "#907aa9",
+      cyan: "#d7827e",
+      white: "#817d96",
+      brightRed: "#b4637a",
+      brightGreen: "#286983",
+      brightYellow: "#ea9d34",
+      brightBlue: "#56949f",
+      brightMagenta: "#907aa9",
+      brightCyan: "#d7827e",
+      brightWhite: "#8c889f",
+    },
+    ring: "#575279",
+  }),
+);
+
+export const lightGithubTheme = buildLightTheme(
+  buildLightSemanticColors({
+    surface0: "#ffffff",
+    surface1: "#f6f8fa",
+    surface2: "#eaeef2",
+    surface3: "#d0d7de",
+    surface4: "#afb8c1",
+    surfaceDiffEmpty: "#f6f8fa",
+    surfaceSidebar: "#f6f8fa",
+    foreground: "#24292e",
+    foregroundMuted: "#586069",
+    foregroundExtraMuted: "#6a737d",
+    border: "#d0d7de",
+    borderAccent: "#e1e4e8",
+    accent: "#0366d6",
+    accentBright: "#005cc5",
+    accentForeground: "#ffffff",
+    primary: "#24292e",
+    primaryForeground: "#ffffff",
+    destructive: "#d73a49",
+    terminalBlack: "#24292e",
+    terminalBrightBlack: "#586069",
+    terminalSelectionBackground: "#c8c8fa",
+    terminalAnsi: {
+      red: "#d73a49",
+      green: "#28a745",
+      yellow: "#dbab09",
+      blue: "#0366d6",
+      magenta: "#5a32a3",
+      cyan: "#0598bc",
+      white: "#6a737d",
+      brightRed: "#cb2431",
+      brightGreen: "#22863a",
+      brightYellow: "#b08800",
+      brightBlue: "#005cc5",
+      brightMagenta: "#5a32a3",
+      brightCyan: "#3192aa",
+      brightWhite: "#8b949e",
+    },
+    ring: "#24292e",
+  }),
+);
 
 // Keep compatibility with existing code
 export const theme = darkTheme;
@@ -773,38 +1353,129 @@ export const THEME_OPTIONS = [
   { name: "auto", group: "primary" },
   {
     name: "zinc",
-    group: "variant",
+    group: "dark",
     unistylesName: "darkZinc",
     theme: darkZincTheme,
     swatch: "#808080",
   },
   {
     name: "midnight",
-    group: "variant",
+    group: "dark",
     unistylesName: "darkMidnight",
     theme: darkMidnightTheme,
     swatch: "#4A6BA8",
   },
   {
     name: "claude",
-    group: "variant",
+    group: "dark",
     unistylesName: "darkClaude",
     theme: darkClaudeTheme,
     swatch: "#D97757",
   },
   {
     name: "ghostty",
-    group: "variant",
+    group: "dark",
     unistylesName: "darkGhostty",
     theme: darkGhosttyTheme,
     swatch: "#8caaee",
   },
   {
     name: "pureBlack",
-    group: "variant",
+    group: "dark",
     unistylesName: "darkPureBlack",
     theme: darkPureBlackTheme,
     swatch: "#000000",
+  },
+  {
+    name: "dracula",
+    group: "dark",
+    unistylesName: "darkDracula",
+    theme: darkDraculaTheme,
+    swatch: "#bd93f9",
+  },
+  {
+    name: "nord",
+    group: "dark",
+    unistylesName: "darkNord",
+    theme: darkNordTheme,
+    swatch: "#88c0d0",
+  },
+  {
+    name: "tokyoNight",
+    group: "dark",
+    unistylesName: "darkTokyoNight",
+    theme: darkTokyoNightTheme,
+    swatch: "#7aa2f7",
+  },
+  {
+    name: "catppuccinMocha",
+    group: "dark",
+    unistylesName: "darkCatppuccinMocha",
+    theme: darkCatppuccinMochaTheme,
+    swatch: "#cba6f7",
+  },
+  {
+    name: "gruvboxDark",
+    group: "dark",
+    unistylesName: "darkGruvbox",
+    theme: darkGruvboxTheme,
+    swatch: "#fe8019",
+  },
+  {
+    name: "solarizedDark",
+    group: "dark",
+    unistylesName: "darkSolarized",
+    theme: darkSolarizedTheme,
+    swatch: "#268bd2",
+  },
+  {
+    name: "oneDark",
+    group: "dark",
+    unistylesName: "darkOneDark",
+    theme: darkOneDarkTheme,
+    swatch: "#61afef",
+  },
+  {
+    name: "rosePine",
+    group: "dark",
+    unistylesName: "darkRosePine",
+    theme: darkRosePineTheme,
+    swatch: "#ebbcba",
+  },
+  {
+    name: "catppuccinLatte",
+    group: "light",
+    unistylesName: "lightCatppuccinLatte",
+    theme: lightCatppuccinLatteTheme,
+    swatch: "#8839ef",
+  },
+  {
+    name: "solarizedLight",
+    group: "light",
+    unistylesName: "lightSolarized",
+    theme: lightSolarizedTheme,
+    swatch: "#cb4b16",
+  },
+  {
+    name: "oneLight",
+    group: "light",
+    unistylesName: "lightOneLight",
+    theme: lightOneLightTheme,
+    swatch: "#4078f2",
+  },
+  {
+    name: "rosePineDawn",
+    group: "light",
+    unistylesName: "lightRosePineDawn",
+    theme: lightRosePineDawnTheme,
+    swatch: "#d7827e",
+  },
+  {
+    name: "githubLight",
+    group: "light",
+    unistylesName: "lightGithub",
+    theme: lightGithubTheme,
+    swatch: "#0366d6",
   },
 ] as const;
 
@@ -820,10 +1491,34 @@ export type ThemePreference =
 export type ThemeName = Exclude<ThemePreference, "auto" | typeof PLUGIN_THEME_PREFERENCE>;
 type ConcreteThemeOption = Exclude<(typeof THEME_OPTIONS)[number], { name: "auto" }>;
 export type Theme = ConcreteThemeOption["theme"];
+/** Built-in themes that render dark, i.e. what "System" may pick when the OS is dark. */
+export type DarkThemeName = Extract<
+  ConcreteThemeOption,
+  { theme: { colorScheme: "dark" } }
+>["name"];
+/** Built-in themes that render light, i.e. what "System" may pick when the OS is light. */
+export type LightThemeName = Extract<
+  ConcreteThemeOption,
+  { theme: { colorScheme: "light" } }
+>["name"];
 
 const CONCRETE_THEME_OPTIONS = THEME_OPTIONS.filter(
   (option): option is ConcreteThemeOption => option.name !== "auto",
 );
+
+type DarkThemeOption = Extract<ConcreteThemeOption, { theme: { colorScheme: "dark" } }>;
+type LightThemeOption = Extract<ConcreteThemeOption, { theme: { colorScheme: "light" } }>;
+
+export const DARK_THEME_NAMES: readonly DarkThemeName[] = CONCRETE_THEME_OPTIONS.filter(
+  (option): option is DarkThemeOption => option.theme.colorScheme === "dark",
+).map((option) => option.name);
+
+export const LIGHT_THEME_NAMES: readonly LightThemeName[] = CONCRETE_THEME_OPTIONS.filter(
+  (option): option is LightThemeOption => option.theme.colorScheme === "light",
+).map((option) => option.name);
+
+// 快捷键只在三个主值间轮转；从任何变体或插件主题出发都回到 light。
+const THEME_CYCLE: readonly ThemePreference[] = ["light", "dark", "auto"];
 
 type ThemeToUnistyles = {
   [Name in ThemeName]: Extract<ConcreteThemeOption, { name: Name }>["unistylesName"];
@@ -857,7 +1552,7 @@ export const REGISTERED_THEMES = {
 } as RegisteredThemes;
 
 export function getNextThemePreference(current: ThemePreference): ThemePreference {
-  const currentIndex = THEME_OPTIONS.findIndex((option) => option.name === current);
-  const nextIndex = (currentIndex + 1) % THEME_OPTIONS.length;
-  return THEME_OPTIONS[nextIndex]?.name ?? THEME_OPTIONS[0].name;
+  const currentIndex = THEME_CYCLE.indexOf(current);
+  if (currentIndex === -1) return THEME_CYCLE[0];
+  return THEME_CYCLE[(currentIndex + 1) % THEME_CYCLE.length];
 }

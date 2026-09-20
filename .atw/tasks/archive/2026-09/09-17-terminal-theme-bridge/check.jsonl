@@ -1,0 +1,14 @@
+{"file": ".atw/tasks/09-17-terminal-theme-bridge/research/terminal-vs-orca.md", "reason": "根因定位、orca 参考实现与 Paseo 接口事实，实现与审查的事实基线"}
+{"file": "docs/protocol-compatibility.md", "reason": "新增可选字段与消息类型必须向后兼容，能力位门控与 COMPAT 标签规则"}
+{"file": "docs/protocol-validation.md", "reason": "改动 protocol 后需重新生成入站校验，schema 纯度规则"}
+{"file": "docs/terminal-performance.md", "reason": "终端管道不变量：worker 内应答、直接写 PTY、尺寸所有权语义"}
+{"file": "docs/testing.md", "reason": "只跑改动文件、真实依赖优先、测试组织"}
+{"file": "docs/design.md", "reason": "内边距取 spacing token 与对齐规则"}
+{"file": "docs/coding-standards.md", "reason": "house style"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 层规范入口"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "会话消息分发、兼容与能力门控的具体写法"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "server 测试分类与单文件运行方式"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 层规范入口"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 用法，内边距实现依据"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "*.browser.test 与单元测试分工"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "本任务跨 protocol/server/app 三层，新增 RPC payload 字段"}

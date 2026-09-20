@@ -78,12 +78,14 @@ function makeManagedAgent(args: {
   sessionId: string;
   nativeHandle?: string;
   title?: string | null;
+  workspaceId?: string;
 }): ManagedAgent {
   const provider = args.provider ?? "codex";
   return {
     id: args.id ?? "00000000-0000-4000-8000-000000000632",
     provider,
     cwd: args.cwd,
+    ...(args.workspaceId ? { workspaceId: args.workspaceId } : {}),
     capabilities: TEST_CAPABILITIES,
     config: { provider, cwd: args.cwd, title: args.title },
     createdAt: new Date("2026-04-30T00:00:00.000Z"),
@@ -276,6 +278,180 @@ test("listImportableProviderSessions filters, sorts, limits, and projects import
       },
     ],
   });
+});
+
+test("listImportableProviderSessions keeps imported rows and names their Paseo agent when includeImported is set", async () => {
+  const cwd = "/tmp/project";
+  const liveAgentId = "00000000-0000-4000-8000-000000000641";
+  const storedAgentId = "00000000-0000-4000-8000-000000000642";
+  const archivedAgentId = "00000000-0000-4000-8000-000000000643";
+  const sessions = [
+    makeImportableSession({
+      provider: "claude",
+      sessionId: "live-session",
+      cwd,
+      lastActivityAt: "2026-04-30T12:04:00.000Z",
+    }),
+    makeImportableSession({
+      provider: "claude",
+      sessionId: "stored-session",
+      nativeHandle: "stored-native",
+      cwd,
+      lastActivityAt: "2026-04-30T12:03:00.000Z",
+    }),
+    makeImportableSession({
+      provider: "claude",
+      sessionId: "archived-session",
+      cwd,
+      lastActivityAt: "2026-04-30T12:02:00.000Z",
+    }),
+    makeImportableSession({
+      provider: "claude",
+      sessionId: "external-session",
+      cwd,
+      lastActivityAt: "2026-04-30T12:01:00.000Z",
+    }),
+  ];
+  const listImportableSessions = vi.fn(async () => makeImportableSessionsResult(sessions));
+  const agentManager = {
+    listAgents: () => [
+      makeManagedAgent({
+        id: liveAgentId,
+        provider: "claude",
+        cwd,
+        sessionId: "live-session",
+        workspaceId: "ws-live",
+      }),
+    ],
+    listImportableSessions,
+  } satisfies Pick<AgentManager, "listAgents" | "listImportableSessions">;
+  const agentStorage = {
+    list: async () => [
+      {
+        id: storedAgentId,
+        provider: "claude",
+        persistence: {
+          provider: "claude",
+          sessionId: "stored-session",
+          nativeHandle: "stored-native",
+        },
+      } as StoredAgentRecord,
+      {
+        id: archivedAgentId,
+        provider: "claude",
+        workspaceId: "ws-archived",
+        archivedAt: "2026-04-30T12:05:00.000Z",
+        persistence: { provider: "claude", sessionId: "archived-session" },
+      } as StoredAgentRecord,
+    ],
+  } satisfies Pick<AgentStorage, "list">;
+
+  const result = await listImportableProviderSessions({
+    request: makeRequest({ cwd, limit: 10, includeImported: true }),
+    agentManager,
+    agentStorage,
+    providerSnapshotManager: { getProviderLabel: () => "Claude" },
+  });
+
+  expect(listImportableSessions).toHaveBeenCalledWith({
+    limit: 10,
+    providerFilter: undefined,
+    cwd,
+  });
+  expect(result.filteredAlreadyImportedCount).toBe(0);
+  expect(
+    result.entries.map((entry) => [
+      entry.providerHandleId,
+      entry.importedAgentId ?? null,
+      entry.importedAgentWorkspaceId ?? null,
+    ]),
+  ).toEqual([
+    ["live-session", liveAgentId, "ws-live"],
+    ["stored-native", storedAgentId, null],
+    ["archived-session", archivedAgentId, "ws-archived"],
+    ["external-session", null, null],
+  ]);
+  expect(result.entries[1]).not.toHaveProperty("importedAgentWorkspaceId");
+  expect(result.entries[3]).not.toHaveProperty("importedAgentId");
+});
+
+test("listImportableProviderSessions names the live agent when an archived record shares its handle", async () => {
+  const cwd = "/tmp/project";
+  const liveAgentId = "00000000-0000-4000-8000-000000000645";
+  const archivedAgentId = "00000000-0000-4000-8000-000000000646";
+  const result = await listImportableProviderSessions({
+    request: makeRequest({ cwd, includeImported: true }),
+    agentManager: {
+      listAgents: () => [
+        makeManagedAgent({
+          id: liveAgentId,
+          provider: "claude",
+          cwd,
+          sessionId: "shared",
+          workspaceId: "ws-live",
+        }),
+      ],
+      listImportableSessions: async () =>
+        makeImportableSessionsResult([
+          makeImportableSession({
+            provider: "claude",
+            sessionId: "shared",
+            cwd,
+            lastActivityAt: "2026-04-30T12:00:00.000Z",
+          }),
+        ]),
+    },
+    agentStorage: {
+      list: async () => [
+        {
+          id: archivedAgentId,
+          provider: "claude",
+          workspaceId: "ws-archived",
+          archivedAt: "2026-04-30T11:00:00.000Z",
+          persistence: { provider: "claude", sessionId: "shared" },
+        } as StoredAgentRecord,
+      ],
+    },
+    providerSnapshotManager: { getProviderLabel: () => "Claude" },
+  });
+
+  expect(result.entries).toHaveLength(1);
+  expect(result.entries[0]?.importedAgentId).toBe(liveAgentId);
+  expect(result.entries[0]?.importedAgentWorkspaceId).toBe("ws-live");
+});
+
+test("listImportableProviderSessions leaves descriptors unmarked unless includeImported is set", async () => {
+  const cwd = "/tmp/project";
+  const archivedAgentId = "00000000-0000-4000-8000-000000000644";
+  const result = await listImportableProviderSessions({
+    request: makeRequest({ cwd, includeImported: false }),
+    agentManager: {
+      listAgents: () => [],
+      listImportableSessions: async () =>
+        makeImportableSessionsResult([
+          makeImportableSession({
+            provider: "claude",
+            sessionId: "archived-session",
+            cwd,
+            lastActivityAt: "2026-04-30T12:00:00.000Z",
+          }),
+        ]),
+    },
+    agentStorage: {
+      list: async () => [
+        {
+          id: archivedAgentId,
+          provider: "claude",
+          archivedAt: "2026-04-30T12:01:00.000Z",
+          persistence: { provider: "claude", sessionId: "archived-session" },
+        } as StoredAgentRecord,
+      ],
+    },
+    providerSnapshotManager: { getProviderLabel: () => "Claude" },
+  });
+
+  expect(result.entries.map((entry) => entry.providerHandleId)).toEqual(["archived-session"]);
+  expect(result.entries[0]).not.toHaveProperty("importedAgentId");
 });
 
 test("listImportableProviderSessions looks past already-imported rows to fill the requested limit", async () => {

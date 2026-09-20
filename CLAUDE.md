@@ -60,6 +60,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/android.md](docs/android.md)                                   | App variants, local/cloud builds, EAS workflows, version codes, F-Droid source builds and store metadata                       |
 | [docs/docker.md](docs/docker.md)                                     | Running the daemon and bundled web UI in Docker, volumes, agent images, security                                               |
 | [docs/release.md](docs/release.md)                                   | Release playbook, draft releases, completion checklist                                                                         |
+| [docs/usage.md](docs/usage.md)                                       | Token usage and estimated cost — the price table, the one outbound request, custom prices                                      |
 | [docs/terminal-activity.md](docs/terminal-activity.md)               | Terminal activity indicators — source-agnostic tracker, agent hook reporting, adding a new hook provider                       |
 | [SECURITY.md](SECURITY.md)                                           | Relay threat model, E2E encryption, DNS rebinding, agent auth                                                                  |
 | [public-docs/hub/security.md](public-docs/hub/security.md)           | Public Hub guide — trust boundaries, untrusted triggers, provider controls, and output authority                               |
@@ -184,11 +185,49 @@ The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is
   ```
   Import as `@/desktop/browser/pane` — Electron desktop gets the `.electron.tsx` file, browser web gets `.web.tsx`, and native gets the native/base implementation.
 - **NEVER use raw DOM APIs without `isWeb` guard.** DOM APIs crash native. Casting a RN ref to `HTMLElement` is a red flag — ensure the block is web-only.
-- **NEVER use `onPointerEnter`/`onPointerLeave`.** They don't fire on native iOS.
-- **Hover only works on web.** React Native's `onHoverIn`/`onHoverOut` on `Pressable` does NOT fire on native iOS/iPad — the underlying W3C pointer events are behind disabled experimental flags. For hover-to-show UI (kebab menus, action buttons), use `isHovered || isNative || isCompact` so the controls are always visible on native and hover-to-show on web.
+- **Hover follows [docs/hover.md](docs/hover.md).** Hover-revealed UI (kebab menus, action buttons, tooltips) uses a plain `View` with `onPointerEnter`/`onPointerLeave` as the hover envelope and a separate inner `Pressable` for press. `onHoverIn`/`onHoverOut` is only for a `Pressable` styling itself; never for hover state read outside that `Pressable`.
+- **Hover only works on web.** Neither pointer events nor `onHoverIn`/`onHoverOut` fire on native iOS/iPad — the underlying W3C pointer events are behind disabled experimental flags. Anything hidden behind hover must also show via `isHovered || isNative || isCompact`.
 - **Don't use Platform.OS as a proxy for layout capabilities.** Use breakpoints for layout decisions, not platform checks.
 - **Import `isWeb`/`isNative` from `@/constants/platform`.** Never write `const isWeb = Platform.OS === "web"` locally.
 
 ## Debugging
 
 Find the complete daemon logs and traces in the $PASEO_HOME/daemon.log
+
+<!-- ATW:START -->
+
+# ATW Instructions
+
+These instructions are for AI assistants working in this project.
+
+This project is managed by ATW. The working knowledge you need lives under `.atw/`:
+
+- `.atw/workflow.md` — development phases, when to create tasks, skill routing
+- `.atw/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
+- `.atw/workspace/` — per-developer journals and session traces
+- `.atw/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+
+ATW commands are written by bare name throughout `.atw/` — `start`, `continue`, `finish-work`. The prefix that invokes them is your platform's, not ATW's: Claude Code uses `/atw:`, Cursor and Pi `/atw-`, Codex `$`, Copilot a plain `/`, and a few hosts expose them as skills instead. Prefer an available ATW command over manual steps; not every platform exposes every command.
+
+If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
+
+- `.agents/skills/` — reusable ATW skills
+- `.codex/agents/` — optional custom subagents
+
+Managed by ATW. Edits outside this block are preserved; edits inside may be overwritten by a future `atw update`.
+
+<!-- ATW:END -->
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the ATW task directory (`.atw/tasks/<task>/`), local only — no GitHub mirror. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles with default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

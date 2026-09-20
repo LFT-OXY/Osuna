@@ -9,10 +9,9 @@ import type {
 } from "../../agent-sdk-types.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 import { createRealpathAwarePathMatcher } from "../../../../utils/path.js";
+import { resolveOmpSessionPaths } from "./provider-config.js";
 
 const OMP_CONFIG_DIR_NAME = ".omp";
-const OMP_AGENT_DIR_ENV = "OMP_AGENT_DIR";
-const OMP_SESSION_DIR_ENV = "OMP_SESSION_DIR";
 // Import listing intentionally bounds header parsing to this window. Sessions
 // with unusually large preambles may omit their first-prompt preview.
 const HEAD_BYTES = 64 * 1024;
@@ -74,7 +73,7 @@ export interface OmpImportSessionConfig {
 export async function listOmpImportableSessions(
   options: OmpSessionDescriptorOptions = {},
 ): Promise<ImportableProviderSession[]> {
-  const sessionsDir = await resolveOmpSessionsDir(options);
+  const sessionsDir = await resolveImportSessionsDir(options);
   const files = await walkJsonlFiles(sessionsDir);
   const matchesCwd = options.cwd ? createRealpathAwarePathMatcher(options.cwd) : null;
   const limit = options.limit ?? 20;
@@ -110,8 +109,9 @@ export async function readOmpImportSessionConfig(
   return toOmpImportSessionConfig(descriptor);
 }
 
-async function resolveOmpSessionsDir(options: OmpSessionDescriptorOptions): Promise<string> {
-  const env = options.env ?? process.env;
+async function resolveImportSessionsDir(options: OmpSessionDescriptorOptions): Promise<string> {
+  // A launched OMP sees runtimeSettings.env layered over the daemon's own environment.
+  const env = { ...(options.env ?? process.env), ...options.runtimeSettings?.env };
   const homeDir = options.homeDir ?? homedir();
   const baseDir = options.cwd ?? process.cwd();
 
@@ -119,36 +119,16 @@ async function resolveOmpSessionsDir(options: OmpSessionDescriptorOptions): Prom
     return resolveConfigPath(options.sessionDir, { baseDir, homeDir });
   }
 
-  const agentDir = resolveOmpAgentDir({ runtimeSettings: options.runtimeSettings, env, homeDir });
-
-  const envSessionDir =
-    options.runtimeSettings?.env?.[OMP_SESSION_DIR_ENV] ?? env[OMP_SESSION_DIR_ENV];
-  if (envSessionDir?.trim()) {
-    return resolveConfigPath(envSessionDir, { baseDir, homeDir });
-  }
-
+  const ompPaths = resolveOmpSessionPaths({ env, homeDir });
   const settingsSessionDir = await readConfiguredSessionDir({
-    agentDir,
+    agentDir: ompPaths.agentDir,
     cwd: options.cwd,
   });
   if (settingsSessionDir?.trim()) {
     return resolveConfigPath(settingsSessionDir, { baseDir, homeDir });
   }
 
-  return path.join(agentDir, "sessions");
-}
-
-function resolveOmpAgentDir(input: {
-  runtimeSettings?: ProviderRuntimeSettings;
-  env: NodeJS.ProcessEnv;
-  homeDir: string;
-}): string {
-  const configured =
-    input.runtimeSettings?.env?.[OMP_AGENT_DIR_ENV] ?? input.env[OMP_AGENT_DIR_ENV];
-  if (configured?.trim()) {
-    return resolveConfigPath(configured, { baseDir: process.cwd(), homeDir: input.homeDir });
-  }
-  return path.join(input.homeDir, OMP_CONFIG_DIR_NAME, "agent");
+  return ompPaths.sessionsDir;
 }
 
 async function readConfiguredSessionDir(input: {

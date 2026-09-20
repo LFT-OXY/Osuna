@@ -1,4 +1,10 @@
-import { forwardRef, useMemo, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import React, {
+  forwardRef,
+  useMemo,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import {
   ScrollView,
   StyleSheet,

@@ -25,6 +25,7 @@ import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { mergeHostnames, parseHostnamesEnv, type HostnamesConfig } from "./hostnames.js";
 import { resolveGitProcessPolicy } from "../utils/git-process-scheduler.js";
+import type { UsageConfig } from "./usage/config.js";
 
 const DEFAULT_PORT = 6767;
 const DEFAULT_RELAY_ENDPOINT = "relay.paseo.sh:443";
@@ -500,6 +501,21 @@ function resolveWorktreesRoot(
     : path.resolve(paseoHome, expandedRoot);
 }
 
+/**
+ * The price-table settings the daemon starts with. They seed the mutable daemon
+ * config, which is what the usage service reads from then on.
+ */
+function resolveUsagePricingConfig(
+  env: NodeJS.ProcessEnv,
+  persisted: ReturnType<typeof loadPersistedConfig>,
+): NonNullable<UsageConfig["pricing"]> {
+  const fromEnv = parseBooleanEnv(env.PASEO_USAGE_PRICING_AUTO_UPDATE);
+  return {
+    autoUpdate: fromEnv ?? persisted.features?.usage?.pricing?.autoUpdate ?? true,
+    overrides: persisted.features?.usage?.pricing?.overrides ?? [],
+  };
+}
+
 function resolveAppendSystemPrompt(persisted: ReturnType<typeof loadPersistedConfig>): string {
   return persisted.daemon?.appendSystemPrompt ?? "";
 }
@@ -617,6 +633,7 @@ export function resolveConfigFromPersisted(
     skillSelection: persisted.agents?.skills?.selection,
     pluginsEnabled: persisted.pluginsEnabled ?? false,
     plugins: persisted.plugins,
+    usage: { pricing: resolveUsagePricingConfig(env, persisted) },
     mcpDebug: env.MCP_DEBUG === "1",
     isDev: resolvePaseoNodeEnv(env) === "development",
     agentStoragePath: path.join(paseoHome, "agents"),
@@ -676,6 +693,7 @@ function resolveOverrideControlledPaths(
       ...resolveDaemonOverrideControlledPaths(env, cli),
       ...resolveLogOverrideControlledPaths(env),
       ...resolveSpeechOverrideControlledPaths(env, speechProviders),
+      ...resolveUsageOverrideControlledPaths(env),
     ]),
   ).sort();
 }
@@ -759,6 +777,12 @@ function resolveServiceAndWebUiOverridePaths(
   }
   if (env.PASEO_WEB_UI_DIST_DIR !== undefined) paths.push("features.webUi.distDir");
   return paths;
+}
+
+function resolveUsageOverrideControlledPaths(env: NodeJS.ProcessEnv): string[] {
+  return parseBooleanEnv(env.PASEO_USAGE_PRICING_AUTO_UPDATE) === undefined
+    ? []
+    : ["features.usage.pricing.autoUpdate"];
 }
 
 function resolveLogOverrideControlledPaths(env: NodeJS.ProcessEnv): string[] {

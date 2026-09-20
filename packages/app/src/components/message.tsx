@@ -582,6 +582,8 @@ interface AssistantTurnFooterProps {
   completedAt?: Date;
   durationMs?: number | null;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
+  /** The turn's usage tail, supplied by the stream so this file stays i18n + layout. */
+  renderUsage?: () => ReactNode;
 }
 
 const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
@@ -589,6 +591,8 @@ const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
+    // A phone puts the usage tail on a second line rather than truncating it.
+    flexWrap: "wrap",
   },
   copyButton: {
     alignSelf: "center",
@@ -626,7 +630,9 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   completedAt,
   durationMs,
   onFork,
+  renderUsage,
 }: AssistantTurnFooterProps) {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const [pressedReveal, setPressedReveal] = useState(false);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -643,9 +649,9 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   const durationLabel = useMemo(
     () =>
       durationMs !== undefined && durationMs !== null
-        ? `Worked for ${formatDuration(durationMs)}`
+        ? t("message.workedFor", { duration: formatDuration(durationMs) })
         : "",
-    [durationMs],
+    [durationMs, t],
   );
   const timestampLabel = useMemo(
     () => (completedAt ? formatMessageTimestamp(completedAt) : ""),
@@ -704,6 +710,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
           </View>
         </Pressable>
       ) : null}
+      {renderUsage?.()}
     </View>
   );
 });

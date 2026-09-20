@@ -5,18 +5,28 @@ type CronCadence = Extract<ScheduleCadence, { type: "cron" }>;
 
 export interface CadencePresetOption {
   id: string;
-  label: string;
+  /** 预设文案的翻译键，由选择器用 t() 渲染。 */
+  labelKey: string;
   expression: string;
 }
 
 export const CUSTOM_CRON_PRESET_ID = "custom";
+const CUSTOM_CRON_LABEL_KEY = "schedules.cadence.presets.custom";
 
 export const CADENCE_PRESET_OPTIONS: CadencePresetOption[] = [
-  { id: "every-minute", label: "Every minute", expression: "* * * * *" },
-  { id: "every-hour", label: "Every hour", expression: "0 * * * *" },
-  { id: "daily-9", label: "Daily 9:00", expression: "0 9 * * *" },
-  { id: "weekdays-9", label: "Weekdays 9:00", expression: "0 9 * * 1-5" },
-  { id: "mondays-9", label: "Mondays 9:00", expression: "0 9 * * 1" },
+  {
+    id: "every-minute",
+    labelKey: "schedules.cadence.presets.everyMinute",
+    expression: "* * * * *",
+  },
+  { id: "every-hour", labelKey: "schedules.cadence.presets.everyHour", expression: "0 * * * *" },
+  { id: "daily-9", labelKey: "schedules.cadence.presets.daily9", expression: "0 9 * * *" },
+  {
+    id: "weekdays-9",
+    labelKey: "schedules.cadence.presets.weekdays9",
+    expression: "0 9 * * 1-5",
+  },
+  { id: "mondays-9", labelKey: "schedules.cadence.presets.mondays9", expression: "0 9 * * 1" },
 ];
 
 export function resolveCronPresetId(cadence: CronCadence): string {
@@ -27,11 +37,11 @@ export function resolveCronPresetId(cadence: CronCadence): string {
   );
 }
 
-export function resolveCronPresetDisplay(cadence: CronCadence): { label: string } {
+export function resolveCronPresetDisplay(cadence: CronCadence): { labelKey: string } {
   return {
-    label:
-      CADENCE_PRESET_OPTIONS.find((option) => option.id === resolveCronPresetId(cadence))?.label ??
-      "Custom cron",
+    labelKey:
+      CADENCE_PRESET_OPTIONS.find((option) => option.id === resolveCronPresetId(cadence))
+        ?.labelKey ?? CUSTOM_CRON_LABEL_KEY,
   };
 }
 

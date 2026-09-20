@@ -22,6 +22,7 @@ import {
   type CompactExplorerSidebarHostModel,
 } from "@/components/compact-explorer-sidebar-host-state";
 import { AppearanceStyleBoundary } from "@/components/appearance-style-boundary";
+import { openTerminalTabFromSessionHistory } from "@/session-history";
 
 interface CompactExplorerOpenGestureSurfaceProps {
   children: ReactNode;
@@ -148,6 +149,19 @@ export function CompactExplorerSidebarHost({
     [focusWorkspaceTab, model, openWorkspaceTabInFocusedPane, presentation, showMobileAgent],
   );
 
+  const handleOpenTerminal = useCallback(
+    (terminalId: string) => {
+      if (!model) {
+        return;
+      }
+      if (presentation === "overlay") {
+        showMobileAgent();
+      }
+      openTerminalTabFromSessionHistory({ workspaceKey: model.persistenceKey, terminalId });
+    },
+    [model, presentation, showMobileAgent],
+  );
+
   const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = event.nativeEvent.layout.width;
     setContainerWidth((current) => (current === nextWidth ? current : nextWidth));
@@ -165,6 +179,7 @@ export function CompactExplorerSidebarHost({
             persistenceKey={model.persistenceKey}
             containerWidth={containerWidth}
             onOpenFile={handleOpenFile}
+            onOpenTerminal={handleOpenTerminal}
           />
         ) : (
           <CompactExplorerSidebar
@@ -173,6 +188,7 @@ export function CompactExplorerSidebarHost({
             workspaceRoot={model.workspaceRoot}
             isGit={model.isGit}
             onOpenFile={handleOpenFile}
+            onOpenTerminal={handleOpenTerminal}
           />
         )}
       </DiffDocumentWorkspaceCacheProvider>

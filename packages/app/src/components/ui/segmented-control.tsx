@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactNode } from "react";
+import React, { useCallback, useMemo, type ReactNode } from "react";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";

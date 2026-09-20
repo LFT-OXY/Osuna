@@ -1,4 +1,4 @@
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { SessionOutboundMessage, TerminalViewAttributes } from "@getpaseo/protocol/messages";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -50,6 +50,10 @@ class FakeTerminalStreamClient implements TerminalStreamControllerClient {
     cols: number;
     intent?: "claim" | "update";
   }> = [];
+  public viewAttributesCalls: Array<{ terminalId: string; attributes: TerminalViewAttributes }> =
+    [];
+  // resize 与 view_attributes 的发送顺序，用于断言"claim 之后紧接视图属性"。
+  public sentKinds: Array<"resize:claim" | "resize:update" | "view_attributes"> = [];
   public nextSubscribeResults: Array<{ terminalId: string; error?: string | null }> = [];
 
   observeTerminal: TerminalStreamControllerClient["observeTerminal"] = (
@@ -103,6 +107,12 @@ class FakeTerminalStreamClient implements TerminalStreamControllerClient {
       cols: message.cols,
       ...(message.intent ? { intent: message.intent } : {}),
     });
+    this.sentKinds.push(message.intent === "claim" ? "resize:claim" : "resize:update");
+  }
+
+  sendTerminalViewAttributes(terminalId: string, attributes: TerminalViewAttributes): void {
+    this.viewAttributesCalls.push({ terminalId, attributes });
+    this.sentKinds.push("view_attributes");
   }
 
   emit(event: TerminalStreamEvent): void {
@@ -112,7 +122,10 @@ class FakeTerminalStreamClient implements TerminalStreamControllerClient {
   }
 }
 
-function createHarness(input?: { client?: FakeTerminalStreamClient }) {
+function createHarness(input?: {
+  client?: FakeTerminalStreamClient;
+  getViewAttributes?: () => TerminalViewAttributes | undefined;
+}) {
   const client = input?.client ?? new FakeTerminalStreamClient();
   const outputs: Array<{ terminalId: string; data: Uint8Array }> = [];
   const restores: Array<{ terminalId: string; data: Uint8Array }> = [];
@@ -138,10 +151,22 @@ function createHarness(input?: { client?: FakeTerminalStreamClient }) {
     onStatusChange: (status) => {
       statuses.push(status);
     },
+    getViewAttributes: input?.getViewAttributes ?? (() => undefined),
   });
 
   return { client, controller, outputs, restores, snapshots, statuses, exits };
 }
+
+const LIGHT_VIEW_ATTRIBUTES: TerminalViewAttributes = {
+  foreground: "#1a1a1e",
+  background: "#ffffff",
+  cursor: "#1a1a1e",
+};
+const DARK_VIEW_ATTRIBUTES: TerminalViewAttributes = {
+  foreground: "#e6e6e6",
+  background: "#0b0b0b",
+  cursor: "#e6e6e6",
+};
 
 async function flushAsyncWork(): Promise<void> {
   await Promise.resolve();
@@ -230,6 +255,7 @@ describe("terminal-stream-controller", () => {
     const controller = new TerminalStreamController({
       client,
       getPreferredSize: () => ({ rows: 24, cols: 80 }),
+      getViewAttributes: () => undefined,
       getRestoreOptions: () => ({
         mode: "visible-snapshot",
         scrollbackLines: 200,
@@ -292,6 +318,74 @@ describe("terminal-stream-controller", () => {
       isAttaching: false,
       error: null,
     });
+  });
+});
+
+describe("terminal-stream-controller view attributes", () => {
+  it("pushes view attributes right after the attach claim resize", async () => {
+    const harness = createHarness({ getViewAttributes: () => LIGHT_VIEW_ATTRIBUTES });
+    harness.client.nextSubscribeResults.push({ terminalId: "term-1", error: null });
+
+    harness.controller.setTerminal({ terminalId: "term-1" });
+    await flushAsyncWork();
+
+    expect(harness.client.sentKinds).toEqual(["resize:claim", "view_attributes"]);
+    expect(harness.client.viewAttributesCalls).toEqual([
+      { terminalId: "term-1", attributes: LIGHT_VIEW_ATTRIBUTES },
+    ]);
+  });
+
+  it("re-pushes on theme change only when the colors actually changed", async () => {
+    let current = LIGHT_VIEW_ATTRIBUTES;
+    const harness = createHarness({ getViewAttributes: () => current });
+    harness.client.nextSubscribeResults.push({ terminalId: "term-1", error: null });
+    harness.controller.setTerminal({ terminalId: "term-1" });
+    await flushAsyncWork();
+
+    // 同值：不重发。
+    current = { ...LIGHT_VIEW_ATTRIBUTES };
+    harness.controller.syncViewAttributes();
+    expect(harness.client.viewAttributesCalls).toHaveLength(1);
+
+    // 变化：重发。
+    current = DARK_VIEW_ATTRIBUTES;
+    harness.controller.syncViewAttributes();
+    expect(harness.client.viewAttributesCalls).toEqual([
+      { terminalId: "term-1", attributes: LIGHT_VIEW_ATTRIBUTES },
+      { terminalId: "term-1", attributes: DARK_VIEW_ATTRIBUTES },
+    ]);
+  });
+
+  it("always re-pushes after a later size claim even when the colors are unchanged", async () => {
+    const harness = createHarness({ getViewAttributes: () => LIGHT_VIEW_ATTRIBUTES });
+    harness.client.nextSubscribeResults.push({ terminalId: "term-1", error: null });
+    harness.controller.setTerminal({ terminalId: "term-1" });
+    await flushAsyncWork();
+
+    harness.controller.syncViewAttributes({ afterClaim: true });
+
+    expect(harness.client.viewAttributesCalls).toHaveLength(2);
+  });
+
+  it("sends nothing when there are no view attributes to send", async () => {
+    const harness = createHarness({ getViewAttributes: () => undefined });
+    harness.client.nextSubscribeResults.push({ terminalId: "term-1", error: null });
+    harness.controller.setTerminal({ terminalId: "term-1" });
+    await flushAsyncWork();
+    harness.controller.syncViewAttributes();
+
+    expect(harness.client.sentKinds).toEqual(["resize:claim"]);
+    expect(harness.client.viewAttributesCalls).toEqual([]);
+  });
+
+  it("does not push view attributes without an attached terminal", async () => {
+    const harness = createHarness({ getViewAttributes: () => LIGHT_VIEW_ATTRIBUTES });
+
+    harness.controller.syncViewAttributes();
+    harness.controller.dispose();
+    harness.controller.syncViewAttributes({ afterClaim: true });
+
+    expect(harness.client.viewAttributesCalls).toEqual([]);
   });
 });
 

@@ -99,21 +99,24 @@ describe("resolveSchedule target line", () => {
     const result = resolve(schedule, {
       agents: [[`host-1:${AGENT_ID}`, { title: "Fix build", provider: "claude" }]],
     });
-    expect(result.target).toEqual({ label: "Fix build", provider: "claude" });
+    expect(result.target).toEqual({ label: { text: "Fix build" }, provider: "claude" });
     expect(result.state).toBe("active");
   });
 
-  it("falls back to Untitled agent when the agent has no title", () => {
+  it("falls back to the untitled-agent key when the agent has no title", () => {
     const schedule = makeSchedule({ target: { type: "agent", agentId: AGENT_ID } });
     const result = resolve(schedule, {
       agents: [[`host-1:${AGENT_ID}`, { title: "  ", provider: "codex" }]],
     });
-    expect(result.target.label).toBe("Untitled agent");
+    expect(result.target.label).toEqual({ key: "schedules.form.untitledAgent" });
   });
 
   it("labels a gone agent target as unavailable with no glyph", () => {
     const schedule = makeSchedule({ target: { type: "agent", agentId: AGENT_ID } });
-    expect(resolve(schedule).target).toEqual({ label: "Agent unavailable", provider: null });
+    expect(resolve(schedule).target).toEqual({
+      label: { key: "schedules.form.agentUnavailable" },
+      provider: null,
+    });
   });
 
   it("names a new-agent cwd by matched project, else the shortened path", () => {
@@ -121,13 +124,16 @@ describe("resolveSchedule target line", () => {
       target: { type: "new-agent", config: { provider: "codex", cwd: "/tmp/project" } },
     });
     expect(resolve(matched, { projects: [["host-1:/tmp/project", "My Project"]] }).target).toEqual({
-      label: "My Project",
+      label: { text: "My Project" },
       provider: "codex",
     });
 
     const unmatched = makeSchedule({
       target: { type: "new-agent", config: { provider: "codex", cwd: "/Users/alex/work/api" } },
     });
-    expect(resolve(unmatched).target).toEqual({ label: "~/work/api", provider: "codex" });
+    expect(resolve(unmatched).target).toEqual({
+      label: { text: "~/work/api" },
+      provider: "codex",
+    });
   });
 });

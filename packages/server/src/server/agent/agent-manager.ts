@@ -19,6 +19,10 @@ import {
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
+import {
+  BUILTIN_PROVIDER_IDS,
+  DEV_AGENT_PROVIDER_DEFINITIONS,
+} from "@getpaseo/protocol/provider-manifest";
 import { z } from "zod";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
 
@@ -54,6 +58,7 @@ import {
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
+import { restoreProviderSessionIds } from "./agent-storage.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
@@ -93,6 +98,12 @@ import { withTimeout } from "../../utils/promise-timeout.js";
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
 const IMPORTABLE_SESSION_LIST_TIMEOUT_MS = 90_000;
+// Paseo 自带的 Provider 集合。dev 的 mock 也算自带 —— 判定问的是「这个 Provider 是不是用户
+// 自己在 config 里要来的」，而不是「它有没有上生产」。
+const BUILTIN_PROVIDER_ID_SET: ReadonlySet<string> = new Set([
+  ...BUILTIN_PROVIDER_IDS,
+  ...DEV_AGENT_PROVIDER_DEFINITIONS.map((definition) => definition.id),
+]);
 const STORED_AGENT_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: false,
   supportsSessionPersistence: true,
@@ -397,6 +408,12 @@ interface ManagedAgentBase {
   inFlightPermissionResponses: Set<string>;
   pendingReplacement: boolean;
   persistence: AgentPersistenceHandle | null;
+  /**
+   * Every provider session this agent has run in, oldest first. Claude hands
+   * back a new id on every resume, so the usage service needs the whole list to
+   * add up what the agent actually spent.
+   */
+  providerSessionIds: string[];
   historyPrimed: boolean;
   lastUserMessageAt: Date | null;
   activeTurnId: string | null;
@@ -539,6 +556,27 @@ function attachPersistenceCwd(
       cwd,
     },
   };
+}
+
+/**
+ * The one place a provider session id reaches an agent. Every handle refresh
+ * goes through here, so `providerSessionIds` grows by exactly the ids the agent
+ * really ran in — a Claude resume appends, everything else re-sets the same id.
+ */
+function applyPersistenceHandle(
+  agent: ManagedAgentBase,
+  handle: AgentPersistenceHandle | null,
+): void {
+  const next = attachPersistenceCwd(handle, agent.cwd);
+  if (!next) return;
+  agent.persistence = next;
+  rememberProviderSessionId(agent, next.sessionId);
+}
+
+function rememberProviderSessionId(agent: ManagedAgentBase, sessionId: string): void {
+  if (!sessionId) return;
+  if (agent.providerSessionIds.includes(sessionId)) return;
+  agent.providerSessionIds.push(sessionId);
 }
 
 interface SubscriptionRecord {
@@ -969,12 +1007,36 @@ export class AgentManager {
   async listImportableSessions(
     options?: ImportablePersistedAgentQueryOptions,
   ): Promise<ManagedImportableSessionsResult> {
-    const providerEntries = Array.from(this.clients.entries()).filter(
+    const candidateEntries = Array.from(this.clients.entries()).filter(
       ([provider, client]) =>
         client.capabilities.supportsSessionListing &&
         !!client.listImportableSessions &&
         this.isProviderImportable(provider, options?.providerFilter),
     );
+    // 没装的内置 Provider 的会话无法 resume，列出来没有意义；"没装"对不用它的用户也不是错误，
+    // 所以直接跳过，不进 providerErrors。探测本身抛错同样按不可用处理。
+    // 用户在 config 里亲手声明的 Provider 是另一回事：他要的就是这个 Provider，起不来必须说出来，
+    // 否则 command 里一个拼写错误只会表现为列表为空。判定用内置集合，不能用 derivedFromProviderId
+    // —— 后者对内置 Provider 和泛型 ACP 自定义 Provider 同样是 null。
+    const probedEntries = await Promise.all(
+      candidateEntries.map(async (entry) => ({
+        provider: entry[0],
+        entry,
+        availability: await this.getProviderAvailability(entry[0]),
+      })),
+    );
+    const providerEntries = probedEntries
+      .filter((candidate) => candidate.availability.available)
+      .map((candidate) => candidate.entry);
+    const unavailableErrors = probedEntries
+      .filter(
+        ({ provider, availability }) =>
+          !availability.available && !BUILTIN_PROVIDER_ID_SET.has(provider),
+      )
+      .map(({ provider, availability }) => ({
+        provider,
+        message: availability.error ?? `Provider '${provider}' is not available`,
+      }));
     const providerResults = await Promise.all(
       providerEntries.map(async ([provider, client]) => {
         try {
@@ -1016,7 +1078,10 @@ export class AgentManager {
       sessions: sessions
         .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
         .slice(0, limit),
-      providerErrors: providerResults.flatMap((result) => (result.error ? [result.error] : [])),
+      providerErrors: [
+        ...unavailableErrors,
+        ...providerResults.flatMap((result) => (result.error ? [result.error] : [])),
+      ],
     };
   }
 
@@ -1875,6 +1940,7 @@ export class AgentManager {
         finalizedForegroundTurnIds: new Set(),
         unsubscribeSession: null,
         persistence: record.persistence ?? null,
+        providerSessionIds: restoreProviderSessionIds(record),
         historyPrimed: true,
         lastUserMessageAt: record.lastUserMessageAt ? new Date(record.lastUserMessageAt) : null,
         lastUsage: undefined,
@@ -2590,7 +2656,7 @@ export class AgentManager {
         ? { provider: mutableAgent.provider, sessionId: mutableAgent.runtimeInfo.sessionId }
         : null);
     if (persistenceHandle) {
-      mutableAgent.persistence = attachPersistenceCwd(persistenceHandle, mutableAgent.cwd);
+      applyPersistenceHandle(mutableAgent, persistenceHandle);
     }
     this.logger.trace(
       {
@@ -3573,6 +3639,10 @@ export class AgentManager {
       | undefined;
   }): ActiveManagedAgent {
     const { resolvedAgentId, session, config, now, durableTimelineHasRows, options } = params;
+    const persistence = attachPersistenceCwd(
+      options?.persistence ?? session.describePersistence(),
+      config.cwd,
+    );
     return {
       id: resolvedAgentId,
       provider: config.provider,
@@ -3598,10 +3668,8 @@ export class AgentManager {
       foregroundTurnWaiters: new Set<ForegroundTurnWaiter>(),
       finalizedForegroundTurnIds: new Set<string>(),
       unsubscribeSession: null,
-      persistence: attachPersistenceCwd(
-        options?.persistence ?? session.describePersistence(),
-        config.cwd,
-      ),
+      persistence,
+      providerSessionIds: persistence ? [persistence.sessionId] : [],
       historyPrimed: options?.historyPrimed ?? durableTimelineHasRows,
       lastUserMessageAt: options?.lastUserMessageAt ?? null,
       lastUsage: options?.lastUsage,
@@ -3885,10 +3953,7 @@ export class AgentManager {
         newInfo.modeId !== agent.runtimeInfo?.modeId;
       agent.runtimeInfo = newInfo;
       if (!agent.persistence && newInfo.sessionId) {
-        agent.persistence = attachPersistenceCwd(
-          { provider: agent.provider, sessionId: newInfo.sessionId },
-          agent.cwd,
-        );
+        applyPersistenceHandle(agent, { provider: agent.provider, sessionId: newInfo.sessionId });
       }
       // Emit state if runtimeInfo changed so clients get the updated model
       if (changed && options?.emit !== false) {
@@ -4228,10 +4293,10 @@ export class AgentManager {
       case "model_changed":
         agent.runtimeInfo = event.runtimeInfo;
         if (!agent.persistence && event.runtimeInfo.sessionId) {
-          agent.persistence = attachPersistenceCwd(
-            { provider: agent.provider, sessionId: event.runtimeInfo.sessionId },
-            agent.cwd,
-          );
+          applyPersistenceHandle(agent, {
+            provider: agent.provider,
+            sessionId: event.runtimeInfo.sessionId,
+          });
         }
         agent.currentModeId = event.runtimeInfo.modeId ?? agent.currentModeId;
         flags.shouldDispatchEvent = false;
@@ -4302,10 +4367,7 @@ export class AgentManager {
   }
 
   private refreshSessionPersistence(agent: ActiveManagedAgent): void {
-    const handle = agent.session.describePersistence();
-    if (handle) {
-      agent.persistence = attachPersistenceCwd(handle, agent.cwd);
-    }
+    applyPersistenceHandle(agent, agent.session.describePersistence());
   }
 
   private async onStreamTimelineEvent(params: {

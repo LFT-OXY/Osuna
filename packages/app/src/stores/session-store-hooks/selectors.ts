@@ -300,6 +300,49 @@ export function selectRecommendedProjectPaths(
     .filter((path) => path.length > 0);
 }
 
+export function selectProjectWorkspaceDirectories(
+  state: SessionsSnapshot,
+  serverId: string | null,
+  projectId: string | null,
+): string[] {
+  if (!serverId || !projectId) {
+    return EMPTY_WORKSPACE_KEYS;
+  }
+  const workspaces = state.sessions[serverId]?.workspaces;
+  if (!workspaces) {
+    return EMPTY_WORKSPACE_KEYS;
+  }
+  const directories = new Set<string>();
+  for (const workspace of workspaces.values()) {
+    if (workspace.projectId === projectId && workspace.workspaceDirectory) {
+      directories.add(workspace.workspaceDirectory);
+    }
+  }
+  return Array.from(directories).sort();
+}
+
+/**
+ * The active workspaces of one project on one host, as directories. The store
+ * only holds active workspaces, so archived ones drop out on their own. Memoized
+ * on the workspaces map so a hot store update that touches nothing here is O(1).
+ */
+export function createProjectWorkspaceDirectoriesSelector(
+  serverId: string | null,
+  projectId: string | null,
+): (state: SessionsSnapshot) => string[] {
+  let previousWorkspaces: Map<string, WorkspaceDescriptor> | undefined;
+  let previousDirectories: string[] | null = null;
+  return (state) => {
+    const workspaces = serverId ? state.sessions[serverId]?.workspaces : undefined;
+    if (previousDirectories && workspaces === previousWorkspaces) {
+      return previousDirectories;
+    }
+    previousWorkspaces = workspaces;
+    previousDirectories = selectProjectWorkspaceDirectories(state, serverId, projectId);
+    return previousDirectories;
+  };
+}
+
 export function selectHasWorkspaces(state: SessionsSnapshot, serverId: string | null): boolean {
   if (!serverId) {
     return false;

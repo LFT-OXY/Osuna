@@ -22,7 +22,7 @@ import {
   DEFAULT_SIDEBAR_ROW_ITEMS,
   SIDEBAR_ROW_ITEMS,
 } from "@/components/sidebar/display-preferences/row-items";
-import { THEME_OPTIONS } from "@/styles/theme";
+import { DARK_THEME_NAMES, LIGHT_THEME_NAMES, THEME_OPTIONS } from "@/styles/theme";
 
 const LEGACY_SETTINGS_KEY = "@paseo:settings";
 
@@ -147,6 +147,78 @@ describe("loadAppSettingsFromStorage", () => {
     const result = await loadAppSettingsFromStorage(deps);
 
     expect(result.theme).toBe(name);
+  });
+
+  it("falls back to auto when the persisted theme is unknown or malformed", async () => {
+    for (const theme of ["solarized", 42, null, { name: "dracula" }]) {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ theme }),
+        }),
+      });
+      expect((await loadAppSettingsFromStorage(deps)).theme).toBe("auto");
+    }
+  });
+
+  it("defaults the system pairing to Dark and Light", async () => {
+    const result = await loadAppSettingsFromStorage(makeDeps());
+
+    expect(result.autoDarkTheme).toBe("dark");
+    expect(result.autoLightTheme).toBe("light");
+  });
+
+  it.each(DARK_THEME_NAMES)("loads %s as the theme used when the system is dark", async (name) => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ autoDarkTheme: name }),
+      }),
+    });
+
+    expect((await loadAppSettingsFromStorage(deps)).autoDarkTheme).toBe(name);
+  });
+
+  it.each(LIGHT_THEME_NAMES)(
+    "loads %s as the theme used when the system is light",
+    async (name) => {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ autoLightTheme: name }),
+        }),
+      });
+
+      expect((await loadAppSettingsFromStorage(deps)).autoLightTheme).toBe(name);
+    },
+  );
+
+  it("rejects a light theme in the dark slot and a dark theme in the light slot", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          autoDarkTheme: "githubLight",
+          autoLightTheme: "dracula",
+        }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.autoDarkTheme).toBe("dark");
+    expect(result.autoLightTheme).toBe("light");
+  });
+
+  it("persists the system pairing round trip", async () => {
+    const deps = makeDeps();
+    await loadAppSettingsFromStorage(deps);
+
+    await saveAppSettings({
+      queryClient: new QueryClient(),
+      updates: { autoDarkTheme: "nord", autoLightTheme: "rosePineDawn" },
+      deps,
+    });
+
+    const loaded = await loadAppSettingsFromStorage(deps);
+    expect(loaded.autoDarkTheme).toBe("nord");
+    expect(loaded.autoLightTheme).toBe("rosePineDawn");
   });
 
   it("seeds storage with the client defaults when nothing is persisted", async () => {

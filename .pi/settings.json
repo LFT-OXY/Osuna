@@ -1,0 +1,9 @@
+{
+  "enableSkillCommands": true,
+  "extensions": [
+    "./extensions/atw/index.ts"
+  ],
+  "prompts": [
+    "./prompts"
+  ]
+}

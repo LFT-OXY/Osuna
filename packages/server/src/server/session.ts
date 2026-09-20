@@ -177,6 +177,8 @@ import {
   createGitMetadataGenerator,
 } from "./session/checkout/git-metadata-generator.js";
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
+import { createUsageSession, type UsageSession } from "./session/usage/usage-session.js";
+import type { UsageService } from "./usage/service.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
@@ -464,6 +466,7 @@ export interface SessionOptions {
   workspaceLabelService?: WorkspaceLabelService;
   filesystem?: SessionFileSystem;
   scheduleService: ScheduleService;
+  usageService?: UsageService;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -773,6 +776,7 @@ export class Session {
   private readonly voiceSessions: VoiceSessions;
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
+  private readonly usageSession: UsageSession | null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
@@ -810,6 +814,7 @@ export class Session {
       workspaceLabelService,
       filesystem,
       scheduleService,
+      usageService,
       checkoutDiffManager,
       github,
       renameCurrentBranch,
@@ -945,6 +950,11 @@ export class Session {
     this.scheduleSession = new ScheduleSession({
       host: { emit: (msg) => this.emit(msg) },
       scheduleService,
+      logger: this.sessionLogger,
+    });
+    this.usageSession = createUsageSession({
+      host: { emit: (msg) => this.emit(msg) },
+      usageService,
       logger: this.sessionLogger,
     });
     this.providerCatalogSession = new ProviderCatalogSession({
@@ -3018,6 +3028,14 @@ export class Session {
       case "list_commands_request":
         await this.handleListCommandsRequest(msg);
         return;
+      case "usage.report.get.request":
+      case "usage.sessions.list.request":
+      case "usage.pricing.list.request":
+      case "usage.pricing.refresh.request":
+      case "usage.agent.get.request":
+      case "usage.agent.turns.list.request":
+        await this.handleUsageRequest(msg);
+        return;
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
         return;
@@ -3032,6 +3050,57 @@ export class Session {
         });
         return;
     }
+  }
+
+  /** Fail closed: a client that ignored the absent `usage` flag gets an error, not silence. */
+  private async handleUsageRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      {
+        type:
+          | "usage.report.get.request"
+          | "usage.sessions.list.request"
+          | "usage.pricing.list.request"
+          | "usage.pricing.refresh.request"
+          | "usage.agent.get.request"
+          | "usage.agent.turns.list.request";
+      }
+    >,
+  ): Promise<void> {
+    const usageSession = this.usageSession;
+    if (!usageSession) {
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: "Usage tracking is not enabled on this daemon",
+          code: "usage_unavailable",
+        },
+      });
+      return;
+    }
+    if (msg.type === "usage.sessions.list.request") {
+      await usageSession.handleUsageSessionsListRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.pricing.list.request") {
+      await usageSession.handleUsagePricingListRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.pricing.refresh.request") {
+      await usageSession.handleUsagePricingRefreshRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.agent.get.request") {
+      await usageSession.handleUsageAgentGetRequest(msg);
+      return;
+    }
+    if (msg.type === "usage.agent.turns.list.request") {
+      await usageSession.handleUsageAgentTurnsListRequest(msg);
+      return;
+    }
+    await usageSession.handleUsageReportGetRequest(msg);
   }
 
   public resetPeakInflight(): void {
@@ -8473,20 +8542,29 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "activity_log":
     case "hub.execution.agent.update":
     case "hub.execution.agent.stream":
+    case "usage.backfill.progress":
+    case "usage.updated":
+    case "usage.pricing.updated":
       return message.type;
     case "status":
-      switch (message.payload.status) {
-        case "server_info":
-          return "status.server_info";
-        case "daemon_config_changed":
-          return "status.daemon_config_changed";
-        case "plugin_catalog_changed":
-          return "status.plugin_catalog_changed";
-        case "plugin_settings_changed":
-          return "status.plugin_settings_changed";
-        default:
-          return null;
-      }
+      return statusEventCategory(message.payload.status);
+    default:
+      return null;
+  }
+}
+
+type StatusPayload = Extract<SessionOutboundMessage, { type: "status" }>["payload"];
+
+function statusEventCategory(status: StatusPayload["status"]): SessionEventSubscription | null {
+  switch (status) {
+    case "server_info":
+      return "status.server_info";
+    case "daemon_config_changed":
+      return "status.daemon_config_changed";
+    case "plugin_catalog_changed":
+      return "status.plugin_catalog_changed";
+    case "plugin_settings_changed":
+      return "status.plugin_settings_changed";
     default:
       return null;
   }
@@ -8507,6 +8585,17 @@ function legacyWantsEvent(
       return !capabilities.has(CLIENT_CAPS.explicitEventSubscriptions);
     case "agent.provider_subagents.update":
       return capabilities.has(CLIENT_CAPS.providerSubagents);
+    // These three arrived with the usage feature in v0.8.2, so no client ever
+    // received them without asking and none can be broken by withholding them.
+    // The app subscribes (`useUsageReport`), and the implicit delivery above is
+    // for events that predate subscriptions. Left in the default branch they
+    // reach every socket, including ones that only ever send RPCs: a backfill
+    // progress push landing between a request and its response is what broke
+    // the Hub relationship tests.
+    case "usage.backfill.progress":
+    case "usage.updated":
+    case "usage.pricing.updated":
+      return false;
     default:
       return true;
   }

@@ -44,6 +44,24 @@ import {
   ScheduleUpdateResponseSchema,
 } from "./schedule/rpc-schemas.js";
 import {
+  UsageAgentGetRequestSchema,
+  UsageAgentGetResponseSchema,
+  UsageAgentTurnsListRequestSchema,
+  UsageAgentTurnsListResponseSchema,
+  UsageReportGetRequestSchema,
+  UsageReportGetResponseSchema,
+  UsageSessionsListRequestSchema,
+  UsageSessionsListResponseSchema,
+  UsageBackfillProgressMessageSchema,
+  UsageUpdatedMessageSchema,
+  UsagePricingListRequestSchema,
+  UsagePricingListResponseSchema,
+  UsagePricingRefreshRequestSchema,
+  UsagePricingRefreshResponseSchema,
+  UsagePricingUpdatedMessageSchema,
+} from "./usage/rpc-schemas.js";
+import { UsagePricingOverrideSchema } from "./usage/types.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -215,6 +233,39 @@ export const AgentSkillSelectionSchema = z.discriminatedUnion("mode", [
 ]);
 export type AgentSkillSelection = z.infer<typeof AgentSkillSelectionSchema>;
 
+/**
+ * The usage feature's runtime-safe settings. Only the price table is here: the
+ * log roots and the scan interval are startup-resolved and have no UI.
+ */
+const MutableUsagePricingConfigSchema = z
+  .object({
+    autoUpdate: z.boolean().default(true),
+    overrides: z.array(UsagePricingOverrideSchema).optional(),
+  })
+  .passthrough();
+
+const MutableUsageConfigSchema = z
+  .object({
+    pricing: MutableUsagePricingConfigSchema.optional(),
+  })
+  .passthrough();
+
+/**
+ * The same section as a patch. `autoUpdate` carries no default here: filling it
+ * in would switch auto-update back on for anyone who only edited a price.
+ */
+const MutableUsageConfigPatchSchema = z
+  .object({
+    pricing: z
+      .object({
+        autoUpdate: z.boolean().optional(),
+        overrides: z.array(UsagePricingOverrideSchema).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -252,6 +303,7 @@ export const MutableDaemonConfigSchema = z
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    usage: MutableUsageConfigSchema.optional(),
   })
   .passthrough();
 
@@ -272,6 +324,7 @@ export const MutableDaemonConfigPatchSchema = z
     agentProfiles: z.array(AgentProfileSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    usage: MutableUsageConfigPatchSchema.optional(),
   })
   .partial()
   .passthrough();
@@ -919,6 +972,10 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   firstPromptPreview: z.string().nullable(),
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
+  // 该 Provider session 对应的 Paseo agent id；只有请求带 includeImported 时 daemon 才填写。
+  importedAgentId: z.string().optional(),
+  // 该 agent 所属 workspace；打开它时要带上，否则已归档 agent 会退到 host 级详情路由。
+  importedAgentWorkspaceId: z.string().optional(),
 });
 
 export type RecentProviderSessionDescriptorPayload = z.infer<
@@ -1383,6 +1440,8 @@ export const FetchRecentProviderSessionsRequestMessageSchema = z.object({
   since: z.string().optional(),
   limit: z.number().int().positive().max(200).optional(),
   query: z.string().optional(),
+  // 为 true 时不剔除已被 Paseo 导入的会话，并在 descriptor 上标出其 agent id。
+  includeImported: z.boolean().optional(),
 });
 
 export const FetchAgentRequestMessageSchema = z.object({
@@ -2907,6 +2966,18 @@ export const UnsubscribeTerminalsRequestSchema = z.object({
   workspaceId: z.string().optional(),
 });
 
+// 客户端终端的前景/背景/光标色（#rrggbb）。daemon 用它回答 TUI 的 OSC 10/11/12
+// 与 CSI ?996n 颜色查询；未收到时 daemon 对这些查询保持沉默。
+// 唯一的颜色格式定义：app 用它过滤主题值，daemon 用它解析通道。
+export const TERMINAL_VIEW_ATTRIBUTE_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const TerminalViewAttributeColorSchema = z.string().regex(TERMINAL_VIEW_ATTRIBUTE_COLOR_PATTERN);
+
+export const TerminalViewAttributesSchema = z.object({
+  foreground: TerminalViewAttributeColorSchema,
+  background: TerminalViewAttributeColorSchema,
+  cursor: TerminalViewAttributeColorSchema,
+});
+
 export const CreateTerminalRequestSchema = z.object({
   type: z.literal("create_terminal_request"),
   cwd: z.string(),
@@ -2915,6 +2986,8 @@ export const CreateTerminalRequestSchema = z.object({
   agentId: z.string().optional(),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
+  // 老客户端不发；daemon 未收到时对颜色查询沉默。
+  viewAttributes: TerminalViewAttributesSchema.optional(),
   // Initial PTY size. Added in v0.1.107; the app no longer sends it (the estimate cache that fed
   // it was removed — the pane-focus resize claim sizes the PTY instead). Kept and honored
   // permanently: released v0.1.107 clients still send it, and programmatic callers may pass an
@@ -2999,6 +3072,11 @@ const TerminalClientMessageSchema = z.discriminatedUnion("type", [
     col: z.number(),
     button: z.number(),
     action: z.enum(["down", "up", "move"]),
+  }),
+  // 客户端主题变化或尺寸 claim 之后推送的视图属性；daemon 只接受当前尺寸所有者的消息。
+  z.object({
+    type: z.literal("view_attributes"),
+    attributes: TerminalViewAttributesSchema,
   }),
 ]);
 
@@ -3115,6 +3193,12 @@ export const SessionEventSubscriptionSchema = z.enum([
   "activity_log",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
+  // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19. A client only
+  // asks for these once `features.usage` is advertised; an older daemon would
+  // reject the whole subscription request.
+  "usage.backfill.progress",
+  "usage.updated",
+  "usage.pricing.updated",
 ]);
 export type SessionEventSubscription = z.infer<typeof SessionEventSubscriptionSchema>;
 export const SessionEventsSetSubscriptionRequestSchema = z.object({
@@ -3353,6 +3437,12 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  UsageReportGetRequestSchema,
+  UsageSessionsListRequestSchema,
+  UsagePricingListRequestSchema,
+  UsagePricingRefreshRequestSchema,
+  UsageAgentGetRequestSchema,
+  UsageAgentTurnsListRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3686,6 +3776,15 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
+        // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17.
+        // daemon 接受终端视图属性（前景/背景/光标色）并据此回答 TUI 的颜色查询。
+        terminalViewAttributes: z.boolean().optional(),
+        // COMPAT(sessionHistory): added in v0.8.1, remove gate after 2027-03-18.
+        // daemon 理解 fetch_recent_provider_sessions 的 includeImported，并回填 importedAgentId 与 importedAgentWorkspaceId。
+        sessionHistory: z.boolean().optional(),
+        // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
+        // daemon 解析本机 CLI 会话日志并回答 usage.* 查询。
+        usage: z.boolean().optional(),
       })
       .optional(),
   })
@@ -6891,6 +6990,15 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopStopResponseSchema,
   DaemonUpdateProgressMessageSchema,
   DaemonUpdateResponseSchema,
+  UsageReportGetResponseSchema,
+  UsageSessionsListResponseSchema,
+  UsageBackfillProgressMessageSchema,
+  UsageUpdatedMessageSchema,
+  UsagePricingListResponseSchema,
+  UsagePricingRefreshResponseSchema,
+  UsagePricingUpdatedMessageSchema,
+  UsageAgentGetResponseSchema,
+  UsageAgentTurnsListResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;
@@ -7315,6 +7423,7 @@ export type ListTerminalsResponse = z.infer<typeof ListTerminalsResponseSchema>;
 export type SubscribeTerminalsRequest = z.infer<typeof SubscribeTerminalsRequestSchema>;
 export type UnsubscribeTerminalsRequest = z.infer<typeof UnsubscribeTerminalsRequestSchema>;
 export type TerminalsChanged = z.infer<typeof TerminalsChangedSchema>;
+export type TerminalViewAttributes = z.infer<typeof TerminalViewAttributesSchema>;
 export type CreateTerminalRequest = z.infer<typeof CreateTerminalRequestSchema>;
 export type CreateTerminalResponse = z.infer<typeof CreateTerminalResponseSchema>;
 export type RenameTerminalRequest = z.infer<typeof RenameTerminalRequestSchema>;

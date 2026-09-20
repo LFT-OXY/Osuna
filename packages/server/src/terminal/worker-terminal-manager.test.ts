@@ -360,6 +360,53 @@ it("refreshes cached terminal size after worker resize", async () => {
   expect(session.getState().cols).toBe(40);
 });
 
+it.skipIf(isPlatform("win32"))(
+  "forwards view attributes through the worker so the session answers OSC 11 with them",
+  async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "worker-terminal-manager-view-attributes-"));
+    temporaryDirs.push(cwd);
+    manager = createWorkerTerminalManager();
+    // 前台程序等 stdin 收到 "q" 再查询 OSC 11，保证视图属性消息先于查询到达会话。
+    const session = trackTerminal(
+      await manager.createTerminal({
+        cwd,
+        workspaceId: "ws-test",
+        ...nodeTerminalCommand(`process.stdin.setRawMode(true);
+process.stdin.resume();
+let buf = "";
+let queried = false;
+process.stdin.on("data", (chunk) => {
+  buf += chunk.toString("binary");
+  if (!queried && buf.includes("q")) {
+    queried = true;
+    process.stdout.write("\\x1b]11;?\\x07");
+    return;
+  }
+  const match = buf.match(/\\x1b\\]11;rgb:([0-9a-f/]+)\\x1b\\\\/);
+  if (match) {
+    process.stdout.write("OSC11_OK:" + match[1] + "\\n");
+  }
+});
+// 不主动退出：worker 在终端退出后会移除记录，captureTerminal 就读不到输出了。
+setInterval(() => {}, 1000);
+process.stdout.write("READY\\n");`),
+      }),
+    );
+
+    // 父进程缓存的 getState() 不随输出刷新，读 worker 权威输出要走 captureTerminal。
+    const capturedText = async () => (await manager!.captureTerminal(session.id)).lines.join("\n");
+    await waitForCondition(async () => (await capturedText()).includes("READY"), 10000);
+    session.send({
+      type: "view_attributes",
+      attributes: { foreground: "#e6e6e6", background: "#0b0b0b", cursor: "#e6e6e6" },
+    });
+    session.send({ type: "input", data: "q" });
+    await waitForCondition(async () => (await capturedText()).includes("OSC11_OK:"), 10000);
+
+    expect(await capturedText()).toContain("OSC11_OK:0b0b/0b0b/0b0b");
+  },
+);
+
 it("captures terminal output from the worker authority", async () => {
   const cwd = mkdtempSync(join(tmpdir(), "worker-terminal-manager-capture-"));
   temporaryDirs.push(cwd);

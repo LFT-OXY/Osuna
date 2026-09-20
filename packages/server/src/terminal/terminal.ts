@@ -9,10 +9,21 @@ import { fileURLToPath } from "node:url";
 import { createExternalProcessEnv } from "../server/paseo-env.js";
 import { writePrivateFileAtomicSync } from "../server/private-files.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
-import type { TerminalCell, TerminalState } from "@getpaseo/protocol/messages";
+import type {
+  TerminalCell,
+  TerminalState,
+  TerminalViewAttributes,
+} from "@getpaseo/protocol/messages";
 import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
 import { TerminalActivityTracker } from "./activity/terminal-activity-tracker.js";
 import type { TerminalActivity, TerminalActivityState } from "@getpaseo/protocol/terminal-activity";
+import {
+  resolveTerminalColorScheme,
+  resolveTerminalViewAttributes,
+  toColorSchemeReport,
+  toOscColorResponse,
+  type ResolvedTerminalViewAttributes,
+} from "./terminal-view-attributes.js";
 
 const { Terminal } = xterm;
 const require = createRequire(import.meta.url);
@@ -21,11 +32,17 @@ let nodePtySpawnHelperChecked = false;
 const TERMINAL_TITLE_DEBOUNCE_MS = 150;
 const TERMINAL_EXIT_OUTPUT_LINE_LIMIT = 12;
 const TERMINAL_EXIT_OUTPUT_CHAR_LIMIT = 16000;
-const TERMINAL_OSC_COLOR_QUERY_RESPONSES = new Map<number, string>([
-  [10, "rgb:e6e6/e6e6/e6e6"],
-  [11, "rgb:0b0b/0b0b/0b0b"],
-  [12, "rgb:e6e6/e6e6/e6e6"],
-]);
+// OSC 10/11/12 分别查询前景、背景、光标色。
+const TERMINAL_OSC_COLOR_QUERY_CODES: ReadonlyArray<
+  [number, keyof ResolvedTerminalViewAttributes]
+> = [
+  [10, "foreground"],
+  [11, "background"],
+  [12, "cursor"],
+];
+const TERMINAL_COLOR_SCHEME_QUERY_PARAM = 996;
+// DECSET/DECRST 2031：TUI 订阅/退订主题变更通知（CSI ?997;1|2n）。
+const TERMINAL_COLOR_SCHEME_SUBSCRIPTION_MODE = 2031;
 
 export interface TerminalExitInfo {
   exitCode: number | null;
@@ -60,7 +77,8 @@ export interface TerminalSubscribeOptions {
 export type ClientMessage =
   | { type: "input"; data: string }
   | { type: "resize"; rows: number; cols: number }
-  | { type: "mouse"; row: number; col: number; button: number; action: "down" | "up" | "move" };
+  | { type: "mouse"; row: number; col: number; button: number; action: "down" | "up" | "move" }
+  | { type: "view_attributes"; attributes: TerminalViewAttributes };
 
 export type ServerMessage =
   | { type: "output"; data: string; revision?: number }
@@ -128,6 +146,8 @@ export interface CreateTerminalOptions {
   title?: string;
   command?: string;
   args?: string[];
+  // 客户端终端的真实颜色；未提供时 daemon 对颜色查询沉默，不伪造默认值。
+  viewAttributes?: TerminalViewAttributes;
 }
 
 function toTerminalActivity(snapshot: {
@@ -897,6 +917,8 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     args = [],
   } = options;
   const resolvedShell = shell ?? resolveDefaultTerminalShell();
+  let viewAttributes = resolveTerminalViewAttributes(options.viewAttributes);
+  let colorSchemeSubscribed = false;
 
   const id = options.id ?? randomUUID();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -1034,19 +1056,49 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     return false;
   });
   terminal.parser.registerCsiHandler({ prefix: "?", final: "n" }, (params) => {
-    if (params.length !== 1 || params[0] !== 6) {
+    if (params.length !== 1) {
       return false;
     }
-    const buffer = terminal.buffer.active;
-    ptyProcess.write(`\x1b[?${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
-    return true;
+    if (params[0] === 6) {
+      const buffer = terminal.buffer.active;
+      ptyProcess.write(`\x1b[?${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
+      return true;
+    }
+    if (params[0] === TERMINAL_COLOR_SCHEME_QUERY_PARAM) {
+      // 未知主题时消费查询但不回复，避免把 TUI 引向错误的配色。
+      if (viewAttributes) {
+        ptyProcess.write(toColorSchemeReport(resolveTerminalColorScheme(viewAttributes)));
+      }
+      return true;
+    }
+    return false;
   });
-  for (const [code, response] of TERMINAL_OSC_COLOR_QUERY_RESPONSES) {
+  // 只记录 2031 的开关，始终返回 false 放行给 xterm 处理同一序列里的其它模式。
+  function subscribeColorSchemeIfRequested(params: (number | number[])[]): boolean {
+    if (params.includes(TERMINAL_COLOR_SCHEME_SUBSCRIPTION_MODE)) {
+      colorSchemeSubscribed = true;
+    }
+    return false;
+  }
+  function unsubscribeColorSchemeIfRequested(params: (number | number[])[]): boolean {
+    if (params.includes(TERMINAL_COLOR_SCHEME_SUBSCRIPTION_MODE)) {
+      colorSchemeSubscribed = false;
+    }
+    return false;
+  }
+  terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, subscribeColorSchemeIfRequested);
+  terminal.parser.registerCsiHandler(
+    { prefix: "?", final: "l" },
+    unsubscribeColorSchemeIfRequested,
+  );
+  for (const [code, attribute] of TERMINAL_OSC_COLOR_QUERY_CODES) {
     terminal.parser.registerOscHandler(code, (data) => {
       if (data.trim() !== "?") {
         return false;
       }
-      ptyProcess.write(`\x1b]${code};${response}\x1b\\`);
+      if (viewAttributes) {
+        ptyProcess.write(`\x1b]${code};${toOscColorResponse(viewAttributes[attribute])}\x1b\\`);
+      }
       return true;
     });
   }
@@ -1325,6 +1377,21 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
         // Mouse events can be sent as escape sequences if terminal supports it
         // For now, we'll just ignore them - can be implemented later
         break;
+      case "view_attributes": {
+        const nextAttributes = resolveTerminalViewAttributes(msg.attributes);
+        if (!nextAttributes) {
+          break;
+        }
+        const previousScheme = viewAttributes ? resolveTerminalColorScheme(viewAttributes) : null;
+        const nextScheme = resolveTerminalColorScheme(nextAttributes);
+        viewAttributes = nextAttributes;
+        // 只在深浅分类变化（含从未知变为已知）时通知已订阅 2031 的 TUI；
+        // 同为浅色的两套配色不触发全量重绘。
+        if (colorSchemeSubscribed && previousScheme !== nextScheme) {
+          ptyProcess.write(toColorSchemeReport(nextScheme));
+        }
+        break;
+      }
     }
   }
 

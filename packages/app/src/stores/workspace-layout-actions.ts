@@ -1140,16 +1140,17 @@ function restoreEmptyPanesInNode(
   explorerSidebarPaneId: string | null,
 ): SplitNodeInternal {
   if (node.kind === "pane") {
-    return node.pane.tabs.length > 0
-      ? node
-      : createPaneNode({
-          id: node.pane.id,
-          tabs:
-            node.pane.id === explorerSidebarPaneId
-              ? createDefaultExplorerSidebarTabs()
-              : [createNewWorkspaceTab()],
-          hidden: node.pane.hidden,
-        });
+    if (node.pane.tabs.length > 0) {
+      return node;
+    }
+    if (node.pane.id === explorerSidebarPaneId) {
+      return createDefaultExplorerSidebarPane({ id: node.pane.id, hidden: node.pane.hidden });
+    }
+    return createPaneNode({
+      id: node.pane.id,
+      tabs: [createNewWorkspaceTab()],
+      hidden: node.pane.hidden,
+    });
   }
   return createGroupNode({
     id: node.group.id,
@@ -1233,14 +1234,97 @@ export function createDefaultLayout(): WorkspaceLayout {
   };
 }
 
+const DEFAULT_EXPLORER_SIDEBAR_TARGETS = [
+  { kind: "files" },
+  { kind: "changes_tree" },
+  { kind: "session_history" },
+] as const satisfies readonly WorkspaceTabTarget[];
+type DefaultExplorerSidebarTabKind = (typeof DEFAULT_EXPLORER_SIDEBAR_TARGETS)[number]["kind"];
+
+export function isDefaultExplorerSidebarTabKind(
+  kind: WorkspaceTabTarget["kind"],
+): kind is DefaultExplorerSidebarTabKind {
+  return DEFAULT_EXPLORER_SIDEBAR_TARGETS.some((target) => target.kind === kind);
+}
+
+/**
+ * Explorer defaults that arrived after layouts were already being saved. A saved
+ * layout without a matching seed marker gets each of these once; the marker is
+ * what lets a user close one and not find it back on the next launch.
+ */
+export const EXPLORER_SIDEBAR_SEEDED_TAB_KINDS: readonly DefaultExplorerSidebarTabKind[] = [
+  "session_history",
+];
+
 function createDefaultExplorerSidebarTabs(): WorkspaceTab[] {
   const createdAt = Date.now();
-  const targets = [{ kind: "files" }, { kind: "changes_tree" }] as const;
-  return targets.map((target) => ({
+  return DEFAULT_EXPLORER_SIDEBAR_TARGETS.map((target) => ({
     tabId: buildDeterministicWorkspaceTabId(target),
     target,
     createdAt,
   }));
+}
+
+/** Changes stays the Explorer's opening view even though it is not the last seeded tab. */
+function createDefaultExplorerSidebarPane(input: {
+  id: string;
+  hidden?: boolean;
+}): SplitNodeInternal {
+  return createPaneNode({
+    id: input.id,
+    tabs: createDefaultExplorerSidebarTabs(),
+    focusedTabId: buildDeterministicWorkspaceTabId({ kind: "changes_tree" }),
+    hidden: input.hidden,
+  });
+}
+
+/**
+ * Adds the Explorer defaults in `kinds` that a saved layout predates. Each one lands
+ * right after the last earlier default still open in the pane (so defaults stay
+ * grouped ahead of the user's own tabs), focus stays put, and a kind already open
+ * anywhere in the layout is left alone.
+ */
+export function seedExplorerSidebarTabs(input: {
+  layout: WorkspaceLayout;
+  explorerSidebarPaneId: string | null;
+  kinds: readonly DefaultExplorerSidebarTabKind[];
+}): WorkspaceLayout {
+  const explorerSidebarPaneId = input.explorerSidebarPaneId;
+  if (!explorerSidebarPaneId || input.kinds.length === 0) {
+    return input.layout;
+  }
+  const internalLayout = asInternalLayout(input.layout);
+  let root = internalLayout.root;
+  if (!findPaneById(root, explorerSidebarPaneId)) {
+    return input.layout;
+  }
+  const createdAt = Date.now();
+  DEFAULT_EXPLORER_SIDEBAR_TARGETS.forEach((target, index) => {
+    if (!input.kinds.includes(target.kind) || findExistingTabForTarget(root, target)) {
+      return;
+    }
+    const precedingKinds: ReadonlySet<string> = new Set(
+      DEFAULT_EXPLORER_SIDEBAR_TARGETS.slice(0, index).map((preceding) => preceding.kind),
+    );
+    root = updatePaneInTree(root, {
+      paneId: explorerSidebarPaneId,
+      updater: (pane) => {
+        const anchorIndex = pane.tabs.findLastIndex((tab) => precedingKinds.has(tab.target.kind));
+        const insertAt = anchorIndex === -1 ? pane.tabs.length : anchorIndex + 1;
+        const tabs = pane.tabs.slice();
+        tabs.splice(insertAt, 0, {
+          tabId: buildDeterministicWorkspaceTabId(target),
+          target,
+          createdAt,
+        });
+        return { ...pane, tabs };
+      },
+    });
+  });
+  if (root === internalLayout.root) {
+    return input.layout;
+  }
+  return withNormalizedParentTabMap({ ...input.layout, root });
 }
 
 /** The desktop companion pane exists before it is first shown. */
@@ -1251,11 +1335,7 @@ export function createWorkspaceLayoutWithExplorerSidebar(): WorkspaceLayout {
       direction: "horizontal",
       children: [
         createPaneNode({ id: DEFAULT_PANE_ID, tabs: [createNewWorkspaceTab()] }),
-        createPaneNode({
-          id: EXPLORER_SIDEBAR_PANE_ID,
-          tabs: createDefaultExplorerSidebarTabs(),
-          hidden: true,
-        }),
+        createDefaultExplorerSidebarPane({ id: EXPLORER_SIDEBAR_PANE_ID, hidden: true }),
       ],
       sizes: [0.78, 0.22],
     }),

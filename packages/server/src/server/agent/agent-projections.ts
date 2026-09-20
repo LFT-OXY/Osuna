@@ -30,6 +30,10 @@ interface ProjectionOptions {
 
 interface RecentProviderSessionProjectionOptions {
   providerLabel: string;
+  /** The Paseo agent that owns this provider session, when the caller resolved one. */
+  importedAgentId?: string;
+  /** That agent's workspace; absent for legacy agents created before ownership stamping. */
+  importedAgentWorkspaceId?: string;
 }
 
 function normalizeThinkingOptionId(value: string | null | undefined): string | null {
@@ -86,6 +90,7 @@ export function toStoredAgentRecord(
     runtimeInfo,
     features: normalizeFeatures(agent.features),
     persistence,
+    providerSessionIds: agent.providerSessionIds.length > 0 ? agent.providerSessionIds : undefined,
     lastError: agent.lastError ?? undefined,
     requiresAttention: agent.attention.requiresAttention,
     attentionReason: agent.attention.requiresAttention ? agent.attention.attentionReason : null,
@@ -284,6 +289,10 @@ export function toRecentProviderSessionDescriptorPayload(
     firstPromptPreview: session.firstPromptPreview,
     lastPromptPreview: session.lastPromptPreview,
     lastActivityAt: session.lastActivityAt.toISOString(),
+    ...(options.importedAgentId ? { importedAgentId: options.importedAgentId } : {}),
+    ...(options.importedAgentWorkspaceId
+      ? { importedAgentWorkspaceId: options.importedAgentWorkspaceId }
+      : {}),
   };
 }
 

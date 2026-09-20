@@ -152,8 +152,8 @@ process.stdout.write("\\x1b[c");
 const DSR_HELPER_SCRIPT = `process.stdin.setRawMode(true);
 process.stdin.resume();
 const mode = process.argv[2] || "cursor";
-const query = mode === "private-cursor" ? "\\x1b[?6n" : mode === "status" ? "\\x1b[5n" : "\\x1b[6n";
-const pattern = mode === "private-cursor" ? /\\x1b\\[\\?(\\d+);(\\d+)R/ : mode === "status" ? /\\x1b\\[0n/ : /\\x1b\\[(\\d+);(\\d+)R/;
+const query = mode === "private-cursor" ? "\\x1b[?6n" : mode === "status" ? "\\x1b[5n" : mode === "color-scheme" ? "\\x1b[?996n" : "\\x1b[6n";
+const pattern = mode === "private-cursor" ? /\\x1b\\[\\?(\\d+);(\\d+)R/ : mode === "status" ? /\\x1b\\[0n/ : mode === "color-scheme" ? /\\x1b\\[\\?997;(\\d)n/ : /\\x1b\\[(\\d+);(\\d+)R/;
 let buf = "";
 const timer = setTimeout(() => {
   process.stdout.write("DSR_TIMEOUT\\n");
@@ -168,6 +168,8 @@ process.stdin.on("data", (chunk) => {
   clearTimeout(timer);
   if (mode === "status") {
     process.stdout.write("DSR_OK:status\\n");
+  } else if (mode === "color-scheme") {
+    process.stdout.write("DSR_OK:scheme:" + match[1] + "\\n");
   } else {
     process.stdout.write("DSR_OK:" + match[1] + ":" + match[2] + "\\n");
   }
@@ -176,8 +178,10 @@ process.stdin.on("data", (chunk) => {
 process.stdout.write(query);
 `;
 
+// 前台程序按 argv 里的 OSC 码（10 前景 / 11 背景 / 12 光标，默认 11）查询颜色。
 const OSC11_HELPER_SCRIPT = `process.stdin.setRawMode(true);
 process.stdin.resume();
+const code = process.argv[2] || "11";
 let buf = "";
 const timer = setTimeout(() => {
   process.stdout.write("OSC11_TIMEOUT\\n");
@@ -185,7 +189,7 @@ const timer = setTimeout(() => {
 }, 2500);
 process.stdin.on("data", (chunk) => {
   buf += chunk.toString("binary");
-  const match = buf.match(/\\x1b\\]11;rgb:[0-9a-f/]+\\x1b\\\\/);
+  const match = buf.match(new RegExp("\\x1b\\]" + code + ";rgb:[0-9a-f/]+\\x1b\\\\\\\\"));
   if (!match) {
     return;
   }
@@ -193,7 +197,33 @@ process.stdin.on("data", (chunk) => {
   process.stdout.write("OSC11_OK:" + match[0].replace(/\\x1b/g, "ESC") + "\\n");
   process.exit(0);
 });
-process.stdout.write("\\x1b]11;?\\x07");
+process.stdout.write("\\x1b]" + code + ";?\\x07");
+`;
+
+// 前台程序按 argv 决定是否开启 DECSET 2031（"subscribe"），打印 SCHEME_READY 后等待
+// daemon 主动推送的 CSI ?997;1|2n；收到打印 SCHEME_OK:<1|2>，2.5s 没收到打印 SCHEME_TIMEOUT。
+const SCHEME_HELPER_SCRIPT = `process.stdin.setRawMode(true);
+process.stdin.resume();
+const subscribe = process.argv[2] === "subscribe";
+let buf = "";
+const timer = setTimeout(() => {
+  process.stdout.write("SCHEME_TIMEOUT\\n");
+  process.exit(2);
+}, 2500);
+process.stdin.on("data", (chunk) => {
+  buf += chunk.toString("binary");
+  const match = buf.match(/\\x1b\\[\\?997;(\\d)n/);
+  if (!match) {
+    return;
+  }
+  clearTimeout(timer);
+  process.stdout.write("SCHEME_OK:" + match[1] + "\\n");
+  process.exit(0);
+});
+if (subscribe) {
+  process.stdout.write("\\x1b[?2031h");
+}
+process.stdout.write("SCHEME_READY\\n");
 `;
 
 function writeDaHelper(prefix: string): string {
@@ -220,6 +250,30 @@ function writeOsc11Helper(prefix: string): string {
   return path;
 }
 
+function writeSchemeHelper(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  temporaryDirs.push(dir);
+  const path = join(dir, "helper.cjs");
+  writeFileSync(path, SCHEME_HELPER_SCRIPT);
+  return path;
+}
+
+function isSchemeOkLine(line: string): boolean {
+  return line.startsWith("SCHEME_OK:");
+}
+
+function hasSchemeReadyLine(state: ReturnType<TerminalSession["getState"]>): boolean {
+  return getLines(state).some((line) => line.startsWith("SCHEME_READY"));
+}
+
+function hasSchemeOkLine(state: ReturnType<TerminalSession["getState"]>): boolean {
+  return getLines(state).some(isSchemeOkLine);
+}
+
+function hasSchemeTimeoutLine(state: ReturnType<TerminalSession["getState"]>): boolean {
+  return getLines(state).some((line) => line.startsWith("SCHEME_TIMEOUT"));
+}
+
 function isDaOkLine(line: string): boolean {
   return line.startsWith("DA_OK:");
 }
@@ -232,6 +286,14 @@ function isOsc11OkLine(line: string): boolean {
   return line.startsWith("OSC11_OK:");
 }
 
+function isOsc11TimeoutLine(line: string): boolean {
+  return line.startsWith("OSC11_TIMEOUT");
+}
+
+function isDsrTimeoutLine(line: string): boolean {
+  return line.startsWith("DSR_TIMEOUT");
+}
+
 function hasDaOkLine(state: ReturnType<TerminalSession["getState"]>): boolean {
   return getLines(state).some(isDaOkLine);
 }
@@ -242,6 +304,14 @@ function hasDsrOkLine(state: ReturnType<TerminalSession["getState"]>): boolean {
 
 function hasOsc11OkLine(state: ReturnType<TerminalSession["getState"]>): boolean {
   return getLines(state).some(isOsc11OkLine);
+}
+
+function hasOsc11TimeoutLine(state: ReturnType<TerminalSession["getState"]>): boolean {
+  return getLines(state).some(isOsc11TimeoutLine);
+}
+
+function hasDsrTimeoutLine(state: ReturnType<TerminalSession["getState"]>): boolean {
+  return getLines(state).some(isDsrTimeoutLine);
 }
 
 function lastNonEmptyLineIsPrompt(state: ReturnType<TerminalSession["getState"]>): boolean {
@@ -1047,8 +1117,54 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
       expect(ack).toBe("DSR_OK:status");
     });
 
-    it("delivers OSC 11 background-color replies to a foreground app on stdin", async () => {
+    it("answers OSC 11 with the background color the client supplied at creation", async () => {
       const helperPath = writeOsc11Helper("terminal-osc11-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#1a1a1e", background: "#FFFFFF", cursor: "#1a1a1e" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath}\r` });
+      await waitForState(session, hasOsc11OkLine);
+
+      const ack = getLines(session.getState()).find(isOsc11OkLine) ?? "";
+      expect(ack).toBe("OSC11_OK:ESC]11;rgb:ffff/ffff/ffffESC\\");
+    });
+
+    it("answers OSC 10 and OSC 12 with the supplied foreground and cursor colors", async () => {
+      const helperPath = writeOsc11Helper("terminal-osc10-12-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#1a1a1e", background: "#ffffff", cursor: "#2563eb" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} 10\r` });
+      await waitForState(session, hasOsc11OkLine);
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} 12\r` });
+      await waitForState(session, (state) => getLines(state).filter(isOsc11OkLine).length === 2);
+
+      expect(getLines(session.getState()).filter(isOsc11OkLine)).toEqual([
+        "OSC11_OK:ESC]10;rgb:1a1a/1a1a/1e1eESC\\",
+        "OSC11_OK:ESC]12;rgb:2525/6363/ebebESC\\",
+      ]);
+    });
+
+    it("stays silent on OSC 11 when no client colors were supplied", async () => {
+      const helperPath = writeOsc11Helper("terminal-osc11-silent-helper-");
 
       const session = trackSession(
         await createTerminal({
@@ -1061,10 +1177,196 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
       await waitForLines(session, ["$"]);
 
       session.send({ type: "input", data: `${process.execPath} ${helperPath}\r` });
+      await waitForState(session, hasOsc11TimeoutLine);
+
+      expect(getLines(session.getState()).some(isOsc11OkLine)).toBe(false);
+    });
+
+    it("answers CSI ?996n as dark when the background is darker than the foreground", async () => {
+      const helperPath = writeDsrHelper("terminal-color-scheme-dark-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#e6e6e6", background: "#0b0b0b", cursor: "#e6e6e6" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} color-scheme\r` });
+      await waitForState(session, hasDsrOkLine);
+
+      const ack = getLines(session.getState()).find(isDsrOkLine) ?? "";
+      expect(ack).toBe("DSR_OK:scheme:1");
+    });
+
+    it("answers CSI ?996n as light when the background is lighter than the foreground", async () => {
+      const helperPath = writeDsrHelper("terminal-color-scheme-light-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} color-scheme\r` });
+      await waitForState(session, hasDsrOkLine);
+
+      const ack = getLines(session.getState()).find(isDsrOkLine) ?? "";
+      expect(ack).toBe("DSR_OK:scheme:2");
+    });
+
+    it("stays silent on CSI ?996n when no client colors were supplied", async () => {
+      const helperPath = writeDsrHelper("terminal-color-scheme-silent-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} color-scheme\r` });
+      await waitForState(session, hasDsrTimeoutLine);
+
+      expect(getLines(session.getState()).some(isDsrOkLine)).toBe(false);
+    });
+
+    it("answers OSC 11 with the colors pushed after creation", async () => {
+      const helperPath = writeOsc11Helper("terminal-osc11-updated-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({
+        type: "view_attributes",
+        attributes: { foreground: "#e6e6e6", background: "#0b0b0b", cursor: "#e6e6e6" },
+      });
+      session.send({ type: "input", data: `${process.execPath} ${helperPath}\r` });
       await waitForState(session, hasOsc11OkLine);
 
       const ack = getLines(session.getState()).find(isOsc11OkLine) ?? "";
       expect(ack).toBe("OSC11_OK:ESC]11;rgb:0b0b/0b0b/0b0bESC\\");
+    });
+
+    it("notifies a DECSET 2031 subscriber when pushed colors flip light to dark", async () => {
+      const helperPath = writeSchemeHelper("terminal-scheme-flip-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} subscribe\r` });
+      await waitForState(session, hasSchemeReadyLine);
+      session.send({
+        type: "view_attributes",
+        attributes: { foreground: "#e6e6e6", background: "#0b0b0b", cursor: "#e6e6e6" },
+      });
+      await waitForState(session, hasSchemeOkLine);
+
+      const ack = getLines(session.getState()).find(isSchemeOkLine) ?? "";
+      expect(ack).toBe("SCHEME_OK:1");
+    });
+
+    it("notifies a DECSET 2031 subscriber when colors become known after creation", async () => {
+      const helperPath = writeSchemeHelper("terminal-scheme-known-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} subscribe\r` });
+      await waitForState(session, hasSchemeReadyLine);
+      session.send({
+        type: "view_attributes",
+        attributes: { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" },
+      });
+      await waitForState(session, hasSchemeOkLine);
+
+      const ack = getLines(session.getState()).find(isSchemeOkLine) ?? "";
+      expect(ack).toBe("SCHEME_OK:2");
+    });
+
+    it("stays quiet for a DECSET 2031 subscriber when pushed colors keep the same scheme", async () => {
+      const helperPath = writeSchemeHelper("terminal-scheme-same-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath} subscribe\r` });
+      await waitForState(session, hasSchemeReadyLine);
+      session.send({
+        type: "view_attributes",
+        attributes: { foreground: "#333333", background: "#f5f5f5", cursor: "#333333" },
+      });
+      await waitForState(session, hasSchemeTimeoutLine);
+
+      expect(getLines(session.getState()).some(isSchemeOkLine)).toBe(false);
+    });
+
+    it("does not notify a program that never enabled DECSET 2031", async () => {
+      const helperPath = writeSchemeHelper("terminal-scheme-unsubscribed-helper-");
+
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+          viewAttributes: { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" },
+        }),
+      );
+      await waitForLines(session, ["$"]);
+
+      session.send({ type: "input", data: `${process.execPath} ${helperPath}\r` });
+      await waitForState(session, hasSchemeReadyLine);
+      session.send({
+        type: "view_attributes",
+        attributes: { foreground: "#e6e6e6", background: "#0b0b0b", cursor: "#e6e6e6" },
+      });
+      await waitForState(session, hasSchemeTimeoutLine);
+
+      expect(getLines(session.getState()).some(isSchemeOkLine)).toBe(false);
     });
   });
 

@@ -66,6 +66,11 @@ $PASEO_HOME/
 ├── plugins/
 │   ├── sources.json                      # Git origin, ref, commit, and managed checkout ownership
 │   └── {pluginId}/{version}/checkout/    # Source checkout for one installed Git commit
+├── usage/
+│   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
+│   ├── turns-YYYY-MM.jsonl               # Token increments per (source, session, turn, model)
+│   ├── scan-state.json                   # One cursor per scanned CLI log file
+│   └── pricing-table.json                # Last price table fetched from LiteLLM
 └── push-tokens.json                     # Expo push notification tokens
 ```
 
@@ -96,6 +101,7 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `config`             | `SerializableConfig?`                    | Agent session configuration (see below)                                                                                                                                                                                                                                                                                                                                             |
 | `runtimeInfo`        | `RuntimeInfo?`                           | Live runtime state (see below)                                                                                                                                                                                                                                                                                                                                                      |
 | `features`           | `AgentFeature[]?`                        | Provider-reported features (toggles/selects)                                                                                                                                                                                                                                                                                                                                        |
+| `providerSessionIds` | `string[]?`                              | Every provider session the agent has run in, oldest first. A Claude resume hands back a new id, so the handle alone under-counts; the usage service adds up all of them. Absent on records written before the field existed — readers fall back to `[persistence.sessionId]` and never rewrite the file                                                                             |
 | `persistence`        | `PersistenceHandle?`                     | Handle for resuming sessions                                                                                                                                                                                                                                                                                                                                                        |
 | `lastError`          | `string?` (nullable)                     | Last error message, if any                                                                                                                                                                                                                                                                                                                                                          |
 | `requiresAttention`  | `boolean?`                               | Whether the agent needs user attention                                                                                                                                                                                                                                                                                                                                              |
@@ -242,7 +248,8 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
   plugins: Record<pluginId, { source: "directory", path: string, enabled?: boolean }>,
   features: {
     dictation: { enabled, stt: { provider, model, language, confidenceThreshold } },
-    voiceMode: { enabled, llm, stt: { provider, model, language }, turnDetection, tts: { provider, model, voice, speakerId, speed } }
+    voiceMode: { enabled, llm, stt: { provider, model, language }, turnDetection, tts: { provider, model, voice, speakerId, speed } },
+    usage: { pricing: { autoUpdate, overrides: [{ model, pricePerMillion: { input, cachedInput, cacheWrite, output }, note }] } }
   },
   log: {
     level, format,
@@ -546,7 +553,115 @@ Simple set of Expo push notification tokens. Loaded with permissive parsing (fil
 
 ---
 
-## 7. Daemon meta files
+## 7. Usage
+
+The daemon parses the local Claude Code / Codex / Pi / OMP session logs into token
+buckets, and the same pass into one row per turn.
+
+### Bucket row (`usage/buckets-YYYY-MM.jsonl`)
+
+Append-only, one file per UTC month, one JSON object per line.
+
+| Field                                                           | Type                                   | Notes                                                                 |
+| --------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                       |
+| `backend`                                                       | `string \| null`                       | Pi/OMP route to a backend; null for Claude and Codex. Part of the key |
+| `model`                                                         | `string`                               | As the log spells it. Part of the key                                 |
+| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                |
+| `cwd`                                                           | `string`                               | First cwd seen in the file. Part of the key                           |
+| `bucket`                                                        | `string`                               | ISO start of a **UTC 15-minute** bucket. Part of the key              |
+| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | `input` is uncached input; `reasoning` is a subset of `output`        |
+| `turns`                                                         | `number`                               | Counted at the bucket the user message fell in                        |
+| `durationMs`                                                    | `number`                               | Wall clock, appended in segments as a turn settles                    |
+
+A row is an **increment**, not a total: one parse pass writes what it just read for a
+key, and startup sums same-key rows. Token columns can be negative — a response is
+split across lines that each repeat the usage, and a later line correcting the group
+is written as a delta. A month file whose line count passes twice its unique key count
+is rewritten at load as one line per key.
+
+Estimated cost is never stored. It is computed per query from the current price table,
+so a custom price applies to history immediately.
+
+### Turn row (`usage/turns-YYYY-MM.jsonl`)
+
+Append-only, one file per UTC month of the turn's **start**, one JSON object per line.
+The page groups sessions and days; this file answers "what did this one turn cost".
+
+| Field                                                           | Type                                   | Notes                                                                   |
+| --------------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------- |
+| `cli`                                                           | `"claude" \| "codex" \| "pi" \| "omp"` | Part of the key                                                         |
+| `backend`                                                       | `string \| null`                       | Part of the key                                                         |
+| `sessionId`                                                     | `string`                               | The provider's own id. Part of the key                                  |
+| `turnKey`                                                       | `string`                               | The CLI's own turn id. Part of the key                                  |
+| `model`                                                         | `string`                               | Part of the key, so a turn that switched models has a row per model     |
+| `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | Same columns as a bucket row                                            |
+| `startedAt` / `lastAt`                                          | `string`                               | The turn's span. **No duration is stored** — `lastAt - startedAt` is it |
+| `userMessageIds`                                                | `string[]`                             | What a client matches its own timeline rows against; empty for Codex    |
+| `turnId`                                                        | `string?`                              | Paseo's own turn id, stamped by the parse a finished turn triggered     |
+
+`turnKey` is the CLI's: Claude's `promptId`, Codex's `turn_id`, the id of the Pi/OMP
+entry that opened the turn. A subagent's tokens join the turn that spawned it and start
+no turn of their own — Claude repeats the parent's `promptId`, Codex writes
+`root_turn_id`, and Pi/OMP say nothing, so the subagent file's header stamp is matched
+against the parent session's turn spans and its tokens stay in the bucket rows alone
+when nothing covers it.
+
+Rows are **increments** like bucket rows, and startup sums same-key rows: tokens add,
+`startedAt` takes the minimum, `lastAt` the maximum, `userMessageIds` union, `turnId`
+the first non-empty. Compaction is the same rule as bucket rows. Both kinds are appended
+in one batch, so a crash cannot leave one ahead of the other.
+
+Summing the turn spans of a session and summing the `durationMs` its bucket rows settled
+give the same number, by construction. The one exception is a subagent still writing
+after its parent's last message — in its own file or inline as a sidechain — which
+widens the turn past what the buckets counted.
+
+### Scan cursor (`usage/scan-state.json`)
+
+`{ version: 1, cursors: Record<cursorKey, cursor> }`, written atomically. The key is the
+file's identity — `claude <sessionId>` for a transcript, `claude <sessionId> <agentId>`
+for a subagent file — which makes this map the session-id to path index as well.
+
+| Field                                 | Type                    | Notes                                                                                                                                                                                                     |
+| ------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli`                                 | usage source            |                                                                                                                                                                                                           |
+| `path` / `inode` / `size` / `mtimeMs` |                         | Change detection; a path change with the same inode is a move                                                                                                                                             |
+| `offset`                              | `number`                | Bytes consumed, always at a line boundary                                                                                                                                                                 |
+| `firstAt` / `lastAt`                  | `string \| null`        | Entry timestamps seen so far                                                                                                                                                                              |
+| `parser`                              | discriminated on `kind` | Per-CLI parse state: session id, cwd, whether the file is a subagent transcript, the resumed-from session id, the open turn, the last deduplicated message, and how a subagent file names its parent turn |
+
+`size < offset` or a changed inode means the file was rewritten: the cursor resets to
+zero and the file is read again, which double counts what it still holds. That is
+deliberate — the alternative loses everything written after the rewrite.
+
+Rows are flushed before the cursor. A crash between the two recounts at most one batch;
+the other order would drop it permanently.
+
+### Price table (`usage/pricing-table.json`)
+
+Written minified, validated with `PRICING_TABLE_SCHEMA`:
+
+```
+{
+  _meta: { source, fetchedAt, etag, license },
+  models: { "<model key>": { input, cachedInput, cacheWrite, output } }
+}
+```
+
+Four columns in US dollars per token; `null` means the vendor does not charge for that
+column. This file is a cache, not a source of truth — the daemon ships the same shape as
+a snapshot and takes whichever of the two has the newer `fetchedAt`. A file that fails to
+parse is deleted rather than repaired; the snapshot always works.
+
+Cost is never stored. Bucket and turn rows hold tokens only and a report multiplies them
+at query time, so a corrected or newly added price reprices everything already recorded, with no
+migration and no backfill. `docs/usage.md` covers the refresh schedule, the single outbound
+request, and how user prices match.
+
+---
+
+## 8. Daemon meta files
 
 These small files are not validated as full Zod schemas but are persisted under `$PASEO_HOME` for daemon identity and runtime coordination.
 

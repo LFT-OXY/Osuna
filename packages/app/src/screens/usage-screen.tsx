@@ -1,0 +1,247 @@
+import { useIsFocused } from "@react-navigation/native";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
+import { useTranslation } from "react-i18next";
+import { Text, View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
+import { MenuHeader } from "@/components/headers/menu-header";
+import { Button } from "@/components/ui/button";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ScrollView } from "@/components/ui/scroll-view";
+import { UsageDetailsCard } from "@/components/usage/usage-details-card";
+import { UsageHeatmapCard } from "@/components/usage/usage-heatmap-card";
+import { UsageOverviewCard } from "@/components/usage/usage-overview-card";
+import { UsagePlanCard } from "@/components/usage/usage-plan-card";
+import { UsageStatsCard } from "@/components/usage/usage-stats-card";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { useUsageReport } from "@/hooks/use-usage-report";
+import type { UsageHostsView } from "@/usage/details";
+import { EMPTY_USAGE_REPORT } from "@/usage/merge";
+import {
+  resolveUsageNow,
+  resolveUsageRange,
+  shiftUsageAnchor,
+  type UsageCustomRange,
+  type UsagePeriod,
+} from "@/usage/period";
+import { useUsageHosts } from "@/usage/use-usage-hosts";
+import { getDeviceTimeZone } from "@/utils/device-timezone";
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export function UsageScreen(): ReactElement {
+  const isFocused = useIsFocused();
+
+  if (!isFocused) {
+    return <View style={styles.container} />;
+  }
+
+  return <UsageScreenContent />;
+}
+
+function UsageScreenContent(): ReactElement {
+  const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const timezone = useMemo(() => getDeviceTimeZone(), []);
+  const now = useMemo(() => resolveUsageNow(timezone), [timezone]);
+  const today = now.day;
+
+  const [period, setPeriod] = useState<UsagePeriod>("all");
+  const [anchor, setAnchor] = useState(today);
+  const [custom, setCustom] = useState<UsageCustomRange>({ from: today, to: today });
+  const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+
+  const { options: hostOptions, selection: hostSelection } = useUsageHosts(selectedServerId);
+  const range = useMemo(
+    () => resolveUsageRange({ period, anchor, custom }),
+    [anchor, custom, period],
+  );
+  const { loadState, hostErrors, backfill, isError, isRefetching, refetch } = useUsageReport({
+    hosts: hostSelection.hosts,
+    range,
+    timezone,
+  });
+
+  const handlePeriodChange = useCallback(
+    (next: UsagePeriod) => {
+      setPeriod(next);
+      setAnchor(today);
+    },
+    [today],
+  );
+  const handleShift = useCallback(
+    (delta: -1 | 1) => {
+      setAnchor((current) => shiftUsageAnchor({ period, anchor: current, delta }));
+    },
+    [period],
+  );
+  // A half-typed date is not a range; the report keeps the last valid one.
+  const handleCustomChange = useCallback((next: UsageCustomRange) => {
+    if (!DAY_PATTERN.test(next.from) || !DAY_PATTERN.test(next.to)) return;
+    setCustom(next);
+  }, []);
+
+  const report = loadState.status === "loaded" ? loadState.data : EMPTY_USAGE_REPORT;
+  const detailsHosts = useMemo<UsageHostsView>(
+    () => ({
+      hosts: hostSelection.hosts,
+      labels: new Map(hostOptions.map((option) => [option.serverId, option.serverName])),
+      isMultiHost: hostSelection.countedCount > 1,
+      timezone,
+    }),
+    [hostOptions, hostSelection.countedCount, hostSelection.hosts, timezone],
+  );
+
+  let body: ReactElement;
+  if (loadState.status !== "loaded" && !isError) {
+    body = (
+      <View style={styles.centered}>
+        <LoadingSpinner size="large" color={styles.spinner.color} />
+      </View>
+    );
+  } else if (isError) {
+    body = (
+      <View style={styles.centered}>
+        <Text style={styles.message}>{t("usage.common.loadError")}</Text>
+        <Button variant="ghost" onPress={refetch} testID="usage-retry">
+          {t("common.actions.retry")}
+        </Button>
+      </View>
+    );
+  } else {
+    const overview = (
+      <UsageOverviewCard
+        report={report}
+        backfill={backfill}
+        period={period}
+        anchor={anchor}
+        custom={custom}
+        today={today}
+        selectedSourceKey={selectedSourceKey}
+        isRefreshing={isRefetching}
+        hostOptions={hostOptions}
+        hostSelection={hostSelection}
+        onPeriodChange={handlePeriodChange}
+        onShift={handleShift}
+        onCustomChange={handleCustomChange}
+        onSelectSource={setSelectedSourceKey}
+        onSelectHost={setSelectedServerId}
+        onRefresh={refetch}
+      />
+    );
+    const sideColumn = (
+      <View style={styles.sideColumn}>
+        <UsageStatsCard report={report} today={today} />
+        <UsageHeatmapCard heatmapDays={report.heatmapDays} today={today} timezone={timezone} />
+        <UsagePlanCard hosts={hostSelection.hosts} isMultiHost={hostSelection.countedCount > 1} />
+      </View>
+    );
+    const mainColumn = (
+      <View style={styles.mainColumn}>
+        {overview}
+        <UsageDetailsCard report={report} hosts={detailsHosts} />
+      </View>
+    );
+
+    body = (
+      // The page padding lives on this inner View, not on `contentContainerStyle`:
+      // Unistyles drops that prop on web. See docs/unistyles.md.
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} testID="usage-page">
+        <View style={styles.content}>
+          {hostErrors.length > 0 ? (
+            <View style={styles.errorsBanner} testID="usage-host-errors">
+              {hostErrors.map((error) => (
+                <Text key={error.serverId} style={styles.errorsBannerText}>
+                  {t("usage.common.hostLoadError", { host: error.serverName })}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+          <View style={styles.grid}>
+            {isCompact ? (
+              <>
+                {mainColumn}
+                {sideColumn}
+              </>
+            ) : (
+              <>
+                {sideColumn}
+                {mainColumn}
+              </>
+            )}
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <MenuHeader title={t("usage.title")} />
+      {body}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create((theme) => {
+  const palette = theme.colors.usage;
+  return {
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.surface0,
+    },
+    scroll: {
+      flex: 1,
+      minHeight: 0,
+    },
+    content: {
+      padding: { xs: theme.spacing[3], md: theme.spacing[6] },
+      gap: theme.spacing[4],
+    },
+    grid: {
+      flexDirection: { xs: "column", md: "row" },
+      alignItems: "stretch",
+      gap: theme.spacing[4],
+    },
+    sideColumn: {
+      flexGrow: 4,
+      flexShrink: 1,
+      flexBasis: 0,
+      minWidth: 0,
+      gap: theme.spacing[4],
+    },
+    mainColumn: {
+      flexGrow: 8,
+      flexShrink: 1,
+      flexBasis: 0,
+      minWidth: 0,
+      gap: theme.spacing[4],
+    },
+    centered: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      gap: theme.spacing[6],
+      padding: theme.spacing[6],
+    },
+    spinner: {
+      color: theme.colors.foregroundMuted,
+    },
+    message: {
+      color: theme.colors.foregroundMuted,
+      fontSize: theme.fontSize.base,
+    },
+    errorsBanner: {
+      borderRadius: theme.borderRadius.lg,
+      borderWidth: 1,
+      borderColor: palette.amberBorder,
+      backgroundColor: palette.amberBg,
+      padding: theme.spacing[3],
+      gap: theme.spacing[1],
+    },
+    errorsBannerText: {
+      fontSize: 12,
+      color: palette.amberFg,
+    },
+  };
+});

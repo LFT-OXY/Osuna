@@ -1,0 +1,3 @@
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "i18n 约定：所有用户可见字符串走 t()，键同步补进每个语言文件；React/lint 规则"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "app 包测试约定与运行方式"}
+{"file": ".atw/tasks/09-18-schedules-i18n/research/discovery.md", "reason": "硬编码文案清单、约束与两轮已定决策（术语、译法、范围）"}

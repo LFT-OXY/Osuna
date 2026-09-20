@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import { deriveStreamTurnTiming } from "./turn-time";
-import type { StreamItem } from "@/types/stream";
+import type { StreamItem, UserMessageItem } from "@/types/stream";
 
-function user(id: string, timestamp: Date): StreamItem {
+function user(id: string, timestamp: Date): UserMessageItem {
   return {
     kind: "user_message",
     id,
@@ -72,6 +72,8 @@ describe("deriveStreamTurnTiming", () => {
     assert.deepEqual(timing.byAssistantId.get("a1"), {
       completedAt: assistantAt,
       durationMs: 7000,
+      turnId: null,
+      userMessageId: null,
     });
   });
 
@@ -94,6 +96,8 @@ describe("deriveStreamTurnTiming", () => {
     const expected = {
       completedAt: lastAssistantAt,
       durationMs: 7000,
+      turnId: null,
+      userMessageId: null,
     };
     assert.deepEqual(timing.byAssistantId.get("a1"), expected);
     assert.deepEqual(timing.byAssistantId.get("a2"), expected);
@@ -123,6 +127,38 @@ describe("deriveStreamTurnTiming", () => {
     assert.deepEqual(timing.byAssistantId.get("hidden-prompt-a2"), {
       completedAt: hiddenPromptTurnAt,
       durationMs: null,
+      turnId: "turn-2",
+      userMessageId: null,
+    });
+  });
+
+  it("carries the turn id and opening user message id of each completed turn", () => {
+    const firstUserAt = new Date("2026-05-15T00:00:00.000Z");
+    const secondUserAt = new Date("2026-05-15T00:01:00.000Z");
+
+    const timing = deriveStreamTurnTiming({
+      isTurnActive: false,
+      activeTurnStartedAt: null,
+      tail: [
+        { ...user("u1", firstUserAt), turnId: "turn-1", messageId: "msg-1" },
+        assistant("a1", new Date("2026-05-15T00:00:07.000Z")),
+        { ...user("u2", secondUserAt), messageId: "msg-2" },
+        assistant("a2", new Date("2026-05-15T00:01:07.000Z")),
+      ],
+      head: [],
+    });
+
+    assert.deepEqual(timing.byAssistantId.get("a1"), {
+      completedAt: new Date("2026-05-15T00:00:07.000Z"),
+      durationMs: 7000,
+      turnId: "turn-1",
+      userMessageId: "msg-1",
+    });
+    assert.deepEqual(timing.byAssistantId.get("a2"), {
+      completedAt: new Date("2026-05-15T00:01:07.000Z"),
+      durationMs: 7000,
+      turnId: null,
+      userMessageId: "msg-2",
     });
   });
 });

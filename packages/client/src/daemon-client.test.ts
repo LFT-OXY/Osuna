@@ -415,6 +415,62 @@ test.each([false, true])(
   },
 );
 
+test.each([true, false])(
+  "create_terminal_request carries view attributes only when the daemon advertises terminalViewAttributes (%s)",
+  async (supported) => {
+    const transport = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "terminal-view-attributes",
+      transportFactory: () => transport.transport,
+      reconnect: { enabled: false },
+    });
+    clients.push(client);
+    const connecting = client.connect();
+    transport.triggerOpen({ features: { terminalViewAttributes: supported } });
+    await connecting;
+    const viewAttributes = { foreground: "#1a1a1e", background: "#ffffff", cursor: "#1a1a1e" };
+    const created = client.createTerminal("/project", undefined, undefined, {
+      workspaceId: "wks_0123456789abcdef",
+      viewAttributes,
+    });
+    void created.catch(() => {});
+    expect(transport.sent).toHaveLength(1);
+    const request = parseSentFrame(transport.sent[0]);
+    expect(request).toMatchObject({ type: "create_terminal_request", cwd: "/project" });
+    expect(request.viewAttributes).toEqual(supported ? viewAttributes : undefined);
+  },
+);
+
+test.each([true, false])(
+  "terminal view attributes are pushed only when the daemon advertises terminalViewAttributes (%s)",
+  async (supported) => {
+    const transport = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "terminal-view-attributes-push",
+      transportFactory: () => transport.transport,
+      reconnect: { enabled: false },
+    });
+    clients.push(client);
+    const connecting = client.connect();
+    transport.triggerOpen({ features: { terminalViewAttributes: supported } });
+    await connecting;
+    const attributes = { foreground: "#e6e6e6", background: "#0b0b0b", cursor: "#e6e6e6" };
+    client.sendTerminalViewAttributes("term-1", attributes);
+    if (!supported) {
+      expect(transport.sent).toHaveLength(0);
+      return;
+    }
+    expect(transport.sent).toHaveLength(1);
+    expect(parseSentFrame(transport.sent[0])).toEqual({
+      type: "terminal_input",
+      terminalId: "term-1",
+      message: { type: "view_attributes", attributes },
+    });
+  },
+);
+
 test.each(["agent", "workspace"] as const)(
   "a lost legacy %s response is not automatically replayed on reconnect",
   async (kind) => {
@@ -4915,6 +4971,7 @@ test("fetches scoped recent provider sessions", async () => {
     since: "2026-04-30T00:00:00.000Z",
     limit: 25,
     query: "invoice",
+    includeImported: true,
   });
 
   expect(mock.sent).toHaveLength(1);
@@ -4928,6 +4985,7 @@ test("fetches scoped recent provider sessions", async () => {
       since?: string;
       limit?: number;
       query?: string;
+      includeImported?: boolean;
     };
   };
   expect(request.message).toMatchObject({
@@ -4937,6 +4995,7 @@ test("fetches scoped recent provider sessions", async () => {
     since: "2026-04-30T00:00:00.000Z",
     limit: 25,
     query: "invoice",
+    includeImported: true,
   });
 
   mock.triggerMessage(

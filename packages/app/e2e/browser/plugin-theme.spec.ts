@@ -8,7 +8,9 @@ import { openSettingsSection } from "../support/helpers/settings";
 
 const PLUGIN_ID = "plugin-theme-e2e";
 
-// Catppuccin Mocha: base, text, surface0, surface1, mauve, subtext0, overlay0.
+// 配色取自 Catppuccin Mocha / Latte 的 base, text, surface0, surface1, mauve, subtext0, overlay0。
+// 显示名也故意用真名和内置主题撞上：这正是装了 Catppuccin 插件的用户看到的，选择器要靠插件 id
+// 副标题把两条分开，而不是靠夹具改名绕开。
 const PLUGIN_SOURCE = `export default function contribute(plugin) {
   plugin.addTheme({
     id: "mocha",
@@ -45,8 +47,12 @@ const PLUGIN_SOURCE = `export default function contribute(plugin) {
 
 // settingsStyles.sectionHeaderTitle paints from foregroundMuted, so the section heading proves the
 // contributed palette reached the semantic tokens rather than just the swatch.
-const MOCHA_MUTED_FOREGROUND = "rgb(166, 173, 200)";
-const LATTE_MUTED_FOREGROUND = "rgb(108, 111, 133)";
+const DARK_FIXTURE_MUTED_FOREGROUND = "rgb(166, 173, 200)";
+const LIGHT_FIXTURE_MUTED_FOREGROUND = "rgb(108, 111, 133)";
+
+// 撞名时触发器也要带限定，否则无障碍标签仍然指向两个主题。
+const QUALIFIED_DARK = `Catppuccin Mocha (${PLUGIN_ID})`;
+const QUALIFIED_LIGHT = `Catppuccin Latte (${PLUGIN_ID})`;
 
 test("applies a contributed theme and falls back when its plugin is gone", async ({
   page,
@@ -69,8 +75,14 @@ test("applies a contributed theme and falls back when its plugin is gone", async
 
     const sectionTitle = page.getByText("Theme", { exact: true }).first();
     await page.getByLabel("Theme: System", { exact: true }).click();
-    const mochaItem = page.getByText("Catppuccin Mocha", { exact: true });
-    await expect(mochaItem).toBeVisible({ timeout: 30_000 });
+    // 两条 "Catppuccin Mocha" 同时在菜单里，插件那条靠插件 id 副标题被单独指认。
+    const mochaItems = page.getByRole("menuitem").filter({ hasText: "Catppuccin Mocha" });
+    const darkFixtureItem = mochaItems.filter({ hasText: PLUGIN_ID });
+    const builtInMochaItem = mochaItems.filter({ hasNotText: PLUGIN_ID });
+    await expect(darkFixtureItem).toBeVisible({ timeout: 30_000 });
+    await expect(mochaItems).toHaveCount(2);
+    await expect(darkFixtureItem).toHaveCount(1);
+    await expect(builtInMochaItem).toHaveCount(1);
     await page.screenshot({
       path: testInfo.outputPath("plugin-theme-picker.png"),
       animations: "disabled",
@@ -78,15 +90,19 @@ test("applies a contributed theme and falls back when its plugin is gone", async
     });
 
     await test.step("a contributed light theme uses the light palette", async () => {
-      await page.getByText("Catppuccin Latte", { exact: true }).click();
-      await expect(page.getByLabel("Theme: Catppuccin Latte", { exact: true })).toBeVisible();
-      await expect(sectionTitle).toHaveCSS("color", LATTE_MUTED_FOREGROUND);
-      await page.getByLabel("Theme: Catppuccin Latte", { exact: true }).click();
+      await page
+        .getByRole("menuitem")
+        .filter({ hasText: "Catppuccin Latte" })
+        .filter({ hasText: PLUGIN_ID })
+        .click();
+      await expect(page.getByLabel(`Theme: ${QUALIFIED_LIGHT}`, { exact: true })).toBeVisible();
+      await expect(sectionTitle).toHaveCSS("color", LIGHT_FIXTURE_MUTED_FOREGROUND);
+      await page.getByLabel(`Theme: ${QUALIFIED_LIGHT}`, { exact: true }).click();
     });
 
-    await mochaItem.click();
-    await expect(page.getByLabel("Theme: Catppuccin Mocha", { exact: true })).toBeVisible();
-    await expect(sectionTitle).toHaveCSS("color", MOCHA_MUTED_FOREGROUND);
+    await darkFixtureItem.click();
+    await expect(page.getByLabel(`Theme: ${QUALIFIED_DARK}`, { exact: true })).toBeVisible();
+    await expect(sectionTitle).toHaveCSS("color", DARK_FIXTURE_MUTED_FOREGROUND);
     await page.screenshot({
       path: testInfo.outputPath("plugin-theme-applied.png"),
       fullPage: true,
@@ -94,10 +110,10 @@ test("applies a contributed theme and falls back when its plugin is gone", async
 
     await test.step("the selection survives a reload", async () => {
       await page.reload();
-      await expect(page.getByLabel("Theme: Catppuccin Mocha", { exact: true })).toBeVisible({
+      await expect(page.getByLabel(`Theme: ${QUALIFIED_DARK}`, { exact: true })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(sectionTitle).toHaveCSS("color", MOCHA_MUTED_FOREGROUND);
+      await expect(sectionTitle).toHaveCSS("color", DARK_FIXTURE_MUTED_FOREGROUND);
     });
 
     await test.step("removing the plugin falls back to the default theme", async () => {
@@ -105,7 +121,7 @@ test("applies a contributed theme and falls back when its plugin is gone", async
       await expect(page.getByLabel("Theme: System", { exact: true })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(sectionTitle).not.toHaveCSS("color", MOCHA_MUTED_FOREGROUND);
+      await expect(sectionTitle).not.toHaveCSS("color", DARK_FIXTURE_MUTED_FOREGROUND);
       await page.screenshot({
         path: testInfo.outputPath("plugin-theme-fallback.png"),
         fullPage: true,

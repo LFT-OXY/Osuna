@@ -1,0 +1,28 @@
+{
+  "id": "usage-stats",
+  "name": "usage-stats",
+  "title": "本机会话 token 用量与估算成本统计",
+  "description": "参考 TokenTracker：daemon 解析 Claude Code / Codex / Pi / OMP 本地会话日志，持久化五列 token 与估算成本，按来源、模型、日/周/月、项目聚合；新增「用量」侧栏页（周期、汇总、来源卡片、Top 模型、趋势、热力图、每日明细，合并 Plan usage），会话标签页 Composer 工具条显示本会话输入/输出 token、成本、耗时；跨 Host 合并；价格表 LiteLLM 自动更新 + 用户覆盖；i18n 9 语言。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-18",
+  "completedAt": "2026-09-19",
+  "branch": "feat/usage-stats",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": "https://github.com/LFT-OXY/Osuna/pull/1",
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "7667112637bfea3970dedade78985d8cbe2037bb"
+  }
+}

@@ -148,6 +148,9 @@ import {
 } from "./workspace-registry.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
+import { createUsageAgentBridge } from "./usage/agent-sessions.js";
+import { UsageService } from "./usage/service.js";
+import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
@@ -446,6 +449,7 @@ export interface PaseoDaemonConfig {
     }>;
   };
   providerOverrides?: Record<string, ProviderOverride>;
+  usage?: UsageConfig;
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;
@@ -524,6 +528,11 @@ function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | stri
   return config.trustedProxies ?? ["loopback"];
 }
 
+function resolveMutableUsageSection(config: PaseoDaemonConfig): MutableDaemonConfig["usage"] {
+  const { autoUpdate, overrides } = resolveUsagePricingSettings(config.usage?.pricing);
+  return { pricing: { autoUpdate, overrides: [...overrides] } };
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
@@ -552,6 +561,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
+    usage: resolveMutableUsageSection(config),
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -1348,6 +1358,26 @@ export async function createPaseoDaemon(
     }
   });
   logger.info({ elapsed: elapsed() }, "Schedule service initialized");
+  const usageService = new UsageService({
+    paseoHome: config.paseoHome,
+    config: config.usage,
+    logger,
+    listProjects: () => projectRegistry.list(),
+    onBackfillProgress: (backfill) => {
+      wsServer?.broadcast(
+        wrapSessionMessage({ type: "usage.backfill.progress", payload: backfill }),
+      );
+    },
+    getPricingConfig: () => resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing),
+    onPricingUpdated: () => {
+      wsServer?.broadcast(wrapSessionMessage({ type: "usage.pricing.updated" }));
+    },
+    agents: createUsageAgentBridge({ agentManager, agentStorage }),
+    onUsageUpdated: (payload) => {
+      wsServer?.broadcast(wrapSessionMessage({ type: "usage.updated", payload }));
+    },
+  });
+  daemonConfigStore.onChange(() => usageService.applyPricingConfig());
   logger.info({ elapsed: elapsed() }, "Loading persisted agent registry");
   const persistedRecords = await agentStorage.list();
   logger.info(
@@ -1717,6 +1747,7 @@ export async function createPaseoDaemon(
               pluginRuntime,
               orchestrationSkills,
               workspaceLabelService,
+              usageService,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
@@ -1762,6 +1793,7 @@ export async function createPaseoDaemon(
       // model loading doesn't block the server from accepting connections.
       speechService.start();
       scriptHealthMonitor.start();
+      await usageService.start();
     } catch (error) {
       unsubscribePluginProviders();
       await pluginRuntime.stopAllPlugins().catch(() => undefined);
@@ -1792,6 +1824,7 @@ export async function createPaseoDaemon(
     terminalManager.killAll();
     await speechService.stop();
     await scheduleService.stop().catch(() => undefined);
+    await usageService.dispose().catch(() => undefined);
     await relayRuntime?.stop().catch(() => undefined);
     if (wsServer) {
       await wsServer.close();

@@ -1,5 +1,5 @@
 import { router, usePathname } from "expo-router";
-import { CalendarClock, History, Plus, Search } from "lucide-react-native";
+import { BarChart3, CalendarClock, History, Plus, Search } from "lucide-react-native";
 import { memo, useCallback, useMemo, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type StyleProp, type ViewStyle } from "react-native";
@@ -14,6 +14,7 @@ import {
   type BuiltinSidebarNavId,
 } from "@/sidebar-nav/model";
 import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
+import { useUsageHosts } from "@/usage/use-usage-hosts";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
@@ -21,6 +22,7 @@ import {
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
   buildSessionsRoute,
+  buildUsageRoute,
 } from "@/utils/host-routes";
 
 interface SidebarNavRowProps {
@@ -170,9 +172,37 @@ function SidebarSchedulesRow({ onBeforeNavigate }: SidebarNavRowProps) {
   );
 }
 
+/**
+ * The only builtin row that can be absent while visible: a host that predates
+ * the usage feature has nothing to show, so the row renders nothing at all.
+ */
+function SidebarUsageRow({ onBeforeNavigate }: SidebarNavRowProps) {
+  const { t } = useTranslation();
+  const pathname = usePathname();
+  const { isAvailable } = useUsageHosts();
+  const handlePress = useCallback(() => {
+    onBeforeNavigate?.();
+    router.push(buildUsageRoute());
+  }, [onBeforeNavigate]);
+
+  if (!isAvailable) return null;
+
+  return (
+    <SidebarHeaderRow
+      icon={BarChart3}
+      label={t(builtinSidebarNavLabelKey("usage"))}
+      onPress={handlePress}
+      isActive={pathname.includes("/usage")}
+      testID="sidebar-usage"
+      variant="compact"
+    />
+  );
+}
+
 const BUILTIN_ROWS: Record<BuiltinSidebarNavId, ComponentType<SidebarNavRowProps>> = {
   "new-workspace": SidebarNewWorkspaceRow,
   history: SidebarHistoryRow,
   search: SidebarSearchRow,
   schedules: SidebarSchedulesRow,
+  usage: SidebarUsageRow,
 };

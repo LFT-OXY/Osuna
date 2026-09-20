@@ -50,7 +50,7 @@ This is the most common hover bug shipped in this codebase, by a wide margin. It
 
 > **Rule:** the hover-tracking element is a plain `View` with `onPointerEnter` / `onPointerLeave`. Any `Pressable`s — including ones you forgot are Pressables, like `TurnCopyButton`, icon buttons, anything that handles a tap — live inside it.
 
-### Failure mode 2 — The hovered state changes the trigger's geometry
+### Failure mode 2 — The hovered state changes layout
 
 Symptom: you hover a button, it changes appearance, then flickers between hovered and not-hovered without the cursor moving.
 
@@ -67,6 +67,8 @@ Fixes, in preferred order:
 1. **Don't change the trigger's outer geometry on hover.** Change colors, opacity, borders that don't take layout space (`outlineWidth` on web, absolutely positioned overlays), or child content that fits inside the same fixed box. Never change `width`, `height`, `padding`, or `borderWidth` of the hover target itself.
 2. **Hide with `opacity` + `pointerEvents`, not conditional rendering**, when the hidden element lives inside the trigger. Mounting/unmounting on hover reflows the layout under the cursor.
 3. **Pin the hit area.** Set a fixed `minHeight` / `minWidth` on the trigger so internal swaps (icon-A becomes icon-B on hover) leave the bounding box unchanged. The workspace row's `minHeight: 36` is what makes the kebab/diff-stat swap stable.
+
+The same rule covers a readout that sits outside the trigger — a caption naming the hovered cell, a detail line under a chart. Give it a fixed box whether or not anything is hovered. An empty `<Text>` collapses to zero height, so leaving the grid moves every control below it by a line; the pointer move that fires `pointerleave` and the reflow land in the same tick, and a click aimed at a control below is delivered to wherever that control used to be. The usage heatmap's caption (`packages/app/src/components/usage/usage-heatmap-card.tsx`, `captionRow`) carries an explicit `height` for exactly this. The symptom is not a flicker — it is one silently swallowed click, and only the first one after a hover.
 
 ### Failure mode 3 — Revealed content lives outside the hover trigger
 

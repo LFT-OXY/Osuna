@@ -16,7 +16,7 @@ export interface IsolatedHostDaemon {
 }
 
 export interface IsolatedHostDaemonOptions {
-  environment?: NodeJS.ProcessEnv;
+  environment?: Record<string, string | undefined>;
   mutableRelay?: {
     enabled: boolean;
     endpoint?: string;

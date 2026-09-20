@@ -21,6 +21,7 @@ import {
   createTabInLayout,
   createDefaultLayout,
   DEFAULT_PANE_ID,
+  EXPLORER_SIDEBAR_SEEDED_TAB_KINDS,
   AMBIENT_PLACEMENT,
   createWorkspaceLayoutWithExplorerSidebar,
   FOCUSED_PANE_PLACEMENT,
@@ -37,7 +38,9 @@ import {
   openTabInLayoutBackground,
   replaceTabTargetInLayout,
   revealTargetInLayout,
+  isDefaultExplorerSidebarTabKind,
   restoreWorkspaceLayout,
+  seedExplorerSidebarTabs,
   reconcileWorkspaceTabs,
   removePaneFromTree,
   removeTabFromTree,
@@ -294,8 +297,7 @@ function migrateVersionOneWorkspaceLayout(input: {
   const preservedTabs = collectAllTabs(strippedLayout.root).filter(
     (tab) =>
       legacyExplorerPane.tabIds.includes(tab.tabId) &&
-      tab.target.kind !== "files" &&
-      tab.target.kind !== "changes_tree",
+      !isDefaultExplorerSidebarTabKind(tab.target.kind),
   );
   const preservedSide = preserveVersionOneSideTabs({
     layout: strippedLayout,
@@ -1689,6 +1691,14 @@ export function createWorkspaceLayoutStore(
             explorerSidebarWidthByWorkspace: state.explorerSidebarWidthByWorkspace,
             explorerPaneIdByWorkspace: state.explorerSidebarPaneIdByWorkspace,
             sidePaneIdByWorkspace: state.sidePaneIdByWorkspace,
+            // Every layout in memory was born with or backfilled to the current
+            // Explorer defaults, so each saved one carries the full marker.
+            explorerSidebarSeededTabKindsByWorkspace: Object.fromEntries(
+              Object.keys(layoutByWorkspace).map((key) => [
+                key,
+                Array.from(EXPLORER_SIDEBAR_SEEDED_TAB_KINDS),
+              ]),
+            ),
           };
         },
         merge: (persistedState, currentState) => {
@@ -1717,10 +1727,18 @@ export function createWorkspaceLayoutStore(
               registeredPaneId: explorerSidebarPaneIdByWorkspace[workspaceKey],
               ids,
             });
-            layoutByWorkspace[workspaceKey] = explorerSidebar?.layout ?? restoredLayout;
             if (explorerSidebar) {
               explorerSidebarPaneIdByWorkspace[workspaceKey] = explorerSidebar.paneId;
             }
+            const seededKinds =
+              result.data.explorerSidebarSeededTabKindsByWorkspace?.[workspaceKey] ?? [];
+            layoutByWorkspace[workspaceKey] = seedExplorerSidebarTabs({
+              layout: explorerSidebar?.layout ?? restoredLayout,
+              explorerSidebarPaneId: explorerSidebar?.paneId ?? null,
+              kinds: EXPLORER_SIDEBAR_SEEDED_TAB_KINDS.filter(
+                (kind) => !seededKinds.includes(kind),
+              ),
+            });
           }
           return {
             ...currentState,

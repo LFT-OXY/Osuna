@@ -11,6 +11,7 @@ import { resolve, sep } from "node:path";
 import { assertAbsolutePath, isSameOrDescendantPath } from "../server/path-utils.js";
 import type { TerminalActivity, TerminalActivityState } from "@getpaseo/protocol/terminal-activity";
 import { deriveTerminalActivityStatusBucket } from "@getpaseo/protocol/terminal-activity";
+import type { TerminalViewAttributes } from "@getpaseo/protocol/messages";
 
 export interface TerminalListItem {
   id: string;
@@ -64,6 +65,7 @@ export interface TerminalManager {
     cols?: number;
     activityToken?: string;
     activityUrl?: string | null;
+    viewAttributes?: TerminalViewAttributes;
   }): Promise<TerminalSession>;
   registerCwdEnv(options: { cwd: string; env: Record<string, string> }): void;
   validateTerminalActivityToken(terminalId: string, token: string): "valid" | "unknown" | "invalid";
@@ -321,6 +323,7 @@ export function createTerminalManager(
       cols?: number;
       activityToken?: string;
       activityUrl?: string | null;
+      viewAttributes?: TerminalViewAttributes;
     }): Promise<TerminalSession> {
       assertAbsolutePath(options.cwd);
 
@@ -354,6 +357,7 @@ export function createTerminalManager(
             ...(options.args ? { args: options.args } : {}),
             ...(options.rows !== undefined ? { rows: options.rows } : {}),
             ...(options.cols !== undefined ? { cols: options.cols } : {}),
+            ...(options.viewAttributes ? { viewAttributes: options.viewAttributes } : {}),
             ...(mergedEnv ? { env: mergedEnv } : {}),
             activityEnv,
           }),

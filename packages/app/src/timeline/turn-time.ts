@@ -4,6 +4,18 @@ import { startsNewTurn } from "@/agent-stream/turn-membership";
 export interface TurnTiming {
   completedAt: Date;
   durationMs: number | null;
+  /** Paseo's own id for the turn, when the daemon watched it open. */
+  turnId: string | null;
+  /** Provider id of the user message that opened the turn. */
+  userMessageId: string | null;
+}
+
+/**
+ * A turn opened by a hidden prompt has no user message but still carries the
+ * daemon's turn id on its first item, which is what the usage rows match on.
+ */
+function readTurnId(item: StreamItem): string | null {
+  return "turnId" in item && typeof item.turnId === "string" ? item.turnId : null;
 }
 
 export interface StreamTurnTiming {
@@ -19,6 +31,8 @@ export function deriveStreamTurnTiming(params: {
 }): StreamTurnTiming {
   const byAssistantId = new Map<string, TurnTiming>();
   let currentUserAt: Date | null = null;
+  let currentTurnId: string | null = null;
+  let currentUserMessageId: string | null = null;
   let currentLastItemAt: Date | null = null;
   let currentAssistantIds: string[] = [];
   let previousItem: StreamItem | null = null;
@@ -32,6 +46,8 @@ export function deriveStreamTurnTiming(params: {
       durationMs: currentUserAt
         ? Math.max(0, currentLastItemAt.getTime() - currentUserAt.getTime())
         : null,
+      turnId: currentTurnId,
+      userMessageId: currentUserMessageId,
     };
     for (const id of currentAssistantIds) {
       byAssistantId.set(id, timing);
@@ -42,6 +58,8 @@ export function deriveStreamTurnTiming(params: {
     if (startsNewTurn(item, previousItem)) {
       flushCompletedTurn();
       currentUserAt = item.kind === "user_message" ? item.timestamp : null;
+      currentTurnId = readTurnId(item);
+      currentUserMessageId = item.kind === "user_message" ? (item.messageId ?? null) : null;
       currentLastItemAt = null;
       currentAssistantIds = [];
     }

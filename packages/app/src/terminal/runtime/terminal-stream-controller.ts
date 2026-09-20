@@ -1,11 +1,15 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { SubscribeTerminalRequest, TerminalState } from "@getpaseo/protocol/messages";
+import type {
+  SubscribeTerminalRequest,
+  TerminalState,
+  TerminalViewAttributes,
+} from "@getpaseo/protocol/messages";
 import type { TerminalOutputData } from "./terminal-emulator-runtime";
 import { i18n } from "@/i18n/i18next";
 
 export type TerminalStreamControllerClient = Pick<
   DaemonClient,
-  "observeTerminal" | "sendTerminalInput"
+  "observeTerminal" | "sendTerminalInput" | "sendTerminalViewAttributes"
 >;
 
 export interface TerminalStreamControllerSize {
@@ -28,6 +32,12 @@ export interface TerminalStreamControllerOptions {
   onRestore?: (input: { terminalId: string; data: TerminalOutputData }) => void;
   getRestoreOptions?: () => SubscribeTerminalRequest["restore"] | undefined;
   onStatusChange?: (status: TerminalStreamControllerStatus) => void;
+  // 当前主题的终端三色；返回 undefined 表示没有可发送的颜色（主题值不是纯 hex）。
+  getViewAttributes: () => TerminalViewAttributes | undefined;
+}
+
+function isSameViewAttributes(a: TerminalViewAttributes, b: TerminalViewAttributes): boolean {
+  return a.foreground === b.foreground && a.background === b.background && a.cursor === b.cursor;
 }
 
 const TERMINAL_EXITED_ERROR = "Terminal exited";
@@ -35,6 +45,7 @@ const TERMINAL_EXITED_ERROR = "Terminal exited";
 export class TerminalStreamController {
   private subscription: ReturnType<DaemonClient["observeTerminal"]> | null = null;
   private terminalId: string | null = null;
+  private lastSentViewAttributes: TerminalViewAttributes | null = null;
   private disposed = false;
 
   constructor(private readonly options: TerminalStreamControllerOptions) {}
@@ -64,6 +75,7 @@ export class TerminalStreamController {
     }
     const nextTerminalId = input.terminalId;
     this.terminalId = nextTerminalId;
+    this.lastSentViewAttributes = null;
     void this.subscription?.release().catch(console.error);
     this.subscription = null;
     if (!nextTerminalId) {
@@ -75,12 +87,14 @@ export class TerminalStreamController {
     let subscription: ReturnType<DaemonClient["observeTerminal"]>;
     try {
       const preferredSize = restore?.size ?? this.options.getPreferredSize();
-      if (preferredSize)
+      if (preferredSize) {
         this.options.client.sendTerminalInput(nextTerminalId, {
           type: "resize",
           ...preferredSize,
           intent: "claim",
         });
+        this.syncViewAttributes({ afterClaim: true });
+      }
       subscription = this.options.client.observeTerminal(
         nextTerminalId,
         this.receive,
@@ -127,6 +141,27 @@ export class TerminalStreamController {
         }
         this.failAttach(nextTerminalId, error);
       });
+  }
+
+  // 把当前主题的三色推给 daemon。主题变化时值相同不重发；尺寸 claim 之后必须重发，
+  // 因为所有权可能刚从另一台设备转移过来，daemon 保存的还是那台设备的颜色。
+  syncViewAttributes(input?: { afterClaim?: boolean }): void {
+    if (this.disposed || !this.terminalId) {
+      return;
+    }
+    const attributes = this.options.getViewAttributes();
+    if (!attributes) {
+      return;
+    }
+    if (
+      !input?.afterClaim &&
+      this.lastSentViewAttributes &&
+      isSameViewAttributes(this.lastSentViewAttributes, attributes)
+    ) {
+      return;
+    }
+    this.lastSentViewAttributes = attributes;
+    this.options.client.sendTerminalViewAttributes(this.terminalId, attributes);
   }
 
   private failAttach(terminalId: string, error: unknown): void {

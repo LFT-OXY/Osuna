@@ -1,0 +1,4 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "server 包编码规范入口"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "事件投递、订阅与 COMPAT 标签的既有约定"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "server 测试形态"}
+{"file": "docs/protocol-compatibility.md", "reason": "协议契约 vs 功能契约，能力门控与 COMPAT 规则"}

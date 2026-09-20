@@ -388,11 +388,9 @@ Custom OMP profiles should extend `omp`. They inherit the OMP adapter's `rpc-ui`
         "label": "Oh My Pi (Work)",
         "command": ["omp"],
         "env": {
-          "XDG_CONFIG_HOME": "~/.config/omp-work",
-          "XDG_STATE_HOME": "~/.local/state/omp-work"
+          "OMP_PROFILE": "work"
         },
         "params": {
-          "sessionDir": "~/.local/state/omp-work/omp/agent/sessions",
           "rpcTimeoutMs": 60000,
           "smolModel": "openai/gpt-5-mini",
           "slowModel": "anthropic/claude-opus-4-1",
@@ -404,7 +402,11 @@ Custom OMP profiles should extend `omp`. They inherit the OMP adapter's `rpc-ui`
 }
 ```
 
-`params.sessionDir` is used only for importing sessions that were started outside Paseo. If `command` or XDG env vars move OMP's state directory, set `params.sessionDir` to the resulting OMP JSONL session directory; launching and resuming still go through the configured command. OMP waits 20 seconds for its initial `ready` frame and 60 seconds for later control-plane RPCs by default. `params.rpcTimeoutMs` overrides both deadlines.
+`OMP_PROFILE` is OMP's own switch for a second state directory. It moves the whole profile to `~/.omp/profiles/work`, and Paseo derives the session directory from it, so nothing else needs setting. Values in `env` reach the process verbatim — `~` is not expanded there, so the variables that take a path (`PI_CODING_AGENT_DIR`, `XDG_DATA_HOME`) need an absolute one. `XDG_DATA_HOME` applies on Linux and macOS only, and only when `$XDG_DATA_HOME/omp` already exists.
+
+Set `params.sessionDir` when OMP's own rules cannot express where the sessions ended up — a wrapper `command` that relocates them, say. It is used for importing sessions that were started outside Paseo and for nothing else; launching and resuming go through the configured command either way, and `~` _is_ expanded here. Usage scanning reads neither this nor `env`: it follows the daemon's own environment ([usage.md](usage.md#what-gets-scanned)).
+
+OMP waits 20 seconds for its initial `ready` frame and 60 seconds for later control-plane RPCs by default. `params.rpcTimeoutMs` overrides both deadlines.
 
 For other providers that keep Pi's `--mode rpc` API but write sessions somewhere else, extend `pi`, replace the command, and provide the JSONL session directory:
 

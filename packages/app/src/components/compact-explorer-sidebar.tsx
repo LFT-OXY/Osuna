@@ -47,6 +47,7 @@ import {
 import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { mutedIconColorMapping } from "@/components/ui/icon-button-chrome";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { SessionHistoryView } from "@/session-history/view";
 
 const ThemedX = withUnistyles(X);
 
@@ -58,6 +59,8 @@ interface ExplorerSidebarProps {
   workspaceRoot: string;
   isGit: boolean;
   onOpenFile?: (filePath: string) => void;
+  /** A terminal the daemon created for a provider session; the host shows it as a tab. */
+  onOpenTerminal?: (terminalId: string) => void;
 }
 
 interface ExplorerSidebarSharedState {
@@ -88,6 +91,7 @@ export function CompactExplorerSidebar({
   workspaceRoot,
   isGit,
   onOpenFile,
+  onOpenTerminal,
 }: ExplorerSidebarProps) {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
@@ -153,6 +157,7 @@ export function CompactExplorerSidebar({
           isGit={isGit}
           isOpen={isActive}
           onOpenFile={onOpenFile}
+          onOpenTerminal={onOpenTerminal}
         />
       </MobilePanelOverlay>
     </RetainedPanelActivity>
@@ -170,6 +175,7 @@ export function NativeExplorerSidebarDock({
   workspaceRoot,
   isGit,
   onOpenFile,
+  onOpenTerminal,
   persistenceKey,
   containerWidth,
 }: NativeExplorerSidebarDockProps) {
@@ -264,6 +270,7 @@ export function NativeExplorerSidebarDock({
             isGit={isGit}
             isOpen={isOpen}
             onOpenFile={onOpenFile}
+            onOpenTerminal={onOpenTerminal}
           />
         </View>
       </Animated.View>
@@ -313,6 +320,7 @@ interface SidebarContentProps {
   isGit: boolean;
   isOpen: boolean;
   onOpenFile?: (filePath: string) => void;
+  onOpenTerminal?: (terminalId: string) => void;
 }
 
 function ExplorerSidebarContent({
@@ -325,6 +333,7 @@ function ExplorerSidebarContent({
   isGit,
   isOpen,
   onOpenFile,
+  onOpenTerminal,
 }: SidebarContentProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -354,6 +363,7 @@ function ExplorerSidebarContent({
   const availableTabs = useMemo<ExplorerTab[]>(() => {
     const tabs: ExplorerTab[] = isGit ? ["changes", "files"] : ["files"];
     if (isGit && showPrTab) tabs.push("pr");
+    tabs.push("sessions");
     return tabs;
   }, [isGit, showPrTab]);
   const { mountedTabIds } = useMountedTabSet({
@@ -401,6 +411,13 @@ function ExplorerSidebarContent({
               />
             </ExplorerTabButton>
           )}
+          <ExplorerTabButton
+            tab="sessions"
+            active={resolvedTab === "sessions"}
+            label={t("workspace.tabs.explorerSidebar.sessions")}
+            onTabPress={onTabPress}
+            testID="explorer-tab-sessions"
+          />
         </View>
         <View style={headerRightSectionStyle}>
           <ToolbarButton
@@ -447,6 +464,16 @@ function ExplorerSidebarContent({
               workspaceId={workspaceId}
               cwd={workspaceRoot}
               prPane={prPane}
+            />
+          </RetainedPanel>
+        ) : null}
+        {mountedTabIds.has("sessions") ? (
+          <RetainedPanel active={resolvedTab === "sessions"}>
+            <SessionsPane
+              serverId={serverId}
+              workspaceId={workspaceId}
+              workspaceRoot={workspaceRoot}
+              onOpenTerminal={onOpenTerminal}
             />
           </RetainedPanel>
         ) : null}
@@ -497,6 +524,34 @@ function FilesPane({
       workspaceRoot={workspaceRoot}
       onOpenFile={onOpenFile}
       onAddToChat={canAddToChat ? addFile : undefined}
+    />
+  );
+}
+
+function SessionsPane({
+  serverId,
+  workspaceId,
+  workspaceRoot,
+  onOpenTerminal,
+}: Pick<SidebarContentProps, "serverId" | "workspaceId" | "workspaceRoot" | "onOpenTerminal">) {
+  const { t } = useTranslation();
+  const handleOpenTerminal = useCallback(
+    (terminalId: string) => onOpenTerminal?.(terminalId),
+    [onOpenTerminal],
+  );
+  if (!workspaceId) {
+    return (
+      <View style={styles.sessionsMissingWorkspace}>
+        <Text style={styles.sessionsMissingWorkspaceText}>{t("panels.file.directoryMissing")}</Text>
+      </View>
+    );
+  }
+  return (
+    <SessionHistoryView
+      serverId={serverId}
+      workspaceId={workspaceId}
+      workspaceDirectory={workspaceRoot}
+      onOpenTerminal={handleOpenTerminal}
     />
   );
 }
@@ -570,5 +625,16 @@ const styles = StyleSheet.create((theme) => ({
   contentArea: {
     flex: 1,
     minHeight: 0,
+  },
+  sessionsMissingWorkspace: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: theme.spacing[4],
+  },
+  sessionsMissingWorkspaceText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+    textAlign: "center",
   },
 }));

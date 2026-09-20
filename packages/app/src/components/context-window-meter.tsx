@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -6,7 +6,16 @@ import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
-import { formatTokenCount } from "./context-window-meter.utils";
+import { formatSessionCost, formatTokenArrows, formatUsageTokensCompact } from "@/usage/format";
+import { isUsageTrackedProvider } from "@/usage/sources";
+import { addRunningTurnElapsed, hasAgentUsage, resolveSessionSpanMs } from "@/usage/turn-usage";
+import {
+  useAgentUsageEvents,
+  useAgentUsageSummary,
+  type AgentUsageScope,
+  type AgentUsageSummaryPayload,
+} from "@/usage/use-agent-usage";
+import { formatDuration } from "@/utils/time";
 
 interface ContextWindowMeterProps {
   maxTokens: number | null;
@@ -20,6 +29,14 @@ interface ContextWindowMeterProps {
   pending?: boolean;
   /** Optional glyph envelope for icon-toolbar alignment. */
   glyphSize?: number;
+  /** The agent whose session total the popover reports. */
+  agentId?: string | null;
+  /** `features.usage`; `null` while the host has not said (disconnected, or no `server_info` yet). */
+  usageSupport?: boolean | null;
+  /** Start of the turn in flight, added to the agent's settled runtime as a stopwatch. */
+  runningTurnStartedAt?: Date | null;
+  /** `84K / 200K` beside the ring. Phones keep the ring alone. */
+  showTokenLabel?: boolean;
 }
 
 const SVG_SIZE = 14;
@@ -49,16 +66,6 @@ function clampPercentage(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
-function formatSessionCost(value: number): string | null {
-  if (!Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-  if (value < 0.01) {
-    return `$${value.toFixed(4)}`;
-  }
-  return `$${value.toFixed(2)}`;
-}
-
 function getMeterColors(
   percentage: number,
   theme: ReturnType<typeof useUnistyles>["theme"],
@@ -73,7 +80,21 @@ function getMeterColors(
   return { progress: theme.colors.foregroundMuted, track };
 }
 
-function getMeterGeometry(showPercentage: boolean, glyphSize?: number) {
+/** No cost yet means no cost line: `$0.00` there would read as "this was free". */
+function resolveSessionCostLabel(totalCostUsd: number | null | undefined): string | null {
+  if (typeof totalCostUsd !== "number" || !Number.isFinite(totalCostUsd) || totalCostUsd <= 0) {
+    return null;
+  }
+  return formatSessionCost(totalCostUsd);
+}
+
+interface MeterGeometryInput {
+  showPercentage: boolean;
+  showTokenLabel: boolean;
+  glyphSize?: number;
+}
+
+function getMeterGeometry({ showPercentage, showTokenLabel, glyphSize }: MeterGeometryInput) {
   if (showPercentage) {
     return {
       svgSize: COMPACT_SVG_SIZE,
@@ -92,7 +113,7 @@ function getMeterGeometry(showPercentage: boolean, glyphSize?: number) {
     radius: (resolvedSize - resolvedStrokeWidth) / 2,
     strokeWidth: resolvedStrokeWidth,
     circumference: Math.PI * (resolvedSize - resolvedStrokeWidth),
-    containerStyle: styles.container,
+    containerStyle: showTokenLabel ? styles.containerWithLabel : styles.container,
   };
 }
 
@@ -105,6 +126,10 @@ export function ContextWindowMeter({
   provider,
   pending = false,
   glyphSize,
+  agentId,
+  usageSupport = null,
+  runningTurnStartedAt = null,
+  showTokenLabel = false,
 }: ContextWindowMeterProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -113,6 +138,14 @@ export function ContextWindowMeter({
     serverId ?? null,
     { enabled: isTooltipOpen },
   );
+  const usageScope = useMemo<AgentUsageScope | null>(
+    () => (usageSupport === true && serverId && agentId ? { serverId, agentId } : null),
+    [agentId, serverId, usageSupport],
+  );
+  // The meter owns its own refetch: the stream view's subscription covers the
+  // turn footers, and the composer is its sibling, not its descendant.
+  useAgentUsageEvents(usageScope);
+  const { payload: agentUsage } = useAgentUsageSummary(usageScope, { enabled: isTooltipOpen });
   const percentage =
     maxTokens !== null && usedTokens !== null ? getUsagePercentage(maxTokens, usedTokens) : null;
   const handleTooltipOpenChange = useCallback(
@@ -125,7 +158,7 @@ export function ContextWindowMeter({
     [refreshProviderUsage],
   );
 
-  const geometry = getMeterGeometry(showPercentage, glyphSize);
+  const geometry = getMeterGeometry({ showPercentage, showTokenLabel, glyphSize });
 
   // No usage yet: reserve the footprint with a track-only ring while a session is
   // active so the real ring fades in without shifting siblings. Render nothing when
@@ -135,26 +168,11 @@ export function ContextWindowMeter({
       return null;
     }
     return (
-      <View style={geometry.containerStyle}>
-        <Svg
-          width={geometry.svgSize}
-          height={geometry.svgSize}
-          viewBox={`0 0 ${geometry.svgSize} ${geometry.svgSize}`}
-          style={styles.svg}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        >
-          <Circle
-            cx={geometry.center}
-            cy={geometry.center}
-            r={geometry.radius}
-            fill="none"
-            stroke={theme.colors.surface3}
-            strokeWidth={geometry.strokeWidth}
-          />
-        </Svg>
-        {showPercentage ? <View style={styles.skeletonLabel} /> : null}
-      </View>
+      <PendingContextWindowMeter
+        geometry={geometry}
+        trackColor={theme.colors.surface3}
+        showLabel={showPercentage || showTokenLabel}
+      />
     );
   }
 
@@ -163,8 +181,9 @@ export function ContextWindowMeter({
   const { svgSize, center, radius, strokeWidth, circumference, containerStyle } = geometry;
   const dashOffset = circumference - (clampedPercentage / 100) * circumference;
   const colors = getMeterColors(clampedPercentage, theme);
-  const formattedSessionCost =
-    typeof totalCostUsd === "number" ? formatSessionCost(totalCostUsd) : null;
+  const formattedUsedTokens = formatUsageTokensCompact(usedTokens);
+  const formattedMaxTokens = formatUsageTokensCompact(maxTokens);
+  const formattedSessionCost = resolveSessionCostLabel(totalCostUsd);
 
   return (
     <Tooltip
@@ -181,39 +200,51 @@ export function ContextWindowMeter({
           accessibilityRole="image"
           accessibilityLabel={t("contextWindow.accessibility", {
             percentage: roundedPercentage,
+            used: formattedUsedTokens,
+            max: formattedMaxTokens,
           })}
         >
-          <Svg
-            width={svgSize}
-            height={svgSize}
-            viewBox={`0 0 ${svgSize} ${svgSize}`}
-            style={styles.svg}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            <Circle
-              cx={center}
-              cy={center}
-              r={radius}
-              fill="none"
-              stroke={colors.track}
-              strokeWidth={strokeWidth}
-            />
-            <Circle
-              cx={center}
-              cy={center}
-              r={radius}
-              fill="none"
-              stroke={colors.progress}
-              strokeWidth={strokeWidth}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-            />
-          </Svg>
-          {showPercentage ? (
-            <Text style={styles.percentageLabel}>{`${roundedPercentage}%`}</Text>
-          ) : null}
+          {({ hovered }) => (
+            <>
+              <Svg
+                width={svgSize}
+                height={svgSize}
+                viewBox={`0 0 ${svgSize} ${svgSize}`}
+                style={styles.svg}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              >
+                <Circle
+                  cx={center}
+                  cy={center}
+                  r={radius}
+                  fill="none"
+                  stroke={colors.track}
+                  strokeWidth={strokeWidth}
+                />
+                <Circle
+                  cx={center}
+                  cy={center}
+                  r={radius}
+                  fill="none"
+                  stroke={colors.progress}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={dashOffset}
+                />
+              </Svg>
+              {showPercentage ? (
+                <Text style={styles.percentageLabel}>{`${roundedPercentage}%`}</Text>
+              ) : null}
+              {showTokenLabel && !showPercentage ? (
+                <Text
+                  style={[styles.tokenLabel, hovered ? styles.tokenLabelHovered : null]}
+                  testID="context-window-token-label"
+                >{`${formattedUsedTokens} / ${formattedMaxTokens}`}</Text>
+              ) : null}
+            </>
+          )}
         </Pressable>
       </TooltipTrigger>
       <TooltipContent side="top" align="center" offset={8}>
@@ -224,8 +255,8 @@ export function ContextWindowMeter({
           </Text>
           <Text style={styles.tooltipDetail}>
             {t("contextWindow.tokens", {
-              used: formatTokenCount(usedTokens),
-              max: formatTokenCount(maxTokens),
+              used: formattedUsedTokens,
+              max: formattedMaxTokens,
             })}
           </Text>
           {formattedSessionCost ? (
@@ -233,10 +264,150 @@ export function ContextWindowMeter({
               {t("contextWindow.sessionCost", { cost: formattedSessionCost })}
             </Text>
           ) : null}
+          <SessionTotalSection
+            usageSupport={usageSupport}
+            summary={agentUsage}
+            provider={provider}
+            runningTurnStartedAt={runningTurnStartedAt}
+          />
           <ProviderUsageTooltipSection view={providerUsageView} activeProviderId={provider} />
         </View>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** A track-only ring holding the footprint until the first usage report lands. */
+function PendingContextWindowMeter({
+  geometry,
+  trackColor,
+  showLabel,
+}: {
+  geometry: ReturnType<typeof getMeterGeometry>;
+  trackColor: string;
+  showLabel: boolean;
+}) {
+  return (
+    <View style={geometry.containerStyle}>
+      <Svg
+        width={geometry.svgSize}
+        height={geometry.svgSize}
+        viewBox={`0 0 ${geometry.svgSize} ${geometry.svgSize}`}
+        style={styles.svg}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Circle
+          cx={geometry.center}
+          cy={geometry.center}
+          r={geometry.radius}
+          fill="none"
+          stroke={trackColor}
+          strokeWidth={geometry.strokeWidth}
+        />
+      </Svg>
+      {showLabel ? <View style={styles.skeletonLabel} /> : null}
+    </View>
+  );
+}
+
+/**
+ * What this agent has spent across every provider session it ran in. A host
+ * that predates `features.usage` says so instead of showing nothing, so the
+ * missing numbers read as an old daemon rather than as a zero.
+ */
+function SessionTotalSection({
+  usageSupport,
+  summary,
+  provider,
+  runningTurnStartedAt,
+}: {
+  usageSupport: boolean | null;
+  summary: AgentUsageSummaryPayload | undefined;
+  provider: string | null | undefined;
+  runningTurnStartedAt: Date | null;
+}) {
+  const { t } = useTranslation();
+  if (usageSupport === null) return null;
+  if (usageSupport === false) {
+    return (
+      <View style={styles.sessionTotalSection} testID="context-window-session-total">
+        <Text style={styles.tooltipTitle}>{t("contextWindow.sessionTotal.title")}</Text>
+        <Text style={styles.updatePill}>{t("contextWindow.sessionTotal.hostUpgradeRequired")}</Text>
+      </View>
+    );
+  }
+  // Zero for a CLI the scanner reads means the scan has not reached this agent —
+  // the section shows and marks itself incomplete. Zero for any other provider
+  // means there is nothing to read, and a row of zeroes would read as "free".
+  if (!summary || !(hasAgentUsage(summary) || isUsageTrackedProvider(provider))) return null;
+
+  const spanMs = resolveSessionSpanMs(summary);
+  return (
+    <View style={styles.sessionTotalSection} testID="context-window-session-total">
+      <View style={styles.sessionTotalHeader}>
+        <Text style={styles.tooltipTitle}>{t("contextWindow.sessionTotal.title")}</Text>
+        {summary.complete ? null : (
+          <Text style={styles.incompletePill}>{t("contextWindow.sessionTotal.incomplete")}</Text>
+        )}
+      </View>
+      <View style={styles.sessionTotalRow}>
+        <Text style={styles.tooltipDetail}>{t("contextWindow.sessionTotal.tokens")}</Text>
+        <Text style={styles.sessionTotalValue}>
+          {formatTokenArrows(summary.totals.input, summary.totals.output)}
+        </Text>
+      </View>
+      <View style={styles.sessionTotalRow}>
+        <Text style={styles.tooltipDetail}>{t("contextWindow.sessionTotal.estimatedCost")}</Text>
+        <Text style={styles.sessionTotalValue}>{formatSessionCost(summary.estimatedCost)}</Text>
+      </View>
+      <View style={styles.sessionTotalRow}>
+        <Text style={styles.tooltipDetail}>{t("contextWindow.sessionTotal.turns")}</Text>
+        <Text style={styles.sessionTotalValue}>
+          {runningTurnStartedAt
+            ? t("contextWindow.sessionTotal.turnsRunning", { turns: summary.turns })
+            : String(summary.turns)}
+        </Text>
+      </View>
+      <View style={styles.sessionTotalRow}>
+        <Text style={styles.tooltipDetail}>{t("contextWindow.sessionTotal.agentRuntime")}</Text>
+        <AgentRuntimeValue
+          durationMs={summary.durationMs}
+          runningTurnStartedAt={runningTurnStartedAt}
+        />
+      </View>
+      {spanMs === null ? null : (
+        <View style={styles.sessionTotalRow}>
+          <Text style={styles.tooltipDetail}>{t("contextWindow.sessionTotal.sessionSpan")}</Text>
+          <Text style={styles.sessionTotalValue}>{formatDuration(spanMs)}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** Ticks only while a turn is in flight; a settled agent renders one string. */
+function AgentRuntimeValue({
+  durationMs,
+  runningTurnStartedAt,
+}: {
+  durationMs: number;
+  runningTurnStartedAt: Date | null;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const runningStartedAtMs = runningTurnStartedAt ? runningTurnStartedAt.getTime() : null;
+
+  useEffect(() => {
+    if (runningStartedAtMs === null) return;
+    setNowMs(Date.now());
+    const handle = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(handle);
+  }, [runningStartedAtMs]);
+
+  return (
+    <Text style={styles.sessionTotalValue}>
+      {formatDuration(addRunningTurnElapsed(durationMs, runningStartedAtMs, nowMs))}
+    </Text>
   );
 }
 
@@ -254,6 +425,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[1],
     borderRadius: theme.borderRadius.full,
   },
   svg: {
@@ -263,6 +435,14 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
+  },
+  tokenLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontVariant: ["tabular-nums"],
+  },
+  tokenLabelHovered: {
+    color: theme.colors.foreground,
   },
   skeletonLabel: {
     width: 22,
@@ -287,5 +467,35 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     lineHeight: theme.fontSize.sm * 1.4,
+  },
+  sessionTotalSection: {
+    gap: theme.spacing[1],
+    paddingTop: theme.spacing[1.5],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  sessionTotalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+  },
+  sessionTotalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[3],
+  },
+  sessionTotalValue: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontVariant: ["tabular-nums"],
+  },
+  incompletePill: {
+    color: theme.colors.palette.amber[500],
+    fontSize: theme.fontSize.sm,
+  },
+  updatePill: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
 }));

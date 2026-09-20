@@ -27,6 +27,7 @@ import {
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
   type ServerInfoStatusPayload,
+  type TerminalViewAttributes,
 } from "@getpaseo/protocol/messages";
 import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outbound";
 import type {
@@ -537,6 +538,50 @@ type SubscribeTerminalPayload = SubscribeTerminalResponse["payload"];
 type CloseItemsPayload = CloseItemsResponse["payload"];
 type KillTerminalPayload = KillTerminalResponse["payload"];
 type CaptureTerminalPayload = CaptureTerminalResponse["payload"];
+type UsageReportPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.report.get.response" }
+>["payload"];
+type UsageSessionsListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.sessions.list.response" }
+>["payload"];
+type UsagePricingListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.pricing.list.response" }
+>["payload"];
+type UsagePricingRefreshPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.pricing.refresh.response" }
+>["payload"];
+type UsageAgentGetPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.agent.get.response" }
+>["payload"];
+type UsageAgentTurnsListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "usage.agent.turns.list.response" }
+>["payload"];
+
+export interface UsageReportOptions {
+  /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
+  from: string | null;
+  to: string | null;
+  timezone: string;
+  filters?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["filters"];
+  trend?: Extract<SessionInboundMessage, { type: "usage.report.get.request" }>["trend"];
+  requestId?: string;
+}
+
+export interface UsageSessionsListOptions {
+  /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
+  from: string | null;
+  to: string | null;
+  timezone: string;
+  filters?: Extract<SessionInboundMessage, { type: "usage.sessions.list.request" }>["filters"];
+  requestId?: string;
+}
+
 type ScheduleCreatePayload = Extract<
   SessionOutboundMessage,
   { type: "schedule/create/response" }
@@ -2336,6 +2381,9 @@ export class DaemonClient {
       ...(options?.since ? { since: options.since } : {}),
       ...(options?.limit ? { limit: options.limit } : {}),
       ...(options?.query !== undefined ? { query: options.query } : {}),
+      ...(options?.includeImported !== undefined
+        ? { includeImported: options.includeImported }
+        : {}),
     });
     return this.sendRequest({
       requestId: resolvedRequestId,
@@ -5585,6 +5633,7 @@ export class DaemonClient {
       args?: string[];
       workspaceId?: string;
       size?: { rows: number; cols: number };
+      viewAttributes?: TerminalViewAttributes;
     },
   ): Promise<CreateTerminalPayload> {
     const resolvedRequestId = this.createRequestId(requestId);
@@ -5597,6 +5646,11 @@ export class DaemonClient {
       args: options?.args,
       ...(options?.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
       ...(options?.size !== undefined ? { size: options.size } : {}),
+      // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17 once daemon floor >= v0.8.1.
+      ...(this.lastServerInfoMessage?.features?.terminalViewAttributes === true &&
+      options?.viewAttributes !== undefined
+        ? { viewAttributes: options.viewAttributes }
+        : {}),
       requestId: resolvedRequestId,
     });
     return this.sendCorrelatedRequest({
@@ -5707,6 +5761,15 @@ export class DaemonClient {
     this.sendSessionMessage({ type: "terminal_input", terminalId, message });
   }
 
+  // 尺寸 claim 之后与主题变化时推送终端三色；daemon 只接受当前尺寸所有者的推送。
+  sendTerminalViewAttributes(terminalId: string, attributes: TerminalViewAttributes): void {
+    // COMPAT(terminalViewAttributes): added in v0.8.1, remove gate after 2027-03-17 once daemon floor >= v0.8.1.
+    if (this.lastServerInfoMessage?.features?.terminalViewAttributes !== true) {
+      return;
+    }
+    this.sendTerminalInput(terminalId, { type: "view_attributes", attributes });
+  }
+
   async killTerminal(terminalId: string, requestId?: string): Promise<KillTerminalPayload> {
     const resolvedRequestId = this.createRequestId(requestId);
     const message = SessionInboundMessageSchema.parse({
@@ -5777,6 +5840,70 @@ export class DaemonClient {
         ...(typeof options.runOnCreate === "boolean" ? { runOnCreate: options.runOnCreate } : {}),
       },
       responseType: "schedule/create/response",
+    });
+  }
+
+  async usageReportGet(options: UsageReportOptions): Promise<UsageReportPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "usage.report.get.request",
+        from: options.from,
+        to: options.to,
+        timezone: options.timezone,
+        ...(options.filters ? { filters: options.filters } : {}),
+        ...(options.trend ? { trend: options.trend } : {}),
+      },
+      responseType: "usage.report.get.response",
+    });
+  }
+
+  async usageSessionsList(options: UsageSessionsListOptions): Promise<UsageSessionsListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "usage.sessions.list.request",
+        from: options.from,
+        to: options.to,
+        timezone: options.timezone,
+        ...(options.filters ? { filters: options.filters } : {}),
+      },
+      responseType: "usage.sessions.list.response",
+    });
+  }
+
+  async usagePricingList(requestId?: string): Promise<UsagePricingListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.pricing.list.request" },
+      responseType: "usage.pricing.list.response",
+    });
+  }
+
+  async usageAgentGet(agentId: string, requestId?: string): Promise<UsageAgentGetPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.agent.get.request", agentId },
+      responseType: "usage.agent.get.response",
+    });
+  }
+
+  async usageAgentTurnsList(
+    agentId: string,
+    requestId?: string,
+  ): Promise<UsageAgentTurnsListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.agent.turns.list.request", agentId },
+      responseType: "usage.agent.turns.list.response",
+    });
+  }
+
+  async usagePricingRefresh(requestId?: string): Promise<UsagePricingRefreshPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "usage.pricing.refresh.request" },
+      responseType: "usage.pricing.refresh.response",
     });
   }
 

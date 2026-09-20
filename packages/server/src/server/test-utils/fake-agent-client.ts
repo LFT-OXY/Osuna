@@ -45,6 +45,12 @@ const TEST_MODES: AgentMode[] = [
   { id: "always-ask", label: "Always Ask", description: "Always prompt" },
 ];
 
+/** What a test may do to a live fake session. */
+export interface FakeAgentSessionControl {
+  /** Stands in for a resume that hands back a new provider session id. */
+  rotateSessionId(sessionId: string): void;
+}
+
 interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -62,6 +68,10 @@ interface FakeAgentSessionOptions {
 }
 
 export interface TestAgentClientOptions {
+  /** Pins the provider session id, so a test can point it at a real transcript. */
+  nextSessionId?: () => string;
+  /** Handed each new session, so a test can drive it — a resume, for instance. */
+  onSessionCreated?: (session: FakeAgentSessionControl) => void;
   beforeCreateSession?: () => Promise<void>;
   closeSession?: () => Promise<void>;
   onStartTurn?: (prompt: AgentPromptInput) => void;
@@ -324,7 +334,8 @@ function buildLargeTimelineItem(input: {
 
 class FakeAgentSession implements AgentSession {
   readonly capabilities: AgentCapabilityFlags;
-  readonly id: string;
+  /** Mutable: a prompt can rotate it, the way a Claude resume does. */
+  id: string;
   private readonly providerName: string;
   private readonly config: AgentSessionConfig;
   private interruptSignal = createDeferred<void>();
@@ -360,6 +371,10 @@ class FakeAgentSession implements AgentSession {
 
   get provider() {
     return this.providerName;
+  }
+
+  rotateSessionId(sessionId: string): void {
+    this.id = sessionId;
   }
 
   get features(): AgentFeature[] {
@@ -1214,13 +1229,17 @@ class FakeAgentClient implements AgentClient {
     _launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
     await this.options.beforeCreateSession?.();
-    return new FakeAgentSession({
+    const sessionId = this.options.nextSessionId?.();
+    const session = new FakeAgentSession({
       providerName: this.provider,
       config: { ...config },
       supportsMcpServers: this.options.supportsMcpServers,
+      ...(sessionId ? { sessionId } : {}),
       closeSession: this.options.closeSession,
       onStartTurn: this.options.onStartTurn,
     });
+    this.options.onSessionCreated?.(session);
+    return session;
   }
 
   async resumeSession(

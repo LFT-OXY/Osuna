@@ -3,12 +3,21 @@ pre-commit:
   jobs:
     - name: format
       glob: "*.{css,js,json,jsonc,jsx,md,ts,tsx,yaml,yml}"
-      exclude:
+      # Mirrors the ignorePatterns in .oxfmtrc.json and .oxlintrc.json. Without
+      # it a commit touching only those paths hands oxfmt a list it ignores
+      # entirely, and "no target file" is an error, not a pass.
+      exclude: &agent_tooling_exclude
         - "package-lock.json"
         - "**/package-lock.json"
+        - ".atw/**"
+        - ".agents/**"
+        - ".claude/**"
+        - ".pi/**"
+        - "docs/agents/**"
       run: npm run format:check:files -- {staged_files}
     - name: lint
       glob: "*.{js,jsx,ts,tsx}"
+      exclude: *agent_tooling_exclude
       run: npm run lint -- {staged_files}
     - name: typecheck
       run: npm run typecheck

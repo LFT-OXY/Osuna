@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
-import { providerUsageCopy } from "./copy";
 import type { ProviderUsageListPayload, ProviderUsageView } from "./types";
+import { PROVIDER_USAGE_CLIENT_UNAVAILABLE_KEY, resolveProviderUsageView } from "./view";
 
 export const PROVIDER_USAGE_STALE_TIME_MS = 5 * 60 * 1000;
 
@@ -42,7 +42,7 @@ export function useProviderUsage(
 
   const queryFn = useCallback(async () => {
     if (!client) {
-      throw new Error(providerUsageCopy.clientUnavailable);
+      throw new Error(PROVIDER_USAGE_CLIENT_UNAVAILABLE_KEY);
     }
     return fetchProviderUsage(client);
   }, [client]);
@@ -67,37 +67,27 @@ export function useProviderUsage(
     });
   }, [canFetch, queryClient, queryFn, queryKey]);
 
-  const view = useMemo<ProviderUsageView>(() => {
-    if (!serverId || !client || !isConnected) {
-      return { kind: "error", message: providerUsageCopy.hostUnavailable };
-    }
-    if (!supportsProviderUsage) {
-      return { kind: "error", message: providerUsageCopy.hostUpgradeRequired };
-    }
-    if (query.data) {
-      return {
-        kind: "ready",
+  const view = useMemo<ProviderUsageView>(
+    () =>
+      resolveProviderUsageView({
+        isConnected: Boolean(serverId && client && isConnected),
+        isSupported: supportsProviderUsage,
         payload: query.data,
-        isRefreshing: query.isFetching,
-      };
-    }
-    if (query.isError) {
-      return {
-        kind: "error",
-        message: query.error instanceof Error ? query.error.message : String(query.error),
-      };
-    }
-    return { kind: "loading" };
-  }, [
-    client,
-    isConnected,
-    query.data,
-    query.error,
-    query.isError,
-    query.isFetching,
-    serverId,
-    supportsProviderUsage,
-  ]);
+        isFetching: query.isFetching,
+        isError: query.isError,
+        error: query.error,
+      }),
+    [
+      client,
+      isConnected,
+      query.data,
+      query.error,
+      query.isError,
+      query.isFetching,
+      serverId,
+      supportsProviderUsage,
+    ],
+  );
 
   return { view, refresh, canFetch };
 }

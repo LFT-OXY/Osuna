@@ -75,6 +75,8 @@ function timingFor(...ids: string[]): Map<string, TurnTiming> {
   const timing = {
     completedAt: timestamp(9),
     durationMs: 8000,
+    turnId: null,
+    userMessageId: null,
   };
   return new Map(ids.map((id) => [id, timing]));
 }

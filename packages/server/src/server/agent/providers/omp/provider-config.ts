@@ -6,7 +6,6 @@ import { z } from "zod";
 
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 
-const OMP_SESSION_DIR = "~/.omp/agent/sessions";
 const DEFAULT_OMP_MODE_ID = "full";
 const DEFAULT_OMP_READY_TIMEOUT_MS = 20_000;
 const DEFAULT_OMP_RPC_TIMEOUT_MS = 60_000;
@@ -25,7 +24,7 @@ export const OmpProviderParamsSchema = z
   .strict();
 
 export interface OmpRuntimeProviderParams {
-  sessionDir: string;
+  sessionDir?: string;
   readyTimeoutMs: number;
   rpcTimeoutMs: number;
 }
@@ -77,11 +76,27 @@ export interface OmpDiagnosticPaths {
   xdgCacheRoot: string;
 }
 
-export function resolveOmpDiagnosticPaths(
-  env: NodeJS.ProcessEnv = process.env,
-  home: string = homedir(),
-  platform: NodeJS.Platform = process.platform,
-): OmpDiagnosticPaths {
+export interface OmpDirectoryOptions {
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+  platform?: NodeJS.Platform;
+}
+
+interface OmpRoots {
+  profile: string;
+  configRoot: string;
+  agentDir: string;
+  /** Where OMP keeps per-profile data; the XDG root when it exists, otherwise the agent directory. */
+  dataDir: string;
+  xdgDataRoot: string;
+  xdgStateRoot: string;
+  xdgCacheRoot: string;
+}
+
+function resolveOmpRoots(options: OmpDirectoryOptions): OmpRoots {
+  const env = options.env ?? process.env;
+  const home = options.homeDir ?? homedir();
+  const platform = options.platform ?? process.platform;
   const normalizedProfile = (env.OMP_PROFILE ?? env.PI_PROFILE)?.trim();
   const profile =
     normalizedProfile && normalizedProfile !== "default" ? normalizedProfile : "default";
@@ -101,19 +116,52 @@ export function resolveOmpDiagnosticPaths(
     const candidate = profile === "default" ? appRoot : join(appRoot, "profiles", profile);
     return existsSync(candidate) ? candidate : undefined;
   };
-  const xdgDataRoot = resolveXdgRoot("XDG_DATA_HOME") ?? configRoot;
-  const xdgStateRoot = resolveXdgRoot("XDG_STATE_HOME") ?? configRoot;
-  const xdgCacheRoot = resolveXdgRoot("XDG_CACHE_HOME") ?? configRoot;
+  const xdgDataRoot = resolveXdgRoot("XDG_DATA_HOME");
 
   return {
     profile,
     configRoot,
     agentDir,
-    agentDb: join(xdgDataRoot === configRoot ? agentDir : xdgDataRoot, "agent.db"),
-    xdgDataRoot,
-    xdgStateRoot,
-    xdgCacheRoot,
+    // Once an XDG data root exists OMP drops the agent/ layer (pi-utils `agentSubdir`).
+    dataDir: xdgDataRoot ?? agentDir,
+    xdgDataRoot: xdgDataRoot ?? configRoot,
+    xdgStateRoot: resolveXdgRoot("XDG_STATE_HOME") ?? configRoot,
+    xdgCacheRoot: resolveXdgRoot("XDG_CACHE_HOME") ?? configRoot,
   };
+}
+
+export function resolveOmpDiagnosticPaths(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+  platform: NodeJS.Platform = process.platform,
+): OmpDiagnosticPaths {
+  const roots = resolveOmpRoots({ env, homeDir: home, platform });
+  return {
+    profile: roots.profile,
+    configRoot: roots.configRoot,
+    agentDir: roots.agentDir,
+    agentDb: join(roots.dataDir, "agent.db"),
+    xdgDataRoot: roots.xdgDataRoot,
+    xdgStateRoot: roots.xdgStateRoot,
+    xdgCacheRoot: roots.xdgCacheRoot,
+  };
+}
+
+export interface OmpSessionPaths {
+  /** Holds OMP's global `settings.json`. */
+  agentDir: string;
+  /** Where OMP writes its JSONL sessions. */
+  sessionsDir: string;
+}
+
+/**
+ * Where OMP itself keeps sessions, derived from the environment exactly as upstream
+ * `pi-utils/dirs.ts` does. Paseo-side overrides (provider params, `settings.json`) are applied by
+ * the caller before falling back here.
+ */
+export function resolveOmpSessionPaths(options: OmpDirectoryOptions = {}): OmpSessionPaths {
+  const roots = resolveOmpRoots(options);
+  return { agentDir: roots.agentDir, sessionsDir: join(roots.dataDir, "sessions") };
 }
 
 export function formatOmpVersionSupport(versionOutput: string): string {
@@ -137,7 +185,7 @@ export function resolveOmpProviderParams(providerParams: unknown): {
   const configuredRpcTimeoutMs = params.rpcTimeoutMs;
   return {
     runtimeProviderParams: {
-      sessionDir: params.sessionDir ?? OMP_SESSION_DIR,
+      ...(params.sessionDir ? { sessionDir: params.sessionDir } : {}),
       readyTimeoutMs: configuredRpcTimeoutMs ?? DEFAULT_OMP_READY_TIMEOUT_MS,
       rpcTimeoutMs: configuredRpcTimeoutMs ?? DEFAULT_OMP_RPC_TIMEOUT_MS,
     },

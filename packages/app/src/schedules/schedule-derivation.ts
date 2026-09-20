@@ -1,5 +1,6 @@
 import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import { describeScheduleCwd } from "@/schedules/schedule-project-targets";
+import type { ScheduleDescription } from "@/utils/schedule-format";
 
 // Derived from existing fields only — no new protocol state. "active"/"paused"
 // mirror the stored status; the rest are computed truths the daemon does not
@@ -14,8 +15,8 @@ export interface ScheduleTargetAgent {
 }
 
 export interface ScheduleTargetResolution {
-  /** The target line: agent title, project name, or the shortened cwd. */
-  label: string;
+  /** 目标行：agent 标题 / 项目名 / 缩短路径是原文；「未命名 Agent」「Agent 不可用」回退是翻译键。 */
+  label: ScheduleDescription;
   /** Provider glyph for the row, when known. */
   provider: string | null;
 }
@@ -66,12 +67,18 @@ function resolveTarget(input: ResolveScheduleInput): ScheduleTargetResolution {
   if (schedule.target.type === "agent") {
     const agent = agentsByKey.get(agentKey(serverId, schedule.target.agentId));
     if (agent) {
-      return { label: agent.title?.trim() || "Untitled agent", provider: agent.provider };
+      const title = agent.title?.trim();
+      return {
+        label: title ? { text: title } : { key: "schedules.form.untitledAgent" },
+        provider: agent.provider,
+      };
     }
-    return { label: "Agent unavailable", provider: null };
+    return { label: { key: "schedules.form.agentUnavailable" }, provider: null };
   }
   return {
-    label: describeScheduleCwd({ serverId, cwd: schedule.target.config.cwd, projectNameByCwd }),
+    label: {
+      text: describeScheduleCwd({ serverId, cwd: schedule.target.config.cwd, projectNameByCwd }),
+    },
     provider: schedule.target.config.provider,
   };
 }

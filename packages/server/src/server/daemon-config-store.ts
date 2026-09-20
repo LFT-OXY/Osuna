@@ -31,6 +31,7 @@ interface SupportedMutableConfigPatch {
   skills?: MutableDaemonConfig["skills"];
   pluginsEnabled?: boolean;
   plugins?: MutableDaemonConfig["plugins"];
+  usage?: MutableDaemonConfigPatch["usage"];
 }
 
 interface LoggerLike {
@@ -189,6 +190,8 @@ const RELOADABLE_PATHS = [
   "agents.metadataGeneration",
   "agents.skills.selection",
   "pluginsEnabled",
+  "features.usage.pricing.autoUpdate",
+  "features.usage.pricing.overrides",
 ] as const;
 
 const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
@@ -212,6 +215,8 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["agents.metadataGeneration", "metadataGeneration"],
   ["agents.skills.selection", "skills.selection"],
   ["pluginsEnabled", "pluginsEnabled"],
+  ["features.usage.pricing.autoUpdate", "usage.pricing.autoUpdate"],
+  ["features.usage.pricing.overrides", "usage.pricing.overrides"],
 ]);
 
 function pathBelongsTo(path: string, owner: string): boolean {
@@ -276,6 +281,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
+    ...(patch.usage?.pricing !== undefined ? { usage: { pricing: patch.usage.pricing } } : {}),
   };
 }
 
@@ -584,13 +590,31 @@ function mergeMutablePatchIntoPersistedConfig(params: {
   const { persisted, patch, removeProviders, persistRelayEnabled } = params;
   const daemon = mergeMutableDaemonPatch(persisted.daemon, patch, persistRelayEnabled);
   const agents = mergeMutableAgentPatch(persisted.agents, patch, removeProviders);
+  const features = mergeMutableFeaturesPatch(persisted.features, patch);
   return {
     ...persisted,
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
     ...(daemon ? { daemon } : { daemon: undefined }),
     ...(agents ? { agents } : { agents: undefined }),
+    ...(features ? { features } : {}),
   } as PersistedConfig;
+}
+
+/** The price table is the only mutable field under `features`. */
+function mergeMutableFeaturesPatch(
+  persistedFeatures: PersistedConfig["features"],
+  patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
+): PersistedConfig["features"] {
+  const pricing = patch.usage?.pricing;
+  if (pricing === undefined) return persistedFeatures;
+  return {
+    ...persistedFeatures,
+    usage: {
+      ...persistedFeatures?.usage,
+      pricing: { ...persistedFeatures?.usage?.pricing, ...pricing },
+    },
+  };
 }
 
 function mergeMutableAgentPatch(

@@ -196,6 +196,9 @@ export async function startE2EWorker(
         NODE_ENV: "development",
         PATH: `${fakeEditorBin}${path.delimiter}${process.env.PATH ?? ""}`,
         PASEO_E2E_EDITOR_RECORD_PATH: editorRecordPath,
+        // Worker daemons stay offline: the price table is the one thing the
+        // daemon would otherwise fetch on its own half a minute after start.
+        PASEO_USAGE_PRICING_AUTO_UPDATE: "0",
         ...options.environment,
       },
     });

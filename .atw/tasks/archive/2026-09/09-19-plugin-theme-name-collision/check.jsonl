@@ -1,0 +1,9 @@
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 包编码规范入口"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单测接缝形态、e2e 组织方式，以及本仓刚记下的「断言不得为了少改而弱化」"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "设置页行与菜单项的组件写法"}
+{"file": ".atw/spec/app/frontend/type-safety.md", "reason": "PluginThemeOption 增字段时的类型派生约定"}
+{"file": "docs/plugins.md", "reason": "addTheme 契约、插件主题 id 与持久化形状，本任务承诺不动这些"}
+{"file": "docs/menus.md", "reason": "菜单引擎：description 槽位与分组分隔线的既有用法"}
+{"file": "docs/design.md", "reason": "副标题属于版式决定，密度与层级按设计系统来"}
+{"file": "docs/testing.md", "reason": "只验外部行为、不为绿灯弱化断言的仓库级基准"}
+{"file": "docs/glossary.md", "reason": "主题、插件贡献的统一说法"}
