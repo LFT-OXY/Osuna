@@ -49,12 +49,12 @@ export function isOsunaToolName(name: string): boolean {
     return (
       segments.length >= 3 &&
       segments[0] === "mcp" &&
-      (segments[1] === "paseo" || segments[1].startsWith("paseo_"))
+      (segments[1] === "osuna" || segments[1].startsWith("osuna_"))
     );
   }
   if (normalized.includes(".")) {
     const firstSegment = normalized.split(".")[0];
-    return firstSegment === "paseo" || firstSegment.startsWith("paseo_");
+    return firstSegment === "osuna" || firstSegment.startsWith("osuna_");
   }
   return false;
 }
@@ -66,7 +66,7 @@ export function getOsunaToolLeafName(name: string): string | null {
     if (
       segments.length >= 3 &&
       segments[0] === "mcp" &&
-      (segments[1] === "paseo" || segments[1].startsWith("paseo_"))
+      (segments[1] === "osuna" || segments[1].startsWith("osuna_"))
     ) {
       return segments.slice(2).join("__");
     }
@@ -74,7 +74,7 @@ export function getOsunaToolLeafName(name: string): string | null {
   }
   if (normalized.includes(".")) {
     const firstSegment = normalized.split(".")[0];
-    if (firstSegment === "paseo" || firstSegment.startsWith("paseo_")) {
+    if (firstSegment === "osuna" || firstSegment.startsWith("osuna_")) {
       return normalized.split(".").slice(1).join(".");
     }
     return null;

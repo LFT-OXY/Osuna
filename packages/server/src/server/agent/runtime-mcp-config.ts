@@ -1,6 +1,6 @@
 import type { AgentSessionConfig, McpServerConfig } from "./agent-sdk-types.js";
 
-const OSUNA_MCP_SERVER_NAME = "paseo";
+const OSUNA_MCP_SERVER_NAME = "osuna";
 const OSUNA_MCP_PATHNAME = "/mcp/agents";
 
 export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSessionConfig {
@@ -9,17 +9,17 @@ export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSe
     return config;
   }
 
-  const paseoServer = mcpServers[OSUNA_MCP_SERVER_NAME];
-  if (!paseoServer || !isInternalPaseoMcpServer(paseoServer)) {
+  // Claim the entry by its URL, not by its key: configs stored before the CLI
+  // rename hold this same server under the old name, and a key-based lookup
+  // would leave it in the user's config pointing at a daemon address long gone.
+  const kept = Object.entries(mcpServers).filter(([, server]) => !isInternalPaseoMcpServer(server));
+  if (kept.length === Object.keys(mcpServers).length) {
     return config;
   }
 
-  const nextMcpServers = { ...mcpServers };
-  delete nextMcpServers[OSUNA_MCP_SERVER_NAME];
-
   const next = { ...config };
-  if (Object.keys(nextMcpServers).length > 0) {
-    next.mcpServers = nextMcpServers;
+  if (kept.length > 0) {
+    next.mcpServers = Object.fromEntries(kept);
   } else {
     delete next.mcpServers;
   }

@@ -2807,7 +2807,7 @@ test("createAgent persists workspaceId on the stored record and emits it in the 
   }
 });
 
-test("createAgent injects paseo MCP server only into provider launch config", async () => {
+test("createAgent injects osuna MCP server only into provider launch config", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");
   const storage = new AgentStorage(storagePath, logger);
@@ -2854,7 +2854,7 @@ test("createAgent injects paseo MCP server only into provider launch config", as
     },
   });
   expect(client.lastConfig?.mcpServers).toEqual({
-    paseo: {
+    osuna: {
       type: "http",
       url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
     },
@@ -3155,7 +3155,7 @@ test("createAgent allows best-effort internal MCP when the provider session repo
   );
 
   expect(manager.getMcpAuthToken()).toBe("cap-token");
-  expect(client.lastConfig?.mcpServers?.paseo).toEqual({
+  expect(client.lastConfig?.mcpServers?.osuna).toEqual({
     type: "http",
     url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
     headers: { Authorization: "Bearer cap-token" },
@@ -3229,7 +3229,7 @@ test("uses each provider's current policy for new sessions and snapshots it by a
   ]);
   expect(codex.launchContexts[0]?.paseoTools).toBe(paseoTools);
   expect(claude.launchContexts[0]?.paseoTools).toBeUndefined();
-  expect(codex.configs[0]?.mcpServers?.paseo).toBeUndefined();
+  expect(codex.configs[0]?.mcpServers?.osuna).toBeUndefined();
   expect(claude.configs[0]?.mcpServers).toBeUndefined();
   expect(manager.getPaseoToolPolicy(codexAgent.id)).toEqual({
     disabledTools: ["list_agents"],
@@ -3294,7 +3294,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     { workspaceId: undefined },
   );
 
-  expect(enabledClient.lastConfig?.mcpServers?.paseo).toEqual({
+  expect(enabledClient.lastConfig?.mcpServers?.osuna).toEqual({
     type: "http",
     url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${enabledAgent.id}`,
   });
@@ -3363,7 +3363,7 @@ test("resumeAgentFromPersistence replaces stored internal paseo MCP with current
   });
 
   expect(client.resumeOverrides[0]?.mcpServers).toEqual({
-    paseo: {
+    osuna: {
       type: "http",
       url: `http://127.0.0.1:6768/mcp/agents?callerAgentId=${snapshot.id}`,
     },
@@ -3414,7 +3414,7 @@ test("resumeAgentFromPersistence drops stored internal paseo MCP when runtime in
   expect(snapshot.config.mcpServers).toBeUndefined();
 });
 
-test("createAgent preserves a user-provided paseo MCP config", async () => {
+test("createAgent preserves a user-provided osuna MCP config", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");
   const storage = new AgentStorage(storagePath, logger);
@@ -3444,9 +3444,9 @@ test("createAgent preserves a user-provided paseo MCP config", async () => {
       provider: "codex",
       cwd: workdir,
       mcpServers: {
-        paseo: {
+        osuna: {
           type: "http",
-          url: "https://example.com/custom-paseo",
+          url: "https://example.com/custom-osuna",
         },
       },
     },
@@ -3455,9 +3455,9 @@ test("createAgent preserves a user-provided paseo MCP config", async () => {
   );
 
   expect(snapshot.config.mcpServers).toEqual({
-    paseo: {
+    osuna: {
       type: "http",
-      url: "https://example.com/custom-paseo",
+      url: "https://example.com/custom-osuna",
     },
   });
   expect(client.lastConfig?.mcpServers).toEqual(snapshot.config.mcpServers);
