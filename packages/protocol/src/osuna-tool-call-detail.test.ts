@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPaseoToolDetailSections } from "./paseo-tool-call-detail.js";
+import { buildOsunaToolDetailSections } from "./osuna-tool-call-detail.js";
 
 describe("Paseo tool-call detail presentation", () => {
   it.each(["mcp__paseo__create_agent", "paseo.create_agent", "paseo_remote.create_agent"])(
     "shares one create-agent mapping for %s",
     (toolName) => {
       expect(
-        buildPaseoToolDetailSections(
+        buildOsunaToolDetailSections(
           toolName,
           {
             workspaceId: "wks_123",
@@ -47,7 +47,7 @@ describe("Paseo tool-call detail presentation", () => {
   );
 
   it("formats schedule cadence and nested settings without JSON syntax", () => {
-    const sections = buildPaseoToolDetailSections(
+    const sections = buildOsunaToolDetailSections(
       "mcp__paseo__create_schedule",
       {
         prompt: "Say hello back.",
@@ -91,7 +91,7 @@ describe("Paseo tool-call detail presentation", () => {
 
   it("unwraps MCP result envelopes instead of exposing JSON-encoded text", () => {
     expect(
-      buildPaseoToolDetailSections(
+      buildOsunaToolDetailSections(
         "mcp__paseo__send_agent_prompt",
         { prompt: "Say hello back." },
         {
@@ -121,7 +121,7 @@ describe("Paseo tool-call detail presentation", () => {
 
   it("uses readable fallback fields for newly added Paseo tools", () => {
     expect(
-      buildPaseoToolDetailSections(
+      buildOsunaToolDetailSections(
         "mcp__paseo__future_tool",
         { opaqueThing: ["one", "two"], enabled: false },
         { success: true },
@@ -144,6 +144,6 @@ describe("Paseo tool-call detail presentation", () => {
   });
 
   it("leaves non-Paseo tools alone", () => {
-    expect(buildPaseoToolDetailSections("mcp__github__create_issue", {}, {})).toBeNull();
+    expect(buildOsunaToolDetailSections("mcp__github__create_issue", {}, {})).toBeNull();
   });
 });

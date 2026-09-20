@@ -20,7 +20,7 @@ import {
   type CreateWorktreeOptions,
   type WorktreeConfig,
 } from "./worktree";
-import type { PaseoConfig } from "@osuna/protocol/paseo-config-schema";
+import type { OsunaConfig } from "@osuna/protocol/osuna-config-schema";
 import { getPaseoWorktreeMetadataPath, readPaseoWorktreeMetadata } from "./worktree-metadata.js";
 import {
   getCheckoutDiff,
@@ -48,7 +48,7 @@ import { delimiter, dirname, join } from "path";
 import { tmpdir } from "os";
 import net from "node:net";
 
-function loadConfigForTest(repoRoot: string): PaseoConfig | null {
+function loadConfigForTest(repoRoot: string): OsunaConfig | null {
   const result = readPaseoConfig(repoRoot);
   return result.ok ? result.config : null;
 }

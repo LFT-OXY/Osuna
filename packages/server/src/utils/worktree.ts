@@ -19,15 +19,15 @@ import {
 } from "./string-command-shell.js";
 import { readPaseoConfigJson, resolvePaseoConfigPath } from "./paseo-config-file.js";
 export {
-  PaseoConfigRawSchema,
-  PaseoLifecycleCommandRawSchema,
-  PaseoScriptEntryRawSchema,
-  PaseoWorktreeConfigRawSchema,
-  PaseoConfigSchema,
-  type PaseoConfig,
-  type PaseoConfigRaw,
-} from "@osuna/protocol/paseo-config-schema";
-import { PaseoConfigSchema, type PaseoConfig } from "@osuna/protocol/paseo-config-schema";
+  OsunaConfigRawSchema,
+  OsunaLifecycleCommandRawSchema,
+  OsunaScriptEntryRawSchema,
+  OsunaWorktreeConfigRawSchema,
+  OsunaConfigSchema,
+  type OsunaConfig,
+  type OsunaConfigRaw,
+} from "@osuna/protocol/osuna-config-schema";
+import { OsunaConfigSchema, type OsunaConfig } from "@osuna/protocol/osuna-config-schema";
 import {
   createPaseoWorktreeChangeRequestHint,
   normalizeBaseRefName,
@@ -253,7 +253,7 @@ export class InvalidGitBranchNameError extends Error {
 }
 
 export type ReadPaseoConfigResult =
-  | { ok: true; config: PaseoConfig | null }
+  | { ok: true; config: OsunaConfig | null }
   | { ok: false; configPath: string; error: unknown };
 
 export function readPaseoConfig(repoRoot: string): ReadPaseoConfigResult {
@@ -262,7 +262,7 @@ export function readPaseoConfig(repoRoot: string): ReadPaseoConfigResult {
     if (json === null) {
       return { ok: true, config: null };
     }
-    return { ok: true, config: PaseoConfigSchema.parse(json) };
+    return { ok: true, config: OsunaConfigSchema.parse(json) };
   } catch (error) {
     return { ok: false, configPath: resolvePaseoConfigPath(repoRoot), error };
   }
@@ -275,7 +275,7 @@ export function paseoConfigParseError(failure: { configPath: string; error: unkn
   });
 }
 
-function readPaseoConfigOrThrow(repoRoot: string): PaseoConfig | null {
+function readPaseoConfigOrThrow(repoRoot: string): OsunaConfig | null {
   const result = readPaseoConfig(repoRoot);
   if (!result.ok) {
     throw paseoConfigParseError(result);
@@ -325,7 +325,7 @@ export function getWorktreeTerminalSpecs(repoRoot: string): WorktreeTerminalConf
   return specs;
 }
 
-export function getScriptConfigs(config: PaseoConfig | null): Map<string, ScriptConfig> {
+export function getScriptConfigs(config: OsunaConfig | null): Map<string, ScriptConfig> {
   const scripts = config?.scripts;
   if (!scripts || typeof scripts !== "object") {
     return new Map();

@@ -1,18 +1,18 @@
 import { describe, expect, test } from "vitest";
 
 import { MutableDaemonConfigPatchSchema, MutableDaemonConfigSchema } from "./messages.js";
-import { ProviderOverrideSchema, ProviderPaseoToolsPolicySchema } from "./provider-config.js";
+import { ProviderOverrideSchema, ProviderOsunaToolsPolicySchema } from "./provider-config.js";
 
 describe("provider Paseo-tool policy", () => {
   test("accepts arbitrary tool IDs and leaves an empty policy enabled by default", () => {
     expect(
-      ProviderPaseoToolsPolicySchema.parse({
+      ProviderOsunaToolsPolicySchema.parse({
         disabledTools: ["future_tool", "browser_future_tool"],
       }),
     ).toEqual({
       disabledTools: ["future_tool", "browser_future_tool"],
     });
-    expect(ProviderPaseoToolsPolicySchema.parse({})).toEqual({});
+    expect(ProviderOsunaToolsPolicySchema.parse({})).toEqual({});
     expect(ProviderOverrideSchema.parse({}).osunaTools).toBeUndefined();
   });
 

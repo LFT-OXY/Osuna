@@ -1,14 +1,14 @@
 import {
-  PaseoConfigRawSchema,
+  OsunaConfigRawSchema,
   normalizeLifecycleCommands,
-  type PaseoConfigRaw,
-} from "@osuna/protocol/paseo-config-schema";
+  type OsunaConfigRaw,
+} from "@osuna/protocol/osuna-config-schema";
 import { READ_ONLY_GIT_ENV } from "../../checkout-git-utils.js";
 import { runGitCommand } from "../../../utils/run-git-command.js";
 
 export async function hasUncommittedWorktreeSetupChanges(input: {
   repoRoot: string;
-  currentConfig: PaseoConfigRaw | null;
+  currentConfig: OsunaConfigRaw | null;
 }): Promise<boolean> {
   const gitPath = await resolveConfigGitPath(input.repoRoot);
   const committedConfig = await readCommittedConfig(input.repoRoot, gitPath);
@@ -28,7 +28,7 @@ async function resolveConfigGitPath(repoRoot: string): Promise<string> {
 async function readCommittedConfig(
   repoRoot: string,
   gitPath: string,
-): Promise<PaseoConfigRaw | null> {
+): Promise<OsunaConfigRaw | null> {
   await runGitCommand(["rev-parse", "--verify", "HEAD"], {
     cwd: repoRoot,
     envOverlay: READ_ONLY_GIT_ENV,
@@ -46,7 +46,7 @@ async function readCommittedConfig(
     cwd: repoRoot,
     envOverlay: READ_ONLY_GIT_ENV,
   });
-  return PaseoConfigRawSchema.parse(JSON.parse(stdout));
+  return OsunaConfigRawSchema.parse(JSON.parse(stdout));
 }
 
 function stringArraysEqual(left: string[], right: string[]): boolean {

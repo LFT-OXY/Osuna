@@ -2,39 +2,39 @@ import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync }
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
-  PaseoConfigRawSchema,
-  type PaseoConfigRaw,
-  type PaseoConfigRevision,
+  OsunaConfigRawSchema,
+  type OsunaConfigRaw,
+  type OsunaConfigRevision,
   type ProjectConfigRpcError,
-} from "@osuna/protocol/paseo-config-schema";
+} from "@osuna/protocol/osuna-config-schema";
 export {
-  PaseoConfigRevisionSchema,
+  OsunaConfigRevisionSchema,
   ProjectConfigRpcErrorSchema,
-  type PaseoConfigRevision,
+  type OsunaConfigRevision,
   type ProjectConfigRpcError,
-} from "@osuna/protocol/paseo-config-schema";
+} from "@osuna/protocol/osuna-config-schema";
 
 export const OSUNA_CONFIG_FILE_NAME = "osuna.json";
 
 export type ReadPaseoConfigForEditResult =
-  | { ok: true; config: PaseoConfigRaw | null; revision: PaseoConfigRevision | null }
+  | { ok: true; config: OsunaConfigRaw | null; revision: OsunaConfigRevision | null }
   | { ok: false; error: ProjectConfigRpcError };
 
 export type WritePaseoConfigForEditResult =
-  | { ok: true; config: PaseoConfigRaw; revision: PaseoConfigRevision }
+  | { ok: true; config: OsunaConfigRaw; revision: OsunaConfigRevision }
   | { ok: false; error: ProjectConfigRpcError };
 
 export interface WritePaseoConfigForEditInput {
   repoRoot: string;
-  config: PaseoConfigRaw;
-  expectedRevision: PaseoConfigRevision | null;
+  config: OsunaConfigRaw;
+  expectedRevision: OsunaConfigRevision | null;
 }
 
 export function resolvePaseoConfigPath(repoRoot: string): string {
   return join(repoRoot, OSUNA_CONFIG_FILE_NAME);
 }
 
-export function statPaseoConfigPath(repoRoot: string): PaseoConfigRevision | null {
+export function statPaseoConfigPath(repoRoot: string): OsunaConfigRevision | null {
   const configPath = resolvePaseoConfigPath(repoRoot);
   if (!existsSync(configPath)) {
     return null;
@@ -62,7 +62,7 @@ export function readPaseoConfigForEdit(repoRoot: string): ReadPaseoConfigForEdit
     }
     return {
       ok: true,
-      config: PaseoConfigRawSchema.parse(json),
+      config: OsunaConfigRawSchema.parse(json),
       revision: statPaseoConfigPath(repoRoot),
     };
   } catch {
@@ -76,7 +76,7 @@ export function readPaseoConfigForEdit(repoRoot: string): ReadPaseoConfigForEdit
 export function writePaseoConfigForEdit(
   input: WritePaseoConfigForEditInput,
 ): WritePaseoConfigForEditResult {
-  const parsed = PaseoConfigRawSchema.safeParse(input.config);
+  const parsed = OsunaConfigRawSchema.safeParse(input.config);
   if (!parsed.success) {
     return { ok: false, error: { code: "invalid_project_config" } };
   }
@@ -111,8 +111,8 @@ export function writePaseoConfigForEdit(
 }
 
 function paseoConfigRevisionsEqual(
-  left: PaseoConfigRevision | null,
-  right: PaseoConfigRevision | null,
+  left: OsunaConfigRevision | null,
+  right: OsunaConfigRevision | null,
 ): boolean {
   if (left === null || right === null) {
     return left === right;

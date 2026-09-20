@@ -17,7 +17,7 @@ import {
   TerminalProfileSchema,
 } from "@osuna/protocol/messages";
 import { UsagePricingOverrideSchema } from "@osuna/protocol/usage/types";
-import { PaseoServicePortAllocationSchema } from "@osuna/protocol/paseo-config-schema";
+import { OsunaServicePortAllocationSchema } from "@osuna/protocol/osuna-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
 export const LogFormatSchema = z.enum(["pretty", "json"]);
@@ -101,7 +101,7 @@ const ProvidersSchema = z
 const WorktreesConfigSchema = z
   .object({
     root: z.string().min(1).optional(),
-    servicePorts: PaseoServicePortAllocationSchema.optional(),
+    servicePorts: OsunaServicePortAllocationSchema.optional(),
   })
   .strict();
 

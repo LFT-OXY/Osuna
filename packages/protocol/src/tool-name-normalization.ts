@@ -39,7 +39,7 @@ export function isLikelyNamespacedToolName(name: string): boolean {
   return false;
 }
 
-export function isPaseoToolName(name: string): boolean {
+export function isOsunaToolName(name: string): boolean {
   const normalized = normalizeToolName(name);
   if (isSpeakToolName(normalized)) {
     return false;
@@ -59,7 +59,7 @@ export function isPaseoToolName(name: string): boolean {
   return false;
 }
 
-export function getPaseoToolLeafName(name: string): string | null {
+export function getOsunaToolLeafName(name: string): string | null {
   const normalized = normalizeToolName(name);
   if (normalized.includes("__")) {
     const segments = normalized.split("__").filter((s) => s.length > 0);

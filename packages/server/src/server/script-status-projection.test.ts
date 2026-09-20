@@ -12,7 +12,7 @@ import { WorkspaceScriptPayloadSchema } from "@osuna/protocol/messages";
 import type { ScriptHealthState } from "./script-health-monitor.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
 import { readPaseoConfig } from "../utils/worktree.js";
-import type { PaseoConfig } from "@osuna/protocol/paseo-config-schema";
+import type { OsunaConfig } from "@osuna/protocol/osuna-config-schema";
 import { createTestLogger } from "../test-utils/test-logger.js";
 
 function createWorkspaceRepo(options?: {
@@ -53,7 +53,7 @@ function createWorkspaceRepo(options?: {
 function buildPayloads(input: {
   workspaceId: string;
   workspaceDirectory: string;
-  paseoConfig?: PaseoConfig | null;
+  paseoConfig?: OsunaConfig | null;
   routeStore?: ScriptRouteStore;
   serviceProxy?: ScriptRouteStore;
   runtimeStore: WorkspaceScriptRuntimeStore;
@@ -72,7 +72,7 @@ function buildPayloads(input: {
   });
 }
 
-function loadConfig(repoRoot: string): PaseoConfig | null {
+function loadConfig(repoRoot: string): OsunaConfig | null {
   const result = readPaseoConfig(repoRoot);
   return result.ok ? result.config : null;
 }

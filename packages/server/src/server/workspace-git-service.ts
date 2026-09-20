@@ -271,14 +271,14 @@ export interface WorkspaceGitBranchSuggestionsOptions {
 }
 
 export interface WorkspaceGitStashListOptions {
-  paseoOnly?: boolean;
+  osunaOnly?: boolean;
 }
 
 export interface WorkspaceGitStashEntry {
   index: number;
   message: string;
   branch: string | null;
-  isPaseo: boolean;
+  osunaeo: boolean;
 }
 
 export type WorkspaceGitBranchValidationResult = BranchCheckoutResolution;
@@ -813,14 +813,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   ): Promise<WorkspaceGitStashEntry[]> {
     this.assertNotDisposed();
     const normalizedCwd = resolve(cwd);
-    const paseoOnly = options?.paseoOnly !== false;
-    const key = JSON.stringify(["stashes", normalizedCwd, paseoOnly]);
+    const osunaOnly = options?.osunaOnly !== false;
+    const key = JSON.stringify(["stashes", normalizedCwd, osunaOnly]);
     return this.readAuxiliaryCache(this.stashListCache, key, readOptions, async () => {
       const { stdout } = await this.deps.runGitCommand(["stash", "list", "--format=%gd%x00%s"], {
         cwd: normalizedCwd,
         envOverlay: READ_ONLY_GIT_ENV,
       });
-      return parseWorkspaceGitStashList(stdout, { paseoOnly });
+      return parseWorkspaceGitStashList(stdout, { osunaOnly });
     });
   }
 
@@ -3435,7 +3435,7 @@ function buildForgeSnapshot(
 
 function parseWorkspaceGitStashList(
   stdout: string,
-  options: { paseoOnly: boolean },
+  options: { osunaOnly: boolean },
 ): WorkspaceGitStashEntry[] {
   const entries: WorkspaceGitStashEntry[] = [];
   const lines = stdout.trim().split("\n").filter(Boolean);
@@ -3456,14 +3456,14 @@ function parseWorkspaceGitStashList(
     const index = Number(indexMatch[1]);
     const prefix = "osuna-auto-stash:";
     const prefixIdx = subject.indexOf(prefix);
-    const isPaseo = prefixIdx >= 0;
-    const branch = isPaseo ? subject.slice(prefixIdx + prefix.length).trim() || null : null;
+    const osunaeo = prefixIdx >= 0;
+    const branch = osunaeo ? subject.slice(prefixIdx + prefix.length).trim() || null : null;
 
-    if (options.paseoOnly && !isPaseo) {
+    if (options.osunaOnly && !osunaeo) {
       continue;
     }
 
-    entries.push({ index, message: subject, branch, isPaseo });
+    entries.push({ index, message: subject, branch, osunaeo });
   }
 
   return entries;

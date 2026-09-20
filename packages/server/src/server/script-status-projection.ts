@@ -4,7 +4,7 @@ import type {
   SessionOutboundMessage,
   WorkspaceScriptPayload,
 } from "@osuna/protocol/messages";
-import type { PaseoConfig } from "@osuna/protocol/paseo-config-schema";
+import type { OsunaConfig } from "@osuna/protocol/osuna-config-schema";
 import { getScriptConfigs, isServiceScript, readPaseoConfig } from "../utils/worktree.js";
 import { deriveProjectSlug } from "./workspace-git-metadata.js";
 import type { ScriptHealthEntry, ScriptHealthState } from "./script-health-monitor.js";
@@ -21,7 +21,7 @@ interface SessionEmitter {
 interface BuildWorkspaceScriptPayloadsOptions {
   workspaceId: string;
   workspaceDirectory: string;
-  paseoConfig: PaseoConfig | null;
+  paseoConfig: OsunaConfig | null;
   serviceProxy: ServiceProxySubsystem;
   runtimeStore: WorkspaceScriptRuntimeStore;
   daemonPort: number | null;
@@ -36,7 +36,7 @@ interface BuildWorkspaceScriptPayloadsOptions {
 export function readPaseoConfigForProjection(
   workspaceDirectory: string,
   logger: Logger,
-): PaseoConfig | null {
+): OsunaConfig | null {
   const result = readPaseoConfig(workspaceDirectory);
   if (result.ok) {
     return result.config;

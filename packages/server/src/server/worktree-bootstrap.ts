@@ -30,7 +30,7 @@ import {
   requirePlannedWorkspaceServicePort,
   refreshWorkspaceServicePort,
 } from "./workspace-service-port-registry.js";
-import type { PaseoServicePortAllocation } from "@osuna/protocol/paseo-config-schema";
+import type { OsunaServicePortAllocation } from "@osuna/protocol/osuna-config-schema";
 
 export interface WorktreeBootstrapTerminalResult {
   name: string | null;
@@ -736,7 +736,7 @@ export interface SpawnWorkspaceScriptOptions {
   serviceProxy: ServiceProxySubsystem;
   runtimeStore: WorkspaceScriptRuntimeStore;
   terminalManager: TerminalManager;
-  globalServicePorts?: PaseoServicePortAllocation;
+  globalServicePorts?: OsunaServicePortAllocation;
   logger?: Logger;
   onLifecycleChanged?: () => void;
 }
@@ -760,7 +760,7 @@ async function setupServiceScriptRoute(params: {
   serviceProxyPublicBaseUrl: string | null | undefined;
   existingRuntimeEntry: ReturnType<WorkspaceScriptRuntimeStore["get"]>;
   serviceProxy: ServiceProxySubsystem;
-  servicePortAllocation: PaseoServicePortAllocation | undefined;
+  servicePortAllocation: OsunaServicePortAllocation | undefined;
 }): Promise<ServiceScriptSetupResult> {
   const {
     scriptConfigs,

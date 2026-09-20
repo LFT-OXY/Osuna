@@ -170,7 +170,7 @@ nix 无法本地验证，验收靠推 CI 跑 `nix.yml`。
   要不要补回来是独立的 daemon 行为问题，不在本改名任务内。
 - **旧的 `paseo-auto-stash:` stash 条目不再在 Osuna 界面里可见。** 批次 2 把前缀改成
   `osuna-auto-stash:`，而 `WorkspaceGitService.listStashes` 默认只列前缀匹配的条目
-  （`paseoOnly` 默认 true）。6767 上那个上游 daemon 过去自动 stash 出来的条目写在**用户
+  （`osunaOnly` 默认 true）。6767 上那个上游 daemon 过去自动 stash 出来的条目写在**用户
   真实 git 仓库**里，改名后 Osuna 不显示、也不提供一键恢复。它们没有丢：`git stash list`
   仍能看到，`git stash apply` 仍能取回。选择保持改名而不是双前缀读取，是为了守住「不保留
   任何读取旧名的兼容路径」这条前提；代价记在这里，不是默默接受。

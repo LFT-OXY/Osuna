@@ -18,7 +18,7 @@ import {
 } from "@osuna/protocol/agent-labels";
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@osuna/protocol/agent-types";
-import type { ProviderPaseoToolsPolicy } from "@osuna/protocol/provider-config";
+import type { ProviderOsunaToolsPolicy } from "@osuna/protocol/provider-config";
 import {
   BUILTIN_PROVIDER_IDS,
   DEV_AGENT_PROVIDER_DEFINITIONS,
@@ -152,7 +152,7 @@ export type AgentRunCancellationResult =
 interface PreparedSessionConfig {
   storedConfig: AgentSessionConfig;
   launchConfig: AgentSessionConfig;
-  paseoToolPolicy: ProviderPaseoToolsPolicy | undefined;
+  paseoToolPolicy: ProviderOsunaToolsPolicy | undefined;
 }
 
 interface NormalizeConfigOptions {
@@ -315,7 +315,7 @@ export interface AgentManagerOptions {
   mcpAuthToken?: string;
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
-  resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
+  resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderOsunaToolsPolicy | undefined;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
@@ -756,10 +756,10 @@ export class AgentManager {
   private readonly mcpAuthToken: string | null;
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
-  private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
+  private readonly paseoToolPolicies = new Map<string, ProviderOsunaToolsPolicy | undefined>();
   private readonly resolvePaseoToolPolicy: (
     provider: AgentProvider,
-  ) => ProviderPaseoToolsPolicy | undefined;
+  ) => ProviderOsunaToolsPolicy | undefined;
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -874,7 +874,7 @@ export class AgentManager {
     this.paseoToolCatalogFactory = factory;
   }
 
-  getPaseoToolPolicy(agentId: string): ProviderPaseoToolsPolicy | undefined {
+  getPaseoToolPolicy(agentId: string): ProviderOsunaToolsPolicy | undefined {
     return this.paseoToolPolicies.get(agentId);
   }
 
@@ -5172,7 +5172,7 @@ export class AgentManager {
     agentId: string,
     client: AgentClient,
     cwd: string,
-    paseoToolPolicy: ProviderPaseoToolsPolicy | undefined,
+    paseoToolPolicy: ProviderOsunaToolsPolicy | undefined,
     env?: Record<string, string>,
     opening?: {
       reason: PluginSessionOpenRequest["reason"];

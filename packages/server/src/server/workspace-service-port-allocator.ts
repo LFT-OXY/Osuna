@@ -1,7 +1,7 @@
 import net from "node:net";
 import { execCommand } from "../utils/spawn.js";
 import { findFreePort } from "./service-proxy.js";
-import type { PaseoServicePortAllocation } from "@osuna/protocol/paseo-config-schema";
+import type { OsunaServicePortAllocation } from "@osuna/protocol/osuna-config-schema";
 
 const PORT_SCRIPT_TIMEOUT_MS = 10_000;
 const PORT_SCRIPT_MAX_OUTPUT_BYTES = 1024;
@@ -14,7 +14,7 @@ interface PortRange {
 }
 
 export interface AllocateWorkspaceServicePortOptions {
-  allocation: PaseoServicePortAllocation | undefined;
+  allocation: OsunaServicePortAllocation | undefined;
   cwd: string;
   scriptName: string;
   workspaceId: string;

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PaseoConfigRawSchema, PaseoConfigSchema } from "@osuna/protocol/paseo-config-schema";
+import { OsunaConfigRawSchema, OsunaConfigSchema } from "@osuna/protocol/osuna-config-schema";
 
 describe("paseo config schema", () => {
   it("parses an empty config without metadata generation", () => {
-    const parsed = PaseoConfigSchema.parse({});
+    const parsed = OsunaConfigSchema.parse({});
 
     expect(parsed).toEqual({});
     expect(parsed.metadataGeneration).toBeUndefined();
@@ -24,7 +24,7 @@ describe("paseo config schema", () => {
       },
     };
 
-    expect(PaseoConfigSchema.parse(config)).toEqual({
+    expect(OsunaConfigSchema.parse(config)).toEqual({
       worktree: {
         setup: ["npm install"],
         teardown: ["npm run clean"],
@@ -35,7 +35,7 @@ describe("paseo config schema", () => {
 
   it("parses service port allocation", () => {
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         worktree: {
           servicePorts: { range: "3000-4000", portScript: "/usr/bin/portmake" },
         },
@@ -51,13 +51,13 @@ describe("paseo config schema", () => {
 
   it("rejects invalid service port ranges", () => {
     expect(() =>
-      PaseoConfigRawSchema.parse({ worktree: { servicePorts: { range: "4000-3000" } } }),
+      OsunaConfigRawSchema.parse({ worktree: { servicePorts: { range: "4000-3000" } } }),
     ).toThrow("Expected an inclusive TCP port range");
   });
 
   it("normalizes partial worktree lifecycle config without dropping present commands", () => {
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         worktree: {
           setup: 'echo "setup ran" > setup.log',
         },
@@ -70,7 +70,7 @@ describe("paseo config schema", () => {
     });
 
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         worktree: {
           teardown: ["npm run clean"],
         },
@@ -85,7 +85,7 @@ describe("paseo config schema", () => {
 
   it("parses all metadata generation instruction entries", () => {
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         metadataGeneration: {
           title: { instructions: "Keep titles to a few words." },
           branchName: { instructions: "Prefix branches with feat/." },
@@ -104,7 +104,7 @@ describe("paseo config schema", () => {
   });
 
   it("parses partial metadata generation instructions with missing entries undefined", () => {
-    const parsed = PaseoConfigSchema.parse({
+    const parsed = OsunaConfigSchema.parse({
       metadataGeneration: {
         branchName: { instructions: "Keep it short." },
       },
@@ -119,7 +119,7 @@ describe("paseo config schema", () => {
 
   it("preserves legacy agentTitle metadata instructions as passthrough", () => {
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         metadataGeneration: {
           agentTitle: { instructions: "Use concise titles." },
         },
@@ -133,7 +133,7 @@ describe("paseo config schema", () => {
 
   it("passes through unknown metadata generation fields", () => {
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         metadataGeneration: {
           futureField: 42,
         },
@@ -147,7 +147,7 @@ describe("paseo config schema", () => {
 
   it("passes through unknown metadata generator entry fields", () => {
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         metadataGeneration: {
           branchName: {
             instructions: "Use concise titles.",
@@ -167,7 +167,7 @@ describe("paseo config schema", () => {
 
   it("falls back to an empty metadata generator entry when instructions has an invalid type", () => {
     expect(
-      PaseoConfigSchema.parse({
+      OsunaConfigSchema.parse({
         metadataGeneration: {
           branchName: { instructions: 42 },
         },
@@ -197,12 +197,12 @@ describe("paseo config schema", () => {
       },
     };
 
-    expect(PaseoConfigRawSchema.parse(config)).toEqual(config);
+    expect(OsunaConfigRawSchema.parse(config)).toEqual(config);
   });
 
   it("raw schema falls back to an empty metadata generator entry when instructions has an invalid type", () => {
     expect(
-      PaseoConfigRawSchema.parse({
+      OsunaConfigRawSchema.parse({
         metadataGeneration: {
           branchName: { instructions: 42 },
         },

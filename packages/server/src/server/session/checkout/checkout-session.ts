@@ -720,9 +720,9 @@ export class CheckoutSession {
     msg: Extract<SessionInboundMessage, { type: "stash_list_request" }>,
   ): Promise<void> {
     const { cwd, requestId } = msg;
-    const paseoOnly = msg.paseoOnly !== false;
+    const osunaOnly = msg.osunaOnly !== false;
     try {
-      const entries = await this.workspaceGitService.listStashes(cwd, { paseoOnly });
+      const entries = await this.workspaceGitService.listStashes(cwd, { osunaOnly });
 
       this.host.emit({
         type: "stash_list_response",

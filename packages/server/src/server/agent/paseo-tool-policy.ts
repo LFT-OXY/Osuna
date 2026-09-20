@@ -1,18 +1,18 @@
-import type { ProviderPaseoToolsPolicy } from "@osuna/protocol/provider-config";
+import type { ProviderOsunaToolsPolicy } from "@osuna/protocol/provider-config";
 
 interface ProviderPaseoToolSettings {
-  osunaTools?: ProviderPaseoToolsPolicy;
+  osunaTools?: ProviderOsunaToolsPolicy;
 }
 
 export function resolvePaseoToolPolicy(
   providerId: string,
   providerSettings: Readonly<Record<string, ProviderPaseoToolSettings>> | undefined,
-): ProviderPaseoToolsPolicy | undefined {
+): ProviderOsunaToolsPolicy | undefined {
   return providerSettings?.[providerId]?.osunaTools;
 }
 
 export function isPaseoToolEnabled(
-  policy: ProviderPaseoToolsPolicy | undefined,
+  policy: ProviderOsunaToolsPolicy | undefined,
   toolName: string,
 ): boolean {
   if (toolName === "speak") {
@@ -24,6 +24,6 @@ export function isPaseoToolEnabled(
   return !policy?.disabledTools?.includes(toolName);
 }
 
-export function isPaseoToolPolicyEnabled(policy: ProviderPaseoToolsPolicy | undefined): boolean {
+export function isPaseoToolPolicyEnabled(policy: ProviderOsunaToolsPolicy | undefined): boolean {
   return policy?.enabled !== false;
 }

@@ -25,7 +25,7 @@ import {
   readPaseoConfigForProjection,
 } from "../../script-status-projection.js";
 import { deriveProjectServiceSlug, deriveProjectSlug } from "../../workspace-git-metadata.js";
-import type { PaseoServicePortAllocation } from "@osuna/protocol/paseo-config-schema";
+import type { OsunaServicePortAllocation } from "@osuna/protocol/osuna-config-schema";
 
 type WorkspaceScriptsPayload = WorkspaceDescriptorPayload["scripts"];
 
@@ -63,7 +63,7 @@ export function createWorkspaceScriptsService(deps: {
   getDaemonTcpHost: (() => string | null) | null;
   serviceProxyPublicBaseUrl: string | null;
   resolveScriptHealth: ((hostname: string) => ScriptHealthState | null) | null;
-  globalServicePorts?: PaseoServicePortAllocation;
+  globalServicePorts?: OsunaServicePortAllocation;
   logger: pino.Logger;
   emit: (message: SessionOutboundMessage) => void;
   wantsStatusUpdates?: () => boolean;

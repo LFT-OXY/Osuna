@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { ProviderPaseoToolsPolicy } from "@osuna/protocol/provider-config";
+import type { ProviderOsunaToolsPolicy } from "@osuna/protocol/provider-config";
 
 import { isPaseoToolEnabled, resolvePaseoToolPolicy } from "./paseo-tool-policy.js";
 
@@ -8,7 +8,7 @@ describe("Paseo tool policy", () => {
     const customPolicy = {
       enabled: true,
       disabledTools: ["list_agents"],
-    } satisfies ProviderPaseoToolsPolicy;
+    } satisfies ProviderOsunaToolsPolicy;
 
     expect(
       resolvePaseoToolPolicy("custom-claude", {

@@ -1,11 +1,11 @@
-import { getPaseoToolLeafName } from "./tool-name-normalization.js";
+import { getOsunaToolLeafName } from "./tool-name-normalization.js";
 
-export interface PaseoToolDetailField {
+export interface OsunaToolDetailField {
   label: string;
   value: string;
 }
 
-export type PaseoToolDetailSection =
+export type OsunaToolDetailSection =
   | {
       kind: "prose";
       title: string;
@@ -14,7 +14,7 @@ export type PaseoToolDetailSection =
   | {
       kind: "fields";
       title: string;
-      fields: PaseoToolDetailField[];
+      fields: OsunaToolDetailField[];
     };
 
 interface ToolDetailSpec {
@@ -282,7 +282,7 @@ function fieldsFromValue(
   order?: readonly string[],
   omittedKey?: string,
   includedKeys?: readonly string[],
-): PaseoToolDetailField[] {
+): OsunaToolDetailField[] {
   if (value === null || value === undefined) return [];
   if (!isRecord(value)) {
     const formatted = formatValue(value);
@@ -320,16 +320,16 @@ function unwrapMcpResult(output: unknown): unknown {
   return output;
 }
 
-export function buildPaseoToolDetailSections(
+export function buildOsunaToolDetailSections(
   toolName: string,
   input: unknown,
   output: unknown,
-): PaseoToolDetailSection[] | null {
-  const leafName = getPaseoToolLeafName(toolName);
+): OsunaToolDetailSection[] | null {
+  const leafName = getOsunaToolLeafName(toolName);
   if (!leafName) return null;
 
   const spec = TOOL_SPECS[leafName] ?? {};
-  const sections: PaseoToolDetailSection[] = [];
+  const sections: OsunaToolDetailSection[] = [];
   if (spec.promptField && isRecord(input)) {
     const prompt = input[spec.promptField];
     if (typeof prompt === "string" && prompt.length > 0) {

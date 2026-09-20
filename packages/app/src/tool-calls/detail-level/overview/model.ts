@@ -1,4 +1,4 @@
-import { isPaseoToolName } from "@osuna/protocol/tool-name-normalization";
+import { isOsunaToolName } from "@osuna/protocol/tool-name-normalization";
 import { describeToolCall, type ToolCallRun } from "../grouping";
 
 const DIRECT_OSUNA_TOOL_PREFIX = "paseo_";
@@ -21,7 +21,7 @@ export interface OverviewToolCallGroup {
 }
 
 function isPaseoCall(name: string, normalizedName: string): boolean {
-  return isPaseoToolName(name) || normalizedName.startsWith(DIRECT_OSUNA_TOOL_PREFIX);
+  return isOsunaToolName(name) || normalizedName.startsWith(DIRECT_OSUNA_TOOL_PREFIX);
 }
 
 function isSearchCall(name: string): boolean {

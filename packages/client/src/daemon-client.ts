@@ -36,7 +36,7 @@ import type {
   ProjectPlacementPayload,
   AgentPermissionResolvedMessage,
   CreateAgentRequestMessage,
-  CreatePaseoWorktreeRequest,
+  CreateOsunaWorktreeRequest,
   FileDownloadTokenResponse,
   FileUploadResponse,
   FileExplorerResponse,
@@ -74,8 +74,8 @@ import type {
   GitHubSearchResponse,
   GitHubSearchRequest,
   DirectorySuggestionsResponse,
-  PaseoWorktreeListResponse,
-  PaseoWorktreeArchiveResponse,
+  OsunaWorktreeListResponse,
+  OsunaWorktreeArchiveResponse,
   ProjectIconSource,
   ProjectIconResponse,
   ProjectIconGetResponse,
@@ -112,8 +112,8 @@ import type {
   SessionInboundMessage,
   SessionOutboundMessage,
   SendAgentMessageRequest,
-  PaseoConfigRaw,
-  PaseoConfigRevision,
+  OsunaConfigRaw,
+  OsunaConfigRevision,
   WorkspaceCreateRequest,
   WorkspaceRecoveryState,
   PluginListItem,
@@ -412,7 +412,7 @@ export interface CreateWorkspaceRequestOptions {
 }
 
 export interface CreatePaseoWorktreeInput extends Pick<
-  CreatePaseoWorktreeRequest,
+  CreateOsunaWorktreeRequest,
   | "cwd"
   | "projectId"
   | "worktreeSlug"
@@ -453,8 +453,8 @@ type BranchSuggestionsPayload = BranchSuggestionsResponse["payload"];
 type ForgeSearchPayload = ForgeSearchResponse["payload"];
 type GitHubSearchPayload = GitHubSearchResponse["payload"];
 type DirectorySuggestionsPayload = DirectorySuggestionsResponse["payload"];
-type PaseoWorktreeListPayload = PaseoWorktreeListResponse["payload"];
-type PaseoWorktreeArchivePayload = PaseoWorktreeArchiveResponse["payload"];
+type PaseoWorktreeListPayload = OsunaWorktreeListResponse["payload"];
+type PaseoWorktreeArchivePayload = OsunaWorktreeArchiveResponse["payload"];
 type CreatePaseoWorktreePayload = Extract<
   SessionOutboundMessage,
   { type: "create_osuna_worktree_response" }
@@ -512,8 +512,8 @@ type ListCommandsDraftConfig = Pick<
 >;
 export interface WriteProjectConfigInput {
   repoRoot: string;
-  config: PaseoConfigRaw;
-  expectedRevision: PaseoConfigRevision | null;
+  config: OsunaConfigRaw;
+  expectedRevision: OsunaConfigRevision | null;
   requestId?: string;
 }
 interface ListCommandsOptions {
@@ -4416,7 +4416,7 @@ export class DaemonClient {
 
   async stashList(
     cwd: string,
-    options?: { paseoOnly?: boolean },
+    options?: { osunaOnly?: boolean },
     requestId?: string,
   ): Promise<StashListPayload> {
     return this.sendCorrelatedSessionRequest({
@@ -4424,7 +4424,7 @@ export class DaemonClient {
       message: {
         type: "stash_list_request",
         cwd,
-        paseoOnly: options?.paseoOnly,
+        osunaOnly: options?.osunaOnly,
       },
       responseType: "stash_list_response",
     });

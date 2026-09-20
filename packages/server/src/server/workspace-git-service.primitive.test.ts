@@ -1762,8 +1762,8 @@ describe("WorkspaceGitServiceImpl D2 read methods", () => {
       now: () => new Date(nowMs),
     });
 
-    const first = service.listStashes(REPO_CWD, { paseoOnly: true });
-    const second = service.listStashes(join(REPO_CWD, "."), { paseoOnly: true });
+    const first = service.listStashes(REPO_CWD, { osunaOnly: true });
+    const second = service.listStashes(join(REPO_CWD, "."), { osunaOnly: true });
     await flushPromises();
 
     expect(runGitCommand).toHaveBeenCalledTimes(1);
@@ -1775,15 +1775,15 @@ describe("WorkspaceGitServiceImpl D2 read methods", () => {
       signal: null,
     });
     await expect(Promise.all([first, second])).resolves.toEqual([
-      [{ index: 0, message: "osuna-auto-stash: feature", branch: "feature", isPaseo: true }],
-      [{ index: 0, message: "osuna-auto-stash: feature", branch: "feature", isPaseo: true }],
+      [{ index: 0, message: "osuna-auto-stash: feature", branch: "feature", osunaeo: true }],
+      [{ index: 0, message: "osuna-auto-stash: feature", branch: "feature", osunaeo: true }],
     ]);
 
     nowMs = 1_000;
-    await service.listStashes(REPO_CWD, { paseoOnly: true });
+    await service.listStashes(REPO_CWD, { osunaOnly: true });
     expect(runGitCommand).toHaveBeenCalledTimes(1);
 
-    await service.listStashes(REPO_CWD, { paseoOnly: true }, { force: true, reason: "test" });
+    await service.listStashes(REPO_CWD, { osunaOnly: true }, { force: true, reason: "test" });
     expect(runGitCommand).toHaveBeenCalledTimes(2);
 
     service.dispose();

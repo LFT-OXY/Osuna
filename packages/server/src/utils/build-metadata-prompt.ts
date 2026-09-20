@@ -1,8 +1,8 @@
 import { readPaseoConfigJson } from "./paseo-config-file.js";
 import {
-  PaseoConfigSchema,
-  type PaseoMetadataGeneration,
-} from "@osuna/protocol/paseo-config-schema";
+  OsunaConfigSchema,
+  type OsunaMetadataGeneration,
+} from "@osuna/protocol/osuna-config-schema";
 
 export type MetadataConfigKey = "title" | "branchName" | "commitMessage" | "pullRequest";
 
@@ -46,14 +46,14 @@ function renderStyleSection(section: MetadataStyleSection, override: string | un
 
 async function readProjectMetadataOverrides(
   options: Pick<BuildMetadataPromptOptions, "cwd" | "workspaceGitService">,
-): Promise<PaseoMetadataGeneration | undefined> {
+): Promise<OsunaMetadataGeneration | undefined> {
   if (!options.workspaceGitService) {
     return undefined;
   }
   try {
     const repoRoot = await options.workspaceGitService.resolveRepoRoot(options.cwd);
     const json = readPaseoConfigJson(repoRoot);
-    return PaseoConfigSchema.parse(json).metadataGeneration;
+    return OsunaConfigSchema.parse(json).metadataGeneration;
   } catch {
     return undefined;
   }

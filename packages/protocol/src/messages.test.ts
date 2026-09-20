@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   FileExplorerRequestSchema,
-  PaseoWorktreeArchiveRequestSchema,
+  OsunaWorktreeArchiveRequestSchema,
   parseServerInfoStatusPayload,
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
@@ -439,7 +439,7 @@ describe("file explorer request compatibility", () => {
 
 describe("paseo worktree archive request compatibility", () => {
   test("omitted scope defaults to workspace", () => {
-    const parsed = PaseoWorktreeArchiveRequestSchema.parse({
+    const parsed = OsunaWorktreeArchiveRequestSchema.parse({
       type: "osuna_worktree_archive_request",
       worktreePath: "/repo/app",
       requestId: "req-old-scope",
@@ -448,7 +448,7 @@ describe("paseo worktree archive request compatibility", () => {
   });
 
   test("scope worktree parses", () => {
-    const parsed = PaseoWorktreeArchiveRequestSchema.parse({
+    const parsed = OsunaWorktreeArchiveRequestSchema.parse({
       type: "osuna_worktree_archive_request",
       worktreePath: "/repo/app",
       scope: "worktree",
@@ -458,7 +458,7 @@ describe("paseo worktree archive request compatibility", () => {
   });
 
   test("unknown extra field is still accepted", () => {
-    const parsed = PaseoWorktreeArchiveRequestSchema.parse({
+    const parsed = OsunaWorktreeArchiveRequestSchema.parse({
       type: "osuna_worktree_archive_request",
       worktreePath: "/repo/app",
       requestId: "req-extra",

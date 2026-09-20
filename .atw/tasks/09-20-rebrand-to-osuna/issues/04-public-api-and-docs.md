@@ -4,7 +4,7 @@
 工作依据的文档。内部私有变量名不在范围内：只有维护者看得见，不值得为它承担一次
 巨大的无意义 diff，后续谁碰到谁顺手改。
 
-**Impl:** ready
+**Impl:** doing
 **Status:** ready-for-agent
 
 **Blocked by:** 06

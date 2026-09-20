@@ -92,7 +92,7 @@ import type {
   PaseoToolExecutionContext,
   PaseoToolResult,
 } from "./types.js";
-import type { ProviderPaseoToolsPolicy } from "@osuna/protocol/provider-config";
+import type { ProviderOsunaToolsPolicy } from "@osuna/protocol/provider-config";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 
 export interface PaseoToolHostDependencies {
@@ -130,7 +130,7 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
-  paseoToolPolicy?: ProviderPaseoToolsPolicy;
+  paseoToolPolicy?: ProviderOsunaToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
   /**

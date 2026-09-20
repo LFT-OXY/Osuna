@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { ProviderPaseoToolsPolicy } from "@osuna/protocol/provider-config";
+import type { ProviderOsunaToolsPolicy } from "@osuna/protocol/provider-config";
 
 export interface PaseoToolExecutionContext {
   signal?: AbortSignal;
@@ -37,7 +37,7 @@ export interface PaseoToolCatalog {
 
 export interface PaseoToolRuntimeContext {
   callerAgentId?: string;
-  paseoToolPolicy?: ProviderPaseoToolsPolicy;
+  paseoToolPolicy?: ProviderOsunaToolsPolicy;
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
 }

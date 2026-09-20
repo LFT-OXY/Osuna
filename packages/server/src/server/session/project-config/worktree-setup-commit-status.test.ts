@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import type { PaseoConfigRaw } from "@osuna/protocol/paseo-config-schema";
+import type { OsunaConfigRaw } from "@osuna/protocol/osuna-config-schema";
 import { hasUncommittedWorktreeSetupChanges } from "./worktree-setup-commit-status.js";
 
 const tempDirs: string[] = [];
@@ -14,7 +14,7 @@ afterEach(() => {
   }
 });
 
-function makeGitRepo(config?: PaseoConfigRaw): string {
+function makeGitRepo(config?: OsunaConfigRaw): string {
   const repoRoot = realpathSync(mkdtempSync(join(tmpdir(), "worktree-setup-status-test-")));
   tempDirs.push(repoRoot);
   execFileSync("git", ["init", "-b", "main"], { cwd: repoRoot });
@@ -27,7 +27,7 @@ function makeGitRepo(config?: PaseoConfigRaw): string {
   return repoRoot;
 }
 
-function writeConfig(repoRoot: string, config: PaseoConfigRaw): void {
+function writeConfig(repoRoot: string, config: OsunaConfigRaw): void {
   writeFileSync(join(repoRoot, "osuna.json"), `${JSON.stringify(config, null, 2)}\n`);
 }
 

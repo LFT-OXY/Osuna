@@ -1,5 +1,5 @@
 import type { ToolCallDetail, ToolCallIconName } from "@osuna/protocol/agent-types";
-import { isPaseoToolName } from "@osuna/protocol/tool-name-normalization";
+import { isOsunaToolName } from "@osuna/protocol/tool-name-normalization";
 
 export type ToolCallIcon = ToolCallIconName | "paseo";
 
@@ -31,7 +31,7 @@ export function resolveToolCallIconName(toolName: string, detail?: ToolCallDetai
   if (lowerName === "speak") {
     return "mic_vocal";
   }
-  if (isPaseoToolName(lowerName)) {
+  if (isOsunaToolName(lowerName)) {
     return "paseo";
   }
   if (lowerName === "task") {

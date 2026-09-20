@@ -4563,7 +4563,7 @@ describe("session stash list handling", () => {
         index: 0,
         message: "osuna-auto-stash: feature",
         branch: "feature",
-        isPaseo: true,
+        osunaeo: true,
       },
     ];
     const workspaceGitService = {
@@ -4576,13 +4576,13 @@ describe("session stash list handling", () => {
     await session.handleMessage({
       type: "stash_list_request",
       cwd: "/tmp/repo",
-      paseoOnly: true,
+      osunaOnly: true,
       requestId: "request-stashes",
     });
 
     expect(workspaceGitService.listStashes).toHaveBeenCalledTimes(1);
     expect(workspaceGitService.listStashes).toHaveBeenCalledWith("/tmp/repo", {
-      paseoOnly: true,
+      osunaOnly: true,
     });
     expect(messages).toContainEqual({
       type: "stash_list_response",

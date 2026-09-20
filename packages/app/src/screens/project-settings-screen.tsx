@@ -8,8 +8,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, MoreVertical, Pencil, Plus } from "lucide-react-native";
 import { ProjectIconView } from "@/components/project-icon-view";
 import type {
-  PaseoConfigRaw,
-  PaseoConfigRevision,
+  OsunaConfigRaw,
+  OsunaConfigRevision,
   ProjectConfigRpcError,
 } from "@osuna/protocol/messages";
 import type { DaemonClient } from "@osuna/client/internal/daemon-client";
@@ -254,8 +254,8 @@ function ProjectSettingsBody({
       selectedHost.projectName,
     ],
   );
-  const loadedConfig: PaseoConfigRaw | null = data?.ok ? (data.config ?? {}) : null;
-  const loadedRevision: PaseoConfigRevision | null = data?.ok ? data.revision : null;
+  const loadedConfig: OsunaConfigRaw | null = data?.ok ? (data.config ?? {}) : null;
+  const loadedRevision: OsunaConfigRevision | null = data?.ok ? data.revision : null;
   const hasUncommittedWorktreeSetupChanges =
     data?.ok === true && data.hasUncommittedWorktreeSetupChanges === true;
   const readError: ProjectConfigRpcError | null = data && !data.ok ? data.error : null;
@@ -324,8 +324,8 @@ function ProjectSettingsBody({
 
 interface RenderContentInput {
   readQuery: ReturnType<typeof useQuery<ReadProjectConfigData>>;
-  loadedConfig: PaseoConfigRaw | null;
-  loadedRevision: PaseoConfigRevision | null;
+  loadedConfig: OsunaConfigRaw | null;
+  loadedRevision: OsunaConfigRevision | null;
   hasUncommittedWorktreeSetupChanges: boolean;
   readError: ProjectConfigRpcError | null;
   selectedHost: ProjectHostEntry;
@@ -399,7 +399,7 @@ function renderContent({
   );
 }
 
-function revisionToKey(revision: PaseoConfigRevision | null): string {
+function revisionToKey(revision: OsunaConfigRevision | null): string {
   if (!revision) return "none";
   return `${revision.mtimeMs}-${revision.size}`;
 }
@@ -469,8 +469,8 @@ function errorToDetail(error: unknown): string | null {
 }
 
 interface ProjectConfigFormProps {
-  baseConfig: PaseoConfigRaw;
-  revision: PaseoConfigRevision | null;
+  baseConfig: OsunaConfigRaw;
+  revision: OsunaConfigRevision | null;
   hasUncommittedWorktreeSetupChanges: boolean;
   repoRoot: string;
   queryKey: readonly [string, string, string];
@@ -497,8 +497,8 @@ function ProjectConfigForm({
 
   const saveMutation = useMutation({
     mutationFn: async (input: {
-      config: PaseoConfigRaw;
-      expectedRevision: PaseoConfigRevision | null;
+      config: OsunaConfigRaw;
+      expectedRevision: OsunaConfigRevision | null;
     }) => {
       return client.writeProjectConfig({
         repoRoot,

@@ -1405,11 +1405,11 @@ describe("CheckoutSession", () => {
 
   describe("stash list", () => {
     it("returns stash entries scoped to paseo stashes by default", async () => {
-      const listStashesCalls: Array<{ cwd: string; paseoOnly: boolean | undefined }> = [];
+      const listStashesCalls: Array<{ cwd: string; osunaOnly: boolean | undefined }> = [];
       const { checkout, emitted } = makeCheckoutSession({
         git: {
           listStashes: async (cwd, opts) => {
-            listStashesCalls.push({ cwd, paseoOnly: opts?.paseoOnly });
+            listStashesCalls.push({ cwd, osunaOnly: opts?.osunaOnly });
             return [];
           },
         },
@@ -1421,7 +1421,7 @@ describe("CheckoutSession", () => {
         requestId: "sl1",
       });
 
-      expect(listStashesCalls).toEqual([{ cwd: "/repo", paseoOnly: true }]);
+      expect(listStashesCalls).toEqual([{ cwd: "/repo", osunaOnly: true }]);
       expect(emitted).toEqual([
         {
           type: "stash_list_response",

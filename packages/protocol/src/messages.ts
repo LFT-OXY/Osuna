@@ -4,7 +4,7 @@ import { CLIENT_CAPS } from "./client-capabilities.js";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-lifecycle.js";
 import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "./agent-title-limits.js";
 import { AgentProviderSchema } from "./provider-manifest.js";
-import { ProviderPaseoToolsPolicySchema } from "./provider-config.js";
+import { ProviderOsunaToolsPolicySchema } from "./provider-config.js";
 import { TOOL_CALL_ICON_NAMES } from "./agent-types.js";
 import { WORKSPACE_LABEL_COLORS } from "./workspace-labels.js";
 import {
@@ -80,33 +80,33 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
-  PaseoConfigRawSchema,
-  PaseoLifecycleCommandRawSchema,
-  PaseoMetadataGenerationEntrySchema,
-  PaseoMetadataGenerationSchema,
-  PaseoScriptEntryRawSchema,
-  PaseoWorktreeConfigRawSchema,
-  PaseoConfigRevisionSchema,
+  OsunaConfigRawSchema,
+  OsunaLifecycleCommandRawSchema,
+  OsunaMetadataGenerationEntrySchema,
+  OsunaMetadataGenerationSchema,
+  OsunaScriptEntryRawSchema,
+  OsunaWorktreeConfigRawSchema,
+  OsunaConfigRevisionSchema,
   ProjectConfigRpcErrorSchema,
-  type PaseoConfigRaw,
-  type PaseoConfigRevision,
-  type PaseoMetadataGeneration,
-  type PaseoMetadataGenerationEntry,
-  type PaseoScriptEntryRaw,
+  type OsunaConfigRaw,
+  type OsunaConfigRevision,
+  type OsunaMetadataGeneration,
+  type OsunaMetadataGenerationEntry,
+  type OsunaScriptEntryRaw,
   type ProjectConfigRpcError,
-} from "./paseo-config-schema.js";
+} from "./osuna-config-schema.js";
 export {
-  PaseoConfigRawSchema,
-  PaseoLifecycleCommandRawSchema,
-  PaseoMetadataGenerationEntrySchema,
-  PaseoMetadataGenerationSchema,
-  PaseoScriptEntryRawSchema,
-  PaseoWorktreeConfigRawSchema,
-  type PaseoConfigRaw,
-  type PaseoConfigRevision,
-  type PaseoMetadataGeneration,
-  type PaseoMetadataGenerationEntry,
-  type PaseoScriptEntryRaw,
+  OsunaConfigRawSchema,
+  OsunaLifecycleCommandRawSchema,
+  OsunaMetadataGenerationEntrySchema,
+  OsunaMetadataGenerationSchema,
+  OsunaScriptEntryRawSchema,
+  OsunaWorktreeConfigRawSchema,
+  type OsunaConfigRaw,
+  type OsunaConfigRevision,
+  type OsunaMetadataGeneration,
+  type OsunaMetadataGenerationEntry,
+  type OsunaScriptEntryRaw,
   type ProjectConfigRpcError,
 };
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ const MutableDaemonProviderModelSchema = z
 
 const MutableDaemonProviderConfigSchema = z
   .object({
-    osunaTools: ProviderPaseoToolsPolicySchema.optional(),
+    osunaTools: ProviderOsunaToolsPolicySchema.optional(),
     enabled: z.boolean().optional(),
     additionalModels: z.array(MutableDaemonProviderModelSchema).optional(),
   })
@@ -1669,8 +1669,8 @@ export const WriteProjectConfigRequestMessageSchema = z.object({
   type: z.literal("write_project_config_request"),
   requestId: z.string(),
   repoRoot: z.string(),
-  config: PaseoConfigRawSchema,
-  expectedRevision: PaseoConfigRevisionSchema.nullable(),
+  config: OsunaConfigRawSchema,
+  expectedRevision: OsunaConfigRevisionSchema.nullable(),
 });
 
 // ============================================================================
@@ -2437,7 +2437,7 @@ export const StashListRequestSchema = z.object({
   type: z.literal("stash_list_request"),
   cwd: z.string(),
   /** If true, only return paseo-created stashes. Default true. */
-  paseoOnly: z.boolean().optional(),
+  osunaOnly: z.boolean().optional(),
   requestId: z.string(),
 });
 
@@ -2513,14 +2513,14 @@ export const DirectorySuggestionsRequestSchema = z.object({
   requestId: z.string(),
 });
 
-export const PaseoWorktreeListRequestSchema = z.object({
+export const OsunaWorktreeListRequestSchema = z.object({
   type: z.literal("osuna_worktree_list_request"),
   cwd: z.string().optional(),
   repoRoot: z.string().optional(),
   requestId: z.string(),
 });
 
-export const PaseoWorktreeArchiveRequestSchema = z.object({
+export const OsunaWorktreeArchiveRequestSchema = z.object({
   type: z.literal("osuna_worktree_archive_request"),
   worktreePath: z.string().optional(),
   repoRoot: z.string().optional(),
@@ -2549,7 +2549,7 @@ export const FirstAgentContextSchema = z.object({
   attachments: AgentAttachmentsSchema,
 });
 
-export const CreatePaseoWorktreeRequestSchema = z.object({
+export const CreateOsunaWorktreeRequestSchema = z.object({
   type: z.literal("create_osuna_worktree_request"),
   cwd: z.string(),
   projectId: z.string().optional(),
@@ -3366,9 +3366,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ForgeSearchRequestSchema,
   GitHubSearchRequestSchema,
   DirectorySuggestionsRequestSchema,
-  PaseoWorktreeListRequestSchema,
-  PaseoWorktreeArchiveRequestSchema,
-  CreatePaseoWorktreeRequestSchema,
+  OsunaWorktreeListRequestSchema,
+  OsunaWorktreeArchiveRequestSchema,
+  CreateOsunaWorktreeRequestSchema,
   WorkspaceSetupStatusRequestSchema,
   WorkspaceSetupRunRequestSchema,
   LegacyListAvailableEditorsRequestSchema,
@@ -3931,7 +3931,7 @@ export const ProjectCheckoutLiteNotGitPayloadSchema = z
     worktreeRoot: null,
   }));
 
-export const ProjectCheckoutLiteGitNonPaseoPayloadSchema = z
+export const ProjectCheckoutLiteGitNonOsunaPayloadSchema = z
   .object({
     cwd: z.string(),
     isGit: z.literal(true),
@@ -3946,7 +3946,7 @@ export const ProjectCheckoutLiteGitNonPaseoPayloadSchema = z
     worktreeRoot: value.worktreeRoot ?? value.cwd,
   }));
 
-export const ProjectCheckoutLiteGitPaseoPayloadSchema = z
+export const ProjectCheckoutLiteGitOsunaPayloadSchema = z
   .object({
     cwd: z.string(),
     isGit: z.literal(true),
@@ -3963,8 +3963,8 @@ export const ProjectCheckoutLiteGitPaseoPayloadSchema = z
 
 export const ProjectCheckoutLitePayloadSchema = z.union([
   ProjectCheckoutLiteNotGitPayloadSchema,
-  ProjectCheckoutLiteGitNonPaseoPayloadSchema,
-  ProjectCheckoutLiteGitPaseoPayloadSchema,
+  ProjectCheckoutLiteGitNonOsunaPayloadSchema,
+  ProjectCheckoutLiteGitOsunaPayloadSchema,
 ]);
 
 export const ProjectPlacementPayloadSchema = z.object({
@@ -5139,8 +5139,8 @@ export const ReadProjectConfigResponseMessageSchema = z.object({
       requestId: z.string(),
       repoRoot: z.string(),
       ok: z.literal(true),
-      config: PaseoConfigRawSchema.nullable(),
-      revision: PaseoConfigRevisionSchema.nullable(),
+      config: OsunaConfigRawSchema.nullable(),
+      revision: OsunaConfigRevisionSchema.nullable(),
       hasUncommittedWorktreeSetupChanges: z.boolean().optional(),
     }),
     z.object({
@@ -5161,8 +5161,8 @@ export const WriteProjectConfigResponseMessageSchema = z.object({
       requestId: z.string(),
       repoRoot: z.string(),
       ok: z.literal(true),
-      config: PaseoConfigRawSchema,
-      revision: PaseoConfigRevisionSchema,
+      config: OsunaConfigRawSchema,
+      revision: OsunaConfigRevisionSchema,
       hasUncommittedWorktreeSetupChanges: z.boolean().optional(),
     }),
     z.object({
@@ -5261,7 +5261,7 @@ const CheckoutStatusNotGitSchema = CheckoutStatusCommonSchema.extend({
   remoteUrl: z.null(),
 });
 
-const CheckoutStatusGitNonPaseoSchema = CheckoutStatusCommonSchema.extend({
+const CheckoutStatusGitNonOsunaSchema = CheckoutStatusCommonSchema.extend({
   isGit: z.literal(true),
   isOsunaOwnedWorktree: z.literal(false),
   repoRoot: z.string(),
@@ -5276,7 +5276,7 @@ const CheckoutStatusGitNonPaseoSchema = CheckoutStatusCommonSchema.extend({
   remoteUrl: z.string().nullable(),
 });
 
-const CheckoutStatusGitPaseoSchema = CheckoutStatusCommonSchema.extend({
+const CheckoutStatusGitOsunaSchema = CheckoutStatusCommonSchema.extend({
   isGit: z.literal(true),
   isOsunaOwnedWorktree: z.literal(true),
   repoRoot: z.string(),
@@ -5295,8 +5295,8 @@ export const CheckoutStatusResponseSchema = z.object({
   type: z.literal("checkout_status_response"),
   payload: z.union([
     CheckoutStatusNotGitSchema,
-    CheckoutStatusGitNonPaseoSchema,
-    CheckoutStatusGitPaseoSchema,
+    CheckoutStatusGitNonOsunaSchema,
+    CheckoutStatusGitOsunaSchema,
   ]),
 });
 
@@ -5436,8 +5436,8 @@ export const CheckoutStatusUpdateSchema = z.object({
   payload: z
     .union([
       CheckoutStatusNotGitSchema,
-      CheckoutStatusGitNonPaseoSchema,
-      CheckoutStatusGitPaseoSchema,
+      CheckoutStatusGitNonOsunaSchema,
+      CheckoutStatusGitOsunaSchema,
     ])
     .and(CheckoutStatusUpdateMetadataSchema),
 });
@@ -5859,7 +5859,7 @@ const StashEntrySchema = z.object({
   index: z.number().int().min(0),
   message: z.string(),
   branch: z.string().nullable(),
-  isPaseo: z.boolean(),
+  osunaeo: z.boolean(),
 });
 
 export const StashSaveResponseSchema = z.object({
@@ -5971,23 +5971,23 @@ export const DirectorySuggestionsResponseSchema = z.object({
   }),
 });
 
-const PaseoWorktreeSchema = z.object({
+const OsunaWorktreeSchema = z.object({
   worktreePath: z.string(),
   createdAt: z.string(),
   branchName: z.string().nullable().optional(),
   head: z.string().nullable().optional(),
 });
 
-export const PaseoWorktreeListResponseSchema = z.object({
+export const OsunaWorktreeListResponseSchema = z.object({
   type: z.literal("osuna_worktree_list_response"),
   payload: z.object({
-    worktrees: z.array(PaseoWorktreeSchema),
+    worktrees: z.array(OsunaWorktreeSchema),
     error: CheckoutErrorSchema.nullable(),
     requestId: z.string(),
   }),
 });
 
-export const PaseoWorktreeArchiveResponseSchema = z.object({
+export const OsunaWorktreeArchiveResponseSchema = z.object({
   type: z.literal("osuna_worktree_archive_response"),
   payload: z.object({
     success: z.boolean(),
@@ -5997,7 +5997,7 @@ export const PaseoWorktreeArchiveResponseSchema = z.object({
   }),
 });
 
-export const CreatePaseoWorktreeResponseSchema = z.object({
+export const CreateOsunaWorktreeResponseSchema = z.object({
   type: z.literal("create_osuna_worktree_response"),
   payload: z.object({
     workspace: WorkspaceDescriptorPayloadSchema.nullable(),
@@ -6932,9 +6932,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ForgeSearchResponseSchema,
   GitHubSearchResponseSchema,
   DirectorySuggestionsResponseSchema,
-  PaseoWorktreeListResponseSchema,
-  PaseoWorktreeArchiveResponseSchema,
-  CreatePaseoWorktreeResponseSchema,
+  OsunaWorktreeListResponseSchema,
+  OsunaWorktreeArchiveResponseSchema,
+  CreateOsunaWorktreeResponseSchema,
   FileExplorerResponseSchema,
   FileSubscribeResponseSchema,
   FileUnsubscribeResponseSchema,
@@ -7351,13 +7351,13 @@ export type GitHubSearchKind = z.infer<typeof GitHubSearchKindSchema>;
 export type GitHubSearchRequest = z.infer<typeof GitHubSearchRequestSchema>;
 export type GitHubSearchResponse = z.infer<typeof GitHubSearchResponseSchema>;
 export type ChangeRequestCheckoutSource = z.infer<typeof ChangeRequestCheckoutSourceSchema>;
-export type CreatePaseoWorktreeRequest = z.infer<typeof CreatePaseoWorktreeRequestSchema>;
+export type CreateOsunaWorktreeRequest = z.infer<typeof CreateOsunaWorktreeRequestSchema>;
 export type DirectorySuggestionsRequest = z.infer<typeof DirectorySuggestionsRequestSchema>;
 export type DirectorySuggestionsResponse = z.infer<typeof DirectorySuggestionsResponseSchema>;
-export type PaseoWorktreeListRequest = z.infer<typeof PaseoWorktreeListRequestSchema>;
-export type PaseoWorktreeListResponse = z.infer<typeof PaseoWorktreeListResponseSchema>;
-export type PaseoWorktreeArchiveRequest = z.infer<typeof PaseoWorktreeArchiveRequestSchema>;
-export type PaseoWorktreeArchiveResponse = z.infer<typeof PaseoWorktreeArchiveResponseSchema>;
+export type OsunaWorktreeListRequest = z.infer<typeof OsunaWorktreeListRequestSchema>;
+export type OsunaWorktreeListResponse = z.infer<typeof OsunaWorktreeListResponseSchema>;
+export type OsunaWorktreeArchiveRequest = z.infer<typeof OsunaWorktreeArchiveRequestSchema>;
+export type OsunaWorktreeArchiveResponse = z.infer<typeof OsunaWorktreeArchiveResponseSchema>;
 export type WorkspaceSetupStatusRequest = z.infer<typeof WorkspaceSetupStatusRequestSchema>;
 export type WorkspaceSetupRunRequest = z.infer<typeof WorkspaceSetupRunRequestSchema>;
 export type LegacyListAvailableEditorsRequest = z.infer<

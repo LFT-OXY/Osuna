@@ -12,9 +12,9 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type { ToolCallDetail } from "@osuna/protocol/agent-types";
 import {
-  buildPaseoToolDetailSections,
-  type PaseoToolDetailSection,
-} from "@osuna/protocol/paseo-tool-call-detail";
+  buildOsunaToolDetailSections,
+  type OsunaToolDetailSection,
+} from "@osuna/protocol/osuna-tool-call-detail";
 import { buildLineDiff, parseUnifiedDiff, type DiffLine } from "@/utils/tool-call-parsers";
 import { highlightDiffLines } from "@/utils/diff-highlight";
 import { hasMeaningfulToolCallDetail } from "@/utils/tool-call-detail-state";
@@ -631,7 +631,7 @@ function buildUnknownSections(detail: UnknownDetail, ds: DetailStyles, t: TFunct
   return out;
 }
 
-function PaseoDetailSection({ section }: { section: PaseoToolDetailSection }) {
+function PaseoDetailSection({ section }: { section: OsunaToolDetailSection }) {
   return (
     <View style={styles.paseoSection}>
       <Text style={styles.paseoSectionTitle}>{section.title}</Text>
@@ -660,7 +660,7 @@ function buildPaseoUnknownSections(
   detail: UnknownDetail,
 ): ReactNode[] | null {
   if (!toolName) return null;
-  const sections = buildPaseoToolDetailSections(toolName, detail.input, detail.output);
+  const sections = buildOsunaToolDetailSections(toolName, detail.input, detail.output);
   if (!sections) return null;
   return sections.map((section) => <PaseoDetailSection key={section.title} section={section} />);
 }
