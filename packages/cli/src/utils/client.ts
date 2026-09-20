@@ -1,4 +1,4 @@
-import { waitForDaemonReady, resolvePaseoHome, type DaemonInstance } from "@osuna/server";
+import { waitForDaemonReady, resolveOsunaHome, type DaemonInstance } from "@osuna/server";
 import { describeDaemonTarget, type DaemonTarget } from "./daemon-target.js";
 export type { DaemonTarget } from "./daemon-target.js";
 import {
@@ -276,7 +276,7 @@ async function connectSelectedDaemon(options: ConnectOptions): Promise<DaemonCli
             instance: options.instance,
           })
         ).listen;
-  const clientId = await getOrCreateCliClientId(resolvePaseoHome({}));
+  const clientId = await getOrCreateCliClientId(resolveOsunaHome({}));
   const nodeWebSocketFactory = createNodeWebSocketFactory();
 
   if (explicitHost?.trim().startsWith("ssh://")) {

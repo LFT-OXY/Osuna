@@ -1,7 +1,7 @@
-import type { PaseoTerminal } from "@osuna/client";
+import type { OsunaTerminal } from "@osuna/client";
 import type { OutputSchema } from "../../output/index.js";
 
-export type TerminalRow = PaseoTerminal;
+export type TerminalRow = OsunaTerminal;
 
 export interface TerminalKillRow {
   terminalId: string;

@@ -13,7 +13,7 @@ export interface WorktreeCreateOptions extends CommandOptions {
 
 const VALID_MODES = ["branch-off", "checkout-branch", "checkout-pr"] as const;
 
-type CreateOsunaWorktreeRequest = Parameters<DaemonClient["createPaseoWorktree"]>[0];
+type CreateOsunaWorktreeRequest = Parameters<DaemonClient["createOsunaWorktree"]>[0];
 
 export function buildCreateWorktreeRequest(
   options: WorktreeCreateOptions,

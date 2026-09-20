@@ -3200,7 +3200,7 @@ test("sends structured first-agent context attachments with create_osuna_worktre
   mock.triggerOpen();
   await connectPromise;
 
-  const createPromise = client.createPaseoWorktree({
+  const createPromise = client.createOsunaWorktree({
     cwd: "/tmp/project",
     worktreeSlug: "review-pr-123",
     firstAgentContext: {
@@ -3601,7 +3601,7 @@ test("sends worktree base-ref fields in create_osuna_worktree_request", async ()
   mock.triggerOpen();
   await connectPromise;
 
-  const createPromise = client.createPaseoWorktree(
+  const createPromise = client.createOsunaWorktree(
     {
       cwd: "/tmp/project",
       projectId: "remote:github.com/acme/project",
@@ -3663,7 +3663,7 @@ test("omitting create_osuna_worktree_request worktree base-ref fields preserves 
   mock.triggerOpen();
   await connectPromise;
 
-  const createPromise = client.createPaseoWorktree(
+  const createPromise = client.createOsunaWorktree(
     {
       cwd: "/tmp/project",
       worktreeSlug: "feature-a",

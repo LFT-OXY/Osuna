@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 
 import pino from "pino";
 import {
-  createPaseoDaemon,
-  type PaseoDaemonConfig,
+  createOsunaDaemon,
+  type OsunaDaemonConfig,
   type PaseoOpenAIConfig,
   type PaseoSpeechConfig,
 } from "../bootstrap.js";
@@ -20,7 +20,7 @@ interface TestPaseoDaemonOptions {
   downloadTokenTtlMs?: number;
   corsAllowedOrigins?: string[];
   listen?: string;
-  logger?: Parameters<typeof createPaseoDaemon>[1];
+  logger?: Parameters<typeof createOsunaDaemon>[1];
   mcpEnabled?: boolean;
   mcpDebug?: boolean;
   isDev?: boolean;
@@ -31,31 +31,31 @@ interface TestPaseoDaemonOptions {
   daemonStatusRpcCapability?: boolean;
   relayConfigCapability?: boolean;
   agentClients?: Partial<Record<AgentProvider, AgentClient>>;
-  providerOverrides?: PaseoDaemonConfig["providerOverrides"];
+  providerOverrides?: OsunaDaemonConfig["providerOverrides"];
   paseoHomeRoot?: string;
   staticDir?: string;
   cleanup?: boolean;
   openai?: PaseoOpenAIConfig;
   speech?: PaseoSpeechConfig;
-  voiceLlmProvider?: PaseoDaemonConfig["voiceLlmProvider"];
+  voiceLlmProvider?: OsunaDaemonConfig["voiceLlmProvider"];
   voiceLlmProviderExplicit?: boolean;
   voiceLlmModel?: string | null;
   dictationFinalTimeoutMs?: number;
-  auth?: PaseoDaemonConfig["auth"];
+  auth?: OsunaDaemonConfig["auth"];
   pushNotificationSender?: PushNotificationSender;
-  serviceProxy?: PaseoDaemonConfig["serviceProxy"];
-  webUi?: PaseoDaemonConfig["webUi"];
-  trustedProxies?: PaseoDaemonConfig["trustedProxies"];
+  serviceProxy?: OsunaDaemonConfig["serviceProxy"];
+  webUi?: OsunaDaemonConfig["webUi"];
+  trustedProxies?: OsunaDaemonConfig["trustedProxies"];
   agentProfiles?: AgentProfile[];
   autoArchiveAfterMerge?: boolean;
-  pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
-  plugins?: PaseoDaemonConfig["plugins"];
-  usage?: PaseoDaemonConfig["usage"];
+  pluginsEnabled?: OsunaDaemonConfig["pluginsEnabled"];
+  plugins?: OsunaDaemonConfig["plugins"];
+  usage?: OsunaDaemonConfig["usage"];
 }
 
 export interface TestPaseoDaemon {
-  config: PaseoDaemonConfig;
-  daemon: Awaited<ReturnType<typeof createPaseoDaemon>>;
+  config: OsunaDaemonConfig;
+  daemon: Awaited<ReturnType<typeof createOsunaDaemon>>;
   port: number;
   paseoHome: string;
   staticDir: string;
@@ -65,7 +65,7 @@ export interface TestPaseoDaemon {
 const TEST_DAEMON_START_TIMEOUT_MS = 20_000;
 
 async function startDaemonWithTimeout(
-  daemon: Awaited<ReturnType<typeof createPaseoDaemon>>,
+  daemon: Awaited<ReturnType<typeof createOsunaDaemon>>,
   timeoutMs: number,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -100,7 +100,7 @@ export async function createTestPaseoDaemon(
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const { config, paseoHomeRoot, paseoHome, staticDir } = await prepareTestDaemonConfig(options);
     const logger = options.logger ?? pino({ level: "silent" });
-    const daemon = await createPaseoDaemon(config, logger, {
+    const daemon = await createOsunaDaemon(config, logger, {
       serverFeatureOverrides: {
         daemonStatusRpc: options.daemonStatusRpcCapability,
         relayConfig: options.relayConfigCapability,
@@ -154,7 +154,7 @@ export async function createTestPaseoDaemon(
 }
 
 interface PreparedTestDaemonConfig {
-  config: PaseoDaemonConfig;
+  config: OsunaDaemonConfig;
   paseoHomeRoot: string;
   paseoHome: string;
   staticDir: string;
@@ -169,7 +169,7 @@ async function prepareTestDaemonConfig(
   await mkdir(paseoHome, { recursive: true });
   const staticDir = options.staticDir ?? (await mkdtemp(path.join(os.tmpdir(), "paseo-static-")));
   const listenHost = options.listen ?? "127.0.0.1";
-  const config: PaseoDaemonConfig = {
+  const config: OsunaDaemonConfig = {
     listen: `${listenHost}:0`,
     paseoHome,
     daemonVersion: options.daemonVersion,

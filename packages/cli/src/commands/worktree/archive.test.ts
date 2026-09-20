@@ -6,16 +6,16 @@ const daemonTarget = { kind: "endpoint" as const, host: "example.test:12345" };
 
 function createFakeDaemonClient(
   overrides: Partial<
-    Pick<DaemonClient, "getPaseoWorktreeList" | "archivePaseoWorktree" | "close">
+    Pick<DaemonClient, "getOsunaWorktreeList" | "archiveOsunaWorktree" | "close">
   > = {},
 ): DaemonClient {
   return {
-    getPaseoWorktreeList: async () => ({
+    getOsunaWorktreeList: async () => ({
       worktrees: [],
       error: null,
       requestId: "req-list",
     }),
-    archivePaseoWorktree: async () => ({
+    archiveOsunaWorktree: async () => ({
       success: true,
       removedAgents: [],
       error: null,
@@ -34,10 +34,10 @@ describe("runArchiveCommand", () => {
   it("sends scope worktree when archiving by worktree path", async () => {
     const worktreePath = "/tmp/osuna-home/worktrees/repo/feature";
     const archiveCalls: Array<{
-      input: Parameters<DaemonClient["archivePaseoWorktree"]>[0];
+      input: Parameters<DaemonClient["archiveOsunaWorktree"]>[0];
     }> = [];
     const fakeClient = createFakeDaemonClient({
-      getPaseoWorktreeList: async () => ({
+      getOsunaWorktreeList: async () => ({
         worktrees: [
           {
             worktreePath,
@@ -49,7 +49,7 @@ describe("runArchiveCommand", () => {
         error: null,
         requestId: "req-list",
       }),
-      archivePaseoWorktree: async (input) => {
+      archiveOsunaWorktree: async (input) => {
         archiveCalls.push({ input });
         return {
           success: true,
@@ -88,10 +88,10 @@ describe("runArchiveCommand", () => {
   it("archives by matching branch name when no directory name matches", async () => {
     const worktreePath = "/tmp/osuna-home/worktrees/repo/feature-branch";
     const archiveCalls: Array<{
-      input: Parameters<DaemonClient["archivePaseoWorktree"]>[0];
+      input: Parameters<DaemonClient["archiveOsunaWorktree"]>[0];
     }> = [];
     const fakeClient = createFakeDaemonClient({
-      getPaseoWorktreeList: async () => ({
+      getOsunaWorktreeList: async () => ({
         worktrees: [
           {
             worktreePath,
@@ -103,7 +103,7 @@ describe("runArchiveCommand", () => {
         error: null,
         requestId: "req-list",
       }),
-      archivePaseoWorktree: async (input) => {
+      archiveOsunaWorktree: async (input) => {
         archiveCalls.push({ input });
         return {
           success: true,
@@ -132,7 +132,7 @@ describe("runArchiveCommand", () => {
 
   it("throws a CommandError when the worktree is not found", async () => {
     const fakeClient = createFakeDaemonClient({
-      getPaseoWorktreeList: async () => ({
+      getOsunaWorktreeList: async () => ({
         worktrees: [],
         error: null,
         requestId: "req-list",

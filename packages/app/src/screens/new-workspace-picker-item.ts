@@ -1,4 +1,4 @@
-import type { CreatePaseoWorktreeInput } from "@osuna/client/internal/daemon-client";
+import type { CreateOsunaWorktreeInput } from "@osuna/client/internal/daemon-client";
 import type { ForgeSearchItem } from "@osuna/protocol/messages";
 import type { ComboboxOptionModel } from "@/components/ui/combobox-options";
 import { getForgePresentation } from "@/git/forge";
@@ -27,7 +27,7 @@ export type PickerItem =
     };
 
 export type PickerCheckoutRequest = Pick<
-  CreatePaseoWorktreeInput,
+  CreateOsunaWorktreeInput,
   "action" | "refName" | "checkoutSource" | "githubPrNumber"
 >;
 

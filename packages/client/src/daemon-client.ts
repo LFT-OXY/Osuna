@@ -411,7 +411,7 @@ export interface CreateWorkspaceRequestOptions {
   requestId?: string;
 }
 
-export interface CreatePaseoWorktreeInput extends Pick<
+export interface CreateOsunaWorktreeInput extends Pick<
   CreateOsunaWorktreeRequest,
   | "cwd"
   | "projectId"
@@ -453,9 +453,9 @@ type BranchSuggestionsPayload = BranchSuggestionsResponse["payload"];
 type ForgeSearchPayload = ForgeSearchResponse["payload"];
 type GitHubSearchPayload = GitHubSearchResponse["payload"];
 type DirectorySuggestionsPayload = DirectorySuggestionsResponse["payload"];
-type PaseoWorktreeListPayload = OsunaWorktreeListResponse["payload"];
-type PaseoWorktreeArchivePayload = OsunaWorktreeArchiveResponse["payload"];
-type CreatePaseoWorktreePayload = Extract<
+type OsunaWorktreeListPayload = OsunaWorktreeListResponse["payload"];
+type OsunaWorktreeArchivePayload = OsunaWorktreeArchiveResponse["payload"];
+type CreateOsunaWorktreePayload = Extract<
   SessionOutboundMessage,
   { type: "create_osuna_worktree_response" }
 >["payload"];
@@ -4430,10 +4430,10 @@ export class DaemonClient {
     });
   }
 
-  async getPaseoWorktreeList(
+  async getOsunaWorktreeList(
     input: { cwd?: string; repoRoot?: string },
     requestId?: string,
-  ): Promise<PaseoWorktreeListPayload> {
+  ): Promise<OsunaWorktreeListPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
@@ -4445,7 +4445,7 @@ export class DaemonClient {
     });
   }
 
-  async archivePaseoWorktree(
+  async archiveOsunaWorktree(
     input: {
       worktreePath?: string;
       repoRoot?: string;
@@ -4454,7 +4454,7 @@ export class DaemonClient {
       scope?: "workspace" | "worktree";
     },
     requestId?: string,
-  ): Promise<PaseoWorktreeArchivePayload> {
+  ): Promise<OsunaWorktreeArchivePayload> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
@@ -4469,10 +4469,10 @@ export class DaemonClient {
     });
   }
 
-  async createPaseoWorktree(
-    input: CreatePaseoWorktreeInput,
+  async createOsunaWorktree(
+    input: CreateOsunaWorktreeInput,
     requestId?: string,
-  ): Promise<CreatePaseoWorktreePayload> {
+  ): Promise<CreateOsunaWorktreePayload> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {

@@ -7,7 +7,7 @@ import pino from "pino";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
 
-import { createPaseoDaemon, parseListenString, type PaseoDaemonConfig } from "./bootstrap.js";
+import { createOsunaDaemon, parseListenString, type OsunaDaemonConfig } from "./bootstrap.js";
 import { loadConfig } from "./config.js";
 import { AgentManagerShuttingDownError } from "./agent/agent-manager.js";
 import { hashDaemonPassword } from "./auth.js";
@@ -180,7 +180,7 @@ describe("paseo daemon bootstrap", () => {
         voiceTts: { provider: "local", explicit: true, enabled: false },
       },
     };
-    const daemon = await createPaseoDaemon(config, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(config, pino({ level: "silent" }));
     let client: DaemonClient | null = null;
     let proxyUpstream: http.Server | null = null;
 
@@ -436,7 +436,7 @@ describe("paseo daemon bootstrap", () => {
     const paseoHome = path.join(paseoHomeRoot, ".osuna");
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     await mkdir(paseoHome, { recursive: true });
-    const config: PaseoDaemonConfig = {
+    const config: OsunaDaemonConfig = {
       listen: "127.0.0.1:0",
       paseoHome,
       corsAllowedOrigins: [],
@@ -454,7 +454,7 @@ describe("paseo daemon bootstrap", () => {
         standaloneListen: `127.0.0.1:${address.port}`,
       },
     };
-    const daemon = await createPaseoDaemon(config, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(config, pino({ level: "silent" }));
 
     try {
       await expect(daemon.start()).rejects.toThrow();
@@ -549,7 +549,7 @@ describe("paseo daemon bootstrap", () => {
         return { close: () => undefined };
       },
     };
-    const config: PaseoDaemonConfig = {
+    const config: OsunaDaemonConfig = {
       listen: "127.0.0.1:0",
       paseoHome,
       corsAllowedOrigins: [],
@@ -566,7 +566,7 @@ describe("paseo daemon bootstrap", () => {
       openai: undefined,
       speech: undefined,
     };
-    const daemon = await createPaseoDaemon(config, pino({ level: "silent" }), {
+    const daemon = await createOsunaDaemon(config, pino({ level: "silent" }), {
       hubRelationshipRemote: remote,
     });
     const starting = daemon.start();
@@ -687,7 +687,7 @@ export default function contribute(plugin: unknown) {
 }`,
       );
     }
-    const config: PaseoDaemonConfig = {
+    const config: OsunaDaemonConfig = {
       listen: `127.0.0.1:${mainPort}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -707,7 +707,7 @@ export default function contribute(plugin: unknown) {
         ? {}
         : { "startup-rollback": { source: "directory", path: pluginDirectory } },
     };
-    const daemon = await createPaseoDaemon(config, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(config, pino({ level: "silent" }));
 
     try {
       await expect(daemon.start()).rejects.toThrow();
@@ -776,7 +776,7 @@ export default function contribute(plugin: unknown) {
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     await mkdir(paseoHome, { recursive: true });
 
-    const config: PaseoDaemonConfig = {
+    const config: OsunaDaemonConfig = {
       listen: "127.0.0.1:0",
       paseoHome,
       corsAllowedOrigins: [],
@@ -799,7 +799,7 @@ export default function contribute(plugin: unknown) {
     };
 
     try {
-      const daemon = await createPaseoDaemon(config, pino({ level: "silent" }));
+      const daemon = await createOsunaDaemon(config, pino({ level: "silent" }));
       try {
         await daemon.start();
         expect(daemon.getListenTarget()).toBeDefined();
@@ -912,7 +912,7 @@ export default function contribute(plugin: unknown) {
       await mkdir(paseoHome, { recursive: true });
       const logger = pino({ level: "silent" });
 
-      const config: PaseoDaemonConfig = {
+      const config: OsunaDaemonConfig = {
         listen: socketPath,
         paseoHome,
         corsAllowedOrigins: [],
@@ -930,7 +930,7 @@ export default function contribute(plugin: unknown) {
         speech: undefined,
       };
 
-      const daemon = await createPaseoDaemon(config, logger);
+      const daemon = await createOsunaDaemon(config, logger);
 
       try {
         await daemon.start();

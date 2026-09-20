@@ -17,16 +17,16 @@ Requires Node.js 22 or newer.
 ## Connect
 
 ```ts
-import { createPaseoClient } from "@getpaseo/client";
+import { createOsunaClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createOsunaClient({ url: "ws://127.0.0.1:6767/ws" });
 await client.connect();
 ```
 
 `connect()` resolves once the daemon has identified itself. If the daemon has a password, pass it:
 
 ```ts
-const client = createPaseoClient({
+const client = createOsunaClient({
   url: "wss://devbox.example.com/ws",
   password: "my-secret",
 });

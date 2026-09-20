@@ -40,7 +40,7 @@ import {
 } from "./worktree-metadata.js";
 import { runGitCommand } from "./run-git-command.js";
 import { spawnProcess } from "./spawn.js";
-import { resolvePaseoHome } from "../server/osuna-home.js";
+import { resolveOsunaHome } from "../server/osuna-home.js";
 import { createExternalProcessEnv } from "../server/paseo-env.js";
 import { parseGitRevParsePath, resolveGitRevParsePath } from "./git-rev-parse-path.js";
 import { expandTilde, getRealpathAwareRelativePath, isPathInsideRoot } from "./path.js";
@@ -863,11 +863,11 @@ export function resolvePaseoWorktreesBaseRoot(options?: WorktreeRootOptions): st
     if (isAbsolute(expandedRoot)) {
       return resolve(expandedRoot);
     }
-    const home = options.paseoHome ? resolve(options.paseoHome) : resolvePaseoHome();
+    const home = options.paseoHome ? resolve(options.paseoHome) : resolveOsunaHome();
     return resolve(home, expandedRoot);
   }
 
-  const home = options?.paseoHome ? resolve(options.paseoHome) : resolvePaseoHome();
+  const home = options?.paseoHome ? resolve(options.paseoHome) : resolveOsunaHome();
   return join(home, "worktrees");
 }
 

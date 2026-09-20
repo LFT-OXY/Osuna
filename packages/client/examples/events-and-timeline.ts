@@ -1,7 +1,7 @@
-import { createPaseoClient, type PaseoClient } from "@osuna/client";
+import { createOsunaClient, type OsunaClient } from "@osuna/client";
 
-export function createClient(url: string): PaseoClient {
-  return createPaseoClient({
+export function createClient(url: string): OsunaClient {
+  return createOsunaClient({
     url,
   });
 }

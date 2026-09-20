@@ -8,7 +8,7 @@ import {
   type ArchiveScope,
 } from "../workspace-archive-service.js";
 import type {
-  CreatePaseoWorktreeInput,
+  CreateOsunaWorktreeInput,
   CreatePaseoWorktreeResult,
 } from "../paseo-worktree-service.js";
 import { toWorktreeWireError, type WorktreeWireError } from "../worktree-errors.js";
@@ -34,7 +34,7 @@ export async function listPaseoWorktreesCommand(
 }
 
 type CreatePaseoWorktreeWorkflow<Result extends CreatePaseoWorktreeResult> = (
-  input: CreatePaseoWorktreeInput,
+  input: CreateOsunaWorktreeInput,
 ) => Promise<Result>;
 
 export interface CreatePaseoWorktreeCommandDependencies<
@@ -46,7 +46,7 @@ export interface CreatePaseoWorktreeCommandDependencies<
 }
 
 export type CreatePaseoWorktreeCommandInput = Omit<
-  CreatePaseoWorktreeInput,
+  CreateOsunaWorktreeInput,
   "paseoHome" | "runSetup"
 > & {
   paseoHome?: string;

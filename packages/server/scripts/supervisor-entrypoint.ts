@@ -8,7 +8,7 @@ import {
   startPidLockHeartbeat,
   updatePidLock,
 } from "../src/server/pid-lock.js";
-import { resolvePaseoHome } from "../src/server/osuna-home.js";
+import { resolveOsunaHome } from "../src/server/osuna-home.js";
 import { loadPersistedConfig } from "../src/server/persisted-config.js";
 import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
 
   applySherpaLoaderEnv(workerEnv);
 
-  const paseoHome = resolvePaseoHome(workerEnv);
+  const paseoHome = resolveOsunaHome(workerEnv);
   const persistedConfig = loadPersistedConfig(paseoHome);
   const supervisorLogFile = resolveSupervisorLogFile(paseoHome, persistedConfig, workerEnv);
 

@@ -237,7 +237,7 @@ describe("daemon checkout ship loop", () => {
         });
         expect(baseDiffAfterMerge.files.length).toBe(0);
 
-        const worktreeList = await ctx.client.getPaseoWorktreeList({
+        const worktreeList = await ctx.client.getOsunaWorktreeList({
           cwd: repoDir,
         });
         expect(worktreeList.error).toBeNull();
@@ -249,7 +249,7 @@ describe("daemon checkout ship loop", () => {
           ),
         ).toBe(true);
 
-        const archiveResult = await ctx.client.archivePaseoWorktree({
+        const archiveResult = await ctx.client.archiveOsunaWorktree({
           worktreePath: worktree.worktreePath,
         });
         expect(archiveResult.error).toBeNull();
@@ -257,7 +257,7 @@ describe("daemon checkout ship loop", () => {
 
         // Archiving removes the agent from the active list but leaves the
         // worktree on disk — disk deletion is a separate, explicit step.
-        const worktreeListAfter = await ctx.client.getPaseoWorktreeList({
+        const worktreeListAfter = await ctx.client.getOsunaWorktreeList({
           cwd: repoDir,
         });
         expect(

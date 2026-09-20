@@ -121,7 +121,7 @@ import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
 import { createWorkspaceLabelService } from "./workspace-labels/index.js";
 import { createGitHubService } from "../services/github-service.js";
-import { createPaseoWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
+import { createOsunaWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
 import { createPaseoWorktreeWorkflow } from "./worktree-session.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
@@ -386,7 +386,7 @@ export type DaemonLifecycleIntent =
       reason: string;
     };
 
-export interface PaseoDaemonConfig {
+export interface OsunaDaemonConfig {
   listen: string;
   paseoHome: string;
   daemonVersion?: string;
@@ -463,8 +463,8 @@ export interface PaseoDaemonConfig {
   };
 }
 
-export interface PaseoDaemon {
-  config: PaseoDaemonConfig;
+export interface OsunaDaemon {
+  config: OsunaDaemonConfig;
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   terminalManager: TerminalManager;
@@ -488,7 +488,7 @@ export interface PaseoDaemonDependencies {
 }
 
 function createBootstrapManagedProcessRegistry(
-  config: Pick<PaseoDaemonConfig, "paseoHome" | "managedProcesses">,
+  config: Pick<OsunaDaemonConfig, "paseoHome" | "managedProcesses">,
   logger: Logger,
 ): ManagedProcessRegistry {
   if (config.managedProcesses) {
@@ -513,7 +513,7 @@ async function reconcileManagedProcessLedger(
   }
 }
 
-function mountWebUi(app: express.Application, config: PaseoDaemonConfig, logger: Logger): void {
+function mountWebUi(app: express.Application, config: OsunaDaemonConfig, logger: Logger): void {
   app.use(
     createWebUiMiddleware({
       enabled: config.webUi?.enabled ?? false,
@@ -524,16 +524,16 @@ function mountWebUi(app: express.Application, config: PaseoDaemonConfig, logger:
   );
 }
 
-function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | string[] {
+function resolveExpressTrustProxySetting(config: OsunaDaemonConfig): true | string[] {
   return config.trustedProxies ?? ["loopback"];
 }
 
-function resolveMutableUsageSection(config: PaseoDaemonConfig): MutableDaemonConfig["usage"] {
+function resolveMutableUsageSection(config: OsunaDaemonConfig): MutableDaemonConfig["usage"] {
   const { autoUpdate, overrides } = resolveUsagePricingSettings(config.usage?.pricing);
   return { pricing: { autoUpdate, overrides: [...overrides] } };
 }
 
-function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
+function createInitialMutableDaemonConfig(config: OsunaDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
   const initialConfig: MutableDaemonConfig = {
@@ -575,11 +575,11 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
   return initialConfig;
 }
 
-export async function createPaseoDaemon(
-  config: PaseoDaemonConfig,
+export async function createOsunaDaemon(
+  config: OsunaDaemonConfig,
   rootLogger: Logger,
   dependencies: PaseoDaemonDependencies = {},
-): Promise<PaseoDaemon> {
+): Promise<OsunaDaemon> {
   configureGitProcessPolicy(config.git ?? resolveGitProcessPolicy({ env: process.env }));
   const logger = rootLogger.child({ module: "bootstrap" });
   const obsoleteTimelineDirectory = path.join(config.paseoHome, "agent-timelines");
@@ -1125,7 +1125,7 @@ export async function createPaseoDaemon(
       {
         paseoHome: config.paseoHome,
         worktreesRoot: config.worktreesRoot,
-        createPaseoWorktree: async (workflowInput, workflowOptions) => {
+        createOsunaWorktree: async (workflowInput, workflowOptions) => {
           return createRegisteredPaseoWorktree(workflowInput, {
             github,
             ...(workflowOptions?.resolveDefaultBranch
@@ -1178,7 +1178,7 @@ export async function createPaseoDaemon(
     worktreesRoot: config.worktreesRoot,
     terminalManager,
     providerSnapshotManager,
-    createPaseoWorktree: createPaseoWorktreeForTools,
+    createOsunaWorktree: createPaseoWorktreeForTools,
     ensureWorkspaceForCreate: ensureWorkspaceForCreateAndBroadcastExternal,
   };
   const createAgent = (input: Parameters<typeof createAgentCommand>[1]) =>
@@ -1439,7 +1439,7 @@ export async function createPaseoDaemon(
     markWorkspaceArchiving: markWorkspaceArchivingExternal,
     clearWorkspaceArchiving: clearWorkspaceArchivingExternal,
     ensureWorkspaceForCreate: createAgentCommandDependencies.ensureWorkspaceForCreate,
-    createPaseoWorktree: createAgentCommandDependencies.createPaseoWorktree,
+    createOsunaWorktree: createAgentCommandDependencies.createOsunaWorktree,
     browserToolsEnabled: browserToolsPolicy.isEnabled(),
     browserToolsBroker,
     paseoToolPolicy:

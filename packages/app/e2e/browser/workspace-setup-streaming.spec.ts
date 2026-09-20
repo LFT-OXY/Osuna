@@ -305,7 +305,7 @@ test.describe("Workspace setup streaming", () => {
           payload.status === "completed" && payload.detail.log.includes("setup complete"),
       );
 
-      const result = await client.createPaseoWorktree({
+      const result = await client.createOsunaWorktree({
         cwd: repo.path,
         worktreeSlug: "workspace-setup-scripts",
       });

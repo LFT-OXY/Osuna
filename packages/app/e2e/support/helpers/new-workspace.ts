@@ -10,16 +10,16 @@ import { withProjectOwnership } from "./project-ownership";
 
 type NewWorkspaceDaemonClient = Pick<
   InternalDaemonClient,
-  | "archivePaseoWorktree"
+  | "archiveOsunaWorktree"
   | "archiveWorkspace"
   | "checkoutRefresh"
   | "close"
   | "connect"
-  | "createPaseoWorktree"
+  | "createOsunaWorktree"
   | "createWorkspace"
   | "fetchAgents"
   | "fetchWorkspaces"
-  | "getPaseoWorktreeList"
+  | "getOsunaWorktreeList"
   | "getDaemonConfig"
   | "installDirectoryPlugin"
   | "disablePlugin"
@@ -141,7 +141,7 @@ export async function archiveWorkspaceFromDaemon(
   workspaceDirectory: string,
   options?: { scope?: "workspace" | "worktree" },
 ): Promise<void> {
-  const payload = await client.archivePaseoWorktree({
+  const payload = await client.archiveOsunaWorktree({
     worktreePath: workspaceDirectory,
     ...(options?.scope !== undefined ? { scope: options.scope } : {}),
   });
@@ -170,7 +170,7 @@ export async function createWorktreeViaDaemon(
   client: NewWorkspaceDaemonClient,
   input: { cwd: string; slug: string },
 ): Promise<OpenedProject> {
-  const payload = await client.createPaseoWorktree({
+  const payload = await client.createOsunaWorktree({
     cwd: input.cwd,
     worktreeSlug: input.slug,
   });

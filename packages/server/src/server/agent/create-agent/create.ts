@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 
 import type { TerminalManager } from "../../../terminal/terminal-manager.js";
-import type { CreatePaseoWorktreeInput } from "../../paseo-worktree-service.js";
+import type { CreateOsunaWorktreeInput } from "../../paseo-worktree-service.js";
 import { expandUserPath, resolvePathFromBase } from "../../path-utils.js";
 import { toWorktreeRequestError } from "../../worktree-errors.js";
 import type {
@@ -43,7 +43,7 @@ export interface CreateAgentCommandDependencies {
   worktreesRoot?: string;
   terminalManager?: TerminalManager | null;
   providerSnapshotManager: Pick<ProviderSnapshotManager, "resolveCreateConfig">;
-  createPaseoWorktree?: CreatePaseoWorktreeWorkflowFn;
+  createOsunaWorktree?: CreatePaseoWorktreeWorkflowFn;
   // Mints a fresh directory workspace for a cwd and returns its id.
   ensureWorkspaceForCreate?: EnsureWorkspaceForCreate;
 }
@@ -550,7 +550,7 @@ async function resolveMcpCwd(params: {
       paseoHome: dependencies.paseoHome,
       worktreesRoot: dependencies.worktreesRoot,
     },
-    createPaseoWorktree: dependencies.createPaseoWorktree,
+    createOsunaWorktree: dependencies.createOsunaWorktree,
     resolveDefaultBranch: baseBranch ? async () => baseBranch : undefined,
     setupContinuation: {
       kind: "agent",
@@ -579,8 +579,8 @@ async function resolveMcpCwd(params: {
 }
 
 interface CreateMcpWorktreeOptions {
-  input: CreatePaseoWorktreeInput;
-  createPaseoWorktree: CreatePaseoWorktreeWorkflowFn | undefined;
+  input: CreateOsunaWorktreeInput;
+  createOsunaWorktree: CreatePaseoWorktreeWorkflowFn | undefined;
   resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
   setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
 }
@@ -589,10 +589,10 @@ async function createMcpWorktree(
   options: CreateMcpWorktreeOptions,
 ): Promise<CreatePaseoWorktreeWorkflowResult> {
   try {
-    if (!options.createPaseoWorktree) {
+    if (!options.createOsunaWorktree) {
       throw new Error("Paseo worktree service is not configured");
     }
-    return await options.createPaseoWorktree(options.input, {
+    return await options.createOsunaWorktree(options.input, {
       ...(options.resolveDefaultBranch
         ? { resolveDefaultBranch: options.resolveDefaultBranch }
         : {}),

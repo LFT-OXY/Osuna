@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, expect, test, vi } from "vitest";
-import { createOsunaApi, createPaseoClient } from "./index.js";
+import { createOsunaApi, createOsunaClient } from "./index.js";
 import { DaemonClient } from "./daemon-client.js";
-import type { PaseoAgent, PaseoClient, PaseoWorkspace } from "./index.js";
+import type { OsunaAgent, OsunaClient, OsunaWorkspace } from "./index.js";
 
 type FakeWebSocketHandler = (...args: unknown[]) => void;
 
@@ -101,8 +101,8 @@ async function connectClient(
     providersSnapshotCwd: true,
     ownedSubscriptions: true,
   },
-): Promise<{ client: PaseoClient; ws: FakeWebSocket }> {
-  const client = createPaseoClient({
+): Promise<{ client: OsunaClient; ws: FakeWebSocket }> {
+  const client = createOsunaClient({
     url: "ws://daemon.test",
     webSocketFactory: (url) => new FakeWebSocket(url),
     reconnect: { enabled: false },
@@ -117,7 +117,7 @@ async function connectClient(
     clientType: "cli",
     protocolVersion: 1,
   });
-  expect(hello.clientId).toEqual(expect.stringMatching(/^paseo-sdk-/));
+  expect(hello.clientId).toEqual(expect.stringMatching(/^osuna-sdk-/));
   ws.message(
     sessionMessage({
       type: "status",
@@ -150,13 +150,13 @@ function acknowledgeObservation(ws: FakeWebSocket, subscriptionId: string): void
   );
 }
 
-async function observeAgents(client: PaseoClient, ws: FakeWebSocket): Promise<string> {
+async function observeAgents(client: OsunaClient, ws: FakeWebSocket): Promise<string> {
   const ready = client.agents.list({ subscribe: {} });
   acknowledgeObservation(ws, "agents-sdk");
   return (await ready).subscriptionId!;
 }
 
-function createWorkspace(input: Partial<PaseoWorkspace> = {}): PaseoWorkspace {
+function createWorkspace(input: Partial<OsunaWorkspace> = {}): OsunaWorkspace {
   return {
     id: "workspace_sdk",
     projectId: "project_sdk",
@@ -177,7 +177,7 @@ function createWorkspace(input: Partial<PaseoWorkspace> = {}): PaseoWorkspace {
   };
 }
 
-function createAgent(input: Partial<PaseoAgent> = {}): PaseoAgent {
+function createAgent(input: Partial<OsunaAgent> = {}): OsunaAgent {
   return {
     id: "agent_sdk",
     provider: "codex",
@@ -209,7 +209,7 @@ function createAgent(input: Partial<PaseoAgent> = {}): PaseoAgent {
   };
 }
 
-test("createPaseoClient exposes workspace list through the daemon client", async () => {
+test("createOsunaClient exposes workspace list through the daemon client", async () => {
   const { client, ws } = await connectClient();
 
   const listPromise = client.workspaces.list({

@@ -29,7 +29,7 @@ import { buildAgentBranchNameSeed } from "./agent/prompt-attachments.js";
 import type { FirstAgentContext } from "@osuna/protocol/messages";
 import { runWithGitCommandPriority } from "../utils/run-git-command.js";
 
-export interface CreatePaseoWorktreeInput extends CreateWorktreeCoreInput {
+export interface CreateOsunaWorktreeInput extends CreateWorktreeCoreInput {
   workspaceId?: string;
   projectId?: string;
   title?: string;
@@ -44,7 +44,7 @@ export interface CreatePaseoWorktreeResult {
 }
 
 export type CreatePaseoWorktreeFn = (
-  input: CreatePaseoWorktreeInput,
+  input: CreateOsunaWorktreeInput,
   options?: {
     resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
   },
@@ -61,15 +61,15 @@ export interface CreatePaseoWorktreeDeps extends CreateWorktreeCoreDeps {
   workspaceProvisioning: Pick<WorkspaceProvisioningService, "createWorkspaceForWorktree">;
 }
 
-export async function createPaseoWorktree(
-  input: CreatePaseoWorktreeInput,
+export async function createOsunaWorktree(
+  input: CreateOsunaWorktreeInput,
   deps: CreatePaseoWorktreeDeps,
 ): Promise<CreatePaseoWorktreeResult> {
   return runWithGitCommandPriority("high", () => createPaseoWorktreeWithPriority(input, deps));
 }
 
 async function createPaseoWorktreeWithPriority(
-  input: CreatePaseoWorktreeInput,
+  input: CreateOsunaWorktreeInput,
   deps: CreatePaseoWorktreeDeps,
 ): Promise<CreatePaseoWorktreeResult> {
   const workspaceCwdPlan = await planWorkspaceCwdForWorktree(input.cwd, deps.workspaceGitService);

@@ -319,7 +319,7 @@ test("mcp create stamps the new worktree's workspaceId, not the parent's", async
         agentStorage: storage,
         logger,
         providerSnapshotManager,
-        createPaseoWorktree: fakeWorktreeCreator({
+        createOsunaWorktree: fakeWorktreeCreator({
           repoRoot: workdir,
           createdWorkspaceId: "ws-new-worktree",
         }),
@@ -370,7 +370,7 @@ test("mcp create exposes the created worktree before dispatching the initial pro
             return {};
           },
         },
-        createPaseoWorktree: async () => createdWorktree,
+        createOsunaWorktree: async () => createdWorktree,
       },
       {
         kind: "mcp",

@@ -88,7 +88,7 @@ interface SessionHandlerInternals {
   handleStashListRequest(params: unknown): Promise<unknown>;
   handleStashSaveRequest(params: unknown): Promise<unknown>;
   handleStashPopRequest(params: unknown): Promise<unknown>;
-  createPaseoWorktree(params: unknown): Promise<unknown>;
+  createOsunaWorktree(params: unknown): Promise<unknown>;
   handleStartWorkspaceScriptRequest(params: unknown): Promise<unknown>;
 }
 
@@ -215,7 +215,7 @@ const gitCommandMocks = vi.hoisted(() => ({
 }));
 
 const paseoWorktreeServiceMocks = vi.hoisted(() => ({
-  createPaseoWorktree: vi.fn(),
+  createOsunaWorktree: vi.fn(),
 }));
 
 interface Deferred<T> {
@@ -258,7 +258,7 @@ vi.mock("./paseo-worktree-service.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./paseo-worktree-service.js")>();
   return {
     ...actual,
-    createPaseoWorktree: paseoWorktreeServiceMocks.createPaseoWorktree,
+    createOsunaWorktree: paseoWorktreeServiceMocks.createOsunaWorktree,
   };
 });
 
@@ -4673,7 +4673,7 @@ describe("session paseo worktree creation handling", () => {
   test("forces workspace git refreshes for the source repo and created worktree", async () => {
     const workspaceGitService = { getSnapshot: vi.fn().mockResolvedValue({}) };
     const session = createSessionForTest({ workspaceGitService });
-    paseoWorktreeServiceMocks.createPaseoWorktree.mockResolvedValue({
+    paseoWorktreeServiceMocks.createOsunaWorktree.mockResolvedValue({
       repoRoot: "/tmp/repo",
       worktree: {
         branchName: "feature/new-worktree",
@@ -4689,7 +4689,7 @@ describe("session paseo worktree creation handling", () => {
       created: true,
     });
 
-    await asSessionInternals(session).createPaseoWorktree({
+    await asSessionInternals(session).createOsunaWorktree({
       cwd: "/tmp/repo",
       worktreeSlug: "new-worktree",
       runSetup: false,

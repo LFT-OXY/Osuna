@@ -262,7 +262,7 @@ test("archiving the last reference to a worktree removes it from disk regardless
   expect(existsSync(keepDir)).toBe(true);
 
   // Last reference, deleteWorktreeFromDisk omitted (defaults ignored) → dir removed.
-  const keepArchive = await ctx.client.archivePaseoWorktree({ worktreePath: keepDir });
+  const keepArchive = await ctx.client.archiveOsunaWorktree({ worktreePath: keepDir });
   expect(keepArchive.success).toBe(true);
   await expect
     .poll(async () => (await activeWorkspaceIds()).has(keepWorkspace.id), {
@@ -289,7 +289,7 @@ test("archiving the last reference to a worktree removes it from disk regardless
 
   // Last reference on a fresh worktree still removes the directory without any
   // caller-supplied disk-deletion flag.
-  const deleteArchive = await ctx.client.archivePaseoWorktree({ worktreePath: deleteDir });
+  const deleteArchive = await ctx.client.archiveOsunaWorktree({ worktreePath: deleteDir });
   expect(deleteArchive.success).toBe(true);
   await expect
     .poll(async () => (await activeWorkspaceIds()).has(deleteWorkspace.id), {
@@ -434,7 +434,7 @@ test("worktree archive targets the explicit workspaceId when a directory backs m
   const localWorkspaceId = await createLocalWorkspace(worktreeDir, "local-sibling");
   expect(localWorkspaceId).not.toBe(worktreeWorkspace.id);
 
-  const archive = await ctx.client.archivePaseoWorktree({
+  const archive = await ctx.client.archiveOsunaWorktree({
     worktreePath: worktreeDir,
     workspaceId: localWorkspaceId,
   });
@@ -452,7 +452,7 @@ test("worktree archive targets the explicit workspaceId when a directory backs m
   expect(remaining.has(worktreeWorkspace.id)).toBe(true);
   expect(existsSync(worktreeDir)).toBe(true);
 
-  await ctx.client.archivePaseoWorktree({
+  await ctx.client.archiveOsunaWorktree({
     worktreePath: worktreeDir,
     workspaceId: worktreeWorkspace.id,
   });
@@ -482,7 +482,7 @@ test("keeps the worktree on disk when a sibling workspace still references it", 
 
   // Archive the worktree-backed workspace. It is NOT the last reference, so the
   // directory must survive regardless of the legacy disk flag.
-  const archive = await ctx.client.archivePaseoWorktree({
+  const archive = await ctx.client.archiveOsunaWorktree({
     worktreePath: worktreeDir,
   });
   expect(archive.success).toBe(true);

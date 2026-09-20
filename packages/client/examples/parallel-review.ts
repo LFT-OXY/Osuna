@@ -1,7 +1,7 @@
-import type { PaseoAgentHandle, PaseoClient } from "@osuna/client";
+import type { OsunaAgentHandle, OsunaClient } from "@osuna/client";
 
-export async function reviewInParallel(client: PaseoClient, cwd: string): Promise<string[]> {
-  const agents: PaseoAgentHandle[] = [];
+export async function reviewInParallel(client: OsunaClient, cwd: string): Promise<string[]> {
+  const agents: OsunaAgentHandle[] = [];
 
   try {
     agents.push(

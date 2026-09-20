@@ -30,9 +30,9 @@ It listens on `ws://127.0.0.1:6767/ws`.
 ## Run an agent
 
 ```ts
-import { createPaseoClient } from "@getpaseo/client";
+import { createOsunaClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createOsunaClient({ url: "ws://127.0.0.1:6767/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

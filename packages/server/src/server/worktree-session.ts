@@ -38,7 +38,7 @@ import {
 } from "../utils/worktree.js";
 import { toCheckoutError } from "./checkout-git-utils.js";
 import type {
-  CreatePaseoWorktreeInput,
+  CreateOsunaWorktreeInput,
   CreatePaseoWorktreeResult,
 } from "./paseo-worktree-service.js";
 import type { ArchiveDependencies } from "./workspace-archive-service.js";
@@ -85,8 +85,8 @@ interface BuildAgentSessionConfigDependencies {
   worktreesRoot?: string;
   sessionLogger: Logger;
   workspaceGitService?: WorkspaceGitService;
-  createPaseoWorktree: (
-    input: CreatePaseoWorktreeInput,
+  createOsunaWorktree: (
+    input: CreateOsunaWorktreeInput,
     options?: {
       resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
       setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
@@ -118,8 +118,8 @@ interface CreatePaseoWorktreeInBackgroundDependencies {
 }
 
 interface CreatePaseoWorktreeWorkflowDependencies extends CreatePaseoWorktreeInBackgroundDependencies {
-  createPaseoWorktree: (
-    input: CreatePaseoWorktreeInput,
+  createOsunaWorktree: (
+    input: CreateOsunaWorktreeInput,
     options?: {
       resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
     },
@@ -155,7 +155,7 @@ export type CreatePaseoWorktreeWorkflowResult = CreatePaseoWorktreeResult & {
 };
 
 export type CreatePaseoWorktreeWorkflowFn = (
-  input: CreatePaseoWorktreeInput,
+  input: CreateOsunaWorktreeInput,
   options?: {
     resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
     setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
@@ -183,7 +183,7 @@ interface HandleCreatePaseoWorktreeRequestDependencies {
   emit: EmitSessionMessage;
   sessionLogger: Logger;
   createPaseoWorktreeWorkflow: (
-    input: CreatePaseoWorktreeInput,
+    input: CreateOsunaWorktreeInput,
   ) => Promise<CreatePaseoWorktreeWorkflowResult>;
 }
 
@@ -235,7 +235,7 @@ export async function buildAgentSessionConfig(
       "Creating worktree through createWorktreeCore",
     );
 
-    const createdWorktree = await dependencies.createPaseoWorktree(
+    const createdWorktree = await dependencies.createOsunaWorktree(
       {
         cwd,
         worktreeSlug: normalized.worktreeSlug,
@@ -607,13 +607,13 @@ export async function handleCreatePaseoWorktreeRequest(
 
 export async function createPaseoWorktreeWorkflow(
   dependencies: CreatePaseoWorktreeWorkflowDependencies,
-  input: CreatePaseoWorktreeInput,
+  input: CreateOsunaWorktreeInput,
   options?: {
     resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
     setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
   },
 ): Promise<CreatePaseoWorktreeWorkflowResult> {
-  const createdWorktree = await dependencies.createPaseoWorktree(
+  const createdWorktree = await dependencies.createOsunaWorktree(
     {
       ...input,
       runSetup: false,

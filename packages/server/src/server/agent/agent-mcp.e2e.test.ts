@@ -10,7 +10,7 @@ import pino from "pino";
 
 import { withTimeout } from "../../utils/promise-timeout.js";
 import { hashDaemonPassword } from "../auth.js";
-import { createPaseoDaemon, type PaseoDaemonConfig } from "../bootstrap.js";
+import { createOsunaDaemon, type OsunaDaemonConfig } from "../bootstrap.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
 import type {
   AgentClient,
@@ -171,7 +171,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
 
-    const daemonConfig: PaseoDaemonConfig = {
+    const daemonConfig: OsunaDaemonConfig = {
       listen: `127.0.0.1:${port}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -183,7 +183,7 @@ describe("agent MCP end-to-end (offline)", () => {
       agentStoragePath: path.join(paseoHome, "agents"),
     };
 
-    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(daemonConfig, pino({ level: "silent" }));
     await daemon.start();
 
     const client = await createMcpClient(`http://127.0.0.1:${port}/mcp/agents`);
@@ -241,7 +241,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
 
-    const daemonConfig: PaseoDaemonConfig = {
+    const daemonConfig: OsunaDaemonConfig = {
       listen: `127.0.0.1:${port}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -254,7 +254,7 @@ describe("agent MCP end-to-end (offline)", () => {
       auth: { password: hashDaemonPassword("daemon-secret") },
     };
 
-    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(daemonConfig, pino({ level: "silent" }));
     await daemon.start();
 
     const mcpUrl = `http://127.0.0.1:${port}/mcp/agents`;
@@ -312,7 +312,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const port = await getAvailablePort();
     const recorder: LaunchRecorder = { recordedLaunches: [] };
 
-    const daemonConfig: PaseoDaemonConfig = {
+    const daemonConfig: OsunaDaemonConfig = {
       listen: `127.0.0.1:${port}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -324,7 +324,7 @@ describe("agent MCP end-to-end (offline)", () => {
       agentStoragePath: path.join(paseoHome, "agents"),
     };
 
-    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(daemonConfig, pino({ level: "silent" }));
     await daemon.start();
 
     const client = await createMcpClient(`http://127.0.0.1:${port}/mcp/agents`);
@@ -334,7 +334,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const disabledAgentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-disabled-"));
     const disabledPort = await getAvailablePort();
     const disabledRecorder: LaunchRecorder = { recordedLaunches: [] };
-    const disabledDaemonConfig: PaseoDaemonConfig = {
+    const disabledDaemonConfig: OsunaDaemonConfig = {
       listen: `127.0.0.1:${disabledPort}`,
       paseoHome: disabledPaseoHome,
       corsAllowedOrigins: [],
@@ -346,7 +346,7 @@ describe("agent MCP end-to-end (offline)", () => {
       agentClients: createMcpRecordingAgentClients(disabledRecorder),
       agentStoragePath: path.join(disabledPaseoHome, "agents"),
     };
-    const disabledDaemon = await createPaseoDaemon(disabledDaemonConfig, pino({ level: "silent" }));
+    const disabledDaemon = await createOsunaDaemon(disabledDaemonConfig, pino({ level: "silent" }));
     await disabledDaemon.start();
 
     const disabledClient = await createMcpClient(`http://127.0.0.1:${disabledPort}/mcp/agents`);
@@ -424,7 +424,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const port = await getAvailablePort();
     const recorder: LaunchRecorder = { recordedLaunches: [] };
 
-    const daemonConfig: PaseoDaemonConfig = {
+    const daemonConfig: OsunaDaemonConfig = {
       listen: `0.0.0.0:${port}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -436,7 +436,7 @@ describe("agent MCP end-to-end (offline)", () => {
       agentStoragePath: path.join(paseoHome, "agents"),
     };
 
-    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(daemonConfig, pino({ level: "silent" }));
     await daemon.start();
 
     const client = await createMcpClient(`http://127.0.0.1:${port}/mcp/agents`);
@@ -484,7 +484,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
 
-    const daemonConfig: PaseoDaemonConfig = {
+    const daemonConfig: OsunaDaemonConfig = {
       listen: `127.0.0.1:${port}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -496,7 +496,7 @@ describe("agent MCP end-to-end (offline)", () => {
       agentStoragePath: path.join(paseoHome, "agents"),
     };
 
-    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(daemonConfig, pino({ level: "silent" }));
     await daemon.start();
 
     const client = await createMcpClient(`http://127.0.0.1:${port}/mcp/agents`);
@@ -662,7 +662,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
     const port = await getAvailablePort();
 
-    const daemonConfig: PaseoDaemonConfig = {
+    const daemonConfig: OsunaDaemonConfig = {
       listen: `127.0.0.1:${port}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -677,7 +677,7 @@ describe("agent MCP end-to-end (offline)", () => {
       agentStoragePath: path.join(paseoHome, "agents"),
     };
 
-    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(daemonConfig, pino({ level: "silent" }));
     await daemon.start();
 
     const client = await createMcpClient(`http://127.0.0.1:${port}/mcp/agents`);
@@ -729,7 +729,7 @@ describe("agent MCP end-to-end (offline)", () => {
     const repoRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-worktree-repo-"));
     const port = await getAvailablePort();
 
-    const daemonConfig: PaseoDaemonConfig = {
+    const daemonConfig: OsunaDaemonConfig = {
       listen: `127.0.0.1:${port}`,
       paseoHome,
       corsAllowedOrigins: [],
@@ -741,7 +741,7 @@ describe("agent MCP end-to-end (offline)", () => {
       agentStoragePath: path.join(paseoHome, "agents"),
     };
 
-    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(daemonConfig, pino({ level: "silent" }));
     await daemon.start();
 
     const client = await createMcpClient(`http://127.0.0.1:${port}/mcp/agents`);

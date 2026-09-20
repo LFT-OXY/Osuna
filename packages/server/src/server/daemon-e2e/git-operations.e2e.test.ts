@@ -770,7 +770,7 @@ test("archiving a worktree shuts down its terminals but leaves the worktree on d
   const beforeArchiveDirectories = ctx.daemon.daemon.terminalManager.listDirectories();
   expect(beforeArchiveDirectories).toContain(agent.cwd);
 
-  const archive = await ctx.client.archivePaseoWorktree({
+  const archive = await ctx.client.archiveOsunaWorktree({
     worktreePath: agent.cwd,
   });
   expect(archive.error).toBeNull();

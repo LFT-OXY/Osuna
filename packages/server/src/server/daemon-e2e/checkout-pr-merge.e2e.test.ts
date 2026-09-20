@@ -284,7 +284,7 @@ describe("daemon checkout PR merge loop", () => {
         });
         expect(readFetchedFile(repoDir, "feature.txt")).toBe("squash merge\n");
 
-        const archiveResult = await ctx.client.archivePaseoWorktree({
+        const archiveResult = await ctx.client.archiveOsunaWorktree({
           worktreePath: worktree.worktreePath,
         });
         expect(archiveResult.error).toBeNull();
@@ -297,7 +297,7 @@ describe("daemon checkout PR merge loop", () => {
         agentId = null;
       } finally {
         if (worktreePath) {
-          await ctx.client.archivePaseoWorktree({ worktreePath }).catch(() => undefined);
+          await ctx.client.archiveOsunaWorktree({ worktreePath }).catch(() => undefined);
         }
         if (agentId) {
           await ctx.client.deleteAgent(agentId).catch(() => undefined);

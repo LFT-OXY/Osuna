@@ -76,7 +76,7 @@ export async function runArchiveCommandWithDeps(
 
   try {
     // Get the list of worktrees first to resolve the name
-    const listResponse = await client.getPaseoWorktreeList({});
+    const listResponse = await client.getOsunaWorktreeList({});
 
     if (listResponse.error) {
       const error: CommandError = {
@@ -103,7 +103,7 @@ export async function runArchiveCommandWithDeps(
 
     // Archive the worktree. scope:"worktree" archives every active workspace on
     // the directory and then removes the directory (Paseo-owned gated).
-    const response = await client.archivePaseoWorktree({
+    const response = await client.archiveOsunaWorktree({
       worktreePath: worktree.worktreePath,
       scope: "worktree",
     });

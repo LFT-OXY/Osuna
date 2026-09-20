@@ -122,7 +122,7 @@ export interface PaseoToolHostDependencies {
   workspaceScripts?: Pick<WorkspaceScriptsService, "list" | "launch" | "stop">;
   markWorkspaceArchiving?: ArchiveDependencies["markWorkspaceArchiving"];
   clearWorkspaceArchiving?: ArchiveDependencies["clearWorkspaceArchiving"];
-  createPaseoWorktree?: CreatePaseoWorktreeWorkflowFn;
+  createOsunaWorktree?: CreatePaseoWorktreeWorkflowFn;
   // Mints a fresh directory workspace for a cwd and returns its id.
   ensureWorkspaceForCreate?: (
     cwd: string,
@@ -1315,7 +1315,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           {
             paseoHome: options.paseoHome,
             worktreesRoot: options.worktreesRoot,
-            createPaseoWorktreeWorkflow: options.createPaseoWorktree,
+            createPaseoWorktreeWorkflow: options.createOsunaWorktree,
           },
           {
             cwd,
@@ -1450,7 +1450,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           worktreesRoot: options.worktreesRoot,
           terminalManager,
           providerSnapshotManager,
-          createPaseoWorktree: options.createPaseoWorktree,
+          createOsunaWorktree: options.createOsunaWorktree,
           ...(options.ensureWorkspaceForCreate
             ? { ensureWorkspaceForCreate: options.ensureWorkspaceForCreate }
             : {}),

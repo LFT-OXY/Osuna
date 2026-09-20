@@ -52,7 +52,7 @@ vi.mock("electron-log/main", () => ({
 }));
 
 vi.mock("@osuna/server", () => ({
-  resolvePaseoHome: vi.fn(() => mocks.paseoHome),
+  resolveOsunaHome: vi.fn(() => mocks.paseoHome),
   spawnProcess: mocks.spawnProcess,
 }));
 

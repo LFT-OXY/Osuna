@@ -5,7 +5,7 @@ import path from "node:path";
 import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
 import { ensureAgentLoaded } from "./agent/agent-loading.js";
-import type { PaseoDaemonConfig } from "./bootstrap.js";
+import type { OsunaDaemonConfig } from "./bootstrap.js";
 
 const originalEnv = {
   PATH: process.env.PATH,
@@ -26,7 +26,7 @@ describe("bootstrap provider availability", () => {
   });
 
   test("loads a persisted Codex record without spawning a missing Codex binary", async () => {
-    const { createPaseoDaemon } = await import("./bootstrap.js");
+    const { createOsunaDaemon } = await import("./bootstrap.js");
     const root = await mkdtemp(path.join(os.tmpdir(), "paseo-bootstrap-provider-"));
     tempRoots.push(root);
     const gitPath = execFileSync(process.platform === "win32" ? "where" : "which", ["git"], {
@@ -68,7 +68,7 @@ describe("bootstrap provider availability", () => {
       }),
     );
 
-    const config: PaseoDaemonConfig = {
+    const config: OsunaDaemonConfig = {
       listen: "127.0.0.1:0",
       paseoHome,
       corsAllowedOrigins: [],
@@ -93,7 +93,7 @@ describe("bootstrap provider availability", () => {
     process.on("unhandledRejection", onUnhandledRejection);
     process.on("uncaughtException", onUncaughtException);
 
-    const daemon = await createPaseoDaemon(config, pino({ level: "silent" }));
+    const daemon = await createOsunaDaemon(config, pino({ level: "silent" }));
     try {
       await expect(daemon.agentStorage.list()).resolves.toHaveLength(1);
       await expect(daemon.agentManager.listProviderAvailability()).resolves.toContainEqual({

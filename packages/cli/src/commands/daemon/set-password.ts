@@ -4,7 +4,7 @@ import { isCancel, password as passwordPrompt } from "@clack/prompts";
 import {
   hashDaemonPassword,
   readPersistedConfig,
-  resolvePaseoHome,
+  resolveOsunaHome,
   savePersistedConfig,
   type PersistedConfig,
 } from "@osuna/server";
@@ -81,7 +81,7 @@ export async function setDaemonPasswordInConfig(
   newPassword: string,
   options: SetPasswordOptions = {},
 ): Promise<SetPasswordResult> {
-  const paseoHome = resolvePaseoHome({ OSUNA_HOME: options.home });
+  const paseoHome = resolveOsunaHome({ OSUNA_HOME: options.home });
   const configPath = path.join(paseoHome, CONFIG_FILENAME);
   const persisted = readPersistedConfig(paseoHome);
   const nextConfig: PersistedConfig = {

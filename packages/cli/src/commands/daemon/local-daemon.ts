@@ -2,7 +2,7 @@ import { Command, Option } from "commander";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { startDaemonInstance, resolvePaseoHome } from "@osuna/server";
+import { startDaemonInstance, resolveOsunaHome } from "@osuna/server";
 const require = createRequire(import.meta.url);
 function resolveServerRunnerFromDir(currentDir: string): string | null {
   const packageJsonPath = path.join(currentDir, "package.json");
@@ -52,7 +52,7 @@ export async function launchLocalDaemon(options: {
   try {
     const entry = resolveDaemonRunnerEntry();
     return await startDaemonInstance({
-      home: resolvePaseoHome({ OSUNA_HOME: options.home }),
+      home: resolveOsunaHome({ OSUNA_HOME: options.home }),
       command: process.execPath,
       args: [...(entry.endsWith(".ts") ? ["--import", "tsx"] : []), entry],
       env: process.env,

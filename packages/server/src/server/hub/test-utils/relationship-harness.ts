@@ -20,7 +20,7 @@ import type {
   CreateAgentWorktreeTarget,
   SessionOutboundMessage,
 } from "../../messages.js";
-import { createPaseoDaemon, type PaseoDaemon, type PaseoDaemonConfig } from "../../bootstrap.js";
+import { createOsunaDaemon, type OsunaDaemon, type OsunaDaemonConfig } from "../../bootstrap.js";
 import type { WebSocketLike } from "../../websocket-server.js";
 import type {
   AgentClient,
@@ -447,8 +447,8 @@ const providerCatalog = {
 export class HubRelationshipHarness {
   private readonly clock = new TestRelationshipClock();
   private readonly remote = new InMemoryHubRelationships(() => this.captureRelationship());
-  private daemon: PaseoDaemon | null = null;
-  private config!: PaseoDaemonConfig;
+  private daemon: OsunaDaemon | null = null;
+  private config!: OsunaDaemonConfig;
   private root = "";
   private paseoHome = "";
   private host = "";
@@ -1423,7 +1423,7 @@ export class HubRelationshipHarness {
         done();
       },
     });
-    this.daemon = await createPaseoDaemon(this.config, pino({ level: "trace" }, destination), {
+    this.daemon = await createOsunaDaemon(this.config, pino({ level: "trace" }, destination), {
       hubRelationshipRemote: this.remote,
       hubRelationshipClock: this.clock,
       hubRelationshipRetryPolicy: this.clock,

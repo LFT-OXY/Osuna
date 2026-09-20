@@ -3,7 +3,7 @@ import path from "node:path";
 import { app, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
 import {
-  resolvePaseoHome,
+  resolveOsunaHome,
   startDaemonInstance,
   DaemonInstanceError,
   stopDaemonInstance,
@@ -123,7 +123,7 @@ function parseDesktopDaemonStopReason(
 // ---------------------------------------------------------------------------
 
 function getPaseoHome(): string {
-  return resolvePaseoHome(process.env);
+  return resolveOsunaHome(process.env);
 }
 
 function logFilePath(): string {

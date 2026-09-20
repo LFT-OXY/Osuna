@@ -4,7 +4,7 @@ Spin up an isolated in-process daemon test harness without touching the main dae
 
 This is for test code only. Executable daemon processes must start through
 `scripts/supervisor-entrypoint.ts` or `dist/scripts/supervisor-entrypoint.js`;
-do not use `createPaseoDaemon` as a product launch path.
+do not use `createOsunaDaemon` as a product launch path.
 
 ## Quick start
 
@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import pino from "pino";
-import { createPaseoDaemon } from "./bootstrap.js";
+import { createOsunaDaemon } from "./bootstrap.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 
 const logger = pino({ level: "warn" });
@@ -22,7 +22,7 @@ const paseoHome = path.join(paseoHomeRoot, ".paseo");
 await mkdir(paseoHome, { recursive: true });
 const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
 
-const daemon = await createPaseoDaemon(
+const daemon = await createOsunaDaemon(
   {
     listen: "127.0.0.1:0", // OS picks a free port
     paseoHome,
@@ -89,7 +89,7 @@ await client.close();
 await daemon.close(); // stops daemon + cleans up temp dirs
 ```
 
-The test helper does **not** expose `providerOverrides`. In test harnesses, use `createPaseoDaemon` directly when you need it (see quick start above).
+The test helper does **not** expose `providerOverrides`. In test harnesses, use `createOsunaDaemon` directly when you need it (see quick start above).
 
 ## Common client methods
 

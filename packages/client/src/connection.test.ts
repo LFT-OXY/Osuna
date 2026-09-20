@@ -504,7 +504,7 @@ test.each([
   const { createOsunaApi } = await import("./index");
   const h = connection(mode);
   const api = createOsunaApi(h.client);
-  const received: import("./index").PaseoAgentTimelineEvent[][] = [[], [], []];
+  const received: import("./index").OsunaAgentTimelineEvent[][] = [[], [], []];
   try {
     const connected = h.client.connect();
     h.open();
@@ -564,7 +564,7 @@ test("a consumer chooses its recovery cursor and a failed read leaves live deliv
   const { createOsunaApi } = await import("./index");
   const h = connection({ acknowledgeTimelineReads: false });
   const api = createOsunaApi(h.client);
-  const received: import("./index").PaseoAgentTimelineEvent[] = [];
+  const received: import("./index").OsunaAgentTimelineEvent[] = [];
   let read: Promise<unknown> | undefined;
   try {
     const connected = h.client.connect();

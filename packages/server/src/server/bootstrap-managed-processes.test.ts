@@ -10,7 +10,7 @@ import type {
   ManagedProcessRegistry,
   ManagedProcessReapResult,
 } from "./managed-processes/managed-processes.js";
-import { createPaseoDaemon, type PaseoDaemonConfig } from "./bootstrap.js";
+import { createOsunaDaemon, type OsunaDaemonConfig } from "./bootstrap.js";
 import { createTestAgentClients } from "./test-utils/fake-agent-client.js";
 
 let tempRoot: string | null = null;
@@ -31,7 +31,7 @@ describe("daemon managed process bootstrap", () => {
     staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const paseoHome = path.join(tempRoot, ".osuna");
     const managedProcesses = new FakeManagedProcesses();
-    const daemon = await createPaseoDaemon(
+    const daemon = await createOsunaDaemon(
       {
         listen: "127.0.0.1:0",
         paseoHome,
@@ -45,7 +45,7 @@ describe("daemon managed process bootstrap", () => {
         relayEnabled: false,
         appBaseUrl: "https://app.paseo.sh",
         managedProcesses,
-      } as PaseoDaemonConfig,
+      } as OsunaDaemonConfig,
       pino({ level: "silent" }),
     );
 

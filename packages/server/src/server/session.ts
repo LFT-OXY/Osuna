@@ -241,8 +241,8 @@ import {
 } from "./workspace-directory.js";
 import { shouldEmitPendingBootstrapUpdate } from "./workspace-bootstrap-dedupe.js";
 import {
-  createPaseoWorktree,
-  type CreatePaseoWorktreeInput,
+  createOsunaWorktree,
+  type CreateOsunaWorktreeInput,
   type CreatePaseoWorktreeResult,
 } from "./paseo-worktree-service.js";
 import { WorkspaceAutoName } from "./workspace-auto-name.js";
@@ -4804,7 +4804,7 @@ export class Session {
         worktreesRoot: this.worktreesRoot,
         sessionLogger: this.sessionLogger,
         workspaceGitService: this.workspaceGitService,
-        createPaseoWorktree: (input, serviceOptions) =>
+        createOsunaWorktree: (input, serviceOptions) =>
           this.createPaseoWorktreeWorkflow(input, {
             ...serviceOptions,
             setupContinuation: {
@@ -5866,13 +5866,13 @@ export class Session {
     await this.restoreWorkspaceAndEmit(record.workspaceId);
   }
 
-  private async createPaseoWorktree(
-    input: CreatePaseoWorktreeInput,
+  private async createOsunaWorktree(
+    input: CreateOsunaWorktreeInput,
     options?: {
       resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
     },
   ): Promise<CreatePaseoWorktreeResult> {
-    const result = await createPaseoWorktree(input, {
+    const result = await createOsunaWorktree(input, {
       github: this.github,
       ...(options?.resolveDefaultBranch
         ? { resolveDefaultBranch: options.resolveDefaultBranch }
@@ -7244,7 +7244,7 @@ export class Session {
   }
 
   private async createPaseoWorktreeWorkflow(
-    input: CreatePaseoWorktreeInput,
+    input: CreateOsunaWorktreeInput,
     options?: {
       resolveDefaultBranch?: (repoRoot: string) => Promise<string>;
       setupContinuation?: CreatePaseoWorktreeSetupContinuationInput;
@@ -7254,8 +7254,8 @@ export class Session {
       {
         paseoHome: this.paseoHome,
         worktreesRoot: this.worktreesRoot,
-        createPaseoWorktree: (workflowInput, serviceOptions) =>
-          this.createPaseoWorktree(workflowInput, serviceOptions),
+        createOsunaWorktree: (workflowInput, serviceOptions) =>
+          this.createOsunaWorktree(workflowInput, serviceOptions),
         warmWorkspaceGitData: (workspace) => this.warmWorkspaceGitDataForWorkspace(workspace),
         autoNameWorkspaceBranchForFirstAgent: (autoNameInput) =>
           this.workspaceAutoName.scheduleForWorktree(autoNameInput, {

@@ -108,9 +108,9 @@ See the [full CLI reference](public-docs/cli.md) for more.
 Build issue integrations, dashboards, and orchestration services with `@osuna/client`:
 
 ```ts
-import { createPaseoClient } from "@osuna/client";
+import { createOsunaClient } from "@osuna/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6777/ws" });
+const client = createOsunaClient({ url: "ws://127.0.0.1:6777/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

@@ -21,7 +21,7 @@ export function downloadUrls(release: ReleaseAssetInfo) {
     linuxAppImage: `${base}/${linuxAppImageAsset}`,
     linuxDeb: `${base}/Paseo-${version}-amd64.deb`,
     linuxRpm: `${base}/Paseo-${version}-x86_64.rpm`,
-    windowsExeX64: `${base}/${windowsX64Asset ?? `Paseo-Setup-${version}.exe`}`,
+    windowsExeX64: `${base}/${windowsX64Asset ?? `Osuna-Setup-${version}.exe`}`,
     windowsExeArm64: windowsArm64Asset ? `${base}/${windowsArm64Asset}` : null,
     androidApk: `${base}/paseo-v${version}-android.apk`,
   };

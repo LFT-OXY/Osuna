@@ -32,19 +32,19 @@ import type {
 import { DaemonClient, type CreateAgentRequestOptions } from "./daemon-client.js";
 import {
   createTerminalActions,
-  type PaseoTerminalActions,
-  type PaseoWorkspaceTerminalActions,
+  type OsunaTerminalActions,
+  type OsunaWorkspaceTerminalActions,
 } from "./terminals/index.js";
 export type {
-  PaseoTerminal,
-  PaseoTerminalActions,
-  PaseoTerminalHandle,
-  PaseoTerminalCreateOptions,
-  PaseoTerminalListOptions,
-  PaseoTerminalListResult,
-  PaseoTerminalCaptureOptions,
-  PaseoTerminalCaptureResult,
-  PaseoWorkspaceTerminalActions,
+  OsunaTerminal,
+  OsunaTerminalActions,
+  OsunaTerminalHandle,
+  OsunaTerminalCreateOptions,
+  OsunaTerminalListOptions,
+  OsunaTerminalListResult,
+  OsunaTerminalCaptureOptions,
+  OsunaTerminalCaptureResult,
+  OsunaWorkspaceTerminalActions,
 } from "./terminals/index.js";
 import type { PluginTimelineItem } from "@osuna/protocol/agent-types";
 import type {
@@ -71,14 +71,14 @@ export type ConnectionState =
   | { status: "disconnected"; reason?: string }
   | { status: "disposed" };
 
-export interface PaseoLogger {
+export interface OsunaLogger {
   debug(obj: object, msg?: string): void;
   info(obj: object, msg?: string): void;
   warn(obj: object, msg?: string): void;
   error(obj: object, msg?: string): void;
 }
 
-export interface PaseoClientConfig {
+export interface OsunaClientConfig {
   capabilities?: DaemonClientConfig["capabilities"];
   url: string;
   clientId?: string;
@@ -87,7 +87,7 @@ export interface PaseoClientConfig {
   password?: string;
   authHeader?: string;
   suppressSendErrors?: boolean;
-  logger?: PaseoLogger;
+  logger?: OsunaLogger;
   connectTimeoutMs?: number;
   e2ee?: {
     enabled?: boolean;
@@ -102,152 +102,152 @@ export interface PaseoClientConfig {
   runtimeMetricsWindowMs?: number;
 }
 
-export type PaseoWorkspace = WorkspaceDescriptorPayload;
-export type PaseoAgent = AgentSnapshotPayload;
-export type PaseoAgentListOptions = FetchAgentsOptions;
-export type PaseoProject = WorkspaceProjectDescriptorPayload;
-export type PaseoProjectListOptions = Omit<ProjectListRequestMessage, "type" | "requestId"> & {
+export type OsunaWorkspace = WorkspaceDescriptorPayload;
+export type OsunaAgent = AgentSnapshotPayload;
+export type OsunaAgentListOptions = FetchAgentsOptions;
+export type OsunaProject = WorkspaceProjectDescriptorPayload;
+export type OsunaProjectListOptions = Omit<ProjectListRequestMessage, "type" | "requestId"> & {
   requestId?: string;
 };
-export type PaseoProjectListResult = ProjectListResponseMessage["payload"];
-export type PaseoProjectUpdate = Extract<
+export type OsunaProjectListResult = ProjectListResponseMessage["payload"];
+export type OsunaProjectUpdate = Extract<
   SessionOutboundMessage,
   { type: "project.update" }
 >["payload"];
-export type PaseoProjectUpdateHandler = (update: PaseoProjectUpdate) => void;
+export type OsunaProjectUpdateHandler = (update: OsunaProjectUpdate) => void;
 
-export interface PaseoAgentListResult {
-  subscription?: OwnedSubscription<PaseoAgentListResult>;
+export interface OsunaAgentListResult {
+  subscription?: OwnedSubscription<OsunaAgentListResult>;
   requestId: string;
   subscriptionId?: string | null;
   entries: FetchAgentsEntry[];
   pageInfo: FetchAgentsPageInfo;
 }
-export type PaseoWorkspaceListOptions = Omit<
+export type OsunaWorkspaceListOptions = Omit<
   FetchWorkspacesRequestMessage,
   "type" | "requestId"
 > & {
   requestId?: string;
 };
 
-export interface PaseoWorkspaceListResult {
-  subscription?: OwnedSubscription<PaseoWorkspaceListResult>;
+export interface OsunaWorkspaceListResult {
+  subscription?: OwnedSubscription<OsunaWorkspaceListResult>;
   requestId: string;
   subscriptionId?: string | null;
-  entries: PaseoWorkspace[];
+  entries: OsunaWorkspace[];
   pageInfo: FetchWorkspacesResponseMessage["payload"]["pageInfo"];
 }
 
-export interface PaseoWorkspaceOpenOptions {
+export interface OsunaWorkspaceOpenOptions {
   cwd: string;
   requestId?: string;
 }
 
-export type PaseoWorkspaceCreateOptions = Omit<
+export type OsunaWorkspaceCreateOptions = Omit<
   WorkspaceCreateRequest,
   "type" | "requestId" | "agent" | "subscribe"
 > & {
   requestId?: string;
   agent?: Omit<
-    PaseoAgentCreateOptions,
+    OsunaAgentCreateOptions,
     "worktree" | "git" | "onEvent" | "idempotencyKey" | "requestId"
   >;
   onEvent?: (snapshot: CreationSnapshot) => void;
 };
 
-export interface PaseoWorkspaceArchiveResult {
+export interface OsunaWorkspaceArchiveResult {
   requestId: string;
   workspaceId: string;
   archivedAt: string | null;
   error: string | null;
 }
 
-export type PaseoWorkspaceUpdate = Extract<
+export type OsunaWorkspaceUpdate = Extract<
   SessionOutboundMessage,
   { type: "workspace_update" }
 >["payload"];
 
-export type PaseoWorkspaceUpdateHandler = (update: PaseoWorkspaceUpdate) => void;
+export type OsunaWorkspaceUpdateHandler = (update: OsunaWorkspaceUpdate) => void;
 
-export interface PaseoWorkspaceHandle {
+export interface OsunaWorkspaceHandle {
   readonly id: string;
   readonly projectId: string | null;
   readonly directory: string | null;
   readonly name: string | null;
-  readonly status: PaseoWorkspace["status"] | null;
+  readonly status: OsunaWorkspace["status"] | null;
   readonly agents: {
-    create(options: PaseoWorkspaceAgentCreateOptions): Promise<PaseoAgentHandle>;
+    create(options: OsunaWorkspaceAgentCreateOptions): Promise<OsunaAgentHandle>;
   };
-  readonly terminals: PaseoWorkspaceTerminalActions;
-  current(): PaseoWorkspace | null;
-  refresh(options?: { requestId?: string }): Promise<PaseoWorkspace | null>;
+  readonly terminals: OsunaWorkspaceTerminalActions;
+  current(): OsunaWorkspace | null;
+  refresh(options?: { requestId?: string }): Promise<OsunaWorkspace | null>;
   setTitle(title: string | null, requestId?: string): Promise<{ title: string | null }>;
-  archive(requestId?: string): Promise<PaseoWorkspaceArchiveResult>;
+  archive(requestId?: string): Promise<OsunaWorkspaceArchiveResult>;
   /**
    * Subscribes to already-emitted daemon workspace_update events for this id.
    * This returns a local unsubscribe function; it does not own app cache state or
    * send a daemon unsubscribe RPC. Call `workspaces.list({ subscribe: {} })` when
    * the daemon should start streaming workspace directory updates.
    */
-  subscribe(handler: (update: PaseoWorkspaceUpdate) => void): () => void;
+  subscribe(handler: (update: OsunaWorkspaceUpdate) => void): () => void;
 }
 
-export interface PaseoProjectActions {
-  list(options?: PaseoProjectListOptions): Promise<PaseoProjectListResult>;
-  subscribe(handler: PaseoProjectUpdateHandler): () => void;
+export interface OsunaProjectActions {
+  list(options?: OsunaProjectListOptions): Promise<OsunaProjectListResult>;
+  subscribe(handler: OsunaProjectUpdateHandler): () => void;
 }
 
-export interface PaseoWorkspaceActions {
-  list(options: PaseoWorkspaceListOptions & { subscribe: {} }): Promise<
-    PaseoWorkspaceListResult & {
+export interface OsunaWorkspaceActions {
+  list(options: OsunaWorkspaceListOptions & { subscribe: {} }): Promise<
+    OsunaWorkspaceListResult & {
       subscriptionId: string;
-      subscription: OwnedSubscription<PaseoWorkspaceListResult>;
+      subscription: OwnedSubscription<OsunaWorkspaceListResult>;
     }
   >;
-  list(options?: PaseoWorkspaceListOptions): Promise<PaseoWorkspaceListResult>;
-  ref(workspace: string | PaseoWorkspace): PaseoWorkspaceHandle;
+  list(options?: OsunaWorkspaceListOptions): Promise<OsunaWorkspaceListResult>;
+  ref(workspace: string | OsunaWorkspace): OsunaWorkspaceHandle;
   open(
-    input: string | PaseoWorkspaceOpenOptions,
+    input: string | OsunaWorkspaceOpenOptions,
     requestId?: string,
-  ): Promise<PaseoWorkspaceHandle>;
-  create(options: PaseoWorkspaceCreateOptions): Promise<PaseoWorkspaceHandle>;
+  ): Promise<OsunaWorkspaceHandle>;
+  create(options: OsunaWorkspaceCreateOptions): Promise<OsunaWorkspaceHandle>;
   archive(
-    workspace: string | PaseoWorkspaceHandle,
+    workspace: string | OsunaWorkspaceHandle,
     requestId?: string,
-  ): Promise<PaseoWorkspaceArchiveResult>;
+  ): Promise<OsunaWorkspaceArchiveResult>;
   /**
    * Local event subscription over the low-level driver's workspace_update stream.
    * The returned function only removes this SDK listener.
    */
-  subscribe(handler: PaseoWorkspaceUpdateHandler): () => void;
+  subscribe(handler: OsunaWorkspaceUpdateHandler): () => void;
 }
 
-type PaseoAgentSessionConfig = CreateAgentRequestMessage["config"];
-export type PaseoAgentProvider = PaseoAgentSessionConfig["provider"];
+type OsunaAgentSessionConfig = CreateAgentRequestMessage["config"];
+export type OsunaAgentProvider = OsunaAgentSessionConfig["provider"];
 
-export type PaseoProviderFeatureValues = Record<string, unknown>;
+export type OsunaProviderFeatureValues = Record<string, unknown>;
 
-export interface PaseoAgentConfig {
+export interface OsunaAgentConfig {
   /** Provider and model in `provider/model` format. */
   provider: string;
-  modeId?: PaseoAgentSessionConfig["modeId"];
-  thinkingOptionId?: PaseoAgentSessionConfig["thinkingOptionId"];
-  featureValues?: PaseoProviderFeatureValues;
+  modeId?: OsunaAgentSessionConfig["modeId"];
+  thinkingOptionId?: OsunaAgentSessionConfig["thinkingOptionId"];
+  featureValues?: OsunaProviderFeatureValues;
   /** JSON-safe provider-native settings, validated by the selected provider. */
-  options?: PaseoAgentSessionConfig["providerOptions"];
-  systemPrompt?: PaseoAgentSessionConfig["systemPrompt"];
-  toolPolicy?: PaseoAgentSessionConfig["toolPolicy"];
-  mcpServers?: PaseoAgentSessionConfig["mcpServers"];
+  options?: OsunaAgentSessionConfig["providerOptions"];
+  systemPrompt?: OsunaAgentSessionConfig["systemPrompt"];
+  toolPolicy?: OsunaAgentSessionConfig["toolPolicy"];
+  mcpServers?: OsunaAgentSessionConfig["mcpServers"];
 }
 
-export interface PaseoAgentCreateOptions {
+export interface OsunaAgentCreateOptions {
   idempotencyKey?: string;
   agentId?: string;
   onEvent?: (snapshot: CreationSnapshot) => void;
-  config: PaseoAgentConfig;
+  config: OsunaAgentConfig;
   cwd: string;
-  parent?: string | PaseoAgentHandle;
-  title?: PaseoAgentSessionConfig["title"];
+  parent?: string | OsunaAgentHandle;
+  title?: OsunaAgentSessionConfig["title"];
   env?: CreateAgentRequestMessage["env"];
   prompt?: string;
   clientMessageId?: string;
@@ -261,14 +261,14 @@ export interface PaseoAgentCreateOptions {
   labels?: Record<string, string>;
 }
 
-export type PaseoWorkspaceAgentCreateOptions = Omit<PaseoAgentCreateOptions, "cwd">;
+export type OsunaWorkspaceAgentCreateOptions = Omit<OsunaAgentCreateOptions, "cwd">;
 
-export interface PaseoAgentRefetchResult {
-  agent: PaseoAgent;
+export interface OsunaAgentRefetchResult {
+  agent: OsunaAgent;
   project: ProjectPlacementPayload | null;
 }
 
-export interface PaseoAgentTimelineRefetchOptions {
+export interface OsunaAgentTimelineRefetchOptions {
   direction?: FetchAgentTimelineDirection;
   cursor?: FetchAgentTimelineCursor;
   limit?: number;
@@ -276,38 +276,38 @@ export interface PaseoAgentTimelineRefetchOptions {
   requestId?: string;
 }
 
-export interface PaseoAgentSendOptions {
+export interface OsunaAgentSendOptions {
   messageId?: string;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: SendAgentMessageRequest["attachments"];
 }
 
-export interface PaseoAgentRunOptions extends PaseoAgentSendOptions {
+export interface OsunaAgentRunOptions extends OsunaAgentSendOptions {
   timeoutMs?: number;
 }
 
-export type PaseoAgentRunResult = WaitForFinishResult;
-export type PaseoAgentPermissionResponse = AgentPermissionResponse;
+export type OsunaAgentRunResult = WaitForFinishResult;
+export type OsunaAgentPermissionResponse = AgentPermissionResponse;
 
-export interface PaseoAgentRespondToPermissionOptions {
+export interface OsunaAgentRespondToPermissionOptions {
   requestId: string;
-  response: PaseoAgentPermissionResponse;
+  response: OsunaAgentPermissionResponse;
 }
 
-export interface PaseoAgentCommandsOptions {
+export interface OsunaAgentCommandsOptions {
   requestId?: string;
 }
 
-export type PaseoAgentCommandsResult = ListCommandsResponse["payload"];
+export type OsunaAgentCommandsResult = ListCommandsResponse["payload"];
 
-export type PaseoAgentUpdate = Extract<SessionOutboundMessage, { type: "agent_update" }>["payload"];
+export type OsunaAgentUpdate = Extract<SessionOutboundMessage, { type: "agent_update" }>["payload"];
 
-export type PaseoAgentStream = Extract<SessionOutboundMessage, { type: "agent_stream" }>["payload"];
+export type OsunaAgentStream = Extract<SessionOutboundMessage, { type: "agent_stream" }>["payload"];
 
-export type PaseoAgentUpdateHandler = (update: PaseoAgentUpdate) => void;
+export type OsunaAgentUpdateHandler = (update: OsunaAgentUpdate) => void;
 
-export type PaseoAgentTimelineEvent =
-  | PaseoAgentStream
+export type OsunaAgentTimelineEvent =
+  | OsunaAgentStream
   | {
       agentId: string;
       event: { type: "replacement"; epoch: string };
@@ -319,16 +319,16 @@ export type PaseoAgentTimelineEvent =
     }
   | { agentId: string; event: { type: "error"; error: string } };
 
-export type PaseoAgentTimelineSubscription = ReturnType<DaemonClient["subscribeAgentTimeline"]>;
+export type OsunaAgentTimelineSubscription = ReturnType<DaemonClient["subscribeAgentTimeline"]>;
 
-export interface PaseoAgentTimelineHandle {
+export interface OsunaAgentTimelineHandle {
   append(item: Omit<PluginTimelineItem, "pluginId">): Promise<{ seq: number; epoch: string }>;
   /**
    * Fetches a fresh timeline page through the existing daemon RPC. If the daemon
    * includes an agent snapshot in the response, the parent handle is updated to
    * that value.
    */
-  refetch(options?: PaseoAgentTimelineRefetchOptions): Promise<FetchAgentTimelinePayload>;
+  refetch(options?: OsunaAgentTimelineRefetchOptions): Promise<FetchAgentTimelinePayload>;
   /**
    * Delivers live events only. After reconnect, subscription_restored precedes
    * subsequent updates. History may have been missed; use refetch() to request
@@ -337,10 +337,10 @@ export interface PaseoAgentTimelineHandle {
    * Await the returned unsubscribe function's `ready` promise before starting
    * work that must be observed. It rejects if establishment fails.
    */
-  subscribe(handler: (event: PaseoAgentTimelineEvent) => void): PaseoAgentTimelineSubscription;
+  subscribe(handler: (event: OsunaAgentTimelineEvent) => void): OsunaAgentTimelineSubscription;
 }
 
-export interface PaseoAgentHandle {
+export interface OsunaAgentHandle {
   readonly id: string;
   /**
    * `workspaceId` through `archivedAt` mirror the last snapshot this handle
@@ -351,25 +351,25 @@ export interface PaseoAgentHandle {
    */
   readonly workspaceId: string | null;
   readonly cwd: string | null;
-  readonly status: PaseoAgent["status"] | null;
-  readonly capabilities: PaseoAgent["capabilities"] | null;
-  readonly availableModes: PaseoAgent["availableModes"] | null;
-  readonly pendingPermissions: PaseoAgent["pendingPermissions"] | null;
-  readonly activeTurn: NonNullable<PaseoAgent["activeTurn"]> | null;
-  readonly lastUsage: NonNullable<PaseoAgent["lastUsage"]> | null;
-  readonly lastError: NonNullable<PaseoAgent["lastError"]> | null;
-  readonly features: NonNullable<PaseoAgent["features"]> | null;
-  readonly runtimeInfo: NonNullable<PaseoAgent["runtimeInfo"]> | null;
-  readonly archivedAt: NonNullable<PaseoAgent["archivedAt"]> | null;
-  readonly timeline: PaseoAgentTimelineHandle;
-  current(): PaseoAgent | null;
-  refresh(requestId?: string): Promise<PaseoAgentRefetchResult | null>;
-  send(text: string, options?: PaseoAgentSendOptions): Promise<void>;
-  respondToPermission(options: PaseoAgentRespondToPermissionOptions): Promise<void>;
+  readonly status: OsunaAgent["status"] | null;
+  readonly capabilities: OsunaAgent["capabilities"] | null;
+  readonly availableModes: OsunaAgent["availableModes"] | null;
+  readonly pendingPermissions: OsunaAgent["pendingPermissions"] | null;
+  readonly activeTurn: NonNullable<OsunaAgent["activeTurn"]> | null;
+  readonly lastUsage: NonNullable<OsunaAgent["lastUsage"]> | null;
+  readonly lastError: NonNullable<OsunaAgent["lastError"]> | null;
+  readonly features: NonNullable<OsunaAgent["features"]> | null;
+  readonly runtimeInfo: NonNullable<OsunaAgent["runtimeInfo"]> | null;
+  readonly archivedAt: NonNullable<OsunaAgent["archivedAt"]> | null;
+  readonly timeline: OsunaAgentTimelineHandle;
+  current(): OsunaAgent | null;
+  refresh(requestId?: string): Promise<OsunaAgentRefetchResult | null>;
+  send(text: string, options?: OsunaAgentSendOptions): Promise<void>;
+  respondToPermission(options: OsunaAgentRespondToPermissionOptions): Promise<void>;
   /** Sends a prompt and resolves when that turn finishes or needs attention. */
-  run(text: string, options?: PaseoAgentRunOptions): Promise<PaseoAgentRunResult>;
+  run(text: string, options?: OsunaAgentRunOptions): Promise<OsunaAgentRunResult>;
   /** Waits for the current turn, including one started with `prompt`. */
-  waitForFinish(timeoutMs?: number): Promise<PaseoAgentRunResult>;
+  waitForFinish(timeoutMs?: number): Promise<OsunaAgentRunResult>;
   /**
    * Asks the running session for the slash commands and skills it actually
    * loaded. Providers answer from the live session, so this sees built-in and
@@ -377,95 +377,95 @@ export interface PaseoAgentHandle {
    * `error` string; a provider that cannot answer reports it there rather than
    * rejecting.
    */
-  commands(options?: PaseoAgentCommandsOptions): Promise<PaseoAgentCommandsResult>;
+  commands(options?: OsunaAgentCommandsOptions): Promise<OsunaAgentCommandsResult>;
   archive(): Promise<{ archivedAt: string }>;
   detach(): Promise<void>;
-  subscribe(handler: (update: PaseoAgentUpdate) => void): () => void;
+  subscribe(handler: (update: OsunaAgentUpdate) => void): () => void;
 }
 
-export interface PaseoAgentActions {
-  list(options: PaseoAgentListOptions & { subscribe: {} }): Promise<
-    PaseoAgentListResult & {
+export interface OsunaAgentActions {
+  list(options: OsunaAgentListOptions & { subscribe: {} }): Promise<
+    OsunaAgentListResult & {
       subscriptionId: string;
-      subscription: OwnedSubscription<PaseoAgentListResult>;
+      subscription: OwnedSubscription<OsunaAgentListResult>;
     }
   >;
-  list(options?: PaseoAgentListOptions): Promise<PaseoAgentListResult>;
-  ref(agent: string | PaseoAgent): PaseoAgentHandle;
-  create(options: PaseoAgentCreateOptions): Promise<PaseoAgentHandle>;
+  list(options?: OsunaAgentListOptions): Promise<OsunaAgentListResult>;
+  ref(agent: string | OsunaAgent): OsunaAgentHandle;
+  create(options: OsunaAgentCreateOptions): Promise<OsunaAgentHandle>;
   /**
    * Local event subscription over the low-level driver's agent_update stream.
    * The returned function only removes this SDK listener.
    */
-  subscribe(handler: PaseoAgentUpdateHandler): () => void;
+  subscribe(handler: OsunaAgentUpdateHandler): () => void;
 }
 
-export type PaseoProviderModelsResult = ListProviderModelsResponseMessage["payload"];
-export type PaseoProviderModesResult = ListProviderModesResponseMessage["payload"];
-type PaseoProviderFeaturesDraft = ListProviderFeaturesRequestMessage["draftConfig"];
-export interface PaseoProviderFeaturesInput extends Omit<
-  PaseoProviderFeaturesDraft,
+export type OsunaProviderModelsResult = ListProviderModelsResponseMessage["payload"];
+export type OsunaProviderModesResult = ListProviderModesResponseMessage["payload"];
+type OsunaProviderFeaturesDraft = ListProviderFeaturesRequestMessage["draftConfig"];
+export interface OsunaProviderFeaturesInput extends Omit<
+  OsunaProviderFeaturesDraft,
   "provider" | "model"
 > {
   /** Provider and model in `provider/model` format. */
   provider: string;
 }
-export type PaseoProviderFeaturesResult = ListProviderFeaturesResponseMessage["payload"];
-export type PaseoProviderAvailabilityResult = ListAvailableProvidersResponse["payload"];
-export type PaseoProviderSnapshotResult = GetProvidersSnapshotResponseMessage["payload"];
-export type PaseoProviderSnapshotUpdate = Extract<
+export type OsunaProviderFeaturesResult = ListProviderFeaturesResponseMessage["payload"];
+export type OsunaProviderAvailabilityResult = ListAvailableProvidersResponse["payload"];
+export type OsunaProviderSnapshotResult = GetProvidersSnapshotResponseMessage["payload"];
+export type OsunaProviderSnapshotUpdate = Extract<
   SessionOutboundMessage,
   { type: "providers_snapshot_update" }
 >["payload"];
-export type PaseoProviderRefreshResult = RefreshProvidersSnapshotResponseMessage["payload"];
-export type PaseoProviderDiagnosticResult = ProviderDiagnosticResponseMessage["payload"];
-export type PaseoProviderUsageResult = ProviderUsageListResponseMessage["payload"];
-export interface PaseoProviderUsageOptions {
+export type OsunaProviderRefreshResult = RefreshProvidersSnapshotResponseMessage["payload"];
+export type OsunaProviderDiagnosticResult = ProviderDiagnosticResponseMessage["payload"];
+export type OsunaProviderUsageResult = ProviderUsageListResponseMessage["payload"];
+export interface OsunaProviderUsageOptions {
   requestId?: string;
 }
 
-export interface PaseoProviderListOptions {
+export interface OsunaProviderListOptions {
   cwd?: string;
   requestId?: string;
 }
 
-export interface PaseoProviderRefreshOptions {
+export interface OsunaProviderRefreshOptions {
   cwd?: string;
-  providers?: PaseoAgentProvider[];
+  providers?: OsunaAgentProvider[];
   requestId?: string;
 }
 
-export interface PaseoProviderWaitOptions extends PaseoProviderListOptions {
+export interface OsunaProviderWaitOptions extends OsunaProviderListOptions {
   timeoutMs?: number;
 }
 
-export interface PaseoProviderActions {
+export interface OsunaProviderActions {
   listModels(
-    provider: PaseoAgentProvider,
-    options?: PaseoProviderListOptions,
-  ): Promise<PaseoProviderModelsResult>;
+    provider: OsunaAgentProvider,
+    options?: OsunaProviderListOptions,
+  ): Promise<OsunaProviderModelsResult>;
   listModes(
-    provider: PaseoAgentProvider,
-    options?: PaseoProviderListOptions,
-  ): Promise<PaseoProviderModesResult>;
+    provider: OsunaAgentProvider,
+    options?: OsunaProviderListOptions,
+  ): Promise<OsunaProviderModesResult>;
   listFeatures(
-    draftConfig: PaseoProviderFeaturesInput,
+    draftConfig: OsunaProviderFeaturesInput,
     options?: { requestId?: string },
-  ): Promise<PaseoProviderFeaturesResult>;
-  listAvailable(options?: { requestId?: string }): Promise<PaseoProviderAvailabilityResult>;
-  snapshot(options?: PaseoProviderListOptions): Promise<PaseoProviderSnapshotResult>;
+  ): Promise<OsunaProviderFeaturesResult>;
+  listAvailable(options?: { requestId?: string }): Promise<OsunaProviderAvailabilityResult>;
+  snapshot(options?: OsunaProviderListOptions): Promise<OsunaProviderSnapshotResult>;
   /** Resolves after the daemon's lazy provider discovery has finished. */
-  waitForReady(options?: PaseoProviderWaitOptions): Promise<PaseoProviderSnapshotResult>;
-  refresh(options?: PaseoProviderRefreshOptions): Promise<PaseoProviderRefreshResult>;
+  waitForReady(options?: OsunaProviderWaitOptions): Promise<OsunaProviderSnapshotResult>;
+  refresh(options?: OsunaProviderRefreshOptions): Promise<OsunaProviderRefreshResult>;
   diagnostic(
-    provider: PaseoAgentProvider,
+    provider: OsunaAgentProvider,
     options?: { requestId?: string },
-  ): Promise<PaseoProviderDiagnosticResult>;
-  listUsage(options?: PaseoProviderUsageOptions): Promise<PaseoProviderUsageResult>;
-  subscribe(handler: (update: PaseoProviderSnapshotUpdate) => void): () => void;
+  ): Promise<OsunaProviderDiagnosticResult>;
+  listUsage(options?: OsunaProviderUsageOptions): Promise<OsunaProviderUsageResult>;
+  subscribe(handler: (update: OsunaProviderSnapshotUpdate) => void): () => void;
 }
 
-export interface PaseoConfigActions {
+export interface OsunaConfigActions {
   /**
    * Reads daemon config through the existing config RPC. Provider profiles,
    * custom provider entries, keys/env, custom binaries, and provider enablement
@@ -488,22 +488,22 @@ export interface PaseoConfigActions {
 export interface OsunaApi {
   dispose(): Promise<void>;
   observeEvents: DaemonClient["observeEvents"];
-  readonly terminals: PaseoTerminalActions;
-  readonly workspaces: PaseoWorkspaceActions;
-  readonly projects: PaseoProjectActions;
-  readonly agents: PaseoAgentActions;
-  readonly providers: PaseoProviderActions;
-  readonly config: PaseoConfigActions;
+  readonly terminals: OsunaTerminalActions;
+  readonly workspaces: OsunaWorkspaceActions;
+  readonly projects: OsunaProjectActions;
+  readonly agents: OsunaAgentActions;
+  readonly providers: OsunaProviderActions;
+  readonly config: OsunaConfigActions;
 }
 
-export interface PaseoClient extends OsunaApi {
+export interface OsunaClient extends OsunaApi {
   connect(): Promise<void>;
   close(): Promise<void>;
   ensureConnected(): void;
   getConnectionState(): ConnectionState;
 }
 
-export function createPaseoClient(config: PaseoClientConfig): PaseoClient {
+export function createOsunaClient(config: OsunaClientConfig): OsunaClient {
   const daemonClient = new DaemonClient({
     ...config,
     clientId: config.clientId ?? createGeneratedClientId(),
@@ -526,7 +526,7 @@ export function createPaseoClient(config: PaseoClientConfig): PaseoClient {
 }
 
 function toDaemonAgentCreateOptions(
-  options: PaseoAgentCreateOptions,
+  options: OsunaAgentCreateOptions,
   placement?: { workspaceId: string; cwd: string },
 ): CreateAgentRequestOptions {
   const { config: agentConfig, cwd, parent, title, prompt, ...requestOptions } = options;
@@ -553,11 +553,11 @@ export function createOsunaApi(
   scopeOptions?: { signal?: AbortSignal },
 ): OsunaApi {
   const handles = new Set<{ release(): Promise<void> }>();
-  const agentListeners = new Set<PaseoAgentUpdateHandler>();
-  const workspaceListeners = new Set<PaseoWorkspaceUpdateHandler>();
+  const agentListeners = new Set<OsunaAgentUpdateHandler>();
+  const workspaceListeners = new Set<OsunaWorkspaceUpdateHandler>();
   const lifetime = new AbortController();
   const own = <T extends { release(): Promise<void> }>(create: () => T): T => {
-    if (lifetime.signal.aborted) throw new Error("Paseo API is disposed");
+    if (lifetime.signal.aborted) throw new Error("Osuna API is disposed");
     const handle = create();
     handles.add(handle);
     const release = handle.release.bind(handle);
@@ -567,15 +567,15 @@ export function createOsunaApi(
     };
     return handle;
   };
-  const listenAgents = (handler: PaseoAgentUpdateHandler) => {
-    if (lifetime.signal.aborted) throw new Error("Paseo API is disposed");
+  const listenAgents = (handler: OsunaAgentUpdateHandler) => {
+    if (lifetime.signal.aborted) throw new Error("Osuna API is disposed");
     agentListeners.add(handler);
     return () => {
       agentListeners.delete(handler);
     };
   };
-  const listenWorkspaces = (handler: PaseoWorkspaceUpdateHandler) => {
-    if (lifetime.signal.aborted) throw new Error("Paseo API is disposed");
+  const listenWorkspaces = (handler: OsunaWorkspaceUpdateHandler) => {
+    if (lifetime.signal.aborted) throw new Error("Osuna API is disposed");
     workspaceListeners.add(handler);
     return () => {
       workspaceListeners.delete(handler);
@@ -587,7 +587,7 @@ export function createOsunaApi(
     (agentId, handler) => own(() => daemonClient.subscribeAgentTimeline(agentId, handler)),
   );
   const createAgent = async (
-    options: PaseoAgentCreateOptions,
+    options: OsunaAgentCreateOptions,
     placement?: { workspaceId: string; cwd: string },
   ) => {
     const agent = await daemonClient.createAgent(toDaemonAgentCreateOptions(options, placement));
@@ -649,16 +649,16 @@ export function createOsunaApi(
     };
   };
 
-  function listWorkspaces(options: PaseoWorkspaceListOptions & { subscribe: {} }): Promise<
-    PaseoWorkspaceListResult & {
+  function listWorkspaces(options: OsunaWorkspaceListOptions & { subscribe: {} }): Promise<
+    OsunaWorkspaceListResult & {
       subscriptionId: string;
-      subscription: OwnedSubscription<PaseoWorkspaceListResult>;
+      subscription: OwnedSubscription<OsunaWorkspaceListResult>;
     }
   >;
-  function listWorkspaces(options?: PaseoWorkspaceListOptions): Promise<PaseoWorkspaceListResult>;
+  function listWorkspaces(options?: OsunaWorkspaceListOptions): Promise<OsunaWorkspaceListResult>;
   async function listWorkspaces(
-    options?: PaseoWorkspaceListOptions,
-  ): Promise<PaseoWorkspaceListResult> {
+    options?: OsunaWorkspaceListOptions,
+  ): Promise<OsunaWorkspaceListResult> {
     if (!options?.subscribe) return daemonClient.fetchWorkspaces(options);
     if (options.subscribe.subscriptionId !== undefined)
       throw new Error("Subscription IDs are assigned by the host");
@@ -673,14 +673,14 @@ export function createOsunaApi(
     return { ...(await subscription.ready), subscription };
   }
 
-  function listAgents(options: PaseoAgentListOptions & { subscribe: {} }): Promise<
-    PaseoAgentListResult & {
+  function listAgents(options: OsunaAgentListOptions & { subscribe: {} }): Promise<
+    OsunaAgentListResult & {
       subscriptionId: string;
-      subscription: OwnedSubscription<PaseoAgentListResult>;
+      subscription: OwnedSubscription<OsunaAgentListResult>;
     }
   >;
-  function listAgents(options?: PaseoAgentListOptions): Promise<PaseoAgentListResult>;
-  async function listAgents(options?: PaseoAgentListOptions): Promise<PaseoAgentListResult> {
+  function listAgents(options?: OsunaAgentListOptions): Promise<OsunaAgentListResult>;
+  async function listAgents(options?: OsunaAgentListOptions): Promise<OsunaAgentListResult> {
     if (!options?.subscribe) return daemonClient.fetchAgents(options);
     if (options.subscribe.subscriptionId !== undefined)
       throw new Error("Subscription IDs are assigned by the host");
@@ -764,18 +764,18 @@ export function createOsunaApi(
   };
 }
 
-type WorkspaceHandleFactory = (workspace: string | PaseoWorkspace) => PaseoWorkspaceHandle;
-type AgentHandleFactory = (agent: string | PaseoAgent) => PaseoAgentHandle;
+type WorkspaceHandleFactory = (workspace: string | OsunaWorkspace) => OsunaWorkspaceHandle;
+type AgentHandleFactory = (agent: string | OsunaAgent) => OsunaAgentHandle;
 type CreateAgent = (
-  options: PaseoAgentCreateOptions,
+  options: OsunaAgentCreateOptions,
   placement?: { workspaceId: string; cwd: string },
-) => Promise<PaseoAgentHandle>;
+) => Promise<OsunaAgentHandle>;
 
 function createWorkspaceHandleFactory(
   daemonClient: DaemonClient,
   createAgent: CreateAgent,
-  terminals: PaseoTerminalActions,
-  listen: (handler: PaseoWorkspaceUpdateHandler) => () => void,
+  terminals: OsunaTerminalActions,
+  listen: (handler: OsunaWorkspaceUpdateHandler) => () => void,
 ): WorkspaceHandleFactory {
   return (workspace) => {
     const id = typeof workspace === "string" ? workspace : workspace.id;
@@ -857,14 +857,14 @@ function createWorkspaceHandleFactory(
 
 function createAgentHandleFactory(
   daemonClient: DaemonClient,
-  listen: (handler: PaseoAgentUpdateHandler) => () => void,
+  listen: (handler: OsunaAgentUpdateHandler) => () => void,
   subscribeTimeline: DaemonClient["subscribeAgentTimeline"],
 ): AgentHandleFactory {
   return (agent) => {
     const id = typeof agent === "string" ? agent : agent.id;
     let current = typeof agent === "string" ? null : agent;
 
-    const handle: PaseoAgentHandle = {
+    const handle: OsunaAgentHandle = {
       id,
       timeline: {
         append: (item) => daemonClient.appendAgentTimelineItem(id, item),
@@ -999,9 +999,9 @@ function createAgentHandleFactory(
 async function openWorkspace(
   daemonClient: DaemonClient,
   createWorkspaceHandle: WorkspaceHandleFactory,
-  input: string | PaseoWorkspaceOpenOptions,
+  input: string | OsunaWorkspaceOpenOptions,
   requestId?: string,
-): Promise<PaseoWorkspaceHandle> {
+): Promise<OsunaWorkspaceHandle> {
   const options = typeof input === "string" ? { cwd: input, requestId } : input;
   const result = await daemonClient.openProject(options.cwd, options.requestId);
   if (result.error || !result.workspace) {
@@ -1010,11 +1010,11 @@ async function openWorkspace(
   return createWorkspaceHandle(result.workspace);
 }
 
-function resolveWorkspaceId(workspace: string | PaseoWorkspaceHandle): string {
+function resolveWorkspaceId(workspace: string | OsunaWorkspaceHandle): string {
   return typeof workspace === "string" ? workspace : workspace.id;
 }
 
-function resolveAgentId(agent: string | PaseoAgentHandle): string {
+function resolveAgentId(agent: string | OsunaAgentHandle): string {
   return typeof agent === "string" ? agent : agent.id;
 }
 
@@ -1031,8 +1031,8 @@ function parseProviderModel(selection: string): { provider: string; model: strin
 
 function listProviderUsage(
   daemonClient: DaemonClient,
-  options?: PaseoProviderUsageOptions,
-): Promise<PaseoProviderUsageResult> {
+  options?: OsunaProviderUsageOptions,
+): Promise<OsunaProviderUsageResult> {
   // COMPAT(providerUsageList): added in v0.1.98, remove after 2027-02-28 once daemon floor >= v0.1.98.
   if (daemonClient.getLastServerInfoMessage()?.features?.providerUsageList !== true) {
     return Promise.reject(new Error("Update the host to list provider usage."));
@@ -1044,26 +1044,26 @@ async function waitForProvidersReady(
   daemonClient: DaemonClient,
   observation: ReturnType<DaemonClient["observeEvents"]>,
   signal: AbortSignal,
-  options: PaseoProviderWaitOptions = {},
-): Promise<PaseoProviderSnapshotResult> {
+  options: OsunaProviderWaitOptions = {},
+): Promise<OsunaProviderSnapshotResult> {
   const { timeoutMs = 60_000, ...snapshotOptions } = options;
 
   try {
     await observation.ready;
     signal.throwIfAborted();
-    return await new Promise<PaseoProviderSnapshotResult>((resolve, reject) => {
+    return await new Promise<OsunaProviderSnapshotResult>((resolve, reject) => {
       let settled = false;
       let requestId: string | null = null;
       let snapshotCwd: string | undefined;
-      const pendingUpdates = new Map<string | undefined, PaseoProviderSnapshotUpdate>();
-      let latestEntries: PaseoProviderSnapshotResult["entries"] = [];
+      const pendingUpdates = new Map<string | undefined, OsunaProviderSnapshotUpdate>();
+      let latestEntries: OsunaProviderSnapshotResult["entries"] = [];
 
       const cleanup = () => {
         clearTimeout(timeout);
         unsubscribe();
         signal.removeEventListener("abort", abort);
       };
-      const finish = (snapshot: PaseoProviderSnapshotResult) => {
+      const finish = (snapshot: OsunaProviderSnapshotResult) => {
         if (settled) return;
         settled = true;
         cleanup();
@@ -1075,7 +1075,7 @@ async function waitForProvidersReady(
         cleanup();
         reject(error instanceof Error ? error : new Error(String(error)));
       };
-      const updateMatches = (update: PaseoProviderSnapshotUpdate) => update.cwd === snapshotCwd;
+      const updateMatches = (update: OsunaProviderSnapshotUpdate) => update.cwd === snapshotCwd;
 
       const unsubscribe = observation.subscribe({
         snapshot: () => {},
@@ -1092,7 +1092,7 @@ async function waitForProvidersReady(
           finish({ ...update, requestId });
         },
       });
-      const abort = () => fail(new Error("Paseo API is disposed"));
+      const abort = () => fail(new Error("Osuna API is disposed"));
       signal.addEventListener("abort", abort, { once: true });
 
       const timeout = setTimeout(() => {
@@ -1137,5 +1137,5 @@ function createGeneratedClientId(): string {
     typeof globalThis.crypto?.randomUUID === "function"
       ? globalThis.crypto.randomUUID()
       : Math.random().toString(36).slice(2);
-  return `paseo-sdk-${randomId}`;
+  return `osuna-sdk-${randomId}`;
 }

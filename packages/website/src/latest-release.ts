@@ -30,7 +30,7 @@ const LINUX_APPIMAGE_ASSET_PATTERN =
 const REQUIRED_ASSET_PATTERNS = [
   /Paseo-.*-arm64\.dmg$/,
   LINUX_APPIMAGE_ASSET_PATTERN,
-  /Paseo-Setup-.*\.exe$/,
+  /Osuna-Setup-.*\.exe$/,
 ];
 
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/getpaseo/paseo/releases?per_page=10";
@@ -44,11 +44,11 @@ function hasRequiredAssets(release: GitHubRelease): boolean {
 }
 
 function pickWindowsAssets(assets: GitHubAsset[]) {
-  const x64Suffixed = assets.find((asset) => /Paseo-Setup-.*-x64\.exe$/.test(asset.name));
-  const arm64 = assets.find((asset) => /Paseo-Setup-.*-arm64\.exe$/.test(asset.name));
+  const x64Suffixed = assets.find((asset) => /Osuna-Setup-.*-x64\.exe$/.test(asset.name));
+  const arm64 = assets.find((asset) => /Osuna-Setup-.*-arm64\.exe$/.test(asset.name));
   const legacy = assets.find(
     (asset) =>
-      /Paseo-Setup-.*\.exe$/.test(asset.name) &&
+      /Osuna-Setup-.*\.exe$/.test(asset.name) &&
       !asset.name.endsWith("-x64.exe") &&
       !asset.name.endsWith("-arm64.exe"),
   );
@@ -172,11 +172,11 @@ function isReleaseInfo(value: unknown): value is ReleaseInfo {
     (typeof record.windowsX64Asset === "string" || record.windowsX64Asset === null) &&
     (typeof record.windowsArm64Asset === "string" || record.windowsArm64Asset === null) &&
     (record.windowsX64Asset === null ||
-      new RegExp(`^Paseo-Setup-${record.version.replaceAll(".", "\\.")}(?:-x64)?\\.exe$`).test(
+      new RegExp(`^Osuna-Setup-${record.version.replaceAll(".", "\\.")}(?:-x64)?\\.exe$`).test(
         record.windowsX64Asset,
       )) &&
     (record.windowsArm64Asset === null ||
-      new RegExp(`^Paseo-Setup-${record.version.replaceAll(".", "\\.")}-arm64\\.exe$`).test(
+      new RegExp(`^Osuna-Setup-${record.version.replaceAll(".", "\\.")}-arm64\\.exe$`).test(
         record.windowsArm64Asset,
       ))
   );

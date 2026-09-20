@@ -7,9 +7,9 @@ npm install @osuna/client
 ```
 
 ```ts
-import { createPaseoClient } from "@osuna/client";
+import { createOsunaClient } from "@osuna/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6777/ws" });
+const client = createOsunaClient({ url: "ws://127.0.0.1:6777/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

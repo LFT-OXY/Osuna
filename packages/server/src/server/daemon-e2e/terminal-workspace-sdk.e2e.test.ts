@@ -3,21 +3,21 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createPaseoClient, type PaseoClient } from "@osuna/client";
+import { createOsunaClient, type OsunaClient } from "@osuna/client";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
 let daemon: TestPaseoDaemon;
 let client: DaemonClient;
 let cwd: string;
-let sdk: PaseoClient;
+let sdk: OsunaClient;
 
 beforeEach(async () => {
   cwd = await mkdtemp(path.join(tmpdir(), "terminal-workspace-sdk-"));
   daemon = await createTestPaseoDaemon();
   client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await client.connect();
-  sdk = createPaseoClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  sdk = createOsunaClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await sdk.connect();
 });
 

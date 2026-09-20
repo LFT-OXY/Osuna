@@ -1,4 +1,4 @@
-import { resolvePaseoHome } from "@osuna/server";
+import { resolveOsunaHome } from "@osuna/server";
 
 export type DaemonTarget = { kind: "instance"; home: string } | { kind: "endpoint"; host: string };
 
@@ -21,11 +21,11 @@ export function selectDaemonTarget(
       };
     return {
       kind: "instance",
-      home: resolvePaseoHome({ OSUNA_HOME: options.home ?? env.OSUNA_HOME }),
+      home: resolveOsunaHome({ OSUNA_HOME: options.home ?? env.OSUNA_HOME }),
     };
   }
   if (options.home !== undefined)
-    return { kind: "instance", home: resolvePaseoHome({ OSUNA_HOME: options.home }) };
+    return { kind: "instance", home: resolveOsunaHome({ OSUNA_HOME: options.home }) };
   if (options.host !== undefined) return { kind: "endpoint", host: options.host };
   if (env.OSUNA_HOME && env.OSUNA_HOST)
     throw {
@@ -33,7 +33,7 @@ export function selectDaemonTarget(
       message: "OSUNA_HOME and OSUNA_HOST are both set. Choose --home or --host explicitly.",
     };
   if (env.OSUNA_HOST) return { kind: "endpoint", host: env.OSUNA_HOST };
-  return { kind: "instance", home: resolvePaseoHome({ OSUNA_HOME: env.OSUNA_HOME }) };
+  return { kind: "instance", home: resolveOsunaHome({ OSUNA_HOME: env.OSUNA_HOME }) };
 }
 
 export function describeDaemonTarget(target: DaemonTarget): string {

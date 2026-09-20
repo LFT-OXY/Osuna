@@ -6,7 +6,7 @@ import { resolvePaseoNodeEnv } from "./paseo-env.js";
 import { z } from "zod";
 import { expandTilde } from "../utils/path.js";
 
-import type { PaseoDaemonConfig } from "./bootstrap.js";
+import type { OsunaDaemonConfig } from "./bootstrap.js";
 import {
   loadPersistedConfig,
   LogFormatSchema,
@@ -94,7 +94,7 @@ function normalizeLogEnv(value: string | undefined): string | undefined {
 function resolveGitProcessConfig(
   env: NodeJS.ProcessEnv,
   persisted: ReturnType<typeof loadPersistedConfig>,
-): NonNullable<PaseoDaemonConfig["git"]> {
+): NonNullable<OsunaDaemonConfig["git"]> {
   return resolveGitProcessPolicy({
     env,
     persisted: persisted.daemon?.git,
@@ -476,7 +476,7 @@ function resolveListenAddress(
 function resolveAuthConfig(
   env: NodeJS.ProcessEnv,
   persisted: ReturnType<typeof loadPersistedConfig>,
-): PaseoDaemonConfig["auth"] {
+): OsunaDaemonConfig["auth"] {
   const envPassword = env.OSUNA_PASSWORD?.trim();
   if (envPassword) {
     return { password: hashDaemonPassword(envPassword) };
@@ -569,7 +569,7 @@ export function resolveConfigFromPersisted(
   paseoHome: string,
   persisted: PersistedConfig,
   options?: ResolveConfigFromPersistedOptions,
-): PaseoDaemonConfig {
+): OsunaDaemonConfig {
   const resolvedOptions = options ?? {};
   const env = configurationEnvironment(resolvedOptions.env ?? process.env);
   const cli = resolvedOptions.cli;
@@ -672,7 +672,7 @@ export function resolveConfigFromPersisted(
 export function loadConfig(
   paseoHome: string,
   options?: Omit<ResolveConfigFromPersistedOptions, "relayEnabledFallback">,
-): PaseoDaemonConfig {
+): OsunaDaemonConfig {
   const persisted = loadPersistedConfig(paseoHome);
   return resolveConfigFromPersisted(paseoHome, persisted, options);
 }

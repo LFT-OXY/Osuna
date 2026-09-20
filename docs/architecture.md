@@ -89,13 +89,13 @@ it does not depend on the server.
 
 ### `packages/client` — Daemon client library and SDK facade
 
-Owns the low-level daemon WebSocket driver plus the higher-level `PaseoClient`
+Owns the low-level daemon WebSocket driver plus the higher-level `OsunaClient`
 facade. App and CLI may import the low-level driver from
 `@getpaseo/client/internal/daemon-client` during migration, while new SDK-shaped
 code imports from `@getpaseo/client`.
 
 `OsunaApi` is the capability-only boundary over workspaces, agents, terminals, providers, and config.
-`PaseoClient` adds connection lifecycle. App plugin surfaces borrow an API over their selected
+`OsunaClient` adds connection lifecycle. App plugin surfaces borrow an API over their selected
 host's client; plugin subprocesses use the same facade over a host-owned IPC transport. Protocol capability ownership and subscription lifetimes follow
 [the client contract](protocol-compatibility.md#client-capability-ownership).
 

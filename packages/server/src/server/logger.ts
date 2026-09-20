@@ -4,7 +4,7 @@ import pino from "pino";
 import pretty from "pino-pretty";
 import { resolveDaemonVersion } from "./daemon-version.js";
 import type { PersistedConfig } from "./persisted-config.js";
-import { resolvePaseoHome } from "./osuna-home.js";
+import { resolveOsunaHome } from "./osuna-home.js";
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 export type LogFormat = "pretty" | "json";
@@ -90,7 +90,7 @@ function resolveConfiguredPaseoHome(options: ResolveLogConfigOptions | undefined
   if (options?.paseoHome) {
     return options.paseoHome;
   }
-  return resolvePaseoHome();
+  return resolveOsunaHome();
 }
 
 function normalizeLoggerConfigInput(config: LoggerConfigInput): PersistedConfig | undefined {

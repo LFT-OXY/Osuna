@@ -43,7 +43,7 @@ import {
 import type { ForgeService } from "../services/forge-service.js";
 import { areEquivalentPaths } from "../utils/path.js";
 import {
-  createPaseoWorktree as createPaseoWorktreeService,
+  createOsunaWorktree as createPaseoWorktreeService,
   type CreatePaseoWorktreeFn,
 } from "./paseo-worktree-service.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
@@ -91,7 +91,7 @@ function createLogger(): Logger {
 
 function createWorkflowForRequestTest(options: {
   paseoHome: string;
-  createPaseoWorktree?: CreatePaseoWorktreeFn;
+  createOsunaWorktree?: CreatePaseoWorktreeFn;
   warmWorkspaceGitData?: (workspace: PersistedWorkspaceRecord) => Promise<void>;
   onSetupStarted?: (input: {
     requestCwd: string;
@@ -102,12 +102,12 @@ function createWorkflowForRequestTest(options: {
   }) => void;
 }) {
   return async (input: Parameters<CreatePaseoWorktreeFn>[0]) => {
-    const createPaseoWorktree =
-      options.createPaseoWorktree ?? createPaseoWorktreeForTest({ paseoHome: options.paseoHome });
+    const createOsunaWorktree =
+      options.createOsunaWorktree ?? createPaseoWorktreeForTest({ paseoHome: options.paseoHome });
     return createPaseoWorktreeWorkflow(
       {
         paseoHome: options.paseoHome,
-        createPaseoWorktree,
+        createOsunaWorktree,
         warmWorkspaceGitData: options.warmWorkspaceGitData ?? (async () => {}),
         autoNameWorkspaceBranchForFirstAgent: () => {},
         emitWorkspaceUpdateForWorkspaceId: async () => {},
@@ -472,7 +472,7 @@ describe("create-agent worktree setup boundary", () => {
       const result = await createPaseoWorktreeWorkflow(
         {
           paseoHome,
-          createPaseoWorktree: createPaseoWorktreeForTest({ paseoHome }),
+          createOsunaWorktree: createPaseoWorktreeForTest({ paseoHome }),
           warmWorkspaceGitData: async () => {},
           autoNameWorkspaceBranchForFirstAgent: () => {},
           assertWorkspaceAutomationAllowed: async () => {
@@ -531,7 +531,7 @@ describe("create-agent worktree setup boundary", () => {
       const result = await createPaseoWorktreeWorkflow(
         {
           paseoHome,
-          createPaseoWorktree: createPaseoWorktreeForTest({ paseoHome }),
+          createOsunaWorktree: createPaseoWorktreeForTest({ paseoHome }),
           warmWorkspaceGitData: async () => {},
           autoNameWorkspaceBranchForFirstAgent: () => {},
           emitWorkspaceUpdateForWorkspaceId: async () => {},
@@ -1540,7 +1540,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
           resolveRepoRoot: vi.fn(async () => repoDir),
           resolveDefaultBranch: vi.fn(async () => "main"),
         } as unknown as WorkspaceGitService,
-        createPaseoWorktree: createPaseoWorktreeForTest({
+        createOsunaWorktree: createPaseoWorktreeForTest({
           paseoHome: path.join(tempDir, ".osuna"),
           events,
         }),
@@ -1589,7 +1589,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
           resolveRepoRoot: vi.fn(async () => repoDir),
           resolveDefaultBranch: vi.fn(async () => "main"),
         } as unknown as WorkspaceGitService,
-        createPaseoWorktree: createPaseoWorktreeForTest({ paseoHome }),
+        createOsunaWorktree: createPaseoWorktreeForTest({ paseoHome }),
         checkoutExistingBranch: async () => {
           throw new Error("should not checkout existing branch");
         },
@@ -1612,7 +1612,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
   });
 
   test("buildAgentSessionConfig passes prompt and attachment context into worktree creation", async () => {
-    const createPaseoWorktree = vi.fn(async () => ({
+    const createOsunaWorktree = vi.fn(async () => ({
       worktree: {
         branchName: "fix-attached-pr-context",
         worktreePath: "/tmp/worktrees/fix-attached-pr-context",
@@ -1656,7 +1656,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
         workspaceGitService: {
           resolveDefaultBranch: vi.fn(async () => "main"),
         } as unknown as WorkspaceGitService,
-        createPaseoWorktree,
+        createOsunaWorktree,
         checkoutExistingBranch: async () => {
           throw new Error("should not checkout existing branch");
         },
@@ -1676,7 +1676,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
       firstAgentContext,
     );
 
-    expect(createPaseoWorktree).toHaveBeenCalledWith(
+    expect(createOsunaWorktree).toHaveBeenCalledWith(
       expect.objectContaining({
         firstAgentContext,
       }),
@@ -1689,14 +1689,14 @@ describe("handleCreatePaseoWorktreeRequest", () => {
     const invalidate = vi.fn();
     const createBranchFromBase = vi.fn(async () => {});
     const checkoutExistingBranch = vi.fn(async () => ({ source: "local" as const }));
-    const createPaseoWorktree = vi.fn(async () => {
+    const createOsunaWorktree = vi.fn(async () => {
       throw new Error("should not create worktree");
     });
 
     await buildAgentSessionConfig(
       {
         sessionLogger: createLogger(),
-        createPaseoWorktree,
+        createOsunaWorktree,
         checkoutExistingBranch,
         createBranchFromBase,
         workspaceGitService: { invalidateForge: invalidate } as unknown as WorkspaceGitService,
@@ -1724,7 +1724,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
     await buildAgentSessionConfig(
       {
         sessionLogger: createLogger(),
-        createPaseoWorktree,
+        createOsunaWorktree,
         checkoutExistingBranch,
         createBranchFromBase,
         workspaceGitService: { invalidateForge: invalidate } as unknown as WorkspaceGitService,
@@ -1785,7 +1785,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
           emit: (message) => emitted.push(message),
           createPaseoWorktreeWorkflow: createWorkflowForRequestTest({
             paseoHome,
-            createPaseoWorktree: createPaseoWorktreeForTest({ paseoHome, events }),
+            createOsunaWorktree: createPaseoWorktreeForTest({ paseoHome, events }),
           }),
           describeWorkspaceRecord: vi.fn(async (result) => ({
             id: result.workspace.workspaceId,
@@ -1848,7 +1848,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
           emit: (message) => emitted.push(message),
           createPaseoWorktreeWorkflow: createWorkflowForRequestTest({
             paseoHome,
-            createPaseoWorktree: async (input) => {
+            createOsunaWorktree: async (input) => {
               const result = await createPaseoWorktreeForTest({ paseoHome })(input);
               expect(existsSync(result.worktree.worktreePath)).toBe(true);
               registeredWorktreePath = result.worktree.worktreePath;
