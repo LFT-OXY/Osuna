@@ -264,13 +264,20 @@ async function initialize(message: Extract<PluginProcessRequest, { type: "initia
     transportFactory,
   });
   osuna = createOsunaApi(daemonClient);
-  await daemonClient.connect();
   settingsStore = message.settingsDirectory
     ? new PluginSettingsStore(message.settingsDirectory, (settingsId) =>
         send({ type: "settings.changed", settingsId }),
       )
     : null;
+  // contribute() 要在握手之前跑完：插件的 process.on("message") 观察者装在里面，而
+  // 连接期间到达的帧派发完就没了，Node 不重放。
+  //
+  // 代价是插件的监听器现在排在 transport 的前面（后者在 connect() 里才注册）。抛错这条
+  // 路径不受顺序影响：监听器无论排第几，抛出都会以 uncaughtException 结束插件子进程，
+  // 这个进程没有装 uncaughtException 处理器。剩下的差别是插件能先碰到帧对象——它本来
+  // 就跑在同一个进程里、拿得到同一个 process，顺序不是这里的信任边界。
   evaluateBundle(message.bundle);
+  await daemonClient.connect();
   send({
     type: "ready",
     methods: [...handlers.keys()].sort(),
@@ -281,21 +288,26 @@ async function initialize(message: Extract<PluginProcessRequest, { type: "initia
   });
 }
 
+/** contribute() 留下的两样东西：hook 注册与它自己的 cleanup。初始化失败与正常关停都要收。 */
+async function releaseContribution(): Promise<void> {
+  hooks.close();
+  const contributedCleanup = cleanup;
+  cleanup = null;
+  try {
+    await contributedCleanup?.();
+  } catch (error) {
+    console.error("Plugin cleanup failed", error);
+  }
+}
+
 async function shutdown(): Promise<void> {
   if (stopping) return;
   stopping = true;
   const releaseApi = osuna
     ?.dispose()
     .catch((error) => console.error("Plugin API cleanup failed", error));
-  hooks.close();
   for (const pending of pendingProviderConnections.values()) pending.tombstoned = true;
-  const currentCleanup = cleanup;
-  cleanup = null;
-  try {
-    await currentCleanup?.();
-  } catch (error) {
-    console.error("Plugin cleanup failed", error);
-  }
+  await releaseContribution();
   await Promise.all([...providerConnections.keys()].map(closeProviderConnection));
   await releaseApi;
   await daemonClient?.close().catch(() => undefined);
@@ -327,6 +339,10 @@ process.on("message", (rawMessage: unknown) => {
   if (message.type === "initialize") {
     void initialize(message).catch(async (error) => {
       send({ type: "fatal", error: describeError(error) });
+      // 这条 catch 现实中的入口是 evaluateBundle 抛错（contribute() 先 on(...) 再返回
+      // 非函数）。它已排在 connect() 之前，此时 hook 注册与 contribute() 的进程外副作用
+      // 都还挂着，得和正常关停走同一处收尾。
+      await releaseContribution();
       await osuna
         ?.dispose()
         .catch((failure) => console.error("Plugin API cleanup failed", failure));

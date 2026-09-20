@@ -36,6 +36,10 @@ export default function contribute(server) {
   const legacy = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
     capabilities: {
+      // 旧客户端必须连 owned_subscriptions 一起关掉：daemon 按它判 isModern
+      // （../session.ts 的 updateClientCapabilities），只关 explicit_event_subscriptions
+      // 仍算新客户端，收不到隐式广播。
+      owned_subscriptions: false,
       selective_agent_timeline: false,
       explicit_event_subscriptions: false,
       provider_snapshot_references: false,
