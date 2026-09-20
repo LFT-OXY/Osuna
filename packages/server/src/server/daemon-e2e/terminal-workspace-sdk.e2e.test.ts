@@ -109,7 +109,7 @@ test("terminal creation rejects unknown and archived owners, including explicit 
   expect((await client.fetchWorkspaces()).entries).toEqual([]);
 });
 
-test("plugin handlers operate terminals through their host-owned Paseo API", async () => {
+test("plugin handlers operate terminals through their host-owned Osuna API", async () => {
   const workspaceId = await createWorkspace("Plugin workspace");
   const pluginDirectory = path.join(cwd, "plugin");
   await mkdir(pluginDirectory);
@@ -117,7 +117,7 @@ test("plugin handlers operate terminals through their host-owned Paseo API", asy
     path.join(pluginDirectory, "osuna-plugin.json"),
     JSON.stringify({
       id: "terminal-sdk",
-      requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
+      requirements: { osuna: `>=${resolveDaemonVersion(import.meta.url)}` },
     }),
   );
   await writeFile(
@@ -137,7 +137,7 @@ async function waitForTerminalOutput(terminal, text) {
 }
 export default function contribute(server) {
   server.handle(operate, async ({ workspaceId, command }, { osuna }) => {
-    const workspace = paseo.workspaces.ref(workspaceId);
+    const workspace = osuna.workspaces.ref(workspaceId);
     const terminal = await workspace.terminals.create({ command, args: ["-e", "process.stdin.setRawMode(true); process.stdin.resume(); console.log('PLUGIN READY'); let hex = ''; process.stdin.on('data', data => { hex += data.toString('hex'); console.log('PLUGIN:' + hex); });"] });
     try {
       await waitForTerminalOutput(terminal, "PLUGIN READY");
@@ -146,7 +146,7 @@ export default function contribute(server) {
       terminal.sendKeys(["Enter"]);
       const lines = await waitForTerminalOutput(terminal, "PLUGIN:456e7465720d");
       const listed = await workspace.terminals.list();
-      await paseo.terminals.ref(terminal.id).kill();
+      await osuna.terminals.ref(terminal.id).kill();
       return { workspaceIds: listed.entries.map(entry => entry.workspaceId), lines, remaining: (await workspace.terminals.list()).entries.length };
     } finally {
       await terminal.kill();

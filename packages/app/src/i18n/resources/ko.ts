@@ -1966,9 +1966,9 @@ export const ko: TranslationResources = {
       one: "기타 도구 {{count}}개 사용함",
       other: "기타 도구 {{count}}개 사용함",
     },
-    paseoCalls: {
-      one: "Paseo를 {{count}}회 호출함",
-      other: "Paseo를 {{count}}회 호출함",
+    osunaCalls: {
+      one: "Osuna를 {{count}}회 호출함",
+      other: "Osuna를 {{count}}회 호출함",
     },
     and: "그리고",
   },

@@ -2004,9 +2004,9 @@ export const es: TranslationResources = {
       one: "usó {{count}} herramienta adicional",
       other: "usó {{count}} herramientas adicionales",
     },
-    paseoCalls: {
-      one: "llamó a Paseo {{count}} vez",
-      other: "llamó a Paseo {{count}} veces",
+    osunaCalls: {
+      one: "llamó a Osuna {{count}} vez",
+      other: "llamó a Osuna {{count}} veces",
     },
     and: "y",
   },

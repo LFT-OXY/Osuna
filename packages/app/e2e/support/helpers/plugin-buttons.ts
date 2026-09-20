@@ -27,15 +27,15 @@ function StatusIcon({ size, theme }) {
 
 function Details({ workspaceId, theme, layout, close }) {
   const workspace = useWorkspace(workspaceId, (workspace) => workspace.name);
-  const paseo = useOsuna();
+  const osuna = useOsuna();
   const [ownerId, setOwnerId] = React.useState("");
   const [updates, setUpdates] = React.useState(0);
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => {
-    const owner = paseo.observeEvents(["project.update"]);
+    const owner = osuna.observeEvents(["project.update"]);
     owner.subscribe({ snapshot(value) { setOwnerId(value.subscriptionId); }, update() { setUpdates((n) => n + 1); } });
     // Deliberately leave this observation to the mounted host scope.
-  }, [paseo]);
+  }, [osuna]);
   const rpc = useRpc(summary);
   const query = useQuery({ queryKey: ["summary"], queryFn: () => rpc({}) });
   if (failed) throw new Error("Button content failed");

@@ -1989,9 +1989,9 @@ export const ptBR: TranslationResources = {
       one: "usou {{count}} outra ferramenta",
       other: "usou {{count}} outras ferramentas",
     },
-    paseoCalls: {
-      one: "chamou o Paseo {{count}} vez",
-      other: "chamou o Paseo {{count}} vezes",
+    osunaCalls: {
+      one: "chamou o Osuna {{count}} vez",
+      other: "chamou o Osuna {{count}} vezes",
     },
     and: "e",
   },

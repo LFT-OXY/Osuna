@@ -675,7 +675,7 @@ describe("paseo daemon bootstrap", () => {
         path.join(pluginDirectory, "osuna-plugin.json"),
         JSON.stringify({
           id: "startup-rollback",
-          requirements: { paseo: `>=${resolveDaemonVersion(import.meta.url)}` },
+          requirements: { osuna: `>=${resolveDaemonVersion(import.meta.url)}` },
         }),
       );
       await writeFile(

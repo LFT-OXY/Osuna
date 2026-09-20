@@ -1989,9 +1989,9 @@ export const ru: TranslationResources = {
       one: "использован {{count}} другой инструмент",
       other: "использованы другие инструменты ({{count}})",
     },
-    paseoCalls: {
-      one: "выполнен {{count}} вызов Paseo",
-      other: "выполнены вызовы Paseo ({{count}})",
+    osunaCalls: {
+      one: "выполнен {{count}} вызов Osuna",
+      other: "выполнены вызовы Osuna ({{count}})",
     },
     and: "и",
   },

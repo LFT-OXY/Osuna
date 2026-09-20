@@ -1935,9 +1935,9 @@ export const zhCN: TranslationResources = {
       one: "使用了 {{count}} 个其他工具",
       other: "使用了 {{count}} 个其他工具",
     },
-    paseoCalls: {
-      one: "调用了 Paseo {{count}} 次",
-      other: "调用了 Paseo {{count}} 次",
+    osunaCalls: {
+      one: "调用了 Osuna {{count}} 次",
+      other: "调用了 Osuna {{count}} 次",
     },
     and: "并",
   },

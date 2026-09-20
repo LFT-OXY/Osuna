@@ -1976,9 +1976,9 @@ export const ja: TranslationResources = {
       one: "その他のツールを{{count}}回使用",
       other: "その他のツールを{{count}}回使用",
     },
-    paseoCalls: {
-      one: "Paseoを{{count}}回呼び出し",
-      other: "Paseoを{{count}}回呼び出し",
+    osunaCalls: {
+      one: "Osunaを{{count}}回呼び出し",
+      other: "Osunaを{{count}}回呼び出し",
     },
     and: "および",
   },

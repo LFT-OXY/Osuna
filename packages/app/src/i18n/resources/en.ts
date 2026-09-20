@@ -1981,9 +1981,9 @@ export const en = {
       one: "used {{count}} other tool",
       other: "used {{count}} other tools",
     },
-    paseoCalls: {
-      one: "called Paseo {{count}} time",
-      other: "called Paseo {{count}} times",
+    osunaCalls: {
+      one: "called Osuna {{count}} time",
+      other: "called Osuna {{count}} times",
     },
     and: "and",
   },

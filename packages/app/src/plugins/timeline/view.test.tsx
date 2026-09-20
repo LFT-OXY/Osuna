@@ -288,9 +288,9 @@ it("releases a crashed renderer's observations and recovers a fresh scope in Str
         const failed = React.useRef(false);
         failed.current = props.item.data.label === "explode";
         React.useEffect(() => {
-          const owner = paseo.observeEvents(["project.update"]);
+          const owner = osuna.observeEvents(["project.update"]);
           return () => { if (failed.current) throw new Error("plugin cleanup failed"); void owner.release(); };
-        }, [paseo]);
+        }, [osuna]);
         if (props.item.data.label === "explode") throw new Error("owned renderer failed");
         return React.createElement("span", null, props.item.data.label);
       }

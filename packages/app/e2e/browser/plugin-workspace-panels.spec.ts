@@ -96,7 +96,7 @@ function contributeClient(client) {
     pills.set(agent.id, () => pill.remove());
   };
   const lifetime = new AbortController();
-  void client.paseo.agents.list({ subscribe: {}, signal: lifetime.signal }).then(({ subscription }) => {
+  void client.osuna.agents.list({ subscribe: {}, signal: lifetime.signal }).then(({ subscription }) => {
     subscription.subscribe({
       snapshot({ entries }) {
         for (const removePill of pills.values()) removePill();
@@ -140,7 +140,7 @@ const pluginServerSource = `import { recordComposerOpen } from "./shared/rpc";
 
 export default function contribute(server) {
   server.handle(recordComposerOpen, async ({ workspaceId }, { osuna }) => {
-    await paseo.workspaces.ref(workspaceId).setTitle("Opened from composer pill");
+    await osuna.workspaces.ref(workspaceId).setTitle("Opened from composer pill");
     return { opened: true };
   });
   return () => {};

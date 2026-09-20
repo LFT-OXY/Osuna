@@ -59,6 +59,35 @@ intended behavior, not fragments" outranks the wish for a test nobody has to tou
   the line you rewrote, restore. A test that only verifies the setting the test itself seeded
   passes for the wrong reason.
 
+## Plugin bundles written as strings are invisible to tooling
+
+Plugin fixtures are source code inside a template literal — `view.test.tsx` builds `liveBundle`,
+`e2e/support/helpers/plugin-buttons.ts` builds `clientSource`, `plugin-workspace-panels.spec.ts`
+builds `pluginServerSource`. They are compiled at run time by the plugin host, so **typecheck and
+lint never look inside them**. Only actually running the test does.
+
+This is where a renamed SDK identifier goes to hide. The Osuna rename produced six instances of one
+shape: the destructuring was updated, the function body was not.
+
+```js
+// Wrong — ReferenceError, and nothing catches it before the test runs
+const osuna = useOsuna();
+React.useEffect(() => { const owner = paseo.observeEvents([...]); }, [paseo]);
+
+// Wrong in the other direction — parses fine, so it survives longer
+server.handle(op, async (input, { osuna }) => { await paseo.workspaces.ref(id).setTitle(...); });
+```
+
+- Renaming anything on the plugin SDK surface (`useOsuna`, `PluginClientCapabilities.osuna`, the
+  `{ osuna }` handler context, `requirements.osuna`) means grepping the **string bodies**, not
+  trusting the compiler. The search that finds them: the bundle mentions `useOsuna()` / `{ osuna }`
+  and the same string still has a bare `paseo.`.
+- The manifest inside those fixtures counts too. `PluginManifestSchema`
+  (`packages/server/src/server/plugins/manifest.ts`) is `.strict()`, so a stale
+  `requirements: { paseo: … }` fails at manifest parse — the plugin never reaches the behavior under
+  test, and a test asserting "the plugin did not start" still passes, for the wrong reason.
+- A fixture whose only job is to be rejected still has to be rejected by the rule under test.
+
 ## Fixtures and isolation
 
 - Playwright gives every worker its own daemon and `OSUNA_HOME`; specs in one file share it. Helpers that create projects or workspaces own them until cleanup, and a fixture fails any test that leaks a project record. Deleting the temp directory is not cleanup.
@@ -72,7 +101,7 @@ intended behavior, not fragments" outranks the wish for a test nobody has to tou
 ```bash
 npx vitest run packages/app/src/stores/session-store.test.ts --bail=1   # pure tests survive a root run
 cd packages/app && npx vitest run src/session-history --bail=1          # rendered tests need the app config
-npm run test:browser --workspace=@getpaseo/app                  # all *.browser.test; small set
+npm run test:browser --workspace=@osuna/app                  # all *.browser.test; small set
 cd packages/app && npx playwright test --project=browser e2e/browser/agent-message-submission.spec.ts
 git diff --name-only | grep -E '\.(ts|tsx)$' | xargs npm run lint --   # zsh does not word-split $FILES
 ```

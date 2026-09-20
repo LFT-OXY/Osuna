@@ -2009,9 +2009,9 @@ export const fr: TranslationResources = {
       one: "a utilisé {{count}} autre outil",
       other: "a utilisé {{count}} autres outils",
     },
-    paseoCalls: {
-      one: "a appelé Paseo {{count}} fois",
-      other: "a appelé Paseo {{count}} fois",
+    osunaCalls: {
+      one: "a appelé Osuna {{count}} fois",
+      other: "a appelé Osuna {{count}} fois",
     },
     and: "et",
   },

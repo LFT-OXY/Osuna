@@ -1956,9 +1956,9 @@ export const ar: TranslationResources = {
       one: "استخدم {{count}} أداة أخرى",
       other: "استخدم {{count}} أدوات أخرى",
     },
-    paseoCalls: {
-      one: "استدعى Paseo {{count}} مرة",
-      other: "استدعى Paseo {{count}} مرات",
+    osunaCalls: {
+      one: "استدعى Osuna {{count}} مرة",
+      other: "استدعى Osuna {{count}} مرات",
     },
     and: "و",
   },

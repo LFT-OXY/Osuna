@@ -260,7 +260,7 @@ describe("tool call detail-level projection", () => {
         readFileCount: 2,
         searchCount: 0,
         otherToolCount: 0,
-        paseoCallCount: 0,
+        osunaCallCount: 0,
       },
     });
   });
@@ -272,7 +272,7 @@ describe("tool call detail-level projection", () => {
       toolCall("3", { type: "fetch", url: "https://github.com/org/repo" }),
       toolCall(
         "4",
-        { type: "search", query: "paseo", toolName: "web_search" },
+        { type: "search", query: "osuna", toolName: "web_search" },
         { status: "failed" },
       ),
       toolCall("5", { type: "fetch", url: "not a url" }),
@@ -313,40 +313,40 @@ describe("tool call detail-level projection", () => {
     });
   });
 
-  it("counts Paseo calls separately from other tools", () => {
+  it("counts Osuna calls separately from other tools", () => {
     const calls = [
-      toolCall("1", { type: "unknown", input: null, output: null }, { name: "paseo.list_agents" }),
+      toolCall("1", { type: "unknown", input: null, output: null }, { name: "osuna.list_agents" }),
       toolCall(
         "2",
         { type: "unknown", input: null, output: null },
-        { name: "mcp__paseo__list_worktrees" },
+        { name: "mcp__osuna__list_worktrees" },
       ),
-      toolCall("3", { type: "fetch", url: "https://paseo.sh" }),
-      toolCall("4", { type: "fetch", url: "https://github.com/getpaseo" }),
+      toolCall("3", { type: "fetch", url: "https://github.com/LFT-OXY/Osuna" }),
+      toolCall("4", { type: "fetch", url: "https://github.com/LFT-OXY/Osuna/releases" }),
     ];
 
     const result = project({ level: "overview", head: calls });
 
     expect(result.groupsByHostId.get("1")).toMatchObject({
-      summary: { otherToolCount: 2, paseoCallCount: 2 },
+      summary: { otherToolCount: 2, osunaCallCount: 2 },
     });
   });
 
-  it("classifies direct Brave search and Paseo runtime tool names", () => {
+  it("classifies direct Brave search and Osuna runtime tool names", () => {
     const unknownDetail = { type: "unknown" as const, input: null, output: null };
     const calls = [
       toolCall("1", unknownDetail, { name: "brave-search_brave_web_search" }),
       toolCall("2", unknownDetail, { name: "brave-search_brave_llm_context" }),
-      toolCall("3", unknownDetail, { name: "paseo_list_providers" }),
-      toolCall("4", unknownDetail, { name: "paseo_list_worktrees" }),
-      toolCall("5", unknownDetail, { name: "paseo_list_worktrees" }),
+      toolCall("3", unknownDetail, { name: "osuna_list_providers" }),
+      toolCall("4", unknownDetail, { name: "osuna_list_worktrees" }),
+      toolCall("5", unknownDetail, { name: "osuna_list_worktrees" }),
       toolCall("6", unknownDetail, { name: "mcp__exa__web_search" }),
     ];
 
     const result = project({ level: "overview", head: calls });
 
     expect(result.groupsByHostId.get("1")).toMatchObject({
-      summary: { searchCount: 3, otherToolCount: 0, paseoCallCount: 3 },
+      summary: { searchCount: 3, otherToolCount: 0, osunaCallCount: 3 },
     });
   });
 
