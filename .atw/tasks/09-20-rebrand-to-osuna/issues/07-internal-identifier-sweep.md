@@ -5,7 +5,7 @@
 `rg -i paseo` 真的归零 —— 这条验收原本挂在票 04 上，但与 04 自己写的「内部私有变量名
 不在范围内」互相矛盾，移到这里独立完成。
 
-**Impl:** doing
+**Impl:** done
 **Status:** ready-for-agent
 
 **Blocked by:** 08
