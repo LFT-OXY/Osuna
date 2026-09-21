@@ -16,8 +16,9 @@
       不是四行（票面漏了 `CSC_KEY_PASSWORD`）
 - [x] `README.md` 写明 macOS 首次打开需右键→打开（未签名包会被 Gatekeeper 拦下）
 - [x] `docs/release.md` 更新为本 fork 的实际发布路径
-- [ ] 验收：推一个测试 tag，CI 产出可下载的 mac/win/linux 包；本地装上后应用名为
-      Osuna，且 electron-updater 能从 `LFT-OXY/Osuna` 的 Release 识别到版本
+- [x] 验收：推一个测试 tag，CI 产出可下载的 mac/win/linux 包；electron-updater 能从
+      `LFT-OXY/Osuna` 的 Release 识别到版本。**达成** —— 见下「重建后的最终状态」。
+      「本地装上」这一步仍需你自己点一次（CI 的打包冒烟已证明 bundle 能启动）
 - [ ] **验收（从票 09 并过来）**：同一个 tag 会触发 `android-apk-release.yml`
       （触发条件 `v*` / `android-v*`）。确认这一跑产出 APK，且票 09 改名后的原生模块
       被 autolink 到位 —— 构建日志里应出现 `:osuna-word-stream`、`:osuna-native-trace`、
@@ -125,6 +126,24 @@ Packaged desktop smoke passed: real renderer and preload loaded;
 
 **prd 批次 5 的 Linux 产物核对通过**：`Maintainer: chinhae <autuhae@gmail.com>`、
 `Vendor: Osuna`、`Package: osuna`、`Homepage: .../LFT-OXY/Osuna#readme`。
+
+### 重建后的最终状态（`desktop-macos-v0.8.1-beta.1` / `desktop-windows-v0.8.1-beta.1`）
+
+- macOS **两个架构都通过**，`NODE_OPTIONS=--max-old-space-size=8192` 解决了 x64 的
+  Expo 打包 OOM。
+- Windows 通过 —— 之前那次确实只是 GitHub 返回 500 的瞬时故障。
+- **Release 已自动从 draft 转为已发布的 prerelease**，23 个资产齐全：mac arm64/x64 的
+  dmg+zip、Windows x64/arm64 的 exe+zip、Linux 的 deb/rpm/AppImage/tar.gz，以及三条
+  channel manifest（`beta-mac.yml`、`beta-linux.yml`、`beta.yml`）。
+- `beta-mac.yml` 内容核对无误：`version: 0.8.1-beta.1`、两架构已由
+  `merge-mac-manifest.mjs` 合并、`minimumSystemVersion: 22.0.0`（macOS 13 的 Darwin
+  内核版本，与 `docs/release.md` 的双版本域约定一致）、`rolloutHours: 36` 已打戳。
+
+一个需要知道的坑：**两个单平台重建 tag 并行推会让 `finalize-rollout` 竞态**。
+Windows 那跑的 finalize 先执行，此时 `beta-mac.yml` 还没上传，于是报
+`Missing updater manifests: beta-mac.yml` 失败；随后 macOS 那跑的 finalize 拿到完整
+三份并成功发布。最终状态正确，但那条红色是误导性的。要么串行重推，要么重推后以
+Release 的实际资产为准而不是看 finalize 的结论。
 
 ### 硬发现：`android-apk-release.yml` 不在本地构建，它是 EAS 的包装
 
