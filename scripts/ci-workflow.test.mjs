@@ -20,6 +20,7 @@ const gatedCiJobs = new Map([
   ["desktop-tests-ubuntu", { name: "desktop-tests (ubuntu-latest)", contract: "desktop" }],
   ["desktop-tests-windows", { name: "desktop-tests (windows-latest)", contract: "desktop" }],
   ["app-tests", { name: "app-tests", contract: "app" }],
+  ["android-autolink", { name: "android-autolink", contract: "android" }],
   ["sdk-tests", { name: "sdk-tests", contract: "sdk" }],
   ["playwright-1", { name: "playwright (shard 1/4)", contract: "browser" }],
   ["playwright-2", { name: "playwright (shard 2/4)", contract: "browser" }],
@@ -116,6 +117,7 @@ test("focused contracts stay inside existing required checks", () => {
   const desktop = jobs.get("desktop-tests-ubuntu")?.join("\n") ?? "";
 
   assert.match(changes, /scripts\/daemon-launch-contract\.test\.mjs/);
+  assert.match(changes, /scripts\/validate-android-autolink\.test\.mjs/);
   assert.doesNotMatch(changes, /Install dependencies|npm run build/);
 
   assert.match(server, /test:hub-cli-contract/);
@@ -127,6 +129,14 @@ test("focused contracts stay inside existing required checks", () => {
   assert.match(desktop, /npm run test --workspace=@osuna\/desktop/);
   assert.ok(!jobs.has("desktop-browser-bridge"));
   assert.ok(!jobs.has("playwright-desktop"));
+
+  // `| tee` reports tee's exit code, so a failing Gradle build passes the step unless the
+  // shell supplies `-o pipefail`. On GitHub that comes from an explicit `shell: bash`.
+  const android = jobs.get("android-autolink")?.join("\n") ?? "";
+  assert.match(android, /validate-android-autolink\.mjs/);
+  const pipedSteps = android.split("- name: ").filter((step) => step.includes("./gradlew"));
+  assert.equal(pipedSteps.length, 2);
+  for (const step of pipedSteps) assert.match(step, /^\s+shell: bash$/m);
 });
 
 test("server builds exclude test utilities at every domain depth", () => {
@@ -169,6 +179,13 @@ test("PR routing declares stable behavior ownership", () => {
       "packages/app/package.json",
     ],
     app: ["packages/app/**", "packages/expo-two-way-audio/**"],
+    android: [
+      "packages/app/modules/**",
+      "packages/app/plugins/**",
+      "packages/app/app.config.js",
+      "packages/app/native-release-version.js",
+      "packages/app/package.json",
+    ],
     sdk: [
       "packages/plugin/**",
       "plugin-examples/**",

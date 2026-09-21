@@ -49,6 +49,15 @@ app:
   - "packages/app/**"
   - "packages/expo-two-way-audio/**"
 
+# Only Gradle resolves the local Expo modules, so only an Android build proves their
+# names still line up. The job is expensive; keep it on the files that can break it.
+android:
+  - "packages/app/modules/**"
+  - "packages/app/plugins/**"
+  - "packages/app/app.config.js"
+  - "packages/app/native-release-version.js"
+  - "packages/app/package.json"
+
 sdk:
   - "packages/plugin/**"
   - "plugin-examples/**"

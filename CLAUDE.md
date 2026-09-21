@@ -57,7 +57,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/explorer-sidebar.md](docs/explorer-sidebar.md)                 | Explorer sidebar and ordinary side-pane host contracts, lifecycle, placement, and routing preferences                          |
 | [docs/ad-hoc-daemon-testing.md](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness                                                                                        |
 | [docs/browser-capture-harness.md](docs/browser-capture-harness.md)   | Real-Electron browser screenshot harness and compositor-surface gotcha                                                         |
-| [docs/android.md](docs/android.md)                                   | App variants, local builds, tag-triggered APK releases, version codes, F-Droid source-build profile                            |
+| [docs/android.md](docs/android.md)                                   | App variants, local builds, CI autolink verification, version codes, F-Droid source-build profile                              |
 | [docs/docker.md](docs/docker.md)                                     | Running the daemon and bundled web UI in Docker, volumes, agent images, security                                               |
 | [docs/release.md](docs/release.md)                                   | Release playbook, draft releases, completion checklist                                                                         |
 | [docs/usage.md](docs/usage.md)                                       | Token usage and estimated cost — the price table, the one outbound request, custom prices                                      |

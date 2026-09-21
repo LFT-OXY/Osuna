@@ -32,6 +32,7 @@ jobs:
       server: ${{ steps.filter.outputs.server }}
       desktop: ${{ steps.filter.outputs.desktop }}
       app: ${{ steps.filter.outputs.app }}
+      android: ${{ steps.filter.outputs.android }}
       sdk: ${{ steps.filter.outputs.sdk }}
       browser: ${{ steps.filter.outputs.browser }}
       relay: ${{ steps.filter.outputs.relay }}
@@ -52,7 +53,7 @@ jobs:
           filters: .github/ci-paths.yml
 
       - name: Validate CI contracts
-        run: node --test scripts/ci-workflow.test.mjs scripts/daemon-launch-contract.test.mjs
+        run: node --test scripts/ci-workflow.test.mjs scripts/daemon-launch-contract.test.mjs scripts/validate-android-autolink.test.mjs
 
   format:
     name: format
@@ -284,6 +285,65 @@ jobs:
 
       - name: Run app unit tests
         run: npm run test --workspace=@osuna/app
+
+  android-autolink:
+    name: android-autolink
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.android != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+
+      # --no-install keeps prebuild off the lockfile; the tree from `npm ci` is what we test.
+      - name: Generate the Android project
+        run: npx expo prebuild --platform android --clean --non-interactive --no-install
+        working-directory: packages/app
+        env:
+          APP_VARIANT: production
+
+      # Keep Gradle serial and daemon-free: compiling the Expo modules in parallel can
+      # exhaust the runner's memory. One ABI is enough to resolve every native module.
+      # `shell: bash` is load-bearing on both Gradle steps: it adds `-o pipefail`, without
+      # which `| tee` would swallow a failing Gradle exit code and the job would pass.
+      - name: List autolinked Gradle projects
+        shell: bash
+        working-directory: packages/app/android
+        env:
+          APP_VARIANT: production
+        run: |
+          ./gradlew projects --no-daemon --max-workers=1 -Dorg.gradle.parallel=false \
+            --console=plain | tee "$RUNNER_TEMP/gradle-projects.txt"
+
+      - name: Build the Android app
+        shell: bash
+        working-directory: packages/app/android
+        env:
+          APP_VARIANT: production
+        run: |
+          ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a \
+            --no-daemon --max-workers=1 -Dorg.gradle.parallel=false \
+            --console=plain | tee "$RUNNER_TEMP/gradle-build.txt"
+
+      - name: Verify native module autolinking
+        run: |
+          node scripts/validate-android-autolink.mjs \
+            --projects "$RUNNER_TEMP/gradle-projects.txt" \
+            --build-log "$RUNNER_TEMP/gradle-build.txt"
 
   sdk-tests:
     name: sdk-tests

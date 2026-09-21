@@ -138,7 +138,7 @@ npm run release:patch
 npm run release:minor
 ```
 
-This bumps the version across all workspaces, runs checks, and pushes the branch + tag. The tag push triggers `Desktop Release`, `Android APK Release`, `Docker`, and `Release Notes Sync` on GitHub Actions. The workflows create the GitHub Release as a draft while builds and release-note sync run, and `finalize-rollout` publishes it once every desktop manifest is attached.
+This bumps the version across all workspaces, runs checks, and pushes the branch + tag. The tag push triggers `Desktop Release`, `Docker`, and `Release Notes Sync` on GitHub Actions. The workflows create the GitHub Release as a draft while builds and release-note sync run, and `finalize-rollout` publishes it once every desktop manifest is attached.
 
 The Docker workflow builds images from the checked-out source tree on pull requests and on `main` as non-publishing checks. Stable `vX.Y.Z` tag pushes publish `ghcr.io/lft-oxy/osuna:X.Y.Z` and `ghcr.io/lft-oxy/osuna:latest`; beta `vX.Y.Z-beta.N` tag pushes publish only `ghcr.io/lft-oxy/osuna:X.Y.Z-beta.N` and never move `latest`.
 
@@ -162,13 +162,13 @@ npm run release:push         # Push HEAD + tag (triggers CI workflows)
 ```bash
 npm run release:beta:patch       # Start the next patch beta line
 npm run release:beta:minor       # Start the next minor beta line
-# ... test desktop and APK prerelease assets from GitHub Releases ...
+# ... test desktop prerelease assets from GitHub Releases ...
 npm run release:beta:next        # Optional: cut X.Y.Z-beta.2, beta.3, ...
 npm run release:promote          # Promote X.Y.Z-beta.N to stable X.Y.Z
 ```
 
 - Beta tags are published GitHub prereleases like `v0.1.41-beta.1`
-- Betas publish desktop assets and the Android APK for testing. There is no iOS build and no store submission; see **Mobile builds**
+- Betas publish desktop assets for testing. There is no mobile artifact of any kind; see **Mobile builds**
 - `release:promote` creates a fresh stable tag like `v0.1.41`; the final release never reuses the beta tag
 - Desktop assets now come from the Electron package at `packages/desktop`
 - Require the Linux artifact CI checks with both restricted and usable user namespaces to pass before publication; see [packaged desktop smoke](testing.md#packaged-desktop-smoke). Keep the installed-package and AppImage checks together.
@@ -281,18 +281,24 @@ macOS 13 maps to Darwin 22. The two values use different version domains; do not
 
 ## Mobile builds
 
-This fork ships no store releases. There is no EAS project, no App Store or Play Store
-identity, and no F-Droid metadata — `fastlane/metadata/` was removed with the rebrand.
-Store distribution is a separate future task; it needs developer accounts, an EAS project,
-and store listings before any of it can work.
+**A release ships no mobile artifacts.** No tag produces an APK or an IPA, and no
+GitHub Release carries one. There is no EAS project, no App Store or Play Store identity,
+and no F-Droid metadata — `fastlane/metadata/` was removed with the rebrand.
 
-**Android has no working release path right now either.**
-`.github/workflows/android-apk-release.yml` looks like an in-repo APK build, but it only
-wraps `eas build --platform android --profile production-apk`: the Gradle build runs on EAS
-servers, not on the runner. Without `EXPO_TOKEN` and a linked EAS project it fails at
-`An Expo user account is required to proceed`, which is what the `v0.8.1-beta.1` dry run hit.
-Making Android ship means either provisioning EAS, or rewriting that workflow to run Gradle
-in GitHub Actions. Until then no tag produces an APK.
+Android distribution is gone from the repo. `android-apk-release.yml` looked like an
+in-repo APK build but only wrapped `eas build --platform android --profile
+production-apk`, so Gradle ran on EAS servers and the job died at `An Expo user account is
+required to proceed` on the `v0.8.1-beta.1` dry run. It made every `v*` tag red and proved
+nothing, so it is gone along with the `android-v*` retry tag and the `submit` profile in
+`packages/app/eas.json`. What survives in CI is the `android-autolink` job, which builds
+the app on the runner to verify native module linking — see
+[docs/android.md](android.md#ci-verification). It produces no distributable artifact.
+
+Restoring distribution is a separate future task. It needs developer accounts, store
+listings, a keystore and signing convention, and either a provisioned EAS project or a
+workflow that runs Gradle and signs on the runner. Until then `packages/website`'s
+`/android-version.txt` route throws — it looks for an `osuna-<tag>-android.apk` asset that
+no release has.
 
 Version codes still come from `packages/app/native-release-version.js`, so the F-Droid ABI
 math in [docs/android.md](android.md) stays authoritative for the build profile.
@@ -313,7 +319,7 @@ the completion checklist or finds a failure that needs new user authority.
 Each heartbeat checks the release tag commit, all GitHub Actions runs for the
 release branch and tag, the GitHub Release body and assets, desktop updater
 manifests, and the published Docker image. Inspect the GitHub Release itself and
-confirm that the macOS, Linux, Windows, and Android APK assets are present along
+confirm that the macOS, Linux, and Windows assets are present along
 with the channel manifests (`latest-mac.yml`, `latest-linux.yml`, and
 `latest.yml` for stable; `beta-mac.yml`, `beta-linux.yml`, and `beta.yml` for
 beta).
@@ -331,7 +337,7 @@ Pattern:
   "timezone": "UTC",
   "maxRuns": 120,
   "expiresIn": "24h",
-  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check every GitHub Actions run for the release branch and tag; the published GitHub Release body, expected desktop/APK assets, and channel manifests; and the Docker image. Completion requires every applicable checklist item. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
+  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check every GitHub Actions run for the release branch and tag; the published GitHub Release body, expected desktop assets, and channel manifests; and the Docker image. Completion requires every applicable checklist item. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
 }
 ```
 
@@ -359,8 +365,7 @@ that happens, this section owns the behaviour again.
 **Do not rely on `workflow_dispatch` for tagged code fixes.** The `workflow_dispatch` trigger runs the workflow file from the default branch but checks out the code at the tag ref (`ref: ${{ inputs.tag }}`). That means fixes committed to `main` won't change the tagged source tree being built. `workflow_dispatch` only helps when the fix lives in the workflow file itself.
 
 For Docker-only retries, **do not push or force-push a `v*` release tag**.
-`v*` tag pushes rebuild desktop assets, the Android APK, Docker, and release
-notes. Use the Docker workflow dispatch instead:
+`v*` tag pushes rebuild desktop assets, Docker, and release notes. Use the Docker workflow dispatch instead:
 
 ```bash
 gh workflow run docker.yml \
@@ -370,7 +375,7 @@ gh workflow run docker.yml \
 ```
 
 This replaces `ghcr.io/lft-oxy/osuna:X.Y.Z-beta.N` in place without touching the
-desktop or APK builders. The Docker exception is safe because the
+desktop builders. The Docker exception is safe because the
 dispatch runs from `--ref main` and uses the explicit `osuna_version`; it does
 not check out or move the `v*` release tag.
 
@@ -386,8 +391,8 @@ release date, and publishes the draft. Use `desktop-vX.Y.Z` when more than one
 platform failed. A `workflow_dispatch` rebuild with publishing enabled follows
 the same path against the existing draft.
 
-Prefer a tag push over `workflow_dispatch` when rebuilding desktop or APK
-release assets. Prefer Docker workflow dispatch when rebuilding only the Docker
+Prefer a tag push over `workflow_dispatch` when rebuilding desktop release
+assets. Prefer Docker workflow dispatch when rebuilding only the Docker
 image.
 
 The retry tag patterns below still work and remain the supported way to rebuild specific release targets:
@@ -401,9 +406,6 @@ git tag -f desktop-macos-v0.1.28 HEAD && git push origin desktop-macos-v0.1.28 -
 git tag -f desktop-linux-v0.1.28 HEAD && git push origin desktop-linux-v0.1.28 --force
 git tag -f desktop-windows-v0.1.28 HEAD && git push origin desktop-windows-v0.1.28 --force
 
-# Android APK
-git tag -f android-v0.1.28 HEAD && git push origin android-v0.1.28 --force
-
 # Beta
 git tag -f v0.1.29-beta.2 HEAD && git push origin v0.1.29-beta.2 --force
 ```
@@ -413,7 +415,6 @@ This ensures the checkout ref matches the actual code on `main` with the fix inc
 - `vX.Y.Z` or `vX.Y.Z-beta.N` rebuilds the full tagged release
 - `desktop-vX.Y.Z` rebuilds desktop for all desktop platforms only
 - `desktop-macos-vX.Y.Z`, `desktop-linux-vX.Y.Z`, and `desktop-windows-vX.Y.Z` rebuild only that desktop platform
-- `android-vX.Y.Z` rebuilds the Android APK release only
 
 If you decide to publish a release without working desktop builds, inspect its
 assets first, then publish it manually:
@@ -580,10 +581,9 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
 - [ ] `npm run release:beta:patch`, `npm run release:beta:minor`, or `npm run release:beta:next` completes successfully
 - [ ] Every GitHub Actions run for the complete release commit and tag is green
-- [ ] The GitHub prerelease was published only after the three beta manifests were uploaded, and it has the changelog body and every expected macOS, Linux, Windows, and Android APK asset
+- [ ] The GitHub prerelease was published only after the three beta manifests were uploaded, and it has the changelog body and every expected macOS, Linux, and Windows asset
 - [ ] GitHub `Desktop Release` workflow for the `v*-beta.N` tag is green
 - [ ] The GitHub prerelease contains `beta-mac.yml`, `beta-linux.yml`, and `beta.yml`
-- [ ] GitHub `Android APK Release` workflow for the same tag is green
 - [ ] GitHub `Docker` workflow is green and the versioned beta image is published without moving `latest`
 - [ ] GitHub `Release Notes Sync` mirrored the beta entry into the prerelease body
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed
@@ -602,11 +602,10 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
 - [ ] `npm run release:patch`, `npm run release:minor`, or `npm run release:promote` completes successfully
 - [ ] Every GitHub Actions run for the complete release commit and tag is green
-- [ ] The GitHub Release was published only after the three stable manifests were uploaded, and it has the changelog body and every expected macOS, Linux, Windows, and Android APK asset
+- [ ] The GitHub Release was published only after the three stable manifests were uploaded, and it has the changelog body and every expected macOS, Linux, and Windows asset
 - [ ] GitHub `Desktop Release` workflow for the `v*` tag is green
 - [ ] The GitHub Release contains `latest-mac.yml`, `latest-linux.yml`, and `latest.yml`
 - [ ] `latest-mac.yml` contains the current `minimumSystemVersion` guard
-- [ ] GitHub `Android APK Release` workflow for the same tag is green
 - [ ] GitHub `Docker` workflow is green and both the versioned and `latest` images are published
 - [ ] GitHub `Release Notes Sync` is green and the release body matches the stable changelog entry
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed

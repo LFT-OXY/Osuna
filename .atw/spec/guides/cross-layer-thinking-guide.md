@@ -305,6 +305,29 @@ packaged artifact, or in CI, or in a user's install.
       the literal the app's TypeScript looks up. The contract table and the test that
       enforces it are in
       [app/frontend Directory Structure](../app/frontend/directory-structure.md#local-native-modules-live-outside-src).
+      Only a real Gradle run resolves these names; see **Verifying a rename in CI** below.
+
+### Verifying a rename in CI
+
+A rename has no type system behind it, so the only proof is a job that builds the thing
+and fails on the old name. Two rules for writing that job.
+
+**Assert on the tool's output; never leave it to a human reading the log.** The Android
+module names are checked by `scripts/validate-android-autolink.mjs`, which parses
+`./gradlew projects` and the `--console=plain` build log and throws unless all three
+`:osuna-*` projects were both linked *and* ran a task, with no `:paseo-*` anywhere.
+Linked-but-never-built is its own failure: it means the module fell out of `:app`'s
+dependency graph.
+
+**`cmd | tee log` silently swallows a failing `cmd` in GitHub Actions.** A pipeline reports
+the *last* command's exit code, so `tee` succeeding masks Gradle failing, and the step goes
+green. GitHub's default Linux shell is `bash -e` with **no** `-o pipefail`; only an explicit
+`shell: bash` adds it. That one line is load-bearing on every piped step, and deleting it
+fails nothing — so pin it: `scripts/ci-workflow.test.mjs` asserts each `./gradlew` step in
+`android-autolink` declares `shell: bash`.
+
+The same trap applies to any `set -e` script that pipes a build into `tee`, `grep`, or
+`jq` for later assertion.
 
 ### The forms a search-and-replace misses
 

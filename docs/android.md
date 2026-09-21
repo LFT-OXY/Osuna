@@ -165,34 +165,21 @@ Keep `react` and `react-dom` pinned to the React version embedded by the current
 adb exec-out screencap -p > screenshot.png
 ```
 
-## Tag-triggered Android builds
+## CI verification
 
-`v*` and `android-v*` tag pushes trigger `.github/workflows/android-apk-release.yml`, which
-attaches an APK to the GitHub Release. `android-v*` ships an APK without cutting a full
-release, and the workflow takes a `workflow_dispatch` `tag` input so you can rebuild one
-without a new tag.
+`android-autolink` in `.github/workflows/ci.yml` is the only place Gradle runs on a runner.
+It runs `expo prebuild --platform android` and `./gradlew :app:assembleDebug` for a single
+ABI, then `scripts/validate-android-autolink.mjs` checks what Gradle linked and compiled.
 
-**It does not build the APK itself.** The job runs
-`eas build --platform android --profile production-apk --wait` and then downloads the
-artifact, so Gradle runs on EAS servers and never appears in the Actions log. Two consequences:
+Nothing cheaper works. A broken native module rename leaves typecheck, lint, and every unit
+test green, and shows up only when the app loads the module on a device.
 
-- Without `EXPO_TOKEN` and a linked EAS project the job dies at `An Expo user account is
-required to proceed`. The rebrand removed `owner` and `extra.eas.projectId` from
-  `eas.json` with no replacement, so that is the state today — verified by the
-  `v0.8.1-beta.1` dry run.
-- You cannot verify native module autolinking from this workflow's log. Checking that the
-  Gradle projects are named `:osuna-*` needs either a local
-  `./gradlew assembleRelease` or a workflow that builds on the runner.
+The job is gated on the `android` contract in `.github/ci-paths.yml` — the local modules,
+the config plugins, `app.config.js`, `native-release-version.js`, and
+`packages/app/package.json`. Outside pull requests the path gate does not apply, so every
+`main` push and every merge-queue entry pays for the full build. A pull request that only
+touches `packages/app/src` skips it, so a rename confined to JS call sites is not covered
+here.
 
-See [release.md](release.md#mobile-builds) for where this sits in the release flow.
-
-### Watching a tagged APK build
-
-```bash
-gh run list --workflow android-apk-release.yml --limit 5
-gh run watch <run-id>
-```
-
-The GitHub Release assets are the final confirmation: the APK is attached only after the
-build job succeeds. See [docs/release.md](release.md#mobile-builds) for where this sits in
-the release flow.
+Nothing it produces is installable: no signing, no keystore, no uploaded artifact. Android
+has no release path at all — see [release.md](release.md#mobile-builds).

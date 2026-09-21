@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   computeNextReleaseVersion,
   getReleaseInfoFromSourceTag,
+  normalizeReleaseTag,
   parseReleaseVersion,
 } from "./release-version-utils.mjs";
 
@@ -50,4 +51,14 @@ test("emits beta release info from tags", () => {
 
 test("rejects non-beta prerelease versions", () => {
   assert.throws(() => parseReleaseVersion("0.1.60-canary.1"), /Expected beta prerelease versions/);
+});
+
+test("accepts the retry tags that still have a workflow behind them", () => {
+  assert.equal(normalizeReleaseTag("v0.1.60"), "v0.1.60");
+  assert.equal(normalizeReleaseTag("desktop-v0.1.60"), "v0.1.60");
+  assert.equal(normalizeReleaseTag("desktop-macos-v0.1.60"), "v0.1.60");
+});
+
+test("rejects android retry tags, whose workflow was deleted with Android distribution", () => {
+  assert.throws(() => normalizeReleaseTag("android-v0.1.60"), /Unsupported release tag/);
 });

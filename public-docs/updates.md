@@ -62,7 +62,7 @@ The app will check for beta updates from then on.
 
 ## Mobile
 
-This fork submits nothing to the App Store or Play Store. Android ships as an APK attached to every release — download it from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases) and sideload it. Beta releases carry an APK too. iOS has no distribution path.
+This fork submits nothing to the App Store or Play Store, and releases carry no APK. Neither Android nor iOS has a distribution path; both need a local build from source.
 
 ## What to do if something breaks
 
