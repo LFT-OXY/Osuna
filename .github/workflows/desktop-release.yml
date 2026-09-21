@@ -154,6 +154,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EP_GH_IGNORE_TIME: true
+          # macOS runner 给 node 的默认堆约 2GB，`expo export --platform web` 在
+          # app 的 5138 个模块中途耗尽（v0.8.1 的 arm64 与 v0.8.1-beta.1 的 x64
+          # 都死在这里）。两个架构都要抬。
+          NODE_OPTIONS: "--max-old-space-size=8192"
           # 本 fork 无 Apple 证书，出无签名包。未签名时 electron-builder 跳过
           # afterSign，而 afterPack 的打包冒烟只覆盖 linux/win32，所以 macOS 这条
           # 路径上没有打包冒烟可跑——不设 PASEO_DESKTOP_SMOKE，避免留下死配置。
