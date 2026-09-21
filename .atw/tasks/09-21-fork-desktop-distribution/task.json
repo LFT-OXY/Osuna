@@ -3,7 +3,7 @@
   "name": "fork-desktop-distribution",
   "title": "桌面端 fork 分发配置改造",
   "description": "把桌面端打包配置从上游 getpaseo/paseo 切到本 fork：更新源指向自己的仓库、macOS 关闭公证出无签名包、Windows 走 CI 构建，并解决与官方版共存时的 appId/数据目录冲突。",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "desktop",
