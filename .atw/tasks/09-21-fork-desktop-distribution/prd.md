@@ -68,8 +68,13 @@ fork。electron-builder 会把这段烘进安装包内的更新配置文件，�
 
 ### macOS 无签名
 
-关闭 macOS 的公证要求。`hardenedRuntime` 在未签名时不生效，保留与否不影响结果，
-按改动最小原则不动它。
+关闭 macOS 的公证要求，同时必须关闭 `hardenedRuntime`。
+
+原先判断「`hardenedRuntime` 在未签名时不生效」是错的，v0.8.1 实测推翻：未签名时
+electron-builder 仍会 ad-hoc 签名并带上 runtime 标志，强化运行时的库验证随之生效。
+而 ad-hoc 签名没有 Team ID，库验证要求进程与其加载的库 Team ID 一致，于是应用加载
+自己的 Electron Framework 就被拒绝，启动即崩（`Library not loaded: @rpath/Electron
+Framework.framework`，`different Team IDs`）。拿到正式证书后才能重新打开它。
 
 CI 的 macOS 作业移除 Apple 证书与公证相关的环境变量注入——这些 secret 在本仓库
 不存在，留着会让作业在一个误导性的位置失败。

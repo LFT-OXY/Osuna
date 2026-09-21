@@ -42,7 +42,10 @@ mac:
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns
-  hardenedRuntime: true
+  # 必须关掉。ad-hoc 签名没有 Team ID，而强化运行时会强制库验证，要求进程与它
+  # 加载的库 Team ID 一致——结果是应用连自己的 Electron Framework 都加载不了，
+  # 启动即崩（v0.8.1 实测）。有正式证书时才能打开它。
+  hardenedRuntime: false
   # 本 fork 没有 Apple Developer 账号，出无签名、不公证的包。
   notarize: false
   entitlements: build/entitlements.mac.plist
