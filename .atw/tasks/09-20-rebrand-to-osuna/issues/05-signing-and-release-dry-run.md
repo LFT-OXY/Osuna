@@ -4,7 +4,7 @@
 真实的 GitHub Release 验证前四票的成果。不采用「有 secrets 才签名」的条件化方案：
 那会让同一条发布流程在有无 secret 时产出行为不同的包，差异只在用户装不上时才暴露。
 
-**Impl:** doing
+**Impl:** done
 **Status:** ready-for-agent
 
 **Blocked by:** 08
@@ -19,14 +19,15 @@
 - [x] 验收：推一个测试 tag，CI 产出可下载的 mac/win/linux 包；electron-updater 能从
       `LFT-OXY/Osuna` 的 Release 识别到版本。**达成** —— 见下「重建后的最终状态」。
       「本地装上」这一步仍需你自己点一次（CI 的打包冒烟已证明 bundle 能启动）
-- [ ] **验收（从票 09 并过来）**：同一个 tag 会触发 `android-apk-release.yml`
-      （触发条件 `v*` / `android-v*`）。确认这一跑产出 APK，且票 09 改名后的原生模块
-      被 autolink 到位 —— 构建日志里应出现 `:osuna-word-stream`、`:osuna-native-trace`、
-      `:osuna-diff-prototype` 三个 Gradle 工程，不应出现任何 `:paseo-*`。
-      落地时核对过：模块是**四个**，但 `osuna-hardware-keyboard` 只有 `ios/` 目录、
-      没有 `android/`，所以安卓侧确实只应出现三个 Gradle 工程，票面清单无误。
+- [x] **验收（从票 09 并过来）→ 已移交票 13**。并过来的前提被演练推翻：
+      `android-apk-release.yml` 只是 EAS 的包装，Gradle 不在 Actions 日志里跑，
+      所以「推一个 tag 就能看到 Gradle 工程名」根本不成立。
+      落地时核对过的部分仍然有效：模块是**四个**，但 `osuna-hardware-keyboard` 只有
+      `ios/` 目录、没有 `android/`，所以安卓侧确实只应出现
+      `:osuna-word-stream`、`:osuna-native-trace`、`:osuna-diff-prototype` 三个
+      Gradle 工程，不应出现任何 `:paseo-*` —— 这份清单原样交给票 13。
       **装到设备确认功能可用（word-stream 淡入、native trace、iOS 硬件键盘提交）
-      CI 给不了，仍需一台真机或模拟器**，那部分不在本票，留给后续的设备回归。
+      CI 给不了，仍需一台真机或模拟器**，那部分两张票都不含，留给后续的设备回归。
 - [x] `npm run typecheck`、`npm run lint` 通过
 
 ## 落地时确认下来的事实（票面写错或没写的）
@@ -157,8 +158,13 @@ Gradle 在 EAS 服务器上跑，**永远不会出现在 Actions 日志里**。�
    `:osuna-word-stream` 等三个 Gradle 工程」需要 Gradle 真的在 runner 上跑。
    要么本地 `./gradlew assembleRelease`，要么把 workflow 改成在 runner 上构建。
 
-这一条需要决定，不是本票能自行解决的。文档（`docs/release.md`、`docs/android.md`）
-已按事实改正，不再声称 workflow 自己构建 APK。
+**已决定：只加 CI 验证、不做安卓发布。** 把「验证改名」和「分发 APK」拆开 ——
+票 09 真正要的是前者。落地归**票 13**：在 `ci.yml` 里跑不签名的 `expo prebuild` +
+`gradlew` 确认 autolink，同时删掉 `android-apk-release.yml` 与 `eas.json` 的
+`submit` 段。不需要 Expo 账号，也不需要 keystore。
+
+文档（`docs/release.md`、`docs/android.md`）已按事实改正，不再声称 workflow 自己
+构建 APK；票 13 落地后需再改一次，说明安卓只有 CI 验证、没有分发。
 
 ## 遗留（不属本票，需另行决定）
 
