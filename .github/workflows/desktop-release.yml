@@ -154,6 +154,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EP_GH_IGNORE_TIME: true
+          # macos-15-intel gives node a ~2 GB default heap, and `expo export
+          # --platform web` runs out of it partway through the app's 5138 modules
+          # (v0.8.1-beta.1 died at "Ineffective mark-compacts near heap limit").
+          # The arm64 runner defaults higher and does not hit this.
+          NODE_OPTIONS: "--max-old-space-size=8192"
           OSUNA_DESKTOP_SMOKE: "1"
           OSUNA_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
         run: |

@@ -103,7 +103,7 @@
 | Release Notes Sync | ✅ | — |
 | Desktop / Linux | ✅ | deb / rpm / AppImage / tar.gz 齐全 |
 | Desktop / macOS arm64 | ✅ | 见下，本票的核心验证 |
-| Desktop / macOS x64 | ❌ | `expo export --platform web` JS 堆 OOM（5138 模块，~2GB 上限）。与签名无关，发生在 electron-builder 之前 |
+| Desktop / macOS x64 | ❌ → 已修 | `expo export --platform web` JS 堆 OOM（5138 模块，~2GB 上限）。与签名无关，发生在 electron-builder 之前。macOS job 加 `NODE_OPTIONS=--max-old-space-size=8192`；arm64 runner 默认堆更大所以没撞上 |
 | Desktop / Windows | ❌ | 下载 `nsis-3.0.4.1.7z` 时 GitHub 返回 **500**。瞬时故障，重推即可 |
 | finalize-rollout | ❌ | 两个平台失败 → Release 如设计般停在 draft |
 | Docker | ❌ | Dockerfile 断言 `package.json` 版本 == tag 版本（0.8.0 ≠ 0.8.1-beta.1）。**裸 tag 方法的产物，不是仓库缺陷** —— 真实路径先 `version:all:beta:*` 再打 tag 就会过 |
