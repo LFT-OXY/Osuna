@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1 - 2026-09-21
+
+内部分发版。桌面端的更新源改为本仓库，macOS 与 Windows 安装包由 CI 构建。
+
+### Changed
+
+- 桌面端自动更新改为从本仓库的 Release 拉取，不再指向上游
+- macOS 安装包不再签名与公证，首次打开需要手动放行一次
+- 桌面端发布只构建 macOS 与 Windows，不再出 Linux 包
+
 ## 0.8.0 - 2026-09-10
 
 Paseo 0.8 adds plugin header buttons, custom providers, and richer chat components, alongside fixes for desktop updates and mobile keyboards.

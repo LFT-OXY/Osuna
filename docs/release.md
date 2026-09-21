@@ -97,8 +97,10 @@ release push as the changelog and version commit.
 
 ### 发版
 
-先把 `npm run format`、`npm run lint`、`npm run typecheck` 跑绿并提交——`version:all:*`
-底下是 `npm version`，工作区不干净就会中断。major 不在这条路径里：按本文「Release
+先在 `CHANGELOG.md` 顶部加本次版本的条目，格式是 `## X.Y.Z - YYYY-MM-DD`——`npm version`
+的生命周期钩子会跑 F-Droid changelog 同步，查不到条目就直接中断。再把 `npm run format`、
+`npm run lint`、`npm run typecheck` 跑绿并提交——`version:all:*` 底下是 `npm version`，
+工作区不干净同样会中断。major 不在这条路径里：按本文「Release
 version decision」，agent 不自选 major，需要时手工改版本号再走 `npm run release:push`。
 
 ```bash
