@@ -31,17 +31,20 @@ extraResources:
     to: app-dist
   - from: assets/editor-targets
     to: editor-target-icons
+# Fork 分发：更新源必须指向本仓库。electron-builder 把这段烘进安装包内的
+# app-update.yml，指回上游会让团队成员被静默升级成官方版。
 publish:
   provider: github
-  owner: getpaseo
-  repo: paseo
+  owner: LFT-OXY
+  repo: Osuna
 mac:
   artifactName: "Paseo-${version}-${arch}.${ext}"
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns
   hardenedRuntime: true
-  notarize: true
+  # 本 fork 没有 Apple Developer 账号，出无签名、不公证的包。
+  notarize: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
   extraResources:

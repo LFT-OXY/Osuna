@@ -112,6 +112,8 @@
     "release:publish": "npm publish --workspace=@getpaseo/highlight --access public && npm publish --workspace=@getpaseo/relay --access public && npm publish --workspace=@getpaseo/protocol --access public && npm publish --workspace=@getpaseo/client --access public && npm publish --workspace=@getpaseo/plugin --access public && npm publish --workspace=@getpaseo/server --access public && npm publish --workspace=@getpaseo/cli --access public",
     "release:publish:beta": "npm publish --workspace=@getpaseo/highlight --access public --tag beta && npm publish --workspace=@getpaseo/relay --access public --tag beta && npm publish --workspace=@getpaseo/protocol --access public --tag beta && npm publish --workspace=@getpaseo/client --access public --tag beta && npm publish --workspace=@getpaseo/plugin --access public --tag beta && npm publish --workspace=@getpaseo/server --access public --tag beta && npm publish --workspace=@getpaseo/cli --access public --tag beta",
     "release:push": "node scripts/push-current-release-tag.mjs",
+    "release:fork:patch": "npm run version:all:patch && npm run release:push",
+    "release:fork:minor": "npm run version:all:minor && npm run release:push",
     "release:beta:patch": "npm run release:check && npm run version:all:beta:patch && npm run release:publish:beta && npm run release:push",
     "release:beta:minor": "npm run release:check && npm run version:all:beta:minor && npm run release:publish:beta && npm run release:push",
     "release:beta:major": "npm run release:check && npm run version:all:beta:major && npm run release:publish:beta && npm run release:push",
