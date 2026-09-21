@@ -1,0 +1,4 @@
+{"file": ".atw/tasks/09-21-fork-desktop-distribution/prd.md", "reason": "本任务的规格：改动范围、测试接缝、明确排除项"}
+{"file": ".atw/tasks/09-21-fork-desktop-distribution/research/discover.md", "reason": "discover 结论：耦合点定位、已排除改动的理由"}
+{"file": "docs/release.md", "reason": "发布流程、灰度机制与 manifest 的既有约定"}
+{"file": "docs/testing.md", "reason": "测试组织与真实依赖优先的基线"}
