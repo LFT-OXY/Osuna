@@ -10,7 +10,7 @@
 - [x] 紧凑布局的 Explorer 覆盖层同样应用新样式，无布局回退
 - [x] diff 行底色与状态色 token 一致
 - [x] 该区域 Electron 桌面端亮色与暗色截图与原型观感一致，截图作为证据附在本票 Comments
-- [ ] 该区域中断言 CSS 值或几何尺寸的 e2e 已随设计更新，且在 CI 上通过
+- [x] 该区域中断言 CSS 值或几何尺寸的 e2e 已随设计更新，且在 CI 上通过（PR #4 CI 全绿：[run 36259696496](https://github.com/LFT-OXY/Osuna/actions/runs/36259696496)，ac45c5dca）
 - [x] testID 与英文 UI 文案逐字未变
 - [x] docs/design.md 等设计文档中对应章节已改写（改写过时内容，不在末尾追加）
 - [x] typecheck 与 lint 通过
