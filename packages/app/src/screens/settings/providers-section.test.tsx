@@ -15,6 +15,11 @@ const { theme, snapshotState, configState, patchConfigMock, openProviderSettings
       fontSize: { xs: 11, sm: 13, base: 15 },
       fontWeight: { normal: "400" },
       borderRadius: { lg: 8 },
+      radius: { sm: 6, md: 8 },
+      typeScale: {
+        caption: { fontSize: 12, lineHeight: 16 },
+        body: { fontSize: 14, lineHeight: 20 },
+      },
       opacity: { 50: 0.5 },
       colors: {
         surface1: "#111",
@@ -44,7 +49,10 @@ const { theme, snapshotState, configState, patchConfigMock, openProviderSettings
 );
 
 vi.mock("react-native", () => ({
-  Platform: { OS: "web" },
+  Platform: {
+    OS: "web",
+    select: (options: Record<string, unknown>) => options.web ?? options.default,
+  },
   View: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
     React.createElement("div", { "data-testid": testID }, children),
   Text: ({ children }: { children?: React.ReactNode }) =>
@@ -91,7 +99,12 @@ vi.mock("react-native-unistyles", () => ({
     create: (factory: unknown) =>
       typeof factory === "function" ? (factory as (t: typeof theme) => unknown)(theme) : factory,
   },
+  // useIsCompactFormFactor 读断点。
   useUnistyles: () => ({ theme, rt: { breakpoint: "md" } }),
+  withUnistyles: (Component: React.ComponentType<Record<string, unknown>>) =>
+    function Themed({ uniProps: _uniProps, ...props }: Record<string, unknown>) {
+      return React.createElement(Component, props);
+    },
 }));
 
 vi.mock("lucide-react-native", () => {
@@ -400,7 +413,7 @@ describe("ProvidersSection", () => {
     expect(indexOfText(codexNodes, "Disabled")).toBeGreaterThanOrEqual(0);
   });
 
-  it("composes the row as chevron, icon, label, status, model count, then switch", () => {
+  it("composes the row as icon, label, model count, status, switch, then chevron", () => {
     snapshotState.entries = [claudeEntry];
     configState.config = makeConfig();
 
@@ -408,19 +421,19 @@ describe("ProvidersSection", () => {
 
     const row = findRow("Claude provider details");
     const nodes = descendants(row);
-    const chevron = indexOfMatches(nodes, '[data-icon="ChevronRight"]');
     const icon = indexOfMatches(nodes, '[data-icon="provider-claude"]');
     const label = indexOfText(nodes, "Claude");
-    const status = indexOfText(nodes, "Available");
     const modelCount = indexOfText(nodes, "3 models");
+    const status = indexOfText(nodes, "Available");
     const switchEl = indexOfMatches(nodes, '[role="switch"]');
+    const chevron = indexOfMatches(nodes, '[data-icon="ChevronRight"]');
 
-    expect(chevron).toBeGreaterThanOrEqual(0);
-    expect(icon).toBeGreaterThan(chevron);
+    expect(icon).toBeGreaterThanOrEqual(0);
     expect(label).toBeGreaterThan(icon);
-    expect(status).toBeGreaterThan(label);
-    expect(modelCount).toBeGreaterThan(status);
-    expect(switchEl).toBeGreaterThan(modelCount);
+    expect(modelCount).toBeGreaterThan(label);
+    expect(status).toBeGreaterThan(modelCount);
+    expect(switchEl).toBeGreaterThan(status);
+    expect(chevron).toBeGreaterThan(switchEl);
   });
 
   it("opens the diagnostic sheet when the outer row is pressed for a disabled provider", () => {

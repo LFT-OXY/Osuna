@@ -19,6 +19,8 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 | A picker                   | `components/ui/combobox.tsx`                                                               | A custom list                                      |
 | A trigger-anchored menu    | `components/ui/dropdown-menu.tsx`; right-click/long-press `components/ui/context-menu.tsx` | An ad hoc popover (`docs/menus.md`)                |
 | A settings section         | `components/settings/headings/settings-section.tsx`                                        | Bare `<Text>` headers                              |
+| A settings card / row      | `styles/settings.ts` `settingsStyles` (`card`, `row`, `rowTitle`, `rowHint`, `rowValue`, `rowIconFrame`) | Local row padding, card radius, or title sizes     |
+| A value dropdown in a row  | `components/ui/dropdown-trigger.tsx` `<DropdownTrigger>` inside `<DropdownMenu>`           | A `DropdownMenuTrigger` with a hand-drawn outline  |
 | A form field               | `components/ui/form-field.tsx` with the model from `docs/forms.md`                         | `useEffect` choreography                           |
 | A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`               | A hand-rolled bar                                  |
 

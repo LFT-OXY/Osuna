@@ -1,5 +1,8 @@
 import { StyleSheet } from "react-native-unistyles";
 
+// 设置行的最小高度：标题加一行说明，或一个 28 高的控件，都落在同一行高里（原型 / t3code）。
+const SETTINGS_ROW_MIN_HEIGHT = 56;
+
 export const settingsStyles = StyleSheet.create((theme) => ({
   section: {
     marginBottom: theme.spacing[6],
@@ -13,8 +16,8 @@ export const settingsStyles = StyleSheet.create((theme) => ({
   },
   sectionHeaderTitle: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
+    ...theme.typeScale.label,
+    fontWeight: theme.fontWeight.medium,
   },
   sectionHeaderLink: {
     alignItems: "center",
@@ -23,11 +26,11 @@ export const settingsStyles = StyleSheet.create((theme) => ({
   },
   sectionHeaderLinkText: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    ...theme.typeScale.label,
   },
   card: {
-    backgroundColor: theme.colors.surface1,
-    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surfaceCard,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
     borderColor: theme.colors.border,
     overflow: "hidden",
@@ -36,7 +39,9 @@ export const settingsStyles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: theme.spacing[4],
+    gap: theme.spacing[4],
+    minHeight: SETTINGS_ROW_MIN_HEIGHT,
+    paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[4],
   },
   rowBorder: {
@@ -45,20 +50,33 @@ export const settingsStyles = StyleSheet.create((theme) => ({
   },
   rowContent: {
     flex: 1,
-    marginRight: theme.spacing[3],
+    minWidth: 0,
   },
   rowTitle: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
+    ...theme.typeScale.body,
   },
   rowHint: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    marginTop: theme.spacing[1],
+    ...theme.typeScale.caption,
+    marginTop: theme.spacing[0.5],
   },
   rowError: {
     color: theme.colors.statusDanger,
-    fontSize: theme.fontSize.sm,
-    marginTop: theme.spacing[1],
+    ...theme.typeScale.caption,
+    marginTop: theme.spacing[0.5],
+  },
+  rowValue: {
+    color: theme.colors.foregroundMuted,
+    ...theme.typeScale.body,
+  },
+  rowIconFrame: {
+    width: 28,
+    height: 28,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
 }));

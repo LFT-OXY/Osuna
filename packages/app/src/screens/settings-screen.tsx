@@ -8,11 +8,11 @@ import {
   View,
   type PressableStateCallbackType,
 } from "react-native";
-import { EditingTextInput as TextInput } from "@/components/ui/text-input";
+import { FormTextInput } from "@/components/ui/form-field";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Buffer } from "buffer";
@@ -42,6 +42,9 @@ import {
   ChevronRight,
 } from "lucide-react-native";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
+import { Row, type RowRenderState } from "@/components/ui/row";
+import { Text as UiText } from "@/components/ui/text";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
@@ -232,26 +235,6 @@ function renderHostSettingsContent(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Trigger + sidebar style helpers
-// ---------------------------------------------------------------------------
-
-function themeTriggerStyle({ pressed }: PressableStateCallbackType) {
-  return [styles.themeTrigger, pressed && { opacity: 0.85 }];
-}
-
-function sidebarItemStyle({ hovered }: PressableStateCallbackType & { hovered?: boolean }) {
-  return [sidebarStyles.item, Boolean(hovered) && sidebarStyles.itemHovered];
-}
-
-function selectedSidebarItemStyle({ hovered }: PressableStateCallbackType & { hovered?: boolean }) {
-  return [
-    sidebarStyles.item,
-    Boolean(hovered) && sidebarStyles.itemHovered,
-    sidebarStyles.itemSelected,
-  ];
-}
-
 function getSendBehaviorOptions(t: TFunction) {
   return [
     { value: "interrupt" as const, label: t("settings.general.defaultSend.options.interrupt") },
@@ -379,6 +362,7 @@ function GeneralSection({
         t(selectedLanguageOption.labelKey),
       )
     : settings.language;
+  const isCompact = useIsCompactFormFactor();
   const [terminalScrollbackValue, setTerminalScrollbackValue] = useState(
     String(settings.terminalScrollbackLines),
   );
@@ -416,7 +400,6 @@ function GeneralSection({
             <DropdownTrigger
               accessibilityRole="button"
               accessibilityLabel={`${t("settings.general.defaultSend.label")}: ${selectedSendBehaviorLabel}`}
-              style={themeTriggerStyle}
             >
               <Text style={styles.themeTriggerText}>{selectedSendBehaviorLabel}</Text>
             </DropdownTrigger>
@@ -439,11 +422,7 @@ function GeneralSection({
             <Text style={settingsStyles.rowHint}>{t("settings.general.language.description")}</Text>
           </View>
           <DropdownMenu>
-            <DropdownTrigger
-              accessibilityRole="button"
-              accessibilityLabel={selectedLanguageLabel}
-              style={themeTriggerStyle}
-            >
+            <DropdownTrigger accessibilityRole="button" accessibilityLabel={selectedLanguageLabel}>
               <Text style={styles.themeTriggerText}>{selectedLanguageLabel}</Text>
             </DropdownTrigger>
             <DropdownMenuContent side="bottom" align="end" width={300}>
@@ -468,7 +447,7 @@ function GeneralSection({
               </Text>
             </View>
             <DropdownMenu>
-              <DropdownTrigger style={themeTriggerStyle}>
+              <DropdownTrigger>
                 <Text style={styles.themeTriggerText}>
                   {getServiceUrlBehaviorLabel(t, settings.serviceUrlBehavior)}
                 </Text>
@@ -496,7 +475,8 @@ function GeneralSection({
               {t("settings.general.terminalScrollback.description")}
             </Text>
           </View>
-          <TextInput
+          <FormTextInput
+            size={isCompact ? "md" : "sm"}
             initialValue={terminalScrollbackValue}
             onChangeText={handleTerminalScrollbackChangeText}
             onBlur={commitTerminalScrollback}
@@ -504,7 +484,7 @@ function GeneralSection({
             keyboardType="number-pad"
             inputMode="numeric"
             selectTextOnFocus
-            style={styles.terminalScrollbackInput}
+            style={TERMINAL_SCROLLBACK_INPUT_STYLE}
             accessibilityLabel={t("settings.general.terminalScrollback.accessibilityLabel")}
           />
         </View>
@@ -607,7 +587,7 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
               <Text style={settingsStyles.rowTitle}>{t("settings.about.appVersion")}</Text>
               <Text style={settingsStyles.rowHint}>{t("settings.about.thisDevice")}</Text>
             </View>
-            <Text style={styles.aboutValue}>{appVersionText}</Text>
+            <Text style={settingsStyles.rowValue}>{appVersionText}</Text>
           </View>
           <WhatsNewRow />
           {isDesktopApp ? <DesktopAppUpdateRow /> : null}
@@ -621,9 +601,15 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
   );
 }
 
+const TERMINAL_SCROLLBACK_INPUT_STYLE = { width: 112, textAlign: "right" } as const;
+
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+
+const ThemedChevronRight = withUnistyles(ChevronRight);
+
 function WhatsNewRow() {
   const { t } = useTranslation();
-  const { theme } = useUnistyles();
 
   return (
     <Pressable
@@ -638,9 +624,9 @@ function WhatsNewRow() {
             <Text style={settingsStyles.rowTitle}>{t("changelog.title")}</Text>
             <Text style={settingsStyles.rowHint}>{t("settings.about.whatsNewHint")}</Text>
           </View>
-          <ChevronRight
-            size={theme.iconSize.sm}
-            color={hovered ? theme.colors.foreground : theme.colors.foregroundMuted}
+          <ThemedChevronRight
+            size={ICON_SIZE.sm}
+            uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
           />
         </>
       )}
@@ -711,7 +697,7 @@ function HostVersionRow({
   }
 
   const valueStyle = useMemo(
-    () => [styles.aboutValue, isMismatch && styles.aboutVersionMismatch],
+    () => [settingsStyles.rowValue, isMismatch && styles.aboutVersionMismatch],
     [isMismatch],
   );
 
@@ -886,6 +872,40 @@ function useSortedHosts(hosts: HostProfile[], localServerId: string | null): Hos
   return useMemo(() => orderHostsLocalFirst(hosts, localServerId), [hosts, localServerId]);
 }
 
+interface SettingsNavRowProps {
+  label: string;
+  icon: ComponentType<{ size: number; color: string }>;
+  isSelected?: boolean;
+  onPress: () => void;
+  testID?: string;
+}
+
+// 设置侧栏的一行：与左侧栏的 Sidebar items 同为 `<Row size="sm">`，选中态是浅底色加细描边。
+function SettingsNavRow({ label, icon, isSelected = false, onPress, testID }: SettingsNavRowProps) {
+  const ThemedIcon = useMemo(() => withUnistyles(icon), [icon]);
+  const renderLeading = useCallback(
+    ({ hovered, pressed, selected }: RowRenderState) => (
+      <ThemedIcon
+        size={ICON_SIZE.md}
+        uniProps={
+          hovered || pressed || selected ? foregroundColorMapping : foregroundMutedColorMapping
+        }
+      />
+    ),
+    [ThemedIcon],
+  );
+  return (
+    <Row
+      title={label}
+      onPress={onPress}
+      selected={isSelected}
+      size="sm"
+      testID={testID}
+      renderLeading={renderLeading}
+    />
+  );
+}
+
 interface SidebarSectionButtonProps {
   itemId: SettingsSectionSlug;
   label: string;
@@ -897,35 +917,14 @@ interface SidebarSectionButtonProps {
 function SidebarSectionButton({
   itemId,
   label,
-  icon: IconComponent,
+  icon,
   isSelected,
   onSelect,
 }: SidebarSectionButtonProps) {
-  const { theme } = useUnistyles();
   const handlePress = useCallback(() => {
     onSelect(itemId);
   }, [onSelect, itemId]);
-  const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
-  const labelStyle = useMemo(
-    () => [sidebarStyles.label, isSelected && { color: theme.colors.foreground }],
-    [isSelected, theme.colors.foreground],
-  );
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={accessibilityState}
-      onPress={handlePress}
-      style={isSelected ? selectedSidebarItemStyle : sidebarItemStyle}
-    >
-      <IconComponent
-        size={theme.iconSize.md}
-        color={isSelected ? theme.colors.foreground : theme.colors.foregroundMuted}
-      />
-      <Text style={labelStyle} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
+  return <SettingsNavRow label={label} icon={icon} isSelected={isSelected} onPress={handlePress} />;
 }
 
 interface SidebarHostSectionButtonProps {
@@ -939,35 +938,21 @@ interface SidebarHostSectionButtonProps {
 function SidebarHostSectionButton({
   itemId,
   label,
-  icon: IconComponent,
+  icon,
   isSelected,
   onSelect,
 }: SidebarHostSectionButtonProps) {
-  const { theme } = useUnistyles();
   const handlePress = useCallback(() => {
     onSelect(itemId);
   }, [onSelect, itemId]);
-  const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
-  const labelStyle = useMemo(
-    () => [sidebarStyles.label, isSelected && { color: theme.colors.foreground }],
-    [isSelected, theme.colors.foreground],
-  );
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={accessibilityState}
+    <SettingsNavRow
+      label={label}
+      icon={icon}
+      isSelected={isSelected}
       onPress={handlePress}
       testID={`settings-host-section-${itemId}`}
-      style={isSelected ? selectedSidebarItemStyle : sidebarItemStyle}
-    >
-      <IconComponent
-        size={theme.iconSize.md}
-        color={isSelected ? theme.colors.foreground : theme.colors.foregroundMuted}
-      />
-      <Text style={labelStyle} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
+    />
   );
 }
 
@@ -1045,9 +1030,9 @@ function HostPicker({
             <HostStatusDot serverId={activeHost.serverId} />
           </View>
         ) : null}
-        <Text style={sidebarStyles.pickerTriggerLabel} numberOfLines={1}>
+        <UiText variant="label" numberOfLines={1} style={sidebarStyles.pickerTriggerLabel}>
           {activeHost?.label ?? t("settings.groups.host")}
-        </Text>
+        </UiText>
       </ComboboxTrigger>
     </SharedHostPicker>
   );
@@ -1074,7 +1059,6 @@ function SettingsSidebar({
   activeHostServerId,
   layout,
 }: SettingsSidebarProps) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
   const hosts = useHosts();
   const localServerId = useLocalDaemonServerId();
@@ -1104,7 +1088,14 @@ function SettingsSidebar({
   const sidebarBody = (
     <>
       <View style={sidebarStyles.list}>
-        <Text style={sidebarStyles.groupLabel}>{t("settings.groups.app")}</Text>
+        <UiText
+          variant="caption"
+          color="foregroundMuted"
+          weight="medium"
+          style={sidebarStyles.groupLabel}
+        >
+          {t("settings.groups.app")}
+        </UiText>
         {items.map((item) => (
           <SidebarSectionButton
             key={item.id}
@@ -1119,7 +1110,14 @@ function SettingsSidebar({
       <SidebarSeparator />
       {hasHosts ? (
         <View style={sidebarStyles.list}>
-          <Text style={sidebarStyles.groupLabel}>{t("settings.groups.host")}</Text>
+          <UiText
+            variant="caption"
+            color="foregroundMuted"
+            weight="medium"
+            style={sidebarStyles.groupLabel}
+          >
+            {t("settings.groups.host")}
+          </UiText>
           <HostPicker
             activeServerId={activeHostServerId}
             sortedHosts={sortedHosts}
@@ -1140,31 +1138,19 @@ function SettingsSidebar({
         </View>
       ) : (
         <View style={sidebarStyles.list}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("settings.addHost")}
+          <SettingsNavRow
+            label={t("settings.addHost")}
+            icon={Plus}
             onPress={onAddHost}
             testID="settings-add-host"
-            style={sidebarItemStyle}
-          >
-            <Plus size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
-            <Text style={sidebarStyles.label} numberOfLines={1}>
-              {t("settings.addHost")}
-            </Text>
-          </Pressable>
+          />
           {enableBuiltInDaemonOption.visible ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("settings.enableBuiltInDaemon")}
+            <SettingsNavRow
+              label={t("settings.enableBuiltInDaemon")}
+              icon={Server}
               onPress={enableBuiltInDaemonOption.onPress}
               testID="settings-enable-built-in-daemon"
-              style={sidebarItemStyle}
-            >
-              <Server size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
-              <Text style={sidebarStyles.label} numberOfLines={1}>
-                {t("settings.enableBuiltInDaemon")}
-              </Text>
-            </Pressable>
+            />
           ) : null}
         </View>
       )}
@@ -1209,6 +1195,11 @@ function SettingsSidebar({
 // Main screen
 // ---------------------------------------------------------------------------
 
+function DetailHeaderIcon({ icon }: { icon: ComponentType<{ size: number; color: string }> }) {
+  const ThemedIcon = useMemo(() => withUnistyles(icon), [icon]);
+  return <ThemedIcon size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />;
+}
+
 export interface SettingsScreenProps {
   view: SettingsView;
   openAddHostIntent?: string | null;
@@ -1216,7 +1207,6 @@ export interface SettingsScreenProps {
 
 export default function SettingsScreen({ view, openAddHostIntent = null }: SettingsScreenProps) {
   const router = useRouter();
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
   const voiceAudioEngine = useVoiceAudioEngineOptional();
   const { settings, isLoading: settingsLoading, updateSettings } = useAppSettings();
@@ -1583,7 +1573,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   const desktopDetailHeaderLeft = detailHeader ? (
     <>
       <HeaderIconBadge>
-        <detailHeader.Icon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
+        <DetailHeaderIcon icon={detailHeader.Icon} />
       </HeaderIconBadge>
       <ScreenTitle testID="settings-detail-header-title">{detailHeader.title}</ScreenTitle>
       {detailHeader.titleAccessory}
@@ -1724,10 +1714,6 @@ const styles = StyleSheet.create((theme) => ({
     maxWidth: 720,
     alignSelf: "center",
   },
-  aboutValue: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-  },
   aboutVersionMismatch: {
     color: theme.colors.palette.amber[500],
   },
@@ -1744,32 +1730,9 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
   },
-  themeTrigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-    paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
   themeTriggerText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
-  },
-  terminalScrollbackInput: {
-    width: 112,
-    minHeight: 36,
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface2,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    textAlign: "right",
   },
   placeholder: {
     flex: 1,
@@ -1819,41 +1782,18 @@ const sidebarStyles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
   },
   groupLabel: {
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.medium,
-    color: theme.colors.foregroundMuted,
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[1],
   },
-  item: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    minHeight: 36,
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
-  },
-  itemHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
-  itemSelected: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
-  label: {
-    fontSize: theme.fontSize.base,
-    color: theme.colors.foregroundMuted,
-    fontWeight: theme.fontWeight.normal,
-    flex: 1,
-  },
+  // 与 <Row size="sm"> 同高、同圆角、同一 hover 底色，主机选择器排在导航行之间不突兀。
   pickerTrigger: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    minHeight: 36,
-    paddingVertical: theme.spacing[2],
+    minHeight: 32,
+    paddingVertical: theme.spacing[1.5],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.radius.md,
   },
   pickerTriggerHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,
@@ -1861,9 +1801,6 @@ const sidebarStyles = StyleSheet.create((theme) => ({
   pickerTriggerLabel: {
     flex: 1,
     minWidth: 0,
-    fontSize: theme.fontSize.base,
-    color: theme.colors.foreground,
-    fontWeight: theme.fontWeight.normal,
   },
   // Match the setting items' icon footprint so the host label aligns with them.
   pickerTriggerDot: {

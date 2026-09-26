@@ -188,8 +188,8 @@ export function AppearancePreview({ overrides }: AppearancePreviewProps) {
 
 const styles = StyleSheet.create((theme) => ({
   card: {
-    backgroundColor: theme.colors.surface1,
-    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surfaceCard,
+    borderRadius: theme.radius.xl,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
     overflow: "hidden",

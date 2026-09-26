@@ -1,10 +1,12 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import React, { type ReactElement, useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { settingsStyles } from "@/styles/settings";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { Alert as InlineAlert } from "@/components/ui/alert";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { ArrowUpRight, Copy, FileText, Activity } from "lucide-react-native";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
@@ -24,6 +26,22 @@ import { resolveAppVersion } from "@/utils/app-version";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 
 type DesktopDaemonSettings = DesktopSettings["daemon"];
+
+const ThemedArrowUpRight = withUnistyles(ArrowUpRight);
+const ThemedCopy = withUnistyles(Copy);
+const ThemedFileText = withUnistyles(FileText);
+const ThemedActivity = withUnistyles(Activity);
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
+
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+
+const advancedSettingsIcon = (
+  <ThemedArrowUpRight size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
+);
+const copyIcon = <ThemedCopy size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
+const fileTextIcon = <ThemedFileText size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
+const activityIcon = <ThemedActivity size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
 
 function useKeepRunningAfterQuitToggle(args: {
   settings: DesktopDaemonSettings;
@@ -203,9 +221,6 @@ interface DaemonInfoCardProps {
   daemonStatusStateText: string;
   daemonStatusDetailText: string;
   isDaemonManagementPaused: boolean;
-  copyIcon: ReactElement;
-  fileTextIcon: ReactElement;
-  activityIcon: ReactElement;
   handleToggleDaemonManagement: () => void;
   isUpdatingDaemonManagement: boolean;
   keepRunningAfterQuit: boolean;
@@ -224,9 +239,6 @@ function DaemonInfoCard(props: DaemonInfoCardProps) {
     daemonStatusStateText,
     daemonStatusDetailText,
     isDaemonManagementPaused,
-    copyIcon,
-    fileTextIcon,
-    activityIcon,
     handleToggleDaemonManagement,
     isUpdatingDaemonManagement,
     keepRunningAfterQuit,
@@ -320,7 +332,6 @@ function DaemonInfoCard(props: DaemonInfoCardProps) {
 
 export function LocalDaemonSection() {
   const { t } = useTranslation();
-  const { theme } = useUnistyles();
   const showSection = shouldUseDesktopDaemon();
   const appVersion = resolveAppVersion();
   const { settings, updateSettings, isLoading: isLoadingSettings } = useDesktopSettings();
@@ -391,23 +402,6 @@ export function LocalDaemonSection() {
     [],
   );
 
-  const advancedSettingsIcon = useMemo(
-    () => <ArrowUpRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />,
-    [theme.iconSize.sm, theme.colors.foregroundMuted],
-  );
-  const copyIcon = useMemo(
-    () => <Copy size={theme.iconSize.sm} color={theme.colors.foreground} />,
-    [theme.iconSize.sm, theme.colors.foreground],
-  );
-  const fileTextIcon = useMemo(
-    () => <FileText size={theme.iconSize.sm} color={theme.colors.foreground} />,
-    [theme.iconSize.sm, theme.colors.foreground],
-  );
-  const activityIcon = useMemo(
-    () => <Activity size={theme.iconSize.sm} color={theme.colors.foreground} />,
-    [theme.iconSize.sm, theme.colors.foreground],
-  );
-
   const advancedSettingsButton = useMemo(
     () => (
       <Button
@@ -422,7 +416,7 @@ export function LocalDaemonSection() {
         {t("desktop.daemon.advancedSettings")}
       </Button>
     ),
-    [advancedSettingsIcon, handleOpenAdvancedSettings, t],
+    [handleOpenAdvancedSettings, t],
   );
 
   if (!showSection) {
@@ -437,7 +431,7 @@ export function LocalDaemonSection() {
     >
       {isLoading || isLoadingSettings ? (
         <View style={[settingsStyles.card, styles.loadingCard]}>
-          <LoadingSpinner size="small" color={theme.colors.foregroundMuted} />
+          <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />
         </View>
       ) : (
         <>
@@ -445,9 +439,6 @@ export function LocalDaemonSection() {
             daemonStatusStateText={daemonStatusStateText}
             daemonStatusDetailText={daemonStatusDetailText}
             isDaemonManagementPaused={isDaemonManagementPaused}
-            copyIcon={copyIcon}
-            fileTextIcon={fileTextIcon}
-            activityIcon={activityIcon}
             handleToggleDaemonManagement={handleToggleDaemonManagement}
             isUpdatingDaemonManagement={isUpdatingDaemonManagement}
             keepRunningAfterQuit={daemonSettings.keepRunningAfterQuit}
@@ -481,8 +472,8 @@ export function LocalDaemonSection() {
           ) : null}
 
           {daemonVersionMismatch ? (
-            <View style={styles.warningCard}>
-              <Text style={styles.warningText}>{t("desktop.daemon.versionMismatch")}</Text>
+            <View style={styles.warning}>
+              <InlineAlert variant="warning" description={t("desktop.daemon.versionMismatch")} />
             </View>
           ) : null}
         </>
@@ -524,24 +515,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   valueText: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
+    ...theme.typeScale.body,
   },
   valueSubtext: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    ...theme.typeScale.caption,
   },
-  warningCard: {
+  warning: {
     marginTop: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.palette.amber[500],
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-  },
-  warningText: {
-    color: theme.colors.palette.amber[500],
-    fontSize: theme.fontSize.sm,
   },
   modalBody: {
     gap: theme.spacing[3],

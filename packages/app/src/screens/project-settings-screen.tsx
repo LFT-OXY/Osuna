@@ -913,10 +913,12 @@ function ScriptRow({ script, isFirst, onEdit, onRemove }: ScriptRowProps) {
   const { t } = useTranslation();
   const handleEdit = useCallback(() => onEdit(script), [onEdit, script]);
   const handleRemove = useCallback(() => onRemove(script), [onRemove, script]);
-  const rowStyle = isFirst ? styles.scriptRow : styles.scriptRowWithBorder;
 
   return (
-    <View style={rowStyle} testID={`script-row-${script.id}`}>
+    <View
+      style={[settingsStyles.row, !isFirst && settingsStyles.rowBorder]}
+      testID={`script-row-${script.id}`}
+    >
       <Pressable style={styles.scriptRowMain} onPress={handleEdit}>
         <Text style={settingsStyles.rowTitle} numberOfLines={1}>
           {script.name || t("settings.project.scripts.untitled")}
@@ -1171,26 +1173,9 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
   },
-  scriptRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: theme.spacing[4],
-    paddingHorizontal: theme.spacing[4],
-  },
-  scriptRowWithBorder: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: theme.spacing[4],
-    paddingHorizontal: theme.spacing[4],
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
   scriptRowMain: {
     flex: 1,
     minWidth: 0,
-    gap: theme.spacing[1],
   },
   scriptKebab: {
     padding: theme.spacing[1],

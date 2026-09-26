@@ -65,7 +65,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   title: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
+    ...theme.typeScale.body,
+    fontWeight: theme.fontWeight.medium,
   },
 }));

@@ -77,6 +77,39 @@ test.describe("Settings sidebar navigation", () => {
     await expect(page).not.toHaveURL(/\/settings(\/|$)/);
   });
 
+  test("lays out settings as 14px cards with 56px rows and 28px controls", async ({ page }) => {
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsSection(page, "general");
+
+    const navRow = page
+      .getByTestId("settings-sidebar")
+      .getByRole("button", { name: "General", exact: true });
+    await expect(navRow).toHaveAttribute("aria-selected", "true");
+    await expect(navRow).toHaveCSS("border-radius", "8px");
+    expect((await navRow.boundingBox())?.height).toBe(32);
+
+    const trigger = page.getByRole("button", { name: /^Default send: / });
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toHaveCSS("border-radius", "8px");
+    expect((await trigger.boundingBox())?.height).toBe(28);
+
+    // 往上找行（最小高 56）与卡片（圆角 14）：行里是标题加一行说明，正好落在最小高度上。
+    const geometry = await trigger.evaluate((element) => {
+      let row: HTMLElement | null = element.parentElement;
+      while (row && getComputedStyle(row).minHeight !== "56px") row = row.parentElement;
+      let card: HTMLElement | null = row?.parentElement ?? null;
+      while (card && getComputedStyle(card).borderTopLeftRadius !== "14px") {
+        card = card.parentElement;
+      }
+      return {
+        rowHeight: row?.getBoundingClientRect().height ?? null,
+        cardBorderWidth: card ? getComputedStyle(card).borderTopWidth : null,
+      };
+    });
+    expect(geometry).toEqual({ rowHeight: 56, cardBorderWidth: "1px" });
+  });
+
   test("/h/[serverId]/settings redirects to the host connections section", async ({ page }) => {
     await gotoAppShell(page);
     await verifyLegacyHostSettingsRedirect(page);
