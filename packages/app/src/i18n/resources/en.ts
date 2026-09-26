@@ -127,6 +127,10 @@ export const en = {
       queue: "Queue",
       send: "Send",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Local",
+    },
     cancel: {
       cancelingAgent: "Canceling agent",
       stopAgent: "Stop agent",
@@ -310,6 +314,12 @@ export const en = {
   },
   message: {
     workedFor: "Worked for {{duration}}",
+    workingFor: "Working for {{duration}}",
+    changedFiles: {
+      one: "{{count}} changed file",
+      other: "{{count}} changed files",
+      openDiff: "Open diff",
+    },
     turnUsage: {
       title: "Turn usage",
       total: "Total",
@@ -937,6 +947,8 @@ export const en = {
           title: "Jump to file",
         },
         binaryFile: "Binary file",
+        unmodifiedLine: "{{count}} unmodified line",
+        unmodifiedLines: "{{count}} unmodified lines",
         tooLarge: "Diff too large to display",
         previewTooLargeTitle: "This diff is too large to preview",
         previewTooLargeDescription: "Narrow the comparison to preview it here",

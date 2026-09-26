@@ -10,6 +10,7 @@ import {
   expectVisibleAgentSurfacesIdle,
 } from "../support/helpers/agent-stream";
 import { gateNextAgentMessage } from "../support/helpers/agent-message-gate";
+import { splitCurrentPanelRight } from "../support/helpers/chat-outline";
 import {
   attachImageFromMenu,
   expectComposerDraft,
@@ -216,6 +217,11 @@ async function expectPendingSubmission(page: Page, userMessage: Locator): Promis
   await expect(page.getByTestId("composer-image-attachment-pill")).toHaveCount(0);
   await expect(userMessage.getByTestId("user-message-timestamp")).toBeAttached();
   await expect(userMessage.getByTestId("user-message-trailing-row")).toHaveCSS("opacity", "0");
+  // The bubble is round on every corner and, with its trailing row, takes at most 80% of the row.
+  const bubble = userMessage.getByTestId("user-message-bubble");
+  await expect(bubble).toHaveCSS("border-top-right-radius", "18px");
+  await expect(bubble).toHaveCSS("border-bottom-left-radius", "18px");
+  await expect(bubble.locator("..")).toHaveCSS("max-width", "80%");
   await expect(userMessage).toHaveAttribute("aria-busy", "true");
   await expect(userMessage.getByRole("button", { name: "Open image attachment" })).toBeVisible();
 }
@@ -310,6 +316,49 @@ async function configureSteerInSettings(page: Page): Promise<void> {
 
 async function selectSteerInSettings(page: Page): Promise<void> {
   await selectSendBehaviorInSettings(page, "Steer", "steer");
+}
+
+function runningAgentComposer(page: Page): Locator {
+  return page
+    .getByTestId("message-input-root")
+    .filter({ has: page.getByRole("button", { name: "Stop agent", exact: true }) });
+}
+
+/** Stop 在 Send 左边，两者都是 32px 圆，完整落在 Composer 内、互不重叠，且各自中心点上最上层就是它自己。 */
+async function expectPrimaryActionsWhole(
+  composer: Locator,
+  stop: Locator,
+  send: Locator,
+): Promise<void> {
+  await expect(stop).toBeVisible();
+  await expect(send).toBeEnabled();
+  const [composerBox, stopBox, sendBox] = await Promise.all([
+    composer.boundingBox(),
+    stop.boundingBox(),
+    send.boundingBox(),
+  ]);
+  expect(composerBox).not.toBeNull();
+  expect(stopBox).not.toBeNull();
+  expect(sendBox).not.toBeNull();
+  expect(composerBox!.width).toBeLessThan(500);
+  for (const box of [stopBox!, sendBox!]) {
+    expect(box.width).toBe(32);
+    expect(box.height).toBe(32);
+    expect(box.x).toBeGreaterThanOrEqual(composerBox!.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(composerBox!.x + composerBox!.width);
+    expect(box.y).toBeGreaterThanOrEqual(composerBox!.y);
+    expect(box.y + box.height).toBeLessThanOrEqual(composerBox!.y + composerBox!.height);
+  }
+  expect(stopBox!.x + stopBox!.width).toBeLessThanOrEqual(sendBox!.x);
+  for (const action of [stop, send]) {
+    expect(await action.evaluate(isTopmostAtOwnCenter)).toBe(true);
+  }
+}
+
+function isTopmostAtOwnCenter(element: Element): boolean {
+  const rect = element.getBoundingClientRect();
+  const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  return hit !== null && element.contains(hit);
 }
 
 /** Steer is the default, so the interrupt path only gets exercised by opting back into it. */
@@ -1017,10 +1066,11 @@ test.describe("Agent message submission", () => {
 
       gate.holdNextClientRequest("send_agent_message_request");
       await fillComposerDraft(page, "Replace the running turn without duplicating its action.");
+      // 有草稿时 Stop 仍留在 Send 旁边，运行中的回合始终只有一个停止入口。
       await expect(page.getByRole("button", { name: "Send and steer", exact: true })).toHaveCount(
         1,
       );
-      await expect(page.getByRole("button", { name: "Stop agent", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Stop agent", exact: true })).toHaveCount(1);
       await expect(page.getByRole("button", { name: "Interrupt agent", exact: true })).toHaveCount(
         0,
       );
@@ -1035,6 +1085,41 @@ test.describe("Agent message submission", () => {
       gate.releaseHeldClientRequest();
     } finally {
       gate.restore();
+      await agent.cleanup();
+    }
+  });
+
+  test("keeps Stop and Send whole and clickable in a narrow split pane", async ({ page }) => {
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "submission-narrow-actions-",
+      title: "Narrow composer actions",
+      model: "one-minute-stream",
+    });
+    try {
+      await page.setViewportSize({ width: 1024, height: 800 });
+      await openAgentRoute(page, agent);
+      await expectComposerVisible(page);
+      await submitMessage(page, "Keep running while the pane narrows.");
+      await expectAgentReadyToInterrupt(page);
+      await splitCurrentPanelRight(page);
+
+      const composer = runningAgentComposer(page);
+      const input = composer.getByRole("textbox");
+      await input.fill("Draft beside the running turn.");
+      const stop = composer.getByRole("button", { name: "Stop agent", exact: true });
+      const send = composer.getByRole("button", { name: "Send and steer", exact: true });
+      await expectPrimaryActionsWhole(composer, stop, send);
+
+      await send.click();
+      await expect(input).toHaveValue("");
+      await expect(
+        page.getByTestId("user-message").filter({ hasText: "Draft beside the running turn." }),
+      ).toBeVisible({ timeout: 30_000 });
+      await stop.click();
+      await expect(page.getByRole("button", { name: "Stop agent", exact: true })).toHaveCount(0, {
+        timeout: 30_000,
+      });
+    } finally {
       await agent.cleanup();
     }
   });

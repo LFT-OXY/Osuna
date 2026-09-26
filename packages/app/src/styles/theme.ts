@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
+import { hexColorWithAlpha, hexContrastRatio, mixHexColor } from "@/utils/color";
 import { USAGE_DARK_PALETTE, USAGE_LIGHT_PALETTE } from "./usage-palette";
 
 export const baseColors = {
@@ -173,9 +174,9 @@ const darkStatusColors = {
 // surface has plenty of contrast but the four hues collapse into each other at 6pt — dark green,
 // dark red, dark amber and dark blue all read as "dark blob", and the point of the dot is telling
 // them apart at a glance. So the light band runs as bright as the contrast floor allows: L=0.62
-// is the last step where all four clear 3:1 against the sidebar's surface2 (success is the
-// binding one at 3.10, and drops under 3 by L=0.64), which is WCAG's non-text minimum for a
-// control that carries state.
+// is the last step where all four clear 3:1 against the resting and hovered sidebar row (success
+// on the hovered row is the binding one at 3.01, and drops under 3 by L=0.64), which is WCAG's
+// non-text minimum for a control that carries state.
 //
 // All four move together. A dot matching its siblings in lightness and chroma says only which
 // state the row is in; one that does not says "this row matters more", which is a claim the
@@ -204,6 +205,192 @@ const darkStatusDotColors = {
   statusDotRunning: "#5caaf6",
 };
 
+// 重设计引入的语义角色。默认亮 / 暗主题给大部分值；其余内置主题与插件主题不写，
+// 由 deriveThemeRoles 从该主题已有的语义色派生，新增角色时只在这里补一次。
+export interface ThemeRoleOverrides {
+  /** 画布：工作区主区域底色。 */
+  surfaceWorkspace?: string;
+  /** 外框：tab 条、pane 头等围绕画布的一圈。 */
+  surfaceChrome?: string;
+  /** 卡片与浮层表面。 */
+  surfaceCard?: string;
+  /** 用户消息气泡。 */
+  surfaceMessage?: string;
+  surfaceSidebarHover?: string;
+  /** 侧栏行按下态。 */
+  surfaceSidebarActive?: string;
+  surfaceSidebarSelected?: string;
+  /** 选中侧栏行的细描边。 */
+  borderSidebarSelected?: string;
+  borderInput?: string;
+  /** Composer 投影色；暗色主题不投影，为 transparent。 */
+  shadowComposer?: string;
+  /** 暗色表面顶部 1px 内高光；亮色主题为 transparent。 */
+  insetHighlight?: string;
+}
+
+interface ThemeRoleBase {
+  colorScheme: "light" | "dark";
+  surface0: string;
+  surface1: string;
+  surface2: string;
+  surface3: string;
+  surfaceSidebar: string;
+  foreground: string;
+  border: string;
+}
+
+// 侧栏行的派生叠色比例：按下在 hover 之上再叠前景色，选中描边在选中底色上叠前景色。
+const SIDEBAR_ROW_ACTIVE_MIX = 0.06;
+const SIDEBAR_ROW_SELECTED_BORDER_MIX = 0.12;
+// 相邻两个侧栏行状态之间的最低对比度，取默认暗色里最轻的一档（黑色侧栏上 4% 白的 hover，约 1.06）。
+const SIDEBAR_ROW_STATE_MINIMUM_CONTRAST = 1.05;
+// 工作区 tab 的派生叠色比例：在 pane 底色（surface0）上叠前景色，亮暗共用一组比例。未聚焦 pane 的
+// 当前 tab 与 hover 同为 hover 一档，聚焦 pane 的当前 tab 为 active 一档。原型是叠纯白 5% / 8%、
+// 纯黑 4% / 6%；叠前景色时这组比例在默认亮 / 暗主题上与原型每通道相差 0–3。
+const TAB_HOVER_MIX = 0.05;
+const TAB_ACTIVE_MIX = 0.075;
+const DARK_INSET_HIGHLIGHT = "rgba(255, 255, 255, 0.04)";
+// 助手回复正文取前景色的 86%（原型 / t3code），让长回复读起来比标题和用户消息轻一档。
+const PROSE_FOREGROUND_ALPHA = 0.86;
+const LIGHT_COMPOSER_SHADOW = "rgba(0, 0, 0, 0.4)";
+// Composer 与其底部上下文条的描边：前景色的 9%，半透明，叠在毛玻璃上随背后内容变化（原型 / t3code）。
+const COMPOSER_BORDER_ALPHA = 0.09;
+// 卡片内行与行之间的分隔：边框色的 50%，比卡片外框淡一档（t3 SettingsGroup 的 border-border/50）。
+const CARD_ROW_BORDER_ALPHA = 0.5;
+// diff 行底色与色条沿用 diff 视图一直使用的状态色（底色为其透明版）。
+const DIFF_ADDITION_BACKGROUND_ALPHA = 0.15;
+const DIFF_DELETION_BACKGROUND_ALPHA = 0.1;
+// 浮层取值来自原型（t3code 的 surface-glass / dialog-backdrop / 菜单与对话框投影）。
+// 毛玻璃表面是卡片色的 80%，只在 Web 上配合背景模糊使用；原生端用不透明的 surfaceCard。
+const GLASS_SURFACE_ALPHA = 0.8;
+const DIALOG_FOOTER_ALPHA = 0.7;
+const WARNING_BLOCK_ALPHA = 0.1;
+
+// 旧主题有的色阶本来就挨得很近（GitHub Light 的 surface1 与侧栏同色）。候选色与任一参照色
+// 分不开时，从候选色按 1% 步长向前景色叠色，取第一个与全部参照色都拉开的值。
+function ensureDistinctRowColor(
+  candidate: string,
+  references: readonly string[],
+  foreground: string,
+): string {
+  const isDistinct = (color: string) =>
+    references.every(
+      (reference) => hexContrastRatio(color, reference) >= SIDEBAR_ROW_STATE_MINIMUM_CONTRAST,
+    );
+  if (isDistinct(candidate)) return candidate;
+  for (let percent = 1; percent <= 100; percent++) {
+    const mixed = mixHexColor(candidate, foreground, percent / 100);
+    if (isDistinct(mixed)) return mixed;
+  }
+  return foreground;
+}
+
+/**
+ * 从主题已有的语义色派生重设计角色；overrides 里给了值的角色直接采用，
+ * 后续派生（按下态、选中描边）基于采用后的值。
+ */
+function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
+  const isDark = base.colorScheme === "dark";
+  const { foreground } = base;
+  const statusColors = isDark ? darkStatusColors : lightStatusColors;
+
+  const surfaceWorkspace = overrides.surfaceWorkspace ?? (isDark ? base.surface1 : base.surface0);
+  const surfaceCard = overrides.surfaceCard ?? (isDark ? base.surface2 : base.surface0);
+  const surfaceSidebarHover =
+    overrides.surfaceSidebarHover ??
+    ensureDistinctRowColor(base.surface1, [base.surfaceSidebar], foreground);
+  const selectedCandidate = isDark ? base.surface2 : base.surface3;
+  const surfaceSidebarSelected =
+    overrides.surfaceSidebarSelected ??
+    ensureDistinctRowColor(
+      selectedCandidate,
+      [base.surfaceSidebar, surfaceSidebarHover],
+      foreground,
+    );
+  const activeCandidate = mixHexColor(surfaceSidebarHover, foreground, SIDEBAR_ROW_ACTIVE_MIX);
+  const surfaceSidebarActive =
+    overrides.surfaceSidebarActive ??
+    ensureDistinctRowColor(
+      activeCandidate,
+      [surfaceSidebarHover, surfaceSidebarSelected],
+      foreground,
+    );
+  const selectedBorderCandidate = mixHexColor(
+    surfaceSidebarSelected,
+    foreground,
+    SIDEBAR_ROW_SELECTED_BORDER_MIX,
+  );
+  const borderSidebarSelected =
+    overrides.borderSidebarSelected ??
+    ensureDistinctRowColor(selectedBorderCandidate, [surfaceSidebarSelected], foreground);
+  const surfaceTabHover = ensureDistinctRowColor(
+    mixHexColor(base.surface0, foreground, TAB_HOVER_MIX),
+    [base.surface0],
+    foreground,
+  );
+  const surfaceTabActive = ensureDistinctRowColor(
+    mixHexColor(base.surface0, foreground, TAB_ACTIVE_MIX),
+    [surfaceTabHover],
+    foreground,
+  );
+  const diffAdditionBackground = hexColorWithAlpha(
+    statusColors.statusSuccess,
+    DIFF_ADDITION_BACKGROUND_ALPHA,
+  );
+  const diffDeletionBackground = hexColorWithAlpha(
+    statusColors.statusDanger,
+    DIFF_DELETION_BACKGROUND_ALPHA,
+  );
+
+  return {
+    surfaceWorkspace,
+    surfaceChrome: overrides.surfaceChrome ?? surfaceWorkspace,
+    surfaceCard,
+    surfaceMessage: overrides.surfaceMessage ?? base.surface3,
+    surfaceSidebarHover,
+    surfaceSidebarActive,
+    surfaceSidebarSelected,
+    borderSidebarSelected,
+    surfaceTabHover,
+    surfaceTabActive,
+    borderInput: overrides.borderInput ?? base.border,
+    borderCardRow: hexColorWithAlpha(base.border, CARD_ROW_BORDER_ALPHA),
+    foregroundProse: hexColorWithAlpha(foreground, PROSE_FOREGROUND_ALPHA),
+    // 代码块只在亮色下描边；暗色靠底色与画布的明度差分开。
+    borderCodeBlock: isDark ? "transparent" : base.border,
+    diffAdditionBackground,
+    diffDeletionBackground,
+    diffAdditionBar: statusColors.statusSuccess,
+    diffDeletionBar: statusColors.statusDanger,
+    borderComposer: hexColorWithAlpha(foreground, COMPOSER_BORDER_ALPHA),
+    shadowComposer: overrides.shadowComposer ?? (isDark ? "transparent" : LIGHT_COMPOSER_SHADOW),
+    insetHighlight: overrides.insetHighlight ?? (isDark ? DARK_INSET_HIGHLIGHT : "transparent"),
+    ...deriveOverlayRoles({ isDark, surfaceCard, surface2: base.surface2 }),
+  };
+}
+
+/** 菜单、对话框等浮层的表面、遮罩与投影，始终派生，主题不单独给值。 */
+function deriveOverlayRoles({
+  isDark,
+  surfaceCard,
+  surface2,
+}: {
+  isDark: boolean;
+  surfaceCard: string;
+  surface2: string;
+}) {
+  return {
+    surfaceGlass: hexColorWithAlpha(surfaceCard, GLASS_SURFACE_ALPHA),
+    surfaceDialogFooter: hexColorWithAlpha(surface2, DIALOG_FOOTER_ALPHA),
+    // 风险警示块：与 <Alert variant="warning"> 的强调色同源。
+    surfaceWarning: hexColorWithAlpha(baseColors.amber[500], WARNING_BLOCK_ALPHA),
+    overlayScrim: isDark ? "rgba(0, 0, 0, 0.35)" : "rgba(0, 0, 0, 0.18)",
+    shadowPopover: isDark ? "rgba(0, 0, 0, 0.8)" : "rgba(0, 0, 0, 0.35)",
+    shadowDialog: isDark ? "rgba(0, 0, 0, 0.9)" : "rgba(0, 0, 0, 0.45)",
+  };
+}
+
 // 终端的 14 个彩色 ANSI 槽位。black / brightBlack 不在其中：它们随界面表面走
 // （terminalBlack / terminalBrightBlack），以保证在该主题的终端底色上仍可见。
 export interface TerminalAnsiPalette {
@@ -223,7 +410,7 @@ export interface TerminalAnsiPalette {
   brightWhite: string;
 }
 
-export interface LightThemeConfig {
+export interface LightThemeConfig extends ThemeRoleOverrides {
   surface0: string;
   surface1: string;
   surface2: string;
@@ -278,9 +465,7 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
     surface4: tint.surface4,
     surfaceDiffEmpty: tint.surfaceDiffEmpty,
     surfaceSidebar: tint.surfaceSidebar,
-    surfaceSidebarHover: tint.surface1,
-    surfaceSidebarSelected: tint.surface3,
-    surfaceWorkspace: tint.surface0,
+    ...deriveThemeRoles({ colorScheme: "light", ...tint }, tint),
     interactionHighlight: "rgba(0, 0, 0, 0.06)",
 
     foreground: tint.foreground,
@@ -330,35 +515,47 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
   };
 }
 
+// 默认亮色：t3code 默认色板（canvas #fcfcfc、surface #fff、强调色 #1b4ed8）。侧栏行态按半透明黑
+// 叠色设计，这里存为叠色后的不透明值：hover 叠在侧栏上，选中描边叠在选中底色上。
+const LIGHT_SIDEBAR = "#fafafa";
+const LIGHT_FOREGROUND = "#27272a";
+// 白底选中在 #fafafa 侧栏上分不出来（1.04:1），改为叠 7.5% 前景色，叠色比例与暗色选中相同。
+const LIGHT_SIDEBAR_SELECTED = mixHexColor(LIGHT_SIDEBAR, LIGHT_FOREGROUND, 0.075);
 const lightSemanticColors = buildLightSemanticColors({
-  surface0: "#ffffff",
+  surface0: "#fcfcfc",
   surface1: "#fafafa",
   surface2: "#f4f4f5",
   surface3: "#e4e4e7",
   surface4: "#d4d4d8",
   surfaceDiffEmpty: "#f6f6f6",
-  surfaceSidebar: "#f4f4f5",
-  foreground: "#1a1a1e",
-  foregroundMuted: "#71717a",
+  surfaceSidebar: LIGHT_SIDEBAR,
+  surfaceCard: "#ffffff",
+  surfaceMessage: "#f4f4f5",
+  surfaceSidebarHover: mixHexColor(LIGHT_SIDEBAR, "#000000", 0.035),
+  surfaceSidebarSelected: LIGHT_SIDEBAR_SELECTED,
+  borderSidebarSelected: mixHexColor(LIGHT_SIDEBAR_SELECTED, "#000000", 0.07),
+  borderInput: "#d4d4d8",
+  foreground: LIGHT_FOREGROUND,
+  foregroundMuted: "#71717b",
   foregroundExtraMuted: "#a1a1aa",
   border: "#e4e4e7",
-  borderAccent: "#ececf1",
-  accent: "#20744A",
-  accentBright: "#239956",
+  borderAccent: "#d4d4d8",
+  accent: "#1b4ed8",
+  accentBright: "#3160db",
   accentForeground: "#ffffff",
   primary: "#18181b",
   primaryForeground: "#fafafa",
-  destructive: "#b04138",
-  terminalBlack: "#1a1a1e",
+  destructive: "#c10007",
+  terminalBlack: "#27272a",
   terminalBrightBlack: "#3f3f46",
-  ring: "#18181b",
+  ring: "#1b4ed8",
 });
 
 // ---------------------------------------------------------------------------
 // Dark theme variant builder
 // ---------------------------------------------------------------------------
 
-export interface DarkThemeConfig {
+export interface DarkThemeConfig extends ThemeRoleOverrides {
   surface0: string;
   surface1: string;
   surface2: string;
@@ -411,9 +608,7 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
     surface4: tint.surface4,
     surfaceDiffEmpty: tint.surfaceDiffEmpty,
     surfaceSidebar: tint.surfaceSidebar,
-    surfaceSidebarHover: tint.surface1,
-    surfaceSidebarSelected: tint.surface2,
-    surfaceWorkspace: tint.surface1,
+    ...deriveThemeRoles({ colorScheme: "dark", ...tint, foreground }, tint),
     interactionHighlight: "rgba(255, 255, 255, 0.08)",
 
     foreground,
@@ -468,24 +663,37 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
 // Dark tint definitions
 // ---------------------------------------------------------------------------
 
-// Paseo — subtle teal-green tint (default)
+// 默认暗色：t3code 默认色板（canvas #0a0a0a、surface #111、强调色 #346bf1），侧栏 #000 比画布更暗。
+// 侧栏行态按半透明白叠色设计，这里存为叠色后的不透明值：hover 与选中叠在侧栏上，选中描边叠在选中底色上。
+const DARK_SIDEBAR = "#000000";
+const DARK_SIDEBAR_SELECTED = mixHexColor(DARK_SIDEBAR, "#ffffff", 0.075);
 const paseoDarkColors = buildDarkSemanticColors({
-  surface0: "#181B1A",
-  surface1: "#1E2120",
-  surface2: "#272A29",
-  surface3: "#434645",
-  surface4: "#595B5B",
-  surfaceDiffEmpty: "#252827",
-  surfaceSidebar: "#141716",
-  foregroundMuted: "#A1A5A4",
-  foregroundExtraMuted: "#717574",
-  border: "#252B2A",
-  borderAccent: "#2F3534",
-  accent: "#20744A",
-  accentBright: "#7ccba0",
-  destructive: "#c64f43", // warm red, hue ~7 — reads as red (not pink) against the green tint
-  terminalBlack: "#141716",
-  terminalBrightBlack: "#434645",
+  surface0: "#0a0a0a",
+  surface1: "#111111",
+  surface2: "#171717",
+  surface3: "#262626",
+  surface4: "#525252",
+  surfaceDiffEmpty: "#0e0e0e",
+  surfaceSidebar: DARK_SIDEBAR,
+  surfaceWorkspace: "#0a0a0a",
+  surfaceCard: "#111111",
+  surfaceMessage: "#141414",
+  surfaceSidebarHover: mixHexColor(DARK_SIDEBAR, "#ffffff", 0.04),
+  surfaceSidebarSelected: DARK_SIDEBAR_SELECTED,
+  borderSidebarSelected: mixHexColor(DARK_SIDEBAR_SELECTED, "#ffffff", 0.06),
+  borderInput: "#1e1e1e",
+  foreground: "#f5f5f5",
+  foregroundMuted: "#818181",
+  foregroundExtraMuted: "#555555",
+  border: "#191919",
+  // outline 按钮描边；t3code 的 input 色 #1e1e1e 在 #0a0a0a 画布上只有 1.14:1，取 surface3。
+  borderAccent: "#262626",
+  accent: "#346bf1",
+  accentBright: "#51a2ff",
+  destructive: "#c44a4a",
+  terminalBlack: "#525252",
+  terminalBrightBlack: "#737373",
+  ring: "#346bf1",
 });
 
 // Zinc — neutral gray, no tint
@@ -602,6 +810,37 @@ export const LINE_HEIGHT = {
   diff: 22,
 } as const;
 
+// <Text> 的用途命名阶梯（components/ui/text.tsx），每档自带行高。这里是 14px 界面基础字号下的
+// 取值；applyAppearance 按用户的界面字号等比换算，所以组件读 theme.typeScale，不读这个常量。
+// prose 是长文阅读用的正文，字号同 body，行高更松。
+export const TYPE_SCALE = {
+  micro: { fontSize: 11, lineHeight: 15 },
+  caption: { fontSize: 12, lineHeight: 16 },
+  label: { fontSize: 13, lineHeight: 18 },
+  body: { fontSize: 14, lineHeight: 20 },
+  "body-lg": { fontSize: 15, lineHeight: 22 },
+  "title-sm": { fontSize: 16, lineHeight: 24 },
+  title: { fontSize: 18, lineHeight: 28 },
+  "title-lg": { fontSize: 20, lineHeight: 28 },
+  display: { fontSize: 24, lineHeight: 32 },
+  prose: { fontSize: 14, lineHeight: 22 },
+} as const;
+
+export type TextVariant = keyof typeof TYPE_SCALE;
+
+/**
+ * 以正文字号（fontSize.content）为基准取 Text 阶梯的一档。消息正文与 markdown 用它：阶梯比例与界面
+ * 一致，但字号跟随用户的正文字号设置，而不是界面字号。
+ */
+export function contentTypeStep(contentSize: number, variant: TextVariant) {
+  const step = TYPE_SCALE[variant];
+  const base = TYPE_SCALE.body.fontSize;
+  return {
+    fontSize: Math.round((contentSize * step.fontSize) / base),
+    lineHeight: Math.round((contentSize * step.lineHeight) / base),
+  };
+}
+
 export const ICON_SIZE = {
   xs: 12,
   sm: 14,
@@ -625,6 +864,25 @@ export const BORDER_RADIUS = {
   xl: 12,
   "2xl": 16,
   full: 9999,
+} as const;
+
+// 重设计的圆角梯度（t3code，base 10）。已迁移到新设计的组件用它；BORDER_RADIUS 是迁移前的
+// 旧梯度，保持原值，让尚未迁移的组件形态不变。
+export const RADIUS = {
+  sm: 6,
+  md: 8,
+  lg: 10,
+  xl: 14,
+  "2xl": 18,
+  "3xl": 22,
+  full: 9999,
+} as const;
+
+// 重设计的三档控件高度。
+export const CONTROL_HEIGHT = {
+  sm: 24,
+  md: 28,
+  lg: 32,
 } as const;
 
 export const BORDER_WIDTH = {
@@ -654,7 +912,7 @@ export const DEFAULT_MONO_FONT_STACK: string = Platform.select({
   web: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 });
 
-// `fontSize`, `fontFamily`, and `lineHeight` are deliberately widened to plain
+// `fontSize`, `fontFamily`, `lineHeight`, and `typeScale` are deliberately widened to plain
 // `number`/`string` (not narrowed by `as const`) so the appearance updater can patch
 // them at runtime via `UnistylesRuntime.updateTheme`. The remaining tokens keep their
 // literal types.
@@ -663,9 +921,12 @@ interface CommonTheme {
   fontSize: Record<keyof typeof FONT_SIZE, number>;
   fontFamily: { ui: string; mono: string };
   lineHeight: Record<keyof typeof LINE_HEIGHT, number>;
+  typeScale: Record<TextVariant, { fontSize: number; lineHeight: number }>;
   iconSize: typeof ICON_SIZE;
   fontWeight: typeof FONT_WEIGHT;
   borderRadius: typeof BORDER_RADIUS;
+  radius: typeof RADIUS;
+  controlHeight: typeof CONTROL_HEIGHT;
   borderWidth: typeof BORDER_WIDTH;
   opacity: typeof OPACITY;
 }
@@ -675,9 +936,12 @@ const commonTheme: CommonTheme = {
   fontSize: FONT_SIZE,
   fontFamily: { ui: DEFAULT_UI_FONT_STACK, mono: DEFAULT_MONO_FONT_STACK },
   lineHeight: LINE_HEIGHT,
+  typeScale: TYPE_SCALE,
   iconSize: ICON_SIZE,
   fontWeight: FONT_WEIGHT,
   borderRadius: BORDER_RADIUS,
+  radius: RADIUS,
+  controlHeight: CONTROL_HEIGHT,
   borderWidth: BORDER_WIDTH,
   opacity: OPACITY,
 };
@@ -1348,7 +1612,7 @@ export const THEME_OPTIONS = [
     group: "primary",
     unistylesName: "dark",
     theme: darkTheme,
-    swatch: "#2D8B62",
+    swatch: "#346bf1",
   },
   { name: "auto", group: "primary" },
   {

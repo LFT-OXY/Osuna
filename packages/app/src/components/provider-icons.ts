@@ -29,6 +29,15 @@ const BUILTIN_PROVIDER_ICONS: Record<string, ProviderIconComponent> = {
   pi: PiIcon as unknown as ProviderIconComponent,
 };
 
+// 品牌色不随主题变；没有品牌色的 provider 图标用前景色。
+const PROVIDER_BRAND_COLORS: Record<string, string> = {
+  claude: "#d97757",
+};
+
+export function getProviderBrandColor(provider: string): string | null {
+  return PROVIDER_BRAND_COLORS[provider] ?? null;
+}
+
 const CATALOG_ICON_SVGS = new Map(
   ACP_PROVIDER_CATALOG.flatMap((entry) => (entry.iconSvg ? [[entry.id, entry.iconSvg]] : [])),
 );

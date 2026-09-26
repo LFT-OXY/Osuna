@@ -283,8 +283,6 @@ const styles = StyleSheet.create((theme) => ({
   subtitleHeader: {
     paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[1],
-    borderBottomWidth: theme.borderWidth[1],
-    borderBottomColor: theme.colors.border,
   },
   subtitleText: {
     color: theme.colors.foregroundMuted,

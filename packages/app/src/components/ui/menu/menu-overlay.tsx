@@ -23,6 +23,8 @@ import { Keyframe, runOnJS } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { FloatingScrollView, FloatingSurface } from "@/components/ui/floating";
 import { isWeb } from "@/constants/platform";
+import { popoverSurfaceStyle } from "@/styles/floating-surface";
+import { GLASS_SURFACES_ENABLED } from "@/styles/glass-support";
 import type { KeyboardFocusScope } from "@/keyboard/actions";
 import {
   getOverlayRoot,
@@ -538,11 +540,7 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   content: {
-    backgroundColor: theme.colors.surface1,
-    borderWidth: 1,
-    borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius.lg,
+    ...popoverSurfaceStyle(theme, { glass: GLASS_SURFACES_ENABLED }),
     overflow: "hidden",
-    ...theme.shadow.md,
   },
 }));

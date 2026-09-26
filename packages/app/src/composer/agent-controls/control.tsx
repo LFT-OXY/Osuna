@@ -1,10 +1,30 @@
 import { forwardRef, useCallback, type ComponentProps } from "react";
 import { Text, View, type PressableStateCallbackType } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
+import { Text as UiText } from "@/components/ui/text";
 import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
+import { COMPOSER_TOOLBAR_GEOMETRY } from "@/composer/agent-controls/layout";
 import type { AgentControlIcon } from "@/agent-controls/icons";
+import type { Theme } from "@/styles/theme";
+
+function ControlIcon({
+  icon: Icon,
+  size,
+  color,
+}: {
+  icon: AgentControlIcon;
+  size: number;
+  color: string;
+}) {
+  return <Icon size={size} color={color} />;
+}
+
+// 图标色随主题变时经它映射，调用方不必订阅主题。
+const ThemedControlIcon = withUnistyles(ControlIcon);
+
+type IconColorMapping = (theme: Theme) => { color: string };
 
 type AgentControlTriggerProps = Omit<
   ComponentProps<typeof ComboboxTrigger>,
@@ -12,6 +32,8 @@ type AgentControlTriggerProps = Omit<
 > & {
   icon: AgentControlIcon;
   iconColor?: string;
+  /** 取代 iconColor，颜色取自主题时用。 */
+  iconColorMapping?: IconColorMapping;
   surface: "toolbar" | "sheet";
   label: string;
   value?: string;
@@ -27,6 +49,7 @@ export const AgentControlTrigger = forwardRef<View, AgentControlTriggerProps>(
     {
       icon: Icon,
       iconColor,
+      iconColorMapping,
       surface,
       label,
       value,
@@ -72,11 +95,21 @@ export const AgentControlTrigger = forwardRef<View, AgentControlTriggerProps>(
       >
         {isSheet ? (
           <View style={styles.sheetGlyph}>
-            <Icon size={resolvedGlyphSize} color={resolvedIconColor} />
+            <TriggerIcon
+              icon={Icon}
+              size={resolvedGlyphSize}
+              color={resolvedIconColor}
+              colorMapping={iconColorMapping}
+            />
           </View>
         ) : (
           <ComposerToolbarGlyph size={resolvedGlyphSize}>
-            <Icon size={resolvedGlyphSize} color={resolvedIconColor} />
+            <TriggerIcon
+              icon={Icon}
+              size={resolvedGlyphSize}
+              color={resolvedIconColor}
+              colorMapping={iconColorMapping}
+            />
           </ComposerToolbarGlyph>
         )}
         {isSheet ? (
@@ -84,30 +117,64 @@ export const AgentControlTrigger = forwardRef<View, AgentControlTriggerProps>(
             {label}
           </Text>
         ) : null}
-        {showValue ? (
-          <Text style={isSheet ? styles.sheetValue : styles.toolbarValue} numberOfLines={1}>
+        {showValue && isSheet ? (
+          <Text style={styles.sheetValue} numberOfLines={1}>
             {value ?? label}
           </Text>
+        ) : null}
+        {showValue && !isSheet ? (
+          <UiText
+            variant="label"
+            color="foregroundMuted"
+            weight="medium"
+            style={styles.toolbarValue}
+            numberOfLines={1}
+          >
+            {value ?? label}
+          </UiText>
         ) : null}
       </ComboboxTrigger>
     );
   },
 );
 
+/** 模型、推理强度、模式之间的细竖线，只在 toolbar 宽度够放全部标签时出现。 */
+export function AgentControlSeparator({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return <View style={styles.separator} accessibilityElementsHidden pointerEvents="none" />;
+}
+
+function TriggerIcon({
+  icon,
+  size,
+  color,
+  colorMapping,
+}: {
+  icon: AgentControlIcon;
+  size: number;
+  color: string;
+  colorMapping: IconColorMapping | undefined;
+}) {
+  if (colorMapping) {
+    return <ThemedControlIcon icon={icon} size={size} uniProps={colorMapping} />;
+  }
+  return <ControlIcon icon={icon} size={size} color={color} />;
+}
+
 const styles = StyleSheet.create((theme) => ({
   toolbarControl: {
-    height: 28,
+    height: theme.controlHeight.md,
     minWidth: 0,
     flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius["2xl"],
+    borderRadius: theme.radius.md,
     backgroundColor: "transparent",
   },
   toolbarIconOnly: {
-    width: 28,
+    width: theme.controlHeight.md,
     flexShrink: 0,
     paddingHorizontal: 0,
     justifyContent: "center",
@@ -115,9 +182,6 @@ const styles = StyleSheet.create((theme) => ({
   toolbarValue: {
     minWidth: 0,
     flexShrink: 1,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
   },
   sheetRow: {
     minHeight: 44,
@@ -156,15 +220,22 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.normal,
   },
   hovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   pressed: {
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   disabled: {
     opacity: 0.5,
   },
   iconColor: {
     color: theme.colors.foregroundMuted,
+  },
+  separator: {
+    width: COMPOSER_TOOLBAR_GEOMETRY.separatorWidth,
+    height: theme.iconSize.md,
+    flexShrink: 0,
+    marginHorizontal: COMPOSER_TOOLBAR_GEOMETRY.separatorInset,
+    backgroundColor: theme.colors.border,
   },
 }));

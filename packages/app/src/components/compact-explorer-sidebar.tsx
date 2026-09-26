@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, type PressableStateCallbackType } from "react-native";
+import { Text as UiText } from "@/components/ui/text";
 import { Gesture } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -297,15 +298,22 @@ function ExplorerTabButton({
 }: ExplorerTabButtonProps) {
   const isCompact = useIsCompactFormFactor();
   const handlePress = useCallback(() => onTabPress(tab), [onTabPress, tab]);
-  const tabStyle = useMemo(
-    () => [styles.tab(isCompact), active && styles.tabActive],
+  const tabStyle = useCallback(
+    ({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.tab(isCompact),
+      Boolean(hovered) && styles.tabHovered,
+      active && styles.tabActive,
+    ],
     [active, isCompact],
   );
-  const tabTextStyle = useMemo(() => [styles.tabText, active && styles.tabTextActive], [active]);
   return (
     <Pressable testID={testID} style={tabStyle} onPress={handlePress}>
       {children}
-      {label !== undefined ? <Text style={tabTextStyle}>{label}</Text> : null}
+      {label !== undefined ? (
+        <UiText variant="caption" color={active ? "foreground" : "foregroundMuted"}>
+          {label}
+        </UiText>
+      ) : null}
     </Pressable>
   );
 }
@@ -585,8 +593,6 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   tabsContainer: (isCompact: boolean) => ({
     flexDirection: "row",
@@ -601,18 +607,14 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: isCompact ? theme.spacing[2] : theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
   }),
+  // 与工作区 tab 同一套底色；高度保留触屏尺寸。
+  tabHovered: {
+    backgroundColor: theme.colors.surfaceTabHover,
+  },
   tabActive: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
-  tabText: {
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
-    color: theme.colors.foregroundMuted,
-  },
-  tabTextActive: {
-    color: theme.colors.foreground,
+    backgroundColor: theme.colors.surfaceTabActive,
   },
   tabTextMuted: {
     opacity: 0.8,

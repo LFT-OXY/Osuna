@@ -126,8 +126,8 @@ const styles = StyleSheet.create((theme) => ({
   scroll: {
     maxHeight: TOOL_CALL_GROUP_MAX_HEIGHT,
   },
+  // 子工具行自带负外边距，这里的内边距把它抵回来。
   content: {
-    paddingTop: theme.spacing[1],
-    paddingHorizontal: 13,
+    paddingHorizontal: theme.spacing[1],
   },
 }));

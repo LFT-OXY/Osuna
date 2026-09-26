@@ -5,6 +5,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { AgentProfilePicker, AgentProfileSeed } from "@/agent-profiles";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
+import { Text as UiText } from "@/components/ui/text";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Combobox, type ComboboxOption, type ComboboxProps } from "@/components/ui/combobox";
 import { ModelBrowser, ModelProviderGlyph, useModelBrowser } from "@/components/model-browser";
@@ -251,18 +252,12 @@ export function CombinedModelSelector({
           testID="combined-model-selector"
           chevron={toolbar?.showCaret === false ? null : undefined}
         >
-          {selectedProvider.trim().length > 0 ? (
-            <View style={toolbar?.glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16}>
-              <ModelProviderGlyph
-                provider={selectedProvider}
-                serverId={serverId}
-                size={toolbar?.glyphSize ?? ICON_SIZE.md}
-              />
-            </View>
-          ) : null}
-          <Text style={styles.triggerText} numberOfLines={1} ellipsizeMode="tail">
-            {browser.triggerLabel}
-          </Text>
+          <DefaultTriggerContent
+            selectedProvider={selectedProvider}
+            serverId={serverId}
+            toolbar={toolbar}
+            label={browser.triggerLabel}
+          />
         </ComboboxTrigger>
       )}
       <Combobox
@@ -287,12 +282,56 @@ export function CombinedModelSelector({
   );
 }
 
+// Composer toolbar 里 provider 图标用品牌色、标签 medium；其他位置保持弱化的图标与普通字重。
+function DefaultTriggerContent({
+  selectedProvider,
+  serverId,
+  toolbar,
+  label,
+}: {
+  selectedProvider: string;
+  serverId: string | null;
+  toolbar: CombinedModelSelectorProps["toolbar"];
+  label: string;
+}) {
+  return (
+    <>
+      {selectedProvider.trim().length > 0 ? (
+        <View style={toolbar?.glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16}>
+          <ModelProviderGlyph
+            provider={selectedProvider}
+            serverId={serverId}
+            size={toolbar?.glyphSize ?? ICON_SIZE.md}
+            tone={toolbar ? "brand" : "muted"}
+          />
+        </View>
+      ) : null}
+      {toolbar ? (
+        <UiText
+          variant="label"
+          color="foregroundMuted"
+          weight="medium"
+          style={styles.toolbarTriggerText}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {label}
+        </UiText>
+      ) : (
+        <Text style={styles.triggerText} numberOfLines={1} ellipsizeMode="tail">
+          {label}
+        </Text>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   mobileBrowserContent: {
     paddingHorizontal: 0,
   },
   trigger: {
-    height: 28,
+    height: theme.controlHeight.md,
     minWidth: 0,
     flexShrink: 1,
     flexDirection: "row",
@@ -300,10 +339,10 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "transparent",
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius["2xl"],
+    borderRadius: theme.radius.md,
   },
   triggerHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   toolbarGlyph16: {
     width: 16,
@@ -316,7 +355,7 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   triggerPressed: {
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   triggerDisabled: {
     opacity: 0.5,
@@ -327,6 +366,10 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
+  },
+  toolbarTriggerText: {
+    minWidth: 0,
+    flexShrink: 1,
   },
   customTriggerWrapper: {
     paddingHorizontal: 0,

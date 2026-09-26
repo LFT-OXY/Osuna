@@ -799,7 +799,7 @@ const sheetStyles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[4],
     gap: theme.spacing[3],
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.borderCardRow,
   },
   modelTitle: {
     color: theme.colors.foreground,

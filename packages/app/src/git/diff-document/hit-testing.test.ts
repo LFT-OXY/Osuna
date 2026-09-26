@@ -119,7 +119,7 @@ describe("diff hit testing", () => {
   it("selects all diff source in document order", () => {
     const model = buildModel("first", { wrapLines: false });
 
-    expect(selectedSourceText(model, selectAllSource(model)!)).toBe("@@ -1,0 +1,2 @@\nfirst\ntail");
+    expect(selectedSourceText(model, selectAllSource(model)!)).toBe("first\ntail");
   });
 
   it("selects all source from one split side without interleaving panes", () => {
@@ -132,37 +132,38 @@ describe("diff hit testing", () => {
     const left = changedRow!.kind === "line" ? changedRow!.cells[0]! : null;
     const right = changedRow!.kind === "line" ? changedRow!.cells[1]! : null;
     expect(selectedSourceText(model, selectAllSource(model, position(model, left!, 0))!)).toBe(
-      "@@ -1,2 +1,2 @@\nold-one\nold-two",
+      "old-one\nold-two",
     );
     expect(selectedSourceText(model, selectAllSource(model, position(model, right!, 0))!)).toBe(
       "new-one\nnew-two",
     );
   });
 
-  it("defaults split hunk-header select-all to the new pane", () => {
+  it("defaults split select-all without a source position to the new pane", () => {
     const model = buildModel("unused", { files: [splitFile()], layout: "split" });
-    const header = model.rows
-      .filter((row) => row.kind === "line")
-      .flatMap((row) => row.cells)
-      .find((cell) => cell?.type === "header");
-    expect(header).toBeDefined();
 
-    expect(selectedSourceText(model, selectAllSource(model, position(model, header!, 0))!)).toBe(
-      "new-one\nnew-two",
-    );
+    expect(selectedSourceText(model, selectAllSource(model)!)).toBe("new-one\nnew-two");
   });
 
   it("falls back to the old pane for a deletion-only split hunk", () => {
-    const model = buildModel("unused", { files: [deletedSplitFile()], layout: "split" });
-    const header = model.rows
-      .filter((row) => row.kind === "line")
-      .flatMap((row) => row.cells)
-      .find((cell) => cell?.type === "header");
-    expect(header).toBeDefined();
+    const model = buildModel("unused", { files: [deletionOnlySplitFile()], layout: "split" });
 
-    expect(selectedSourceText(model, selectAllSource(model, position(model, header!, 0))!)).toBe(
-      "@@ -1,2 +1,0 @@\nold-one\nold-two",
-    );
+    expect(selectedSourceText(model, selectAllSource(model)!)).toBe("old-one\nold-two");
+  });
+
+  it("never hits a hunk separator", () => {
+    const model = buildModel("unused", { files: [splitFile()], layout: "split" });
+    const separator = model.rows.find((row) => row.kind === "separator");
+    expect(separator).toBeDefined();
+
+    expect(
+      hitTestDiffDocument({
+        model,
+        x: 90,
+        documentY: separator!.top + 1,
+        horizontalOffset: 0,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -201,6 +202,7 @@ function buildModel(changedContent: string, overrides: Partial<BuildDiffDocument
       border: "#222",
       foreground: "#fff",
       foregroundMuted: "#aaa",
+      foregroundExtraMuted: "extra-muted",
       addition: "green",
       deletion: "red",
       additionBackground: "#010",
@@ -214,7 +216,11 @@ function buildModel(changedContent: string, overrides: Partial<BuildDiffDocument
       statusWarning: "orange",
       syntax: {},
     },
-    labels: { binary: "Binary", tooLarge: "Too large" },
+    labels: {
+      binary: "Binary",
+      tooLarge: "Too large",
+      unmodifiedLines: (count) => `${count} unmodified lines`,
+    },
     ...overrides,
   });
 }
@@ -256,12 +262,12 @@ function splitFile(): ParsedDiffFile {
     deletions: 2,
     hunks: [
       {
-        oldStart: 1,
+        oldStart: 4,
         oldCount: 2,
-        newStart: 1,
+        newStart: 4,
         newCount: 2,
         lines: [
-          { type: "header", content: "@@ -1,2 +1,2 @@" },
+          { type: "header", content: "@@ -4,2 +4,2 @@" },
           { type: "remove", content: "old-one" },
           { type: "remove", content: "old-two" },
           { type: "add", content: "new-one" },
@@ -272,21 +278,21 @@ function splitFile(): ParsedDiffFile {
   };
 }
 
-function deletedSplitFile(): ParsedDiffFile {
+function deletionOnlySplitFile(): ParsedDiffFile {
   return {
-    path: "src/deleted.ts",
+    path: "src/deletion-only.ts",
     isNew: false,
-    isDeleted: true,
+    isDeleted: false,
     additions: 0,
     deletions: 2,
     hunks: [
       {
-        oldStart: 1,
+        oldStart: 4,
         oldCount: 2,
-        newStart: 1,
+        newStart: 3,
         newCount: 0,
         lines: [
-          { type: "header", content: "@@ -1,2 +1,0 @@" },
+          { type: "header", content: "@@ -4,2 +3,0 @@" },
           { type: "remove", content: "old-one" },
           { type: "remove", content: "old-two" },
         ],

@@ -29,6 +29,7 @@ import {
 import { gotoAppShell } from "../support/helpers/app";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 import { getServerId } from "../support/helpers/server-id";
+import { runWorkspaceActionFromCommandCenter } from "../support/helpers/command-center-workspace-actions";
 
 // ─── Shared state ──────────────────────────────────────────────────────────
 
@@ -46,6 +47,30 @@ async function tabTestIds(tabs: Locator): Promise<(string | null)[]> {
   return tabs.evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-testid")),
   );
+}
+
+/** 关闭按钮放在一个叠层里，由叠层的 opacity 控制显隐。 */
+async function closeOverlayOpacity(closeButton: Locator): Promise<string> {
+  return closeButton.evaluate((element) => getComputedStyle(element.parentElement!).opacity);
+}
+
+/** 每个 tab 底色相对所在 tab 条底色的对比度；越高，这个 tab 越显眼。 */
+async function tabFillContrasts(tabs: Locator): Promise<number[]> {
+  return tabs.evaluateAll((nodes) => {
+    const luminance = (color: string) => {
+      const [r, g, b] = (color.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map((channel) => {
+        const value = Number(channel) / 255;
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    return nodes.map((node) => {
+      const row = node.closest('[data-testid="workspace-tabs-row"]')!;
+      const fill = luminance(getComputedStyle(node).backgroundColor);
+      const rowFill = luminance(getComputedStyle(row).backgroundColor);
+      return (Math.max(fill, rowFill) + 0.05) / (Math.min(fill, rowFill) + 0.05);
+    });
+  });
 }
 
 function tabIdentityKey(snapshot: Array<{ id: string }>): string {
@@ -255,6 +280,53 @@ test.describe("Tab creation", () => {
     await assertSingleNewTabButton(page);
     await assertNewChatTileVisible(page);
     await assertNewTabMenuTriggerVisible(page);
+  });
+
+  test("active tabs keep their close button and the focused pane's tab reads strongest", async ({
+    page,
+    withWorkspace,
+  }) => {
+    const isolatedWorkspace = await withWorkspace({ prefix: "launcher-tab-chrome-" });
+    await isolatedWorkspace.navigateTo();
+    await clickNewTerminal(page);
+    await clickNewTerminal(page);
+
+    const terminalTabs = page
+      .locator('[data-testid^="workspace-tab-terminal_"]')
+      .filter({ visible: true });
+    await expect(terminalTabs).toHaveCount(2, { timeout: 30_000 });
+    const activeTabs = page
+      .locator('[data-testid^="workspace-tab-"][aria-selected="true"]')
+      .filter({ visible: true });
+    await expect(activeTabs).toHaveCount(1);
+    await expect(activeTabs.first()).toHaveCSS("height", "26px");
+    await expect(activeTabs.first()).toHaveCSS("border-radius", "8px");
+
+    // 指针不在 tab 上时：当前 tab 仍显示关闭按钮，非当前 tab 隐藏。
+    await page.mouse.move(0, 0);
+    const closeButtonFor = async (tab: Locator) => {
+      const testId = await tab.getAttribute("data-testid");
+      const terminalId = testId!.replace("workspace-tab-terminal_", "");
+      return page.getByTestId(`workspace-terminal-close-${terminalId}`);
+    };
+    const activeTerminalTab = terminalTabs.and(page.locator('[aria-selected="true"]'));
+    const inactiveTerminalTab = terminalTabs.and(page.locator('[aria-selected="false"]'));
+    const activeClose = await closeButtonFor(activeTerminalTab);
+    const inactiveClose = await closeButtonFor(inactiveTerminalTab);
+    await expect.poll(() => closeOverlayOpacity(activeClose)).toBe("1");
+    await expect.poll(() => closeOverlayOpacity(inactiveClose)).toBe("0");
+
+    await runWorkspaceActionFromCommandCenter(page, "Split pane right");
+    await expect(page.getByTestId("workspace-new-tab-panel").filter({ visible: true })).toBeVisible(
+      {
+        timeout: 30_000,
+      },
+    );
+    await expect(activeTabs).toHaveCount(2);
+    // 焦点在新拆出的右侧 pane：左侧 pane 的当前 tab 底色更弱。
+    const [unfocusedContrast, focusedContrast] = await tabFillContrasts(activeTabs);
+    expect(focusedContrast).toBeGreaterThan(unfocusedContrast);
+    expect(unfocusedContrast).toBeGreaterThan(1);
   });
 });
 

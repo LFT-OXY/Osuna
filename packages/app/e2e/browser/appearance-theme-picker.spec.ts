@@ -35,7 +35,9 @@ test("keeps the selected workspace visible in Light", async ({ page }, testInfo)
     await row.click();
 
     await expect(row).toHaveAttribute("aria-selected", "true");
-    await expect(row).toHaveCSS("background-color", "rgb(228, 228, 231)");
+    await expect(row).toHaveCSS("background-color", "rgb(234, 234, 234)");
+    // 选中态是浅底色加 1px 内嵌描边（borderSidebarSelected）。
+    await expect(row).toHaveCSS("box-shadow", "rgb(218, 218, 218) 0px 0px 0px 1px inset");
     await page.screenshot({
       path: testInfo.outputPath("light-selected-workspace.png"),
       fullPage: true,
@@ -62,7 +64,7 @@ test("keeps the selected workspace visible in Pure black", async ({ page }, test
     await row.click();
 
     await expect(row).toHaveAttribute("aria-selected", "true");
-    await expect(row).toHaveCSS("background-color", "rgb(17, 17, 17)");
+    await expect(row).toHaveCSS("background-color", "rgb(19, 19, 19)");
     await page.screenshot({
       path: testInfo.outputPath("pure-black-selected-workspace.png"),
       fullPage: true,
@@ -80,8 +82,9 @@ test("applies the interface font size to settings text", async ({ page }) => {
   await expect(page.getByTestId("settings-sidebar")).toBeVisible();
   await openSettingsSection(page, "appearance");
 
+  // 分组标题是 label 档（13px 基准），按界面字号等比换算：21 → 19.5 取整为 20。
   const sectionTitle = page.getByText("Theme", { exact: true }).first();
-  await expect(sectionTitle).toHaveCSS("font-size", "18px");
+  await expect(sectionTitle).toHaveCSS("font-size", "20px");
 
   const interfaceSizeInput = page.getByLabel("Interface font size");
   const contentSizeInput = page.getByLabel("Content font size");
@@ -92,5 +95,5 @@ test("applies the interface font size to settings text", async ({ page }) => {
 
   await expect(interfaceSizeInput).toHaveValue("12");
   await expect(contentSizeInput).toHaveValue("21");
-  await expect(sectionTitle).toHaveCSS("font-size", "10px");
+  await expect(sectionTitle).toHaveCSS("font-size", "11px");
 });

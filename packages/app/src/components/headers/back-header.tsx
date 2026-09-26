@@ -12,13 +12,20 @@ interface BackHeaderProps {
   titleAccessory?: ReactNode;
   rightContent?: ReactNode;
   onBack?: () => void;
+  borderless?: boolean;
 }
 
 function goBack(): void {
   router.back();
 }
 
-export function BackHeader({ title, titleAccessory, rightContent, onBack }: BackHeaderProps) {
+export function BackHeader({
+  title,
+  titleAccessory,
+  rightContent,
+  onBack,
+  borderless,
+}: BackHeaderProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const handleBack = useCallback(() => {
@@ -47,6 +54,7 @@ export function BackHeader({ title, titleAccessory, rightContent, onBack }: Back
       }
       right={rightContent}
       leftStyle={styles.left}
+      borderless={borderless}
     />
   );
 }

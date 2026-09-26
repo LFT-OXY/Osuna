@@ -1,14 +1,12 @@
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
+import { getRowBackdrop } from "@/components/ui/row";
 
 /**
  * Which surface a sidebar row is currently painting, so anything knocking out of it — the status
  * badge on a project icon — can match.
  *
- * This restates the precedence of the row style arrays, which live in three separate renderers
- * (`sidebar-workspace-list`, `sidebar-status-list`, `sidebar-workspace-row`). One copy of the rule
- * here rather than three ternaries beside three stylesheets: drifting from them is how the badge
- * ends up with a halo, and a halo in one grouping mode but not the other is worse than either.
- *
+ * 状态优先级沿用 `<Row>` 的 `getRowBackdrop`，行渲染器也通过 `getRowSurfaceStyle` 用同一条
+ * 规则上色；拖拽是侧栏独有、叠在最上层的状态。
  */
 export function getSidebarRowBackdrop({
   isDragging = false,
@@ -21,8 +19,6 @@ export function getSidebarRowBackdrop({
   selected?: boolean;
   isHovered?: boolean;
 }): SidebarSurfaceBackdrop {
-  if (isDragging || isPressed) return "surface2";
-  if (selected) return "surfaceSidebarSelected";
-  if (isHovered) return "surfaceSidebarHover";
-  return "surfaceSidebar";
+  if (isDragging) return "surface2";
+  return getRowBackdrop({ hovered: isHovered, pressed: isPressed, selected });
 }

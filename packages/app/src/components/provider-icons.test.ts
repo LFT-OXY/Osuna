@@ -2,7 +2,11 @@ import { Bot } from "lucide-react-native";
 import { SvgXml } from "react-native-svg";
 import { describe, expect, it } from "vitest";
 import { replaceProviderSnapshotIcons } from "./provider-icon-name";
-import { getProviderIcon, type ProviderIconComponent } from "./provider-icons";
+import {
+  getProviderBrandColor,
+  getProviderIcon,
+  type ProviderIconComponent,
+} from "./provider-icons";
 
 function renderIcon(Component: ProviderIconComponent) {
   if (typeof Component !== "function") throw new Error("Expected a function component");
@@ -29,5 +33,13 @@ describe("getProviderIcon", () => {
     replaceProviderSnapshotIcons("server-1", [{ provider: "plain-provider" }]);
 
     expect(getProviderIcon("plain-provider", "server-1")).toBe(Bot);
+  });
+});
+
+describe("getProviderBrandColor", () => {
+  it("gives Claude its brand orange and leaves other providers without one", () => {
+    expect(getProviderBrandColor("claude")).toBe("#d97757");
+    expect(getProviderBrandColor("codex")).toBeNull();
+    expect(getProviderBrandColor("custom-provider")).toBeNull();
   });
 });

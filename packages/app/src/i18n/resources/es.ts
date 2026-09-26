@@ -132,6 +132,10 @@ export const es: TranslationResources = {
       queue: "Cola",
       send: "Enviar",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Local",
+    },
     cancel: {
       cancelingAgent: "Agente de cancelación",
       stopAgent: "detener agente",
@@ -318,6 +322,12 @@ export const es: TranslationResources = {
   },
   message: {
     workedFor: "Trabajó durante {{duration}}",
+    workingFor: "Trabajando durante {{duration}}",
+    changedFiles: {
+      one: "{{count}} archivo modificado",
+      other: "{{count}} archivos modificados",
+      openDiff: "Abrir diferencias",
+    },
     turnUsage: {
       title: "Uso del turno",
       total: "Total",
@@ -962,6 +972,8 @@ export const es: TranslationResources = {
           title: "Ir al archivo",
         },
         binaryFile: "archivo binario",
+        unmodifiedLine: "{{count}} línea sin cambios",
+        unmodifiedLines: "{{count}} líneas sin cambios",
         tooLarge: "La diferencia es demasiado grande para mostrarse",
         previewTooLargeTitle: "Este diff es demasiado grande para previsualizarlo",
         previewTooLargeDescription: "Reduce la comparación para previsualizarla aquí",

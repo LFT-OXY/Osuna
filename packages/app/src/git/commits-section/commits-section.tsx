@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { Text as UiText } from "@/components/ui/text";
 import { StyleSheet } from "react-native-unistyles";
+import { ICON_SIZE } from "@/styles/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { useRetainedPanelActive } from "@/components/retained-panel";
@@ -122,10 +124,7 @@ export function CommitsSection({
     () => [styles.headerChevron, !collapsed && styles.headerChevronExpanded],
     [collapsed],
   );
-  const containerStyle = useMemo(
-    () => [styles.container, { paddingBottom: insets.bottom }],
-    [insets.bottom],
-  );
+  const containerStyle = useMemo(() => ({ paddingBottom: insets.bottom }), [insets.bottom]);
 
   if (query.status === "unsupported") {
     return null;
@@ -144,9 +143,9 @@ export function CommitsSection({
         style={styles.header}
       >
         <View style={headerChevronStyle}>
-          <ThemedChevron size={14} uniProps={chevronColorMapping} />
+          <ThemedChevron size={ICON_SIZE.sm} uniProps={chevronColorMapping} />
         </View>
-        <Text style={styles.title}>{t("workspace.git.diff.commits.title")}</Text>
+        <UiText variant="label">{t("workspace.git.diff.commits.title")}</UiText>
         {commitCount === null ? (
           <View style={styles.countSpacer} />
         ) : (
@@ -168,10 +167,6 @@ export function CommitsSection({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  container: {
-    borderTopWidth: theme.borderWidth[1],
-    borderTopColor: theme.colors.border,
-  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -192,10 +187,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   headerChevronExpanded: {
     transform: [{ rotate: "90deg" }],
-  },
-  title: {
-    fontSize: theme.fontSize.base,
-    color: theme.colors.foreground,
   },
   count: {
     fontSize: theme.fontSize.sm,

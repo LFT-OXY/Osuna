@@ -17,6 +17,8 @@ const { theme } = vi.hoisted(() => ({
     spacing: { 1: 4, 1.5: 6, 2: 8, 2.5: 10, 3: 12, 4: 16, 6: 24, 8: 32 },
     borderWidth: { 1: 1 },
     borderRadius: { md: 6, lg: 8, full: 9999 },
+    radius: { sm: 6, md: 8, lg: 10, xl: 14, "2xl": 18, "3xl": 22, full: 9999 },
+    controlHeight: { sm: 24, md: 28, lg: 32 },
     fontSize: { xs: 11, sm: 13, base: 15 },
     fontWeight: { normal: "400", medium: "500", semibold: "600" },
     iconSize: { sm: 14, md: 16, lg: 24 },

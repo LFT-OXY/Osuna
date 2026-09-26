@@ -134,6 +134,10 @@ export const fr: TranslationResources = {
       queue: "File d'attente",
       send: "Envoyer",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Local",
+    },
     cancel: {
       cancelingAgent: "Agent d'annulation",
       stopAgent: "Agent d'arrêt",
@@ -319,6 +323,12 @@ export const fr: TranslationResources = {
   },
   message: {
     workedFor: "A travaillé pendant {{duration}}",
+    workingFor: "Travaille depuis {{duration}}",
+    changedFiles: {
+      one: "{{count}} fichier modifié",
+      other: "{{count}} fichiers modifiés",
+      openDiff: "Ouvrir le diff",
+    },
     turnUsage: {
       title: "Utilisation du tour",
       total: "Total",
@@ -961,6 +971,8 @@ export const fr: TranslationResources = {
           title: "Aller au fichier",
         },
         binaryFile: "Fichier binaire",
+        unmodifiedLine: "{{count}} ligne inchangée",
+        unmodifiedLines: "{{count}} lignes inchangées",
         tooLarge: "Diff trop grand pour être affiché",
         previewTooLargeTitle: "Ce diff est trop volumineux pour être prévisualisé",
         previewTooLargeDescription: "Réduisez la comparaison pour la prévisualiser ici",

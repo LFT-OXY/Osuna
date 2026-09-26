@@ -1,10 +1,21 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, View, type TextStyle, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  View,
+  type PressableStateCallbackType,
+  type TextStyle,
+  type ViewStyle,
+} from "react-native";
 import { Code, Maximize2, Workflow } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
+import {
+  iconButtonChromeGlyphSize,
+  iconButtonChromeStyle,
+} from "@/components/ui/icon-button-chrome";
 import { ZoomableViewport } from "@/components/zoomable-viewport";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
 import type { MarkdownFenceRendererProps } from "../types";
 import { MermaidFullscreenViewer } from "./fullscreen-viewer.web";
@@ -24,6 +35,7 @@ function MermaidFenceHostImpl({
   colorScheme = "dark",
 }: MermaidFenceHostImplProps) {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
   const { state, request, rendered, renderFailed } = useMermaidRenderModel({
     source: code,
     phase,
@@ -75,7 +87,7 @@ function MermaidFenceHostImpl({
       marginBottom: marginBottom ?? marginVertical,
     };
     const text: TextStyle = sourceTextStyle;
-    return { container: [margins, sourceContainerStyle], text };
+    return { container: margins, text };
   }, [textStyle]);
   const diagramStyle = useMemo(
     () => [
@@ -90,9 +102,28 @@ function MermaidFenceHostImpl({
     [visible],
   );
   const sourceVisible = !diagramVisible;
-  const sourceContainer = showSource ? sourceView.container : sourceContainerStyle;
+  const sourceContainer = showSource ? sourceView.container : undefined;
   const sourceTextStyle = showSource ? sourceView.text : textStyle;
   const viewportStyle = diagramVisible ? diagramStyle : measuringStyle;
+  const renderSourceHeaderActions = useCallback(
+    () =>
+      showSource && canShowDiagram ? (
+        <Pressable
+          accessibilityLabel={t("message.diagram.viewDiagram")}
+          accessibilityRole="button"
+          onPress={showDiagramPress}
+          style={isCompact ? compactViewDiagramButtonStyle : viewDiagramButtonStyle}
+        >
+          {({ hovered }) => (
+            <Workflow
+              size={iconButtonChromeGlyphSize("small", isCompact)}
+              color={hovered ? controlStyles.iconHovered.color : controlStyles.icon.color}
+            />
+          )}
+        </Pressable>
+      ) : null,
+    [canShowDiagram, isCompact, showDiagramPress, showSource, t],
+  );
 
   return (
     <>
@@ -103,23 +134,8 @@ function MermaidFenceHostImpl({
             language="mermaid"
             inheritedStyles={inheritedStyles}
             textStyle={sourceTextStyle}
+            renderHeaderActions={renderSourceHeaderActions}
           />
-          {showSource && canShowDiagram ? (
-            <Pressable
-              accessibilityLabel={t("message.diagram.viewDiagram")}
-              accessibilityRole="button"
-              hitSlop={4}
-              onPress={showDiagramPress}
-              style={controlStyles.sourceButton}
-            >
-              {({ hovered }) => (
-                <Workflow
-                  size={14}
-                  color={hovered ? controlStyles.iconHovered.color : controlStyles.icon.color}
-                />
-              )}
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
       <ZoomableViewport
@@ -153,7 +169,11 @@ const MEASURING_SIZE = { width: 240, height: 240 };
  * with `overflow: hidden`, so a shorter box leaves the buttons half-clipped and unclickable.
  */
 const MIN_DIAGRAM_BOX_HEIGHT = 56;
-const sourceContainerStyle: ViewStyle = { position: "relative" };
+// 与代码块头部的复制按钮同一尺寸档（紧凑布局下同为触控尺寸）。
+const viewDiagramButtonStyle = (state: PressableStateCallbackType & { hovered?: boolean }) =>
+  iconButtonChromeStyle({ size: "small", state });
+const compactViewDiagramButtonStyle = (state: PressableStateCallbackType & { hovered?: boolean }) =>
+  iconButtonChromeStyle({ size: "small", state, compact: true });
 /**
  * The viewport's own root is `flex: 1`, so as a flex item it has `flex-basis: 0%` and that basis
  * replaces the height below. In the markdown column there is no free space to grow into, so the
@@ -176,12 +196,6 @@ const measuringStyle: ViewStyle = {
   pointerEvents: "none",
 };
 const controlStyles = StyleSheet.create((theme) => ({
-  sourceButton: {
-    position: "absolute",
-    top: theme.spacing[2],
-    right: theme.spacing[2],
-    padding: theme.spacing[1],
-  },
   icon: { color: theme.colors.foregroundMuted },
   iconHovered: { color: theme.colors.foreground },
 }));

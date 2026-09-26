@@ -5,17 +5,24 @@ import {
   fragmentWidthForRange,
   visibleRowRange,
 } from "./model";
-import { codeLineNumberTone, codeTextColor } from "./palette";
+import {
+  DIFF_CHANGE_BAR_WIDTH,
+  changeBarTone,
+  codeLineNumberTone,
+  diffSeparatorLayout,
+} from "./palette";
 import {
   DIFF_FILE_HEADER_CONTENT_HEIGHT,
   DIFF_FILE_HEADER_HEIGHT,
-  DIFF_FILE_HEADER_ICON_SIZE,
+  DIFF_FILE_CHANGE_SLOT_SIZE,
   DIFF_FILE_HEADER_LEFT,
   DIFF_FILE_HEADER_RIGHT,
   DIFF_FILE_HEADER_TEXT_GAP,
   allocateDiffHeaderTextWidths,
   diffFileChangeKind,
+  diffFileChangePresentation,
   directorySuffix,
+  type DiffFileChange,
   fileNameForPath,
   formatDiffCount,
 } from "@/git/file-header-presentation";
@@ -28,6 +35,7 @@ import type {
   DiffLineRow,
   DiffPalette,
   DiffSelection,
+  DiffSeparatorRow,
   DiffTypography,
   TextMeasurer,
 } from "./types";
@@ -76,6 +84,10 @@ export function paintWebViewport(input: PaintWebViewportInput): void {
     if (row.kind === "status") {
       context.fillStyle = input.palette.foregroundMuted;
       context.fillText(row.label, 12, y + input.model.lineHeight + 6);
+      continue;
+    }
+    if (row.kind === "separator") {
+      paintSeparator({ ...input, row, y });
       continue;
     }
     paintLine({
@@ -138,7 +150,7 @@ export function paintWebFileHeader(input: {
   context.fillStyle = palette.headerBorder;
   context.fillRect(0, y + DIFF_FILE_HEADER_HEIGHT - 1, viewportWidth, 1);
 
-  const iconX = viewportWidth - DIFF_FILE_HEADER_RIGHT - DIFF_FILE_HEADER_ICON_SIZE;
+  const changeSlotX = viewportWidth - DIFF_FILE_HEADER_RIGHT - DIFF_FILE_CHANGE_SLOT_SIZE;
   const statLabels = [
     `+${formatDiffCount(file.file.additions)}`,
     `-${formatDiffCount(file.file.deletions)}`,
@@ -146,19 +158,20 @@ export function paintWebFileHeader(input: {
   context.font = `${typography.statSize}px ${typography.family}`;
   const statWidths = statLabels.map((label) => context.measureText(label).width);
   const statWidth = statWidths[0]! + 4 + statWidths[1]!;
-  const statX = iconX - 8 - statWidth;
+  const statX = changeSlotX - 8 - statWidth;
   const statBaseline = centeredTextBaseline(context, y + DIFF_FILE_HEADER_CONTENT_HEIGHT / 2);
   context.fillStyle = palette.statusSuccess;
   context.fillText(statLabels[0]!, statX, statBaseline);
   context.fillStyle = palette.statusDanger;
   context.fillText(statLabels[1]!, statX + statWidths[0]! + 4, statBaseline);
-  paintChangeIcon(
+  paintChangeLetter({
     context,
-    file,
-    iconX,
-    y + (DIFF_FILE_HEADER_CONTENT_HEIGHT - DIFF_FILE_HEADER_ICON_SIZE) / 2,
+    change: diffFileChangeKind(file.file),
+    slotX: changeSlotX,
+    baseline: statBaseline,
     palette,
-  );
+    typography,
+  });
 
   context.font = `${typography.size}px ${typography.family}`;
   const textBaseline = centeredTextBaseline(context, y + DIFF_FILE_HEADER_CONTENT_HEIGHT / 2);
@@ -225,38 +238,41 @@ function truncateCanvasText(
   return `${text.slice(0, low)}${ellipsis}`;
 }
 
-function paintChangeIcon(
-  context: CanvasRenderingContext2D,
-  file: DiffFileSection,
-  x: number,
-  y: number,
-  palette: DiffPalette,
-): void {
-  const change = diffFileChangeKind(file.file);
+function paintChangeLetter(input: {
+  context: CanvasRenderingContext2D;
+  change: DiffFileChange;
+  slotX: number;
+  baseline: number;
+  palette: DiffPalette;
+  typography: DiffHeaderTypography;
+}): void {
+  const { context } = input;
+  const { letter, tone } = diffFileChangePresentation(input.change);
+  context.font = `600 ${input.typography.microSize}px ${input.typography.family}`;
+  context.fillStyle = input.palette[tone];
+  const width = context.measureText(letter).width;
+  context.fillText(letter, input.slotX + (DIFF_FILE_CHANGE_SLOT_SIZE - width) / 2, input.baseline);
+}
+
+// 分隔行是装饰：UI 字体的 micro 档标签居中，两侧横线，不跟横向滚动，不参与选区。
+function paintSeparator(input: PaintWebViewportInput & { row: DiffSeparatorRow; y: number }): void {
+  const { context } = input;
   context.save();
-  context.translate(x, y);
-  context.scale(DIFF_FILE_HEADER_ICON_SIZE / 24, DIFF_FILE_HEADER_ICON_SIZE / 24);
-  if (change === "added") context.strokeStyle = palette.statusSuccess;
-  else if (change === "deleted") context.strokeStyle = palette.statusDanger;
-  else context.strokeStyle = palette.statusWarning;
-  context.lineWidth = 2;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.beginPath();
-  context.roundRect(3, 3, 18, 18, 2);
-  if (change === "added") {
-    context.moveTo(8, 12);
-    context.lineTo(16, 12);
-    context.moveTo(12, 8);
-    context.lineTo(12, 16);
-  } else if (change === "deleted") {
-    context.moveTo(8, 12);
-    context.lineTo(16, 12);
-  } else {
-    context.moveTo(12, 12);
-    context.lineTo(12.01, 12);
-  }
-  context.stroke();
+  context.font = `${input.headerTypography.microSize}px ${input.headerTypography.family}`;
+  const layout = diffSeparatorLayout({
+    rowTop: input.y,
+    rowHeight: input.row.height,
+    width: input.viewportWidth,
+    labelWidth: context.measureText(input.row.label).width,
+  });
+  context.fillStyle = input.palette.border;
+  for (const rule of layout.rules) context.fillRect(rule.x, layout.ruleY, rule.width, 1);
+  context.fillStyle = input.palette.foregroundExtraMuted;
+  context.fillText(
+    input.row.label,
+    layout.labelX,
+    centeredTextBaseline(context, input.y + input.row.height / 2),
+  );
   context.restore();
 }
 
@@ -284,6 +300,12 @@ function paintLine(
       );
     }
     if (!cell) return;
+    const textHeight = input.row.height - input.row.reviewHeight;
+    const barTone = changeBarTone(cell);
+    if (barTone) {
+      input.context.fillStyle = input.palette[barTone];
+      input.context.fillRect(x, input.y, DIFF_CHANGE_BAR_WIDTH, textHeight);
+    }
     input.context.fillStyle = input.palette.border;
     input.context.fillRect(x + file.gutterWidth, input.y, 1, reviewDividerHeight(input.row.height));
     if (cell.lineNumber !== null) {
@@ -301,7 +323,7 @@ function paintLine(
       x + file.gutterWidth + CODE_LEFT_PADDING,
       input.y,
       columnWidth - file.gutterWidth - CODE_LEFT_PADDING,
-      input.row.height - input.row.reviewHeight,
+      textHeight,
     );
     input.context.clip();
     paintCellText({ ...input, cell, x: x + file.gutterWidth + CODE_LEFT_PADDING });
@@ -351,13 +373,13 @@ function fragmentColorBands(
     const syntaxRun = cell.tokens.find(
       (run) => run.start <= grapheme.start && grapheme.start < run.end,
     );
-    const color = syntaxRun?.color ?? cellForeground(cell, palette);
+    const color = syntaxRun?.color ?? palette.foreground;
     const previous = ranges.at(-1);
     if (previous?.color === color) previous.end = grapheme.end;
     else ranges.push({ start: grapheme.start, end: grapheme.end, color });
   }
   if (ranges.length === 0) {
-    return [{ x: 0, width: Math.max(1, fragment.width), color: cellForeground(cell, palette) }];
+    return [{ x: 0, width: Math.max(1, fragment.width), color: palette.foreground }];
   }
   return ranges.map((range) => ({
     x: fragmentWidthForRange(fragment, fragment.start, range.start),
@@ -393,12 +415,7 @@ function cellBackground(cell: DiffCell | null, palette: DiffPalette): string {
   if (!cell) return palette.emptyBackground;
   if (cell.type === "add") return palette.additionBackground;
   if (cell.type === "remove") return palette.deletionBackground;
-  if (cell.type === "header") return palette.headerSurface;
   return palette.surface;
-}
-
-function cellForeground(cell: DiffCell, palette: DiffPalette): string {
-  return codeTextColor(cell, palette);
 }
 
 function lineNumberColor(cell: DiffCell, palette: DiffPalette): string {

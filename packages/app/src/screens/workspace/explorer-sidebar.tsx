@@ -102,7 +102,6 @@ export function ExplorerSidebarDock({
               onReorderTabs={handleReorderTabs}
               trailingAccessory={headerAction}
             />
-            <View pointerEvents="none" style={styles.tabRailDivider} />
           </WindowChromeSafeArea>
           <View style={styles.content}>
             <WorkspacePanelHost
@@ -133,14 +132,6 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
     flexShrink: 0,
     backgroundColor: theme.colors.surfaceSidebar,
-  },
-  tabRailDivider: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    left: 0,
-    height: theme.borderWidth[1],
-    backgroundColor: theme.colors.border,
   },
   content: {
     flex: 1,

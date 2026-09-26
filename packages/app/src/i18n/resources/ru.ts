@@ -132,6 +132,10 @@ export const ru: TranslationResources = {
       queue: "Очередь",
       send: "Отправить",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Локально",
+    },
     cancel: {
       cancelingAgent: "Отменить агента",
       stopAgent: "Остановить агента",
@@ -317,6 +321,12 @@ export const ru: TranslationResources = {
   },
   message: {
     workedFor: "Работа заняла {{duration}}",
+    workingFor: "Работает {{duration}}",
+    changedFiles: {
+      one: "Изменён {{count}} файл",
+      other: "Изменено файлов: {{count}}",
+      openDiff: "Открыть дифф",
+    },
     turnUsage: {
       title: "Расход за ход",
       total: "Итого",
@@ -946,6 +956,8 @@ export const ru: TranslationResources = {
           title: "Перейти к файлу",
         },
         binaryFile: "Бинарный файл",
+        unmodifiedLine: "Без изменений, строк: {{count}}",
+        unmodifiedLines: "Без изменений, строк: {{count}}",
         tooLarge: "Дифф слишком велик для отображения",
         previewTooLargeTitle: "Этот дифф слишком велик для предварительного просмотра",
         previewTooLargeDescription: "Сузьте диапазон сравнения, чтобы просмотреть дифф здесь",

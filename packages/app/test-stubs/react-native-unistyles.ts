@@ -3,6 +3,8 @@ const testTheme = {
   colors: {
     foreground: "#111111",
     foregroundMuted: "#666666",
+    foregroundExtraMuted: "#a1a1aa",
+    accentBright: "#3160db",
     statusSuccess: "#15803d",
     statusDanger: "#b91c1c",
     statusWarning: "#d97706",
@@ -16,11 +18,29 @@ const testTheme = {
     accentForeground: "#ffffff",
     destructive: "#dc2626",
     destructiveForeground: "#ffffff",
+    surface0: "#ffffff",
     surface1: "#fafafa",
     surface2: "#f4f4f5",
     surface3: "#e4e4e7",
     border: "#e4e4e7",
+    // 侧栏与行三态（<Row>），取默认亮色主题的值。
+    surfaceSidebar: "#fafafa",
+    surfaceSidebarHover: "#f1f1f1",
+    surfaceSidebarActive: "#e4e4e4",
+    surfaceSidebarSelected: "#eaeaea",
+    borderSidebarSelected: "#dadada",
+    // 工作区 tab 的 hover / 当前两档，取默认亮色主题的值。
+    surfaceTabHover: "#f1f1f2",
+    surfaceTabActive: "#eaeaea",
     borderAccent: "#a1a1aa",
+    // 浮层（菜单、对话框）的卡片、毛玻璃与遮罩，取默认亮色主题的值。
+    surfaceCard: "#ffffff",
+    surfaceGlass: "rgba(255, 255, 255, 0.8)",
+    overlayScrim: "rgba(0, 0, 0, 0.18)",
+    // Composer 的描边、投影与内高光，取默认亮色主题的值。
+    borderComposer: "rgba(39, 39, 42, 0.09)",
+    shadowComposer: "rgba(0, 0, 0, 0.4)",
+    insetHighlight: "transparent",
     palette: {
       amber: { 500: "#f59e0b" },
       blue: { 300: "#93c5fd" },
@@ -46,9 +66,23 @@ const testTheme = {
     ui: "sans-serif",
     mono: "monospace",
   },
+  // <Text> 阶梯，取 14px 界面字号下的原值。
+  typeScale: {
+    micro: { fontSize: 11, lineHeight: 15 },
+    caption: { fontSize: 12, lineHeight: 16 },
+    label: { fontSize: 13, lineHeight: 18 },
+    body: { fontSize: 14, lineHeight: 20 },
+    "body-lg": { fontSize: 15, lineHeight: 22 },
+    "title-sm": { fontSize: 16, lineHeight: 24 },
+    title: { fontSize: 18, lineHeight: 28 },
+    "title-lg": { fontSize: 20, lineHeight: 28 },
+    display: { fontSize: 24, lineHeight: 32 },
+    prose: { fontSize: 14, lineHeight: 22 },
+  },
   fontWeight: {
     normal: "400",
     medium: "500",
+    semibold: "600",
   },
   borderRadius: {
     base: 4,
@@ -57,6 +91,8 @@ const testTheme = {
     xl: 12,
     full: 9999,
   },
+  radius: { sm: 6, md: 8, lg: 10, xl: 14, "2xl": 18, "3xl": 22, full: 9999 },
+  controlHeight: { sm: 24, md: 28, lg: 32 },
   iconSize: { sm: 16, md: 20 },
   opacity: { 50: 0.5 },
   shadow: {

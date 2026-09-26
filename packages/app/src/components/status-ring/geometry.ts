@@ -30,11 +30,16 @@ export const STATUS_RING_HEAD_OPACITY = 0.9;
 // animations share an absolute document-timeline start, while native publishes this wall-clock
 // phase from one UI-thread clock. A row that appears mid-flight therefore lands in step with the
 // rings already turning.
-export const STATUS_RING_PERIOD_MS = 900;
+export const STATUS_RING_PERIOD_MS = 1000;
+
+// 四分之一弧每圈只在这么多个位置间跳动而不是连续扫过：满屏运行中的 agent 每秒只重绘 8 次，
+// 读起来是安静的滴答，而不是每帧都在转。
+export const STATUS_RING_STEPS = 8;
 
 export function getStatusRingRotation(nowMs: number): number {
   "worklet";
-  return ((nowMs % STATUS_RING_PERIOD_MS) / STATUS_RING_PERIOD_MS) * 360;
+  const phase = (nowMs % STATUS_RING_PERIOD_MS) / STATUS_RING_PERIOD_MS;
+  return (Math.floor(phase * STATUS_RING_STEPS) / STATUS_RING_STEPS) * 360;
 }
 
 /**

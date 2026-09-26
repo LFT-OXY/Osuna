@@ -132,6 +132,10 @@ export const ptBR: TranslationResources = {
       queue: "Fila",
       send: "Enviar",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Local",
+    },
     cancel: {
       cancelingAgent: "Cancelando agente",
       stopAgent: "Parar agente",
@@ -317,6 +321,12 @@ export const ptBR: TranslationResources = {
   },
   message: {
     workedFor: "Trabalhou por {{duration}}",
+    workingFor: "Trabalhando há {{duration}}",
+    changedFiles: {
+      one: "{{count}} arquivo alterado",
+      other: "{{count}} arquivos alterados",
+      openDiff: "Abrir diff",
+    },
     turnUsage: {
       title: "Uso do turno",
       total: "Total",
@@ -952,6 +962,8 @@ export const ptBR: TranslationResources = {
           title: "Ir para o arquivo",
         },
         binaryFile: "Arquivo binário",
+        unmodifiedLine: "{{count}} linha sem alterações",
+        unmodifiedLines: "{{count}} linhas sem alterações",
         tooLarge: "Diff grande demais para exibir",
         previewTooLargeTitle: "Este diff é grande demais para visualizar",
         previewTooLargeDescription: "Reduza a comparação para visualizá-la aqui",

@@ -29,6 +29,7 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { Check, ChevronDown, X } from "lucide-react-native";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { openExplorerSidebarView } from "@/workspace-tabs/explorer-sidebar";
+import { TurnChangedFilesProvider, type TurnChangedFilesActions } from "./turn-changed-files-card";
 import {
   AssistantMessage,
   SpeakMessage,
@@ -150,6 +151,11 @@ function renderPendingPermissionsNode(input: {
       ))}
     </View>
   );
+}
+
+// placement 还没加载到 checkout 时按 git 工作区处理，与打开文件时的既有默认一致。
+function isGitCheckout(placement: AgentScreenAgent["projectPlacement"]): boolean {
+  return placement?.checkout?.isGit ?? true;
 }
 
 function renderStreamItemWithTurnFooter(input: {
@@ -437,6 +443,22 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       setExpandedToolCallGroupIds(new Set());
     }, [agentId]);
 
+    const openExplorerView = useStableEvent((view: "files" | "changes") => {
+      openExplorerSidebarView({
+        isCompact: isMobile,
+        workspaceKey: buildWorkspaceTabPersistenceKey({
+          serverId: resolvedServerId,
+          workspaceId: context.workspaceId ?? "",
+        }),
+        checkout: {
+          serverId: resolvedServerId,
+          cwd: context.cwd,
+          isGit: isGitCheckout(context.projectPlacement),
+        },
+        view,
+      });
+    });
+
     const handleInlinePathPress = useStableEvent(
       (target: InlinePathTarget, disposition: OpenFileDisposition) => {
         if (!target.path) {
@@ -481,25 +503,15 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           setCurrentPath: false,
         });
 
-        openExplorerSidebarView({
-          isCompact: isMobile,
-          workspaceKey: buildWorkspaceTabPersistenceKey({
-            serverId: resolvedServerId,
-            workspaceId: context.workspaceId ?? "",
-          }),
-          checkout: {
-            serverId: resolvedServerId,
-            cwd: context.cwd,
-            isGit: context.projectPlacement?.checkout?.isGit ?? true,
-          },
-          view: "files",
-        });
+        openExplorerView("files");
       },
     );
 
     const handleToolCallOpenFile = useStableEvent((filePath: string) => {
       handleInlinePathPress({ raw: filePath, path: filePath }, "preferred");
     });
+
+    const handleOpenChanges = useStableEvent(() => openExplorerView("changes"));
 
     const handleForkAssistantTurn: AssistantTurnForkHandler = useStableEvent(
       async ({ target, boundary }) => {
@@ -817,6 +829,24 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     // every tick; history hosts whose group changed are revised through `historyRowRevision`.
     const getToolCallGroup = useStableEvent((hostId: string) =>
       presentation.groupsByHostId.get(hostId),
+    );
+    const expandToolCallGroup = useStableEvent(
+      (hostId: string) => getToolCallGroup(hostId)?.run.calls,
+    );
+    const turnChangedFilesActions = useMemo<TurnChangedFilesActions>(
+      () => ({
+        cwd: context.cwd,
+        expandGroup: expandToolCallGroup,
+        openFile: handleToolCallOpenFile,
+        openChanges: isGitCheckout(context.projectPlacement) ? handleOpenChanges : undefined,
+      }),
+      [
+        context.cwd,
+        context.projectPlacement,
+        expandToolCallGroup,
+        handleOpenChanges,
+        handleToolCallOpenFile,
+      ],
     );
     const renderToolCallItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "tool_call" }>) => {
@@ -1154,7 +1184,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
     return (
       <AgentUsageScopeProvider serverId={resolvedServerId} agentId={agentId}>
-        {streamSurface}
+        <TurnChangedFilesProvider value={turnChangedFilesActions}>
+          {streamSurface}
+        </TurnChangedFilesProvider>
       </AgentUsageScopeProvider>
     );
   },

@@ -48,6 +48,7 @@ import {
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
+import { ComposerContextStrip } from "./context-strip";
 import { KeyboardTranslateView } from "@/components/keyboard-translate-view";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
 import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
@@ -140,7 +141,7 @@ import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attac
 import { openExternalUrl } from "@/utils/open-external-url";
 import { useIsDictationReady } from "@/hooks/use-is-dictation-ready";
 import { useForgeSearchQuery } from "@/git/use-forge-search-query";
-import { useCheckoutStatusQuery } from "@/git/use-status-query";
+import { useCheckoutStatusQuery, type CheckoutStatusPayload } from "@/git/use-status-query";
 import { useCheckoutPrStatusQuery } from "@/git/use-pr-status-query";
 import { getForgePresentation } from "@/git/forge";
 import { ForgeBrandIcon } from "@/git/forge-icon";
@@ -987,6 +988,8 @@ interface ComposerProps {
   externalKeyboardShift?: boolean;
   /** Optional panel/container layout breakpoint. Defaults to the screen breakpoint. */
   isCompactLayout?: boolean;
+  /** 在 Composer 底部挂上工作区类型 / 分支 / host 的只读条（工作区 pane 用，手机上不显示）。 */
+  showContextStrip?: boolean;
   /**
    * What this composer is for. Terminal drops the chat-agent affordances and
    * uses the terminal font; see `@/composer/input-mode`. Callers set the mode
@@ -1093,7 +1096,6 @@ function ComposerForgeBinding({
 }
 
 interface ComposerCancelButtonProps {
-  buttonIconSize: number;
   cancelButtonStyle: (object | undefined)[];
   handleCancelAgent: () => void;
   isConnected: boolean;
@@ -1103,7 +1105,6 @@ interface ComposerCancelButtonProps {
 }
 
 function ComposerCancelButton({
-  buttonIconSize,
   cancelButtonStyle,
   handleCancelAgent,
   isConnected,
@@ -1115,9 +1116,9 @@ function ComposerCancelButton({
     ? t("composer.cancel.cancelingAgent")
     : t("composer.cancel.stopAgent");
   const icon = isCancellingAgent ? (
-    <LoadingSpinner size="small" color="white" />
+    <ThemedLoadingSpinner size="small" uniProps={iconCanvasMapping} />
   ) : (
-    <Square size={buttonIconSize} color="white" fill="white" />
+    <ThemedSquare size={ICON_SIZE.sm} uniProps={iconCanvasFillMapping} />
   );
   const shortcutNode = agentInterruptKeys ? <Shortcut chord={agentInterruptKeys} /> : null;
   return (
@@ -1223,6 +1224,27 @@ function ComposerVoiceModeButton({
   );
 }
 
+// 上下文条要紧贴 MessageInput，不能直接放进有 gap 的 messageInputContainer；单独成组件也让
+// 外层 JSX 不超过嵌套深度上限。
+function ComposerSurfaceStack({
+  serverId,
+  gitStatus,
+  showContextStrip,
+  children,
+}: {
+  serverId: string;
+  gitStatus: CheckoutStatusPayload | null;
+  showContextStrip: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.surfaceStack}>
+      <RenderProfile id="MessageInput">{children}</RenderProfile>
+      {showContextStrip ? <ComposerContextStrip serverId={serverId} gitStatus={gitStatus} /> : null}
+    </View>
+  );
+}
+
 export function Composer({ isPaneFocused, ...props }: ComposerProps) {
   return (
     <ComposerKeyboardScopeProvider isActiveComposer={isPaneFocused}>
@@ -1276,6 +1298,7 @@ function ComposerContentImpl({
   inputWrapperStyle,
   externalKeyboardShift,
   isCompactLayout: isCompactLayoutOverride,
+  showContextStrip = false,
   inputMode = "chat",
   readOnly = false,
   submitLabel,
@@ -2020,7 +2043,6 @@ function ComposerContentImpl({
   const activeActionContent = useMemo(
     () => (
       <ComposerCancelButton
-        buttonIconSize={buttonIconSize}
         cancelButtonStyle={cancelButtonStyle}
         handleCancelAgent={handleCancelAgent}
         isConnected={isConnected}
@@ -2029,15 +2051,7 @@ function ComposerContentImpl({
         t={t}
       />
     ),
-    [
-      agentInterruptKeys,
-      buttonIconSize,
-      cancelButtonStyle,
-      handleCancelAgent,
-      isCancellingAgent,
-      isConnected,
-      t,
-    ],
+    [agentInterruptKeys, cancelButtonStyle, handleCancelAgent, isCancellingAgent, isConnected, t],
   );
 
   const rightContent = useMemo(
@@ -2456,7 +2470,11 @@ function ComposerContentImpl({
               />
 
               {/* MessageInput handles everything: text, dictation, attachments, all buttons */}
-              <RenderProfile id="MessageInput">
+              <ComposerSurfaceStack
+                serverId={serverId}
+                gitStatus={checkoutStatusQuery.status}
+                showContextStrip={showContextStrip && !isCompactFormFactor}
+              >
                 <StableMessageInput
                   ref={messageInputRef}
                   value={textSource.getSnapshot()}
@@ -2503,7 +2521,7 @@ function ComposerContentImpl({
                   textReplacement={textReplacement}
                   submitLabel={submitLabel}
                 />
-              </RenderProfile>
+              </ComposerSurfaceStack>
               <Combobox
                 options={githubSearchOptions}
                 value=""
@@ -2573,14 +2591,17 @@ const styles = StyleSheet.create((theme: Theme) => ({
     width: "100%",
     gap: theme.spacing[3],
   },
+  surfaceStack: {
+    flexShrink: 1,
+  },
+  // 红色只留给确认里的破坏性按钮（docs/design.md §3），停止用中性的前景色。
   cancelButton: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.palette.red[600],
+    width: theme.controlHeight.lg,
+    height: theme.controlHeight.lg,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.foreground,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: theme.spacing[1],
   },
   rightControls: {
     flexDirection: "row",
@@ -2603,9 +2624,9 @@ const styles = StyleSheet.create((theme: Theme) => ({
     justifyContent: "center",
   },
   realtimeVoiceButton: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.borderRadius.full,
+    width: theme.controlHeight.md,
+    height: theme.controlHeight.md,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2617,7 +2638,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     borderColor: theme.colors.palette.green[800],
   },
   iconButtonHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   attachmentTray: {
     flexDirection: "row",
@@ -2684,6 +2705,8 @@ const ThemedArrowUp = withUnistyles(ArrowUp);
 const ThemedGitPullRequest = withUnistyles(GitPullRequest);
 const ThemedCircleDot = withUnistyles(CircleDot);
 const ThemedAudioLines = withUnistyles(AudioLines);
+const ThemedSquare = withUnistyles(Square);
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedPaperclip = withUnistyles(Paperclip);
 const ThemedImageIcon = withUnistyles(ImageIcon);
 const ThemedClipboardPaste = withUnistyles(ClipboardPaste);
@@ -2691,6 +2714,11 @@ const ThemedFileText = withUnistyles(FileText);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
+const iconCanvasMapping = (theme: Theme) => ({ color: theme.colors.surface0 });
+const iconCanvasFillMapping = (theme: Theme) => ({
+  color: theme.colors.surface0,
+  fill: theme.colors.surface0,
+});
 
 function renderForgeAttachmentIcon(icon: string): ReactElement {
   return (

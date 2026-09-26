@@ -131,6 +131,10 @@ export const ko: TranslationResources = {
       queue: "대기열",
       send: "보내기",
     },
+    context: {
+      worktree: "Worktree",
+      local: "로컬",
+    },
     cancel: {
       cancelingAgent: "에이전트 취소 중",
       stopAgent: "에이전트 중지",
@@ -314,6 +318,12 @@ export const ko: TranslationResources = {
   },
   message: {
     workedFor: "작업 시간 {{duration}}",
+    workingFor: "작업 중 {{duration}}",
+    changedFiles: {
+      one: "파일 {{count}}개 변경",
+      other: "파일 {{count}}개 변경",
+      openDiff: "Diff 열기",
+    },
     turnUsage: {
       title: "이번 턴 사용량",
       total: "합계",
@@ -936,6 +946,8 @@ export const ko: TranslationResources = {
           title: "파일로 이동",
         },
         binaryFile: "바이너리 파일",
+        unmodifiedLine: "변경되지 않은 {{count}}줄",
+        unmodifiedLines: "변경되지 않은 {{count}}줄",
         tooLarge: "표시하기에 diff가 너무 큽니다",
         previewTooLargeTitle: "Diff가 너무 커서 미리 볼 수 없습니다",
         previewTooLargeDescription: "여기에서 미리 보려면 비교 범위를 좁히세요.",

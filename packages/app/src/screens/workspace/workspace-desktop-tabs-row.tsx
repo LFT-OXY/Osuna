@@ -9,7 +9,7 @@ import React, {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, Text as RNText, View, type LayoutChangeEvent } from "react-native";
 import {
   CopyX,
   ArrowLeftToLine,
@@ -45,7 +45,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
-import { buttonControlHeight } from "@/components/ui/control-geometry";
+import { HEADER_CONTROL_HEIGHT } from "@/components/ui/control-geometry";
+import { Text, type TextColor } from "@/components/ui/text";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
@@ -64,9 +65,8 @@ import {
 } from "@/screens/workspace/workspace-tab-menu";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, SPACING, type Theme } from "@/styles/theme";
 import { RenderProfile } from "@/utils/render-profiler";
-import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
@@ -85,7 +85,9 @@ import {
 import { useSessionStore } from "@/stores/session-store";
 
 const DROPDOWN_WIDTH = 220;
-const DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH = 36;
+const INLINE_ADD_BUTTON_HORIZONTAL_PADDING = SPACING[1];
+const INLINE_ADD_BUTTON_RESERVED_WIDTH =
+  HEADER_CONTROL_HEIGHT + INLINE_ADD_BUTTON_HORIZONTAL_PADDING * 2;
 const PANE_SPLIT_ACTIONS_HORIZONTAL_PADDING = 2;
 const PANE_SPLIT_ACTIONS_OUTER_MARGIN =
   paneContentToolbarTrailingPadding(false, "glyph") - PANE_SPLIT_ACTIONS_HORIZONTAL_PADDING;
@@ -108,7 +110,14 @@ const TAB_DROP_INDICATOR_WIDTH = 4;
 const TAB_MODIFIED_DOT_SIZE = 8;
 const TAB_MIN_WIDTH = 96;
 const TAB_MAX_WIDTH = 160;
-const TAB_CLOSE_BUTTON_RESERVED_WIDTH = 0;
+const TAB_CLOSE_BUTTON_SIZE = 18;
+const TAB_CLOSE_BUTTON_INSET = 4;
+// 关闭按钮叠在 chip 右端，chip 始终给它留出位置：标签在按钮前截断，按钮出现或隐藏时标签不移动。
+const TAB_CLOSE_BUTTON_RESERVED_WIDTH =
+  TAB_CLOSE_BUTTON_INSET +
+  TAB_CLOSE_BUTTON_SIZE +
+  TAB_CONTENT_GAP / 2 -
+  TAB_CHIP_HORIZONTAL_PADDING;
 const TAB_LABEL_LAYOUT_ALLOWANCE = 4;
 const AGENT_TOOLTIP_TITLE_MAX_LENGTH = 80;
 
@@ -173,15 +182,15 @@ function AgentTabTooltipBody({
 
   return (
     <View style={styles.tooltipAgentContent}>
-      <Text style={styles.agentTooltipTitle} numberOfLines={1} ellipsizeMode="tail">
+      <RNText style={styles.agentTooltipTitle} numberOfLines={1} ellipsizeMode="tail">
         {title}
-      </Text>
+      </RNText>
       <View style={styles.tooltipAgentMetadata}>
-        <Text style={styles.tooltipAgentId}>{agentId.slice(0, 7)}</Text>
+        <RNText style={styles.tooltipAgentId}>{agentId.slice(0, 7)}</RNText>
         {activity ? (
           <>
-            <Text style={styles.tooltipAgentSeparator}>·</Text>
-            <Text style={styles.tooltipAgentActivity}>{activity}</Text>
+            <RNText style={styles.tooltipAgentSeparator}>·</RNText>
+            <RNText style={styles.tooltipAgentActivity}>{activity}</RNText>
           </>
         ) : null}
       </View>
@@ -205,6 +214,7 @@ function TabLabelMeasurement({
 
   return (
     <Text
+      variant="caption"
       style={[styles.tabLabel, styles.tabLabelMeasurement]}
       numberOfLines={1}
       onLayout={handleLayout}
@@ -238,7 +248,7 @@ function WorkspaceNewTabButton({
         testID="workspace-new-tab-button"
         style={placement === "inline" ? styles.inlineNewTabButton : undefined}
       >
-        <ThemedPlus size={14} uniProps={extraMutedColorMapping} />
+        <ThemedPlus size={ICON_SIZE.sm} uniProps={extraMutedColorMapping} />
       </ToolbarButton>
       <WorkspaceNewTabMenuContent
         serverId={serverId}
@@ -280,11 +290,11 @@ function WorkspacePaneToolbarActions({
   const splitDownKeys = useShortcutKeys("workspace-pane-split-down");
   const splitActionsVisible = showSplitActions && Boolean(onSplitRight && onSplitDown);
   const splitRightLeading = useMemo(
-    () => <ThemedColumns2 size={14} uniProps={extraMutedColorMapping} />,
+    () => <ThemedColumns2 size={ICON_SIZE.sm} uniProps={extraMutedColorMapping} />,
     [],
   );
   const splitDownLeading = useMemo(
-    () => <ThemedRows2 size={14} uniProps={extraMutedColorMapping} />,
+    () => <ThemedRows2 size={ICON_SIZE.sm} uniProps={extraMutedColorMapping} />,
     [],
   );
   const splitRightTrailing = useMemo(
@@ -320,9 +330,9 @@ function WorkspacePaneToolbarActions({
           onPress={onTogglePaneMaximized}
         >
           {paneMaximized ? (
-            <ThemedMinimize size={14} uniProps={extraMutedColorMapping} />
+            <ThemedMinimize size={ICON_SIZE.sm} uniProps={extraMutedColorMapping} />
           ) : (
-            <ThemedMaximize size={14} uniProps={extraMutedColorMapping} />
+            <ThemedMaximize size={ICON_SIZE.sm} uniProps={extraMutedColorMapping} />
           )}
         </ToolbarButton>
       ) : null}
@@ -333,7 +343,7 @@ function WorkspacePaneToolbarActions({
             label={t("workspace.git.actions.moreActions")}
             testID="workspace-split-pane-menu"
           >
-            <ThemedEllipsis size={14} uniProps={extraMutedColorMapping} />
+            <ThemedEllipsis size={ICON_SIZE.sm} uniProps={extraMutedColorMapping} />
           </ToolbarButton>
           <DropdownMenuContent
             side="bottom"
@@ -388,7 +398,7 @@ function WorkspaceExitFocusModeButton({
         testID="workspace-exit-focus-mode"
         onPress={onPress}
       >
-        <ThemedX size={14} uniProps={mutedColorMapping} />
+        <ThemedX size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
       </ToolbarButton>
     </View>
   );
@@ -402,25 +412,25 @@ function TabContextMenuItem({
   const leading = useMemo(() => {
     switch (entry.icon) {
       case "copy":
-        return <ThemedCopy size={16} uniProps={mutedColorMapping} />;
+        return <ThemedCopy size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
       case "rotate-cw":
-        return <ThemedRotateCw size={16} uniProps={mutedColorMapping} />;
+        return <ThemedRotateCw size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
       case "arrow-left-to-line":
-        return <ThemedArrowLeftToLine size={16} uniProps={mutedColorMapping} />;
+        return <ThemedArrowLeftToLine size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
       case "arrow-right-to-line":
-        return <ThemedArrowRightToLine size={16} uniProps={mutedColorMapping} />;
+        return <ThemedArrowRightToLine size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
       case "copy-x":
-        return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
+        return <ThemedCopyX size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
       case "pencil":
-        return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+        return <ThemedPencil size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
       case "x":
-        return <ThemedX size={16} uniProps={mutedColorMapping} />;
+        return <ThemedX size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
       default:
         return undefined;
     }
   }, [entry.icon]);
   const trailing = useMemo(
-    () => (entry.hint ? <Text style={styles.menuItemHint}>{entry.hint}</Text> : undefined),
+    () => (entry.hint ? <RNText style={styles.menuItemHint}>{entry.hint}</RNText> : undefined),
     [entry.hint],
   );
   return (
@@ -651,8 +661,8 @@ function resolveChipBackdrop({
   isActiveFocused: boolean;
   isFilled: boolean;
 }): SurfaceBackdrop {
-  if (isActiveFocused) return "surface2";
-  return isFilled ? "surface1" : "surface0";
+  if (isActiveFocused) return "surfaceTabActive";
+  return isFilled ? "surfaceTabHover" : "surface0";
 }
 
 function TabHandleContent({
@@ -661,7 +671,6 @@ function TabHandleContent({
   showLabel,
   backdrop,
   tabLabelSkeletonStyle,
-  tabLabelStyle,
   modifiedTestId,
 }: {
   presentation: WorkspaceTabPresentation;
@@ -669,10 +678,10 @@ function TabHandleContent({
   showLabel: boolean;
   backdrop: SurfaceBackdrop;
   tabLabelSkeletonStyle: React.ComponentProps<typeof View>["style"];
-  tabLabelStyle: React.ComponentProps<typeof Text>["style"];
   modifiedTestId: string;
 }) {
   const { t } = useTranslation();
+  const labelColor: TextColor = isHighlighted ? "foreground" : "foregroundMuted";
   const tabHandleDataSet = useMemo(
     () => ({ statusBucket: presentation.statusBucket ?? "none" }),
     [presentation.statusBucket],
@@ -687,7 +696,14 @@ function TabHandleContent({
         <View style={tabLabelSkeletonStyle} />
       ) : null}
       {showLabel && presentation.titleState !== "loading" ? (
-        <Text style={tabLabelStyle} selectable={false} numberOfLines={1} ellipsizeMode="tail">
+        <Text
+          variant="caption"
+          color={labelColor}
+          style={styles.tabLabel}
+          selectable={false}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
           {presentation.label}
         </Text>
       ) : null}
@@ -750,8 +766,7 @@ function TabChip({
   );
   const isCompact = useIsCompactFormFactor();
   const [hovered, setHovered] = useState(false);
-  // An active tab in a pane that does not have focus stays legible but quiet: it keeps the fill of
-  // a hovered chip and the muted label, so only one chip in the window reads as the live one.
+  // 未聚焦 pane 的当前 tab 仍可辨认但更弱：取 hover 底色与 muted 文字，整个窗口只有一个 tab 最显眼。
   const isActiveFocused = isActive && isFocused;
   const isHovered = hovered || isCloseHovered;
   const isHighlighted = isActiveFocused || isHovered;
@@ -759,7 +774,9 @@ function TabChip({
     isActiveFocused,
     isFilled: isActive || isHovered,
   });
-  const showCloseControl = showCloseButton && (isHovered || isNative || isCompact || isClosingTab);
+  // 选中的 tab 常显关闭按钮；其余 tab 悬停时出现，原生端与紧凑布局没有悬停，常显。
+  const showCloseControl =
+    showCloseButton && (isHovered || isActive || isNative || isCompact || isClosingTab);
   const closeButtonDragBlockers = isWeb
     ? ({
         onPointerDown: (event: { stopPropagation?: () => void }) => {
@@ -777,6 +794,7 @@ function TabChip({
       isActiveFocused && styles.tabActive,
       isActive && !isFocused && styles.tabActiveUnfocused,
       !isActive && isHovered && styles.tabHovered,
+      showCloseButton && styles.tabWithCloseSlot,
       isWeb && isDragging && ({ cursor: "grabbing" } as object),
       {
         minWidth: resolvedTabWidth,
@@ -784,7 +802,15 @@ function TabChip({
         maxWidth: resolvedTabWidth,
       },
     ],
-    [isActive, isActiveFocused, isDragging, isFocused, isHovered, resolvedTabWidth],
+    [
+      isActive,
+      isActiveFocused,
+      isDragging,
+      isFocused,
+      isHovered,
+      resolvedTabWidth,
+      showCloseButton,
+    ],
   );
 
   const handleTabPointerEnter = useCallback(() => {
@@ -823,10 +849,6 @@ function TabChip({
   const testIdentity =
     tab.target.kind === "new_tab" ? tab.tabId : buildDeterministicWorkspaceTabId(tab.target);
   const tabLabelSkeletonStyle = styles.tabLabelSkeleton;
-  const tabLabelStyle = useMemo(
-    () => [styles.tabLabel, isHighlighted && styles.tabLabelActive],
-    [isHighlighted],
-  );
 
   return (
     <View
@@ -858,7 +880,6 @@ function TabChip({
                 showLabel={showLabel}
                 backdrop={chipBackdrop}
                 tabLabelSkeletonStyle={tabLabelSkeletonStyle}
-                tabLabelStyle={tabLabelStyle}
                 modifiedTestId={`workspace-tab-modified-${testIdentity}`}
               />
             </ContextMenuTrigger>
@@ -877,7 +898,7 @@ function TabChip({
                 title={tooltipLabel}
               />
             ) : (
-              <Text style={styles.newTabTooltipText}>{tooltipLabel}</Text>
+              <RNText style={styles.newTabTooltipText}>{tooltipLabel}</RNText>
             )}
           </TooltipContent>
         </Tooltip>
@@ -890,7 +911,6 @@ function TabChip({
               showCloseControl ? styles.tabTrailingOverlayShown : styles.tabTrailingOverlayHidden,
             ]}
           >
-            <TrailingActionScrim backdrop={chipBackdrop} />
             <Pressable
               {...(closeButtonDragBlockers as object | undefined)}
               testID={closeButtonTestId}
@@ -908,14 +928,14 @@ function TabChip({
                 if (isClosingTab) {
                   return (
                     <ThemedLoadingSpinner
-                      size={12}
+                      size={ICON_SIZE.xs}
                       uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
                     />
                   );
                 }
                 return (
                   <ThemedX
-                    size={12}
+                    size={ICON_SIZE.xs}
                     uniProps={highlighted ? foregroundColorMapping : mutedColorMapping}
                   />
                 );
@@ -1052,7 +1072,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       rowHorizontalInset: 0,
       actionsReservedWidth: Math.max(
         0,
-        DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH +
+        INLINE_ADD_BUTTON_RESERVED_WIDTH +
           (focusModeEnabled ? exitFocusModeWidth : 0) +
           (showPaneSplitActions ? PANE_SPLIT_ACTIONS_RESERVED_WIDTH : 0) +
           (showPaneMaximizeAction ? PANE_MAXIMIZE_ACTION_RESERVED_WIDTH : 0),
@@ -1541,8 +1561,6 @@ const styles = StyleSheet.create((theme) => ({
   tabsContainer: {
     minWidth: 0,
     height: WORKSPACE_SECONDARY_HEADER_HEIGHT,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface0,
     flexDirection: "row",
     alignItems: "center",
@@ -1578,33 +1596,37 @@ const styles = StyleSheet.create((theme) => ({
   inlineAddButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: theme.spacing[1],
+    paddingHorizontal: INLINE_ADD_BUTTON_HORIZONTAL_PADDING,
   },
   inlineNewTabButton: {
-    width: buttonControlHeight.xs,
-    height: buttonControlHeight.xs,
+    width: HEADER_CONTROL_HEIGHT,
+    height: HEADER_CONTROL_HEIGHT,
+    borderRadius: theme.radius.md,
   },
   paneSplitActions: {
     paddingHorizontal: PANE_SPLIT_ACTIONS_HORIZONTAL_PADDING,
     marginRight: PANE_SPLIT_ACTIONS_OUTER_MARGIN,
   },
   tab: {
-    height: buttonControlHeight.xs,
+    height: HEADER_CONTROL_HEIGHT,
     paddingHorizontal: TAB_CHIP_HORIZONTAL_PADDING,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
     userSelect: "none",
   },
   tabHovered: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceTabHover,
   },
   tabActive: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceTabActive,
   },
   tabActiveUnfocused: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceTabHover,
+  },
+  tabWithCloseSlot: {
+    paddingRight: TAB_CHIP_HORIZONTAL_PADDING + TAB_CLOSE_BUTTON_RESERVED_WIDTH,
   },
   tabHoverFrame: {
     position: "relative",
@@ -1650,9 +1672,6 @@ const styles = StyleSheet.create((theme) => ({
   tabLabel: {
     flexShrink: 1,
     minWidth: 0,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
     userSelect: "none",
   },
   tabLabelMeasurements: {
@@ -1676,21 +1695,15 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface3,
     opacity: 0.9,
   },
-  tabLabelActive: {
-    color: theme.colors.foreground,
-  },
   tabTrailingOverlay: {
     position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
-    width: 48,
-    borderTopRightRadius: theme.borderRadius.md,
-    borderBottomRightRadius: theme.borderRadius.md,
+    width: TAB_CLOSE_BUTTON_INSET * 2 + TAB_CLOSE_BUTTON_SIZE,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
-    overflow: "hidden",
   },
   tabTrailingOverlayShown: {
     opacity: 1,
@@ -1700,10 +1713,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabCloseButton: {
     position: "absolute",
-    right: 4,
-    width: 18,
-    height: 18,
-    borderRadius: theme.borderRadius.sm,
+    right: TAB_CLOSE_BUTTON_INSET,
+    width: TAB_CLOSE_BUTTON_SIZE,
+    height: TAB_CLOSE_BUTTON_SIZE,
+    borderRadius: theme.radius.sm,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,

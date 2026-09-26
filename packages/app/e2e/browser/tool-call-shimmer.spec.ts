@@ -3,11 +3,13 @@ import { test, expect } from "../support/fixtures";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import { shimmerSteps } from "@/components/shimmer/timing";
 
 type WebSocketMessage = string | Buffer;
 
 interface ShimmerEvidence {
   animationDuration: string;
+  animationTimingFunction: string;
   endPx: number;
   label: string;
   renderedWidth: number;
@@ -146,6 +148,7 @@ async function readShimmerEvidence(locator: Locator): Promise<ShimmerEvidence> {
     const style = getComputedStyle(shimmer);
     return {
       animationDuration: style.animationDuration,
+      animationTimingFunction: style.animationTimingFunction,
       endPx: Number.parseFloat(style.getPropertyValue("--paseo-shimmer-end")),
       label: shimmer.textContent ?? "",
       renderedWidth: shimmer.getBoundingClientRect().width,
@@ -208,6 +211,11 @@ test("measures an overview heading that becomes loading after its idle mount", a
     });
 
     expect(sameGroupNode).toBe(true);
+    // 低频扫光：按固定帧率分段前进，不是连续的 linear。
+    for (const shimmer of [header, child]) {
+      const durationSeconds = Number.parseFloat(shimmer.animationDuration);
+      expect(shimmer.animationTimingFunction).toBe(`steps(${shimmerSteps(durationSeconds)})`);
+    }
     expect(child.endPx).toBeGreaterThan(0);
     expect(
       header.endPx,

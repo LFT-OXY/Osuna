@@ -1,12 +1,13 @@
 import {
+  FontWeight,
   Skia,
   listFontFamilies,
   matchFont,
   type SkFont,
   type SkParagraph,
+  type SkTextStyle,
 } from "@shopify/react-native-skia";
 import { fragmentTextForRange, visibleRowRange } from "./model";
-import { codeTextColor } from "./palette";
 import {
   createCachedAsciiTextMetrics,
   createChunkedAdvanceMeasurer,
@@ -27,7 +28,16 @@ export interface NativeHeaderTextLayout {
   families: string[] | undefined;
   fontSize: number;
   statFontSize: number;
-  palette: Pick<DiffPalette, "foreground" | "foregroundMuted" | "statusSuccess" | "statusDanger">;
+  microFontSize: number;
+  palette: Pick<
+    DiffPalette,
+    | "foreground"
+    | "foregroundMuted"
+    | "foregroundExtraMuted"
+    | "statusSuccess"
+    | "statusDanger"
+    | "statusWarning"
+  >;
 }
 
 export interface NativeShapedHeaderText {
@@ -42,6 +52,7 @@ export function createNativeHeaderTextLayout(input: {
   configuredFamily: string;
   fontSize: number;
   statFontSize: number;
+  microFontSize: number;
   palette: NativeHeaderTextLayout["palette"];
 }): NativeHeaderTextLayout {
   const configured = input.configuredFamily
@@ -55,6 +66,7 @@ export function createNativeHeaderTextLayout(input: {
     families,
     fontSize: input.fontSize,
     statFontSize: input.statFontSize,
+    microFontSize: input.microFontSize,
     palette: input.palette,
   };
 }
@@ -62,16 +74,24 @@ export function createNativeHeaderTextLayout(input: {
 export function shapeNativeHeaderText(input: {
   layout: NativeHeaderTextLayout;
   text: string;
-  size: "body" | "stat";
+  size: "body" | "stat" | "micro";
+  weight?: "semibold";
   tone: NativeHeaderTextTone;
   maximumWidth?: number;
 }): NativeShapedHeaderText {
+  const fontSize = {
+    body: input.layout.fontSize,
+    stat: input.layout.statFontSize,
+    micro: input.layout.microFontSize,
+  }[input.size];
+  const headerStyle: SkTextStyle = {
+    ...(input.layout.families ? { fontFamilies: input.layout.families } : {}),
+    fontSize,
+    color: Skia.Color(input.layout.palette[input.tone]),
+  };
+  if (input.weight === "semibold") headerStyle.fontStyle = { weight: FontWeight.SemiBold };
   const paragraph = Skia.ParagraphBuilder.Make({ maxLines: 1, ellipsis: "…" })
-    .pushStyle({
-      ...(input.layout.families ? { fontFamilies: input.layout.families } : {}),
-      fontSize: input.size === "body" ? input.layout.fontSize : input.layout.statFontSize,
-      color: Skia.Color(input.layout.palette[input.tone]),
-    })
+    .pushStyle(headerStyle)
     .addText(input.text)
     .pop()
     .build();
@@ -267,9 +287,11 @@ function createFragmentParagraph(input: {
   const builder = Skia.ParagraphBuilder.Make(
     paragraphStyle(input.families, input.fontSize, input.lineHeight),
   );
-  if (input.cell.tokens.length === 0 || input.cell.type === "header") {
-    const color = codeTextColor(input.cell, input.palette);
-    builder.pushStyle(retainedTextStyle(input, color)).addText(input.fragment.text).pop();
+  if (input.cell.tokens.length === 0) {
+    builder
+      .pushStyle(retainedTextStyle(input, input.palette.foreground))
+      .addText(input.fragment.text)
+      .pop();
   } else {
     for (const run of input.cell.tokens) {
       const start = Math.max(input.fragment.start, run.start);

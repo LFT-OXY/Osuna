@@ -1,0 +1,14 @@
+{"file": ".atw/tasks/09-26-ui-redesign/research/interview-decisions.md", "reason": "访谈确定的 13 条设计决策，审查是否偏离"}
+{"file": ".atw/tasks/09-26-ui-redesign/research/prototype.md", "reason": "原型结论：左侧栏 V1 + 借 V3 选中描边与未读加粗、暗色侧栏更暗"}
+{"file": ".atw/tasks/09-26-ui-redesign/research/reference-t3code.md", "reason": "主参考的色值、圆角、组件形态，token 取值的依据"}
+{"file": ".atw/tasks/09-26-ui-redesign/research/reference-multica.md", "reason": "Text 用途命名字号阶梯与状态规则的参考"}
+{"file": ".atw/tasks/09-26-ui-redesign/research/osuna-current-state.md", "reason": "现状 token 位置、硬编码热点、e2e 影响面"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 样式约定与禁用项"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "primitive 复用、hover、平台门控、英文文案不变"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单测 / browser 测试 / Playwright 的分工"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "app 专属检查项与验证命令"}
+{"file": "docs/design.md", "reason": "现行设计系统规则，迁移时需同步改写"}
+{"file": "docs/unistyles.md", "reason": "useUnistyles 禁用与运行时主题改写的边界"}
+{"file": "docs/hover.md", "reason": "Row 组件必须遵循的唯一 hover 模式"}
+{"file": "docs/qa.md", "reason": "Electron 截图等视觉验收证据要求"}
+{"file": ".atw/tasks/09-26-ui-redesign/issues/11-settings-fewer-rules.md", "reason": "ATW current ticket"}

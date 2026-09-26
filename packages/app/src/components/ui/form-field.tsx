@@ -73,6 +73,8 @@ interface SplitFormTextInputStyle {
   inputStyle?: TextStyle;
 }
 
+// 调用方的 style 在这里被压平后拆成外框与文字两份。Unistyles 样式在 Web 上只剩 class，压平后
+// 没有值，所以调用方要传的尺寸、对齐用普通对象，不用 StyleSheet.create 的样式。
 function splitFormTextInputStyle(style: AdaptiveTextInputProps["style"]): SplitFormTextInputStyle {
   const flattened = RNStyleSheet.flatten(style) as FlatFormTextInputStyle | undefined;
   if (!flattened) {
@@ -256,14 +258,15 @@ const formInputStyles = StyleSheet.create((theme) => {
     chromeMd: {
       ...geometry.fieldControlMd,
     },
+    // 带颜色的条目直接引用 theme 才会被记为主题依赖（.atw/spec/app/frontend/styling.md）。
     controlRest: {
-      ...geometry.controlRest,
+      ...createControlGeometry(theme).controlRest,
     },
     controlHover: {
-      ...geometry.controlHover,
+      ...createControlGeometry(theme).controlHover,
     },
     controlActive: {
-      ...geometry.controlActive,
+      ...createControlGeometry(theme).controlActive,
     },
     controlDisabled: {
       ...geometry.controlDisabled,

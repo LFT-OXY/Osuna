@@ -1694,8 +1694,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface0,
   },
   chromeLeft: {
@@ -1748,9 +1746,7 @@ const styles = StyleSheet.create((theme) => ({
   errorRow: {
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[1],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.surface1,
   },
   metaError: {
     fontSize: theme.fontSize.sm,

@@ -4,7 +4,7 @@ import { View, Text, type PressableStateCallbackType } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { MoreHorizontal, Pencil, Undo2, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { settingsStyles } from "@/styles/settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
@@ -45,9 +45,9 @@ const ThemedX = withUnistyles(X);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-const bindLeadingIcon = <ThemedPencil size={14} uniProps={foregroundMutedColorMapping} />;
-const clearLeadingIcon = <ThemedX size={14} uniProps={foregroundMutedColorMapping} />;
-const resetLeadingIcon = <ThemedUndo2 size={14} uniProps={foregroundMutedColorMapping} />;
+const bindLeadingIcon = <ThemedPencil size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />;
+const clearLeadingIcon = <ThemedX size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />;
+const resetLeadingIcon = <ThemedUndo2 size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />;
 
 function ShortcutSequence({
   chord,
@@ -198,7 +198,7 @@ function ShortcutActionsMenu({
       >
         {({ hovered, open }) => (
           <ThemedMoreHorizontal
-            size={14}
+            size={ICON_SIZE.sm}
             uniProps={hovered || open ? foregroundColorMapping : foregroundMutedColorMapping}
           />
         )}
@@ -264,7 +264,10 @@ function ShortcutRow({
   onReset: () => void;
 }) {
   const { t } = useTranslation();
-  const rowStyle = useMemo(() => [styles.row, isCapturing && styles.rowCapturing], [isCapturing]);
+  const rowStyle = useMemo(
+    () => [settingsStyles.row, isCapturing && styles.rowCapturing],
+    [isCapturing],
+  );
 
   const isBindable = bindingId !== null;
   const showDone = isCapturing && capturedCombos.length > 0;
@@ -494,18 +497,11 @@ export function KeyboardShortcutsSection() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[3],
-  },
   rowCapturing: {
     backgroundColor: theme.colors.surface2,
   },
   rowLabel: {
-    fontSize: theme.fontSize.base,
+    ...theme.typeScale.body,
     color: theme.colors.foreground,
     flexShrink: 1,
   },
@@ -518,13 +514,13 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "flex-end",
   },
   menuSlot: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
   },
   menuButton: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.borderRadius.lg,
+    width: 28,
+    height: 28,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -544,7 +540,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   separator: {
     height: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.borderCardRow,
   },
   mobileCard: {
     padding: theme.spacing[4],

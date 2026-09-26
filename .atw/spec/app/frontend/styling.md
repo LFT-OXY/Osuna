@@ -51,7 +51,7 @@ Both live in the shared xterm runtime (`terminal/runtime/terminal-emulator-runti
 
 ## Theme catalog
 
-`THEME_OPTIONS` in `styles/theme.ts` is the one catalog: the picker, the settings schema, the Unistyles registration, the swatch table, and `DARK_THEME_NAMES` / `LIGHT_THEME_NAMES` are all derived from it. A new variant is one entry plus one `build*Theme(build*SemanticColors({...}))` call; nothing else lists themes. `group` is `primary` / `dark` / `light` and the picker inserts a separator wherever it changes.
+`THEME_OPTIONS` in `styles/theme.ts` is the one catalog: the picker, the settings schema, the Unistyles registration, the swatch table, and `DARK_THEME_NAMES` / `LIGHT_THEME_NAMES` are all derived from it. A new variant is one entry plus one `build*Theme(build*SemanticColors({...}))` call; nothing else lists themes, and the variant sets no redesign roles (see [Redesign roles](#redesign-roles-and-their-derivation)). `group` is `primary` / `dark` / `light` and the picker inserts a separator wherever it changes.
 
 Terminal ANSI colors are per theme only when the config provides `terminalAnsi` (the 14 colored slots) and `terminalSelectionBackground`; a config without them shares `lightTerminalAnsi` / `darkTerminalAnsi` and the rgba selection. `black` / `brightBlack` are never in `terminalAnsi`: they come from `terminalBlack` / `terminalBrightBlack`, and on a palette dark variant they clear 1.5:1 and 2:1 on the terminal background (`terminal-contrast.test.ts` lists the six older dark themes as the exception; a new dark variant is covered without editing the test). `background` / `foreground` / `cursor` are always derived from `surface0` / `foreground`, so they stay pure `#rrggbb` for the daemon bridge above.
 
@@ -59,10 +59,135 @@ Terminal ANSI colors are per theme only when the config provides `terminalAnsi` 
 
 `terminal-emulator-runtime.browser.test.ts` does not load `xterm.css`, so `.xterm-screen` geometry is meaningless there. Assert inset through the host's rect against the root's, and assert the fit through `rows * rowHeight <= host height` and rows/cols against an uninset baseline. To assert "written only when changed" on an xterm option, redefine the accessor on `terminal.options` (it is configurable) and count setter calls; do not assert on runtime internals.
 
+## Redesign roles and their derivation
+
+The redesign added color roles on top of `surface0`–`surface4`. Design intent lives in `docs/design.md` §3, §4, §12; this is the implementation contract.
+
+**Signature.** `LightThemeConfig` / `DarkThemeConfig` extend `ThemeRoleOverrides` (`styles/theme.ts`): optional `surfaceWorkspace`, `surfaceChrome`, `surfaceCard`, `surfaceMessage`, `surfaceSidebarHover`, `surfaceSidebarActive`, `surfaceSidebarSelected`, `borderSidebarSelected`, `borderInput`, `shadowComposer`, `insetHighlight`. Both semantic builders spread `deriveThemeRoles(base, overrides)` (module-private), which returns those eleven plus `surfaceTabHover` / `surfaceTabActive` (always derived, below), `foregroundProse` (`foreground` at 0.86 via `hexColorWithAlpha`), `borderCodeBlock` (light `border`, dark `transparent`) and `borderComposer` (`foreground` at 0.09), `borderCardRow` (`border` at 0.5), all always derived, `diffAdditionBackground`, `diffDeletionBackground`, `diffAdditionBar`, `diffDeletionBar` (always derived from the status colors; `createDiffPalette` in `git/diff-document/palette.ts` reads them for the added / removed fills and bars) and the overlay roles from `deriveOverlayRoles` (always derived, never overridden):
+
+| Overlay role | Value |
+|---|---|
+| `surfaceGlass` | `surfaceCard` at 80% (web glass fill) |
+| `surfaceDialogFooter` | `surface2` at 70% |
+| `surfaceWarning` | `palette.amber[500]` at 10% (`<Alert variant="warning">`) |
+| `overlayScrim` | light `rgba(0, 0, 0, 0.18)`, dark `0.35` |
+| `shadowPopover` / `shadowDialog` | light `0.35` / `0.45`, dark `0.8` / `0.9` black |
+
+`hexColorWithAlpha` drops the alpha byte of a `#rrggbbaa` input, as `mixHexColor` does, so a plugin card color cannot crash the build.
+
+**Contract.**
+
+| Role | Derived value when the config omits it |
+|---|---|
+| `surfaceWorkspace` | dark `surface1`, light `surface0` (what the workspace painted before) |
+| `surfaceChrome` | `surfaceWorkspace` |
+| `surfaceCard` | dark `surface2`, light `surface0` (same as `popover`) |
+| `surfaceMessage` | `surface3` (the bubble's old fill) |
+| `surfaceSidebarHover` / `Selected` | `surface1` / dark `surface2`, light `surface3`, then separated (below) |
+| `surfaceSidebarActive` | hover + 6% `foreground`, separated from hover and selected |
+| `borderSidebarSelected` | selected + 12% `foreground`, separated from selected |
+| `borderInput` | `border` |
+| `shadowComposer` / `insetHighlight` | light `rgba(0, 0, 0, 0.4)` / `transparent`; dark `transparent` / `rgba(255, 255, 255, 0.04)` |
+
+- Only Light and Dark (`lightSemanticColors`, `paseoDarkColors`) pass overrides. Variants and plugin themes pass none, so a plugin never has to ship a new field when the host adds a role.
+- Row-state colors are opaque `#rrggbb`. Translucent design values are flattened with `mixHexColor(base, overlay, amount)` (`utils/color.ts`), which accepts `#rgb`, `#rrggbb`, and `#rrggbbaa` (alpha ignored), so plugin palettes cannot crash the build.
+- Separation: `ensureDistinctRowColor` keeps a derived row state ≥ 1.05:1 (`hexContrastRatio`) from each neighbor by mixing toward `foreground` in 1% steps. Hover/selected/active/border neighbors: sidebar↔hover, hover↔selected, sidebar↔selected, active↔hover, active↔selected, border↔selected; tabs: `surface0`↔`surfaceTabHover`, `surfaceTabHover`↔`surfaceTabActive`. Pure Black, Catppuccin Latte, Rosé Pine Dawn, and GitHub Light shifted by one to a few steps because of this.
+
+**Shape tokens.** `theme.radius` (`RADIUS`: `sm` 6 … `3xl` 22, `full`) and `theme.controlHeight` (`CONTROL_HEIGHT`: 24 / 28 / 32) sit beside the unchanged `borderRadius`. Migrated components read the new ones; unmigrated ones keep `borderRadius` so their shape does not move. `applyAppearance` spreads the theme, so both pass through appearance updates untouched.
+
+**Control geometry.** `createControlGeometry(theme)` returns heights and field padding as Unistyles breakpoint values, `{ xs: touch, md: theme.controlHeight.* }`. The touch table is the exported `buttonControlHeight` / `CONTROL_HEIGHTS` (28 / 32 / 44); callers that pair `xs: buttonControlHeight.xs` with a desktop value keep working. Anything reading `geometry.buttonSm.minHeight` gets an object, not a number. The breakpoint helper returns an object literal type, not an interface: Unistyles types breakpoint values with a symbol index signature, which an interface does not satisfy.
+
+**Text ramp.** `theme.typeScale` (`TYPE_SCALE`, `TextVariant` in `styles/theme.ts`) is `Record<TextVariant, { fontSize; lineHeight }>` authored at a 14px base. `applyAppearance` rebuilds it from `TYPE_SCALE` (never from the live theme, so repeated applies do not compound) with `round(value * uiBaseFontSize / 14)` for both numbers; it is widened to `number` like `fontSize`. `<Text>` (`components/ui/text.tsx`) is the only reader of rendered text sizes; the exceptions are surfaces that cannot render `<Text>` — a `TextInput` matching its row (`file-explorer-pane.tsx` `draftInput`), canvas typography (`git/diff-document/index.tsx` `headerTypography.microSize`), and layout that aligns to a step's line height (`<Row>`'s leading slot):
+
+```ts
+interface TextProps extends Omit<RNTextProps, "style"> {
+  variant?: TextVariant;   // default "body"
+  color?: TextColor;       // default "foreground"; the three text tiers + status* + accentBright
+  weight?: TextWeight;     // "normal" | "medium" | "semibold"
+  style?: StyleProp<TextLayoutStyle>; // TextStyle minus color / fontSize / lineHeight / fontWeight
+}
+```
+
+`TextLayoutStyle` types those four keys as `never`, so a stylesheet entry that sets any of them fails to typecheck at the call site; opacity, flex, and margins stay allowed. A variant style must spread the token (`micro: { ...theme.typeScale.micro }`), never return the theme object itself.
+
+**Row states.** `components/ui/row.tsx` owns the one state rule for sidebar-surface rows: `getRowBackdrop({ hovered, pressed, selected })` returns `surfaceSidebarActive` > `surfaceSidebarSelected` > `surfaceSidebarHover` > `surfaceSidebar` (pressed wins, then selected, so hover never hides selection), and `getRowSurfaceStyle(state)` returns `[radius.md, that fill (none at rest), selected ? boxShadow inset 1px borderSidebarSelected : null]`. `<Row>` uses both; rows that own their press target (workspace and project rows: `ContextMenuTrigger` + drag) spread `getRowSurfaceStyle` into their own style array and keep `sidebar-row-backdrop.ts`, which layers dragging (`surface2`) on top of `getRowBackdrop`. Explorer tree rows do the same: `workspaceTreeRowStyles.row` (`components/tree-primitives.tsx`) sets `minHeight: WORKSPACE_TREE_ROW_HEIGHT` (28) and `marginHorizontal: WORKSPACE_TREE_ROW_INSET` (6), and every tree row — Files `TreeRowItem`, `DiffFolderRow`, `FileHeader` with `showsBodyState={false}` — pads its left edge with `treeRowIndent(depth)` (`treeRowPaddingLeft(depth) - inset`) and spreads `getRowSurfaceStyle({ hovered, pressed, selected })`. Using `treeRowPaddingLeft` on an inset row pushes names 6px off the pane's leading rail, which the Files e2e alignment assertions catch. The selected ring is an inset `boxShadow` because a border would move content and an outline would override the `:focus-visible` ring in `public/index.html`. Native `PressHighlight.highlightStyle` still needs its own `surfaceSidebarActive` entry; it does not read the row style array.
+
+**Workspace tab chips.** `screens/workspace/workspace-desktop-tabs-row.tsx`. Fills come from two always-derived roles, `mixHexColor(surface0, foreground, 0.05)` → `surfaceTabHover` and `0.075` → `surfaceTabActive`, each separated with `ensureDistinctRowColor` (Dark `#161616` / `#1c1c1c`, Light `#f1f1f2` / `#eaeaea`). They mix from `surface0` because that is the pane and tab-row fill in every theme; `surfaceChrome` is not painted there yet. State → fill: focused pane's active tab `surfaceTabActive` + `foreground` label; unfocused pane's active tab and any hovered tab `surfaceTabHover`; rest none. `resolveChipBackdrop` mirrors that table for the status-ring knockout. Chip geometry: `HEADER_CONTROL_HEIGHT` (26), `radius.md`, `<Text variant="caption">` label; the measurement text uses the same variant or `layoutMetrics` drifts. The close button is an absolute overlay (`TAB_CLOSE_BUTTON_SIZE` 18, inset 4) that shows on `isHovered || isActive || isNative || isCompact || isClosingTab`; every chip reserves its slot through `tabWithCloseSlot` (`paddingRight`) and `closeButtonWidth: TAB_CLOSE_BUTTON_RESERVED_WIDTH` in `layoutMetrics`, so the label ellipsizes before it. Do not go back to a `TrailingActionScrim` over the label: once the active tab always shows its button, the scrim fades the active label permanently. Explorer tabs reuse the fills: the desktop rail (`screens/workspace/explorer-sidebar-tab-rail.tsx`) and the compact overlay (`components/compact-explorer-sidebar.tsx`) paint hover `surfaceTabHover` and active `surfaceTabActive` on `surfaceSidebar`, with `radius.md` and a `caption` label; the Explorer never holds focus, so there is no unfocused tier. The rail's status-ring backdrop follows the same table (`resolveExplorerSidebarTabBackdrop`). The compact overlay keeps its touch-height padding. Header controls (`icon-button-chrome` large, the open-in-editor / git / scripts / plugin split buttons) are `HEADER_CONTROL_HEIGHT` with `radius.md` and `interactionHighlight` hover; pane-toolbar small icon buttons are 20 (32 compact) with `radius.sm`.
+
+**Conversation.** Markdown sizes come from `contentTypeStep(contentSize, variant)` (`styles/theme.ts`): `round(contentSize * TYPE_SCALE[variant] / 14)` for size and line height, fed `theme.fontSize.content`, never `theme.typeScale`, so the Content size setting keeps owning messages. `createMarkdownStyles`: body `prose` in `foregroundProse`; h1–h5 `title-lg` / `title` / `title-sm` / `body-lg` / `body`, `semibold`, `foreground`, no border; h6 `body` muted; list markers `prose` so they sit on the body's baseline. Compact steps headings to `title-sm` / `body-lg` / `body`. `fence` and `code_block` share one frame: `surface2`, 1px `borderCodeBlock`, `radius.lg`, `paddingHorizontal` / `paddingTop` / `paddingBottom` (compact narrows the horizontal and bottom). `HighlightedCodeBlock` (`components/highlighted-code-block.tsx`) splits that style three ways in `splitFenceStyle`: font + color + the four padding keys go on the code text, the header gets `paddingLeft` equal to the code's horizontal padding, everything else (fill, border, radius, margins) is the wrapper. The header row (`controlHeight.md`, marked `markdownCopyDataSet.ignore`) holds the language as `<Text variant="micro" color="foregroundMuted">` in mono and an always-visible `icon-button-chrome` small copy button; `renderHeaderActions?: () => ReactNode` puts extra controls before it (the Mermaid web source view's "View diagram" toggle, which used to overlap the copy button at the same absolute corner). Mermaid's diagram box has no header and takes `paddingHorizontal` on all four sides (`fence/mermaid/presentation.ts`). The user bubble is `surfaceMessage`, `radius["2xl"]` on every corner, `spacing[3]` padding, inside a content column capped at `maxWidth: "80%"`; its timestamp is `<Text variant="caption" color="foregroundMuted">`. The agent turn footer stays always visible by decision (it summarizes the turn and has no single hover target).
+
+**Composer.** The surface is `composerSurfaceStyle(theme, { glass: GLASS_SURFACES_ENABLED })` (`styles/floating-surface.ts`), spread into `inputWrapper` in `composer/input/input.tsx`: `floatingSurfaceFill` + 1px `borderComposer` + `radius["3xl"]` + `boxShadow: 0 12px 28px -18px shadowComposer, inset 0 1px 0 insetHighlight` (one string for both schemes; the unused half is `transparent`). The toolbar row is two groups: left `leftButtonGroup` (`flexShrink: 1`, `minWidth: 0`, `overflow: "hidden"`) holds only the Agent controls; right `rightButtonGroup` (`flexShrink: 0`) holds, in order, attach, context meter, dictation, realtime voice, Stop, Send. Icon buttons are `controlHeight.md` squares at `radius.md` with `interactionHighlight` hover; Stop (`ComposerCancelButton`, `composer/index.tsx`) and Send are `controlHeight.lg` circles, Stop filled `foreground` with a `surface0` `ICON_SIZE.sm` square, Send `accent`. Which of the two render is `resolvePrimaryActions` (`composer/input/state.ts`):
+
+```ts
+resolvePrimaryActions({ hasSendableContent, allowEmptySubmit, isAgentRunning, isSubmitLoading })
+  // → { showStop: isAgentRunning,
+  //     showSend: hasSendableContent || allowEmptySubmit || (isSubmitLoading && !isAgentRunning) }
+```
+
+| State | Stop | Send |
+|---|---|---|
+| idle, empty | – | – (voice-mode button instead) |
+| idle, draft / `allowEmptySubmit` / submit in flight | – | ✓ |
+| running, empty | ✓ | – |
+| running, draft | ✓ | ✓ (does what the running-send setting says; default steer, not forced queue) |
+| running, submit in flight (text already cleared) | ✓ | – (no second interrupt-shaped button) |
+
+Agent controls are ghost buttons: `AgentControlTrigger` toolbar, the provider badge, the features icon, and `CombinedModelSelector`'s default trigger are `controlHeight.md`, `radius.md`, `interactionHighlight` for hovered and pressed/open; toolbar labels are `<Text variant="label" color="foregroundMuted" weight="medium">` (sheet rows and the non-toolbar model trigger keep `fontSize.base` at `normal`). The toolbar's provider glyph is `ModelProviderGlyph tone="brand"`, which reads `getProviderBrandColor` and falls back to `foreground`; other surfaces keep `muted`. Fast mode on swaps the feature icon for `FastModeOnIcon` (filled) and colors it through the `providerBrand` highlight. The separators between model, thinking, and mode are `AgentControlSeparator`, placed by `resolveComposerSeparators` and shown only when `presentation.showSeparators` (full density); `resolveFullFloor` budgets their width, so a new toolbar item that sits between them has to be counted there too. A trigger whose glyph color comes from the theme passes `iconColorMapping: (theme) => ({ color })`; `AgentControlTrigger` routes it to a leaf `withUnistyles(ControlIcon)`. Wrapping the whole trigger in `withUnistyles` is wrong (it is not a leaf; on web it adds a `display: contents` node inside `TooltipTrigger asChild`).
+
+The context strip (`composer/context-strip/`) renders only when a caller passes `showContextStrip` (agent panel, draft workspace tab) and the form factor is not compact. `ComposerSurfaceStack` puts it directly under `MessageInput`, outside the `gap` of `messageInputContainer` and outside `message-input-root`, so the voice overlay does not cover it and the autocomplete anchor width is unchanged. It is `controlHeight.md` tall, inset `spacing[6]` each side, `surface2`, `borderComposer` on three sides, bottom corners `radius.xl`. Content comes from the git status the composer already queries:
+
+```ts
+resolveComposerContext(gitStatus: CheckoutStatusPayload | null): {
+  workspaceKind: "worktree" | "local_checkout" | "directory" | null; // null = not loaded yet
+  branch: string | null;                                           // null on detached HEAD / non-git
+}
+```
+
+`workspaceKind` follows the daemon's `deriveWorkspaceKind` (`packages/server/src/server/workspace-registry-model.ts`): non-git → `directory`, `mainRepoRoot` set → `worktree`, else `local_checkout`; do not use `isPaseoOwnedWorktree`, which disagrees for a user-made git worktree. Labels are `composer.context.worktree` ("Worktree") and `composer.context.local` ("Local", for both other kinds). The host is `<HostBadge>` from `useHostBadges({ enabled: true })`, so it obeys the host's badge setting and is absent for the local host by default. Name the prop `gitStatus`, not `checkoutStatus` ("checkout" is forbidden in new identifiers, `docs/design.md` §14).
+
+> **Warning**: selection copy (`assistant-selection-copy/content.web.ts` `restoreMarkdownElements`) finds a fence's code as `:scope > code` under the `pre`-tagged wrapper. Wrapping the code text in another View drops the fence language from the copied Markdown (the whole-selection assertion in `e2e/browser/assistant-selection-copy.spec.ts` catches it as `` ``` `` without `typescript`). Put inset on the code text, not on a body wrapper.
+
+**Knockout fills.** Anything filled with the colour behind it (status-ring frame, project status badge, `<Row>` actions, tab chips) takes `getSurfaceBackdropFillStyle(backdrop)` from `styles/surface-backdrop-fill.ts`. Adding a `SurfaceBackdrop` name takes three entries: the union in `styles/surface-backdrop.ts`, the style in `surface-backdrop-fill.ts`, and the colour mapping in `components/ui/trailing-action-scrim.tsx` (an SVG prop needs a colour, not a style). The scrim's table is a `Record<SurfaceBackdrop, …>`, so typecheck names a missing entry.
+
+**Startup canvas.** The default canvas (`#0a0a0a` / `#fcfcfc`) is repeated where the theme cannot be imported: `packages/desktop/src/window/window-manager.ts` `getWindowBackgroundColor`, `packages/app/public/index.html` (`html, body` + dark media query), and `public/manifest.json`. After mount, `DesktopWindowControlsSync` (`app/_layout.tsx`) pushes `surface0`. Changing the default canvas without these flashes the old color at startup.
+
+**Tests required** for the ramp and rows: `appearance/apply.test.ts` (ramp unchanged at 14, every variant scaled at another size), `components/ui/text.browser.test.tsx` (computed size / line height per variant, every colour and weight against the fixture theme), `components/ui/row.browser.test.tsx` (rest, hover, pressed, selected, selected + hover: fill, ring, title colour, actions opacity / pointer-events). The fixture theme in `test-stubs/react-native-unistyles.ts` carries `typeScale`, the row roles, the tab roles, and the composer roles (`borderComposer`, `shadowComposer`, `insetHighlight`); add a token there when a browser-tested component starts reading it. Glass: `styles/floating-surface.browser.test.tsx` (glass fill `rgba(…, 0.8)` + `blur(12px) saturate(1.14)`, opaque fallback with `backdrop-filter: none`, scrim with and without `blur(4px)`, and `GLASS_SURFACES_ENABLED` true in the web build); `styles/install-web-surface-grain.browser.test.ts` (fixed, click-through, removed on uninstall). `components/ui/control-geometry.test.ts` holds the `{ xs, md }` height table, radii, segmented inset, and switch size as literals. Tabs: `styles/theme.test.ts` asserts the Light / Dark tab fills and, for every catalog theme plus the plugin samples, both tab separations and `foreground` contrast on each tab fill; `e2e/browser/launcher-tab.spec.ts` ("active tabs keep their close button…") asserts 26px / 8px, close overlay opacity `1` on the active tab and `0` on an inactive one with the pointer away, and after a split that the focused pane's active tab has the higher fill contrast against its tab row.
+
+**Tests required** for the conversation: `styles/markdown-styles.test.ts` (prose 15 / 24 in `foregroundProse` at content 15; every heading's size and line height, weight, color, no border / uppercase; compact headings; scaling at content 21; fence / code_block frame and inline code); `styles/theme.test.ts` (Light / Dark `foregroundProse` and `borderCodeBlock` literals; every catalog theme's prose composited at 0.86 over `surfaceWorkspace` clears the scheme minimum); `e2e/browser/agent-message-submission.spec.ts` (bubble 18px corners, content column `max-width: 80%`); `e2e/browser/assistant-selection-copy.spec.ts` (language label visible, whole-selection copy keeps ```` ```typescript ```` without the label, header "Copy code" strips trailing newlines).
+
+**Tests required** for the composer: `composer/input/state.test.ts` (every row of the Stop / Send table above); `composer/context-strip/model.test.ts` (null, Paseo worktree, linked non-Paseo worktree, main checkout, detached HEAD, directory); `styles/theme.test.ts` (Light / Dark `borderComposer` literals, and the role in the catalog list); `styles/floating-surface.browser.test.tsx` (`composerSurfaceStyle` glass: `rgba(255, 255, 255, 0.8)`, `blur(12px) saturate(1.14)`, 22px, `rgba(39, 39, 42, 0.09)`, the composer shadow; opaque: `rgb(255, 255, 255)`, `backdrop-filter: none`); `e2e/browser/agent-message-submission.spec.ts` ("keeps Stop and Send whole and clickable in a narrow split pane": 1024px viewport + split, composer < 500px, both 32×32 inside the composer box, Stop left of Send, each topmost at its own center, Send then Stop clicked; "keeps one Stop action…": Stop count 1 beside the draft, 1 and no "Interrupt agent" after Enter).
+
+**Tests required** for the roles (`styles/theme.test.ts`, run from `packages/app`):
+- Default palette: Light / Dark role values against the t3code default palette literals, overlay roles included.
+- Catalog (every `THEME_OPTIONS` theme plus a dark and a light plugin sample built through `collectPluginThemes`): every role matches a color value; building a plugin twice gives equal themes; `foreground` clears 4.5 (light) / 3 (dark) on canvas, chrome, card, message, sidebar and every row state, and `foregroundMuted` on the canvas; the row-state neighbor pairs above clear 1.05.
+- Light status dots clear 3:1 on the resting and hovered sidebar row.
+- Changing `surface0` for Dark also moves `e2e/browser/terminal-protocol-query.spec.ts` (OSC 11 reply) and any `toHaveCSS` on row fills (`appearance-theme-picker.spec.ts`).
+
+**Wrong vs correct.**
+
+```ts
+// Wrong: hand-tuning a variant for a new role — every plugin theme still lacks it.
+export const darkNordTheme = buildDarkTheme(
+  buildDarkSemanticColors({ /* ... */ surfaceMessage: "#3b4252" }),
+);
+
+// Correct: add the role to ThemeRoleOverrides and give it a derivation in
+// deriveThemeRoles; set it by hand only in lightSemanticColors / paseoDarkColors.
+```
+
+**Diff document.** `git/diff-document/`. `DiffRow` is `DiffLineRow | DiffStatusRow | DiffSeparatorRow`; `DiffCell["type"]` has no `"header"`. `lineSources` turns each hunk header into a `DiffSeparatorRow` (`label`, `height = typography.lineHeight`) when `unmodifiedLinesBeforeHunk` (old-side gap; a `count 0` side's start means the line before) is above 0, and into nothing otherwise: `@@ -0,0 +1,N @@` and a hunk at line 1 have no separator, and nothing follows the last hunk (no file length on the wire). Separator rows are decoration: hit testing, `selectAllSource`, and `selectedSourceText` only walk `kind === "line"`, so a separator is never hit, selected, or copied. Painting: `diffSeparatorLayout({ rowTop, rowHeight, width, labelWidth })` (`palette.ts`) centers the label and returns two equal rules 12 from the row ends and 8 from the label; web paints the label in `headerTypography.family` at `microSize` in `foregroundExtraMuted`, native paints it in the slab's fixed layer through `shapeNativeHeaderText(size: "micro")`, so both need the header text layout, not the code font. Added / removed cells get a `DIFF_CHANGE_BAR_WIDTH` (3) bar in `palette.addition` / `palette.deletion` at the cell's left edge over the text height only (`row.height - row.reviewHeight`). The change letter (A / D / M and its status tone) comes only from `diffFileChangePresentation(diffFileChangeKind(file))` (`git/file-header-presentation.ts`), shared by `FileChangeBadge` and both canvas headers; the badge keeps `accessibilityRole="image"` and the Modified / New / Deleted label, which `changes-pane.spec.ts` locates by role. Separator copy comes from `diffDocumentLabels(t)` (`labels.ts`, two keys with `{{count}}`), and the workspace cache keys the label function by `unmodifiedLines(1)` and `(2)`.
+
+- Gotcha: `hasMeasuredFileRows` counts a status row as measured but a separator row as not; treating separators like status rows made a file with unmeasured lines look reusable.
+- Gotcha: `captureScrollAnchor` skips separator rows when picking the anchor row; anchoring on one falls back to the file header and drifts on relayout.
+- Gotcha: Playwright selection helpers in `changes-pane.spec.ts` compute line positions from the body top. Their fixtures start from committed empty files (`@@ -0,0`), so the first changed line is body row 0; a fixture that edits mid-file gets a separator row first.
+
 ## Rules from the gotcha list
 
 - A style factory is theme-reactive only where it reads a token; branching on `theme.colorScheme` is not tracked. A page with its own palette (the usage page) puts that palette on the theme as `theme.colors.usage`. See `docs/unistyles.md`.
-- Do not materialize styles at module scope (`styles.container` read outside a component); `styles/unistyles-module-scope.test.ts` guards this.
+- The Babel plugin marks a style key theme-dependent only when `theme` itself appears inside that key's value. `const geometry = createControlGeometry(theme)` above the `return` and `controlRest: { ...geometry.controlRest }` below it leave the key untracked, so on native its colors freeze at the first theme. Spread a color-bearing geometry entry as `{ ...createControlGeometry(theme).controlRest }` (`components/ui/form-field.tsx`). Helpers called inside the value (`...popoverSurfaceStyle(theme, …)`) are tracked.
+- Never compute a color from a token inside a factory. On web, color tokens reach the factory as CSS variables, so `hexColorWithAlpha(theme.colors.x, …)` throws there; add a derived role instead.
+- Do not materialize styles at module scope (`styles.container` read outside a component); `styles/unistyles-module-scope.test.ts` guards this. A module-level `const rowWithBorder = [settingsStyles.row, settingsStyles.rowBorder]` counts; compose the array in the render (`style={[settingsStyles.row, !isFirst && settingsStyles.rowBorder]}`).
+- A component that flattens its `style` prop with `StyleSheet.flatten` to split it (`FormTextInput` splits chrome from text in `components/ui/form-field.tsx`) gets nothing from a `StyleSheet.create` style on web: there the style is a class name with no values, so `width` and `textAlign` silently vanish. Pass theme-independent sizing to such a component as a plain object (`const FONT_SIZE_INPUT_STYLE = { width: 64, textAlign: "right" } as const`). Symptom: the Electron input is wider than asked and left-aligned while native looks right.
 - Dynamic pixel values on web and inline styles go through `styles/unistyles-inline-style.ts` and its platform variants.
 - `contentContainerStyle` and other non-`style` props do not get tracked; see the fix patterns in `docs/unistyles.md`.
 - Reanimated `Animated.View` with dynamic Unistyles styles crashes; the doc has the safe shape.
@@ -70,8 +195,31 @@ Terminal ANSI colors are per theme only when the config provides `terminalAnsi` 
 
 ## Tokens
 
-Spacing uses the theme scale (`theme.spacing[n]`), never `padding: 20`. Colors come from the palette; the identity color table in `styles/identity-colors.ts` is the documented exception. `fontWeight.medium` is reserved for the structural-label tier (`docs/design.md` §3 and §14). Disabled is opacity, not a color change. Code surfaces share `styles/code-surface.ts` and `styles/syntax-token-styles.ts`; markdown shares `styles/markdown-styles.ts`.
+Spacing uses the theme scale (`theme.spacing[n]`), never `padding: 20`. Colors come from the palette; the identity color table in `styles/identity-colors.ts` and the provider brand colors in `components/provider-icons.ts` are the documented exceptions. `fontWeight.medium` is reserved for the structural-label tier (`docs/design.md` §3 and §14). Disabled is opacity, not a color change. Code surfaces share `styles/code-surface.ts` and `styles/syntax-token-styles.ts`; markdown shares `styles/markdown-styles.ts`.
 
 ## Web-only styling
 
-Scrollbars are installed once through `styles/install-web-scrollbar-styles.web.ts`. Anything that needs a DOM stylesheet lives in a `.web.ts` file, not behind an `if (isWeb)` in a component.
+Scrollbars are installed once through `styles/install-web-scrollbar-styles.web.ts`, the window grain through `styles/install-web-surface-grain.web.ts`, both from `app/_layout.tsx`. Anything that needs a DOM stylesheet lives in a `.web.ts` file, not behind an `if (isWeb)` in a component.
+
+Glass needs no DOM stylesheet. `styles/floating-surface.ts` holds pure style builders (`floatingSurfaceFill`, `dialogScrimFill`, `popoverSurfaceStyle`, `composerSurfaceStyle`) that take `{ glass }`; callers pass `GLASS_SURFACES_ENABLED` from `styles/glass-support.ts` (false) / `.web.ts` (true). `backdropFilter` is not on RN's `ViewStyle`, so the builders return inferred object types and `StyleSheet.create` accepts them; react-native-web and Unistyles web both emit it as CSS. Keeping the flag outside the builders is what lets `styles/floating-surface.browser.test.tsx` assert both the glass and the native fallback path in one browser run, since the browser project always resolves `.web.ts`.
+
+## Running motion (shimmer)
+
+Every "in progress" shimmer goes through `components/shimmer/`; do not add a second shimmer implementation. The contract:
+
+| Piece | Web (`.web.ts(x)`) | Native |
+|---|---|---|
+| Timing | CSS `animation: <name> <d>s steps(shimmerSteps(d)) infinite` — `shimmerSteps` is 10 steps per second (`timing.ts`) | `withTiming` progress quantized by `quantizeShimmerProgress` in the worklet |
+| Pause | `useShimmerVisibilityRef()` on the sweep layer writes `--paseo-shimmer-play-state` (`running` / `paused`) from one shared `IntersectionObserver` plus `visibilitychange`; the animated text reads `animationPlayState: SHIMMER_PLAY_STATE` (defaults to `paused` before the first observation) | `useRetainedPanelActive()` only — rows scrolled off screen inside a mounted list keep running (accepted, `docs/design.md`) |
+| Reduced motion | `useReduceMotionEnabled()` (`hooks/use-reduce-motion-enabled.web.ts`, live `matchMedia`) → the sweep layer is not rendered | same hook, native file uses `AccessibilityInfo` |
+| Keyframes | `ensureShimmerKeyframes()` (`web-keyframes.web.ts`), called in an effect when the sweep mounts | no-op |
+
+Two shapes exist: `<ShimmerText text testID>` for a single label (mask sweep, testID stays on the base copy — the sweep layer is an `aria-hidden` duplicate, so it must never carry a testID), and the tool-row sweep inside `ExpandableBadge` (`components/message.tsx`), which measures label + summary so one peak crosses both. Anything moving that is not a shimmer (status ring, `SyncedLoader`) also reads `useReduceMotionEnabled`, not Reanimated's `useReducedMotion`, which samples once at startup.
+
+The visibility ref callback must be idempotent. react-native-web composes refs and may call a callback ref again with the same element; `IntersectionObserver.observe()` on an already observed element never fires a new entry, so a callback that re-registers and resets the state to `paused` freezes the shimmer for good. `visibility.web.ts` keeps the current element in a `useRef`, releases only when the element changes or the component unmounts, and `observe()` reuses an existing entry.
+
+`shimmer-text.browser.test.tsx` holds the web contract: `getComputedStyle(target).animationTimingFunction` is `steps(24)` (a CSS animation's `effect.getTiming().easing` is always `linear`), `playState` turns `paused` after `translateY(200vh)` and back, no animation under emulated reduced motion, and the sweep keeps running across label re-renders.
+
+## Surfaces inside a framed container
+
+A child that sits inside a frame drawn by its parent does not paint its own background. `DiffViewer` context and hunk-header rows are transparent and take the container's fill (`surface1` standalone, the tool row's `surface2` frame in the conversation); `ToolCallDetailsContent` takes `framed` when the parent draws the frame and then drops its own borders and fills. A second fill inside the frame reads as a nested panel with a padded ring.

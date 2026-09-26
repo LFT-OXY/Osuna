@@ -132,6 +132,10 @@ export const ja: TranslationResources = {
       queue: "キュー",
       send: "送信",
     },
+    context: {
+      worktree: "Worktree",
+      local: "ローカル",
+    },
     cancel: {
       cancelingAgent: "エージェントをキャンセル中",
       stopAgent: "エージェントを停止",
@@ -318,6 +322,12 @@ export const ja: TranslationResources = {
   },
   message: {
     workedFor: "作業時間 {{duration}}",
+    workingFor: "作業中 {{duration}}",
+    changedFiles: {
+      one: "{{count}} 件のファイルを変更",
+      other: "{{count}} 件のファイルを変更",
+      openDiff: "差分を開く",
+    },
     turnUsage: {
       title: "このターンの使用量",
       total: "合計",
@@ -942,6 +952,8 @@ export const ja: TranslationResources = {
           title: "ファイルへ移動",
         },
         binaryFile: "バイナリファイル",
+        unmodifiedLine: "変更のない {{count}} 行",
+        unmodifiedLines: "変更のない {{count}} 行",
         tooLarge: "差分が大きすぎて表示できません",
         previewTooLargeTitle: "この差分は大きすぎるためプレビューできません",
         previewTooLargeDescription: "比較範囲を狭めると、ここでプレビューできます",

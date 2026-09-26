@@ -1,5 +1,4 @@
 import type { Theme } from "@/styles/theme";
-import { hexColorWithAlpha } from "@/utils/color";
 import type { DiffCell, DiffPalette } from "./types";
 
 export function createDiffPalette(theme: Theme): DiffPalette {
@@ -9,10 +8,11 @@ export function createDiffPalette(theme: Theme): DiffPalette {
     border: theme.colors.border,
     foreground: theme.colors.foreground,
     foregroundMuted: theme.colors.foregroundMuted,
-    addition: theme.colors.statusSuccess,
-    deletion: theme.colors.statusDanger,
-    additionBackground: hexColorWithAlpha(theme.colors.statusSuccess, 0.15),
-    deletionBackground: hexColorWithAlpha(theme.colors.statusDanger, 0.1),
+    foregroundExtraMuted: theme.colors.foregroundExtraMuted,
+    addition: theme.colors.diffAdditionBar,
+    deletion: theme.colors.diffDeletionBar,
+    additionBackground: theme.colors.diffAdditionBackground,
+    deletionBackground: theme.colors.diffDeletionBackground,
     emptyBackground: theme.colors.surface0,
     selection: theme.colors.terminal.blue,
     headerActiveSurface: theme.colors.surface1,
@@ -31,6 +31,7 @@ export function retainDiffPalette(previous: DiffPalette, next: DiffPalette): Dif
     previous.border !== next.border ||
     previous.foreground !== next.foreground ||
     previous.foregroundMuted !== next.foregroundMuted ||
+    previous.foregroundExtraMuted !== next.foregroundExtraMuted ||
     previous.addition !== next.addition ||
     previous.deletion !== next.deletion ||
     previous.additionBackground !== next.additionBackground ||
@@ -55,13 +56,52 @@ function sameColorMap(left: Record<string, string>, right: Record<string, string
   return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
 }
 
-export function codeTextColor(cell: DiffCell, palette: DiffPalette): string {
-  return cell.type === "header" ? palette.foregroundMuted : palette.foreground;
-}
-
 export function codeLineNumberTone(cell: DiffCell): "addition" | "deletion" | "foregroundMuted" {
   "worklet";
   if (cell.type === "add") return "addition";
   if (cell.type === "remove") return "deletion";
   return "foregroundMuted";
+}
+
+/** 新增 / 删除单元格左缘色条的宽度。 */
+export const DIFF_CHANGE_BAR_WIDTH = 3;
+
+export function changeBarTone(cell: DiffCell): "addition" | "deletion" | null {
+  "worklet";
+  if (cell.type === "add") return "addition";
+  if (cell.type === "remove") return "deletion";
+  return null;
+}
+
+// 分隔行：标签居中，两侧各一条横线，横线离行两端 12、离标签 8（取自本任务的界面原型）。
+const SEPARATOR_EDGE_INSET = 12;
+const SEPARATOR_LABEL_GAP = 8;
+
+export interface DiffSeparatorRule {
+  x: number;
+  width: number;
+}
+
+export interface DiffSeparatorLayout {
+  labelX: number;
+  ruleY: number;
+  rules: DiffSeparatorRule[];
+}
+
+export function diffSeparatorLayout(input: {
+  rowTop: number;
+  rowHeight: number;
+  width: number;
+  labelWidth: number;
+}): DiffSeparatorLayout {
+  const labelX = (input.width - input.labelWidth) / 2;
+  const ruleWidth = Math.max(0, labelX - SEPARATOR_LABEL_GAP - SEPARATOR_EDGE_INSET);
+  return {
+    labelX,
+    ruleY: input.rowTop + Math.floor(input.rowHeight / 2),
+    rules: [
+      { x: SEPARATOR_EDGE_INSET, width: ruleWidth },
+      { x: labelX + input.labelWidth + SEPARATOR_LABEL_GAP, width: ruleWidth },
+    ],
+  };
 }

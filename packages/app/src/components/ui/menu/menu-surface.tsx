@@ -37,11 +37,12 @@ const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMute
 // track, so the sheet is wrapped rather than reading the theme through a hook.
 // See docs/unistyles.md.
 const ThemedBottomSheetModal = withUnistyles(IsolatedBottomSheetModal, (theme) => ({
+  // sheet 只在紧凑布局出现，主要是原生端，所以是不透明的卡片色，不做毛玻璃。
   backgroundStyle: {
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
+    borderTopLeftRadius: theme.radius["2xl"],
+    borderTopRightRadius: theme.radius["2xl"],
     borderWidth: 1,
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.surfaceCard,
     borderColor: theme.colors.border,
   },
   handleIndicatorStyle: {

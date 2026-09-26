@@ -39,9 +39,9 @@ const successMapping = (theme: Theme) => ({ color: theme.colors.palette.green[50
  * the sheet were the thing being asked about. `md` is where `useIsCompactFormFactor` divides, so
  * this and the popover/sheet choice always turn over together.
  *
- * On desktop the number is exactly the content: 18 line + 8 padding + 2 border. Leave the text's
- * `lineHeight` to the platform and the content outgrows `minHeight`, which then does nothing and
- * the rows drift taller again. On compact, `minHeight` leads instead and the label centres in it.
+ * The content is 18 line + 8 padding + 2 border = 28, so `minHeight` (30 on desktop, 40 on
+ * compact) leads and the label centres in it. Leave the text's `lineHeight` to the platform and
+ * the content outgrows `minHeight`, which then does nothing and the rows drift taller again.
  */
 const MENU_ITEM_LINE_HEIGHT = 18;
 
@@ -304,17 +304,12 @@ export function MenuItem({
   );
 
   const itemPressableStyle = useCallback(
-    ({
-      pressed,
-      hovered = false,
-      focused = false,
-    }: PressableStateCallbackType & { hovered?: boolean; focused?: boolean }) => [
+    ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.item,
       active ? styles.itemActive : null,
       isDisabled ? styles.itemDisabled : null,
       muted && !isDisabled ? styles.itemMuted : null,
       hovered && !pressed && !isDisabled ? styles.itemHovered : null,
-      focused && !isDisabled ? styles.itemHovered : null,
       pressed && !isDisabled ? styles.itemPressed : null,
     ],
     [active, isDisabled, muted],
@@ -394,20 +389,20 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },
-  // `border` sits between surface1 and surface2, which put it within a hair of the hover fill and
-  // made separators vanish against a hovered row. `borderAccent` is the colour the menu surface
-  // already outlines itself with, so the divider reads as part of the same frame.
+  // `border` is the colour the menu surface outlines itself with, so the divider reads as part of
+  // the same frame. The hover fill is a translucent highlight, not a surface step, so the two no
+  // longer collide the way `border` and `surface2` once did.
   //
   // The one thing on a page that wants more room than the row gap gives it, so it says so here.
   // That is one number controlling one gap: rows no longer carry vertical spacing of their own,
   // so there is nothing left for this to double up with.
   //
-  // No horizontal margin, and the page has no horizontal padding, so the rule still runs the
-  // full width of the surface rather than reading as an inset tick between two chips.
+  // Inset by the same 6 the row corners round off, so the rule ends where the chips' fills do.
   separator: {
     height: 1,
     marginVertical: theme.spacing[1],
-    backgroundColor: theme.colors.borderAccent,
+    marginHorizontal: theme.spacing[1.5],
+    backgroundColor: theme.colors.border,
   },
   // A hint with `trailing` is a key on the left edge and its value on the right, so the values
   // line up down the menu's right rail instead of ragging with the length of each key.
@@ -448,9 +443,18 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[1],
     borderWidth: theme.borderWidth[1],
     borderColor: "transparent",
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.sm,
     outlineWidth: 0,
     outlineColor: "transparent",
+    // The surface focuses its first row on open, pointer or keyboard alike. Filling every
+    // focused row would leave that row lit while the pointer hovers another, two highlights
+    // at once. `:focus-visible` only matches once the keyboard is driving, where the focused
+    // row is the one highlight.
+    _web: {
+      "_focus-visible": {
+        backgroundColor: theme.colors.interactionHighlight,
+      },
+    },
   },
   // The same box as `item`, filled the way a hovered row is filled, so the field sits in the
   // column of rows rather than beside it. Every number here is `item`'s: change one, change both.
@@ -462,9 +466,9 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[1],
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface2,
+    borderColor: theme.colors.borderInput,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   fieldFocused: {
     borderColor: theme.colors.borderAccent,
@@ -477,15 +481,17 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 0,
     paddingHorizontal: 0,
   },
+  // A translucent highlight rather than a surface step: the menu surface is glass on web, and a
+  // solid step would punch an opaque chip through it.
   itemHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   itemPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   // The row you are inside, not the value you chose. A chosen value is marked by its check.
   itemActive: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   itemDisabled: {
     opacity: 0.5,

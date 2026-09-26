@@ -28,7 +28,6 @@ import {
 import type { ComponentType, ReactNode } from "react";
 import type MarkdownIt from "markdown-it";
 import { type ASTNode, type RenderRules } from "react-native-markdown-display";
-import MaskedView from "@react-native-masked-view/masked-view";
 import {
   Info,
   XCircle,
@@ -44,17 +43,9 @@ import {
   FileSymlink,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { contentTypeStep, ICON_SIZE, SPACING, type Theme } from "@/styles/theme";
+import { Text as UiText, type TextProps as UiTextProps } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { MarkdownRenderer, type MarkdownStyles } from "@/components/markdown/renderer";
 import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/types/stream";
@@ -104,7 +95,15 @@ import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
 import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
-import { useRetainedPanelActive } from "@/components/retained-panel";
+import { NativeShimmerSweep } from "@/components/shimmer/native-sweep";
+import {
+  SHIMMER_PLAY_STATE,
+  TOOL_CALL_SHIMMER_ANIMATION_NAME,
+} from "@/components/shimmer/animation-names";
+import { resolveNativeShimmerPeakWidth, shimmerSteps } from "@/components/shimmer/timing";
+import { useShimmerVisibilityRef } from "@/components/shimmer/visibility";
+import { ensureShimmerKeyframes } from "@/components/shimmer/web-keyframes";
+import { useReduceMotionEnabled } from "@/hooks/use-reduce-motion-enabled";
 import {
   markdownCopyDataSet,
   markdownCopyOrderedListDataSet,
@@ -152,8 +151,6 @@ function useDisableOuterSpacing(disableOuterSpacing: boolean | undefined) {
   return disableOuterSpacing ?? contextValue;
 }
 
-const WEB_TOOLCALL_SHIMMER_KEYFRAME_ID = "paseo-toolcall-shimmer-keyframes";
-const WEB_TOOLCALL_SHIMMER_ANIMATION_NAME = "paseo-toolcall-shimmer";
 const MARKDOWN_ALLOWED_IMAGE_HANDLERS = [
   "data:image/png;base64",
   "data:image/gif;base64",
@@ -182,48 +179,12 @@ const mutedForegroundColorMapping = (theme: Theme) => ({
 const destructiveColorMapping = (theme: Theme) => ({ color: theme.colors.destructive });
 const infoColorMapping = (theme: Theme) => ({ color: theme.colors.palette.blue[300] });
 const warningColorMapping = (theme: Theme) => ({ color: theme.colors.palette.amber[500] });
-const WEB_TOOLCALL_SHIMMER_KEYFRAME_CSS = `
-  @keyframes ${WEB_TOOLCALL_SHIMMER_ANIMATION_NAME} {
-    0% {
-      background-position: var(--paseo-shimmer-start, -200px) 0;
-    }
-    100% {
-      background-position: var(--paseo-shimmer-end, 200px) 0;
-    }
-  }
-`;
-let webToolCallShimmerRegistered = false;
 const SCROLL_EDGE_EPSILON = 0.5;
 
-// Font size for stream metadata (timestamps, durations, live elapsed timer).
+// Font size for stream metadata (timestamps, durations, turn usage).
 // Lives between theme.fontSize.sm (12) and theme.fontSize.base (14); no token.
 export const STREAM_METADATA_FONT_SIZE = 13;
 type ScrollAxis = "x" | "y";
-
-function ensureWebToolCallShimmerKeyframes() {
-  if (isNative) {
-    return;
-  }
-  if (typeof document === "undefined") {
-    return;
-  }
-  const existing = document.getElementById(WEB_TOOLCALL_SHIMMER_KEYFRAME_ID);
-  if (existing) {
-    if (existing.textContent !== WEB_TOOLCALL_SHIMMER_KEYFRAME_CSS) {
-      existing.textContent = WEB_TOOLCALL_SHIMMER_KEYFRAME_CSS;
-    }
-    webToolCallShimmerRegistered = true;
-    return;
-  }
-  if (webToolCallShimmerRegistered) {
-    return;
-  }
-  const styleElement = document.createElement("style");
-  styleElement.id = WEB_TOOLCALL_SHIMMER_KEYFRAME_ID;
-  styleElement.textContent = WEB_TOOLCALL_SHIMMER_KEYFRAME_CSS;
-  document.head.appendChild(styleElement);
-  webToolCallShimmerRegistered = true;
-}
 
 function getWheelEventElementTarget(event: WheelEvent, fallback: HTMLElement): HTMLElement {
   const { target } = event;
@@ -333,7 +294,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   },
   content: {
     alignItems: "flex-end",
-    maxWidth: "100%",
+    maxWidth: "80%",
     cursor: "auto",
   },
   containerSpacing: {
@@ -346,11 +307,9 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing[4],
   },
   bubble: {
-    backgroundColor: theme.colors.surface3,
-    borderRadius: theme.borderRadius["2xl"],
-    borderTopRightRadius: theme.borderRadius.sm,
-    paddingHorizontal: theme.spacing[4],
-    paddingVertical: theme.spacing[4],
+    backgroundColor: theme.colors.surfaceMessage,
+    borderRadius: theme.radius["2xl"],
+    padding: theme.spacing[3],
     minWidth: 0,
     flexShrink: 1,
   },
@@ -359,7 +318,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.content,
     ...(isWeb
       ? {
-          lineHeight: Math.round(theme.fontSize.content * 1.4),
+          lineHeight: contentTypeStep(theme.fontSize.content, "prose").lineHeight,
           overflowWrap: "anywhere" as const,
         }
       : {}),
@@ -390,17 +349,13 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     alignItems: "center",
     height: 24,
     gap: theme.spacing[2],
-    marginTop: theme.spacing[2],
+    marginTop: theme.spacing[1],
   },
   trailingRowHidden: {
     opacity: 0,
   },
   trailingRowVisible: {
     opacity: 1,
-  },
-  timestampText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: STREAM_METADATA_FONT_SIZE,
   },
 }));
 
@@ -510,7 +465,7 @@ export const UserMessage = memo(function UserMessage({
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
       >
-        <View style={userMessageStylesheet.bubble}>
+        <View style={userMessageStylesheet.bubble} testID="user-message-bubble">
           {hasImages ? (
             <View style={imagePreviewContainerStyle}>
               {images.map((image) => (
@@ -553,9 +508,9 @@ export const UserMessage = memo(function UserMessage({
             pointerEvents={showTrailingRow ? "auto" : "none"}
             testID="user-message-trailing-row"
           >
-            <Text style={userMessageStylesheet.timestampText} testID="user-message-timestamp">
+            <UiText variant="caption" color="foregroundMuted" testID="user-message-timestamp">
               {formattedTimestamp}
-            </Text>
+            </UiText>
             {capabilities && messageId ? (
               <RewindMenu
                 capabilities={capabilities}
@@ -718,8 +673,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
 interface LiveElapsedProps {
   startedAt: Date;
   active?: boolean;
-  style?: StyleProp<TextStyle>;
-  testID?: string;
+  renderLabel: (duration: string) => ReactNode;
 }
 
 /**
@@ -729,8 +683,7 @@ interface LiveElapsedProps {
 export const LiveElapsed = memo(function LiveElapsed({
   startedAt,
   active = true,
-  style,
-  testID,
+  renderLabel,
 }: LiveElapsedProps) {
   const startedAtMs = startedAt.getTime();
   const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - startedAtMs));
@@ -747,11 +700,7 @@ export const LiveElapsed = memo(function LiveElapsed({
     return () => clearInterval(handle);
   }, [active, startedAtMs]);
 
-  return (
-    <Text style={style} testID={testID}>
-      {formatDuration(visibleElapsedMs)}
-    </Text>
-  );
+  return renderLabel(formatDuration(visibleElapsedMs));
 });
 
 interface AssistantMessageProps {
@@ -1107,21 +1056,23 @@ export const TurnCopyButton = memo(function TurnCopyButton({
   );
 });
 
+// 工具行的几何：图标槽宽等于图标，行的水平内边距由容器的负外边距抵消，图标笔画落在正文的左轨上；
+// 展开内容缩进到标签所在的轨。
+const TOOL_ROW_INLINE_PADDING = SPACING[1];
+const TOOL_ROW_LABEL_INSET = TOOL_ROW_INLINE_PADDING + ICON_SIZE.sm + SPACING[2];
+
 const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
   container: {
-    marginHorizontal: -13,
-  },
-  containerSpacing: {
-    marginBottom: theme.spacing[1],
+    marginHorizontal: -TOOL_ROW_INLINE_PADDING,
   },
   containerLastInSequence: {
     marginBottom: theme.spacing[4],
   },
   pressable: {
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: theme.borderWidth[1],
-    borderColor: "transparent",
-    paddingHorizontal: theme.spacing[2],
+    minHeight: 26,
+    justifyContent: "center",
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: TOOL_ROW_INLINE_PADDING,
     paddingVertical: theme.spacing[1],
     overflow: "hidden",
   },
@@ -1139,42 +1090,22 @@ const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
     overflow: "hidden",
   },
   iconBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: theme.iconSize.sm,
+    height: theme.iconSize.sm,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: theme.spacing[1],
-    backgroundColor: "transparent",
+    marginRight: theme.spacing[2],
   },
   label: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
     flexShrink: 0,
   },
-  labelActive: {
-    color: theme.colors.foreground,
-  },
   labelLoading: {
-    color: theme.colors.foreground,
     opacity: 0.72,
   },
   secondaryLabel: {
     flexShrink: 1,
     minWidth: 0,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
     marginLeft: theme.spacing[2],
-  },
-  secondaryLabelActive: {
-    color: theme.colors.foreground,
-  },
-  shimmerText: {
-    color: "transparent",
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
   },
   spacer: {
     flex: 1,
@@ -1184,37 +1115,35 @@ const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
   },
   openFileButton: {
     marginLeft: theme.spacing[1],
-    padding: theme.spacing[1],
-    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing[0.5],
+    borderRadius: theme.radius.sm,
     flexShrink: 0,
   },
   openFileButtonPlaceholderIcon: {
-    width: 14,
-    height: 14,
+    width: theme.iconSize.sm,
+    height: theme.iconSize.sm,
   },
+  // 展开内容：缩进到标签轨，放在与代码块同一种浅底框里。
   detailWrapper: {
-    borderBottomLeftRadius: theme.borderRadius.lg,
-    borderBottomRightRadius: theme.borderRadius.lg,
+    marginLeft: TOOL_ROW_LABEL_INSET,
+    marginRight: TOOL_ROW_INLINE_PADDING,
+    marginTop: theme.spacing[0.5],
+    marginBottom: theme.spacing[1],
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
-    borderTopWidth: 0,
-    borderColor: theme.colors.border,
-    padding: 0,
-    gap: 0,
+    borderColor: theme.colors.borderCodeBlock,
+    backgroundColor: theme.colors.surface2,
     flexShrink: 1,
     minWidth: 0,
     overflow: "hidden",
     ...(isWeb ? { cursor: "auto" as const, userSelect: "text" as const } : {}),
   },
-  pressableExpanded: {
-    backgroundColor: theme.colors.surface1,
-  },
-  pressableExpandedAttached: {
-    borderColor: theme.colors.border,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
+  // 分组展开后是一列子工具行，只缩进，不加框。
   detailWrapperBorderless: {
+    marginTop: 0,
     borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: "transparent",
   },
   shimmerOverlay: {
     position: "absolute",
@@ -1229,22 +1158,6 @@ const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
   shimmerMaskRow: {
     flexDirection: "row",
     alignItems: "center",
-    width: "100%",
-    height: "100%",
-  },
-  nativeShimmerTrack: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    overflow: "hidden",
-  },
-  nativeShimmerPeak: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
   },
 }));
 
@@ -1255,118 +1168,50 @@ interface NativeExpandableBadgeShimmerProps {
   rowHeight: number;
   peakWidth: number;
   durationSeconds: number;
-  gradientId: string;
 }
 
-const NativeExpandableBadgeShimmer = memo(function NativeExpandableBadgeShimmer({
+function NativeExpandableBadgeShimmer({
   label,
   secondaryLabel,
   rowWidth,
   rowHeight,
   peakWidth,
   durationSeconds,
-  gradientId,
 }: NativeExpandableBadgeShimmerProps) {
-  const isPanelActive = useRetainedPanelActive();
-  const shimmerTranslateX = useSharedValue(0);
-
-  useEffect(() => {
-    if (!isPanelActive) {
-      cancelAnimation(shimmerTranslateX);
-      return;
-    }
-    const startPosition = -peakWidth;
-    const endPosition = rowWidth + peakWidth;
-    shimmerTranslateX.value = startPosition;
-    shimmerTranslateX.value = withRepeat(
-      withTiming(endPosition, {
-        duration: durationSeconds * 1000,
-        easing: Easing.linear,
-      }),
-      -1,
-      false,
-    );
-    return () => {
-      cancelAnimation(shimmerTranslateX);
-    };
-  }, [durationSeconds, isPanelActive, peakWidth, rowWidth, shimmerTranslateX]);
-
-  const nativeShimmerPeakStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: shimmerTranslateX.value }],
-  }));
-
-  const nativeShimmerTrackStyle = useMemo(
-    () => [expandableBadgeStylesheet.nativeShimmerTrack, { width: rowWidth, height: rowHeight }],
-    [rowHeight, rowWidth],
-  );
-
-  const nativeShimmerMaskStyle = useMemo(
+  const maskRowStyle = useMemo(
     () => [expandableBadgeStylesheet.shimmerMaskRow, { width: rowWidth, height: rowHeight }],
     [rowHeight, rowWidth],
   );
-
-  const nativeLabelMaskStyle = useMemo(
-    () => [expandableBadgeStylesheet.label, { color: "#000000", opacity: 1 }],
-    [],
-  );
-
-  const nativeSecondaryMaskStyle = useMemo(
-    () => [expandableBadgeStylesheet.secondaryLabel, { color: "#000000", opacity: 1 }],
-    [],
-  );
-
-  const nativeShimmerPeakCombinedStyle = useMemo(
-    () => [
-      expandableBadgeStylesheet.nativeShimmerPeak,
-      nativeShimmerPeakStyle,
-      { width: peakWidth, height: rowHeight },
-    ],
-    [nativeShimmerPeakStyle, peakWidth, rowHeight],
-  );
-
-  const maskElement = useMemo(
+  const renderMask = useCallback(
     () => (
-      <View pointerEvents="none" style={nativeShimmerMaskStyle}>
-        <Text style={nativeLabelMaskStyle} numberOfLines={1}>
+      <View pointerEvents="none" style={maskRowStyle}>
+        {/* 遮罩只看 alpha：与底下的标签同一份排版，颜色取默认的不透明前景色。 */}
+        <UiText variant="label" style={expandableBadgeStylesheet.label} numberOfLines={1}>
           {label}
-        </Text>
+        </UiText>
         {secondaryLabel ? (
-          <Text style={nativeSecondaryMaskStyle} numberOfLines={1}>
+          <UiText
+            variant="label"
+            style={expandableBadgeStylesheet.secondaryLabel}
+            numberOfLines={1}
+          >
             {secondaryLabel}
-          </Text>
+          </UiText>
         ) : (
           <View style={expandableBadgeStylesheet.spacer} />
         )}
       </View>
     ),
-    [nativeShimmerMaskStyle, nativeLabelMaskStyle, nativeSecondaryMaskStyle, label, secondaryLabel],
+    [label, maskRowStyle, secondaryLabel],
   );
-
   return (
-    <View style={expandableBadgeStylesheet.shimmerOverlay} pointerEvents="none">
-      <MaskedView pointerEvents="none" style={nativeShimmerTrackStyle} maskElement={maskElement}>
-        <View pointerEvents="none" style={nativeShimmerTrackStyle}>
-          <Animated.View pointerEvents="none" style={nativeShimmerPeakCombinedStyle}>
-            <NativeShimmerPeakSvg gradientId={gradientId} />
-          </Animated.View>
-        </View>
-      </MaskedView>
-    </View>
-  );
-});
-
-function NativeShimmerPeakSvg({ gradientId }: { gradientId: string }) {
-  return (
-    <Svg width="100%" height="100%" preserveAspectRatio="none">
-      <Defs>
-        <SvgLinearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-          <Stop offset="0%" stopColor="#ffffff" stopOpacity={0} />
-          <Stop offset="50%" stopColor="#ffffff" stopOpacity={1} />
-          <Stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
-        </SvgLinearGradient>
-      </Defs>
-      <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${gradientId})`} />
-    </Svg>
+    <NativeShimmerSweep
+      width={rowWidth}
+      height={rowHeight}
+      peakWidth={peakWidth}
+      durationSeconds={durationSeconds}
+      renderMask={renderMask}
+    />
   );
 }
 
@@ -2352,16 +2197,18 @@ interface ExpandableBadgeProps {
   testID?: string;
 }
 
+type BadgeLabelColor = "foreground" | "foregroundMuted";
+
 interface ExpandableBadgeSecondaryLabelProps {
   secondaryLabel?: string;
-  secondaryLabelStyle: StyleProp<TextStyle>;
+  secondaryLabelColor: BadgeLabelColor;
   shouldMeasureWebShimmer: boolean;
   onSecondaryLayout: (event: LayoutChangeEvent) => void;
 }
 
 function ExpandableBadgeSecondaryLabel({
   secondaryLabel,
-  secondaryLabelStyle,
+  secondaryLabelColor,
   shouldMeasureWebShimmer,
   onSecondaryLayout,
 }: ExpandableBadgeSecondaryLabelProps) {
@@ -2369,21 +2216,23 @@ function ExpandableBadgeSecondaryLabel({
     return null;
   }
   return (
-    <Text
-      style={secondaryLabelStyle}
+    <UiText
+      variant="label"
+      color={secondaryLabelColor}
+      style={expandableBadgeStylesheet.secondaryLabel}
       numberOfLines={1}
       onLayout={shouldMeasureWebShimmer ? onSecondaryLayout : undefined}
     >
       {secondaryLabel}
-    </Text>
+    </UiText>
   );
 }
 
 interface ExpandableBadgeWebShimmerOverlayProps {
   label: string;
   secondaryLabel?: string;
-  shimmerLabelTextStyle: StyleProp<TextStyle>;
-  shimmerSecondaryTextStyle: StyleProp<TextStyle>;
+  shimmerLabelTextStyle: UiTextProps["style"];
+  shimmerSecondaryTextStyle: UiTextProps["style"];
   showOpenFileButton: boolean;
 }
 
@@ -2394,15 +2243,20 @@ function ExpandableBadgeWebShimmerOverlay({
   shimmerSecondaryTextStyle,
   showOpenFileButton,
 }: ExpandableBadgeWebShimmerOverlayProps) {
+  const reduceMotion = useReduceMotionEnabled();
+  const visibilityRef = useShimmerVisibilityRef();
+  if (reduceMotion) {
+    return null;
+  }
   return (
-    <View style={expandableBadgeStylesheet.shimmerOverlay} pointerEvents="none">
-      <Text style={shimmerLabelTextStyle} numberOfLines={1}>
+    <View ref={visibilityRef} style={expandableBadgeStylesheet.shimmerOverlay} pointerEvents="none">
+      <UiText variant="label" style={shimmerLabelTextStyle} numberOfLines={1}>
         {label}
-      </Text>
+      </UiText>
       {secondaryLabel ? (
-        <Text style={shimmerSecondaryTextStyle} numberOfLines={1}>
+        <UiText variant="label" style={shimmerSecondaryTextStyle} numberOfLines={1}>
           {secondaryLabel}
-        </Text>
+        </UiText>
       ) : null}
       {showOpenFileButton ? (
         <View style={expandableBadgeStylesheet.openFileButton}>
@@ -2418,20 +2272,20 @@ function ExpandableBadgeWebShimmerOverlay({
 
 interface ExpandableBadgeLabelRowProps {
   label: string;
-  labelStyle: StyleProp<TextStyle>;
+  /** 悬停或展开时标签提亮到前景色。 */
+  isActive: boolean;
+  isLoading: boolean;
   secondaryLabel?: string;
-  secondaryLabelStyle: StyleProp<TextStyle>;
   shouldMeasureWebShimmer: boolean;
   shouldMeasureNativeShimmer: boolean;
   isWebShimmer: boolean;
   isNativeShimmer: boolean;
-  shimmerLabelTextStyle: StyleProp<TextStyle>;
-  shimmerSecondaryTextStyle: StyleProp<TextStyle>;
+  shimmerLabelTextStyle: UiTextProps["style"];
+  shimmerSecondaryTextStyle: UiTextProps["style"];
   labelRowWidth: number;
   labelRowHeight: number;
   nativeShimmerPeakWidth: number;
   shimmerDuration: number;
-  nativeGradientId: string;
   onLabelRowLayout: (event: LayoutChangeEvent) => void;
   onLabelLayout: (event: LayoutChangeEvent) => void;
   onSecondaryLayout: (event: LayoutChangeEvent) => void;
@@ -2444,9 +2298,9 @@ interface ExpandableBadgeLabelRowProps {
 
 function ExpandableBadgeLabelRow({
   label,
-  labelStyle,
+  isActive,
+  isLoading,
   secondaryLabel,
-  secondaryLabelStyle,
   shouldMeasureWebShimmer,
   shouldMeasureNativeShimmer,
   isWebShimmer,
@@ -2457,7 +2311,6 @@ function ExpandableBadgeLabelRow({
   labelRowHeight,
   nativeShimmerPeakWidth,
   shimmerDuration,
-  nativeGradientId,
   onLabelRowLayout,
   onLabelLayout,
   onSecondaryLayout,
@@ -2468,21 +2321,32 @@ function ExpandableBadgeLabelRow({
   onOpenFileHoverOut,
 }: ExpandableBadgeLabelRowProps) {
   const { t } = useTranslation();
+  const labelColor: BadgeLabelColor = isActive || isLoading ? "foreground" : "foregroundMuted";
+  const secondaryLabelColor: BadgeLabelColor = isActive ? "foreground" : "foregroundMuted";
+  const labelStyle = useMemo(
+    () =>
+      isLoading
+        ? [expandableBadgeStylesheet.label, expandableBadgeStylesheet.labelLoading]
+        : expandableBadgeStylesheet.label,
+    [isLoading],
+  );
   return (
     <View
       style={expandableBadgeStylesheet.labelRow}
       onLayout={shouldMeasureNativeShimmer ? onLabelRowLayout : undefined}
     >
-      <Text
+      <UiText
+        variant="label"
+        color={labelColor}
         style={labelStyle}
         numberOfLines={1}
         onLayout={shouldMeasureWebShimmer ? onLabelLayout : undefined}
       >
         {label}
-      </Text>
+      </UiText>
       <ExpandableBadgeSecondaryLabel
         secondaryLabel={secondaryLabel}
-        secondaryLabelStyle={secondaryLabelStyle}
+        secondaryLabelColor={secondaryLabelColor}
         shouldMeasureWebShimmer={shouldMeasureWebShimmer}
         onSecondaryLayout={onSecondaryLayout}
       />
@@ -2498,7 +2362,7 @@ function ExpandableBadgeLabelRow({
           hitSlop={6}
         >
           <ThemedFileSymlinkIcon
-            size={14}
+            size={ICON_SIZE.sm}
             uniProps={isOpenFileHovered ? foregroundColorMapping : foregroundMutedColorMapping}
           />
         </Pressable>
@@ -2520,7 +2384,6 @@ function ExpandableBadgeLabelRow({
           rowHeight={labelRowHeight}
           peakWidth={nativeShimmerPeakWidth}
           durationSeconds={shimmerDuration}
-          gradientId={nativeGradientId}
         />
       ) : null}
     </View>
@@ -2541,7 +2404,7 @@ function ExpandableBadgeLabelRow({
 //   - LUCIDE_TOOL_ICON_NUDGE_LEFT: regular tool icons (path mostly fills
 //     the viewBox); needs ~1px left shift.
 //   - LUCIDE_CHEVRON_NUDGE_LEFT: chevron-right (path in right half of
-//     viewBox, and we scale it 1.3×); needs ~4px left shift.
+//     viewBox, drawn one size up from the tool icon); needs ~4px left shift.
 // If we ever want this exact, the principled fix is a custom <Svg> wrapper
 // with a tight viewBox per icon — see option (2) in the design discussion.
 const LUCIDE_TOOL_ICON_NUDGE_LEFT: ViewStyle = { marginLeft: -1 };
@@ -2559,7 +2422,11 @@ function renderExpandableBadgeIcon({
   if (isError) {
     return (
       <View style={LUCIDE_TOOL_ICON_NUDGE_LEFT}>
-        <ThemedTriangleAlertIcon size={12} opacity={0.8} uniProps={destructiveColorMapping} />
+        <ThemedTriangleAlertIcon
+          size={ICON_SIZE.sm}
+          opacity={0.8}
+          uniProps={destructiveColorMapping}
+        />
       </View>
     );
   }
@@ -2567,7 +2434,7 @@ function renderExpandableBadgeIcon({
     return (
       <View style={LUCIDE_TOOL_ICON_NUDGE_LEFT}>
         <ThemedIcon
-          size={12}
+          size={ICON_SIZE.sm}
           uniProps={isActive ? foregroundColorMapping : mutedForegroundColorMapping}
         />
       </View>
@@ -2588,7 +2455,7 @@ function renderExpandableBadgeIconSlot({
   if (showChevron) {
     return (
       <View style={chevronStyle}>
-        <ThemedChevronRightIcon size={12} uniProps={foregroundColorMapping} />
+        <ThemedChevronRightIcon size={ICON_SIZE.md} uniProps={foregroundColorMapping} />
       </View>
     );
   }
@@ -2612,10 +2479,7 @@ function computeShimmerMetrics(input: {
     1,
     Math.min(2.3, 1.25 + totalShimmerChars * 0.008 - shortTextDurationAdjustment),
   );
-  const nativeShimmerPeakWidth = Math.max(
-    32,
-    Math.min(120, input.labelRowWidth > 0 ? input.labelRowWidth * 0.28 : 0),
-  );
+  const nativeShimmerPeakWidth = resolveNativeShimmerPeakWidth(input.labelRowWidth);
   const isWebShimmer = input.isLoading && isWeb;
   // React Native Web only observes a node when onLayout exists at mount. Keep
   // measuring while idle so a retained badge has dimensions when it starts loading.
@@ -2684,14 +2548,14 @@ function buildShimmerTextStyle(input: {
   if (!input.isWebShimmer) return null;
   return inlineUnistylesStyle({
     opacity: 1,
-    color: "transparent",
     backgroundImage: SHIMMER_GRADIENT,
     backgroundSize: `${input.webShimmerPeakWidth}px 100%`,
     backgroundRepeat: "no-repeat",
     backgroundClip: "text",
     WebkitBackgroundClip: "text",
     WebkitTextFillColor: "transparent",
-    animation: `${WEB_TOOLCALL_SHIMMER_ANIMATION_NAME} ${input.shimmerDuration}s linear infinite`,
+    animation: `${TOOL_CALL_SHIMMER_ANIMATION_NAME} ${input.shimmerDuration}s steps(${shimmerSteps(input.shimmerDuration)}) infinite`,
+    animationPlayState: SHIMMER_PLAY_STATE,
     "--paseo-shimmer-start": `${input.webShimmerTrackStart - input.offsetX}px`,
     "--paseo-shimmer-end": `${input.webShimmerTrackEnd - input.offsetX}px`,
   });
@@ -2745,9 +2609,6 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   const handleOpenFileHoverIn = useCallback(() => setIsOpenFileHovered(true), []);
   const handleOpenFileHoverOut = useCallback(() => setIsOpenFileHovered(false), []);
 
-  const nativeGradientIdRef = useRef(
-    `shimmer-gradient-${Math.random().toString(36).substring(2, 9)}`,
-  );
   const [labelRowWidth, setLabelRowWidth] = useState(0);
   const [labelRowHeight, setLabelRowHeight] = useState(0);
   const [labelOffsetX, setLabelOffsetX] = useState(0);
@@ -2817,7 +2678,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     if (!isWebShimmer) {
       return;
     }
-    ensureWebToolCallShimmerKeyframes();
+    ensureShimmerKeyframes();
   }, [isWebShimmer]);
 
   useDetailWheelPropagationBlocker({
@@ -2825,7 +2686,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     enabled: !isNative && isExpanded && hasDetailContent,
   });
 
-  const shimmerLabelStyle = useMemo<StyleProp<TextStyle>>(
+  const shimmerLabelStyle = useMemo<UiTextProps["style"]>(
     () =>
       buildShimmerTextStyle({
         isWebShimmer,
@@ -2845,7 +2706,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     ],
   );
 
-  const shimmerSecondaryStyle = useMemo<StyleProp<TextStyle>>(
+  const shimmerSecondaryStyle = useMemo<UiTextProps["style"]>(
     () =>
       buildShimmerTextStyle({
         isWebShimmer,
@@ -2869,9 +2730,8 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     () => [
       expandableBadgeStylesheet.container,
       !resolvedDisableOuterSpacing &&
-        (isLastInSequence
-          ? expandableBadgeStylesheet.containerLastInSequence
-          : expandableBadgeStylesheet.containerSpacing),
+        isLastInSequence &&
+        expandableBadgeStylesheet.containerLastInSequence,
       style,
     ],
     [isLastInSequence, resolvedDisableOuterSpacing, style],
@@ -2881,10 +2741,8 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     () => [
       expandableBadgeStylesheet.pressable,
       isPressed && isInteractive ? expandableBadgeStylesheet.pressablePressed : null,
-      isExpanded && expandableBadgeStylesheet.pressableExpanded,
-      isExpanded && !borderlessWhenExpanded && expandableBadgeStylesheet.pressableExpandedAttached,
     ],
-    [borderlessWhenExpanded, isExpanded, isInteractive, isPressed],
+    [isInteractive, isPressed],
   );
 
   const detailWrapperStyle = useMemo(
@@ -2902,39 +2760,17 @@ export const ExpandableBadge = memo(function ExpandableBadge({
 
   const isActive = isHovered || isExpanded;
 
-  const labelStyle = useMemo(
-    () => [
-      expandableBadgeStylesheet.label,
-      isActive && expandableBadgeStylesheet.labelActive,
-      isLoading && expandableBadgeStylesheet.labelLoading,
-    ],
-    [isActive, isLoading],
-  );
-
-  const secondaryLabelStyle = useMemo(
-    () => [
-      expandableBadgeStylesheet.secondaryLabel,
-      isActive && expandableBadgeStylesheet.secondaryLabelActive,
-    ],
-    [isActive],
-  );
-
   const shimmerLabelTextStyle = useMemo(
     () => [
       expandableBadgeStylesheet.label,
       isLoading && expandableBadgeStylesheet.labelLoading,
-      expandableBadgeStylesheet.shimmerText,
       shimmerLabelStyle,
     ],
     [isLoading, shimmerLabelStyle],
   );
 
   const shimmerSecondaryTextStyle = useMemo(
-    () => [
-      expandableBadgeStylesheet.secondaryLabel,
-      expandableBadgeStylesheet.shimmerText,
-      shimmerSecondaryStyle,
-    ],
+    () => [expandableBadgeStylesheet.secondaryLabel, shimmerSecondaryStyle],
     [shimmerSecondaryStyle],
   );
 
@@ -2943,7 +2779,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
       expandableBadgeStylesheet.chevron,
       LUCIDE_CHEVRON_NUDGE_LEFT,
       inlineUnistylesStyle({
-        transform: isExpanded ? [{ scale: 1.3 }, { rotate: "90deg" }] : [{ scale: 1.3 }],
+        transform: isExpanded ? [{ rotate: "90deg" }] : [],
       }),
     ],
     [isExpanded],
@@ -2983,9 +2819,9 @@ export const ExpandableBadge = memo(function ExpandableBadge({
           <View style={expandableBadgeStylesheet.iconBadge}>{iconSlotNode}</View>
           <ExpandableBadgeLabelRow
             label={label}
-            labelStyle={labelStyle}
+            isActive={isActive}
+            isLoading={isLoading}
             secondaryLabel={secondaryLabel}
-            secondaryLabelStyle={secondaryLabelStyle}
             shouldMeasureWebShimmer={shouldMeasureWebShimmer}
             shouldMeasureNativeShimmer={shouldMeasureNativeShimmer}
             isWebShimmer={isWebShimmer}
@@ -2996,7 +2832,6 @@ export const ExpandableBadge = memo(function ExpandableBadge({
             labelRowHeight={labelRowHeight}
             nativeShimmerPeakWidth={nativeShimmerPeakWidth}
             shimmerDuration={shimmerDuration}
-            nativeGradientId={nativeGradientIdRef.current}
             onLabelRowLayout={handleLabelRowLayout}
             onLabelLayout={handleLabelLayout}
             onSecondaryLayout={handleSecondaryLayout}
@@ -3014,6 +2849,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
           style={detailWrapperStyle}
           onHoverIn={handleDetailHoverIn}
           onHoverOut={handleDetailHoverOut}
+          testID={testID ? `${testID}-details` : undefined}
         >
           {detailContent}
         </Pressable>
@@ -3182,6 +3018,7 @@ export const ToolCall = memo(function ToolCall({
         errorText={presentation.errorText}
         maxHeight={maxDetailHeight}
         showLoadingSkeleton={presentation.isLoadingDetails}
+        framed
       />
     );
   }, [

@@ -44,15 +44,19 @@ function unregisterStatusRing(registered: SharedValue<boolean>): void {
   activeRingCount.value -= 1;
 }
 
-export function useStatusRingRotation(): SharedValue<number> {
+/** `enabled: false`（减少动态效果）时这个环完全不接入共享时钟。 */
+export function useStatusRingRotation({ enabled }: { enabled: boolean }): SharedValue<number> {
   const registered = useSharedValue(false);
 
   useLayoutEffect(() => {
+    if (!enabled) {
+      return;
+    }
     scheduleOnUI(registerStatusRing, registered);
     return () => {
       scheduleOnUI(unregisterStatusRing, registered);
     };
-  }, [registered]);
+  }, [enabled, registered]);
 
   return sharedRotation;
 }

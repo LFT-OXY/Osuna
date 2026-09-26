@@ -22,10 +22,11 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import invariant from "tiny-invariant";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
 import { ScreenHeader } from "@/components/headers/screen-header";
+import { Text as UiText } from "@/components/ui/text";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { HostBadge } from "@/hosts/host-badge";
 import { useHostBadges } from "@/hosts/use-host-badges";
@@ -763,7 +764,7 @@ const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitcher({
                 backdrop={pressed ? "surface1" : "surface0"}
               />
             </View>
-            <ThemedChevronDown size={14} uniProps={mutedColorMapping} />
+            <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
           </>
         )}
       </Pressable>
@@ -912,13 +913,11 @@ function useCloseTabs(): UseCloseTabsResult {
 }
 
 /**
- * Which project the workspace belongs to, and which machine it runs on.
+ * 工作区属于哪个项目、跑在哪台机器上。
  *
- * Compact gets both, on their own line under the workspace name: this header is the only thing on
- * screen that says where the workspace lives, because the sidebar that normally carries the host
- * badge is closed. It still follows the host's own badge setting, so a purely local setup stays
- * quiet. A project name that only repeats the workspace name is dropped on wide, where the two sit
- * side by side, and kept on compact, where the line exists for the host anyway.
+ * 紧凑布局下两者都显示，在工作区名下方单独一行：侧栏收起时，只有这里能看出工作区在哪，
+ * host badge 仍遵循该 host 自己的显示设置，纯本地时不出现。宽屏时项目名在工作区名前作面包屑
+ * （`项目 / 工作区`）；项目名与工作区名重复时宽屏不显示，紧凑布局保留，因为那一行本来就为 host 存在。
  */
 function WorkspaceHeaderProjectRow({
   subtitle,
@@ -948,6 +947,11 @@ function WorkspaceHeaderProjectRow({
       ) : null}
       {showProject && hostBadge ? <Text style={styles.headerProjectSeparator}>·</Text> : null}
       {hostBadge ? <HostBadge badge={hostBadge} /> : null}
+      {showProject && !isCompact ? (
+        <UiText color="foregroundExtraMuted" style={styles.headerBreadcrumbSeparator}>
+          /
+        </UiText>
+      ) : null}
     </View>
   );
 }
@@ -1009,6 +1013,14 @@ function WorkspaceHeaderTitleBar({
   onViewScriptTerminal,
   onOpenUrlInBrowserTab,
 }: WorkspaceHeaderTitleBarProps) {
+  // 宽屏时项目名在前作面包屑，紧凑布局时在标题下方另起一行。
+  const projectRow = (
+    <WorkspaceHeaderProjectRow
+      subtitle={subtitle}
+      isSubtitleDistinct={isSubtitleDistinct}
+      serverId={normalizedServerId}
+    />
+  );
   return (
     <View style={styles.headerTitleContainer}>
       {isLoading ? (
@@ -1017,12 +1029,9 @@ function WorkspaceHeaderTitleBar({
         </View>
       ) : (
         <View style={styles.headerTitleTextGroup}>
+          {isMobile ? null : projectRow}
           <ScreenTitle testID="workspace-header-title">{title}</ScreenTitle>
-          <WorkspaceHeaderProjectRow
-            subtitle={subtitle}
-            isSubtitleDistinct={isSubtitleDistinct}
-            serverId={normalizedServerId}
-          />
+          {isMobile ? projectRow : null}
         </View>
       )}
       <View style={styles.compactHeaderMenuCluster}>
@@ -1302,7 +1311,7 @@ function shouldInspectWorkspaceRecovery(
 function WorkspaceScreenGateFrame({ children }: { children: ReactNode }) {
   return (
     <>
-      <ScreenHeader left={GATED_WORKSPACE_HEADER_LEFT} />
+      <ScreenHeader left={GATED_WORKSPACE_HEADER_LEFT} borderless />
       <View style={styles.centerContent}>{children}</View>
     </>
   );
@@ -3920,6 +3929,7 @@ function WorkspaceScreenContent({
             </>
           }
           right={headerRight}
+          borderless
         />
       ) : null,
     [
@@ -4200,7 +4210,10 @@ const styles = StyleSheet.create((theme) => ({
   headerProjectRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1.5],
+    gap: {
+      xs: theme.spacing[1.5],
+      md: theme.spacing[2],
+    },
     minWidth: 0,
     flexShrink: 1,
   },
@@ -4216,6 +4229,9 @@ const styles = StyleSheet.create((theme) => ({
   headerProjectSeparator: {
     color: theme.colors.foregroundExtraMuted,
     fontSize: theme.fontSize.sm,
+    flexShrink: 0,
+  },
+  headerBreadcrumbSeparator: {
     flexShrink: 0,
   },
   headerTitleSkeleton: {
@@ -4278,8 +4294,6 @@ const styles = StyleSheet.create((theme) => ({
   newTabTooltipShortcut: {},
   mobileTabsRow: {
     backgroundColor: theme.colors.surface0,
-    borderBottomWidth: theme.borderWidth[1],
-    borderBottomColor: theme.colors.border,
   },
   switcherTrigger: {
     flexDirection: "row",

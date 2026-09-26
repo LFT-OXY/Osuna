@@ -175,8 +175,8 @@ export function SettingsAction({ actionLabel, onPress, disabled, ...row }: Setti
 
 const styles = StyleSheet.create((theme) => ({
   compactRow: { flexWrap: "wrap", gap: theme.spacing[3] },
-  label: { flexGrow: 1, flexShrink: 1, flexBasis: 160, marginRight: theme.spacing[3] },
+  label: { flexGrow: 1, flexShrink: 1, flexBasis: 160 },
   control: { flexShrink: 1, maxWidth: "100%" },
-  value: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
+  value: { color: theme.colors.foreground, ...theme.typeScale.body },
   input: { minWidth: 180 },
 }));

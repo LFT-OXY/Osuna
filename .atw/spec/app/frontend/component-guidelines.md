@@ -8,17 +8,21 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 
 | Need                       | Use                                                                                        | Not                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| Text                       | `components/ui/text.tsx` (`variant`, `color`, `weight`; see Styling "Text ramp")           | RN `<Text>` with hand-set `fontSize` / `color`     |
+| A list row                 | `components/ui/row.tsx` `<Row>`; own press target → `getRowSurfaceStyle`                   | Per-file hover / selected / pressed fills          |
 | A button                   | `components/ui/button.tsx`                                                                 | `<Pressable>` wrapping `<Text>`                    |
 | A loading state            | `components/ui/loading-spinner.tsx`                                                        | `ActivityIndicator` imported directly              |
 | A status pill              | `components/ui/status-badge.tsx`                                                           | A bespoke pill                                     |
 | A focused modal task       | `components/adaptive-modal-sheet.tsx`                                                      | Raw `Modal`                                        |
 | A page-level alert         | `components/ui/alert.tsx`                                                                  | `Alert.alert()` (a no-op on web) or a console line |
-| A destructive confirmation | `utils/confirm-dialog.ts` → `confirmDialog()`                                              | An unguarded action                                |
+| A destructive confirmation | `utils/confirm-dialog.ts` → `confirmDialog()` (OS dialog); with detail, `<AdaptiveModalSheet>` + `footer` | An unguarded action; a red button on the page      |
 | A picker                   | `components/ui/combobox.tsx`                                                               | A custom list                                      |
 | A trigger-anchored menu    | `components/ui/dropdown-menu.tsx`; right-click/long-press `components/ui/context-menu.tsx` | An ad hoc popover (`docs/menus.md`)                |
 | A settings section         | `components/settings/headings/settings-section.tsx`                                        | Bare `<Text>` headers                              |
+| A settings card / row      | `styles/settings.ts` `settingsStyles` (`card`, `row`, `rowBorder`, `rowTitle`, `rowHint`, `rowValue`, `rowIconFrame`); a card row that draws its own divider uses `borderCardRow` | Local row padding, card radius, or title sizes; a row divider in `border` |
+| A value dropdown in a row  | `components/ui/dropdown-trigger.tsx` `<DropdownTrigger>` inside `<DropdownMenu>`           | A `DropdownMenuTrigger` with a hand-drawn outline  |
 | A form field               | `components/ui/form-field.tsx` with the model from `docs/forms.md`                         | `useEffect` choreography                           |
-| A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`               | A hand-rolled bar                                  |
+| A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`; workspace and settings call sites pass `borderless` (`docs/design.md` §5) | A hand-rolled bar; a `borderBottom` on workspace or settings chrome |
 
 ## Fallible actions own their three states
 
@@ -26,7 +30,9 @@ Every user action that can fail renders pending, success, and failure in the sam
 
 ## Hover
 
-Read `docs/hover.md` and copy the workspace row in `components/sidebar-workspace-list.tsx`: a plain `View` with `onPointerEnter` / `onPointerLeave` as the hover envelope, a separate inner `Pressable` for press only, fixed `minHeight` so revealed content does not shift layout. Hover only fires on web, so anything hover-revealed is gated `isHovered || isNative || isCompact` so native and phones always see it. A hover readout that sits outside the envelope — a caption naming the hovered cell — needs the same fixed box: an empty `<Text>` collapses, and the reflow on `pointerleave` swallows the next click aimed anywhere below it (`docs/hover.md` failure mode 2).
+Read `docs/hover.md`. A simple list row is `<Row>` (`components/ui/row.tsx`), which already is the pattern: a plain `View` with `onPointerEnter` / `onPointerLeave` as the hover envelope, a separate inner `Pressable` for press only, fixed `minHeight`, and `renderActions` hidden by `opacity` + `pointerEvents` and drawn over the trailing slot. A row with its own press target copies the workspace row in `components/sidebar-workspace-list.tsx` and paints its states with `getRowSurfaceStyle`. Hover only fires on web, so anything hover-revealed is gated `isHovered || isNative || isCompact` so native and phones always see it. A hover readout that sits outside the envelope — a caption naming the hovered cell — needs the same fixed box: an empty `<Text>` collapses, and the reflow on `pointerleave` swallows the next click aimed anywhere below it (`docs/hover.md` failure mode 2).
+
+`<Row>` paints the sidebar row roles (`surfaceSidebar*`), so it only belongs on the sidebar or canvas. A list inside a `surface2` card — the changed-files list in `agent-stream/turn-changed-files-card.tsx` — paints its own hover with a `Pressable` style callback (`hovered ? surface3`), which is the one legitimate use of `onHoverIn`-style state: the `Pressable` styling itself.
 
 A list row that needs a hover kebab **and** a right-click / long-press menu is `SessionHistoryRowItem` in `session-history/index.tsx`: the plain `View` envelope holds `isHovered` and `contextMenuOpen`; `ContextMenuTrigger` is the inner press target (press opens, right click and native long press open the menu); the kebab sits in a fixed-width trailing slot hidden by `opacity: 0` + `pointerEvents="none"`, never unmounted; `useOpenKebabMenuVisibility(isHovered || isNative || isCompact)` keeps it mounted while its menu is up. Both menus render one `…MenuItems` component switched by a `surface: "context" | "dropdown"` prop (`session-history/internal/row-menu.tsx`, the same shape as `components/sidebar/sidebar-workspace-menu.tsx`) so the two cannot drift; an action the row cannot offer (import for a Paseo-owned session) is passed as `null`, not hidden by a boolean.
 
@@ -54,6 +60,7 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 
 - Components render and dispatch. Transitions live in reducers, stores, or the form model.
 - Never define a component inside another component.
+- oxlint caps a function's `complexity` at 20, and the large render functions (`DesktopAgentControlsContent`, `CombinedModelSelector`) sit near it, so one more `a && b ? <X /> : null` fails lint. Move the decision into a pure resolver next to the layout code (`resolveComposerSeparators` in `composer/agent-controls/layout.ts`, unit-tested) or the branch into a child component (`DefaultTriggerContent` in `components/combined-model-selector.tsx`). Do not add an `oxlint-disable`.
 - Collection rows do not subscribe to the session store individually; the list owner selects once and passes row models (`docs/coding-standards.md` "React").
 - Retained native panels use `RetainedPanel` / `RetainedPanelActivity`, keep a stable sibling order, and gate effects through `useRetainedPanelActive` (`docs/mobile-panels.md`).
 - Anchored panels go through the portal and lifecycle gates in `docs/floating-panels.md`; the flash and the Android hit-test bug are both documented there.
@@ -62,4 +69,4 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 
 ## Forbidden (from `docs/design.md` §14, enforced in review)
 
-`fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without `confirmDialog`.
+`fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens outside the exceptions §14 names; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without a confirmation (`confirmDialog`, or a sheet whose footer holds the destructive button).

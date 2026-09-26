@@ -524,7 +524,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   featureRowBorder: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.borderCardRow,
   },
   featureMeta: {
     flex: 1,
