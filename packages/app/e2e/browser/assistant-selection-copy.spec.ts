@@ -568,17 +568,17 @@ test("copying an assistant selection preserves Markdown structure and links", as
     // The block's own Copy button had the same hazard: a Markdown fence body ends in
     // a newline, and the button copied it raw.
     const typescriptFence = assistantMessage.locator('[data-paseo-markdown-language="typescript"]');
-    // The button is opacity 0 / pointerEvents none until the fence is hovered.
-    await typescriptFence.hover();
-    await typescriptFence.locator("[data-paseo-markdown-ignore]").click();
+    // The header row names the language and holds the button; whole-selection copy above
+    // already proved the label stays out of the clipboard.
+    await expect(typescriptFence.getByText("typescript", { exact: true })).toBeVisible();
+    await typescriptFence.getByRole("button", { name: "Copy code" }).click();
 
     expect(await readPlainClipboard(page)).toBe('const answer = "yes";\n  return answer;');
 
     // A blank line before the closing fence leaves the body ending in two newlines,
     // so stripping only the terminal one still hands the terminal an executable line.
     const bashFence = assistantMessage.locator('[data-paseo-markdown-language="bash"]');
-    await bashFence.hover();
-    await bashFence.locator("[data-paseo-markdown-ignore]").click();
+    await bashFence.getByRole("button", { name: "Copy code" }).click();
 
     expect(await readPlainClipboard(page)).toBe("echo trailing");
   } finally {

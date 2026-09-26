@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { collectPluginThemes } from "@/plugins/themes";
 import type { InstalledPlugin } from "@/plugins/types";
 import { contrastRatio } from "@/terminal/runtime/terminal-contrast";
+import { mixHexColor } from "@/utils/color";
 import {
   BORDER_RADIUS,
   CONTROL_HEIGHT,
@@ -308,6 +309,17 @@ describe("Default palette", () => {
     expect(darkTheme.colors.insetHighlight).toBe("rgba(255, 255, 255, 0.04)");
   });
 
+  it("tones assistant prose to 86% of the foreground and borders code blocks only in Light", () => {
+    expect(darkTheme.colors).toMatchObject({
+      foregroundProse: "rgba(245, 245, 245, 0.86)",
+      borderCodeBlock: "transparent",
+    });
+    expect(lightTheme.colors).toMatchObject({
+      foregroundProse: "rgba(39, 39, 42, 0.86)",
+      borderCodeBlock: "#e4e4e7",
+    });
+  });
+
   it("gives menus and dialogs the designed glass, scrim, shadow and warning fills", () => {
     expect(lightTheme.colors).toMatchObject({
       surfaceGlass: "rgba(255, 255, 255, 0.8)",
@@ -423,6 +435,8 @@ const REDESIGN_ROLES = [
   "surfaceTabHover",
   "surfaceTabActive",
   "borderInput",
+  "foregroundProse",
+  "borderCodeBlock",
   "diffAdditionBackground",
   "diffDeletionBackground",
   "diffAdditionBar",
@@ -439,6 +453,7 @@ const REDESIGN_ROLES = [
 
 const COLOR_VALUE =
   /^(#[0-9a-f]{6}|rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0?\.\d+)\)|transparent)$/i;
+const PROSE_ALPHA = 0.86;
 // 可辨阈值：设计稿里最轻的一档（黑色侧栏上 4% 白的 hover）约 1.06:1。
 const ROW_STATE_MINIMUM_CONTRAST = 1.05;
 
@@ -493,6 +508,9 @@ describe("Redesign roles across the catalog", () => {
       expect(ratio(colors.foregroundMuted, colors.surfaceWorkspace)).toBeGreaterThanOrEqual(
         minimum,
       );
+      // 助手正文是前景色的 86%，按它在画布上合成后的实际颜色检查。
+      const prose = mixHexColor(colors.surfaceWorkspace, colors.foreground, PROSE_ALPHA);
+      expect(ratio(prose, colors.surfaceWorkspace)).toBeGreaterThanOrEqual(minimum);
     },
   );
 

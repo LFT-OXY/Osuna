@@ -44,7 +44,8 @@ import {
   FileSymlink,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { contentTypeStep, ICON_SIZE, type Theme } from "@/styles/theme";
+import { Text as UiText } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import Animated, {
   Easing,
@@ -333,7 +334,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   },
   content: {
     alignItems: "flex-end",
-    maxWidth: "100%",
+    maxWidth: "80%",
     cursor: "auto",
   },
   containerSpacing: {
@@ -346,11 +347,9 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing[4],
   },
   bubble: {
-    backgroundColor: theme.colors.surface3,
-    borderRadius: theme.borderRadius["2xl"],
-    borderTopRightRadius: theme.borderRadius.sm,
-    paddingHorizontal: theme.spacing[4],
-    paddingVertical: theme.spacing[4],
+    backgroundColor: theme.colors.surfaceMessage,
+    borderRadius: theme.radius["2xl"],
+    padding: theme.spacing[3],
     minWidth: 0,
     flexShrink: 1,
   },
@@ -359,7 +358,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.content,
     ...(isWeb
       ? {
-          lineHeight: Math.round(theme.fontSize.content * 1.4),
+          lineHeight: contentTypeStep(theme.fontSize.content, "prose").lineHeight,
           overflowWrap: "anywhere" as const,
         }
       : {}),
@@ -390,17 +389,13 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     alignItems: "center",
     height: 24,
     gap: theme.spacing[2],
-    marginTop: theme.spacing[2],
+    marginTop: theme.spacing[1],
   },
   trailingRowHidden: {
     opacity: 0,
   },
   trailingRowVisible: {
     opacity: 1,
-  },
-  timestampText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: STREAM_METADATA_FONT_SIZE,
   },
 }));
 
@@ -510,7 +505,7 @@ export const UserMessage = memo(function UserMessage({
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
       >
-        <View style={userMessageStylesheet.bubble}>
+        <View style={userMessageStylesheet.bubble} testID="user-message-bubble">
           {hasImages ? (
             <View style={imagePreviewContainerStyle}>
               {images.map((image) => (
@@ -553,9 +548,9 @@ export const UserMessage = memo(function UserMessage({
             pointerEvents={showTrailingRow ? "auto" : "none"}
             testID="user-message-trailing-row"
           >
-            <Text style={userMessageStylesheet.timestampText} testID="user-message-timestamp">
+            <UiText variant="caption" color="foregroundMuted" testID="user-message-timestamp">
               {formattedTimestamp}
-            </Text>
+            </UiText>
             {capabilities && messageId ? (
               <RewindMenu
                 capabilities={capabilities}

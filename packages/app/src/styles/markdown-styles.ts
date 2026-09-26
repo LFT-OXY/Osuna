@@ -1,15 +1,7 @@
-import { FONT_SIZE, type Theme } from "./theme";
+import { contentTypeStep, type Theme } from "./theme";
 import { isWeb } from "@/constants/platform";
 
 const webSelectableTextStyle = isWeb ? { userSelect: "text" as const } : {};
-
-function contentHeadingSize(contentSize: number, tier: keyof typeof FONT_SIZE): number {
-  return Math.round(contentSize * (FONT_SIZE[tier] / FONT_SIZE.base));
-}
-
-function contentHeadingLineHeight(contentSize: number, tier: keyof typeof FONT_SIZE): number {
-  return Math.round(contentHeadingSize(contentSize, tier) * 1.3);
-}
 
 /**
  * Creates comprehensive markdown styles for react-native-markdown-display.
@@ -30,11 +22,8 @@ export function createMarkdownStyles(theme: Theme) {
 
     body: {
       ...webSelectableTextStyle,
-      color: theme.colors.foreground,
-      fontSize: theme.fontSize.content,
-      // Prose line-height scales with the content size, not the
-      // code-size-coupled lineHeight.diff token used by code/diff surfaces.
-      lineHeight: Math.round(theme.fontSize.content * 1.4),
+      color: theme.colors.foregroundProse,
+      ...contentTypeStep(theme.fontSize.content, "prose"),
       flexShrink: 1,
       minWidth: 0,
       width: "100%" as const,
@@ -65,70 +54,56 @@ export function createMarkdownStyles(theme: Theme) {
 
     heading1: {
       ...webSelectableTextStyle,
-      fontSize: contentHeadingSize(theme.fontSize.content, "4xl"),
-      fontWeight: theme.fontWeight.bold,
+      ...contentTypeStep(theme.fontSize.content, "title-lg"),
+      fontWeight: theme.fontWeight.semibold,
       color: theme.colors.foreground,
-      marginTop: theme.spacing[6],
-      marginBottom: theme.spacing[3],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "4xl"),
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-      paddingBottom: theme.spacing[2],
+      marginTop: theme.spacing[4],
+      marginBottom: theme.spacing[2],
     },
 
     heading2: {
       ...webSelectableTextStyle,
-      fontSize: contentHeadingSize(theme.fontSize.content, "3xl"),
-      fontWeight: theme.fontWeight.bold,
+      ...contentTypeStep(theme.fontSize.content, "title"),
+      fontWeight: theme.fontWeight.semibold,
       color: theme.colors.foreground,
-      marginTop: theme.spacing[6],
-      marginBottom: theme.spacing[3],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "3xl"),
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-      paddingBottom: theme.spacing[2],
+      marginTop: theme.spacing[4],
+      marginBottom: theme.spacing[2],
     },
 
     heading3: {
       ...webSelectableTextStyle,
-      fontSize: contentHeadingSize(theme.fontSize.content, "2xl"),
+      ...contentTypeStep(theme.fontSize.content, "title-sm"),
       fontWeight: theme.fontWeight.semibold,
       color: theme.colors.foreground,
       marginTop: theme.spacing[4],
       marginBottom: theme.spacing[2],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "2xl"),
     },
 
     heading4: {
       ...webSelectableTextStyle,
-      fontSize: contentHeadingSize(theme.fontSize.content, "xl"),
+      ...contentTypeStep(theme.fontSize.content, "body-lg"),
       fontWeight: theme.fontWeight.semibold,
       color: theme.colors.foreground,
-      marginTop: theme.spacing[4],
-      marginBottom: theme.spacing[2],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "xl"),
+      marginTop: theme.spacing[3],
+      marginBottom: theme.spacing[1],
     },
 
     heading5: {
       ...webSelectableTextStyle,
-      fontSize: contentHeadingSize(theme.fontSize.content, "lg"),
+      ...contentTypeStep(theme.fontSize.content, "body"),
       fontWeight: theme.fontWeight.semibold,
       color: theme.colors.foreground,
       marginTop: theme.spacing[3],
       marginBottom: theme.spacing[1],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "lg"),
     },
 
     heading6: {
       ...webSelectableTextStyle,
-      fontSize: contentHeadingSize(theme.fontSize.content, "lg"),
+      ...contentTypeStep(theme.fontSize.content, "body"),
       fontWeight: theme.fontWeight.semibold,
       color: theme.colors.foregroundMuted,
       marginTop: theme.spacing[3],
       marginBottom: theme.spacing[1],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "lg"),
-      textTransform: "uppercase" as const,
-      letterSpacing: 0.5,
     },
 
     // =========================================================================
@@ -178,32 +153,40 @@ export function createMarkdownStyles(theme: Theme) {
       backgroundColor: theme.colors.surface2,
       color: theme.colors.foreground,
       paddingHorizontal: theme.spacing[1],
-      paddingVertical: 2,
-      borderRadius: theme.borderRadius.md,
+      paddingVertical: theme.spacing[0.5],
+      borderRadius: theme.radius.sm,
       borderWidth: 0,
       fontFamily: theme.fontFamily.mono,
       fontSize: theme.fontSize.code,
     },
 
+    // 代码块的外框（底色、描边、圆角、外边距）画在 HighlightedCodeBlock 的容器上，内边距给代码正文，
+    // 语言标签与复制按钮那一行在正文上方，左侧与代码对齐。
     code_block: {
       ...webSelectableTextStyle,
       backgroundColor: theme.colors.surface2,
       color: theme.colors.foreground,
-      padding: theme.spacing[3],
-      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.borderCodeBlock,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing[3],
+      paddingTop: theme.spacing[1],
+      paddingBottom: theme.spacing[3],
       fontFamily: theme.fontFamily.mono,
       fontSize: theme.fontSize.code,
-      marginVertical: theme.spacing[2],
+      marginVertical: theme.spacing[3],
     },
 
     fence: {
       ...webSelectableTextStyle,
       backgroundColor: theme.colors.surface2,
       color: theme.colors.foreground,
-      padding: theme.spacing[3],
-      borderRadius: theme.borderRadius.md,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.borderCodeBlock,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing[3],
+      paddingTop: theme.spacing[1],
+      paddingBottom: theme.spacing[3],
       fontFamily: theme.fontFamily.mono,
       fontSize: theme.fontSize.code,
       marginVertical: theme.spacing[3],
@@ -294,17 +277,15 @@ export function createMarkdownStyles(theme: Theme) {
       ...webSelectableTextStyle,
       color: theme.colors.foregroundMuted,
       marginRight: 4,
-      fontSize: theme.fontSize.content,
-      lineHeight: Math.round(theme.fontSize.content * 1.4),
+      ...contentTypeStep(theme.fontSize.content, "prose"),
     },
 
     ordered_list_icon: {
       ...webSelectableTextStyle,
       color: theme.colors.foregroundMuted,
       marginRight: 4,
-      fontSize: theme.fontSize.content,
+      ...contentTypeStep(theme.fontSize.content, "prose"),
       fontWeight: theme.fontWeight.normal,
-      lineHeight: Math.round(theme.fontSize.content * 1.4),
       minWidth: 12,
     },
 
@@ -367,34 +348,23 @@ export function createCompactMarkdownStyles(theme: Theme) {
   return {
     ...baseStyles,
 
-    body: {
-      ...baseStyles.body,
-      fontSize: theme.fontSize.content,
-      lineHeight: Math.round(theme.fontSize.content * 1.4),
-    },
-
     heading1: {
       ...baseStyles.heading1,
-      fontSize: contentHeadingSize(theme.fontSize.content, "2xl"),
-      marginTop: theme.spacing[4],
-      marginBottom: theme.spacing[2],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "2xl"),
+      ...contentTypeStep(theme.fontSize.content, "title-sm"),
+      marginTop: theme.spacing[3],
     },
 
     heading2: {
       ...baseStyles.heading2,
-      fontSize: contentHeadingSize(theme.fontSize.content, "xl"),
+      ...contentTypeStep(theme.fontSize.content, "body-lg"),
       marginTop: theme.spacing[3],
-      marginBottom: theme.spacing[2],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "xl"),
     },
 
     heading3: {
       ...baseStyles.heading3,
-      fontSize: contentHeadingSize(theme.fontSize.content, "lg"),
+      ...contentTypeStep(theme.fontSize.content, "body"),
       marginTop: theme.spacing[3],
       marginBottom: theme.spacing[1],
-      lineHeight: contentHeadingLineHeight(theme.fontSize.content, "lg"),
     },
 
     paragraph: {
@@ -402,21 +372,16 @@ export function createCompactMarkdownStyles(theme: Theme) {
       marginBottom: theme.spacing[2],
     },
 
-    code_inline: {
-      ...baseStyles.code_inline,
-      fontSize: theme.fontSize.code,
-    },
-
     code_block: {
       ...baseStyles.code_block,
-      fontSize: theme.fontSize.code,
-      padding: theme.spacing[2],
+      paddingHorizontal: theme.spacing[2],
+      paddingBottom: theme.spacing[2],
     },
 
     fence: {
       ...baseStyles.fence,
-      fontSize: theme.fontSize.code,
-      padding: theme.spacing[2],
+      paddingHorizontal: theme.spacing[2],
+      paddingBottom: theme.spacing[2],
     },
   };
 }

@@ -251,6 +251,8 @@ const SIDEBAR_ROW_STATE_MINIMUM_CONTRAST = 1.05;
 const TAB_HOVER_MIX = 0.05;
 const TAB_ACTIVE_MIX = 0.075;
 const DARK_INSET_HIGHLIGHT = "rgba(255, 255, 255, 0.04)";
+// 助手回复正文取前景色的 86%（原型 / t3code），让长回复读起来比标题和用户消息轻一档。
+const PROSE_FOREGROUND_ALPHA = 0.86;
 const LIGHT_COMPOSER_SHADOW = "rgba(0, 0, 0, 0.4)";
 // diff 行底色与色条沿用 diff 视图一直使用的状态色（底色为其透明版）。
 const DIFF_ADDITION_BACKGROUND_ALPHA = 0.15;
@@ -349,6 +351,9 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     surfaceTabHover,
     surfaceTabActive,
     borderInput: overrides.borderInput ?? base.border,
+    foregroundProse: hexColorWithAlpha(foreground, PROSE_FOREGROUND_ALPHA),
+    // 代码块只在亮色下描边；暗色靠底色与画布的明度差分开。
+    borderCodeBlock: isDark ? "transparent" : base.border,
     diffAdditionBackground,
     diffDeletionBackground,
     diffAdditionBar: statusColors.statusSuccess,
@@ -816,6 +821,19 @@ export const TYPE_SCALE = {
 } as const;
 
 export type TextVariant = keyof typeof TYPE_SCALE;
+
+/**
+ * 以正文字号（fontSize.content）为基准取 Text 阶梯的一档。消息正文与 markdown 用它：阶梯比例与界面
+ * 一致，但字号跟随用户的正文字号设置，而不是界面字号。
+ */
+export function contentTypeStep(contentSize: number, variant: TextVariant) {
+  const step = TYPE_SCALE[variant];
+  const base = TYPE_SCALE.body.fontSize;
+  return {
+    fontSize: Math.round((contentSize * step.fontSize) / base),
+    lineHeight: Math.round((contentSize * step.lineHeight) / base),
+  };
+}
 
 export const ICON_SIZE = {
   xs: 12,
