@@ -46,7 +46,7 @@ export const settingsStyles = StyleSheet.create((theme) => ({
   },
   rowBorder: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.borderCardRow,
   },
   rowContent: {
     flex: 1,

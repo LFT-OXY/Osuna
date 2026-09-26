@@ -540,7 +540,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   separator: {
     height: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.borderCardRow,
   },
   mobileCard: {
     padding: theme.spacing[4],

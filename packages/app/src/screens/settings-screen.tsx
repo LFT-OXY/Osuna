@@ -47,7 +47,6 @@ import { Text as UiText } from "@/components/ui/text";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
-import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
 import { HostPicker as SharedHostPicker } from "@/components/hosts/host-picker";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { ScreenTitle } from "@/components/headers/screen-title";
@@ -1107,7 +1106,6 @@ function SettingsSidebar({
           />
         ))}
       </View>
-      <SidebarSeparator />
       {hasHosts ? (
         <View style={sidebarStyles.list}>
           <UiText
@@ -1615,7 +1613,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   if (isCompactLayout && view.kind === "root") {
     return (
       <View style={styles.container}>
-        <BackHeader title={t("settings.title")} onBack={handleBackToWorkspace} />
+        <BackHeader title={t("settings.title")} onBack={handleBackToWorkspace} borderless />
         <ScrollView style={styles.scrollView} contentContainerStyle={insetBottomStyle}>
           <SettingsSidebar
             view={view}
@@ -1640,6 +1638,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
           title={detailHeader?.title}
           titleAccessory={detailHeader?.titleAccessory}
           onBack={handleBackFromDetail}
+          borderless
         />
         <ScrollView style={styles.scrollView} contentContainerStyle={insetBottomStyle}>
           <View style={styles.content}>{content}</View>
@@ -1670,7 +1669,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
         <WindowChromeRegion corners="top-right">
           <View style={desktopStyles.contentPane} testID="settings-detail-pane">
             <ScreenHeader
-              borderless={!detailHeader}
+              borderless
               left={desktopDetailHeaderLeft}
               leftStyle={desktopStyles.detailLeft}
             />
