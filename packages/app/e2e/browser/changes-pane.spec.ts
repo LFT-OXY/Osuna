@@ -551,6 +551,26 @@ test("changes tree aligns every file status after its diff stat", async ({ page 
   expect(statusBounds.x - (statBounds.x + statBounds.width)).toBeGreaterThanOrEqual(8);
 });
 
+test("changes tree rows are 28px and the selected row keeps a fill and ring", async ({ page }) => {
+  const workspace = await createWorkspaceWithMountedTabDiff({ includeUntrackedFile: true });
+  await useUnwrappedDiffLines(page);
+  await openWorkspaceChanges(page, workspace);
+  const tree = changesTree(page);
+  const selectedRow = tree.getByTestId("diff-tree-file-0-toggle");
+  const otherRow = tree.getByTestId("diff-tree-file-1-toggle");
+  await selectedRow.click({ button: "right" });
+  await page.keyboard.press("Escape");
+  await page.mouse.move(0, 0);
+
+  await expect(selectedRow).toHaveCSS("height", "28px");
+  await expect(tree.getByTestId("diff-folder-src-toggle")).toHaveCSS("height", "28px");
+  await expect(selectedRow).toHaveCSS("border-radius", "8px");
+  await expect(selectedRow).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(selectedRow).toHaveCSS("box-shadow", /inset/);
+  await expect(otherRow).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(otherRow).toHaveCSS("box-shadow", "none");
+});
+
 test("the scrolling diff lists files in changes tree order", async ({ page }) => {
   const workspace = await createWorkspaceWithMountedTabDiff({
     includeNestedFolders: true,
@@ -1561,6 +1581,8 @@ async function writeComparisonFiles(
   ]);
 }
 
+// 选区夹具都从已提交的空文件改起，hunk 从文件第一行开始，前面没有 "N unmodified lines" 分隔：
+// 第一行改动就是 diff 正文的第一行，下面的拖选辅助函数按这个位置取坐标。
 async function createWorkspaceWithExactSelectionDiff(content: string): Promise<DirtyWorkspace> {
   const repo = await createTempGitRepo("changes-canvas-selection-", {
     files: [{ path: "src/selection.ts", content: "" }],
@@ -1872,7 +1894,7 @@ async function clickFirstChangedLine(page: Page): Promise<void> {
   ]);
   if (!bodyBounds) throw new Error("Expanded diff body has no bounds");
   const lineHeight = Math.round(fontSize * 1.5);
-  await page.mouse.click(bodyBounds.x + 120, bodyBounds.y + lineHeight * 1.5);
+  await page.mouse.click(bodyBounds.x + 120, bodyBounds.y + lineHeight * 0.5);
 }
 
 async function openCopyableSelectionDiff(page: Page, content: string): Promise<void> {
@@ -1919,7 +1941,7 @@ async function rightClickFirstChangedLine(page: Page, fileIndex = 0): Promise<vo
   ]);
   if (!bodyBounds) throw new Error("Expanded diff body has no bounds");
   const lineHeight = Math.round(fontSize * 1.5);
-  await page.mouse.click(bodyBounds.x + 120, bodyBounds.y + lineHeight * 1.5, {
+  await page.mouse.click(bodyBounds.x + 120, bodyBounds.y + lineHeight * 0.5, {
     button: "right",
   });
 }
@@ -1985,12 +2007,12 @@ async function dragExactAddedText(
   const textLeft = bodyBounds.x + gutterWidth + 8;
   await page.mouse.move(
     textLeft + offsets.startOffset * metrics.characterWidth + 1,
-    bodyBounds.y + lineHeight * 1.5,
+    bodyBounds.y + lineHeight * 0.5,
   );
   await page.mouse.down();
   await page.mouse.move(
     textLeft + offsets.endOffset * metrics.characterWidth - 1,
-    bodyBounds.y + lineHeight * 1.5,
+    bodyBounds.y + lineHeight * 0.5,
     { steps: 8 },
   );
   await page.mouse.up();
@@ -2045,7 +2067,7 @@ async function dragAddedTextRange(
         8 +
         localOffset * metrics.characterWidth -
         (input.horizontalOffset ?? 0),
-      y: bounds.y + (1 + fragmentsBefore(line) + fragment + 0.5) * lineHeight,
+      y: bounds.y + (fragmentsBefore(line) + fragment + 0.5) * lineHeight,
     };
   };
   const start = point(input.start);
@@ -2079,9 +2101,9 @@ async function readSelectionPaintSamples(
     const columnLeft =
       selectedSide === "right" ? bodyBounds.left + bodyBounds.width / 2 : bodyBounds.left;
     return {
-      gutter: sample(columnLeft + 2, bodyBounds.top + 24, 8, 8),
-      code: sample(columnLeft + 80, bodyBounds.top + 24, 80, 10),
-      opposite: sample(bodyBounds.left + 80, bodyBounds.top + 24, 80, 10),
+      gutter: sample(columnLeft + 2, bodyBounds.top + 4, 8, 8),
+      code: sample(columnLeft + 80, bodyBounds.top + 4, 80, 10),
+      opposite: sample(bodyBounds.left + 80, bodyBounds.top + 4, 80, 10),
     };
   }, side);
 }
@@ -2095,7 +2117,7 @@ async function dragWithinFirstAddedGrapheme(page: Page): Promise<void> {
   const lineHeight = Math.round(fontSize * 1.5);
   const gutterWidth = 2 * Math.ceil(fontSize * 0.62) + 12;
   const x = bodyBounds.x + gutterWidth + 10;
-  const y = bodyBounds.y + lineHeight * 1.5;
+  const y = bodyBounds.y + lineHeight * 0.5;
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x + 5, y, { steps: 3 });
@@ -2110,7 +2132,7 @@ async function dragFirstAddedLineIntoHeader(page: Page): Promise<void> {
   if (!bodyBounds) throw new Error("Expanded diff body has no bounds");
   const lineHeight = Math.round(fontSize * 1.5);
   const x = bodyBounds.x + 60;
-  await page.mouse.move(x, bodyBounds.y + lineHeight * 1.5);
+  await page.mouse.move(x, bodyBounds.y + lineHeight * 0.5);
   await page.mouse.down();
   await page.mouse.move(x, bodyBounds.y - 10, { steps: 4 });
   await page.mouse.up();

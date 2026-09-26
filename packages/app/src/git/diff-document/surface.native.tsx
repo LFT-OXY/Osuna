@@ -64,6 +64,7 @@ import {
   type NativeTextLayout,
   type NativeHeaderTextLayout,
 } from "./text.native";
+import { diffDocumentLabels } from "./labels";
 import type {
   DiffDocumentModel,
   DiffFileSection,
@@ -133,10 +134,7 @@ export function DiffSurface(props: DiffSurfaceProps) {
       measureText: measurement,
       palette: props.palette,
       reviewActions,
-      labels: {
-        binary: t("workspace.git.diff.binaryFile"),
-        tooLarge: t("workspace.git.diff.tooLarge"),
-      },
+      labels: diffDocumentLabels(t),
       materializationWindow: diffMaterializationWindow(fileWindowTop, viewport.height),
       reuseFrom,
     });
@@ -186,6 +184,7 @@ export function DiffSurface(props: DiffSurfaceProps) {
         configuredFamily: props.headerTypography.family,
         fontSize: props.headerTypography.size,
         statFontSize: props.headerTypography.statSize,
+        microFontSize: props.headerTypography.microSize,
         palette: props.palette,
       }),
     [props.headerTypography, props.palette],
@@ -280,6 +279,7 @@ export function DiffSurface(props: DiffSurfaceProps) {
           viewportHeight={viewport.height}
           scrollTop={scrollTop}
           textLayout={textLayout}
+          headerTextLayout={headerTextLayout}
           paints={paints}
           horizontalOffsets={horizontalOffsets}
         />
@@ -320,6 +320,7 @@ function NativeCanvasSlabLayer({
   viewportHeight,
   scrollTop,
   textLayout,
+  headerTextLayout,
   paints,
   horizontalOffsets,
 }: {
@@ -327,6 +328,7 @@ function NativeCanvasSlabLayer({
   viewportHeight: number;
   scrollTop: SharedValue<number>;
   textLayout: NativeTextLayout;
+  headerTextLayout: NativeHeaderTextLayout;
   paints: NativePaints;
   horizontalOffsets: SharedValue<DiffHorizontalOffsets>;
 }) {
@@ -358,6 +360,7 @@ function NativeCanvasSlabLayer({
       slab={slab}
       model={model}
       textLayout={textLayout}
+      headerTextLayout={headerTextLayout}
       paints={paints}
       horizontalOffsets={horizontalOffsets}
     />
@@ -549,12 +552,14 @@ function NativeCanvasSlabView({
   slab,
   model,
   textLayout,
+  headerTextLayout,
   paints,
   horizontalOffsets,
 }: {
   slab: NativeCanvasSlab;
   model: DiffDocumentModel;
   textLayout: NativeTextLayout;
+  headerTextLayout: NativeHeaderTextLayout;
   paints: NativePaints;
   horizontalOffsets: SharedValue<DiffHorizontalOffsets>;
 }) {
@@ -568,9 +573,10 @@ function NativeCanvasSlabView({
         height: slab.height,
         viewportWidth: model.viewportWidth,
         textLayout,
+        headerTextLayout,
         paints,
       }),
-    [model, paints, slab.fileIndex, slab.height, slab.top, textLayout],
+    [headerTextLayout, model, paints, slab.fileIndex, slab.height, slab.top, textLayout],
   );
   const style = useMemo<ViewStyle>(
     () => ({

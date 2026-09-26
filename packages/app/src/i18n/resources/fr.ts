@@ -971,6 +971,8 @@ export const fr: TranslationResources = {
           title: "Aller au fichier",
         },
         binaryFile: "Fichier binaire",
+        unmodifiedLine: "{{count}} ligne inchangée",
+        unmodifiedLines: "{{count}} lignes inchangées",
         tooLarge: "Diff trop grand pour être affiché",
         previewTooLargeTitle: "Ce diff est trop volumineux pour être prévisualisé",
         previewTooLargeDescription: "Réduisez la comparaison pour la prévisualiser ici",

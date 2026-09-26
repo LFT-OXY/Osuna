@@ -38,10 +38,13 @@ interface CellSource {
 }
 
 interface GeometryLine {
+  kind: "line";
   cells: DiffLineRow["cells"];
   reviewHeight: number;
   height: number;
 }
+
+type GeometryItem = GeometryLine | { kind: "separator"; label: string; height: number };
 
 interface ReusableModelIndex {
   model: DiffDocumentModel;
@@ -238,7 +241,12 @@ function appendNewFileRows(candidate: {
   }
 
   const lines = geometryLines(
-    lineSources(candidate.file, candidate.input.layout, false),
+    lineSources({
+      file: candidate.file,
+      layout: candidate.input.layout,
+      includeTokens: false,
+      labels: candidate.input.labels,
+    }),
     candidate.input,
   );
   const fileBottom =
@@ -251,6 +259,19 @@ function appendNewFileRows(candidate: {
   let top = candidate.bodyTop;
   let maximumHorizontalOverflow = 0;
   for (const line of lines) {
+    if (line.kind === "separator") {
+      candidate.rows.push({
+        kind: "separator",
+        index: candidate.rows.length,
+        fileIndex: candidate.fileIndex,
+        path: candidate.file.path,
+        top,
+        height: line.height,
+        label: line.label,
+      });
+      top += line.height;
+      continue;
+    }
     const shouldMaterialize =
       candidate.input.wrapLines ||
       intersectsMaterializationWindow(candidate.input, top, top + line.height);
@@ -308,7 +329,7 @@ function materializeCells(
     return measureCell({
       source: {
         ...cell,
-        tokenText: cell.type === "header" ? [] : compactHighlightTokens(sourceLine.tokens ?? []),
+        tokenText: compactHighlightTokens(sourceLine.tokens ?? []),
       },
       availableWidth,
       input,
@@ -356,21 +377,36 @@ export function retainReusableModels(
   return fullest === next ? [next] : [fullest, next];
 }
 
-function lineSources(
-  file: BuildDiffDocumentModelInput["files"][number],
-  layout: "unified" | "split",
-  includeTokens: boolean,
-): Array<[CellSource] | [CellSource | null, CellSource | null]> {
-  if (layout === "split") {
-    return buildSplitDiffRows(file).map((row) => {
-      if (row.kind === "header") {
-        return [headerSource(row.content, row.hunkIndex, row.lineIndex)];
-      }
-      return [cellSource(row.left, includeTokens), cellSource(row.right, includeTokens)];
+type SourceRow = [CellSource] | [CellSource | null, CellSource | null];
+
+type LineSource = { kind: "cells"; cells: SourceRow } | { kind: "separator"; label: string };
+
+function lineSources(input: {
+  file: BuildDiffDocumentModelInput["files"][number];
+  layout: "unified" | "split";
+  includeTokens: boolean;
+  labels: BuildDiffDocumentModelInput["labels"];
+}): LineSource[] {
+  const { file, includeTokens } = input;
+  // hunk 头换成它跳过的未改动行数；文件开头的 hunk 前面没有被跳过的行，不留分隔。
+  function separatorFor(hunkIndex: number): LineSource[] {
+    const count = unmodifiedLinesBeforeHunk(file, hunkIndex);
+    if (count === 0) return [];
+    return [{ kind: "separator", label: input.labels.unmodifiedLines(count) }];
+  }
+  if (input.layout === "split") {
+    return buildSplitDiffRows(file).flatMap((row) => {
+      if (row.kind === "header") return separatorFor(row.hunkIndex);
+      const cells: SourceRow = [
+        cellSource(row.left, includeTokens),
+        cellSource(row.right, includeTokens),
+      ];
+      return [{ kind: "cells", cells }];
     });
   }
-  return buildUnifiedDiffLines(file).map((entry) => [
-    {
+  return buildUnifiedDiffLines(file).flatMap((entry): LineSource[] => {
+    if (entry.line.type === "header") return separatorFor(entry.hunkIndex);
+    const source: CellSource = {
       type: entry.line.type,
       content: entry.line.content,
       lineNumber: entry.lineNumber,
@@ -381,19 +417,27 @@ function lineSources(
         lineIndex: entry.lineIndex,
         side: entry.reviewTarget?.side ?? "new",
       },
-    },
-  ]);
+    };
+    return [{ kind: "cells", cells: [source] }];
+  });
 }
 
-function headerSource(content: string, hunkIndex: number, lineIndex: number): CellSource {
-  return {
-    type: "header",
-    content,
-    lineNumber: null,
-    reviewTarget: null,
-    tokenText: [],
-    sourceIdentity: { hunkIndex, lineIndex, side: "new" },
-  };
+/** 上一个 hunk（或文件开头）与这个 hunk 之间的旧侧行数。 */
+function unmodifiedLinesBeforeHunk(
+  file: BuildDiffDocumentModelInput["files"][number],
+  hunkIndex: number,
+): number {
+  const hunk = file.hunks[hunkIndex];
+  if (!hunk) return 0;
+  // 行数为 0 的一侧，起始行号指向它前面那一行（`@@ -0,0 +1,3 @@`）。
+  const firstLine = hunk.oldCount === 0 ? hunk.oldStart + 1 : hunk.oldStart;
+  const previous = file.hunks[hunkIndex - 1];
+  let nextUnshownLine = 1;
+  if (previous) {
+    nextUnshownLine =
+      previous.oldCount === 0 ? previous.oldStart + 1 : previous.oldStart + previous.oldCount;
+  }
+  return Math.max(0, firstLine - nextUnshownLine);
 }
 
 function cellSource(line: SplitDiffDisplayLine | null, includeTokens: boolean): CellSource | null {
@@ -425,15 +469,19 @@ function geometryCell(source: CellSource): DiffCell {
 }
 
 function geometryLines(
-  sources: Array<[CellSource] | [CellSource | null, CellSource | null]>,
+  sources: readonly LineSource[],
   input: BuildDiffDocumentModelInput,
-): GeometryLine[] {
-  return sources.map((sourceCells) => {
-    const cells = sourceCells.map((source) =>
-      source ? geometryCell(source) : null,
+): GeometryItem[] {
+  return sources.map((source) => {
+    if (source.kind === "separator") {
+      return { kind: "separator", label: source.label, height: input.typography.lineHeight };
+    }
+    const cells = source.cells.map((cell) =>
+      cell ? geometryCell(cell) : null,
     ) as DiffLineRow["cells"];
     const reviewHeight = reviewHeightForCells(cells, input);
     return {
+      kind: "line",
       cells,
       reviewHeight,
       height: input.typography.lineHeight + reviewHeight,
@@ -454,7 +502,9 @@ function intersectsMaterializationWindow(
 function hasMeasuredFileRows(model: DiffDocumentModel, file: DiffFileSection): boolean {
   if (file.isCollapsed) return false;
   return model.rows.slice(file.rowStart, file.rowEnd).some((row) => {
-    if (row.kind !== "line") return true;
+    // 状态行没有要测量的文字，本身就算测量完；分隔行不代表文件的正文测量过。
+    if (row.kind === "status") return true;
+    if (row.kind !== "line") return false;
     return row.cells.some((cell) => cell && cell.fragments.length > 0);
   });
 }
@@ -789,7 +839,9 @@ export function captureScrollAnchor(
   if (!file) return null;
   const row = model.rows
     .slice(file.rowStart, file.rowEnd)
-    .find((candidate) => candidate.top + candidate.height > scrollTop);
+    .find(
+      (candidate) => candidate.kind !== "separator" && candidate.top + candidate.height > scrollTop,
+    );
   if (!row || row.kind !== "line") {
     return { kind: "header", path: file.path, viewportDelta: file.top - scrollTop };
   }

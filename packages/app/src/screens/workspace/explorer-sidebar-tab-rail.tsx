@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Text as RNText, View } from "react-native";
+import { Text } from "@/components/ui/text";
 import { ArrowLeftToLine, Plus, X } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -36,7 +37,7 @@ import {
 import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import type { PanelIconProps } from "@/panels/panel-registry";
 import { panelTargetSupportsHost } from "@/plugins/workspace-panels/locations";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import {
   HorizontalScrollBoundaryShades,
@@ -67,8 +68,16 @@ function tabKey(item: WorkspaceDesktopTabRowItem): string {
   return `${item.tab.key}:${item.tab.kind}`;
 }
 
-function resolveExplorerSidebarTabBackdrop(): SurfaceBackdrop {
-  return "surfaceSidebar";
+/** tab 底色，状态环要从它上面挖空。与 `styles.tab*` 一一对应。 */
+function resolveExplorerSidebarTabBackdrop({
+  isActive,
+  isHovered,
+}: {
+  isActive: boolean;
+  isHovered: boolean;
+}): SurfaceBackdrop {
+  if (isActive) return "surfaceTabActive";
+  return isHovered ? "surfaceTabHover" : "surfaceSidebar";
 }
 
 function ExplorerSidebarTab({
@@ -107,10 +116,13 @@ function ExplorerSidebarTab({
   );
   const canMoveToMain = panelTargetSupportsHost(normalizedServerId, item.tab.target, "main");
   const moveToMainLeading = useMemo(
-    () => <ThemedArrowLeftToLine size={14} uniProps={mutedColorMapping} />,
+    () => <ThemedArrowLeftToLine size={ICON_SIZE.sm} uniProps={mutedColorMapping} />,
     [],
   );
-  const closeLeading = useMemo(() => <ThemedX size={14} uniProps={mutedColorMapping} />, []);
+  const closeLeading = useMemo(
+    () => <ThemedX size={ICON_SIZE.sm} uniProps={mutedColorMapping} />,
+    [],
+  );
   const accessibilityState = useMemo(() => ({ selected: item.isActive }), [item.isActive]);
   const renderPresentation = useCallback(
     (presentation: WorkspaceTabPresentation) => (
@@ -140,20 +152,25 @@ function ExplorerSidebarTab({
                 active={item.isActive}
                 size={iconButtonChromeGlyphSize("small")}
                 strokeWidth={1.5}
-                backdrop={resolveExplorerSidebarTabBackdrop()}
+                backdrop={resolveExplorerSidebarTabBackdrop({
+                  isActive: item.isActive,
+                  isHovered: hovered,
+                })}
               />
               <Text
+                variant="caption"
+                color={item.isActive ? "foreground" : "foregroundMuted"}
                 selectable={false}
                 numberOfLines={1}
                 ellipsizeMode="tail"
-                style={[styles.tabLabel, item.isActive ? styles.tabLabelActive : null]}
+                style={styles.tabLabel}
               >
                 {presentation.label}
               </Text>
             </ContextMenuTrigger>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="center" offset={8}>
-            <Text style={styles.tooltipText}>{presentation.tooltip}</Text>
+            <RNText style={styles.tooltipText}>{presentation.tooltip}</RNText>
           </TooltipContent>
         </Tooltip>
         <ContextMenuContent align="start" minWidth={180}>
@@ -205,7 +222,7 @@ function CatalogIcon({
   Icon: ComponentType<PanelIconProps>;
   color?: string;
 }) {
-  return <Icon size={14} color={color} />;
+  return <Icon size={ICON_SIZE.sm} color={color} />;
 }
 
 const ThemedCatalogIcon = withUnistyles(CatalogIcon);
@@ -277,7 +294,10 @@ export function ExplorerSidebarTabRail({
     () => groups.flatMap((group) => group.items).filter((item) => item.toggleTarget !== null),
     [groups],
   );
-  const newTabLeading = useMemo(() => <ThemedPlus size={14} uniProps={mutedColorMapping} />, []);
+  const newTabLeading = useMemo(
+    () => <ThemedPlus size={ICON_SIZE.sm} uniProps={mutedColorMapping} />,
+    [],
+  );
   const handleDragEnd = useCallback(
     (nextTabs: WorkspaceDesktopTabRowItem[]) => onReorderTabs(nextTabs.map((item) => item.tab)),
     [onReorderTabs],
@@ -419,28 +439,23 @@ const styles = StyleSheet.create((theme) => ({
     height: HEADER_CONTROL_HEIGHT,
     maxWidth: 180,
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
     userSelect: "none",
   },
+  // 与工作区 tab 同一套底色。Explorer 不持有焦点，当前 tab 始终用聚焦 pane 的那一档。
   tabHovered: {
-    backgroundColor: theme.colors.interactionHighlight,
+    backgroundColor: theme.colors.surfaceTabHover,
   },
   tabActive: {
-    backgroundColor: theme.colors.interactionHighlight,
+    backgroundColor: theme.colors.surfaceTabActive,
   },
   tabLabel: {
     minWidth: 0,
     flexShrink: 1,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
     userSelect: "none",
-  },
-  tabLabelActive: {
-    color: theme.colors.foreground,
   },
   tabDragging: {
     opacity: 0.3,

@@ -57,6 +57,7 @@ export interface DiffPalette {
   border: string;
   foreground: string;
   foregroundMuted: string;
+  foregroundExtraMuted: string;
   addition: string;
   deletion: string;
   additionBackground: string;
@@ -75,6 +76,8 @@ export interface DiffHeaderTypography {
   family: string;
   size: number;
   statSize: number;
+  /** `micro` 档字号：变更字母与 hunk 分隔标签。 */
+  microSize: number;
 }
 
 export interface DiffTokenRun {
@@ -107,7 +110,7 @@ export interface DiffSourceIdentity {
 }
 
 export interface DiffCell {
-  type: "add" | "remove" | "context" | "header" | "empty";
+  type: "add" | "remove" | "context" | "empty";
   content: string;
   lineNumber: number | null;
   tokens: DiffTokenRun[];
@@ -137,7 +140,18 @@ export interface DiffStatusRow {
   label: string;
 }
 
-export type DiffRow = DiffLineRow | DiffStatusRow;
+/** 代替 hunk 头的分隔行，写出它跳过的未改动行数；装饰用，不参与选区。 */
+export interface DiffSeparatorRow {
+  kind: "separator";
+  index: number;
+  fileIndex: number;
+  path: string;
+  top: number;
+  height: number;
+  label: string;
+}
+
+export type DiffRow = DiffLineRow | DiffStatusRow | DiffSeparatorRow;
 
 export interface DiffFileSection {
   file: ParsedDiffFile;
@@ -183,7 +197,12 @@ export interface BuildDiffDocumentModelInput {
   measureText: TextMeasurer;
   palette: DiffPalette;
   reviewActions?: InlineReviewActions;
-  labels: { binary: string; tooLarge: string };
+  labels: {
+    binary: string;
+    tooLarge: string;
+    /** 分隔行标签。 */
+    unmodifiedLines: (count: number) => string;
+  };
   materializationWindow?: { top: number; height: number };
   /** A geometry-compatible model whose unchanged file measurements may be reused. */
   reuseFrom?: readonly DiffDocumentModel[];

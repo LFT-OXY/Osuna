@@ -52,6 +52,7 @@ function input(overrides: Partial<BuildDiffDocumentModelInput> = {}): BuildDiffD
       border: "#222",
       foreground: "#fff",
       foregroundMuted: "#aaa",
+      foregroundExtraMuted: "extra-muted",
       addition: "green",
       deletion: "red",
       additionBackground: "#010",
@@ -65,7 +66,11 @@ function input(overrides: Partial<BuildDiffDocumentModelInput> = {}): BuildDiffD
       statusWarning: "orange",
       syntax: {},
     },
-    labels: { binary: "Binary", tooLarge: "Too large" },
+    labels: {
+      binary: "Binary",
+      tooLarge: "Too large",
+      unmodifiedLines: (count) => `${count} unmodified line${count === 1 ? "" : "s"}`,
+    },
     ...overrides,
   };
 }
@@ -650,7 +655,94 @@ describe("diff document model", () => {
     expect(measuredFragments(model, "a.ts")).toBeGreaterThan(0);
     expect(measuredFragments(model, "b.ts")).toBeGreaterThan(0);
   });
+
+  it.each(["unified", "split"] as const)(
+    "replaces %s hunk headers with the unmodified lines they skip",
+    (layout) => {
+      const model = buildDiffDocumentModel(input({ files: [fileWithTwoHunks()], layout }));
+
+      expect(separatorLabels(model)).toEqual(["9 unmodified lines", "1 unmodified line"]);
+    },
+  );
+
+  it("drops the separator of a hunk that starts at the top of the file", () => {
+    const model = buildDiffDocumentModel(input({ files: [file()] }));
+
+    expect(separatorLabels(model)).toEqual([]);
+    expect(model.rows.map((row) => row.kind === "line" && row.cells[0]?.type)).toEqual([
+      "remove",
+      "add",
+    ]);
+  });
+
+  it("keeps separators out of the measured text rows", () => {
+    const model = buildDiffDocumentModel(input({ files: [fileWithTwoHunks()] }));
+    const separator = model.rows.find((row) => row.kind === "separator");
+
+    expect(separator).toMatchObject({ kind: "separator", height: 18, fileIndex: 0 });
+    expect(model.rows.filter((row) => row.kind === "line")).toHaveLength(5);
+  });
+
+  it("counts a new file's hunk from the top of the file", () => {
+    const created: ParsedDiffFile = {
+      ...file("new.ts"),
+      isNew: true,
+      hunks: [
+        {
+          oldStart: 0,
+          oldCount: 0,
+          newStart: 1,
+          newCount: 1,
+          lines: [
+            { type: "header", content: "@@ -0,0 +1 @@" },
+            { type: "add", content: "export {};" },
+          ],
+        },
+      ],
+    };
+
+    expect(separatorLabels(buildDiffDocumentModel(input({ files: [created] })))).toEqual([]);
+  });
 });
+
+function fileWithTwoHunks(): ParsedDiffFile {
+  return {
+    path: "src/folds.ts",
+    isNew: false,
+    isDeleted: false,
+    additions: 2,
+    deletions: 1,
+    hunks: [
+      {
+        oldStart: 10,
+        oldCount: 2,
+        newStart: 10,
+        newCount: 3,
+        lines: [
+          { type: "header", content: "@@ -10,2 +10,3 @@ function first()" },
+          { type: "context", content: "first" },
+          { type: "remove", content: "old" },
+          { type: "add", content: "new" },
+          { type: "add", content: "newer" },
+        ],
+      },
+      {
+        oldStart: 13,
+        oldCount: 1,
+        newStart: 14,
+        newCount: 1,
+        lines: [
+          { type: "header", content: "@@ -13 +14 @@" },
+          { type: "context", content: "last" },
+        ],
+      },
+    ],
+  };
+}
+
+function separatorLabels(model: ReturnType<typeof buildDiffDocumentModel>): string[] {
+  return model.rows.flatMap((row) => (row.kind === "separator" ? [row.label] : []));
+}
 
 function measuredFragments(model: ReturnType<typeof buildDiffDocumentModel>, path: string): number {
   const fileSection = model.files.find((entry) => entry.path === path);

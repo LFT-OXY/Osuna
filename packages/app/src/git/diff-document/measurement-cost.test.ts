@@ -72,6 +72,7 @@ function shapedCharactersFor(options: { lineCount: number; lineLength: number })
       border: "#222",
       foreground: "#fff",
       foregroundMuted: "#aaa",
+      foregroundExtraMuted: "extra-muted",
       addition: "green",
       deletion: "red",
       additionBackground: "#010",
@@ -85,7 +86,11 @@ function shapedCharactersFor(options: { lineCount: number; lineLength: number })
       statusWarning: "orange",
       syntax: {},
     },
-    labels: { binary: "Binary", tooLarge: "Too large" },
+    labels: {
+      binary: "Binary",
+      tooLarge: "Too large",
+      unmodifiedLines: (count) => `${count} unmodified lines`,
+    },
   };
   buildDiffDocumentModel(input);
   return stats.shapedCharacters;

@@ -70,7 +70,7 @@ describe("web diff text shaping", () => {
       },
       palette,
       typography: { family: "monospace", size: 12, lineHeight: 18 },
-      headerTypography: { family: "system-ui", size: 14, statSize: 12 },
+      headerTypography: { family: "system-ui", size: 14, statSize: 12, microSize: 11 },
       measureText: { measure: () => 0 },
       scrollTop: 0,
       viewportWidth: 200,
@@ -90,6 +90,7 @@ describe("web diff text shaping", () => {
     expect(labels.filter((label) => label.text !== "fi")).toEqual([
       { text: "+1", x: 142, y: 18, color: "success", font: "12px system-ui" },
       { text: "-0", x: 158, y: 18, color: "danger", font: "12px system-ui" },
+      { text: "M", x: 182, y: 18, color: "warning", font: "600 11px system-ui" },
       { text: "a.ts", x: 12, y: 18, color: "foreground", font: "14px system-ui" },
       { text: "src", x: 40, y: 18, color: "muted", font: "14px system-ui" },
     ]);
@@ -178,6 +179,50 @@ describe("web diff text shaping", () => {
 
     expect(fills).toContainEqual({ color: "surface", x: 0, y: 18, width: 200, height: 40 });
     expect(fills).toContainEqual({ color: "border", x: 20, y: 0, width: 1, height: 58 });
+  });
+
+  it("marks each added and removed cell with a bar on its leading edge", () => {
+    const fills = paintFills({ model: createSelectionModel("split") });
+
+    expect(fills).toContainEqual({ color: "red", x: 0, y: 0, width: 3, height: 18 });
+    expect(fills).toContainEqual({ color: "green", x: 100, y: 0, width: 3, height: 18 });
+  });
+
+  it("keeps the bar off the review space under a line", () => {
+    const fills = paintFills({ model: modelWithReview });
+
+    expect(fills).toContainEqual({ color: "green", x: 0, y: 0, width: 3, height: 18 });
+  });
+
+  it("paints a hunk separator as a centered label between two rules", () => {
+    const labels: PaintedLabel[] = [];
+    const fills = paintFills({
+      model: {
+        ...createSelectionModel("unified"),
+        rows: [
+          {
+            kind: "separator",
+            index: 0,
+            fileIndex: 0,
+            path: "src/selection.ts",
+            top: 0,
+            height: 18,
+            label: "9 unmodified lines",
+          },
+        ],
+      },
+      labels,
+    });
+
+    // 标签宽 18 × 6 = 108，居中于 200 宽：左缘 46；两侧横线离行两端 12、离标签 8。
+    expect(fills.filter((fill) => fill.color === "border")).toEqual([
+      { color: "border", x: 12, y: 9, width: 26, height: 1 },
+      { color: "border", x: 162, y: 9, width: 26, height: 1 },
+      { color: "border", x: 0, y: 17, width: 200, height: 1 },
+    ]);
+    expect(labels).toEqual([
+      { text: "9 unmodified lines", x: 46, color: "extra-muted", font: "11px system-ui" },
+    ]);
   });
 
   it("paints every expanded file body's bottom border", () => {
@@ -451,6 +496,7 @@ const palette: DiffPalette = {
   border: "border",
   foreground: "foreground",
   foregroundMuted: "muted",
+  foregroundExtraMuted: "extra-muted",
   addition: "green",
   deletion: "red",
   additionBackground: "green-bg",
@@ -465,7 +511,7 @@ const palette: DiffPalette = {
   syntax: { first: "red", second: "blue" },
 };
 
-const headerTypography = { family: "system-ui", size: 14, statSize: 12 };
+const headerTypography = { family: "system-ui", size: 14, statSize: 12, microSize: 11 };
 
 const model: DiffDocumentModel = {
   files: [
@@ -550,3 +596,75 @@ const modelWithReview: DiffDocumentModel = {
   ],
   height: 58,
 };
+
+interface PaintedFill {
+  color: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface PaintedLabel {
+  text: string;
+  x: number;
+  color: string;
+  font: string;
+}
+
+function paintFills(input: { model: DiffDocumentModel; labels?: PaintedLabel[] }) {
+  const target = input.model;
+  const labels = input.labels ?? [];
+  const fills: PaintedFill[] = [];
+  let fillStyle = "";
+  let font = "";
+  const context = {
+    setTransform() {},
+    clearRect() {},
+    fillRect(x: number, y: number, width: number, height: number) {
+      fills.push({ color: fillStyle, x, y, width, height });
+    },
+    save() {},
+    restore() {},
+    beginPath() {},
+    rect() {},
+    clip() {},
+    measureText(text: string) {
+      return { width: text.length * 6, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 };
+    },
+    fillText(text: string, x: number) {
+      labels.push({ text, x, color: fillStyle, font });
+    },
+    get fillStyle() {
+      return fillStyle;
+    },
+    set fillStyle(value: string | CanvasGradient | CanvasPattern) {
+      fillStyle = String(value);
+    },
+    get font() {
+      return font;
+    },
+    set font(value: string) {
+      font = value;
+    },
+    globalAlpha: 1,
+    textBaseline: "alphabetic",
+  } as unknown as CanvasRenderingContext2D;
+
+  paintWebViewport({
+    context,
+    model: target,
+    palette,
+    typography: { family: "monospace", size: 12, lineHeight: 18 },
+    headerTypography,
+    measureText: { measure: () => 0 },
+    scrollTop: 0,
+    viewportWidth: 200,
+    viewportHeight: 100,
+    horizontalOffsets: new Map(),
+    selection: null,
+    activeHeaderPath: null,
+    devicePixelRatio: 1,
+  });
+  return fills;
+}

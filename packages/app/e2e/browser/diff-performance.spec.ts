@@ -433,7 +433,8 @@ async function openFirstReviewEditor(page: Page): Promise<number> {
   if (!bodyBounds) throw new Error("Expanded diff body has no bounds");
   const lineHeight = Math.round(fontSize * 1.5);
   const startedAt = performance.now();
-  await page.mouse.click(bodyBounds.x + 120, bodyBounds.y + lineHeight * 1.5);
+  // 夹具从文件第一行改起，没有分隔行，第一行改动就是正文第一行。
+  await page.mouse.click(bodyBounds.x + 120, bodyBounds.y + lineHeight * 0.5);
   await expect(page.getByTestId("inline-review-editor")).toBeVisible();
   return performance.now() - startedAt;
 }

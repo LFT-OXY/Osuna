@@ -952,6 +952,8 @@ export const ja: TranslationResources = {
           title: "ファイルへ移動",
         },
         binaryFile: "バイナリファイル",
+        unmodifiedLine: "変更のない {{count}} 行",
+        unmodifiedLines: "変更のない {{count}} 行",
         tooLarge: "差分が大きすぎて表示できません",
         previewTooLargeTitle: "この差分は大きすぎるためプレビューできません",
         previewTooLargeDescription: "比較範囲を狭めると、ここでプレビューできます",

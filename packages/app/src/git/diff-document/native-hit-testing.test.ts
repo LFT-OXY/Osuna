@@ -101,6 +101,7 @@ function build(layout: "unified" | "split") {
       border: "#222",
       foreground: "#fff",
       foregroundMuted: "#aaa",
+      foregroundExtraMuted: "extra-muted",
       addition: "green",
       deletion: "red",
       additionBackground: "#010",
@@ -114,7 +115,11 @@ function build(layout: "unified" | "split") {
       statusWarning: "orange",
       syntax: {},
     },
-    labels: { binary: "Binary", tooLarge: "Too large" },
+    labels: {
+      binary: "Binary",
+      tooLarge: "Too large",
+      unmodifiedLines: (count) => `${count} unmodified lines`,
+    },
   };
   return buildDiffDocumentModel(input);
 }

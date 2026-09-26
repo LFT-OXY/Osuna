@@ -30,6 +30,7 @@ import { retainHorizontalOffsetMapForPaths } from "./horizontal-offsets";
 import { HorizontalScroll } from "./horizontal-scroll.web";
 import { buildDiffDocumentModel, FILE_HEADER_HEIGHT, resolveRelayoutScrollTop } from "./model";
 import { paintWebFileHeader, paintWebViewport } from "./paint.web";
+import { diffDocumentLabels } from "./labels";
 import { hasPointerDragStarted } from "./pointer-gesture";
 import { createMeasuredAdvances } from "./text-measurement";
 import { retainDiffViewport } from "./viewport";
@@ -144,6 +145,9 @@ export function DiffSurface(props: DiffSurfaceProps) {
             document.fonts.load(
               `400 ${props.headerTypography.statSize}px ${props.headerTypography.family}`,
             ),
+            document.fonts.load(
+              `600 ${props.headerTypography.microSize}px ${props.headerTypography.family}`,
+            ),
           ]);
           await document.fonts.ready;
         },
@@ -178,10 +182,7 @@ export function DiffSurface(props: DiffSurfaceProps) {
       measureText: measurement,
       palette: props.palette,
       reviewActions,
-      labels: {
-        binary: t("workspace.git.diff.binaryFile"),
-        tooLarge: t("workspace.git.diff.tooLarge"),
-      },
+      labels: diffDocumentLabels(t),
       materializationWindow: diffMaterializationWindow(fileWindowTop, viewport.height),
     });
     return next;

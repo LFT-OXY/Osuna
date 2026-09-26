@@ -1,9 +1,6 @@
 import {
   ClipOp,
-  PaintStyle,
   Skia,
-  StrokeCap,
-  StrokeJoin,
   type SkCanvas,
   type SkPaint,
   type SkPicture,
@@ -11,12 +8,13 @@ import {
 import {
   DIFF_FILE_HEADER_CONTENT_HEIGHT,
   DIFF_FILE_HEADER_HEIGHT,
-  DIFF_FILE_HEADER_ICON_SIZE,
+  DIFF_FILE_CHANGE_SLOT_SIZE,
   DIFF_FILE_HEADER_LEFT,
   DIFF_FILE_HEADER_RIGHT,
   DIFF_FILE_HEADER_TEXT_GAP,
   allocateDiffHeaderTextWidths,
   diffFileChangeKind,
+  diffFileChangePresentation,
   directorySuffix,
   fileNameForPath,
   formatDiffCount,
@@ -24,7 +22,12 @@ import {
 import { DIFF_BODY_BORDER_HEIGHT, expandedBodyBorderTop, visibleRowRange } from "./model";
 import { nativeTextRuns } from "./native-text-runs";
 import { horizontalOffsetForPath, type DiffHorizontalOffsets } from "./horizontal-offsets";
-import { codeLineNumberTone } from "./palette";
+import {
+  DIFF_CHANGE_BAR_WIDTH,
+  changeBarTone,
+  codeLineNumberTone,
+  diffSeparatorLayout,
+} from "./palette";
 import { reviewBackgroundPaint, reviewDividerHeight, reviewGapTop } from "./review-paint";
 import {
   shapeNativeHeaderText,
@@ -38,6 +41,7 @@ import type {
   DiffFileSection,
   DiffLineRow,
   DiffPalette,
+  DiffSeparatorRow,
 } from "./types";
 
 const CODE_LEFT_PADDING = 8;
@@ -51,11 +55,7 @@ export interface NativePaints {
   deletion: SkPaint;
   additionBackground: SkPaint;
   deletionBackground: SkPaint;
-  headerSurface: SkPaint;
   headerBorder: SkPaint;
-  statusSuccess: SkPaint;
-  statusDanger: SkPaint;
-  statusWarning: SkPaint;
   emptyBackground: SkPaint;
   text: Record<string, SkPaint>;
 }
@@ -70,11 +70,7 @@ export function createNativePaints(palette: DiffPalette): NativePaints {
     deletion: paint(palette.deletion),
     additionBackground: paint(palette.additionBackground),
     deletionBackground: paint(palette.deletionBackground),
-    headerSurface: paint(palette.headerSurface),
     headerBorder: paint(palette.headerBorder),
-    statusSuccess: paint(palette.statusSuccess),
-    statusDanger: paint(palette.statusDanger),
-    statusWarning: paint(palette.statusWarning),
     emptyBackground: paint(palette.emptyBackground),
     text: Object.fromEntries(
       [
@@ -98,7 +94,7 @@ export function recordNativeHeaderPicture(input: {
     Skia.XYWHRect(0, DIFF_FILE_HEADER_HEIGHT - 1, input.viewportWidth, 1),
     input.paints.headerBorder,
   );
-  const iconX = input.viewportWidth - DIFF_FILE_HEADER_RIGHT - DIFF_FILE_HEADER_ICON_SIZE;
+  const changeSlotX = input.viewportWidth - DIFF_FILE_HEADER_RIGHT - DIFF_FILE_CHANGE_SLOT_SIZE;
   const additions = `+${formatDiffCount(input.file.file.additions)}`;
   const deletions = `-${formatDiffCount(input.file.file.deletions)}`;
   const additionsText = shapeNativeHeaderText({
@@ -113,15 +109,21 @@ export function recordNativeHeaderPicture(input: {
     size: "stat",
     tone: "statusDanger",
   });
-  const statX = iconX - 8 - additionsText.width - 4 - deletionsText.width;
+  const statX = changeSlotX - 8 - additionsText.width - 4 - deletionsText.width;
   paintNativeHeaderText(canvas, additionsText, statX);
   paintNativeHeaderText(canvas, deletionsText, statX + additionsText.width + 4);
-  paintNativeChangeIcon(
+  const change = diffFileChangePresentation(diffFileChangeKind(input.file.file));
+  const changeText = shapeNativeHeaderText({
+    layout: input.textLayout,
+    text: change.letter,
+    size: "micro",
+    weight: "semibold",
+    tone: change.tone,
+  });
+  paintNativeHeaderText(
     canvas,
-    input.file,
-    iconX,
-    (DIFF_FILE_HEADER_CONTENT_HEIGHT - DIFF_FILE_HEADER_ICON_SIZE) / 2,
-    input.paints,
+    changeText,
+    changeSlotX + (DIFF_FILE_CHANGE_SLOT_SIZE - changeText.width) / 2,
   );
 
   const available = Math.max(0, statX - DIFF_FILE_HEADER_LEFT);
@@ -146,6 +148,7 @@ export function recordNativeHeaderPicture(input: {
   const picture = recorder.finishRecordingAsPicture();
   additionsText.paragraph.dispose();
   deletionsText.paragraph.dispose();
+  changeText.paragraph.dispose();
   fitted.name.paragraph.dispose();
   fitted.directory.paragraph.dispose();
   return picture;
@@ -198,42 +201,6 @@ function fitNativeHeaderText(
   return { name: nameText, directory: directoryText };
 }
 
-function paintNativeChangeIcon(
-  canvas: SkCanvas,
-  file: DiffFileSection,
-  x: number,
-  y: number,
-  paints: NativePaints,
-): void {
-  const change = diffFileChangeKind(file.file);
-  let source = paints.statusWarning;
-  if (change === "added") source = paints.statusSuccess;
-  else if (change === "deleted") source = paints.statusDanger;
-  const stroke = source.copy();
-  stroke.setStyle(PaintStyle.Stroke);
-  stroke.setStrokeWidth(DIFF_FILE_HEADER_ICON_SIZE / 12);
-  stroke.setStrokeCap(StrokeCap.Round);
-  stroke.setStrokeJoin(StrokeJoin.Round);
-  const scale = DIFF_FILE_HEADER_ICON_SIZE / 24;
-  canvas.drawRRect(
-    Skia.RRectXY(
-      Skia.XYWHRect(x + 3 * scale, y + 3 * scale, 18 * scale, 18 * scale),
-      2 * scale,
-      2 * scale,
-    ),
-    stroke,
-  );
-  if (change === "added") {
-    canvas.drawLine(x + 8 * scale, y + 12 * scale, x + 16 * scale, y + 12 * scale, stroke);
-    canvas.drawLine(x + 12 * scale, y + 8 * scale, x + 12 * scale, y + 16 * scale, stroke);
-  } else if (change === "deleted") {
-    canvas.drawLine(x + 8 * scale, y + 12 * scale, x + 16 * scale, y + 12 * scale, stroke);
-  } else {
-    canvas.drawCircle(x + 12 * scale, y + 12 * scale, scale, stroke);
-  }
-  stroke.dispose();
-}
-
 function paint(color: string): SkPaint {
   const result = Skia.Paint();
   result.setColor(Skia.Color(color));
@@ -248,6 +215,7 @@ export function paintNativeViewport(input: {
   scrollTop: number;
   horizontalOffsets: Readonly<DiffHorizontalOffsets>;
   textLayout: NativeTextLayout;
+  headerTextLayout: NativeHeaderTextLayout;
   paints: NativePaints;
 }): void {
   paintNativeRange({ ...input, layer: "all" });
@@ -260,6 +228,7 @@ export function recordNativeSlabPictures(input: {
   height: number;
   viewportWidth: number;
   textLayout: NativeTextLayout;
+  headerTextLayout: NativeHeaderTextLayout;
   paints: NativePaints;
 }): {
   fixed: SkPicture;
@@ -279,6 +248,7 @@ export function recordNativeSlabPictures(input: {
     scrollTop: input.top,
     horizontalOffsets: {},
     textLayout: input.textLayout,
+    headerTextLayout: input.headerTextLayout,
     paints: input.paints,
     layer: "fixed",
     fileIndex: input.fileIndex,
@@ -297,6 +267,7 @@ export function recordNativeSlabPictures(input: {
       scrollTop: input.top,
       horizontalOffsets: {},
       textLayout: input.textLayout,
+      headerTextLayout: input.headerTextLayout,
       paints: input.paints,
       layer: "content",
       contentCell,
@@ -370,6 +341,7 @@ interface PaintNativeRangeInput {
   scrollTop: number;
   horizontalOffsets: Readonly<DiffHorizontalOffsets>;
   textLayout: NativeTextLayout;
+  headerTextLayout: NativeHeaderTextLayout;
   paints: NativePaints;
   layer: "all" | "fixed" | "content";
   contentCell?: "unified" | "left" | "right";
@@ -390,7 +362,6 @@ function paintNativeRange(input: PaintNativeRangeInput): void {
     add: input.paints.additionBackground,
     context: input.paints.surface,
     empty: input.paints.emptyBackground,
-    header: input.paints.headerSurface,
     remove: input.paints.deletionBackground,
   };
   const range = visibleRowRange(input.model.rows, input.scrollTop, input.viewportHeight);
@@ -408,6 +379,10 @@ function paintNativeRange(input: PaintNativeRangeInput): void {
           input.textLayout.font,
         );
       }
+      continue;
+    }
+    if (row.kind === "separator") {
+      if (paintsFixedContent) paintNativeSeparator({ input, row, y });
       continue;
     }
     const file = input.model.files[row.fileIndex];
@@ -494,6 +469,18 @@ function paintNativeFixedCell(input: {
     reviewBackgroundPaint(input.input.paints.surface),
   );
   if (!input.cell) return;
+  const barTone = changeBarTone(input.cell);
+  if (barTone) {
+    input.input.canvas.drawRect(
+      Skia.XYWHRect(
+        input.columnX,
+        input.y,
+        DIFF_CHANGE_BAR_WIDTH,
+        input.row.height - input.row.reviewHeight,
+      ),
+      input.input.paints[barTone],
+    );
+  }
   input.input.canvas.drawRect(
     Skia.XYWHRect(
       input.columnX + input.file.gutterWidth,
@@ -550,14 +537,12 @@ function paintNativeCodeCell(input: {
     }
     const fragmentX = textX - offset;
     const baseline = input.y + fragment.baseline;
-    if (input.cell.tokens.length === 0 || input.cell.type === "header") {
+    if (input.cell.tokens.length === 0) {
       input.input.canvas.drawText(
         fragment.text,
         fragmentX,
         baseline,
-        input.cell.type === "header"
-          ? input.input.paints.foregroundMuted
-          : input.input.paints.foreground,
+        input.input.paints.foreground,
         input.input.textLayout.font,
       );
       continue;
@@ -573,4 +558,36 @@ function paintNativeCodeCell(input: {
     }
   }
   if (clipsContent) input.input.canvas.restore();
+}
+
+// 分隔行是装饰：UI 字体的 micro 档标签居中，两侧横线，画在不随横向滚动的固定层。
+function paintNativeSeparator(input: {
+  input: PaintNativeRangeInput;
+  row: DiffSeparatorRow;
+  y: number;
+}): void {
+  const label = shapeNativeHeaderText({
+    layout: input.input.headerTextLayout,
+    text: input.row.label,
+    size: "micro",
+    tone: "foregroundExtraMuted",
+  });
+  const layout = diffSeparatorLayout({
+    rowTop: input.y,
+    rowHeight: input.row.height,
+    width: input.input.viewportWidth,
+    labelWidth: label.width,
+  });
+  for (const rule of layout.rules) {
+    input.input.canvas.drawRect(
+      Skia.XYWHRect(rule.x, layout.ruleY, rule.width, 1),
+      input.input.paints.border,
+    );
+  }
+  label.paragraph.paint(
+    input.input.canvas,
+    layout.labelX,
+    input.y + (input.row.height - label.height) / 2,
+  );
+  label.paragraph.dispose();
 }

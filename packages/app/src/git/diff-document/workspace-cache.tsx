@@ -119,6 +119,9 @@ function modelVariantKey(input: Omit<BuildDiffDocumentModelInput, "reuseFrom">):
     paletteKey(input.palette),
     input.labels.binary,
     input.labels.tooLarge,
+    // 标签是按数量取文案的函数，用两个数量的输出代表它（单复数各一）。
+    input.labels.unmodifiedLines(1),
+    input.labels.unmodifiedLines(2),
   ]);
 }
 

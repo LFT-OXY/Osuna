@@ -53,7 +53,7 @@ export interface NumberedDiffHunk {
 }
 
 export interface SplitDiffDisplayLine {
-  type: DiffLine["type"];
+  type: ReviewableLineType;
   content: string;
   tokens?: DiffLine["tokens"];
   lineNumber: number | null;

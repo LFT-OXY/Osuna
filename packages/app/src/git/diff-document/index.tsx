@@ -50,6 +50,7 @@ const StyledDiffDocument = withUnistyles(ThemedDiffDocument, (theme) => ({
     family: theme.fontFamily.ui,
     size: theme.fontSize.base,
     statSize: theme.fontSize.sm,
+    microSize: theme.typeScale.micro.fontSize,
   },
 }));
 

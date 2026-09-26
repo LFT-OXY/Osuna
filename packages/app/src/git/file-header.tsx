@@ -9,10 +9,11 @@ import { StyleSheet } from "react-native-unistyles";
 import { useWorkspaceFileDragSource } from "@/attachments/use-workspace-file-drag-source";
 import { DiffStat } from "@/components/diff-stat";
 import { FileActionsContextMenuContent } from "@/components/file-actions-menu";
-import { FileChangeIcon } from "@/components/file-change-icon";
+import { FileChangeBadge } from "@/components/file-change-badge";
+import { Text as UiText } from "@/components/ui/text";
 import { MaterialFileIcon } from "@/components/material-file-icon";
 import {
-  treeRowPaddingLeft,
+  treeRowIndent,
   workspaceTreeRowStyles,
   WORKSPACE_PANE_TRAILING_GLYPH_RAIL,
   WORKSPACE_FILE_ROW_VERTICAL_PADDING,
@@ -20,6 +21,7 @@ import {
   WORKSPACE_TREE_ICON_SIZE,
 } from "@/components/tree-primitives";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { getRowSurfaceStyle } from "@/components/ui/row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useFileHeaderInteraction } from "@/git/file-header-interaction";
 import {
@@ -92,28 +94,32 @@ function useFileHeaderHover(enabled: boolean, onActiveChange?: (active: boolean)
   return { isHovered, handlePointerEnter, handlePointerLeave };
 }
 
-function fileHeaderIsActive(input: {
-  isHovered: boolean;
-  pressed: boolean;
-  showsBodyState: boolean;
-  isSelected: boolean;
-}): boolean {
-  return input.isHovered || input.pressed || (!input.showsBodyState && input.isSelected);
-}
-
 function fileHeaderInteractionStyle(input: {
   isHovered: boolean;
   pressed: boolean;
   showsBodyState: boolean;
   isSelected: boolean;
 }) {
-  if (!fileHeaderIsActive(input)) return null;
-  return input.showsBodyState ? styles.documentActive : workspaceTreeRowStyles.active;
+  if (!input.showsBodyState) {
+    return getRowSurfaceStyle({
+      hovered: input.isHovered,
+      pressed: input.pressed,
+      selected: input.isSelected,
+    });
+  }
+  const isActive = input.isHovered || input.pressed;
+  return isActive ? styles.documentActive : null;
 }
 
 function fileHeaderPressFeedbackStyle(showsBodyState: boolean, canvasRendered: boolean) {
   if (canvasRendered) return undefined;
-  return showsBodyState ? styles.documentPressFeedback : workspaceTreeRowStyles.active;
+  if (showsBodyState) return styles.documentPressFeedback;
+  return getRowSurfaceStyle({ pressed: true });
+}
+
+function fileHeaderTreeIndentStyle(input: { showsBodyState: boolean; depth: number }) {
+  if (input.showsBodyState) return null;
+  return inlineUnistylesStyle({ paddingLeft: treeRowIndent(input.depth) });
 }
 
 function fileHeaderContainerStyle(showsBodyState: boolean) {
@@ -121,17 +127,34 @@ function fileHeaderContainerStyle(showsBodyState: boolean) {
   return styles.documentContainer;
 }
 
-function fileHeaderNameStyle(showsBodyState: boolean, isHovered: boolean) {
-  if (showsBodyState) return styles.name;
-  return [
-    styles.name,
-    workspaceTreeRowStyles.name,
-    isHovered ? workspaceTreeRowStyles.nameHovered : null,
-  ];
-}
-
-function fileChange(file: ParsedDiffFile): "added" | "deleted" | "modified" {
-  return diffFileChangeKind(file);
+// 树形行的名称走 `<Text variant="label">`；文档头沿用原来的界面字号。
+function FileHeaderName(input: {
+  fileName: string;
+  tree: boolean;
+  isHovered: boolean;
+  testID?: string;
+}) {
+  if (!input.tree) {
+    return (
+      <Text style={styles.name} numberOfLines={1} testID={input.testID}>
+        {input.fileName}
+      </Text>
+    );
+  }
+  return (
+    <UiText
+      variant="label"
+      style={[
+        styles.treeName,
+        workspaceTreeRowStyles.name,
+        input.isHovered && workspaceTreeRowStyles.nameHovered,
+      ]}
+      numberOfLines={1}
+      testID={input.testID}
+    >
+      {input.fileName}
+    </UiText>
+  );
 }
 
 function FileHeaderMenu({
@@ -222,11 +245,7 @@ export const FileHeader = memo(function FileHeader({
       styles.header,
       !showsBodyState && workspaceTreeRowStyles.row,
       showsBodyState && styles.documentHeader,
-      depth > 0
-        ? inlineUnistylesStyle({
-            paddingLeft: treeRowPaddingLeft(depth),
-          })
-        : null,
+      fileHeaderTreeIndentStyle({ showsBodyState, depth }),
       fileHeaderInteractionStyle({
         isHovered: hover.isHovered,
         pressed,
@@ -248,8 +267,7 @@ export const FileHeader = memo(function FileHeader({
     [bodyVisible, isSelected, showsBodyState],
   );
   const fileName = fileNameForPath(file.path);
-  const nameStyle = fileHeaderNameStyle(showsBodyState, hover.isHovered);
-  const changeIcon = <FileChangeIcon change={fileChange(file)} />;
+  const changeBadge = <FileChangeBadge change={diffFileChangeKind(file)} />;
   const content = (
     <View
       style={[styles.content, showsBodyState && styles.documentContent]}
@@ -261,9 +279,12 @@ export const FileHeader = memo(function FileHeader({
             <MaterialFileIcon fileName={fileName} size={WORKSPACE_TREE_ICON_SIZE} />
           </View>
         )}
-        <Text style={nameStyle} numberOfLines={1} testID={testID ? `${testID}-name` : undefined}>
-          {fileName}
-        </Text>
+        <FileHeaderName
+          fileName={fileName}
+          tree={!showsBodyState}
+          isHovered={hover.isHovered}
+          testID={testID ? `${testID}-name` : undefined}
+        />
         {showDir ? (
           <Text style={styles.directory} numberOfLines={1}>
             {directorySuffix(file.path)}
@@ -278,7 +299,7 @@ export const FileHeader = memo(function FileHeader({
           deletions={file.deletions}
           testID={testID ? `${testID}-stat` : undefined}
         />
-        {changeIcon}
+        {changeBadge}
       </View>
     </View>
   );
@@ -447,5 +468,6 @@ const styles = StyleSheet.create((theme) => ({
     userSelect: "none",
   },
   directorySpacer: { flex: 1, minWidth: 0 },
+  treeName: { flexShrink: 1, minWidth: 0, userSelect: "none" },
   tooltip: { color: theme.colors.popoverForeground, fontSize: theme.fontSize.base },
 }));
