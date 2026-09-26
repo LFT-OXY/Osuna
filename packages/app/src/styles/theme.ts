@@ -754,6 +754,24 @@ export const LINE_HEIGHT = {
   diff: 22,
 } as const;
 
+// <Text> 的用途命名阶梯（components/ui/text.tsx），每档自带行高。这里是 14px 界面基础字号下的
+// 取值；applyAppearance 按用户的界面字号等比换算，所以组件读 theme.typeScale，不读这个常量。
+// prose 是长文阅读用的正文，字号同 body，行高更松。
+export const TYPE_SCALE = {
+  micro: { fontSize: 11, lineHeight: 15 },
+  caption: { fontSize: 12, lineHeight: 16 },
+  label: { fontSize: 13, lineHeight: 18 },
+  body: { fontSize: 14, lineHeight: 20 },
+  "body-lg": { fontSize: 15, lineHeight: 22 },
+  "title-sm": { fontSize: 16, lineHeight: 24 },
+  title: { fontSize: 18, lineHeight: 28 },
+  "title-lg": { fontSize: 20, lineHeight: 28 },
+  display: { fontSize: 24, lineHeight: 32 },
+  prose: { fontSize: 14, lineHeight: 22 },
+} as const;
+
+export type TextVariant = keyof typeof TYPE_SCALE;
+
 export const ICON_SIZE = {
   xs: 12,
   sm: 14,
@@ -825,7 +843,7 @@ export const DEFAULT_MONO_FONT_STACK: string = Platform.select({
   web: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 });
 
-// `fontSize`, `fontFamily`, and `lineHeight` are deliberately widened to plain
+// `fontSize`, `fontFamily`, `lineHeight`, and `typeScale` are deliberately widened to plain
 // `number`/`string` (not narrowed by `as const`) so the appearance updater can patch
 // them at runtime via `UnistylesRuntime.updateTheme`. The remaining tokens keep their
 // literal types.
@@ -834,6 +852,7 @@ interface CommonTheme {
   fontSize: Record<keyof typeof FONT_SIZE, number>;
   fontFamily: { ui: string; mono: string };
   lineHeight: Record<keyof typeof LINE_HEIGHT, number>;
+  typeScale: Record<TextVariant, { fontSize: number; lineHeight: number }>;
   iconSize: typeof ICON_SIZE;
   fontWeight: typeof FONT_WEIGHT;
   borderRadius: typeof BORDER_RADIUS;
@@ -848,6 +867,7 @@ const commonTheme: CommonTheme = {
   fontSize: FONT_SIZE,
   fontFamily: { ui: DEFAULT_UI_FONT_STACK, mono: DEFAULT_MONO_FONT_STACK },
   lineHeight: LINE_HEIGHT,
+  typeScale: TYPE_SCALE,
   iconSize: ICON_SIZE,
   fontWeight: FONT_WEIGHT,
   borderRadius: BORDER_RADIUS,

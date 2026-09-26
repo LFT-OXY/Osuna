@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import { StyleSheet as RNStyleSheet, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
+import { getSurfaceBackdropFillStyle } from "@/styles/surface-backdrop-fill";
 import { getStatusDotColor } from "@/utils/status-dot-color";
 import {
   STATUS_RING_FRAME_SIZE,
@@ -32,31 +33,12 @@ export interface StatusRingProps {
  */
 export function StatusRingFrame({ backdrop, children }: StatusRingProps & { children: ReactNode }) {
   return (
-    <View style={[styles.frame, getBackdropStyle(backdrop)]}>
+    <View style={[styles.frame, backdrop ? getSurfaceBackdropFillStyle(backdrop) : null]}>
       <View style={styles.track} />
       {children}
       <View style={styles.centerDot} />
     </View>
   );
-}
-
-function getBackdropStyle(backdrop: SurfaceBackdrop | null | undefined) {
-  switch (backdrop) {
-    case "surface0":
-      return styles.backdropSurface0;
-    case "surface1":
-      return styles.backdropSurface1;
-    case "surfaceSidebar":
-      return styles.backdropSurfaceSidebar;
-    case "surfaceSidebarHover":
-      return styles.backdropSurfaceSidebarHover;
-    case "surfaceSidebarSelected":
-      return styles.backdropSurfaceSidebarSelected;
-    case "surface2":
-      return styles.backdropSurface2;
-    default:
-      return null;
-  }
 }
 
 // The rotating quarter's geometry, deliberately plain React Native rather than Unistyles: on
@@ -89,12 +71,6 @@ export const styles = StyleSheet.create((theme) => {
       alignItems: "center",
       justifyContent: "center",
     },
-    backdropSurface0: { backgroundColor: theme.colors.surface0 },
-    backdropSurface1: { backgroundColor: theme.colors.surface1 },
-    backdropSurfaceSidebar: { backgroundColor: theme.colors.surfaceSidebar },
-    backdropSurfaceSidebarHover: { backgroundColor: theme.colors.surfaceSidebarHover },
-    backdropSurfaceSidebarSelected: { backgroundColor: theme.colors.surfaceSidebarSelected },
-    backdropSurface2: { backgroundColor: theme.colors.surface2 },
 
     // The closed ring the quarter runs on. Same colour rather than a grey so the indicator is one
     // object at one hue; the opacity is what puts it behind the quarter instead of competing.

@@ -5,9 +5,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject
 import {
   Pressable,
   StyleSheet as RNStyleSheet,
-  Text,
+  Text as RNText,
   useWindowDimensions,
   View,
+  type PressableStateCallbackType,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -26,6 +27,7 @@ import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
 import { Shortcut } from "@/components/ui/shortcut";
+import { Text } from "@/components/ui/text";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -264,6 +266,14 @@ function sidebarHostOptionTestID(serverId: string): string {
   return `sidebar-host-row-${serverId}`;
 }
 
+function footerIconButtonStyle({
+  hovered,
+  pressed,
+}: PressableStateCallbackType & { hovered?: boolean }) {
+  const isHighlighted = hovered || pressed;
+  return [styles.footerIconButton, isHighlighted && styles.footerIconButtonHighlighted];
+}
+
 function FooterIconButton({
   buttonRef,
   onPress,
@@ -288,7 +298,7 @@ function FooterIconButton({
       <TooltipTrigger asChild>
         <Pressable
           ref={buttonRef}
-          style={styles.footerIconButton}
+          style={footerIconButtonStyle}
           testID={testID}
           nativeID={testID}
           collapsable={false}
@@ -376,7 +386,7 @@ function IconTooltipContent({
 }) {
   return (
     <View style={styles.tooltipRow}>
-      <Text style={styles.tooltipText}>{label}</Text>
+      <RNText style={styles.tooltipText}>{label}</RNText>
       {shortcutKeys ? <Shortcut chord={shortcutKeys} /> : null}
     </View>
   );
@@ -685,9 +695,9 @@ function DesktopSidebar({
                   accessibilityLabel={`Development build: ${DEV_BUILD_LABEL}`}
                 >
                   <GitBranch size={12} color={theme.colors.accentForeground} />
-                  <Text numberOfLines={1} ellipsizeMode="tail" style={styles.devBuildBadgeText}>
+                  <RNText numberOfLines={1} ellipsizeMode="tail" style={styles.devBuildBadgeText}>
                     {DEV_BUILD_LABEL}
-                  </Text>
+                  </RNText>
                 </View>
               ) : null}
             </View>
@@ -746,7 +756,9 @@ function DesktopSidebar({
 function WorkspacesSectionHeader() {
   return (
     <View style={styles.workspacesSectionHeader}>
-      <Text style={styles.workspacesSectionTitle}>Workspaces</Text>
+      <Text variant="caption" color="foregroundMuted" weight="medium">
+        Workspaces
+      </Text>
       <View style={styles.workspacesSectionActions}>
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
@@ -802,11 +814,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingRight: 4,
     paddingTop: theme.spacing[1],
     paddingBottom: theme.spacing[1],
-  },
-  workspacesSectionTitle: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
   },
   workspacesSectionActions: {
     flexDirection: "row",
@@ -877,23 +884,26 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
   footerIconRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: theme.spacing[0.5],
     flexShrink: 0,
   },
+  // 与同一行里 sidebar-help-menu.tsx 的 Help 按钮取同一套框（controlHeight.md、radius.md）。
   footerIconButton: {
-    width: 28,
-    height: 28,
+    width: theme.controlHeight.md,
+    height: theme.controlHeight.md,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[1],
+  },
+  footerIconButtonHighlighted: {
+    backgroundColor: theme.colors.interactionHighlight,
   },
   tooltipRow: {
     flexDirection: "row",

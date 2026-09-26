@@ -21,6 +21,7 @@ import { useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useSessionStore } from "@/stores/session-store";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import type { MenuTriggerState } from "@/components/ui/menu/menu-root";
 import type { HostProfile } from "@/types/host-connection";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
@@ -103,7 +104,7 @@ export function SidebarHelpMenu() {
         <TooltipTrigger asChild>
           <View>
             <DropdownMenuTrigger
-              style={styles.trigger}
+              style={triggerStyle}
               testID="sidebar-help"
               accessibilityRole="button"
               accessibilityLabel={t("sidebar.help.trigger")}
@@ -180,14 +181,22 @@ export function SidebarHelpMenu() {
   );
 }
 
+function triggerStyle({ hovered, pressed, open }: MenuTriggerState) {
+  const isHighlighted = hovered || pressed || open;
+  return [styles.trigger, isHighlighted && styles.triggerHighlighted];
+}
+
+// 与侧栏底部其他按钮同框（left-sidebar.tsx 的 footerIconButton）。
 const styles = StyleSheet.create((theme) => ({
   trigger: {
-    width: 28,
-    height: 28,
+    width: theme.controlHeight.md,
+    height: theme.controlHeight.md,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[1],
+  },
+  triggerHighlighted: {
+    backgroundColor: theme.colors.interactionHighlight,
   },
   tooltipText: {
     fontSize: theme.fontSize.base,
