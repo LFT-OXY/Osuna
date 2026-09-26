@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="robots" content="noindex,nofollow" />
-    <meta name="theme-color" content="#181B1A" />
+    <meta name="theme-color" content="#0a0a0a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Paseo" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -32,11 +32,15 @@
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
-      /* Prevent white flash before React mounts */
+      /* React 挂载前先铺默认主题的画布色，启动时不闪旧色 */
+      html,
+      body {
+        background-color: #fcfcfc;
+      }
       @media (prefers-color-scheme: dark) {
         html,
         body {
-          background-color: #181b1a;
+          background-color: #0a0a0a;
         }
       }
       /* These styles make the root element full-height */
@@ -77,8 +81,13 @@
         outline: none;
       }
       *:focus-visible {
-        outline: 2px solid #20744a;
+        outline: 2px solid #1b4ed8;
         outline-offset: 2px;
+      }
+      @media (prefers-color-scheme: dark) {
+        *:focus-visible {
+          outline-color: #346bf1;
+        }
       }
     </style>
   </head>

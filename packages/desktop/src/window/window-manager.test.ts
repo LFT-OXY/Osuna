@@ -5,6 +5,7 @@ import {
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
   getMainWindowChromeOptions,
+  getWindowBackgroundColor,
   readBadgeCount,
   readWindowChromeUpdate,
   readWindowTheme,
@@ -40,6 +41,14 @@ describe("window-manager", () => {
       expect(readWindowTheme(undefined)).toBeNull();
       expect(readWindowTheme("auto")).toBeNull();
       expect(readWindowTheme("system")).toBeNull();
+    });
+  });
+
+  describe("getWindowBackgroundColor", () => {
+    // 与 app 默认主题的画布色（packages/app/src/styles/theme.ts 的 surface0）一致，启动时不闪旧色。
+    it("opens windows on the default theme's canvas color", () => {
+      expect(getWindowBackgroundColor("dark")).toBe("#0a0a0a");
+      expect(getWindowBackgroundColor("light")).toBe("#fcfcfc");
     });
   });
 

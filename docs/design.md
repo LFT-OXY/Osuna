@@ -10,6 +10,8 @@ Paseo is minimal, spacious, quiet, confident. Whitespace is deliberate. Nothing 
 
 The app is calm so the user's work is not. Every visual decision serves either _act on this_ or _understand this_ — never _look at this_.
 
+The default Light and Dark themes wear the t3code default palette: a neutral gray canvas, one blue accent (`#1b4ed8` light, `#346bf1` dark), and layers told apart by lightness rather than by shadow. In Dark the sidebar (`#000`) is darker than the canvas (`#0a0a0a`). The Electron window (`packages/desktop/src/window/window-manager.ts`) and `packages/app/public/index.html` paint that canvas before React mounts; change them with the theme, or startup flashes the old color.
+
 Consistency comes from component reuse, not from hand-matching styles across surfaces. A row in the projects list, a row in settings, and a row in a modal are the same component, not three implementations that happen to look alike. When two surfaces do the same semantic thing in two different ways, one of them is wrong.
 
 ---
@@ -48,6 +50,8 @@ Accent is the one CTA per surface. A `<Button variant="default">` filled with `a
 
 Destructive is a color, not a click. Restart-daemon and remove-host are `<Button variant="outline">` in the row trailing slot; the destructive surface only appears inside the `confirmDialog` (`packages/app/src/screens/settings/host-page.tsx:541-547`). Workspace archive opens a confirm dialog before any red appears (`packages/app/src/components/sidebar-workspace-list.tsx`). Red appears after the user has indicated intent.
 
+Surfaces carry the rest of the hierarchy. The canvas, chrome, card, message bubble, sidebar row states, input border, composer shadow, and dark inset highlight are roles in `ThemeRoleOverrides` (`packages/app/src/styles/theme.ts`); diff row fills and bars sit beside them and are always derived. `deriveThemeRoles` fills every role a theme leaves out from that theme's existing colors: Light and Dark set most of them by hand, and every other built-in theme and every plugin theme sets none. Add a new role there once and never tune a variant by hand — plugin authors do not update their themes when the host adds a role. `styles/theme.test.ts` holds every theme plus a plugin sample to the text-contrast and row-state floors.
+
 ---
 
 ## 4. Buttons
@@ -72,6 +76,8 @@ Sizes: `xs` for ultra-tight inline triggers. `sm` for any button sitting in a ro
 
 Sizes are a shared contract across control kinds, defined once in `control-geometry.ts`: `xs` = 28px tall with `fontSize.sm` labels, `sm` = 32px with `fontSize.base`, `md`/`lg` = 44px with `fontSize.base`. `<SegmentedControl>` (`packages/app/src/components/ui/segmented-control.tsx`) takes the same `xs`/`sm`/`md` sizes — a segmented control next to a `<Button>` of the same size always matches in height, label size, and corner radius. Its segments run one padding step tighter than a button, because the gap between segments already reads as padding. The selected segment is a `surface3` fill with `foreground` text, not an inverted one — inverting it inside thin chrome puts a white slab in the toolbar. Thin chrome such as the file toolbar uses `xs`; settings rows use `sm`. Never shrink a control's font or padding locally to fit a context — if the context needs a smaller control, the size tier is missing or the wrong one is in use.
 
+The redesign moves controls to three heights, `controlHeight.sm` / `md` / `lg` = 24 / 28 / 32. The tier names do not line up with the button sizes above (`controlHeight.sm` is 24, a `sm` button is 32) until the controls migrate; `control-geometry.ts` keeps the heights above, and a new control reads `controlHeight`. Corners follow the same split: `radius` (`sm`–`3xl` = 6 / 8 / 10 / 14 / 18 / 22) is the new ladder, and `borderRadius` keeps its old values so unmigrated components keep their shape. A component moves to `radius` when it is migrated; `borderRadius` goes once nothing reads it. Icons default to `iconSize.md` (16); metadata uses `xs` or `sm`.
+
 A `<Pressable>` wrapping a `<Text>` is a sixth variant. It is wrong. `<Button>` accepts `style`, `textStyle`, `leftIcon`, `disabled`, `size`, and `variant`.
 
 ---
@@ -88,7 +94,7 @@ A list that is itself the page content — sidebar items in `sidebar-workspace-l
 
 Pane chrome — the workspace pane header, the file-explorer header, the diff pane header — uses a single bottom border to separate the header from the content (`packages/app/src/components/git-diff-pane.tsx:2328-2331`). One border, no shadow.
 
-`borderAccent` is reserved for the outline button. Inputs use `border`. Single-thing borders are wrong; a single bordered element is either a card with one row (use the card) or it does not need a border.
+`borderAccent` is reserved for the outline button. Inputs use `border` until they migrate; a migrated input uses `borderInput`, which only Light and Dark set apart from `border`. Single-thing borders are wrong; a single bordered element is either a card with one row (use the card) or it does not need a border.
 
 ---
 
@@ -225,7 +231,7 @@ A row may carry both a chevron and a kebab when both navigation and row-level ac
 
 Switches and segmented controls also sit in the trailing slot. A row that both navigates and toggles is a `<Pressable>` with a `<Switch>` in the trailing slot — the switch calls `event.stopPropagation()` so the row press does not fire (`packages/app/src/screens/settings/providers-section.tsx:92-132`). Sidebar items that hold a status dot, a count, and a kebab follow the same rule (`packages/app/src/components/sidebar-workspace-list.tsx`).
 
-Selected state on rows in a desktop list+detail uses `surfaceSidebarHover` as the background (`packages/app/src/screens/projects-screen.tsx`). Selected state on rows in the sidebar list uses `surface2` (`packages/app/src/components/agent-list.tsx:563-571`).
+Selected state on rows in a desktop list+detail uses `surfaceSidebarHover` as the background (`packages/app/src/screens/projects-screen.tsx`). Selected state on workspace rows in the sidebar uses `surfaceSidebarSelected` (`packages/app/src/components/sidebar-workspace-list.tsx`); the agent list still uses `surface2` (`packages/app/src/components/agent-list.tsx`). Sidebar row states — `surfaceSidebarHover`, `surfaceSidebarActive`, `surfaceSidebarSelected`, and the `borderSidebarSelected` drawn on the selected fill — are opaque hexes: a row always sits on the sidebar, so the design's translucent fills are flattened with `mixHexColor` and contrast checks can read them. Light's selected fill is gray, not white: white on the `#fafafa` sidebar is 1.04:1.
 
 ---
 
@@ -233,7 +239,7 @@ Selected state on rows in a desktop list+detail uses `surfaceSidebarHover` as th
 
 There is exactly one token per status signal — `statusSuccess`, `statusDanger`, `statusWarning`, `statusMerged` — and every status surface uses it: PR state icons, CI check icons and pies, diff stats, file-change icons, status pills, usage bars. A surface does not get a quieter or louder variant because of where it sits. If a dense list feels loud, that is a density or weight problem; fix the density, not the color. The tokens are generated, not hand-picked — see the rule in `packages/app/src/styles/theme.ts` and regenerate rather than nudging one value. The level is set by the densest consumer, the sidebar workspace list.
 
-Status **dots** are the one exception, and they are a family of their own — `statusDotSuccess`, `statusDotDanger`, `statusDotWarning`, `statusDotRunning`, read only by `getStatusDotColor` (`packages/app/src/utils/status-dot-color.ts`). Same hues and the same generation rule, but their own band: 90% of gamut chroma against the status family's 55–60%. A dot is a few points of solid color with no shape to read and no label attached, and the running one pulses, so at the status band's chroma the dots read dimmer than the metadata beside them — backwards, since the dot is the row's state. Lightness is set by hue separation rather than by distance from the surface: at 6pt four dark hues on a light surface all read as one dark blob no matter how much contrast they have. So the light band runs as bright as the contrast floor allows at L=0.62, the last step where all four clear 3:1 against the sidebar's `surface2`; the dark band sits at L=0.72, where danger turns pink above. All four move together; regenerate the set, never one hue.
+Status **dots** are the one exception, and they are a family of their own — `statusDotSuccess`, `statusDotDanger`, `statusDotWarning`, `statusDotRunning`, read only by `getStatusDotColor` (`packages/app/src/utils/status-dot-color.ts`). Same hues and the same generation rule, but their own band: 90% of gamut chroma against the status family's 55–60%. A dot is a few points of solid color with no shape to read and no label attached, and the running one pulses, so at the status band's chroma the dots read dimmer than the metadata beside them — backwards, since the dot is the row's state. Lightness is set by hue separation rather than by distance from the surface: at 6pt four dark hues on a light surface all read as one dark blob no matter how much contrast they have. So the light band runs as bright as the contrast floor allows at L=0.62, the last step where all four clear 3:1 against the resting and hovered sidebar row (success on the hovered row binds at 3.01); the dark band sits at L=0.72, where danger turns pink above. All four move together; regenerate the set, never one hue.
 
 Status pills use the status token for text on the shared `surface3` and `border` shell. The neutral shell keeps the signal legible without manufacturing translucent colors outside the theme. The `<StatusBadge>` primitive (`packages/app/src/components/ui/status-badge.tsx`) is canonical; a pill never reaches into `palette`.
 
