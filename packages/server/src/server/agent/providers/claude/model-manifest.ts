@@ -35,9 +35,19 @@ export const CLAUDE_ULTRACODE_THINKING_OPTION_ID = "ultracode";
 
 export const CLAUDE_MODEL_MANIFEST = [
   {
+    id: "claude-opus-5-5",
+    label: "Opus 5.5",
+    description: "Opus 5.5 · Latest release",
+    defaultPriority: 3,
+    minimumClaudeCodeVersion: "2.1.280",
+    contextWindowMaxTokens: 1_000_000,
+    effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
+    supportsFastMode: true,
+  },
+  {
     id: "claude-opus-5",
     label: "Opus 5",
-    description: "Opus 5 · Latest release",
+    description: "Opus 5 · Previous release",
     defaultPriority: 2,
     minimumClaudeCodeVersion: "2.1.219",
     contextWindowMaxTokens: 1_000_000,
@@ -363,32 +373,34 @@ export function normalizeClaudeRuntimeModelId(value: string | null | undefined):
     return null;
   }
 
-  const singleSegmentMatch = trimmed.match(
-    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)(\[1m\])?/i,
+  const hasOneMillionContext = trimmed.toLowerCase().includes("[1m]");
+  // 先试主-次版本：否则带前缀的 claude-opus-5-5 会被单段规则截成 claude-opus-5
+  const runtimeMatch = trimmed.match(
+    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(\[1m\])?/i,
   );
-  if (singleSegmentMatch) {
-    const normalizedModelId = normalizeSingleSegmentClaudeModelId(
-      singleSegmentMatch[1],
-      singleSegmentMatch[2],
-      trimmed.toLowerCase().includes("[1m]"),
+  if (runtimeMatch) {
+    const normalizedModelId = normalizeMajorMinorClaudeModelId(
+      runtimeMatch[1],
+      runtimeMatch[2],
+      runtimeMatch[3],
+      hasOneMillionContext,
     );
     if (normalizedModelId) {
       return normalizedModelId;
     }
   }
 
-  const runtimeMatch = trimmed.match(
-    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(\[1m\])?/i,
+  const singleSegmentMatch = trimmed.match(
+    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)(\[1m\])?/i,
   );
-  if (!runtimeMatch) {
+  if (!singleSegmentMatch) {
     return null;
   }
 
-  return normalizeMajorMinorClaudeModelId(
-    runtimeMatch[1],
-    runtimeMatch[2],
-    runtimeMatch[3],
-    trimmed.toLowerCase().includes("[1m]"),
+  return normalizeSingleSegmentClaudeModelId(
+    singleSegmentMatch[1],
+    singleSegmentMatch[2],
+    hasOneMillionContext,
   );
 }
 

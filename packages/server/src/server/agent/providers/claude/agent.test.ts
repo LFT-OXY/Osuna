@@ -476,7 +476,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
         force: false,
       });
 
-      expect(models.find((model) => model.isDefault)?.id).toBe("claude-opus-5");
+      expect(models.find((model) => model.isDefault)?.id).toBe("claude-opus-5-5");
       expect(models.map((model) => model.id)).toContain("claude-fable-5");
     } finally {
       await fs.rm(emptyConfigDir, { recursive: true, force: true });
@@ -489,7 +489,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
       const client = new ClaudeAgentClient({
         logger,
         resolveBinary: async () => "/test/claude/bin",
-        resolveVersion: async () => "2.1.219",
+        resolveVersion: async () => "2.1.280",
         configDir: emptyConfigDir,
       });
       const { models } = await client.fetchCatalog({
@@ -501,6 +501,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
         return models.find((model) => model.id === modelId)?.thinkingOptions?.map(({ id }) => id);
       };
 
+      expect(getThinkingIds("claude-opus-5-5")).toContain("ultracode");
       expect(getThinkingIds("claude-opus-5")).toContain("ultracode");
       expect(getThinkingIds("claude-fable-5-1")).toContain("ultracode");
       expect(getThinkingIds("claude-fable-5")).toContain("ultracode");
