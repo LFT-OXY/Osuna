@@ -317,6 +317,12 @@ export const ru: TranslationResources = {
   },
   message: {
     workedFor: "Работа заняла {{duration}}",
+    workingFor: "Работает {{duration}}",
+    changedFiles: {
+      one: "Изменён {{count}} файл",
+      other: "Изменено файлов: {{count}}",
+      openDiff: "Открыть дифф",
+    },
     turnUsage: {
       title: "Расход за ход",
       total: "Итого",

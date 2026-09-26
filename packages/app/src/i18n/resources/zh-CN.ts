@@ -313,6 +313,12 @@ export const zhCN: TranslationResources = {
   },
   message: {
     workedFor: "已工作 {{duration}}",
+    workingFor: "工作中 {{duration}}",
+    changedFiles: {
+      one: "改动了 {{count}} 个文件",
+      other: "改动了 {{count}} 个文件",
+      openDiff: "打开 Diff",
+    },
     turnUsage: {
       title: "本轮用量",
       total: "合计",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { StreamItem } from "@/types/stream";
 import {
   collectAssistantResponseContentForStreamRenderStrategy,
+  collectAssistantResponseItemsForStreamRenderStrategy,
   getBottomOffsetForStreamRenderStrategy,
   getFrameChildOrderForStreamRenderStrategy,
   getHistoryLiveBoundaryIndexForStreamRenderStrategy,
@@ -212,6 +213,42 @@ describe("neighbor and traversal semantics", () => {
         startIndex: invertedStartIndex,
       }),
     ).toBe("assistant-1\n\nassistant-2");
+  });
+
+  it("collects the response items in chronological order for both traversal directions", () => {
+    const chronological: StreamItem[] = [
+      userMessage("u1", "user-1", 1),
+      toolCall("t1", 2),
+      assistantMessage("a1", "assistant-1", 3),
+      toolCall("t2", 4),
+      assistantMessage("a2", "assistant-2", 5),
+    ];
+    const expectedIds = ["t1", "a1", "t2", "a2"];
+
+    const forward = resolveStreamRenderStrategy({ platform: "web", isMobileBreakpoint: false });
+    expect(
+      collectAssistantResponseItemsForStreamRenderStrategy({
+        strategy: forward,
+        items: chronological,
+        startIndex: chronological.length - 1,
+      }).map((item) => item.id),
+    ).toEqual(expectedIds);
+
+    const inverted = resolveStreamRenderStrategy({
+      platform: "android",
+      isMobileBreakpoint: false,
+    });
+    const invertedItems = orderTailForStreamRenderStrategy({
+      strategy: inverted,
+      streamItems: chronological,
+    });
+    expect(
+      collectAssistantResponseItemsForStreamRenderStrategy({
+        strategy: inverted,
+        items: invertedItems,
+        startIndex: invertedItems.findIndex((item) => item.id === "a2"),
+      }).map((item) => item.id),
+    ).toEqual(expectedIds);
   });
 
   it("collects copy content across adjacent turns without a visible prompt", () => {

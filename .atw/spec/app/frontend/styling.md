@@ -164,3 +164,24 @@ Spacing uses the theme scale (`theme.spacing[n]`), never `padding: 20`. Colors c
 Scrollbars are installed once through `styles/install-web-scrollbar-styles.web.ts`, the window grain through `styles/install-web-surface-grain.web.ts`, both from `app/_layout.tsx`. Anything that needs a DOM stylesheet lives in a `.web.ts` file, not behind an `if (isWeb)` in a component.
 
 Glass needs no DOM stylesheet. `styles/floating-surface.ts` holds pure style builders (`floatingSurfaceFill`, `dialogScrimFill`, `popoverSurfaceStyle`) that take `{ glass }`; callers pass `GLASS_SURFACES_ENABLED` from `styles/glass-support.ts` (false) / `.web.ts` (true). `backdropFilter` is not on RN's `ViewStyle`, so the builders return inferred object types and `StyleSheet.create` accepts them; react-native-web and Unistyles web both emit it as CSS. Keeping the flag outside the builders is what lets `styles/floating-surface.browser.test.tsx` assert both the glass and the native fallback path in one browser run, since the browser project always resolves `.web.ts`.
+
+## Running motion (shimmer)
+
+Every "in progress" shimmer goes through `components/shimmer/`; do not add a second shimmer implementation. The contract:
+
+| Piece | Web (`.web.ts(x)`) | Native |
+|---|---|---|
+| Timing | CSS `animation: <name> <d>s steps(shimmerSteps(d)) infinite` — `shimmerSteps` is 10 steps per second (`timing.ts`) | `withTiming` progress quantized by `quantizeShimmerProgress` in the worklet |
+| Pause | `useShimmerVisibilityRef()` on the sweep layer writes `--paseo-shimmer-play-state` (`running` / `paused`) from one shared `IntersectionObserver` plus `visibilitychange`; the animated text reads `animationPlayState: SHIMMER_PLAY_STATE` (defaults to `paused` before the first observation) | `useRetainedPanelActive()` only — rows scrolled off screen inside a mounted list keep running (accepted, `docs/design.md`) |
+| Reduced motion | `useReduceMotionEnabled()` (`hooks/use-reduce-motion-enabled.web.ts`, live `matchMedia`) → the sweep layer is not rendered | same hook, native file uses `AccessibilityInfo` |
+| Keyframes | `ensureShimmerKeyframes()` (`web-keyframes.web.ts`), called in an effect when the sweep mounts | no-op |
+
+Two shapes exist: `<ShimmerText text testID>` for a single label (mask sweep, testID stays on the base copy — the sweep layer is an `aria-hidden` duplicate, so it must never carry a testID), and the tool-row sweep inside `ExpandableBadge` (`components/message.tsx`), which measures label + summary so one peak crosses both. Anything moving that is not a shimmer (status ring, `SyncedLoader`) also reads `useReduceMotionEnabled`, not Reanimated's `useReducedMotion`, which samples once at startup.
+
+The visibility ref callback must be idempotent. react-native-web composes refs and may call a callback ref again with the same element; `IntersectionObserver.observe()` on an already observed element never fires a new entry, so a callback that re-registers and resets the state to `paused` freezes the shimmer for good. `visibility.web.ts` keeps the current element in a `useRef`, releases only when the element changes or the component unmounts, and `observe()` reuses an existing entry.
+
+`shimmer-text.browser.test.tsx` holds the web contract: `getComputedStyle(target).animationTimingFunction` is `steps(24)` (a CSS animation's `effect.getTiming().easing` is always `linear`), `playState` turns `paused` after `translateY(200vh)` and back, no animation under emulated reduced motion, and the sweep keeps running across label re-renders.
+
+## Surfaces inside a framed container
+
+A child that sits inside a frame drawn by its parent does not paint its own background. `DiffViewer` context and hunk-header rows are transparent and take the container's fill (`surface1` standalone, the tool row's `surface2` frame in the conversation); `ToolCallDetailsContent` takes `framed` when the parent draws the frame and then drops its own borders and fills. A second fill inside the frame reads as a nested panel with a padded ring.

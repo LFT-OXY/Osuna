@@ -24,10 +24,8 @@ function DiffLineRow({ line }: { line: DiffLine }) {
   const lineContainerStyle = React.useMemo(
     () => [
       styles.line,
-      line.type === "header" && styles.headerLine,
       line.type === "add" && styles.addLine,
       line.type === "remove" && styles.removeLine,
-      line.type === "context" && styles.contextLine,
     ],
     [line.type],
   );
@@ -117,6 +115,7 @@ function DiffSegment({
   return <Text style={segmentStyle}>{segment.text}</Text>;
 }
 
+/** 上下文行与 hunk 头不自带底色，透出外层容器：独立展示时是 surface1，对话流里是工具行的浅底框。 */
 export function DiffViewer({
   diffLines,
   maxHeight,
@@ -235,9 +234,6 @@ const styles = StyleSheet.create((theme) => {
           }
         : null),
     },
-    headerLine: {
-      backgroundColor: theme.colors.surface1,
-    },
     headerText: {
       color: theme.colors.foregroundMuted,
     },
@@ -258,9 +254,6 @@ const styles = StyleSheet.create((theme) => {
     },
     removeHighlight: {
       backgroundColor: "rgba(248, 81, 73, 0.35)",
-    },
-    contextLine: {
-      backgroundColor: theme.colors.surface1,
     },
     contextText: {
       color: theme.colors.foregroundMuted,

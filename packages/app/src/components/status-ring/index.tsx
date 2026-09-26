@@ -7,7 +7,8 @@ import {
   rotatorStyles,
   styles,
 } from "@/components/status-ring/frame";
-import { useReduceMotionEnabled, useStatusRingRotation } from "@/components/status-ring/clock";
+import { useStatusRingRotation } from "@/components/status-ring/clock";
+import { useReduceMotionEnabled } from "@/hooks/use-reduce-motion-enabled";
 
 /**
  * Native running indicator. The rotation is published by one shared UI-thread clock rather than

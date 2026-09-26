@@ -310,6 +310,12 @@ export const en = {
   },
   message: {
     workedFor: "Worked for {{duration}}",
+    workingFor: "Working for {{duration}}",
+    changedFiles: {
+      one: "{{count}} changed file",
+      other: "{{count}} changed files",
+      openDiff: "Open diff",
+    },
     turnUsage: {
       title: "Turn usage",
       total: "Total",
