@@ -19,6 +19,7 @@ import {
 import { StatusRing } from "@/components/status-ring";
 import { getStatusRingOffset } from "@/components/status-ring/geometry";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
+import { getSurfaceBackdropFillStyle } from "@/styles/surface-backdrop-fill";
 
 // Every surfaced status shares one badge shell, so the badge never changes size or position
 // between states. Only the thing inside it changes.
@@ -189,7 +190,7 @@ function ProjectStatusBadge({
     <View
       role="status"
       accessibilityLabel={STATUS_BUCKET_LABELS[statusBucket]}
-      style={[styles.statusBadge, getStatusBadgeBackdropStyle(backdrop)]}
+      style={[styles.statusBadge, getSurfaceBackdropFillStyle(backdrop)]}
       testID="project-status-badge"
     >
       {content.kind === "alert" ? (
@@ -199,19 +200,6 @@ function ProjectStatusBadge({
       )}
     </View>
   );
-}
-
-function getStatusBadgeBackdropStyle(backdrop: SidebarSurfaceBackdrop): ViewStyle {
-  switch (backdrop) {
-    case "surfaceSidebar":
-      return styles.statusBadgeOnSidebar;
-    case "surfaceSidebarHover":
-      return styles.statusBadgeOnSidebarHover;
-    case "surfaceSidebarSelected":
-      return styles.statusBadgeOnSidebarSelected;
-    case "surface2":
-      return styles.statusBadgeOnSurface2;
-  }
 }
 
 function ProjectStatusDot({ bucket }: { bucket: ProjectStatusBadgeDotBucket }) {
@@ -309,10 +297,6 @@ const styles = StyleSheet.create((theme) => {
       right: getStatusRingOffset(STATUS_BADGE_OFFSET, STATUS_BADGE_SIZE),
       bottom: getStatusRingOffset(STATUS_BADGE_OFFSET, STATUS_BADGE_SIZE),
     },
-    statusBadgeOnSidebar: { backgroundColor: theme.colors.surfaceSidebar },
-    statusBadgeOnSidebarHover: { backgroundColor: theme.colors.surfaceSidebarHover },
-    statusBadgeOnSidebarSelected: { backgroundColor: theme.colors.surfaceSidebarSelected },
-    statusBadgeOnSurface2: { backgroundColor: theme.colors.surface2 },
     statusDotRunning: statusDot("running"),
     statusDotFailed: statusDot("failed"),
     statusDotAttention: statusDot("attention"),

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { darkHighlightColors, resolveSyntaxColors } from "@getpaseo/highlight";
-import { DEFAULT_UI_FONT_STACK, REGISTERED_THEMES } from "@/styles/theme";
+import { DEFAULT_UI_FONT_STACK, REGISTERED_THEMES, TYPE_SCALE } from "@/styles/theme";
 import { applyAppearance, type AppearanceInput } from "./apply";
 
 // Override the global react-native-unistyles mock (vitest.setup.ts) so that
@@ -37,6 +37,7 @@ interface FakeTheme {
     "4xl": number;
   };
   lineHeight: { diff: number };
+  typeScale: Record<keyof typeof TYPE_SCALE, { fontSize: number; lineHeight: number }>;
   colors: { foreground: string; syntax: Record<string, string> };
 }
 
@@ -56,6 +57,7 @@ function makeFakeTheme(): FakeTheme {
       "4xl": 26,
     },
     lineHeight: { diff: 22 },
+    typeScale: TYPE_SCALE,
     colors: { foreground: "#fff", syntax: {} },
   };
 }
@@ -123,6 +125,24 @@ describe("applyAppearance", () => {
     expect(fontSize.lg).toBe(17);
     expect(fontSize.xl).toBe(19);
     expect(fontSize["4xl"]).toBe(28);
+  });
+
+  it("keeps the Text ramp at its authored sizes at the default interface size", () => {
+    applyAppearance(makeInput({ uiBaseFontSize: 14 }));
+
+    expect(runCapturedUpdater().typeScale).toEqual(TYPE_SCALE);
+  });
+
+  it("scales every Text variant's size and line height with the interface size", () => {
+    applyAppearance(makeInput({ uiBaseFontSize: 16 }));
+
+    const { typeScale } = runCapturedUpdater();
+    expect(typeScale.micro).toEqual({ fontSize: 13, lineHeight: 17 });
+    expect(typeScale.label).toEqual({ fontSize: 15, lineHeight: 21 });
+    expect(typeScale.body).toEqual({ fontSize: 16, lineHeight: 23 });
+    expect(typeScale.prose).toEqual({ fontSize: 16, lineHeight: 25 });
+    expect(typeScale.display).toEqual({ fontSize: 27, lineHeight: 37 });
+    expect(Object.keys(typeScale)).toEqual(Object.keys(TYPE_SCALE));
   });
 
   it("derives the UI ramp from the canonical sizes, not the live theme (no compounding)", () => {

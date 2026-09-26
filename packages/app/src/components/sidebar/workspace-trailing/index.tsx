@@ -1,6 +1,6 @@
-import { Text } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { DiffStat } from "@/components/diff-stat";
+import { Text } from "@/components/ui/text";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
 import type { SidebarWorkspaceTrailing } from "@/hooks/use-settings";
@@ -62,22 +62,23 @@ export function SidebarWorkspaceTrailingContent({
 function WorkspaceTimestamp({ enteredAt }: { enteredAt: Date }) {
   const label = useCompactTimeAgo(enteredAt);
   return (
-    <Text style={styles.timestamp} numberOfLines={1} testID="sidebar-workspace-timestamp">
+    <Text
+      variant="caption"
+      color="foregroundExtraMuted"
+      style={styles.timestamp}
+      numberOfLines={1}
+      testID="sidebar-workspace-timestamp"
+    >
       {label}
     </Text>
   );
 }
 
-const styles = StyleSheet.create((theme) => ({
-  // A step below the project title it shares the row with. The timestamp is the one thing here
-  // you never came looking for, so it sits at the bottom of the muted ramp rather than tying
-  // with the label naming the group.
+// A step below the project title it shares the row with. The timestamp is the one thing here
+// you never came looking for, so it sits at the bottom of the muted ramp rather than tying
+// with the label naming the group.
+const styles = StyleSheet.create({
   timestamp: {
-    height: 20,
-    lineHeight: 20,
-    color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
     flexShrink: 0,
   },
-}));
+});

@@ -85,9 +85,28 @@ The redesign added color roles on top of `surface0`–`surface4`. Design intent 
 
 **Shape tokens.** `theme.radius` (`RADIUS`: `sm` 6 … `3xl` 22, `full`) and `theme.controlHeight` (`CONTROL_HEIGHT`: 24 / 28 / 32) sit beside the unchanged `borderRadius` and `control-geometry.ts` heights. Migrated components read the new ones; unmigrated ones keep the old ones so their shape does not move. `applyAppearance` spreads the theme, so both pass through appearance updates untouched.
 
+**Text ramp.** `theme.typeScale` (`TYPE_SCALE`, `TextVariant` in `styles/theme.ts`) is `Record<TextVariant, { fontSize; lineHeight }>` authored at a 14px base. `applyAppearance` rebuilds it from `TYPE_SCALE` (never from the live theme, so repeated applies do not compound) with `round(value * uiBaseFontSize / 14)` for both numbers; it is widened to `number` like `fontSize`. `<Text>` (`components/ui/text.tsx`) is the only reader:
+
+```ts
+interface TextProps extends Omit<RNTextProps, "style"> {
+  variant?: TextVariant;   // default "body"
+  color?: TextColor;       // default "foreground"; the three text tiers + status* + accentBright
+  weight?: TextWeight;     // "normal" | "medium" | "semibold"
+  style?: StyleProp<TextLayoutStyle>; // TextStyle minus color / fontSize / lineHeight / fontWeight
+}
+```
+
+`TextLayoutStyle` types those four keys as `never`, so a stylesheet entry that sets any of them fails to typecheck at the call site; opacity, flex, and margins stay allowed. A variant style must spread the token (`micro: { ...theme.typeScale.micro }`), never return the theme object itself.
+
+**Row states.** `components/ui/row.tsx` owns the one state rule for sidebar-surface rows: `getRowBackdrop({ hovered, pressed, selected })` returns `surfaceSidebarActive` > `surfaceSidebarSelected` > `surfaceSidebarHover` > `surfaceSidebar` (pressed wins, then selected, so hover never hides selection), and `getRowSurfaceStyle(state)` returns `[radius.md, that fill (none at rest), selected ? boxShadow inset 1px borderSidebarSelected : null]`. `<Row>` uses both; rows that own their press target (workspace and project rows: `ContextMenuTrigger` + drag) spread `getRowSurfaceStyle` into their own style array and keep `sidebar-row-backdrop.ts`, which layers dragging (`surface2`) on top of `getRowBackdrop`. The selected ring is an inset `boxShadow` because a border would move content and an outline would override the `:focus-visible` ring in `public/index.html`. Native `PressHighlight.highlightStyle` still needs its own `surfaceSidebarActive` entry; it does not read the row style array.
+
+**Knockout fills.** Anything filled with the colour behind it (status-ring frame, project status badge, `<Row>` actions) takes `getSurfaceBackdropFillStyle(backdrop)` from `styles/surface-backdrop-fill.ts`. Adding a `SurfaceBackdrop` name is one entry there; `TrailingActionScrim` is the exception because it needs a colour for an SVG prop, not a style.
+
 **Startup canvas.** The default canvas (`#0a0a0a` / `#fcfcfc`) is repeated where the theme cannot be imported: `packages/desktop/src/window/window-manager.ts` `getWindowBackgroundColor`, `packages/app/public/index.html` (`html, body` + dark media query), and `public/manifest.json`. After mount, `DesktopWindowControlsSync` (`app/_layout.tsx`) pushes `surface0`. Changing the default canvas without these flashes the old color at startup.
 
-**Tests required** (`styles/theme.test.ts`, run from `packages/app`):
+**Tests required** for the ramp and rows: `appearance/apply.test.ts` (ramp unchanged at 14, every variant scaled at another size), `components/ui/text.browser.test.tsx` (computed size / line height per variant, every colour and weight against the fixture theme), `components/ui/row.browser.test.tsx` (rest, hover, pressed, selected, selected + hover: fill, ring, title colour, actions opacity / pointer-events). The fixture theme in `test-stubs/react-native-unistyles.ts` carries `typeScale` and the row roles; add a token there when a browser-tested component starts reading it.
+
+**Tests required** for the roles (`styles/theme.test.ts`, run from `packages/app`):
 - Default palette: Light / Dark role values against the t3code default palette literals.
 - Catalog (every `THEME_OPTIONS` theme plus a dark and a light plugin sample built through `collectPluginThemes`): every role matches a color value; building a plugin twice gives equal themes; `foreground` clears 4.5 (light) / 3 (dark) on canvas, chrome, card, message, sidebar and every row state, and `foregroundMuted` on the canvas; the row-state neighbor pairs above clear 1.05.
 - Light status dots clear 3:1 on the resting and hovered sidebar row.

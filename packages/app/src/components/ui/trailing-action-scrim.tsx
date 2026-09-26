@@ -33,6 +33,7 @@ const backdropColorMappings: Record<SurfaceBackdrop, (theme: Theme) => { color: 
   surface2: (theme) => ({ color: theme.colors.surface2 }),
   surfaceSidebar: (theme) => ({ color: theme.colors.surfaceSidebar }),
   surfaceSidebarHover: (theme) => ({ color: theme.colors.surfaceSidebarHover }),
+  surfaceSidebarActive: (theme) => ({ color: theme.colors.surfaceSidebarActive }),
   surfaceSidebarSelected: (theme) => ({ color: theme.colors.surfaceSidebarSelected }),
 };
 

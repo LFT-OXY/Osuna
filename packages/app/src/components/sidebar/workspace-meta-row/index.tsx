@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, View, type GestureResponderEvent } from "react-native";
+import { Pressable, View, type GestureResponderEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ExternalLink, Folder, GitBranch, Globe } from "lucide-react-native";
 import {
@@ -15,6 +15,7 @@ import { getForgePresentation, normalizeForge } from "@/git/forge";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { useSidebarMetaPreferences } from "@/components/sidebar/display-preferences/model";
 import type { Theme } from "@/styles/theme";
+import { Text, type TextColor } from "@/components/ui/text";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
 import { CheckIndicator } from "./check-indicator";
 import type { CheckSummary, CheckSummaryState } from "./check-summary";
@@ -93,7 +94,11 @@ export function WorkspaceMetaRow({
     <View style={styles.row}>
       {items.map((item, index) => (
         <Fragment key={item.kind}>
-          {index > 0 ? <Text style={styles.separator}>·</Text> : null}
+          {index > 0 ? (
+            <Text variant="caption" color="foregroundExtraMuted" style={styles.separator}>
+              ·
+            </Text>
+          ) : null}
           <MetaItemNode item={item} hostBadge={hostBadge} leading={index === 0} />
         </Fragment>
       ))}
@@ -139,7 +144,7 @@ function IdentityItem({ kind, name }: { kind: "branch" | "project"; name: string
       <View style={styles.identityIcon}>
         <Icon size={META_ICON_SIZE} uniProps={mutedMapping} />
       </View>
-      <Text style={styles.identityText} numberOfLines={1}>
+      <Text variant="caption" color="foregroundMuted" style={styles.identityText} numberOfLines={1}>
         {name}
       </Text>
     </View>
@@ -220,7 +225,12 @@ function PullRequestItem({ hint }: { hint: PrHint }) {
       ) : (
         <PullRequestStateIcon state={hint.state} size={META_ICON_SIZE} />
       )}
-      <Text style={isHovered ? styles.prTextHovered : styles.prText} numberOfLines={1}>
+      <Text
+        variant="caption"
+        color={isHovered ? "foreground" : "foregroundMuted"}
+        style={styles.prText}
+        numberOfLines={1}
+      >
         {hint.number}
         {/* An open change request is the unremarkable case and says nothing extra; a merged
             or closed one is why the row still looks like it has work in it. */}
@@ -253,13 +263,25 @@ function ChecksItem({ summary, label }: { summary: CheckSummary; label: boolean 
     >
       <CheckIndicator summary={summary} size={META_ICON_SIZE} />
       {label ? (
-        <Text style={checksTextStyle(summary.state)} numberOfLines={1}>
+        <Text
+          variant="caption"
+          color={CHECK_STATE_TEXT_COLORS[summary.state]}
+          style={styles.checksText}
+          numberOfLines={1}
+        >
           {t(CHECK_STATE_LABEL_KEYS[summary.state])}
         </Text>
       ) : null}
     </View>
   );
 }
+
+// Matches the indicator — see COLOR_MAPPINGS in check-indicator.tsx.
+const CHECK_STATE_TEXT_COLORS: Record<CheckSummaryState, TextColor> = {
+  passed: "statusSuccess",
+  failed: "statusDanger",
+  running: "statusWarning",
+};
 
 const CHECK_STATE_LABEL_KEYS = {
   passed: "workspace.git.pr.checksSummary.passedLabel",
@@ -291,7 +313,12 @@ function ServiceItem({ summary }: { summary: WorkspaceServiceSummary }) {
       testID={unhealthy ? "workspace-service-unhealthy" : "workspace-service"}
     >
       <ThemedGlobe size={META_ICON_SIZE} uniProps={unhealthy ? dangerMapping : successMapping} />
-      <Text style={unhealthy ? styles.serviceNameUnhealthy : styles.serviceName} numberOfLines={1}>
+      <Text
+        variant="caption"
+        color={unhealthy ? "statusDanger" : "statusSuccess"}
+        style={styles.serviceName}
+        numberOfLines={1}
+      >
         {summary.name}
       </Text>
     </View>
@@ -334,18 +361,12 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   identityText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
     flexShrink: 1,
   },
   itemPressed: {
     opacity: 0.82,
   },
   separator: {
-    color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
     flexShrink: 0,
   },
   // Tighter than the line's own gap so a run of chips reads as one item — see `LabelsItem`.
@@ -371,55 +392,12 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
   },
   serviceName: {
-    color: theme.colors.statusSuccess,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
-    flexShrink: 1,
-  },
-  serviceNameUnhealthy: {
-    color: theme.colors.statusDanger,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
     flexShrink: 1,
   },
   prText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
     flexShrink: 0,
   },
-  prTextHovered: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
-    flexShrink: 0,
-  },
-  // Matches the indicator — see COLOR_MAPPINGS in check-indicator.tsx.
-  checksTextPassed: {
-    color: theme.colors.statusSuccess,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
-    flexShrink: 0,
-  },
-  checksTextFailed: {
-    color: theme.colors.statusDanger,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
-    flexShrink: 0,
-  },
-  checksTextRunning: {
-    color: theme.colors.statusWarning,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
+  checksText: {
     flexShrink: 0,
   },
 }));
-
-// Read inside render, never into a module-scope table: touching `styles.x` at module load
-// materializes the Unistyles proxy before the persisted theme has resolved, and the style
-// freezes on whatever theme happened to be active first. See docs/unistyles.md.
-function checksTextStyle(state: CheckSummaryState) {
-  if (state === "failed") return styles.checksTextFailed;
-  if (state === "running") return styles.checksTextRunning;
-  return styles.checksTextPassed;
-}

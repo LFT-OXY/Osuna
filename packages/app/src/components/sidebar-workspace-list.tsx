@@ -1,7 +1,9 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { getRowSurfaceStyle } from "@/components/ui/row";
+import { Text } from "@/components/ui/text";
 import {
   View,
-  Text,
+  Text as RNText,
   Pressable,
   ScrollView,
   type GestureResponderEvent,
@@ -346,9 +348,9 @@ export function PrBadge({ hint, style }: { hint: PrHint; style?: StyleProp<ViewS
       ) : (
         <PullRequestStateIcon state={hint.state} size={12} />
       )}
-      <Text style={textStyle} numberOfLines={1}>
+      <RNText style={textStyle} numberOfLines={1}>
         {hint.number}
-      </Text>
+      </RNText>
     </Pressable>
   );
 }
@@ -372,10 +374,8 @@ function getProjectWorkspaceRowStyle({
 }) {
   return [
     styles.workspaceRow,
-    isHovered && styles.workspaceRowHovered,
-    selected && styles.sidebarRowSelected,
+    ...getRowSurfaceStyle({ hovered: isHovered, pressed: isPressed, selected }),
     isDragging && styles.workspaceRowDragging,
-    isPressed && styles.workspaceRowPressed,
   ];
 }
 
@@ -663,7 +663,9 @@ function WorkspaceRowRightGroup({
   return (
     <>
       {isCreating ? (
-        <Text style={styles.workspaceCreatingText}>{t("sidebar.workspace.status.creating")}</Text>
+        <Text variant="caption" color="foregroundMuted" style={styles.workspaceCreatingText}>
+          {t("sidebar.workspace.status.creating")}
+        </Text>
       ) : null}
       {renderSlot ? (
         <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
@@ -768,9 +770,9 @@ function NewWorktreeButton({
         </TooltipTrigger>
         <TooltipContent side="bottom" align="center" offset={8}>
           <View style={styles.projectActionTooltipRow}>
-            <Text style={styles.projectActionTooltipText}>
+            <RNText style={styles.projectActionTooltipText}>
               {t("sidebar.workspace.actions.newWorkspace")}
-            </Text>
+            </RNText>
             {showShortcutHint && newWorktreeKeys ? (
               <Shortcut chord={newWorktreeKeys} style={styles.projectActionTooltipShortcut} />
             ) : null}
@@ -807,8 +809,7 @@ function NewWorkspaceGhostRow({
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.newWorkspaceGhostRow,
-      hovered && !pressed && styles.newWorkspaceGhostRowHovered,
-      pressed && styles.newWorkspaceGhostRowPressed,
+      ...getRowSurfaceStyle({ hovered, pressed }),
     ],
     [],
   );
@@ -832,11 +833,9 @@ function NewWorkspaceGhostRow({
             />
           </View>
           <Text
-            style={
-              hovered || pressed
-                ? styles.newWorkspaceGhostTextHovered
-                : styles.newWorkspaceGhostText
-            }
+            variant="label"
+            color={hovered || pressed ? "foreground" : "foregroundMuted"}
+            style={styles.newWorkspaceGhostText}
             numberOfLines={1}
           >
             {t("sidebar.workspace.actions.newWorkspace")}
@@ -933,9 +932,7 @@ function ProjectHeaderRow({
     ({ pressed }: PressableStateCallbackType) => [
       styles.projectRow,
       isDragging && styles.projectRowDragging,
-      selected && styles.sidebarRowSelected,
-      isHovered && styles.projectRowHovered,
-      pressed && styles.projectRowPressed,
+      ...getRowSurfaceStyle({ hovered: isHovered, pressed, selected }),
     ],
     [isDragging, selected, isHovered],
   );
@@ -955,7 +952,12 @@ function ProjectHeaderRow({
         />
 
         <View style={styles.projectTitleGroup}>
-          <Text style={styles.projectTitle} numberOfLines={1}>
+          <Text
+            variant="label"
+            color="foregroundMuted"
+            style={styles.projectTitle}
+            numberOfLines={1}
+          >
             {displayName}
           </Text>
         </View>
@@ -1171,6 +1173,7 @@ function WorkspaceRowInner({
                 serviceSummary={serviceSummary}
                 backdrop={backdrop}
                 isHovered={isHovered}
+                selected={selected}
                 isLoading={isArchiving || isCreating}
                 isCreating={isCreating}
                 shortcutNumber={shortcutNumber}
@@ -2532,17 +2535,10 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[2],
     paddingLeft: theme.spacing[4],
     paddingRight: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
     userSelect: "none",
-  },
-  newWorkspaceGhostRowHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
-  newWorkspaceGhostRowPressed: {
-    backgroundColor: theme.colors.surface2,
   },
   // The width of a workspace row's status slot, so the label lands on the same rail as the
   // titles above it.
@@ -2554,23 +2550,14 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   newWorkspaceGhostText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
     minWidth: 0,
     flexShrink: 1,
-  },
-  newWorkspaceGhostTextHovered: {
-    fontSize: theme.fontSize.base,
-    minWidth: 0,
-    flexShrink: 1,
-    color: theme.colors.foreground,
   },
   projectRow: {
     position: "relative",
     minHeight: 36,
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
     marginBottom: theme.spacing[1],
     flexDirection: "row",
     alignItems: "center",
@@ -2578,11 +2565,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     userSelect: "none",
   },
-  projectRowHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
   projectRowPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceSidebarActive,
   },
   projectRowDragging: {
     backgroundColor: theme.colors.surface2,
@@ -2607,9 +2591,6 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   projectTitle: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: "400",
     minWidth: 0,
     flexShrink: 1,
   },
@@ -2694,7 +2675,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[2],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "center",
@@ -2721,11 +2701,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     flexShrink: 0,
   },
-  workspaceRowHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
   workspaceRowPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceSidebarActive,
   },
   workspaceRowDragging: {
     backgroundColor: theme.colors.surface2,
@@ -2734,9 +2711,6 @@ const styles = StyleSheet.create((theme) => ({
     transform: [{ scale: 1.02 }],
     zIndex: 3,
     ...theme.shadow.md,
-  },
-  sidebarRowSelected: {
-    backgroundColor: theme.colors.surfaceSidebarSelected,
   },
   workspaceRowContainer: {
     position: "relative",
@@ -2787,8 +2761,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingLeft: WORKSPACE_STATUS_DOT_WIDTH + theme.spacing[2],
   },
   workspaceCreatingText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
     flexShrink: 0,
   },
   kebabButton: {

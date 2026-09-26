@@ -10,13 +10,14 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   View,
-  Text,
   Pressable,
   ScrollView,
   type GestureResponderEvent,
   type PressableStateCallbackType,
 } from "react-native";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
+import { getRowSurfaceStyle } from "@/components/ui/row";
+import { Text } from "@/components/ui/text";
 import type { GestureType } from "react-native-gesture-handler";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
@@ -420,8 +421,7 @@ function StatusGroupHeader({
   const rowStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
       styles.statusGroupRow,
-      isHovered && styles.statusGroupRowHovered,
-      pressed && styles.statusGroupRowPressed,
+      ...getRowSurfaceStyle({ hovered: isHovered, pressed }),
     ],
     [isHovered],
   );
@@ -446,7 +446,12 @@ function StatusGroupHeader({
             />
           </View>
           <View style={styles.statusGroupTitleGroup}>
-            <Text style={styles.statusGroupTitle} numberOfLines={1}>
+            <Text
+              variant="label"
+              color="foregroundMuted"
+              style={styles.statusGroupTitle}
+              numberOfLines={1}
+            >
               {group.label}
             </Text>
           </View>
@@ -898,6 +903,7 @@ function StatusWorkspaceRowInnerContent({
                 serviceSummary={serviceSummary}
                 backdrop={backdrop}
                 isHovered={isHovered}
+                selected={selected}
                 isLoading={isArchiving}
                 shortcutNumber={shortcutNumber}
                 showShortcutBadge={showShortcutBadge}
@@ -1028,10 +1034,8 @@ function getStatusWorkspaceRowStyle({
   return [
     styles.workspaceRow,
     inStatusGroup && sidebarWorkspaceRowStyles.rowIndented,
-    isHovered && styles.workspaceRowHovered,
-    selected && styles.sidebarRowSelected,
+    ...getRowSurfaceStyle({ hovered: isHovered, pressed: isPressed, selected }),
     isDragging && styles.workspaceRowDragging,
-    isPressed && styles.workspaceRowPressed,
   ];
 }
 
@@ -1060,19 +1064,12 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 36,
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
     marginBottom: theme.spacing[2],
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing[2],
     userSelect: "none",
-  },
-  statusGroupRowHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
-  statusGroupRowPressed: {
-    backgroundColor: theme.colors.surface2,
   },
   statusGroupRowLeft: {
     flexDirection: "row",
@@ -1097,9 +1094,6 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   statusGroupTitle: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: "400",
     minWidth: 0,
     flexShrink: 1,
   },
@@ -1112,18 +1106,14 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[2],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "flex-start",
     gap: theme.spacing[1],
     userSelect: "none",
   },
-  workspaceRowHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
   workspaceRowPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceSidebarActive,
   },
   workspaceRowDragging: {
     backgroundColor: theme.colors.surface2,
@@ -1132,8 +1122,5 @@ const styles = StyleSheet.create((theme) => ({
     transform: [{ scale: 1.02 }],
     zIndex: 3,
     ...theme.shadow.md,
-  },
-  sidebarRowSelected: {
-    backgroundColor: theme.colors.surfaceSidebarSelected,
   },
 }));

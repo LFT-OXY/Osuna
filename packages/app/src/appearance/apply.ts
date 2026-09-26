@@ -5,6 +5,7 @@ import {
   DEFAULT_MONO_FONT_STACK,
   FONT_SIZE,
   REGISTERED_THEMES,
+  TYPE_SCALE,
   type Theme,
 } from "@/styles/theme";
 import { applyRootUiFont } from "./apply-root-font";
@@ -48,6 +49,27 @@ function scaleFontSize(
   };
 }
 
+/** <Text> 阶梯同样按界面字号等比换算，行高一起缩放。 */
+function scaleTypeScale(uiBaseSize: number): Theme["typeScale"] {
+  const r = uiBaseSize / FONT_SIZE.base;
+  const scale = ({ fontSize, lineHeight }: { fontSize: number; lineHeight: number }) => ({
+    fontSize: Math.round(fontSize * r),
+    lineHeight: Math.round(lineHeight * r),
+  });
+  return {
+    micro: scale(TYPE_SCALE.micro),
+    caption: scale(TYPE_SCALE.caption),
+    label: scale(TYPE_SCALE.label),
+    body: scale(TYPE_SCALE.body),
+    "body-lg": scale(TYPE_SCALE["body-lg"]),
+    "title-sm": scale(TYPE_SCALE["title-sm"]),
+    title: scale(TYPE_SCALE.title),
+    "title-lg": scale(TYPE_SCALE["title-lg"]),
+    display: scale(TYPE_SCALE.display),
+    prose: scale(TYPE_SCALE.prose),
+  };
+}
+
 /**
  * Patch every registered Unistyles theme with the user's appearance choices.
  * All keys in `ALL_THEME_KEYS` are patched because the active theme can change
@@ -80,12 +102,14 @@ export function applyAppearance(input: AppearanceInput): void {
         input.codeFontSize,
       );
       const lineHeight = { ...t.lineHeight, diff: diffLineHeight };
+      const typeScale = scaleTypeScale(input.uiBaseFontSize);
       if (t.colorScheme === "light") {
         return {
           ...t,
           fontFamily,
           fontSize,
           lineHeight,
+          typeScale,
           colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
         };
       }
@@ -94,6 +118,7 @@ export function applyAppearance(input: AppearanceInput): void {
         fontFamily,
         fontSize,
         lineHeight,
+        typeScale,
         colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
       };
     });
