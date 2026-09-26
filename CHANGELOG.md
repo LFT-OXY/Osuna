@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.2 - 2026-09-26
+
+内部分发版。Claude Code 的模型列表加入 Opus 5.5，并修复 0.8.1 的 macOS 包启动即崩。
+
+### Added
+
+- Claude Code 的模型列表加入 Opus 5.5，并设为默认模型：1M 上下文，支持 Extra High、Max、Ultra Code 与 Fast 模式；需要 Claude Code 2.1.280 或更新版本，旧版本仍默认 Opus 5
+
+### Fixed
+
+- 修复 macOS 安装包启动即崩溃
+- 修复通过 Bedrock 等带前缀的模型 ID 使用 Opus 5.5 或 Fable 5.1 时，被识别成 Opus 5 或 Fable 5
+- 修复 macOS 安装包在 CI 构建时因内存不足失败
+
 ## 0.8.1 - 2026-09-21
 
 内部分发版。桌面端的更新源改为本仓库，macOS 与 Windows 安装包由 CI 构建。
