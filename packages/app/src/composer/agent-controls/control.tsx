@@ -5,6 +5,7 @@ import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { Text as UiText } from "@/components/ui/text";
 import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
+import { COMPOSER_TOOLBAR_GEOMETRY } from "@/composer/agent-controls/layout";
 import type { AgentControlIcon } from "@/agent-controls/icons";
 import type { Theme } from "@/styles/theme";
 
@@ -125,6 +126,7 @@ export const AgentControlTrigger = forwardRef<View, AgentControlTriggerProps>(
           <UiText
             variant="label"
             color="foregroundMuted"
+            weight="medium"
             style={styles.toolbarValue}
             numberOfLines={1}
           >
@@ -135,6 +137,12 @@ export const AgentControlTrigger = forwardRef<View, AgentControlTriggerProps>(
     );
   },
 );
+
+/** 模型、推理强度、模式之间的细竖线，只在 toolbar 宽度够放全部标签时出现。 */
+export function AgentControlSeparator({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return <View style={styles.separator} accessibilityElementsHidden pointerEvents="none" />;
+}
 
 function TriggerIcon({
   icon,
@@ -222,5 +230,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   iconColor: {
     color: theme.colors.foregroundMuted,
+  },
+  separator: {
+    width: COMPOSER_TOOLBAR_GEOMETRY.separatorWidth,
+    height: theme.iconSize.md,
+    flexShrink: 0,
+    marginHorizontal: COMPOSER_TOOLBAR_GEOMETRY.separatorInset,
+    backgroundColor: theme.colors.border,
   },
 }));

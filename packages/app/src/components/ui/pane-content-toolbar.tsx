@@ -200,8 +200,6 @@ const styles = StyleSheet.create((theme) => ({
   toolbar: {
     height: WORKSPACE_SECONDARY_HEADER_HEIGHT,
     backgroundColor: theme.colors.surface0,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
     flexShrink: 0,
   },
   controls: {

@@ -4,7 +4,7 @@ import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { FAST_MODE_FEATURE_ID, PLAN_MODE_FEATURE_ID } from "@/agent-controls/policy";
 
 export type ExplainedAgentControl = "mode" | "model" | "thinking";
-export type FeatureHighlightColor = "blue" | "default" | "green" | "yellow";
+export type FeatureHighlightColor = "blue" | "default" | "green" | "providerBrand";
 export type AgentControlHintKey =
   | "agentControls.hints.thinking"
   | "agentControls.hints.model"
@@ -38,7 +38,7 @@ export function getFeatureTooltip(feature: Pick<AgentFeature, "label" | "tooltip
 export function getFeatureHighlightColor(featureId: string): FeatureHighlightColor {
   switch (featureId) {
     case FAST_MODE_FEATURE_ID:
-      return "yellow";
+      return "providerBrand";
     case "auto_accept":
       return "green";
     case PLAN_MODE_FEATURE_ID:

@@ -593,8 +593,6 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   tabsContainer: (isCompact: boolean) => ({
     flexDirection: "row",

@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { createElement, type ComponentType } from "react";
 import {
   Bot,
   Brain,
@@ -24,6 +24,11 @@ export type AgentControlIcon = ComponentType<AgentControlIconProps>;
 
 export const ThinkingIcon = Brain;
 export const PlanModeIcon = ListTodo;
+
+// 快速模式开启时闪电实心着色。
+export function FastModeOnIcon({ size, color }: AgentControlIconProps) {
+  return createElement(Zap, { size, color, fill: color });
+}
 
 const MODE_ICONS: Record<string, AgentControlIcon> = {
   Bot,

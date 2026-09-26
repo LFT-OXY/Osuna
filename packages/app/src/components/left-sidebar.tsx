@@ -796,8 +796,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[2],
     gap: 2,
     paddingBottom: theme.spacing[1.5],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   sidebarHeaderGroupBelowChrome: {
     paddingTop: 0,
@@ -885,8 +883,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[2],
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
   footerIconRow: {
     flexDirection: "row",
