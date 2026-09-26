@@ -314,6 +314,12 @@ export const ko: TranslationResources = {
   },
   message: {
     workedFor: "작업 시간 {{duration}}",
+    workingFor: "작업 중 {{duration}}",
+    changedFiles: {
+      one: "파일 {{count}}개 변경",
+      other: "파일 {{count}}개 변경",
+      openDiff: "Diff 열기",
+    },
     turnUsage: {
       title: "이번 턴 사용량",
       total: "합계",

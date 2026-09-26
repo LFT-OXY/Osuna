@@ -318,6 +318,12 @@ export const es: TranslationResources = {
   },
   message: {
     workedFor: "Trabajó durante {{duration}}",
+    workingFor: "Trabajando durante {{duration}}",
+    changedFiles: {
+      one: "{{count}} archivo modificado",
+      other: "{{count}} archivos modificados",
+      openDiff: "Abrir diferencias",
+    },
     turnUsage: {
       title: "Uso del turno",
       total: "Total",

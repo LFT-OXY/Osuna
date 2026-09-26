@@ -37,6 +37,8 @@ interface ToolCallDetailsContentProps {
   maxHeight?: number;
   fillAvailableHeight?: boolean;
   showLoadingSkeleton?: boolean;
+  /** 外层已经画了浅底框（对话流里展开的工具行），内部各段不再各带边框和底色。 */
+  framed?: boolean;
 }
 
 interface DetailStyles {
@@ -67,14 +69,31 @@ function resolveShouldFill(
   return t === "shell" || t === "edit" || t === "write" || t === "read" || t === "sub_agent";
 }
 
-function useDetailStyles(
-  detail: ToolCallDetail | undefined,
-  resolvedMaxHeight: number | undefined,
-  fillAvailableHeight: boolean,
-): DetailStyles {
+interface DetailStylesInput {
+  detail: ToolCallDetail | undefined;
+  resolvedMaxHeight: number | undefined;
+  fillAvailableHeight: boolean;
+  framed: boolean;
+}
+
+function resolveCodeBlockStyle(input: {
+  isFullBleed: boolean;
+  framed: boolean;
+}): StyleProp<ViewStyle> {
+  if (input.framed) return styles.framedBlock;
+  return input.isFullBleed ? styles.fullBleedBlock : styles.diffContainer;
+}
+
+function useDetailStyles({
+  detail,
+  resolvedMaxHeight,
+  fillAvailableHeight,
+  framed,
+}: DetailStylesInput): DetailStyles {
   const isFullBleed = resolveIsFullBleed(detail);
   const shouldFill = resolveShouldFill(detail, fillAvailableHeight);
-  const codeBlockStyle = isFullBleed ? styles.fullBleedBlock : styles.diffContainer;
+  const codeBlockStyle = resolveCodeBlockStyle({ isFullBleed, framed });
+  const scrollAreaBase = framed ? null : styles.scrollArea;
 
   const sectionFillStyle = useMemo(
     () => [styles.section, shouldFill && styles.fillHeight],
@@ -94,21 +113,21 @@ function useDetailStyles(
   );
   const scrollAreaFillStyle = useMemo(
     () => [
-      styles.scrollArea,
+      scrollAreaBase,
       resolvedMaxHeight !== undefined && inlineUnistylesStyle({ maxHeight: resolvedMaxHeight }),
       shouldFill && styles.fillHeight,
     ],
-    [resolvedMaxHeight, shouldFill],
+    [resolvedMaxHeight, scrollAreaBase, shouldFill],
   );
   const scrollAreaStyle = useMemo(
     () => [
-      styles.scrollArea,
+      scrollAreaBase,
       resolvedMaxHeight !== undefined && inlineUnistylesStyle({ maxHeight: resolvedMaxHeight }),
     ],
-    [resolvedMaxHeight],
+    [resolvedMaxHeight, scrollAreaBase],
   );
-  const jsonScrollCombined = styles.jsonScroll;
-  const jsonScrollErrorCombined = [styles.jsonScroll, styles.jsonScrollError];
+  const jsonScrollCombined = framed ? null : styles.jsonScroll;
+  const jsonScrollErrorCombined = framed ? null : [styles.jsonScroll, styles.jsonScrollError];
   const fullBleedContainerStyle = useMemo(
     () => [
       isFullBleed ? styles.fullBleedContainer : styles.paddedContainer,
@@ -787,10 +806,11 @@ export function ToolCallDetailsContent({
   maxHeight,
   fillAvailableHeight = false,
   showLoadingSkeleton = false,
+  framed = false,
 }: ToolCallDetailsContentProps) {
   const { t } = useTranslation();
   const resolvedMaxHeight = fillAvailableHeight ? undefined : (maxHeight ?? 300);
-  const ds = useDetailStyles(detail, resolvedMaxHeight, fillAvailableHeight);
+  const ds = useDetailStyles({ detail, resolvedMaxHeight, fillAvailableHeight, framed });
   const diffLines = useDiffLines(detail);
 
   const sections: ReactNode[] = buildDetailSections(toolName, detail, diffLines, ds, t);
@@ -914,6 +934,9 @@ const styles = StyleSheet.create((theme) => {
       borderRadius: 0,
       overflow: "hidden",
       backgroundColor: theme.colors.surface1,
+    },
+    framedBlock: {
+      overflow: "hidden",
     },
     codeVerticalScroll: {},
     codeVerticalContent: {

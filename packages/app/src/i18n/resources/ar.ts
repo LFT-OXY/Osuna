@@ -313,6 +313,12 @@ export const ar: TranslationResources = {
   },
   message: {
     workedFor: "استغرق {{duration}}",
+    workingFor: "يعمل منذ {{duration}}",
+    changedFiles: {
+      one: "تم تغيير {{count}} ملف",
+      other: "تم تغيير {{count}} ملفات",
+      openDiff: "فتح الفرق",
+    },
     turnUsage: {
       title: "استهلاك هذه الجولة",
       total: "الإجمالي",

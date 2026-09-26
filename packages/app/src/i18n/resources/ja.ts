@@ -318,6 +318,12 @@ export const ja: TranslationResources = {
   },
   message: {
     workedFor: "作業時間 {{duration}}",
+    workingFor: "作業中 {{duration}}",
+    changedFiles: {
+      one: "{{count}} 件のファイルを変更",
+      other: "{{count}} 件のファイルを変更",
+      openDiff: "差分を開く",
+    },
     turnUsage: {
       title: "このターンの使用量",
       total: "合計",

@@ -297,6 +297,63 @@ test.describe("Agent stream UI", () => {
     }
   });
 
+  test("keeps execution quiet: one-line tool rows, collapsed thinking, and a changed-files summary", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "stream-execution-rows-",
+      title: "Execution rows",
+      model: "ten-second-stream",
+      initialPrompt: "Stream a turn that reads, edits, and runs a command.",
+    });
+    try {
+      await agent.client.waitForFinish(agent.agentId, 30_000);
+      await openAgentRoute(page, {
+        workspaceId: agent.workspaceId,
+        agentId: agent.agentId,
+      });
+      await scrollAgentChatToBottom(page);
+
+      const thinking = page.getByTestId("tool-call-badge").filter({ hasText: "Thinking" }).first();
+      await expect(thinking).toBeVisible();
+      await expect(thinking.getByTestId("tool-call-badge-details")).toHaveCount(0);
+
+      const editRow = page.getByTestId("tool-call-badge").filter({ hasText: "Edit" }).last();
+      const editHeader = editRow.getByRole("button").first();
+      await editRow.scrollIntoViewIfNeeded();
+      expect((await editHeader.boundingBox())?.height).toBe(26);
+      await expect(editRow.getByTestId("tool-call-badge-details")).toHaveCount(0);
+      await editHeader.click();
+      await expect(editRow.getByTestId("tool-call-badge-details")).toBeVisible();
+      await editHeader.click();
+      await expect(editRow.getByTestId("tool-call-badge-details")).toHaveCount(0);
+
+      // 每个循环都改同一个文件，整轮汇总成一个文件。
+      const changedFiles = page.getByTestId("turn-changed-files").last();
+      await changedFiles.scrollIntoViewIfNeeded();
+      await expect(changedFiles.getByTestId("turn-changed-files-toggle")).toContainText(
+        "1 changed file",
+      );
+      const fileRows = changedFiles.getByTestId("turn-changed-file-row");
+      await expect(fileRows).toHaveCount(0);
+      await changedFiles.getByTestId("turn-changed-files-toggle").click();
+      await expect(fileRows).toHaveCount(1);
+      await expect(fileRows.first()).toHaveAccessibleName(
+        "packages/app/src/hooks/use-scroll-anchor.ts",
+      );
+      await changedFiles.getByTestId("turn-changed-files-toggle").click();
+      await expect(fileRows).toHaveCount(0);
+
+      await changedFiles.getByRole("button", { name: "Open diff" }).click();
+      await expect(
+        page.getByTestId("changes-tree-panel").filter({ visible: true }).first(),
+      ).toBeVisible({ timeout: 30_000 });
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("working-indicator transitions to copy-button when stream ends", async ({ page }) => {
     test.setTimeout(60_000);
     const agent = await startRunningMockAgent(page, {

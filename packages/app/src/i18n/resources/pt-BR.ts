@@ -317,6 +317,12 @@ export const ptBR: TranslationResources = {
   },
   message: {
     workedFor: "Trabalhou por {{duration}}",
+    workingFor: "Trabalhando há {{duration}}",
+    changedFiles: {
+      one: "{{count}} arquivo alterado",
+      other: "{{count}} arquivos alterados",
+      openDiff: "Abrir diff",
+    },
     turnUsage: {
       title: "Uso do turno",
       total: "Total",

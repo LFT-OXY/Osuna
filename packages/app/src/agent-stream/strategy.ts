@@ -102,6 +102,7 @@ export interface StreamStrategy {
     index: number,
     relation: NeighborRelation,
   ) => StreamItem | undefined;
+  collectAssistantResponseItems: (items: StreamItem[], startIndex: number) => StreamItem[];
   collectAssistantResponseContent: (items: StreamItem[], startIndex: number) => string;
   isNearBottom: (input: StreamNearBottomInput) => boolean;
   getBottomOffset: (metrics: StreamViewportMetrics) => number;
@@ -146,6 +147,28 @@ interface StreamStrategyConfig {
 
 const NATIVE_SETTLING_VERIFICATION_DELAY_FRAMES = 4;
 
+/** 从回合末尾往回走到本轮回复的起点，按时间顺序返回这一段。 */
+function collectResponseItems(
+  items: StreamItem[],
+  startIndex: number,
+  step: AssistantTurnTraversalStep,
+): StreamItem[] {
+  const collected: StreamItem[] = [];
+  let laterItem: StreamItem | null = null;
+  for (let index = startIndex; index >= 0 && index < items.length; index += step) {
+    const currentItem = items[index];
+    if (!currentItem || (laterItem && !continuesResponse(currentItem, laterItem))) {
+      break;
+    }
+    // 往回走会停在用户消息上，它是回复的边界，不算回复的一部分。
+    if (currentItem.kind !== "user_message") {
+      collected.push(currentItem);
+    }
+    laterItem = currentItem;
+  }
+  return collected.toReversed();
+}
+
 export function createStreamStrategy(config: StreamStrategyConfig): StreamStrategy {
   return {
     render: config.render,
@@ -167,25 +190,12 @@ export function createStreamStrategy(config: StreamStrategyConfig): StreamStrate
       }
       return items[neighborIndex];
     },
-    collectAssistantResponseContent: (items, startIndex) => {
-      const messages: string[] = [];
-      let laterItem: StreamItem | null = null;
-      for (
-        let index = startIndex;
-        index >= 0 && index < items.length;
-        index += config.assistantTurnTraversalStep
-      ) {
-        const currentItem = items[index];
-        if (!currentItem || (laterItem && !continuesResponse(currentItem, laterItem))) {
-          break;
-        }
-        if (currentItem.kind === "assistant_message") {
-          messages.push(currentItem.text);
-        }
-        laterItem = currentItem;
-      }
-      return messages.toReversed().join("\n\n");
-    },
+    collectAssistantResponseItems: (items, startIndex) =>
+      collectResponseItems(items, startIndex, config.assistantTurnTraversalStep),
+    collectAssistantResponseContent: (items, startIndex) =>
+      collectResponseItems(items, startIndex, config.assistantTurnTraversalStep)
+        .flatMap((item) => (item.kind === "assistant_message" ? [item.text] : []))
+        .join("\n\n"),
     isNearBottom: (input) => config.isNearBottom(input),
     getBottomOffset: (metrics) => config.getBottomOffset(metrics),
     getEdgeSlotProps: (component, gapSize) => {
@@ -277,6 +287,14 @@ export function getStreamNeighborItem(params: {
   relation: NeighborRelation;
 }): StreamItem | undefined {
   return params.strategy.getNeighborItem(params.items, params.index, params.relation);
+}
+
+export function collectAssistantResponseItemsForStreamRenderStrategy(params: {
+  strategy: StreamStrategy;
+  items: StreamItem[];
+  startIndex: number;
+}): StreamItem[] {
+  return params.strategy.collectAssistantResponseItems(params.items, params.startIndex);
 }
 
 export function collectAssistantResponseContentForStreamRenderStrategy(params: {

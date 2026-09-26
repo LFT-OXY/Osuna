@@ -1,11 +1,5 @@
-import { useEffect, useLayoutEffect, useState } from "react";
-import { AccessibilityInfo } from "react-native";
-import {
-  makeMutable,
-  type SharedValue,
-  useReducedMotion,
-  useSharedValue,
-} from "react-native-reanimated";
+import { useLayoutEffect } from "react";
+import { makeMutable, type SharedValue, useSharedValue } from "react-native-reanimated";
 import { scheduleOnUI } from "react-native-worklets";
 import { getStatusRingRotation } from "@/components/status-ring/geometry";
 
@@ -48,27 +42,6 @@ function unregisterStatusRing(registered: SharedValue<boolean>): void {
 
   registered.value = false;
   activeRingCount.value -= 1;
-}
-
-// Reanimated 的 useReducedMotion 只在启动时采样一次；这里以它为初值，再订阅系统变化，
-// 运行中打开减少动态效果时旋转环立即停下。
-export function useReduceMotionEnabled(): boolean {
-  const startupValue = useReducedMotion();
-  const [enabled, setEnabled] = useState(startupValue);
-  useEffect(() => {
-    let cancelled = false;
-    const readCurrent = async () => {
-      const value = await AccessibilityInfo.isReduceMotionEnabled();
-      if (!cancelled) setEnabled(value);
-    };
-    void readCurrent();
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setEnabled);
-    return () => {
-      cancelled = true;
-      subscription.remove();
-    };
-  }, []);
-  return enabled;
 }
 
 /** `enabled: false`（减少动态效果）时这个环完全不接入共享时钟。 */
