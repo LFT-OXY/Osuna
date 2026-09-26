@@ -23,10 +23,9 @@ interface SidebarHeaderRowProps {
   nativeID?: string;
   accessibilityLabel?: string;
   /**
-   * "header" (default): a sidebar-height row with its own bottom separator —
-   * the lone header at the top of a sidebar (settings "Back to workspace").
-   * "compact": a Sidebar item row with no separator, for entries that
-   * sit in a header group whose wrapper owns the single divider.
+   * "header" (default): a header-height row — the lone header at the top of a
+   * sidebar (settings "Back to workspace").
+   * "compact": a Sidebar item row, for entries that sit in a header group.
    */
   variant?: SidebarHeaderRowVariant;
   shortcutKeys?: ShortcutKey[][] | null;
@@ -90,8 +89,6 @@ const styles = StyleSheet.create((theme) => ({
     },
     paddingHorizontal: theme.spacing[3],
     justifyContent: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
     userSelect: "none",
   },
   containerCompact: {

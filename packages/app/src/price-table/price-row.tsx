@@ -158,7 +158,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
     paddingVertical: theme.spacing[2],
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.borderCardRow,
   },
   row: {
     flexDirection: "row",

@@ -331,8 +331,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
     paddingVertical: theme.spacing[3],
     paddingHorizontal: theme.spacing[4],
-    borderTopWidth: theme.borderWidth[1],
-    borderTopColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSidebar,
   },
   previewTitle: {

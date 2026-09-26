@@ -256,6 +256,8 @@ const PROSE_FOREGROUND_ALPHA = 0.86;
 const LIGHT_COMPOSER_SHADOW = "rgba(0, 0, 0, 0.4)";
 // Composer 与其底部上下文条的描边：前景色的 9%，半透明，叠在毛玻璃上随背后内容变化（原型 / t3code）。
 const COMPOSER_BORDER_ALPHA = 0.09;
+// 卡片内行与行之间的分隔：边框色的 50%，比卡片外框淡一档（t3 SettingsGroup 的 border-border/50）。
+const CARD_ROW_BORDER_ALPHA = 0.5;
 // diff 行底色与色条沿用 diff 视图一直使用的状态色（底色为其透明版）。
 const DIFF_ADDITION_BACKGROUND_ALPHA = 0.15;
 const DIFF_DELETION_BACKGROUND_ALPHA = 0.1;
@@ -353,6 +355,7 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     surfaceTabHover,
     surfaceTabActive,
     borderInput: overrides.borderInput ?? base.border,
+    borderCardRow: hexColorWithAlpha(base.border, CARD_ROW_BORDER_ALPHA),
     foregroundProse: hexColorWithAlpha(foreground, PROSE_FOREGROUND_ALPHA),
     // 代码块只在亮色下描边；暗色靠底色与画布的明度差分开。
     borderCodeBlock: isDark ? "transparent" : base.border,

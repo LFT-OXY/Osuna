@@ -44,6 +44,7 @@ function PluginRow({
   onAction,
   onOpenLogs,
   supportsLogs,
+  isFirst,
 }: {
   plugin: PluginListItem;
   serverId: string;
@@ -53,8 +54,13 @@ function PluginRow({
   onAction(action: PluginRowAction, plugin: PluginListItem): void;
   onOpenLogs(pluginId: string): void;
   supportsLogs: boolean;
+  isFirst: boolean;
 }) {
   const { t } = useTranslation();
+  const rowStyle = useMemo(
+    () => [styles.pluginRow, !isFirst && settingsStyles.rowBorder],
+    [isFirst],
+  );
   const reload = useCallback(() => onAction("reload", plugin), [onAction, plugin]);
   const toggle = useCallback(
     () => onAction(plugin.enabled ? "disable" : "enable", plugin),
@@ -74,7 +80,7 @@ function PluginRow({
   else if (pendingAction === "disable") toggleLabel = t("settings.plugins.actions.disabling");
   return (
     <View>
-      <View style={styles.pluginRow} accessibilityLabel={`${plugin.id} ${statusLabel}`}>
+      <View style={rowStyle} accessibilityLabel={`${plugin.id} ${statusLabel}`}>
         <View style={settingsStyles.rowContent}>
           <View style={styles.pluginTitle}>
             <Text style={settingsStyles.rowTitle}>{plugin.id}</Text>
@@ -362,7 +368,7 @@ export function HostPluginsPage({ serverId }: { serverId: string }) {
     catalogContent = (
       <View style={settingsStyles.card}>
         {plugins.data?.length ? (
-          plugins.data.map((plugin) => {
+          plugins.data.map((plugin, index) => {
             const clientError = pluginRegistry.getEvaluationError(serverId, plugin.id);
             const pending = mutation.isPending && mutation.variables?.pluginId === plugin.id;
             return (
@@ -376,6 +382,7 @@ export function HostPluginsPage({ serverId }: { serverId: string }) {
                 onAction={action}
                 onOpenLogs={setLogsPluginId}
                 supportsLogs={logsSupported}
+                isFirst={index === 0}
               />
             );
           })
@@ -468,8 +475,6 @@ const styles = StyleSheet.create((theme) => ({
   pluginRow: {
     padding: theme.spacing[4],
     gap: theme.spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   pluginTitle: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[2] },

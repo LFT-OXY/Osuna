@@ -314,6 +314,11 @@ describe("Default palette", () => {
     expect(darkTheme.colors.borderComposer).toBe("rgba(245, 245, 245, 0.09)");
   });
 
+  it("draws card row dividers at half the border alpha", () => {
+    expect(darkTheme.colors.borderCardRow).toBe("rgba(25, 25, 25, 0.5)");
+    expect(lightTheme.colors.borderCardRow).toBe("rgba(228, 228, 231, 0.5)");
+  });
+
   it("tones assistant prose to 86% of the foreground and borders code blocks only in Light", () => {
     expect(darkTheme.colors).toMatchObject({
       foregroundProse: "rgba(245, 245, 245, 0.86)",
@@ -440,6 +445,7 @@ const REDESIGN_ROLES = [
   "surfaceTabHover",
   "surfaceTabActive",
   "borderInput",
+  "borderCardRow",
   "foregroundProse",
   "borderCodeBlock",
   "diffAdditionBackground",

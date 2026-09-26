@@ -19,10 +19,10 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 | A picker                   | `components/ui/combobox.tsx`                                                               | A custom list                                      |
 | A trigger-anchored menu    | `components/ui/dropdown-menu.tsx`; right-click/long-press `components/ui/context-menu.tsx` | An ad hoc popover (`docs/menus.md`)                |
 | A settings section         | `components/settings/headings/settings-section.tsx`                                        | Bare `<Text>` headers                              |
-| A settings card / row      | `styles/settings.ts` `settingsStyles` (`card`, `row`, `rowTitle`, `rowHint`, `rowValue`, `rowIconFrame`) | Local row padding, card radius, or title sizes     |
+| A settings card / row      | `styles/settings.ts` `settingsStyles` (`card`, `row`, `rowBorder`, `rowTitle`, `rowHint`, `rowValue`, `rowIconFrame`); a card row that draws its own divider uses `borderCardRow` | Local row padding, card radius, or title sizes; a row divider in `border` |
 | A value dropdown in a row  | `components/ui/dropdown-trigger.tsx` `<DropdownTrigger>` inside `<DropdownMenu>`           | A `DropdownMenuTrigger` with a hand-drawn outline  |
 | A form field               | `components/ui/form-field.tsx` with the model from `docs/forms.md`                         | `useEffect` choreography                           |
-| A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`; workspace call sites pass `borderless` (`docs/design.md` §5) | A hand-rolled bar; a `borderBottom` on workspace chrome |
+| A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`; workspace and settings call sites pass `borderless` (`docs/design.md` §5) | A hand-rolled bar; a `borderBottom` on workspace or settings chrome |
 
 ## Fallible actions own their three states
 
