@@ -216,6 +216,11 @@ async function expectPendingSubmission(page: Page, userMessage: Locator): Promis
   await expect(page.getByTestId("composer-image-attachment-pill")).toHaveCount(0);
   await expect(userMessage.getByTestId("user-message-timestamp")).toBeAttached();
   await expect(userMessage.getByTestId("user-message-trailing-row")).toHaveCSS("opacity", "0");
+  // The bubble is round on every corner and, with its trailing row, takes at most 80% of the row.
+  const bubble = userMessage.getByTestId("user-message-bubble");
+  await expect(bubble).toHaveCSS("border-top-right-radius", "18px");
+  await expect(bubble).toHaveCSS("border-bottom-left-radius", "18px");
+  await expect(bubble.locator("..")).toHaveCSS("max-width", "80%");
   await expect(userMessage).toHaveAttribute("aria-busy", "true");
   await expect(userMessage.getByRole("button", { name: "Open image attachment" })).toBeVisible();
 }
