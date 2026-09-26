@@ -199,19 +199,19 @@ Osuna 的界面沿用上游 Paseo 的视觉。用户更喜欢 t3code（以及 mu
 
 ## 验收标准
 
-- [ ] 默认亮色和暗色主题的语义色与 research/reference-t3code.md 色值表一致；暗色侧栏比画布更暗。
-- [ ] 全部内置主题和插件主题样例都具备完整的新角色，主题单测与对比度单测通过。
-- [ ] 用户已保存的主题选择、字体和字号偏好在升级后继续生效，不需要迁移。
-- [ ] Text 和 Row 组件存在并有 browser 测试覆盖各档与各状态；毛玻璃只在 Web / Electron 生效，原生端为不透明表面。
-- [ ] 左侧栏、工作区 tab 与 pane 头、对话流、Composer、Explorer sidebar 与 diff、设置页、菜单与对话框全部迁移到新组件和新 token，Electron 亮 / 暗截图与原型观感一致。
-- [ ] 布局结构（项目 → 工作区的左侧栏、多 tab 与分屏、Explorer sidebar）与迁移前一致。
-- [ ] 窄 pane（分屏）下 Composer 的发送和停止按钮不被遮挡或压缩。
-- [ ] 开启"减少动态效果"时，运行中的旋转和扫光动画停止。
-- [ ] testID 和英文 UI 文案逐字未变；CI 上 Playwright e2e 全部通过。
-- [ ] Electron 启动时窗口背景色与新画布色一致，没有旧颜色闪烁。
-- [ ] design.md 等设计文档已按新设计改写。
-- [ ] 每个阶段各自可单独合并、单独回滚。
-- [ ] typecheck 与 lint 通过。
+- [x] 默认亮色和暗色主题的语义色与 research/reference-t3code.md 色值表一致；暗色侧栏比画布更暗。
+- [x] 全部内置主题和插件主题样例都具备完整的新角色，主题单测与对比度单测通过。
+- [x] 用户已保存的主题选择、字体和字号偏好在升级后继续生效，不需要迁移。
+- [x] Text 和 Row 组件存在并有 browser 测试覆盖各档与各状态；毛玻璃只在 Web / Electron 生效，原生端为不透明表面。（原生端只有代码层面的保证 `glass-support.ts`，没有真机证据，用户接受为已知缺口。）
+- [x] 左侧栏、工作区 tab 与 pane 头、对话流、Composer、Explorer sidebar 与 diff、设置页、菜单与对话框全部迁移到新组件和新 token，Electron 亮 / 暗截图与原型观感一致。
+- [x] 布局结构（项目 → 工作区的左侧栏、多 tab 与分屏、Explorer sidebar）与迁移前一致。
+- [x] 窄 pane（分屏）下 Composer 的发送和停止按钮不被遮挡或压缩。
+- [x] 开启"减少动态效果"时，运行中的旋转和扫光动画停止。
+- [x] testID 和英文 UI 文案逐字未变；CI 上 Playwright e2e 全部通过。（原有文案未改，新增的 10 条英文文案用于 PRD 要求的新界面；PR #4 CI run 36259696496。）
+- [x] Electron 启动时窗口背景色与新画布色一致，没有旧颜色闪烁。
+- [x] design.md 等设计文档已按新设计改写。
+- [x] 每个阶段一个独立提交，可按倒序回滚（2026-09-27 用户决定：后续阶段依赖前面的 token 与 Text/Row，只能按倒序回滚；全部阶段在 PR #4 一起合并，用 rebase 保留阶段提交）。
+- [x] typecheck 与 lint 通过。
 
 ## 补充说明
 
