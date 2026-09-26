@@ -3,7 +3,7 @@
   "name": "ui-redesign",
   "title": "UI 重设计（以 t3code 为主参考）",
   "description": "渐进式重设计整套 UI：原型定 token → 改 token → 补 Typography/Row 基础组件 → 逐页迁移",
-  "status": "accept",
+  "status": "implement",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -23,6 +23,6 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "0a53e2643367d6439810a973a854c1a1414cd1f1"
+    "implementation_base_sha": "91ffc3911c9c75607ec1db9f2d24fbccbe7da2c7"
   }
 }
