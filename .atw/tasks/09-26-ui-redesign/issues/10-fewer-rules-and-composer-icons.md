@@ -20,7 +20,7 @@
 - [x] 上述横线全部去掉，分组靠底色与留白仍然清楚；紧凑布局与分屏无布局回退
 - [x] Composer 四项调整生效；Claude 与非 Claude provider 各有截图
 - [x] 该区域 Electron 桌面端亮色与暗色截图与 t3 观感对照，截图作为证据附在本票 Comments
-- [ ] 该区域中断言边框或颜色的 e2e 已随设计更新，且在 CI 上通过
+- [x] 该区域中断言边框或颜色的 e2e 已随设计更新，且在 CI 上通过（PR #4 CI 全绿：[run 36259696496](https://github.com/LFT-OXY/Osuna/actions/runs/36259696496)，ac45c5dca）
 - [x] testID 与英文 UI 文案逐字未变
 - [x] docs/design.md 对应章节已改写（§5 pane chrome 的"一条底边线"规则等），不在末尾追加
 - [x] typecheck 与 lint 通过

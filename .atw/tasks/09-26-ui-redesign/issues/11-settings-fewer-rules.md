@@ -16,7 +16,7 @@
 - [x] 上述横线全部去掉，卡片内行分隔为边框色的 50%；桌面与紧凑布局无布局回退
 - [x] 新颜色在全部内置主题与插件主题样例中都有值，主题单测通过
 - [x] 设置页 Electron 桌面端亮色与暗色截图（通用、外观、Providers、快捷键、主机）与 t3 观感对照，截图作为证据附在本票 Comments
-- [ ] 该区域中断言边框或颜色的 e2e 已随设计更新，且在 CI 上通过
+- [x] 该区域中断言边框或颜色的 e2e 已随设计更新，且在 CI 上通过（PR #4 CI 全绿：[run 36259696496](https://github.com/LFT-OXY/Osuna/actions/runs/36259696496)，ac45c5dca）
 - [x] testID 与英文 UI 文案逐字未变
 - [x] docs/design.md 对应章节已改写（§5 卡片内行分隔、§5 workspace chrome 规则扩展到设置页），不在末尾追加
 - [x] typecheck 与 lint 通过
