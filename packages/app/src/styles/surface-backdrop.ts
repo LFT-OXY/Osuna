@@ -18,7 +18,9 @@ export type SurfaceBackdrop =
   | "surfaceSidebar"
   | "surfaceSidebarHover"
   | "surfaceSidebarActive"
-  | "surfaceSidebarSelected";
+  | "surfaceSidebarSelected"
+  | "surfaceTabHover"
+  | "surfaceTabActive";
 
 export type SidebarSurfaceBackdrop = Extract<
   SurfaceBackdrop,

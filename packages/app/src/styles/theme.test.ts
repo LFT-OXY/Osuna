@@ -290,6 +290,17 @@ describe("Default palette", () => {
     });
   });
 
+  it("uses the designed workspace tab fills", () => {
+    expect(darkTheme.colors).toMatchObject({
+      surfaceTabHover: "#161616",
+      surfaceTabActive: "#1c1c1c",
+    });
+    expect(lightTheme.colors).toMatchObject({
+      surfaceTabHover: "#f1f1f2",
+      surfaceTabActive: "#eaeaea",
+    });
+  });
+
   it("gives Light a composer shadow and Dark a top inner highlight instead", () => {
     expect(lightTheme.colors.shadowComposer).toBe("rgba(0, 0, 0, 0.4)");
     expect(lightTheme.colors.insetHighlight).toBe("transparent");
@@ -409,6 +420,8 @@ const REDESIGN_ROLES = [
   "surfaceSidebarActive",
   "surfaceSidebarSelected",
   "borderSidebarSelected",
+  "surfaceTabHover",
+  "surfaceTabActive",
   "borderInput",
   "diffAdditionBackground",
   "diffDeletionBackground",
@@ -472,6 +485,8 @@ describe("Redesign roles across the catalog", () => {
         colors.surfaceSidebarHover,
         colors.surfaceSidebarActive,
         colors.surfaceSidebarSelected,
+        colors.surfaceTabHover,
+        colors.surfaceTabActive,
       ]) {
         expect(ratio(colors.foreground, surface)).toBeGreaterThanOrEqual(minimum);
       }
@@ -505,6 +520,15 @@ describe("Redesign roles across the catalog", () => {
       ROW_STATE_MINIMUM_CONTRAST,
     );
     expect(ratio(borderSidebarSelected, surfaceSidebarSelected)).toBeGreaterThanOrEqual(
+      ROW_STATE_MINIMUM_CONTRAST,
+    );
+  });
+
+  // 未聚焦 pane 的当前 tab 用 hover 底色，聚焦 pane 的当前 tab 用 active 底色，两者都要与 pane 底色和彼此拉开。
+  it.each(CATALOG)("keeps $name workspace tab states apart from each other", ({ theme }) => {
+    const { surface0, surfaceTabHover, surfaceTabActive } = theme.colors;
+    expect(ratio(surfaceTabHover, surface0)).toBeGreaterThanOrEqual(ROW_STATE_MINIMUM_CONTRAST);
+    expect(ratio(surfaceTabActive, surfaceTabHover)).toBeGreaterThanOrEqual(
       ROW_STATE_MINIMUM_CONTRAST,
     );
   });

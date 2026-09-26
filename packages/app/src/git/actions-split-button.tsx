@@ -1,4 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ICON_SIZE } from "@/styles/theme";
 import { useCallback, useMemo } from "react";
 import { View, Text, Pressable, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -105,28 +106,28 @@ export function GitActionsSplitButton({
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.splitButtonPrimary,
       (Boolean(hovered) || pressed) &&
-        inlineUnistylesStyle({ backgroundColor: theme.colors.surface2 }),
+        inlineUnistylesStyle({ backgroundColor: theme.colors.interactionHighlight }),
       primaryDisabled && styles.splitButtonPrimaryDisabled,
     ],
-    [primaryDisabled, theme.colors.surface2],
+    [primaryDisabled, theme.colors.interactionHighlight],
   );
 
   const caretTriggerStyle = useCallback(
     ({ hovered, pressed, open }: { hovered: boolean; pressed: boolean; open: boolean }) => [
       styles.splitButtonCaret,
       (hovered || pressed || open) &&
-        inlineUnistylesStyle({ backgroundColor: theme.colors.surface2 }),
+        inlineUnistylesStyle({ backgroundColor: theme.colors.interactionHighlight }),
     ],
-    [theme.colors.surface2],
+    [theme.colors.interactionHighlight],
   );
 
   const menuOnlyTriggerStyle = useCallback(
     ({ hovered, pressed, open }: { hovered: boolean; pressed: boolean; open: boolean }) => [
       styles.menuOnlyTrigger,
       (hovered || pressed || open) &&
-        inlineUnistylesStyle({ backgroundColor: theme.colors.surface2 }),
+        inlineUnistylesStyle({ backgroundColor: theme.colors.interactionHighlight }),
     ],
-    [theme.colors.surface2],
+    [theme.colors.interactionHighlight],
   );
 
   const menuOnlyActions = useMemo(
@@ -151,8 +152,8 @@ export function GitActionsSplitButton({
           accessibilityRole="button"
           accessibilityLabel={t("workspace.header.actions.workspaceActions")}
         >
-          <GitBranch size={16} color={theme.colors.foregroundMuted} />
-          <ChevronDown size={12} color={theme.colors.foregroundExtraMuted} />
+          <GitBranch size={ICON_SIZE.md} color={theme.colors.foregroundMuted} />
+          <ChevronDown size={ICON_SIZE.xs} color={theme.colors.foregroundExtraMuted} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" testID="changes-primary-cta-menu">
           {menuOnlyActions.map((action, index) => (
@@ -217,7 +218,7 @@ export function GitActionsSplitButton({
                 accessibilityRole="button"
                 accessibilityLabel={t("workspace.git.actions.moreOptions")}
               >
-                <ChevronDown size={16} color={theme.colors.foregroundExtraMuted} />
+                <ChevronDown size={ICON_SIZE.md} color={theme.colors.foregroundExtraMuted} />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" testID="changes-primary-cta-menu">
                 {gitActions.secondary.map((action, index) => (
@@ -250,7 +251,7 @@ export function GitActionsSplitButton({
             accessibilityRole="button"
             accessibilityLabel={t("workspace.git.actions.moreActions")}
           >
-            <MoreVertical size={16} color={theme.colors.foregroundMuted} />
+            <MoreVertical size={ICON_SIZE.md} color={theme.colors.foregroundMuted} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" width={220} testID="changes-overflow-content">
             {gitActions.menu.map((action) => (
@@ -282,7 +283,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     flexDirection: "row",
     alignItems: "stretch",
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
     overflow: "hidden",
@@ -308,7 +309,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     gap: theme.spacing[1],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
   },
@@ -354,7 +355,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
   },
   overflowMenuButton: {
     marginRight: -theme.spacing[2],

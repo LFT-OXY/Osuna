@@ -29,6 +29,9 @@ const testTheme = {
     surfaceSidebarActive: "#e4e4e4",
     surfaceSidebarSelected: "#eaeaea",
     borderSidebarSelected: "#dadada",
+    // 工作区 tab 的 hover / 当前两档，取默认亮色主题的值。
+    surfaceTabHover: "#f1f1f2",
+    surfaceTabActive: "#eaeaea",
     borderAccent: "#a1a1aa",
     // 浮层（菜单、对话框）的卡片、毛玻璃与遮罩，取默认亮色主题的值。
     surfaceCard: "#ffffff",

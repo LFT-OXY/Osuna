@@ -52,7 +52,7 @@ Accent is the one CTA per surface. A `<Button variant="default">` filled with `a
 
 Destructive is a color, not a click. Restart-daemon and remove-host are `<Button variant="outline">` in the row trailing slot; the destructive fill only appears in the confirmation's footer (Remove host, `RemoveHostSection` in `packages/app/src/screens/settings/host-page.tsx`). Workspace archive opens a confirm dialog before any red appears (`packages/app/src/components/sidebar-workspace-list.tsx`). Red appears after the user has indicated intent.
 
-Surfaces carry the rest of the hierarchy. The canvas, chrome, card, message bubble, sidebar row states, input border, composer shadow, and dark inset highlight are roles in `ThemeRoleOverrides` (`packages/app/src/styles/theme.ts`); diff row fills and bars, and the overlay roles in §6, sit beside them and are always derived. `deriveThemeRoles` fills every role a theme leaves out from that theme's existing colors: Light and Dark set most of them by hand, and every other built-in theme and every plugin theme sets none. Add a new role there once and never tune a variant by hand — plugin authors do not update their themes when the host adds a role. `styles/theme.test.ts` holds every theme plus a plugin sample to the text-contrast and row-state floors.
+Surfaces carry the rest of the hierarchy. The canvas, chrome, card, message bubble, sidebar row states, input border, composer shadow, and dark inset highlight are roles in `ThemeRoleOverrides` (`packages/app/src/styles/theme.ts`); diff row fills and bars, workspace tab fills (§5), and the overlay roles in §6, sit beside them and are always derived. `deriveThemeRoles` fills every role a theme leaves out from that theme's existing colors: Light and Dark set most of them by hand, and every other built-in theme and every plugin theme sets none. Add a new role there once and never tune a variant by hand — plugin authors do not update their themes when the host adds a role. `styles/theme.test.ts` holds every theme plus a plugin sample to the text-contrast and row-state floors.
 
 ---
 
@@ -68,7 +68,7 @@ The button is `<Button>` (`packages/app/src/components/ui/button.tsx`). It has f
 
 `ghost` is structural and non-committal — no border, no fill. Back arrows, header toggles, "Load more" footers (`packages/app/src/screens/sessions-screen.tsx:54-63`), more-affordances. Ghost is used when the affordance is part of the chrome, not a decision. Hovered `outline` and `ghost` buttons take the `interactionHighlight` fill.
 
-Header and toolbar controls use `interactionHighlight` for hovered, pressed, open, and selected
+Header controls are `HEADER_CONTROL_HEIGHT` (26px) tall with `radius.md` corners; pane toolbar icon buttons are 20px (32px on compact) with `radius.sm` (`packages/app/src/components/ui/icon-button-chrome.ts`). Both use `interactionHighlight` for hovered, pressed, open, and selected
 backgrounds. It is a translucent semantic fill so the same control works over the main surface and
 the sidebar. Apply it as `backgroundColor`; setting `opacity` on the control also fades its content.
 
@@ -96,7 +96,9 @@ Rows after the first inside a card carry `settingsStyles.rowBorder` — a single
 
 A list that is itself the page content — sidebar items in `sidebar-workspace-list.tsx`, the workspace list, the agent list (`packages/app/src/components/agent-list.tsx`) — uses spacing and surface, not borders, to separate items. Rows-in-a-card is an interior pattern; lists-as-pages are not.
 
-Pane chrome — the workspace pane header, the file-explorer header, the diff pane header — uses a single bottom border to separate the header from the content (`packages/app/src/components/git-diff-pane.tsx:2328-2331`). One border, no shadow.
+Pane chrome — the workspace header, the workspace tab row, the file-explorer header, the diff pane header — uses a single bottom border to separate the header from the content (`packages/app/src/components/ui/pane-content-toolbar.tsx:200-206`). One border, no shadow. On desktop the workspace header is a breadcrumb: the project in `foregroundMuted`, a `foregroundExtraMuted` `/`, then the workspace `<ScreenTitle>`. Compact keeps the project on its own line under the title, next to the host badge.
+
+Workspace tabs (`packages/app/src/screens/workspace/workspace-desktop-tabs-row.tsx`) are chips on the tab row, `HEADER_CONTROL_HEIGHT` tall with `radius.md` corners and a `caption` label; the inline New tab button takes the same box. The fill marks the state: none at rest, `surfaceTabHover` on hover, `surfaceTabActive` for the active tab of the focused pane. The active tab of an unfocused pane drops to `surfaceTabHover` and a muted label, so one chip in the window reads as live. The close button shows on hover and on the active tab, and always on native and compact, where there is no hover; the label never moves when it appears. When the chips no longer fit, the row scrolls on one line and the New tab button moves into the pane toolbar.
 
 `borderAccent` is reserved for the outline button and for a hovered or focused field. A field at rest is outlined in `borderInput` (`controlRest` in `control-geometry.ts`), which only Light and Dark set apart from `border`. Single-thing borders are wrong; a single bordered element is either a card with one row (use the card) or it does not need a border.
 

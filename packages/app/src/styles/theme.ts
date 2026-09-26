@@ -245,6 +245,11 @@ const SIDEBAR_ROW_ACTIVE_MIX = 0.06;
 const SIDEBAR_ROW_SELECTED_BORDER_MIX = 0.12;
 // 相邻两个侧栏行状态之间的最低对比度，取默认暗色里最轻的一档（黑色侧栏上 4% 白的 hover，约 1.06）。
 const SIDEBAR_ROW_STATE_MINIMUM_CONTRAST = 1.05;
+// 工作区 tab 的派生叠色比例：在 pane 底色（surface0）上叠前景色，亮暗共用一组比例。未聚焦 pane 的
+// 当前 tab 与 hover 同为 hover 一档，聚焦 pane 的当前 tab 为 active 一档。原型是叠纯白 5% / 8%、
+// 纯黑 4% / 6%；叠前景色时这组比例在默认亮 / 暗主题上与原型每通道相差 0–3。
+const TAB_HOVER_MIX = 0.05;
+const TAB_ACTIVE_MIX = 0.075;
 const DARK_INSET_HIGHLIGHT = "rgba(255, 255, 255, 0.04)";
 const LIGHT_COMPOSER_SHADOW = "rgba(0, 0, 0, 0.4)";
 // diff 行底色与色条沿用 diff 视图一直使用的状态色（底色为其透明版）。
@@ -313,6 +318,16 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
   const borderSidebarSelected =
     overrides.borderSidebarSelected ??
     ensureDistinctRowColor(selectedBorderCandidate, [surfaceSidebarSelected], foreground);
+  const surfaceTabHover = ensureDistinctRowColor(
+    mixHexColor(base.surface0, foreground, TAB_HOVER_MIX),
+    [base.surface0],
+    foreground,
+  );
+  const surfaceTabActive = ensureDistinctRowColor(
+    mixHexColor(base.surface0, foreground, TAB_ACTIVE_MIX),
+    [surfaceTabHover],
+    foreground,
+  );
   const diffAdditionBackground = hexColorWithAlpha(
     statusColors.statusSuccess,
     DIFF_ADDITION_BACKGROUND_ALPHA,
@@ -331,6 +346,8 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     surfaceSidebarActive,
     surfaceSidebarSelected,
     borderSidebarSelected,
+    surfaceTabHover,
+    surfaceTabActive,
     borderInput: overrides.borderInput ?? base.border,
     diffAdditionBackground,
     diffDeletionBackground,

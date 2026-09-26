@@ -24,7 +24,7 @@ import { isWeb } from "@/constants/platform";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import { resolveWorkspaceFilePaths, type WorkspaceFileLocation } from "@/workspace/file-open";
 import { planWorkspaceOpenTargets } from "@/workspace/open-in-editor/planner";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { ForgeBrandIcon } from "@/git/forge-icon";
 import { getForgePresentation } from "@/git/forge";
 import { buttonControlHeight, HEADER_CONTROL_HEIGHT } from "@/components/ui/control-geometry";
@@ -53,7 +53,7 @@ const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foregrou
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 function renderForgeOpenTargetIcon(icon: string): ReactElement {
-  return <ForgeBrandIcon iconKind={icon} size={16} uniProps={mutedColorMapping} />;
+  return <ForgeBrandIcon iconKind={icon} size={ICON_SIZE.md} uniProps={mutedColorMapping} />;
 }
 
 interface OpenTargetMenuItemProps {
@@ -65,7 +65,10 @@ interface OpenTargetMenuItemProps {
 function OpenTargetMenuItem({ target, isPreferred, onSelect }: OpenTargetMenuItemProps) {
   const handleSelect = useCallback(() => onSelect(target), [onSelect, target]);
   const trailing = useMemo(
-    () => (isPreferred ? <ThemedCheckIcon size={16} uniProps={mutedColorMapping} /> : undefined),
+    () =>
+      isPreferred ? (
+        <ThemedCheckIcon size={ICON_SIZE.md} uniProps={mutedColorMapping} />
+      ) : undefined,
     [isPreferred],
   );
   return (
@@ -143,7 +146,11 @@ export function WorkspaceOpenInEditorButton({
           id: target.id,
           label: target.label,
           icon: (
-            <ThemedEditorTargetIcon icon={target.icon} size={16} uniProps={mutedColorMapping} />
+            <ThemedEditorTargetIcon
+              icon={target.icon}
+              size={ICON_SIZE.md}
+              uniProps={mutedColorMapping}
+            />
           ),
           onOpen: () => openDesktopTarget(target.openInput),
         };
@@ -260,7 +267,7 @@ export function WorkspaceOpenInEditorButton({
               accessibilityRole="button"
               accessibilityLabel={t("workspace.git.openInEditor.chooseEditor")}
             >
-              <ThemedChevronDown size={16} uniProps={extraMutedIconColorMapping} />
+              <ThemedChevronDown size={ICON_SIZE.md} uniProps={extraMutedIconColorMapping} />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
@@ -298,7 +305,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     flexDirection: "row",
     alignItems: "stretch",
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
     overflow: "hidden",
@@ -321,7 +328,7 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   splitButtonPrimaryHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   splitButtonPrimaryDisabled: {
     opacity: 0.6,
@@ -353,6 +360,6 @@ const styles = StyleSheet.create((theme) => ({
     borderLeftColor: theme.colors.borderAccent,
   },
   splitButtonCaretHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
 }));

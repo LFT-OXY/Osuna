@@ -32,7 +32,7 @@ import { composerPillStyles } from "@/composer/pill-styles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { ToastApiProvider, useToast } from "@/contexts/toast-context";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { createPluginClientStateSource } from "../client-state/source";
 import { Icon } from "../icons";
 import { PluginRuntimeBoundary } from "../runtime-boundary";
@@ -62,7 +62,7 @@ function headerButtonStyle(compact: boolean, state: IconButtonChromeState, disab
   return [
     styles.headerButton,
     styles.button,
-    (state.hovered || state.pressed || state.open) && styles.active,
+    (state.hovered || state.pressed || state.open) && styles.headerActive,
     disabled && styles.disabled,
   ];
 }
@@ -283,7 +283,7 @@ function ButtonControl({ view }: { view: ButtonView }) {
     <>
       {entry.pending ? (
         <View style={styles.icon}>
-          <LoadingSpinner size={14} color={props.theme.colors.foregroundMuted} />
+          <LoadingSpinner size={ICON_SIZE.sm} color={props.theme.colors.foregroundMuted} />
         </View>
       ) : (
         <ButtonIcon view={view} icon={button.icon} />
@@ -295,7 +295,7 @@ function ButtonControl({ view }: { view: ButtonView }) {
       ) : null}
       {chevron ? (
         <View testID="plugin-button-chevron">
-          <ChevronDown size={12} color={props.theme.colors.foregroundMuted} />
+          <ChevronDown size={ICON_SIZE.xs} color={props.theme.colors.foregroundMuted} />
         </View>
       ) : null}
     </>
@@ -371,7 +371,7 @@ function BrokenButton({
         disabled
         style={headerButtonStyle(compact, {}, true)}
       >
-        <ThemedErrorIcon size={16} uniProps={errorIconMapping} />
+        <ThemedErrorIcon size={ICON_SIZE.md} uniProps={errorIconMapping} />
       </TooltipTrigger>
       <TooltipContent>
         <Text style={styles.tooltipLabel}>{error}</Text>
@@ -615,7 +615,7 @@ export function PluginHeaderButtons({
             accessibilityLabel={t("workspace.git.actions.moreActions")}
             style={overflowStyle}
           >
-            <ThemedMoreIcon size={16} uniProps={mutedIconMapping} />
+            <ThemedMoreIcon size={ICON_SIZE.md} uniProps={mutedIconMapping} />
           </MenuTrigger>
           <ThemedOverflowPages
             entries={overflow}
@@ -643,12 +643,14 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     gap: theme.spacing[1],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
   },
   button: { flexShrink: 1, minWidth: 0, maxWidth: 160 },
+  // Composer 里的插件按钮沿用 surface2；头部的插件按钮与其他头部控件一样用 interactionHighlight。
   active: { backgroundColor: theme.colors.surface2 },
+  headerActive: { backgroundColor: theme.colors.interactionHighlight },
   disabled: { opacity: theme.opacity[50] },
   tooltipLabel: { fontSize: theme.fontSize.sm, color: theme.colors.foreground },
   composerLabel: {

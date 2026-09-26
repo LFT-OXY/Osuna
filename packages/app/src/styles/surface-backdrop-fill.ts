@@ -11,6 +11,8 @@ const styles = StyleSheet.create((theme) => ({
   surfaceSidebarHover: { backgroundColor: theme.colors.surfaceSidebarHover },
   surfaceSidebarActive: { backgroundColor: theme.colors.surfaceSidebarActive },
   surfaceSidebarSelected: { backgroundColor: theme.colors.surfaceSidebarSelected },
+  surfaceTabHover: { backgroundColor: theme.colors.surfaceTabHover },
+  surfaceTabActive: { backgroundColor: theme.colors.surfaceTabActive },
 }));
 
 export function getSurfaceBackdropFillStyle(backdrop: SurfaceBackdrop) {

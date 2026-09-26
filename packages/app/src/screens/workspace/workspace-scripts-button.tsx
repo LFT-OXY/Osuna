@@ -34,7 +34,7 @@ import {
   type WorkspaceScriptLinkKind,
   type WorkspaceScriptLinkTarget,
 } from "@/utils/workspace-script-links";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { useWorkspaceServiceRoutePreferencesStore } from "@/workspace-service-routes/store";
 import { buttonControlHeight, HEADER_CONTROL_HEIGHT } from "@/components/ui/control-geometry";
 import { extraMutedIconColorMapping } from "@/components/ui/icon-color";
@@ -62,7 +62,7 @@ const ThemedCopy = withUnistyles(Copy);
 const ThemedRotateCw = withUnistyles(RotateCw);
 const ThemedSquare = withUnistyles(Square);
 
-const GHOST_TRIGGER_ICON_SIZE = 16;
+const GHOST_TRIGGER_ICON_SIZE = ICON_SIZE.md;
 
 const foregroundColorMapping = (theme: Theme) => ({
   color: theme.colors.foreground,
@@ -219,7 +219,7 @@ function ServiceRouteTriggerContent({
     <>
       <View style={styles.routeSelectorButton}>
         <ThemedChevronDown
-          size={14}
+          size={ICON_SIZE.sm}
           uniProps={hovered ? foregroundColorMapping : mutedColorMapping}
         />
       </View>
@@ -497,7 +497,7 @@ function ScriptRow({
       })}
     >
       <View style={styles.scriptHeader}>
-        <ScriptIcon size={14} uniProps={iconColorMapping} style={styles.scriptIcon} />
+        <ScriptIcon size={ICON_SIZE.sm} uniProps={iconColorMapping} style={styles.scriptIcon} />
         <Text style={scriptNameStyle} numberOfLines={1}>
           {script.scriptName}
         </Text>
@@ -672,7 +672,7 @@ export function WorkspaceScriptsButton({
 
   const hasAnyRunning = scripts.some((s) => s.lifecycle === "running");
   const triggerPlayMapping = hasAnyRunning ? blueColorMapping : mutedColorMapping;
-  const triggerIconSize = presentation === "ghost" ? GHOST_TRIGGER_ICON_SIZE : 14;
+  const triggerIconSize = presentation === "ghost" ? GHOST_TRIGGER_ICON_SIZE : ICON_SIZE.sm;
   const triggerPlayProps =
     presentation === "ghost" ? { ...playFillTransparent, ...ghostPlayStroke } : playFillTransparent;
 
@@ -696,7 +696,7 @@ export function WorkspaceScriptsButton({
                 <Text style={styles.splitButtonText}>{t("workspace.scripts.title")}</Text>
               )}
               {presentation === "split" ? (
-                <ThemedChevronDown size={16} uniProps={extraMutedIconColorMapping} />
+                <ThemedChevronDown size={ICON_SIZE.md} uniProps={extraMutedIconColorMapping} />
               ) : null}
             </View>
           </DropdownMenuTrigger>
@@ -745,7 +745,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     flexDirection: "row",
     alignItems: "stretch",
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
     overflow: "hidden",
@@ -758,7 +758,7 @@ const styles = StyleSheet.create((theme) => ({
     width: theme.spacing[8],
     height: theme.spacing[8],
     padding: 0,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -773,7 +773,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   splitButtonPrimaryHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   splitButtonText: {
     fontSize: theme.fontSize.base,
