@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, type LayoutChangeEvent, type PressableStateCallbackType } from "react-native";
+import { View, type LayoutChangeEvent, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { DiffStat } from "@/components/diff-stat";
 import {
   TreeChevron,
-  treeRowPaddingLeft,
+  treeRowIndent,
   workspaceTreeRowStyles,
   WORKSPACE_TREE_ICON_LABEL_GAP,
   WORKSPACE_TREE_ICON_SIZE,
@@ -14,6 +14,8 @@ import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { FileActionsContextMenuContent } from "@/components/file-actions-menu";
 import { isWeb } from "@/constants/platform";
+import { getRowSurfaceStyle } from "@/components/ui/row";
+import { Text as UiText } from "@/components/ui/text";
 
 interface DiffFolderRowProps {
   /** full uncompressed directory path — the collapse identity */
@@ -43,7 +45,7 @@ function folderRowPressableStyle(
 ) {
   return [
     workspaceTreeRowStyles.row,
-    (Boolean(hovered) || pressed || isSelected) && workspaceTreeRowStyles.active,
+    getRowSurfaceStyle({ hovered: Boolean(hovered), pressed, selected: isSelected }),
   ];
 }
 
@@ -124,7 +126,7 @@ export function DiffFolderRow({
     () => [
       styles.left,
       inlineUnistylesStyle({
-        paddingLeft: treeRowPaddingLeft(depth),
+        paddingLeft: treeRowIndent(depth),
       }),
     ],
     [depth],
@@ -154,7 +156,8 @@ export function DiffFolderRow({
             <View style={styles.chevronSlot}>
               <TreeChevron expanded={!collapsed} />
             </View>
-            <Text
+            <UiText
+              variant="label"
               style={[
                 styles.folderName,
                 workspaceTreeRowStyles.name,
@@ -164,7 +167,7 @@ export function DiffFolderRow({
               testID={testID ? `${testID}-name` : undefined}
             >
               {displayName}
-            </Text>
+            </UiText>
           </View>
           <View style={styles.right}>
             <DiffStat
@@ -214,9 +217,6 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[1],
   },
   folderName: {
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
-    color: theme.colors.foreground,
     flexShrink: 1,
     minWidth: 0,
     userSelect: "none",

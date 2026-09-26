@@ -956,6 +956,8 @@ export const ru: TranslationResources = {
           title: "Перейти к файлу",
         },
         binaryFile: "Бинарный файл",
+        unmodifiedLine: "Без изменений, строк: {{count}}",
+        unmodifiedLines: "Без изменений, строк: {{count}}",
         tooLarge: "Дифф слишком велик для отображения",
         previewTooLargeTitle: "Этот дифф слишком велик для предварительного просмотра",
         previewTooLargeDescription: "Сузьте диапазон сравнения, чтобы просмотреть дифф здесь",

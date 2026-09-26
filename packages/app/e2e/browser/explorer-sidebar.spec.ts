@@ -45,4 +45,34 @@ test.describe("Explorer sidebar", () => {
       await workspace.cleanup();
     }
   });
+
+  test("draws its tabs as workspace tab chips", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "explorer-sidebar-tab-chips-" });
+
+    try {
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForWorkspaceTabsVisible(page);
+      const explorer = await ensureExplorerSidebar(page);
+      await explorer.getByTestId("explorer-sidebar-tab-changes_tree").click();
+      const activeExplorerTab = explorer.getByTestId("explorer-sidebar-tab-changes_tree");
+      const idleExplorerTab = explorer.getByTestId("explorer-sidebar-tab-files");
+      const activeMainTab = page
+        .getByTestId("workspace-pane-main")
+        .locator('[data-testid^="workspace-tab-"][aria-selected="true"]')
+        .filter({ visible: true })
+        .first();
+      await page.mouse.move(0, 0);
+
+      await expect(activeExplorerTab).toHaveCSS("height", "26px");
+      await expect(activeExplorerTab).toHaveCSS("border-radius", "8px");
+      // Explorer 不持有焦点，当前 tab 与聚焦 pane 的当前 tab 同一档底色。
+      const mainFill = await activeMainTab.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      );
+      await expect(activeExplorerTab).toHaveCSS("background-color", mainFill);
+      await expect(idleExplorerTab).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    } finally {
+      await workspace.cleanup();
+    }
+  });
 });

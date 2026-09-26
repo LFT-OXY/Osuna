@@ -1,6 +1,10 @@
 import { memo, useCallback } from "react";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { ICON_SIZE } from "@/styles/theme";
+import { getRowSurfaceStyle } from "@/components/ui/row";
+import { Text as UiText } from "@/components/ui/text";
+import { WORKSPACE_TREE_ROW_HEIGHT, WORKSPACE_TREE_ROW_INSET } from "@/components/tree-primitives";
 import { ThemedChevron, chevronColorMapping } from "@/git/themed-chevron";
 import type { ClassifiedCheckoutCommit } from "@/git/use-commits-query";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
@@ -19,7 +23,7 @@ function commitRowPressableStyle({
   hovered,
   pressed,
 }: PressableStateCallbackType & { hovered?: boolean }) {
-  return [styles.row, (Boolean(hovered) || pressed) && styles.rowActive];
+  return [styles.row, getRowSurfaceStyle({ hovered: Boolean(hovered), pressed })];
 }
 
 export const CommitRow = memo(function CommitRow({
@@ -45,29 +49,29 @@ export const CommitRow = memo(function CommitRow({
         <Text dataSet={CODE_SURFACE_DATASET} style={styles.shortSha} numberOfLines={1}>
           {commit.shortSha}
         </Text>
-        <Text style={styles.subject} numberOfLines={1}>
+        <UiText variant="label" style={styles.subject} numberOfLines={1}>
           {commit.subject}
-        </Text>
+        </UiText>
       </View>
       <Text style={styles.timestamp}>{formatTimeAgo(new Date(commit.authorDate), now)}</Text>
       <View style={styles.caret}>
-        <ThemedChevron size={14} uniProps={chevronColorMapping} />
+        <ThemedChevron size={ICON_SIZE.sm} uniProps={chevronColorMapping} />
       </View>
     </Pressable>
   );
 });
 
 const styles = StyleSheet.create((theme) => ({
+  // 与上方改动文件树的行同高、同样两侧收进，收进量从内边距扣回，提交图节点不挪位。
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingLeft: theme.spacing[2],
-    paddingRight: theme.spacing[2],
+    minHeight: WORKSPACE_TREE_ROW_HEIGHT,
+    marginHorizontal: WORKSPACE_TREE_ROW_INSET,
+    paddingLeft: theme.spacing[2] - WORKSPACE_TREE_ROW_INSET,
+    paddingRight: theme.spacing[2] - WORKSPACE_TREE_ROW_INSET,
     paddingVertical: theme.spacing[1],
-  },
-  rowActive: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
   },
   commitDetails: {
     flex: 1,
@@ -86,8 +90,6 @@ const styles = StyleSheet.create((theme) => ({
   subject: {
     flex: 1,
     minWidth: 0,
-    fontSize: theme.fontSize.base,
-    color: theme.colors.foreground,
   },
   timestamp: {
     flexShrink: 0,

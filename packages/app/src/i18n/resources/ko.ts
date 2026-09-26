@@ -946,6 +946,8 @@ export const ko: TranslationResources = {
           title: "파일로 이동",
         },
         binaryFile: "바이너리 파일",
+        unmodifiedLine: "변경되지 않은 {{count}}줄",
+        unmodifiedLines: "변경되지 않은 {{count}}줄",
         tooLarge: "표시하기에 diff가 너무 큽니다",
         previewTooLargeTitle: "Diff가 너무 커서 미리 볼 수 없습니다",
         previewTooLargeDescription: "여기에서 미리 보려면 비교 범위를 좁히세요.",

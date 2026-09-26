@@ -31,13 +31,15 @@ import { ChevronDown, Eye, EyeOff, FilePlus, FolderPlus, RotateCw } from "lucide
 import { MaterialFileIcon } from "@/components/material-file-icon";
 import {
   TreeChevron,
-  treeRowPaddingLeft,
+  treeRowIndent,
   workspaceTreeRowStyles,
   WORKSPACE_TREE_ICON_LABEL_GAP,
   WORKSPACE_TREE_ICON_SIZE,
   WORKSPACE_TREE_LOADING_ICON_SIZE,
 } from "@/components/tree-primitives";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { getRowSurfaceStyle } from "@/components/ui/row";
+import { Text as UiText } from "@/components/ui/text";
 import {
   PaneContentToolbar,
   paneContentToolbarIconSize,
@@ -195,7 +197,7 @@ function EntryNameInputRow({
   );
 
   return (
-    <View style={[workspaceTreeRowStyles.row, { paddingLeft: treeRowPaddingLeft(depth) }]}>
+    <View style={[workspaceTreeRowStyles.row, { paddingLeft: treeRowIndent(depth) }]}>
       <View style={styles.entryInfo}>
         <View style={styles.entryIcon}>
           {kind === "directory" ? (
@@ -281,8 +283,8 @@ function TreeRowItem({
   const pressableStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       workspaceTreeRowStyles.row,
-      { paddingLeft: treeRowPaddingLeft(depth) },
-      (Boolean(hovered) || pressed || isSelected) && workspaceTreeRowStyles.active,
+      { paddingLeft: treeRowIndent(depth) },
+      getRowSurfaceStyle({ hovered: Boolean(hovered), pressed, selected: isSelected }),
     ],
     [depth, isSelected],
   );
@@ -360,7 +362,8 @@ function TreeRowItem({
               <MaterialFileIcon fileName={entry.name} size={WORKSPACE_TREE_ICON_SIZE} />
             )}
           </View>
-          <Text
+          <UiText
+            variant="label"
             style={[
               styles.entryName,
               workspaceTreeRowStyles.name,
@@ -370,7 +373,7 @@ function TreeRowItem({
             testID={testID ? `${testID}-name` : undefined}
           >
             {entry.name}
-          </Text>
+          </UiText>
         </View>
       </ContextMenuTrigger>
       <FileActionsContextMenuContent
@@ -1777,14 +1780,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   entryName: {
     flex: 1,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
     userSelect: "none",
   },
   draftInput: {
     flex: 1,
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
+    fontSize: theme.typeScale.label.fontSize,
     paddingVertical: 0,
     paddingHorizontal: 0,
   },

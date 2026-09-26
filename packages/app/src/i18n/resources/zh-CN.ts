@@ -931,6 +931,8 @@ export const zhCN: TranslationResources = {
           title: "跳转到文件",
         },
         binaryFile: "二进制文件",
+        unmodifiedLine: "{{count}} 行未改动",
+        unmodifiedLines: "{{count}} 行未改动",
         tooLarge: "Diff 过大，无法显示",
         previewTooLargeTitle: "此 diff 过大，无法预览",
         previewTooLargeDescription: "缩小比较范围即可在此预览",

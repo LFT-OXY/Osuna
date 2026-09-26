@@ -14,6 +14,7 @@ const palette: DiffPalette = {
   border: "#222",
   foreground: "#fff",
   foregroundMuted: "#aaa",
+  foregroundExtraMuted: "extra-muted",
   addition: "green",
   deletion: "red",
   additionBackground: "#010",
@@ -72,7 +73,11 @@ function modelInput(
     typography: { family: "monospace", size: 12, lineHeight: 18 },
     measureText,
     palette,
-    labels: { binary: "Binary", tooLarge: "Too large" },
+    labels: {
+      binary: "Binary",
+      tooLarge: "Too large",
+      unmodifiedLines: (count) => `${count} unmodified lines`,
+    },
     ...overrides,
   };
 }
@@ -173,12 +178,48 @@ describe("diff document workspace cache", () => {
     const first = cache.buildModel(modelInput(files, measureText));
     const second = cache.buildModel(
       modelInput(files, measureText, {
-        labels: { binary: "Binary blob", tooLarge: "Too large" },
+        labels: {
+          binary: "Binary blob",
+          tooLarge: "Too large",
+          unmodifiedLines: (count) => `${count} unmodified lines`,
+        },
       }),
     );
 
     expect(first.rows[0]).toMatchObject({ kind: "status", label: "Binary" });
     expect(second.rows[0]).toMatchObject({ kind: "status", label: "Binary blob" });
+  });
+
+  it("invalidates hunk separators when their translated label changes", () => {
+    const cache = createDiffDocumentWorkspaceCache();
+    const { measureText } = countingMeasurer();
+    const source = diffFile();
+    const files: ParsedDiffFile[] = [
+      {
+        ...source,
+        hunks: [
+          {
+            ...source.hunks[0]!,
+            oldStart: 5,
+            newStart: 6,
+            lines: [{ type: "header", content: "@@ -5,0 +6 @@" }, ...source.hunks[0]!.lines],
+          },
+        ],
+      },
+    ];
+    const first = cache.buildModel(modelInput(files, measureText));
+    const second = cache.buildModel(
+      modelInput(files, measureText, {
+        labels: {
+          binary: "Binary",
+          tooLarge: "Too large",
+          unmodifiedLines: (count) => `${count} lignes inchangées`,
+        },
+      }),
+    );
+
+    expect(first.rows[0]).toMatchObject({ kind: "separator", label: "5 unmodified lines" });
+    expect(second.rows[0]).toMatchObject({ kind: "separator", label: "5 lignes inchangées" });
   });
 
   it("materializes successive unwrapped windows without remeasuring retained files", () => {

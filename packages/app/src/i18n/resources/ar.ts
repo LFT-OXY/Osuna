@@ -939,6 +939,8 @@ export const ar: TranslationResources = {
           title: "الانتقال إلى ملف",
         },
         binaryFile: "ملف ثنائي",
+        unmodifiedLine: "أسطر بلا تغيير: {{count}}",
+        unmodifiedLines: "أسطر بلا تغيير: {{count}}",
         tooLarge: "الفرق كبير جدًا بحيث لا يمكن عرضه",
         previewTooLargeTitle: "هذا الفرق كبير جدًا بحيث لا يمكن معاينته",
         previewTooLargeDescription: "ضيّق نطاق المقارنة لمعاينتها هنا",

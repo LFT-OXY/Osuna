@@ -962,6 +962,8 @@ export const ptBR: TranslationResources = {
           title: "Ir para o arquivo",
         },
         binaryFile: "Arquivo binário",
+        unmodifiedLine: "{{count}} linha sem alterações",
+        unmodifiedLines: "{{count}} linhas sem alterações",
         tooLarge: "Diff grande demais para exibir",
         previewTooLargeTitle: "Este diff é grande demais para visualizar",
         previewTooLargeDescription: "Reduza a comparação para visualizá-la aqui",
