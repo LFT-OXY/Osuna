@@ -30,6 +30,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { FloatingSurface } from "@/components/ui/floating";
 import { isWeb } from "@/constants/platform";
 import { getOverlayRoot, OVERLAY_Z } from "@/lib/overlay-root";
+import { popoverSurfaceStyle } from "@/styles/floating-surface";
 
 type Side = "top" | "bottom" | "left" | "right";
 type Align = "start" | "center" | "end";
@@ -570,14 +571,12 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
     zIndex: OVERLAY_Z.tooltip,
   },
+  // 与菜单同一套浮层外框，但不透明：提示只有一两行字，底下内容透上来反而难读。
   content: {
+    ...popoverSurfaceStyle(theme, { glass: false }),
+    borderRadius: theme.radius.md,
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.xl,
-    backgroundColor: theme.colors.popover,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderAccent,
-    ...theme.shadow.md,
     zIndex: 1000,
   },
 }));

@@ -71,6 +71,9 @@ import {
   useWebOverlayRegistration,
 } from "@/lib/overlay-root";
 import { buildDesktopFrameStyle } from "./combobox-frame-style";
+import { MENU_ITEM_HEIGHT } from "./menu/menu-geometry";
+import { popoverSurfaceStyle } from "@/styles/floating-surface";
+import { GLASS_SURFACES_ENABLED } from "@/styles/glass-support";
 
 export { buildDesktopFrameStyle } from "./combobox-frame-style";
 
@@ -167,12 +170,12 @@ function ComboboxSheetBackground({ style }: BottomSheetBackgroundProps) {
     () => [
       style,
       {
-        backgroundColor: theme.colors.surface0,
-        borderTopLeftRadius: theme.borderRadius["2xl"],
-        borderTopRightRadius: theme.borderRadius["2xl"],
+        backgroundColor: theme.colors.surfaceCard,
+        borderTopLeftRadius: theme.radius["2xl"],
+        borderTopRightRadius: theme.radius["2xl"],
       },
     ],
-    [style, theme.colors.surface0, theme.borderRadius],
+    [style, theme.colors.surfaceCard, theme.radius],
   );
 
   return <Animated.View pointerEvents="none" style={combinedStyle} />;
@@ -236,8 +239,6 @@ export interface ComboboxItemProps {
   active?: boolean;
   disabled?: boolean;
   accessibilityLabel?: string;
-  /** When true, bumps hover/pressed colors up one surface level (for items on elevated backgrounds). */
-  elevated?: boolean;
   onPress: () => void;
   testID?: string;
 }
@@ -252,7 +253,6 @@ export function ComboboxItem({
   active,
   disabled,
   accessibilityLabel,
-  elevated,
   onPress,
   testID,
 }: ComboboxItemProps): ReactElement {
@@ -278,12 +278,10 @@ export function ComboboxItem({
   const itemPressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.comboboxItem,
-      hovered && (elevated ? styles.comboboxItemHoveredElevated : styles.comboboxItemHovered),
-      pressed && (elevated ? styles.comboboxItemPressedElevated : styles.comboboxItemPressed),
-      active && styles.comboboxItemActive,
+      (hovered || pressed || active) && styles.comboboxItemHighlighted,
       disabled && styles.comboboxItemDisabled,
     ],
-    [elevated, active, disabled],
+    [active, disabled],
   );
 
   const itemContentStyle = useMemo(
@@ -1662,7 +1660,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     paddingHorizontal: theme.spacing[3],
     gap: theme.spacing[2],
-    backgroundColor: theme.colors.surface1,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     ...(IS_WEB ? {} : { marginHorizontal: theme.spacing[1] }),
@@ -1673,35 +1670,23 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
   },
+  // On web the row is a menu row: a chip inset 4 from the popover edge (4 + 8 padding keeps the
+  // label on the 12pt rail the inline header uses), 30 tall on desktop like `MenuItem`.
   comboboxItem: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 36,
+    minHeight: { xs: 36, md: MENU_ITEM_HEIGHT.md },
     gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[2],
-    borderRadius: 0,
+    paddingVertical: { xs: theme.spacing[2], md: theme.spacing[1] },
+    marginHorizontal: theme.spacing[1],
+    borderRadius: theme.radius.sm,
     ...(IS_WEB
-      ? {}
-      : {
-          marginHorizontal: theme.spacing[1],
-          marginBottom: theme.spacing[1],
-        }),
+      ? { paddingHorizontal: theme.spacing[2] }
+      : { paddingHorizontal: theme.spacing[3], marginBottom: theme.spacing[1] }),
   },
-  comboboxItemHovered: {
-    backgroundColor: theme.colors.surface1,
-  },
-  comboboxItemHoveredElevated: {
-    backgroundColor: theme.colors.surface2,
-  },
-  comboboxItemPressed: {
-    backgroundColor: theme.colors.surface1,
-  },
-  comboboxItemPressedElevated: {
-    backgroundColor: theme.colors.surface2,
-  },
-  comboboxItemActive: {
-    backgroundColor: theme.colors.surface1,
+  // Translucent, so the same fill works on the glass popover and on an opaque sheet.
+  comboboxItemHighlighted: {
+    backgroundColor: theme.colors.interactionHighlight,
   },
   comboboxItemDisabled: {
     opacity: 0.55,
@@ -1780,11 +1765,7 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   desktopContainer: {
-    backgroundColor: theme.colors.surface0,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow.md,
+    ...popoverSurfaceStyle(theme, { glass: GLASS_SURFACES_ENABLED }),
     maxHeight: 400,
     overflow: "hidden",
   },

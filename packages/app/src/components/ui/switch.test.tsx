@@ -10,6 +10,8 @@ const { theme } = vi.hoisted(() => ({
     spacing: { 0: 0, 3: 12, 4: 16, 6: 24 },
     fontSize: { xs: 12, sm: 14, base: 16 },
     borderRadius: { md: 6, lg: 8, xl: 12 },
+    radius: { sm: 6, md: 8, lg: 10, xl: 14, "2xl": 18, "3xl": 22, full: 9999 },
+    controlHeight: { sm: 24, md: 28, lg: 32 },
     borderWidth: { 1: 1 },
     colors: {
       surface3: "#333",

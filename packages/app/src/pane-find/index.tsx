@@ -339,9 +339,10 @@ const styles = StyleSheet.create((theme) => {
       backgroundColor: theme.colors.surface2,
       borderRadius: theme.borderRadius.md,
     },
-    controlRest: { ...geometry.controlRest },
-    controlHover: { ...geometry.controlHover },
-    controlActive: { ...geometry.controlActive },
+    // 带颜色的条目直接引用 theme 才会被记为主题依赖（.atw/spec/app/frontend/styling.md）。
+    controlRest: { ...createControlGeometry(theme).controlRest },
+    controlHover: { ...createControlGeometry(theme).controlHover },
+    controlActive: { ...createControlGeometry(theme).controlActive },
     input: {
       flex: 1,
       minWidth: 0,

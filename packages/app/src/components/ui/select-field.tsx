@@ -357,14 +357,15 @@ const styles = StyleSheet.create((theme) => {
     triggerMd: {
       ...geometry.fieldControlMd,
     },
+    // 带颜色的条目直接引用 theme 才会被记为主题依赖（.atw/spec/app/frontend/styling.md）。
     controlRest: {
-      ...geometry.controlRest,
+      ...createControlGeometry(theme).controlRest,
     },
     controlHover: {
-      ...geometry.controlHover,
+      ...createControlGeometry(theme).controlHover,
     },
     controlActive: {
-      ...geometry.controlActive,
+      ...createControlGeometry(theme).controlActive,
     },
     controlDisabled: {
       ...geometry.controlDisabled,

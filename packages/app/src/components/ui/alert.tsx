@@ -1,7 +1,8 @@
-import { AlertTriangle, CheckCircle2, Info, XCircle, type LucideIcon } from "lucide-react-native";
+import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react-native";
 import React, { type ReactNode, useMemo } from "react";
 import { Text, View } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 export type AlertVariant = "default" | "info" | "success" | "warning" | "error";
 
@@ -14,11 +15,18 @@ export interface AlertProps {
   testID?: string;
 }
 
-const VARIANT_ICON: Record<Exclude<AlertVariant, "default">, LucideIcon> = {
-  info: Info,
-  success: CheckCircle2,
-  warning: AlertTriangle,
-  error: XCircle,
+const ICON_COLOR_MAPPINGS: Record<Exclude<AlertVariant, "default">, (theme: Theme) => object> = {
+  info: (theme) => ({ color: theme.colors.palette.blue[300] }),
+  success: (theme) => ({ color: theme.colors.statusSuccess }),
+  warning: (theme) => ({ color: theme.colors.palette.amber[500] }),
+  error: (theme) => ({ color: theme.colors.destructive }),
+};
+
+const ThemedIcons = {
+  info: withUnistyles(Info),
+  success: withUnistyles(CheckCircle2),
+  warning: withUnistyles(AlertTriangle),
+  error: withUnistyles(XCircle),
 };
 
 export function Alert({
@@ -29,26 +37,18 @@ export function Alert({
   children,
   testID,
 }: AlertProps) {
-  const { theme } = useUnistyles();
-  const accentColor = resolveAccentColor(variant, theme);
-  const borderColor = variant === "success" ? theme.colors.border : accentColor;
-
   const containerStyle = useMemo(
-    () => [styles.container, borderColor ? { borderColor } : null],
-    [borderColor],
+    () => [styles.container, getVariantStyles(variant).container],
+    [variant],
   );
-
-  const titleStyle = useMemo(
-    () => [styles.title, accentColor ? { color: accentColor } : null],
-    [accentColor],
-  );
+  const titleStyle = useMemo(() => [styles.title, getVariantStyles(variant).title], [variant]);
 
   const resolvedIcon = useMemo(() => {
     if (icon !== undefined) return icon;
     if (variant === "default") return null;
-    const Icon = VARIANT_ICON[variant];
-    return <Icon size={theme.iconSize.sm} color={accentColor ?? theme.colors.foreground} />;
-  }, [icon, variant, theme, accentColor]);
+    const Icon = ThemedIcons[variant];
+    return <Icon size={ICON_SIZE.sm} uniProps={ICON_COLOR_MAPPINGS[variant]} />;
+  }, [icon, variant]);
 
   const hasDescription = description != null && description !== "";
 
@@ -69,17 +69,6 @@ export function Alert({
   );
 }
 
-function resolveAccentColor(
-  variant: AlertVariant,
-  theme: ReturnType<typeof useUnistyles>["theme"],
-): string | null {
-  if (variant === "info") return theme.colors.palette.blue[300];
-  if (variant === "success") return theme.colors.statusSuccess;
-  if (variant === "warning") return theme.colors.palette.amber[500];
-  if (variant === "error") return theme.colors.destructive;
-  return null;
-}
-
 const styles = StyleSheet.create((theme) => ({
   container: {
     flexDirection: "row",
@@ -91,6 +80,19 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.xl,
     paddingVertical: theme.spacing[3],
     paddingHorizontal: theme.spacing[4],
+  },
+  containerInfo: {
+    borderColor: theme.colors.palette.blue[300],
+  },
+  // The risk block: a light amber fill instead of an outline, so a warning inside a dialog reads
+  // as a caution about the action rather than as another bordered card.
+  containerWarning: {
+    borderColor: "transparent",
+    backgroundColor: theme.colors.surfaceWarning,
+    borderRadius: theme.radius.md,
+  },
+  containerError: {
+    borderColor: theme.colors.destructive,
   },
   iconSlot: {
     paddingTop: 2,
@@ -104,6 +106,18 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.medium,
+  },
+  titleInfo: {
+    color: theme.colors.palette.blue[300],
+  },
+  titleSuccess: {
+    color: theme.colors.statusSuccess,
+  },
+  titleWarning: {
+    color: theme.colors.palette.amber[500],
+  },
+  titleError: {
+    color: theme.colors.destructive,
   },
   description: {
     color: theme.colors.foregroundMuted,
@@ -120,3 +134,15 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing[2],
   },
 }));
+
+// 每个 variant 的容器与标题样式放在一张表里；在渲染时取，不在模块作用域读 styles。
+function getVariantStyles(variant: AlertVariant) {
+  const byVariant = {
+    default: { container: null, title: null },
+    info: { container: styles.containerInfo, title: styles.titleInfo },
+    success: { container: null, title: styles.titleSuccess },
+    warning: { container: styles.containerWarning, title: styles.titleWarning },
+    error: { container: styles.containerError, title: styles.titleError },
+  };
+  return byVariant[variant];
+}

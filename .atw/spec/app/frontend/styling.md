@@ -63,7 +63,17 @@ Terminal ANSI colors are per theme only when the config provides `terminalAnsi` 
 
 The redesign added color roles on top of `surface0`–`surface4`. Design intent lives in `docs/design.md` §3, §4, §12; this is the implementation contract.
 
-**Signature.** `LightThemeConfig` / `DarkThemeConfig` extend `ThemeRoleOverrides` (`styles/theme.ts`): optional `surfaceWorkspace`, `surfaceChrome`, `surfaceCard`, `surfaceMessage`, `surfaceSidebarHover`, `surfaceSidebarActive`, `surfaceSidebarSelected`, `borderSidebarSelected`, `borderInput`, `shadowComposer`, `insetHighlight`. Both semantic builders spread `deriveThemeRoles(base, overrides)` (module-private), which returns those eleven plus `diffAdditionBackground`, `diffDeletionBackground`, `diffAdditionBar`, `diffDeletionBar` (always derived from the status colors, matching `git/diff-document/palette.ts`).
+**Signature.** `LightThemeConfig` / `DarkThemeConfig` extend `ThemeRoleOverrides` (`styles/theme.ts`): optional `surfaceWorkspace`, `surfaceChrome`, `surfaceCard`, `surfaceMessage`, `surfaceSidebarHover`, `surfaceSidebarActive`, `surfaceSidebarSelected`, `borderSidebarSelected`, `borderInput`, `shadowComposer`, `insetHighlight`. Both semantic builders spread `deriveThemeRoles(base, overrides)` (module-private), which returns those eleven plus `diffAdditionBackground`, `diffDeletionBackground`, `diffAdditionBar`, `diffDeletionBar` (always derived from the status colors, matching `git/diff-document/palette.ts`) and the overlay roles from `deriveOverlayRoles` (always derived, never overridden):
+
+| Overlay role | Value |
+|---|---|
+| `surfaceGlass` | `surfaceCard` at 80% (web glass fill) |
+| `surfaceDialogFooter` | `surface2` at 70% |
+| `surfaceWarning` | `palette.amber[500]` at 10% (`<Alert variant="warning">`) |
+| `overlayScrim` | light `rgba(0, 0, 0, 0.18)`, dark `0.35` |
+| `shadowPopover` / `shadowDialog` | light `0.35` / `0.45`, dark `0.8` / `0.9` black |
+
+`hexColorWithAlpha` drops the alpha byte of a `#rrggbbaa` input, as `mixHexColor` does, so a plugin card color cannot crash the build.
 
 **Contract.**
 
@@ -83,7 +93,9 @@ The redesign added color roles on top of `surface0`–`surface4`. Design intent 
 - Row-state colors are opaque `#rrggbb`. Translucent design values are flattened with `mixHexColor(base, overlay, amount)` (`utils/color.ts`), which accepts `#rgb`, `#rrggbb`, and `#rrggbbaa` (alpha ignored), so plugin palettes cannot crash the build.
 - Separation: `ensureDistinctRowColor` keeps a derived row state ≥ 1.05:1 (`hexContrastRatio`) from each neighbor by mixing toward `foreground` in 1% steps. Hover/selected/active/border neighbors: sidebar↔hover, hover↔selected, sidebar↔selected, active↔hover, active↔selected, border↔selected. Pure Black, Catppuccin Latte, Rosé Pine Dawn, and GitHub Light shifted by one to a few steps because of this.
 
-**Shape tokens.** `theme.radius` (`RADIUS`: `sm` 6 … `3xl` 22, `full`) and `theme.controlHeight` (`CONTROL_HEIGHT`: 24 / 28 / 32) sit beside the unchanged `borderRadius` and `control-geometry.ts` heights. Migrated components read the new ones; unmigrated ones keep the old ones so their shape does not move. `applyAppearance` spreads the theme, so both pass through appearance updates untouched.
+**Shape tokens.** `theme.radius` (`RADIUS`: `sm` 6 … `3xl` 22, `full`) and `theme.controlHeight` (`CONTROL_HEIGHT`: 24 / 28 / 32) sit beside the unchanged `borderRadius`. Migrated components read the new ones; unmigrated ones keep `borderRadius` so their shape does not move. `applyAppearance` spreads the theme, so both pass through appearance updates untouched.
+
+**Control geometry.** `createControlGeometry(theme)` returns heights and field padding as Unistyles breakpoint values, `{ xs: touch, md: theme.controlHeight.* }`. The touch table is the exported `buttonControlHeight` / `CONTROL_HEIGHTS` (28 / 32 / 44); callers that pair `xs: buttonControlHeight.xs` with a desktop value keep working. Anything reading `geometry.buttonSm.minHeight` gets an object, not a number. The breakpoint helper returns an object literal type, not an interface: Unistyles types breakpoint values with a symbol index signature, which an interface does not satisfy.
 
 **Text ramp.** `theme.typeScale` (`TYPE_SCALE`, `TextVariant` in `styles/theme.ts`) is `Record<TextVariant, { fontSize; lineHeight }>` authored at a 14px base. `applyAppearance` rebuilds it from `TYPE_SCALE` (never from the live theme, so repeated applies do not compound) with `round(value * uiBaseFontSize / 14)` for both numbers; it is widened to `number` like `fontSize`. `<Text>` (`components/ui/text.tsx`) is the only reader:
 
@@ -104,10 +116,10 @@ interface TextProps extends Omit<RNTextProps, "style"> {
 
 **Startup canvas.** The default canvas (`#0a0a0a` / `#fcfcfc`) is repeated where the theme cannot be imported: `packages/desktop/src/window/window-manager.ts` `getWindowBackgroundColor`, `packages/app/public/index.html` (`html, body` + dark media query), and `public/manifest.json`. After mount, `DesktopWindowControlsSync` (`app/_layout.tsx`) pushes `surface0`. Changing the default canvas without these flashes the old color at startup.
 
-**Tests required** for the ramp and rows: `appearance/apply.test.ts` (ramp unchanged at 14, every variant scaled at another size), `components/ui/text.browser.test.tsx` (computed size / line height per variant, every colour and weight against the fixture theme), `components/ui/row.browser.test.tsx` (rest, hover, pressed, selected, selected + hover: fill, ring, title colour, actions opacity / pointer-events). The fixture theme in `test-stubs/react-native-unistyles.ts` carries `typeScale` and the row roles; add a token there when a browser-tested component starts reading it.
+**Tests required** for the ramp and rows: `appearance/apply.test.ts` (ramp unchanged at 14, every variant scaled at another size), `components/ui/text.browser.test.tsx` (computed size / line height per variant, every colour and weight against the fixture theme), `components/ui/row.browser.test.tsx` (rest, hover, pressed, selected, selected + hover: fill, ring, title colour, actions opacity / pointer-events). The fixture theme in `test-stubs/react-native-unistyles.ts` carries `typeScale` and the row roles; add a token there when a browser-tested component starts reading it. Glass: `styles/floating-surface.browser.test.tsx` (glass fill `rgba(…, 0.8)` + `blur(12px) saturate(1.14)`, opaque fallback with `backdrop-filter: none`, scrim with and without `blur(4px)`, and `GLASS_SURFACES_ENABLED` true in the web build); `styles/install-web-surface-grain.browser.test.ts` (fixed, click-through, removed on uninstall). `components/ui/control-geometry.test.ts` holds the `{ xs, md }` height table, radii, segmented inset, and switch size as literals.
 
 **Tests required** for the roles (`styles/theme.test.ts`, run from `packages/app`):
-- Default palette: Light / Dark role values against the t3code default palette literals.
+- Default palette: Light / Dark role values against the t3code default palette literals, overlay roles included.
 - Catalog (every `THEME_OPTIONS` theme plus a dark and a light plugin sample built through `collectPluginThemes`): every role matches a color value; building a plugin twice gives equal themes; `foreground` clears 4.5 (light) / 3 (dark) on canvas, chrome, card, message, sidebar and every row state, and `foregroundMuted` on the canvas; the row-state neighbor pairs above clear 1.05.
 - Light status dots clear 3:1 on the resting and hovered sidebar row.
 - Changing `surface0` for Dark also moves `e2e/browser/terminal-protocol-query.spec.ts` (OSC 11 reply) and any `toHaveCSS` on row fills (`appearance-theme-picker.spec.ts`).
@@ -127,6 +139,8 @@ export const darkNordTheme = buildDarkTheme(
 ## Rules from the gotcha list
 
 - A style factory is theme-reactive only where it reads a token; branching on `theme.colorScheme` is not tracked. A page with its own palette (the usage page) puts that palette on the theme as `theme.colors.usage`. See `docs/unistyles.md`.
+- The Babel plugin marks a style key theme-dependent only when `theme` itself appears inside that key's value. `const geometry = createControlGeometry(theme)` above the `return` and `controlRest: { ...geometry.controlRest }` below it leave the key untracked, so on native its colors freeze at the first theme. Spread a color-bearing geometry entry as `{ ...createControlGeometry(theme).controlRest }` (`components/ui/form-field.tsx`). Helpers called inside the value (`...popoverSurfaceStyle(theme, …)`) are tracked.
+- Never compute a color from a token inside a factory. On web, color tokens reach the factory as CSS variables, so `hexColorWithAlpha(theme.colors.x, …)` throws there; add a derived role instead.
 - Do not materialize styles at module scope (`styles.container` read outside a component); `styles/unistyles-module-scope.test.ts` guards this.
 - Dynamic pixel values on web and inline styles go through `styles/unistyles-inline-style.ts` and its platform variants.
 - `contentContainerStyle` and other non-`style` props do not get tracked; see the fix patterns in `docs/unistyles.md`.
@@ -139,4 +153,6 @@ Spacing uses the theme scale (`theme.spacing[n]`), never `padding: 20`. Colors c
 
 ## Web-only styling
 
-Scrollbars are installed once through `styles/install-web-scrollbar-styles.web.ts`. Anything that needs a DOM stylesheet lives in a `.web.ts` file, not behind an `if (isWeb)` in a component.
+Scrollbars are installed once through `styles/install-web-scrollbar-styles.web.ts`, the window grain through `styles/install-web-surface-grain.web.ts`, both from `app/_layout.tsx`. Anything that needs a DOM stylesheet lives in a `.web.ts` file, not behind an `if (isWeb)` in a component.
+
+Glass needs no DOM stylesheet. `styles/floating-surface.ts` holds pure style builders (`floatingSurfaceFill`, `dialogScrimFill`, `popoverSurfaceStyle`) that take `{ glass }`; callers pass `GLASS_SURFACES_ENABLED` from `styles/glass-support.ts` (false) / `.web.ts` (true). `backdropFilter` is not on RN's `ViewStyle`, so the builders return inferred object types and `StyleSheet.create` accepts them; react-native-web and Unistyles web both emit it as CSS. Keeping the flag outside the builders is what lets `styles/floating-surface.browser.test.tsx` assert both the glass and the native fallback path in one browser run, since the browser project always resolves `.web.ts`.

@@ -69,7 +69,8 @@ export function parseHexColor(hex: string): [number, number, number] | null {
 
 /** Adds alpha to a theme-owned hex color in a format accepted by Canvas and Skia. */
 export function hexColorWithAlpha(hex: string, alpha: number): string {
-  const rgb = parseHexColor(hex);
+  // 插件色板可能是 `#rrggbbaa`，按不透明色处理，与 mixHexColor 一致。
+  const rgb = parseHexColor(opaqueHexColor(hex));
   if (!rgb) throw new TypeError(`Expected a hex color, received ${hex}`);
   if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
     throw new RangeError(`Color alpha must be between 0 and 1, received ${alpha}`);

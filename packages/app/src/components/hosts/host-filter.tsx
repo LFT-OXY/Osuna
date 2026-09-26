@@ -108,10 +108,10 @@ const styles = StyleSheet.create((theme) => ({
     alignSelf: "flex-start",
     paddingVertical: theme.spacing[1.5],
     paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surface1,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderInput,
   },
   filterTriggerHovered: {
     backgroundColor: theme.colors.surface2,

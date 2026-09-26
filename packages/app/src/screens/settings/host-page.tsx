@@ -428,6 +428,32 @@ function ConnectionsSection({ host }: { host: HostProfile }) {
       .finally(() => setIsRemovingConnection(false));
   }, [pendingRemoveConnection, removeConnection, host.serverId, t]);
 
+  // 危险确认的红色按钮放在对话框底部按钮区。
+  const removeConnectionFooter = useMemo(
+    () => (
+      <View style={styles.confirmActions}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={handleCancelConfirm}
+          disabled={isRemovingConnection}
+        >
+          {t("common.actions.cancel")}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onPress={handleConfirmRemove}
+          disabled={isRemovingConnection}
+          testID="remove-connection-confirm"
+        >
+          {t("settings.host.connections.removeAction")}
+        </Button>
+      </View>
+    ),
+    [handleCancelConfirm, handleConfirmRemove, isRemovingConnection, t],
+  );
+
   return (
     <SettingsSection title={t("settings.host.connections.title")}>
       <View style={settingsStyles.card} testID="host-page-connections-card">
@@ -452,6 +478,7 @@ function ConnectionsSection({ host }: { host: HostProfile }) {
           header={removeConnectionHeader}
           visible
           onClose={handleCloseConfirm}
+          footer={removeConnectionFooter}
           testID="remove-connection-confirm-modal"
         >
           <Text style={styles.confirmText}>
@@ -459,27 +486,6 @@ function ConnectionsSection({ host }: { host: HostProfile }) {
               name: pendingRemoveConnection.title,
             })}
           </Text>
-          <View style={styles.confirmActions}>
-            <Button
-              variant="secondary"
-              size="sm"
-              style={FLEX_1_STYLE}
-              onPress={handleCancelConfirm}
-              disabled={isRemovingConnection}
-            >
-              {t("common.actions.cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              style={FLEX_1_STYLE}
-              onPress={handleConfirmRemove}
-              disabled={isRemovingConnection}
-              testID="remove-connection-confirm"
-            >
-              {t("settings.host.connections.removeAction")}
-            </Button>
-          </View>
         </AdaptiveModalSheet>
       ) : null}
     </SettingsSection>
@@ -1226,6 +1232,31 @@ function RemoveHostSection({
     [theme.iconSize.sm, theme.colors.destructive],
   );
 
+  const removeHostFooter = useMemo(
+    () => (
+      <View style={styles.confirmActions}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={handleCancel}
+          disabled={isRemoving}
+        >
+          {t("common.actions.cancel")}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onPress={handleConfirmRemove}
+          disabled={isRemoving}
+          testID="remove-host-confirm"
+        >
+          {t("settings.host.connections.removeAction")}
+        </Button>
+      </View>
+    ),
+    [handleCancel, handleConfirmRemove, isRemoving, t],
+  );
+
   return (
     <SettingsSection
       title={t("settings.host.daemon.dangerZone")}
@@ -1265,6 +1296,7 @@ function RemoveHostSection({
           header={removeHostHeader}
           visible
           onClose={handleCloseConfirm}
+          footer={removeHostFooter}
           testID="remove-host-confirm-modal"
         >
           <Text style={styles.confirmText}>
@@ -1272,27 +1304,6 @@ function RemoveHostSection({
               ? t("settings.host.daemon.remove.localConfirmMessage")
               : t("settings.host.daemon.remove.confirmMessage", { name: host.label })}
           </Text>
-          <View style={styles.confirmActions}>
-            <Button
-              variant="secondary"
-              size="sm"
-              style={FLEX_1_STYLE}
-              onPress={handleCancel}
-              disabled={isRemoving}
-            >
-              {t("common.actions.cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              style={FLEX_1_STYLE}
-              onPress={handleConfirmRemove}
-              disabled={isRemoving}
-              testID="remove-host-confirm"
-            >
-              {t("settings.host.connections.removeAction")}
-            </Button>
-          </View>
         </AdaptiveModalSheet>
       ) : null}
     </SettingsSection>
@@ -1751,10 +1762,11 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
   },
   confirmActions: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: theme.spacing[2],
-    marginTop: theme.spacing[4],
   },
   appendPromptActions: {
     flexDirection: "row",
@@ -1771,4 +1783,3 @@ const styles = StyleSheet.create((theme) => ({
   },
 }));
 
-const FLEX_1_STYLE = { flex: 1 };

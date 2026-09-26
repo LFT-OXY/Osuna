@@ -30,6 +30,10 @@ const testTheme = {
     surfaceSidebarSelected: "#eaeaea",
     borderSidebarSelected: "#dadada",
     borderAccent: "#a1a1aa",
+    // 浮层（菜单、对话框）的卡片、毛玻璃与遮罩，取默认亮色主题的值。
+    surfaceCard: "#ffffff",
+    surfaceGlass: "rgba(255, 255, 255, 0.8)",
+    overlayScrim: "rgba(0, 0, 0, 0.18)",
     palette: {
       amber: { 500: "#f59e0b" },
       blue: { 300: "#93c5fd" },
@@ -81,6 +85,7 @@ const testTheme = {
     full: 9999,
   },
   radius: { sm: 6, md: 8, lg: 10, xl: 14, "2xl": 18, "3xl": 22, full: 9999 },
+  controlHeight: { sm: 24, md: 28, lg: 32 },
   iconSize: { sm: 16, md: 20 },
   opacity: { 50: 0.5 },
   shadow: {

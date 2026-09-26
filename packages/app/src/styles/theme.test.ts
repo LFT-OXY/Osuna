@@ -296,6 +296,25 @@ describe("Default palette", () => {
     expect(darkTheme.colors.shadowComposer).toBe("transparent");
     expect(darkTheme.colors.insetHighlight).toBe("rgba(255, 255, 255, 0.04)");
   });
+
+  it("gives menus and dialogs the designed glass, scrim, shadow and warning fills", () => {
+    expect(lightTheme.colors).toMatchObject({
+      surfaceGlass: "rgba(255, 255, 255, 0.8)",
+      surfaceDialogFooter: "rgba(244, 244, 245, 0.7)",
+      surfaceWarning: "rgba(245, 158, 11, 0.1)",
+      overlayScrim: "rgba(0, 0, 0, 0.18)",
+      shadowPopover: "rgba(0, 0, 0, 0.35)",
+      shadowDialog: "rgba(0, 0, 0, 0.45)",
+    });
+    expect(darkTheme.colors).toMatchObject({
+      surfaceGlass: "rgba(17, 17, 17, 0.8)",
+      surfaceDialogFooter: "rgba(23, 23, 23, 0.7)",
+      surfaceWarning: "rgba(245, 158, 11, 0.1)",
+      overlayScrim: "rgba(0, 0, 0, 0.35)",
+      shadowPopover: "rgba(0, 0, 0, 0.8)",
+      shadowDialog: "rgba(0, 0, 0, 0.9)",
+    });
+  });
 });
 
 describe("Built-in light theme", () => {
@@ -397,6 +416,12 @@ const REDESIGN_ROLES = [
   "diffDeletionBar",
   "shadowComposer",
   "insetHighlight",
+  "surfaceGlass",
+  "surfaceDialogFooter",
+  "surfaceWarning",
+  "overlayScrim",
+  "shadowPopover",
+  "shadowDialog",
 ] as const;
 
 const COLOR_VALUE =
