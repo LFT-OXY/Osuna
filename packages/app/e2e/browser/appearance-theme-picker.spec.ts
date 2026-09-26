@@ -82,8 +82,9 @@ test("applies the interface font size to settings text", async ({ page }) => {
   await expect(page.getByTestId("settings-sidebar")).toBeVisible();
   await openSettingsSection(page, "appearance");
 
+  // 分组标题是 label 档（13px 基准），按界面字号等比换算：21 → 19.5 取整为 20。
   const sectionTitle = page.getByText("Theme", { exact: true }).first();
-  await expect(sectionTitle).toHaveCSS("font-size", "18px");
+  await expect(sectionTitle).toHaveCSS("font-size", "20px");
 
   const interfaceSizeInput = page.getByLabel("Interface font size");
   const contentSizeInput = page.getByLabel("Content font size");
@@ -94,5 +95,5 @@ test("applies the interface font size to settings text", async ({ page }) => {
 
   await expect(interfaceSizeInput).toHaveValue("12");
   await expect(contentSizeInput).toHaveValue("21");
-  await expect(sectionTitle).toHaveCSS("font-size", "10px");
+  await expect(sectionTitle).toHaveCSS("font-size", "11px");
 });

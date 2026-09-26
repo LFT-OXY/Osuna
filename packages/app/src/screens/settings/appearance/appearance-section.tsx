@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Text, View, type PressableStateCallbackType } from "react-native";
+import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ChevronDown, Monitor, Moon, Sun } from "lucide-react-native";
+import { Monitor, Moon, Sun } from "lucide-react-native";
 import {
   SYNTAX_THEME_OPTIONS,
   type SyntaxThemeId,
@@ -14,12 +14,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
+import { FormTextInput } from "@/components/ui/form-field";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { SettingsCard, SettingsSwitch } from "@/components/settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { useContributedThemes } from "@/appearance/provider";
-import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import {
   MAX_CODE_FONT_SIZE,
   MAX_CONTENT_FONT_SIZE,
@@ -60,7 +61,6 @@ import { SidebarNavSection } from "./sidebar-nav-section";
 const ThemedSun = withUnistyles(Sun);
 const ThemedMoon = withUnistyles(Moon);
 const ThemedMonitor = withUnistyles(Monitor);
-const ThemedChevronDown = withUnistyles(ChevronDown);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -73,6 +73,9 @@ function getPluginThemeLabel(t: TFunction, option: PluginThemeOption): string {
     qualifier: option.qualifier,
   });
 }
+
+const FONT_FAMILY_INPUT_STYLE = { flexGrow: 1, flexShrink: 1, maxWidth: 280 } as const;
+const FONT_SIZE_INPUT_STYLE = { width: 64, textAlign: "right" } as const;
 
 // Platform default stacks can be the bare native tokens ("normal"/"monospace");
 // those read as a bug, so show a human label in the placeholder instead.
@@ -88,10 +91,6 @@ function sizeDraftToOverride(value: string): number | undefined {
   if (value.length === 0) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function dropdownTriggerStyle({ pressed }: PressableStateCallbackType) {
-  return [styles.trigger, pressed ? styles.triggerPressed : null];
 }
 
 // ---------------------------------------------------------------------------
@@ -197,8 +196,7 @@ function ThemeRow({
         <Text style={settingsStyles.rowTitle}>{t("settings.appearance.theme.title")}</Text>
       </View>
       <DropdownMenu>
-        <DropdownMenuTrigger
-          style={dropdownTriggerStyle}
+        <DropdownTrigger
           accessibilityLabel={t("settings.appearance.theme.accessibilityLabel", {
             value: selectedLabel,
           })}
@@ -209,8 +207,7 @@ function ThemeRow({
             <ThemeLeading themeValue={builtInValue} />
           )}
           <Text style={styles.triggerText}>{selectedLabel}</Text>
-          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
-        </DropdownMenuTrigger>
+        </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {THEME_OPTIONS.map((option, index) => {
             const previousOption = THEME_OPTIONS[index - 1];
@@ -259,21 +256,19 @@ function SystemPairingRow<T extends ThemeName>({
   const { t } = useTranslation();
   const selectedLabel = getBuiltInThemeLabel(t, value);
   return (
-    <View style={styles.rowWithBorder}>
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
       <View style={settingsStyles.rowContent}>
         <Text style={settingsStyles.rowTitle}>{title}</Text>
       </View>
       <DropdownMenu>
-        <DropdownMenuTrigger
-          style={dropdownTriggerStyle}
+        <DropdownTrigger
           accessibilityLabel={t("settings.appearance.theme.accessibilityLabel", {
             value: selectedLabel,
           })}
         >
           <ThemeLeading themeValue={value} />
           <Text style={styles.triggerText}>{selectedLabel}</Text>
-          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
-        </DropdownMenuTrigger>
+        </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {options.map((option) => (
             <ThemeMenuItem
@@ -368,15 +363,13 @@ function ToolCallDetailRow({ value, onChange }: ToolCallDetailRowProps) {
         </Text>
       </View>
       <DropdownMenu>
-        <DropdownMenuTrigger
-          style={dropdownTriggerStyle}
+        <DropdownTrigger
           accessibilityLabel={t("settings.general.toolCallDetail.accessibilityLabel", {
             value: selectedLabel,
           })}
         >
           <Text style={styles.triggerText}>{selectedLabel}</Text>
-          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
-        </DropdownMenuTrigger>
+        </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {TOOL_CALL_DETAIL_LEVELS.map((option) => (
             <ToolCallDetailMenuItem
@@ -419,6 +412,7 @@ function FontFamilyRow({
   onChangeDraft,
   onCommit,
 }: FontFamilyRowProps) {
+  const isCompact = useIsCompactFormFactor();
   const handleCommit = useCallback(() => {
     onCommit(draft);
   }, [draft, onCommit]);
@@ -431,12 +425,13 @@ function FontFamilyRow({
   }, [value]);
 
   return (
-    <View style={withBorder ? styles.rowWithBorder : settingsStyles.row}>
+    <View style={[settingsStyles.row, withBorder && settingsStyles.rowBorder]}>
       <View style={settingsStyles.rowContent}>
         <Text style={settingsStyles.rowTitle}>{title}</Text>
         <Text style={settingsStyles.rowHint}>{hint}</Text>
       </View>
-      <TextInput
+      <FormTextInput
+        size={isCompact ? "md" : "sm"}
         initialValue={draft}
         onChangeText={onChangeDraft}
         onBlur={handleCommit}
@@ -446,7 +441,7 @@ function FontFamilyRow({
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
-        style={styles.fontFamilyInput}
+        style={FONT_FAMILY_INPUT_STYLE}
         accessibilityLabel={accessibilityLabel}
       />
     </View>
@@ -472,14 +467,16 @@ function FontSizeRow({
   onChangeDraft,
   onCommit,
 }: FontSizeRowProps) {
+  const isCompact = useIsCompactFormFactor();
   return (
-    <View style={withBorder ? styles.rowWithBorder : settingsStyles.row}>
+    <View style={[settingsStyles.row, withBorder && settingsStyles.rowBorder]}>
       <View style={settingsStyles.rowContent}>
         <Text style={settingsStyles.rowTitle}>{title}</Text>
         <Text style={settingsStyles.rowHint}>{hint}</Text>
       </View>
       <View style={styles.sizeField}>
-        <TextInput
+        <FormTextInput
+          size={isCompact ? "md" : "sm"}
           initialValue={draft}
           onChangeText={onChangeDraft}
           onBlur={onCommit}
@@ -487,7 +484,7 @@ function FontSizeRow({
           keyboardType="number-pad"
           inputMode="numeric"
           selectTextOnFocus
-          style={styles.sizeInput}
+          style={FONT_SIZE_INPUT_STYLE}
           accessibilityLabel={accessibilityLabel}
         />
         <Text style={styles.unit}>px</Text>
@@ -541,15 +538,13 @@ function SyntaxRow({ value, onChange }: SyntaxRowProps) {
         </Text>
       </View>
       <DropdownMenu>
-        <DropdownMenuTrigger
-          style={dropdownTriggerStyle}
+        <DropdownTrigger
           accessibilityLabel={t("settings.appearance.syntax.highlightThemeAccessibility", {
             value: selectedLabel,
           })}
         >
           <Text style={styles.triggerText}>{selectedLabel}</Text>
-          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
-        </DropdownMenuTrigger>
+        </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {SYNTAX_THEME_OPTIONS.map((option) => (
             <SyntaxMenuItem
@@ -866,28 +861,6 @@ const styles = StyleSheet.create((theme) => ({
   preview: {
     marginTop: theme.spacing[4],
   },
-  rowWithBorder: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: theme.spacing[4],
-    paddingHorizontal: theme.spacing[4],
-    borderTopWidth: theme.borderWidth[1],
-    borderTopColor: theme.colors.border,
-  },
-  trigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-    paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
-  },
-  triggerPressed: {
-    opacity: 0.85,
-  },
   triggerText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
@@ -899,38 +872,10 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
   },
-  fontFamilyInput: {
-    flexGrow: 1,
-    flexShrink: 1,
-    maxWidth: 280,
-    minHeight: 36,
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface2,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    textAlign: "left",
-  },
   sizeField: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-  },
-  sizeInput: {
-    width: 64,
-    minHeight: 36,
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface2,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    textAlign: "right",
   },
   unit: {
     color: theme.colors.foregroundMuted,

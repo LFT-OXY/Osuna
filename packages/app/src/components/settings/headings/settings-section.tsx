@@ -66,8 +66,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing[2],
-    marginBottom: theme.spacing[3],
-    marginLeft: theme.spacing[1],
+    marginBottom: theme.spacing[2],
+    marginLeft: theme.spacing[0.5],
   },
   titleRow: {
     flexDirection: "row",

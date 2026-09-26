@@ -102,7 +102,7 @@ A `<Pressable>` wrapping a `<Text>` is a sixth variant. It is wrong. `<Button>` 
 
 Borders group, separate, or rarely emphasize.
 
-A logical block of related rows lives inside a card — one border around the whole group. The card primitive is `settingsStyles.card`; the keyboard-shortcuts dialog uses the same shape inline (`packages/app/src/components/keyboard-shortcuts-dialog.tsx:68-73`). The border defines what belongs together.
+A logical block of related rows lives inside a card — one border around the whole group. The card primitive is `settingsStyles.card`: `radius.xl` (14) corners, a `surfaceCard` fill, a 1px `border`. The keyboard-shortcuts dialog uses the same shape inline (`packages/app/src/components/keyboard-shortcuts-dialog.tsx:68-73`). The border defines what belongs together.
 
 Rows after the first inside a card carry `settingsStyles.rowBorder` — a single top border. The first row never has one. The same divider pattern appears in the keyboard-shortcuts dialog rows (`packages/app/src/components/keyboard-shortcuts-dialog.tsx:74-83`). Rows do not need their own background to feel separated.
 
@@ -120,7 +120,7 @@ Workspace tabs (`packages/app/src/screens/workspace/workspace-desktop-tabs-row.t
 
 Five primitives. The pick is determined by option count, the need to search, and how the picker is anchored.
 
-`<DropdownMenu>` is for a small fixed set anchored to a trigger. Theme picker, kebab menus on workspace and project rows (`packages/app/src/components/sidebar-workspace-list.tsx:684-770`), row "more" menus. Items can be async (`status: "pending"`) and can include destructive entries. Under ~10 options where the user knows what they're looking for.
+`<DropdownMenu>` is for a small fixed set anchored to a trigger. Theme picker, kebab menus on workspace and project rows (`packages/app/src/components/sidebar-workspace-list.tsx:684-770`), row "more" menus. Items can be async (`status: "pending"`) and can include destructive entries. Under ~10 options where the user knows what they're looking for. When the menu picks a value shown in a row, the trigger is `<DropdownTrigger>` (`packages/app/src/components/ui/dropdown-trigger.tsx`): the `sm` button box, outlined in `borderInput` at rest and `borderAccent` on hover or while open, the value then a chevron. A leading swatch or icon goes in its children. A trigger that draws its own outline is wrong.
 
 `<Combobox>` is for a large or searchable list. Host switcher in the sidebar footer, model selector in the composer, branch switcher in the workspace header (`packages/app/src/components/branch-switcher.tsx`). The user types to find the option, or the list is long enough to scroll.
 
@@ -148,13 +148,13 @@ Settings detail pages, the projects detail page, and any list+detail content sit
 
 Workspace and chat surfaces use the full width — these are working surfaces, not reading surfaces. The composer carries `MAX_CONTENT_WIDTH` from `packages/app/src/constants/layout.ts` to keep lines readable while letting the workspace pane fill the rest.
 
-Sections sit apart. `<SettingsSection>` owns its own bottom margin; the next thing is wrapped in another `<SettingsSection>`. The agent-list `sectionHeading` carries the same `marginTop`/`marginBottom` rhythm (`packages/app/src/components/agent-list.tsx:511-517`). Adding `marginBottom` to a section is wrong.
+Sections sit apart. `<SettingsSection>` owns its own bottom margin; the next thing is wrapped in another `<SettingsSection>`. Its title is `label`, `medium`, `foregroundMuted`, 8px above the card; a `<SettingsGroup>` title above several sections is `body` `medium` in `foreground`. The agent-list `sectionHeading` carries the same `marginTop`/`marginBottom` rhythm (`packages/app/src/components/agent-list.tsx:511-517`). Adding `marginBottom` to a section is wrong.
 
 A section or group explains itself through the `info` prop on `<SettingsSection>` or `<SettingsGroup>` — an info icon beside the header that opens a tooltip (`packages/app/src/components/settings/headings/settings-info-tip.tsx`). A muted paragraph between the header and the card is wrong: it sits in the section's own gap, so it reads as a second heading rather than as prose belonging to the header. Explanatory copy that describes one row belongs to that row, as `settingsStyles.rowHint` inside the card.
 
 Cards inside a section sit closer than sections. Rows inside a card touch — only the divider separates them. The rhythm is page → spacious; section → spacious; card → tight.
 
-Rows have generous vertical padding: roughly 16px of content plus 16px of vertical padding for settings rows, 8–12px for sidebar list items where many rows must fit. Compressing rows below the established density to fit more on the screen is wrong. Too many rows means more cards or more sections, not smaller rows.
+A settings row (`settingsStyles.row`) is at least 56 tall: a `body` title with an optional `caption` hint (`rowHint`) on the left, the control on the right, 16px between them and 16px in from the card edge. A title with one hint line or a single `sm` control lands exactly on 56; more content grows the row. A read-only value in the trailing slot is `rowValue`. Sidebar list items are 32 or 36 (`<Row>`) where many rows must fit. Compressing rows below the established density to fit more on the screen is wrong. Too many rows means more cards or more sections, not smaller rows.
 
 The whitespace is the design.
 
@@ -221,11 +221,11 @@ Terminology:
 
 ## 11. States
 
-Loading is inline by default. `<LoadingSpinner size={14} color={foregroundMuted} />` sits next to the thing it relates to (`packages/app/src/screens/settings/providers-section.tsx:227-231`). Page-level loading is a centered `<LoadingSpinner size="large">` (`packages/app/src/screens/sessions-screen.tsx:69-72`). Card-level loading is a single short line, not a spinner. In-row dropdown items use `<DropdownMenuItem status="pending" pendingLabel="Removing...">`; the menu item handles its own pending state.
+Loading is inline by default. A small `foregroundMuted` `<LoadingSpinner>` sits next to the thing it relates to (`StatusIndicator` in `packages/app/src/screens/settings/providers-section.tsx`). Page-level loading is a centered `<LoadingSpinner size="large">` (`packages/app/src/screens/sessions-screen.tsx:69-72`). Card-level loading is a single short line, not a spinner. In-row dropdown items use `<DropdownMenuItem status="pending" pendingLabel="Removing...">`; the menu item handles its own pending state.
 
 Empty states are short noun phrases. Centered, muted, one or two lines. Sessions screen pairs the empty noun with a single ghost button to navigate back (`packages/app/src/screens/sessions-screen.tsx:74-81`); that pairing is the maximum elaboration. Illustrations and CTAs disguised as empty states are wrong.
 
-Inline errors are a single sentence in `palette.red[300]` `xs`, sitting under the field or inside the card it relates to (`packages/app/src/screens/settings/providers-section.tsx:115-119`).
+Inline errors are a single sentence in `palette.red[300]` `caption`, sitting under the field or inside the card it relates to (the provider error under its name, `ProviderRow` in `packages/app/src/screens/settings/providers-section.tsx`).
 
 Page-level alerts — informational notices, success confirmations, warnings, or recoverable errors that need a small visible block on the page — use `<Alert>` (`packages/app/src/components/ui/alert.tsx`). Variants: `default`, `info`, `success`, `warning`, `error`. The chrome is quiet by design: a 1px tinted border, transparent background, a small variant-tinted icon, the title in the variant accent, the description in `foregroundMuted`. `warning` is the risk block instead: no border, a `surfaceWarning` fill, `radius.md` corners. It is the warning a dialog shows before a risky action (the pairing-link warning in `packages/app/src/desktop/components/pair-device-section.tsx`). Actions go in the `children` slot as `<Button variant="outline" size="sm">` — recovery actions are low-frequency and outline keeps them quiet alongside the alert's accent (`packages/app/src/screens/project-settings-screen.tsx`). One `<Alert>` at a time per region.
 
@@ -249,15 +249,17 @@ The row anatomy is a content column with an optional trailing slot. Inside a car
 
 Row states come from the sidebar row roles: hover `surfaceSidebarHover`, pressed `surfaceSidebarActive`, selected `surfaceSidebarSelected` plus a 1px inset ring in `borderSidebarSelected`. Selection outranks hover, so the selected row still reads as selected under the pointer; pressing outranks both. The ring is an inset `boxShadow`, not a border, so selecting a row does not move its content, and not an outline, so it does not replace the keyboard focus ring. Corners are `radius.md`.
 
-Rows that drill into a detail lead with a chevron in the trailing slot (`ChevronRight`, `iconSize.sm`, `foregroundMuted`). The whole row is the `<Pressable>`. Pair-device row (`packages/app/src/screens/settings/host-page.tsx:644-668`), provider row (`packages/app/src/screens/settings/providers-section.tsx:92-132`), project row in the projects list. Chevron means navigation.
+Rows that drill into a detail end with a chevron in the trailing slot (`ChevronRight`, `iconSize.sm`, `foregroundMuted`). The whole row is the `<Pressable>`. Pair-device row (`packages/app/src/screens/settings/host-page.tsx:644-668`), provider row (`ProviderRow` in `packages/app/src/screens/settings/providers-section.tsx`), project row in the projects list. Chevron means navigation.
+
+A settings row that leads with an icon puts it in `settingsStyles.rowIconFrame`, so installed providers and the Add provider catalog share one rail. The provider snapshot carries no version, so an installed provider row shows none; only catalog rows, which read the registry, show a version.
 
 Kebab menus (`<DropdownMenu>` with `<MoreVertical size={14} />` trigger) are for actions on the row, not navigation. Menu position: `align="end"`. Items use `<DropdownMenuItem leading={<Icon size={14} color={foregroundMuted} />} ...>`. Visibility is `isHovered || isNative || isCompact` — hover-revealed on web, always visible on native and compact layouts. On a hovered workspace row the kebab covers the diff stat behind a scrim instead of displacing it (`resolveTrailingActionVisibility` in `packages/app/src/components/sidebar/sidebar-workspace-row-content.tsx`).
 
 A row may carry both a chevron and a kebab when both navigation and row-level actions apply. Chevron sits at the end; kebab sits before it.
 
-Switches and segmented controls also sit in the trailing slot. A row that both navigates and toggles is a `<Pressable>` with a `<Switch>` in the trailing slot — the switch calls `event.stopPropagation()` so the row press does not fire (`packages/app/src/screens/settings/providers-section.tsx:92-132`). Sidebar items that hold a status dot, a count, and a kebab follow the same rule (`packages/app/src/components/sidebar-workspace-list.tsx`).
+Switches and segmented controls also sit in the trailing slot. A row that both navigates and toggles is a `<Pressable>` with a `<Switch>` in the trailing slot — the switch calls `event.stopPropagation()` so the row press does not fire (`ProviderRow` in `packages/app/src/screens/settings/providers-section.tsx`). Sidebar items that hold a status dot, a count, and a kebab follow the same rule (`packages/app/src/components/sidebar-workspace-list.tsx`).
 
-Selected state on rows in a desktop list+detail uses `surfaceSidebarHover` as the background (`packages/app/src/screens/projects-screen.tsx`); the agent list still uses `surface2` (`packages/app/src/components/agent-list.tsx`). Both predate `<Row>`. The sidebar row roles are opaque hexes: a row always sits on the sidebar, so the design's translucent fills are flattened with `mixHexColor` and contrast checks can read them. Light's selected fill is gray, not white: white on the `#fafafa` sidebar is 1.04:1.
+The settings list is `<Row size="sm">` with a 16px icon in the leading slot (`SettingsNavRow` in `packages/app/src/screens/settings-screen.tsx`), so its selected section takes the same fill and ring as a selected sidebar row; the host picker between those rows matches their height, corners, and hover fill. Selected state in the projects list uses `surfaceSidebarHover` as the background (`packages/app/src/screens/projects-screen.tsx`); the agent list still uses `surface2` (`packages/app/src/components/agent-list.tsx`). Both predate `<Row>`. The sidebar row roles are opaque hexes: a row always sits on the sidebar, so the design's translucent fills are flattened with `mixHexColor` and contrast checks can read them. Light's selected fill is gray, not white: white on the `#fafafa` sidebar is 1.04:1.
 
 A workspace row's title is `label` at 76% opacity, lifted to full on hover or selection. A workspace in the `attention` state (finished, not yet read) has a `semibold` title at full strength: it is the one row asking to be looked at.
 

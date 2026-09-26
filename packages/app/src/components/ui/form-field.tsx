@@ -73,6 +73,8 @@ interface SplitFormTextInputStyle {
   inputStyle?: TextStyle;
 }
 
+// 调用方的 style 在这里被压平后拆成外框与文字两份。Unistyles 样式在 Web 上只剩 class，压平后
+// 没有值，所以调用方要传的尺寸、对齐用普通对象，不用 StyleSheet.create 的样式。
 function splitFormTextInputStyle(style: AdaptiveTextInputProps["style"]): SplitFormTextInputStyle {
   const flattened = RNStyleSheet.flatten(style) as FlatFormTextInputStyle | undefined;
   if (!flattened) {

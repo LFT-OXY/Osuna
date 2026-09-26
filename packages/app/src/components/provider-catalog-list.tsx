@@ -11,7 +11,8 @@ import {
   type AcpProviderCatalogItem,
 } from "@/hooks/use-acp-provider-catalog";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
-import type { Theme } from "@/styles/theme";
+import { settingsStyles } from "@/styles/settings";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 
@@ -21,9 +22,7 @@ interface ProviderCatalogListProps {
   onInstall: (entry: AcpProviderCatalogItem) => Promise<void> | void;
 }
 
-const SEARCH_ICON_SIZE = 16;
-const PROVIDER_FALLBACK_ICON_SIZE = 20;
-const PROVIDER_REMOTE_ICON_SIZE = 24;
+const PROVIDER_REMOTE_ICON_SIZE = ICON_SIZE.lg;
 
 const ThemedPackagePlus = withUnistyles(PackagePlus);
 const ThemedSvgXml = withUnistyles(SvgXml);
@@ -49,10 +48,11 @@ function matchesSearch(entry: AcpProviderCatalogItem, query: string): boolean {
 interface CatalogRowProps {
   entry: AcpProviderCatalogItem;
   installing: boolean;
+  isFirst: boolean;
   onInstall: (entry: AcpProviderCatalogItem) => void;
 }
 
-function CatalogRow({ entry, installing, onInstall }: CatalogRowProps) {
+function CatalogRow({ entry, installing, isFirst, onInstall }: CatalogRowProps) {
   const { t } = useTranslation();
   const actionLabel = installing
     ? t("providerCatalog.actions.adding")
@@ -66,8 +66,8 @@ function CatalogRow({ entry, installing, onInstall }: CatalogRowProps) {
   }, [entry.installLink]);
 
   return (
-    <View style={styles.row}>
-      <View style={styles.iconFrame}>
+    <View style={[settingsStyles.row, !isFirst && settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowIconFrame}>
         {entry.iconSvg ? (
           <ThemedSvgXml
             xml={entry.iconSvg}
@@ -76,7 +76,7 @@ function CatalogRow({ entry, installing, onInstall }: CatalogRowProps) {
             uniProps={foregroundColorMapping}
           />
         ) : (
-          <ThemedPackagePlus size={PROVIDER_FALLBACK_ICON_SIZE} uniProps={foregroundColorMapping} />
+          <ThemedPackagePlus size={ICON_SIZE.md} uniProps={foregroundColorMapping} />
         )}
       </View>
       <View style={styles.textColumn}>
@@ -102,7 +102,7 @@ function CatalogRow({ entry, installing, onInstall }: CatalogRowProps) {
           <Text style={styles.installLinkText} numberOfLines={1}>
             {t("providerCatalog.actions.installInstructions")}
           </Text>
-          <ThemedExternalLink size={12} uniProps={foregroundMutedColorMapping} />
+          <ThemedExternalLink size={ICON_SIZE.xs} uniProps={foregroundMutedColorMapping} />
         </Pressable>
       </View>
       <Button
@@ -147,7 +147,7 @@ export function ProviderCatalogList({
     <View>
       <View style={styles.searchField}>
         <View style={styles.searchIcon}>
-          <ThemedSearch size={SEARCH_ICON_SIZE} uniProps={foregroundMutedColorMapping} />
+          <ThemedSearch size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />
         </View>
         <ThemedTextInput
           testID="provider-catalog-search"
@@ -167,12 +167,13 @@ export function ProviderCatalogList({
           <Text style={styles.stateText}>{t("providerCatalog.noProviders")}</Text>
         </View>
       ) : (
-        <View style={styles.list}>
-          {availableEntries.map((entry) => (
+        <View style={settingsStyles.card}>
+          {availableEntries.map((entry, index) => (
             <CatalogRow
               key={entry.id}
               entry={entry}
               installing={installingProviderId === entry.id}
+              isFirst={index === 0}
               onInstall={onInstall}
             />
           ))}
@@ -188,9 +189,9 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
     backgroundColor: theme.colors.surface2,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderInput,
     paddingHorizontal: theme.spacing[3],
     marginBottom: theme.spacing[3],
   },
@@ -201,37 +202,13 @@ const styles = StyleSheet.create((theme) => ({
   searchInput: {
     flex: 1,
     minWidth: 0,
-    paddingVertical: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-  },
-  list: {
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: "hidden",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[3],
-    padding: theme.spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  iconFrame: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface2,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
+    ...theme.typeScale.body,
   },
   textColumn: {
     flex: 1,
     minWidth: 0,
-    gap: theme.spacing[1],
   },
   titleRow: {
     flexDirection: "row",
@@ -241,18 +218,18 @@ const styles = StyleSheet.create((theme) => ({
   },
   name: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.medium,
+    ...theme.typeScale.body,
     flexShrink: 1,
   },
   version: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    ...theme.typeScale.caption,
     flexShrink: 0,
   },
   description: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    ...theme.typeScale.caption,
+    marginTop: theme.spacing[0.5],
   },
   installLink: {
     alignSelf: "flex-start",
@@ -260,10 +237,11 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[1],
     maxWidth: "100%",
+    marginTop: theme.spacing[0.5],
   },
   installLinkText: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    ...theme.typeScale.caption,
   },
   actionButton: {
     width: 92,
@@ -271,10 +249,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   stateBox: {
     minHeight: 96,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceCard,
     alignItems: "center",
     justifyContent: "center",
     gap: theme.spacing[3],
@@ -282,6 +260,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   stateText: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
+    ...theme.typeScale.body,
   },
 }));

@@ -103,6 +103,8 @@ const moveUpIcon = <ThemedArrowUp size={ICON_SIZE.sm} uniProps={mutedColorMappin
 const moveDownIcon = <ThemedArrowDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const editProfileIcon = <ThemedProfilePencil size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const removeProfileIcon = <ThemedTrash2 size={ICON_SIZE.sm} uniProps={destructiveColorMapping} />;
+// 页面上的移除按钮只打开确认，不上红色；红色按钮在确认的 footer 里（design.md §3）。
+const removeHostIcon = <ThemedTrash2 size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const addProfileIcon = <ThemedPlus size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 
 function formatHostConnectionLabel(connection: HostConnection, t: TFunction): string {
@@ -531,11 +533,6 @@ function ConnectionRow({
     () => [styles.connectionLatency, { color: latencyColor }],
     [latencyColor],
   );
-  const destructiveTextStyle = useMemo(
-    () => ({ color: theme.colors.destructive }),
-    [theme.colors.destructive],
-  );
-
   return (
     <View style={rowStyle}>
       <View style={settingsStyles.rowContent}>
@@ -544,12 +541,7 @@ function ConnectionRow({
         </Text>
       </View>
       <Text style={latencyTextStyle}>{latencyText}</Text>
-      <Button
-        variant="ghost"
-        size="sm"
-        textStyle={destructiveTextStyle}
-        onPress={handlePressRemove}
-      >
+      <Button variant="outline" size="sm" onPress={handlePressRemove}>
         {t("settings.host.connections.removeAction")}
       </Button>
     </View>
@@ -1133,7 +1125,6 @@ function RemoveHostSection({
   onRemoved?: () => void;
 }) {
   const { t } = useTranslation();
-  const { theme } = useUnistyles();
   const { removeHost } = useHostMutations();
   const { updateSettings } = useDesktopSettings();
   const { data: daemonStatusData, setStatus } = useDaemonStatus();
@@ -1148,11 +1139,6 @@ function RemoveHostSection({
         : t("settings.host.daemon.remove.title"),
     }),
     [stopsOwnedDaemon, t],
-  );
-
-  const destructiveTextStyle = useMemo(
-    () => ({ color: theme.colors.destructive }),
-    [theme.colors.destructive],
   );
 
   const handleOpenConfirm = useCallback(() => setIsConfirming(true), []);
@@ -1227,20 +1213,10 @@ function RemoveHostSection({
     updateSettings,
   ]);
 
-  const removeIcon = useMemo(
-    () => <Trash2 size={theme.iconSize.sm} color={theme.colors.destructive} />,
-    [theme.iconSize.sm, theme.colors.destructive],
-  );
-
   const removeHostFooter = useMemo(
     () => (
       <View style={styles.confirmActions}>
-        <Button
-          variant="secondary"
-          size="sm"
-          onPress={handleCancel}
-          disabled={isRemoving}
-        >
+        <Button variant="secondary" size="sm" onPress={handleCancel} disabled={isRemoving}>
           {t("common.actions.cancel")}
         </Button>
         <Button
@@ -1281,8 +1257,7 @@ function RemoveHostSection({
           <Button
             variant="outline"
             size="sm"
-            leftIcon={removeIcon}
-            textStyle={destructiveTextStyle}
+            leftIcon={removeHostIcon}
             onPress={handleOpenConfirm}
             testID="host-page-remove-host-button"
           >
@@ -1782,4 +1757,3 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
   },
 }));
-
