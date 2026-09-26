@@ -124,10 +124,7 @@ export function CommitsSection({
     () => [styles.headerChevron, !collapsed && styles.headerChevronExpanded],
     [collapsed],
   );
-  const containerStyle = useMemo(
-    () => [styles.container, { paddingBottom: insets.bottom }],
-    [insets.bottom],
-  );
+  const containerStyle = useMemo(() => ({ paddingBottom: insets.bottom }), [insets.bottom]);
 
   if (query.status === "unsupported") {
     return null;
@@ -170,10 +167,6 @@ export function CommitsSection({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  container: {
-    borderTopWidth: theme.borderWidth[1],
-    borderTopColor: theme.colors.border,
-  },
   header: {
     flexDirection: "row",
     alignItems: "center",

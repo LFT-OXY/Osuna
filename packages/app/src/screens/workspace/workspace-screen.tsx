@@ -1311,7 +1311,7 @@ function shouldInspectWorkspaceRecovery(
 function WorkspaceScreenGateFrame({ children }: { children: ReactNode }) {
   return (
     <>
-      <ScreenHeader left={GATED_WORKSPACE_HEADER_LEFT} />
+      <ScreenHeader left={GATED_WORKSPACE_HEADER_LEFT} borderless />
       <View style={styles.centerContent}>{children}</View>
     </>
   );
@@ -3929,6 +3929,7 @@ function WorkspaceScreenContent({
             </>
           }
           right={headerRight}
+          borderless
         />
       ) : null,
     [
@@ -4293,8 +4294,6 @@ const styles = StyleSheet.create((theme) => ({
   newTabTooltipShortcut: {},
   mobileTabsRow: {
     backgroundColor: theme.colors.surface0,
-    borderBottomWidth: theme.borderWidth[1],
-    borderBottomColor: theme.colors.border,
   },
   switcherTrigger: {
     flexDirection: "row",

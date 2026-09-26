@@ -39,7 +39,7 @@ import type { SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getProviderIcon } from "@/components/provider-icons";
+import { getProviderBrandColor, getProviderIcon } from "@/components/provider-icons";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import {
@@ -210,7 +210,8 @@ interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "sc
   rootBrowseContent?: React.ReactNode;
 }
 
-type ProviderGlyphTone = "muted" | "foreground";
+// brand：有品牌色的 provider 用品牌色，其余用前景色（Composer toolbar）。
+type ProviderGlyphTone = "muted" | "foreground" | "brand";
 
 export function ModelProviderGlyph({
   provider,
@@ -224,9 +225,16 @@ export function ModelProviderGlyph({
   tone?: ProviderGlyphTone;
 }) {
   const Icon = getProviderIcon(provider, serverId);
-  const color =
-    tone === "foreground" ? styles.providerIconForeground.color : styles.providerIconMuted.color;
-  return <Icon size={size} color={color} />;
+  return <Icon size={size} color={resolveProviderGlyphColor(provider, tone)} />;
+}
+
+function resolveProviderGlyphColor(provider: string, tone: ProviderGlyphTone): string {
+  if (tone === "brand") {
+    return getProviderBrandColor(provider) ?? styles.providerIconForeground.color;
+  }
+  return tone === "foreground"
+    ? styles.providerIconForeground.color
+    : styles.providerIconMuted.color;
 }
 
 function HeaderSettingsIcon({ disabled }: { disabled: boolean }) {

@@ -7,7 +7,7 @@
 - **Cross-platform by default.** Any `isWeb`, `isNative`, `getIsElectron()`, or `Platform.OS` has a specific reason in the diff. Layout decisions use `useIsCompactFormFactor()`, never `Platform.OS`. Large platform branches are separate `.web.ts` / `.native.ts` / `.electron.tsx` files.
 - **No `useUnistyles()` added.** See [Styling](./styling.md).
 - **Hover follows `docs/hover.md`**, and hover-revealed controls are visible on native and compact.
-- **Design forbidden list** (`docs/design.md` §14): `<Pressable>` buttons, raw `Modal`, direct `ActivityIndicator`, bespoke pills, hex colors, off-scale spacing, `fontWeight.medium` on body text, destructive actions without a confirmation, "checkout" in UI strings.
+- **Design forbidden list** (`docs/design.md` §14): `<Pressable>` buttons, raw `Modal`, direct `ActivityIndicator`, bespoke pills, hex colors outside the exceptions §14 names, off-scale spacing, `fontWeight.medium` on body text, destructive actions without a confirmation, "checkout" in UI strings.
 - **Route changes** re-read `docs/expo-router.md` and its checklist: routes are registered in the layout that owns them, workspace returns go through `navigateToWorkspace()` from `stores/navigation-active-workspace-store/index.ts`, and root stays on `/h/[serverId]` for remembered restore.
 - **Every fallible action has pending, success, and failure UI**, and tests for success and failure.
 - **All copy is in `i18n/resources/`**, in every locale.

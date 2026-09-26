@@ -22,7 +22,7 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 | A settings card / row      | `styles/settings.ts` `settingsStyles` (`card`, `row`, `rowTitle`, `rowHint`, `rowValue`, `rowIconFrame`) | Local row padding, card radius, or title sizes     |
 | A value dropdown in a row  | `components/ui/dropdown-trigger.tsx` `<DropdownTrigger>` inside `<DropdownMenu>`           | A `DropdownMenuTrigger` with a hand-drawn outline  |
 | A form field               | `components/ui/form-field.tsx` with the model from `docs/forms.md`                         | `useEffect` choreography                           |
-| A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`               | A hand-rolled bar                                  |
+| A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`; workspace call sites pass `borderless` (`docs/design.md` §5) | A hand-rolled bar; a `borderBottom` on workspace chrome |
 
 ## Fallible actions own their three states
 
@@ -60,6 +60,7 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 
 - Components render and dispatch. Transitions live in reducers, stores, or the form model.
 - Never define a component inside another component.
+- oxlint caps a function's `complexity` at 20, and the large render functions (`DesktopAgentControlsContent`, `CombinedModelSelector`) sit near it, so one more `a && b ? <X /> : null` fails lint. Move the decision into a pure resolver next to the layout code (`resolveComposerSeparators` in `composer/agent-controls/layout.ts`, unit-tested) or the branch into a child component (`DefaultTriggerContent` in `components/combined-model-selector.tsx`). Do not add an `oxlint-disable`.
 - Collection rows do not subscribe to the session store individually; the list owner selects once and passes row models (`docs/coding-standards.md` "React").
 - Retained native panels use `RetainedPanel` / `RetainedPanelActivity`, keep a stable sibling order, and gate effects through `useRetainedPanelActive` (`docs/mobile-panels.md`).
 - Anchored panels go through the portal and lifecycle gates in `docs/floating-panels.md`; the flash and the Android hit-test bug are both documented there.
@@ -68,4 +69,4 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 
 ## Forbidden (from `docs/design.md` §14, enforced in review)
 
-`fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without a confirmation (`confirmDialog`, or a sheet whose footer holds the destructive button).
+`fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens outside the exceptions §14 names; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without a confirmation (`confirmDialog`, or a sheet whose footer holds the destructive button).

@@ -12,6 +12,7 @@ const DEFAULT_LAYOUT: ComposerControlLayoutValue = {
     showCarets: true,
     showThinkingLabel: true,
     showModeLabel: true,
+    showSeparators: true,
     aggregateFeatures: false,
   },
 };

@@ -14,6 +14,7 @@ export interface ComposerControlPresentation {
   showCarets: boolean;
   showThinkingLabel: boolean;
   showModeLabel: boolean;
+  showSeparators: boolean;
   aggregateFeatures: boolean;
 }
 
@@ -23,6 +24,8 @@ export const COMPOSER_TOOLBAR_GEOMETRY = {
   iconLabelGap: 4,
   labelPadding: 8,
   caretSize: 14,
+  separatorWidth: 1,
+  separatorInset: 2,
 } as const;
 
 const DENSITY_HYSTERESIS = 12;
@@ -72,6 +75,13 @@ function resolveFullFloor(controls: ComposerControlPresence): number {
   if (controls.hasModel) widths.push(50 + 70 * fontScale);
   if (controls.hasThinking) widths.push(54 + 48 * fontScale);
   if (controls.hasMode) widths.push(54 + 96 * fontScale);
+  // 只有 full 画分隔线：模型、推理强度、模式相邻两项之间各一条。
+  const separatorCount = Math.max(0, widths.length - 1);
+  for (let index = 0; index < separatorCount; index += 1) {
+    widths.push(
+      COMPOSER_TOOLBAR_GEOMETRY.separatorWidth + COMPOSER_TOOLBAR_GEOMETRY.separatorInset * 2,
+    );
+  }
   for (const feature of controls.features) {
     widths.push(resolveFeatureControlWidth(feature, fontScale));
   }
@@ -110,6 +120,7 @@ export function resolveComposerControlPresentation(
       showCarets: true,
       showThinkingLabel: true,
       showModeLabel: true,
+      showSeparators: true,
       aggregateFeatures: false,
     };
   }
@@ -118,6 +129,7 @@ export function resolveComposerControlPresentation(
       showCarets: false,
       showThinkingLabel: false,
       showModeLabel: true,
+      showSeparators: false,
       aggregateFeatures: true,
     };
   }
@@ -125,7 +137,20 @@ export function resolveComposerControlPresentation(
     showCarets: false,
     showThinkingLabel: false,
     showModeLabel: false,
+    showSeparators: false,
     aggregateFeatures: true,
+  };
+}
+
+/** 竖线只落在相邻两项之间：推理强度前要有模型，模式前要有模型或推理强度。 */
+export function resolveComposerSeparators(input: {
+  showSeparators: boolean;
+  hasModel: boolean;
+  hasThinking: boolean;
+}): { beforeThinking: boolean; beforeMode: boolean } {
+  return {
+    beforeThinking: input.showSeparators && input.hasModel,
+    beforeMode: input.showSeparators && (input.hasModel || input.hasThinking),
   };
 }
 

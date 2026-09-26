@@ -149,11 +149,11 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     paddingVertical: theme.spacing[3],
     paddingHorizontal: theme.spacing[4],
-    borderTopWidth: theme.borderWidth[1],
-    borderTopColor: theme.colors.border,
     gap: theme.spacing[2],
   },
+  // 默认态靠侧栏留白分组，不画线；错误态的红线是状态信号，保留。
   containerError: {
+    borderTopWidth: theme.borderWidth[1],
     borderTopColor: theme.colors.destructive,
   },
   dismissButton: {

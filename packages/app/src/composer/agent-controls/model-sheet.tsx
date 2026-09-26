@@ -8,7 +8,7 @@ import type { AgentProfilePicker, AgentProfileSeed } from "@/agent-profiles";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { getProviderIcon } from "@/components/provider-icons";
-import { ModelBrowser, useModelBrowser } from "@/components/model-browser";
+import { ModelBrowser, ModelProviderGlyph, useModelBrowser } from "@/components/model-browser";
 import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
@@ -279,7 +279,12 @@ export function CompactModelSheet({
       >
         {ProviderIcon ? (
           <ComposerToolbarGlyph size={glyphSize}>
-            <ProviderIcon size={glyphSize} color={styles.providerIcon.color} />
+            <ModelProviderGlyph
+              provider={selectedProvider}
+              serverId={serverId}
+              size={glyphSize}
+              tone="brand"
+            />
           </ComposerToolbarGlyph>
         ) : null}
         <View style={styles.triggerLabels}>
@@ -402,7 +407,7 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
+    fontWeight: theme.fontWeight.medium,
   },
   triggerLabels: {
     minWidth: 0,
@@ -416,9 +421,6 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundExtraMuted,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
-  },
-  providerIcon: {
-    color: theme.colors.foregroundMuted,
   },
   sheetBody: {
     paddingHorizontal: 0,

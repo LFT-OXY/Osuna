@@ -1164,8 +1164,6 @@ const styles = StyleSheet.create((theme) => ({
   errorRow: {
     paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[1],
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
     backgroundColor: theme.colors.surface1,
   },
   statusError: {

@@ -24,7 +24,13 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { Settings2 } from "lucide-react-native";
-import { getAgentFeatureIcon, ThinkingIcon } from "@/agent-controls/icons";
+import {
+  FastModeOnIcon,
+  getAgentFeatureIcon,
+  ThinkingIcon,
+  type AgentControlIcon,
+} from "@/agent-controls/icons";
+import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { Text as UiText } from "@/components/ui/text";
@@ -74,13 +80,15 @@ import { isNative } from "@/constants/platform";
 import {
   resolveComposerControlDensity,
   resolveComposerControlPresentation,
+  resolveComposerSeparators,
   resolveComposerToolbarGlyphSize,
   type ComposerControlDensity,
   type ComposerControlPresentation,
 } from "@/composer/agent-controls/layout";
 import { ComposerControlLayoutProvider } from "@/composer/agent-controls/layout-context";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
-import { AgentControlTrigger } from "@/composer/agent-controls/control";
+import { AgentControlSeparator, AgentControlTrigger } from "@/composer/agent-controls/control";
+import { getProviderBrandColor } from "@/components/provider-icons";
 import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
 import {
   useAgentProfileEditor,
@@ -215,42 +223,47 @@ function getModeProviderDefinitions(modeControl: AgentModeControlValue | null) {
 function getFeatureIconColor(
   featureId: string,
   enabled: boolean,
-  palette: {
-    blue: { 400: string };
-    green: { 400: string };
-    yellow: { 400: string };
+  provider: string,
+  colors: {
+    palette: {
+      blue: { 400: string };
+      green: { 400: string };
+    };
+    foreground: string;
+    foregroundMuted: string;
   },
-  foregroundMuted: string,
 ): string {
   if (!enabled) {
-    return foregroundMuted;
+    return colors.foregroundMuted;
   }
 
   switch (getFeatureHighlightColor(featureId)) {
     case "blue":
-      return palette.blue[400];
+      return colors.palette.blue[400];
     case "green":
-      return palette.green[400];
-    case "yellow":
-      return palette.yellow[400];
+      return colors.palette.green[400];
+    case "providerBrand":
+      return getProviderBrandColor(provider) ?? colors.foreground;
     default:
-      return foregroundMuted;
+      return colors.foregroundMuted;
   }
 }
 
 // 开关类功能的图标色随主题变，交给 AgentControlTrigger 经 withUnistyles 映射，不在组件里订阅主题。
-function useFeatureIconColorMapping(featureId: string, enabled: boolean) {
+function useFeatureIconColorMapping(featureId: string, enabled: boolean, provider: string) {
   return useCallback(
     (theme: Theme) => ({
-      color: getFeatureIconColor(
-        featureId,
-        enabled,
-        theme.colors.palette,
-        theme.colors.foregroundMuted,
-      ),
+      color: getFeatureIconColor(featureId, enabled, provider, theme.colors),
     }),
-    [featureId, enabled],
+    [featureId, enabled, provider],
   );
+}
+
+function getToggleFeatureIcon(feature: AgentFeature): AgentControlIcon {
+  if (feature.id === FAST_MODE_FEATURE_ID && feature.type === "toggle" && feature.value) {
+    return FastModeOnIcon;
+  }
+  return getAgentFeatureIcon(feature.icon);
 }
 
 const ThemedSettings2 = withUnistyles(Settings2);
@@ -970,6 +983,12 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     [t],
   );
   const handleOpenFeatures = useCallback(() => handleOpenSheet("features"), [handleOpenSheet]);
+  const hasThinking = Boolean(thinkingOptions && thinkingOptions.length > 0);
+  const separators = resolveComposerSeparators({
+    showSeparators: presentation.showSeparators,
+    hasModel: canSelectModel,
+    hasThinking,
+  });
   return (
     <>
       {providerOptions && providerOptions.length > 0 ? (
@@ -987,6 +1006,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
             <UiText
               variant="label"
               color="foregroundMuted"
+              weight="medium"
               style={styles.modeBadgeText}
               numberOfLines={1}
             >
@@ -1039,8 +1059,9 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
         </Tooltip>
       ) : null}
 
-      {thinkingOptions && thinkingOptions.length > 0 ? (
+      {hasThinking ? (
         <>
+          <AgentControlSeparator visible={separators.beforeThinking} />
           <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
             <TooltipTrigger asChild triggerRefProp="ref">
               <AgentControlTrigger
@@ -1079,7 +1100,12 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
         </>
       ) : null}
 
-      {modeControl ? <AgentModeControl {...modeControl} onClose={onDropdownClose} /> : null}
+      {modeControl ? (
+        <>
+          <AgentControlSeparator visible={separators.beforeMode} />
+          <AgentModeControl {...modeControl} onClose={onDropdownClose} />
+        </>
+      ) : null}
 
       {presentation.aggregateFeatures && features?.length ? (
         <>
@@ -1105,6 +1131,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
               <SheetFeatureItem
                 key={`feature-${feature.id}`}
                 feature={feature}
+                provider={provider}
                 disabled={disabled}
                 openSelector={openSelector}
                 handleOpenChange={handleNestedOpenChange}
@@ -1118,6 +1145,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
           <DesktopFeatureItem
             key={`feature-${feature.id}`}
             feature={feature}
+            provider={provider}
             disabled={disabled}
             openSelector={openSelector}
             handleOpenChange={handleOpenChange}
@@ -1266,6 +1294,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
         <SheetFeatureItem
           key={`feature-${feature.id}`}
           feature={feature}
+          provider={provider}
           disabled={disabled}
           openSelector={openSelector}
           handleOpenChange={handleOpenChange}
@@ -1304,6 +1333,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
 
 function DesktopFeatureItem({
   feature,
+  provider,
   disabled,
   openSelector,
   handleOpenChange,
@@ -1311,6 +1341,7 @@ function DesktopFeatureItem({
   onActionComplete,
 }: {
   feature: AgentFeature;
+  provider: string;
   disabled: boolean;
   openSelector: AgentControlSelector | null;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
@@ -1320,6 +1351,7 @@ function DesktopFeatureItem({
   const featureIconColorMapping = useFeatureIconColorMapping(
     feature.id,
     feature.type === "toggle" && feature.value,
+    provider,
   );
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
@@ -1355,7 +1387,7 @@ function DesktopFeatureItem({
   );
 
   if (feature.type === "toggle") {
-    const FeatureIcon = getAgentFeatureIcon(feature.icon);
+    const FeatureIcon = getToggleFeatureIcon(feature);
     return (
       <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
         <TooltipTrigger asChild triggerRefProp="ref">
@@ -1420,12 +1452,14 @@ function DesktopFeatureItem({
 
 function SheetFeatureItem({
   feature,
+  provider,
   disabled,
   openSelector,
   handleOpenChange,
   onSetFeature,
 }: {
   feature: AgentFeature;
+  provider: string;
   disabled: boolean;
   openSelector: AgentControlSelector | null;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
@@ -1434,6 +1468,7 @@ function SheetFeatureItem({
   const featureIconColorMapping = useFeatureIconColorMapping(
     feature.id,
     feature.type === "toggle" && feature.value,
+    provider,
   );
   const { t } = useTranslation();
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
@@ -1466,7 +1501,7 @@ function SheetFeatureItem({
   }, [feature, t]);
 
   if (feature.type === "toggle") {
-    const FeatureIcon = getAgentFeatureIcon(feature.icon);
+    const FeatureIcon = getToggleFeatureIcon(feature);
     return (
       <>
         <AgentControlTrigger
