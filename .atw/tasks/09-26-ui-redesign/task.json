@@ -12,7 +12,7 @@
   "assignee": "oxy",
   "createdAt": "2026-09-26",
   "completedAt": null,
-  "branch": "main",
+  "branch": "feat/ui-redesign",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
