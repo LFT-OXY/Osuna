@@ -98,10 +98,10 @@ const styles = StyleSheet.create((theme) => ({
     maxWidth: SEARCH_FIELD_MAX_WIDTH,
     paddingVertical: theme.spacing[1.5],
     paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surface1,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderInput,
   },
   fieldFocused: {
     borderColor: theme.colors.borderAccent,

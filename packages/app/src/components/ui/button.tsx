@@ -94,7 +94,7 @@ const styles = StyleSheet.create((theme) => {
       alignItems: "center",
       justifyContent: "center",
       gap: theme.spacing[2],
-      borderRadius: theme.borderRadius.lg,
+      borderRadius: theme.radius.md,
       borderWidth: 1,
       borderColor: "transparent",
     },
@@ -129,6 +129,10 @@ const styles = StyleSheet.create((theme) => {
     destructive: {
       backgroundColor: theme.colors.destructive,
       borderColor: theme.colors.destructive,
+    },
+    // outline 与 ghost 没有自己的底色，hover 时铺一层与菜单项、工具栏按钮相同的半透明高亮。
+    hoveredFill: {
+      backgroundColor: theme.colors.interactionHighlight,
     },
     pressed: {
       opacity: 0.85,
@@ -210,6 +214,7 @@ export function Button({
     sizeStyle = styles.md;
   }
   const isGhostHovered = hovered && variant === "ghost";
+  const hasHoverFill = hovered && !isDisabled && (variant === "ghost" || variant === "outline");
 
   const handleHoverIn = useCallback(() => setHovered(true), []);
   const handleHoverOut = useCallback(() => setHovered(false), []);
@@ -219,11 +224,12 @@ export function Button({
       styles.base,
       sizeStyle,
       variantStyle,
+      hasHoverFill ? styles.hoveredFill : null,
       pressed ? styles.pressed : null,
       isDisabled ? styles.disabled : null,
       style,
     ],
-    [sizeStyle, variantStyle, isDisabled, style],
+    [sizeStyle, variantStyle, hasHoverFill, isDisabled, style],
   );
 
   const resolvedTextStyle = useMemo(

@@ -15,7 +15,7 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 | A status pill              | `components/ui/status-badge.tsx`                                                           | A bespoke pill                                     |
 | A focused modal task       | `components/adaptive-modal-sheet.tsx`                                                      | Raw `Modal`                                        |
 | A page-level alert         | `components/ui/alert.tsx`                                                                  | `Alert.alert()` (a no-op on web) or a console line |
-| A destructive confirmation | `utils/confirm-dialog.ts` → `confirmDialog()`                                              | An unguarded action                                |
+| A destructive confirmation | `utils/confirm-dialog.ts` → `confirmDialog()` (OS dialog); with detail, `<AdaptiveModalSheet>` + `footer` | An unguarded action; a red button on the page      |
 | A picker                   | `components/ui/combobox.tsx`                                                               | A custom list                                      |
 | A trigger-anchored menu    | `components/ui/dropdown-menu.tsx`; right-click/long-press `components/ui/context-menu.tsx` | An ad hoc popover (`docs/menus.md`)                |
 | A settings section         | `components/settings/headings/settings-section.tsx`                                        | Bare `<Text>` headers                              |
@@ -64,4 +64,4 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 
 ## Forbidden (from `docs/design.md` §14, enforced in review)
 
-`fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without `confirmDialog`.
+`fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without a confirmation (`confirmDialog`, or a sheet whose footer holds the destructive button).

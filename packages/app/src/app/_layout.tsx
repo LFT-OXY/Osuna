@@ -116,6 +116,7 @@ import { flushDraftPersistStorage } from "@/stores/draft-store";
 import { getNextThemePreference } from "@/styles/theme";
 import { useSessionStore } from "@/stores/session-store";
 import { installWebScrollbarStyles } from "@/styles/install-web-scrollbar-styles";
+import { installWebSurfaceGrain } from "@/styles/install-web-surface-grain";
 import type { HostProfile } from "@/types/host-connection";
 import {
   useHasWindowChromeObstruction,
@@ -994,6 +995,7 @@ function RootAppTree() {
 
 export default function RootLayout() {
   useEffect(() => installWebScrollbarStyles(), []);
+  useEffect(() => installWebSurfaceGrain(), []);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState !== "active") {

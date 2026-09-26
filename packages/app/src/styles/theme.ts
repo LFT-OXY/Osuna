@@ -250,6 +250,11 @@ const LIGHT_COMPOSER_SHADOW = "rgba(0, 0, 0, 0.4)";
 // diff 行底色与色条沿用 diff 视图一直使用的状态色（底色为其透明版）。
 const DIFF_ADDITION_BACKGROUND_ALPHA = 0.15;
 const DIFF_DELETION_BACKGROUND_ALPHA = 0.1;
+// 浮层取值来自原型（t3code 的 surface-glass / dialog-backdrop / 菜单与对话框投影）。
+// 毛玻璃表面是卡片色的 80%，只在 Web 上配合背景模糊使用；原生端用不透明的 surfaceCard。
+const GLASS_SURFACE_ALPHA = 0.8;
+const DIALOG_FOOTER_ALPHA = 0.7;
+const WARNING_BLOCK_ALPHA = 0.1;
 
 // 旧主题有的色阶本来就挨得很近（GitHub Light 的 surface1 与侧栏同色）。候选色与任一参照色
 // 分不开时，从候选色按 1% 步长向前景色叠色，取第一个与全部参照色都拉开的值。
@@ -280,6 +285,7 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
   const statusColors = isDark ? darkStatusColors : lightStatusColors;
 
   const surfaceWorkspace = overrides.surfaceWorkspace ?? (isDark ? base.surface1 : base.surface0);
+  const surfaceCard = overrides.surfaceCard ?? (isDark ? base.surface2 : base.surface0);
   const surfaceSidebarHover =
     overrides.surfaceSidebarHover ??
     ensureDistinctRowColor(base.surface1, [base.surfaceSidebar], foreground);
@@ -319,7 +325,7 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
   return {
     surfaceWorkspace,
     surfaceChrome: overrides.surfaceChrome ?? surfaceWorkspace,
-    surfaceCard: overrides.surfaceCard ?? (isDark ? base.surface2 : base.surface0),
+    surfaceCard,
     surfaceMessage: overrides.surfaceMessage ?? base.surface3,
     surfaceSidebarHover,
     surfaceSidebarActive,
@@ -332,6 +338,28 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     diffDeletionBar: statusColors.statusDanger,
     shadowComposer: overrides.shadowComposer ?? (isDark ? "transparent" : LIGHT_COMPOSER_SHADOW),
     insetHighlight: overrides.insetHighlight ?? (isDark ? DARK_INSET_HIGHLIGHT : "transparent"),
+    ...deriveOverlayRoles({ isDark, surfaceCard, surface2: base.surface2 }),
+  };
+}
+
+/** 菜单、对话框等浮层的表面、遮罩与投影，始终派生，主题不单独给值。 */
+function deriveOverlayRoles({
+  isDark,
+  surfaceCard,
+  surface2,
+}: {
+  isDark: boolean;
+  surfaceCard: string;
+  surface2: string;
+}) {
+  return {
+    surfaceGlass: hexColorWithAlpha(surfaceCard, GLASS_SURFACE_ALPHA),
+    surfaceDialogFooter: hexColorWithAlpha(surface2, DIALOG_FOOTER_ALPHA),
+    // 风险警示块：与 <Alert variant="warning"> 的强调色同源。
+    surfaceWarning: hexColorWithAlpha(baseColors.amber[500], WARNING_BLOCK_ALPHA),
+    overlayScrim: isDark ? "rgba(0, 0, 0, 0.35)" : "rgba(0, 0, 0, 0.18)",
+    shadowPopover: isDark ? "rgba(0, 0, 0, 0.8)" : "rgba(0, 0, 0, 0.35)",
+    shadowDialog: isDark ? "rgba(0, 0, 0, 0.9)" : "rgba(0, 0, 0, 0.45)",
   };
 }
 

@@ -164,11 +164,12 @@ const styles = StyleSheet.create((theme) => {
   const geometry = createControlGeometry(theme);
 
   return {
+    // 分段坐在一条 surface2 的轨道里；选中段抬成 surface3，悬停段用半透明高亮，轨道上仍可辨。
     container: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: "transparent",
-      gap: theme.spacing[1],
+      backgroundColor: theme.colors.surface2,
+      gap: theme.spacing[0.5],
     },
     containerXs: {
       ...geometry.segmentedContainerXs,
@@ -199,7 +200,7 @@ const styles = StyleSheet.create((theme) => {
       backgroundColor: theme.colors.surface3,
     },
     segmentHover: {
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.interactionHighlight,
     },
     segmentPressed: {
       backgroundColor: theme.colors.surface3,

@@ -35,6 +35,8 @@ import { isWeb } from "@/constants/platform";
 import { useKeyboardVisibility } from "@/hooks/use-keyboard-visibility";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
+import { dialogScrimFill, floatingSurfaceFill } from "@/styles/floating-surface";
+import { GLASS_SURFACES_ENABLED } from "@/styles/glass-support";
 export { AdaptiveTextInput, type AdaptiveTextInputProps } from "@/components/adaptive-text-input";
 
 // Horizontal indent token shared by the sheet header (title, back arrow,
@@ -74,7 +76,6 @@ export interface SheetHeader {
 }
 
 const SCROLL_CONTENT_GROW = { flexGrow: 1 };
-const ABSOLUTE_FILL_STYLE = { ...StyleSheet.absoluteFillObject };
 
 const styles = StyleSheet.create((theme) => ({
   nativeModalRoot: {
@@ -82,11 +83,17 @@ const styles = StyleSheet.create((theme) => ({
   },
   desktopOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",
     padding: theme.spacing[6],
     pointerEvents: "auto" as const,
+  },
+  // The scrim is the dismiss target, a sibling of the card rather than its parent: an ancestor
+  // with a backdrop filter would become the card's backdrop root, and the card's own blur would
+  // then sample only the scrim tint instead of the page.
+  desktopScrim: {
+    ...StyleSheet.absoluteFillObject,
+    ...dialogScrimFill(theme, { glass: GLASS_SURFACES_ENABLED }),
   },
   desktopCard: {
     overflow: "hidden",
@@ -95,14 +102,15 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: "85%",
     flexShrink: 1,
     minHeight: 0,
-    backgroundColor: theme.colors.surface1,
-    borderRadius: theme.borderRadius.xl,
+    ...floatingSurfaceFill(theme, { glass: GLASS_SURFACES_ENABLED }),
+    borderRadius: theme.radius["2xl"],
     borderWidth: 1,
-    borderColor: theme.colors.surface2,
+    borderColor: theme.colors.border,
+    boxShadow: `0 24px 64px -24px ${theme.colors.shadowDialog}, inset 0 1px 0 ${theme.colors.insetHighlight}`,
   },
   headerContainer: {
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.surface2,
+    borderBottomColor: theme.colors.border,
   },
   headerRow: {
     paddingHorizontal: theme.spacing[SHEET_HORIZONTAL_PADDING_SCALE],
@@ -217,11 +225,14 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     minHeight: 0,
   },
+  // The button area: a tinted strip under a single rule, so the actions read as the dialog's
+  // footing rather than as more content.
   footer: {
     paddingHorizontal: theme.spacing[SHEET_HORIZONTAL_PADDING_SCALE],
     paddingVertical: theme.spacing[3],
     borderTopWidth: 1,
-    borderTopColor: theme.colors.surface2,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceDialogFooter,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -237,12 +248,12 @@ function SheetBackground({ style }: BottomSheetBackgroundProps) {
     () => [
       style,
       {
-        backgroundColor: theme.colors.surface0,
-        borderTopLeftRadius: theme.borderRadius["2xl"],
-        borderTopRightRadius: theme.borderRadius["2xl"],
+        backgroundColor: theme.colors.surfaceCard,
+        borderTopLeftRadius: theme.radius["2xl"],
+        borderTopRightRadius: theme.radius["2xl"],
       },
     ],
-    [style, theme.colors.surface0, theme.borderRadius],
+    [style, theme.colors.surfaceCard, theme.radius],
   );
   return <Animated.View pointerEvents="none" style={combinedStyle} />;
 }
@@ -703,7 +714,7 @@ export function AdaptiveModalSheet({
     <View style={desktopOverlayStyle} testID={testID}>
       <Pressable
         accessibilityLabel={t("common.actions.dismiss")}
-        style={ABSOLUTE_FILL_STYLE}
+        style={styles.desktopScrim}
         onPress={onClose}
       />
       <View
