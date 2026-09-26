@@ -254,6 +254,8 @@ const DARK_INSET_HIGHLIGHT = "rgba(255, 255, 255, 0.04)";
 // 助手回复正文取前景色的 86%（原型 / t3code），让长回复读起来比标题和用户消息轻一档。
 const PROSE_FOREGROUND_ALPHA = 0.86;
 const LIGHT_COMPOSER_SHADOW = "rgba(0, 0, 0, 0.4)";
+// Composer 与其底部上下文条的描边：前景色的 9%，半透明，叠在毛玻璃上随背后内容变化（原型 / t3code）。
+const COMPOSER_BORDER_ALPHA = 0.09;
 // diff 行底色与色条沿用 diff 视图一直使用的状态色（底色为其透明版）。
 const DIFF_ADDITION_BACKGROUND_ALPHA = 0.15;
 const DIFF_DELETION_BACKGROUND_ALPHA = 0.1;
@@ -358,6 +360,7 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     diffDeletionBackground,
     diffAdditionBar: statusColors.statusSuccess,
     diffDeletionBar: statusColors.statusDanger,
+    borderComposer: hexColorWithAlpha(foreground, COMPOSER_BORDER_ALPHA),
     shadowComposer: overrides.shadowComposer ?? (isDark ? "transparent" : LIGHT_COMPOSER_SHADOW),
     insetHighlight: overrides.insetHighlight ?? (isDark ? DARK_INSET_HIGHLIGHT : "transparent"),
     ...deriveOverlayRoles({ isDark, surfaceCard, surface2: base.surface2 }),

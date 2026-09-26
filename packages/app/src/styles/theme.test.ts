@@ -309,6 +309,11 @@ describe("Default palette", () => {
     expect(darkTheme.colors.insetHighlight).toBe("rgba(255, 255, 255, 0.04)");
   });
 
+  it("outlines the composer in 9% of the foreground", () => {
+    expect(lightTheme.colors.borderComposer).toBe("rgba(39, 39, 42, 0.09)");
+    expect(darkTheme.colors.borderComposer).toBe("rgba(245, 245, 245, 0.09)");
+  });
+
   it("tones assistant prose to 86% of the foreground and borders code blocks only in Light", () => {
     expect(darkTheme.colors).toMatchObject({
       foregroundProse: "rgba(245, 245, 245, 0.86)",
@@ -441,6 +446,7 @@ const REDESIGN_ROLES = [
   "diffDeletionBackground",
   "diffAdditionBar",
   "diffDeletionBar",
+  "borderComposer",
   "shadowComposer",
   "insetHighlight",
   "surfaceGlass",

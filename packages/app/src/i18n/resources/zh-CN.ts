@@ -131,6 +131,10 @@ export const zhCN: TranslationResources = {
       queue: "排队",
       send: "发送",
     },
+    context: {
+      worktree: "Worktree",
+      local: "本地",
+    },
     cancel: {
       cancelingAgent: "正在取消 Agent",
       stopAgent: "停止 Agent",

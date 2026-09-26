@@ -131,6 +131,10 @@ export const ko: TranslationResources = {
       queue: "대기열",
       send: "보내기",
     },
+    context: {
+      worktree: "Worktree",
+      local: "로컬",
+    },
     cancel: {
       cancelingAgent: "에이전트 취소 중",
       stopAgent: "에이전트 중지",

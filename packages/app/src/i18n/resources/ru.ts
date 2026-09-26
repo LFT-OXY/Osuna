@@ -132,6 +132,10 @@ export const ru: TranslationResources = {
       queue: "Очередь",
       send: "Отправить",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Локально",
+    },
     cancel: {
       cancelingAgent: "Отменить агента",
       stopAgent: "Остановить агента",
