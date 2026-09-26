@@ -44,7 +44,7 @@ export function resolveSystemWindowTheme(): WindowTheme {
 }
 
 export function getWindowBackgroundColor(theme: WindowTheme): string {
-  return theme === "dark" ? "#181B1A" : "#ffffff";
+  return theme === "dark" ? "#0a0a0a" : "#fcfcfc";
 }
 
 export function getMainWindowChromeOptions(input: {

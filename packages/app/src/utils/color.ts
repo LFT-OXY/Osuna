@@ -83,6 +83,37 @@ function toHexChannel(channel: number): string {
   return clamped.toString(16).padStart(2, "0");
 }
 
+/** 两个 hex 颜色之间的 WCAG 对比度（忽略 alpha 位）。 */
+export function hexContrastRatio(first: string, second: string): number {
+  const luminance = (hex: string) => {
+    const rgb = parseHexColor(opaqueHexColor(hex));
+    if (!rgb) throw new TypeError(`Expected a hex color, received ${hex}`);
+    const [r, g, b] = rgb.map(srgbToLinear);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const a = luminance(first);
+  const b = luminance(second);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/** 去掉 `#rrggbbaa` 的 alpha 位；插件色板可能带 alpha。 */
+function opaqueHexColor(hex: string): string {
+  const body = hex.startsWith("#") ? hex.slice(1) : hex;
+  return body.length === 8 ? `#${body.slice(0, 6)}` : hex;
+}
+
+/**
+ * 把 `overlay` 以 `amount` 不透明度叠在 `base` 上，返回叠色后的不透明值，与浏览器绘制 rgba 填充的
+ * sRGB 混合一致。半透明填充总落在同一个已知表面上时用它，token 保持纯 hex，对比度检查才读得了。
+ */
+export function mixHexColor(base: string, overlay: string, amount: number): string {
+  const from = parseHexColor(opaqueHexColor(base));
+  const to = parseHexColor(opaqueHexColor(overlay));
+  if (!from || !to) throw new TypeError(`Expected hex colors, received ${base} and ${overlay}`);
+  const [r, g, b] = from.map((channel, index) => channel + (to[index] - channel) * amount);
+  return `#${toHexChannel(r)}${toHexChannel(g)}${toHexChannel(b)}`;
+}
+
 /**
  * Scales a colour's chroma toward neutral while holding its perceived lightness.
  *

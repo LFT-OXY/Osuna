@@ -325,7 +325,7 @@ test.describe("CodeMirror workspace file editing", () => {
     await content.click();
     const cursor = editorHost.locator(".cm-cursor-primary");
     await expect(cursor).toBeVisible();
-    await expect(cursor).toHaveCSS("border-left-color", "rgb(250, 250, 250)");
+    await expect(cursor).toHaveCSS("border-left-color", "rgb(245, 245, 245)");
 
     const initialModeBox = await modeControl.boundingBox();
     expect(initialModeBox).not.toBeNull();

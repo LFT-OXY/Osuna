@@ -26,9 +26,9 @@ process.stdin.on("data", (chunk) => {
 setTimeout(finish, 700);
 `;
 
-// 深色主题 terminal.background 是 styles/theme.ts 里 paseoDarkColors.surface0 = #181B1A，
+// 深色主题 terminal.background 是 styles/theme.ts 里 paseoDarkColors.surface0 = #0a0a0a，
 // daemon 按 OSC 11 的 rgb:rrrr/gggg/bbbb 形式回答。
-const DARK_TERMINAL_BACKGROUND_REPLY = "rgb:1818/1b1b/1a1a";
+const DARK_TERMINAL_BACKGROUND_REPLY = "rgb:0a0a/0a0a/0a0a";
 
 test.describe("Terminal protocol queries", () => {
   let harness: TerminalE2EHarness;
