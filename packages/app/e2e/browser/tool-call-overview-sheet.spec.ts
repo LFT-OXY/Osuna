@@ -228,9 +228,10 @@ test.describe("compact overview tool calls", () => {
       await expect(sheet).toBeVisible();
       const initialSummary = await summary.innerText();
 
-      gate.release(10);
+      // 放出足够多的工具行，让 26px 高的行在紧凑 sheet 里溢出，才能检查是否滚到最新一行。
+      gate.release(20);
       const badges = sheet.getByTestId("tool-call-badge");
-      await expect.poll(() => badges.count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(11);
+      await expect.poll(() => badges.count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(21);
       await expect(summary).not.toHaveText(initialSummary);
       await expect.poll(() => sheet.evaluate(hasScrolledToLatest)).toBe(true);
       const scrollMetrics = await sheet.evaluate(readScrollMetrics);

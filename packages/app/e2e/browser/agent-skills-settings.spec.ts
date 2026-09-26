@@ -195,7 +195,7 @@ test.describe("Agent skills sheet inset", () => {
       expect({
         aboveLabel: await readVerticalGap(allSkillsCard(page), bundledSkillsLabel(page)),
         belowLabel: await readVerticalGap(bundledSkillsLabel(page), skillListCard(page)),
-      }).toEqual({ aboveLabel: 16, belowLabel: 12 });
+      }).toEqual({ aboveLabel: 16, belowLabel: 8 });
     });
   });
 
@@ -209,7 +209,7 @@ test.describe("Agent skills sheet inset", () => {
       expect({
         aboveLabel: await readVerticalGap(allSkillsCard(page), bundledSkillsLabel(page)),
         belowLabel: await readVerticalGap(bundledSkillsLabel(page), skillListCard(page)),
-      }).toEqual({ aboveLabel: 16, belowLabel: 12 });
+      }).toEqual({ aboveLabel: 16, belowLabel: 8 });
     });
   });
 });
