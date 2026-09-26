@@ -11,3 +11,4 @@
 {"file": "docs/unistyles.md", "reason": "useUnistyles 禁用与运行时主题改写的边界"}
 {"file": "docs/hover.md", "reason": "Row 组件必须遵循的唯一 hover 模式"}
 {"file": "docs/qa.md", "reason": "Electron 截图等视觉验收证据要求"}
+{"file": ".atw/tasks/09-26-ui-redesign/issues/11-settings-fewer-rules.md", "reason": "ATW current ticket"}
