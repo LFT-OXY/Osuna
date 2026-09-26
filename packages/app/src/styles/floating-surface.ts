@@ -13,7 +13,7 @@ interface SurfaceFillOptions {
   glass: boolean;
 }
 
-/** 菜单、Combobox 弹层、对话框卡片的底色。 */
+/** 菜单、Combobox 弹层、对话框卡片与 Composer 的底色。 */
 export function floatingSurfaceFill(theme: Theme, { glass }: SurfaceFillOptions) {
   if (!glass) {
     return { backgroundColor: theme.colors.surfaceCard };
@@ -46,5 +46,19 @@ export function popoverSurfaceStyle(theme: Theme, options: SurfaceFillOptions) {
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
     boxShadow: `0 16px 40px -18px ${theme.colors.shadowPopover}, inset 0 1px 0 ${theme.colors.insetHighlight}`,
+  };
+}
+
+/**
+ * Composer 输入面：与浮层同一种（毛玻璃或不透明）底色，但描边是半透明的 `borderComposer`，
+ * 叠在毛玻璃上随背后内容变化；亮色投下 Composer 阴影，暗色只有顶部内高光。
+ */
+export function composerSurfaceStyle(theme: Theme, options: SurfaceFillOptions) {
+  return {
+    ...floatingSurfaceFill(theme, options),
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.borderComposer,
+    borderRadius: theme.radius["3xl"],
+    boxShadow: `0 12px 28px -18px ${theme.colors.shadowComposer}, inset 0 1px 0 ${theme.colors.insetHighlight}`,
   };
 }

@@ -4,6 +4,7 @@ import {
   computeCanStartDictation,
   resolveActiveSendBehavior,
   resolveComposerSurfacePresentation,
+  resolvePrimaryActions,
   runAlternateSendAction,
   runDefaultSendAction,
   runMessageInputKeyboardAction,
@@ -53,6 +54,52 @@ describe("composer surface presentation", () => {
       input: { opacity: 0, pointerEvents: "none" },
       overlay: { opacity: 1, pointerEvents: "auto" },
     });
+  });
+});
+
+describe("composer primary actions", () => {
+  const idle = {
+    hasSendableContent: false,
+    allowEmptySubmit: false,
+    isAgentRunning: false,
+    isSubmitLoading: false,
+  };
+
+  it("shows neither button on an idle, empty composer", () => {
+    expect(resolvePrimaryActions(idle)).toEqual({ showStop: false, showSend: false });
+  });
+
+  it("shows Send once there is something to send", () => {
+    expect(resolvePrimaryActions({ ...idle, hasSendableContent: true })).toEqual({
+      showStop: false,
+      showSend: true,
+    });
+    expect(resolvePrimaryActions({ ...idle, allowEmptySubmit: true })).toEqual({
+      showStop: false,
+      showSend: true,
+    });
+  });
+
+  it("keeps the loading Send in place while an idle submit is in flight", () => {
+    expect(resolvePrimaryActions({ ...idle, isSubmitLoading: true })).toEqual({
+      showStop: false,
+      showSend: true,
+    });
+  });
+
+  it("keeps Stop while running and adds Send beside it once there is a draft", () => {
+    const running = { ...idle, isAgentRunning: true };
+    expect(resolvePrimaryActions(running)).toEqual({ showStop: true, showSend: false });
+    expect(resolvePrimaryActions({ ...running, hasSendableContent: true })).toEqual({
+      showStop: true,
+      showSend: true,
+    });
+  });
+
+  it("does not add a second stop while a submit into a running agent is in flight", () => {
+    expect(resolvePrimaryActions({ ...idle, isAgentRunning: true, isSubmitLoading: true })).toEqual(
+      { showStop: true, showSend: false },
+    );
   });
 });
 

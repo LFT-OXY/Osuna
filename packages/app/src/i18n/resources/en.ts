@@ -127,6 +127,10 @@ export const en = {
       queue: "Queue",
       send: "Send",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Local",
+    },
     cancel: {
       cancelingAgent: "Canceling agent",
       stopAgent: "Stop agent",

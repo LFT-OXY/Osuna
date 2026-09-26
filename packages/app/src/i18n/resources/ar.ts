@@ -131,6 +131,10 @@ export const ar: TranslationResources = {
       queue: "طابور",
       send: "يرسل",
     },
+    context: {
+      worktree: "Worktree",
+      local: "محلي",
+    },
     cancel: {
       cancelingAgent: "وكيل الإلغاء",
       stopAgent: "توقف الوكيل",

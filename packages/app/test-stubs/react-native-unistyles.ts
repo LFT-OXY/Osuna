@@ -37,6 +37,10 @@ const testTheme = {
     surfaceCard: "#ffffff",
     surfaceGlass: "rgba(255, 255, 255, 0.8)",
     overlayScrim: "rgba(0, 0, 0, 0.18)",
+    // Composer 的描边、投影与内高光，取默认亮色主题的值。
+    borderComposer: "rgba(39, 39, 42, 0.09)",
+    shadowComposer: "rgba(0, 0, 0, 0.4)",
+    insetHighlight: "transparent",
     palette: {
       amber: { 500: "#f59e0b" },
       blue: { 300: "#93c5fd" },

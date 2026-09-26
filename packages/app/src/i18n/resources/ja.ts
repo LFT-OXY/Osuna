@@ -132,6 +132,10 @@ export const ja: TranslationResources = {
       queue: "キュー",
       send: "送信",
     },
+    context: {
+      worktree: "Worktree",
+      local: "ローカル",
+    },
     cancel: {
       cancelingAgent: "エージェントをキャンセル中",
       stopAgent: "エージェントを停止",

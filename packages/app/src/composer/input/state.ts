@@ -38,6 +38,31 @@ export function resolveComposerSurfacePresentation(
   return showOverlay ? OVERLAY_PRESENTATION : INPUT_PRESENTATION;
 }
 
+export interface PrimaryActions {
+  showStop: boolean;
+  showSend: boolean;
+}
+
+/**
+ * Composer 右下角的停止与发送。运行中停止常驻，有可发送内容时发送出现在它右边，
+ * 两者同时可见；发送做什么仍由发送行为设置决定。运行中提交进行时，文本已清空，
+ * 不再出现第二个可中断的按钮。
+ */
+export function resolvePrimaryActions(input: {
+  hasSendableContent: boolean;
+  allowEmptySubmit: boolean;
+  isAgentRunning: boolean;
+  isSubmitLoading: boolean;
+}): PrimaryActions {
+  return {
+    showStop: input.isAgentRunning,
+    showSend:
+      input.hasSendableContent ||
+      input.allowEmptySubmit ||
+      (input.isSubmitLoading && !input.isAgentRunning),
+  };
+}
+
 interface StopRealtimeVoiceContext {
   voice: { stopVoice: () => Promise<unknown> } | null | undefined;
   isRealtimeVoiceForCurrentAgent: boolean;

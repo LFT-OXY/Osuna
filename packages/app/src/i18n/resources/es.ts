@@ -132,6 +132,10 @@ export const es: TranslationResources = {
       queue: "Cola",
       send: "Enviar",
     },
+    context: {
+      worktree: "Worktree",
+      local: "Local",
+    },
     cancel: {
       cancelingAgent: "Agente de cancelación",
       stopAgent: "detener agente",

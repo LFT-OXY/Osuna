@@ -21,6 +21,8 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { composerSurfaceStyle } from "@/styles/floating-surface";
+import { GLASS_SURFACES_ENABLED } from "@/styles/glass-support";
 import { ArrowUp, Mic, MicOff, CornerDownLeft, Plus, Square } from "lucide-react-native";
 import { useDictation } from "@/hooks/use-dictation";
 import { DictationOverlay } from "@/components/dictation-controls";
@@ -77,6 +79,8 @@ import {
   applyDictationTranscript,
   computeCanStartDictation,
   resolveComposerSurfacePresentation,
+  resolvePrimaryActions,
+  type PrimaryActions,
   runAlternateSendAction,
   runDefaultSendAction,
   runMessageInputKeyboardAction,
@@ -141,7 +145,7 @@ export interface MessageInputProps {
   beforeVoiceContent?: React.ReactNode;
   /** Auxiliary content to render on the right side after the voice button. */
   rightContent?: React.ReactNode;
-  /** Primary action to render when the agent is active and the composer has no sendable content. */
+  /** Stop action, shown for as long as the agent runs; Send joins it once there is a draft. */
   activeActionContent?: React.ReactNode;
   voiceServerId?: string;
   voiceAgentId?: string;
@@ -292,7 +296,7 @@ function AttachmentDropdown({
       </Tooltip>
       <DropdownMenuContent
         side="top"
-        align="start"
+        align="end"
         offset={8}
         minWidth={220}
         testID="message-input-attachment-menu"
@@ -792,7 +796,9 @@ function SendButtonTooltip({
   );
 }
 
-type PrimaryActionKind = "send" | "active" | "none";
+function resolveStopAction(actions: PrimaryActions, stop: React.ReactNode): React.ReactNode {
+  return actions.showStop ? stop : null;
+}
 
 function hasSendableComposerContent(input: {
   hasText: boolean;
@@ -802,30 +808,6 @@ function hasSendableComposerContent(input: {
   return input.hasText || input.attachments.length > 0 || input.hasExternalContent;
 }
 
-function resolvePrimaryActionKind(input: {
-  hasSendableContent: boolean;
-  allowEmptySubmit: boolean;
-  isAgentRunning: boolean;
-  isSubmitLoading: boolean;
-}): PrimaryActionKind {
-  if (input.hasSendableContent || input.allowEmptySubmit) return "send";
-  if (input.isAgentRunning) return "active";
-  if (input.isSubmitLoading) return "send";
-  return "none";
-}
-
-function PrimaryAction({
-  kind,
-  activeActionContent,
-  ...sendButtonProps
-}: {
-  kind: PrimaryActionKind;
-  activeActionContent: React.ReactNode;
-} & React.ComponentProps<typeof SendButtonTooltip>) {
-  if (kind === "active") return activeActionContent;
-  if (kind === "send") return <SendButtonTooltip {...sendButtonProps} />;
-  return null;
-}
 interface ToggleRealtimeVoiceContext {
   voice:
     | {
@@ -1616,7 +1598,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       });
     }
 
-    const primaryActionKind = resolvePrimaryActionKind({
+    const primaryActions = resolvePrimaryActions({
       hasSendableContent: hasSendableComposerContent({
         hasText: hasLiveText,
         attachments,
@@ -1829,8 +1811,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
           {/* Button row */}
           <View style={styles.buttonRow}>
-            {/* Toolbar left: attachment button + agent controls */}
-            <View style={styles.leftButtonGroup}>
+            {/* 左侧只放 agent controls，窄 pane 时由它们截断 */}
+            <View style={styles.leftButtonGroup}>{leftContent}</View>
+
+            {/* 右侧不参与压缩：附件、上下文占用、语音、停止与发送 */}
+            <View style={styles.rightButtonGroup}>
               <AttachmentDropdown
                 visible={mode.showAttachments}
                 isConnected={isConnected}
@@ -1840,11 +1825,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 attachmentMenuItems={attachmentMenuItems}
                 addAttachmentLabel={t("composer.input.addAttachment")}
               />
-              {leftContent}
-            </View>
-
-            {/* Right: voice button, contextual button (realtime/send/cancel) */}
-            <View style={styles.rightButtonGroup}>
               {beforeVoiceContent}
               <VoiceButtonTooltip
                 visible={mode.showVoice}
@@ -1859,10 +1839,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 dictationToggleKeys={dictationToggleKeys}
               />
               {rightContent}
-              <PrimaryAction
-                kind={primaryActionKind}
-                activeActionContent={activeActionContent}
-                shouldShow
+              {resolveStopAction(primaryActions, activeActionContent)}
+              <SendButtonTooltip
+                shouldShow={primaryActions.showSend}
                 canPressLoadingButton={canPressLoadingButton}
                 onSubmitLoadingPress={onSubmitLoadingPress}
                 onDefaultSendAction={handleDefaultSendAction}
@@ -1917,14 +1896,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexShrink: 1,
     flexDirection: "column",
     gap: theme.spacing[3],
-    backgroundColor: theme.colors.surface1,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius["2xl"],
-    paddingVertical: {
+    ...composerSurfaceStyle(theme, { glass: GLASS_SURFACES_ENABLED }),
+    paddingTop: {
       xs: theme.spacing[2],
-      md: theme.spacing[4],
+      md: theme.spacing[3],
     },
+    paddingBottom: theme.spacing[2],
     paddingHorizontal: {
       xs: theme.spacing[3],
       md: theme.spacing[4],
@@ -1981,20 +1958,22 @@ const styles = StyleSheet.create((theme: Theme) => ({
     minHeight: MIN_INPUT_HEIGHT,
     color: theme.colors.foregroundMuted,
   },
+  // 窄 pane 时只有左组（agent controls）让出宽度并被裁掉，右组的停止与发送保持原宽。
   buttonRow: {
     flexShrink: 0,
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginHorizontal: -6,
+    gap: theme.spacing[1],
+    marginHorizontal: -theme.spacing[1.5],
   },
   leftButtonGroup: {
     minWidth: 0,
     flexShrink: 1,
     flexGrow: 1,
     flexDirection: "row",
-    alignItems: "flex-end",
-    gap: theme.spacing[0],
+    alignItems: "center",
+    overflow: "hidden",
   },
   rightButtonGroup: {
     flexShrink: 0,
@@ -2003,22 +1982,22 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[1],
   },
   attachButton: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.borderRadius.full,
+    width: theme.controlHeight.md,
+    height: theme.controlHeight.md,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
   attachButtonAnchor: {
-    width: 28,
-    height: 28,
+    width: theme.controlHeight.md,
+    height: theme.controlHeight.md,
     alignItems: "center",
     justifyContent: "center",
   },
   voiceButton: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.borderRadius.full,
+    width: theme.controlHeight.md,
+    height: theme.controlHeight.md,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2026,19 +2005,18 @@ const styles = StyleSheet.create((theme: Theme) => ({
     backgroundColor: theme.colors.destructive,
   },
   sendButton: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.borderRadius.full,
+    width: theme.controlHeight.lg,
+    height: theme.controlHeight.lg,
+    borderRadius: theme.radius.full,
     backgroundColor: theme.colors.accent,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: theme.spacing[1],
   },
   sendButtonLabeled: {
     width: "auto",
-    minWidth: 28,
+    minWidth: theme.controlHeight.lg,
     paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.full,
+    borderRadius: theme.radius.full,
   },
   sendButtonLabel: {
     fontSize: theme.fontSize.base,
@@ -2046,7 +2024,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     color: theme.colors.accentForeground,
   },
   iconButtonHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   tooltipRow: {
     flexDirection: "row",
