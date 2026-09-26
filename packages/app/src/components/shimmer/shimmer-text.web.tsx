@@ -12,6 +12,7 @@ import { ensureShimmerKeyframes } from "./web-keyframes";
 
 // 遮罩只读 alpha，#000 是"完全露出"，不是可见颜色。
 const PEAK_MASK = "linear-gradient(90deg, transparent 0%, #000 50%, transparent 100%)";
+const TABULAR_NUMS: "tabular-nums"[] = ["tabular-nums"];
 
 /**
  * 一行弱色文字，上面叠一份前景色文字，用渐变遮罩只露出峰的位置并从左扫到右。扫光按固定帧率分段，
@@ -25,10 +26,12 @@ export function ShimmerText({ text, testID }: ShimmerTextProps) {
     if (!reduceMotion) ensureShimmerKeyframes();
   }, [reduceMotion]);
 
+  // fontVariant 与遮罩放在同一个对象里：RN 的 TextStyle 没有 mask / animation，对象里得有一个
+  // TextStyle 属性才能传给 Text 的 style（与 floating-surface.ts 的 backdropFilter 同理），不用 as 强转。
   const sweepStyle = useMemo(
-    () => [
-      styles.text,
+    () =>
       inlineUnistylesStyle({
+        fontVariant: TABULAR_NUMS,
         WebkitMaskImage: PEAK_MASK,
         maskImage: PEAK_MASK,
         WebkitMaskSize: "40% 100%",
@@ -38,7 +41,6 @@ export function ShimmerText({ text, testID }: ShimmerTextProps) {
         animation: `${TEXT_SHIMMER_ANIMATION_NAME} ${WORKING_SHIMMER_DURATION_SECONDS}s steps(${shimmerSteps(WORKING_SHIMMER_DURATION_SECONDS)}) infinite`,
         animationPlayState: SHIMMER_PLAY_STATE,
       }),
-    ],
     [],
   );
 
@@ -63,7 +65,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   text: {
-    fontVariant: ["tabular-nums"],
+    fontVariant: TABULAR_NUMS,
   },
   sweepLayer: {
     position: "absolute",
