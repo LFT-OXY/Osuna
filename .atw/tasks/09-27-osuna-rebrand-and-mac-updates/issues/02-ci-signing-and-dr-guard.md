@@ -1,6 +1,6 @@
 # 02 — 正式证书与 CI 签名，外加签名断言
 
-**What to build:** 让 CI 发出的每一个 macOS 包（arm64 和 x64）都用同一张长期有效的自签名证书签名。万一签名退化成 ad-hoc 或者没签上，CI 要直接失败，不能悄悄发版。按照 01 的结论，生成有效期 30 年的正式证书，把 `.p12` 和密码存到本机 `~/.config/osuna/codesign/`；目录权限设为 700，密码文件权限设为 600。然后把证书写入仓库的 Secrets。CI 的 macOS 作业用这张证书签名，签名身份要显式指定。打包完成、清单上传之前，断言 designated requirement 是基于证书的，并且签名完整性校验通过。`hardenedRuntime` 继续保持关闭，本地构建不做任何改动。同时更新发版文档里和签名相关的说明。
+**What to build:** 让 CI 发出的每一个 macOS 包（arm64 和 x64）都用同一张长期有效的自签名证书签名。万一签名退化成 ad-hoc 或者没签上，CI 要直接失败，不能悄悄发版。按照 01 的结论，生成有效期 30 年的正式证书，把 `.p12` 和密码存到本机 `~/.config/osuna/codesign/`；目录权限设为 700，密码文件权限设为 600。然后把证书写入仓库的 Secrets。CI 的 macOS 作业用这张证书签名，签名身份要显式指定：按 01 的结论，CI 通过 `-c.mac.sign=` 注入自定义 sign 钩子，按证书 SHA-1 指纹签名，不设钥匙串信任，钩子拿不到指纹时报错；`electron-builder.yml` 不引用这个钩子。打包完成、清单上传之前，断言 designated requirement 是基于证书的，并且签名完整性校验通过。`hardenedRuntime` 继续保持关闭，本地构建不做任何改动。同时更新发版文档里和签名相关的说明。
 
 **Blocked by:** 01 — 本地两包互验：验证签名方案的核心假设
 **Status:** ready-for-agent

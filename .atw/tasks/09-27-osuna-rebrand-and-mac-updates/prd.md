@@ -101,7 +101,7 @@
 
 - 生成一张自签名 code signing 证书，有效期 30 年，CN 为 Osuna 的签名身份名。`.p12` 和导出密码存到本机 `~/.config/osuna/codesign/`：目录权限 700，密码文件权限 600。由用户自行同步到云盘。
 - 用 `gh secret set` 把证书（base64）和密码写入仓库 Secrets（`CSC_LINK`、`CSC_KEY_PASSWORD`）。**这一步是写入外部服务，执行前必须单独征得用户确认。**
-- CI 的 macOS 作业注入这两个 secret，并通过 `identity` 或 `CSC_NAME` 显式指定签名身份，不依赖自动发现。原因是 electron-builder 只从钥匙串里「有效」的身份中挑选，自签证书不一定被列为有效，必要时由 CI 在临时钥匙串里设置信任。arm64 与 x64 都签名。
+- CI 的 macOS 作业注入这两个 secret，并通过自定义 `mac.sign` 钩子按证书的 SHA-1 指纹显式签名，不依赖 electron-builder 的身份查找，也不设钥匙串信任。原因（ticket 01 实测）：electron-builder 只从 `security find-identity -v` 列出的受信身份里挑选，自签证书不设信任就一定不在其中，此时即使给了 `identity` / `CSC_NAME`，arm64 也会静默退回 ad-hoc，x64 直接不签名。配了 `sign` 钩子后 electron-builder 不再兜底，把 `CSC_LINK` 导入的临时钥匙串交给钩子，钩子拿不到指纹或签名失败时必须报错。钩子只在 CI 用 `-c.mac.sign=` 注入，`electron-builder.yml` 不引用它。arm64 与 x64 都签名。
 - `hardenedRuntime` 保持关闭，不做公证。本地构建不引入证书，维持现状。
 - 打包后在 CI 里断言：用 `codesign -d -r-` 读出的 designated requirement 必须包含证书约束（`certificate leaf`），且不能是 `cdhash`；再对产物做一次 `codesign --verify --deep --strict`。任一不满足就让作业失败，并且在清单上传之前失败。
 - 修正发版文档：首次打开的放行步骤改用 Osuna.app，删除「自动更新装上的新版本也不会再问」这句与事实不符的说法，写明证书的存放位置、备份要求和丢失的后果，并把「afterSign 在未签名时被跳过」的描述更新到新的现状。
@@ -151,5 +151,5 @@
 
 - **不可逆的点。** 证书和 `appId` 一起构成更新身份。证书丢失或更换，或者改动 `appId`，都会让所有已安装的副本停止自动更新，只能手动重装。
 - **官方手机 App 是个已知风险。** 二次开发里需要新 capability 的功能，在官方 App 上看不到；上游 App 以后怎么演进，本仓库控制不了。App 端不按 semver 比较 daemon 版本（插件需求除外），所以把版本号改到 `0.10.0` 不会导致误判。
-- **未验证的推断。** 「自签证书满足 Squirrel.Mac 校验」依据的是 Squirrel.Mac 的源码：它用 `SecStaticCodeCheckValidityWithErrors`，拿当前应用的 designated requirement 去校验新包。「CI 的 x64 包没有签名」依据的是 app-builder-lib 的源码。这两条都由上面的人工验证第 1、3 项来证实。
+- **未验证的推断。** 「自签证书满足 Squirrel.Mac 校验」依据的是 Squirrel.Mac 的源码：它用 `SecStaticCodeCheckValidityWithErrors`，拿当前应用的 designated requirement 去校验新包。ticket 01 已在本地用等价的 `codesign --verify --deep --strict -R` 证实（仅 arm64、最小 Electron 工程）。「CI 的 x64 包没有签名」依据的是 app-builder-lib 的源码，仍由人工验证第 3 项证实。
 - 调研的细节和证据（含文件位置）见 `research/discover.md`。
