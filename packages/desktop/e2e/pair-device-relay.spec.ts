@@ -16,7 +16,6 @@ import {
   expectRelayConsent,
   openPairDeviceModal,
   openPairDeviceFromHome,
-  openRelaySecurityDocs,
   observePairingOfferRequests,
   prepareLocalPairingHost,
   reloadAndOpenPairDevice,
@@ -78,12 +77,6 @@ test.describe("local device relay pairing", () => {
     await declineRelay(page);
     await openPairDeviceModal(page);
     await expectRelayConsent(page);
-  });
-
-  test("opens relay security documentation through the desktop opener", async ({ page }) => {
-    await prepareLocalPairingHost(page, relayOffDaemon);
-    await openPairDeviceModal(page);
-    await openRelaySecurityDocs(page);
   });
 
   test("opens the same relay consent dialog from the home screen", async ({ page }) => {

@@ -1,18 +1,7 @@
 name: Deploy Website
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "CHANGELOG.md"
-      - "public-docs/**"
-      - "packages/website/**"
-      - "package.json"
-      - "package-lock.json"
-      - "patches/**"
-      - ".github/workflows/deploy-website.yml"
-  release:
-    types: [published]
+  # 仅手动触发：部署依赖上游的 Cloudflare 账号，推 main 或发布 release 在本 fork 下必然失败。
   workflow_dispatch:
 
 jobs:

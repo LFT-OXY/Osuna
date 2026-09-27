@@ -32,6 +32,7 @@ class FakeAppUpdateRuntime implements AppUpdateRuntime {
   downloadedVersions: string[] = [];
   installedVersions: string[] = [];
   installModes: Array<{ targetVersion: string; isSilent: boolean; isForceRunAfter: boolean }> = [];
+  private holdsQuitHandoff = false;
 
   configure(input: AppUpdateRuntimeConfiguration): void {
     this.configuration = input;
@@ -143,23 +144,56 @@ class FakeAppUpdateRuntime implements AppUpdateRuntime {
     }
   }
 
+  holdQuitHandoff(): void {
+    this.holdsQuitHandoff = true;
+  }
+
+  startQuitForUpdate(): void {
+    this.configuration?.onBeforeQuitForUpdate();
+  }
+
   quitAndInstall({ targetVersion, isSilent, isForceRunAfter }: AppUpdateInstallRequest): void {
     if (this.downloadedUpdate) {
       this.installedVersions.push(this.downloadedUpdate.version);
       this.installModes.push({ targetVersion, isSilent, isForceRunAfter });
+      if (!this.holdsQuitHandoff) this.startQuitForUpdate();
     }
   }
 }
 
 function createService(input?: { now?: () => number; bucket?: () => Promise<number> }) {
   const runtime = new FakeAppUpdateRuntime();
+  const installHandoffDeadline = new AbortController();
   const service = createAppUpdateService({
     runtime,
     isPackaged: () => true,
     now: input?.now ?? (() => Date.parse("2026-04-28T12:00:00.000Z")),
     bucket: input?.bucket ?? (async () => 0.99),
+    createInstallHandoffDeadline: () => installHandoffDeadline.signal,
   });
-  return { runtime, service };
+  return {
+    runtime,
+    service,
+    expireInstallHandoff: () => installHandoffDeadline.abort(),
+  };
+}
+
+async function flushAsyncWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+async function prepareDownloadedUpdate(
+  runtime: FakeAppUpdateRuntime,
+  service: ReturnType<typeof createService>["service"],
+): Promise<void> {
+  runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+  await service.checkForAppUpdate({
+    currentVersion: "1.2.3",
+    releaseChannel: "stable",
+    intent: "manual",
+  });
+  runtime.finishUpdateDownload(rolledOutUpdate);
+  runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
 }
 
 const rolledOutUpdate = {
@@ -840,5 +874,125 @@ describe("app update service", () => {
       date: "2026-04-28T00:00:00.000Z",
       errorMessage: null,
     });
+  });
+});
+
+describe("app update service — manual install handoff", () => {
+  it("does not report the update as installed before the updater starts quitting", async () => {
+    const { runtime, service } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    runtime.holdQuitHandoff();
+
+    let settled = false;
+    const pending = service
+      .downloadAndInstallUpdate({ currentVersion: "1.2.3", releaseChannel: "stable" })
+      .finally(() => {
+        settled = true;
+      });
+    await flushAsyncWork();
+
+    expect(runtime.installedVersions).toEqual(["1.2.4"]);
+    expect(settled).toBe(false);
+
+    runtime.startQuitForUpdate();
+    await pending;
+  });
+
+  it("reports the app as restarting once the updater starts quitting", async () => {
+    const { runtime, service } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    runtime.holdQuitHandoff();
+
+    const pending = service.downloadAndInstallUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+    });
+    await flushAsyncWork();
+    runtime.startQuitForUpdate();
+
+    await expect(pending).resolves.toEqual({
+      installed: true,
+      version: "1.2.4",
+      message: "Update downloaded. The app will restart shortly.",
+      failure: null,
+    });
+  });
+
+  it("returns the updater error as the failure reason when it fails before quitting", async () => {
+    const { runtime, service } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    runtime.holdQuitHandoff();
+
+    const pending = service.downloadAndInstallUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+    });
+    await flushAsyncWork();
+    runtime.failRuntime(new Error("Code signature did not pass validation"));
+
+    await expect(pending).resolves.toEqual({
+      installed: false,
+      version: "1.2.3",
+      message: "Update failed: Code signature did not pass validation",
+      failure: { reason: "updater-error", message: "Code signature did not pass validation" },
+    });
+  });
+
+  it("fails the install when the updater never starts quitting before the deadline", async () => {
+    const { runtime, service, expireInstallHandoff } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    runtime.holdQuitHandoff();
+
+    const pending = service.downloadAndInstallUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+    });
+    await flushAsyncWork();
+    expireInstallHandoff();
+
+    await expect(pending).resolves.toEqual({
+      installed: false,
+      version: "1.2.3",
+      message: "Update failed: Timed out waiting for the updater to restart the app.",
+      failure: { reason: "handoff-timeout" },
+    });
+  });
+
+  it("settles every concurrent install request once the updater starts quitting", async () => {
+    const { runtime, service } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+    runtime.holdQuitHandoff();
+
+    const first = service.downloadAndInstallUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+    });
+    const second = service.downloadAndInstallUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+    });
+    await flushAsyncWork();
+    runtime.startQuitForUpdate();
+
+    const results = await Promise.all([first, second]);
+    expect(results.map((result) => result.installed)).toEqual([true, true]);
+  });
+
+  it("does not wait for a restart handoff when installing silently on quit", async () => {
+    const { runtime, service } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    runtime.holdQuitHandoff();
+
+    const installed = await service.installUpdateOnQuit({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+      signal: new AbortController().signal,
+    });
+
+    expect(installed).toBe(true);
+    expect(runtime.installModes).toEqual([
+      { targetVersion: "1.2.4", isSilent: true, isForceRunAfter: false },
+    ]);
   });
 });

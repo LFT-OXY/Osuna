@@ -337,10 +337,16 @@ test.skipIf(process.platform === "win32").each([["start"], ["daemon", "run"]])(
         stdio: "ignore",
       });
       const exited = new Promise((resolve) => child!.once("exit", resolve));
-      await expect
-        .poll(async () => existsSync(path.join(home, "paseo.pid")), { timeout: 10_000 })
-        .toBe(true);
-      const lock = JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
+      // pid 锁先以 "wx" 建出空文件再写入内容，只等文件出现会读到空串。
+      const readLock = async (): Promise<{ pid: number } | null> => {
+        try {
+          return JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
+        } catch {
+          return null;
+        }
+      };
+      await expect.poll(readLock, { timeout: 10_000 }).not.toBeNull();
+      const lock = (await readLock())!;
       await f.ok(["status", "--home", home]);
       child.kill("SIGINT");
       await exited;

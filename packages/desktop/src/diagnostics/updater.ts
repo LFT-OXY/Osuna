@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { tailFile } from "./tail-file.js";
 
-const SHIPIT_DIRECTORY_NAME = "sh.paseo.desktop.ShipIt";
+// Squirrel.Mac 按 appId 命名缓存目录，须与 electron-builder.yml 的 appId 同步。
+const SHIPIT_DIRECTORY_NAME = "com.chinhae.osuna.desktop.ShipIt";
 const SHIPIT_LOG_TAIL_LINES = 100;
 
 export interface DesktopUpdaterDiagnosticFile {

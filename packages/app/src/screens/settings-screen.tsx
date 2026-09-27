@@ -92,7 +92,10 @@ import { BrowserDataSection } from "@/desktop/browser/settings/browser-data-sect
 import { IntegrationsSection } from "@/desktop/components/integrations-section";
 import { isElectronRuntime } from "@/desktop/host";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
-import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
+import {
+  formatVersionWithPrefix,
+  openDesktopReleasesPage,
+} from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
 import { openChangelog } from "@/changelog";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
@@ -734,6 +737,7 @@ function DesktopAppUpdateRow() {
   const { settings, updateSettings } = useSettings();
   const {
     isDesktopApp,
+    status,
     statusText,
     availableUpdate,
     errorMessage,
@@ -838,6 +842,11 @@ function DesktopAppUpdateRow() {
           {errorMessage ? <Text style={styles.aboutErrorText}>{errorMessage}</Text> : null}
         </View>
         <View style={styles.aboutUpdateActions}>
+          {status === "install-failed" ? (
+            <Button variant="outline" size="sm" onPress={openDesktopReleasesPage}>
+              {t("desktop.updates.manualDownload")}
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="sm"

@@ -1239,14 +1239,14 @@ test("receives server_info on websocket connect", async () => {
   expect(serverInfo?.features?.commitsList).toBe(true);
   expect(serverInfo?.features?.commitBaseClassification).toBe(true);
   expect(serverInfo?.desktopManaged).toBe(false);
-  expect(serverInfo?.features?.daemonSelfUpdate).toBe(true);
+  expect(serverInfo?.features).not.toHaveProperty("daemonSelfUpdate");
   expect(serverInfo?.features?.worktreeRestore).toBe(true);
   expect(serverInfo?.features?.workspaceRecovery).toBe(true);
 
   await client.close();
 }, 15000);
 
-test("a Desktop-managed daemon does not advertise npm self-update", async () => {
+test("a Desktop-managed daemon reports desktopManaged in server_info", async () => {
   const daemon = await createTestPaseoDaemon({ desktopManaged: true });
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
@@ -1259,10 +1259,32 @@ test("a Desktop-managed daemon does not advertise npm self-update", async () => 
     const serverInfo = client.getLastServerInfoMessage();
 
     expect(serverInfo?.desktopManaged).toBe(true);
-    expect(serverInfo?.features?.daemonSelfUpdate).toBe(false);
+    expect(serverInfo?.features).not.toHaveProperty("daemonSelfUpdate");
   } finally {
     await client.close();
     await daemon.close();
+  }
+}, 15000);
+
+test("rejects a direct daemon self-update request", async () => {
+  const client = new DaemonClient({
+    url: `ws://127.0.0.1:${ctx.daemon.port}/ws`,
+    clientId: `cid-self-update-${randomUUID()}`,
+    clientType: "cli",
+  });
+
+  try {
+    await client.connect();
+    const response = await client.updateDaemon("req-self-update");
+
+    expect(response).toMatchObject({
+      requestId: "req-self-update",
+      success: false,
+      newVersion: null,
+    });
+    expect(response.error).toMatch(/not available/i);
+  } finally {
+    await client.close();
   }
 }, 15000);
 

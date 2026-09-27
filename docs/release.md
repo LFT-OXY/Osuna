@@ -113,6 +113,10 @@ npm run release:fork:minor
 tag 推上去之后由 `Desktop Release` 工作流接管，构建 macOS（arm64 + x64）与 Windows
 （x64 + arm64）产物，上传到 GitHub Release 并在清单齐全后把草稿转正。
 
+`Android APK Release`、`Deploy App`、`Deploy Website`、`Deploy Relay` 依赖上游的 EAS 与
+Cloudflare 账号，在 fork 下只保留手动触发，推 tag、推 main、发布 Release 都不会跑它们。
+工作流文件留着，自建时把触发加回来即可。
+
 想先出产物自己试装而不发布：在 Actions 里手动派发 `Desktop Release`，填已存在的
 tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 
@@ -127,21 +131,42 @@ electron-builder 把它烘进安装包内的 `app-update.yml`，客户端据此�
 同步代码时必须保住这个值**——指回 `getpaseo/paseo` 会让团队成员被静默升级成官方版，
 二次开发的功能全部消失，而且没有任何提示。
 
+### macOS 签名证书
+
+CI 发出的 macOS 包（arm64 与 x64）都用同一张长期固定的自签名证书签名（ADR 0001）。
+这张证书就是更新身份：Squirrel.Mac 只安装满足当前应用 designated requirement 的新包，
+而 DR 绑的是这张证书（`certificate root = H"<SHA-1 指纹>"`：证书带 `O=` 字段时 codesign
+写 `root`，否则写 `leaf`，自签证书两者是同一张）和 appId。
+
+- **存放位置**：本机 `~/.config/osuna/codesign/`（目录权限 700），里面是
+  `osuna-codesign.p12`、导出密码 `osuna-codesign.p12.password`（权限 600）和公开的
+  `osuna-codesign.pem`。仓库 Secrets 里有一份：`CSC_LINK`（`.p12` 的 base64）和
+  `CSC_KEY_PASSWORD`。有效期 30 年。
+- **必须备份**：把整个目录同步到云盘。Secrets 写进去就读不出来，不算备份。
+- **丢失或更换的后果**：之后发的包不再满足已装版本的 DR，所有人的自动更新都会失败，
+  每个人都得手动重装一次。改 `appId` 的后果相同。
+- **指纹钉在工作流里**：`desktop-release.yml` 的 `OSUNA_MAC_SIGNING_SHA1`。签名钩子
+  `packages/desktop/scripts/mac-sign.js` 按它签名，`scripts/verify-mac-signature.mjs`
+  在上传前断言产物的 DR 绑的正是它。secret 缺失或配错、换了一张证书、签名退化成
+  ad-hoc，该架构的作业都会在上传产物之前失败（前三种在构建步骤就失败，退回 ad-hoc 由
+  断言拦下），Release 留在草稿，而不是发出一个打断所有人更新链的版本。**轮换证书就意味着所有人重装一次**，
+  改这个值之前先想清楚。
+
 ### macOS 首次打开
 
-包是无签名、未公证的。团队成员把应用拖进「应用程序」后首次打开会被 Gatekeeper 拦住，
-提示「无法验证开发者」或「已损坏，无法打开」。按顺序试：
+包用自签名证书签名，但没有公证。团队成员把应用拖进「应用程序」后首次打开会被
+Gatekeeper 拦住，提示「无法验证开发者」或「已损坏，无法打开」。按顺序试：
 
-1. 在「应用程序」里右键点 Paseo → 打开 → 在弹窗里再点一次「打开」。
+1. 在「应用程序」里右键点 Osuna → 打开 → 在弹窗里再点一次「打开」。
 2. 如果提示的是「已损坏」，先去掉隔离属性再打开：
 
    ```bash
-   xattr -dr com.apple.quarantine /Applications/Paseo.app
+   xattr -dr com.apple.quarantine /Applications/Osuna.app
    ```
 
 3. 仍被拦就去 系统设置 → 隐私与安全性，在底部点「仍要打开」。
 
-只需要做一次，之后正常启动，自动更新装上的新版本也不会再问。
+每次手动下载安装都要做一遍，之后正常启动。
 
 ### Windows 首次安装
 
@@ -154,10 +179,11 @@ electron-builder 把它烘进安装包内的 `app-update.yml`，客户端据此�
 CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:desktop -- --publish never --mac --arm64
 ```
 
-产物在 `packages/desktop/release`。关掉签名身份自动发现是为了让结果不依赖本机钥匙串
-里恰好有什么证书。macOS 的打包冒烟挂在 `afterSign` 上，未签名时 electron-builder 会
-跳过该钩子（`afterPack` 那条冒烟只覆盖 Linux 和 Windows），所以 macOS 包没有自动冒烟
-可跑，CI 的 macOS 作业同理——装一次亲自点开是这条路径上唯一的验证。
+产物在 `packages/desktop/release`。本地构建不接触签名证书：关掉签名身份自动发现，
+结果就不依赖本机钥匙串里恰好有什么证书，arm64 包会退回 ad-hoc 签名，x64 包不签名。
+这样的包不能自动更新到 CI 发的版本，只用来自己试装。macOS 包没有自动冒烟（见
+[testing.md 的 Packaged desktop smoke](testing.md#packaged-desktop-smoke)），装一次
+亲自点开是这条路径上唯一的验证。
 
 ### 加回 Linux
 

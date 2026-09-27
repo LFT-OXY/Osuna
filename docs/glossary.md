@@ -2,6 +2,9 @@
 
 Authoritative terminology. UI label wins. Don't invent synonyms; use what's here.
 
+- **Osuna** — This fork's product: the desktop app and the UI it renders. UI says "Osuna". Identifiers inherited from upstream keep the `paseo` spelling and are not product names: the `paseo` CLI command, `paseo.json`, `~/.paseo`, `PASEO_*`, `@getpaseo/*`, the `paseo://` scheme. Forbidden: "Paseo" as a label for this product.
+- **Paseo** — The upstream project, and its official app-store mobile app, which is the mobile client for an Osuna daemon. UI keeps "Paseo" only where it means that mobile app (e.g. "Scan this QR code with Paseo on your phone"). Don't confuse with **Osuna**.
+
 - **Project** — A stable, exact selected-root record. Its host-local `projectId` is an opaque `prj_<16 hex>` value. Its persisted `projectKey` is an opaque equivalence key that may group the logical project across hosts. A normalized Git remote is the current key producer, but consumers must not parse or rederive it. Git facts can update mutable kind and grouping metadata but never the ID, root, or default display name. UI: "Project" / "Add project". Forbidden: "Repo", "Repository" as UI label.
 - **Workspace** — One concrete `cwd` on one daemon, with git state; belongs to exactly one project. Its `id` is opaque workspace identity; its `cwd` is the filesystem directory. UI: "Workspace". Code: `WorkspaceDescriptorPayload` (`packages/protocol/src/messages.ts:2178`). Don't confuse with: Branch (one branch can back many workspaces via worktrees). Forbidden: "Folder", "Directory" as UI label.
 - **Archive workspace** — Removes one workspace from active use and archives everything it owns. UI, CLI, and MCP always say "Archive workspace", regardless of backing. The daemon leaves ordinary directories intact and removes a Paseo-owned worktree only when no active workspace still references it.

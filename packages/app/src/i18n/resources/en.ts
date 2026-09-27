@@ -901,7 +901,7 @@ export const en = {
             "Update isn't available because this branch is already up to date with {{baseRef}}",
           mergePrNoGithub: "Merge PR isn't available right now because GitHub isn't connected",
           archiveNotWorktree:
-            "Archive isn't available here because this workspace was not created as a Paseo worktree",
+            "Archive isn't available here because this workspace was not created as an Osuna worktree",
           mergePrNoForge:
             "Merge {{noun}} isn't available right now because {{brand}} isn't connected",
           mergePrMissing: "Merge PR isn't available because there isn't a pull request yet",
@@ -1117,7 +1117,6 @@ export const en = {
     title: "What's new",
     installed: "Installed",
     showMore: "Show more",
-    openWebsite: "Full changelog",
     error: {
       title: "Unable to load the changelog",
       description: "Check your connection and try again.",
@@ -1190,10 +1189,9 @@ export const en = {
       diagnostics: "Run diagnostics",
       shortcuts: "Keyboard shortcuts",
       reportIssue: "Report an issue",
-      discord: "Discord",
       github: "Create GitHub issue",
       whatsNew: "What's new",
-      appName: "Paseo",
+      appName: "Osuna",
     },
     sections: {
       sessions: "History",
@@ -1341,7 +1339,7 @@ export const en = {
       close: "Close window",
     },
     quitting: {
-      title: "Quitting Paseo...",
+      title: "Quitting Osuna...",
       detail: "Stopping the local daemon.",
     },
     daemon: {
@@ -1372,20 +1370,20 @@ export const en = {
       },
       management: {
         title: "Manage built-in daemon",
-        hint: "Let Paseo start and stop the built-in daemon",
+        hint: "Let Osuna start and stop the built-in daemon",
         pauseTitle: "Pause built-in daemon",
         pauseMessage:
           "This will stop the built-in daemon immediately. Running agents and terminals connected to the built-in daemon will be stopped.",
         pauseAndStop: "Pause and stop",
         registrationFailed:
-          "Built-in daemon started, but Paseo could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.",
+          "Built-in daemon started, but Osuna could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.",
         pausedStopFailed:
-          "Built-in daemon management was paused, but Paseo could not stop the daemon.",
+          "Built-in daemon management was paused, but Osuna could not stop the daemon.",
         updateFailed: "Unable to update built-in daemon management.",
       },
       keepRunning: {
         title: "Keep daemon running after quit",
-        hint: "Daemon keeps running when you quit Paseo",
+        hint: "Daemon keeps running when you quit Osuna",
       },
       logs: {
         title: "Log file",
@@ -1405,8 +1403,6 @@ export const en = {
         copied: "Status copied to clipboard.",
         fetchFailed: "Failed to fetch daemon status: {{message}}",
       },
-      advancedSettings: "Advanced settings",
-      openAdvancedSettings: "Open advanced daemon settings",
       versionMismatch:
         "App and daemon versions don't match. Update both to the same version for the best experience.",
       loadFailed: "Unable to load desktop daemon status.",
@@ -1428,10 +1424,13 @@ export const en = {
         available: "An app update is ready to install.",
         availableWithLastChecked: "An app update is ready to install. Last checked at {{time}}.",
         installed: "App update installed. Restart required.",
+        installFailed: "The update couldn't be installed.",
         failed: "Failed to update app.",
         idle: "Update status has not been checked yet.",
       },
       installError: "Unable to install the desktop app update.",
+      manualDownload: "Download from Releases",
+      installTimedOut: "The updater didn't restart the app in time.",
       callout: {
         installingTitle: "Installing update",
         failedTitle: "Update failed",
@@ -1452,7 +1451,7 @@ export const en = {
     },
     rosetta: {
       title: "Download the Apple Silicon build",
-      runningIntel: "You're running the Intel build of Paseo under Rosetta on Apple Silicon.",
+      runningIntel: "You're running the Intel build of Osuna under Rosetta on Apple Silicon.",
       highCpu: "This causes high CPU usage. Download the Apple Silicon build to fix it.",
       download: "Download",
     },
@@ -1494,7 +1493,7 @@ export const en = {
         microphone: "Microphone status has not been checked yet.",
       },
       testNotification: {
-        title: "Paseo notification test",
+        title: "Osuna notification test",
         body: "If you can see this, desktop notifications work.",
         notDelivered: "Notification was not delivered. Check System Settings > Notifications.",
         failed: "Failed to send notification.",
@@ -1503,12 +1502,12 @@ export const en = {
     integrations: {
       cli: {
         statusFailed: "Unable to check CLI install status.",
-        installFailed: "Unable to install the Paseo CLI.",
+        installFailed: "Unable to install the Osuna CLI.",
       },
     },
   },
   rootError: {
-    title: "Paseo ran into a problem.",
+    title: "Osuna ran into a problem.",
     body: "Try again to reload the app. If this keeps happening, include the details below when you report it.",
     details: "Details",
   },
@@ -1607,7 +1606,7 @@ export const en = {
     },
   },
   onboarding: {
-    title: "Welcome to Paseo",
+    title: "Welcome to Osuna",
     subtitle: "Connect your computer to get started",
     actions: {
       settings: "Settings",
@@ -1695,7 +1694,7 @@ export const en = {
     },
     direct: {
       title: "Direct connection",
-      helper: "Enter the address of a Paseo server.",
+      helper: "Enter the address of an Osuna server.",
       fields: {
         host: "Host",
         port: "Port",
@@ -1737,7 +1736,7 @@ export const en = {
     },
     remoteSsh: {
       title: "Remote SSH",
-      helper: "Connect to a Paseo daemon running on the remote host.",
+      helper: "Connect to an Osuna daemon running on the remote host.",
       fields: {
         target: "SSH host",
       },
@@ -1792,14 +1791,12 @@ export const en = {
       enableTitle: "Enable relay?",
       enableDescription:
         "Relay lets this device connect from anywhere. Pairing traffic is end-to-end encrypted.",
-      relayDocs: "How relay works",
-      relayDocsAccessibility: "Read how Paseo relay works",
       enableRelay: "Enable relay",
       enablingRelay: "Enabling...",
       notNow: "Not now",
       directConnectionHint:
         "Without relay, connect directly over TCP, Tailscale, or another VPN. No QR code is created.",
-      updateRequired: "Update the host to enable relay from Paseo Desktop.",
+      updateRequired: "Update the host to enable relay from Osuna Desktop.",
       unavailable: "Pairing offer unavailable.",
       hint: "Scan this QR code with Paseo on your phone, or copy the link below.",
       securityWarning:
@@ -1836,7 +1833,7 @@ export const en = {
   serviceUrl: {
     title: "Open service URL",
     message: "Open {{url}}?",
-    inPaseo: "In Paseo",
+    inPaseo: "In Osuna",
     externalBrowser: "External browser",
     dontAskAgain: "Don't ask again",
   },
@@ -1956,10 +1953,10 @@ export const en = {
       },
       row: {
         opening: "Opening...",
-        paseo: "Paseo",
+        paseo: "Osuna",
         menu: "Session actions",
         copyResumeCommand: "Copy resume command",
-        importAsAgent: "Import as Paseo agent",
+        importAsAgent: "Import as Osuna agent",
         importing: "Importing...",
       },
       errors: {
@@ -2010,8 +2007,8 @@ export const en = {
       other: "used {{count}} other tools",
     },
     paseoCalls: {
-      one: "called Paseo {{count}} time",
-      other: "called Paseo {{count}} times",
+      one: "called Osuna {{count}} time",
+      other: "called Osuna {{count}} times",
     },
     and: "and",
   },
@@ -2138,7 +2135,7 @@ export const en = {
       send: "Send",
       sending: "Sending...",
       sentTitle: "Test notification sent",
-      sentDescription: "Paseo handed the notification to the operating system.",
+      sentDescription: "Osuna handed the notification to the operating system.",
       sendFailedTitle: "Unable to send test notification",
     },
     hostSections: {
@@ -2218,15 +2215,14 @@ export const en = {
     metadataGeneration: {
       title: "Metadata generation",
       description:
-        "Choose the model Paseo uses for workspace titles, branch names, commit messages, and pull request drafts",
+        "Choose the model Osuna uses for workspace titles, branch names, commit messages, and pull request drafts",
       selection: "Model selection",
       automatic: "Automatic",
       preferred: "Manual",
-      automaticHint: "Paseo picks a fast available model",
-      preferredHint: "Choose the model Paseo uses",
+      automaticHint: "Osuna picks a fast available model",
+      preferredHint: "Choose the model Osuna uses",
       model: "Model",
-      fallbackHint: "If it is unavailable, Paseo falls back to another available model",
-      docs: "Docs",
+      fallbackHint: "If it is unavailable, Osuna falls back to another available model",
       saveError: "Unable to update metadata generation",
     },
     general: {
@@ -2234,7 +2230,7 @@ export const en = {
       browserData: {
         title: "Browser data",
         siteData: "Cookies and site data",
-        description: "Browser tabs share sign-ins and site data across Paseo.",
+        description: "Browser tabs share sign-ins and site data across Osuna.",
         clear: "Clear browser data",
         clearing: "Clearing...",
         confirmTitle: "Clear browser data?",
@@ -2261,7 +2257,7 @@ export const en = {
         description: "Where to open URLs from running scripts",
         options: {
           ask: "Ask",
-          inApp: "In Paseo",
+          inApp: "In Osuna",
           external: "External browser",
         },
       },
@@ -2346,7 +2342,7 @@ export const en = {
         label: "App updates",
         readyToInstall: "Ready to install: {{version}}",
         installTitle: "Install desktop update",
-        installMessage: "This updates Paseo on this computer",
+        installMessage: "This updates Osuna on this computer",
         installConfirm: "Install update",
         update: "Update",
         updateTo: "Update to {{version}}",
@@ -2507,10 +2503,6 @@ export const en = {
     },
     integrations: {
       title: "Integrations",
-      docs: {
-        cli: "CLI docs",
-        openCli: "Open CLI documentation",
-      },
       commandLine: {
         title: "Command line",
         description: "Control and script agents from your terminal",
@@ -2593,8 +2585,6 @@ export const en = {
         sectionTitle: "Orchestration skills",
         title: "Orchestration skills",
         description: "Teach your agents to orchestrate through the CLI",
-        docs: "Skills",
-        openDocs: "Open skills documentation",
         unavailable: "Connect to this host to manage orchestration skills",
         unsupported: "Update this host to manage orchestration skills",
         statusFailed: "Unable to check orchestration skills status.",
@@ -2602,11 +2592,11 @@ export const en = {
         uninstallFailed: "Unable to uninstall orchestration skills.",
         saveSelectionFailed: "Unable to save the orchestration skills selection.",
         updateAvailable: "Update available",
-        updateTitle: "Update Paseo skills?",
+        updateTitle: "Update Osuna skills?",
         updateFallback: "Sync bundled skills to this host.",
-        uninstallTitle: "Uninstall Paseo skills?",
+        uninstallTitle: "Uninstall Osuna skills?",
         uninstallMessage:
-          "Removes all Paseo orchestration skills from ~/.agents, ~/.claude, ~/.codex on this host.",
+          "Removes all Osuna orchestration skills from ~/.agents, ~/.claude, ~/.codex on this host.",
         choose: "Choose skills",
         chooseAll: "All skills",
         chooseAllHint: "Keep every bundled skill installed, including ones added later.",
@@ -2638,9 +2628,9 @@ export const en = {
         title: "Orchestration",
         unavailable: "Connect to this host to manage orchestration",
         enableTools: {
-          title: "Enable Paseo tools",
+          title: "Enable Osuna tools",
           hint: "Agents will be able to manage worktrees, agents and schedules",
-          accessibilityLabel: "Inject Paseo tools",
+          accessibilityLabel: "Inject Osuna tools",
         },
         systemPrompt: {
           title: "System prompt",
@@ -2743,15 +2733,15 @@ export const en = {
             "This host is not connected. Wait for it to come online before restarting.",
           offlineTitle: "Host offline",
           offlineMessage:
-            "This host is offline. Paseo reconnects automatically-wait until it's back online before restarting.",
+            "This host is offline. Osuna reconnects automatically-wait until it's back online before restarting.",
           requestFailedTitle: "Error",
           requestFailedMessage:
-            "Failed to send the restart request. Paseo reconnects automatically-try again once the host shows as online.",
+            "Failed to send the restart request. Osuna reconnects automatically-try again once the host shows as online.",
           dialogFailedMessage: "Unable to open the restart confirmation dialog.",
         },
         update: {
           desktopManagedHint:
-            "This daemon is managed by Paseo Desktop. Update Paseo Desktop on the host.",
+            "This daemon is managed by Osuna Desktop. Update Osuna Desktop on the host.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",
@@ -2916,9 +2906,6 @@ export const en = {
       worktree: {
         title: "Worktree lifecycle hooks",
         info: "Commands that run when a worktree is created or torn down for this project",
-        docs: "Docs",
-        docsTooltip:
-          "See docs for more details and the environment variables available to these commands",
         setup: "Setup",
         setupAccessibility: "Worktree setup commands",
         uncommittedTitle: "Commit paseo.json changes",
@@ -2946,7 +2933,7 @@ export const en = {
         newScript: "New script",
         editScript: "Edit {{name}}",
         runAsService: "Run as a service",
-        serviceHint: "Paseo supervises the process and assigns a port via $PASEO_PORT",
+        serviceHint: "Osuna supervises the process and assigns a port via $PASEO_PORT",
         actions: {
           add: "Add script",
           edit: "Edit",
@@ -2955,7 +2942,7 @@ export const en = {
       },
       metadata: {
         title: "Metadata generation",
-        info: "Project-specific instructions injected into the AI prompts Paseo uses to generate metadata - use them to enforce your team's conventions like branch naming, commit style, or PR format",
+        info: "Project-specific instructions injected into the AI prompts Osuna uses to generate metadata - use them to enforce your team's conventions like branch naming, commit style, or PR format",
         branchName: "Branch names",
         branchNamePlaceholder: "Prefix branches with feat/ or fix/, mb/ for personal branches",
         commitMessage: "Commit messages",
@@ -2992,7 +2979,6 @@ export const en = {
       hostLoadError: "{{host}}: Could not load schedules",
       emptyTitle: "No active schedules",
       emptyDescription: "Schedules run agents on a cadence.",
-      seeDocs: "See docs",
       endedEmptyTitle: "No ended schedules",
     },
     form: {

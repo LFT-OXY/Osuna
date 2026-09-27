@@ -8,11 +8,10 @@ import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
-import { ArrowUpRight, Copy, FileText, Activity } from "lucide-react-native";
+import { Copy, FileText, Activity } from "lucide-react-native";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { openExternalUrl } from "@/utils/open-external-url";
 import { isVersionMismatch } from "@/desktop/updates/desktop-updates";
 import {
   getCliDaemonStatus,
@@ -27,7 +26,6 @@ import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 
 type DesktopDaemonSettings = DesktopSettings["daemon"];
 
-const ThemedArrowUpRight = withUnistyles(ArrowUpRight);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedFileText = withUnistyles(FileText);
 const ThemedActivity = withUnistyles(Activity);
@@ -36,9 +34,6 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-const advancedSettingsIcon = (
-  <ThemedArrowUpRight size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
-);
 const copyIcon = <ThemedCopy size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
 const fileTextIcon = <ThemedFileText size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
 const activityIcon = <ThemedActivity size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />;
@@ -397,38 +392,12 @@ export function LocalDaemonSection() {
     void handleOpenCliStatus();
   }, [handleOpenCliStatus]);
 
-  const handleOpenAdvancedSettings = useCallback(
-    () => void openExternalUrl(ADVANCED_DAEMON_SETTINGS_URL),
-    [],
-  );
-
-  const advancedSettingsButton = useMemo(
-    () => (
-      <Button
-        variant="ghost"
-        size="sm"
-        leftIcon={advancedSettingsIcon}
-        textStyle={settingsStyles.sectionHeaderLinkText}
-        style={settingsStyles.sectionHeaderLink}
-        onPress={handleOpenAdvancedSettings}
-        accessibilityLabel={t("desktop.daemon.openAdvancedSettings")}
-      >
-        {t("desktop.daemon.advancedSettings")}
-      </Button>
-    ),
-    [handleOpenAdvancedSettings, t],
-  );
-
   if (!showSection) {
     return null;
   }
 
   return (
-    <SettingsSection
-      title={t("desktop.daemon.title")}
-      trailing={advancedSettingsButton}
-      testID="host-page-daemon-lifecycle-card"
-    >
+    <SettingsSection title={t("desktop.daemon.title")} testID="host-page-daemon-lifecycle-card">
       {isLoading || isLoadingSettings ? (
         <View style={[settingsStyles.card, styles.loadingCard]}>
           <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />
@@ -494,8 +463,6 @@ export function LocalDaemonSection() {
     </SettingsSection>
   );
 }
-
-const ADVANCED_DAEMON_SETTINGS_URL = "https://paseo.sh/docs/configuration";
 
 const styles = StyleSheet.create((theme) => ({
   actionGroup: {

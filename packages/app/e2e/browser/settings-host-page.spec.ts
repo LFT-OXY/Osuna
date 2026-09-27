@@ -64,7 +64,7 @@ test.describe("Settings host page", () => {
     });
   });
 
-  test("a failed remote daemon update remains visible in the host UI", async ({
+  test("an outdated remote daemon offers no daemon update entry", async ({
     page,
     outdatedDaemon,
   }) => {
@@ -74,19 +74,10 @@ test.describe("Settings host page", () => {
     await openSettingsHost(page, outdatedDaemon.serverId);
     await openHostSection(page, outdatedDaemon.serverId, "host");
 
-    page.once("dialog", (dialog) => dialog.accept());
-    const updateButton = page.getByTestId("host-page-update-button");
-    await updateButton.click();
-
-    await expect(
-      updateButton.filter({ hasText: /Preparing update|Downloading packages|Installing/ }),
-    ).toBeDisabled();
-
-    const updateFailure = page.getByTestId("host-page-update-error");
-    await expect(updateFailure).toBeVisible();
-    await expect(updateFailure).toContainText("Update failed");
-    await expect(updateFailure).toContainText("Failed to update the daemon:");
-    await expect(updateButton).toBeEnabled();
+    // 版本徽标出现说明 server_info 已到，此时再断言缺席才有意义。
+    await expect(page.getByTestId("host-page-identity")).toContainText("0.0.0");
+    await expect(page.getByTestId("host-page-restart-card")).toBeVisible();
+    await expect(page.getByTestId("host-page-update-card")).toHaveCount(0);
   });
 
   test("navigating to /settings/hosts/[serverId] redirects to the connections section", async ({

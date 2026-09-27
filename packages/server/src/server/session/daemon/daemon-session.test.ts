@@ -46,15 +46,12 @@ function makeSubsystem(overrides: {
   reloadConfig?: () => DaemonConfigReloadResult;
 }) {
   const emitted: SessionOutboundMessage[] = [];
-  const restartIntents: Parameters<DaemonSessionHost["emitLifecycleIntent"]>[0][] = [];
   const host: DaemonSessionHost = {
     emit: (msg) => emitted.push(msg),
-    emitLifecycleIntent: (intent) => restartIntents.push(intent),
   };
   const paseoHome = makeHome();
   const subsystem = new DaemonSession({
     host,
-    clientId: "client-1",
     paseoHome,
     serverId: overrides.serverId,
     daemonVersion: overrides.daemonVersion,
@@ -74,7 +71,7 @@ function makeSubsystem(overrides: {
       })),
     logger: pino({ level: "silent" }),
   });
-  return { subsystem, emitted, paseoHome, restartIntents };
+  return { subsystem, emitted, paseoHome };
 }
 
 describe("DaemonSession", () => {

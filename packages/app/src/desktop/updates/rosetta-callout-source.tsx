@@ -6,12 +6,11 @@ import { useSidebarCallouts } from "@/contexts/sidebar-callout-context";
 import {
   buildMacAppleSiliconDownloadUrl,
   getDesktopRuntimeInfo,
+  openDesktopReleasesPage,
   type DesktopRuntimeInfo,
 } from "@/desktop/updates/desktop-updates";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { openExternalUrl } from "@/utils/open-external-url";
-
-const FALLBACK_DOWNLOAD_URL = "https://paseo.sh/download";
 
 function RosettaCalloutDescription({ t }: { t: ReturnType<typeof useTranslation>["t"] }) {
   return (
@@ -31,9 +30,12 @@ export function RosettaCalloutSource() {
   const isElectronMac = getIsElectronMac();
 
   const openDownload = useStableEvent(() => {
-    const downloadUrl =
-      buildMacAppleSiliconDownloadUrl(runtimeInfo?.appVersion) ?? FALLBACK_DOWNLOAD_URL;
-    void openExternalUrl(downloadUrl);
+    const downloadUrl = buildMacAppleSiliconDownloadUrl(runtimeInfo?.appVersion);
+    if (downloadUrl) {
+      void openExternalUrl(downloadUrl);
+    } else {
+      openDesktopReleasesPage();
+    }
   });
 
   useEffect(() => {

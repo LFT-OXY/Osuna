@@ -15,11 +15,19 @@ export interface AppUpdateCheckResult {
   errorMessage: string | null;
 }
 
-export interface AppUpdateInstallResult {
-  installed: boolean;
-  version: string | null;
-  message: string;
-}
+export type AppUpdateInstallFailure =
+  | { reason: "handoff-timeout" }
+  | { reason: "updater-error"; message: string };
+
+// failure 为 null 的未安装结果是正常情况（无更新、稍后安装等），不是安装失败。
+export type AppUpdateInstallResult =
+  | { installed: true; version: string; message: string; failure: null }
+  | {
+      installed: false;
+      version: string;
+      message: string;
+      failure: AppUpdateInstallFailure | null;
+    };
 
 export interface RuntimeUpdateInfo {
   version: string;
@@ -38,6 +46,7 @@ export interface AppUpdateRuntimeConfiguration {
   shouldAdmitUpdate(info: RuntimeUpdateInfo): boolean | Promise<boolean>;
   onUpdateAvailable(info: RuntimeUpdateInfo): void;
   onUpdateDownloaded(info: RuntimeUpdateInfo): void;
+  onBeforeQuitForUpdate(): void;
   onError(error: unknown): void;
 }
 
@@ -79,6 +88,7 @@ export interface AppUpdateServiceDeps {
   isPackaged(): boolean;
   now(): number;
   bucket(): Promise<number>;
+  createInstallHandoffDeadline(): AbortSignal;
   reportCheckError?(error: unknown): void;
   reportRuntimeError?(error: unknown): void;
   reportInstallError?(message: string): void;
@@ -104,26 +114,6 @@ function buildCheckResult(input: {
   };
 }
 
-async function performQuitAndInstall(
-  runtime: AppUpdateRuntime,
-  {
-    targetVersion,
-    onBeforeQuit,
-    restart,
-  }: {
-    targetVersion: string;
-    onBeforeQuit?: () => Promise<void>;
-    restart: boolean;
-  },
-): Promise<void> {
-  if (onBeforeQuit) await onBeforeQuit();
-  runtime.quitAndInstall({
-    targetVersion,
-    isSilent: !restart,
-    isForceRunAfter: restart,
-  });
-}
-
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && typeof error.message === "string") {
     return error.message;
@@ -131,12 +121,41 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-function buildDeferredInstallResult(currentVersion: string): AppUpdateInstallResult {
+type InstallHandoffOutcome =
+  | { started: true }
+  | { started: false; failure: AppUpdateInstallFailure };
+
+function describeInstallFailure(failure: AppUpdateInstallFailure): string {
+  return failure.reason === "handoff-timeout"
+    ? "Timed out waiting for the updater to restart the app."
+    : failure.message;
+}
+
+function buildNotInstalledResult(currentVersion: string, message: string): AppUpdateInstallResult {
+  return { installed: false, version: currentVersion, message, failure: null };
+}
+
+function buildFailedInstallResult(
+  currentVersion: string,
+  failure: AppUpdateInstallFailure,
+): AppUpdateInstallResult {
   return {
     installed: false,
     version: currentVersion,
-    message: "Update validation timed out. The update will be installed later.",
+    message: `Update failed: ${describeInstallFailure(failure)}`,
+    failure,
   };
+}
+
+function updaterErrorFailure(message: string): AppUpdateInstallFailure {
+  return { reason: "updater-error", message };
+}
+
+function buildDeferredInstallResult(currentVersion: string): AppUpdateInstallResult {
+  return buildNotInstalledResult(
+    currentVersion,
+    "Update validation timed out. The update will be installed later.",
+  );
 }
 
 export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateService {
@@ -146,6 +165,11 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
   let preparationError: { version: string; message: string } | null = null;
   let preparingUpdateVersion: string | null = null;
   let checkQueue: Promise<void> = Promise.resolve();
+  const installHandoffWaiters = new Set<(outcome: InstallHandoffOutcome) => void>();
+
+  function settleInstallHandoffs(outcome: InstallHandoffOutcome): void {
+    for (const settle of installHandoffWaiters) settle(outcome);
+  }
 
   function isReadyToInstallVersion(version: string): boolean {
     return downloadedUpdateVersion === version;
@@ -215,7 +239,14 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
           preparationError = null;
         }
       },
+      onBeforeQuitForUpdate() {
+        settleInstallHandoffs({ started: true });
+      },
       onError(error) {
+        settleInstallHandoffs({
+          started: false,
+          failure: updaterErrorFailure(getErrorMessage(error)),
+        });
         if (preparingUpdateVersion) {
           preparationError = {
             version: preparingUpdateVersion,
@@ -334,11 +365,10 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     onBeforeQuit?: () => Promise<void>,
   ): Promise<AppUpdateInstallResult> {
     if (!deps.isPackaged()) {
-      return {
-        installed: false,
-        version: currentVersion,
-        message: "Auto-update is not available in development mode.",
-      };
+      return buildNotInstalledResult(
+        currentVersion,
+        "Auto-update is not available in development mode.",
+      );
     }
 
     const check = await checkForAppUpdate({
@@ -347,11 +377,9 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
       intent: "manual",
     });
     if (!check.hasUpdate) {
-      return {
-        installed: false,
-        version: currentVersion,
-        message: check.errorMessage ?? "No update available.",
-      };
+      return check.errorMessage
+        ? buildFailedInstallResult(currentVersion, updaterErrorFailure(check.errorMessage))
+        : buildNotInstalledResult(currentVersion, "No update available.");
     }
 
     return installCachedUpdate(currentVersion, { onBeforeQuit, restart: true });
@@ -392,6 +420,56 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     return signal?.aborted ? "aborted" : "ready";
   }
 
+  // 需要重启的安装只有在更新器真正开始退出时才算成功：Squirrel.Mac 在 quitAndInstall
+  // 返回之后才校验新包签名，校验失败只会发出 error 事件。
+  function waitForInstallHandoff(): Promise<InstallHandoffOutcome> {
+    const deadline = deps.createInstallHandoffDeadline();
+    return new Promise((resolve) => {
+      function settle(outcome: InstallHandoffOutcome): void {
+        installHandoffWaiters.delete(settle);
+        deadline.removeEventListener("abort", onDeadline);
+        resolve(outcome);
+      }
+      function onDeadline(): void {
+        settle({ started: false, failure: { reason: "handoff-timeout" } });
+      }
+      installHandoffWaiters.add(settle);
+      if (deadline.aborted) onDeadline();
+      else deadline.addEventListener("abort", onDeadline, { once: true });
+    });
+  }
+
+  async function performQuitAndInstall({
+    currentVersion,
+    targetVersion,
+    onBeforeQuit,
+    restart,
+  }: {
+    currentVersion: string;
+    targetVersion: string;
+    onBeforeQuit?: () => Promise<void>;
+    restart: boolean;
+  }): Promise<AppUpdateInstallResult> {
+    if (onBeforeQuit) await onBeforeQuit();
+    const handoff = restart ? waitForInstallHandoff() : null;
+    deps.runtime.quitAndInstall({
+      targetVersion,
+      isSilent: !restart,
+      isForceRunAfter: restart,
+    });
+    const outcome = handoff ? await handoff : ({ started: true } as const);
+    if (!outcome.started) {
+      deps.reportInstallError?.(describeInstallFailure(outcome.failure));
+      return buildFailedInstallResult(currentVersion, outcome.failure);
+    }
+    return {
+      installed: true,
+      version: targetVersion,
+      message: "Update downloaded. The app will restart shortly.",
+      failure: null,
+    };
+  }
+
   async function installCachedUpdate(
     currentVersion: string,
     {
@@ -405,11 +483,10 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     },
   ): Promise<AppUpdateInstallResult> {
     if (!cachedUpdateInfo) {
-      return {
-        installed: false,
-        version: currentVersion,
-        message: "No update available. Check for updates first.",
-      };
+      return buildNotInstalledResult(
+        currentVersion,
+        "No update available. Check for updates first.",
+      );
     }
 
     const readyVersion = cachedUpdateInfo.version;
@@ -418,16 +495,12 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     }
 
     if (isReadyToInstallVersion(readyVersion)) {
-      await performQuitAndInstall(deps.runtime, {
+      return performQuitAndInstall({
+        currentVersion,
         targetVersion: readyVersion,
         onBeforeQuit,
         restart,
       });
-      return {
-        installed: true,
-        version: readyVersion,
-        message: "Update downloaded. The app will restart shortly.",
-      };
     }
 
     try {
@@ -436,31 +509,21 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
         return buildDeferredInstallResult(currentVersion);
       }
       if (preparation === "superseded") {
-        return {
-          installed: false,
-          version: currentVersion,
-          message: "A newer update was found and will be installed later.",
-        };
+        return buildNotInstalledResult(
+          currentVersion,
+          "A newer update was found and will be installed later.",
+        );
       }
-      await performQuitAndInstall(deps.runtime, {
+      return await performQuitAndInstall({
+        currentVersion,
         targetVersion: readyVersion,
         onBeforeQuit,
         restart,
       });
-
-      return {
-        installed: true,
-        version: readyVersion,
-        message: "Update downloaded. The app will restart shortly.",
-      };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       deps.reportInstallError?.(message);
-      return {
-        installed: false,
-        version: currentVersion,
-        message: `Update failed: ${message}`,
-      };
+      return buildFailedInstallResult(currentVersion, updaterErrorFailure(message));
     }
   }
 

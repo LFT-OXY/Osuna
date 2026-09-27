@@ -60,8 +60,8 @@ it("rejects catalogs without requirements from pre-0.8 daemons", () => {
   const { result, starts } = registry("0.8.0");
   result.installCatalog("host", [{ id: "example", clientBundle }], { client });
   expect(starts()).toBe(0);
-  expect(result.getEvaluationError("host", "example")).toContain(
-    "https://paseo.sh/docs/plugins/v0.8/migration",
+  expect(result.getEvaluationError("host", "example")).toMatch(
+    /targets Paseo before 0\.8\. Ask its author to migrate it\.$/,
   );
 });
 

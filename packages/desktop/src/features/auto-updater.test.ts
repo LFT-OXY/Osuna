@@ -30,6 +30,9 @@ vi.mock("electron", () => ({
     getPath: vi.fn(),
     isPackaged: true,
   },
+  autoUpdater: {
+    on: vi.fn(),
+  },
 }));
 
 vi.mock("electron-updater", () => ({
@@ -73,7 +76,10 @@ describe("checkForAppUpdate", () => {
       date: null,
       errorMessage: null,
     });
-    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalledWith(
+      "[auto-updater] Failed to check for updates:",
+      error,
+    );
     consoleError.mockRestore();
   });
 
@@ -93,7 +99,7 @@ describe("checkForAppUpdate", () => {
     });
 
     expect(result.errorMessage).toBe("network down");
-    expect(consoleError).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith("[auto-updater] Failed to check for updates:", error);
     consoleError.mockRestore();
   });
 
