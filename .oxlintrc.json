@@ -192,7 +192,7 @@
         ]
       }
     },
-    // useUnistyles burn-down: 74 files total; the 68 files below still enforce the raw-query ban.
+    // useUnistyles burn-down: 73 files total; the 67 files below still enforce the raw-query ban.
     {
       "files": [
         "packages/app/src/app/_layout.tsx",
@@ -217,7 +217,6 @@
         "packages/app/src/components/headers/screen-header.tsx",
         "packages/app/src/components/host-status-dot.tsx",
         "packages/app/src/components/hosts/host-picker.tsx",
-        "packages/app/src/components/icons/paseo-logo.tsx",
         "packages/app/src/components/left-sidebar.tsx",
         "packages/app/src/components/pair-link-modal.tsx",
         "packages/app/src/components/plan-card.tsx",
