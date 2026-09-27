@@ -1,6 +1,6 @@
 /*
- * 渲染管线移植自 t3code `apps/web/src/components/ChatMarkdown.tsx`：remark-gfm + rehype-raw +
- * rehype-sanitize，去掉了 t3code 特有的协议、codex directives 与流式渲染。
+ * 渲染管线移植自 t3code `apps/web/src/components/ChatMarkdown.tsx`：remark-gfm + GitHub 提示块 +
+ * rehype-raw + rehype-sanitize，去掉了 t3code 特有的协议、codex directives 与流式渲染。
  *
  * MIT License
  *
@@ -25,7 +25,16 @@
  * SOFTWARE.
  */
 import { memo, useCallback, type ComponentProps, type MouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { TextStyle } from "react-native";
+import {
+  Info,
+  Lightbulb,
+  MessageSquareWarning,
+  OctagonAlert,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react-native";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from "rehype-sanitize";
@@ -34,8 +43,9 @@ import { withUnistyles } from "react-native-unistyles";
 import { getMarkdownFenceLanguage } from "@/components/markdown/fence/language";
 import { MermaidFence } from "@/components/markdown/fence/mermaid";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { isGithubAlertKind, remarkGithubAlerts, type GithubAlertKind } from "./github-alerts";
 
 type HastNode = NonNullable<ExtraProps["node"]>;
 type HastChild = HastNode["children"][number];
@@ -44,13 +54,17 @@ type HastChild = HastNode["children"][number];
 // 链接协议在此基础上收窄到 http(s) / mailto；相对路径与页内锚点不带协议，本就放行。
 const PREVIEW_SANITIZE_SCHEMA = {
   ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "dataAlert"],
+  },
   protocols: {
     ...defaultSchema.protocols,
     href: ["http", "https", "mailto"],
   },
 } satisfies SanitizeSchema;
 
-const REMARK_PLUGINS = [remarkGfm];
+const REMARK_PLUGINS = [remarkGfm, remarkGithubAlerts];
 const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, PREVIEW_SANITIZE_SCHEMA]] satisfies NonNullable<
   ComponentProps<typeof ReactMarkdown>["rehypePlugins"]
 >;
@@ -140,6 +154,37 @@ function MarkdownLink({ node: _node, href, ...props }: ComponentProps<"a"> & Ext
   return <a {...props} href={href} onClick={openInBrowser} />;
 }
 
+const GITHUB_ALERT_ICONS: Record<GithubAlertKind, LucideIcon> = {
+  note: Info,
+  tip: Lightbulb,
+  important: MessageSquareWarning,
+  warning: TriangleAlert,
+  caution: OctagonAlert,
+};
+
+function MarkdownBlockquote({
+  node,
+  children,
+  ...props
+}: ComponentProps<"blockquote"> & ExtraProps) {
+  const { t } = useTranslation();
+  const kind = node?.properties.dataAlert;
+  if (!isGithubAlertKind(kind)) {
+    return <blockquote {...props}>{children}</blockquote>;
+  }
+  const Icon = GITHUB_ALERT_ICONS[kind];
+  // 不用 <blockquote>：样式表把引用正文调暗，而提示块正文是普通文字，只有标题着色。
+  return (
+    <div role="note" className="md-alert" data-alert={kind}>
+      <p className="md-alert-title">
+        <Icon aria-hidden size={ICON_SIZE.sm} color="currentColor" />
+        {t(`panels.file.markdownAlerts.${kind}`)}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 function MarkdownTable({ node: _node, ...props }: ComponentProps<"table"> & ExtraProps) {
   return (
     <div className="md-table-scroll">
@@ -152,6 +197,7 @@ const COMPONENTS = {
   pre: MarkdownPre,
   code: MarkdownCode,
   a: MarkdownLink,
+  blockquote: MarkdownBlockquote,
   table: MarkdownTable,
 } satisfies Components;
 

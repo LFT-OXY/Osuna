@@ -1904,6 +1904,13 @@ export const es: TranslationResources = {
       tooLargeToDisplay: "Este archivo es demasiado grande para mostrarlo",
       failedToLoad: "No se pudo cargar el archivo",
       failedToLoadPreview: "No se pudo cargar la vista previa del archivo",
+      markdownAlerts: {
+        note: "Nota",
+        tip: "Consejo",
+        important: "Importante",
+        warning: "Advertencia",
+        caution: "Precaución",
+      },
       editor: {
         fileSize: "Tamaño {{size}}",
         lines: "{{count}} líneas",

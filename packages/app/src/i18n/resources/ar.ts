@@ -1855,6 +1855,13 @@ export const ar: TranslationResources = {
       tooLargeToDisplay: "هذا الملف كبير جدًا بحيث لا يمكن عرضه",
       failedToLoad: "فشل تحميل الملف",
       failedToLoadPreview: "فشل تحميل معاينة الملف",
+      markdownAlerts: {
+        note: "ملاحظة",
+        tip: "نصيحة",
+        important: "مهم",
+        warning: "تحذير",
+        caution: "تنبيه",
+      },
       editor: {
         fileSize: "حجم الملف {{size}}",
         lines: "{{count}} سطر",

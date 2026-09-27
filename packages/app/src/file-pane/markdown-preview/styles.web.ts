@@ -62,6 +62,17 @@ export function markdownPreviewThemeVariables(theme: Theme): MarkdownPreviewThem
     "--md-code-background": theme.colors.surface2,
     "--md-code-foreground": theme.colors.foreground,
     "--md-front-matter-key-background": theme.colors.surface2,
+    // 提示块：note 取固定蓝色档（强调色随主题变，会与 caution 撞色或变成近白），
+    // 其余四种取状态色族中语义对应的一员。
+    "--md-alert-note":
+      theme.colorScheme === "dark"
+        ? theme.colors.palette.blue[400]
+        : theme.colors.palette.blue[600],
+    "--md-alert-tip": theme.colors.statusSuccess,
+    "--md-alert-important": theme.colors.statusMerged,
+    "--md-alert-warning": theme.colors.statusWarning,
+    "--md-alert-caution": theme.colors.statusDanger,
+    "--md-alert-title-weight": theme.fontWeight.medium,
     "--md-mono": theme.fontFamily.mono,
     "--md-code-size": px(theme.fontSize.code),
     "--md-front-matter-size": px(theme.fontSize.base),
@@ -222,6 +233,45 @@ ${ROOT} blockquote {
   margin-left: 0;
   margin-right: 0;
   color: var(--md-muted);
+}
+
+/* 提示块只给左边线与标题着色，正文保持普通文字颜色（与 GitHub 一致）。 */
+${ROOT} .md-alert {
+  margin: 0.25rem 0;
+  border-left: 2px solid var(--md-alert-color);
+  padding-left: 0.75rem;
+}
+
+${ROOT} .md-alert[data-alert="note"] {
+  --md-alert-color: var(--md-alert-note);
+}
+
+${ROOT} .md-alert[data-alert="tip"] {
+  --md-alert-color: var(--md-alert-tip);
+}
+
+${ROOT} .md-alert[data-alert="important"] {
+  --md-alert-color: var(--md-alert-important);
+}
+
+${ROOT} .md-alert[data-alert="warning"] {
+  --md-alert-color: var(--md-alert-warning);
+}
+
+${ROOT} .md-alert[data-alert="caution"] {
+  --md-alert-color: var(--md-alert-caution);
+}
+
+${ROOT} .md-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--md-alert-color);
+  font-weight: var(--md-alert-title-weight);
+}
+
+${ROOT} .md-alert-title > svg {
+  flex-shrink: 0;
 }
 
 ${ROOT} hr {

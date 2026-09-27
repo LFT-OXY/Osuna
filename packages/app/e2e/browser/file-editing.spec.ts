@@ -49,6 +49,9 @@ const README_FIXTURE = [
   "",
   '<a href="javascript:window.readmeLinkRan=true">Unsafe html link</a>',
   "",
+  "> [!NOTE]",
+  "> Alert body text",
+  "",
   "| Name | Status |",
   "| --- | :---: |",
   "| Table cell | ~~Removed~~ |",
@@ -91,6 +94,10 @@ function editor(page: Page) {
 
 function hasHorizontalOverflow(element: HTMLElement): boolean {
   return element.scrollWidth > element.clientWidth;
+}
+
+function readBorderLeftColors(elements: Element[]): string[] {
+  return elements.map((element) => getComputedStyle(element).borderLeftColor);
 }
 
 function fitsViewportWidth(element: HTMLElement): boolean {
@@ -663,6 +670,11 @@ test.describe("CodeMirror workspace file editing", () => {
     await popup.close();
 
     await expect(preview.getByTestId("markdown-front-matter")).toContainText("Fixture title");
+    const alert = preview.getByRole("note");
+    await expect(alert).toHaveCount(1);
+    await expect(alert.locator("p").first()).toHaveText("Note");
+    await expect(alert).toContainText("Alert body text");
+    await expect(preview).not.toContainText("[!NOTE]");
     const table = preview.getByRole("table");
     await expect(table.getByRole("columnheader")).toHaveText(["Name", "Status"]);
     await expect(table.getByRole("cell")).toHaveText(["Table cell", "Removed"]);
@@ -731,6 +743,65 @@ test.describe("CodeMirror workspace file editing", () => {
       quote: "rgb(129, 129, 129)",
       cellBorder: "rgb(25, 25, 25)",
     });
+  });
+
+  test("renders the five GitHub alerts with localized titles and distinct colors", async ({
+    page,
+    withWorkspace,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.addInitScript((key) => {
+      localStorage.setItem(key, JSON.stringify({ theme: "auto", language: "zh-CN" }));
+    }, APP_SETTINGS_KEY);
+    const workspace = await withWorkspace({ prefix: "file-editing-markdown-alerts-" });
+    await writeFile(
+      path.join(workspace.repoPath, "alerts.md"),
+      ["NOTE", "tip", "Important", "WARNING", "caution"]
+        .map((kind) => `> [!${kind}]\n> ${kind} body`)
+        .concat("> [!NOTE] inline aside")
+        .join("\n\n"),
+      "utf8",
+    );
+    await workspace.navigateTo();
+    await openWorkspaceFile(page, "alerts.md");
+
+    const preview = page.getByTestId("file-markdown-preview").filter({ visible: true });
+    const alerts = preview.getByRole("note");
+    await expect(alerts).toHaveCount(5);
+    await expect(alerts.locator("p:first-child")).toHaveText([
+      "注意",
+      "提示",
+      "重要",
+      "警告",
+      "小心",
+    ]);
+    await expect(alerts.locator("svg")).toHaveCount(5);
+    // 标记后面跟着文字时不是提示块，按普通引用保留原文；其余标记都不外露。
+    await expect(preview.locator("blockquote")).toHaveText("[!NOTE] inline aside");
+    expect((await preview.textContent())?.match(/\[!/g)).toHaveLength(1);
+
+    // 默认 Light / Dark 主题下 note 的蓝色档与 statusSuccess、statusMerged、statusWarning、statusDanger。
+    const readAlertColors = () => alerts.evaluateAll(readBorderLeftColors);
+    await expect
+      .poll(readAlertColors)
+      .toEqual([
+        "rgb(37, 99, 235)",
+        "rgb(62, 112, 74)",
+        "rgb(115, 71, 175)",
+        "rgb(123, 93, 57)",
+        "rgb(157, 67, 59)",
+      ]);
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect
+      .poll(readAlertColors)
+      .toEqual([
+        "rgb(96, 165, 250)",
+        "rgb(108, 177, 123)",
+        "rgb(168, 144, 213)",
+        "rgb(192, 150, 100)",
+        "rgb(216, 132, 123)",
+      ]);
   });
 
   test("previews and refreshes an HTML plan while preserving source access", async ({
