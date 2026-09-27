@@ -101,10 +101,10 @@
 
 - 生成一张自签名 code signing 证书，有效期 30 年，CN 为 Osuna 的签名身份名。`.p12` 和导出密码存到本机 `~/.config/osuna/codesign/`：目录权限 700，密码文件权限 600。由用户自行同步到云盘。
 - 用 `gh secret set` 把证书（base64）和密码写入仓库 Secrets（`CSC_LINK`、`CSC_KEY_PASSWORD`）。**这一步是写入外部服务，执行前必须单独征得用户确认。**
-- CI 的 macOS 作业注入这两个 secret，并通过自定义 `mac.sign` 钩子按证书的 SHA-1 指纹显式签名，不依赖 electron-builder 的身份查找，也不设钥匙串信任。原因（ticket 01 实测）：electron-builder 只从 `security find-identity -v` 列出的受信身份里挑选，自签证书不设信任就一定不在其中，此时即使给了 `identity` / `CSC_NAME`，arm64 也会静默退回 ad-hoc，x64 直接不签名。配了 `sign` 钩子后 electron-builder 不再兜底，把 `CSC_LINK` 导入的临时钥匙串交给钩子，钩子拿不到指纹或签名失败时必须报错。钩子只在 CI 用 `-c.mac.sign=` 注入，`electron-builder.yml` 不引用它。arm64 与 x64 都签名。
+- CI 的 macOS 作业注入这两个 secret，并通过自定义 `mac.sign` 钩子按证书的 SHA-1 指纹显式签名，不依赖 electron-builder 的身份查找，也不设钥匙串信任。原因（ticket 01 实测）：electron-builder 只从 `security find-identity -v` 列出的受信身份里挑选，自签证书不设信任就一定不在其中，此时即使给了 `identity` / `CSC_NAME`，arm64 也会静默退回 ad-hoc，x64 直接不签名。配了 `sign` 钩子后 electron-builder 不再兜底，把 `CSC_LINK` 导入的临时钥匙串交给钩子，钩子拿不到指纹或签名失败时必须报错。钩子只在 CI 用 `-c.mac.sign=` 注入，`electron-builder.yml` 不引用它。arm64 与 x64 都签名。指纹是公开值，钉在工作流 env 的 `OSUNA_MAC_SIGNING_SHA1`，不从 secret 推导：secret 里换成另一张证书时，钩子在钥匙串里找不到这个指纹，构建直接失败。
 - `hardenedRuntime` 保持关闭，不做公证。本地构建不引入证书，维持现状。
-- 打包后在 CI 里断言：用 `codesign -d -r-` 读出的 designated requirement 必须包含证书约束（`certificate leaf`），且不能是 `cdhash`；再对产物做一次 `codesign --verify --deep --strict`。任一不满足就让作业失败，并且在清单上传之前失败。
-- 修正发版文档：首次打开的放行步骤改用 Osuna.app，删除「自动更新装上的新版本也不会再问」这句与事实不符的说法，写明证书的存放位置、备份要求和丢失的后果，并把「afterSign 在未签名时被跳过」的描述更新到新的现状。
+- 打包后在 CI 里断言：用 `codesign -d -r-` 读出的 designated requirement 必须钉住这张证书（`certificate root = H"<指纹>"` 或 `certificate leaf = H"<指纹>"`，哈希等于钉住的指纹），且不能是 `cdhash`。证书带 `O=` 字段时 codesign 沿链上溯到锚点，写成 `root`；自签证书的链只有一张，两种写法钉的是同一张证书（正式证书实测为 `root`）。再对产物做一次 `codesign --verify --deep --strict`。打包目录里的 `.app` 和从更新 zip 用 ditto 解出的 `.app` 都要检查。任一不满足就让该架构的作业失败，并且在它上传任何产物之前失败。
+- 修正发版文档：首次打开的放行步骤改用 Osuna.app，删除「自动更新装上的新版本也不会再问」这句与事实不符的说法，写明证书的存放位置、备份要求和丢失的后果，并把「afterSign 在未签名时被跳过」的描述更正为事实：electron-builder 26.8.1 在 macOS 上总会执行 afterSign，macOS 没有打包冒烟是因为没设 `PASEO_DESKTOP_SMOKE`（该事实归 `docs/testing.md`）。首次打开步骤里的 Osuna.app 随 04 改名一起改。
 
 ### 更新失败可见
 
@@ -127,7 +127,7 @@
   - 等待超时按失败处理。
 - **desktop-updates（现有接缝）**：`desktop-updates.test.ts` 里原先断言上游下载地址的用例，改为断言本仓库地址。
 - **daemon 自更新（现有接缝）**：在 daemon client 的 e2e 测试里断言 `server_info.features` 不含 `daemonSelfUpdate`，并且直接调用自更新 RPC 会被拒绝。
-- **CI 签名断言（唯一新增接缝，位于最高层）**：macOS 作业在打包后检查 designated requirement 和签名的完整性，失败即中止。它防的是「secret 缺失时 electron-builder 静默回退」这种不会报错的失败。
+- **CI 签名断言（唯一新增接缝，位于最高层）**：macOS 作业在打包后检查 designated requirement 和签名的完整性，失败即中止。它防的是「签名钩子没注入或失效时 electron-builder 静默退回 ad-hoc / 不签名」这种不会报错的失败。secret 缺失或配错、换了证书则会在构建步骤就报错。判定 DR 的纯函数有单测（`scripts/verify-mac-signature.test.mjs`），查找产物、解 zip 的部分只能在 macOS 上端到端验证。
 - **既有测试的跟随修改**：依赖旧产品名的单元测试和 e2e 断言，按新文案更新。修改前后的失败情况要和基线对照（部分 e2e 在 macOS 本机的基线上本来就失败），不把基线失败算到本次改动头上。
 - **人工验证**（这些只能人工验）：
   1. **本地两包互验实验**（在改 CI 之前）：在临时钥匙串里用同一张自签证书签两个内容不同的包，确认第二个包能满足第一个包的 designated requirement；再确认一张不同的证书签出的包会被拒绝。
