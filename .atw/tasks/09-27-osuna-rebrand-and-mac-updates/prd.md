@@ -75,7 +75,7 @@
 ### 身份与改名（ADR 0002）
 
 - 桌面端打包配置：`appId` 为 `com.chinhae.osuna.desktop`，`productName` 与 `executableName` 为 `Osuna`，所有产物名以 `Osuna-` 开头，协议显示名改成 Osuna 的说法。scheme 仍为 `paseo`。
-- 主进程在应用就绪前，显式把 userData 固定到 appData 下的 `Paseo` 目录。开发时的 worktree 隔离目录和强制 userData 覆盖逻辑保持原有优先级，这条固定只作用于默认路径。
+- 主进程在应用就绪前，显式把 userData 固定到 appData 下的 `Paseo` 目录。开发时的 worktree 隔离目录和强制 userData 覆盖逻辑保持原有优先级，这条固定只作用于默认路径。设置了强制覆盖（`PASEO_ELECTRON_USER_DATA_DIR`）时，直接用它，不再解析 appData。原因是 Windows 打包冒烟会改写 `USERPROFILE`，这时 `getPath("appData")` 会在启动时抛错。
 - 日志目录同样固定在 `Paseo`（实施时经用户确认追加）：macOS 的 electron-log 按应用名放在 `~/Library/Logs/<名字>`，不固定就会挪到 `Osuna`，而 Windows、Linux 的日志在 userData 下，本来就随 userData 固定。两处固定都必须早于首次写日志，因为 electron-log 在首次写入时缓存路径。
 - 所有依赖可执行文件名或 bundle 名的地方同步改名：打包钩子、随包分发的 CLI shim、更新诊断里的 ShipIt 缓存目录（由 appId 推导）、CLI 查找桌面端的候选路径（macOS、Windows、Linux）、主进程里的应用名常量、Linux 的 desktop 文件名与窗口 class（electron-builder 按 productName 生成 `Osuna.desktop` 与 `StartupWMClass=Osuna`）、打包冒烟脚本。
 - 以下几项经用户确认后一并改名：Nix 打包（`nix/desktop-package.nix` 按 `Osuna.app` 取产物，`nix.yml` 断言新 appId）；deb/rpm 的 maintainer 改为 `oxy <oxy.chinhae@gmail.com>`，vendor 改为 `Osuna`；GitHub Release 标题改为 `Osuna <tag>`。

@@ -24,3 +24,10 @@
 - 留给其他票：Rosetta 下载地址里的 `Paseo-<ver>-arm64.dmg` 文件名随 07 一起改（它的基址仍指向上游，单改文件名只会得到坏链接）。`cli agent open` 的帮助文字 "Paseo Desktop"、`nix/desktop-package.nix` 的 `meta.description` 属于文案，没有改。测试里作为样例输入的 `/Applications/Paseo.app` 路径与名字无关，保留。
 - 验证：先把 `desktop-packaging.test.ts`（shim 走 Helper、协议名）与 `updater.test.ts`（ShipIt 目录）改成新名字确认变红，再改实现转绿。desktop 单测 385 通过，CLI 单测 293 通过，两包 typecheck、改动文件 oxlint/oxfmt 通过。本地 `--mac --arm64` 出包：Info.plist 的 bundle id 为 `com.chinhae.osuna.desktop`，名称与 Helper 都是 Osuna，URL scheme 为 `paseo`，包内 `Resources/bin/paseo --version` 输出 0.9.0。
 - 人工验证（前三条验收项）由用户在本机完成并确认通过：把包装进 /Applications 后看 Dock、菜单、通知；确认 userData 仍是 `~/Library/Application Support/Paseo`，已有 host 还在；`paseo open` 能拉起 Osuna.app。
+
+**发版前 Windows 打包冒烟回归（2026-09-27）**
+
+- 现象：在改名后的代码上手动派发 `Desktop Release`（`platform=windows`、`publish=false`，run 36322120386），打包冒烟失败。`Osuna.exe` 进程一直活着，但 60 秒内没有打开 CDP 端口，stdout、stderr 为空，找不到任何日志。v0.9.0（改名前）的同一冒烟 30 秒通过；本机 mac 包跑同一脚本也通过，所以问题只出现在 Windows 上。
+- 定位：冒烟脚本改成失败时留存临时目录清单、日志和 `tasklist /v`（`2b09a3006`），拿到的进程列表里 `Osuna.exe` 的窗口标题是 "Error"，即主进程在写首条日志之前抛了未捕获异常，被 Electron 的错误弹窗挂住。原因是本票新加的 `app.setPath("userData", path.join(app.getPath("appData"), "Paseo"))`：冒烟把子进程的 `USERPROFILE` 指向临时目录，Windows 按它展开出一个不存在的 AppData，`getPath("appData")` 直接抛错。改名前，打包版启动时从不调用它。
+- 修复（`859ba6e53`）：设置了 `PASEO_ELECTRON_USER_DATA_DIR` 时直接用它作为 userData，不再解析 appData。默认路径的行为不变。附带效果：强制覆盖时，日志也写进该目录，冒烟失败时能读到 desktop log。没有为真实用户改写 `USERPROFILE` 的情况加兜底（用户确认），因为 Electron 自己的默认 userData 也由 appData 推导。
+- 验证：run 36324689620 通过。x64 冒烟完整跑通；产物为 `Osuna-Setup-0.9.0{,-x64,-arm64}.exe` 和两个架构的 zip。macOS 已在 run 36320612873 通过签名断言（arm64、x64 的 `Osuna.app` 与更新 zip 均 `ok`），本修复不改默认路径，不需要重跑。
