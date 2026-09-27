@@ -2,6 +2,7 @@ import { isElectronRuntime } from "@/desktop/host";
 import { invokeDesktopCommand } from "@/desktop/electron/invoke";
 import { isWeb } from "@/constants/platform";
 import { i18n } from "@/i18n/i18next";
+import { openExternalUrl } from "@/utils/open-external-url";
 
 export interface DesktopAppUpdateCheckResult {
   hasUpdate: boolean;
@@ -13,11 +14,19 @@ export interface DesktopAppUpdateCheckResult {
   errorMessage: string | null;
 }
 
-export interface DesktopAppUpdateInstallResult {
-  installed: boolean;
-  version: string | null;
-  message: string;
-}
+export type DesktopAppUpdateInstallFailure =
+  | { reason: "handoff-timeout" }
+  | { reason: "updater-error"; message: string };
+
+// failure 为 null 的未安装结果是正常情况（无更新、稍后安装等），不是安装失败。
+export type DesktopAppUpdateInstallResult =
+  | { installed: true; version: string | null; message: string; failure: null }
+  | {
+      installed: false;
+      version: string | null;
+      message: string;
+      failure: DesktopAppUpdateInstallFailure | null;
+    };
 
 export interface DesktopRuntimeInfo {
   appVersion: string | null;
@@ -39,6 +48,7 @@ export interface LocalDaemonVersionResult {
 }
 
 const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/getpaseo/paseo/releases/download";
+const DESKTOP_RELEASES_URL = "https://github.com/LFT-OXY/Osuna/releases";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -126,6 +136,16 @@ export async function checkDesktopAppUpdate({
   };
 }
 
+function parseInstallFailure(raw: unknown): DesktopAppUpdateInstallFailure | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  if (raw.reason === "handoff-timeout") {
+    return { reason: "handoff-timeout" };
+  }
+  return { reason: "updater-error", message: toStringOrNull(raw.message) ?? "" };
+}
+
 export async function installDesktopAppUpdate({
   releaseChannel,
 }: {
@@ -136,11 +156,16 @@ export async function installDesktopAppUpdate({
     throw new Error("Unexpected response while installing desktop update.");
   }
 
-  return {
-    installed: result.installed === true,
-    version: toStringOrNull(result.version),
-    message: toStringOrNull(result.message) ?? i18n.t("desktop.updates.status.installed"),
-  };
+  const version = toStringOrNull(result.version);
+  const message = toStringOrNull(result.message) ?? i18n.t("desktop.updates.status.installed");
+  if (result.installed === true) {
+    return { installed: true, version, message, failure: null };
+  }
+  return { installed: false, version, message, failure: parseInstallFailure(result.failure) };
+}
+
+export function openDesktopReleasesPage(): void {
+  void openExternalUrl(DESKTOP_RELEASES_URL);
 }
 
 export async function runLocalDaemonUpdate(): Promise<LocalDaemonUpdateResult> {

@@ -1401,10 +1401,13 @@ export const ar: TranslationResources = {
         available: "تحديث التطبيق جاهز للتثبيت.",
         availableWithLastChecked: "تحديث التطبيق جاهز للتثبيت. آخر فحص في {{time}}.",
         installed: "تم تثبيت تحديث التطبيق. إعادة التشغيل مطلوبة.",
+        installFailed: "تعذّر تثبيت التحديث.",
         failed: "فشل في تحديث التطبيق.",
         idle: "لم يتم التحقق من حالة التحديث بعد.",
       },
       installError: "غير قادر على تثبيت تحديث تطبيق سطح المكتب.",
+      manualDownload: "التنزيل من Releases",
+      installTimedOut: "لم يُعِد المُحدِّث تشغيل التطبيق في الوقت المحدد.",
       callout: {
         installingTitle: "تثبيت التحديث",
         failedTitle: "فشل التحديث",

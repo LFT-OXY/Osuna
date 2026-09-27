@@ -10,9 +10,11 @@ import { useSidebarCallouts } from "@/contexts/sidebar-callout-context";
 import {
   resolveUpdateCalloutDescriptor,
   type UpdateCalloutActionDescriptor,
+  type UpdateCalloutActionRole,
   type UpdateCalloutBody,
 } from "@/desktop/updates/resolve-update-callout";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
+import { openDesktopReleasesPage } from "@/desktop/updates/desktop-updates";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { openChangelog } from "@/changelog";
 
@@ -26,7 +28,7 @@ function renderBody(body: UpdateCalloutBody, t: ReturnType<typeof useTranslation
 
 function materializeActions(
   actions: readonly UpdateCalloutActionDescriptor[],
-  handlers: { changelog: () => void; install: () => void; retry: () => void },
+  handlers: Record<UpdateCalloutActionRole, () => void>,
 ): SidebarCalloutAction[] {
   return actions.map((action) => ({
     label: action.label,
@@ -97,6 +99,7 @@ export function UpdateCalloutSource() {
         changelog: openChangelog,
         install,
         retry,
+        download: openDesktopReleasesPage,
       }),
       testID: descriptor.testID,
     });

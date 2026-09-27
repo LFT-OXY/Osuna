@@ -1416,10 +1416,13 @@ export const ja: TranslationResources = {
         available: "アプリの更新をインストールできます。",
         availableWithLastChecked: "アプリの更新をインストールできます。最終確認: {{time}}。",
         installed: "アプリの更新がインストールされました。再起動が必要です。",
+        installFailed: "アップデートをインストールできませんでした。",
         failed: "アプリの更新に失敗しました。",
         idle: "更新ステータスはまだ確認されていません。",
       },
       installError: "デスクトップアプリの更新をインストールできません。",
+      manualDownload: "Releases から手動でダウンロード",
+      installTimedOut: "アップデーターが時間内にアプリを再起動しませんでした。",
       callout: {
         installingTitle: "更新をインストール中",
         failedTitle: "更新に失敗しました",

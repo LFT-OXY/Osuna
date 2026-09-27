@@ -1440,10 +1440,13 @@ export const fr: TranslationResources = {
         availableWithLastChecked:
           "Une mise à jour de l'application est prête à être installée. Dernière vérification à {{time}}.",
         installed: "Mise à jour de l'application installée. Redémarrage requis.",
+        installFailed: "Impossible d'installer la mise à jour.",
         failed: "Échec de la mise à jour de l'application.",
         idle: "L'état de la mise à jour n'a pas encore été vérifié.",
       },
       installError: "Impossible d'installer la mise à jour de l'application de bureau.",
+      manualDownload: "Télécharger depuis Releases",
+      installTimedOut: "Le programme de mise à jour n'a pas redémarré l'application à temps.",
       callout: {
         installingTitle: "Installation de la mise à jour",
         failedTitle: "La mise à jour a échoué",

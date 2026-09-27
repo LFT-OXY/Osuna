@@ -1426,10 +1426,13 @@ export const en = {
         available: "An app update is ready to install.",
         availableWithLastChecked: "An app update is ready to install. Last checked at {{time}}.",
         installed: "App update installed. Restart required.",
+        installFailed: "The update couldn't be installed.",
         failed: "Failed to update app.",
         idle: "Update status has not been checked yet.",
       },
       installError: "Unable to install the desktop app update.",
+      manualDownload: "Download from Releases",
+      installTimedOut: "The updater didn't restart the app in time.",
       callout: {
         installingTitle: "Installing update",
         failedTitle: "Update failed",

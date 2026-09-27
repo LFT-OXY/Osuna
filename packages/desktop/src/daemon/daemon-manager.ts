@@ -447,12 +447,24 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     },
     install_app_update: async (args) => {
       const currentVersion = resolveDesktopAppVersion();
-      return downloadAndInstallUpdate(
+      let stoppedDaemonForUpdate = false;
+      const result = await downloadAndInstallUpdate(
         { currentVersion, releaseChannel: await resolveRequestedReleaseChannel(args) },
         async () => {
-          await stopDesktopDaemon("app_update");
+          const before = await resolveDesktopDaemonStatus();
+          const after = await stopDesktopDaemon("app_update");
+          stoppedDaemonForUpdate =
+            (before.status === "running" || before.status === "starting") &&
+            after.status === "stopped";
         },
       );
+      // 安装失败时应用不会退出，把为更新而停掉的 daemon 拉起来。
+      if (!result.installed && stoppedDaemonForUpdate) {
+        void startDaemon().catch((error) => {
+          log.error("[desktop daemon] failed to restart daemon after failed app update", error);
+        });
+      }
+      return result;
     },
     get_local_daemon_version: () => getLocalDaemonVersion(),
     install_cli: () => installCli(),

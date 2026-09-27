@@ -1410,10 +1410,13 @@ export const ko: TranslationResources = {
         availableWithLastChecked:
           "앱 업데이트를 설치할 준비가 되었습니다. {{time}}에서 마지막으로 확인했습니다.",
         installed: "앱 업데이트가 설치되었습니다. 재시작이 필요합니다.",
+        installFailed: "업데이트를 설치하지 못했습니다.",
         failed: "앱을 업데이트하지 못했습니다.",
         idle: "업데이트 상태를 아직 확인하지 않았습니다.",
       },
       installError: "데스크톱 앱 업데이트를 설치할 수 없습니다.",
+      manualDownload: "Releases에서 직접 다운로드",
+      installTimedOut: "업데이터가 제시간에 앱을 다시 시작하지 못했습니다.",
       callout: {
         installingTitle: "업데이트 설치 중",
         failedTitle: "업데이트 실패",

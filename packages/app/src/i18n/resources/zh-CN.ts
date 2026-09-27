@@ -1388,10 +1388,13 @@ export const zhCN: TranslationResources = {
         available: "有 app 更新可安装。",
         availableWithLastChecked: "有 app 更新可安装。上次检查时间：{{time}}。",
         installed: "App 更新已安装。需要重启。",
+        installFailed: "App 更新未能安装。",
         failed: "App 更新失败。",
         idle: "尚未检查更新状态。",
       },
       installError: "无法安装 desktop app 更新。",
+      manualDownload: "前往 Releases 手动下载",
+      installTimedOut: "更新器未能及时重启 App。",
       callout: {
         installingTitle: "正在安装更新",
         failedTitle: "更新失败",

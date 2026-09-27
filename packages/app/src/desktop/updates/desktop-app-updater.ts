@@ -1,6 +1,7 @@
 import type {
   DesktopAppUpdateCheckResult,
   DesktopAppUpdateCheckIntent,
+  DesktopAppUpdateInstallFailure,
   DesktopAppUpdateInstallResult,
   DesktopReleaseChannel,
 } from "@/desktop/updates/desktop-updates";
@@ -14,6 +15,7 @@ export type DesktopAppUpdateStatus =
   | "available"
   | "installing"
   | "installed"
+  | "install-failed"
   | "error";
 
 export const PENDING_RECHECK_MS = 10_000;
@@ -102,6 +104,34 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+const FIXED_STATUS_TEXT_KEYS = {
+  checking: "desktop.updates.status.checking",
+  installing: "desktop.updates.status.installing",
+  "install-failed": "desktop.updates.status.installFailed",
+  error: "desktop.updates.status.failed",
+} as const satisfies Partial<Record<DesktopAppUpdateStatus, string>>;
+
+function isFixedTextStatus(
+  status: DesktopAppUpdateStatus,
+): status is keyof typeof FIXED_STATUS_TEXT_KEYS {
+  return status in FIXED_STATUS_TEXT_KEYS;
+}
+
+function describeInstallFailure(failure: DesktopAppUpdateInstallFailure): string {
+  return failure.reason === "handoff-timeout"
+    ? i18n.t("desktop.updates.installTimedOut")
+    : failure.message || i18n.t("desktop.updates.callout.genericError");
+}
+
+// 后台静默检查只刷新可用版本，不抹掉安装失败的原因和手动下载入口。
+function keepsInstallFailure(input: {
+  silent: boolean;
+  status: DesktopAppUpdateStatus;
+  result: DesktopAppUpdateCheckResult;
+}): boolean {
+  return input.silent && input.status === "install-failed" && input.result.readyToInstall;
+}
+
 export function formatStatusText(input: {
   status: DesktopAppUpdateStatus;
   availableUpdate: DesktopAppUpdateCheckResult | null;
@@ -119,12 +149,8 @@ export function formatStatusText(input: {
     formatLastCheckedAt,
   } = input;
 
-  if (status === "checking") {
-    return i18n.t("desktop.updates.status.checking");
-  }
-
-  if (status === "installing") {
-    return i18n.t("desktop.updates.status.installing");
+  if (isFixedTextStatus(status)) {
+    return i18n.t(FIXED_STATUS_TEXT_KEYS[status]);
   }
 
   if (status === "up-to-date") {
@@ -180,10 +206,6 @@ export function formatStatusText(input: {
 
   if (status === "installed") {
     return installMessage ?? i18n.t("desktop.updates.status.installed");
-  }
-
-  if (status === "error") {
-    return i18n.t("desktop.updates.status.failed");
   }
 
   return i18n.t("desktop.updates.status.idle");
@@ -248,6 +270,11 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         return result;
       }
 
+      if (keepsInstallFailure({ silent, status: state.status, result })) {
+        commit({ ...state, availableUpdate: result });
+        return result;
+      }
+
       let nextStatus: DesktopAppUpdateStatus;
       let nextAvailable: DesktopAppUpdateCheckResult | null;
 
@@ -307,6 +334,18 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         releaseChannel: options.releaseChannel,
       });
       const nextLastCheckedAt = deps.now();
+      if (result.failure) {
+        // 保留 availableUpdate，用户仍可重试安装或改为手动下载。
+        commit({
+          ...state,
+          status: "install-failed",
+          errorMessage: describeInstallFailure(result.failure),
+          installMessage: null,
+          lastCheckedAt: nextLastCheckedAt,
+          isInstalling: false,
+        });
+        return result;
+      }
       commit({
         ...state,
         status: result.installed ? "installed" : "up-to-date",

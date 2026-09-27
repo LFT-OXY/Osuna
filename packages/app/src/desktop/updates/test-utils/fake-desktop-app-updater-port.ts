@@ -53,8 +53,9 @@ function buildInstallResult(
     installed: false,
     version: null,
     message: "Update completed.",
+    failure: null,
     ...overrides,
-  };
+  } as DesktopAppUpdateInstallResult;
 }
 
 export function createFakeDesktopAppUpdaterPort(): FakeDesktopAppUpdaterPort {

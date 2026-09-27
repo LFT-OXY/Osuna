@@ -92,6 +92,25 @@ describe("resolveUpdateCalloutDescriptor", () => {
     expect(descriptor?.dismissalKey).toBe("desktop-update:error:unknown");
   });
 
+  it("offers a manual download from Releases when installing failed", () => {
+    const descriptor = resolveUpdateCalloutDescriptor(
+      input({ status: "install-failed", errorMessage: "Code signature did not pass validation" }),
+    );
+
+    expect(descriptor?.title).toBe("Update failed");
+    expect(descriptor?.body).toEqual({
+      kind: "error",
+      message: "Code signature did not pass validation",
+    });
+    expect(descriptor?.variant).toBe("error");
+    expect(descriptor?.showGiftIcon).toBe(false);
+    expect(descriptor?.actions).toEqual([
+      { role: "install", label: "Retry" },
+      { role: "download", label: "Download from Releases", variant: "primary" },
+    ]);
+    expect(descriptor?.dismissalKey).toBe("desktop-update:install-failed:1.2.3");
+  });
+
   it("falls back to a generic error message when none is provided", () => {
     const descriptor = resolveUpdateCalloutDescriptor(
       input({ status: "error", errorMessage: null, availableUpdate: null }),

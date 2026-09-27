@@ -340,6 +340,78 @@ describe("desktop app updater — install", () => {
     expect(updater.getSnapshot().status).toBe("up-to-date");
   });
 
+  it("moves to 'install-failed' with the reason when the install reports a failure", async () => {
+    const { updater, port } = createUpdater();
+    const readyUpdate = buildFakeCheckResult({
+      hasUpdate: true,
+      readyToInstall: true,
+      latestVersion: "1.2.4",
+    });
+    port.nextCheckResult(readyUpdate);
+    await updater.checkForUpdates({ releaseChannel: "stable" });
+    port.nextInstallResult(
+      buildFakeInstallResult({
+        installed: false,
+        message: "Update failed: Code signature did not pass validation",
+        failure: { reason: "updater-error", message: "Code signature did not pass validation" },
+      }),
+    );
+
+    await updater.installUpdate({ releaseChannel: "stable" });
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "install-failed",
+      availableUpdate: readyUpdate,
+      errorMessage: "Code signature did not pass validation",
+      isInstalling: false,
+    });
+  });
+
+  it("explains a restart handoff timeout in the app language", async () => {
+    const { updater, port } = createUpdater();
+    port.nextInstallResult(
+      buildFakeInstallResult({
+        installed: false,
+        message: "Update failed: Timed out waiting for the updater to restart the app.",
+        failure: { reason: "handoff-timeout" },
+      }),
+    );
+
+    await updater.installUpdate({ releaseChannel: "stable" });
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "install-failed",
+      errorMessage: "The updater didn't restart the app in time.",
+    });
+  });
+
+  it("keeps the install failure visible through a silent recheck", async () => {
+    const { updater, port } = createUpdater();
+    const readyUpdate = buildFakeCheckResult({
+      hasUpdate: true,
+      readyToInstall: true,
+      latestVersion: "1.2.4",
+    });
+    port.nextCheckResult(readyUpdate);
+    await updater.checkForUpdates({ releaseChannel: "stable" });
+    port.nextInstallResult(
+      buildFakeInstallResult({
+        installed: false,
+        failure: { reason: "updater-error", message: "Code signature did not pass validation" },
+      }),
+    );
+    await updater.installUpdate({ releaseChannel: "stable" });
+
+    port.nextCheckResult(readyUpdate);
+    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "install-failed",
+      availableUpdate: readyUpdate,
+      errorMessage: "Code signature did not pass validation",
+    });
+  });
+
   it("reports the install error and moves to 'error' when the install throws", async () => {
     const { updater, port, reportedInstallErrors } = createUpdater();
     const error = new Error("install failed");
@@ -447,6 +519,19 @@ describe("formatStatusText", () => {
         formatLastCheckedAt,
       }),
     ).toBe("An app update is ready to install.");
+  });
+
+  it("says the update could not be installed in the 'install-failed' state", () => {
+    expect(
+      formatStatusText({
+        status: "install-failed",
+        availableUpdate: null,
+        installMessage: null,
+        lastCheckedAt: null,
+        formatVersion,
+        formatLastCheckedAt,
+      }),
+    ).toBe("The update couldn't be installed.");
   });
 
   it("uses the install message in the 'installed' state when present", () => {

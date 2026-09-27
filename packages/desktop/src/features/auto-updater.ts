@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { app } from "electron";
+import { app, autoUpdater as electronAutoUpdater } from "electron";
 import { UUID } from "builder-util-runtime";
 import log from "electron-log/main";
 import { autoUpdater } from "electron-updater";
@@ -36,6 +36,8 @@ export {
 let cachedStagingUserIdPromise: Promise<string> | null = null;
 
 const UPDATE_CHANNEL_NOT_PUBLISHED_CODE = "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND";
+// Squirrel.Mac 需要从本地代理取回整个更新 zip、解压并校验签名后才会开始退出。
+const INSTALL_HANDOFF_TIMEOUT_MS = 60_000;
 
 interface AppUpdateLogSink {
   info(message: string, details: object): void;
@@ -164,17 +166,8 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
     if (this.configured) return;
     this.configured = true;
 
-    // electron-updater logs every emitted error before consumers can classify it.
-    // Paseo reports genuine check, runtime, and install failures through the
-    // callbacks below, so leave internal error logging disabled to avoid both
-    // duplicate logs and expected missing-channel noise.
-    const updaterLogger = autoUpdater.logger;
-    autoUpdater.logger = {
-      debug: updaterLogger?.debug ? (message) => updaterLogger.debug?.(message) : undefined,
-      error: () => undefined,
-      info: (message) => updaterLogger?.info(message),
-      warn: (message) => updaterLogger?.warn(message),
-    };
+    // 更新器的诊断日志（包括 Squirrel.Mac 的签名校验错误）写入 main.log。
+    autoUpdater.logger = log;
 
     autoUpdater.on("update-available", (info) => {
       const updateInfo = info as RuntimeUpdateInfo;
@@ -185,6 +178,10 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
       const updateInfo = info as RuntimeUpdateInfo;
       updateLifecycleLog.updateDownloaded(updateInfo.version);
       input.onUpdateDownloaded(updateInfo);
+    });
+    // electron-updater 通过 Electron 内置 autoUpdater 发出安装交接事件。
+    electronAutoUpdater.on("before-quit-for-update", () => {
+      input.onBeforeQuitForUpdate();
     });
     autoUpdater.on("error", (error) => {
       if (isUpdateChannelNotPublished(error)) return;
@@ -227,6 +224,7 @@ const appUpdateService = createAppUpdateService({
   isPackaged: () => app.isPackaged,
   now: () => Date.now(),
   bucket: async () => bucketFromStagingUserId(await getStagingUserId()),
+  createInstallHandoffDeadline: () => AbortSignal.timeout(INSTALL_HANDOFF_TIMEOUT_MS),
   reportCheckError: (error) => {
     console.error("[auto-updater] Failed to check for updates:", error);
   },

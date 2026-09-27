@@ -1430,10 +1430,13 @@ export const ptBR: TranslationResources = {
         availableWithLastChecked:
           "Há uma atualização do app pronta para instalar. Última verificação às {{time}}.",
         installed: "Atualização do app instalada. Reinicialização obrigatória.",
+        installFailed: "Não foi possível instalar a atualização.",
         failed: "Falha ao atualizar o app.",
         idle: "O status de atualização ainda não foi verificado.",
       },
       installError: "Não foi possível instalar a atualização do app desktop.",
+      manualDownload: "Baixar em Releases",
+      installTimedOut: "O atualizador não reiniciou o app a tempo.",
       callout: {
         installingTitle: "Instalando atualização",
         failedTitle: "Falha na atualização",

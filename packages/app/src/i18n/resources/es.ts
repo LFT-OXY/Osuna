@@ -1440,10 +1440,13 @@ export const es: TranslationResources = {
         availableWithLastChecked:
           "Una actualización de la aplicación está lista para instalarse. Última comprobación a las {{time}}.",
         installed: "Actualización de la aplicación instalada. Se requiere reinicio.",
+        installFailed: "No se pudo instalar la actualización.",
         failed: "No se pudo actualizar la aplicación.",
         idle: "El estado de la actualización aún no se ha comprobado.",
       },
       installError: "No se puede instalar la actualización de la aplicación de escritorio.",
+      manualDownload: "Descargar desde Releases",
+      installTimedOut: "El actualizador no reinició la aplicación a tiempo.",
       callout: {
         installingTitle: "Instalando actualización",
         failedTitle: "La actualización falló",
