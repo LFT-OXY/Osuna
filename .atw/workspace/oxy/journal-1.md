@@ -288,3 +288,26 @@ Composer 底部上下文条的分支名换成 BranchSwitcher 紧凑外观，点�
 
 - stash@{0}（prettier 误格式化前的备份）已被提交取代，确认后可 git stash drop
 - 新建分支（基于当前 HEAD 创建并切换）按 PRD Out of Scope 另开任务
+
+
+## Session 9: markdown-preview-dom 07 整体验收与归档
+<!-- atw-session: v=2 fp=8f4895a408143cef -->
+
+**Date**: 2026-09-27
+**Task**: markdown-preview-dom 07 整体验收与归档
+**Package**: app
+**Branch**: `feat/markdown-preview-dom`
+
+### Summary
+
+dev 桌面端深浅色目检 README.zh-CN.md（居中、徽章横排、NOTE 提示块、截图、bash 着色），补验对话 bash 与源代码视图 sh/toml 着色；markdown 相关 e2e 5 个与单测通过，app/highlight typecheck、lint 通过；PRD 验收项全勾，任务归档。遗留：应用重新可见时文件预览重挂载、滚动归零（main 既有，未修）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b6ec7ea25` | docs(atw): markdown-preview-dom 整体验收，任务进入 accept |
+
+### Status
+
+[OK] **Completed**
