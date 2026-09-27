@@ -46,7 +46,8 @@ mac:
   # 加载的库 Team ID 一致——结果是应用连自己的 Electron Framework 都加载不了，
   # 启动即崩（v0.8.1 实测）。有正式证书时才能打开它。
   hardenedRuntime: false
-  # 本 fork 没有 Apple Developer 账号，出无签名、不公证的包。
+  # 本 fork 没有 Apple Developer 账号，不公证。CI 用自签证书签名（ADR 0001），
+  # 签名钩子只在 CI 注入，本地构建不签名。
   notarize: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
