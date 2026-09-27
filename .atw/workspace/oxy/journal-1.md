@@ -167,3 +167,38 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: fork-desktop-distribution 验收归档
+<!-- atw-session: v=2 fp=1790bf47c4b2677f -->
+
+**Date**: 2026-09-27
+**Task**: fork-desktop-distribution 验收归档
+**Package**: desktop
+**Branch**: `main`
+
+### Summary
+
+核对 09-21-fork-desktop-distribution 完成度后按用户验收归档；本会话无代码提交，实现早已随 #3（876f00b82）合入。
+
+### Main Changes
+
+- 核对完成度：代码随 #3 合入 main；9-21 两次 workflow_dispatch 成功；v0.8.2 已转正为 Latest，资产仅 mac/windows 包与 latest-mac.yml、latest.yml，无 Linux
+- 按用户验收执行 task.py archive，任务移至 archive/2026-09（9750cb124）
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 无代码改动；归档提交因本机 cli tsgo 已知 TS7006 退化用 --no-verify
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- PRD 人工验证第三条（团队客户端收到更新且更新后仍是内部版）仓库内无记录，由用户确认
+- v0.9.0 Desktop Release 在跑，Release 仍是草稿，关注是否正常转正
