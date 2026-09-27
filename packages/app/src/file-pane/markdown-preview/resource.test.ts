@@ -106,6 +106,34 @@ describe("resolveMarkdownResource", () => {
     expect(windows("D:/elsewhere/output.png")).toEqual({ kind: "outside_workspace" });
   });
 
+  it("keeps GitHub-style line fragments of workspace file links", () => {
+    expect(resolve("../../src/main.ts#L12")).toEqual({
+      kind: "workspace_file",
+      path: "src/main.ts",
+      lineStart: 12,
+    });
+    expect(resolve("/src/main.ts#L12-L20")).toEqual({
+      kind: "workspace_file",
+      path: "src/main.ts",
+      lineStart: 12,
+      lineEnd: 20,
+    });
+    expect(resolve("CONTRIBUTING.md#setup")).toEqual({
+      kind: "workspace_file",
+      path: "docs/guide/CONTRIBUTING.md",
+    });
+  });
+
+  it("classifies links that climb above the workspace root as outside the workspace", () => {
+    expect(resolve("../../../sibling/README.md#L3")).toEqual({ kind: "outside_workspace" });
+  });
+
+  it("classifies same-document fragments as anchors with the decoded id", () => {
+    expect(resolve("#setup-guide")).toEqual({ kind: "anchor", id: "setup-guide" });
+    expect(resolve("#%E5%AE%89%E8%A3%85")).toEqual({ kind: "anchor", id: "安装" });
+    expect(resolve("#")).toEqual({ kind: "unsupported" });
+  });
+
   it("rejects empty sources, other schemes, and directory targets", () => {
     expect(resolve("   ")).toEqual({ kind: "unsupported" });
     expect(resolve("javascript:alert(1)")).toEqual({ kind: "unsupported" });

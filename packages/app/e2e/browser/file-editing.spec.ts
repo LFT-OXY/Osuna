@@ -39,6 +39,10 @@ const README_FIXTURE = [
   "",
   '<h1 align="center">Readme fixture</h1>',
   "",
+  "[Jump to setup](#setup-guide)",
+  "",
+  "See the [Contributing guide](docs/CONTRIBUTING.md) and the [Target line](src/target.ts#L42).",
+  "",
   "![Markdown screenshot](docs/shots/pixel.png)",
   "",
   '<img src="./docs/shots/pixel.png" alt="Html screenshot" width="20" height="20">',
@@ -90,7 +94,15 @@ const README_FIXTURE = [
   "  Alpha --> Beta",
   "```",
   "",
+  "## Setup guide",
+  "",
+  "Setup body text",
+  "",
 ].join("\n");
+const README_LINKED_TARGET = Array.from(
+  { length: 80 },
+  (_, index) => `export const line${index + 1} = ${index + 1};`,
+).join("\n");
 
 interface LinkedFile {
   target: string;
@@ -686,6 +698,17 @@ test.describe("CodeMirror workspace file editing", () => {
     await mkdir(path.dirname(screenshotPath), { recursive: true });
     await writeFile(screenshotPath, RED_PIXEL);
     await writeFile(path.join(workspace.repoPath, "README.md"), README_FIXTURE, "utf8");
+    await writeFile(
+      path.join(workspace.repoPath, "docs", "CONTRIBUTING.md"),
+      "# Contributing\n",
+      "utf8",
+    );
+    await mkdir(path.join(workspace.repoPath, "src"), { recursive: true });
+    await writeFile(
+      path.join(workspace.repoPath, "src", "target.ts"),
+      README_LINKED_TARGET,
+      "utf8",
+    );
     await workspace.navigateTo();
     await openWorkspaceFile(page, "README.md");
 
@@ -808,6 +831,35 @@ test.describe("CodeMirror workspace file editing", () => {
     }
     expect(page.url()).toBe(pageUrl);
     expect(await readSetWindowFlags(page, README_UNSAFE_FLAGS)).toEqual([]);
+
+    // 页内锚点在预览滚动容器内滚到对应标题，不改动应用路由。
+    const setupHeading = preview.getByRole("heading", { level: 2, name: "Setup guide" });
+    await expect(setupHeading).not.toBeInViewport();
+    await preview.getByRole("link", { name: "Jump to setup", exact: true }).click();
+    await expect(setupHeading).toBeInViewport();
+    expect(page.url()).toBe(pageUrl);
+
+    // 仓库内文件链接是带文件图标的 chip，点击在新文件标签打开，带行号时定位到该行。
+    const fileLinks = preview.getByTestId("markdown-file-link");
+    await expect(fileLinks).toHaveCount(2);
+    const contributingLink = fileLinks.filter({ hasText: "Contributing guide" });
+    await expect(contributingLink.locator("svg")).toHaveCount(1);
+    await contributingLink.click();
+    await expectFileTabOpen(page, "docs/CONTRIBUTING.md");
+    await expect(
+      page
+        .getByTestId("file-markdown-preview")
+        .filter({ visible: true })
+        .getByRole("heading", { level: 1, name: "Contributing" }),
+    ).toBeVisible();
+
+    await page.getByTestId("workspace-tab-file_README.md").filter({ visible: true }).click();
+    await fileLinks.filter({ hasText: "Target line" }).click();
+    await expectFileTabOpen(page, "src/target.ts");
+    await expect(page.getByLabel("Line 42, column 1")).toBeVisible();
+    await expect(
+      page.getByTestId("file-source-editor").locator(".cm-line", { hasText: "line42 = 42" }),
+    ).toBeVisible();
   });
 
   test("repaints Markdown prose, quotes, tables, and code when the color scheme changes", async ({

@@ -1,4 +1,6 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { parseLineFragment } from "@/assistant-file-links";
+import type { WorkspaceFileLocation } from "@/workspace/file-open";
 
 /** 文件面板交给预览、用于解析相对资源的上下文（仅 Web 版使用）。 */
 export interface MarkdownPreviewResources {
@@ -10,12 +12,16 @@ export interface MarkdownPreviewResources {
   enabled: boolean;
   /** daemon 支持文件订阅时，资源在磁盘上变更后自动刷新。 */
   liveUpdates: boolean;
+  /** 在新的文件标签打开仓库内文件（`path` 为工作区相对路径）。 */
+  openWorkspaceFile: (location: WorkspaceFileLocation) => void;
 }
 
 export type MarkdownResourceTarget =
   | { kind: "external"; url: string }
-  /** `path` 为规范化后的工作区相对路径（`/` 分隔）。 */
-  | { kind: "workspace_file"; path: string }
+  /** `path` 为规范化后的工作区相对路径（`/` 分隔）；行号来自 `#L12` / `#L12-L20` 片段。 */
+  | ({ kind: "workspace_file" } & WorkspaceFileLocation)
+  /** 当前文档内的页内锚点，`id` 为解码后的片段（不含 `#`）。 */
+  | { kind: "anchor"; id: string }
   | { kind: "outside_workspace" }
   | { kind: "unsupported" };
 
@@ -96,9 +102,19 @@ function readPath(href: string): string {
   return toSlashes(safeDecode(href.split(/[?#]/, 1)[0] ?? ""));
 }
 
-function workspaceFile(segments: string[] | null): MarkdownResourceTarget {
+type LineRange = Omit<WorkspaceFileLocation, "path">;
+
+// 只认 GitHub 的行号片段；`#section` 之类的其他片段打开文件但不定位。
+function readLineRange(href: string): LineRange {
+  const hashIndex = href.indexOf("#");
+  if (hashIndex < 0) return {};
+  return parseLineFragment(href.slice(hashIndex + 1)) ?? {};
+}
+
+function workspaceFile(segments: string[] | null, lines: LineRange): MarkdownResourceTarget {
   if (!segments) return OUTSIDE_WORKSPACE;
-  return segments.length > 0 ? { kind: "workspace_file", path: segments.join("/") } : UNSUPPORTED;
+  if (segments.length === 0) return UNSUPPORTED;
+  return { kind: "workspace_file", path: segments.join("/"), ...lines };
 }
 
 export interface MarkdownResourceInput {
@@ -114,7 +130,11 @@ export interface MarkdownResourceInput {
 export function resolveMarkdownResource(input: MarkdownResourceInput): MarkdownResourceTarget {
   const href = input.href.trim();
   if (WEB_URL_PATTERN.test(href) || isDataImageUrl(href)) return { kind: "external", url: href };
-  const hasNoPath = href === "" || /^[#?]/.test(href);
+  if (href.startsWith("#")) {
+    const id = safeDecode(href.slice(1));
+    return id === "" ? UNSUPPORTED : { kind: "anchor", id };
+  }
+  const hasNoPath = href === "" || href.startsWith("?");
   const isProtocolRelative = href.startsWith("//");
   if (hasNoPath || isProtocolRelative) return UNSUPPORTED;
 
@@ -125,15 +145,16 @@ export function resolveMarkdownResource(input: MarkdownResourceInput): MarkdownR
 
   const root = normalizeRoot(input.workspaceRoot);
   if (root === null) return UNSUPPORTED;
+  const lines = readLineRange(href);
 
   if (isAbsolute(path)) {
     const insideRoot = relativeToRoot(path, root);
-    if (insideRoot !== null) return workspaceFile(resolveSegments([], insideRoot));
+    if (insideRoot !== null) return workspaceFile(resolveSegments([], insideRoot), lines);
     if (WINDOWS_DRIVE_PATTERN.test(path)) return OUTSIDE_WORKSPACE;
-    return workspaceFile(resolveSegments([], path));
+    return workspaceFile(resolveSegments([], path), lines);
   }
 
   const directory = documentDirectory(input.documentPath, root);
   if (!directory) return OUTSIDE_WORKSPACE;
-  return workspaceFile(resolveSegments(directory, path));
+  return workspaceFile(resolveSegments(directory, path), lines);
 }

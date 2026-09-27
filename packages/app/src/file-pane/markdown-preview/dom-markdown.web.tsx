@@ -24,7 +24,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-import { memo, useCallback, type ComponentProps, type MouseEvent } from "react";
+import { memo, type ComponentProps } from "react";
 import { useTranslation } from "react-i18next";
 import type { TextStyle } from "react-native";
 import {
@@ -42,16 +42,17 @@ import ReactMarkdown, {
 } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from "rehype-sanitize";
+import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { withUnistyles } from "react-native-unistyles";
 import { getMarkdownFenceLanguage } from "@/components/markdown/fence/language";
 import { MermaidFence } from "@/components/markdown/fence/mermaid";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import { openExternalUrl } from "@/utils/open-external-url";
 import { MarkdownCodeBlock } from "./code-block.web";
 import { isGithubAlertKind, remarkGithubAlerts, type GithubAlertKind } from "./github-alerts";
 import { MarkdownImage } from "./image.web";
+import { MarkdownLink } from "./link.web";
 import { isDataImageUrl, type MarkdownPreviewResources } from "./resource";
 import { MarkdownPreviewResourcesContext } from "./resources-context.web";
 
@@ -75,9 +76,13 @@ const PREVIEW_SANITIZE_SCHEMA = {
 } satisfies SanitizeSchema;
 
 const REMARK_PLUGINS = [remarkGfm, remarkGithubAlerts];
-const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, PREVIEW_SANITIZE_SCHEMA]] satisfies NonNullable<
-  ComponentProps<typeof ReactMarkdown>["rehypePlugins"]
->;
+// 标题的 GitHub 风格 slug id 在消毒前生成，消毒时与原始 HTML 的 id 一样加上 user-content- 前缀，
+// 页内锚点点击时再去掉前缀匹配（见 link.web.tsx）。
+const REHYPE_PLUGINS = [
+  rehypeRaw,
+  rehypeSlug,
+  [rehypeSanitize, PREVIEW_SANITIZE_SCHEMA],
+] satisfies NonNullable<ComponentProps<typeof ReactMarkdown>["rehypePlugins"]>;
 
 // react-markdown 默认会把 data: 地址清空；图片的 data:image/ 放行，其余照默认处理。
 function previewUrlTransform(url: string, key: string, node: Readonly<HastNode>): string {
@@ -156,23 +161,6 @@ function MarkdownPre({ node, children, ...props }: ComponentProps<"pre"> & Extra
 
 function MarkdownCode({ node: _node, ...props }: ComponentProps<"code"> & ExtraProps) {
   return <code {...props} data-pmono="" />;
-}
-
-function isWebHref(href: string | undefined): href is string {
-  return href !== undefined && /^https?:\/\//i.test(href);
-}
-
-function MarkdownLink({ node: _node, href, ...props }: ComponentProps<"a"> & ExtraProps) {
-  // 预览里的链接不能让应用窗口自己导航走：http(s) 交给系统浏览器，其余先不响应。
-  // 桌面端 opener 对非 http(s) 会抛错，所以只把 http(s) 交出去。
-  const openInBrowser = useCallback(
-    (event: MouseEvent<HTMLAnchorElement>) => {
-      event.preventDefault();
-      if (isWebHref(href)) void openExternalUrl(href);
-    },
-    [href],
-  );
-  return <a {...props} href={href} onClick={openInBrowser} />;
 }
 
 const GITHUB_ALERT_ICONS: Record<GithubAlertKind, LucideIcon> = {

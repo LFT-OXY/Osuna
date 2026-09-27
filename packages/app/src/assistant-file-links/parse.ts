@@ -114,7 +114,9 @@ function normalizePathToken(value: string): string | null {
   return trimmed.replace(/\\/g, "/");
 }
 
-function parseLineFragment(value: string): Pick<InlinePathTarget, "lineStart" | "lineEnd"> | null {
+export function parseLineFragment(
+  value: string,
+): Pick<InlinePathTarget, "lineStart" | "lineEnd"> | null {
   const rawFragment = value.startsWith("#") ? value.slice(1) : value;
   if (!rawFragment) {
     return { lineStart: undefined, lineEnd: undefined };

@@ -261,12 +261,50 @@ ${ROOT} a {
   cursor: pointer;
 }
 
-${ROOT} a:hover,
-${ROOT} a:focus-visible {
+${ROOT} a:not(.md-file-link):hover,
+${ROOT} a:not(.md-file-link):focus-visible {
   background-image: radial-gradient(circle, currentcolor 0.75px, transparent 1px);
   background-position: left bottom;
   background-repeat: repeat-x;
   background-size: 4px 2px;
+}
+
+/* 仓库内文件链接 chip：尺寸用 em 随正文缩放，强调色取链接色（t3code ContextChip 的 mention 款）。 */
+${ROOT} .md-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.33em;
+  max-width: 100%;
+  height: 1.41em;
+  padding: 0 0.5em;
+  border: 1px solid color-mix(in srgb, var(--md-link) 34%, var(--md-border));
+  border-radius: var(--md-radius-inline-code);
+  background: color-mix(in srgb, var(--md-link) 11%, transparent);
+  color: var(--md-foreground-strong);
+  font-size: 0.86em;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+${ROOT} .md-file-link:hover {
+  border-color: color-mix(in srgb, var(--md-link) 48%, var(--md-border));
+  background: color-mix(in srgb, var(--md-link) 17%, transparent);
+}
+
+${ROOT} .md-file-link:focus-visible {
+  outline: 2px solid var(--md-link);
+  outline-offset: 2px;
+}
+
+${ROOT} .md-file-link > svg {
+  flex-shrink: 0;
+}
+
+${ROOT} .md-file-link-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 ${ROOT} blockquote {

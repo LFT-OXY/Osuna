@@ -18,7 +18,7 @@ import { filePreviewRenderKind } from "@/components/file-pane-render-mode";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
 import { getFileNameFromPath } from "@/attachments/utils";
 import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
-import type { WorkspaceFileLocation } from "@/workspace/file-open";
+import type { WorkspaceFileLocation, WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { isFileQueryEnabled } from "@/components/file-pane-enabled";
@@ -227,11 +227,13 @@ export function FilePane({
   workspaceRoot,
   location,
   navigationRevision,
+  onOpenWorkspaceFile,
 }: {
   serverId: string;
   workspaceRoot: string;
   location: WorkspaceFileLocation;
   navigationRevision: number;
+  onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
 }) {
   const { t } = useTranslation();
   const isMobile = useIsCompactFormFactor();
@@ -281,6 +283,11 @@ export function FilePane({
 
   useEffect(() => setPreviewMode("preview"), [targetKey]);
 
+  const openLinkedWorkspaceFile = useCallback(
+    (linkedLocation: WorkspaceFileLocation) =>
+      onOpenWorkspaceFile({ location: linkedLocation, disposition: "main" }),
+    [onOpenWorkspaceFile],
+  );
   const markdownResources = useMemo<MarkdownPreviewResources>(
     () => ({
       client,
@@ -288,8 +295,16 @@ export function FilePane({
       documentPath: location.path,
       enabled,
       liveUpdates: supportsEditing,
+      openWorkspaceFile: openLinkedWorkspaceFile,
     }),
-    [client, enabled, location.path, normalizedWorkspaceRoot, supportsEditing],
+    [
+      client,
+      enabled,
+      location.path,
+      normalizedWorkspaceRoot,
+      openLinkedWorkspaceFile,
+      supportsEditing,
+    ],
   );
 
   const { file: preview, imageAttachment } = resolveFilePreviewLifecycle(previewLifecycle);
