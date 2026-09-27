@@ -113,6 +113,10 @@ npm run release:fork:minor
 tag 推上去之后由 `Desktop Release` 工作流接管，构建 macOS（arm64 + x64）与 Windows
 （x64 + arm64）产物，上传到 GitHub Release 并在清单齐全后把草稿转正。
 
+`Android APK Release`、`Deploy App`、`Deploy Website`、`Deploy Relay` 依赖上游的 EAS 与
+Cloudflare 账号，在 fork 下只保留手动触发，推 tag、推 main、发布 Release 都不会跑它们。
+工作流文件留着，自建时把触发加回来即可。
+
 想先出产物自己试装而不发布：在 Actions 里手动派发 `Desktop Release`，填已存在的
 tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 

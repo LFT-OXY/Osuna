@@ -1,10 +1,7 @@
 name: Android APK Release
 
 on:
-  push:
-    tags:
-      - "v*"
-      - "android-v*"
+  # 仅手动触发：本 fork 不打手机包，构建依赖上游的 EAS 账号，推 tag 必然失败。
   workflow_dispatch:
     inputs:
       tag:
