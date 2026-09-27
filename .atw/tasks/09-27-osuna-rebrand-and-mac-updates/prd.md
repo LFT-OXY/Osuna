@@ -81,6 +81,9 @@
 - 以下几项经用户确认后一并改名：Nix 打包（`nix/desktop-package.nix` 按 `Osuna.app` 取产物，`nix.yml` 断言新 appId）；deb/rpm 的 maintainer 改为 `oxy <oxy.chinhae@gmail.com>`，vendor 改为 `Osuna`；GitHub Release 标题改为 `Osuna <tag>`。
 - Windows 使用新 appId 推导出的新 NSIS GUID，不做原地升级（当前没有 Windows 用户）。
 - 共享界面（`packages/app`，同时是桌面端的渲染层）：所有语言的翻译文件以及硬编码文案里，指代本产品的 "Paseo" 改成 "Osuna"。指代手机官方 App 的保留 "Paseo"。`paseo` 命令名、`paseo.json`、`~/.paseo` 这类标识照旧。
+  - 手机官方 App 的指代只有配对扫码提示 `pairing.device.hint`（各语言各一条）。i18n 键名（`inPaseo`、`paseoCalls`、`row.paseo`）是标识，不改。"Paseo CLI" 当作产品标签，改为 "Osuna CLI"。
+  - Web 标题不经过 app config：`public/index.html` 的 `<title>` 直接写 `Osuna`，替代 Expo 按 `expo.name` 注入的 `%WEB_TITLE%`；manifest 的 `name` / `short_name` 与 `apple-mobile-web-app-title` 同为 Osuna。
+  - 以下不属于共享界面文案，保留 "Paseo"：protocol 的插件需求报错 "requires Paseo \<range\>"，它对应 `requirements.paseo` 兼容目标；server 给 agent 的 MCP 与浏览器工具描述；测试夹具中作为输入数据的 "Paseo"。
 - 手机端打包配置完全不动：app config 的 name、bundle id、EAS 绑定、手机图标、fastlane。网站包、README、fastlane 元数据也不动。
 
 ### 图标
