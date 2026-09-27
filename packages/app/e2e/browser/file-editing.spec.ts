@@ -23,6 +23,10 @@ const BLUE_PIXEL = Buffer.from(
 const BLOCKED_PREVIEW_URL = "https://html-preview.invalid/leak";
 const README_BADGE_ORIGIN = "https://badges.readme.test";
 const README_LINK_ORIGIN = "https://docs.readme.test";
+const README_BASH_CODE = [
+  "# Install deps",
+  `npm install --save "osuna" ${"--long-flag ".repeat(40)}`,
+].join("\n");
 const README_FIXTURE = [
   "---",
   "title: Fixture title",
@@ -58,6 +62,22 @@ const README_FIXTURE = [
   "",
   "- [x] Done task",
   "- [ ] Open task",
+  "",
+  "```bash",
+  README_BASH_CODE,
+  "```",
+  "",
+  "```ts",
+  "const answer: number = 42;",
+  "```",
+  "",
+  "```json",
+  '{ "answer": 42 }',
+  "```",
+  "",
+  "```",
+  "plain fence text",
+  "```",
   "",
   "```mermaid",
   "graph TD",
@@ -98,6 +118,21 @@ function hasHorizontalOverflow(element: HTMLElement): boolean {
 
 function readBorderLeftColors(elements: Element[]): string[] {
   return elements.map((element) => getComputedStyle(element).borderLeftColor);
+}
+
+function readInnerHtml(elements: Element[]): string[] {
+  return elements.map((element) => element.innerHTML);
+}
+
+function readPlainClipboard(page: Page): Promise<string> {
+  return page.evaluate(() => navigator.clipboard.readText());
+}
+
+function breakClipboardWrites(): void {
+  navigator.clipboard.writeText = () => Promise.reject(new Error("Clipboard blocked"));
+  document.execCommand = () => {
+    throw new Error("Clipboard blocked");
+  };
 }
 
 function fitsViewportWidth(element: HTMLElement): boolean {
@@ -623,6 +658,7 @@ test.describe("CodeMirror workspace file editing", () => {
     withWorkspace,
   }) => {
     test.setTimeout(90_000);
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
     await page
       .context()
       .route(`${README_BADGE_ORIGIN}/**`, (route) =>
@@ -685,6 +721,48 @@ test.describe("CodeMirror workspace file editing", () => {
     await expect(tasks.last()).not.toBeChecked();
     await expectDiagramWithLabels(page, ["Alpha", "Beta"]);
 
+    const codeBlocks = preview.getByTestId("markdown-code-block");
+    await expect(codeBlocks).toHaveCount(4);
+    const languageLabels = preview.getByTestId("markdown-code-block-language");
+    await expect(languageLabels).toHaveText(["bash", "ts", "json"]);
+    // 每种语言取到各自的 Material 图标，而不是同一个通用文件图标。
+    const languageIcons = await languageLabels.locator("svg").evaluateAll(readInnerHtml);
+    expect(new Set(languageIcons).size).toBe(3);
+    const bashBlock = codeBlocks.first();
+    const bashCode = bashBlock.locator("pre");
+    await expect(bashCode).toHaveText(README_BASH_CODE);
+    const comment = bashBlock.locator('[data-syntax="comment"]');
+    await expect(comment).toHaveText("# Install deps");
+    const plainColor = await bashCode.evaluate((element) => getComputedStyle(element).color);
+    await expect(comment).not.toHaveCSS("color", plainColor);
+    await expect(bashBlock.locator('[data-syntax="string"]').first()).toHaveText('"osuna"');
+
+    const wrapToggle = bashBlock.getByRole("button", { name: "Wrap lines", exact: true });
+    await expect(wrapToggle).toHaveAttribute("aria-pressed", "false");
+    expect(await bashCode.evaluate(hasHorizontalOverflow)).toBe(true);
+    await wrapToggle.click();
+    await expect(wrapToggle).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => bashCode.evaluate(hasHorizontalOverflow)).toBe(false);
+    await wrapToggle.click();
+    await expect.poll(() => bashCode.evaluate(hasHorizontalOverflow)).toBe(true);
+
+    await bashBlock.getByRole("button", { name: "Copy code", exact: true }).click();
+    await expect(bashBlock.getByRole("button", { name: "Copied", exact: true })).toBeVisible();
+    await expect.poll(() => readPlainClipboard(page)).toBe(README_BASH_CODE);
+
+    // 剪贴板 API 与 execCommand 兜底都失败时，给出失败提示而不是假装已复制。
+    await page.evaluate(breakClipboardWrites);
+    const tsBlock = codeBlocks.nth(1);
+    await tsBlock.getByRole("button", { name: "Copy code", exact: true }).click();
+    await expect(page.getByTestId("app-toast-message")).toHaveText("Copy failed");
+    await expect(tsBlock.getByRole("button", { name: "Copy code", exact: true })).toBeVisible();
+
+    const plainBlock = codeBlocks.last();
+    await expect(plainBlock.locator("pre")).toHaveText("plain fence text");
+    await expect(plainBlock.locator("[data-syntax]")).toHaveCount(0);
+    await expect(plainBlock.getByTestId("markdown-code-block-language")).toHaveCount(0);
+    await expect(plainBlock.locator("pre")).toHaveCSS("font-family", /monospace/);
+
     await expect(preview.locator("script, style")).toHaveCount(0);
     // mermaid 自带渲染 iframe，只断言 fixture 里的那个被剥掉。
     await expect(preview.locator('iframe[srcdoc*="readmeFrameRan"]')).toHaveCount(0);
@@ -702,18 +780,19 @@ test.describe("CodeMirror workspace file editing", () => {
     expect(await readSetWindowFlags(page, README_UNSAFE_FLAGS)).toEqual([]);
   });
 
-  test("repaints Markdown prose, quotes, and tables when the color scheme changes", async ({
+  test("repaints Markdown prose, quotes, tables, and code when the color scheme changes", async ({
     page,
     withWorkspace,
   }) => {
     await page.emulateMedia({ colorScheme: "light" });
+    // 选一个非默认、且与主题基础色（GitHub 配色）不同的语法主题，证明代码块颜色跟随设置。
     await page.addInitScript((key) => {
-      localStorage.setItem(key, JSON.stringify({ theme: "auto" }));
+      localStorage.setItem(key, JSON.stringify({ theme: "auto", syntaxTheme: "catppuccin" }));
     }, APP_SETTINGS_KEY);
     const workspace = await withWorkspace({ prefix: "file-editing-markdown-theme-" });
     await writeFile(
       path.join(workspace.repoPath, "notes.md"),
-      "Body text\n\n> Quoted text\n\n| Key | Value |\n| --- | --- |\n| Cell | Data |\n",
+      "Body text\n\n> Quoted text\n\n| Key | Value |\n| --- | --- |\n| Cell | Data |\n\n```bash\n# Code comment\n```\n",
       "utf8",
     );
     await workspace.navigateTo();
@@ -724,17 +803,25 @@ test.describe("CodeMirror workspace file editing", () => {
       body: preview.getByText("Body text", { exact: true }),
       quote: preview.getByText("Quoted text", { exact: true }),
       cell: preview.getByRole("cell", { name: "Cell", exact: true }),
+      comment: preview.locator('[data-syntax="comment"]'),
     };
-    // 默认 Light / Dark 主题的 foregroundProse、foregroundMuted、border。
-    const expectColors = async (colors: { body: string; quote: string; cellBorder: string }) => {
+    // 默认 Light / Dark 主题的 foregroundProse、foregroundMuted、border，以及 Catppuccin Latte / Mocha 的注释色。
+    const expectColors = async (colors: {
+      body: string;
+      quote: string;
+      cellBorder: string;
+      comment: string;
+    }) => {
       await expect(probes.body).toHaveCSS("color", colors.body);
       await expect(probes.quote).toHaveCSS("color", colors.quote);
       await expect(probes.cell).toHaveCSS("border-bottom-color", colors.cellBorder);
+      await expect(probes.comment).toHaveCSS("color", colors.comment);
     };
     await expectColors({
       body: "rgba(39, 39, 42, 0.86)",
       quote: "rgb(113, 113, 123)",
       cellBorder: "rgb(228, 228, 231)",
+      comment: "rgb(140, 143, 161)",
     });
 
     await page.emulateMedia({ colorScheme: "dark" });
@@ -742,6 +829,7 @@ test.describe("CodeMirror workspace file editing", () => {
       body: "rgba(245, 245, 245, 0.86)",
       quote: "rgb(129, 129, 129)",
       cellBorder: "rgb(25, 25, 25)",
+      comment: "rgb(147, 153, 178)",
     });
   });
 

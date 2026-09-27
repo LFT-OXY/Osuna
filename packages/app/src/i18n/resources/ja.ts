@@ -1881,6 +1881,9 @@ export const ja: TranslationResources = {
         warning: "警告",
         caution: "注意",
       },
+      markdownCodeBlock: {
+        wrapLines: "行を折り返す",
+      },
       editor: {
         fileSize: "ファイルサイズ {{size}}",
         lines: "{{count}} 行",

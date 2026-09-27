@@ -1911,6 +1911,9 @@ export const es: TranslationResources = {
         warning: "Advertencia",
         caution: "Precaución",
       },
+      markdownCodeBlock: {
+        wrapLines: "Ajustar líneas",
+      },
       editor: {
         fileSize: "Tamaño {{size}}",
         lines: "{{count}} líneas",

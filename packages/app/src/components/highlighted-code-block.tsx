@@ -18,6 +18,7 @@ import * as Clipboard from "expo-clipboard";
 import { Check, Copy } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import type { HighlightToken } from "@getpaseo/highlight";
+import { fenceLanguageToExtension } from "@/components/markdown/fence/language";
 import { isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { syntaxTokenStyleFor } from "@/styles/syntax-token-styles";
@@ -36,32 +37,6 @@ interface HighlightedCodeBlockProps {
   textStyle: TextStyle;
   /** 头部里排在复制按钮之前的额外控件（Mermaid 源码视图的切回图表按钮）。 */
   renderHeaderActions?: () => ReactNode;
-}
-
-// Fence info strings ("```ts", "```typescript", "```ts {1,3}") map to the
-// extension-based parser table in @getpaseo/highlight. Aliases here only
-// cover names that don't already match an extension key in parsers.ts.
-const LANGUAGE_ALIASES: Record<string, string> = {
-  typescript: "ts",
-  javascript: "js",
-  python: "py",
-  rust: "rs",
-  golang: "go",
-  "c++": "cpp",
-  csharp: "cs",
-  "c#": "cs",
-  objc: "m",
-  "objective-c": "m",
-  markdown: "md",
-  elixir: "ex",
-};
-
-function fenceLanguageToExtension(info: string | null | undefined): string | null {
-  if (!info) return null;
-  const first = info.trim().split(/\s+/)[0]?.toLowerCase();
-  if (!first) return null;
-  const normalized = first.replace(/^\./, "");
-  return LANGUAGE_ALIASES[normalized] ?? normalized;
 }
 
 function stripTerminalFenceNewline(code: string): string {

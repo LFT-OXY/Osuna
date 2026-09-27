@@ -1897,6 +1897,9 @@ export const ptBR: TranslationResources = {
         warning: "Aviso",
         caution: "Cuidado",
       },
+      markdownCodeBlock: {
+        wrapLines: "Quebrar linhas",
+      },
       editor: {
         fileSize: "Tamanho {{size}}",
         lines: "{{count}} linhas",

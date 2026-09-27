@@ -45,6 +45,7 @@ import { MermaidFence } from "@/components/markdown/fence/mermaid";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { MarkdownCodeBlock } from "./code-block.web";
 import { isGithubAlertKind, remarkGithubAlerts, type GithubAlertKind } from "./github-alerts";
 
 type HastNode = NonNullable<ExtraProps["node"]>;
@@ -125,6 +126,10 @@ function MarkdownPre({ node, children, ...props }: ComponentProps<"pre"> & Extra
   if (fence?.language === "mermaid") {
     return <ThemedPreviewMermaidFence code={fence.code} uniProps={mapFenceStyle} />;
   }
+  if (fence) {
+    return <MarkdownCodeBlock language={fence.language} code={fence.code} />;
+  }
+  // 手写的 <pre>（内部没有 <code>）不带头部，原样等宽显示。
   // data-pmono 让全局界面字体规则跳过代码（见 styles/code-surface.ts）。
   return (
     <pre {...props} data-pmono="">

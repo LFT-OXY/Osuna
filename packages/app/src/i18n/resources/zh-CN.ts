@@ -1841,6 +1841,9 @@ export const zhCN: TranslationResources = {
         warning: "警告",
         caution: "小心",
       },
+      markdownCodeBlock: {
+        wrapLines: "自动换行",
+      },
       editor: {
         fileSize: "文件大小 {{size}}",
         lines: "{{count}} 行",

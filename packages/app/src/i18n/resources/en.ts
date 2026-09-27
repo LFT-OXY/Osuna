@@ -1887,6 +1887,9 @@ export const en = {
         warning: "Warning",
         caution: "Caution",
       },
+      markdownCodeBlock: {
+        wrapLines: "Wrap lines",
+      },
       editor: {
         fileSize: "File size {{size}}",
         lines: "{{count}} lines",

@@ -1894,6 +1894,9 @@ export const ru: TranslationResources = {
         warning: "Предупреждение",
         caution: "Осторожно",
       },
+      markdownCodeBlock: {
+        wrapLines: "Переносить строки",
+      },
       editor: {
         fileSize: "Размер файла {{size}}",
         lines: "Строк: {{count}}",

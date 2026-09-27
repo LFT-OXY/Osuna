@@ -1862,6 +1862,9 @@ export const ar: TranslationResources = {
         warning: "تحذير",
         caution: "تنبيه",
       },
+      markdownCodeBlock: {
+        wrapLines: "التفاف الأسطر",
+      },
       editor: {
         fileSize: "حجم الملف {{size}}",
         lines: "{{count}} سطر",

@@ -23,6 +23,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+import { lightHighlightColors } from "@getpaseo/highlight";
 import { contentTypeStep, type TextVariant, type Theme } from "@/styles/theme";
 
 export const MARKDOWN_PREVIEW_CLASS_NAME = "paseo-markdown-preview";
@@ -50,6 +51,21 @@ function typeStepVariables(
 
 export type MarkdownPreviewThemeVariables = Record<`--md-${string}`, string>;
 
+const SYNTAX_ROLES = Object.keys(lightHighlightColors);
+
+// 语法色取自 theme.colors.syntax，它已按用户选的语法主题与当前深浅色解析好。
+function syntaxVariables(theme: Theme): MarkdownPreviewThemeVariables {
+  const variables: MarkdownPreviewThemeVariables = {};
+  for (const [role, color] of Object.entries(theme.colors.syntax)) {
+    variables[`--md-syntax-${role}`] = color;
+  }
+  return variables;
+}
+
+const SYNTAX_RULES = SYNTAX_ROLES.map(
+  (role) => `${ROOT} [data-syntax="${role}"] {\n  color: var(--md-syntax-${role});\n}`,
+).join("\n\n");
+
 /** 主题 token 以 CSS 自定义属性挂在预览根节点上，样式表只引用这些变量。 */
 export function markdownPreviewThemeVariables(theme: Theme): MarkdownPreviewThemeVariables {
   return {
@@ -62,6 +78,7 @@ export function markdownPreviewThemeVariables(theme: Theme): MarkdownPreviewThem
     "--md-code-background": theme.colors.surface2,
     "--md-code-foreground": theme.colors.foreground,
     "--md-front-matter-key-background": theme.colors.surface2,
+    "--md-interaction-highlight": theme.colors.interactionHighlight,
     // 提示块：note 取固定蓝色档（强调色随主题变，会与 caution 撞色或变成近白），
     // 其余四种取状态色族中语义对应的一员。
     "--md-alert-note":
@@ -88,6 +105,8 @@ export function markdownPreviewThemeVariables(theme: Theme): MarkdownPreviewThem
     ...typeStepVariables(theme, "h3", "title-sm"),
     ...typeStepVariables(theme, "h4", "body"),
     ...typeStepVariables(theme, "table", "caption"),
+    ...typeStepVariables(theme, "code-label", "micro"),
+    ...syntaxVariables(theme),
   };
 }
 
@@ -342,6 +361,86 @@ ${ROOT} pre code {
   padding: 0;
   font-size: inherit;
 }
+
+/* 代码块外框画在 .md-code-block 上，头部与代码同在框内；内部 pre 去掉自己的框。 */
+${ROOT} .md-code-block {
+  margin: 0.65rem 0;
+  overflow: hidden;
+  border: 1px solid var(--md-code-border);
+  border-radius: var(--md-radius-code);
+  background: var(--md-code-background);
+}
+
+${ROOT} .md-code-block-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.375rem 0 0.9rem;
+  color: var(--md-muted);
+  user-select: none;
+}
+
+${ROOT} .md-code-block-language {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  font-family: var(--md-mono);
+  font-size: var(--md-code-label-size);
+  line-height: var(--md-code-label-line-height);
+}
+
+${ROOT} .md-code-block-language > svg {
+  flex-shrink: 0;
+}
+
+${ROOT} .md-code-block-language-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+${ROOT} .md-code-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin-left: auto;
+}
+
+${ROOT} .md-code-block-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--md-radius-inline-code);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+${ROOT} .md-code-block-button:hover,
+${ROOT} .md-code-block-button:focus-visible,
+${ROOT} .md-code-block-button[aria-pressed="true"] {
+  background: var(--md-interaction-highlight);
+  color: var(--md-foreground-strong);
+}
+
+${ROOT} .md-code-block pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+${ROOT} .md-code-block[data-wrap="true"] pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+${SYNTAX_RULES}
 
 ${ROOT} .md-table-scroll {
   max-width: 100%;

@@ -1873,6 +1873,9 @@ export const ko: TranslationResources = {
         warning: "경고",
         caution: "주의",
       },
+      markdownCodeBlock: {
+        wrapLines: "줄 바꿈",
+      },
       editor: {
         fileSize: "파일 크기 {{size}}",
         lines: "{{count}} 라인",
