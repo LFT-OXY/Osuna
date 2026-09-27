@@ -7,11 +7,13 @@ import {
   collectDaemonDiagnostics,
   type DaemonWebSocketRuntimeDiagnosticSnapshot,
 } from "./diagnostics.js";
-import { DaemonSelfUpdateSessionController } from "./daemon-self-update-session-controller.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
+
+const DAEMON_SELF_UPDATE_UNAVAILABLE_ERROR =
+  "Daemon self-update is not available on Osuna. Update the host the way it was installed.";
 
 export interface DaemonRuntimeConfig {
   listen: string | null;
@@ -29,17 +31,10 @@ export interface DaemonRuntimeConfig {
 
 export interface DaemonSessionHost {
   emit(msg: SessionOutboundMessage): void;
-  emitLifecycleIntent(intent: {
-    type: "restart";
-    clientId: string;
-    requestId: string;
-    reason: string;
-  }): void;
 }
 
 export interface DaemonSessionOptions {
   host: DaemonSessionHost;
-  clientId: string;
   paseoHome: string;
   serverId: string | undefined;
   daemonVersion: string | undefined;
@@ -64,7 +59,6 @@ export interface DaemonSessionOptions {
  */
 export class DaemonSession {
   private readonly host: DaemonSessionHost;
-  private readonly clientId: string;
   private readonly paseoHome: string;
   private readonly serverId: string | undefined;
   private readonly daemonVersion: string | undefined;
@@ -76,13 +70,11 @@ export class DaemonSession {
   private readonly getWebSocketRuntimeMetrics: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   private readonly getObservationMetrics: DaemonSessionOptions["getObservationMetrics"];
   private readonly logger: pino.Logger;
-  private readonly selfUpdate: DaemonSelfUpdateSessionController;
   private readonly hubRelationships: HubRelationshipManagement | null;
   private readonly reloadConfig: () => DaemonConfigReloadResult;
 
   constructor(options: DaemonSessionOptions) {
     this.host = options.host;
-    this.clientId = options.clientId;
     this.paseoHome = options.paseoHome;
     this.serverId = options.serverId;
     this.daemonVersion = options.daemonVersion;
@@ -96,14 +88,6 @@ export class DaemonSession {
     this.logger = options.logger;
     this.hubRelationships = options.hubRelationships ?? null;
     this.reloadConfig = options.reloadConfig;
-    this.selfUpdate = new DaemonSelfUpdateSessionController({
-      clientId: this.clientId,
-      daemonVersion: this.daemonVersion ?? null,
-      desktopManaged: this.daemonRuntimeConfig?.desktopManaged === true,
-      emit: (msg) => this.host.emit(msg),
-      emitLifecycleIntent: (intent) => this.host.emitLifecycleIntent(intent),
-      sessionLogger: this.logger,
-    });
   }
 
   async handleHubRelationshipRequest(
@@ -310,9 +294,19 @@ export class DaemonSession {
     }
   }
 
-  async handleUpdateRequest(
+  // npm 自更新会把 daemon 换成上游的 @getpaseo/cli，Osuna 一律拒绝。
+  handleUpdateRequest(
     msg: Extract<SessionInboundMessage, { type: "daemon.update.request" }>,
-  ): Promise<void> {
-    await this.selfUpdate.dispatch(msg);
+  ): void {
+    this.host.emit({
+      type: "daemon.update.response",
+      payload: {
+        requestId: msg.requestId,
+        success: false,
+        error: DAEMON_SELF_UPDATE_UNAVAILABLE_ERROR,
+        previousVersion: this.daemonVersion ?? null,
+        newVersion: null,
+      },
+    });
   }
 }
