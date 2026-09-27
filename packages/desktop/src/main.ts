@@ -134,9 +134,11 @@ const bootstrapComplete = new Promise<void>((resolve) => {
 let bootstrapIsComplete = false;
 
 app.setName(APP_NAME);
-// 必须早于首次写日志：electron-log 在首次写入时缓存路径。下方的强制覆盖与
-// worktree 隔离会再次 setPath，因此保持更高优先级。
-app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_DIR_NAME));
+const forcedUserDataDir = process.env.PASEO_ELECTRON_USER_DATA_DIR?.trim();
+// 必须早于首次写日志：electron-log 在首次写入时缓存路径。下方的 worktree 隔离会
+// 再次 setPath，因此保持更高优先级。显式指定目录时不解析 appData：Windows 上
+// USERPROFILE 被改写（打包冒烟即如此）时 getPath("appData") 会直接抛错。
+app.setPath("userData", forcedUserDataDir || path.join(app.getPath("appData"), USER_DATA_DIR_NAME));
 log.transports.file.setAppName(USER_DATA_DIR_NAME);
 log.info("[desktop] app startup", {
   version: app.getVersion(),
@@ -303,9 +305,7 @@ function installBrowserWindowOpenHandler(input: {
 // In dev mode, detect git worktrees and isolate each instance so multiple
 // Electron windows can run side-by-side (separate userData = separate lock).
 let devWorktreeName: string | null = null;
-const forcedUserDataDir = process.env.PASEO_ELECTRON_USER_DATA_DIR?.trim();
 if (forcedUserDataDir) {
-  app.setPath("userData", forcedUserDataDir);
   log.info("[dev-user-data] forced userData dir:", forcedUserDataDir);
 } else if (!app.isPackaged) {
   try {
