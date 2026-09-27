@@ -1,32 +1,48 @@
 import { View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Folder, GitBranch } from "lucide-react-native";
+import { Folder } from "lucide-react-native";
+import { BranchSwitcher } from "@/components/branch-switcher";
 import { Text } from "@/components/ui/text";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { HOST_BADGE_ICON_SIZE, HostBadge } from "@/hosts/host-badge";
 import { useHostBadges } from "@/hosts/use-host-badges";
 import type { Theme } from "@/styles/theme";
-import { resolveComposerContext } from "./model";
+import { resolveBranchSwitch, resolveComposerContext, type BranchSwitchConditions } from "./model";
 
 const ThemedFolder = withUnistyles(Folder);
-const ThemedGitBranch = withUnistyles(GitBranch);
 const iconMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
+const BRANCH_SWITCH_DISABLED_REASON_KEYS = {
+  "agent-running": "composer.context.branchSwitchAgentRunning",
+  "host-disconnected": "composer.context.branchSwitchHostDisconnected",
+} as const;
+
 /**
- * 附着在 Composer 底部的只读窄条。状态没到之前条本身照常占位，内容到了也不改变高度。
- * host 按该 host 自己的徽标设置显示，本机默认隐藏。
+ * 附着在 Composer 底部的窄条。状态没到之前条本身照常占位，内容到了也不改变高度。
+ * 分支名是切换分支的入口，工作区类型只读；host 按该 host 自己的徽标设置显示，本机默认隐藏。
  */
 export function ComposerContextStrip({
   serverId,
+  workspaceId,
+  cwd,
   gitStatus,
+  branchSwitchConditions,
 }: {
   serverId: string;
+  workspaceId: string;
+  cwd: string;
   gitStatus: CheckoutStatusPayload | null;
+  branchSwitchConditions: BranchSwitchConditions;
 }) {
   const { t } = useTranslation();
   const hostBadge = useHostBadges({ enabled: true }).get(serverId) ?? null;
   const context = resolveComposerContext(gitStatus);
+  const branchSwitch = resolveBranchSwitch(context, branchSwitchConditions);
+  const disabledReasonKey =
+    branchSwitch.kind === "disabled"
+      ? BRANCH_SWITCH_DISABLED_REASON_KEYS[branchSwitch.reason]
+      : null;
   return (
     <View style={styles.strip} testID="composer-context-strip">
       {context.workspaceKind ? (
@@ -39,14 +55,20 @@ export function ComposerContextStrip({
           </Text>
         </View>
       ) : null}
-      {context.branch ? (
+      {branchSwitch.kind === "hidden" ? null : (
         <View style={[styles.item, styles.branch]}>
-          <ThemedGitBranch size={HOST_BADGE_ICON_SIZE} uniProps={iconMutedMapping} />
-          <Text variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.label}>
-            {context.branch}
-          </Text>
+          <BranchSwitcher
+            appearance="strip"
+            currentBranchName={context.branch}
+            serverId={serverId}
+            workspaceId={workspaceId}
+            workspaceDirectory={cwd}
+            isGitCheckout
+            disabledReason={disabledReasonKey ? t(disabledReasonKey) : null}
+            testID="composer-context-strip-branch-switcher"
+          />
         </View>
-      ) : null}
+      )}
       <View style={styles.spacer} />
       {hostBadge ? <HostBadge badge={hostBadge} /> : null}
     </View>
@@ -79,10 +101,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   // 分支名长度不受控，先于其他项截断。
   branch: {
-    minWidth: 0,
-    flexShrink: 1,
-  },
-  label: {
     minWidth: 0,
     flexShrink: 1,
   },

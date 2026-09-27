@@ -135,6 +135,8 @@ export const ja: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "ローカル",
+      branchSwitchAgentRunning: "エージェントの実行中はブランチを切り替えられません",
+      branchSwitchHostDisconnected: "ホストが切断されているため、ブランチを切り替えられません",
     },
     cancel: {
       cancelingAgent: "エージェントをキャンセル中",
@@ -1547,6 +1549,7 @@ export const ja: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "ワークスペースのブランチを切り替え",
     currentBranch: "現在のブランチ: {{branchName}}。押してブランチを切り替えてください。",
+    currentBranchUnavailable: "現在のブランチ: {{branchName}}。{{reason}}",
     placeholder: "ブランチを切り替え...",
     searchPlaceholder: "ブランチをフィルタ...",
     empty: "ブランチが見つかりません。",
@@ -1562,6 +1565,9 @@ export const ja: TranslationResources = {
     restore: "復元",
     later: "後で",
     stashRestored: "スタッシュした変更を復元しました",
+    checkedOutElsewhereAt:
+      "ブランチ {{branchName}} は別の worktree（{{worktreePath}}）でチェックアウト済みです。そちらで操作してください。",
+    checkedOutElsewhere: "ブランチ {{branchName}} は別の worktree でチェックアウト済みです。",
   },
   agentAutocomplete: {
     searchingWorkspace: "ワークスペースを検索中...",

@@ -258,3 +258,47 @@ export async function readWorktreeBranchInfo({ worktreePath }: { worktreePath: s
     },
   };
 }
+
+/**
+ * Leave `branch` only on origin: delete the local copy, and hide the fixture's
+ * in-repo bare remote so the working tree still reads as clean.
+ */
+export async function leaveBranchOnlyOnRemote(repoPath: string, branch: string): Promise<void> {
+  execSync(`git branch -D ${JSON.stringify(branch)}`, { cwd: repoPath, stdio: "ignore" });
+  await writeFile(path.join(repoPath, ".git", "info", "exclude"), "remote.git/\n");
+}
+
+export function readUpstreamBranch(repoPath: string, branch: string): string {
+  return execSync(`git rev-parse --abbrev-ref ${JSON.stringify(`${branch}@{upstream}`)}`, {
+    cwd: repoPath,
+    stdio: "pipe",
+  })
+    .toString()
+    .trim();
+}
+
+/** Check `branch` out in a second, linked worktree so git refuses it everywhere else. */
+export async function checkOutBranchInLinkedWorktree(
+  repoPath: string,
+  branch: string,
+): Promise<TempDirectory> {
+  const worktreePath = path.join(
+    await mkdtemp(path.join(await resolveTempRoot(), "paseo-e2e-linked-")),
+    "worktree",
+  );
+  execSync(`git worktree add ${JSON.stringify(worktreePath)} ${JSON.stringify(branch)}`, {
+    cwd: repoPath,
+    stdio: "ignore",
+  });
+  return {
+    path: worktreePath,
+    cleanup: async () => {
+      await rm(path.dirname(worktreePath), {
+        recursive: true,
+        force: true,
+        maxRetries: TEMP_CLEANUP_RETRIES,
+        retryDelay: TEMP_CLEANUP_RETRY_DELAY_MS,
+      });
+    },
+  };
+}

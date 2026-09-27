@@ -134,6 +134,8 @@ export const ko: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "로컬",
+      branchSwitchAgentRunning: "에이전트가 실행 중일 때는 브랜치를 전환할 수 없습니다",
+      branchSwitchHostDisconnected: "호스트 연결이 끊겨 브랜치를 전환할 수 없습니다",
     },
     cancel: {
       cancelingAgent: "에이전트 취소 중",
@@ -1540,6 +1542,7 @@ export const ko: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "워크스페이스 브랜치 전환",
     currentBranch: "현재 브랜치: {{branchName}}. 브랜치를 전환하려면 누르세요.",
+    currentBranchUnavailable: "현재 브랜치: {{branchName}}. {{reason}}",
     placeholder: "브랜치 전환...",
     searchPlaceholder: "브랜치 필터...",
     empty: "브랜치를 찾을 수 없습니다.",
@@ -1555,6 +1558,10 @@ export const ko: TranslationResources = {
     restore: "복원",
     later: "나중에",
     stashRestored: "스태시된 변경 사항이 복원되었습니다",
+    checkedOutElsewhereAt:
+      "브랜치 {{branchName}}은(는) 다른 worktree({{worktreePath}})에서 이미 체크아웃되어 있습니다. 해당 worktree에서 작업하세요.",
+    checkedOutElsewhere:
+      "브랜치 {{branchName}}은(는) 다른 worktree에서 이미 체크아웃되어 있습니다.",
   },
   agentAutocomplete: {
     searchingWorkspace: "워크스페이스 검색 중...",

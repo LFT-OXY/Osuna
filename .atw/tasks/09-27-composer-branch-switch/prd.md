@@ -24,8 +24,8 @@ Composer 底下那条 Composer context strip 显示着「本地 / Worktree」和
   下拉：可搜索，列出本地与远程分支，选中即切换；脏工作区沿用现有「Stash 并切换」确认与
   切回后恢复 stash 的询问。
 - 当前 agent 正在运行时，触发器置灰，悬停提示原因；agent 结束后自动恢复可用。
-- 草稿标签页（还没发出的新 agent）里同样可切，且始终可用 —— 这时切分支就是在决定「从哪个
-  分支开始干活」。
+- 草稿标签页（还没发出的新 agent）里同样可切，不受任何 agent 运行状态影响 —— 这时切分支
+  就是在决定「从哪个分支开始干活」。host 断开时与其他入口一样置灰。
 - worktree 工作区也能切；目标分支已被别的 worktree 检出时，提示改成一句可读的本地化文案。
 - 「本地 / Worktree」标签保持只读。
 - 紧凑屏上这条栏本来就不显示，维持现状。
@@ -68,8 +68,16 @@ Composer 底下那条 Composer context strip 显示着「本地 / Worktree」和
   caption 字号的 muted 文字），只增加可点击的反馈（悬停 / 按下态、指针光标），不为此改变
   窄条高度或版式。`BranchSwitcher` 目前只提供 Changes 面板的工具栏样式触发器，这里需要一个
   与窄条一致的紧凑外观；以参数形式让同一个组件支持两种外观，不复制组件。
+  - 实现：`BranchSwitcher` 的 `appearance?: "toolbar" | "strip"`（默认 toolbar）。strip 形态的
+    触发器是分支图标 + caption 弱色文字，外框与悬停 / 按下 / 打开高亮复用
+    `toolbarLabelTriggerStyle`，两侧 `-spacing[1]` 负边距让文字位置与只读时一致；窄条仍高 28px。
+  - strip 形态的 tooltip 向上弹、下拉用 `desktopPlacement="top-start"` 向上展开（窄条贴着
+    Composer 底边，向下会被窗口底部截住）。
 - `BranchSwitcher` 增加「不可用」状态与原因文案：不可用时触发器置灰、不响应点击与键盘、
   tooltip 显示原因，无障碍标签标明不可用。Changes 面板不传这个状态，行为不变。
+  - 实现：`disabledReason?: string | null`（已本地化的原因，非空即不可用）。置灰是
+    `opacity[50]`，`Pressable disabled`（web 上 `aria-disabled=true`、移出 tab 序）；无障碍标签
+    为 `branchSwitcher.currentBranchUnavailable`「Current branch: {{branchName}}. {{reason}}」。
 - 分支名为空（detached HEAD）或不是 git checkout 时不渲染触发器，与现有窄条行为一致。
 - 「本地 / Worktree」段保持只读，不加交互。
 
@@ -78,14 +86,27 @@ Composer 底下那条 Composer context strip 显示着「本地 / Worktree」和
 - 由 Composer context strip 的模型层给出：输入为 git 状态、是否草稿、当前 agent 是否在运行、
   host 是否连接；输出为「是否显示触发器」「是否可用」「不可用原因」。纯函数，放在现有
   `resolveComposerContext` 同一个模型里扩展。
+  - 实现：`resolveBranchSwitch(context: ComposerContext, conditions: BranchSwitchConditions)
+    → { kind: "hidden" } | { kind: "enabled" } | { kind: "disabled"; reason: "agent-running" |
+    "host-disconnected" }`，`BranchSwitchConditions = { agent: "draft" | "idle" | "running";
+    isHostConnected: boolean }`（草稿与运行中用一个三态表达，不可能同时为真）。
+  - 判定顺序：没有分支名 → hidden；host 断开 → disabled(host-disconnected)，草稿同样；
+    agent 为 running → disabled(agent-running)；其余 enabled。
+  - Composer 里草稿取自 `resolveAgentControlsMode(agentControls) === "draft"`，运行中取自
+    `selectAgentTurnPresentation(...).isActive`。原因文案 key：
+    `composer.context.branchSwitchAgentRunning` / `branchSwitchHostDisconnected`。
 - 「运行中」只看**当前这个 agent** 的运行状态，不汇总同目录下的其他 agent。
-- 草稿没有运行中的 agent，始终可用。
+- 草稿没有运行中的 agent，不因运行状态置灰（host 断开时仍置灰，见上）。
 - 拦截只在这个入口：服务端的切换处理与 Changes 面板不加运行中检查。
 
 ### 数据接线
 
 - Composer 把工作区 id、工作区目录、host 与当前 agent 的运行状态传给 Composer context strip；
   这些 Composer 与 agent 面板 / 草稿标签页都已持有，不新增查询。
+  - 实现：工作区目录用 Composer 的 `cwd`（与窄条显示的 `useCheckoutStatusQuery` 同源，切换成功
+    后失效的正是这条查询）；工作区 id 为空时退回 `cwd`，与 Changes 面板
+    `model.workspaceId ?? model.cwd` 一致 —— 它只作分支建议 / stash 列表的查询缓存键，git 操作
+    一律走目录。
 - 切换走现有 `useBranchSwitcher` 链路：懒加载分支建议、`checkout_switch_branch_request`、脏树
   时的 stash 确认与切回恢复询问、成功后的 checkout 状态失效。
 
@@ -94,6 +115,11 @@ Composer 底下那条 Composer context strip 显示着「本地 / Worktree」和
 - 切换失败且 git 报错表明目标分支已被别的 worktree 检出时，把原始报错替换为本地化文案
   （带上占用它的 worktree 路径，能从报错里取到时）。识别放在 `useBranchSwitcher` 的错误处理
   中，与现有「uncommitted → stash 确认」的识别并列，因此 Changes 面板一并受益。
+  - 实现：`parseBranchCheckedOutElsewhere(message) → { worktreePath: string | null } | null`
+    （`git/branch-switcher-operations.ts`），匹配 git ≥ 2.42 的「is already used by worktree at
+    '<path>'」与旧版「is already checked out at '<path>'」。直接切换与「Stash 并切换」后的切换
+    两条失败路径都经过它。文案 key：`branchSwitcher.checkedOutElsewhereAt`（带
+    `{{worktreePath}}`）/ `branchSwitcher.checkedOutElsewhere`。
 - 其余错误仍按现状显示原始信息。
 - 分支列表不预先过滤或标注被占用的分支；不新增协议字段。
 - 文案补齐所有 locale。
@@ -116,6 +142,14 @@ Composer 底下那条 Composer context strip 显示着「本地 / Worktree」和
   新增用例：从 Composer context strip 切换到本地分支、切换到仅远程存在的分支，断言窄条与
   工作区显示的分支随之更新；带未提交改动时走 stash 确认。复用
   `e2e/support/helpers/branch-switcher` 里现有的辅助函数，必要时为窄条入口加一个同风格的辅助。
+  - 实际落地 4 个用例：本地分支（断言窄条、标题、侧栏行、Changes 面板、磁盘分支）；仅远程
+    分支（断言窄条、磁盘分支、upstream 为 `origin/<branch>`）；未提交改动（两次确认框的完整
+    文案、stash 后工作区干净、切回后改动恢复）；目标分支被另一 worktree 占用（toast 为本地化
+    全文且含路径，窄条与磁盘仍在原分支）—— 最后一个是 `docs/testing.md`「Fallible user
+    actions」要求的失败覆盖。
+  - 辅助：`branch-switcher.ts` 新增 `expectComposerContextStripBranch`、
+    `switchBranchFromComposerContextStrip`（与 Changes 入口共用选分支步骤）；`workspace.ts` 新增
+    `leaveBranchOnlyOnRemote`、`readUpstreamBranch`、`checkOutBranchInLinkedWorktree`。
 - **单测：Composer context strip 模型（`context-strip/model.test.ts`）**。覆盖可用性判定：
   git checkout 且有分支 → 可用；当前 agent 运行中 → 不可用并给出原因；草稿 → 始终可用；
   detached HEAD / 非 git / 未加载 → 不显示；host 断开 → 不可用。

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
-import { resolveComposerContext } from "./model";
+import { resolveBranchSwitch, resolveComposerContext } from "./model";
 
 const common = { cwd: "/repo", error: null, requestId: "req" };
 
@@ -89,5 +89,55 @@ describe("resolveComposerContext", () => {
       workspaceKind: "directory",
       branch: null,
     });
+  });
+});
+
+describe("resolveBranchSwitch", () => {
+  const idleAgent = { agent: "idle", isHostConnected: true } as const;
+
+  it("offers the switcher on a git checkout with a branch", () => {
+    expect(resolveBranchSwitch(resolveComposerContext(localCheckout), idleAgent)).toEqual({
+      kind: "enabled",
+    });
+  });
+
+  it("offers the switcher in a worktree too", () => {
+    expect(resolveBranchSwitch(resolveComposerContext(paseoWorktree), idleAgent)).toEqual({
+      kind: "enabled",
+    });
+  });
+
+  it("disables the switcher while the current agent is running", () => {
+    expect(
+      resolveBranchSwitch(resolveComposerContext(localCheckout), {
+        ...idleAgent,
+        agent: "running",
+      }),
+    ).toEqual({ kind: "disabled", reason: "agent-running" });
+  });
+
+  it("keeps the switcher available in a draft", () => {
+    expect(
+      resolveBranchSwitch(resolveComposerContext(localCheckout), { ...idleAgent, agent: "draft" }),
+    ).toEqual({ kind: "enabled" });
+  });
+
+  it("disables the switcher while the host is disconnected, draft or not", () => {
+    for (const agent of ["idle", "draft"] as const) {
+      expect(
+        resolveBranchSwitch(resolveComposerContext(localCheckout), {
+          agent,
+          isHostConnected: false,
+        }),
+      ).toEqual({ kind: "disabled", reason: "host-disconnected" });
+    }
+  });
+
+  it("hides the switcher on a detached HEAD, a plain directory, or before git status loads", () => {
+    for (const gitStatus of [{ ...localCheckout, currentBranch: null }, plainDirectory, null]) {
+      expect(resolveBranchSwitch(resolveComposerContext(gitStatus), idleAgent)).toEqual({
+        kind: "hidden",
+      });
+    }
   });
 });

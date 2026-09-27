@@ -135,6 +135,9 @@ export const es: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "Local",
+      branchSwitchAgentRunning: "No se puede cambiar de rama mientras el agente se ejecuta",
+      branchSwitchHostDisconnected:
+        "No se puede cambiar de rama mientras el host está desconectado",
     },
     cancel: {
       cancelingAgent: "Agente de cancelación",
@@ -1576,6 +1579,7 @@ export const es: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "Cambiar rama del espacio de trabajo",
     currentBranch: "Sucursal actual:{{branchName}}. Presione para cambiar de rama.",
+    currentBranchUnavailable: "Rama actual: {{branchName}}. {{reason}}",
     placeholder: "Cambiar de rama...",
     searchPlaceholder: "Filtrar ramas...",
     empty: "No se encontraron sucursales.",
@@ -1591,6 +1595,9 @@ export const es: TranslationResources = {
     restore: "Restaurar",
     later: "Más tarde",
     stashRestored: "Se restauraron los cambios ocultos",
+    checkedOutElsewhereAt:
+      "La rama {{branchName}} ya está activa en otro worktree en {{worktreePath}}. Cámbiala desde allí.",
+    checkedOutElsewhere: "La rama {{branchName}} ya está activa en otro worktree.",
   },
   agentAutocomplete: {
     searchingWorkspace: "Buscando espacio de trabajo...",

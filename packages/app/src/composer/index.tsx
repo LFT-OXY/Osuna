@@ -49,6 +49,7 @@ import {
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
 import { ComposerContextStrip } from "./context-strip";
+import type { BranchSwitchConditions, ComposerAgentPhase } from "./context-strip/model";
 import { KeyboardTranslateView } from "@/components/keyboard-translate-view";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
 import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
@@ -988,7 +989,7 @@ interface ComposerProps {
   externalKeyboardShift?: boolean;
   /** Optional panel/container layout breakpoint. Defaults to the screen breakpoint. */
   isCompactLayout?: boolean;
-  /** 在 Composer 底部挂上工作区类型 / 分支 / host 的只读条（工作区 pane 用，手机上不显示）。 */
+  /** 在 Composer 底部挂上工作区类型 / 分支 / host 的窄条，分支可点开切换（工作区 pane 用，手机上不显示）。 */
   showContextStrip?: boolean;
   /**
    * What this composer is for. Terminal drops the chat-agent affordances and
@@ -1228,19 +1229,33 @@ function ComposerVoiceModeButton({
 // 外层 JSX 不超过嵌套深度上限。
 function ComposerSurfaceStack({
   serverId,
+  workspaceId,
+  cwd,
   gitStatus,
+  branchSwitchConditions,
   showContextStrip,
   children,
 }: {
   serverId: string;
+  workspaceId: string;
+  cwd: string;
   gitStatus: CheckoutStatusPayload | null;
+  branchSwitchConditions: BranchSwitchConditions;
   showContextStrip: boolean;
   children: ReactNode;
 }) {
   return (
     <View style={styles.surfaceStack}>
       <RenderProfile id="MessageInput">{children}</RenderProfile>
-      {showContextStrip ? <ComposerContextStrip serverId={serverId} gitStatus={gitStatus} /> : null}
+      {showContextStrip ? (
+        <ComposerContextStrip
+          serverId={serverId}
+          workspaceId={workspaceId}
+          cwd={cwd}
+          gitStatus={gitStatus}
+          branchSwitchConditions={branchSwitchConditions}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1638,6 +1653,11 @@ function ComposerContentImpl({
     hasPendingPermission,
   );
   const hasAgent = agentState.status !== null;
+  const branchSwitchConditions = useMemo<BranchSwitchConditions>(() => {
+    let agent: ComposerAgentPhase = isAgentRunning ? "running" : "idle";
+    if (resolveAgentControlsMode(agentControls) === "draft") agent = "draft";
+    return { agent, isHostConnected: isConnected };
+  }, [agentControls, isAgentRunning, isConnected]);
 
   const queueWriter = useMemo<QueueWriter>(
     () => ({
@@ -2472,7 +2492,10 @@ function ComposerContentImpl({
               {/* MessageInput handles everything: text, dictation, attachments, all buttons */}
               <ComposerSurfaceStack
                 serverId={serverId}
+                workspaceId={workspaceId ?? cwd}
+                cwd={cwd}
                 gitStatus={checkoutStatusQuery.status}
+                branchSwitchConditions={branchSwitchConditions}
                 showContextStrip={showContextStrip && !isCompactFormFactor}
               >
                 <StableMessageInput

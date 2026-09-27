@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import { createBranchSwitcherOperations } from "./branch-switcher-operations";
+import {
+  createBranchSwitcherOperations,
+  parseBranchCheckedOutElsewhere,
+} from "./branch-switcher-operations";
 
 function createRecordingClient() {
   const cwds: string[] = [];
@@ -50,5 +53,48 @@ describe("createBranchSwitcherOperations", () => {
       workspaceDirectory,
     ]);
     expect(cwds).not.toContain(workspaceId);
+  });
+});
+
+describe("parseBranchCheckedOutElsewhere", () => {
+  // 与 daemon 的 runGitCommand 报错同形：命令行 + 退出码，下一行是 git 的 stderr。
+  const gitFailure = (stderr: string) =>
+    `Git command failed: git checkout feat (exit code: 128, signal: none)\n${stderr}`;
+
+  it("recognises the current git wording and pulls out the worktree path", () => {
+    expect(
+      parseBranchCheckedOutElsewhere(
+        gitFailure("fatal: 'feat' is already used by worktree at '/Users/dev/wt/feat'"),
+      ),
+    ).toEqual({ worktreePath: "/Users/dev/wt/feat" });
+  });
+
+  it("recognises the older git wording", () => {
+    expect(
+      parseBranchCheckedOutElsewhere(
+        gitFailure("fatal: 'feat' is already checked out at '/Users/dev/wt/feat'"),
+      ),
+    ).toEqual({ worktreePath: "/Users/dev/wt/feat" });
+  });
+
+  it("still recognises the conflict when no path can be read", () => {
+    expect(
+      parseBranchCheckedOutElsewhere(gitFailure("fatal: 'feat' is already checked out")),
+    ).toEqual({
+      worktreePath: null,
+    });
+  });
+
+  it("leaves unrelated errors alone", () => {
+    expect(
+      parseBranchCheckedOutElsewhere(
+        gitFailure("error: pathspec 'feat' did not match any file(s) known to git"),
+      ),
+    ).toBeNull();
+    expect(
+      parseBranchCheckedOutElsewhere(
+        "Working directory has uncommitted changes. Commit or stash before switching branches.",
+      ),
+    ).toBeNull();
   });
 });

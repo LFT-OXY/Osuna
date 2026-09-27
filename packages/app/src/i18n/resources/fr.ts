@@ -137,6 +137,9 @@ export const fr: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "Local",
+      branchSwitchAgentRunning: "Impossible de changer de branche pendant que l'agent s'exécute",
+      branchSwitchHostDisconnected:
+        "Impossible de changer de branche tant que l'hôte est déconnecté",
     },
     cancel: {
       cancelingAgent: "Agent d'annulation",
@@ -1579,6 +1582,7 @@ export const fr: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "Changer la branche de l’espace de travail",
     currentBranch: "Branche actuelle:{{branchName}}. Appuyez pour changer de branche.",
+    currentBranchUnavailable: "Branche actuelle : {{branchName}}. {{reason}}",
     placeholder: "Changer de branche...",
     searchPlaceholder: "Filtrer les branches...",
     empty: "Aucune branche trouvée.",
@@ -1595,6 +1599,9 @@ export const fr: TranslationResources = {
     restore: "Restaurer",
     later: "Plus tard",
     stashRestored: "Modifications cachées restaurées",
+    checkedOutElsewhereAt:
+      "La branche {{branchName}} est déjà extraite dans un autre worktree ({{worktreePath}}). Changez-la depuis ce worktree.",
+    checkedOutElsewhere: "La branche {{branchName}} est déjà extraite dans un autre worktree.",
   },
   agentAutocomplete: {
     searchingWorkspace: "Recherche dans l'espace de travail...",

@@ -14,3 +14,21 @@ export function createBranchSwitcherOperations(client: DaemonClient, cwd: string
 }
 
 export type BranchSwitcherOperations = ReturnType<typeof createBranchSwitcherOperations>;
+
+export interface BranchCheckedOutElsewhere {
+  /** 占用该分支的 worktree 路径；报错里取不到时为 null。 */
+  worktreePath: string | null;
+}
+
+// git ≥ 2.42 写作 "is already used by worktree at '<path>'"，更早的版本写作
+// "is already checked out at '<path>'"。
+const CHECKED_OUT_ELSEWHERE = /is already (?:used by worktree|checked out)(?: at '([^']+)')?/;
+
+/** 识别「目标分支已被别的 worktree 检出」的 git 报错。 */
+export function parseBranchCheckedOutElsewhere(message: string): BranchCheckedOutElsewhere | null {
+  const match = CHECKED_OUT_ELSEWHERE.exec(message);
+  if (!match) {
+    return null;
+  }
+  return { worktreePath: match[1] ?? null };
+}

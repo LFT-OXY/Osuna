@@ -5,7 +5,10 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { ToastApi } from "@/components/toast-host";
 import { invalidateCheckoutGitQueriesForClient } from "@/git/query-keys";
-import { createBranchSwitcherOperations } from "@/git/branch-switcher-operations";
+import {
+  createBranchSwitcherOperations,
+  parseBranchCheckedOutElsewhere,
+} from "@/git/branch-switcher-operations";
 import { confirmDialog } from "@/utils/confirm-dialog";
 
 interface UseBranchSwitcherInput {
@@ -90,6 +93,21 @@ export function useBranchSwitcher({
     ]);
   }, [queryClient, stashListQueryKey, normalizedServerId, workspaceDirectory]);
 
+  // 目标分支被别的 worktree 检出时，把 git 原文换成可读提示；其余错误照原样显示。
+  const describeSwitchError = useCallback(
+    (branchName: string, message: string) => {
+      const conflict = parseBranchCheckedOutElsewhere(message);
+      if (!conflict) return message;
+      return conflict.worktreePath
+        ? t("branchSwitcher.checkedOutElsewhereAt", {
+            branchName,
+            worktreePath: conflict.worktreePath,
+          })
+        : t("branchSwitcher.checkedOutElsewhere", { branchName });
+    },
+    [t],
+  );
+
   const maybeRestoreStashForBranch = useCallback(
     async (branchId: string) => {
       if (!operations) return;
@@ -138,7 +156,7 @@ export function useBranchSwitcher({
         await invalidateStashAndCheckout();
         const switchPayload = await operations.switchBranch(branchId);
         if (switchPayload.error) {
-          toast.error(switchPayload.error.message);
+          toast.error(describeSwitchError(branchId, switchPayload.error.message));
           return;
         }
         await invalidateStashAndCheckout();
@@ -146,7 +164,7 @@ export function useBranchSwitcher({
         toast.error(err instanceof Error ? err.message : t("branchSwitcher.failedToStash"));
       }
     },
-    [operations, currentBranchName, invalidateStashAndCheckout, toast, t],
+    [operations, currentBranchName, invalidateStashAndCheckout, describeSwitchError, toast, t],
   );
 
   const handleBranchSelect = useCallback(
@@ -163,7 +181,7 @@ export function useBranchSwitcher({
               await stashAndSwitch(branchId);
               return;
             }
-            toast.error(payload.error.message);
+            toast.error(describeSwitchError(branchId, payload.error.message));
             return;
           }
           // Success — refresh and check for stashes on the target branch
@@ -177,6 +195,7 @@ export function useBranchSwitcher({
     [
       operations,
       currentBranchName,
+      describeSwitchError,
       invalidateStashAndCheckout,
       maybeRestoreStashForBranch,
       stashAndSwitch,

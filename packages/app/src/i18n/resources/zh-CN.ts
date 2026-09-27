@@ -134,6 +134,8 @@ export const zhCN: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "本地",
+      branchSwitchAgentRunning: "Agent 运行中，暂不能切换分支",
+      branchSwitchHostDisconnected: "Host 未连接，暂不能切换分支",
     },
     cancel: {
       cancelingAgent: "正在取消 Agent",
@@ -1514,6 +1516,7 @@ export const zhCN: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "切换工作区分支",
     currentBranch: "当前分支：{{branchName}}。按下以切换分支。",
+    currentBranchUnavailable: "当前分支：{{branchName}}。{{reason}}",
     placeholder: "切换分支...",
     searchPlaceholder: "筛选分支...",
     empty: "没有找到分支。",
@@ -1528,6 +1531,9 @@ export const zhCN: TranslationResources = {
     restore: "恢复",
     later: "稍后",
     stashRestored: "Stashed 变更已恢复",
+    checkedOutElsewhereAt:
+      "分支 {{branchName}} 已在另一个 worktree 中检出（{{worktreePath}}），请到那个 worktree 里操作。",
+    checkedOutElsewhere: "分支 {{branchName}} 已在另一个 worktree 中检出。",
   },
   agentAutocomplete: {
     searchingWorkspace: "正在搜索 workspace...",

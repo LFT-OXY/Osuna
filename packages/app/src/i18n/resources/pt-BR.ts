@@ -135,6 +135,10 @@ export const ptBR: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "Local",
+      branchSwitchAgentRunning:
+        "Não é possível trocar de branch enquanto o agente está em execução",
+      branchSwitchHostDisconnected:
+        "Não é possível trocar de branch enquanto o host está desconectado",
     },
     cancel: {
       cancelingAgent: "Cancelando agente",
@@ -1561,6 +1565,7 @@ export const ptBR: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "Trocar branch do workspace",
     currentBranch: "Branch atual: {{branchName}}. Pressione para trocar de branch.",
+    currentBranchUnavailable: "Branch atual: {{branchName}}. {{reason}}",
     placeholder: "Trocar branch...",
     searchPlaceholder: "Filtrar branches...",
     empty: "Nenhuma branch encontrada.",
@@ -1576,6 +1581,9 @@ export const ptBR: TranslationResources = {
     restore: "Restaurar",
     later: "Depois",
     stashRestored: "Alterações em stash restauradas",
+    checkedOutElsewhereAt:
+      "A branch {{branchName}} já está em uso em outro worktree em {{worktreePath}}. Troque por lá.",
+    checkedOutElsewhere: "A branch {{branchName}} já está em uso em outro worktree.",
   },
   agentAutocomplete: {
     searchingWorkspace: "Buscando workspace...",

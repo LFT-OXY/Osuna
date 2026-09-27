@@ -1,18 +1,45 @@
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import {
+  expectComposerContextStripBranch,
   expectNoBranchSwitcherInWorkspaceHeader,
   expectWorkspaceBranch,
   openChangesPanel,
   switchBranchFromChangesPanel,
+  switchBranchFromComposerContextStrip,
 } from "../support/helpers/branch-switcher";
+import { clickNewChat } from "../support/helpers/launcher";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
-import { readWorktreeBranchInfo } from "../support/helpers/workspace";
+import {
+  checkOutBranchInLinkedWorktree,
+  leaveBranchOnlyOnRemote,
+  readUpstreamBranch,
+  readWorktreeBranchInfo,
+} from "../support/helpers/workspace";
 import {
   switchWorkspaceViaSidebar,
   waitForSidebarHydration,
 } from "../support/helpers/workspace-ui";
+
+// A freshly opened workspace shows the New tab launcher; the composer (and its
+// context strip) arrives with a new agent draft tab.
+async function openDraftInSeededWorkspace(page: Page, workspaceId: string): Promise<void> {
+  await gotoAppShell(page);
+  await waitForSidebarHydration(page);
+  await switchWorkspaceViaSidebar({ page, serverId: getServerId(), workspaceId });
+  await clickNewChat(page);
+}
+
+async function expectBranchOnDisk(repoPath: string, branchName: string): Promise<void> {
+  await expect
+    .poll(async () => (await readWorktreeBranchInfo({ worktreePath: repoPath })).currentBranch, {
+      timeout: 30_000,
+    })
+    .toBe(branchName);
+}
 
 async function renameWorkspaceViaSidebar(
   page: Page,
@@ -97,6 +124,124 @@ test.describe("Branch switcher", () => {
         .toBe("dev");
     } finally {
       await workspace.cleanup();
+    }
+  });
+
+  test("the composer context strip switches the workspace to a local branch", async ({ page }) => {
+    test.setTimeout(90_000);
+    const workspace = await seedWorkspace({
+      repoPrefix: "strip-branch-local-",
+      repo: { branches: ["main", "dev"] },
+    });
+
+    try {
+      await openDraftInSeededWorkspace(page, workspace.workspaceId);
+      await expectComposerContextStripBranch(page, "main");
+
+      await switchBranchFromComposerContextStrip(page, { from: "main", to: "dev" });
+
+      await expectComposerContextStripBranch(page, "dev");
+      await expectBranchOnDisk(workspace.repoPath, "dev");
+      await expect(
+        page.getByTestId("workspace-header-title").filter({ visible: true }).first(),
+      ).toHaveText("dev", { timeout: 30_000 });
+      await expect(
+        page
+          .getByTestId(`sidebar-workspace-row-${getServerId()}:${workspace.workspaceId}`)
+          .getByText("dev", { exact: true }),
+      ).toBeVisible({ timeout: 30_000 });
+      await openChangesPanel(page);
+      await expectWorkspaceBranch(page, "dev");
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("the composer context strip checks out a branch that only exists on the remote", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const workspace = await seedWorkspace({
+      repoPrefix: "strip-branch-remote-",
+      repo: { withRemote: true, branches: ["main", "remote-only"] },
+    });
+
+    try {
+      await leaveBranchOnlyOnRemote(workspace.repoPath, "remote-only");
+
+      await openDraftInSeededWorkspace(page, workspace.workspaceId);
+      await switchBranchFromComposerContextStrip(page, { from: "main", to: "remote-only" });
+
+      await expectComposerContextStripBranch(page, "remote-only");
+      await expectBranchOnDisk(workspace.repoPath, "remote-only");
+      expect(readUpstreamBranch(workspace.repoPath, "remote-only")).toBe("origin/remote-only");
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("the composer context strip stashes uncommitted changes and offers them back on return", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const workspace = await seedWorkspace({
+      repoPrefix: "strip-branch-stash-",
+      repo: { branches: ["main", "dev"] },
+    });
+    const readmePath = path.join(workspace.repoPath, "README.md");
+    const editedReadme = "# Temp Repo\n\nwork in progress\n";
+
+    try {
+      await writeFile(readmePath, editedReadme);
+      await openDraftInSeededWorkspace(page, workspace.workspaceId);
+
+      const dialogs: string[] = [];
+      page.on("dialog", async (dialog) => {
+        dialogs.push(dialog.message());
+        await dialog.accept();
+      });
+
+      await switchBranchFromComposerContextStrip(page, { from: "main", to: "dev" });
+      await expectComposerContextStripBranch(page, "dev");
+      await expectBranchOnDisk(workspace.repoPath, "dev");
+      expect(await readFile(readmePath, "utf8")).toBe("# Temp Repo\n");
+
+      await switchBranchFromComposerContextStrip(page, { from: "dev", to: "main" });
+      await expectComposerContextStripBranch(page, "main");
+      await expect.poll(() => readFile(readmePath, "utf8"), { timeout: 30_000 }).toBe(editedReadme);
+
+      expect(dialogs).toEqual([
+        "Uncommitted changes\n\nYou have uncommitted changes. Stash them before switching branches?",
+        "Restore stashed changes?\n\nThis branch has stashed changes from a previous session. Would you like to restore them?",
+      ]);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("the composer context strip explains a branch held by another worktree", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const workspace = await seedWorkspace({
+      repoPrefix: "strip-branch-held-",
+      repo: { branches: ["main", "dev"] },
+    });
+    const linked = await checkOutBranchInLinkedWorktree(workspace.repoPath, "dev");
+
+    try {
+      await openDraftInSeededWorkspace(page, workspace.workspaceId);
+      await switchBranchFromComposerContextStrip(page, { from: "main", to: "dev" });
+
+      await expect(page.getByTestId("app-toast-message")).toHaveText(
+        `Branch dev is already checked out in another worktree at ${linked.path}. Switch to it there.`,
+        { timeout: 30_000 },
+      );
+      await expectComposerContextStripBranch(page, "main");
+      await expectBranchOnDisk(workspace.repoPath, "main");
+    } finally {
+      await workspace.cleanup();
+      await linked.cleanup();
     }
   });
 });

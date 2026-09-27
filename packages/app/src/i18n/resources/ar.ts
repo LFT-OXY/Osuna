@@ -134,6 +134,8 @@ export const ar: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "محلي",
+      branchSwitchAgentRunning: "لا يمكن تبديل الفرع أثناء تشغيل الوكيل",
+      branchSwitchHostDisconnected: "لا يمكن تبديل الفرع أثناء انقطاع الاتصال بالمضيف",
     },
     cancel: {
       cancelingAgent: "وكيل الإلغاء",
@@ -1531,6 +1533,7 @@ export const ar: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "تبديل فرع مساحة العمل",
     currentBranch: "الفرع الحالي:{{branchName}}. اضغط لتبديل الفرع.",
+    currentBranchUnavailable: "الفرع الحالي: {{branchName}}. {{reason}}",
     placeholder: "تبديل الفرع...",
     searchPlaceholder: "تصفية الفروع...",
     empty: "لم يتم العثور على فروع.",
@@ -1545,6 +1548,9 @@ export const ar: TranslationResources = {
     restore: "يعيد",
     later: "لاحقاً",
     stashRestored: "تمت استعادة التغييرات المخفية",
+    checkedOutElsewhereAt:
+      "الفرع {{branchName}} مستخدم بالفعل في worktree آخر في {{worktreePath}}. بدّله من هناك.",
+    checkedOutElsewhere: "الفرع {{branchName}} مستخدم بالفعل في worktree آخر.",
   },
   agentAutocomplete: {
     searchingWorkspace: "جارٍ البحث في مساحة العمل...",

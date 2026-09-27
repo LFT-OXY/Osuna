@@ -33,7 +33,10 @@ export async function switchBranchFromChangesPanel(
   input: { from: string; to: string },
 ): Promise<void> {
   await branchSwitcherTrigger(page, input.from).click();
+  await pickBranchFromOpenSwitcher(page, input.to);
+}
 
+async function pickBranchFromOpenSwitcher(page: Page, branchName: string): Promise<void> {
   const picker = page.getByTestId("combobox-desktop-container");
   await expect(picker).toBeVisible({ timeout: 30_000 });
 
@@ -42,9 +45,9 @@ export async function switchBranchFromChangesPanel(
   // first guarantees a single, unambiguous match.
   const search = page.getByPlaceholder("Filter branches...");
   await expect(search).toBeVisible({ timeout: 30_000 });
-  await search.fill(input.to);
+  await search.fill(branchName);
 
-  const option = picker.getByText(input.to, { exact: true });
+  const option = picker.getByText(branchName, { exact: true });
   await expect(option).toBeVisible({ timeout: 30_000 });
   await option.click();
 
@@ -56,4 +59,31 @@ export async function switchBranchFromChangesPanel(
 // honest even as the switcher continues to exist inside the Changes panel.
 export async function expectNoBranchSwitcherInWorkspaceHeader(page: Page): Promise<void> {
   await expect(page.getByTestId("workspace-header-branch-switcher")).toHaveCount(0);
+}
+
+// The Composer context strip carries the same switcher in its compact form, under
+// the same accessible name, so the matcher is the Changes one scoped to the strip.
+function composerContextStripBranchTrigger(page: Page, branchName: string) {
+  return page
+    .getByTestId("composer-context-strip")
+    .filter({ visible: true })
+    .first()
+    .getByRole("button", { name: new RegExp(`Current branch: ${escapeRegex(branchName)}\\b`) });
+}
+
+export async function expectComposerContextStripBranch(
+  page: Page,
+  branchName: string,
+): Promise<void> {
+  await expect(composerContextStripBranchTrigger(page, branchName)).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+export async function switchBranchFromComposerContextStrip(
+  page: Page,
+  input: { from: string; to: string },
+): Promise<void> {
+  await composerContextStripBranchTrigger(page, input.from).click();
+  await pickBranchFromOpenSwitcher(page, input.to);
 }

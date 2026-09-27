@@ -130,6 +130,8 @@ export const en = {
     context: {
       worktree: "Worktree",
       local: "Local",
+      branchSwitchAgentRunning: "Can't switch branches while the agent is running",
+      branchSwitchHostDisconnected: "Can't switch branches while the host is disconnected",
     },
     cancel: {
       cancelingAgent: "Canceling agent",
@@ -1555,6 +1557,7 @@ export const en = {
   branchSwitcher: {
     triggerTooltip: "Switch workspace branch",
     currentBranch: "Current branch: {{branchName}}. Press to switch branch.",
+    currentBranchUnavailable: "Current branch: {{branchName}}. {{reason}}",
     placeholder: "Switch branch...",
     searchPlaceholder: "Filter branches...",
     empty: "No branches found.",
@@ -1570,6 +1573,9 @@ export const en = {
     restore: "Restore",
     later: "Later",
     stashRestored: "Stashed changes restored",
+    checkedOutElsewhereAt:
+      "Branch {{branchName}} is already checked out in another worktree at {{worktreePath}}. Switch to it there.",
+    checkedOutElsewhere: "Branch {{branchName}} is already checked out in another worktree.",
   },
   agentAutocomplete: {
     searchingWorkspace: "Searching workspace...",

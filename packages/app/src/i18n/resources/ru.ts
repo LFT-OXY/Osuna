@@ -135,6 +135,8 @@ export const ru: TranslationResources = {
     context: {
       worktree: "Worktree",
       local: "Локально",
+      branchSwitchAgentRunning: "Нельзя переключить ветку, пока агент работает",
+      branchSwitchHostDisconnected: "Нельзя переключить ветку, пока хост отключён",
     },
     cancel: {
       cancelingAgent: "Отменить агента",
@@ -1558,6 +1560,7 @@ export const ru: TranslationResources = {
   branchSwitcher: {
     triggerTooltip: "Переключить ветку рабочего пространства",
     currentBranch: "Текущая ветка: {{branchName}}. Нажмите, чтобы переключить ветку.",
+    currentBranchUnavailable: "Текущая ветка: {{branchName}}. {{reason}}",
     placeholder: "Сменить ветку...",
     searchPlaceholder: "Фильтровать ветки...",
     empty: "Ветки не найдены.",
@@ -1574,6 +1577,9 @@ export const ru: TranslationResources = {
     restore: "Восстановить",
     later: "Позже",
     stashRestored: "Изменения из stash восстановлены.",
+    checkedOutElsewhereAt:
+      "Ветка {{branchName}} уже извлечена в другом worktree ({{worktreePath}}). Переключитесь там.",
+    checkedOutElsewhere: "Ветка {{branchName}} уже извлечена в другом worktree.",
   },
   agentAutocomplete: {
     searchingWorkspace: "Поиск в рабочем пространстве...",

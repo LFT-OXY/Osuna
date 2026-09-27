@@ -25,3 +25,39 @@ export function resolveComposerContext(gitStatus: CheckoutStatusPayload | null):
     branch: gitStatus.currentBranch,
   };
 }
+
+/**
+ * 当前这个 Composer 背后的 agent：草稿（还没创建，切分支就是在选起点）、空闲或运行中。
+ * 只看当前这个 agent，不汇总同目录下的其他 agent。
+ */
+export type ComposerAgentPhase = "draft" | "idle" | "running";
+
+export interface BranchSwitchConditions {
+  agent: ComposerAgentPhase;
+  isHostConnected: boolean;
+}
+
+export type BranchSwitchState =
+  | { kind: "hidden" }
+  | { kind: "enabled" }
+  | { kind: "disabled"; reason: "agent-running" | "host-disconnected" };
+
+/**
+ * 上下文条上的分支切换触发器：没有分支名（detached HEAD、非 git、状态未到）时不显示；
+ * 当前 agent 运行中时置灰，避免它读写到一半工作区被换掉；草稿没有运行中的 agent，始终可用。
+ */
+export function resolveBranchSwitch(
+  context: ComposerContext,
+  conditions: BranchSwitchConditions,
+): BranchSwitchState {
+  if (!context.branch) {
+    return { kind: "hidden" };
+  }
+  if (!conditions.isHostConnected) {
+    return { kind: "disabled", reason: "host-disconnected" };
+  }
+  if (conditions.agent === "running") {
+    return { kind: "disabled", reason: "agent-running" };
+  }
+  return { kind: "enabled" };
+}
