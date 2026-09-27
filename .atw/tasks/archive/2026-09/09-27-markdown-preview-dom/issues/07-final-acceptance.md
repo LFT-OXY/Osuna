@@ -27,5 +27,5 @@
 - 补了 01 未勾的两项：源代码视图打开 `.mise.toml`、`scripts/dev-app.sh` 着色正常；在 dev daemon 上用 haiku 起一个 agent 回 bash 代码块，对话里注释、参数、字符串分色（该 agent 与它新建的工作区留在 checkout 本地的 dev home 里）。
 - 回归：对话 / PR 评论 / changelog / plan 卡片走的 `components/markdown/renderer.tsx` 与 `html-ish.ts` 在分支上未改；`highlighted-code-block.tsx` 只是把别名表挪到 `fence/language.ts`，取首词逻辑等价；原生端 `markdown-preview/index.tsx` 只改了 props 类型。
 - 验证：`components/markdown`、`assistant-file-links`、`file-pane/markdown-preview`、`highlight-cache` 共 17 个单测文件 147 个用例通过；highlight 包 5 个文件 110 个用例通过；file-editing e2e 中 5 个 markdown 相关用例（README、刷新、长行换行、深浅色、五种提示块）本地通过；app 与 highlight typecheck 通过，排除 `.expo` 类型复核后改动文件无错误（剩 2 个错误在本分支未改的 `*.browser.test.tsx`）；改动文件 lint 0 警告。
-- 顺带发现（main 上已有，不是本分支引入）：应用重新可见时文件面板会重读文件，读取期间 `preview-lifecycle/model.ts` 的 `read_pending` 不带旧预览，预览整块重挂载，滚动位置回到顶部。本票没有修改，需要的话另开任务。
+- 已排除的疑点：Playwright 通过 CDP 连上 dev 桌面端的瞬间，预览内容会短暂消失、滚动归零。这只是 CDP 接入带来的假象：`preview-lifecycle/model.ts` 在重读期间保留旧预览，用户手动切换应用与标签页都没有复现。
 

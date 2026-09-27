@@ -300,7 +300,7 @@ Composer 底部上下文条的分支名换成 BranchSwitcher 紧凑外观，点�
 
 ### Summary
 
-dev 桌面端深浅色目检 README.zh-CN.md（居中、徽章横排、NOTE 提示块、截图、bash 着色），补验对话 bash 与源代码视图 sh/toml 着色；markdown 相关 e2e 5 个与单测通过，app/highlight typecheck、lint 通过；PRD 验收项全勾，任务归档。遗留：应用重新可见时文件预览重挂载、滚动归零（main 既有，未修）。
+dev 桌面端深浅色目检 README.zh-CN.md（居中、徽章横排、NOTE 提示块、截图、bash 着色），补验对话 bash 与源代码视图 sh/toml 着色；markdown 相关 e2e 5 个与单测通过，app/highlight typecheck、lint 通过；PRD 验收项全勾，任务归档。CDP 连接瞬间预览重挂载、滚动归零是 CDP 假象，用户手动切应用 / 标签页未复现，无遗留。
 
 ### Git Commits
 
