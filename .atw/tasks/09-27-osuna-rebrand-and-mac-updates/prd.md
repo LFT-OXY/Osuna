@@ -97,7 +97,7 @@
 - daemon 自更新：server 不再在 `server_info.features` 中声明 `daemonSelfUpdate`，对应的 RPC 也拒绝执行。官方手机 App 和本仓库的界面都靠这个 capability 判断，所以会一起隐藏入口，这符合 `docs/protocol-compatibility.md` 的 feature contract。
 - CLI 找不到桌面端时的提示、onboard 里的下载链接改为指向本仓库。
 - 反馈与 Issue 链接、仓库链接改为指向 `LFT-OXY/Osuna`。删除赞助链接。删除应用和 CLI 里所有指向上游文档站的链接，包括只为承载这些链接而存在的「了解更多」元素。
-- 工作流：`android-apk-release`、`deploy-app`、`deploy-website`、`deploy-relay` 去掉 tag 与 push 触发，保留手动触发和文件本身。
+- 工作流：`android-apk-release`、`deploy-app`、`deploy-website`、`deploy-relay` 只保留 `workflow_dispatch`，文件本身保留。`deploy-website` 的 `release: published` 触发一并去掉（发布 Desktop Release 时同样会必然失败）；`deploy-relay` 原本就只有手动触发。job 里只对 push / release 事件有意义的条件（`deploy-website` 的 `if`、`android-apk-release` 的 `|| github.ref` 兜底）有意保留，把触发加回来时只改 `on:` 一处。fork 发版文档写明这四个工作流在 fork 下停用。
 
 ### macOS 签名（ADR 0001）
 
