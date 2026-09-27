@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
-- **Last Active**: 2026-09-20
+- **Total Sessions**: 5
+- **Last Active**: 2026-09-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~144 | Active |
+| `journal-1.md` | ~169 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-09-27 | ui-redesign 工单 11、CI 修复、验收归档与合并 | `8377ff61b`, `8f15ffc45`, `89e3baa1e` | `main` |
 | 4 | 2026-09-20 | 插件主题与内置主题重名的消歧 | `45fe656ab` | `feat/usage-stats` |
 | 3   | 2026-09-18 | 计划（Schedules）功能面文案接入 i18n，补齐 9 种语言                            | `f994fdea9` | `main` |
 | 2   | 2026-09-18 | 实现并归档 more-ui-themes：13 套深浅色主题变体、终端 ANSI 随主题、跟随系统配对 | `8eadc588b` | `main` |

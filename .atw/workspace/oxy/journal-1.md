@@ -142,3 +142,28 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 5: ui-redesign 工单 11、CI 修复、验收归档与合并
+<!-- atw-session: v=2 fp=a4a72314c2ea4e36 -->
+
+**Date**: 2026-09-27
+**Task**: ui-redesign 工单 11、CI 修复、验收归档与合并
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+实现工单 11：设置页去掉横向分割线，新增派生角色 borderCardRow（边框色 50%）作为卡片内行分隔。开 PR #4 跑 CI，修复 4 处失败：shimmer-text.web.tsx 的 TS2322（本机被 .expo 生成类型掩盖），以及三条未随工单 06/09 设计更新的 e2e 断言。CI 全绿后验收通过；原生端三项作为已知缺口接受；PRD 第 12 条改为每阶段一个提交、可按倒序回滚。任务已归档，PR #4 以 rebase 合并到 main。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8377ff61b` | feat(app): 设置页去掉横向分割线，卡片内行分隔改为边框色 50%（borderCardRow） |
+| `8f15ffc45` | fix(app): 修复 CI 上 ui-redesign 的 typecheck 与桌面字号 e2e |
+| `89e3baa1e` | test(app): e2e 随 ui-redesign 更新：设置分组标题下距 8px，紧凑概览 sheet 放出 20 条工具行 |
+
+### Status
+
+[OK] **Completed**
