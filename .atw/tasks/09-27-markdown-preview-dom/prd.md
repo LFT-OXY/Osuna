@@ -183,18 +183,18 @@ dockerfile / ini，所以这些代码块没有颜色。
 
 ## Acceptance Criteria
 
-- [ ] 桌面端打开本仓库 `README.zh-CN.md`，与 t3code 截图对照：头部居中、徽章横排、`[!NOTE]` 为带图标与「注意」标题的提示块、截图正常显示。
-- [ ] bash / shell / toml / sql / diff / dockerfile / ini 代码块着色，颜色随语法主题与深浅色切换。
-- [ ] 代码块头部有语言图标、换行开关、复制按钮，均可用；无语言代码块为纯文本。
-- [ ] 相对路径图片（两种写法）显示；图片文件更新后预览更新；缺失图片显示占位。
-- [ ] 仓库内文件链接为带图标 chip，点击在新文件标签打开；页内锚点滚动到对应标题；外链用浏览器打开。
-- [ ] `<script>`、事件属性、`javascript:` 链接、`iframe`、`style` 被剥离且不执行。
-- [ ] GFM 表格、任务列表、删除线正常；front matter 表格保留；mermaid 图表仍渲染。
-- [ ] 提示块标题随界面语言本地化，所有 locale 补齐。
-- [ ] 对话里的 bash 代码块也有颜色。
-- [ ] 原生端预览、对话 / PR / changelog / plan 卡片渲染无变化，现有相关测试不改断言、继续通过。
-- [ ] 移植文件保留 t3code MIT 声明。
-- [ ] 上述测试接缝的用例补齐并通过；改动涉及的包 typecheck 与 lint 通过。
+- [x] 桌面端打开本仓库 `README.zh-CN.md`，与 t3code 截图对照：头部居中、徽章横排、`[!NOTE]` 为带图标与「注意」标题的提示块、截图正常显示。（07：没有 t3code 截图，按这四项加 bash 着色逐项目检并对照 t3code 样式源码，见 `issues/07-final-acceptance.md`。）
+- [x] bash / shell / toml / sql / diff / dockerfile / ini 代码块着色，颜色随语法主题与深浅色切换。
+- [x] 代码块头部有语言图标、换行开关、复制按钮，均可用；无语言代码块为纯文本。
+- [x] 相对路径图片（两种写法）显示；图片文件更新后预览更新；缺失图片显示占位。
+- [x] 仓库内文件链接为带图标 chip，点击在新文件标签打开；页内锚点滚动到对应标题；外链用浏览器打开。
+- [x] `<script>`、事件属性、`javascript:` 链接、`iframe`、`style` 被剥离且不执行。
+- [x] GFM 表格、任务列表、删除线正常；front matter 表格保留；mermaid 图表仍渲染。
+- [x] 提示块标题随界面语言本地化，所有 locale 补齐。
+- [x] 对话里的 bash 代码块也有颜色。
+- [x] 原生端预览、对话 / PR / changelog / plan 卡片渲染无变化，现有相关测试不改断言、继续通过。
+- [x] 移植文件保留 t3code MIT 声明。
+- [x] 上述测试接缝的用例补齐并通过；改动涉及的包 typecheck 与 lint 通过。
 
 ## Further Notes
 
