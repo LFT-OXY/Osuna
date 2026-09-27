@@ -244,3 +244,47 @@ Pi 适配层在实时与历史回放两条路上遵守 custom 消息的 display:
 
 - 为 OMP 的 skill-prompt 全文显示问题新建任务（含实时去重与轮次提前结算的核实）
 - Pi 扩展 notify 提示行（observational memory、workspace history）是否折叠，待用户决定
+
+
+## Session 8: composer-branch-switch：从 Composer 上下文条切换分支
+<!-- atw-session: v=2 fp=11dc4833806961a1 -->
+
+**Date**: 2026-09-27
+**Task**: composer-branch-switch：从 Composer 上下文条切换分支
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+Composer 底部上下文条的分支名换成 BranchSwitcher 紧凑外观，点开即可搜索并切换本地 / 远程分支，沿用 Stash 并切换与切回恢复；当前 agent 运行中或 host 断开时置灰并在 tooltip 说明原因，草稿不受运行状态影响；分支被别的 worktree 占用时显示本地化提示（Changes 面板同样受益）。用户在 dev 桌面端实测通过后归档。
+
+### Main Changes
+
+- BranchSwitcher 新增 appearance="strip" 与 disabledReason；strip 触发器复用 toolbarLabelTriggerStyle，下拉 top-start、tooltip 向上，窄条仍高 28px
+- context-strip/model.ts 新增纯函数 resolveBranchSwitch（agent: draft|idle|running + isHostConnected → hidden/enabled/disabled+原因）；Composer 传入 workspaceId、cwd 与判定条件
+- git/branch-switcher-operations.ts 新增 parseBranchCheckedOutElsewhere，覆盖 git 新旧两种措辞；useBranchSwitcher 直接切换与 stash 后切换两条失败路径都换成本地化文案
+- 9 个 locale 补文案；docs/design.md 更新窄条描述；.atw/spec/app/frontend/testing.md 记下 e2e 需先 clickNewChat、withRemote 夹具的 remote.git 会让工作区变脏
+- atw-code-review 两轴无硬性阻塞；按评审改为三态 agent、复用工具栏触发器样式、补侧栏/标题断言与 worktree 占用失败用例、修正 zh-CN/pt-BR 用词，并把实际实现写回 PRD
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1ccc71dd0` | feat(app): Composer 上下文条的分支名可点击切换分支 |
+| `2e4093c98` | chore(task): archive 09-27-composer-branch-switch |
+
+### Testing
+
+- [OK] 模型与占用识别单测、i18n 契约测试、lint、app typecheck 通过；app unit 全量 631 文件 5749 用例通过
+- [OK] e2e branch-switcher.spec.ts 5 个用例通过；临时破坏占用提示验证断言会失败
+- [OK] 截图确认窄条高度不变、悬停与置灰态 tooltip、回车可打开下拉；用户在 dev 桌面端（daemon 6769）实测通过
+- [OK] 功能提交因本机 cli tsgo 已知 TS7006 退化用 --no-verify，归档提交跳过 typecheck
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- stash@{0}（prettier 误格式化前的备份）已被提交取代，确认后可 git stash drop
+- 新建分支（基于当前 HEAD 创建并切换）按 PRD Out of Scope 另开任务

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-09-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~246 | Active |
+| `journal-1.md` | ~290 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-09-27 | composer-branch-switch：从 Composer 上下文条切换分支 | `1ccc71dd0`, `2e4093c98` | `main` |
 | 7 | 2026-09-27 | pi-hidden-context：隐藏 Pi 注入上下文与 skill 展开全文 | `2838a4c53`, `fec0d9406` | `main` |
 | 6 | 2026-09-27 | fork-desktop-distribution 验收归档 | - | `main` |
 | 5 | 2026-09-27 | ui-redesign 工单 11、CI 修复、验收归档与合并 | `8377ff61b`, `8f15ffc45`, `89e3baa1e` | `main` |
