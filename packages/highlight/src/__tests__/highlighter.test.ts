@@ -86,6 +86,78 @@ describe("highlightCode", () => {
     expect(stringToken?.style).toBe("string");
   });
 
+  it("highlights shell scripts", () => {
+    const code = [
+      "# install deps",
+      'export NODE_ENV="production"',
+      'if [ -f "$HOME/.zshrc" ]; then',
+      "  npm install --save-dev vitest",
+      "fi",
+    ].join("\n");
+    const result = highlightCode(code, "install.sh");
+
+    expect(result).toHaveLength(5);
+    expect(result[0].find((t) => t.text === "# install deps")?.style).toBe("comment");
+    expect(result[1].find((t) => t.text === "export")?.style).toBe("keyword");
+    expect(result[1].find((t) => t.text.includes("production"))?.style).toBe("string");
+    expect(result[2].find((t) => t.text === "if")?.style).toBe("keyword");
+    expect(result[2].find((t) => t.text === "$HOME")?.style).toBe("definition");
+    expect(result[3].find((t) => t.text === "--save-dev")?.style).toBe("attribute");
+  });
+
+  it("highlights TOML", () => {
+    const code = '# config\n[package]\nname = "osuna"\nversion = 3';
+    const result = highlightCode(code, "Cargo.toml");
+
+    expect(result[0].find((t) => t.text === "# config")?.style).toBe("comment");
+    expect(result[1].find((t) => t.text === "[package]")?.style).toBe("keyword");
+    expect(result[2].find((t) => t.text === "name")?.style).toBe("property");
+    expect(result[2].find((t) => t.text.includes("osuna"))?.style).toBe("string");
+    expect(result[3].find((t) => t.text === "3")?.style).toBe("number");
+  });
+
+  it("highlights SQL", () => {
+    const code = "-- adults\nSELECT id FROM users WHERE name = 'a' AND age > 18;";
+    const result = highlightCode(code, "query.sql");
+
+    expect(result[0].find((t) => t.text === "-- adults")?.style).toBe("comment");
+    expect(result[1].find((t) => t.text === "SELECT")?.style).toBe("keyword");
+    expect(result[1].find((t) => t.text === "WHERE")?.style).toBe("keyword");
+    expect(result[1].find((t) => t.text === "'a'")?.style).toBe("string");
+    expect(result[1].find((t) => t.text === "18")?.style).toBe("number");
+  });
+
+  it("highlights diffs with distinct inserted and deleted lines", () => {
+    const code = "@@ -1,2 +1,2 @@\n context\n-old line\n+new line";
+    const result = highlightCode(code, "change.diff");
+
+    expect(result[0].find((t) => t.text.startsWith("@@"))?.style).toBe("meta");
+    expect(result[1]).toEqual([{ text: " context", style: null }]);
+    expect(result[2]).toEqual([{ text: "-old line", style: "keyword" }]);
+    expect(result[3]).toEqual([{ text: "+new line", style: "string" }]);
+  });
+
+  it("highlights Dockerfiles by name", () => {
+    const code = '# base\nFROM node:20 AS build\nRUN npm ci && echo "ok"\nEXPOSE 3000';
+    const result = highlightCode(code, "Dockerfile");
+
+    expect(result[0].find((t) => t.text === "# base")?.style).toBe("comment");
+    expect(result[1].find((t) => t.text === "FROM")?.style).toBe("keyword");
+    expect(result[2].find((t) => t.text === "RUN")?.style).toBe("keyword");
+    expect(result[2].find((t) => t.text.includes("ok"))?.style).toBe("string");
+    expect(result[3].find((t) => t.text === "3000")?.style).toBe("number");
+  });
+
+  it("highlights INI files", () => {
+    const code = "; comment\n[section]\nkey = value";
+    const result = highlightCode(code, "settings.ini");
+
+    expect(result[0].find((t) => t.text === "; comment")?.style).toBe("comment");
+    expect(result[1].find((t) => t.text === "[section]")?.style).toBe("heading");
+    expect(result[2].find((t) => t.text.trim() === "key")?.style).toBe("definition");
+    expect(result[2].find((t) => t.text.trim() === "value")?.style).toBe("string");
+  });
+
   it("highlights Svelte components across script, markup, and style", () => {
     const code = [
       '<script lang="ts">',

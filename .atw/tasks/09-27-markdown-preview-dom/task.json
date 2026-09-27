@@ -3,7 +3,7 @@
   "name": "markdown-preview-dom",
   "title": "DOM markdown file preview on web with Lezer highlighting",
   "description": "Render the markdown file preview on web/Electron with a DOM renderer ported from t3code (raw HTML, GitHub alerts, relative images/links, code block header), extend @getpaseo/highlight languages; native keeps the RN renderer. See docs/adr/0001.",
-  "status": "specify",
+  "status": "implement",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -12,7 +12,7 @@
   "assignee": "oxy",
   "createdAt": "2026-09-27",
   "completedAt": null,
-  "branch": null,
+  "branch": "feat/markdown-preview-dom",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
@@ -22,5 +22,7 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "0a36d29355f900212943f054dfc7b7e6ef2b4bcb"
+  }
 }

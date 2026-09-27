@@ -1,6 +1,12 @@
 import { defineLanguageFacet, Language, StreamLanguage } from "@codemirror/language";
 import { dart } from "@codemirror/legacy-modes/mode/clike";
+import { diff } from "@codemirror/legacy-modes/mode/diff";
+import { dockerFile } from "@codemirror/legacy-modes/mode/dockerfile";
+import { properties } from "@codemirror/legacy-modes/mode/properties";
+import { shell } from "@codemirror/legacy-modes/mode/shell";
+import { standardSQL } from "@codemirror/legacy-modes/mode/sql";
 import { swift } from "@codemirror/legacy-modes/mode/swift";
+import { toml } from "@codemirror/legacy-modes/mode/toml";
 import { parser as jsParser } from "@lezer/javascript";
 import { parser as jsonParser } from "@lezer/json";
 import { parser as cssParser } from "@lezer/css";
@@ -15,6 +21,7 @@ import { parser as rustParser } from "@lezer/rust";
 import { parser as xmlParser } from "@lezer/xml";
 import { parser as yamlParser } from "@lezer/yaml";
 import { parser as elixirParser } from "lezer-elixir";
+import { tags } from "@lezer/highlight";
 import type { Parser } from "@lezer/common";
 import { csharpLanguage } from "./csharp/language.js";
 import { astroParser } from "./astro/parser.js";
@@ -26,6 +33,17 @@ function language(parser: Parser): Language {
   return new Language(defineLanguageFacet(), parser);
 }
 
+const shellLanguage = StreamLanguage.define(shell);
+// diff 的 inserted/deleted 与 ini 值的 quote 在语义角色表里没有对应项，就地映射到
+// 现有角色（新增行 string、删除行 keyword，值 string），不给主题加字段。
+const diffLanguage = StreamLanguage.define({
+  ...diff,
+  tokenTable: { inserted: tags.string, deleted: tags.keyword },
+});
+const iniLanguage = StreamLanguage.define({ ...properties, tokenTable: { quote: tags.string } });
+
+// 键同时服务文件扩展名与 fence 语言名（调用方把 ```bash 当作 `x.bash` 查表）；
+// 无扩展名的文件按整个文件名查表，`Dockerfile`（含带目录的路径）因此命中。
 const languagesByExtension: Record<string, Language> = {
   // JavaScript/TypeScript
   js: language(jsParser),
@@ -82,13 +100,32 @@ const languagesByExtension: Record<string, Language> = {
   // Elixir
   ex: language(elixirParser),
   exs: language(elixirParser),
+  // Shell
+  sh: shellLanguage,
+  bash: shellLanguage,
+  zsh: shellLanguage,
+  shell: shellLanguage,
+  console: shellLanguage,
+  // TOML
+  toml: StreamLanguage.define(toml),
+  // SQL
+  sql: StreamLanguage.define(standardSQL),
+  // Diff
+  diff: diffLanguage,
+  patch: diffLanguage,
+  // Dockerfile
+  dockerfile: StreamLanguage.define(dockerFile),
+  // INI / properties
+  ini: iniLanguage,
+  properties: iniLanguage,
   // Markdown
   md: language(markdownParser),
   mdx: language(markdownParser),
 };
 
 export function getLanguageForFile(filename: string): Language | null {
-  const ext = filename.split(".").pop()?.toLowerCase();
+  const basename = filename.split(/[\\/]/).pop() ?? filename;
+  const ext = basename.split(".").pop()?.toLowerCase();
   if (!ext) return null;
   return languagesByExtension[ext] ?? null;
 }

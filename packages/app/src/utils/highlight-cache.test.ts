@@ -30,6 +30,12 @@ describe("tokenizeToLines", () => {
     expect(lines?.[0].some((token) => token.style === "keyword")).toBe(true);
   });
 
+  it("highlights a ```bash fence name as shell", () => {
+    const lines = tokenizeToLines('# setup\nexport PATH="$HOME/bin"', "bash");
+    expect(lines?.[0]).toEqual([{ text: "# setup", style: "comment" }]);
+    expect(lines?.[1].find((token) => token.text === "export")?.style).toBe("keyword");
+  });
+
   it("returns null when there is no extension", () => {
     expect(tokenizeToLines("whatever", null)).toBeNull();
   });

@@ -27,6 +27,18 @@ describe("isLanguageSupported", () => {
     expect(isLanguageSupported("Page.astro")).toBe(true);
   });
 
+  it("returns true for shell and config files, including Dockerfile by name", () => {
+    expect(isLanguageSupported("install.sh")).toBe(true);
+    expect(isLanguageSupported("Cargo.toml")).toBe(true);
+    expect(isLanguageSupported("query.sql")).toBe(true);
+    expect(isLanguageSupported("change.diff")).toBe(true);
+    expect(isLanguageSupported("change.patch")).toBe(true);
+    expect(isLanguageSupported("Dockerfile")).toBe(true);
+    expect(isLanguageSupported("/repo/docker/Dockerfile")).toBe(true);
+    expect(isLanguageSupported("settings.ini")).toBe(true);
+    expect(isLanguageSupported("app.properties")).toBe(true);
+  });
+
   it("returns false for unsupported file extensions", () => {
     expect(isLanguageSupported("test.xyz")).toBe(false);
     expect(isLanguageSupported("test.txt")).toBe(false);
@@ -67,6 +79,21 @@ describe("getSupportedExtensions", () => {
     expect(extensions).toContain("json");
     expect(extensions).toContain("svelte");
     expect(extensions).toContain("astro");
+  });
+});
+
+describe("fence language names", () => {
+  it.each([
+    ["bash", "sh"],
+    ["zsh", "sh"],
+    ["shell", "sh"],
+    ["console", "sh"],
+    ["patch", "diff"],
+    ["properties", "ini"],
+  ])("resolves ```%s to the same language as ```%s", (fence, canonical) => {
+    const language = getLanguageForFile(`x.${fence}`);
+    expect(language).not.toBeNull();
+    expect(language).toBe(getLanguageForFile(`x.${canonical}`));
   });
 });
 
