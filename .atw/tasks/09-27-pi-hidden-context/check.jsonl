@@ -1,0 +1,7 @@
+{"file": ".atw/tasks/09-27-pi-hidden-context/prd.md", "reason": "Spec: requirements and acceptance criteria"}
+{"file": ".atw/tasks/09-27-pi-hidden-context/research/interview-decisions.md", "reason": "Interview decisions and code evidence"}
+{"file": "docs/timeline-sync.md", "reason": "Convention: system-injected prompts absent from timeline; canonical user row identity"}
+{"file": "docs/providers.md", "reason": "Pi/OMP provider conventions to update"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "server 包编码规范入口"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "provider 测试接缝与假进程用法"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "server 代码质量约定"}

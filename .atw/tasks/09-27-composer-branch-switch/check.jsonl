@@ -1,0 +1,8 @@
+{"file": ".atw/tasks/09-27-composer-branch-switch/prd.md", "reason": "Spec: requirements and acceptance criteria"}
+{"file": ".atw/tasks/09-27-composer-branch-switch/research/interview-decisions.md", "reason": "Interview decisions and code evidence"}
+{"file": "docs/glossary.md", "reason": "Composer context strip / Branch / Workspace kind / Directory-backed surface 术语"}
+{"file": "docs/menus.md", "reason": "菜单与 popover 规则（selected/active、紧凑屏 sheet）"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 包编码规范入口"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件写法与复用"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "hook 与数据查询约定"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单测接缝与 e2e 组织方式"}

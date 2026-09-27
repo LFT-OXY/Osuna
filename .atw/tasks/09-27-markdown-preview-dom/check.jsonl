@@ -1,0 +1,9 @@
+{"file": ".atw/tasks/09-27-markdown-preview-dom/prd.md", "reason": "Spec: requirements and acceptance criteria"}
+{"file": ".atw/tasks/09-27-markdown-preview-dom/research/interview-decisions.md", "reason": "Interview decisions, Osuna 现状与 t3code 参考位置"}
+{"file": "docs/adr/0001-markdown-file-preview-dom-renderer-with-lezer.md", "reason": "DOM 渲染与不用 Shiki 的决策"}
+{"file": "docs/file-icons.md", "reason": "Material 文件图标的使用与新增方式"}
+{"file": "docs/unistyles.md", "reason": "主题 token 与样式约定"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 包编码规范入口"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "样式与主题 token"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件写法与平台分支文件"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单测接缝与 e2e 组织方式"}
