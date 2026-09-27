@@ -277,6 +277,38 @@ function formatLogs({ stdout, stderr, userData, daemonHome }) {
   ].join("\n\n");
 }
 
+function collectTempDirDiagnostics(rootDir, destDir) {
+  const listing = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (readError) {
+      listing.push(`<unreadable> ${dir}: ${readError}`);
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      const relativePath = path.relative(rootDir, fullPath);
+      if (entry.isDirectory()) {
+        listing.push(`${relativePath}${path.sep}`);
+        walk(fullPath);
+        continue;
+      }
+      const size = fs.statSync(fullPath, { throwIfNoEntry: false })?.size ?? -1;
+      listing.push(`${relativePath} (${size} B)`);
+      if (entry.name.endsWith(".log") && size >= 0 && size < 5 * 1024 * 1024) {
+        const target = path.join(destDir, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(fullPath, target);
+      }
+    }
+  };
+  walk(rootDir);
+  fs.mkdirSync(destDir, { recursive: true });
+  fs.writeFileSync(path.join(destDir, "listing.txt"), `${listing.join("\n")}\n`);
+}
+
 async function writeSmokeArtifacts({ page, stdout, stderr, userData, daemonHome, error }) {
   const artifactDir = process.env.PASEO_DESKTOP_SMOKE_ARTIFACT_DIR?.trim();
   if (!artifactDir) {
@@ -303,6 +335,17 @@ async function writeSmokeArtifacts({ page, stdout, stderr, userData, daemonHome,
   const daemonLog = readIfExists(path.join(daemonHome, "daemon.log"));
   if (daemonLog !== null) {
     fs.writeFileSync(path.join(artifactDir, "daemon.log"), daemonLog);
+  }
+
+  if (error) {
+    // 应用可能把日志写到别处（例如 Windows 按 USERPROFILE 解析出的 AppData），
+    // 临时目录在 finally 中会被删除，这里先把两棵目录的清单与日志留下。
+    collectTempDirDiagnostics(userData, path.join(artifactDir, "user-data"));
+    collectTempDirDiagnostics(daemonHome, path.join(artifactDir, "daemon-home"));
+    if (process.platform === "win32") {
+      const tasks = spawnSync("tasklist.exe", ["/v", "/fo", "csv"], { encoding: "utf8" });
+      fs.writeFileSync(path.join(artifactDir, "tasklist.csv"), tasks.stdout ?? String(tasks.error));
+    }
   }
 
   if (page) {
