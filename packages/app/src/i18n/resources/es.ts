@@ -1143,7 +1143,6 @@ export const es: TranslationResources = {
     title: "Novedades",
     installed: "Instalada",
     showMore: "Mostrar más",
-    openWebsite: "Registro de cambios completo",
     error: {
       title: "No se pudo cargar el registro de cambios",
       description: "Comprueba tu conexión e inténtalo de nuevo.",
@@ -1216,7 +1215,6 @@ export const es: TranslationResources = {
       diagnostics: "Ejecutar diagnóstico",
       shortcuts: "Atajos de teclado",
       reportIssue: "Informar de un problema",
-      discord: "Discord",
       github: "Crear incidencia en GitHub",
       whatsNew: "Novedades",
       appName: "Paseo",
@@ -1415,8 +1413,6 @@ export const es: TranslationResources = {
         copied: "Estado copiado al portapapeles.",
         fetchFailed: "No se pudo recuperar el estado del demonio:{{message}}",
       },
-      advancedSettings: "Configuraciones avanzadas",
-      openAdvancedSettings: "Abrir configuración avanzada del demonio",
       versionMismatch:
         "Las versiones de la aplicación y del demonio no coinciden. Actualice ambos a la misma versión para obtener la mejor experiencia.",
       loadFailed: "No se puede cargar el estado del demonio del escritorio.",
@@ -1812,8 +1808,6 @@ export const es: TranslationResources = {
       enableTitle: "¿Habilitar el relé?",
       enableDescription:
         "El relé permite conectar este dispositivo desde cualquier lugar. El tráfico de emparejamiento está cifrado de extremo a extremo.",
-      relayDocs: "Cómo funciona el relé",
-      relayDocsAccessibility: "Leer cómo funciona el relé de Paseo",
       enableRelay: "Habilitar relé",
       enablingRelay: "Habilitando...",
       notNow: "Ahora no",
@@ -2140,7 +2134,6 @@ export const es: TranslationResources = {
       preferredHint: "Elige el modelo que usa Paseo",
       model: "Modelo",
       fallbackHint: "Si no está disponible, Paseo usa otro modelo disponible",
-      docs: "Documentación",
       saveError: "No se pudo actualizar la generación de metadatos",
     },
     general: {
@@ -2429,10 +2422,6 @@ export const es: TranslationResources = {
     },
     integrations: {
       title: "Integraciones",
-      docs: {
-        cli: "DocumentosCLI",
-        openCli: "Abrir la documentación deCLI",
-      },
       commandLine: {
         title: "línea de comando",
         description: "Agentes de control y script desde tu terminal",
@@ -2839,9 +2828,6 @@ export const es: TranslationResources = {
       worktree: {
         title: "Ganchos del ciclo de vida del árbol de trabajo",
         info: "Comandos que se ejecutan cuando se crea o elimina un árbol de trabajo para este proyecto",
-        docs: "Documentos",
-        docsTooltip:
-          "Consulte los documentos para obtener más detalles y las variables de entorno disponibles para estos comandos.",
         setup: "Configuración",
         setupAccessibility: "Comandos de configuración del árbol de trabajo",
         uncommittedTitle: "Confirma los cambios de paseo.json",
@@ -2916,7 +2902,6 @@ export const es: TranslationResources = {
       hostLoadError: "{{host}}: no se pudieron cargar los horarios",
       emptyTitle: "No hay horarios activos",
       emptyDescription: "Los horarios ejecutan agentes con una cadencia.",
-      seeDocs: "Ver documentación",
       endedEmptyTitle: "No hay horarios finalizados",
     },
     form: {

@@ -1115,7 +1115,6 @@ export const en = {
     title: "What's new",
     installed: "Installed",
     showMore: "Show more",
-    openWebsite: "Full changelog",
     error: {
       title: "Unable to load the changelog",
       description: "Check your connection and try again.",
@@ -1188,7 +1187,6 @@ export const en = {
       diagnostics: "Run diagnostics",
       shortcuts: "Keyboard shortcuts",
       reportIssue: "Report an issue",
-      discord: "Discord",
       github: "Create GitHub issue",
       whatsNew: "What's new",
       appName: "Paseo",
@@ -1403,8 +1401,6 @@ export const en = {
         copied: "Status copied to clipboard.",
         fetchFailed: "Failed to fetch daemon status: {{message}}",
       },
-      advancedSettings: "Advanced settings",
-      openAdvancedSettings: "Open advanced daemon settings",
       versionMismatch:
         "App and daemon versions don't match. Update both to the same version for the best experience.",
       loadFailed: "Unable to load desktop daemon status.",
@@ -1789,8 +1785,6 @@ export const en = {
       enableTitle: "Enable relay?",
       enableDescription:
         "Relay lets this device connect from anywhere. Pairing traffic is end-to-end encrypted.",
-      relayDocs: "How relay works",
-      relayDocsAccessibility: "Read how Paseo relay works",
       enableRelay: "Enable relay",
       enablingRelay: "Enabling...",
       notNow: "Not now",
@@ -2213,7 +2207,6 @@ export const en = {
       preferredHint: "Choose the model Paseo uses",
       model: "Model",
       fallbackHint: "If it is unavailable, Paseo falls back to another available model",
-      docs: "Docs",
       saveError: "Unable to update metadata generation",
     },
     general: {
@@ -2494,10 +2487,6 @@ export const en = {
     },
     integrations: {
       title: "Integrations",
-      docs: {
-        cli: "CLI docs",
-        openCli: "Open CLI documentation",
-      },
       commandLine: {
         title: "Command line",
         description: "Control and script agents from your terminal",
@@ -2580,8 +2569,6 @@ export const en = {
         sectionTitle: "Orchestration skills",
         title: "Orchestration skills",
         description: "Teach your agents to orchestrate through the CLI",
-        docs: "Skills",
-        openDocs: "Open skills documentation",
         unavailable: "Connect to this host to manage orchestration skills",
         unsupported: "Update this host to manage orchestration skills",
         statusFailed: "Unable to check orchestration skills status.",
@@ -2903,9 +2890,6 @@ export const en = {
       worktree: {
         title: "Worktree lifecycle hooks",
         info: "Commands that run when a worktree is created or torn down for this project",
-        docs: "Docs",
-        docsTooltip:
-          "See docs for more details and the environment variables available to these commands",
         setup: "Setup",
         setupAccessibility: "Worktree setup commands",
         uncommittedTitle: "Commit paseo.json changes",
@@ -2979,7 +2963,6 @@ export const en = {
       hostLoadError: "{{host}}: Could not load schedules",
       emptyTitle: "No active schedules",
       emptyDescription: "Schedules run agents on a cadence.",
-      seeDocs: "See docs",
       endedEmptyTitle: "No ended schedules",
     },
     form: {

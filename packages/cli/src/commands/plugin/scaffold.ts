@@ -100,11 +100,11 @@ export function GreetingSurface({ theme, layout }: PluginSurfaceProps) {
       </Pressable>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel="Open the Paseo website"
+        accessibilityLabel="Open the Osuna repository"
         style={styles.button}
-        onPress={() => openExternal("https://paseo.sh")}
+        onPress={() => openExternal("https://github.com/LFT-OXY/Osuna")}
       >
-        <Text style={styles.buttonText}>Open paseo.sh</Text>
+        <Text style={styles.buttonText}>Open Osuna on GitHub</Text>
       </Pressable>
     </View>
   );

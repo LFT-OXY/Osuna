@@ -1124,7 +1124,6 @@ export const ru: TranslationResources = {
     title: "Что нового",
     installed: "Установлена",
     showMore: "Показать ещё",
-    openWebsite: "Полный список изменений",
     error: {
       title: "Не удалось загрузить список изменений",
       description: "Проверьте подключение и попробуйте снова.",
@@ -1198,7 +1197,6 @@ export const ru: TranslationResources = {
       diagnostics: "Запустить диагностику",
       shortcuts: "Сочетания клавиш",
       reportIssue: "Сообщить о проблеме",
-      discord: "Discord",
       github: "Создать issue на GitHub",
       whatsNew: "Что нового",
       appName: "Paseo",
@@ -1398,8 +1396,6 @@ export const ru: TranslationResources = {
         copied: "Статус скопирован в буфер обмена.",
         fetchFailed: "Не удалось получить статус демона: {{message}}",
       },
-      advancedSettings: "Расширенные настройки",
-      openAdvancedSettings: "Открыть дополнительные настройки демона",
       versionMismatch:
         "Версии приложения и демона не совпадают. Обновите приложение и демон до одной версии, чтобы избежать проблем.",
       loadFailed: "Не удалось загрузить статус встроенного демона.",
@@ -1796,8 +1792,6 @@ export const ru: TranslationResources = {
       enableTitle: "Включить ретранслятор?",
       enableDescription:
         "Ретранслятор позволяет этому устройству подключаться откуда угодно. Трафик сопряжения защищён сквозным шифрованием.",
-      relayDocs: "Как работает ретранслятор",
-      relayDocsAccessibility: "Узнать, как работает ретранслятор Paseo",
       enableRelay: "Включить ретранслятор",
       enablingRelay: "Включение ретранслятора...",
       notNow: "Не сейчас",
@@ -2125,7 +2119,6 @@ export const ru: TranslationResources = {
       preferredHint: "Выберите модель, которую использует Paseo",
       model: "Модель",
       fallbackHint: "Если она недоступна, Paseo использует другую доступную модель",
-      docs: "Документация",
       saveError: "Не удалось обновить настройки генерации метаданных",
     },
     general: {
@@ -2415,10 +2408,6 @@ export const ru: TranslationResources = {
     },
     integrations: {
       title: "Интеграции",
-      docs: {
-        cli: "Документация CLI",
-        openCli: "Открыть документацию CLI",
-      },
       commandLine: {
         title: "Командная строка",
         description: "Управляйте агентами и автоматизируйте их работу из терминала",
@@ -2502,8 +2491,6 @@ export const ru: TranslationResources = {
         sectionTitle: "Навыки оркестрации",
         title: "Навыки оркестрации",
         description: "Научите агентов координировать работу через CLI",
-        docs: "Навыки",
-        openDocs: "Открыть документацию по навыкам",
         unavailable: "Подключитесь к этому хосту, чтобы управлять навыками оркестрации",
         unsupported: "Обновите этот хост, чтобы управлять навыками оркестрации",
         updateAvailable: "Доступно обновление",
@@ -2829,9 +2816,6 @@ export const ru: TranslationResources = {
       worktree: {
         title: "Хуки жизненного цикла worktree",
         info: "Команды, которые выполняются при создании или удалении worktree для этого проекта.",
-        docs: "Документация",
-        docsTooltip:
-          "Дополнительную информацию и переменные среды, доступные для этих команд, см. в документации.",
         setup: "Настройка",
         setupAccessibility: "Команды настройки worktree",
         uncommittedTitle: "Закоммитьте изменения в paseo.json",
@@ -2907,7 +2891,6 @@ export const ru: TranslationResources = {
       hostLoadError: "{{host}}: не удалось загрузить расписания",
       emptyTitle: "Нет активных расписаний",
       emptyDescription: "Расписания запускают агентов с заданной периодичностью.",
-      seeDocs: "Открыть документацию",
       endedEmptyTitle: "Нет завершённых расписаний",
     },
     form: {

@@ -12,7 +12,6 @@ import { useIsFocused } from "@react-navigation/native";
 import { CalendarClock, Plus } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MenuHeader } from "@/components/headers/menu-header";
-import { ExternalLink } from "@/components/ui/external-link";
 import { HostFilter } from "@/components/hosts/host-filter";
 import { ALL_HOSTS_OPTION_ID } from "@/components/hosts/host-picker";
 import { ScheduleFormSheet } from "@/components/schedules/schedule-form-sheet";
@@ -339,10 +338,6 @@ function SchedulesEmptyState({
       <View style={styles.emptyTextStack}>
         <Text style={styles.emptyTitle}>{t("schedules.screen.emptyTitle")}</Text>
         <Text style={styles.emptyDescription}>{t("schedules.screen.emptyDescription")}</Text>
-        <ExternalLink
-          href="https://paseo.sh/docs/schedules"
-          label={t("schedules.screen.seeDocs")}
-        />
       </View>
       <Button variant="outline" leftIcon={Plus} onPress={onCreate} testID="schedules-empty-new">
         {t("schedules.screen.newSchedule")}

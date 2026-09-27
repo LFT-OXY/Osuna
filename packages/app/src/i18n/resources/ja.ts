@@ -1120,7 +1120,6 @@ export const ja: TranslationResources = {
     title: "新着情報",
     installed: "インストール済み",
     showMore: "もっと見る",
-    openWebsite: "変更履歴をすべて表示",
     error: {
       title: "変更履歴を読み込めません",
       description: "接続を確認してもう一度お試しください。",
@@ -1194,7 +1193,6 @@ export const ja: TranslationResources = {
       diagnostics: "診断を実行",
       shortcuts: "キーボードショートカット",
       reportIssue: "問題を報告",
-      discord: "Discord",
       github: "GitHub Issueを作成",
       whatsNew: "新着情報",
       appName: "Paseo",
@@ -1393,8 +1391,6 @@ export const ja: TranslationResources = {
         copied: "ステータスをクリップボードにコピーしました。",
         fetchFailed: "デーモンのステータスの取得に失敗しました: {{message}}",
       },
-      advancedSettings: "詳細設定",
-      openAdvancedSettings: "高度なデーモン設定を開く",
       versionMismatch:
         "アプリとデーモンのバージョンが一致しません。最良の体験のために両方を同じバージョンに更新してください。",
       loadFailed: "デスクトップデーモンのステータスを読み込めません。",
@@ -1783,8 +1779,6 @@ export const ja: TranslationResources = {
       enableTitle: "リレーを有効にしますか？",
       enableDescription:
         "リレーを使うと、このデバイスからどこでも接続できます。ペアリング通信はエンドツーエンドで暗号化されます。",
-      relayDocs: "リレーの仕組み",
-      relayDocsAccessibility: "Paseo リレーの仕組みを読む",
       enableRelay: "リレーを有効にする",
       enablingRelay: "有効化中...",
       notNow: "今はしない",
@@ -2112,7 +2106,6 @@ export const ja: TranslationResources = {
       preferredHint: "Paseo が使用するモデルを選択します",
       model: "モデル",
       fallbackHint: "利用できない場合、Paseo は別の利用可能なモデルを使用します",
-      docs: "ドキュメント",
       saveError: "メタデータ生成を更新できません",
     },
     general: {
@@ -2396,10 +2389,6 @@ export const ja: TranslationResources = {
     },
     integrations: {
       title: "連携",
-      docs: {
-        cli: "CLIドキュメント",
-        openCli: "CLIドキュメントを開く",
-      },
       commandLine: {
         title: "コマンドライン",
         description: "ターミナルからエージェントを制御し、スクリプトで操作",
@@ -2806,9 +2795,6 @@ export const ja: TranslationResources = {
       worktree: {
         title: "ワークツリーライフサイクルフック",
         info: "このプロジェクトのワークツリーが作成または削除されたときに実行されるコマンド",
-        docs: "ドキュメント",
-        docsTooltip:
-          "これらのコマンドで使用可能な詳細と環境変数についてはドキュメントを参照してください",
         setup: "セットアップ",
         setupAccessibility: "ワークツリーセットアップコマンド",
         uncommittedTitle: "paseo.json の変更をコミットしてください",
@@ -2882,7 +2868,6 @@ export const ja: TranslationResources = {
       hostLoadError: "{{host}}: スケジュールを読み込めませんでした",
       emptyTitle: "有効なスケジュールはありません",
       emptyDescription: "スケジュールは一定の周期でエージェントを実行します。",
-      seeDocs: "ドキュメントを見る",
       endedEmptyTitle: "終了したスケジュールはありません",
     },
     form: {

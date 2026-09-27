@@ -1107,7 +1107,6 @@ export const ar: TranslationResources = {
     title: "ما الجديد",
     installed: "مثبّت",
     showMore: "عرض المزيد",
-    openWebsite: "سجل التغييرات الكامل",
     error: {
       title: "تعذّر تحميل سجل التغييرات",
       description: "تحقق من اتصالك وحاول مرة أخرى.",
@@ -1180,7 +1179,6 @@ export const ar: TranslationResources = {
       diagnostics: "تشغيل التشخيص",
       shortcuts: "اختصارات لوحة المفاتيح",
       reportIssue: "الإبلاغ عن مشكلة",
-      discord: "Discord",
       github: "إنشاء مشكلة على GitHub",
       whatsNew: "ما الجديد",
       appName: "Paseo",
@@ -1379,8 +1377,6 @@ export const ar: TranslationResources = {
         copied: "تم نسخ الحالة إلى الحافظة.",
         fetchFailed: "فشل جلب حالة البرنامج الخفي:{{message}}",
       },
-      advancedSettings: "الإعدادات المتقدمة",
-      openAdvancedSettings: "افتح إعدادات البرنامج الخفي المتقدمة",
       versionMismatch:
         "إصدارا التطبيق والبرنامج الخفي غير متطابقين. قم بتحديث كلاهما إلى نفس الإصدار للحصول على أفضل تجربة.",
       loadFailed: "غير قادر على تحميل حالة البرنامج الخفي لسطح المكتب.",
@@ -1764,8 +1760,6 @@ export const ar: TranslationResources = {
       enableTitle: "تمكين التتابع؟",
       enableDescription:
         "يتيح التتابع لهذا الجهاز الاتصال من أي مكان. حركة مرور الإقران مشفرة من طرف إلى طرف.",
-      relayDocs: "كيفية عمل التتابع",
-      relayDocsAccessibility: "اقرأ كيفية عمل تتابع Paseo",
       enableRelay: "تمكين التتابع",
       enablingRelay: "جارٍ التمكين...",
       notNow: "ليس الآن",
@@ -2092,7 +2086,6 @@ export const ar: TranslationResources = {
       preferredHint: "اختر النموذج الذي يستخدمه Paseo",
       model: "النموذج",
       fallbackHint: "إذا لم يكن متاحًا، يستخدم Paseo نموذجًا آخر متاحًا",
-      docs: "الوثائق",
       saveError: "تعذر تحديث إنشاء البيانات الوصفية",
     },
     general: {
@@ -2375,10 +2368,6 @@ export const ar: TranslationResources = {
     },
     integrations: {
       title: "التكامل",
-      docs: {
-        cli: "مستندات CLI",
-        openCli: "افتح وثائق CLI",
-      },
       commandLine: {
         title: "سطر الأوامر",
         description: "وكلاء التحكم والبرنامج النصي من المحطة الطرفية الخاصة بك",
@@ -2779,8 +2768,6 @@ export const ar: TranslationResources = {
       worktree: {
         title: "خطافات دورة حياة شجرة العمل",
         info: "الأوامر التي يتم تشغيلها عند إنشاء شجرة عمل أو هدمها لهذا المشروع",
-        docs: "المستندات",
-        docsTooltip: "راجع المستندات لمزيد من التفاصيل ومتغيرات البيئة المتاحة لهذه الأوامر",
         setup: "يثبت",
         setupAccessibility: "أوامر إعداد شجرة العمل",
         uncommittedTitle: "ثبّت تغييرات paseo.json",
@@ -2854,7 +2841,6 @@ export const ar: TranslationResources = {
       hostLoadError: "{{host}}: تعذر تحميل الجداول",
       emptyTitle: "لا توجد جداول نشطة",
       emptyDescription: "تشغّل الجداول الوكلاء وفق إيقاع محدد.",
-      seeDocs: "عرض الوثائق",
       endedEmptyTitle: "لا توجد جداول منتهية",
     },
     form: {

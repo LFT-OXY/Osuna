@@ -1142,7 +1142,6 @@ export const fr: TranslationResources = {
     title: "Nouveautés",
     installed: "Installée",
     showMore: "Afficher plus",
-    openWebsite: "Journal des modifications complet",
     error: {
       title: "Impossible de charger le journal des modifications",
       description: "Vérifiez votre connexion et réessayez.",
@@ -1216,7 +1215,6 @@ export const fr: TranslationResources = {
       diagnostics: "Lancer le diagnostic",
       shortcuts: "Raccourcis clavier",
       reportIssue: "Signaler un problème",
-      discord: "Discord",
       github: "Créer un ticket GitHub",
       whatsNew: "Nouveautés",
       appName: "Paseo",
@@ -1415,8 +1413,6 @@ export const fr: TranslationResources = {
         copied: "Statut copié dans le presse-papiers.",
         fetchFailed: "Échec de la récupération de l'état du démon:{{message}}",
       },
-      advancedSettings: "Paramètres avancés",
-      openAdvancedSettings: "Ouvrir les paramètres avancés du démon",
       versionMismatch:
         "Les versions de l'application et du démon ne correspondent pas. Mettez à jour les deux vers la même version pour une meilleure expérience.",
       loadFailed: "Impossible de charger l'état du démon de bureau.",
@@ -1816,8 +1812,6 @@ export const fr: TranslationResources = {
       enableTitle: "Activer le relais ?",
       enableDescription:
         "Le relais permet à cet appareil de se connecter depuis n’importe où. Le trafic de couplage est chiffré de bout en bout.",
-      relayDocs: "Fonctionnement du relais",
-      relayDocsAccessibility: "Lire comment fonctionne le relais Paseo",
       enableRelay: "Activer le relais",
       enablingRelay: "Activation...",
       notNow: "Pas maintenant",
@@ -2145,7 +2139,6 @@ export const fr: TranslationResources = {
       preferredHint: "Choisissez le modèle utilisé par Paseo",
       model: "Modèle",
       fallbackHint: "S’il est indisponible, Paseo utilise un autre modèle disponible",
-      docs: "Documentation",
       saveError: "Impossible de mettre à jour la génération de métadonnées",
     },
     general: {
@@ -2433,10 +2426,6 @@ export const fr: TranslationResources = {
     },
     integrations: {
       title: "Intégrations",
-      docs: {
-        cli: "DocumentsCLI",
-        openCli: "Ouvrir la documentationCLI",
-      },
       commandLine: {
         title: "Ligne de commande",
         description: "Agents de contrôle et de script depuis votre terminal",
@@ -2845,9 +2834,6 @@ export const fr: TranslationResources = {
       worktree: {
         title: "Crochets de cycle de vie Worktree",
         info: "Commandes exécutées lorsqu'un arbre de travail est créé ou supprimé pour ce projet",
-        docs: "Documents",
-        docsTooltip:
-          "Voir la documentation pour plus de détails et les variables d'environnement disponibles pour ces commandes",
         setup: "Installation",
         setupAccessibility: "Commandes de configuration de Worktree",
         uncommittedTitle: "Validez les modifications de paseo.json",
@@ -2923,7 +2909,6 @@ export const fr: TranslationResources = {
       hostLoadError: "{{host}} : impossible de charger les planifications",
       emptyTitle: "Aucune planification active",
       emptyDescription: "Les planifications exécutent des agents à une cadence donnée.",
-      seeDocs: "Voir la documentation",
       endedEmptyTitle: "Aucune planification terminée",
     },
     form: {

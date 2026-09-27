@@ -1099,7 +1099,6 @@ export const zhCN: TranslationResources = {
     title: "新功能",
     installed: "已安装",
     showMore: "显示更多",
-    openWebsite: "完整更新日志",
     error: {
       title: "无法加载更新日志",
       description: "请检查网络连接后重试。",
@@ -1172,7 +1171,6 @@ export const zhCN: TranslationResources = {
       diagnostics: "运行诊断",
       shortcuts: "键盘快捷键",
       reportIssue: "报告问题",
-      discord: "Discord",
       github: "创建 GitHub Issue",
       whatsNew: "新功能",
       appName: "Paseo",
@@ -1367,8 +1365,6 @@ export const zhCN: TranslationResources = {
         copied: "状态已复制到剪贴板。",
         fetchFailed: "获取 daemon 状态失败：{{message}}",
       },
-      advancedSettings: "高级设置",
-      openAdvancedSettings: "打开 daemon 高级设置",
       versionMismatch: "App 和 daemon 版本不匹配。请将两者更新到相同版本，以获得最佳体验。",
       loadFailed: "无法加载桌面 daemon 状态。",
     },
@@ -1744,8 +1740,6 @@ export const zhCN: TranslationResources = {
       relayDisabled: "Relay 未启用。启用 relay 后才能配对设备。",
       enableTitle: "启用中继？",
       enableDescription: "中继让此设备可以从任何地方连接。配对流量采用端到端加密。",
-      relayDocs: "中继如何工作",
-      relayDocsAccessibility: "阅读 Paseo 中继的工作原理",
       enableRelay: "启用中继",
       enablingRelay: "正在启用...",
       notNow: "暂不",
@@ -2070,7 +2064,6 @@ export const zhCN: TranslationResources = {
       preferredHint: "选择 Paseo 使用的模型",
       model: "模型",
       fallbackHint: "如果不可用，Paseo 会改用其他可用模型",
-      docs: "文档",
       saveError: "无法更新元数据生成设置",
     },
     general: {
@@ -2349,10 +2342,6 @@ export const zhCN: TranslationResources = {
     },
     integrations: {
       title: "集成",
-      docs: {
-        cli: "CLI 文档",
-        openCli: "打开 CLI 文档",
-      },
       commandLine: {
         title: "命令行",
         description: "从终端控制 Agent 并运行脚本",
@@ -2748,8 +2737,6 @@ export const zhCN: TranslationResources = {
       worktree: {
         title: "Worktree 生命周期 hooks",
         info: "为此 Project 创建或清理 worktree 时运行的命令",
-        docs: "文档",
-        docsTooltip: "查看命令可用的环境变量和更多细节",
         setup: "Setup",
         setupAccessibility: "Worktree setup 命令",
         uncommittedTitle: "提交 paseo.json 更改",
@@ -2822,7 +2809,6 @@ export const zhCN: TranslationResources = {
       hostLoadError: "{{host}}：无法加载计划",
       emptyTitle: "暂无活跃计划",
       emptyDescription: "计划会按固定频率运行 agent。",
-      seeDocs: "查看文档",
       endedEmptyTitle: "暂无已结束的计划",
     },
     form: {

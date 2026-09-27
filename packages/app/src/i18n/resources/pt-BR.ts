@@ -1133,7 +1133,6 @@ export const ptBR: TranslationResources = {
     title: "Novidades",
     installed: "Instalada",
     showMore: "Mostrar mais",
-    openWebsite: "Changelog completo",
     error: {
       title: "Não foi possível carregar o changelog",
       description: "Verifique sua conexão e tente novamente.",
@@ -1206,7 +1205,6 @@ export const ptBR: TranslationResources = {
       diagnostics: "Executar diagnóstico",
       shortcuts: "Atalhos de teclado",
       reportIssue: "Relatar um problema",
-      discord: "Discord",
       github: "Criar issue no GitHub",
       whatsNew: "Novidades",
       appName: "Paseo",
@@ -1405,8 +1403,6 @@ export const ptBR: TranslationResources = {
         copied: "Status copiado para a área de transferência.",
         fetchFailed: "Falha ao buscar status do daemon: {{message}}",
       },
-      advancedSettings: "Configurações avançadas",
-      openAdvancedSettings: "Abrir configurações avançadas do daemon",
       versionMismatch:
         "As versões do app e do daemon não coincidem. Atualize ambos para a mesma versão para a melhor experiência.",
       loadFailed: "Não foi possível carregar o status do daemon desktop.",
@@ -1797,8 +1793,6 @@ export const ptBR: TranslationResources = {
       enableTitle: "Ativar o relay?",
       enableDescription:
         "O relay permite conectar este dispositivo de qualquer lugar. O tráfego de pareamento é criptografado de ponta a ponta.",
-      relayDocs: "Como o relay funciona",
-      relayDocsAccessibility: "Leia como o relay do Paseo funciona",
       enableRelay: "Ativar relay",
       enablingRelay: "Ativando...",
       notNow: "Agora não",
@@ -2125,7 +2119,6 @@ export const ptBR: TranslationResources = {
       preferredHint: "Escolha o modelo que o Paseo usa",
       model: "Modelo",
       fallbackHint: "Se ele não estiver disponível, o Paseo usa outro modelo disponível",
-      docs: "Documentação",
       saveError: "Não foi possível atualizar a geração de metadados",
     },
     general: {
@@ -2411,10 +2404,6 @@ export const ptBR: TranslationResources = {
     },
     integrations: {
       title: "Integrações",
-      docs: {
-        cli: "Docs da CLI",
-        openCli: "Abrir documentação da CLI",
-      },
       commandLine: {
         title: "Linha de comando",
         description: "Controle agentes e execute scripts pelo terminal",
@@ -2821,9 +2810,6 @@ export const ptBR: TranslationResources = {
       worktree: {
         title: "Hooks de ciclo de vida do worktree",
         info: "Comandos executados quando um worktree é criado ou desmontado para este projeto",
-        docs: "Docs",
-        docsTooltip:
-          "Veja a documentação para mais detalhes e as variáveis de ambiente disponíveis para estes comandos",
         setup: "Configuração",
         setupAccessibility: "Comandos de configuração do worktree",
         uncommittedTitle: "Faça commit das alterações no paseo.json",
@@ -2897,7 +2883,6 @@ export const ptBR: TranslationResources = {
       hostLoadError: "{{host}}: não foi possível carregar os agendamentos",
       emptyTitle: "Nenhum agendamento ativo",
       emptyDescription: "Agendamentos executam agentes em uma cadência.",
-      seeDocs: "Ver documentação",
       endedEmptyTitle: "Nenhum agendamento encerrado",
     },
     form: {

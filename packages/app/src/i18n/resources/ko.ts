@@ -1114,7 +1114,6 @@ export const ko: TranslationResources = {
     title: "새로운 소식",
     installed: "설치됨",
     showMore: "더 보기",
-    openWebsite: "전체 변경 내역",
     error: {
       title: "변경 내역을 불러오지 못했습니다",
       description: "연결을 확인한 후 다시 시도하세요.",
@@ -1187,7 +1186,6 @@ export const ko: TranslationResources = {
       diagnostics: "진단 실행",
       shortcuts: "키보드 단축키",
       reportIssue: "문제 신고",
-      discord: "Discord",
       github: "GitHub 이슈 만들기",
       whatsNew: "새로운 소식",
       appName: "Paseo",
@@ -1385,8 +1383,6 @@ export const ko: TranslationResources = {
         copied: "상태가 클립보드에 복사되었습니다.",
         fetchFailed: "데몬 상태를 가져오지 못했습니다: {{message}}",
       },
-      advancedSettings: "고급 설정",
-      openAdvancedSettings: "고급 데몬 설정 열기",
       versionMismatch:
         "앱과 데몬의 버전이 일치하지 않습니다. 최상의 경험을 위해 둘 다 동일한 버전으로 업데이트하세요.",
       loadFailed: "데스크톱 데몬 상태를 불러올 수 없습니다.",
@@ -1774,8 +1770,6 @@ export const ko: TranslationResources = {
       enableTitle: "릴레이를 활성화하시겠습니까?",
       enableDescription:
         "릴레이를 사용하면 이 장치를 어디에서나 연결할 수 있습니다. 페어링 트래픽은 종단 간 암호화됩니다.",
-      relayDocs: "릴레이 작동 방식",
-      relayDocsAccessibility: "Paseo 릴레이 작동 방식 읽기",
       enableRelay: "릴레이 활성화",
       enablingRelay: "활성화 중...",
       notNow: "지금은 아님",
@@ -2102,7 +2096,6 @@ export const ko: TranslationResources = {
       preferredHint: "Paseo에서 사용할 모델을 선택하세요",
       model: "모델",
       fallbackHint: "사용할 수 없으면 Paseo가 다른 사용 가능한 모델을 사용합니다",
-      docs: "문서",
       saveError: "메타데이터 생성을 업데이트할 수 없습니다",
     },
     general: {
@@ -2385,10 +2378,6 @@ export const ko: TranslationResources = {
     },
     integrations: {
       title: "통합",
-      docs: {
-        cli: "CLI 문서",
-        openCli: "CLI 문서 열기",
-      },
       commandLine: {
         title: "명령줄",
         description: "터미널에서 에이전트를 제어하고 스크립팅합니다",
@@ -2794,8 +2783,6 @@ export const ko: TranslationResources = {
       worktree: {
         title: "워크트리 수명 주기 훅",
         info: "이 프로젝트에서 워크트리가 생성되거나 정리될 때 실행되는 명령",
-        docs: "문서",
-        docsTooltip: "자세한 내용과 이 명령에 사용할 수 있는 환경 변수는 문서를 참조하세요",
         setup: "설정",
         setupAccessibility: "워크트리 설정 명령",
         uncommittedTitle: "paseo.json 변경 사항을 커밋하세요",
@@ -2869,7 +2856,6 @@ export const ko: TranslationResources = {
       hostLoadError: "{{host}}: 일정을 불러오지 못했습니다",
       emptyTitle: "활성 일정이 없습니다",
       emptyDescription: "일정은 정해진 주기로 에이전트를 실행합니다.",
-      seeDocs: "문서 보기",
       endedEmptyTitle: "종료된 일정이 없습니다",
     },
     form: {
