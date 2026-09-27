@@ -4,4 +4,3 @@
 {"file": "docs/glossary.md", "reason": "Osuna / Paseo 词条，决定界面文案怎么改"}
 {"file": "docs/protocol-compatibility.md", "reason": "daemon 自更新靠 capability 门控下线的依据"}
 {"file": "docs/release.md", "reason": "fork 发版路径与需要修正的 macOS 说明"}
-{"file": ".atw/tasks/09-27-osuna-rebrand-and-mac-updates/issues/04-desktop-app-identity.md", "reason": "ATW current ticket"}
