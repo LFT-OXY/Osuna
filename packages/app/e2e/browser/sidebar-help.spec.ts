@@ -7,7 +7,7 @@ const GITHUB_ISSUE_DESTINATION =
   /^https:\/\/github\.com\/(?:LFT-OXY\/Osuna\/issues\/new(?:\/choose)?(?:[/?#]|$)|login\?return_to=https%3A%2F%2Fgithub\.com%2FLFT-OXY%2FOsuna%2Fissues%2Fnew$)/;
 // The name and the version are separate cells of a key/value row, so they meet with no space
 // between them in the row's text content.
-const APP_VERSION = /^Paseo\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const APP_VERSION = /^Osuna\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 async function openHelpMenu(page: Page): Promise<void> {
   await page.getByTestId("sidebar-help").click();

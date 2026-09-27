@@ -172,7 +172,7 @@ export async function openPairDeviceFromHome(page: Page): Promise<void> {
 export async function expectRelayUpdateRequired(page: Page): Promise<void> {
   const modal = page.getByTestId("host-page-pair-device-card");
   await expect(
-    modal.getByText("Update the host to enable relay from Paseo Desktop."),
+    modal.getByText("Update the host to enable relay from Osuna Desktop."),
   ).toBeVisible();
   await expect(modal.getByRole("button", { name: "Enable relay", exact: true })).toHaveCount(0);
   await expect(modal.getByRole("textbox", { name: "Pairing link" })).toHaveCount(0);
