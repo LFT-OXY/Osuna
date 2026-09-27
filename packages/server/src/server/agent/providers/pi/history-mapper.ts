@@ -52,6 +52,25 @@ export function getUserMessageText(content: string | (PiTextContent | PiImageCon
   return textParts.join("\n\n");
 }
 
+// 与 Pi 运行时 parseSkillBlock 的格式一致：/skill:name args 被展开成整份 skill 正文加参数。
+const PI_SKILL_BLOCK_PATTERN =
+  /^<skill name="([^"]+)" location="[^"]+">\n[\s\S]*?\n<\/skill>(?:\n\n([\s\S]+))?$/;
+
+export function restorePiSkillCommand(text: string): string {
+  const match = PI_SKILL_BLOCK_PATTERN.exec(text);
+  if (!match) {
+    return text;
+  }
+  const [, name, args] = match;
+  return args ? `/skill:${name} ${args}` : `/skill:${name}`;
+}
+
+export function shouldDisplayPiCustomMessage(
+  message: Extract<PiAgentMessage, { role: "custom" }>,
+): boolean {
+  return message.display !== false;
+}
+
 export class PiHistoryMapper {
   private readonly pendingToolCalls = new Map<string, PiTrackedToolCall>();
   private userIndex = 0;
@@ -94,7 +113,7 @@ export class PiHistoryMapper {
   }
 
   private mapUserMessage(message: Extract<PiAgentMessage, { role: "user" }>): AgentStreamEvent[] {
-    const text = getUserMessageText(message.content);
+    const text = restorePiSkillCommand(getUserMessageText(message.content));
     this.userIndex += 1;
     if (!text) {
       return [];
@@ -116,6 +135,9 @@ export class PiHistoryMapper {
   private mapCustomMessage(
     message: Extract<PiAgentMessage, { role: "custom" }>,
   ): AgentStreamEvent[] {
+    if (!shouldDisplayPiCustomMessage(message)) {
+      return [];
+    }
     const text = getUserMessageText(message.content);
     const mappedEvent = text ? this.hooks.mapCustomMessage?.(text, this.provider) : null;
     if (mappedEvent) {

@@ -841,6 +841,40 @@ describe("PiRpcAgentSession", () => {
     expect(events.eventTypes().slice(0, 2)).toEqual(["turn_started", "timeline"]);
   });
 
+  test("shows submitted Pi skill expansions as the typed /skill command", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    const skillBlock =
+      '<skill name="review" location="/repo/.pi/skills/review/SKILL.md">\n' +
+      "References are relative to /repo/.pi/skills/review.\n\n" +
+      "# Review\n\nLong skill body.\n" +
+      "</skill>";
+
+    await session.startTurn("/skill:review src/app.ts\nonly the diff");
+    fakeSession.emit({ type: "turn_start" });
+    fakeSession.finishSubmittedUserMessage({
+      id: "entry-skill-args",
+      parentId: null,
+      text: `${skillBlock}\n\nsrc/app.ts\nonly the diff`,
+    });
+    fakeSession.finishSubmittedUserMessage({
+      id: "entry-skill-bare",
+      parentId: "entry-skill-args",
+      text: skillBlock,
+    });
+
+    await events.nextTimelineEvent();
+
+    expect(events.timelineItems()).toEqual([
+      {
+        type: "user_message",
+        text: "/skill:review src/app.ts\nonly the diff",
+        messageId: "entry-skill-args",
+      },
+      { type: "user_message", text: "/skill:review", messageId: "entry-skill-bare" },
+    ]);
+  });
+
   test("uses the Pi entry attached to a submitted prompt after resuming old history", async () => {
     const pi = new FakePi();
     const client = createClient(pi);
@@ -895,6 +929,50 @@ describe("PiRpcAgentSession", () => {
     ]);
   });
 
+  test("omits hidden Pi custom messages and still completes a command turn", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("/refresh-context");
+    fakeSession.emit({
+      type: "message_end",
+      message: {
+        role: "custom",
+        customType: "atw-runtime-context",
+        content: [
+          { type: "text", text: "<session-overview>\nSESSION CONTEXT\n</session-overview>" },
+        ],
+        display: false,
+      },
+    });
+
+    expect(events.timelineAndCompletionEvents()).toEqual([{ type: "turn_completed" }]);
+  });
+
+  test("surfaces Pi custom messages that explicitly declare display true", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("/show-status");
+    fakeSession.emit({
+      type: "message_end",
+      message: {
+        role: "custom",
+        customType: "status",
+        content: "Extension command output",
+        display: true,
+      },
+    });
+
+    expect(events.timelineAndCompletionEvents()).toEqual([
+      {
+        type: "timeline",
+        item: { type: "assistant_message", text: "Extension command output" },
+      },
+      { type: "turn_completed" },
+    ]);
+  });
+
   test("settles an autonomous turn triggered by a Pi extension custom message", async () => {
     const { pi, events } = await createSession();
     const fakeSession = pi.latestSession();
@@ -924,6 +1002,38 @@ describe("PiRpcAgentSession", () => {
 
     fakeSession.settleTurn();
 
+    expect(events.turnLifecycleEvents()).toEqual([
+      { type: "turn_started", turnId: undefined },
+      { type: "turn_completed", turnId: undefined },
+    ]);
+  });
+
+  test("settles an autonomous turn whose Pi custom message is hidden", async () => {
+    const { pi, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({ type: "turn_start" });
+    fakeSession.emit({
+      type: "message_end",
+      message: {
+        role: "custom",
+        customType: "atw-runtime-context",
+        content: "<workflow-state>\nPlanning\n</workflow-state>",
+        display: false,
+      },
+    });
+    fakeSession.finishAgentRun({
+      message: {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "text", text: "Continuation finished" }],
+      },
+      willRetry: false,
+    });
+    fakeSession.settleTurn();
+
+    expect(events.timelineItems()).toEqual([]);
     expect(events.turnLifecycleEvents()).toEqual([
       { type: "turn_started", turnId: undefined },
       { type: "turn_completed", turnId: undefined },

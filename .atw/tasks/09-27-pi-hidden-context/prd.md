@@ -140,14 +140,44 @@ OMP（Pi 的 fork）在 Osuna 里也遵守（`5e47cff58`），唯独 Osuna 的 P
 - [ ] 在本仓库用 Pi 发「你好」，实时时间线里不出现 `<workflow-state>`、`<session-overview>` 或其正文。
 - [ ] 同一会话在 daemon 重启 / 重新打开后的历史回放里同样不出现。
 - [ ] 用 `/skill:xxx 参数` 调一次 skill，实时时间线与历史回放里该条用户消息都显示为 `/skill:xxx 参数`；不带参数时为 `/skill:xxx`。
-- [ ] 不带 `display` 或 `display: true` 的 Pi custom 消息（扩展命令输出）仍显示为助手文本。
-- [ ] 隐藏的 custom 消息不影响轮次开始 / 结束，会话不会卡在运行中。
-- [ ] 普通用户消息（包括只是提到 `<skill` 的文本）原样显示。
-- [ ] `pi/agent.test.ts`、`pi/history-mapper.test.ts` 覆盖上述规则，原有用例不改断言、继续通过。
-- [ ] OMP 的 skill 展开处理已核对，结论记录在任务里（有问题则同样修复并有测试）。
-- [ ] Claude Code、Codex 的映射代码无改动。
-- [ ] `docs/providers.md` 写明 custom 消息的 `display` 约定与 skill 展开块还原。
-- [ ] 改动涉及的包 typecheck 与 lint 通过。
+- [x] 不带 `display` 或 `display: true` 的 Pi custom 消息（扩展命令输出）仍显示为助手文本。
+- [x] 隐藏的 custom 消息不影响轮次开始 / 结束，会话不会卡在运行中。
+- [x] 普通用户消息（包括只是提到 `<skill` 的文本）原样显示。
+- [x] `pi/agent.test.ts`、`pi/history-mapper.test.ts` 覆盖上述规则，原有用例不改断言、继续通过。
+- [x] OMP 的 skill 展开处理已核对，结论记录在任务里（见下文「OMP 核对结论」；有问题，但按用户决定另开任务）。
+- [x] Claude Code、Codex 的映射代码无改动。
+- [x] `docs/providers.md` 写明 custom 消息的 `display` 约定与 skill 展开块还原。
+- [x] 改动涉及的包 typecheck 与 lint 通过。
+
+## 实现落点
+
+- `pi/rpc-types.ts`：custom 消息补 `customType?: string`、`display?: boolean`。
+- `pi/history-mapper.ts` 导出两个共用函数（与已被实时路径复用的 `getUserMessageText` 同处）：
+  - `shouldDisplayPiCustomMessage(message)`：`message.display !== false`。
+  - `restorePiSkillCommand(text)`：正则与 Pi `parseSkillBlock` 相同
+    （`/^<skill name="([^"]+)" location="[^"]+">\n[\s\S]*?\n<\/skill>(?:\n\n([\s\S]+))?$/`），
+    命中返回 `/skill:<name>` 或 `/skill:<name> <args>`，否则原文返回。参数不再 trim——Pi 展开时已 trim。
+- 实时路径：`PiRpcAgentSession.handleMessageEnd` 的 custom 分支先过可见性判定，
+  `completeTurn` 不受影响；`handleSubmittedUserEntryMarker` 用还原后的文本生成 `user_message`。
+  steer 关联仍按原文 `entry.text` 匹配：`/skill:` 输入会被 `parseSlashCommandInput` 识别为斜杠命令，
+  `steerActiveTurn` 对斜杠命令直接返回 `unavailable`，skill 永远不会进入 steer 匹配。
+- 回放路径：`PiHistoryMapper.mapUserMessage` 还原 skill 块；`mapCustomMessage` 先判定可见性再交给 hook。
+
+## OMP 核对结论（2026-09-27）
+
+问题存在，但形态与 Pi 不同，用户决定本任务不修、另开任务：
+
+- OMP 17.3.3 的 RPC 模式下，`/skill:name args` 由 `tryRunRpcSkillCommand`
+  （`@oh-my-pi/pi-coding-agent/src/modes/rpc/rpc-mode.ts`）以 custom 消息发出：
+  `customType: "skill-prompt"`、`display: true`、`attribution: "user"`、`details: { name, path, args, lineCount }`，
+  正文是 `[IMPORTANT: User invoked the "name" skill; …]` + 整份 skill + `User: args`。没有 `<skill>` 包裹。
+  `skills.enableSkillCommands` 默认开启。
+- Osuna 的 OMP 适配层（`omp/agent.ts` `handleMessageEnd`、`omp/message-history.ts` `mapCustomMessage`）
+  把它当可见 custom 消息映射成 `assistant_message`：实时和回放都把整份 skill 正文显示为助手回复，
+  回放里还缺少用户那条 `/skill:name` 行。
+- 修复需要按 `customType`/`attribution`/`details` 映射成 `user_message`，并处理实时路径与 daemon canonical
+  用户行的关联去重；另外 `handleMessageEnd` 在 `!activeTurnHasUserMessage` 时会 `completeTurn`，
+  skill 轮次是否被提前结算尚未验证。
 
 ## Further Notes
 

@@ -140,6 +140,73 @@ describe("Pi history mapper", () => {
     ]);
   });
 
+  test("omits replayed custom messages that declare display false", async () => {
+    await expect(
+      collectHistory([
+        { role: "user", content: "hello" },
+        {
+          role: "custom",
+          customType: "atw-runtime-context",
+          content: "<workflow-state>\nPlanning\n</workflow-state>",
+          display: false,
+        },
+        { role: "custom", customType: "status", content: "Shown output", display: true },
+      ]),
+    ).resolves.toEqual([
+      { type: "timeline", provider: "pi", item: { type: "user_message", text: "hello" } },
+      {
+        type: "timeline",
+        provider: "pi",
+        item: { type: "assistant_message", text: "Shown output" },
+      },
+    ]);
+  });
+
+  test("replays expanded Pi skill blocks as the typed /skill command", async () => {
+    const skillBlock =
+      '<skill name="atw-implement" location="/repo/.agents/skills/atw-implement/SKILL.md">\n' +
+      "References are relative to /repo/.agents/skills/atw-implement.\n\n" +
+      "# Implement\n\nLong skill body.\n" +
+      "</skill>";
+
+    await expect(
+      collectHistory([
+        { role: "user", content: `${skillBlock}\n\nprd.md\nfocus on the live path` },
+        { role: "user", content: skillBlock },
+      ]),
+    ).resolves.toEqual([
+      {
+        type: "timeline",
+        provider: "pi",
+        item: {
+          type: "user_message",
+          text: "/skill:atw-implement prd.md\nfocus on the live path",
+        },
+      },
+      {
+        type: "timeline",
+        provider: "pi",
+        item: { type: "user_message", text: "/skill:atw-implement" },
+      },
+    ]);
+  });
+
+  test("replays user messages that only resemble a skill block verbatim", async () => {
+    const mentionsSkill = 'Why does <skill name="x" location="/x/SKILL.md"> show up?';
+    const trailingText =
+      '<skill name="x" location="/x/SKILL.md">\nbody\n</skill>\nnot separated by a blank line';
+
+    await expect(
+      collectHistory([
+        { role: "user", content: mentionsSkill },
+        { role: "user", content: trailingText },
+      ]),
+    ).resolves.toEqual([
+      { type: "timeline", provider: "pi", item: { type: "user_message", text: mentionsSkill } },
+      { type: "timeline", provider: "pi", item: { type: "user_message", text: trailingText } },
+    ]);
+  });
+
   test("uses Pi tree entry ids for replayed user messages", async () => {
     await expect(
       collectHistory(

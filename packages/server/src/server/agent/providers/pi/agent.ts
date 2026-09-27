@@ -60,6 +60,8 @@ import {
 } from "../diagnostic-utils.js";
 import {
   getUserMessageText,
+  restorePiSkillCommand,
+  shouldDisplayPiCustomMessage,
   streamPiHistory,
   type PiCapturedUserMessageEntry,
 } from "./history-mapper.js";
@@ -1981,13 +1983,14 @@ export class PiRpcAgentSession implements AgentSession {
     const clientMessageId = pendingSteer
       ? pendingSteer.clientMessageId
       : this.activeClientMessageId;
+    const text = restorePiSkillCommand(entry.text);
     this.emit({
       type: "timeline",
       provider: this.provider,
       turnId: this.currentTurnIdForEvent(),
       item: {
         type: "user_message",
-        text: entry.text,
+        text,
         messageId: entry.id,
         ...(clientMessageId ? { clientMessageId } : {}),
       },
@@ -2403,14 +2406,16 @@ export class PiRpcAgentSession implements AgentSession {
       return;
     }
     if (event.message.role === "custom") {
-      const text = getUserMessageText(event.message.content);
-      if (text) {
-        this.emit({
-          type: "timeline",
-          provider: this.provider,
-          turnId,
-          item: { type: "assistant_message", text },
-        });
+      if (shouldDisplayPiCustomMessage(event.message)) {
+        const text = getUserMessageText(event.message.content);
+        if (text) {
+          this.emit({
+            type: "timeline",
+            provider: this.provider,
+            turnId,
+            item: { type: "assistant_message", text },
+          });
+        }
       }
       if (!this.activeTurnStarted) {
         this.completeTurn(turnId, []);
