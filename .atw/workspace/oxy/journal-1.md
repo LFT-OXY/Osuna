@@ -202,3 +202,45 @@
 
 - PRD 人工验证第三条（团队客户端收到更新且更新后仍是内部版）仓库内无记录，由用户确认
 - v0.9.0 Desktop Release 在跑，Release 仍是草稿，关注是否正常转正
+
+
+## Session 7: pi-hidden-context：隐藏 Pi 注入上下文与 skill 展开全文
+<!-- atw-session: v=2 fp=516d56a772a0e843 -->
+
+**Date**: 2026-09-27
+**Task**: pi-hidden-context：隐藏 Pi 注入上下文与 skill 展开全文
+**Package**: server
+**Branch**: `main`
+
+### Summary
+
+Pi 适配层在实时与历史回放两条路上遵守 custom 消息的 display:false，ATW 注入的 <workflow-state>/<session-overview> 不再上时间线；Pi 展开的 <skill>…</skill> 用户消息还原为 /skill:name 参数。用户在 dev 桌面端实测通过后归档。
+
+### Main Changes
+
+- pi/history-mapper.ts 新增 shouldDisplayPiCustomMessage 与 restorePiSkillCommand（正则同 Pi parseSkillBlock），实时 handleMessageEnd / handleSubmittedUserEntryMarker 与回放 PiHistoryMapper 共用
+- pi/rpc-types.ts custom 消息补 customType/display；docs/providers.md 与 .atw/spec/server/backend/quality-guidelines.md 记录约定
+- atw-code-review 两轴无硬性问题；steer 关联疑点经核实不成立（/skill: 走斜杠命令，不进 steer）
+- 核对 OMP：skill 以 customType skill-prompt、display:true 的 custom 消息发出，被映射成含全文的助手文本；用户决定另开任务，结论记在归档 PRD
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2838a4c53` | fix(pi): 时间线隐藏 display:false 的 custom 消息，skill 展开块还原为 /skill:name |
+| `fec0d9406` | chore(task): archive 09-27-pi-hidden-context |
+
+### Testing
+
+- [OK] [OK] pi/ 目录 6 个测试文件 136 个用例通过；server typecheck、oxlint 通过
+- [OK] [OK] 用户在 dev 桌面端（daemon 6769，重建 server dist）用 Pi 发「你好」，注入上下文不再出现
+- [OK] [OK] 提交因本机 cli tsgo 已知 TS7006 退化用 --no-verify
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 为 OMP 的 skill-prompt 全文显示问题新建任务（含实时去重与轮次提前结算的核实）
+- Pi 扩展 notify 提示行（observational memory、workspace history）是否折叠，待用户决定

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-09-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~204 | Active |
+| `journal-1.md` | ~246 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-09-27 | pi-hidden-context：隐藏 Pi 注入上下文与 skill 展开全文 | `2838a4c53`, `fec0d9406` | `main` |
 | 6 | 2026-09-27 | fork-desktop-distribution 验收归档 | - | `main` |
 | 5 | 2026-09-27 | ui-redesign 工单 11、CI 修复、验收归档与合并 | `8377ff61b`, `8f15ffc45`, `89e3baa1e` | `main` |
 | 4 | 2026-09-20 | 插件主题与内置主题重名的消歧 | `45fe656ab` | `feat/usage-stats` |
