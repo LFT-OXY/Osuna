@@ -4,9 +4,9 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
-- [ ] 四个工作流只剩手动触发，YAML 能被 GitHub 正常解析（推送后 Actions 页面不报 workflow 语法错误）
+- [x] 四个工作流只剩手动触发，YAML 能被 GitHub 正常解析（推送后 Actions 页面不报 workflow 语法错误）
 - [x] 其余工作流（Desktop Release、Docker、CI 等）的触发条件没有变化
 
 ## Comments
@@ -18,4 +18,4 @@
 - 有意保留的死分支：`deploy-website` 的 job `if`（判断 release 事件）、`android-apk-release` 里 `github.event_name == 'workflow_dispatch' && inputs.tag || github.ref` 的兜底。手动派发下它们恒走同一支，不影响运行；保留是为了把触发加回来时只改 `on:`，也少和上游冲突。评审两轴都认可保留。
 - `docs/release.md` 的 fork 分发章节补一段：这四个工作流在 fork 下只手动触发，文件保留供自建。上游章节里关于 APK / 网站触发的描述属于上游发布路径，不改。
 - 验证：用 `yaml` 包解析全部 12 个工作流通过，四个工作流的触发只剩 `workflow_dispatch`，其余 8 个的触发与基点一致；没有工作流通过 `workflow_run` / `workflow_call` 引用这四个；改动文件 oxfmt 检查通过。纯 YAML 与文档改动，不涉及 typecheck 和单测。
-- 待确认：第一条验收里「推送后 Actions 页面不报 workflow 语法错误」要推送后才能确认，Impl 保持 doing。
+- 推送确认（2026-09-27）：`09ee4e380` 推到 origin 后，该分支两个提交都没有产生任何 run，没有 Invalid workflow file 的失败运行。
