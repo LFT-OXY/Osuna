@@ -109,7 +109,7 @@ jobs:
       packages: read
     runs-on: ${{ matrix.runner }}
     env:
-      # Osuna 签名证书的 SHA-1 指纹，也就是 DR 里的 `certificate leaf`（ADR 0001）。它是
+      # Osuna 签名证书的 SHA-1 指纹，也就是 DR 里钉住的证书哈希（ADR 0001）。它是
       # 公开信息，钉在这里而不是放进 secrets：换了证书的 CSC_LINK 会在签名或断言时失败，
       # 而不是悄悄发出一个打断所有人更新链的包。只有有意轮换证书时才改它。
       OSUNA_MAC_SIGNING_SHA1: "41B36EDDC9E915B7A457C0A08673AC5DF0DAF77B"

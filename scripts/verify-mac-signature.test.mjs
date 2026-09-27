@@ -20,6 +20,21 @@ test("normalizes a colon-separated lowercase fingerprint", () => {
   assert.equal(normalizeSha1(colonSeparated), SHA1);
 });
 
+test("accepts a self-signed certificate pinned as the chain root", () => {
+  // 叶证书带 Organization 时，codesign 沿链上溯，自签证书的链只有一张，于是写成 root。
+  const output = codesignOutput(
+    `identifier "sh.paseo.desktop" and certificate root = H"${SHA1.toLowerCase()}"`,
+  );
+  assert.equal(checkDesignatedRequirement(output, SHA1), null);
+});
+
+test("rejects a chain root that is a different certificate", () => {
+  const output = codesignOutput(
+    `identifier "x" and certificate root = H"5a1b00000000000000000000000000000000c883"`,
+  );
+  assert.match(checkDesignatedRequirement(output, SHA1), /not pinned to certificate/);
+});
+
 test("rejects an ad-hoc requirement pinned to the cdhash", () => {
   const output = codesignOutput(`cdhash H"a4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5"`);
   assert.match(checkDesignatedRequirement(output, SHA1), /pinned to a cdhash/);
@@ -34,7 +49,7 @@ test("rejects a requirement pinned to a different certificate", () => {
   const output = codesignOutput(
     `identifier "x" and certificate leaf = H"5a1b000000000000000000000000000000c883"`,
   );
-  assert.match(checkDesignatedRequirement(output, SHA1), /not pinned to certificate leaf/);
+  assert.match(checkDesignatedRequirement(output, SHA1), /not pinned to certificate/);
 });
 
 test("rejects an unsigned bundle", () => {

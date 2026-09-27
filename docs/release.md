@@ -131,7 +131,8 @@ electron-builder 把它烘进安装包内的 `app-update.yml`，客户端据此�
 
 CI 发出的 macOS 包（arm64 与 x64）都用同一张长期固定的自签名证书签名（ADR 0001）。
 这张证书就是更新身份：Squirrel.Mac 只安装满足当前应用 designated requirement 的新包，
-而 DR 绑的是这张证书（`certificate leaf = H"<SHA-1 指纹>"`）和 appId。
+而 DR 绑的是这张证书（`certificate root = H"<SHA-1 指纹>"`：证书带 `O=` 字段时 codesign
+写 `root`，否则写 `leaf`，自签证书两者是同一张）和 appId。
 
 - **存放位置**：本机 `~/.config/osuna/codesign/`（目录权限 700），里面是
   `osuna-codesign.p12`、导出密码 `osuna-codesign.p12.password`（权限 600）和公开的

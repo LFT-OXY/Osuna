@@ -29,9 +29,11 @@ export function checkDesignatedRequirement(codesignOutput, expectedSha1) {
   if (/\bcdhash\b/.test(requirement)) {
     return `Designated requirement is pinned to a cdhash (ad-hoc signature): ${requirement}`;
   }
-  const leaf = /certificate leaf = H"([0-9a-fA-F]{40})"/.exec(requirement);
-  if (!leaf || leaf[1].toUpperCase() !== expectedSha1) {
-    return `Designated requirement is not pinned to certificate leaf H"${expectedSha1}": ${requirement}`;
+  // 叶证书带 Organization 时 codesign 写 `certificate root`，否则写 `certificate leaf`；
+  // 自签证书的链只有一张，两种写法钉的是同一张证书。
+  const pinned = /certificate (?:leaf|root) = H"([0-9a-fA-F]{40})"/.exec(requirement);
+  if (!pinned || pinned[1].toUpperCase() !== expectedSha1) {
+    return `Designated requirement is not pinned to certificate H"${expectedSha1}": ${requirement}`;
   }
   return null;
 }
