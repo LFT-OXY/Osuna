@@ -88,10 +88,15 @@
 
 ### 图标
 
-- 源图是用户调整好的 1254² PNG，底板占画布约 80%，符合 Apple 图标栅格。先做清理：底板内部 alpha 补到 255，清除画布边缘的低 alpha 杂点。
-- 从清理后的源图派生：macOS icns、Windows ico（16–256）、Linux 各尺寸 png、打包进应用和通知用的 png、开发版图标，以及 Web 的 favicon、PWA、apple-touch 图标。favicon 的状态变体（running / attention）按现有的状态语义重新生成。
-- 应用内 logo：欢迎页和启动闪屏使用彩色图标（位图）。16px 的工具调用小图标换成新描的单色鸟形 SVG，随主题着色，替代原来的蝴蝶组件。
-- 派生过程写成一个可以重复运行的脚本，源图放进仓库。以后换 logo 只需替换源图再跑一遍。
+- 源图是用户调整好的 1254² PNG（`packages/desktop/icon-source/osuna.png`），底板占画布约 80%，符合 Apple 图标栅格。先做清理：底板内部 alpha 补到 255，清除画布边缘的低 alpha 杂点。清理结果由脚本自行断言，不满足就报错。
+- 从清理后的源图派生：macOS icns、Windows ico（16–256）、Linux 各尺寸 png、打包进应用和通知用的 png、开发版图标，以及 Web 的 favicon、PWA、apple-touch 图标。
+  - 桌面端图标用整张画布，保留 Apple 栅格留白，Dock 里的大小与系统图标一致。Web 图标和应用内 logo 按底板满版裁切，与原来的图标一致。
+  - icns 的条目类型与 iconutil 的输出相同：16、32 的 1x 用 ARGB 格式（ic04 / ic05），其余用 PNG。
+  - 开发版图标（实施时经用户确认）：鸟身色相转 140°，由蓝变为橙棕，胸口随之变为青色；按饱和度混合，米色底板不变。
+  - favicon 的状态变体（running / attention）沿用原来的标记：700 画布上圆心 (570,570)、半径 130 的圆点，running 为 `#3b82f6`，attention 为 `#22c55e`。圆点外圈挖出一道透明缝，与底板分开。亮暗两版仍是同一张图（原来也是）。
+- 应用内 logo：欢迎页、启动闪屏（加载态和错误态）、打开项目页使用彩色图标位图（`OsunaLogo`）。打开项目页原来也引用蝴蝶组件，一并替换，这样蝴蝶组件才能删除。闪屏的高光在 Web 端改为按底板圆角裁切；原来用蝴蝶路径做遮罩，这条路径已经不存在。16px 的工具调用小图标换成按源图描出的单色鸟形 SVG（`OsunaGlyph`），随主题着色。原来的蝴蝶组件已删除。
+- 派生过程写成一个可以重复运行的脚本 `scripts/generate-osuna-icons.mjs`，用 Node + sharp 实现（实施时经用户确认；sharp 加为根 devDependency），重复运行的产物逐字节相同。以后换 logo 只需替换源图再跑一遍。
+- 原有的未引用文件 `butterfly-*.svg` 与 `favicon-*.svg` 在本次改动之前就已是孤儿，不属于本票的清理范围，保留不动。
 
 ### 更新与外链只指向本仓库
 
