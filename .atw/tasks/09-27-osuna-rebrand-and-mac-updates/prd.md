@@ -92,11 +92,15 @@
 
 ### 更新与外链只指向本仓库
 
-- Rosetta 提示的下载基址改为本仓库的 Releases，回退地址同样指向本仓库的 Releases 页面。
+- Rosetta 提示的下载基址改为本仓库的 Releases（`.../releases/download/v<版本>/Osuna-<版本>-arm64.dmg`，与 mac `artifactName` 一致），取不到版本时打开本仓库的 Releases 页面。
 - 应用内更新日志改为读取本仓库主分支的 `CHANGELOG.md`。
 - daemon 自更新：server 不再在 `server_info.features` 中声明 `daemonSelfUpdate`，对应的 RPC 也拒绝执行。官方手机 App 和本仓库的界面都靠这个 capability 判断，所以会一起隐藏入口，这符合 `docs/protocol-compatibility.md` 的 feature contract。桌面托管与否都不声明。拒绝的形式是 `daemon.update.response { success: false, error, previousVersion, newVersion: null }`，客户端沿用已有的失败提示显示原因。npm 自更新实现（updater、session controller、install-origin、npm-global-cli）随之成为孤儿，已删除；protocol 里的 `daemonSelfUpdate` 字段、client 的 `updateDaemon`、app 的更新卡片保留。已知例外：远程的桌面托管 daemon 版本与 app 不一致时，host 页仍显示那张按钮禁用、提示去 host 上更新桌面端的卡片。这是原有的版本不一致提示，不是自更新入口，要隐藏它就得在 app 里另加判断，违反 feature contract。
 - CLI 找不到桌面端时的提示、onboard 里的下载链接改为指向本仓库。
-- 反馈与 Issue 链接、仓库链接改为指向 `LFT-OXY/Osuna`。删除赞助链接。删除应用和 CLI 里所有指向上游文档站的链接，包括只为承载这些链接而存在的「了解更多」元素。
+- 反馈与 Issue 链接、仓库链接改为指向 `LFT-OXY/Osuna`。删除赞助链接。删除应用和 CLI 里所有指向上游文档站的链接，包括只为承载这些链接而存在的「了解更多」元素。以下三项在实施时经用户确认追加：
+  - 上游 Discord 入口一并删除（侧栏帮助菜单的 Discord 项、CommunityLinks 的 Community 按钮）。
+  - server 与 protocol 里两条插件报错（旧入口 `index.ts`、缺少 `requirements.paseo`）去掉迁移指南链接，只保留「请插件作者更新 / 迁移」。
+  - `paseo plugin scaffold` 模板里演示 `openExternal` 的按钮改为打开本仓库，保留这个 API 示例。
+- 不属于外链清理的命中：hub、relay、app 的服务端点默认值（含 onboard 里的 Web app 地址和配对链接输入框的占位符），以及 podspec、`packages/desktop/package.json`、`packages/client/README.md` 里的包元数据和开发文档，都不改。
 - 工作流：`android-apk-release`、`deploy-app`、`deploy-website`、`deploy-relay` 只保留 `workflow_dispatch`，文件本身保留。`deploy-website` 的 `release: published` 触发一并去掉（发布 Desktop Release 时同样会必然失败）；`deploy-relay` 原本就只有手动触发。job 里只对 push / release 事件有意义的条件（`deploy-website` 的 `if`、`android-apk-release` 的 `|| github.ref` 兜底）有意保留，把触发加回来时只改 `on:` 一处。fork 发版文档写明这四个工作流在 fork 下停用。
 
 ### macOS 签名（ADR 0001）
