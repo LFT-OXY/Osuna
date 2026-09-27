@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 ## 范围
 
@@ -19,10 +19,20 @@
 
 ## 验收
 
-- [ ] `e2e/browser/file-editing.spec.ts` 新增 README 风格 fixture 用例（本票部分）：原始 HTML 不以文字出现；居中容器计算样式为居中；多个徽章图片纵坐标相同；`<script>` 未执行、事件属性被剥离、`javascript:` 链接不可用。
-- [ ] 现有「Markdown 预览刷新」「长行换行」用例保持不变并通过；预览 / 源代码切换与磁盘变更刷新照常。
-- [ ] GFM 表格、任务列表、删除线渲染正确；front matter 表格保留；mermaid 图表渲染。
-- [ ] 深浅色切换时正文、表格、引用颜色正确。
-- [ ] 现有 RN 渲染器相关测试（html-ish、renderer 等）不改断言、继续通过；原生端预览代码路径未改。
-- [ ] 移植文件保留 t3code MIT 声明。
-- [ ] app 包 typecheck、lint 通过。
+- [x] `e2e/browser/file-editing.spec.ts` 新增 README 风格 fixture 用例（本票部分）：原始 HTML 不以文字出现；居中容器计算样式为居中；多个徽章图片纵坐标相同；`<script>` 未执行、事件属性被剥离、`javascript:` 链接不可用。
+- [x] 现有「Markdown 预览刷新」「长行换行」用例保持不变并通过；预览 / 源代码切换与磁盘变更刷新照常。
+- [x] GFM 表格、任务列表、删除线渲染正确；front matter 表格保留；mermaid 图表渲染。
+- [x] 深浅色切换时正文、表格、引用颜色正确。
+- [x] 现有 RN 渲染器相关测试（html-ish、renderer 等）不改断言、继续通过；原生端预览代码路径未改。
+- [x] 移植文件保留 t3code MIT 声明。
+- [x] app 包 typecheck、lint 通过。
+
+## Comments
+
+- 实现：`file-pane/markdown-preview/index.web.tsx`（外框、front matter、主题变量根节点）、`dom-markdown.web.tsx`（react-markdown 管线与 `pre` / `code` / `a` / `table` 覆盖）、`styles.web.ts`（移植的版式，只引用 `--md-*` 变量）。约定写入 `.atw/spec/app/frontend/styling.md`「Web-only styling」的 DOM markdown 段。
+- 白名单即 `defaultSchema`，只把 `href` 协议收窄到 http / https / mailto。`mailto:` 能通过消毒，但点击无反应：两端 opener 都只放行 http(s)，与原 RN 预览一致。
+- 未加「代码块元信息」插件：本票没有读取方，交给 04 连同头部一起加。
+- 与 t3code 的偏差：表格去掉 `min-width: max-content`（t3code 拿它配合单元格截断，这里没有移植截断），改为按词换行、放不下再横向滚动；`th` / `td` 只在无 `align` 时左对齐，保证 GFM 列对齐生效；另补了浏览器默认样式的归零（`blockquote` 外边距、`hr`、`dl` / `details` / `figure` 外边距、`img` 的 `max-width`）。
+- 间距按本票「版式照搬 t3code」保留 t3code 的 rem 值，没有换成 `theme.spacing` 刻度。它与 `docs/design.md` §14「刻度外间距」相冲突，已提给用户决定。h4–h6 用 t3code 的 14px（`body` 档），与 RN `markdown-styles.ts` 的 h4 `body-lg` 不同。
+- 深浅色 e2e 用例在切换时整个面板会被重新挂载，所以它验证的是「颜色取自 token」，并不单独验证 `withUnistyles` 的响应式。
+- 验证：README 用例、深浅色用例、原有「Markdown 预览刷新」「长行换行」用例本地通过；app 单测全绿（631 个文件）；app typecheck 与 lint 通过；桌面端尺寸下截图对照过 `README.zh-CN.md` 的深浅两色。

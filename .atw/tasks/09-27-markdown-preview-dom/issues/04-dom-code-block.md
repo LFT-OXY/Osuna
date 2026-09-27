@@ -21,3 +21,7 @@
 - [ ] 切换语法主题与深浅色后代码块颜色随之变化（人工验证）。
 - [ ] 语言图标对 bash、ts、json 等常见语言显示正确。
 - [ ] app 包 typecheck、lint 通过。
+
+## Comments
+
+- 来自 02：02 没有加 t3code 的 `remarkPreserveCodeMeta`（把 fence 元信息写成 `data-code-meta`），加它时要同时在 `PREVIEW_SANITIZE_SCHEMA.attributes.code` 放行 `dataCodeMeta`。代码块目前由 `dom-markdown.web.tsx` 的 `MarkdownPre` 输出为带 `data-pmono` 的纯 `<pre>`，mermaid 已在同一处分流。

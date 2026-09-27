@@ -19,3 +19,7 @@
 - [ ] README 风格 e2e 用例补充断言：点击仓库内 `.md` 链接 chip 打开对应文件标签；点击锚点后目标标题滚动进可视区。
 - [ ] 外链点击仍用浏览器打开，不在应用内导航。
 - [ ] app 包 typecheck、lint 通过。
+
+## Comments
+
+- 来自 02：`defaultSchema` 会给 `id` / `name` 加 `user-content-` 前缀（clobber），页内锚点 `#foo` 需要去掉前缀后再匹配，或自行生成标题 slug id。`MarkdownLink` 目前对所有点击 `preventDefault`，只把 `^https?://` 交给 `openExternalUrl`，相对链接与锚点暂时点击无反应。`mailto:` 同样无反应，本票如要支持，需要同时改 app 与桌面端 opener 的协议白名单。

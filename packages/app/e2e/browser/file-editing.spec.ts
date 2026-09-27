@@ -8,6 +8,7 @@ import {
 } from "../support/helpers/file-explorer";
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import { expectDiagramWithLabels } from "../support/helpers/diagram";
 
 const APP_SETTINGS_KEY = "@paseo:app-settings";
 
@@ -20,11 +21,68 @@ const BLUE_PIXEL = Buffer.from(
   "base64",
 );
 const BLOCKED_PREVIEW_URL = "https://html-preview.invalid/leak";
+const README_BADGE_ORIGIN = "https://badges.readme.test";
+const README_LINK_ORIGIN = "https://docs.readme.test";
+const README_FIXTURE = [
+  "---",
+  "title: Fixture title",
+  "---",
+  '<p align="center">',
+  `  <a href="${README_LINK_ORIGIN}/docs"><img src="${README_BADGE_ORIGIN}/docs.png" alt="Docs badge" width="60" height="20"></a>`,
+  `  <a href="${README_LINK_ORIGIN}/ci"><img src="${README_BADGE_ORIGIN}/ci.png" alt="CI badge" width="60" height="20"></a>`,
+  `  <img src="${README_BADGE_ORIGIN}/license.png" alt="License badge" width="60" height="20">`,
+  "</p>",
+  "",
+  '<h1 align="center">Readme fixture</h1>',
+  "",
+  "<script>window.readmeScriptRan = true;</script>",
+  "",
+  `<img src="${README_BADGE_ORIGIN}/missing.png" alt="Handler image" width="10" height="10" onerror="window.readmeHandlerRan = true">`,
+  "",
+  '<iframe srcdoc="<script>parent.readmeFrameRan = true;</script>"></iframe>',
+  "",
+  "<style>body { display: none; }</style>",
+  "",
+  '<p><span style="color: red">Styled text</span></p>',
+  "",
+  "[Unsafe link](javascript:window.readmeLinkRan=true)",
+  "",
+  '<a href="javascript:window.readmeLinkRan=true">Unsafe html link</a>',
+  "",
+  "| Name | Status |",
+  "| --- | :---: |",
+  "| Table cell | ~~Removed~~ |",
+  "",
+  "- [x] Done task",
+  "- [ ] Open task",
+  "",
+  "```mermaid",
+  "graph TD",
+  "  Alpha --> Beta",
+  "```",
+  "",
+].join("\n");
 
 interface LinkedFile {
   target: string;
   fileName: string;
   content: string;
+}
+
+// Chromium 把 align="center" 计算为 -webkit-center（连同块级子元素一起居中）。
+const CENTERED = /^(-webkit-)?center$/;
+const README_UNSAFE_FLAGS = [
+  "readmeScriptRan",
+  "readmeHandlerRan",
+  "readmeLinkRan",
+  "readmeFrameRan",
+];
+
+function readSetWindowFlags(page: Page, names: readonly string[]): Promise<string[]> {
+  return page.evaluate((flagNames) => {
+    const flags = window as unknown as Record<string, unknown>;
+    return flagNames.filter((flag) => flags[flag] !== undefined);
+  }, names);
 }
 
 function editor(page: Page) {
@@ -551,6 +609,128 @@ test.describe("CodeMirror workspace file editing", () => {
     const initialSource = await image.getAttribute("src");
     await writeFile(imagePath, BLUE_PIXEL);
     await expect.poll(() => image.getAttribute("src")).not.toBe(initialSource);
+  });
+
+  test("renders a README-style Markdown file as sanitized HTML with GFM", async ({
+    page,
+    withWorkspace,
+  }) => {
+    test.setTimeout(90_000);
+    await page
+      .context()
+      .route(`${README_BADGE_ORIGIN}/**`, (route) =>
+        route.request().url().endsWith("/missing.png")
+          ? route.fulfill({ status: 404 })
+          : route.fulfill({ contentType: "image/png", body: RED_PIXEL }),
+      );
+    await page
+      .context()
+      .route(`${README_LINK_ORIGIN}/**`, (route) =>
+        route.fulfill({ contentType: "text/html", body: "<title>Docs</title>" }),
+      );
+    const workspace = await withWorkspace({ prefix: "file-editing-readme-preview-" });
+    await writeFile(path.join(workspace.repoPath, "README.md"), README_FIXTURE, "utf8");
+    await workspace.navigateTo();
+    await openWorkspaceFile(page, "README.md");
+
+    const preview = page.getByTestId("file-markdown-preview").filter({ visible: true });
+    await expect(preview.getByRole("heading", { level: 1, name: "Readme fixture" })).toBeVisible();
+    for (const rawMarkup of ["<p", "<img", "<h1", "align=", "<script", "onerror"]) {
+      await expect(preview).not.toContainText(rawMarkup);
+    }
+
+    await expect(preview.getByRole("heading", { level: 1, name: "Readme fixture" })).toHaveCSS(
+      "text-align",
+      CENTERED,
+    );
+    const badges = ["Docs badge", "CI badge", "License badge"].map((name) =>
+      preview.getByRole("img", { name, exact: true }),
+    );
+    await expect(badges[0].locator("xpath=ancestor::p[1]")).toHaveCSS("text-align", CENTERED);
+    const badgeTops = await Promise.all(
+      badges.map(async (badge) => {
+        await expect(badge).toBeVisible();
+        return (await badge.boundingBox())?.y;
+      }),
+    );
+    expect(new Set(badgeTops).size).toBe(1);
+    const docsLink = preview.getByRole("link", { name: "Docs badge", exact: true });
+    await expect(docsLink).toHaveAttribute("href", `${README_LINK_ORIGIN}/docs`);
+    const popupPromise = page.waitForEvent("popup");
+    await docsLink.click();
+    const popup = await popupPromise;
+    await expect.poll(() => popup.url()).toBe(`${README_LINK_ORIGIN}/docs`);
+    await popup.close();
+
+    await expect(preview.getByTestId("markdown-front-matter")).toContainText("Fixture title");
+    const table = preview.getByRole("table");
+    await expect(table.getByRole("columnheader")).toHaveText(["Name", "Status"]);
+    await expect(table.getByRole("cell")).toHaveText(["Table cell", "Removed"]);
+    await expect(table.locator("del")).toHaveText("Removed");
+    const tasks = preview.getByRole("checkbox");
+    await expect(tasks).toHaveCount(2);
+    await expect(tasks.first()).toBeChecked();
+    await expect(tasks.last()).not.toBeChecked();
+    await expectDiagramWithLabels(page, ["Alpha", "Beta"]);
+
+    await expect(preview.locator("script, style")).toHaveCount(0);
+    // mermaid 自带渲染 iframe，只断言 fixture 里的那个被剥掉。
+    await expect(preview.locator('iframe[srcdoc*="readmeFrameRan"]')).toHaveCount(0);
+    const handlerImage = preview.getByRole("img", { name: "Handler image", exact: true });
+    await expect(handlerImage).toBeAttached();
+    await expect(handlerImage).not.toHaveAttribute("onerror");
+    await expect(preview.getByText("Styled text", { exact: true })).not.toHaveAttribute("style");
+    const pageUrl = page.url();
+    for (const name of ["Unsafe link", "Unsafe html link"]) {
+      const unsafeLink = preview.getByText(name, { exact: true });
+      await expect(unsafeLink).not.toHaveAttribute("href", /javascript:/i);
+      await unsafeLink.click();
+    }
+    expect(page.url()).toBe(pageUrl);
+    expect(await readSetWindowFlags(page, README_UNSAFE_FLAGS)).toEqual([]);
+  });
+
+  test("repaints Markdown prose, quotes, and tables when the color scheme changes", async ({
+    page,
+    withWorkspace,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.addInitScript((key) => {
+      localStorage.setItem(key, JSON.stringify({ theme: "auto" }));
+    }, APP_SETTINGS_KEY);
+    const workspace = await withWorkspace({ prefix: "file-editing-markdown-theme-" });
+    await writeFile(
+      path.join(workspace.repoPath, "notes.md"),
+      "Body text\n\n> Quoted text\n\n| Key | Value |\n| --- | --- |\n| Cell | Data |\n",
+      "utf8",
+    );
+    await workspace.navigateTo();
+    await openWorkspaceFile(page, "notes.md");
+
+    const preview = page.getByTestId("file-markdown-preview").filter({ visible: true });
+    const probes = {
+      body: preview.getByText("Body text", { exact: true }),
+      quote: preview.getByText("Quoted text", { exact: true }),
+      cell: preview.getByRole("cell", { name: "Cell", exact: true }),
+    };
+    // 默认 Light / Dark 主题的 foregroundProse、foregroundMuted、border。
+    const expectColors = async (colors: { body: string; quote: string; cellBorder: string }) => {
+      await expect(probes.body).toHaveCSS("color", colors.body);
+      await expect(probes.quote).toHaveCSS("color", colors.quote);
+      await expect(probes.cell).toHaveCSS("border-bottom-color", colors.cellBorder);
+    };
+    await expectColors({
+      body: "rgba(39, 39, 42, 0.86)",
+      quote: "rgb(113, 113, 123)",
+      cellBorder: "rgb(228, 228, 231)",
+    });
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expectColors({
+      body: "rgba(245, 245, 245, 0.86)",
+      quote: "rgb(129, 129, 129)",
+      cellBorder: "rgb(25, 25, 25)",
+    });
   });
 
   test("previews and refreshes an HTML plan while preserving source access", async ({
