@@ -5,6 +5,7 @@ import { MAX_CONTENT_WIDTH } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
 import { DomMarkdown } from "./dom-markdown.web";
 import { parseMarkdownPreviewDocument, type MarkdownFrontMatterRow } from "./document";
+import type { MarkdownPreviewResources } from "./resource";
 import {
   installMarkdownPreviewStyles,
   MARKDOWN_PREVIEW_CLASS_NAME,
@@ -51,7 +52,12 @@ function FrontMatterTable({ rows }: FrontMatterTableProps) {
   );
 }
 
-export function FileMarkdownPreview({ source }: { source: string }) {
+interface FileMarkdownPreviewProps {
+  source: string;
+  resources: MarkdownPreviewResources;
+}
+
+export function FileMarkdownPreview({ source, resources }: FileMarkdownPreviewProps) {
   const document = useMemo(() => parseMarkdownPreviewDocument(source), [source]);
   useInsertionEffect(installMarkdownPreviewStyles, []);
 
@@ -62,7 +68,7 @@ export function FileMarkdownPreview({ source }: { source: string }) {
           {document.frontMatter.length > 0 ? (
             <FrontMatterTable rows={document.frontMatter} />
           ) : null}
-          <DomMarkdown source={document.body} />
+          <DomMarkdown source={document.body} resources={resources} />
         </ThemedMarkdownPreviewSurface>
       </View>
     </View>

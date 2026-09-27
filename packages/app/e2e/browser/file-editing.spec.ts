@@ -39,6 +39,12 @@ const README_FIXTURE = [
   "",
   '<h1 align="center">Readme fixture</h1>',
   "",
+  "![Markdown screenshot](docs/shots/pixel.png)",
+  "",
+  '<img src="./docs/shots/pixel.png" alt="Html screenshot" width="20" height="20">',
+  "",
+  "![Missing screenshot](docs/shots/missing.png)",
+  "",
   "<script>window.readmeScriptRan = true;</script>",
   "",
   `<img src="${README_BADGE_ORIGIN}/missing.png" alt="Handler image" width="10" height="10" onerror="window.readmeHandlerRan = true">`,
@@ -118,6 +124,10 @@ function hasHorizontalOverflow(element: HTMLElement): boolean {
 
 function readBorderLeftColors(elements: Element[]): string[] {
   return elements.map((element) => getComputedStyle(element).borderLeftColor);
+}
+
+function readNaturalWidth(image: HTMLImageElement): number {
+  return image.naturalWidth;
 }
 
 function readInnerHtml(elements: Element[]): string[] {
@@ -672,6 +682,9 @@ test.describe("CodeMirror workspace file editing", () => {
         route.fulfill({ contentType: "text/html", body: "<title>Docs</title>" }),
       );
     const workspace = await withWorkspace({ prefix: "file-editing-readme-preview-" });
+    const screenshotPath = path.join(workspace.repoPath, "docs", "shots", "pixel.png");
+    await mkdir(path.dirname(screenshotPath), { recursive: true });
+    await writeFile(screenshotPath, RED_PIXEL);
     await writeFile(path.join(workspace.repoPath, "README.md"), README_FIXTURE, "utf8");
     await workspace.navigateTo();
     await openWorkspaceFile(page, "README.md");
@@ -704,6 +717,23 @@ test.describe("CodeMirror workspace file editing", () => {
     const popup = await popupPromise;
     await expect.poll(() => popup.url()).toBe(`${README_LINK_ORIGIN}/docs`);
     await popup.close();
+
+    // markdown 语法与 <img> 两种写法的相对路径图片都经工作区读取链路显示。
+    const screenshots = ["Markdown screenshot", "Html screenshot"].map((name) =>
+      preview.locator(`img[alt="${name}"]`),
+    );
+    for (const screenshot of screenshots) {
+      await expect.poll(() => screenshot.evaluate(readNaturalWidth)).toBeGreaterThan(0);
+    }
+    const initialScreenshotSource = await screenshots[0].getAttribute("src");
+    await writeFile(screenshotPath, BLUE_PIXEL);
+    await expect.poll(() => screenshots[0].getAttribute("src")).not.toBe(initialScreenshotSource);
+    await expect.poll(() => screenshots[0].evaluate(readNaturalWidth)).toBeGreaterThan(0);
+    const missingScreenshot = preview.getByTestId("markdown-image-missing").filter({
+      hasText: "Missing screenshot",
+    });
+    await expect(missingScreenshot).toBeVisible();
+    await expect(missingScreenshot).toHaveAttribute("role", "img");
 
     await expect(preview.getByTestId("markdown-front-matter")).toContainText("Fixture title");
     const alert = preview.getByRole("note");

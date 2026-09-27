@@ -35,7 +35,11 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react-native";
-import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
+import ReactMarkdown, {
+  defaultUrlTransform,
+  type Components,
+  type ExtraProps,
+} from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -47,12 +51,16 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { MarkdownCodeBlock } from "./code-block.web";
 import { isGithubAlertKind, remarkGithubAlerts, type GithubAlertKind } from "./github-alerts";
+import { MarkdownImage } from "./image.web";
+import { isDataImageUrl, type MarkdownPreviewResources } from "./resource";
+import { MarkdownPreviewResourcesContext } from "./resources-context.web";
 
 type HastNode = NonNullable<ExtraProps["node"]>;
 type HastChild = HastNode["children"][number];
 
 // 默认 schema 即 GitHub 的白名单：保留 align 等排版属性，剥掉 script、style、iframe 与事件属性。
 // 链接协议在此基础上收窄到 http(s) / mailto；相对路径与页内锚点不带协议，本就放行。
+// 图片另放行 data:（<img> 里的 data 地址不会执行脚本）；只有 data:image/ 能通过 previewUrlTransform。
 const PREVIEW_SANITIZE_SCHEMA = {
   ...defaultSchema,
   attributes: {
@@ -62,6 +70,7 @@ const PREVIEW_SANITIZE_SCHEMA = {
   protocols: {
     ...defaultSchema.protocols,
     href: ["http", "https", "mailto"],
+    src: ["http", "https", "data"],
   },
 } satisfies SanitizeSchema;
 
@@ -69,6 +78,13 @@ const REMARK_PLUGINS = [remarkGfm, remarkGithubAlerts];
 const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, PREVIEW_SANITIZE_SCHEMA]] satisfies NonNullable<
   ComponentProps<typeof ReactMarkdown>["rehypePlugins"]
 >;
+
+// react-markdown 默认会把 data: 地址清空；图片的 data:image/ 放行，其余照默认处理。
+function previewUrlTransform(url: string, key: string, node: Readonly<HastNode>): string {
+  const isImageSource = key === "src" && node.tagName === "img";
+  if (isImageSource && isDataImageUrl(url)) return url;
+  return defaultUrlTransform(url);
+}
 
 const EMPTY_TEXT_STYLE: TextStyle = {};
 
@@ -204,18 +220,27 @@ const COMPONENTS = {
   a: MarkdownLink,
   blockquote: MarkdownBlockquote,
   table: MarkdownTable,
+  img: MarkdownImage,
 } satisfies Components;
 
-export const DomMarkdown = memo(function DomMarkdown({ source }: { source: string }) {
+interface DomMarkdownProps {
+  source: string;
+  resources: MarkdownPreviewResources;
+}
+
+export const DomMarkdown = memo(function DomMarkdown({ source, resources }: DomMarkdownProps) {
   return (
-    <div className="md-body">
-      <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={REHYPE_PLUGINS}
-        components={COMPONENTS}
-      >
-        {source}
-      </ReactMarkdown>
-    </div>
+    <MarkdownPreviewResourcesContext.Provider value={resources}>
+      <div className="md-body">
+        <ReactMarkdown
+          remarkPlugins={REMARK_PLUGINS}
+          rehypePlugins={REHYPE_PLUGINS}
+          components={COMPONENTS}
+          urlTransform={previewUrlTransform}
+        >
+          {source}
+        </ReactMarkdown>
+      </div>
+    </MarkdownPreviewResourcesContext.Provider>
   );
 });

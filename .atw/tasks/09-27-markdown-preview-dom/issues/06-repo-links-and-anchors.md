@@ -23,3 +23,4 @@
 ## Comments
 
 - 来自 02：`defaultSchema` 会给 `id` / `name` 加 `user-content-` 前缀（clobber），页内锚点 `#foo` 需要去掉前缀后再匹配，或自行生成标题 slug id。`MarkdownLink` 目前对所有点击 `preventDefault`，只把 `^https?://` 交给 `openExternalUrl`，相对链接与锚点暂时点击无反应。`mailto:` 同样无反应，本票如要支持，需要同时改 app 与桌面端 opener 的协议白名单。
+- 来自 05：分类函数是 `file-pane/markdown-preview/resource.ts` 的 `resolveMarkdownResource`，它读取的上下文来自 `MarkdownPreviewResourcesContext`（`resources-context.web.ts`，由 `DomMarkdown` 提供）。目前它会先截掉 `?` / `#` 后缀，并把 `#…` 直接判为 `unsupported`。补锚点与 `#L12` 时，需要保留 fragment 并新增分类。现有的 `external` 只认 http(s) 与 `data:image/`，链接要支持 `mailto:` 时也得在这里处理。`MarkdownImage` 把非 `external` / `workspace_file` 的结果一律显示为占位，新增分类不会影响图片。

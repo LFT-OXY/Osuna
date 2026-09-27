@@ -30,6 +30,7 @@ import { resolveFilePreviewLifecycle } from "./preview-lifecycle/model";
 import { FilePanelBar } from "./bar";
 import { FileHtmlPreview } from "./html-preview";
 import { FileMarkdownPreview } from "./markdown-preview";
+import type { MarkdownPreviewResources } from "./markdown-preview/resource";
 import { FileEditorModel, getFileConflictCallout, type FileConflictCallout } from "./editor/model";
 import { createFileObservationSource } from "./editor/observation-source";
 import { FileEditorView } from "./editor/view";
@@ -54,6 +55,7 @@ interface FilePreviewBodyProps {
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
+  markdownResources: MarkdownPreviewResources;
 }
 
 type TextExplorerFile = ExplorerFile & { kind: "text" };
@@ -135,6 +137,7 @@ function FilePreviewBody({
   location,
   navigationRevision,
   imagePreviewUri,
+  markdownResources,
 }: FilePreviewBodyProps) {
   const { t } = useTranslation();
   const filePath = location.path;
@@ -182,7 +185,7 @@ function FilePreviewBody({
             style={styles.previewContent}
             showsVerticalScrollIndicator
           >
-            <FileMarkdownPreview source={preview.content ?? ""} />
+            <FileMarkdownPreview source={preview.content ?? ""} resources={markdownResources} />
           </RNScrollView>
         </View>
       );
@@ -278,6 +281,17 @@ export function FilePane({
 
   useEffect(() => setPreviewMode("preview"), [targetKey]);
 
+  const markdownResources = useMemo<MarkdownPreviewResources>(
+    () => ({
+      client,
+      workspaceRoot: normalizedWorkspaceRoot,
+      documentPath: location.path,
+      enabled,
+      liveUpdates: supportsEditing,
+    }),
+    [client, enabled, location.path, normalizedWorkspaceRoot, supportsEditing],
+  );
+
   const { file: preview, imageAttachment } = resolveFilePreviewLifecycle(previewLifecycle);
   const imagePreviewUri = useAttachmentPreviewUrl(imageAttachment);
   const isRenderable = isRenderablePreview(preview, location.path);
@@ -316,6 +330,7 @@ export function FilePane({
       location={location}
       navigationRevision={navigationRevision}
       imagePreviewUri={imagePreviewUri}
+      markdownResources={markdownResources}
     />
   );
 }
@@ -357,6 +372,7 @@ function FilePanePresentation({
   location,
   navigationRevision,
   imagePreviewUri,
+  markdownResources,
 }: {
   serverId: string;
   client: DaemonClient | null;
@@ -378,6 +394,7 @@ function FilePanePresentation({
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
+  markdownResources: MarkdownPreviewResources;
 }) {
   if (!client && readTarget) {
     return (
@@ -407,6 +424,7 @@ function FilePanePresentation({
         isMobile={isMobile}
         location={location}
         navigationRevision={navigationRevision}
+        markdownResources={markdownResources}
       />
     );
   }
@@ -449,6 +467,7 @@ function FilePanePresentation({
         location={location}
         navigationRevision={navigationRevision}
         imagePreviewUri={imagePreviewUri}
+        markdownResources={markdownResources}
       />
     </View>
   );
@@ -469,6 +488,7 @@ function EditableFilePane({
   isMobile,
   location,
   navigationRevision,
+  markdownResources,
 }: {
   client: DaemonClient;
   cwd: string;
@@ -484,6 +504,7 @@ function EditableFilePane({
   isMobile: boolean;
   location: WorkspaceFileLocation;
   navigationRevision: number;
+  markdownResources: MarkdownPreviewResources;
 }) {
   const { settings } = useAppSettings();
   const { t } = useTranslation();
@@ -622,6 +643,7 @@ function EditableFilePane({
           location={location}
           navigationRevision={navigationRevision}
           imagePreviewUri={null}
+          markdownResources={markdownResources}
         />
       )}
     </View>

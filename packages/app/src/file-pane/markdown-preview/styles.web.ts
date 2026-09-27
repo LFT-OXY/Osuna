@@ -232,6 +232,29 @@ ${ROOT} img {
   border-style: none;
 }
 
+/* 读不到的图片：行内占位，只显示图标与替代文字，不打断周围排版。 */
+${ROOT} .md-image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  padding: 0.125rem 0.5rem;
+  border: 1px dashed var(--md-border);
+  border-radius: var(--md-radius-inline-code);
+  color: var(--md-muted);
+  font-size: var(--md-table-size);
+  line-height: var(--md-table-line-height);
+  vertical-align: middle;
+}
+
+${ROOT} .md-image-missing > svg {
+  flex-shrink: 0;
+}
+
+${ROOT} .md-image-pending {
+  display: inline-block;
+}
+
 ${ROOT} a {
   color: var(--md-link);
   text-decoration: none;

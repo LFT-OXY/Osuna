@@ -4,8 +4,15 @@ import { StyleSheet } from "react-native-unistyles";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { MAX_CONTENT_WIDTH } from "@/constants/layout";
 import { parseMarkdownPreviewDocument } from "./document";
+import type { MarkdownPreviewResources } from "./resource";
 
-export function FileMarkdownPreview({ source }: { source: string }) {
+interface FileMarkdownPreviewProps {
+  source: string;
+  // 相对资源只在 Web 版解析；原生版沿用 RN 渲染器，签名与 Web 版保持一致。
+  resources: MarkdownPreviewResources;
+}
+
+export function FileMarkdownPreview({ source }: FileMarkdownPreviewProps) {
   const document = useMemo(() => parseMarkdownPreviewDocument(source), [source]);
 
   return (
