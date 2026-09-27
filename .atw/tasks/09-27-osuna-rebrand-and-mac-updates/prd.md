@@ -108,9 +108,12 @@
 
 ### 更新失败可见
 
-- 主进程把 electron-updater 的 logger（info / warn / error）接到 electron-log，Squirrel.Mac 的错误会进入 main.log。
-- app-update-service 的安装流程：调用安装后不再立即返回「已安装、即将重启」。只有收到 `before-quit-for-update` 才进入「正在重启」；如果先收到更新器错误，就把错误原因作为安装失败返回给界面。等待要有上限，超时按失败处理并提示原因。
-- 界面的更新区域在安装失败时展示原因，并给出「前往 Releases 手动下载」的出口，地址指向本仓库。
+- 主进程把 electron-updater 的 logger（info / warn / error）直接设为 electron-log，Squirrel.Mac 的错误会进入 main.log。代价是频道清单未发布（`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`）时 main.log 也会记一行 error；它仍不会作为检查失败上报给界面。
+- app-update-service 的安装流程：调用安装后不再立即返回「已安装、即将重启」。只有收到 `before-quit-for-update` 才进入「正在重启」；如果先收到更新器错误，就把错误原因作为安装失败返回给界面。等待上限 60 秒，超时按失败处理并提示原因。只有需要重启的手动安装等待交接；退出时的静默安装仍由 quit lifecycle 处理，不等这个事件。
+- 安装结果是判别联合：`failure` 为 `{ reason: "handoff-timeout" }` 或 `{ reason: "updater-error", message }`，没有失败时为 null。超时原因由界面翻译，更新器报错原文显示。点安装时的复查失败、下载失败也按安装失败返回。
+- 界面的更新区域在安装失败时（`install-failed` 状态）展示原因，并给出「前往 Releases 手动下载」的出口，地址指向本仓库。侧栏提示的「重试」重新执行安装；后台静默检查不会覆盖失败状态。
+- 安装前主进程会为更新停掉本地 daemon。安装失败时应用不会退出，所以主进程把这个 daemon 重新拉起来。
+- 已知边界：超时之后如果 Squirrel 才完成，应用仍会重启（界面此前已显示失败）；等待期间出现的任何更新器 error 都会让这次安装判为失败。
 
 ### 发版
 
@@ -125,6 +128,8 @@
   - 收到 `before-quit-for-update` 后进入重启状态。
   - 先收到更新器错误时，返回失败并带上原因。
   - 等待超时按失败处理。
+  - 并发的多个安装请求都会随交接一起结算。
+- **更新区域状态机与侧栏提示（现有接缝，实施时经用户确认追加）**：`desktop-app-updater.test.ts` 断言带 `failure` 的安装结果进入 `install-failed` 并保留可用版本、超时原因按界面语言显示、静默复查不覆盖失败；`resolve-update-callout.test.ts` 断言失败时提供「重试」与「前往 Releases 下载」。
 - **desktop-updates（现有接缝）**：`desktop-updates.test.ts` 里原先断言上游下载地址的用例，改为断言本仓库地址。
 - **daemon 自更新（现有接缝）**：在 daemon client 的 e2e 测试里断言 `server_info.features` 不含 `daemonSelfUpdate`，并且直接调用自更新 RPC 会被拒绝。
 - **CI 签名断言（唯一新增接缝，位于最高层）**：macOS 作业在打包后检查 designated requirement 和签名的完整性，失败即中止。它防的是「签名钩子没注入或失效时 electron-builder 静默退回 ad-hoc / 不签名」这种不会报错的失败。secret 缺失或配错、换了证书则会在构建步骤就报错。判定 DR 的纯函数有单测（`scripts/verify-mac-signature.test.mjs`），查找产物、解 zip 的部分只能在 macOS 上端到端验证。
