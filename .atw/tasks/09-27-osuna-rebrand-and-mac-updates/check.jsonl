@@ -1,0 +1,6 @@
+{"file": ".atw/tasks/09-27-osuna-rebrand-and-mac-updates/research/discover.md", "reason": "改名露出点、更新通道、签名链路的现状与文件位置证据"}
+{"file": "docs/adr/0001-macos-self-signed-certificate.md", "reason": "macOS 签名方案与证书丢失的后果"}
+{"file": "docs/adr/0002-rename-stops-at-app-identity.md", "reason": "改名边界：哪些 paseo 标识刻意保留"}
+{"file": "docs/glossary.md", "reason": "Osuna / Paseo 词条，决定界面文案怎么改"}
+{"file": "docs/protocol-compatibility.md", "reason": "daemon 自更新靠 capability 门控下线的依据"}
+{"file": "docs/release.md", "reason": "fork 发版路径与需要修正的 macOS 说明"}

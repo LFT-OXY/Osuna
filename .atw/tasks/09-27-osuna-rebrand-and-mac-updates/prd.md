@@ -1,0 +1,155 @@
+# Osuna 品牌化与 macOS 自动更新修复
+
+**Triage:** ready-for-agent
+
+## Problem Statement
+
+我在 `getpaseo/paseo` 的基础上二次开发出 `LFT-OXY/Osuna`，已经和上游彻底分开，但分发出去的桌面端还是上游的样子，更新链路也没有真正归我管：
+
+1. **名字和图标还是 Paseo。** 装上后 Dock、菜单栏、窗口标题、界面文案都叫 Paseo，图标是上游的蝴蝶。上游的许可证是 Apache-2.0，它不授予商标权，所以发布物里本来就不该带蝴蝶图标。
+2. **还有几条路径会把用户带回上游。** 桌面自动更新源已经指向本仓库，但另外三处没有：
+   - Rosetta 提示里的「下载」按钮，拿到的是上游安装包。
+   - daemon 自更新执行的是 `npm install -g @getpaseo/cli@latest`，Docker 部署的 daemon 点一下就会被换成上游 npm 版。
+   - 应用内的更新日志读的是上游的 CHANGELOG。
+
+   CLI 里的下载提示、反馈与仓库链接、赞助链接、文档链接也都指向上游。每推一个 tag，还会触发四条在 fork 下注定失败的工作流（它们依赖上游的 EAS 和 Cloudflare 账号）。
+3. **macOS 自动更新从来没成功过，而且没人知道。** Squirrel.Mac 替换应用前，会检查新包是否满足当前应用的 designated requirement。ad-hoc 签名把这条要求绑在二进制的 cdhash 上，而每次构建的 cdhash 都不一样，所以任何版本都更新不到下一个版本。更糟的是，这个错误没有任何地方能看到：
+   - 更新器的报错只写到主进程 console，没有进日志文件。
+   - 界面在调用安装之后，立刻就告诉用户「即将重启」。
+
+   CI 出的 x64 包其实连 ad-hoc 签名都没有，electron-builder 找不到签名身份时会直接跳过。
+
+## Solution
+
+桌面端以 Osuna 的身份发布，所有更新和外链只指向本仓库，macOS 自动更新真正能用，失败了也看得见：
+
+- **改名只改到桌面 App 的身份这一层**（ADR 0002）。显示名改为 `Osuna`，`appId` 改为 `com.chinhae.osuna.desktop`，图标换成 Osuna 折纸鸟。用户看不到的内部标识保留 `paseo` 拼写：`paseo://` scheme、userData 目录、`~/.paseo`、`paseo` 命令、`PASEO_*`、`@getpaseo/*`。这样已经添加的 host 和设置都不会丢。
+- **手机端用官方 Paseo App**，本仓库不打手机包。共享界面的文案一律改成 Osuna，只有指代手机官方 App 的地方保留 "Paseo"。
+- **macOS 改用一张长期固定的自签名证书签名**（ADR 0001）。designated requirement 从绑定 cdhash 改为绑定证书，更新就能通过。这张证书就是更新身份：本地存一份，放进 GitHub Secrets 一份，用户自己再同步一份到云盘。
+- **更新失败要可见**：更新器的日志进 main.log；只有真正开始退出安装，界面才说「即将重启」；出错时显示原因。
+- **一次性过渡**：`0.10.0` 需要每个人手动下载安装一次，之后再删掉旧的 Paseo.app。从这一版开始，自动更新可用。
+
+## User Stories
+
+1. 作为团队成员，我希望装上后 Dock、菜单栏、窗口标题里显示的是 Osuna，这样我知道自己用的是团队版而不是官方版。
+2. 作为团队成员，我希望应用图标是 Osuna 的折纸鸟，这样我在 Dock 和启动台里一眼就能认出它。
+3. 作为团队成员，我希望「关于 Osuna」「退出 Osuna」这类菜单项用的是新名字，这样界面前后一致。
+4. 作为团队成员，我希望系统通知的标题是 Osuna，这样我知道通知来自哪个应用。
+5. 作为团队成员，我希望应用内的欢迎页和启动闪屏显示 Osuna 的图标，这样品牌从外到里是统一的。
+6. 作为团队成员，我希望界面文案里提到本产品的地方都叫 Osuna，这样我不会以为自己装错了。
+7. 作为团队成员，我希望提示我「用手机扫码」的地方仍然写 Paseo，这样我知道该去应用商店下载哪个 App。
+8. 作为团队成员，我希望从 Paseo 换成 Osuna 后，已经添加的 host 仍然在，这样我不用重新配对和设置。
+9. 作为团队成员，我希望换成 Osuna 后，我的快捷键覆盖、应用设置和评审草稿都保留，这样升级不会打断手头的工作。
+10. 作为团队成员，我希望 Osuna 仍然使用原来的 `~/.paseo` 数据目录，这样我已有的 agent、worktree 和配置都还在。
+11. 作为团队成员，我希望手机上的官方 Paseo App 还能照常连接我的 daemon，这样我不用换手机端。
+12. 作为 macOS 用户，我希望装上 0.10.0 之后，后续版本都能在应用内自动更新，这样我不用每次手动下载。
+13. 作为 macOS 用户，我希望更新失败时能看到失败原因，这样我知道要不要手动重装，或者去找维护者。
+14. 作为 macOS 用户，我希望只有安装真的开始了，应用才告诉我「即将重启」，这样我不会被一个没有兑现的提示误导。
+15. 作为 macOS 用户，我希望发版说明写清楚 0.10.0 必须手动安装一次，还要删掉旧的 Paseo.app，这样我知道升级该怎么做。
+16. 作为 macOS 用户，我希望首次打开时的放行步骤里写的是 Osuna.app，这样我照着文档操作不会出错。
+17. 作为 x64 Mac 用户，我希望拿到的包和 Apple Silicon 包一样经过签名，这样我也能自动更新。
+18. 作为在 Rosetta 下运行 x64 版的用户，我希望提示里的「下载 Apple Silicon 版」拿到的是 Osuna，这样我不会被换成官方版。
+19. 作为团队成员，我希望应用内的更新日志展示的是 Osuna 自己的变更，这样我知道这个版本改了什么。
+20. 作为用 Docker 部署 daemon 的用户，我希望设置页里不再出现「更新 daemon」按钮，这样我不会误点之后被换成上游的 npm 版。
+21. 作为用 CLI 的用户，我希望 `paseo open` 能找到并打开 Osuna.app，这样命令行和桌面端能配合使用。
+22. 作为用 CLI 的用户，我希望找不到桌面端时，提示的下载地址是本仓库的 Releases，这样我装上的是团队版。
+23. 作为团队成员，我希望「反馈问题」和「仓库」链接指向 Osuna 的仓库，这样问题能报给真正维护它的人。
+24. 作为团队成员，我希望应用里不再出现上游作者的赞助链接和上游文档链接，这样我不会被引到与团队版无关的地方。
+25. 作为维护者，我希望 macOS 包用同一张证书签名，这样每一版都满足上一版的 designated requirement。
+26. 作为维护者，我希望 CI 在签名退化成 ad-hoc 或未签名时直接失败，这样一个 secret 配错不会悄悄发出一个打断所有人更新链的版本。
+27. 作为维护者，我希望证书的 `.p12` 和密码有一份在本机固定位置，这样我能自己同步到云盘做备份。
+28. 作为维护者，我希望证书有效期足够长，这样不会因为证书过期而被迫让所有人重装。
+29. 作为维护者，我希望本地构建保持现状、不接触证书，这样证书只存在于 CI 和我的备份里。
+30. 作为维护者，我希望更新器的报错能进 main.log，这样用户发来日志我就能诊断更新问题。
+31. 作为维护者，我希望在改 CI 之前，先在本地证明「同一张自签证书签出的两个包可以互相通过校验」，这样方案的核心假设在上线前就被验证过。
+32. 作为维护者，我希望 0.10.0 → 0.10.1 在真机上自动更新成功之后才通知团队，这样团队拿到的是一条确认可用的更新链。
+33. 作为维护者，我希望推 tag 时不再触发注定失败的 Android、Web app、网站、relay 工作流，这样发版页面只有真正的信号。
+34. 作为维护者，我希望这些工作流文件先保留，这样以后需要自建时有据可依。
+35. 作为维护者，我希望有 ADR 解释为什么内部标识还叫 `paseo`，这样后来的人不会去把改名「补完」。
+36. 作为维护者，我希望 glossary 区分 Osuna 和 Paseo，这样写文案时知道哪个词指什么。
+37. 作为维护者，我希望这次发版用 0.10.0，这样版本号能标记出身份变化，又不动用 major。
+38. 作为维护者，我希望旧 Paseo.app 与 Osuna.app 并存的问题靠发版说明解决，这样不会留下只运行一次的死代码。
+
+## Implementation Decisions
+
+### 身份与改名（ADR 0002）
+
+- 桌面端打包配置：`appId` 为 `com.chinhae.osuna.desktop`，`productName` 与 `executableName` 为 `Osuna`，所有产物名以 `Osuna-` 开头，协议显示名改成 Osuna 的说法。scheme 仍为 `paseo`。
+- 主进程在应用就绪前，显式把 userData 固定到 appData 下的 `Paseo` 目录。开发时的 worktree 隔离目录和强制 userData 覆盖逻辑保持原有优先级，这条固定只作用于默认路径。
+- 所有依赖可执行文件名或 bundle 名的地方同步改名：打包钩子、随包分发的 CLI shim、更新诊断里的 ShipIt 缓存目录（由 appId 推导）、CLI 查找桌面端的候选路径（macOS、Windows、Linux）、主进程里的应用名常量。
+- Windows 使用新 appId 推导出的新 NSIS GUID，不做原地升级（当前没有 Windows 用户）。
+- 共享界面（`packages/app`，同时是桌面端的渲染层）：所有语言的翻译文件以及硬编码文案里，指代本产品的 "Paseo" 改成 "Osuna"。指代手机官方 App 的保留 "Paseo"。`paseo` 命令名、`paseo.json`、`~/.paseo` 这类标识照旧。
+- 手机端打包配置完全不动：app config 的 name、bundle id、EAS 绑定、手机图标、fastlane。网站包、README、fastlane 元数据也不动。
+
+### 图标
+
+- 源图是用户调整好的 1254² PNG，底板占画布约 80%，符合 Apple 图标栅格。先做清理：底板内部 alpha 补到 255，清除画布边缘的低 alpha 杂点。
+- 从清理后的源图派生：macOS icns、Windows ico（16–256）、Linux 各尺寸 png、打包进应用和通知用的 png、开发版图标，以及 Web 的 favicon、PWA、apple-touch 图标。favicon 的状态变体（running / attention）按现有的状态语义重新生成。
+- 应用内 logo：欢迎页和启动闪屏使用彩色图标（位图）。16px 的工具调用小图标换成新描的单色鸟形 SVG，随主题着色，替代原来的蝴蝶组件。
+- 派生过程写成一个可以重复运行的脚本，源图放进仓库。以后换 logo 只需替换源图再跑一遍。
+
+### 更新与外链只指向本仓库
+
+- Rosetta 提示的下载基址改为本仓库的 Releases，回退地址同样指向本仓库的 Releases 页面。
+- 应用内更新日志改为读取本仓库主分支的 `CHANGELOG.md`。
+- daemon 自更新：server 不再在 `server_info.features` 中声明 `daemonSelfUpdate`，对应的 RPC 也拒绝执行。官方手机 App 和本仓库的界面都靠这个 capability 判断，所以会一起隐藏入口，这符合 `docs/protocol-compatibility.md` 的 feature contract。
+- CLI 找不到桌面端时的提示、onboard 里的下载链接改为指向本仓库。
+- 反馈与 Issue 链接、仓库链接改为指向 `LFT-OXY/Osuna`。删除赞助链接。删除应用和 CLI 里所有指向上游文档站的链接，包括只为承载这些链接而存在的「了解更多」元素。
+- 工作流：`android-apk-release`、`deploy-app`、`deploy-website`、`deploy-relay` 去掉 tag 与 push 触发，保留手动触发和文件本身。
+
+### macOS 签名（ADR 0001）
+
+- 生成一张自签名 code signing 证书，有效期 30 年，CN 为 Osuna 的签名身份名。`.p12` 和导出密码存到本机 `~/.config/osuna/codesign/`：目录权限 700，密码文件权限 600。由用户自行同步到云盘。
+- 用 `gh secret set` 把证书（base64）和密码写入仓库 Secrets（`CSC_LINK`、`CSC_KEY_PASSWORD`）。**这一步是写入外部服务，执行前必须单独征得用户确认。**
+- CI 的 macOS 作业注入这两个 secret，并通过 `identity` 或 `CSC_NAME` 显式指定签名身份，不依赖自动发现。原因是 electron-builder 只从钥匙串里「有效」的身份中挑选，自签证书不一定被列为有效，必要时由 CI 在临时钥匙串里设置信任。arm64 与 x64 都签名。
+- `hardenedRuntime` 保持关闭，不做公证。本地构建不引入证书，维持现状。
+- 打包后在 CI 里断言：用 `codesign -d -r-` 读出的 designated requirement 必须包含证书约束（`certificate leaf`），且不能是 `cdhash`；再对产物做一次 `codesign --verify --deep --strict`。任一不满足就让作业失败，并且在清单上传之前失败。
+- 修正发版文档：首次打开的放行步骤改用 Osuna.app，删除「自动更新装上的新版本也不会再问」这句与事实不符的说法，写明证书的存放位置、备份要求和丢失的后果，并把「afterSign 在未签名时被跳过」的描述更新到新的现状。
+
+### 更新失败可见
+
+- 主进程把 electron-updater 的 logger（info / warn / error）接到 electron-log，Squirrel.Mac 的错误会进入 main.log。
+- app-update-service 的安装流程：调用安装后不再立即返回「已安装、即将重启」。只有收到 `before-quit-for-update` 才进入「正在重启」；如果先收到更新器错误，就把错误原因作为安装失败返回给界面。等待要有上限，超时按失败处理并提示原因。
+- 界面的更新区域在安装失败时展示原因，并给出「前往 Releases 手动下载」的出口，地址指向本仓库。
+
+### 发版
+
+- 版本号 `0.10.0`，走现有的 fork 发版路径（minor）。发版说明写明：本版需要手动下载安装；装好后删除旧的 Paseo.app；首次打开需要放行。
+
+## Testing Decisions
+
+好的测试只验证外部可观察的行为，不锁定实现细节。本任务大部分是声明式配置和文案，不为它们新造接缝。
+
+- **app-update-service（现有接缝）**：在 `app-update-service.test.ts` 里用现有的伪更新器驱动，覆盖以下情况：
+  - 调用安装后、收到 `before-quit-for-update` 之前，不报告「已安装」。
+  - 收到 `before-quit-for-update` 后进入重启状态。
+  - 先收到更新器错误时，返回失败并带上原因。
+  - 等待超时按失败处理。
+- **desktop-updates（现有接缝）**：`desktop-updates.test.ts` 里原先断言上游下载地址的用例，改为断言本仓库地址。
+- **daemon 自更新（现有接缝）**：在 daemon client 的 e2e 测试里断言 `server_info.features` 不含 `daemonSelfUpdate`，并且直接调用自更新 RPC 会被拒绝。
+- **CI 签名断言（唯一新增接缝，位于最高层）**：macOS 作业在打包后检查 designated requirement 和签名的完整性，失败即中止。它防的是「secret 缺失时 electron-builder 静默回退」这种不会报错的失败。
+- **既有测试的跟随修改**：依赖旧产品名的单元测试和 e2e 断言，按新文案更新。修改前后的失败情况要和基线对照（部分 e2e 在 macOS 本机的基线上本来就失败），不把基线失败算到本次改动头上。
+- **人工验证**（这些只能人工验）：
+  1. **本地两包互验实验**（在改 CI 之前）：在临时钥匙串里用同一张自签证书签两个内容不同的包，确认第二个包能满足第一个包的 designated requirement；再确认一张不同的证书签出的包会被拒绝。
+  2. 本地装一个构建（本地不签名，照常出包即可），确认 userData 仍指向 `Paseo` 目录、已加的 host 还在，并确认名字、图标、菜单、通知都已改掉。
+  3. 手动触发一次 CI 且不发布，确认 arm64 和 x64 两个包都通过签名断言。
+  4. **硬门槛**：发布 `0.10.0` 并在一台真实的 Mac 上手动安装，再发布 `0.10.1`，在同一台机器上通过应用内更新升级成功，main.log 里出现 `before-quit-for-update`，重启后版本为 `0.10.1`。通过之前不通知团队。
+
+## Out of Scope
+
+- 上游运营的运行时服务：relay（`relay.paseo.sh`）、配对 web app（`app.paseo.sh`）、hub（`hub.paseo.sh`）、Expo 推送。要自建、关闭还是继续借用，另行立项。
+- 手机端的打包、上架、EAS 迁移，以及手机端图标和名称。
+- 内部标识改名：scheme、userData 目录名、`~/.paseo`、`paseo` 命令、`PASEO_*`、`@getpaseo/*`、`paseo.json`、MCP 工具名、IPC 通道名。
+- Apple Developer ID、公证、开启 `hardenedRuntime`。
+- 绕过 Squirrel.Mac 的自定义安装器，以及把旧 ad-hoc 装机平滑带到新签名的过渡版本。
+- 旧 Paseo.app 的自动检测与清理。
+- Windows 原地升级与代码签名。
+- 网站包、README、fastlane 元数据、Docker 与 Nix 文档里的上游名称。
+- 删除 fork 下失败的工作流文件本身。
+
+## Further Notes
+
+- **不可逆的点。** 证书和 `appId` 一起构成更新身份。证书丢失或更换，或者改动 `appId`，都会让所有已安装的副本停止自动更新，只能手动重装。
+- **官方手机 App 是个已知风险。** 二次开发里需要新 capability 的功能，在官方 App 上看不到；上游 App 以后怎么演进，本仓库控制不了。App 端不按 semver 比较 daemon 版本（插件需求除外），所以把版本号改到 `0.10.0` 不会导致误判。
+- **未验证的推断。** 「自签证书满足 Squirrel.Mac 校验」依据的是 Squirrel.Mac 的源码：它用 `SecStaticCodeCheckValidityWithErrors`，拿当前应用的 designated requirement 去校验新包。「CI 的 x64 包没有签名」依据的是 app-builder-lib 的源码。这两条都由上面的人工验证第 1、3 项来证实。
+- 调研的细节和证据（含文件位置）见 `research/discover.md`。
