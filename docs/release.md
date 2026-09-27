@@ -153,11 +153,11 @@ CI 发出的 macOS 包（arm64 与 x64）都用同一张长期固定的自签名
 包用自签名证书签名，但没有公证。团队成员把应用拖进「应用程序」后首次打开会被
 Gatekeeper 拦住，提示「无法验证开发者」或「已损坏，无法打开」。按顺序试：
 
-1. 在「应用程序」里右键点 Paseo → 打开 → 在弹窗里再点一次「打开」。
+1. 在「应用程序」里右键点 Osuna → 打开 → 在弹窗里再点一次「打开」。
 2. 如果提示的是「已损坏」，先去掉隔离属性再打开：
 
    ```bash
-   xattr -dr com.apple.quarantine /Applications/Paseo.app
+   xattr -dr com.apple.quarantine /Applications/Osuna.app
    ```
 
 3. 仍被拦就去 系统设置 → 隐私与安全性，在底部点「仍要打开」。
