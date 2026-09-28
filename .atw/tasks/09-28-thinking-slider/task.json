@@ -3,7 +3,7 @@
   "name": "thinking-slider",
   "title": "思考等级改为带动效的滑条",
   "description": "Composer 的思考等级浮层从列表改成按提供方品牌色渐变、带粒子动效的滑条，桌面与手机端都做",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",
