@@ -466,16 +466,17 @@ test.describe("Composer autocomplete", () => {
       const input = composerLocator(page);
       await expect(input).toBeEditable({ timeout: 30_000 });
 
-      await input.fill("/he");
+      // 删字前的结果要少于面板最大高度能放下的行数，否则删字后无从变高。
+      await input.fill("/hea");
       const popover = page.getByTestId("composer-autocomplete-popover");
-      await expect(popover.getByText("/help", { exact: true }).first()).toBeVisible({
+      await expect(popover.getByText("/health", { exact: true }).first()).toBeVisible({
         timeout: 30_000,
       });
       const beforeDelete = await visiblePopoverBox(page);
 
       await input.press("Backspace");
-      await expect(input).toHaveValue("/h");
-      await expect(popover.getByText("/history", { exact: true }).first()).toBeVisible({
+      await expect(input).toHaveValue("/he");
+      await expect(popover.getByText("/help", { exact: true }).first()).toBeVisible({
         timeout: 30_000,
       });
       const afterDelete = await visiblePopoverBox(page);
@@ -647,8 +648,9 @@ test.describe("Composer autocomplete", () => {
       expect(composerBox).not.toBeNull();
       expect(popoverBox).not.toBeNull();
 
-      expect(Math.abs(popoverBox!.x - composerBox!.x)).toBeLessThanOrEqual(4);
-      expect(Math.abs(popoverBox!.width - composerBox!.width)).toBeLessThanOrEqual(4);
+      // 面板左右各内缩 PANEL_INSET（24），与 context strip 对齐。
+      expect(Math.abs(popoverBox!.x - (composerBox!.x + 24))).toBeLessThanOrEqual(4);
+      expect(Math.abs(popoverBox!.width - (composerBox!.width - 48))).toBeLessThanOrEqual(4);
     } finally {
       await agent.cleanup();
     }

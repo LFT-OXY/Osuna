@@ -86,14 +86,10 @@ async function selectMode(page: Page, label: string): Promise<void> {
   await expect(popup).toBeVisible({ timeout: 10_000 });
   await expectNoTruncation(popup);
 
-  const searchInput = page.getByRole("textbox", { name: /search mode/i });
-  await expect(searchInput).toBeVisible({ timeout: 10_000 });
-  await searchInput.fill(label);
-
   const option = popup.getByText(new RegExp(`^${escapeRegex(label)}$`, "i")).first();
   await expect(option).toBeVisible({ timeout: 10_000 });
   await option.click({ force: true });
-  await expect(searchInput).not.toBeVisible({ timeout: 5_000 });
+  await expect(popup).not.toBeVisible({ timeout: 5_000 });
 }
 
 async function expectThinkingOptionsFit(page: Page): Promise<void> {
