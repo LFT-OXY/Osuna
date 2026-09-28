@@ -88,7 +88,9 @@ export default defineConfig({
       "react-native-gesture-handler > hoist-non-react-statics",
       "react-native-gesture-handler > invariant",
     ],
-    exclude: ["react-native-reanimated", "react-native-gesture-handler"],
+    // `attachments/store.ts` 的 native 分支动态导入会被扫描器爬到 expo-file-system；
+    // Web 运行时不走该分支，不预构建即可。
+    exclude: ["react-native-reanimated", "react-native-gesture-handler", "expo-file-system"],
   },
   // The globals a React Native bundler defines, which esbuild is no longer there to supply for
   // the package excluded above.

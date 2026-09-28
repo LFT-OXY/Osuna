@@ -2001,8 +2001,10 @@ test("a session's command report fills the catalog for drafts and survives a res
 test("a Pi draft lists built-ins without launching Pi, then the agent's report fills the catalog", async () => {
   const { workdir, catalogPath } = createCatalogWorkdir();
   const pi = new FakePi();
+  const piClient = new PiRpcAgentClient({ logger, runtime: pi });
+  piClient.isAvailable = async () => true;
   const manager = new AgentManager({
-    clients: { pi: new PiRpcAgentClient({ logger, runtime: pi }) },
+    clients: { pi: piClient },
     commandCatalogPath: catalogPath,
     logger,
   });
