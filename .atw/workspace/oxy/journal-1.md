@@ -334,3 +334,28 @@ dev 桌面端深浅色目检 README.zh-CN.md（居中、徽章横排、NOTE 提�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: 思考滑条第二版与收尺寸
+<!-- atw-session: v=2 fp=14ee6757ba940c4d -->
+
+**Date**: 2026-09-28
+**Task**: 思考滑条第二版与收尺寸
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+实现思考滑条第二版：2 档及以上一律用滑条，去掉列表和搜索框；1 档时触发器置灰不可点；按 v2 参考图改为加粗胶囊轨道、溢出的白色滑块、品牌色居中档位名；光点改为从左向右持续流动，最低档左侧留一段填充；新增派生主题色 thinkingThumbBorder。两轴审查无硬违规和 spec 偏差。按验收反馈把浮层收到 220 宽（轨道 22、滑块 28、档位名 body），居中对齐的尝试已撤回。Off 档保留光点，由用户决定。遗留：手机真机手势仲裁、1 档实机、Claude 亮色最低档对比度未验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `757ba8a29` | feat(app): 思考滑条第二版——全档位滑条、单档锁定、流动光点 |
+| `6f25eebc6` | fix(app): 思考滑条浮层收小一档 |
+| `e233cbbcd` | chore(task): thinking-slider 记录 Off 档保留光点的决定，进入验收 |
+
+### Status
+
+[OK] **Completed**
