@@ -1560,8 +1560,13 @@ export const ar: TranslationResources = {
     loadingCommands: "جارٍ تحميل الأوامر...",
     noFiles: "لم يتم العثور على ملفات أو أدلة",
     noCommands: "لم يتم العثور على أي أوامر",
+    error: "خطأ: {{message}}",
     failedToLoad: "فشل التحميل",
     partialCommands: "أرسل رسالة لتحميل جميع الأوامر",
+    groups: {
+      commands: "الأوامر",
+      skills: "المهارات",
+    },
   },
   loadOlderHistory: {
     failed: "تعذر تحميل السجل الأقدم",

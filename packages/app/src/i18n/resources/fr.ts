@@ -1611,8 +1611,13 @@ export const fr: TranslationResources = {
     loadingCommands: "Chargement des commandes...",
     noFiles: "Aucun fichier ou répertoire trouvé",
     noCommands: "Aucune commande trouvée",
+    error: "Erreur : {{message}}",
     failedToLoad: "Échec du chargement",
     partialCommands: "Envoyez un message pour charger toutes les commandes",
+    groups: {
+      commands: "Commandes",
+      skills: "Compétences",
+    },
   },
   loadOlderHistory: {
     failed: "Impossible de charger l'ancien historique",

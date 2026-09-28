@@ -16,16 +16,27 @@ beforeAll(async () => {
   await i18n.changeLanguage("en");
 });
 
-const review = { name: "review", description: "Review changes", argumentHint: "" };
+interface TestCommand {
+  name: string;
+  description: string;
+  argumentHint: string;
+  kind?: string;
+}
 
-function commandOptions(input: { commands: (typeof review)[]; isCommandsLoading: boolean }) {
+const review: TestCommand = { name: "review", description: "Review changes", argumentHint: "" };
+
+function commandOptions(input: {
+  commands: TestCommand[];
+  isCommandsLoading: boolean;
+  isDraftContext?: boolean;
+}) {
   return buildCommandAutocompleteOptions({
     isVisible: true,
     mode: "command",
     commands: input.commands,
     isCommandsLoading: input.isCommandsLoading,
     pluginCommands: [],
-    isDraftContext: true,
+    isDraftContext: input.isDraftContext ?? true,
     commandFilterQuery: "",
     activeSlashCommand: { start: 0, end: 1, query: "", position: "start" },
     activeFileMention: null,
@@ -75,6 +86,23 @@ describe("command menu options", () => {
         description: "Review changes",
         kind: "command",
       },
+    ]);
+  });
+
+  it("lists skills below every command, built-in commands included", () => {
+    const options = commandOptions({
+      commands: [
+        { name: "tdd", description: "Test first", argumentHint: "", kind: "skill" },
+        { name: "compact", description: "Compact context", argumentHint: "", kind: "command" },
+      ],
+      isCommandsLoading: false,
+      isDraftContext: false,
+    });
+    expect(options.map((option) => [option.label, option.kind])).toEqual([
+      ["/exit", "command"],
+      ["/clear", "command"],
+      ["/compact", "command"],
+      ["/tdd", "skill"],
     ]);
   });
 });

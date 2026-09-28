@@ -3,29 +3,43 @@ import { describe, expect, it } from "vitest";
 import {
   getAutocompleteFallbackIndex,
   getAutocompleteScrollOffset,
-  orderAutocompleteOptions,
+  orderAutocompleteGroups,
 } from "./autocomplete-utils";
 
-const OPTIONS = ["alpha", "beta", "gamma"];
-
-describe("orderAutocompleteOptions", () => {
-  it("keeps first logical option closest to the input by default", () => {
-    expect(orderAutocompleteOptions(OPTIONS)).toEqual(["gamma", "beta", "alpha"]);
+describe("orderAutocompleteGroups", () => {
+  it("puts commands above skills and keeps the ranked order inside each group", () => {
+    const options = [
+      { id: "tdd", kind: "skill" },
+      { id: "help", kind: "command" },
+      { id: "review", kind: "skill" },
+      { id: "compact", kind: "command" },
+    ];
+    expect(orderAutocompleteGroups(options).map((option) => option.id)).toEqual([
+      "help",
+      "compact",
+      "tdd",
+      "review",
+    ]);
   });
 
-  it("keeps normal top-down order when below-input is selected", () => {
-    expect(orderAutocompleteOptions(OPTIONS, "below-input")).toEqual(["alpha", "beta", "gamma"]);
+  it("keeps file and directory entries in their given order", () => {
+    const options = [
+      { id: "src", kind: "directory" },
+      { id: "a.ts", kind: "file" },
+      { id: "lib", kind: "directory" },
+    ];
+    expect(orderAutocompleteGroups(options).map((option) => option.id)).toEqual([
+      "src",
+      "a.ts",
+      "lib",
+    ]);
   });
 });
 
 describe("getAutocompleteFallbackIndex", () => {
-  it("picks the option nearest the input by default", () => {
-    expect(getAutocompleteFallbackIndex(3)).toBe(2);
+  it("picks the top item", () => {
+    expect(getAutocompleteFallbackIndex(3)).toBe(0);
     expect(getAutocompleteFallbackIndex(0)).toBe(-1);
-  });
-
-  it("picks top item when below-input ordering is used", () => {
-    expect(getAutocompleteFallbackIndex(3, "below-input")).toBe(0);
   });
 });
 

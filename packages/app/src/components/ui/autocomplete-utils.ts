@@ -1,25 +1,24 @@
 import { getNextActiveIndex } from "./combobox-keyboard";
 
-export type AutocompleteOptionsPosition = "above-input" | "below-input";
+export type AutocompleteGroup = "commands" | "skills";
 
-export function orderAutocompleteOptions<T>(
-  options: readonly T[],
-  position: AutocompleteOptionsPosition = "above-input",
-): T[] {
-  if (position === "below-input") {
-    return [...options];
-  }
-  return [...options].toReversed();
+/** Command menu 的分组；`@` 文件列表不分组，返回 null。 */
+export function getAutocompleteGroup(kind: string | undefined): AutocompleteGroup | null {
+  if (kind === "skill") return "skills";
+  if (kind === "command") return "commands";
+  return null;
 }
 
-export function getAutocompleteFallbackIndex(
-  itemCount: number,
-  position: AutocompleteOptionsPosition = "above-input",
-): number {
-  if (itemCount <= 0) {
-    return -1;
-  }
-  return position === "above-input" ? itemCount - 1 : 0;
+/** 命令组在上、技能组在下，组内保持传入顺序（即匹配排序）。 */
+export function orderAutocompleteGroups<T extends { kind?: string }>(options: readonly T[]): T[] {
+  return [
+    ...options.filter((option) => getAutocompleteGroup(option.kind) !== "skills"),
+    ...options.filter((option) => getAutocompleteGroup(option.kind) === "skills"),
+  ];
+}
+
+export function getAutocompleteFallbackIndex(itemCount: number): number {
+  return itemCount > 0 ? 0 : -1;
 }
 
 export function getAutocompleteNextIndex(args: {

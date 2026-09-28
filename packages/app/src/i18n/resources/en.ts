@@ -1585,8 +1585,13 @@ export const en = {
     loadingCommands: "Loading commands...",
     noFiles: "No files or directories found",
     noCommands: "No commands found",
+    error: "Error: {{message}}",
     failedToLoad: "Failed to load",
     partialCommands: "Send a message to load all commands",
+    groups: {
+      commands: "Commands",
+      skills: "Skills",
+    },
   },
   loadOlderHistory: {
     failed: "Couldn't load older history",

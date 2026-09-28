@@ -8,7 +8,7 @@ import {
   type AgentSlashCommand,
   type DraftCommandConfig,
 } from "./use-agent-commands-query";
-import { orderAutocompleteOptions } from "@/components/ui/autocomplete-utils";
+import { orderAutocompleteGroups } from "@/components/ui/autocomplete-utils";
 import { useAutocomplete } from "./use-autocomplete";
 import { useSessionStore } from "@/stores/session-store";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -71,6 +71,7 @@ interface AgentAutocompleteResult {
   isVisible: boolean;
   options: AutocompleteOption[];
   selectedIndex: number;
+  onHighlight: (index: number) => void;
   isLoading: boolean;
   errorMessage?: string;
   loadingText: string;
@@ -177,7 +178,11 @@ function mapCommandToOption(entry: AvailableCommand, t: TFunction): AgentAutocom
     detail: command.argumentHint || undefined,
     description:
       entry.source === "client" ? t(entry.command.descriptionKey) : entry.command.description,
-    kind: "command" as const,
+    // 客户端内置与插件命令都归"命令"组，只有 daemon 标成 skill 的才进"技能"组。
+    kind:
+      entry.source === "provider" && entry.command.kind === "skill"
+        ? ("skill" as const)
+        : ("command" as const),
   };
   if (entry.source === "client") {
     return {
@@ -250,14 +255,12 @@ export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsI
       availableCommands,
       input.commandFilterQuery,
     );
-    const orderedMatches = orderAutocompleteOptions(matches);
-    return orderedMatches.map((entry) => mapCommandToOption(entry, input.t));
+    return orderAutocompleteGroups(matches.map((entry) => mapCommandToOption(entry, input.t)));
   }
 
   const activeFileMention = input.activeFileMention;
   if (input.mode === "file" && activeFileMention) {
-    const orderedEntries = orderAutocompleteOptions(input.fileSuggestions);
-    return orderedEntries.map((entry) => ({
+    return input.fileSuggestions.map((entry) => ({
       type: "workspace_entry" as const,
       id: `${entry.kind}:${entry.path}`,
       label: entry.path,
@@ -600,7 +603,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [onSelectOption],
   );
 
-  const { selectedIndex, onKeyPress } = useAutocomplete({
+  const { selectedIndex, onHighlight, onKeyPress } = useAutocomplete({
     isVisible,
     options,
     query: mode === "command" ? commandFilterQuery : fileFilterQuery,
@@ -635,6 +638,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     isVisible,
     options,
     selectedIndex,
+    onHighlight,
     isLoading,
     errorMessage,
     loadingText,

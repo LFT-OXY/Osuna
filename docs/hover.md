@@ -133,6 +133,10 @@ It is **not** fine for tracking hover to drive state **outside** that `Pressable
 
 Heuristic: if your hover state is going to be `useState`'d and read by anything other than the same `Pressable`'s own style, do not use `onHoverIn` / `onHoverOut`. Use the canonical pattern.
 
+## A highlight the keyboard also moves
+
+When hover and the arrow keys drive the same highlight, as in the Command menu (`packages/app/src/components/ui/autocomplete.tsx`), the envelope listens to `onPointerMove` instead of `onPointerEnter`, and there is no leave handler. Arrow keys scroll the list, which slides another row under a pointer that has not moved; the browser then sends `pointerover` / `pointerenter` to that row, and an enter handler would take the highlight back from the keyboard. A move event only fires when the pointer actually moves. Leaving the list keeps the highlight where it is, because Enter still needs a row to select. The rest of the pattern is unchanged: plain `View` envelope, separate inner `Pressable`.
+
 ## Real gaps with floating panels
 
 Sometimes the revealed content can't live inside the trigger — a hover card portals into a different layer, a tooltip floats above other content, a popover renders into a `Portal`. There's a real visual gap the user has to cross with the cursor.
@@ -145,7 +149,7 @@ Don't roll your own. The math is annoying, the edge cases (pointer leaves window
 
 Before opening a PR that touches hover:
 
-- [ ] Hover-tracking is on a plain `View` with `onPointerEnter` / `onPointerLeave`, **not** on a `Pressable` that wraps anything pressable.
+- [ ] Hover-tracking is on a plain `View` with `onPointerEnter` / `onPointerLeave` (or `onPointerMove` and no leave handler when the keyboard shares the highlight), **not** on a `Pressable` that wraps anything pressable.
 - [ ] Any press behavior lives on a separate inner `Pressable` that does not have `onHoverIn` / `onHoverOut`.
 - [ ] The hover trigger's bounding box contains every element the user might mouse into while interacting with the feature.
 - [ ] Hovered state does **not** change the trigger's outer geometry (`width`, `height`, `padding`, `borderWidth`, mount/unmount of siblings that shift it). Internal swaps fit inside a fixed `minHeight` / `minWidth`.

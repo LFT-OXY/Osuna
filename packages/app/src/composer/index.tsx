@@ -1067,6 +1067,7 @@ function ComposerAutocompleteBinding({
       options={autocomplete.options}
       selectedIndex={autocomplete.selectedIndex}
       onSelect={onSelect}
+      onHighlight={autocomplete.onHighlight}
       isLoading={autocomplete.isLoading}
       errorMessage={autocomplete.errorMessage}
       loadingText={autocomplete.loadingText}

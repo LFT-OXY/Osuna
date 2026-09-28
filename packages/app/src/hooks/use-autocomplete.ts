@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getAutocompleteFallbackIndex,
   getAutocompleteNextIndex,
-  type AutocompleteOptionsPosition,
 } from "@/components/ui/autocomplete-utils";
 
 interface AutocompleteKeyPressEvent {
@@ -19,11 +18,12 @@ interface UseAutocompleteInput<
   query: string;
   onSelectOption: (option: TOption, event?: TKeyPressEvent) => void;
   onEscape?: () => void;
-  optionsPosition?: AutocompleteOptionsPosition;
 }
 
 interface UseAutocompleteResult<TKeyPressEvent extends AutocompleteKeyPressEvent> {
   selectedIndex: number;
+  /** 悬停与键盘共用同一个高亮。 */
+  onHighlight: (index: number) => void;
   onKeyPress: (event: TKeyPressEvent) => boolean;
 }
 
@@ -49,10 +49,7 @@ export function useAutocomplete<
         return -1;
       }
 
-      const fallbackIndex = getAutocompleteFallbackIndex(
-        input.options.length,
-        input.optionsPosition,
-      );
+      const fallbackIndex = getAutocompleteFallbackIndex(input.options.length);
 
       if (queryChanged) {
         return fallbackIndex;
@@ -62,7 +59,7 @@ export function useAutocomplete<
       }
       return current;
     });
-  }, [input.isVisible, input.options.length, input.query, input.optionsPosition]);
+  }, [input.isVisible, input.options.length, input.query]);
 
   const onKeyPress = useCallback(
     (event: TKeyPressEvent) => {
@@ -96,10 +93,7 @@ export function useAutocomplete<
 
       if (event.key === "Tab" || event.key === "Enter") {
         event.preventDefault();
-        const fallbackIndex = getAutocompleteFallbackIndex(
-          input.options.length,
-          input.optionsPosition,
-        );
+        const fallbackIndex = getAutocompleteFallbackIndex(input.options.length);
         const resolvedIndex =
           selectedIndex >= 0 && selectedIndex < input.options.length
             ? selectedIndex
@@ -122,8 +116,16 @@ export function useAutocomplete<
     [input, selectedIndex],
   );
 
+  const onHighlight = useCallback(
+    (index: number) => {
+      if (index >= 0 && index < input.options.length) setSelectedIndex(index);
+    },
+    [input.options.length],
+  );
+
   return {
     selectedIndex,
+    onHighlight,
     onKeyPress,
   };
 }

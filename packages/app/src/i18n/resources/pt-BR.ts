@@ -1593,8 +1593,13 @@ export const ptBR: TranslationResources = {
     loadingCommands: "Carregando comandos...",
     noFiles: "Nenhum arquivo ou diretório encontrado",
     noCommands: "Nenhum comando encontrado",
+    error: "Erro: {{message}}",
     failedToLoad: "Falha ao carregar",
     partialCommands: "Envie uma mensagem para carregar todos os comandos",
+    groups: {
+      commands: "Comandos",
+      skills: "Habilidades",
+    },
   },
   loadOlderHistory: {
     failed: "Não foi possível carregar o histórico mais antigo",

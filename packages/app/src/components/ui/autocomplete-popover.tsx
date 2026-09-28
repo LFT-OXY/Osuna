@@ -56,6 +56,7 @@ interface AutocompletePopoverProps {
   options: readonly AutocompleteOption[];
   selectedIndex: number;
   onSelect: (option: AutocompleteOption) => void;
+  onHighlight?: (index: number) => void;
   isLoading?: boolean;
   errorMessage?: string;
   loadingText?: string;
@@ -69,6 +70,7 @@ export function AutocompletePopover({
   options,
   selectedIndex,
   onSelect,
+  onHighlight,
   isLoading,
   errorMessage,
   loadingText,
@@ -168,6 +170,7 @@ export function AutocompletePopover({
             options={options}
             selectedIndex={selectedIndex}
             onSelect={onSelect}
+            onHighlight={onHighlight}
             isLoading={isLoading}
             errorMessage={errorMessage}
             loadingText={loadingText}

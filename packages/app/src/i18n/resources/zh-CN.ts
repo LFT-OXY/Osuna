@@ -1542,9 +1542,14 @@ export const zhCN: TranslationResources = {
     searchingWorkspace: "正在搜索 workspace...",
     loadingCommands: "正在加载 commands...",
     noFiles: "没有找到文件或目录",
-    noCommands: "没有找到 commands",
+    noCommands: "没有匹配的指令",
+    error: "错误：{{message}}",
     failedToLoad: "加载失败",
     partialCommands: "发送一条消息后加载全部指令",
+    groups: {
+      commands: "命令",
+      skills: "技能",
+    },
   },
   loadOlderHistory: {
     failed: "无法加载更早历史",

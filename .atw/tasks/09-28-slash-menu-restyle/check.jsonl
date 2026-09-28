@@ -1,0 +1,13 @@
+{"file": ".atw/tasks/09-28-slash-menu-restyle/prd.md", "reason": "本任务的 spec 与验收标准"}
+{"file": ".atw/tasks/09-28-composer-slash-revamp/prd.md", "reason": "父任务的跨子任务约束"}
+{"file": ".atw/tasks/09-28-composer-slash-revamp/research/discovery.md", "reason": "访谈决定、现状与 t3code 菜单参考"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "原语复用、平台门控、i18n、无障碍"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 规则"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "browser 测试分层"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "禁用模式与验证命令"}
+{"file": "docs/design.md", "reason": "菜单行、Composer 表面、玻璃、颜色规则"}
+{"file": "docs/floating-panels.md", "reason": "浮层定位、Android、生命周期"}
+{"file": "docs/menus.md", "reason": "菜单行为约定"}
+{"file": "docs/hover.md", "reason": "悬停规范"}
+{"file": "docs/unistyles.md", "reason": "useUnistyles 的替代做法"}
+{"file": "docs/i18n.md", "reason": "新文案补全所有 locale"}

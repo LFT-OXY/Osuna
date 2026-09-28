@@ -1,0 +1,28 @@
+{
+  "id": "slash-menu-restyle",
+  "name": "slash-menu-restyle",
+  "title": "斜杠菜单美化",
+  "description": "贴合 composer 顶边的面板、自上而下排序、命令/技能分组、去掉详情卡，共用组件覆盖 @ 列表",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-28",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-28-composer-slash-revamp",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "ba63ed5711c6128ee20a13142fe66d82837777d1"
+  }
+}

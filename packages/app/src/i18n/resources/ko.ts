@@ -1571,8 +1571,13 @@ export const ko: TranslationResources = {
     loadingCommands: "명령 불러오는 중...",
     noFiles: "파일 또는 디렉터리를 찾을 수 없습니다",
     noCommands: "명령을 찾을 수 없습니다",
+    error: "오류: {{message}}",
     failedToLoad: "불러오지 못했습니다",
     partialCommands: "메시지를 보내면 모든 명령을 불러옵니다",
+    groups: {
+      commands: "명령",
+      skills: "스킬",
+    },
   },
   loadOlderHistory: {
     failed: "이전 기록을 불러올 수 없습니다",
