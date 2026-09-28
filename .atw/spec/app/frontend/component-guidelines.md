@@ -45,6 +45,8 @@ A list row that needs a hover kebab **and** a right-click / long-press menu is `
 
 `onHoverIn` / `onHoverOut` has one legitimate use: a `Pressable` styling itself (`components/ui/button.tsx`), preferably through the render-prop `style={({ hovered }) => …}`. The moment hover state is read by anything else, use the envelope. Never put both handler kinds on one element.
 
+That use still needs a press target. A frame that only recolors on hover and has no `onPress` is not one: react-native-web gives every enabled `Pressable` `tabIndex=0`, so keyboard users land on a dead stop before the input inside it. Use the plain `View` envelope. The expanded "other" row in `components/question-form-card.tsx` (`QuestionOtherInputRow`) is the example. It draws its own field frame because `FormTextInput` cannot hold the number badge inside its border. The frame still takes its states from `createControlGeometry(theme)` (`controlRest` / `controlHover` / `controlActive` / `controlDisabled`) through `resolveControlInteractionStyles`, as `FormTextInput` does. Copying only the border colors drops the focus ring that `controlActive` draws. A field with nothing inside the border is `FormTextInput`.
+
 ## Platform gates
 
 Import from `constants/platform.ts`: `isWeb` for DOM APIs, `isNative` for native-only APIs, `getIsElectron()` for the desktop bridge, `useIsCompactFormFactor()` from `constants/layout.ts` for layout. Never redefine `Platform.OS === "web"` locally, never touch `document`/`window` without `isWeb`, never use `Platform.OS` to make a layout decision.

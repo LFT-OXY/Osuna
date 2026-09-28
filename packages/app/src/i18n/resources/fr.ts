@@ -407,6 +407,7 @@ export const fr: TranslationResources = {
       next: "Suivant",
       answerPlaceholder: "Tapez votre réponse...",
       otherPlaceholder: "Autre...",
+      skip: "Passer",
     },
     todo: {
       title: "Tâches",

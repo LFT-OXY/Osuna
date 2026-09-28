@@ -404,6 +404,7 @@ export const ru: TranslationResources = {
       next: "Далее",
       answerPlaceholder: "Введите ответ...",
       otherPlaceholder: "Другой ответ...",
+      skip: "Пропустить",
     },
     todo: {
       title: "Задачи",

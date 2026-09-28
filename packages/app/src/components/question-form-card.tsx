@@ -1,23 +1,38 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useState, useCallback, useMemo } from "react";
-import { View, Text, Pressable, type PressableStateCallbackType } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useState, useCallback, useMemo, type ReactNode } from "react";
+import { View, Pressable, type PressableStateCallbackType } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { Check, X } from "lucide-react-native";
+import { ArrowRight, Check, X } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import type { PendingPermission } from "@/types/shared";
 import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
-import { isWeb } from "@/constants/platform";
-import { EditingTextInput as TextInput } from "@/components/ui/text-input";
+import { isNative } from "@/constants/platform";
+import { Button } from "@/components/ui/button";
 import {
-  areQuestionsAnswered,
+  createControlGeometry,
+  resolveControlInteractionStyles,
+} from "@/components/ui/control-geometry";
+import { FormTextInput } from "@/components/ui/form-field";
+import { Text } from "@/components/ui/text";
+import { EditingTextInput } from "@/components/ui/text-input";
+import { ICON_SIZE } from "@/styles/theme";
+import {
   buildQuestionFormAnswers,
-  isQuestionAnswered,
+  canConfirmQuestion,
+  EMPTY_QUESTION_FORM_STATE,
+  isOtherInputExpanded,
+  markQuestionAnswered,
   parseQuestionFormQuestions,
-  questionShowsTextInput,
-  resolveDismissLabel,
+  pickQuestionOption,
+  resolveNextQuestionFormStep,
+  resolvePrimaryActionKind,
+  resolveSkipLabel,
+  setQuestionOtherText,
   shouldSubmitEmptyOnDismiss,
+  skipQuestion,
   type QuestionFormQuestion,
+  type QuestionFormState,
   type QuestionOption,
 } from "./question-form-card-core";
 
@@ -27,87 +42,115 @@ interface QuestionFormCardProps {
   isResponding: boolean;
 }
 
-const IS_WEB = isWeb;
+/** 哪个控件触发了这次发送，加载指示就画在哪里。 */
+type RespondingSource =
+  | { kind: "option"; optIndex: number }
+  | { kind: "primary" }
+  | { kind: "skip" }
+  | { kind: "dismiss" };
 
-function getQuestionInputPlaceholder({
-  question,
-  answerPlaceholder,
-  otherPlaceholder,
-}: {
-  question: QuestionFormQuestion;
-  answerPlaceholder: string;
-  otherPlaceholder: string;
-}): string {
+type HoverableState = PressableStateCallbackType & { hovered?: boolean };
+
+const ThemedArrowRight = withUnistyles(ArrowRight, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedCheck = withUnistyles(Check, (theme) => ({
+  color: theme.colors.accentForeground,
+}));
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedTextInput = withUnistyles(EditingTextInput, (theme) => ({
+  placeholderTextColor: theme.colors.foregroundMuted,
+}));
+
+function NumberBadge({ number, isSelected }: { number: number; isSelected: boolean }) {
   return (
-    question.placeholder ?? (question.options.length === 0 ? answerPlaceholder : otherPlaceholder)
+    <View style={[styles.numberBadge, isSelected ? styles.numberBadgeSelected : null]}>
+      {isSelected ? (
+        <ThemedCheck size={ICON_SIZE.sm} />
+      ) : (
+        <Text variant="caption" color="foregroundMuted">
+          {number}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+interface RowTrailingProps {
+  isHovered: boolean;
+  isLoading: boolean;
+  showArrow: boolean;
+}
+
+// 箭头和加载指示共用一个固定宽度的尾槽，悬停和发送都不会让行内容移动。
+function RowTrailing({ isHovered, isLoading, showArrow }: RowTrailingProps) {
+  if (isLoading) {
+    return (
+      <View style={styles.rowTrailing}>
+        <ThemedLoadingSpinner size="small" />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.rowTrailing, showArrow && isHovered ? null : styles.hidden]}>
+      <ThemedArrowRight size={ICON_SIZE.md} />
+    </View>
   );
 }
 
 interface QuestionOptionRowProps {
-  qIndex: number;
   optIndex: number;
   option: QuestionOption;
   isSelected: boolean;
   multiSelect: boolean;
+  showArrow: boolean;
+  isLoading: boolean;
   isResponding: boolean;
-  onToggle: (qIndex: number, optIndex: number, multiSelect: boolean) => void;
+  onPick: (optIndex: number) => void;
 }
 
 function QuestionOptionRow({
-  qIndex,
   optIndex,
   option,
   isSelected,
   multiSelect,
+  showArrow,
+  isLoading,
   isResponding,
-  onToggle,
+  onPick,
 }: QuestionOptionRowProps) {
-  const { theme } = useUnistyles();
-
   const handlePress = useCallback(() => {
-    onToggle(qIndex, optIndex, multiSelect);
-  }, [onToggle, qIndex, optIndex, multiSelect]);
-
+    onPick(optIndex);
+  }, [onPick, optIndex]);
+  const accessibilityState = useMemo(
+    () => ({ checked: isSelected, disabled: isResponding }),
+    [isSelected, isResponding],
+  );
   const pressableStyle = useCallback(
-    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.optionItem,
-      (Boolean(hovered) || isSelected) && {
-        backgroundColor: theme.colors.surface2,
-      },
-      pressed && styles.optionItemPressed,
+    ({ pressed, hovered }: HoverableState) => [
+      styles.row,
+      hovered || pressed ? styles.rowHighlighted : null,
+      isResponding && !isLoading ? styles.disabled : null,
     ],
-    [isSelected, theme.colors.surface2],
+    [isResponding, isLoading],
   );
-
-  const optionLabelStyle = useMemo(
-    () => [
-      styles.optionLabel,
-      { color: isSelected ? theme.colors.foreground : theme.colors.foregroundMuted },
-    ],
-    [isSelected, theme.colors.foreground, theme.colors.foregroundMuted],
-  );
-  const optionDescriptionStyle = useMemo(
-    () => [styles.optionDescription, { color: theme.colors.foregroundMuted }],
-    [theme.colors.foregroundMuted],
-  );
-  const accessibilityState = useMemo(() => ({ checked: isSelected }), [isSelected]);
-
-  // Static left-side control: square for multi-select, circle for single-select.
-  // Always rendered so toggling only swaps fill/border — the row never reflows.
-  const controlStyle = useMemo(
-    () => [
-      styles.selectionControl,
-      multiSelect ? styles.selectionControlCheckbox : styles.selectionControlRadio,
-      {
-        borderColor: isSelected ? theme.colors.accent : theme.colors.foregroundExtraMuted,
-        backgroundColor: isSelected && multiSelect ? theme.colors.accent : "transparent",
-      },
-    ],
-    [isSelected, multiSelect, theme.colors.accent, theme.colors.foregroundExtraMuted],
-  );
-  const radioDotStyle = useMemo(
-    () => [styles.selectionRadioDot, { backgroundColor: theme.colors.accent }],
-    [theme.colors.accent],
+  const renderContent = useCallback(
+    ({ hovered }: HoverableState) => (
+      <>
+        <NumberBadge number={optIndex + 1} isSelected={isSelected} />
+        <View style={styles.rowText}>
+          <Text>{option.label}</Text>
+          {option.description ? <Text color="foregroundMuted">{option.description}</Text> : null}
+        </View>
+        {/* → 表示点下去就作答：多选行和"其他..."行点下去只是切换或展开，不显示。 */}
+        {multiSelect ? null : (
+          <RowTrailing isHovered={Boolean(hovered)} isLoading={isLoading} showArrow={showArrow} />
+        )}
+      </>
+    ),
+    [isLoading, isSelected, multiSelect, option.description, option.label, optIndex, showArrow],
   );
 
   return (
@@ -120,21 +163,188 @@ function QuestionOptionRow({
       accessibilityState={accessibilityState}
       aria-checked={isSelected}
     >
-      <View style={styles.optionItemContent}>
-        <View style={controlStyle}>
-          {isSelected && multiSelect ? (
-            <Check size={12} color={theme.colors.accentForeground} />
-          ) : null}
-          {isSelected && !multiSelect ? <View style={radioDotStyle} /> : null}
-        </View>
-        <View style={styles.optionTextBlock}>
-          <Text style={optionLabelStyle}>{option.label}</Text>
-          {option.description ? (
-            <Text style={optionDescriptionStyle}>{option.description}</Text>
-          ) : null}
-        </View>
+      {renderContent}
+    </Pressable>
+  );
+}
+
+interface QuestionOtherRowProps {
+  number: number;
+  label: string;
+  isResponding: boolean;
+  onExpand: () => void;
+}
+
+function QuestionOtherRow({ number, label, isResponding, onExpand }: QuestionOtherRowProps) {
+  const pressableStyle = useCallback(
+    ({ pressed, hovered }: HoverableState) => [
+      styles.row,
+      hovered || pressed ? styles.rowHighlighted : null,
+      isResponding ? styles.disabled : null,
+    ],
+    [isResponding],
+  );
+
+  return (
+    <Pressable
+      style={pressableStyle}
+      onPress={onExpand}
+      disabled={isResponding}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID="question-form-other-option"
+    >
+      <NumberBadge number={number} isSelected={false} />
+      <View style={styles.rowText}>
+        <Text>{label}</Text>
       </View>
     </Pressable>
+  );
+}
+
+interface QuestionOtherInputRowProps {
+  number: number;
+  accessibilityLabel: string;
+  initialValue: string;
+  placeholder: string;
+  isResponding: boolean;
+  onChange: (text: string) => void;
+  onSubmit: () => void;
+}
+
+// 框内要保留编号圆圈，FormTextInput 放不下，所以自绘外框，四态样式与它共用 control-geometry。
+// 外框不是按压目标，悬停用普通 View 的 pointer 事件，免得在 Web 上多一个 Tab 停留点。
+function QuestionOtherInputRow({
+  number,
+  accessibilityLabel,
+  initialValue,
+  placeholder,
+  isResponding,
+  onChange,
+  onSubmit,
+}: QuestionOtherInputRowProps) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const handleFocus = useCallback(() => setIsFocused(true), []);
+  const handleBlur = useCallback(() => setIsFocused(false), []);
+  const handlePointerEnter = useCallback(() => setIsHovered(true), []);
+  const handlePointerLeave = useCallback(() => setIsHovered(false), []);
+  return (
+    <View
+      style={styles.hoverEnvelope}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+    >
+      <View
+        style={[
+          styles.row,
+          styles.otherInputFrame,
+          resolveControlInteractionStyles(
+            {
+              controlRest: styles.controlRest,
+              controlHover: styles.controlHover,
+              controlActive: styles.controlActive,
+              controlDisabled: styles.controlDisabled,
+            },
+            { hovered: isHovered, focused: isFocused, disabled: isResponding },
+          ),
+        ]}
+      >
+        <NumberBadge number={number} isSelected={false} />
+        <ThemedTextInput
+          style={styles.otherInput}
+          accessibilityLabel={accessibilityLabel}
+          placeholder={placeholder}
+          initialValue={initialValue}
+          onChangeText={onChange}
+          onSubmitEditing={onSubmit}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          editable={!isResponding}
+          autoFocus
+          blurOnSubmit={false}
+        />
+      </View>
+    </View>
+  );
+}
+
+interface QuestionOptionListProps {
+  question: QuestionFormQuestion;
+  selected: ReadonlySet<number> | undefined;
+  otherText: string;
+  otherLabel: string;
+  isOtherExpanded: boolean;
+  showArrow: boolean;
+  loadingSource: RespondingSource | null;
+  isResponding: boolean;
+  onPick: (optIndex: number) => void;
+  onExpandOther: () => void;
+  onOtherTextChange: (text: string) => void;
+  onConfirm: () => void;
+}
+
+function QuestionOptionList({
+  question,
+  selected,
+  otherText,
+  otherLabel,
+  isOtherExpanded,
+  showArrow,
+  loadingSource,
+  isResponding,
+  onPick,
+  onExpandOther,
+  onOtherTextChange,
+  onConfirm,
+}: QuestionOptionListProps) {
+  const otherNumber = question.options.length + 1;
+  const loadingOptIndex = loadingSource?.kind === "option" ? loadingSource.optIndex : null;
+  let otherRow: ReactNode = null;
+  if (isOtherExpanded) {
+    otherRow = (
+      <QuestionOtherInputRow
+        number={otherNumber}
+        accessibilityLabel={question.question}
+        initialValue={otherText}
+        placeholder={otherLabel}
+        isResponding={isResponding}
+        onChange={onOtherTextChange}
+        onSubmit={onConfirm}
+      />
+    );
+  } else if (question.allowOther) {
+    otherRow = (
+      <QuestionOtherRow
+        number={otherNumber}
+        label={otherLabel}
+        isResponding={isResponding}
+        onExpand={onExpandOther}
+      />
+    );
+  }
+
+  return (
+    <View
+      style={styles.options}
+      accessibilityRole={question.multiSelect ? undefined : "radiogroup"}
+      accessibilityLabel={question.multiSelect ? undefined : question.question}
+    >
+      {question.options.map((option, optIndex) => (
+        <QuestionOptionRow
+          key={option.label}
+          optIndex={optIndex}
+          option={option}
+          isSelected={selected?.has(optIndex) ?? false}
+          multiSelect={question.multiSelect}
+          showArrow={showArrow}
+          isLoading={loadingOptIndex === optIndex}
+          isResponding={isResponding}
+          onPick={onPick}
+        />
+      ))}
+      {otherRow}
+    </View>
   );
 }
 
@@ -157,77 +367,44 @@ function QuestionNavButton({
   isResponding,
   onSelect,
 }: QuestionNavButtonProps) {
-  const { theme } = useUnistyles();
   const accessibilityState = useMemo(() => ({ selected: isActive }), [isActive]);
   const handlePress = useCallback(() => {
     onSelect(index);
   }, [index, onSelect]);
-  const pressableStyle = useCallback(
-    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => {
-      return [
-        styles.questionNavButton,
-        {
-          backgroundColor:
-            isActive || Boolean(hovered) ? theme.colors.surface2 : theme.colors.surface1,
-          borderColor: isActive ? theme.colors.foregroundMuted : theme.colors.border,
-        },
-        pressed && styles.optionItemPressed,
-      ];
-    },
-    [
-      isActive,
-      theme.colors.border,
-      theme.colors.foregroundMuted,
-      theme.colors.surface1,
-      theme.colors.surface2,
-    ],
-  );
-  const textStyle = useMemo(
-    () => [
-      styles.questionNavText,
-      { color: isActive ? theme.colors.foreground : theme.colors.foregroundMuted },
-    ],
-    [isActive, theme.colors.foreground, theme.colors.foregroundMuted],
-  );
 
   return (
-    <Pressable
+    <Button
+      variant="ghost"
+      size="xs"
+      leftIcon={isAnswered ? Check : null}
+      onPress={handlePress}
+      disabled={isResponding}
       accessibilityRole="tab"
       accessibilityLabel={`Question ${index + 1} of ${total}`}
       accessibilityState={accessibilityState}
       aria-selected={isActive}
       testID={`question-form-question-nav-${index + 1}`}
-      style={pressableStyle}
-      onPress={handlePress}
-      disabled={isResponding}
+      style={isActive ? styles.navTabActive : null}
+      textStyle={isActive ? styles.navTabTextActive : null}
     >
-      {isAnswered ? (
-        <Check
-          size={12}
-          color={isActive ? theme.colors.foreground : theme.colors.foregroundMuted}
-        />
-      ) : null}
-      <Text style={textStyle} numberOfLines={1}>
-        {header}
-      </Text>
-    </Pressable>
+      {header}
+    </Button>
   );
 }
 
 interface QuestionNavProps {
   questions: QuestionFormQuestion[];
   activeIndex: number;
-  isAnswered: (qIndex: number) => boolean;
+  formState: QuestionFormState;
   isResponding: boolean;
   onSelect: (index: number) => void;
 }
 
-// Titled tabs (one per question header) with a check on answered ones. Hidden for
-// a lone question — a single "1 of 1" tab carries no information.
+// 每道题一个标签页，已作答的带勾。只有一道题时不显示，「1 of 1」没有信息量。
 function QuestionNav({
   questions,
   activeIndex,
-  isAnswered,
+  formState,
   isResponding,
   onSelect,
 }: QuestionNavProps) {
@@ -235,11 +412,7 @@ function QuestionNav({
     return null;
   }
   return (
-    <View
-      style={styles.questionNav}
-      testID="question-form-question-nav"
-      accessibilityRole="tablist"
-    >
+    <View style={styles.nav} testID="question-form-question-nav" accessibilityRole="tablist">
       {questions.map((question, qIndex) => (
         <QuestionNavButton
           key={question.header}
@@ -247,7 +420,7 @@ function QuestionNav({
           total={questions.length}
           header={question.header}
           isActive={qIndex === activeIndex}
-          isAnswered={isAnswered(qIndex)}
+          isAnswered={formState.statuses[qIndex] === "answered"}
           isResponding={isResponding}
           onSelect={onSelect}
         />
@@ -256,484 +429,380 @@ function QuestionNav({
   );
 }
 
-interface QuestionOtherInputProps {
-  qIndex: number;
-  accessibilityLabel: string;
-  value: string;
-  placeholder: string;
+interface QuestionFormFooterProps {
+  skipLabel: string;
+  /** 为 null 时不显示「下一步/提交」：单选题点选项即作答。 */
+  primaryActionLabel: string | null;
+  canConfirm: boolean;
   isResponding: boolean;
-  onChange: (qIndex: number, text: string) => void;
-  onSubmit: () => void;
+  loadingKind: RespondingSource["kind"] | null;
+  onSkip: () => void;
+  onConfirm: () => void;
 }
 
-function QuestionOtherInput({
-  qIndex,
-  accessibilityLabel,
-  value,
-  placeholder,
+function QuestionFormFooter({
+  skipLabel,
+  primaryActionLabel,
+  canConfirm,
   isResponding,
-  onChange,
-  onSubmit,
-}: QuestionOtherInputProps) {
-  const { theme } = useUnistyles();
-  const handleChange = useCallback(
-    (text: string) => {
-      onChange(qIndex, text);
-    },
-    [onChange, qIndex],
-  );
-  const otherInputStyle = useMemo(
-    () =>
-      [
-        styles.otherInput,
-        {
-          borderColor: value.length > 0 ? theme.colors.borderAccent : theme.colors.border,
-          color: theme.colors.foreground,
-          backgroundColor: theme.colors.surface2,
-        },
-        IS_WEB ? { outlineStyle: "none", outlineWidth: 0, outlineColor: "transparent" } : null,
-      ] as const,
-    [
-      value.length,
-      theme.colors.borderAccent,
-      theme.colors.border,
-      theme.colors.foreground,
-      theme.colors.surface2,
-    ],
-  );
+  loadingKind,
+  onSkip,
+  onConfirm,
+}: QuestionFormFooterProps) {
   return (
-    <TextInput
-      // @ts-expect-error - outlineStyle is web-only
-      style={otherInputStyle}
-      accessibilityLabel={accessibilityLabel}
-      placeholder={placeholder}
-      placeholderTextColor={theme.colors.foregroundMuted}
-      initialValue={value}
-      onChangeText={handleChange}
-      onSubmitEditing={onSubmit}
-      editable={!isResponding}
-      blurOnSubmit={false}
-    />
+    <View style={styles.footer}>
+      <Button
+        variant="outline"
+        size="sm"
+        onPress={onSkip}
+        disabled={isResponding}
+        loading={loadingKind === "skip"}
+        testID="question-form-skip"
+      >
+        {skipLabel}
+      </Button>
+      {primaryActionLabel ? (
+        <Button
+          variant="default"
+          size="sm"
+          onPress={onConfirm}
+          disabled={isResponding || !canConfirm}
+          loading={loadingKind === "primary"}
+          accessibilityLabel={primaryActionLabel}
+          testID="question-form-primary-action"
+        >
+          {primaryActionLabel}
+        </Button>
+      ) : null}
+    </View>
   );
 }
 
 export function QuestionFormCard({ permission, onRespond, isResponding }: QuestionFormCardProps) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const isMobile = useIsCompactFormFactor();
+  const isCompact = useIsCompactFormFactor();
   const questions = useMemo(
     () => parseQuestionFormQuestions(permission.request.input),
     [permission.request.input],
   );
 
-  const [selections, setSelections] = useState<Record<number, Set<number>>>({});
-  const [otherTexts, setOtherTexts] = useState<Record<number, string>>({});
-  const [respondingAction, setRespondingAction] = useState<"submit" | "dismiss" | null>(null);
+  const [formState, setFormState] = useState<QuestionFormState>(EMPTY_QUESTION_FORM_STATE);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [expandedOtherQuestions, setExpandedOtherQuestions] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  const [respondingSource, setRespondingSource] = useState<RespondingSource | null>(null);
 
-  const toggleOption = useCallback(
-    (qIndex: number, optIndex: number, multiSelect: boolean) => {
-      const current = selections[qIndex] ?? new Set<number>();
-      const next = new Set(current);
-      if (multiSelect) {
-        if (next.has(optIndex)) {
-          next.delete(optIndex);
-        } else {
-          next.add(optIndex);
-        }
-      } else if (next.has(optIndex)) {
-        next.clear();
-      } else {
-        next.clear();
-        next.add(optIndex);
-      }
-
-      setSelections((prev) => ({ ...prev, [qIndex]: next }));
-      setOtherTexts((prev) => {
-        if (!prev[qIndex]) return prev;
-        const nextTexts = { ...prev };
-        delete nextTexts[qIndex];
-        return nextTexts;
-      });
-
-      if (!multiSelect && next.size > 0 && qIndex === activeQuestionIndex && questions) {
-        setActiveQuestionIndex(Math.min(qIndex + 1, questions.length - 1));
-      }
-    },
-    [activeQuestionIndex, questions, selections],
+  const activeIndex = questions ? Math.min(activeQuestionIndex, questions.length - 1) : 0;
+  const activeQuestion = questions?.[activeIndex];
+  const activeOtherText = formState.otherTexts[activeIndex] ?? "";
+  const isOtherExpanded = isOtherInputExpanded(
+    activeQuestion,
+    expandedOtherQuestions.has(activeIndex),
+    activeOtherText,
   );
 
-  const setOtherText = useCallback((qIndex: number, text: string) => {
-    setOtherTexts((prev) => ({ ...prev, [qIndex]: text }));
-    if (text.length > 0) {
-      setSelections((prev) => {
-        if (!prev[qIndex] || prev[qIndex].size === 0) return prev;
-        return { ...prev, [qIndex]: new Set<number>() };
-      });
-    }
-  }, []);
+  const respondWithAnswers = useCallback(
+    (answers: Record<string, string>) => {
+      onRespond({ behavior: "allow", updatedInput: { ...permission.request.input, answers } });
+    },
+    [onRespond, permission.request.input],
+  );
 
-  const allAnswered = areQuestionsAnswered(questions, selections, otherTexts);
-  const resolvedActiveQuestionIndex = questions
-    ? Math.min(activeQuestionIndex, questions.length - 1)
-    : 0;
-  const activeQuestion = questions?.[resolvedActiveQuestionIndex];
-  const activeQuestionAnswered = activeQuestion
-    ? isQuestionAnswered(activeQuestion, resolvedActiveQuestionIndex, selections, otherTexts)
-    : false;
-  const isLastQuestion = questions ? resolvedActiveQuestionIndex === questions.length - 1 : true;
-
-  const handleSubmit = useCallback(() => {
-    if (!questions || !allAnswered || isResponding) return;
-    setRespondingAction("submit");
-    onRespond({
-      behavior: "allow",
-      updatedInput: {
-        ...permission.request.input,
-        answers: buildQuestionFormAnswers(questions, selections, otherTexts),
-      },
-    });
-  }, [
-    questions,
-    allAnswered,
-    isResponding,
-    selections,
-    otherTexts,
-    onRespond,
-    permission.request.input,
-  ]);
-
-  const handleDeny = useCallback(() => {
+  // 忽略整组时不带上已输入的内容，X 和单题的「跳过」才会是同一个结果。
+  const respondDismiss = useCallback(() => {
     if (!questions) return;
-    setRespondingAction("dismiss");
     if (shouldSubmitEmptyOnDismiss(questions)) {
-      onRespond({
-        behavior: "allow",
-        updatedInput: {
-          ...permission.request.input,
-          answers: buildQuestionFormAnswers(questions, selections, otherTexts),
-        },
-      });
+      respondWithAnswers(buildQuestionFormAnswers(questions, {}, {}));
       return;
     }
-    onRespond({
-      behavior: "deny",
-      message: "Dismissed by user",
+    onRespond({ behavior: "deny", message: "Dismissed by user" });
+  }, [questions, respondWithAnswers, onRespond]);
+
+  // 当前题处理完：跳到下一道未处理的题，或者结束整组。
+  const advance = useCallback(
+    (next: QuestionFormState, source: RespondingSource) => {
+      if (!questions || isResponding) return;
+      setFormState(next);
+      const step = resolveNextQuestionFormStep(questions, activeIndex, next);
+      if (step.kind === "show") {
+        setActiveQuestionIndex(step.index);
+        return;
+      }
+      setRespondingSource(source);
+      if (step.kind === "submit") {
+        respondWithAnswers(step.answers);
+        return;
+      }
+      respondDismiss();
+    },
+    [questions, isResponding, activeIndex, respondWithAnswers, respondDismiss],
+  );
+
+  const collapseOther = useCallback((qIndex: number) => {
+    setExpandedOtherQuestions((prev) => {
+      if (!prev.has(qIndex)) return prev;
+      const next = new Set(prev);
+      next.delete(qIndex);
+      return next;
     });
-  }, [questions, onRespond, otherTexts, permission.request.input, selections]);
+  }, []);
+
+  const handlePickOption = useCallback(
+    (optIndex: number) => {
+      if (!questions || !activeQuestion || isResponding) return;
+      collapseOther(activeIndex);
+      const next = pickQuestionOption(formState, questions, activeIndex, optIndex);
+      if (activeQuestion.multiSelect) {
+        setFormState(next);
+        return;
+      }
+      advance(next, { kind: "option", optIndex });
+    },
+    [questions, activeQuestion, isResponding, collapseOther, activeIndex, formState, advance],
+  );
+
+  const handleExpandOther = useCallback(() => {
+    setExpandedOtherQuestions((prev) => new Set(prev).add(activeIndex));
+  }, [activeIndex]);
+
+  const handleActiveTextChange = useCallback(
+    (text: string) => {
+      setFormState((prev) => setQuestionOtherText(prev, activeIndex, text));
+    },
+    [activeIndex],
+  );
+
+  const canConfirm =
+    questions !== null && canConfirmQuestion(questions, activeIndex, formState, isOtherExpanded);
+
+  const handleConfirm = useCallback(() => {
+    if (!canConfirm) return;
+    advance(markQuestionAnswered(formState, activeIndex), { kind: "primary" });
+  }, [canConfirm, advance, formState, activeIndex]);
+
+  const handleSkip = useCallback(() => {
+    collapseOther(activeIndex);
+    advance(skipQuestion(formState, activeIndex), { kind: "skip" });
+  }, [collapseOther, activeIndex, advance, formState]);
+
+  const handleDismiss = useCallback(() => {
+    if (isResponding) return;
+    setRespondingSource({ kind: "dismiss" });
+    respondDismiss();
+  }, [isResponding, respondDismiss]);
 
   const handleSelectQuestion = useCallback((index: number) => {
     setActiveQuestionIndex(index);
   }, []);
 
-  const navIsAnswered = useCallback(
-    (qIndex: number) =>
-      questions ? isQuestionAnswered(questions[qIndex], qIndex, selections, otherTexts) : false,
-    [questions, selections, otherTexts],
-  );
-
-  const handlePrimaryAction = useCallback(() => {
-    if (!isLastQuestion) {
-      if (!activeQuestionAnswered || isResponding) return;
-      setActiveQuestionIndex((index) => Math.min(index + 1, (questions?.length ?? 1) - 1));
-      return;
-    }
-    handleSubmit();
-  }, [activeQuestionAnswered, handleSubmit, isLastQuestion, isResponding, questions?.length]);
-
-  const dismissButtonStyle = useCallback(
-    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.actionButton,
-      {
-        backgroundColor: hovered ? theme.colors.surface2 : theme.colors.surface1,
-        borderColor: theme.colors.borderAccent,
-      },
-      pressed && styles.optionItemPressed,
-    ],
-    [theme.colors.surface2, theme.colors.surface1, theme.colors.borderAccent],
-  );
-
-  const primaryDisabled = isResponding || (isLastQuestion ? !allAnswered : !activeQuestionAnswered);
-  const primaryActionLabel = isLastQuestion
-    ? t("message.question.submit")
-    : t("message.question.next");
-  const submitButtonStyle = useCallback(
-    ({ pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.actionButton,
-      {
-        backgroundColor: theme.colors.accent,
-        borderColor: theme.colors.accent,
-        opacity: primaryDisabled ? 0.5 : 1,
-      },
-      pressed && !primaryDisabled ? styles.optionItemPressed : null,
-    ],
-    [primaryDisabled, theme.colors.accent],
-  );
-
-  const containerStyle = useMemo(
-    () => [
-      styles.container,
-      {
-        backgroundColor: theme.colors.surface1,
-        borderColor: theme.colors.border,
-      },
-    ],
-    [theme.colors.surface1, theme.colors.border],
-  );
-  const questionTextStyle = useMemo(
-    () => [styles.questionText, { color: theme.colors.foreground }],
-    [theme.colors.foreground],
-  );
-  // Single-select radios need a group; checkboxes are valid standalone.
-  const optionsGroupAccessibility = useMemo(
-    () =>
-      activeQuestion && !activeQuestion.multiSelect
-        ? ({
-            accessibilityRole: "radiogroup",
-            accessibilityLabel: activeQuestion.question,
-          } as const)
-        : {},
-    [activeQuestion],
-  );
-  const actionsContainerStyle = useMemo(
-    () => [styles.actionsContainer, !isMobile && styles.actionsContainerDesktop],
-    [isMobile],
-  );
-  const dismissActionTextStyle = useMemo(
-    () => [styles.actionText, { color: theme.colors.foregroundMuted }],
-    [theme.colors.foregroundMuted],
-  );
-  const submitActionTextColor = theme.colors.accentForeground;
-  const submitActionTextStyle = useMemo(
-    () => [styles.actionText, { color: submitActionTextColor }],
-    [submitActionTextColor],
-  );
-
-  if (!questions) {
+  if (!questions || !activeQuestion) {
     return null;
   }
 
-  const dismissLabel = resolveDismissLabel(questions, t("common.actions.dismiss"));
-  const selected = selections[resolvedActiveQuestionIndex] ?? new Set<number>();
-  const otherText = otherTexts[resolvedActiveQuestionIndex] ?? "";
-  const showTextInput = activeQuestion ? questionShowsTextInput(activeQuestion) : false;
+  const loadingSource = isResponding ? respondingSource : null;
+  const isTextOnly = activeQuestion.options.length === 0;
+  const showPrimaryAction = activeQuestion.multiSelect || isTextOnly || isOtherExpanded;
+  const primaryActionLabel =
+    resolvePrimaryActionKind(questions.length, activeIndex, formState.statuses) === "next"
+      ? t("message.question.next")
+      : t("message.question.submit");
 
   return (
-    <View style={containerStyle} testID="question-form-card">
-      <QuestionNav
-        questions={questions}
-        activeIndex={resolvedActiveQuestionIndex}
-        isAnswered={navIsAnswered}
-        isResponding={isResponding}
-        onSelect={handleSelectQuestion}
-      />
-      <View style={styles.questionHeader}>
-        <Text testID="question-form-current-question" style={questionTextStyle}>
-          {activeQuestion?.question}
-        </Text>
-      </View>
-
-      {activeQuestion ? (
-        <View key={activeQuestion.question} style={styles.questionBlock}>
-          {activeQuestion.options.length > 0 ? (
-            <View style={styles.optionsWrap} {...optionsGroupAccessibility}>
-              {activeQuestion.options.map((opt, optIndex) => (
-                <QuestionOptionRow
-                  key={opt.label}
-                  qIndex={resolvedActiveQuestionIndex}
-                  optIndex={optIndex}
-                  option={opt}
-                  isSelected={selected.has(optIndex)}
-                  multiSelect={activeQuestion.multiSelect}
-                  isResponding={isResponding}
-                  onToggle={toggleOption}
-                />
-              ))}
-            </View>
-          ) : null}
-          {showTextInput ? (
-            <QuestionOtherInput
-              qIndex={resolvedActiveQuestionIndex}
-              accessibilityLabel={activeQuestion.question}
-              value={otherText}
-              placeholder={getQuestionInputPlaceholder({
-                question: activeQuestion,
-                answerPlaceholder: t("message.question.answerPlaceholder"),
-                otherPlaceholder: t("message.question.otherPlaceholder"),
-              })}
-              isResponding={isResponding}
-              onChange={setOtherText}
-              onSubmit={handlePrimaryAction}
-            />
-          ) : null}
+    <View style={styles.container} testID="question-form-card">
+      <View style={styles.header}>
+        <View style={styles.headerMain}>
+          <QuestionNav
+            questions={questions}
+            activeIndex={activeIndex}
+            formState={formState}
+            isResponding={isResponding}
+            onSelect={handleSelectQuestion}
+          />
+          <Text testID="question-form-current-question" style={styles.headerText}>
+            {activeQuestion.question}
+          </Text>
         </View>
-      ) : null}
-
-      <View style={actionsContainerStyle}>
-        <Pressable
-          style={dismissButtonStyle}
-          onPress={handleDeny}
+        <Button
+          variant="ghost"
+          size="xs"
+          leftIcon={X}
+          onPress={handleDismiss}
           disabled={isResponding}
-          accessibilityRole="button"
-          accessibilityLabel={dismissLabel}
+          loading={loadingSource?.kind === "dismiss"}
+          accessibilityLabel={t("common.actions.dismiss")}
           testID="question-form-dismiss"
-        >
-          {respondingAction === "dismiss" ? (
-            <LoadingSpinner size="small" color={theme.colors.foregroundMuted} />
-          ) : (
-            <View style={styles.actionContent}>
-              <X size={14} color={theme.colors.foregroundMuted} />
-              <Text style={dismissActionTextStyle}>{dismissLabel}</Text>
-            </View>
-          )}
-        </Pressable>
-
-        <Pressable
-          style={submitButtonStyle}
-          onPress={handlePrimaryAction}
-          disabled={primaryDisabled}
-          accessibilityRole="button"
-          accessibilityLabel={primaryActionLabel}
-          testID="question-form-primary-action"
-        >
-          {respondingAction === "submit" ? (
-            <LoadingSpinner size="small" color={theme.colors.accentForeground} />
-          ) : (
-            <View style={styles.actionContent}>
-              <Check size={14} color={submitActionTextColor} />
-              <Text style={submitActionTextStyle}>{primaryActionLabel}</Text>
-            </View>
-          )}
-        </Pressable>
+        />
       </View>
+
+      <View key={activeIndex} style={styles.body}>
+        {isTextOnly ? (
+          <View style={styles.answerField}>
+            <FormTextInput
+              accessibilityLabel={activeQuestion.question}
+              placeholder={activeQuestion.placeholder ?? t("message.question.answerPlaceholder")}
+              initialValue={activeOtherText}
+              onChangeText={handleActiveTextChange}
+              onSubmitEditing={handleConfirm}
+              editable={!isResponding}
+              blurOnSubmit={false}
+            />
+          </View>
+        ) : (
+          <QuestionOptionList
+            question={activeQuestion}
+            selected={formState.selections[activeIndex]}
+            otherText={activeOtherText}
+            otherLabel={activeQuestion.placeholder ?? t("message.question.otherPlaceholder")}
+            isOtherExpanded={isOtherExpanded}
+            showArrow={!isNative && !isCompact}
+            loadingSource={loadingSource}
+            isResponding={isResponding}
+            onPick={handlePickOption}
+            onExpandOther={handleExpandOther}
+            onOtherTextChange={handleActiveTextChange}
+            onConfirm={handleConfirm}
+          />
+        )}
+      </View>
+
+      <QuestionFormFooter
+        skipLabel={resolveSkipLabel(questions, t("message.question.skip"))}
+        primaryActionLabel={showPrimaryAction ? primaryActionLabel : null}
+        canConfirm={canConfirm}
+        isResponding={isResponding}
+        loadingKind={loadingSource?.kind ?? null}
+        onSkip={handleSkip}
+        onConfirm={handleConfirm}
+      />
     </View>
   );
 }
 
+const NUMBER_BADGE_SIZE = 24;
+
 const styles = StyleSheet.create((theme) => ({
   container: {
-    padding: theme.spacing[3],
-    borderRadius: theme.spacing[2],
-    borderWidth: 1,
+    padding: theme.spacing[4],
     gap: theme.spacing[3],
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceCard,
   },
-  questionBlock: {
-    gap: theme.spacing[2],
-  },
-  questionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    paddingBottom: theme.spacing[1],
-    flex: 1,
-  },
-  questionText: {
-    flex: 1,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
-    lineHeight: 22,
-  },
-  optionsWrap: {
-    gap: theme.spacing[1],
-  },
-  questionNav: {
+  nav: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[1],
-    paddingHorizontal: theme.spacing[3],
   },
-  questionNavButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-    minHeight: 28,
-    paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[1],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: theme.borderWidth[1],
+  navTabActive: {
+    backgroundColor: theme.colors.interactionHighlight,
   },
-  questionNavText: {
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
+  navTabTextActive: {
+    color: theme.colors.foreground,
   },
-  optionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
-  },
-  optionItemPressed: {
-    opacity: 0.9,
-  },
-  optionItemContent: {
-    flex: 1,
+  header: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: theme.spacing[2],
   },
-  optionTextBlock: {
+  headerMain: {
     flex: 1,
-    gap: theme.spacing[1],
+    gap: theme.spacing[3],
   },
-  optionLabel: {
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
-    lineHeight: 22,
+  headerText: {
+    paddingTop: theme.spacing[0.5],
   },
-  optionDescription: {
-    fontSize: theme.fontSize.base,
-    lineHeight: 20,
+  body: {
+    // 行的悬停底色比内容多出一圈，向外借回这圈留白，让编号圆圈和问题文字对齐。
+    marginHorizontal: -theme.spacing[2],
   },
-  selectionControl: {
-    width: 18,
-    height: 18,
+  options: {
+    gap: theme.spacing[0.5],
+  },
+  row: {
+    flexDirection: "row",
+    // 圆圈对齐选项名这一行，说明换行多了也不下沉到中间。
+    alignItems: "flex-start",
+    gap: theme.spacing[3],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1.5],
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  rowHighlighted: {
+    backgroundColor: theme.colors.interactionHighlight,
+  },
+  hoverEnvelope: {
+    position: "relative",
+  },
+  otherInputFrame: {
+    alignItems: "center",
+    backgroundColor: theme.colors.surface2,
+  },
+  // 带颜色的条目直接引用 theme 才会被记为主题依赖，所以逐条展开（同 form-field.tsx）。
+  controlRest: {
+    ...createControlGeometry(theme).controlRest,
+  },
+  controlHover: {
+    ...createControlGeometry(theme).controlHover,
+  },
+  controlActive: {
+    ...createControlGeometry(theme).controlActive,
+  },
+  controlDisabled: {
+    ...createControlGeometry(theme).controlDisabled,
+  },
+  rowText: {
+    flex: 1,
+    gap: theme.spacing[0.5],
+    // 文字第一行与圆圈居中对齐；行高随界面字号缩放，所以按差值算。
+    paddingTop: Math.max(0, (NUMBER_BADGE_SIZE - theme.typeScale.body.lineHeight) / 2),
+  },
+  rowTrailing: {
+    width: theme.iconSize.md,
+    height: NUMBER_BADGE_SIZE,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: theme.borderWidth[1],
-    marginTop: 2, // optical-align 18px control to the 22px label first line
   },
-  selectionControlCheckbox: {
-    borderRadius: theme.borderRadius.base,
+  hidden: {
+    opacity: 0,
   },
-  selectionControlRadio: {
-    borderRadius: 999,
+  disabled: {
+    opacity: theme.opacity[50],
   },
-  selectionRadioDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
+  numberBadge: {
+    width: NUMBER_BADGE_SIZE,
+    height: NUMBER_BADGE_SIZE,
+    borderRadius: theme.radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    // 半透明填充在亮暗两种卡片上都能看出来；暗色主题的卡片本身就是 surface2。
+    backgroundColor: theme.colors.interactionHighlight,
+  },
+  numberBadgeSelected: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accent,
+  },
+  answerField: {
+    // body 向外借了一圈留白给行的悬停底色，输入框不需要，还回去。
+    marginHorizontal: theme.spacing[2],
   },
   otherInput: {
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.lg,
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[3],
-    fontSize: theme.fontSize.base,
+    flex: 1,
+    padding: 0,
+    ...theme.typeScale.body,
+    color: theme.colors.foreground,
+    outlineWidth: 0,
   },
-  actionsContainer: {
-    gap: theme.spacing[2],
-  },
-  actionsContainerDesktop: {
+  footer: {
     flexDirection: "row",
-    justifyContent: "flex-start",
-    alignItems: "center",
-  },
-  actionButton: {
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-    alignItems: "center",
-    borderWidth: theme.borderWidth[1],
-  },
-  actionContent: {
-    flexDirection: "row",
+    justifyContent: "flex-end",
     alignItems: "center",
     gap: theme.spacing[2],
-  },
-  actionText: {
-    fontSize: theme.fontSize.base,
   },
 }));

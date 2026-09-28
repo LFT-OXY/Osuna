@@ -400,6 +400,7 @@ export const ar: TranslationResources = {
       next: "التالي",
       answerPlaceholder: "اكتب إجابتك...",
       otherPlaceholder: "آخر...",
+      skip: "تخطي",
     },
     todo: {
       title: "المهام",

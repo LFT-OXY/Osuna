@@ -405,6 +405,7 @@ export const ja: TranslationResources = {
       next: "次へ",
       answerPlaceholder: "回答を入力...",
       otherPlaceholder: "その他...",
+      skip: "スキップ",
     },
     todo: {
       title: "タスク",

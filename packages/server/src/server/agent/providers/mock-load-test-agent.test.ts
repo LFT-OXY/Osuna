@@ -418,8 +418,55 @@ describe("MockLoadTestAgentClient", () => {
     });
     await expect(resultPromise).resolves.toMatchObject({
       sessionId: session.id,
-      finalText: "Synthetic questions resolved",
+      finalText:
+        "Synthetic questions resolved: repoUrl=git@github.com:user/private-repo.git; commitMessage=Initialize private repo",
       canceled: false,
+    });
+    unsubscribe();
+  });
+
+  test.each([
+    {
+      prompt: "Emit synthetic questions: one single-choice question with other.",
+      question: {
+        header: "theme",
+        options: [{ label: "Light" }, { label: "Dark" }, { label: "System" }],
+        multiSelect: false,
+        allowOther: true,
+      },
+    },
+    {
+      prompt: "Emit synthetic questions: one multi-select question.",
+      question: {
+        header: "platforms",
+        options: [{ label: "iOS" }, { label: "Android" }, { label: "Web" }],
+        multiSelect: true,
+      },
+    },
+  ])("emits the question variant selected by $prompt", async ({ prompt, question }) => {
+    vi.useFakeTimers();
+    const client = new MockLoadTestAgentClient();
+    const session = await client.createSession({
+      provider: "mock",
+      cwd: process.cwd(),
+      model: "ten-second-stream",
+    });
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+
+    const resultPromise = session.run(prompt);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const permission = expectSinglePermissionRequest(events);
+    // toMatchObject 对数组要求长度一致，所以这里也断言了只有一道题。
+    expect(permission.request.input).toMatchObject({ questions: [question] });
+
+    await session.respondToPermission(permission.request.id, {
+      behavior: "deny",
+      message: "Dismissed by user",
+    });
+    await expect(resultPromise).resolves.toMatchObject({
+      finalText: "Synthetic questions dismissed",
     });
     unsubscribe();
   });

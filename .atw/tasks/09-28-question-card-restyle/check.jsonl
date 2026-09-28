@@ -1,0 +1,10 @@
+{"file": ".atw/tasks/09-28-question-card-restyle/prd.md", "reason": "本任务的 spec 与验收标准"}
+{"file": ".atw/tasks/09-28-question-card-restyle/research/discover-decisions.md", "reason": "用户决策、现状代码位置、provider 对部分答案的处理"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "原语复用、平台门控、i18n、无障碍"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 规则，禁用 useUnistyles"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "Node 单元与 Playwright e2e 分层"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "禁用模式与验证命令"}
+{"file": "docs/design.md", "reason": "卡片、按钮、悬停底色、字重等设计规则"}
+{"file": "docs/hover.md", "reason": "悬停只用于 Pressable 自身样式，原生无悬停"}
+{"file": "docs/unistyles.md", "reason": "useUnistyles 的替代做法"}
+{"file": "docs/i18n.md", "reason": "新增文案需补全 9 个 locale"}

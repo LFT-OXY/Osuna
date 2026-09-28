@@ -401,6 +401,7 @@ export const ko: TranslationResources = {
       next: "다음",
       answerPlaceholder: "답변을 입력하세요...",
       otherPlaceholder: "기타...",
+      skip: "건너뛰기",
     },
     todo: {
       title: "작업",

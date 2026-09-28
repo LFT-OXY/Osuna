@@ -70,7 +70,7 @@ export async function fillQuestionAnswer(
 
 export async function submitQuestionAnswers(page: Page): Promise<void> {
   await page.getByTestId("question-form-primary-action").click();
-  await expect(page.getByTestId("question-form-card")).toHaveCount(0, { timeout: 30_000 });
+  await expectQuestionPromptResolved(page);
 }
 
 export async function expectQuestionPrimaryActionEnabled(page: Page, label: string): Promise<void> {
@@ -100,4 +100,53 @@ export async function continueToNextQuestion(page: Page): Promise<void> {
     .first()
     .getByRole("button", { name: "Next" })
     .click();
+}
+
+export async function expectQuestionPrimaryActionHidden(page: Page): Promise<void> {
+  await expect(
+    page.getByTestId("question-form-card").first().getByTestId("question-form-primary-action"),
+  ).toHaveCount(0);
+}
+
+export async function expectQuestionPromptResolved(page: Page): Promise<void> {
+  await expect(page.getByTestId("question-form-card")).toHaveCount(0, { timeout: 30_000 });
+}
+
+// mock agent 把收到的答案写进结束文本（header=答案，按题目顺序用 "; " 连接），忽略时回 dismissed。
+export async function expectAgentReceivedAnswers(page: Page, summary: string): Promise<void> {
+  await expect(
+    page.getByText(`Synthetic questions resolved: ${summary}`, { exact: true }),
+  ).toBeVisible({ timeout: 30_000 });
+}
+
+export async function expectAgentReceivedDismissal(page: Page): Promise<void> {
+  await expect(page.getByText("Synthetic questions dismissed", { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+export async function skipCurrentQuestion(page: Page): Promise<void> {
+  await page.getByTestId("question-form-card").first().getByTestId("question-form-skip").click();
+}
+
+export async function dismissQuestionPrompt(page: Page): Promise<void> {
+  await page
+    .getByTestId("question-form-card")
+    .first()
+    .getByRole("button", { name: "Dismiss" })
+    .click();
+  await expectQuestionPromptResolved(page);
+}
+
+// "其他..."行原地展开成输入框，输入框的无障碍名称是题目文字。
+export async function answerQuestionWithOther(
+  page: Page,
+  input: { question: string; answer: string },
+): Promise<void> {
+  const card = page.getByTestId("question-form-card").first();
+  await card.getByTestId("question-form-other-option").click();
+  const textbox = card.getByRole("textbox", { name: input.question });
+  await expect(textbox).toBeFocused();
+  await textbox.fill(input.answer);
+  await textbox.press("Enter");
 }

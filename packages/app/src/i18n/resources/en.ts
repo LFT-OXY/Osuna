@@ -397,6 +397,7 @@ export const en = {
       next: "Next",
       answerPlaceholder: "Type your answer...",
       otherPlaceholder: "Other...",
+      skip: "Skip",
     },
     todo: {
       title: "Tasks",

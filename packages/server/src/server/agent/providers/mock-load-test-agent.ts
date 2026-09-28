@@ -286,6 +286,40 @@ function parseMockQuestionPrompt(prompt: AgentPromptInput): MockQuestionPromptRe
     };
   }
 
+  if (/single[-\s]?choice/i.test(text)) {
+    return {
+      questions: [
+        {
+          question: "Which client theme should we test?",
+          header: "theme",
+          options: [
+            {
+              label: "Light",
+              description: "Check text, borders, and selection on light surfaces.",
+            },
+            { label: "Dark", description: "Check contrast and highlights on dark surfaces." },
+            { label: "System" },
+          ],
+          multiSelect: false,
+          allowOther: true,
+        },
+      ],
+    };
+  }
+
+  if (/multi[-\s]?select/i.test(text)) {
+    return {
+      questions: [
+        {
+          question: "Which platforms should we cover?",
+          header: "platforms",
+          options: [{ label: "iOS" }, { label: "Android" }, { label: "Web" }],
+          multiSelect: true,
+        },
+      ],
+    };
+  }
+
   return {
     questions: [
       {
@@ -309,6 +343,21 @@ function parseMockQuestionPrompt(prompt: AgentPromptInput): MockQuestionPromptRe
       },
     ],
   };
+}
+
+// 把收到的答案写成一条助手消息，e2e 才分得清卡片是提交了答案还是被忽略。
+function describeQuestionResolution(response: AgentPermissionResponse): string {
+  if (response.behavior === "deny") {
+    return "Synthetic questions dismissed";
+  }
+  const answers = response.updatedInput?.answers;
+  if (typeof answers !== "object" || answers === null) {
+    return "Synthetic questions resolved";
+  }
+  const summary = Object.entries(answers)
+    .map(([header, answer]) => `${header}=${String(answer)}`)
+    .join("; ");
+  return `Synthetic questions resolved: ${summary}`;
 }
 
 function resolveModelProfile(modelId: string | null | undefined): {
@@ -977,12 +1026,17 @@ export class MockLoadTestAgentSession implements AgentSession {
     });
 
     if (turn) {
-      this.finishTurnWithText(
-        turn,
-        request.kind === "question"
-          ? "Synthetic questions resolved"
-          : "Synthetic plan approval resolved",
-      );
+      if (request.kind === "question") {
+        const text = describeQuestionResolution(response);
+        this.emitTimeline(turn.turnId, {
+          type: "assistant_message",
+          text,
+          messageId: turn.assistantMessageId,
+        });
+        this.finishTurnWithText(turn, text);
+      } else {
+        this.finishTurnWithText(turn, "Synthetic plan approval resolved");
+      }
     }
     return undefined;
   }
