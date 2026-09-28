@@ -76,6 +76,47 @@ export async function selectComposerProvider(page: Page, providerId: string): Pr
   await chooseProvider(page, providerId);
 }
 
+/** 紧凑布局下 Agent controls sheet 里的「提供方」行。 */
+export function sheetProviderRow(page: Page): Locator {
+  return page.getByTestId("agent-controls-provider").filter({ visible: true });
+}
+
+/** 列表以 push 叠在 Agent controls sheet 上，没有桌面 popover 的容器，只按可见行找。 */
+export function sheetProviderOption(page: Page, providerId: string): Locator {
+  return page.getByTestId(`agent-provider-option-${providerId}`).filter({ visible: true });
+}
+
+export function sheetMoreAgentsRow(page: Page): Locator {
+  return page.getByTestId("agent-provider-more").filter({ visible: true });
+}
+
+/** 打开 Agent controls sheet，停在设置列表上。 */
+export async function openAgentControlsSheet(page: Page): Promise<void> {
+  await page.getByTestId("combined-model-selector").filter({ visible: true }).first().click();
+  await expect(page.getByTestId("agent-controls-settings-list")).toBeVisible({ timeout: 30_000 });
+}
+
+/** 关掉「模型」行 push 出来的模型浏览器，回到设置列表。 */
+export async function closeSheetModelBrowser(page: Page): Promise<void> {
+  await page.getByLabel("Close", { exact: true }).last().click({ force: true });
+  await expect(page.getByTestId("agent-controls-model-browser-viewport")).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("agent-controls-settings-list")).toBeVisible();
+}
+
+/** 「提供方」行排在「模型」行之前。 */
+export async function expectProviderRowAboveModelRow(page: Page): Promise<void> {
+  const [providerBox, modelBox] = await Promise.all([
+    sheetProviderRow(page).boundingBox(),
+    page.getByTestId("agent-controls-model").filter({ visible: true }).boundingBox(),
+  ]);
+  if (!providerBox || !modelBox) {
+    throw new Error("Expected the provider and model rows to be laid out");
+  }
+  expect(providerBox.y).toBeLessThan(modelBox.y);
+}
+
 /** 各控件在屏幕上的左边缘，应按 toolbar 顺序递增。 */
 export async function expectToolbarOrder(page: Page, controls: Locator[]): Promise<void> {
   const lefts = await Promise.all(

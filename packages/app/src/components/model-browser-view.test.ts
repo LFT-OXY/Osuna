@@ -4,6 +4,7 @@ import type {
   ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
 import {
+  followSelectedProviderView,
   resolveInitialModelBrowserView,
   resolveModelBrowserAllView,
   resolveProviderViewModelRows,
@@ -385,5 +386,46 @@ describe("model browser scoped to the selected provider", () => {
         scope: "allProviders",
       }),
     ).toEqual([{ id: "claude-profile", provider: "claude" }]);
+  });
+
+  const claudeView = {
+    kind: "provider",
+    providerId: "claude",
+    providerLabel: "Claude Code",
+  } as const;
+  const copilotView = {
+    kind: "provider",
+    providerId: "copilot",
+    providerLabel: "Copilot",
+  } as const;
+
+  it("moves an open provider view to the provider chosen while it was open", () => {
+    expect(
+      followSelectedProviderView({
+        view: claudeView,
+        selectedProviderView: copilotView,
+        scope: "selectedProvider",
+      }),
+    ).toEqual(copilotView);
+  });
+
+  it("keeps the root view that holds the compact settings list", () => {
+    expect(
+      followSelectedProviderView({
+        view: { kind: "all" },
+        selectedProviderView: copilotView,
+        scope: "selectedProvider",
+      }),
+    ).toEqual({ kind: "all" });
+  });
+
+  it("keeps a drilled-into provider when browsing all providers", () => {
+    expect(
+      followSelectedProviderView({
+        view: claudeView,
+        selectedProviderView: copilotView,
+        scope: "allProviders",
+      }),
+    ).toEqual(claudeView);
   });
 });

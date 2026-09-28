@@ -59,6 +59,7 @@ import {
   resolveInitialModelBrowserView,
   resolveModelBrowserAllView,
   resolveProviderViewModelRows,
+  followSelectedProviderView,
   scopeModelBrowserProviders,
   selectProviderViewProfileRows,
   type ModelBrowserScope,
@@ -284,7 +285,7 @@ export function useModelBrowser({
     () => scopeModelBrowserProviders({ providers: allProviders, selectedProvider, scope }),
     [allProviders, scope, selectedProvider],
   );
-  const [view, setView] = useState<ModelBrowserView>({ kind: "all" });
+  const [storedView, setView] = useState<ModelBrowserView>({ kind: "all" });
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchResetKey, bumpSearchResetKey] = useReducer((key: number) => key + 1, 0);
@@ -300,6 +301,11 @@ export function useModelBrowser({
         scope,
       }),
     [hasProfiles, providers, scope, selectedModel, selectedProvider],
+  );
+  const view = useMemo(
+    () =>
+      followSelectedProviderView({ view: storedView, selectedProviderView: initialView, scope }),
+    [initialView, scope, storedView],
   );
 
   const prepareToOpen = useCallback(() => {

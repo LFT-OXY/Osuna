@@ -125,6 +125,25 @@ export function resolveModelBrowserAllView({
   return { kind: "searchResults", rows };
 }
 
+/**
+ * 限定为当前提供方时，提供方视图始终是当前提供方：打开期间在旁边换了提供方，也不停在旧的那家。
+ * 根视图（手机 sheet 的设置列表）不受影响。
+ */
+export function followSelectedProviderView({
+  view,
+  selectedProviderView,
+  scope,
+}: {
+  view: ModelBrowserView;
+  selectedProviderView: ModelBrowserView;
+  scope: ModelBrowserScope;
+}): ModelBrowserView {
+  if (scope !== "selectedProvider" || view.kind !== "provider") {
+    return view;
+  }
+  return selectedProviderView;
+}
+
 /** Where the picker lands when it opens. A sole provider skips the redundant root view. */
 export function resolveInitialModelBrowserView({
   providers,

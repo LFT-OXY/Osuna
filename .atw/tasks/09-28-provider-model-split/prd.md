@@ -68,8 +68,8 @@
   - 模型浏览器改为只作用于当前提供方：初始视图固定为该提供方，不再有跨提供方的「全部」视图和返回入口。
   - 搜索只在该提供方的模型行里做。
   - 没有收藏区：收藏已在 v0.3.2 移除并迁移为 Agent profiles（`create-agent-preferences/preferences.ts` 的 COMPAT 注释），`favoriteKey` 只是行标识的历史命名。
-  - 限定做成模型浏览器的必填参数 `scope: "allProviders" | "selectedProvider"`（`components/model-browser-view.ts` 的 `ModelBrowserScope`），由 `useModelBrowser` 和 `CombinedModelSelector` 透传。只有旁边另有提供方按钮的 Composer 桌面工具栏传 `selectedProvider`（`hasProviderControl`）；定时任务表单和元数据生成设置页没有提供方按钮，传 `allProviders`，保留跨提供方浏览，否则换不了提供方；手机 sheet 在工单 04 之前也传 `allProviders`。
-  - `selectedProvider` 下：提供方列表收窄到当前提供方（`scopeModelBrowserProviders`）；初始视图固定为当前提供方，即使它还不在列表里（快照未到或已停用）也不回落到根视图；标题栏没有返回按钮；提供方视图展示全部 profiles（`selectProviderViewProfileRows`）。profile 可套用的范围仍由 `useAgentProfilePicker` 的 `availableProviders` 决定：草稿是所有提供方，运行中的 Agent 只有自己的提供方。
+  - 限定做成模型浏览器的必填参数 `scope: "allProviders" | "selectedProvider"`（`components/model-browser-view.ts` 的 `ModelBrowserScope`），由 `useModelBrowser` 和 `CombinedModelSelector` 透传。只有旁边另有提供方按钮的 Composer 桌面工具栏传 `selectedProvider`（`hasProviderControl`）；定时任务表单和元数据生成设置页没有提供方按钮，传 `allProviders`，保留跨提供方浏览，否则换不了提供方；手机 sheet 的根浏览器与「模型」行 push 出的浏览器都传 `selectedProvider`，因为设置列表里有「提供方」行。
+  - `selectedProvider` 下：提供方列表收窄到当前提供方（`scopeModelBrowserProviders`）；初始视图固定为当前提供方，即使它还不在列表里（快照未到或已停用）也不回落到根视图；打开期间换了提供方，提供方视图跟着换（`followSelectedProviderView`，根视图不受影响；桌面模型菜单打开时只有套用 profile 会换提供方，而套用会关闭菜单，所以桌面没有可见变化）；标题栏没有返回按钮；提供方视图展示全部 profiles（`selectProviderViewProfileRows`）。profile 可套用的范围仍由 `useAgentProfilePicker` 的 `availableProviders` 决定：草稿是所有提供方，运行中的 Agent 只有自己的提供方。
   - Agent profiles 区保留，并展示全部 profiles。套用指向其他提供方的 profile 时，走现有的套用流程，提供方随之切换。
 - **草稿切换提供方**
   - 只选提供方时，模型取该提供方已记忆的上次选择，没有记录则取默认模型。
@@ -78,9 +78,11 @@
   - 非 `ready` 的提供方模型列表未知，记住的模型 id 原样保留，等列表到达后再解析；没有记忆时模型为空，提交和模型按钮都回落到该提供方的默认模型（`resolveEffectiveComposerModelId`）。
 - **运行中的 Agent**：提供方按钮渲染为禁用态，只显示图标，不能打开。
 - **紧凑布局（sheet）**
-  - Agent controls sheet 增加「提供方」行，点进去是提供方列表，分组规则和桌面端相同。
-  - 「模型」行进入的模型列表同样只含当前提供方。
-  - 运行中的 Agent 上，「提供方」行只读。
+  - Agent controls sheet 增加「提供方」行，点进去是提供方列表，分组规则和桌面端相同。行和列表复用桌面的 `AgentProviderControl`，以必填的 `surface="sheet"` 渲染：行上有品牌图标、「Provider」和提供方名字，列表以 push 叠在 sheet 上，不带悬停提示。
+  - 「模型」行进入的模型列表同样只含当前提供方，直接停在提供方视图（`prepareToOpen`）；根视图的搜索也只在当前提供方里找，占位文案统一为「Search models...」。
+  - Composer 容器窄于紧凑宽度、窗口却不紧凑时，sheet 以弹窗呈现：模型列表在上，直接是当前提供方的模型；「提供方」行在下方设置列表的最前面，列表以桌面 popover 打开。
+  - 运行中的 Agent 上，「提供方」行只读（禁用态，不传提供方列表）。
+  - 旧的 `model-sheet-flow`（按能否换提供方决定停在根视图还是下钻）随之删除。
 - **图标机制**
   - 每个提供方可以有两个版本：
     - 单色版：沿用现有的 `color`/`currentColor` 上色。
@@ -123,7 +125,7 @@
   - 验证没有彩色版的提供方仍按 `color` 渲染。
   - 验证补齐后的品牌色表。
   - 先例：provider-icons 现有的单元测试。
-- **手机端**：不新增 Maestro 流程。如果现有的模型 sheet 流程因为多出「提供方」行而失效，就更新对应流程，不在本地跑，交给 CI。
+- **手机端**：不新增 Maestro 流程。如果现有的模型 sheet 流程因为多出「提供方」行而失效，就更新对应流程，不在本地跑，交给 CI。`model-tablet-agent.android.ad` 的弹窗不再有提供方下钻行，已改为直接点模型行；`model.android.ad` 按坐标下拉关闭 sheet，多出一行后未在本地验证。紧凑布局用浏览器 e2e 覆盖（`composer-provider-selector.spec.ts` 的「Agent controls sheet provider row」）：手机 sheet 的行序、分组、切换后的默认与恢复、模型范围与搜索，运行中只读，以及窄 Composer 弹窗的打开视图与切换提供方后列表跟随。
 - **验证方式**：按仓库规定只跑改动的单个测试文件；每次改动后跑 typecheck 和 lint。
 
 ## Out of Scope

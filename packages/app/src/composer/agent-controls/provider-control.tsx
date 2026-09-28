@@ -30,6 +30,8 @@ export interface AgentProviderControlProps {
   onSelectProvider?: (providerId: string) => void;
   disabled: boolean;
   onClose?: () => void;
+  /** toolbar 是纯图标按钮；sheet 是 Agent controls sheet 里带名字的一行，列表以 push 叠在 sheet 上。 */
+  surface: "toolbar" | "sheet";
 }
 
 // 品牌色写死时不需要主题色；没有品牌色的用前景色，占位图标用弱化色。
@@ -63,6 +65,7 @@ export function AgentProviderControl({
   onSelectProvider,
   disabled,
   onClose,
+  surface,
 }: AgentProviderControlProps) {
   const { t } = useTranslation();
   const anchorRef = useRef<View>(null);
@@ -145,32 +148,42 @@ export function AgentProviderControl({
     : t("agentControls.provider.select");
   const hint = menu ? t("agentControls.hints.provider") : t("agentControls.hints.providerLocked");
 
+  const isSheet = surface === "sheet";
+  const trigger = (
+    <AgentControlTrigger
+      ref={anchorRef}
+      icon={glyph.Icon}
+      iconColor={glyph.brandColor ?? undefined}
+      iconColorMapping={resolveTriggerIconColorMapping({
+        brandColor: glyph.brandColor,
+        hasProvider,
+      })}
+      surface={surface}
+      label={t("agentControls.provider.fallback")}
+      value={hasProvider ? providerLabel : t("modelSelector.loading")}
+      showToolbarLabel={false}
+      open={open}
+      disabled={!canOpen}
+      onPress={handlePress}
+      accessibilityLabel={accessibilityLabel}
+      testID={isSheet ? "agent-controls-provider" : "agent-provider-selector"}
+    />
+  );
+
   return (
     <>
-      <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-        <TooltipTrigger asChild triggerRefProp="ref">
-          <AgentControlTrigger
-            ref={anchorRef}
-            icon={glyph.Icon}
-            iconColor={glyph.brandColor ?? undefined}
-            iconColorMapping={resolveTriggerIconColorMapping({
-              brandColor: glyph.brandColor,
-              hasProvider,
-            })}
-            surface="toolbar"
-            label={t("agentControls.provider.fallback")}
-            showToolbarLabel={false}
-            open={open}
-            disabled={!canOpen}
-            onPress={handlePress}
-            accessibilityLabel={accessibilityLabel}
-            testID="agent-provider-selector"
-          />
-        </TooltipTrigger>
-        <TooltipContent side="top" align="center" offset={8}>
-          <Text style={styles.tooltipText}>{hint}</Text>
-        </TooltipContent>
-      </Tooltip>
+      {isSheet ? (
+        trigger
+      ) : (
+        <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+          <TooltipTrigger asChild triggerRefProp="ref">
+            {trigger}
+          </TooltipTrigger>
+          <TooltipContent side="top" align="center" offset={8}>
+            <Text style={styles.tooltipText}>{hint}</Text>
+          </TooltipContent>
+        </Tooltip>
+      )}
       {menu ? (
         <Combobox
           options={options}
@@ -178,6 +191,8 @@ export function AgentProviderControl({
           onSelect={handleSelect}
           searchable={false}
           keepOpenOnSelect
+          title={isSheet ? t("agentControls.provider.fallback") : undefined}
+          presentation={isSheet ? "push" : undefined}
           open={open}
           onOpenChange={handleOpenChange}
           anchorRef={anchorRef}

@@ -538,7 +538,7 @@ function ControlledAgentControls({
   const _modelAnchorRef = useRef<View>(null);
   const thinkingAnchorRef = useRef<View>(null);
 
-  // 紧凑布局的 provider 行在 sheet 里另做，这里只管桌面 toolbar 上的图标按钮。
+  // 紧凑布局的 provider 行在 Agent controls sheet 里，这里只管桌面 toolbar 上的图标按钮。
   const hasProviderControl = !isCompact && (provider.length > 0 || providerMenu !== undefined);
   const canSelectModel = Boolean(onSelectModel);
   const canSelectThinking = Boolean(
@@ -780,6 +780,9 @@ function ControlledAgentControls({
         ) : (
           <SheetAgentControlsContent
             provider={provider}
+            providerLabel={providerLabel}
+            providerMenu={providerMenu ?? null}
+            onSelectProvider={onSelectProvider}
             selectedModelId={selectedModelId}
             selectedThinkingOptionId={selectedThinkingOptionId}
             features={features}
@@ -812,7 +815,6 @@ function ControlledAgentControls({
             modeControl={modeControl}
             glyphSize={layoutContextValue.glyphSize}
             modelSelectorServerId={modelSelectorServerId}
-            canSwitchProvider={Boolean(onSelectProviderAndModel)}
           />
         )}
       </View>
@@ -944,6 +946,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     <>
       {hasProviderControl ? (
         <AgentProviderControl
+          surface="toolbar"
           provider={provider}
           providerLabel={providerLabel}
           serverId={modelSelectorServerId}
@@ -1089,6 +1092,9 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
 
 interface SheetAgentControlsContentProps {
   provider: string;
+  providerLabel: string;
+  providerMenu: ProviderMenuGroups | null;
+  onSelectProvider?: (providerId: string) => void;
   selectedModelId?: string;
   selectedThinkingOptionId?: string;
   features?: AgentFeature[];
@@ -1126,13 +1132,15 @@ interface SheetAgentControlsContentProps {
   modeControl?: AgentModeControlValue | null;
   glyphSize: number;
   modelSelectorServerId: string | null;
-  canSwitchProvider: boolean;
 }
 
 function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
   const { t } = useTranslation();
   const {
     provider,
+    providerLabel,
+    providerMenu,
+    onSelectProvider,
     selectedModelId,
     selectedThinkingOptionId,
     features,
@@ -1165,7 +1173,6 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     modeControl,
     glyphSize,
     modelSelectorServerId,
-    canSwitchProvider,
   } = props;
 
   const thinkingAnchorRef = useRef<View | null>(null);
@@ -1233,6 +1240,21 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     </View>
   );
 
+  const providerControl = useMemo(
+    () => (
+      <AgentProviderControl
+        surface="sheet"
+        provider={provider}
+        providerLabel={providerLabel}
+        serverId={modelSelectorServerId}
+        menu={providerMenu}
+        onSelectProvider={onSelectProvider}
+        disabled={disabled}
+      />
+    ),
+    [disabled, modelSelectorServerId, onSelectProvider, provider, providerLabel, providerMenu],
+  );
+
   return canSelectModel ? (
     <CompactModelSheet
       providers={modelSelectorProviders}
@@ -1253,7 +1275,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       isRetryingProvider={isRetryingModelProvider}
       serverId={modelSelectorServerId}
       glyphSize={glyphSize}
-      canSwitchProvider={canSwitchProvider}
+      providerControl={providerControl}
     >
       {sheetControls}
     </CompactModelSheet>

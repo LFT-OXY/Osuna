@@ -53,7 +53,7 @@ was not. iOS and Electron were not exercised.
 `model-tablet.android.ad` exercises the New workspace popover. `model-tablet-agent.android.ad`
 exercises the modal used by an existing agent's narrow composer on a wide device. New workspace
 picks the provider from the provider button, since its model popover lists only the current
-provider; the agent modal drills into a populated provider. Both select a real model, assert the
+provider; the agent modal opens on the agent's provider. Both select a real model, assert the
 updated trigger, reopen, and dismiss with Android Back. New workspace also pans beyond the short list viewport and flings back without
 selecting a row or dismissing the popover. They do not submit a prompt.
 

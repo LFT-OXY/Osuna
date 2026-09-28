@@ -12,7 +12,6 @@ import { ModelBrowser, ModelProviderGlyph, useModelBrowser } from "@/components/
 import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
-import { resolveModelSheetOpening } from "@/composer/agent-controls/model-sheet-flow";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
@@ -43,7 +42,8 @@ interface CompactModelSheetProps {
   disabled?: boolean;
   serverId?: string | null;
   glyphSize: number;
-  canSwitchProvider: boolean;
+  /** 「提供方」行，排在「模型」行之前。 */
+  providerControl: ReactNode;
   children: ReactNode;
 }
 
@@ -95,7 +95,7 @@ export function CompactModelSheet({
   disabled = false,
   serverId = null,
   glyphSize,
-  canSwitchProvider,
+  providerControl,
   children,
 }: CompactModelSheetProps) {
   const { t } = useTranslation();
@@ -106,31 +106,25 @@ export function CompactModelSheet({
   });
   const [isOpen, setIsOpen] = useState(false);
   const [isModelBrowserOpen, setIsModelBrowserOpen] = useState(false);
-  const availableProviders = useMemo(() => {
-    if (canSwitchProvider) return providers;
-    const fixedProvider =
-      providers.find((entry) => entry.id === selectedProvider) ?? providers[0] ?? null;
-    return fixedProvider ? [fixedProvider] : [];
-  }, [canSwitchProvider, providers, selectedProvider]);
   const rootBrowser = useModelBrowser({
-    providers: availableProviders,
+    providers,
     selectedProvider,
     selectedModel,
     isLoading,
     autoFocusSearch: isWeb && !usesBottomSheet,
     profiles,
     serverId,
-    scope: "allProviders",
+    scope: "selectedProvider",
   });
   const modelBrowser = useModelBrowser({
-    providers: availableProviders,
+    providers,
     selectedProvider,
     selectedModel,
     isLoading,
     autoFocusSearch: isWeb && !usesBottomSheet,
     profiles,
     serverId,
-    scope: "allProviders",
+    scope: "selectedProvider",
   });
   const ProviderIcon =
     selectedProvider.trim().length > 0 ? getProviderIcon(selectedProvider, serverId) : null;
@@ -139,23 +133,24 @@ export function CompactModelSheet({
     () => ({
       ...rootBrowser.header,
       title: t("modelSelector.selectModel"),
-      search:
-        rootBrowser.header.search && !canSwitchProvider
-          ? {
-              ...rootBrowser.header.search,
-              placeholder: t("modelSelector.searchPlaceholder"),
-            }
-          : rootBrowser.header.search,
+      search: rootBrowser.header.search
+        ? { ...rootBrowser.header.search, placeholder: t("modelSelector.searchPlaceholder") }
+        : undefined,
     }),
-    [canSwitchProvider, rootBrowser.header, t],
+    [rootBrowser.header, t],
   );
 
   const open = useCallback(() => {
     Keyboard.dismiss();
-    rootBrowser.showAll();
+    // 手机上根视图是设置列表；弹窗里没有「模型」行，直接停在当前提供方的模型列表。
+    if (usesBottomSheet) {
+      rootBrowser.showAll();
+    } else {
+      rootBrowser.prepareToOpen();
+    }
     setIsOpen(true);
     onOpen?.();
-  }, [onOpen, rootBrowser]);
+  }, [onOpen, rootBrowser, usesBottomSheet]);
 
   const close = useCallback(() => {
     setIsModelBrowserOpen(false);
@@ -176,18 +171,9 @@ export function CompactModelSheet({
 
   const openModelBrowser = useCallback(() => {
     Keyboard.dismiss();
-    const destination = resolveModelSheetOpening({
-      canSwitchProvider,
-      providers: availableProviders,
-      selectedProvider,
-    });
-    if (destination.kind === "all") {
-      modelBrowser.showAll();
-    } else {
-      modelBrowser.drillDown(destination.providerId, destination.providerLabel);
-    }
+    modelBrowser.prepareToOpen();
     setIsModelBrowserOpen(true);
-  }, [availableProviders, canSwitchProvider, modelBrowser, selectedProvider]);
+  }, [modelBrowser]);
 
   const closeModelBrowser = useCallback(() => {
     setIsModelBrowserOpen(false);
@@ -246,6 +232,7 @@ export function CompactModelSheet({
     () => (
       <View style={styles.mobileRootContent} testID="agent-controls-settings-list">
         <View style={styles.controlsContent}>
+          {providerControl}
           <AgentControlTrigger
             icon={ModelIcon}
             surface="sheet"
@@ -262,7 +249,15 @@ export function CompactModelSheet({
         </View>
       </View>
     ),
-    [ModelIcon, children, disabled, openModelBrowser, rootBrowser.selectedModelLabel, t],
+    [
+      ModelIcon,
+      children,
+      disabled,
+      openModelBrowser,
+      providerControl,
+      rootBrowser.selectedModelLabel,
+      t,
+    ],
   );
 
   return (
@@ -342,6 +337,7 @@ export function CompactModelSheet({
               showsVerticalScrollIndicator={false}
               testID="agent-controls-settings-list"
             >
+              {providerControl}
               {children}
             </ScrollView>
           </>
