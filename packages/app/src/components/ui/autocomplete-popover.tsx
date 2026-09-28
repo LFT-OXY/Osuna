@@ -26,7 +26,10 @@ import { useKeyboardShift } from "@/hooks/keyboard-shift-context";
 import { SPACING } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 
-const OFFSET_FROM_ANCHOR = SPACING[3];
+// 面板左右相对 Composer 内缩，与 Composer context strip 的 marginHorizontal 相同。
+const PANEL_INSET = SPACING[6];
+// 面板顶边与可用空间上沿之间至少留出的距离。
+const TOP_CLEARANCE = SPACING[3];
 
 interface Rect {
   x: number;
@@ -139,20 +142,19 @@ export function AutocompletePopover({
     if (!relativeAnchorRect) return null;
     return inlineUnistylesStyle({
       position: "absolute" as const,
-      left: relativeAnchorRect.x,
-      width: relativeAnchorRect.width,
+      left: relativeAnchorRect.x + PANEL_INSET,
+      width: Math.max(0, relativeAnchorRect.width - PANEL_INSET * 2),
     });
   }, [relativeAnchorRect]);
 
   const anchorY = relativeAnchorRect?.y ?? 0;
-  const baseBottom = relativeAnchorRect
-    ? relativeAnchorRect.hostHeight - relativeAnchorRect.y + OFFSET_FROM_ANCHOR
-    : 0;
+  // 底边正好落在 Composer 顶边上：Portal 画在 Composer 之上，再往下伸会盖住它的顶边描边。
+  const baseBottom = relativeAnchorRect ? relativeAnchorRect.hostHeight - relativeAnchorRect.y : 0;
   const keyboardLayoutStyle = useAnimatedStyle(() => {
     const shiftDelta = shift.value - measuredShift.value;
     return {
       bottom: baseBottom + shiftDelta,
-      maxHeight: Math.max(0, anchorY - shiftDelta - safeAreaInsets.top - OFFSET_FROM_ANCHOR * 2),
+      maxHeight: Math.max(0, anchorY - shiftDelta - safeAreaInsets.top - TOP_CLEARANCE),
     };
   }, [anchorY, baseBottom, safeAreaInsets.top]);
 

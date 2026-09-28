@@ -65,4 +65,28 @@ describe("getAutocompleteScrollOffset", () => {
       }),
     ).toBe(74);
   });
+
+  it("keeps the active item above the bottom fade when scrolling down", () => {
+    expect(
+      getAutocompleteScrollOffset({
+        currentOffset: 0,
+        viewportHeight: 100,
+        bottomInset: 16,
+        itemTop: 150,
+        itemHeight: 24,
+      }),
+    ).toBe(90);
+  });
+
+  it("treats an item under the bottom fade as out of view", () => {
+    expect(
+      getAutocompleteScrollOffset({
+        currentOffset: 0,
+        viewportHeight: 100,
+        bottomInset: 16,
+        itemTop: 70,
+        itemHeight: 24,
+      }),
+    ).toBe(10);
+  });
 });

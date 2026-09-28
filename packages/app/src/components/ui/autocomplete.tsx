@@ -13,8 +13,12 @@ import { useTranslation } from "react-i18next";
 import { Box, File, Folder, SquareSlash } from "lucide-react-native";
 import { Text } from "@/components/ui/text";
 import { MENU_ITEM_HEIGHT } from "@/components/ui/menu/menu-geometry";
+import { composerSurfaceStyle } from "@/styles/floating-surface";
+import { GLASS_SURFACES_ENABLED } from "@/styles/glass-support";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { AutocompleteFadeFrame } from "./autocomplete-fade";
 import {
+  AUTOCOMPLETE_FADE_HEIGHT,
   getAutocompleteGroup,
   getAutocompleteScrollOffset,
   type AutocompleteGroup,
@@ -223,7 +227,7 @@ export function Autocomplete({
   loadingText,
   emptyText,
   footerText,
-  maxHeight = 220,
+  maxHeight = 300,
 }: AutocompleteProps) {
   const { t } = useTranslation();
   const resolvedLoadingText = loadingText ?? t("common.states.loading");
@@ -264,6 +268,7 @@ export function Autocomplete({
     const nextOffset = getAutocompleteScrollOffset({
       currentOffset: scrollOffsetRef.current,
       viewportHeight: viewportHeightRef.current,
+      bottomInset: AUTOCOMPLETE_FADE_HEIGHT,
       itemTop,
       itemHeight: layout.top + layout.height - itemTop,
     });
@@ -324,7 +329,9 @@ export function Autocomplete({
   if (isLoading) {
     return (
       <View style={containerStyle}>
-        <AutocompleteHint text={resolvedLoadingText} />
+        <View style={styles.list}>
+          <AutocompleteHint text={resolvedLoadingText} />
+        </View>
       </View>
     );
   }
@@ -332,7 +339,9 @@ export function Autocomplete({
   if (errorMessage) {
     return (
       <View style={containerStyle}>
-        <AutocompleteHint text={t("agentAutocomplete.error", { message: errorMessage })} />
+        <View style={styles.list}>
+          <AutocompleteHint text={t("agentAutocomplete.error", { message: errorMessage })} />
+        </View>
       </View>
     );
   }
@@ -340,8 +349,10 @@ export function Autocomplete({
   if (options.length === 0) {
     return (
       <View style={containerStyle}>
-        <AutocompleteHint text={resolvedEmptyText} />
-        {footerText ? <AutocompleteHint text={footerText} /> : null}
+        <View style={styles.list}>
+          <AutocompleteHint text={resolvedEmptyText} />
+          {footerText ? <AutocompleteHint text={footerText} /> : null}
+        </View>
       </View>
     );
   }
@@ -377,40 +388,46 @@ export function Autocomplete({
 
   return (
     <View style={containerStyle}>
-      <ScrollView
-        ref={scrollRef}
-        onLayout={handleScrollViewLayout}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        style={styles.scrollView}
-        keyboardShouldPersistTaps="always"
-      >
-        <View key={listSignature} style={styles.list}>
-          {items}
-          {footerText ? <AutocompleteHint text={footerText} /> : null}
-        </View>
-      </ScrollView>
+      <AutocompleteFadeFrame>
+        <ScrollView
+          ref={scrollRef}
+          onLayout={handleScrollViewLayout}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          style={styles.scrollView}
+          keyboardShouldPersistTaps="always"
+        >
+          <View key={listSignature} style={styles.list}>
+            {items}
+            {footerText ? <AutocompleteHint text={footerText} /> : null}
+          </View>
+        </ScrollView>
+      </AutocompleteFadeFrame>
     </View>
   );
 }
 
 const styles = StyleSheet.create((theme: Theme) => ({
+  // 与 Composer 同一种表面，但立在它的顶边上：底边由 Composer 的顶边描边充当，只画上、左、右
+  // 三条边；Composer 的投影朝下，会落到 Composer 身上，只留顶部内高光。
   container: {
     flexShrink: 1,
     minHeight: 0,
-    backgroundColor: theme.colors.surface1,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius.lg,
+    ...composerSurfaceStyle(theme, { glass: GLASS_SURFACES_ENABLED }),
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    boxShadow: `inset 0 1px 0 ${theme.colors.insetHighlight}`,
     overflow: "hidden",
-    ...theme.shadow.md,
   },
   scrollView: {
     flexGrow: 0,
     flexShrink: 1,
   },
+  // 顶部多留一点，首行高亮的圆角不被面板的大圆角切掉；底部留出渐隐区，滚到底时末行完整可见。
   list: {
-    paddingVertical: theme.spacing[1],
+    paddingTop: theme.spacing[2],
+    paddingBottom: AUTOCOMPLETE_FADE_HEIGHT,
   },
   rowEnvelope: {
     position: "relative",

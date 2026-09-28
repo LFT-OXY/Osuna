@@ -1,3 +1,4 @@
+import { SPACING } from "@/styles/theme";
 import { getNextActiveIndex } from "./combobox-keyboard";
 
 export type AutocompleteGroup = "commands" | "skills";
@@ -29,26 +30,32 @@ export function getAutocompleteNextIndex(args: {
   return getNextActiveIndex(args);
 }
 
+/** 面板底部渐隐的高度；列表底部留出同样的空白，滚到底时最后一行不被淡掉。 */
+export const AUTOCOMPLETE_FADE_HEIGHT = SPACING[4];
+
 export function getAutocompleteScrollOffset(args: {
   currentOffset: number;
   viewportHeight: number;
+  /** 视口底部被渐隐盖住的高度，落在这里的行不算可见。 */
+  bottomInset?: number;
   itemTop: number;
   itemHeight: number;
 }): number {
-  if (args.viewportHeight <= 0) {
+  const visibleHeight = args.viewportHeight - (args.bottomInset ?? 0);
+  if (visibleHeight <= 0) {
     return args.currentOffset;
   }
 
   const itemBottom = args.itemTop + args.itemHeight;
   const viewportTop = args.currentOffset;
-  const viewportBottom = args.currentOffset + args.viewportHeight;
+  const viewportBottom = args.currentOffset + visibleHeight;
 
   if (args.itemTop < viewportTop) {
     return Math.max(0, args.itemTop);
   }
 
   if (itemBottom > viewportBottom) {
-    return Math.max(0, itemBottom - args.viewportHeight);
+    return Math.max(0, itemBottom - visibleHeight);
   }
 
   return args.currentOffset;

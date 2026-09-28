@@ -16,7 +16,7 @@
 
 ## Solution
 
-- Command menu 贴合 Composer 顶边：面板左右略微内缩，底部藏在 Composer 后面并渐隐，看起来像从输入框里长出来。
+- Command menu 贴合 Composer 顶边：面板左右略微内缩，底边落在 Composer 顶边上、内容在底部渐隐，看起来像从输入框里长出来。
 - 列表从上往下排，默认高亮第一项。
 - 分成"命令""技能"两组，各有小标题；技能行用立方体图标，命令行用 `SquareSlash` 图标。
 - 每行一行显示：图标、`/name`、弱化的描述（一行截断）、再弱一级的参数提示。
@@ -59,7 +59,8 @@
   - Web / Electron 用与 Composer 相同的玻璃表面，原生用不透明 `surfaceCard`（`GLASS_SURFACES_ENABLED` 已处理）。
   - 上方两角 `radius["3xl"]`，与 Composer 一致；描边用 `borderComposer`。
   - 左右相对 Composer 内缩，内缩量与 Composer context strip 相同。
-  - 面板底边伸到 Composer 顶边之下被遮住，面板内容在底部约 16 的范围内渐隐。
+  - 面板底边齐平落在 Composer 顶边上、不画底边，由 Composer 的顶边描边充当分界；面板内容在底部约 16 的范围内渐隐（Web 为 CSS 遮罩，原生为 `surfaceCard` 渐变覆盖），列表底部留出同高空白，滚动跟随把高亮行停在渐隐区之上。面板经 Portal 画在 Composer 之上，无法真正压到 Composer 后面；挪出 Portal 又会碰上 `docs/floating-panels.md` 的 Android 触摸问题，所以改为齐平（2026-09-28 用户确认）。
+  - 面板沿用 Composer 表面（`composerSurfaceStyle`），去掉底边、下方圆角与向下的投影，只留顶部内高光；浅色下不另加投影（2026-09-28 用户确认）。
   - 最大高度 300，且受 Composer 上方可用空间约束；键盘弹出时跟随（现有 Reanimated 跟随逻辑保留）。
 - 去掉详情卡；参数提示并入行内。
 - 定位仍走现有的 Portal / floating-panel host，遵守 `docs/floating-panels.md` 的生命周期与 Android 规则。
