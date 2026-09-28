@@ -311,3 +311,26 @@ dev 桌面端深浅色目检 README.zh-CN.md（居中、徽章横排、NOTE 提�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: 工单 04：手机 Agent controls sheet 提供方行
+<!-- atw-session: v=2 fp=d68656293e22ad7a -->
+
+**Date**: 2026-09-28
+**Task**: 工单 04：手机 Agent controls sheet 提供方行
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+实现工单 04：sheet 新增「提供方」行（AgentProviderControl 新增必填 surface），手机与窄 Composer 弹窗的模型浏览器改为 selectedProvider，新增 followSelectedProviderView，删除 model-sheet-flow；新增 4 个紧凑布局 e2e；审查意见已处理并回写 PRD、工单与组件规范。dev 桌面端排查：在 Agent 内启动继承了正式版 PASEO_HOME，接管 6767 daemon 且退出会停掉它，改用 env -u PASEO_HOME 启动。归档 provider-model-split 与 osuna-rebrand-and-mac-updates 两个任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `68a035516` | feat(app): 手机 Agent controls sheet 新增提供方行，模型列表限定为当前提供方 |
+
+### Status
+
+[OK] **Completed**

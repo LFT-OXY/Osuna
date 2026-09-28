@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-09-27
+- **Total Sessions**: 10
+- **Last Active**: 2026-09-28
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~313 | Active |
+| `journal-1.md` | ~336 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-09-28 | 工单 04：手机 Agent controls sheet 提供方行 | `68a035516` | `main` |
 | 9 | 2026-09-27 | markdown-preview-dom 07 整体验收与归档 | `b6ec7ea25` | `feat/markdown-preview-dom` |
 | 8 | 2026-09-27 | composer-branch-switch：从 Composer 上下文条切换分支 | `1ccc71dd0`, `2e4093c98` | `main` |
 | 7 | 2026-09-27 | pi-hidden-context：隐藏 Pi 注入上下文与 skill 展开全文 | `2838a4c53`, `fec0d9406` | `main` |
