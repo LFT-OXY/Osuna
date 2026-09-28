@@ -1,6 +1,8 @@
 export type ComposerControlDensity = "full" | "condensed" | "tight";
 
 export interface ComposerControlPresence {
+  /** 独立的 provider 图标按钮；有它时模型按钮不再画 provider 图标。 */
+  hasProvider: boolean;
   hasModel: boolean;
   hasThinking: boolean;
   hasMode: boolean;
@@ -29,6 +31,7 @@ export const COMPOSER_TOOLBAR_GEOMETRY = {
 } as const;
 
 const DENSITY_HYSTERESIS = 12;
+const MODEL_TRIGGER_GLYPH_WIDTH = 16 + COMPOSER_TOOLBAR_GEOMETRY.iconLabelGap;
 
 function normalizedFontScale(fontScale: number): number {
   return Number.isFinite(fontScale) ? Math.max(1, fontScale) : 1;
@@ -62,7 +65,9 @@ function resolveFeatureControlWidth(
 function resolveCondensedFloor(controls: ComposerControlPresence): number {
   const fontScale = normalizedFontScale(controls.fontScale);
   const widths: number[] = [];
-  if (controls.hasModel) widths.push(36 + 60 * fontScale);
+  const modelGlyph = controls.hasProvider ? 0 : MODEL_TRIGGER_GLYPH_WIDTH;
+  if (controls.hasProvider) widths.push(COMPOSER_TOOLBAR_GEOMETRY.controlSize);
+  if (controls.hasModel) widths.push(16 + modelGlyph + 60 * fontScale);
   if (controls.hasThinking) widths.push(COMPOSER_TOOLBAR_GEOMETRY.controlSize);
   if (controls.hasMode) widths.push(36 + 96 * fontScale);
   if (controls.features.length > 0) widths.push(COMPOSER_TOOLBAR_GEOMETRY.controlSize);
@@ -72,11 +77,14 @@ function resolveCondensedFloor(controls: ComposerControlPresence): number {
 function resolveFullFloor(controls: ComposerControlPresence): number {
   const fontScale = normalizedFontScale(controls.fontScale);
   const widths: number[] = [];
-  if (controls.hasModel) widths.push(50 + 70 * fontScale);
+  const modelGlyph = controls.hasProvider ? 0 : MODEL_TRIGGER_GLYPH_WIDTH;
+  if (controls.hasModel) widths.push(30 + modelGlyph + 70 * fontScale);
   if (controls.hasThinking) widths.push(54 + 48 * fontScale);
   if (controls.hasMode) widths.push(54 + 96 * fontScale);
   // 只有 full 画分隔线：模型、推理强度、模式相邻两项之间各一条。
   const separatorCount = Math.max(0, widths.length - 1);
+  // provider 按钮紧贴模型按钮，两者之间不画分隔线。
+  if (controls.hasProvider) widths.push(COMPOSER_TOOLBAR_GEOMETRY.controlSize);
   for (let index = 0; index < separatorCount; index += 1) {
     widths.push(
       COMPOSER_TOOLBAR_GEOMETRY.separatorWidth + COMPOSER_TOOLBAR_GEOMETRY.separatorInset * 2,

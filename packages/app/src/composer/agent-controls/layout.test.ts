@@ -34,6 +34,7 @@ describe("composer control layout", () => {
 
   it("uses local available width and hysteresis to avoid density churn", () => {
     const controls = {
+      hasProvider: false,
       hasModel: true,
       hasThinking: true,
       hasMode: true,
@@ -95,6 +96,7 @@ describe("composer control layout", () => {
       resolveComposerControlDensity({
         ...base,
         controls: {
+          hasProvider: false,
           hasModel: true,
           hasThinking: true,
           hasMode: true,
@@ -107,6 +109,7 @@ describe("composer control layout", () => {
       resolveComposerControlDensity({
         ...base,
         controls: {
+          hasProvider: false,
           hasModel: true,
           hasThinking: true,
           hasMode: true,
@@ -119,6 +122,7 @@ describe("composer control layout", () => {
       resolveComposerControlDensity({
         ...base,
         controls: {
+          hasProvider: false,
           hasModel: true,
           hasThinking: true,
           hasMode: true,
@@ -134,6 +138,7 @@ describe("composer control layout", () => {
       availableWidth: 430,
       currentDensity: "full" as const,
       controls: {
+        hasProvider: false,
         hasModel: true,
         hasThinking: true,
         hasMode: true,
@@ -160,6 +165,7 @@ describe("composer control layout", () => {
 
   it("reserves room for the separators between model, thinking, and mode", () => {
     const controls = {
+      hasProvider: false,
       hasModel: true,
       hasThinking: true,
       hasMode: true,
@@ -181,6 +187,31 @@ describe("composer control layout", () => {
         controls: { ...controls, hasThinking: false },
       }),
     ).toBe("full");
+  });
+
+  it("budgets the provider button as the model trigger hands it its glyph", () => {
+    const controls = {
+      hasProvider: true,
+      hasModel: true,
+      hasThinking: true,
+      hasMode: true,
+      features: [],
+      fontScale: 1,
+    };
+
+    // 图标从模型按钮移到独立的 28 宽按钮：多 28 + 4 间距，模型按钮少 16 + 4，净增 12。
+    expect(
+      resolveComposerControlDensity({ availableWidth: 398, currentDensity: "full", controls }),
+    ).toBe("full");
+    expect(
+      resolveComposerControlDensity({ availableWidth: 397, currentDensity: "full", controls }),
+    ).toBe("condensed");
+    expect(
+      resolveComposerControlDensity({ availableWidth: 276, currentDensity: "condensed", controls }),
+    ).toBe("condensed");
+    expect(
+      resolveComposerControlDensity({ availableWidth: 275, currentDensity: "full", controls }),
+    ).toBe("tight");
   });
 
   it("draws a separator only between neighbouring model, thinking, and mode controls", () => {

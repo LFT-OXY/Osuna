@@ -203,6 +203,8 @@ export const zhCN: TranslationResources = {
     provider: {
       fallback: "Provider",
       select: "选择 Agent Provider",
+      selectWithValue: "选择 Agent Provider（{{value}}）",
+      moreAgents: "更多 Agent（{{count}}）",
     },
     thinking: {
       title: "Thinking",
@@ -229,6 +231,8 @@ export const zhCN: TranslationResources = {
       thinking: "Thinking mode",
       model: "切换 Model",
       mode: "更改模式",
+      provider: "切换 Provider",
+      providerLocked: "运行中的 Agent 不能切换 Provider",
     },
   },
   agentStream: {

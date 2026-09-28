@@ -112,6 +112,7 @@ export async function seedModelProvider(input: {
   models: SeededProviderModel[];
   extends?: "claude" | "pi";
   command?: string[];
+  enabled?: boolean;
 }): Promise<HostSeed> {
   const client = await connectAgentProfilesClient();
   await client.patchDaemonConfig({
@@ -120,7 +121,7 @@ export async function seedModelProvider(input: {
         extends: input.extends ?? "claude",
         label: input.label,
         description: `${input.label} test provider`,
-        enabled: true,
+        enabled: input.enabled ?? true,
         command: input.command ?? ["node"],
         models: input.models,
       },

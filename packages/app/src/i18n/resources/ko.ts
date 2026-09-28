@@ -203,6 +203,8 @@ export const ko: TranslationResources = {
     provider: {
       fallback: "프로바이더",
       select: "에이전트 프로바이더 선택",
+      selectWithValue: "에이전트 프로바이더 선택 ({{value}})",
+      moreAgents: "에이전트 더 보기 ({{count}})",
     },
     thinking: {
       title: "사고",
@@ -229,6 +231,8 @@ export const ko: TranslationResources = {
       thinking: "사고 모드",
       model: "모델 변경",
       mode: "모드 변경",
+      provider: "프로바이더 변경",
+      providerLocked: "실행 중인 에이전트는 프로바이더를 변경할 수 없습니다",
     },
   },
   agentStream: {

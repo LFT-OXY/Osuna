@@ -25,6 +25,8 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 | The product logo           | `components/icons/osuna-logo.tsx`: `<OsunaLogo size>` (color bitmap, splash / welcome / open-project); `<OsunaGlyph size color>` (monochrome, 16px tool-call icon). The PNG and every desktop / web icon come from `node scripts/generate-osuna-icons.mjs` run on `packages/desktop/icon-source/osuna.png` | Hand-edited icon files; a new inline logo SVG      |
 | A header                   | `components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`; workspace and settings call sites pass `borderless` (`docs/design.md` §5) | A hand-rolled bar; a `borderBottom` on workspace or settings chrome |
 
+A collapsible group inside a `Combobox` ("More agents (N)") is one more option, not a second list: put a sentinel option between the visible rows and the folded ones, append the folded rows only while expanded, set `keepOpenOnSelect`, and in `onSelect` toggle on the sentinel and close yourself on everything else. Arrow keys and Enter then reach the toggle row like any other, which a `Pressable` footer below the list would not. Leave `searchable` off — filtering a list with a fold in it hides the toggle. Reference: `composer/agent-controls/provider-control.tsx`.
+
 ## Fallible actions own their three states
 
 Every user action that can fail renders pending, success, and failure in the same context (`docs/testing.md` "Fallible user actions"). Disable the trigger while pending, show the result or an acknowledgement, keep an actionable error visible until retried or dismissed. `screens/settings/host-page.tsx` and `screens/project-settings-screen.tsx` are references. Eleven files still call `Alert.alert`; do not add a twelfth.

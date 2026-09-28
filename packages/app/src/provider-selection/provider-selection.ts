@@ -155,6 +155,35 @@ export function buildSelectableProviderSelectorProviders(
     });
 }
 
+export interface ProviderMenuItem {
+  id: string;
+  label: string;
+}
+
+export interface ProviderMenuGroups {
+  flat: ProviderMenuItem[];
+  more: ProviderMenuItem[];
+}
+
+const FLAT_PROVIDER_MENU_STATUSES = new Set<ProviderSnapshotEntry["status"]>(["ready", "loading"]);
+
+// 可用的平铺，出错或不可用的折进「More agents」，但仍可选中去看错误并重试。
+export function groupProviderMenuEntries(
+  entries: ProviderSnapshotEntry[] | undefined,
+): ProviderMenuGroups {
+  const groups: ProviderMenuGroups = { flat: [], more: [] };
+  for (const entry of entries ?? []) {
+    if (!entry.enabled) continue;
+    const item = { id: entry.provider, label: entry.label ?? entry.provider };
+    if (FLAT_PROVIDER_MENU_STATUSES.has(entry.status)) {
+      groups.flat.push(item);
+    } else {
+      groups.more.push(item);
+    }
+  }
+  return groups;
+}
+
 export function getProviderModelRows(
   provider: ProviderSelectorProvider,
 ): ProviderSelectionModelRow[] {

@@ -74,6 +74,7 @@ export interface UseAgentFormStateResult {
   refreshProviderModels: (provider?: AgentProvider) => void;
   refetchProviderModelsIfStale: () => void;
   setProviderAndModelFromUser: (provider: AgentProvider, modelId: string) => void;
+  setProviderFromUser: (provider: AgentProvider) => void;
   applyProfileFromUser: (profile: MaterializedAgentProfile) => void;
   clearProviderSelectionFromUser: () => void;
   workingDirIsEmpty: boolean;
@@ -275,13 +276,14 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     snapshotResolvableProviderDefinitionMap,
   ]);
 
-  const setProviderAndModelFromUser = useCallback(
-    (provider: AgentProvider, modelId: string) => {
-      if (!selectableProviderDefinitionMap.has(provider)) {
-        return;
-      }
-      const providerDef = selectableProviderDefinitionMap.get(provider);
-      const providerModels = allProviderModels.get(provider) ?? null;
+  const selectProviderAndModel = useCallback(
+    (input: {
+      provider: AgentProvider;
+      modelId: string;
+      providerDef: AgentProviderDefinition | undefined;
+      providerModels: AgentModelDefinition[] | null;
+    }) => {
+      const { provider, modelId, providerDef, providerModels } = input;
       const providerPrefs = preferenceOverlayRef.current.current().providerPreferences?.[provider];
       const normalizedModelId = normalizeSelectedModelId(modelId);
       const nextModelId = normalizedModelId || resolveDefaultModelId(providerModels);
@@ -304,7 +306,48 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         }),
       );
     },
-    [allProviderModels, selectableProviderDefinitionMap, updateCurrentPreferences],
+    [updateCurrentPreferences],
+  );
+
+  const setProviderAndModelFromUser = useCallback(
+    (provider: AgentProvider, modelId: string) => {
+      if (!selectableProviderDefinitionMap.has(provider)) {
+        return;
+      }
+      selectProviderAndModel({
+        provider,
+        modelId,
+        providerDef: selectableProviderDefinitionMap.get(provider),
+        providerModels: allProviderModels.get(provider) ?? null,
+      });
+    },
+    [allProviderModels, selectProviderAndModel, selectableProviderDefinitionMap],
+  );
+
+  // 只换 provider：模型取该 provider 记住的上次选择，没有就落到默认模型。
+  // 出错或不可用的 provider 也能选中，模型菜单里才看得到它的错误并重试。
+  const setProviderFromUser = useCallback(
+    (provider: AgentProvider) => {
+      const entry = allProviderEntries.find((candidate) => candidate.provider === provider);
+      if (!entry?.enabled) {
+        return;
+      }
+      const rememberedModelId =
+        preferenceOverlayRef.current.current().providerPreferences?.[provider]?.model ?? "";
+      selectProviderAndModel({
+        provider,
+        modelId: rememberedModelId,
+        providerDef: providerDefinitionMap.get(provider),
+        // 未就绪时模型列表未知，保留记住的模型 id，等列表到了再按它解析。
+        providerModels: snapshotProviderModelsByProvider.get(provider) ?? null,
+      });
+    },
+    [
+      allProviderEntries,
+      providerDefinitionMap,
+      selectProviderAndModel,
+      snapshotProviderModelsByProvider,
+    ],
   );
 
   const clearProviderSelectionFromUser = useCallback(() => {
@@ -498,6 +541,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
+      setProviderFromUser,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,
@@ -529,6 +573,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
+      setProviderFromUser,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,

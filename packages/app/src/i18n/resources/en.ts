@@ -199,6 +199,8 @@ export const en = {
     provider: {
       fallback: "Provider",
       select: "Select agent provider",
+      selectWithValue: "Select agent provider ({{value}})",
+      moreAgents: "More agents ({{count}})",
     },
     thinking: {
       title: "Thinking",
@@ -225,6 +227,8 @@ export const en = {
       thinking: "Thinking mode",
       model: "Change model",
       mode: "Change mode",
+      provider: "Change provider",
+      providerLocked: "A running agent can't change provider",
     },
   },
   agentStream: {

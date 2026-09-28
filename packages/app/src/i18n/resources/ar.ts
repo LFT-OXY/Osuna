@@ -203,6 +203,8 @@ export const ar: TranslationResources = {
     provider: {
       fallback: "مزود",
       select: "حدد مزود الوكيل",
+      selectWithValue: "حدد مزود الوكيل ({{value}})",
+      moreAgents: "المزيد من الوكلاء ({{count}})",
     },
     thinking: {
       title: "التفكير",
@@ -229,6 +231,8 @@ export const ar: TranslationResources = {
       thinking: "وضع التفكير",
       model: "تغيير النموذج",
       mode: "تغيير الوضع",
+      provider: "تغيير المزود",
+      providerLocked: "لا يمكن تغيير مزود وكيل قيد التشغيل",
     },
   },
   agentStream: {

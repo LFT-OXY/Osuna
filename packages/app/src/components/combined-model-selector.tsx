@@ -63,6 +63,8 @@ interface CombinedModelSelectorProps {
   toolbar?: {
     glyphSize: number;
     showCaret: boolean;
+    /** toolbar 上有独立的 provider 按钮时关掉，避免同一个图标并排出现两次。 */
+    showProviderGlyph: boolean;
   };
 }
 
@@ -283,6 +285,7 @@ export function CombinedModelSelector({
 }
 
 // Composer toolbar 里 provider 图标用品牌色、标签 medium；其他位置保持弱化的图标与普通字重。
+// toolbar 有独立的 provider 按钮时，模型按钮只显示模型名。
 function DefaultTriggerContent({
   selectedProvider,
   serverId,
@@ -296,7 +299,7 @@ function DefaultTriggerContent({
 }) {
   return (
     <>
-      {selectedProvider.trim().length > 0 ? (
+      {selectedProvider.trim().length > 0 && toolbar?.showProviderGlyph !== false ? (
         <View style={toolbar?.glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16}>
           <ModelProviderGlyph
             provider={selectedProvider}

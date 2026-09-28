@@ -206,6 +206,8 @@ export const ptBR: TranslationResources = {
     provider: {
       fallback: "Provedor",
       select: "Selecionar provedor do agente",
+      selectWithValue: "Selecionar provedor do agente ({{value}})",
+      moreAgents: "Mais agentes ({{count}})",
     },
     thinking: {
       title: "Raciocínio",
@@ -232,6 +234,8 @@ export const ptBR: TranslationResources = {
       thinking: "Modo de raciocínio",
       model: "Alterar modelo",
       mode: "Alterar modo de permissão",
+      provider: "Alterar provedor",
+      providerLocked: "Um agente em execução não pode trocar de provedor",
     },
   },
   agentStream: {

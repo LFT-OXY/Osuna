@@ -205,6 +205,8 @@ export const ru: TranslationResources = {
     provider: {
       fallback: "Провайдер",
       select: "Выбрать провайдера агента",
+      selectWithValue: "Выбрать провайдера агента ({{value}})",
+      moreAgents: "Другие агенты ({{count}})",
     },
     thinking: {
       title: "Рассуждения",
@@ -231,6 +233,8 @@ export const ru: TranslationResources = {
       thinking: "Режим рассуждений",
       model: "Изменить модель",
       mode: "Изменить режим",
+      provider: "Сменить провайдера",
+      providerLocked: "Работающий агент не может сменить провайдера",
     },
   },
   agentStream: {

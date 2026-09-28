@@ -12,6 +12,8 @@ import { getServerId } from "./server-id";
 import { openSettingsHostSection } from "./settings";
 
 const MODEL_LABEL = "Select model (Example 1)";
+// 宽屏 toolbar 上 provider 图标在独立按钮里，模型按钮只显示模型名。
+const PROVIDER_LABEL = "Select agent provider (Direct provider example)";
 const WIDE = { width: 1400, height: 950 };
 const COMPACT = { width: 390, height: 844 };
 
@@ -120,7 +122,7 @@ export async function verifyNewWorkspaceModelIcon({
   iconPaths,
   testInfo,
 }: ProviderIconJourney): Promise<void> {
-  await test.step("new workspace keeps the picker icon on its selected model button", async () => {
+  await test.step("new workspace shows the picker icon on its provider button", async () => {
     await openGlobalNewWorkspaceComposer(page);
     await selectPluginModel(page);
     await openModelPicker(page);
@@ -128,7 +130,7 @@ export async function verifyNewWorkspaceModelIcon({
     await capture(page, testInfo, "new-workspace-picker");
     await page.keyboard.press("Escape");
     await expectProviderIcon(
-      page.getByRole("button", { name: MODEL_LABEL, exact: true }),
+      page.getByRole("button", { name: PROVIDER_LABEL, exact: true }),
       iconPaths,
     );
     await capture(page, testInfo, "new-workspace-selected-model");
@@ -167,7 +169,7 @@ export async function verifyExistingAgentModelIcon({
     await page.setViewportSize(WIDE);
     await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: agent.id });
     await expectProviderIcon(
-      page.getByRole("button", { name: MODEL_LABEL, exact: true }),
+      page.getByRole("button", { name: PROVIDER_LABEL, exact: true }),
       iconPaths,
     );
     await capture(page, testInfo, "agent-selected-model");

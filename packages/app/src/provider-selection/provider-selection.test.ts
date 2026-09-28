@@ -8,6 +8,7 @@ import {
   buildSelectableProviderSelectorProviders,
   buildSelectedTriggerLabel,
   filterAndRankModelRows,
+  groupProviderMenuEntries,
   matchesModelSearch,
   resolveSelectedModelLabel,
   resolveSubmissionReadiness,
@@ -431,6 +432,66 @@ describe("combined model selector data", () => {
     } finally {
       await i18n.changeLanguage("en");
     }
+  });
+});
+
+describe("provider menu groups", () => {
+  function entry(
+    provider: string,
+    overrides: Pick<ProviderSnapshotEntry, "status"> & Partial<ProviderSnapshotEntry>,
+  ): ProviderSnapshotEntry {
+    return {
+      provider,
+      enabled: true,
+      label: provider.toUpperCase(),
+      description: `${provider} provider`,
+      defaultModeId: "default",
+      modes: [],
+      models: [],
+      ...overrides,
+    };
+  }
+
+  it("lays out ready and loading providers flat and folds error and unavailable ones into more", () => {
+    expect(
+      groupProviderMenuEntries([
+        entry("claude", { status: "ready" }),
+        entry("gemini", { status: "unavailable" }),
+        entry("codex", { status: "loading" }),
+        entry("kimi", { status: "error" }),
+        entry("pi", { status: "ready" }),
+      ]),
+    ).toEqual({
+      flat: [
+        { id: "claude", label: "CLAUDE" },
+        { id: "codex", label: "CODEX" },
+        { id: "pi", label: "PI" },
+      ],
+      more: [
+        { id: "gemini", label: "GEMINI" },
+        { id: "kimi", label: "KIMI" },
+      ],
+    });
+  });
+
+  it("leaves disabled providers out of both groups", () => {
+    expect(
+      groupProviderMenuEntries([
+        entry("claude", { status: "ready", enabled: false }),
+        entry("gemini", { status: "unavailable", enabled: false }),
+        entry("codex", { status: "ready" }),
+      ]),
+    ).toEqual({ flat: [{ id: "codex", label: "CODEX" }], more: [] });
+  });
+
+  it("falls back to the provider id when the snapshot has no label", () => {
+    expect(
+      groupProviderMenuEntries([{ ...entry("custom-acp", { status: "ready" }), label: undefined }]),
+    ).toEqual({ flat: [{ id: "custom-acp", label: "custom-acp" }], more: [] });
+  });
+
+  it("returns empty groups before the snapshot arrives", () => {
+    expect(groupProviderMenuEntries(undefined)).toEqual({ flat: [], more: [] });
   });
 });
 

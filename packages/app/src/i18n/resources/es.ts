@@ -206,6 +206,8 @@ export const es: TranslationResources = {
     provider: {
       fallback: "Proveedor",
       select: "Seleccionar proveedor de agente",
+      selectWithValue: "Seleccionar proveedor de agente ({{value}})",
+      moreAgents: "Más agentes ({{count}})",
     },
     thinking: {
       title: "Pensamiento",
@@ -232,6 +234,8 @@ export const es: TranslationResources = {
       thinking: "Modo de pensamiento",
       model: "Cambiar modelo",
       mode: "Cambiar modo",
+      provider: "Cambiar proveedor",
+      providerLocked: "Un agente en ejecución no puede cambiar de proveedor",
     },
   },
   agentStream: {

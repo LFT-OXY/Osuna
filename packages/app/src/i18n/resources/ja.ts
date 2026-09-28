@@ -205,6 +205,8 @@ export const ja: TranslationResources = {
     provider: {
       fallback: "プロバイダー",
       select: "エージェントプロバイダーを選択",
+      selectWithValue: "エージェントプロバイダーを選択（{{value}}）",
+      moreAgents: "その他のエージェント（{{count}}）",
     },
     thinking: {
       title: "思考",
@@ -231,6 +233,8 @@ export const ja: TranslationResources = {
       thinking: "思考モード",
       model: "モデルを変更",
       mode: "権限モードを変更",
+      provider: "プロバイダーを変更",
+      providerLocked: "実行中のエージェントはプロバイダーを変更できません",
     },
   },
   agentStream: {

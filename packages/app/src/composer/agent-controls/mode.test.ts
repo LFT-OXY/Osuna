@@ -19,7 +19,9 @@ describe("resolveAgentControlsMode", () => {
     expect(
       resolveAgentControlsMode({
         providerDefinitions: [],
+        providerEntries: [],
         selectedProvider: "codex",
+        onSelectProvider: () => undefined,
         modeOptions: [],
         selectedMode: "",
         onSelectMode: () => undefined,

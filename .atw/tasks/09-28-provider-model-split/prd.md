@@ -54,7 +54,10 @@
 
 - **拆分方式**
   - 工具栏上的现有合并选择器拆成两个控件：提供方选择器和模型选择器。
-  - 独立的提供方选择器沿用 Agent controls 里已有但从未启用的提供方 Combobox 结构，改成纯图标触发器加自定义行渲染：行内有品牌图标、名字、勾选状态，末尾是「More agents (N)」折叠区。
+  - 独立的提供方选择器沿用 Agent controls 里已有但从未启用的提供方 Combobox 结构，改成纯图标触发器加自定义行渲染：行内有品牌图标、名字、勾选状态，末尾是「More agents (N)」折叠区。实现在 `composer/agent-controls/provider-control.tsx`（`AgentProviderControl`），旧的文字版提供方 Combobox 结构随之删除。
+  - 「More agents (N)」是 Combobox 选项列表里的一个哨兵行，配合 `keepOpenOnSelect`：选中它只展开或收起，不关闭列表，所以键盘上下移动和回车对它同样有效。当前提供方在折叠区里时，打开列表即自动展开。
+  - 提供方列表不带搜索：条目少，搜索和折叠区同时存在时折叠区会被过滤打乱。
+  - 桌面 toolbar 上出现提供方按钮时，模型按钮不再画提供方图标，只显示模型名（`CombinedModelSelector` 的 `toolbar.showProviderGlyph`），对应故事 2「不占用工具栏宽度」。工具栏密度预算里提供方按钮计 28，模型按钮相应扣掉图标加间距的 20，净增 12（`composer/agent-controls/layout.ts` 的 `hasProvider`）。其他页面的模型选择器和手机端不受影响。
 - **提供方分组规则**
   - 平铺：状态为 `ready` 或 `loading` 的已启用提供方。
   - 折叠进「More agents (N)」：状态为 `error` 或 `unavailable` 的已启用提供方。
@@ -68,7 +71,9 @@
   - Agent profiles 区保留，并展示全部 profiles。套用指向其他提供方的 profile 时，走现有的套用流程，提供方随之切换。
 - **草稿切换提供方**
   - 只选提供方时，模型取该提供方已记忆的上次选择，没有记录则取默认模型。
-  - 复用 Agent 表单状态里现有的提供方与模型设置入口和按提供方记忆的偏好，不新增状态。
+  - 复用 Agent 表单状态里现有的提供方与模型设置入口和按提供方记忆的偏好，不新增状态。入口是 `setProviderFromUser(provider)`，与 `setProviderAndModelFromUser` 共用同一个 reducer 动作和偏好写入。
+  - 两个入口的门槛不同：`setProviderAndModelFromUser` 只接受 `ready` 的提供方（选模型的前提是有模型列表）；`setProviderFromUser` 接受任何已启用的提供方，`loading`、`error`、`unavailable` 都能选中，这样折叠区里的提供方才能选中后到模型菜单看错误并重试。
+  - 非 `ready` 的提供方模型列表未知，记住的模型 id 原样保留，等列表到达后再解析；没有记忆时模型为空，提交和模型按钮都回落到该提供方的默认模型（`resolveEffectiveComposerModelId`）。
 - **运行中的 Agent**：提供方按钮渲染为禁用态，只显示图标，不能打开。
 - **紧凑布局（sheet）**
   - Agent controls sheet 增加「提供方」行，点进去是提供方列表，分组规则和桌面端相同。

@@ -28,7 +28,9 @@ export function buildDraftAgentControls(input: {
   const { formState, features, onSetFeature, onApplyAgentProfile, onDropdownClose } = input;
   return {
     providerDefinitions: formState.providerDefinitions,
+    providerEntries: formState.allProviderEntries ?? [],
     selectedProvider: formState.selectedProvider,
+    onSelectProvider: formState.setProviderFromUser,
     modeOptions: formState.modeOptions,
     selectedMode: formState.selectedMode,
     onSelectMode: formState.setModeFromUser,
