@@ -1255,6 +1255,7 @@ export class PiRpcAgentSession implements AgentSession {
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
   private commandCache: AgentSlashCommand[] | null = null;
+  private processExited = false;
   private state: PiSessionState;
   private readonly currentModeId: string | null;
   private readonly logger: Logger;
@@ -1344,6 +1345,9 @@ export class PiRpcAgentSession implements AgentSession {
       try {
         const ack = await this.runtimeSession.prompt(payload.text, payload.images);
         this.activePromptRequestId = ack.requestId ?? null;
+        void this.reportRunningCommands().catch((error) => {
+          this.logger.warn({ err: error }, "Failed to read Pi's command list after a prompt");
+        });
         const correlatedResult = ack.requestId
           ? this.pendingPromptResults.get(ack.requestId)
           : undefined;
@@ -1644,13 +1648,24 @@ export class PiRpcAgentSession implements AgentSession {
     }
   }
 
-  async listCommands(): Promise<AgentSlashCommand[]> {
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
     if (this.commandCache) {
       return this.commandCache;
+    }
+    if (this.closed || this.processExited) {
+      return null;
     }
     const commands = await this.runtimeSession.getCommands();
     const mappedCommands = mapPiSlashCommands(commands);
     return mappedCommands;
+  }
+
+  // Reported once per turn so drafts in this cwd see the full list; the catalog skips unchanged lists.
+  private async reportRunningCommands(): Promise<void> {
+    const commands = await this.listCommands();
+    if (commands) {
+      this.emit({ type: "commands_changed", provider: this.provider, commands });
+    }
   }
 
   tryHandleOutOfBand(
@@ -2166,6 +2181,7 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private handleProcessExit(error: string): void {
+    this.processExited = true;
     this.rejectAllExtensionResults(new Error(error));
     this.interruptingTurn = null;
     if (!this.activeTurnId && !this.activeTurnStarted) {
@@ -2676,6 +2692,10 @@ export class PiRpcAgentClient implements AgentClient {
       context?.signal.removeEventListener("abort", handleAbort);
       await closeSession();
     }
+  }
+
+  async discoverCommands(_cwd: string): Promise<AgentSlashCommand[]> {
+    return [...PI_HANDLED_BUILTIN_SLASH_COMMANDS];
   }
 
   async listFeatures(_config: AgentSessionConfig): Promise<AgentFeature[]> {

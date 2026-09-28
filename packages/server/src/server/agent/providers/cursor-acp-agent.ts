@@ -19,7 +19,6 @@ interface CursorACPAgentClientOptions {
   providerParams?: unknown;
 }
 
-const CURSOR_INITIAL_COMMANDS_WAIT_TIMEOUT_MS = 10_000;
 const CURSOR_CLIENT_CAPABILITY_META = {
   parameterizedModelPicker: true,
 };
@@ -94,9 +93,6 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
       providerId: options.providerId,
       label: options.label,
       providerParams: options.providerParams,
-      // cursor-agent publishes slash commands asynchronously via available_commands_update.
-      waitForInitialCommands: true,
-      initialCommandsWaitTimeoutMs: CURSOR_INITIAL_COMMANDS_WAIT_TIMEOUT_MS,
       clientCapabilityMeta: CURSOR_CLIENT_CAPABILITY_META,
       configFeatureOptions: [CURSOR_FAST_FEATURE_OPTION],
       catalogModelResolver: resolveCursorCatalogModels,

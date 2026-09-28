@@ -1762,7 +1762,8 @@ describe("Codex app-server provider", () => {
         clientMessageId: "client-message",
       },
     });
-    expect(events.slice(0, 2).map((event) => event.type)).toEqual(["turn_started", "timeline"]);
+    const turnEvents = events.filter((event) => event.type !== "commands_changed");
+    expect(turnEvents.slice(0, 2).map((event) => event.type)).toEqual(["turn_started", "timeline"]);
     appServer.completeTurn();
     await session.close();
   });
@@ -2222,6 +2223,115 @@ describe("Codex app-server provider", () => {
     expect(commands).not.toContainEqual(
       expect.objectContaining({ name: "disabled-skill", kind: "skill" }),
     );
+  });
+
+  test("does not reconnect a disconnected app-server to list commands", async () => {
+    const session = createSession();
+    session.connectionState = "disconnected";
+
+    await expect(session.listCommands?.()).resolves.toBeNull();
+    expect(session.connectionState).toBe("disconnected");
+    expect(session.client).toBeNull();
+  });
+
+  test("discovers prompts, skills, and built-ins without starting app-server", async () => {
+    const codexHome = await mkdtemp(path.join(tmpdir(), "codex-discover-home-"));
+    const projectCwd = await mkdtemp(path.join(tmpdir(), "codex-discover-project-"));
+    mkdirSync(path.join(codexHome, "prompts"), { recursive: true });
+    writeFileSync(
+      path.join(codexHome, "prompts", "review.md"),
+      "---\ndescription: Review the diff\nargument-hint: <path>\n---\nReview $1\n",
+    );
+    const skillDir = path.join(projectCwd, ".codex", "skills", "ship");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: ship\ndescription: Ship the change\n---\n",
+    );
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "codex-discover-repo-"));
+    const repoSkillDir = path.join(repoRoot, ".codex", "skills", "release");
+    mkdirSync(repoSkillDir, { recursive: true });
+    writeFileSync(
+      path.join(repoSkillDir, "SKILL.md"),
+      "---\nname: release\ndescription: Cut a release\n---\n",
+    );
+    vi.stubEnv("CODEX_HOME", codexHome);
+    const workspaceGitService = {
+      resolveRepoRoot: vi.fn(async () => {
+        throw new Error("discoverCommands must not run git");
+      }),
+      peekRepoRoot: vi.fn(() => repoRoot),
+    };
+    const provider = new CodexAppServerAgentClient(createTestLogger(), undefined, {
+      workspaceGitService,
+    });
+    const internals = castInternals<{
+      goalsEnabledPromise: Promise<boolean> | null;
+      spawnAppServer: () => Promise<ChildProcessWithoutNullStreams>;
+    }>(provider);
+    const spawnAppServer = vi.fn(async () => {
+      throw new Error("discoverCommands must not spawn Codex app-server");
+    });
+    internals.spawnAppServer = spawnAppServer;
+
+    try {
+      const commands = await provider.discoverCommands(projectCwd);
+
+      expect(commands).toEqual([
+        {
+          name: "compact",
+          description: "Summarize conversation to prevent hitting the context limit",
+          argumentHint: "",
+          kind: "command",
+        },
+        {
+          name: "prompts:review",
+          description: "Review the diff",
+          argumentHint: "<path>",
+          kind: "command",
+        },
+        { name: "release", description: "Cut a release", argumentHint: "", kind: "skill" },
+        { name: "ship", description: "Ship the change", argumentHint: "", kind: "skill" },
+      ]);
+      expect(spawnAppServer).not.toHaveBeenCalled();
+      expect(workspaceGitService.resolveRepoRoot).not.toHaveBeenCalled();
+      // The goals gate runs `codex --version`; discovery must not trigger it.
+      expect(internals.goalsEnabledPromise).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(codexHome, { recursive: true, force: true });
+      rmSync(projectCwd, { recursive: true, force: true });
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reports the connected app-server's command list when a turn starts", async () => {
+    const session = createSession();
+    session.activeForegroundTurnId = null;
+    castInternals<{ cachedSkills: Array<{ name: string; description: string; path: string }> }>(
+      session,
+    ).cachedSkills = [{ name: "ship", description: "Ship the change", path: "/tmp/ship" }];
+    session.client = {
+      request: vi.fn(async (method: string) => {
+        if (method === "thread/loaded/list") {
+          return { data: ["test-thread"] };
+        }
+        return {};
+      }),
+    };
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.startTurn("hello");
+
+    expect(events).toContainEqual({
+      type: "commands_changed",
+      provider: "codex",
+      commands: expect.arrayContaining([
+        { name: "ship", description: "Ship the change", argumentHint: "", kind: "skill" },
+        expect.objectContaining({ name: "compact", kind: "command" }),
+      ]),
+    });
   });
 
   test("maps image prompt blocks to Codex localImage input", async () => {

@@ -249,6 +249,7 @@ function createFallbackWorkspaceGitService(): WorkspaceGitService {
       return deriveProjectSlug(cwd, snapshot.git.isGit ? snapshot.git.remoteUrl : null);
     },
     resolveRepoRoot: async (cwd: string) => cwd,
+    peekRepoRoot: () => null,
     resolveDefaultBranch: async () => "main",
     resolveRepoRemoteUrl: async () => null,
     refresh: async () => {},

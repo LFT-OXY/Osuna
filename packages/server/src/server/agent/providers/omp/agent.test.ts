@@ -560,6 +560,23 @@ describe("OMP agent client and session", () => {
     });
   });
 
+  test("reports command updates to the catalog and never asks an exited OMP process", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+
+    omp.publishCommands([{ name: "handoff", description: "Start a handoff" }]);
+    expect(omp.commandReports()).toEqual([
+      expect.arrayContaining([
+        expect.objectContaining({ name: "handoff", description: "Start a handoff" }),
+      ]),
+    ]);
+
+    const idle = new OmpHarness();
+    await idle.start();
+    idle.exitProcess("OMP exited");
+    await expect(idle.commands()).resolves.toBeNull();
+  });
+
   test("rewinds natively, interrupts, and shuts down", async () => {
     const omp = new OmpHarness();
     await omp.start();

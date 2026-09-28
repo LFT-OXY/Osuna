@@ -203,6 +203,7 @@ function createProviderHarness(options: ProviderHarnessOptions = {}) {
   return {
     registration,
     inputs,
+    emit,
     closeCount: () => closeCount,
     waitForClose: () => closed,
   };
@@ -234,6 +235,38 @@ describe("PluginAgentClientRegistry", () => {
     await expect(client.archiveNativeSession?.(persistence)).resolves.toBeUndefined();
     await expect(client.unarchiveNativeSession?.(persistence)).resolves.toBeUndefined();
     expect(harness.inputs).toEqual([]);
+    await registry.shutdown();
+  });
+
+  test("reports plugin command lists to the catalog and returns null before the first report", async () => {
+    const harness = createProviderHarness();
+    const registry = new PluginAgentClientRegistry(createTestLogger());
+    registry.replace([harness.registration]);
+    const client = registry.clients()[harness.registration.id]!;
+    const session = await client.createSession({
+      provider: harness.registration.id,
+      cwd: "/workspace",
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    const opened = harness.inputs.find((input) => input.type === "session.open");
+    if (opened?.type !== "session.open") throw new Error("Expected a session.open input");
+
+    await expect(session.listCommands?.()).resolves.toBeNull();
+
+    harness.emit({
+      type: "session.commands",
+      sessionId: opened.sessionId,
+      commands: [{ name: "review", description: "Review the diff" }],
+    });
+
+    const reported = [
+      { name: "review", description: "Review the diff", argumentHint: "", kind: "command" },
+    ];
+    expect(eventsOfType(events, "commands_changed")).toEqual([
+      { type: "commands_changed", provider: harness.registration.id, commands: reported },
+    ]);
+    await expect(session.listCommands?.()).resolves.toEqual(reported);
     await registry.shutdown();
   });
 

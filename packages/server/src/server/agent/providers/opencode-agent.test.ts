@@ -2497,7 +2497,11 @@ describe("OpenCode adapter startTurn error handling", () => {
       await replacementCompleted.promise;
 
       expect(
-        turnEventSignatures(events.filter((event) => event.type !== "provider_subagent")),
+        turnEventSignatures(
+          events.filter(
+            (event) => event.type !== "provider_subagent" && event.type !== "commands_changed",
+          ),
+        ),
       ).toEqual([
         ["turn_started", "opencode-turn-0"],
         ["turn_canceled", "opencode-turn-0"],
@@ -2773,7 +2777,7 @@ describe("OpenCode adapter startTurn error handling", () => {
     openCode.sessionAbortImplementation = async () => {
       throw new Error("abort failed");
     };
-    session.subscribe((event) => events.push(event));
+    session.subscribe((event) => event.type !== "commands_changed" && events.push(event));
 
     try {
       await session.startTurn("still running upstream");
@@ -2798,7 +2802,7 @@ describe("OpenCode adapter startTurn error handling", () => {
       }
       return { data: true };
     };
-    session.subscribe((event) => events.push(event));
+    session.subscribe((event) => event.type !== "commands_changed" && events.push(event));
 
     try {
       await session.startTurn("still running upstream");
@@ -4968,7 +4972,11 @@ describe("OpenCode provider subagent contract", () => {
       });
 
       await streamDrained.promise;
-      expect(events.filter((event) => event.type !== "provider_subagent")).toEqual([
+      expect(
+        events.filter(
+          (event) => event.type !== "provider_subagent" && event.type !== "commands_changed",
+        ),
+      ).toEqual([
         { type: "turn_started", provider: "opencode", turnId: "opencode-turn-0" },
         {
           type: "turn_canceled",

@@ -254,7 +254,7 @@ interface CodexAppServerClientLike {
 }
 
 interface CodexAppServerAgentDeps {
-  workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
+  workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot" | "peekRepoRoot">;
   customProvider?: {
     id: string;
     label: string;
@@ -668,12 +668,16 @@ export async function listCodexSkills(
   cwd: string,
   workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">,
 ): Promise<AgentSlashCommand[]> {
-  const candidates: string[] = [];
-  candidates.push(path.join(cwd, ".codex", "skills"));
-
   const repoRoot = workspaceGitService
     ? await workspaceGitService.resolveRepoRoot(cwd).catch(() => null)
     : null;
+  return await scanCodexSkills(cwd, repoRoot);
+}
+
+async function scanCodexSkills(cwd: string, repoRoot: string | null): Promise<AgentSlashCommand[]> {
+  const candidates: string[] = [];
+  candidates.push(path.join(cwd, ".codex", "skills"));
+
   if (repoRoot) {
     candidates.push(path.join(path.dirname(cwd), ".codex", "skills"));
     candidates.push(path.join(repoRoot, ".codex", "skills"));
@@ -726,6 +730,42 @@ export async function listCodexSkills(
   }
 
   return Array.from(commandsByName.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function codexBuiltinCommands(goalsEnabled: boolean): AgentSlashCommand[] {
+  const builtin: AgentSlashCommand[] = [
+    {
+      name: "compact",
+      description: "Summarize conversation to prevent hitting the context limit",
+      argumentHint: "",
+      kind: "command",
+    },
+  ];
+  if (goalsEnabled) {
+    builtin.push({
+      name: "goal",
+      description: "Set, pause, resume, or clear the agent's goal",
+      argumentHint: "[<objective>|pause|resume|clear]",
+      kind: "command",
+    });
+  }
+  return builtin;
+}
+
+async function discoverCodexCommands(input: {
+  cwd: string;
+  goalsEnabled: boolean;
+  repoRoot: string | null;
+}): Promise<AgentSlashCommand[]> {
+  const [skills, prompts] = await Promise.all([
+    scanCodexSkills(input.cwd, input.repoRoot),
+    listCodexCustomPrompts(),
+  ]);
+  return sortCommandsByName([...codexBuiltinCommands(input.goalsEnabled), ...skills, ...prompts]);
+}
+
+function sortCommandsByName(commands: AgentSlashCommand[]): AgentSlashCommand[] {
+  return commands.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function escapeRegExp(value: string): string {
@@ -3927,7 +3967,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       return null;
     }
     try {
-      const commands = await this.listCommands();
+      const commands = await this.listInvocableCommands();
       return commands.some((command) => command.name === parsed.commandName) ? parsed : null;
     } catch (error) {
       this.logger.warn(
@@ -4169,6 +4209,9 @@ export class CodexAppServerAgentSession implements AgentSession {
       if (!this.client) {
         throw new Error("Codex client not initialized");
       }
+      // The first connect happens inside createSession, before AgentManager subscribes,
+      // so the list is reported per turn; the catalog skips unchanged lists.
+      await this.reportAppServerCommands();
 
       const slashCommand = await this.resolveSlashCommandInvocation(prompt);
       const effectivePrompt = slashCommand
@@ -4847,41 +4890,54 @@ export class CodexAppServerAgentSession implements AgentSession {
     this.client = null;
   }
 
-  async listCommands(): Promise<AgentSlashCommand[]> {
-    const prompts = await listCodexCustomPrompts();
-    if (this.connectionState === "disconnected") {
-      await this.connect();
-    } else {
-      await this.loadSkills();
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
+    // Ask only a connected app-server; never reconnect for the list (docs/adr/0003-command-list-never-spawns.md).
+    if (this.connectionState !== "connected") {
+      return null;
     }
-    const appServerSkills = (this.cachedSkills ?? []).map((skill) => ({
+    await this.loadSkills();
+    return await this.buildAppServerCommands();
+  }
+
+  /** The connected app-server's full list; null until `skills/list` has succeeded. */
+  private async buildAppServerCommands(): Promise<AgentSlashCommand[] | null> {
+    if (this.cachedSkills === null) {
+      return null;
+    }
+    const appServerSkills = this.cachedSkills.map((skill) => ({
       name: skill.name,
       description: skill.description,
       argumentHint: "",
       kind: "skill" as const,
     }));
-    const fallbackSkills =
-      this.cachedSkills === null
-        ? await listCodexSkills(this.config.cwd, this.deps.workspaceGitService)
-        : [];
-    const builtin: AgentSlashCommand[] = [
-      {
-        name: "compact",
-        description: "Summarize conversation to prevent hitting the context limit",
-        argumentHint: "",
-        kind: "command",
-      },
-    ];
-    if (this.goalsEnabled) {
-      builtin.push({
-        name: "goal",
-        description: "Set, pause, resume, or clear the agent's goal",
-        argumentHint: "[<objective>|pause|resume|clear]",
-        kind: "command",
-      });
+    const prompts = await listCodexCustomPrompts();
+    return sortCommandsByName([
+      ...codexBuiltinCommands(this.goalsEnabled),
+      ...appServerSkills,
+      ...prompts,
+    ]);
+  }
+
+  private async reportAppServerCommands(): Promise<void> {
+    const commands = await this.buildAppServerCommands();
+    if (commands) {
+      this.emitEvent({ type: "commands_changed", provider: CODEX_PROVIDER, commands });
     }
-    return [...builtin, ...appServerSkills, ...fallbackSkills, ...prompts].sort((a, b) =>
-      a.name.localeCompare(b.name),
+  }
+
+  /** Commands a prompt may invoke; falls back to the directory scan when `skills/list` failed. */
+  private async listInvocableCommands(): Promise<AgentSlashCommand[]> {
+    await this.loadSkills();
+    return (
+      (await this.buildAppServerCommands()) ??
+      (await discoverCodexCommands({
+        cwd: this.config.cwd,
+        goalsEnabled: this.goalsEnabled,
+        repoRoot:
+          (await this.deps.workspaceGitService
+            ?.resolveRepoRoot(this.config.cwd)
+            .catch(() => null)) ?? null,
+      }))
     );
   }
 
@@ -6923,6 +6979,8 @@ export class CodexAppServerAgentClient implements AgentClient {
   readonly provider = CODEX_PROVIDER;
   readonly capabilities = CODEX_APP_SERVER_CAPABILITIES;
   private goalsEnabledPromise: Promise<boolean> | null = null;
+  /** The goals gate once probed; discovery reads only this, since probing runs `codex --version`. */
+  private probedGoalsEnabled = false;
   private autoReviewEnabledPromise: Promise<boolean> | null = null;
 
   constructor(
@@ -6948,6 +7006,7 @@ export class CodexAppServerAgentClient implements AgentClient {
           const launchPrefix = await resolveCodexLaunchPrefix(this.runtimeSettings);
           const versionOutput = await resolveBinaryVersion(launchPrefix.command);
           const enabled = codexVersionAtLeast(versionOutput, CODEX_GOALS_MIN_VERSION);
+          this.probedGoalsEnabled = enabled;
           this.logger.trace(
             {
               provider: CODEX_PROVIDER,
@@ -6964,6 +7023,15 @@ export class CodexAppServerAgentClient implements AgentClient {
       })();
     }
     return this.goalsEnabledPromise;
+  }
+
+  async discoverCommands(cwd: string): Promise<AgentSlashCommand[]> {
+    // peekRepoRoot reads only a cached snapshot; resolveRepoRoot could run git.
+    return await discoverCodexCommands({
+      cwd,
+      goalsEnabled: this.probedGoalsEnabled,
+      repoRoot: this.deps.workspaceGitService?.peekRepoRoot(cwd) ?? null,
+    });
   }
 
   private resolveAutoReviewEnabled(signal?: AbortSignal): Promise<boolean> {

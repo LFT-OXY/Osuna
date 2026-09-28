@@ -212,7 +212,6 @@ function createSessionWithConfig(
 }
 
 function createKiroSession(
-  options: { waitForInitialCommands?: boolean; initialCommandsWaitTimeoutMs?: number } = {},
   logger: ReturnType<typeof createTestLogger> = createTestLogger(),
 ): ACPAgentSession {
   return new ACPAgentSession(
@@ -234,8 +233,6 @@ function createKiroSession(
         supportsToolInvocations: true,
       },
       extensionCommandsParser: parseKiroExtensionCommands,
-      waitForInitialCommands: options.waitForInitialCommands ?? false,
-      initialCommandsWaitTimeoutMs: options.initialCommandsWaitTimeoutMs,
     },
   );
 }
@@ -2324,7 +2321,7 @@ describe("transformPiModels", () => {
 });
 
 describe("ACPAgentSession slash commands", () => {
-  test("returns immediately for ACP sessions that do not wait for async command discovery", async () => {
+  test("returns null right away when the agent has not reported commands yet", async () => {
     const session = new ACPAgentSession(
       {
         provider: "claude-acp",
@@ -2343,14 +2340,13 @@ describe("ACPAgentSession slash commands", () => {
           supportsReasoningStream: true,
           supportsToolInvocations: true,
         },
-        waitForInitialCommands: false,
       },
     );
 
-    await expect(session.listCommands()).resolves.toEqual([]);
+    await expect(session.listCommands()).resolves.toBeNull();
   });
 
-  test("waits for async available_commands_update when enabled", async () => {
+  test("returns the list from the latest available_commands_update", async () => {
     const session = new ACPAgentSession(
       {
         provider: "claude-acp",
@@ -2369,12 +2365,8 @@ describe("ACPAgentSession slash commands", () => {
           supportsReasoningStream: true,
           supportsToolInvocations: true,
         },
-        waitForInitialCommands: true,
-        initialCommandsWaitTimeoutMs: 1500,
       },
     );
-
-    const listCommandsPromise = session.listCommands();
 
     asInternals<ACPSessionInternals>(session).translateSessionUpdate({
       sessionUpdate: "available_commands_update",
@@ -2390,21 +2382,6 @@ describe("ACPAgentSession slash commands", () => {
       ],
     });
 
-    expect(await listCommandsPromise).toEqual([
-      {
-        name: "research_codebase",
-        description: "Search the workspace for relevant files",
-        argumentHint: "",
-        kind: "command",
-      },
-      {
-        name: "create_plan",
-        description: "Draft a plan for the requested work",
-        argumentHint: "",
-        kind: "command",
-      },
-    ]);
-
     expect(await session.listCommands()).toEqual([
       {
         name: "research_codebase",
@@ -2419,6 +2396,41 @@ describe("ACPAgentSession slash commands", () => {
         kind: "command",
       },
     ]);
+  });
+
+  test("reports each available_commands_update to the command catalog", () => {
+    const session = new ACPAgentSession(
+      { provider: "copilot", cwd: "/tmp/paseo-acp-test" },
+      {
+        provider: "copilot",
+        logger: createTestLogger(),
+        defaultCommand: ["copilot", "--acp"],
+        defaultModes: [],
+        capabilities: {
+          supportsStreaming: true,
+          supportsSessionPersistence: true,
+          supportsDynamicModes: true,
+          supportsMcpServers: true,
+          supportsReasoningStream: true,
+          supportsToolInvocations: true,
+        },
+      },
+    );
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    asInternals<ACPSessionInternals>(session).translateSessionUpdate({
+      sessionUpdate: "available_commands_update",
+      availableCommands: [{ name: "review", description: "Review the diff" }],
+    });
+
+    expect(events).toContainEqual({
+      type: "commands_changed",
+      provider: "copilot",
+      commands: [
+        { name: "review", description: "Review the diff", argumentHint: "", kind: "command" },
+      ],
+    });
   });
 });
 
@@ -2490,13 +2502,8 @@ describe("ACPAgentSession", () => {
   });
 
   test("maps the Kiro _kiro.dev/commands/available notification into slash commands and skills", async () => {
-    const session = createKiroSession({
-      waitForInitialCommands: true,
-      initialCommandsWaitTimeoutMs: 1500,
-    });
+    const session = createKiroSession();
     asInternals<ACPSessionInternals>(session).sessionId = "session-1";
-
-    const listCommandsPromise = session.listCommands();
 
     await session.extNotification("_kiro.dev/commands/available", {
       sessionId: "session-1",
@@ -2519,7 +2526,7 @@ describe("ACPAgentSession", () => {
       tools: [{ name: "code", description: "Code intelligence", source: "built-in" }],
     });
 
-    expect(await listCommandsPromise).toEqual([
+    expect(await session.listCommands()).toEqual([
       {
         name: "agent",
         description: "Select or list available agents",
@@ -2545,20 +2552,12 @@ describe("ACPAgentSession", () => {
       prompts: [],
     });
 
-    expect(await session.listCommands()).toEqual([]);
+    expect(await session.listCommands()).toBeNull();
   });
 
-  test("settles listCommands() immediately on an empty Kiro commands batch", async () => {
-    // A long timeout means a resolution can only come from settleCommandsReady()
-    // firing — not from the wait timer — so this test would hang if the empty
-    // batch failed to unblock listCommands() (the P1 regression).
-    const session = createKiroSession({
-      waitForInitialCommands: true,
-      initialCommandsWaitTimeoutMs: 60_000,
-    });
+  test("does not treat an empty Kiro commands batch as a report", async () => {
+    const session = createKiroSession();
     asInternals<ACPSessionInternals>(session).sessionId = "session-1";
-
-    const listCommandsPromise = session.listCommands();
 
     await session.extNotification("_kiro.dev/commands/available", {
       sessionId: "session-1",
@@ -2566,7 +2565,7 @@ describe("ACPAgentSession", () => {
       prompts: [],
     });
 
-    expect(await listCommandsPromise).toEqual([]);
+    expect(await session.listCommands()).toBeNull();
   });
 
   test("emits assistant and reasoning chunks as deltas while user chunks stay accumulated", async () => {

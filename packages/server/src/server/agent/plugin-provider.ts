@@ -532,7 +532,8 @@ class ProviderRuntimeSession {
   >();
   private terminal = false;
   config: ProviderConfigState = { models: [], modes: [], thinkingOptions: [], settings: [] };
-  commands: Array<{ name: string; description: string; argumentHint?: string }> = [];
+  /** The provider's last reported command list; null until it reports one. */
+  commands: Array<{ name: string; description: string; argumentHint?: string }> | null = null;
   persistence: ProviderPersistence | null = null;
 
   constructor(
@@ -1087,7 +1088,7 @@ class PluginAgentSession implements AgentSession {
     const result = await this.bridge.prompt({
       clientMessageId,
       delivery: "auto",
-      input: mapPromptInput(prompt, this.bridge.commands),
+      input: mapPromptInput(prompt, this.bridge.commands ?? []),
       ...(options.outputSchema === undefined
         ? {}
         : { outputSchema: toJsonValue(options.outputSchema, "output schema") }),
@@ -1192,12 +1193,8 @@ class PluginAgentSession implements AgentSession {
     await this.bridge.close();
   }
 
-  async listCommands(): Promise<AgentSlashCommand[]> {
-    return this.bridge.commands.map((command) => ({
-      ...command,
-      argumentHint: command.argumentHint ?? "",
-      kind: "command",
-    }));
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
+    return this.bridge.commands ? toSlashCommands(this.bridge.commands) : null;
   }
 
   async setModel(modelId: string | null): Promise<void> {
@@ -1300,6 +1297,14 @@ class PluginAgentSession implements AgentSession {
         return [this.translateFailure(event.error)];
       case "session.closed":
         return event.error ? [this.translateFailure(event.error)] : [];
+      case "session.commands":
+        return [
+          {
+            type: "commands_changed",
+            provider: this.provider,
+            commands: toSlashCommands(event.commands),
+          },
+        ];
       default:
         return [];
     }
@@ -1495,6 +1500,16 @@ class PluginAgentSession implements AgentSession {
   private emit(event: AgentStreamEvent): void {
     for (const listener of this.listeners) listener(event);
   }
+}
+
+function toSlashCommands(
+  commands: ReadonlyArray<{ name: string; description: string; argumentHint?: string }>,
+): AgentSlashCommand[] {
+  return commands.map((command) => ({
+    ...command,
+    argumentHint: command.argumentHint ?? "",
+    kind: "command",
+  }));
 }
 
 function agentCapabilities(capabilities: readonly string[]): AgentCapabilityFlags {

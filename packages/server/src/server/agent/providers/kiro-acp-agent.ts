@@ -13,12 +13,6 @@ interface KiroACPAgentClientOptions {
   providerParams?: unknown;
 }
 
-// Kiro CLI publishes its slash commands and skills asynchronously through the
-// `_kiro.dev/commands/available` extension notification shortly after
-// `session/new` resolves. Wait for that first batch so listCommands() doesn't
-// resolve to an empty list before Kiro has reported its commands.
-const KIRO_INITIAL_COMMANDS_WAIT_TIMEOUT_MS = 10_000;
-
 // ACP extension method (per the `_`-prefixed vendor namespace convention) that
 // Kiro CLI uses to publish its slash commands and skills after session/new.
 const KIRO_COMMANDS_AVAILABLE_METHOD = "_kiro.dev/commands/available";
@@ -93,8 +87,6 @@ export class KiroACPAgentClient extends GenericACPAgentClient {
       providerId: options.providerId,
       label: options.label,
       providerParams: options.providerParams,
-      waitForInitialCommands: true,
-      initialCommandsWaitTimeoutMs: KIRO_INITIAL_COMMANDS_WAIT_TIMEOUT_MS,
       extensionCommandsParser: parseKiroExtensionCommands,
     });
   }

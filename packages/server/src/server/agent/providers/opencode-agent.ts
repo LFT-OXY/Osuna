@@ -1610,6 +1610,10 @@ export class OpenCodeAgentClient implements AgentClient {
     }
   }
 
+  async discoverCommands(_cwd: string): Promise<AgentSlashCommand[]> {
+    return [...OPENCODE_HANDLED_BUILTIN_SLASH_COMMANDS];
+  }
+
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
     return [buildOpenCodeAutoAcceptFeature(this.assertConfig(config))];
   }
@@ -1984,14 +1988,16 @@ function stringifyStructuredAssistantMessage(value: unknown): string | null {
 async function listOpenCodeCommandsFromSdk(
   client: Pick<OpencodeClient, "command">,
   directory: string,
-): Promise<AgentSlashCommand[]> {
+  logger: Logger,
+): Promise<AgentSlashCommand[] | null> {
   const result = await client.command.list({ directory });
+  if (result.error || !result.data) {
+    logger.warn({ err: result.error, directory }, "OpenCode failed to list commands");
+    return null;
+  }
   const commandsByName = new Map(
     OPENCODE_HANDLED_BUILTIN_SLASH_COMMANDS.map((command) => [command.name, command]),
   );
-  if (result.error || !result.data) {
-    return Array.from(commandsByName.values());
-  }
 
   for (const cmd of result.data) {
     commandsByName.set(cmd.name, {
@@ -3722,6 +3728,9 @@ class OpenCodeAgentSession implements AgentSession {
     this.materializedParts.clear();
     this.turnState = { status: "running", turnId };
     this.notifySubscribers({ type: "turn_started", provider: "opencode" }, turnId);
+    void this.reportRunningCommands().catch((error) => {
+      this.logger.warn({ err: error }, "Failed to read OpenCode's command list after a prompt");
+    });
 
     const slashCommand = await this.resolveSlashCommandInvocation(prompt);
     if (slashCommand) {
@@ -4776,8 +4785,20 @@ class OpenCodeAgentSession implements AgentSession {
     return this.currentMode;
   }
 
-  async listCommands(): Promise<AgentSlashCommand[]> {
-    return await listOpenCodeCommandsFromSdk(this.client, this.config.cwd);
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
+    // Only the server this session already holds; once it exits, nothing reacquires one for the list.
+    if (this.closed || this.recoveryAbortController.signal.aborted) {
+      return null;
+    }
+    return await listOpenCodeCommandsFromSdk(this.client, this.config.cwd, this.logger);
+  }
+
+  // Reported once per turn so drafts in this cwd see the full list; the catalog skips unchanged lists.
+  private async reportRunningCommands(): Promise<void> {
+    const commands = await this.listCommands();
+    if (commands) {
+      this.notifySubscribers({ type: "commands_changed", provider: "opencode", commands }, null);
+    }
   }
 
   async setMode(modeId: string): Promise<void> {
@@ -4948,7 +4969,7 @@ class OpenCodeAgentSession implements AgentSession {
       return null;
     }
     try {
-      const commands = await this.listCommands();
+      const commands = (await this.listCommands()) ?? OPENCODE_HANDLED_BUILTIN_SLASH_COMMANDS;
       return commands.some((command) => command.name === parsed.commandName) ? parsed : null;
     } catch (error) {
       this.logger.warn(

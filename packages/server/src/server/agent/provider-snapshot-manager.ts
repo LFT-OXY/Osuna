@@ -115,7 +115,7 @@ export interface ProviderSnapshotManagerOptions {
   logger: Logger;
   runtimeSettings?: AgentProviderRuntimeSettingsMap;
   providerOverrides?: Record<string, ProviderOverride>;
-  workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
+  workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot" | "peekRepoRoot">;
   managedProcesses?: ManagedProcessRegistry;
   isDev?: boolean;
   extraClients?: Partial<Record<AgentProvider, AgentClient>>;
@@ -244,7 +244,10 @@ export class ProviderSnapshotManager {
   private refreshTimeoutMs: number;
   private diagnosticTimeoutMs: number;
   private readonly logger: Logger;
-  private readonly workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
+  private readonly workspaceGitService?: Pick<
+    WorkspaceGitService,
+    "resolveRepoRoot" | "peekRepoRoot"
+  >;
   private readonly managedProcesses?: ManagedProcessRegistry;
   private readonly openCodeBridge?: OpenCodeBridge;
   private readonly isDev: boolean;

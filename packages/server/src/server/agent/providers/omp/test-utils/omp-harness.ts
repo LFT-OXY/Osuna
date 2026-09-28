@@ -8,6 +8,7 @@ import type {
   AgentPersistenceHandle,
   AgentPermissionResponse,
   AgentSessionConfig,
+  AgentSlashCommand,
   AgentStreamEvent,
   AgentTimelineItem,
 } from "../../../agent-sdk-types.js";
@@ -440,6 +441,20 @@ export class OmpHarness {
 
   async commands() {
     return await this.requireSession().listCommands();
+  }
+
+  publishCommands(commands: Array<{ name: string; description?: string }>): void {
+    this.omp.latestSession().emit({ type: "available_commands_update", commands });
+  }
+
+  exitProcess(error: string): void {
+    this.omp.latestSession().emit({ type: "process_exit", error });
+  }
+
+  commandReports(): AgentSlashCommand[][] {
+    return this.events.flatMap((event) =>
+      event.type === "commands_changed" ? [event.commands] : [],
+    );
   }
 
   async setMode(modeId: string) {

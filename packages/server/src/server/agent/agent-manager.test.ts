@@ -14,6 +14,8 @@ import {
   type ManagedAgent,
 } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
+import { PiRpcAgentClient } from "./providers/pi/agent.js";
+import { FakePi } from "./providers/pi/test-utils/fake-pi.js";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
 import { toAgentPayload } from "./agent-projections.js";
 import { projectTimelineRows } from "./timeline-projection.js";
@@ -1994,6 +1996,39 @@ test("a session's command report fills the catalog for drafts and survives a res
   await expect(restarted.listCommands({ provider: "codex", cwd: workdir })).resolves.toEqual(
     expected,
   );
+});
+
+test("a Pi draft lists built-ins without launching Pi, then the agent's report fills the catalog", async () => {
+  const { workdir, catalogPath } = createCatalogWorkdir();
+  const pi = new FakePi();
+  const manager = new AgentManager({
+    clients: { pi: new PiRpcAgentClient({ logger, runtime: pi }) },
+    commandCatalogPath: catalogPath,
+    logger,
+  });
+
+  const draft = await manager.listCommands({ provider: "pi", cwd: workdir });
+
+  expect(draft.partial).toBe(true);
+  expect(draft.commands.map((command) => command.name)).toEqual(["autocompact", "compact"]);
+  expect(pi.recordedLaunches).toHaveLength(0);
+
+  const agent = await manager.createAgent({ provider: "pi", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  const launchesAfterCreate = pi.recordedLaunches.length;
+  pi.latestSession().commands = [{ name: "skill:docs", description: "Read docs", source: "skill" }];
+  await manager.listCommands({ provider: "pi", cwd: workdir, agentId: agent.id });
+
+  const afterRun = await manager.listCommands({ provider: "pi", cwd: workdir });
+  expect(afterRun.partial).toBe(false);
+  expect(afterRun.commands).toContainEqual({
+    name: "skill:docs",
+    description: "Read docs",
+    argumentHint: "",
+    kind: "skill",
+  });
+  expect(pi.recordedLaunches).toHaveLength(launchesAfterCreate);
 });
 
 test("listCommands treats a corrupt catalog file as an empty cache", async () => {

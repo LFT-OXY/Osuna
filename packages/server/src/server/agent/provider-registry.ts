@@ -108,7 +108,7 @@ export interface ProviderDefinition extends AgentProviderDefinition {
 export interface BuildProviderRegistryOptions {
   runtimeSettings?: AgentProviderRuntimeSettingsMap;
   providerOverrides?: Record<string, ProviderOverride>;
-  workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
+  workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot" | "peekRepoRoot">;
   managedProcesses?: ManagedProcessRegistry;
   isDev?: boolean;
   ompRuntime?: OmpRuntime;

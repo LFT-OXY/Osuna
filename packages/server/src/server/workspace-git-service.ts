@@ -213,6 +213,8 @@ export interface WorkspaceGitService {
   ): Promise<WorkspaceGitWorktreeInfo[]>;
   getProjectSlug(cwd: string, options?: WorkspaceGitReadOptions): Promise<string>;
   resolveRepoRoot(cwd: string, options?: WorkspaceGitReadOptions): Promise<string>;
+  /** The repo root from an already cached snapshot; null when none is cached. Never runs git. */
+  peekRepoRoot(cwd: string): string | null;
   resolveDefaultBranch(cwdOrRepoRoot: string, options?: WorkspaceGitReadOptions): Promise<string>;
   resolveRepoRemoteUrl(cwd: string, options?: WorkspaceGitReadOptions): Promise<string | null>;
   refresh(cwd: string, options?: { priority?: "normal" | "high" }): Promise<void>;
@@ -514,6 +516,12 @@ function resolveWorkspaceGitServiceDeps(
   deps: Partial<WorkspaceGitServiceDependencies> | undefined,
 ): WorkspaceGitServiceDependencies {
   return { ...buildDefaultWorkspaceGitServiceDeps(subscribe), ...deps };
+}
+
+function repoRootFromSnapshot(snapshot: WorkspaceGitRuntimeSnapshot, cwd: string): string {
+  return snapshot.git.isPaseoOwnedWorktree
+    ? (snapshot.git.mainRepoRoot ?? snapshot.git.repoRoot ?? resolve(cwd))
+    : (snapshot.git.repoRoot ?? resolve(cwd));
 }
 
 export class WorkspaceGitServiceImpl implements WorkspaceGitService {
@@ -846,9 +854,12 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       throw new Error("Create worktree requires a git repository");
     }
 
-    return snapshot.git.isPaseoOwnedWorktree
-      ? (snapshot.git.mainRepoRoot ?? snapshot.git.repoRoot ?? resolve(cwd))
-      : (snapshot.git.repoRoot ?? resolve(cwd));
+    return repoRootFromSnapshot(snapshot, cwd);
+  }
+
+  peekRepoRoot(cwd: string): string | null {
+    const snapshot = this.peekSnapshot(cwd);
+    return snapshot?.git.isGit ? repoRootFromSnapshot(snapshot, cwd) : null;
   }
 
   async resolveDefaultBranch(

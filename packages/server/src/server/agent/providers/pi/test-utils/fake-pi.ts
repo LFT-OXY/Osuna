@@ -123,6 +123,7 @@ export class FakePiSession implements PiRuntimeSession {
     cost: 0,
   };
   commands: PiRpcSlashCommand[] = [];
+  commandRequestCount = 0;
   subagents: FakePiSubagentSnapshot[] = [];
   subagentSubscriptionError: Error | null = null;
   setSessionNameError: Error | null = null;
@@ -313,6 +314,7 @@ export class FakePiSession implements PiRuntimeSession {
   }
 
   async getCommands(): Promise<PiRpcSlashCommand[]> {
+    this.commandRequestCount += 1;
     return this.commands;
   }
 

@@ -2492,6 +2492,63 @@ describe("PiRpcAgentClient", () => {
     });
   });
 
+  test("discovers Pi built-in commands without starting a Pi process", async () => {
+    const pi = new FakePi();
+    const client = createClient(pi);
+
+    await expect(client.discoverCommands("/workspace")).resolves.toEqual([
+      {
+        name: "compact",
+        description: "Manually compact the session context",
+        argumentHint: "[instructions]",
+        kind: "command",
+      },
+      {
+        name: "autocompact",
+        description: "Toggle automatic context compaction",
+        argumentHint: "[on|off|toggle]",
+        kind: "command",
+      },
+    ]);
+    expect(pi.recordedLaunches).toHaveLength(0);
+  });
+
+  test("reports the running Pi process's command list when a turn starts", async () => {
+    const { pi, session } = await createSession();
+    pi.latestSession().commands = [
+      { name: "skill:docs", description: "Read docs", source: "skill" },
+    ];
+    const reports: AgentStreamEvent[] = [];
+    session.subscribe((event) => {
+      if (event.type === "commands_changed") reports.push(event);
+    });
+
+    await session.startTurn("hello");
+
+    await expect
+      .poll(() => reports)
+      .toEqual([
+        {
+          type: "commands_changed",
+          provider: "pi",
+          commands: expect.arrayContaining([
+            { name: "skill:docs", description: "Read docs", argumentHint: "", kind: "skill" },
+          ]),
+        },
+      ]);
+  });
+
+  test("does not ask an exited Pi process for its command list", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    fakeSession.emit({ type: "process_exit", error: "Pi exited" });
+
+    await expect(session.listCommands()).resolves.toBeNull();
+    expect(fakeSession.commandRequestCount).toBe(0);
+    expect(pi.recordedLaunches).toHaveLength(1);
+  });
+
   test("preserves known argument hints when RPC get_commands returns built-in slash commands", async () => {
     const { pi, session } = await createSession();
     pi.latestSession().commands = [

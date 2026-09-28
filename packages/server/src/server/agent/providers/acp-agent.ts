@@ -438,8 +438,6 @@ interface ACPAgentClientOptions {
   ) => Promise<void>;
   capabilities?: AgentCapabilityFlags;
   extensionCommandsParser?: ACPExtensionCommandsParser;
-  waitForInitialCommands?: boolean;
-  initialCommandsWaitTimeoutMs?: number;
   terminateProcess?: ProcessTerminator;
   now?: () => number;
 }
@@ -472,8 +470,6 @@ interface ACPAgentSessionOptions {
   handle?: AgentPersistenceHandle;
   agentId?: string;
   launchEnv?: Record<string, string>;
-  waitForInitialCommands?: boolean;
-  initialCommandsWaitTimeoutMs?: number;
   terminateProcess?: ProcessTerminator;
 }
 
@@ -898,8 +894,6 @@ export class ACPAgentClient implements AgentClient {
     sessionId: string,
     thinkingOptionId: string,
   ) => Promise<void>;
-  private readonly waitForInitialCommands: boolean;
-  private readonly initialCommandsWaitTimeoutMs: number;
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private readonly importPromptCache = new Map<string, ACPImportPromptCacheEntry>();
   private readonly now: () => number;
@@ -928,8 +922,6 @@ export class ACPAgentClient implements AgentClient {
     this.providerModeWriter = options.providerModeWriter;
     this.beforeModeWriter = options.beforeModeWriter;
     this.thinkingOptionWriter = options.thinkingOptionWriter;
-    this.waitForInitialCommands = options.waitForInitialCommands ?? false;
-    this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
     this.now = options.now ?? Date.now;
   }
@@ -962,8 +954,6 @@ export class ACPAgentClient implements AgentClient {
         agentId: launchContext?.agentId,
         launchEnv: launchContext?.env,
         extensionCommandsParser: this.extensionCommandsParser,
-        waitForInitialCommands: this.waitForInitialCommands,
-        initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
       },
     );
     await session.initializeNewSession();
@@ -1013,8 +1003,6 @@ export class ACPAgentClient implements AgentClient {
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
       extensionCommandsParser: this.extensionCommandsParser,
-      waitForInitialCommands: this.waitForInitialCommands,
-      initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
     });
     await session.initializeResumedSession();
     return session;
@@ -1674,11 +1662,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private currentTitle: string | null = null;
   private lastActivityAt: string | null = null;
   private configOptions: SessionConfigOption[] = [];
-  private cachedCommands: AgentSlashCommand[] = [];
-  private commandsReadyDeferred: { promise: Promise<void>; resolve: () => void } | null = null;
-  private commandsReadySettled = false;
-  private waitForInitialCommands: boolean;
-  private initialCommandsWaitTimeoutMs: number;
+  /** The agent's last reported list; null until it reports one. */
+  private reportedCommands: AgentSlashCommand[] | null = null;
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private currentTurnUsage: AgentUsage | undefined;
   private activeForegroundTurnId: string | null = null;
@@ -1717,8 +1702,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.currentModel = config.model ?? null;
     this.thinkingOptionId = config.thinkingOptionId ?? null;
     this.currentTitle = config.title ?? null;
-    this.waitForInitialCommands = options.waitForInitialCommands ?? false;
-    this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
   }
 
@@ -1925,60 +1908,15 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     ];
   }
 
-  private ensureCommandsReadyDeferred(): void {
-    if (this.commandsReadyDeferred || this.commandsReadySettled || this.cachedCommands.length > 0) {
-      return;
-    }
-
-    let resolve!: () => void;
-    const promise = new Promise<void>((r) => {
-      resolve = r;
-    });
-    this.commandsReadyDeferred = { promise, resolve };
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
+    // Until the agent reports a list, the command catalog answers; an empty
+    // placeholder here would overwrite its cached list. Never wait for the first report.
+    return this.reportedCommands;
   }
 
-  private settleCommandsReady(): void {
-    if (this.commandsReadySettled) {
-      return;
-    }
-    this.commandsReadySettled = true;
-    this.commandsReadyDeferred?.resolve();
-    this.commandsReadyDeferred = null;
-  }
-
-  private async waitForCommandsReady(): Promise<void> {
-    const deferred = this.commandsReadyDeferred;
-    if (!deferred) {
-      return;
-    }
-
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    try {
-      await Promise.race([
-        deferred.promise,
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, this.initialCommandsWaitTimeoutMs);
-        }),
-      ]);
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    }
-  }
-
-  async listCommands(): Promise<AgentSlashCommand[]> {
-    if (this.cachedCommands.length > 0) {
-      return this.cachedCommands;
-    }
-    if (!this.waitForInitialCommands || this.closed) {
-      return this.cachedCommands;
-    }
-
-    this.ensureCommandsReadyDeferred();
-    await this.waitForCommandsReady();
-    this.settleCommandsReady();
-    return this.cachedCommands;
+  private reportCommands(commands: AgentSlashCommand[]): void {
+    this.reportedCommands = commands;
+    this.pushEvent({ type: "commands_changed", provider: this.provider, commands });
   }
 
   async setMode(modeId: string): Promise<void> {
@@ -2414,7 +2352,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.closed = true;
 
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
-    this.settleCommandsReady();
 
     for (const pending of this.pendingPermissions.values()) {
       pending.resolve({ outcome: { outcome: "cancelled" } });
@@ -2565,14 +2502,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
   }
 
-  // Cache an asynchronously-delivered slash-command batch and unblock any
-  // listCommands() call that is waiting on the initial batch. Used when a
-  // provider supplies an extensionCommandsParser whose result arrives after
-  // session/new (e.g. via a vendor extension notification). The ready gate is
-  // always settled — even for an empty batch — so a provider that legitimately
-  // reports no commands does not leave listCommands() blocked for the full
-  // initial-commands timeout. An optional sessionId scopes the batch to this
-  // session; notifications addressed to a different session are ignored.
+  // Report a slash-command batch delivered through a vendor extension
+  // notification after session/new (see extensionCommandsParser). An empty
+  // batch is not a report, so it never replaces a cached list. An optional
+  // sessionId scopes the batch to this session; notifications addressed to a
+  // different session are ignored.
   private applyResolvedCommands(
     commands: AgentSlashCommand[],
     options?: { sessionId?: string },
@@ -2586,9 +2520,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     if (commands.length > 0) {
-      this.cachedCommands = commands;
+      this.reportCommands(commands);
     }
-    this.settleCommandsReady();
   }
 
   async readTextFile(params: ReadTextFileRequest): Promise<{ content: string }> {
@@ -2910,13 +2843,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.handleUsageUpdate(update);
         return pendingUserEvents;
       case "available_commands_update":
-        this.cachedCommands = update.availableCommands.map((command) => ({
-          name: command.name,
-          description: command.description,
-          argumentHint: "",
-          kind: "command",
-        }));
-        this.settleCommandsReady();
+        this.reportCommands(
+          update.availableCommands.map((command) => ({
+            name: command.name,
+            description: command.description,
+            argumentHint: "",
+            kind: "command",
+          })),
+        );
         return pendingUserEvents;
       default:
         return pendingUserEvents;

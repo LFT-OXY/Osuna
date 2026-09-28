@@ -75,14 +75,15 @@
 | provider | 上报列表何时产生 | 免进程发现 | 内置命令 |
 |---|---|---|---|
 | Claude | 每条 init 消息（随 turn 到达）后读 `supportedCommands()`；收到 `commands_changed` 时直接用其 `commands` 覆盖；query 已启动但还没跑过 turn 时无上报列表 | 扫 `$CLAUDE_CONFIG_DIR`（默认 `~/.claude`）与 `<cwd>/.claude` 下的 `skills/*/SKILL.md` 和 `commands/**/*.md`，读 frontmatter 的 name、description、argument-hint；子目录命令名用 `:` 连接 | 现有 root-only 名单里经 SDK 可用的命令 + 合成的 `rewind` |
-| Codex | app-server 已连接时的 `skills/list` 结果 | `~/.codex/prompts/*.md`（`prompts:` 前缀）与现有 skills 目录扫描（现在只作失败兜底，改为常规来源） | `compact`，以及启用时的 `goal` |
-| Pi | 进程运行时的 `get_commands` | 无 | 现有 Pi 自处理的内置命令 |
-| OpenCode | 会话所用服务已在运行时的 `command.list` | 无 | `compact`、`summarize` |
-| Copilot / 其他 ACP、OMP | 已有的 `available_commands_update` / 更新事件缓存 | 无 | 无 |
+| Codex | app-server 已连接时的 `skills/list` 结果；每个 turn 开始时上报一次（连接发生在 `createSession` 内、AgentManager 订阅之前，连接时上报会丢） | `~/.codex/prompts/*.md`（`prompts:` 前缀）与现有 skills 目录扫描（现在只作失败兜底，改为常规来源）；repo root 只取 `peekRepoRoot`（已缓存的 git 快照），不跑 git | `compact`，以及已探测过版本且启用时的 `goal`（探测要跑 `codex --version`，发现阶段不触发） |
+| Pi | 进程运行时的 `get_commands`；每个 turn 的 prompt 被接收后上报一次；进程退出后返回 null | 无 | 现有 Pi 自处理的内置命令 |
+| OpenCode | 会话所用服务已在运行时的 `command.list`；每个 turn 开始时上报一次；服务退出或 SDK 出错返回 null | 无 | `compact`、`summarize` |
+| Copilot / 其他 ACP、OMP、插件 provider | 每次 `available_commands_update`、Kiro 扩展通知、OMP 更新事件、插件 `session.commands` 到达时上报；从没上报过返回 null，不再等待首批上报（删除 `waitForInitialCommands`） | 无 | 无 |
 
 - 同名的扫描结果以个人目录（`$CLAUDE_CONFIG_DIR`）优先于项目目录；`commands/` 下的符号链接子目录按目录处理；缺 description 时取正文第一行非空文本。
 - Claude 内置命令即现有 10 个 root-only 命令加 `rewind`；SDK 0.3.246 的 `supportedCommands()` 实测 10 个都在，`agent-commands.real.e2e.test.ts` 逐项断言。
-- 删除 `AgentClient.listCommands(config)`：它唯一的实现（OpenCode）为取列表启动服务，违反 ADR。工单 04 完成前，非 Claude 的草稿只得到发现结果（多为空）和 `partial: true`。
+- 删除 `AgentClient.listCommands(config)`：它唯一的实现（OpenCode）为取列表启动服务，违反 ADR。
+- 各 provider 的 `session.listCommands` 在进程还没上报过列表时返回 `null`，不返回 `[]`：指令目录会把返回值当作上报写入，空列表会覆盖缓存并去掉 `partial`。`AgentManager` 不吞 `listCommands` 的异常。
 - Claude 的 `kind`：有上报列表时，名字在 init `skills` 名单里的为 `skill`，其余为 `command`；只有扫描结果时，来自 `skills` 目录的为 `skill`，来自 `commands` 目录的为 `command`。删除按名单猜的旧逻辑。
 - Claude 隐藏 init `terminal_slash_commands` 里的命令，所有端一致。过滤只作用于上报列表；内置名单不经过滤，`agent-commands.real.e2e.test.ts` 断言每个内置命令都留在过滤后的上报列表里、`kind` 为 `command`。
 - 已知限制：`commands_changed` 不带 `skills`，会话中途新增的 skill 在下一次 init（下一个 turn）前标为 `command`。

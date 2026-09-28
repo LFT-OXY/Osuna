@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { createTestLogger } from "../../../test-utils/test-logger.js";
+import type { AgentStreamEvent } from "../agent-sdk-types.js";
 import { OpenCodeAgentClient } from "./opencode-agent.js";
 import {
   idleEvent,
@@ -35,6 +36,94 @@ describe("OpenCodeAgentSession slash command timeout handling", () => {
         { name: "models", description: expect.any(String), argumentHint: "" },
       ]),
     );
+  });
+
+  test("discovers OpenCode built-in commands without acquiring a server", async () => {
+    const runtime = new TestOpenCodeHarness();
+    const client = new OpenCodeAgentClient(createTestLogger(), undefined, {
+      serverManager: runtime,
+      createClient: runtime.createClient,
+    });
+
+    await expect(client.discoverCommands("/tmp")).resolves.toEqual([
+      {
+        name: "compact",
+        description: "Compact the current session",
+        argumentHint: "",
+        kind: "command",
+      },
+      {
+        name: "summarize",
+        description: "Compact the current session",
+        argumentHint: "",
+        kind: "command",
+      },
+    ]);
+    expect(runtime.acquisitions).toEqual([]);
+  });
+
+  test("reports the running server's command list when a turn starts", async () => {
+    const runtime = new TestOpenCodeHarness();
+    const openCodeClient = createOpenCodeClientWithConnectedProvider();
+    openCodeClient.commandListResponse = {
+      data: [{ name: "review", description: "Review the diff", hints: [], source: "skill" }],
+    };
+    runtime.enqueueClient(openCodeClient);
+    const client = new OpenCodeAgentClient(createTestLogger(), undefined, {
+      serverManager: runtime,
+      createClient: runtime.createClient,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp" });
+    const reports: AgentStreamEvent[] = [];
+    session.subscribe((event) => {
+      if (event.type === "commands_changed") reports.push(event);
+    });
+
+    await session.startTurn("hello");
+
+    await expect
+      .poll(() => reports)
+      .toEqual([
+        {
+          type: "commands_changed",
+          provider: "opencode",
+          commands: expect.arrayContaining([
+            { name: "review", description: "Review the diff", argumentHint: "", kind: "skill" },
+          ]),
+        },
+      ]);
+  });
+
+  test("does not ask an exited OpenCode server for its command list", async () => {
+    const runtime = new TestOpenCodeHarness();
+    const openCodeClient = createOpenCodeClientWithConnectedProvider();
+    runtime.enqueueClient(openCodeClient);
+    const client = new OpenCodeAgentClient(createTestLogger(), undefined, {
+      serverManager: runtime,
+      createClient: runtime.createClient,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp" });
+    const acquisitionCount = runtime.acquisitions.length;
+
+    openCodeClient.emitEvent({ type: "server-exited", error: new Error("OpenCode exited") });
+
+    await expect(session.listCommands?.()).resolves.toBeNull();
+    expect(openCodeClient.calls.commandList).toEqual([]);
+    expect(runtime.acquisitions).toHaveLength(acquisitionCount);
+  });
+
+  test("returns no command list when OpenCode fails to list commands", async () => {
+    const runtime = new TestOpenCodeHarness();
+    const openCodeClient = createOpenCodeClientWithConnectedProvider();
+    openCodeClient.commandListResponse = { error: { message: "boom" } };
+    runtime.enqueueClient(openCodeClient);
+    const client = new OpenCodeAgentClient(createTestLogger(), undefined, {
+      serverManager: runtime,
+      createClient: runtime.createClient,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp" });
+
+    await expect(session.listCommands?.()).resolves.toBeNull();
   });
 
   test("executes compact through the OpenCode summarize endpoint", async () => {

@@ -866,6 +866,7 @@ export class OmpAgentSession implements AgentSession {
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
   private commandCache: AgentSlashCommand[] | null = null;
+  private processExited = false;
   private readonly subagentIndex = new OmpSubagentIndex();
   private readonly subagentCardTracker: OmpSubagentCardTracker;
   private lastTodoItem: Extract<AgentTimelineItem, { type: "todo" }> | null = null;
@@ -1190,9 +1191,12 @@ export class OmpAgentSession implements AgentSession {
     this.clearOmpTurnState();
   }
 
-  async listCommands(): Promise<AgentSlashCommand[]> {
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
     if (this.commandCache) {
       return this.commandCache;
+    }
+    if (this.closed || this.processExited) {
+      return null;
     }
     const commands = await this.runtimeSession.getCommands();
     return mapOmpRuntimeSlashCommands(commands);
@@ -1678,6 +1682,7 @@ export class OmpAgentSession implements AgentSession {
       const commands = mapOmpAvailableCommandsUpdate(event);
       if (commands) {
         this.commandCache = commands;
+        this.emit({ type: "commands_changed", provider: this.provider, commands });
       } else {
         this.logger.debug({ event }, "Dropped malformed OMP command update event");
       }
@@ -1778,6 +1783,7 @@ export class OmpAgentSession implements AgentSession {
   }
 
   private handleProcessExit(error: string): void {
+    this.processExited = true;
     this.usagePoller.stopTurn();
     this.terminalizeActiveWork();
     this.subagentIndex.clear(this.runtimeSession);
