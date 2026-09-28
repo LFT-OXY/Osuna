@@ -5,6 +5,7 @@ import {
   canRunRealProvider,
   createRealProviderClient,
 } from "../../../daemon-e2e/real-provider-test-config.js";
+import { CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS } from "./commands.js";
 
 // Real-Claude contract coverage: validates slash command shape from a live Claude CLI session.
 describe("claude agent commands contract (real)", () => {
@@ -20,7 +21,7 @@ describe("claude agent commands contract (real)", () => {
     }
   });
 
-  test("lists slash commands with the expected contract", async () => {
+  test("lists slash commands only from a running CLI, including every built-in", async () => {
     const client = createRealProviderClient("claude", pino({ level: "silent" }));
     const session = await client.createSession({
       provider: "claude",
@@ -30,11 +31,18 @@ describe("claude agent commands contract (real)", () => {
 
     try {
       expect(typeof session.listCommands).toBe("function");
+      await expect(session.listCommands!()).resolves.toBeNull();
+
+      await session.setMode("plan");
       const commands = await session.listCommands!();
 
-      expect(Array.isArray(commands)).toBe(true);
-      expect(commands.length).toBeGreaterThan(0);
-      expect(commands.map((command) => command.name)).toContain("rewind");
+      if (commands === null) {
+        throw new Error("Expected the running CLI to report its commands");
+      }
+      const names = commands.map((command) => command.name);
+      for (const builtin of CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS) {
+        expect(names).toContain(builtin.name);
+      }
 
       for (const command of commands) {
         const typed = command;

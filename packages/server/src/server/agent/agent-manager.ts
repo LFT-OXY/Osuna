@@ -58,6 +58,7 @@ import {
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
+import { CommandCatalog, type CommandCatalogResult } from "./command-catalog.js";
 import { restoreProviderSessionIds } from "./agent-storage.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
@@ -307,6 +308,8 @@ export interface AgentManagerOptions {
   providerDefinitions?: ProviderEnabledMap;
   idFactory?: () => string;
   registry?: AgentStorage;
+  /** Where the command catalog persists process-reported lists; omit to keep them in memory. */
+  commandCatalogPath?: string;
   onAgentAttention?: AgentAttentionCallback;
   onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
   durableTimelineStore?: AgentTimelineStore;
@@ -334,6 +337,13 @@ function stripSteerOptions(options?: AgentSteerOptions): AgentRunOptions | undef
   if (!options) return undefined;
   const { clearPendingPermissions: _, ...runOptions } = options;
   return runOptions;
+}
+
+export interface ListCommandsInput {
+  provider: AgentProvider;
+  cwd: string;
+  /** A loaded agent whose running process may report a fresher list. */
+  agentId?: string;
 }
 
 export interface WaitForAgentOptions {
@@ -744,6 +754,7 @@ export class AgentManager {
   private readonly subscribers = new Set<SubscriptionRecord>();
   private readonly idFactory: () => string;
   private readonly registry?: AgentStorage;
+  private readonly commandCatalog: CommandCatalog;
   private readonly durableTimelineStore?: AgentTimelineStore;
   private readonly previousStatuses = new Map<string, AgentLifecycleStatus>();
   private readonly backgroundTasks = new Set<Promise<void>>();
@@ -782,6 +793,10 @@ export class AgentManager {
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
+    this.commandCatalog = new CommandCatalog({
+      filePath: options.commandCatalogPath,
+      logger: this.logger,
+    });
     this.rescueTimeouts = {
       reloadSessionCloseMs:
         options.rescueTimeouts?.reloadSessionCloseMs ?? RELOAD_SESSION_CLOSE_TIMEOUT_MS,
@@ -1132,41 +1147,32 @@ export class AgentManager {
     }
   }
 
-  async listDraftCommands(config: AgentSessionConfig): Promise<AgentSlashCommand[]> {
-    const normalizedConfig = await this.normalizeConfig(config, { resolveDefaultModel: false });
-    const client = this.requireClient(normalizedConfig.provider);
-    if (!normalizedConfig.model) {
-      return [];
-    }
-    const available = await client.isAvailable();
-    if (!available) {
-      throw new Error(
-        `Provider '${normalizedConfig.provider}' is not available. Please ensure the CLI is installed.`,
-      );
-    }
+  /**
+   * The command list for a provider + cwd, for existing agents and drafts alike.
+   * Reads memory and local files only; never starts a provider process.
+   */
+  async listCommands(input: ListCommandsInput): Promise<CommandCatalogResult> {
+    const client = this.requireClient(input.provider);
+    const agent = input.agentId ? this.agents.get(input.agentId) : undefined;
+    const [live, discovered] = await Promise.all([
+      this.listRunningAgentCommands(agent),
+      client.discoverCommands ? client.discoverCommands(input.cwd) : [],
+    ]);
+    return await this.commandCatalog.lookup({
+      provider: input.provider,
+      cwd: input.cwd,
+      live,
+      discovered,
+    });
+  }
 
-    if (client.listCommands) {
-      return await client.listCommands(normalizedConfig);
+  private async listRunningAgentCommands(
+    agent: LiveManagedAgent | undefined,
+  ): Promise<AgentSlashCommand[] | null> {
+    if (!agent?.session?.listCommands) {
+      return null;
     }
-
-    const session = await client.createSession(normalizedConfig);
-    try {
-      if (!session.listCommands) {
-        throw new Error(
-          `Provider '${normalizedConfig.provider}' does not support listing commands`,
-        );
-      }
-      return await session.listCommands();
-    } finally {
-      try {
-        await session.close();
-      } catch (error) {
-        this.logger.warn(
-          { err: error, provider: normalizedConfig.provider },
-          "Failed to close draft command listing session",
-        );
-      }
-    }
+    return await agent.session.listCommands();
   }
 
   async listDraftFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {

@@ -97,6 +97,30 @@ A field users can change while the daemon runs needs five edits, and missing any
 `deepMerge` already replaces arrays wholesale (`isRecord` excludes them), so a patch that swaps a whole list needs no special case — writing one adds dead code.
 
 Owners read the live value through one resolver rather than repeating `?? default` at each call site; `resolveUsagePricingSettings` in `server/usage/config.ts` is the shape.
+### Cache files: unreadable means empty, never "start the source"
+
+`CommandCatalog` (`server/agent/command-catalog.ts`, file
+`$PASEO_HOME/command-catalog.json`) holds data the daemon can rebuild: the
+command list a provider process last reported, per provider and `path.resolve`d
+cwd. That makes it the one kind of store where a failed read is harmless — a
+missing, corrupt, or schema-invalid file loads as an empty map and is rewritten
+on the next report. It is not the cursor case above: nothing downstream
+accumulates from it.
+
+- Load once, lazily; memoize the in-flight load so concurrent first calls share
+  one read.
+- Parse on read **and** `CatalogFileSchema.parse(snapshot)` before
+  `writeJsonFileAtomic`; serialize writes through one promise chain.
+- Skip the write when the new value equals the stored one. `lookup` runs on
+  every menu open for a running agent.
+- Cap the entry count (200, least recently reported dropped); cwds are
+  unbounded across worktrees.
+- An empty cache must degrade to "partial", never to fetching from the source:
+  `docs/adr/0003-command-list-never-spawns.md`.
+
+Tests: `agent-manager.test.ts` "listCommands …" — a second `AgentManager` on the
+same `commandCatalogPath` reads the entry back (daemon restart), and a
+`"{ not json"` file yields `partial: true`.
 
 ## Files and secrets
 

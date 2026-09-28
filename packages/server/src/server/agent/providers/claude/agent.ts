@@ -34,6 +34,7 @@ import {
   findClaudeModel,
   getClaudeModelsWithSettings,
   normalizeClaudeRuntimeModelId,
+  resolveClaudeConfigDir,
   resolveConfiguredClaudeModel,
 } from "./models.js";
 import {
@@ -77,6 +78,11 @@ import {
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
 import { claudeQuery, type ClaudeOptions, type ClaudeQueryFactory } from "./query.js";
 import { realClaudeRewindSdk, revertClaudeConversation, revertClaudeFiles } from "./rewind.js";
+import {
+  CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS,
+  discoverClaudeCommands,
+  REWIND_COMMAND_NAME,
+} from "./commands.js";
 import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
 import { claudeProjectDirSync } from "./project-dir.js";
 import { THINKING_APPLIES_NEXT_TURN_NOTICE } from "../../provider-notices.js";
@@ -349,24 +355,9 @@ const DEFAULT_MODES: AgentMode[] = [
 
 const VALID_CLAUDE_MODES = new Set(DEFAULT_MODES.map((mode) => mode.id));
 
-const REWIND_COMMAND_NAME = "rewind";
-const REWIND_COMMAND: AgentSlashCommand = {
-  name: REWIND_COMMAND_NAME,
-  description: "Rewind tracked files to a previous user message",
-  argumentHint: "[user_message_uuid]",
-};
-const CLAUDE_ROOT_ONLY_COMMANDS = new Set([
-  "clear",
-  "compact",
-  "context",
-  "debug",
-  "extra-usage",
-  "heapdump",
-  "init",
-  "loop",
-  "schedule",
-  "usage",
-]);
+const CLAUDE_ROOT_ONLY_COMMANDS = new Set(
+  CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS.map((command) => command.name),
+);
 const INTERRUPT_TOOL_USE_PLACEHOLDER = "[Request interrupted by user for tool use]";
 const INTERRUPT_PLACEHOLDER_PATTERN = /^\[Request interrupted by user(?:[^\]]*)\]$/;
 const NO_RESPONSE_REQUESTED_PLACEHOLDER = "No response requested.";
@@ -1602,6 +1593,10 @@ export class ClaudeAgentClient implements AgentClient {
     return claudeModeCatalog(env).defaultModeId;
   }
 
+  async discoverCommands(cwd: string): Promise<AgentSlashCommand[]> {
+    return await discoverClaudeCommands({ configDir: resolveClaudeConfigDir(this.configDir), cwd });
+  }
+
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
     const claudeConfig = this.assertConfig(config);
     return buildClaudeFeatures({
@@ -2733,8 +2728,12 @@ class ClaudeAgentSession implements AgentSession {
     );
   }
 
-  async listCommands(): Promise<AgentSlashCommand[]> {
-    const q = await this.ensureQuery();
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
+    // Ask only a query that is already running; ensureQuery() here would spawn the CLI.
+    const q = this.query;
+    if (!q) {
+      return null;
+    }
     const commands = await q.supportedCommands();
     const commandMap = new Map<string, AgentSlashCommand>();
     for (const cmd of commands) {
@@ -2746,9 +2745,6 @@ class ClaudeAgentSession implements AgentSession {
           kind: classifyClaudeSlashCommand(cmd.name),
         });
       }
-    }
-    if (!commandMap.has(REWIND_COMMAND_NAME)) {
-      commandMap.set(REWIND_COMMAND_NAME, REWIND_COMMAND);
     }
     return Array.from(commandMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -3153,9 +3149,9 @@ class ClaudeAgentSession implements AgentSession {
       await this.query.applyFlagSettings({ fastMode });
     }
     // Do not kick off background control-plane queries here. Methods like
-    // supportedCommands()/setPermissionMode() may execute immediately after
-    // ensureQuery() (for listCommands()/setMode()), and sharing the same query
-    // control plane can cause those calls to wait behind supportedModels().
+    // setPermissionMode() may execute immediately after ensureQuery() (for
+    // setMode()), and sharing the same query control plane can cause those
+    // calls to wait behind supportedModels().
     return this.query;
   }
 

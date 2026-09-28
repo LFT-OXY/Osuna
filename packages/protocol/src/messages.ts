@@ -6325,6 +6325,9 @@ export const ListCommandsResponseSchema = z.object({
   payload: z.object({
     agentId: z.string(),
     commands: z.array(AgentSlashCommandSchema),
+    // True when the list lacks the provider process's own report (only scan + built-ins).
+    // Absent from older daemons; treat as complete.
+    partial: z.boolean().optional(),
     error: z.string().nullable(),
     requestId: z.string(),
   }),

@@ -8,6 +8,7 @@ import type {
   AgentModelDefinition,
   AgentMode,
   AgentSessionConfig,
+  AgentSlashCommand,
   ProviderCatalog,
 } from "./agent-sdk-types.js";
 
@@ -120,6 +121,10 @@ vi.mock("./providers/claude/agent.js", async () => {
 
       resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
         return resolveConfiguredClaudeModel(model);
+      }
+
+      async discoverCommands(cwd: string): Promise<AgentSlashCommand[]> {
+        return [{ name: "scanned", description: cwd, argumentHint: "", kind: "skill" }];
       }
 
       async isAvailable(): Promise<boolean> {
@@ -649,6 +654,21 @@ test("new provider extending claude appears in registry", () => {
   expect(registry.zai.label).toBe("ZAI");
   expect(registry.zai.description).toBe("Claude with ZAI defaults");
   expect(registry.zai.createClient(logger).provider).toBe("zai");
+});
+
+test("wrapped claude profile keeps no-process command discovery", async () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: {
+      zai: {
+        extends: "claude",
+        label: "ZAI",
+      },
+    },
+  });
+
+  await expect(registry.zai.createClient(logger).discoverCommands?.("/tmp/zai")).resolves.toEqual([
+    { name: "scanned", description: "/tmp/zai", argumentHint: "", kind: "skill" },
+  ]);
 });
 
 test("built-in OMP override keeps the real OMP adapter enabled and launchable", async () => {

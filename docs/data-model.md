@@ -66,6 +66,7 @@ $PASEO_HOME/
 ├── plugins/
 │   ├── sources.json                      # Git origin, ref, commit, and managed checkout ownership
 │   └── {pluginId}/{version}/checkout/    # Source checkout for one installed Git commit
+├── command-catalog.json                 # Last process-reported command list per provider + cwd
 ├── usage/
 │   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
 │   ├── turns-YYYY-MM.jsonl               # Token increments per (source, session, turn, model)
@@ -661,7 +662,28 @@ request, and how user prices match.
 
 ---
 
-## 8. Daemon meta files
+## 8. Command Catalog
+
+**Path:** `$PASEO_HOME/command-catalog.json`
+
+```json
+{
+  "entries": [
+    {
+      "provider": "claude",
+      "cwd": "/Users/me/project",
+      "updatedAt": "2026-09-28T00:00:00.000Z",
+      "commands": [{ "name": "review", "description": "…", "argumentHint": "", "kind": "skill" }]
+    }
+  ]
+}
+```
+
+The command list the provider's running process last reported, one entry per provider and `path.resolve`d `cwd`. The command menu reads it so listing commands never starts a process ([ADR 0003](adr/0003-command-list-never-spawns.md)); `partial` on `list_commands_response` is true when no entry exists. It is a cache: an unreadable or invalid file is ignored and rewritten on the next report. Written atomically, capped at 200 entries (least recently reported dropped first). Owned by `packages/server/src/server/agent/command-catalog.ts`.
+
+---
+
+## 9. Daemon meta files
 
 These small files are not validated as full Zod schemas but are persisted under `$PASEO_HOME` for daemon identity and runtime coordination.
 

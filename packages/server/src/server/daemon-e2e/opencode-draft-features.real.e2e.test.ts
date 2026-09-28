@@ -117,7 +117,7 @@ describe("daemon E2E (real opencode) - draft feature discovery", () => {
         });
 
         expect(response.error).toBeNull();
-        expect(response.commands.length).toBeGreaterThan(0);
+        expect(response.partial).toBe(true);
       });
 
       after = (await provider.listImportableSessions?.({ cwd })) ?? [];

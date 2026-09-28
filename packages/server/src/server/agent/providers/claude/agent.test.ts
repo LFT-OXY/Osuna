@@ -17,7 +17,13 @@ import {
 } from "./agent.js";
 import { claudeProjectDirSync } from "./project-dir.js";
 import { streamSession } from "../test-utils/session-stream-adapter.js";
-import type { AgentSession, AgentTimelineItem, AgentStreamEvent } from "../../agent-sdk-types.js";
+import type {
+  AgentSession,
+  AgentSlashCommand,
+  AgentTimelineItem,
+  AgentStreamEvent,
+} from "../../agent-sdk-types.js";
+import { CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS } from "./commands.js";
 
 interface TestClaudeSession {
   translateMessageToEvents(message: SDKMessage): AgentStreamEvent[];
@@ -2077,7 +2083,7 @@ describe("ClaudeAgentSession context window usage", () => {
     expect(persistedQueryFactory.mock.calls[0]?.[0].options.persistSession).toBe(true);
   });
 
-  test("classifies Claude root-only commands separately from inline skills", async () => {
+  test("lists the running query's commands and classifies root-only ones as commands", async () => {
     const queryFactory = vi.fn(({ prompt }: { prompt: AsyncIterable<unknown> }) => {
       void prompt;
       return {
@@ -2124,7 +2130,11 @@ describe("ClaudeAgentSession context window usage", () => {
     });
     const session = await client.createSession({ provider: "claude", cwd: process.cwd() });
 
-    const commands = await session.listCommands();
+    await expect(session.listCommands?.()).resolves.toBeNull();
+    expect(queryFactory).not.toHaveBeenCalled();
+
+    await session.setMode("default");
+    const commands = await session.listCommands?.();
     await session.close();
 
     expect(commands).toEqual([
@@ -2141,11 +2151,6 @@ describe("ClaudeAgentSession context window usage", () => {
         kind: "command",
       },
       {
-        name: "rewind",
-        description: "Rewind tracked files to a previous user message",
-        argumentHint: "[user_message_uuid]",
-      },
-      {
         name: "taste",
         description: "Use when another skill needs the shared standard. (user)",
         argumentHint: "",
@@ -2158,6 +2163,63 @@ describe("ClaudeAgentSession context window usage", () => {
         kind: "command",
       },
     ]);
+  });
+
+  test("discovers skills, commands, and built-ins without starting the CLI", async () => {
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-claude-discover-config-"));
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-claude-discover-cwd-"));
+    try {
+      await fs.mkdir(path.join(configDir, "skills", "x"), { recursive: true });
+      await fs.writeFile(
+        path.join(configDir, "skills", "x", "SKILL.md"),
+        "---\nname: x\ndescription: Personal skill\nargument-hint: <topic>\n---\nBody\n",
+      );
+      await fs.mkdir(path.join(cwd, ".claude", "commands", "a"), { recursive: true });
+      await fs.writeFile(
+        path.join(cwd, ".claude", "commands", "a", "b.md"),
+        "---\ndescription: Nested project command\nargument-hint: [file]\n---\nDo it\n",
+      );
+      await fs.writeFile(path.join(cwd, ".claude", "commands", "plain.md"), "\nFirst line wins\n");
+      const sharedCommands = path.join(configDir, "shared-commands");
+      await fs.mkdir(sharedCommands);
+      await fs.writeFile(path.join(sharedCommands, "lint.md"), "---\ndescription: Shared\n---\n");
+      await fs.symlink(sharedCommands, path.join(cwd, ".claude", "commands", "team"));
+      const queryFactory = vi.fn();
+      const client = new ClaudeAgentClient({
+        logger,
+        queryFactory,
+        configDir,
+        resolveBinary: async () => "/test/claude/bin",
+      });
+
+      const commands = await client.discoverCommands(cwd);
+
+      expect(queryFactory).not.toHaveBeenCalled();
+      const byName = (a: AgentSlashCommand, b: AgentSlashCommand) => a.name.localeCompare(b.name);
+      expect([...commands].sort(byName)).toEqual(
+        [
+          { name: "x", description: "Personal skill", argumentHint: "<topic>", kind: "skill" },
+          {
+            name: "a:b",
+            description: "Nested project command",
+            argumentHint: "[file]",
+            kind: "command",
+          },
+          { name: "plain", description: "First line wins", argumentHint: "", kind: "command" },
+          { name: "team:lint", description: "Shared", argumentHint: "", kind: "command" },
+          ...CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS,
+          {
+            name: "rewind",
+            description: "Rewind tracked files to a previous user message",
+            argumentHint: "[user_message_uuid]",
+            kind: "command",
+          },
+        ].sort(byName),
+      );
+    } finally {
+      await fs.rm(configDir, { recursive: true, force: true });
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
   });
 
   test("deletes the persisted session jsonl on close when persistSession=false", async () => {

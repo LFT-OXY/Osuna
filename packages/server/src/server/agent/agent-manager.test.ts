@@ -1,7 +1,7 @@
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -1843,102 +1843,134 @@ test("normalizeConfig strips legacy 'default' model id", async () => {
   expect(snapshot.config.modeId).toBeUndefined();
 });
 
-test("listDraftCommands returns no commands without guessing a missing model", async () => {
-  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-draft-commands-"));
-  const storagePath = join(workdir, "agents");
-  const storage = new AgentStorage(storagePath, logger);
-  class DraftCommandClient extends TestAgentClient {
-    fetchCatalogCalls = 0;
-    createSessionCalls = 0;
-    availabilityCalls = 0;
-
-    override async isAvailable(): Promise<boolean> {
-      this.availabilityCalls += 1;
-      return true;
-    }
-
-    override async fetchCatalog() {
-      this.fetchCatalogCalls += 1;
-      return await super.fetchCatalog();
-    }
-
-    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
-      this.createSessionCalls += 1;
-      return await super.createSession(config);
-    }
-  }
-  const client = new DraftCommandClient();
-  const manager = new AgentManager({
-    clients: {
-      codex: client,
-    },
-    registry: storage,
-    logger,
-  });
-
-  await expect(manager.listDraftCommands({ provider: "codex", cwd: workdir })).resolves.toEqual([]);
-
-  expect(client.fetchCatalogCalls).toBe(0);
-  expect(client.createSessionCalls).toBe(0);
-  expect(client.availabilityCalls).toBe(0);
-});
-
-test("listDraftCommands uses explicit model config without default model fetching", async () => {
-  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-draft-commands-"));
-  const storagePath = join(workdir, "agents");
-  const storage = new AgentStorage(storagePath, logger);
-  const draftCommand: AgentSlashCommand = {
-    name: "review",
-    description: "Review changes",
+const catalogSkill: AgentSlashCommand = {
+  name: "deploy",
+  description: "Scanned deploy skill",
+  argumentHint: "",
+  kind: "skill",
+};
+const catalogBuiltin: AgentSlashCommand = {
+  name: "compact",
+  description: "Built-in compact",
+  argumentHint: "",
+  kind: "command",
+};
+const reportedCommands: AgentSlashCommand[] = [
+  { name: "deploy", description: "Reported deploy skill", argumentHint: "<env>", kind: "skill" },
+  {
+    name: "mcp-prompt",
+    description: "Only the process knows this",
     argumentHint: "",
     kind: "command",
-  };
-  class DraftCommandSession extends TestAgentSession {
-    override async listCommands(): Promise<AgentSlashCommand[]> {
-      return [draftCommand];
-    }
-  }
-  class DraftCommandClient extends TestAgentClient {
-    fetchCatalogCalls = 0;
-    createSessionCalls = 0;
-    readonly commandConfigs: AgentSessionConfig[] = [];
+  },
+];
 
-    override async fetchCatalog() {
-      this.fetchCatalogCalls += 1;
-      return await super.fetchCatalog();
-    }
-
-    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
-      this.createSessionCalls += 1;
-      this.commandConfigs.push(config);
-      return new DraftCommandSession(config);
-    }
+class CatalogSession extends TestAgentSession {
+  constructor(
+    config: AgentSessionConfig,
+    private readonly running: AgentSlashCommand[] | null,
+  ) {
+    super(config);
   }
-  const client = new DraftCommandClient();
+
+  async listCommands(): Promise<AgentSlashCommand[] | null> {
+    return this.running;
+  }
+}
+
+class CatalogClient extends TestAgentClient {
+  createSessionCalls = 0;
+
+  constructor(private readonly running: AgentSlashCommand[] | null = null) {
+    super("codex");
+  }
+
+  override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+    this.createSessionCalls += 1;
+    return new CatalogSession(config, this.running);
+  }
+
+  async discoverCommands(): Promise<AgentSlashCommand[]> {
+    return [catalogSkill, catalogBuiltin];
+  }
+}
+
+function createCatalogWorkdir(): { workdir: string; catalogPath: string } {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-command-catalog-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  return { workdir, catalogPath: join(workdir, "paseo-home", "command-catalog.json") };
+}
+
+test("listCommands answers a draft from discovery without starting a session", async () => {
+  const { workdir, catalogPath } = createCatalogWorkdir();
+  const client = new CatalogClient();
   const manager = new AgentManager({
-    clients: {
-      codex: client,
-    },
-    registry: storage,
+    clients: { codex: client },
+    commandCatalogPath: catalogPath,
     logger,
   });
 
-  const commands = await manager.listDraftCommands({
-    provider: "codex",
-    cwd: workdir,
-    model: "gpt-5.4",
+  const result = await manager.listCommands({ provider: "codex", cwd: workdir });
+
+  expect(result).toEqual({ commands: [catalogBuiltin, catalogSkill], partial: true });
+  expect(client.createSessionCalls).toBe(0);
+});
+
+test("listCommands merges a running agent's report and serves it after a daemon restart", async () => {
+  const { workdir, catalogPath } = createCatalogWorkdir();
+  const runningClient = new CatalogClient(reportedCommands);
+  const manager = new AgentManager({
+    clients: { codex: runningClient },
+    commandCatalogPath: catalogPath,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  const expected = {
+    commands: [catalogBuiltin, reportedCommands[0], reportedCommands[1]],
+    partial: false,
+  };
+
+  await expect(
+    manager.listCommands({ provider: "codex", cwd: workdir, agentId: agent.id }),
+  ).resolves.toEqual(expected);
+  expect(runningClient.createSessionCalls).toBe(1);
+
+  const restartedClient = new CatalogClient();
+  const restarted = new AgentManager({
+    clients: { codex: restartedClient },
+    commandCatalogPath: catalogPath,
+    logger,
+  });
+  await expect(
+    restarted.listCommands({ provider: "codex", cwd: join(workdir, ".") }),
+  ).resolves.toEqual(expected);
+  expect(restartedClient.createSessionCalls).toBe(0);
+
+  const idleAgent = await restarted.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  await expect(
+    restarted.listCommands({ provider: "codex", cwd: workdir, agentId: idleAgent.id }),
+  ).resolves.toEqual(expected);
+  expect(restartedClient.createSessionCalls).toBe(1);
+});
+
+test("listCommands treats a corrupt catalog file as an empty cache", async () => {
+  const { workdir, catalogPath } = createCatalogWorkdir();
+  mkdirSync(dirname(catalogPath), { recursive: true });
+  writeFileSync(catalogPath, "{ not json");
+  const manager = new AgentManager({
+    clients: { codex: new CatalogClient() },
+    commandCatalogPath: catalogPath,
+    logger,
   });
 
-  expect(commands).toEqual([draftCommand]);
-  expect(client.fetchCatalogCalls).toBe(0);
-  expect(client.createSessionCalls).toBe(1);
-  expect(client.commandConfigs).toEqual([
-    {
-      provider: "codex",
-      cwd: workdir,
-      model: "gpt-5.4",
-    },
-  ]);
+  await expect(manager.listCommands({ provider: "codex", cwd: workdir })).resolves.toEqual({
+    commands: [catalogBuiltin, catalogSkill],
+    partial: true,
+  });
 });
 
 test("listDraftFeatures does not start a fallback session without a model", async () => {

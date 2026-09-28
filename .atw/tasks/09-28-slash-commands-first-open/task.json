@@ -1,0 +1,28 @@
+{
+  "id": "slash-commands-first-open",
+  "name": "slash-commands-first-open",
+  "title": "斜杠指令列表首开提速",
+  "description": "daemon 按 provider+cwd 缓存并落盘指令列表、composer 聚焦预取、加载中显示面板",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "server",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-28",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-28-composer-slash-revamp",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "6b75439c6f606b4a07a1ae464dfe5b4455fe8608"
+  }
+}

@@ -181,8 +181,8 @@ function createRecordingAgentClients(): Record<AgentProvider, AgentClient> {
     if (client.isCreateConfigUnattended) {
       wrappedClient.isCreateConfigUnattended = (input) => client.isCreateConfigUnattended!(input);
     }
-    if (client.listCommands) {
-      wrappedClient.listCommands = async (config) => await client.listCommands!(config);
+    if (client.discoverCommands) {
+      wrappedClient.discoverCommands = async (cwd) => await client.discoverCommands!(cwd);
     }
     if (client.listFeatures) {
       wrappedClient.listFeatures = async (config) => await client.listFeatures!(config);

@@ -101,6 +101,7 @@ import type {
   AgentTimelineCursor,
   AgentTimelineFetchDirection,
   AgentTimelineFetchResult,
+  ListCommandsInput,
   ManagedAgent,
 } from "./agent/agent-manager.js";
 import { createAgentCommand } from "./agent/create-agent/create.js";
@@ -4941,6 +4942,24 @@ export class Session {
     this.sessionLogger.info("Registered push token");
   }
 
+  // Listing never loads or resumes an agent: a stored agent only lends its provider + cwd.
+  private async resolveListCommandsTarget(
+    msg: Extract<SessionInboundMessage, { type: "list_commands_request" }>,
+  ): Promise<ListCommandsInput | null> {
+    const existing = this.agentManager.getAgent(msg.agentId);
+    if (existing) {
+      return { provider: existing.provider, cwd: existing.cwd, agentId: msg.agentId };
+    }
+    const stored = await this.agentStorage.get(msg.agentId);
+    if (stored && !stored.archivedAt) {
+      return { provider: stored.provider, cwd: stored.cwd };
+    }
+    if (msg.draftConfig) {
+      return { provider: msg.draftConfig.provider, cwd: expandTilde(msg.draftConfig.cwd) };
+    }
+    return null;
+  }
+
   /**
    * Handle list commands request for an agent
    */
@@ -4954,61 +4973,28 @@ export class Session {
     );
 
     try {
-      const existing = this.agentManager.getAgent(agentId);
-      const stored = existing ? null : await this.agentStorage.get(agentId);
-      const agent =
-        existing || (stored && !stored.archivedAt)
-          ? await ensureAgentLoaded(agentId, {
-              agentManager: this.agentManager,
-              agentStorage: this.agentStorage,
-              logger: this.sessionLogger,
-            })
-          : null;
-
-      if (agent?.session?.listCommands) {
-        const commands = await agent.session.listCommands();
+      const target = await this.resolveListCommandsTarget(msg);
+      if (!target) {
         this.emit({
           type: "list_commands_response",
           payload: {
             agentId,
-            commands,
-            error: null,
+            commands: [],
+            error: `Agent not found: ${agentId}`,
             requestId,
           },
         });
         return;
       }
 
-      if (!agent && draftConfig) {
-        const sessionConfig: AgentSessionConfig = {
-          provider: draftConfig.provider,
-          cwd: expandTilde(draftConfig.cwd),
-          ...(draftConfig.modeId ? { modeId: draftConfig.modeId } : {}),
-          ...(draftConfig.model ? { model: draftConfig.model } : {}),
-          ...(draftConfig.thinkingOptionId
-            ? { thinkingOptionId: draftConfig.thinkingOptionId }
-            : {}),
-        };
-
-        const commands = await this.agentManager.listDraftCommands(sessionConfig);
-        this.emit({
-          type: "list_commands_response",
-          payload: {
-            agentId,
-            commands,
-            error: null,
-            requestId,
-          },
-        });
-        return;
-      }
-
+      const { commands, partial } = await this.agentManager.listCommands(target);
       this.emit({
         type: "list_commands_response",
         payload: {
           agentId,
-          commands: [],
-          error: agent ? `Agent does not support listing commands` : `Agent not found: ${agentId}`,
+          commands,
+          partial,
+          error: null,
           requestId,
         },
       });

@@ -685,7 +685,12 @@ export interface AgentSession {
   interrupt(): Promise<void>;
   /** Release live runtime resources without archiving or deleting the durable native session. */
   close(): Promise<void>;
-  listCommands?(): Promise<AgentSlashCommand[]>;
+  /**
+   * Return the list the running provider process reports. Never start a process or
+   * reconnect to get it (docs/adr/0003-command-list-never-spawns.md); return null
+   * when nothing is running.
+   */
+  listCommands?(): Promise<AgentSlashCommand[] | null>;
   setModel?(modelId: string | null): Promise<void>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;
   setFeature?(featureId: string, value: unknown): Promise<void>;
@@ -769,7 +774,11 @@ export interface AgentClient {
   resolveDefaultModeId?(input: ResolveAgentDefaultModeInput): Promise<string | undefined>;
   resolveCreateConfig?(input: ResolveAgentCreateConfigInput): ResolveAgentCreateConfigResult;
   isCreateConfigUnattended?(input: AgentCreateConfigUnattendedInput): boolean;
-  listCommands?(config: AgentSessionConfig): Promise<AgentSlashCommand[]>;
+  /**
+   * Commands found without a process: skill/command directory scans for `cwd` plus
+   * built-in commands. Must not start a process or open a connection.
+   */
+  discoverCommands?(cwd: string): Promise<AgentSlashCommand[]>;
   listFeatures?(config: AgentSessionConfig): Promise<AgentFeature[]>;
   listImportableSessions?(
     options?: ListImportableSessionsOptions,

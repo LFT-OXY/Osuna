@@ -37,12 +37,13 @@ describe("opencode agent commands E2E", () => {
     }
   }, 60_000);
 
-  test("listing commands resumes an explicitly closed agent", async () => {
+  test("listing commands for a closed agent answers from the catalog without resuming it", async () => {
     const agent = await ctx.client.createAgent({
       ...getFullAccessConfig("opencode"),
       cwd: "/tmp",
       title: "Closed OpenCode Commands Test Agent",
     });
+    const whileRunning = await ctx.client.listCommands({ agentId: agent.id });
 
     await ctx.daemon.daemon.agentManager.closeAgent(agent.id);
     expect(ctx.daemon.daemon.agentManager.getAgent(agent.id)).toBeNull();
@@ -50,8 +51,9 @@ describe("opencode agent commands E2E", () => {
     const result = await ctx.client.listCommands({ agentId: agent.id });
 
     expect(result.error).toBeNull();
-    expect(result.commands.length).toBeGreaterThan(0);
-    expect(ctx.daemon.daemon.agentManager.getAgent(agent.id)?.id).toBe(agent.id);
+    expect(result.partial).toBe(false);
+    expect(result.commands).toEqual(whileRunning.commands);
+    expect(ctx.daemon.daemon.agentManager.getAgent(agent.id)).toBeNull();
   }, 60_000);
 
   test("sendMessage executes a slash command without arguments", async () => {

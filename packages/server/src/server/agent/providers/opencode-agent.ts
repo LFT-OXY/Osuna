@@ -1610,22 +1610,6 @@ export class OpenCodeAgentClient implements AgentClient {
     }
   }
 
-  async listCommands(config: AgentSessionConfig): Promise<AgentSlashCommand[]> {
-    const openCodeConfig = this.assertConfig(config);
-    const acquisition = await this.serverManager.acquireCurrent();
-    const { url } = acquisition.server;
-    const client = this.createOpenCodeClient({
-      baseUrl: url,
-      directory: openCodeConfig.cwd,
-    });
-
-    try {
-      return await listOpenCodeCommandsFromSdk(client, openCodeConfig.cwd);
-    } finally {
-      await acquisition.release();
-    }
-  }
-
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
     return [buildOpenCodeAutoAcceptFeature(this.assertConfig(config))];
   }

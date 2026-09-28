@@ -328,7 +328,7 @@ describe("ClaudeAgentSession history replay regression", () => {
     });
   });
 
-  test("listCommands includes rewind command", async () => {
+  test("listCommands on a resumed session does not start the CLI", async () => {
     const logger = createTestLogger();
     const client = new ClaudeAgentClient({
       logger,
@@ -347,8 +347,8 @@ describe("ClaudeAgentSession history replay regression", () => {
 
     const session = await client.resumeSession(handle, { cwd });
     try {
-      const commands = await session.listCommands?.();
-      expect(commands?.some((command) => command.name === "rewind")).toBe(true);
+      await expect(session.listCommands?.()).resolves.toBeNull();
+      expect(queryFactory).not.toHaveBeenCalled();
     } finally {
       await session.close();
     }
