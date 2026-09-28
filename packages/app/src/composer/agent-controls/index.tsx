@@ -89,6 +89,7 @@ import { AgentControlSeparator, AgentControlTrigger } from "@/composer/agent-con
 import { AgentProviderControl } from "@/composer/agent-controls/provider-control";
 import { getProviderBrandColor } from "@/components/provider-icons";
 import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
+import { ThinkingPicker } from "@/composer/agent-controls/thinking-picker";
 import {
   useAgentProfileEditor,
   useAgentProfilePicker,
@@ -809,6 +810,7 @@ function ControlledAgentControls({
             handleOpenSheet={handleOpenSheet}
             handleCloseSheet={handleCloseSheet}
             handleSheetModelSelect={handleSheetModelSelect}
+            handleThinkingSelect={handleThinkingSelect}
             handleSelectThinkingAndClose={handleSelectThinkingAndClose}
             handleOpenChange={handleSheetOpenChange}
             renderThinkingOption={renderThinkingOption}
@@ -873,8 +875,6 @@ interface DesktopAgentControlsContentProps {
   handleCloseSheet: () => void;
   modelSelectorServerId: string | null;
 }
-
-const DESKTOP_SEARCH_THRESHOLD = 6;
 
 function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
   const { t } = useTranslation();
@@ -1017,16 +1017,17 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
               <Text style={styles.tooltipText}>{t(getAgentControlHintKey("thinking"))}</Text>
             </TooltipContent>
           </Tooltip>
-          <Combobox
+          <ThinkingPicker
+            surface="toolbar"
             options={comboboxThinkingOptions}
-            value={selectedThinkingOptionId ?? ""}
-            onSelect={handleThinkingSelect}
-            searchable={comboboxThinkingOptions.length > DESKTOP_SEARCH_THRESHOLD}
+            selectedId={selectedThinkingOptionId}
+            provider={provider}
+            disabled={disabled || !canSelectThinking}
             open={openSelector === "thinking"}
             onOpenChange={handleThinkingOpenChange}
             anchorRef={thinkingAnchorRef}
-            desktopPlacement="top-start"
-            desktopMinWidth={200}
+            onSelect={handleThinkingSelect}
+            onSelectFromList={handleThinkingSelect}
             renderOption={renderThinkingOption}
           />
         </>
@@ -1121,6 +1122,7 @@ interface SheetAgentControlsContentProps {
   handleOpenSheet: (sheet: Exclude<ActiveSheet, null>) => void;
   handleCloseSheet: () => void;
   handleSheetModelSelect: (providerId: string, modelId: string) => void;
+  handleThinkingSelect: (thinkingOptionId: string) => void;
   handleSelectThinkingAndClose: (thinkingOptionId: string) => void;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   renderThinkingOption: (args: {
@@ -1167,6 +1169,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     handleOpenSheet,
     handleCloseSheet,
     handleSheetModelSelect,
+    handleThinkingSelect,
     handleSelectThinkingAndClose,
     handleOpenChange,
     renderThinkingOption,
@@ -1209,17 +1212,18 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
             })}
             testID="agent-controls-thinking"
           />
-          <Combobox
+          <ThinkingPicker
+            surface="sheet"
             options={comboboxThinkingOptions}
-            value={selectedThinkingOptionId ?? ""}
-            onSelect={handleSelectThinkingAndClose}
-            searchable={false}
-            title={t("agentControls.thinking.title")}
+            selectedId={selectedThinkingOptionId}
+            provider={provider}
+            disabled={disabled || !canSelectThinking}
             open={activeSheet === "thinking"}
             onOpenChange={handleThinkingSheetOpenChange}
             anchorRef={thinkingAnchorRef}
+            onSelect={handleThinkingSelect}
+            onSelectFromList={handleSelectThinkingAndClose}
             renderOption={renderThinkingOption}
-            presentation="push"
           />
         </>
       ) : null}

@@ -13,6 +13,18 @@ const resolvePackageEntry = (packageName: string) => {
 };
 
 export default defineConfig({
+  plugins: [
+    {
+      // Reanimated 的 Web 层用 `require()` 取 react-native-web 工具，不打包的浏览器测试项目做不到；
+      // 只把 Reanimated 自己的这一个相对导入换成 ESM 桩。
+      name: "reanimated-web-utils",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if (source !== "./webUtils" || !importer?.includes("react-native-reanimated")) return null;
+        return path.resolve(__dirname, "test-stubs/reanimated-web-utils.ts");
+      },
+    },
+  ],
   test: {
     environment: "node",
     exclude: [...configDefaults.exclude, "e2e/**"],

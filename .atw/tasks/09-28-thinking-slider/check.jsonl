@@ -1,0 +1,10 @@
+{"file": ".atw/tasks/09-28-thinking-slider/prd.md", "reason": "本任务的 spec 与验收标准"}
+{"file": ".atw/tasks/09-28-thinking-slider/research/interview-decisions.md", "reason": "访谈决策与思考选项、品牌色的代码现状"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "原语复用、平台门控、i18n、无障碍"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 规则，禁用 useUnistyles"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "Node 单元、browser 组件测试、Playwright e2e 分层"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "禁用模式与验证命令"}
+{"file": "docs/design.md", "reason": "设计 token，兜底渐变色不得在调色板外硬编码"}
+{"file": "docs/floating-panels.md", "reason": "锚定浮层的生命周期与 Android 逃逸"}
+{"file": "docs/mobile-panels.md", "reason": "紧凑布局手势与 sheet 冲突、worklet 动画约束"}
+{"file": "docs/unistyles.md", "reason": "动画样式中读取主题的替代做法"}

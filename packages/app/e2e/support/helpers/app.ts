@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { escapeRegex } from "./regex";
 
 export const gotoAppShell = async (page: Page) => {
@@ -200,6 +200,33 @@ export const createAgent = async (page: Page, message: string) => {
   });
 };
 
+const PREFERRED_FAST_THINKING_LABELS = ["low", "minimal", "off", "medium"];
+
+// 滑条只暴露当前档名：从最左端逐档读出所有档名，再退回到最想要的那一档。
+async function chooseSliderThinkingOption(page: Page, slider: Locator): Promise<void> {
+  const box = await slider.boundingBox();
+  if (!box) throw new Error("Thinking slider has no layout box");
+  await slider.click({ position: { x: 2, y: box.height / 2 } });
+  await expect(slider).toHaveAttribute("aria-valuenow", "0");
+  const lastIndex = Number(await slider.getAttribute("aria-valuemax"));
+  const labels: string[] = [];
+  for (let index = 0; index <= lastIndex; index += 1) {
+    if (index > 0) {
+      await page.keyboard.press("ArrowRight");
+      await expect(slider).toHaveAttribute("aria-valuenow", String(index));
+    }
+    labels.push(((await slider.getAttribute("aria-valuetext")) ?? "").trim().toLowerCase());
+  }
+  const preferred = PREFERRED_FAST_THINKING_LABELS.map((label) => labels.indexOf(label)).find(
+    (index) => index >= 0,
+  );
+  const target = preferred ?? 0;
+  for (let index = lastIndex; index > target; index -= 1) {
+    await page.keyboard.press("ArrowLeft");
+  }
+  await expect(slider).toHaveAttribute("aria-valuenow", String(target));
+}
+
 async function preferFastThinkingOption(page: Page): Promise<void> {
   const providerTrigger = page
     .locator(
@@ -226,14 +253,25 @@ async function preferFastThinkingOption(page: Page): Promise<void> {
   }
 
   await thinkingTrigger.click();
+  // 2 到 6 档的模型打开的是滑条，其余档数仍是列表。
+  const slider = page.getByTestId("agent-thinking-slider-track").first();
+  await expect(slider.or(page.getByTestId("combobox-desktop-container")).first()).toBeVisible({
+    timeout: 5000,
+  });
+  if (await slider.isVisible()) {
+    await chooseSliderThinkingOption(page, slider);
+    await page.keyboard.press("Escape");
+    await expect(slider).not.toBeVisible({ timeout: 5000 });
+    return;
+  }
+
   const menu = page.getByTestId("agent-thinking-menu").first();
   if (!(await menu.isVisible().catch(() => false))) {
     return;
   }
 
-  const preferredLabels = ["low", "minimal", "off", "medium"];
   let selected = false;
-  for (const label of preferredLabels) {
+  for (const label of PREFERRED_FAST_THINKING_LABELS) {
     const option = menu
       .getByRole("button", { name: new RegExp(`^${escapeRegex(label)}$`, "i") })
       .first();

@@ -366,7 +366,16 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     borderComposer: hexColorWithAlpha(foreground, COMPOSER_BORDER_ALPHA),
     shadowComposer: overrides.shadowComposer ?? (isDark ? "transparent" : LIGHT_COMPOSER_SHADOW),
     insetHighlight: overrides.insetHighlight ?? (isDark ? DARK_INSET_HIGHLIGHT : "transparent"),
+    ...deriveThinkingGradientRoles(isDark),
     ...deriveOverlayRoles({ isDark, surfaceCard, surface2: base.surface2 }),
+  };
+}
+
+/** 思考滑条填充的兜底渐变，给没有品牌色的提供方用：蓝到紫，取自调色板，始终派生。 */
+function deriveThinkingGradientRoles(isDark: boolean) {
+  return {
+    thinkingGradientFrom: isDark ? baseColors.blue[400] : baseColors.blue[500],
+    thinkingGradientTo: isDark ? baseColors.purple[500] : baseColors.purple[600],
   };
 }
 

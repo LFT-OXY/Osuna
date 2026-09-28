@@ -35,7 +35,8 @@ trigger still wins when it is wider. Changing this default requires re-verifying
 every consumer listed here.
 
 Consumers: `composer/agent-controls/mode-control.tsx`,
-`composer/agent-controls/index.tsx`, `composer/index.tsx`,
+`composer/agent-controls/index.tsx`, `composer/agent-controls/thinking-picker.tsx`,
+`composer/index.tsx`,
 `components/combined-model-selector.tsx`, `components/hosts/host-picker.tsx`
 (including `components/hosts/host-filter.tsx`), `components/branch-switcher.tsx`,
 `components/left-sidebar.tsx`, `components/ui/select-field.tsx` (schedule form),

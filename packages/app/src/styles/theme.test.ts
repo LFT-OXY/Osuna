@@ -314,6 +314,17 @@ describe("Default palette", () => {
     expect(darkTheme.colors.borderComposer).toBe("rgba(245, 245, 245, 0.09)");
   });
 
+  it("fills the thinking slider with a blue-to-purple fallback from the palette", () => {
+    expect(lightTheme.colors).toMatchObject({
+      thinkingGradientFrom: "#3b82f6",
+      thinkingGradientTo: "#9333ea",
+    });
+    expect(darkTheme.colors).toMatchObject({
+      thinkingGradientFrom: "#60a5fa",
+      thinkingGradientTo: "#a855f7",
+    });
+  });
+
   it("draws card row dividers at half the border alpha", () => {
     expect(darkTheme.colors.borderCardRow).toBe("rgba(25, 25, 25, 0.5)");
     expect(lightTheme.colors.borderCardRow).toBe("rgba(228, 228, 231, 0.5)");
@@ -455,6 +466,8 @@ const REDESIGN_ROLES = [
   "borderComposer",
   "shadowComposer",
   "insetHighlight",
+  "thinkingGradientFrom",
+  "thinkingGradientTo",
   "surfaceGlass",
   "surfaceDialogFooter",
   "surfaceWarning",
