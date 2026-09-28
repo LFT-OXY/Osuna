@@ -429,3 +429,42 @@ Command menu 与 @ 列表面板改用 Composer 表面，去底边与向下投影
 ### Status
 
 [OK] **Completed**
+
+
+## Session 15: Skill chip 工单 03：开头退格删除、悬停提示与读屏名称，归档任务
+<!-- atw-session: v=2 fp=6cdff8c347040111 -->
+
+**Date**: 2026-09-29
+**Task**: Skill chip 工单 03：开头退格删除、悬停提示与读屏名称，归档任务
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+Skill chip 子任务三张工单全部完成并归档。本次做工单 03：光标在正文开头无选区时退格删最后一个 chip（Web keydown / 原生 onKeyPress 只转 Backspace，锁定时不删）；chip 悬停 tooltip 显示全名与描述；读屏名 Skill：名字，Web 挂 role=group、原生挂名字 Text，九种语言文案；Attachment tray 抽到 composer/attachment-tray.tsx 作 browser 测试缝。前三个提交为工单 01/02 与 24px 方角 pill 视觉调整，此前未记日志。
+
+### Main Changes
+
+- 新增 resolveSkillChipBackspace、ComposerAttachmentTray、composer.attachments.skillChip
+- spec：component-guidelines 新增 Accessible names 与 tooltip 悬停包络；testing 补 browser 项目加载不了 Composer/MessageInput 的测试缝
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bf80f7c27` | feat(app): Command menu 选中 skill 变成 Skill chip，发送时拼回 /name 前缀 |
+| `7587a8b15` | feat(app): Skill chip 随草稿持久化，发送失败恢复成 chip |
+| `578f04533` | style(app): Skill chip 改为 24px 小号方角 pill，× 替换图标位置 |
+| `8625cc6f9` | feat(app): Skill chip 支持开头退格删除、悬停提示与读屏名称 |
+
+### Testing
+
+- [OK] skill-chips 单测、submit/state/autocomplete 单测、skill-chip.browser.test.tsx 4 条，typecheck/lint 通过；Electron 实测退格/悬停/AX 树 group: Skill：atw-tdd，浅深色截图；用户手测通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 父任务 09-28-composer-slash-revamp 整体验收：Electron 与一个原生端各走一遍新 agent → / → 选 skill → 发送并截图；补原生常驻 × 截图，真机确认 Android 退格与选区时序

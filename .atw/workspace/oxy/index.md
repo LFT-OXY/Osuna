@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 14
-- **Last Active**: 2026-09-28
+- **Total Sessions**: 15
+- **Last Active**: 2026-09-29
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~431 | Active |
+| `journal-1.md` | ~470 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 15 | 2026-09-29 | Skill chip 工单 03：开头退格删除、悬停提示与读屏名称，归档任务 | `bf80f7c27`, `7587a8b15`, `578f04533`, `8625cc6f9` | `main` |
 | 14 | 2026-09-28 | 斜杠菜单美化：面板贴合 Composer 顶边（ticket 02） | `411d4f68c` | `main` |
 | 13 | 2026-09-28 | 斜杠指令首开提速：工单 04 其他 provider 不为列表起进程 | `7360f4787` | `main` |
 | 12 | 2026-09-28 | 美化问题选择卡片 | `9af4490f8`, `d24393f99` | `main` |
