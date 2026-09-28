@@ -1,13 +1,4 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-  type RefObject,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import {
@@ -42,7 +33,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { resolveProviderDefinition, resolveProviderLabel } from "@/utils/provider-definitions";
 import { mergeProviderPreferences, useFormPreferences } from "@/hooks/use-form-preferences";
-import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import {
   AgentModeControl,
   useLiveAgentModeControl,
@@ -90,6 +81,7 @@ import { AgentProviderControl } from "@/composer/agent-controls/provider-control
 import { getProviderBrandColor } from "@/components/provider-icons";
 import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
 import { ThinkingPicker } from "@/composer/agent-controls/thinking-picker";
+import { resolveThinkingControlState } from "@/composer/agent-controls/thinking";
 import {
   useAgentProfileEditor,
   useAgentProfilePicker,
@@ -100,7 +92,7 @@ import {
   type DraftAgentProfileControls,
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
-import { ICON_SIZE, type Theme } from "@/styles/theme";
+import type { Theme } from "@/styles/theme";
 
 interface AgentControlOption {
   id: string;
@@ -270,8 +262,6 @@ function getToggleFeatureIcon(feature: AgentFeature): AgentControlIcon {
 }
 
 const ThemedSettings2 = withUnistyles(Settings2);
-const ThemedThinkingIcon = withUnistyles(ThinkingIcon);
-const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 type ActiveSheet = "thinking" | "features" | null;
@@ -542,14 +532,14 @@ function ControlledAgentControls({
   // 紧凑布局的 provider 行在 Agent controls sheet 里，这里只管桌面 toolbar 上的图标按钮。
   const hasProviderControl = !isCompact && (provider.length > 0 || providerMenu !== undefined);
   const canSelectModel = Boolean(onSelectModel);
-  const canSelectThinking = Boolean(
-    onSelectThinkingOption && thinkingOptions && thinkingOptions.length > 0,
-  );
-
   const formattedThinkingOptions = useMemo(
     () => toThinkingControlOptions(thinkingOptions),
     [thinkingOptions],
   );
+  // 只有 1 档时触发器照常显示档位名，但置灰、点不开。
+  const thinkingControlState = resolveThinkingControlState(formattedThinkingOptions.length);
+  const canSelectThinking =
+    thinkingControlState === "slider" && onSelectThinkingOption !== undefined;
   const displayThinking = findOptionLabel(
     formattedThinkingOptions,
     selectedThinkingOptionId,
@@ -579,18 +569,18 @@ function ControlledAgentControls({
     () => ({
       hasProvider: hasProviderControl,
       hasModel: canSelectModel,
-      hasThinking: canSelectThinking,
+      hasThinking: thinkingControlState !== "hidden",
       hasMode: modeControl !== null && modeControl !== undefined,
       features: featureControls,
       fontScale,
     }),
     [
       canSelectModel,
-      canSelectThinking,
       featureControls,
       fontScale,
       hasProviderControl,
       modeControl,
+      thinkingControlState,
     ],
   );
   const presentation = useMemo(() => resolveComposerControlPresentation(density), [density]);
@@ -644,18 +634,6 @@ function ControlledAgentControls({
     [formattedThinkingOptions],
   );
 
-  const renderThinkingOption = useCallback(
-    (args: { option: ComboboxOption; selected: boolean; active: boolean; onPress: () => void }) => (
-      <ThinkingComboboxOption
-        option={args.option}
-        selected={args.selected}
-        active={args.active}
-        onPress={args.onPress}
-      />
-    ),
-    [],
-  );
-
   const handleOpenChange = useCallback(
     (selector: AgentControlSelector) =>
       buildOpenChangeHandler(selector, setOpenSelector, onDropdownClose),
@@ -701,14 +679,6 @@ function ControlledAgentControls({
     setActiveSheet(null);
     if (!isCompact) onDropdownClose?.();
   }, [isCompact, onDropdownClose]);
-
-  const handleSelectThinkingAndClose = useCallback(
-    (thinkingOptionId: string) => {
-      onSelectThinkingOption?.(thinkingOptionId);
-      setActiveSheet(null);
-    },
-    [onSelectThinkingOption],
-  );
 
   const handleSheetModelSelect = useCallback(
     (nextProviderId: string, modelId: string) => {
@@ -769,7 +739,6 @@ function ControlledAgentControls({
             handleThinkingOpenChange={handleThinkingOpenChange}
             handleOpenChange={handleOpenChange}
             handleNestedOpenChange={handleSheetOpenChange}
-            renderThinkingOption={renderThinkingOption}
             modeControl={modeControl}
             presentation={presentation}
             glyphSize={layoutContextValue.glyphSize}
@@ -811,9 +780,7 @@ function ControlledAgentControls({
             handleCloseSheet={handleCloseSheet}
             handleSheetModelSelect={handleSheetModelSelect}
             handleThinkingSelect={handleThinkingSelect}
-            handleSelectThinkingAndClose={handleSelectThinkingAndClose}
             handleOpenChange={handleSheetOpenChange}
-            renderThinkingOption={renderThinkingOption}
             modeControl={modeControl}
             glyphSize={layoutContextValue.glyphSize}
             modelSelectorServerId={modelSelectorServerId}
@@ -861,12 +828,6 @@ interface DesktopAgentControlsContentProps {
   handleThinkingOpenChange: (open: boolean) => void;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   handleNestedOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
-  renderThinkingOption: (args: {
-    option: ComboboxOption;
-    selected: boolean;
-    active: boolean;
-    onPress: () => void;
-  }) => ReactElement;
   modeControl?: AgentModeControlValue | null;
   presentation: ComposerControlPresentation;
   glyphSize: number;
@@ -914,7 +875,6 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     handleThinkingOpenChange,
     handleOpenChange,
     handleNestedOpenChange,
-    renderThinkingOption,
     modeControl,
     presentation,
     glyphSize,
@@ -1027,8 +987,6 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
             onOpenChange={handleThinkingOpenChange}
             anchorRef={thinkingAnchorRef}
             onSelect={handleThinkingSelect}
-            onSelectFromList={handleThinkingSelect}
-            renderOption={renderThinkingOption}
           />
         </>
       ) : null}
@@ -1123,14 +1081,7 @@ interface SheetAgentControlsContentProps {
   handleCloseSheet: () => void;
   handleSheetModelSelect: (providerId: string, modelId: string) => void;
   handleThinkingSelect: (thinkingOptionId: string) => void;
-  handleSelectThinkingAndClose: (thinkingOptionId: string) => void;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
-  renderThinkingOption: (args: {
-    option: ComboboxOption;
-    selected: boolean;
-    active: boolean;
-    onPress: () => void;
-  }) => ReactElement;
   modeControl?: AgentModeControlValue | null;
   glyphSize: number;
   modelSelectorServerId: string | null;
@@ -1170,9 +1121,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     handleCloseSheet,
     handleSheetModelSelect,
     handleThinkingSelect,
-    handleSelectThinkingAndClose,
     handleOpenChange,
-    renderThinkingOption,
     modeControl,
     glyphSize,
     modelSelectorServerId,
@@ -1222,8 +1171,6 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
             onOpenChange={handleThinkingSheetOpenChange}
             anchorRef={thinkingAnchorRef}
             onSelect={handleThinkingSelect}
-            onSelectFromList={handleSelectThinkingAndClose}
-            renderOption={renderThinkingOption}
           />
         </>
       ) : null}
@@ -1521,32 +1468,6 @@ function SheetFeatureItem({
   return null;
 }
 
-function ThinkingComboboxOption({
-  option,
-  selected,
-  active,
-  onPress,
-}: {
-  option: ComboboxOption;
-  selected: boolean;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const leadingSlot = useMemo(
-    () => <ThemedThinkingIcon size={ICON_SIZE.md} uniProps={iconForegroundMapping} />,
-    [],
-  );
-  return (
-    <ComboboxItem
-      label={option.label}
-      selected={selected}
-      active={active}
-      onPress={onPress}
-      leadingSlot={leadingSlot}
-    />
-  );
-}
-
 export const AgentControls = memo(function AgentControls({
   agentId,
   serverId,
@@ -1802,7 +1723,7 @@ export const AgentControls = memo(function AgentControls({
         onEditAgentProfiles={handleEditAgentProfiles}
         onCreateAgentProfile={profileActions.create}
         onEditAgentProfile={profileActions.edit}
-        thinkingOptions={thinkingOptions.length > 1 ? thinkingOptions : undefined}
+        thinkingOptions={thinkingOptions.length > 0 ? thinkingOptions : undefined}
         selectedThinkingOptionId={modelSelection.selectedThinkingId ?? undefined}
         onSelectThinkingOption={handleSelectThinkingOption}
         features={agent.features}

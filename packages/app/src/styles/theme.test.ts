@@ -325,6 +325,11 @@ describe("Default palette", () => {
     });
   });
 
+  it("outlines the white thinking slider thumb only in light", () => {
+    expect(lightTheme.colors.thinkingThumbBorder).toBe(lightTheme.colors.border);
+    expect(darkTheme.colors.thinkingThumbBorder).toBe("transparent");
+  });
+
   it("draws card row dividers at half the border alpha", () => {
     expect(darkTheme.colors.borderCardRow).toBe("rgba(25, 25, 25, 0.5)");
     expect(lightTheme.colors.borderCardRow).toBe("rgba(228, 228, 231, 0.5)");
@@ -468,6 +473,7 @@ const REDESIGN_ROLES = [
   "insetHighlight",
   "thinkingGradientFrom",
   "thinkingGradientTo",
+  "thinkingThumbBorder",
   "surfaceGlass",
   "surfaceDialogFooter",
   "surfaceWarning",

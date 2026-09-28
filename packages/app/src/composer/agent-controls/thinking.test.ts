@@ -2,18 +2,25 @@ import { describe, expect, it } from "vitest";
 import { mixHexColor } from "@/utils/color";
 import {
   THINKING_BRAND_TINT,
+  resolveThinkingControlState,
   resolveThinkingGradient,
   resolveThinkingParticleIntensity,
+  resolveThinkingParticleLayout,
   resolveThinkingParticles,
   resolveThinkingStopPositions,
-  shouldUseThinkingSlider,
   snapThinkingPosition,
   stepThinkingIndex,
 } from "./thinking";
 
-describe("shouldUseThinkingSlider", () => {
-  it("uses the slider from two through six options and the list otherwise", () => {
-    expect([0, 1, 2, 6, 7].map(shouldUseThinkingSlider)).toEqual([false, false, true, true, false]);
+describe("resolveThinkingControlState", () => {
+  it("hides the control without options, locks a single option, and slides two or more", () => {
+    expect([0, 1, 2, 7, 12].map(resolveThinkingControlState)).toEqual([
+      "hidden",
+      "locked",
+      "slider",
+      "slider",
+      "slider",
+    ]);
   });
 });
 
@@ -80,15 +87,32 @@ describe("resolveThinkingParticleIntensity", () => {
 });
 
 describe("resolveThinkingParticles", () => {
-  it("adds particles and speeds them up as intensity rises", () => {
+  it("sends more particles, faster, as intensity rises", () => {
     const levels = [0, 0.25, 0.5, 0.75, 1].map(resolveThinkingParticles);
     for (let index = 1; index < levels.length; index += 1) {
       const previous = levels[index - 1]!;
       const current = levels[index]!;
       expect(current.count).toBeGreaterThan(previous.count);
-      expect(current.driftMs).toBeLessThan(previous.driftMs);
+      expect(current.travelMs).toBeLessThan(previous.travelMs);
     }
-    expect(levels[0]!.count).toBeGreaterThan(0);
+  });
+
+  it("keeps a few particles flowing at the lowest stop", () => {
+    expect(resolveThinkingParticles(0).count).toBeGreaterThan(0);
+  });
+});
+
+describe("resolveThinkingParticleLayout", () => {
+  it("starts particles at different heights inside the fill and staggers them across the cycle", () => {
+    const layouts = Array.from({ length: 8 }, (_, index) => resolveThinkingParticleLayout(index));
+    for (const layout of layouts) {
+      expect(layout.top).toBeGreaterThan(0);
+      expect(layout.top).toBeLessThan(1);
+      expect(layout.phase).toBeGreaterThanOrEqual(0);
+      expect(layout.phase).toBeLessThan(1);
+    }
+    expect(new Set(layouts.map((layout) => layout.top)).size).toBe(layouts.length);
+    expect(new Set(layouts.map((layout) => layout.phase)).size).toBe(layouts.length);
   });
 });
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   StyleSheet as RNStyleSheet,
+  Text as RNText,
   View,
   type AccessibilityActionEvent,
   type LayoutChangeEvent,
@@ -10,15 +11,15 @@ import Animated, {
   cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
   withRepeat,
+  withSequence,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Text } from "@/components/ui/text";
 import { getProviderBrandColor } from "@/components/provider-icons";
 import { useReduceMotionEnabled } from "@/hooks/use-reduce-motion-enabled";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
@@ -48,13 +49,17 @@ export interface ThinkingSliderProps {
   onSelect: (id: string) => void;
 }
 
-const TRACK_HEIGHT = 24;
-const THUMB_SIZE = 18;
-const TRACK_PADDING = (TRACK_HEIGHT - THUMB_SIZE) / 2;
-const STOP_DOT_SIZE = 4;
+const TRACK_HEIGHT = 32;
+const THUMB_SIZE = 40;
+// 最低档的滑块左侧留出一个轨道高度的填充，光点在最低档也有地方流动。
+const FLOW_MIN_WIDTH = TRACK_HEIGHT;
+const STOP_START = FLOW_MIN_WIDTH + THUMB_SIZE / 2;
+const STOP_END_INSET = THUMB_SIZE / 2;
+const STOP_DOT_SIZE = 5;
 const THUMB_TRAVEL_MS = 160;
-const PARTICLE_DRIFT_X = 6;
-const PARTICLE_DRIFT_Y = 3;
+// 光点在一趟里淡入、淡出所占的比例。
+const PARTICLE_FADE_IN = 0.12;
+const PARTICLE_FADE_OUT = 0.2;
 
 const ADJUSTABLE_ACTIONS = [{ name: "increment" }, { name: "decrement" }] as const;
 
@@ -68,8 +73,14 @@ function toProgress(index: number, optionCount: number): number {
   return resolveThinkingStopPositions(optionCount)[index] ?? 0;
 }
 
+// 滑块中心的横坐标；填充的右端和光点流的终点都由它推出。
+function thumbCenterX(progress: number, rail: number): number {
+  "worklet";
+  return STOP_START + progress * rail;
+}
+
 function toRailWidth(trackWidth: number): number {
-  return Math.max(0, trackWidth - TRACK_PADDING * 2 - THUMB_SIZE);
+  return Math.max(0, trackWidth - STOP_START - STOP_END_INSET);
 }
 
 function ThinkingFillGradient({
@@ -98,37 +109,42 @@ const ThemedThinkingFillGradient = withUnistyles(ThinkingFillGradient);
 
 function ThinkingParticle({
   layout,
-  driftMs,
+  travelMs,
+  progress,
+  rail,
 }: {
   layout: ThinkingParticleLayout;
-  driftMs: number;
+  travelMs: number;
+  progress: SharedValue<number>;
+  rail: SharedValue<number>;
 }) {
   const cycle = useSharedValue(0);
 
+  // 换档改变速度时从当前位置接着走完这一趟，光点不会一起跳回左端。
   useEffect(() => {
-    cycle.value = 0;
-    cycle.value = withDelay(
-      Math.round(layout.phase * driftMs),
-      withRepeat(withTiming(1, { duration: driftMs, easing: Easing.linear }), -1, false),
+    const trip = { duration: travelMs, easing: Easing.linear };
+    cycle.value = withSequence(
+      withTiming(1, { ...trip, duration: Math.round((1 - cycle.value) * travelMs) }),
+      withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, trip)), -1, false),
     );
     return () => cancelAnimation(cycle);
-  }, [cycle, driftMs, layout.phase]);
+  }, [cycle, travelMs]);
 
+  // 从填充区左端走到滑块左缘，走完再从左端出发；途中按自己的频率闪烁。
   const animatedStyle = useAnimatedStyle(() => {
-    const turn = cycle.value * Math.PI * 2;
+    const trip = (cycle.value + layout.phase) % 1;
+    const flowWidth = thumbCenterX(progress.value, rail.value) - THUMB_SIZE / 2;
+    const edge = Math.min(1, trip / PARTICLE_FADE_IN, (1 - trip) / PARTICLE_FADE_OUT);
+    const twinkle = 0.5 + 0.5 * Math.sin(trip * layout.twinkles * Math.PI * 2);
     return {
-      opacity: 0.2 + 0.8 * Math.sin(cycle.value * Math.PI),
-      transform: [
-        { translateX: (cycle.value - 0.5) * PARTICLE_DRIFT_X },
-        { translateY: Math.sin(turn) * PARTICLE_DRIFT_Y },
-      ],
+      opacity: edge * (0.35 + 0.65 * twinkle),
+      transform: [{ translateX: trip * flowWidth }, { scale: 0.6 + 0.6 * twinkle }],
     };
   });
 
   const placement = useMemo(
     () => ({
-      left: `${layout.left * 100}%` as const,
-      top: `${layout.top * 100}%` as const,
+      top: layout.top * TRACK_HEIGHT - layout.size / 2,
       width: layout.size,
       height: layout.size,
       borderRadius: layout.size / 2,
@@ -145,11 +161,21 @@ function ThinkingParticle({
   );
 }
 
-function ThinkingParticles({ index, optionCount }: { index: number; optionCount: number }) {
-  const { count, driftMs } = resolveThinkingParticles(
+function ThinkingParticles({
+  index,
+  optionCount,
+  progress,
+  rail,
+}: {
+  index: number;
+  optionCount: number;
+  progress: SharedValue<number>;
+  rail: SharedValue<number>;
+}) {
+  const { count, travelMs } = resolveThinkingParticles(
     resolveThinkingParticleIntensity(index, optionCount),
   );
-  // 光点的序号就是它的身份：位置由序号算出，数量变化时只增删末尾。
+  // 光点的序号就是它的身份：参数由序号算出，数量变化时只增删末尾。
   const particles = useMemo(
     () =>
       Array.from({ length: count }, (_, ordinal) => ({
@@ -161,7 +187,13 @@ function ThinkingParticles({ index, optionCount }: { index: number; optionCount:
   return (
     <>
       {particles.map((particle) => (
-        <ThinkingParticle key={particle.id} layout={particle.layout} driftMs={driftMs} />
+        <ThinkingParticle
+          key={particle.id}
+          layout={particle.layout}
+          travelMs={travelMs}
+          progress={progress}
+          rail={rail}
+        />
       ))}
     </>
   );
@@ -208,8 +240,9 @@ export function ThinkingSlider({
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: progress.value * rail.value }],
   }));
+  // 填充的右端圆角和滑块同心，藏在滑块下面。
   const fillStyle = useAnimatedStyle(() => ({
-    width: TRACK_PADDING * 2 + THUMB_SIZE + progress.value * rail.value,
+    width: thumbCenterX(progress.value, rail.value) + TRACK_HEIGHT / 2,
   }));
 
   const commit = useCallback(
@@ -234,10 +267,7 @@ export function ThinkingSlider({
 
   const gesture = useMemo(() => {
     const snapAt = (x: number) =>
-      snapThinkingPosition(
-        railWidth > 0 ? (x - TRACK_PADDING - THUMB_SIZE / 2) / railWidth : 0,
-        optionCount,
-      );
+      snapThinkingPosition(railWidth > 0 ? (x - STOP_START) / railWidth : 0, optionCount);
     // 拖动只预览吸附后的档，松手才提交；点击在抬起时直接提交最近一档。
     const pan = Gesture.Pan()
       .runOnJS(true)
@@ -286,14 +316,19 @@ export function ThinkingSlider({
     [provider],
   );
 
-  const particleFieldStyle = useMemo(() => ({ width: trackWidth }), [trackWidth]);
+  const brandColor = getProviderBrandColor(provider);
   const stopPositions = resolveThinkingStopPositions(optionCount);
 
   return (
     <View style={[styles.panel, disabled && styles.panelDisabled]} testID="agent-thinking-slider">
-      <Text variant="body" weight="medium" testID="agent-thinking-slider-value">
+      {/* 档位名跟填充终点色，品牌色不在 Text 原语的主题文字色里，这里是它的例外。 */}
+      <RNText
+        style={styles.value(brandColor)}
+        numberOfLines={1}
+        testID="agent-thinking-slider-value"
+      >
         {displayLabel}
-      </Text>
+      </RNText>
       <GestureDetector gesture={gesture}>
         <View
           style={styles.track}
@@ -317,9 +352,12 @@ export function ThinkingSlider({
               <ThemedThinkingFillGradient gradientId={gradientId} uniProps={gradientMapping} />
             </View>
             {reduceMotion ? null : (
-              <View style={[motionStyles.particleField, particleFieldStyle]}>
-                <ThinkingParticles index={displayIndex} optionCount={optionCount} />
-              </View>
+              <ThinkingParticles
+                index={displayIndex}
+                optionCount={optionCount}
+                progress={progress}
+                rail={rail}
+              />
             )}
           </Animated.View>
           {stopPositions.map((position, index) =>
@@ -332,7 +370,7 @@ export function ThinkingSlider({
                   styles.stopDot,
                   index < displayIndex ? styles.stopDotFilled : styles.stopDotEmpty,
                   inlineUnistylesStyle({
-                    left: TRACK_PADDING + THUMB_SIZE / 2 + position * railWidth - STOP_DOT_SIZE / 2,
+                    left: STOP_START + position * railWidth - STOP_DOT_SIZE / 2,
                   }),
                 ]}
               />
@@ -360,20 +398,15 @@ const motionStyles = RNStyleSheet.create({
   fillContent: {
     ...RNStyleSheet.absoluteFillObject,
   },
-  particleField: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-  },
   particle: {
     position: "absolute",
+    left: 0,
     backgroundColor: baseColors.white,
   },
   thumbFrame: {
     position: "absolute",
-    left: TRACK_PADDING,
-    top: TRACK_PADDING,
+    left: STOP_START - THUMB_SIZE / 2,
+    top: (TRACK_HEIGHT - THUMB_SIZE) / 2,
     width: THUMB_SIZE,
     height: THUMB_SIZE,
   },
@@ -381,11 +414,17 @@ const motionStyles = RNStyleSheet.create({
 
 const styles = StyleSheet.create((theme) => ({
   panel: {
-    gap: theme.spacing[2],
+    gap: theme.spacing[3],
   },
   panelDisabled: {
     opacity: theme.opacity[50],
   },
+  value: (brandColor: string | null) => ({
+    ...theme.typeScale["title-lg"],
+    fontWeight: theme.fontWeight.semibold,
+    textAlign: "center" as const,
+    color: brandColor ?? theme.colors.thinkingGradientTo,
+  }),
   track: {
     height: TRACK_HEIGHT,
     borderRadius: theme.radius.full,
@@ -411,6 +450,8 @@ const styles = StyleSheet.create((theme) => ({
     height: THUMB_SIZE,
     borderRadius: theme.radius.full,
     backgroundColor: theme.colors.palette.white,
-    boxShadow: `0 1px 3px ${theme.colors.shadowPopover}`,
+    borderWidth: 1,
+    borderColor: theme.colors.thinkingThumbBorder,
+    boxShadow: `0 2px 6px ${theme.colors.shadowPopover}`,
   },
 }));

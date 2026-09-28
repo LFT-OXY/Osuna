@@ -226,7 +226,7 @@ describe("ThinkingSlider", () => {
     expect(track.getAttribute("aria-disabled")).toBe("true");
   });
 
-  it("floats particles in the fill, more of them at higher stops", () => {
+  it("streams particles through the fill, more of them at higher stops", () => {
     const low = mountSlider({ initialId: "low" });
     const high = mountSlider({ initialId: "xhigh" });
 

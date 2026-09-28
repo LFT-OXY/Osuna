@@ -103,7 +103,23 @@ async function expectThinkingOptionsFit(page: Page): Promise<void> {
 
   const popup = page.getByTestId("combobox-desktop-container").last();
   await expect(popup).toBeVisible({ timeout: 10_000 });
-  await expectNoTruncation(popup);
+  const value = popup.getByTestId("agent-thinking-slider-value");
+  const track = popup.getByTestId("agent-thinking-slider-track");
+  await expect(value).toBeVisible();
+  await expect(track).toBeVisible();
+  await expectNoTruncation(value);
+
+  // 档位名和整条滑条都要落在浮层里，不能被浮层边缘裁掉。
+  const popupBox = await popup.boundingBox();
+  if (!popupBox) throw new Error("Thinking popover has no layout box");
+  for (const part of [value, track]) {
+    const box = await part.boundingBox();
+    if (!box) throw new Error("Thinking slider part has no layout box");
+    expect(box.x).toBeGreaterThanOrEqual(popupBox.x);
+    expect(box.y).toBeGreaterThanOrEqual(popupBox.y);
+    expect(box.x + box.width).toBeLessThanOrEqual(popupBox.x + popupBox.width);
+    expect(box.y + box.height).toBeLessThanOrEqual(popupBox.y + popupBox.height);
+  }
 
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("combobox-desktop-container")).toHaveCount(0, { timeout: 5_000 });

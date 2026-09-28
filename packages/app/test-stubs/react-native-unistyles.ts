@@ -41,9 +41,10 @@ const testTheme = {
     borderComposer: "rgba(39, 39, 42, 0.09)",
     shadowComposer: "rgba(0, 0, 0, 0.4)",
     insetHighlight: "transparent",
-    // 思考滑条的兜底渐变，取默认亮色主题的值。
+    // 思考滑条的兜底渐变与滑块描边，取默认亮色主题的值。
     thinkingGradientFrom: "#3b82f6",
     thinkingGradientTo: "#9333ea",
+    thinkingThumbBorder: "#e4e4e7",
     palette: {
       amber: { 500: "#f59e0b" },
       blue: { 300: "#93c5fd" },

@@ -252,60 +252,17 @@ async function preferFastThinkingOption(page: Page): Promise<void> {
     return;
   }
 
+  // 只有 1 档的模型触发器是禁用的，没得选。
+  if (await thinkingTrigger.isDisabled()) {
+    return;
+  }
+
   await thinkingTrigger.click();
-  // 2 到 6 档的模型打开的是滑条，其余档数仍是列表。
   const slider = page.getByTestId("agent-thinking-slider-track").first();
-  await expect(slider.or(page.getByTestId("combobox-desktop-container")).first()).toBeVisible({
-    timeout: 5000,
-  });
-  if (await slider.isVisible()) {
-    await chooseSliderThinkingOption(page, slider);
-    await page.keyboard.press("Escape");
-    await expect(slider).not.toBeVisible({ timeout: 5000 });
-    return;
-  }
-
-  const menu = page.getByTestId("agent-thinking-menu").first();
-  if (!(await menu.isVisible().catch(() => false))) {
-    return;
-  }
-
-  let selected = false;
-  for (const label of PREFERRED_FAST_THINKING_LABELS) {
-    const option = menu
-      .getByRole("button", { name: new RegExp(`^${escapeRegex(label)}$`, "i") })
-      .first();
-    if (await option.isVisible().catch(() => false)) {
-      await option.click({ force: true });
-      selected = true;
-      break;
-    }
-  }
-
-  if (!selected) {
-    const options = menu.getByRole("button");
-    const count = await options.count();
-    for (let index = 0; index < count; index += 1) {
-      const option = options.nth(index);
-      const label = ((await option.innerText().catch(() => "")) ?? "").trim();
-      if (!label) {
-        continue;
-      }
-      if (label.toLowerCase() === currentThinkingLabel) {
-        continue;
-      }
-      await option.click({ force: true });
-      selected = true;
-      break;
-    }
-  }
-
-  if (!selected) {
-    await page.keyboard.press("Escape").catch(() => undefined);
-    return;
-  }
-
-  await expect(menu).not.toBeVisible({ timeout: 5000 });
+  await expect(slider).toBeVisible({ timeout: 5000 });
+  await chooseSliderThinkingOption(page, slider);
+  await page.keyboard.press("Escape");
+  await expect(slider).not.toBeVisible({ timeout: 5000 });
 }
 
 export interface AgentConfig {
