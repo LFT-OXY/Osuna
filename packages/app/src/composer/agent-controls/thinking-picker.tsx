@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { ThinkingSlider } from "@/composer/agent-controls/thinking-slider";
 
-const SLIDER_POPOVER_WIDTH = 320;
+const SLIDER_POPOVER_WIDTH = 220;
 const NO_OPTIONS: ComboboxOption[] = [];
 
 export interface ThinkingPickerProps {
@@ -68,7 +68,7 @@ export function ThinkingPicker({
 
 const styles = StyleSheet.create((theme) => ({
   popoverBody: {
-    padding: theme.spacing[4],
+    padding: theme.spacing[3],
   },
   sheetBody: {
     paddingHorizontal: theme.spacing[6],

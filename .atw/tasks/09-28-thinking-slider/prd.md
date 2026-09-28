@@ -62,7 +62,7 @@
 - **待回写的显示**：运行中的 Agent 要等 daemon 回写才换选中；这期间滑条显示刚提交的档（组件内的显示状态，不进 store、不持久化）。父级换了选中就作废；回写前退回原档时清掉待定并照常提交。
 - **无障碍**：滑条暴露为 adjustable 或 slider 角色，值文本为当前档位名，支持 increment 和 decrement 操作；Escape 关闭浮层，不改变选择。
 - **协议和 daemon 不变**。
-- **模块落点**：纯函数在 `composer/agent-controls/thinking.ts`，滑条在 `thinking-slider.tsx`，浮层外壳在 `thinking-picker.tsx`（`surface: "toolbar" | "sheet"`，桌面浮层和手机推入页共用），Web 方向键在 `thinking-slider-keyboard.web.ts`。兜底 token 为 `thinkingGradientFrom` / `thinkingGradientTo`，亮色 `blue[500]→purple[600]`，暗色 `blue[400]→purple[500]`；滑块描边 token 为 `thinkingThumbBorder`（亮色 `border`，暗色透明）。轨道 32px、滑块 40px；第一档离轨道左端一个轨道高度，最低档滑块左侧总有一小段填充供光点流动。手势是 `Gesture.Race(Pan, Tap)`：Pan 移动 1px 即激活，只预览；Tap 抬起时提交。
+- **模块落点**：纯函数在 `composer/agent-controls/thinking.ts`，滑条在 `thinking-slider.tsx`，浮层外壳在 `thinking-picker.tsx`（`surface: "toolbar" | "sheet"`，桌面浮层和手机推入页共用），Web 方向键在 `thinking-slider-keyboard.web.ts`。兜底 token 为 `thinkingGradientFrom` / `thinkingGradientTo`，亮色 `blue[500]→purple[600]`，暗色 `blue[400]→purple[500]`；滑块描边 token 为 `thinkingThumbBorder`（亮色 `border`，暗色透明）。轨道 22px、滑块 28px、档位名 `body` 半粗、浮层 220 宽（验收时嫌第二版的 32/40、`title-lg`、320 宽太大，前后收小两轮；浮层仍左对齐触发器）；第一档离轨道左端一个轨道高度，最低档滑块左侧总有一小段填充供光点流动。手势是 `Gesture.Race(Pan, Tap)`：Pan 移动 1px 即激活，只预览；Tap 抬起时提交。
 
 ## Testing Decisions
 

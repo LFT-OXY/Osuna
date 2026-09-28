@@ -49,13 +49,13 @@ export interface ThinkingSliderProps {
   onSelect: (id: string) => void;
 }
 
-const TRACK_HEIGHT = 32;
-const THUMB_SIZE = 40;
+const TRACK_HEIGHT = 22;
+const THUMB_SIZE = 28;
 // 最低档的滑块左侧留出一个轨道高度的填充，光点在最低档也有地方流动。
 const FLOW_MIN_WIDTH = TRACK_HEIGHT;
 const STOP_START = FLOW_MIN_WIDTH + THUMB_SIZE / 2;
 const STOP_END_INSET = THUMB_SIZE / 2;
-const STOP_DOT_SIZE = 5;
+const STOP_DOT_SIZE = 4;
 const THUMB_TRAVEL_MS = 160;
 // 光点在一趟里淡入、淡出所占的比例。
 const PARTICLE_FADE_IN = 0.12;
@@ -414,13 +414,13 @@ const motionStyles = RNStyleSheet.create({
 
 const styles = StyleSheet.create((theme) => ({
   panel: {
-    gap: theme.spacing[3],
+    gap: theme.spacing[2],
   },
   panelDisabled: {
     opacity: theme.opacity[50],
   },
   value: (brandColor: string | null) => ({
-    ...theme.typeScale["title-lg"],
+    ...theme.typeScale.body,
     fontWeight: theme.fontWeight.semibold,
     textAlign: "center" as const,
     color: brandColor ?? theme.colors.thinkingGradientTo,
