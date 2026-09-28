@@ -1,0 +1,10 @@
+{"file": ".atw/tasks/09-28-provider-model-split/prd.md", "reason": "本任务的 spec 与验收标准"}
+{"file": ".atw/tasks/09-28-provider-model-split/research/interview-decisions.md", "reason": "访谈决策、代码现状、彩色 SVG 来源与许可"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "Combobox/菜单原语复用、hover、平台门控、i18n"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 规则，图标上色"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单元、browser、Playwright e2e 分层"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "禁用模式与验证命令"}
+{"file": ".atw/spec/guides/code-reuse-thinking-guide.md", "reason": "复用已有提供方 Combobox 与 ModelBrowser，避免新抽象"}
+{"file": "docs/design.md", "reason": "设计 token、禁止新增调色板外颜色"}
+{"file": "docs/menus.md", "reason": "popover 与 sheet 菜单引擎、折叠区"}
+{"file": "docs/glossary.md", "reason": "Provider/Model/Agent controls/Agent profile 术语"}

@@ -1,0 +1,28 @@
+{
+  "id": "provider-model-split",
+  "name": "provider-model-split",
+  "title": "拆分提供方与模型选择，并接入提供方彩色图标",
+  "description": "Composer 工具栏把提供方和模型拆成两个按钮；Composer 相关位置的提供方图标改用彩色版本，补齐品牌色表",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-28",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "569a09490676eb0fdcf699e82a40b957ce29c949"
+  }
+}

@@ -39,7 +39,7 @@ import type { SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getProviderBrandColor, getProviderIcon } from "@/components/provider-icons";
+import { resolveProviderGlyph, type ProviderIconTone } from "@/components/provider-icons";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import {
@@ -210,9 +210,6 @@ interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "sc
   rootBrowseContent?: React.ReactNode;
 }
 
-// brand：有品牌色的 provider 用品牌色，其余用前景色（Composer toolbar）。
-type ProviderGlyphTone = "muted" | "foreground" | "brand";
-
 export function ModelProviderGlyph({
   provider,
   serverId,
@@ -222,19 +219,12 @@ export function ModelProviderGlyph({
   provider: string;
   serverId: string | null;
   size: number;
-  tone?: ProviderGlyphTone;
+  tone?: ProviderIconTone;
 }) {
-  const Icon = getProviderIcon(provider, serverId);
-  return <Icon size={size} color={resolveProviderGlyphColor(provider, tone)} />;
-}
-
-function resolveProviderGlyphColor(provider: string, tone: ProviderGlyphTone): string {
-  if (tone === "brand") {
-    return getProviderBrandColor(provider) ?? styles.providerIconForeground.color;
-  }
-  return tone === "foreground"
-    ? styles.providerIconForeground.color
-    : styles.providerIconMuted.color;
+  const { Icon, brandColor } = resolveProviderGlyph({ provider, serverId, tone });
+  const themeColor =
+    tone === "muted" ? styles.providerIconMuted.color : styles.providerIconForeground.color;
+  return <Icon size={size} color={brandColor ?? themeColor} />;
 }
 
 function HeaderSettingsIcon({ disabled }: { disabled: boolean }) {
@@ -695,7 +685,14 @@ function ModelRow({
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const leadingSlot = useMemo(
-    () => <ModelProviderGlyph provider={row.provider} serverId={serverId} size={ICON_SIZE.sm} />,
+    () => (
+      <ModelProviderGlyph
+        provider={row.provider}
+        serverId={serverId}
+        size={ICON_SIZE.sm}
+        tone="brand"
+      />
+    ),
     [row.provider, serverId],
   );
 
@@ -1016,7 +1013,14 @@ function GroupProviderButton({
     );
   }, [selection, t]);
   const leadingSlot = useMemo(
-    () => <ModelProviderGlyph provider={provider.id} serverId={serverId} size={ICON_SIZE.sm} />,
+    () => (
+      <ModelProviderGlyph
+        provider={provider.id}
+        serverId={serverId}
+        size={ICON_SIZE.sm}
+        tone="brand"
+      />
+    ),
     [provider.id, serverId],
   );
   const trailingSlot = useMemo(
