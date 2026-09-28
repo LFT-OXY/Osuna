@@ -3,7 +3,7 @@
   "name": "question-card-restyle",
   "title": "美化问题选择卡片",
   "description": "QuestionFormCard 改为编号行列表：单选点击即提交、X 忽略整组、跳过单题、自由输入原地展开",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",
