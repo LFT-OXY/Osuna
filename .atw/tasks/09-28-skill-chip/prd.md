@@ -81,13 +81,13 @@
 
 ### 视图
 
-- chip 渲染在 Attachment tray 中、排在附件之前；tray 在"有附件或有 chip"时显示。
-- 外观（不新增 token）：
-  - 底色用 `accent`，经一层不透明度 0.1 的底层实现，不影响文字不透明度；
-  - 描边是另一层 `accent` 1px 边框，不透明度 0.4（`composer/skill-chip-pill.tsx`）；
-  - 立方体图标与名字用 `accentBright`，名字 `label` 级、medium；
-  - 高度（48 + 上下描边）、`radius.md` 圆角、内边距与现有附件 pill 对齐，最宽 260，名字过长时截断。
-- ×：Web 端按 `docs/hover.md` 的规范——外层普通 View 用 `onPointerEnter` / `onPointerLeave` 作悬停包络，内部独立 Pressable 负责点击；可见性 `isHovered || isNative || isCompact`。
+- chip 渲染在 Attachment tray 中、排在附件之前；tray 在"有附件或有 chip"时显示。tray 内各项垂直居中，所以与 50 高的附件 pill 同一行时 chip 居中。
+- 外观取原型变体 B，定于 2026-09-28；原型在 `prototype/skill-chip-styles` 分支。起因是 48 高的 chip 被用户评为又大又丑。不新增 token：
+  - 小号方角 pill，总高 24（含上下 1px 描边），`radius.md` 圆角，左内边距 6、右内边距 8，最宽 260，名字过长时截断；
+  - 底色用 `accent`，经一层不透明度 0.07 的底层实现，不影响文字不透明度；
+  - 描边是另一层 `accent` 1px 边框，不透明度 0.3（`composer/skill-chip-pill.tsx`）；
+  - 立方体图标 12（`ICON_SIZE.xs`）与名字都用 `accentBright`，名字 `caption` 级（12）、medium，不带 `/`。
+- ×：不浮在 chip 外，而是替换图标的位置，尺寸相同，所以出现时 chip 宽度不变。Web 端按 `docs/hover.md` 的规范——外层普通 View 用 `onPointerEnter` / `onPointerLeave` 作悬停包络，内部独立 Pressable 负责点击；可见性 `isHovered || isNative || isCompact`，原生与紧凑布局常显 ×、不显示图标。
 - 悬停提示显示全名与描述（Web）；原生端不做长按提示。
 - 退格删除：Web 在 textarea 的 keydown、原生在 `onKeyPress` 捕获 Backspace，仅当选区起止都在 0 时删除最后一个 chip 并阻止默认行为。
 - 无障碍：chip `accessibilityLabel` 为"Skill: 名字"，× 为"移除"，文案进 i18n。× 的文案 `composer.attachments.removeSkill` 已随工单 01 加入。

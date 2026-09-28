@@ -89,7 +89,9 @@ cd packages/app && npx playwright test --project=browser e2e/browser/agent-messa
 git diff --name-only | grep -E '\.(ts|tsx)$' | xargs npm run lint --   # zsh does not word-split $FILES
 ```
 
-A control revealed on hover and hidden with `opacity: 0` + `pointerEvents: "none"` (the attachment and Skill chip `×`) fails Playwright's `locator.click()` with "… intercepts pointer events": the actionability check runs before the hover takes effect. Hover the envelope, then `page.mouse.move` onto the control's box and click with the mouse.
+A control revealed on hover and hidden with `opacity: 0` + `pointerEvents: "none"` (the attachment `×`) fails Playwright's `locator.click()` with "… intercepts pointer events": the actionability check runs before the hover takes effect. Hover the envelope, then `page.mouse.move` onto the control's box and click with the mouse. The Skill chip `×` is not in the DOM until hover (it replaces the cube icon), so hover the chip first, then locate `composer-skill-chip-remove`.
+
+A screenshot taken over CDP from the dev Electron window ends the hover: the hovered control is present before `Page.captureScreenshot` and gone after it. You cannot screenshot a hover state that way; assert it from the DOM instead.
 
 A schema edit is invisible to client and app tests until `npm run build:client` runs (`CLAUDE.md` "Build workspace packages"); the symptom is a passing protocol test next to a client test that cannot see the new field.
 

@@ -2770,6 +2770,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
   },
   attachmentTray: {
     flexDirection: "row",
+    alignItems: "center",
     gap: theme.spacing[2],
     flexWrap: "wrap",
   },
