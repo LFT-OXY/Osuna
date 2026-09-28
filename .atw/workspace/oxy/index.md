@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-09-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~408 | Active |
+| `journal-1.md` | ~431 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-09-28 | 斜杠菜单美化：面板贴合 Composer 顶边（ticket 02） | `411d4f68c` | `main` |
 | 13 | 2026-09-28 | 斜杠指令首开提速：工单 04 其他 provider 不为列表起进程 | `7360f4787` | `main` |
 | 12 | 2026-09-28 | 美化问题选择卡片 | `9af4490f8`, `d24393f99` | `main` |
 | 11 | 2026-09-28 | 思考滑条第二版与收尺寸 | `757ba8a29`, `6f25eebc6`, `e233cbbcd` | `main` |

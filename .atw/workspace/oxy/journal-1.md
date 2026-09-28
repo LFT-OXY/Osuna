@@ -406,3 +406,26 @@ Codex/Pi/OpenCode/ACP/OMP/插件 provider 统一走指令目录：未运行或�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 14: 斜杠菜单美化：面板贴合 Composer 顶边（ticket 02）
+<!-- atw-session: v=2 fp=10856da62c98077c -->
+
+**Date**: 2026-09-28
+**Task**: 斜杠菜单美化：面板贴合 Composer 顶边（ticket 02）
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+Command menu 与 @ 列表面板改用 Composer 表面，去底边与向下投影，左右内缩 24，底边齐平落在 Composer 顶边（Portal 在上无法压到其后，规格按用户决定修订）；底部 16 渐隐：Web CSS 遮罩、原生 surfaceCard SVG 渐变，滚动跟随避开渐隐区（TDD）；最大高度 300。两轮双轴审查无硬违规；Electron 浅/深/@ 截图留证，用户实测通过；原生端截图未拍（本机无模拟器）。遗留：01 的命令名早于描述被截断（/compa…），未建票。任务已归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `411d4f68c` | feat(app): Command menu 面板贴合 Composer 顶边，底部渐隐 |
+
+### Status
+
+[OK] **Completed**
