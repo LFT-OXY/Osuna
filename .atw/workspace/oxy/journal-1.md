@@ -359,3 +359,27 @@ dev 桌面端深浅色目检 README.zh-CN.md（居中、徽章横排、NOTE 提�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 12: 美化问题选择卡片
+<!-- atw-session: v=2 fp=d0a6be8fe74aacc4 -->
+
+**Date**: 2026-09-28
+**Task**: 美化问题选择卡片
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+QuestionFormCard 改为编号行列表：单选点击即作答（单题直接提交、多题跳到下一道未处理题），右上角 X 忽略整组、右下角跳过单题，其他...行原地展开为输入框，多选勾选后确认；推进规则放进 question-form-card-core 并补单测；按钮换 Button、去掉 useUnistyles、纯输入题用 FormTextInput、其他行复用 control-geometry 四态；9 个 locale 补 skip；mock agent 增加单选带其他/多选题型并把收到的答案写成助手消息，e2e 断言实际答案。经 6 轮双轴审查，spec 回写悬停外框坑与 mock 问题提示词约定。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9af4490f8` | feat(app): 问题卡片改为编号行列表，单选点击即作答 |
+| `d24393f99` | chore(task): question-card-restyle 进入验收 |
+
+### Status
+
+[OK] **Completed**
