@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 13
 - **Last Active**: 2026-09-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~385 | Active |
+| `journal-1.md` | ~408 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-09-28 | 斜杠指令首开提速：工单 04 其他 provider 不为列表起进程 | `7360f4787` | `main` |
 | 12 | 2026-09-28 | 美化问题选择卡片 | `9af4490f8`, `d24393f99` | `main` |
 | 11 | 2026-09-28 | 思考滑条第二版与收尺寸 | `757ba8a29`, `6f25eebc6`, `e233cbbcd` | `main` |
 | 10 | 2026-09-28 | 工单 04：手机 Agent controls sheet 提供方行 | `68a035516` | `main` |

@@ -383,3 +383,26 @@ QuestionFormCard 改为编号行列表：单选点击即作答（单题直接提
 ### Status
 
 [OK] **Completed**
+
+
+## Session 13: 斜杠指令首开提速：工单 04 其他 provider 不为列表起进程
+<!-- atw-session: v=2 fp=4c40625b4861c95c -->
+
+**Date**: 2026-09-28
+**Task**: 斜杠指令首开提速：工单 04 其他 provider 不为列表起进程
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+Codex/Pi/OpenCode/ACP/OMP/插件 provider 统一走指令目录：未运行或未上报时 listCommands 返回 null，不重连不起进程；Codex/Pi/OpenCode 每个 turn 上报 commands_changed，ACP/OMP/插件在命令更新时上报；删除 ACP waitForInitialCommands；Codex 发现经新增的 WorkspaceGitService.peekRepoRoot 只读缓存快照，不跑 git。审查后删除 AgentManager 吞错 catch。归档任务 09-28-slash-commands-first-open。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7360f4787` | feat(server): 其他 provider 取指令列表不再重连或起进程，并上报到指令目录 |
+
+### Status
+
+[OK] **Completed**
