@@ -224,7 +224,6 @@ export const zhCN: TranslationResources = {
     },
     mode: {
       title: "Mode",
-      searchPlaceholder: "搜索 modes...",
       selectWithValue: "选择 Agent mode（{{value}}）",
     },
     hints: {

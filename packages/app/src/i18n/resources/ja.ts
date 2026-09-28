@@ -226,7 +226,6 @@ export const ja: TranslationResources = {
     },
     mode: {
       title: "モード",
-      searchPlaceholder: "モードを検索...",
       selectWithValue: "エージェントモードを選択（{{value}}）",
     },
     hints: {

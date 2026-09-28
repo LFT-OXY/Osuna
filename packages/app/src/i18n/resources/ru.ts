@@ -226,7 +226,6 @@ export const ru: TranslationResources = {
     },
     mode: {
       title: "Режим",
-      searchPlaceholder: "Поиск режимов...",
       selectWithValue: "Выбрать режим агента ({{value}})",
     },
     hints: {

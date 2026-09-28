@@ -224,7 +224,6 @@ export const ar: TranslationResources = {
     },
     mode: {
       title: "وضع",
-      searchPlaceholder: "أوضاع البحث...",
       selectWithValue: "حدد وضع الوكيل ({{value}})",
     },
     hints: {

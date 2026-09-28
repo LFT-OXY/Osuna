@@ -229,7 +229,6 @@ export const fr: TranslationResources = {
     },
     mode: {
       title: "Mode",
-      searchPlaceholder: "Modes de recherche...",
       selectWithValue: "Sélectionnez le mode agent ({{value}})",
     },
     hints: {

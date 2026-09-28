@@ -71,10 +71,6 @@ export interface AgentModeControlValue {
   disabled?: boolean;
 }
 
-function normalizeSearchQuery(value: string): string {
-  return value.trim().toLowerCase();
-}
-
 export function AgentModeControl({
   provider,
   providerDefinitions,
@@ -94,7 +90,6 @@ export function AgentModeControl({
   const keyboardHandlerIdRef = useRef(`mode-control:${Math.random().toString(36).slice(2)}`);
   const openRef = useRef(false);
   const [open, setOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const selectedMode = useMemo(() => {
     if (modeOptions.length === 0) return null;
@@ -105,25 +100,17 @@ export function AgentModeControl({
   const iconColor = theme.colors.foregroundMuted;
   const selectedModeLabel = selectedMode ? formatAgentModeLabel(selectedMode) : "";
 
-  const allOptions = useMemo<ComboboxOption[]>(
+  const options = useMemo<ComboboxOption[]>(
     () => modeOptions.map((m) => ({ id: m.id, label: formatAgentModeLabel(m) })),
     [modeOptions],
   );
-  const options = useMemo<ComboboxOption[]>(() => {
-    const q = normalizeSearchQuery(searchQuery);
-    if (!q) return allOptions;
-    return allOptions.filter((o) => o.label.toLowerCase().includes(q));
-  }, [allOptions, searchQuery]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
       const wasOpen = openRef.current;
       openRef.current = next;
       setOpen(next);
-      if (!next) {
-        setSearchQuery("");
-        if (wasOpen) onClose?.();
-      }
+      if (!next && wasOpen) onClose?.();
     },
     [onClose],
   );
@@ -177,17 +164,7 @@ export function AgentModeControl({
     [provider, providerDefinitions, theme.colors.foreground],
   );
 
-  const sheetHeader = useMemo<SheetHeader>(
-    () => ({
-      title: t("agentControls.mode.title"),
-      search: {
-        onChange: setSearchQuery,
-        placeholder: t("agentControls.mode.searchPlaceholder"),
-        testID: "mode-search-input",
-      },
-    }),
-    [t],
-  );
+  const sheetHeader = useMemo<SheetHeader>(() => ({ title: t("agentControls.mode.title") }), [t]);
 
   if (!selectedMode) return null;
 
@@ -229,6 +206,7 @@ export function AgentModeControl({
         anchorRef={anchorRef}
         desktopPlacement="top-start"
         desktopMinWidth={260}
+        searchable={false}
         header={sheetHeader}
         renderOption={renderOption}
       />

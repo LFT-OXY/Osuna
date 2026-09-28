@@ -224,7 +224,6 @@ export const ko: TranslationResources = {
     },
     mode: {
       title: "모드",
-      searchPlaceholder: "모드 검색...",
       selectWithValue: "에이전트 모드 선택 ({{value}})",
     },
     hints: {

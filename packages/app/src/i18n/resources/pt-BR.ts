@@ -227,7 +227,6 @@ export const ptBR: TranslationResources = {
     },
     mode: {
       title: "Modo",
-      searchPlaceholder: "Buscar modos...",
       selectWithValue: "Selecionar modo do agente ({{value}})",
     },
     hints: {

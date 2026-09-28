@@ -220,7 +220,6 @@ export const en = {
     },
     mode: {
       title: "Mode",
-      searchPlaceholder: "Search modes...",
       selectWithValue: "Select agent mode ({{value}})",
     },
     hints: {
