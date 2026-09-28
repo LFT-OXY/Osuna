@@ -31,6 +31,7 @@ describe("submitAgentInput", () => {
     const submitPromise = submitAgentInput({
       message: "  hello world  ",
       attachments: [],
+      skillChips: [],
       isAgentRunning: false,
       canSubmit: true,
       queueMessage,
@@ -38,6 +39,7 @@ describe("submitAgentInput", () => {
       clearDraft,
       setUserInput,
       setAttachments,
+      setSkillChips: vi.fn(),
       setSendError,
       setIsProcessing,
     });
@@ -75,6 +77,7 @@ describe("submitAgentInput", () => {
     const submitPromise = submitAgentInput({
       message: "  keep me  ",
       attachments,
+      skillChips: [],
       submitBehavior: "preserve-and-lock",
       isAgentRunning: false,
       canSubmit: true,
@@ -83,6 +86,7 @@ describe("submitAgentInput", () => {
       clearDraft,
       setUserInput,
       setAttachments,
+      setSkillChips: vi.fn(),
       setSendError,
       setIsProcessing,
     });
@@ -117,6 +121,7 @@ describe("submitAgentInput", () => {
       submitAgentInput({
         message: "  queued message  ",
         attachments: [{ id: "img-1" }],
+        skillChips: [],
         isAgentRunning: true,
         canSubmit: true,
         queueMessage,
@@ -124,6 +129,7 @@ describe("submitAgentInput", () => {
         clearDraft,
         setUserInput,
         setAttachments,
+        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
       }),
@@ -159,6 +165,7 @@ describe("submitAgentInput", () => {
       submitAgentInput({
         message: "  hello world  ",
         attachments,
+        skillChips: [],
         isAgentRunning: false,
         canSubmit: true,
         queueMessage,
@@ -166,6 +173,7 @@ describe("submitAgentInput", () => {
         clearDraft,
         setUserInput,
         setAttachments,
+        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
         onSubmitError,
@@ -195,6 +203,7 @@ describe("submitAgentInput", () => {
       submitAgentInput({
         message: "  steer this turn  ",
         attachments: [{ id: "img-1" }],
+        skillChips: [],
         forceSend: true,
         isAgentRunning: true,
         canSubmit: true,
@@ -205,6 +214,7 @@ describe("submitAgentInput", () => {
         clearDraft: vi.fn(),
         setUserInput,
         setAttachments,
+        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
       }),
@@ -230,6 +240,7 @@ describe("submitAgentInput", () => {
       submitAgentInput({
         message: "   ",
         attachments: [],
+        skillChips: [],
         allowEmptySubmit: true,
         isAgentRunning: false,
         canSubmit: true,
@@ -238,6 +249,7 @@ describe("submitAgentInput", () => {
         clearDraft,
         setUserInput,
         setAttachments,
+        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
       }),
@@ -249,5 +261,114 @@ describe("submitAgentInput", () => {
       attachments: [],
     });
     expect(clearDraft).toHaveBeenCalledWith("sent");
+  });
+
+  it("sends skill chips as a /name prefix and clears them with the text", async () => {
+    const setSkillChips = vi.fn();
+    const submitMessage = vi.fn(async () => {});
+
+    await expect(
+      submitAgentInput({
+        message: "   ",
+        attachments: [],
+        skillChips: [{ name: "a" }, { name: "b" }],
+        setSkillChips,
+        isAgentRunning: false,
+        canSubmit: true,
+        queueMessage: vi.fn(),
+        submitMessage,
+        clearDraft: vi.fn(),
+        setUserInput: vi.fn(),
+        setAttachments: vi.fn(),
+        setSendError: vi.fn(),
+        setIsProcessing: vi.fn(),
+      }),
+    ).resolves.toBe("submitted");
+
+    expect(submitMessage).toHaveBeenCalledWith({ message: "/a /b", attachments: [] });
+    expect(setSkillChips).toHaveBeenCalledWith([]);
+  });
+
+  it("queues the serialized message and clears the skill chips while the agent runs", async () => {
+    const setSkillChips = vi.fn();
+    const queueMessage = vi.fn();
+
+    await expect(
+      submitAgentInput({
+        message: " body ",
+        attachments: [],
+        skillChips: [{ name: "a" }],
+        setSkillChips,
+        isAgentRunning: true,
+        canSubmit: true,
+        queueMessage,
+        submitMessage: vi.fn(async () => {}),
+        clearDraft: vi.fn(),
+        setUserInput: vi.fn(),
+        setAttachments: vi.fn(),
+        setSendError: vi.fn(),
+        setIsProcessing: vi.fn(),
+      }),
+    ).resolves.toBe("queued");
+
+    expect(queueMessage).toHaveBeenCalledWith({ message: "/a body", attachments: [] });
+    expect(setSkillChips).toHaveBeenCalledWith([]);
+  });
+
+  it("restores the skill chips and the body without the prefix when submit fails", async () => {
+    const chips = [{ name: "a", description: "Skill A" }, { name: "b" }];
+    const setSkillChips = vi.fn();
+    const setUserInput = vi.fn();
+
+    await expect(
+      submitAgentInput({
+        message: "  hello  ",
+        attachments: [],
+        skillChips: chips,
+        setSkillChips,
+        isAgentRunning: false,
+        canSubmit: true,
+        queueMessage: vi.fn(),
+        submitMessage: async () => {
+          throw new Error("offline");
+        },
+        clearDraft: vi.fn(),
+        setUserInput,
+        setAttachments: vi.fn(),
+        setSendError: vi.fn(),
+        setIsProcessing: vi.fn(),
+      }),
+    ).resolves.toBe("failed");
+
+    expect(setUserInput).toHaveBeenLastCalledWith("hello");
+    expect(setSkillChips).toHaveBeenNthCalledWith(1, []);
+    expect(setSkillChips).toHaveBeenNthCalledWith(2, chips);
+  });
+
+  it("keeps the skill chips when submit preserves and locks the composer", async () => {
+    const setSkillChips = vi.fn();
+    const submitMessage = vi.fn(async () => {});
+
+    await expect(
+      submitAgentInput({
+        message: "body",
+        attachments: [],
+        skillChips: [{ name: "a" }],
+        setSkillChips,
+        submitBehavior: "preserve-and-lock",
+        isAgentRunning: false,
+        canSubmit: true,
+        queueMessage: vi.fn(),
+        submitMessage,
+        clearDraft: vi.fn(),
+        setUserInput: vi.fn(),
+        setAttachments: vi.fn(),
+        setSendError: vi.fn(),
+        setIsProcessing: vi.fn(),
+      }),
+    ).resolves.toBe("submitted");
+
+    expect(submitMessage).toHaveBeenCalledWith({ message: "/a body", attachments: [] });
+    expect(setSkillChips).not.toHaveBeenCalled();
   });
 });

@@ -729,12 +729,16 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
 
 ### Draft Store
 
-**AsyncStorage key:** `paseo-drafts` (version 2)
+**AsyncStorage key:** `paseo-drafts` (version 5)
 
 ```typescript
 {
   drafts: Record<draftKey, {
-    input: { text: string, images: AttachmentMetadata[] },
+    input: {
+      text: string,
+      attachments: UserComposerAttachment[],
+      skills?: { name: string, description?: string }[]  // Skill chips; absent on older drafts
+    },
     lifecycle: "active" | "abandoned" | "sent",
     updatedAt: number,     // epoch ms
     version: number        // optimistic concurrency
@@ -742,6 +746,8 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
   createModalDraft: DraftRecord | null
 }
 ```
+
+Both schemas are strict: `PersistedDraftStoreSchema` (`stores/draft-store/migration.ts`) validates every read and write, and `CanonicalDraftInputSchema` (`state.ts`) is the in-memory shape. A new input field must be added to both as optional. If the persisted schema rejects a write, `createValidatedPersistStorage` removes the whole `paseo-drafts` key, so every draft is lost, not just the new field. The same happens when an older app build reads a draft with a field it does not know.
 
 ### Attachment Store (Web)
 

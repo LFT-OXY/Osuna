@@ -1,6 +1,7 @@
 import type { AttachmentMetadata, UserComposerAttachment } from "@/attachments/types";
 import { isLegacyNewWorkspaceDraftKey, NEW_WORKSPACE_DRAFT_KEY } from "@/stores/draft-keys";
 import { z } from "zod";
+import { SkillChipSchema } from "@/composer/skill-chips";
 import {
   AttachmentMetadataSchema,
   LegacyDraftImageSchema,
@@ -83,6 +84,7 @@ const RawDraftInputSchema = z.strictObject({
       z.union([AttachmentMetadataSchema, LegacyAttachmentMetadataSchema, LegacyDraftImageSchema]),
     )
     .optional(),
+  skills: z.array(SkillChipSchema).optional(),
   cwd: z.string().optional(),
 });
 const DraftLifecycleSchema = z.enum(["active", "abandoned", "sent"]);
@@ -162,6 +164,7 @@ export async function migrateDraftInput(
   return {
     text: typeof rawInput.text === "string" ? rawInput.text : "",
     attachments: [...attachments, ...legacyImagesToAttachments(migratedImages)],
+    ...(rawInput.skills ? { skills: rawInput.skills } : {}),
   };
 }
 

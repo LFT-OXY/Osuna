@@ -37,7 +37,9 @@ A Skill chip (`composer/skill-chips.ts`) is prompt content that is not in the Co
 
 - `MessageInput` only sees text and attachments, so the Composer passes `hasExternalContent || hasSkillChips`. Both empty-content guards read it: `sendMessageImpl` in `composer/input/input.tsx` and `queueComposerInput` in `composer/input/state.ts`. A chip-only message that one of them drops sends from Enter and silently does nothing from Mod+Enter.
 - Serialize before submit: `resolveSkillChipSubmission({ chips, text })` returns the `/a /b body` message plus `recognizesClientCommands`. With chips, `/clear` in the body is ordinary text, both at submit and when picked from the Command menu (`canExecuteClientSlashCommand` is false).
-- The submit path's `setUserInput` clears the chips with the text. A restored failed send already carries the `/name` prefix, so clearing the chips there avoids sending the prefix twice. Ticket 02 of `09-28-skill-chip` moves the chips into the draft store and restores them as chips.
+- Chips live in the draft record (`input.skills`), so they share the draft key and its workspace isolation. The Composer takes them as `skillChips` / `onChangeSkillChips` props from `useAgentInputDraft`, like `attachments`. Never keep them in Composer state: one Composer instance is reused across agents.
+- `submitAgentInput` (`composer/submit.ts`) owns the chip side of a send: it receives the body and `skillChips`, serializes the outgoing message, clears chips with the text, and on failure restores the body without the prefix plus the chips via `setSkillChips`. Restoring the serialized text instead would send the prefix twice. Queued messages and edit-resend stay plain serialized text.
+- A chip-only draft is content: `hasDraftContent` in `stores/draft-store/state.ts` is the one predicate for "active vs abandoned", used by both `editDraftRecordText` and the hook's `saveDraft`.
 
 ## Contexts
 

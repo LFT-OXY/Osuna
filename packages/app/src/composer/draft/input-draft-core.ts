@@ -55,13 +55,6 @@ export function buildDraftAgentControls(input: {
   };
 }
 
-export function hasDraftContent(input: {
-  text: string;
-  attachments: UserComposerAttachment[];
-}): boolean {
-  return input.text.length > 0 || input.attachments.length > 0;
-}
-
 export function areAttachmentsEqual(input: {
   left: UserComposerAttachment[];
   right: UserComposerAttachment[];

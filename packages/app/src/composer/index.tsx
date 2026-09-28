@@ -125,6 +125,7 @@ import {
   removeSkillChip,
   resolveSkillChipSubmission,
   type SkillChip,
+  type SkillChipUpdater,
 } from "@/composer/skill-chips";
 import { SkillChipPill } from "@/composer/skill-chip-pill";
 import type { SlashCommandRange } from "@/utils/agent-command-autocomplete";
@@ -1010,6 +1011,8 @@ interface ComposerProps {
   onChangeText: (text: string) => void;
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
+  skillChips: readonly SkillChip[];
+  onChangeSkillChips: (updater: SkillChipUpdater) => void;
   attachmentScopeKeys?: readonly string[];
   onOpenWorkspaceAttachment?: (attachment: WorkspaceComposerAttachment) => void;
   onChangeAttachments: (updater: AttachmentListUpdater) => void;
@@ -1057,8 +1060,9 @@ interface ComposerProps {
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 const EMPTY_ARRAY: readonly QueuedMessage[] = [];
-const EMPTY_SKILL_CHIPS: readonly SkillChip[] = [];
-const clearSkillChips = (): readonly SkillChip[] => EMPTY_SKILL_CHIPS;
+function clearSkillChips(): readonly SkillChip[] {
+  return [];
+}
 const StableMessageInput = memo(MessageInput);
 
 function resolveContextWindowValues(
@@ -1347,6 +1351,8 @@ function ComposerContentImpl({
   onChangeText,
   textReplacement,
   attachments,
+  skillChips,
+  onChangeSkillChips: setSkillChips,
   attachmentScopeKeys = EMPTY_ATTACHMENT_SCOPE_KEYS,
   onOpenWorkspaceAttachment,
   onChangeAttachments,
@@ -1475,25 +1481,7 @@ function ComposerContentImpl({
   const [isGithubPickerOpen, setIsGithubPickerOpen] = useState(false);
   const [githubSearchQuery, setGithubSearchQuery] = useState("");
   const [lightboxMetadata, setLightboxMetadata] = useState<AttachmentMetadata | null>(null);
-  // chip 标上所属 agent：同一个 Composer 换到别的 agent 时不带过去。工单 02 之前的过渡做法，
-  // 之后 chip 随草稿按草稿键存取。
-  const skillChipOwner = `${serverId}:${agentId}`;
-  const [skillChipState, setSkillChipState] = useState<{
-    owner: string;
-    chips: readonly SkillChip[];
-  }>(() => ({ owner: skillChipOwner, chips: [] }));
-  const skillChips =
-    skillChipState.owner === skillChipOwner ? skillChipState.chips : EMPTY_SKILL_CHIPS;
   const hasSkillChips = skillChips.length > 0;
-  const setSkillChips = useCallback(
-    (update: (current: readonly SkillChip[]) => readonly SkillChip[]) => {
-      setSkillChipState((state) => ({
-        owner: skillChipOwner,
-        chips: update(state.owner === skillChipOwner ? state.chips : EMPTY_SKILL_CHIPS),
-      }));
-    },
-    [skillChipOwner],
-  );
   const attachButtonRef = useRef<View | null>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
   const pluginAttachments = usePluginAttachmentPicker({
@@ -1523,15 +1511,6 @@ function ComposerContentImpl({
       onChangeText(text);
     },
     [onChangeText],
-  );
-
-  // 提交路径清空或恢复正文时一并清掉 chip：恢复的正文已经拼进了 `/name` 前缀。
-  const replaceSubmittedInput = useCallback(
-    (text: string) => {
-      replaceUserInput(text);
-      setSkillChips(clearSkillChips);
-    },
-    [replaceUserInput, setSkillChips],
   );
 
   const handlePickSkill = useCallback(
@@ -1777,7 +1756,8 @@ function ComposerContentImpl({
       });
       if (!result.queued) return;
 
-      replaceSubmittedInput("");
+      replaceUserInput("");
+      setSkillChips(clearSkillChips);
       setSelectedAttachments([]);
       resetSuppression();
       clearSentAttachments(queuedAttachments);
@@ -1788,7 +1768,8 @@ function ComposerContentImpl({
       queueWriter,
       resetSuppression,
       setSelectedAttachments,
-      replaceSubmittedInput,
+      setSkillChips,
+      replaceUserInput,
     ],
   );
 
@@ -1801,6 +1782,8 @@ function ComposerContentImpl({
       const result = await submitAgentInput({
         message: outgoingMessage,
         attachments: outgoingAttachments,
+        skillChips,
+        setSkillChips: (chips) => setSkillChips(() => chips),
         hasExternalContent,
         allowEmptySubmit,
         forceSend,
@@ -1819,7 +1802,7 @@ function ComposerContentImpl({
           await submitMessage(submitText, submitAttachments);
         },
         clearDraft,
-        setUserInput: replaceSubmittedInput,
+        setUserInput: replaceUserInput,
         setAttachments: (nextAttachments) => {
           setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
         },
@@ -1844,7 +1827,9 @@ function ComposerContentImpl({
       isAgentRunning,
       queueMessage,
       setSelectedAttachments,
-      replaceSubmittedInput,
+      setSkillChips,
+      skillChips,
+      replaceUserInput,
       submitBehavior,
       submitMessage,
       t,
@@ -1871,7 +1856,7 @@ function ComposerContentImpl({
       if (blurOnSubmit) {
         messageInputRef.current?.blur();
       }
-      void sendMessageWithContent(submission.message, outgoingAttachments, payload.forceSend);
+      void sendMessageWithContent(payload.text, outgoingAttachments, payload.forceSend);
     },
     [
       attachments,

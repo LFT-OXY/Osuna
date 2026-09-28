@@ -3,6 +3,7 @@ import {
   type AttachmentMetadata,
   type UserComposerAttachment,
 } from "@/attachments/types";
+import { SkillChipSchema, type SkillChip } from "@/composer/skill-chips";
 import { PluginResourceComposerAttachmentSchema } from "@/plugins/attachments";
 import { z } from "zod";
 
@@ -19,6 +20,8 @@ export type PersistedDraftImage = AttachmentMetadata | LegacyDraftImage;
 export interface DraftInput {
   text: string;
   attachments: UserComposerAttachment[];
+  /** 旧草稿没有这个字段，读出时视为没有 chip。 */
+  skills?: readonly SkillChip[];
 }
 
 export type DraftLifecycleState = "active" | "abandoned" | "sent";
@@ -39,12 +42,25 @@ export function editDraftRecordText(
 ): DraftRecord {
   if (record?.lifecycle === "active" && record.input.text === text) return record;
   const attachments = record?.lifecycle === "active" ? record.input.attachments : [];
+  const skills = record?.lifecycle === "active" ? record.input.skills : undefined;
+  const input = { text, attachments, ...(skills ? { skills } : {}) };
   return {
-    input: { text, attachments },
-    lifecycle: text.length > 0 || attachments.length > 0 ? "active" : "abandoned",
+    input,
+    lifecycle: hasDraftContent(input) ? "active" : "abandoned",
     updatedAt: now,
     version: (record?.version ?? 0) + 1,
   };
+}
+
+/** 只有 chip 没有正文也算有内容；空白正文同样算，用户可能还在输入。 */
+export function hasDraftContent(input: DraftInput): boolean {
+  return input.text.length > 0 || input.attachments.length > 0 || (input.skills?.length ?? 0) > 0;
+}
+
+const NO_SKILL_CHIPS: readonly SkillChip[] = [];
+
+export function selectDraftSkillChips(record: DraftRecord | undefined): readonly SkillChip[] {
+  return record?.lifecycle === "active" ? (record.input.skills ?? NO_SKILL_CHIPS) : NO_SKILL_CHIPS;
 }
 
 export interface DraftStoreState {
@@ -122,6 +138,7 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
 export const CanonicalDraftInputSchema = z.strictObject({
   text: z.string(),
   attachments: z.array(UserComposerAttachmentSchema),
+  skills: z.array(SkillChipSchema).optional(),
   // COMPAT(draft-cwd): accept legacy persisted drafts that include cwd. Stop accepting after 2026-11-09.
   cwd: z.string().optional(),
 });
@@ -202,6 +219,7 @@ export function toDraftInputIfReady(
   return {
     text: record.input.text,
     attachments: record.input.attachments.map(normalizeComposerAttachment),
+    ...(record.input.skills ? { skills: record.input.skills } : {}),
   };
 }
 

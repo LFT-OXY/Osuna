@@ -1191,6 +1191,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     textReplacement,
     attachments,
     setAttachments,
+    skillChips,
+    setSkillChips,
     clear,
     isHydrated,
     attachmentFocusRequestId,
@@ -1204,6 +1206,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       textReplacement,
       attachments,
       setAttachments,
+      skillChips,
+      setSkillChips,
       clear,
       isHydrated,
       attachmentFocusRequestId,
@@ -1216,6 +1220,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       textReplacement,
       attachments,
       setAttachments,
+      skillChips,
+      setSkillChips,
       clear,
       isHydrated,
       attachmentFocusRequestId,
@@ -1614,6 +1620,8 @@ function ActiveAgentComposer({
         attachmentScopeKeys={attachmentScopeKeys}
         onOpenWorkspaceAttachment={handleOpenWorkspaceAttachment}
         onChangeAttachments={agentInputDraft.setAttachments}
+        skillChips={agentInputDraft.skillChips}
+        onChangeSkillChips={agentInputDraft.setSkillChips}
         cwd={cwd}
         clearDraft={agentInputDraft.clear}
         autoFocus

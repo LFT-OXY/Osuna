@@ -38,6 +38,7 @@ import { createDraftPersistStorage } from "./persistence";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
 
 export type { DraftInput, DraftLifecycleState } from "./state";
+export { hasDraftContent, selectDraftSkillChips } from "./state";
 
 interface DraftStoreActions {
   getDraftInput: (draftKey: string) => DraftInput | undefined;
@@ -82,6 +83,7 @@ function createDraftRecord(input: {
     input: {
       text: input.draft.text,
       attachments: input.draft.attachments.map(normalizeComposerAttachment),
+      ...(input.draft.skills?.length ? { skills: input.draft.skills } : {}),
     },
     lifecycle: input.lifecycle,
     updatedAt: Date.now(),

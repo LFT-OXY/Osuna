@@ -687,6 +687,8 @@ export function WorkspaceDraftAgentTab({
               attachmentScopeKeys={attachmentScopeKeys}
               onOpenWorkspaceAttachment={handleOpenWorkspaceAttachment}
               onChangeAttachments={draftInput.setAttachments}
+              skillChips={draftInput.skillChips}
+              onChangeSkillChips={draftInput.setSkillChips}
               cwd={composerState.workingDir}
               clearDraft={draftInput.clear}
               autoFocus={shouldAutoFocusWorkspaceDraftComposer({ isPaneFocused, isSubmitting })}

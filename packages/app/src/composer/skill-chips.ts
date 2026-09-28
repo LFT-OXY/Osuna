@@ -1,10 +1,14 @@
+import { z } from "zod";
 import type { SlashCommandRange } from "@/utils/agent-command-autocomplete";
 
-/** Command menu 里选中的一个 skill；description 只用于悬停提示。 */
-export interface SkillChip {
-  name: string;
-  description?: string;
-}
+/** Command menu 里选中的一个 skill；description 只用于悬停提示。随草稿持久化。 */
+export const SkillChipSchema = z.strictObject({
+  name: z.string(),
+  description: z.string().optional(),
+});
+export type SkillChip = z.infer<typeof SkillChipSchema>;
+
+export type SkillChipUpdater = (current: readonly SkillChip[]) => readonly SkillChip[];
 
 export interface PickSkillChipResult {
   text: string;

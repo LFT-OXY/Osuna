@@ -63,6 +63,9 @@
 ### 草稿持久化
 
 - 草稿输入在 `text`、`attachments` 之外新增可选字段 `skills`（chip 列表）。schema 里设为可选，旧草稿读出时视为空；不升级草稿版本号，不写迁移。
+  - `SkillChipSchema` 定义在 `composer/skill-chips.ts`，`SkillChip` 由它推导；持久化 schema（`migration.ts`）与规范 schema（`state.ts`）都引用它。
+  - 读取用 `selectDraftSkillChips(record)`，非活跃或旧草稿返回空列表；"是否有内容"统一用 `stores/draft-store/state.ts` 的 `hasDraftContent`。
+  - Composer 通过 `skillChips` / `onChangeSkillChips` 两个 props 读写，来自 `useAgentInputDraft`。
 - 草稿"是否活跃"的判定把 chip 计入：只有 chip 没有正文也算活跃草稿。
 - chip 属于 Workspace-owned state，按现有草稿键隔离，不串到同 `cwd` 的其他工作区。
 - 排队消息与"编辑后重发"只保存拼好的纯文本，不反向解析成 chip。
@@ -73,6 +76,7 @@
 - 有 chip 时跳过客户端内置命令与插件客户端命令的识别，整条消息按普通消息发送；在 Command menu 里选中立即执行的客户端命令（如 `/clear`）也改为插入文字。
 - 只有 chip 时，Composer 以 `hasExternalContent` 告诉 `MessageInput` 有待发内容，发送与排队（`queueComposerInput`）都据此放行。
 - 发送成功或进入排队后，chip 与正文、附件一起清空；发送失败时按现有逻辑恢复正文，chip 同样恢复。`preserve-and-lock` 模式下正文不清空，chip 也不清空。
+- 以上由 `submitAgentInput`（`composer/submit.ts`）统一处理：入参是正文与 `skillChips` / `setSkillChips`，内部用 `serializeSkillChips` 拼出外发消息；失败时正文恢复为不带前缀的原文，chip 恢复为原列表。
 - 工单 01 的过渡状态：chip 存在 Composer 本地、按 `serverId:agentId` 标记归属；发送失败时正文恢复为拼好的 `/a /b 正文`、chip 清空。工单 02 改为随草稿存取并恢复成 chip。
 
 ### 视图
