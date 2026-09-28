@@ -45,7 +45,6 @@ import { isNative, isWeb } from "@/constants/platform";
 import {
   buildProviderQualifiedDescription,
   buildSelectedTriggerLabel,
-  filterAndRankModelRows,
   getAllProviderModelRows,
   getProviderModelRows,
   resolveSelectedModelLabel,
@@ -59,6 +58,10 @@ import {
   groupProfilesByProviderModel,
   resolveInitialModelBrowserView,
   resolveModelBrowserAllView,
+  resolveProviderViewModelRows,
+  scopeModelBrowserProviders,
+  selectProviderViewProfileRows,
+  type ModelBrowserScope,
   type ModelBrowserView,
 } from "@/components/model-browser-view";
 
@@ -154,10 +157,13 @@ interface ModelBrowserInput {
   /** Pinned above the provider list on the root view. `null` hides the section. */
   profiles?: AgentProfilePicker | null;
   serverId?: string | null;
+  scope: ModelBrowserScope;
 }
 
 export interface ModelBrowserState {
   serverId: string | null;
+  scope: ModelBrowserScope;
+  /** 已按 `scope` 收窄，范围外的提供方不会进入浏览器。 */
   providers: ProviderSelectorProvider[];
   selectedProvider: string;
   selectedModel: string;
@@ -197,6 +203,7 @@ interface ModelBrowserProps {
 
 interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "scrolling"> {
   serverId: string | null;
+  scope: ModelBrowserScope;
   view: ModelBrowserView;
   providers: ProviderSelectorProvider[];
   selectedProvider: string;
@@ -263,15 +270,20 @@ function resolveDesktopFixedHeight(
 }
 
 export function useModelBrowser({
-  providers,
+  providers: allProviders,
   selectedProvider,
   selectedModel,
   isLoading,
   autoFocusSearch = isWeb,
   profiles = null,
   serverId = null,
+  scope,
 }: ModelBrowserInput): ModelBrowserState {
   const { t } = useTranslation();
+  const providers = useMemo(
+    () => scopeModelBrowserProviders({ providers: allProviders, selectedProvider, scope }),
+    [allProviders, scope, selectedProvider],
+  );
   const [view, setView] = useState<ModelBrowserView>({ kind: "all" });
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -285,8 +297,9 @@ export function useModelBrowser({
         selectedProvider,
         selectedModel,
         hasProfiles,
+        scope,
       }),
-    [hasProfiles, providers, selectedModel, selectedProvider],
+    [hasProfiles, providers, scope, selectedModel, selectedProvider],
   );
 
   const prepareToOpen = useCallback(() => {
@@ -316,7 +329,7 @@ export function useModelBrowser({
     setSearchQuery(value);
   }, []);
 
-  const singleProviderView = providers.length === 1;
+  const hasRootView = scope === "allProviders" && providers.length !== 1;
   const header = useMemo<SheetHeader>(() => {
     if (view.kind === "all") {
       return {
@@ -342,7 +355,7 @@ export function useModelBrowser({
           tone="foreground"
         />
       ),
-      back: singleProviderView ? undefined : { onPress: showAll },
+      back: hasRootView ? { onPress: showAll } : undefined,
       actions: (
         <View style={styles.headerActionRow}>
           <ProviderSettingsAction
@@ -369,7 +382,7 @@ export function useModelBrowser({
     handleSearchQueryChange,
     searchResetKey,
     serverId,
-    singleProviderView,
+    hasRootView,
     showAll,
     t,
     view,
@@ -400,6 +413,7 @@ export function useModelBrowser({
 
   return {
     serverId,
+    scope,
     providers,
     selectedProvider,
     selectedModel,
@@ -1268,6 +1282,7 @@ function ModelSearchEmptyState() {
 
 function ProviderModelBrowserContent({
   serverId,
+  scope,
   view,
   provider,
   profiles,
@@ -1286,6 +1301,7 @@ function ProviderModelBrowserContent({
   scrolling,
 }: {
   serverId: string | null;
+  scope: ModelBrowserScope;
   view: Extract<ModelBrowserView, { kind: "provider" }>;
   provider: ProviderSelectorProvider | null;
   profiles: AgentProfilePicker | null;
@@ -1305,12 +1321,17 @@ function ProviderModelBrowserContent({
 }) {
   const { t } = useTranslation();
   const visibleRows = useMemo(
-    () => (provider ? filterAndRankModelRows(getProviderModelRows(provider), normalizedQuery) : []),
+    () => resolveProviderViewModelRows(provider, normalizedQuery),
     [normalizedQuery, provider],
   );
   const providerProfileRows = useMemo(
-    () => profiles?.rows.filter((row) => row.provider === view.providerId) ?? [],
-    [profiles, view.providerId],
+    () =>
+      selectProviderViewProfileRows({
+        rows: profiles?.rows ?? [],
+        providerId: view.providerId,
+        scope,
+      }),
+    [profiles, scope, view.providerId],
   );
   const profileHeader = useMemo(
     () =>
@@ -1375,6 +1396,7 @@ function ProviderModelBrowserContent({
 
 function ModelBrowserContent({
   serverId,
+  scope,
   view,
   providers,
   selectedProvider,
@@ -1423,6 +1445,7 @@ function ModelBrowserContent({
     return (
       <ProviderModelBrowserContent
         serverId={serverId}
+        scope={scope}
         view={view}
         provider={selectedViewProvider}
         profiles={profiles}
@@ -1536,6 +1559,7 @@ export function ModelBrowser({
   return (
     <ModelBrowserContent
       serverId={state.serverId}
+      scope={state.scope}
       view={state.view}
       providers={state.providers}
       selectedProvider={state.selectedProvider}

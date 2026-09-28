@@ -963,6 +963,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
                 selectedProvider={provider}
                 selectedModel={selectedModelId ?? ""}
                 onSelect={handleDesktopModelSelect}
+                scope={hasProviderControl ? "selectedProvider" : "allProviders"}
                 profiles={agentProfiles}
                 onApplyProfile={onApplyAgentProfile}
                 onEditProfiles={onEditAgentProfiles}

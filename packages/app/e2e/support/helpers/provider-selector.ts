@@ -62,6 +62,20 @@ export async function chooseProvider(page: Page, providerId: string): Promise<vo
   await expect(providerMenu(page)).toHaveCount(0, { timeout: 30_000 });
 }
 
+/** 模型菜单只列当前 provider，换 provider 要走 provider 按钮；不可用的在折叠区里。 */
+export async function selectComposerProvider(page: Page, providerId: string): Promise<void> {
+  await openProviderMenu(page);
+  // 先等列表渲染出行再判断目标在不在折叠区，否则会误点「More agents」把它收起来。
+  await expect(
+    providerMenu(page).locator('[data-testid^="agent-provider-option-"]').first(),
+  ).toBeVisible({ timeout: 30_000 });
+  const option = providerMenuOption(page, providerId);
+  if ((await option.count()) === 0) {
+    await moreAgentsRow(page).click();
+  }
+  await chooseProvider(page, providerId);
+}
+
 /** 各控件在屏幕上的左边缘，应按 toolbar 顺序递增。 */
 export async function expectToolbarOrder(page: Page, controls: Locator[]): Promise<void> {
   const lefts = await Promise.all(

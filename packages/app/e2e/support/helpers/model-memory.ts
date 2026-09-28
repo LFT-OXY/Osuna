@@ -1,29 +1,30 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { expect, type Page } from "../fixtures";
-import { drillIntoProvider, openModelPicker } from "./agent-profiles";
+import { openModelPicker } from "./agent-profiles";
+import { selectComposerProvider } from "./provider-selector";
 
 export async function startWithoutRememberedModel(page: Page) {
   await page.addInitScript(() => localStorage.removeItem("@paseo:create-agent-preferences"));
 }
 
 export async function chooseModel(page: Page, provider: string, label: string) {
-  await openModelPicker(page);
-  await expect(
-    page.getByRole("dialog").getByRole("button", { name: "Back", exact: true }),
-  ).toHaveCount(0);
+  await selectComposerProvider(page, provider);
   await selectProviderModel(page, provider, label);
 }
 
+/** 记住的 provider 就是当前 provider，模型菜单直接打开在它的模型列表上。 */
 export async function reselectModel(page: Page, provider: string, label: string) {
   await expectRememberedModel(page, label);
-  await openModelPicker(page);
-  await page.getByRole("dialog").getByRole("button", { name: "Back", exact: true }).click();
   await selectProviderModel(page, provider, label);
 }
 
 async function selectProviderModel(page: Page, provider: string, label: string) {
-  await drillIntoProvider(page, provider);
-  await page.getByTestId("combobox-desktop-container").getByText(label, { exact: true }).click();
+  await openModelPicker(page);
+  await page
+    .getByTestId("combobox-desktop-container")
+    .locator(`[data-testid^="model-row-${provider}-"]`)
+    .filter({ hasText: label })
+    .click();
   await expect(
     page
       .getByRole("button", { name: `Select model (${label})`, exact: true })

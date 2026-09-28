@@ -120,6 +120,7 @@ export function CompactModelSheet({
     autoFocusSearch: isWeb && !usesBottomSheet,
     profiles,
     serverId,
+    scope: "allProviders",
   });
   const modelBrowser = useModelBrowser({
     providers: availableProviders,
@@ -129,6 +130,7 @@ export function CompactModelSheet({
     autoFocusSearch: isWeb && !usesBottomSheet,
     profiles,
     serverId,
+    scope: "allProviders",
   });
   const ProviderIcon =
     selectedProvider.trim().length > 0 ? getProviderIcon(selectedProvider, serverId) : null;

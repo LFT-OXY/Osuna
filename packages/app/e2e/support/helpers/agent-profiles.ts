@@ -470,10 +470,6 @@ export async function expectAgentProfilesEditShortcut(page: Page): Promise<void>
   ).toBeVisible({ timeout: 30_000 });
 }
 
-export async function drillIntoProvider(page: Page, providerId: string): Promise<void> {
-  await pickerViewport(page).getByTestId(`model-provider-${providerId}`).click();
-}
-
 export async function expectModelRowSelected(
   page: Page,
   input: { provider: string; modelId: string },
@@ -483,41 +479,49 @@ export async function expectModelRowSelected(
   ).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
 }
 
-// ─── Cross-provider model search ───────────────────────────────────────────
+// ─── Model search ──────────────────────────────────────────────────────────
 
-export async function searchAllModels(page: Page, query: string): Promise<void> {
-  const input = page.getByTestId("model-search-all-input");
+/** 模型菜单只列 Composer 当前的提供方，搜索框也只在它的模型里找。 */
+export async function searchProviderModels(page: Page, query: string): Promise<void> {
+  const input = page.getByTestId("model-search-input").filter({ visible: true });
   await expect(input).toBeVisible({ timeout: 30_000 });
   await input.fill(query);
 }
 
 export async function expectModelSearchResult(
   page: Page,
-  expected: { provider: string; modelId: string; providerLabel: string; modelLabel: string },
+  expected: { provider: string; modelId: string; modelLabel: string },
 ): Promise<void> {
   const row = pickerViewport(page).getByTestId(
     `model-row-${expected.provider}-${expected.modelId}`,
   );
   await expect(row).toBeVisible({ timeout: 30_000 });
   await expect(row.getByText(expected.modelLabel, { exact: true })).toBeVisible();
+}
+
+export interface ProviderModelIds {
+  id: string;
+  models: ReadonlyArray<Pick<SeededProviderModel, "id">>;
+}
+
+/** 逐行断言：提供方 id 可能互为前缀（`mock` 与 `mock-studio`），不能按 testID 前缀匹配。 */
+export async function expectNoModelRowsFor(page: Page, provider: ProviderModelIds): Promise<void> {
+  for (const model of provider.models) {
+    await expect(
+      pickerViewport(page).getByTestId(`model-row-${provider.id}-${model.id}`),
+    ).toHaveCount(0);
+  }
+}
+
+export async function expectProviderSearchEmptyState(page: Page): Promise<void> {
   await expect(
-    row.getByText(new RegExp(`^${escapeForRegex(expected.providerLabel)}\\b`)),
-  ).toBeVisible();
+    pickerViewport(page).getByText("No models match your search", { exact: true }),
+  ).toBeVisible({ timeout: 30_000 });
 }
 
-function escapeForRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Search results replace the whole root view, pinned profiles included. */
+/** 有搜索词时 profiles 区隐藏，只剩匹配的模型行。 */
 export async function expectPinnedProfilesHidden(page: Page): Promise<void> {
   await expect(pickerViewport(page).locator('[data-testid^="model-profile-row-"]')).toHaveCount(0);
-}
-
-export async function expectModelSearchEmptyState(page: Page, query: string): Promise<void> {
-  const empty = page.getByTestId("model-search-empty");
-  await expect(empty).toBeVisible({ timeout: 30_000 });
-  await expect(empty.getByText(`No models match "${query}"`, { exact: true })).toBeVisible();
 }
 
 export async function readModelPickerHeight(page: Page): Promise<number> {

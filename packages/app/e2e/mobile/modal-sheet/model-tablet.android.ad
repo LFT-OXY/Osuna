@@ -6,12 +6,12 @@ env PROVIDER_ID=codex
 
 open "${APP_ID}" "${FORM_URL}"
 wait "label=\"Workspace project\"" 20000
+# 模型列表只含当前提供方，先从提供方按钮选中目标提供方。
+press "id=\"agent-provider-selector\""
+wait "id=\"agent-provider-option-${PROVIDER_ID}\"" 10000
+press "id=\"agent-provider-option-${PROVIDER_ID}\""
 press "id=\"combined-model-selector\""
 wait "id=\"combobox-desktop-container\"" 10000
-# A remembered model opens its provider's list. Return to the provider page first.
-press "label=\"Back\""
-wait "id=\"model-provider-${PROVIDER_ID}\"" 10000
-press "id=\"model-provider-${PROVIDER_ID}\""
 wait "id=\"compact-model-list\"" 3000
 press "id=\"model-row-${PROVIDER_ID}-${MODEL_ID}\""
 wait "id=\"combined-model-selector\" label=\"Select model (${MODEL_LABEL})\"" 3000

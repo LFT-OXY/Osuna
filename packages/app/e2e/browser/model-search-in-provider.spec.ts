@@ -4,27 +4,29 @@ import { test, expect, type Page } from "../support/fixtures";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import {
   closeModelPicker,
-  expectModelSearchEmptyState,
   expectModelPickerHeight,
   expectModelPickerWidth,
   expectModelSearchResult,
+  expectNoModelRowsFor,
   expectPinnedProfilesHidden,
+  expectProfileVisibleForProvider,
+  expectProviderSearchEmptyState,
   openModelPicker,
   readModelPickerHeight,
   readModelPickerWidth,
-  searchAllModels,
+  searchProviderModels,
   seedAgentProfiles,
   seedModelProvider,
   expectSearchResultsVirtualized,
 } from "../support/helpers/agent-profiles";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { clickNewChat, clickNewTerminal, gotoWorkspace } from "../support/helpers/launcher";
+import { expectProviderStatus, selectComposerProvider } from "../support/helpers/provider-selector";
 import { seedWorkspace } from "../support/helpers/seed-client";
 
-const MOCK_PROVIDER_LABEL = "Mock Load Test";
+// 它的快速模型与 mock 提供方的同名，同一个搜索词在两家都能命中，显示哪家只取决于限定范围。
+const MOCK = { id: "mock", models: [{ id: "ten-second-stream" }] };
 
-// Its fast model deliberately carries the same label as the mock provider's, so
-// the only thing telling the two result rows apart is the provider name.
 const STUDIO = {
   id: "mock-studio",
   label: "Mock Studio",
@@ -34,12 +36,12 @@ const STUDIO = {
   ],
 };
 
-// The cross-provider search lives on the picker's root view, and a profile is
-// what keeps the picker opening there.
-const ROOT_VIEW_PROFILE = {
-  id: "agent_profile_e2e_search_root",
-  name: "Search anchor",
-  provider: "mock",
+// 指向另一家提供方，用来证明模型菜单仍列出全部 profiles。
+const STUDIO_PROFILE = {
+  id: "agent_profile_e2e_search_studio",
+  name: "Studio anchor",
+  provider: STUDIO.id,
+  model: "studio-deep",
 };
 
 const LARGE_CATALOG_SIZE = 200;
@@ -53,59 +55,83 @@ const LARGE_CATALOG = {
   })),
 };
 
-test.describe("Cross-provider model search", () => {
-  test("one query over the picker root reaches every provider and names each result's provider", async ({
-    page,
-  }) => {
+async function waitForProviderReady(provider: string, cwd: string): Promise<void> {
+  const client = await connectDaemonClient<DaemonClient>({ clientIdPrefix: "model-search" });
+  try {
+    await expectProviderStatus({ client, cwd, provider, status: "ready" });
+  } finally {
+    await client.close();
+  }
+}
+
+test.describe("Model search in the composer", () => {
+  test("search only reaches the current provider's models", async ({ page }) => {
     const provider = await seedModelProvider(STUDIO);
-    const profile = await seedAgentProfiles([ROOT_VIEW_PROFILE]);
-    const workspace = await seedWorkspace({ repoPrefix: "model-search-providers-" });
+    const profile = await seedAgentProfiles([STUDIO_PROFILE]);
+    const workspace = await seedWorkspace({ repoPrefix: "model-search-provider-" });
 
     try {
-      await test.step("open a draft composer that can reach every provider", async () => {
+      await waitForProviderReady(STUDIO.id, workspace.repoPath);
+      await test.step("open a draft composer on the mock provider", async () => {
         await gotoWorkspace(page, workspace.workspaceId);
         await clickNewChat(page);
         await expectComposerVisible(page);
+        await selectComposerProvider(page, "mock");
         await openModelPicker(page);
       });
       const restingWidth = await readModelPickerWidth(page);
 
-      await test.step("one query returns the same model label from two providers", async () => {
-        await searchAllModels(page, "ten second stream");
+      await test.step("the picker opens on the provider and still lists every profile", async () => {
+        await expect(page.getByTestId("sheet-header-back")).toHaveCount(0);
+        await expect(page.locator('[data-testid^="model-provider-"]')).toHaveCount(0);
+        await expectNoModelRowsFor(page, STUDIO);
+        await expectProfileVisibleForProvider(page, {
+          name: STUDIO_PROFILE.name,
+          summary: "Mock Studio · Studio deep think",
+        });
+      });
+
+      await test.step("a label both providers offer only matches the current one", async () => {
+        await searchProviderModels(page, "ten second stream");
         await expectModelSearchResult(page, {
           provider: "mock",
           modelId: "ten-second-stream",
           modelLabel: "Ten second stream",
-          providerLabel: MOCK_PROVIDER_LABEL,
         });
-        await expectModelSearchResult(page, {
-          provider: STUDIO.id,
-          modelId: "studio-fast",
-          modelLabel: "Ten second stream",
-          providerLabel: STUDIO.label,
-        });
+        await expectNoModelRowsFor(page, STUDIO);
         await expectModelPickerWidth(page, restingWidth);
-      });
-
-      await test.step("searching by provider name reaches that provider's own models", async () => {
-        await searchAllModels(page, "studio deep");
-        await expectModelSearchResult(page, {
-          provider: STUDIO.id,
-          modelId: "studio-deep",
-          modelLabel: "Studio deep think",
-          providerLabel: STUDIO.label,
-        });
       });
 
       await test.step("results replace the pinned profiles", async () => {
         await expectPinnedProfilesHidden(page);
+        await closeModelPicker(page);
       });
 
-      // Search falls back to subsequence matching, so "no matches" needs letters
-      // that cannot be picked out of a model label or description in order.
-      await test.step("a query with no matches repeats the query back", async () => {
-        await searchAllModels(page, "zzz");
-        await expectModelSearchEmptyState(page, "zzz");
+      await test.step("after switching provider the same query reaches only the new one", async () => {
+        await selectComposerProvider(page, STUDIO.id);
+        await openModelPicker(page);
+        await searchProviderModels(page, "ten second stream");
+        await expectModelSearchResult(page, {
+          provider: STUDIO.id,
+          modelId: "studio-fast",
+          modelLabel: "Ten second stream",
+        });
+        await expectNoModelRowsFor(page, MOCK);
+      });
+
+      await test.step("a query can still find a model by its own name", async () => {
+        await searchProviderModels(page, "studio deep");
+        await expectModelSearchResult(page, {
+          provider: STUDIO.id,
+          modelId: "studio-deep",
+          modelLabel: "Studio deep think",
+        });
+      });
+
+      // 搜索会退回子序列匹配，「无结果」要用无法从模型名或描述里按序挑出的字母。
+      await test.step("a query with no matches shows the empty state", async () => {
+        await searchProviderModels(page, "zzz");
+        await expectProviderSearchEmptyState(page);
         await closeModelPicker(page);
       });
     } finally {
@@ -115,18 +141,19 @@ test.describe("Cross-provider model search", () => {
     }
   });
 
-  test("desktop search keeps its frame stable and virtualizes a host-wide catalog", async ({
+  test("desktop search keeps its frame stable and virtualizes a large provider catalog", async ({
     page,
   }) => {
     const provider = await seedModelProvider(LARGE_CATALOG);
-    const profile = await seedAgentProfiles([ROOT_VIEW_PROFILE]);
     const workspace = await seedWorkspace({ repoPrefix: "model-search-large-catalog-" });
 
     try {
-      await test.step("open the host-wide model picker", async () => {
+      await waitForProviderReady(LARGE_CATALOG.id, workspace.repoPath);
+      await test.step("open the large provider's model picker", async () => {
         await gotoWorkspace(page, workspace.workspaceId);
         await clickNewChat(page);
         await expectComposerVisible(page);
+        await selectComposerProvider(page, LARGE_CATALOG.id);
         await openModelPicker(page);
       });
 
@@ -134,7 +161,7 @@ test.describe("Cross-provider model search", () => {
       const restingWidth = await readModelPickerWidth(page);
 
       await test.step("a broad query renders only the visible result window", async () => {
-        await searchAllModels(page, "bulk model");
+        await searchProviderModels(page, "bulk model");
         await expectSearchResultsVirtualized(page, {
           provider: LARGE_CATALOG.id,
           total: LARGE_CATALOG_SIZE,
@@ -144,19 +171,17 @@ test.describe("Cross-provider model search", () => {
       });
 
       await test.step("narrowing to one result does not resize the picker", async () => {
-        await searchAllModels(page, "bulk model 199");
+        await searchProviderModels(page, "bulk model 199");
         await expectModelSearchResult(page, {
           provider: LARGE_CATALOG.id,
           modelId: "bulk-199",
           modelLabel: "Bulk model 199",
-          providerLabel: LARGE_CATALOG.label,
         });
         await expectModelPickerHeight(page, restingHeight);
         await expectModelPickerWidth(page, restingWidth);
       });
     } finally {
       await workspace.cleanup();
-      await profile.restore();
       await provider.restore();
     }
   });
@@ -198,9 +223,9 @@ async function reloadSavedDraft(page: Page) {
   await expectComposerVisible(page);
 }
 async function expectOneCatalogChoice(page: Page, label: string) {
+  await selectComposerProvider(page, "gemini");
   await openModelPicker(page);
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await searchAllModels(page, label);
+  await searchProviderModels(page, label);
   await expect(page.getByTestId("model-row-gemini-gemini-3.5-flash")).toHaveCount(1);
   await closeModelPicker(page);
 }

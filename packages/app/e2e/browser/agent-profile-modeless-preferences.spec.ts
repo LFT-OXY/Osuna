@@ -3,7 +3,6 @@ import path from "node:path";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import {
   applyProfileFromPicker,
-  drillIntoProvider,
   openModelPicker,
   seedAgentProfiles,
   seedModelProvider,
@@ -15,6 +14,7 @@ import {
   selectNewWorkspaceProject,
   submitNewWorkspacePrompt,
 } from "../support/helpers/new-workspace";
+import { selectComposerProvider } from "../support/helpers/provider-selector";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 
@@ -117,9 +117,9 @@ test.describe("Agent profiles repair modeless provider preferences", () => {
         .poll(() => readProviderModePreference(page, "mock"), { timeout: 10_000 })
         .toBe("approval-test");
 
+      await selectComposerProvider(page, MODELESS_PROVIDER);
       await openModelPicker(page);
-      await drillIntoProvider(page, MODELESS_PROVIDER);
-      await page.getByRole("button", { name: /Pi profile model/ }).click();
+      await page.getByTestId(`model-row-${MODELESS_PROVIDER}-${MODELESS_MODEL}`).click();
 
       await submitNewWorkspacePrompt(page, "Create a Pi agent after repairing preferences.");
       const createAgentRequest = await createAgentRecorder.waitForRequest();

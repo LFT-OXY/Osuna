@@ -2,7 +2,6 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { test, expect, type Page } from "../support/fixtures";
 import {
   closeModelPicker,
-  drillIntoProvider,
   openModelPicker,
   seedModelProvider,
 } from "../support/helpers/agent-profiles";
@@ -32,10 +31,9 @@ async function rememberModel(page: Page) {
   );
 }
 
+// 模型菜单只列当前 provider，恢复后的 provider 就是当前 provider。
 async function expectRecoveredModelInPicker(page: Page) {
   await openModelPicker(page);
-  await page.getByRole("dialog").getByRole("button", { name: "Back", exact: true }).click();
-  await drillIntoProvider(page, PROVIDER);
   await expect(
     page.getByTestId("combobox-desktop-container").getByText(LABEL, { exact: true }),
   ).toBeVisible();

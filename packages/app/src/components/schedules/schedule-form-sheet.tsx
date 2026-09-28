@@ -761,6 +761,7 @@ function ScheduleTargetFields({
             selectedProvider={state.selectedProvider ?? ""}
             selectedModel={state.selectedModel}
             onSelect={handleSelectModel}
+            scope="allProviders"
             isLoading={providerSnapshot.isLoading || providerSnapshot.isFetching}
             renderTrigger={renderModelTrigger}
             triggerFill

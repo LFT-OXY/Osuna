@@ -6,8 +6,11 @@ import type {
 import {
   resolveInitialModelBrowserView,
   resolveModelBrowserAllView,
+  resolveProviderViewModelRows,
   groupProfilesByProviderModel,
   resolveModelBrowserScrolling,
+  scopeModelBrowserProviders,
+  selectProviderViewProfileRows,
 } from "./model-browser-view";
 
 function provider(
@@ -63,6 +66,7 @@ describe("model browser initial view", () => {
         selectedProvider: "",
         selectedModel: "",
         hasProfiles: false,
+        scope: "allProviders",
       }),
     ).toEqual({ kind: "provider", providerId: "pi", providerLabel: "Pi" });
   });
@@ -74,6 +78,7 @@ describe("model browser initial view", () => {
         selectedProvider: "pi",
         selectedModel: "pi-pro",
         hasProfiles: false,
+        scope: "allProviders",
       }),
     ).toEqual({ kind: "provider", providerId: "pi", providerLabel: "Pi" });
   });
@@ -85,6 +90,7 @@ describe("model browser initial view", () => {
         selectedProvider: "pi",
         selectedModel: "pi-pro",
         hasProfiles: true,
+        scope: "allProviders",
       }),
     ).toEqual({ kind: "all" });
   });
@@ -96,6 +102,7 @@ describe("model browser initial view", () => {
         selectedProvider: "pi",
         selectedModel: "pi-pro",
         hasProfiles: true,
+        scope: "allProviders",
       }),
     ).toEqual({ kind: "provider", providerId: "pi", providerLabel: "Pi" });
   });
@@ -107,6 +114,7 @@ describe("model browser initial view", () => {
         selectedProvider: "gemini",
         selectedModel: "gemini-3",
         hasProfiles: false,
+        scope: "allProviders",
       }),
     ).toEqual({ kind: "all" });
   });
@@ -232,5 +240,150 @@ describe("model browser all view", () => {
         isSearchFocused: true,
       }),
     ).toEqual({ kind: "noSearchMatches" });
+  });
+});
+
+describe("model browser scoped to the selected provider", () => {
+  const claude = provider("claude", "Claude Code", [
+    modelRow("claude", "Claude Code", "opus-5", "Opus 5"),
+    modelRow("claude", "Claude Code", "sonnet-4.6", "Sonnet 4.6"),
+  ]);
+  const copilot = provider("copilot", "Copilot", [
+    modelRow("copilot", "Copilot", "claude-opus-5", "Opus 5"),
+  ]);
+  const providers = [claude, copilot];
+  const profiles = [
+    { id: "claude-profile", provider: "claude" },
+    { id: "copilot-profile", provider: "copilot" },
+  ];
+
+  it("keeps only the selected provider", () => {
+    expect(
+      scopeModelBrowserProviders({
+        providers,
+        selectedProvider: "claude",
+        scope: "selectedProvider",
+      }),
+    ).toEqual([claude]);
+  });
+
+  it("keeps every provider when browsing all providers", () => {
+    expect(
+      scopeModelBrowserProviders({ providers, selectedProvider: "claude", scope: "allProviders" }),
+    ).toEqual(providers);
+  });
+
+  it("leaves nothing to browse when the selected provider is not listed", () => {
+    expect(
+      scopeModelBrowserProviders({
+        providers,
+        selectedProvider: "gemini",
+        scope: "selectedProvider",
+      }),
+    ).toEqual([]);
+  });
+
+  it("opens on the selected provider with no root view, even with profiles", () => {
+    expect(
+      resolveInitialModelBrowserView({
+        providers: scopeModelBrowserProviders({
+          providers,
+          selectedProvider: "copilot",
+          scope: "selectedProvider",
+        }),
+        selectedProvider: "copilot",
+        selectedModel: "",
+        hasProfiles: true,
+        scope: "selectedProvider",
+      }),
+    ).toEqual({ kind: "provider", providerId: "copilot", providerLabel: "Copilot" });
+  });
+
+  it("stays on the selected provider's view when it is not listed yet", () => {
+    expect(
+      resolveInitialModelBrowserView({
+        providers: scopeModelBrowserProviders({
+          providers,
+          selectedProvider: "gemini",
+          scope: "selectedProvider",
+        }),
+        selectedProvider: "gemini",
+        selectedModel: "gemini-3",
+        hasProfiles: true,
+        scope: "selectedProvider",
+      }),
+    ).toEqual({ kind: "provider", providerId: "gemini", providerLabel: "gemini" });
+  });
+
+  it("drops another provider's model that the same query would match across providers", () => {
+    const acrossProviders = resolveModelBrowserAllView({
+      providers,
+      normalizedQuery: "opus",
+      isSearchFocused: true,
+    });
+    const scoped = resolveModelBrowserAllView({
+      providers: scopeModelBrowserProviders({
+        providers,
+        selectedProvider: "claude",
+        scope: "selectedProvider",
+      }),
+      normalizedQuery: "opus",
+      isSearchFocused: true,
+    });
+
+    expect(
+      acrossProviders.kind === "searchResults"
+        ? acrossProviders.rows.map((row) => row.favoriteKey)
+        : [],
+    ).toEqual(["claude:opus-5", "copilot:claude-opus-5"]);
+    expect(
+      scoped.kind === "searchResults" ? scoped.rows.map((row) => row.favoriteKey) : [],
+    ).toEqual(["claude:opus-5"]);
+  });
+
+  it("searches only the selected provider's models", () => {
+    const [scoped] = scopeModelBrowserProviders({
+      providers,
+      selectedProvider: "claude",
+      scope: "selectedProvider",
+    });
+
+    expect(resolveProviderViewModelRows(scoped, "opus").map((row) => row.favoriteKey)).toEqual([
+      "claude:opus-5",
+    ]);
+    expect(resolveProviderViewModelRows(scoped, "").map((row) => row.favoriteKey)).toEqual([
+      "claude:opus-5",
+      "claude:sonnet-4.6",
+    ]);
+  });
+
+  it("has no rows for a provider whose models have not arrived", () => {
+    expect(
+      resolveProviderViewModelRows(
+        { id: "pi", label: "Pi", modelSelection: { kind: "loading" } },
+        "",
+      ),
+    ).toEqual([]);
+    expect(resolveProviderViewModelRows(null, "")).toEqual([]);
+  });
+
+  it("shows every profile, whichever provider it targets", () => {
+    expect(
+      selectProviderViewProfileRows({
+        rows: profiles,
+        providerId: "claude",
+        scope: "selectedProvider",
+      }),
+    ).toEqual(profiles);
+  });
+
+  it("shows only the drilled-into provider's profiles when browsing all providers", () => {
+    expect(
+      selectProviderViewProfileRows({
+        rows: profiles,
+        providerId: "claude",
+        scope: "allProviders",
+      }),
+    ).toEqual([{ id: "claude-profile", provider: "claude" }]);
   });
 });

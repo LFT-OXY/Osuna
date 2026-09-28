@@ -27,7 +27,7 @@
 10. 作为新建 Agent 的用户，我想在从没用过某个提供方时自动选中它的默认模型，以便切换后能立即发送。
 11. 作为新建 Agent 的用户，我想让模型菜单只列当前提供方的模型，以便不在其他提供方的模型里翻找。
 12. 作为新建 Agent 的用户，我想让模型菜单里的搜索只在当前提供方的模型里匹配，以便搜索结果不混入别家模型。
-13. 作为收藏过模型的用户，我想在模型菜单里只看到属于当前提供方的收藏，以便收藏区和当前提供方保持一致。
+13. （不适用）收藏功能已在 v0.3.2 移除并迁移为 Agent profiles，模型菜单里没有收藏区。原诉求「收藏区和当前提供方保持一致」由故事 14 的 Agent profiles 承接。
 14. 作为使用 Agent profiles 的用户，我想让 Agent profiles 继续留在模型菜单里，以便一键套用一组配置（包括跨提供方的配置）。
 15. 作为套用了某个 Agent profile 的用户，我想在它指向别的提供方时让提供方按钮同步切换，以便工具栏显示的就是实际要用的提供方。
 16. 作为已有运行中 Agent 的用户，我想在工具栏上仍然看到提供方图标，以便工具栏布局和新建时一致。
@@ -67,7 +67,9 @@
 - **模型选择器限定为单一提供方**
   - 模型浏览器改为只作用于当前提供方：初始视图固定为该提供方，不再有跨提供方的「全部」视图和返回入口。
   - 搜索只在该提供方的模型行里做。
-  - 收藏区只展示属于当前提供方的收藏。
+  - 没有收藏区：收藏已在 v0.3.2 移除并迁移为 Agent profiles（`create-agent-preferences/preferences.ts` 的 COMPAT 注释），`favoriteKey` 只是行标识的历史命名。
+  - 限定做成模型浏览器的必填参数 `scope: "allProviders" | "selectedProvider"`（`components/model-browser-view.ts` 的 `ModelBrowserScope`），由 `useModelBrowser` 和 `CombinedModelSelector` 透传。只有旁边另有提供方按钮的 Composer 桌面工具栏传 `selectedProvider`（`hasProviderControl`）；定时任务表单和元数据生成设置页没有提供方按钮，传 `allProviders`，保留跨提供方浏览，否则换不了提供方；手机 sheet 在工单 04 之前也传 `allProviders`。
+  - `selectedProvider` 下：提供方列表收窄到当前提供方（`scopeModelBrowserProviders`）；初始视图固定为当前提供方，即使它还不在列表里（快照未到或已停用）也不回落到根视图；标题栏没有返回按钮；提供方视图展示全部 profiles（`selectProviderViewProfileRows`）。profile 可套用的范围仍由 `useAgentProfilePicker` 的 `availableProviders` 决定：草稿是所有提供方，运行中的 Agent 只有自己的提供方。
   - Agent profiles 区保留，并展示全部 profiles。套用指向其他提供方的 profile 时，走现有的套用流程，提供方随之切换。
 - **草稿切换提供方**
   - 只选提供方时，模型取该提供方已记忆的上次选择，没有记录则取默认模型。
@@ -114,7 +116,7 @@
   - 先例：New workspace 在提供方恢复后还原模型的 e2e 用例，以及 Agent profiles 的 e2e helper。
 - **接缝 2（纯函数单元测试）：provider-selection 模块**
   - 验证提供方分组函数：`ready`/`loading` 平铺；`error`/`unavailable` 进「更多」；未启用的排除；保持顺序。
-  - 验证模型浏览器视图在单一提供方下的初始视图、搜索范围和收藏过滤。
+  - 验证模型浏览器视图在单一提供方下的初始视图（含当前提供方不在列表时）、搜索范围和 profiles 展示范围。
   - 先例：provider-selection 和 model-browser-view 现有的单元测试。
 - **接缝 3（单元测试）：提供方图标模块**
   - 验证 brand tone 下有彩色版的提供方返回彩色版，并且不受 `color` 影响。
@@ -142,7 +144,7 @@
   - [ ] 不可用的提供方折叠在「More agents (N)」下，展开后可以选中
   - [ ] 未启用的提供方不出现
 - [ ] 在草稿中切换提供方后，模型按钮显示该提供方上次选的模型；没有记录时显示默认模型。
-- [ ] 模型菜单只列当前提供方的模型，搜索和收藏都限定在当前提供方内；Agent profiles 仍可套用，套用跨提供方的 profile 会同步切换提供方按钮。
+- [ ] 模型菜单只列当前提供方的模型，搜索限定在当前提供方内；Agent profiles 全部可见且仍可套用，套用跨提供方的 profile 会同步切换提供方按钮。定时任务表单和元数据生成设置页仍可跨提供方选择。
 - [ ] 已运行的 Agent 上，提供方按钮显示当前提供方图标且为禁用态；模型按钮仍能切换同一提供方下的模型。
 - [ ] 手机端 sheet 有「提供方」行，点进去是同样分组的提供方列表；「模型」行只列当前提供方的模型；运行中的 Agent 上「提供方」行只读。
 - [ ] Composer 工具栏、提供方列表、模型列表里：

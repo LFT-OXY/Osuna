@@ -1,6 +1,16 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { test, expect, type Page } from "../support/fixtures";
-import { expectComposerModel, seedModelProvider } from "../support/helpers/agent-profiles";
+import {
+  applyProfileFromPicker,
+  closeModelPicker,
+  expectComposerModel,
+  expectModelRowSelected,
+  expectNoModelRowsFor,
+  expectProfileVisibleForProvider,
+  openModelPicker,
+  seedAgentProfiles,
+  seedModelProvider,
+} from "../support/helpers/agent-profiles";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { gotoWorkspace } from "../support/helpers/launcher";
@@ -47,6 +57,13 @@ const DISABLED = {
   label: "Disabled agents",
   models: [{ id: "disabled-one", label: "Disabled one", description: "Turned off" }],
   enabled: false,
+};
+
+const BETA_PROFILE = {
+  id: "agent_profile_e2e_provider_menu_beta",
+  name: "Beta work",
+  provider: BETA.id,
+  model: "beta-two",
 };
 
 async function rememberAlphaModel(page: Page) {
@@ -138,6 +155,54 @@ test.describe("Composer provider button", () => {
       });
     } finally {
       await client.close();
+      for (const seed of seeds) await seed.restore();
+      await workspace.cleanup();
+    }
+  });
+
+  test("a profile for another provider switches the provider button with it", async ({ page }) => {
+    test.setTimeout(120_000);
+    const workspace = await seedWorkspace({ repoPrefix: "provider-menu-profile-" });
+    const seeds = await Promise.all([ALPHA, BETA].map((provider) => seedModelProvider(provider)));
+    const profiles = await seedAgentProfiles([BETA_PROFILE]);
+    const client = await connectDaemonClient<DaemonClient>({ clientIdPrefix: "provider-profile" });
+    try {
+      const cwd = workspace.repoPath;
+      await expectProviderStatus({ client, cwd, provider: ALPHA.id, status: "ready" });
+      await expectProviderStatus({ client, cwd, provider: BETA.id, status: "ready" });
+
+      await rememberAlphaModel(page);
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForSidebarHydration(page);
+      await openGlobalNewWorkspaceComposer(page);
+      await expect(providerButton(page, ALPHA.label)).toBeVisible({ timeout: 30_000 });
+      await expectComposerModel(page, "Alpha two");
+
+      await test.step("the model menu lists only Alpha's models but every profile", async () => {
+        await openModelPicker(page);
+        await expectModelRowSelected(page, { provider: ALPHA.id, modelId: "alpha-two" });
+        await expectNoModelRowsFor(page, BETA);
+        await expectProfileVisibleForProvider(page, {
+          name: BETA_PROFILE.name,
+          summary: `${BETA.label} · Beta two`,
+        });
+      });
+
+      await test.step("applying the Beta profile moves the provider button to Beta", async () => {
+        await applyProfileFromPicker(page, BETA_PROFILE.name);
+        await expect(providerButton(page, BETA.label)).toBeVisible({ timeout: 30_000 });
+        await expectComposerModel(page, "Beta two");
+      });
+
+      await test.step("the model menu now lists Beta's models", async () => {
+        await openModelPicker(page);
+        await expectModelRowSelected(page, { provider: BETA.id, modelId: "beta-two" });
+        await expectNoModelRowsFor(page, ALPHA);
+        await closeModelPicker(page);
+      });
+    } finally {
+      await client.close();
+      await profiles.restore();
       for (const seed of seeds) await seed.restore();
       await workspace.cleanup();
     }

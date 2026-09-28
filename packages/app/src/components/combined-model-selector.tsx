@@ -9,7 +9,10 @@ import { Text as UiText } from "@/components/ui/text";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Combobox, type ComboboxOption, type ComboboxProps } from "@/components/ui/combobox";
 import { ModelBrowser, ModelProviderGlyph, useModelBrowser } from "@/components/model-browser";
-import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
+import {
+  resolveModelBrowserScrolling,
+  type ModelBrowserScope,
+} from "@/components/model-browser-view";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
@@ -30,6 +33,8 @@ interface CombinedModelSelectorProps {
   selectedModel: string;
   onSelect: (provider: AgentProvider, modelId: string) => void;
   isLoading: boolean;
+  /** 只有旁边另有提供方按钮时才能限定为 `selectedProvider`。 */
+  scope: ModelBrowserScope;
   profiles?: AgentProfilePicker | null;
   onApplyProfile?: (profileId: string) => void;
   onEditProfiles?: () => void;
@@ -74,6 +79,7 @@ export function CombinedModelSelector({
   selectedModel,
   onSelect,
   isLoading,
+  scope,
   profiles = null,
   onApplyProfile,
   onEditProfiles,
@@ -104,6 +110,7 @@ export function CombinedModelSelector({
     isLoading,
     profiles,
     serverId,
+    scope,
   });
   const { prepareToOpen, reset } = browser;
 

@@ -27,6 +27,8 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 
 A collapsible group inside a `Combobox` ("More agents (N)") is one more option, not a second list: put a sentinel option between the visible rows and the folded ones, append the folded rows only while expanded, set `keepOpenOnSelect`, and in `onSelect` toggle on the sentinel and close yourself on everything else. Arrow keys and Enter then reach the toggle row like any other, which a `Pressable` footer below the list would not. Leave `searchable` off — filtering a list with a fold in it hides the toggle. Reference: `composer/agent-controls/provider-control.tsx`.
 
+`useModelBrowser` and `CombinedModelSelector` take a required `scope`. Pass `"selectedProvider"` only where a separate provider control sits next to the model trigger (the composer toolbar passes it when `hasProviderControl`): the browser then sees only the current provider, opens on its view even before the provider is listed, drops the back button, and shows every profile the picker offers. Every other surface passes `"allProviders"` — a schedule form or settings page with `"selectedProvider"` has no way left to change provider. Pure rules and their tests: `components/model-browser-view.ts`.
+
 ## Fallible actions own their three states
 
 Every user action that can fail renders pending, success, and failure in the same context (`docs/testing.md` "Fallible user actions"). Disable the trigger while pending, show the result or an acknowledgement, keep an actionable error visible until retried or dismissed. `screens/settings/host-page.tsx` and `screens/project-settings-screen.tsx` are references. Eleven files still call `Alert.alert`; do not add a twelfth.
