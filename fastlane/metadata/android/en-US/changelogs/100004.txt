@@ -1,0 +1,16 @@
+内部分发版。桌面端改名为 Osuna，换上新图标；从这一版开始，macOS 可以在应用内自动更新。
+
+升级前必读： 这一版需要手动下载安装一次，旧版无法自动更新到它。
+
+1. 从本仓库的 Releases 下载 Osuna 安装包，把 Osuna.app 拖进「应用程序」。
+
+2. 确认 Osuna 能正常打开后，删除旧的 Paseo.app。已添加的主机、应用设置和快捷键都保留在原来的位置，不受影响。
+
+3. 首次打开 Osuna.app 会被 Gatekeeper 拦下，按顺序尝试：
+
+Windows 用户同样需要手动安装一次。SmartScreen 提示「已阻止运行无法识别的应用」时，点「更多信息」→「仍要运行」。
+
+- 在「应用程序」里右键点 Osuna，选「打开」，在弹窗里再点一次「打开」。
+- 如果提示「已损坏」，先在终端运行 xattr -dr com.apple.quarantine /Applications/Osuna.app，再打开。
+
+Full notes: https://paseo.sh/changelog
