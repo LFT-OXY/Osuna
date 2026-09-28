@@ -1544,6 +1544,7 @@ export const zhCN: TranslationResources = {
     noFiles: "没有找到文件或目录",
     noCommands: "没有找到 commands",
     failedToLoad: "加载失败",
+    partialCommands: "发送一条消息后加载全部指令",
   },
   loadOlderHistory: {
     failed: "无法加载更早历史",

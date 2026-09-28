@@ -1578,6 +1578,7 @@ export const ja: TranslationResources = {
     noFiles: "ファイルまたはディレクトリが見つかりません",
     noCommands: "コマンドが見つかりません",
     failedToLoad: "読み込みに失敗しました",
+    partialCommands: "メッセージを送信するとすべてのコマンドを読み込みます",
   },
   loadOlderHistory: {
     failed: "古い履歴を読み込めませんでした",

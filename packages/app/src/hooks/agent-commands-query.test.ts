@@ -22,6 +22,20 @@ describe("agent command query keys", () => {
     ).toEqual(agentCommandsQueryKey({ serverId: "server-1", agentId: "draft-b", draftConfig }));
   });
 
+  it("keeps the same draft key when only the model or mode changes", () => {
+    expect(
+      draftAgentCommandsQueryKey({
+        serverId: "server-1",
+        draftConfig: { provider: "claude", cwd: "/repo", model: "opus", modeId: "plan" },
+      }),
+    ).toEqual(
+      draftAgentCommandsQueryKey({
+        serverId: "server-1",
+        draftConfig: { provider: "claude", cwd: "/repo", model: "sonnet", modeId: "default" },
+      }),
+    );
+  });
+
   it("keeps draft commands separate from running agent session commands", () => {
     expect(sessionAgentCommandsQueryKey({ serverId: "server-1", agentId: "agent-1" })).toEqual([
       "agentCommands",
@@ -34,22 +48,7 @@ describe("agent command query keys", () => {
         serverId: "server-1",
         draftConfig: { provider: "codex", cwd: "/repo" },
       }),
-    ).toEqual([
-      "agentCommands",
-      "server-1",
-      "draft",
-      "codex",
-      "cwd",
-      "/repo",
-      "mode",
-      null,
-      "model",
-      null,
-      "thinking",
-      null,
-      "features",
-      null,
-    ]);
+    ).toEqual(["agentCommands", "server-1", "draft", "codex", "cwd", "/repo"]);
   });
 
   it("normalizes cwd values so equivalent workspace paths share one draft scope", () => {

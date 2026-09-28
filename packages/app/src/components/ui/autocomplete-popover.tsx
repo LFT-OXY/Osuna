@@ -60,6 +60,7 @@ interface AutocompletePopoverProps {
   errorMessage?: string;
   loadingText?: string;
   emptyText?: string;
+  footerText?: string;
 }
 
 export function AutocompletePopover({
@@ -72,6 +73,7 @@ export function AutocompletePopover({
   errorMessage,
   loadingText,
   emptyText,
+  footerText,
 }: AutocompletePopoverProps): ReactElement | null {
   "use no memo";
   // React Compiler memoizes effect captures by reading SharedValue.value during render.
@@ -170,6 +172,7 @@ export function AutocompletePopover({
             errorMessage={errorMessage}
             loadingText={loadingText}
             emptyText={emptyText}
+            footerText={footerText}
           />
         </Animated.View>
       </View>

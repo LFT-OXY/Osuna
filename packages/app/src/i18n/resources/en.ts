@@ -1586,6 +1586,7 @@ export const en = {
     noFiles: "No files or directories found",
     noCommands: "No commands found",
     failedToLoad: "Failed to load",
+    partialCommands: "Send a message to load all commands",
   },
   loadOlderHistory: {
     failed: "Couldn't load older history",

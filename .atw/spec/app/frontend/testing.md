@@ -18,6 +18,8 @@ There are over 600 `*.test.ts` files and the good ones look like `hooks/use-arch
 
 45 test files still use `vi.mock`. They predate the current rule and are not a license. A new test that wants `vi.mock`, `vi.hoisted`, `vi.spyOn` of the module's own exports, or a monkey-patched global is telling you the production module lacks a port: add the injected interface, write a typed fake next to the adapter, test against the fake. The stubs in `vitest.setup.ts` are for modules with no meaningful Node behavior (`react-native-unistyles`, `react-native-svg`, `expo-linking`, `@xterm/addon-ligatures`), not for app code.
 
+React Query behavior (refetch on `enabled` flipping, data kept during a refetch, a prefetch observer feeding a second observer) does not need a renderer either. Export the options builder with the client as a parameter, then drive the real cache in Node: `new QueryObserver(new QueryClient(...), fetchQueryOptions(inputs.menu))`, `subscribe`, `setOptions` to flip flags, and a fake client whose promises the test resolves. `hooks/use-agent-commands-query.test.ts` is the reference. "Did not fetch" is a synchronous check (`fetchStatus === "idle"` and an empty call list), never an assertion after a `setTimeout`.
+
 ## When a spec prescribes a rendered component seam
 
 Some PRDs name "component + fake `DaemonClient`" as the test seam (`components/import-session-sheet.test.tsx`, `session-history/index.test.tsx`). Those run in the `unit` project under `@vitest-environment jsdom` with `@testing-library/react`, which is the tolerated exception above, not the default. These facts about the runners decide whether such a test can exist at all:

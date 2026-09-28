@@ -35,6 +35,8 @@ interface UseAgentAutocompleteInput {
   serverId: string;
   agentId: string;
   draftConfig?: DraftCommandConfig;
+  /** Composer input 聚焦且可显示菜单时为真，用于预取指令列表。 */
+  prefetchCommands: boolean;
   onAutocompleteApplied?: () => void;
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
@@ -73,6 +75,7 @@ interface AgentAutocompleteResult {
   errorMessage?: string;
   loadingText: string;
   emptyText: string;
+  footerText?: string;
   onSelectOption: (option: AutocompleteOption, input?: AgentAutocompleteInputSnapshot) => void;
   onKeyPress: (event: AgentAutocompleteKeyPressEvent) => boolean;
 }
@@ -194,10 +197,13 @@ function mapCommandToOption(entry: AvailableCommand, t: TFunction): AgentAutocom
 
 type AutocompleteMode = "command" | "file" | null;
 
+const EMPTY_COMMANDS: AgentSlashCommand[] = [];
+
 interface BuildAutocompleteOptionsInput {
   isVisible: boolean;
   mode: AutocompleteMode;
   commands: AgentSlashCommand[];
+  isCommandsLoading: boolean;
   pluginCommands: readonly PluginClientSlashCommand[];
   isDraftContext: boolean;
   commandFilterQuery: string;
@@ -207,12 +213,16 @@ interface BuildAutocompleteOptionsInput {
   t: TFunction;
 }
 
-function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
+export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
   if (!input.isVisible) {
     return [];
   }
 
   if (input.mode === "command") {
+    // 列表未到之前不给选项，免得键盘在"加载中"行下面选中看不见的内置命令。
+    if (input.isCommandsLoading) {
+      return [];
+    }
     const providerCommands = input.commands.map((command) => ({
       source: "provider" as const,
       command,
@@ -273,14 +283,16 @@ function resolveAutocompleteMode(args: {
   return null;
 }
 
-function resolveAutocompleteIsVisible(args: {
+export function resolveAutocompleteIsVisible(args: {
   mode: AutocompleteMode;
   canLoadCommands: boolean;
+  /** 能请求指令或手里已有列表；断线且从没拿到过时不显示面板。 */
+  commandsAvailable: boolean;
   serverId: string;
   autocompleteCwd: string;
 }): boolean {
   if (args.mode === "command") {
-    return args.canLoadCommands;
+    return args.canLoadCommands && args.commandsAvailable;
   }
   if (args.mode === "file") {
     return Boolean(args.serverId) && args.autocompleteCwd.length > 0;
@@ -299,7 +311,7 @@ function resolveCanLoadCommands(args: {
   return Boolean(args.agentId) || args.isDraftContext;
 }
 
-function resolveAutocompleteIsLoading(args: {
+export function resolveAutocompleteIsLoading(args: {
   mode: AutocompleteMode;
   isCommandsLoading: boolean;
   fileSuggestionsIsPending: boolean;
@@ -307,7 +319,7 @@ function resolveAutocompleteIsLoading(args: {
   optionsLength: number;
 }): boolean {
   if (args.mode === "command") {
-    return args.isCommandsLoading && args.optionsLength === 0;
+    return args.isCommandsLoading;
   }
   if (args.mode === "file") {
     return (
@@ -319,14 +331,13 @@ function resolveAutocompleteIsLoading(args: {
 
 function resolveAutocompleteErrorMessage(args: {
   mode: AutocompleteMode;
-  isCommandError: boolean;
   commandError: Error | null;
   fileSuggestionsError: unknown;
   t: TFunction;
 }): string | undefined {
   if (args.mode === "command") {
-    return args.isCommandError
-      ? (args.commandError?.message ?? args.t("agentAutocomplete.failedToLoad"))
+    return args.commandError
+      ? args.commandError.message || args.t("agentAutocomplete.failedToLoad")
       : undefined;
   }
   if (args.mode === "file") {
@@ -335,6 +346,35 @@ function resolveAutocompleteErrorMessage(args: {
       : undefined;
   }
   return undefined;
+}
+
+interface AutocompleteTexts {
+  loadingText: string;
+  emptyText: string;
+  footerText?: string;
+}
+
+interface AutocompleteTextsInput {
+  mode: AutocompleteMode;
+  isCommandListPartial: boolean;
+  t: TFunction;
+}
+
+export function resolveAutocompleteTexts(args: AutocompleteTextsInput): AutocompleteTexts {
+  if (args.mode === "file") {
+    return {
+      loadingText: args.t("agentAutocomplete.searchingWorkspace"),
+      emptyText: args.t("agentAutocomplete.noFiles"),
+    };
+  }
+  return {
+    loadingText: args.t("agentAutocomplete.loadingCommands"),
+    emptyText: args.t("agentAutocomplete.noCommands"),
+    footerText:
+      args.mode === "command" && args.isCommandListPartial
+        ? args.t("agentAutocomplete.partialCommands")
+        : undefined,
+  };
 }
 
 export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAutocompleteResult {
@@ -346,6 +386,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     serverId,
     agentId,
     draftConfig,
+    prefetchCommands,
     onAutocompleteApplied,
     onClientSlashCommand,
     canExecuteClientSlashCommand,
@@ -403,26 +444,26 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const isConnected = useHostRuntimeIsConnected(serverId);
 
   const mode = resolveAutocompleteMode({ showFileAutocomplete, showCommandAutocomplete });
-  const canShowAutocomplete = resolveAutocompleteIsVisible({
+  const commandsState = useAgentCommandsQuery({
+    serverId,
+    agentId,
+    isMenuOpen: mode === "command" && canLoadCommands,
+    prefetch: prefetchCommands && canLoadCommands,
+    draftConfig: queryDraftConfig,
+  });
+  const commands = commandsState.status === "ready" ? commandsState.commands : EMPTY_COMMANDS;
+  const isCommandListPartial = commandsState.status === "ready" && commandsState.partial;
+  const commandsAvailable = commandsState.status !== "unavailable";
+  const isCommandsLoading = commandsState.status === "loading";
+  const commandError = commandsState.status === "error" ? commandsState.error : null;
+
+  const isVisible = resolveAutocompleteIsVisible({
     mode,
     canLoadCommands,
+    commandsAvailable,
     serverId,
     autocompleteCwd,
   });
-
-  const {
-    commands,
-    isLoading: isCommandsLoading,
-    isError,
-    error,
-  } = useAgentCommandsQuery({
-    serverId,
-    agentId,
-    enabled: mode === "command" && canLoadCommands,
-    draftConfig: queryDraftConfig,
-  });
-
-  const isVisible = canShowAutocomplete && !(mode === "command" && isCommandsLoading);
 
   const fileSuggestionsQuery = useQuery({
     queryKey: [
@@ -466,6 +507,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         activeFileMention,
         commandFilterQuery,
         commands,
+        isCommandsLoading,
         pluginCommands: pluginClientSlashCommands,
         activeSlashCommand,
         fileSuggestions: fileSuggestionsQuery.data ?? [],
@@ -479,6 +521,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       activeSlashCommand,
       commandFilterQuery,
       commands,
+      isCommandsLoading,
       pluginClientSlashCommands,
       fileSuggestionsQuery.data,
       isDraftContext,
@@ -577,18 +620,16 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   });
   const errorMessage = resolveAutocompleteErrorMessage({
     mode,
-    isCommandError: isError,
-    commandError: error,
+    commandError,
     fileSuggestionsError: fileSuggestionsQuery.error,
     t,
   });
 
-  const loadingText =
-    mode === "file"
-      ? t("agentAutocomplete.searchingWorkspace")
-      : t("agentAutocomplete.loadingCommands");
-  const emptyText =
-    mode === "file" ? t("agentAutocomplete.noFiles") : t("agentAutocomplete.noCommands");
+  const { loadingText, emptyText, footerText } = resolveAutocompleteTexts({
+    mode,
+    isCommandListPartial,
+    t,
+  });
 
   return {
     isVisible,
@@ -598,6 +639,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     errorMessage,
     loadingText,
     emptyText,
+    footerText,
     onSelectOption,
     onKeyPress,
   };

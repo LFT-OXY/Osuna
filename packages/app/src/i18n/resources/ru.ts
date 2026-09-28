@@ -1590,6 +1590,7 @@ export const ru: TranslationResources = {
     noFiles: "Файлы и каталоги не найдены",
     noCommands: "Команды не найдены",
     failedToLoad: "Не удалось загрузить",
+    partialCommands: "Отправьте сообщение, чтобы загрузить все команды",
   },
   loadOlderHistory: {
     failed: "Не удалось загрузить старую историю.",

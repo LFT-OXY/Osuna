@@ -29,20 +29,13 @@ export function draftAgentCommandsQueryKey(input: {
   draftConfig: AgentCommandsDraftConfig;
 }) {
   const { draftConfig } = input;
+  // daemon 的指令目录只按 provider + 工作目录区分，切换 model / mode 不应换成空键闪"加载中"。
   return [
     ...agentCommandsQueryRoot(input.serverId),
     "draft",
     draftConfig.provider,
     "cwd",
     normalizeAgentCommandsCwd(draftConfig.cwd),
-    "mode",
-    draftConfig.modeId ?? null,
-    "model",
-    draftConfig.model ?? null,
-    "thinking",
-    draftConfig.thinkingOptionId ?? null,
-    "features",
-    draftConfig.featureValues ?? null,
   ] as const;
 }
 

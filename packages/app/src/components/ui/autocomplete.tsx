@@ -31,6 +31,8 @@ interface AutocompleteProps {
   errorMessage?: string;
   loadingText?: string;
   emptyText?: string;
+  /** 列表底部的说明行，不可选，键盘导航不经过它。 */
+  footerText?: string;
   maxHeight?: number;
 }
 
@@ -117,6 +119,14 @@ function AutocompleteRow({
   );
 }
 
+function AutocompleteFooter({ text }: { text: string }) {
+  return (
+    <View style={styles.footerItem}>
+      <Text style={styles.footerText}>{text}</Text>
+    </View>
+  );
+}
+
 export function Autocomplete({
   options,
   selectedIndex,
@@ -125,6 +135,7 @@ export function Autocomplete({
   errorMessage,
   loadingText,
   emptyText,
+  footerText,
   maxHeight = 220,
 }: AutocompleteProps) {
   const { t } = useTranslation();
@@ -239,6 +250,7 @@ export function Autocomplete({
         <View style={styles.emptyItem}>
           <Text style={styles.emptyText}>{resolvedEmptyText}</Text>
         </View>
+        {footerText ? <AutocompleteFooter text={footerText} /> : null}
       </View>
     );
   }
@@ -280,6 +292,7 @@ export function Autocomplete({
               onRowLayout={handleRowLayout}
             />
           ))}
+          {footerText ? <AutocompleteFooter text={footerText} /> : null}
         </ScrollView>
       </View>
     </View>
@@ -391,5 +404,13 @@ const styles = StyleSheet.create((theme: Theme) => ({
   emptyText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+  },
+  footerItem: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+  },
+  footerText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
 })) as unknown as Record<string, object>;

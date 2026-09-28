@@ -29,6 +29,21 @@ useFetchQuery({ ..., staleTimeMs: 0, enabled: isClientReady && isVisible });
 
 Re-enabling a stale query is a fetch, so "window regains focus" and "hidden retained panel comes back" both refresh with no code of their own, and a hidden panel never fans out requests in the background. `file-pane/pane.tsx` (`isFileQueryEnabled`) and `session-history/index.tsx` are the references. The surface takes `isVisible: boolean` as a prop next to `isConnected`, so a jsdom test drives the transition by rerendering, not by patching `document.hasFocus`.
 
+### Refresh on every open, prefetch on focus: two observers on one key
+
+The Command menu wants both: fetch when the Composer input gains focus so the menu opens with data, and fetch again every time the menu opens while keeping the old list on screen. One observer cannot do both, because typing `/` in an already-focused input does not flip its `enabled`. `hooks/use-agent-commands-query.ts` mounts two `useFetchQuery` observers on the same key:
+
+```ts
+const inputs = agentCommandsQueryInputs({ ..., canFetch, isMenuOpen, prefetch });
+useFetchQuery(inputs.prefetch); // staleTimeMs: 60_000, enabled: canFetch && prefetch
+const query = useFetchQuery(inputs.menu); // staleTimeMs: 0, enabled: canFetch && isMenuOpen
+return selectAgentCommandsState({ canFetch, data: query.data, error: query.error });
+```
+
+`staleTime` is evaluated per observer, so refocusing within a minute does not refetch, while every menu open (`enabled` false → true on a stale query) does. An open that lands while the focus fetch is still in flight joins that fetch instead of starting a second one. Use `dataShape: "value"` here: `"list"` adds `keepPreviousData`, which would show another agent's commands under a new key.
+
+Expose the result as a discriminated union (`unavailable | loading | error | ready`), not `{ isLoading, error, data }`. Two rules live in the selector: data wins over error, so a failed background refresh keeps the old list instead of replacing it with an error row; and "cannot fetch and never had data" (host disconnected) is `unavailable`, which hides the menu instead of showing a loading row that never ends.
+
 ## Hook shape
 
 A hook that does real work has a pure module beside it and a test for that module:

@@ -1071,6 +1071,7 @@ function ComposerAutocompleteBinding({
       errorMessage={autocomplete.errorMessage}
       loadingText={autocomplete.loadingText}
       emptyText={autocomplete.emptyText}
+      footerText={autocomplete.footerText}
     />
   );
 }
@@ -2400,6 +2401,7 @@ function ComposerContentImpl({
       serverId,
       agentId,
       draftConfig: commandDraftConfig,
+      prefetchCommands: isMessageInputFocused && mode.showAutocomplete,
       canExecuteClientSlashCommand: buildOutgoingAttachments(attachments).length === 0,
       onClientSlashCommand: runClientSlashCommand,
       pluginClientSlashCommands,
@@ -2409,6 +2411,8 @@ function ComposerContentImpl({
       serverId,
       agentId,
       commandDraftConfig,
+      isMessageInputFocused,
+      mode.showAutocomplete,
       buildOutgoingAttachments,
       attachments,
       runClientSlashCommand,
