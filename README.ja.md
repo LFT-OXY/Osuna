@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
+  <img src="packages/app/assets/images/osuna-logo.png" width="64" height="64" alt="Osuna ロゴ">
 </p>
 
-<h1 align="center">Paseo</h1>
+<h1 align="center">Osuna</h1>
 
 <p align="center">
   <a href="README.md">English</a> ·
@@ -12,50 +12,34 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/getpaseo/paseo/stargazers">
-    <img src="https://img.shields.io/github/stars/getpaseo/paseo?style=flat&logo=github" alt="GitHub stars">
-  </a>
-  <a href="https://github.com/getpaseo/paseo/releases">
-    <img src="https://img.shields.io/github/v/release/getpaseo/paseo?style=flat&logo=github" alt="GitHub release">
-  </a>
-  <a href="https://x.com/moboudra">
-    <img src="https://img.shields.io/badge/%40moboudra-555?logo=x" alt="X">
-  </a>
-  <a href="https://discord.gg/jz8T2uahpH">
-    <img src="https://img.shields.io/badge/Discord-555?logo=discord" alt="Discord">
-  </a>
-  <a href="https://www.reddit.com/r/PaseoAI/">
-    <img src="https://img.shields.io/badge/Reddit-555?logo=reddit" alt="Reddit">
+  <a href="https://github.com/LFT-OXY/Osuna/releases">
+    <img src="https://img.shields.io/github/v/release/LFT-OXY/Osuna?style=flat&logo=github" alt="GitHub release">
   </a>
 </p>
 
 <p align="center">Claude Code、Codex、Copilot、OpenCode、Pi のエージェントを、ひとつのインターフェースで。</p>
-
-<p align="center">
-  <img src="https://paseo.sh/hero-mockup.png" alt="Paseo アプリのスクリーンショット" width="100%">
-</p>
-
-<p align="center">
-  <img src="https://paseo.sh/mobile-mockup.png" alt="Paseo モバイルアプリ" width="100%">
-</p>
-
-> [!NOTE]
-> 私はひとりでメンテナンスしているため、GitHub Issues を毎日確認できるとは限りません。
-> 急ぎの問題や作業がブロックされている場合は、[Discord](https://discord.gg/jz8T2uahpH) から連絡するのが一番早いです。
-
----
 
 自分のマシンでエージェントを並列実行。スマートフォンからでもデスクからでも、開発を進めてリリースできます。
 
 - **セルフホスト:** エージェントはあなたのマシン上で動作し、完全な開発環境を使用します。自分のツール・設定・スキルをそのまま活用できます。
 - **マルチプロバイダー:** Claude Code、Codex、Copilot、OpenCode、Pi を同一のインターフェースで利用。タスクに合ったモデルを選べます。
 - **音声コントロール:** 音声モードでタスクを口述したり問題を話し合ったりできます。ハンズフリーが必要なときに便利です。
-- **クロスデバイス:** iOS、Android、デスクトップ、Web、CLI に対応。机で作業を始め、スマートフォンで確認し、ターミナルから自動化できます。
-- **プライバシー優先:** Paseo にはテレメトリー・トラッキング・強制ログインは一切ありません。
+- **クロスデバイス:** デスクトップ、Web、CLI、スマートフォンに対応。机で作業を始め、スマートフォンで確認し、ターミナルから自動化できます。
+- **プライバシー優先:** Osuna にはテレメトリー・トラッキング・強制ログインは一切ありません。
+
+> [!NOTE]
+> Osuna は [Paseo](https://github.com/getpaseo/paseo) のフォークです。内部の識別子は上流の表記のままです。CLI コマンドは `paseo`、データは `~/.paseo`、環境変数は `PASEO_` で始まります。
+
+## プラグイン
+
+信頼できる TypeScript プラグインで、テーマ、ワークスペースパネル、コマンド、設定画面、コーディングエージェントのプロバイダーを追加できます。
+`paseo plugin add <source>` でローカルディレクトリまたは Git リポジトリからインストールします。
+
+詳しくは[プラグインのドキュメント](docs/plugins.md)を参照してください。プラグインはデーモンが動くマシンにアクセスでき、接続中のクライアント内でも実行されます。信頼できるコードだけをインストールしてください。
 
 ## はじめかた
 
-Paseo はコーディングエージェントを管理するローカルサーバー（デーモン）を起動します。デスクトップアプリ・モバイルアプリ・Web アプリ・CLI などのクライアントがこのデーモンに接続します。
+Osuna はコーディングエージェントを管理するローカルサーバー（デーモン）を起動します。デスクトップアプリ・Web アプリ・CLI・Paseo モバイルアプリなどのクライアントがこのデーモンに接続します。
 
 ### 前提条件
 
@@ -69,50 +53,55 @@ Paseo はコーディングエージェントを管理するローカルサー�
 
 ### デスクトップアプリ（推奨）
 
-[paseo.sh/download](https://paseo.sh/download) または [GitHub のリリースページ](https://github.com/getpaseo/paseo/releases)からダウンロードしてください。アプリを開くとデーモンが自動的に起動します。追加のインストールは不要です。
+[GitHub のリリースページ](https://github.com/LFT-OXY/Osuna/releases)からダウンロードしてください。アプリを開くとデーモンが自動的に起動します。追加のインストールは不要です。
 
-スマートフォンから接続するには、Settings 画面に表示される QR コードをスキャンしてください。
+スマートフォンから接続するには、公式の Paseo モバイルアプリをインストールし、Osuna で **Settings → ホスト → Pair Device** を開いてください。
 
-### CLI / ヘッドレス
+### CLI
 
-CLI をインストールして Paseo を起動します。
+デスクトップアプリで **Settings → Integrations → Command line** を開き、**Install** をクリックします。`paseo` コマンドが `~/.local/bin` にリンクされます。
+
+npm から `@getpaseo/cli` をインストールしないでください。それは上流の Paseo で、Osuna ではありません。
+
+### Docker
+
+Osuna デーモンとセルフホスト Web UI を Docker で実行します。サーバーやリモートマシンでの利用に適しています。
 
 ```bash
-npm install -g @getpaseo/cli
-paseo
+docker run -d --name osuna \
+  -p 6767:6767 \
+  -e PASEO_PASSWORD=change-me \
+  -v "$PWD/paseo-home:/home/paseo" \
+  -v "$PWD:/workspace" \
+  ghcr.io/lft-oxy/paseo:latest
 ```
 
-ターミナルに QR コードが表示されます。どのクライアントからでも接続できます。サーバーやリモートマシンでの利用に適しています。
+起動したら `http://localhost:6767` を開いてください。使用するエージェント CLI をベースイメージに追加し、環境変数または永続化した `/home/paseo` ボリュームで認証情報を渡します。詳しくは [Docker のドキュメント](docs/docker.md)を参照してください。
 
-詳しいセットアップと設定については以下を参照してください。
-
-- [ドキュメント](https://paseo.sh/docs)
-- [設定リファレンス](https://paseo.sh/docs/configuration)
-
-## CLI
+## CLI の使い方
 
 アプリでできることはすべてターミナルからも実行できます。
 
 ```bash
 paseo run --provider claude/opus-4.6 "implement user authentication"
-paseo run --provider codex/gpt-5.4 --worktree feature-x "implement feature X"
+paseo run --provider codex/gpt-5.5 --worktree feature-x "implement feature X"
 
 paseo ls                           # 実行中のエージェントを一覧表示
 paseo attach abc123                # ライブ出力をストリーミング
 paseo send abc123 "also add tests" # 追加タスクを送信
 
-# リモートデーモンで実行
-paseo --host workstation.local:6767 run "run the full test suite"
+# リモートデーモンで実行。--cwd はそのホスト上のパス
+paseo run --host workstation.local:6767 --cwd /workspace "run the full test suite"
 ```
 
-詳細は[完全な CLI リファレンス](https://paseo.sh/docs/cli)を参照してください。
+コマンドの一覧は `paseo --help` で確認できます。
 
 ## スキル
 
-スキルはエージェントに Paseo を使って他のエージェントをオーケストレーションする方法を教えます。
+スキルはエージェントに Osuna を使って他のエージェントをオーケストレーションする方法を教えます。
 
 ```bash
-npx skills add getpaseo/paseo
+npx skills add LFT-OXY/Osuna
 ```
 
 どのエージェントとの会話でも使用できます。
@@ -125,12 +114,12 @@ npx skills add getpaseo/paseo
 
 モノレポのパッケージ構成：
 
-- `packages/server`: Paseo デーモン（エージェントプロセスのオーケストレーション、WebSocket API、MCP サーバー）
+- `packages/server`: Osuna デーモン（エージェントプロセスのオーケストレーション、WebSocket API、MCP サーバー）
 - `packages/app`: Expo クライアント（iOS、Android、Web）
 - `packages/cli`: デーモンおよびエージェントワークフロー向け `paseo` CLI
 - `packages/desktop`: Electron デスクトップアプリ
-- `packages/relay`: リモート接続用リレーパッケージ
-- `packages/website`: マーケティングサイトとドキュメント（`paseo.sh`）
+- `packages/relay`: デーモンとクライアントが使うリレーの通信と暗号化
+- `packages/website`: 上流のマーケティングサイトとドキュメント（`paseo.sh`）。このフォークではデプロイしません
 
 よく使うコマンド：
 
@@ -151,10 +140,7 @@ npm run build:server
 npm run typecheck
 ```
 
-## 関連プロジェクト
-
-- [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — Elixir 製の公式分散リレー
-- [paseo-vscode](https://marketplace.visualstudio.com/items?itemName=hinnes.paseo-vscode) — VS Code 拡張機能
+開発環境の詳しいセットアップは [docs/development.md](docs/development.md) を参照してください。
 
 ## ライセンス
 
