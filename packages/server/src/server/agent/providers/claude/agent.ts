@@ -17,6 +17,7 @@ import {
   type SDKResultMessage,
   type SDKSystemMessage,
   type SDKUserMessage,
+  type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { Logger } from "pino";
 import {
@@ -369,13 +370,6 @@ interface SlashCommandInvocation {
   commandName: string;
   args?: string;
   rawInput: string;
-}
-
-function classifyClaudeSlashCommand(commandName: string): AgentSlashCommand["kind"] {
-  // Claude exposes commands and skills as one flat SDK list, without structured source
-  // metadata. Keep obvious root-only/session controls out of inline autocomplete and
-  // treat the rest as skills; the worst failure mode is an inert inline suggestion.
-  return CLAUDE_ROOT_ONLY_COMMANDS.has(commandName) ? "command" : "skill";
 }
 
 type ClaudeAgentConfig = Omit<AgentSessionConfig, "providerOptions"> & {
@@ -2037,6 +2031,10 @@ class ClaudeAgentSession implements AgentSession {
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
   private query: Query | null = null;
+  /** The last full list the CLI reported, classified with the latest init message. */
+  private reportedCommands: AgentSlashCommand[] | null = null;
+  private skillNames = new Set<string>();
+  private terminalCommandNames = new Set<string>();
   private childProcess: ChildProcess | null = null;
   private input: AsyncMessageInput<SDKUserMessage> | null = null;
   /** The exact SDK query/input pair that owns the current foreground turn. */
@@ -2729,24 +2727,47 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async listCommands(): Promise<AgentSlashCommand[] | null> {
-    // Ask only a query that is already running; ensureQuery() here would spawn the CLI.
-    const q = this.query;
-    if (!q) {
-      return null;
+    // Only a running CLI's report counts; ensureQuery() here would spawn the CLI.
+    return this.query ? this.reportedCommands : null;
+  }
+
+  // The init message names the skills, which the command list itself does not mark. Skills a
+  // commands_changed push adds mid-turn stay "command" until the next turn's init names them.
+  private refreshCommandsFromInit(message: SDKSystemMessage): void {
+    this.skillNames = new Set(message.skills);
+    this.terminalCommandNames = new Set(message.terminal_slash_commands ?? []);
+    const query = this.query;
+    if (!query) {
+      return;
     }
-    const commands = await q.supportedCommands();
-    const commandMap = new Map<string, AgentSlashCommand>();
-    for (const cmd of commands) {
-      if (!commandMap.has(cmd.name)) {
-        commandMap.set(cmd.name, {
-          name: cmd.name,
-          description: cmd.description,
-          argumentHint: cmd.argumentHint,
-          kind: classifyClaudeSlashCommand(cmd.name),
-        });
+    void this.reportSupportedCommands(query).catch((error) => {
+      this.logger.warn({ err: error }, "Failed to read Claude's command list after init");
+    });
+  }
+
+  private async reportSupportedCommands(query: Query): Promise<void> {
+    const commands = await query.supportedCommands();
+    if (this.query === query) {
+      this.reportCommands(commands);
+    }
+  }
+
+  private reportCommands(commands: SlashCommand[]): void {
+    const byName = new Map<string, AgentSlashCommand>();
+    for (const command of commands) {
+      if (this.terminalCommandNames.has(command.name) || byName.has(command.name)) {
+        continue;
       }
+      byName.set(command.name, {
+        name: command.name,
+        description: command.description,
+        argumentHint: command.argumentHint,
+        kind: this.skillNames.has(command.name) ? "skill" : "command",
+      });
     }
-    return Array.from(commandMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const reported = Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
+    this.reportedCommands = reported;
+    this.notifySubscribers({ type: "commands_changed", provider: "claude", commands: reported });
   }
 
   async revertConversation(input: { messageId: string }): Promise<void> {
@@ -4234,6 +4255,7 @@ class ClaudeAgentSession implements AgentSession {
     events: AgentStreamEvent[],
   ): void {
     if (message.subtype === "init") {
+      this.refreshCommandsFromInit(message);
       const sessionUpdate = this.handleSystemMessage(message);
       if (sessionUpdate.notice) {
         events.push({
@@ -4267,6 +4289,10 @@ class ClaudeAgentSession implements AgentSession {
           });
         }
       }
+      return;
+    }
+    if (message.subtype === "commands_changed") {
+      this.reportCommands(message.commands);
       return;
     }
     if (message.subtype === "compact_boundary") {

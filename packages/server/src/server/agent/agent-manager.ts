@@ -3844,6 +3844,14 @@ export class AgentManager {
       this.dispatch({ type: "provider_subagent", event: update });
       return;
     }
+    if (event.type === "commands_changed") {
+      await this.commandCatalog.record({
+        provider: agent.provider,
+        cwd: agent.cwd,
+        commands: event.commands,
+      });
+      return;
+    }
     const turnId = getAgentStreamEventTurnId(event);
     const matchingWaiters = this.runs.getMatchingWaiters(agent, turnId);
     this.logger.trace(

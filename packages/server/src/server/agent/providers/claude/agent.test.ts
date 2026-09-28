@@ -1723,6 +1723,7 @@ describe("ClaudeAgentSession context window usage", () => {
   interface QueryFactoryForTurnsOptions {
     getContextUsage?: ReturnType<typeof vi.fn>;
     model?: string;
+    supportedCommands?: Array<{ name: string; description: string; argumentHint: string }>;
   }
 
   async function createSessionForTest(): Promise<TestClaudeSession> {
@@ -1863,7 +1864,7 @@ describe("ClaudeAgentSession context window usage", () => {
         setModel: vi.fn(async () => undefined),
         getContextUsage,
         supportedModels: vi.fn(async () => []),
-        supportedCommands: vi.fn(async () => []),
+        supportedCommands: vi.fn(async () => options?.supportedCommands ?? []),
         rewindFiles: vi.fn(async () => ({ canRewind: true })),
         [Symbol.asyncIterator]() {
           return this;
@@ -2083,86 +2084,108 @@ describe("ClaudeAgentSession context window usage", () => {
     expect(persistedQueryFactory.mock.calls[0]?.[0].options.persistSession).toBe(true);
   });
 
-  test("lists the running query's commands and classifies root-only ones as commands", async () => {
-    const queryFactory = vi.fn(({ prompt }: { prompt: AsyncIterable<unknown> }) => {
-      void prompt;
-      return {
-        next: async () => ({ done: true, value: undefined }),
-        interrupt: async () => undefined,
-        return: async () => undefined,
-        close: () => undefined,
-        setPermissionMode: async () => undefined,
-        setModel: async () => undefined,
-        getContextUsage: async () => undefined,
-        supportedModels: async () => [],
-        supportedCommands: async () => [
+  test("reports the process's commands at init, classified by init skills, without terminal ones", async () => {
+    const queryFactory = createQueryFactoryForTurns(
+      [
+        [
           {
-            name: "taste",
-            description: "Use when another skill needs the shared standard. (user)",
-            argumentHint: "",
+            ...createInitMessage(),
+            skills: ["taste", "plugin:review"],
+            terminal_slash_commands: ["exit"],
           },
-          {
-            name: "claude-api",
-            description: "Build, debug, and optimize Claude API apps with this skill.",
-            argumentHint: "",
-          },
-          {
-            name: "usage",
-            description: "Show the total cost and duration of the current session",
-            argumentHint: "",
-          },
-          {
-            name: "clear",
-            description: "Start a new session with empty context",
-            argumentHint: "",
-          },
+          createSuccessResult(),
         ],
-        rewindFiles: async () => ({ canRewind: true }),
-        [Symbol.asyncIterator]() {
-          return this;
-        },
-      };
-    });
+      ],
+      {
+        supportedCommands: [
+          { name: "taste", description: "Personal skill", argumentHint: "" },
+          { name: "plugin:review", description: "Plugin skill", argumentHint: "<pr>" },
+          { name: "deploy", description: "Custom .claude/commands file", argumentHint: "" },
+          { name: "clear", description: "Start a new session", argumentHint: "" },
+          { name: "exit", description: "Exit the REPL", argumentHint: "" },
+        ],
+      },
+    );
     const client = new ClaudeAgentClient({
       logger,
       queryFactory,
       resolveBinary: async () => "/test/claude/bin",
     });
     const session = await client.createSession({ provider: "claude", cwd: process.cwd() });
+    const reports: AgentSlashCommand[][] = [];
+    session.subscribe((event) => {
+      if (event.type === "commands_changed") reports.push(event.commands);
+    });
+    const expected: AgentSlashCommand[] = [
+      { name: "clear", description: "Start a new session", argumentHint: "", kind: "command" },
+      {
+        name: "deploy",
+        description: "Custom .claude/commands file",
+        argumentHint: "",
+        kind: "command",
+      },
+      { name: "plugin:review", description: "Plugin skill", argumentHint: "<pr>", kind: "skill" },
+      { name: "taste", description: "Personal skill", argumentHint: "", kind: "skill" },
+    ];
 
     await expect(session.listCommands?.()).resolves.toBeNull();
     expect(queryFactory).not.toHaveBeenCalled();
 
-    await session.setMode("default");
+    await session.run("turn");
+    await vi.waitFor(() => expect(reports).toEqual([expected]));
     const commands = await session.listCommands?.();
     await session.close();
 
-    expect(commands).toEqual([
-      {
-        name: "claude-api",
-        description: "Build, debug, and optimize Claude API apps with this skill.",
-        argumentHint: "",
-        kind: "skill",
-      },
-      {
-        name: "clear",
-        description: "Start a new session with empty context",
-        argumentHint: "",
-        kind: "command",
-      },
-      {
-        name: "taste",
-        description: "Use when another skill needs the shared standard. (user)",
-        argumentHint: "",
-        kind: "skill",
-      },
-      {
-        name: "usage",
-        description: "Show the total cost and duration of the current session",
-        argumentHint: "",
-        kind: "command",
-      },
+    expect(commands).toEqual(expected);
+  });
+
+  test("replaces the reported commands when Claude pushes commands_changed", async () => {
+    const queryFactory = createQueryFactoryForTurns([
+      [
+        { ...createInitMessage(), skills: ["taste"], terminal_slash_commands: ["statusline"] },
+        createSuccessResult(),
+      ],
+      [
+        {
+          type: "system",
+          subtype: "commands_changed",
+          session_id: "session-1",
+          commands: [
+            { name: "taste", description: "Personal skill", argumentHint: "" },
+            { name: "notes", description: "Command found mid-session", argumentHint: "" },
+            { name: "statusline", description: "Terminal status line", argumentHint: "" },
+          ],
+        },
+        createSuccessResult(),
+      ],
     ]);
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({ provider: "claude", cwd: process.cwd() });
+    const reports: AgentSlashCommand[][] = [];
+    session.subscribe((event) => {
+      if (event.type === "commands_changed") reports.push(event.commands);
+    });
+    const expected: AgentSlashCommand[] = [
+      {
+        name: "notes",
+        description: "Command found mid-session",
+        argumentHint: "",
+        kind: "command",
+      },
+      { name: "taste", description: "Personal skill", argumentHint: "", kind: "skill" },
+    ];
+
+    await session.run("first");
+    await session.run("second");
+    await vi.waitFor(() => expect(reports.at(-1)).toEqual(expected));
+    const commands = await session.listCommands?.();
+    await session.close();
+
+    expect(commands).toEqual(expected);
   });
 
   test("discovers skills, commands, and built-ins without starting the CLI", async () => {

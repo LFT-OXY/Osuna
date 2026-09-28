@@ -69,12 +69,12 @@
 
 - provider client 新增"免进程发现"能力：给定工作目录，返回扫描所得条目加内置命令，不得启动进程或建立连接。
 - provider session 的取列表改为"只看不启"：进程在运行则返回实时列表，否则返回"无"；原来会触发 `ensureQuery` / 重连的路径不再从取列表进入。
-- provider session 在拿到完整列表时通知 AgentManager 更新缓存（事件或回调，沿用现有 session 事件风格）。
+- provider session 在拿到完整列表时发出 `commands_changed` stream 事件（`{ type, provider, commands }`），AgentManager 在 `dispatchSessionEvent` 里按该 agent 的 provider + cwd 写入缓存，不转发给客户端。
 - 各 provider 的三路来源：
 
 | provider | 上报列表何时产生 | 免进程发现 | 内置命令 |
 |---|---|---|---|
-| Claude | 进程初始化完成后取一次；收到 `commands_changed` 时覆盖 | 扫 `$CLAUDE_CONFIG_DIR`（默认 `~/.claude`）与 `<cwd>/.claude` 下的 `skills/*/SKILL.md` 和 `commands/**/*.md`，读 frontmatter 的 name、description、argument-hint；子目录命令名用 `:` 连接 | 现有 root-only 名单里经 SDK 可用的命令 + 合成的 `rewind` |
+| Claude | 每条 init 消息（随 turn 到达）后读 `supportedCommands()`；收到 `commands_changed` 时直接用其 `commands` 覆盖；query 已启动但还没跑过 turn 时无上报列表 | 扫 `$CLAUDE_CONFIG_DIR`（默认 `~/.claude`）与 `<cwd>/.claude` 下的 `skills/*/SKILL.md` 和 `commands/**/*.md`，读 frontmatter 的 name、description、argument-hint；子目录命令名用 `:` 连接 | 现有 root-only 名单里经 SDK 可用的命令 + 合成的 `rewind` |
 | Codex | app-server 已连接时的 `skills/list` 结果 | `~/.codex/prompts/*.md`（`prompts:` 前缀）与现有 skills 目录扫描（现在只作失败兜底，改为常规来源） | `compact`，以及启用时的 `goal` |
 | Pi | 进程运行时的 `get_commands` | 无 | 现有 Pi 自处理的内置命令 |
 | OpenCode | 会话所用服务已在运行时的 `command.list` | 无 | `compact`、`summarize` |
@@ -84,7 +84,8 @@
 - Claude 内置命令即现有 10 个 root-only 命令加 `rewind`；SDK 0.3.246 的 `supportedCommands()` 实测 10 个都在，`agent-commands.real.e2e.test.ts` 逐项断言。
 - 删除 `AgentClient.listCommands(config)`：它唯一的实现（OpenCode）为取列表启动服务，违反 ADR。工单 04 完成前，非 Claude 的草稿只得到发现结果（多为空）和 `partial: true`。
 - Claude 的 `kind`：有上报列表时，名字在 init `skills` 名单里的为 `skill`，其余为 `command`；只有扫描结果时，来自 `skills` 目录的为 `skill`，来自 `commands` 目录的为 `command`。删除按名单猜的旧逻辑。
-- Claude 隐藏 init `terminal_slash_commands` 里的命令，所有端一致。
+- Claude 隐藏 init `terminal_slash_commands` 里的命令，所有端一致。过滤只作用于上报列表；内置名单不经过滤，`agent-commands.real.e2e.test.ts` 断言每个内置命令都留在过滤后的上报列表里、`kind` 为 `command`。
+- 已知限制：`commands_changed` 不带 `skills`，会话中途新增的 skill 在下一次 init（下一个 turn）前标为 `command`。
 - Claude 的初始化与 `commands_changed` 都已在 SDK 消息流里，只需接入；SDK 版本见 `research/command-list-references.md`。
 
 ### 协议

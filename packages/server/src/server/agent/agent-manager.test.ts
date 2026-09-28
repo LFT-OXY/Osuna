@@ -1880,6 +1880,7 @@ class CatalogSession extends TestAgentSession {
 
 class CatalogClient extends TestAgentClient {
   createSessionCalls = 0;
+  lastSession: CatalogSession | null = null;
 
   constructor(private readonly running: AgentSlashCommand[] | null = null) {
     super("codex");
@@ -1887,7 +1888,8 @@ class CatalogClient extends TestAgentClient {
 
   override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
     this.createSessionCalls += 1;
-    return new CatalogSession(config, this.running);
+    this.lastSession = new CatalogSession(config, this.running);
+    return this.lastSession;
   }
 
   async discoverCommands(): Promise<AgentSlashCommand[]> {
@@ -1955,6 +1957,43 @@ test("listCommands merges a running agent's report and serves it after a daemon 
     restarted.listCommands({ provider: "codex", cwd: workdir, agentId: idleAgent.id }),
   ).resolves.toEqual(expected);
   expect(restartedClient.createSessionCalls).toBe(1);
+});
+
+test("a session's command report fills the catalog for drafts and survives a restart", async () => {
+  const { workdir, catalogPath } = createCatalogWorkdir();
+  const client = new CatalogClient();
+  const manager = new AgentManager({
+    clients: { codex: client },
+    commandCatalogPath: catalogPath,
+    logger,
+  });
+  await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  const expected = {
+    commands: [catalogBuiltin, reportedCommands[0], reportedCommands[1]],
+    partial: false,
+  };
+
+  const session = client.lastSession;
+  if (!session) {
+    throw new Error("Expected createAgent to open a session");
+  }
+
+  session.pushEvent({ type: "commands_changed", provider: "codex", commands: reportedCommands });
+  await manager.flush();
+
+  await expect(manager.listCommands({ provider: "codex", cwd: workdir })).resolves.toEqual(
+    expected,
+  );
+  const restarted = new AgentManager({
+    clients: { codex: new CatalogClient() },
+    commandCatalogPath: catalogPath,
+    logger,
+  });
+  await expect(restarted.listCommands({ provider: "codex", cwd: workdir })).resolves.toEqual(
+    expected,
+  );
 });
 
 test("listCommands treats a corrupt catalog file as an empty cache", async () => {

@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import pino from "pino";
 
 import {
@@ -21,7 +21,7 @@ describe("claude agent commands contract (real)", () => {
     }
   });
 
-  test("lists slash commands only from a running CLI, including every built-in", async () => {
+  test("reports slash commands once a turn starts the CLI, including every built-in", async () => {
     const client = createRealProviderClient("claude", pino({ level: "silent" }));
     const session = await client.createSession({
       provider: "claude",
@@ -33,24 +33,29 @@ describe("claude agent commands contract (real)", () => {
       expect(typeof session.listCommands).toBe("function");
       await expect(session.listCommands!()).resolves.toBeNull();
 
-      await session.setMode("plan");
-      const commands = await session.listCommands!();
+      // Claude reports its list from the init message, which only a turn produces.
+      await session.run("Reply with exactly OK and nothing else.");
+      const commands = await vi.waitFor(async () => {
+        const reported = await session.listCommands!();
+        if (reported === null) {
+          throw new Error("Expected the running CLI to report its commands");
+        }
+        return reported;
+      });
 
-      if (commands === null) {
-        throw new Error("Expected the running CLI to report its commands");
-      }
-      const names = commands.map((command) => command.name);
+      // Every built-in survives the terminal-only filter and is classified as a command.
       for (const builtin of CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS) {
-        expect(names).toContain(builtin.name);
+        expect(commands).toContainEqual(
+          expect.objectContaining({ name: builtin.name, kind: "command" }),
+        );
       }
 
       for (const command of commands) {
-        const typed = command;
-        expect(typeof typed.name).toBe("string");
-        expect(typed.name.length).toBeGreaterThan(0);
-        expect(typed.name.startsWith("/")).toBe(false);
-        expect(typeof typed.description).toBe("string");
-        expect(typeof typed.argumentHint).toBe("string");
+        expect(command.name.length).toBeGreaterThan(0);
+        expect(command.name.startsWith("/")).toBe(false);
+        expect(typeof command.description).toBe("string");
+        expect(typeof command.argumentHint).toBe("string");
+        expect(["skill", "command"]).toContain(command.kind);
       }
     } finally {
       await session.close();

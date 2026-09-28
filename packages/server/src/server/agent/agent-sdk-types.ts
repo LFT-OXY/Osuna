@@ -472,7 +472,9 @@ export type AgentStreamEvent =
       type: "provider_subagent";
       provider: AgentProvider;
       event: import("./provider-subagents/store.js").ProviderSubagentInputEvent;
-    };
+    }
+  /** The running process reported its full command list; replaces the cached one for this cwd. */
+  | { type: "commands_changed"; provider: AgentProvider; commands: AgentSlashCommand[] };
 
 export function getAgentStreamEventTurnId(event: AgentStreamEvent): string | undefined {
   return "turnId" in event ? event.turnId : undefined;
