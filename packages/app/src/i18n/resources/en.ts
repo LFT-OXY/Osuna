@@ -170,6 +170,7 @@ export const en = {
       removeBrowserElement: "Remove browser element attachment",
       openReview: "Open review attachment",
       removeReview: "Remove review attachment",
+      removeSkill: "Remove",
     },
     errors: {
       failedToSend: "Failed to send message",

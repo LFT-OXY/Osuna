@@ -175,6 +175,7 @@ export const ja: TranslationResources = {
       removeBrowserElement: "ブラウザ要素の添付ファイルを削除",
       openReview: "レビュー添付ファイルを開く",
       removeReview: "レビュー添付ファイルを削除",
+      removeSkill: "削除",
     },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",

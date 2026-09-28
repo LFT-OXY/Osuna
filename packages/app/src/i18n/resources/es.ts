@@ -176,6 +176,7 @@ export const es: TranslationResources = {
       removeBrowserElement: "Eliminar el archivo adjunto del elemento del navegador",
       openReview: "Abrir archivo adjunto de reseña",
       removeReview: "Eliminar archivo adjunto de reseña",
+      removeSkill: "Eliminar",
     },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",

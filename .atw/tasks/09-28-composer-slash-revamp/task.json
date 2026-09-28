@@ -1,0 +1,30 @@
+{
+  "id": "composer-slash-revamp",
+  "name": "composer-slash-revamp",
+  "title": "Composer 斜杠指令体验改造",
+  "description": "Skill chip、斜杠列表首开提速、斜杠菜单美化的父任务",
+  "status": "specify",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-28",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-28-slash-commands-first-open",
+    "09-28-slash-menu-restyle",
+    "09-28-skill-chip"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

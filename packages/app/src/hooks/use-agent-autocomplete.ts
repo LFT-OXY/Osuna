@@ -22,6 +22,7 @@ import {
   findActiveSlashCommand,
   type SlashCommandRange,
 } from "@/utils/agent-command-autocomplete";
+import type { SkillChip } from "@/composer/skill-chips";
 import {
   applyFileMentionReplacement,
   findActiveFileMention,
@@ -38,6 +39,12 @@ interface UseAgentAutocompleteInput {
   /** Composer input 聚焦且可显示菜单时为真，用于预取指令列表。 */
   prefetchCommands: boolean;
   onAutocompleteApplied?: () => void;
+  /** 选中 skill 时交给 Composer 变成 Skill chip；不传则按命令插入文字。 */
+  onPickSkill?: (input: {
+    text: string;
+    command: SlashCommandRange | null;
+    chip: SkillChip;
+  }) => void;
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
@@ -54,7 +61,7 @@ interface AgentAutocompleteInputSnapshot {
   selection: { start: number; end: number };
 }
 
-type AgentAutocompleteOption =
+export type AgentAutocompleteOption =
   | (AutocompleteOption & { type: "client_command"; command: ClientSlashCommand })
   | (AutocompleteOption & {
       type: "plugin_command";
@@ -201,6 +208,14 @@ function mapCommandToOption(entry: AvailableCommand, t: TFunction): AgentAutocom
 }
 
 type AutocompleteMode = "command" | "file" | null;
+
+/** 只有 daemon 标成 skill 的 provider 条目变 chip，命令一律保持文字。 */
+export function resolvePickedSkillChip(selected: AgentAutocompleteOption): SkillChip | null {
+  if (selected.type !== "provider_command" || selected.kind !== "skill") return null;
+  return selected.description
+    ? { name: selected.id, description: selected.description }
+    : { name: selected.id };
+}
 
 const EMPTY_COMMANDS: AgentSlashCommand[] = [];
 
@@ -391,6 +406,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     draftConfig,
     prefetchCommands,
     onAutocompleteApplied,
+    onPickSkill,
     onClientSlashCommand,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
@@ -559,6 +575,13 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         return;
       }
 
+      const skillChip = resolvePickedSkillChip(selected);
+      if (skillChip && onPickSkill) {
+        onPickSkill({ text: current.text, command: current.slashCommand, chip: skillChip });
+        onAutocompleteApplied?.();
+        return;
+      }
+
       if (selectedIsCommand) {
         if (!current.slashCommand) {
           setUserInput(`/${selected.id} `);
@@ -588,6 +611,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [
       canExecuteClientSlashCommand,
       onAutocompleteApplied,
+      onPickSkill,
       onClientSlashCommand,
       setUserInput,
       userInput,

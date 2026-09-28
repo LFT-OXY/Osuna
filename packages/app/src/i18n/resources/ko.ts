@@ -174,6 +174,7 @@ export const ko: TranslationResources = {
       removeBrowserElement: "브라우저 요소 첨부 제거",
       openReview: "리뷰 첨부 열기",
       removeReview: "리뷰 첨부 제거",
+      removeSkill: "제거",
     },
     errors: {
       failedToSend: "메시지를 보내지 못했습니다",

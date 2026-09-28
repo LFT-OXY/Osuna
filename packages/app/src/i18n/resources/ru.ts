@@ -175,6 +175,7 @@ export const ru: TranslationResources = {
       removeBrowserElement: "Удалить вложение с элементом браузера",
       openReview: "Открыть вложение проверки",
       removeReview: "Удалить вложение проверки",
+      removeSkill: "Удалить",
     },
     errors: {
       failedToSend: "Не удалось отправить сообщение",

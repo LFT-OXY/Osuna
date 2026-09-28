@@ -89,6 +89,8 @@ cd packages/app && npx playwright test --project=browser e2e/browser/agent-messa
 git diff --name-only | grep -E '\.(ts|tsx)$' | xargs npm run lint --   # zsh does not word-split $FILES
 ```
 
+A control revealed on hover and hidden with `opacity: 0` + `pointerEvents: "none"` (the attachment and Skill chip `×`) fails Playwright's `locator.click()` with "… intercepts pointer events": the actionability check runs before the hover takes effect. Hover the envelope, then `page.mouse.move` onto the control's box and click with the mouse.
+
 A schema edit is invisible to client and app tests until `npm run build:client` runs (`CLAUDE.md` "Build workspace packages"); the symptom is a passing protocol test next to a client test that cannot see the new field.
 
 Never run the whole Playwright suite locally; it is CI's job. Never `npm run test` for the workspace. Metro readiness for Playwright means `/status` returns `packager-status:running` and the bundle has been fetched; the global setup handles it.

@@ -129,6 +129,26 @@ interface MessageInputKeyboardActions {
   toggleRealtimeVoiceMute: () => void;
 }
 
+interface QueueComposerInputContext {
+  value: string;
+  attachments: MessagePayload["attachments"];
+  /** 正文之外的待发内容（Skill chip）；只有它时也要能排队。 */
+  hasExternalContent: boolean;
+  cwd: string;
+  onQueue: ((payload: MessagePayload) => void) | undefined;
+  replaceText: (text: string) => void;
+  onMinimizeHeight: () => void;
+}
+
+export function queueComposerInput(ctx: QueueComposerInputContext): void {
+  if (!ctx.onQueue) return;
+  const trimmed = ctx.value.trim();
+  if (!trimmed && ctx.attachments.length === 0 && !ctx.hasExternalContent) return;
+  ctx.onQueue({ text: trimmed, attachments: ctx.attachments, cwd: ctx.cwd });
+  ctx.replaceText("");
+  ctx.onMinimizeHeight();
+}
+
 export function computeCanStartDictation(input: {
   client: DaemonClient | null;
   isReadyForDictation: boolean | undefined;

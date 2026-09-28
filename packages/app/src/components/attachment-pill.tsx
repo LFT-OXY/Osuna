@@ -10,7 +10,7 @@ import type { Theme } from "@/styles/theme";
 
 // Every attachment pill body — image thumbnail or labelled — renders at this
 // height so mixed attachment trays line up.
-const ATTACHMENT_CONTENT_HEIGHT = 48;
+export const ATTACHMENT_CONTENT_HEIGHT = 48;
 
 interface AttachmentPillProps {
   onOpen: () => void;

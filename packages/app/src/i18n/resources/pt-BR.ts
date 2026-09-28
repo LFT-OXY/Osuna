@@ -177,6 +177,7 @@ export const ptBR: TranslationResources = {
       removeBrowserElement: "Remover anexo de elemento do navegador",
       openReview: "Abrir anexo de revisão",
       removeReview: "Remover anexo de revisão",
+      removeSkill: "Remover",
     },
     errors: {
       failedToSend: "Falha ao enviar mensagem",

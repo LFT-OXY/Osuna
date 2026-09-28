@@ -174,6 +174,7 @@ export const ar: TranslationResources = {
       removeBrowserElement: "إزالة مرفق عنصر المتصفح",
       openReview: "فتح مرفق المراجعة",
       removeReview: "إزالة مرفق المراجعة",
+      removeSkill: "إزالة",
     },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",

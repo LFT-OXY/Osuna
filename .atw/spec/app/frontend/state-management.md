@@ -31,6 +31,14 @@ Rules:
 
 Timeline updates go through the reducers in `timeline/session-stream-reducers.ts` (compaction, gap detection, sequence dedupe). `docs/timeline-sync.md` explains why live streams are for immediacy and `fetch_agent_timeline_request` is authoritative.
 
+## Composer content outside the text
+
+A Skill chip (`composer/skill-chips.ts`) is prompt content that is not in the Composer text. Three rules keep it sendable:
+
+- `MessageInput` only sees text and attachments, so the Composer passes `hasExternalContent || hasSkillChips`. Both empty-content guards read it: `sendMessageImpl` in `composer/input/input.tsx` and `queueComposerInput` in `composer/input/state.ts`. A chip-only message that one of them drops sends from Enter and silently does nothing from Mod+Enter.
+- Serialize before submit: `resolveSkillChipSubmission({ chips, text })` returns the `/a /b body` message plus `recognizesClientCommands`. With chips, `/clear` in the body is ordinary text, both at submit and when picked from the Command menu (`canExecuteClientSlashCommand` is false).
+- The submit path's `setUserInput` clears the chips with the text. A restored failed send already carries the `/name` prefix, so clearing the chips there avoids sending the prefix twice. Ticket 02 of `09-28-skill-chip` moves the chips into the draft store and restores them as chips.
+
 ## Contexts
 
 Context is for values that rarely change: the daemon client for the active session, the toast API, the voice controller, the sidebar callout registry. Lint rejects constructed context values (`react/jsx-no-constructed-context-values`), so memoize what you provide. State that changes per keystroke or per stream event is a store, not a context.

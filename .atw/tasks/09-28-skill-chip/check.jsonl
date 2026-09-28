@@ -1,0 +1,14 @@
+{"file": ".atw/tasks/09-28-skill-chip/prd.md", "reason": "本任务的 spec 与验收标准"}
+{"file": ".atw/tasks/09-28-composer-slash-revamp/prd.md", "reason": "父任务的跨子任务约束"}
+{"file": ".atw/tasks/09-28-composer-slash-revamp/research/discovery.md", "reason": "访谈决定与现状代码位置"}
+{"file": "docs/glossary.md", "reason": "Skill chip、Attachment tray、Command menu 术语"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "原语复用、平台门控、i18n、无障碍"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "草稿 store 与 Workspace-owned state"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 规则"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单元与 browser 测试分层"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "禁用模式与验证命令"}
+{"file": "docs/data-model.md", "reason": "草稿持久化与无迁移约定"}
+{"file": "docs/design.md", "reason": "颜色、pill、禁止新增 token"}
+{"file": "docs/hover.md", "reason": "× 按钮的悬停包络规范"}
+{"file": "docs/unistyles.md", "reason": "useUnistyles 的替代做法"}
+{"file": "docs/i18n.md", "reason": "新文案补全所有 locale"}

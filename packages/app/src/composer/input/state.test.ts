@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyDictationTranscript,
   computeCanStartDictation,
+  queueComposerInput,
   resolveActiveSendBehavior,
   resolveComposerSurfacePresentation,
   resolvePrimaryActions,
@@ -319,6 +320,34 @@ describe("composer send behavior", () => {
 
     expect(defaultAction.calls).toEqual(["queue"]);
     expect(alternateAction.calls).toEqual(["send"]);
+  });
+});
+
+describe("queueComposerInput", () => {
+  function queueContext(input: { value: string; hasExternalContent: boolean }) {
+    const onQueue = vi.fn();
+    const replaceText = vi.fn();
+    queueComposerInput({
+      value: input.value,
+      attachments: [],
+      hasExternalContent: input.hasExternalContent,
+      cwd: "/repo",
+      onQueue,
+      replaceText,
+      onMinimizeHeight: () => undefined,
+    });
+    return { onQueue, replaceText };
+  }
+
+  it("queues content held outside the text, such as skill chips, with an empty prompt", () => {
+    const { onQueue, replaceText } = queueContext({ value: "  ", hasExternalContent: true });
+    expect(onQueue).toHaveBeenCalledWith({ text: "", attachments: [], cwd: "/repo" });
+    expect(replaceText).toHaveBeenCalledWith("");
+  });
+
+  it("queues nothing when there is no text, attachment, or outside content", () => {
+    const { onQueue } = queueContext({ value: "  ", hasExternalContent: false });
+    expect(onQueue).not.toHaveBeenCalled();
   });
 });
 

@@ -5,6 +5,7 @@ import {
   resolveAutocompleteIsLoading,
   resolveAutocompleteIsVisible,
   resolveAutocompleteTexts,
+  resolvePickedSkillChip,
 } from "./use-agent-autocomplete";
 
 const t = i18n.t;
@@ -104,6 +105,34 @@ describe("command menu options", () => {
       ["/compact", "command"],
       ["/tdd", "skill"],
     ]);
+  });
+});
+
+describe("resolvePickedSkillChip", () => {
+  const options = commandOptions({
+    commands: [
+      { name: "tdd", description: "Test first", argumentHint: "", kind: "skill" },
+      { name: "compact", description: "Compact context", argumentHint: "", kind: "command" },
+    ],
+    isCommandsLoading: false,
+    isDraftContext: false,
+  });
+  const optionNamed = (label: string) => {
+    const option = options.find((candidate) => candidate.label === label);
+    if (!option) throw new Error(`missing option ${label}`);
+    return option;
+  };
+
+  it("turns a picked skill into a chip carrying its description", () => {
+    expect(resolvePickedSkillChip(optionNamed("/tdd"))).toEqual({
+      name: "tdd",
+      description: "Test first",
+    });
+  });
+
+  it("keeps provider and built-in commands as text", () => {
+    expect(resolvePickedSkillChip(optionNamed("/compact"))).toBeNull();
+    expect(resolvePickedSkillChip(optionNamed("/clear"))).toBeNull();
   });
 });
 

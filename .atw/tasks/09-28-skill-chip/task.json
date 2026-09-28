@@ -1,0 +1,28 @@
+{
+  "id": "skill-chip",
+  "name": "skill-chip",
+  "title": "Skill chip",
+  "description": "选中 skill 后在 composer 输入区上方显示块状 chip，发送时拼回 /name 前缀",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-28",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-28-composer-slash-revamp",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "f127675ddb25f12de139423c1a0eab2fe5e7937f"
+  }
+}

@@ -93,7 +93,10 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
 import { useAgentAutocomplete } from "@/hooks/use-agent-autocomplete";
-import { usePluginClientSlashCommands } from "@/plugins/client-slash-commands";
+import {
+  usePluginClientSlashCommands,
+  type PluginClientSlashCommand,
+} from "@/plugins/client-slash-commands";
 import {
   executePluginClientSlashCommand,
   resolvePluginClientSlashCommand,
@@ -116,6 +119,15 @@ import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { submitAgentInput } from "@/composer/submit";
+import {
+  appendSkillChip,
+  pickSkillChip,
+  removeSkillChip,
+  resolveSkillChipSubmission,
+  type SkillChip,
+} from "@/composer/skill-chips";
+import { SkillChipPill } from "@/composer/skill-chip-pill";
+import type { SlashCommandRange } from "@/utils/agent-command-autocomplete";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -353,11 +365,14 @@ function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {
 }
 
 interface RenderAttachmentTrayArgs {
+  skillChips: readonly SkillChip[];
   selectedAttachments: ComposerAttachment[];
   isComposerLocked: boolean;
   handleOpenAttachment: (attachment: ComposerAttachment) => void;
   handleRemoveAttachment: (index: number) => void;
+  handleRemoveSkillChip: (name: string) => void;
   labels: {
+    removeSkill: string;
     openImage: string;
     removeImage: string;
     removeFile: string;
@@ -368,15 +383,26 @@ interface RenderAttachmentTrayArgs {
 
 function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | null {
   const {
+    skillChips,
     selectedAttachments,
     isComposerLocked,
     handleOpenAttachment,
     handleRemoveAttachment,
+    handleRemoveSkillChip,
     labels,
   } = args;
-  if (selectedAttachments.length === 0) return null;
+  if (selectedAttachments.length === 0 && skillChips.length === 0) return null;
   return (
     <View style={styles.attachmentTray} testID="composer-attachment-tray">
+      {skillChips.map((chip) => (
+        <SkillChipPill
+          key={`skill:${chip.name}`}
+          chip={chip}
+          disabled={isComposerLocked}
+          onRemove={handleRemoveSkillChip}
+          removeLabel={labels.removeSkill}
+        />
+      ))}
       {selectedAttachments.map((attachment, index) =>
         renderComposerAttachmentPill({
           attachment,
@@ -503,6 +529,29 @@ function renderComposerAttachmentPill(args: RenderComposerAttachmentPillArgs): R
       removeLabel={labels.removeGithub}
     />
   );
+}
+
+function runRecognizedClientSlashCommand(input: {
+  text: string;
+  hasAttachments: boolean;
+  pluginCommands: readonly PluginClientSlashCommand[];
+  runClientSlashCommand: (command: ClientSlashCommand) => boolean;
+  runPluginClientSlashCommand: (resolved: {
+    command: PluginClientSlashCommand;
+    args: string;
+  }) => boolean;
+}): boolean {
+  const clientSlashCommand = resolveClientSlashCommand({
+    text: input.text,
+    hasAttachments: input.hasAttachments,
+  });
+  if (clientSlashCommand && input.runClientSlashCommand(clientSlashCommand)) return true;
+  const pluginSlashCommand = resolvePluginClientSlashCommand({
+    text: input.text,
+    hasAttachments: input.hasAttachments,
+    commands: input.pluginCommands,
+  });
+  return Boolean(pluginSlashCommand && input.runPluginClientSlashCommand(pluginSlashCommand));
 }
 
 function resolveErrorMessage(error: unknown): string | null {
@@ -1008,6 +1057,8 @@ interface ComposerProps {
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 const EMPTY_ARRAY: readonly QueuedMessage[] = [];
+const EMPTY_SKILL_CHIPS: readonly SkillChip[] = [];
+const clearSkillChips = (): readonly SkillChip[] => EMPTY_SKILL_CHIPS;
 const StableMessageInput = memo(MessageInput);
 
 function resolveContextWindowValues(
@@ -1424,6 +1475,25 @@ function ComposerContentImpl({
   const [isGithubPickerOpen, setIsGithubPickerOpen] = useState(false);
   const [githubSearchQuery, setGithubSearchQuery] = useState("");
   const [lightboxMetadata, setLightboxMetadata] = useState<AttachmentMetadata | null>(null);
+  // chip 标上所属 agent：同一个 Composer 换到别的 agent 时不带过去。工单 02 之前的过渡做法，
+  // 之后 chip 随草稿按草稿键存取。
+  const skillChipOwner = `${serverId}:${agentId}`;
+  const [skillChipState, setSkillChipState] = useState<{
+    owner: string;
+    chips: readonly SkillChip[];
+  }>(() => ({ owner: skillChipOwner, chips: [] }));
+  const skillChips =
+    skillChipState.owner === skillChipOwner ? skillChipState.chips : EMPTY_SKILL_CHIPS;
+  const hasSkillChips = skillChips.length > 0;
+  const setSkillChips = useCallback(
+    (update: (current: readonly SkillChip[]) => readonly SkillChip[]) => {
+      setSkillChipState((state) => ({
+        owner: skillChipOwner,
+        chips: update(state.owner === skillChipOwner ? state.chips : EMPTY_SKILL_CHIPS),
+      }));
+    },
+    [skillChipOwner],
+  );
   const attachButtonRef = useRef<View | null>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
   const pluginAttachments = usePluginAttachmentPicker({
@@ -1453,6 +1523,34 @@ function ComposerContentImpl({
       onChangeText(text);
     },
     [onChangeText],
+  );
+
+  // 提交路径清空或恢复正文时一并清掉 chip：恢复的正文已经拼进了 `/name` 前缀。
+  const replaceSubmittedInput = useCallback(
+    (text: string) => {
+      replaceUserInput(text);
+      setSkillChips(clearSkillChips);
+    },
+    [replaceUserInput, setSkillChips],
+  );
+
+  const handlePickSkill = useCallback(
+    (input: { text: string; command: SlashCommandRange | null; chip: SkillChip }) => {
+      const { command, chip } = input;
+      if (!command) {
+        setSkillChips((current) => appendSkillChip(current, chip));
+        return;
+      }
+      const picked = pickSkillChip({ text: input.text, command, chip, chips: skillChips });
+      setSkillChips(() => picked.chips);
+      replaceUserInput(picked.text, { start: picked.cursor, end: picked.cursor });
+    },
+    [replaceUserInput, setSkillChips, skillChips],
+  );
+
+  const handleRemoveSkillChip = useCallback(
+    (name: string) => setSkillChips((current) => removeSkillChip(current, name)),
+    [setSkillChips],
   );
 
   const runClientSlashCommand = useCallback(
@@ -1679,7 +1777,7 @@ function ComposerContentImpl({
       });
       if (!result.queued) return;
 
-      replaceUserInput("");
+      replaceSubmittedInput("");
       setSelectedAttachments([]);
       resetSuppression();
       clearSentAttachments(queuedAttachments);
@@ -1690,7 +1788,7 @@ function ComposerContentImpl({
       queueWriter,
       resetSuppression,
       setSelectedAttachments,
-      replaceUserInput,
+      replaceSubmittedInput,
     ],
   );
 
@@ -1721,7 +1819,7 @@ function ComposerContentImpl({
           await submitMessage(submitText, submitAttachments);
         },
         clearDraft,
-        setUserInput: replaceUserInput,
+        setUserInput: replaceSubmittedInput,
         setAttachments: (nextAttachments) => {
           setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
         },
@@ -1746,7 +1844,7 @@ function ComposerContentImpl({
       isAgentRunning,
       queueMessage,
       setSelectedAttachments,
-      replaceUserInput,
+      replaceSubmittedInput,
       submitBehavior,
       submitMessage,
       t,
@@ -1756,24 +1854,24 @@ function ComposerContentImpl({
   const handleSubmit = useCallback(
     (payload: MessagePayload) => {
       const outgoingAttachments = buildOutgoingAttachments(attachments);
-      const clientSlashCommand = resolveClientSlashCommand({
-        text: payload.text,
-        hasAttachments: outgoingAttachments.length > 0,
-      });
-      if (clientSlashCommand && runClientSlashCommand(clientSlashCommand)) {
+      const submission = resolveSkillChipSubmission({ chips: skillChips, text: payload.text });
+      if (
+        submission.recognizesClientCommands &&
+        runRecognizedClientSlashCommand({
+          text: payload.text,
+          hasAttachments: outgoingAttachments.length > 0,
+          pluginCommands: pluginClientSlashCommands,
+          runClientSlashCommand,
+          runPluginClientSlashCommand,
+        })
+      ) {
         return;
       }
-      const pluginSlashCommand = resolvePluginClientSlashCommand({
-        text: payload.text,
-        hasAttachments: outgoingAttachments.length > 0,
-        commands: pluginClientSlashCommands,
-      });
-      if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
 
       if (blurOnSubmit) {
         messageInputRef.current?.blur();
       }
-      void sendMessageWithContent(payload.text, outgoingAttachments, payload.forceSend);
+      void sendMessageWithContent(submission.message, outgoingAttachments, payload.forceSend);
     },
     [
       attachments,
@@ -1783,6 +1881,7 @@ function ComposerContentImpl({
       pluginClientSlashCommands,
       runPluginClientSlashCommand,
       sendMessageWithContent,
+      skillChips,
     ],
   );
 
@@ -2016,20 +2115,20 @@ function ComposerContentImpl({
   const handleQueue = useCallback(
     (payload: MessagePayload) => {
       const outgoingAttachments = buildOutgoingAttachments(attachments);
-      const clientSlashCommand = resolveClientSlashCommand({
-        text: payload.text,
-        hasAttachments: outgoingAttachments.length > 0,
-      });
-      if (clientSlashCommand && runClientSlashCommand(clientSlashCommand)) {
+      const submission = resolveSkillChipSubmission({ chips: skillChips, text: payload.text });
+      if (
+        submission.recognizesClientCommands &&
+        runRecognizedClientSlashCommand({
+          text: payload.text,
+          hasAttachments: outgoingAttachments.length > 0,
+          pluginCommands: pluginClientSlashCommands,
+          runClientSlashCommand,
+          runPluginClientSlashCommand,
+        })
+      ) {
         return;
       }
-      const pluginSlashCommand = resolvePluginClientSlashCommand({
-        text: payload.text,
-        hasAttachments: outgoingAttachments.length > 0,
-        commands: pluginClientSlashCommands,
-      });
-      if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
-      queueMessage(payload.text, outgoingAttachments);
+      queueMessage(submission.message, outgoingAttachments);
     },
     [
       attachments,
@@ -2038,10 +2137,11 @@ function ComposerContentImpl({
       queueMessage,
       runClientSlashCommand,
       runPluginClientSlashCommand,
+      skillChips,
     ],
   );
 
-  const hasSendableContent = hasText || selectedAttachments.length > 0;
+  const hasSendableContent = hasText || selectedAttachments.length > 0 || hasSkillChips;
 
   // Handle keyboard navigation for command autocomplete.
   const handleCommandKeyPress = useCallback(
@@ -2367,11 +2467,14 @@ function ComposerContentImpl({
   const attachmentTray = useMemo(
     () =>
       renderAttachmentTray({
+        skillChips,
         selectedAttachments,
         isComposerLocked,
         handleOpenAttachment,
         handleRemoveAttachment,
+        handleRemoveSkillChip,
         labels: {
+          removeSkill: t("composer.attachments.removeSkill"),
           openImage: t("composer.attachments.openImage"),
           removeImage: t("composer.attachments.removeImage"),
           removeFile: t("composer.attachments.removeFile"),
@@ -2381,7 +2484,15 @@ function ComposerContentImpl({
             t("composer.attachments.removeGithub", { kind, number: numberLabel }),
         },
       }),
-    [handleOpenAttachment, handleRemoveAttachment, isComposerLocked, selectedAttachments, t],
+    [
+      handleOpenAttachment,
+      handleRemoveAttachment,
+      handleRemoveSkillChip,
+      isComposerLocked,
+      selectedAttachments,
+      skillChips,
+      t,
+    ],
   );
 
   const queueList = useMemo(
@@ -2403,11 +2514,15 @@ function ComposerContentImpl({
       agentId,
       draftConfig: commandDraftConfig,
       prefetchCommands: isMessageInputFocused && mode.showAutocomplete,
-      canExecuteClientSlashCommand: buildOutgoingAttachments(attachments).length === 0,
+      onPickSkill: handlePickSkill,
+      canExecuteClientSlashCommand:
+        buildOutgoingAttachments(attachments).length === 0 && !hasSkillChips,
       onClientSlashCommand: runClientSlashCommand,
       pluginClientSlashCommands,
     }),
     [
+      handlePickSkill,
+      hasSkillChips,
       replaceUserInput,
       serverId,
       agentId,
@@ -2508,7 +2623,7 @@ function ComposerContentImpl({
                   value={textSource.getSnapshot()}
                   onChangeText={setUserInput}
                   onSubmit={handleSubmit}
-                  hasExternalContent={hasExternalContent}
+                  hasExternalContent={hasExternalContent || hasSkillChips}
                   allowEmptySubmit={allowEmptySubmit}
                   submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
                   submitButtonTestID={submitButtonTestID}
