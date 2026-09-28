@@ -52,3 +52,4 @@
 
 - 访谈记录：`research/discovery.md`；参考项目对比：`research/command-list-references.md`。
 - 整体验收：三个子任务都归档后，在 Electron 与一个原生端各走一遍"新 agent → 输入 `/` → 选 skill → 发送"的流程，截图留证。
+  - 2026-09-29 结果：Electron 已走通（Claude / Opus 5.5，`/shuorenhua` → Skill chip → 发送，transcript 为 `/shuorenhua 正文`，skill 正常展开；首次 `/` 150ms 内出现分组面板，发送后列表补全为完整 98 项）。原生端按用户决定本轮不测；原生常驻 × 截图与 Android 退格 / 选区时序仍未验证。
