@@ -43,6 +43,8 @@ Read `docs/hover.md`. A simple list row is `<Row>` (`components/ui/row.tsx`), wh
 
 A list row that needs a hover kebab **and** a right-click / long-press menu is `SessionHistoryRowItem` in `session-history/index.tsx`: the plain `View` envelope holds `isHovered` and `contextMenuOpen`; `ContextMenuTrigger` is the inner press target (press opens, right click and native long press open the menu); the kebab sits in a fixed-width trailing slot hidden by `opacity: 0` + `pointerEvents="none"`, never unmounted; `useOpenKebabMenuVisibility(isHovered || isNative || isCompact)` keeps it mounted while its menu is up. Both menus render one `…MenuItems` component switched by a `surface: "context" | "dropdown"` prop (`session-history/internal/row-menu.tsx`, the same shape as `components/sidebar/sidebar-workspace-menu.tsx`) so the two cannot drift; an action the row cannot offer (import for a Paseo-owned session) is passed as `null`, not hidden by a boolean.
 
+A hover envelope that also shows a tooltip wraps the plain `View` in `TooltipTrigger asChild`: the trigger composes its own `onPointerEnter` / `onPointerLeave` with the envelope's, so one element drives both the hover state and the tooltip, and moving onto the inner `Pressable` does not close it (`pointerleave` ignores descendants). The Skill chip in `composer/skill-chip-pill.tsx` is the example.
+
 A highlight the arrow keys also move (the Command menu) listens to `onPointerMove` on the envelope and has no leave handler; `docs/hover.md` "A highlight the keyboard also moves" says why.
 
 `onHoverIn` / `onHoverOut` has one legitimate use: a `Pressable` styling itself (`components/ui/button.tsx`), preferably through the render-prop `style={({ hovered }) => …}`. The moment hover state is read by anything else, use the envelope. Never put both handler kinds on one element.
@@ -52,6 +54,10 @@ That use still needs a press target. A frame that only recolors on hover and has
 ## Platform gates
 
 Import from `constants/platform.ts`: `isWeb` for DOM APIs, `isNative` for native-only APIs, `getIsElectron()` for the desktop bridge, `useIsCompactFormFactor()` from `constants/layout.ts` for layout. Never redefine `Platform.OS === "web"` locally, never touch `document`/`window` without `isWeb`, never use `Platform.OS` to make a layout decision.
+
+## Accessible names
+
+On web, a screen reader reads `aria-label` only from an element that has a role. `accessibilityLabel` on a `<Text>` or a role-less `View` renders as `aria-label` on a generic `div`; Chromium's accessibility tree drops that name and reads the text content instead. A non-interactive item that needs its own name (a chip read as "Skill: name") puts the label on a `role="group"` container, as the sidebar project block does (`components/sidebar-workspace-list.tsx`). On native a role-less container is not an accessibility element, so iOS never reads that label; give it to the visible `<Text>` there. `composer/skill-chip-pill.tsx` splits the two with inline `isWeb ? label : undefined` / `isNative ? label : undefined`. Verify a web name through the AX tree (`Accessibility.getFullAXTree` over CDP shows `group: Skill：atw-tdd`), not by finding the attribute in the DOM.
 
 ## Copy
 

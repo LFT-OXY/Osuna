@@ -177,6 +177,7 @@ export const ptBR: TranslationResources = {
       removeBrowserElement: "Remover anexo de elemento do navegador",
       openReview: "Abrir anexo de revisão",
       removeReview: "Remover anexo de revisão",
+      skillChip: "Habilidade: {{name}}",
       removeSkill: "Remover",
     },
     errors: {

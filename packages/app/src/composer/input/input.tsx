@@ -1582,6 +1582,20 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       });
     }
 
+    // 原生只转发 Backspace（删 Skill chip 用），Enter 等键仍走软键盘的默认行为。
+    function handleNativeKeyPress(event: NativeSyntheticEvent<TextInputKeyPressEventData>) {
+      if (event.nativeEvent.key !== "Backspace") return;
+      onKeyPressCallback?.({
+        key: event.nativeEvent.key,
+        preventDefault: () => event.preventDefault(),
+        input: getComposerInputSnapshot(
+          textInputRef.current,
+          valueRef.current,
+          selectionRef.current,
+        ),
+      });
+    }
+
     const primaryActions = resolvePrimaryActions({
       hasSendableContent: hasSendableComposerContent({
         hasText: hasLiveText,
@@ -1781,7 +1795,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
               scrollEnabled={isComposerScrollEnabled}
               autoFocus={false}
-              onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : undefined}
+              onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : handleNativeKeyPress}
               onSelectionChange={handleSelectionChange}
               onPasteImages={onPasteImages}
               onPasteError={handlePasteError}

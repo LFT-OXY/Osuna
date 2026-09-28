@@ -5,6 +5,7 @@ import {
   pickSkillChip,
   removeLastSkillChip,
   removeSkillChip,
+  resolveSkillChipBackspace,
   resolveSkillChipSubmission,
   serializeSkillChips,
   type SkillChip,
@@ -111,6 +112,45 @@ describe("removeLastSkillChip", () => {
   it("returns the same empty list when there is nothing to remove", () => {
     const chips: SkillChip[] = [];
     expect(removeLastSkillChip(chips)).toBe(chips);
+  });
+});
+
+describe("resolveSkillChipBackspace", () => {
+  const atStart = { start: 0, end: 0 };
+
+  it("removes the last chip when the caret sits at the start with nothing selected", () => {
+    expect(
+      resolveSkillChipBackspace({ key: "Backspace", selection: atStart, chips: [askme, tdd] }),
+    ).toEqual([askme]);
+  });
+
+  it("leaves the chips to the text when the caret is past the start", () => {
+    expect(
+      resolveSkillChipBackspace({
+        key: "Backspace",
+        selection: { start: 3, end: 3 },
+        chips: [askme],
+      }),
+    ).toBeNull();
+  });
+
+  it("leaves the chips to the text when a selection starts at the start", () => {
+    expect(
+      resolveSkillChipBackspace({
+        key: "Backspace",
+        selection: { start: 0, end: 4 },
+        chips: [askme],
+      }),
+    ).toBeNull();
+  });
+
+  it("ignores other keys and an empty chip list", () => {
+    expect(resolveSkillChipBackspace({ key: "Delete", selection: atStart, chips: [askme] })).toBe(
+      null,
+    );
+    expect(resolveSkillChipBackspace({ key: "Backspace", selection: atStart, chips: [] })).toBe(
+      null,
+    );
   });
 });
 

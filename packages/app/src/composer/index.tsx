@@ -123,11 +123,12 @@ import {
   appendSkillChip,
   pickSkillChip,
   removeSkillChip,
+  resolveSkillChipBackspace,
   resolveSkillChipSubmission,
   type SkillChip,
   type SkillChipUpdater,
 } from "@/composer/skill-chips";
-import { SkillChipPill } from "@/composer/skill-chip-pill";
+import { ComposerAttachmentTray } from "@/composer/attachment-tray";
 import type { SlashCommandRange } from "@/utils/agent-command-autocomplete";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
@@ -373,6 +374,7 @@ interface RenderAttachmentTrayArgs {
   handleRemoveAttachment: (index: number) => void;
   handleRemoveSkillChip: (name: string) => void;
   labels: {
+    skillChip: (name: string) => string;
     removeSkill: string;
     openImage: string;
     removeImage: string;
@@ -382,7 +384,7 @@ interface RenderAttachmentTrayArgs {
   };
 }
 
-function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | null {
+function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement {
   const {
     skillChips,
     selectedAttachments,
@@ -392,18 +394,14 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
     handleRemoveSkillChip,
     labels,
   } = args;
-  if (selectedAttachments.length === 0 && skillChips.length === 0) return null;
   return (
-    <View style={styles.attachmentTray} testID="composer-attachment-tray">
-      {skillChips.map((chip) => (
-        <SkillChipPill
-          key={`skill:${chip.name}`}
-          chip={chip}
-          disabled={isComposerLocked}
-          onRemove={handleRemoveSkillChip}
-          removeLabel={labels.removeSkill}
-        />
-      ))}
+    <ComposerAttachmentTray
+      skillChips={skillChips}
+      hasAttachments={selectedAttachments.length > 0}
+      disabled={isComposerLocked}
+      onRemoveSkillChip={handleRemoveSkillChip}
+      labels={labels}
+    >
       {selectedAttachments.map((attachment, index) =>
         renderComposerAttachmentPill({
           attachment,
@@ -414,7 +412,7 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
           labels,
         }),
       )}
-    </View>
+    </ComposerAttachmentTray>
   );
 }
 
@@ -2128,10 +2126,22 @@ function ComposerContentImpl({
 
   const hasSendableContent = hasText || selectedAttachments.length > 0 || hasSkillChips;
 
-  // Handle keyboard navigation for command autocomplete.
+  // Handle keyboard navigation for command autocomplete, then Backspace into the Skill chips.
   const handleCommandKeyPress = useCallback(
-    (event: ComposerKeyPressEvent) => autocompleteRef.current?.onKeyPress(event) ?? false,
-    [],
+    (event: ComposerKeyPressEvent) => {
+      if (autocompleteRef.current?.onKeyPress(event)) return true;
+      if (isComposerLocked) return false;
+      const remaining = resolveSkillChipBackspace({
+        key: event.key,
+        selection: event.input.selection,
+        chips: skillChips,
+      });
+      if (!remaining) return false;
+      event.preventDefault();
+      setSkillChips(() => remaining);
+      return true;
+    },
+    [isComposerLocked, setSkillChips, skillChips],
   );
 
   const cancelButtonStyle = useMemo(
@@ -2459,6 +2469,7 @@ function ComposerContentImpl({
         handleRemoveAttachment,
         handleRemoveSkillChip,
         labels: {
+          skillChip: (name: string) => t("composer.attachments.skillChip", { name }),
           removeSkill: t("composer.attachments.removeSkill"),
           openImage: t("composer.attachments.openImage"),
           removeImage: t("composer.attachments.removeImage"),
@@ -2767,12 +2778,6 @@ const styles = StyleSheet.create((theme: Theme) => ({
   },
   iconButtonHovered: {
     backgroundColor: theme.colors.interactionHighlight,
-  },
-  attachmentTray: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    flexWrap: "wrap",
   },
   tooltipRow: {
     flexDirection: "row",

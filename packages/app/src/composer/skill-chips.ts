@@ -51,6 +51,18 @@ export function removeLastSkillChip(chips: readonly SkillChip[]): readonly Skill
   return chips.slice(0, -1);
 }
 
+/** 光标停在正文最开头且无选区时，退格删最后一个 chip；返回 null 表示交给输入框按默认删文字。 */
+export function resolveSkillChipBackspace(input: {
+  key: string;
+  selection: { start: number; end: number };
+  chips: readonly SkillChip[];
+}): readonly SkillChip[] | null {
+  const { key, selection, chips } = input;
+  if (key !== "Backspace" || chips.length === 0) return null;
+  if (selection.start !== 0 || selection.end !== 0) return null;
+  return removeLastSkillChip(chips);
+}
+
 /** 发送时 chip 按选中顺序拼回正文开头，与手打 `/a /b 正文` 等价。 */
 export function serializeSkillChips(input: { chips: readonly SkillChip[]; text: string }): string {
   if (input.chips.length === 0) return input.text;

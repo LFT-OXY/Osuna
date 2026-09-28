@@ -81,16 +81,16 @@
 
 ### 视图
 
-- chip 渲染在 Attachment tray 中、排在附件之前；tray 在"有附件或有 chip"时显示。tray 内各项垂直居中，所以与 50 高的附件 pill 同一行时 chip 居中。
+- chip 渲染在 Attachment tray 中、排在附件之前；tray 在"有附件或有 chip"时显示。tray 是 `ComposerAttachmentTray`（`composer/attachment-tray.tsx`），附件 pill 作为 children 由 Composer 传入。tray 内各项垂直居中，所以与 50 高的附件 pill 同一行时 chip 居中。
 - 外观取原型变体 B，定于 2026-09-28；原型在 `prototype/skill-chip-styles` 分支。起因是 48 高的 chip 被用户评为又大又丑。不新增 token：
   - 小号方角 pill，总高 24（含上下 1px 描边），`radius.md` 圆角，左内边距 6、右内边距 8，最宽 260，名字过长时截断；
   - 底色用 `accent`，经一层不透明度 0.07 的底层实现，不影响文字不透明度；
   - 描边是另一层 `accent` 1px 边框，不透明度 0.3（`composer/skill-chip-pill.tsx`）；
   - 立方体图标 12（`ICON_SIZE.xs`）与名字都用 `accentBright`，名字 `caption` 级（12）、medium，不带 `/`。
 - ×：不浮在 chip 外，而是替换图标的位置，尺寸相同，所以出现时 chip 宽度不变。Web 端按 `docs/hover.md` 的规范——外层普通 View 用 `onPointerEnter` / `onPointerLeave` 作悬停包络，内部独立 Pressable 负责点击；可见性 `isHovered || isNative || isCompact`，原生与紧凑布局常显 ×、不显示图标。
-- 悬停提示显示全名与描述（Web）；原生端不做长按提示。
-- 退格删除：Web 在 textarea 的 keydown、原生在 `onKeyPress` 捕获 Backspace，仅当选区起止都在 0 时删除最后一个 chip 并阻止默认行为。
-- 无障碍：chip `accessibilityLabel` 为"Skill: 名字"，× 为"移除"，文案进 i18n。× 的文案 `composer.attachments.removeSkill` 已随工单 01 加入。
+- 悬停提示显示全名与描述（Web）：现有 `Tooltip`，`TooltipTrigger asChild` 包在 chip 的悬停包络 View 上，`enabledOnMobile={false}`，所以紧凑宽度的 Web 窗口也不出提示（与其他 tooltip 一致）。原生端不做长按提示。
+- 退格删除：Web 在 textarea 的 keydown、原生在 `onKeyPress` 捕获 Backspace，仅当选区起止都在 0 时删除最后一个 chip 并阻止默认行为。判定是 `resolveSkillChipBackspace`（`composer/skill-chips.ts`），Composer 在 autocomplete 之后调用；Composer 锁定（`preserve-and-lock` 提交中）时不删。`MessageInput` 在原生端只把 Backspace 转给 `onKeyPress` 回调，Enter 等键仍走软键盘默认行为。原生选区来自 `onSelectionChange`，Android 上 `onKeyPress` 与选区更新的先后未经真机验证。
+- 无障碍：chip 读作"Skill: 名字"（`composer.attachments.skillChip`，九种语言；zh-CN 为 `Skill：{{name}}`），× 为"移除"（`composer.attachments.removeSkill`，随工单 01 加入）。Web 上标签挂在 chip 的 `role="group"` 容器上，原生挂在名字 Text 上，见 `.atw/spec/app/frontend/component-guidelines.md`「Accessible names」。
 - 立方体图标与 Command menu 技能行共用同一个图标。
 
 ## Testing Decisions
@@ -105,7 +105,7 @@
   - 删除指定 chip、删除最后一个 chip；
   - 有 chip 时不识别客户端命令。
 - **A2 · 草稿持久化**，参照 `stores/draft-store/persistence.test.ts` 与 `state.test.ts`：含 chip 的草稿写入再读出一致；没有 `skills` 字段的旧草稿能读出且 chip 为空；只有 chip 的草稿是活跃草稿。
-- **A3 · vitest browser**，参照 `composer/input/text-input.web.browser.test.tsx`：
+- **A3 · vitest browser**（`composer/skill-chip.browser.test.tsx`），参照 `composer/input/text-input.web.browser.test.tsx`。Composer 入口与 `MessageInput` 在 browser 项目加载不了，测试用真实 `EditingTextInput` + 真实 `ComposerAttachmentTray` + `resolveSkillChipBackspace` 拼装；`MessageInput` → Composer 的按键链路由 Electron 实测覆盖：
   - 渲染 Composer input 与 Attachment tray，放入两个 chip 与一个附件，chip 在附件之前；
   - 点 × 删除对应 chip；
   - 光标在开头按退格删除最后一个 chip，光标在中间按退格只删文字。

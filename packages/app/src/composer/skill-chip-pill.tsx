@@ -3,7 +3,8 @@ import { Pressable, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Box, X } from "lucide-react-native";
 import { Text } from "@/components/ui/text";
-import { isNative } from "@/constants/platform";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isNative, isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { SkillChip } from "./skill-chips";
@@ -17,10 +18,18 @@ interface SkillChipPillProps {
   chip: SkillChip;
   disabled: boolean;
   onRemove: (name: string) => void;
+  /** 读屏读到的 chip 名称，形如 "Skill: 名字"。 */
+  label: string;
   removeLabel: string;
 }
 
-export function SkillChipPill({ chip, disabled, onRemove, removeLabel }: SkillChipPillProps) {
+export function SkillChipPill({
+  chip,
+  disabled,
+  onRemove,
+  label,
+  removeLabel,
+}: SkillChipPillProps) {
   const isCompact = useIsCompactFormFactor();
   const [isHovered, setIsHovered] = useState(false);
   const showRemove = isHovered || isNative || isCompact;
@@ -28,42 +37,62 @@ export function SkillChipPill({ chip, disabled, onRemove, removeLabel }: SkillCh
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const handleRemove = useCallback(() => onRemove(chip.name), [chip.name, onRemove]);
   return (
-    <View
-      testID="composer-skill-chip"
-      style={styles.body}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
-    >
-      <View pointerEvents="none" style={styles.fill} />
-      <View pointerEvents="none" style={styles.outline} />
-      {/* × 占图标的位置、同尺寸，出现时 chip 宽度不跳。 */}
-      {showRemove ? (
-        <Pressable
-          testID="composer-skill-chip-remove"
-          onPress={handleRemove}
-          disabled={disabled}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={removeLabel}
-          style={styles.iconSlot}
+    <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild>
+        {/* Web 读屏不念无 role 元素的 aria-label，标签挂在 group 上；原生由名字 Text 承载。 */}
+        <View
+          testID="composer-skill-chip"
+          role={isWeb ? "group" : undefined}
+          accessibilityLabel={isWeb ? label : undefined}
+          style={styles.body}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
         >
-          <ThemedX size={ICON_SIZE.xs} uniProps={accentBrightIconMapping} />
-        </Pressable>
-      ) : (
-        <View style={styles.iconSlot}>
-          <ThemedBox size={ICON_SIZE.xs} uniProps={accentBrightIconMapping} />
+          <View pointerEvents="none" style={styles.fill} />
+          <View pointerEvents="none" style={styles.outline} />
+          {/* × 占图标的位置、同尺寸，出现时 chip 宽度不跳。 */}
+          {showRemove ? (
+            <Pressable
+              testID="composer-skill-chip-remove"
+              onPress={handleRemove}
+              disabled={disabled}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={removeLabel}
+              style={styles.iconSlot}
+            >
+              <ThemedX size={ICON_SIZE.xs} uniProps={accentBrightIconMapping} />
+            </Pressable>
+          ) : (
+            <View style={styles.iconSlot}>
+              <ThemedBox size={ICON_SIZE.xs} uniProps={accentBrightIconMapping} />
+            </View>
+          )}
+          <Text
+            variant="caption"
+            weight="medium"
+            color="accentBright"
+            numberOfLines={1}
+            accessibilityLabel={isNative ? label : undefined}
+            style={styles.name}
+          >
+            {chip.name}
+          </Text>
         </View>
-      )}
-      <Text
-        variant="caption"
-        weight="medium"
-        color="accentBright"
-        numberOfLines={1}
-        style={styles.name}
-      >
-        {chip.name}
-      </Text>
-    </View>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" offset={8} testID="composer-skill-chip-tooltip">
+        <View style={styles.tooltipBody}>
+          <Text variant="label" weight="medium">
+            {chip.name}
+          </Text>
+          {chip.description ? (
+            <Text variant="label" color="foregroundMuted">
+              {chip.description}
+            </Text>
+          ) : null}
+        </View>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -113,5 +142,8 @@ const styles = StyleSheet.create((theme) => ({
   name: {
     minWidth: 0,
     flexShrink: 1,
+  },
+  tooltipBody: {
+    gap: theme.spacing[0.5],
   },
 }));

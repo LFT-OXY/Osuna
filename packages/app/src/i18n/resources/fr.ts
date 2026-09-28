@@ -178,6 +178,7 @@ export const fr: TranslationResources = {
       removeBrowserElement: "Supprimer la pièce jointe d'un élément de navigateur",
       openReview: "Ouvrir la pièce jointe de l'avis",
       removeReview: "Supprimer la pièce jointe de l'avis",
+      skillChip: "Compétence : {{name}}",
       removeSkill: "Supprimer",
     },
     errors: {
