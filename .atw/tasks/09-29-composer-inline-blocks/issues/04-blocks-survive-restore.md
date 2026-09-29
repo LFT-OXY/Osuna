@@ -11,7 +11,7 @@
 
 **Blocked by:** 03 — File mention：@ 选文件 / 目录 / 图片生成块并发送
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] draft-store 测试（测试层 C）：带分段结构的草稿写入再读出一致；只有块的草稿是活跃草稿；没有分段字段的旧草稿照常读出。
 - [ ] 切 tab 回来：选中产生的块仍是块，手打的 `[x](path)` 仍是文字。

@@ -20,5 +20,6 @@
 - [ ] 手打的 `/skill` 在输入框里保持文字，切 tab 回来仍是文字；发出后气泡按已知 skill 显示为块。
 - [ ] Attachment tray 不再出现 Skill chip；仓库里不再有 Skill chip 代码与文案（无障碍文案按五种块保留）。
 - [ ] 原生端选 skill 插入开头 `/name `。
+- [ ] 补 01、03 未做的原生端验收：原生端气泡渲染块无崩溃（截图）；原生端选文件插入链接文字，发出后气泡显示块。
 - [ ] Playwright e2e（mock agent）覆盖选 skill → 块在开头 → 发送文本断言 → 气泡显示块。
 - [ ] `npm run typecheck`、`npm run lint` 通过。
