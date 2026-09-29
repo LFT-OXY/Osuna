@@ -537,3 +537,29 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 19: 工单 05：Skill block 取代 Skill chip；手动验收修复，任务归档
+<!-- atw-session: v=2 fp=e2fed0023d5b0613 -->
+
+**Date**: 2026-09-30
+**Task**: 工单 05：Skill block 取代 Skill chip；手动验收修复，任务归档
+**Package**: app
+**Branch**: `feat/multi-agent-collab`
+
+### Summary
+
+实现工单 05：从 Command menu 选中的 skill 变成输入框开头的 Skill block，发送时序列化为 /a /b 正文；删除 Skill chip，旧草稿的 skills 字段按 COMPAT(skill-chip-draft) 迁移；原生端改为在开头插入 /name。手动验收修了三处：编辑器段落默认外边距导致光标比 placeholder 低一截；块名字号从 caption 改为 body，与正文同为 fontSize.content；排队行正文改用 fontSize.content。提交 glossary（不含多智能体任务的 Agent mention 条目）与 ADR 0005，归档任务。遗留：开头有多个 skill 时，Codex/opencode（大概率 Claude Code 也是）只把第一个当正式调用，后面的作为参数文字，建议另开任务核实。dev 桌面端在这个 worktree 需 PASEO_LISTEN=127.0.0.1:6769。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6da8e5994` | feat(app): Skill block 取代 Skill chip，选中的 skill 进输入框开头 |
+| `cb631fc83` | docs(glossary): Skill chip 改为 Inline block / Skill block / File mention，Attachment tray 只放附件 |
+| `0b6b6ff34` | fix(app): 输入框光标与 placeholder 对齐，块名与排队行字号随 Content size 与正文一致 |
+| `cccdc40df` | docs(adr): 0005 行内块以普通文字存在消息里，协议不加字段 |
+
+### Status
+
+[OK] **Completed**
