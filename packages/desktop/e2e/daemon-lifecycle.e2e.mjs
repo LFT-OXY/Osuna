@@ -42,9 +42,10 @@ savePersistedConfig(home, {
 });
 const main = path.join(root, "main.cjs");
 const managerPath = path.join(repo, "packages/desktop/dist/daemon/daemon-manager.js");
+const autoUpdaterPath = path.join(repo, "packages/desktop/dist/features/auto-updater.js");
 await writeFile(
   main,
-  `const { app } = require("electron"); app.setPath("userData", ${JSON.stringify(path.join(root, "user-data"))}); app.whenReady().then(() => { global.lifecycle = require(${JSON.stringify(managerPath)}); });`,
+  `const { app } = require("electron"); app.setPath("userData", ${JSON.stringify(path.join(root, "user-data"))}); app.whenReady().then(() => { global.lifecycle = require(${JSON.stringify(managerPath)}); global.appUpdates = require(${JSON.stringify(autoUpdaterPath)}).electronAppUpdateCommands; });`,
 );
 let desktop;
 let captured;
@@ -73,7 +74,12 @@ async function closeDesktop() {
 async function command(name, args) {
   console.log(`Desktop command: ${name}${args?.reason ? ` (${args.reason})` : ""}`);
   return desktop.evaluate(
-    async (_, input) => global.lifecycle.createDaemonCommandHandlers()[input.name](input.args),
+    async (_, input) => {
+      const handlers = global.lifecycle.createDaemonCommandHandlers({
+        appUpdates: global.appUpdates,
+      });
+      return handlers[input.name](input.args);
+    },
     { name, args },
   );
 }
