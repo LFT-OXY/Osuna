@@ -537,3 +537,26 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 20: 提供方安装指引
+<!-- atw-session: v=2 fp=ecc1226f81485b94 -->
+
+**Date**: 2026-09-30
+**Task**: 提供方安装指引
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+实现 09-30-provider-install-guide：server_info 新增 hostPlatform；未安装的 Claude Code/Codex/Pi/OMP 在列表显示「如何安装」，详情面板按主机系统展示官方安装命令（可复制）与文档链接，自定义提供方显示所继承 CLI 的指引。命令已对照官方页面核对（Codex 文档改用 learn.chatgpt.com）；Pi Windows 按规格用 npm。双轴审查后迁入 provider-install-guide 特性目录、改用 Text 原语、补 surface 测试；桌面端浅/深色截图入任务 qa/。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bbb132e50` | feat(app): 未安装的提供方按主机系统显示安装指引 |
+
+### Status
+
+[OK] **Completed**
