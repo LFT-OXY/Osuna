@@ -1,11 +1,11 @@
-import React, { act, useCallback, useRef, useState } from "react";
+import React, { act, forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
 import { page, userEvent } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AttachmentLabel, AttachmentPill } from "@/components/attachment-pill";
-import { EditingTextInput as ComposerTextInput } from "@/components/ui/text-input/text-input.web";
-import type { EditingTextInputHandle } from "@/components/ui/text-input";
+import { ComposerTextInput } from "@/composer/input/text-input.web";
+import type { ComposerTextInputHandle } from "@/composer/input/text-input.types";
 import { i18n } from "@/i18n/i18next";
 import { ComposerAttachmentTray } from "./attachment-tray";
 import { resolveSkillChipBackspace, removeSkillChip, type SkillChip } from "./skill-chips";
@@ -14,8 +14,8 @@ import { resolveSkillChipBackspace, removeSkillChip, type SkillChip } from "./sk
 beforeEach(() => vi.stubGlobal("React", React));
 
 /**
- * Composer 入口与 MessageInput 在 browser 项目里加载不了（expo-modules-core），所以这里用真实的
- * web 文本输入、真实的 Attachment tray 和 Composer 用的同一个退格判定，拼出输入区。
+ * Composer 入口与 MessageInput 在 browser 项目里加载不了（expo-modules-core），所以这里用 Composer
+ * 真实的 web 文本输入、真实的 Attachment tray 和 Composer 用的同一个退格判定，拼出输入区。
  */
 
 const askme: SkillChip = { name: "atw-askme", description: "Ask me questions" };
@@ -28,26 +28,27 @@ const TRAY_LABELS = {
 
 function ignoreAttachmentAction(): void {}
 
-function SkillChipComposer({
-  initialText,
-  initialChips,
-}: {
-  initialText: string;
-  initialChips: readonly SkillChip[];
-}) {
+const SkillChipComposer = forwardRef<
+  ComposerTextInputHandle,
+  { initialText: string; initialChips: readonly SkillChip[] }
+>(function SkillChipComposer({ initialText, initialChips }, ref) {
   const [chips, setChips] = useState(initialChips);
-  const inputRef = useRef<EditingTextInputHandle>(null);
+  const inputRef = useRef<ComposerTextInputHandle>(null);
+  useImperativeHandle(ref, () => {
+    if (!inputRef.current) throw new Error("composer text input did not mount");
+    return inputRef.current;
+  }, []);
   const handleRemove = useCallback(
     (name: string) => setChips((current) => removeSkillChip(current, name)),
     [],
   );
   const handleKeyPress = useCallback(
     (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
-      const textarea = inputRef.current?.getNativeRef();
-      if (!(textarea instanceof HTMLTextAreaElement)) return;
+      const selection = inputRef.current?.getSelection?.();
+      if (!selection) return;
       const remaining = resolveSkillChipBackspace({
         key: event.nativeEvent.key,
-        selection: { start: textarea.selectionStart, end: textarea.selectionEnd },
+        selection,
         chips,
       });
       if (!remaining) return;
@@ -84,7 +85,7 @@ function SkillChipComposer({
       />
     </>
   );
-}
+});
 
 const mounted: { root: Root; container: HTMLDivElement }[] = [];
 
@@ -92,11 +93,11 @@ function mount(props: { initialText: string; initialChips: readonly SkillChip[] 
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  act(() => root.render(<SkillChipComposer {...props} />));
+  const inputRef = React.createRef<ComposerTextInputHandle>();
+  act(() => root.render(<SkillChipComposer {...props} ref={inputRef} />));
   mounted.push({ root, container });
-  const textarea = container.querySelector("textarea");
-  if (!textarea) throw new Error("composer text input did not render a textarea");
-  return { container, textarea };
+  if (!inputRef.current) throw new Error("composer text input did not mount");
+  return { container, input: inputRef.current };
 }
 
 afterEach(async () => {
@@ -129,9 +130,11 @@ function chip(container: HTMLElement, name: string): HTMLElement {
   return match;
 }
 
-async function pressBackspaceAt(textarea: HTMLTextAreaElement, caret: number): Promise<void> {
-  textarea.focus();
-  textarea.setSelectionRange(caret, caret);
+async function pressBackspaceAt(input: ComposerTextInputHandle, caret: number): Promise<void> {
+  act(() => {
+    input.focus();
+    input.replaceText(input.getText(), { start: caret, end: caret });
+  });
   await userEvent.keyboard("{Backspace}");
 }
 
@@ -175,20 +178,20 @@ describe("Skill chips in the composer", () => {
   });
 
   it("removes the last chip on Backspace at the very start and keeps the prompt", async () => {
-    const { container, textarea } = mount({ initialText: "hello", initialChips: [askme, tdd] });
+    const { container, input } = mount({ initialText: "hello", initialChips: [askme, tdd] });
 
-    await pressBackspaceAt(textarea, 0);
+    await pressBackspaceAt(input, 0);
 
     expect(chipNames(container)).toEqual(["atw-askme"]);
-    expect(textarea.value).toBe("hello");
+    expect(input.getText()).toBe("hello");
   });
 
   it("deletes a character, not a chip, on Backspace inside the prompt", async () => {
-    const { container, textarea } = mount({ initialText: "hello", initialChips: [askme, tdd] });
+    const { container, input } = mount({ initialText: "hello", initialChips: [askme, tdd] });
 
-    await pressBackspaceAt(textarea, 3);
+    await pressBackspaceAt(input, 3);
 
     expect(chipNames(container)).toEqual(["atw-askme", "atw-tdd"]);
-    expect(textarea.value).toBe("helo");
+    expect(input.getText()).toBe("helo");
   });
 });

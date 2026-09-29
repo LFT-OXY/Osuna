@@ -4,6 +4,7 @@ import { createMockIdleAgent, openWorkspaceWithAgents } from "../support/helpers
 import { waitForTabBar, expectAgentTabActive } from "../support/helpers/launcher";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
+import { expectComposerText } from "../support/helpers/composer";
 
 async function pressSettingsToggleShortcut(page: import("@playwright/test").Page) {
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
@@ -28,7 +29,7 @@ async function startComposerFrameCapture(page: import("@playwright/test").Page) 
     const sample = () => {
       if (capture.stopped) return;
       const root = document.querySelector<HTMLElement>('[data-testid="message-input-root"]');
-      const input = root?.querySelector<HTMLTextAreaElement>("textarea");
+      const input = root?.querySelector<HTMLElement>('[role="textbox"]');
       if (root && input) {
         const style = getComputedStyle(input);
         capture.frames.push({
@@ -189,7 +190,7 @@ test.describe("Settings toggle tab regression", () => {
       await expect(page).toHaveURL(/\/settings\/general$/);
       await pressSettingsToggleShortcut(page);
       await expect(page).not.toHaveURL(/\/settings(\/|$)/);
-      await expect(input).toHaveValue("Keep this short draft in the composer");
+      await expectComposerText(input, "Keep this short draft in the composer");
       await page.waitForTimeout(250);
 
       const frames = await stopComposerFrameCapture(page);

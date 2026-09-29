@@ -137,7 +137,6 @@ interface QueueComposerInputContext {
   cwd: string;
   onQueue: ((payload: MessagePayload) => void) | undefined;
   replaceText: (text: string) => void;
-  onMinimizeHeight: () => void;
 }
 
 export function queueComposerInput(ctx: QueueComposerInputContext): void {
@@ -146,7 +145,6 @@ export function queueComposerInput(ctx: QueueComposerInputContext): void {
   if (!trimmed && ctx.attachments.length === 0 && !ctx.hasExternalContent) return;
   ctx.onQueue({ text: trimmed, attachments: ctx.attachments, cwd: ctx.cwd });
   ctx.replaceText("");
-  ctx.onMinimizeHeight();
 }
 
 export function computeCanStartDictation(input: {

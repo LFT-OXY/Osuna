@@ -16,6 +16,7 @@ import {
   expectReconnectingToastGone,
   expectReconnectingToastVisible,
 } from "../support/helpers/workspace-ui";
+import { expectComposerText } from "../support/helpers/composer";
 
 interface ViewedTimelineScenario {
   client: SeedDaemonClient;
@@ -261,9 +262,9 @@ test.describe("Viewed agent timelines", () => {
         page.getByText("Committed while the first chat is hidden.", { exact: true }),
       ).toBeVisible();
       await expect(page.getByText("(end of synthetic stream)", { exact: true })).toBeVisible();
-      await expect(composer).toHaveValue("Unsent draft survives hidden streaming");
+      await expectComposerText(composer, "Unsent draft survives hidden streaming");
       await composer.fill("Draft edited after returning");
-      await expect(composer).toHaveValue("Draft edited after returning");
+      await expectComposerText(composer, "Draft edited after returning");
     } finally {
       await scenario.cleanup();
     }

@@ -334,7 +334,6 @@ describe("queueComposerInput", () => {
       cwd: "/repo",
       onQueue,
       replaceText,
-      onMinimizeHeight: () => undefined,
     });
     return { onQueue, replaceText };
   }

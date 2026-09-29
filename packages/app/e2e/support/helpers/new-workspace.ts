@@ -7,6 +7,7 @@ import { daemonWsRoutePattern } from "./daemon-port";
 import { projectEquivalenceViewKey } from "./project-view-key";
 import { expectWorkspaceHeader } from "./workspace-ui";
 import { withProjectOwnership } from "./project-ownership";
+import { expectComposerText } from "./composer";
 
 type NewWorkspaceDaemonClient = Pick<
   InternalDaemonClient,
@@ -278,7 +279,7 @@ export async function fillNewWorkspaceDraft(page: Page, draft: string): Promise<
 }
 
 export async function expectNewWorkspaceDraft(page: Page, draft: string): Promise<void> {
-  await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveValue(draft);
+  await expectComposerText(page.getByRole("textbox", { name: "Message agent..." }), draft);
 }
 
 export async function selectNewWorkspaceHost(page: Page, hostLabel: string): Promise<void> {

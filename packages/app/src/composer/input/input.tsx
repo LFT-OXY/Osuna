@@ -13,7 +13,6 @@ import {
   useRef,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useImperativeHandle,
   useMemo,
   forwardRef,
@@ -57,16 +56,15 @@ import { isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { RenderProfile } from "@/utils/render-profiler";
-import { useComposerHeight } from "./height";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
 import type { NativePastedFile } from "@/composer/native-pasted-image";
+import type { EditingTextInputProps } from "@/components/ui/text-input";
 import {
-  EditingTextInput,
-  type EditingTextInputHandle as ComposerTextInputHandle,
-  type EditingTextInputProps,
-} from "@/components/ui/text-input";
+  ComposerTextInput as ComposerTextInputBase,
+  type ComposerTextInputHandle,
+} from "./text-input";
 
-const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
+const ComposerTextInput = withUnistyles(ComposerTextInputBase, (theme) => ({
   placeholderTextColor: theme.colors.surface4,
 }));
 import {
@@ -209,19 +207,6 @@ type WebTextInputKeyPressEvent = NativeSyntheticEvent<
     keyCode?: number;
   }
 >;
-
-interface TextAreaHandle {
-  scrollHeight?: number;
-  clientHeight?: number;
-  offsetHeight?: number;
-  scrollTop?: number;
-  selectionStart?: number | null;
-  selectionEnd?: number | null;
-  style?: {
-    height?: string;
-    overflowY?: string;
-  } & Record<string, unknown>;
-}
 
 function AttachButtonIcon({
   hovered,
@@ -438,7 +423,7 @@ function getTextInputNativeElement(current: ComposerTextInputHandle | null): HTM
 }
 
 interface PasteImagesEffectArgs {
-  getWebTextArea: () => TextAreaHandle | null;
+  getWebInputElement: () => HTMLElement | null;
   isConnected: boolean;
   disabled: boolean;
   isDictating: boolean;
@@ -448,7 +433,7 @@ interface PasteImagesEffectArgs {
 
 function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
   const {
-    getWebTextArea,
+    getWebInputElement,
     isConnected,
     disabled,
     isDictating,
@@ -459,19 +444,8 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
   useEffect(() => {
     if (!isWeb || !onAddImages) return;
 
-    const textarea = getWebTextArea() as
-      | (TextAreaHandle & {
-          addEventListener?: (type: string, listener: (e: ClipboardEvent) => void) => void;
-          removeEventListener?: (type: string, listener: (e: ClipboardEvent) => void) => void;
-        })
-      | null;
-    if (
-      !textarea ||
-      typeof textarea.addEventListener !== "function" ||
-      typeof textarea.removeEventListener !== "function"
-    ) {
-      return;
-    }
+    const inputElement = getWebInputElement();
+    if (!inputElement) return;
 
     let disposed = false;
     const handlePaste = (event: ClipboardEvent) => {
@@ -493,14 +467,15 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
         });
     };
 
-    textarea.addEventListener("paste", handlePaste);
+    // 捕获阶段先于编辑器处理：收走图片后编辑器看到 defaultPrevented 就不再插入文字。
+    inputElement.addEventListener("paste", handlePaste, true);
     return () => {
       disposed = true;
-      textarea.removeEventListener?.("paste", handlePaste);
+      inputElement.removeEventListener("paste", handlePaste, true);
     };
   }, [
     disabled,
-    getWebTextArea,
+    getWebInputElement,
     isConnected,
     isDictating,
     isRealtimeVoiceForCurrentAgent,
@@ -642,7 +617,6 @@ interface ComposerTextSurfaceProps {
   onFocus: () => void;
   onBlur: () => void;
   editable: boolean;
-  scrollEnabled: boolean;
   autoFocus: boolean;
   onKeyPress: ((event: WebTextInputKeyPressEvent) => void) | undefined;
   onSelectionChange: (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => void;
@@ -681,7 +655,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         onBlur={props.onBlur}
         style={props.textInputStyle}
         multiline
-        scrollEnabled={props.scrollEnabled}
+        scrollEnabled
         editable={props.editable}
         onKeyPress={props.onKeyPress}
         onSelectionChange={props.onSelectionChange}
@@ -896,8 +870,6 @@ interface SendMessageContext {
   cwd: string;
   isAgentRunning: boolean;
   onSubmit: (payload: MessagePayload) => void;
-  onMinimizeHeight: () => void;
-  preserveHeightOnSubmit: boolean;
 }
 
 function sendMessageImpl(ctx: SendMessageContext): void {
@@ -916,11 +888,6 @@ function sendMessageImpl(ctx: SendMessageContext): void {
     cwd: ctx.cwd,
     forceSend: ctx.isAgentRunning || undefined,
   });
-  // When the host preserves and locks the composer (e.g. new-workspace creation),
-  // the text stays put — collapsing the height would clip it. Keep it grown.
-  if (!ctx.preserveHeightOnSubmit) {
-    ctx.onMinimizeHeight();
-  }
 }
 
 function computeIsRealtimeVoiceForAgent(
@@ -953,31 +920,14 @@ function resolveMaxInputHeight(windowHeight: number): number {
   return Math.max(DEFAULT_MAX_INPUT_HEIGHT, Math.floor(windowHeight * MAX_INPUT_VIEWPORT_RATIO));
 }
 
-function isTextAreaLike(v: unknown): v is TextAreaHandle {
-  return typeof v === "object" && v !== null && "scrollHeight" in v;
-}
-
-function getWebTextAreaImpl(current: ComposerTextInputHandle | null): TextAreaHandle | null {
-  if (!current) return null;
-  const candidate = current as { getNativeRef?: () => unknown };
-  if (typeof candidate.getNativeRef === "function") {
-    const native = candidate.getNativeRef();
-    if (isTextAreaLike(native)) return native;
-  }
-  if (isTextAreaLike(current)) return current;
-  return null;
-}
-
 function getComposerInputSnapshot(
   current: ComposerTextInputHandle | null,
   fallbackText: string,
   fallbackSelection: ComposerInputSnapshot["selection"],
 ): ComposerInputSnapshot {
   const text = current?.getText() ?? fallbackText;
-  const textArea = getWebTextAreaImpl(current);
-  const start = textArea?.selectionStart ?? fallbackSelection.start;
-  const end = textArea?.selectionEnd ?? fallbackSelection.end;
-  return { text, selection: { start, end } };
+  const selection = current?.getSelection?.() ?? fallbackSelection;
+  return { text, selection };
 }
 
 interface SendButtonStateInput {
@@ -1175,18 +1125,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const valueRef = useRef(value);
     const selectionRef = useRef({ start: value.length, end: value.length });
     const appliedTextReplacementKeyRef = useRef(textReplacement.key);
-    const webTextareaRef = useRef<HTMLElement | null>(null);
-    const getLiveText = useCallback(() => valueRef.current, []);
-    const composerHeight = useComposerHeight({
-      getText: getLiveText,
-      textareaRef: webTextareaRef,
-      minHeight: MIN_INPUT_HEIGHT,
-      maxHeight: maxInputHeight,
-    });
-    const { style: composerHeightStyle, scrollEnabled: isComposerScrollEnabled } = composerHeight;
-    const measuredComposerHeight = composerHeight.mode === "measured" ? composerHeight : undefined;
-    const updateComposerHeightForText = measuredComposerHeight?.onTextChange;
-    const resetComposerHeight = measuredComposerHeight?.reset;
+    // 两端的输入都随内容自己长高，到 maxHeight 后在内部滚动。
+    const composerHeightStyle = useMemo(
+      () => ({ minHeight: MIN_INPUT_HEIGHT, maxHeight: maxInputHeight }),
+      [maxInputHeight],
+    );
 
     const handleComposerLayout = useCallback(
       (event: LayoutChangeEvent) => onHeightChange?.(event.nativeEvent.layout.height),
@@ -1202,7 +1145,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     const replaceText = useCallback(
       (nextText: string, selection?: { start: number; end: number }) => {
-        updateComposerHeightForText?.(valueRef.current, nextText);
         valueRef.current = nextText;
         updateLiveTextPresence(nextText);
         selectionRef.current = selection ?? { start: nextText.length, end: nextText.length };
@@ -1213,7 +1155,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         }
         onChangeText(nextText);
       },
-      [onChangeText, updateComposerHeightForText, updateLiveTextPresence],
+      [onChangeText, updateLiveTextPresence],
     );
 
     useImperativeHandle(ref, () => ({
@@ -1259,7 +1201,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     useEffect(() => {
       if (appliedTextReplacementKeyRef.current === textReplacement.key) return;
       appliedTextReplacementKeyRef.current = textReplacement.key;
-      updateComposerHeightForText?.(valueRef.current, textReplacement.text);
       valueRef.current = textReplacement.text;
       updateLiveTextPresence(textReplacement.text);
       if (textReplacement.text === "") {
@@ -1267,7 +1208,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       } else {
         textInputRef.current?.replaceText(textReplacement.text);
       }
-    }, [textReplacement, updateComposerHeightForText, updateLiveTextPresence]);
+    }, [textReplacement, updateLiveTextPresence]);
 
     useEffect(() => {
       return () => {
@@ -1463,10 +1404,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       voiceServerId,
     ]);
 
-    const minimizeInputHeight = useCallback(() => {
-      resetComposerHeight?.();
-    }, [resetComposerHeight]);
-
     const handleSendMessage = useCallback(() => {
       const liveValue = textInputRef.current?.getText() ?? valueRef.current;
       if (!preserveHeightOnSubmit) {
@@ -1480,8 +1417,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         cwd,
         isAgentRunning,
         onSubmit,
-        onMinimizeHeight: minimizeInputHeight,
-        preserveHeightOnSubmit,
       });
     }, [
       allowEmptySubmit,
@@ -1490,7 +1425,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       onSubmit,
       isAgentRunning,
       hasExternalContent,
-      minimizeInputHeight,
       preserveHeightOnSubmit,
       updateLiveTextPresence,
     ]);
@@ -1504,9 +1438,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           cwd,
           onQueue,
           replaceText,
-          onMinimizeHeight: minimizeInputHeight,
         }),
-      [attachments, cwd, hasExternalContent, onQueue, replaceText, minimizeInputHeight],
+      [attachments, cwd, hasExternalContent, onQueue, replaceText],
     );
 
     const handleDefaultSendAction = useCallback(() => {
@@ -1529,19 +1462,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       });
     }, [defaultSendBehavior, isAgentRunning, handleSendMessage, handleQueueMessage, onQueue]);
 
-    const getWebTextArea = useCallback(
-      (): TextAreaHandle | null => getWebTextAreaImpl(textInputRef.current),
+    const getWebInputElement = useCallback(
+      () => getTextInputNativeElement(textInputRef.current),
       [],
     );
 
-    useLayoutEffect(() => {
-      if (isWeb) {
-        webTextareaRef.current = getWebTextArea() as HTMLElement | null;
-      }
-    }, [getWebTextArea]);
-
     usePasteImagesEffect({
-      getWebTextArea,
+      getWebInputElement,
       isConnected,
       disabled,
       isDictating,
@@ -1649,12 +1576,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     const handleInputChange = useCallback(
       (nextValue: string) => {
-        updateComposerHeightForText?.(valueRef.current, nextValue);
         valueRef.current = nextValue;
         updateLiveTextPresence(nextValue);
         onChangeText(nextValue);
       },
-      [onChangeText, updateComposerHeightForText, updateLiveTextPresence],
+      [onChangeText, updateLiveTextPresence],
     );
 
     const handleInputFocus = useCallback(() => {
@@ -1793,7 +1719,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
               editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
-              scrollEnabled={isComposerScrollEnabled}
               autoFocus={false}
               onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : handleNativeKeyPress}
               onSelectionChange={handleSelectionChange}

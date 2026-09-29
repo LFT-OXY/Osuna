@@ -73,6 +73,17 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 - **English stays byte-identical to what it replaced.** Playwright specs locate controls by English accessible name (`getByLabel("Schedule name")`, `getByRole("button", { name: "Create schedule" })`); the e2e run is the proof the migration changed nothing. When a localized wrapper has nothing to add in English, the English value is the bare placeholder (`schedules.cadence.errors.invalid: "{{detail}}"` wraps the cron library's English reason; zh-CN is `"无效的 cron 表达式：{{detail}}"`).
 - **`utils/time.ts` `formatTimeAgo` ("5m ago") is deliberately English** and shared app-wide; localize the prefix around it (`"Created {{ago}}"`), not the value.
 
+## The Composer web input is a Tiptap editor
+
+`composer/input/text-input.web.tsx` keeps the `EditingTextInputHandle` and RN callback shapes, so `MessageInput` does not know it is not a textarea. When you touch it:
+
+- **Offsets.** The document is one paragraph with `hardBreak` newlines, so a text offset is the ProseMirror position minus 1. Anything that adds inline nodes breaks that mapping.
+- **Initial selection goes in `onMount`, not `onCreate`.** `onCreate` fires a tick later and overwrites a selection the Composer set in its mount effects (a restored draft, a Rewind).
+- **ProseMirror's selection lags the DOM.** It syncs on the async `selectionchange`, and keydown only flushes pending DOM mutations. A handler that runs before that sync (`beforeinput` from `fill` or a text service) reads the target range from the DOM selection, not `view.state.selection`.
+- **`useEditor` compares options every render.** Build them once with `useMemo` and read changing props through refs; an inline options object makes every rerender call `setOptions`.
+- **Composition.** Report text only when `view.composing` is false, and once more after `compositionend` (ProseMirror clears `composing` inside its own handler).
+- **Styling** comes from the Composer's `withUnistyles` `.hash > *` rule landing on the root `div`; the `style` prop is emptied on web and not read.
+
 ## React rules that matter most here
 
 - Components render and dispatch. Transitions live in reducers, stores, or the form model.

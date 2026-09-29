@@ -95,7 +95,14 @@
 
 ### Web / Electron 编辑器
 
-- 用 Tiptap 3 替换 Web 端的 textarea，作为 Composer 文字输入的 Web 实现，通过 Metro 平台扩展名与原生实现分开；Electron 走同一 Web 实现。
+- 用 Tiptap 3 替换 Web 端的 textarea，作为 Composer 文字输入的 Web 实现，通过 Metro 平台扩展名与原生实现分开；Electron 走同一 Web 实现。已落地（工单 02）：
+  - `composer/input/text-input.web.tsx`（Tiptap）与 `text-input.tsx`（原生，转出共享 `EditingTextInput`），对外仍是 `EditingTextInputHandle` 与 RN 回调形状，另加可选 `getSelection()` 读实时选区（原生没有，退回最近一次选区事件）。只有 Composer 换了，查找、重命名等共享文本输入不动。
+  - 文档固定为一个段落，换行是 `hardBreak`，所以文字偏移 = 编辑器位置 - 1。工单 03 加块节点后这个映射要改成按分段计算。
+  - 未被 Composer 拦下的 Enter 与 Shift+Enter 都插入换行；Cmd/Ctrl+Enter 不换行（交给 Composer 排队或发送）。程序替换文字（`replaceText` / `reset`）不进撤销栈。
+  - 高度不再用 textarea 镜像测量：编辑器随内容自己长高，到最大高度后在根元素内部滚动；原生端同样只给 `minHeight` / `maxHeight`。
+  - 粘贴只取 `text/plain`；Composer 在捕获阶段先收走图片并 `preventDefault`，编辑器看到后不再插入。拖放一律交给外层 file drop。
+  - 一次插入的多行文字（Playwright `fill`、系统文本替换）按换行拆成 `hardBreak`，替换范围取 DOM 选区，因为 ProseMirror 要等异步的 `selectionchange` 才同步选区。
+  - Web 包体积增量：未压缩 +402 KB，gzip +115 KB，brotli +95 KB。
 - 块是 inline、atom 的节点，NodeView 不可编辑；方向键整块跳过；退格、选区删除整块处理；开头 Skill block 之前不可放光标。
 - 外观照 codeg：线性单色图标（立方体、文件、文件夹、图片、provider 图标）+ accent 色名字，`caption` 级字号，无底色无描边，名字过长截断；不新增 token。
 - Web 悬停：File mention 显示相对路径，Skill block 显示全名与描述；按 `docs/hover.md` 的规范实现，紧凑宽度不出提示。

@@ -122,6 +122,37 @@ async function installAppBootstrap(page) {
   });
 }
 
+// Composer 是 contenteditable 编辑器，对照组是 textarea。两者都按文字读取，`<br>` 算换行
+// （ProseMirror 行尾补的占位 `<br>` 不算内容）。
+async function readInputText(input) {
+  return input.evaluate((element) => {
+    if (element instanceof HTMLTextAreaElement) return element.value;
+    const serialize = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+      if (node instanceof HTMLBRElement) {
+        return node.classList.contains("ProseMirror-trailingBreak") ? "" : "\n";
+      }
+      return [...node.childNodes].map(serialize).join("");
+    };
+    return serialize(element);
+  });
+}
+
+async function moveCaretToEnd(input) {
+  await input.evaluate((element) => {
+    if (element instanceof HTMLTextAreaElement) {
+      element.setSelectionRange(element.value.length, element.value.length);
+      return;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+}
+
 async function openComposer(page) {
   await installAppBootstrap(page);
   await page.goto(`${baseUrl}/?renderProfile=1`, { waitUntil: "commit" });
@@ -129,15 +160,13 @@ async function openComposer(page) {
     timeout: 60_000,
   });
   await page.keyboard.press(`Meta+${workspaceDigit}`);
-  const input = page.locator("[data-composer-input]").filter({ visible: true }).first();
+  const input = page
+    .locator('[data-composer-input] [role="textbox"]')
+    .filter({ visible: true })
+    .first();
   await input.waitFor({ state: "visible", timeout: 60_000 });
   await input.focus();
-  await input.evaluate((element) => {
-    if (!(element instanceof HTMLTextAreaElement)) {
-      throw new Error("The visible composer input is not a textarea");
-    }
-    element.setSelectionRange(element.value.length, element.value.length);
-  });
+  await moveCaretToEnd(input);
   return input;
 }
 
@@ -166,20 +195,33 @@ async function installTypingProbe(page, target) {
     globalThis.__PASEO_TYPING_BENCHMARK_CLEANUP__?.();
     const element =
       probeTarget === "composer"
-        ? [...document.querySelectorAll("[data-composer-input]")].find(
+        ? [...document.querySelectorAll('[data-composer-input] [role="textbox"]')].find(
             (candidate) => candidate.getClientRects().length > 0,
           )
         : document.querySelector('textarea[aria-label="Plain textarea benchmark"]');
-    if (!(element instanceof HTMLTextAreaElement)) {
+    if (!(element instanceof HTMLElement)) {
       throw new Error(`Typing target ${probeTarget} was not found`);
     }
+    const serialize = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+      if (node instanceof HTMLBRElement) {
+        return node.classList.contains("ProseMirror-trailingBreak") ? "" : "\n";
+      }
+      return [...node.childNodes].map(serialize).join("");
+    };
+    const readText = () =>
+      element instanceof HTMLTextAreaElement ? element.value : serialize(element);
+    globalThis.__PASEO_TYPING_READ_TEXT__ = readText;
     const composerRoot = element.closest('[data-testid="message-input-root"]');
-    const readLayout = () => ({
-      inputHeight: element.getBoundingClientRect().height,
-      composerHeight: composerRoot?.getBoundingClientRect().height ?? null,
-      valueLength: element.value.length,
-      lineCount: element.value.split("\n").length,
-    });
+    const readLayout = () => {
+      const text = readText();
+      return {
+        inputHeight: element.getBoundingClientRect().height,
+        composerHeight: composerRoot?.getBoundingClientRect().height ?? null,
+        valueLength: text.length,
+        lineCount: text.split("\n").length,
+      };
+    };
 
     let sequence = 0;
     let frameScheduled = false;
@@ -242,7 +284,14 @@ async function installTypingProbe(page, target) {
       });
     };
     element.addEventListener("keydown", onKeydown, true);
-    element.addEventListener("input", onInput);
+    // Composer 编辑器自己处理 Shift+Enter，不触发 input 事件，以 DOM 变更作为信号。
+    const editObserver =
+      element instanceof HTMLTextAreaElement ? null : new MutationObserver(onInput);
+    if (editObserver) {
+      editObserver.observe(element, { childList: true, characterData: true, subtree: true });
+    } else {
+      element.addEventListener("input", onInput);
+    }
     globalThis.__PASEO_TYPING_BENCHMARK__ = {
       get receivedKeys() {
         return sequence;
@@ -262,6 +311,7 @@ async function installTypingProbe(page, target) {
     globalThis.__PASEO_TYPING_BENCHMARK_CLEANUP__ = () => {
       element.removeEventListener("keydown", onKeydown, true);
       element.removeEventListener("input", onInput);
+      editObserver?.disconnect();
       longTaskObserver.disconnect();
       eventObserver.disconnect();
     };
@@ -490,9 +540,7 @@ async function waitForMeasurement(page, expectedKeys) {
 async function measureTarget(page, input, target, originalText) {
   await input.fill(originalText);
   await input.focus();
-  await input.evaluate((element) => {
-    element.setSelectionRange(element.value.length, element.value.length);
-  });
+  await moveCaretToEnd(input);
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
@@ -505,7 +553,7 @@ async function measureTarget(page, input, target, originalText) {
     state: globalThis.__PASEO_TYPING_BENCHMARK__,
     commits: globalThis.__PASEO_RENDER_PROFILE__ ?? [],
     renderReasons: globalThis.__PASEO_RENDER_PROFILE_REASONS__ ?? {},
-    value: document.activeElement?.value ?? null,
+    value: globalThis.__PASEO_TYPING_READ_TEXT__?.() ?? null,
   }));
   if (diagnostics.value !== `${originalText}${measuredText}`) {
     throw new Error(
@@ -578,9 +626,7 @@ async function measureTarget(page, input, target, originalText) {
 async function warmTarget(page, input, originalText) {
   await input.fill(originalText);
   await input.focus();
-  await input.evaluate((element) => {
-    element.setSelectionRange(element.value.length, element.value.length);
-  });
+  await moveCaretToEnd(input);
   await page.keyboard.type("warmupwarmupwarmupwarmupwarmup", { delay: 5 });
   await input.fill(originalText);
   await page.evaluate(
@@ -665,7 +711,7 @@ async function main() {
 
   try {
     composerInput = await openComposer(composerPage);
-    originalText = await composerInput.inputValue();
+    originalText = await readInputText(composerInput);
     const textareaInput = await prepareTextareaControl(textareaPage);
     await warmTarget(composerPage, composerInput, originalText);
     await warmTarget(textareaPage, textareaInput, "");
