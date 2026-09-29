@@ -1,0 +1,9 @@
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 前端规范入口"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "渲染进程更新状态机改单例与外部 store"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "更新 hook 与桌面 IPC 数据流"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "侧栏更新卡片与设置页改动"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "状态机与描述器测试写法"}
+{"file": ".atw/spec/app/frontend/type-safety.md", "reason": "IPC 快照解析与类型收窄"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "主进程与渲染进程跨进程状态与事件契约"}
+{"file": "docs/design.md", "reason": "卡片按钮层级与进度展示须沿用设计系统"}
+{"file": "docs/i18n.md", "reason": "新增文案补齐全部语言"}

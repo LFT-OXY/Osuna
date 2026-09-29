@@ -19,6 +19,7 @@ export type DesktopAppUpdateStatus =
   | "error";
 
 export const PENDING_RECHECK_MS = 10_000;
+export const AUTOMATIC_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 export interface DesktopAppUpdaterSnapshot {
   status: DesktopAppUpdateStatus;
@@ -382,5 +383,51 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     },
     checkForUpdates,
     installUpdate,
+  };
+}
+
+export interface IntervalTimer {
+  every(intervalMs: number, run: () => void): () => void;
+}
+
+export const systemIntervalTimer: IntervalTimer = {
+  every(intervalMs, run) {
+    const intervalId = setInterval(run, intervalMs);
+    return () => clearInterval(intervalId);
+  },
+};
+
+// 每个窗口只启动一份，由 DesktopAppUpdaterProvider 负责。
+export function startAutomaticUpdateChecks(input: {
+  updater: DesktopAppUpdater;
+  releaseChannel: DesktopReleaseChannel;
+  timer: IntervalTimer;
+}): () => void {
+  const { updater, releaseChannel, timer } = input;
+  const check = () => {
+    void updater.checkForUpdates({ releaseChannel, intent: "automatic", silent: true });
+  };
+  let stopPendingRecheck: (() => void) | null = null;
+
+  const syncPendingRecheck = () => {
+    const isPending = updater.getSnapshot().status === "pending";
+    if (isPending && stopPendingRecheck === null) {
+      stopPendingRecheck = timer.every(PENDING_RECHECK_MS, check);
+    } else if (!isPending && stopPendingRecheck !== null) {
+      stopPendingRecheck();
+      stopPendingRecheck = null;
+    }
+  };
+
+  const unsubscribe = updater.subscribe(syncPendingRecheck);
+  syncPendingRecheck();
+  check();
+  const stopAutomaticCheck = timer.every(AUTOMATIC_CHECK_INTERVAL_MS, check);
+
+  return () => {
+    stopAutomaticCheck();
+    unsubscribe();
+    stopPendingRecheck?.();
+    stopPendingRecheck = null;
   };
 }

@@ -81,6 +81,7 @@ import { updateDesktopWindowChrome } from "@/desktop/electron/window";
 import { getDesktopHost } from "@/desktop/host";
 import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { RosettaCalloutSource } from "@/desktop/updates/rosetta-callout-source";
+import { DesktopAppUpdaterProvider } from "@/desktop/updates/desktop-app-updater-provider";
 import { UpdateCalloutSource } from "@/desktop/updates/update-callout-source";
 import { useActiveWorktreeNewAction } from "@/hooks/use-active-worktree-new-action";
 import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-action";
@@ -949,7 +950,9 @@ function RuntimeProviders({ children }: { children: ReactNode }) {
     <HostRuntimeBootstrapProvider>
       <PushNotificationRouter />
       <SidebarCalloutProvider>
-        <ProvidersWrapper>{children}</ProvidersWrapper>
+        <ProvidersWrapper>
+          <DesktopAppUpdaterProvider>{children}</DesktopAppUpdaterProvider>
+        </ProvidersWrapper>
       </SidebarCalloutProvider>
     </HostRuntimeBootstrapProvider>
   );

@@ -1,21 +1,15 @@
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import {
-  checkDesktopAppUpdate,
   formatVersionWithPrefix,
-  installDesktopAppUpdate,
-  shouldShowDesktopUpdateSection,
   type DesktopAppUpdateCheckResult,
   type DesktopAppUpdateCheckIntent,
   type DesktopAppUpdateInstallResult,
 } from "@/desktop/updates/desktop-updates";
-import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
-import { useDesktopIpcErrorReporter } from "@/desktop/hooks/desktop-ipc-error";
 import {
-  PENDING_RECHECK_MS,
-  createDesktopAppUpdater,
   formatStatusText,
   type DesktopAppUpdateStatus,
 } from "@/desktop/updates/desktop-app-updater";
+import { useSharedDesktopAppUpdater } from "@/desktop/updates/desktop-app-updater-provider";
 import { formatMessageTimestamp } from "@/utils/time";
 
 export type { DesktopAppUpdateStatus };
@@ -37,23 +31,7 @@ export interface UseDesktopAppUpdaterReturn {
 }
 
 export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
-  const isDesktopApp = shouldShowDesktopUpdateSection();
-  const { settings: desktopSettings } = useDesktopSettings();
-  const releaseChannel = desktopSettings.releaseChannel;
-  const reportError = useDesktopIpcErrorReporter();
-
-  const updater = useMemo(
-    () =>
-      createDesktopAppUpdater({
-        port: {
-          checkDesktopAppUpdate,
-          installDesktopAppUpdate,
-        },
-        now: () => Date.now(),
-        reportInstallError: reportError,
-      }),
-    [reportError],
-  );
+  const { updater, releaseChannel, isDesktopApp } = useSharedDesktopAppUpdater();
 
   const snapshot = useSyncExternalStore(
     updater.subscribe,
@@ -81,27 +59,6 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
     }
     return updater.installUpdate({ releaseChannel });
   }, [isDesktopApp, releaseChannel, updater]);
-
-  useEffect(() => {
-    if (!isDesktopApp) {
-      return;
-    }
-    void checkForUpdates({ intent: "automatic", silent: true });
-  }, [checkForUpdates, isDesktopApp]);
-
-  useEffect(() => {
-    if (!isDesktopApp || snapshot.status !== "pending") {
-      return undefined;
-    }
-
-    const intervalId = setInterval(() => {
-      void checkForUpdates({ intent: "automatic", silent: true });
-    }, PENDING_RECHECK_MS);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [checkForUpdates, isDesktopApp, snapshot.status]);
 
   return {
     isDesktopApp,

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {
+  AUTOMATIC_CHECK_INTERVAL_MS,
+  PENDING_RECHECK_MS,
   createDesktopAppUpdater,
   formatStatusText,
+  startAutomaticUpdateChecks,
   type DesktopAppUpdater,
   type DesktopAppUpdaterErrorReport,
 } from "./desktop-app-updater";
@@ -12,6 +15,7 @@ import {
   createFakeDesktopAppUpdaterPort,
   type FakeDesktopAppUpdaterPort,
 } from "./test-utils/fake-desktop-app-updater-port";
+import { createFakeIntervalTimer } from "./test-utils/fake-interval-timer";
 
 function createUpdater(
   overrides: {
@@ -573,5 +577,98 @@ describe("formatStatusText", () => {
     } finally {
       await i18n.changeLanguage("en");
     }
+  });
+});
+
+function flushChecks(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+const AUTOMATIC_STABLE_CHECK = { releaseChannel: "stable", intent: "automatic" } as const;
+
+describe("desktop app updater — automatic checks", () => {
+  it("checks once when started and again every automatic interval until stopped", async () => {
+    const { updater, port } = createUpdater();
+    const timer = createFakeIntervalTimer();
+
+    const stop = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
+    await flushChecks();
+    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK]);
+
+    timer.advance(AUTOMATIC_CHECK_INTERVAL_MS);
+    await flushChecks();
+    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK, AUTOMATIC_STABLE_CHECK]);
+
+    stop();
+    timer.advance(AUTOMATIC_CHECK_INTERVAL_MS);
+    await flushChecks();
+    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK, AUTOMATIC_STABLE_CHECK]);
+  });
+
+  it("rechecks quickly only while the found update is still preparing", async () => {
+    const { updater, port } = createUpdater();
+    const timer = createFakeIntervalTimer();
+    port.nextCheckResult(buildFakeCheckResult({ hasUpdate: true, readyToInstall: false }));
+    port.nextCheckResult(
+      buildFakeCheckResult({ hasUpdate: true, readyToInstall: true, latestVersion: "1.2.3" }),
+    );
+
+    const stop = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
+    await flushChecks();
+    expect(updater.getSnapshot().status).toBe("pending");
+
+    timer.advance(PENDING_RECHECK_MS);
+    await flushChecks();
+    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK, AUTOMATIC_STABLE_CHECK]);
+    expect(updater.getSnapshot().status).toBe("available");
+
+    timer.advance(PENDING_RECHECK_MS * 3);
+    await flushChecks();
+    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK, AUTOMATIC_STABLE_CHECK]);
+    stop();
+  });
+
+  it("checks the new release channel when restarted after a channel change", async () => {
+    const { updater, port } = createUpdater();
+    const timer = createFakeIntervalTimer();
+
+    const stopStable = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
+    await flushChecks();
+    stopStable();
+    const stopBeta = startAutomaticUpdateChecks({ updater, releaseChannel: "beta", timer });
+    timer.advance(AUTOMATIC_CHECK_INTERVAL_MS);
+    await flushChecks();
+
+    expect(port.recordedChecks).toEqual([
+      AUTOMATIC_STABLE_CHECK,
+      { releaseChannel: "beta", intent: "automatic" },
+      { releaseChannel: "beta", intent: "automatic" },
+    ]);
+    stopBeta();
+  });
+
+  it("shows a manual check from one caller to every other caller of the shared updater", async () => {
+    const { updater, port } = createUpdater();
+    const timer = createFakeIntervalTimer();
+    const stop = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
+    await flushChecks();
+    const sidebarSnapshots: Array<ReturnType<DesktopAppUpdater["getSnapshot"]>> = [];
+    const unsubscribeSidebar = updater.subscribe(() => {
+      sidebarSnapshots.push(updater.getSnapshot());
+    });
+
+    port.nextCheckResult(
+      buildFakeCheckResult({ hasUpdate: true, readyToInstall: true, latestVersion: "1.2.3" }),
+    );
+    await updater.checkForUpdates({ releaseChannel: "stable" });
+
+    expect(port.recordedChecks).toEqual([
+      AUTOMATIC_STABLE_CHECK,
+      { releaseChannel: "stable", intent: "manual" },
+    ]);
+    expect(sidebarSnapshots.map((snapshot) => snapshot.status)).toEqual(["checking", "available"]);
+    expect(sidebarSnapshots.at(-1)?.availableUpdate?.latestVersion).toBe("1.2.3");
+    unsubscribeSidebar();
+    stop();
   });
 });
