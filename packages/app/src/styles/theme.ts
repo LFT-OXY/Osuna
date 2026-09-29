@@ -910,9 +910,9 @@ export const OPACITY = {
   100: 1,
 } as const;
 
-// Platform default font stacks — copied verbatim from constants/theme.ts `Fonts`
-// (sans -> ui, mono -> mono). These seed the dynamic `fontFamily` theme token and
-// are the fallback an empty user-supplied family resolves to at apply time.
+// 各平台的默认字体栈：`fontFamily` 主题 token 的初值，也是 appearance/font-stack 解析用户字体时
+// 用的默认栈。Web 等宽栈只含具体字体名和结尾的 `monospace`，canvas 字体串遇到 `ui-monospace`
+// 这类不认识的关键字会整串失效。
 export const DEFAULT_UI_FONT_STACK: string = Platform.select({
   ios: "system-ui",
   default: "normal",

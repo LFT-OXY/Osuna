@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { darkHighlightColors, resolveSyntaxColors } from "@getpaseo/highlight";
-import { DEFAULT_UI_FONT_STACK, REGISTERED_THEMES, TYPE_SCALE } from "@/styles/theme";
+import {
+  DEFAULT_MONO_FONT_STACK,
+  DEFAULT_UI_FONT_STACK,
+  REGISTERED_THEMES,
+  TYPE_SCALE,
+} from "@/styles/theme";
 import { applyAppearance, type AppearanceInput } from "./apply";
 
 // Override the global react-native-unistyles mock (vitest.setup.ts) so that
@@ -110,10 +115,30 @@ describe("applyAppearance", () => {
     expect(runCapturedUpdater().fontFamily.ui).toBe(DEFAULT_UI_FONT_STACK);
   });
 
-  it("passes a non-empty UI font family through trimmed", () => {
-    applyAppearance(makeInput({ uiFontFamily: "  Menlo  " }));
+  it("places a chosen UI font in front of the default stack on web", () => {
+    applyAppearance(makeInput({ uiFontFamily: "  Inter  " }));
 
-    expect(runCapturedUpdater().fontFamily.ui).toBe("Menlo");
+    expect(runCapturedUpdater().fontFamily.ui).toBe(`Inter, ${DEFAULT_UI_FONT_STACK}`);
+  });
+
+  it("quotes a chosen code font whose name has spaces and keeps the default stack behind it", () => {
+    applyAppearance(makeInput({ monoFontFamily: "Maple Mono" }));
+
+    expect(runCapturedUpdater().fontFamily.mono).toBe(`"Maple Mono", ${DEFAULT_MONO_FONT_STACK}`);
+  });
+
+  it("keeps a hand-written full stack as the first choice and leaves generic keywords unquoted", () => {
+    applyAppearance(makeInput({ monoFontFamily: "'Iosevka Term', Fira Code, monospace" }));
+
+    expect(runCapturedUpdater().fontFamily.mono).toBe(
+      `'Iosevka Term', "Fira Code", monospace, ${DEFAULT_MONO_FONT_STACK}`,
+    );
+  });
+
+  it("resolves an empty code font to the default mono stack", () => {
+    applyAppearance(makeInput({ monoFontFamily: "" }));
+
+    expect(runCapturedUpdater().fontFamily.mono).toBe(DEFAULT_MONO_FONT_STACK);
   });
 
   it("scales the whole UI ramp proportionally while preserving ratios", () => {

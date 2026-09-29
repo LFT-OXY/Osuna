@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ViewStyle } from "react-native";
+import { resolveMonoFontStack } from "@/appearance/font-stack";
 import { DomOverlayScrollbar } from "@/components/ui/overlay-scrollbar/dom-overlay-scrollbar";
 import {
   ContextMenu,
@@ -44,7 +45,6 @@ import type {
 } from "./types";
 import { useDiffDocumentWorkspaceCache } from "./workspace-cache";
 
-const DEFAULT_MONO_STACK = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
 const RESIZE_SETTLE_DELAY_MS = 120;
 
 interface StickyHeaderCanvasSlot {
@@ -117,7 +117,7 @@ export function DiffSurface(props: DiffSurfaceProps) {
     top: number;
   } | null>(null);
   const hasHoveredAffordanceRef = useRef(false);
-  const family = props.displayPreferences.monoFontFamily.trim() || DEFAULT_MONO_STACK;
+  const family = resolveMonoFontStack(props.displayPreferences.monoFontFamily);
   useLayoutEffect(() => {
     const stats = (window as typeof window & { __PASEO_DIFF_REACT_STATS__?: { commits: number } })
       .__PASEO_DIFF_REACT_STATS__;

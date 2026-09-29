@@ -1,0 +1,9 @@
+{"file": ".atw/tasks/09-29-font-picker/research/interview-decisions.md", "reason": "问答已定的 18 条决策，规格验收的依据"}
+{"file": ".atw/tasks/09-29-font-picker/research/reference-projects.md", "reason": "现状定位与参考项目的坑（document.fonts.check 误报、canvas 字体串失效等）"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "复用 Combobox 等原语、i18n、平台门控"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 主题 token 与运行时 patch 约束"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单测与 *.browser.test 的分工"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "app 专属检查与禁用模式"}
+{"file": "docs/unistyles.md", "reason": "Runtime Theme Patching：外观 token 放宽类型、AppearanceStyleBoundary remount"}
+{"file": "docs/design.md", "reason": "字号 token 与设置页控件规范"}
+{"file": "docs/glossary.md", "reason": "Interface font / Code font / Terminal font 术语"}

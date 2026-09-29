@@ -3,10 +3,10 @@ import { useTranslation } from "react-i18next";
 import { Text, View, type TextStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { HighlightToken } from "@getpaseo/highlight";
+import { resolveMonoFontStack } from "@/appearance/font-stack";
 import { isWeb } from "@/constants/platform";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { syntaxTokenStyleFor } from "@/styles/syntax-token-styles";
-import { DEFAULT_MONO_FONT_STACK } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { tokenizeToLines } from "@/utils/highlight-cache";
 import { CHANGED_LINE_INDICES, PREVIEW_AFTER, PREVIEW_BEFORE } from "./preview-snippet";
@@ -38,12 +38,6 @@ interface AppearancePreviewProps {
   overrides?: PreviewOverrides;
 }
 
-function resolveFamilyOverride(value: string | undefined, fallback: string): string | undefined {
-  if (value === undefined) return undefined;
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? fallback : trimmed;
-}
-
 function resolveSizeOverride(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -51,8 +45,9 @@ function resolveSizeOverride(value: number | undefined): number | undefined {
 function buildCodeOverride(overrides: PreviewOverrides | undefined): TextStyle {
   if (!overrides) return {};
   const style: TextStyle = {};
-  const fontFamily = resolveFamilyOverride(overrides.monoFontFamily, DEFAULT_MONO_FONT_STACK);
-  if (fontFamily !== undefined) style.fontFamily = fontFamily;
+  if (overrides.monoFontFamily !== undefined) {
+    style.fontFamily = resolveMonoFontStack(overrides.monoFontFamily);
+  }
   const fontSize = resolveSizeOverride(overrides.codeFontSize);
   if (fontSize !== undefined) {
     style.fontSize = fontSize;

@@ -201,6 +201,32 @@ export const darkNordTheme = buildDarkTheme(
 
 Spacing uses the theme scale (`theme.spacing[n]`), never `padding: 20`. Colors come from the palette; the identity color table in `styles/identity-colors.ts` and the provider brand colors in `components/provider-icons.ts` are the documented exceptions. `fontWeight.medium` is reserved for the structural-label tier (`docs/design.md` §3 and §14). Disabled is opacity, not a color change. Code surfaces share `styles/code-surface.ts` and `styles/syntax-token-styles.ts`; markdown shares `styles/markdown-styles.ts`.
 
+## Font stacks
+
+`appearance/font-stack.ts` (web and Electron) and `font-stack.native.ts` resolve every effective font stack from the raw `AppSettings` value. Consumers never concatenate a stack or fall back to their own default:
+
+```ts
+resolveUiFontStack(userValue: string): string       // applyAppearance → theme.fontFamily.ui
+resolveMonoFontStack(userValue: string): string     // applyAppearance → theme.fontFamily.mono; web diff canvas; settings preview
+resolveTerminalFontStack(userValue: string): string // terminal-pane → TerminalEmulator fontFamily
+```
+
+The default stacks live once in `styles/theme.ts` (`DEFAULT_UI_FONT_STACK`, `DEFAULT_MONO_FONT_STACK`). The Nerd Font names live in `terminal/runtime/terminal-font.ts` (`NERD_FONT_FAMILIES`), because that file is bundled into the terminal webview and cannot import `react-native`.
+
+| Input | Web | Native |
+| --- | --- | --- |
+| `""` (UI or mono) | the default stack, verbatim | the default stack |
+| `Maple Mono` (mono) | `"Maple Mono", <DEFAULT_MONO_FONT_STACK>` | `Maple Mono` (replaces the default; RN `fontFamily` takes one name) |
+| `'Iosevka Term', Fira Code, monospace` | already-quoted and identifier names kept, others double-quoted, then the default stack | the value as typed |
+| `""` (terminal) | concrete fonts of `DEFAULT_MONO_FONT_STACK`, then the quoted Nerd Fonts, then `monospace` | `DEFAULT_TERMINAL_FONT_FAMILY` (the pre-existing JetBrains-first stack, so native-grid still picks Menlo on iOS and `monospace` on Android) |
+| `Maple Mono, monospace` (terminal) | the user's generic keywords are dropped; exactly one `monospace`, after the Nerd Fonts | the value as typed |
+
+- The web mono default holds only concrete names plus a trailing `monospace`. A canvas `font` string with an unknown keyword such as `ui-monospace` is rejected whole. A user value that contains `ui-monospace` still breaks the web diff canvas, as it did before prepending.
+- The native diff (`surface.native.tsx`) keeps its own `"monospace"` fallback, and native `DEFAULT_MONO_FONT_STACK` is still `ui-monospace` on iOS. Web-only unification leaves native fonts unchanged.
+- Changing `terminal-font.ts` means running `npm run build:terminal-webview` in `packages/app` and then `format:files` on the generated file.
+
+Tests: `appearance/font-stack.test.ts` asserts full literal stacks for web. `font-stack.native.test.ts` imports `./font-stack.native` directly. `apply.test.ts` asserts the theme tokens. None of them mock `@/constants/platform`: vitest resolves `./font-stack` to the web file.
+
 ## Web-only styling
 
 Scrollbars are installed once through `styles/install-web-scrollbar-styles.web.ts`, the window grain through `styles/install-web-surface-grain.web.ts`, both from `app/_layout.tsx`. Anything that needs a DOM stylesheet lives in a `.web.ts` file, not behind an `if (isWeb)` in a component.

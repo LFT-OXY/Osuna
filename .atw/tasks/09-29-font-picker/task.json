@@ -1,0 +1,28 @@
+{
+  "id": "font-picker",
+  "name": "font-picker",
+  "title": "字体选择器：系统字体枚举与终端独立字体",
+  "description": "桌面/Web 端字体设置升级：queryLocalFonts 系统字体选择器、用户字体前插默认栈、终端独立字体/字号（默认跟随代码字体）、统一默认等宽栈",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-29",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "1802b4ae56890847f750343dcb01866e4257e4ac"
+  }
+}

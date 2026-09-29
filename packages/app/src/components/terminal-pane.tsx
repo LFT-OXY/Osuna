@@ -1,3 +1,4 @@
+import { resolveTerminalFontStack } from "@/appearance/font-stack";
 import { TerminalFind, type TerminalPaneFindHandle } from "@/terminal/find";
 import type { TerminalFindResult } from "@/terminal/runtime/terminal-emulator-runtime";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -223,10 +224,10 @@ export function TerminalPane({
     [theme],
   );
   const getTerminalViewAttributes = useStableEvent(() => terminalViewAttributes);
-  const terminalFontFamily = useMemo(() => {
-    const trimmed = settings.monoFontFamily.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }, [settings.monoFontFamily]);
+  const terminalFontFamily = useMemo(
+    () => resolveTerminalFontStack(settings.monoFontFamily),
+    [settings.monoFontFamily],
+  );
   const isMobile = useIsCompactFormFactor();
   const mobileView = usePanelStore((state) => state.mobilePanel.target);
   const showMobileAgentList = usePanelStore((state) => state.showMobileAgentList);
