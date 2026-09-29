@@ -3,14 +3,18 @@ import {
   composerLocator,
   expectComposerText,
   expectComposerVisible,
-  fillComposerDraft,
   sendDraftToQueue,
-  startRunningMockAgent,
   submitMessage,
 } from "../support/helpers/composer";
 import { expectAgentIdle } from "../support/helpers/agent-stream";
+import { createMockIdleAgent, openWorkspaceWithAgents } from "../support/helpers/archive-tab";
 import { expectInlineBlocks, installAgentCommandsStub } from "../support/helpers/inline-blocks";
-import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import {
+  openAgentRoute,
+  seedMockAgentWorkspace,
+  seedRunningMockAgentWorkspace,
+} from "../support/helpers/mock-agent";
+import { seedWorkspace } from "../support/helpers/seed-client";
 
 const COMMANDS = [
   { name: "atw-tdd", description: "Red, green, refactor", argumentHint: "", kind: "skill" },
@@ -33,6 +37,14 @@ const MESSAGE_BLOCKS = [
 
 function readClipboardText(page: Page): Promise<string> {
   return page.evaluate(() => navigator.clipboard.readText());
+}
+
+/** Focuses the visible composer once it accepts input. */
+async function focusComposer(page: Page) {
+  const input = composerLocator(page);
+  await expect(input).toBeEditable({ timeout: 30_000 });
+  await input.click();
+  return input;
 }
 
 /** Types `@query` and clicks the workspace entry whose path is `path`. */
@@ -98,31 +110,6 @@ test.describe("Inline blocks in sent messages", () => {
       const bubble = page.getByTestId("user-message").filter({ hasText: "short" }).last();
       await expectInlineBlocks(bubble, [{ variant: "file", label: "File: notes.md" }]);
       await expect(bubble).toContainText("/compact keep");
-    } finally {
-      await agent.cleanup();
-    }
-  });
-
-  test("a queued message shows blocks in the queue track", async ({ page }, testInfo) => {
-    await installAgentCommandsStub(page, COMMANDS);
-    const agent = await startRunningMockAgent(page, {
-      prefix: `inline-blocks-queue-${testInfo.workerIndex}-`,
-      model: "one-minute-stream",
-      prompt: "Keep this turn running while a message waits in the queue.",
-    });
-    try {
-      // 排队项目前只有文本，按"无结构的旧项"解析显示。工单 04 起排队项带分段结构，
-      // 手打的 `/atw-tdd` 发出前保持文字，届时这里改用选中产生的块。
-      await fillComposerDraft(page, "/atw-tdd then [components](src/components/) next");
-      await sendDraftToQueue(page);
-
-      const queued = page.getByTestId("queued-message");
-      await expect(queued).toHaveCount(1);
-      await expectInlineBlocks(queued, [
-        { variant: "skill", label: "Skill: atw-tdd" },
-        { variant: "directory", label: "Folder: components" },
-      ]);
-      await expect(queued).toContainText("then");
     } finally {
       await agent.cleanup();
     }
@@ -207,6 +194,120 @@ test.describe("Inline blocks in the composer", () => {
       await page.keyboard.press("ControlOrMeta+v");
       await expectComposerText(input, sent);
       await expect(input.getByTestId("inline-block")).toHaveCount(0);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("picked blocks stay blocks and typed links stay text after switching tabs", async ({
+    page,
+  }, testInfo) => {
+    const workspace = await seedWorkspace({
+      repoPrefix: `inline-blocks-draft-${testInfo.workerIndex}-`,
+      repo: { files: [{ path: "src/widget.ts", content: "export {};\n" }] },
+    });
+    try {
+      const drafting = await createMockIdleAgent(workspace.client, {
+        cwd: workspace.repoPath,
+        workspaceId: workspace.workspaceId,
+        title: "Drafting agent",
+      });
+      const other = await createMockIdleAgent(workspace.client, {
+        cwd: workspace.repoPath,
+        workspaceId: workspace.workspaceId,
+        title: "Other agent",
+      });
+      await openWorkspaceWithAgents(page, [other, drafting]);
+      const input = await focusComposer(page);
+      await page.keyboard.type("read ");
+      await pickFileMention(page, "widget", "src/widget.ts");
+      await page.keyboard.type("not [notes.md](docs/notes.md)");
+      // The composer shows the block by its name and the typed link as written.
+      const draft = "read widget.ts not [notes.md](docs/notes.md)";
+      await expectInlineBlocks(input, [{ variant: "file", label: "File: widget.ts" }]);
+
+      await page.getByTestId(`workspace-tab-agent_${other.id}`).filter({ visible: true }).click();
+      await expectComposerText(composerLocator(page), "");
+      await page
+        .getByTestId(`workspace-tab-agent_${drafting.id}`)
+        .filter({ visible: true })
+        .click();
+
+      const restored = composerLocator(page);
+      await expectComposerText(restored, draft);
+      await expectInlineBlocks(restored, [{ variant: "file", label: "File: widget.ts" }]);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("a queued message keeps its blocks in the queue track and back in the composer", async ({
+    page,
+  }, testInfo) => {
+    await installAgentCommandsStub(page, COMMANDS);
+    const agent = await seedRunningMockAgentWorkspace({
+      repoPrefix: `inline-blocks-queue-${testInfo.workerIndex}-`,
+      title: "Inline blocks queue",
+      model: "one-minute-stream",
+      initialPrompt: "Keep this turn running while a message waits in the queue.",
+      repo: { files: [{ path: "src/components/button.tsx", content: "export {};\n" }] },
+    });
+    try {
+      await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+      await expectComposerVisible(page);
+      await focusComposer(page);
+      // A typed leading /name stays text until it is sent, even for a known skill.
+      await page.keyboard.type("/atw-tdd then ");
+      await pickFileMention(page, "components", "src/components");
+      await page.keyboard.type("next");
+      await sendDraftToQueue(page);
+
+      const queued = page.getByTestId("queued-message");
+      await expect(queued).toHaveCount(1);
+      await expectInlineBlocks(queued, [{ variant: "directory", label: "Folder: components" }]);
+      await expect(queued).toContainText("/atw-tdd then");
+
+      await queued.getByRole("button", { name: "Edit queued message" }).click();
+      await expect(queued).toHaveCount(0);
+      const input = composerLocator(page);
+      await expectComposerText(input, "/atw-tdd then components next");
+      await expectInlineBlocks(input, [{ variant: "directory", label: "Folder: components" }]);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("rewinding a message puts its blocks back in the composer", async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    const prompt = "ask [@Claude](paseo://agent/claude) about [x.ts](src/x.ts) please";
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `inline-blocks-rewind-${testInfo.workerIndex}-`,
+      title: "Inline blocks rewind",
+      model: "ten-second-stream",
+    });
+    try {
+      await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+      await expectComposerVisible(page);
+      await submitMessage(page, prompt);
+      const userMessage = page.getByTestId("user-message").filter({ hasText: "please" }).last();
+      await expect(userMessage).toBeVisible();
+      const finish = await agent.client.waitForFinish(agent.agentId, 30_000);
+      expect(finish.status).toBe("idle");
+      await expect(userMessage).toHaveAttribute("aria-busy", "false");
+
+      await userMessage.getByTestId("user-message-bubble").hover();
+      await userMessage
+        .getByRole("button", { name: "Rewind to this message", exact: true })
+        .click();
+      await page.getByRole("menuitem", { name: "Rewind conversation", exact: true }).click();
+
+      // The composer shows each block by its name.
+      const input = composerLocator(page);
+      await expectComposerText(input, "ask Claude about x.ts please");
+      await expectInlineBlocks(input, [
+        { variant: "agent", label: "Agent: Claude" },
+        { variant: "file", label: "File: x.ts" },
+      ]);
     } finally {
       await agent.cleanup();
     }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inlineSegmentsText, type InlineSegment } from "@/inline-blocks";
 import type { SlashCommandRange } from "@/utils/agent-command-autocomplete";
 
 /** Command menu 里选中的一个 skill；description 只用于悬停提示。随草稿持久化。 */
@@ -80,4 +81,36 @@ export function resolveSkillChipSubmission(input: { chips: readonly SkillChip[];
     message: serializeSkillChips(input),
     recognizesClientCommands: input.chips.length === 0,
   };
+}
+
+/** 排队项的分段结构：chip 作为开头的 Skill block，其后是输入框里的内容。 */
+export function withSkillChipBlocks(
+  chips: readonly SkillChip[],
+  body: readonly InlineSegment[],
+): InlineSegment[] {
+  return [
+    ...chips.map((chip): InlineSegment => ({ type: "block", block: { kind: "skill", ...chip } })),
+    ...body,
+  ];
+}
+
+export interface SkillChipSplit {
+  chips: SkillChip[];
+  /** 正文的分段结构与它在输入框里的文字。 */
+  body: InlineSegment[];
+  text: string;
+}
+
+/** 分段结构写回输入框时，开头的 Skill block 回到 chip，其余进输入框。 */
+export function splitLeadingSkillBlocks(segments: readonly InlineSegment[]): SkillChipSplit {
+  const chips: SkillChip[] = [];
+  let index = 0;
+  for (; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (segment?.type !== "block" || segment.block.kind !== "skill") break;
+    const { name, description } = segment.block;
+    chips.push(description === undefined ? { name } : { name, description });
+  }
+  const body = segments.slice(index);
+  return { chips, body, text: inlineSegmentsText(body) };
 }

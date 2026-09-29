@@ -21,13 +21,24 @@ describe("draft-store lifecycle", () => {
       updatedAt: 1,
       version: 1,
     };
-    const edited = editDraftRecordText(draft, "hello\n", 2);
+    const edited = editDraftRecordText({
+      record: draft,
+      text: "hello\n",
+      segments: undefined,
+      now: 2,
+    });
     expect(edited.input.text).toBe("hello\n");
     expect(edited.input.attachments).toBe(draft.input.attachments);
     expect(edited.version).toBe(2);
-    expect(editDraftRecordText(edited, "hello\n", 3)).toBe(edited);
-    expect(editDraftRecordText(edited, "", 3).lifecycle).toBe("active");
-    expect(editDraftRecordText(undefined, "", 3).lifecycle).toBe("abandoned");
+    expect(
+      editDraftRecordText({ record: edited, text: "hello\n", segments: undefined, now: 3 }),
+    ).toBe(edited);
+    expect(
+      editDraftRecordText({ record: edited, text: "", segments: undefined, now: 3 }).lifecycle,
+    ).toBe("active");
+    expect(
+      editDraftRecordText({ record: undefined, text: "", segments: undefined, now: 3 }).lifecycle,
+    ).toBe("abandoned");
   });
   it("keeps skill chips across text edits and counts a chip-only draft as active", () => {
     const skills = [{ name: "atw-askme", description: "Ask me first" }];
@@ -38,7 +49,7 @@ describe("draft-store lifecycle", () => {
       version: 1,
     };
 
-    const emptied = editDraftRecordText(draft, "", 2);
+    const emptied = editDraftRecordText({ record: draft, text: "", segments: undefined, now: 2 });
 
     expect(emptied.lifecycle).toBe("active");
     expect(emptied.input.skills).toBe(skills);

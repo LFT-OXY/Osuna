@@ -8,6 +8,7 @@ import {
   parseInlineSegments,
   resolveInlineBlockVariant,
   type InlineBlock,
+  type InlineSegment,
 } from "./index";
 
 interface AgentSkillNamesInput {
@@ -44,14 +45,13 @@ export function useAgentSkillNames(input: AgentSkillNamesInput): ReadonlySet<str
 
 type KeyedPart = { key: string; text: string } | { key: string; block: InlineBlock };
 
-function keyInlineParts(text: string, skillNames: ReadonlySet<string> | null): KeyedPart[] {
+function keyInlineParts(segments: readonly InlineSegment[]): KeyedPart[] {
   const occurrences = new Map<string, number>();
   function nextKey(base: string): string {
     const occurrence = occurrences.get(base) ?? 0;
     occurrences.set(base, occurrence + 1);
     return `${base}:${occurrence}`;
   }
-  const segments = parseInlineSegments(text, { skillNames });
   const parts: KeyedPart[] = [];
   for (const [index, segment] of segments.entries()) {
     if (segment.type === "text") {
@@ -76,6 +76,8 @@ function keyInlineParts(text: string, skillNames: ReadonlySet<string> | null): K
 
 interface InlineBlockTextProps {
   text: string;
+  /** 排队项保存的分段结构，有时按它显示，不再从 text 解析。 */
+  segments?: readonly InlineSegment[];
   skillNames: ReadonlySet<string> | null;
   /** Agent mention 的 provider 图标按 host 的 provider 快照解析。 */
   serverId: string | null;
@@ -89,11 +91,15 @@ interface InlineBlockTextProps {
 /** 已发出的文本：认出的块显示为图标 + accent 名字，其余照原样；整段仍可选中。 */
 export function InlineBlockText({
   text,
+  segments,
   skillNames,
   serverId,
   ...textProps
 }: InlineBlockTextProps) {
-  const parts = useMemo(() => keyInlineParts(text, skillNames), [text, skillNames]);
+  const parts = useMemo(
+    () => keyInlineParts(segments ?? parseInlineSegments(text, { skillNames })),
+    [segments, text, skillNames],
+  );
   return (
     <Text {...textProps}>
       {parts.map((part) =>

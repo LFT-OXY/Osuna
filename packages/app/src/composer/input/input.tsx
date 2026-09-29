@@ -58,7 +58,12 @@ import { RenderProfile } from "@/utils/render-profiler";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
 import type { NativePastedFile } from "@/composer/native-pasted-image";
 import type { EditingTextInputProps } from "@/components/ui/text-input";
-import { insertInlineBlockText, type InlineBlock } from "@/inline-blocks";
+import {
+  inlineSegmentsText,
+  insertInlineBlockText,
+  type InlineBlock,
+  type InlineSegment,
+} from "@/inline-blocks";
 import {
   ComposerTextInput as ComposerTextInputBase,
   type ComposerTextInputHandle,
@@ -113,7 +118,12 @@ export interface ComposerKeyPressEvent {
 
 export interface MessageInputProps {
   value: string;
-  onChangeText: (text: string) => void;
+  /** 挂载时 value 的分段结构（草稿含块时），块恢复成块。 */
+  valueSegments?: readonly InlineSegment[];
+  /** segments 是 Web 输入框内容的分段结构；原生端没有。 */
+  onChangeText: (text: string, segments?: readonly InlineSegment[]) => void;
+  /** 输入框里 Agent mention 的 provider 图标按这个 host 解析。 */
+  serverId?: string;
   onSubmit: (payload: MessagePayload) => void;
   /** When true, the submit button is enabled even without text or images (e.g. external attachment selected). */
   hasExternalContent?: boolean;
@@ -187,6 +197,10 @@ export interface MessageInputRef {
   getText: () => string;
   getInputSnapshot: () => ComposerInputSnapshot;
   replaceText: (text: string, selection?: { start: number; end: number }) => void;
+  /** 当前内容的分段结构；原生端输入框只有文字，为 null。 */
+  getSegments: () => InlineSegment[] | null;
+  /** 以分段结构整体替换内容；原生端写入它的文字。 */
+  replaceSegments: (segments: readonly InlineSegment[]) => void;
   /** 把 range 换成行内块并补一个空格；原生端输入框只有文字，插入块的链接文字。 */
   insertInlineBlock: (block: InlineBlock, range: ComposerTextSelection) => void;
   runKeyboardAction: (action: MessageInputKeyboardActionKind) => boolean;
@@ -613,6 +627,8 @@ function FocusHint({
 interface ComposerTextSurfaceProps {
   readOnly: boolean;
   value: string;
+  valueSegments: readonly InlineSegment[] | undefined;
+  serverId: string | null;
   textInputRef: React.Ref<ComposerTextInputHandle>;
   textInputStyle: EditingTextInputProps["style"];
   readOnlyTextStyle: React.ComponentProps<typeof Text>["style"];
@@ -653,6 +669,8 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         ref={props.textInputRef}
         dataSet={COMPOSER_INPUT_DATASET}
         initialValue={props.value}
+        initialSegments={props.valueSegments}
+        inlineBlockServerId={props.serverId}
         onChangeText={props.onChangeText}
         placeholder={props.placeholder}
         accessibilityLabel={props.accessibilityLabel}
@@ -961,7 +979,9 @@ function computeSendButtonState(input: SendButtonStateInput): SendButtonStateOut
 
 interface ResolvedMessageInputProps {
   value: string;
-  onChangeText: (text: string) => void;
+  valueSegments: readonly InlineSegment[] | undefined;
+  onChangeText: (text: string, segments?: readonly InlineSegment[]) => void;
+  serverId: string | null;
   onSubmit: (payload: MessagePayload) => void;
   hasExternalContent: boolean;
   allowEmptySubmit: boolean;
@@ -1008,7 +1028,9 @@ interface ResolvedMessageInputProps {
 function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInputProps {
   return {
     value: props.value,
+    valueSegments: props.valueSegments,
     onChangeText: props.onChangeText,
+    serverId: props.serverId ?? null,
     onSubmit: props.onSubmit,
     hasExternalContent: props.hasExternalContent ?? false,
     allowEmptySubmit: props.allowEmptySubmit ?? false,
@@ -1063,7 +1085,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
   function MessageInput(props, ref) {
     const {
       value,
+      valueSegments,
       onChangeText,
+      serverId,
       onSubmit,
       hasExternalContent,
       allowEmptySubmit,
@@ -1163,9 +1187,27 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         } else {
           textInputRef.current?.replaceText(nextText, selection);
         }
-        onChangeText(nextText);
+        // 差异替换会保留没碰到的块，草稿随之保存替换后的分段结构。
+        onChangeText(nextText, textInputRef.current?.getSegments?.());
       },
       [onChangeText, updateLiveTextPresence],
+    );
+
+    const replaceSegments = useCallback(
+      (segments: readonly InlineSegment[]) => {
+        const input = textInputRef.current;
+        if (!input?.replaceSegments) {
+          replaceText(inlineSegmentsText(segments));
+          return;
+        }
+        input.replaceSegments(segments);
+        const nextText = input.getText();
+        valueRef.current = nextText;
+        updateLiveTextPresence(nextText);
+        selectionRef.current = { start: nextText.length, end: nextText.length, blockBoundary: 0 };
+        onChangeText(nextText, input.getSegments?.());
+      },
+      [onChangeText, replaceText, updateLiveTextPresence],
     );
 
     useImperativeHandle(ref, () => ({
@@ -1179,6 +1221,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       getInputSnapshot: () =>
         getComposerInputSnapshot(textInputRef.current, valueRef.current, selectionRef.current),
       replaceText,
+      getSegments: () => textInputRef.current?.getSegments?.() ?? null,
+      replaceSegments,
       insertInlineBlock: (block, range) => {
         const input = textInputRef.current;
         if (input?.insertInlineBlock) {
@@ -1226,10 +1270,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       appliedTextReplacementKeyRef.current = textReplacement.key;
       valueRef.current = textReplacement.text;
       updateLiveTextPresence(textReplacement.text);
-      if (textReplacement.text === "") {
-        textInputRef.current?.reset();
+      const input = textInputRef.current;
+      if (textReplacement.segments && input?.replaceSegments) {
+        input.replaceSegments(textReplacement.segments);
+      } else if (textReplacement.text === "") {
+        input?.reset();
       } else {
-        textInputRef.current?.replaceText(textReplacement.text);
+        input?.replaceText(textReplacement.text);
       }
     }, [textReplacement, updateLiveTextPresence]);
 
@@ -1602,7 +1649,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       (nextValue: string) => {
         valueRef.current = nextValue;
         updateLiveTextPresence(nextValue);
-        onChangeText(nextValue);
+        onChangeText(nextValue, textInputRef.current?.getSegments?.());
       },
       [onChangeText, updateLiveTextPresence],
     );
@@ -1734,6 +1781,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             <ComposerTextSurface
               readOnly={readOnly}
               value={value}
+              valueSegments={valueSegments}
+              serverId={serverId}
               textInputRef={textInputRef}
               textInputStyle={textInputStyle}
               readOnlyTextStyle={readOnlyTextStyle}

@@ -15,6 +15,11 @@ function createDeferredPromise<T>() {
   };
 }
 
+const fileSegment = {
+  type: "block" as const,
+  block: { kind: "file" as const, path: "src/x.ts", entryKind: "file" as const },
+};
+
 describe("submitAgentInput", () => {
   it("clears the composer before an in-flight submit resolves", async () => {
     const deferred = createDeferredPromise<void>();
@@ -30,6 +35,7 @@ describe("submitAgentInput", () => {
 
     const submitPromise = submitAgentInput({
       message: "  hello world  ",
+      segments: null,
       attachments: [],
       skillChips: [],
       isAgentRunning: false,
@@ -47,6 +53,7 @@ describe("submitAgentInput", () => {
     expect(queueMessage).not.toHaveBeenCalled();
     expect(submitMessage).toHaveBeenCalledWith({
       message: "hello world",
+      segments: null,
       attachments: [],
     });
     expect(setUserInput).toHaveBeenCalledWith("");
@@ -76,6 +83,7 @@ describe("submitAgentInput", () => {
 
     const submitPromise = submitAgentInput({
       message: "  keep me  ",
+      segments: null,
       attachments,
       skillChips: [],
       submitBehavior: "preserve-and-lock",
@@ -94,6 +102,7 @@ describe("submitAgentInput", () => {
     expect(queueMessage).not.toHaveBeenCalled();
     expect(submitMessage).toHaveBeenCalledWith({
       message: "keep me",
+      segments: null,
       attachments,
     });
     expect(setUserInput).not.toHaveBeenCalled();
@@ -120,6 +129,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: "  queued message  ",
+        segments: null,
         attachments: [{ id: "img-1" }],
         skillChips: [],
         isAgentRunning: true,
@@ -137,6 +147,7 @@ describe("submitAgentInput", () => {
 
     expect(queueMessage).toHaveBeenCalledWith({
       message: "queued message",
+      segments: null,
       attachments: [{ id: "img-1" }],
     });
     expect(submitMessage).not.toHaveBeenCalled();
@@ -164,6 +175,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: "  hello world  ",
+        segments: null,
         attachments,
         skillChips: [],
         isAgentRunning: false,
@@ -202,6 +214,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: "  steer this turn  ",
+        segments: null,
         attachments: [{ id: "img-1" }],
         skillChips: [],
         forceSend: true,
@@ -239,6 +252,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: "   ",
+        segments: null,
         attachments: [],
         skillChips: [],
         allowEmptySubmit: true,
@@ -258,6 +272,7 @@ describe("submitAgentInput", () => {
     expect(queueMessage).not.toHaveBeenCalled();
     expect(submitMessage).toHaveBeenCalledWith({
       message: "",
+      segments: null,
       attachments: [],
     });
     expect(clearDraft).toHaveBeenCalledWith("sent");
@@ -270,6 +285,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: "   ",
+        segments: null,
         attachments: [],
         skillChips: [{ name: "a" }, { name: "b" }],
         setSkillChips,
@@ -285,7 +301,11 @@ describe("submitAgentInput", () => {
       }),
     ).resolves.toBe("submitted");
 
-    expect(submitMessage).toHaveBeenCalledWith({ message: "/a /b", attachments: [] });
+    expect(submitMessage).toHaveBeenCalledWith({
+      message: "/a /b",
+      segments: null,
+      attachments: [],
+    });
     expect(setSkillChips).toHaveBeenCalledWith([]);
   });
 
@@ -296,6 +316,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: " body ",
+        segments: null,
         attachments: [],
         skillChips: [{ name: "a" }],
         setSkillChips,
@@ -311,7 +332,11 @@ describe("submitAgentInput", () => {
       }),
     ).resolves.toBe("queued");
 
-    expect(queueMessage).toHaveBeenCalledWith({ message: "/a body", attachments: [] });
+    expect(queueMessage).toHaveBeenCalledWith({
+      message: "/a body",
+      segments: null,
+      attachments: [],
+    });
     expect(setSkillChips).toHaveBeenCalledWith([]);
   });
 
@@ -323,6 +348,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: "  hello  ",
+        segments: null,
         attachments: [],
         skillChips: chips,
         setSkillChips,
@@ -352,6 +378,7 @@ describe("submitAgentInput", () => {
     await expect(
       submitAgentInput({
         message: "body",
+        segments: null,
         attachments: [],
         skillChips: [{ name: "a" }],
         setSkillChips,
@@ -368,7 +395,74 @@ describe("submitAgentInput", () => {
       }),
     ).resolves.toBe("submitted");
 
-    expect(submitMessage).toHaveBeenCalledWith({ message: "/a body", attachments: [] });
+    expect(submitMessage).toHaveBeenCalledWith({
+      message: "/a body",
+      segments: null,
+      attachments: [],
+    });
     expect(setSkillChips).not.toHaveBeenCalled();
+  });
+
+  it("queues the segments behind the chips' skill blocks, trimmed like the text", async () => {
+    const queueMessage = vi.fn();
+
+    await expect(
+      submitAgentInput({
+        message: " see [x.ts](src/x.ts)\n",
+        segments: [{ type: "text", text: " see " }, fileSegment, { type: "text", text: "\n" }],
+        attachments: [],
+        skillChips: [{ name: "a" }],
+        setSkillChips: vi.fn(),
+        isAgentRunning: true,
+        canSubmit: true,
+        queueMessage,
+        submitMessage: vi.fn(async () => {}),
+        clearDraft: vi.fn(),
+        setUserInput: vi.fn(),
+        setAttachments: vi.fn(),
+        setSendError: vi.fn(),
+        setIsProcessing: vi.fn(),
+      }),
+    ).resolves.toBe("queued");
+
+    expect(queueMessage).toHaveBeenCalledWith({
+      message: "/a see [x.ts](src/x.ts)",
+      segments: [
+        { type: "block", block: { kind: "skill", name: "a" } },
+        { type: "text", text: "see " },
+        fileSegment,
+      ],
+      attachments: [],
+    });
+  });
+
+  it("restores the blocks with the body when submit fails", async () => {
+    const setUserInput = vi.fn();
+
+    await expect(
+      submitAgentInput({
+        message: " see [x.ts](src/x.ts) ",
+        segments: [{ type: "text", text: " see " }, fileSegment, { type: "text", text: " " }],
+        attachments: [],
+        skillChips: [],
+        setSkillChips: vi.fn(),
+        isAgentRunning: false,
+        canSubmit: true,
+        queueMessage: vi.fn(),
+        submitMessage: async () => {
+          throw new Error("offline");
+        },
+        clearDraft: vi.fn(),
+        setUserInput,
+        setAttachments: vi.fn(),
+        setSendError: vi.fn(),
+        setIsProcessing: vi.fn(),
+      }),
+    ).resolves.toBe("failed");
+
+    expect(setUserInput).toHaveBeenLastCalledWith("see [x.ts](src/x.ts)", [
+      { type: "text", text: "see " },
+      fileSegment,
+    ]);
   });
 });

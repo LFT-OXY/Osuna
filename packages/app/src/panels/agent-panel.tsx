@@ -102,6 +102,8 @@ import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-w
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { buildDraftAgentSetup, type ClientSlashCommand } from "@/client-slash-commands";
+import { useAgentSkillNames } from "@/inline-blocks/view";
+import type { SkillChip } from "@/composer/skill-chips";
 
 interface ChatAgentStateShape {
   serverId: string | null;
@@ -1228,6 +1230,11 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       composerState,
     ],
   );
+  const skillNames = useAgentSkillNames({ serverId, agentId });
+  const setRewoundSkillChips = useCallback(
+    (chips: readonly SkillChip[]) => setSkillChips(() => chips),
+    [setSkillChips],
+  );
   const composerSection = (
     <RenderProfile id={`AgentComposerSection:${agentId}`}>
       <AgentComposerSection
@@ -1283,7 +1290,10 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   return (
     <RewindComposerRestoreProvider
       textSource={agentInputDraft.textSource}
+      skillNames={skillNames}
       setText={agentInputDraft.replaceText}
+      hasSkillChips={agentInputDraft.skillChips.length > 0}
+      setSkillChips={setRewoundSkillChips}
       onRewindComplete={handleRewindComplete}
     >
       <ComposerViewport style={styles.root} keyboardReserve="retain">

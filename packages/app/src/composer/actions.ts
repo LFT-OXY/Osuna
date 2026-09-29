@@ -17,10 +17,17 @@ import { createUserMessage, generateMessageId, type UserMessageItem } from "@/ty
 import type { MessageSubmissionRejectionOutcome } from "@/composer/submission/model";
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { i18n } from "@/i18n/i18next";
+import type { InlineSegment } from "@/inline-blocks";
 
 export interface QueuedComposerMessage {
   id: string;
+  /** 发出去的文字。 */
   text: string;
+  /**
+   * Web 输入框排队时的分段结构（开头是 chip 对应的 Skill block），排队行按它显示、编辑时按它恢复，
+   * 手打的文字发出前仍是文字。原生端没有，按 text 解析显示。
+   */
+  segments?: readonly InlineSegment[];
   attachments: ComposerAttachment[];
 }
 
@@ -218,6 +225,8 @@ export async function dispatchComposerAgentMessage(
 export interface QueueComposerMessageInput {
   agentId: string;
   text: string;
+  /** 原生端输入框没有分段结构，为 null。 */
+  segments: readonly InlineSegment[] | null;
   attachments: ComposerAttachment[];
   queue: QueueWriter;
 }
@@ -234,6 +243,7 @@ export function queueComposerMessage(input: QueueComposerMessageInput): QueueCom
   const item: QueuedComposerMessage = {
     id: generateMessageId(),
     text: trimmed,
+    ...(input.segments ? { segments: input.segments } : {}),
     attachments: input.attachments,
   };
   input.queue.write((prev) => {
@@ -252,6 +262,7 @@ export interface EditQueuedComposerMessageInput {
 
 export interface EditQueuedComposerMessageResult {
   text: string;
+  segments?: readonly InlineSegment[];
   attachments: UserComposerAttachment[];
 }
 
@@ -270,6 +281,7 @@ export function editQueuedComposerMessage(
   });
   return {
     text: item.text,
+    ...(item.segments ? { segments: item.segments } : {}),
     attachments: userAttachmentsOnly(item.attachments),
   };
 }

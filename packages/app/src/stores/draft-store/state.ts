@@ -4,6 +4,7 @@ import {
   type UserComposerAttachment,
 } from "@/attachments/types";
 import { SkillChipSchema, type SkillChip } from "@/composer/skill-chips";
+import { hasInlineBlock, isInlineSegment, type InlineSegment } from "@/inline-blocks";
 import { PluginResourceComposerAttachmentSchema } from "@/plugins/attachments";
 import { z } from "zod";
 
@@ -22,6 +23,11 @@ export interface DraftInput {
   attachments: UserComposerAttachment[];
   /** 旧草稿没有这个字段，读出时视为没有 chip。 */
   skills?: readonly SkillChip[];
+  /**
+   * 输入框里的分段结构，只在含块时保存；有它时以它恢复输入框，text 仍是序列化文字。
+   * 旧草稿没有这个字段，按 text 恢复成纯文字。
+   */
+  segments?: readonly InlineSegment[];
 }
 
 export type DraftLifecycleState = "active" | "abandoned" | "sent";
@@ -35,15 +41,46 @@ export interface DraftRecord {
   version: number;
 }
 
-export function editDraftRecordText(
-  record: DraftRecord | undefined,
-  text: string,
-  now: number,
-): DraftRecord {
-  if (record?.lifecycle === "active" && record.input.text === text) return record;
+/** 不含块的分段结构与纯文字无异，不保存。 */
+export function segmentsWithBlocks(
+  segments: readonly InlineSegment[] | undefined,
+): readonly InlineSegment[] | undefined {
+  return segments && hasInlineBlock(segments) ? segments : undefined;
+}
+
+function sameSegments(
+  a: readonly InlineSegment[] | undefined,
+  b: readonly InlineSegment[] | undefined,
+): boolean {
+  if (a === b) return true;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+export interface DraftTextEdit {
+  record: DraftRecord | undefined;
+  text: string;
+  /** undefined 表示这次改动只有文字（原生端或程序替换），旧的分段结构随之作废。 */
+  segments: readonly InlineSegment[] | undefined;
+  now: number;
+}
+
+export function editDraftRecordText({ record, text, segments, now }: DraftTextEdit): DraftRecord {
+  const nextSegments = segmentsWithBlocks(segments);
+  if (
+    record?.lifecycle === "active" &&
+    record.input.text === text &&
+    sameSegments(record.input.segments, nextSegments)
+  ) {
+    return record;
+  }
   const attachments = record?.lifecycle === "active" ? record.input.attachments : [];
   const skills = record?.lifecycle === "active" ? record.input.skills : undefined;
-  const input = { text, attachments, ...(skills ? { skills } : {}) };
+  const input = {
+    text,
+    attachments,
+    ...(skills ? { skills } : {}),
+    ...(nextSegments ? { segments: nextSegments } : {}),
+  };
   return {
     input,
     lifecycle: hasDraftContent(input) ? "active" : "abandoned",
@@ -52,7 +89,10 @@ export function editDraftRecordText(
   };
 }
 
-/** 只有 chip 没有正文也算有内容；空白正文同样算，用户可能还在输入。 */
+/**
+ * 只有 chip 没有正文也算有内容；空白正文同样算，用户可能还在输入。
+ * 块按链接写法计入 text，只有块的草稿 text 也不为空。
+ */
 export function hasDraftContent(input: DraftInput): boolean {
   return input.text.length > 0 || input.attachments.length > 0 || (input.skills?.length ?? 0) > 0;
 }
@@ -135,10 +175,13 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
     }),
   ],
 );
+// 块的形状由 inline-blocks 的守卫确认，与编辑器属性、剪贴板用同一套判断。
+export const InlineSegmentSchema = z.custom<InlineSegment>(isInlineSegment);
 export const CanonicalDraftInputSchema = z.strictObject({
   text: z.string(),
   attachments: z.array(UserComposerAttachmentSchema),
   skills: z.array(SkillChipSchema).optional(),
+  segments: z.array(InlineSegmentSchema).optional(),
   // COMPAT(draft-cwd): accept legacy persisted drafts that include cwd. Stop accepting after 2026-11-09.
   cwd: z.string().optional(),
 });
@@ -220,6 +263,7 @@ export function toDraftInputIfReady(
     text: record.input.text,
     attachments: record.input.attachments.map(normalizeComposerAttachment),
     ...(record.input.skills ? { skills: record.input.skills } : {}),
+    ...(record.input.segments ? { segments: record.input.segments } : {}),
   };
 }
 

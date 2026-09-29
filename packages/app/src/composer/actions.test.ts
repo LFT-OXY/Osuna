@@ -712,6 +712,7 @@ describe("queueComposerMessage", () => {
     const result = queueComposerMessage({
       agentId: "agent",
       text: "  draft  ",
+      segments: null,
       attachments: [],
       queue,
     });
@@ -727,6 +728,7 @@ describe("queueComposerMessage", () => {
     const result = queueComposerMessage({
       agentId: "agent",
       text: "   ",
+      segments: null,
       attachments: [],
       queue,
     });
@@ -741,6 +743,7 @@ describe("queueComposerMessage", () => {
     queueComposerMessage({
       agentId: "agent",
       text: "queue this",
+      segments: null,
       attachments: [{ kind: "image", metadata: image }, review],
       queue,
     });
@@ -749,6 +752,44 @@ describe("queueComposerMessage", () => {
       { kind: "image", metadata: image },
       review,
     ]);
+  });
+});
+
+describe("queued message segments", () => {
+  const segments = [
+    { type: "block" as const, block: { kind: "skill" as const, name: "atw-tdd" } },
+    { type: "text" as const, text: "look at " },
+    {
+      type: "block" as const,
+      block: { kind: "file" as const, path: "src/x.ts", entryKind: "file" as const },
+    },
+  ];
+
+  it("keeps the segments with the queued text and gives them back on edit", () => {
+    const queue = createFakeQueue();
+    const result = queueComposerMessage({
+      agentId: "agent",
+      text: "/atw-tdd look at [x.ts](src/x.ts)",
+      segments,
+      attachments: [],
+      queue,
+    });
+
+    expect(queue.state.get("agent")?.[0]?.segments).toEqual(segments);
+    expect(
+      editQueuedComposerMessage({ agentId: "agent", messageId: result.queued?.id ?? "", queue }),
+    ).toEqual({ text: "/atw-tdd look at [x.ts](src/x.ts)", segments, attachments: [] });
+  });
+
+  it("gives back no segments for an entry queued as plain text", () => {
+    const queue = createFakeQueue(
+      new Map([["agent", [{ id: "msg-1", text: "typed [x.ts](x.ts)", attachments: [] }]]]),
+    );
+
+    expect(editQueuedComposerMessage({ agentId: "agent", messageId: "msg-1", queue })).toEqual({
+      text: "typed [x.ts](x.ts)",
+      attachments: [],
+    });
   });
 });
 

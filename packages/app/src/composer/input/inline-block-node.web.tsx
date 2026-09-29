@@ -1,4 +1,4 @@
-import React from "react";
+import React, { createContext, useContext } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Extension, Node } from "@tiptap/core";
@@ -26,6 +26,9 @@ export function readInlineBlockNode(node: ProseMirrorNode): InlineBlock | null {
   return isInlineBlock(block) ? block : null;
 }
 
+/** 输入框所属的 host；Agent mention 的 profile 与自定义 provider 按它取图标。 */
+export const InlineBlockServerIdContext = createContext<string | null>(null);
+
 /** 悬停提示：File mention 显示相对路径，目录带末尾 `/`。 */
 function resolveTooltipText(block: InlineBlock): string | null {
   if (block.kind !== "file") return null;
@@ -33,6 +36,7 @@ function resolveTooltipText(block: InlineBlock): string | null {
 }
 
 function ComposerInlineBlockNodeView({ node }: ReactNodeViewProps) {
+  const serverId = useContext(InlineBlockServerIdContext);
   const block = readInlineBlockNode(node);
   if (!block) return null;
   const tooltipText = resolveTooltipText(block);
@@ -42,7 +46,7 @@ function ComposerInlineBlockNodeView({ node }: ReactNodeViewProps) {
         <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
           <TooltipTrigger asChild>
             <View style={styles.envelope}>
-              <InlineBlockView block={block} serverId={null} />
+              <InlineBlockView block={block} serverId={serverId} />
             </View>
           </TooltipTrigger>
           <TooltipContent side="top" align="start" offset={8} testID="inline-block-tooltip">
@@ -50,7 +54,7 @@ function ComposerInlineBlockNodeView({ node }: ReactNodeViewProps) {
           </TooltipContent>
         </Tooltip>
       ) : (
-        <InlineBlockView block={block} serverId={null} />
+        <InlineBlockView block={block} serverId={serverId} />
       )}
     </NodeViewWrapper>
   );

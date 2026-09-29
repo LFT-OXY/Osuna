@@ -134,6 +134,7 @@ import {
 } from "./workspace/terminals/state";
 import { captureWorkspaceDraftCleanup } from "./new-workspace/background-handoff";
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
+import type { InlineSegment } from "@/inline-blocks";
 
 const ThemedFolderPlus = withUnistyles(FolderPlus);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -781,6 +782,7 @@ interface SubmitDraftInput {
   workspaceId: string;
   workspaceDirectory: string;
   text: string;
+  segments: readonly InlineSegment[] | undefined;
   attachments: ComposerAttachment[];
   provider: AgentProvider;
   composerState: NewWorkspaceComposerState;
@@ -954,7 +956,7 @@ function runCreateChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome>
 async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
   const { payload, composerState, ensureWorkspace, serverId, clearDraft } = input;
   const clearConsumedDraft = captureWorkspaceDraftCleanup(input);
-  const { text, attachments, cwd } = payload;
+  const { text, segments, attachments, cwd } = payload;
   if (!composerState) {
     throw new Error(input.labels.composerStateRequired);
   }
@@ -1023,6 +1025,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
           workspaceId: workspace.id,
           workspaceDirectory: workspace.workspaceDirectory,
           text,
+          segments,
           attachments,
           provider,
           composerState,
@@ -1155,6 +1158,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     workspaceId,
     draftId,
     text: text.trim(),
+    ...(input.segments ? { segments: input.segments } : {}),
     attachments,
     cwd: submission.cwd,
     provider: submission.provider,

@@ -6,6 +6,7 @@ import {
   parseInlineSegments,
   resolveInlineBlockVariant,
   serializeInlineSegments,
+  trimInlineSegments,
   type InlineBlock,
   type InlineBlockVariant,
   type InlineSegment,
@@ -303,5 +304,27 @@ describe("inline block presentation", () => {
     for (const variant of variants) {
       expect(i18n.exists(`composer.inlineBlocks.${variant}`), variant).toBe(true);
     }
+  });
+});
+
+describe("trimInlineSegments", () => {
+  const file = block({ kind: "file", path: "src/x.ts", entryKind: "file" });
+
+  it("trims the whitespace around the content like trimming its text", () => {
+    expect(trimInlineSegments([text("\n  see "), file, text(" now \n")])).toEqual([
+      text("see "),
+      file,
+      text(" now"),
+    ]);
+  });
+
+  it("drops text that is only whitespace at either end", () => {
+    expect(trimInlineSegments([text("  "), file, text(" \n")])).toEqual([file]);
+    expect(trimInlineSegments([text("   ")])).toEqual([]);
+  });
+
+  it("keeps whitespace between blocks", () => {
+    const dir = block({ kind: "file", path: "docs", entryKind: "directory" });
+    expect(trimInlineSegments([file, text(" "), dir])).toEqual([file, text(" "), dir]);
   });
 });

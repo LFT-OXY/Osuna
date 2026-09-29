@@ -8,6 +8,8 @@ import {
   resolveSkillChipBackspace,
   resolveSkillChipSubmission,
   serializeSkillChips,
+  splitLeadingSkillBlocks,
+  withSkillChipBlocks,
   type SkillChip,
 } from "./skill-chips";
 
@@ -182,6 +184,51 @@ describe("resolveSkillChipSubmission", () => {
     expect(resolveSkillChipSubmission({ chips: [askme], text: "/clear" })).toEqual({
       message: "/atw-askme /clear",
       recognizesClientCommands: false,
+    });
+  });
+});
+
+describe("skill chips inside segments", () => {
+  const file = {
+    type: "block" as const,
+    block: { kind: "file" as const, path: "src/x.ts", entryKind: "file" as const },
+  };
+
+  it("puts the chips in front of the body as skill blocks, in picking order", () => {
+    expect(
+      withSkillChipBlocks(
+        [{ name: "atw-askme", description: "Ask me first" }, { name: "atw-tdd" }],
+        [{ type: "text", text: "fix " }, file],
+      ),
+    ).toEqual([
+      { type: "block", block: { kind: "skill", name: "atw-askme", description: "Ask me first" } },
+      { type: "block", block: { kind: "skill", name: "atw-tdd" } },
+      { type: "text", text: "fix " },
+      file,
+    ]);
+  });
+
+  it("takes the leading skill blocks back out as chips", () => {
+    expect(
+      splitLeadingSkillBlocks([
+        { type: "block", block: { kind: "skill", name: "atw-askme", description: "Ask me first" } },
+        { type: "block", block: { kind: "skill", name: "atw-tdd" } },
+        { type: "text", text: "fix " },
+        file,
+      ]),
+    ).toEqual({
+      chips: [{ name: "atw-askme", description: "Ask me first" }, { name: "atw-tdd" }],
+      body: [{ type: "text", text: "fix " }, file],
+      text: "fix [x.ts](src/x.ts)",
+    });
+  });
+
+  it("leaves a skill block after the body start in the body", () => {
+    const later = { type: "block" as const, block: { kind: "skill" as const, name: "atw-tdd" } };
+    expect(splitLeadingSkillBlocks([{ type: "text", text: "a " }, later])).toEqual({
+      chips: [],
+      body: [{ type: "text", text: "a " }, later],
+      text: "a /atw-tdd",
     });
   });
 });

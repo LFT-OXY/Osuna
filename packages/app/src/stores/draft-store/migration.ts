@@ -4,6 +4,7 @@ import { z } from "zod";
 import { SkillChipSchema } from "@/composer/skill-chips";
 import {
   AttachmentMetadataSchema,
+  InlineSegmentSchema,
   LegacyDraftImageSchema,
   normalizeAttachmentMetadata,
   normalizeComposerAttachment,
@@ -85,6 +86,7 @@ const RawDraftInputSchema = z.strictObject({
     )
     .optional(),
   skills: z.array(SkillChipSchema).optional(),
+  segments: z.array(InlineSegmentSchema).optional(),
   cwd: z.string().optional(),
 });
 const DraftLifecycleSchema = z.enum(["active", "abandoned", "sent"]);
@@ -165,6 +167,7 @@ export async function migrateDraftInput(
     text: typeof rawInput.text === "string" ? rawInput.text : "",
     attachments: [...attachments, ...legacyImagesToAttachments(migratedImages)],
     ...(rawInput.skills ? { skills: rawInput.skills } : {}),
+    ...(rawInput.segments ? { segments: rawInput.segments } : {}),
   };
 }
 

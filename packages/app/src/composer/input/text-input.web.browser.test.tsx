@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
 import { cdp, userEvent } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { InlineBlock } from "@/inline-blocks";
+import type { InlineBlock, InlineSegment } from "@/inline-blocks";
 import { ComposerTextInput } from "./text-input.web";
 import type { ComposerSelectionChangeEventData, ComposerTextInputHandle } from "./text-input.types";
 
@@ -50,6 +50,7 @@ function createRecorder(): Recorder {
 
 interface MountOptions {
   initialValue?: string;
+  initialSegments?: readonly InlineSegment[];
   placeholder?: string;
   editable?: boolean;
   claimKeys?: readonly string[];
@@ -80,6 +81,7 @@ function mount(options: MountOptions = {}): Mounted {
         <ComposerTextInput
           ref={ref}
           initialValue={next.initialValue ?? ""}
+          initialSegments={next.initialSegments}
           placeholder={next.placeholder}
           placeholderTextColor="gray"
           accessibilityLabel="Message agent..."
@@ -524,5 +526,49 @@ describe("Inline blocks in the Composer text input", () => {
     });
 
     expect(mounted.handle.getText()).toBe("plain");
+  });
+});
+
+describe("Restoring inline blocks in the Composer text input", () => {
+  const segments: InlineSegment[] = [
+    { type: "text", text: "see " },
+    { type: "block", block: xFile },
+    { type: "text", text: " typed [y.ts](y.ts)\nnext" },
+  ];
+  const text = `see ${X_LINK} typed [y.ts](y.ts)\nnext`;
+
+  it("mounts saved segments with blocks as blocks and typed link text as text", async () => {
+    const mounted = mount({ initialValue: text, initialSegments: segments });
+
+    await expectBlockCount(mounted, 1);
+    expect(mounted.handle.getText()).toBe(text);
+    expect(mounted.handle.getSegments?.()).toEqual(segments);
+  });
+
+  it("mounts the text when the saved segments no longer match it", async () => {
+    const mounted = mount({ initialValue: `${text}!`, initialSegments: segments });
+
+    expect(mounted.handle.getText()).toBe(`${text}!`);
+    expect(mounted.handle.getSegments?.()).toEqual([{ type: "text", text: `${text}!` }]);
+    await expectBlockCount(mounted, 0);
+  });
+
+  it("swaps in segments with the caret at the end, without reporting a change", async () => {
+    const mounted = mount({ initialValue: "draft" });
+    await focusAtEnd(mounted);
+    const changesBefore = mounted.recorder.changes.length;
+
+    act(() => mounted.handle.replaceSegments?.(segments));
+
+    await expectBlockCount(mounted, 1);
+    expect(mounted.handle.getText()).toBe(text);
+    expect(mounted.handle.getSelection?.()).toMatchObject({ start: text.length, end: text.length });
+    expect(mounted.recorder.changes).toHaveLength(changesBefore);
+
+    await userEvent.keyboard("!");
+    expect(mounted.handle.getSegments?.()).toEqual([
+      ...segments.slice(0, 2),
+      { type: "text", text: " typed [y.ts](y.ts)\nnext!" },
+    ]);
   });
 });

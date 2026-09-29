@@ -31,6 +31,7 @@ import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { useShallow } from "zustand/shallow";
 import type { ComposerTextSource } from "@/composer/text-source";
 import { isWeb } from "@/constants/platform";
+import type { InlineSegment } from "@/inline-blocks";
 
 type AttachmentUpdater =
   | UserComposerAttachment[]
@@ -58,10 +59,17 @@ type DraftComposerState = UseAgentFormStateResult & {
   commandDraftConfig: DraftCommandConfig | undefined;
 };
 
+/** 输入框的一次内容：text 是发出去的文字，segments 是 Web 输入框的分段结构（含块时以它为准）。 */
+interface DraftTextEdit {
+  text: string;
+  segments?: readonly InlineSegment[];
+}
+
 export interface AgentInputDraft {
   textSource: ComposerTextSource;
-  editText: (text: string) => void;
-  replaceText: (text: string) => void;
+  editText: (text: string, segments?: readonly InlineSegment[]) => void;
+  /** 程序写入内容（Rewind 等）；有 segments 时块写回成块。 */
+  replaceText: (text: string, segments?: readonly InlineSegment[]) => void;
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
   setAttachments: (updater: AttachmentUpdater) => void;
@@ -105,6 +113,10 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         const record = useDraftStore.getState().drafts[draftKey];
         return record?.lifecycle === "active" ? record.input.text : "";
       },
+      getSegmentsSnapshot: () => {
+        const record = useDraftStore.getState().drafts[draftKey];
+        return record?.lifecycle === "active" ? record.input.segments : undefined;
+      },
       subscribe: (listener) =>
         useDraftStore.subscribe((state, previous) => {
           if (
@@ -128,11 +140,12 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   }));
 
   const publishTextReplacement = useCallback(
-    (nextText: string) => {
+    (edit: DraftTextEdit) => {
       textReplacementRevisionRef.current += 1;
       setTextReplacement({
         key: `${draftKey}:${textReplacementRevisionRef.current}`,
-        text: nextText,
+        text: edit.text,
+        ...(edit.segments ? { segments: edit.segments } : {}),
       });
     },
     [draftKey],
@@ -154,28 +167,28 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
 
   const textPublication = useMemo(
     () =>
-      new AfterPaintPublication<string>((nextText) => {
-        useDraftStore.getState().editDraftText({ draftKey, text: nextText });
+      new AfterPaintPublication<DraftTextEdit>((edit) => {
+        useDraftStore.getState().editDraftText({ draftKey, ...edit });
       }),
     [draftKey],
   );
 
   const editText = useCallback(
-    (nextText: string) => {
+    (text: string, segments?: readonly InlineSegment[]) => {
       if (isWeb) {
-        textPublication.stage(nextText);
+        textPublication.stage({ text, segments });
       } else {
-        useDraftStore.getState().editDraftText({ draftKey, text: nextText });
+        useDraftStore.getState().editDraftText({ draftKey, text, segments });
       }
     },
     [draftKey, textPublication],
   );
 
   const replaceText = useCallback(
-    (nextText: string) => {
+    (text: string, segments?: readonly InlineSegment[]) => {
       textPublication.cancel();
-      useDraftStore.getState().editDraftText({ draftKey, text: nextText });
-      publishTextReplacement(nextText);
+      useDraftStore.getState().editDraftText({ draftKey, text, segments });
+      publishTextReplacement({ text, segments });
     },
     [draftKey, publishTextReplacement, textPublication],
   );
@@ -237,8 +250,8 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     void (async () => {
       await useDraftStore.getState().hydrateDraftInput({ draftKey });
       if (!cancelled) {
-        const hydratedText = useDraftStore.getState().getDraftInput(draftKey)?.text ?? "";
-        publishTextReplacement(hydratedText);
+        const hydrated = useDraftStore.getState().getDraftInput(draftKey);
+        publishTextReplacement({ text: hydrated?.text ?? "", segments: hydrated?.segments });
         setHydratedDraftKey(draftKey);
       }
     })();

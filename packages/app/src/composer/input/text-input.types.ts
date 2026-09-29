@@ -1,6 +1,6 @@
 import type { TextInputSelectionChangeEventData } from "react-native";
 import type { EditingTextInputHandle, EditingTextInputProps } from "@/components/ui/text-input";
-import type { InlineBlock, TextRange } from "@/inline-blocks";
+import type { InlineBlock, InlineSegment, TextRange } from "@/inline-blocks";
 
 /** 文字偏移表示的选区。 */
 export type ComposerTextSelection = TextRange;
@@ -29,9 +29,17 @@ export interface ComposerTextInputHandle extends EditingTextInputHandle {
   getSelection?(): ComposerLiveSelection;
   /** 把 range 换成行内块并补一个空格。原生端没有，由 MessageInput 插入块的链接文字。 */
   insertInlineBlock?(block: InlineBlock, range: ComposerTextSelection): void;
+  /** 当前内容的分段结构。原生端没有，内容只有文字。 */
+  getSegments?(): InlineSegment[];
+  /** 以分段结构整体替换内容，块仍是块；光标默认在末尾。与 replaceText 一样不进撤销栈。 */
+  replaceSegments?(segments: readonly InlineSegment[], selection?: ComposerTextSelection): void;
 }
 
 /** Web 端额外读 react-native-web 的 `dataSet`，渲染成根元素上的 `data-*`。 */
 export type ComposerTextInputProps = EditingTextInputProps & {
   dataSet?: Readonly<Record<string, string>>;
+  /** 挂载时的分段结构，文字与 initialValue 一致时代替它，块恢复成块。原生端忽略。 */
+  initialSegments?: readonly InlineSegment[];
+  /** 块里 Agent mention 的 provider 图标按这个 host 的 provider 快照解析。原生端忽略。 */
+  inlineBlockServerId?: string | null;
 };

@@ -17,6 +17,7 @@ import {
   editDraftRecordText,
   collectReferencedAttachmentIdsFromState,
   DRAFT_STORE_VERSION,
+  segmentsWithBlocks,
   isAttachmentMetadata,
   isCanonicalDraftInput,
   isLegacyDraftImage,
@@ -36,6 +37,7 @@ import {
 } from "./migration";
 import { createDraftPersistStorage } from "./persistence";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
+import type { InlineSegment } from "@/inline-blocks";
 
 export type { DraftInput, DraftLifecycleState } from "./state";
 export { hasDraftContent, selectDraftSkillChips } from "./state";
@@ -44,7 +46,11 @@ interface DraftStoreActions {
   getDraftInput: (draftKey: string) => DraftInput | undefined;
   hydrateDraftInput: (input: { draftKey: string }) => Promise<DraftInput | undefined>;
   saveDraftInput: (input: { draftKey: string; draft: DraftInput }) => void;
-  editDraftText: (input: { draftKey: string; text: string }) => void;
+  editDraftText: (input: {
+    draftKey: string;
+    text: string;
+    segments?: readonly InlineSegment[];
+  }) => void;
   markDraftLifecycle: (input: { draftKey: string; lifecycle: DraftLifecycleState }) => void;
   clearDraftInput: (input: {
     draftKey: string;
@@ -84,6 +90,7 @@ function createDraftRecord(input: {
       text: input.draft.text,
       attachments: input.draft.attachments.map(normalizeComposerAttachment),
       ...(input.draft.skills?.length ? { skills: input.draft.skills } : {}),
+      ...(segmentsWithBlocks(input.draft.segments) ? { segments: input.draft.segments } : {}),
     },
     lifecycle: input.lifecycle,
     updatedAt: Date.now(),
@@ -320,10 +327,10 @@ export const useDraftStore = create<DraftStore>()(
         scheduleAttachmentGc();
       },
 
-      editDraftText: ({ draftKey, text }) => {
+      editDraftText: ({ draftKey, text, segments }) => {
         set((state) => {
           const previous = state.drafts[draftKey];
-          const next = editDraftRecordText(previous, text, Date.now());
+          const next = editDraftRecordText({ record: previous, text, segments, now: Date.now() });
           return next === previous ? state : { drafts: { ...state.drafts, [draftKey]: next } };
         });
       },

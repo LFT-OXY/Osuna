@@ -23,6 +23,7 @@ import { Fragment } from "@tiptap/pm/model";
 import { TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
+  inlineSegmentsText,
   needsSpaceAfterInlineBlock,
   serializeInlineSegments,
   type InlineBlock,
@@ -40,7 +41,12 @@ import {
   segmentsToInlineContent,
   textToFragment,
 } from "./editor-text.web";
-import { INLINE_BLOCK_NODE, InlineBlockKeys, InlineBlockNode } from "./inline-block-node.web";
+import {
+  INLINE_BLOCK_NODE,
+  InlineBlockKeys,
+  InlineBlockNode,
+  InlineBlockServerIdContext,
+} from "./inline-block-node.web";
 import type {
   ComposerLiveSelection,
   ComposerSelectionChangeEventData,
@@ -161,6 +167,26 @@ function replaceDocumentText(
   editor.view.dispatch(tr);
 }
 
+/** 草稿、排队项、Rewind 写回：整体换成分段结构，块仍是块。与 replaceDocumentText 一样不进撤销栈。 */
+function replaceDocumentSegments(
+  editor: Editor,
+  segments: readonly InlineSegment[],
+  selection: ComposerTextSelection | undefined,
+): void {
+  const { state } = editor;
+  const paragraph = state.doc.firstChild;
+  if (!paragraph) return;
+  const tr = state.tr.replaceWith(
+    1,
+    1 + paragraph.content.size,
+    segmentsToFragment(state.schema, segments),
+  );
+  const length = docText(tr.doc).length;
+  setTextSelection(tr, selection ?? { start: length, end: length }, length);
+  tr.setMeta("addToHistory", false);
+  editor.view.dispatch(tr);
+}
+
 /**
  * 把 range 换成块，块后跟一个空格（range 后面已是空格时沿用），光标停在空格后。
  * 这是用户的一次选择，进撤销栈：撤销回到原来的 `@query`。
@@ -231,6 +257,15 @@ function writeSelectionToClipboard(view: EditorView, event: ClipboardEvent): boo
   return true;
 }
 
+/** 分段结构与文字对不上（文字在别处改过）时以文字为准。 */
+function resolveInitialSegments(
+  text: string,
+  segments: readonly InlineSegment[] | undefined,
+): readonly InlineSegment[] {
+  if (segments && inlineSegmentsText(segments) === text) return segments;
+  return [{ type: "text", text }];
+}
+
 // 回调契约沿用 RN TextInput 的事件形状。Composer 只读 nativeEvent 上的 key / 修饰键 /
 // isComposing / keyCode / selection 与 preventDefault，其余字段 Web 上没有对应物，
 // 所以只在这一处把 DOM 事件桥成 RN 事件类型。
@@ -290,6 +325,8 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
       accessibilityLabel,
       editable = true,
       dataSet,
+      initialSegments,
+      inlineBlockServerId = null,
     } = props;
 
     const callbacksRef = useRef({ onChangeText, onKeyPress, onSelectionChange, onFocus, onBlur });
@@ -300,6 +337,9 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
     editableRef.current = editable;
 
     const initialTextRef = useRef(normalizeNewlines(initialValue));
+    const initialSegmentsRef = useRef(
+      resolveInitialSegments(initialTextRef.current, initialSegments),
+    );
     const publishedTextRef = useRef(initialTextRef.current);
     const publishedSelectionRef = useRef<ComposerLiveSelection | null>(null);
     const [isEmpty, setIsEmpty] = useState(initialTextRef.current.length === 0);
@@ -354,7 +394,7 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
           content: [
             {
               type: "paragraph",
-              content: segmentsToInlineContent([{ type: "text", text: initialTextRef.current }]),
+              content: segmentsToInlineContent(initialSegmentsRef.current),
             },
           ],
         },
@@ -452,6 +492,16 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
       [editor, syncEmpty],
     );
 
+    const replaceSegments = useCallback(
+      (segments: readonly InlineSegment[], selection?: ComposerTextSelection) => {
+        const text = normalizeNewlines(inlineSegmentsText(segments));
+        publishedTextRef.current = text;
+        replaceDocumentSegments(editor, segments, selection);
+        syncEmpty(text);
+      },
+      [editor, syncEmpty],
+    );
+
     useImperativeHandle(
       ref,
       () => ({
@@ -463,9 +513,11 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
         replaceText,
         reset: () => replaceText(""),
         insertInlineBlock: (block, range) => insertInlineBlock(editor, block, range),
+        getSegments: () => fragmentSegments(editor.state.doc.firstChild?.content ?? Fragment.empty),
+        replaceSegments,
         getNativeRef: () => editor.view.dom,
       }),
-      [editor, replaceText],
+      [editor, replaceSegments, replaceText],
     );
 
     const placeholderStyle = useMemo(
@@ -483,7 +535,9 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
             {placeholder}
           </div>
         ) : null}
-        <EditorContent editor={editor} style={CONTENT_STYLE} />
+        <InlineBlockServerIdContext.Provider value={inlineBlockServerId}>
+          <EditorContent editor={editor} style={CONTENT_STYLE} />
+        </InlineBlockServerIdContext.Provider>
       </div>
     );
   },

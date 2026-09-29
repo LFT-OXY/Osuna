@@ -15,6 +15,10 @@ export type InlineBlock =
 
 export type InlineSegment = { type: "text"; text: string } | { type: "block"; block: InlineBlock };
 
+export function hasInlineBlock(segments: readonly InlineSegment[]): boolean {
+  return segments.some((segment) => segment.type === "block");
+}
+
 export type InlineBlockVariant = "skill" | "file" | "directory" | "image" | "agent";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,6 +145,26 @@ export function serializeInlineSegments(segments: readonly InlineSegment[]): str
     .join(" ");
   if (!body.trim()) return prefix;
   return `${prefix} ${body.replace(/^[ \t]+/, "").trimEnd()}`;
+}
+
+/** 分段结构在输入框里的文字：逐段相接，块按链接写法。 */
+export function inlineSegmentsText(segments: readonly InlineSegment[]): string {
+  return segments
+    .map((segment) =>
+      segment.type === "text" ? segment.text : serializeInlineBlock(segment.block),
+    )
+    .join("");
+}
+
+/** 与对文字 trim 对应：去掉开头与末尾文字段的空白，只剩空白的文字段整段去掉。 */
+export function trimInlineSegments(segments: readonly InlineSegment[]): InlineSegment[] {
+  const trimmed = [...segments];
+  const first = trimmed[0];
+  if (first?.type === "text") trimmed[0] = { type: "text", text: first.text.trimStart() };
+  const lastIndex = trimmed.length - 1;
+  const last = trimmed[lastIndex];
+  if (last?.type === "text") trimmed[lastIndex] = { type: "text", text: last.text.trimEnd() };
+  return trimmed.filter((segment) => segment.type === "block" || segment.text.length > 0);
 }
 
 /** 文字偏移表示的范围，end 不含。 */

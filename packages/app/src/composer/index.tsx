@@ -119,17 +119,23 @@ import { resolveActiveSendBehavior } from "./input/state";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
-import { submitAgentInput } from "@/composer/submit";
+import {
+  resolveOutgoingSegments,
+  submitAgentInput,
+  type OutgoingAgentInput,
+} from "@/composer/submit";
 import {
   appendSkillChip,
   pickSkillChip,
   removeSkillChip,
   resolveSkillChipBackspace,
   resolveSkillChipSubmission,
+  splitLeadingSkillBlocks,
   type SkillChip,
   type SkillChipUpdater,
 } from "@/composer/skill-chips";
 import { ComposerAttachmentTray } from "@/composer/attachment-tray";
+import type { InlineSegment } from "@/inline-blocks";
 import { InlineBlockText, useAgentSkillNames } from "@/inline-blocks/view";
 import type { SlashCommandRange } from "@/utils/agent-command-autocomplete";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
@@ -773,6 +779,7 @@ function QueuedMessageRow({
     <View style={styles.queueItem} testID="queued-message">
       <InlineBlockText
         text={item.text}
+        segments={item.segments}
         skillNames={skillNames}
         serverId={serverId}
         style={styles.queueText}
@@ -1032,7 +1039,7 @@ interface ComposerProps {
   /** When true, blurs the input immediately when submitting. */
   blurOnSubmit?: boolean;
   textSource: ComposerTextSource;
-  onChangeText: (text: string) => void;
+  onChangeText: (text: string, segments?: readonly InlineSegment[]) => void;
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
   skillChips: readonly SkillChip[];
@@ -1097,6 +1104,14 @@ function resolveContextWindowValues(
     return { contextWindowMaxTokens: rawMax, contextWindowUsedTokens: rawUsed };
   }
   return { contextWindowMaxTokens: null, contextWindowUsedTokens: null };
+}
+
+interface OutgoingComposerMessage {
+  message: string;
+  /** 输入框的分段结构，原生端为 null。 */
+  segments: InlineSegment[] | null;
+  attachments: ComposerAttachment[];
+  forceSend: boolean | undefined;
 }
 
 interface ComposerAutocompleteHandle {
@@ -1544,6 +1559,22 @@ function ComposerContentImpl({
     [onChangeText],
   );
 
+  // 排队项、发送失败把分段结构写回输入框，块仍是块；没有分段结构时按文字写回。
+  const restoreUserInput = useCallback(
+    (text: string, segments?: readonly InlineSegment[]) => {
+      if (!segments) {
+        replaceUserInput(text);
+        return;
+      }
+      if (messageInputRef.current) {
+        messageInputRef.current.replaceSegments(segments);
+        return;
+      }
+      onChangeText(text, segments);
+    },
+    [onChangeText, replaceUserInput],
+  );
+
   const handlePickSkill = useCallback(
     (input: { text: string; command: SlashCommandRange | null; chip: SkillChip }) => {
       const { command, chip } = input;
@@ -1686,10 +1717,19 @@ function ComposerContentImpl({
   }, [focusInput, onFocusInput]);
 
   const submitMessage = useCallback(
-    async (text: string, submitAttachments: ComposerAttachment[]) => {
+    async ({
+      message: text,
+      segments,
+      attachments: submitAttachments,
+    }: OutgoingAgentInput<ComposerAttachment>) => {
       onMessageSent?.();
       if (onSubmitMessageRef.current) {
-        await onSubmitMessageRef.current({ text, attachments: submitAttachments, cwd });
+        await onSubmitMessageRef.current({
+          text,
+          ...(segments ? { segments } : {}),
+          attachments: submitAttachments,
+          cwd,
+        });
         return;
       }
       if (!sendAgentMessageRef.current) {
@@ -1783,10 +1823,15 @@ function ComposerContentImpl({
   );
 
   const queueMessage = useCallback(
-    (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
+    ({
+      message: queuedMessage,
+      segments: queuedSegments,
+      attachments: queuedAttachments,
+    }: OutgoingAgentInput<ComposerAttachment>) => {
       const result = queueComposerMessage({
         agentId,
         text: queuedMessage,
+        segments: queuedSegments,
         attachments: queuedAttachments,
         queue: queueWriter,
       });
@@ -1810,13 +1855,15 @@ function ComposerContentImpl({
   );
 
   const sendMessageWithContent = useCallback(
-    async (
-      outgoingMessage: string,
-      outgoingAttachments: ComposerAttachment[],
-      forceSend?: boolean,
-    ) => {
+    async ({
+      message: outgoingMessage,
+      segments: outgoingSegments,
+      attachments: outgoingAttachments,
+      forceSend,
+    }: OutgoingComposerMessage) => {
       const result = await submitAgentInput({
         message: outgoingMessage,
+        segments: outgoingSegments,
         attachments: outgoingAttachments,
         skillChips,
         setSkillChips: (chips) => setSkillChips(() => chips),
@@ -1828,17 +1875,15 @@ function ComposerContentImpl({
         // Parent-managed submits are still valid submit paths even when the
         // transport is disconnected, because the parent decides the failure mode.
         canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
-        queueMessage: ({ message: queuedText, attachments: queuedAttachments }) => {
-          queueMessage(queuedText, queuedAttachments);
-        },
-        submitMessage: async ({ message: submitText, attachments: submitAttachments }) => {
+        queueMessage,
+        submitMessage: async (outgoing) => {
           if (submitBehavior !== "preserve-and-lock") {
-            beginSubmit(submitAttachments);
+            beginSubmit(outgoing.attachments);
           }
-          await submitMessage(submitText, submitAttachments);
+          await submitMessage(outgoing);
         },
         clearDraft,
-        setUserInput: replaceUserInput,
+        setUserInput: restoreUserInput,
         setAttachments: (nextAttachments) => {
           setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
         },
@@ -1865,7 +1910,7 @@ function ComposerContentImpl({
       setSelectedAttachments,
       setSkillChips,
       skillChips,
-      replaceUserInput,
+      restoreUserInput,
       submitBehavior,
       submitMessage,
       t,
@@ -1892,7 +1937,12 @@ function ComposerContentImpl({
       if (blurOnSubmit) {
         messageInputRef.current?.blur();
       }
-      void sendMessageWithContent(payload.text, outgoingAttachments, payload.forceSend);
+      void sendMessageWithContent({
+        message: payload.text,
+        segments: messageInputRef.current?.getSegments() ?? null,
+        attachments: outgoingAttachments,
+        forceSend: payload.forceSend,
+      });
     },
     [
       attachments,
@@ -2108,10 +2158,23 @@ function ComposerContentImpl({
         queue: queueWriter,
       });
       if (!result) return;
-      replaceUserInput(result.text);
+      if (result.segments) {
+        const { chips, body, text } = splitLeadingSkillBlocks(result.segments);
+        setSkillChips(() => chips);
+        restoreUserInput(text, body);
+      } else {
+        replaceUserInput(result.text);
+      }
       setSelectedAttachments(result.attachments);
     },
-    [agentId, queueWriter, replaceUserInput, setSelectedAttachments],
+    [
+      agentId,
+      queueWriter,
+      replaceUserInput,
+      restoreUserInput,
+      setSelectedAttachments,
+      setSkillChips,
+    ],
   );
 
   const handleSendQueuedNow = useCallback(
@@ -2123,7 +2186,7 @@ function ComposerContentImpl({
         messageId: id,
         queue: queueWriter,
         submitMessage: ({ text, attachments: queuedAttachments }) =>
-          submitMessage(text, queuedAttachments),
+          submitMessage({ message: text, segments: null, attachments: queuedAttachments }),
         failedToSendMessage: t("composer.errors.failedToSend"),
       });
       if (result.status === "failed") {
@@ -2149,7 +2212,14 @@ function ComposerContentImpl({
       ) {
         return;
       }
-      queueMessage(submission.message, outgoingAttachments);
+      queueMessage({
+        message: submission.message,
+        segments: resolveOutgoingSegments({
+          chips: skillChips,
+          segments: messageInputRef.current?.getSegments() ?? null,
+        }),
+        attachments: outgoingAttachments,
+      });
     },
     [
       attachments,
@@ -2659,7 +2729,9 @@ function ComposerContentImpl({
                 <StableMessageInput
                   ref={messageInputRef}
                   value={textSource.getSnapshot()}
+                  valueSegments={textSource.getSegmentsSnapshot?.()}
                   onChangeText={setUserInput}
+                  serverId={serverId}
                   onSubmit={handleSubmit}
                   hasExternalContent={hasExternalContent || hasSkillChips}
                   allowEmptySubmit={allowEmptySubmit}
