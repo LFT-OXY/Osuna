@@ -33,6 +33,7 @@ export interface UseDesktopAppUpdaterReturn {
   downloadUpdate: () => Promise<DesktopAppUpdateState | null>;
   cancelDownload: () => Promise<DesktopAppUpdateState | null>;
   installUpdate: () => Promise<DesktopAppUpdateInstallResult | null>;
+  retry: () => Promise<void>;
   hide: () => void;
 }
 
@@ -76,6 +77,13 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
     return updater.installUpdate();
   }, [isDesktopApp, updater]);
 
+  const retry = useCallback(async () => {
+    if (!isDesktopApp) {
+      return;
+    }
+    await updater.retry();
+  }, [isDesktopApp, updater]);
+
   return {
     isDesktopApp,
     status: snapshot.status,
@@ -97,6 +105,7 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
     downloadUpdate,
     cancelDownload,
     installUpdate,
+    retry,
     hide: updater.hide,
   };
 }

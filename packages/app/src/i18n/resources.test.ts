@@ -623,7 +623,6 @@ describe("translation resources", () => {
     expect(en.desktop.updates.callout.failedTitle).toBe("Update failed");
     expect(en.desktop.updates.callout.availableTitle).toBe("Update available");
     expect(en.desktop.updates.callout.genericError).toBe("Something went wrong.");
-    expect(en.desktop.updates.callout.whatsNew).toBe("What's new");
     expect(en.desktop.updates.callout.installingDescription).toBe("Preparing to restart...");
     expect(en.desktop.updates.callout.versionDownloaded).toBe("{{version}} has been downloaded.");
     expect(en.desktop.updates.callout.restartWarning).toBe(

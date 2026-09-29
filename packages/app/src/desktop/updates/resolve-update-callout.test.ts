@@ -35,8 +35,10 @@ describe("resolveUpdateCalloutDescriptor", () => {
       "available",
       "downloading",
       "downloaded",
+      "check-failed",
+      "download-failed",
+      "cancel-failed",
       "install-failed",
-      "error",
     ] as const) {
       expect(resolveUpdateCalloutDescriptor(input({ status, isHidden: true }))).toBeNull();
     }
@@ -182,45 +184,43 @@ describe("resolveUpdateCalloutDescriptor", () => {
     });
   });
 
-  it("shows a retry action and surfaces the error message on error", () => {
-    const descriptor = resolveUpdateCalloutDescriptor(
-      input({ status: "error", errorMessage: "Download failed" }),
-    );
+  it("offers Retry / Download from Releases and surfaces the error message once failed", () => {
+    for (const status of ["check-failed", "download-failed", "install-failed"] as const) {
+      const descriptor = resolveUpdateCalloutDescriptor(
+        input({ status, errorMessage: "sha512 checksum mismatch" }),
+      );
 
-    expect(descriptor).toMatchObject({
-      title: "Update failed",
-      body: { kind: "error", message: "Download failed" },
-      variant: "error",
-      showGiftIcon: false,
-      actions: [
-        { role: "changelog", label: "What's new" },
-        { role: "retry", label: "Retry", variant: "primary" },
-      ],
-      dismissible: true,
-    });
+      expect(descriptor).toMatchObject({
+        title: "Update failed",
+        body: { kind: "error", message: "sha512 checksum mismatch" },
+        variant: "error",
+        showGiftIcon: false,
+        actions: [
+          { role: "retry", label: "Retry" },
+          { role: "manualDownload", label: "Download from Releases", variant: "primary" },
+        ],
+        dismissible: true,
+      });
+    }
   });
 
-  it("offers a manual download from Releases when installing failed", () => {
+  it("offers only Retry when cancelling failed, since the download keeps going", () => {
     const descriptor = resolveUpdateCalloutDescriptor(
-      input({ status: "install-failed", errorMessage: "Code signature did not pass validation" }),
+      input({ status: "cancel-failed", errorMessage: "ipc closed" }),
     );
 
     expect(descriptor).toMatchObject({
       title: "Update failed",
-      body: { kind: "error", message: "Code signature did not pass validation" },
+      body: { kind: "error", message: "ipc closed" },
       variant: "error",
-      showGiftIcon: false,
-      actions: [
-        { role: "install", label: "Retry" },
-        { role: "manualDownload", label: "Download from Releases", variant: "primary" },
-      ],
+      actions: [{ role: "retry", label: "Retry", variant: "primary" }],
       dismissible: true,
     });
   });
 
   it("falls back to a generic error message when none is provided", () => {
     const descriptor = resolveUpdateCalloutDescriptor(
-      input({ status: "error", errorMessage: null }),
+      input({ status: "download-failed", errorMessage: null }),
     );
     expect(descriptor?.body).toEqual({ kind: "error", message: "Something went wrong." });
   });

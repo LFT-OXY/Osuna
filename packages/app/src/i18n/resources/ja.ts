@@ -1419,6 +1419,7 @@ export const ja: TranslationResources = {
         downloadedWithVersion: "更新の準備ができました: {{version}}",
         downloadedWithVersionAndLastChecked:
           "更新の準備ができました: {{version}}。最終確認: {{time}}。",
+        downloadFailed: "アップデートをダウンロードできませんでした。",
         installFailed: "アップデートをインストールできませんでした。",
         failed: "アプリの更新に失敗しました。",
         idle: "更新ステータスはまだ確認されていません。",
@@ -1433,7 +1434,6 @@ export const ja: TranslationResources = {
         failedTitle: "更新に失敗しました",
         availableTitle: "更新が利用可能",
         genericError: "問題が発生しました。",
-        whatsNew: "新機能",
         installingAction: "インストール中...",
         cancellingAction: "キャンセル中...",
         installingDescription: "再起動の準備中...",

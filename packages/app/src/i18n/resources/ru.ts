@@ -1427,6 +1427,7 @@ export const ru: TranslationResources = {
         downloadedWithVersion: "Обновление готово: {{version}}",
         downloadedWithVersionAndLastChecked:
           "Обновление готово: {{version}}. Последняя проверка: {{time}}.",
+        downloadFailed: "Не удалось загрузить обновление.",
         installFailed: "Не удалось установить обновление.",
         failed: "Не удалось обновить приложение.",
         idle: "Статус обновления ещё не проверен.",
@@ -1441,7 +1442,6 @@ export const ru: TranslationResources = {
         failedTitle: "Обновление не выполнено",
         availableTitle: "Доступно обновление",
         genericError: "Что-то пошло не так.",
-        whatsNew: "Что нового",
         installingAction: "Установка...",
         cancellingAction: "Отмена...",
         installingDescription: "Подготовка к перезапуску...",

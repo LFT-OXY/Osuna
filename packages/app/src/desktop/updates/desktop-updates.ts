@@ -28,15 +28,20 @@ export interface DesktopAppUpdateDownloadProgress {
   bytesPerSecond: number;
 }
 
-// 主进程持有的更新阶段快照（features/app-update-service.ts 的 AppUpdateState）。
-export interface DesktopAppUpdateState {
+interface DesktopAppUpdateStateFields {
   revision: number;
-  phase: DesktopAppUpdatePhase;
   targetVersion: string | null;
-  failure: DesktopAppUpdateFailure | null;
   progress: DesktopAppUpdateDownloadProgress | null;
   installsOnQuit: boolean;
 }
+
+// 主进程持有的更新阶段快照（features/app-update-service.ts 的 AppUpdateState）。
+// 失败阶段一定带失败原因，其余阶段没有；解析边界保证这一点。
+export type DesktopAppUpdateState = DesktopAppUpdateStateFields &
+  (
+    | { phase: Exclude<DesktopAppUpdatePhase, "failed">; failure: null }
+    | { phase: "failed"; failure: DesktopAppUpdateFailure }
+  );
 
 export interface DesktopAppUpdateCheckResult {
   hasUpdate: boolean;
@@ -192,14 +197,21 @@ export function parseDesktopAppUpdateState(raw: unknown): DesktopAppUpdateState 
     return null;
   }
 
-  return {
+  const fields: DesktopAppUpdateStateFields = {
     revision: raw.revision,
-    phase: raw.phase,
     targetVersion: toStringOrNull(raw.targetVersion),
-    failure: parseUpdateFailure(raw.failure),
     progress: parseDownloadProgress(raw.progress),
     installsOnQuit: raw.installsOnQuit === true,
   };
+  if (raw.phase !== "failed") {
+    return { ...fields, phase: raw.phase, failure: null };
+  }
+  // 失败阶段缺了失败原因就是畸形快照。
+  const failure = parseUpdateFailure(raw.failure);
+  if (failure === null) {
+    return null;
+  }
+  return { ...fields, phase: "failed", failure };
 }
 
 function requireDesktopAppUpdateState(raw: unknown, context: string): DesktopAppUpdateState {

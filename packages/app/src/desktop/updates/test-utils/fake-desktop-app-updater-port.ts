@@ -1,7 +1,9 @@
 import type {
   DesktopAppUpdateCheckResult,
   DesktopAppUpdateCheckIntent,
+  DesktopAppUpdateFailure,
   DesktopAppUpdateInstallResult,
+  DesktopAppUpdatePhase,
   DesktopAppUpdateState,
 } from "@/desktop/updates/desktop-updates";
 import type { DesktopAppUpdaterPort } from "@/desktop/updates/desktop-app-updater";
@@ -60,19 +62,28 @@ async function settle<T>(outcome: Outcome<T> | undefined, fallback: () => T): Pr
 // 自增 revision，保证测试里后建的快照一定比先建的新；需要乱序时显式传 revision。
 let nextRevision = 1;
 
+type FakeUpdateStateOverrides = Partial<
+  Pick<DesktopAppUpdateState, "revision" | "targetVersion" | "progress" | "installsOnQuit">
+> &
+  (
+    | { phase?: Exclude<DesktopAppUpdatePhase, "failed"> }
+    | { phase: "failed"; failure: DesktopAppUpdateFailure }
+  );
+
 export function buildFakeUpdateState(
-  overrides: Partial<DesktopAppUpdateState> = {},
+  overrides: FakeUpdateStateOverrides = {},
 ): DesktopAppUpdateState {
-  const phase = overrides.phase ?? "none";
-  return {
+  const hasNoUpdate = overrides.phase === undefined || overrides.phase === "none";
+  const fields = {
     revision: nextRevision++,
-    phase,
-    targetVersion: phase === "none" ? null : "1.2.3",
-    failure: null,
+    targetVersion: hasNoUpdate ? null : "1.2.3",
     progress: null,
     installsOnQuit: true,
-    ...overrides,
   };
+  if (overrides.phase === "failed") {
+    return { ...fields, ...overrides };
+  }
+  return { ...fields, failure: null, ...overrides, phase: overrides.phase ?? "none" };
 }
 
 export function buildFakeCheckResult(

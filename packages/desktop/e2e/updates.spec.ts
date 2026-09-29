@@ -138,7 +138,7 @@ test.describe("Desktop updates", () => {
     await expect(callout).toContainText("Downloading update");
   });
 
-  test("a cancel that fails shows the reason and a retry", async ({ page }) => {
+  test("a cancel that fails shows the reason, and Retry cancels again", async ({ page }) => {
     await installDesktopRuntime(page, {
       serverId: getServerId(),
       updateAvailable: true,
@@ -156,7 +156,13 @@ test.describe("Desktop updates", () => {
 
     await expect(callout).toContainText("Update failed");
     await expect(callout).toContainText("The updater did not respond.");
-    await expect(callout.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+    await expect(
+      callout.getByRole("button", { name: "Download from Releases", exact: true }),
+    ).toHaveCount(0);
+
+    await clickUpdateCalloutAction(page, "Retry");
+
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
   });
 
   test("a download hidden mid-way shows up again once it finishes", async ({ page }) => {
@@ -194,7 +200,9 @@ test.describe("Desktop updates", () => {
     await expect(page.getByTestId("update-callout")).not.toContainText("when you quit the app");
   });
 
-  test("a failed download shows the reason and a retry", async ({ page }) => {
+  test("a failed download shows the reason and the Releases download, and Retry downloads again", async ({
+    page,
+  }) => {
     await installDesktopRuntime(page, {
       serverId: getServerId(),
       updateAvailable: true,
@@ -208,10 +216,18 @@ test.describe("Desktop updates", () => {
     const callout = page.getByTestId("update-callout");
     await expect(callout).toContainText("Update failed");
     await expect(callout).toContainText("sha512 checksum mismatch");
-    await expect(callout.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+    await expect(
+      callout.getByRole("button", { name: "Download from Releases", exact: true }),
+    ).toBeVisible();
+
+    await clickUpdateCalloutAction(page, "Retry");
+
+    await expectUpdateCallout(page, { title: "Update downloaded", version: "1.2.3" });
   });
 
-  test("a failed install shows the reason and the Releases download", async ({ page }) => {
+  test("a failed install shows the reason and the Releases download, and Retry installs again", async ({
+    page,
+  }) => {
     await installDesktopRuntime(page, {
       serverId: getServerId(),
       updateAvailable: true,
@@ -230,7 +246,18 @@ test.describe("Desktop updates", () => {
     await expect(
       callout.getByRole("button", { name: "Download from Releases", exact: true }),
     ).toBeVisible();
-    await expect(callout.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+
+    await page
+      .context()
+      .route("https://github.com/**", (route) => route.fulfill({ status: 200, body: "" }));
+    const releasesPage = page.waitForEvent("popup");
+    await clickUpdateCalloutAction(page, "Download from Releases");
+    await (await releasesPage).waitForURL("https://github.com/LFT-OXY/Osuna/releases");
+
+    await clickUpdateCalloutAction(page, "Retry");
+
+    await expect(callout).toContainText("Installing update");
+    await expect(callout).not.toContainText("Update failed");
   });
 
   test("manual check in settings reports the found update", async ({ page }) => {

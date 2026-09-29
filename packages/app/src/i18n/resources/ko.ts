@@ -1414,6 +1414,7 @@ export const ko: TranslationResources = {
         downloadedWithVersion: "업데이트 준비됨: {{version}}",
         downloadedWithVersionAndLastChecked:
           "업데이트 준비됨: {{version}}. {{time}}에서 마지막으로 확인했습니다.",
+        downloadFailed: "업데이트를 다운로드하지 못했습니다.",
         installFailed: "업데이트를 설치하지 못했습니다.",
         failed: "앱을 업데이트하지 못했습니다.",
         idle: "업데이트 상태를 아직 확인하지 않았습니다.",
@@ -1428,7 +1429,6 @@ export const ko: TranslationResources = {
         failedTitle: "업데이트 실패",
         availableTitle: "업데이트 사용 가능",
         genericError: "문제가 발생했습니다.",
-        whatsNew: "새로운 기능",
         installingAction: "설치 중...",
         cancellingAction: "취소 중...",
         installingDescription: "재시작 준비 중...",

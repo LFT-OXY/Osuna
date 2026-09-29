@@ -74,10 +74,10 @@ export function UpdateCalloutSource() {
     errorMessage,
     isHidden,
     isCancellingDownload,
-    checkForUpdates,
     downloadUpdate,
     cancelDownload,
     installUpdate,
+    retry: retryFailedAction,
     hide,
   } = useDesktopAppUpdater();
 
@@ -91,7 +91,7 @@ export function UpdateCalloutSource() {
     void installUpdate();
   });
   const retry = useStableEvent(() => {
-    void checkForUpdates();
+    void retryFailedAction();
   });
   useEffect(() => {
     const descriptor = resolveUpdateCalloutDescriptor({
@@ -121,7 +121,6 @@ export function UpdateCalloutSource() {
         update: download,
         cancel,
         install,
-        changelog: openChangelog,
         retry,
         manualDownload: openDesktopReleasesPage,
       }),

@@ -1445,6 +1445,7 @@ export const fr: TranslationResources = {
         downloadedWithVersion: "Mise à jour prête:{{version}}",
         downloadedWithVersionAndLastChecked:
           "Mise à jour prête:{{version}}. Dernière vérification à {{time}}.",
+        downloadFailed: "Impossible de télécharger la mise à jour.",
         installFailed: "Impossible d'installer la mise à jour.",
         failed: "Échec de la mise à jour de l'application.",
         idle: "L'état de la mise à jour n'a pas encore été vérifié.",
@@ -1460,7 +1461,6 @@ export const fr: TranslationResources = {
         failedTitle: "La mise à jour a échoué",
         availableTitle: "Mise à jour disponible",
         genericError: "Quelque chose s'est mal passé.",
-        whatsNew: "Quoi de neuf",
         installingAction: "Installation...",
         cancellingAction: "Annulation...",
         installingDescription: "Préparation du redémarrage...",

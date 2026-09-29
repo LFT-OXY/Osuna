@@ -152,6 +152,19 @@ describe("desktop-updates helpers", () => {
     });
   });
 
+  it("drops a failed state that does not say what failed", async () => {
+    const { parseDesktopAppUpdateState } = await loadModuleForPlatform("web");
+
+    expect(
+      parseDesktopAppUpdateState({
+        revision: 5,
+        phase: "failed",
+        targetVersion: "1.2.4",
+        failure: { action: "unknown" },
+      }),
+    ).toBeNull();
+  });
+
   it("parses the download progress of an update state", async () => {
     const { parseDesktopAppUpdateState } = await loadModuleForPlatform("web");
     const progress = { percent: 42, transferred: 42, total: 100, bytesPerSecond: 7 };

@@ -183,14 +183,18 @@ function createService(input?: {
   installsOnQuit?: boolean;
 }) {
   const runtime = new FakeAppUpdateRuntime();
-  const installHandoffDeadline = new AbortController();
+  // 与生产一致，每次安装新建一个截止信号；expireInstallHandoff 让最近一次安装超时。
+  let installHandoffDeadline = new AbortController();
   const publishedStates: AppUpdateState[] = [];
   const service = createAppUpdateService({
     runtime,
     isPackaged: () => true,
     now: input?.now ?? (() => Date.parse("2026-04-28T12:00:00.000Z")),
     bucket: input?.bucket ?? (async () => 0.99),
-    createInstallHandoffDeadline: () => installHandoffDeadline.signal,
+    createInstallHandoffDeadline: () => {
+      installHandoffDeadline = new AbortController();
+      return installHandoffDeadline.signal;
+    },
     installsOnQuit: input?.installsOnQuit ?? true,
     publishState: (state) => {
       publishedStates.push(state);
@@ -1058,6 +1062,25 @@ describe("app update service — install", () => {
       phase: "failed",
       failure: { action: "install", reason: "handoff-timeout" },
     });
+  });
+
+  it("installs the same download again when retried after a failed install", async () => {
+    const { runtime, service, expireInstallHandoff } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    runtime.holdQuitHandoff();
+    const failed = service.installUpdate({ currentVersion: "1.2.3" });
+    await flushAsyncWork();
+    expireInstallHandoff();
+    expect(await failed).toMatchObject({ installed: false });
+    expect(service.getState()).toMatchObject({ phase: "failed" });
+
+    const retry = service.installUpdate({ currentVersion: "1.2.3" });
+    await flushAsyncWork();
+    runtime.startQuitForUpdate();
+
+    await expect(retry).resolves.toMatchObject({ installed: true, version: "1.2.4" });
+    expect(runtime.requestedDownloadVersions).toEqual(["1.2.4"]);
+    expect(runtime.installedVersions).toEqual(["1.2.4", "1.2.4"]);
   });
 
   it("fails the install when preparing to quit throws", async () => {

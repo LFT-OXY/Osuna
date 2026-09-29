@@ -59,7 +59,7 @@ export interface DesktopRuntimeConfig {
   latestVersion?: string;
   /** Keep download_app_update in the downloading phase until the test releases it. */
   holdDownload?: boolean;
-  /** download / install：按主进程的方式报告下载或安装失败；cancel：让 cancel_app_update_download 直接抛错。 */
+  /** 只让第一次尝试失败，重试会成功。download / install：按主进程的方式报告下载或安装失败；cancel：让 cancel_app_update_download 直接抛错。 */
   failUpdateAction?: "download" | "install" | "cancel";
   /** False models Linux AppImage, which does not install on quit. Defaults to true. */
   installsOnQuit?: boolean;
@@ -257,6 +257,16 @@ export async function installDesktopRuntime(
       };
     }
 
+    let hasFailedUpdateAction = false;
+
+    function shouldFailUpdateAction(action: "download" | "install" | "cancel"): boolean {
+      if (cfg.failUpdateAction !== action || hasFailedUpdateAction) {
+        return false;
+      }
+      hasFailedUpdateAction = true;
+      return true;
+    }
+
     let cancelHeldDownload: (() => void) | null = null;
 
     async function runDownload() {
@@ -275,7 +285,7 @@ export async function installDesktopRuntime(
           return;
         }
       }
-      if (cfg.failUpdateAction === "download") {
+      if (shouldFailUpdateAction("download")) {
         setUpdatePhase("failed", { action: "download", message: "sha512 checksum mismatch" });
       } else {
         setUpdatePhase("downloaded");
@@ -298,7 +308,7 @@ export async function installDesktopRuntime(
 
     // 与真实服务一样：取消不算失败，阶段回到「发现更新」。
     async function cancelAppUpdateDownload() {
-      if (cfg.failUpdateAction === "cancel") {
+      if (shouldFailUpdateAction("cancel")) {
         throw new Error("The updater did not respond.");
       }
       if (updateState.phase === "downloading" && cancelHeldDownload) {
@@ -307,6 +317,41 @@ export async function installDesktopRuntime(
         await activeDownload;
       }
       return updateState;
+    }
+
+    async function installAppUpdate() {
+      // 与真实服务一样：安装失败后安装包还在，可以重新安装。
+      const canInstall =
+        updateState.phase === "downloaded" ||
+        (updateState.phase === "failed" && updateState.failure?.action === "install");
+      if (!canInstall) {
+        return {
+          installed: false,
+          version: "1.0.0",
+          message: "The update has not been downloaded yet.",
+          failure: null,
+        };
+      }
+      setUpdatePhase("installing");
+      if (cfg.slowInstall) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 3000));
+      }
+      if (shouldFailUpdateAction("install")) {
+        const message = "Code signature did not pass validation";
+        setUpdatePhase("failed", { action: "install", reason: "updater-error", message });
+        return {
+          installed: false,
+          version: "1.0.0",
+          message: `Update failed: ${message}`,
+          failure: { reason: "updater-error", message },
+        };
+      }
+      return {
+        installed: true,
+        version: targetVersion,
+        message: "Update downloaded. The app will restart shortly.",
+        failure: null,
+      };
     }
 
     const desktopBridge: {
@@ -341,34 +386,7 @@ export async function installDesktopRuntime(
         }
 
         if (command === "install_app_update") {
-          if (updateState.phase !== "downloaded") {
-            return {
-              installed: false,
-              version: "1.0.0",
-              message: "The update has not been downloaded yet.",
-              failure: null,
-            };
-          }
-          setUpdatePhase("installing");
-          if (cfg.slowInstall) {
-            await new Promise<void>((resolve) => setTimeout(resolve, 3000));
-          }
-          if (cfg.failUpdateAction === "install") {
-            const message = "Code signature did not pass validation";
-            setUpdatePhase("failed", { action: "install", reason: "updater-error", message });
-            return {
-              installed: false,
-              version: "1.0.0",
-              message: `Update failed: ${message}`,
-              failure: { reason: "updater-error", message },
-            };
-          }
-          return {
-            installed: true,
-            version: targetVersion,
-            message: "Update downloaded. The app will restart shortly.",
-            failure: null,
-          };
+          return installAppUpdate();
         }
 
         if (command === "desktop_daemon_status") {

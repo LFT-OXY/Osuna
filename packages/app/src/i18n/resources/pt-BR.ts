@@ -1436,6 +1436,7 @@ export const ptBR: TranslationResources = {
         downloadedWithVersion: "Atualização pronta: {{version}}",
         downloadedWithVersionAndLastChecked:
           "Atualização pronta: {{version}}. Última verificação às {{time}}.",
+        downloadFailed: "Não foi possível baixar a atualização.",
         installFailed: "Não foi possível instalar a atualização.",
         failed: "Falha ao atualizar o app.",
         idle: "O status de atualização ainda não foi verificado.",
@@ -1450,7 +1451,6 @@ export const ptBR: TranslationResources = {
         failedTitle: "Falha na atualização",
         availableTitle: "Atualização disponível",
         genericError: "Algo deu errado.",
-        whatsNew: "Novidades",
         installingAction: "Instalando...",
         cancellingAction: "Cancelando...",
         installingDescription: "Preparando para reiniciar...",

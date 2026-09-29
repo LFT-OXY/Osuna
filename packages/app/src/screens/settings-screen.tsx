@@ -91,6 +91,7 @@ import { DesktopNotificationsSection } from "@/desktop/components/desktop-notifi
 import { BrowserDataSection } from "@/desktop/browser/settings/browser-data-section";
 import { IntegrationsSection } from "@/desktop/components/integrations-section";
 import { isElectronRuntime } from "@/desktop/host";
+import { offersManualDownload } from "@/desktop/updates/desktop-app-updater";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
 import {
   formatVersionWithPrefix,
@@ -832,7 +833,7 @@ function DesktopAppUpdateRow() {
           {errorMessage ? <Text style={styles.aboutErrorText}>{errorMessage}</Text> : null}
         </View>
         <View style={styles.aboutUpdateActions}>
-          {status === "install-failed" ? (
+          {offersManualDownload(status) ? (
             <Button variant="outline" size="sm" onPress={openDesktopReleasesPage}>
               {t("desktop.updates.manualDownload")}
             </Button>

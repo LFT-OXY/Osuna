@@ -1,4 +1,5 @@
 import type { DesktopAppUpdateDownloadProgress } from "@/desktop/updates/desktop-updates";
+import { offersManualDownload } from "@/desktop/updates/desktop-app-updater";
 import type { DesktopAppUpdateStatus } from "@/desktop/updates/use-desktop-app-updater";
 import { i18n } from "@/i18n/i18next";
 
@@ -21,7 +22,6 @@ export type UpdateCalloutActionRole =
   | "update"
   | "cancel"
   | "install"
-  | "changelog"
   | "retry"
   | "manualDownload";
 
@@ -106,6 +106,17 @@ function cancelDownloadAction({
   return { role: "cancel", label: i18n.t("common.actions.cancel") };
 }
 
+function failureActions(status: DesktopAppUpdateStatus): UpdateCalloutActionDescriptor[] {
+  const retry = { role: "retry", label: i18n.t("common.actions.retry") } as const;
+  if (!offersManualDownload(status)) {
+    return [{ ...retry, variant: "primary" }];
+  }
+  return [
+    retry,
+    { role: "manualDownload", label: i18n.t("desktop.updates.manualDownload"), variant: "primary" },
+  ];
+}
+
 function resolveContent(input: ResolveUpdateCalloutInput): UpdateCalloutContent | null {
   const versionLabel = formatVersionLabel(input.targetVersion);
   const errorBody: UpdateCalloutBody = {
@@ -163,32 +174,16 @@ function resolveContent(input: ResolveUpdateCalloutInput): UpdateCalloutContent 
         ],
         dismissible: false,
       };
+    case "check-failed":
+    case "download-failed":
+    case "cancel-failed":
     case "install-failed":
       return {
         title: i18n.t("desktop.updates.callout.failedTitle"),
         body: errorBody,
         showGiftIcon: false,
         variant: "error",
-        actions: [
-          { role: "install", label: i18n.t("common.actions.retry") },
-          {
-            role: "manualDownload",
-            label: i18n.t("desktop.updates.manualDownload"),
-            variant: "primary",
-          },
-        ],
-        dismissible: true,
-      };
-    case "error":
-      return {
-        title: i18n.t("desktop.updates.callout.failedTitle"),
-        body: errorBody,
-        showGiftIcon: false,
-        variant: "error",
-        actions: [
-          { role: "changelog", label: i18n.t("desktop.updates.callout.whatsNew") },
-          { role: "retry", label: i18n.t("common.actions.retry"), variant: "primary" },
-        ],
+        actions: failureActions(input.status),
         dismissible: true,
       };
     case "idle":

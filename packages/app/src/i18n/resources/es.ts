@@ -1445,6 +1445,7 @@ export const es: TranslationResources = {
         downloadedWithVersion: "Actualización lista:{{version}}",
         downloadedWithVersionAndLastChecked:
           "Actualización lista:{{version}}. Última comprobación a las {{time}}.",
+        downloadFailed: "No se pudo descargar la actualización.",
         installFailed: "No se pudo instalar la actualización.",
         failed: "No se pudo actualizar la aplicación.",
         idle: "El estado de la actualización aún no se ha comprobado.",
@@ -1460,7 +1461,6 @@ export const es: TranslationResources = {
         failedTitle: "La actualización falló",
         availableTitle: "Actualización disponible",
         genericError: "Algo salió mal.",
-        whatsNew: "Qué hay de nuevo",
         installingAction: "Instalando...",
         cancellingAction: "Cancelando...",
         installingDescription: "Preparando el reinicio...",

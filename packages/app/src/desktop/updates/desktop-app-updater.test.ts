@@ -40,12 +40,14 @@ function createUpdater(
   return { updater, port, reportedErrors };
 }
 
-function checkResultWith(phase: DesktopAppUpdatePhase): DesktopAppUpdateCheckResult {
+type PhaseWithoutFailure = Exclude<DesktopAppUpdatePhase, "failed">;
+
+function checkResultWith(phase: PhaseWithoutFailure): DesktopAppUpdateCheckResult {
   return buildFakeCheckResult({ state: buildFakeUpdateState({ phase }) });
 }
 
 async function connectWithState(
-  phase: DesktopAppUpdatePhase,
+  phase: PhaseWithoutFailure,
 ): Promise<ReturnType<typeof createUpdater>> {
   const created = createUpdater();
   created.updater.connect();
@@ -151,14 +153,14 @@ describe("desktop app updater — check", () => {
     expect(updater.getSnapshot().status).toBe("up-to-date");
   });
 
-  it("reports 'error' when a non-silent check throws", async () => {
+  it("reports 'check-failed' when a non-silent check throws", async () => {
     const { updater, port } = createUpdater();
     port.failNextCheck(new Error("network down"));
 
     await updater.checkForUpdates();
 
     expect(updater.getSnapshot()).toMatchObject({
-      status: "error",
+      status: "check-failed",
       errorMessage: "network down",
     });
   });
@@ -170,7 +172,7 @@ describe("desktop app updater — check", () => {
     await updater.checkForUpdates();
 
     expect(updater.getSnapshot()).toMatchObject({
-      status: "error",
+      status: "check-failed",
       errorMessage: "network down",
       lastCheckedAt: 42,
     });
@@ -208,7 +210,7 @@ describe("desktop app updater — check", () => {
     });
   });
 
-  it("does not move to 'error' when a silent check throws", async () => {
+  it("does not move to 'check-failed' when a silent check throws", async () => {
     const { updater, port } = createUpdater();
     port.nextCheckResult(checkResultWith("available"));
     await updater.checkForUpdates();
@@ -343,7 +345,7 @@ describe("desktop app updater — main-process state", () => {
     );
 
     expect(updater.getSnapshot()).toMatchObject({
-      status: "error",
+      status: "download-failed",
       errorMessage: "sha512 checksum mismatch",
     });
   });
@@ -363,14 +365,17 @@ describe("desktop app updater — download", () => {
     expect(port.downloadCount).toBe(1);
   });
 
-  it("reports the error and moves to 'error' when the download command throws", async () => {
+  it("reports the error and moves to 'download-failed' when the download command throws", async () => {
     const { updater, port, reportedErrors } = await connectWithState("available");
     const error = new Error("ipc closed");
     port.failNextDownload(error);
 
     await updater.downloadUpdate();
 
-    expect(updater.getSnapshot()).toMatchObject({ status: "error", errorMessage: "ipc closed" });
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "download-failed",
+      errorMessage: "ipc closed",
+    });
     expect(reportedErrors).toEqual([
       {
         error,
@@ -432,7 +437,7 @@ describe("desktop app updater — cancel download", () => {
     });
   });
 
-  it("reports the error and moves to 'error' when the cancel command throws", async () => {
+  it("reports the error and moves to 'cancel-failed' when the cancel command throws", async () => {
     const { updater, port, reportedErrors } = await connectWithState("downloading");
     const error = new Error("ipc closed");
     port.failNextCancel(error);
@@ -440,7 +445,7 @@ describe("desktop app updater — cancel download", () => {
     await updater.cancelDownload();
 
     expect(updater.getSnapshot()).toMatchObject({
-      status: "error",
+      status: "cancel-failed",
       errorMessage: "ipc closed",
       isCancellingDownload: false,
     });
@@ -459,7 +464,7 @@ describe("desktop app updater — stale command errors", () => {
     const { updater, port } = await connectWithState("downloading");
     port.failNextCancel(new Error("ipc closed"));
     await updater.cancelDownload();
-    expect(updater.getSnapshot().status).toBe("error");
+    expect(updater.getSnapshot().status).toBe("cancel-failed");
 
     port.pushState(buildFakeUpdateState({ phase: "downloaded" }));
 
@@ -478,7 +483,10 @@ describe("desktop app updater — stale command errors", () => {
       }),
     );
 
-    expect(updater.getSnapshot()).toMatchObject({ status: "error", errorMessage: "ipc closed" });
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "cancel-failed",
+      errorMessage: "ipc closed",
+    });
   });
 });
 
@@ -574,7 +582,7 @@ describe("desktop app updater — install", () => {
     });
   });
 
-  it("reports the install error and moves to 'error' when the install throws", async () => {
+  it("reports the install error and moves to 'install-failed' when the install throws", async () => {
     const { updater, port, reportedErrors } = await connectWithState("downloaded");
     const error = new Error("install failed");
     port.failNextInstall(error);
@@ -582,7 +590,7 @@ describe("desktop app updater — install", () => {
     await updater.installUpdate();
 
     expect(updater.getSnapshot()).toMatchObject({
-      status: "error",
+      status: "install-failed",
       errorMessage: "install failed",
     });
     expect(reportedErrors).toEqual([
@@ -624,6 +632,228 @@ describe("desktop app updater — hidden for this run", () => {
     port.pushState(buildFakeUpdateState({ phase: "downloaded" }));
 
     expect(updater.getSnapshot()).toMatchObject({ status: "downloaded", isHidden: true });
+  });
+});
+
+describe("desktop app updater — failure stage", () => {
+  const FAILURES = {
+    download: { action: "download", message: "sha512 checksum mismatch" },
+    install: { action: "install", reason: "updater-error", message: "Code signature invalid" },
+  } as const;
+
+  function failedState(action: keyof typeof FAILURES) {
+    return buildFakeUpdateState({ phase: "failed", failure: FAILURES[action] });
+  }
+
+  it("retries a failed download by downloading again", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    port.pushState(failedState("download"));
+    const download = port.deferNextDownload();
+
+    const pending = updater.retry();
+    expect(updater.getSnapshot()).toMatchObject({ status: "downloading", errorMessage: null });
+
+    download.resolve(buildFakeUpdateState({ phase: "downloaded" }));
+    await pending;
+    expect(port.downloadCount).toBe(1);
+    expect(port.installCount).toBe(0);
+    expect(updater.getSnapshot().status).toBe("downloaded");
+  });
+
+  it("retries a failed install by installing again", async () => {
+    const { updater, port } = await connectWithState("downloaded");
+    port.pushState(failedState("install"));
+
+    await updater.retry();
+
+    expect(port.installCount).toBe(1);
+    expect(port.downloadCount).toBe(0);
+  });
+
+  it("retries a download command that threw by downloading again", async () => {
+    const { updater, port } = await connectWithState("available");
+    port.failNextDownload(new Error("ipc closed"));
+    await updater.downloadUpdate();
+
+    await updater.retry();
+
+    expect(port.downloadCount).toBe(2);
+  });
+
+  it("retries a failed cancel by cancelling again", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    port.failNextCancel(new Error("ipc closed"));
+    await updater.cancelDownload();
+
+    await updater.retry();
+
+    expect(port.cancelCount).toBe(2);
+    expect(updater.getSnapshot().status).toBe("available");
+  });
+
+  it("retries a failed manual check by checking again", async () => {
+    const { updater, port } = createUpdater();
+    port.failNextCheck(new Error("network down"));
+    await updater.checkForUpdates();
+    port.nextCheckResult(checkResultWith("available"));
+
+    await updater.retry();
+
+    expect(port.recordedChecks).toEqual([{ intent: "manual" }, { intent: "manual" }]);
+    expect(updater.getSnapshot().status).toBe("available");
+  });
+
+  it("does nothing on retry when nothing failed", async () => {
+    const { updater, port } = await connectWithState("available");
+
+    await updater.retry();
+
+    expect(port.recordedChecks).toHaveLength(1);
+    expect(port.downloadCount).toBe(0);
+  });
+
+  it("shows a download hidden mid-way again when it fails", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    updater.hide();
+
+    port.pushState(failedState("download"));
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "download-failed", isHidden: false });
+  });
+
+  it("shows the card again when an install fails after the user chose later", async () => {
+    const { updater, port } = await connectWithState("downloaded");
+    updater.hide();
+    const install = port.deferNextInstall();
+
+    const pending = updater.installUpdate();
+    port.pushState(failedState("install"));
+    install.resolve(buildFakeInstallResult({ installed: false }));
+    await pending;
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "install-failed",
+      isHidden: false,
+    });
+  });
+
+  it("shows the card again when a manual check fails", async () => {
+    const { updater, port } = await connectWithState("available");
+    updater.hide();
+    port.failNextCheck(new Error("network down"));
+
+    await updater.checkForUpdates();
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "check-failed", isHidden: false });
+  });
+
+  it("shows the card again when a cancel fails", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    updater.hide();
+    port.failNextCancel(new Error("ipc closed"));
+
+    await updater.cancelDownload();
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "cancel-failed", isHidden: false });
+  });
+
+  it("keeps a failure the user hid hidden through a silent recheck", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    port.pushState(failedState("download"));
+    updater.hide();
+
+    port.nextCheckResult(buildFakeCheckResult({ state: failedState("download") }));
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "download-failed", isHidden: true });
+  });
+
+  it("shows the newer manual check error over an earlier download failure", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    const failed = failedState("download");
+    port.pushState(failed);
+
+    port.nextCheckResult(buildFakeCheckResult({ errorMessage: "network down", state: failed }));
+    await updater.checkForUpdates();
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "check-failed",
+      errorMessage: "network down",
+    });
+  });
+
+  it("keeps a failed command visible through a successful silent recheck", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    port.failNextCancel(new Error("ipc closed"));
+    await updater.cancelDownload();
+
+    port.nextCheckResult(checkResultWith("downloading"));
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "cancel-failed",
+      errorMessage: "ipc closed",
+    });
+  });
+
+  it("keeps a failed manual check visible through a successful silent recheck", async () => {
+    const { updater, port } = await connectWithState("available");
+    port.failNextCheck(new Error("network down"));
+    await updater.checkForUpdates();
+
+    port.nextCheckResult(checkResultWith("available"));
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "check-failed",
+      errorMessage: "network down",
+    });
+  });
+
+  it("drops a failed manual check once the user starts another action", async () => {
+    const { updater, port } = await connectWithState("downloaded");
+    port.failNextCheck(new Error("network down"));
+    await updater.checkForUpdates();
+    port.nextInstallResult(buildFakeInstallResult({ installed: false }));
+
+    await updater.installUpdate();
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "downloaded", errorMessage: null });
+  });
+
+  it("does not let a check error older than a pushed failure cover it", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    const check = port.deferNextCheck();
+    const pending = updater.checkForUpdates();
+    const staleState = buildFakeUpdateState({ phase: "downloading" });
+    port.pushState(failedState("download"));
+
+    check.resolve(buildFakeCheckResult({ errorMessage: "network down", state: staleState }));
+    await pending;
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "download-failed",
+      errorMessage: "sha512 checksum mismatch",
+    });
+  });
+
+  it("drops a check error once the main process moves to another phase", async () => {
+    const { updater, port } = await connectWithState("available");
+    port.nextCheckResult(
+      buildFakeCheckResult({
+        errorMessage: "network down",
+        state: buildFakeUpdateState({ phase: "available" }),
+      }),
+    );
+    await updater.checkForUpdates();
+
+    port.pushState(buildFakeUpdateState({ phase: "downloading" }));
+    port.pushState(failedState("download"));
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "download-failed",
+      errorMessage: "sha512 checksum mismatch",
+    });
   });
 });
 
@@ -694,8 +924,13 @@ describe("formatStatusText", () => {
     expect(format({ status: "downloaded" })).toBe("An app update is ready to install.");
   });
 
-  it("says the update could not be installed in the 'install-failed' state", () => {
+  it("says which step of the update failed", () => {
+    expect(format({ status: "download-failed" })).toBe("The update couldn't be downloaded.");
     expect(format({ status: "install-failed" })).toBe("The update couldn't be installed.");
+    expect(format({ status: "check-failed" })).toBe("Failed to update app.");
+    expect(format({ status: "cancel-failed" })).toBe(
+      "Unable to cancel the desktop app update download.",
+    );
   });
 
   it("uses the active app language for local status wrappers", async () => {
