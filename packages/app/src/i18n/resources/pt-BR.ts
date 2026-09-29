@@ -1442,6 +1442,7 @@ export const ptBR: TranslationResources = {
       },
       installError: "Não foi possível instalar a atualização do app desktop.",
       downloadError: "Não foi possível baixar a atualização do app desktop.",
+      cancelDownloadError: "Não foi possível cancelar o download da atualização do app desktop.",
       manualDownload: "Baixar em Releases",
       installTimedOut: "O atualizador não reiniciou o app a tempo.",
       callout: {
@@ -1451,6 +1452,7 @@ export const ptBR: TranslationResources = {
         genericError: "Algo deu errado.",
         whatsNew: "Novidades",
         installingAction: "Instalando...",
+        cancellingAction: "Cancelando...",
         installingDescription: "Preparando para reiniciar...",
         restartWarning:
           "Instalar reinicia o app, interrompe os agentes em execução e fecha as sessões de terminal.",

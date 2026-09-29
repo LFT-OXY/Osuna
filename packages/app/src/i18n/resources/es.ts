@@ -1451,6 +1451,8 @@ export const es: TranslationResources = {
       },
       installError: "No se puede instalar la actualización de la aplicación de escritorio.",
       downloadError: "No se puede descargar la actualización de la aplicación de escritorio.",
+      cancelDownloadError:
+        "No se puede cancelar la descarga de la actualización de la aplicación de escritorio.",
       manualDownload: "Descargar desde Releases",
       installTimedOut: "El actualizador no reinició la aplicación a tiempo.",
       callout: {
@@ -1460,6 +1462,7 @@ export const es: TranslationResources = {
         genericError: "Algo salió mal.",
         whatsNew: "Qué hay de nuevo",
         installingAction: "Instalando...",
+        cancellingAction: "Cancelando...",
         installingDescription: "Preparando el reinicio...",
         restartWarning:
           "Instalar reinicia la aplicación, detiene los agentes en ejecución y cierra las sesiones de terminal.",

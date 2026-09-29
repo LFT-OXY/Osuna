@@ -50,32 +50,32 @@ async function connectWithState(
   const created = createUpdater();
   created.updater.connect();
   created.port.nextCheckResult(checkResultWith(phase));
-  await created.updater.checkForUpdates({ releaseChannel: "stable" });
+  await created.updater.checkForUpdates();
   return created;
 }
 
 describe("desktop app updater — check", () => {
-  it("forwards manual check intent and the requested release channel to the port", async () => {
+  it("forwards manual check intent to the port", async () => {
     const { updater, port } = createUpdater();
 
-    await updater.checkForUpdates({ releaseChannel: "beta" });
+    await updater.checkForUpdates();
 
-    expect(port.recordedChecks).toEqual([{ releaseChannel: "beta", intent: "manual" }]);
+    expect(port.recordedChecks).toEqual([{ intent: "manual" }]);
   });
 
   it("forwards automatic check intent independently from silent UI state", async () => {
     const { updater, port } = createUpdater();
 
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
-    expect(port.recordedChecks).toEqual([{ releaseChannel: "stable", intent: "automatic" }]);
+    expect(port.recordedChecks).toEqual([{ intent: "automatic" }]);
   });
 
   it("does not add manual last-checked feedback for automatic checks", async () => {
     const { updater, port } = createUpdater({ now: () => 42 });
     port.nextCheckResult(checkResultWith("available"));
 
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
     expect(updater.getSnapshot()).toMatchObject({ status: "available", lastCheckedAt: null });
   });
@@ -84,7 +84,7 @@ describe("desktop app updater — check", () => {
     const { updater, port } = createUpdater();
     const deferred = port.deferNextCheck();
 
-    const pending = updater.checkForUpdates({ releaseChannel: "stable" });
+    const pending = updater.checkForUpdates();
     expect(updater.getSnapshot().status).toBe("checking");
 
     deferred.resolve(buildFakeCheckResult());
@@ -94,11 +94,10 @@ describe("desktop app updater — check", () => {
   it("stays on the current status during a silent check", async () => {
     const { updater, port } = createUpdater();
     port.nextCheckResult(checkResultWith("available"));
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     const deferred = port.deferNextCheck();
     const pending = updater.checkForUpdates({
-      releaseChannel: "stable",
       intent: "automatic",
       silent: true,
     });
@@ -116,7 +115,7 @@ describe("desktop app updater — check", () => {
       }),
     );
 
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     expect(updater.getSnapshot()).toMatchObject({
       status: "available",
@@ -134,7 +133,7 @@ describe("desktop app updater — check", () => {
       }),
     );
 
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
     expect(updater.getSnapshot()).toMatchObject({
       status: "downloaded",
@@ -147,7 +146,7 @@ describe("desktop app updater — check", () => {
     const { updater, port } = createUpdater();
     port.nextCheckResult(checkResultWith("none"));
 
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     expect(updater.getSnapshot().status).toBe("up-to-date");
   });
@@ -156,7 +155,7 @@ describe("desktop app updater — check", () => {
     const { updater, port } = createUpdater();
     port.failNextCheck(new Error("network down"));
 
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     expect(updater.getSnapshot()).toMatchObject({
       status: "error",
@@ -168,7 +167,7 @@ describe("desktop app updater — check", () => {
     const { updater, port } = createUpdater({ now: () => 42 });
     port.nextCheckResult(buildFakeCheckResult({ errorMessage: "network down" }));
 
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     expect(updater.getSnapshot()).toMatchObject({
       status: "error",
@@ -181,7 +180,7 @@ describe("desktop app updater — check", () => {
     const { updater, port } = await connectWithState("downloaded");
     port.failNextCheck(new Error("network down"));
 
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     expect(updater.getSnapshot()).toMatchObject({
       status: "downloaded",
@@ -192,7 +191,7 @@ describe("desktop app updater — check", () => {
   it("keeps silent check errors quiet", async () => {
     const { updater, port } = createUpdater({ now: () => 42 });
     port.nextCheckResult(checkResultWith("available"));
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     port.nextCheckResult(
       buildFakeCheckResult({
@@ -200,7 +199,7 @@ describe("desktop app updater — check", () => {
         state: buildFakeUpdateState({ phase: "available" }),
       }),
     );
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
     expect(updater.getSnapshot()).toMatchObject({
       status: "available",
@@ -212,10 +211,10 @@ describe("desktop app updater — check", () => {
   it("does not move to 'error' when a silent check throws", async () => {
     const { updater, port } = createUpdater();
     port.nextCheckResult(checkResultWith("available"));
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
     port.failNextCheck(new Error("boom"));
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
     expect(updater.getSnapshot().status).toBe("available");
   });
@@ -224,13 +223,13 @@ describe("desktop app updater — check", () => {
     const { updater, port } = createUpdater();
     const deferred = port.deferNextCheck();
 
-    const manualCheck = updater.checkForUpdates({ releaseChannel: "stable" });
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    const manualCheck = updater.checkForUpdates();
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
     deferred.resolve(checkResultWith("none"));
     await manualCheck;
 
-    expect(port.recordedChecks).toEqual([{ releaseChannel: "stable", intent: "manual" }]);
+    expect(port.recordedChecks).toEqual([{ intent: "manual" }]);
     expect(updater.getSnapshot().status).toBe("up-to-date");
   });
 
@@ -238,13 +237,11 @@ describe("desktop app updater — check", () => {
     const { updater, port } = createUpdater();
     const olderCheck = port.deferNextCheck();
     const olderPending = updater.checkForUpdates({
-      releaseChannel: "stable",
       intent: "automatic",
       silent: true,
     });
     const newerCheck = port.deferNextCheck();
     const newerPending = updater.checkForUpdates({
-      releaseChannel: "stable",
       intent: "automatic",
       silent: true,
     });
@@ -263,13 +260,11 @@ describe("desktop app updater — check", () => {
     const { updater, port } = createUpdater();
     const olderCheck = port.deferNextCheck();
     const olderPending = updater.checkForUpdates({
-      releaseChannel: "stable",
       intent: "automatic",
       silent: true,
     });
     const newerCheck = port.deferNextCheck();
     const newerPending = updater.checkForUpdates({
-      releaseChannel: "stable",
       intent: "automatic",
       silent: true,
     });
@@ -386,6 +381,107 @@ describe("desktop app updater — download", () => {
   });
 });
 
+describe("desktop app updater — cancel download", () => {
+  it("returns to 'available' without an error once the download is cancelled", async () => {
+    const { updater, port, reportedErrors } = await connectWithState("available");
+    const download = port.deferNextDownload();
+    const pendingDownload = updater.downloadUpdate();
+    port.pushState(buildFakeUpdateState({ phase: "downloading" }));
+    const cancelled = buildFakeUpdateState({ phase: "available" });
+    port.nextCancelResult(cancelled);
+
+    await updater.cancelDownload();
+
+    expect(port.cancelCount).toBe(1);
+    expect(updater.getSnapshot()).toMatchObject({ status: "available", errorMessage: null });
+    download.resolve(cancelled);
+    await pendingDownload;
+    expect(updater.getSnapshot()).toMatchObject({ status: "available", errorMessage: null });
+    expect(reportedErrors).toEqual([]);
+  });
+
+  it("shows a download cancelled from another window as available right away", async () => {
+    const { updater, port } = await connectWithState("available");
+    const download = port.deferNextDownload();
+    const pendingDownload = updater.downloadUpdate();
+    port.pushState(buildFakeUpdateState({ phase: "downloading" }));
+
+    const cancelled = buildFakeUpdateState({ phase: "available" });
+    port.pushState(cancelled);
+
+    expect(updater.getSnapshot().status).toBe("available");
+    download.resolve(cancelled);
+    await pendingDownload;
+  });
+
+  it("marks the download as cancelling until the main process answers", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    const cancel = port.deferNextCancel();
+
+    const pending = updater.cancelDownload();
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "downloading",
+      isCancellingDownload: true,
+    });
+
+    cancel.resolve(buildFakeUpdateState({ phase: "available" }));
+    await pending;
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "available",
+      isCancellingDownload: false,
+    });
+  });
+
+  it("reports the error and moves to 'error' when the cancel command throws", async () => {
+    const { updater, port, reportedErrors } = await connectWithState("downloading");
+    const error = new Error("ipc closed");
+    port.failNextCancel(error);
+
+    await updater.cancelDownload();
+
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "error",
+      errorMessage: "ipc closed",
+      isCancellingDownload: false,
+    });
+    expect(reportedErrors).toEqual([
+      {
+        error,
+        message: "Unable to cancel the desktop app update download.",
+        logLabel: "[DesktopUpdater] Failed to cancel app update download",
+      },
+    ]);
+  });
+});
+
+describe("desktop app updater — stale command errors", () => {
+  it("drops a failed cancel once the main process moves to another phase", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    port.failNextCancel(new Error("ipc closed"));
+    await updater.cancelDownload();
+    expect(updater.getSnapshot().status).toBe("error");
+
+    port.pushState(buildFakeUpdateState({ phase: "downloaded" }));
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "downloaded", errorMessage: null });
+  });
+
+  it("keeps the command error while the main process stays in the same phase", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    port.failNextCancel(new Error("ipc closed"));
+    await updater.cancelDownload();
+
+    port.pushState(
+      buildFakeUpdateState({
+        phase: "downloading",
+        progress: { percent: 50, transferred: 50, total: 100, bytesPerSecond: 10 },
+      }),
+    );
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "error", errorMessage: "ipc closed" });
+  });
+});
+
 describe("desktop app updater — install", () => {
   it("shows 'installing' as soon as the user asks", async () => {
     const { updater, port } = await connectWithState("downloaded");
@@ -470,7 +566,7 @@ describe("desktop app updater — install", () => {
     port.pushState(buildFakeUpdateState(failed));
 
     port.nextCheckResult(buildFakeCheckResult({ state: buildFakeUpdateState(failed) }));
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
     expect(updater.getSnapshot()).toMatchObject({
       status: "install-failed",
@@ -505,7 +601,7 @@ describe("desktop app updater — hidden for this run", () => {
 
     updater.hide();
     port.nextCheckResult(checkResultWith("available"));
-    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
 
     expect(updater.getSnapshot()).toMatchObject({ status: "available", isHidden: true });
   });
@@ -541,7 +637,7 @@ describe("desktop app updater — subscribe", () => {
       notifications.push(updater.getSnapshot().status);
     });
 
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
     unsubscribe();
 
     expect(notifications).toEqual(["checking", "available"]);
@@ -618,25 +714,25 @@ function flushChecks(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-const AUTOMATIC_STABLE_CHECK = { releaseChannel: "stable", intent: "automatic" } as const;
+const AUTOMATIC_CHECK = { intent: "automatic" } as const;
 
 describe("desktop app updater — automatic checks", () => {
   it("checks once when started and again every automatic interval until stopped", async () => {
     const { updater, port } = createUpdater();
     const timer = createFakeIntervalTimer();
 
-    const stop = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
+    const stop = startAutomaticUpdateChecks({ updater, timer });
     await flushChecks();
-    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK]);
+    expect(port.recordedChecks).toEqual([AUTOMATIC_CHECK]);
 
     timer.advance(AUTOMATIC_CHECK_INTERVAL_MS);
     await flushChecks();
-    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK, AUTOMATIC_STABLE_CHECK]);
+    expect(port.recordedChecks).toEqual([AUTOMATIC_CHECK, AUTOMATIC_CHECK]);
 
     stop();
     timer.advance(AUTOMATIC_CHECK_INTERVAL_MS);
     await flushChecks();
-    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK, AUTOMATIC_STABLE_CHECK]);
+    expect(port.recordedChecks).toEqual([AUTOMATIC_CHECK, AUTOMATIC_CHECK]);
   });
 
   it("does not poll faster while an update is found but not downloaded", async () => {
@@ -644,38 +740,19 @@ describe("desktop app updater — automatic checks", () => {
     const timer = createFakeIntervalTimer();
     port.nextCheckResult(checkResultWith("available"));
 
-    const stop = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
+    const stop = startAutomaticUpdateChecks({ updater, timer });
     await flushChecks();
     timer.advance(AUTOMATIC_CHECK_INTERVAL_MS - 1);
     await flushChecks();
 
-    expect(port.recordedChecks).toEqual([AUTOMATIC_STABLE_CHECK]);
+    expect(port.recordedChecks).toEqual([AUTOMATIC_CHECK]);
     stop();
-  });
-
-  it("checks the new release channel when restarted after a channel change", async () => {
-    const { updater, port } = createUpdater();
-    const timer = createFakeIntervalTimer();
-
-    const stopStable = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
-    await flushChecks();
-    stopStable();
-    const stopBeta = startAutomaticUpdateChecks({ updater, releaseChannel: "beta", timer });
-    timer.advance(AUTOMATIC_CHECK_INTERVAL_MS);
-    await flushChecks();
-
-    expect(port.recordedChecks).toEqual([
-      AUTOMATIC_STABLE_CHECK,
-      { releaseChannel: "beta", intent: "automatic" },
-      { releaseChannel: "beta", intent: "automatic" },
-    ]);
-    stopBeta();
   });
 
   it("shows a manual check from one caller to every other caller of the shared updater", async () => {
     const { updater, port } = createUpdater();
     const timer = createFakeIntervalTimer();
-    const stop = startAutomaticUpdateChecks({ updater, releaseChannel: "stable", timer });
+    const stop = startAutomaticUpdateChecks({ updater, timer });
     await flushChecks();
     const sidebarSnapshots: Array<ReturnType<DesktopAppUpdater["getSnapshot"]>> = [];
     const unsubscribeSidebar = updater.subscribe(() => {
@@ -687,12 +764,9 @@ describe("desktop app updater — automatic checks", () => {
         state: buildFakeUpdateState({ phase: "available", targetVersion: "1.2.3" }),
       }),
     );
-    await updater.checkForUpdates({ releaseChannel: "stable" });
+    await updater.checkForUpdates();
 
-    expect(port.recordedChecks).toEqual([
-      AUTOMATIC_STABLE_CHECK,
-      { releaseChannel: "stable", intent: "manual" },
-    ]);
+    expect(port.recordedChecks).toEqual([AUTOMATIC_CHECK, { intent: "manual" }]);
     expect(sidebarSnapshots.map((snapshot) => snapshot.status)).toEqual(["checking", "available"]);
     expect(sidebarSnapshots.at(-1)?.targetVersion).toBe("1.2.3");
     unsubscribeSidebar();

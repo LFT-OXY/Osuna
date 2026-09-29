@@ -2,13 +2,13 @@ import { useCallback, useSyncExternalStore } from "react";
 import {
   formatVersionWithPrefix,
   type DesktopAppUpdateCheckResult,
-  type DesktopAppUpdateCheckIntent,
   type DesktopAppUpdateDownloadProgress,
   type DesktopAppUpdateInstallResult,
   type DesktopAppUpdateState,
 } from "@/desktop/updates/desktop-updates";
 import {
   formatStatusText,
+  type DesktopAppUpdateCheckOptions,
   type DesktopAppUpdateStatus,
 } from "@/desktop/updates/desktop-app-updater";
 import { useSharedDesktopAppUpdater } from "@/desktop/updates/desktop-app-updater-provider";
@@ -26,17 +26,18 @@ export interface UseDesktopAppUpdaterReturn {
   errorMessage: string | null;
   lastCheckedAt: number | null;
   isHidden: boolean;
-  checkForUpdates: (options?: {
-    intent?: DesktopAppUpdateCheckIntent;
-    silent?: boolean;
-  }) => Promise<DesktopAppUpdateCheckResult | null>;
+  isCancellingDownload: boolean;
+  checkForUpdates: (
+    options?: DesktopAppUpdateCheckOptions,
+  ) => Promise<DesktopAppUpdateCheckResult | null>;
   downloadUpdate: () => Promise<DesktopAppUpdateState | null>;
+  cancelDownload: () => Promise<DesktopAppUpdateState | null>;
   installUpdate: () => Promise<DesktopAppUpdateInstallResult | null>;
   hide: () => void;
 }
 
 export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
-  const { updater, releaseChannel, isDesktopApp } = useSharedDesktopAppUpdater();
+  const { updater, isDesktopApp } = useSharedDesktopAppUpdater();
 
   const snapshot = useSyncExternalStore(
     updater.subscribe,
@@ -45,17 +46,13 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
   );
 
   const checkForUpdates = useCallback(
-    async (options: { intent?: DesktopAppUpdateCheckIntent; silent?: boolean } = {}) => {
+    async (options: DesktopAppUpdateCheckOptions = {}) => {
       if (!isDesktopApp) {
         return null;
       }
-      return updater.checkForUpdates({
-        releaseChannel,
-        intent: options.intent ?? "manual",
-        silent: options.silent,
-      });
+      return updater.checkForUpdates(options);
     },
-    [isDesktopApp, releaseChannel, updater],
+    [isDesktopApp, updater],
   );
 
   const downloadUpdate = useCallback(async () => {
@@ -63,6 +60,13 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
       return null;
     }
     return updater.downloadUpdate();
+  }, [isDesktopApp, updater]);
+
+  const cancelDownload = useCallback(async () => {
+    if (!isDesktopApp) {
+      return null;
+    }
+    return updater.cancelDownload();
   }, [isDesktopApp, updater]);
 
   const installUpdate = useCallback(async () => {
@@ -88,8 +92,10 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
     errorMessage: snapshot.errorMessage,
     lastCheckedAt: snapshot.lastCheckedAt,
     isHidden: snapshot.isHidden,
+    isCancellingDownload: snapshot.isCancellingDownload,
     checkForUpdates,
     downloadUpdate,
+    cancelDownload,
     installUpdate,
     hide: updater.hide,
   };

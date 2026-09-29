@@ -3,9 +3,12 @@ import type {
   DesktopAppUpdateCheckIntent,
   DesktopAppUpdateInstallResult,
   DesktopAppUpdateState,
-  DesktopReleaseChannel,
 } from "@/desktop/updates/desktop-updates";
 import type { DesktopAppUpdaterPort } from "@/desktop/updates/desktop-app-updater";
+
+interface RecordedCheck {
+  intent: DesktopAppUpdateCheckIntent;
+}
 
 interface Deferred<T> {
   resolve(value: T): void;
@@ -13,17 +16,18 @@ interface Deferred<T> {
 }
 
 export interface FakeDesktopAppUpdaterPort extends DesktopAppUpdaterPort {
-  readonly recordedChecks: Array<{
-    releaseChannel: DesktopReleaseChannel;
-    intent: DesktopAppUpdateCheckIntent;
-  }>;
+  readonly recordedChecks: RecordedCheck[];
   readonly downloadCount: number;
+  readonly cancelCount: number;
   readonly installCount: number;
   nextCheckResult(result: DesktopAppUpdateCheckResult): void;
   deferNextCheck(): Deferred<DesktopAppUpdateCheckResult>;
   failNextCheck(error: unknown): void;
   deferNextDownload(): Deferred<DesktopAppUpdateState>;
   failNextDownload(error: unknown): void;
+  nextCancelResult(state: DesktopAppUpdateState): void;
+  deferNextCancel(): Deferred<DesktopAppUpdateState>;
+  failNextCancel(error: unknown): void;
   nextInstallResult(result: DesktopAppUpdateInstallResult): void;
   deferNextInstall(): Deferred<DesktopAppUpdateInstallResult>;
   failNextInstall(error: unknown): void;
@@ -100,21 +104,23 @@ export function buildFakeInstallResult(
 }
 
 export function createFakeDesktopAppUpdaterPort(): FakeDesktopAppUpdaterPort {
-  const recordedChecks: Array<{
-    releaseChannel: DesktopReleaseChannel;
-    intent: DesktopAppUpdateCheckIntent;
-  }> = [];
+  const recordedChecks: RecordedCheck[] = [];
   const checkOutcomes: Outcome<DesktopAppUpdateCheckResult>[] = [];
   const downloadOutcomes: Outcome<DesktopAppUpdateState>[] = [];
+  const cancelOutcomes: Outcome<DesktopAppUpdateState>[] = [];
   const installOutcomes: Outcome<DesktopAppUpdateInstallResult>[] = [];
   const stateListeners = new Set<(state: DesktopAppUpdateState) => void>();
   let downloadCount = 0;
+  let cancelCount = 0;
   let installCount = 0;
 
   return {
     recordedChecks,
     get downloadCount() {
       return downloadCount;
+    },
+    get cancelCount() {
+      return cancelCount;
     },
     get installCount() {
       return installCount;
@@ -138,6 +144,17 @@ export function createFakeDesktopAppUpdaterPort(): FakeDesktopAppUpdaterPort {
     failNextDownload(error) {
       downloadOutcomes.push({ kind: "error", error });
     },
+    nextCancelResult(state) {
+      cancelOutcomes.push({ kind: "result", result: state });
+    },
+    deferNextCancel() {
+      const { deferred, promise } = createDeferred<DesktopAppUpdateState>();
+      cancelOutcomes.push({ kind: "deferred", promise });
+      return deferred;
+    },
+    failNextCancel(error) {
+      cancelOutcomes.push({ kind: "error", error });
+    },
     nextInstallResult(result) {
       installOutcomes.push({ kind: "result", result });
     },
@@ -159,6 +176,10 @@ export function createFakeDesktopAppUpdaterPort(): FakeDesktopAppUpdaterPort {
     async downloadDesktopAppUpdate() {
       downloadCount += 1;
       return settle(downloadOutcomes.shift(), () => buildFakeUpdateState({ phase: "downloaded" }));
+    },
+    async cancelDesktopAppUpdateDownload() {
+      cancelCount += 1;
+      return settle(cancelOutcomes.shift(), () => buildFakeUpdateState({ phase: "available" }));
     },
     async installDesktopAppUpdate() {
       installCount += 1;

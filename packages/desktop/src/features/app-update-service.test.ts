@@ -31,6 +31,7 @@ class FakeAppUpdateRuntime implements AppUpdateRuntime {
   } | null = null;
   checkCount = 0;
   requestedDownloadVersions: string[] = [];
+  cancelledDownloadVersions: string[] = [];
   downloadedVersions: string[] = [];
   installedVersions: string[] = [];
   installModes: Array<{ targetVersion: string; isSilent: boolean; isForceRunAfter: boolean }> = [];
@@ -124,7 +125,7 @@ class FakeAppUpdateRuntime implements AppUpdateRuntime {
     return { ...result, isUpdateAvailable };
   }
 
-  async downloadUpdate(targetVersion: string): Promise<void> {
+  async downloadUpdate(targetVersion: string, signal: AbortSignal): Promise<void> {
     this.requestedDownloadVersions.push(targetVersion);
     const info = this.downloadableUpdate;
     if (!info) throw new Error("Please check update first");
@@ -134,6 +135,16 @@ class FakeAppUpdateRuntime implements AppUpdateRuntime {
     }
     this.holdsNextDownload = false;
     await new Promise<void>((resolve, reject) => {
+      // 与 electron-updater 一致：取消只让下载 promise 拒绝，不发 error 事件。
+      signal.addEventListener(
+        "abort",
+        () => {
+          this.heldDownload = null;
+          this.cancelledDownloadVersions.push(targetVersion);
+          reject(new Error("cancelled"));
+        },
+        { once: true },
+      );
       this.heldDownload = {
         resolve: () => {
           this.heldDownload = null;
@@ -757,6 +768,167 @@ describe("app update service — download", () => {
       targetVersion: "1.2.5",
       failure: null,
     });
+  });
+});
+
+// 包一层对象：async 函数直接返回 promise 会被展平，调用方就等到下载结束了。
+interface HeldDownload {
+  pending: Promise<AppUpdateState>;
+}
+
+describe("app update service — cancel download", () => {
+  async function startHeldDownload(
+    runtime: FakeAppUpdateRuntime,
+    service: ReturnType<typeof createService>["service"],
+  ): Promise<HeldDownload> {
+    runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+    await checkManually(service);
+    runtime.holdNextDownload();
+    const pending = service.downloadUpdate();
+    await flushAsyncWork();
+    return { pending };
+  }
+
+  it("cancels a running download back to available without a failure", async () => {
+    const { runtime, service, publishedStates } = createService();
+    const { pending } = await startHeldDownload(runtime, service);
+    runtime.reportDownloadProgress({
+      percent: 30,
+      transferred: 30,
+      total: 100,
+      bytesPerSecond: 10,
+    });
+
+    const state = await service.cancelDownload();
+
+    expect(runtime.cancelledDownloadVersions).toEqual(["1.2.4"]);
+    expect(state).toMatchObject({
+      phase: "available",
+      targetVersion: "1.2.4",
+      failure: null,
+      progress: null,
+    });
+    expect(await pending).toEqual(state);
+    expect(publishedStates.at(-1)).toEqual(state);
+    expect(publishedStates.map((published) => published.phase)).not.toContain("failed");
+  });
+
+  it("downloads again after a cancelled download", async () => {
+    const { runtime, service } = createService();
+    const { pending } = await startHeldDownload(runtime, service);
+    await service.cancelDownload();
+    await pending;
+
+    const state = await service.downloadUpdate();
+
+    expect(runtime.requestedDownloadVersions).toEqual(["1.2.4", "1.2.4"]);
+    expect(state).toEqual(phaseOf("downloaded", "1.2.4"));
+  });
+
+  it("cancels a download that was still waiting behind a check", async () => {
+    const { runtime, service } = createService();
+    runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+    await checkManually(service);
+    const check = runtime.deferNextCheck();
+    const recheck = service.checkForAppUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+      intent: "automatic",
+    });
+    runtime.holdNextDownload();
+    const download = service.downloadUpdate();
+    const cancel = service.cancelDownload();
+
+    check.resolve({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+    await recheck;
+    const [downloadState, cancelState] = await Promise.all([download, cancel]);
+
+    expect(runtime.cancelledDownloadVersions).toEqual(["1.2.4"]);
+    expect(cancelState).toEqual(phaseOf("available", "1.2.4"));
+    expect(downloadState).toEqual(cancelState);
+  });
+
+  it("leaves a downloaded update alone when there is nothing to cancel", async () => {
+    const { runtime, service, publishedStates } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    const publishedCount = publishedStates.length;
+
+    const state = await service.cancelDownload();
+
+    expect(state).toEqual(phaseOf("downloaded", "1.2.4"));
+    expect(runtime.cancelledDownloadVersions).toEqual([]);
+    expect(publishedStates).toHaveLength(publishedCount);
+  });
+
+  it("cancels the download and clears the update when the release channel changes", async () => {
+    const { runtime, service, publishedStates } = createService();
+    const { pending } = await startHeldDownload(runtime, service);
+    runtime.nextCheck(null);
+
+    const state = await service.switchReleaseChannel({
+      currentVersion: "1.2.3",
+      releaseChannel: "beta",
+    });
+
+    expect(runtime.cancelledDownloadVersions).toEqual(["1.2.4"]);
+    expect(state).toEqual(phaseOf("none", null));
+    expect(publishedStates.map((published) => published.phase)).toEqual([
+      "available",
+      "downloading",
+      "available",
+      "none",
+    ]);
+    await pending;
+  });
+
+  it("checks the new channel right after switching mid-download", async () => {
+    const { runtime, service } = createService();
+    const { pending } = await startHeldDownload(runtime, service);
+    runtime.nextCheck({
+      isUpdateAvailable: true,
+      updateInfo: { ...rolledOutUpdate, version: "1.3.0-beta.1" },
+    });
+
+    const state = await service.switchReleaseChannel({
+      currentVersion: "1.2.3",
+      releaseChannel: "beta",
+    });
+
+    expect(runtime.checkCount).toBe(2);
+    expect(state).toEqual(phaseOf("available", "1.3.0-beta.1"));
+    await pending;
+  });
+
+  it("does not switch or recheck when the channel is unchanged", async () => {
+    const { runtime, service } = createService();
+    const { pending } = await startHeldDownload(runtime, service);
+
+    const state = await service.switchReleaseChannel({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+    });
+
+    expect(runtime.cancelledDownloadVersions).toEqual([]);
+    expect(runtime.checkCount).toBe(1);
+    expect(state).toEqual(phaseOf("downloading", "1.2.4"));
+    runtime.completeDownload();
+    await pending;
+  });
+
+  it("keeps downloading when a window with a stale channel checks", async () => {
+    const { runtime, service } = createService();
+    const { pending } = await startHeldDownload(runtime, service);
+
+    const result = await service.checkForAppUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "beta",
+      intent: "automatic",
+    });
+
+    expect(runtime.cancelledDownloadVersions).toEqual([]);
+    expect(result.state).toEqual(phaseOf("downloading", "1.2.4"));
+    runtime.completeDownload();
+    await pending;
   });
 });
 

@@ -64,7 +64,6 @@ export interface DesktopRuntimeInfo {
   runningUnderARM64Translation: boolean;
 }
 
-export type DesktopReleaseChannel = "stable" | "beta";
 export type DesktopAppUpdateCheckIntent = "automatic" | "manual";
 
 export interface LocalDaemonUpdateResult {
@@ -212,16 +211,11 @@ function requireDesktopAppUpdateState(raw: unknown, context: string): DesktopApp
 }
 
 export async function checkDesktopAppUpdate({
-  releaseChannel,
   intent,
 }: {
-  releaseChannel: DesktopReleaseChannel;
   intent: DesktopAppUpdateCheckIntent;
 }): Promise<DesktopAppUpdateCheckResult> {
-  const result = await invokeDesktopCommand<unknown>("check_app_update", {
-    releaseChannel,
-    intent,
-  });
+  const result = await invokeDesktopCommand<unknown>("check_app_update", { intent });
   if (!isRecord(result)) {
     throw new Error("Unexpected response while checking desktop updates.");
   }
@@ -241,6 +235,11 @@ export async function checkDesktopAppUpdate({
 export async function downloadDesktopAppUpdate(): Promise<DesktopAppUpdateState> {
   const result = await invokeDesktopCommand<unknown>("download_app_update");
   return requireDesktopAppUpdateState(result, "downloading the desktop update");
+}
+
+export async function cancelDesktopAppUpdateDownload(): Promise<DesktopAppUpdateState> {
+  const result = await invokeDesktopCommand<unknown>("cancel_app_update_download");
+  return requireDesktopAppUpdateState(result, "cancelling the desktop update download");
 }
 
 // 主进程每次更新阶段变化都会推送给所有窗口。

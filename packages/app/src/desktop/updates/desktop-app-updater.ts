@@ -5,7 +5,6 @@ import type {
   DesktopAppUpdateFailure,
   DesktopAppUpdateInstallResult,
   DesktopAppUpdateState,
-  DesktopReleaseChannel,
 } from "@/desktop/updates/desktop-updates";
 import { i18n } from "@/i18n/i18next";
 
@@ -32,14 +31,15 @@ export interface DesktopAppUpdaterSnapshot {
   lastCheckedAt: number | null;
   // 本次运行内被「稍后」或 × 收起，只存在内存里，按窗口生效。
   isHidden: boolean;
+  isCancellingDownload: boolean;
 }
 
 export interface DesktopAppUpdaterPort {
   checkDesktopAppUpdate(input: {
-    releaseChannel: DesktopReleaseChannel;
     intent: DesktopAppUpdateCheckIntent;
   }): Promise<DesktopAppUpdateCheckResult>;
   downloadDesktopAppUpdate(): Promise<DesktopAppUpdateState>;
+  cancelDesktopAppUpdateDownload(): Promise<DesktopAppUpdateState>;
   installDesktopAppUpdate(): Promise<DesktopAppUpdateInstallResult>;
   subscribeToDesktopAppUpdateState(listener: (state: DesktopAppUpdateState) => void): () => void;
 }
@@ -56,17 +56,21 @@ export interface DesktopAppUpdaterDeps {
   reportError?(report: DesktopAppUpdaterErrorReport): void;
 }
 
+export interface DesktopAppUpdateCheckOptions {
+  intent?: DesktopAppUpdateCheckIntent;
+  silent?: boolean;
+}
+
 export interface DesktopAppUpdater {
   getSnapshot(): DesktopAppUpdaterSnapshot;
   subscribe(listener: () => void): () => void;
   // 订阅主进程推送的更新阶段，返回取消订阅函数。
   connect(): () => void;
-  checkForUpdates(options?: {
-    releaseChannel: DesktopReleaseChannel;
-    intent?: DesktopAppUpdateCheckIntent;
-    silent?: boolean;
-  }): Promise<DesktopAppUpdateCheckResult | null>;
+  checkForUpdates(
+    options?: DesktopAppUpdateCheckOptions,
+  ): Promise<DesktopAppUpdateCheckResult | null>;
   downloadUpdate(): Promise<DesktopAppUpdateState | null>;
+  cancelDownload(): Promise<DesktopAppUpdateState | null>;
   installUpdate(): Promise<DesktopAppUpdateInstallResult | null>;
   hide(): void;
 }
@@ -77,10 +81,10 @@ interface InternalState {
   check: "idle" | "checking" | "checked";
   // 手动检查失败；只在还没有可操作的更新时顶替阶段，不遮住已下载的安装入口。
   checkError: string | null;
-  // 下载或安装命令本身抛错；下一次动作或非静默检查时清掉。
+  // 下载、取消或安装命令本身抛错；下一次动作、非静默检查，或主进程阶段变化时清掉。
   actionError: string | null;
   // 命令已发出、主进程快照还没跟上时，先显示对应阶段。
-  pendingAction: "download" | "install" | null;
+  pendingAction: "download" | "cancel" | "install" | null;
   lastCheckedAt: number | null;
   isHidden: boolean;
   requestVersion: number;
@@ -150,6 +154,7 @@ function buildSnapshot(state: InternalState): DesktopAppUpdaterSnapshot {
     errorMessage,
     lastCheckedAt: state.lastCheckedAt,
     isHidden: state.isHidden,
+    isCancellingDownload: status === "downloading" && state.pendingAction === "cancel",
   };
 }
 
@@ -245,9 +250,16 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
       return base;
     }
     const entersDownloaded = next.phase === "downloaded" && base.mirror.phase !== "downloaded";
+    // 主进程已离开「发现更新」，下载请求就算落地了；之后回到「发现更新」（被取消）不再显示下载中。
+    const isDownloadRequestSettled =
+      base.pendingAction === "download" && next.phase !== "available";
+    // 命令报错时主进程可能仍在推进（例如取消失败但下载继续）；阶段一变，本地错误就过期了。
+    const hasPhaseChanged = next.phase !== base.mirror.phase;
     return {
       ...base,
       mirror: next,
+      pendingAction: isDownloadRequestSettled ? null : base.pendingAction,
+      actionError: hasPhaseChanged ? null : base.actionError,
       // 进入「已下载」时重新出现，不论之前在哪个阶段被收起。
       isHidden: entersDownloaded ? false : base.isHidden,
     };
@@ -260,15 +272,10 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     }
   }
 
-  async function checkForUpdates(options?: {
-    releaseChannel: DesktopReleaseChannel;
-    intent?: DesktopAppUpdateCheckIntent;
-    silent?: boolean;
-  }): Promise<DesktopAppUpdateCheckResult | null> {
-    if (!options) {
-      return null;
-    }
-    const { releaseChannel, intent = "manual", silent = false } = options;
+  async function checkForUpdates({
+    intent = "manual",
+    silent = false,
+  }: DesktopAppUpdateCheckOptions = {}): Promise<DesktopAppUpdateCheckResult | null> {
     if (silent && state.check === "checking") {
       return null;
     }
@@ -284,7 +291,7 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     });
 
     try {
-      const result = await deps.port.checkDesktopAppUpdate({ releaseChannel, intent });
+      const result = await deps.port.checkDesktopAppUpdate({ intent });
       if (requestVersion !== state.requestVersion) {
         applyMirror(result.state);
         return result;
@@ -343,6 +350,24 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     }
   }
 
+  async function cancelDownload(): Promise<DesktopAppUpdateState | null> {
+    commit({ ...state, pendingAction: "cancel", actionError: null });
+
+    try {
+      const next = await deps.port.cancelDesktopAppUpdateDownload();
+      commit({ ...withMirror(state, next), pendingAction: null });
+      return next;
+    } catch (error) {
+      deps.reportError?.({
+        error,
+        message: i18n.t("desktop.updates.cancelDownloadError"),
+        logLabel: "[DesktopUpdater] Failed to cancel app update download",
+      });
+      commit({ ...state, pendingAction: null, actionError: getErrorMessage(error) });
+      return null;
+    }
+  }
+
   async function installUpdate(): Promise<DesktopAppUpdateInstallResult | null> {
     commit({ ...state, pendingAction: "install", actionError: null });
 
@@ -373,6 +398,7 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     connect: () => deps.port.subscribeToDesktopAppUpdateState(applyMirror),
     checkForUpdates,
     downloadUpdate,
+    cancelDownload,
     installUpdate,
     hide() {
       if (!state.isHidden) {
@@ -396,12 +422,11 @@ export const systemIntervalTimer: IntervalTimer = {
 // 每个窗口只启动一份，由 DesktopAppUpdaterProvider 负责。
 export function startAutomaticUpdateChecks(input: {
   updater: DesktopAppUpdater;
-  releaseChannel: DesktopReleaseChannel;
   timer: IntervalTimer;
 }): () => void {
-  const { updater, releaseChannel, timer } = input;
+  const { updater, timer } = input;
   const check = () => {
-    void updater.checkForUpdates({ releaseChannel, intent: "automatic", silent: true });
+    void updater.checkForUpdates({ intent: "automatic", silent: true });
   };
 
   check();

@@ -19,6 +19,7 @@ export type UpdateCalloutBody =
 export type UpdateCalloutActionRole =
   | "later"
   | "update"
+  | "cancel"
   | "install"
   | "changelog"
   | "retry"
@@ -51,6 +52,7 @@ export interface ResolveUpdateCalloutInput {
   downloadProgress: DesktopAppUpdateDownloadProgress | null;
   errorMessage: string | null;
   isHidden: boolean;
+  isCancellingDownload: boolean;
 }
 
 type UpdateCalloutContent = Pick<
@@ -89,6 +91,21 @@ function laterAction(): UpdateCalloutActionDescriptor {
   return { role: "later", label: i18n.t("desktop.updates.callout.later") };
 }
 
+function cancelDownloadAction({
+  isCancelling,
+}: {
+  isCancelling: boolean;
+}): UpdateCalloutActionDescriptor {
+  if (isCancelling) {
+    return {
+      role: "cancel",
+      label: i18n.t("desktop.updates.callout.cancellingAction"),
+      disabled: true,
+    };
+  }
+  return { role: "cancel", label: i18n.t("common.actions.cancel") };
+}
+
 function resolveContent(input: ResolveUpdateCalloutInput): UpdateCalloutContent | null {
   const versionLabel = formatVersionLabel(input.targetVersion);
   const errorBody: UpdateCalloutBody = {
@@ -115,7 +132,7 @@ function resolveContent(input: ResolveUpdateCalloutInput): UpdateCalloutContent 
         body: { kind: "downloading", progress: resolveProgress(input.downloadProgress) },
         showGiftIcon: false,
         variant: "default",
-        actions: [],
+        actions: [cancelDownloadAction({ isCancelling: input.isCancellingDownload })],
         dismissible: true,
       };
     case "downloaded":

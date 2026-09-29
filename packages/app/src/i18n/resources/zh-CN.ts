@@ -1397,6 +1397,7 @@ export const zhCN: TranslationResources = {
       },
       installError: "无法安装 desktop app 更新。",
       downloadError: "无法下载 desktop app 更新。",
+      cancelDownloadError: "无法取消 desktop app 更新的下载。",
       manualDownload: "前往 Releases 手动下载",
       installTimedOut: "更新器未能及时重启 App。",
       callout: {
@@ -1406,6 +1407,7 @@ export const zhCN: TranslationResources = {
         genericError: "出了点问题。",
         whatsNew: "更新内容",
         installingAction: "正在安装...",
+        cancellingAction: "正在取消...",
         installingDescription: "正在准备重启...",
         restartWarning: "安装会重启 App，停止正在运行的 agents 并关闭 terminal 会话。",
         versionAvailable: "{{version}} 可用",

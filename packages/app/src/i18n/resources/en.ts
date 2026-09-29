@@ -1435,6 +1435,7 @@ export const en = {
       },
       installError: "Unable to install the desktop app update.",
       downloadError: "Unable to download the desktop app update.",
+      cancelDownloadError: "Unable to cancel the desktop app update download.",
       manualDownload: "Download from Releases",
       installTimedOut: "The updater didn't restart the app in time.",
       callout: {
@@ -1444,6 +1445,7 @@ export const en = {
         genericError: "Something went wrong.",
         whatsNew: "What's new",
         installingAction: "Installing...",
+        cancellingAction: "Cancelling...",
         installingDescription: "Preparing to restart...",
         restartWarning:
           "Installing restarts the app, stops running agents, and closes terminal sessions.",

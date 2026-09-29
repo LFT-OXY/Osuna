@@ -20,11 +20,9 @@ import {
   writeAttachmentBytes,
 } from "../features/attachments.js";
 import {
-  checkForAppUpdate,
-  downloadAppUpdate,
-  installAppUpdate,
+  electronAppUpdateCommands,
   type AppUpdateCheckIntent,
-  type AppReleaseChannel,
+  type AppUpdateCommands,
 } from "../features/auto-updater.js";
 import {
   getBundledCliShimPath,
@@ -89,18 +87,6 @@ export interface DesktopDaemonStatus {
 interface DesktopDaemonLogs {
   logPath: string;
   contents: string;
-}
-
-function parseReleaseChannel(
-  args: Record<string, unknown> | undefined,
-): AppReleaseChannel | undefined {
-  if (args?.releaseChannel === "beta") {
-    return "beta";
-  }
-  if (args?.releaseChannel === "stable") {
-    return "stable";
-  }
-  return undefined;
 }
 
 function parseAppUpdateCheckIntent(
@@ -382,19 +368,29 @@ async function getLocalDaemonVersion(): Promise<{ version: string | null; error:
   };
 }
 
-async function resolveRequestedReleaseChannel(
-  args: Record<string, unknown> | undefined,
-): Promise<AppReleaseChannel> {
-  return parseReleaseChannel(args) ?? (await getDesktopSettingsStore().get()).releaseChannel;
-}
-
 // ---------------------------------------------------------------------------
 // IPC registration
 // ---------------------------------------------------------------------------
 
-export function createDaemonCommandHandlers(): Record<string, DesktopCommandHandler> {
+export function createDaemonCommandHandlers({
+  appUpdates,
+}: {
+  appUpdates: AppUpdateCommands;
+}): Record<string, DesktopCommandHandler> {
   return {
-    ...createDesktopSettingsCommandHandlers({ settingsStore: getDesktopSettingsStore() }),
+    ...createDesktopSettingsCommandHandlers({
+      settingsStore: getDesktopSettingsStore(),
+      onPatched: ({ releaseChannel }) => {
+        void appUpdates
+          .switchAppUpdateReleaseChannel({
+            currentVersion: resolveDesktopAppVersion(),
+            releaseChannel,
+          })
+          .catch((error) => {
+            log.error("[auto-updater] failed to switch release channel", error);
+          });
+      },
+    }),
     desktop_get_runtime_info: () => ({
       appVersion: resolveDesktopAppVersion(),
       runningUnderARM64Translation: isRunningUnderARM64Translation(),
@@ -440,17 +436,19 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     },
     check_app_update: async (args) => {
       const currentVersion = resolveDesktopAppVersion();
-      return checkForAppUpdate({
+      return appUpdates.checkForAppUpdate({
         currentVersion,
-        releaseChannel: await resolveRequestedReleaseChannel(args),
+        // 以保存的设置为准：窗口间的设置不同步，别的窗口可能还拿着旧通道。
+        releaseChannel: (await getDesktopSettingsStore().get()).releaseChannel,
         intent: parseAppUpdateCheckIntent(args),
       });
     },
-    download_app_update: () => downloadAppUpdate(),
+    download_app_update: () => appUpdates.downloadAppUpdate(),
+    cancel_app_update_download: () => appUpdates.cancelAppUpdateDownload(),
     install_app_update: async () => {
       const currentVersion = resolveDesktopAppVersion();
       let stoppedDaemonForUpdate = false;
-      const result = await installAppUpdate({ currentVersion }, async () => {
+      const result = await appUpdates.installAppUpdate({ currentVersion }, async () => {
         const before = await resolveDesktopDaemonStatus();
         const after = await stopDesktopDaemon("app_update");
         stoppedDaemonForUpdate =
@@ -474,7 +472,7 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
 }
 
 export function registerDaemonManager(): void {
-  const handlers = createDaemonCommandHandlers();
+  const handlers = createDaemonCommandHandlers({ appUpdates: electronAppUpdateCommands });
 
   ipcMain.handle(
     "paseo:invoke",

@@ -1420,6 +1420,7 @@ export const ko: TranslationResources = {
       },
       installError: "데스크톱 앱 업데이트를 설치할 수 없습니다.",
       downloadError: "데스크톱 앱 업데이트를 다운로드할 수 없습니다.",
+      cancelDownloadError: "데스크톱 앱 업데이트 다운로드를 취소할 수 없습니다.",
       manualDownload: "Releases에서 직접 다운로드",
       installTimedOut: "업데이터가 제시간에 앱을 다시 시작하지 못했습니다.",
       callout: {
@@ -1429,6 +1430,7 @@ export const ko: TranslationResources = {
         genericError: "문제가 발생했습니다.",
         whatsNew: "새로운 기능",
         installingAction: "설치 중...",
+        cancellingAction: "취소 중...",
         installingDescription: "재시작 준비 중...",
         restartWarning:
           "설치하면 앱이 재시작되고 실행 중인 에이전트가 중지되며 터미널 세션이 닫힙니다.",

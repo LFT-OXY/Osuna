@@ -1410,6 +1410,7 @@ export const ar: TranslationResources = {
       },
       installError: "غير قادر على تثبيت تحديث تطبيق سطح المكتب.",
       downloadError: "غير قادر على تنزيل تحديث تطبيق سطح المكتب.",
+      cancelDownloadError: "غير قادر على إلغاء تنزيل تحديث تطبيق سطح المكتب.",
       manualDownload: "التنزيل من Releases",
       installTimedOut: "لم يُعِد المُحدِّث تشغيل التطبيق في الوقت المحدد.",
       callout: {
@@ -1419,6 +1420,7 @@ export const ar: TranslationResources = {
         genericError: "حدث خطأ ما.",
         whatsNew: "ما هو الجديد",
         installingAction: "جارٍ التثبيت...",
+        cancellingAction: "جارٍ الإلغاء...",
         installingDescription: "جارٍ التحضير لإعادة التشغيل...",
         restartWarning:
           "يؤدي التثبيت إلى إعادة تشغيل التطبيق وإيقاف الوكلاء قيد التشغيل وإغلاق الجلسات الطرفية.",

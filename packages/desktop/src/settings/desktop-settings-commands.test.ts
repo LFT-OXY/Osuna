@@ -24,7 +24,10 @@ function createStoreMock(): DesktopSettingsStore {
 describe("desktop-settings-commands", () => {
   it("exposes get and patch handlers through the desktop command bus shape", async () => {
     const store = createStoreMock();
-    const handlers = createDesktopSettingsCommandHandlers({ settingsStore: store });
+    const handlers = createDesktopSettingsCommandHandlers({
+      settingsStore: store,
+      onPatched: () => undefined,
+    });
 
     await expect(handlers.get_desktop_settings()).resolves.toEqual(DEFAULT_DESKTOP_SETTINGS);
     await expect(
@@ -42,9 +45,27 @@ describe("desktop-settings-commands", () => {
     });
   });
 
+  it("hands the persisted settings to the patch listener", async () => {
+    const store = createStoreMock();
+    const patchedSettings: unknown[] = [];
+    const handlers = createDesktopSettingsCommandHandlers({
+      settingsStore: store,
+      onPatched: (settings) => {
+        patchedSettings.push(settings);
+      },
+    });
+
+    await handlers.patch_desktop_settings({ releaseChannel: "beta" });
+
+    expect(patchedSettings).toEqual([{ ...DEFAULT_DESKTOP_SETTINGS, releaseChannel: "beta" }]);
+  });
+
   it("accepts legacy renderer settings migration payloads", async () => {
     const store = createStoreMock();
-    const handlers = createDesktopSettingsCommandHandlers({ settingsStore: store });
+    const handlers = createDesktopSettingsCommandHandlers({
+      settingsStore: store,
+      onPatched: () => undefined,
+    });
 
     const result = await handlers.migrate_legacy_desktop_settings({
       releaseChannel: "beta",

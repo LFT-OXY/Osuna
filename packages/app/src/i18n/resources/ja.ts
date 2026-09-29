@@ -1425,6 +1425,7 @@ export const ja: TranslationResources = {
       },
       installError: "デスクトップアプリの更新をインストールできません。",
       downloadError: "デスクトップアプリの更新をダウンロードできません。",
+      cancelDownloadError: "デスクトップアプリの更新のダウンロードをキャンセルできません。",
       manualDownload: "Releases から手動でダウンロード",
       installTimedOut: "アップデーターが時間内にアプリを再起動しませんでした。",
       callout: {
@@ -1434,6 +1435,7 @@ export const ja: TranslationResources = {
         genericError: "問題が発生しました。",
         whatsNew: "新機能",
         installingAction: "インストール中...",
+        cancellingAction: "キャンセル中...",
         installingDescription: "再起動の準備中...",
         restartWarning:
           "インストールするとアプリが再起動し、実行中のエージェントが停止し、ターミナルセッションが閉じられます。",

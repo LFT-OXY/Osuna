@@ -1451,6 +1451,8 @@ export const fr: TranslationResources = {
       },
       installError: "Impossible d'installer la mise à jour de l'application de bureau.",
       downloadError: "Impossible de télécharger la mise à jour de l'application de bureau.",
+      cancelDownloadError:
+        "Impossible d'annuler le téléchargement de la mise à jour de l'application de bureau.",
       manualDownload: "Télécharger depuis Releases",
       installTimedOut: "Le programme de mise à jour n'a pas redémarré l'application à temps.",
       callout: {
@@ -1460,6 +1462,7 @@ export const fr: TranslationResources = {
         genericError: "Quelque chose s'est mal passé.",
         whatsNew: "Quoi de neuf",
         installingAction: "Installation...",
+        cancellingAction: "Annulation...",
         installingDescription: "Préparation du redémarrage...",
         restartWarning:
           "L'installation redémarre l'application, arrête les agents en cours et ferme les sessions de terminal.",

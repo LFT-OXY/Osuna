@@ -92,8 +92,14 @@ export interface AppUpdateInstallRequest {
 export interface AppUpdateRuntime {
   configure(input: AppUpdateRuntimeConfiguration): void;
   checkForUpdates(): Promise<RuntimeUpdateCheckResult | null>;
-  downloadUpdate(targetVersion: string): Promise<unknown>;
+  // signal 中止时取消下载；被取消的下载 promise 会拒绝，但不算失败。
+  downloadUpdate(targetVersion: string, signal: AbortSignal): Promise<unknown>;
   quitAndInstall(input: AppUpdateInstallRequest): void;
+}
+
+export interface AppReleaseChannelSwitch {
+  currentVersion: string;
+  releaseChannel: AppReleaseChannel;
 }
 
 export interface AppUpdateService {
@@ -103,6 +109,8 @@ export interface AppUpdateService {
     intent: AppUpdateCheckIntent;
   }): Promise<AppUpdateCheckResult>;
   downloadUpdate(): Promise<AppUpdateState>;
+  cancelDownload(): Promise<AppUpdateState>;
+  switchReleaseChannel(input: AppReleaseChannelSwitch): Promise<AppUpdateState>;
   installUpdate(
     input: { currentVersion: string },
     onBeforeQuit?: () => Promise<void>,
@@ -183,7 +191,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
   let downloadedUpdateVersion: string | null = null;
   let downloadingVersion: string | null = null;
   let downloadProgress: RuntimeDownloadProgress | null = null;
-  let activeDownload: Promise<void> | null = null;
+  let activeDownload: { settled: Promise<void>; abortController: AbortController } | null = null;
   let isInstalling = false;
   let lastFailure: { version: string; detail: AppUpdateFailure } | null = null;
   let configuredReleaseChannel: AppReleaseChannel | null = null;
@@ -290,11 +298,15 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     return buildCheckResult({ currentVersion, hasUpdate: true, info });
   }
 
-  function configureRuntime(releaseChannel: AppReleaseChannel, intent: AppUpdateCheckIntent): void {
+  function adoptReleaseChannel(releaseChannel: AppReleaseChannel): void {
     if (configuredReleaseChannel !== releaseChannel) {
       clearUpdateState();
       configuredReleaseChannel = releaseChannel;
     }
+  }
+
+  function configureRuntime(releaseChannel: AppReleaseChannel, intent: AppUpdateCheckIntent): void {
+    adoptReleaseChannel(releaseChannel);
 
     deps.runtime.configure({
       releaseChannel,
@@ -442,20 +454,25 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     }
     publishState();
 
-    activeDownload = runDownload(version).finally(() => {
+    const abortController = new AbortController();
+    const settled = runDownload(version, abortController.signal).finally(() => {
       activeDownload = null;
       publishState();
     });
+    activeDownload = { settled, abortController };
   }
 
-  async function runDownload(version: string): Promise<void> {
+  async function runDownload(version: string, signal: AbortSignal): Promise<void> {
     try {
-      await deps.runtime.downloadUpdate(version);
+      await deps.runtime.downloadUpdate(version, signal);
       if (downloadingVersion === version) {
         downloadingVersion = null;
         downloadedUpdateVersion = version;
       }
     } catch (error) {
+      if (signal.aborted) {
+        return;
+      }
       const message = getErrorMessage(error);
       if (downloadingVersion === version) {
         downloadingVersion = null;
@@ -474,7 +491,57 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     await runCheckExclusively(async () => {
       startDownload();
     });
-    await activeDownload;
+    const download = activeDownload;
+    if (download) {
+      await download.settled;
+    }
+    return state;
+  }
+
+  // 阶段立即回到「发现更新」，再等被取消的下载落定，之后的下载请求才能重新开始。
+  async function cancelActiveDownload(): Promise<void> {
+    const download = activeDownload;
+    const hasNothingToCancel = download === null || downloadingVersion === null;
+    if (hasNothingToCancel) {
+      return;
+    }
+    downloadingVersion = null;
+    download.abortController.abort();
+    publishState();
+    await download.settled;
+  }
+
+  async function cancelDownload(): Promise<AppUpdateState> {
+    if (!deps.isPackaged()) {
+      return state;
+    }
+
+    // 排在已发出的下载请求之后，取消的一定是最近一次请求的下载。
+    await runCheckExclusively(cancelActiveDownload);
+    return state;
+  }
+
+  // 由设置写入触发：取消旧通道的下载并清空状态，再按新通道检查。渲染进程按新通道发起的
+  // 检查可能先到、拿到的是旧状态，所以这里补查一次，结果广播给所有窗口。
+  async function switchReleaseChannel({
+    currentVersion,
+    releaseChannel,
+  }: AppReleaseChannelSwitch): Promise<AppUpdateState> {
+    const switched = await runCheckExclusively(async () => {
+      // 还没检查过就没有要取消的东西，下一次检查会按新通道配置。
+      const isUnchanged =
+        configuredReleaseChannel === null || configuredReleaseChannel === releaseChannel;
+      if (isUnchanged || isInstalling) {
+        return false;
+      }
+      await cancelActiveDownload();
+      adoptReleaseChannel(releaseChannel);
+      publishState();
+      return true;
+    });
+    if (switched) {
+      await checkForAppUpdate({ currentVersion, releaseChannel, intent: "automatic" });
+    }
     return state;
   }
 
@@ -614,6 +681,8 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
   return {
     checkForAppUpdate,
     downloadUpdate,
+    cancelDownload,
+    switchReleaseChannel,
     installUpdate,
     installUpdateOnQuit,
     getState: () => state,

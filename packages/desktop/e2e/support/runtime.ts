@@ -59,8 +59,8 @@ export interface DesktopRuntimeConfig {
   latestVersion?: string;
   /** Keep download_app_update in the downloading phase until the test releases it. */
   holdDownload?: boolean;
-  /** Make download_app_update or install_app_update fail the way the main process reports it. */
-  failUpdateAction?: "download" | "install";
+  /** download / install：按主进程的方式报告下载或安装失败；cancel：让 cancel_app_update_download 直接抛错。 */
+  failUpdateAction?: "download" | "install" | "cancel";
   /** False models Linux AppImage, which does not install on quit. Defaults to true. */
   installsOnQuit?: boolean;
   slowInstall?: boolean;
@@ -257,6 +257,8 @@ export async function installDesktopRuntime(
       };
     }
 
+    let cancelHeldDownload: (() => void) | null = null;
+
     async function runDownload() {
       setUpdatePhase("downloading");
       if (cfg.holdDownload) {
@@ -264,9 +266,14 @@ export async function installDesktopRuntime(
           updateState = { ...updateState, revision: updateState.revision + 1, progress };
           publishUpdateState();
         };
-        await new Promise<void>((resolve) => {
-          window.__releaseDesktopUpdateDownload = resolve;
+        const outcome = await new Promise<"released" | "cancelled">((resolve) => {
+          window.__releaseDesktopUpdateDownload = () => resolve("released");
+          cancelHeldDownload = () => resolve("cancelled");
         });
+        cancelHeldDownload = null;
+        if (outcome === "cancelled") {
+          return;
+        }
       }
       if (cfg.failUpdateAction === "download") {
         setUpdatePhase("failed", { action: "download", message: "sha512 checksum mismatch" });
@@ -286,6 +293,19 @@ export async function installDesktopRuntime(
         });
       }
       await activeDownload;
+      return updateState;
+    }
+
+    // 与真实服务一样：取消不算失败，阶段回到「发现更新」。
+    async function cancelAppUpdateDownload() {
+      if (cfg.failUpdateAction === "cancel") {
+        throw new Error("The updater did not respond.");
+      }
+      if (updateState.phase === "downloading" && cancelHeldDownload) {
+        setUpdatePhase("available");
+        cancelHeldDownload();
+        await activeDownload;
+      }
       return updateState;
     }
 
@@ -314,6 +334,10 @@ export async function installDesktopRuntime(
 
         if (command === "download_app_update") {
           return downloadAppUpdate();
+        }
+
+        if (command === "cancel_app_update_download") {
+          return cancelAppUpdateDownload();
         }
 
         if (command === "install_app_update") {

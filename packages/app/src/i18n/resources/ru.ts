@@ -1433,6 +1433,7 @@ export const ru: TranslationResources = {
       },
       installError: "Не удалось установить обновление настольного приложения.",
       downloadError: "Не удалось загрузить обновление настольного приложения.",
+      cancelDownloadError: "Не удалось отменить загрузку обновления настольного приложения.",
       manualDownload: "Скачать из Releases",
       installTimedOut: "Программа обновления не перезапустила приложение вовремя.",
       callout: {
@@ -1442,6 +1443,7 @@ export const ru: TranslationResources = {
         genericError: "Что-то пошло не так.",
         whatsNew: "Что нового",
         installingAction: "Установка...",
+        cancellingAction: "Отмена...",
         installingDescription: "Подготовка к перезапуску...",
         restartWarning:
           "Установка перезапустит приложение, остановит запущенных агентов и закроет сессии терминала.",

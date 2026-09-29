@@ -71,7 +71,7 @@ test.describe("Desktop updates", () => {
     await clickUpdateCalloutAction(page, "Update");
     await expect(callout).toContainText("Downloading update");
     await expect(callout).toContainText("Downloading...");
-    await expect(page.getByTestId("update-callout-actions")).toHaveCount(0);
+    await expect(callout.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
     const MB = 1024 * 1024;
     await reportUpdateDownloadProgress(page, {
       percent: 42,
@@ -114,6 +114,49 @@ test.describe("Desktop updates", () => {
 
     await page.getByTestId("update-callout-dismiss").click();
     await expectNoUpdateCallout(page);
+  });
+
+  test("cancelling a download goes back to the found update without an error", async ({ page }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
+      holdDownload: true,
+    });
+    await gotoAppShell(page);
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
+
+    await clickUpdateCalloutAction(page, "Update");
+    const callout = page.getByTestId("update-callout");
+    await expect(callout).toContainText("Downloading update");
+    await clickUpdateCalloutAction(page, "Cancel");
+
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
+    await expect(callout).not.toContainText("Update failed");
+
+    await clickUpdateCalloutAction(page, "Update");
+    await expect(callout).toContainText("Downloading update");
+  });
+
+  test("a cancel that fails shows the reason and a retry", async ({ page }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
+      holdDownload: true,
+      failUpdateAction: "cancel",
+    });
+    await gotoAppShell(page);
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
+
+    await clickUpdateCalloutAction(page, "Update");
+    const callout = page.getByTestId("update-callout");
+    await expect(callout).toContainText("Downloading update");
+    await clickUpdateCalloutAction(page, "Cancel");
+
+    await expect(callout).toContainText("Update failed");
+    await expect(callout).toContainText("The updater did not respond.");
+    await expect(callout.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
   });
 
   test("a download hidden mid-way shows up again once it finishes", async ({ page }) => {

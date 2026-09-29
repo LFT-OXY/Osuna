@@ -2,11 +2,12 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { app, BrowserWindow, autoUpdater as electronAutoUpdater } from "electron";
-import { UUID } from "builder-util-runtime";
+import { CancellationToken, UUID } from "builder-util-runtime";
 import log from "electron-log/main";
 import { autoUpdater } from "electron-updater";
 import {
   createAppUpdateService,
+  type AppReleaseChannelSwitch,
   type AppUpdateCheckResult,
   type AppUpdateInstallRequest,
   type AppUpdateInstallResult,
@@ -75,6 +76,9 @@ export function createAppUpdateLifecycleLogger(logger: AppUpdateLogSink) {
     },
     downloadRequested(targetVersion: string): void {
       logger.info("[auto-updater] download requested", { targetVersion });
+    },
+    downloadCancelled(targetVersion: string): void {
+      logger.info("[auto-updater] download cancelled", { targetVersion });
     },
     quitAndInstallRequested(details: AppUpdateInstallRequest): void {
       logger.info("[auto-updater] quitAndInstall requested", details);
@@ -215,9 +219,18 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
     }
   }
 
-  downloadUpdate(targetVersion: string): Promise<unknown> {
+  downloadUpdate(targetVersion: string, signal: AbortSignal): Promise<unknown> {
     updateLifecycleLog.downloadRequested(targetVersion);
-    return autoUpdater.downloadUpdate();
+    const cancellationToken = new CancellationToken();
+    signal.addEventListener(
+      "abort",
+      () => {
+        updateLifecycleLog.downloadCancelled(targetVersion);
+        cancellationToken.cancel();
+      },
+      { once: true },
+    );
+    return autoUpdater.downloadUpdate(cancellationToken);
   }
 
   quitAndInstall({ targetVersion, isSilent, isForceRunAfter }: AppUpdateInstallRequest): void {
@@ -299,6 +312,16 @@ export function downloadAppUpdate(): Promise<AppUpdateState> {
   return appUpdateService.downloadUpdate();
 }
 
+export function cancelAppUpdateDownload(): Promise<AppUpdateState> {
+  return appUpdateService.cancelDownload();
+}
+
+export function switchAppUpdateReleaseChannel(
+  input: AppReleaseChannelSwitch,
+): Promise<AppUpdateState> {
+  return appUpdateService.switchReleaseChannel(input);
+}
+
 export function installAppUpdate(
   { currentVersion }: { currentVersion: string },
   onBeforeQuit?: () => Promise<void>,
@@ -317,3 +340,20 @@ export function installAppUpdateOnQuit({
 }): Promise<boolean> {
   return appUpdateService.installUpdateOnQuit({ currentVersion, releaseChannel, signal });
 }
+
+// 桌面命令处理器依赖的更新端口；测试注入内存实现。
+export interface AppUpdateCommands {
+  checkForAppUpdate: typeof checkForAppUpdate;
+  downloadAppUpdate: typeof downloadAppUpdate;
+  cancelAppUpdateDownload: typeof cancelAppUpdateDownload;
+  installAppUpdate: typeof installAppUpdate;
+  switchAppUpdateReleaseChannel: typeof switchAppUpdateReleaseChannel;
+}
+
+export const electronAppUpdateCommands: AppUpdateCommands = {
+  checkForAppUpdate,
+  downloadAppUpdate,
+  cancelAppUpdateDownload,
+  installAppUpdate,
+  switchAppUpdateReleaseChannel,
+};

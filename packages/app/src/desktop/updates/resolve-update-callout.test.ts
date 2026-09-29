@@ -14,6 +14,7 @@ function input(overrides: Partial<ResolveUpdateCalloutInput> = {}): ResolveUpdat
     downloadProgress: null,
     errorMessage: null,
     isHidden: false,
+    isCancellingDownload: false,
     ...overrides,
   };
 }
@@ -76,7 +77,7 @@ describe("resolveUpdateCalloutDescriptor", () => {
     expect(descriptor?.body).toEqual({ kind: "available", versionLabel: null });
   });
 
-  it("shows a dismissible downloading stage without actions", () => {
+  it("offers Cancel while downloading and stays dismissible", () => {
     const descriptor = resolveUpdateCalloutDescriptor(input({ status: "downloading" }));
 
     expect(descriptor).toMatchObject({
@@ -84,9 +85,20 @@ describe("resolveUpdateCalloutDescriptor", () => {
       body: { kind: "downloading", progress: null },
       showGiftIcon: false,
       variant: "default",
-      actions: [],
+      actions: [{ role: "cancel", label: "Cancel" }],
       dismissible: true,
     });
+    expect(descriptor?.actions[0]?.variant).toBeUndefined();
+  });
+
+  it("disables Cancel and says it is cancelling while the cancel is in flight", () => {
+    const descriptor = resolveUpdateCalloutDescriptor(
+      input({ status: "downloading", isCancellingDownload: true }),
+    );
+
+    expect(descriptor?.actions).toEqual([
+      { role: "cancel", label: "Cancelling...", disabled: true },
+    ]);
   });
 
   it("shows the percent, downloaded / total size and speed in MB once progress arrives", () => {

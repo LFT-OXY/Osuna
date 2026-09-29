@@ -73,14 +73,19 @@ export function UpdateCalloutSource() {
     downloadProgress,
     errorMessage,
     isHidden,
+    isCancellingDownload,
     checkForUpdates,
     downloadUpdate,
+    cancelDownload,
     installUpdate,
     hide,
   } = useDesktopAppUpdater();
 
   const download = useStableEvent(() => {
     void downloadUpdate();
+  });
+  const cancel = useStableEvent(() => {
+    void cancelDownload();
   });
   const install = useStableEvent(() => {
     void installUpdate();
@@ -97,6 +102,7 @@ export function UpdateCalloutSource() {
       downloadProgress,
       errorMessage,
       isHidden,
+      isCancellingDownload,
     });
     if (!descriptor) return;
 
@@ -113,6 +119,7 @@ export function UpdateCalloutSource() {
       actions: materializeActions(descriptor.actions, {
         later: hide,
         update: download,
+        cancel,
         install,
         changelog: openChangelog,
         retry,
@@ -124,12 +131,14 @@ export function UpdateCalloutSource() {
     });
   }, [
     callouts,
+    cancel,
     download,
     downloadProgress,
     errorMessage,
     hide,
     install,
     installsOnQuit,
+    isCancellingDownload,
     isDesktopApp,
     isHidden,
     retry,
