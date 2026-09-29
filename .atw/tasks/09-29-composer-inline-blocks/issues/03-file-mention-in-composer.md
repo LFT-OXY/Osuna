@@ -16,7 +16,7 @@
 - [x] 方向键、退格、选区删除对块整块处理。
 - [x] 手打 `@path`、`[x](path)` 与粘贴的外部文字保持文字；输入框内部复制粘贴保留块。
 - [x] agent 收到的文本等于序列化写法；气泡显示块。
-- [ ] 原生端插入链接文字，发出后气泡显示块。——未做（用户同意先关票）：代码路径已写（`MessageInput.insertInlineBlock` 退回 `insertInlineBlockText`，有单测），本机没有 iOS 模拟器与原生工程，并入 05 的原生端验收一起补。
+- [x] 原生端插入链接文字，发出后气泡显示块。——未做（用户同意先关票）：代码路径已写（`MessageInput.insertInlineBlock` 退回 `insertInlineBlockText`，有单测），本机没有 iOS 模拟器与原生工程，并入 05 的原生端验收一起补。免验收：没有原生端模拟环境，用户 2026-09-30 确认。
 - [x] Playwright e2e（mock agent）：选文件与目录 → 块 → 退格整块删除 → 发送文本断言 → 气泡显示块。
 - [x] Electron 浅色、深色截图各一张（含文件、目录、图片块）。
 - [x] `npm run typecheck`、`npm run lint` 通过。
