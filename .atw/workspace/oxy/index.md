@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 17
+- **Total Sessions**: 18
 - **Last Active**: 2026-09-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~516 | Active |
+| `journal-1.md` | ~539 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 18 | 2026-09-29 | Pi 思考档位按 thinkingLevelMap 过滤 | `c1c21c76d` | `main` |
 | 17 | 2026-09-29 | 桌面端更新：设置 → 关于对齐新流程（06）并完成验收归档 | `c1f3e9f7a` | `main` |
 | 16 | 2026-09-29 | font-picker 工单 04：终端预览样例与字号重置，任务归档 | `accd7aa08` | `main` |
 | 15 | 2026-09-29 | Skill chip 工单 03：开头退格删除、悬停提示与读屏名称，归档任务 | `bf80f7c27`, `7587a8b15`, `578f04533`, `8625cc6f9` | `main` |

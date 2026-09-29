@@ -514,3 +514,26 @@ Skill chip 子任务三张工单全部完成并归档。本次做工单 03：光
 ### Status
 
 [OK] **Completed**
+
+
+## Session 18: Pi 思考档位按 thinkingLevelMap 过滤
+<!-- atw-session: v=2 fp=0ad5ee4f37d1aaf8 -->
+
+**Date**: 2026-09-29
+**Task**: Pi 思考档位按 thinkingLevelMap 过滤
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 规则）暴露思考档位，默认档按 clampThinkingLevel 从 medium 收敛；切到有档位的模型后重新下发用户档位并回读 Pi 实际档位，不同则发 thinking_option_changed；无档位模型保留原档位；对齐/回读失败只记 warn。五轮双轴审查修掉非推理启动会话切模型变 off、全 null 模型把档位改成 off 等缺陷。docs/providers.md 记录 Pi<0.72 不报映射与 set_model 重置档位；后端质量规范新增档位规则。dev 桌面端手测通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c1c21c76d` | feat(server): Pi 思考档位按模型 thinkingLevelMap 过滤并在切模型后对齐 |
+
+### Status
+
+[OK] **Completed**
