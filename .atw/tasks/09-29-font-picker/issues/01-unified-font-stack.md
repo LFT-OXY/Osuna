@@ -11,9 +11,9 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] Code font 留空时，代码块、diff、终端解析出的是同一套默认等宽栈。
-- [ ] Web 端 Code font 填 `Maple Mono`，有效栈为 `"Maple Mono", <默认等宽栈>`；填本机没装的字体时，界面落到默认等宽字体，而不是浏览器默认字体。
-- [ ] 老用户手写的完整字体栈照常作为首选生效。
-- [ ] 原生端有效字体与改动前一致。
-- [ ] 终端有效栈中，Nerd Font 名排在 `monospace` 之前。
-- [ ] `apply.test.ts`（主题 token）与 `font-stack.test.ts` / `font-stack.native.test.ts`（解析函数）覆盖以上行为。typecheck 和 lint 通过。
+- [x] Code font 留空时，代码块、diff、终端解析出的是同一套默认等宽栈。
+- [x] Web 端 Code font 填 `Maple Mono`，有效栈为 `"Maple Mono", <默认等宽栈>`；填本机没装的字体时，界面落到默认等宽字体，而不是浏览器默认字体。
+- [x] 老用户手写的完整字体栈照常作为首选生效。
+- [x] 原生端有效字体与改动前一致。
+- [x] 终端有效栈中，Nerd Font 名排在 `monospace` 之前。
+- [x] `apply.test.ts`（主题 token）与 `font-stack.test.ts` / `font-stack.native.test.ts`（解析函数）覆盖以上行为。typecheck 和 lint 通过。
