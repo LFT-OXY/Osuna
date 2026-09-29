@@ -6,6 +6,8 @@
 
 静默自动检查失败仍然只记录日志，不打扰用户。
 
+02 留下的衔接点：失败阶段现在由主进程快照的 `failure.action` 区分；下载失败的「重试」暂时走的是检查，要改为重新下载。阶段为失败时，手动检查再失败，渲染进程的 `checkError` 会盖掉原来的失败原因，要决定哪条优先。`packages/desktop/e2e/updates.spec.ts` 的两条失败用例按 02 的按钮（下载失败：更新内容 / 重试；安装失败：重试 / 前往 Releases）断言，改按钮时一并更新。
+
 **Blocked by:** 02 — 手动下载主链路
 **Status:** ready-for-agent
 **Impl:** ready

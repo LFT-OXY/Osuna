@@ -3,7 +3,6 @@ import { appendFile } from "node:fs/promises";
 import { expect, type Page } from "@playwright/test";
 import { openSettings } from "../../../app/e2e/support/helpers/app";
 import { getE2EDaemonPort } from "../../../app/e2e/support/helpers/daemon-port";
-import { escapeRegex } from "../../../app/e2e/support/helpers/regex";
 import {
   openSettingsHost,
   openSettingsHostSection,
@@ -55,10 +54,15 @@ export async function loadRealDaemonState(): Promise<RealDaemonState> {
 
 export interface DesktopRuntimeConfig {
   serverId: string;
+  /** The update service finds latestVersion on every check. */
   updateAvailable?: boolean;
   latestVersion?: string;
-  updateReadyToInstall?: boolean;
-  manualUpdateBypassesRollout?: boolean;
+  /** Keep download_app_update in the downloading phase until the test releases it. */
+  holdDownload?: boolean;
+  /** Make download_app_update or install_app_update fail the way the main process reports it. */
+  failUpdateAction?: "download" | "install";
+  /** False models Linux AppImage, which does not install on quit. Defaults to true. */
+  installsOnQuit?: boolean;
   slowInstall?: boolean;
   /** Initial PID reported by desktop_daemon_status. Defaults to null. */
   daemonPid?: number | null;
@@ -112,6 +116,8 @@ declare global {
     __capturedDialogOpenCalls: Array<Record<string, unknown> | undefined>;
     __recordDesktopEditorOpen?: (input: DesktopEditorOpenRecord) => Promise<void>;
     __desktopDaemonStartRequested?: boolean;
+    __desktopInvokedCommands: string[];
+    __releaseDesktopUpdateDownload?: () => void;
   }
 }
 
@@ -143,7 +149,6 @@ export async function installDesktopRuntime(
     let daemonRunning = true;
     let currentPid: number | null = cfg.daemonPid ?? null;
     let ownedByDesktop = cfg.ownedByDesktop ?? false;
-    let manualUpdateAdmitted = false;
     window.__desktopDaemonStartRequested = false;
 
     function buildDaemonStatus() {
@@ -182,31 +187,87 @@ export async function installDesktopRuntime(
       }
     }
 
-    function buildAppUpdateCheckResult(hasUpdate: boolean, readyToInstall: boolean) {
+    // 模拟主进程的更新服务：持有阶段快照，每次变化都推送给 app-update-state 订阅者。
+    type UpdatePhase =
+      | "none"
+      | "available"
+      | "downloading"
+      | "downloaded"
+      | "installing"
+      | "failed";
+    type UpdateFailure =
+      | { action: "download"; message: string }
+      | { action: "install"; reason: "updater-error"; message: string };
+    const targetVersion = cfg.latestVersion ?? "1.2.3";
+    const updateStateListeners = new Set<(payload: unknown) => void>();
+    let activeDownload: Promise<unknown> | null = null;
+    let updateState: {
+      revision: number;
+      phase: UpdatePhase;
+      targetVersion: string | null;
+      failure: UpdateFailure | null;
+      installsOnQuit: boolean;
+    } = {
+      revision: 0,
+      phase: "none",
+      targetVersion: null,
+      failure: null,
+      installsOnQuit: cfg.installsOnQuit ?? true,
+    };
+
+    function setUpdatePhase(phase: UpdatePhase, failure: UpdateFailure | null = null) {
+      updateState = {
+        ...updateState,
+        revision: updateState.revision + 1,
+        phase,
+        targetVersion: phase === "none" ? null : targetVersion,
+        failure,
+      };
+      for (const listener of updateStateListeners) listener(updateState);
+    }
+
+    function checkAppUpdate() {
+      if (cfg.updateAvailable === true && updateState.phase === "none") {
+        setUpdatePhase("available");
+      }
       return {
-        hasUpdate,
-        readyToInstall,
+        hasUpdate: updateState.phase !== "none",
+        readyToInstall: updateState.phase === "downloaded",
         currentVersion: "1.0.0",
-        latestVersion: hasUpdate ? (cfg.latestVersion ?? "1.2.3") : null,
+        latestVersion: updateState.targetVersion,
         body: null,
         date: null,
+        errorMessage: null,
+        state: updateState,
       };
     }
 
-    function checkAppUpdate(intent: unknown) {
-      if (!cfg.manualUpdateBypassesRollout) {
-        return buildAppUpdateCheckResult(
-          cfg.updateAvailable === true,
-          cfg.updateAvailable === true && (cfg.updateReadyToInstall ?? true),
-        );
+    async function runDownload() {
+      setUpdatePhase("downloading");
+      if (cfg.holdDownload) {
+        await new Promise<void>((resolve) => {
+          window.__releaseDesktopUpdateDownload = resolve;
+        });
       }
-
-      if (intent === "manual") {
-        manualUpdateAdmitted = true;
-        return buildAppUpdateCheckResult(true, false);
+      if (cfg.failUpdateAction === "download") {
+        setUpdatePhase("failed", { action: "download", message: "sha512 checksum mismatch" });
+      } else {
+        setUpdatePhase("downloaded");
       }
+    }
 
-      return buildAppUpdateCheckResult(manualUpdateAdmitted, manualUpdateAdmitted);
+    // 与真实服务一样幂等：下载进行中再次调用会等同一次下载结束；下载失败后可以重新下载。
+    async function downloadAppUpdate() {
+      const canStartDownload =
+        updateState.phase === "available" ||
+        (updateState.phase === "failed" && updateState.failure?.action === "download");
+      if (canStartDownload) {
+        activeDownload = runDownload().finally(() => {
+          activeDownload = null;
+        });
+      }
+      await activeDownload;
+      return updateState;
     }
 
     const desktopBridge: {
@@ -217,7 +278,9 @@ export async function installDesktopRuntime(
         open: (options?: Record<string, unknown>) => Promise<string | string[] | null>;
       };
       getPendingOpenProject: () => Promise<string | null>;
-      events: { on: () => Promise<() => void> };
+      events: {
+        on: (event: string, handler: (payload: unknown) => void) => Promise<() => void>;
+      };
       editor?: {
         listTargets: () => Promise<DesktopEditorTargetConfig[]>;
         openTarget: (input: DesktopEditorOpenRecord) => Promise<void>;
@@ -225,18 +288,43 @@ export async function installDesktopRuntime(
     } = {
       platform: "darwin",
       invoke: async (command: string, args?: Record<string, unknown>) => {
+        window.__desktopInvokedCommands.push(command);
         if (command === "check_app_update") {
-          return checkAppUpdate(args?.intent);
+          return checkAppUpdate();
+        }
+
+        if (command === "download_app_update") {
+          return downloadAppUpdate();
         }
 
         if (command === "install_app_update") {
+          if (updateState.phase !== "downloaded") {
+            return {
+              installed: false,
+              version: "1.0.0",
+              message: "The update has not been downloaded yet.",
+              failure: null,
+            };
+          }
+          setUpdatePhase("installing");
           if (cfg.slowInstall) {
             await new Promise<void>((resolve) => setTimeout(resolve, 3000));
           }
+          if (cfg.failUpdateAction === "install") {
+            const message = "Code signature did not pass validation";
+            setUpdatePhase("failed", { action: "install", reason: "updater-error", message });
+            return {
+              installed: false,
+              version: "1.0.0",
+              message: `Update failed: ${message}`,
+              failure: { reason: "updater-error", message },
+            };
+          }
           return {
             installed: true,
-            version: cfg.latestVersion ?? "1.2.3",
-            message: "App update installed. Restart required.",
+            version: targetVersion,
+            message: "Update downloaded. The app will restart shortly.",
+            failure: null,
           };
         }
 
@@ -299,7 +387,15 @@ export async function installDesktopRuntime(
         },
       },
       getPendingOpenProject: async () => null,
-      events: { on: async () => () => undefined },
+      events: {
+        on: async (event: string, handler: (payload: unknown) => void) => {
+          if (event !== "app-update-state") return () => undefined;
+          updateStateListeners.add(handler);
+          return () => {
+            updateStateListeners.delete(handler);
+          };
+        },
+      },
     };
 
     if (cfg.editorTargets) {
@@ -312,6 +408,7 @@ export async function installDesktopRuntime(
     }
 
     window.__capturedDialogOpenCalls = [];
+    window.__desktopInvokedCommands = [];
     (window as unknown as { paseoDesktop: unknown }).paseoDesktop = desktopBridge;
   }, config);
 }
@@ -351,41 +448,55 @@ export async function openDesktopAboutSettings(page: Page): Promise<void> {
   await expect(page.getByText("App updates", { exact: true })).toBeVisible();
 }
 
-export async function expectUpdateBanner(page: Page, version: string): Promise<void> {
+function formatVersionLabel(version: string): string {
+  return `v${version.replace(/^v/i, "")}`;
+}
+
+export async function expectUpdateCallout(
+  page: Page,
+  input: { title: string; version: string },
+): Promise<void> {
   const callout = page.getByTestId("update-callout");
   await expect(callout).toBeVisible({ timeout: 15_000 });
-  await expect(callout).toContainText(`v${version.replace(/^v/i, "")}`);
+  await expect(callout).toContainText(input.title);
+  await expect(callout).toContainText(formatVersionLabel(input.version));
+}
+
+export async function expectNoUpdateCallout(page: Page): Promise<void> {
+  await expect(page.getByTestId("update-callout")).toHaveCount(0);
+}
+
+export async function clickUpdateCalloutAction(page: Page, label: string): Promise<void> {
+  await page
+    .getByTestId("update-callout")
+    .getByRole("button", { name: label, exact: true })
+    .click();
+}
+
+export async function releaseUpdateDownload(page: Page): Promise<void> {
+  await page.waitForFunction(() => typeof window.__releaseDesktopUpdateDownload === "function");
+  await page.evaluate(() => window.__releaseDesktopUpdateDownload?.());
+}
+
+export async function readInvokedDesktopCommands(page: Page): Promise<string[]> {
+  return page.evaluate(() => window.__desktopInvokedCommands);
 }
 
 export async function clickCheckForUpdates(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Check" }).click();
 }
 
-export async function expectPendingUpdateCheckResult(page: Page, version: string): Promise<void> {
-  const normalizedVersion = `v${version.replace(/^v/i, "")}`;
+export async function expectAvailableUpdateCheckResult(page: Page, version: string): Promise<void> {
   await expect(
-    page.getByText(
-      new RegExp(`Update found: ${escapeRegex(normalizedVersion)}\\. Downloading\\.\\.\\.`),
-    ),
+    // 手动检查后文案带时间，只锚定到固定前缀。
+    page.getByText(`Update available: ${formatVersionLabel(version)}. Last checked at `),
   ).toBeVisible();
-  await expect(page.getByText(`Ready to install: ${normalizedVersion}`)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Update" })).toBeDisabled();
-}
-
-export async function expectReadyUpdateCheckResult(page: Page, version: string): Promise<void> {
-  const normalizedVersion = `v${version.replace(/^v/i, "")}`;
-  await expect(page.getByText(`Ready to install: ${normalizedVersion}`)).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByRole("button", { name: `Update to ${normalizedVersion}` })).toBeEnabled();
-}
-
-export async function clickInstallUpdate(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Install & restart" }).click();
 }
 
 export async function expectInstallInProgress(page: Page): Promise<void> {
-  await expect(page.getByRole("button", { name: "Installing..." })).toBeVisible();
+  await expect(
+    page.getByTestId("update-callout").getByRole("button", { name: "Installing..." }),
+  ).toBeDisabled();
 }
 
 /**

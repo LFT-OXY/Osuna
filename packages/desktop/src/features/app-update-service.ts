@@ -5,6 +5,31 @@ import {
   type AppUpdateCheckIntent,
 } from "./app-update-rollout.js";
 
+export type AppUpdateInstallFailure =
+  | { reason: "handoff-timeout" }
+  | { reason: "updater-error"; message: string };
+
+export type AppUpdatePhase =
+  | "none"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "installing"
+  | "failed";
+
+export type AppUpdateFailure =
+  | { action: "download"; message: string }
+  | ({ action: "install" } & AppUpdateInstallFailure);
+
+// 主进程是更新阶段的唯一事实来源；revision 单调递增，渲染进程据此丢弃过期快照。
+export interface AppUpdateState {
+  revision: number;
+  phase: AppUpdatePhase;
+  targetVersion: string | null;
+  failure: AppUpdateFailure | null;
+  installsOnQuit: boolean;
+}
+
 export interface AppUpdateCheckResult {
   hasUpdate: boolean;
   readyToInstall: boolean;
@@ -13,11 +38,8 @@ export interface AppUpdateCheckResult {
   body: string | null;
   date: string | null;
   errorMessage: string | null;
+  state: AppUpdateState;
 }
-
-export type AppUpdateInstallFailure =
-  | { reason: "handoff-timeout" }
-  | { reason: "updater-error"; message: string };
 
 // failure 为 null 的未安装结果是正常情况（无更新、稍后安装等），不是安装失败。
 export type AppUpdateInstallResult =
@@ -69,11 +91,9 @@ export interface AppUpdateService {
     releaseChannel: AppReleaseChannel;
     intent: AppUpdateCheckIntent;
   }): Promise<AppUpdateCheckResult>;
-  downloadAndInstallUpdate(
-    input: {
-      currentVersion: string;
-      releaseChannel: AppReleaseChannel;
-    },
+  downloadUpdate(): Promise<AppUpdateState>;
+  installUpdate(
+    input: { currentVersion: string },
     onBeforeQuit?: () => Promise<void>,
   ): Promise<AppUpdateInstallResult>;
   installUpdateOnQuit(input: {
@@ -81,6 +101,7 @@ export interface AppUpdateService {
     releaseChannel: AppReleaseChannel;
     signal: AbortSignal;
   }): Promise<boolean>;
+  getState(): AppUpdateState;
 }
 
 export interface AppUpdateServiceDeps {
@@ -89,29 +110,13 @@ export interface AppUpdateServiceDeps {
   now(): number;
   bucket(): Promise<number>;
   createInstallHandoffDeadline(): AbortSignal;
+  // 当前平台是否会在退出 App 时安装已下载的更新（Linux AppImage 不会）。
+  installsOnQuit: boolean;
+  publishState?(state: AppUpdateState): void;
   reportCheckError?(error: unknown): void;
   reportRuntimeError?(error: unknown): void;
+  reportDownloadError?(message: string): void;
   reportInstallError?(message: string): void;
-}
-
-function buildCheckResult(input: {
-  currentVersion: string;
-  hasUpdate: boolean;
-  readyToInstall: boolean;
-  info?: RuntimeUpdateInfo | null;
-  errorMessage?: string | null;
-}): AppUpdateCheckResult {
-  const { currentVersion, hasUpdate, readyToInstall, info, errorMessage = null } = input;
-
-  return {
-    hasUpdate,
-    readyToInstall,
-    currentVersion,
-    latestVersion: info?.version ?? currentVersion,
-    body: typeof info?.releaseNotes === "string" ? info.releaseNotes : null,
-    date: typeof info?.releaseDate === "string" ? info.releaseDate : null,
-    errorMessage,
-  };
 }
 
 function getErrorMessage(error: unknown): string {
@@ -151,20 +156,26 @@ function updaterErrorFailure(message: string): AppUpdateInstallFailure {
   return { reason: "updater-error", message };
 }
 
-function buildDeferredInstallResult(currentVersion: string): AppUpdateInstallResult {
-  return buildNotInstalledResult(
-    currentVersion,
-    "Update validation timed out. The update will be installed later.",
-  );
+function isSameFailure(a: AppUpdateFailure | null, b: AppUpdateFailure | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateService {
   let cachedUpdateInfo: RuntimeUpdateInfo | null = null;
   let downloadedUpdateVersion: string | null = null;
+  let downloadingVersion: string | null = null;
+  let activeDownload: Promise<void> | null = null;
+  let isInstalling = false;
+  let lastFailure: { version: string; detail: AppUpdateFailure } | null = null;
   let configuredReleaseChannel: AppReleaseChannel | null = null;
-  let preparationError: { version: string; message: string } | null = null;
-  let preparingUpdateVersion: string | null = null;
   let checkQueue: Promise<void> = Promise.resolve();
+  let state: AppUpdateState = {
+    revision: 0,
+    phase: "none",
+    targetVersion: null,
+    failure: null,
+    installsOnQuit: deps.installsOnQuit,
+  };
   const installHandoffWaiters = new Set<(outcome: InstallHandoffOutcome) => void>();
 
   function settleInstallHandoffs(outcome: InstallHandoffOutcome): void {
@@ -175,11 +186,73 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     return downloadedUpdateVersion === version;
   }
 
+  function derivePhase(version: string): AppUpdatePhase {
+    if (isInstalling) return "installing";
+    if (downloadingVersion === version) return "downloading";
+    if (lastFailure?.version === version) return "failed";
+    if (isReadyToInstallVersion(version)) return "downloaded";
+    return "available";
+  }
+
+  // 状态有变化才递增 revision 并广播，重复调用是安全的。
+  function publishState(): AppUpdateState {
+    const targetVersion = cachedUpdateInfo?.version ?? null;
+    const phase = targetVersion ? derivePhase(targetVersion) : "none";
+    const nextFailure = phase === "failed" && lastFailure ? lastFailure.detail : null;
+    if (
+      phase === state.phase &&
+      targetVersion === state.targetVersion &&
+      isSameFailure(nextFailure, state.failure)
+    ) {
+      return state;
+    }
+    state = {
+      revision: state.revision + 1,
+      phase,
+      targetVersion,
+      failure: nextFailure,
+      installsOnQuit: deps.installsOnQuit,
+    };
+    deps.publishState?.(state);
+    return state;
+  }
+
+  function buildCheckResult(input: {
+    currentVersion: string;
+    hasUpdate: boolean;
+    info?: RuntimeUpdateInfo | null;
+    errorMessage?: string | null;
+  }): AppUpdateCheckResult {
+    const { currentVersion, hasUpdate, info, errorMessage = null } = input;
+    const readyToInstall = hasUpdate && info != null && isReadyToInstallVersion(info.version);
+
+    return {
+      hasUpdate,
+      readyToInstall,
+      currentVersion,
+      latestVersion: info?.version ?? currentVersion,
+      body: typeof info?.releaseNotes === "string" ? info.releaseNotes : null,
+      date: typeof info?.releaseDate === "string" ? info.releaseDate : null,
+      errorMessage,
+      state: publishState(),
+    };
+  }
+
+  // 只有目标版本已下载完才返回它，安装和退出时安装都以此为准。
+  function getDownloadedTargetVersion(): string | null {
+    const version = cachedUpdateInfo?.version ?? null;
+    return version !== null && isReadyToInstallVersion(version) ? version : null;
+  }
+
   function clearUpdateState(): void {
     cachedUpdateInfo = null;
     downloadedUpdateVersion = null;
-    preparationError = null;
-    preparingUpdateVersion = null;
+    lastFailure = null;
+  }
+
+  function buildNoUpdateResult(currentVersion: string): AppUpdateCheckResult {
+    clearUpdateState();
+    return buildCheckResult({ currentVersion, hasUpdate: false });
   }
 
   function buildPreviouslyAdmittedUpdateResult(
@@ -191,13 +264,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
       return null;
     }
 
-    return buildCheckResult({
-      currentVersion,
-      hasUpdate: true,
-      readyToInstall: isReadyToInstallVersion(info.version),
-      info,
-      errorMessage: preparationError?.version === info.version ? preparationError.message : null,
-    });
+    return buildCheckResult({ currentVersion, hasUpdate: true, info });
   }
 
   function configureRuntime(releaseChannel: AppReleaseChannel, intent: AppUpdateCheckIntent): void {
@@ -220,24 +287,24 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
         });
       },
       onUpdateAvailable(info) {
-        const alreadyReady = downloadedUpdateVersion === info.version;
         cachedUpdateInfo = info;
-        downloadedUpdateVersion = alreadyReady ? info.version : null;
-        if (!alreadyReady && preparingUpdateVersion === null) {
-          preparingUpdateVersion = info.version;
+        if (!isReadyToInstallVersion(info.version)) {
+          downloadedUpdateVersion = null;
         }
+        publishState();
       },
       onUpdateDownloaded(info) {
-        // A superseded download can finish after a newer manifest check. Keep
-        // the validated manifest as the install target in that case.
         cachedUpdateInfo ??= info;
         downloadedUpdateVersion = info.version;
-        if (preparingUpdateVersion === info.version) {
-          preparingUpdateVersion = null;
+        if (downloadingVersion === info.version) {
+          downloadingVersion = null;
         }
-        if (preparationError?.version === info.version) {
-          preparationError = null;
+        const isDownloadFailureForVersion =
+          lastFailure?.version === info.version && lastFailure.detail.action === "download";
+        if (isDownloadFailureForVersion) {
+          lastFailure = null;
         }
+        publishState();
       },
       onBeforeQuitForUpdate() {
         settleInstallHandoffs({ started: true });
@@ -247,12 +314,13 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
           started: false,
           failure: updaterErrorFailure(getErrorMessage(error)),
         });
-        if (preparingUpdateVersion) {
-          preparationError = {
-            version: preparingUpdateVersion,
-            message: getErrorMessage(error),
+        if (downloadingVersion) {
+          lastFailure = {
+            version: downloadingVersion,
+            detail: { action: "download", message: getErrorMessage(error) },
           };
-          preparingUpdateVersion = null;
+          downloadingVersion = null;
+          publishState();
         }
         deps.reportRuntimeError?.(error);
       },
@@ -278,146 +346,104 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     intent: AppUpdateCheckIntent;
   }): Promise<AppUpdateCheckResult> {
     if (!deps.isPackaged()) {
-      return buildCheckResult({
-        currentVersion,
-        hasUpdate: false,
-        readyToInstall: false,
-      });
+      return buildCheckResult({ currentVersion, hasUpdate: false });
     }
 
     return runCheckExclusively(async () => {
+      // 下载或安装进行中不访问更新源，避免清单变化替换掉正在处理的目标版本。
+      const busyTarget = downloadingVersion !== null || isInstalling ? cachedUpdateInfo : null;
+      if (busyTarget) {
+        return buildCheckResult({ currentVersion, hasUpdate: true, info: busyTarget });
+      }
+
       configureRuntime(releaseChannel, intent);
 
       try {
         const result = await deps.runtime.checkForUpdates();
         if (!result || !result.updateInfo) {
-          clearUpdateState();
-          return buildCheckResult({
-            currentVersion,
-            hasUpdate: false,
-            readyToInstall: false,
-          });
+          return buildNoUpdateResult(currentVersion);
         }
 
         if (!result.isUpdateAvailable) {
-          const admittedUpdate = buildPreviouslyAdmittedUpdateResult(
-            currentVersion,
-            result.updateInfo,
+          return (
+            buildPreviouslyAdmittedUpdateResult(currentVersion, result.updateInfo) ??
+            buildNoUpdateResult(currentVersion)
           );
-          if (admittedUpdate) {
-            return admittedUpdate;
-          }
-
-          clearUpdateState();
-          return buildCheckResult({
-            currentVersion,
-            hasUpdate: false,
-            readyToInstall: false,
-          });
         }
 
         const info = result.updateInfo;
-        const latestVersion = info.version;
-        const hasUpdate = latestVersion !== currentVersion;
-
-        if (hasUpdate) {
-          cachedUpdateInfo = info;
-          const errorMessage =
-            preparationError?.version === latestVersion ? preparationError.message : null;
-          if (!errorMessage) {
-            preparationError = null;
-          }
-          return buildCheckResult({
-            currentVersion,
-            hasUpdate: true,
-            readyToInstall: isReadyToInstallVersion(latestVersion),
-            info,
-            errorMessage,
-          });
+        if (info.version === currentVersion) {
+          return buildNoUpdateResult(currentVersion);
         }
 
-        clearUpdateState();
-        return buildCheckResult({
-          currentVersion,
-          hasUpdate: false,
-          readyToInstall: false,
-        });
+        cachedUpdateInfo = info;
+        // 手动检查清掉上次失败，让用户重新开始；自动检查保留失败，错误不会悄悄消失。
+        const isStaleFailure =
+          lastFailure !== null && (lastFailure.version !== info.version || intent === "manual");
+        if (isStaleFailure) {
+          lastFailure = null;
+        }
+        return buildCheckResult({ currentVersion, hasUpdate: true, info });
       } catch (error) {
         deps.reportCheckError?.(error);
         return buildCheckResult({
           currentVersion,
           hasUpdate: false,
-          readyToInstall: false,
           errorMessage: getErrorMessage(error),
         });
       }
     });
   }
 
-  async function downloadAndInstallUpdate(
-    {
-      currentVersion,
-      releaseChannel,
-    }: {
-      currentVersion: string;
-      releaseChannel: AppReleaseChannel;
-    },
-    onBeforeQuit?: () => Promise<void>,
-  ): Promise<AppUpdateInstallResult> {
-    if (!deps.isPackaged()) {
-      return buildNotInstalledResult(
-        currentVersion,
-        "Auto-update is not available in development mode.",
-      );
+  function startDownload(): void {
+    const info = cachedUpdateInfo;
+    const shouldSkipDownload =
+      !info || activeDownload !== null || isInstalling || isReadyToInstallVersion(info.version);
+    if (shouldSkipDownload) {
+      return;
     }
 
-    const check = await checkForAppUpdate({
-      currentVersion,
-      releaseChannel,
-      intent: "manual",
+    const version = info.version;
+    downloadingVersion = version;
+    if (lastFailure?.version === version) {
+      lastFailure = null;
+    }
+    publishState();
+
+    activeDownload = runDownload(version).finally(() => {
+      activeDownload = null;
+      publishState();
     });
-    if (!check.hasUpdate) {
-      return check.errorMessage
-        ? buildFailedInstallResult(currentVersion, updaterErrorFailure(check.errorMessage))
-        : buildNotInstalledResult(currentVersion, "No update available.");
-    }
-
-    return installCachedUpdate(currentVersion, { onBeforeQuit, restart: true });
   }
 
-  async function ensureUpdateDownloaded(
-    readyVersion: string,
-    signal?: AbortSignal,
-  ): Promise<"ready" | "aborted" | "superseded"> {
-    while (!isReadyToInstallVersion(readyVersion)) {
-      if (signal?.aborted) return "aborted";
-      if (cachedUpdateInfo?.version !== readyVersion) return "superseded";
-
-      const attemptedVersion: string = preparingUpdateVersion ?? readyVersion;
-      preparingUpdateVersion ??= readyVersion;
-      try {
-        await deps.runtime.downloadUpdate(attemptedVersion);
-      } catch (error) {
-        if (
-          attemptedVersion !== readyVersion &&
-          cachedUpdateInfo?.version === readyVersion &&
-          !signal?.aborted
-        ) {
-          continue;
-        }
-        throw error;
+  async function runDownload(version: string): Promise<void> {
+    try {
+      await deps.runtime.downloadUpdate(version);
+      if (downloadingVersion === version) {
+        downloadingVersion = null;
+        downloadedUpdateVersion = version;
       }
-
-      // electron-updater can return an older, already-running download. Its
-      // event clears that version, then the next iteration starts the newly
-      // validated release instead of treating the stale artifact as ready.
-      if (attemptedVersion === readyVersion && !isReadyToInstallVersion(readyVersion)) {
-        downloadedUpdateVersion = readyVersion;
-        preparingUpdateVersion = null;
+    } catch (error) {
+      const message = getErrorMessage(error);
+      if (downloadingVersion === version) {
+        downloadingVersion = null;
+        lastFailure = { version, detail: { action: "download", message } };
       }
+      deps.reportDownloadError?.(message);
+    }
+  }
+
+  async function downloadUpdate(): Promise<AppUpdateState> {
+    if (!deps.isPackaged()) {
+      return state;
     }
 
-    return signal?.aborted ? "aborted" : "ready";
+    // 等进行中的检查结束再开始，下载的目标就是最近一次检查确认的版本。
+    await runCheckExclusively(async () => {
+      startDownload();
+    });
+    await activeDownload;
+    return state;
   }
 
   // 需要重启的安装只有在更新器真正开始退出时才算成功：Squirrel.Mac 在 quitAndInstall
@@ -470,61 +496,51 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     };
   }
 
-  async function installCachedUpdate(
-    currentVersion: string,
-    {
-      onBeforeQuit,
-      signal,
-      restart,
-    }: {
-      onBeforeQuit?: () => Promise<void>;
-      signal?: AbortSignal;
-      restart: boolean;
-    },
+  async function installUpdate(
+    { currentVersion }: { currentVersion: string },
+    onBeforeQuit?: () => Promise<void>,
   ): Promise<AppUpdateInstallResult> {
-    if (!cachedUpdateInfo) {
+    if (!deps.isPackaged()) {
       return buildNotInstalledResult(
         currentVersion,
-        "No update available. Check for updates first.",
+        "Auto-update is not available in development mode.",
       );
     }
 
-    const readyVersion = cachedUpdateInfo.version;
-    if (signal?.aborted) {
-      return buildDeferredInstallResult(currentVersion);
+    // 只安装已下载的版本；未下载时不替用户开始下载。
+    const targetVersion = getDownloadedTargetVersion();
+    if (!targetVersion) {
+      return buildNotInstalledResult(currentVersion, "The update has not been downloaded yet.");
     }
 
-    if (isReadyToInstallVersion(readyVersion)) {
-      return performQuitAndInstall({
-        currentVersion,
-        targetVersion: readyVersion,
-        onBeforeQuit,
-        restart,
-      });
+    isInstalling = true;
+    if (lastFailure?.version === targetVersion) {
+      lastFailure = null;
     }
+    publishState();
 
+    let result: AppUpdateInstallResult;
     try {
-      const preparation = await ensureUpdateDownloaded(readyVersion, signal);
-      if (preparation === "aborted") {
-        return buildDeferredInstallResult(currentVersion);
-      }
-      if (preparation === "superseded") {
-        return buildNotInstalledResult(
-          currentVersion,
-          "A newer update was found and will be installed later.",
-        );
-      }
-      return await performQuitAndInstall({
+      result = await performQuitAndInstall({
         currentVersion,
-        targetVersion: readyVersion,
+        targetVersion,
         onBeforeQuit,
-        restart,
+        restart: true,
       });
     } catch (error) {
       const message = getErrorMessage(error);
       deps.reportInstallError?.(message);
-      return buildFailedInstallResult(currentVersion, updaterErrorFailure(message));
+      result = buildFailedInstallResult(currentVersion, updaterErrorFailure(message));
     }
+
+    if (!result.installed) {
+      isInstalling = false;
+      if (result.failure) {
+        lastFailure = { version: targetVersion, detail: { action: "install", ...result.failure } };
+      }
+      publishState();
+    }
+    return result;
   }
 
   async function installUpdateOnQuit({
@@ -536,7 +552,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     releaseChannel: AppReleaseChannel;
     signal: AbortSignal;
   }): Promise<boolean> {
-    if (!deps.isPackaged() || !downloadedUpdateVersion) {
+    if (!deps.installsOnQuit || !deps.isPackaged() || !downloadedUpdateVersion) {
       return false;
     }
 
@@ -549,13 +565,25 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
       return false;
     }
 
-    const result = await installCachedUpdate(currentVersion, { signal, restart: false });
+    // 清单里出现了更新的版本时，不在退出途中替用户下载。
+    const targetVersion = getDownloadedTargetVersion();
+    if (!targetVersion) {
+      return false;
+    }
+
+    const result = await performQuitAndInstall({
+      currentVersion,
+      targetVersion,
+      restart: false,
+    });
     return result.installed;
   }
 
   return {
     checkForAppUpdate,
-    downloadAndInstallUpdate,
+    downloadUpdate,
+    installUpdate,
     installUpdateOnQuit,
+    getState: () => state,
   };
 }

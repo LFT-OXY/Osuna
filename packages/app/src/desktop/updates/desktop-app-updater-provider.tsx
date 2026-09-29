@@ -9,8 +9,10 @@ import {
 } from "@/desktop/updates/desktop-app-updater";
 import {
   checkDesktopAppUpdate,
+  downloadDesktopAppUpdate,
   installDesktopAppUpdate,
   shouldShowDesktopUpdateSection,
+  subscribeToDesktopAppUpdateState,
   type DesktopReleaseChannel,
 } from "@/desktop/updates/desktop-updates";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -28,14 +30,26 @@ export function DesktopAppUpdaterProvider({ children }: { children: ReactNode })
   const isDesktopApp = shouldShowDesktopUpdateSection();
   const { settings, isLoading } = useDesktopSettings();
   const releaseChannel = settings.releaseChannel;
-  const reportInstallError = useStableEvent(useDesktopIpcErrorReporter());
+  const reportError = useStableEvent(useDesktopIpcErrorReporter());
   const [updater] = useState(() =>
     createDesktopAppUpdater({
-      port: { checkDesktopAppUpdate, installDesktopAppUpdate },
+      port: {
+        checkDesktopAppUpdate,
+        downloadDesktopAppUpdate,
+        installDesktopAppUpdate,
+        subscribeToDesktopAppUpdateState,
+      },
       now: () => Date.now(),
-      reportInstallError,
+      reportError,
     }),
   );
+
+  useEffect(() => {
+    if (!isDesktopApp) {
+      return undefined;
+    }
+    return updater.connect();
+  }, [isDesktopApp, updater]);
 
   // 等设置加载完再检查，避免先用默认通道检查一次、再用真实通道检查一次。
   useEffect(() => {

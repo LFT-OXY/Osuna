@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { app, autoUpdater as electronAutoUpdater } from "electron";
+import { app, BrowserWindow, autoUpdater as electronAutoUpdater } from "electron";
 import { UUID } from "builder-util-runtime";
 import log from "electron-log/main";
 import { autoUpdater } from "electron-updater";
@@ -12,6 +12,7 @@ import {
   type AppUpdateInstallResult,
   type AppUpdateRuntime,
   type AppUpdateRuntimeConfiguration,
+  type AppUpdateState,
   type RuntimeUpdateCheckResult,
   type RuntimeUpdateInfo,
 } from "./app-update-service.js";
@@ -31,10 +32,12 @@ export {
   type AppUpdateCheckIntent,
   type AppUpdateCheckResult,
   type AppUpdateInstallResult,
+  type AppUpdateState,
 };
 
 let cachedStagingUserIdPromise: Promise<string> | null = null;
 
+const APP_UPDATE_STATE_EVENT = "paseo:event:app-update-state";
 const UPDATE_CHANNEL_NOT_PUBLISHED_CODE = "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND";
 // Squirrel.Mac 需要从本地代理取回整个更新 zip、解压并校验签名后才会开始退出。
 const INSTALL_HANDOFF_TIMEOUT_MS = 60_000;
@@ -146,7 +149,8 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
   private configured = false;
 
   configure(input: AppUpdateRuntimeConfiguration): void {
-    autoUpdater.autoDownload = true;
+    // 不在用户不知情时下载：只有用户点了「更新」才调用 downloadUpdate。
+    autoUpdater.autoDownload = false;
     autoUpdater.autoRunAppAfterInstall = true;
     // Paseo revalidates the current manifest before explicitly installing on quit.
     // Electron's built-in handler would install an older download without checking
@@ -219,20 +223,36 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
   }
 }
 
+function broadcastAppUpdateState(state: AppUpdateState): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(APP_UPDATE_STATE_EVENT, state);
+    }
+  }
+}
+
 const appUpdateService = createAppUpdateService({
   runtime: new ElectronAppUpdateRuntime(),
   isPackaged: () => app.isPackaged,
   now: () => Date.now(),
   bucket: async () => bucketFromStagingUserId(await getStagingUserId()),
   createInstallHandoffDeadline: () => AbortSignal.timeout(INSTALL_HANDOFF_TIMEOUT_MS),
+  installsOnQuit: shouldInstallAppUpdateOnQuit({
+    platform: process.platform,
+    isAppImage: Boolean(process.env.APPIMAGE),
+  }),
+  publishState: broadcastAppUpdateState,
   reportCheckError: (error) => {
     console.error("[auto-updater] Failed to check for updates:", error);
   },
   reportRuntimeError: (error) => {
     console.error("[auto-updater] Updater event failed:", error);
   },
+  reportDownloadError: (message) => {
+    console.error("[auto-updater] Failed to download update:", message);
+  },
   reportInstallError: (message) => {
-    console.error("[auto-updater] Failed to download/install update:", message);
+    console.error("[auto-updater] Failed to install update:", message);
   },
 });
 
@@ -267,23 +287,18 @@ export async function checkForAppUpdate({
   return result;
 }
 
-export async function downloadAndInstallUpdate(
-  {
-    currentVersion,
-    releaseChannel,
-  }: {
-    currentVersion: string;
-    releaseChannel: AppReleaseChannel;
-  },
-  onBeforeQuit?: () => Promise<void>,
-): Promise<AppUpdateInstallResult> {
-  return appUpdateService.downloadAndInstallUpdate(
-    { currentVersion, releaseChannel },
-    onBeforeQuit,
-  );
+export function downloadAppUpdate(): Promise<AppUpdateState> {
+  return appUpdateService.downloadUpdate();
 }
 
-export async function installAppUpdateOnQuit({
+export function installAppUpdate(
+  { currentVersion }: { currentVersion: string },
+  onBeforeQuit?: () => Promise<void>,
+): Promise<AppUpdateInstallResult> {
+  return appUpdateService.installUpdate({ currentVersion }, onBeforeQuit);
+}
+
+export function installAppUpdateOnQuit({
   currentVersion,
   releaseChannel,
   signal,
@@ -292,14 +307,5 @@ export async function installAppUpdateOnQuit({
   releaseChannel: AppReleaseChannel;
   signal: AbortSignal;
 }): Promise<boolean> {
-  if (
-    !shouldInstallAppUpdateOnQuit({
-      platform: process.platform,
-      isAppImage: Boolean(process.env.APPIMAGE),
-    })
-  ) {
-    return false;
-  }
-
   return appUpdateService.installUpdateOnQuit({ currentVersion, releaseChannel, signal });
 }

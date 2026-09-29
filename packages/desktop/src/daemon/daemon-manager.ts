@@ -21,7 +21,8 @@ import {
 } from "../features/attachments.js";
 import {
   checkForAppUpdate,
-  downloadAndInstallUpdate,
+  downloadAppUpdate,
+  installAppUpdate,
   type AppUpdateCheckIntent,
   type AppReleaseChannel,
 } from "../features/auto-updater.js";
@@ -445,19 +446,17 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
         intent: parseAppUpdateCheckIntent(args),
       });
     },
-    install_app_update: async (args) => {
+    download_app_update: () => downloadAppUpdate(),
+    install_app_update: async () => {
       const currentVersion = resolveDesktopAppVersion();
       let stoppedDaemonForUpdate = false;
-      const result = await downloadAndInstallUpdate(
-        { currentVersion, releaseChannel: await resolveRequestedReleaseChannel(args) },
-        async () => {
-          const before = await resolveDesktopDaemonStatus();
-          const after = await stopDesktopDaemon("app_update");
-          stoppedDaemonForUpdate =
-            (before.status === "running" || before.status === "starting") &&
-            after.status === "stopped";
-        },
-      );
+      const result = await installAppUpdate({ currentVersion }, async () => {
+        const before = await resolveDesktopDaemonStatus();
+        const after = await stopDesktopDaemon("app_update");
+        stoppedDaemonForUpdate =
+          (before.status === "running" || before.status === "starting") &&
+          after.status === "stopped";
+      });
       // 安装失败时应用不会退出，把为更新而停掉的 daemon 拉起来。
       if (!result.installed && stoppedDaemonForUpdate) {
         void startDaemon().catch((error) => {

@@ -1423,24 +1423,25 @@ export const ptBR: TranslationResources = {
         installing: "Instalando atualização do app...",
         upToDate: "O app está atualizado.",
         upToDateWithLastChecked: "Atualizado. Última verificação às {{time}}.",
-        pending: "Avisaremos quando a atualização estiver pronta.",
-        pendingWithLastChecked:
-          "Avisaremos quando a atualização estiver pronta. Última verificação às {{time}}.",
-        pendingWithVersion: "Atualização encontrada: {{version}}. Baixando...",
-        pendingWithVersionAndLastChecked:
-          "Atualização encontrada: {{version}}. Baixando... Última verificação às {{time}}.",
-        availableWithVersion: "Atualização pronta: {{version}}",
-        availableWithVersionAndLastChecked:
-          "Atualização pronta: {{version}}. Última verificação às {{time}}.",
-        available: "Há uma atualização do app pronta para instalar.",
+        available: "Há uma atualização do app disponível.",
         availableWithLastChecked:
+          "Há uma atualização do app disponível. Última verificação às {{time}}.",
+        availableWithVersion: "Atualização disponível: {{version}}",
+        availableWithVersionAndLastChecked:
+          "Atualização disponível: {{version}}. Última verificação às {{time}}.",
+        downloading: "Baixando a atualização do app...",
+        downloaded: "Há uma atualização do app pronta para instalar.",
+        downloadedWithLastChecked:
           "Há uma atualização do app pronta para instalar. Última verificação às {{time}}.",
-        installed: "Atualização do app instalada. Reinicialização obrigatória.",
+        downloadedWithVersion: "Atualização pronta: {{version}}",
+        downloadedWithVersionAndLastChecked:
+          "Atualização pronta: {{version}}. Última verificação às {{time}}.",
         installFailed: "Não foi possível instalar a atualização.",
         failed: "Falha ao atualizar o app.",
         idle: "O status de atualização ainda não foi verificado.",
       },
       installError: "Não foi possível instalar a atualização do app desktop.",
+      downloadError: "Não foi possível baixar a atualização do app desktop.",
       manualDownload: "Baixar em Releases",
       installTimedOut: "O atualizador não reiniciou o app a tempo.",
       callout: {
@@ -1450,12 +1451,21 @@ export const ptBR: TranslationResources = {
         genericError: "Algo deu errado.",
         whatsNew: "Novidades",
         installingAction: "Instalando...",
-        installAndRestart: "Instalar e reiniciar",
-        installingDescription: "Instalando e reiniciando...",
-        versionReady: "{{version}} está pronta para instalar.",
-        newVersionReady: "Uma nova versão está pronta para instalar.",
+        installingDescription: "Preparando para reiniciar...",
         restartWarning:
-          "Atualizar o app vai interromper agentes em execução e fechar sessões de terminal.",
+          "Instalar reinicia o app, interrompe os agentes em execução e fecha as sessões de terminal.",
+        versionAvailable: "{{version}} disponível",
+        newVersionAvailable: "Uma nova versão está disponível",
+        viewChanges: "Ver mudanças",
+        later: "Mais tarde",
+        update: "Atualizar",
+        downloadingTitle: "Baixando atualização",
+        downloadingDescription: "Baixando...",
+        downloadedTitle: "Atualização baixada",
+        versionDownloaded: "{{version}} foi baixada.",
+        newVersionDownloaded: "Uma nova versão foi baixada.",
+        installsOnQuit: "Ela também será instalada automaticamente quando você sair do app.",
+        install: "Instalar",
       },
     },
     settings: {

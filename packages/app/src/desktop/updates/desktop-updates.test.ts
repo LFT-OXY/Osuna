@@ -119,4 +119,43 @@ describe("desktop-updates helpers", () => {
     );
     expect(buildMacAppleSiliconDownloadUrl(null)).toBeNull();
   });
+
+  it("parses the update state the main process broadcasts", async () => {
+    const { parseDesktopAppUpdateState } = await loadModuleForPlatform("web");
+
+    expect(
+      parseDesktopAppUpdateState({
+        revision: 4,
+        phase: "failed",
+        targetVersion: "1.2.4",
+        failure: { action: "install", reason: "handoff-timeout" },
+        installsOnQuit: true,
+      }),
+    ).toEqual({
+      revision: 4,
+      phase: "failed",
+      targetVersion: "1.2.4",
+      failure: { action: "install", reason: "handoff-timeout" },
+      installsOnQuit: true,
+    });
+    expect(
+      parseDesktopAppUpdateState({
+        revision: 5,
+        phase: "failed",
+        targetVersion: "1.2.4",
+        failure: { action: "download", message: "sha512 checksum mismatch" },
+      }),
+    ).toMatchObject({
+      failure: { action: "download", message: "sha512 checksum mismatch" },
+      installsOnQuit: false,
+    });
+  });
+
+  it("rejects an update state without a known phase or revision", async () => {
+    const { parseDesktopAppUpdateState } = await loadModuleForPlatform("web");
+
+    expect(parseDesktopAppUpdateState({ revision: 1, phase: "pending" })).toBeNull();
+    expect(parseDesktopAppUpdateState({ phase: "available" })).toBeNull();
+    expect(parseDesktopAppUpdateState(null)).toBeNull();
+  });
 });

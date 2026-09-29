@@ -11,11 +11,13 @@ import {
   installDesktopRuntime,
   openDesktopAboutSettings,
   openDesktopSettings,
-  expectUpdateBanner,
+  expectUpdateCallout,
+  expectNoUpdateCallout,
+  clickUpdateCalloutAction,
+  releaseUpdateDownload,
+  readInvokedDesktopCommands,
   clickCheckForUpdates,
-  expectPendingUpdateCheckResult,
-  expectReadyUpdateCheckResult,
-  clickInstallUpdate,
+  expectAvailableUpdateCheckResult,
   expectInstallInProgress,
   interceptDaemonManagementConfirmDialog,
   interceptDaemonStopConfirmDialog,
@@ -49,47 +51,147 @@ test.describe("Desktop updates", () => {
     await expect(page.getByTestId("host-page-update-button")).toBeDisabled();
   });
 
-  test("clicking install shows the installing state on the callout", async ({ page }) => {
+  test("a found update downloads and installs only when the user asks", async ({ page }) => {
     await installDesktopRuntime(page, {
       serverId: getServerId(),
       updateAvailable: true,
       latestVersion: "1.2.3",
+      holdDownload: true,
       slowInstall: true,
     });
     await gotoAppShell(page);
 
-    await expectUpdateBanner(page, "1.2.3");
-    await clickInstallUpdate(page);
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
+    const callout = page.getByTestId("update-callout");
+    await expect(callout.getByRole("link", { name: "View changes" })).toBeVisible();
+    await expect(callout.getByRole("button", { name: "Later", exact: true })).toBeVisible();
+    expect(await readInvokedDesktopCommands(page)).not.toContain("download_app_update");
+
+    await clickUpdateCalloutAction(page, "Update");
+    await expect(callout).toContainText("Downloading update");
+    await expect(page.getByTestId("update-callout-actions")).toHaveCount(0);
+    await releaseUpdateDownload(page);
+
+    await expectUpdateCallout(page, { title: "Update downloaded", version: "1.2.3" });
+    await expect(callout).toContainText(
+      "Installing restarts the app, stops running agents, and closes terminal sessions.",
+    );
+    await expect(callout).toContainText(
+      "It will also be installed automatically when you quit the app.",
+    );
+    await clickUpdateCalloutAction(page, "Install");
+    await expect(callout).toContainText("Installing update");
+    await expect(callout).toContainText("Preparing to restart...");
     await expectInstallInProgress(page);
+    await expect(page.getByTestId("update-callout-dismiss")).toHaveCount(0);
   });
 
-  test("manual check reports a found update while it downloads", async ({ page }) => {
+  test("Later and the close button hide the update only for this run", async ({ page }) => {
     await installDesktopRuntime(page, {
       serverId: getServerId(),
       updateAvailable: true,
       latestVersion: "1.2.3",
-      updateReadyToInstall: false,
     });
     await gotoAppShell(page);
-    await openDesktopAboutSettings(page);
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
 
-    await clickCheckForUpdates(page);
+    await clickUpdateCalloutAction(page, "Later");
+    await expectNoUpdateCallout(page);
 
-    await expectPendingUpdateCheckResult(page, "1.2.3");
+    await page.reload();
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
+
+    await page.getByTestId("update-callout-dismiss").click();
+    await expectNoUpdateCallout(page);
   });
 
-  test("manual update remains available after the automatic rollout recheck", async ({ page }) => {
+  test("a download hidden mid-way shows up again once it finishes", async ({ page }) => {
     await installDesktopRuntime(page, {
       serverId: getServerId(),
+      updateAvailable: true,
       latestVersion: "1.2.3",
-      manualUpdateBypassesRollout: true,
+      holdDownload: true,
+    });
+    await gotoAppShell(page);
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
+
+    await clickUpdateCalloutAction(page, "Update");
+    await expect(page.getByTestId("update-callout")).toContainText("Downloading update");
+    await page.getByTestId("update-callout-dismiss").click();
+    await expectNoUpdateCallout(page);
+    await releaseUpdateDownload(page);
+
+    await expectUpdateCallout(page, { title: "Update downloaded", version: "1.2.3" });
+  });
+
+  test("where the platform skips install on quit, the card does not promise it", async ({
+    page,
+  }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
+      installsOnQuit: false,
+    });
+    await gotoAppShell(page);
+    await clickUpdateCalloutAction(page, "Update");
+
+    await expectUpdateCallout(page, { title: "Update downloaded", version: "1.2.3" });
+    await expect(page.getByTestId("update-callout")).not.toContainText("when you quit the app");
+  });
+
+  test("a failed download shows the reason and a retry", async ({ page }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
+      failUpdateAction: "download",
+    });
+    await gotoAppShell(page);
+
+    await clickUpdateCalloutAction(page, "Update");
+
+    const callout = page.getByTestId("update-callout");
+    await expect(callout).toContainText("Update failed");
+    await expect(callout).toContainText("sha512 checksum mismatch");
+    await expect(callout.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+  });
+
+  test("a failed install shows the reason and the Releases download", async ({ page }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
+      failUpdateAction: "install",
+    });
+    await gotoAppShell(page);
+    await clickUpdateCalloutAction(page, "Update");
+    await expectUpdateCallout(page, { title: "Update downloaded", version: "1.2.3" });
+
+    await clickUpdateCalloutAction(page, "Install");
+
+    const callout = page.getByTestId("update-callout");
+    await expect(callout).toContainText("Update failed");
+    await expect(callout).toContainText("Code signature did not pass validation");
+    await expect(
+      callout.getByRole("button", { name: "Download from Releases", exact: true }),
+    ).toBeVisible();
+    await expect(callout.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+  });
+
+  test("manual check in settings reports the found update", async ({ page }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
     });
     await gotoAppShell(page);
     await openDesktopAboutSettings(page);
 
     await clickCheckForUpdates(page);
-    await expectPendingUpdateCheckResult(page, "1.2.3");
-    await expectReadyUpdateCheckResult(page, "1.2.3");
+
+    await expectAvailableUpdateCheckResult(page, "1.2.3");
+    expect(await readInvokedDesktopCommands(page)).not.toContain("download_app_update");
   });
 });
 

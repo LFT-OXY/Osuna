@@ -3,10 +3,18 @@ import { i18n } from "@/i18n/i18next";
 
 export type UpdateCalloutBody =
   | { kind: "available"; versionLabel: string | null }
+  | { kind: "downloading" }
+  | { kind: "downloaded"; versionLabel: string | null; installsOnQuit: boolean }
   | { kind: "installing" }
   | { kind: "error"; message: string };
 
-export type UpdateCalloutActionRole = "changelog" | "install" | "retry" | "download";
+export type UpdateCalloutActionRole =
+  | "later"
+  | "update"
+  | "install"
+  | "changelog"
+  | "retry"
+  | "manualDownload";
 
 export interface UpdateCalloutActionDescriptor {
   role: UpdateCalloutActionRole;
@@ -17,113 +25,146 @@ export interface UpdateCalloutActionDescriptor {
 
 export interface UpdateCalloutDescriptor {
   id: "desktop-update";
-  dismissalKey: string;
   priority: number;
   title: string;
   body: UpdateCalloutBody;
   showGiftIcon: boolean;
   variant: "default" | "error";
   actions: UpdateCalloutActionDescriptor[];
+  dismissible: boolean;
   testID: "update-callout";
 }
-
-const CALLOUT_STATUSES: ReadonlySet<DesktopAppUpdateStatus> = new Set([
-  "available",
-  "installing",
-  "error",
-  "install-failed",
-]);
 
 export interface ResolveUpdateCalloutInput {
   isDesktopApp: boolean;
   status: DesktopAppUpdateStatus;
-  isInstalling: boolean;
-  availableUpdate: { latestVersion?: string | null } | null;
+  targetVersion: string | null;
+  installsOnQuit: boolean;
   errorMessage: string | null;
+  isHidden: boolean;
 }
 
-function formatVersionLabel(latestVersion: string | null | undefined): string | null {
-  if (!latestVersion) return null;
-  return `v${latestVersion.replace(/^v/i, "")}`;
+type UpdateCalloutContent = Pick<
+  UpdateCalloutDescriptor,
+  "title" | "body" | "showGiftIcon" | "variant" | "actions" | "dismissible"
+>;
+
+function formatVersionLabel(version: string | null): string | null {
+  if (!version) return null;
+  return `v${version.replace(/^v/i, "")}`;
 }
 
-function resolveCalloutActions(input: {
-  isInstallFailed: boolean;
-  isError: boolean;
-  isInstalling: boolean;
-}): UpdateCalloutActionDescriptor[] {
-  if (input.isInstallFailed) {
-    return [
-      { role: "install", label: i18n.t("common.actions.retry") },
-      { role: "download", label: i18n.t("desktop.updates.manualDownload"), variant: "primary" },
-    ];
-  }
-  const changelog: UpdateCalloutActionDescriptor = {
-    role: "changelog",
-    label: i18n.t("desktop.updates.callout.whatsNew"),
+function laterAction(): UpdateCalloutActionDescriptor {
+  return { role: "later", label: i18n.t("desktop.updates.callout.later") };
+}
+
+function resolveContent(input: ResolveUpdateCalloutInput): UpdateCalloutContent | null {
+  const versionLabel = formatVersionLabel(input.targetVersion);
+  const errorBody: UpdateCalloutBody = {
+    kind: "error",
+    message: input.errorMessage ?? i18n.t("desktop.updates.callout.genericError"),
   };
-  if (input.isError) {
-    return [
-      changelog,
-      { role: "retry", label: i18n.t("common.actions.retry"), variant: "primary" },
-    ];
+
+  switch (input.status) {
+    case "available":
+      return {
+        title: i18n.t("desktop.updates.callout.availableTitle"),
+        body: { kind: "available", versionLabel },
+        showGiftIcon: true,
+        variant: "default",
+        actions: [
+          laterAction(),
+          { role: "update", label: i18n.t("desktop.updates.callout.update"), variant: "primary" },
+        ],
+        dismissible: true,
+      };
+    case "downloading":
+      return {
+        title: i18n.t("desktop.updates.callout.downloadingTitle"),
+        body: { kind: "downloading" },
+        showGiftIcon: false,
+        variant: "default",
+        actions: [],
+        dismissible: true,
+      };
+    case "downloaded":
+      return {
+        title: i18n.t("desktop.updates.callout.downloadedTitle"),
+        body: { kind: "downloaded", versionLabel, installsOnQuit: input.installsOnQuit },
+        showGiftIcon: true,
+        variant: "default",
+        actions: [
+          laterAction(),
+          { role: "install", label: i18n.t("desktop.updates.callout.install"), variant: "primary" },
+        ],
+        dismissible: true,
+      };
+    case "installing":
+      return {
+        title: i18n.t("desktop.updates.callout.installingTitle"),
+        body: { kind: "installing" },
+        showGiftIcon: false,
+        variant: "default",
+        actions: [
+          {
+            role: "install",
+            label: i18n.t("desktop.updates.callout.installingAction"),
+            variant: "primary",
+            disabled: true,
+          },
+        ],
+        dismissible: false,
+      };
+    case "install-failed":
+      return {
+        title: i18n.t("desktop.updates.callout.failedTitle"),
+        body: errorBody,
+        showGiftIcon: false,
+        variant: "error",
+        actions: [
+          { role: "install", label: i18n.t("common.actions.retry") },
+          {
+            role: "manualDownload",
+            label: i18n.t("desktop.updates.manualDownload"),
+            variant: "primary",
+          },
+        ],
+        dismissible: true,
+      };
+    case "error":
+      return {
+        title: i18n.t("desktop.updates.callout.failedTitle"),
+        body: errorBody,
+        showGiftIcon: false,
+        variant: "error",
+        actions: [
+          { role: "changelog", label: i18n.t("desktop.updates.callout.whatsNew") },
+          { role: "retry", label: i18n.t("common.actions.retry"), variant: "primary" },
+        ],
+        dismissible: true,
+      };
+    case "idle":
+    case "checking":
+    case "up-to-date":
+      return null;
   }
-  return [
-    changelog,
-    {
-      role: "install",
-      label: input.isInstalling
-        ? i18n.t("desktop.updates.callout.installingAction")
-        : i18n.t("desktop.updates.callout.installAndRestart"),
-      variant: "primary",
-      disabled: input.isInstalling,
-    },
-  ];
 }
 
 export function resolveUpdateCalloutDescriptor(
   input: ResolveUpdateCalloutInput,
 ): UpdateCalloutDescriptor | null {
   if (!input.isDesktopApp) return null;
-  if (!CALLOUT_STATUSES.has(input.status)) {
-    return null;
-  }
 
-  const isInstallFailed = input.status === "install-failed";
-  const isError = input.status === "error" || isInstallFailed;
-  const isInstalling = input.isInstalling;
-  const isAvailable = !isInstalling && !isError;
-
-  const latestVersion = input.availableUpdate?.latestVersion ?? null;
-  const dismissalKey = `desktop-update:${input.status}:${latestVersion ?? "unknown"}`;
-
-  let title: string;
-  let body: UpdateCalloutBody;
-  if (isInstalling) {
-    title = i18n.t("desktop.updates.callout.installingTitle");
-    body = { kind: "installing" };
-  } else if (isError) {
-    title = i18n.t("desktop.updates.callout.failedTitle");
-    body = {
-      kind: "error",
-      message: input.errorMessage ?? i18n.t("desktop.updates.callout.genericError"),
-    };
-  } else {
-    title = i18n.t("desktop.updates.callout.availableTitle");
-    body = { kind: "available", versionLabel: formatVersionLabel(latestVersion) };
-  }
-
-  const actions = resolveCalloutActions({ isInstallFailed, isError, isInstalling });
+  const content = resolveContent(input);
+  if (!content) return null;
+  // 安装中不可关闭：即使之前点过「稍后」，从设置页发起的安装也要在卡片上看得到。
+  const isHiddenByUser = input.isHidden && content.dismissible;
+  if (isHiddenByUser) return null;
 
   return {
     id: "desktop-update",
-    dismissalKey,
     priority: 200,
-    title,
-    body,
-    showGiftIcon: isAvailable,
-    variant: isError ? "error" : "default",
-    actions,
+    ...content,
     testID: "update-callout",
   };
 }

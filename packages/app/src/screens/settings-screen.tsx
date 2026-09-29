@@ -739,13 +739,13 @@ function DesktopAppUpdateRow() {
     isDesktopApp,
     status,
     statusText,
-    availableUpdate,
+    targetVersion,
     errorMessage,
-    isChecking,
-    isInstalling,
     checkForUpdates,
     installUpdate,
   } = useDesktopAppUpdater();
+  const isChecking = status === "checking";
+  const isInstalling = status === "installing";
 
   const handleCheckForUpdates = useCallback(() => {
     if (!isDesktopApp) {
@@ -795,8 +795,8 @@ function DesktopAppUpdateRow() {
       });
   }, [installUpdate, isDesktopApp, t]);
 
-  const isUpdateReady = availableUpdate?.readyToInstall === true;
-  const readyUpdateVersion = isUpdateReady ? availableUpdate?.latestVersion : null;
+  const isUpdateReady = status === "downloaded";
+  const readyUpdateVersion = isUpdateReady ? targetVersion : null;
 
   if (!isDesktopApp) {
     return null;

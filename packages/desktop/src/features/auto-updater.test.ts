@@ -26,6 +26,9 @@ const { autoUpdaterMock } = vi.hoisted(() => {
 });
 
 vi.mock("electron", () => ({
+  BrowserWindow: {
+    getAllWindows: vi.fn(() => []),
+  },
   app: {
     getPath: vi.fn(),
     isPackaged: true,
@@ -75,6 +78,7 @@ describe("checkForAppUpdate", () => {
       body: null,
       date: null,
       errorMessage: null,
+      state: expect.objectContaining({ phase: "none", targetVersion: null }),
     });
     expect(consoleError).not.toHaveBeenCalledWith(
       "[auto-updater] Failed to check for updates:",

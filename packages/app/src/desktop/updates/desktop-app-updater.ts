@@ -1,8 +1,9 @@
 import type {
   DesktopAppUpdateCheckResult,
   DesktopAppUpdateCheckIntent,
-  DesktopAppUpdateInstallFailure,
+  DesktopAppUpdateFailure,
   DesktopAppUpdateInstallResult,
+  DesktopAppUpdateState,
   DesktopReleaseChannel,
 } from "@/desktop/updates/desktop-updates";
 import { i18n } from "@/i18n/i18next";
@@ -10,25 +11,24 @@ import { i18n } from "@/i18n/i18next";
 export type DesktopAppUpdateStatus =
   | "idle"
   | "checking"
-  | "pending"
   | "up-to-date"
   | "available"
+  | "downloading"
+  | "downloaded"
   | "installing"
-  | "installed"
   | "install-failed"
   | "error";
 
-export const PENDING_RECHECK_MS = 10_000;
 export const AUTOMATIC_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 export interface DesktopAppUpdaterSnapshot {
   status: DesktopAppUpdateStatus;
-  availableUpdate: DesktopAppUpdateCheckResult | null;
+  targetVersion: string | null;
+  installsOnQuit: boolean;
   errorMessage: string | null;
-  installMessage: string | null;
   lastCheckedAt: number | null;
-  isChecking: boolean;
-  isInstalling: boolean;
+  // 本次运行内被「稍后」或 × 收起，只存在内存里，按窗口生效。
+  isHidden: boolean;
 }
 
 export interface DesktopAppUpdaterPort {
@@ -36,9 +36,9 @@ export interface DesktopAppUpdaterPort {
     releaseChannel: DesktopReleaseChannel;
     intent: DesktopAppUpdateCheckIntent;
   }): Promise<DesktopAppUpdateCheckResult>;
-  installDesktopAppUpdate(input: {
-    releaseChannel: DesktopReleaseChannel;
-  }): Promise<DesktopAppUpdateInstallResult>;
+  downloadDesktopAppUpdate(): Promise<DesktopAppUpdateState>;
+  installDesktopAppUpdate(): Promise<DesktopAppUpdateInstallResult>;
+  subscribeToDesktopAppUpdateState(listener: (state: DesktopAppUpdateState) => void): () => void;
 }
 
 export interface DesktopAppUpdaterErrorReport {
@@ -50,51 +50,100 @@ export interface DesktopAppUpdaterErrorReport {
 export interface DesktopAppUpdaterDeps {
   port: DesktopAppUpdaterPort;
   now(): number;
-  reportInstallError?(report: DesktopAppUpdaterErrorReport): void;
+  reportError?(report: DesktopAppUpdaterErrorReport): void;
 }
 
 export interface DesktopAppUpdater {
   getSnapshot(): DesktopAppUpdaterSnapshot;
   subscribe(listener: () => void): () => void;
+  // 订阅主进程推送的更新阶段，返回取消订阅函数。
+  connect(): () => void;
   checkForUpdates(options?: {
     releaseChannel: DesktopReleaseChannel;
     intent?: DesktopAppUpdateCheckIntent;
     silent?: boolean;
   }): Promise<DesktopAppUpdateCheckResult | null>;
-  installUpdate(options: {
-    releaseChannel: DesktopReleaseChannel;
-  }): Promise<DesktopAppUpdateInstallResult | null>;
+  downloadUpdate(): Promise<DesktopAppUpdateState | null>;
+  installUpdate(): Promise<DesktopAppUpdateInstallResult | null>;
+  hide(): void;
 }
 
 interface InternalState {
-  status: DesktopAppUpdateStatus;
-  availableUpdate: DesktopAppUpdateCheckResult | null;
-  errorMessage: string | null;
-  installMessage: string | null;
+  // 主进程快照的镜像，更新阶段以它为准。
+  mirror: DesktopAppUpdateState;
+  check: "idle" | "checking" | "checked";
+  // 手动检查失败；只在还没有可操作的更新时顶替阶段，不遮住已下载的安装入口。
+  checkError: string | null;
+  // 下载或安装命令本身抛错；下一次动作或非静默检查时清掉。
+  actionError: string | null;
+  // 命令已发出、主进程快照还没跟上时，先显示对应阶段。
+  pendingAction: "download" | "install" | null;
   lastCheckedAt: number | null;
-  isInstalling: boolean;
+  isHidden: boolean;
   requestVersion: number;
 }
 
+const INITIAL_MIRROR: DesktopAppUpdateState = {
+  revision: 0,
+  phase: "none",
+  targetVersion: null,
+  failure: null,
+  installsOnQuit: false,
+};
+
 const INITIAL_STATE: InternalState = {
-  status: "idle",
-  availableUpdate: null,
-  errorMessage: null,
-  installMessage: null,
+  mirror: INITIAL_MIRROR,
+  check: "idle",
+  checkError: null,
+  actionError: null,
+  pendingAction: null,
   lastCheckedAt: null,
-  isInstalling: false,
+  isHidden: false,
   requestVersion: 0,
 };
 
+function deriveStatus(state: InternalState): DesktopAppUpdateStatus {
+  if (state.check === "checking") return "checking";
+  if (state.actionError !== null) return "error";
+  if (state.pendingAction === "install") return "installing";
+
+  const { phase, failure } = state.mirror;
+  // 下载一旦开始，检查失败不再顶替阶段，已下载的「安装」入口保持可见。
+  const hasStartedDownload = phase !== "none" && phase !== "available";
+  if (state.checkError !== null && !hasStartedDownload) return "error";
+  switch (phase) {
+    case "available":
+      return state.pendingAction === "download" ? "downloading" : "available";
+    case "downloading":
+    case "downloaded":
+    case "installing":
+      return phase;
+    case "failed":
+      return failure?.action === "install" ? "install-failed" : "error";
+    case "none":
+      return state.check === "checked" ? "up-to-date" : "idle";
+  }
+}
+
+function describeFailure(failure: DesktopAppUpdateFailure): string {
+  if (failure.action === "install" && failure.reason === "handoff-timeout") {
+    return i18n.t("desktop.updates.installTimedOut");
+  }
+  return failure.message || i18n.t("desktop.updates.callout.genericError");
+}
+
 function buildSnapshot(state: InternalState): DesktopAppUpdaterSnapshot {
+  const { mirror } = state;
+  const mirrorError = mirror.phase === "failed" && mirror.failure ? mirror.failure : null;
+  const mirrorErrorMessage = mirrorError ? describeFailure(mirrorError) : null;
+  const errorMessage = state.actionError ?? state.checkError ?? mirrorErrorMessage;
   return {
-    status: state.status,
-    availableUpdate: state.availableUpdate,
-    errorMessage: state.errorMessage,
-    installMessage: state.installMessage,
+    status: deriveStatus(state),
+    targetVersion: mirror.targetVersion,
+    installsOnQuit: mirror.installsOnQuit,
+    errorMessage,
     lastCheckedAt: state.lastCheckedAt,
-    isChecking: state.status === "checking",
-    isInstalling: state.status === "installing" || state.isInstalling,
+    isHidden: state.isHidden,
   };
 }
 
@@ -107,6 +156,7 @@ function getErrorMessage(error: unknown): string {
 
 const FIXED_STATUS_TEXT_KEYS = {
   checking: "desktop.updates.status.checking",
+  downloading: "desktop.updates.status.downloading",
   installing: "desktop.updates.status.installing",
   "install-failed": "desktop.updates.status.installFailed",
   error: "desktop.updates.status.failed",
@@ -118,37 +168,29 @@ function isFixedTextStatus(
   return status in FIXED_STATUS_TEXT_KEYS;
 }
 
-function describeInstallFailure(failure: DesktopAppUpdateInstallFailure): string {
-  return failure.reason === "handoff-timeout"
-    ? i18n.t("desktop.updates.installTimedOut")
-    : failure.message || i18n.t("desktop.updates.callout.genericError");
-}
-
-// 后台静默检查只刷新可用版本，不抹掉安装失败的原因和手动下载入口。
-function keepsInstallFailure(input: {
-  silent: boolean;
-  status: DesktopAppUpdateStatus;
-  result: DesktopAppUpdateCheckResult;
-}): boolean {
-  return input.silent && input.status === "install-failed" && input.result.readyToInstall;
-}
+const VERSIONED_STATUS_TEXT_KEYS = {
+  available: {
+    plain: "desktop.updates.status.available",
+    withLastChecked: "desktop.updates.status.availableWithLastChecked",
+    withVersion: "desktop.updates.status.availableWithVersion",
+    withVersionAndLastChecked: "desktop.updates.status.availableWithVersionAndLastChecked",
+  },
+  downloaded: {
+    plain: "desktop.updates.status.downloaded",
+    withLastChecked: "desktop.updates.status.downloadedWithLastChecked",
+    withVersion: "desktop.updates.status.downloadedWithVersion",
+    withVersionAndLastChecked: "desktop.updates.status.downloadedWithVersionAndLastChecked",
+  },
+} as const;
 
 export function formatStatusText(input: {
   status: DesktopAppUpdateStatus;
-  availableUpdate: DesktopAppUpdateCheckResult | null;
-  installMessage: string | null;
+  targetVersion: string | null;
   lastCheckedAt: number | null;
   formatVersion: (version: string | null | undefined) => string;
   formatLastCheckedAt: (timestamp: number) => string;
 }): string {
-  const {
-    status,
-    availableUpdate,
-    installMessage,
-    lastCheckedAt,
-    formatVersion,
-    formatLastCheckedAt,
-  } = input;
+  const { status, targetVersion, lastCheckedAt, formatVersion, formatLastCheckedAt } = input;
 
   if (isFixedTextStatus(status)) {
     return i18n.t(FIXED_STATUS_TEXT_KEYS[status]);
@@ -163,50 +205,16 @@ export function formatStatusText(input: {
     return i18n.t("desktop.updates.status.upToDate");
   }
 
-  if (status === "pending") {
-    if (availableUpdate?.latestVersion) {
-      return i18n.t(
-        lastCheckedAt != null
-          ? "desktop.updates.status.pendingWithVersionAndLastChecked"
-          : "desktop.updates.status.pendingWithVersion",
-        {
-          version: formatVersion(availableUpdate.latestVersion),
-          time: lastCheckedAt != null ? formatLastCheckedAt(lastCheckedAt) : undefined,
-        },
-      );
-    }
-
-    if (lastCheckedAt != null) {
-      return i18n.t("desktop.updates.status.pendingWithLastChecked", {
-        time: formatLastCheckedAt(lastCheckedAt),
+  if (status === "available" || status === "downloaded") {
+    const keys = VERSIONED_STATUS_TEXT_KEYS[status];
+    const time = lastCheckedAt != null ? formatLastCheckedAt(lastCheckedAt) : undefined;
+    if (targetVersion) {
+      return i18n.t(time ? keys.withVersionAndLastChecked : keys.withVersion, {
+        version: formatVersion(targetVersion),
+        time,
       });
     }
-    return i18n.t("desktop.updates.status.pending");
-  }
-
-  if (status === "available") {
-    if (availableUpdate?.latestVersion) {
-      return i18n.t(
-        lastCheckedAt != null
-          ? "desktop.updates.status.availableWithVersionAndLastChecked"
-          : "desktop.updates.status.availableWithVersion",
-        {
-          version: formatVersion(availableUpdate.latestVersion),
-          time: lastCheckedAt != null ? formatLastCheckedAt(lastCheckedAt) : undefined,
-        },
-      );
-    }
-
-    if (lastCheckedAt != null) {
-      return i18n.t("desktop.updates.status.availableWithLastChecked", {
-        time: formatLastCheckedAt(lastCheckedAt),
-      });
-    }
-    return i18n.t("desktop.updates.status.available");
-  }
-
-  if (status === "installed") {
-    return installMessage ?? i18n.t("desktop.updates.status.installed");
+    return time ? i18n.t(keys.withLastChecked, { time }) : i18n.t(keys.plain);
   }
 
   return i18n.t("desktop.updates.status.idle");
@@ -225,6 +233,27 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     }
   }
 
+  // 按 revision 丢弃过期快照：命令返回值和推送事件可能乱序到达。
+  function withMirror(base: InternalState, next: DesktopAppUpdateState): InternalState {
+    if (next.revision < base.mirror.revision) {
+      return base;
+    }
+    const entersDownloaded = next.phase === "downloaded" && base.mirror.phase !== "downloaded";
+    return {
+      ...base,
+      mirror: next,
+      // 进入「已下载」时重新出现，不论之前在哪个阶段被收起。
+      isHidden: entersDownloaded ? false : base.isHidden,
+    };
+  }
+
+  function applyMirror(next: DesktopAppUpdateState): void {
+    const updated = withMirror(state, next);
+    if (updated !== state) {
+      commit(updated);
+    }
+  }
+
   async function checkForUpdates(options?: {
     releaseChannel: DesktopReleaseChannel;
     intent?: DesktopAppUpdateCheckIntent;
@@ -234,7 +263,7 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
       return null;
     }
     const { releaseChannel, intent = "manual", silent = false } = options;
-    if (silent && state.status === "checking") {
+    if (silent && state.check === "checking") {
       return null;
     }
 
@@ -243,62 +272,32 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     commit({
       ...state,
       requestVersion,
-      status: silent ? state.status : "checking",
-      errorMessage: silent ? state.errorMessage : null,
+      check: silent ? state.check : "checking",
+      checkError: silent ? state.checkError : null,
+      actionError: silent ? state.actionError : null,
     });
 
     try {
       const result = await deps.port.checkDesktopAppUpdate({ releaseChannel, intent });
       if (requestVersion !== state.requestVersion) {
+        applyMirror(result.state);
         return result;
       }
 
-      const nextLastCheckedAt = intent === "manual" ? deps.now() : state.lastCheckedAt;
-      if (result.errorMessage) {
-        if (silent && !result.hasUpdate) {
-          console.warn("[DesktopUpdater] Silent update check failed", result.errorMessage);
-          return result;
-        }
-
-        commit({
-          ...state,
-          status: "error",
-          availableUpdate: null,
-          errorMessage: result.errorMessage,
-          installMessage: null,
-          lastCheckedAt: nextLastCheckedAt,
-        });
+      const lastCheckedAt = intent === "manual" ? deps.now() : state.lastCheckedAt;
+      if (result.errorMessage && silent) {
+        console.warn("[DesktopUpdater] Silent update check failed", result.errorMessage);
+        applyMirror(result.state);
         return result;
-      }
-
-      if (keepsInstallFailure({ silent, status: state.status, result })) {
-        commit({ ...state, availableUpdate: result });
-        return result;
-      }
-
-      let nextStatus: DesktopAppUpdateStatus;
-      let nextAvailable: DesktopAppUpdateCheckResult | null;
-
-      if (result.readyToInstall) {
-        nextStatus = "available";
-        nextAvailable = result;
-      } else if (result.hasUpdate) {
-        nextStatus = "pending";
-        nextAvailable = result;
-      } else {
-        nextStatus = "up-to-date";
-        nextAvailable = null;
       }
 
       commit({
-        ...state,
-        status: nextStatus,
-        availableUpdate: nextAvailable,
-        errorMessage: null,
-        installMessage: null,
-        lastCheckedAt: nextLastCheckedAt,
+        ...withMirror(state, result.state),
+        check: "checked",
+        checkError: result.errorMessage,
+        actionError: null,
+        lastCheckedAt,
       });
-
       return result;
     } catch (error) {
       if (requestVersion !== state.requestVersion) {
@@ -311,8 +310,8 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
       } else {
         commit({
           ...state,
-          status: "error",
-          errorMessage: message,
+          check: "checked",
+          checkError: message,
           lastCheckedAt: intent === "manual" ? deps.now() : state.lastCheckedAt,
         });
       }
@@ -320,55 +319,39 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     }
   }
 
-  async function installUpdate(options: {
-    releaseChannel: DesktopReleaseChannel;
-  }): Promise<DesktopAppUpdateInstallResult | null> {
-    commit({
-      ...state,
-      status: "installing",
-      errorMessage: null,
-      isInstalling: true,
-    });
+  async function downloadUpdate(): Promise<DesktopAppUpdateState | null> {
+    commit({ ...state, pendingAction: "download", actionError: null });
 
     try {
-      const result = await deps.port.installDesktopAppUpdate({
-        releaseChannel: options.releaseChannel,
+      const next = await deps.port.downloadDesktopAppUpdate();
+      commit({ ...withMirror(state, next), pendingAction: null });
+      return next;
+    } catch (error) {
+      deps.reportError?.({
+        error,
+        message: i18n.t("desktop.updates.downloadError"),
+        logLabel: "[DesktopUpdater] Failed to download app update",
       });
-      const nextLastCheckedAt = deps.now();
-      if (result.failure) {
-        // 保留 availableUpdate，用户仍可重试安装或改为手动下载。
-        commit({
-          ...state,
-          status: "install-failed",
-          errorMessage: describeInstallFailure(result.failure),
-          installMessage: null,
-          lastCheckedAt: nextLastCheckedAt,
-          isInstalling: false,
-        });
-        return result;
-      }
-      commit({
-        ...state,
-        status: result.installed ? "installed" : "up-to-date",
-        availableUpdate: null,
-        installMessage: result.message,
-        lastCheckedAt: nextLastCheckedAt,
-        isInstalling: false,
-      });
+      commit({ ...state, pendingAction: null, actionError: getErrorMessage(error) });
+      return null;
+    }
+  }
+
+  async function installUpdate(): Promise<DesktopAppUpdateInstallResult | null> {
+    commit({ ...state, pendingAction: "install", actionError: null });
+
+    try {
+      // 安装结果（含失败原因）随主进程快照推送过来，这里只收尾本地的等待状态。
+      const result = await deps.port.installDesktopAppUpdate();
+      commit({ ...state, pendingAction: null });
       return result;
     } catch (error) {
-      const message = getErrorMessage(error);
-      deps.reportInstallError?.({
+      deps.reportError?.({
         error,
         message: i18n.t("desktop.updates.installError"),
         logLabel: "[DesktopUpdater] Failed to install app update",
       });
-      commit({
-        ...state,
-        status: "error",
-        errorMessage: message,
-        isInstalling: false,
-      });
+      commit({ ...state, pendingAction: null, actionError: getErrorMessage(error) });
       return null;
     }
   }
@@ -381,8 +364,15 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         listeners.delete(listener);
       };
     },
+    connect: () => deps.port.subscribeToDesktopAppUpdateState(applyMirror),
     checkForUpdates,
+    downloadUpdate,
     installUpdate,
+    hide() {
+      if (!state.isHidden) {
+        commit({ ...state, isHidden: true });
+      }
+    },
   };
 }
 
@@ -407,27 +397,7 @@ export function startAutomaticUpdateChecks(input: {
   const check = () => {
     void updater.checkForUpdates({ releaseChannel, intent: "automatic", silent: true });
   };
-  let stopPendingRecheck: (() => void) | null = null;
 
-  const syncPendingRecheck = () => {
-    const isPending = updater.getSnapshot().status === "pending";
-    if (isPending && stopPendingRecheck === null) {
-      stopPendingRecheck = timer.every(PENDING_RECHECK_MS, check);
-    } else if (!isPending && stopPendingRecheck !== null) {
-      stopPendingRecheck();
-      stopPendingRecheck = null;
-    }
-  };
-
-  const unsubscribe = updater.subscribe(syncPendingRecheck);
-  syncPendingRecheck();
   check();
-  const stopAutomaticCheck = timer.every(AUTOMATIC_CHECK_INTERVAL_MS, check);
-
-  return () => {
-    stopAutomaticCheck();
-    unsubscribe();
-    stopPendingRecheck?.();
-    stopPendingRecheck = null;
-  };
+  return timer.every(AUTOMATIC_CHECK_INTERVAL_MS, check);
 }

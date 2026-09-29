@@ -27,22 +27,26 @@ Validate at the edges: the socket (protocol schemas), AsyncStorage / IndexedDB /
 
 Platform capability is also a type boundary: `constants/platform.ts` exports `isWeb`, `isNative`, `isDev`, `getIsElectron()`. Inside an `isWeb` block, DOM types are fine; outside it, casting a RN ref to `HTMLElement` is the red flag reviewers look for.
 
-## Scenario: desktop app update install (`install_app_update`)
+## Scenario: desktop app update (`check_app_update` / `download_app_update` / `install_app_update`)
 
-1. **Scope.** Cross-layer IPC contract between `packages/desktop/src/features/app-update-service.ts` (producer) and `packages/app/src/desktop/updates/` (consumer). Changing either side means changing both.
-2. **Signatures.** Renderer: `installDesktopAppUpdate({ releaseChannel }) → Promise<DesktopAppUpdateInstallResult>` (`desktop-updates.ts`). Main: `downloadAndInstallUpdate(input, onBeforeQuit)`; the service takes `createInstallHandoffDeadline(): AbortSignal` (60 s in `auto-updater.ts`) and the runtime reports `onBeforeQuitForUpdate()`.
-3. **Contract.** A discriminated union, mirrored on both sides:
+1. **Scope.** Cross-layer IPC contract between `packages/desktop/src/features/app-update-service.ts` (producer) and `packages/app/src/desktop/updates/` (consumer). Changing either side means changing both. Main and renderer ship in one desktop build, so no `COMPAT` shim.
+2. **Signatures.** Renderer (`desktop-updates.ts`): `checkDesktopAppUpdate({ releaseChannel, intent }) → { …, state }`, `downloadDesktopAppUpdate() → DesktopAppUpdateState`, `installDesktopAppUpdate() → DesktopAppUpdateInstallResult`, `subscribeToDesktopAppUpdateState(listener)` on `paseo:event:app-update-state`. Main: `checkForAppUpdate`, `downloadUpdate()`, `installUpdate({ currentVersion }, onBeforeQuit)`, `installUpdateOnQuit`; deps `createInstallHandoffDeadline(): AbortSignal` (60 s), `installsOnQuit`, `publishState(state)`.
+3. **Contract.** The main process owns the phase; the renderer mirrors it.
    ```ts
+   type AppUpdateState = {
+     revision: number; // bumped on every change; the renderer drops a lower revision
+     phase: "none" | "available" | "downloading" | "downloaded" | "installing" | "failed";
+     targetVersion: string | null;
+     failure: { action: "download"; message } | ({ action: "install" } & InstallFailure) | null;
+     installsOnQuit: boolean; // false on Linux AppImage
+   };
    type InstallFailure = { reason: "handoff-timeout" } | { reason: "updater-error"; message: string };
-   type InstallResult =
-     | { installed: true; version; message; failure: null }
-     | { installed: false; version; message; failure: InstallFailure | null };
    ```
-   `installed: true` is returned only after Electron's `before-quit-for-update`. `failure: null` with `installed: false` is a normal outcome (no update, deferred, superseded, dev mode), not an error. The renderer parses defensively; a missing `failure` is `null`.
-4. **Error matrix.** Updater `error` event before the handoff → `updater-error` with the raw updater message (Squirrel.Mac signature errors land here). No handoff before the deadline → `handoff-timeout`, translated in the renderer (`desktop.updates.installTimedOut`). A failed recheck or download → `updater-error`. The silent quit-time path (`installUpdateOnQuit`, `restart: false`) does not wait for a handoff, because MacUpdater's no-relaunch path never emits it.
-5. **Cases.** Good: handoff → renderer `installed`. Base: nothing to install → `up-to-date`. Bad: any `failure` → `install-failed` keeps `availableUpdate`, shows the reason and a Releases entry (`openDesktopReleasesPage`); the callout's Retry reinstalls; silent rechecks leave `install-failed` in place. On failure the main process restarts the daemon it stopped for the update (`daemon-manager.ts`). A Squirrel success after the timeout still restarts the app while the UI says failed; an unrelated updater error inside the window also fails the install.
-6. **Tests.** `app-update-service.test.ts` "manual install handoff" (pending before handoff, restart after, updater error, timeout, concurrent requests); `desktop-app-updater.test.ts` (install-failed, localized timeout, silent recheck); `resolve-update-callout.test.ts` (Retry + Download actions).
-7. **Wrong vs correct.** Wrong: return `{ installed: true }` right after `quitAndInstall()`, or map `installed: false` to `up-to-date`; both hide a rejected update. Correct: wait for the handoff and map `failure` to `install-failed`.
+   `autoDownload` is off: a check never downloads. `install` runs only for the downloaded target and otherwise returns `installed: false, failure: null` without starting a download. `installed: true` is returned only after Electron's `before-quit-for-update`. The renderer parses the state once at the boundary (`parseDesktopAppUpdateState`); a check result with a malformed `state` throws, a malformed push is dropped.
+4. **Error matrix.** Download rejection or updater `error` while downloading → `failed` / `download`. Updater `error` before the install handoff → `failed` / `install` / `updater-error` with the raw message (Squirrel.Mac signature errors). No handoff before the deadline → `handoff-timeout`, translated in the renderer (`desktop.updates.installTimedOut`). A manual check clears a failure for the same version; an automatic check keeps it. While downloading or installing, a check returns the current state without querying the feed. The silent quit-time path (`installUpdateOnQuit`, `restart: false`) rechecks, installs only a version that is already downloaded, never downloads, and does not wait for a handoff (MacUpdater's no-relaunch path never emits it).
+5. **Cases.** Renderer status: `available` / `downloading` / `downloaded` / `installing` follow the phase; `failed` + `install` → `install-failed` (Retry reinstalls, Releases entry via `openDesktopReleasesPage`); `failed` + `download` → `error`. A command in flight shows its phase before the push arrives (`pendingAction`). A failed manual check shows `error` only while nothing is actionable (`none` / `available`); once an update is downloading, downloaded, or installing, the status keeps the phase and the message shows beside it, so the Install entry stays reachable. A thrown download/install command (`actionError`) always shows `error`. On install failure the main process restarts the daemon it stopped for the update (`daemon-manager.ts`). A Squirrel success after the timeout still restarts the app while the UI says failed.
+6. **Tests.** `app-update-service.test.ts` (check does not download, download phases and broadcast, install refused when not downloaded, handoff outcomes, quit-time install only for the downloaded version); `desktop-app-updater.test.ts` (mirroring, revision ordering, pending actions, hide rules); `resolve-update-callout.test.ts` (per-stage descriptor); `desktop-updates.test.ts` (state parsing).
+7. **Wrong vs correct.** Wrong: return `{ installed: true }` right after `quitAndInstall()`, keep a renderer-only copy of the phase, or let `install` fall back to downloading. Correct: wait for the handoff, derive the renderer status from the mirrored state, and make download an explicit user action.
 
 ## Props
 

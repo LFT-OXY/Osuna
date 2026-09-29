@@ -1415,24 +1415,24 @@ export const ru: TranslationResources = {
         upToDate: "Установлена последняя версия приложения.",
         upToDateWithLastChecked:
           "Установлена последняя версия приложения. Последняя проверка: {{time}}.",
-        pending: "Мы сообщим вам, когда обновление будет готово.",
-        pendingWithLastChecked:
-          "Мы сообщим вам, когда обновление будет готово. Последняя проверка в {{time}}.",
-        pendingWithVersion: "Найдено обновление: {{version}}. Загрузка...",
-        pendingWithVersionAndLastChecked:
-          "Найдено обновление: {{version}}. Загрузка... Последняя проверка в {{time}}.",
-        availableWithVersion: "Обновление готово: {{version}}",
+        available: "Доступно обновление приложения.",
+        availableWithLastChecked: "Доступно обновление приложения. Последняя проверка в {{time}}.",
+        availableWithVersion: "Доступно обновление: {{version}}",
         availableWithVersionAndLastChecked:
-          "Обновление готово: {{version}}. Последняя проверка: {{time}}.",
-        available: "Обновление приложения готово к установке.",
-        availableWithLastChecked:
+          "Доступно обновление: {{version}}. Последняя проверка: {{time}}.",
+        downloading: "Загрузка обновления приложения...",
+        downloaded: "Обновление приложения готово к установке.",
+        downloadedWithLastChecked:
           "Обновление приложения готово к установке. Последняя проверка в {{time}}.",
-        installed: "Обновление приложения установлено. Требуется перезапуск.",
+        downloadedWithVersion: "Обновление готово: {{version}}",
+        downloadedWithVersionAndLastChecked:
+          "Обновление готово: {{version}}. Последняя проверка: {{time}}.",
         installFailed: "Не удалось установить обновление.",
         failed: "Не удалось обновить приложение.",
         idle: "Статус обновления ещё не проверен.",
       },
       installError: "Не удалось установить обновление настольного приложения.",
+      downloadError: "Не удалось загрузить обновление настольного приложения.",
       manualDownload: "Скачать из Releases",
       installTimedOut: "Программа обновления не перезапустила приложение вовремя.",
       callout: {
@@ -1442,12 +1442,21 @@ export const ru: TranslationResources = {
         genericError: "Что-то пошло не так.",
         whatsNew: "Что нового",
         installingAction: "Установка...",
-        installAndRestart: "Установить и перезапустить",
-        installingDescription: "Установка и перезапуск...",
-        versionReady: "Версия {{version}} готова к установке.",
-        newVersionReady: "Новая версия готова к установке.",
+        installingDescription: "Подготовка к перезапуску...",
         restartWarning:
-          "При обновлении приложения работающие агенты будут остановлены, а сеансы терминала закрыты.",
+          "Установка перезапустит приложение, остановит запущенных агентов и закроет сессии терминала.",
+        versionAvailable: "Доступна {{version}}",
+        newVersionAvailable: "Доступна новая версия",
+        viewChanges: "Что изменилось",
+        later: "Позже",
+        update: "Обновить",
+        downloadingTitle: "Загрузка обновления",
+        downloadingDescription: "Загрузка...",
+        downloadedTitle: "Обновление загружено",
+        versionDownloaded: "Версия {{version}} загружена.",
+        newVersionDownloaded: "Новая версия загружена.",
+        installsOnQuit: "Оно также установится автоматически при выходе из приложения.",
+        install: "Установить",
       },
     },
     settings: {

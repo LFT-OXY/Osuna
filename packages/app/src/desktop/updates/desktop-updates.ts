@@ -1,8 +1,33 @@
 import { isElectronRuntime } from "@/desktop/host";
 import { invokeDesktopCommand } from "@/desktop/electron/invoke";
+import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { isWeb } from "@/constants/platform";
-import { i18n } from "@/i18n/i18next";
 import { openExternalUrl } from "@/utils/open-external-url";
+
+export type DesktopAppUpdateInstallFailure =
+  | { reason: "handoff-timeout" }
+  | { reason: "updater-error"; message: string };
+
+export type DesktopAppUpdatePhase =
+  | "none"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "installing"
+  | "failed";
+
+export type DesktopAppUpdateFailure =
+  | { action: "download"; message: string }
+  | ({ action: "install" } & DesktopAppUpdateInstallFailure);
+
+// 主进程持有的更新阶段快照（features/app-update-service.ts 的 AppUpdateState）。
+export interface DesktopAppUpdateState {
+  revision: number;
+  phase: DesktopAppUpdatePhase;
+  targetVersion: string | null;
+  failure: DesktopAppUpdateFailure | null;
+  installsOnQuit: boolean;
+}
 
 export interface DesktopAppUpdateCheckResult {
   hasUpdate: boolean;
@@ -12,11 +37,8 @@ export interface DesktopAppUpdateCheckResult {
   body: string | null;
   date: string | null;
   errorMessage: string | null;
+  state: DesktopAppUpdateState;
 }
-
-export type DesktopAppUpdateInstallFailure =
-  | { reason: "handoff-timeout" }
-  | { reason: "updater-error"; message: string };
 
 // failure 为 null 的未安装结果是正常情况（无更新、稍后安装等），不是安装失败。
 export type DesktopAppUpdateInstallResult =
@@ -110,6 +132,55 @@ export async function getDesktopRuntimeInfo(): Promise<DesktopRuntimeInfo> {
   return parseDesktopRuntimeInfo(result);
 }
 
+const DESKTOP_APP_UPDATE_PHASES: ReadonlySet<string> = new Set<DesktopAppUpdatePhase>([
+  "none",
+  "available",
+  "downloading",
+  "downloaded",
+  "installing",
+  "failed",
+]);
+
+function isDesktopAppUpdatePhase(value: unknown): value is DesktopAppUpdatePhase {
+  return typeof value === "string" && DESKTOP_APP_UPDATE_PHASES.has(value);
+}
+
+function parseUpdateFailure(raw: unknown): DesktopAppUpdateFailure | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  if (raw.action === "download") {
+    return { action: "download", message: toStringOrEmpty(raw.message) };
+  }
+  if (raw.action === "install") {
+    const failure = parseInstallFailure(raw);
+    return failure ? { action: "install", ...failure } : null;
+  }
+  return null;
+}
+
+export function parseDesktopAppUpdateState(raw: unknown): DesktopAppUpdateState | null {
+  if (!isRecord(raw) || typeof raw.revision !== "number" || !isDesktopAppUpdatePhase(raw.phase)) {
+    return null;
+  }
+
+  return {
+    revision: raw.revision,
+    phase: raw.phase,
+    targetVersion: toStringOrNull(raw.targetVersion),
+    failure: parseUpdateFailure(raw.failure),
+    installsOnQuit: raw.installsOnQuit === true,
+  };
+}
+
+function requireDesktopAppUpdateState(raw: unknown, context: string): DesktopAppUpdateState {
+  const state = parseDesktopAppUpdateState(raw);
+  if (!state) {
+    throw new Error(`Unexpected update state while ${context}.`);
+  }
+  return state;
+}
+
 export async function checkDesktopAppUpdate({
   releaseChannel,
   intent,
@@ -133,6 +204,45 @@ export async function checkDesktopAppUpdate({
     body: toStringOrNull(result.body),
     date: toStringOrNull(result.date),
     errorMessage: toStringOrNull(result.errorMessage),
+    state: requireDesktopAppUpdateState(result.state, "checking desktop updates"),
+  };
+}
+
+export async function downloadDesktopAppUpdate(): Promise<DesktopAppUpdateState> {
+  const result = await invokeDesktopCommand<unknown>("download_app_update");
+  return requireDesktopAppUpdateState(result, "downloading the desktop update");
+}
+
+// 主进程每次更新阶段变化都会推送给所有窗口。
+export function subscribeToDesktopAppUpdateState(
+  listener: (state: DesktopAppUpdateState) => void,
+): () => void {
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+
+  void (async () => {
+    try {
+      const dispose = await listenToDesktopEvent<unknown>("app-update-state", (raw) => {
+        const state = parseDesktopAppUpdateState(raw);
+        if (state) {
+          listener(state);
+        } else {
+          console.warn("[DesktopUpdater] Ignoring malformed update state", raw);
+        }
+      });
+      if (disposed) {
+        dispose();
+      } else {
+        unlisten = dispose;
+      }
+    } catch (error) {
+      console.warn("[DesktopUpdater] Failed to subscribe to update state", error);
+    }
+  })();
+
+  return () => {
+    disposed = true;
+    unlisten?.();
   };
 }
 
@@ -146,18 +256,14 @@ function parseInstallFailure(raw: unknown): DesktopAppUpdateInstallFailure | nul
   return { reason: "updater-error", message: toStringOrNull(raw.message) ?? "" };
 }
 
-export async function installDesktopAppUpdate({
-  releaseChannel,
-}: {
-  releaseChannel: DesktopReleaseChannel;
-}): Promise<DesktopAppUpdateInstallResult> {
-  const result = await invokeDesktopCommand<unknown>("install_app_update", { releaseChannel });
+export async function installDesktopAppUpdate(): Promise<DesktopAppUpdateInstallResult> {
+  const result = await invokeDesktopCommand<unknown>("install_app_update");
   if (!isRecord(result)) {
     throw new Error("Unexpected response while installing desktop update.");
   }
 
   const version = toStringOrNull(result.version);
-  const message = toStringOrNull(result.message) ?? i18n.t("desktop.updates.status.installed");
+  const message = toStringOrEmpty(result.message);
   if (result.installed === true) {
     return { installed: true, version, message, failure: null };
   }

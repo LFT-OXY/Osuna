@@ -1,11 +1,12 @@
 import { Gift } from "lucide-react-native";
 import { type ReactNode, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useUnistyles } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   type SidebarCalloutAction,
   SidebarCalloutDescriptionText,
 } from "@/components/sidebar-callout";
+import { Text } from "@/components/ui/text";
 import { useSidebarCallouts } from "@/contexts/sidebar-callout-context";
 import {
   resolveUpdateCalloutDescriptor,
@@ -18,10 +19,27 @@ import { openDesktopReleasesPage } from "@/desktop/updates/desktop-updates";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { openChangelog } from "@/changelog";
 
-function renderBody(body: UpdateCalloutBody, t: ReturnType<typeof useTranslation>["t"]): ReactNode {
-  if (body.kind === "installing") return t("desktop.updates.callout.installingDescription");
-  if (body.kind === "error") return body.message;
-  return <UpdateAvailableDescription versionLabel={body.versionLabel ?? undefined} t={t} />;
+type TranslateFn = ReturnType<typeof useTranslation>["t"];
+
+function renderBody(body: UpdateCalloutBody, t: TranslateFn): ReactNode {
+  switch (body.kind) {
+    case "available":
+      return <UpdateAvailableDescription versionLabel={body.versionLabel} t={t} />;
+    case "downloading":
+      return t("desktop.updates.callout.downloadingDescription");
+    case "downloaded":
+      return (
+        <UpdateDownloadedDescription
+          versionLabel={body.versionLabel}
+          installsOnQuit={body.installsOnQuit}
+          t={t}
+        />
+      );
+    case "installing":
+      return t("desktop.updates.callout.installingDescription");
+    case "error":
+      return body.message;
+  }
 }
 
 function materializeActions(
@@ -43,13 +61,19 @@ export function UpdateCalloutSource() {
   const {
     isDesktopApp,
     status,
-    availableUpdate,
+    targetVersion,
+    installsOnQuit,
     errorMessage,
+    isHidden,
     checkForUpdates,
+    downloadUpdate,
     installUpdate,
-    isInstalling,
+    hide,
   } = useDesktopAppUpdater();
 
+  const download = useStableEvent(() => {
+    void downloadUpdate();
+  });
   const install = useStableEvent(() => {
     void installUpdate();
   });
@@ -60,15 +84,16 @@ export function UpdateCalloutSource() {
     const descriptor = resolveUpdateCalloutDescriptor({
       isDesktopApp,
       status,
-      isInstalling,
-      availableUpdate,
+      targetVersion,
+      installsOnQuit,
       errorMessage,
+      isHidden,
     });
     if (!descriptor) return;
 
+    // 不传 dismissalKey：× 只在本次运行内隐藏，由更新状态机记住。
     return callouts.show({
       id: descriptor.id,
-      dismissalKey: descriptor.dismissalKey,
       priority: descriptor.priority,
       title: descriptor.title,
       description: renderBody(descriptor.body, t),
@@ -77,22 +102,29 @@ export function UpdateCalloutSource() {
       ) : undefined,
       variant: descriptor.variant,
       actions: materializeActions(descriptor.actions, {
-        changelog: openChangelog,
+        later: hide,
+        update: download,
         install,
+        changelog: openChangelog,
         retry,
-        download: openDesktopReleasesPage,
+        manualDownload: openDesktopReleasesPage,
       }),
+      dismissible: descriptor.dismissible,
+      onDismiss: hide,
       testID: descriptor.testID,
     });
   }, [
-    availableUpdate,
     callouts,
+    download,
     errorMessage,
+    hide,
     install,
+    installsOnQuit,
     isDesktopApp,
-    isInstalling,
+    isHidden,
     retry,
     status,
+    targetVersion,
     theme.colors.foregroundMuted,
     theme.iconSize.sm,
     t,
@@ -105,19 +137,50 @@ function UpdateAvailableDescription({
   versionLabel,
   t,
 }: {
-  versionLabel?: string;
-  t: ReturnType<typeof useTranslation>["t"];
+  versionLabel: string | null;
+  t: TranslateFn;
+}) {
+  return (
+    <SidebarCalloutDescriptionText>
+      {versionLabel
+        ? t("desktop.updates.callout.versionAvailable", { version: versionLabel })
+        : t("desktop.updates.callout.newVersionAvailable")}
+      {" · "}
+      <Text variant="caption" accessibilityRole="link" onPress={openChangelog} style={styles.link}>
+        {t("desktop.updates.callout.viewChanges")}
+      </Text>
+    </SidebarCalloutDescriptionText>
+  );
+}
+
+function UpdateDownloadedDescription({
+  versionLabel,
+  installsOnQuit,
+  t,
+}: {
+  versionLabel: string | null;
+  installsOnQuit: boolean;
+  t: TranslateFn;
 }) {
   return (
     <>
       <SidebarCalloutDescriptionText>
         {versionLabel
-          ? t("desktop.updates.callout.versionReady", { version: versionLabel })
-          : t("desktop.updates.callout.newVersionReady")}
-      </SidebarCalloutDescriptionText>
-      <SidebarCalloutDescriptionText>
+          ? t("desktop.updates.callout.versionDownloaded", { version: versionLabel })
+          : t("desktop.updates.callout.newVersionDownloaded")}{" "}
         {t("desktop.updates.callout.restartWarning")}
       </SidebarCalloutDescriptionText>
+      {installsOnQuit ? (
+        <SidebarCalloutDescriptionText>
+          {t("desktop.updates.callout.installsOnQuit")}
+        </SidebarCalloutDescriptionText>
+      ) : null}
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  link: {
+    textDecorationLine: "underline",
+  },
+});

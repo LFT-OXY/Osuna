@@ -1432,24 +1432,25 @@ export const fr: TranslationResources = {
         installing: "Installation de la mise à jour de l'application...",
         upToDate: "L'application est à jour.",
         upToDateWithLastChecked: "Up to date. Last checked at {{time}}.",
-        pending: "Nous vous informerons lorsque la mise à jour sera prête.",
-        pendingWithLastChecked:
-          "Nous vous informerons lorsque la mise à jour sera prête. Dernière vérification à {{time}}.",
-        pendingWithVersion: "Mise à jour trouvée : {{version}}. Téléchargement...",
-        pendingWithVersionAndLastChecked:
-          "Mise à jour trouvée : {{version}}. Téléchargement... Dernière vérification à {{time}}.",
-        availableWithVersion: "Mise à jour prête:{{version}}",
-        availableWithVersionAndLastChecked:
-          "Mise à jour prête:{{version}}. Dernière vérification à {{time}}.",
-        available: "Une mise à jour de l'application est prête à être installée.",
+        available: "Une mise à jour de l'application est disponible.",
         availableWithLastChecked:
+          "Une mise à jour de l'application est disponible. Dernière vérification à {{time}}.",
+        availableWithVersion: "Mise à jour disponible : {{version}}",
+        availableWithVersionAndLastChecked:
+          "Mise à jour disponible : {{version}}. Dernière vérification à {{time}}.",
+        downloading: "Téléchargement de la mise à jour de l'application...",
+        downloaded: "Une mise à jour de l'application est prête à être installée.",
+        downloadedWithLastChecked:
           "Une mise à jour de l'application est prête à être installée. Dernière vérification à {{time}}.",
-        installed: "Mise à jour de l'application installée. Redémarrage requis.",
+        downloadedWithVersion: "Mise à jour prête:{{version}}",
+        downloadedWithVersionAndLastChecked:
+          "Mise à jour prête:{{version}}. Dernière vérification à {{time}}.",
         installFailed: "Impossible d'installer la mise à jour.",
         failed: "Échec de la mise à jour de l'application.",
         idle: "L'état de la mise à jour n'a pas encore été vérifié.",
       },
       installError: "Impossible d'installer la mise à jour de l'application de bureau.",
+      downloadError: "Impossible de télécharger la mise à jour de l'application de bureau.",
       manualDownload: "Télécharger depuis Releases",
       installTimedOut: "Le programme de mise à jour n'a pas redémarré l'application à temps.",
       callout: {
@@ -1459,12 +1460,22 @@ export const fr: TranslationResources = {
         genericError: "Quelque chose s'est mal passé.",
         whatsNew: "Quoi de neuf",
         installingAction: "Installation...",
-        installAndRestart: "Installer et redémarrer",
-        installingDescription: "Installation et redémarrage...",
-        versionReady: "{{version}}est prêt à être installé.",
-        newVersionReady: "Une nouvelle version est prête à être installée.",
+        installingDescription: "Préparation du redémarrage...",
         restartWarning:
-          "La mise à niveau de l'application arrêtera l'exécution des agents et fermera les sessions de terminal.",
+          "L'installation redémarre l'application, arrête les agents en cours et ferme les sessions de terminal.",
+        versionAvailable: "{{version}} disponible",
+        newVersionAvailable: "Une nouvelle version est disponible",
+        viewChanges: "Voir les changements",
+        later: "Plus tard",
+        update: "Mettre à jour",
+        downloadingTitle: "Téléchargement de la mise à jour",
+        downloadingDescription: "Téléchargement...",
+        downloadedTitle: "Mise à jour téléchargée",
+        versionDownloaded: "{{version}} a été téléchargée.",
+        newVersionDownloaded: "Une nouvelle version a été téléchargée.",
+        installsOnQuit:
+          "Elle sera aussi installée automatiquement à la fermeture de l'application.",
+        install: "Installer",
       },
     },
     settings: {

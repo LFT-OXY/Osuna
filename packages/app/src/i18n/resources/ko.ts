@@ -1401,24 +1401,25 @@ export const ko: TranslationResources = {
         installing: "앱 업데이트 설치 중...",
         upToDate: "앱이 최신 상태입니다.",
         upToDateWithLastChecked: "최신 상태입니다. 마지막 확인: {{time}}.",
-        pending: "업데이트가 준비되면 알려드리겠습니다.",
-        pendingWithLastChecked:
-          "업데이트가 준비되면 알려드리겠습니다. {{time}}에서 마지막으로 확인했습니다.",
-        pendingWithVersion: "업데이트 발견: {{version}}. 다운로드 중...",
-        pendingWithVersionAndLastChecked:
-          "업데이트 발견: {{version}}. 다운로드 중... {{time}}에서 마지막으로 확인했습니다.",
-        availableWithVersion: "업데이트 준비됨: {{version}}",
-        availableWithVersionAndLastChecked:
-          "업데이트 준비됨: {{version}}. {{time}}에서 마지막으로 확인했습니다.",
-        available: "설치할 앱 업데이트가 준비되었습니다.",
+        available: "앱 업데이트를 사용할 수 있습니다.",
         availableWithLastChecked:
+          "앱 업데이트를 사용할 수 있습니다. {{time}}에서 마지막으로 확인했습니다.",
+        availableWithVersion: "업데이트 사용 가능: {{version}}",
+        availableWithVersionAndLastChecked:
+          "업데이트 사용 가능: {{version}}. {{time}}에서 마지막으로 확인했습니다.",
+        downloading: "앱 업데이트 다운로드 중...",
+        downloaded: "설치할 앱 업데이트가 준비되었습니다.",
+        downloadedWithLastChecked:
           "앱 업데이트를 설치할 준비가 되었습니다. {{time}}에서 마지막으로 확인했습니다.",
-        installed: "앱 업데이트가 설치되었습니다. 재시작이 필요합니다.",
+        downloadedWithVersion: "업데이트 준비됨: {{version}}",
+        downloadedWithVersionAndLastChecked:
+          "업데이트 준비됨: {{version}}. {{time}}에서 마지막으로 확인했습니다.",
         installFailed: "업데이트를 설치하지 못했습니다.",
         failed: "앱을 업데이트하지 못했습니다.",
         idle: "업데이트 상태를 아직 확인하지 않았습니다.",
       },
       installError: "데스크톱 앱 업데이트를 설치할 수 없습니다.",
+      downloadError: "데스크톱 앱 업데이트를 다운로드할 수 없습니다.",
       manualDownload: "Releases에서 직접 다운로드",
       installTimedOut: "업데이터가 제시간에 앱을 다시 시작하지 못했습니다.",
       callout: {
@@ -1428,11 +1429,21 @@ export const ko: TranslationResources = {
         genericError: "문제가 발생했습니다.",
         whatsNew: "새로운 기능",
         installingAction: "설치 중...",
-        installAndRestart: "설치 후 재시작",
-        installingDescription: "설치 후 재시작 중...",
-        versionReady: "{{version}} 설치가 준비되었습니다.",
-        newVersionReady: "새 버전 설치가 준비되었습니다.",
-        restartWarning: "앱을 업그레이드하면 실행 중인 에이전트가 중지되고 터미널 세션이 닫힙니다.",
+        installingDescription: "재시작 준비 중...",
+        restartWarning:
+          "설치하면 앱이 재시작되고 실행 중인 에이전트가 중지되며 터미널 세션이 닫힙니다.",
+        versionAvailable: "{{version}} 사용 가능",
+        newVersionAvailable: "새 버전 사용 가능",
+        viewChanges: "변경 사항 보기",
+        later: "나중에",
+        update: "업데이트",
+        downloadingTitle: "업데이트 다운로드 중",
+        downloadingDescription: "다운로드 중...",
+        downloadedTitle: "업데이트 다운로드됨",
+        versionDownloaded: "{{version}}을(를) 다운로드했습니다.",
+        newVersionDownloaded: "새 버전을 다운로드했습니다.",
+        installsOnQuit: "앱을 종료할 때도 자동으로 설치됩니다.",
+        install: "설치",
       },
     },
     settings: {

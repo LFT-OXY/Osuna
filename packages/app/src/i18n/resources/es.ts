@@ -1432,24 +1432,25 @@ export const es: TranslationResources = {
         installing: "Instalando actualización de la aplicación...",
         upToDate: "La aplicación está actualizada.",
         upToDateWithLastChecked: "Up to date. Last checked at {{time}}.",
-        pending: "Le avisaremos cuando la actualización esté lista.",
-        pendingWithLastChecked:
-          "Le avisaremos cuando la actualización esté lista. Última comprobación a las {{time}}.",
-        pendingWithVersion: "Actualización encontrada: {{version}}. Descargando...",
-        pendingWithVersionAndLastChecked:
-          "Actualización encontrada: {{version}}. Descargando... Última comprobación a las {{time}}.",
-        availableWithVersion: "Actualización lista:{{version}}",
-        availableWithVersionAndLastChecked:
-          "Actualización lista:{{version}}. Última comprobación a las {{time}}.",
-        available: "Una actualización de la aplicación está lista para instalarse.",
+        available: "Hay una actualización de la aplicación disponible.",
         availableWithLastChecked:
+          "Hay una actualización de la aplicación disponible. Última comprobación a las {{time}}.",
+        availableWithVersion: "Actualización disponible: {{version}}",
+        availableWithVersionAndLastChecked:
+          "Actualización disponible: {{version}}. Última comprobación a las {{time}}.",
+        downloading: "Descargando la actualización de la aplicación...",
+        downloaded: "Una actualización de la aplicación está lista para instalarse.",
+        downloadedWithLastChecked:
           "Una actualización de la aplicación está lista para instalarse. Última comprobación a las {{time}}.",
-        installed: "Actualización de la aplicación instalada. Se requiere reinicio.",
+        downloadedWithVersion: "Actualización lista:{{version}}",
+        downloadedWithVersionAndLastChecked:
+          "Actualización lista:{{version}}. Última comprobación a las {{time}}.",
         installFailed: "No se pudo instalar la actualización.",
         failed: "No se pudo actualizar la aplicación.",
         idle: "El estado de la actualización aún no se ha comprobado.",
       },
       installError: "No se puede instalar la actualización de la aplicación de escritorio.",
+      downloadError: "No se puede descargar la actualización de la aplicación de escritorio.",
       manualDownload: "Descargar desde Releases",
       installTimedOut: "El actualizador no reinició la aplicación a tiempo.",
       callout: {
@@ -1459,12 +1460,21 @@ export const es: TranslationResources = {
         genericError: "Algo salió mal.",
         whatsNew: "Qué hay de nuevo",
         installingAction: "Instalando...",
-        installAndRestart: "Instalar y reiniciar",
-        installingDescription: "Instalando y reiniciando...",
-        versionReady: "{{version}}está listo para instalar.",
-        newVersionReady: "Una nueva versión está lista para instalar.",
+        installingDescription: "Preparando el reinicio...",
         restartWarning:
-          "La actualización de la aplicación dejará de ejecutar agentes y cerrará sesiones de terminal.",
+          "Instalar reinicia la aplicación, detiene los agentes en ejecución y cierra las sesiones de terminal.",
+        versionAvailable: "{{version}} disponible",
+        newVersionAvailable: "Hay una nueva versión disponible",
+        viewChanges: "Ver cambios",
+        later: "Más tarde",
+        update: "Actualizar",
+        downloadingTitle: "Descargando actualización",
+        downloadingDescription: "Descargando...",
+        downloadedTitle: "Actualización descargada",
+        versionDownloaded: "{{version}} se ha descargado.",
+        newVersionDownloaded: "Se ha descargado una nueva versión.",
+        installsOnQuit: "También se instalará automáticamente al salir de la aplicación.",
+        install: "Instalar",
       },
     },
     settings: {

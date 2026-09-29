@@ -2,36 +2,75 @@ import type {
   DesktopAppUpdateCheckResult,
   DesktopAppUpdateCheckIntent,
   DesktopAppUpdateInstallResult,
+  DesktopAppUpdateState,
   DesktopReleaseChannel,
 } from "@/desktop/updates/desktop-updates";
 import type { DesktopAppUpdaterPort } from "@/desktop/updates/desktop-app-updater";
+
+interface Deferred<T> {
+  resolve(value: T): void;
+  reject(error: unknown): void;
+}
 
 export interface FakeDesktopAppUpdaterPort extends DesktopAppUpdaterPort {
   readonly recordedChecks: Array<{
     releaseChannel: DesktopReleaseChannel;
     intent: DesktopAppUpdateCheckIntent;
   }>;
-  readonly recordedInstalls: Array<{ releaseChannel: DesktopReleaseChannel }>;
+  readonly downloadCount: number;
+  readonly installCount: number;
   nextCheckResult(result: DesktopAppUpdateCheckResult): void;
-  deferNextCheck(): {
-    resolve(result: DesktopAppUpdateCheckResult): void;
-    reject(error: unknown): void;
-  };
+  deferNextCheck(): Deferred<DesktopAppUpdateCheckResult>;
   failNextCheck(error: unknown): void;
+  deferNextDownload(): Deferred<DesktopAppUpdateState>;
+  failNextDownload(error: unknown): void;
   nextInstallResult(result: DesktopAppUpdateInstallResult): void;
+  deferNextInstall(): Deferred<DesktopAppUpdateInstallResult>;
   failNextInstall(error: unknown): void;
+  // 模拟主进程向所有窗口广播更新阶段。
+  pushState(state: DesktopAppUpdateState): void;
 }
 
-type CheckOutcome =
-  | { kind: "result"; result: DesktopAppUpdateCheckResult }
+type Outcome<T> =
+  | { kind: "result"; result: T }
   | { kind: "error"; error: unknown }
-  | { kind: "deferred"; promise: Promise<DesktopAppUpdateCheckResult> };
+  | { kind: "deferred"; promise: Promise<T> };
 
-type InstallOutcome =
-  | { kind: "result"; result: DesktopAppUpdateInstallResult }
-  | { kind: "error"; error: unknown };
+function createDeferred<T>(): { deferred: Deferred<T>; promise: Promise<T> } {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { deferred: { resolve, reject }, promise };
+}
 
-function buildCheckResult(
+async function settle<T>(outcome: Outcome<T> | undefined, fallback: () => T): Promise<T> {
+  if (!outcome) return fallback();
+  if (outcome.kind === "result") return outcome.result;
+  if (outcome.kind === "error") throw outcome.error;
+  return outcome.promise;
+}
+
+// 自增 revision，保证测试里后建的快照一定比先建的新；需要乱序时显式传 revision。
+let nextRevision = 1;
+
+export function buildFakeUpdateState(
+  overrides: Partial<DesktopAppUpdateState> = {},
+): DesktopAppUpdateState {
+  const phase = overrides.phase ?? "none";
+  return {
+    revision: nextRevision++,
+    phase,
+    targetVersion: phase === "none" ? null : "1.2.3",
+    failure: null,
+    installsOnQuit: true,
+    ...overrides,
+  };
+}
+
+export function buildFakeCheckResult(
   overrides: Partial<DesktopAppUpdateCheckResult> = {},
 ): DesktopAppUpdateCheckResult {
   return {
@@ -42,11 +81,12 @@ function buildCheckResult(
     body: null,
     date: null,
     errorMessage: null,
+    state: overrides.state ?? buildFakeUpdateState(),
     ...overrides,
   };
 }
 
-function buildInstallResult(
+export function buildFakeInstallResult(
   overrides: Partial<DesktopAppUpdateInstallResult> = {},
 ): DesktopAppUpdateInstallResult {
   return {
@@ -63,71 +103,71 @@ export function createFakeDesktopAppUpdaterPort(): FakeDesktopAppUpdaterPort {
     releaseChannel: DesktopReleaseChannel;
     intent: DesktopAppUpdateCheckIntent;
   }> = [];
-  const recordedInstalls: Array<{ releaseChannel: DesktopReleaseChannel }> = [];
-  const checkOutcomes: CheckOutcome[] = [];
-  const installOutcomes: InstallOutcome[] = [];
+  const checkOutcomes: Outcome<DesktopAppUpdateCheckResult>[] = [];
+  const downloadOutcomes: Outcome<DesktopAppUpdateState>[] = [];
+  const installOutcomes: Outcome<DesktopAppUpdateInstallResult>[] = [];
+  const stateListeners = new Set<(state: DesktopAppUpdateState) => void>();
+  let downloadCount = 0;
+  let installCount = 0;
 
   return {
     recordedChecks,
-    recordedInstalls,
+    get downloadCount() {
+      return downloadCount;
+    },
+    get installCount() {
+      return installCount;
+    },
     nextCheckResult(result) {
       checkOutcomes.push({ kind: "result", result });
     },
     deferNextCheck() {
-      let resolve!: (value: DesktopAppUpdateCheckResult) => void;
-      let reject!: (error: unknown) => void;
-      const promise = new Promise<DesktopAppUpdateCheckResult>((res, rej) => {
-        resolve = res;
-        reject = rej;
-      });
+      const { deferred, promise } = createDeferred<DesktopAppUpdateCheckResult>();
       checkOutcomes.push({ kind: "deferred", promise });
-      return { resolve, reject };
+      return deferred;
     },
     failNextCheck(error) {
       checkOutcomes.push({ kind: "error", error });
     },
+    deferNextDownload() {
+      const { deferred, promise } = createDeferred<DesktopAppUpdateState>();
+      downloadOutcomes.push({ kind: "deferred", promise });
+      return deferred;
+    },
+    failNextDownload(error) {
+      downloadOutcomes.push({ kind: "error", error });
+    },
     nextInstallResult(result) {
       installOutcomes.push({ kind: "result", result });
+    },
+    deferNextInstall() {
+      const { deferred, promise } = createDeferred<DesktopAppUpdateInstallResult>();
+      installOutcomes.push({ kind: "deferred", promise });
+      return deferred;
     },
     failNextInstall(error) {
       installOutcomes.push({ kind: "error", error });
     },
+    pushState(state) {
+      for (const listener of stateListeners) listener(state);
+    },
     async checkDesktopAppUpdate(input) {
       recordedChecks.push(input);
-      const outcome = checkOutcomes.shift();
-      if (!outcome) {
-        return buildCheckResult();
-      }
-      if (outcome.kind === "result") {
-        return outcome.result;
-      }
-      if (outcome.kind === "error") {
-        throw outcome.error;
-      }
-      return outcome.promise;
+      return settle(checkOutcomes.shift(), () => buildFakeCheckResult());
     },
-    async installDesktopAppUpdate(input) {
-      recordedInstalls.push(input);
-      const outcome = installOutcomes.shift();
-      if (!outcome) {
-        return buildInstallResult();
-      }
-      if (outcome.kind === "result") {
-        return outcome.result;
-      }
-      throw outcome.error;
+    async downloadDesktopAppUpdate() {
+      downloadCount += 1;
+      return settle(downloadOutcomes.shift(), () => buildFakeUpdateState({ phase: "downloaded" }));
+    },
+    async installDesktopAppUpdate() {
+      installCount += 1;
+      return settle(installOutcomes.shift(), () => buildFakeInstallResult());
+    },
+    subscribeToDesktopAppUpdateState(listener) {
+      stateListeners.add(listener);
+      return () => {
+        stateListeners.delete(listener);
+      };
     },
   };
-}
-
-export function buildFakeCheckResult(
-  overrides: Partial<DesktopAppUpdateCheckResult> = {},
-): DesktopAppUpdateCheckResult {
-  return buildCheckResult(overrides);
-}
-
-export function buildFakeInstallResult(
-  overrides: Partial<DesktopAppUpdateInstallResult> = {},
-): DesktopAppUpdateInstallResult {
-  return buildInstallResult(overrides);
 }
