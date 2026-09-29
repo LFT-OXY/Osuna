@@ -2377,6 +2377,12 @@ export const fr: TranslationResources = {
         terminalSize: "Taille du terminal",
         terminalSizeHint: "Utilisée dans le terminal. Laisser vide pour suivre la taille du code",
         terminalSizeAccessibility: "Taille de la police du terminal",
+        searchPlaceholder: "Rechercher des polices",
+        customValuePrefix: "Utiliser",
+        pickerAccessibility: "{{field}} : {{value}}",
+        notInstalledWarning:
+          "Police introuvable sur cet appareil ; une police de secours sera utilisée",
+        notMonospaceWarning: "Police non monospace ; le texte risque d’être mal aligné",
       },
       syntax: {
         title: "Syntaxe",

@@ -51,6 +51,8 @@ const testTheme = {
       green: { 500: "#22c55e" },
       red: { 300: "#fca5a5" },
       white: "#ffffff",
+      // Combobox 的底部表单把手色。
+      zinc: { 600: "#52525b" },
     },
     // 终端三色：前景/光标沿用浅色主题的 foreground，背景为白。
     terminal: {

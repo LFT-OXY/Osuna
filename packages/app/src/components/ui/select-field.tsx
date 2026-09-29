@@ -5,7 +5,9 @@ import {
   View,
   type NativeSyntheticEvent,
   type PressableStateCallbackType,
+  type StyleProp,
   type TargetedEvent,
+  type TextStyle,
 } from "react-native";
 import { ChevronDown } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -67,6 +69,8 @@ export interface SelectFieldProps<TValue> {
 export interface SelectFieldTriggerProps {
   display?: SelectFieldDisplay | null;
   label?: string;
+  /** 标签文字的附加样式，比如用值所指的字体渲染。 */
+  labelStyle?: StyleProp<TextStyle>;
   isPlaceholder?: boolean;
   placeholder: string;
   hovered?: boolean;
@@ -118,6 +122,7 @@ function useVisibleSelectOptions<TValue>(
 export function SelectFieldTrigger({
   display,
   label: explicitLabel,
+  labelStyle,
   isPlaceholder: explicitIsPlaceholder,
   placeholder,
   hovered = false,
@@ -150,8 +155,8 @@ export function SelectFieldTrigger({
   const label = explicitLabel ?? display?.label ?? placeholder;
   const isPlaceholder = explicitIsPlaceholder ?? display == null;
   const textStyle = useMemo(
-    () => [isPlaceholder ? styles.placeholderText : styles.triggerText, textSizeStyle],
-    [isPlaceholder, textSizeStyle],
+    () => [isPlaceholder ? styles.placeholderText : styles.triggerText, textSizeStyle, labelStyle],
+    [isPlaceholder, labelStyle, textSizeStyle],
   );
 
   return (

@@ -2439,6 +2439,11 @@ export const en = {
         terminalSize: "Terminal size",
         terminalSizeHint: "Used in the terminal. Leave empty to follow the code size",
         terminalSizeAccessibility: "Terminal font size",
+        searchPlaceholder: "Search fonts",
+        customValuePrefix: "Use",
+        pickerAccessibility: "{{field}}: {{value}}",
+        notInstalledWarning: "This font was not found on this device; a fallback font will be used",
+        notMonospaceWarning: "Not a monospace font; text may misalign",
       },
       syntax: {
         title: "Syntax",

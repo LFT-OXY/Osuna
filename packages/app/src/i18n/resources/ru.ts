@@ -2361,6 +2361,11 @@ export const ru: TranslationResources = {
         terminalSizeHint:
           "Используется в терминале. Оставьте поле пустым, чтобы использовать размер кода",
         terminalSizeAccessibility: "Размер шрифта терминала",
+        searchPlaceholder: "Поиск шрифтов",
+        customValuePrefix: "Использовать",
+        pickerAccessibility: "{{field}}: {{value}}",
+        notInstalledWarning: "Шрифт не найден на этом устройстве; будет использован запасной шрифт",
+        notMonospaceWarning: "Шрифт не моноширинный; текст может съехать",
       },
       syntax: {
         title: "Синтаксис",

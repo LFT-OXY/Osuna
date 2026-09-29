@@ -20,6 +20,7 @@ import { FormTextInput } from "@/components/ui/form-field";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { SettingsCard, SettingsSwitch } from "@/components/settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { localFontProbe } from "@/appearance/font-probe";
 import { useContributedThemes } from "@/appearance/provider";
 import {
   MAX_CODE_FONT_SIZE,
@@ -38,7 +39,6 @@ import { getBuiltInThemeLabel } from "@/appearance/theme-labels";
 import {
   DARK_THEME_NAMES,
   DEFAULT_MONO_FONT_STACK,
-  DEFAULT_UI_FONT_STACK,
   ICON_SIZE,
   LIGHT_THEME_NAMES,
   THEME_OPTIONS,
@@ -50,6 +50,7 @@ import { isNative } from "@/constants/platform";
 import type { PluginThemeOption } from "@/plugins/themes";
 import { settingsStyles } from "@/styles/settings";
 import { AppearancePreview } from "./appearance-preview";
+import { FontPickerRow } from "./font-picker-row";
 import { SidebarNavSection } from "./sidebar-nav-section";
 
 // ---------------------------------------------------------------------------
@@ -391,7 +392,8 @@ function ToolCallDetailRow({ value, onChange }: ToolCallDetailRowProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Fonts: family text fields + numeric size fields (commit on blur/submit)
+// Fonts: family pickers (web) or text fields (native) + numeric size fields
+// (commit on blur/submit)
 // ---------------------------------------------------------------------------
 
 interface FontFamilyRowProps {
@@ -581,18 +583,15 @@ export function AppearanceSection() {
     selected: selectedPluginTheme,
     select: selectPluginTheme,
   } = useContributedThemes();
-  const showInterfaceFontFamilyRow = !isNative;
+  // 字体选择器只在桌面端和 Web 端提供：原生端 Interface font 行隐藏，Code font 维持文本输入。
   // 原生终端只认白名单字体，Terminal font 行只在桌面端和 Web 端显示；Terminal size 全平台。
-  const showTerminalFontFamilyRow = !isNative;
-  const uiFontPlaceholder = resolveDefaultStackPlaceholder(t, DEFAULT_UI_FONT_STACK);
+  const showFontPickers = !isNative;
   const monoFontPlaceholder = resolveDefaultStackPlaceholder(t, DEFAULT_MONO_FONT_STACK);
 
-  const [uiFontDraft, setUiFontDraft] = useState(settings.uiFontFamily);
   const [monoFontDraft, setMonoFontDraft] = useState(settings.monoFontFamily);
   const [uiBaseSizeDraft, setUiBaseSizeDraft] = useState(String(settings.uiBaseFontSize));
   const [contentSizeDraft, setContentSizeDraft] = useState(String(settings.contentFontSize));
   const [codeSizeDraft, setCodeSizeDraft] = useState(String(settings.codeFontSize));
-  const [terminalFontDraft, setTerminalFontDraft] = useState(settings.terminalFontFamily);
   const [terminalSizeDraft, setTerminalSizeDraft] = useState(
     terminalSizeToDraft(settings.terminalFontSize),
   );
@@ -610,6 +609,10 @@ export function AppearanceSection() {
   useEffect(() => {
     setTerminalSizeDraft(terminalSizeToDraft(settings.terminalFontSize));
   }, [settings.terminalFontSize]);
+  // Web 端 Code font 是选择器，没有文本框替预览同步草稿。
+  useEffect(() => {
+    setMonoFontDraft(settings.monoFontFamily);
+  }, [settings.monoFontFamily]);
 
   const handleThemeChange = useCallback(
     (theme: BuiltInThemePreference) => {
@@ -675,12 +678,7 @@ export function AppearanceSection() {
   const commitUiFontFamily = useCallback(
     (value: string) => {
       const sanitized = sanitizeFontFamily(value);
-      if (sanitized === null) {
-        setUiFontDraft(settings.uiFontFamily);
-        return;
-      }
-      setUiFontDraft(sanitized);
-      if (sanitized !== settings.uiFontFamily) {
+      if (sanitized !== null && sanitized !== settings.uiFontFamily) {
         void updateSettings({ uiFontFamily: sanitized });
       }
     },
@@ -705,12 +703,7 @@ export function AppearanceSection() {
   const commitTerminalFontFamily = useCallback(
     (value: string) => {
       const sanitized = sanitizeFontFamily(value);
-      if (sanitized === null) {
-        setTerminalFontDraft(settings.terminalFontFamily);
-        return;
-      }
-      setTerminalFontDraft(sanitized);
-      if (sanitized !== settings.terminalFontFamily) {
+      if (sanitized !== null && sanitized !== settings.terminalFontFamily) {
         void updateSettings({ terminalFontFamily: sanitized });
       }
     },
@@ -846,17 +839,16 @@ export function AppearanceSection() {
       <SidebarNavSection />
       <SettingsSection title={t("settings.appearance.fonts.title")}>
         <View style={settingsStyles.card}>
-          {showInterfaceFontFamilyRow ? (
-            <FontFamilyRow
+          {showFontPickers ? (
+            <FontPickerRow
+              kind="interface"
               title={t("settings.appearance.fonts.interfaceFont")}
               hint={t("settings.appearance.fonts.interfaceFontHint")}
               accessibilityLabel={t("settings.appearance.fonts.interfaceFontAccessibility")}
-              placeholder={uiFontPlaceholder}
               value={settings.uiFontFamily}
-              draft={uiFontDraft}
               withBorder={false}
-              onChangeDraft={setUiFontDraft}
-              onCommit={commitUiFontFamily}
+              probe={localFontProbe}
+              onChange={commitUiFontFamily}
             />
           ) : null}
           <FontSizeRow
@@ -864,7 +856,7 @@ export function AppearanceSection() {
             hint={t("settings.appearance.fonts.interfaceSizeHint")}
             accessibilityLabel={t("settings.appearance.fonts.interfaceSizeAccessibility")}
             draft={uiBaseSizeDraft}
-            withBorder={showInterfaceFontFamilyRow}
+            withBorder={showFontPickers}
             onChangeDraft={handleUiBaseSizeChange}
             onCommit={commitUiBaseSize}
           />
@@ -876,17 +868,30 @@ export function AppearanceSection() {
             onChangeDraft={handleContentSizeChange}
             onCommit={commitContentSize}
           />
-          <FontFamilyRow
-            title={t("settings.appearance.fonts.codeFont")}
-            hint={t("settings.appearance.fonts.codeFontHint")}
-            accessibilityLabel={t("settings.appearance.fonts.codeFontAccessibility")}
-            placeholder={monoFontPlaceholder}
-            value={settings.monoFontFamily}
-            draft={monoFontDraft}
-            withBorder
-            onChangeDraft={setMonoFontDraft}
-            onCommit={commitMonoFontFamily}
-          />
+          {showFontPickers ? (
+            <FontPickerRow
+              kind="code"
+              title={t("settings.appearance.fonts.codeFont")}
+              hint={t("settings.appearance.fonts.codeFontHint")}
+              accessibilityLabel={t("settings.appearance.fonts.codeFontAccessibility")}
+              value={settings.monoFontFamily}
+              withBorder
+              probe={localFontProbe}
+              onChange={commitMonoFontFamily}
+            />
+          ) : (
+            <FontFamilyRow
+              title={t("settings.appearance.fonts.codeFont")}
+              hint={t("settings.appearance.fonts.codeFontHint")}
+              accessibilityLabel={t("settings.appearance.fonts.codeFontAccessibility")}
+              placeholder={monoFontPlaceholder}
+              value={settings.monoFontFamily}
+              draft={monoFontDraft}
+              withBorder
+              onChangeDraft={setMonoFontDraft}
+              onCommit={commitMonoFontFamily}
+            />
+          )}
           <FontSizeRow
             title={t("settings.appearance.fonts.codeSize")}
             hint={t("settings.appearance.fonts.codeSizeHint")}
@@ -895,17 +900,16 @@ export function AppearanceSection() {
             onChangeDraft={handleCodeSizeChange}
             onCommit={commitCodeSize}
           />
-          {showTerminalFontFamilyRow ? (
-            <FontFamilyRow
+          {showFontPickers ? (
+            <FontPickerRow
+              kind="terminal"
               title={t("settings.appearance.fonts.terminalFont")}
               hint={t("settings.appearance.fonts.terminalFontHint")}
               accessibilityLabel={t("settings.appearance.fonts.terminalFontAccessibility")}
-              placeholder={t("settings.appearance.fonts.followCodeFont")}
               value={settings.terminalFontFamily}
-              draft={terminalFontDraft}
               withBorder
-              onChangeDraft={setTerminalFontDraft}
-              onCommit={commitTerminalFontFamily}
+              probe={localFontProbe}
+              onChange={commitTerminalFontFamily}
             />
           ) : null}
           <FontSizeRow

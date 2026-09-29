@@ -2356,6 +2356,12 @@ export const ptBR: TranslationResources = {
         terminalSize: "Tamanho do terminal",
         terminalSizeHint: "Usado no terminal. Deixe vazio para seguir o tamanho do código",
         terminalSizeAccessibility: "Tamanho da fonte do terminal",
+        searchPlaceholder: "Buscar fontes",
+        customValuePrefix: "Usar",
+        pickerAccessibility: "{{field}}: {{value}}",
+        notInstalledWarning:
+          "Esta fonte não foi encontrada neste dispositivo; uma fonte alternativa será usada",
+        notMonospaceWarning: "Não é uma fonte monoespaçada; o texto pode ficar desalinhado",
       },
       syntax: {
         title: "Sintaxe",

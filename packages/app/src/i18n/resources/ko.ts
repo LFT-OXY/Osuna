@@ -2331,6 +2331,11 @@ export const ko: TranslationResources = {
         terminalSize: "터미널 크기",
         terminalSizeHint: "터미널에 사용됩니다. 코드 크기를 따르려면 비워 두세요",
         terminalSizeAccessibility: "터미널 글꼴 크기",
+        searchPlaceholder: "글꼴 검색",
+        customValuePrefix: "사용",
+        pickerAccessibility: "{{field}}: {{value}}",
+        notInstalledWarning: "이 기기에서 글꼴을 찾을 수 없어 대체 글꼴이 사용됩니다",
+        notMonospaceWarning: "고정폭 글꼴이 아니어서 정렬이 어긋날 수 있습니다",
       },
       syntax: {
         title: "구문",

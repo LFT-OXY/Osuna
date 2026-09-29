@@ -26,15 +26,25 @@
 
 **Blocked by:** 01 — 统一默认等宽栈，自选字体前插默认栈；02 — Terminal font 与 Terminal size
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] Electron 上展开任一字体选择器即可看到本机字体，能搜索，每项用自身字体渲染。
-- [ ] Code font 和 Terminal font 列表里没有比例字体。
-- [ ] 浏览器拒绝授权、API 不支持或非安全上下文时，仍能输入并保存自定义字体名，没有报错。
-- [ ] 老用户已存的多字体栈原样显示，并且继续生效。
-- [ ] 选"默认"或"跟随代码字体"写入 `""`，界面随即恢复。
-- [ ] 本机没装的字体、非等宽的 Code font 或 Terminal font 会出现对应提示，值照常保存。
-- [ ] 新增文案有中英文翻译。
-- [ ] 选择器有浏览器测试（`*.browser.test.tsx`，注入假字体源），覆盖以上行为。
+- [x] Electron 上展开任一字体选择器即可看到本机字体，能搜索，每项用自身字体渲染。
+  - 证据（2026-09-29 Electron dev，CDP 实测）：三行都是选择器（`界面字体族：系统默认` / `代码字体族：系统默认` / `终端字体族：跟随代码字体`）；展开 Code font 列出 21 款本机等宽字体，首项 computed font-family 为 `"Andale Mono", SFMono-Regular, …`，截图中每项字形各不相同。三行是同一个组件，实测只展开了 Code font。搜索由 `font-picker-row.browser.test.tsx` 覆盖。
+- [x] Code font 和 Terminal font 列表里没有比例字体。
+  - 证据：Electron 实测列表里没有 Helvetica、Arial 等比例字体；浏览器测试 "lists only monospace fonts"。
+- [x] 浏览器拒绝授权、API 不支持或非安全上下文时，仍能输入并保存自定义字体名，没有报错。
+  - 证据：`font-probe.browser.test.ts` 覆盖 API 缺失返回 `unavailable`、`NotAllowedError` 不抛出且下次重试；`font-picker-row.browser.test.tsx` 在 `unavailable` 下输入 `Maple Mono` 并保存。没有在真实浏览器里点"拒绝"实测。
+- [x] 老用户已存的多字体栈原样显示，并且继续生效。
+  - 证据：浏览器测试 "shows a stored font stack verbatim"（触发按钮文字与无障碍名原样显示）；生效由工单 01 的前插解析负责，选择器不改写已存的值。
+- [x] 选"默认"或"跟随代码字体"写入 `""`，界面随即恢复。
+  - 证据：Electron 实测 Code font 选"系统默认"后存储为 `""`，预览代码行回到默认等宽栈；浏览器测试覆盖两种首项都写入 `""`。
+- [x] 本机没装的字体、非等宽的 Code font 或 Terminal font 会出现对应提示，值照常保存。
+  - 证据：Electron 实测 Code font 填 `Helvetica` 行下出现"不是等宽字体，可能错位"，填 `NoSuchFont Zeta` 出现"本机未检测到该字体，将使用回退字体"，两者都已存储。Chromium 不支持的 `ui-monospace` 不误报（探测测试）。
+- [x] 新增文案有中英文翻译。
+  - 证据：9 个语言文件都补了 5 个键，`i18n/resources.test.ts` 通过。
+- [x] 选择器有浏览器测试（`*.browser.test.tsx`，注入假字体源），覆盖以上行为。
+  - 证据：`font-picker-row.browser.test.tsx`（9 个用例）与 `font-probe.browser.test.ts`（7 个用例）；app 全部浏览器测试 26 个文件、227 个用例通过，清空 Vite 缓存后复跑也通过。
 - [ ] `appearance-font-size.electron.mjs` 追加回归：打开 Code font 选择器能列出本机字体，选中后代码区 computed `font-family` 以所选字体开头。本机跑不通时以 CI 为准。
-- [ ] typecheck 和 lint 通过。
+  - 未勾：回归段已追加，但本机没跑（desktop browser-tabs e2e 在 macOS 上本来就跑不通）。同样的步骤已在 Electron dev 上通过 CDP 手工走通，等 CI 结果。
+- [x] typecheck 和 lint 通过。
+  - 证据：app typecheck 通过，排除 `.expo` 类型后复核也通过；改动文件 lint 通过。

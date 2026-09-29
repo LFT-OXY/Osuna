@@ -1,47 +1,10 @@
 import type { AppSettings } from "@/hooks/use-settings";
 import { DEFAULT_MONO_FONT_STACK, DEFAULT_UI_FONT_STACK } from "@/styles/theme";
 import { NERD_FONT_FAMILIES } from "@/terminal/runtime/terminal-font";
+import { formatFontFamily, isGenericFontFamily, splitFontStack } from "./font-family-name";
 
 // Interface font、Code font 与终端的有效字体栈只在这里解析；主题 token、终端、diff 画布
 // 和设置页预览都从这里取值。原生端语义见 font-stack.native.ts。
-
-const GENERIC_FONT_FAMILIES: ReadonlySet<string> = new Set([
-  "serif",
-  "sans-serif",
-  "monospace",
-  "cursive",
-  "fantasy",
-  "system-ui",
-  "ui-serif",
-  "ui-sans-serif",
-  "ui-monospace",
-  "ui-rounded",
-  "emoji",
-  "math",
-  "fangsong",
-]);
-
-const CSS_IDENTIFIER = /^-?[A-Za-z_][A-Za-z0-9_-]*$/;
-
-function isQuoted(family: string): boolean {
-  return (
-    family.length >= 2 &&
-    ((family.startsWith('"') && family.endsWith('"')) ||
-      (family.startsWith("'") && family.endsWith("'")))
-  );
-}
-
-function formatFontFamily(family: string): string {
-  if (isQuoted(family) || CSS_IDENTIFIER.test(family)) return family;
-  return `"${family.replace(/"/g, '\\"')}"`;
-}
-
-function splitFontStack(stack: string): string[] {
-  return stack
-    .split(",")
-    .map((family) => family.trim())
-    .filter((family) => family.length > 0);
-}
 
 function formatUserFamilies(userValue: string): string[] {
   return splitFontStack(userValue).map(formatFontFamily);
@@ -72,7 +35,7 @@ export function resolveTerminalFontStack(userValue: string): string {
     ...formatUserFamilies(userValue),
     ...splitFontStack(DEFAULT_MONO_FONT_STACK),
     ...NERD_FONT_FAMILIES.map(formatFontFamily),
-  ].filter((family) => !GENERIC_FONT_FAMILIES.has(family.toLowerCase()));
+  ].filter((family) => !isGenericFontFamily(family));
   return [...concreteFamilies, "monospace"].join(", ");
 }
 

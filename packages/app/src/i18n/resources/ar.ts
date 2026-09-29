@@ -2319,6 +2319,11 @@ export const ar: TranslationResources = {
         terminalSize: "حجم الطرفية",
         terminalSizeHint: "يُستخدم في الطرفية. اتركه فارغًا لاتباع حجم الكود",
         terminalSizeAccessibility: "حجم خط الطرفية",
+        searchPlaceholder: "البحث عن الخطوط",
+        customValuePrefix: "استخدام",
+        pickerAccessibility: "{{field}}: {{value}}",
+        notInstalledWarning: "لم يُعثر على هذا الخط على هذا الجهاز؛ سيُستخدم خط بديل",
+        notMonospaceWarning: "ليس خطًا ثابت العرض؛ قد يختل محاذاة النص",
       },
       syntax: {
         title: "بناء الجملة",

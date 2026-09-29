@@ -2294,6 +2294,11 @@ export const zhCN: TranslationResources = {
         terminalSize: "终端字号",
         terminalSizeHint: "用于终端。留空则跟随代码字号",
         terminalSizeAccessibility: "终端字体大小",
+        searchPlaceholder: "搜索字体",
+        customValuePrefix: "使用",
+        pickerAccessibility: "{{field}}：{{value}}",
+        notInstalledWarning: "本机未检测到该字体，将使用回退字体",
+        notMonospaceWarning: "不是等宽字体，可能错位",
       },
       syntax: {
         title: "语法",

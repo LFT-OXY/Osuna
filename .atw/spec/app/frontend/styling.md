@@ -240,6 +240,41 @@ The default stacks live once in `styles/theme.ts` (`DEFAULT_UI_FONT_STACK`, `DEF
 
 Tests: `appearance/font-stack.test.ts` asserts full literal stacks for web, including `resolveTerminalFont` follow and override cases. `font-stack.native.test.ts` imports `./font-stack.native` directly. `apply.test.ts` asserts the theme tokens. None of them mock `@/constants/platform`: vitest resolves `./font-stack` to the web file.
 
+Name parsing that both platforms share (`formatFontFamily`, `splitFontStack`, `firstFontFamily`, `isGenericFontFamily`) lives in `appearance/font-family-name.ts`, which has no platform suffix. Put a helper there when web-only code needs it, not in `font-stack.ts`: Metro resolves `@/appearance/font-stack` to `font-stack.native.ts` on native, which doesn't have the web-only exports, so the import is `undefined` at runtime while tsc, which only reads `font-stack.ts`, still passes.
+
+### Font picker (web and Electron)
+
+`screens/settings/appearance/font-picker-row.tsx` renders the Interface font, Code font, and Terminal font rows on web. Native keeps `FontFamilyRow` for Code font and hides the other two (`showFontPickers = !isNative` in `appearance-section.tsx`).
+
+```ts
+<FontPickerRow kind="interface" | "code" | "terminal" title hint accessibilityLabel
+  value={settings.<field>} withBorder probe={localFontProbe} onChange={commit<Field>FontFamily} />
+// appearance/font-probe.ts
+type LocalFontSource = () => Promise<readonly string[] | null>; // null = API missing; throws = denied
+interface FontProbe {
+  listFamilies(): Promise<{ status: "available"; families: readonly string[] } | { status: "unavailable" }>;
+  isInstalled(family: string): boolean;
+  isMonospace(family: string): boolean;
+}
+createFontProbe(source: LocalFontSource): FontProbe; // localFontProbe wraps window.queryLocalFonts
+```
+
+| Case | Result |
+| --- | --- |
+| Pick the first option ("System default", or "Follow code font" for `terminal`) | `onChange("")` |
+| Pick a listed family | `onChange("<family>")`, unquoted; the font-stack resolvers add quotes |
+| Type a name that matches no option, then pick `Use "<name>"` | `onChange("<name>")`; the section's commit runs `sanitizeFontFamily` and silently drops a rejected value |
+| `queryLocalFonts` missing, denied, or throwing | `unavailable`; the list shows only the first option, and typing still works. Not cached, so the next open asks again |
+| `code` / `terminal` | the list keeps only `probe.isMonospace` families |
+| First name in `value` not installed | row warning `notInstalledWarning`; a generic keyword always counts as installed |
+| `code` / `terminal` first name not monospace | row warning `notMonospaceWarning`; the value is still saved |
+
+- The web interface-font rule (`apply-root-font.web.ts`) overrides `font-family` on every text node. Text that has to render in its own face, such as a font name in the list or the trigger showing the chosen value, sits under `dataSet={CODE_SURFACE_DATASET}`. The per-option `fontFamily` goes through `inlineUnistylesStyle`, because every font is a unique value. `ComboboxItem` and `SelectFieldTrigger` take a `labelStyle` for this.
+- Request the list inside the trigger's press handler. The permission prompt needs the transient user activation.
+- Canvas rules: measure against `monospace` / `serif` / `sans-serif` baselines; never use `document.fonts.check()`. Headless Chromium accepts `72px ui-monospace, serif` but draws serif (observed 2026-09-29), so a family that does not actually render cannot be measured, and `isMonospace` returns `true`. Otherwise a stored `ui-monospace, …` stack gets a false "not monospace" warning.
+
+Tests: `appearance/font-probe.browser.test.ts` injects a fake `LocalFontSource` and measures with the real canvas, asserting only generic keywords (`monospace` is monospace, `serif` is not, a made-up name is not installed), because nothing else has a deterministic result on every CI Chromium. `font-picker-row.browser.test.tsx` injects a fake `FontProbe`. The desktop regression `packages/desktop/e2e/appearance-font-size.electron.mjs` opens Code font, picks the first listed family, and asserts that the preview code line's computed `font-family` starts with it. It then picks System default again.
+
 ## Web-only styling
 
 Scrollbars are installed once through `styles/install-web-scrollbar-styles.web.ts`, the window grain through `styles/install-web-surface-grain.web.ts`, both from `app/_layout.tsx`. Anything that needs a DOM stylesheet lives in a `.web.ts` file, not behind an `if (isWeb)` in a component.

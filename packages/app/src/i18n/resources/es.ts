@@ -2374,6 +2374,12 @@ export const es: TranslationResources = {
         terminalSize: "Tamaño del terminal",
         terminalSizeHint: "Se usa en el terminal. Déjelo vacío para seguir el tamaño del código",
         terminalSizeAccessibility: "Tamaño de fuente del terminal",
+        searchPlaceholder: "Buscar fuentes",
+        customValuePrefix: "Usar",
+        pickerAccessibility: "{{field}}: {{value}}",
+        notInstalledWarning:
+          "No se encontró esta fuente en este dispositivo; se usará una fuente alternativa",
+        notMonospaceWarning: "No es una fuente monoespaciada; el texto puede desalinearse",
       },
       syntax: {
         title: "Sintaxis",
