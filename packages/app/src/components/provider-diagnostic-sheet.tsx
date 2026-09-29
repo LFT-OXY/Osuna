@@ -20,8 +20,11 @@ import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
+import { resolveProviderInstallGuide } from "@/provider-install-guide";
+import { ProviderInstallGuideView } from "@/provider-install-guide/view";
 import { formatTimeAgo } from "@/utils/time";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
 import type { AgentModelDefinition, AgentProvider } from "@getpaseo/protocol/agent-types";
@@ -591,6 +594,15 @@ export function ProviderDiagnosticSheet({
     () => config?.providers?.[provider]?.additionalModels ?? [],
     [config?.providers, provider],
   );
+  const hostPlatform = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.hostPlatform,
+  );
+  const extendsProvider = config?.providers?.[provider]?.extends;
+  const isNotInstalled = providerEntry?.status === "unavailable";
+  const installGuide = useMemo(() => {
+    if (!isNotInstalled) return null;
+    return resolveProviderInstallGuide({ provider, extendsProvider, hostPlatform });
+  }, [extendsProvider, hostPlatform, isNotInstalled, provider]);
   const providerSnapshotRefreshing = providerEntry?.status === "loading";
   const providerErrorMessage =
     providerEntry?.status === "error"
@@ -696,6 +708,12 @@ export function ProviderDiagnosticSheet({
         })}
         snapPoints={MAIN_SNAP_POINTS}
       >
+        {installGuide ? (
+          <ProviderInstallGuideView
+            guide={installGuide}
+            cliLabel={resolveProviderLabel(installGuide.provider, snapshotEntries)}
+          />
+        ) : null}
         <ProviderModalBody
           discoveredCount={discoveredModels.length}
           additionalCount={additionalModels.length}

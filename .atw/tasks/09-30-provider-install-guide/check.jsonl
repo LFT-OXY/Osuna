@@ -1,0 +1,11 @@
+{"file": ".atw/tasks/09-30-provider-install-and-api-endpoint/research/install-commands.md", "reason": "官方安装命令原文与参考项目做法"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "复用原语、设计禁止项、i18n 规则"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 单测与组件测试写法"}
+{"file": ".atw/spec/app/frontend/type-safety.md", "reason": "协议类型与 DaemonServerInfo 透传"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "App 质量检查与禁止模式"}
+{"file": "docs/protocol-compatibility.md", "reason": "server_info 新增可选字段的兼容约束"}
+{"file": "docs/i18n.md", "reason": "9 语言文案、不翻译命令与 URL"}
+{"file": "docs/design.md", "reason": "指引区视觉：分段标签、等宽命令、禁止项"}
+{"file": "docs/qa.md", "reason": "截图验收标准"}
+{"file": "docs/glossary.md", "reason": "Provider/Custom provider 术语"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon→协议→App 透传 hostPlatform 的跨层检查"}

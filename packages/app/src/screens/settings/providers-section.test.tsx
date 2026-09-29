@@ -14,8 +14,12 @@ const { theme, snapshotState, configState, patchConfigMock, openProviderSettings
       iconSize: { sm: 14, md: 20 },
       fontSize: { xs: 11, sm: 13, base: 15 },
       fontWeight: { normal: "400" },
+      fontFamily: { ui: "system-ui", mono: "monospace" },
       borderRadius: { lg: 8 },
-      radius: { sm: 6, md: 8 },
+      radius: { sm: 6, md: 8, lg: 10 },
+      // 安装指引区渲染 Button / SegmentedControl，createControlGeometry 读这两组 token。
+      borderWidth: { 1: 1 },
+      controlHeight: { sm: 24, md: 28, lg: 32 },
       typeScale: {
         caption: { fontSize: 12, lineHeight: 16 },
         body: { fontSize: 14, lineHeight: 20 },
@@ -55,8 +59,22 @@ vi.mock("react-native", () => ({
   },
   View: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
     React.createElement("div", { "data-testid": testID }, children),
-  Text: ({ children }: { children?: React.ReactNode }) =>
-    React.createElement("span", null, children),
+  Text: ({
+    children,
+    onPress,
+    accessibilityRole,
+    accessibilityLabel,
+  }: {
+    children?: React.ReactNode;
+    onPress?: (event: React.MouseEvent) => void;
+    accessibilityRole?: string;
+    accessibilityLabel?: string;
+  }) =>
+    React.createElement(
+      "span",
+      { role: accessibilityRole, "aria-label": accessibilityLabel, onClick: onPress },
+      children,
+    ),
   Pressable: ({
     children,
     onPress,
@@ -111,6 +129,8 @@ vi.mock("lucide-react-native", () => {
   const icon = (name: string) => () => React.createElement("span", { "data-icon": name });
   return {
     ChevronRight: icon("ChevronRight"),
+    Copy: icon("Copy"),
+    ExternalLink: icon("ExternalLink"),
     MoreHorizontal: icon("MoreHorizontal"),
     Trash2: icon("Trash2"),
   };
@@ -140,6 +160,8 @@ vi.mock("react-i18next", () => ({
             "This deletes the provider entry from config.json. It cannot be undone.",
           "settings.providers.remove.confirm": "Remove",
           "settings.providers.remove.errorTitle": "Unable to remove provider",
+          "settings.providers.install.howTo": "How to install",
+          "settings.providers.install.howToFor": "How to install {{name}}",
         })[key] ?? key
       )
         .replaceAll("{{name}}", String(values?.name ?? ""))
@@ -319,6 +341,32 @@ const disabledCodexEntry: ProviderSnapshotEntry = {
   modes: [],
 };
 
+const notInstalledCodexEntry: ProviderSnapshotEntry = {
+  ...disabledCodexEntry,
+  enabled: true,
+};
+
+const notInstalledOpenCodeEntry: ProviderSnapshotEntry = {
+  provider: "opencode",
+  status: "unavailable",
+  enabled: true,
+  label: "OpenCode",
+  description: "OpenCode",
+  defaultModeId: null,
+  modes: [],
+};
+
+const notInstalledCustomClaudeEntry: ProviderSnapshotEntry = {
+  provider: "work-claude",
+  status: "unavailable",
+  enabled: true,
+  label: "Work Claude",
+  description: "Claude Code",
+  defaultModeId: null,
+  modes: [],
+  source: "custom",
+};
+
 function makeConfig(providers: MutableDaemonConfig["providers"] = {}): MutableDaemonConfig {
   return {
     relay: { enabled: false },
@@ -454,6 +502,62 @@ describe("ProvidersSection", () => {
       serverId: "server-1",
       provider: "codex",
     });
+  });
+
+  function findInstallEntry(providerLabel: string): HTMLElement | null {
+    return (
+      container?.querySelector<HTMLElement>(
+        `[role="link"][aria-label="How to install ${providerLabel}"]`,
+      ) ?? null
+    );
+  }
+
+  it("offers a how-to-install entry on a not-installed provider that opens its details", () => {
+    snapshotState.entries = [claudeEntry, notInstalledCodexEntry];
+    configState.config = makeConfig();
+
+    render();
+
+    const codexRow = findRow("Codex provider details");
+    const entry = findInstallEntry("Codex");
+    expect(entry).not.toBeNull();
+    expect(codexRow.contains(entry)).toBe(true);
+    expect(entry?.textContent).toBe("How to install");
+    expect(indexOfText(descendants(codexRow), "Not installed")).toBe(-1);
+
+    act(() => {
+      entry?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(openProviderSettingsMock).toHaveBeenCalledTimes(1);
+    expect(openProviderSettingsMock).toHaveBeenCalledWith({
+      serverId: "server-1",
+      provider: "codex",
+    });
+  });
+
+  it("keeps installed providers and providers without a guide unchanged", () => {
+    snapshotState.entries = [claudeEntry, notInstalledOpenCodeEntry];
+    configState.config = makeConfig();
+
+    render();
+
+    expect(findInstallEntry("Claude")).toBeNull();
+    expect(findInstallEntry("OpenCode")).toBeNull();
+    expect(
+      indexOfText(descendants(findRow("OpenCode provider details")), "Not installed"),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it("offers the entry on a custom provider that extends a guided provider", () => {
+    snapshotState.entries = [notInstalledCustomClaudeEntry];
+    configState.config = makeConfig({
+      "work-claude": { extends: "claude", label: "Work Claude" },
+    });
+
+    render();
+
+    expect(findInstallEntry("Work Claude")).not.toBeNull();
   });
 
   it("toggles the provider enabled flag through patchConfig when the switch is pressed", async () => {

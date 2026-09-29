@@ -36,6 +36,8 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
+import { Text as UiText } from "@/components/ui/text";
+import { hasProviderInstallGuide } from "@/provider-install-guide";
 import { ChevronRight, MoreHorizontal, Trash2 } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
@@ -85,6 +87,7 @@ interface ProviderRowProps {
   isToggling: boolean;
   isRemoving: boolean;
   canRemove: boolean;
+  hasInstallGuide: boolean;
   isFirst: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
@@ -180,6 +183,7 @@ function ProviderRow({
   isToggling,
   isRemoving,
   canRemove,
+  hasInstallGuide,
   isFirst,
   onPress,
   onToggleEnabled,
@@ -208,6 +212,15 @@ function ProviderRow({
   const handlePress = useCallback(() => {
     onPress(def.id);
   }, [def.id, onPress]);
+  const handleInstallPress = useCallback(
+    (event: GestureResponderEvent) => {
+      // 外层整行也会打开详情面板，这里拦住冒泡，避免打开两次。
+      event.stopPropagation();
+      onPress(def.id);
+    },
+    [def.id, onPress],
+  );
+  const showInstallEntry = hasInstallGuide && enabled && entry.status === "unavailable";
   const handleToggleValueChange = useCallback(
     (value: boolean) => {
       onToggleEnabled(def.id, value);
@@ -254,7 +267,11 @@ function ProviderRow({
             </View>
           </View>
           <View style={styles.trailingControls}>
-            <StatusIndicator status={providerStatus} compact={isCompact} />
+            {showInstallEntry ? (
+              <InstallEntry providerLabel={def.label} onPress={handleInstallPress} />
+            ) : (
+              <StatusIndicator status={providerStatus} compact={isCompact} />
+            )}
             <Switch
               value={enabled}
               onValueChange={handleToggleValueChange}
@@ -295,6 +312,30 @@ function StatusIndicator({ status, compact }: { status: ProviderStatus; compact:
   );
 }
 
+function InstallEntry({
+  providerLabel,
+  onPress,
+}: {
+  providerLabel: string;
+  onPress: (event: GestureResponderEvent) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.statusRow}>
+      <View style={[styles.statusDot, statusDotStyles.warning]} />
+      <UiText
+        variant="caption"
+        accessibilityRole="link"
+        accessibilityLabel={t("settings.providers.install.howToFor", { name: providerLabel })}
+        onPress={onPress}
+        style={styles.installEntryLabel}
+      >
+        {t("settings.providers.install.howTo")}
+      </UiText>
+    </View>
+  );
+}
+
 export interface ProvidersSectionProps {
   serverId: string;
 }
@@ -304,7 +345,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const isConnected = useHostRuntimeIsConnected(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const { entries, isLoading, refresh } = useProvidersSnapshot(serverId);
-  const { patchConfig } = useDaemonConfig(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
   const openProviderSettings = useProviderSettingsStore((state) => state.open);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
@@ -411,6 +452,10 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
             {providerDefinitions.map((def, index) => {
               const entry = entries?.find((candidate) => candidate.provider === def.id);
               if (!entry) return null;
+              const hasInstallGuide = hasProviderInstallGuide({
+                provider: def.id,
+                extendsProvider: config?.providers?.[def.id]?.extends,
+              });
               return (
                 <ProviderRow
                   key={def.id}
@@ -421,6 +466,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   isToggling={pendingProviderId === def.id}
                   isRemoving={removingProviderId === def.id}
                   canRemove={supportsProviderRemoval && entry.source === "custom"}
+                  hasInstallGuide={hasInstallGuide}
                   isFirst={index === 0}
                   onPress={handleOpenProviderSettings}
                   onToggleEnabled={handleToggleEnabled}
@@ -490,6 +536,9 @@ const styles = StyleSheet.create((theme) => ({
   statusLabel: {
     color: theme.colors.foregroundMuted,
     ...theme.typeScale.caption,
+  },
+  installEntryLabel: {
+    textDecorationLine: "underline",
   },
   errorText: {
     color: theme.colors.palette.red[300],

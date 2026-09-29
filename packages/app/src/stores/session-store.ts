@@ -281,6 +281,7 @@ export interface DaemonServerInfo {
   hostname: string | null;
   version: string | null;
   desktopManaged?: boolean;
+  hostPlatform?: ServerInfoStatusPayload["hostPlatform"];
   capabilities?: ServerCapabilities;
   features?: ServerInfoStatusPayload["features"];
 }
@@ -675,6 +676,7 @@ function isSessionServerInfoUnchanged(input: {
   nextHostname: string | null;
   nextVersion: string | null;
   nextDesktopManaged: boolean | undefined;
+  nextHostPlatform: string | undefined;
   nextCapabilities: ServerCapabilities | undefined;
   nextFeatures: ServerInfoStatusPayload["features"] | undefined;
   nextServerId: string;
@@ -684,6 +686,7 @@ function isSessionServerInfoUnchanged(input: {
     nextHostname,
     nextVersion,
     nextDesktopManaged,
+    nextHostPlatform,
     nextCapabilities,
     nextFeatures,
   } = input;
@@ -694,6 +697,7 @@ function isSessionServerInfoUnchanged(input: {
     prevHostname === nextHostname &&
     prevVersion === nextVersion &&
     currentServerInfo?.desktopManaged === nextDesktopManaged &&
+    currentServerInfo?.hostPlatform === nextHostPlatform &&
     areServerCapabilitiesEqual(currentServerInfo?.capabilities, nextCapabilities) &&
     areServerInfoFeaturesEqual(currentServerInfo?.features, nextFeatures)
   );
@@ -831,6 +835,7 @@ export const useSessionStore = create<SessionStore>()(
           const nextHostname = info.hostname?.trim() || null;
           const nextVersion = info.version?.trim() || null;
           const nextDesktopManaged = info.desktopManaged;
+          const nextHostPlatform = info.hostPlatform;
           const nextCapabilities = info.capabilities;
           const nextFeatures = info.features;
 
@@ -840,6 +845,7 @@ export const useSessionStore = create<SessionStore>()(
               nextHostname,
               nextVersion,
               nextDesktopManaged,
+              nextHostPlatform,
               nextCapabilities,
               nextFeatures,
               nextServerId: info.serverId,
@@ -861,6 +867,7 @@ export const useSessionStore = create<SessionStore>()(
                   ...(nextDesktopManaged !== undefined
                     ? { desktopManaged: nextDesktopManaged }
                     : {}),
+                  ...(nextHostPlatform !== undefined ? { hostPlatform: nextHostPlatform } : {}),
                   ...(nextCapabilities ? { capabilities: nextCapabilities } : {}),
                   ...(nextFeatures ? { features: nextFeatures } : {}),
                 },
