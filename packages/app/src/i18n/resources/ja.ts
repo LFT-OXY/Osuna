@@ -2339,6 +2339,7 @@ export const ja: TranslationResources = {
         terminalSize: "ターミナルサイズ",
         terminalSizeHint: "ターミナルで使用されます。空のままにするとコードサイズに従います",
         terminalSizeAccessibility: "ターミナルフォントサイズ",
+        resetSizeAccessibility: "{{field}}をリセット",
         searchPlaceholder: "フォントを検索",
         customValuePrefix: "使用",
         pickerAccessibility: "{{field}}: {{value}}",

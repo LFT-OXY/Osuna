@@ -104,9 +104,10 @@
 **设置页**
 
 - 外观 → 字体分区的行顺序：Interface font、Interface size、Content size、Code font、Code size、Terminal font、Terminal size。
-- 字号行在值不等于默认值时显示重置图标按钮，参照快捷键设置页的重置按钮。Terminal size 的"默认"就是空（跟随）。不做全局恢复默认。
+- 字号行在已保存的值不等于默认值时显示重置图标按钮。图标沿用快捷键设置页重置项的 `Undo2`，按钮本身用 `<Button variant="ghost" size="sm">` 纯图标形式（快捷键页的重置是菜单项，不是独立按钮；`docs/design.md` 不允许手绘按钮）。按钮放在输入框左侧，输入框和单位不随它出现而移动。Terminal size 的"默认"就是空（跟随）。不做全局恢复默认。
+- 字号输入框在 clamp 或重置后显示提交后的值（`AdaptiveTextInput` 的 `resetKey` 替换文字）。
 - 新增文案补齐中英文 i18n。英文 UI 标签用 "Terminal font" / "Terminal size"，中文用"终端字体"/"终端字号"。
-- `AppearancePreview` 增加一段静态终端样例：用终端有效字体栈和有效字号渲染，包含一个 Nerd Font 提示符图标，并跟随输入中的草稿值实时预览。不启动真实的 xterm。
+- `AppearancePreview` 增加一段静态终端样例：用终端有效字体栈和有效字号渲染，包含一个 Nerd Font 提示符图标，并跟随输入中的草稿值实时预览。字号草稿按 9–22 clamp，与终端实际使用的字号一致。不启动真实的 xterm。
 
 **生效**
 

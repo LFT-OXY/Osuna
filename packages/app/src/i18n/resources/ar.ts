@@ -2319,6 +2319,7 @@ export const ar: TranslationResources = {
         terminalSize: "حجم الطرفية",
         terminalSizeHint: "يُستخدم في الطرفية. اتركه فارغًا لاتباع حجم الكود",
         terminalSizeAccessibility: "حجم خط الطرفية",
+        resetSizeAccessibility: "إعادة تعيين {{field}}",
         searchPlaceholder: "البحث عن الخطوط",
         customValuePrefix: "استخدام",
         pickerAccessibility: "{{field}}: {{value}}",

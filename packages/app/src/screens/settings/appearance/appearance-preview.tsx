@@ -9,7 +9,14 @@ import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { syntaxTokenStyleFor } from "@/styles/syntax-token-styles";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { tokenizeToLines } from "@/utils/highlight-cache";
-import { CHANGED_LINE_INDICES, PREVIEW_AFTER, PREVIEW_BEFORE } from "./preview-snippet";
+import {
+  CHANGED_LINE_INDICES,
+  PREVIEW_AFTER,
+  PREVIEW_BEFORE,
+  PREVIEW_TERMINAL_BRANCH,
+  PREVIEW_TERMINAL_COMMAND,
+  PREVIEW_TERMINAL_DIRECTORY,
+} from "./preview-snippet";
 
 // Snippets are TypeScript; the cache keys grammar selection off the extension.
 const PREVIEW_EXTENSION = "ts";
@@ -31,11 +38,18 @@ interface PreviewOverrides {
   codeFontSize?: number;
 }
 
+interface PreviewTerminalFont {
+  fontFamily: string;
+  fontSize: number;
+}
+
 interface AppearancePreviewProps {
   // Live draft values for the code font applied as inline overrides on top of the
   // themed styles (the while-typing path). Absent/empty fields fall back to the
   // theme value; an explicitly-empty family resolves to the default stack.
   overrides?: PreviewOverrides;
+  // 终端有效字体栈与字号，由调用方用 resolveTerminalFont 从草稿值解析。
+  terminalFont: PreviewTerminalFont;
 }
 
 function resolveSizeOverride(value: number | undefined): number | undefined {
@@ -57,6 +71,10 @@ function buildCodeOverride(overrides: PreviewOverrides | undefined): TextStyle {
   }
   // High-churn draft values bypass the Unistyles CSS registry (docs/unistyles.md).
   return inlineUnistylesStyle(style);
+}
+
+function buildTerminalStyle({ fontFamily, fontSize }: PreviewTerminalFont): TextStyle {
+  return inlineUnistylesStyle({ fontFamily, fontSize, lineHeight: Math.round(fontSize * 1.25) });
 }
 
 function buildContentOverride(overrides: PreviewOverrides | undefined): TextStyle {
@@ -136,13 +154,17 @@ function markerStyle(type: RowType) {
 // through StyleSheet.create((theme) => …) so it repaints when
 // UnistylesRuntime.updateTheme commits a setting; the optional `overrides` layer
 // inline styles for live-while-typing feedback on the code font.
-export function AppearancePreview({ overrides }: AppearancePreviewProps) {
+export function AppearancePreview({ overrides, terminalFont }: AppearancePreviewProps) {
   const { t } = useTranslation();
   const rows = useMemo(() => buildUnifiedRows(), []);
   const contentOverride = useMemo(() => buildContentOverride(overrides), [overrides]);
   const codeOverride = useMemo(() => buildCodeOverride(overrides), [overrides]);
   const contentStyle = useMemo(() => [styles.contentSample, contentOverride], [contentOverride]);
   const codeStyle = useMemo(() => [styles.codeLine, codeOverride], [codeOverride]);
+  const terminalLineStyle = useMemo(
+    () => [styles.terminalLine, buildTerminalStyle(terminalFont)],
+    [terminalFont],
+  );
   const addRowStyle = useMemo(() => [styles.row, styles.addRow], []);
   const removeRowStyle = useMemo(() => [styles.row, styles.removeRow], []);
 
@@ -177,6 +199,18 @@ export function AppearancePreview({ overrides }: AppearancePreviewProps) {
           </Text>
         </View>
       ))}
+      {/* 静态终端样例，不启动 xterm；分支图标是 Nerd Font 字形，本机没装时显示为方框。 */}
+      <View style={styles.terminal} testID="appearance-preview-terminal">
+        <Text style={terminalLineStyle}>
+          <Text style={styles.terminalDirectory}>{PREVIEW_TERMINAL_DIRECTORY}</Text>
+          <Text style={styles.terminalMuted}> on </Text>
+          <Text style={styles.terminalBranch}>{PREVIEW_TERMINAL_BRANCH}</Text>
+        </Text>
+        <Text style={terminalLineStyle}>
+          <Text style={styles.terminalPrompt}>❯ </Text>
+          {PREVIEW_TERMINAL_COMMAND}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -212,6 +246,31 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: Math.round(theme.fontSize.content * 1.4),
     paddingHorizontal: theme.spacing[3],
     paddingBottom: theme.spacing[2],
+  },
+  terminal: {
+    marginTop: theme.spacing[2],
+    marginBottom: -theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    backgroundColor: theme.colors.terminal.background,
+    borderTopWidth: theme.borderWidth[1],
+    borderTopColor: theme.colors.border,
+  },
+  terminalLine: {
+    color: theme.colors.terminal.foreground,
+    ...(isWeb ? { whiteSpace: "pre", overflowWrap: "normal" } : null),
+  },
+  terminalDirectory: {
+    color: theme.colors.terminal.blue,
+  },
+  terminalMuted: {
+    color: theme.colors.terminal.brightBlack,
+  },
+  terminalBranch: {
+    color: theme.colors.terminal.magenta,
+  },
+  terminalPrompt: {
+    color: theme.colors.terminal.green,
   },
   markerContext: {
     color: theme.colors.foregroundMuted,

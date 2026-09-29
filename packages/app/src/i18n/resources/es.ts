@@ -2374,6 +2374,7 @@ export const es: TranslationResources = {
         terminalSize: "Tamaño del terminal",
         terminalSizeHint: "Se usa en el terminal. Déjelo vacío para seguir el tamaño del código",
         terminalSizeAccessibility: "Tamaño de fuente del terminal",
+        resetSizeAccessibility: "Restablecer {{field}}",
         searchPlaceholder: "Buscar fuentes",
         customValuePrefix: "Usar",
         pickerAccessibility: "{{field}}: {{value}}",

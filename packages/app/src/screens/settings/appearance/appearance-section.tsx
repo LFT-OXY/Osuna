@@ -22,7 +22,11 @@ import { SettingsCard, SettingsSwitch } from "@/components/settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { localFontProbe } from "@/appearance/font-probe";
 import { useContributedThemes } from "@/appearance/provider";
+import { resolveTerminalFont } from "@/appearance/font-stack";
 import {
+  DEFAULT_CODE_FONT_SIZE,
+  DEFAULT_CONTENT_FONT_SIZE,
+  DEFAULT_UI_BASE_FONT_SIZE,
   MAX_CODE_FONT_SIZE,
   MAX_CONTENT_FONT_SIZE,
   MAX_UI_BASE_FONT_SIZE,
@@ -51,6 +55,7 @@ import type { PluginThemeOption } from "@/plugins/themes";
 import { settingsStyles } from "@/styles/settings";
 import { AppearancePreview } from "./appearance-preview";
 import { FontPickerRow } from "./font-picker-row";
+import { FontSizeRow } from "./font-size-row";
 import { SidebarNavSection } from "./sidebar-nav-section";
 
 // ---------------------------------------------------------------------------
@@ -76,7 +81,6 @@ function getPluginThemeLabel(t: TFunction, option: PluginThemeOption): string {
 }
 
 const FONT_FAMILY_INPUT_STYLE = { flexGrow: 1, flexShrink: 1, maxWidth: 280 } as const;
-const FONT_SIZE_INPUT_STYLE = { width: 64, textAlign: "right" } as const;
 
 // Platform default stacks can be the bare native tokens ("normal"/"monospace");
 // those read as a bug, so show a human label in the placeholder instead.
@@ -455,55 +459,6 @@ function FontFamilyRow({
   );
 }
 
-interface FontSizeRowProps {
-  title: string;
-  hint: string;
-  accessibilityLabel: string;
-  draft: string;
-  placeholder?: string;
-  withBorder?: boolean;
-  onChangeDraft: (value: string) => void;
-  onCommit: () => void;
-}
-
-function FontSizeRow({
-  title,
-  hint,
-  accessibilityLabel,
-  draft,
-  placeholder,
-  withBorder = true,
-  onChangeDraft,
-  onCommit,
-}: FontSizeRowProps) {
-  const isCompact = useIsCompactFormFactor();
-  return (
-    <View style={[settingsStyles.row, withBorder && settingsStyles.rowBorder]}>
-      <View style={settingsStyles.rowContent}>
-        <Text style={settingsStyles.rowTitle}>{title}</Text>
-        <Text style={settingsStyles.rowHint}>{hint}</Text>
-      </View>
-      <View style={styles.sizeField}>
-        <FormTextInput
-          size={isCompact ? "md" : "sm"}
-          initialValue={draft}
-          onChangeText={onChangeDraft}
-          onBlur={onCommit}
-          onSubmitEditing={onCommit}
-          keyboardType="number-pad"
-          inputMode="numeric"
-          selectTextOnFocus
-          placeholder={placeholder}
-          placeholderTextColor={styles.placeholderColor.color}
-          style={FONT_SIZE_INPUT_STYLE}
-          accessibilityLabel={accessibilityLabel}
-        />
-        <Text style={styles.unit}>px</Text>
-      </View>
-    </View>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Syntax highlight theme picker (commits immediately)
 // ---------------------------------------------------------------------------
@@ -777,6 +732,27 @@ export function AppearanceSection() {
     }
   }, [settings.terminalFontSize, terminalSizeDraft, updateSettings]);
 
+  const resetUiBaseSize = useCallback(() => {
+    setUiBaseSizeDraft(String(DEFAULT_UI_BASE_FONT_SIZE));
+    void updateSettings({ uiBaseFontSize: DEFAULT_UI_BASE_FONT_SIZE });
+  }, [updateSettings]);
+
+  const resetContentSize = useCallback(() => {
+    setContentSizeDraft(String(DEFAULT_CONTENT_FONT_SIZE));
+    void updateSettings({ contentFontSize: DEFAULT_CONTENT_FONT_SIZE });
+  }, [updateSettings]);
+
+  const resetCodeSize = useCallback(() => {
+    setCodeSizeDraft(String(DEFAULT_CODE_FONT_SIZE));
+    void updateSettings({ codeFontSize: DEFAULT_CODE_FONT_SIZE });
+  }, [updateSettings]);
+
+  // Terminal size 的默认值是空，即跟随 Code size。
+  const resetTerminalSize = useCallback(() => {
+    setTerminalSizeDraft("");
+    void updateSettings({ terminalFontSize: null });
+  }, [updateSettings]);
+
   // Live-while-typing: the in-progress drafts drive the preview without
   // committing to the global theme. Empty/invalid fields fall back to the
   // theme value inside the preview.
@@ -788,6 +764,23 @@ export function AppearanceSection() {
     }),
     [codeSizeDraft, contentSizeDraft, monoFontDraft],
   );
+  // 终端样例与真实终端走同一个解析；Code font / Code size 草稿会影响跟随值。
+  // 字号草稿按提交时的范围 clamp，与终端实际使用的字号一致；Terminal size 草稿留空即跟随。
+  const previewTerminalFont = useMemo(() => {
+    const sizeBounds = { min: MIN_CODE_FONT_SIZE, max: MAX_CODE_FONT_SIZE };
+    return resolveTerminalFont({
+      monoFontFamily: monoFontDraft,
+      codeFontSize: parseClampedFontSize(codeSizeDraft, sizeBounds) ?? settings.codeFontSize,
+      terminalFontFamily: settings.terminalFontFamily,
+      terminalFontSize: parseClampedFontSize(terminalSizeDraft, sizeBounds),
+    });
+  }, [
+    codeSizeDraft,
+    monoFontDraft,
+    settings.codeFontSize,
+    settings.terminalFontFamily,
+    terminalSizeDraft,
+  ]);
 
   return (
     <View>
@@ -857,16 +850,20 @@ export function AppearanceSection() {
             accessibilityLabel={t("settings.appearance.fonts.interfaceSizeAccessibility")}
             draft={uiBaseSizeDraft}
             withBorder={showFontPickers}
+            showReset={settings.uiBaseFontSize !== DEFAULT_UI_BASE_FONT_SIZE}
             onChangeDraft={handleUiBaseSizeChange}
             onCommit={commitUiBaseSize}
+            onReset={resetUiBaseSize}
           />
           <FontSizeRow
             title={t("settings.appearance.fonts.contentSize")}
             hint={t("settings.appearance.fonts.contentSizeHint")}
             accessibilityLabel={t("settings.appearance.fonts.contentSizeAccessibility")}
             draft={contentSizeDraft}
+            showReset={settings.contentFontSize !== DEFAULT_CONTENT_FONT_SIZE}
             onChangeDraft={handleContentSizeChange}
             onCommit={commitContentSize}
+            onReset={resetContentSize}
           />
           {showFontPickers ? (
             <FontPickerRow
@@ -897,8 +894,10 @@ export function AppearanceSection() {
             hint={t("settings.appearance.fonts.codeSizeHint")}
             accessibilityLabel={t("settings.appearance.fonts.codeSizeAccessibility")}
             draft={codeSizeDraft}
+            showReset={settings.codeFontSize !== DEFAULT_CODE_FONT_SIZE}
             onChangeDraft={handleCodeSizeChange}
             onCommit={commitCodeSize}
+            onReset={resetCodeSize}
           />
           {showFontPickers ? (
             <FontPickerRow
@@ -918,8 +917,10 @@ export function AppearanceSection() {
             accessibilityLabel={t("settings.appearance.fonts.terminalSizeAccessibility")}
             draft={terminalSizeDraft}
             placeholder={String(settings.codeFontSize)}
+            showReset={settings.terminalFontSize !== null}
             onChangeDraft={handleTerminalSizeChange}
             onCommit={commitTerminalSize}
+            onReset={resetTerminalSize}
           />
         </View>
       </SettingsSection>
@@ -928,7 +929,7 @@ export function AppearanceSection() {
           <SyntaxRow value={settings.syntaxTheme} onChange={handleSyntaxThemeChange} />
         </View>
         <View style={styles.preview}>
-          <AppearancePreview overrides={previewOverrides} />
+          <AppearancePreview overrides={previewOverrides} terminalFont={previewTerminalFont} />
         </View>
       </SettingsSection>
     </View>
@@ -949,15 +950,6 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: ICON_SIZE.md / 2,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
-  },
-  sizeField: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-  },
-  unit: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
   },
   placeholderColor: {
     color: theme.colors.foregroundMuted,

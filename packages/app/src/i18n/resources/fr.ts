@@ -2377,6 +2377,7 @@ export const fr: TranslationResources = {
         terminalSize: "Taille du terminal",
         terminalSizeHint: "Utilisée dans le terminal. Laisser vide pour suivre la taille du code",
         terminalSizeAccessibility: "Taille de la police du terminal",
+        resetSizeAccessibility: "Réinitialiser {{field}}",
         searchPlaceholder: "Rechercher des polices",
         customValuePrefix: "Utiliser",
         pickerAccessibility: "{{field}} : {{value}}",

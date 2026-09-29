@@ -2356,6 +2356,7 @@ export const ptBR: TranslationResources = {
         terminalSize: "Tamanho do terminal",
         terminalSizeHint: "Usado no terminal. Deixe vazio para seguir o tamanho do código",
         terminalSizeAccessibility: "Tamanho da fonte do terminal",
+        resetSizeAccessibility: "Redefinir {{field}}",
         searchPlaceholder: "Buscar fontes",
         customValuePrefix: "Usar",
         pickerAccessibility: "{{field}}: {{value}}",

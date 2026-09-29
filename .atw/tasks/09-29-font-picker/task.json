@@ -3,7 +3,7 @@
   "name": "font-picker",
   "title": "字体选择器：系统字体枚举与终端独立字体",
   "description": "桌面/Web 端字体设置升级：queryLocalFonts 系统字体选择器、用户字体前插默认栈、终端独立字体/字号（默认跟随代码字体）、统一默认等宽栈",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -23,6 +23,6 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "9a988b9e8015a8498eb9953882aef8156f17148c"
+    "implementation_base_sha": "57617df2f0a03e84cbf499648488e25eb8a0df09"
   }
 }

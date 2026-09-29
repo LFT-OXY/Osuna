@@ -2361,6 +2361,7 @@ export const ru: TranslationResources = {
         terminalSizeHint:
           "Используется в терминале. Оставьте поле пустым, чтобы использовать размер кода",
         terminalSizeAccessibility: "Размер шрифта терминала",
+        resetSizeAccessibility: "Сбросить: {{field}}",
         searchPlaceholder: "Поиск шрифтов",
         customValuePrefix: "Использовать",
         pickerAccessibility: "{{field}}: {{value}}",

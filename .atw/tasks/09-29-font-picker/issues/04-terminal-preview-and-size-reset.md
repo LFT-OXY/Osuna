@@ -14,12 +14,20 @@
 
 **Blocked by:** 02 — Terminal font 与 Terminal size
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 预览区有终端样例，修改终端字体或字号（包括跟随代码字体、代码字号时）会实时变化。
-- [ ] 本机装有常见 Nerd Font 时，样例里的提示符图标正常显示。
-- [ ] 任一字号行改过后出现重置按钮；点击后恢复默认，按钮随之消失。
-- [ ] Terminal size 重置后回到跟随，占位符显示当前 Code size。
-- [ ] 四个字号行输入超出范围的值并提交后，输入框显示 clamp 后的值；点击重置后显示默认值（Terminal size 显示为空）。
-- [ ] 新增文案有中英文翻译。
-- [ ] typecheck 和 lint 通过。
+- [x] 预览区有终端样例，修改终端字体或字号（包括跟随代码字体、代码字号时）会实时变化。
+  - 证据（2026-09-29 Electron dev，CDP 实测）：Terminal size 输入 20 未提交时样例即为 20px；Terminal size 留空时 Code size 输入 18 未提交，样例跟随为 18px；Code font 选"系统默认"后样例首个字体变为 `SFMono-Regular`，选回 Menlo 后变回 `Menlo`。审查后字号草稿改为 clamp，复测 Terminal size 输入 30 未提交时样例为 22px。
+- [x] 本机装有常见 Nerd Font 时，样例里的提示符图标正常显示。
+  - 证据：Electron 截图中 U+E0A0 分支图标正常渲染，没有显示成方框。
+- [x] 任一字号行改过后出现重置按钮；点击后恢复默认，按钮随之消失。
+  - 证据：Electron 实测四行都会出现 `重置<字段>` 按钮，点击后恢复默认，按钮消失；`font-size-row.browser.test.tsx` "offers reset only while the size differs from the default"。审查后按钮改为 ghost `Button` 纯图标，Electron 复测截图与点击均正常。
+  - 偏离说明：快捷键页的"重置"是 `…` 菜单里的菜单项，不是独立按钮。这里只沿用它的 `Undo2` 图标，按钮本身用 `docs/design.md` 要求的 `<Button variant="ghost" size="sm">`，与同页侧栏排序按钮一致。按钮放在输入框左侧，输入框和 `px` 不随按钮出现而移动。
+- [x] Terminal size 重置后回到跟随，占位符显示当前 Code size。
+  - 证据：Electron 实测重置后存储为 `null`，输入框为空，占位符为 `15`（当前 Code size），样例回到 Code size。
+- [x] 四个字号行输入超出范围的值并提交后，输入框显示 clamp 后的值；点击重置后显示默认值（Terminal size 显示为空）。
+  - 证据：Electron 实测 Terminal size 30→22、重置后为空；Code size 99→22、重置后为 12；Content size 5→10、重置后为 15；Interface size 40→21、重置后为 14。浏览器测试覆盖 Enter、失焦和重置三种回显，去掉 `resetKey` 后三个用例都会失败。
+- [x] 新增文案有中英文翻译。
+  - 证据：`resetSizeAccessibility` 已补齐 9 个语言，`i18n/resources.test.ts` 通过。
+- [x] typecheck 和 lint 通过。
+  - 证据：app typecheck 通过，排除 `.expo` 的 CI 探针配置下本次改动文件无报错；改动文件 lint 通过。

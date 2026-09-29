@@ -2331,6 +2331,7 @@ export const ko: TranslationResources = {
         terminalSize: "터미널 크기",
         terminalSizeHint: "터미널에 사용됩니다. 코드 크기를 따르려면 비워 두세요",
         terminalSizeAccessibility: "터미널 글꼴 크기",
+        resetSizeAccessibility: "{{field}} 재설정",
         searchPlaceholder: "글꼴 검색",
         customValuePrefix: "사용",
         pickerAccessibility: "{{field}}: {{value}}",

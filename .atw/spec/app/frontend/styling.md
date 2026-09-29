@@ -235,7 +235,7 @@ The default stacks live once in `styles/theme.ts` (`DEFAULT_UI_FONT_STACK`, `DEF
 
 - The web mono default holds only concrete names plus a trailing `monospace`. A canvas `font` string with an unknown keyword such as `ui-monospace` is rejected whole. A user value that contains `ui-monospace` still breaks the web diff canvas, as it did before prepending.
 - The native diff (`surface.native.tsx`) keeps its own `"monospace"` fallback, and native `DEFAULT_MONO_FONT_STACK` is still `ui-monospace` on iOS. Web-only unification leaves native fonts unchanged.
-- Settings size inputs (`FontSizeRow` → `FormTextInput`) read `initialValue` once (`components/ui/text-input/text-input.web.tsx:25`). Updating the draft state after a commit, such as a clamped `22` for a typed `30` or a reset, changes the stored value but does not redraw the text in the input. A reset button has to remount or imperatively replace the input text.
+- `FormTextInput` reads `initialValue` once (`components/ui/text-input/text-input.web.tsx:25`). Setting the draft after a commit (a clamped `22` for a typed `30`) or a reset changes the stored value but leaves the old text in the box. `FontSizeRow` handles this, see below.
 - Changing `terminal-font.ts` means running `npm run build:terminal-webview` in `packages/app` and then `format:files` on the generated file.
 
 Tests: `appearance/font-stack.test.ts` asserts full literal stacks for web, including `resolveTerminalFont` follow and override cases. `font-stack.native.test.ts` imports `./font-stack.native` directly. `apply.test.ts` asserts the theme tokens. None of them mock `@/constants/platform`: vitest resolves `./font-stack` to the web file.
@@ -274,6 +274,35 @@ createFontProbe(source: LocalFontSource): FontProbe; // localFontProbe wraps win
 - Canvas rules: measure against `monospace` / `serif` / `sans-serif` baselines; never use `document.fonts.check()`. Headless Chromium accepts `72px ui-monospace, serif` but draws serif (observed 2026-09-29), so a family that does not actually render cannot be measured, and `isMonospace` returns `true`. Otherwise a stored `ui-monospace, …` stack gets a false "not monospace" warning.
 
 Tests: `appearance/font-probe.browser.test.ts` injects a fake `LocalFontSource` and measures with the real canvas, asserting only generic keywords (`monospace` is monospace, `serif` is not, a made-up name is not installed), because nothing else has a deterministic result on every CI Chromium. `font-picker-row.browser.test.tsx` injects a fake `FontProbe`. The desktop regression `packages/desktop/e2e/appearance-font-size.electron.mjs` opens Code font, picks the first listed family, and asserts that the preview code line's computed `font-family` starts with it. It then picks System default again.
+
+### Font size rows and the terminal preview
+
+`screens/settings/appearance/font-size-row.tsx` renders Interface size, Content size, Code size, and Terminal size. `appearance-section.tsx` owns the drafts, the clamp, and the writes:
+
+```ts
+<FontSizeRow title hint accessibilityLabel draft placeholder? withBorder?
+  showReset={settings.<field> !== DEFAULT_<FIELD>}  // Terminal size: settings.terminalFontSize !== null
+  onChangeDraft onCommit onReset />
+<AppearancePreview overrides={previewOverrides}
+  terminalFont={resolveTerminalFont({ monoFontFamily: monoFontDraft,
+    codeFontSize: parseClampedFontSize(codeSizeDraft, bounds) ?? settings.codeFontSize,
+    terminalFontFamily: settings.terminalFontFamily,
+    terminalFontSize: parseClampedFontSize(terminalSizeDraft, bounds) })} />
+```
+
+| Case | Result |
+| --- | --- |
+| Submit or blur with `30` in Code size | the section sets the draft to `"22"` and saves 22; the box shows `22` |
+| Size equals its default | no reset button |
+| Press reset | the draft becomes the default (`""` for Terminal size), the setting is saved (`null` for Terminal size), and the button disappears. An empty Terminal size box shows the Code size placeholder |
+| Type in Terminal size or Code size without committing | the terminal sample changes size right away, clamped to 9–22 like the real terminal |
+
+- Echo: `FontSizeRow` increments the input's `resetKey` in the same handler that calls `onCommit` / `onReset`. `AdaptiveTextInput` then calls `replaceText(initialValue)`. The input is not remounted and `onChangeText` does not fire. This only works if the parent sets the new draft synchronously inside `onCommit` / `onReset`, so React batches both updates into one render.
+- The reset button is `<Button variant="ghost" size="sm" leftIcon={Undo2} />`, the same icon-only form as the sidebar reorder buttons on this page. A hand-styled `Pressable` goes against `docs/design.md` ("A pressable styled to look like a button is wrong"). It sits left of the input so the input and `px` stay on the card's trailing rail when it appears.
+- The terminal sample does not start xterm. It is two `Text` lines in the terminal ANSI colors, and the branch glyph is U+E0A0 (Powerline, in every Nerd Font). The preview passes the committed `terminalFontFamily`, because the Terminal font picker saves on select and has no draft.
+- The code-line preview (`resolveSizeOverride`) still renders an unclamped draft, so typing `30` shows 30px code next to a 22px terminal until the commit.
+
+Tests: `font-size-row.browser.test.tsx` renders the row inside a small harness that clamps like the section and asserts the box text after Enter, blur, and reset, plus the button's visibility. The section's own `commit*` / `reset*` wiring was verified in Electron over CDP, not by a test.
 
 ## Web-only styling
 

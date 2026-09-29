@@ -2439,6 +2439,7 @@ export const en = {
         terminalSize: "Terminal size",
         terminalSizeHint: "Used in the terminal. Leave empty to follow the code size",
         terminalSizeAccessibility: "Terminal font size",
+        resetSizeAccessibility: "Reset {{field}}",
         searchPlaceholder: "Search fonts",
         customValuePrefix: "Use",
         pickerAccessibility: "{{field}}: {{value}}",
