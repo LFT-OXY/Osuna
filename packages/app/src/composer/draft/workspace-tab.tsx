@@ -54,7 +54,6 @@ import {
 } from "@/workspace-tabs/model";
 import { openWorkspaceChanges } from "@/workspace-tabs/open-supporting-view";
 import { useSettings } from "@/hooks/use-settings";
-import { splitLeadingSkillBlocks } from "@/composer/skill-chips";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const DRAFT_CAPABILITIES: AgentCapabilityFlags = {
@@ -383,7 +382,6 @@ export function WorkspaceDraftAgentTab({
   const clearDraftInput = draftInput.clear;
   const replaceDraftText = draftInput.replaceText;
   const setDraftAttachments = draftInput.setAttachments;
-  const setDraftSkillChips = draftInput.setSkillChips;
   const pendingAutoSubmit = useWorkspaceDraftSubmissionStore((state) => {
     const pending = state.pendingByDraftId[draftId] ?? null;
     return pending?.serverId === serverId && pending.workspaceId === workspaceId ? pending : null;
@@ -591,13 +589,7 @@ export function WorkspaceDraftAgentTab({
           cwd: submission.cwd,
         });
     void createPromise.catch(() => {
-      if (submission.segments) {
-        const { chips, body, text } = splitLeadingSkillBlocks(submission.segments);
-        setDraftSkillChips(() => chips);
-        replaceDraftText(text, body);
-      } else {
-        replaceDraftText(submission.text);
-      }
+      replaceDraftText(submission.text, submission.segments);
       setDraftAttachments(composerWorkspaceAttachment.userAttachmentsOnly(submission.attachments));
       autoSubmitKeyRef.current = null;
     });
@@ -610,7 +602,6 @@ export function WorkspaceDraftAgentTab({
     isReadyForPendingAutoSubmit,
     serverId,
     setDraftAttachments,
-    setDraftSkillChips,
     replaceDraftText,
     workspaceId,
   ]);
@@ -696,8 +687,6 @@ export function WorkspaceDraftAgentTab({
               attachmentScopeKeys={attachmentScopeKeys}
               onOpenWorkspaceAttachment={handleOpenWorkspaceAttachment}
               onChangeAttachments={draftInput.setAttachments}
-              skillChips={draftInput.skillChips}
-              onChangeSkillChips={draftInput.setSkillChips}
               cwd={composerState.workingDir}
               clearDraft={draftInput.clear}
               autoFocus={shouldAutoFocusWorkspaceDraftComposer({ isPaneFocused, isSubmitting })}

@@ -4,7 +4,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { Extension, Node } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { TextSelection } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { Text } from "@/components/ui/text";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,20 +29,37 @@ export function readInlineBlockNode(node: ProseMirrorNode): InlineBlock | null {
 /** 输入框所属的 host；Agent mention 的 profile 与自定义 provider 按它取图标。 */
 export const InlineBlockServerIdContext = createContext<string | null>(null);
 
-/** 悬停提示：File mention 显示相对路径，目录带末尾 `/`。 */
-function resolveTooltipText(block: InlineBlock): string | null {
-  if (block.kind !== "file") return null;
-  return block.entryKind === "directory" ? `${block.path}/` : block.path;
+interface InlineBlockTooltip {
+  title: string;
+  titleWeight: "normal" | "medium";
+  detail?: string;
+}
+
+/** 悬停提示：File mention 显示相对路径（目录带末尾 `/`），Skill block 显示全名与描述。 */
+function resolveTooltip(block: InlineBlock): InlineBlockTooltip | null {
+  switch (block.kind) {
+    case "file":
+      return {
+        title: block.entryKind === "directory" ? `${block.path}/` : block.path,
+        titleWeight: "normal",
+      };
+    case "skill":
+      return block.description
+        ? { title: block.name, titleWeight: "medium", detail: block.description }
+        : { title: block.name, titleWeight: "medium" };
+    case "agent":
+      return null;
+  }
 }
 
 function ComposerInlineBlockNodeView({ node }: ReactNodeViewProps) {
   const serverId = useContext(InlineBlockServerIdContext);
   const block = readInlineBlockNode(node);
   if (!block) return null;
-  const tooltipText = resolveTooltipText(block);
+  const tooltip = resolveTooltip(block);
   return (
     <NodeViewWrapper as="span" style={WRAPPER_STYLE}>
-      {tooltipText ? (
+      {tooltip ? (
         <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
           <TooltipTrigger asChild>
             <View style={styles.envelope}>
@@ -50,7 +67,16 @@ function ComposerInlineBlockNodeView({ node }: ReactNodeViewProps) {
             </View>
           </TooltipTrigger>
           <TooltipContent side="top" align="start" offset={8} testID="inline-block-tooltip">
-            <Text variant="label">{tooltipText}</Text>
+            <View style={styles.tooltipBody}>
+              <Text variant="label" weight={tooltip.titleWeight}>
+                {tooltip.title}
+              </Text>
+              {tooltip.detail ? (
+                <Text variant="label" color="foregroundMuted">
+                  {tooltip.detail}
+                </Text>
+              ) : null}
+            </View>
           </TooltipContent>
         </Tooltip>
       ) : (
@@ -144,9 +170,54 @@ export const InlineBlockKeys = Extension.create({
   },
 });
 
-const styles = StyleSheet.create({
+function isSkillBlockNode(node: ProseMirrorNode | null | undefined): boolean {
+  return Boolean(node && readInlineBlockNode(node)?.kind === "skill");
+}
+
+/** 开头连续 Skill block（块之间是一个空格）中最后一个块的结束位置；开头不是 Skill block 时为 null。 */
+function leadingSkillBlocksEnd(doc: ProseMirrorNode): number | null {
+  const paragraph = doc.firstChild;
+  if (!paragraph) return null;
+  let end: number | null = null;
+  let pos = 1;
+  for (let index = 0; index < paragraph.childCount; index += 1) {
+    const child = paragraph.child(index);
+    if (isSkillBlockNode(child)) {
+      end = pos + child.nodeSize;
+    } else if (!(child.text === " " && isSkillBlockNode(paragraph.maybeChild(index + 1)))) {
+      break;
+    }
+    pos += child.nodeSize;
+  }
+  return end;
+}
+
+// Skill block 固定在开头：光标落到开头 Skill block 之前或之间（点击、Home、方向键）时移到最后一个
+// 开头块后面，免得在 skill 前写出正文。只管空选区，全选删除照常。
+export const LeadingSkillBlockCaret = Extension.create({
+  name: "leadingSkillBlockCaret",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("leadingSkillBlockCaret"),
+        appendTransaction: (_transactions, _oldState, state) => {
+          const { selection } = state;
+          if (!selection.empty) return null;
+          const end = leadingSkillBlocksEnd(state.doc);
+          if (end === null || selection.from >= end) return null;
+          return state.tr.setSelection(TextSelection.create(state.doc, end));
+        },
+      }),
+    ];
+  },
+});
+
+const styles = StyleSheet.create((theme) => ({
   envelope: {
     position: "relative",
     minWidth: 0,
   },
-});
+  tooltipBody: {
+    gap: theme.spacing[0.5],
+  },
+}));

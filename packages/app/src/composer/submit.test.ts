@@ -20,6 +20,10 @@ const fileSegment = {
   block: { kind: "file" as const, path: "src/x.ts", entryKind: "file" as const },
 };
 
+function skill(name: string) {
+  return { type: "block" as const, block: { kind: "skill" as const, name } };
+}
+
 describe("submitAgentInput", () => {
   it("clears the composer before an in-flight submit resolves", async () => {
     const deferred = createDeferredPromise<void>();
@@ -37,7 +41,6 @@ describe("submitAgentInput", () => {
       message: "  hello world  ",
       segments: null,
       attachments: [],
-      skillChips: [],
       isAgentRunning: false,
       canSubmit: true,
       queueMessage,
@@ -45,7 +48,6 @@ describe("submitAgentInput", () => {
       clearDraft,
       setUserInput,
       setAttachments,
-      setSkillChips: vi.fn(),
       setSendError,
       setIsProcessing,
     });
@@ -85,7 +87,6 @@ describe("submitAgentInput", () => {
       message: "  keep me  ",
       segments: null,
       attachments,
-      skillChips: [],
       submitBehavior: "preserve-and-lock",
       isAgentRunning: false,
       canSubmit: true,
@@ -94,7 +95,6 @@ describe("submitAgentInput", () => {
       clearDraft,
       setUserInput,
       setAttachments,
-      setSkillChips: vi.fn(),
       setSendError,
       setIsProcessing,
     });
@@ -131,7 +131,6 @@ describe("submitAgentInput", () => {
         message: "  queued message  ",
         segments: null,
         attachments: [{ id: "img-1" }],
-        skillChips: [],
         isAgentRunning: true,
         canSubmit: true,
         queueMessage,
@@ -139,7 +138,6 @@ describe("submitAgentInput", () => {
         clearDraft,
         setUserInput,
         setAttachments,
-        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
       }),
@@ -177,7 +175,6 @@ describe("submitAgentInput", () => {
         message: "  hello world  ",
         segments: null,
         attachments,
-        skillChips: [],
         isAgentRunning: false,
         canSubmit: true,
         queueMessage,
@@ -185,7 +182,6 @@ describe("submitAgentInput", () => {
         clearDraft,
         setUserInput,
         setAttachments,
-        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
         onSubmitError,
@@ -216,7 +212,6 @@ describe("submitAgentInput", () => {
         message: "  steer this turn  ",
         segments: null,
         attachments: [{ id: "img-1" }],
-        skillChips: [],
         forceSend: true,
         isAgentRunning: true,
         canSubmit: true,
@@ -227,7 +222,6 @@ describe("submitAgentInput", () => {
         clearDraft: vi.fn(),
         setUserInput,
         setAttachments,
-        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
       }),
@@ -254,7 +248,6 @@ describe("submitAgentInput", () => {
         message: "   ",
         segments: null,
         attachments: [],
-        skillChips: [],
         allowEmptySubmit: true,
         isAgentRunning: false,
         canSubmit: true,
@@ -263,7 +256,6 @@ describe("submitAgentInput", () => {
         clearDraft,
         setUserInput,
         setAttachments,
-        setSkillChips: vi.fn(),
         setSendError,
         setIsProcessing,
       }),
@@ -278,17 +270,19 @@ describe("submitAgentInput", () => {
     expect(clearDraft).toHaveBeenCalledWith("sent");
   });
 
-  it("sends skill chips as a /name prefix and clears them with the text", async () => {
-    const setSkillChips = vi.fn();
+  it("sends leading skill blocks as a /name prefix and keeps a skill-only message", async () => {
     const submitMessage = vi.fn(async () => {});
 
     await expect(
       submitAgentInput({
-        message: "   ",
-        segments: null,
+        message: "/a /b ",
+        segments: [
+          skill("a"),
+          { type: "text", text: " " },
+          skill("b"),
+          { type: "text", text: " " },
+        ],
         attachments: [],
-        skillChips: [{ name: "a" }, { name: "b" }],
-        setSkillChips,
         isAgentRunning: false,
         canSubmit: true,
         queueMessage: vi.fn(),
@@ -303,116 +297,45 @@ describe("submitAgentInput", () => {
 
     expect(submitMessage).toHaveBeenCalledWith({
       message: "/a /b",
-      segments: null,
+      segments: [skill("a"), { type: "text", text: " " }, skill("b")],
       attachments: [],
     });
-    expect(setSkillChips).toHaveBeenCalledWith([]);
   });
 
-  it("queues the serialized message and clears the skill chips while the agent runs", async () => {
-    const setSkillChips = vi.fn();
-    const queueMessage = vi.fn();
-
-    await expect(
-      submitAgentInput({
-        message: " body ",
-        segments: null,
-        attachments: [],
-        skillChips: [{ name: "a" }],
-        setSkillChips,
-        isAgentRunning: true,
-        canSubmit: true,
-        queueMessage,
-        submitMessage: vi.fn(async () => {}),
-        clearDraft: vi.fn(),
-        setUserInput: vi.fn(),
-        setAttachments: vi.fn(),
-        setSendError: vi.fn(),
-        setIsProcessing: vi.fn(),
-      }),
-    ).resolves.toBe("queued");
-
-    expect(queueMessage).toHaveBeenCalledWith({
-      message: "/a body",
-      segments: null,
-      attachments: [],
-    });
-    expect(setSkillChips).toHaveBeenCalledWith([]);
-  });
-
-  it("restores the skill chips and the body without the prefix when submit fails", async () => {
-    const chips = [{ name: "a", description: "Skill A" }, { name: "b" }];
-    const setSkillChips = vi.fn();
-    const setUserInput = vi.fn();
-
-    await expect(
-      submitAgentInput({
-        message: "  hello  ",
-        segments: null,
-        attachments: [],
-        skillChips: chips,
-        setSkillChips,
-        isAgentRunning: false,
-        canSubmit: true,
-        queueMessage: vi.fn(),
-        submitMessage: async () => {
-          throw new Error("offline");
-        },
-        clearDraft: vi.fn(),
-        setUserInput,
-        setAttachments: vi.fn(),
-        setSendError: vi.fn(),
-        setIsProcessing: vi.fn(),
-      }),
-    ).resolves.toBe("failed");
-
-    expect(setUserInput).toHaveBeenLastCalledWith("hello");
-    expect(setSkillChips).toHaveBeenNthCalledWith(1, []);
-    expect(setSkillChips).toHaveBeenNthCalledWith(2, chips);
-  });
-
-  it("keeps the skill chips when submit preserves and locks the composer", async () => {
-    const setSkillChips = vi.fn();
+  it("sends one space between the skill blocks and the body however the body starts", async () => {
     const submitMessage = vi.fn(async () => {});
 
-    await expect(
-      submitAgentInput({
-        message: "body",
-        segments: null,
-        attachments: [],
-        skillChips: [{ name: "a" }],
-        setSkillChips,
-        submitBehavior: "preserve-and-lock",
-        isAgentRunning: false,
-        canSubmit: true,
-        queueMessage: vi.fn(),
-        submitMessage,
-        clearDraft: vi.fn(),
-        setUserInput: vi.fn(),
-        setAttachments: vi.fn(),
-        setSendError: vi.fn(),
-        setIsProcessing: vi.fn(),
-      }),
-    ).resolves.toBe("submitted");
-
-    expect(submitMessage).toHaveBeenCalledWith({
-      message: "/a body",
-      segments: null,
+    await submitAgentInput({
+      message: "/a   body",
+      segments: [skill("a"), { type: "text", text: "   body" }],
       attachments: [],
+      isAgentRunning: false,
+      canSubmit: true,
+      queueMessage: vi.fn(),
+      submitMessage,
+      clearDraft: vi.fn(),
+      setUserInput: vi.fn(),
+      setAttachments: vi.fn(),
+      setSendError: vi.fn(),
+      setIsProcessing: vi.fn(),
     });
-    expect(setSkillChips).not.toHaveBeenCalled();
+
+    expect(submitMessage).toHaveBeenCalledWith(expect.objectContaining({ message: "/a body" }));
   });
 
-  it("queues the segments behind the chips' skill blocks, trimmed like the text", async () => {
+  it("queues the segments trimmed like the text", async () => {
     const queueMessage = vi.fn();
 
     await expect(
       submitAgentInput({
-        message: " see [x.ts](src/x.ts)\n",
-        segments: [{ type: "text", text: " see " }, fileSegment, { type: "text", text: "\n" }],
+        message: "/a see [x.ts](src/x.ts)\n",
+        segments: [
+          skill("a"),
+          { type: "text", text: " see " },
+          fileSegment,
+          { type: "text", text: "\n" },
+        ],
         attachments: [],
-        skillChips: [{ name: "a" }],
-        setSkillChips: vi.fn(),
         isAgentRunning: true,
         canSubmit: true,
         queueMessage,
@@ -427,11 +350,7 @@ describe("submitAgentInput", () => {
 
     expect(queueMessage).toHaveBeenCalledWith({
       message: "/a see [x.ts](src/x.ts)",
-      segments: [
-        { type: "block", block: { kind: "skill", name: "a" } },
-        { type: "text", text: "see " },
-        fileSegment,
-      ],
+      segments: [skill("a"), { type: "text", text: " see " }, fileSegment],
       attachments: [],
     });
   });
@@ -444,8 +363,6 @@ describe("submitAgentInput", () => {
         message: " see [x.ts](src/x.ts) ",
         segments: [{ type: "text", text: " see " }, fileSegment, { type: "text", text: " " }],
         attachments: [],
-        skillChips: [],
-        setSkillChips: vi.fn(),
         isAgentRunning: false,
         canSubmit: true,
         queueMessage: vi.fn(),

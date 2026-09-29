@@ -3,7 +3,6 @@ import {
   type AttachmentMetadata,
   type UserComposerAttachment,
 } from "@/attachments/types";
-import { SkillChipSchema, type SkillChip } from "@/composer/skill-chips";
 import { hasInlineBlock, isInlineSegment, type InlineSegment } from "@/inline-blocks";
 import { PluginResourceComposerAttachmentSchema } from "@/plugins/attachments";
 import { z } from "zod";
@@ -21,8 +20,6 @@ export type PersistedDraftImage = AttachmentMetadata | LegacyDraftImage;
 export interface DraftInput {
   text: string;
   attachments: UserComposerAttachment[];
-  /** 旧草稿没有这个字段，读出时视为没有 chip。 */
-  skills?: readonly SkillChip[];
   /**
    * 输入框里的分段结构，只在含块时保存；有它时以它恢复输入框，text 仍是序列化文字。
    * 旧草稿没有这个字段，按 text 恢复成纯文字。
@@ -74,11 +71,9 @@ export function editDraftRecordText({ record, text, segments, now }: DraftTextEd
     return record;
   }
   const attachments = record?.lifecycle === "active" ? record.input.attachments : [];
-  const skills = record?.lifecycle === "active" ? record.input.skills : undefined;
   const input = {
     text,
     attachments,
-    ...(skills ? { skills } : {}),
     ...(nextSegments ? { segments: nextSegments } : {}),
   };
   return {
@@ -90,17 +85,10 @@ export function editDraftRecordText({ record, text, segments, now }: DraftTextEd
 }
 
 /**
- * 只有 chip 没有正文也算有内容；空白正文同样算，用户可能还在输入。
- * 块按链接写法计入 text，只有块的草稿 text 也不为空。
+ * 空白正文也算有内容，用户可能还在输入。块按链接写法计入 text，只有块的草稿 text 也不为空。
  */
 export function hasDraftContent(input: DraftInput): boolean {
-  return input.text.length > 0 || input.attachments.length > 0 || (input.skills?.length ?? 0) > 0;
-}
-
-const NO_SKILL_CHIPS: readonly SkillChip[] = [];
-
-export function selectDraftSkillChips(record: DraftRecord | undefined): readonly SkillChip[] {
-  return record?.lifecycle === "active" ? (record.input.skills ?? NO_SKILL_CHIPS) : NO_SKILL_CHIPS;
+  return input.text.length > 0 || input.attachments.length > 0;
 }
 
 export interface DraftStoreState {
@@ -180,7 +168,6 @@ export const InlineSegmentSchema = z.custom<InlineSegment>(isInlineSegment);
 export const CanonicalDraftInputSchema = z.strictObject({
   text: z.string(),
   attachments: z.array(UserComposerAttachmentSchema),
-  skills: z.array(SkillChipSchema).optional(),
   segments: z.array(InlineSegmentSchema).optional(),
   // COMPAT(draft-cwd): accept legacy persisted drafts that include cwd. Stop accepting after 2026-11-09.
   cwd: z.string().optional(),
@@ -262,7 +249,6 @@ export function toDraftInputIfReady(
   return {
     text: record.input.text,
     attachments: record.input.attachments.map(normalizeComposerAttachment),
-    ...(record.input.skills ? { skills: record.input.skills } : {}),
     ...(record.input.segments ? { segments: record.input.segments } : {}),
   };
 }

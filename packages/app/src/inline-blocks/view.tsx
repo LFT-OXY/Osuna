@@ -7,6 +7,7 @@ import {
   inlineBlockName,
   parseInlineSegments,
   resolveInlineBlockVariant,
+  splitLeadingSkillBlocks,
   type InlineBlock,
   type InlineSegment,
 } from "./index";
@@ -44,6 +45,12 @@ export function useAgentSkillNames(input: AgentSkillNamesInput): ReadonlySet<str
 }
 
 type KeyedPart = { key: string; text: string } | { key: string; block: InlineBlock };
+
+/** 输入框的分段结构里开头 Skill block 各带一个分隔空格，与解析结果对齐时拆掉，显示时再统一补回。 */
+function withoutLeadingSkillSeparators(segments: readonly InlineSegment[]): InlineSegment[] {
+  const { blocks, rest } = splitLeadingSkillBlocks(segments);
+  return [...blocks.map((block): InlineSegment => ({ type: "block", block })), ...rest];
+}
 
 function keyInlineParts(segments: readonly InlineSegment[]): KeyedPart[] {
   const occurrences = new Map<string, number>();
@@ -97,7 +104,12 @@ export function InlineBlockText({
   ...textProps
 }: InlineBlockTextProps) {
   const parts = useMemo(
-    () => keyInlineParts(segments ?? parseInlineSegments(text, { skillNames })),
+    () =>
+      keyInlineParts(
+        segments
+          ? withoutLeadingSkillSeparators(segments)
+          : parseInlineSegments(text, { skillNames }),
+      ),
     [segments, text, skillNames],
   );
   return (

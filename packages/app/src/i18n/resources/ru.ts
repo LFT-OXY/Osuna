@@ -175,8 +175,6 @@ export const ru: TranslationResources = {
       removeBrowserElement: "Удалить вложение с элементом браузера",
       openReview: "Открыть вложение проверки",
       removeReview: "Удалить вложение проверки",
-      skillChip: "Навык: {{name}}",
-      removeSkill: "Удалить",
     },
     inlineBlocks: {
       skill: "Навык: {{name}}",

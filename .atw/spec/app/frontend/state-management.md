@@ -31,15 +31,27 @@ Rules:
 
 Timeline updates go through the reducers in `timeline/session-stream-reducers.ts` (compaction, gap detection, sequence dedupe). `docs/timeline-sync.md` explains why live streams are for immediacy and `fetch_agent_timeline_request` is authoritative.
 
-## Composer content outside the text
+## Leading Skill blocks
 
-A Skill chip (`composer/skill-chips.ts`) is prompt content that is not in the Composer text. Three rules keep it sendable:
+A Skill block is an inline block like a File mention, but it only lives at the start of the message: body text before it would turn it into a mid-text `/name` the agent ignores. The pure rules are in `inline-blocks/index.ts`; the web editor applies them in `composer/input/text-input.web.tsx` and `composer/input/inline-block-node.web.tsx`.
 
-- `MessageInput` only sees text and attachments, so the Composer passes `hasExternalContent || hasSkillChips`. Both empty-content guards read it: `sendMessageImpl` in `composer/input/input.tsx` and `queueComposerInput` in `composer/input/state.ts`. A chip-only message that one of them drops sends from Enter and silently does nothing from Mod+Enter.
-- Serialize before submit: `resolveSkillChipSubmission({ chips, text })` returns the `/a /b body` message plus `recognizesClientCommands`. With chips, `/clear` in the body is ordinary text, both at submit and when picked from the Command menu (`canExecuteClientSlashCommand` is false).
-- Chips live in the draft record (`input.skills`), so they share the draft key and its workspace isolation. The Composer takes them as `skillChips` / `onChangeSkillChips` props from `useAgentInputDraft`, like `attachments`. Never keep them in Composer state: one Composer instance is reused across agents.
-- `submitAgentInput` (`composer/submit.ts`) owns the chip side of a send: it receives the body and `skillChips`, serializes the outgoing message, clears chips with the text, and on failure restores the body without the prefix plus the chips via `setSkillChips`. Restoring the serialized text instead would send the prefix twice.
-- A chip-only draft is content: `hasDraftContent` in `stores/draft-store/state.ts` is the one predicate for "active vs abandoned", used by both `editDraftRecordText` and the hook's `saveDraft`. A block-only draft needs no extra case: a block is its link text in `text`, so `text` is not empty.
+| Entry point | Web | Native |
+| --- | --- | --- |
+| Pick from the Command menu | `MessageInputRef.pickSkillBlock(pick: SkillPick)` → `ComposerTextInputHandle.pickSkillBlock(block, command)` → `pickSkillBlock`. One undo step. | Same `MessageInputRef` call → `pickSkillText`, which needs `SkillPick.skillNames`: only leading `/x` that are known skills count as the leading run, so both platforms send picks in picking order. |
+| Paste from inside the composer | `pasteSegments` → `extractSkillBlocks` + `addLeadingSkillBlocks`. | Text only. |
+| Caret | `LeadingSkillBlockCaret` moves an empty selection that lands before the last leading Skill block to just after it (click, Home, arrows). Consequence: Backspace removes leading blocks from the last one back; a range selection still deletes any of them. | — |
+
+Rules:
+
+- **Two segment shapes.** Editor segments keep one space after each leading Skill block (`leadingSkillSegments`), so the editor text reads `/a /b body`, the same as what is sent. Parsed segments (`parseInlineSegments`, bubbles) drop that separator and the renderer adds it back. `splitLeadingSkillBlocks` turns editor segments into `{ blocks, rest }` without the separators; `leadingSkillSegments(blocks, rest)` goes back. Hand one shape to code that expects the other and the space doubles (Queue track) or disappears (`/atw-tddfix` in the composer).
+- **Send from segments, not text.** `resolveOutgoingMessage({ text, segments })` in `composer/submit.ts` returns `serializeInlineSegments(trimInlineSegments(segments))` and the trimmed segments. The user can delete the separator space, and the serializer still writes exactly one.
+- **No client commands with a Skill block.** A skill named `clear` serializes to `/clear`. `handleSubmit` and `handleQueue` skip `runRecognizedClientSlashCommand` when `hasSkillBlock(getSegments())`. The Command menu's `canExecuteClientSlashCommand` reads the same predicate from `textSource.getSegmentsSnapshot()`.
+- **A block-only message is content.** A block is its link text in `text`, so `text` is not empty; `hasDraftContent` and the Composer's `hasText` need no extra case.
+- **Old drafts.** A stored draft may still carry the Skill chip `skills` field. `migrateDraftInput` folds it into leading Skill blocks under `COMPAT(skill-chip-draft)`; how a retired field reaches that migration is in `docs/data-model.md` (Draft Store).
+
+Wrong: Rewind writes `parseInlineSegments(text, { skillNames })` straight into the editor; `/atw-tdd fix` comes back as `atw-tddfix`. Correct: `resolveRewoundComposerContent` in `components/rewind/composer-restore.tsx`, which runs the parsed segments through `splitLeadingSkillBlocks` and `leadingSkillSegments`.
+
+Tests: `inline-blocks/index.test.ts` (`pickSkillBlock`, `pickSkillText`, pasted skill blocks, leading skill blocks), `composer/submit.test.ts`, `stores/draft-store/persistence.test.ts` ("draft persistence of legacy skill chips"), `composer/input/text-input.web.browser.test.tsx` ("Skill blocks in the Composer text input"), and the skills case in `e2e/browser/composer-inline-blocks.spec.ts`.
 
 ## Unsent Composer content keeps its segments
 
@@ -48,19 +60,19 @@ A Skill chip (`composer/skill-chips.ts`) is prompt content that is not in the Co
 | Where | Field | Written by | Restored by |
 | --- | --- | --- | --- |
 | Draft | `DraftInput.segments?` (`stores/draft-store/state.ts`), stored only when it holds a block (`segmentsWithBlocks`) | `editDraftText({ draftKey, text, segments })` from `MessageInput`'s `onChangeText(text, segments?)` | `initialSegments` on mount (`textSource.getSegmentsSnapshot`), `TextReplacement.segments` after hydration |
-| Queue item | `QueuedComposerMessage.segments?` (`composer/actions.ts`) | `resolveOutgoingSegments({ chips, segments })` in `composer/submit.ts` | Edit queued message |
+| Queue item | `QueuedComposerMessage.segments?` (`composer/actions.ts`) | `resolveOutgoingMessage({ text, segments })` in `composer/submit.ts` | Edit queued message |
 | Failed send | — | `submitAgentInput` input `segments` | its `setUserInput(text, segments)` |
 | New workspace → draft tab handoff | `PendingWorkspaceDraftSubmission.segments?` via `MessagePayload.segments?` | Composer `submitMessage` → `onSubmitMessage` | `createPromise.catch` in `composer/draft/workspace-tab.tsx` |
-| Rewind | — | parsed from the bubble text (`resolveRewoundComposerContent`) | only when the composer has no text and no chips |
+| Rewind | — | parsed from the bubble text (`resolveRewoundComposerContent`) | only when the composer has no text |
 
 Rules:
 
 - **A text-only write drops the segments.** `editDraftRecordText({ record, text, segments: undefined, now })` returns a record without `segments`; old segments would describe text that is gone. Native writes never carry segments.
-- **Outgoing segments are the message's structure**: the input segments trimmed like the text (`trimInlineSegments`), with the chips in front as leading Skill blocks (`withSkillChipBlocks`). Every restore path splits them back with `splitLeadingSkillBlocks`, which returns `{ chips, body, text }`: chips go to `setSkillChips`, `body` and `text` go to the input. Until ticket 05 removes chips, putting leading Skill blocks into the editor would join `/name` to the body with no separator.
+- **Outgoing segments are the message's structure**: the editor segments trimmed like the text (`trimInlineSegments`), leading Skill blocks and their separators included. Every restore path hands them straight back to the input (`restoreUserInput(text, segments)`, `replaceDraftText(text, segments)`).
 - **Native passes `null`.** `MessageInputRef.getSegments()` is `null` on native; the queue item then has no segments and the Queue track parses its text, so a typed known `/skill` shows as a block there. Native link text and picked link text are the same characters, so there is nothing better to show.
 - **A restored mismatch falls back to text.** The web editor mounts `initialSegments` only when their text equals `initialValue` (`resolveInitialSegments`).
 
-Wrong: `replaceUserInput(result.text)` when editing a queued item. The blocks come back as link text and the chips as a typed `/name`. Correct: `const { chips, body, text } = splitLeadingSkillBlocks(result.segments); setSkillChips(() => chips); restoreUserInput(text, body);` (`handleEditQueuedMessage` in `composer/index.tsx`).
+Wrong: `replaceUserInput(result.text)` when editing a queued item. The blocks come back as link text and a picked skill as a typed `/name`. Correct: `restoreUserInput(result.text, result.segments)` (`handleEditQueuedMessage` in `composer/index.tsx`).
 
 Tests: `stores/draft-store/persistence.test.ts` ("draft persistence of inline segments"), `composer/actions.test.ts` ("queued message segments"), `composer/submit.test.ts`, `components/rewind/composer-restore.test.ts`, and the switch-tabs, queue-edit, and Rewind cases in `e2e/browser/composer-inline-blocks.spec.ts`.
 

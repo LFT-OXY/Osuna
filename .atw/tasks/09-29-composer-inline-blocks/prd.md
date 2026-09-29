@@ -90,7 +90,10 @@
   - 旧消息中带引号的 `"path"` 不解析。
 - 选中 skill：从正文移除当前 `/query`（连同紧随的一个空格），块追加到开头块串末尾（同名去重），光标回到原 `/query` 所在位置。只有 `kind === "skill"` 的 provider 条目走这里；命令、客户端内置命令、插件命令保持文本替换。
 - 选中文件 / 目录：把当前 `@query` 替换为块并补一个空格。
-- 有 Skill block 时跳过客户端命令与插件客户端命令识别，沿用 Skill chip 行为。
+- 有 Skill block 时跳过客户端命令与插件客户端命令识别，沿用 Skill chip 行为。已落地（工单 05）：
+  - 输入框里每个开头 Skill block 后跟一个空格（`leadingSkillSegments`），输入框文字即发出的 `/a /b 正文`；发送一律从分段结构序列化（`resolveOutgoingMessage`），用户删掉分隔空格也照样写一个。
+  - 气泡解析出的分段结构不带分隔空格，输入框的带；Rewind 与 Queue track 经 `splitLeadingSkillBlocks` / `leadingSkillSegments` 互转。
+  - 输入框内部粘贴进来的 Skill block 移到开头块串末尾（同名去重），其余原位插入。
 - 空消息判定：文字段与块段都为空才算空。
 
 ### Web / Electron 编辑器
@@ -103,7 +106,7 @@
   - 粘贴只取 `text/plain`；Composer 在捕获阶段先收走图片并 `preventDefault`，编辑器看到后不再插入。拖放一律交给外层 file drop。
   - 一次插入的多行文字（Playwright `fill`、系统文本替换）按换行拆成 `hardBreak`，替换范围取 DOM 选区，因为 ProseMirror 要等异步的 `selectionchange` 才同步选区。粘贴同样取 DOM 选区（工单 04 补上：全选后按方向键立刻粘贴，原先会覆盖整段）。
   - Web 包体积增量：未压缩 +402 KB，gzip +115 KB，brotli +95 KB。
-- 块是 inline、atom 的节点，NodeView 不可编辑；方向键整块跳过；退格、Delete、选区删除整块处理；开头 Skill block 之前不可放光标。已落地（工单 03）：
+- 块是 inline、atom 的节点，NodeView 不可编辑；方向键整块跳过；退格、Delete、选区删除整块处理；开头 Skill block 之前不可放光标（工单 05：空选区落在最后一个开头 Skill block 之前一律移到它后面，因此开头块只能从最后一个往前退格删，选区删除不受限）。已落地（工单 03）：
   - Composer 看到的文字就是发出去的文字：`getText()`、`onChangeText` 与所有偏移都按序列化写法计，块在编辑器里只占一个位置，两者经 `composer/input/editor-text.web.ts` 换算。发送与草稿、排队项的 `text` 因此不用改；块的结构另存在分段结构里（工单 04，见下文「草稿、排队、失败恢复、Rewind」）。
   - 编辑器的选区另报 `blockBoundary`（光标前最后一个块的结束偏移），`@` 与 `/` 的识别不往回越过它，块的链接目标里的 `@`、` /` 不会打开列表。
   - Composer 以整段文字替换内容（补全命令、语音、清空、草稿恢复）时，编辑器只改与当前文字不同的那一段，没碰到的块保留，碰到的块整块变成新文字。
@@ -116,7 +119,7 @@
 
 ### 原生端
 
-- 输入框保持现有 `TextInput`。选中 skill：在正文开头插入 `/name `（去重，不重复插入已在开头的同名）；选中文件 / 目录：插入序列化链接文字加空格。
+- 输入框保持现有 `TextInput`。选中 skill：在正文开头插入 `/name `（去重，不重复插入已在开头的同名）；选中文件 / 目录：插入序列化链接文字加空格。工单 05 落地时，"开头"指开头连续的已知 skill `/x `（skill 名随选中从 Command menu 的命令列表带下来），新 skill 追加在其后，与 Web 的选中顺序一致；开头不是已知 skill 的 `/x`（如 `/usr/bin/foo`）排在新 skill 之后。
 - Attachment tray 里的 Skill chip 渲染与相关逻辑删除。
 - 气泡与 Queue track 使用共用渲染器显示块。
 
@@ -133,10 +136,10 @@
 - 草稿输入新增可选的分段结构字段 `segments`；`text` 仍保存序列化文本。只在含块时保存；有分段结构时以它恢复，恢复后手打文字仍是文字。只改文字的写入（原生端、程序替换）丢弃旧的分段结构。字段可选，不升版本号，不写迁移。已落地（工单 04），契约见 `.atw/spec/app/frontend/state-management.md`「Unsent Composer content keeps its segments」。
 - 旧草稿的 `skills` 字段读取时转成开头的 Skill block，标 `COMPAT(skill-chip-draft)`；新写入的草稿不再写 `skills`（工单 05）。
 - "是否有内容"与活跃草稿判定计入块：块按链接写法计入 `text`，只有块的草稿 `text` 不为空，`hasDraftContent` 不需另判。
-- 排队项保存分段结构（发出的消息的结构：输入框内容按文字同样 trim，chip 作为开头的 Skill block）；编辑排队项时开头的 Skill block 回到 chip，其余按结构恢复到输入框，输入框原有内容与 chip 一并被替换。
+- 排队项保存分段结构（发出的消息的结构：输入框内容按文字同样 trim，开头 Skill block 与分隔空格原样保留）；编辑排队项时按结构恢复到输入框，替换输入框原有内容。
 - 发送失败按提交前的分段结构恢复；新建工作区页交给草稿 tab 自动建 agent 失败时同样按分段结构写回（`MessagePayload.segments` → `PendingWorkspaceDraftSubmission.segments`）。
-- Rewind 从气泡文本解析后写回输入框：File mention 与 Agent mention 成块，开头的已知 skill 回到 chip；仍只在输入框为空时写入，有 chip 也算不空。
-- 工单 05 起 chip 取消，上面各处"开头的 Skill block 回到 chip"改为直接进输入框。
+- Rewind 从气泡文本解析后写回输入框：File mention、Agent mention 与开头的已知 skill 都成块；仍只在输入框为空时写入。
+- 旧草稿的 `skills` 迁移走草稿存储既有的 legacy 路径：`CanonicalDraftInputSchema` 不再有 `skills`，带它的记录启动时交给 `migrateDraftInput` 改写（见 `docs/data-model.md` Draft Store）。
 
 ### 协议与 daemon
 

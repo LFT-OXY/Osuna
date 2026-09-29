@@ -737,7 +737,7 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
     input: {
       text: string,
       attachments: UserComposerAttachment[],
-      skills?: { name: string, description?: string }[]  // Skill chips; absent on older drafts
+      segments?: InlineSegment[]  // only when the text holds an inline block; restores blocks as blocks
     },
     lifecycle: "active" | "abandoned" | "sent",
     updatedAt: number,     // epoch ms
@@ -748,6 +748,8 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
 ```
 
 Both schemas are strict: `PersistedDraftStoreSchema` (`stores/draft-store/migration.ts`) validates every read and write, and `CanonicalDraftInputSchema` (`state.ts`) is the in-memory shape. A new input field must be added to both as optional. If the persisted schema rejects a write, `createValidatedPersistStorage` removes the whole `paseo-drafts` key, so every draft is lost, not just the new field. The same happens when an older app build reads a draft with a field it does not know.
+
+To retire a field, drop it from `CanonicalDraftInputSchema` but keep it in `PersistedDraftStoreSchema` under a `COMPAT` tag. A stored record that still has it fails `isCanonicalDraftInput`, so startup hands it to `migrateDraftInput`, which rewrites it into the current shape. The old Skill chip `skills` field goes this way: its names become leading Skill blocks in `text` and `segments`.
 
 ### Attachment Store (Web)
 

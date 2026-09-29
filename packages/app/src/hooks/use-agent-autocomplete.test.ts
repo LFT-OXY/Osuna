@@ -5,7 +5,7 @@ import {
   resolveAutocompleteIsLoading,
   resolveAutocompleteIsVisible,
   resolveAutocompleteTexts,
-  resolvePickedSkillChip,
+  resolvePickedSkillBlock,
 } from "./use-agent-autocomplete";
 
 const t = i18n.t;
@@ -108,7 +108,7 @@ describe("command menu options", () => {
   });
 });
 
-describe("resolvePickedSkillChip", () => {
+describe("resolvePickedSkillBlock", () => {
   const options = commandOptions({
     commands: [
       { name: "tdd", description: "Test first", argumentHint: "", kind: "skill" },
@@ -123,16 +123,17 @@ describe("resolvePickedSkillChip", () => {
     return option;
   };
 
-  it("turns a picked skill into a chip carrying its description", () => {
-    expect(resolvePickedSkillChip(optionNamed("/tdd"))).toEqual({
+  it("turns a picked skill into a Skill block carrying its description", () => {
+    expect(resolvePickedSkillBlock(optionNamed("/tdd"))).toEqual({
+      kind: "skill",
       name: "tdd",
       description: "Test first",
     });
   });
 
-  it("keeps provider and built-in commands as text", () => {
-    expect(resolvePickedSkillChip(optionNamed("/compact"))).toBeNull();
-    expect(resolvePickedSkillChip(optionNamed("/clear"))).toBeNull();
+  it("makes no block for provider and built-in commands, which stay text", () => {
+    expect(resolvePickedSkillBlock(optionNamed("/compact"))).toBeNull();
+    expect(resolvePickedSkillBlock(optionNamed("/clear"))).toBeNull();
   });
 });
 

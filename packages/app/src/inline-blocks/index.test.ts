@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
+import { findActiveSlashCommand } from "@/utils/agent-command-autocomplete";
 import {
+  addLeadingSkillBlocks,
+  extractSkillBlocks,
+  hasSkillBlock,
   inlineBlockName,
+  inlineSegmentsText,
   insertInlineBlockText,
+  leadingSkillSegments,
+  pickSkillBlock,
+  pickSkillText,
+  splitLeadingSkillBlocks,
   parseInlineSegments,
   resolveInlineBlockVariant,
   serializeInlineSegments,
@@ -326,5 +335,223 @@ describe("trimInlineSegments", () => {
   it("keeps whitespace between blocks", () => {
     const dir = block({ kind: "file", path: "docs", entryKind: "directory" });
     expect(trimInlineSegments([file, text(" "), dir])).toEqual([file, text(" "), dir]);
+  });
+});
+
+function activeCommand(value: string, cursorIndex: number, blockBoundary = 0) {
+  const command = findActiveSlashCommand({ text: value, cursorIndex, blockBoundary });
+  if (!command) throw new Error(`no slash command in ${JSON.stringify(value)}`);
+  return command;
+}
+
+describe("pickSkillBlock", () => {
+  const tddBlock = { kind: "skill", name: "atw-tdd" } as const;
+  const askmeBlock = { kind: "skill", name: "atw-askme", description: "Ask me first" } as const;
+  const askmeWithDescription = block(askmeBlock);
+  const file = block({ kind: "file", path: "src/x.ts", entryKind: "file" });
+
+  it("removes a leading /query and the space after it, leaving the cursor where it was", () => {
+    const value = "/atw- write tests";
+    const result = pickSkillBlock({
+      segments: [text(value)],
+      command: activeCommand(value, "/atw-".length),
+      block: askmeBlock,
+    });
+
+    expect(result.segments).toEqual([askmeWithDescription, text(" write tests")]);
+    expect(inlineSegmentsText(result.segments)).toBe("/atw-askme write tests");
+    expect(result.cursor).toBe("/atw-askme ".length);
+  });
+
+  it("moves a mid-text pick to the start and keeps the cursor where the /query was", () => {
+    const value = "use /tdd before implementation";
+    const result = pickSkillBlock({
+      segments: [text(value)],
+      command: activeCommand(value, "use /tdd".length),
+      block: tddBlock,
+    });
+
+    expect(result.segments).toEqual([tdd, text(" use before implementation")]);
+    expect(result.cursor).toBe("/atw-tdd use ".length);
+  });
+
+  it("leaves only the block and its space when the /query was all there was", () => {
+    const value = "/atw";
+    const result = pickSkillBlock({
+      segments: [text(value)],
+      command: activeCommand(value, value.length),
+      block: tddBlock,
+    });
+
+    expect(result.segments).toEqual([tdd, text(" ")]);
+    expect(result.cursor).toBe("/atw-tdd ".length);
+  });
+
+  it("appends after the leading skill blocks in picking order", () => {
+    const value = "/atw-tdd fix /ask";
+    const result = pickSkillBlock({
+      segments: [tdd, text(" fix /ask")],
+      command: activeCommand(value, value.length, "/atw-tdd".length),
+      block: askmeBlock,
+    });
+
+    expect(result.segments).toEqual([tdd, text(" "), askmeWithDescription, text(" fix ")]);
+    expect(result.cursor).toBe("/atw-tdd /atw-askme fix ".length);
+  });
+
+  it("does not add a second block with the same name", () => {
+    const value = "/atw-tdd fix /atw-tdd now";
+    const result = pickSkillBlock({
+      segments: [tdd, text(" fix /atw-tdd now")],
+      command: activeCommand(value, "/atw-tdd fix /atw-tdd".length, "/atw-tdd".length),
+      block: tddBlock,
+    });
+
+    expect(result.segments).toEqual([tdd, text(" fix now")]);
+    expect(result.cursor).toBe("/atw-tdd fix ".length);
+  });
+
+  it("keeps file mentions where they were", () => {
+    const value = "see [x.ts](src/x.ts) /tdd";
+    const result = pickSkillBlock({
+      segments: [text("see "), file, text(" /tdd")],
+      command: activeCommand(value, value.length, "see [x.ts](src/x.ts)".length),
+      block: tddBlock,
+    });
+
+    expect(result.segments).toEqual([tdd, text(" see "), file, text(" ")]);
+    expect(serializeInlineSegments(result.segments)).toBe("/atw-tdd see [x.ts](src/x.ts)");
+  });
+
+  it("puts the block at the start when no /query is being typed", () => {
+    const result = pickSkillBlock({
+      segments: [text(" fix it")],
+      command: null,
+      block: tddBlock,
+    });
+
+    expect(result.segments).toEqual([tdd, text("  fix it")]);
+    expect(result.cursor).toBe("/atw-tdd ".length);
+  });
+});
+
+describe("pickSkillText", () => {
+  it("inserts /name at the start of the text and removes the /query", () => {
+    const value = "use /tdd now";
+    expect(
+      pickSkillText({
+        text: value,
+        command: activeCommand(value, "use /tdd".length),
+        name: "atw-tdd",
+        skillNames: SKILLS,
+      }),
+    ).toEqual({ text: "/atw-tdd use now", cursor: "/atw-tdd use ".length });
+  });
+
+  it("appends after the leading known skills in picking order", () => {
+    const value = "/atw-tdd fix /ask";
+    expect(
+      pickSkillText({
+        text: value,
+        command: activeCommand(value, value.length),
+        name: "atw-askme",
+        skillNames: SKILLS,
+      }),
+    ).toEqual({ text: "/atw-tdd /atw-askme fix ", cursor: "/atw-tdd /atw-askme fix ".length });
+  });
+
+  it("puts the skill in front of leading slashes that are not skills", () => {
+    const value = "/usr/bin/foo fix /ask";
+    expect(
+      pickSkillText({
+        text: value,
+        command: activeCommand(value, value.length),
+        name: "atw-askme",
+        skillNames: SKILLS,
+      }),
+    ).toEqual({
+      text: "/atw-askme /usr/bin/foo fix ",
+      cursor: "/atw-askme /usr/bin/foo fix ".length,
+    });
+  });
+
+  it("appends after a leading known skill followed by a line break", () => {
+    const value = "/atw-tdd\nfix /ask";
+    expect(
+      pickSkillText({
+        text: value,
+        command: activeCommand(value, value.length),
+        name: "atw-askme",
+        skillNames: SKILLS,
+      }),
+    ).toEqual({ text: "/atw-tdd /atw-askme \nfix ", cursor: "/atw-tdd /atw-askme \nfix ".length });
+  });
+
+  it("does not insert a name that already leads the text", () => {
+    const value = "/atw-askme /atw-tdd fix /atw-tdd";
+    expect(
+      pickSkillText({
+        text: value,
+        command: activeCommand(value, value.length),
+        name: "atw-tdd",
+        skillNames: SKILLS,
+      }),
+    ).toEqual({ text: "/atw-askme /atw-tdd fix ", cursor: "/atw-askme /atw-tdd fix ".length });
+  });
+});
+
+describe("pasted skill blocks", () => {
+  const file = block({ kind: "file", path: "src/x.ts", entryKind: "file" });
+
+  it("takes skill blocks and their separating space out of pasted content", () => {
+    expect(extractSkillBlocks([tdd, text(" see "), file, text(" "), askme, text(" now")])).toEqual({
+      blocks: [
+        { kind: "skill", name: "atw-tdd" },
+        { kind: "skill", name: "atw-askme" },
+      ],
+      rest: [text("see "), file, text(" now")],
+    });
+  });
+
+  it("adds skill blocks to the leading ones without duplicates and keeps the caret in the body", () => {
+    const result = addLeadingSkillBlocks({
+      segments: [tdd, text(" fix it")],
+      blocks: [
+        { kind: "skill", name: "atw-askme" },
+        { kind: "skill", name: "atw-tdd" },
+      ],
+      cursor: "/atw-tdd fix".length,
+    });
+
+    expect(result.segments).toEqual([tdd, text(" "), askme, text(" fix it")]);
+    expect(result.cursor).toBe("/atw-tdd /atw-askme fix".length);
+  });
+});
+
+describe("leading skill blocks", () => {
+  it("puts one space after each leading skill block in the composer", () => {
+    const parsed = parseInlineSegments("/atw-tdd /atw-askme fix it", { skillNames: SKILLS });
+    const { blocks, rest } = splitLeadingSkillBlocks(parsed);
+    const composer = leadingSkillSegments(blocks, rest);
+
+    expect(composer).toEqual([tdd, text(" "), askme, text(" fix it")]);
+    expect(inlineSegmentsText(composer)).toBe("/atw-tdd /atw-askme fix it");
+  });
+
+  it("splits off the one separating space after each leading block", () => {
+    expect(splitLeadingSkillBlocks([tdd, text(" "), askme, text("  fix")])).toEqual({
+      blocks: [
+        { kind: "skill", name: "atw-tdd" },
+        { kind: "skill", name: "atw-askme" },
+      ],
+      rest: [text(" fix")],
+    });
+  });
+
+  it("tells whether the content has a skill block, so client commands are not recognized", () => {
+    const file = block({ kind: "file", path: "src/x.ts", entryKind: "file" });
+    expect(hasSkillBlock([tdd, text(" /clear")])).toBe(true);
+    expect(hasSkillBlock([text("/clear "), file])).toBe(false);
+    expect(hasSkillBlock(null)).toBe(false);
   });
 });

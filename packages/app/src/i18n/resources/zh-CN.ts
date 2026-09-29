@@ -174,8 +174,6 @@ export const zhCN: TranslationResources = {
       removeBrowserElement: "移除浏览器元素附件",
       openReview: "打开 review 附件",
       removeReview: "移除 review 附件",
-      skillChip: "Skill：{{name}}",
-      removeSkill: "移除",
     },
     inlineBlocks: {
       skill: "Skill：{{name}}",

@@ -31,17 +31,13 @@ describe("shouldRestoreComposerForRewindMode", () => {
 });
 
 describe("resolveRewoundComposerContent", () => {
-  test("brings file and agent mentions back as blocks and leading skills back as chips", () => {
-    expect(
-      resolveRewoundComposerContent(
-        "/atw-tdd ask [@Claude](paseo://agent/claude) about [x.ts](src/x.ts)",
-        new Set(["atw-tdd"]),
-      ),
-    ).toEqual({
-      chips: [{ name: "atw-tdd" }],
-      text: "ask [@Claude](paseo://agent/claude) about [x.ts](src/x.ts)",
-      body: [
-        { type: "text", text: "ask " },
+  test("brings leading skills, file and agent mentions back as blocks", () => {
+    const rewound = "/atw-tdd ask [@Claude](paseo://agent/claude) about [x.ts](src/x.ts)";
+    expect(resolveRewoundComposerContent(rewound, new Set(["atw-tdd"]))).toEqual({
+      text: rewound,
+      segments: [
+        { type: "block", block: { kind: "skill", name: "atw-tdd" } },
+        { type: "text", text: " ask " },
         { type: "block", block: { kind: "agent", target: "claude", name: "Claude" } },
         { type: "text", text: " about " },
         { type: "block", block: { kind: "file", path: "src/x.ts", entryKind: "file" } },
@@ -51,9 +47,8 @@ describe("resolveRewoundComposerContent", () => {
 
   test("keeps a leading /name as text while the skill list is unknown", () => {
     expect(resolveRewoundComposerContent("/atw-tdd go", null)).toEqual({
-      chips: [],
       text: "/atw-tdd go",
-      body: [{ type: "text", text: "/atw-tdd go" }],
+      segments: [{ type: "text", text: "/atw-tdd go" }],
     });
   });
 });

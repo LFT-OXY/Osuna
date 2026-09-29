@@ -132,7 +132,6 @@ interface MessageInputKeyboardActions {
 interface QueueComposerInputContext {
   value: string;
   attachments: MessagePayload["attachments"];
-  /** 正文之外的待发内容（Skill chip）；只有它时也要能排队。 */
   hasExternalContent: boolean;
   cwd: string;
   onQueue: ((payload: MessagePayload) => void) | undefined;

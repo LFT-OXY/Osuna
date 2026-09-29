@@ -18,6 +18,7 @@ import { seedWorkspace } from "../support/helpers/seed-client";
 
 const COMMANDS = [
   { name: "atw-tdd", description: "Red, green, refactor", argumentHint: "", kind: "skill" },
+  { name: "atw-askme", description: "Ask me first", argumentHint: "", kind: "skill" },
   { name: "compact", description: "Compact the conversation", argumentHint: "", kind: "command" },
 ] as const;
 
@@ -45,6 +46,17 @@ async function focusComposer(page: Page) {
   await expect(input).toBeEditable({ timeout: 30_000 });
   await input.click();
   return input;
+}
+
+/** Types `/query` and clicks the Command menu entry `/name`. */
+async function pickSkill(page: Page, query: string, name: string): Promise<void> {
+  await page.keyboard.type(`/${query}`);
+  const option = page
+    .getByTestId("composer-autocomplete-popover")
+    .getByText(`/${name}`, { exact: true })
+    .first();
+  await expect(option).toBeVisible({ timeout: 30_000 });
+  await option.click();
 }
 
 /** Types `@query` and clicks the workspace entry whose path is `path`. */
@@ -199,9 +211,52 @@ test.describe("Inline blocks in the composer", () => {
     }
   });
 
+  test("skills picked mid-text lead the message as blocks and send as a /name prefix", async ({
+    page,
+    context,
+  }, testInfo) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await installAgentCommandsStub(page, COMMANDS);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `inline-blocks-skill-${testInfo.workerIndex}-`,
+      title: "Inline blocks skill",
+    });
+    try {
+      await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+      await expectComposerVisible(page);
+      const input = await focusComposer(page);
+      await page.keyboard.type("fix it ");
+      await pickSkill(page, "atw-t", "atw-tdd");
+
+      // The block leads the message; the /query is gone and the caret stays where it was.
+      await expectInlineBlocks(input, [{ variant: "skill", label: "Skill: atw-tdd" }]);
+      await expectComposerText(input, "atw-tdd fix it ");
+      await expect(page.getByTestId("composer-attachment-tray")).toHaveCount(0);
+      await pickSkill(page, "atw-a", "atw-askme");
+      await page.keyboard.type("now");
+      const skillBlocks = [
+        { variant: "skill", label: "Skill: atw-tdd" },
+        { variant: "skill", label: "Skill: atw-askme" },
+      ] as const;
+      await expectInlineBlocks(input, skillBlocks);
+      await expectComposerText(input, "atw-tdd atw-askme fix it now");
+      await page.keyboard.press("Enter");
+      await expectAgentIdle(page);
+
+      const bubble = page.getByTestId("user-message").filter({ hasText: "fix it now" }).last();
+      await expectInlineBlocks(bubble, skillBlocks);
+      await bubble.getByTestId("user-message-bubble").hover();
+      await bubble.getByRole("button", { name: "Copy message" }).click();
+      await expect.poll(() => readClipboardText(page)).toBe("/atw-tdd /atw-askme fix it now");
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("picked blocks stay blocks and typed links stay text after switching tabs", async ({
     page,
   }, testInfo) => {
+    await installAgentCommandsStub(page, COMMANDS);
     const workspace = await seedWorkspace({
       repoPrefix: `inline-blocks-draft-${testInfo.workerIndex}-`,
       repo: { files: [{ path: "src/widget.ts", content: "export {};\n" }] },
@@ -219,12 +274,21 @@ test.describe("Inline blocks in the composer", () => {
       });
       await openWorkspaceWithAgents(page, [other, drafting]);
       const input = await focusComposer(page);
-      await page.keyboard.type("read ");
+      // A typed known /skill stays text, even once a later pick puts a Skill block before it
+      // and it reads like a leading skill. Escape closes the Command menu it opens.
+      await page.keyboard.type("/atw-askme");
+      await page.keyboard.press("Escape");
+      await page.keyboard.type(" read ");
       await pickFileMention(page, "widget", "src/widget.ts");
-      await page.keyboard.type("not [notes.md](docs/notes.md)");
-      // The composer shows the block by its name and the typed link as written.
-      const draft = "read widget.ts not [notes.md](docs/notes.md)";
-      await expectInlineBlocks(input, [{ variant: "file", label: "File: widget.ts" }]);
+      await page.keyboard.type("not [notes.md](docs/notes.md) ");
+      await pickSkill(page, "atw-t", "atw-tdd");
+      // The composer shows each picked block by its name and typed text as written.
+      const draft = "atw-tdd /atw-askme read widget.ts not [notes.md](docs/notes.md) ";
+      const draftBlocks = [
+        { variant: "skill", label: "Skill: atw-tdd" },
+        { variant: "file", label: "File: widget.ts" },
+      ] as const;
+      await expectInlineBlocks(input, draftBlocks);
 
       await page.getByTestId(`workspace-tab-agent_${other.id}`).filter({ visible: true }).click();
       await expectComposerText(composerLocator(page), "");
@@ -235,7 +299,7 @@ test.describe("Inline blocks in the composer", () => {
 
       const restored = composerLocator(page);
       await expectComposerText(restored, draft);
-      await expectInlineBlocks(restored, [{ variant: "file", label: "File: widget.ts" }]);
+      await expectInlineBlocks(restored, draftBlocks);
     } finally {
       await workspace.cleanup();
     }

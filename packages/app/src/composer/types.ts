@@ -5,7 +5,7 @@ export type ImageAttachment = AttachmentMetadata;
 
 export interface MessagePayload {
   text: string;
-  /** 发出的消息的分段结构（开头是 chip 对应的 Skill block），交给别处提交时用来在失败后恢复块。 */
+  /** 发出的消息的分段结构，交给别处提交时用来在失败后恢复块。 */
   segments?: readonly InlineSegment[];
   attachments: ComposerAttachment[];
   cwd: string;

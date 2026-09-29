@@ -40,7 +40,7 @@ import { createValidatedPersistStorage } from "@/storage/validated-persist-stora
 import type { InlineSegment } from "@/inline-blocks";
 
 export type { DraftInput, DraftLifecycleState } from "./state";
-export { hasDraftContent, selectDraftSkillChips } from "./state";
+export { hasDraftContent } from "./state";
 
 interface DraftStoreActions {
   getDraftInput: (draftKey: string) => DraftInput | undefined;
@@ -89,7 +89,6 @@ function createDraftRecord(input: {
     input: {
       text: input.draft.text,
       attachments: input.draft.attachments.map(normalizeComposerAttachment),
-      ...(input.draft.skills?.length ? { skills: input.draft.skills } : {}),
       ...(segmentsWithBlocks(input.draft.segments) ? { segments: input.draft.segments } : {}),
     },
     lifecycle: input.lifecycle,

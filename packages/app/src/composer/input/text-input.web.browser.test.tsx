@@ -572,3 +572,128 @@ describe("Restoring inline blocks in the Composer text input", () => {
     ]);
   });
 });
+
+describe("Skill blocks in the Composer text input", () => {
+  const tddSkill = { kind: "skill", name: "atw-tdd" } as const;
+  const askmeSkill = { kind: "skill", name: "atw-askme", description: "Ask me first" } as const;
+
+  it("moves a skill picked mid-text to the start and leaves the caret where the /query was", async () => {
+    const mounted = mount({ initialValue: "use /tdd now" });
+    await focusAtEnd(mounted);
+
+    act(() => mounted.handle.pickSkillBlock?.(tddSkill, { start: 4, end: 8 }));
+
+    const caret = "/atw-tdd use ".length;
+    expect(mounted.handle.getText()).toBe("/atw-tdd use now");
+    expect(mounted.recorder.changes.at(-1)).toBe("/atw-tdd use now");
+    expect(mounted.handle.getSelection?.()).toMatchObject({ start: caret, end: caret });
+    const [block] = await expectBlockCount(mounted, 1);
+    expect(block?.dataset.inlineBlock).toBe("skill");
+    expect(block?.textContent).toBe("atw-tdd");
+
+    await userEvent.keyboard("x");
+    expect(mounted.handle.getText()).toBe("/atw-tdd use xnow");
+  });
+
+  it("appends a second skill after the first and keeps one block per name", async () => {
+    const mounted = mount({ initialValue: "/tdd" });
+    await focusAtEnd(mounted);
+    act(() => mounted.handle.pickSkillBlock?.(tddSkill, { start: 0, end: 4 }));
+    await userEvent.keyboard("fix /ask");
+
+    act(() => mounted.handle.pickSkillBlock?.(askmeSkill, { start: 13, end: 17 }));
+    await userEvent.keyboard("/atw-tdd");
+    act(() => mounted.handle.pickSkillBlock?.(tddSkill, { start: 24, end: 32 }));
+
+    expect(mounted.handle.getText()).toBe("/atw-tdd /atw-askme fix ");
+    expect(mounted.handle.getSegments?.()).toEqual([
+      { type: "block", block: tddSkill },
+      { type: "text", text: " " },
+      { type: "block", block: askmeSkill },
+      { type: "text", text: " fix " },
+    ]);
+    await expectBlockCount(mounted, 2);
+  });
+
+  it("undoes a pick back to the /query", async () => {
+    const mounted = mount({ initialValue: "use /tdd" });
+    await focusAtEnd(mounted);
+    act(() => mounted.handle.pickSkillBlock?.(tddSkill, { start: 4, end: 8 }));
+    await expectBlockCount(mounted, 1);
+
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+
+    expect(mounted.handle.getText()).toBe("use /tdd");
+    await expectBlockCount(mounted, 0);
+  });
+
+  it("keeps the caret after a leading skill block", async () => {
+    const mounted = mount({
+      initialValue: "/atw-tdd go",
+      initialSegments: [
+        { type: "block", block: tddSkill },
+        { type: "text", text: " go" },
+      ],
+    });
+    await focusAtEnd(mounted);
+    await expectBlockCount(mounted, 1);
+    const afterBlock = "/atw-tdd".length;
+
+    for (let press = 0; press < 4; press += 1) await userEvent.keyboard("{ArrowLeft}");
+    expect(mounted.handle.getSelection?.()).toMatchObject({ start: afterBlock, end: afterBlock });
+    await userEvent.keyboard("{Home}");
+    expect(mounted.handle.getSelection?.()).toMatchObject({ start: afterBlock, end: afterBlock });
+
+    await userEvent.keyboard("{Backspace}");
+    expect(mounted.handle.getText()).toBe(" go");
+    await expectBlockCount(mounted, 0);
+  });
+
+  it("keeps the caret after the last of several leading skill blocks", async () => {
+    const mounted = mount({
+      initialValue: "/atw-tdd /atw-askme go",
+      initialSegments: [
+        { type: "block", block: tddSkill },
+        { type: "text", text: " " },
+        { type: "block", block: askmeSkill },
+        { type: "text", text: " go" },
+      ],
+    });
+    await focusAtEnd(mounted);
+    await expectBlockCount(mounted, 2);
+    const afterBlocks = "/atw-tdd /atw-askme".length;
+
+    for (let press = 0; press < 6; press += 1) await userEvent.keyboard("{ArrowLeft}");
+    expect(mounted.handle.getSelection?.()).toMatchObject({ start: afterBlocks, end: afterBlocks });
+    await userEvent.keyboard("{Home}");
+    expect(mounted.handle.getSelection?.()).toMatchObject({ start: afterBlocks, end: afterBlocks });
+  });
+
+  it("moves skill blocks pasted from inside the composer to the start", async () => {
+    const mounted = mount({ initialValue: "see " });
+    await focusAtEnd(mounted);
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "/atw-tdd x");
+    clipboardData.setData(
+      "application/x-paseo-inline-segments",
+      JSON.stringify([
+        { type: "block", block: tddSkill },
+        { type: "text", text: " x" },
+      ]),
+    );
+
+    act(() => {
+      mounted.editor.dispatchEvent(pasteEvent(clipboardData));
+    });
+
+    expect(mounted.handle.getSegments?.()).toEqual([
+      { type: "block", block: tddSkill },
+      { type: "text", text: " see x" },
+    ]);
+    expect(mounted.handle.getSelection?.()).toMatchObject({
+      start: "/atw-tdd see x".length,
+      end: "/atw-tdd see x".length,
+    });
+    await expectBlockCount(mounted, 1);
+  });
+});

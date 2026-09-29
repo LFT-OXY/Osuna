@@ -170,8 +170,6 @@ export const en = {
       removeBrowserElement: "Remove browser element attachment",
       openReview: "Open review attachment",
       removeReview: "Remove review attachment",
-      skillChip: "Skill: {{name}}",
-      removeSkill: "Remove",
     },
     inlineBlocks: {
       skill: "Skill: {{name}}",

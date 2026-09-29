@@ -20,13 +20,7 @@ import {
   resolveEffectiveComposerThinkingOptionId,
   type ProviderSelectionState,
 } from "@/provider-selection/provider-selection";
-import {
-  hasDraftContent,
-  selectDraftSkillChips,
-  useDraftStore,
-  type DraftInput,
-} from "@/stores/draft-store";
-import type { SkillChip, SkillChipUpdater } from "@/composer/skill-chips";
+import { hasDraftContent, useDraftStore, type DraftInput } from "@/stores/draft-store";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { useShallow } from "zustand/shallow";
 import type { ComposerTextSource } from "@/composer/text-source";
@@ -73,8 +67,6 @@ export interface AgentInputDraft {
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
   setAttachments: (updater: AttachmentUpdater) => void;
-  skillChips: readonly SkillChip[];
-  setSkillChips: (updater: SkillChipUpdater) => void;
   clear: (lifecycle: "sent" | "abandoned") => void;
   isHydrated: boolean;
   attachmentFocusRequestId: number;
@@ -106,7 +98,6 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         : [],
     ),
   );
-  const skillChips = useDraftStore((state) => selectDraftSkillChips(state.drafts[draftKey]));
   const textSource = useMemo<ComposerTextSource>(
     () => ({
       getSnapshot: () => {
@@ -201,16 +192,6 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       }));
     },
     [saveDraft],
-  );
-
-  const setSkillChips = useCallback(
-    (updater: SkillChipUpdater) => {
-      const current = selectDraftSkillChips(useDraftStore.getState().drafts[draftKey]);
-      const next = updater(current);
-      if (next === current || (next.length === 0 && current.length === 0)) return;
-      saveDraft((draft) => ({ ...draft, skills: next }));
-    },
-    [draftKey, saveDraft],
   );
 
   const clear = useCallback(
@@ -373,8 +354,6 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     textReplacement,
     attachments,
     setAttachments,
-    skillChips,
-    setSkillChips,
     clear,
     isHydrated,
     attachmentFocusRequestId,

@@ -95,7 +95,6 @@ import type { ComposerAttachment } from "@/attachments/types";
 import { useDraftWorkspaceAttachmentScopeKey } from "@/attachments/workspace-attachments-store";
 import type { MessagePayload } from "@/composer/types";
 import type { UserComposerAttachment } from "@/attachments/types";
-import type { SkillChip } from "@/composer/skill-chips";
 import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
@@ -197,11 +196,9 @@ interface NewWorkspaceScreenProps {
 }
 
 // A terminal launch sends argv, not a message: there is nothing to attach and
-// no draft to persist, so the composer's attachment, skill chip, and draft seams are inert.
+// no draft to persist, so the composer's attachment and draft seams are inert.
 const NO_TERMINAL_ATTACHMENTS: UserComposerAttachment[] = [];
 function noopChangeAttachments() {}
-const NO_TERMINAL_SKILL_CHIPS: readonly SkillChip[] = [];
-function noopChangeSkillChips() {}
 function noopClearDraft() {}
 
 const PROJECT_ICON_FALLBACK_FONT_SIZE = 10;
@@ -2428,8 +2425,6 @@ export function NewWorkspaceScreen({
                 textReplacement={terminalTextReplacement}
                 attachments={NO_TERMINAL_ATTACHMENTS}
                 onChangeAttachments={noopChangeAttachments}
-                skillChips={NO_TERMINAL_SKILL_CHIPS}
-                onChangeSkillChips={noopChangeSkillChips}
                 cwd={selectedSourceDirectory ?? ""}
                 clearDraft={noopClearDraft}
                 autoFocus={terminalTakesPrompt}
@@ -2457,8 +2452,6 @@ export function NewWorkspaceScreen({
                 attachments={chatDraft.attachments}
                 attachmentScopeKeys={visibleDraftContextScopeKeys}
                 onChangeAttachments={chatDraft.setAttachments}
-                skillChips={chatDraft.skillChips}
-                onChangeSkillChips={chatDraft.setSkillChips}
                 onForgeChangeRequestDetected={handleForgeChangeRequestDetected}
                 onForgeChangeRequestAutoAttach={handleForgeChangeRequestAutoAttach}
                 cwd={selectedSourceDirectory ?? ""}

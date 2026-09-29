@@ -23,11 +23,15 @@ import { Fragment } from "@tiptap/pm/model";
 import { TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
+  addLeadingSkillBlocks,
+  extractSkillBlocks,
   inlineSegmentsText,
   needsSpaceAfterInlineBlock,
+  pickSkillBlock,
   serializeInlineSegments,
   type InlineBlock,
   type InlineSegment,
+  type SkillBlock,
 } from "@/inline-blocks";
 import {
   blockBoundaryAt,
@@ -46,6 +50,7 @@ import {
   InlineBlockKeys,
   InlineBlockNode,
   InlineBlockServerIdContext,
+  LeadingSkillBlockCaret,
 } from "./inline-block-node.web";
 import type {
   ComposerLiveSelection,
@@ -94,6 +99,7 @@ const EXTENSIONS = [
   ComposerNewline,
   InlineBlockNode,
   InlineBlockKeys,
+  LeadingSkillBlockCaret,
   UndoRedo,
 ];
 
@@ -205,6 +211,29 @@ function insertInlineBlock(editor: Editor, block: InlineBlock, range: ComposerTe
   editor.view.dispatch(tr.scrollIntoView());
 }
 
+/**
+ * 选中 skill：块追加到开头块串末尾，`/query` 从原处去掉，光标回到原处。这是用户的一次选择，
+ * 进撤销栈：撤销回到原来的 `/query`。
+ */
+function applySkillPick(
+  editor: Editor,
+  block: SkillBlock,
+  command: ComposerTextSelection | null,
+): void {
+  const { state } = editor;
+  const paragraph = state.doc.firstChild;
+  if (!paragraph) return;
+  const picked = pickSkillBlock({ segments: fragmentSegments(paragraph.content), command, block });
+  const tr = state.tr.replaceWith(
+    1,
+    1 + paragraph.content.size,
+    segmentsToFragment(state.schema, picked.segments),
+  );
+  const length = docText(tr.doc).length;
+  setTextSelection(tr, { start: picked.cursor, end: picked.cursor }, length);
+  editor.view.dispatch(tr.scrollIntoView());
+}
+
 // beforeinput 与 paste 早于 ProseMirror 从 DOM 同步选区（selectionchange 是异步的）：方向键刚移动光标、
 // Playwright fill 刚设好选区时，编辑器的选区还是旧的。替换范围以 DOM 选区为准。
 interface EditorRange {
@@ -234,6 +263,32 @@ function insertSegments(view: EditorView, segments: readonly InlineSegment[]): v
   const fragment = segmentsToFragment(view.state.schema, segments);
   const tr = view.state.tr.replaceWith(from, to, fragment);
   tr.setSelection(TextSelection.create(tr.doc, from + fragment.size));
+  view.dispatch(tr.scrollIntoView());
+}
+
+/** 输入框内部粘贴：Skill block 只能在开头，粘贴进来的移到开头块串末尾，其余照原位插入。 */
+function pasteSegments(view: EditorView, segments: readonly InlineSegment[]): void {
+  const { blocks, rest } = extractSkillBlocks(segments);
+  if (blocks.length === 0) {
+    insertSegments(view, segments);
+    return;
+  }
+  const { from, to } = insertionRange(view);
+  const fragment = segmentsToFragment(view.state.schema, rest);
+  const tr = view.state.tr.replaceWith(from, to, fragment);
+  const paragraph = tr.doc.firstChild;
+  if (!paragraph) return;
+  const moved = addLeadingSkillBlocks({
+    segments: fragmentSegments(paragraph.content),
+    blocks,
+    cursor: offsetAtPos(tr.doc, from + fragment.size),
+  });
+  tr.replaceWith(
+    1,
+    1 + paragraph.content.size,
+    segmentsToFragment(tr.doc.type.schema, moved.segments),
+  );
+  setTextSelection(tr, { start: moved.cursor, end: moved.cursor }, docText(tr.doc).length);
   view.dispatch(tr.scrollIntoView());
 }
 
@@ -462,7 +517,7 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
               event.clipboardData?.getData(INLINE_SEGMENTS_MIME) ?? "",
             );
             if (segments) {
-              insertSegments(view, segments);
+              pasteSegments(view, segments);
               return true;
             }
             const text = event.clipboardData?.getData("text/plain") ?? "";
@@ -513,6 +568,7 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
         replaceText,
         reset: () => replaceText(""),
         insertInlineBlock: (block, range) => insertInlineBlock(editor, block, range),
+        pickSkillBlock: (block, command) => applySkillPick(editor, block, command),
         getSegments: () => fragmentSegments(editor.state.doc.firstChild?.content ?? Fragment.empty),
         replaceSegments,
         getNativeRef: () => editor.view.dom,

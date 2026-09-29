@@ -24,7 +24,7 @@ export interface QueuedComposerMessage {
   /** 发出去的文字。 */
   text: string;
   /**
-   * Web 输入框排队时的分段结构（开头是 chip 对应的 Skill block），排队行按它显示、编辑时按它恢复，
+   * Web 输入框排队时的分段结构，排队行按它显示、编辑时按它恢复，
    * 手打的文字发出前仍是文字。原生端没有，按 text 解析显示。
    */
   segments?: readonly InlineSegment[];

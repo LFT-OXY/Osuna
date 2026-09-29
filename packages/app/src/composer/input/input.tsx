@@ -61,9 +61,11 @@ import type { EditingTextInputProps } from "@/components/ui/text-input";
 import {
   inlineSegmentsText,
   insertInlineBlockText,
+  pickSkillText,
   type InlineBlock,
   type InlineSegment,
 } from "@/inline-blocks";
+import type { SkillPick } from "@/hooks/use-agent-autocomplete";
 import {
   ComposerTextInput as ComposerTextInputBase,
   type ComposerTextInputHandle,
@@ -203,6 +205,11 @@ export interface MessageInputRef {
   replaceSegments: (segments: readonly InlineSegment[]) => void;
   /** 把 range 换成行内块并补一个空格；原生端输入框只有文字，插入块的链接文字。 */
   insertInlineBlock: (block: InlineBlock, range: ComposerTextSelection) => void;
+  /**
+   * 选中 skill：去掉 command 范围的 `/query`，Skill block 追加到开头块串末尾，光标回到原处；
+   * 原生端输入框只有文字，把 `/name ` 插在开头已知 skill 之后。
+   */
+  pickSkillBlock: (pick: SkillPick) => void;
   runKeyboardAction: (action: MessageInputKeyboardActionKind) => boolean;
   /**
    * Web-only: return the underlying DOM element for focus assertions/retries.
@@ -1236,6 +1243,20 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         });
         replaceText(inserted.text, { start: inserted.cursor, end: inserted.cursor });
       },
+      pickSkillBlock: ({ block, command, skillNames }) => {
+        const input = textInputRef.current;
+        if (input?.pickSkillBlock) {
+          input.pickSkillBlock(block, command);
+          return;
+        }
+        const picked = pickSkillText({
+          text: input?.getText() ?? valueRef.current,
+          command,
+          name: block.name,
+          skillNames,
+        });
+        replaceText(picked.text, { start: picked.cursor, end: picked.cursor });
+      },
       runKeyboardAction: (action) =>
         runMessageInputKeyboardAction(action, {
           focusInput: () => textInputRef.current?.focus(),
@@ -1580,20 +1601,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       });
     }
 
-    // 原生只转发 Backspace（删 Skill chip 用），Enter 等键仍走软键盘的默认行为。
-    function handleNativeKeyPress(event: NativeSyntheticEvent<TextInputKeyPressEventData>) {
-      if (event.nativeEvent.key !== "Backspace") return;
-      onKeyPressCallback?.({
-        key: event.nativeEvent.key,
-        preventDefault: () => event.preventDefault(),
-        input: getComposerInputSnapshot(
-          textInputRef.current,
-          valueRef.current,
-          selectionRef.current,
-        ),
-      });
-    }
-
     const primaryActions = resolvePrimaryActions({
       hasSendableContent: hasSendableComposerContent({
         hasText: hasLiveText,
@@ -1793,7 +1800,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               onBlur={handleInputBlur}
               editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
               autoFocus={false}
-              onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : handleNativeKeyPress}
+              onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : undefined}
               onSelectionChange={handleSelectionChange}
               onPasteImages={onPasteImages}
               onPasteError={handlePasteError}

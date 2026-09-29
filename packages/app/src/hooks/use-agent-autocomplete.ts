@@ -22,9 +22,8 @@ import {
   findActiveSlashCommand,
   type SlashCommandRange,
 } from "@/utils/agent-command-autocomplete";
-import type { SkillChip } from "@/composer/skill-chips";
 import { findActiveFileMention, type FileMentionRange } from "@/utils/file-mention-autocomplete";
-import type { FileEntryKind, InlineBlock } from "@/inline-blocks";
+import type { FileEntryKind, InlineBlock, SkillBlock } from "@/inline-blocks";
 import type { ComposerInputSnapshot } from "@/composer/input/text-input.types";
 
 export interface FileMentionPick {
@@ -44,12 +43,8 @@ interface UseAgentAutocompleteInput {
   /** Composer input 聚焦且可显示菜单时为真，用于预取指令列表。 */
   prefetchCommands: boolean;
   onAutocompleteApplied?: () => void;
-  /** 选中 skill 时交给 Composer 变成 Skill chip；不传则按命令插入文字。 */
-  onPickSkill?: (input: {
-    text: string;
-    command: SlashCommandRange | null;
-    chip: SkillChip;
-  }) => void;
+  /** 选中 skill 时交给 Composer 变成开头的 Skill block；不传则按命令插入文字。 */
+  onPickSkill?: (input: SkillPick) => void;
   /** 选中文件或目录：把当前 `@query` 换成 File mention。 */
   onPickFileMention: (pick: FileMentionPick) => void;
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
@@ -212,12 +207,19 @@ function mapCommandToOption(entry: AvailableCommand, t: TFunction): AgentAutocom
 
 type AutocompleteMode = "command" | "file" | null;
 
-/** 只有 daemon 标成 skill 的 provider 条目变 chip，命令一律保持文字。 */
-export function resolvePickedSkillChip(selected: AgentAutocompleteOption): SkillChip | null {
+export interface SkillPick {
+  command: SlashCommandRange | null;
+  block: SkillBlock;
+  /** 该 agent 的 skill 名；原生端据此认出开头已有的 `/skill`。 */
+  skillNames: ReadonlySet<string>;
+}
+
+/** 只有 daemon 标成 skill 的 provider 条目变 Skill block，命令一律保持文字。 */
+export function resolvePickedSkillBlock(selected: AgentAutocompleteOption): SkillBlock | null {
   if (selected.type !== "provider_command" || selected.kind !== "skill") return null;
   return selected.description
-    ? { name: selected.id, description: selected.description }
-    : { name: selected.id };
+    ? { kind: "skill", name: selected.id, description: selected.description }
+    : { kind: "skill", name: selected.id };
 }
 
 const EMPTY_COMMANDS: AgentSlashCommand[] = [];
@@ -583,9 +585,15 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         return;
       }
 
-      const skillChip = resolvePickedSkillChip(selected);
-      if (skillChip && onPickSkill) {
-        onPickSkill({ text: current.text, command: current.slashCommand, chip: skillChip });
+      const skillBlock = resolvePickedSkillBlock(selected);
+      if (skillBlock && onPickSkill) {
+        onPickSkill({
+          command: current.slashCommand,
+          block: skillBlock,
+          skillNames: new Set(
+            commands.filter((command) => command.kind === "skill").map((command) => command.name),
+          ),
+        });
         onAutocompleteApplied?.();
         return;
       }
@@ -625,6 +633,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       cursorIndex,
       activeFileMention,
       activeSlashCommand,
+      commands,
     ],
   );
 

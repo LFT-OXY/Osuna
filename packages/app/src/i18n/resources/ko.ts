@@ -174,8 +174,6 @@ export const ko: TranslationResources = {
       removeBrowserElement: "브라우저 요소 첨부 제거",
       openReview: "리뷰 첨부 열기",
       removeReview: "리뷰 첨부 제거",
-      skillChip: "스킬: {{name}}",
-      removeSkill: "제거",
     },
     inlineBlocks: {
       skill: "스킬: {{name}}",
