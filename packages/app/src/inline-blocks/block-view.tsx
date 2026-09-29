@@ -90,12 +90,12 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[1],
   },
-  // 块名随 Content size 设置缩放，取 caption 一级，与气泡正文同一套字号。
+  // 块名与输入框、气泡正文同字号（Content size 的 body 一级），随设置缩放。
   name: {
     minWidth: 0,
     flexShrink: 1,
     color: theme.colors.accentBright,
     fontWeight: theme.fontWeight.normal,
-    ...contentTypeStep(theme.fontSize.content, "caption"),
+    ...contentTypeStep(theme.fontSize.content, "body"),
   },
 }));

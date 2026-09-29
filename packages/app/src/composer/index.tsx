@@ -2842,7 +2842,8 @@ const styles = StyleSheet.create((theme: Theme) => ({
   queueText: {
     flex: 1,
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
+    // 排队的是消息正文，与输入框、气泡同随 Content size，块名也就同字号。
+    fontSize: theme.fontSize.content,
   },
   queueActions: {
     flexDirection: "row",

@@ -111,7 +111,7 @@
   - 编辑器的选区另报 `blockBoundary`（光标前最后一个块的结束偏移），`@` 与 `/` 的识别不往回越过它，块的链接目标里的 `@`、` /` 不会打开列表。
   - Composer 以整段文字替换内容（补全命令、语音、清空、草稿恢复）时，编辑器只改与当前文字不同的那一段，没碰到的块保留，碰到的块整块变成新文字。
   - 选中文件走 `insertInlineBlock(block, range)`：`@query` 后面已经是空格时沿用它，不补第二个；这次替换进撤销栈，撤销回到 `@query`。
-- 外观照 codeg：线性单色图标（立方体、文件、文件夹、图片、provider 图标）+ accent 色名字，`caption` 级字号，无底色无描边，名字过长截断；不新增 token。
+- 外观照 codeg：线性单色图标（立方体、文件、文件夹、图片、provider 图标）+ accent 色名字，字号与正文一致（`body` 级，随 Content size 缩放；原定 `caption` 级，手动验收时嫌比正文小一号改掉），无底色无描边，名字过长截断；不新增 token。
 - Web 悬停：File mention 显示相对路径，Skill block 显示全名与描述；按 `docs/hover.md` 的规范实现，紧凑宽度不出提示。
 - 保持 Composer 现有能力不变：IME 组字、Enter 发送与 Shift+Enter 换行、Command menu 与 `@` 列表的触发与键盘导航、粘贴/拖拽图片与文件进 Attachment tray、语音输入插入、随内容长高与最大高度、placeholder、聚焦快捷键、`preserve-and-lock` 提交锁定。Composer 改文字的调用点仍用 imperative handle 的整段文字替换（靠上面的差异替换保块），另加 `insertInlineBlock`；分段结构在草稿、排队这些要跨卸载保存的地方才出现（工单 04）。
 - 粘贴外部文字一律按纯文字插入；输入框内部复制粘贴保留块；从输入框复制到外部时剪贴板是序列化文本。粘贴只读 `text/plain`，所以编辑器默认写的 HTML 用不上：选区含块时由编辑器接管复制与剪切，`text/plain` 写序列化文字，另写 `application/x-paseo-inline-segments`（分段结构 JSON，粘贴时逐字段校验）；不含块时仍走编辑器默认。在别的工作区的输入框里粘贴同样还原成块，路径不随 cwd 改写。
@@ -126,7 +126,7 @@
 ### 气泡与 Queue track
 
 - 用户气泡正文改为共用的"块文本"渲染器（`inline-blocks/view.tsx` 的 `InlineBlockText`）：解析文本，块显示为与输入框相同的图标 + accent 文字，四端一致；仍可选中文字。
-- 气泡里块名是 `accentBright`、字重 normal，字号取 `contentTypeStep(fontSize.content, "caption")`，随 Content size 设置缩放（`.atw/spec/app/frontend/styling.md`「Conversation」）。
+- 气泡里块名是 `accentBright`、字重 normal，字号取 `contentTypeStep(fontSize.content, "body")`，与正文同字号，随 Content size 设置缩放（`.atw/spec/app/frontend/styling.md`「Conversation」）。
 - 解析需要的 skill 列表取该 agent 当前的命令列表查询结果（`useAgentSkillNames`）：`AgentStreamView` 与 Queue track 挂载时以预取观察者请求，只对 session store 里存在的 agent 请求（草稿 tab、provider 子智能体面板不请求）；未加载时按文字显示，加载后重新渲染；`partial` 列表按已加载使用。
 - 复制按钮复制原始文本。
 - Queue track 的排队行用同一渲染器。Web 排队项带分段结构，按它渲染，手打的 `/skill` 发出前保持文字；原生端排队项没有分段结构，按文字解析，手打的已知 `/skill` 在排队行显示为块（原生端手打的链接与插入的链接文字本就无法区分，已确认接受）。

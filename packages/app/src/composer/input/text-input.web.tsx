@@ -93,7 +93,8 @@ const ComposerNewline = Extension.create({
 
 const EXTENSIONS = [
   SingleParagraphDocument,
-  Paragraph,
+  // 浏览器给 <p> 默认上下 1em 外边距，会让文字比 placeholder 低一截、输入框多高两截。
+  Paragraph.configure({ HTMLAttributes: { style: "margin: 0" } }),
   Text,
   ComposerHardBreak,
   ComposerNewline,

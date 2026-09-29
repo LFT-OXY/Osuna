@@ -241,6 +241,16 @@ describe("Composer text input on web", () => {
     expect(placeholder()).toBeDefined();
   });
 
+  it("lines the placeholder up with the first line of text", () => {
+    const mounted = mount({ placeholder: "Message the agent" });
+    const placeholder = Array.from(mounted.container.querySelectorAll('[aria-hidden="true"]')).find(
+      (node) => node.textContent === "Message the agent",
+    );
+    const paragraph = mounted.editor.querySelector("p");
+
+    expect(paragraph?.getBoundingClientRect().top).toBe(placeholder?.getBoundingClientRect().top);
+  });
+
   it("is read-only while not editable", () => {
     const mounted = mount({ initialValue: "locked" });
     mounted.render({ initialValue: "locked", editable: false });
