@@ -1425,6 +1425,7 @@ export const en = {
         availableWithVersionAndLastChecked:
           "Update available: {{version}}. Last checked at {{time}}.",
         downloading: "Downloading app update...",
+        downloadingWithPercent: "Downloading app update... {{percent}}%",
         downloaded: "An app update is ready to install.",
         downloadedWithLastChecked: "An app update is ready to install. Last checked at {{time}}.",
         downloadedWithVersion: "Update ready: {{version}}",
@@ -2365,17 +2366,11 @@ export const en = {
       },
       updates: {
         label: "App updates",
-        readyToInstall: "Ready to install: {{version}}",
-        installTitle: "Install desktop update",
-        installMessage: "This updates Osuna on this computer",
-        installConfirm: "Install update",
         update: "Update",
-        updateTo: "Update to {{version}}",
+        installAndRestart: "Install and restart",
         installing: "Installing...",
         check: "Check",
         checking: "Checking...",
-        alertTitle: "Error",
-        alertMessage: "Unable to open the update confirmation dialog.",
       },
     },
     appearance: {

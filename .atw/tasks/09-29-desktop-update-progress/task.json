@@ -3,7 +3,7 @@
   "name": "desktop-update-progress",
   "title": "桌面端应用更新改为手动下载并显示进度",
   "description": "侧栏更新卡片支持发现/下载中/已下载/安装中/失败五阶段，手动下载并显示进度，设置页共用同一状态",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -23,6 +23,6 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "d4adec7e54ca0cd6a3c7620fa8c72a18b6858e53"
+    "implementation_base_sha": "53656d27d2c8507a5fc6778adf77f2a11ac81071"
   }
 }

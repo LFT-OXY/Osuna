@@ -1439,6 +1439,8 @@ export const fr: TranslationResources = {
         availableWithVersionAndLastChecked:
           "Mise à jour disponible : {{version}}. Dernière vérification à {{time}}.",
         downloading: "Téléchargement de la mise à jour de l'application...",
+        downloadingWithPercent:
+          "Téléchargement de la mise à jour de l'application... {{percent}} %",
         downloaded: "Une mise à jour de l'application est prête à être installée.",
         downloadedWithLastChecked:
           "Une mise à jour de l'application est prête à être installée. Dernière vérification à {{time}}.",
@@ -2304,17 +2306,11 @@ export const fr: TranslationResources = {
       },
       updates: {
         label: "Mises à jour de l'application",
-        readyToInstall: "Prêt à installer:{{version}}",
-        installTitle: "Installer la mise à jour du bureau",
-        installMessage: "Cela met à jour Osuna sur cet ordinateur",
-        installConfirm: "Installer la mise à jour",
         update: "Mise à jour",
-        updateTo: "Mise à jour vers{{version}}",
+        installAndRestart: "Installer et redémarrer",
         installing: "Installation...",
         check: "Vérifier",
         checking: "Vérification...",
-        alertTitle: "Erreur",
-        alertMessage: "Impossible d'ouvrir la boîte de dialogue de confirmation de mise à jour.",
       },
     },
     appearance: {

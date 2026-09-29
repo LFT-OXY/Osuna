@@ -1430,6 +1430,7 @@ export const ptBR: TranslationResources = {
         availableWithVersionAndLastChecked:
           "Atualização disponível: {{version}}. Última verificação às {{time}}.",
         downloading: "Baixando a atualização do app...",
+        downloadingWithPercent: "Baixando a atualização do app... {{percent}}%",
         downloaded: "Há uma atualização do app pronta para instalar.",
         downloadedWithLastChecked:
           "Há uma atualização do app pronta para instalar. Última verificação às {{time}}.",
@@ -2282,17 +2283,11 @@ export const ptBR: TranslationResources = {
       },
       updates: {
         label: "Atualizações do app",
-        readyToInstall: "Pronta para instalar: {{version}}",
-        installTitle: "Instalar atualização desktop",
-        installMessage: "Isso atualiza o Osuna neste computador",
-        installConfirm: "Instalar atualização",
         update: "Atualizar",
-        updateTo: "Atualizar para {{version}}",
+        installAndRestart: "Instalar e reiniciar",
         installing: "Instalando...",
         check: "Verificar",
         checking: "Verificando...",
-        alertTitle: "Erro",
-        alertMessage: "Não foi possível abrir o diálogo de confirmação da atualização.",
       },
     },
     appearance: {

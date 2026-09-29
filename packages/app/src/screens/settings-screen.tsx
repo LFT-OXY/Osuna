@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  type PressableStateCallbackType,
-} from "react-native";
+import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { FormTextInput } from "@/components/ui/form-field";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -72,7 +65,6 @@ import {
 } from "@/types/host-connection";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { WindowChromeRegion, WindowChromeSafeArea } from "@/utils/desktop-window";
-import { confirmDialog } from "@/utils/confirm-dialog";
 import { BackHeader } from "@/components/headers/back-header";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { AddHostMethodModal } from "@/components/add-host-method-modal";
@@ -92,7 +84,10 @@ import { BrowserDataSection } from "@/desktop/browser/settings/browser-data-sect
 import { IntegrationsSection } from "@/desktop/components/integrations-section";
 import { isElectronRuntime } from "@/desktop/host";
 import { offersManualDownload } from "@/desktop/updates/desktop-app-updater";
-import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
+import {
+  useDesktopAppUpdater,
+  type DesktopAppUpdateStatus,
+} from "@/desktop/updates/use-desktop-app-updater";
 import {
   formatVersionWithPrefix,
   openDesktopReleasesPage,
@@ -719,17 +714,9 @@ function HostVersionRow({
   );
 }
 
-function getUpdateButtonLabel(
-  t: TFunction,
-  isInstalling: boolean,
-  latestVersion: string | null | undefined,
-): string {
-  if (isInstalling) return t("settings.about.updates.installing");
-  if (latestVersion) {
-    return t("settings.about.updates.updateTo", {
-      version: formatVersionWithPrefix(latestVersion),
-    });
-  }
+function getUpdateButtonLabel(t: TFunction, status: DesktopAppUpdateStatus): string {
+  if (status === "installing") return t("settings.about.updates.installing");
+  if (status === "downloaded") return t("settings.about.updates.installAndRestart");
   return t("settings.about.updates.update");
 }
 
@@ -740,9 +727,9 @@ function DesktopAppUpdateRow() {
     isDesktopApp,
     status,
     statusText,
-    targetVersion,
     errorMessage,
     checkForUpdates,
+    downloadUpdate,
     installUpdate,
   } = useDesktopAppUpdater();
   const isChecking = status === "checking";
@@ -769,35 +756,21 @@ function DesktopAppUpdateRow() {
     [t],
   );
 
-  const handleInstallUpdate = useCallback(() => {
+  const isUpdateReady = status === "downloaded";
+  const canStartDownload = status === "available";
+  const hasUpdateAction = isUpdateReady || canStartDownload;
+
+  // 发现更新时开始下载，已下载时直接安装：重启风险已写在状态文字下面，和侧栏卡片一致。
+  const handleUpdatePress = useCallback(() => {
     if (!isDesktopApp) {
       return;
     }
-
-    void confirmDialog({
-      title: t("settings.about.updates.installTitle"),
-      message: t("settings.about.updates.installMessage"),
-      confirmLabel: t("settings.about.updates.installConfirm"),
-      cancelLabel: t("common.actions.cancel"),
-    })
-      .then((confirmed) => {
-        if (!confirmed) {
-          return;
-        }
-        void installUpdate();
-        return;
-      })
-      .catch((error) => {
-        console.error("[Settings] Failed to open app update confirmation", error);
-        Alert.alert(
-          t("settings.about.updates.alertTitle"),
-          t("settings.about.updates.alertMessage"),
-        );
-      });
-  }, [installUpdate, isDesktopApp, t]);
-
-  const isUpdateReady = status === "downloaded";
-  const readyUpdateVersion = isUpdateReady ? targetVersion : null;
+    if (isUpdateReady) {
+      void installUpdate();
+    } else {
+      void downloadUpdate();
+    }
+  }, [downloadUpdate, installUpdate, isDesktopApp, isUpdateReady]);
 
   if (!isDesktopApp) {
     return null;
@@ -823,11 +796,9 @@ function DesktopAppUpdateRow() {
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("settings.about.updates.label")}</Text>
           <Text style={settingsStyles.rowHint}>{statusText}</Text>
-          {readyUpdateVersion ? (
+          {isUpdateReady ? (
             <Text style={settingsStyles.rowHint}>
-              {t("settings.about.updates.readyToInstall", {
-                version: formatVersionWithPrefix(readyUpdateVersion),
-              })}
+              {t("desktop.updates.callout.restartWarning")}
             </Text>
           ) : null}
           {errorMessage ? <Text style={styles.aboutErrorText}>{errorMessage}</Text> : null}
@@ -849,10 +820,10 @@ function DesktopAppUpdateRow() {
           <Button
             variant="default"
             size="sm"
-            onPress={handleInstallUpdate}
-            disabled={isChecking || isInstalling || !isUpdateReady}
+            onPress={handleUpdatePress}
+            disabled={!hasUpdateAction}
           >
-            {getUpdateButtonLabel(t, isInstalling, readyUpdateVersion)}
+            {getUpdateButtonLabel(t, status)}
           </Button>
         </View>
       </View>

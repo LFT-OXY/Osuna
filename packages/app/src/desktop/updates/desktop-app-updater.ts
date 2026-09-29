@@ -228,6 +228,11 @@ const FIXED_STATUS_TEXT_KEYS = {
   "install-failed": "desktop.updates.status.installFailed",
 } as const satisfies Partial<Record<DesktopAppUpdateStatus, string>>;
 
+// 向下取整：下载完成前不显示 100%。侧栏卡片和设置页共用这条规则。
+export function toWholeDownloadPercent(progress: DesktopAppUpdateDownloadProgress): number {
+  return Math.floor(Math.min(Math.max(progress.percent, 0), 100));
+}
+
 function isFixedTextStatus(
   status: DesktopAppUpdateStatus,
 ): status is keyof typeof FIXED_STATUS_TEXT_KEYS {
@@ -253,10 +258,17 @@ export function formatStatusText(input: {
   status: DesktopAppUpdateStatus;
   targetVersion: string | null;
   lastCheckedAt: number | null;
+  downloadProgress: DesktopAppUpdateDownloadProgress | null;
   formatVersion: (version: string | null | undefined) => string;
   formatLastCheckedAt: (timestamp: number) => string;
 }): string {
   const { status, targetVersion, lastCheckedAt, formatVersion, formatLastCheckedAt } = input;
+
+  if (status === "downloading" && input.downloadProgress) {
+    return i18n.t("desktop.updates.status.downloadingWithPercent", {
+      percent: toWholeDownloadPercent(input.downloadProgress),
+    });
+  }
 
   if (isFixedTextStatus(status)) {
     return i18n.t(FIXED_STATUS_TEXT_KEYS[status]);
@@ -325,6 +337,26 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
     return { ...base, mirror: next, pendingAction, actionError, checkError, isHidden };
   }
 
+  function withCheckResult(
+    base: InternalState,
+    result: DesktopAppUpdateCheckResult,
+    { silent }: { silent: boolean },
+  ): InternalState {
+    // 结果比已镜像的快照旧时，它带的检查错误也比之后推来的失败旧，不再顶替。
+    const isStaleResult = result.state.revision < base.mirror.revision;
+    // 静默检查不抹掉本地错误，它们在下一次动作、手动检查或阶段变化时过期。
+    const keepsCheckError = silent || isStaleResult;
+    const next = withMirror(base, result.state);
+    const checkError = keepsCheckError ? next.checkError : result.errorMessage;
+    const actionError = silent ? next.actionError : null;
+    // 手动检查发现新版本时重新出现，即使之前点过「稍后」。下载中的检查不访问更新源，
+    // 只返回当前快照，不算发现：下载中被收起的卡片仍等下完再出现。
+    const isFoundByManualCheck =
+      !silent && result.hasUpdate && result.state.phase !== "downloading";
+    const isHidden = isFoundByManualCheck ? false : next.isHidden;
+    return { ...next, checkError, actionError, isHidden };
+  }
+
   function applyMirror(next: DesktopAppUpdateState): void {
     const updated = withMirror(state, next);
     if (updated !== state) {
@@ -364,14 +396,7 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         return result;
       }
 
-      // 结果比已镜像的快照旧时，它带的检查错误也比之后推来的失败旧，不再顶替。
-      const isStaleResult = result.state.revision < state.mirror.revision;
-      // 静默检查不抹掉本地错误，它们在下一次动作、手动检查或阶段变化时过期。
-      const keepsCheckError = silent || isStaleResult;
-      const next = withMirror(state, result.state);
-      const checkError = keepsCheckError ? next.checkError : result.errorMessage;
-      const actionError = silent ? next.actionError : null;
-      commit({ ...next, check: "checked", checkError, actionError, lastCheckedAt });
+      commit({ ...withCheckResult(state, result, { silent }), check: "checked", lastCheckedAt });
       return result;
     } catch (error) {
       if (requestVersion !== state.requestVersion) {
@@ -394,7 +419,14 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
   }
 
   async function downloadUpdate(): Promise<DesktopAppUpdateState | null> {
-    commit({ ...state, pendingAction: "download", actionError: null, checkError: null });
+    // 用户发起下载（例如在设置页）时重新出现，离开设置页后在侧栏卡片继续看进度。
+    commit({
+      ...state,
+      pendingAction: "download",
+      actionError: null,
+      checkError: null,
+      isHidden: false,
+    });
 
     try {
       const next = await deps.port.downloadDesktopAppUpdate();

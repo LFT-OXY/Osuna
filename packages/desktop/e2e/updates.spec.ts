@@ -2,6 +2,7 @@ import { expect, test } from "../../app/e2e/support/fixtures";
 import { gotoAppShell, openSettings } from "../../app/e2e/support/helpers/app";
 import { getServerId } from "../../app/e2e/support/helpers/server-id";
 import {
+  clickSettingsBackToWorkspace,
   openHostSection,
   openSettingsHost,
   seedSavedSettingsHosts,
@@ -17,6 +18,7 @@ import {
   releaseUpdateDownload,
   reportUpdateDownloadProgress,
   readInvokedDesktopCommands,
+  readCapturedConfirmDialog,
   clickCheckForUpdates,
   expectAvailableUpdateCheckResult,
   expectInstallInProgress,
@@ -273,6 +275,88 @@ test.describe("Desktop updates", () => {
 
     await expectAvailableUpdateCheckResult(page, "1.2.3");
     expect(await readInvokedDesktopCommands(page)).not.toContain("download_app_update");
+  });
+
+  test("an update checked and downloaded in settings is the one the sidebar card shows", async ({
+    page,
+  }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
+      holdDownload: true,
+      slowInstall: true,
+    });
+    await gotoAppShell(page);
+    await expectUpdateCallout(page, { title: "Update available", version: "1.2.3" });
+    await clickUpdateCalloutAction(page, "Later");
+    await expectNoUpdateCallout(page);
+
+    await openDesktopAboutSettings(page);
+    await clickCheckForUpdates(page);
+    await expectAvailableUpdateCheckResult(page, "1.2.3");
+    const aboutPane = page.getByTestId("settings-detail-pane");
+    await aboutPane.getByRole("button", { name: "Update", exact: true }).click();
+    const MB = 1024 * 1024;
+    await reportUpdateDownloadProgress(page, {
+      percent: 42,
+      transferred: 41.4 * MB,
+      total: 98.6 * MB,
+      bytesPerSecond: 3.2 * MB,
+    });
+    await expect(
+      aboutPane.getByText("Downloading app update... 42%", { exact: true }),
+    ).toBeVisible();
+
+    await clickSettingsBackToWorkspace(page);
+    await expect(page.getByTestId("update-callout")).toContainText(
+      "42% · 41.4 / 98.6 MB · 3.2 MB/s",
+    );
+    await releaseUpdateDownload(page);
+    await expectUpdateCallout(page, { title: "Update downloaded", version: "1.2.3" });
+
+    await openDesktopAboutSettings(page);
+    await expect(
+      aboutPane.getByText(
+        "Installing restarts the app, stops running agents, and closes terminal sessions.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await aboutPane.getByRole("button", { name: "Install and restart", exact: true }).click();
+    await expect(
+      aboutPane.getByRole("button", { name: "Installing...", exact: true }),
+    ).toBeDisabled();
+    expect(await readInvokedDesktopCommands(page)).toContain("install_app_update");
+    expect(await readCapturedConfirmDialog(page)).toBeUndefined();
+  });
+
+  test("a download started in settings that fails shows the reason and the Releases download there", async ({
+    page,
+  }) => {
+    await installDesktopRuntime(page, {
+      serverId: getServerId(),
+      updateAvailable: true,
+      latestVersion: "1.2.3",
+      failUpdateAction: "download",
+    });
+    await gotoAppShell(page);
+    await openDesktopAboutSettings(page);
+    await clickCheckForUpdates(page);
+    await expectAvailableUpdateCheckResult(page, "1.2.3");
+
+    const aboutPane = page.getByTestId("settings-detail-pane");
+    await aboutPane.getByRole("button", { name: "Update", exact: true }).click();
+
+    await expect(
+      aboutPane.getByText("The update couldn't be downloaded.", { exact: true }),
+    ).toBeVisible();
+    await expect(aboutPane.getByText("sha512 checksum mismatch", { exact: true })).toBeVisible();
+    await page
+      .context()
+      .route("https://github.com/**", (route) => route.fulfill({ status: 200, body: "" }));
+    const releasesPage = page.waitForEvent("popup");
+    await aboutPane.getByRole("button", { name: "Download from Releases", exact: true }).click();
+    await (await releasesPage).waitForURL("https://github.com/LFT-OXY/Osuna/releases");
   });
 });
 

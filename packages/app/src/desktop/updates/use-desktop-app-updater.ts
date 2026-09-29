@@ -91,6 +91,7 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
       status: snapshot.status,
       targetVersion: snapshot.targetVersion,
       lastCheckedAt: snapshot.lastCheckedAt,
+      downloadProgress: snapshot.downloadProgress,
       formatVersion: formatVersionWithPrefix,
       formatLastCheckedAt: (timestamp) => formatMessageTimestamp(new Date(timestamp)),
     }),

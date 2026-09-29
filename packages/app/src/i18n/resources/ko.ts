@@ -1408,6 +1408,7 @@ export const ko: TranslationResources = {
         availableWithVersionAndLastChecked:
           "업데이트 사용 가능: {{version}}. {{time}}에서 마지막으로 확인했습니다.",
         downloading: "앱 업데이트 다운로드 중...",
+        downloadingWithPercent: "앱 업데이트 다운로드 중... {{percent}}%",
         downloaded: "설치할 앱 업데이트가 준비되었습니다.",
         downloadedWithLastChecked:
           "앱 업데이트를 설치할 준비가 되었습니다. {{time}}에서 마지막으로 확인했습니다.",
@@ -2258,17 +2259,11 @@ export const ko: TranslationResources = {
       },
       updates: {
         label: "앱 업데이트",
-        readyToInstall: "설치 준비됨: {{version}}",
-        installTitle: "데스크톱 업데이트 설치",
-        installMessage: "이 컴퓨터의 Osuna를 업데이트합니다",
-        installConfirm: "업데이트 설치",
         update: "업데이트",
-        updateTo: "{{version}}(으)로 업데이트",
+        installAndRestart: "설치 후 재시작",
         installing: "설치 중...",
         check: "확인",
         checking: "확인 중...",
-        alertTitle: "오류",
-        alertMessage: "업데이트 확인 대화 상자를 열 수 없습니다.",
       },
     },
     appearance: {

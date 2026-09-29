@@ -12,12 +12,18 @@
 
 **Blocked by:** 03 — 下载进度
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 设置页显示的阶段和侧栏卡片一致，下载中显示百分比。
-- [ ] 在设置里点「更新」开始下载，离开设置页后侧栏卡片显示同一份进度。
-- [ ] 已下载时点「安装并重启」直接安装，不弹系统确认框。
-- [ ] 之前点过「稍后」的用户在设置里手动检查发现新版本后，侧栏卡片重新出现。
-- [ ] 9 种语言里没有残留的无用更新文案 key。
-- [ ] 状态机测试覆盖「从设置页发起的检查和下载会解除隐藏」。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] 设置页显示的阶段和侧栏卡片一致，下载中显示百分比。
+- [x] 在设置里点「更新」开始下载，离开设置页后侧栏卡片显示同一份进度。
+- [x] 已下载时点「安装并重启」直接安装，不弹系统确认框。
+- [x] 之前点过「稍后」的用户在设置里手动检查发现新版本后，侧栏卡片重新出现。
+- [x] 9 种语言里没有残留的无用更新文案 key。
+- [x] 状态机测试覆盖「从设置页发起的检查和下载会解除隐藏」。
+- [x] `npm run typecheck`、`npm run lint` 通过。
+
+**Verification:** 渲染端由 `desktop-app-updater.test.ts`（手动检查发现新版本解除隐藏、自动检查不解除、下载中被收起的卡片经手动检查仍隐藏、发起下载解除隐藏、下载中状态文字带向下取整的百分比）验证；`packages/desktop/e2e/updates.spec.ts` 新增两条设置页用例：卡片点「稍后」后在设置页检查、点「更新」、注入进度，设置页显示「Downloading app update... 42%」，回到工作区后卡片显示同一份进度，下完后在设置页点「安装并重启」直接进入安装中且没有弹确认框；设置页发起的下载失败时，设置页显示失败原因和「前往 Releases 手动下载」并能打开发布页。本机 `npm run typecheck`、`npm run lint`、相关单测和 `updates.spec.ts` 全部通过。
+
+**实现中定下的约定：** 「手动检查发现新版本」按 `!silent && hasUpdate && 阶段不是下载中` 判断，下载中的检查只返回快照、不算发现。主按钮发现更新时显示「更新」（原来的「更新到 vX」和 `updateTo` key 删除）。已下载时的重启提示复用卡片的 `restartWarning`，删除 `readyToInstall`、确认框的 `installTitle` / `installMessage` / `installConfirm` 和打不开确认框时的 `alertTitle` / `alertMessage`。设置页失败时没有「重试」，主按钮禁用。为满足 lint 的复杂度上限，检查结果合并抽成 `withCheckResult`。
+
+**越出本票：** 下载百分比取整抽成 `toWholeDownloadPercent`，侧栏卡片改用它（原来经 `fraction * 100` 再取整，浮点误差会把 57 显示成 56）。

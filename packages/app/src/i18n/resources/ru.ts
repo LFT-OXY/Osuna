@@ -1421,6 +1421,7 @@ export const ru: TranslationResources = {
         availableWithVersionAndLastChecked:
           "Доступно обновление: {{version}}. Последняя проверка: {{time}}.",
         downloading: "Загрузка обновления приложения...",
+        downloadingWithPercent: "Загрузка обновления приложения... {{percent}}%",
         downloaded: "Обновление приложения готово к установке.",
         downloadedWithLastChecked:
           "Обновление приложения готово к установке. Последняя проверка в {{time}}.",
@@ -2282,17 +2283,11 @@ export const ru: TranslationResources = {
       },
       updates: {
         label: "Обновления приложения",
-        readyToInstall: "Версия {{version}} готова к установке",
-        installTitle: "Установить обновление настольного приложения",
-        installMessage: "Это обновит Osuna на этом компьютере.",
-        installConfirm: "Установить обновление",
         update: "Обновить",
-        updateTo: "Обновить до {{version}}",
+        installAndRestart: "Установить и перезапустить",
         installing: "Установка...",
         check: "Проверить",
         checking: "Проверка...",
-        alertTitle: "Ошибка",
-        alertMessage: "Не удалось открыть диалог подтверждения обновления.",
       },
     },
     appearance: {

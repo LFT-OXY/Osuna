@@ -16,7 +16,11 @@ import {
   type FakeDesktopAppUpdaterPort,
 } from "./test-utils/fake-desktop-app-updater-port";
 import { createFakeIntervalTimer } from "./test-utils/fake-interval-timer";
-import type { DesktopAppUpdateCheckResult, DesktopAppUpdatePhase } from "./desktop-updates";
+import type {
+  DesktopAppUpdateCheckResult,
+  DesktopAppUpdateDownloadProgress,
+  DesktopAppUpdatePhase,
+} from "./desktop-updates";
 
 function createUpdater(
   overrides: {
@@ -633,6 +637,61 @@ describe("desktop app updater — hidden for this run", () => {
 
     expect(updater.getSnapshot()).toMatchObject({ status: "downloaded", isHidden: true });
   });
+
+  it("shows the update again when a manual check finds it", async () => {
+    const { updater, port } = await connectWithState("available");
+    updater.hide();
+
+    port.nextCheckResult(
+      buildFakeCheckResult({
+        hasUpdate: true,
+        state: buildFakeUpdateState({ phase: "available" }),
+      }),
+    );
+    await updater.checkForUpdates();
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "available", isHidden: false });
+  });
+
+  it("keeps the update hidden when an automatic check finds it", async () => {
+    const { updater, port } = await connectWithState("available");
+    updater.hide();
+
+    port.nextCheckResult(
+      buildFakeCheckResult({
+        hasUpdate: true,
+        state: buildFakeUpdateState({ phase: "available" }),
+      }),
+    );
+    await updater.checkForUpdates({ intent: "automatic", silent: true });
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "available", isHidden: true });
+  });
+
+  it("keeps a download hidden mid-way hidden through a manual check", async () => {
+    const { updater, port } = await connectWithState("downloading");
+    updater.hide();
+
+    port.nextCheckResult(
+      buildFakeCheckResult({
+        hasUpdate: true,
+        state: buildFakeUpdateState({ phase: "downloading" }),
+      }),
+    );
+    await updater.checkForUpdates();
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "downloading", isHidden: true });
+  });
+
+  it("shows the update again once the user starts the download", async () => {
+    const { updater, port } = await connectWithState("available");
+    updater.hide();
+    port.deferNextDownload();
+
+    void updater.downloadUpdate();
+
+    expect(updater.getSnapshot()).toMatchObject({ status: "downloading", isHidden: false });
+  });
 });
 
 describe("desktop app updater — failure stage", () => {
@@ -882,11 +941,13 @@ describe("formatStatusText", () => {
     status: Parameters<typeof formatStatusText>[0]["status"];
     targetVersion?: string | null;
     lastCheckedAt?: number | null;
+    downloadProgress?: DesktopAppUpdateDownloadProgress | null;
   }) =>
     formatStatusText({
       status: input.status,
       targetVersion: input.targetVersion ?? null,
       lastCheckedAt: input.lastCheckedAt ?? null,
+      downloadProgress: input.downloadProgress ?? null,
       formatVersion,
       formatLastCheckedAt,
     });
@@ -910,6 +971,21 @@ describe("formatStatusText", () => {
     expect(format({ status: "downloading", targetVersion: "1.2.3" })).toBe(
       "Downloading app update...",
     );
+  });
+
+  it("shows the whole download percent once progress arrives", () => {
+    const downloadProgress = {
+      percent: 42.9,
+      transferred: 42.9,
+      total: 100,
+      bytesPerSecond: 1,
+    };
+    expect(format({ status: "downloading", downloadProgress })).toBe(
+      "Downloading app update... 42%",
+    );
+    expect(
+      format({ status: "downloading", downloadProgress: { ...downloadProgress, percent: 99.95 } }),
+    ).toBe("Downloading app update... 99%");
   });
 
   it("says a downloaded update is ready to install", () => {

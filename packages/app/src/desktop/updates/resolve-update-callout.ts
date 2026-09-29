@@ -1,5 +1,8 @@
 import type { DesktopAppUpdateDownloadProgress } from "@/desktop/updates/desktop-updates";
-import { offersManualDownload } from "@/desktop/updates/desktop-app-updater";
+import {
+  offersManualDownload,
+  toWholeDownloadPercent,
+} from "@/desktop/updates/desktop-app-updater";
 import type { DesktopAppUpdateStatus } from "@/desktop/updates/use-desktop-app-updater";
 import { i18n } from "@/i18n/i18next";
 
@@ -76,8 +79,7 @@ function resolveProgress(
 ): UpdateCalloutProgress | null {
   if (!progress) return null;
   const fraction = Math.min(Math.max(progress.percent / 100, 0), 1);
-  // 向下取整：下载完成前不显示 100%。
-  const percent = Math.floor(fraction * 100);
+  const percent = toWholeDownloadPercent(progress);
   const label = i18n.t("desktop.updates.callout.downloadProgress", {
     percent,
     transferred: formatMegabytes(progress.transferred),

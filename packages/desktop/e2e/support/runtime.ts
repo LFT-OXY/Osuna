@@ -553,6 +553,12 @@ export async function readInvokedDesktopCommands(page: Page): Promise<string[]> 
   return page.evaluate(() => window.__desktopInvokedCommands);
 }
 
+export async function readCapturedConfirmDialog(
+  page: Page,
+): Promise<ConfirmDialogCall | undefined> {
+  return page.evaluate(() => window.__capturedDialogCall);
+}
+
 export async function clickCheckForUpdates(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Check" }).click();
 }

@@ -1439,6 +1439,7 @@ export const es: TranslationResources = {
         availableWithVersionAndLastChecked:
           "Actualización disponible: {{version}}. Última comprobación a las {{time}}.",
         downloading: "Descargando la actualización de la aplicación...",
+        downloadingWithPercent: "Descargando la actualización de la aplicación... {{percent}}%",
         downloaded: "Una actualización de la aplicación está lista para instalarse.",
         downloadedWithLastChecked:
           "Una actualización de la aplicación está lista para instalarse. Última comprobación a las {{time}}.",
@@ -2299,17 +2300,11 @@ export const es: TranslationResources = {
       },
       updates: {
         label: "Actualizaciones de aplicaciones",
-        readyToInstall: "Listo para instalar:{{version}}",
-        installTitle: "Instalar actualización de escritorio",
-        installMessage: "Esto actualiza Osuna en esta computadora.",
-        installConfirm: "Instalar actualización",
         update: "Actualizar",
-        updateTo: "Actualización a{{version}}",
+        installAndRestart: "Instalar y reiniciar",
         installing: "Instalando...",
         check: "Controlar",
         checking: "De cheques...",
-        alertTitle: "Error",
-        alertMessage: "No se puede abrir el cuadro de diálogo de confirmación de actualización.",
       },
     },
     appearance: {
