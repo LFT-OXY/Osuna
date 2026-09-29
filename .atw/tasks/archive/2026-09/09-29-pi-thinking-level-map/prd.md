@@ -90,16 +90,16 @@ Paseo 的 Pi 适配层读取 Pi 在模型列表里返回的 `thinkingLevelMap`�
 
 ## Acceptance Criteria
 
-- [ ] Pi 模型目录中，推理模型的档位列表等于按 Pi 规则由 `thinkingLevelMap` 算出的集合，顺序固定
-- [ ] 没配 `thinkingLevelMap` 的推理模型只给 off/minimal/low/medium/high
-- [ ] 非推理模型、以及映射后没有任何受支持档位的模型，不给档位
-- [ ] 默认档为收敛(medium)，且是列表中唯一 `isDefault` 的项
-- [ ] 运行中的 Pi 会话切到支持当前档位的模型后，档位保持不变，不发 `thinking_option_changed`
-- [ ] 切到不支持当前档位的模型后，档位变为 Pi 实际生效的收敛档位，发出 `thinking_option_changed`，runtime info 返回该档位
-- [ ] 设档位后 Pi 会话的 runtime info 返回 Pi 实际生效的档位
-- [ ] 切到非推理模型或没有受支持档位的模型时不重新下发档位；再切回推理模型时恢复原档位
-- [ ] 以非推理模型启动的会话切到推理模型时，下发用户选择的档位或 medium，而不是 off
-- [ ] 切模型后档位对齐失败不影响切模型成功；设档位后回读失败时记录请求值
-- [ ] 以上行为在 Pi provider 现有测试文件中有测试覆盖并通过
-- [ ] 不改 protocol 和 App 代码
-- [ ] typecheck 与 lint 通过
+- [x] Pi 模型目录中，推理模型的档位列表等于按 Pi 规则由 `thinkingLevelMap` 算出的集合，顺序固定
+- [x] 没配 `thinkingLevelMap` 的推理模型只给 off/minimal/low/medium/high
+- [x] 非推理模型、以及映射后没有任何受支持档位的模型，不给档位
+- [x] 默认档为收敛(medium)，且是列表中唯一 `isDefault` 的项
+- [x] 运行中的 Pi 会话切到支持当前档位的模型后，档位保持不变，不发 `thinking_option_changed`
+- [x] 切到不支持当前档位的模型后，档位变为 Pi 实际生效的收敛档位，发出 `thinking_option_changed`，runtime info 返回该档位
+- [x] 设档位后 Pi 会话的 runtime info 返回 Pi 实际生效的档位
+- [x] 切到非推理模型或没有受支持档位的模型时不重新下发档位；再切回推理模型时恢复原档位
+- [x] 以非推理模型启动的会话切到推理模型时，下发用户选择的档位或 medium，而不是 off
+- [x] 切模型后档位对齐失败不影响切模型成功；设档位后回读失败时记录请求值
+- [x] 以上行为在 Pi provider 现有测试文件中有测试覆盖并通过
+- [x] 不改 protocol 和 App 代码
+- [x] typecheck 与 lint 通过
