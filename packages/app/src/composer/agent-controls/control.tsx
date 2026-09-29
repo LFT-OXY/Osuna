@@ -40,6 +40,8 @@ type AgentControlTriggerProps = Omit<
   showToolbarLabel?: boolean;
   showCaret?: boolean;
   open?: boolean;
+  /** 为 false 时 disabled 只挡交互不变灰，用于「看得见但改不了」的状态。 */
+  dimWhenDisabled?: boolean;
   onPress: () => void;
   accessibilityLabel: string;
 };
@@ -57,6 +59,7 @@ export const AgentControlTrigger = forwardRef<View, AgentControlTriggerProps>(
       showCaret = false,
       open = false,
       disabled = false,
+      dimWhenDisabled = true,
       onPress,
       accessibilityLabel,
       testID,
@@ -75,9 +78,9 @@ export const AgentControlTrigger = forwardRef<View, AgentControlTriggerProps>(
         !isSheet && !showToolbarLabel && styles.toolbarIconOnly,
         hovered && (isSheet ? styles.sheetRowInteractive : styles.hovered),
         (pressed || open) && (isSheet ? styles.sheetRowInteractive : styles.pressed),
-        disabled && styles.disabled,
+        disabled && dimWhenDisabled && styles.disabled,
       ],
-      [disabled, isSheet, open, showToolbarLabel],
+      [dimWhenDisabled, disabled, isSheet, open, showToolbarLabel],
     );
 
     return (

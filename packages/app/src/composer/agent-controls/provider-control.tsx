@@ -164,6 +164,8 @@ export function AgentProviderControl({
       showToolbarLabel={false}
       open={open}
       disabled={!canOpen}
+      // 运行中锁定 provider 时保持原色，只靠 tooltip 说明不能切换。
+      dimWhenDisabled={menu !== null || disabled}
       onPress={handlePress}
       accessibilityLabel={accessibilityLabel}
       testID={isSheet ? "agent-controls-provider" : "agent-provider-selector"}
