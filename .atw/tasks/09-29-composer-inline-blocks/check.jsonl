@@ -8,4 +8,4 @@
 {"file": ".atw/spec/app/frontend/state-management.md", "reason": "草稿与排队状态设计"}
 {"file": ".atw/spec/app/frontend/testing.md", "reason": "测试分层与 e2e 约定"}
 {"file": "docs/hover.md", "reason": "悬停提示的规范写法"}
-{"file": ".atw/tasks/09-29-composer-inline-blocks/issues/01-bubble-renders-blocks.md", "reason": "ATW current ticket"}
+{"file": ".atw/tasks/09-29-composer-inline-blocks/issues/02-tiptap-composer-input.md", "reason": "ATW current ticket"}

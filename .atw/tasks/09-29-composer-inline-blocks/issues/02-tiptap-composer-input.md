@@ -7,7 +7,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 所有使用 `Composer` 的界面（agent 面板、草稿 tab、新建工作区页、工作区设置弹窗）都用新输入。
 - [ ] 无回归：IME 组字、Enter 发送与 Shift+Enter 换行、Command menu 与 `@` 列表的触发与键盘导航、粘贴 / 拖拽图片与文件进 Attachment tray、语音输入插入、随内容长高与最大高度、placeholder、聚焦快捷键、`preserve-and-lock` 提交锁定、只读模式、Skill chip 的退格删除。

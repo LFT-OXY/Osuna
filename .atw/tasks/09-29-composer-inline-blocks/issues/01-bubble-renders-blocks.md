@@ -9,7 +9,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 编解码单元测试（测试层 B 的解析与序列化部分）：各合法写法、label 与 basename 不等、目录末尾 `/`、含空格括号的 `<…>` 目标、Agent mention、未知 skill、skill 列表缺失、旧 `"path"`、Claude 导入还原的 `/cmd args`、序列化再解析得原结构。
 - [x] 气泡显示 File mention（文件 / 目录 / 图片图标）、开头已知 skill 的 Skill block、Agent mention（provider 图标）；刷新页面后不变。
@@ -18,5 +18,5 @@
 - [x] 复制按钮复制原始文本。
 - [x] 五种块的无障碍标签（Skill、文件、文件夹、图片、智能体）九种语言齐全。
 - [x] Playwright e2e（mock agent）覆盖气泡显示块与刷新后仍显示。
-- [ ] 原生端气泡渲染块无崩溃（截图）。——未做：本机没有 iOS 模拟器与原生工程，需要在有原生环境的机器上补。
+- [ ] 原生端气泡渲染块无崩溃（截图）。——未做（用户同意先关票）：本机没有 iOS 模拟器与原生工程，并入 03、05 的原生端验收一起补。
 - [x] `npm run typecheck`、`npm run lint` 通过。
