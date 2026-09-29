@@ -486,6 +486,29 @@ describe("Inline blocks in the Composer text input", () => {
     await expectBlockCount(mounted, 2);
   });
 
+  it("pastes at the caret the browser just moved, before the editor reads the selection", async () => {
+    const mounted = await mountWithFileBlock();
+    await expectBlockCount(mounted, 1);
+    await userEvent.keyboard("{ControlOrMeta>}a{/ControlOrMeta}");
+    const clipboardData = new DataTransfer();
+    act(() => {
+      mounted.editor.dispatchEvent(
+        new ClipboardEvent("copy", { clipboardData, bubbles: true, cancelable: true }),
+      );
+    });
+
+    // 浏览器的方向键已把光标收到末尾，编辑器要等异步的 selectionchange 才知道。
+    act(() => {
+      document
+        .getSelection()
+        ?.collapse(mounted.editor.firstChild, mounted.editor.firstChild?.childNodes.length ?? 0);
+      mounted.editor.dispatchEvent(pasteEvent(clipboardData));
+    });
+
+    expect(mounted.handle.getText()).toBe(`see ${X_LINK} see ${X_LINK} `);
+    await expectBlockCount(mounted, 2);
+  });
+
   it("does not paste a forged block structure", async () => {
     const mounted = mount({ initialValue: "" });
     await focusAtEnd(mounted);

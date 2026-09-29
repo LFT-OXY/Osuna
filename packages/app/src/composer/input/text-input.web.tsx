@@ -19,7 +19,7 @@ import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
 import { UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor, type Editor, type UseEditorOptions } from "@tiptap/react";
-import { Fragment, Slice } from "@tiptap/pm/model";
+import { Fragment } from "@tiptap/pm/model";
 import { TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
@@ -179,9 +179,36 @@ function insertInlineBlock(editor: Editor, block: InlineBlock, range: ComposerTe
   editor.view.dispatch(tr.scrollIntoView());
 }
 
+// beforeinput 与 paste 早于 ProseMirror 从 DOM 同步选区（selectionchange 是异步的）：方向键刚移动光标、
+// Playwright fill 刚设好选区时，编辑器的选区还是旧的。替换范围以 DOM 选区为准。
+interface EditorRange {
+  from: number;
+  to: number;
+}
+
+function liveSelectionRange(view: EditorView): EditorRange {
+  const selection = view.dom.ownerDocument.getSelection();
+  const anchorNode = selection?.anchorNode;
+  const focusNode = selection?.focusNode;
+  if (!selection || !anchorNode || !focusNode) return view.state.selection;
+  if (!view.dom.contains(anchorNode) || !view.dom.contains(focusNode)) return view.state.selection;
+  const anchor = view.posAtDOM(anchorNode, selection.anchorOffset);
+  const head = view.posAtDOM(focusNode, selection.focusOffset);
+  return { from: Math.min(anchor, head), to: Math.max(anchor, head) };
+}
+
+function insertionRange(view: EditorView): EditorRange {
+  const { from, to } = liveSelectionRange(view);
+  // 全选（AllSelection）覆盖段落本身，替换只在段落内容里进行。
+  return { from: Math.max(1, from), to: Math.min(view.state.doc.content.size - 1, to) };
+}
+
 function insertSegments(view: EditorView, segments: readonly InlineSegment[]): void {
+  const { from, to } = insertionRange(view);
   const fragment = segmentsToFragment(view.state.schema, segments);
-  view.dispatch(view.state.tr.replaceSelection(new Slice(fragment, 0, 0)).scrollIntoView());
+  const tr = view.state.tr.replaceWith(from, to, fragment);
+  tr.setSelection(TextSelection.create(tr.doc, from + fragment.size));
+  view.dispatch(tr.scrollIntoView());
 }
 
 function insertPlainText(view: EditorView, text: string): void {
@@ -202,30 +229,6 @@ function writeSelectionToClipboard(view: EditorView, event: ClipboardEvent): boo
   event.clipboardData.setData(INLINE_SEGMENTS_MIME, JSON.stringify(segments));
   event.preventDefault();
   return true;
-}
-
-// beforeinput 早于 ProseMirror 从 DOM 同步选区（selectionchange 是异步的），替换范围以 DOM 选区为准。
-function insertPlainTextAtDomSelection(view: EditorView, text: string): void {
-  const selection = view.dom.ownerDocument.getSelection();
-  const anchorNode = selection?.anchorNode;
-  const focusNode = selection?.focusNode;
-  const selectionInEditor =
-    anchorNode != null &&
-    focusNode != null &&
-    view.dom.contains(anchorNode) &&
-    view.dom.contains(focusNode);
-  if (!selection || !selectionInEditor) {
-    insertPlainText(view, text);
-    return;
-  }
-  const anchor = view.posAtDOM(anchorNode, selection.anchorOffset);
-  const head = view.posAtDOM(focusNode, selection.focusOffset);
-  const from = Math.max(1, Math.min(anchor, head));
-  const to = Math.min(view.state.doc.content.size - 1, Math.max(anchor, head));
-  const fragment = textToFragment(view.state.schema, text);
-  const tr = view.state.tr.replaceWith(from, to, fragment);
-  tr.setSelection(TextSelection.create(tr.doc, from + fragment.size));
-  view.dispatch(tr.scrollIntoView());
 }
 
 // 回调契约沿用 RN TextInput 的事件形状。Composer 只读 nativeEvent 上的 key / 修饰键 /
@@ -396,7 +399,7 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
                 !view.composing && event.inputType === "insertText" && /[\r\n]/.test(data);
               if (!insertsMultilineText) return false;
               event.preventDefault();
-              insertPlainTextAtDomSelection(view, data);
+              insertPlainText(view, data);
               return true;
             },
             compositionend: (view) => {
