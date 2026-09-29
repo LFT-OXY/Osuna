@@ -12,7 +12,7 @@ import {
 } from "./skill-chips";
 
 function activeCommand(text: string, cursorIndex: number) {
-  const command = findActiveSlashCommand({ text, cursorIndex });
+  const command = findActiveSlashCommand({ text, cursorIndex, blockBoundary: 0 });
   if (!command) throw new Error(`no slash command in ${JSON.stringify(text)}`);
   return command;
 }

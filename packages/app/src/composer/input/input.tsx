@@ -5,7 +5,6 @@ import {
   useWindowDimensions,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
-  TextInputSelectionChangeEventData,
   type LayoutChangeEvent,
 } from "react-native";
 import {
@@ -59,10 +58,17 @@ import { RenderProfile } from "@/utils/render-profiler";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
 import type { NativePastedFile } from "@/composer/native-pasted-image";
 import type { EditingTextInputProps } from "@/components/ui/text-input";
+import { insertInlineBlockText, type InlineBlock } from "@/inline-blocks";
 import {
   ComposerTextInput as ComposerTextInputBase,
   type ComposerTextInputHandle,
 } from "./text-input";
+import type {
+  ComposerInputSnapshot,
+  ComposerLiveSelection,
+  ComposerSelectionChangeEventData,
+  ComposerTextSelection,
+} from "./text-input.types";
 
 const ComposerTextInput = withUnistyles(ComposerTextInputBase, (theme) => ({
   placeholderTextColor: theme.colors.surface4,
@@ -97,10 +103,7 @@ export interface AttachmentMenuItem {
   icon?: React.ReactElement | null;
 }
 
-export interface ComposerInputSnapshot {
-  text: string;
-  selection: { start: number; end: number };
-}
+export type { ComposerInputSnapshot };
 
 export interface ComposerKeyPressEvent {
   key: string;
@@ -161,7 +164,7 @@ export interface MessageInputProps {
   /** Intercept key press events before default handling. Return true to prevent default. */
   onKeyPress?: (event: ComposerKeyPressEvent) => boolean;
   /** Reports cursor selection updates from the underlying input. */
-  onSelectionChange?: (selection: { start: number; end: number }) => void;
+  onSelectionChange?: (selection: ComposerLiveSelection) => void;
   onFocusChange?: (focused: boolean) => void;
   onHeightChange?: (height: number) => void;
   /** Extra styles merged onto the input wrapper (e.g. elevated background). */
@@ -184,6 +187,8 @@ export interface MessageInputRef {
   getText: () => string;
   getInputSnapshot: () => ComposerInputSnapshot;
   replaceText: (text: string, selection?: { start: number; end: number }) => void;
+  /** 把 range 换成行内块并补一个空格；原生端输入框只有文字，插入块的链接文字。 */
+  insertInlineBlock: (block: InlineBlock, range: ComposerTextSelection) => void;
   runKeyboardAction: (action: MessageInputKeyboardActionKind) => boolean;
   /**
    * Web-only: return the underlying DOM element for focus assertions/retries.
@@ -619,7 +624,7 @@ interface ComposerTextSurfaceProps {
   editable: boolean;
   autoFocus: boolean;
   onKeyPress: ((event: WebTextInputKeyPressEvent) => void) | undefined;
-  onSelectionChange: (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => void;
+  onSelectionChange: (event: NativeSyntheticEvent<ComposerSelectionChangeEventData>) => void;
   onPasteImages: ((files: readonly NativePastedFile[]) => void) | undefined;
   onPasteError: (message: string) => void;
   focusHintVisible: boolean;
@@ -923,11 +928,11 @@ function resolveMaxInputHeight(windowHeight: number): number {
 function getComposerInputSnapshot(
   current: ComposerTextInputHandle | null,
   fallbackText: string,
-  fallbackSelection: ComposerInputSnapshot["selection"],
+  fallbackSelection: ComposerLiveSelection,
 ): ComposerInputSnapshot {
   const text = current?.getText() ?? fallbackText;
-  const selection = current?.getSelection?.() ?? fallbackSelection;
-  return { text, selection };
+  const { start, end, blockBoundary } = current?.getSelection?.() ?? fallbackSelection;
+  return { text, selection: { start, end }, blockBoundary };
 }
 
 interface SendButtonStateInput {
@@ -989,7 +994,7 @@ interface ResolvedMessageInputProps {
   onQueue: ((payload: MessagePayload) => void) | undefined;
   onSubmitLoadingPress: (() => void) | undefined;
   onKeyPressCallback: ((event: ComposerKeyPressEvent) => boolean) | undefined;
-  onSelectionChangeCallback: ((selection: { start: number; end: number }) => void) | undefined;
+  onSelectionChangeCallback: ((selection: ComposerLiveSelection) => void) | undefined;
   onFocusChange: ((focused: boolean) => void) | undefined;
   onHeightChange: ((height: number) => void) | undefined;
   inputWrapperStyle: import("react-native").ViewStyle | undefined;
@@ -1123,7 +1128,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const textInputRef = useRef<ComposerTextInputHandle | null>(null);
     const isInputFocusedRef = useRef(false);
     const valueRef = useRef(value);
-    const selectionRef = useRef({ start: value.length, end: value.length });
+    const selectionRef = useRef<ComposerLiveSelection>({
+      start: value.length,
+      end: value.length,
+      blockBoundary: 0,
+    });
     const appliedTextReplacementKeyRef = useRef(textReplacement.key);
     // 两端的输入都随内容自己长高，到 maxHeight 后在内部滚动。
     const composerHeightStyle = useMemo(
@@ -1147,7 +1156,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       (nextText: string, selection?: { start: number; end: number }) => {
         valueRef.current = nextText;
         updateLiveTextPresence(nextText);
-        selectionRef.current = selection ?? { start: nextText.length, end: nextText.length };
+        const nextSelection = selection ?? { start: nextText.length, end: nextText.length };
+        selectionRef.current = { ...nextSelection, blockBoundary: 0 };
         if (nextText === "") {
           textInputRef.current?.reset();
         } else {
@@ -1169,6 +1179,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       getInputSnapshot: () =>
         getComposerInputSnapshot(textInputRef.current, valueRef.current, selectionRef.current),
       replaceText,
+      insertInlineBlock: (block, range) => {
+        const input = textInputRef.current;
+        if (input?.insertInlineBlock) {
+          input.insertInlineBlock(block, range);
+          return;
+        }
+        const inserted = insertInlineBlockText({
+          text: input?.getText() ?? valueRef.current,
+          range,
+          block,
+        });
+        replaceText(inserted.text, { start: inserted.cursor, end: inserted.cursor });
+      },
       runKeyboardAction: (action) =>
         runMessageInputKeyboardAction(action, {
           focusInput: () => textInputRef.current?.focus(),
@@ -1477,11 +1500,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     });
 
     const handleSelectionChange = useCallback(
-      (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
+      (event: NativeSyntheticEvent<ComposerSelectionChangeEventData>) => {
         const start = event.nativeEvent.selection?.start ?? 0;
         const end = event.nativeEvent.selection?.end ?? start;
-        selectionRef.current = { start, end };
-        onSelectionChangeCallback?.({ start, end });
+        const blockBoundary = event.nativeEvent.blockBoundary ?? 0;
+        selectionRef.current = { start, end, blockBoundary };
+        onSelectionChangeCallback?.({ start, end, blockBoundary });
       },
       [onSelectionChangeCallback],
     );

@@ -7,6 +7,8 @@
 - 发送失败按提交前的分段结构恢复。
 - Rewind 把气泡文本解析成块写回输入框（仍只在输入框为空时写入），包括 Agent mention 链接。
 
+- 输入框的块节点视图目前传 `serverId={null}`（`composer/input/inline-block-node.web.tsx`），Rewind 写回的 Agent mention 若指向 profile 或自定义 provider 会显示 Bot 图标；本工单要把 serverId 带进节点视图。
+
 **Blocked by:** 03 — File mention：@ 选文件 / 目录 / 图片生成块并发送
 **Status:** ready-for-agent
 **Impl:** ready

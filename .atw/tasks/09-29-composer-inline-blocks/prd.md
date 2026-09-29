@@ -97,17 +97,21 @@
 
 - 用 Tiptap 3 替换 Web 端的 textarea，作为 Composer 文字输入的 Web 实现，通过 Metro 平台扩展名与原生实现分开；Electron 走同一 Web 实现。已落地（工单 02）：
   - `composer/input/text-input.web.tsx`（Tiptap）与 `text-input.tsx`（原生，转出共享 `EditingTextInput`），对外仍是 `EditingTextInputHandle` 与 RN 回调形状，另加可选 `getSelection()` 读实时选区（原生没有，退回最近一次选区事件）。只有 Composer 换了，查找、重命名等共享文本输入不动。
-  - 文档固定为一个段落，换行是 `hardBreak`，所以文字偏移 = 编辑器位置 - 1。工单 03 加块节点后这个映射要改成按分段计算。
+  - 文档固定为一个段落，换行是 `hardBreak`。
   - 未被 Composer 拦下的 Enter 与 Shift+Enter 都插入换行；Cmd/Ctrl+Enter 不换行（交给 Composer 排队或发送）。程序替换文字（`replaceText` / `reset`）不进撤销栈。
   - 高度不再用 textarea 镜像测量：编辑器随内容自己长高，到最大高度后在根元素内部滚动；原生端同样只给 `minHeight` / `maxHeight`。
   - 粘贴只取 `text/plain`；Composer 在捕获阶段先收走图片并 `preventDefault`，编辑器看到后不再插入。拖放一律交给外层 file drop。
   - 一次插入的多行文字（Playwright `fill`、系统文本替换）按换行拆成 `hardBreak`，替换范围取 DOM 选区，因为 ProseMirror 要等异步的 `selectionchange` 才同步选区。
   - Web 包体积增量：未压缩 +402 KB，gzip +115 KB，brotli +95 KB。
-- 块是 inline、atom 的节点，NodeView 不可编辑；方向键整块跳过；退格、选区删除整块处理；开头 Skill block 之前不可放光标。
+- 块是 inline、atom 的节点，NodeView 不可编辑；方向键整块跳过；退格、Delete、选区删除整块处理；开头 Skill block 之前不可放光标。已落地（工单 03）：
+  - Composer 看到的文字就是发出去的文字：`getText()`、`onChangeText` 与所有偏移都按序列化写法计，块在编辑器里只占一个位置，两者经 `composer/input/editor-text.web.ts` 换算。草稿 `text`、排队、发送因此不用改。
+  - 编辑器的选区另报 `blockBoundary`（光标前最后一个块的结束偏移），`@` 与 `/` 的识别不往回越过它，块的链接目标里的 `@`、` /` 不会打开列表。
+  - Composer 以整段文字替换内容（补全命令、语音、清空、草稿恢复）时，编辑器只改与当前文字不同的那一段，没碰到的块保留，碰到的块整块变成新文字。
+  - 选中文件走 `insertInlineBlock(block, range)`：`@query` 后面已经是空格时沿用它，不补第二个；这次替换进撤销栈，撤销回到 `@query`。
 - 外观照 codeg：线性单色图标（立方体、文件、文件夹、图片、provider 图标）+ accent 色名字，`caption` 级字号，无底色无描边，名字过长截断；不新增 token。
 - Web 悬停：File mention 显示相对路径，Skill block 显示全名与描述；按 `docs/hover.md` 的规范实现，紧凑宽度不出提示。
-- 保持 Composer 现有能力不变：IME 组字、Enter 发送与 Shift+Enter 换行、Command menu 与 `@` 列表的触发与键盘导航、粘贴/拖拽图片与文件进 Attachment tray、语音输入插入、随内容长高与最大高度、placeholder、聚焦快捷键、`preserve-and-lock` 提交锁定。Composer 通过现有 imperative handle 改文字的调用点改为操作分段结构。
-- 粘贴外部文字一律按纯文字插入；输入框内部复制粘贴保留块（编辑器默认行为）；从输入框复制到外部时剪贴板是序列化文本。
+- 保持 Composer 现有能力不变：IME 组字、Enter 发送与 Shift+Enter 换行、Command menu 与 `@` 列表的触发与键盘导航、粘贴/拖拽图片与文件进 Attachment tray、语音输入插入、随内容长高与最大高度、placeholder、聚焦快捷键、`preserve-and-lock` 提交锁定。Composer 改文字的调用点仍用 imperative handle 的整段文字替换（靠上面的差异替换保块），另加 `insertInlineBlock`；分段结构在草稿、排队这些要跨卸载保存的地方才出现（工单 04）。
+- 粘贴外部文字一律按纯文字插入；输入框内部复制粘贴保留块；从输入框复制到外部时剪贴板是序列化文本。粘贴只读 `text/plain`，所以编辑器默认写的 HTML 用不上：选区含块时由编辑器接管复制与剪切，`text/plain` 写序列化文字，另写 `application/x-paseo-inline-segments`（分段结构 JSON，粘贴时逐字段校验）；不含块时仍走编辑器默认。在别的工作区的输入框里粘贴同样还原成块，路径不随 cwd 改写。
 - 覆盖所有使用 `Composer` 的界面：agent 面板、草稿 tab、新建工作区页、工作区设置弹窗。
 
 ### 原生端
@@ -140,7 +144,7 @@
 
 ### 分工
 
-- 本任务提供 Agent mention 的块类型、链接格式、解析、渲染、编辑器节点与 provider 图标；`@` 列表的智能体分组、置灰、daemon 提取与派发归 `09-29-multi-agent-collab`。本任务里 Agent mention 只会经解析出现（气泡、Rewind），输入框暂无插入入口。
+- 本任务提供 Agent mention 的块类型、链接格式、解析、渲染、编辑器节点与 provider 图标（输入框节点视图拿不到 serverId，只认内置 provider 的图标，profile 与自定义 provider 回退到 Bot；写回输入框前要补上）；`@` 列表的智能体分组、置灰、daemon 提取与派发归 `09-29-multi-agent-collab`。本任务里 Agent mention 只会经解析出现（气泡、Rewind），输入框暂无插入入口。
 
 ### 无障碍
 

@@ -10,13 +10,13 @@
 
 **Blocked by:** 01 — 气泡与 Queue track 从文本渲染块；02 — Web/Electron 输入框换成 Tiptap（纯文字，行为不变）
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
-- [ ] 选文件 / 目录 / 图片后输入框出现对应图标 + basename 的块，外观与参考图一致（无底色、accent 文字、名字过长截断、颜色随主题 accent）。
-- [ ] 方向键、退格、选区删除对块整块处理。
-- [ ] 手打 `@path`、`[x](path)` 与粘贴的外部文字保持文字；输入框内部复制粘贴保留块。
-- [ ] agent 收到的文本等于序列化写法；气泡显示块。
-- [ ] 原生端插入链接文字，发出后气泡显示块。
-- [ ] Playwright e2e（mock agent）：选文件与目录 → 块 → 退格整块删除 → 发送文本断言 → 气泡显示块。
-- [ ] Electron 浅色、深色截图各一张（含文件、目录、图片块）。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] 选文件 / 目录 / 图片后输入框出现对应图标 + basename 的块，外观与参考图一致（无底色、accent 文字、名字过长截断、颜色随主题 accent）。
+- [x] 方向键、退格、选区删除对块整块处理。
+- [x] 手打 `@path`、`[x](path)` 与粘贴的外部文字保持文字；输入框内部复制粘贴保留块。
+- [x] agent 收到的文本等于序列化写法；气泡显示块。
+- [ ] 原生端插入链接文字，发出后气泡显示块。——代码路径已写（`MessageInput.insertInlineBlock` 退回 `insertInlineBlockText`，有单测），本机没有 iOS 模拟器与原生工程，未实机验证。
+- [x] Playwright e2e（mock agent）：选文件与目录 → 块 → 退格整块删除 → 发送文本断言 → 气泡显示块。
+- [x] Electron 浅色、深色截图各一张（含文件、目录、图片块）。
+- [x] `npm run typecheck`、`npm run lint` 通过。

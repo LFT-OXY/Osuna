@@ -17,6 +17,41 @@ export type InlineSegment = { type: "text"; text: string } | { type: "block"; bl
 
 export type InlineBlockVariant = "skill" | "file" | "directory" | "image" | "agent";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+/** 来自编辑器属性或剪贴板 JSON 的块，逐字段确认后才当块用。 */
+export function isInlineBlock(value: unknown): value is InlineBlock {
+  if (!isRecord(value)) return false;
+  switch (value.kind) {
+    case "skill":
+      return (
+        isNonEmptyString(value.name) &&
+        (value.description === undefined || typeof value.description === "string")
+      );
+    case "file":
+      return (
+        isNonEmptyString(value.path) &&
+        (value.entryKind === "file" || value.entryKind === "directory")
+      );
+    case "agent":
+      return isNonEmptyString(value.target) && isNonEmptyString(value.name);
+    default:
+      return false;
+  }
+}
+
+export function isInlineSegment(value: unknown): value is InlineSegment {
+  if (!isRecord(value)) return false;
+  if (value.type === "text") return typeof value.text === "string";
+  return value.type === "block" && isInlineBlock(value.block);
+}
+
 const AGENT_LINK_PREFIX = "paseo://agent/";
 // label 与目标里的转义只认会破坏链接结构的字符；目标用 `<…>` 包时可含空格与括号，
 // 裸目标按 CommonMark 允许一层成对括号（如 `app/(tabs)/index.tsx`）。
@@ -67,7 +102,8 @@ function formatLinkTarget(target: string): string {
   return `<${target.replace(/[<>]/g, "\\$&")}>`;
 }
 
-function serializeBlock(block: InlineBlock): string {
+/** 单个块发出时的文字；Skill block 在开头时由 serializeInlineSegments 负责拼接。 */
+export function serializeInlineBlock(block: InlineBlock): string {
   switch (block.kind) {
     case "skill":
       return `/${block.name}`;
@@ -94,15 +130,53 @@ export function serializeInlineSegments(segments: readonly InlineSegment[]): str
   }
   const body = segments
     .slice(skillCount)
-    .map((segment) => (segment.type === "text" ? segment.text : serializeBlock(segment.block)))
+    .map((segment) =>
+      segment.type === "text" ? segment.text : serializeInlineBlock(segment.block),
+    )
     .join("");
   if (skillCount === 0) return body;
   const prefix = segments
     .slice(0, skillCount)
-    .map((segment) => (segment.type === "block" ? serializeBlock(segment.block) : ""))
+    .map((segment) => (segment.type === "block" ? serializeInlineBlock(segment.block) : ""))
     .join(" ");
   if (!body.trim()) return prefix;
   return `${prefix} ${body.replace(/^[ \t]+/, "").trimEnd()}`;
+}
+
+/** 文字偏移表示的范围，end 不含。 */
+export interface TextRange {
+  start: number;
+  end: number;
+}
+
+export interface InlineBlockTextInsertion {
+  text: string;
+  cursor: number;
+}
+
+/** 选中块后块后面要跟一个空格；range 后面已经是空格时沿用它，不补第二个。 */
+export function needsSpaceAfterInlineBlock(textAfter: string): boolean {
+  return !textAfter.startsWith(" ");
+}
+
+export interface InlineBlockTextInsertInput {
+  text: string;
+  range: TextRange;
+  block: InlineBlock;
+}
+
+/**
+ * 输入框只有纯文字时（原生端）选中块：把 range 换成块的链接文字，后面跟一个空格，光标停在空格后。
+ */
+export function insertInlineBlockText(input: InlineBlockTextInsertInput): InlineBlockTextInsertion {
+  const before = input.text.slice(0, input.range.start);
+  const after = input.text.slice(input.range.end);
+  const blockText = serializeInlineBlock(input.block);
+  const space = needsSpaceAfterInlineBlock(after) ? " " : "";
+  return {
+    text: `${before}${blockText}${space}${after}`,
+    cursor: before.length + blockText.length + 1,
+  };
 }
 
 function decodeAgentTarget(encoded: string): string | null {

@@ -23,15 +23,20 @@ import {
   type SlashCommandRange,
 } from "@/utils/agent-command-autocomplete";
 import type { SkillChip } from "@/composer/skill-chips";
-import {
-  applyFileMentionReplacement,
-  findActiveFileMention,
-  type FileMentionRange,
-} from "@/utils/file-mention-autocomplete";
+import { findActiveFileMention, type FileMentionRange } from "@/utils/file-mention-autocomplete";
+import type { FileEntryKind, InlineBlock } from "@/inline-blocks";
+import type { ComposerInputSnapshot } from "@/composer/input/text-input.types";
+
+export interface FileMentionPick {
+  range: FileMentionRange;
+  block: InlineBlock;
+}
 
 interface UseAgentAutocompleteInput {
   userInput: string;
   cursorIndex: number;
+  /** 光标前最后一个行内块结束处的偏移；`@`、`/` 识别不往回越过它。 */
+  blockBoundary: number;
   setUserInput: (nextValue: string) => void;
   serverId: string;
   agentId: string;
@@ -45,6 +50,8 @@ interface UseAgentAutocompleteInput {
     command: SlashCommandRange | null;
     chip: SkillChip;
   }) => void;
+  /** 选中文件或目录：把当前 `@query` 换成 File mention。 */
+  onPickFileMention: (pick: FileMentionPick) => void;
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
@@ -53,12 +60,7 @@ interface UseAgentAutocompleteInput {
 interface AgentAutocompleteKeyPressEvent {
   key: string;
   preventDefault: () => void;
-  input: AgentAutocompleteInputSnapshot;
-}
-
-interface AgentAutocompleteInputSnapshot {
-  text: string;
-  selection: { start: number; end: number };
+  input: ComposerInputSnapshot;
 }
 
 export type AgentAutocompleteOption =
@@ -71,6 +73,7 @@ export type AgentAutocompleteOption =
   | (AutocompleteOption & {
       type: "workspace_entry";
       entryPath: string;
+      entryKind: FileEntryKind;
       mention: FileMentionRange;
     });
 
@@ -84,7 +87,7 @@ interface AgentAutocompleteResult {
   loadingText: string;
   emptyText: string;
   footerText?: string;
-  onSelectOption: (option: AutocompleteOption, input?: AgentAutocompleteInputSnapshot) => void;
+  onSelectOption: (option: AutocompleteOption, input?: ComposerInputSnapshot) => void;
   onKeyPress: (event: AgentAutocompleteKeyPressEvent) => boolean;
 }
 
@@ -95,7 +98,7 @@ interface AgentAutocompleteSnapshot {
 }
 
 function resolveAgentAutocompleteSnapshot(input: {
-  input?: AgentAutocompleteInputSnapshot;
+  input?: ComposerInputSnapshot;
   userInput: string;
   cursorIndex: number;
   activeSlashCommand: SlashCommandRange | null;
@@ -109,12 +112,12 @@ function resolveAgentAutocompleteSnapshot(input: {
     };
   }
 
-  const text = input.input.text;
+  const { text, blockBoundary } = input.input;
   const cursorIndex = input.input.selection.start;
   return {
     text,
-    slashCommand: findActiveSlashCommand({ text, cursorIndex }),
-    fileMention: findActiveFileMention({ text, cursorIndex }),
+    slashCommand: findActiveSlashCommand({ text, cursorIndex, blockBoundary }),
+    fileMention: findActiveFileMention({ text, cursorIndex, blockBoundary }),
   };
 }
 
@@ -281,6 +284,7 @@ export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsI
       label: entry.path,
       kind: entry.kind,
       entryPath: entry.path,
+      entryKind: entry.kind,
       mention: activeFileMention,
     }));
   }
@@ -400,6 +404,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const {
     userInput,
     cursorIndex,
+    blockBoundary,
     setUserInput,
     serverId,
     agentId,
@@ -407,6 +412,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     prefetchCommands,
     onAutocompleteApplied,
     onPickSkill,
+    onPickFileMention,
     onClientSlashCommand,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
@@ -417,8 +423,9 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       findActiveSlashCommand({
         text: userInput,
         cursorIndex,
+        blockBoundary,
       }),
-    [cursorIndex, userInput],
+    [blockBoundary, cursorIndex, userInput],
   );
   const showCommandAutocomplete = activeSlashCommand !== null;
   const commandFilterQuery = activeSlashCommand?.query ?? "";
@@ -428,8 +435,9 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       findActiveFileMention({
         text: userInput,
         cursorIndex,
+        blockBoundary,
       }),
-    [cursorIndex, userInput],
+    [blockBoundary, cursorIndex, userInput],
   );
   const showFileAutocomplete = activeFileMention !== null;
   const fileFilterQuery = activeFileMention?.query ?? "";
@@ -551,7 +559,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   );
 
   const onSelectOption = useCallback(
-    (option: AutocompleteOption, snapshot?: AgentAutocompleteInputSnapshot) => {
+    (option: AutocompleteOption, snapshot?: ComposerInputSnapshot) => {
       const selected = option as AgentAutocompleteOption;
       const current = resolveAgentAutocompleteSnapshot({
         input: snapshot,
@@ -600,18 +608,17 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       }
 
       if (!current.fileMention) return;
-      const nextInput = applyFileMentionReplacement({
-        text: current.text,
-        mention: current.fileMention,
-        relativePath: selected.entryPath,
+      onPickFileMention({
+        range: current.fileMention,
+        block: { kind: "file", path: selected.entryPath, entryKind: selected.entryKind },
       });
-      setUserInput(nextInput);
       onAutocompleteApplied?.();
     },
     [
       canExecuteClientSlashCommand,
       onAutocompleteApplied,
       onPickSkill,
+      onPickFileMention,
       onClientSlashCommand,
       setUserInput,
       userInput,

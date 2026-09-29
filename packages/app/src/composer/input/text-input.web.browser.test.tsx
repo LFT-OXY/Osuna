@@ -1,14 +1,11 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type {
-  NativeSyntheticEvent,
-  TextInputKeyPressEventData,
-  TextInputSelectionChangeEventData,
-} from "react-native";
+import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
 import { cdp, userEvent } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { InlineBlock } from "@/inline-blocks";
 import { ComposerTextInput } from "./text-input.web";
-import type { ComposerTextInputHandle } from "./text-input.types";
+import type { ComposerSelectionChangeEventData, ComposerTextInputHandle } from "./text-input.types";
 
 // 应用源码按经典 JSX 运行时编译，需要全局 React。
 beforeEach(() => vi.stubGlobal("React", React));
@@ -20,11 +17,12 @@ type KeyPressEvent = NativeSyntheticEvent<
 interface Recorder {
   changes: string[];
   selections: { start: number; end: number }[];
+  blockBoundaries: number[];
   keys: { key: string; shiftKey: boolean; isComposing: boolean }[];
   /** 宿主拦下的按键，对应 Composer 的 Enter 发送与菜单导航。 */
   claimKeys: readonly string[];
   onChangeText: (text: string) => void;
-  onSelectionChange: (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => void;
+  onSelectionChange: (event: NativeSyntheticEvent<ComposerSelectionChangeEventData>) => void;
   onKeyPress: (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => void;
 }
 
@@ -32,10 +30,15 @@ function createRecorder(): Recorder {
   const recorder: Recorder = {
     changes: [],
     selections: [],
+    blockBoundaries: [],
     keys: [],
     claimKeys: [],
     onChangeText: (text) => recorder.changes.push(text),
-    onSelectionChange: (event) => recorder.selections.push(event.nativeEvent.selection),
+    onSelectionChange: (event) => {
+      const { selection, blockBoundary } = event.nativeEvent;
+      recorder.selections.push(selection);
+      recorder.blockBoundaries.push(blockBoundary ?? 0);
+    },
     onKeyPress: (event) => {
       const { key, shiftKey, isComposing } = (event as KeyPressEvent).nativeEvent;
       recorder.keys.push({ key, shiftKey: Boolean(shiftKey), isComposing: Boolean(isComposing) });
@@ -171,7 +174,7 @@ describe("Composer text input on web", () => {
 
     await userEvent.keyboard("{ArrowLeft}{ArrowLeft}{ArrowLeft}");
 
-    expect(mounted.handle.getSelection?.()).toEqual({ start: 2, end: 2 });
+    expect(mounted.handle.getSelection?.()).toEqual({ start: 2, end: 2, blockBoundary: 0 });
     expect(mounted.recorder.selections.at(-1)).toEqual({ start: 2, end: 2 });
   });
 
@@ -182,7 +185,7 @@ describe("Composer text input on web", () => {
     act(() => mounted.handle.replaceText("hello\nworld", { start: 5, end: 5 }));
     expect(mounted.recorder.changes).toEqual([]);
     expect(mounted.handle.getText()).toBe("hello\nworld");
-    expect(mounted.handle.getSelection?.()).toEqual({ start: 5, end: 5 });
+    expect(mounted.handle.getSelection?.()).toEqual({ start: 5, end: 5, blockBoundary: 0 });
 
     await userEvent.keyboard("!");
     expect(mounted.handle.getText()).toBe("hello!\nworld");
@@ -310,5 +313,193 @@ describe("Composer text input on web", () => {
     await vi.waitFor(() => expect(mounted.recorder.changes).toEqual(["old你好"]));
     expect(mounted.handle.getText()).toBe("old你好");
     expect(mounted.recorder.selections.at(-1)).toEqual({ start: 5, end: 5 });
+  });
+});
+
+const componentsDir: InlineBlock = { kind: "file", path: "src/components", entryKind: "directory" };
+const xFile: InlineBlock = { kind: "file", path: "src/x.ts", entryKind: "file" };
+const X_LINK = "[x.ts](src/x.ts)";
+
+function blockElements(mounted: Mounted): HTMLElement[] {
+  return Array.from(mounted.editor.querySelectorAll<HTMLElement>("[data-inline-block]"));
+}
+
+/** 块的节点视图由 React 异步渲染。 */
+async function expectBlockCount(mounted: Mounted, count: number): Promise<HTMLElement[]> {
+  await vi.waitFor(() => expect(blockElements(mounted)).toHaveLength(count));
+  return blockElements(mounted);
+}
+
+function pasteEvent(clipboardData: DataTransfer): ClipboardEvent {
+  return new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true });
+}
+
+/** "see " 后面跟一个选中的文件块，光标在块后补的空格之后。 */
+async function mountWithFileBlock(): Promise<Mounted> {
+  const mounted = mount({ initialValue: "see @x" });
+  await focusAtEnd(mounted);
+  act(() => mounted.handle.insertInlineBlock?.(xFile, { start: 4, end: 6 }));
+  return mounted;
+}
+
+describe("Inline blocks in the Composer text input", () => {
+  it("replaces the @query with a block and a space, reporting the text the agent receives", async () => {
+    const mounted = mount({ initialValue: "open @src/co" });
+    await focusAtEnd(mounted);
+
+    act(() => mounted.handle.insertInlineBlock?.(componentsDir, { start: 5, end: 12 }));
+
+    const text = "open [components](src/components/) ";
+    const caret = "open [components](src/components/) ".length;
+    expect(mounted.handle.getText()).toBe(text);
+    expect(mounted.recorder.changes.at(-1)).toBe(text);
+    expect(mounted.recorder.selections.at(-1)).toEqual({ start: caret, end: caret });
+    expect(mounted.recorder.blockBoundaries.at(-1)).toBe(caret - 1);
+    const [block] = await expectBlockCount(mounted, 1);
+    expect(block?.dataset.inlineBlock).toBe("directory");
+    expect(block?.textContent).toBe("components");
+
+    await userEvent.keyboard("!");
+    expect(mounted.handle.getText()).toBe("open [components](src/components/) !");
+  });
+
+  it("reuses the space that already follows the @query", async () => {
+    const mounted = mount({ initialValue: "open @src/co next" });
+    await focusAtEnd(mounted);
+
+    act(() => mounted.handle.insertInlineBlock?.(componentsDir, { start: 5, end: 12 }));
+
+    const caret = "open [components](src/components/) ".length;
+    expect(mounted.handle.getText()).toBe("open [components](src/components/) next");
+    expect(mounted.handle.getSelection?.()).toEqual({
+      start: caret,
+      end: caret,
+      blockBoundary: caret - 1,
+    });
+  });
+
+  it("undoes a pick back to the @query", async () => {
+    const mounted = mount({ initialValue: "open @src/co" });
+    await focusAtEnd(mounted);
+    act(() => mounted.handle.insertInlineBlock?.(componentsDir, { start: 5, end: 12 }));
+    await expectBlockCount(mounted, 1);
+
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+
+    expect(mounted.handle.getText()).toBe("open @src/co");
+    await expectBlockCount(mounted, 0);
+  });
+
+  it("steps over a block with the arrow keys", async () => {
+    const mounted = await mountWithFileBlock();
+    await expectBlockCount(mounted, 1);
+    const afterBlock = `see ${X_LINK}`.length;
+
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(mounted.handle.getSelection?.()).toEqual({
+      start: afterBlock,
+      end: afterBlock,
+      blockBoundary: afterBlock,
+    });
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(mounted.handle.getSelection?.()).toEqual({ start: 4, end: 4, blockBoundary: 0 });
+    await userEvent.keyboard("{ArrowRight}");
+    expect(mounted.handle.getSelection?.()).toEqual({
+      start: afterBlock,
+      end: afterBlock,
+      blockBoundary: afterBlock,
+    });
+  });
+
+  it("deletes the whole block with one Backspace right after it", async () => {
+    const mounted = await mountWithFileBlock();
+
+    await expectBlockCount(mounted, 1);
+    await userEvent.keyboard("{Backspace}");
+    await userEvent.keyboard("{Backspace}");
+
+    expect(mounted.handle.getText()).toBe("see ");
+    await expectBlockCount(mounted, 0);
+  });
+
+  it("deletes the whole block with one Delete right before it", async () => {
+    const mounted = await mountWithFileBlock();
+
+    await expectBlockCount(mounted, 1);
+    await userEvent.keyboard("{ArrowLeft}");
+    await userEvent.keyboard("{ArrowLeft}");
+    await userEvent.keyboard("{Delete}");
+
+    expect(mounted.handle.getText()).toBe("see  ");
+    await expectBlockCount(mounted, 0);
+  });
+
+  it("keeps blocks outside the range a text replacement changes", async () => {
+    const mounted = await mountWithFileBlock();
+
+    act(() => mounted.handle.replaceText(`see ${X_LINK} /compact `));
+    await expectBlockCount(mounted, 1);
+    expect(mounted.handle.getText()).toBe(`see ${X_LINK} /compact `);
+
+    // 变化范围碰到块时，块整块换成新文字。
+    act(() => mounted.handle.replaceText("see [x.ts](src/y.ts) "));
+    await expectBlockCount(mounted, 0);
+    expect(mounted.handle.getText()).toBe("see [x.ts](src/y.ts) ");
+
+    act(() => mounted.handle.reset());
+    expect(mounted.handle.getText()).toBe("");
+  });
+
+  it("pastes link text from outside as text", async () => {
+    const mounted = mount({ initialValue: "" });
+    await focusAtEnd(mounted);
+
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", X_LINK);
+    act(() => {
+      mounted.editor.dispatchEvent(pasteEvent(clipboardData));
+    });
+
+    expect(mounted.handle.getText()).toBe(X_LINK);
+    expect(blockElements(mounted)).toHaveLength(0);
+  });
+
+  it("copies blocks as link text and pastes them back inside as blocks", async () => {
+    const mounted = await mountWithFileBlock();
+    await expectBlockCount(mounted, 1);
+    await userEvent.keyboard("{ControlOrMeta>}a{/ControlOrMeta}");
+
+    const clipboardData = new DataTransfer();
+    const copy = new ClipboardEvent("copy", { clipboardData, bubbles: true, cancelable: true });
+    act(() => {
+      mounted.editor.dispatchEvent(copy);
+    });
+    expect(copy.defaultPrevented).toBe(true);
+    expect(clipboardData.getData("text/plain")).toBe(`see ${X_LINK} `);
+
+    await userEvent.keyboard("{ArrowRight}");
+    act(() => {
+      mounted.editor.dispatchEvent(pasteEvent(clipboardData));
+    });
+
+    expect(mounted.handle.getText()).toBe(`see ${X_LINK} see ${X_LINK} `);
+    await expectBlockCount(mounted, 2);
+  });
+
+  it("does not paste a forged block structure", async () => {
+    const mounted = mount({ initialValue: "" });
+    await focusAtEnd(mounted);
+
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "plain");
+    clipboardData.setData(
+      "application/x-paseo-inline-segments",
+      JSON.stringify([{ type: "block", block: { kind: "file", path: "" } }]),
+    );
+    act(() => {
+      mounted.editor.dispatchEvent(pasteEvent(clipboardData));
+    });
+
+    expect(mounted.handle.getText()).toBe("plain");
   });
 });

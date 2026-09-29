@@ -11,19 +11,39 @@ import type {
   NativeSyntheticEvent,
   TextInputFocusEventData,
   TextInputKeyPressEventData,
-  TextInputSelectionChangeEventData,
 } from "react-native";
-import { Extension, type JSONContent } from "@tiptap/core";
+import { Extension } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
 import { HardBreak } from "@tiptap/extension-hard-break";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
 import { UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor, type Editor, type UseEditorOptions } from "@tiptap/react";
-import { Fragment, Slice, type Node as ProseMirrorNode, type Schema } from "@tiptap/pm/model";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
+import {
+  needsSpaceAfterInlineBlock,
+  serializeInlineSegments,
+  type InlineBlock,
+  type InlineSegment,
+} from "@/inline-blocks";
+import {
+  blockBoundaryAt,
+  docText,
+  fragmentSegments,
+  normalizeNewlines,
+  offsetAtPos,
+  parseClipboardSegments,
+  posAtOffset,
+  segmentsToFragment,
+  segmentsToInlineContent,
+  textToFragment,
+} from "./editor-text.web";
+import { INLINE_BLOCK_NODE, InlineBlockKeys, InlineBlockNode } from "./inline-block-node.web";
 import type {
+  ComposerLiveSelection,
+  ComposerSelectionChangeEventData,
   ComposerTextInputHandle,
   ComposerTextInputProps,
   ComposerTextSelection,
@@ -32,8 +52,8 @@ import type {
 /**
  * Composer 的 Web / Electron 文字输入：Tiptap 编辑器，对外沿用共享文本输入的 handle 与回调。
  *
- * 文档固定为一个段落，换行是 hardBreak。段落内每个字符与 hardBreak 都占一个位置，
- * 所以文字偏移 = 编辑器位置 - 1。
+ * 文档固定为一个段落，换行是 hardBreak，选中的文件等是行内块节点。对外的文字是发出去的文字
+ * （块按链接写法），偏移与编辑器位置的换算见 editor-text.web.ts。
  *
  * 样式来自 Composer 的 `withUnistyles`：它把 `style` 编译成 `.hash > *` 规则，落到这里的根 div 上，
  * 字体、颜色、行高再继承给可编辑区。`style` prop 本身在 Web 上已被清空，这里不读。
@@ -66,44 +86,54 @@ const EXTENSIONS = [
   Text,
   ComposerHardBreak,
   ComposerNewline,
+  InlineBlockNode,
+  InlineBlockKeys,
   UndoRedo,
 ];
 
-function normalizeNewlines(text: string): string {
-  return text.replace(/\r\n?/g, "\n");
-}
-
-function textToInlineContent(text: string): JSONContent[] {
-  const content: JSONContent[] = [];
-  normalizeNewlines(text)
-    .split("\n")
-    .forEach((line, index) => {
-      if (index > 0) content.push({ type: "hardBreak" });
-      if (line.length > 0) content.push({ type: "text", text: line });
-    });
-  return content;
-}
-
-function textToFragment(schema: Schema, text: string): Fragment {
-  return Fragment.fromJSON(schema, textToInlineContent(text));
-}
-
-function docText(doc: ProseMirrorNode): string {
-  return doc.textBetween(0, doc.content.size, "\n", (leaf) =>
-    leaf.type.name === "hardBreak" ? "\n" : "",
-  );
-}
+// 输入框内部复制时连同块的结构一起写进剪贴板；外部只看得到 text/plain 的序列化文字。
+const INLINE_SEGMENTS_MIME = "application/x-paseo-inline-segments";
 
 function clampOffset(offset: number, length: number): number {
   return Math.max(0, Math.min(length, offset));
 }
 
-function readSelection(state: EditorState): ComposerTextSelection {
+function readSelection(state: EditorState): ComposerLiveSelection {
   const { from, to } = state.selection;
-  const length = state.doc.firstChild?.content.size ?? 0;
-  return { start: clampOffset(from - 1, length), end: clampOffset(to - 1, length) };
+  return {
+    start: offsetAtPos(state.doc, from),
+    end: offsetAtPos(state.doc, to),
+    blockBoundary: blockBoundaryAt(state.doc, from),
+  };
 }
 
+function commonPrefixLength(a: string, b: string): number {
+  const limit = Math.min(a.length, b.length);
+  let length = 0;
+  while (length < limit && a[length] === b[length]) length += 1;
+  return length;
+}
+
+function commonSuffixLength(a: string, b: string, limit: number): number {
+  let length = 0;
+  while (length < limit && a[a.length - 1 - length] === b[b.length - 1 - length]) length += 1;
+  return length;
+}
+
+function setTextSelection(
+  tr: EditorState["tr"],
+  selection: ComposerTextSelection,
+  length: number,
+): void {
+  const anchor = posAtOffset(tr.doc, clampOffset(selection.start, length), "after");
+  const head = posAtOffset(tr.doc, clampOffset(selection.end, length), "after");
+  tr.setSelection(TextSelection.create(tr.doc, anchor, head));
+}
+
+/**
+ * Composer 以整段文字替换内容（补全命令、语音、清空、草稿恢复）。只替换与当前文字不同的那一段，
+ * 前后没变的块原样保留；变化范围碰到的块整块换成新文字。
+ */
 function replaceDocumentText(
   editor: Editor,
   text: string,
@@ -112,25 +142,66 @@ function replaceDocumentText(
   const { state } = editor;
   const paragraph = state.doc.firstChild;
   if (!paragraph) return;
-  const content = textToFragment(state.schema, text);
-  const tr = state.tr.replaceWith(1, 1 + paragraph.content.size, content);
-  const length = content.size;
-  const target = selection ?? { start: length, end: length };
-  tr.setSelection(
-    TextSelection.create(
-      tr.doc,
-      1 + clampOffset(target.start, length),
-      1 + clampOffset(target.end, length),
-    ),
+  const current = docText(state.doc);
+  const prefix = commonPrefixLength(current, text);
+  const suffixLimit = Math.min(current.length, text.length) - prefix;
+  const suffix = commonSuffixLength(current, text, suffixLimit);
+  const from = posAtOffset(state.doc, prefix, "before");
+  const to = posAtOffset(state.doc, current.length - suffix, "after");
+  const keptStart = offsetAtPos(state.doc, from);
+  const keptEnd = current.length - offsetAtPos(state.doc, to);
+  const tr = state.tr.replaceWith(
+    from,
+    to,
+    textToFragment(state.schema, text.slice(keptStart, text.length - keptEnd)),
   );
+  setTextSelection(tr, selection ?? { start: text.length, end: text.length }, text.length);
   // 与 textarea 赋值一致：程序替换不进撤销栈。
   tr.setMeta("addToHistory", false);
   editor.view.dispatch(tr);
 }
 
-function insertPlainText(view: EditorView, text: string): void {
-  const fragment = textToFragment(view.state.schema, text);
+/**
+ * 把 range 换成块，块后跟一个空格（range 后面已是空格时沿用），光标停在空格后。
+ * 这是用户的一次选择，进撤销栈：撤销回到原来的 `@query`。
+ */
+function insertInlineBlock(editor: Editor, block: InlineBlock, range: ComposerTextSelection): void {
+  const { state } = editor;
+  const from = posAtOffset(state.doc, range.start, "before");
+  const to = posAtOffset(state.doc, range.end, "after");
+  const textAfter = docText(state.doc).slice(range.end);
+  const nodes = [state.schema.nodes[INLINE_BLOCK_NODE].create({ block })];
+  if (needsSpaceAfterInlineBlock(textAfter)) nodes.push(state.schema.text(" "));
+  const content = Fragment.from(nodes);
+  const tr = state.tr.replaceWith(from, to, content);
+  // 块占 1 个位置，空格占 1 个位置。
+  tr.setSelection(TextSelection.create(tr.doc, from + 2));
+  editor.view.dispatch(tr.scrollIntoView());
+}
+
+function insertSegments(view: EditorView, segments: readonly InlineSegment[]): void {
+  const fragment = segmentsToFragment(view.state.schema, segments);
   view.dispatch(view.state.tr.replaceSelection(new Slice(fragment, 0, 0)).scrollIntoView());
+}
+
+function insertPlainText(view: EditorView, text: string): void {
+  insertSegments(view, [{ type: "text", text }]);
+}
+
+/**
+ * 选区含块时接管复制与剪切：text/plain 是序列化文字，另写一份分段结构，粘贴回输入框时块仍是块。
+ * 粘贴只读 text/plain（外部内容不转块），所以编辑器默认写的 HTML 用不上。不含块时照旧交给编辑器。
+ */
+function writeSelectionToClipboard(view: EditorView, event: ClipboardEvent): boolean {
+  const { selection } = view.state;
+  if (selection.empty || !event.clipboardData) return false;
+  const segments = fragmentSegments(selection.content().content);
+  if (!segments.some((segment) => segment.type === "block")) return false;
+  event.clipboardData.clearData();
+  event.clipboardData.setData("text/plain", serializeInlineSegments(segments));
+  event.clipboardData.setData(INLINE_SEGMENTS_MIME, JSON.stringify(segments));
+  event.preventDefault();
+  return true;
 }
 
 // beforeinput 早于 ProseMirror 从 DOM 同步选区（selectionchange 是异步的），替换范围以 DOM 选区为准。
@@ -227,7 +298,7 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
 
     const initialTextRef = useRef(normalizeNewlines(initialValue));
     const publishedTextRef = useRef(initialTextRef.current);
-    const publishedSelectionRef = useRef<ComposerTextSelection | null>(null);
+    const publishedSelectionRef = useRef<ComposerLiveSelection | null>(null);
     const [isEmpty, setIsEmpty] = useState(initialTextRef.current.length === 0);
 
     const syncEmpty = useCallback((text: string) => setIsEmpty(text.length === 0), []);
@@ -245,11 +316,17 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
         const selection = readSelection(view.state);
         const previous = publishedSelectionRef.current;
         const selectionUnchanged =
-          previous !== null && previous.start === selection.start && previous.end === selection.end;
+          previous !== null &&
+          previous.start === selection.start &&
+          previous.end === selection.end &&
+          previous.blockBoundary === selection.blockBoundary;
         if (selectionUnchanged) return;
         publishedSelectionRef.current = selection;
         callbacksRef.current.onSelectionChange?.(
-          toSyntheticEvent<TextInputSelectionChangeEventData>({ selection }),
+          toSyntheticEvent<ComposerSelectionChangeEventData>({
+            selection: { start: selection.start, end: selection.end },
+            blockBoundary: selection.blockBoundary,
+          }),
         );
       },
       [syncEmpty],
@@ -271,7 +348,12 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
         extensions: EXTENSIONS,
         content: {
           type: "doc",
-          content: [{ type: "paragraph", content: textToInlineContent(initialTextRef.current) }],
+          content: [
+            {
+              type: "paragraph",
+              content: segmentsToInlineContent([{ type: "text", text: initialTextRef.current }]),
+            },
+          ],
         },
         editable: editableRef.current,
         autofocus: false,
@@ -321,11 +403,25 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
               publishAfterComposition(view);
               return false;
             },
+            copy: (view, event) => writeSelectionToClipboard(view, event),
+            cut: (view, event) => {
+              if (!writeSelectionToClipboard(view, event)) return false;
+              if (view.editable) view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
+              return true;
+            },
           },
-          // 与 textarea 一致只取纯文字。Composer 在捕获阶段先收走图片（进 Attachment tray）并
-          // preventDefault；它不收（断连、禁用等）时照常插入剪贴板里的文字。
+          // 外部粘贴只取纯文字，链接写法不转成块；输入框自己复制的内容带分段结构，块仍是块。
+          // Composer 在捕获阶段先收走图片（进 Attachment tray）并 preventDefault；它不收
+          // （断连、禁用等）时照常插入剪贴板里的文字。
           handlePaste: (view, event) => {
             if (event.defaultPrevented) return true;
+            const segments = parseClipboardSegments(
+              event.clipboardData?.getData(INLINE_SEGMENTS_MIME) ?? "",
+            );
+            if (segments) {
+              insertSegments(view, segments);
+              return true;
+            }
             const text = event.clipboardData?.getData("text/plain") ?? "";
             if (text) insertPlainText(view, text);
             return true;
@@ -363,6 +459,7 @@ export const ComposerTextInput = forwardRef<ComposerTextInputHandle, ComposerTex
         getSelection: () => readSelection(editor.state),
         replaceText,
         reset: () => replaceText(""),
+        insertInlineBlock: (block, range) => insertInlineBlock(editor, block, range),
         getNativeRef: () => editor.view.dom,
       }),
       [editor, replaceText],

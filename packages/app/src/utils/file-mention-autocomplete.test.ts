@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-  applyFileMentionReplacement,
-  findActiveFileMention,
-  formatQuotedFileMentionPath,
-} from "./file-mention-autocomplete";
+import { findActiveFileMention } from "./file-mention-autocomplete";
 
 describe("findActiveFileMention", () => {
   it("detects mentions at the start of input", () => {
     const mention = findActiveFileMention({
       text: "@src/components",
       cursorIndex: "@src/components".length,
+      blockBoundary: 0,
     });
     expect(mention).toEqual({
       start: 0,
@@ -24,6 +21,7 @@ describe("findActiveFileMention", () => {
     const mention = findActiveFileMention({
       text,
       cursorIndex,
+      blockBoundary: 0,
     });
     expect(mention).toEqual({
       start: text.indexOf("@"),
@@ -37,6 +35,7 @@ describe("findActiveFileMention", () => {
     const mention = findActiveFileMention({
       text,
       cursorIndex: text.length,
+      blockBoundary: 0,
     });
     expect(mention).toBeNull();
   });
@@ -45,37 +44,24 @@ describe("findActiveFileMention", () => {
     const mention = findActiveFileMention({
       text: "@ ",
       cursorIndex: 2,
+      blockBoundary: 0,
     });
     expect(mention).toBeNull();
   });
-});
 
-describe("formatQuotedFileMentionPath", () => {
-  it("quotes workspace-relative paths using file mention escaping", () => {
-    expect(formatQuotedFileMentionPath('src/changed "file".ts')).toBe(
-      '"src/changed \\"file\\".ts"',
-    );
-  });
-});
-
-describe("applyFileMentionReplacement", () => {
-  it("replaces only the active @query segment with a quoted relative path", () => {
-    const text = "open @src/com next";
-    const next = applyFileMentionReplacement({
-      text,
-      mention: { start: 5, end: 13, query: "src/com" },
-      relativePath: "src/components/chat.tsx",
-    });
-    expect(next).toBe('open "src/components/chat.tsx" next');
+  it("does not reach back past an inline block", () => {
+    // 光标紧跟 File mention，块的链接目标里有 @。
+    const text = "see [x.ts](node_modules/@types/x.ts)";
+    expect(
+      findActiveFileMention({ text, cursorIndex: text.length, blockBoundary: text.length }),
+    ).toBeNull();
   });
 
-  it("escapes double quotes in replacement path", () => {
-    const text = "@foo";
-    const next = applyFileMentionReplacement({
-      text,
-      mention: { start: 0, end: 4, query: "foo" },
-      relativePath: 'src/"quoted".ts',
-    });
-    expect(next).toBe('"src/\\"quoted\\".ts"');
+  it("finds a mention typed right after an inline block", () => {
+    const block = "[x.ts](src/x.ts)";
+    const text = `${block}@lib`;
+    expect(
+      findActiveFileMention({ text, cursorIndex: text.length, blockBoundary: block.length }),
+    ).toEqual({ start: block.length, end: text.length, query: "lib" });
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {
   inlineBlockName,
+  insertInlineBlockText,
   parseInlineSegments,
   resolveInlineBlockVariant,
   serializeInlineSegments,
@@ -190,6 +191,39 @@ describe("serializeInlineSegments", () => {
         text(" write the tests"),
       ]),
     ).toBe("[@Claude](paseo://agent/claude) write the tests");
+  });
+});
+
+describe("insertInlineBlockText", () => {
+  it("reuses the space that already follows the range, caret after it", () => {
+    const result = insertInlineBlockText({
+      text: "open @src/co next",
+      range: { start: 5, end: 12 },
+      block: { kind: "file", path: "src/components", entryKind: "directory" },
+    });
+    expect(result).toEqual({
+      text: "open [components](src/components/) next",
+      cursor: "open [components](src/components/) ".length,
+    });
+  });
+
+  it("adds a space when the text after the range does not start with one", () => {
+    const result = insertInlineBlockText({
+      text: "@x,",
+      range: { start: 0, end: 2 },
+      block: { kind: "file", path: "src/x.ts", entryKind: "file" },
+    });
+    expect(result).toEqual({ text: "[x.ts](src/x.ts) ,", cursor: 17 });
+  });
+
+  it("writes a file at the end of the text", () => {
+    expect(
+      insertInlineBlockText({
+        text: "@x",
+        range: { start: 0, end: 2 },
+        block: { kind: "file", path: "src/x.ts", entryKind: "file" },
+      }),
+    ).toEqual({ text: "[x.ts](src/x.ts) ", cursor: 17 });
   });
 });
 

@@ -63,6 +63,7 @@ import {
   type ComposerKeyPressEvent,
   type MessageInputRef,
 } from "./input/input";
+import type { ComposerLiveSelection } from "./input/text-input.types";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "./types";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { DraftCommandConfig } from "@/hooks/use-agent-commands-query";
@@ -92,7 +93,7 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
-import { useAgentAutocomplete } from "@/hooks/use-agent-autocomplete";
+import { useAgentAutocomplete, type FileMentionPick } from "@/hooks/use-agent-autocomplete";
 import {
   usePluginClientSlashCommands,
   type PluginClientSlashCommand,
@@ -1104,7 +1105,7 @@ interface ComposerAutocompleteHandle {
 
 function ComposerAutocompleteBinding({
   text,
-  cursor,
+  selection,
   configuration,
   inputRef,
   anchorRef,
@@ -1112,10 +1113,10 @@ function ComposerAutocompleteBinding({
   ref,
 }: {
   text: ComposerTextSource;
-  cursor: StoreApi<number>;
+  selection: StoreApi<ComposerLiveSelection>;
   configuration: Omit<
     Parameters<typeof useAgentAutocomplete>[0],
-    "userInput" | "cursorIndex" | "onAutocompleteApplied"
+    "userInput" | "cursorIndex" | "blockBoundary" | "onAutocompleteApplied"
   >;
   inputRef: React.RefObject<MessageInputRef | null>;
   anchorRef: React.RefObject<View | null>;
@@ -1123,11 +1124,12 @@ function ComposerAutocompleteBinding({
   ref: React.Ref<ComposerAutocompleteHandle>;
 }) {
   const userInput = useSyncExternalStore(text.subscribe, text.getSnapshot, text.getSnapshot);
-  const cursorIndex = useStore(cursor);
+  const liveSelection = useStore(selection);
   const autocomplete = useAgentAutocomplete({
     ...configuration,
     userInput,
-    cursorIndex: Math.min(cursorIndex, userInput.length),
+    cursorIndex: Math.min(liveSelection.start, userInput.length),
+    blockBoundary: Math.min(liveSelection.blockBoundary, userInput.length),
     onAutocompleteApplied: () => inputRef.current?.focus(),
   });
   useImperativeHandle(ref, () => ({ onKeyPress: autocomplete.onKeyPress }), [
@@ -1489,12 +1491,18 @@ function ComposerContentImpl({
       onForgeChangeRequestAutoAttach,
     ],
   );
-  const cursor = useMemo(() => createStore<number>(() => 0), []);
-  const cursorPublication = useMemo(
-    () => new AfterPaintPublication<number>((position) => cursor.setState(position)),
-    [cursor],
+  const selectionStore = useMemo(
+    () => createStore<ComposerLiveSelection>(() => ({ start: 0, end: 0, blockBoundary: 0 })),
+    [],
   );
-  useEffect(() => () => cursorPublication.cancel(), [cursorPublication]);
+  const selectionPublication = useMemo(
+    () =>
+      new AfterPaintPublication<ComposerLiveSelection>((selection) =>
+        selectionStore.setState(selection, true),
+      ),
+    [selectionStore],
+  );
+  useEffect(() => () => selectionPublication.cancel(), [selectionPublication]);
   const autocompleteRef = useRef<ComposerAutocompleteHandle>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -1548,6 +1556,11 @@ function ComposerContentImpl({
       replaceUserInput(picked.text, { start: picked.cursor, end: picked.cursor });
     },
     [replaceUserInput, setSkillChips, skillChips],
+  );
+
+  const handlePickFileMention = useCallback(
+    (pick: FileMentionPick) => messageInputRef.current?.insertInlineBlock(pick.block, pick.range),
+    [],
   );
 
   const handleRemoveSkillChip = useCallback(
@@ -2419,14 +2432,14 @@ function ComposerContentImpl({
   }, []);
 
   const handleSelectionChange = useCallback(
-    (selection: { start: number; end: number }) => {
+    (selection: ComposerLiveSelection) => {
       if (isWeb) {
-        cursorPublication.stage(selection.start);
+        selectionPublication.stage(selection);
       } else {
-        cursor.setState(selection.start);
+        selectionStore.setState(selection, true);
       }
     },
-    [cursorPublication, cursor],
+    [selectionPublication, selectionStore],
   );
 
   const handleFocusChange = useCallback(
@@ -2538,6 +2551,7 @@ function ComposerContentImpl({
       draftConfig: commandDraftConfig,
       prefetchCommands: isMessageInputFocused && mode.showAutocomplete,
       onPickSkill: handlePickSkill,
+      onPickFileMention: handlePickFileMention,
       canExecuteClientSlashCommand:
         buildOutgoingAttachments(attachments).length === 0 && !hasSkillChips,
       onClientSlashCommand: runClientSlashCommand,
@@ -2545,6 +2559,7 @@ function ComposerContentImpl({
     }),
     [
       handlePickSkill,
+      handlePickFileMention,
       hasSkillChips,
       replaceUserInput,
       serverId,
@@ -2618,7 +2633,7 @@ function ComposerContentImpl({
             <View ref={messageInputContainerRef} style={styles.messageInputContainer}>
               <ComposerAutocompleteBinding
                 text={textSource}
-                cursor={cursor}
+                selection={selectionStore}
                 inputRef={messageInputRef}
                 anchorRef={messageInputContainerRef}
                 show={mode.showAutocomplete}

@@ -7,12 +7,8 @@ export interface FileMentionRange {
 interface FindActiveFileMentionInput {
   text: string;
   cursorIndex: number;
-}
-
-interface ApplyFileMentionReplacementInput {
-  text: string;
-  mention: FileMentionRange;
-  relativePath: string;
+  /** 光标前最后一个行内块的结束偏移：`@` 不能在块里或块之前。 */
+  blockBoundary: number;
 }
 
 const INVALID_MENTION_QUERY_CHARS = /[\s\n\r\t"']/;
@@ -30,6 +26,7 @@ export function findActiveFileMention(input: FindActiveFileMentionInput): FileMe
     if (INVALID_MENTION_QUERY_CHARS.test(query)) {
       continue;
     }
+    if (atIndex < input.blockBoundary) return null;
     return {
       start: atIndex,
       end: clampedCursor,
@@ -38,15 +35,4 @@ export function findActiveFileMention(input: FindActiveFileMentionInput): FileMe
   }
 
   return null;
-}
-
-export function formatQuotedFileMentionPath(relativePath: string): string {
-  const safePath = relativePath.replace(/"/g, '\\"');
-  return `"${safePath}"`;
-}
-
-export function applyFileMentionReplacement(input: ApplyFileMentionReplacementInput): string {
-  const before = input.text.slice(0, input.mention.start);
-  const after = input.text.slice(input.mention.end);
-  return `${before}${formatQuotedFileMentionPath(input.relativePath)}${after}`;
 }
