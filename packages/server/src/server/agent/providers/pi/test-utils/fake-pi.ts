@@ -12,8 +12,19 @@ import type {
   PiRuntimeEvent,
   PiSessionState,
   PiSessionStats,
+  PiThinkingLevel,
 } from "../rpc-types.js";
 import { buildPiLaunch } from "../runtime.js";
+
+const FAKE_PI_THINKING_LEVELS: readonly PiThinkingLevel[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 
 type FakePiSubagentSubscriptionLevel = "off" | "progress" | "events";
 type FakePiSubagentStatus = "pending" | "running" | "completed" | "failed" | "aborted";
@@ -116,6 +127,10 @@ export class FakePiSession implements PiRuntimeSession {
     response: { value?: string; confirmed?: boolean; cancelled?: boolean };
   }> = [];
   setModelResult: PiModel | null = null;
+  // 模拟 Pi 的档位收敛与切模型时按 Pi 设置重置档位
+  thinkingLevelClamp: ((level: PiThinkingLevel) => PiThinkingLevel) | null = null;
+  modelSwitchThinkingLevel: PiThinkingLevel | null = null;
+  setThinkingLevelError: Error | null = null;
   models: PiModel[] = [];
   messages: PiAgentMessage[] = [];
   stats: PiSessionStats = {
@@ -266,11 +281,27 @@ export class FakePiSession implements PiRuntimeSession {
     if (!this.setModelResult) {
       throw new Error("FakePi setModel requires setModelResult to be scripted");
     }
+    this.state = {
+      ...this.state,
+      model: this.setModelResult,
+      thinkingLevel: this.modelSwitchThinkingLevel ?? this.state.thinkingLevel,
+    };
     return this.setModelResult;
   }
 
   async setThinkingLevel(level: string): Promise<void> {
     this.setThinkingLevelRequests.push(level);
+    if (this.setThinkingLevelError) {
+      throw this.setThinkingLevelError;
+    }
+    const requested = FAKE_PI_THINKING_LEVELS.find((candidate) => candidate === level);
+    if (!requested) {
+      throw new Error(`FakePi received an unknown thinking level: ${level}`);
+    }
+    this.state = {
+      ...this.state,
+      thinkingLevel: this.thinkingLevelClamp ? this.thinkingLevelClamp(requested) : requested,
+    };
   }
 
   async getSessionStats(): Promise<PiSessionStats> {

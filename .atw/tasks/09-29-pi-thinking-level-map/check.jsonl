@@ -1,0 +1,6 @@
+{"file": ".atw/tasks/09-29-pi-thinking-level-map/research/pi-thinking-levels.md", "reason": "Pi 档位判定/收敛规则出处、Paseo 现状与先例"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "server 后端规范入口"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "测试约定：FakePi、只跑单文件"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "server 代码质量约定"}
+{"file": "docs/providers.md", "reason": "provider 适配层约定与 thinkingOptions 语义"}
+{"file": "docs/testing.md", "reason": "测试原则：只测外部行为、真实依赖优先"}

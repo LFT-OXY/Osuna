@@ -16,7 +16,12 @@ import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { describe, expect, onTestFinished, test } from "vitest";
 
-import type { AgentSession, AgentSessionConfig, AgentStreamEvent } from "../../agent-sdk-types.js";
+import type {
+  AgentModelDefinition,
+  AgentSession,
+  AgentSessionConfig,
+  AgentStreamEvent,
+} from "../../agent-sdk-types.js";
 import {
   PiProviderParamsSchema,
   PiRpcAgentClient,
@@ -50,6 +55,17 @@ function rewindCapabilities(capabilities: PiRpcAgentSession["capabilities"]) {
     supportsRewindConversation: capabilities.supportsRewindConversation,
     supportsRewindFiles: capabilities.supportsRewindFiles,
     supportsRewindBoth: capabilities.supportsRewindBoth,
+  };
+}
+
+function summarizeThinkingConfig(model: AgentModelDefinition) {
+  return {
+    id: model.id,
+    thinkingOptionIds: model.thinkingOptions?.map((option) => option.id),
+    isDefaultIds: model.thinkingOptions
+      ?.filter((option) => option.isDefault)
+      .map((option) => option.id),
+    defaultThinkingOptionId: model.defaultThinkingOptionId,
   };
 }
 
@@ -243,6 +259,13 @@ class SessionEvents {
     return this.events.filter(
       (event): event is Extract<AgentStreamEvent, { type: "turn_completed" }> =>
         event.type === "turn_completed",
+    );
+  }
+
+  thinkingOptionChangedEvents() {
+    return this.events.filter(
+      (event): event is Extract<AgentStreamEvent, { type: "thinking_option_changed" }> =>
+        event.type === "thinking_option_changed",
     );
   }
 
@@ -1617,6 +1640,138 @@ describe("PiRpcAgentSession", () => {
     expect(fakeSession.setThinkingLevelRequests).toEqual(["high"]);
   });
 
+  test("keeps the current thinking level when switching to a model that supports it", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    fakeSession.modelSwitchThinkingLevel = "low";
+    fakeSession.setModelResult = { provider: "openai-codex", id: "gpt-6-astra", reasoning: true };
+
+    await session.setModel("openai-codex/gpt-6-astra");
+
+    expect(fakeSession.setThinkingLevelRequests).toEqual(["medium"]);
+    expect(events.thinkingOptionChangedEvents()).toEqual([]);
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({
+      model: "openai-codex/gpt-6-astra",
+      thinkingOptionId: "medium",
+    });
+  });
+
+  test("reports the clamped thinking level when switching to a model that lacks it", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    fakeSession.thinkingLevelClamp = (level) => (level === "medium" ? "high" : level);
+    fakeSession.setModelResult = {
+      provider: "3oxy-deepseek",
+      id: "deepseek-flash",
+      reasoning: true,
+      thinkingLevelMap: { minimal: null, low: null, medium: null, high: "high", max: "max" },
+    };
+
+    await session.setModel("3oxy-deepseek/deepseek-flash");
+
+    expect(fakeSession.setThinkingLevelRequests).toEqual(["medium"]);
+    expect(events.thinkingOptionChangedEvents()).toEqual([
+      { type: "thinking_option_changed", provider: "pi", thinkingOptionId: "high" },
+    ]);
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({ thinkingOptionId: "high" });
+  });
+
+  test("restores the thinking level after passing through a non-reasoning model", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    fakeSession.modelSwitchThinkingLevel = "off";
+    await session.setThinkingOption("high");
+
+    fakeSession.setModelResult = { provider: "openrouter", id: "plain-model", reasoning: false };
+    await session.setModel("openrouter/plain-model");
+    fakeSession.setModelResult = { provider: "openai-codex", id: "gpt-6-astra", reasoning: true };
+    await session.setModel("openai-codex/gpt-6-astra");
+
+    expect(fakeSession.setThinkingLevelRequests).toEqual(["high", "high"]);
+    expect(events.thinkingOptionChangedEvents()).toEqual([]);
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({ thinkingOptionId: "high" });
+  });
+
+  test("keeps the thinking level when passing through a model with no supported levels", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    await session.setThinkingOption("high");
+
+    fakeSession.thinkingLevelClamp = () => "off";
+    fakeSession.setModelResult = {
+      provider: "local",
+      id: "no-levels",
+      reasoning: true,
+      thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: null },
+    };
+    await session.setModel("local/no-levels");
+    fakeSession.thinkingLevelClamp = null;
+    fakeSession.setModelResult = { provider: "openai-codex", id: "gpt-6-astra", reasoning: true };
+    await session.setModel("openai-codex/gpt-6-astra");
+
+    expect(fakeSession.setThinkingLevelRequests).toEqual(["high", "high"]);
+    expect(events.thinkingOptionChangedEvents()).toEqual([]);
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({ thinkingOptionId: "high" });
+  });
+
+  test("applies the default thinking level when leaving a non-reasoning launch model", async () => {
+    const pi = new FakePi();
+    pi.queueSessionSetup((fakeSession) => {
+      fakeSession.state = {
+        ...fakeSession.state,
+        model: { provider: "openrouter", id: "plain-model", reasoning: false },
+        thinkingLevel: "off",
+      };
+    });
+    const { session, events } = await createSession(pi);
+    const fakeSession = pi.latestSession();
+    fakeSession.modelSwitchThinkingLevel = "low";
+    fakeSession.setModelResult = { provider: "openai-codex", id: "gpt-6-astra", reasoning: true };
+
+    await session.setModel("openai-codex/gpt-6-astra");
+
+    expect(fakeSession.setThinkingLevelRequests).toEqual(["medium"]);
+    expect(events.thinkingOptionChangedEvents()).toEqual([
+      { type: "thinking_option_changed", provider: "pi", thinkingOptionId: "medium" },
+    ]);
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({ thinkingOptionId: "medium" });
+  });
+
+  test("completes a model switch when re-applying the thinking level fails", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+    fakeSession.setThinkingLevelError = new Error("set_thinking_level failed");
+    fakeSession.setModelResult = { provider: "openai-codex", id: "gpt-6-astra", reasoning: true };
+
+    await expect(session.setModel("openai-codex/gpt-6-astra")).resolves.toBeUndefined();
+
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({
+      model: "openai-codex/gpt-6-astra",
+      thinkingOptionId: "medium",
+    });
+  });
+
+  test("keeps the requested thinking level when reading Pi state back fails", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+    fakeSession.getStateError = new Error("get_state timed out");
+
+    await expect(session.setThinkingOption("low")).resolves.toBeUndefined();
+
+    fakeSession.getStateError = null;
+    expect(fakeSession.setThinkingLevelRequests).toEqual(["low"]);
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({ thinkingOptionId: "low" });
+  });
+
+  test("reports the thinking level Pi applied after setting a thinking option", async () => {
+    const { pi, session } = await createSession();
+    pi.latestSession().thinkingLevelClamp = (level) => (level === "low" ? "high" : level);
+
+    await session.setThinkingOption("low");
+
+    await expect(session.getRuntimeInfo()).resolves.toMatchObject({ thinkingOptionId: "high" });
+  });
+
   test("materializes image prompts as text hints for text-only Pi models", async () => {
     const { pi, session } = await createSession();
     const fakeSession = pi.latestSession();
@@ -2432,6 +2587,103 @@ describe("PiRpcAgentClient", () => {
       modes: [],
     });
     expect(pi.recordedLaunches[0]).toMatchObject({ cwd: "/workspace/with-extension" });
+  });
+
+  test("exposes only the thinking levels each model's thinkingLevelMap supports", async () => {
+    const pi = new FakePi();
+    const client = createClient(pi);
+    const catalogPromise = client.fetchCatalog({ scope: "workspace", cwd: "/tmp", force: false });
+    pi.latestSession().models = [
+      {
+        provider: "openai-codex",
+        id: "gpt-6-astra",
+        reasoning: true,
+        thinkingLevelMap: {
+          off: "none",
+          minimal: null,
+          low: "low",
+          medium: "medium",
+          high: "high",
+          xhigh: "xhigh",
+          max: "max",
+        },
+      },
+      {
+        provider: "3oxy-deepseek",
+        id: "deepseek-flash",
+        reasoning: true,
+        thinkingLevelMap: {
+          minimal: null,
+          low: null,
+          medium: null,
+          high: "high",
+          xhigh: null,
+          max: "max",
+        },
+      },
+      { provider: "xai", id: "grok-4.5", reasoning: true, thinkingLevelMap: null },
+      { provider: "xai", id: "grok-4.3", reasoning: true },
+      {
+        provider: "local",
+        id: "low-only",
+        reasoning: true,
+        thinkingLevelMap: { medium: null, high: null },
+      },
+      {
+        provider: "local",
+        id: "no-levels",
+        reasoning: true,
+        thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: null },
+      },
+      { provider: "openrouter", id: "plain-model", reasoning: false },
+    ];
+
+    const catalog = await catalogPromise;
+
+    expect(catalog.models.map(summarizeThinkingConfig)).toEqual([
+      {
+        id: "openai-codex/gpt-6-astra",
+        thinkingOptionIds: ["off", "low", "medium", "high", "xhigh", "max"],
+        isDefaultIds: ["medium"],
+        defaultThinkingOptionId: "medium",
+      },
+      {
+        id: "3oxy-deepseek/deepseek-flash",
+        thinkingOptionIds: ["off", "high", "max"],
+        isDefaultIds: ["high"],
+        defaultThinkingOptionId: "high",
+      },
+      {
+        id: "xai/grok-4.5",
+        thinkingOptionIds: ["off", "minimal", "low", "medium", "high"],
+        isDefaultIds: ["medium"],
+        defaultThinkingOptionId: "medium",
+      },
+      {
+        id: "xai/grok-4.3",
+        thinkingOptionIds: ["off", "minimal", "low", "medium", "high"],
+        isDefaultIds: ["medium"],
+        defaultThinkingOptionId: "medium",
+      },
+      {
+        id: "local/low-only",
+        thinkingOptionIds: ["off", "minimal", "low"],
+        isDefaultIds: ["low"],
+        defaultThinkingOptionId: "low",
+      },
+      {
+        id: "local/no-levels",
+        thinkingOptionIds: undefined,
+        isDefaultIds: undefined,
+        defaultThinkingOptionId: undefined,
+      },
+      {
+        id: "openrouter/plain-model",
+        thinkingOptionIds: undefined,
+        isDefaultIds: undefined,
+        defaultThinkingOptionId: undefined,
+      },
+    ]);
   });
 
   test("lists no draft features without starting a Pi session", async () => {

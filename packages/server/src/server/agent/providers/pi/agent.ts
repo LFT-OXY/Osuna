@@ -173,12 +173,11 @@ const PI_THINKING_OPTIONS: ReadonlyArray<{
   id: PiThinkingLevel;
   label: string;
   description: string;
-  isDefault?: boolean;
 }> = [
   { id: "off", label: "Off", description: "No extra reasoning" },
   { id: "minimal", label: "Minimal", description: "Light reasoning" },
   { id: "low", label: "Low", description: "Faster reasoning" },
-  { id: "medium", label: "Medium", description: "Balanced reasoning", isDefault: true },
+  { id: "medium", label: "Medium", description: "Balanced reasoning" },
   { id: "high", label: "High", description: "Deeper reasoning" },
   { id: "xhigh", label: "XHigh", description: "Very deep reasoning" },
   { id: "max", label: "Max", description: "Extreme reasoning" },
@@ -375,13 +374,55 @@ function parseAutoCompactMode(value: string | undefined): AutoCompactMode {
   return "unknown";
 }
 
-function mapThinkingOption(option: (typeof PI_THINKING_OPTIONS)[number]) {
+// 与 Pi 的 getSupportedThinkingLevels 保持一致；非推理模型在 Paseo 里不给档位
+function getSupportedPiThinkingLevels(model: PiModel): PiThinkingLevel[] {
+  if (!model.reasoning) {
+    return [];
+  }
+  return PI_THINKING_OPTIONS.map((option) => option.id).filter((level) => {
+    const mapped = model.thinkingLevelMap?.[level];
+    if (mapped === null) {
+      return false;
+    }
+    if (level === "xhigh" || level === "max") {
+      return mapped !== undefined;
+    }
+    return true;
+  });
+}
+
+// 与 Pi 的 clampThinkingLevel 保持一致：先往高档找，再往低档找
+function clampPiThinkingLevel(
+  supportedLevels: readonly PiThinkingLevel[],
+  level: PiThinkingLevel,
+): PiThinkingLevel {
+  if (supportedLevels.includes(level)) {
+    return level;
+  }
+  const orderedLevels = PI_THINKING_OPTIONS.map((option) => option.id);
+  const requestedIndex = orderedLevels.indexOf(level);
+  const higher = orderedLevels.slice(requestedIndex + 1);
+  const lower = orderedLevels.slice(0, requestedIndex).toReversed();
+  return (
+    [...higher, ...lower].find((candidate) => supportedLevels.includes(candidate)) ??
+    supportedLevels[0] ??
+    "off"
+  );
+}
+
+function mapThinkingOption({
+  option,
+  isDefault,
+}: {
+  option: (typeof PI_THINKING_OPTIONS)[number];
+  isDefault: boolean;
+}) {
   const mappedOption = {
     id: option.id,
     label: option.label,
     description: option.description,
   };
-  if (option.isDefault) {
+  if (isDefault) {
     return {
       ...mappedOption,
       isDefault: true,
@@ -1207,9 +1248,25 @@ function mapPiModel(model: PiModel, provider: AgentProvider): AgentModelDefiniti
       provider: model.provider,
       modelId: model.id,
     },
-    thinkingOptions: model.reasoning ? PI_THINKING_OPTIONS.map(mapThinkingOption) : undefined,
-    defaultThinkingOptionId: model.reasoning ? DEFAULT_PI_THINKING_LEVEL : undefined,
+    ...resolvePiThinkingConfig(model),
   };
+}
+
+function resolvePiThinkingConfig(
+  model: PiModel,
+): Pick<AgentModelDefinition, "thinkingOptions" | "defaultThinkingOptionId"> {
+  const supportedLevels = getSupportedPiThinkingLevels(model);
+  if (supportedLevels.length === 0) {
+    return { thinkingOptions: undefined, defaultThinkingOptionId: undefined };
+  }
+  const defaultThinkingOptionId = clampPiThinkingLevel(supportedLevels, DEFAULT_PI_THINKING_LEVEL);
+  const supportedOptions = PI_THINKING_OPTIONS.filter((option) =>
+    supportedLevels.includes(option.id),
+  );
+  const thinkingOptions = supportedOptions.map((option) =>
+    mapThinkingOption({ option, isDefault: option.id === defaultThinkingOptionId }),
+  );
+  return { thinkingOptions, defaultThinkingOptionId };
 }
 
 function createRuntime(
@@ -1705,23 +1762,67 @@ export class PiRpcAgentSession implements AgentSession {
       throw new Error(`Pi model id must include a provider: ${modelId}`);
     }
 
+    const reportedThinkingLevel = resolveThinkingOptionId(
+      this.lastKnownThinkingOptionId,
+      this.state.thinkingLevel,
+    );
     const model = await this.runtimeSession.setModel(parsedReference.provider, parsedReference.id);
     this.state = {
       ...this.state,
       model,
     };
     this.config.model = `${model.provider}/${model.id}`;
+    if (getSupportedPiThinkingLevels(model).length === 0) {
+      return;
+    }
+
+    // Pi 切模型会把档位重置为 Pi 设置里的默认值；重新下发用户选择的档位（未选过则为启动默认档），由 Pi 按新模型收敛
+    const desiredThinkingLevel =
+      normalizePiThinkingOption(this.config.thinkingOptionId) ?? DEFAULT_PI_THINKING_LEVEL;
+    let appliedThinkingLevel: PiThinkingLevel;
+    try {
+      appliedThinkingLevel = await this.applyThinkingLevel(desiredThinkingLevel);
+    } catch (error) {
+      // 模型已切换成功，档位对齐失败不回滚也不报错
+      this.logger.warn(
+        { err: error },
+        "Failed to re-apply the Pi thinking level after a model switch",
+      );
+      return;
+    }
+    if (appliedThinkingLevel !== reportedThinkingLevel) {
+      this.emit({
+        type: "thinking_option_changed",
+        provider: this.provider,
+        thinkingOptionId: appliedThinkingLevel,
+      });
+    }
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
-    const thinkingLevel = normalizePiThinkingOption(thinkingOptionId) ?? DEFAULT_PI_THINKING_LEVEL;
+    await this.applyThinkingLevel(
+      normalizePiThinkingOption(thinkingOptionId) ?? DEFAULT_PI_THINKING_LEVEL,
+    );
+  }
+
+  private async applyThinkingLevel(thinkingLevel: PiThinkingLevel): Promise<PiThinkingLevel> {
     await this.runtimeSession.setThinkingLevel(thinkingLevel);
-    this.lastKnownThinkingOptionId = thinkingLevel;
-    this.config.thinkingOptionId = thinkingLevel;
-    this.state = {
-      ...this.state,
-      thinkingLevel,
-    };
+    const appliedThinkingLevel = await this.readAppliedThinkingLevel(thinkingLevel);
+    this.lastKnownThinkingOptionId = appliedThinkingLevel;
+    this.config.thinkingOptionId = appliedThinkingLevel;
+    return appliedThinkingLevel;
+  }
+
+  private async readAppliedThinkingLevel(
+    requestedThinkingLevel: PiThinkingLevel,
+  ): Promise<PiThinkingLevel> {
+    try {
+      await this.refreshState();
+      return this.state.thinkingLevel;
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to read the Pi thinking level after setting it");
+      return requestedThinkingLevel;
+    }
   }
 
   private emit(event: AgentStreamEvent): void {

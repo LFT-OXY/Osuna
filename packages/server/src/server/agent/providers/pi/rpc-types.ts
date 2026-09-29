@@ -76,6 +76,8 @@ export interface PiModel {
   id: string;
   name?: string;
   reasoning?: boolean;
+  // null 值表示该档不支持；xhigh/max 需显式映射才支持（Pi 0.72+）
+  thinkingLevelMap?: Partial<Record<PiThinkingLevel, string | null>> | null;
   contextWindow?: number;
   maxTokens?: number;
   api?: string;
