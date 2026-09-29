@@ -320,6 +320,23 @@ describe("desktop app updater — main-process state", () => {
     expect(updater.getSnapshot().status).toBe("idle");
   });
 
+  it("follows the download progress the main process pushes", async () => {
+    const { updater, port } = await connectWithState("available");
+    const progress = { percent: 42, transferred: 42, total: 100, bytesPerSecond: 7 };
+
+    port.pushState(buildFakeUpdateState({ phase: "downloading" }));
+    expect(updater.getSnapshot().downloadProgress).toBeNull();
+
+    port.pushState(buildFakeUpdateState({ phase: "downloading", progress }));
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "downloading",
+      downloadProgress: progress,
+    });
+
+    port.pushState(buildFakeUpdateState({ phase: "downloaded" }));
+    expect(updater.getSnapshot().downloadProgress).toBeNull();
+  });
+
   it("shows a download failure with its message", async () => {
     const { updater, port } = await connectWithState("downloading");
 
@@ -343,7 +360,7 @@ describe("desktop app updater — download", () => {
     const download = port.deferNextDownload();
 
     const pending = updater.downloadUpdate();
-    expect(updater.getSnapshot().status).toBe("downloading");
+    expect(updater.getSnapshot()).toMatchObject({ status: "downloading", downloadProgress: null });
 
     download.resolve(buildFakeUpdateState({ phase: "downloaded" }));
     await pending;

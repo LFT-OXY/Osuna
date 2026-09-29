@@ -1444,6 +1444,7 @@ export const ja: TranslationResources = {
         update: "更新",
         downloadingTitle: "更新をダウンロード中",
         downloadingDescription: "ダウンロード中...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s",
         downloadedTitle: "更新をダウンロードしました",
         versionDownloaded: "{{version}} をダウンロードしました。",
         newVersionDownloaded: "新しいバージョンをダウンロードしました。",

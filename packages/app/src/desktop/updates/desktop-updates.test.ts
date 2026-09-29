@@ -136,6 +136,7 @@ describe("desktop-updates helpers", () => {
       phase: "failed",
       targetVersion: "1.2.4",
       failure: { action: "install", reason: "handoff-timeout" },
+      progress: null,
       installsOnQuit: true,
     });
     expect(
@@ -149,6 +150,30 @@ describe("desktop-updates helpers", () => {
       failure: { action: "download", message: "sha512 checksum mismatch" },
       installsOnQuit: false,
     });
+  });
+
+  it("parses the download progress of an update state", async () => {
+    const { parseDesktopAppUpdateState } = await loadModuleForPlatform("web");
+    const progress = { percent: 42, transferred: 42, total: 100, bytesPerSecond: 7 };
+
+    expect(
+      parseDesktopAppUpdateState({
+        revision: 6,
+        phase: "downloading",
+        targetVersion: "1.2.4",
+        failure: null,
+        progress: { ...progress, delta: 3 },
+        installsOnQuit: true,
+      }),
+    ).toMatchObject({ phase: "downloading", progress });
+    expect(
+      parseDesktopAppUpdateState({
+        revision: 7,
+        phase: "downloading",
+        targetVersion: "1.2.4",
+        progress: { percent: "42" },
+      }),
+    ).toMatchObject({ progress: null });
   });
 
   it("rejects an update state without a known phase or revision", async () => {

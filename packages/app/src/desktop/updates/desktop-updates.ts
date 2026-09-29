@@ -20,12 +20,21 @@ export type DesktopAppUpdateFailure =
   | { action: "download"; message: string }
   | ({ action: "install" } & DesktopAppUpdateInstallFailure);
 
+// percent 是 0–100；差量下载时 total 可能小于完整安装包。
+export interface DesktopAppUpdateDownloadProgress {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+}
+
 // 主进程持有的更新阶段快照（features/app-update-service.ts 的 AppUpdateState）。
 export interface DesktopAppUpdateState {
   revision: number;
   phase: DesktopAppUpdatePhase;
   targetVersion: string | null;
   failure: DesktopAppUpdateFailure | null;
+  progress: DesktopAppUpdateDownloadProgress | null;
   installsOnQuit: boolean;
 }
 
@@ -159,6 +168,26 @@ function parseUpdateFailure(raw: unknown): DesktopAppUpdateFailure | null {
   return null;
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseDownloadProgress(raw: unknown): DesktopAppUpdateDownloadProgress | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const { percent, transferred, total, bytesPerSecond } = raw;
+  if (
+    !isFiniteNumber(percent) ||
+    !isFiniteNumber(transferred) ||
+    !isFiniteNumber(total) ||
+    !isFiniteNumber(bytesPerSecond)
+  ) {
+    return null;
+  }
+  return { percent, transferred, total, bytesPerSecond };
+}
+
 export function parseDesktopAppUpdateState(raw: unknown): DesktopAppUpdateState | null {
   if (!isRecord(raw) || typeof raw.revision !== "number" || !isDesktopAppUpdatePhase(raw.phase)) {
     return null;
@@ -169,6 +198,7 @@ export function parseDesktopAppUpdateState(raw: unknown): DesktopAppUpdateState 
     phase: raw.phase,
     targetVersion: toStringOrNull(raw.targetVersion),
     failure: parseUpdateFailure(raw.failure),
+    progress: parseDownloadProgress(raw.progress),
     installsOnQuit: raw.installsOnQuit === true,
   };
 }

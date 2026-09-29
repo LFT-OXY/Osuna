@@ -1,6 +1,7 @@
 import type {
   DesktopAppUpdateCheckResult,
   DesktopAppUpdateCheckIntent,
+  DesktopAppUpdateDownloadProgress,
   DesktopAppUpdateFailure,
   DesktopAppUpdateInstallResult,
   DesktopAppUpdateState,
@@ -25,6 +26,8 @@ export interface DesktopAppUpdaterSnapshot {
   status: DesktopAppUpdateStatus;
   targetVersion: string | null;
   installsOnQuit: boolean;
+  // 只在下载中有值；主进程的第一份进度到达前为 null。
+  downloadProgress: DesktopAppUpdateDownloadProgress | null;
   errorMessage: string | null;
   lastCheckedAt: number | null;
   // 本次运行内被「稍后」或 × 收起，只存在内存里，按窗口生效。
@@ -88,6 +91,7 @@ const INITIAL_MIRROR: DesktopAppUpdateState = {
   phase: "none",
   targetVersion: null,
   failure: null,
+  progress: null,
   installsOnQuit: false,
 };
 
@@ -137,10 +141,12 @@ function buildSnapshot(state: InternalState): DesktopAppUpdaterSnapshot {
   const mirrorError = mirror.phase === "failed" && mirror.failure ? mirror.failure : null;
   const mirrorErrorMessage = mirrorError ? describeFailure(mirrorError) : null;
   const errorMessage = state.actionError ?? state.checkError ?? mirrorErrorMessage;
+  const status = deriveStatus(state);
   return {
-    status: deriveStatus(state),
+    status,
     targetVersion: mirror.targetVersion,
     installsOnQuit: mirror.installsOnQuit,
+    downloadProgress: status === "downloading" ? mirror.progress : null,
     errorMessage,
     lastCheckedAt: state.lastCheckedAt,
     isHidden: state.isHidden,

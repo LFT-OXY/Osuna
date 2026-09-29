@@ -1452,6 +1452,7 @@ export const ru: TranslationResources = {
         update: "Обновить",
         downloadingTitle: "Загрузка обновления",
         downloadingDescription: "Загрузка...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} МБ · {{speed}} МБ/с",
         downloadedTitle: "Обновление загружено",
         versionDownloaded: "Версия {{version}} загружена.",
         newVersionDownloaded: "Новая версия загружена.",

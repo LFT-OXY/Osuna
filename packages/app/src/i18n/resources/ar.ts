@@ -1429,6 +1429,7 @@ export const ar: TranslationResources = {
         update: "تحديث",
         downloadingTitle: "جارٍ تنزيل التحديث",
         downloadingDescription: "جارٍ التنزيل...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s",
         downloadedTitle: "تم تنزيل التحديث",
         versionDownloaded: "تم تنزيل {{version}}.",
         newVersionDownloaded: "تم تنزيل إصدار جديد.",

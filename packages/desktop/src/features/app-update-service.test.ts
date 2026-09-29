@@ -7,6 +7,7 @@ import {
   type AppUpdateRuntime,
   type AppUpdateRuntimeConfiguration,
   type AppUpdateState,
+  type RuntimeDownloadProgress,
   type RuntimeUpdateCheckResult,
   type RuntimeUpdateInfo,
 } from "./app-update-service";
@@ -91,6 +92,10 @@ class FakeAppUpdateRuntime implements AppUpdateRuntime {
 
   failDownload(error: Error): void {
     this.heldDownload?.reject(error);
+  }
+
+  reportDownloadProgress(progress: RuntimeDownloadProgress): void {
+    this.configuration?.onDownloadProgress(progress);
   }
 
   async checkForUpdates(): Promise<{
@@ -266,6 +271,7 @@ describe("app update service — check", () => {
         phase: "available",
         targetVersion: "1.2.4",
         failure: null,
+        progress: null,
         installsOnQuit: true,
       },
     });
@@ -607,6 +613,72 @@ describe("app update service — download", () => {
     });
     runtime.completeDownload();
     await pending;
+  });
+
+  it("records each download progress event in the state and broadcasts it", async () => {
+    const { runtime, service, publishedStates } = createService();
+    runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+    await checkManually(service);
+    runtime.holdNextDownload();
+
+    const pending = service.downloadUpdate();
+    await flushAsyncWork();
+    expect(service.getState()).toMatchObject({ phase: "downloading", progress: null });
+
+    const progress = {
+      percent: 42,
+      transferred: 43_411_046,
+      total: 103_389_184,
+      bytesPerSecond: 3_355_443,
+    };
+    runtime.reportDownloadProgress(progress);
+
+    expect(publishedStates.at(-1)).toMatchObject({ phase: "downloading", progress });
+
+    runtime.completeDownload();
+    const state = await pending;
+    expect(state).toMatchObject({ phase: "downloaded", progress: null });
+  });
+
+  it("starts a retried download without the previous attempt's progress", async () => {
+    const { runtime, service } = createService();
+    runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+    await checkManually(service);
+    runtime.holdNextDownload();
+    const first = service.downloadUpdate();
+    await flushAsyncWork();
+    runtime.reportDownloadProgress({
+      percent: 80,
+      transferred: 80,
+      total: 100,
+      bytesPerSecond: 10,
+    });
+    runtime.failDownload(new Error("socket hang up"));
+    expect(await first).toMatchObject({ phase: "failed", progress: null });
+
+    runtime.holdNextDownload();
+    const retry = service.downloadUpdate();
+    await flushAsyncWork();
+
+    expect(service.getState()).toMatchObject({ phase: "downloading", progress: null });
+    runtime.completeDownload();
+    await retry;
+  });
+
+  it("ignores progress events that arrive outside a download", async () => {
+    const { runtime, service, publishedStates } = createService();
+    await prepareDownloadedUpdate(runtime, service);
+    const publishedCount = publishedStates.length;
+
+    runtime.reportDownloadProgress({
+      percent: 100,
+      transferred: 100,
+      total: 100,
+      bytesPerSecond: 10,
+    });
+
+    expect(publishedStates).toHaveLength(publishedCount);
+    expect(service.getState()).toMatchObject({ phase: "downloaded", progress: null });
   });
 
   it("moves to failed with the download error", async () => {

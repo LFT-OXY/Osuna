@@ -110,6 +110,13 @@ export interface ConfirmDialogCall {
   title: string | undefined;
 }
 
+interface UpdateDownloadProgress {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+}
+
 declare global {
   interface Window {
     __capturedDialogCall: ConfirmDialogCall | undefined;
@@ -118,6 +125,7 @@ declare global {
     __desktopDaemonStartRequested?: boolean;
     __desktopInvokedCommands: string[];
     __releaseDesktopUpdateDownload?: () => void;
+    __reportDesktopUpdateDownloadProgress?: (progress: UpdateDownloadProgress) => void;
   }
 }
 
@@ -206,12 +214,14 @@ export async function installDesktopRuntime(
       phase: UpdatePhase;
       targetVersion: string | null;
       failure: UpdateFailure | null;
+      progress: UpdateDownloadProgress | null;
       installsOnQuit: boolean;
     } = {
       revision: 0,
       phase: "none",
       targetVersion: null,
       failure: null,
+      progress: null,
       installsOnQuit: cfg.installsOnQuit ?? true,
     };
 
@@ -222,7 +232,12 @@ export async function installDesktopRuntime(
         phase,
         targetVersion: phase === "none" ? null : targetVersion,
         failure,
+        progress: null,
       };
+      publishUpdateState();
+    }
+
+    function publishUpdateState() {
       for (const listener of updateStateListeners) listener(updateState);
     }
 
@@ -245,6 +260,10 @@ export async function installDesktopRuntime(
     async function runDownload() {
       setUpdatePhase("downloading");
       if (cfg.holdDownload) {
+        window.__reportDesktopUpdateDownloadProgress = (progress) => {
+          updateState = { ...updateState, revision: updateState.revision + 1, progress };
+          publishUpdateState();
+        };
         await new Promise<void>((resolve) => {
           window.__releaseDesktopUpdateDownload = resolve;
         });
@@ -476,6 +495,16 @@ export async function clickUpdateCalloutAction(page: Page, label: string): Promi
 export async function releaseUpdateDownload(page: Page): Promise<void> {
   await page.waitForFunction(() => typeof window.__releaseDesktopUpdateDownload === "function");
   await page.evaluate(() => window.__releaseDesktopUpdateDownload?.());
+}
+
+export async function reportUpdateDownloadProgress(
+  page: Page,
+  progress: UpdateDownloadProgress,
+): Promise<void> {
+  await page.waitForFunction(
+    () => typeof window.__reportDesktopUpdateDownloadProgress === "function",
+  );
+  await page.evaluate((next) => window.__reportDesktopUpdateDownloadProgress?.(next), progress);
 }
 
 export async function readInvokedDesktopCommands(page: Page): Promise<string[]> {

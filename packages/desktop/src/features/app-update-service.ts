@@ -21,12 +21,22 @@ export type AppUpdateFailure =
   | { action: "download"; message: string }
   | ({ action: "install" } & AppUpdateInstallFailure);
 
+// electron-updater download-progress 事件里用到的字段；percent 是 0–100。
+export interface RuntimeDownloadProgress {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+}
+
 // 主进程是更新阶段的唯一事实来源；revision 单调递增，渲染进程据此丢弃过期快照。
 export interface AppUpdateState {
   revision: number;
   phase: AppUpdatePhase;
   targetVersion: string | null;
   failure: AppUpdateFailure | null;
+  // 只在下载中阶段有值，第一份进度到达前为 null。
+  progress: RuntimeDownloadProgress | null;
   installsOnQuit: boolean;
 }
 
@@ -68,6 +78,7 @@ export interface AppUpdateRuntimeConfiguration {
   shouldAdmitUpdate(info: RuntimeUpdateInfo): boolean | Promise<boolean>;
   onUpdateAvailable(info: RuntimeUpdateInfo): void;
   onUpdateDownloaded(info: RuntimeUpdateInfo): void;
+  onDownloadProgress(progress: RuntimeDownloadProgress): void;
   onBeforeQuitForUpdate(): void;
   onError(error: unknown): void;
 }
@@ -160,10 +171,18 @@ function isSameFailure(a: AppUpdateFailure | null, b: AppUpdateFailure | null): 
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function isSameProgress(
+  a: RuntimeDownloadProgress | null,
+  b: RuntimeDownloadProgress | null,
+): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateService {
   let cachedUpdateInfo: RuntimeUpdateInfo | null = null;
   let downloadedUpdateVersion: string | null = null;
   let downloadingVersion: string | null = null;
+  let downloadProgress: RuntimeDownloadProgress | null = null;
   let activeDownload: Promise<void> | null = null;
   let isInstalling = false;
   let lastFailure: { version: string; detail: AppUpdateFailure } | null = null;
@@ -174,6 +193,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     phase: "none",
     targetVersion: null,
     failure: null,
+    progress: null,
     installsOnQuit: deps.installsOnQuit,
   };
   const installHandoffWaiters = new Set<(outcome: InstallHandoffOutcome) => void>();
@@ -199,10 +219,12 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     const targetVersion = cachedUpdateInfo?.version ?? null;
     const phase = targetVersion ? derivePhase(targetVersion) : "none";
     const nextFailure = phase === "failed" && lastFailure ? lastFailure.detail : null;
+    const nextProgress = phase === "downloading" ? downloadProgress : null;
     if (
       phase === state.phase &&
       targetVersion === state.targetVersion &&
-      isSameFailure(nextFailure, state.failure)
+      isSameFailure(nextFailure, state.failure) &&
+      isSameProgress(nextProgress, state.progress)
     ) {
       return state;
     }
@@ -211,6 +233,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
       phase,
       targetVersion,
       failure: nextFailure,
+      progress: nextProgress,
       installsOnQuit: deps.installsOnQuit,
     };
     deps.publishState?.(state);
@@ -304,6 +327,14 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
         if (isDownloadFailureForVersion) {
           lastFailure = null;
         }
+        publishState();
+      },
+      // 频率跟随 electron-updater 自身的节流，这里不再节流。
+      onDownloadProgress(progress) {
+        if (downloadingVersion === null) {
+          return;
+        }
+        downloadProgress = progress;
         publishState();
       },
       onBeforeQuitForUpdate() {
@@ -405,6 +436,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
 
     const version = info.version;
     downloadingVersion = version;
+    downloadProgress = null;
     if (lastFailure?.version === version) {
       lastFailure = null;
     }

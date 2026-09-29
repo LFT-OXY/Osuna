@@ -1461,6 +1461,7 @@ export const ptBR: TranslationResources = {
         update: "Atualizar",
         downloadingTitle: "Baixando atualização",
         downloadingDescription: "Baixando...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s",
         downloadedTitle: "Atualização baixada",
         versionDownloaded: "{{version}} foi baixada.",
         newVersionDownloaded: "Uma nova versão foi baixada.",

@@ -1454,6 +1454,7 @@ export const en = {
         update: "Update",
         downloadingTitle: "Downloading update",
         downloadingDescription: "Downloading...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s",
         downloadedTitle: "Update downloaded",
         versionDownloaded: "{{version}} has been downloaded.",
         newVersionDownloaded: "A new version has been downloaded.",

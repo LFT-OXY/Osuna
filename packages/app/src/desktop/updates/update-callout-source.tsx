@@ -1,6 +1,7 @@
 import { Gift } from "lucide-react-native";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   type SidebarCalloutAction,
@@ -13,11 +14,13 @@ import {
   type UpdateCalloutActionDescriptor,
   type UpdateCalloutActionRole,
   type UpdateCalloutBody,
+  type UpdateCalloutProgress,
 } from "@/desktop/updates/resolve-update-callout";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
 import { openDesktopReleasesPage } from "@/desktop/updates/desktop-updates";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { openChangelog } from "@/changelog";
+import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 
 type TranslateFn = ReturnType<typeof useTranslation>["t"];
 
@@ -26,7 +29,11 @@ function renderBody(body: UpdateCalloutBody, t: TranslateFn): ReactNode {
     case "available":
       return <UpdateAvailableDescription versionLabel={body.versionLabel} t={t} />;
     case "downloading":
-      return t("desktop.updates.callout.downloadingDescription");
+      return body.progress ? (
+        <UpdateDownloadProgress progress={body.progress} />
+      ) : (
+        t("desktop.updates.callout.downloadingDescription")
+      );
     case "downloaded":
       return (
         <UpdateDownloadedDescription
@@ -63,6 +70,7 @@ export function UpdateCalloutSource() {
     status,
     targetVersion,
     installsOnQuit,
+    downloadProgress,
     errorMessage,
     isHidden,
     checkForUpdates,
@@ -86,6 +94,7 @@ export function UpdateCalloutSource() {
       status,
       targetVersion,
       installsOnQuit,
+      downloadProgress,
       errorMessage,
       isHidden,
     });
@@ -116,6 +125,7 @@ export function UpdateCalloutSource() {
   }, [
     callouts,
     download,
+    downloadProgress,
     errorMessage,
     hide,
     install,
@@ -179,8 +189,48 @@ function UpdateDownloadedDescription({
   );
 }
 
-const styles = StyleSheet.create({
+// 最小进度条，样式参照 DownloadToast 那条；不抽公共组件。
+// 宽度每秒都在变，走 inline 样式，避免每个值都往 #unistyles-web 追加一条 CSS 规则。
+function UpdateDownloadProgress({ progress }: { progress: UpdateCalloutProgress }) {
+  const fillStyle = useMemo(
+    () => [
+      styles.progressFill,
+      inlineUnistylesStyle({ width: `${progress.fraction * 100}%` as const }),
+    ],
+    [progress.fraction],
+  );
+  const accessibilityValue = useMemo(
+    () => ({ min: 0, max: 100, now: progress.percent }),
+    [progress.percent],
+  );
+  return (
+    <>
+      <View
+        style={styles.progressTrack}
+        accessibilityRole="progressbar"
+        accessibilityValue={accessibilityValue}
+        testID="update-callout-progress"
+      >
+        <View style={fillStyle} />
+      </View>
+      <SidebarCalloutDescriptionText>{progress.label}</SidebarCalloutDescriptionText>
+    </>
+  );
+}
+
+const styles = StyleSheet.create((theme) => ({
   link: {
     textDecorationLine: "underline",
   },
-});
+  progressTrack: {
+    height: 4,
+    backgroundColor: theme.colors.surface3,
+    borderRadius: theme.borderRadius.full,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.full,
+  },
+}));

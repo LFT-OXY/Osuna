@@ -15,6 +15,7 @@ import {
   expectNoUpdateCallout,
   clickUpdateCalloutAction,
   releaseUpdateDownload,
+  reportUpdateDownloadProgress,
   readInvokedDesktopCommands,
   clickCheckForUpdates,
   expectAvailableUpdateCheckResult,
@@ -69,7 +70,17 @@ test.describe("Desktop updates", () => {
 
     await clickUpdateCalloutAction(page, "Update");
     await expect(callout).toContainText("Downloading update");
+    await expect(callout).toContainText("Downloading...");
     await expect(page.getByTestId("update-callout-actions")).toHaveCount(0);
+    const MB = 1024 * 1024;
+    await reportUpdateDownloadProgress(page, {
+      percent: 42,
+      transferred: 41.4 * MB,
+      total: 98.6 * MB,
+      bytesPerSecond: 3.2 * MB,
+    });
+    await expect(page.getByTestId("update-callout-progress")).toBeVisible();
+    await expect(callout).toContainText("42% · 41.4 / 98.6 MB · 3.2 MB/s");
     await releaseUpdateDownload(page);
 
     await expectUpdateCallout(page, { title: "Update downloaded", version: "1.2.3" });

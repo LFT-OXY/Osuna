@@ -11,6 +11,7 @@ function input(overrides: Partial<ResolveUpdateCalloutInput> = {}): ResolveUpdat
     status: "available",
     targetVersion: "1.2.3",
     installsOnQuit: true,
+    downloadProgress: null,
     errorMessage: null,
     isHidden: false,
     ...overrides,
@@ -80,11 +81,51 @@ describe("resolveUpdateCalloutDescriptor", () => {
 
     expect(descriptor).toMatchObject({
       title: "Downloading update",
-      body: { kind: "downloading" },
+      body: { kind: "downloading", progress: null },
       showGiftIcon: false,
       variant: "default",
       actions: [],
       dismissible: true,
+    });
+  });
+
+  it("shows the percent, downloaded / total size and speed in MB once progress arrives", () => {
+    const MB = 1024 * 1024;
+    const descriptor = resolveUpdateCalloutDescriptor(
+      input({
+        status: "downloading",
+        downloadProgress: {
+          percent: 42,
+          transferred: 41.4 * MB,
+          total: 98.6 * MB,
+          bytesPerSecond: 3.2 * MB,
+        },
+      }),
+    );
+
+    expect(descriptor?.body).toEqual({
+      kind: "downloading",
+      progress: { fraction: 0.42, percent: 42, label: "42% · 41.4 / 98.6 MB · 3.2 MB/s" },
+    });
+  });
+
+  it("does not round the percent up to 100% before the download finishes", () => {
+    const MB = 1024 * 1024;
+    const descriptor = resolveUpdateCalloutDescriptor(
+      input({
+        status: "downloading",
+        downloadProgress: {
+          percent: 99.7,
+          transferred: 99.7 * MB,
+          total: 100 * MB,
+          bytesPerSecond: 0,
+        },
+      }),
+    );
+
+    expect(descriptor?.body).toEqual({
+      kind: "downloading",
+      progress: { fraction: 0.997, percent: 99, label: "99% · 99.7 / 100.0 MB · 0.0 MB/s" },
     });
   });
 

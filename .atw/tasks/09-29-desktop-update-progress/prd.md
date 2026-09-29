@@ -79,7 +79,7 @@
   - **下载**：对已准入的目标版本开始下载，重复调用是幂等的。
   - **取消下载**：通过 electron-updater 的取消令牌中止下载。取消不算错误，阶段回到「发现更新」。
   - **安装**：只在目标版本已下载时执行，包括停 daemon、`quitAndInstall`、等待安装交接、失败后把 daemon 拉起来。原来那个先下载再安装的合并动作取消，未下载时调用安装返回「未安装」，而不是偷偷开始下载。安装前不再重新检查更新源，直接安装已下载的目标版本。
-- 服务订阅 electron-updater 的 `download-progress` 事件，记录最新的 `{ percent, transferred, total, bytesPerSecond }`。
+- 服务订阅 electron-updater 的 `download-progress` 事件，记录最新的 `{ percent, transferred, total, bytesPerSecond }`（`percent` 是 0–100），写进快照的 `progress` 字段。`progress` 只在下载中阶段有值：每次开始下载先清空，第一份进度到达前为 `null`；不在下载中时到达的进度事件直接丢弃。
 - 服务对外提供一份**更新状态快照**：阶段（无更新 / 发现更新 / 下载中 / 已下载 / 安装中 / 失败）、目标版本、最新进度、错误信息，以及当前平台是否会在退出时安装。检查结果里带上这份快照，渲染进程挂载时直接调用检查就能拿到当前状态，不需要额外的查询命令。快照带单调递增的 `revision`，命令返回值和推送事件乱序到达时，渲染进程丢弃较旧的一份。失败项记录是哪个动作失败（下载 / 安装）；手动检查会清掉同一版本的失败，自动检查保留，错误不会被后台检查悄悄抹掉。
 - 快照每次变化都通过现有的 `paseo:event:*` 通道广播给所有窗口。进度事件的频率跟随 electron-updater 自身的节流（大约每秒一次），不另外加一层节流。
 - 切换发布通道时，如果正在下载就先取消，再清空更新状态。
@@ -107,7 +107,9 @@
 - 继续通过现有的侧栏提示 API 注册卡片。不传持久化的关闭键，改用 `onDismiss` 回调去设置本次运行的隐藏；安装中传 `dismissible: false`。优先级保持 200，排在 Rosetta 提示（300）后面。
 - 卡片描述器（由状态推导标题、描述、按钮）继续做成纯函数，按上面 Solution 那张表输出五个阶段。
 - 下载中的进度条放在卡片描述里，现有描述本来就接受任意 ReactNode。仓库里没有通用的进度条组件：文件下载提示里那条是它自己私有的，这次不去抽公共组件，在更新卡片里写一个最小的实现，样式参照它。
-- 大小和速度按 MB 和 MB/s 格式化，保留一位小数；不显示剩余时间。
+- 大小和速度按 MB 和 MB/s 格式化，保留一位小数；不显示剩余时间。MB 按 1024² 字节换算，与文件下载提示的 `formatSpeed`（`stores/download-store.ts`）一致。百分比向下取整，下载完成前不会显示 100%。
+- 整行进度文字走 i18n key `desktop.updates.callout.downloadProgress`（`{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s`），单位随语言：法语 `Mo`，俄语 `МБ`，其余语言用 `MB`。
+- 进度条高 4px，轨道 `surface3`，填充 `primary`，全圆角；DownloadToast 那条 3px、`surface2` 轨道放在侧栏上太淡。填充宽度每秒都在变，走 `inlineUnistylesStyle`，不进 Unistyles 的 CSS 注册表（`docs/unistyles.md`）。
 - 「查看更新内容」链接复用现有的 changelog 打开逻辑。
 
 ### 设置 → 关于

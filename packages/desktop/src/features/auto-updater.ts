@@ -183,6 +183,14 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
       updateLifecycleLog.updateDownloaded(updateInfo.version);
       input.onUpdateDownloaded(updateInfo);
     });
+    autoUpdater.on("download-progress", (progress) => {
+      input.onDownloadProgress({
+        percent: progress.percent,
+        transferred: progress.transferred,
+        total: progress.total,
+        bytesPerSecond: progress.bytesPerSecond,
+      });
+    });
     // electron-updater 通过 Electron 内置 autoUpdater 发出安装交接事件。
     electronAutoUpdater.on("before-quit-for-update", () => {
       input.onBeforeQuitForUpdate();

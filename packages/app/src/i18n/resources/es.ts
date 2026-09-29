@@ -1470,6 +1470,7 @@ export const es: TranslationResources = {
         update: "Actualizar",
         downloadingTitle: "Descargando actualización",
         downloadingDescription: "Descargando...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s",
         downloadedTitle: "Actualización descargada",
         versionDownloaded: "{{version}} se ha descargado.",
         newVersionDownloaded: "Se ha descargado una nueva versión.",

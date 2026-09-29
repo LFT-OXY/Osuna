@@ -1439,6 +1439,7 @@ export const ko: TranslationResources = {
         update: "업데이트",
         downloadingTitle: "업데이트 다운로드 중",
         downloadingDescription: "다운로드 중...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s",
         downloadedTitle: "업데이트 다운로드됨",
         versionDownloaded: "{{version}}을(를) 다운로드했습니다.",
         newVersionDownloaded: "새 버전을 다운로드했습니다.",

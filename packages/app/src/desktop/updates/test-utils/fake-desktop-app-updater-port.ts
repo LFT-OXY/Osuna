@@ -65,6 +65,7 @@ export function buildFakeUpdateState(
     phase,
     targetVersion: phase === "none" ? null : "1.2.3",
     failure: null,
+    progress: null,
     installsOnQuit: true,
     ...overrides,
   };

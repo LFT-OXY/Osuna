@@ -1415,6 +1415,7 @@ export const zhCN: TranslationResources = {
         update: "更新",
         downloadingTitle: "正在下载更新",
         downloadingDescription: "正在下载...",
+        downloadProgress: "{{percent}}% · {{transferred}} / {{total}} MB · {{speed}} MB/s",
         downloadedTitle: "更新已下载",
         versionDownloaded: "{{version}} 已下载。",
         newVersionDownloaded: "新版本已下载。",

@@ -1,9 +1,17 @@
+import type { DesktopAppUpdateDownloadProgress } from "@/desktop/updates/desktop-updates";
 import type { DesktopAppUpdateStatus } from "@/desktop/updates/use-desktop-app-updater";
 import { i18n } from "@/i18n/i18next";
 
+// fraction 是 0–1，给进度条用；label 形如「42% · 41.4 / 98.6 MB · 3.2 MB/s」。
+export interface UpdateCalloutProgress {
+  fraction: number;
+  percent: number;
+  label: string;
+}
+
 export type UpdateCalloutBody =
   | { kind: "available"; versionLabel: string | null }
-  | { kind: "downloading" }
+  | { kind: "downloading"; progress: UpdateCalloutProgress | null }
   | { kind: "downloaded"; versionLabel: string | null; installsOnQuit: boolean }
   | { kind: "installing" }
   | { kind: "error"; message: string };
@@ -40,6 +48,7 @@ export interface ResolveUpdateCalloutInput {
   status: DesktopAppUpdateStatus;
   targetVersion: string | null;
   installsOnQuit: boolean;
+  downloadProgress: DesktopAppUpdateDownloadProgress | null;
   errorMessage: string | null;
   isHidden: boolean;
 }
@@ -52,6 +61,28 @@ type UpdateCalloutContent = Pick<
 function formatVersionLabel(version: string | null): string | null {
   if (!version) return null;
   return `v${version.replace(/^v/i, "")}`;
+}
+
+const BYTES_PER_MB = 1024 * 1024;
+
+function formatMegabytes(bytes: number): string {
+  return (bytes / BYTES_PER_MB).toFixed(1);
+}
+
+function resolveProgress(
+  progress: DesktopAppUpdateDownloadProgress | null,
+): UpdateCalloutProgress | null {
+  if (!progress) return null;
+  const fraction = Math.min(Math.max(progress.percent / 100, 0), 1);
+  // 向下取整：下载完成前不显示 100%。
+  const percent = Math.floor(fraction * 100);
+  const label = i18n.t("desktop.updates.callout.downloadProgress", {
+    percent,
+    transferred: formatMegabytes(progress.transferred),
+    total: formatMegabytes(progress.total),
+    speed: formatMegabytes(progress.bytesPerSecond),
+  });
+  return { fraction, percent, label };
 }
 
 function laterAction(): UpdateCalloutActionDescriptor {
@@ -81,7 +112,7 @@ function resolveContent(input: ResolveUpdateCalloutInput): UpdateCalloutContent 
     case "downloading":
       return {
         title: i18n.t("desktop.updates.callout.downloadingTitle"),
-        body: { kind: "downloading" },
+        body: { kind: "downloading", progress: resolveProgress(input.downloadProgress) },
         showGiftIcon: false,
         variant: "default",
         actions: [],

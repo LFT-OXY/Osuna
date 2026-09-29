@@ -3,6 +3,7 @@ import {
   formatVersionWithPrefix,
   type DesktopAppUpdateCheckResult,
   type DesktopAppUpdateCheckIntent,
+  type DesktopAppUpdateDownloadProgress,
   type DesktopAppUpdateInstallResult,
   type DesktopAppUpdateState,
 } from "@/desktop/updates/desktop-updates";
@@ -21,6 +22,7 @@ export interface UseDesktopAppUpdaterReturn {
   statusText: string;
   targetVersion: string | null;
   installsOnQuit: boolean;
+  downloadProgress: DesktopAppUpdateDownloadProgress | null;
   errorMessage: string | null;
   lastCheckedAt: number | null;
   isHidden: boolean;
@@ -82,6 +84,7 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
     }),
     targetVersion: snapshot.targetVersion,
     installsOnQuit: snapshot.installsOnQuit,
+    downloadProgress: snapshot.downloadProgress,
     errorMessage: snapshot.errorMessage,
     lastCheckedAt: snapshot.lastCheckedAt,
     isHidden: snapshot.isHidden,
