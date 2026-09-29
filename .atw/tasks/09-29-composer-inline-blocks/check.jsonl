@@ -8,4 +8,4 @@
 {"file": ".atw/spec/app/frontend/state-management.md", "reason": "草稿与排队状态设计"}
 {"file": ".atw/spec/app/frontend/testing.md", "reason": "测试分层与 e2e 约定"}
 {"file": "docs/hover.md", "reason": "悬停提示的规范写法"}
-{"file": ".atw/tasks/09-29-composer-inline-blocks/issues/04-blocks-survive-restore.md", "reason": "ATW current ticket"}
+{"file": ".atw/tasks/09-29-composer-inline-blocks/issues/05-skill-block-replaces-skill-chip.md", "reason": "ATW current ticket"}

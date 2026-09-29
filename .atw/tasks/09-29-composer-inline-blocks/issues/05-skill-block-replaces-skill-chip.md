@@ -11,7 +11,7 @@
 
 **Blocked by:** 04 — 块在草稿、排队编辑、发送失败恢复、Rewind 中保留
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 编解码单元测试（测试层 B 的选中部分）：开头与中间 `/query` 选中 skill 后被移除、光标位置正确、同名去重、顺序保持、选中命令不产生块、有 Skill block 时不识别客户端命令。
 - [ ] draft-store 测试：旧 `skills` 字段读出为开头的 Skill block。
