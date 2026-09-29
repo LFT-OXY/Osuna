@@ -93,6 +93,11 @@ function sizeDraftToOverride(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+// Terminal size 的 null（跟随 Code size）对应空输入框。
+function terminalSizeToDraft(value: number | null): string {
+  return value === null ? "" : String(value);
+}
+
 // ---------------------------------------------------------------------------
 // Theme picker
 // ---------------------------------------------------------------------------
@@ -453,6 +458,7 @@ interface FontSizeRowProps {
   hint: string;
   accessibilityLabel: string;
   draft: string;
+  placeholder?: string;
   withBorder?: boolean;
   onChangeDraft: (value: string) => void;
   onCommit: () => void;
@@ -463,6 +469,7 @@ function FontSizeRow({
   hint,
   accessibilityLabel,
   draft,
+  placeholder,
   withBorder = true,
   onChangeDraft,
   onCommit,
@@ -484,6 +491,8 @@ function FontSizeRow({
           keyboardType="number-pad"
           inputMode="numeric"
           selectTextOnFocus
+          placeholder={placeholder}
+          placeholderTextColor={styles.placeholderColor.color}
           style={FONT_SIZE_INPUT_STYLE}
           accessibilityLabel={accessibilityLabel}
         />
@@ -573,6 +582,8 @@ export function AppearanceSection() {
     select: selectPluginTheme,
   } = useContributedThemes();
   const showInterfaceFontFamilyRow = !isNative;
+  // 原生终端只认白名单字体，Terminal font 行只在桌面端和 Web 端显示；Terminal size 全平台。
+  const showTerminalFontFamilyRow = !isNative;
   const uiFontPlaceholder = resolveDefaultStackPlaceholder(t, DEFAULT_UI_FONT_STACK);
   const monoFontPlaceholder = resolveDefaultStackPlaceholder(t, DEFAULT_MONO_FONT_STACK);
 
@@ -581,6 +592,10 @@ export function AppearanceSection() {
   const [uiBaseSizeDraft, setUiBaseSizeDraft] = useState(String(settings.uiBaseFontSize));
   const [contentSizeDraft, setContentSizeDraft] = useState(String(settings.contentFontSize));
   const [codeSizeDraft, setCodeSizeDraft] = useState(String(settings.codeFontSize));
+  const [terminalFontDraft, setTerminalFontDraft] = useState(settings.terminalFontFamily);
+  const [terminalSizeDraft, setTerminalSizeDraft] = useState(
+    terminalSizeToDraft(settings.terminalFontSize),
+  );
 
   // Resync numeric drafts when the committed value changes elsewhere.
   useEffect(() => {
@@ -592,6 +607,9 @@ export function AppearanceSection() {
   useEffect(() => {
     setCodeSizeDraft(String(settings.codeFontSize));
   }, [settings.codeFontSize]);
+  useEffect(() => {
+    setTerminalSizeDraft(terminalSizeToDraft(settings.terminalFontSize));
+  }, [settings.terminalFontSize]);
 
   const handleThemeChange = useCallback(
     (theme: BuiltInThemePreference) => {
@@ -684,6 +702,21 @@ export function AppearanceSection() {
     [settings.monoFontFamily, updateSettings],
   );
 
+  const commitTerminalFontFamily = useCallback(
+    (value: string) => {
+      const sanitized = sanitizeFontFamily(value);
+      if (sanitized === null) {
+        setTerminalFontDraft(settings.terminalFontFamily);
+        return;
+      }
+      setTerminalFontDraft(sanitized);
+      if (sanitized !== settings.terminalFontFamily) {
+        void updateSettings({ terminalFontFamily: sanitized });
+      }
+    },
+    [settings.terminalFontFamily, updateSettings],
+  );
+
   const handleUiBaseSizeChange = useCallback((value: string) => {
     setUiBaseSizeDraft(value.replace(/[^\d]/g, ""));
   }, []);
@@ -694,6 +727,10 @@ export function AppearanceSection() {
 
   const handleContentSizeChange = useCallback((value: string) => {
     setContentSizeDraft(value.replace(/[^\d]/g, ""));
+  }, []);
+
+  const handleTerminalSizeChange = useCallback((value: string) => {
+    setTerminalSizeDraft(value.replace(/[^\d]/g, ""));
   }, []);
 
   const commitUiBaseSize = useCallback(() => {
@@ -731,6 +768,21 @@ export function AppearanceSection() {
       void updateSettings({ contentFontSize: next });
     }
   }, [contentSizeDraft, settings.contentFontSize, updateSettings]);
+
+  // 留空表示跟随 Code size，写入 null。
+  const commitTerminalSize = useCallback(() => {
+    const next =
+      terminalSizeDraft.length === 0
+        ? null
+        : (parseClampedFontSize(terminalSizeDraft, {
+            min: MIN_CODE_FONT_SIZE,
+            max: MAX_CODE_FONT_SIZE,
+          }) ?? settings.terminalFontSize);
+    setTerminalSizeDraft(terminalSizeToDraft(next));
+    if (next !== settings.terminalFontSize) {
+      void updateSettings({ terminalFontSize: next });
+    }
+  }, [settings.terminalFontSize, terminalSizeDraft, updateSettings]);
 
   // Live-while-typing: the in-progress drafts drive the preview without
   // committing to the global theme. Empty/invalid fields fall back to the
@@ -842,6 +894,28 @@ export function AppearanceSection() {
             draft={codeSizeDraft}
             onChangeDraft={handleCodeSizeChange}
             onCommit={commitCodeSize}
+          />
+          {showTerminalFontFamilyRow ? (
+            <FontFamilyRow
+              title={t("settings.appearance.fonts.terminalFont")}
+              hint={t("settings.appearance.fonts.terminalFontHint")}
+              accessibilityLabel={t("settings.appearance.fonts.terminalFontAccessibility")}
+              placeholder={t("settings.appearance.fonts.followCodeFont")}
+              value={settings.terminalFontFamily}
+              draft={terminalFontDraft}
+              withBorder
+              onChangeDraft={setTerminalFontDraft}
+              onCommit={commitTerminalFontFamily}
+            />
+          ) : null}
+          <FontSizeRow
+            title={t("settings.appearance.fonts.terminalSize")}
+            hint={t("settings.appearance.fonts.terminalSizeHint")}
+            accessibilityLabel={t("settings.appearance.fonts.terminalSizeAccessibility")}
+            draft={terminalSizeDraft}
+            placeholder={String(settings.codeFontSize)}
+            onChangeDraft={handleTerminalSizeChange}
+            onCommit={commitTerminalSize}
           />
         </View>
       </SettingsSection>

@@ -9,6 +9,8 @@
   - 点击后恢复默认值；Terminal size 恢复为空，即跟随 Code size。
   - 值等于默认时按钮不显示。
 - 不做全局"恢复全部默认"。
+- 已知约束：字号输入框（`FormTextInput`）只在挂载时读取 `initialValue`，改 draft 不会刷新框内文字（02 实现时确认，现有字号行同样如此）。重置按钮要让输入框重挂载或直接替换文字，否则存储值变了、框里仍显示旧值。
+- 终端样例的字体与字号取 `resolveTerminalFont`（02 新增），传入 Code font / Code size / Terminal font / Terminal size 的草稿值。
 
 **Blocked by:** 02 — Terminal font 与 Terminal size
 **Status:** ready-for-agent

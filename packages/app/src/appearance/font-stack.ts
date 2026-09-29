@@ -1,3 +1,4 @@
+import type { AppSettings } from "@/hooks/use-settings";
 import { DEFAULT_MONO_FONT_STACK, DEFAULT_UI_FONT_STACK } from "@/styles/theme";
 import { NERD_FONT_FAMILIES } from "@/terminal/runtime/terminal-font";
 
@@ -73,4 +74,21 @@ export function resolveTerminalFontStack(userValue: string): string {
     ...NERD_FONT_FAMILIES.map(formatFontFamily),
   ].filter((family) => !GENERIC_FONT_FAMILIES.has(family.toLowerCase()));
   return [...concreteFamilies, "monospace"].join(", ");
+}
+
+export type TerminalFontSettings = Pick<
+  AppSettings,
+  "monoFontFamily" | "codeFontSize" | "terminalFontFamily" | "terminalFontSize"
+>;
+
+// Terminal font 留空跟随 Code font，Terminal size 为 null 跟随 Code size。
+export function resolveTerminalFont(settings: TerminalFontSettings): {
+  fontFamily: string;
+  fontSize: number;
+} {
+  const userValue = settings.terminalFontFamily.trim() || settings.monoFontFamily;
+  return {
+    fontFamily: resolveTerminalFontStack(userValue),
+    fontSize: settings.terminalFontSize ?? settings.codeFontSize,
+  };
 }

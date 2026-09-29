@@ -2287,6 +2287,13 @@ export const zhCN: TranslationResources = {
         codeSize: "代码字号",
         codeSizeHint: "用于代码、差异和终端输出",
         codeSizeAccessibility: "代码字号",
+        terminalFont: "终端字体",
+        terminalFontHint: "用于终端。留空则跟随代码字体",
+        terminalFontAccessibility: "终端字体族",
+        followCodeFont: "跟随代码字体",
+        terminalSize: "终端字号",
+        terminalSizeHint: "用于终端。留空则跟随代码字号",
+        terminalSizeAccessibility: "终端字体大小",
       },
       syntax: {
         title: "语法",

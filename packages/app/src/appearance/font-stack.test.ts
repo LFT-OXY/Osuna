@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveMonoFontStack, resolveTerminalFontStack } from "./font-stack";
+import { resolveMonoFontStack, resolveTerminalFont, resolveTerminalFontStack } from "./font-stack";
 
 const WEB_DEFAULT_MONO_STACK =
   "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
@@ -29,6 +29,46 @@ describe("resolveTerminalFontStack", () => {
     expect(resolveTerminalFontStack("Maple Mono, monospace")).toBe(
       '"Maple Mono", SFMono-Regular, Menlo, Monaco, Consolas, ' +
         `'Liberation Mono', 'Courier New', ${NERD_FALLBACKS}, monospace`,
+    );
+  });
+});
+
+describe("resolveTerminalFont", () => {
+  const followingSettings = {
+    monoFontFamily: "Maple Mono",
+    codeFontSize: 13,
+    terminalFontFamily: "",
+    terminalFontSize: null,
+  };
+  const mapleTerminalStack =
+    '"Maple Mono", SFMono-Regular, Menlo, Monaco, Consolas, ' +
+    `'Liberation Mono', 'Courier New', ${NERD_FALLBACKS}, monospace`;
+
+  it("follows the code font and code size when the terminal has no override", () => {
+    expect(resolveTerminalFont(followingSettings)).toEqual({
+      fontFamily: mapleTerminalStack,
+      fontSize: 13,
+    });
+  });
+
+  it("uses the terminal font and size over the code font and size when set", () => {
+    expect(
+      resolveTerminalFont({
+        ...followingSettings,
+        terminalFontFamily: "Hack Nerd Font",
+        terminalFontSize: 16,
+      }),
+    ).toEqual({
+      fontFamily:
+        '"Hack Nerd Font", SFMono-Regular, Menlo, Monaco, Consolas, ' +
+        `'Liberation Mono', 'Courier New', ${NERD_FALLBACKS}, monospace`,
+      fontSize: 16,
+    });
+  });
+
+  it("treats a whitespace-only terminal font as following the code font", () => {
+    expect(resolveTerminalFont({ ...followingSettings, terminalFontFamily: "  " }).fontFamily).toBe(
+      mapleTerminalStack,
     );
   });
 });

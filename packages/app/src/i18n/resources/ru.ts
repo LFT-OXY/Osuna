@@ -2352,6 +2352,15 @@ export const ru: TranslationResources = {
         codeSize: "Размер кода",
         codeSizeHint: "Используется для кода, диффов и вывода терминала",
         codeSizeAccessibility: "Размер шрифта кода",
+        terminalFont: "Шрифт терминала",
+        terminalFontHint:
+          "Используется в терминале. Оставьте поле пустым, чтобы использовать шрифт кода",
+        terminalFontAccessibility: "Семейство шрифтов терминала",
+        followCodeFont: "Как шрифт кода",
+        terminalSize: "Размер терминала",
+        terminalSizeHint:
+          "Используется в терминале. Оставьте поле пустым, чтобы использовать размер кода",
+        terminalSizeAccessibility: "Размер шрифта терминала",
       },
       syntax: {
         title: "Синтаксис",

@@ -2324,6 +2324,13 @@ export const ko: TranslationResources = {
         codeSize: "코드 크기",
         codeSizeHint: "코드, diff 및 터미널 출력에 사용됩니다",
         codeSizeAccessibility: "코드 글꼴 크기",
+        terminalFont: "터미널 글꼴",
+        terminalFontHint: "터미널에 사용됩니다. 코드 글꼴을 따르려면 비워 두세요",
+        terminalFontAccessibility: "터미널 글꼴 패밀리",
+        followCodeFont: "코드 글꼴 따르기",
+        terminalSize: "터미널 크기",
+        terminalSizeHint: "터미널에 사용됩니다. 코드 크기를 따르려면 비워 두세요",
+        terminalSizeAccessibility: "터미널 글꼴 크기",
       },
       syntax: {
         title: "구문",

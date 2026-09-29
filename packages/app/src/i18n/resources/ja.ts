@@ -2332,6 +2332,13 @@ export const ja: TranslationResources = {
         codeSize: "コードサイズ",
         codeSizeHint: "コード、差分、ターミナル出力に使用されます",
         codeSizeAccessibility: "コードフォントサイズ",
+        terminalFont: "ターミナルフォント",
+        terminalFontHint: "ターミナルで使用されます。空のままにするとコードフォントに従います",
+        terminalFontAccessibility: "ターミナルフォントファミリー",
+        followCodeFont: "コードフォントに従う",
+        terminalSize: "ターミナルサイズ",
+        terminalSizeHint: "ターミナルで使用されます。空のままにするとコードサイズに従います",
+        terminalSizeAccessibility: "ターミナルフォントサイズ",
       },
       syntax: {
         title: "構文ハイライト",

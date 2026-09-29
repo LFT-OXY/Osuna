@@ -2312,6 +2312,13 @@ export const ar: TranslationResources = {
         codeSize: "حجم الكود",
         codeSizeHint: "يُستخدم للكود والفروقات ومخرجات الطرفية",
         codeSizeAccessibility: "حجم خط الكود",
+        terminalFont: "خط الطرفية",
+        terminalFontHint: "يُستخدم في الطرفية. اتركه فارغًا لاتباع خط الكود",
+        terminalFontAccessibility: "عائلة خطوط الطرفية",
+        followCodeFont: "اتباع خط الكود",
+        terminalSize: "حجم الطرفية",
+        terminalSizeHint: "يُستخدم في الطرفية. اتركه فارغًا لاتباع حجم الكود",
+        terminalSizeAccessibility: "حجم خط الطرفية",
       },
       syntax: {
         title: "بناء الجملة",

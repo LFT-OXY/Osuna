@@ -2370,6 +2370,13 @@ export const fr: TranslationResources = {
         codeSize: "Taille du code",
         codeSizeHint: "Utilisée pour le code, les diffs et la sortie du terminal",
         codeSizeAccessibility: "Taille de la police du code",
+        terminalFont: "Police du terminal",
+        terminalFontHint: "Utilisée dans le terminal. Laisser vide pour suivre la police de code",
+        terminalFontAccessibility: "Famille de polices du terminal",
+        followCodeFont: "Suivre la police de code",
+        terminalSize: "Taille du terminal",
+        terminalSizeHint: "Utilisée dans le terminal. Laisser vide pour suivre la taille du code",
+        terminalSizeAccessibility: "Taille de la police du terminal",
       },
       syntax: {
         title: "Syntaxe",

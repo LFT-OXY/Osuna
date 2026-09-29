@@ -208,8 +208,20 @@ Spacing uses the theme scale (`theme.spacing[n]`), never `padding: 20`. Colors c
 ```ts
 resolveUiFontStack(userValue: string): string       // applyAppearance → theme.fontFamily.ui
 resolveMonoFontStack(userValue: string): string     // applyAppearance → theme.fontFamily.mono; web diff canvas; settings preview
-resolveTerminalFontStack(userValue: string): string // terminal-pane → TerminalEmulator fontFamily
+resolveTerminalFontStack(userValue: string): string // the terminal stack for one user value
+resolveTerminalFont(settings: TerminalFontSettings): { fontFamily: string; fontSize: number }
+// terminal-pane → TerminalEmulator fontFamily / fontSize
+// TerminalFontSettings = Pick<AppSettings, "monoFontFamily" | "codeFontSize" | "terminalFontFamily" | "terminalFontSize">
 ```
+
+The terminal follows the code settings unless the user overrides it. `resolveTerminalFont` owns that rule on both platforms; terminal-pane passes the four fields and never picks between them itself:
+
+| `terminalFontFamily` | `terminalFontSize` | Terminal gets |
+| --- | --- | --- |
+| `""` or whitespace | `null` | `resolveTerminalFontStack(monoFontFamily)`, `codeFontSize` |
+| `Hack Nerd Font` | `16` | `resolveTerminalFontStack("Hack Nerd Font")`, `16` |
+
+Storage (`hooks/use-settings/storage.ts`): `terminalFontFamily` goes through the same `sanitizedFontFamily()` as the other font fields and falls back to `""`. `terminalFontSize` is `clampedNumber(MIN_CODE_FONT_SIZE, MAX_CODE_FONT_SIZE).nullable().catch(null)`: it reuses the Code size range, and a missing, `null`, or non-numeric value reads as `null` (follow). Zod's `.catch(null)` does not type-check without `.nullable()`. Old blobs need no migration. In the settings page an empty Terminal size input commits `null`, and its placeholder shows the committed Code size. The Terminal font row is hidden on native (`isNative`); Terminal size shows on every platform.
 
 The default stacks live once in `styles/theme.ts` (`DEFAULT_UI_FONT_STACK`, `DEFAULT_MONO_FONT_STACK`). The Nerd Font names live in `terminal/runtime/terminal-font.ts` (`NERD_FONT_FAMILIES`), because that file is bundled into the terminal webview and cannot import `react-native`.
 
@@ -223,9 +235,10 @@ The default stacks live once in `styles/theme.ts` (`DEFAULT_UI_FONT_STACK`, `DEF
 
 - The web mono default holds only concrete names plus a trailing `monospace`. A canvas `font` string with an unknown keyword such as `ui-monospace` is rejected whole. A user value that contains `ui-monospace` still breaks the web diff canvas, as it did before prepending.
 - The native diff (`surface.native.tsx`) keeps its own `"monospace"` fallback, and native `DEFAULT_MONO_FONT_STACK` is still `ui-monospace` on iOS. Web-only unification leaves native fonts unchanged.
+- Settings size inputs (`FontSizeRow` → `FormTextInput`) read `initialValue` once (`components/ui/text-input/text-input.web.tsx:25`). Updating the draft state after a commit, such as a clamped `22` for a typed `30` or a reset, changes the stored value but does not redraw the text in the input. A reset button has to remount or imperatively replace the input text.
 - Changing `terminal-font.ts` means running `npm run build:terminal-webview` in `packages/app` and then `format:files` on the generated file.
 
-Tests: `appearance/font-stack.test.ts` asserts full literal stacks for web. `font-stack.native.test.ts` imports `./font-stack.native` directly. `apply.test.ts` asserts the theme tokens. None of them mock `@/constants/platform`: vitest resolves `./font-stack` to the web file.
+Tests: `appearance/font-stack.test.ts` asserts full literal stacks for web, including `resolveTerminalFont` follow and override cases. `font-stack.native.test.ts` imports `./font-stack.native` directly. `apply.test.ts` asserts the theme tokens. None of them mock `@/constants/platform`: vitest resolves `./font-stack` to the web file.
 
 ## Web-only styling
 

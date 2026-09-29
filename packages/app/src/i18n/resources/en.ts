@@ -2432,6 +2432,13 @@ export const en = {
         codeSize: "Code size",
         codeSizeHint: "Used for code, diffs, and terminal output",
         codeSizeAccessibility: "Code font size",
+        terminalFont: "Terminal font",
+        terminalFontHint: "Used in the terminal. Leave empty to follow the code font",
+        terminalFontAccessibility: "Terminal font family",
+        followCodeFont: "Follow code font",
+        terminalSize: "Terminal size",
+        terminalSizeHint: "Used in the terminal. Leave empty to follow the code size",
+        terminalSizeAccessibility: "Terminal font size",
       },
       syntax: {
         title: "Syntax",

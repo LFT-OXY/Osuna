@@ -15,11 +15,11 @@
 
 **Blocked by:** 01 — 统一默认等宽栈，自选字体前插默认栈
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 单独设置终端字体或字号后，终端随之变化，代码块和 diff 不受影响；已打开的终端无需重开。
 - [ ] 清空 Terminal font 和 Terminal size 后，终端回到跟随 Code font / Code size。
 - [ ] Terminal size 留空时，占位符显示当前 Code size；超出 9–22 的输入被 clamp。
 - [ ] iOS/Android 上能设置 Terminal size，并对终端生效；原生端不显示 Terminal font 行。
 - [ ] 缺少新字段的老设置数据可以正常解析。
-- [ ] `storage.test.ts` 与 `apply.test.ts` 覆盖以上行为。typecheck 和 lint 通过。
+- [ ] `storage.test.ts` 覆盖新字段的缺省、clamp 与 `null` 跟随；跟随/覆盖规则由 `resolveTerminalFont` 承担，断言放在 `font-stack.test.ts` / `font-stack.native.test.ts`（主题 token 不含终端字段，`apply.test.ts` 不涉及）。typecheck 和 lint 通过。

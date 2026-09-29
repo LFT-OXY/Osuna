@@ -1,4 +1,4 @@
-import { resolveTerminalFontStack } from "@/appearance/font-stack";
+import { resolveTerminalFont } from "@/appearance/font-stack";
 import { TerminalFind, type TerminalPaneFindHandle } from "@/terminal/find";
 import type { TerminalFindResult } from "@/terminal/runtime/terminal-emulator-runtime";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -224,9 +224,20 @@ export function TerminalPane({
     [theme],
   );
   const getTerminalViewAttributes = useStableEvent(() => terminalViewAttributes);
-  const terminalFontFamily = useMemo(
-    () => resolveTerminalFontStack(settings.monoFontFamily),
-    [settings.monoFontFamily],
+  const terminalFont = useMemo(
+    () =>
+      resolveTerminalFont({
+        monoFontFamily: settings.monoFontFamily,
+        codeFontSize: settings.codeFontSize,
+        terminalFontFamily: settings.terminalFontFamily,
+        terminalFontSize: settings.terminalFontSize,
+      }),
+    [
+      settings.codeFontSize,
+      settings.monoFontFamily,
+      settings.terminalFontFamily,
+      settings.terminalFontSize,
+    ],
   );
   const isMobile = useIsCompactFormFactor();
   const mobileView = usePanelStore((state) => state.mobilePanel.target);
@@ -1059,8 +1070,8 @@ export function TerminalPane({
             testId="terminal-surface"
             xtermTheme={xtermTheme}
             scrollbackLines={settings.terminalScrollbackLines}
-            fontFamily={terminalFontFamily}
-            fontSize={settings.codeFontSize}
+            fontFamily={terminalFont.fontFamily}
+            fontSize={terminalFont.fontSize}
             keyboardInset={keyboardInset}
             isKeyboardVisible={isKeyboardVisible}
             swipeGesturesEnabled={swipeGesturesEnabled}

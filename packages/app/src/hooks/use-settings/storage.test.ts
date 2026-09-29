@@ -757,6 +757,8 @@ describe("appearance settings", () => {
     expect(result.uiBaseFontSize).toBe(DEFAULT_UI_BASE_FONT_SIZE);
     expect(result.contentFontSize).toBe(DEFAULT_UI_BASE_FONT_SIZE);
     expect(result.codeFontSize).toBe(DEFAULT_CODE_FONT_SIZE);
+    expect(result.terminalFontFamily).toBe("");
+    expect(result.terminalFontSize).toBeNull();
     expect(result.syntaxTheme).toBe("one");
     expect(result.toolCallDetailLevel).toBe("detailed");
   });
@@ -946,6 +948,77 @@ describe("appearance settings", () => {
       }),
     });
     expect((await loadAppSettingsFromStorage(bogus)).codeFontSize).toBe(DEFAULT_CODE_FONT_SIZE);
+  });
+
+  it("clamps the terminal font size into the code size range", async () => {
+    const high = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ terminalFontSize: 999 }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(high)).terminalFontSize).toBe(22);
+
+    const low = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ terminalFontSize: 8 }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(low)).terminalFontSize).toBe(9);
+  });
+
+  it("reads a null or malformed terminal font size as following the code size", async () => {
+    const followed = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ terminalFontSize: null }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(followed)).terminalFontSize).toBeNull();
+
+    const bogus = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ terminalFontSize: "abc" }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(bogus)).terminalFontSize).toBeNull();
+  });
+
+  it("sanitizes the terminal font family like the other font fields", async () => {
+    const accepted = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ terminalFontFamily: "  Hack Nerd Font  " }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(accepted)).terminalFontFamily).toBe("Hack Nerd Font");
+
+    const rejected = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ terminalFontFamily: "a;b{c}" }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(rejected)).terminalFontFamily).toBe("");
+  });
+
+  it("round-trips a terminal override and the return to following", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+
+    await saveAppSettings({
+      queryClient,
+      updates: { terminalFontFamily: "Hack Nerd Font", terminalFontSize: 16 },
+      deps,
+    });
+    const overridden = await loadAppSettingsFromStorage(deps);
+    expect(overridden.terminalFontFamily).toBe("Hack Nerd Font");
+    expect(overridden.terminalFontSize).toBe(16);
+
+    await saveAppSettings({
+      queryClient,
+      updates: { terminalFontFamily: "", terminalFontSize: null },
+      deps,
+    });
+    const followed = await loadAppSettingsFromStorage(deps);
+    expect(followed.terminalFontFamily).toBe("");
+    expect(followed.terminalFontSize).toBeNull();
   });
 
   it("trims an accepted font family", async () => {

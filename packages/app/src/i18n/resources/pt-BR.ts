@@ -2349,6 +2349,13 @@ export const ptBR: TranslationResources = {
         codeSize: "Tamanho do código",
         codeSizeHint: "Usado em código, diffs e saída do terminal",
         codeSizeAccessibility: "Tamanho da fonte de código",
+        terminalFont: "Fonte do terminal",
+        terminalFontHint: "Usada no terminal. Deixe vazio para seguir a fonte de código",
+        terminalFontAccessibility: "Família da fonte do terminal",
+        followCodeFont: "Seguir a fonte de código",
+        terminalSize: "Tamanho do terminal",
+        terminalSizeHint: "Usado no terminal. Deixe vazio para seguir o tamanho do código",
+        terminalSizeAccessibility: "Tamanho da fonte do terminal",
       },
       syntax: {
         title: "Sintaxe",
