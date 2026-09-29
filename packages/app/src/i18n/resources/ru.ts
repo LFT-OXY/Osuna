@@ -178,6 +178,13 @@ export const ru: TranslationResources = {
       skillChip: "Навык: {{name}}",
       removeSkill: "Удалить",
     },
+    inlineBlocks: {
+      skill: "Навык: {{name}}",
+      file: "Файл: {{name}}",
+      directory: "Папка: {{name}}",
+      image: "Изображение: {{name}}",
+      agent: "Агент: {{name}}",
+    },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
       failedToCreateAgent: "Не удалось создать агента.",

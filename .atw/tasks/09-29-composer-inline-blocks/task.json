@@ -1,0 +1,28 @@
+{
+  "id": "composer-inline-blocks",
+  "name": "composer-inline-blocks",
+  "title": "输入框行内块：Skill、@文件/目录/图片、@智能体",
+  "description": "从 / 和 @ 弹窗选中的 Skill、文件、目录、图片、智能体在输入框正文里显示为行内块（Web/Electron），发送后用户气泡与 Queue track 四端显示为块；块以文本为准；粘贴/拖拽附件仍在托盘",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-29",
+  "completedAt": null,
+  "branch": "feat/multi-agent-collab",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "b226380b3b421814a777db2e7b954855c8d12eee"
+  }
+}

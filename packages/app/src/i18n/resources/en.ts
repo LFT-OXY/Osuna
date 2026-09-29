@@ -173,6 +173,13 @@ export const en = {
       skillChip: "Skill: {{name}}",
       removeSkill: "Remove",
     },
+    inlineBlocks: {
+      skill: "Skill: {{name}}",
+      file: "File: {{name}}",
+      directory: "Folder: {{name}}",
+      image: "Image: {{name}}",
+      agent: "Agent: {{name}}",
+    },
     errors: {
       failedToSend: "Failed to send message",
       failedToCreateAgent: "Failed to create agent",

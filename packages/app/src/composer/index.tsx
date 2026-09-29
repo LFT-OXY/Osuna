@@ -129,6 +129,7 @@ import {
   type SkillChipUpdater,
 } from "@/composer/skill-chips";
 import { ComposerAttachmentTray } from "@/composer/attachment-tray";
+import { InlineBlockText, useAgentSkillNames } from "@/inline-blocks/view";
 import type { SlashCommandRange } from "@/utils/agent-command-autocomplete";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
@@ -417,6 +418,8 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement {
 }
 
 interface RenderQueueTrackArgs {
+  serverId: string;
+  agentId: string;
   queuedMessages: readonly QueuedMessage[];
   handleEditQueuedMessage: (id: string) => void;
   handleSendQueuedNow: (id: string) => Promise<void>;
@@ -425,15 +428,28 @@ interface RenderQueueTrackArgs {
 }
 
 function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
-  const { queuedMessages, handleEditQueuedMessage, handleSendQueuedNow, editLabel, sendNowLabel } =
-    args;
-  if (queuedMessages.length === 0) return null;
+  if (args.queuedMessages.length === 0) return null;
+  return <QueueTrack {...args} />;
+}
+
+function QueueTrack({
+  serverId,
+  agentId,
+  queuedMessages,
+  handleEditQueuedMessage,
+  handleSendQueuedNow,
+  editLabel,
+  sendNowLabel,
+}: RenderQueueTrackArgs) {
+  const skillNames = useAgentSkillNames({ serverId, agentId });
   return (
     <View style={styles.queueTrack}>
       {queuedMessages.map((item) => (
         <QueuedMessageRow
           key={item.id}
+          serverId={serverId}
           item={item}
+          skillNames={skillNames}
           onEdit={handleEditQueuedMessage}
           onSendNow={handleSendQueuedNow}
           editLabel={editLabel}
@@ -728,7 +744,9 @@ function resolveMessageInputPassthroughAction(
 }
 
 interface QueuedMessageRowProps {
+  serverId: string;
   item: QueuedMessage;
+  skillNames: ReadonlySet<string> | null;
   onEdit: (id: string) => void;
   onSendNow: (id: string) => void;
   editLabel: string;
@@ -736,7 +754,9 @@ interface QueuedMessageRowProps {
 }
 
 function QueuedMessageRow({
+  serverId,
   item,
+  skillNames,
   onEdit,
   onSendNow,
   editLabel,
@@ -749,10 +769,15 @@ function QueuedMessageRow({
     onSendNow(item.id);
   }, [onSendNow, item.id]);
   return (
-    <View style={styles.queueItem}>
-      <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
-        {item.text}
-      </Text>
+    <View style={styles.queueItem} testID="queued-message">
+      <InlineBlockText
+        text={item.text}
+        skillNames={skillNames}
+        serverId={serverId}
+        style={styles.queueText}
+        numberOfLines={2}
+        ellipsizeMode="tail"
+      />
       <View style={styles.queueActions}>
         <Pressable
           onPress={handleEdit}
@@ -2494,13 +2519,15 @@ function ComposerContentImpl({
   const queueList = useMemo(
     () =>
       renderQueueTrack({
+        serverId,
+        agentId,
         queuedMessages,
         handleEditQueuedMessage,
         handleSendQueuedNow,
         editLabel: t("composer.attachments.editQueuedMessage"),
         sendNowLabel: t("composer.attachments.sendQueuedMessageNow"),
       }),
-    [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
+    [agentId, handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, serverId, t],
   );
 
   const autocompleteConfiguration = useMemo(

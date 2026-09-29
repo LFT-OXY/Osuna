@@ -178,6 +178,13 @@ export const ja: TranslationResources = {
       skillChip: "スキル: {{name}}",
       removeSkill: "削除",
     },
+    inlineBlocks: {
+      skill: "スキル: {{name}}",
+      file: "ファイル: {{name}}",
+      directory: "フォルダー: {{name}}",
+      image: "画像: {{name}}",
+      agent: "エージェント: {{name}}",
+    },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",
       failedToCreateAgent: "エージェントの作成に失敗しました",

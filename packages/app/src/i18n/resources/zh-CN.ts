@@ -177,6 +177,13 @@ export const zhCN: TranslationResources = {
       skillChip: "Skill：{{name}}",
       removeSkill: "移除",
     },
+    inlineBlocks: {
+      skill: "Skill：{{name}}",
+      file: "文件：{{name}}",
+      directory: "文件夹：{{name}}",
+      image: "图片：{{name}}",
+      agent: "智能体：{{name}}",
+    },
     errors: {
       failedToSend: "发送消息失败",
       failedToCreateAgent: "创建 Agent 失败",

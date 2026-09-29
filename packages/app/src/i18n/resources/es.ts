@@ -179,6 +179,13 @@ export const es: TranslationResources = {
       skillChip: "Habilidad: {{name}}",
       removeSkill: "Eliminar",
     },
+    inlineBlocks: {
+      skill: "Habilidad: {{name}}",
+      file: "Archivo: {{name}}",
+      directory: "Carpeta: {{name}}",
+      image: "Imagen: {{name}}",
+      agent: "Agente: {{name}}",
+    },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",
       failedToCreateAgent: "No se pudo crear el agente",

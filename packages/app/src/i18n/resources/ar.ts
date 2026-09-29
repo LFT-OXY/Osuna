@@ -177,6 +177,13 @@ export const ar: TranslationResources = {
       skillChip: "مهارة: {{name}}",
       removeSkill: "إزالة",
     },
+    inlineBlocks: {
+      skill: "مهارة: {{name}}",
+      file: "ملف: {{name}}",
+      directory: "مجلد: {{name}}",
+      image: "صورة: {{name}}",
+      agent: "وكيل: {{name}}",
+    },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
       failedToCreateAgent: "فشل في إنشاء الوكيل",

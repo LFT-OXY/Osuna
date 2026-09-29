@@ -177,6 +177,13 @@ export const ko: TranslationResources = {
       skillChip: "스킬: {{name}}",
       removeSkill: "제거",
     },
+    inlineBlocks: {
+      skill: "스킬: {{name}}",
+      file: "파일: {{name}}",
+      directory: "폴더: {{name}}",
+      image: "이미지: {{name}}",
+      agent: "에이전트: {{name}}",
+    },
     errors: {
       failedToSend: "메시지를 보내지 못했습니다",
       failedToCreateAgent: "에이전트를 생성하지 못했습니다",

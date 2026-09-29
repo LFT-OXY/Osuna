@@ -1,0 +1,11 @@
+{"file": "docs/adr/0005-inline-blocks-live-in-message-text.md", "reason": "块以文本为准、协议不加字段；审查是否偷偷加了结构化字段"}
+{"file": "docs/adr/0002-rename-stops-at-app-identity.md", "reason": "scheme 用 paseo，不发布手机包"}
+{"file": "docs/glossary.md", "reason": "Inline block、Skill block、File mention、Agent mention、Attachment tray 术语"}
+{"file": ".atw/tasks/09-29-composer-inline-blocks/research/reference-projects.md", "reason": "codeg/t3code 的编辑器、解析与外观参考"}
+{"file": ".atw/tasks/09-29-composer-inline-blocks/research/composer-current-state.md", "reason": "输入框、草稿、排队、协议、气泡现状与文件位置"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件与无障碍标签约定"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "样式与 token 约定，不新增 token"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "草稿与排队状态设计"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "测试分层与 e2e 约定"}
+{"file": "docs/hover.md", "reason": "悬停提示的规范写法"}
+{"file": ".atw/tasks/09-29-composer-inline-blocks/issues/01-bubble-renders-blocks.md", "reason": "ATW current ticket"}

@@ -180,6 +180,13 @@ export const ptBR: TranslationResources = {
       skillChip: "Habilidade: {{name}}",
       removeSkill: "Remover",
     },
+    inlineBlocks: {
+      skill: "Habilidade: {{name}}",
+      file: "Arquivo: {{name}}",
+      directory: "Pasta: {{name}}",
+      image: "Imagem: {{name}}",
+      agent: "Agente: {{name}}",
+    },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
       failedToCreateAgent: "Falha ao criar agente",
