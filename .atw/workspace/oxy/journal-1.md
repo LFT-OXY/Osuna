@@ -468,3 +468,26 @@ Skill chip 子任务三张工单全部完成并归档。本次做工单 03：光
 ### Next Steps
 
 - 父任务 09-28-composer-slash-revamp 整体验收：Electron 与一个原生端各走一遍新 agent → / → 选 skill → 发送并截图；补原生常驻 × 截图，真机确认 Android 退格与选区时序
+
+
+## Session 16: font-picker 工单 04：终端预览样例与字号重置，任务归档
+<!-- atw-session: v=2 fp=dc412cf6ae95416e -->
+
+**Date**: 2026-09-29
+**Task**: font-picker 工单 04：终端预览样例与字号重置，任务归档
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+外观预览增加静态终端样例（resolveTerminalFont、草稿实时且 clamp、Nerd Font 分支图标）；字号行抽出 FontSizeRow，非默认时显示 ghost Button 重置，resetKey 回显 clamp/重置值；补 9 语言文案与浏览器测试；两轮双轴审查后修复手绘按钮与预览未 clamp；Electron CDP 实测通过；回写 PRD 与 styling 规范；排查 SF Pro/Inter 不在列表的原因（系统字体不可枚举、Codex 为主题预设名）及正文颜色偏浅的 token 原因；任务验收归档。遗留：原生端 Terminal size 未实测、Electron 回归待 CI。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `accd7aa08` | feat(app): 外观预览增加终端样例，字号行支持重置 |
+
+### Status
+
+[OK] **Completed**
