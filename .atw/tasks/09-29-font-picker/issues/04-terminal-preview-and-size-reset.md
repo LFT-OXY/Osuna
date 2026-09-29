@@ -9,7 +9,7 @@
   - 点击后恢复默认值；Terminal size 恢复为空，即跟随 Code size。
   - 值等于默认时按钮不显示。
 - 不做全局"恢复全部默认"。
-- 已知约束：字号输入框（`FormTextInput`）只在挂载时读取 `initialValue`，改 draft 不会刷新框内文字（02 实现时确认，现有字号行同样如此）。重置按钮要让输入框重挂载或直接替换文字，否则存储值变了、框里仍显示旧值。
+- 字号输入框回显（2026-09-29 决定从 02 移到这里）：`FormTextInput` 只在挂载时读取 `initialValue`，改 draft 不会刷新框内文字。四个字号行在 clamp 或重置后，框内文字都要与提交后的值一致。修法是让输入框重挂载或直接替换文字。
 - 终端样例的字体与字号取 `resolveTerminalFont`（02 新增），传入 Code font / Code size / Terminal font / Terminal size 的草稿值。
 
 **Blocked by:** 02 — Terminal font 与 Terminal size
@@ -20,5 +20,6 @@
 - [ ] 本机装有常见 Nerd Font 时，样例里的提示符图标正常显示。
 - [ ] 任一字号行改过后出现重置按钮；点击后恢复默认，按钮随之消失。
 - [ ] Terminal size 重置后回到跟随，占位符显示当前 Code size。
+- [ ] 四个字号行输入超出范围的值并提交后，输入框显示 clamp 后的值；点击重置后显示默认值（Terminal size 显示为空）。
 - [ ] 新增文案有中英文翻译。
 - [ ] typecheck 和 lint 通过。

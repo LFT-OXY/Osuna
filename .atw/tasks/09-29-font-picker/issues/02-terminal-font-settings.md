@@ -22,7 +22,7 @@
 - [x] 清空 Terminal font 和 Terminal size 后，终端回到跟随 Code font / Code size。
   - 证据：`font-stack(.native).test.ts` 的跟随用例（含纯空白视为跟随）；`storage.test.ts` 的 `""` / `null` 往返用例。Electron 实测：清空两项后存储为 `""` / `null`，同一终端实例回到默认等宽栈与 Code size 15。
 - [ ] Terminal size 留空时，占位符显示当前 Code size；超出 9–22 的输入被 clamp。
-  - 未勾：Electron 实测占位符为当前 Code size（15），输入 30 存为 22、终端用 22；但输入框仍显示 30，不回显 clamp 后的值（`FormTextInput` 只读一次 `initialValue`，现有字号行同样如此）。
+  - 未勾：Electron 实测占位符为当前 Code size（15），输入 30 存为 22、终端用 22；但输入框仍显示 30，不回显 clamp 后的值（`FormTextInput` 只读一次 `initialValue`，现有字号行同样如此）。回显问题已按决定移交 04，由 04 的验收项覆盖。
 - [ ] iOS/Android 上能设置 Terminal size，并对终端生效；原生端不显示 Terminal font 行。
   - 未勾：本机没有 iOS/Android 模拟器。原生解析有单测（`font-stack.native.test.ts`），行的显示规则只读过代码。
 - [x] 缺少新字段的老设置数据可以正常解析。
