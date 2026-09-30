@@ -365,6 +365,63 @@ function sessionEventCategory(message: SessionOutboundMessage) {
 await client.observeEvents(["usage.pricing.updated"]);
 ```
 
+## Scenario: the daemon calls an upstream with a secret the client never sees
+
+Reference implementation: `provider.api_endpoint.fetch_models` / `provider.api_endpoint.cancel` (api-endpoint ticket 03).
+
+### 1. Scope / Trigger
+
+- An RPC makes an outbound HTTP request with a key stored on the host. The key must not reach the client, the request must time out, and the client must be able to cancel it.
+
+### 2. Signatures
+
+- `fetchUpstreamModels({ provider, baseUrl, apiKey, signal, timeoutMs }) → { ok: true, models } | { ok: false, error: UpstreamFailure }` in `server/api-endpoints/upstream-models.ts`; no throw, no logging.
+- `ApiEndpointService.fetchModels(provider, { endpointId?, baseUrl, apiKey? }, signal) → ApiEndpointModel[]`, throws `ApiEndpointRequestError`.
+- `ApiEndpointSession.handle(request, connectionSignal)`: session passes `this.delivery.requestSignal`. `dispose()` aborts every pending upstream request; `Session.cleanup` calls it.
+- Client: `apiEndpointFetchModels(options, requestId?)`, `apiEndpointCancel(targetRequestId)`. The caller picks the `requestId` so it can cancel it.
+
+### 3. Contracts
+
+- Pending requests live in a `Map<requestId, AbortController>` per session; the upstream signal is `AbortSignal.any([controller.signal, connectionSignal])`, and the timeout is added inside `fetchUpstreamModels` so `cancelled` and `upstream_timeout` stay distinguishable.
+- A cancelled request still gets its response, with `error.code: "cancelled"`. `cancel` answers `cancelled: false` when the target already finished.
+- The key comes from the request, else from the saved endpoint; it is never in a response or a log, and `redact` replaces it in echoed upstream text.
+- Read-only upstream calls stay out of the service's mutation queue.
+
+### 4. Validation & Error Matrix
+
+- No typed key and no `endpointId` with a saved key → `invalid_input`, no request sent. Unknown `endpointId` → `not_found`.
+- Non-404/405 status on either address → `upstream_error` (`HTTP <status>: <detail>`). Both addresses unreachable → `upstream_unreachable`. Otherwise (404, not a model list) → `models_unsupported`.
+- Timeout → `upstream_timeout`, second address not tried. Client cancel or disconnect → `cancelled`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Codex base `https://relay/v1` → `/v1/v1/models` 404 → `/v1/models` lists `models[].slug`.
+- Base: upstream returns `data: []` → `ok` with no models; the form says so and offers manual add.
+- Bad: reporting the second address's 404 when the first returned 401 (hides the real cause).
+
+### 6. Tests Required
+
+- `upstream-models.test.ts` against a local `node:http` server: both addresses, both shapes, pagination, 401 without the key in the message, unsupported, timeout (one request only), cancel, unreachable.
+- `daemon-e2e/api-endpoint-models.e2e.test.ts`: typed key; saved key with a blank field (upstream sees it, response does not); Codex fallback; 401; no key → no request; cancel by `requestId`; mapping written and restored.
+- `messages.api-endpoint.test.ts`: request/response parse, including an error code the client has never seen.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// 客户端放弃等待，daemon 仍然挂着请求直到超时，也分不清超时和取消
+const result = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+```
+
+#### Correct
+
+```ts
+const timeout = AbortSignal.timeout(input.timeoutMs);
+const signal = AbortSignal.any([input.signal, timeout]); // input.signal = client cancel + disconnect
+// catch: input.signal.aborted → cancelled; timeout.aborted → upstream_timeout
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

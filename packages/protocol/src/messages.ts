@@ -62,8 +62,12 @@ import {
 } from "./usage/rpc-schemas.js";
 import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
+  ApiEndpointCancelRequestSchema,
+  ApiEndpointCancelResponseSchema,
   ApiEndpointDeleteRequestSchema,
   ApiEndpointDeleteResponseSchema,
+  ApiEndpointFetchModelsRequestSchema,
+  ApiEndpointFetchModelsResponseSchema,
   ApiEndpointListRequestSchema,
   ApiEndpointListResponseSchema,
   ApiEndpointSaveRequestSchema,
@@ -3457,6 +3461,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSaveRequestSchema,
   ApiEndpointDeleteRequestSchema,
   ApiEndpointSetActiveRequestSchema,
+  ApiEndpointFetchModelsRequestSchema,
+  ApiEndpointCancelRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -7025,6 +7031,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSaveResponseSchema,
   ApiEndpointDeleteResponseSchema,
   ApiEndpointSetActiveResponseSchema,
+  ApiEndpointFetchModelsResponseSchema,
+  ApiEndpointCancelResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

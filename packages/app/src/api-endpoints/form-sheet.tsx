@@ -1,37 +1,81 @@
 import React, { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import { View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
-import { Trash2 } from "lucide-react-native";
-import type { ApiEndpointModel } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { Pressable, View, type PressableStateCallbackType } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { Square, SquareCheck, Trash2 } from "lucide-react-native";
+import {
+  API_ENDPOINT_MODEL_TIERS,
+  type ApiEndpointModel,
+  type ApiEndpointModelTier,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
+import { SearchField } from "@/components/ui/search-field";
+import {
+  SelectField,
+  type SelectFieldDisplay,
+  type SelectFieldOption,
+} from "@/components/ui/select-field";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
+import type { Theme } from "@/styles/theme";
 import { useApiEndpointFormModel } from "./use-form-model";
-import {
-  type ApiEndpointFormSeed,
-  type ApiEndpointSaveRequestInput,
-  type ApiEndpointSaveResult,
+import type {
+  ApiEndpointFetchModelsRequestInput,
+  ApiEndpointFetchModelsResult,
+  ApiEndpointFetchedRow,
+  ApiEndpointFormModel,
+  ApiEndpointFormSeed,
+  ApiEndpointFormState,
+  ApiEndpointSaveRequestInput,
+  ApiEndpointSaveResult,
 } from "./internal/form-model";
 
 export interface ApiEndpointFormSheetProps {
   seed: ApiEndpointFormSeed;
   onSave: (request: ApiEndpointSaveRequestInput) => Promise<ApiEndpointSaveResult>;
+  onFetchModels: (
+    request: ApiEndpointFetchModelsRequestInput,
+    signal: AbortSignal,
+  ) => Promise<ApiEndpointFetchModelsResult>;
   onClose: () => void;
 }
+
+type HoverableState = PressableStateCallbackType & { hovered?: boolean };
+
+const ThemedSquare = withUnistyles(Square, (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedSquareCheck = withUnistyles(SquareCheck, (theme: Theme) => ({
+  color: theme.colors.foreground,
+}));
+
+// 映射下拉里「不映射」这一项的值；模型 id 不会是空串。
+const UNMAPPED = "";
+
+const TIER_LABELS: Record<ApiEndpointModelTier, string> = {
+  opus: "Opus",
+  sonnet: "Sonnet",
+  haiku: "Haiku",
+  fable: "Fable",
+};
 
 /**
  * 新建或编辑一个第三方接口。调用方按「模式 + 接口 id」给 key，每次打开都是新挂载，
  * 模型只在挂载时构造一次（docs/forms.md）。
  */
-export function ApiEndpointFormSheet({ seed, onSave, onClose }: ApiEndpointFormSheetProps) {
+export function ApiEndpointFormSheet({
+  seed,
+  onSave,
+  onFetchModels,
+  onClose,
+}: ApiEndpointFormSheetProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const fieldSize = isCompact ? "md" : "sm";
-  const model = useApiEndpointFormModel(seed, onSave);
+  const model = useApiEndpointFormModel(seed, { save: onSave, fetchModels: onFetchModels });
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
 
   const handleSubmit = useCallback(() => {
@@ -107,48 +151,75 @@ export function ApiEndpointFormSheet({ seed, onSave, onClose }: ApiEndpointFormS
         </Field>
         <Field
           label={t("settings.providers.apiEndpoints.form.models")}
+          hint={t("settings.providers.apiEndpoints.form.modelsHint")}
+        >
+          <FetchModelsSection state={state} model={model} />
+        </Field>
+        <Field
+          label={t("settings.providers.apiEndpoints.form.selectedModels")}
           error={
             state.models.length === 0 ? t("settings.providers.apiEndpoints.form.noModels") : null
           }
         >
-          <View style={styles.modelInputRow}>
-            <View style={styles.modelInput}>
-              <FormTextInput
-                initialValue=""
-                resetKey={`model-draft-${state.modelDraftGeneration}`}
-                onChangeText={model.setModelDraft}
-                onSubmitEditing={handleAddModel}
-                placeholder={t("settings.providers.apiEndpoints.form.modelIdPlaceholder")}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="done"
-                size={fieldSize}
-                testID="api-endpoint-form-model-id"
-              />
+          <View style={styles.stack}>
+            {state.models.length > 0 ? (
+              <View style={styles.modelList}>
+                {state.models.map((modelEntry) => (
+                  <ModelRow
+                    key={modelEntry.id}
+                    model={modelEntry}
+                    isDefault={state.defaultModelId === modelEntry.id}
+                    onMakeDefault={model.setDefaultModel}
+                    onRemove={model.removeModel}
+                  />
+                ))}
+              </View>
+            ) : null}
+            <View style={styles.modelInputRow}>
+              <View style={styles.modelInput}>
+                <FormTextInput
+                  initialValue=""
+                  resetKey={`model-draft-${state.modelDraftGeneration}`}
+                  onChangeText={model.setModelDraft}
+                  onSubmitEditing={handleAddModel}
+                  placeholder={t("settings.providers.apiEndpoints.form.modelIdPlaceholder")}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  size={fieldSize}
+                  testID="api-endpoint-form-model-id"
+                />
+              </View>
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={handleAddModel}
+                disabled={!state.canAddModel}
+                testID="api-endpoint-form-add-model"
+              >
+                {t("settings.providers.apiEndpoints.form.addModel")}
+              </Button>
             </View>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={handleAddModel}
-              disabled={!state.canAddModel}
-              testID="api-endpoint-form-add-model"
-            >
-              {t("settings.providers.apiEndpoints.form.addModel")}
-            </Button>
           </View>
         </Field>
-        {state.models.length > 0 ? (
-          <View style={styles.modelList}>
-            {state.models.map((modelEntry) => (
-              <ModelRow
-                key={modelEntry.id}
-                model={modelEntry}
-                isDefault={state.defaultModelId === modelEntry.id}
-                onMakeDefault={model.setDefaultModel}
-                onRemove={model.removeModel}
-              />
-            ))}
-          </View>
+        {state.showMapping ? (
+          <Field
+            label={t("settings.providers.apiEndpoints.form.mapping")}
+            hint={t("settings.providers.apiEndpoints.form.mappingHint")}
+          >
+            <View style={styles.mappingList}>
+              {API_ENDPOINT_MODEL_TIERS.map((tier) => (
+                <MappingRow
+                  key={tier}
+                  tier={tier}
+                  value={state.mapping[tier] ?? null}
+                  models={state.models}
+                  size={fieldSize}
+                  onChange={model.setMapping}
+                />
+              ))}
+            </View>
+          </Field>
         ) : null}
         {state.submitError ? (
           <Text variant="caption" color="statusDanger" selectable testID="api-endpoint-form-error">
@@ -174,6 +245,225 @@ export function ApiEndpointFormSheet({ seed, onSave, onClose }: ApiEndpointFormS
         </View>
       </View>
     </AdaptiveModalSheet>
+  );
+}
+
+function FetchModelsSection({
+  state,
+  model,
+}: {
+  state: ApiEndpointFormState;
+  model: ApiEndpointFormModel;
+}) {
+  const { t } = useTranslation();
+  const fetching = state.fetch.status === "fetching";
+  const handleFetch = useCallback(() => model.fetchModels(), [model]);
+  const handleCancel = useCallback(() => model.cancelFetch(), [model]);
+
+  return (
+    <View style={styles.stack}>
+      <View style={styles.fetchActions}>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleFetch}
+          disabled={!state.canFetch}
+          loading={fetching}
+          testID="api-endpoint-form-fetch-models"
+        >
+          {state.fetch.status === "fetched"
+            ? t("settings.providers.apiEndpoints.form.refetchModels")
+            : t("settings.providers.apiEndpoints.form.fetchModels")}
+        </Button>
+        {fetching ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleCancel}
+            testID="api-endpoint-form-cancel-fetch"
+          >
+            {t("common.actions.cancel")}
+          </Button>
+        ) : null}
+      </View>
+      {state.fetch.status === "failed" ? (
+        <Text
+          variant="caption"
+          color="statusDanger"
+          selectable
+          testID="api-endpoint-form-fetch-error"
+        >
+          {state.fetch.message}
+        </Text>
+      ) : null}
+      {state.fetch.status === "fetched" ? (
+        <FetchedModels
+          total={state.fetch.models.length}
+          rows={state.fetchedRows}
+          hiddenCount={state.hiddenFetchedCount}
+          search={state.modelSearch}
+          model={model}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function FetchedModels({
+  total,
+  rows,
+  hiddenCount,
+  search,
+  model,
+}: {
+  total: number;
+  rows: ApiEndpointFetchedRow[];
+  hiddenCount: number;
+  search: string;
+  model: ApiEndpointFormModel;
+}) {
+  const { t } = useTranslation();
+
+  if (total === 0) {
+    return (
+      <Text variant="caption" color="foregroundMuted">
+        {t("settings.providers.apiEndpoints.form.noUpstreamModels")}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.stack}>
+      <View style={styles.searchRail}>
+        <SearchField
+          value={search}
+          onChangeText={model.setModelSearch}
+          placeholder={t("settings.providers.apiEndpoints.form.searchModels", { count: total })}
+          clearAccessibilityLabel={t("settings.providers.apiEndpoints.form.clearSearch")}
+          testID="api-endpoint-form-model-search"
+        />
+      </View>
+      {rows.length > 0 ? (
+        <View style={styles.modelList}>
+          {rows.map((row) => (
+            <FetchedModelRow key={row.model.id} row={row} onToggle={model.toggleModel} />
+          ))}
+        </View>
+      ) : (
+        <Text variant="caption" color="foregroundMuted">
+          {t("settings.providers.apiEndpoints.form.noMatchingModels")}
+        </Text>
+      )}
+      {hiddenCount > 0 ? (
+        <Text variant="caption" color="foregroundMuted">
+          {t("settings.providers.apiEndpoints.form.moreModelsHidden", { count: hiddenCount })}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function FetchedModelRow({
+  row,
+  onToggle,
+}: {
+  row: ApiEndpointFetchedRow;
+  onToggle: (id: string) => void;
+}) {
+  const handlePress = useCallback(() => onToggle(row.model.id), [onToggle, row.model.id]);
+  const pressableStyle = useCallback(
+    ({ pressed, hovered }: HoverableState) => [
+      styles.modelRow,
+      styles.fetchedRow,
+      hovered || pressed ? styles.rowHighlighted : null,
+    ],
+    [],
+  );
+  const accessibilityState = useMemo(() => ({ checked: row.checked }), [row.checked]);
+
+  return (
+    <Pressable
+      style={pressableStyle}
+      onPress={handlePress}
+      accessibilityRole="checkbox"
+      accessibilityState={accessibilityState}
+      accessibilityLabel={row.model.label ?? row.model.id}
+      testID={`api-endpoint-form-fetched-${row.model.id}`}
+    >
+      {row.checked ? <ThemedSquareCheck size={16} /> : <ThemedSquare size={16} />}
+      <Text
+        variant="caption"
+        numberOfLines={1}
+        style={styles.modelId}
+        dataSet={CODE_SURFACE_DATASET}
+      >
+        {row.model.id}
+      </Text>
+      {row.model.label ? (
+        <Text variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.modelLabel}>
+          {row.model.label}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function MappingRow({
+  tier,
+  value,
+  models,
+  size,
+  onChange,
+}: {
+  tier: ApiEndpointModelTier;
+  value: string | null;
+  models: ApiEndpointModel[];
+  size: "sm" | "md";
+  onChange: (tier: ApiEndpointModelTier, modelId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const unmappedLabel = t("settings.providers.apiEndpoints.form.unmapped");
+  const options = useMemo<SelectFieldOption<string>[]>(
+    () => [
+      { id: "unmapped", value: UNMAPPED, label: unmappedLabel },
+      ...models.map((entry) => ({ id: entry.id, value: entry.id, label: entry.id })),
+    ],
+    [models, unmappedLabel],
+  );
+  const selectedDisplay = useMemo<SelectFieldDisplay>(
+    () => ({ label: value ?? unmappedLabel }),
+    [unmappedLabel, value],
+  );
+  const handleChange = useCallback(
+    (next: string) => onChange(tier, next === UNMAPPED ? null : next),
+    [onChange, tier],
+  );
+
+  return (
+    <View style={styles.mappingRow}>
+      <Text variant="caption" style={styles.mappingTier}>
+        {TIER_LABELS[tier]}
+      </Text>
+      <View style={styles.mappingSelect}>
+        <SelectField
+          field={false}
+          label={TIER_LABELS[tier]}
+          value={value ?? UNMAPPED}
+          selectedDisplay={selectedDisplay}
+          options={options}
+          onChange={handleChange}
+          placeholder={unmappedLabel}
+          emptyText={t("settings.providers.apiEndpoints.form.noModels")}
+          searchable={options.length > 6}
+          title={t("settings.providers.apiEndpoints.form.mappingTitle", {
+            tier: TIER_LABELS[tier],
+          })}
+          size={size}
+          testID={`api-endpoint-form-mapping-${tier}`}
+          triggerTestID={`api-endpoint-form-mapping-${tier}-trigger`}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -226,6 +516,7 @@ function ModelRow({
 }
 
 const FORM_SNAP_POINTS = ["85%"];
+const MAPPING_TIER_WIDTH = 56;
 
 const styles = StyleSheet.create((theme) => ({
   form: {
@@ -259,6 +550,43 @@ const styles = StyleSheet.create((theme) => ({
   modelId: {
     flex: 1,
     fontFamily: theme.fontFamily.mono,
+  },
+  modelLabel: {
+    flexShrink: 1,
+    maxWidth: "40%",
+  },
+  stack: {
+    gap: theme.spacing[2],
+  },
+  fetchActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  searchRail: {
+    flexDirection: "row",
+  },
+  fetchedRow: {
+    paddingVertical: theme.spacing[2],
+    paddingRight: theme.spacing[3],
+  },
+  rowHighlighted: {
+    backgroundColor: theme.colors.interactionHighlight,
+  },
+  mappingList: {
+    gap: theme.spacing[2],
+  },
+  mappingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+  },
+  mappingTier: {
+    width: MAPPING_TIER_WIDTH,
+  },
+  mappingSelect: {
+    flex: 1,
+    minWidth: 0,
   },
   defaultBadge: {
     paddingHorizontal: theme.spacing[3],

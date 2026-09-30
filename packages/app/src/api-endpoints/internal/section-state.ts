@@ -40,5 +40,11 @@ export function apiEndpointErrorMessageKey(error: ApiEndpointError): string | nu
   if (error.code === "codex_version_unsupported") {
     return "settings.providers.apiEndpoints.codexVersionUnsupported";
   }
+  if (error.code === "models_unsupported") {
+    return "settings.providers.apiEndpoints.form.modelsUnsupported";
+  }
+  if (error.code === "upstream_timeout") {
+    return "settings.providers.apiEndpoints.form.fetchTimeout";
+  }
   return null;
 }

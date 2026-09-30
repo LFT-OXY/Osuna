@@ -579,8 +579,22 @@ type ApiEndpointSetActivePayload = Extract<
   { type: "provider.api_endpoint.set_active.response" }
 >["payload"];
 
+type ApiEndpointFetchModelsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.fetch_models.response" }
+>["payload"];
+type ApiEndpointCancelPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.cancel.response" }
+>["payload"];
+
 export type ApiEndpointSaveOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.save.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointFetchModelsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.fetch_models.request" }>,
   "type" | "requestId"
 >;
 
@@ -5966,6 +5980,27 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.set_active.request", provider, endpointId },
+    });
+  }
+
+  /** 省略 apiKey 并带 endpointId 时用已保存的 key。传入 requestId 才能用 apiEndpointCancel 取消。 */
+  async apiEndpointFetchModels(
+    options: ApiEndpointFetchModelsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointFetchModelsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.fetch_models.request", ...options },
+    });
+  }
+
+  async apiEndpointCancel(
+    targetRequestId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointCancelPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.cancel.request", targetRequestId },
     });
   }
 

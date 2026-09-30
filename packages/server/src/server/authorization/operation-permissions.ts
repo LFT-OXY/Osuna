@@ -151,6 +151,9 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.save.request": "daemon.manage",
   "provider.api_endpoint.delete.request": "daemon.manage",
   "provider.api_endpoint.set_active.request": "daemon.manage",
+  // 会用已保存的 key 向上游发请求，和保存同一级。
+  "provider.api_endpoint.fetch_models.request": "daemon.manage",
+  "provider.api_endpoint.cancel.request": "daemon.manage",
   provider_diagnostic_request: "daemon.read",
   pull_request_timeline_request: "workspace.read",
   "push.unregister.request": "workspace.read",
@@ -385,6 +388,8 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.save.response": "daemon.manage",
   "provider.api_endpoint.delete.response": "daemon.manage",
   "provider.api_endpoint.set_active.response": "daemon.manage",
+  "provider.api_endpoint.fetch_models.response": "daemon.manage",
+  "provider.api_endpoint.cancel.response": "daemon.manage",
   provider_diagnostic_response: "daemon.read",
   providers_snapshot_update: ["daemon.read", "hub.execute"],
   pull_request_timeline_response: "workspace.read",

@@ -12,6 +12,28 @@ export const ApiEndpointModelSchema = z.object({
 });
 export type ApiEndpointModel = z.infer<typeof ApiEndpointModelSchema>;
 
+/**
+ * Claude 的模型映射：每档写进 settings.json 的 ANTHROPIC_DEFAULT_<档位>_MODEL，只改写 `/model opus` 这类别名。
+ * 每档都是勾选的模型之一；没有的档位不写。Codex 接口没有映射。
+ */
+export const API_ENDPOINT_MODEL_TIERS = ["opus", "sonnet", "haiku", "fable"] as const;
+export type ApiEndpointModelTier = (typeof API_ENDPOINT_MODEL_TIERS)[number];
+
+/** 有模型映射的提供方；App 据此显示映射区，daemon 据此拒绝其他提供方的映射。 */
+const MODEL_MAPPING_PROVIDERS: ReadonlySet<string> = new Set(["claude"]);
+
+export function apiEndpointHasModelMapping(provider: string): boolean {
+  return MODEL_MAPPING_PROVIDERS.has(provider);
+}
+
+export const ApiEndpointModelMappingSchema = z.object({
+  opus: z.string().optional(),
+  sonnet: z.string().optional(),
+  haiku: z.string().optional(),
+  fable: z.string().optional(),
+});
+export type ApiEndpointModelMapping = z.infer<typeof ApiEndpointModelMappingSchema>;
+
 export const ApiEndpointSchema = z.object({
   id: z.string(),
   provider: z.string(),
@@ -19,6 +41,7 @@ export const ApiEndpointSchema = z.object({
   baseUrl: z.string(),
   models: z.array(ApiEndpointModelSchema),
   defaultModelId: z.string(),
+  modelMapping: ApiEndpointModelMappingSchema.optional(),
   hasApiKey: z.boolean(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
@@ -52,7 +75,7 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
 
 /**
  * 没有 endpointId 是新建，有则更新。更新时省略 apiKey 表示保留原 key；
- * 新建时 apiKey 必填。
+ * 新建时 apiKey 必填。modelMapping 每次都整份提交，省略即不映射。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -64,6 +87,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   apiKey: z.string().optional(),
   models: z.array(ApiEndpointModelSchema),
   defaultModelId: z.string(),
+  modelMapping: ApiEndpointModelMappingSchema.optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -114,3 +138,47 @@ export const ApiEndpointSetActiveResponseSchema = z.object({
   }),
 });
 export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveResponseSchema>;
+
+/**
+ * daemon 在主机上向上游列出模型，key 不经过客户端。编辑已保存的接口时带 endpointId、
+ * 省略 apiKey（或留空），就用已保存的 key。可以用 cancel 按 requestId 取消。
+ */
+export const ApiEndpointFetchModelsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.fetch_models.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  endpointId: z.string().optional(),
+  baseUrl: z.string(),
+  apiKey: z.string().optional(),
+});
+export type ApiEndpointFetchModelsRequest = z.infer<typeof ApiEndpointFetchModelsRequestSchema>;
+
+export const ApiEndpointFetchModelsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.fetch_models.response"),
+  payload: z.object({
+    requestId: z.string(),
+    models: z.array(ApiEndpointModelSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointFetchModelsResponse = z.infer<typeof ApiEndpointFetchModelsResponseSchema>;
+
+/**
+ * 取消同一连接上还在进行的上游请求；被取消的请求照常回一条 error.code 为 cancelled 的响应。
+ * `cancelled: false` 表示那条请求已经结束或不存在。
+ */
+export const ApiEndpointCancelRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.cancel.request"),
+  requestId: z.string(),
+  targetRequestId: z.string(),
+});
+export type ApiEndpointCancelRequest = z.infer<typeof ApiEndpointCancelRequestSchema>;
+
+export const ApiEndpointCancelResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.cancel.response"),
+  payload: z.object({
+    requestId: z.string(),
+    cancelled: z.boolean(),
+  }),
+});
+export type ApiEndpointCancelResponse = z.infer<typeof ApiEndpointCancelResponseSchema>;

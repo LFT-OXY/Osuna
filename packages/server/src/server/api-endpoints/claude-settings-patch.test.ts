@@ -66,6 +66,24 @@ describe("buildClaudeEndpointEnv", () => {
       ANTHROPIC_MODEL: "relay/sonnet",
     });
   });
+
+  it("writes only the mapped tiers", () => {
+    expect(
+      buildClaudeEndpointEnv({
+        baseUrl: "https://relay.example/api",
+        apiKey: "sk-relay",
+        defaultModelId: "relay/sonnet",
+        modelMapping: { opus: "relay/opus", haiku: "relay/haiku" },
+      }),
+    ).toEqual({
+      ANTHROPIC_BASE_URL: "https://relay.example/api",
+      ANTHROPIC_AUTH_TOKEN: "sk-relay",
+      ANTHROPIC_API_KEY: "",
+      ANTHROPIC_MODEL: "relay/sonnet",
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "relay/opus",
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: "relay/haiku",
+    });
+  });
 });
 
 describe("applyClaudeApiEndpoint", () => {
@@ -222,6 +240,42 @@ describe("applyClaudeApiEndpoint", () => {
 
     expect(JSON.parse(second.text).env.ANTHROPIC_MODEL).toBeUndefined();
     expect(Object.keys(second.takeover.env)).not.toContain("ANTHROPIC_MODEL");
+  });
+
+  it("gives a tier back to the user's own value once it is no longer mapped", () => {
+    const handWritten = `{
+  "env": {
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "my-opus"
+  }
+}
+`;
+    const mapped = applyClaudeApiEndpoint({
+      text: handWritten,
+      env: buildClaudeEndpointEnv({
+        baseUrl: "https://relay.example/api",
+        apiKey: "sk-relay",
+        defaultModelId: "relay/sonnet",
+        modelMapping: { opus: "relay/opus", fable: "relay/fable" },
+      }),
+      takeover: null,
+    });
+    if (mapped.kind !== "patched") throw new Error("expected patch");
+    expect(JSON.parse(mapped.text).env).toMatchObject({
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "relay/opus",
+      ANTHROPIC_DEFAULT_FABLE_MODEL: "relay/fable",
+    });
+
+    const unmapped = applyClaudeApiEndpoint({
+      text: mapped.text,
+      env: RELAY_ENV,
+      takeover: mapped.takeover,
+    });
+    if (unmapped.kind !== "patched") throw new Error("expected patch");
+    const env = JSON.parse(unmapped.text).env;
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("my-opus");
+    expect(env.ANTHROPIC_DEFAULT_FABLE_MODEL).toBeUndefined();
+
+    expect(restore(mapped.text, mapped.takeover)).toBe(handWritten);
   });
 
   it("follows the file's own indentation for inserted keys", () => {

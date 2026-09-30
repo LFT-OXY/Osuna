@@ -11,7 +11,13 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import type pino from "pino";
-import type { ApiEndpoint, ApiEndpointModel } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  API_ENDPOINT_MODEL_TIERS,
+  apiEndpointHasModelMapping,
+  type ApiEndpoint,
+  type ApiEndpointModel,
+  type ApiEndpointModelMapping,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
@@ -39,13 +45,17 @@ import {
   type ApiEndpointProvider,
   type StoredApiEndpoint,
 } from "./store.js";
+import { fetchUpstreamModels, type UpstreamFailureCode } from "./upstream-models.js";
 
 export type ApiEndpointErrorCode =
   | "unsupported_provider"
   | "invalid_input"
   | "not_found"
   | "config_unparsable"
-  | "codex_version_unsupported";
+  | "codex_version_unsupported"
+  | UpstreamFailureCode;
+
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
 
 // auth.command 从这个版本开始才有（ADR 0004）。
 const CODEX_AUTH_COMMAND_MIN_VERSION: readonly [number, number, number] = [0, 118, 0];
@@ -68,6 +78,14 @@ export interface ApiEndpointSaveInput {
   apiKey?: string;
   models: ApiEndpointModel[];
   defaultModelId: string;
+  modelMapping?: ApiEndpointModelMapping;
+}
+
+export interface ApiEndpointFetchModelsInput {
+  // 编辑已保存的接口时带上；apiKey 留空就用它已保存的 key。
+  endpointId?: string;
+  baseUrl: string;
+  apiKey?: string;
 }
 
 export interface ApiEndpointServiceOptions {
@@ -79,6 +97,7 @@ export interface ApiEndpointServiceOptions {
   now?: () => Date;
   // `codex --version` 的输出；启用 Codex 接口前检查版本。
   probeCodexVersion: () => Promise<string>;
+  upstreamTimeoutMs?: number;
 }
 
 /**
@@ -92,6 +111,7 @@ export class ApiEndpointService {
   private readonly homeDir: string;
   private readonly now: () => Date;
   private readonly probeCodexVersion: () => Promise<string>;
+  private readonly upstreamTimeoutMs: number;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ApiEndpointServiceOptions) {
@@ -101,6 +121,7 @@ export class ApiEndpointService {
     this.homeDir = options.homeDir ?? homedir();
     this.now = options.now ?? (() => new Date());
     this.probeCodexVersion = options.probeCodexVersion;
+    this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
   }
 
   list(provider: string): { endpoints: ApiEndpoint[]; activeEndpointId: string | null } {
@@ -128,7 +149,7 @@ export class ApiEndpointService {
       const endpoint: StoredApiEndpoint = {
         id: existing?.id ?? `ep_${randomUUID()}`,
         provider: supported,
-        ...validateFields(input),
+        ...validateFields(supported, input),
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
       };
@@ -195,6 +216,46 @@ export class ApiEndpointService {
     });
   }
 
+  /**
+   * 从上游列出模型。只读，不进串行队列：慢的上游不该挡住切换。
+   * 失败抛 ApiEndpointRequestError，code 区分鉴权/不支持/超时/取消。
+   */
+  async fetchModels(
+    provider: string,
+    input: ApiEndpointFetchModelsInput,
+    signal: AbortSignal,
+  ): Promise<ApiEndpointModel[]> {
+    const supported = requireProvider(provider);
+    const baseUrl = normalizeBaseUrl(input.baseUrl);
+    const apiKey = this.resolveRequestKey(supported, input);
+    const result = await fetchUpstreamModels({
+      provider: supported,
+      baseUrl,
+      apiKey,
+      signal,
+      timeoutMs: this.upstreamTimeoutMs,
+    });
+    if (!result.ok) throw new ApiEndpointRequestError(result.error.code, result.error.message);
+    return result.models;
+  }
+
+  /** 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。key 从不回给客户端。 */
+  private resolveRequestKey(
+    provider: ApiEndpointProvider,
+    input: ApiEndpointFetchModelsInput,
+  ): string {
+    const typed = input.apiKey?.trim();
+    if (typed) return typed;
+    if (input.endpointId) {
+      if (!this.store.getEndpoint(provider, input.endpointId)) {
+        throw new ApiEndpointRequestError("not_found", "API endpoint not found");
+      }
+      const saved = this.store.getApiKey(input.endpointId);
+      if (saved !== null) return saved;
+    }
+    throw new ApiEndpointRequestError("invalid_input", "API key is required");
+  }
+
   resolveClaudeSettingsPath(): string {
     return resolveAgentHookConfigPath(claudeAgentHookProvider, {
       env: this.env,
@@ -237,6 +298,7 @@ export class ApiEndpointService {
         baseUrl: endpoint.baseUrl,
         apiKey,
         defaultModelId: endpoint.defaultModelId,
+        modelMapping: endpoint.modelMapping,
       }),
       takeover: record.takeover,
     });
@@ -428,6 +490,7 @@ export class ApiEndpointService {
       baseUrl: endpoint.baseUrl,
       models: endpoint.models,
       defaultModelId: endpoint.defaultModelId,
+      ...(endpoint.modelMapping ? { modelMapping: endpoint.modelMapping } : {}),
       hasApiKey: this.store.getApiKey(endpoint.id) !== null,
     };
   }
@@ -451,8 +514,9 @@ function requireProvider(provider: string): ApiEndpointProvider {
 }
 
 function validateFields(
+  provider: ApiEndpointProvider,
   input: ApiEndpointSaveInput,
-): Pick<StoredApiEndpoint, "name" | "baseUrl" | "models" | "defaultModelId"> {
+): Pick<StoredApiEndpoint, "name" | "baseUrl" | "models" | "defaultModelId" | "modelMapping"> {
   const name = input.name.trim();
   if (!name) {
     throw new ApiEndpointRequestError("invalid_input", "Name is required");
@@ -475,7 +539,33 @@ function validateFields(
       "The default model must be one of the models",
     );
   }
-  return { name, baseUrl, models, defaultModelId };
+  const modelMapping = validateModelMapping(provider, input.modelMapping, models);
+  return { name, baseUrl, models, defaultModelId, ...(modelMapping ? { modelMapping } : {}) };
+}
+
+/** 每档只能是勾选的模型之一；空白档位视为不映射。只有 Claude 有映射。 */
+function validateModelMapping(
+  provider: ApiEndpointProvider,
+  raw: ApiEndpointModelMapping | undefined,
+  models: ApiEndpointModel[],
+): ApiEndpointModelMapping | undefined {
+  const mapping: ApiEndpointModelMapping = {};
+  for (const tier of API_ENDPOINT_MODEL_TIERS) {
+    const modelId = raw?.[tier]?.trim();
+    if (!modelId) continue;
+    if (!models.some((model) => model.id === modelId)) {
+      throw new ApiEndpointRequestError(
+        "invalid_input",
+        `The ${tier} mapping must be one of the models`,
+      );
+    }
+    mapping[tier] = modelId;
+  }
+  if (Object.keys(mapping).length === 0) return undefined;
+  if (!apiEndpointHasModelMapping(provider)) {
+    throw new ApiEndpointRequestError("invalid_input", "Only Claude endpoints have model mapping");
+  }
+  return mapping;
 }
 
 /** 去掉末尾斜杠，和 CLI 自己拼路径的方式一致。 */

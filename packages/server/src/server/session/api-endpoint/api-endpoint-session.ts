@@ -14,7 +14,9 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.list.request"
       | "provider.api_endpoint.save.request"
       | "provider.api_endpoint.delete.request"
-      | "provider.api_endpoint.set_active.request";
+      | "provider.api_endpoint.set_active.request"
+      | "provider.api_endpoint.fetch_models.request"
+      | "provider.api_endpoint.cancel.request";
   }
 >;
 
@@ -33,6 +35,8 @@ export class ApiEndpointSession {
   private readonly host: ApiEndpointSessionHost;
   private readonly service: ApiEndpointService;
   private readonly logger: pino.Logger;
+  // 还在进行的上游请求，按 requestId 取消；会话关闭时全部取消。
+  private readonly upstreamRequests = new Map<string, AbortController>();
 
   constructor(options: {
     host: ApiEndpointSessionHost;
@@ -44,7 +48,8 @@ export class ApiEndpointSession {
     this.logger = options.logger;
   }
 
-  async handle(request: ApiEndpointRequest): Promise<void> {
+  /** `connectionSignal`：发起请求的连接断开时触发，上游请求随之取消。 */
+  async handle(request: ApiEndpointRequest, connectionSignal: AbortSignal): Promise<void> {
     switch (request.type) {
       case "provider.api_endpoint.list.request":
         return this.handleList(request);
@@ -54,7 +59,16 @@ export class ApiEndpointSession {
         return this.handleDelete(request);
       case "provider.api_endpoint.set_active.request":
         return this.handleSetActive(request);
+      case "provider.api_endpoint.fetch_models.request":
+        return this.handleFetchModels(request, connectionSignal);
+      case "provider.api_endpoint.cancel.request":
+        return this.handleCancel(request);
     }
+  }
+
+  dispose(): void {
+    for (const controller of this.upstreamRequests.values()) controller.abort();
+    this.upstreamRequests.clear();
   }
 
   private async handleList(
@@ -96,6 +110,7 @@ export class ApiEndpointSession {
         ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
         models: request.models,
         defaultModelId: request.defaultModelId,
+        ...(request.modelMapping !== undefined ? { modelMapping: request.modelMapping } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -153,6 +168,52 @@ export class ApiEndpointSession {
         },
       });
     }
+  }
+
+  private async handleFetchModels(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.fetch_models.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const controller = new AbortController();
+    this.upstreamRequests.set(request.requestId, controller);
+    const signal = AbortSignal.any([controller.signal, connectionSignal]);
+    try {
+      const models = await this.service.fetchModels(
+        request.provider,
+        {
+          ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
+          baseUrl: request.baseUrl,
+          ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+        },
+        signal,
+      );
+      this.host.emit({
+        type: "provider.api_endpoint.fetch_models.response",
+        payload: { requestId: request.requestId, models, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.fetch_models.response",
+        payload: {
+          requestId: request.requestId,
+          models: [],
+          error: this.toWireError(error, request),
+        },
+      });
+    } finally {
+      this.upstreamRequests.delete(request.requestId);
+    }
+  }
+
+  private async handleCancel(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.cancel.request" }>,
+  ): Promise<void> {
+    const controller = this.upstreamRequests.get(request.targetRequestId);
+    controller?.abort();
+    this.host.emit({
+      type: "provider.api_endpoint.cancel.response",
+      payload: { requestId: request.requestId, cancelled: controller !== undefined },
+    });
   }
 
   /** 失败后状态保持切换前的样子，回报真实的当前启用接口。 */

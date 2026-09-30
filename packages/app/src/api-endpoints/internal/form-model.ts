@@ -1,12 +1,19 @@
-import type {
-  ApiEndpoint,
-  ApiEndpointModel,
-  ApiEndpointSaveRequest,
+import {
+  API_ENDPOINT_MODEL_TIERS,
+  apiEndpointHasModelMapping,
+  type ApiEndpoint,
+  type ApiEndpointFetchModelsRequest,
+  type ApiEndpointModel,
+  type ApiEndpointModelMapping,
+  type ApiEndpointModelTier,
+  type ApiEndpointSaveRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
  * 第三方接口的新建/编辑表单模型：纯 TypeScript，无 React（docs/forms.md）。
- * API key 只写不读：编辑时输入框从空开始，留空提交就不带 apiKey，daemon 保留原 key。
+ * API key 只写不读：编辑时输入框从空开始，留空提交就不带 apiKey，daemon 保留原 key；
+ * 拉取模型同理，留空就带 endpointId 让 daemon 用已保存的 key。
+ * `models` 是勾选的模型（拉取后勾选的 + 手动添加的），只保存它们；默认模型和 Claude 的映射都只能从中选。
  */
 
 export type ApiEndpointFormSeed =
@@ -16,6 +23,30 @@ export type ApiEndpointFormSeed =
 export type ApiEndpointSaveRequestInput = Omit<ApiEndpointSaveRequest, "type" | "requestId">;
 
 export type ApiEndpointSaveResult = { ok: true } | { ok: false; message: string };
+
+export type ApiEndpointFetchModelsRequestInput = Omit<
+  ApiEndpointFetchModelsRequest,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointFetchModelsResult =
+  | { status: "ok"; models: ApiEndpointModel[] }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+export type ApiEndpointFetchState =
+  | { status: "idle" }
+  | { status: "fetching" }
+  | { status: "fetched"; models: ApiEndpointModel[] }
+  | { status: "failed"; message: string };
+
+export interface ApiEndpointFetchedRow {
+  model: ApiEndpointModel;
+  checked: boolean;
+}
+
+// OpenRouter 一次返回几百个模型；列表只画前这么多条，其余靠搜索缩小，表单里不嵌套滚动。
+const MAX_FETCHED_ROWS = 50;
 
 export interface ApiEndpointFormState {
   mode: "create" | "edit";
@@ -28,7 +59,15 @@ export interface ApiEndpointFormState {
   modelDraft: string;
   // 每加入一个模型加一，输入框据此清空（删除模型不清空正在输入的内容）。
   modelDraftGeneration: number;
+  fetch: ApiEndpointFetchState;
+  modelSearch: string;
+  // 拉取到的模型按搜索过滤后的前若干条，带勾选状态。
+  fetchedRows: ApiEndpointFetchedRow[];
+  hiddenFetchedCount: number;
+  showMapping: boolean;
+  mapping: ApiEndpointModelMapping;
   baseUrlInvalid: boolean;
+  canFetch: boolean;
   canAddModel: boolean;
   canSubmit: boolean;
   submitting: boolean;
@@ -45,6 +84,13 @@ export interface ApiEndpointFormModel {
   addModel(): void;
   removeModel(id: string): void;
   setDefaultModel(id: string): void;
+  fetchModels(): void;
+  cancelFetch(): void;
+  setModelSearch(value: string): void;
+  // 勾选或取消勾选一个模型；拉取列表里的模型勾选时带上它的显示名。
+  toggleModel(id: string): void;
+  // null 表示这一档不映射；不是勾选的模型就忽略。
+  setMapping(tier: ApiEndpointModelTier, modelId: string | null): void;
   submit(): Promise<boolean>;
   close(): void;
 }
@@ -57,16 +103,30 @@ interface Values {
   defaultModelId: string | null;
   modelDraft: string;
   modelDraftGeneration: number;
+  fetch: ApiEndpointFetchState;
+  modelSearch: string;
+  mapping: ApiEndpointModelMapping;
   submitting: boolean;
   submitError: string | null;
 }
 
+export interface ApiEndpointFormDeps {
+  save: (request: ApiEndpointSaveRequestInput) => Promise<ApiEndpointSaveResult>;
+  fetchModels: (
+    request: ApiEndpointFetchModelsRequestInput,
+    signal: AbortSignal,
+  ) => Promise<ApiEndpointFetchModelsResult>;
+}
+
 export function createApiEndpointFormModel(
   seed: ApiEndpointFormSeed,
-  deps: { save: (request: ApiEndpointSaveRequestInput) => Promise<ApiEndpointSaveResult> },
+  deps: ApiEndpointFormDeps,
 ): ApiEndpointFormModel {
   const listeners = new Set<() => void>();
+  const showMapping = apiEndpointHasModelMapping(seed.provider);
   let closed = false;
+  // 当前这次拉取；取消或重新拉取后，旧请求晚到的结果不再生效。
+  let pendingFetch: AbortController | null = null;
   let values: Values =
     seed.mode === "edit"
       ? {
@@ -77,6 +137,9 @@ export function createApiEndpointFormModel(
           defaultModelId: seed.endpoint.defaultModelId,
           modelDraft: "",
           modelDraftGeneration: 0,
+          fetch: { status: "idle" },
+          modelSearch: "",
+          mapping: showMapping ? { ...seed.endpoint.modelMapping } : {},
           submitting: false,
           submitError: null,
         }
@@ -88,6 +151,9 @@ export function createApiEndpointFormModel(
           defaultModelId: null,
           modelDraft: "",
           modelDraftGeneration: 0,
+          fetch: { status: "idle" },
+          modelSearch: "",
+          mapping: {},
           submitting: false,
           submitError: null,
         };
@@ -98,11 +164,18 @@ export function createApiEndpointFormModel(
     const draft = next.modelDraft.trim();
     const baseUrlInvalid = next.baseUrl.trim() !== "" && !isHttpUrl(next.baseUrl.trim());
     const hasKey = next.apiKey.trim() !== "" || hasSavedKey;
+    const hasValidUrl = next.baseUrl.trim() !== "" && !baseUrlInvalid;
+    const isFetching = next.fetch.status === "fetching";
+    const canFetch = !isFetching && hasValidUrl && hasKey;
+    const fetched = deriveFetchedRows(next);
     return {
       mode: seed.mode,
       ...next,
       hasSavedKey,
+      ...fetched,
+      showMapping,
       baseUrlInvalid,
+      canFetch,
       canAddModel: draft !== "" && !next.models.some((model) => model.id === draft),
       canSubmit:
         !next.submitting &&
@@ -124,6 +197,7 @@ export function createApiEndpointFormModel(
   function buildRequest(): ApiEndpointSaveRequestInput | null {
     if (!state.canSubmit || values.defaultModelId === null) return null;
     const apiKey = values.apiKey.trim();
+    const hasMapping = showMapping && Object.keys(values.mapping).length > 0;
     return {
       provider: seed.provider,
       ...(seed.mode === "edit" ? { endpointId: seed.endpoint.id } : {}),
@@ -132,7 +206,59 @@ export function createApiEndpointFormModel(
       ...(apiKey ? { apiKey } : {}),
       models: values.models,
       defaultModelId: values.defaultModelId,
+      ...(hasMapping ? { modelMapping: values.mapping } : {}),
     };
+  }
+
+  function buildFetchRequest(): ApiEndpointFetchModelsRequestInput {
+    const apiKey = values.apiKey.trim();
+    return {
+      provider: seed.provider,
+      ...(seed.mode === "edit" && !apiKey ? { endpointId: seed.endpoint.id } : {}),
+      baseUrl: values.baseUrl.trim(),
+      ...(apiKey ? { apiKey } : {}),
+    };
+  }
+
+  /** 去掉一个勾选的模型：默认模型顺延到剩下的第一个，指向它的映射档位清空。 */
+  function withoutModel(id: string): Partial<Values> {
+    const models = values.models.filter((model) => model.id !== id);
+    const mapping: ApiEndpointModelMapping = {};
+    for (const tier of API_ENDPOINT_MODEL_TIERS) {
+      const mapped = values.mapping[tier];
+      if (mapped !== undefined && mapped !== id) mapping[tier] = mapped;
+    }
+    return {
+      models,
+      mapping,
+      defaultModelId:
+        values.defaultModelId === id ? (models[0]?.id ?? null) : values.defaultModelId,
+    };
+  }
+
+  function withModel(model: ApiEndpointModel): Partial<Values> {
+    return {
+      models: [...values.models, model],
+      defaultModelId: values.defaultModelId ?? model.id,
+    };
+  }
+
+  async function runFetch(controller: AbortController): Promise<void> {
+    const result = await deps.fetchModels(buildFetchRequest(), controller.signal);
+    if (pendingFetch !== controller) return;
+    pendingFetch = null;
+    if (result.status === "ok") {
+      update({ fetch: { status: "fetched", models: result.models } });
+    } else if (result.status === "failed") {
+      update({ fetch: { status: "failed", message: result.message } });
+    } else {
+      update({ fetch: { status: "idle" } });
+    }
+  }
+
+  function abortPendingFetch(): void {
+    pendingFetch?.abort();
+    pendingFetch = null;
   }
 
   return {
@@ -147,25 +273,49 @@ export function createApiEndpointFormModel(
     setModelDraft: (modelDraft) => update({ modelDraft }),
     addModel() {
       if (!state.canAddModel) return;
-      const id = values.modelDraft.trim();
       update({
-        models: [...values.models, { id }],
-        defaultModelId: values.defaultModelId ?? id,
+        ...withModel({ id: values.modelDraft.trim() }),
         modelDraft: "",
         modelDraftGeneration: values.modelDraftGeneration + 1,
       });
     },
     removeModel(id) {
-      const models = values.models.filter((model) => model.id !== id);
-      update({
-        models,
-        defaultModelId:
-          values.defaultModelId === id ? (models[0]?.id ?? null) : values.defaultModelId,
-      });
+      update(withoutModel(id));
     },
     setDefaultModel(id) {
       if (!values.models.some((model) => model.id === id)) return;
       update({ defaultModelId: id });
+    },
+    fetchModels() {
+      if (!state.canFetch) return;
+      abortPendingFetch();
+      const controller = new AbortController();
+      pendingFetch = controller;
+      update({ fetch: { status: "fetching" } });
+      void runFetch(controller);
+    },
+    cancelFetch() {
+      if (!pendingFetch) return;
+      abortPendingFetch();
+      update({ fetch: { status: "idle" } });
+    },
+    setModelSearch: (modelSearch) => update({ modelSearch }),
+    toggleModel(id) {
+      if (values.models.some((model) => model.id === id)) {
+        update(withoutModel(id));
+        return;
+      }
+      const fetchedModel =
+        values.fetch.status === "fetched"
+          ? values.fetch.models.find((model) => model.id === id)
+          : undefined;
+      if (fetchedModel) update(withModel(fetchedModel));
+    },
+    setMapping(tier, modelId) {
+      if (!showMapping) return;
+      if (modelId !== null && !values.models.some((model) => model.id === modelId)) return;
+      const { [tier]: _previous, ...rest } = values.mapping;
+      update({ mapping: modelId === null ? rest : { ...rest, [tier]: modelId } });
     },
     async submit() {
       const request = buildRequest();
@@ -176,9 +326,31 @@ export function createApiEndpointFormModel(
       return result.ok;
     },
     close() {
+      abortPendingFetch();
       closed = true;
       listeners.clear();
     },
+  };
+}
+
+function deriveFetchedRows(
+  values: Pick<Values, "fetch" | "modelSearch" | "models">,
+): Pick<ApiEndpointFormState, "fetchedRows" | "hiddenFetchedCount"> {
+  if (values.fetch.status !== "fetched") return { fetchedRows: [], hiddenFetchedCount: 0 };
+  const query = values.modelSearch.trim().toLowerCase();
+  const matches = query
+    ? values.fetch.models.filter(
+        (model) =>
+          model.id.toLowerCase().includes(query) ||
+          (model.label?.toLowerCase().includes(query) ?? false),
+      )
+    : values.fetch.models;
+  const checked = new Set(values.models.map((model) => model.id));
+  return {
+    fetchedRows: matches
+      .slice(0, MAX_FETCHED_ROWS)
+      .map((model) => ({ model, checked: checked.has(model.id) })),
+    hiddenFetchedCount: Math.max(0, matches.length - MAX_FETCHED_ROWS),
   };
 }
 

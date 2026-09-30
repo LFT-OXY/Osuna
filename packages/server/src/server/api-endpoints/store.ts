@@ -1,6 +1,7 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { ApiEndpointModelMappingSchema } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
@@ -26,6 +27,8 @@ const StoredApiEndpointSchema = z.object({
   baseUrl: z.string(),
   models: z.array(z.object({ id: z.string(), label: z.string().optional() })),
   defaultModelId: z.string(),
+  // 只有 Claude 接口有；每档都是 models 里的一个。
+  modelMapping: ApiEndpointModelMappingSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

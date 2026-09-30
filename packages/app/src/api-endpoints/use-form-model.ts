@@ -1,17 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   createApiEndpointFormModel,
+  type ApiEndpointFormDeps,
   type ApiEndpointFormSeed,
-  type ApiEndpointSaveRequestInput,
-  type ApiEndpointSaveResult,
 } from "./internal/form-model";
 
-/** 模型只在挂载时构造一次，卸载时关闭；打开时的 seed 之后再变也不重建。 */
-export function useApiEndpointFormModel(
-  seed: ApiEndpointFormSeed,
-  save: (request: ApiEndpointSaveRequestInput) => Promise<ApiEndpointSaveResult>,
-) {
-  const [model] = useState(() => createApiEndpointFormModel(seed, { save }));
+/** 模型只在挂载时构造一次，卸载时关闭（顺带取消还在进行的拉取）；打开时的 seed 之后再变也不重建。 */
+export function useApiEndpointFormModel(seed: ApiEndpointFormSeed, deps: ApiEndpointFormDeps) {
+  const [model] = useState(() => createApiEndpointFormModel(seed, deps));
 
   useEffect(() => {
     return () => {

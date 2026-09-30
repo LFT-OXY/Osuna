@@ -73,4 +73,14 @@ describe("apiEndpointErrorMessageKey", () => {
     );
     expect(apiEndpointErrorMessageKey({ code: "invalid_input", message: "x" })).toBeNull();
   });
+
+  it("localizes an upstream that can't list models and a timeout, but not an upstream HTTP error", () => {
+    expect(apiEndpointErrorMessageKey({ code: "models_unsupported", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.form.modelsUnsupported",
+    );
+    expect(apiEndpointErrorMessageKey({ code: "upstream_timeout", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.form.fetchTimeout",
+    );
+    expect(apiEndpointErrorMessageKey({ code: "upstream_error", message: "x" })).toBeNull();
+  });
 });

@@ -3053,6 +3053,8 @@ export class Session {
       case "provider.api_endpoint.save.request":
       case "provider.api_endpoint.delete.request":
       case "provider.api_endpoint.set_active.request":
+      case "provider.api_endpoint.fetch_models.request":
+      case "provider.api_endpoint.cancel.request":
         if (!this.apiEndpointSession) {
           // 没声明 apiEndpoints 能力的 daemon 明确拒绝，而不是沉默。
           this.emit({
@@ -3066,7 +3068,7 @@ export class Session {
           });
           return;
         }
-        await this.apiEndpointSession.handle(msg);
+        await this.apiEndpointSession.handle(msg, this.delivery.requestSignal);
         return;
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
@@ -8484,6 +8486,7 @@ export class Session {
       this.unsubscribeTerminalWorkspaceContributionEvents = null;
     }
     this.providerCatalogSession.dispose();
+    this.apiEndpointSession?.dispose();
 
     this.terminalController.dispose();
 

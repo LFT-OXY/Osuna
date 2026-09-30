@@ -1,5 +1,9 @@
 import { applyEdits, modify, type FormattingOptions, type JSONPath } from "jsonc-parser";
 import { z } from "zod";
+import {
+  API_ENDPOINT_MODEL_TIERS,
+  type ApiEndpointModelMapping,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
@@ -7,6 +11,7 @@ import { z } from "zod";
  *
  * 负责的键：
  * - env 下的 ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY（置空）/ ANTHROPIC_MODEL；
+ * - env 下用户映射了的 ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL，没映射的档位不写；
  * - permissions.deny 里的一条 "WebSearch"：WebSearch 是 Anthropic 服务端工具，第三方接口不支持，
  *   Claude Code 没有关它的环境变量，只能用权限规则。用户自己写的同名规则不归 Osuna 所有。
  */
@@ -56,14 +61,20 @@ export function buildClaudeEndpointEnv(input: {
   baseUrl: string;
   apiKey: string;
   defaultModelId: string;
+  modelMapping?: ApiEndpointModelMapping;
 }): Record<string, string> {
-  return {
+  const env: Record<string, string> = {
     ANTHROPIC_BASE_URL: input.baseUrl,
     ANTHROPIC_AUTH_TOKEN: input.apiKey,
     // 登录态或环境里残留的 API key 会和 token 冲突，置空并纳入负责的键。
     ANTHROPIC_API_KEY: "",
     ANTHROPIC_MODEL: input.defaultModelId,
   };
+  for (const tier of API_ENDPOINT_MODEL_TIERS) {
+    const modelId = input.modelMapping?.[tier];
+    if (modelId) env[`ANTHROPIC_DEFAULT_${tier.toUpperCase()}_MODEL`] = modelId;
+  }
+  return env;
 }
 
 /**

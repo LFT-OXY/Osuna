@@ -131,6 +131,89 @@ describe("provider.api_endpoint.delete and set_active", () => {
   });
 });
 
+describe("Claude model mapping", () => {
+  it("parses an endpoint and a save request with some tiers mapped", () => {
+    const endpoint = { ...ENDPOINT, modelMapping: { opus: "z-ai/glm-4.6", haiku: "z-ai/glm-4.6" } };
+    const response = {
+      type: "provider.api_endpoint.save.response" as const,
+      payload: { requestId: "req-7", endpoint, error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+
+    const request = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-7",
+      provider: "claude",
+      name: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api",
+      models: [{ id: "z-ai/glm-4.6" }],
+      defaultModelId: "z-ai/glm-4.6",
+      modelMapping: { fable: "z-ai/glm-4.6" },
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  });
+});
+
+describe("provider.api_endpoint.fetch_models", () => {
+  it("parses a request with a typed key and one that reuses the saved key", () => {
+    const typed = {
+      type: "provider.api_endpoint.fetch_models.request" as const,
+      requestId: "req-8",
+      provider: "codex",
+      baseUrl: "https://relay.example/v1",
+      apiKey: "sk-typed",
+    };
+    expect(SessionInboundMessageSchema.parse(typed)).toEqual(typed);
+
+    const saved = {
+      type: "provider.api_endpoint.fetch_models.request" as const,
+      requestId: "req-9",
+      provider: "claude",
+      endpointId: "ep_1",
+      baseUrl: "https://openrouter.ai/api",
+    };
+    expect(SessionInboundMessageSchema.parse(saved)).toEqual(saved);
+  });
+
+  it("parses the listed models and an upstream failure", () => {
+    const listed = {
+      type: "provider.api_endpoint.fetch_models.response" as const,
+      payload: {
+        requestId: "req-8",
+        models: [{ id: "gpt-5", label: "GPT-5" }, { id: "gpt-5-mini" }],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(listed)).toEqual(listed);
+
+    const failed = {
+      type: "provider.api_endpoint.fetch_models.response" as const,
+      payload: {
+        requestId: "req-9",
+        models: [],
+        error: { code: "models_unsupported", message: "HTTP 404" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(failed)).toEqual(failed);
+  });
+});
+
+describe("provider.api_endpoint.cancel", () => {
+  it("parses request and response", () => {
+    const request = {
+      type: "provider.api_endpoint.cancel.request" as const,
+      requestId: "req-10",
+      targetRequestId: "req-8",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "provider.api_endpoint.cancel.response" as const,
+      payload: { requestId: "req-10", cancelled: true },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+});
+
 describe("server_info.features.apiEndpoints", () => {
   const base = { status: "server_info" as const, serverId: "srv_1" };
 

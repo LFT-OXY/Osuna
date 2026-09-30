@@ -178,6 +178,7 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02). `server/
 - `daemon-e2e/api-endpoint-claude.e2e.test.ts`: create → activate → file → Official → file; key absent from every response and from `config.json`; `keys.json` mode `0600`; `settings.json` keeps `0644`; no backup when the file started absent.
 - `codex-config-patch.test.ts`: exact text after apply; Official restores the top-level bytes and keeps the table; apply twice is identical; CRLF and BOM kept; inline `model_providers` refused; the dedicated id fails `ProviderOverridesSchema`.
 - `codex-auth-command.test.ts`: executes the generated command with `execFile` and asserts stdout equals the key file exactly; this runs on the Windows server CI job.
+- `claude-settings-patch.test.ts` also: only mapped tiers are written; a tier dropped on the next apply gets the user's own value back.
 - `daemon-e2e/api-endpoint-codex.e2e.test.ts` (POSIX; fake `codex` shell script): `auth.json` byte-identical; version below 0.118.0 refused; unparsable refused with no key file; read-only `CODEX_HOME` keeps the previous mode and key.
 
 ### 7. Wrong vs Correct

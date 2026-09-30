@@ -127,14 +127,15 @@
 
 - 新增一组带点号命名空间的 RPC，遵循 `docs/rpc-namespacing.md`，前缀 `provider.api_endpoint.*`，schema 在 `packages/protocol/src/api-endpoint/rpc-schemas.ts`：
   - `list`：`{ provider }` → `{ provider, endpoints, activeEndpointId, error }`，`activeEndpointId: null` 即「官方」；
-  - `save`：没有 `endpointId` 是新建（`apiKey` 必填），有则更新；`apiKey` 省略或空白表示保留原值 → `{ endpoint, error }`，`endpoint.hasApiKey` 代替 key；
+  - `save`：没有 `endpointId` 是新建（`apiKey` 必填），有则更新；`apiKey` 省略或空白表示保留原值 → `{ endpoint, error }`，`endpoint.hasApiKey` 代替 key。`modelMapping`（`{ opus?, sonnet?, haiku?, fable? }`）每次整份提交，省略即不映射；每档必须是勾选的模型之一，只有 Claude 能带，否则 `invalid_input`。哪些提供方有映射由协议里的 `apiEndpointHasModelMapping` 决定，App 与 daemon 共用；
   - `delete`：`{ provider, endpointId }` → `{ activeEndpointId, error }`；
   - `set_active`：`{ provider, endpointId | null }`，null 为切回官方 → `{ activeEndpointId, error }`；失败时回报的是真实的当前启用接口；
-  - 从上游拉取模型；
+  - `fetch_models`：`{ provider, baseUrl, endpointId?, apiKey? }` → `{ models, error }`。`apiKey` 省略或空白且带 `endpointId` 时用已保存的 key；两者都没有返回 `invalid_input`；
+  - `cancel`：`{ targetRequestId }` → `{ cancelled }`，取消同一连接上还在进行的上游请求（拉取模型，之后测试连接也用它）；被取消的请求照常回一条 `cancelled` 错误。连接断开时 daemon 也会取消；
   - 测试连接；
   - 启用接口或切回官方；
   - 重新应用（处理外部修改时使用）。
-- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`、`codex_version_unsupported`，意外错误为 `unknown`（例如找不到 codex 可执行文件）。App 把 `config_unparsable` 和 `codex_version_unsupported` 换成本地化文案，后面接 daemon 原文；其余只显示 daemon 原文。
+- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`、`codex_version_unsupported`；上游请求另有 `upstream_error`（非 404/405 的状态码，message 形如 `GET <url>: HTTP 401: <上游信息>`）、`upstream_unreachable`、`upstream_timeout`、`models_unsupported`、`cancelled`；意外错误为 `unknown`（例如找不到 codex 可执行文件）。App 把 `config_unparsable`、`codex_version_unsupported`、`models_unsupported`、`upstream_timeout` 换成本地化文案，后面接 daemon 原文；`cancelled` 不显示；其余只显示 daemon 原文。
 - `provider` 在线上是字符串而非枚举；daemon 只接受已支持的内置提供方，其余返回 `unsupported_provider`。
 - 状态查询返回四类信息：
   - 当前模式；
@@ -185,9 +186,12 @@
 ### 上游请求
 
 - 拉取模型、测试连接都**由 daemon 在主机上发起**，key 不经过客户端。
-- **拉取模型**：先请求 `<base>/v1/models`，失败再请求 `<base>/models`。返回格式兼容 `data[]` 和 `models[].slug` 两种。认证方式：
-  - Claude 接口同时带 Bearer 和 `x-api-key`；
+- **拉取模型**（`server/api-endpoints/upstream-models.ts`）：先请求 `<base>/v1/models`，失败再请求 `<base>/models`。返回格式兼容 `data[].id` 和 `models[].slug` 两种，显示名取 `display_name` 或 `name`，按 id 去重；`has_more` + `last_id` 时带 `after_id` 翻页，最多 20 页。认证方式：
+  - Claude 接口同时带 Bearer、`x-api-key` 和 `anthropic-version`；
   - Codex 接口带 Bearer。
+  - 两个地址都失败时，非 404/405 的状态码优先报 `upstream_error`，都连不上报 `upstream_unreachable`，其余报 `models_unsupported`。上游错误信息截断到 300 字，其中出现的 key 替换成 `***`。
+  - 超时是两个地址共用的 15 秒（`ApiEndpointServiceOptions.upstreamTimeoutMs`）；超时后不再试第二个地址。拉取不进串行队列，慢的上游不挡切换。
+  - 编辑时改了 Base URL 而 key 留空，照样用已保存的 key 去新地址拉取，和保存时「只改地址不用重新粘贴 key」一致；该 RPC 与保存同为 `daemon.manage`。
 - **测试连接**：用 CLI 实际使用的协议，发一条最小请求：
   - Claude：Anthropic Messages，`max_tokens` 取最小值；
   - Codex：OpenAI Responses，不带 `store` 和 `previous_response_id`。
@@ -211,6 +215,10 @@
 
 - 在提供方详情面板里新增「官方 / 第三方接口」模式区和接口列表，仅限 Claude Code 和 Codex，并且只在主机声明了 `apiEndpoints` 能力时显示。每个接口的操作有：启用、编辑、删除。
 - 新建和编辑表单遵循 `docs/forms.md`，用非 React 的表单模型。字段为：名称、Base URL、API key（只写）、拉取模型（可搜索勾选）、默认模型、手动添加模型 id；Claude 另有映射区。
+  - 拉取到的列表按 id 和显示名搜索，只画前 50 条，其余提示用搜索缩小，表单里不嵌套滚动。重新拉取保留已勾选的模型；上游没列出的已勾选模型照样保留。
+  - 「使用的模型」列表放勾选和手动添加的模型，在这里指定默认模型；取消勾选默认模型时默认顺延到剩下的第一个，指向它的映射档位清空。
+  - 映射每档是一个下拉，选项为「不映射」加勾选的模型。
+  - 拉取中可以取消；关闭表单也会取消。取消后晚到的结果不生效。
 - 测试连接先弹出模型选择，再展示结果。
 - 以下操作需要二次确认：切换、编辑当前启用的接口、删除当前启用的接口。确认框写明受影响的正在运行的会话数，以及「终端里的 CLI 也会切换」。
 - 健康状态的展示：

@@ -5,7 +5,12 @@ import type { ApiEndpoint, ApiEndpointError } from "@getpaseo/protocol/api-endpo
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { confirmDialog, type ConfirmDialogInput } from "@/utils/confirm-dialog";
-import type { ApiEndpointSaveRequestInput, ApiEndpointSaveResult } from "./internal/form-model";
+import type {
+  ApiEndpointFetchModelsRequestInput,
+  ApiEndpointFetchModelsResult,
+  ApiEndpointSaveRequestInput,
+  ApiEndpointSaveResult,
+} from "./internal/form-model";
 import {
   apiEndpointErrorMessageKey,
   selectApiEndpointsState,
@@ -25,6 +30,10 @@ export interface UseApiEndpointsResult {
   activate: (endpoint: ApiEndpoint | null) => void;
   remove: (endpoint: ApiEndpoint) => void;
   save: (request: ApiEndpointSaveRequestInput) => Promise<ApiEndpointSaveResult>;
+  fetchModels: (
+    request: ApiEndpointFetchModelsRequestInput,
+    signal: AbortSignal,
+  ) => Promise<ApiEndpointFetchModelsResult>;
 }
 
 interface ActionOutcome {
@@ -33,6 +42,14 @@ interface ActionOutcome {
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+let fetchRequestCounter = 0;
+
+// 自己生成 requestId，取消时才知道要取消哪一条。
+function createFetchRequestId(): string {
+  fetchRequestCounter += 1;
+  return `api-endpoint-fetch-${Date.now().toString(36)}-${fetchRequestCounter}`;
 }
 
 /**
@@ -156,7 +173,34 @@ export function useApiEndpoints(input: {
     [client, describeError, refresh, t],
   );
 
+  const fetchModels = useCallback(
+    async (
+      request: ApiEndpointFetchModelsRequestInput,
+      signal: AbortSignal,
+    ): Promise<ApiEndpointFetchModelsResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createFetchRequestId();
+      const cancel = () => {
+        // 取消只是尽力而为：连接已断时 daemon 那边也会随连接一起取消。
+        void client.apiEndpointCancel(requestId).catch(() => undefined);
+      };
+      signal.addEventListener("abort", cancel, { once: true });
+      try {
+        const result = await client.apiEndpointFetchModels(request, requestId);
+        if (signal.aborted || result.error?.code === "cancelled") return { status: "cancelled" };
+        if (result.error) return { status: "failed", message: describeError(result.error) };
+        return { status: "ok", models: result.models };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: errorText(error) };
+      } finally {
+        signal.removeEventListener("abort", cancel);
+      }
+    },
+    [client, describeError, t],
+  );
+
   const dismissActionError = useCallback(() => setActionError(null), []);
 
-  return { state, busy, actionError, dismissActionError, activate, remove, save };
+  return { state, busy, actionError, dismissActionError, activate, remove, save, fetchModels };
 }
