@@ -5,4 +5,3 @@
 {"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件层 i18n 约定"}
 {"file": ".atw/spec/app/frontend/testing.md", "reason": "app 测试组织与运行方式"}
 {"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "app 质量检查与验证命令"}
-{"file": ".atw/tasks/09-30-zh-cn-i18n-gaps/issues/05-new-workspace-and-panels.md", "reason": "ATW current ticket"}
