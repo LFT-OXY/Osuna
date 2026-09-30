@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { createContext, useContext, type ComponentType } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -27,7 +27,6 @@ export function InlineBlockView({ block, serverId }: InlineBlockViewProps) {
   const variant = resolveInlineBlockVariant(block);
   const name = inlineBlockName(block);
   const label = t(`composer.inlineBlocks.${variant}`, { name });
-  const Icon = resolveInlineBlockIcon(block, serverId);
   return (
     // Web 读屏不念无 role 元素的 aria-label，标签挂在 group 上；原生由名字 Text 承载。
     <View
@@ -37,7 +36,7 @@ export function InlineBlockView({ block, serverId }: InlineBlockViewProps) {
       accessibilityLabel={isWeb ? label : undefined}
       style={styles.block}
     >
-      <ThemedInlineBlockIcon Icon={Icon} size={ICON_SIZE.xs} uniProps={accentBrightIconMapping} />
+      <InlineBlockIcon block={block} serverId={serverId} />
       <Text numberOfLines={1} accessibilityLabel={isNative ? label : undefined} style={styles.name}>
         {name}
       </Text>
@@ -53,7 +52,7 @@ const INLINE_BLOCK_DATASETS: Record<InlineBlockVariant, { inlineBlock: InlineBlo
   agent: { inlineBlock: "agent" },
 };
 
-// agent 按 provider 或 profile 取图标，Bot 与 getProviderIcon 认不出时的回退一致。
+// agent 按 provider 或 profile 取图标，Bot 是两者都认不出时的回退，与 getProviderIcon 一致。
 const VARIANT_ICONS: Record<InlineBlockVariant, ComponentType<ProviderIconProps>> = {
   skill: Box,
   file: File,
@@ -62,12 +61,32 @@ const VARIANT_ICONS: Record<InlineBlockVariant, ComponentType<ProviderIconProps>
   agent: Bot,
 };
 
-function resolveInlineBlockIcon(
-  block: InlineBlock,
-  serverId: string | null,
-): ComponentType<ProviderIconProps> {
-  if (block.kind === "agent") return getProviderIcon(block.target, serverId);
-  return VARIANT_ICONS[resolveInlineBlockVariant(block)];
+function InlineBlockIcon({ block, serverId }: InlineBlockViewProps) {
+  if (block.kind !== "agent")
+    return <AccentIcon Icon={VARIANT_ICONS[resolveInlineBlockVariant(block)]} />;
+  if (block.target.kind === "profile") {
+    return <AgentProfileMentionIcon profileId={block.target.id} />;
+  }
+  return <AccentIcon Icon={getProviderIcon(block.target.id, serverId)} />;
+}
+
+/** 按 profile id 取图标；profile 不在（已删除或配置未到）时返回 null。 */
+export type AgentProfileIconResolver = (
+  profileId: string,
+) => ComponentType<ProviderIconProps> | null;
+
+// 块在 browser 项目里也要能渲染，不能读 store，profile 图标由上层（view.tsx 的 Provider）解析好传下来。
+export const AgentProfileIconContext = createContext<AgentProfileIconResolver>(() => null);
+
+function AgentProfileMentionIcon({ profileId }: { profileId: string }) {
+  const resolveProfileIcon = useContext(AgentProfileIconContext);
+  return <AccentIcon Icon={resolveProfileIcon(profileId) ?? VARIANT_ICONS.agent} />;
+}
+
+function AccentIcon({ Icon }: { Icon: ComponentType<ProviderIconProps> }) {
+  return (
+    <ThemedInlineBlockIcon Icon={Icon} size={ICON_SIZE.xs} uniProps={accentBrightIconMapping} />
+  );
 }
 
 interface InlineBlockIconSlotProps {

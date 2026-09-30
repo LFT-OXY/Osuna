@@ -64,7 +64,7 @@ export const ProviderOverrideSchema = z.object({
 });
 
 const BUILTIN_PROVIDER_IDS = ["claude", "codex", "copilot", "opencode", "pi", "omp"] as const;
-const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
+export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 export const ProviderOverridesSchema = z
   .record(z.string(), ProviderOverrideSchema)

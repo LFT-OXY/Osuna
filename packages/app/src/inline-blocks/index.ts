@@ -1,3 +1,12 @@
+import {
+  findMarkdownLinks,
+  formatAgentMentionLink,
+  formatMarkdownLink,
+  isAgentMentionTarget,
+  parseAgentMentionLink,
+  type AgentMentionTarget,
+  type MarkdownLink,
+} from "@getpaseo/protocol/message-links";
 import { getRasterImageMimeTypeFromPath } from "@/attachments/file-types";
 
 export type FileEntryKind = "file" | "directory";
@@ -6,12 +15,12 @@ export type FileEntryKind = "file" | "directory";
  * 从 Command menu 或 `@` 列表选中的行内块。块以文本为准（ADR 0005），这里只是文本的结构化视图。
  * - skill：description 只用于悬停提示，不进文本。
  * - file：path 相对工作区 cwd，目录不带末尾 `/`。
- * - agent：target 是 provider 或 profile 标识，name 是显示名。
+ * - agent：target 指向 provider 或 Agent profile，name 是发送时的显示名。
  */
 export type InlineBlock =
   | { kind: "skill"; name: string; description?: string }
   | { kind: "file"; path: string; entryKind: FileEntryKind }
-  | { kind: "agent"; target: string; name: string };
+  | { kind: "agent"; target: AgentMentionTarget; name: string };
 
 export type SkillBlock = Extract<InlineBlock, { kind: "skill" }>;
 
@@ -53,7 +62,7 @@ export function isInlineBlock(value: unknown): value is InlineBlock {
         (value.entryKind === "file" || value.entryKind === "directory")
       );
     case "agent":
-      return isNonEmptyString(value.target) && isNonEmptyString(value.name);
+      return isAgentMentionTarget(value.target) && isNonEmptyString(value.name);
     default:
       return false;
   }
@@ -65,14 +74,7 @@ export function isInlineSegment(value: unknown): value is InlineSegment {
   return value.type === "block" && isInlineBlock(value.block);
 }
 
-const AGENT_LINK_PREFIX = "paseo://agent/";
-// label 与目标里的转义只认会破坏链接结构的字符；目标用 `<…>` 包时可含空格与括号，
-// 裸目标按 CommonMark 允许一层成对括号（如 `app/(tabs)/index.tsx`）。
-const LINK_PATTERN =
-  /\[((?:\\[\\[\]]|[^\\[\]\n])+)\]\((?:<((?:\\[<>]|[^<>\n])+)>|((?:[^\s()<>]|\([^\s()<>]*\))+))\)/g;
 const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]+:/i;
-// `![…](…)` 是图片，`\[` 是转义的方括号，按 CommonMark 都不是链接。
-const NOT_A_LINK_PREFIXES = new Set(["!", "\\"]);
 // Paseo 发给 Codex 的 skill 会改写成 `$name`，从 Codex 历史导入时原样回来，与 `/name` 同样对待。
 const LEADING_SKILL_TOKEN_PATTERN = /^[/$](\S+)/;
 
@@ -102,19 +104,6 @@ export function resolveInlineBlockVariant(block: InlineBlock): InlineBlockVarian
   return getRasterImageMimeTypeFromPath(block.path) ? "image" : "file";
 }
 
-function escapeLabel(label: string): string {
-  return label.replace(/[\\[\]]/g, "\\$&");
-}
-
-function unescapeLabel(label: string): string {
-  return label.replace(/\\([\\[\]])/g, "$1");
-}
-
-function formatLinkTarget(target: string): string {
-  if (!/[\s()<>]/.test(target)) return target;
-  return `<${target.replace(/[<>]/g, "\\$&")}>`;
-}
-
 /** 单个块发出时的文字；Skill block 在开头时由 serializeInlineSegments 负责拼接。 */
 export function serializeInlineBlock(block: InlineBlock): string {
   switch (block.kind) {
@@ -123,10 +112,10 @@ export function serializeInlineBlock(block: InlineBlock): string {
     case "file": {
       const path = stripTrailingSlashes(block.path);
       const target = block.entryKind === "directory" ? `${path}/` : path;
-      return `[${escapeLabel(basename(path))}](${formatLinkTarget(target)})`;
+      return formatMarkdownLink(basename(path), target);
     }
     case "agent":
-      return `[@${escapeLabel(block.name)}](${AGENT_LINK_PREFIX}${encodeURIComponent(block.target)})`;
+      return formatAgentMentionLink({ target: block.target, name: block.name });
   }
 }
 
@@ -410,23 +399,10 @@ export function pickSkillText(input: PickSkillTextInput): InlineBlockTextInserti
   };
 }
 
-function decodeAgentTarget(encoded: string): string | null {
-  try {
-    return decodeURIComponent(encoded);
-  } catch (error) {
-    if (error instanceof URIError) return null;
-    throw error;
-  }
-}
-
-function resolveLinkBlock(label: string, target: string): InlineBlock | null {
-  if (target.startsWith(AGENT_LINK_PREFIX)) {
-    const encoded = target.slice(AGENT_LINK_PREFIX.length);
-    const name = label.slice(1);
-    if (!label.startsWith("@") || !name || !encoded || encoded.includes("/")) return null;
-    const agentTarget = decodeAgentTarget(encoded);
-    return agentTarget ? { kind: "agent", target: agentTarget, name } : null;
-  }
+function resolveLinkBlock(link: MarkdownLink): InlineBlock | null {
+  const mention = parseAgentMentionLink(link);
+  if (mention) return { kind: "agent", ...mention };
+  const { label, target } = link;
   if (URL_SCHEME_PATTERN.test(target)) return null;
   const path = stripTrailingSlashes(target);
   if (!path || basename(path) !== label) return null;
@@ -455,18 +431,14 @@ function parseLeadingSkills(text: string, skillNames: ReadonlySet<string>): Lead
 function parseLinks(text: string): InlineSegment[] {
   const segments: InlineSegment[] = [];
   let cursor = 0;
-  for (const match of text.matchAll(LINK_PATTERN)) {
-    const [raw, rawLabel = "", angleTarget, bareTarget] = match;
-    if (NOT_A_LINK_PREFIXES.has(text[match.index - 1] ?? "")) continue;
-    const target =
-      angleTarget !== undefined ? angleTarget.replace(/\\([<>])/g, "$1") : (bareTarget ?? "");
-    const block = resolveLinkBlock(unescapeLabel(rawLabel), target);
+  for (const link of findMarkdownLinks(text)) {
+    const block = resolveLinkBlock(link);
     if (!block) continue;
-    if (match.index > cursor) {
-      segments.push({ type: "text", text: text.slice(cursor, match.index) });
+    if (link.index > cursor) {
+      segments.push({ type: "text", text: text.slice(cursor, link.index) });
     }
     segments.push({ type: "block", block });
-    cursor = match.index + raw.length;
+    cursor = link.index + link.raw.length;
   }
   if (cursor < text.length) segments.push({ type: "text", text: text.slice(cursor) });
   return segments;

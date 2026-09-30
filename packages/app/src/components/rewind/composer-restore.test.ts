@@ -32,13 +32,16 @@ describe("shouldRestoreComposerForRewindMode", () => {
 
 describe("resolveRewoundComposerContent", () => {
   test("brings leading skills, file and agent mentions back as blocks", () => {
-    const rewound = "/atw-tdd ask [@Claude](paseo://agent/claude) about [x.ts](src/x.ts)";
+    const rewound = "/atw-tdd ask [@Claude](paseo://agent/provider/claude) about [x.ts](src/x.ts)";
     expect(resolveRewoundComposerContent(rewound, new Set(["atw-tdd"]))).toEqual({
       text: rewound,
       segments: [
         { type: "block", block: { kind: "skill", name: "atw-tdd" } },
         { type: "text", text: " ask " },
-        { type: "block", block: { kind: "agent", target: "claude", name: "Claude" } },
+        {
+          type: "block",
+          block: { kind: "agent", target: { kind: "provider", id: "claude" }, name: "Claude" },
+        },
         { type: "text", text: " about " },
         { type: "block", block: { kind: "file", path: "src/x.ts", entryKind: "file" } },
       ],

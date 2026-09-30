@@ -272,7 +272,7 @@ describe("draft persistence of inline segments", () => {
 
   it("reads back the segments it wrote with the draft", async () => {
     const input = {
-      text: "see [x.ts](src/x.ts) and [@Claude](paseo://agent/claude) typed [y](y)",
+      text: "see [x.ts](src/x.ts) and [@Claude](paseo://agent/provider/claude) typed [y](y)",
       attachments: [],
       segments: [
         { type: "text" as const, text: "see " },
@@ -283,7 +283,11 @@ describe("draft persistence of inline segments", () => {
         { type: "text" as const, text: " and " },
         {
           type: "block" as const,
-          block: { kind: "agent" as const, target: "claude", name: "Claude" },
+          block: {
+            kind: "agent" as const,
+            target: { kind: "provider" as const, id: "claude" },
+            name: "Claude",
+          },
         },
         { type: "text" as const, text: " typed [y](y)" },
       ],

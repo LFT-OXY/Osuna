@@ -84,9 +84,9 @@
 ### 链接格式与共用解析器（protocol）
 
 - Agent mention 写在正文里：`[@名字](paseo://agent/provider/<providerId>)` 与 `[@名字](paseo://agent/profile/<profileId>)`，`<id>` 经 `encodeURIComponent` 编码，不加版本段，kind 段就是扩展位。provider id 满足 `^[a-z][a-z0-9-]*$`，profile id 是任意字符串。格式写进历史后不再改。
-- 把 agent 链接的序列化、解析（前缀、编码、两种 kind）和整条链接的匹配规则（Markdown 链接模式、排除 `![` 与 `\[`）从 app 的行内块模块抽到 `packages/protocol` 的新模块，app 行内块模块与 daemon 共用。app 的块类型从单个 `target` 改为带 kind 的形式。
+- 把 agent 链接的序列化、解析（前缀、编码、两种 kind）和整条链接的匹配规则（Markdown 链接模式、排除 `![` 与 `\[`）从 app 的行内块模块抽到 `packages/protocol/src/message-links.ts`，app 行内块模块与 daemon 共用：`findMarkdownLinks`（所有链接，含位置与去转义后的 label/target）、`formatMarkdownLink`、`parseAgentMentionLink` / `formatAgentMentionLink`、`parseAgentMentionHref` / `formatAgentMentionHref`、`isAgentMentionTarget`。解析时 provider id 须满足 `provider-config.ts` 的 `PROVIDER_ID_PATTERN`，profile id 非空且解码后不含 `/`；不满足的链接保持文字。app 的块类型从单个 `target` 改为 `target: { kind: "provider" | "profile"; id }`。旧的单段写法 `paseo://agent/<id>` 从未发版，不做兼容。
 - 显示成块的链接就触发派发，包括代码块里的链接，与 app 解析器的行为一致。
-- 旧气泡显示发送时的 label，不随 provider 或 profile 改名更新。块图标：provider 用 provider 图标；profile 用它的 `icon`，认不出时用该 provider 的图标，profile 已删除时退回 `Bot`。
+- 旧气泡显示发送时的 label，不随 provider 或 profile 改名更新。块图标：provider 用 provider 图标；profile 用它的 `icon`，认不出时用该 provider 的图标，profile 已删除（或 daemon 配置还没到）时退回 `Bot`。
 
 ### 触发来源与 Routing block（server session 层）
 

@@ -23,10 +23,12 @@ const COMMANDS = [
 ] as const;
 
 // A leading known skill, a file, a directory, an image, a link that is not a file mention, and
-// an agent mention. The message ends in plain words so no `@` or `/` list is open on Enter.
+// agent mentions of a provider and of a profile the host does not have. The message ends in
+// plain words so no `@` or `/` list is open on Enter.
 const MESSAGE =
   "/atw-tdd read [x.ts](src/x.ts), [components](src/components/), [logo.png](assets/logo.png)" +
-  ' and [the helper](src/y.ts) not "src/z.ts" with [@Claude](paseo://agent/claude) please';
+  ' and [the helper](src/y.ts) not "src/z.ts" with [@Claude](paseo://agent/provider/claude)' +
+  " and [@Reviewer](paseo://agent/profile/deleted-profile) please";
 
 const MESSAGE_BLOCKS = [
   { variant: "skill", label: "Skill: atw-tdd" },
@@ -34,6 +36,7 @@ const MESSAGE_BLOCKS = [
   { variant: "directory", label: "Folder: components" },
   { variant: "image", label: "Image: logo.png" },
   { variant: "agent", label: "Agent: Claude" },
+  { variant: "agent", label: "Agent: Reviewer" },
 ] as const;
 
 function readClipboardText(page: Page): Promise<string> {
@@ -343,7 +346,7 @@ test.describe("Inline blocks in the composer", () => {
 
   test("rewinding a message puts its blocks back in the composer", async ({ page }, testInfo) => {
     test.setTimeout(90_000);
-    const prompt = "ask [@Claude](paseo://agent/claude) about [x.ts](src/x.ts) please";
+    const prompt = "ask [@Claude](paseo://agent/provider/claude) about [x.ts](src/x.ts) please";
     const agent = await seedMockAgentWorkspace({
       repoPrefix: `inline-blocks-rewind-${testInfo.workerIndex}-`,
       title: "Inline blocks rewind",

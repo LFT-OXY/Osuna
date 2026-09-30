@@ -8,10 +8,10 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] agent 链接的解析与序列化只有 `packages/protocol` 里一份，app 行内块模块改用它，没有第二份实现。
-- [ ] 单测覆盖：两种 kind、编码与含特殊字符的 id、解码后含 `/` 的 target 被拒、排除 `![` 与 `\[`、序列化后再解析得到原结构。
-- [ ] 气泡里 `paseo://agent/provider/<id>` 与 `paseo://agent/profile/<id>` 两种链接都显示成块，图标按上述规则取。
-- [ ] 现有行内块单测与 `composer-inline-blocks.spec.ts` 通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] agent 链接的解析与序列化只有 `packages/protocol` 里一份，app 行内块模块改用它，没有第二份实现。
+- [x] 单测覆盖：两种 kind、编码与含特殊字符的 id、解码后含 `/` 的 target 被拒、排除 `![` 与 `\[`、序列化后再解析得到原结构。
+- [x] 气泡里 `paseo://agent/provider/<id>` 与 `paseo://agent/profile/<id>` 两种链接都显示成块，图标按上述规则取。
+- [x] 现有行内块单测与 `composer-inline-blocks.spec.ts` 通过。
+- [x] `npm run typecheck`、`npm run lint` 通过。

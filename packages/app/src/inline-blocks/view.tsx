@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { Text, type StyleProp, type TextStyle } from "react-native";
+import { getAgentProfileIcon, useAgentProfiles } from "@/agent-profiles";
+import { getProviderIcon } from "@/components/provider-icons";
 import { useAgentCommandsQuery } from "@/hooks/use-agent-commands-query";
 import { useSessionStore } from "@/stores/session-store";
-import { InlineBlockView } from "./block-view";
+import { AgentProfileIconContext, InlineBlockView } from "./block-view";
 import {
   inlineBlockName,
   parseInlineSegments,
@@ -41,6 +43,29 @@ export function useAgentSkillNames(input: AgentSkillNamesInput): ReadonlySet<str
   return useMemo(
     () => (skillNameList === undefined ? null : new Set(skillNameList.split("\n").filter(Boolean))),
     [skillNameList],
+  );
+}
+
+interface AgentProfileIconProviderProps {
+  serverId: string | null;
+  children: ReactNode;
+}
+
+/** 让其下的 Agent mention 块取到 profile 图标：profile 的 icon，认不出时用所属 provider 的图标。 */
+export function AgentProfileIconProvider({ serverId, children }: AgentProfileIconProviderProps) {
+  const { profiles } = useAgentProfiles(serverId);
+  const resolveProfileIcon = useCallback(
+    (profileId: string) => {
+      const profile = profiles?.find((candidate) => candidate.id === profileId);
+      if (!profile) return null;
+      return getAgentProfileIcon(profile.icon) ?? getProviderIcon(profile.provider, serverId);
+    },
+    [profiles, serverId],
+  );
+  return (
+    <AgentProfileIconContext.Provider value={resolveProfileIcon}>
+      {children}
+    </AgentProfileIconContext.Provider>
   );
 }
 
@@ -113,14 +138,16 @@ export function InlineBlockText({
     [segments, text, skillNames],
   );
   return (
-    <Text {...textProps}>
-      {parts.map((part) =>
-        "text" in part ? (
-          part.text
-        ) : (
-          <InlineBlockView key={part.key} block={part.block} serverId={serverId} />
-        ),
-      )}
-    </Text>
+    <AgentProfileIconProvider serverId={serverId}>
+      <Text {...textProps}>
+        {parts.map((part) =>
+          "text" in part ? (
+            part.text
+          ) : (
+            <InlineBlockView key={part.key} block={part.block} serverId={serverId} />
+          ),
+        )}
+      </Text>
+    </AgentProfileIconProvider>
   );
 }

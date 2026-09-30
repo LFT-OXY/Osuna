@@ -30,11 +30,13 @@ import {
   Terminal,
   TestTube,
   Wrench,
+  type LucideIcon,
 } from "lucide-react-native";
 import { identityForeground } from "@/styles/identity-colors";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
   AGENT_PROFILE_COLORS,
+  AGENT_PROFILE_ICON_KEYS,
   resolveAgentProfileColor,
   resolveAgentProfileIconKey,
   type AgentProfileColor,
@@ -44,46 +46,53 @@ import {
 /** Drawn when a profile names no icon, and as the "default" cell in the picker grid. */
 const ThemedDefaultIcon = withUnistyles(Star);
 
-/**
- * `withUnistyles` has to wrap each icon once at module scope, so the registry
- * stores the themed component rather than the raw lucide one.
- */
-const THEMED_ICONS: Record<AgentProfileIconKey, typeof ThemedDefaultIcon> = {
-  code: withUnistyles(Code),
-  terminal: withUnistyles(Terminal),
-  bug: withUnistyles(Bug),
-  wrench: withUnistyles(Wrench),
-  hammer: withUnistyles(Hammer),
+const PROFILE_ICONS: Record<AgentProfileIconKey, LucideIcon> = {
+  code: Code,
+  terminal: Terminal,
+  bug: Bug,
+  wrench: Wrench,
+  hammer: Hammer,
 
-  flask: withUnistyles(FlaskConical),
-  testTube: withUnistyles(TestTube),
-  microscope: withUnistyles(Microscope),
-  search: withUnistyles(Search),
-  eye: withUnistyles(Eye),
+  flask: FlaskConical,
+  testTube: TestTube,
+  microscope: Microscope,
+  search: Search,
+  eye: Eye,
 
-  palette: withUnistyles(Palette),
-  feather: withUnistyles(Feather),
-  pencil: withUnistyles(Pencil),
-  fileText: withUnistyles(FileText),
-  book: withUnistyles(BookOpen),
+  palette: Palette,
+  feather: Feather,
+  pencil: Pencil,
+  fileText: FileText,
+  book: BookOpen,
 
-  rocket: withUnistyles(Rocket),
-  package: withUnistyles(Package),
-  boxes: withUnistyles(Boxes),
-  server: withUnistyles(Server),
-  database: withUnistyles(Database),
+  rocket: Rocket,
+  package: Package,
+  boxes: Boxes,
+  server: Server,
+  database: Database,
 
-  cpu: withUnistyles(Cpu),
-  cloud: withUnistyles(Cloud),
-  globe: withUnistyles(Globe),
-  gitBranch: withUnistyles(GitBranch),
-  layers: withUnistyles(Layers),
+  cpu: Cpu,
+  cloud: Cloud,
+  globe: Globe,
+  gitBranch: GitBranch,
+  layers: Layers,
 
-  compass: withUnistyles(Compass),
-  brain: withUnistyles(Brain),
-  sparkles: withUnistyles(Sparkles),
-  shield: withUnistyles(Shield),
+  compass: Compass,
+  brain: Brain,
+  sparkles: Sparkles,
+  shield: Shield,
 };
+
+/** `withUnistyles` has to wrap each icon once at module scope, not per render. */
+const THEMED_ICONS = new Map(
+  AGENT_PROFILE_ICON_KEYS.map((key) => [key, withUnistyles(PROFILE_ICONS[key])]),
+);
+
+/** The raw icon for callers that theme it themselves; `null` when the profile names none we know. */
+export function getAgentProfileIcon(icon: string | undefined): LucideIcon | null {
+  const iconKey = resolveAgentProfileIconKey(icon);
+  return iconKey ? PROFILE_ICONS[iconKey] : null;
+}
 
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -123,6 +132,6 @@ export function AgentProfileGlyph({
 }) {
   const iconKey = resolveAgentProfileIconKey(icon);
   const mapping = COLOR_MAPPINGS[resolveAgentProfileColor(color)];
-  const Icon = iconKey ? THEMED_ICONS[iconKey] : ThemedDefaultIcon;
+  const Icon = (iconKey && THEMED_ICONS.get(iconKey)) || ThemedDefaultIcon;
   return <Icon size={size} uniProps={mapping} />;
 }

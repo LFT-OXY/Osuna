@@ -22,6 +22,7 @@ import {
 } from "./index";
 
 const SKILLS = new Set(["atw-tdd", "atw-askme", "plugin:review"]);
+const CLAUDE = { kind: "provider", id: "claude" } as const;
 
 function text(value: string): InlineSegment {
   return { type: "text", text: value };
@@ -82,20 +83,22 @@ describe("parseInlineSegments", () => {
     expect(parseInlineSegments(message, { skillNames: SKILLS })).toEqual([text(message)]);
   });
 
-  it("reads an agent mention link", () => {
+  it("reads provider and profile agent mention links", () => {
     expect(
-      parseInlineSegments("[@Claude](paseo://agent/claude) write the tests", {
-        skillNames: SKILLS,
-      }),
+      parseInlineSegments(
+        "[@Claude](paseo://agent/provider/claude) and [@Reviewer](paseo://agent/profile/p%201)",
+        { skillNames: SKILLS },
+      ),
     ).toEqual([
-      block({ kind: "agent", target: "claude", name: "Claude" }),
-      text(" write the tests"),
+      block({ kind: "agent", target: CLAUDE, name: "Claude" }),
+      text(" and "),
+      block({ kind: "agent", target: { kind: "profile", id: "p 1" }, name: "Reviewer" }),
     ]);
   });
 
-  it("keeps an agent link without the @ or without a target as text", () => {
+  it("keeps an agent link without the @, the kind, or the id as text", () => {
     const message =
-      "[Claude](paseo://agent/claude) [@Claude](paseo://agent/) [@](paseo://agent/claude)";
+      "[Claude](paseo://agent/provider/claude) [@Claude](paseo://agent/provider/) [@Claude](paseo://agent/claude) [@](paseo://agent/provider/claude)";
     expect(parseInlineSegments(message, { skillNames: SKILLS })).toEqual([text(message)]);
   });
 
@@ -197,10 +200,10 @@ describe("serializeInlineSegments", () => {
   it("writes an agent mention as a paseo agent link", () => {
     expect(
       serializeInlineSegments([
-        block({ kind: "agent", target: "claude", name: "Claude" }),
+        block({ kind: "agent", target: CLAUDE, name: "Claude" }),
         text(" write the tests"),
       ]),
-    ).toBe("[@Claude](paseo://agent/claude) write the tests");
+    ).toBe("[@Claude](paseo://agent/provider/claude) write the tests");
   });
 });
 
@@ -268,7 +271,13 @@ describe("serialize then parse", () => {
       name: "agent mentions next to a skill and a file",
       segments: [
         tdd,
-        block({ kind: "agent", target: "my-profile", name: "Reviewer (fast)" }),
+        block({
+          kind: "agent",
+          target: { kind: "profile", id: "my (profile)" },
+          name: "Reviewer [fast]",
+        }),
+        text(" and "),
+        block({ kind: "agent", target: CLAUDE, name: "Claude" }),
         text(" read "),
         block({ kind: "file", path: "photo.png", entryKind: "file" }),
       ],
@@ -289,7 +298,7 @@ describe("inline block presentation", () => {
     expect(inlineBlockName({ kind: "skill", name: "atw-tdd" })).toBe("atw-tdd");
     expect(inlineBlockName({ kind: "file", path: "src/x.ts", entryKind: "file" })).toBe("x.ts");
     expect(inlineBlockName({ kind: "file", path: "src/lib", entryKind: "directory" })).toBe("lib");
-    expect(inlineBlockName({ kind: "agent", target: "claude", name: "Claude" })).toBe("Claude");
+    expect(inlineBlockName({ kind: "agent", target: CLAUDE, name: "Claude" })).toBe("Claude");
   });
 
   it("shows raster images with the image variant", () => {
@@ -303,7 +312,7 @@ describe("inline block presentation", () => {
       resolveInlineBlockVariant({ kind: "file", path: "assets.png", entryKind: "directory" }),
     ).toBe("directory");
     expect(resolveInlineBlockVariant({ kind: "skill", name: "atw-tdd" })).toBe("skill");
-    expect(resolveInlineBlockVariant({ kind: "agent", target: "claude", name: "Claude" })).toBe(
+    expect(resolveInlineBlockVariant({ kind: "agent", target: CLAUDE, name: "Claude" })).toBe(
       "agent",
     );
   });

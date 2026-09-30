@@ -65,6 +65,7 @@ import {
   type InlineBlock,
   type InlineSegment,
 } from "@/inline-blocks";
+import { AgentProfileIconProvider } from "@/inline-blocks/view";
 import type { SkillPick } from "@/hooks/use-agent-autocomplete";
 import {
   ComposerTextInput as ComposerTextInputBase,
@@ -672,27 +673,29 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
   }
   return (
     <View style={styles.textInputScrollWrapper}>
-      <ComposerTextInput
-        ref={props.textInputRef}
-        dataSet={COMPOSER_INPUT_DATASET}
-        initialValue={props.value}
-        initialSegments={props.valueSegments}
-        inlineBlockServerId={props.serverId}
-        onChangeText={props.onChangeText}
-        placeholder={props.placeholder}
-        accessibilityLabel={props.accessibilityLabel}
-        onFocus={props.onFocus}
-        onBlur={props.onBlur}
-        style={props.textInputStyle}
-        multiline
-        scrollEnabled
-        editable={props.editable}
-        onKeyPress={props.onKeyPress}
-        onSelectionChange={props.onSelectionChange}
-        onPasteImages={props.onPasteImages}
-        onPasteError={props.onPasteError}
-        autoFocus={props.autoFocus}
-      />
+      <AgentProfileIconProvider serverId={props.serverId}>
+        <ComposerTextInput
+          ref={props.textInputRef}
+          dataSet={COMPOSER_INPUT_DATASET}
+          initialValue={props.value}
+          initialSegments={props.valueSegments}
+          inlineBlockServerId={props.serverId}
+          onChangeText={props.onChangeText}
+          placeholder={props.placeholder}
+          accessibilityLabel={props.accessibilityLabel}
+          onFocus={props.onFocus}
+          onBlur={props.onBlur}
+          style={props.textInputStyle}
+          multiline
+          scrollEnabled
+          editable={props.editable}
+          onKeyPress={props.onKeyPress}
+          onSelectionChange={props.onSelectionChange}
+          onPasteImages={props.onPasteImages}
+          onPasteError={props.onPasteError}
+          autoFocus={props.autoFocus}
+        />
+      </AgentProfileIconProvider>
       <FocusHint
         visible={props.focusHintVisible}
         focusInputKeys={props.focusInputKeys}
