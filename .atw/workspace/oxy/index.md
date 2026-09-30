@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 23
-- **Last Active**: 2026-09-30
+- **Total Sessions**: 24
+- **Last Active**: 2026-10-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~649 | Active |
+| `journal-1.md` | ~672 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 24 | 2026-10-01 | 本轮用量面板重设计（工单 04）与任务归档 | `20d358e65` | `enhance-pricing-hover-panel` |
 | 23 | 2026-09-30 | 提供方设置页重排：工单 09 文档收尾与截图验收、Providers 页改用彩色图标，任务归档 | `fe7b4914d`, `20a0911f7` | `main` |
 | 22 | 2026-09-30 | 多智能体协作票 13：provider 子智能体权限归属与验收归档 | `ecbcc7c36` | `feat/multi-agent-collab` |
 | 21 | 2026-09-30 | 第三方接口：工单 09 文档收尾、截图验收与 CI 回归修复，任务归档 | `9255915d9`, `0a853a263`, `48411967a` | `main` |

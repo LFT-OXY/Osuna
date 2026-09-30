@@ -1,123 +1,314 @@
 import type { UsagePricingModel } from "@getpaseo/protocol/usage/types";
+import { CircleAlert, Pencil, Undo2, X, type LucideIcon } from "lucide-react-native";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { View, type TextStyle } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { renderUsageText } from "@/usage/text";
-import { PRICE_COLUMN_GAP, priceColumns } from "./price-columns";
+import { Text } from "@/components/ui/text";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { Theme } from "@/styles/theme";
+import {
+  PRICE_COLUMN_GAP,
+  PRICE_INPUT_PADDING_X,
+  PRICE_VALUE_INSET_RIGHT,
+  priceColumns,
+  type PriceTableLayout,
+} from "./price-columns";
 import {
   PRICE_COLUMNS,
-  describePriceSource,
   formatPriceCell,
+  parsePriceInput,
   type PriceDraft,
   type PriceField,
 } from "./pricing";
+import type { PriceRowError, RowWriteState } from "./price-rows";
 
-export interface PriceRowProps {
+const dangerIconMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
+const ThemedCircleAlert = withUnistyles(CircleAlert, dangerIconMapping);
+
+export interface CustomPriceRowProps {
   model: UsagePricingModel;
+  layout: PriceTableLayout;
   /** 打开时四格变成输入框；无价格的行一开始就是打开的。 */
   draft: PriceDraft | null;
   /** 草稿被外部丢弃（取消、保存成功）时变值，把非受控输入框重新播种。 */
   draftToken: number;
-  isSaving: boolean;
-  error: string | null;
+  /** 保存与移除自定义价格都是写回 daemon 配置。 */
+  writeState: RowWriteState;
+  error: PriceRowError | null;
   onEdit: (model: string) => void;
   onCancel: (model: string) => void;
   onChangeField: (model: string, field: PriceField, value: string) => void;
   onSave: (model: string) => void;
+  onRemove: (model: string) => void;
 }
 
-export function PriceRow({
+/** 「自定义价格」组的一行：模型名与状态行、四个价格、操作。 */
+export function CustomPriceRow({
   model,
+  layout,
   draft,
   draftToken,
-  isSaving,
+  writeState,
   error,
   onEdit,
   onCancel,
   onChangeField,
   onSave,
-}: PriceRowProps) {
+  onRemove,
+}: CustomPriceRowProps) {
   const { t } = useTranslation();
   const modelId = model.model;
+  const stacked = layout === "stacked";
+  const unpriced = model.priceSource === null;
+  // 只有校验没过才标格子：daemon 拒绝时四格都填对了。
+  const flagInvalidCells = error?.invalid === true;
+  const isWriting = writeState === "writing";
+  const isLocked = writeState === "locked";
   const handleEdit = useCallback(() => onEdit(modelId), [modelId, onEdit]);
   const handleCancel = useCallback(() => onCancel(modelId), [modelId, onCancel]);
   const handleSave = useCallback(() => onSave(modelId), [modelId, onSave]);
+  const handleRemove = useCallback(() => onRemove(modelId), [modelId, onRemove]);
 
   return (
-    <View style={styles.rowBlock} testID={`price-table-row-${modelId}`}>
-      <View style={styles.row}>
-        <View style={styles.modelCell}>
-          <Text style={styles.model} numberOfLines={1}>
-            {modelId}
-          </Text>
-          {model.priced ? null : (
-            <View style={styles.badgeRow}>
-              <StatusBadge label={t("settings.host.priceTable.unpriced")} variant="warning" />
-            </View>
-          )}
-        </View>
-        {PRICE_COLUMNS.map((column) => (
-          <View key={column.field} style={styles.priceCell}>
-            {draft ? (
+    <View
+      style={[
+        styles.row,
+        stacked ? styles.rowStacked : styles.rowTable,
+        unpriced ? styles.rowUnpriced : null,
+      ]}
+      testID={`price-table-row-${modelId}`}
+    >
+      <View style={styles.modelCell}>
+        <ModelIdText modelId={modelId} />
+        <PriceRowStatus model={model} error={error} />
+      </View>
+      <View style={styles.prices}>
+        {PRICE_COLUMNS.map((column) => {
+          const cellStyle = stacked ? styles.priceCellStacked : styles.priceCell;
+          if (!draft) {
+            const price = model.pricePerMillion?.[column.field] ?? null;
+            return (
+              <View key={column.field} style={cellStyle}>
+                <PriceValue value={price} />
+              </View>
+            );
+          }
+          const value = draft[column.field];
+          const cellInvalid = flagInvalidCells && parsePriceInput(value) === null;
+          return (
+            <View key={column.field} style={cellStyle}>
               <PriceInputCell
                 modelId={modelId}
                 field={column.field}
                 labelKey={column.labelKey}
-                value={draft[column.field]}
+                value={value}
                 draftToken={draftToken}
+                invalid={cellInvalid}
                 onChangeField={onChangeField}
               />
-            ) : (
-              <Text style={styles.price}>
-                {model.pricePerMillion ? formatPriceCell(model.pricePerMillion[column.field]) : "—"}
-              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <View style={stacked ? styles.actionsStacked : styles.actionsTable}>
+        {draft ? (
+          <>
+            {unpriced ? null : (
+              <IconAction
+                icon={X}
+                label={t("common.actions.cancel")}
+                // 写回途中取消会丢掉草稿，而写入还可能失败、需要它重试。
+                disabled={isWriting}
+                onPress={handleCancel}
+                testID={`price-table-cancel-${modelId}`}
+              />
             )}
-          </View>
-        ))}
-        <Text style={styles.sourceCell} numberOfLines={1}>
-          {renderUsageText(t, describePriceSource(model))}
-        </Text>
-        <View style={styles.actionsCell}>
-          {draft ? (
-            <>
-              <Button
-                variant="default"
-                size="sm"
-                loading={isSaving}
-                onPress={handleSave}
-                testID={`price-table-save-${modelId}`}
-              >
-                {t("settings.host.priceTable.save")}
-              </Button>
-              {model.priced ? (
-                <Button variant="ghost" size="sm" onPress={handleCancel}>
-                  {t("common.actions.cancel")}
-                </Button>
-              ) : null}
-            </>
-          ) : (
             <Button
-              variant="ghost"
+              variant="default"
               size="sm"
+              loading={isWriting}
+              disabled={isLocked}
+              onPress={handleSave}
+              testID={`price-table-save-${modelId}`}
+            >
+              {t("settings.host.priceTable.save")}
+            </Button>
+          </>
+        ) : (
+          <>
+            <IconAction
+              icon={Pencil}
+              label={t("settings.host.priceTable.edit")}
+              accessibilityLabel={t("settings.host.priceTable.editAccessibility", {
+                model: modelId,
+              })}
+              disabled={isWriting}
               onPress={handleEdit}
               testID={`price-table-edit-${modelId}`}
-            >
-              {t("settings.host.priceTable.customPrice")}
-            </Button>
-          )}
-        </View>
+            />
+            {/* 不弹确认：移除后要么回到 LiteLLM 价格，要么回到可以直接重填的无价格数据。 */}
+            <IconAction
+              icon={Undo2}
+              label={t("settings.host.priceTable.removeCustomPrice")}
+              accessibilityLabel={t("settings.host.priceTable.removeCustomPriceAccessibility", {
+                model: modelId,
+              })}
+              loading={isWriting}
+              disabled={isLocked}
+              onPress={handleRemove}
+              testID={`price-table-remove-${modelId}`}
+            />
+          </>
+        )}
       </View>
-      {/* 这一行始终占位：条件挂载会在出错时把下面的行整体推走，正好吞掉下一次点击。 */}
-      <Text style={styles.error} numberOfLines={1} testID={`price-table-error-${modelId}`}>
-        {error ?? ""}
+    </View>
+  );
+}
+
+/**
+ * 操作列里的图标按钮：定宽的列放不下「取消」「编辑」这类文字按钮与「保存」并排
+ * （fr「Annuler」+「Enregistrer」），所以只有主操作「保存」留文字，其余是图标加 tooltip。
+ */
+function IconAction({
+  icon,
+  label,
+  accessibilityLabel,
+  loading,
+  disabled,
+  onPress,
+  testID,
+}: {
+  icon: LucideIcon;
+  /** tooltip 里的短标签；没给 `accessibilityLabel` 时也是读屏读到的名字。 */
+  label: string;
+  accessibilityLabel?: string;
+  loading?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+  testID: string;
+}) {
+  return (
+    <Tooltip delayDuration={250}>
+      <TooltipTrigger asChild>
+        <View collapsable={false}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={icon}
+            loading={loading}
+            disabled={disabled}
+            onPress={onPress}
+            style={styles.iconAction}
+            accessibilityLabel={accessibilityLabel ?? label}
+            testID={testID}
+          />
+        </View>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={8}>
+        <Text variant="caption">{label}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * 模型名下面固定高度的一行：出错时错误替换状态，而不是另起一行，这样下面的行不会被
+ * 推走——那正好会吞掉用户接下来的那一次点击。
+ */
+function PriceRowStatus({
+  model,
+  error,
+}: {
+  model: UsagePricingModel;
+  error: PriceRowError | null;
+}) {
+  const { t } = useTranslation();
+  if (error) {
+    // 模型列很窄，daemon 给的原因常被截断；悬停看全文，行高不变。
+    return (
+      <Tooltip delayDuration={250}>
+        <TooltipTrigger asChild>
+          <View style={styles.status} collapsable={false}>
+            <ThemedCircleAlert size={12} />
+            <Text
+              variant="caption"
+              color="statusDanger"
+              numberOfLines={1}
+              style={styles.statusText}
+              testID={`price-table-error-${model.model}`}
+            >
+              {error.message}
+            </Text>
+          </View>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start" offset={8}>
+          <Text variant="caption">{error.message}</Text>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  const status = ROW_STATUS[model.priceSource ?? "unpriced"];
+  return (
+    <View style={styles.status}>
+      <View style={[styles.dot, styles[status.dot]]} />
+      <Text variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.statusText}>
+        {t(status.labelKey)}
       </Text>
     </View>
   );
 }
+
+/** `table`：从 LiteLLM 行点了「自定义」、还没保存的行，写的是它现在的价格来源。 */
+const ROW_STATUS = {
+  unpriced: { dot: "dotUnpriced", labelKey: "settings.host.priceTable.unpriced" },
+  override: { dot: "dotCustom", labelKey: "settings.host.priceTable.customPrice" },
+  table: { dot: "dotLitellm", labelKey: "settings.host.priceTable.litellmPrice" },
+} as const;
+
+/**
+ * 模型 id 单行省略；列放不下时悬停看完整 id，好分清两个相近的模型。
+ */
+export function ModelIdText({ modelId }: { modelId: string }) {
+  return (
+    <Tooltip delayDuration={250}>
+      <TooltipTrigger asChild>
+        <View collapsable={false} style={styles.modelId}>
+          <Text variant="label" numberOfLines={1}>
+            {modelId}
+          </Text>
+        </View>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" offset={8}>
+        <Text variant="caption">{modelId}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** 只读的一格价格。0 用次级色：多数是上游缺这一列，读的时候不该和真实价格一样重。 */
+export function PriceValue({ value }: { value: number | null }) {
+  return (
+    <Text
+      variant="label"
+      color={value === 0 ? "foregroundMuted" : "foreground"}
+      numberOfLines={1}
+      style={styles.value}
+    >
+      {value === null ? "—" : formatPriceCell(value)}
+    </Text>
+  );
+}
+
+// 调用方给 FormTextInput 的样式要是普通对象：它在 Web 上压平后拆成外框与文字两份，
+// Unistyles 的样式压平后只剩 class（`components/ui/form-field.tsx`）。
+const PRICE_INPUT_STYLE: TextStyle = {
+  paddingHorizontal: PRICE_INPUT_PADDING_X,
+  textAlign: "right",
+  fontVariant: ["tabular-nums"],
+};
 
 function PriceInputCell({
   modelId,
@@ -125,6 +316,7 @@ function PriceInputCell({
   labelKey,
   value,
   draftToken,
+  invalid,
   onChangeField,
 }: {
   modelId: string;
@@ -132,6 +324,7 @@ function PriceInputCell({
   labelKey: string;
   value: string;
   draftToken: number;
+  invalid: boolean;
   onChangeField: (model: string, field: PriceField, value: string) => void;
 }) {
   const { t } = useTranslation();
@@ -143,63 +336,141 @@ function PriceInputCell({
   return (
     <FormTextInput
       size="sm"
+      prefix="$"
+      invalid={invalid}
+      placeholder="0.00"
       initialValue={value}
       resetKey={`${modelId}-${field}-${draftToken}`}
       onChangeText={handleChange}
       keyboardType="decimal-pad"
+      style={PRICE_INPUT_STYLE}
       accessibilityLabel={`${modelId} ${t(labelKey)}`}
       testID={`price-table-input-${modelId}-${field}`}
     />
   );
 }
 
+/** 表头与行共用同一套列：表头里模型列与操作列留空，窄屏只剩四个价格列。 */
+export function PriceTableHeader({ layout }: { layout: PriceTableLayout }) {
+  const { t } = useTranslation();
+  const stacked = layout === "stacked";
+  return (
+    <View style={styles.header}>
+      {stacked ? null : (
+        <Text variant="caption" color="foregroundMuted" style={styles.modelCell}>
+          {t("settings.host.priceTable.columns.model")}
+        </Text>
+      )}
+      <View style={[styles.prices, stacked ? styles.pricesFill : null]}>
+        {PRICE_COLUMNS.map((column) => (
+          <Text
+            key={column.field}
+            variant="caption"
+            color="foregroundMuted"
+            style={[stacked ? styles.priceCellStacked : styles.priceCell, styles.value]}
+          >
+            {t(column.labelKey)}
+          </Text>
+        ))}
+      </View>
+      {stacked ? null : <View style={priceColumns.actions} />}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
-  rowBlock: {
-    gap: theme.spacing[1],
-    paddingVertical: theme.spacing[2],
+  row: {
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderCardRow,
   },
-  row: {
+  rowTable: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: PRICE_COLUMN_GAP,
+    minHeight: 60,
+  },
+  rowStacked: {
+    gap: theme.spacing[2],
+  },
+  // 无价格数据的行：提示「这一行要填」，用主题现成的警示底色，不另调一档更淡的。
+  rowUnpriced: {
+    backgroundColor: theme.colors.surfaceWarning,
+  },
+  modelId: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+  },
+  modelCell: {
+    ...priceColumns.model,
+    gap: theme.spacing[0.5],
+  },
+  status: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+    // 与 caption 的行高相同：状态与错误互换时这一行不变高。
+    height: theme.typeScale.caption.lineHeight,
+  },
+  statusText: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dotUnpriced: {
+    backgroundColor: theme.colors.statusWarning,
+  },
+  dotCustom: {
+    backgroundColor: theme.colors.accent,
+  },
+  dotLitellm: {
+    backgroundColor: theme.colors.foregroundMuted,
+  },
+  prices: {
     flexDirection: "row",
     alignItems: "center",
     gap: PRICE_COLUMN_GAP,
   },
-  // The badge takes its own line: beside a long model id it left no room for the
-  // id itself, and the settings column caps at 720.
-  modelCell: {
-    ...priceColumns.model,
-    gap: theme.spacing[1],
-  },
-  model: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
-  },
-  badgeRow: {
-    flexDirection: "row",
+  pricesFill: {
+    flex: 1,
   },
   priceCell: priceColumns.price,
-  price: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+  priceCellStacked: {
+    flex: 1,
+    minWidth: 0,
+  },
+  value: {
     textAlign: "right",
+    paddingRight: PRICE_VALUE_INSET_RIGHT,
+    fontVariant: ["tabular-nums"],
   },
-  sourceCell: {
-    ...priceColumns.source,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  actionsCell: {
+  actionsTable: {
     ...priceColumns.actions,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: theme.spacing[1],
+  },
+  // sm 按钮高 28，左右各 6 加 14 的图标与 1px 边框正好是方的。
+  iconAction: {
+    paddingHorizontal: theme.spacing[1.5],
+  },
+  actionsStacked: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
   },
-  error: {
-    color: theme.colors.statusDanger,
-    fontSize: theme.fontSize.sm,
-    // 固定行高，空字符串时也不塌陷。
-    lineHeight: theme.fontSize.sm * 1.4,
-    minHeight: theme.fontSize.sm * 1.4,
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: PRICE_COLUMN_GAP,
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[2],
+    paddingBottom: theme.spacing[1.5],
   },
 }));

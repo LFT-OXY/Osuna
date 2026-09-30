@@ -647,3 +647,26 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 ### Status
 
 [OK] **Completed**
+
+
+## Session 24: 本轮用量面板重设计（工单 04）与任务归档
+<!-- atw-session: v=2 fp=2fd7698e71746561 -->
+
+**Date**: 2026-10-01
+**Task**: 本轮用量面板重设计（工单 04）与任务归档
+**Package**: app
+**Branch**: `enhance-pricing-hover-panel`
+
+### Summary
+
+实现 04 票：本轮用量面板改为「总览 + 明细」，外框经 TooltipContent 定宽 300、去内边距，修掉内容越出右边框 18px 的歪斜；推理单独成格，单/多模型分别呈现，无价格数据有明细标记、点状下划线与底部提示。buildTurnUsagePanel（none/single/multi 联合）取代旧明细函数，9 种语言文案补齐并删旧键。新增浏览器组件测试（三种轮次 × 1280/390）。两轴审查后修了联合、密度、嵌套与测试断言。真实 Web 与 dev 桌面端验收通过；多模型/无价格画面只在浏览器测试里以亮色渲染。前端规范补 Tooltip 面板定宽写法与 browser 项目三条坑。PRD 验收项除 CI 外全部勾选（分支未推送、CI 未跑），任务已归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `20d358e65` | feat(app): 本轮用量面板改为「总览 + 明细」，内容不再溢出边框 |
+
+### Status
+
+[OK] **Completed**

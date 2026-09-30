@@ -145,11 +145,13 @@ surrounding space — no normalization, no prefix stripping, so an override
 applies to the id as your logs spell it and to nothing else. All four columns
 are required; zero is a price, which is how you mark a model as free rather than
 as unknown. A repeated model takes its last entry. Removing the entry removes
-the price.
+the price; "Remove custom price" in the price table deletes every entry for that
+model and leaves the rest, notes included.
 
 An override wins over the table. Everything else falls back to the table through
 the lookup order in `packages/server/src/server/usage/pricing/matcher.ts`: the
 id as written, the Claude spelling the table uses, the undated id, then the same
 steps with a gateway prefix removed. A model that survives all of that unmatched
-costs zero and is reported as unpriced, which is what the price table's amber
-pill shows.
+costs zero and is reported as unpriced. The price table lists those models at
+the top of its "Custom prices" group, marked "No price data", with inputs open
+for the four columns; saving writes the override and the row stays in that group.

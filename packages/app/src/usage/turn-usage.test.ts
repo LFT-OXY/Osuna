@@ -4,10 +4,13 @@ import type {
   UsageModelAmount,
   UsageTokenTotals,
 } from "@getpaseo/protocol/usage/types";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
+import { renderUsageText } from "./text";
 import {
   addRunningTurnElapsed,
-  buildTurnUsageBreakdown,
+  buildTurnUsagePanel,
+  describeUnpricedWarning,
   hasAgentUsage,
   isTurnUsagePending,
   matchTurnUsage,
@@ -41,6 +44,13 @@ function turn(overrides: Partial<UsageAgentTurn> = {}): UsageAgentTurn {
     ...overrides,
   };
 }
+
+beforeAll(async () => {
+  if (!i18n.isInitialized) {
+    await i18n.init();
+  }
+  await i18n.changeLanguage("en");
+});
 
 describe("matchTurnUsage", () => {
   const withTurnId = turn({ turnKey: "prompt-a", turnId: "paseo-turn-1", userMessageIds: ["u1"] });
@@ -118,95 +128,121 @@ describe("summarizeTurnUsage", () => {
   });
 });
 
-describe("buildTurnUsageBreakdown", () => {
-  it("folds cache reads and writes into one column and skips the total for a single model", () => {
+describe("buildTurnUsagePanel", () => {
+  const sonnet = model(
+    "claude-sonnet-4-5",
+    { input: 100, cachedInput: 20, cacheWrite: 5, output: 50, reasoning: 12 },
+    0.02,
+  );
+  const glm = model("glm-4.6", { input: 40, output: 10, reasoning: 4 }, 0);
+  const sonnetRow = {
+    model: "claude-sonnet-4-5",
+    input: 100,
+    cache: 25,
+    output: 50,
+    reasoning: 12,
+    estimatedCost: 0.02,
+    priced: true,
+  };
+  const glmRow = {
+    model: "glm-4.6",
+    input: 40,
+    cache: 0,
+    output: 10,
+    reasoning: 4,
+    estimatedCost: 0,
+    priced: false,
+  };
+
+  it("names the one model and takes the totals from the turn, reasoning kept inside output", () => {
     expect(
-      buildTurnUsageBreakdown(
+      buildTurnUsagePanel(
         turn({
-          byModel: [
-            model(
-              "claude-sonnet-4-5",
-              { input: 100, cachedInput: 20, cacheWrite: 5, output: 50 },
-              0.02,
-            ),
-          ],
-          totals: totals({ input: 100, cachedInput: 20, cacheWrite: 5, output: 50 }),
+          byModel: [sonnet],
+          totals: totals({ input: 100, cachedInput: 20, cacheWrite: 5, output: 50, reasoning: 12 }),
           estimatedCost: 0.02,
+          priced: true,
         }),
       ),
     ).toEqual({
-      rows: [
-        {
-          model: "claude-sonnet-4-5",
-          input: 100,
-          cache: 25,
-          output: 50,
-          reasoning: 0,
-          estimatedCost: 0.02,
-          priced: true,
-        },
-      ],
-      total: null,
+      totals: {
+        input: 100,
+        cache: 25,
+        output: 50,
+        reasoning: 12,
+        estimatedCost: 0.02,
+        priced: true,
+      },
+      models: { kind: "single", model: sonnetRow },
+      unpricedModels: [],
     });
   });
 
-  it("adds a total row once a turn ran more than one model", () => {
+  it("lists every model of a turn that ran more than one, and the ones without price data", () => {
     expect(
-      buildTurnUsageBreakdown(
+      buildTurnUsagePanel(
         turn({
-          byModel: [
-            model(
-              "claude-sonnet-4-5",
-              { input: 100, cachedInput: 20, cacheWrite: 5, output: 50 },
-              0.02,
-            ),
-            model(
-              "glm-4.6",
-              { input: 40, cachedInput: 0, cacheWrite: 0, output: 10, reasoning: 4 },
-              0,
-            ),
-          ],
-          totals: totals({
-            input: 140,
-            cachedInput: 20,
-            cacheWrite: 5,
-            output: 60,
-            reasoning: 4,
-          }),
+          byModel: [sonnet, glm],
+          totals: totals({ input: 140, cachedInput: 20, cacheWrite: 5, output: 60, reasoning: 16 }),
           estimatedCost: 0.02,
           priced: false,
         }),
       ),
     ).toEqual({
-      rows: [
-        {
-          model: "claude-sonnet-4-5",
-          input: 100,
-          cache: 25,
-          output: 50,
-          reasoning: 0,
-          estimatedCost: 0.02,
-          priced: true,
-        },
-        {
-          model: "glm-4.6",
-          input: 40,
-          cache: 0,
-          output: 10,
-          reasoning: 4,
-          estimatedCost: 0,
-          priced: false,
-        },
-      ],
-      total: {
+      totals: {
         input: 140,
         cache: 25,
         output: 60,
-        reasoning: 4,
+        reasoning: 16,
         estimatedCost: 0.02,
         priced: false,
       },
+      models: { kind: "multi", models: [sonnetRow, glmRow] },
+      unpricedModels: ["glm-4.6"],
     });
+  });
+
+  it("costs nothing when no model of the turn has price data", () => {
+    expect(
+      buildTurnUsagePanel(
+        turn({
+          byModel: [glm],
+          totals: totals({ input: 40, output: 10, reasoning: 4 }),
+          estimatedCost: 0,
+          priced: false,
+        }),
+      ),
+    ).toEqual({
+      totals: { input: 40, cache: 0, output: 10, reasoning: 4, estimatedCost: 0, priced: false },
+      models: { kind: "single", model: glmRow },
+      unpricedModels: ["glm-4.6"],
+    });
+  });
+
+  it("names no model for a turn the daemon broke down by none", () => {
+    expect(buildTurnUsagePanel(turn()).models).toEqual({ kind: "none" });
+  });
+});
+
+describe("describeUnpricedWarning", () => {
+  it("names the models counted at $0 with two keys rather than a plural suffix", () => {
+    expect(renderUsageText(i18n.t, describeUnpricedWarning(["glm-4.6"], ", "))).toBe(
+      "glm-4.6 has no price data and counts as $0. Set a custom price in Settings › Price table.",
+    );
+    expect(
+      renderUsageText(i18n.t, describeUnpricedWarning(["glm-4.6", "orcarouter/qwen3"], ", ")),
+    ).toBe(
+      "glm-4.6, orcarouter/qwen3 have no price data and count as $0. Set custom prices in Settings › Price table.",
+    );
+  });
+
+  it("has a key for every runtime-assembled name", () => {
+    for (const key of [
+      "message.turnUsage.unpricedWarningOne",
+      "message.turnUsage.unpricedWarningMany",
+    ]) {
+      expect(i18n.exists(key), key).toBe(true);
+    }
   });
 });
 

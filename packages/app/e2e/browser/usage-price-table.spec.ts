@@ -1,3 +1,5 @@
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { UsagePricePerMillion, UsagePricingOverride } from "@getpaseo/protocol/usage/types";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
@@ -17,34 +19,68 @@ test.use({ e2eDaemonEnvironment: fixtures.environment });
 /** Token totals come only from the parsers, so they are exact. */
 const FIXTURE_TOKENS = "180,248";
 
-interface PricingConfigClient {
-  connect(): Promise<void>;
-  close(): Promise<void>;
-  getDaemonConfig(): Promise<{
-    config: { usage?: { pricing?: { autoUpdate?: boolean } } };
-  }>;
-}
+const ONE_DOLLAR = { input: 1, cachedInput: 1, cacheWrite: 1, output: 1 };
 
-/** Reads the switch back out of the daemon, not out of the page it just set. */
-async function readAutoUpdate(): Promise<boolean | undefined> {
-  const client = await connectDaemonClient<PricingConfigClient>({
+async function withPricingClient<T>(run: (client: DaemonClient) => Promise<T>): Promise<T> {
+  const client = await connectDaemonClient<DaemonClient>({
     clientIdPrefix: "price-table-e2e",
   });
   try {
-    const { config } = await client.getDaemonConfig();
-    return config.usage?.pricing?.autoUpdate;
+    return await run(client);
   } finally {
     await client.close().catch(() => undefined);
   }
 }
 
 /**
- * The bundled price snapshot is refreshed before a release, so which model it
- * misses is not a constant. The daemon sorts unpriced models first, so the top
- * row is the one to price, whichever it turns out to be.
+ * 直接写 daemon 配置，不经过页面：布置前提、模拟在 App 外改的 `config.json`，
+ * 或者传空表清掉同一个 worker daemon 上前面的用例定过的价。
+ */
+async function writeCustomPrices(overrides: UsagePricingOverride[]): Promise<void> {
+  await withPricingClient((client) =>
+    client.patchDaemonConfig({ usage: { pricing: { overrides } } }),
+  );
+}
+
+/** 从 daemon 读回覆盖表，而不是从写它的页面读。 */
+async function readCustomPrices(): Promise<UsagePricingOverride[] | undefined> {
+  return withPricingClient(async (client) => {
+    const { config } = await client.getDaemonConfig();
+    return config.usage?.pricing?.overrides;
+  });
+}
+
+/** daemon 当前给这个模型的 LiteLLM 价格：「自定义」要以它预填。 */
+async function readTablePrice(model: string): Promise<UsagePricePerMillion> {
+  return withPricingClient(async (client) => {
+    const { models } = await client.usagePricingList();
+    const price = models.find((row) => row.model === model)?.pricePerMillion;
+    if (!price) throw new Error(`Expected ${model} to have a LiteLLM price.`);
+    return price;
+  });
+}
+
+/** Reads the switch back out of the daemon, not out of the page it just set. */
+async function readAutoUpdate(): Promise<boolean | undefined> {
+  return withPricingClient(async (client) => {
+    const { config } = await client.getDaemonConfig();
+    return config.usage?.pricing?.autoUpdate;
+  });
+}
+
+/** LiteLLM 组的副标题：daemon 读的是内置快照还是联网缓存都认。 */
+const LITELLM_SUBTITLE =
+  /(Bundled LiteLLM snapshot|LiteLLM prices fetched online), updated .+ · \$ per million tokens/;
+
+/**
+ * 内置快照每次发版前都会刷新，所以它漏掉哪个模型不是常量。无价格的模型排在自定义
+ * 价格组最前面，取这一组的第一行，不管它是哪个模型。
  */
 async function topRowModel(page: Page): Promise<string> {
-  const firstRow = page.locator('[data-testid^="price-table-row-"]').first();
+  const firstRow = page
+    .getByTestId("price-table-custom-group")
+    .locator('[data-testid^="price-table-row-"]')
+    .first();
   await expect(firstRow).toBeVisible({ timeout: 30_000 });
   const testId = await firstRow.getAttribute("data-testid");
   if (!testId) throw new Error("Expected the first price table row to carry a testID.");
@@ -52,17 +88,29 @@ async function topRowModel(page: Page): Promise<string> {
 }
 
 /**
- * Opens the editor on a row that already has a price, and answers with its
- * model. Which model the snapshot misses is not fixed, and a sibling test may
- * have priced it already, so a priced row is the only row every run has.
+ * 自定义组第一行的模型。调用前先 `writeCustomPrices([])`：这样它一定是无价格数据的
+ * 那一行，输入框一进来就开着。
  */
-async function openPricedRowEditor(page: Page): Promise<string> {
-  const editButton = page.locator('[data-testid^="price-table-edit-"]').first();
-  await expect(editButton).toBeVisible({ timeout: 30_000 });
-  const testId = await editButton.getAttribute("data-testid");
-  if (!testId) throw new Error("Expected the edit button to carry a testID.");
-  await editButton.click();
-  return testId.replace("price-table-edit-", "");
+async function openUnpricedRowEditor(page: Page): Promise<string> {
+  const model = await topRowModel(page);
+  await expect(page.getByTestId(`price-table-input-${model}-input`)).toBeVisible();
+  return model;
+}
+
+function readTestIds(nodes: Element[]): string[] {
+  return nodes.map((node) => node.getAttribute("data-testid") ?? "");
+}
+
+/** LiteLLM 组展开后第一行的模型：内置快照每次发版都会变，不写死是哪个。 */
+async function firstLiteLLMRowModel(page: Page): Promise<string> {
+  const firstRow = page
+    .getByTestId("price-table-litellm-group")
+    .locator('[data-testid^="price-table-row-"]')
+    .first();
+  await expect(firstRow).toBeVisible();
+  const testId = await firstRow.getAttribute("data-testid");
+  if (!testId) throw new Error("Expected a LiteLLM row to carry a testID.");
+  return testId.replace("price-table-row-", "");
 }
 
 test.describe("Price table", () => {
@@ -92,9 +140,7 @@ test.describe("Price table", () => {
       await openSettingsHostSection(page, serverId, "usage");
       const card = page.getByTestId("host-page-price-table-card");
       await expect(card).toBeVisible({ timeout: 30_000 });
-      await expect(card).toContainText(
-        /\$ per million tokens · LiteLLM snapshot, updated .+, \d+ models/,
-      );
+      await expect(page.getByTestId("price-table-litellm-group")).toContainText(LITELLM_SUBTITLE);
       await expect(page.getByTestId("provider-usage-card")).toHaveCount(0);
     });
 
@@ -107,15 +153,18 @@ test.describe("Price table", () => {
       await expect(page.getByTestId(`price-table-error-${model}`)).toHaveText(
         "Enter a number in all four columns.",
       );
-      // 被拒的保存没有写出去：这一行还是无价格。
-      await expect(page.getByTestId(`price-table-row-${model}`)).toContainText(
+      // 错误替换了状态行；被拒的保存没有写出去，这一行仍开着输入框、没有编辑按钮。
+      await expect(page.getByTestId(`price-table-row-${model}`)).not.toContainText(
         "No price data · estimated $0",
       );
+      await expect(page.getByTestId(`price-table-input-${model}-output`)).toBeVisible();
+      await expect(page.getByTestId(`price-table-edit-${model}`)).toHaveCount(0);
     });
 
-    await test.step("the unpriced model leads the table and takes a custom price", async () => {
-      const row = page.getByTestId(`price-table-row-${model}`);
-      await expect(row).toContainText("No price data · estimated $0");
+    await test.step("the unpriced model leads the custom group and takes a custom price", async () => {
+      const group = page.getByTestId("price-table-custom-group");
+      const row = group.getByTestId(`price-table-row-${model}`);
+      await expect(group).toContainText(/No price data \d+/);
 
       // The model the snapshot misses is a small slice of the fixture tree, so
       // the price has to be absurd for the two-decimal total to move at all.
@@ -125,9 +174,11 @@ test.describe("Price table", () => {
       await page.getByTestId(`price-table-input-${model}-output`).fill("1000000");
       await page.getByTestId(`price-table-save-${model}`).click();
 
-      await expect(row).toContainText("Custom", { timeout: 30_000 });
+      // 保存后这一行留在自定义组，变成显示数值的已定价状态。
+      await expect(row).toContainText("Custom price", { timeout: 30_000 });
       await expect(row).not.toContainText("No price data · estimated $0");
-      await expect(page.getByTestId(`price-table-edit-${model}`)).toBeVisible();
+      await expect(row).toContainText("1000000");
+      await expect(group.getByTestId(`price-table-edit-${model}`)).toBeVisible();
     });
 
     await test.step("the usage page prices every model and the estimate moves", async () => {
@@ -136,6 +187,106 @@ test.describe("Price table", () => {
       await expect(page.getByTestId("usage-unpriced-summary")).toHaveCount(0);
       await expect(page.getByTestId("usage-total-cost")).not.toHaveText(costBefore);
     });
+  });
+
+  test("removing a custom price hands the model back to no price data", async ({ page }) => {
+    const serverId = getServerId();
+    // 一条在 App 外写的覆盖项：移除别的模型时它和它的 note 都要原样留下。
+    const kept: UsagePricingOverride = {
+      model: "e2e-model-never-seen",
+      pricePerMillion: ONE_DOLLAR,
+      note: "negotiated rate",
+    };
+    await writeCustomPrices([kept]);
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const model = await openUnpricedRowEditor(page);
+    const row = page
+      .getByTestId("price-table-custom-group")
+      .getByTestId(`price-table-row-${model}`);
+
+    await test.step("save a custom price for the unpriced model", async () => {
+      for (const field of ["input", "cachedInput", "cacheWrite", "output"]) {
+        await page.getByTestId(`price-table-input-${model}-${field}`).fill("2");
+      }
+      await page.getByTestId(`price-table-save-${model}`).click();
+      await expect(row).toContainText("Custom price", { timeout: 30_000 });
+      await expect(page.getByTestId(`price-table-remove-${model}`)).toBeVisible();
+    });
+
+    await test.step("remove it without a confirmation", async () => {
+      await page.getByTestId(`price-table-remove-${model}`).click();
+
+      // LiteLLM 没有它的价格，所以它回到无价格数据、输入框开着，可以直接重填。
+      await expect(row).toContainText("No price data · estimated $0", { timeout: 30_000 });
+      await expect(page.getByTestId(`price-table-input-${model}-input`)).toHaveValue("");
+      await expect(page.getByTestId(`price-table-remove-${model}`)).toHaveCount(0);
+      await expect(page.getByTestId(`price-table-edit-${model}`)).toHaveCount(0);
+    });
+
+    expect(await readCustomPrices()).toEqual([kept]);
+  });
+
+  test("removing a custom price hands a LiteLLM model back to its group", async ({ page }) => {
+    const serverId = getServerId();
+    await writeCustomPrices([]);
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const litellmGroup = page.getByTestId("price-table-litellm-group");
+    const customGroup = page.getByTestId("price-table-custom-group");
+    const toggle = page.getByTestId("price-table-litellm-toggle");
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await toggle.click();
+    const model = await firstLiteLLMRowModel(page);
+
+    // 覆盖一个 LiteLLM 定过价的模型：它搬进自定义组。
+    await writeCustomPrices([{ model, pricePerMillion: ONE_DOLLAR }]);
+    await expect(customGroup.getByTestId(`price-table-row-${model}`)).toContainText(
+      "Custom price",
+      { timeout: 30_000 },
+    );
+
+    await page.getByTestId(`price-table-remove-${model}`).click();
+
+    await expect(litellmGroup.getByTestId(`price-table-row-${model}`)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(customGroup.getByTestId(`price-table-row-${model}`)).toHaveCount(0);
+    expect(await readCustomPrices()).toEqual([]);
+  });
+
+  test("a refused removal keeps the custom price and names the daemon's reason", async ({
+    page,
+  }) => {
+    const serverId = getServerId();
+    await writeCustomPrices([]);
+    await installDaemonConfigFailureFixture(page, "config is read-only on this host");
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const model = await openUnpricedRowEditor(page);
+    // 覆盖项绕开页面直接写进 daemon：页面的写入都会被夹具拒掉。
+    await writeCustomPrices([{ model, pricePerMillion: ONE_DOLLAR }]);
+    const remove = page.getByTestId(`price-table-remove-${model}`);
+    await expect(remove).toBeVisible({ timeout: 30_000 });
+
+    await remove.click();
+
+    await expect(page.getByTestId(`price-table-error-${model}`)).toHaveText(
+      "Could not remove this custom price. config is read-only on this host",
+    );
+    // 这一行保持原状：仍是只读的自定义价格，可以再试一次。
+    await expect(page.getByTestId(`price-table-edit-${model}`)).toBeVisible();
+    await expect(remove).toBeEnabled();
+    expect(await readCustomPrices()).toEqual([{ model, pricePerMillion: ONE_DOLLAR }]);
   });
 
   test("the auto-update switch writes through to the daemon config", async ({ page }) => {
@@ -161,13 +312,14 @@ test.describe("Price table", () => {
 
   test("a refused save keeps the row open and names the daemon's reason", async ({ page }) => {
     const serverId = getServerId();
+    await writeCustomPrices([]);
     await installDaemonConfigFailureFixture(page, "config is read-only on this host");
 
     await gotoAppShell(page);
     await openSettings(page);
     await openSettingsHostSection(page, serverId, "usage");
 
-    const model = await openPricedRowEditor(page);
+    const model = await openUnpricedRowEditor(page);
     await page.getByTestId(`price-table-input-${model}-input`).fill("1");
     await page.getByTestId(`price-table-input-${model}-cachedInput`).fill("1");
     await page.getByTestId(`price-table-input-${model}-cacheWrite`).fill("1");
@@ -237,18 +389,139 @@ test.describe("Price table", () => {
     await openSettings(page);
     await openSettingsHostSection(page, serverId, "usage");
 
-    const card = page.getByTestId("host-page-price-table-card");
+    const group = page.getByTestId("price-table-litellm-group");
     const button = page.getByTestId("price-table-refresh");
     await expect(button).toBeVisible({ timeout: 30_000 });
     await button.click();
     await refresh.waitForRequestCount(1);
 
-    // 这一行常驻占位，所以「没有错误」是空字符串而不是不存在。
-    await expect(page.getByTestId("price-table-control-error")).toHaveText("");
+    // 没有错误时，错误那一格换回副标题。
+    await expect(page.getByTestId("price-table-control-error")).toHaveCount(0);
     await expect(button).toBeEnabled();
     // 副标题仍然报得出快照时间：刷新没有把卡片打回加载态。
-    await expect(card).toContainText(
-      /\$ per million tokens · LiteLLM snapshot, updated .+, \d+ models/,
+    await expect(group).toContainText(LITELLM_SUBTITLE);
+  });
+
+  test("the LiteLLM group folds its models until asked", async ({ page }) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const group = page.getByTestId("price-table-litellm-group");
+    const toggle = page.getByTestId("price-table-litellm-toggle");
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await expect(toggle).toContainText(/\d+ models? priced by LiteLLM/);
+    await expect(group.locator('[data-testid^="price-table-row-"]')).toHaveCount(0);
+
+    await toggle.click();
+    const firstRow = group.locator('[data-testid^="price-table-row-"]').first();
+    await expect(firstRow).toBeVisible();
+    // 这一组只读：没有输入框，也没有保存。
+    await expect(group.locator('[data-testid^="price-table-input-"]')).toHaveCount(0);
+    await expect(group.locator('[data-testid^="price-table-save-"]')).toHaveCount(0);
+
+    await toggle.click();
+    await expect(group.locator('[data-testid^="price-table-row-"]')).toHaveCount(0);
+  });
+
+  test("searching the LiteLLM group filters it by model name", async ({ page }) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const group = page.getByTestId("price-table-litellm-group");
+    const toggle = page.getByTestId("price-table-litellm-toggle");
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await toggle.click();
+    const model = await firstLiteLLMRowModel(page);
+    const rows = group.locator('[data-testid^="price-table-row-"]');
+    const search = page.getByTestId("price-table-litellm-search");
+
+    // 不区分大小写、去首尾空格的子串匹配。
+    await search.fill(`  ${model.toUpperCase()}  `);
+    await expect(group.getByTestId(`price-table-row-${model}`)).toBeVisible();
+    const matchedIds = await rows.evaluateAll(readTestIds);
+    for (const testId of matchedIds) {
+      expect(testId.toLowerCase()).toContain(model.toLowerCase());
+    }
+
+    await search.fill("e2e-no-such-model");
+    await expect(page.getByTestId("price-table-litellm-no-matches")).toHaveText(
+      "No model names contain “e2e-no-such-model”.",
     );
+    await expect(rows).toHaveCount(0);
+
+    await page.getByTestId("price-table-litellm-search-clear").click();
+    await expect(page.getByTestId("price-table-litellm-no-matches")).toHaveCount(0);
+    await expect(group.getByTestId(`price-table-row-${model}`)).toBeVisible();
+  });
+
+  test("customizing a LiteLLM row prices it by hand or leaves it alone", async ({ page }) => {
+    const serverId = getServerId();
+    await writeCustomPrices([]);
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const litellmGroup = page.getByTestId("price-table-litellm-group");
+    const customGroup = page.getByTestId("price-table-custom-group");
+    const toggle = page.getByTestId("price-table-litellm-toggle");
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await toggle.click();
+    const model = await firstLiteLLMRowModel(page);
+    const litellmRow = litellmGroup.getByTestId(`price-table-row-${model}`);
+    const customRow = customGroup.getByTestId(`price-table-row-${model}`);
+    const customize = page.getByTestId(`price-table-customize-${model}`);
+
+    try {
+      await test.step("the customize action shows on hover", async () => {
+        // 按钮用 opacity 藏起来而不是卸载，行高不变；它的外层是那一层透明度。
+        const slot = customize.locator("xpath=..");
+        await page.mouse.move(0, 0);
+        await expect(slot).toHaveCSS("opacity", "0");
+        await litellmRow.hover();
+        await expect(slot).toHaveCSS("opacity", "1");
+      });
+
+      await test.step("customize pulls the row up, prefilled with the LiteLLM price", async () => {
+        const litellmPrice = await readTablePrice(model);
+        await customize.click();
+        await expect(customRow).toContainText("LiteLLM price");
+        await expect(litellmRow).toHaveCount(0);
+        for (const field of ["input", "cachedInput", "cacheWrite", "output"] as const) {
+          const input = page.getByTestId(`price-table-input-${model}-${field}`);
+          await expect(input).not.toHaveValue("");
+          expect(Number(await input.inputValue())).toBeCloseTo(litellmPrice[field], 6);
+        }
+      });
+
+      await test.step("cancel sends it back and writes nothing", async () => {
+        await page.getByTestId(`price-table-cancel-${model}`).click();
+        await expect(customRow).toHaveCount(0);
+        await expect(litellmRow).toBeVisible();
+        expect(await readCustomPrices()).toEqual([]);
+      });
+
+      await test.step("save turns it into a custom price that stays up top", async () => {
+        await litellmRow.hover();
+        await customize.click();
+        await page.getByTestId(`price-table-input-${model}-input`).fill("7");
+        await page.getByTestId(`price-table-save-${model}`).click();
+
+        await expect(customRow).toContainText("Custom price", { timeout: 30_000 });
+        await expect(page.getByTestId(`price-table-edit-${model}`)).toBeVisible();
+        await expect(litellmRow).toHaveCount(0);
+        const saved = await readCustomPrices();
+        expect(saved).toHaveLength(1);
+        expect(saved?.[0]?.model).toBe(model);
+        expect(saved?.[0]?.pricePerMillion.input).toBe(7);
+      });
+    } finally {
+      // 同一个 worker daemon 上后面的用例从干净的覆盖表开始。
+      await writeCustomPrices([]);
+    }
   });
 });
