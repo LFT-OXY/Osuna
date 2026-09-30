@@ -179,8 +179,12 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
   );
 }
 
-// 详情头部要的数据：设置页的头部块和手机顶栏共用。
-export function useProviderDetailHeader(serverId: string, provider: string) {
+// 详情头部要的数据：设置页的头部块、手机顶栏和 composer 弹窗头部共用。
+export function useProviderDetailHeader(
+  serverId: string,
+  provider: string,
+  options?: { onRemoved?: () => void },
+) {
   const { t } = useTranslation();
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
   const { patchConfig } = useDaemonConfig(serverId);
@@ -208,7 +212,8 @@ export function useProviderDetailHeader(serverId: string, provider: string) {
   const providerSource = providerEntry?.source;
   const isRemoving = removal.status === "removing";
 
-  // 删除成功后提供方从快照里消失，由页面的地址修正回到第一个提供方或列表。
+  // 删除成功后提供方从快照里消失，设置页由地址修正回到第一个提供方或列表；弹窗经 onRemoved 关闭。
+  const onRemoved = options?.onRemoved;
   const handleRemove = useCallback(() => {
     void removeProvider(serverId, provider, {
       confirm: () =>
@@ -218,9 +223,12 @@ export function useProviderDetailHeader(serverId: string, provider: string) {
           confirmLabel: t("settings.providers.remove.confirm"),
           destructive: true,
         }),
-      remove: () => patchConfig({ removeProviders: [provider] }),
+      remove: async () => {
+        await patchConfig({ removeProviders: [provider] });
+        onRemoved?.();
+      },
     });
-  }, [label, patchConfig, provider, serverId, t]);
+  }, [label, onRemoved, patchConfig, provider, serverId, t]);
 
   return {
     icon,
@@ -236,6 +244,42 @@ export function useProviderDetailHeader(serverId: string, provider: string) {
   };
 }
 
+export type ProviderDetailHeaderState = ReturnType<typeof useProviderDetailHeader>;
+
+// 头部的「刷新」和 ⋯ 菜单：设置页的头部块和 composer 弹窗头部共用；手机顶栏另有顶栏尺寸的版本。
+export function ProviderDetailActions({
+  serverId,
+  provider,
+  header,
+  iconOnlyRefresh = false,
+}: {
+  serverId: string;
+  provider: string;
+  header: ProviderDetailHeaderState;
+  iconOnlyRefresh?: boolean;
+}) {
+  const { diagnose } = useProviderDiagnosticActions(serverId, provider);
+  return (
+    <>
+      <ProviderDetailRefreshButton
+        isRefreshing={header.isRefreshing}
+        onRefresh={header.onRefresh}
+        iconOnly={iconOnlyRefresh}
+      />
+      <ProviderDetailMenu
+        provider={provider}
+        providerLabel={header.label}
+        providerSource={header.providerSource}
+        hostSupportsRemoval={header.hostSupportsRemoval}
+        isRemoving={header.isRemoving}
+        onDiagnose={diagnose}
+        onRemove={header.onRemove}
+        placement="inline"
+      />
+    </>
+  );
+}
+
 // 设置页的页面外框：头部块加详情内容。
 export function ProviderDetailPage({
   serverId,
@@ -248,43 +292,9 @@ export function ProviderDetailPage({
   hasScreenHeaderActions: boolean;
 }) {
   const header = useProviderDetailHeader(serverId, provider);
-  const { diagnose } = useProviderDiagnosticActions(serverId, provider);
-  const {
-    label,
-    isRefreshing,
-    onRefresh,
-    providerSource,
-    hostSupportsRemoval,
-    isRemoving,
-    onRemove,
-  } = header;
   const renderActions = useCallback(
-    () => (
-      <>
-        <ProviderDetailRefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />
-        <ProviderDetailMenu
-          provider={provider}
-          providerLabel={label}
-          providerSource={providerSource}
-          hostSupportsRemoval={hostSupportsRemoval}
-          isRemoving={isRemoving}
-          onDiagnose={diagnose}
-          onRemove={onRemove}
-          placement="inline"
-        />
-      </>
-    ),
-    [
-      diagnose,
-      hostSupportsRemoval,
-      isRefreshing,
-      isRemoving,
-      label,
-      onRefresh,
-      onRemove,
-      provider,
-      providerSource,
-    ],
+    () => <ProviderDetailActions serverId={serverId} provider={provider} header={header} />,
+    [header, provider, serverId],
   );
 
   return (

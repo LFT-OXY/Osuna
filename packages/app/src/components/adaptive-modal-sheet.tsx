@@ -69,6 +69,8 @@ export interface SheetHeaderBack {
 export interface SheetHeader {
   title: string;
   subtitle?: ReactNode;
+  // 与标题同一行、紧跟标题（如状态徽章）；subtitle 在标题下方另起一行。
+  titleAccessory?: ReactNode;
   back?: SheetHeaderBack;
   leading?: ReactNode;
   actions?: ReactNode;
@@ -134,6 +136,15 @@ const styles = StyleSheet.create((theme) => ({
   title: {
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.medium,
+  },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    minWidth: 0,
+  },
+  headerTitleShrink: {
+    flexShrink: 1,
   },
   headerActions: {
     flexDirection: "row",
@@ -323,6 +334,7 @@ export function SheetHeaderView({
     () => [styles.title, { color: theme.colors.foreground }],
     [theme.colors.foreground],
   );
+  const shrinkingTitleStyle = useMemo(() => [titleStyle, styles.headerTitleShrink], [titleStyle]);
   const back = header.back;
   const handleBackPress = back?.onPress;
   const search = header.search;
@@ -355,9 +367,18 @@ export function SheetHeaderView({
         ) : null}
         {header.leading ? <View style={styles.headerLeadingSlot}>{header.leading}</View> : null}
         <View style={styles.headerTitleGroup}>
-          <Text style={titleStyle} numberOfLines={1}>
-            {header.title}
-          </Text>
+          {header.titleAccessory ? (
+            <View style={styles.headerTitleRow}>
+              <Text style={shrinkingTitleStyle} numberOfLines={1}>
+                {header.title}
+              </Text>
+              {header.titleAccessory}
+            </View>
+          ) : (
+            <Text style={titleStyle} numberOfLines={1}>
+              {header.title}
+            </Text>
+          )}
           {header.subtitle}
         </View>
         {header.actions ? <View style={styles.headerActions}>{header.actions}</View> : null}

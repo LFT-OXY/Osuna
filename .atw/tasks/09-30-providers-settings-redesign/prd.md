@@ -153,7 +153,7 @@
   - 模块是 `packages/app/src/provider-detail/`：`index.tsx` 的 `ProviderDetailSurface` 只收 props，决定显示哪些区块；`view.tsx` 的 `ProviderDetail` 接快照、配置和主机能力。安装指引与第三方接口的运行时视图在 unit 运行器里无法加载，由 view 经 `renderInstallGuide` / `renderApiEndpoints` 插槽注入（工单 01）。
   - 页面外框：渲染头部块。头部块是 40 的图标框（圆角 10），名称用 title-sm，下面一行是 StatusBadge 加「{N} 个 Model」，右侧是 secondary sm「刷新」和 28 的 ⋯ 按钮。
   - 紧凑页面：「刷新」和 ⋯ 放到 BackHeader 右侧，改成仅图标按钮；页内头部块只保留图标、名称、徽章和模型数。头部块的操作区是 `renderActions` 插槽，手机上不传。
-  - 弹窗外框：名称、徽章、「刷新」、⋯ 放进弹窗头部。
+  - 弹窗外框：图标、名称、徽章、「刷新」、⋯ 放进弹窗头部（见「composer 齿轮入口」）。
 - 区块顺序固定：错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models → 诊断。每块是一个 SettingsSection，Alert 类区块除外。块与块之间保留 SettingsSection 默认的 24 间距。
 - **错误卡**：Alert error。标题「{名称} 无法启动」（新增），下面是 daemon 返回的错误原文，等宽、可选中；再下面是 outline「刷新」和 outline「运行诊断」（`settings.providers.diagnostic.run`，05 新增，07 的诊断节复用）。仅在已启用且出错时显示。
   - 原文和按钮一起放在 Alert 的 children 里：`description` 只收字符串，用 `useMemo` 包 JSX 能躲过 lint，但仍是 JSX 经 prop 传递。
@@ -192,7 +192,7 @@
 - **⋯ 菜单**：DropdownMenu，align end，宽 220。菜单项是「诊断」（`FileText`）；自定义提供方且主机支持 `providerRemoval` 时，加分隔线和 destructive「Remove provider」（`Trash2`）。删除仍走现有 `confirmDialog`；失败时在详情顶部显示 Alert error，不再用 `Alert.alert`。
   - 组件是 `provider-detail/header.tsx` 的 `ProviderDetailMenu`，收 `providerSource` 和 `hostSupportsRemoval`，自己判定有没有删除项；`placement` 区分页内头部块（28 的按钮）和手机顶栏（顶栏图标按钮尺寸）。
   - 删除状态在 `provider-detail/removal.ts`：按主机加提供方分键的 store，`idle | removing | failed`。手机上 ⋯ 在顶栏、失败提示在正文，两处不在同一棵组件树，所以不用组件 state。确认框弹出期间就是 `removing`，菜单项显示「正在删除...」。
-  - 删除失败的 Alert 标题复用 `settings.providers.remove.errorTitle`，描述是原因，带 outline「关闭」；重试删除时也清掉。删除成功后提供方从快照消失，由页面的地址修正回到第一个提供方或列表。
+  - 删除失败的 Alert 标题复用 `settings.providers.remove.errorTitle`，描述是原因，带 outline「关闭」；重试删除时也清掉。删除成功后提供方从快照消失，由页面的地址修正回到第一个提供方或列表；composer 弹窗里删除成功则关闭弹窗（见「composer 齿轮入口」）。
   - 「诊断」和错误卡的「运行诊断」走 `useProviderDiagnosticActions` 的 `diagnose`，见上面「诊断（就地）」。`DiagnosticSubSheet` 已删除。
 
 ### ACP 目录弹窗
@@ -207,7 +207,18 @@
 ### composer 齿轮入口
 
 - 全局 provider settings 宿主保留，测试 id `provider-settings-sheet` 不变；弹窗内容换成详情组件的弹窗外框，desktopMaxWidth 640。
+- 弹窗头部（`components/provider-diagnostic-sheet.tsx`）：
+  - `leading` 是 28 的图标框（`ProviderIconFrame size="sm"`，样式复用 `settingsStyles.rowIconFrame`）；
+  - 标题是名称，徽章经 `SheetHeader.titleAccessory` 紧跟在标题同一行（`subtitle` 会另起一行，和原型不符）；
+  - `actions` 是 `provider-detail/view.tsx` 的 `ProviderDetailActions`（「刷新」加 ⋯），设置页头部块也用它；
+  - 头部不显示模型数，与原型一致。
+- 紧凑（底部 sheet）下「刷新」改为 ghost sm 仅图标按钮（无障碍名称仍是「刷新」）：390 宽时文字按钮会把名称挤成省略号。这与紧凑页面顶栏改仅图标的做法一致。
+- 弹窗内容 `contentStyle` 设 gap 0、paddingBottom 0：区块自带 24 的下边距，不再叠加 sheet 默认的 16 间距；最后一块的下边距充当底部留白。
+- 删除（用户确认的两条）：
+  - 删除失败的提示按主机加提供方共享，设置页留下的失败提示在弹窗里也显示，任一处关闭或重试都会清掉。
+  - 删除成功后关闭弹窗，回到模型选择器。`useProviderDetailHeader(serverId, provider, { onRemoved })` 在写入成功后调用 `onRemoved`；宿主经 store 的 `closeIfShowing({ serverId, provider })` 只关仍在显示的同一个提供方，删除期间换开了别的提供方时不关。
 - 原来叠在它上面的两个子弹窗（添加 Model、诊断）随就地展开一并移除。第三方接口表单仍然叠在它上面，这是 §6 允许的多字段表单。
+- 测试：`provider-settings-refresh.spec.ts` 断言头部「刷新」和 ⋯、⋯「诊断」后输出进入视口、没有子弹窗（桌面与手机视口各一条）；`closeIfShowing` 在 `provider-settings-store.test.ts` 覆盖。弹窗内的删除没有 e2e：mock 提供方不是自定义提供方，删除路径由 `provider-removal.spec.ts`（设置页）和 `removal.test.ts` 覆盖。
 
 ### 视觉
 

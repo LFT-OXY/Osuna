@@ -92,10 +92,34 @@ async function hasFocusWithin(locator: Locator): Promise<boolean> {
   return locator.evaluate((element) => element.contains(document.activeElement));
 }
 
+const MOCK_PROVIDER = "mock";
+
+// 弹窗头部是图标、名称、徽章、「刷新」和 ⋯；桌面端 testID 在整个弹窗上，手机上在头部。
 async function expectProviderSettingsVisible(page: Page) {
-  await expect(page.getByTestId("provider-settings-sheet")).toBeVisible({ timeout: 10_000 });
+  const sheet = page.getByTestId("provider-settings-sheet");
+  await expect(sheet).toBeVisible({ timeout: 10_000 });
+  await expect(sheet.getByRole("button", { name: /^(Refresh|Refreshing\.\.\.)$/ })).toBeVisible();
+  await expect(sheet.getByTestId(`provider-actions-${MOCK_PROVIDER}`)).toBeVisible();
   await expect(page.getByRole("button", { name: "Add model" })).toBeVisible();
   await expect(page.getByTestId("provider-diagnostic-section")).toBeVisible();
+}
+
+async function expectNoChildSheets(page: Page) {
+  await expect(page.getByTestId("add-custom-model-sheet")).toHaveCount(0);
+  await expect(page.getByTestId("provider-diagnostic-sheet")).toHaveCount(0);
+}
+
+// 头部 ⋯「诊断」把诊断节滚进弹窗视野并运行。
+async function diagnoseFromHeaderMenu(page: Page) {
+  await page
+    .getByTestId("provider-settings-sheet")
+    .getByTestId(`provider-actions-${MOCK_PROVIDER}`)
+    .click();
+  await page.getByTestId(`provider-diagnose-${MOCK_PROVIDER}`).click();
+  await expect(page.getByTestId("provider-diagnostic-output")).toBeInViewport({
+    timeout: 30_000,
+  });
+  await expectNoChildSheets(page);
 }
 
 // 诊断结果按主机与提供方保留，第二次打开弹窗时诊断节已有上次的输出，入口是「重新运行」。
@@ -109,7 +133,7 @@ async function exerciseProviderSettingsStack(
   await page.getByRole("button", { name: "Add model" }).click();
   const modelIdInput = page.getByPlaceholder("e.g. openai/gpt-5");
   await expect(modelIdInput).toBeFocused({ timeout: 10_000 });
-  await expect(page.getByTestId("add-custom-model-sheet")).toHaveCount(0);
+  await expectNoChildSheets(page);
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(modelIdInput).not.toBeVisible({ timeout: 10_000 });
   await expectProviderSettingsVisible(page);
@@ -120,7 +144,7 @@ async function exerciseProviderSettingsStack(
   await expect(diagnostic.getByTestId("provider-diagnostic-output")).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByTestId("provider-diagnostic-sheet")).toHaveCount(0);
+  await expectNoChildSheets(page);
   await expectProviderSettingsVisible(page);
 }
 
@@ -177,6 +201,15 @@ test.describe("provider settings overlay stack", () => {
       const settings = page.getByTestId("provider-settings-sheet");
       await expect(settings).toBeVisible({ timeout: 10_000 });
       await expectOverlayAbove(page, "provider-settings-sheet", "combobox-desktop-container");
+      await expectProviderSettingsVisible(page);
+
+      // 头部「刷新」重新检测这个提供方，完成后按钮恢复。
+      const refresh = settings.getByRole("button", { name: "Refresh", exact: true });
+      await refresh.click();
+      await expect(refresh).toBeEnabled({ timeout: 30_000 });
+
+      await diagnoseFromHeaderMenu(page);
+      await expect(settings).toBeVisible();
 
       await page.keyboard.press("Escape");
       await expect(settings).not.toBeVisible({ timeout: 10_000 });
@@ -203,6 +236,7 @@ test.describe("provider settings overlay stack", () => {
       await page.getByRole("button", { name: /Open .* settings/ }).click();
       await expect(page.getByTestId("provider-settings-sheet")).toBeVisible({ timeout: 10_000 });
       await exerciseProviderSettingsStack(page, "Refresh diagnostic");
+      await diagnoseFromHeaderMenu(page);
       await closeSheetByHeaderButton(page, "provider-settings-sheet");
 
       await expectModelBrowserVisible(page);
