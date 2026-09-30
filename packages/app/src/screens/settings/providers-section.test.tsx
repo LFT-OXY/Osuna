@@ -173,6 +173,12 @@ vi.mock("react-i18next", () => ({
           "providerCatalog.actions.add": "Add",
           "providerCatalog.actions.adding": "Adding",
           "providerCatalog.actions.installInstructions": "Install instructions",
+          "providerCatalog.actions.open": "Open {{name}}",
+          "providerCatalog.groups.notEnabled": "Not enabled",
+          "providerCatalog.groups.acpCatalog": "ACP catalog",
+          "providerCatalog.marks.turnedOff": "Turned off",
+          "providerCatalog.marks.notInstalled": "Not installed",
+          "settings.providers.empty": "No providers in use. Press + to add one.",
           "common.actions.dismiss": "Dismiss",
         })[key] ?? key
       )
@@ -421,26 +427,37 @@ describe("ProvidersSection", () => {
     return row;
   }
 
-  it("renders the disabled provider with its server-provided label in snapshot order", () => {
-    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+  function listedRowIds(): string[] {
+    return Array.from(
+      container?.querySelectorAll<HTMLElement>('[data-testid^="provider-row-"]') ?? [],
+    ).map((row) => row.getAttribute("data-testid")?.slice("provider-row-".length) ?? "");
+  }
+
+  it("lists only enabled providers whose CLI was found, in snapshot order", () => {
+    snapshotState.entries = [
+      claudeEntry,
+      disabledCodexEntry,
+      notInstalledCustomClaudeEntry,
+      { ...claudeEntry, provider: "opencode", label: "OpenCode", status: "loading" },
+      { ...claudeEntry, provider: "pi", label: "Pi", status: "error", error: "boom" },
+    ];
     configState.config = makeConfig({ codex: { enabled: false } });
 
     render();
 
-    const rows = Array.from(
-      container?.querySelectorAll<HTMLElement>('[role="button"][aria-label$="provider details"]') ??
-        [],
-    );
-    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
-      "Claude provider details",
-      "Codex provider details",
-    ]);
+    expect(listedRowIds()).toEqual(["claude", "opencode", "pi"]);
+    expect(findRow("OpenCode provider details").textContent).toContain("OpenCode");
+  });
 
-    const codexRow = findRow("Codex provider details");
-    const codexNodes = descendants(codexRow);
-    expect(indexOfText(codexNodes, "Codex")).toBeGreaterThanOrEqual(0);
-    expect(indexOfText(codexNodes, "codex")).toBe(-1);
-    expect(indexOfText(codexNodes, "Disabled")).toBeGreaterThanOrEqual(0);
+  it("points to + when no provider is in use", () => {
+    snapshotState.entries = [disabledCodexEntry, notInstalledCustomClaudeEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render();
+
+    expect(listedRowIds()).toEqual([]);
+    expect(container?.textContent).toContain("No providers in use. Press + to add one.");
+    expect(container?.querySelector('[role="button"][aria-label="Add provider"]')).not.toBeNull();
   });
 
   it("composes the row as brand icon, label, status line, switch, then chevron", () => {
@@ -469,7 +486,6 @@ describe("ProvidersSection", () => {
   });
 
   it.each([
-    ["disabled", { ...claudeEntry, enabled: false }, "muted", "Disabled"],
     ["loading", { ...claudeEntry, status: "loading" }, null, "Loading"],
     ["error", { ...claudeEntry, status: "error", error: "boom" }, "danger", "Error"],
     [
@@ -484,12 +500,6 @@ describe("ProvidersSection", () => {
       { ...claudeEntry, models: claudeEntry.models?.slice(0, 1) },
       "success",
       "1 model",
-    ],
-    [
-      "not installed",
-      { ...claudeEntry, status: "unavailable", models: [] },
-      "warning",
-      "Not installed",
     ],
   ] as const)("shows the %s status line", (_name, entry, dotTone, text) => {
     snapshotState.entries = [entry as ProviderSnapshotEntry];
@@ -508,8 +518,11 @@ describe("ProvidersSection", () => {
   });
 
   it("selects the provider when its row is pressed", () => {
-    snapshotState.entries = [claudeEntry, disabledCodexEntry];
-    configState.config = makeConfig({ codex: { enabled: false } });
+    snapshotState.entries = [
+      claudeEntry,
+      { ...disabledCodexEntry, enabled: true, status: "ready" },
+    ];
+    configState.config = makeConfig();
 
     render();
 
@@ -829,5 +842,167 @@ describe("ProvidersSection", () => {
     openCatalogDialog();
     expect(requireCatalogDialog().textContent).not.toContain("Unable to add provider");
     expect(findCatalogAddButton(minimax.id)?.textContent).not.toContain("Adding");
+  });
+
+  function searchCatalog(value: string): void {
+    const search = requireCatalogDialog().querySelector<HTMLInputElement>(
+      'input[aria-label="Search providers"]',
+    );
+    if (!search) throw new Error("Expected the search field in the dialog header");
+    act(() => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setValue?.call(search, value);
+      search.dispatchEvent(new window.Event("input", { bubbles: true }));
+    });
+  }
+
+  function findNotEnabledItem(providerId: string): HTMLElement | null {
+    return (
+      findCatalogDialog()?.querySelector<HTMLElement>(
+        `[data-testid="enable-provider-${providerId}"]`,
+      ) ?? null
+    );
+  }
+
+  function requireNotEnabledItem(providerId: string): HTMLElement {
+    const item = findNotEnabledItem(providerId);
+    if (!item) throw new Error(`Expected ${providerId} in the Not enabled group`);
+    return item;
+  }
+
+  it("lists turned-off and not-installed providers above the ACP catalog", () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry, notInstalledCustomClaudeEntry];
+    configState.config = makeConfig({
+      codex: { enabled: false },
+      "work-claude": { extends: "claude", label: "Work Claude" },
+    });
+
+    render();
+    const dialog = openCatalogDialog();
+
+    const nodes = descendants(dialog);
+    const notEnabledHeading = indexOfText(nodes, "Not enabled");
+    const catalogHeading = indexOfText(nodes, "ACP catalog");
+    const codexItem = indexOfMatches(nodes, '[data-testid="enable-provider-codex"]');
+    const catalogItem = indexOfMatches(nodes, `[data-testid="install-provider-${minimax.id}"]`);
+    expect(notEnabledHeading).toBeGreaterThanOrEqual(0);
+    expect(codexItem).toBeGreaterThan(notEnabledHeading);
+    expect(catalogHeading).toBeGreaterThan(codexItem);
+    expect(catalogItem).toBeGreaterThan(catalogHeading);
+
+    expect(findNotEnabledItem("claude")).toBeNull();
+    expect(requireNotEnabledItem("codex").textContent).toContain("Turned off");
+    expect(requireNotEnabledItem("work-claude").textContent).toContain("Not installed");
+  });
+
+  it("hides the Not enabled group when every provider is in use", () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+
+    render();
+    const dialog = openCatalogDialog();
+
+    expect(indexOfText(descendants(dialog), "Not enabled")).toBe(-1);
+    expect(indexOfText(descendants(dialog), "ACP catalog")).toBeGreaterThanOrEqual(0);
+  });
+
+  it("moves a provider turned off in the list to Not enabled without deleting its config", async () => {
+    const acpProvider: ProviderSnapshotEntry = {
+      ...claudeEntry,
+      provider: minimax.id,
+      label: minimax.title,
+      source: "custom",
+    };
+    snapshotState.entries = [claudeEntry, acpProvider];
+    configState.config = makeConfig();
+
+    render();
+    const switchEl = findRow(`${minimax.title} provider details`).querySelector<HTMLElement>(
+      '[role="switch"]',
+    );
+    await act(async () => {
+      switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(patchConfigMock).toHaveBeenCalledWith({
+      providers: { [minimax.id]: { enabled: false } },
+    });
+
+    // daemon 随后推来停用后的快照。
+    snapshotState.entries = [
+      claudeEntry,
+      { ...acpProvider, enabled: false, status: "unavailable", models: [] },
+    ];
+    render();
+
+    expect(listedRowIds()).toEqual(["claude"]);
+    openCatalogDialog();
+    expect(requireNotEnabledItem(minimax.id).textContent).toContain("Turned off");
+    // 目录里不再重复出现同一个提供方。
+    expect(findCatalogAddButton(minimax.id)).toBeNull();
+  });
+
+  it("turns a turned-off provider on and opens its details", async () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+    const resolvePatch = deferPatch();
+
+    render();
+    openCatalogDialog();
+    await act(async () => click(requireNotEnabledItem("codex")));
+
+    expect(patchConfigMock).toHaveBeenCalledWith({ providers: { codex: { enabled: true } } });
+    expect(selectProviderMock).not.toHaveBeenCalled();
+
+    await resolvePatch();
+
+    expect(findCatalogDialog()).toBeNull();
+    expect(selectProviderMock).toHaveBeenCalledTimes(1);
+    expect(selectProviderMock).toHaveBeenCalledWith("codex");
+  });
+
+  it("opens a not-installed provider's details without writing config", async () => {
+    snapshotState.entries = [claudeEntry, notInstalledCodexEntry];
+    configState.config = makeConfig();
+
+    render();
+    openCatalogDialog();
+    await act(async () => click(requireNotEnabledItem("codex")));
+
+    expect(patchConfigMock).not.toHaveBeenCalled();
+    expect(findCatalogDialog()).toBeNull();
+    expect(selectProviderMock).toHaveBeenCalledWith("codex");
+  });
+
+  // 真实 daemon 无法稳定造出配置写入失败，失败路径只在这里覆盖（docs/testing.md）。
+  it("keeps the dialog open with a visible error when turning a provider on fails", async () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+    patchConfigMock.mockRejectedValueOnce(new Error("config.json is read-only"));
+
+    render();
+    openCatalogDialog();
+    await act(async () => click(requireNotEnabledItem("codex")));
+
+    const dialogText = requireCatalogDialog().textContent;
+    expect(dialogText).toContain("Unable to add provider");
+    expect(dialogText).toContain("config.json is read-only");
+    expect(selectProviderMock).not.toHaveBeenCalled();
+  });
+
+  it("filters both groups with the dialog header search", () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render();
+    openCatalogDialog();
+
+    searchCatalog("MiniMax Code");
+    expect(findNotEnabledItem("codex")).toBeNull();
+    expect(findCatalogAddButton(minimax.id)).not.toBeNull();
+
+    searchCatalog("codex");
+    expect(findNotEnabledItem("codex")).not.toBeNull();
+    expect(findCatalogAddButton(minimax.id)).toBeNull();
   });
 });

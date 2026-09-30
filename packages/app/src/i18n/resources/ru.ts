@@ -1711,9 +1711,18 @@ export const ru: TranslationResources = {
       cancel: "Отмена",
       installInstructions: "Инструкции по установке",
       installInstructionsFor: "Инструкции по установке {{provider}}",
+      open: "Открыть {{name}}",
     },
     errors: {
       unableToInstall: "Не удалось установить провайдера",
+    },
+    groups: {
+      notEnabled: "Не включены",
+      acpCatalog: "Каталог ACP",
+    },
+    marks: {
+      turnedOff: "Отключён",
+      notInstalled: "Не установлен",
     },
   },
   providerSelection: {
@@ -2855,6 +2864,7 @@ export const ru: TranslationResources = {
       enableProvider: "Включить {{name}}",
       unavailable: "Подключитесь к этому хосту, чтобы увидеть провайдеров",
       loading: "Загрузка...",
+      empty: "Нет используемых провайдеров. Нажмите +, чтобы добавить.",
       addErrorTitle: "Не удалось добавить провайдера",
       startErrorTitle: "Не удаётся запустить {{name}}",
       actions: {

@@ -1730,9 +1730,18 @@ export const es: TranslationResources = {
       cancel: "Cancelar",
       installInstructions: "Instrucciones de instalación",
       installInstructionsFor: "Instrucciones de instalación de{{provider}}",
+      open: "Abrir {{name}}",
     },
     errors: {
       unableToInstall: "No se puede instalar el proveedor",
+    },
+    groups: {
+      notEnabled: "No habilitados",
+      acpCatalog: "Catálogo ACP",
+    },
+    marks: {
+      turnedOff: "Desactivado",
+      notInstalled: "No instalado",
     },
   },
   providerSelection: {
@@ -2870,6 +2879,7 @@ export const es: TranslationResources = {
       enableProvider: "Habilitar{{name}}",
       unavailable: "Conéctese a este host para ver proveedores",
       loading: "Cargando...",
+      empty: "No hay proveedores en uso. Pulsa + para agregar uno.",
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} no puede iniciarse",
       actions: {

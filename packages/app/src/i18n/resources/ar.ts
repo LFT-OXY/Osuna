@@ -1682,9 +1682,18 @@ export const ar: TranslationResources = {
       cancel: "يلغي",
       installInstructions: "تعليمات التثبيت",
       installInstructionsFor: "تعليمات تثبيت{{provider}}",
+      open: "فتح {{name}}",
     },
     errors: {
       unableToInstall: "غير قادر على تثبيت الموفر",
+    },
+    groups: {
+      notEnabled: "غير مفعّلة",
+      acpCatalog: "كتالوج ACP",
+    },
+    marks: {
+      turnedOff: "متوقف",
+      notInstalled: "غير مثبت",
     },
   },
   providerSelection: {
@@ -2804,6 +2813,7 @@ export const ar: TranslationResources = {
       enableProvider: "تمكين{{name}}",
       unavailable: "اتصل بهذا المضيف لرؤية مقدمي الخدمة",
       loading: "تحميل...",
+      empty: "لا يوجد مزودون قيد الاستخدام. اضغط + للإضافة.",
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "تعذّر تشغيل {{name}}",
       actions: {

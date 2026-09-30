@@ -1651,9 +1651,9 @@ export const zhCN: TranslationResources = {
     openProviderSettings: "打开 {{provider}} 设置",
   },
   providerCatalog: {
-    title: "添加 provider",
-    search: "搜索 providers",
-    noProviders: "未找到 providers",
+    title: "添加提供方",
+    search: "搜索提供方",
+    noProviders: "未找到提供方",
     actions: {
       add: "添加",
       adding: "正在添加",
@@ -1661,9 +1661,18 @@ export const zhCN: TranslationResources = {
       cancel: "取消",
       installInstructions: "安装说明",
       installInstructionsFor: "{{provider}} 安装说明",
+      open: "打开 {{name}}",
     },
     errors: {
       unableToInstall: "无法安装 provider",
+    },
+    groups: {
+      notEnabled: "未启用",
+      acpCatalog: "ACP 目录",
+    },
+    marks: {
+      turnedOff: "已停用",
+      notInstalled: "未安装",
     },
   },
   providerSelection: {
@@ -2763,12 +2772,13 @@ export const zhCN: TranslationResources = {
     },
     providers: {
       title: "Providers",
-      addProvider: "添加 Provider",
+      addProvider: "添加提供方",
       providerDetails: "{{name}} Provider 详情",
       enableProvider: "启用 {{name}}",
       unavailable: "连接到这个 Host 以查看 Providers",
       loading: "正在加载...",
-      addErrorTitle: "无法添加 Provider",
+      empty: "没有在用的提供方。点 + 添加。",
+      addErrorTitle: "无法添加提供方",
       startErrorTitle: "{{name}} 无法启动",
       actions: {
         menu: "{{name}} actions",

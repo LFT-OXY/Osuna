@@ -1694,9 +1694,18 @@ export const ko: TranslationResources = {
       cancel: "취소",
       installInstructions: "설치 안내",
       installInstructionsFor: "{{provider}} 설치 안내",
+      open: "{{name}} 열기",
     },
     errors: {
       unableToInstall: "프로바이더를 설치할 수 없습니다",
+    },
+    groups: {
+      notEnabled: "사용 안 함",
+      acpCatalog: "ACP 카탈로그",
+    },
+    marks: {
+      turnedOff: "꺼짐",
+      notInstalled: "설치되지 않음",
     },
   },
   providerSelection: {
@@ -2820,6 +2829,7 @@ export const ko: TranslationResources = {
       enableProvider: "{{name}} 활성화",
       unavailable: "프로바이더를 보려면 이 호스트에 연결하세요",
       loading: "불러오는 중...",
+      empty: "사용 중인 프로바이더가 없습니다. +를 눌러 추가하세요.",
       addErrorTitle: "프로바이더를 추가할 수 없습니다",
       startErrorTitle: "{{name}}을(를) 시작할 수 없습니다",
       actions: {

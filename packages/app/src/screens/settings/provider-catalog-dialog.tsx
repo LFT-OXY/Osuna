@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { ProviderCatalogList } from "@/components/provider-catalog-list";
+import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Alert } from "@/components/ui/alert";
 import {
   buildAcpProviderConfigPatch,
@@ -11,12 +12,13 @@ import {
 } from "@/hooks/use-acp-provider-catalog";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
+import { ProviderNotEnabledSection, type NotEnabledItem } from "./provider-not-enabled-section";
 
 export interface ProviderCatalogDialogProps {
   serverId: string;
   visible: boolean;
   onClose: () => void;
-  // 配置已写入即添加成功；新提供方已在快照里（通常还在探测），或快照刷新已结束。
+  // 配置已写入即成功：从"未启用"组启用了一项，或从 ACP 目录添加了新提供方。
   onAdded: (providerId: string) => void;
 }
 
@@ -79,33 +81,62 @@ export function ProviderCatalogDialog({
     [onAdded],
   );
 
-  const handleInstall = useCallback(
-    async (entry: AcpProviderCatalogItem) => {
-      if (attemptRef.current) return;
+  // 写入配置；成功后等快照里有这个提供方再导航（见下方 effect），失败把错误留在弹窗里。
+  // 返回 null 表示这次不再继续：已有进行中的尝试、写入失败，或弹窗已关闭。
+  const writeConfig = useCallback(
+    async (providerId: string, write: () => Promise<unknown>): Promise<AbortController | null> => {
+      if (attemptRef.current) return null;
       const attempt = new AbortController();
       attemptRef.current = attempt;
-      dispatch({ type: "started", providerId: entry.id });
+      dispatch({ type: "started", providerId });
       try {
-        await patchConfig(buildAcpProviderConfigPatch(entry));
+        await write();
       } catch (error) {
-        if (attempt.signal.aborted) return;
+        if (attempt.signal.aborted) return null;
         attemptRef.current = null;
         dispatch({
           type: "failed",
           message: error instanceof Error ? error.message : String(error),
         });
-        return;
+        return null;
       }
-      if (attempt.signal.aborted) return;
-      // 快照带上新提供方就导航（见下方 effect），否则地址修正会把它当成不存在的提供方。
+      if (attempt.signal.aborted) return null;
+      dispatch({ type: "configWritten" });
+      return attempt;
+    },
+    [],
+  );
+
+  const handleInstall = useCallback(
+    async (entry: AcpProviderCatalogItem) => {
+      const attempt = await writeConfig(entry.id, () =>
+        patchConfig(buildAcpProviderConfigPatch(entry)),
+      );
+      if (!attempt) return;
+      // 快照带上新提供方就导航，否则地址修正会把它当成不存在的提供方。
       // daemon 提交配置时已把它以 loading 推进快照并在后台探测，不等刷新：未安装的 CLI
       // 可能探测很久。刷新只作兜底，结束或失败都算添加成功——配置已经写入。
-      dispatch({ type: "configWritten" });
       void refresh([entry.id])
         .catch(() => undefined)
         .then(() => finishAttempt(attempt, entry.id));
     },
-    [finishAttempt, patchConfig, refresh],
+    [finishAttempt, patchConfig, refresh, writeConfig],
+  );
+
+  // "未启用"里的提供方已在快照里，配置一写入 effect 就导航。
+  // 启用了但没装的无需再写 enabled，直接进详情页看安装指引。
+  const handleOpenNotEnabled = useCallback(
+    ({ entry, mark }: NotEnabledItem) => {
+      const providerId = entry.provider;
+      if (mark === "notInstalled") {
+        void writeConfig(providerId, () => Promise.resolve());
+        return;
+      }
+      void writeConfig(providerId, () =>
+        patchConfig({ providers: { [providerId]: { enabled: true } } }),
+      );
+    },
+    [patchConfig, writeConfig],
   );
 
   const awaitingProviderId =
@@ -118,6 +149,8 @@ export function ProviderCatalogDialog({
     if (!isAwaitedProviderInSnapshot || !awaitingProviderId || !attempt) return;
     finishAttempt(attempt, awaitingProviderId);
   }, [awaitingProviderId, finishAttempt, isAwaitedProviderInSnapshot]);
+
+  const pendingProviderId = addState.status === "adding" ? addState.providerId : null;
 
   // resetKey 随打开 / 关闭变化，清空头部不受控的搜索框，与 query 保持一致。
   const header = useMemo<SheetHeader>(
@@ -150,12 +183,24 @@ export function ProviderCatalogDialog({
           />
         </View>
       ) : null}
-      <ProviderCatalogList
+      <ProviderNotEnabledSection
         serverId={serverId}
         query={query}
-        installingProviderId={addState.status === "adding" ? addState.providerId : null}
-        onInstall={handleInstall}
+        openingProviderId={pendingProviderId}
+        onOpen={handleOpenNotEnabled}
       />
+      <SettingsSection
+        title={t("providerCatalog.groups.acpCatalog")}
+        flush
+        testID="provider-catalog-acp"
+      >
+        <ProviderCatalogList
+          serverId={serverId}
+          query={query}
+          installingProviderId={pendingProviderId}
+          onInstall={handleInstall}
+        />
+      </SettingsSection>
     </AdaptiveModalSheet>
   );
 }

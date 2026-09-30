@@ -10,17 +10,14 @@ import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
 import { resolveProviderGlyph } from "@/components/provider-icons";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Switch } from "@/components/ui/switch";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Text as UiText } from "@/components/ui/text";
-import {
-  countSelectableModels,
-  resolveProviderStatusLine,
-  type ProviderStatusDisplay,
-} from "@/provider-detail/status";
+import { countSelectableModels, resolveProviderStatusLine } from "@/provider-detail/status";
 import { ProviderIconFrame } from "@/provider-detail/icon-frame";
 import { ProviderCatalogDialog } from "./provider-catalog-dialog";
+import { resolveProviderPlacement } from "./provider-placement";
+import { ProviderStatusLine } from "./provider-status-line";
 import { ChevronRight, Plus } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
@@ -38,7 +35,6 @@ interface ProviderRowProps {
 }
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
-const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -99,7 +95,7 @@ function ProviderRow({
               <Text style={settingsStyles.rowTitle} numberOfLines={1}>
                 {def.label}
               </Text>
-              <StatusLine status={statusLine} />
+              <ProviderStatusLine status={statusLine} />
             </View>
           </View>
           <View style={styles.trailingControls}>
@@ -120,25 +116,6 @@ function ProviderRow({
   );
 }
 
-function StatusLine({ status }: { status: ProviderStatusDisplay }) {
-  const { t } = useTranslation();
-  return (
-    <View style={styles.statusLine}>
-      {status.tone === "loading" ? (
-        <ThemedLoadingSpinner size={10} uniProps={foregroundMutedColorMapping} />
-      ) : (
-        <View
-          style={[styles.statusDot, statusDotStyles[status.tone]]}
-          testID={`provider-status-dot-${status.tone}`}
-        />
-      )}
-      <Text style={styles.statusLabel} numberOfLines={1}>
-        {t(status.label.key, status.label.params)}
-      </Text>
-    </View>
-  );
-}
-
 export interface ProvidersSectionProps {
   serverId: string;
   onSelectProvider: (providerId: string) => void;
@@ -154,7 +131,15 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
-  const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
+  // 只列在用的提供方；其余在「添加提供方」的"未启用"组里。
+  const listedEntries = useMemo(
+    () => entries?.filter((entry) => resolveProviderPlacement(entry).kind === "list"),
+    [entries],
+  );
+  const providerDefinitions = useMemo(
+    () => buildProviderDefinitions(listedEntries),
+    [listedEntries],
+  );
   const hasServer = serverId.length > 0;
 
   const handleToggleEnabled = useCallback(
@@ -184,6 +169,7 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
   );
 
   const canAddProvider = hasServer && isConnected;
+  const isListLoaded = canAddProvider && !isLoading;
   // 错误行占了卡片第一行，下面的提供方行都要带分隔线。
   const hasErrorRowAbove = toggleError !== null;
   const addProviderButton = useMemo(
@@ -219,7 +205,12 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
             <Text style={styles.emptyText}>{t("settings.providers.loading")}</Text>
           </View>
         ) : null}
-        {hasServer && isConnected && !isLoading && providerDefinitions.length > 0 ? (
+        {isListLoaded && providerDefinitions.length === 0 ? (
+          <View style={[settingsStyles.card, styles.emptyCard]} testID="providers-empty">
+            <Text style={styles.emptyText}>{t("settings.providers.empty")}</Text>
+          </View>
+        ) : null}
+        {isListLoaded && providerDefinitions.length > 0 ? (
           <View style={settingsStyles.card}>
             {toggleError ? (
               <View style={settingsStyles.row} testID="providers-toggle-error">
@@ -237,7 +228,7 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
               </View>
             ) : null}
             {providerDefinitions.map((def, index) => {
-              const entry = entries?.find((candidate) => candidate.provider === def.id);
+              const entry = listedEntries?.find((candidate) => candidate.provider === def.id);
               if (!entry) return null;
               return (
                 <ProviderRow
@@ -294,22 +285,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[3],
   },
-  statusLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1.5],
-    marginTop: theme.spacing[0.5],
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusLabel: {
-    flexShrink: 1,
-    color: theme.colors.foregroundMuted,
-    ...theme.typeScale.caption,
-  },
   toggleError: {
     flex: 1,
   },
@@ -318,12 +293,4 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
   },
-}));
-
-const statusDotStyles = StyleSheet.create((theme) => ({
-  success: { backgroundColor: theme.colors.statusSuccess },
-  warning: { backgroundColor: theme.colors.statusWarning },
-  danger: { backgroundColor: theme.colors.statusDanger },
-  muted: { backgroundColor: theme.colors.foregroundMuted },
-  loading: { backgroundColor: theme.colors.foregroundMuted },
 }));

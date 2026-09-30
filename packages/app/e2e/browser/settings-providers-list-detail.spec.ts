@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "../support/fixtures";
+import { seedModelProvider, type HostSeed } from "../support/helpers/agent-profiles";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { getServerId } from "../support/helpers/server-id";
 import {
@@ -18,6 +19,22 @@ const WIDE_VIEWPORT = { width: 1280, height: 800 };
 // 设置侧栏 320，内容区 580，又不到紧凑断点。
 const NARROW_DESKTOP_VIEWPORT = { width: 900, height: 800 };
 const PHONE_VIEWPORT = { width: 390, height: 844 };
+
+// 列表只放已启用且 CLI 已找到的提供方；e2e daemon 自带的只有 mock 一定就绪，再补一家。
+let secondListedProvider: HostSeed | null = null;
+
+test.beforeEach(async () => {
+  secondListedProvider = await seedModelProvider({
+    id: "list-detail-studio",
+    label: "List Detail Studio",
+    models: [{ id: "studio-fast", label: "Studio fast", description: "Studio quick pass" }],
+  });
+});
+
+test.afterEach(async () => {
+  await secondListedProvider?.restore();
+  secondListedProvider = null;
+});
 
 async function readTwoProviderIds(page: Page): Promise<[string, string]> {
   const [first, second] = await readProviderRowIds(page);

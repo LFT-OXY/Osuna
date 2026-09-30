@@ -1700,9 +1700,18 @@ export const ja: TranslationResources = {
       cancel: "キャンセル",
       installInstructions: "インストール手順",
       installInstructionsFor: "{{provider}}のインストール手順",
+      open: "{{name}} を開く",
     },
     errors: {
       unableToInstall: "プロバイダーをインストールできません",
+    },
+    groups: {
+      notEnabled: "未有効",
+      acpCatalog: "ACP カタログ",
+    },
+    marks: {
+      turnedOff: "オフ",
+      notInstalled: "未インストール",
     },
   },
   providerSelection: {
@@ -2832,6 +2841,7 @@ export const ja: TranslationResources = {
       enableProvider: "{{name}}を有効にする",
       unavailable: "プロバイダーを見るにはこのホストに接続してください",
       loading: "読み込み中...",
+      empty: "使用中のプロバイダーはありません。+ を押して追加します。",
       addErrorTitle: "プロバイダーを追加できません",
       startErrorTitle: "{{name}} を起動できません",
       actions: {
