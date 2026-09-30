@@ -1603,6 +1603,20 @@ export const ja: TranslationResources = {
     groups: {
       commands: "コマンド",
       skills: "スキル",
+      agents: "エージェント",
+      files: "ファイル",
+    },
+    agentMentions: {
+      toolsNotInjected: "このエージェントでは Osuna tools が無効です",
+      toolsNotInjectedDetail:
+        "設定 → Host → エージェント で有効にしてから、このエージェントを再読み込みしてください。",
+      openAgentsSettings: "設定を開く",
+      mcpDisabled: "この Host では MCP が無効です",
+      createAgentNotAllowed:
+        "この provider の Osuna tools ポリシーでは create_agent が許可されていません",
+      toolsNotDelivered: "このエージェントは Osuna tools を呼び出せません",
+      unknownReason: "このエージェントはサブエージェントを起動できません",
+      hostOutdated: "エージェントをメンションするには Host を更新してください",
     },
   },
   loadOlderHistory: {

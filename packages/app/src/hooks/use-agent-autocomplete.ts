@@ -2,7 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import type { AutocompleteOption } from "@/components/ui/autocomplete";
+import { useShallow } from "zustand/shallow";
+import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type {
+  AutocompleteGroupNotice,
+  AutocompleteGroupNotices,
+  AutocompleteOption,
+} from "@/components/ui/autocomplete";
+import { getProviderIcon } from "@/components/provider-icons";
+import { openHostSettingsSection } from "@/navigation/settings-navigation";
+import { useHostFeatureAvailability } from "@/runtime/host-features";
+import { useProvidersSnapshot } from "./use-providers-snapshot";
 import {
   useAgentCommandsQuery,
   type AgentSlashCommand,
@@ -26,7 +36,8 @@ import { findActiveFileMention, type FileMentionRange } from "@/utils/file-menti
 import type { FileEntryKind, InlineBlock, SkillBlock } from "@/inline-blocks";
 import type { ComposerInputSnapshot } from "@/composer/input/text-input.types";
 
-export interface FileMentionPick {
+/** `@` 列表选中的文件、目录或智能体，换掉当前的 `@query`。 */
+export interface MentionPick {
   range: FileMentionRange;
   block: InlineBlock;
 }
@@ -45,8 +56,8 @@ interface UseAgentAutocompleteInput {
   onAutocompleteApplied?: () => void;
   /** 选中 skill 时交给 Composer 变成开头的 Skill block；不传则按命令插入文字。 */
   onPickSkill?: (input: SkillPick) => void;
-  /** 选中文件或目录：把当前 `@query` 换成 File mention。 */
-  onPickFileMention: (pick: FileMentionPick) => void;
+  /** 选中文件、目录或智能体：把当前 `@query` 换成 File mention 或 Agent mention。 */
+  onPickMention: (pick: MentionPick) => void;
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
@@ -70,7 +81,8 @@ export type AgentAutocompleteOption =
       entryPath: string;
       entryKind: FileEntryKind;
       mention: FileMentionRange;
-    });
+    })
+  | (AutocompleteOption & { type: "agent_mention"; providerId: string });
 
 interface AgentAutocompleteResult {
   isVisible: boolean;
@@ -82,6 +94,7 @@ interface AgentAutocompleteResult {
   loadingText: string;
   emptyText: string;
   footerText?: string;
+  groupNotices?: AutocompleteGroupNotices;
   onSelectOption: (option: AutocompleteOption, input?: ComposerInputSnapshot) => void;
   onKeyPress: (event: AgentAutocompleteKeyPressEvent) => boolean;
 }
@@ -222,6 +235,191 @@ export function resolvePickedSkillBlock(selected: AgentAutocompleteOption): Skil
     : { kind: "skill", name: selected.id };
 }
 
+/**
+ * `@` 列表智能体分组的状态。老 Host 没有 `agentMentions`；当前会话不能派发时带 daemon 的原因码。
+ * 快照没带 `canCreateAgents`（未加载的存档智能体、本地缓存）时按可用处理：发送会恢复会话，由 daemon 判定。
+ */
+export type AgentMentionAvailability =
+  | { kind: "available" }
+  | { kind: "host_outdated" }
+  | { kind: "unavailable"; reason: string | undefined };
+
+export interface AgentMentionAvailabilityInput {
+  supportsAgentMentions: boolean;
+  canCreateAgents: boolean | undefined;
+  unavailableReason: string | undefined;
+}
+
+export function resolveAgentMentionAvailability(
+  input: AgentMentionAvailabilityInput,
+): AgentMentionAvailability {
+  if (!input.supportsAgentMentions) return { kind: "host_outdated" };
+  if (input.canCreateAgents === false) {
+    return { kind: "unavailable", reason: input.unavailableReason };
+  }
+  return { kind: "available" };
+}
+
+// wire 上原因码是开放的字符串（新 daemon 可能加码），这里只列 app 认得、只有一句说明的几个。
+type PlainUnavailableReason = "mcp_disabled" | "create_agent_not_allowed" | "tools_not_delivered";
+
+const UNAVAILABLE_REASON_MESSAGE_KEYS = {
+  mcp_disabled: "agentAutocomplete.agentMentions.mcpDisabled",
+  create_agent_not_allowed: "agentAutocomplete.agentMentions.createAgentNotAllowed",
+  tools_not_delivered: "agentAutocomplete.agentMentions.toolsNotDelivered",
+} as const satisfies Record<PlainUnavailableReason, string>;
+
+function isPlainUnavailableReason(reason: string | undefined): reason is PlainUnavailableReason {
+  return reason !== undefined && Object.hasOwn(UNAVAILABLE_REASON_MESSAGE_KEYS, reason);
+}
+
+export interface AgentMentionNoticeInput {
+  availability: AgentMentionAvailability;
+  t: TFunction;
+  onOpenAgentsSettings: () => void;
+}
+
+/** 智能体组顶的原因说明；认不出的原因码用通用文案。 */
+export function resolveAgentMentionNotice(
+  input: AgentMentionNoticeInput,
+): AutocompleteGroupNotice | undefined {
+  const { availability, t } = input;
+  if (availability.kind === "available") return undefined;
+  if (availability.kind === "host_outdated") {
+    return { message: t("agentAutocomplete.agentMentions.hostOutdated") };
+  }
+  if (availability.reason === "tools_not_injected") {
+    return {
+      message: t("agentAutocomplete.agentMentions.toolsNotInjected"),
+      detail: t("agentAutocomplete.agentMentions.toolsNotInjectedDetail"),
+      action: {
+        label: t("agentAutocomplete.agentMentions.openAgentsSettings"),
+        onPress: input.onOpenAgentsSettings,
+      },
+    };
+  }
+  const messageKey = isPlainUnavailableReason(availability.reason)
+    ? UNAVAILABLE_REASON_MESSAGE_KEYS[availability.reason]
+    : "agentAutocomplete.agentMentions.unknownReason";
+  return { message: t(messageKey) };
+}
+
+export interface AgentMentionOptionsInput {
+  entries: readonly ProviderSnapshotEntry[] | undefined;
+  query: string;
+  disabled: boolean;
+  serverId: string;
+}
+
+/** Providers 设置里已启用的 provider，保持设置里的顺序；按显示名或 id 过滤。 */
+export function buildAgentMentionOptions(
+  input: AgentMentionOptionsInput,
+): AgentAutocompleteOption[] {
+  // provider id 满足 PROVIDER_ID_PATTERN，本身就是小写。
+  const query = input.query.toLowerCase();
+  return (input.entries ?? []).flatMap((entry): AgentAutocompleteOption[] => {
+    if (entry.enabled === false) return [];
+    const label = entry.label ?? entry.provider;
+    const matchesQuery = label.toLowerCase().includes(query) || entry.provider.includes(query);
+    if (!matchesQuery) return [];
+    return [
+      {
+        type: "agent_mention",
+        id: `agent:provider:${entry.provider}`,
+        label,
+        kind: "agent",
+        Icon: getProviderIcon(entry.provider, input.serverId),
+        disabled: input.disabled,
+        providerId: entry.provider,
+      },
+    ];
+  });
+}
+
+/** `@` 列表选中的行变成 File mention 或 Agent mention；置灰行与命令不产生块。 */
+export function resolvePickedMentionBlock(selected: AgentAutocompleteOption): InlineBlock | null {
+  if (selected.disabled) return null;
+  if (selected.type === "agent_mention") {
+    return {
+      kind: "agent",
+      target: { kind: "provider", id: selected.providerId },
+      name: selected.label,
+    };
+  }
+  if (selected.type === "workspace_entry") {
+    return { kind: "file", path: selected.entryPath, entryKind: selected.entryKind };
+  }
+  return null;
+}
+
+/**
+ * `@` 列表的智能体分组：行与组顶说明。只在已有会话的输入框里出现，派发由当前会话的 daemon 判定决定；
+ * 还没收到 server_info 时（断线不等于老 Host）不显示。
+ */
+interface AgentMentionGroupInput {
+  serverId: string;
+  agentId: string;
+  cwd: string;
+  query: string;
+  enabled: boolean;
+}
+
+interface AgentMentionGroup {
+  options: AgentAutocompleteOption[];
+  groupNotices?: AutocompleteGroupNotices;
+}
+
+function useAgentMentionGroup(input: AgentMentionGroupInput): AgentMentionGroup {
+  const { t } = useTranslation();
+  const { serverId, agentId } = input;
+  const agentState = useSessionStore(
+    useShallow((state) => {
+      const agent = state.sessions[serverId]?.agents?.get(agentId);
+      return {
+        hasAgent: Boolean(agent),
+        canCreateAgents: agent?.canCreateAgents,
+        unavailableReason: agent?.createAgentsUnavailableReason,
+      };
+    }),
+  );
+  const supportsAgentMentions = useHostFeatureAvailability(serverId, "agentMentions");
+  const visible = input.enabled && agentState.hasAgent && supportsAgentMentions !== null;
+  const { entries } = useProvidersSnapshot(serverId, { cwd: input.cwd, enabled: visible });
+
+  const availability = useMemo(
+    () =>
+      resolveAgentMentionAvailability({
+        supportsAgentMentions: supportsAgentMentions === true,
+        canCreateAgents: agentState.canCreateAgents,
+        unavailableReason: agentState.unavailableReason,
+      }),
+    [agentState.canCreateAgents, agentState.unavailableReason, supportsAgentMentions],
+  );
+  const options = useMemo(
+    () =>
+      visible
+        ? buildAgentMentionOptions({
+            entries,
+            query: input.query,
+            disabled: availability.kind !== "available",
+            serverId,
+          })
+        : [],
+    [availability.kind, entries, input.query, serverId, visible],
+  );
+  const groupNotices = useMemo<AutocompleteGroupNotices | undefined>(() => {
+    if (options.length === 0) return undefined;
+    const notice = resolveAgentMentionNotice({
+      availability,
+      t,
+      onOpenAgentsSettings: () => openHostSettingsSection(serverId, "agents"),
+    });
+    return notice ? { agents: notice } : undefined;
+  }, [availability, options.length, serverId, t]);
+
+  return { options, groupNotices };
+}
+
 const EMPTY_COMMANDS: AgentSlashCommand[] = [];
 
 interface BuildAutocompleteOptionsInput {
@@ -234,6 +432,8 @@ interface BuildAutocompleteOptionsInput {
   commandFilterQuery: string;
   activeSlashCommand: SlashCommandRange | null;
   activeFileMention: FileMentionRange | null;
+  /** `@` 列表里排在文件上面的智能体行；没有智能体分组时为空。 */
+  agentMentionOptions: readonly AgentAutocompleteOption[];
   fileSuggestions: DirectorySuggestionEntry[];
   t: TFunction;
 }
@@ -280,7 +480,7 @@ export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsI
 
   const activeFileMention = input.activeFileMention;
   if (input.mode === "file" && activeFileMention) {
-    return input.fileSuggestions.map((entry) => ({
+    const fileOptions = input.fileSuggestions.map((entry) => ({
       type: "workspace_entry" as const,
       id: `${entry.kind}:${entry.path}`,
       label: entry.path,
@@ -289,6 +489,7 @@ export function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsI
       entryKind: entry.kind,
       mention: activeFileMention,
     }));
+    return [...input.agentMentionOptions, ...fileOptions];
   }
 
   return [];
@@ -414,7 +615,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     prefetchCommands,
     onAutocompleteApplied,
     onPickSkill,
-    onPickFileMention,
+    onPickMention,
     onClientSlashCommand,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
@@ -530,10 +731,19 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     placeholderData: keepPreviousData,
   });
 
+  const { options: agentMentionOptions, groupNotices } = useAgentMentionGroup({
+    serverId,
+    agentId,
+    cwd: agentCwd,
+    query: fileFilterQuery,
+    enabled: !isDraftContext && mode === "file",
+  });
+
   const options = useMemo<AgentAutocompleteOption[]>(
     () =>
       buildCommandAutocompleteOptions({
         activeFileMention,
+        agentMentionOptions,
         commandFilterQuery,
         commands,
         isCommandsLoading,
@@ -548,6 +758,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [
       activeFileMention,
       activeSlashCommand,
+      agentMentionOptions,
       commandFilterQuery,
       commands,
       isCommandsLoading,
@@ -615,18 +826,16 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         return;
       }
 
-      if (!current.fileMention) return;
-      onPickFileMention({
-        range: current.fileMention,
-        block: { kind: "file", path: selected.entryPath, entryKind: selected.entryKind },
-      });
+      const mentionBlock = resolvePickedMentionBlock(selected);
+      if (!current.fileMention || !mentionBlock) return;
+      onPickMention({ range: current.fileMention, block: mentionBlock });
       onAutocompleteApplied?.();
     },
     [
       canExecuteClientSlashCommand,
       onAutocompleteApplied,
       onPickSkill,
-      onPickFileMention,
+      onPickMention,
       onClientSlashCommand,
       setUserInput,
       userInput,
@@ -684,6 +893,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     loadingText,
     emptyText,
     footerText,
+    groupNotices,
     onSelectOption,
     onKeyPress,
   };

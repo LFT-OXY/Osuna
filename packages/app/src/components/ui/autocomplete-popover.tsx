@@ -17,7 +17,12 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
-import { Autocomplete, type AutocompleteOption } from "@/components/ui/autocomplete";
+import {
+  Autocomplete,
+  type AutocompleteGroupNotices,
+  type AutocompleteOption,
+} from "@/components/ui/autocomplete";
+import { hasSelectableAutocompleteOption } from "@/components/ui/autocomplete-utils";
 import {
   measureFloatingPanelPortalHost,
   useFloatingPanelPortalHostName,
@@ -65,6 +70,7 @@ interface AutocompletePopoverProps {
   loadingText?: string;
   emptyText?: string;
   footerText?: string;
+  groupNotices?: AutocompleteGroupNotices;
 }
 
 export function AutocompletePopover({
@@ -79,6 +85,7 @@ export function AutocompletePopover({
   loadingText,
   emptyText,
   footerText,
+  groupNotices,
 }: AutocompletePopoverProps): ReactElement | null {
   "use no memo";
   // React Compiler memoizes effect captures by reading SharedValue.value during render.
@@ -89,7 +96,9 @@ export function AutocompletePopover({
   const { shift, isMoving } = useKeyboardShift();
   const measuredShift = useSharedValue(0);
   const measurementGeneration = useRef(0);
-  const canMeasure = visible && (options.length === 0 || selectedIndex >= 0);
+  // 高亮就位后才显示，免得首帧没有高亮行；全是置灰行时没有可高亮的行，直接显示。
+  const hasSelectableOption = hasSelectableAutocompleteOption(options);
+  const canMeasure = visible && (!hasSelectableOption || selectedIndex >= 0);
 
   const remeasure = useCallback(() => {
     if (!canMeasure) return;
@@ -159,7 +168,7 @@ export function AutocompletePopover({
   }, [anchorY, baseBottom, safeAreaInsets.top]);
 
   if (!visible || !relativeAnchorRect || !baseStyle) return null;
-  if (options.length > 0 && selectedIndex < 0) return null;
+  if (hasSelectableOption && selectedIndex < 0) return null;
 
   return (
     <Portal hostName={portalHostName}>
@@ -178,6 +187,7 @@ export function AutocompletePopover({
             loadingText={loadingText}
             emptyText={emptyText}
             footerText={footerText}
+            groupNotices={groupNotices}
           />
         </Animated.View>
       </View>

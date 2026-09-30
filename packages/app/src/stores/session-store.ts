@@ -97,6 +97,9 @@ export interface Agent {
   attentionReason?: "finished" | "error" | "permission" | null;
   attentionTimestamp?: Date | null;
   archivedAt?: Date | null;
+  /** 会话启动时 daemon 判定的能否调用 create_agent；老 Host 与未加载的存档智能体没有。 */
+  canCreateAgents?: boolean;
+  createAgentsUnavailableReason?: string;
   parentAgentId: string | null;
   labels: Record<string, string>;
   projectPlacement?: ProjectPlacementPayload | null;

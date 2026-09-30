@@ -1641,6 +1641,19 @@ export const fr: TranslationResources = {
     groups: {
       commands: "Commandes",
       skills: "Compétences",
+      agents: "Agents",
+      files: "Fichiers",
+    },
+    agentMentions: {
+      toolsNotInjected: "Les Osuna tools sont désactivés pour cet agent",
+      toolsNotInjectedDetail:
+        "Activez-les dans Réglages → Host → Agents, puis rechargez cet agent.",
+      openAgentsSettings: "Ouvrir les réglages",
+      mcpDisabled: "MCP est désactivé sur cet hôte",
+      createAgentNotAllowed: "La politique Osuna tools de ce provider n'autorise pas create_agent",
+      toolsNotDelivered: "Cet agent ne peut pas appeler les Osuna tools",
+      unknownReason: "Cet agent ne peut pas lancer de sous-agents",
+      hostOutdated: "Mettez à jour l'hôte pour mentionner des agents",
     },
   },
   loadOlderHistory: {

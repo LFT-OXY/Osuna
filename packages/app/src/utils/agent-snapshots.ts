@@ -85,6 +85,10 @@ export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
     attentionReason: agent.attentionReason ?? null,
     attentionTimestamp: agent.attentionTimestamp?.toISOString() ?? null,
     archivedAt: agent.archivedAt?.toISOString() ?? null,
+    ...(agent.canCreateAgents !== undefined ? { canCreateAgents: agent.canCreateAgents } : {}),
+    ...(agent.createAgentsUnavailableReason !== undefined
+      ? { createAgentsUnavailableReason: agent.createAgentsUnavailableReason }
+      : {}),
   };
 }
 
@@ -132,6 +136,8 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     attentionReason: snapshot.attentionReason ?? null,
     attentionTimestamp,
     archivedAt,
+    canCreateAgents: snapshot.canCreateAgents,
+    createAgentsUnavailableReason: snapshot.createAgentsUnavailableReason,
     parentAgentId,
     labels: snapshot.labels,
   };

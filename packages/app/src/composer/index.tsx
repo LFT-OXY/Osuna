@@ -95,7 +95,7 @@ import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
 import {
   useAgentAutocomplete,
-  type FileMentionPick,
+  type MentionPick,
   type SkillPick,
 } from "@/hooks/use-agent-autocomplete";
 import {
@@ -1144,6 +1144,7 @@ function ComposerAutocompleteBinding({
       loadingText={autocomplete.loadingText}
       emptyText={autocomplete.emptyText}
       footerText={autocomplete.footerText}
+      groupNotices={autocomplete.groupNotices}
     />
   );
 }
@@ -1559,8 +1560,8 @@ function ComposerContentImpl({
     [],
   );
 
-  const handlePickFileMention = useCallback(
-    (pick: FileMentionPick) => messageInputRef.current?.insertInlineBlock(pick.block, pick.range),
+  const handlePickMention = useCallback(
+    (pick: MentionPick) => messageInputRef.current?.insertInlineBlock(pick.block, pick.range),
     [],
   );
 
@@ -2539,7 +2540,7 @@ function ComposerContentImpl({
       draftConfig: commandDraftConfig,
       prefetchCommands: isMessageInputFocused && mode.showAutocomplete,
       onPickSkill: handlePickSkill,
-      onPickFileMention: handlePickFileMention,
+      onPickMention: handlePickMention,
       canExecuteClientSlashCommand:
         buildOutgoingAttachments(attachments).length === 0 && !hasSkillBlockInInput,
       onClientSlashCommand: runClientSlashCommand,
@@ -2547,7 +2548,7 @@ function ComposerContentImpl({
     }),
     [
       handlePickSkill,
-      handlePickFileMention,
+      handlePickMention,
       hasSkillBlockInInput,
       replaceUserInput,
       serverId,

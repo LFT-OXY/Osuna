@@ -4,7 +4,11 @@ import { userEvent } from "@vitest/browser/context";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { useAutocomplete } from "@/hooks/use-autocomplete";
-import { Autocomplete, type AutocompleteOption } from "./autocomplete";
+import {
+  Autocomplete,
+  type AutocompleteGroupNotices,
+  type AutocompleteOption,
+} from "./autocomplete";
 import { orderAutocompleteGroups } from "./autocomplete-utils";
 
 // 应用源码在 Vitest 下按经典 JSX 运行时编译，需要全局的 React。
@@ -55,6 +59,7 @@ interface HarnessProps {
   errorMessage?: string;
   footerText?: string;
   maxHeight?: number;
+  groupNotices?: AutocompleteGroupNotices;
 }
 
 // Composer 里的接法：选项先分组，高亮与键盘由 useAutocomplete 管，按键从输入框转发过来。
@@ -65,6 +70,7 @@ function Harness({
   errorMessage,
   footerText,
   maxHeight,
+  groupNotices,
 }: HarnessProps) {
   const ordered = useMemo(() => orderAutocompleteGroups(options), [options]);
   const { selectedIndex, onHighlight, onKeyPress } = useAutocomplete({
@@ -92,6 +98,7 @@ function Harness({
       emptyText="No commands found"
       footerText={footerText}
       maxHeight={maxHeight}
+      groupNotices={groupNotices}
     />
   );
 }
@@ -352,7 +359,7 @@ describe("Command menu", () => {
 });
 
 describe("File list", () => {
-  it("lists files and folders top-down without group titles", () => {
+  it("lists files and folders top-down without a title when no agent is listed", () => {
     const { container } = mount({
       options: [
         { id: "directory:src", label: "src", kind: "directory" },
@@ -363,5 +370,101 @@ describe("File list", () => {
 
     expect(visibleSequence(container)).toEqual(["src", "README.md", "docs"]);
     expect(highlightedLabel(container)).toBe("src");
+  });
+});
+
+const SRC: AutocompleteOption = { id: "directory:src", label: "src", kind: "directory" };
+const README: AutocompleteOption = { id: "file:README.md", label: "README.md", kind: "file" };
+const CLAUDE: AutocompleteOption = { id: "agent:claude", label: "Claude", kind: "agent" };
+const CODEX: AutocompleteOption = { id: "agent:codex", label: "Codex", kind: "agent" };
+
+function disable(option: AutocompleteOption): AutocompleteOption {
+  return { ...option, disabled: true };
+}
+
+describe("@ list with agents", () => {
+  it("puts the agents above the files, each group under its title", () => {
+    const { container } = mount({ options: [SRC, CLAUDE, README, CODEX] });
+
+    expect(visibleSequence(container)).toEqual([
+      "Agents",
+      "Claude",
+      "Codex",
+      "Files",
+      "src",
+      "README.md",
+    ]);
+    expect(highlightedLabel(container)).toBe("Claude");
+  });
+
+  it("shows unavailable agents dimmed, with the reason under the title, and never selects them", async () => {
+    const onOpenSettings = vi.fn();
+    const { container, onSelect } = mount({
+      options: [disable(CLAUDE), disable(CODEX), SRC, README],
+      groupNotices: {
+        agents: {
+          message: "Osuna tools are off for this agent",
+          detail: "Reload the agent after turning them on",
+          action: { label: "Open settings", onPress: onOpenSettings },
+        },
+      },
+    });
+
+    const notice = container.querySelector('[data-testid="autocomplete-group-notice"]');
+    expect(notice?.textContent).toContain("Osuna tools are off for this agent");
+    expect(notice?.textContent).toContain("Reload the agent after turning them on");
+    const agentRows = Array.from(container.querySelectorAll('[role="option"]')).slice(0, 2);
+    expect(agentRows.map((row) => row.getAttribute("aria-disabled"))).toEqual(["true", "true"]);
+    expect(highlightedLabel(container)).toBe("src");
+
+    await press("ArrowDown");
+    expect(highlightedLabel(container)).toBe("README.md");
+    await press("ArrowDown");
+    expect(highlightedLabel(container)).toBe("src");
+    await press("ArrowUp");
+    expect(highlightedLabel(container)).toBe("README.md");
+
+    // 置灰行不接指针事件，指针落在它外层的行容器上。
+    const disabledEnvelope = agentRows[0]!.parentElement!;
+    await userEvent.hover(disabledEnvelope);
+    expect(highlightedLabel(container)).toBe("README.md");
+    await userEvent.click(disabledEnvelope);
+    expect(onSelect).not.toHaveBeenCalled();
+
+    const action = container.querySelector<HTMLElement>(
+      '[data-testid="autocomplete-group-notice-action"]',
+    );
+    await userEvent.click(action!);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens at the top so the reason stays in view when the list overflows", async () => {
+    const agents = Array.from({ length: 8 }, (_, index) =>
+      disable({ id: `agent:${index}`, label: `Agent ${index}`, kind: "agent" }),
+    );
+    const { container } = mount({
+      options: [...agents, SRC, README],
+      maxHeight: 160,
+      groupNotices: { agents: { message: "Osuna tools are off for this agent" } },
+    });
+    await nextFrames();
+    await nextFrames();
+
+    const notice = container.querySelector('[data-testid="autocomplete-group-notice"]')!;
+    expect(isInsideScroller(container, notice)).toBe(true);
+    expect(highlightedLabel(container)).toBe("src");
+
+    await press("ArrowDown");
+    await nextFrames();
+    const readme = Array.from(container.querySelectorAll('[role="option"]')).at(-1)!;
+    expect(isInsideScroller(container, readme)).toBe(true);
+  });
+
+  it("selects nothing on Enter when every row is unavailable", async () => {
+    const { container, onSelect } = mount({ options: [disable(CLAUDE)] });
+
+    expect(highlightedLabel(container)).toBeNull();
+    await press("Enter");
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

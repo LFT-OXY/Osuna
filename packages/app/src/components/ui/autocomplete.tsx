@@ -11,6 +11,8 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Box, File, Folder, SquareSlash } from "lucide-react-native";
+import type { ProviderIconComponent } from "@/components/provider-icons";
+import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { MENU_ITEM_HEIGHT } from "@/components/ui/menu/menu-geometry";
 import { composerSurfaceStyle } from "@/styles/floating-surface";
@@ -19,9 +21,11 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { AutocompleteFadeFrame } from "./autocomplete-fade";
 import {
   AUTOCOMPLETE_FADE_HEIGHT,
+  getAutocompleteFallbackIndex,
   getAutocompleteGroup,
   getAutocompleteScrollOffset,
   type AutocompleteGroup,
+  type SelectableOption,
 } from "./autocomplete-utils";
 
 export interface AutocompleteOption {
@@ -30,8 +34,20 @@ export interface AutocompleteOption {
   /** 参数提示，如 `<file>`。 */
   detail?: string;
   description?: string;
-  kind?: "command" | "skill" | "file" | "directory";
+  kind?: "command" | "skill" | "file" | "directory" | "agent";
+  /** 行首图标；不传时按 kind 取。 */
+  Icon?: ProviderIconComponent;
+  disabled?: SelectableOption["disabled"];
 }
+
+/** 组标题下的一行说明，如智能体组不可用的原因；不可选，键盘不经过它。 */
+export interface AutocompleteGroupNotice {
+  message: string;
+  detail?: string;
+  action?: { label: string; onPress: () => void };
+}
+
+export type AutocompleteGroupNotices = Partial<Record<AutocompleteGroup, AutocompleteGroupNotice>>;
 
 interface AutocompleteProps {
   options: readonly AutocompleteOption[];
@@ -46,11 +62,14 @@ interface AutocompleteProps {
   /** 列表底部的说明行，不可选，键盘导航不经过它。 */
   footerText?: string;
   maxHeight?: number;
+  groupNotices?: AutocompleteGroupNotices;
 }
 
 const GROUP_TITLE_KEYS = {
   commands: "agentAutocomplete.groups.commands",
   skills: "agentAutocomplete.groups.skills",
+  agents: "agentAutocomplete.groups.agents",
+  files: "agentAutocomplete.groups.files",
 } as const satisfies Record<AutocompleteGroup, string>;
 
 const BOLT_GLYPH_PATTERN = /\u26A1|\uFE0F/gu;
@@ -70,7 +89,22 @@ const ThemedSquareSlash = withUnistyles(SquareSlash);
 
 const mutedIconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-function AutocompleteOptionIcon({ kind }: { kind: AutocompleteOption["kind"] }) {
+function OptionIconSlot({
+  Icon,
+  size,
+  color,
+}: {
+  Icon: ProviderIconComponent;
+  size: number;
+  color: string;
+}) {
+  return <Icon size={size} color={color} />;
+}
+
+const ThemedOptionIcon = withUnistyles(OptionIconSlot);
+
+function AutocompleteOptionIcon({ kind, Icon }: Pick<AutocompleteOption, "kind" | "Icon">) {
+  if (Icon) return <ThemedOptionIcon Icon={Icon} size={ICON_SIZE.md} uniProps={mutedIconColor} />;
   switch (kind) {
     case "skill":
       return <ThemedBox size={ICON_SIZE.md} uniProps={mutedIconColor} />;
@@ -110,25 +144,33 @@ function AutocompleteRow({
   );
   const handlePointerMove = useCallback(() => onHighlight?.(index), [index, onHighlight]);
   const handlePress = useCallback(() => onSelect(option), [onSelect, option]);
+  const disabled = option.disabled === true;
   const pressableStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
       styles.row,
-      (pressed || isHighlighted) && styles.rowHighlighted,
+      !disabled && (pressed || isHighlighted) && styles.rowHighlighted,
+      disabled && styles.rowDisabled,
     ],
-    [isHighlighted],
+    [disabled, isHighlighted],
   );
 
   // 悬停按 docs/hover.md 的"A highlight the keyboard also moves"：用 pointermove，不用 enter/leave。
   return (
-    <View style={styles.rowEnvelope} onLayout={handleLayout} onPointerMove={handlePointerMove}>
+    <View
+      style={styles.rowEnvelope}
+      onLayout={handleLayout}
+      onPointerMove={disabled ? undefined : handlePointerMove}
+    >
       <Pressable
         role="option"
         aria-selected={isHighlighted}
+        aria-disabled={disabled}
+        disabled={disabled}
         onPress={handlePress}
         style={pressableStyle}
       >
         <View style={styles.rowIcon}>
-          <AutocompleteOptionIcon kind={option.kind} />
+          <AutocompleteOptionIcon kind={option.kind} Icon={option.Icon} />
         </View>
         <Text
           variant="label"
@@ -165,6 +207,7 @@ function AutocompleteRow({
 
 interface AutocompleteGroupTitleProps {
   group: AutocompleteGroup;
+  notice?: AutocompleteGroupNotice;
   /** 标题下面那一行的下标。 */
   firstRowIndex: number;
   onTitleLayout: (firstRowIndex: number, event: LayoutChangeEvent) => void;
@@ -172,6 +215,7 @@ interface AutocompleteGroupTitleProps {
 
 function AutocompleteGroupTitle({
   group,
+  notice,
   firstRowIndex,
   onTitleLayout,
 }: AutocompleteGroupTitleProps) {
@@ -190,6 +234,34 @@ function AutocompleteGroupTitle({
       >
         {t(GROUP_TITLE_KEYS[group])}
       </Text>
+      {notice ? <AutocompleteGroupNoticeView notice={notice} /> : null}
+    </View>
+  );
+}
+
+function AutocompleteGroupNoticeView({ notice }: { notice: AutocompleteGroupNotice }) {
+  return (
+    <View style={styles.groupNotice} testID="autocomplete-group-notice">
+      <View style={styles.groupNoticeText}>
+        <Text variant="label" color="foregroundMuted">
+          {notice.message}
+        </Text>
+        {notice.detail ? (
+          <Text variant="caption" color="foregroundMuted">
+            {notice.detail}
+          </Text>
+        ) : null}
+      </View>
+      {notice.action ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={notice.action.onPress}
+          testID="autocomplete-group-notice-action"
+        >
+          {notice.action.label}
+        </Button>
+      ) : null}
     </View>
   );
 }
@@ -228,6 +300,7 @@ export function Autocomplete({
   emptyText,
   footerText,
   maxHeight = 300,
+  groupNotices,
 }: AutocompleteProps) {
   const { t } = useTranslation();
   const resolvedLoadingText = loadingText ?? t("common.states.loading");
@@ -252,8 +325,20 @@ export function Autocomplete({
     return layoutCacheRef.current;
   }, [listSignature]);
 
+  const firstSelectableIndex = useMemo(() => getAutocompleteFallbackIndex(options), [options]);
+
   const ensureActiveItemVisible = useCallback(() => {
     if (selectedIndex < 0) {
+      return;
+    }
+
+    // 高亮在第一个可选行时停在列表顶部：它上面是置灰的智能体组时，组顶的原因说明比高亮行更要紧，
+    // 放不下也先给说明；按方向键之后再跟随高亮。
+    if (selectedIndex === firstSelectableIndex) {
+      if (scrollOffsetRef.current !== 0) {
+        scrollOffsetRef.current = 0;
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      }
       return;
     }
 
@@ -279,7 +364,7 @@ export function Autocomplete({
 
     scrollOffsetRef.current = nextOffset;
     scrollRef.current?.scrollTo({ y: nextOffset, animated: false });
-  }, [getLayoutCache, selectedIndex]);
+  }, [firstSelectableIndex, getLayoutCache, selectedIndex]);
 
   useEffect(() => {
     scrollOffsetRef.current = 0;
@@ -357,16 +442,19 @@ export function Autocomplete({
     );
   }
 
-  // 选项已按组排好（orderAutocompleteGroups），组变化处插入标题；文件列表没有组，不插标题。
+  // 选项已按组排好（orderAutocompleteGroups），组变化处插入标题。只有文件的 `@` 列表不插标题，
+  // 上面有智能体组时文件组才需要标题来分开两组。
   const items: ReactElement[] = [];
   let previousGroup: AutocompleteGroup | null = null;
   options.forEach((option, index) => {
     const group = getAutocompleteGroup(option.kind);
-    if (group && group !== previousGroup) {
+    const isLoneFileList = group === "files" && previousGroup === null;
+    if (group && group !== previousGroup && !isLoneFileList) {
       items.push(
         <AutocompleteGroupTitle
           key={`group:${group}`}
           group={group}
+          notice={groupNotices?.[group]}
           firstRowIndex={index}
           onTitleLayout={handleGroupTitleLayout}
         />,
@@ -445,6 +533,9 @@ const styles = StyleSheet.create((theme: Theme) => ({
   rowHighlighted: {
     backgroundColor: theme.colors.interactionHighlight,
   },
+  rowDisabled: {
+    opacity: theme.opacity[50],
+  },
   rowIcon: {
     width: ICON_SIZE.md,
     alignItems: "center",
@@ -466,6 +557,16 @@ const styles = StyleSheet.create((theme: Theme) => ({
     paddingHorizontal: theme.spacing[3],
     paddingTop: theme.spacing[2],
     paddingBottom: theme.spacing[1],
+  },
+  groupNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingTop: theme.spacing[1],
+  },
+  groupNoticeText: {
+    flex: 1,
+    minWidth: 0,
   },
   hint: {
     justifyContent: "center",

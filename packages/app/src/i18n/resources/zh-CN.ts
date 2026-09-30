@@ -1569,6 +1569,18 @@ export const zhCN: TranslationResources = {
     groups: {
       commands: "命令",
       skills: "技能",
+      agents: "智能体",
+      files: "文件",
+    },
+    agentMentions: {
+      toolsNotInjected: "当前智能体未启用 Osuna tools",
+      toolsNotInjectedDetail: "在设置 → Host → Agents 中开启后，需要重新加载当前智能体。",
+      openAgentsSettings: "去开启",
+      mcpDisabled: "Host 已关闭 MCP",
+      createAgentNotAllowed: "当前 provider 的 Osuna tools 策略未允许 create_agent",
+      toolsNotDelivered: "当前智能体无法调用 Osuna tools",
+      unknownReason: "当前智能体无法派发子智能体",
+      hostOutdated: "更新 Host 后可以提及智能体",
     },
   },
   loadOlderHistory: {

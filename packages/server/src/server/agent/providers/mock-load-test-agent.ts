@@ -51,7 +51,8 @@ const CAPABILITIES: AgentCapabilityFlags = {
   supportsSessionPersistence: true,
   supportsSessionListing: true,
   supportsDynamicModes: false,
-  supportsMcpServers: false,
+  // 声明接受 MCP，e2e 开启 Osuna tools 注入后 mock 会话就能派发（@ 智能体分组的可用状态）。
+  supportsMcpServers: true,
   supportsReasoningStream: true,
   supportsToolInvocations: true,
   supportsRewindConversation: true,

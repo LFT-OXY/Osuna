@@ -1599,6 +1599,18 @@ export const ko: TranslationResources = {
     groups: {
       commands: "명령",
       skills: "스킬",
+      agents: "에이전트",
+      files: "파일",
+    },
+    agentMentions: {
+      toolsNotInjected: "이 에이전트에서 Osuna tools가 꺼져 있습니다",
+      toolsNotInjectedDetail: "설정 → Host → 에이전트에서 켠 다음 이 에이전트를 다시 불러오세요.",
+      openAgentsSettings: "설정 열기",
+      mcpDisabled: "이 Host에서 MCP가 꺼져 있습니다",
+      createAgentNotAllowed: "이 provider의 Osuna tools 정책이 create_agent를 허용하지 않습니다",
+      toolsNotDelivered: "이 에이전트는 Osuna tools를 호출할 수 없습니다",
+      unknownReason: "이 에이전트는 하위 에이전트를 시작할 수 없습니다",
+      hostOutdated: "에이전트를 멘션하려면 Host를 업데이트하세요",
     },
   },
   loadOlderHistory: {

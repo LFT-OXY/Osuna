@@ -90,6 +90,16 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 - **Composition.** Report text only when `view.composing` is false, and once more after `compositionend` (ProseMirror clears `composing` inside its own handler).
 - **Styling** comes from the Composer's `withUnistyles` `.hash > *` rule landing on the root `div`; the `style` prop is emptied on web and not read.
 
+## The `@` list and the Command menu
+
+Both render through `components/ui/autocomplete.tsx`; `hooks/use-agent-autocomplete.ts` builds the options and `hooks/use-autocomplete.ts` owns highlight and keys.
+
+- **Groups.** `getAutocompleteGroup` maps `kind` to `commands` / `skills` (Command menu) or `agents` / `files` (`@` list); `orderAutocompleteGroups` puts the second group of each pair below the first. A title goes in where the group changes, except a `files` group that opens the list: an `@` list with no agent rows has no titles.
+- **Unavailable rows stay visible.** An option with `disabled: true` renders at `opacity[50]`, `aria-disabled`, with no `onPointerMove`; `useAutocomplete` never highlights or selects it, and `getAutocompleteFallbackIndex` / `getAutocompleteNextIndex` step over it. With no selectable row, keys pass through to the input (Enter sends), same as an empty list, and `AutocompletePopover` shows without waiting for a highlight (`hasSelectableAutocompleteOption`).
+- **Why a group is unavailable** goes in `groupNotices[group]` (`message`, optional `detail`, optional `action` rendered as an outline `sm` `Button`) under that group's title, never as a fake row.
+- **The list opens at the top** whenever the highlight is on the first selectable row, even if that row is then below the fold. A grayed agent group sits above the first file, and its reason must be visible before the highlighted file (decided with the user in multi-agent ticket 06). Keyboard moves past that row follow the highlight as before.
+- **The agent group** comes from `useAgentMentionGroup`: enabled providers from the provider snapshot, in snapshot order (the Providers settings order), filtered by label or id. It shows only in a composer bound to a loaded agent and once `server_info` has arrived; drafts get it with ticket 10's prediction. `resolveAgentMentionAvailability` grays the group when the host lacks `features.agentMentions` or the agent snapshot says `canCreateAgents: false`; a snapshot without the field (stored agent, replica cache) counts as available, because sending resumes the session and the daemon decides. Unknown reason codes get the generic message.
+
 ## React rules that matter most here
 
 - Components render and dispatch. Transitions live in reducers, stores, or the form model.

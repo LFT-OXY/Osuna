@@ -1612,6 +1612,18 @@ export const en = {
     groups: {
       commands: "Commands",
       skills: "Skills",
+      agents: "Agents",
+      files: "Files",
+    },
+    agentMentions: {
+      toolsNotInjected: "Osuna tools are off for this agent",
+      toolsNotInjectedDetail: "Turn them on in Settings → Host → Agents, then reload this agent.",
+      openAgentsSettings: "Open settings",
+      mcpDisabled: "MCP is turned off on this host",
+      createAgentNotAllowed: "This provider's Osuna tools policy doesn't allow create_agent",
+      toolsNotDelivered: "This agent can't call Osuna tools",
+      unknownReason: "This agent can't start subagents",
+      hostOutdated: "Update the host to mention agents",
     },
   },
   loadOlderHistory: {

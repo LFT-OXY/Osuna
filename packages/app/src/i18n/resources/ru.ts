@@ -1615,6 +1615,19 @@ export const ru: TranslationResources = {
     groups: {
       commands: "Команды",
       skills: "Навыки",
+      agents: "Агенты",
+      files: "Файлы",
+    },
+    agentMentions: {
+      toolsNotInjected: "Для этого агента Osuna tools выключены",
+      toolsNotInjectedDetail:
+        "Включите их в Настройки → Host → Агенты, затем перезагрузите этого агента.",
+      openAgentsSettings: "Открыть настройки",
+      mcpDisabled: "На этом хосте MCP выключен",
+      createAgentNotAllowed: "Политика Osuna tools этого provider не разрешает create_agent",
+      toolsNotDelivered: "Этот агент не может вызывать Osuna tools",
+      unknownReason: "Этот агент не может запускать субагентов",
+      hostOutdated: "Обновите хост, чтобы упоминать агентов",
     },
   },
   loadOlderHistory: {

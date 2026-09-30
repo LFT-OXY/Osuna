@@ -1587,6 +1587,18 @@ export const ar: TranslationResources = {
     groups: {
       commands: "الأوامر",
       skills: "المهارات",
+      agents: "الوكلاء",
+      files: "الملفات",
+    },
+    agentMentions: {
+      toolsNotInjected: "أدوات Osuna معطّلة لهذا الوكيل",
+      toolsNotInjectedDetail: "فعّلها من الإعدادات ← Host ← Agents، ثم أعد تحميل هذا الوكيل.",
+      openAgentsSettings: "فتح الإعدادات",
+      mcpDisabled: "MCP معطّل على هذا المضيف",
+      createAgentNotAllowed: "سياسة أدوات Osuna لهذا الـ provider لا تسمح بـ create_agent",
+      toolsNotDelivered: "لا يستطيع هذا الوكيل استدعاء أدوات Osuna",
+      unknownReason: "لا يستطيع هذا الوكيل تشغيل وكلاء فرعيين",
+      hostOutdated: "حدّث المضيف لتتمكن من الإشارة إلى الوكلاء",
     },
   },
   loadOlderHistory: {

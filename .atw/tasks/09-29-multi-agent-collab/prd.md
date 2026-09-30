@@ -162,6 +162,8 @@ Rules:
 - `@` 列表智能体分组在上、文件在下，输入后两组同时过滤。provider 按 Providers 设置的顺序排列，Agent profile 排在后面；只列已启用的 provider，以及 provider 已启用的 profile。profile 行显示它的名字、图标和颜色，副文字写所属 provider。过滤匹配 provider 显示名、provider id、profile 名。
 - 选中后，输入框（Web/Electron）插入 Agent mention 块；原生端插入链接文字（与 File mention 一致）。
 - 置灰时整组条目仍可见但不可选，组顶显示一行原因说明：`tools_not_injected` → "当前智能体未启用 Osuna tools"，附去设置 → Host → Agents 开启的入口，并说明开启后需要重新加载当前智能体；`mcp_disabled` → Host 已关闭 MCP；`create_agent_not_allowed` → 当前 provider 的 Osuna tools 策略未允许 `create_agent`；`tools_not_delivered` → 当前智能体无法调用 Osuna tools；认不出的原因码 → 当前智能体无法派发子智能体。老 Host（没有 `agentMentions`）整组置灰，提示更新 Host。新建界面按 provider 快照的预测字段置灰。
+- 智能体分组只在已加载会话的输入框里出现（快照带 `canCreateAgents` 的那种）；新建界面在票 10 按预测字段接入之前不显示分组。已收到 `agentMentions` 但会话快照没带 `canCreateAgents`（未加载的存档智能体、本地缓存）时按可用处理，发送会恢复会话，由 daemon 判定。
+- 置灰组连同原因说明排在文件上面，列表放不下时打开后停在顶部，原因说明优先于第一个可选文件露出；按方向键后照常跟随高亮。只剩置灰行时 Enter 照常发送，与空列表一致。
 - 所有新增文案补齐九种语言。
 
 ### 提及智能体默认值卡片（app）

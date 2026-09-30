@@ -9,11 +9,11 @@
 
 **Blocked by:** 01, 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 浏览器 e2e：智能体分组在文件上方，过滤后两组同时收窄且智能体组仍在上面；选中插入块，发出的文本为 `paseo://agent/provider/<id>` 格式。
-- [ ] 浏览器 e2e：`tools_not_injected` 时整组置灰、显示原因与开启入口；老 Host 显示更新提示。
-- [ ] 只列已启用的 provider。
-- [ ] 九种语言文案齐全。
-- [ ] Electron QA 截图：可用与置灰两种状态。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] 浏览器 e2e：智能体分组在文件上方，过滤后两组同时收窄且智能体组仍在上面；选中插入块，发出的文本为 `paseo://agent/provider/<id>` 格式。
+- [x] 浏览器 e2e：`tools_not_injected` 时整组置灰、显示原因与开启入口；老 Host 显示更新提示。
+- [x] 只列已启用的 provider。
+- [x] 九种语言文案齐全。
+- [x] Electron QA 截图：可用与置灰两种状态。
+- [x] `npm run typecheck`、`npm run lint` 通过。

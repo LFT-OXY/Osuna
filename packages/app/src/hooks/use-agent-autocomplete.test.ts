@@ -1,7 +1,12 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import { i18n } from "@/i18n/i18next";
 import {
+  buildAgentMentionOptions,
   buildCommandAutocompleteOptions,
+  resolveAgentMentionAvailability,
+  resolveAgentMentionNotice,
+  resolvePickedMentionBlock,
   resolveAutocompleteIsLoading,
   resolveAutocompleteIsVisible,
   resolveAutocompleteTexts,
@@ -41,6 +46,7 @@ function commandOptions(input: {
     commandFilterQuery: "",
     activeSlashCommand: { start: 0, end: 1, query: "", position: "start" },
     activeFileMention: null,
+    agentMentionOptions: [],
     fileSuggestions: [],
     t,
   });
@@ -173,5 +179,176 @@ describe("resolveAutocompleteTexts", () => {
       loadingText: "Searching workspace...",
       emptyText: "No files or directories found",
     });
+  });
+});
+
+function providerEntry(
+  provider: string,
+  label: string,
+  overrides: Partial<ProviderSnapshotEntry> = {},
+): ProviderSnapshotEntry {
+  return { provider, label, status: "ready", enabled: true, ...overrides };
+}
+
+const PROVIDERS = [
+  providerEntry("codex", "Codex"),
+  providerEntry("claude", "Claude"),
+  providerEntry("pi", "Pi", { enabled: false }),
+  providerEntry("my-agent", "Reviewer Bot"),
+];
+
+function agentRows(input: { query: string; disabled?: boolean }) {
+  return buildAgentMentionOptions({
+    entries: PROVIDERS,
+    query: input.query,
+    disabled: input.disabled ?? false,
+    serverId: "server-1",
+  }).map((option) => ({ label: option.label, disabled: option.disabled }));
+}
+
+describe("@ list agent group", () => {
+  it("lists enabled providers in the Providers settings order", () => {
+    expect(agentRows({ query: "" }).map((row) => row.label)).toEqual([
+      "Codex",
+      "Claude",
+      "Reviewer Bot",
+    ]);
+  });
+
+  it("filters by display name and by provider id, ignoring case", () => {
+    expect(agentRows({ query: "CLA" }).map((row) => row.label)).toEqual(["Claude"]);
+    expect(agentRows({ query: "my-a" }).map((row) => row.label)).toEqual(["Reviewer Bot"]);
+    expect(agentRows({ query: "pi" })).toEqual([]);
+  });
+
+  it("marks every row unavailable when the group is grayed out", () => {
+    expect(agentRows({ query: "", disabled: true }).every((row) => row.disabled)).toBe(true);
+  });
+
+  it("puts the agent rows above the files", () => {
+    const mention = { start: 0, end: 2, query: "c" };
+    const options = buildCommandAutocompleteOptions({
+      isVisible: true,
+      mode: "file",
+      commands: [],
+      isCommandsLoading: false,
+      pluginCommands: [],
+      isDraftContext: false,
+      commandFilterQuery: "",
+      activeSlashCommand: null,
+      activeFileMention: mention,
+      agentMentionOptions: buildAgentMentionOptions({
+        entries: PROVIDERS,
+        query: "c",
+        disabled: false,
+        serverId: "server-1",
+      }),
+      fileSuggestions: [{ path: "src/cli.ts", kind: "file" }],
+      t,
+    });
+    expect(options.map((option) => [option.kind, option.label])).toEqual([
+      ["agent", "Codex"],
+      ["agent", "Claude"],
+      ["file", "src/cli.ts"],
+    ]);
+  });
+});
+
+describe("@ list agent group availability", () => {
+  it("asks for a host update when the host predates agent mentions", () => {
+    expect(
+      resolveAgentMentionAvailability({
+        supportsAgentMentions: false,
+        canCreateAgents: undefined,
+        unavailableReason: undefined,
+      }),
+    ).toEqual({ kind: "host_outdated" });
+  });
+
+  it("grays the group out with the daemon's reason when the session cannot dispatch", () => {
+    expect(
+      resolveAgentMentionAvailability({
+        supportsAgentMentions: true,
+        canCreateAgents: false,
+        unavailableReason: "tools_not_injected",
+      }),
+    ).toEqual({ kind: "unavailable", reason: "tools_not_injected" });
+  });
+
+  it("keeps the group available when the snapshot has no verdict yet", () => {
+    expect(
+      resolveAgentMentionAvailability({
+        supportsAgentMentions: true,
+        canCreateAgents: undefined,
+        unavailableReason: undefined,
+      }),
+    ).toEqual({ kind: "available" });
+  });
+});
+
+describe("@ list agent group notice", () => {
+  function notice(availability: Parameters<typeof resolveAgentMentionNotice>[0]["availability"]) {
+    return resolveAgentMentionNotice({ availability, t, onOpenAgentsSettings: vi.fn() });
+  }
+
+  it("shows nothing when agents can be mentioned", () => {
+    expect(notice({ kind: "available" })).toBeUndefined();
+  });
+
+  it("links to the Agents settings when Osuna tools are not injected", () => {
+    const onOpenAgentsSettings = vi.fn();
+    const result = resolveAgentMentionNotice({
+      availability: { kind: "unavailable", reason: "tools_not_injected" },
+      t,
+      onOpenAgentsSettings,
+    });
+    expect(result?.message).toBe("Osuna tools are off for this agent");
+    expect(result?.detail).toBe(
+      "Turn them on in Settings → Host → Agents, then reload this agent.",
+    );
+    result?.action?.onPress();
+    expect(onOpenAgentsSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("names each other reason, and falls back to a generic message for an unknown one", () => {
+    const messages = [
+      "mcp_disabled",
+      "create_agent_not_allowed",
+      "tools_not_delivered",
+      "some_future_reason",
+      undefined,
+    ].map((reason) => notice({ kind: "unavailable", reason }));
+    expect(messages.map((entry) => [entry?.message, entry?.action])).toEqual([
+      ["MCP is turned off on this host", undefined],
+      ["This provider's Osuna tools policy doesn't allow create_agent", undefined],
+      ["This agent can't call Osuna tools", undefined],
+      ["This agent can't start subagents", undefined],
+      ["This agent can't start subagents", undefined],
+    ]);
+  });
+
+  it("asks for a host update on an old host", () => {
+    expect(notice({ kind: "host_outdated" })?.message).toBe("Update the host to mention agents");
+  });
+});
+
+describe("resolvePickedMentionBlock", () => {
+  const [claude] = buildAgentMentionOptions({
+    entries: [providerEntry("claude", "Claude")],
+    query: "",
+    disabled: false,
+    serverId: "server-1",
+  });
+
+  it("turns a picked provider into an Agent mention named after its display name", () => {
+    expect(resolvePickedMentionBlock(claude!)).toEqual({
+      kind: "agent",
+      target: { kind: "provider", id: "claude" },
+      name: "Claude",
+    });
+  });
+
+  it("makes no block for a grayed-out agent", () => {
+    expect(resolvePickedMentionBlock({ ...claude!, disabled: true })).toBeNull();
   });
 });

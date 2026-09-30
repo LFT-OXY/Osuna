@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getAutocompleteFallbackIndex,
   getAutocompleteNextIndex,
+  hasSelectableAutocompleteOption,
+  type SelectableOption,
 } from "@/components/ui/autocomplete-utils";
 
 interface AutocompleteKeyPressEvent {
@@ -10,7 +12,7 @@ interface AutocompleteKeyPressEvent {
 }
 
 interface UseAutocompleteInput<
-  TOption,
+  TOption extends SelectableOption,
   TKeyPressEvent extends AutocompleteKeyPressEvent = AutocompleteKeyPressEvent,
 > {
   isVisible: boolean;
@@ -28,7 +30,7 @@ interface UseAutocompleteResult<TKeyPressEvent extends AutocompleteKeyPressEvent
 }
 
 export function useAutocomplete<
-  TOption,
+  TOption extends SelectableOption,
   TKeyPressEvent extends AutocompleteKeyPressEvent = AutocompleteKeyPressEvent,
 >(input: UseAutocompleteInput<TOption, TKeyPressEvent>): UseAutocompleteResult<TKeyPressEvent> {
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -45,25 +47,20 @@ export function useAutocomplete<
     previousQueryRef.current = input.query;
 
     setSelectedIndex((current) => {
-      if (input.options.length === 0) {
-        return -1;
-      }
-
-      const fallbackIndex = getAutocompleteFallbackIndex(input.options.length);
+      const fallbackIndex = getAutocompleteFallbackIndex(input.options);
 
       if (queryChanged) {
         return fallbackIndex;
       }
-      if (current < 0 || current >= input.options.length) {
-        return fallbackIndex;
-      }
-      return current;
+      const currentOption = input.options[current];
+      const currentIsSelectable = currentOption !== undefined && !currentOption.disabled;
+      return currentIsSelectable ? current : fallbackIndex;
     });
-  }, [input.isVisible, input.options.length, input.query]);
+  }, [input.isVisible, input.options, input.query]);
 
   const onKeyPress = useCallback(
     (event: TKeyPressEvent) => {
-      if (!input.isVisible || input.options.length === 0) {
+      if (!input.isVisible || !hasSelectableAutocompleteOption(input.options)) {
         return false;
       }
 
@@ -72,7 +69,7 @@ export function useAutocomplete<
         setSelectedIndex((current) =>
           getAutocompleteNextIndex({
             currentIndex: current,
-            itemCount: input.options.length,
+            options: input.options,
             key: "ArrowUp",
           }),
         );
@@ -84,7 +81,7 @@ export function useAutocomplete<
         setSelectedIndex((current) =>
           getAutocompleteNextIndex({
             currentIndex: current,
-            itemCount: input.options.length,
+            options: input.options,
             key: "ArrowDown",
           }),
         );
@@ -93,11 +90,10 @@ export function useAutocomplete<
 
       if (event.key === "Tab" || event.key === "Enter") {
         event.preventDefault();
-        const fallbackIndex = getAutocompleteFallbackIndex(input.options.length);
         const resolvedIndex =
-          selectedIndex >= 0 && selectedIndex < input.options.length
+          selectedIndex >= 0 && !input.options[selectedIndex]?.disabled
             ? selectedIndex
-            : fallbackIndex;
+            : getAutocompleteFallbackIndex(input.options);
         const selectedOption = input.options[resolvedIndex];
         if (selectedOption) {
           input.onSelectOption(selectedOption, event);
@@ -118,9 +114,10 @@ export function useAutocomplete<
 
   const onHighlight = useCallback(
     (index: number) => {
-      if (index >= 0 && index < input.options.length) setSelectedIndex(index);
+      const option = input.options[index];
+      if (option && !option.disabled) setSelectedIndex(index);
     },
-    [input.options.length],
+    [input.options],
   );
 
   return {
