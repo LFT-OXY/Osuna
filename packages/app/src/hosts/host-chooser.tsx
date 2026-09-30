@@ -7,6 +7,7 @@ import {
   View,
   type PressableStateCallbackType,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
   EditingTextInput as TextInput,
   type EditingTextInputHandle,
@@ -39,7 +40,7 @@ export interface ChooseHostInput {
 
 interface HostChoiceRequest {
   id: number;
-  title: string;
+  title?: string;
   serverIds: string[];
   onChooseHost: HostChoiceHandler;
 }
@@ -91,7 +92,7 @@ export function useHostChooser() {
       }
 
       open({
-        title: input.title ?? "Choose host",
+        title: input.title,
         serverIds: availableHosts.map((host) => host.serverId),
         onChooseHost: input.onChooseHost,
       });
@@ -145,6 +146,7 @@ function HostChooserRow({
 
 export function HostChooserModal() {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const hosts = useHosts();
   const request = useHostChooserStore((state) => state.request);
   const close = useHostChooserStore((state) => state.close);
@@ -247,12 +249,12 @@ export function HostChooserModal() {
         <Pressable style={styles.backdrop} onPress={close} />
         <View ref={setWebOverlayScope} style={styles.panel}>
           <View style={styles.header}>
-            <Text style={styles.title}>{request.title}</Text>
+            <Text style={styles.title}>{request.title ?? t("hostPicker.chooser.title")}</Text>
             <TextInput
               ref={inputRef}
               initialValue={query}
               onChangeText={handleQueryChange}
-              placeholder="Search hosts..."
+              placeholder={t("hostPicker.chooser.searchPlaceholder")}
               placeholderTextColor={theme.colors.foregroundMuted}
               style={styles.input}
               autoCapitalize="none"
@@ -266,7 +268,9 @@ export function HostChooserModal() {
             keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
           >
-            {options.length === 0 ? <Text style={styles.emptyText}>No matching hosts</Text> : null}
+            {options.length === 0 ? (
+              <Text style={styles.emptyText}>{t("hostPicker.chooser.empty")}</Text>
+            ) : null}
             {options.map((host, index) => (
               <HostChooserRow
                 key={host.serverId}

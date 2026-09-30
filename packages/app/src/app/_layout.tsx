@@ -776,7 +776,6 @@ function OpenProjectListener() {
       }
 
       chooseHost({
-        title: "Choose host",
         onChooseHost: (serverId) => {
           setRequest({
             id: nextOpenProjectRequestId++,

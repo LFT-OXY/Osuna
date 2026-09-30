@@ -67,12 +67,12 @@
 - **只修简体中文。** 迁移硬编码文案时新增的键，在其他 7 种非英语语言里填英文原文，满足键一致性测试，显示效果和现在相同。其他语言的漏翻另开任务。
 - **中文资源不再引用英文资源。** 中文资源里现有的「整块引用英文」和「展开英文块」都要改成中文值。插件设置资源里对所有语言共用的英文日志文案块，要为中文单独提供译文。
 - **中文译法原则**，调研依据见 `research/zh-cn-terminology-practice.md`：
-  - 翻成中文：提交、拉取、推送、合并、变基、压缩合并、抓取、差异、提示词、工作树、守护进程、主机、提供方、工作区、项目、模型、终端、布局、中继、插件、思考、模式、功能、检查、审查；完整的 pull request / merge request 译作拉取请求 / 合并请求；Setup / Teardown 作为界面标签译作初始化 / 清理；Light / Dark 译作浅色 / 深色；Stable / Beta 译作稳定版 / 测试版。
+  - 翻成中文：提交、拉取、推送、合并、变基、压缩合并、抓取、差异、提示词、工作树、守护进程、主机、提供方、工作区、项目、模型、终端、布局、中继、插件、思考、模式、功能、检查、审查；完整的 pull request / merge request 译作拉取请求 / 合并请求；Setup / Teardown 作为界面标签译作初始化 / 清理；Light / Dark 译作浅色 / 深色；Stable / Beta 译作稳定版 / 测试版；筛选项的 All hosts / All projects 译作全部主机 / 全部项目。
   - 保留英文：
     - Agent、Subagent。已有的「智能体」「子智能体」「代理」全部改回英文。
     - 缩写和协议名：PR、MR、MCP、API、API key、Base URL、CLI、PID、URL、Shell、token。
     - 提供方自定义的功能名：Skills、Hooks。
-    - 具名主题、品牌和产品名（Osuna、GitHub、LiteLLM、OpenRouter、Claude 等）。
+    - 具名主题、品牌和产品名（Osuna、GitHub、LiteLLM、OpenRouter、Claude 等）。例外：Finder 用 macOS 官方中文名「访达」（工单 04 确认）。
     - 占位示例值（命令、参数、路径、示例名称）。
     - 语言选项「English」，以及只含插值和标点的值。
   - 已有中文译文和原则一致的不动；和原则冲突的英文残留要改掉，包括 Worktree、Daemon、Diff、Prompt、Model、Project、Agent Provider 等。
