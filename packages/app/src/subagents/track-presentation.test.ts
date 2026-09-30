@@ -1,7 +1,15 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import type { PaseoSubagentRow, ProviderSubagentRow, SubagentRow } from "./select";
+import type {
+  DispatchRowState,
+  DispatchSubagent,
+  PaseoSubagentRow,
+  ProviderSubagentRow,
+  SubagentRow,
+} from "./select";
 import {
+  buildDispatchGroupHeaderPresentation,
+  buildDispatchRowPresentation,
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
@@ -325,5 +333,153 @@ describe("provider-owned row subtitles", () => {
         providerRow({ description: null, subtitle: null, title: "general-purpose" }),
       ).subtitle,
     ).toBe("");
+  });
+});
+
+describe("dispatch group presentation", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+    await i18n.changeLanguage("en");
+  });
+
+  const CALL_INPUT = { title: "Write tests", provider: "codex", model: "gpt-5.4", modeId: "auto" };
+  const providerLabel = (provider: string) => (provider === "codex" ? "Codex" : provider);
+
+  function subagent(
+    overrides: Partial<PaseoSubagentRow> & Pick<PaseoSubagentRow, "id">,
+    extra: Partial<Omit<DispatchSubagent, "row">> = {},
+  ): DispatchRowState {
+    return {
+      kind: "subagent",
+      callId: `call-${overrides.id}`,
+      input: CALL_INPUT,
+      subagent: {
+        row: row(overrides),
+        model: "gpt-5.4",
+        modeLabel: "Auto",
+        pendingPermissionName: null,
+        updatedAt: new Date("2026-04-20T00:02:05.000Z"),
+        archived: false,
+        detached: false,
+        ...extra,
+      },
+    };
+  }
+
+  const starting: DispatchRowState = { kind: "starting", callId: "call-s", input: CALL_INPUT };
+
+  it("counts rows in the track's order with starting before done", () => {
+    const header = buildDispatchGroupHeaderPresentation(i18n.t, [
+      subagent({ id: "a" }),
+      starting,
+      subagent({ id: "b", status: "running" }),
+      subagent({ id: "c", pendingPermissionCount: 1 }),
+      subagent({ id: "d", status: "error" }),
+    ]);
+
+    expect(header).toEqual({
+      title: "Dispatched 5 subagents",
+      segments: [
+        { bucket: "needs_input", text: "1 waiting for approval" },
+        { bucket: "failed", text: "1 failed" },
+        { bucket: "running", text: "1 working" },
+        { bucket: "starting", text: "1 starting" },
+        { bucket: "done", text: "1 done" },
+      ],
+      accessibilityLabel:
+        "Dispatched 5 subagents: 1 waiting for approval, 1 failed, 1 working, 1 starting, 1 done",
+    });
+  });
+
+  it("names a lone dispatch in the singular", () => {
+    expect(buildDispatchGroupHeaderPresentation(i18n.t, [starting]).title).toBe(
+      "Dispatched 1 subagent",
+    );
+  });
+
+  it("draws a starting row from the call input and does not open it", () => {
+    expect(
+      buildDispatchRowPresentation({ t: i18n.t, state: starting, providerLabelOf: providerLabel }),
+    ).toEqual({
+      key: "call-s",
+      agentId: null,
+      provider: "codex",
+      label: "Write tests",
+      subtitle: "Codex · gpt-5.4 · auto",
+      tone: "default",
+      bucket: "starting",
+      timing: { kind: "starting" },
+    });
+  });
+
+  it("shows provider, model, and mode under a running row and times it live", () => {
+    const presentation = buildDispatchRowPresentation({
+      t: i18n.t,
+      state: subagent({ id: "a", title: "Write tests", status: "running" }),
+      providerLabelOf: providerLabel,
+    });
+
+    expect(presentation).toMatchObject({
+      agentId: "a",
+      label: "Write tests",
+      subtitle: "Codex · gpt-5.4 · Auto",
+      bucket: "running",
+      timing: { kind: "live", startedAt: new Date("2026-04-20T00:00:00.000Z") },
+    });
+  });
+
+  it("swaps the subtitle for the pending tool while it waits for approval", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: subagent({ id: "a", pendingPermissionCount: 1 }, { pendingPermissionName: "Bash" }),
+        providerLabelOf: providerLabel,
+      }),
+    ).toMatchObject({
+      subtitle: "Waiting for approval · Bash",
+      tone: "warning",
+      bucket: "needs_input",
+    });
+  });
+
+  it("freezes the duration at the last update once the subagent stops", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: subagent({ id: "a" }),
+        providerLabelOf: providerLabel,
+      }).timing,
+    ).toEqual({ kind: "frozen", durationMs: 125_000 });
+  });
+
+  it("marks archived and detached rows and drops the duration the archive time would inflate", () => {
+    const archived = buildDispatchRowPresentation({
+      t: i18n.t,
+      state: subagent({ id: "a" }, { archived: true }),
+      providerLabelOf: providerLabel,
+    });
+    const detached = buildDispatchRowPresentation({
+      t: i18n.t,
+      state: subagent({ id: "b" }, { detached: true }),
+      providerLabelOf: providerLabel,
+    });
+
+    expect(archived).toMatchObject({
+      subtitle: "Codex · gpt-5.4 · Auto · Archived",
+      bucket: "done",
+      timing: { kind: "none" },
+    });
+    expect(detached.subtitle).toBe("Codex · gpt-5.4 · Auto · Detached");
+  });
+
+  it("names the row after the dispatched task even once the child is renamed", () => {
+    const renamed = subagent({ id: "a", title: "Renamed later" });
+
+    expect(
+      buildDispatchRowPresentation({ t: i18n.t, state: renamed, providerLabelOf: providerLabel })
+        .label,
+    ).toBe("Write tests");
   });
 });

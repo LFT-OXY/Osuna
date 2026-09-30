@@ -1932,6 +1932,15 @@ export const es: TranslationResources = {
     archiveTooltip: "Subagente de archivo",
     archiveFinishedAction: "Archivar subagentes finalizados",
     archiveFinishedRetry: "Reintentar ({{failed}}/{{total}})",
+    dispatchTitleOne: "1 subagente enviado",
+    dispatchTitleMany: "{{count}} subagentes enviados",
+    dispatchStartingRow: "Iniciando",
+    dispatchStarting: "{{count}} iniciando",
+    dispatchDone: "{{count}} finalizados",
+    dispatchWaitingCount: "{{count}} esperando aprobación",
+    dispatchWaitingForApproval: "Esperando aprobación · {{tool}}",
+    dispatchArchived: "Archivado",
+    dispatchDetached: "Separado",
   },
   panels: {
     draft: {

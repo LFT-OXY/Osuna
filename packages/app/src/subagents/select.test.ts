@@ -1,6 +1,17 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { afterEach, describe, expect, it } from "vitest";
-import { selectProviderSubagentsForParent, selectSubagentsForParent } from "./select";
+import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import type { AgentToolCallItem } from "@/types/stream";
+import {
+  createDispatchSubagentsSelector,
+  PENDING_DISPATCH_LOOKUP,
+  resolveDispatchCall,
+  selectDispatchSubagents,
+  selectProviderSubagentsForParent,
+  selectSubagentsForParent,
+  splitDispatchSegments,
+  toDispatchSubagent,
+} from "./select";
 import { useProviderSubagentStore } from "./provider-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 
@@ -436,5 +447,201 @@ describe("selectSubagentsForParent", () => {
         EMPTY_PENDING_ARCHIVE_IDS,
       ),
     );
+  });
+});
+
+function createAgentCall(
+  callId: string,
+  status: "running" | "completed" | "failed" = "completed",
+): AgentToolCallItem {
+  return {
+    kind: "tool_call",
+    id: callId,
+    timestamp: AGENT_TIMESTAMP,
+    payload: {
+      source: "agent",
+      data: {
+        provider: "claude",
+        callId,
+        name: "paseo.create_agent",
+        status,
+        error: null,
+        detail: {
+          type: "unknown",
+          input: {
+            title: `Task ${callId}`,
+            provider: "codex/gpt-5.4",
+            initialPrompt: "Do it",
+            settings: { modeId: "auto" },
+          },
+          output: null,
+        },
+      },
+    },
+  };
+}
+
+function dispatchChild(input: Partial<Agent> & Pick<Agent, "id">, callId: string): Agent {
+  return makeAgent({
+    parentAgentId: "parent",
+    ...input,
+    labels: { [PARENT_TOOL_CALL_ID_LABEL]: callId, ...input.labels },
+  });
+}
+
+describe("dispatch groups", () => {
+  it("links each call to the child that carries its call id under this parent", () => {
+    setAgents([
+      makeAgent({ id: "parent" }),
+      dispatchChild({ id: "child-a" }, "call-a"),
+      dispatchChild({ id: "child-b", parentAgentId: null }, "call-b"),
+      dispatchChild({ id: "other-parent-child", parentAgentId: "someone-else" }, "call-c"),
+      makeAgent({ id: "sibling-without-link", parentAgentId: "parent" }),
+    ]);
+
+    const linked = selectDispatchSubagents(useSessionStore.getState(), {
+      serverId: SERVER_ID,
+      parentAgentId: "parent",
+    });
+
+    expect(Object.keys(linked).sort()).toEqual(["call-a", "call-b"]);
+    expect(linked["call-a"]).toMatchObject({ row: { id: "child-a" }, detached: false });
+    // Detach clears the parent label but keeps the call id, so the row stays linked.
+    expect(linked["call-b"]).toMatchObject({ row: { id: "child-b" }, detached: true });
+  });
+
+  it("reuses the last result until the agents table changes", () => {
+    setAgents([makeAgent({ id: "parent" }), dispatchChild({ id: "child-a" }, "call-a")]);
+    const select = createDispatchSubagentsSelector({
+      serverId: SERVER_ID,
+      parentAgentId: "parent",
+    });
+
+    const first = select(useSessionStore.getState());
+    expect(select(useSessionStore.getState())).toBe(first);
+
+    setAgents([
+      makeAgent({ id: "parent" }),
+      dispatchChild({ id: "child-a", status: "running" }, "call-a"),
+    ]);
+    expect(select(useSessionStore.getState())).toMatchObject({
+      "call-a": { row: { status: "running" } },
+    });
+  });
+
+  it("carries what the row shows: model, mode label, first pending tool, archive state", () => {
+    const archivedAt = new Date("2026-03-08T11:00:00.000Z");
+    const subagent = toDispatchSubagent(
+      dispatchChild(
+        {
+          id: "child",
+          model: "gpt-5.4",
+          currentModeId: "auto",
+          availableModes: [{ id: "auto", label: "Auto" }],
+          pendingPermissions: [{ id: "perm-1", provider: "codex", name: "Bash", kind: "tool" }],
+          archivedAt,
+        },
+        "call-a",
+      ),
+    );
+
+    expect(subagent).toMatchObject({
+      row: { kind: "paseo", id: "child", pendingPermissionCount: 1 },
+      model: "gpt-5.4",
+      modeLabel: "Auto",
+      pendingPermissionName: "Bash",
+      archived: true,
+      detached: false,
+    });
+  });
+
+  it("shows a running call without a child as starting, from the call's own input", () => {
+    expect(
+      resolveDispatchCall({
+        call: createAgentCall("call-a", "running"),
+        subagent: undefined,
+        lookup: PENDING_DISPATCH_LOOKUP,
+      }),
+    ).toEqual({
+      kind: "starting",
+      callId: "call-a",
+      input: { title: "Task call-a", provider: "codex", model: "gpt-5.4", modeId: "auto" },
+    });
+  });
+
+  it("prefers the live child over an archived lookup and keeps starting while the lookup runs", () => {
+    const live = toDispatchSubagent(dispatchChild({ id: "child" }, "call-a"));
+    const call = createAgentCall("call-a");
+
+    expect(
+      resolveDispatchCall({ call, subagent: live, lookup: { status: "missing" } }),
+    ).toMatchObject({
+      kind: "subagent",
+      callId: "call-a",
+      input: { title: "Task call-a" },
+      subagent: live,
+    });
+    expect(
+      resolveDispatchCall({ call, subagent: undefined, lookup: PENDING_DISPATCH_LOOKUP }).kind,
+    ).toBe("starting");
+    const archived = toDispatchSubagent(
+      dispatchChild({ id: "child", archivedAt: AGENT_TIMESTAMP }, "call-a"),
+    );
+    expect(
+      resolveDispatchCall({
+        call,
+        subagent: undefined,
+        lookup: { status: "found", subagent: archived },
+      }),
+    ).toMatchObject({
+      kind: "subagent",
+      callId: "call-a",
+      subagent: archived,
+    });
+  });
+
+  it("falls back to the generic card once a finished call has no child anywhere", () => {
+    const call = createAgentCall("call-a", "failed");
+
+    expect(
+      resolveDispatchCall({ call, subagent: undefined, lookup: { status: "missing" } }),
+    ).toEqual({
+      kind: "generic",
+      call,
+    });
+  });
+
+  it("splits a run into cards around the calls that fell back to generic", () => {
+    const linked = toDispatchSubagent(dispatchChild({ id: "child" }, "a"));
+    const generic = createAgentCall("b");
+    const states = [
+      resolveDispatchCall({
+        call: createAgentCall("a"),
+        subagent: linked,
+        lookup: PENDING_DISPATCH_LOOKUP,
+      }),
+      resolveDispatchCall({ call: generic, subagent: undefined, lookup: { status: "missing" } }),
+      resolveDispatchCall({
+        call: createAgentCall("c", "running"),
+        subagent: undefined,
+        lookup: PENDING_DISPATCH_LOOKUP,
+      }),
+      resolveDispatchCall({
+        call: createAgentCall("d", "running"),
+        subagent: undefined,
+        lookup: PENDING_DISPATCH_LOOKUP,
+      }),
+    ];
+
+    const segments = splitDispatchSegments(states);
+
+    expect(segments.map((segment) => segment.kind)).toEqual(["group", "generic", "group"]);
+    expect(segments[0]).toMatchObject({ kind: "group", key: "a", rows: [{ callId: "a" }] });
+    expect(segments[1]).toEqual({ kind: "generic", call: generic });
+    expect(segments[2]).toMatchObject({
+      kind: "group",
+      key: "c",
+      rows: [{ callId: "c" }, { callId: "d" }],
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { PARENT_AGENT_ID_LABEL, PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { expect, type Page } from "@playwright/test";
 import { daemonWsRoutePattern } from "./daemon-port";
 import { loadSessionMessageReaders } from "./new-workspace";
@@ -362,4 +362,92 @@ export async function detachSubagentFromTrack(page: Page, childId: string): Prom
   const detachButton = page.getByTestId(`subagents-track-detach-${childId}`);
   await expect(detachButton).toBeVisible({ timeout: 30_000 });
   await detachButton.click();
+}
+
+/** 一步派发脚本：一次 `paseo.create_agent` 调用，或夹在调用之间的一段正文。 */
+export type DispatchStep =
+  | { callId: string; title: string; provider?: string; runningMs?: number }
+  | { text: string };
+
+export async function seedDispatchParent(
+  workspace: Pick<SeededWorkspace, "client" | "repoPath" | "workspaceId">,
+  title: string,
+): Promise<string> {
+  const parent = await workspace.client.createAgent({
+    provider: "mock",
+    cwd: workspace.repoPath,
+    workspaceId: workspace.workspaceId,
+    title,
+    modeId: "load-test",
+    model: "ten-second-stream",
+  });
+  return parent.id;
+}
+
+/** 按 daemon 写的关联标签种一个子智能体，等同父智能体那次 `create_agent` 调用派出的。 */
+export async function seedDispatchChild(
+  workspace: Pick<SeededWorkspace, "client" | "repoPath" | "workspaceId">,
+  input: { parentId: string; callId: string; title: string },
+): Promise<string> {
+  const child = await workspace.client.createAgent({
+    provider: "mock",
+    cwd: workspace.repoPath,
+    workspaceId: workspace.workspaceId,
+    title: input.title,
+    modeId: "load-test",
+    model: "ten-second-stream",
+    labels: {
+      [PARENT_AGENT_ID_LABEL]: input.parentId,
+      [PARENT_TOOL_CALL_ID_LABEL]: input.callId,
+    },
+  });
+  return child.id;
+}
+
+/** 让 mock 父智能体往自己的时间线依次写这些调用与正文（`mock-load-test-agent.ts`）。 */
+export async function emitDispatchCalls(
+  workspace: Pick<SeededWorkspace, "client">,
+  parentId: string,
+  steps: DispatchStep[],
+): Promise<void> {
+  await workspace.client.sendAgentMessage(
+    parentId,
+    `Emit synthetic create_agent calls: ${JSON.stringify(steps)}`,
+  );
+}
+
+export function dispatchGroups(page: Page) {
+  return page.getByTestId("dispatch-group");
+}
+
+export function dispatchRow(page: Page, callId: string) {
+  return page.getByTestId(`dispatch-group-row-${callId}`);
+}
+
+export async function expectDispatchHeader(page: Page, index: number, label: string | RegExp) {
+  await expect(
+    dispatchGroups(page).nth(index).getByTestId("dispatch-group-header"),
+  ).toHaveAttribute("aria-label", label, { timeout: 30_000 });
+}
+
+/** 从 server_info 去掉 `subagentCallLinks`，模拟不会写关联标签的老 Host。 */
+export async function installHostWithoutSubagentCallLinks(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (typeof message !== "string" || !message.includes('"server_info"')) {
+        ws.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
+      };
+      const payload = envelope.message?.payload;
+      if (payload?.status === "server_info" && payload.features) {
+        delete payload.features.subagentCallLinks;
+      }
+      ws.send(JSON.stringify(envelope));
+    });
+  });
 }

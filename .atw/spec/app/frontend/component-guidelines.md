@@ -100,6 +100,19 @@ Both render through `components/ui/autocomplete.tsx`; `hooks/use-agent-autocompl
 - **The list opens at the top** whenever the highlight is on the first selectable row, even if that row is then below the fold. A grayed agent group sits above the first file, and its reason must be visible before the highlighted file (decided with the user in multi-agent ticket 06). Keyboard moves past that row follow the highlight as before.
 - **The agent group** comes from `useAgentMentionGroup`: enabled providers from the provider snapshot, in snapshot order (the Providers settings order), filtered by label or id; then Agent profiles whose provider is listed, in config order, filtered by name, with the provider label as `description`. A profile whose id fails `isAgentMentionTarget` (empty or containing `/`, only possible by editing config by hand) is skipped: its link would parse back to text and never dispatch. Profiles reach the hook as the `agentProfiles` input, read by `ComposerAutocompleteBinding` through `useAgentProfiles`: importing `@/agent-profiles` at runtime in `use-agent-autocomplete.ts` pulls the settings components into its node unit test. A profile row carries data, not a node — `profileGlyph: { icon, color }` plus the provider icon as `Icon` — and `autocomplete.tsx` draws `AgentProfileGlyph` with `fallbackIcon={Icon}`, so an unknown icon shows the provider's glyph in the profile's colour, matching the block. It shows once `server_info` has arrived, in a composer bound to a loaded agent or in a draft (new agent tab, new workspace screen, workspace setup dialog — any composer given `draftConfig`). A draft has no session, so `resolveDraftCreateAgentsVerdict(entries, draftProvider)` reads the selected provider's prediction from the provider snapshot for the draft's cwd; a provider without prediction fields counts as available. `resolveAgentMentionNotice({ isDraft })` swaps the `tools_not_injected` detail for `toolsNotInjectedDraftDetail` (no "reload this agent": the prediction updates as soon as the switch flips). `resolveAgentMentionAvailability` grays the group when the host lacks `features.agentMentions` or the verdict says `canCreateAgents: false`; a snapshot without the field (stored agent, replica cache) counts as available, because sending resumes the session and the daemon decides. Unknown reason codes get the generic message.
 
+## Timeline tool-call groups
+
+`tool-calls/detail-level/grouping.ts` groups consecutive tool calls by a run key: `runKeyOf(item: ToolCallItem) => key | null`. `null` keeps a call out of every group; a change of key closes the run and starts another. `projection.ts` picks the key function from the detail level and `dispatchGroups`:
+
+| level | `dispatchGroups` | key |
+|---|---|---|
+| `detailed` | false | none, calls pass through |
+| `detailed` | true | `create_agent` → `"dispatch"`, the rest `null` |
+| `overview` | false | every groupable call → `"overview"` |
+| `overview` | true | `create_agent` → `"dispatch"`, other groupable calls → `"overview"` |
+
+`ToolCallDetailGroup` is a union on `mode`, and `agent-stream/view.tsx` branches on it. A new kind of group adds a mode and a key, and must not become a second grouping pass. `dispatchGroups` is `useDispatchGroupsEnabled`: the host has `subagentCallLinks` and the view was given `onOpenSubagent`. The read-only provider-subagent panel and drafts don't pass it, so their `create_agent` calls stay generic cards. Whether a call links to a child is decided at render time (`resolveDispatchCall` in `subagents/select.ts`). A call that doesn't link splits its card and renders through the generic tool-call renderer passed in as `renderGenericCall`. The projection can't know ahead of time.
+
 ## React rules that matter most here
 
 - Components render and dispatch. Transitions live in reducers, stores, or the form model.

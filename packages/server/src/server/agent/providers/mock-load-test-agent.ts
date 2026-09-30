@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import type { Logger } from "pino";
 import type {
   AgentCapabilityFlags,
@@ -251,6 +252,30 @@ function parseSteeringReplayShape(prompt: AgentPromptInput): SteeringReplayShape
     promptToText(prompt),
   );
   return match?.[1] === "claude" || match?.[1] === "codex" ? match[1] : null;
+}
+
+const SyntheticDispatchStepsSchema = z.array(
+  z.union([
+    z.object({
+      callId: z.string(),
+      title: z.string(),
+      provider: z.string().optional(),
+      runningMs: z.number().optional(),
+    }),
+    z.object({ text: z.string() }),
+  ]),
+);
+
+type SyntheticDispatchStep = z.infer<typeof SyntheticDispatchStepsSchema>[number];
+
+// 浏览器 e2e 用它往父时间线写带 callId 的 `paseo.create_agent` 调用；子智能体由测试按标签另外种入。
+// 步骤依次执行，`runningMs` 让该调用停在执行中，好验证派发组的"启动中"。脚本写错直接抛错。
+function parseSyntheticDispatchSteps(prompt: AgentPromptInput): SyntheticDispatchStep[] | null {
+  const match = /^emit synthetic create_agent calls:\s*(\[[\s\S]*\])\s*$/i.exec(
+    promptToText(prompt),
+  );
+  if (!match?.[1]) return null;
+  return SyntheticDispatchStepsSchema.parse(JSON.parse(match[1]));
 }
 
 function parseSettledAssistantImageMarkdown(prompt: AgentPromptInput): string | null {
@@ -872,11 +897,14 @@ export class MockLoadTestAgentSession implements AgentSession {
     const structuredBranchName = parseStructuredBranchNamePrompt(prompt);
     const settledAssistantImageMarkdown = parseSettledAssistantImageMarkdown(prompt);
     const steeringReplayShape = parseSteeringReplayShape(prompt);
+    const dispatchSteps = parseSyntheticDispatchSteps(prompt);
     const scheduleTurn = () => {
       if (shouldEmitTurnFailure(prompt)) {
         this.scheduleFailedTurn(turn);
       } else if (steeringReplayShape) {
         this.scheduleSteeringReplayTurn(turn, steeringReplayShape);
+      } else if (dispatchSteps) {
+        this.scheduleDispatchTurn(turn, dispatchSteps);
       } else if (this.streamingAssistantResponse !== null) {
         this.scheduleStreamingAssistantTurn(turn, this.streamingAssistantResponse);
       } else if (this.assistantResponse !== null) {
@@ -1229,6 +1257,58 @@ export class MockLoadTestAgentSession implements AgentSession {
       }, 5_000);
       turn.timer.unref?.();
     }, 0);
+    turn.timer.unref?.();
+  }
+
+  private scheduleDispatchTurn(turn: ActiveTurn, steps: SyntheticDispatchStep[]): void {
+    const runStep = (index: number) => {
+      if (this.activeTurn !== turn) return;
+      this.clearTurnTimer(turn);
+      this.emitTurnStarted(turn);
+      const step = steps[index];
+      if (!step) {
+        this.finishTurnWithText(turn, "Dispatched subagents.");
+        return;
+      }
+      if ("text" in step) {
+        this.emitTimeline(turn.turnId, {
+          type: "assistant_message",
+          text: step.text,
+          messageId: `${turn.assistantMessageId}-${index}`,
+        });
+        runStep(index + 1);
+        return;
+      }
+      const detail: ToolCallDetail = {
+        type: "unknown",
+        input: {
+          title: step.title,
+          provider: step.provider ?? "mock/ten-second-stream",
+          initialPrompt: `Work on: ${step.title}`,
+        },
+        output: null,
+      };
+      const name = "paseo.create_agent";
+      this.emitTimeline(
+        turn.turnId,
+        createToolCall({ callId: step.callId, name, status: "running", detail }),
+      );
+      const complete = () => {
+        if (this.activeTurn !== turn) return;
+        this.emitTimeline(
+          turn.turnId,
+          createToolCall({ callId: step.callId, name, status: "completed", detail }),
+        );
+        runStep(index + 1);
+      };
+      if (!step.runningMs) {
+        complete();
+        return;
+      }
+      turn.timer = setTimeout(complete, step.runningMs);
+      turn.timer.unref?.();
+    };
+    turn.timer = setTimeout(() => runStep(0), 0);
     turn.timer.unref?.();
   }
 

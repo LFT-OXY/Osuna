@@ -1914,6 +1914,15 @@ export const ru: TranslationResources = {
     archiveTooltip: "Архивировать субагента",
     archiveFinishedAction: "Архивировать завершенные субагенты",
     archiveFinishedRetry: "Повторить ({{failed}}/{{total}})",
+    dispatchTitleOne: "Запущен 1 субагент",
+    dispatchTitleMany: "Запущено субагентов: {{count}}",
+    dispatchStartingRow: "Запуск",
+    dispatchStarting: "{{count}} запускается",
+    dispatchDone: "{{count}} завершено",
+    dispatchWaitingCount: "{{count}} ожидает одобрения",
+    dispatchWaitingForApproval: "Ожидает одобрения · {{tool}}",
+    dispatchArchived: "В архиве",
+    dispatchDetached: "Отсоединён",
   },
   panels: {
     draft: {

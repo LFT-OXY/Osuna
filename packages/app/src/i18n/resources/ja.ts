@@ -1902,6 +1902,15 @@ export const ja: TranslationResources = {
     archiveTooltip: "サブエージェントをアーカイブ",
     archiveFinishedAction: "完了したサブエージェントをアーカイブ",
     archiveFinishedRetry: "再試行 ({{failed}}/{{total}})",
+    dispatchTitleOne: "サブエージェントを 1 件派遣",
+    dispatchTitleMany: "サブエージェントを {{count}} 件派遣",
+    dispatchStartingRow: "起動中",
+    dispatchStarting: "{{count}} 件起動中",
+    dispatchDone: "{{count}} 件完了",
+    dispatchWaitingCount: "{{count}} 件承認待ち",
+    dispatchWaitingForApproval: "承認待ち · {{tool}}",
+    dispatchArchived: "アーカイブ済み",
+    dispatchDetached: "切り離し済み",
   },
   panels: {
     draft: {

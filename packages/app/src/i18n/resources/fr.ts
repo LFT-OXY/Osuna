@@ -1939,6 +1939,15 @@ export const fr: TranslationResources = {
     archiveTooltip: "Sous-agent d'archivage",
     archiveFinishedAction: "Archiver les sous-agents terminés",
     archiveFinishedRetry: "Réessayer ({{failed}}/{{total}})",
+    dispatchTitleOne: "1 sous-agent lancé",
+    dispatchTitleMany: "{{count}} sous-agents lancés",
+    dispatchStartingRow: "Démarrage",
+    dispatchStarting: "{{count}} en démarrage",
+    dispatchDone: "{{count}} terminés",
+    dispatchWaitingCount: "{{count}} en attente d'approbation",
+    dispatchWaitingForApproval: "En attente d'approbation · {{tool}}",
+    dispatchArchived: "Archivé",
+    dispatchDetached: "Détaché",
   },
   panels: {
     draft: {

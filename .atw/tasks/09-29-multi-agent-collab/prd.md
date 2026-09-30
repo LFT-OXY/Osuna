@@ -63,7 +63,7 @@
 38. 作为用户，我想点击一行就打开对应的子会话（桌面按"在侧栏打开"偏好，手机整页），以便查看或接管它。
 39. 作为用户，我想 `create_agent` 还在执行时就看到一行"启动中"，以便知道派发已经开始。
 40. 作为用户，我想子智能体被归档（或父智能体被归档）后，行仍显示最终状态并标"已归档"，以便回看历史时关联不丢。
-41. 作为用户，我想子智能体被脱离后，行显示"已独立"，点开是普通根智能体，以便知道它已不受父智能体管理。
+41. 作为用户，我想子智能体被脱离后，行显示"已分离"，点开是普通根智能体，以便知道它已不受父智能体管理。
 42. 作为用户，我想取消当前轮次后已派出的子智能体继续运行、行照常更新，以便取消回复不会误杀子任务。
 43. 作为用户，我想不是由 Agent mention 触发、而是当前智能体自己决定调用的 `create_agent` 也显示为派发组，以便所有子智能体都看得见。
 44. 作为用户，我想 Claude、Codex、OpenCode、OMP 自己的子智能体也以同样的行形态出现在时间线里，点开是只读面板，以便统一查看各种子智能体。
@@ -182,12 +182,13 @@ Rules:
 
 ### 时间线派发组（app）
 
-- 同一段助手输出里连续的子智能体调用（`paseo.create_agent` 且产出 Subagent，或 provider 子智能体调用）合成一个派发组；中间插进正文或其他工具调用就断开，另起一组。单个调用也是一个组，只有一行。组头写"派出 N 个子智能体"，后面按 track 的桶顺序分段计数（等待批准 / 失败 / 运行中 / 启动中 / 已完成），可以折叠。
+- 同一段助手输出里连续的子智能体调用（`paseo.create_agent` 且产出 Subagent，或 provider 子智能体调用）合成一个派发组；中间插进正文或其他工具调用就断开，另起一组。单个调用也是一个组，只有一行。组头写"派出 N 个子智能体"，后面按 track 的桶顺序分段计数（等待批准 / 失败 / 运行中 / 启动中 / 已完成），可以折叠。组头的 `needs_input` 段写"等待批准"，不沿用 pill 的"需要输入"：派发组的行只会因为权限请求进这个桶。两种工具调用细节级别下都合组；detailed 下其余调用照旧一条一行。
 - 每行：provider 图标、标题（Paseo 子智能体取 `create_agent` 的 title，provider 子智能体取 description）、副行（provider · 模型 · 模式；provider 子智能体用描述符的 subtitle；等待批准时换成"等待批准 · 工具名"）、运行时长（运行中实时走，结束后定格）、状态标记。行数据与 Subagents track 同源；组和 track 的内容会重复，这一点接受。不显示子智能体的最后一条消息，不放批准按钮。
+- 时长：从子智能体创建起算，完成后被再次唤醒时也算上中间的空闲。快照里没有结束时间，停下后按"最后一次更新 − 创建"近似；归档会把最后一次更新改成归档时刻，所以已归档的行不显示时长，行尾留空，最终状态看图标上的标记和副行的"已归档"。完成后再脱离或改名会让时长略偏大，这一点接受。
 - 点击一行即打开，复用 track 的打开处理：Paseo 子智能体打开普通 agent 标签，provider 子智能体打开 `provider_subagent` 只读标签。派发组的行不再展开 provider 子智能体的活动日志，完整时间线在只读面板里。
-- 关联：Paseo 子智能体按 `paseo.parent-tool-call-id` 标签，在 store 里找父 agentId 与 callId 都对得上的智能体，不按 `parentAgentId` 找，这样脱离后也能找到。provider 子智能体按父 agentId 加描述符的 `toolCallId` 找，app 要保留描述符上已有的 `toolCallId`。
-- 过渡态：调用还在执行、store 里还没有这个子智能体时，用入参里的 provider 和 title 画一行"启动中"，不可点。调用完成后仍未命中，就按标签调一次 `fetch_agents` 并带上 `includeArchived`；查到已归档的，显示最终状态加"已归档"；还查不到就退回通用工具卡。
-- 已脱离的子智能体，行上显示"已独立"。
+- 关联：Paseo 子智能体按 `paseo.parent-tool-call-id` 标签，在 store 里找 callId 对得上、且父标签是本父智能体或已被脱离清空的智能体，不按 `parentAgentId` 找，这样脱离后也能找到。脱离会清掉父标签，所以已脱离的只能靠 callId 对；tool call id 由 provider 随机生成，不会撞到别的会话。代价是导入的会话会关联到原会话里已脱离的子智能体，这一点接受。provider 子智能体按父 agentId 加描述符的 `toolCallId` 找，app 要保留描述符上已有的 `toolCallId`。
+- 过渡态：调用还在执行、store 里还没有这个子智能体时，用入参里的 provider 和 title 画一行"启动中"，不可点（降到半透明）。app 事先不知道 provider 有没有给 tool call id，所以拿不到 id 的调用执行中也先画"启动中"，调用结束、按标签查不到后才退回通用卡；打开历史会话时，已完成但还在按标签查询的调用同样先画"启动中"。调用完成后仍未命中，就按标签调一次 `fetch_agents` 并带上 `includeArchived`；查到已归档的，显示最终状态加"已归档"；还查不到就退回通用工具卡。
+- 已脱离的子智能体，行上显示"已分离"（与 track 的"分离"同一个词，术语表不许同义词）。
 - 退回通用工具卡的情况：拿不到 tool call id、老 Host（没有 `subagentCallLinks`）、导入的会话、不带 workspaceId 的顶层 `create_agent`（它不是 Subagent，也不进 track）。
 
 ### Subagents track 与只读面板（app）
@@ -221,10 +222,10 @@ Rules:
 - **接缝 4 · app Playwright 浏览器端到端 + 真实 daemon + `mock` provider**：`mock` provider 新增两个能力，一是声明 `supportsMcpServers`，二是一个脚本化 prompt，往时间线写一条带 callId 的 `paseo.create_agent` 工具调用；子智能体用 `seedParentWithSubagent` 按标签种入。覆盖：
   - `@` 智能体分组的排序、过滤、插入块、发送文本、各原因码的置灰文案与开启入口、老 Host 提示；
   - 提及智能体默认值卡片：即时保存（刷新后仍在）、思考档位联动与提示、失效值显示、全部恢复默认、Osuna tools 关闭提示；保存失败时界面上能看到可重试的错误。卡片的 e2e 不用 `mock`：daemon 拒绝保存 `providers.mock.*`（dev provider 不是内置 id，只放宽 `ProviderOverridesSchema` 会让生产 daemon 建 registry 时抛错），改用自定义 ACP provider（`e2e/support/fixtures/thinking-modes-acp.cjs`）。ACP 的模型共用一组档位，"换到没有档位的模型 → 不支持"只由 `mention-defaults-model.test.ts` 覆盖；
-  - 派发组：组头计数、行状态实时变化、等待批准、点开去向、启动中、已归档、已独立、退回通用卡；
+  - 派发组：组头计数、行状态实时变化、等待批准、点开去向、启动中、已归档、已分离、退回通用卡；
   - track 行的等待批准。
   - 参照：`composer-inline-blocks.spec.ts`、`composer-autocomplete.spec.ts`、`subagent-detach.spec.ts`、`archive-finished-subagents.spec.ts`、`agent-profiles-settings.spec.ts`、`creation-old-daemon.spec.ts`。
-  - 纯选择逻辑（track 行待批准计数、派发组分组）补进现有的 `subagents/select.test.ts`、`track-presentation.test.ts`。
+  - 纯选择逻辑（track 行待批准计数、派发组关联与切段）补进现有的 `subagents/select.test.ts`、`track-presentation.test.ts`；按连续调用成组的逻辑属于工具调用分组，测试在 `tool-calls/detail-level/projection.test.ts`。
 - 真实 provider 的 `.real.e2e` 不作为验收，只在本地选跑（Claude、Codex 的派发与 tool call id 抓取）。原生端没有模拟环境，按惯例免验收。
 - 手动 QA 按 `docs/qa.md`，在 Electron 上截图留证：`@` 分组（可用、置灰）、设置卡（浅色、深色）、派发组（运行中、等待批准、已完成）。
 
@@ -239,7 +240,7 @@ Rules:
 - [ ] `@` 智能体分组按原因码置灰并显示对应文案与开启入口；新建界面按预测字段置灰；老 Host 提示更新。
 - [ ] 设置 → Host → Agents 的「提及智能体默认值」卡片：即时保存、"默认（X）"首项、思考档位联动、"不支持"置灰、失效值显示、加载与出错状态、全部恢复默认、Osuna tools 关闭提示、老 Host 提示，都与 06 号票原型一致；删除 provider 时清掉它的配置。
 - [ ] 带 tool call id 的 `create_agent` 产出的子智能体带 `paseo.parent-tool-call-id`（覆盖模型传入的值）；OpenCode、Pi、OMP 的时间线工具名统一为 `paseo.create_agent`，入参平铺。
-- [ ] 时间线派发组：连续调用合组、组头分段计数、行实时状态与时长、点开去向、启动中、已归档、已独立、各种退回通用卡的情况都与 07 号票原型一致；Claude、Codex、OpenCode、OMP 的 provider 子智能体按同样的行形态显示。
+- [ ] 时间线派发组：连续调用合组、组头分段计数、行实时状态与时长、点开去向、启动中、已归档、已分离、各种退回通用卡的情况都与 07 号票原型一致；Claude、Codex、OpenCode、OMP 的 provider 子智能体按同样的行形态显示。
 - [ ] 子智能体等待批准时：派发组的行与组头、Subagents track、工作区状态都显示等待批准；推送指向子会话；`finished`/`error` 不推送。
 - [ ] 父智能体收到的权限通知正文改为"用户在子会话批准，除非明确授权否则勿代批"，载荷照附。
 - [ ] provider 子智能体的权限（Codex、Claude、OpenCode）能在只读面板里看到并批准；OMP 不归属。

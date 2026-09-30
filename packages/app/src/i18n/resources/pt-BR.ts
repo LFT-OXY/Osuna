@@ -1918,6 +1918,15 @@ export const ptBR: TranslationResources = {
     archiveTooltip: "Arquivar subagente",
     archiveFinishedAction: "Arquivar subagentes concluídos",
     archiveFinishedRetry: "Tentar novamente ({{failed}}/{{total}})",
+    dispatchTitleOne: "1 subagente enviado",
+    dispatchTitleMany: "{{count}} subagentes enviados",
+    dispatchStartingRow: "Iniciando",
+    dispatchStarting: "{{count}} iniciando",
+    dispatchDone: "{{count}} concluídos",
+    dispatchWaitingCount: "{{count}} aguardando aprovação",
+    dispatchWaitingForApproval: "Aguardando aprovação · {{tool}}",
+    dispatchArchived: "Arquivado",
+    dispatchDetached: "Desanexado",
   },
   panels: {
     draft: {

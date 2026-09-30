@@ -1882,6 +1882,15 @@ export const ar: TranslationResources = {
     archiveTooltip: "أرشفة الوكيل الفرعي",
     archiveFinishedAction: "أرشفة الوكلاء الفرعيين المكتملين",
     archiveFinishedRetry: "إعادة المحاولة ({{failed}}/{{total}})",
+    dispatchTitleOne: "تم إرسال وكيل فرعي واحد",
+    dispatchTitleMany: "تم إرسال {{count}} وكلاء فرعيين",
+    dispatchStartingRow: "جارٍ البدء",
+    dispatchStarting: "{{count}} قيد البدء",
+    dispatchDone: "{{count}} مكتملة",
+    dispatchWaitingCount: "{{count}} بانتظار الموافقة",
+    dispatchWaitingForApproval: "بانتظار الموافقة · {{tool}}",
+    dispatchArchived: "مؤرشف",
+    dispatchDetached: "منفصل",
   },
   panels: {
     draft: {

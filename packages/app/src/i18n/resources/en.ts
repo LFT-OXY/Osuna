@@ -1907,6 +1907,15 @@ export const en = {
     archiveTooltip: "Archive subagent",
     archiveFinishedAction: "Archive finished subagents",
     archiveFinishedRetry: "Retry ({{failed}}/{{total}})",
+    dispatchTitleOne: "Dispatched 1 subagent",
+    dispatchTitleMany: "Dispatched {{count}} subagents",
+    dispatchStartingRow: "Starting",
+    dispatchStarting: "{{count}} starting",
+    dispatchDone: "{{count}} done",
+    dispatchWaitingCount: "{{count}} waiting for approval",
+    dispatchWaitingForApproval: "Waiting for approval · {{tool}}",
+    dispatchArchived: "Archived",
+    dispatchDetached: "Detached",
   },
   panels: {
     draft: {

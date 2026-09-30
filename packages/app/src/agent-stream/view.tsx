@@ -65,6 +65,12 @@ import { QuestionFormCard } from "@/components/question-form-card";
 import { ToolCallSheetProvider } from "@/components/tool-call-sheet";
 import { createStreamPresentation } from "./presentation";
 import { OverviewToolCallGroupView } from "@/tool-calls/detail-level/overview/view";
+import {
+  DispatchGroupView,
+  DispatchSubagentIndexProvider,
+  useDispatchGroupsEnabled,
+  useDispatchSubagentIndex,
+} from "@/subagents/dispatch-group";
 import { type AgentStreamRenderModel, buildAgentStreamRenderModel } from "./model";
 import { resolveStreamRenderStrategy } from "./strategy-resolver";
 import { type StreamSegmentRenderers, type StreamViewportHandle } from "./strategy";
@@ -294,6 +300,8 @@ export interface AgentStreamViewProps {
   bottomOverlayControlClearance?: number;
   toast?: ToastApi | null;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
+  /** 给了才把 `create_agent` 调用画成派发组；只读面板与草稿不给，照常是通用工具卡。 */
+  onOpenSubagent?: (agentId: string) => void;
   readOnly?: boolean;
   historyPagination?: {
     hasOlder: boolean;
@@ -348,6 +356,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       bottomOverlayControlClearance,
       toast,
       onOpenWorkspaceFile,
+      onOpenSubagent,
       readOnly = false,
       historyPagination,
     },
@@ -394,6 +403,15 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       (state) =>
         state.sessions[resolvedServerId]?.serverInfo?.features?.agentForkContextCursor === true,
     );
+    const dispatchGroups = useDispatchGroupsEnabled({
+      serverId: resolvedServerId,
+      canOpenSubagents: onOpenSubagent !== undefined,
+    });
+    const dispatchSubagentIndex = useDispatchSubagentIndex({
+      serverId: resolvedServerId,
+      parentAgentId: agentId,
+      enabled: dispatchGroups,
+    });
     const supportsChatOutline = useSessionStore(
       (state) =>
         state.sessions[resolvedServerId]?.serverInfo?.features?.agentTimelinePromptIndex === true,
@@ -558,6 +576,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           transform: transformTimelineItem,
           level: toolCallDetailLevel,
           isTurnActive,
+          dispatchGroups,
         }),
       [
         presentStream,
@@ -566,6 +585,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         transformTimelineItem,
         toolCallDetailLevel,
         isTurnActive,
+        dispatchGroups,
       ],
     );
     const {
@@ -858,11 +878,26 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         handleToolCallOpenFile,
       ],
     );
+    const handleOpenSubagent = useStableEvent((subagentId: string) => {
+      onOpenSubagent?.(subagentId);
+    });
     const renderToolCallItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "tool_call" }>) => {
         const group = getToolCallGroup(item.id);
         if (!group) {
           return renderSingleToolCallItem(item, layoutItem.isLastInToolSequence);
+        }
+        if (group.mode === "dispatch") {
+          return (
+            <DispatchGroupView
+              serverId={resolvedServerId}
+              parentAgentId={agentId}
+              calls={group.calls}
+              isLastInSequence={layoutItem.isLastInToolSequence}
+              onOpenSubagent={handleOpenSubagent}
+              renderGenericCall={renderSingleToolCallItem}
+            />
+          );
         }
         const expanded = expandedToolCallGroupIds.has(group.run.id);
         return (
@@ -887,9 +922,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         );
       },
       [
+        agentId,
         expandedToolCallGroupIds,
         getToolCallGroup,
+        handleOpenSubagent,
         renderSingleToolCallItem,
+        resolvedServerId,
         setToolCallGroupExpanded,
       ],
     );
@@ -1195,7 +1233,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     return (
       <AgentUsageScopeProvider serverId={resolvedServerId} agentId={agentId}>
         <TurnChangedFilesProvider value={turnChangedFilesActions}>
-          {streamSurface}
+          <DispatchSubagentIndexProvider value={dispatchSubagentIndex}>
+            {streamSurface}
+          </DispatchSubagentIndexProvider>
         </TurnChangedFilesProvider>
       </AgentUsageScopeProvider>
     );

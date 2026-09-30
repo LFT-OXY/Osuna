@@ -1894,6 +1894,15 @@ export const ko: TranslationResources = {
     archiveTooltip: "서브에이전트 보관",
     archiveFinishedAction: "완료된 하위 에이전트 보관",
     archiveFinishedRetry: "다시 시도 ({{failed}}/{{total}})",
+    dispatchTitleOne: "하위 에이전트 1개 파견",
+    dispatchTitleMany: "하위 에이전트 {{count}}개 파견",
+    dispatchStartingRow: "시작 중",
+    dispatchStarting: "{{count}}개 시작 중",
+    dispatchDone: "{{count}}개 완료",
+    dispatchWaitingCount: "{{count}}개 승인 대기",
+    dispatchWaitingForApproval: "승인 대기 · {{tool}}",
+    dispatchArchived: "보관됨",
+    dispatchDetached: "분리됨",
   },
   panels: {
     draft: {

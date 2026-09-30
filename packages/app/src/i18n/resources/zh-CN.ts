@@ -1860,6 +1860,15 @@ export const zhCN: TranslationResources = {
     archiveTooltip: "归档 subagent",
     archiveFinishedAction: "归档已完成的 subagent",
     archiveFinishedRetry: "重试 ({{failed}}/{{total}})",
+    dispatchTitleOne: "派出 1 个 subagent",
+    dispatchTitleMany: "派出 {{count}} 个 subagent",
+    dispatchStartingRow: "启动中",
+    dispatchStarting: "{{count}} 个启动中",
+    dispatchDone: "{{count}} 个已完成",
+    dispatchWaitingCount: "{{count}} 个等待批准",
+    dispatchWaitingForApproval: "等待批准 · {{tool}}",
+    dispatchArchived: "已归档",
+    dispatchDetached: "已分离",
   },
   panels: {
     draft: {
