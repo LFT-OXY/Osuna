@@ -1,0 +1,14 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "server 层规范入口（session、agent-manager、adapter 改动）"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "快照新字段、server_info.features 开关、wire schema 纯度"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "进程内 daemon 集成测试与假 provider 的写法"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "mentionDefaults 配置持久化与热重载"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 层规范入口（@ 分组、设置卡、派发组、track）"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "新 UI 组件的结构与复用"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "派发组与 track 同源的 store 选择"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "Playwright 浏览器 e2e 与 mock provider"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "协议—daemon—app 三层改动与老 Host 兼容"}
+{"file": "docs/protocol-compatibility.md", "reason": "新字段只增不改、能力开关门控"}
+{"file": ".atw/tasks/09-29-multi-agent-collab/research/dispatch-capability.md", "reason": "可派发三层判定与原因码来源"}
+{"file": ".atw/tasks/09-29-multi-agent-collab/research/create-agent-child-link.md", "reason": "各 provider 的 tool call id 来源"}
+{"file": ".atw/tasks/09-29-multi-agent-collab/research/subagent-permission-source.md", "reason": "子智能体权限的归属来源与只读面板批准做法"}
+{"file": ".atw/tasks/09-29-multi-agent-collab/prototype/results.md", "reason": "路由提示实测结论"}

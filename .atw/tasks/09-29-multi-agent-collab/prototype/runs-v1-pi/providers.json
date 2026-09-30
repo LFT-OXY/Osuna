@@ -1,0 +1,60 @@
+[
+  {
+    "provider": "claude",
+    "status": "ready",
+    "defaultModeId": "auto",
+    "modes": [
+      "plan",
+      "default",
+      "acceptEdits",
+      "auto",
+      "bypassPermissions"
+    ],
+    "defaultModel": "claude-opus-5-5",
+    "thinking": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultracode"
+    ],
+    "defaultThinking": "high"
+  },
+  {
+    "provider": "codex",
+    "status": "ready",
+    "defaultModeId": "auto-review",
+    "modes": [
+      "auto",
+      "auto-review",
+      "full-access"
+    ],
+    "defaultModel": "gpt-6-astra",
+    "thinking": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra"
+    ],
+    "defaultThinking": "low"
+  },
+  {
+    "provider": "pi",
+    "status": "ready",
+    "defaultModeId": null,
+    "modes": [],
+    "defaultModel": "anthropic/claude-fable-5",
+    "thinking": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "defaultThinking": "medium"
+  }
+]
