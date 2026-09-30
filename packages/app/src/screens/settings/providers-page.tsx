@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
+import { useProviderVersionCheck } from "@/provider-detail/use-version-check";
 import { ProviderDetailPage } from "@/provider-detail/view";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { buildProviderSettingsRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
@@ -39,6 +40,8 @@ export function ProvidersPage({ serverId, requestedProvider }: ProvidersPageProp
   const isFocused = useIsFocused();
   const isCompact = useIsCompactFormFactor();
   const providersView = useProvidersView(serverId, requestedProvider);
+  // 打开 Providers 页（列表或详情）时查一次有没有新版本；只有这里会发起检查。
+  useProviderVersionCheck(serverId, { checkOnMount: true });
   const addressNamesMissingProvider = providersView.kind === "missing";
 
   useEffect(() => {

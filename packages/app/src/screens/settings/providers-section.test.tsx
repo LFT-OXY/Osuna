@@ -3,6 +3,7 @@
  */
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
@@ -166,6 +167,7 @@ vi.mock("react-i18next", () => ({
           "settings.providers.models.one": "1 model",
           "settings.providers.models.many": "{{count}} models",
           "settings.providers.version.value": "v{{version}}",
+          "settings.providers.version.update": "v{{from}} → v{{to}}",
           "settings.providers.addProvider": "Add provider",
           "settings.providers.addErrorTitle": "Unable to add provider",
           "providerCatalog.title": "Add provider",
@@ -185,7 +187,9 @@ vi.mock("react-i18next", () => ({
       )
         .replaceAll("{{name}}", String(values?.name ?? ""))
         .replaceAll("{{count}}", String(values?.count ?? ""))
-        .replaceAll("{{version}}", String(values?.version ?? "")),
+        .replaceAll("{{version}}", String(values?.version ?? ""))
+        .replaceAll("{{from}}", String(values?.from ?? ""))
+        .replaceAll("{{to}}", String(values?.to ?? "")),
   }),
 }));
 
@@ -299,6 +303,8 @@ vi.mock("@/hooks/use-daemon-config", () => ({
 
 vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeIsConnected: () => true,
+  // 列表只读 Providers 页的版本检查结果，不会用它发请求。
+  useHostRuntimeClient: () => ({}),
 }));
 
 import {
@@ -307,6 +313,7 @@ import {
 } from "@/hooks/use-acp-provider-catalog";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useSessionStore } from "@/stores/session-store";
+import { providerVersionCheckQueryKey } from "@/provider-detail/version-check";
 import { ProvidersSection } from "./providers-section";
 
 const catalog = getAcpProviderCatalog();
@@ -384,6 +391,7 @@ function indexOfText(nodes: HTMLElement[], text: string): number {
 
 describe("ProvidersSection", () => {
   let root: Root | null = null;
+  let queryClient = new QueryClient();
   let container: HTMLElement | null = null;
 
   beforeEach(() => {
@@ -398,6 +406,7 @@ describe("ProvidersSection", () => {
     snapshotState.isLoading = false;
     snapshotState.isRefreshing = false;
     configState.config = null;
+    queryClient = new QueryClient();
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
     refreshMock.mockReset();
@@ -420,7 +429,11 @@ describe("ProvidersSection", () => {
 
   function render(): void {
     act(() => {
-      root?.render(<ProvidersSection serverId="server-1" onSelectProvider={selectProviderMock} />);
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <ProvidersSection serverId="server-1" onSelectProvider={selectProviderMock} />
+        </QueryClientProvider>,
+      );
     });
   }
 
@@ -544,6 +557,49 @@ describe("ProvidersSection", () => {
     expect(
       indexOfText(descendants(findRow("Claude provider details")), "3 models · v2.1.280"),
     ).toBeGreaterThan(-1);
+  });
+
+  it("shows the newer version next to the installed one", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.280",
+        latestVersion: "2.1.285",
+        updateAvailable: true,
+      },
+    ]);
+    configState.config = makeConfig();
+
+    render();
+
+    expect(
+      indexOfText(
+        descendants(findRow("Claude provider details")),
+        "3 models · v2.1.280 → v2.1.285",
+      ),
+    ).toBeGreaterThan(-1);
+  });
+
+  it("keeps showing only the installed version when the check failed", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.280",
+        updateAvailable: false,
+        error: "registry unreachable",
+      },
+    ]);
+    configState.config = makeConfig();
+
+    render();
+
+    const row = findRow("Claude provider details");
+    expect(indexOfText(descendants(row), "3 models · v2.1.280")).toBeGreaterThan(-1);
+    expect(row.textContent).not.toContain("registry unreachable");
   });
 
   it("shows no version when the host does not report provider versions", () => {

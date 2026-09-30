@@ -952,6 +952,66 @@ let version: string | undefined;
 if (base.source === "builtin") version = await this.readInstalledVersion({ provider, catalog, client });
 ```
 
+## Scenario: a user-triggered outbound lookup cached in the daemon
+
+Example: `provider.version.check.request`, which compares each built-in CLI's installed `version` with npm's `latest`.
+
+### 1. Scope / Trigger
+
+- A read RPC whose answer needs the public internet. `docs/usage.md` ("The one outbound request") allows only one daemon-initiated request, so this one must run only when a client asks.
+
+### 2. Signatures
+
+- Protocol: `ProviderVersionCheckRequestSchema { requestId, providers?: string[], force?: boolean }`; response `{ requestId, results: ProviderVersionCheckResult[] }`, result `{ provider, installedVersion?, latestVersion?, updateAvailable, error? }` (`packages/protocol/src/messages.ts`). Permission `daemon.read` both ways.
+- Package names: `AgentProviderDefinition.npmPackage` (`packages/protocol/src/provider-manifest.ts`), one per built-in provider.
+- Server: `ProviderVersionCheckService.check({ providers?, force? })`, `isNewerVersion({ installed, latest })`, `FetchLatestVersion = ({ npmPackage, signal }) => Promise<string>` (`agent/provider-version-check.ts`). `WebSocketServer` builds the service from `providerSnapshotManager.listProviders({ wait: true })`; the fetcher comes from `PaseoDaemonConfig.providerVersions.fetchLatestVersion`, default `fetchNpmLatestVersion` (`registry.npmjs.org/-/package/<pkg>/dist-tags`, zod-parsed, 15 s timeout).
+- Client: `DaemonClient.checkProviderVersions({ providers?, force? })`.
+
+### 3. Contracts
+
+- Only `source === "builtin"` entries with an `npmPackage` appear in `results`.
+- An entry without `version` (disabled, not installed, unreadable) returns `{ provider, updateAvailable: false }` and is never looked up.
+- Latest versions are cached in memory per provider for 1 hour; failures are not cached. Concurrent lookups for one provider share one request, `force` included. `force` skips the cache.
+- `updateAvailable` is a semver compare; either side unparseable → `false`.
+- No lookup at startup or on a timer. `createTestPaseoDaemon` injects a fetcher that throws, so a test daemon never reaches npm.
+
+### 4. Validation & Error Matrix
+
+- npm non-2xx, timeout, or no `latest` tag → that result carries `error` (the message), `updateAvailable: false`, no `latestVersion`; logged at `warn`; other providers unaffected.
+- Snapshot read throws → `rpc_error` with code `provider_version_check_failed`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: installed `2.1.280`, latest `2.1.285` → `{ installedVersion: "2.1.280", latestVersion: "2.1.285", updateAvailable: true }`.
+- Base: registry unreachable for copilot → copilot has `error`, claude still answers.
+- Bad: querying npm for every built-in provider on daemon start "to warm the cache" — it breaks the outbound-request rule.
+
+### 6. Tests Required
+
+- Unit `provider-version-check.test.ts`: semver cases (numeric not lexical, prerelease, unparseable); cache expiry via injected `now`; concurrent checks share one lookup.
+- Daemon e2e `daemon-e2e/provider-version.e2e.test.ts` with a stub registry: latest + `updateAvailable`; cached answer until `force`; one failed lookup only marks that provider; entries without a version are not looked up (the stub would write an `error` if they were).
+- Protocol `messages.test.ts`: request with and without optional fields; results omitting versions and error.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Session-level optional service plus an rpc_error branch, only so in-process tests can omit it.
+providerVersionCheckService?: ProviderVersionCheckService;
+```
+
+#### Correct
+
+```ts
+// The WebSocketServer owns it; only the network function is injectable at the daemon config boundary.
+this.providerVersionCheckService = new ProviderVersionCheckService({
+  listProviders: () => providerSnapshotManager.listProviders({ wait: true }),
+  fetchLatestVersion,
+  logger: this.logger.child({ module: "provider-version-check" }),
+});
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

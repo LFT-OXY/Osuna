@@ -180,6 +180,8 @@ After a successful catalog probe, the manager fills `version` for built-in provi
 cannot turn a ready entry into an error. A provider whose catalog probe already ran `--version` returns it as
 `ProviderCatalog.installedVersion` so the manager does not run it twice (Claude does this).
 An unreadable version omits the field and never changes the entry's status.
+`provider.version.check.request` compares that `version` with the npm `latest` of the manifest's
+`npmPackage`; the request is described in [usage.md](usage.md#the-one-outbound-request).
 
 Saved provider/model choices are user intent. Catalogue failure must not erase them or substitute
 another model. Creation reads the caller's host and directory directly; an earlier global snapshot
@@ -323,6 +325,8 @@ export class CopilotACPAgentClient extends ACPAgentClient {
 ### 2. Add to the provider manifest
 
 In `packages/server/src/server/agent/provider-manifest.ts`, add mode definitions with UI metadata (icons, color tiers) and a provider definition entry.
+
+Set `npmPackage` on the entry when the CLI is published on npm. Settings → Providers compares the installed version with that package's `latest`; without it the provider never shows an update.
 
 First, define the modes with visual metadata:
 

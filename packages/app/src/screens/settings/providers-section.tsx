@@ -16,6 +16,8 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { Text as UiText } from "@/components/ui/text";
 import { countSelectableModels, resolveProviderStatusLine } from "@/provider-detail/status";
 import { ProviderIconFrame } from "@/provider-detail/icon-frame";
+import { useProviderVersionCheck } from "@/provider-detail/use-version-check";
+import { selectNewerVersion } from "@/provider-detail/version-check";
 import { ProviderCatalogDialog } from "./provider-catalog-dialog";
 import { resolveProviderPlacement } from "./provider-placement";
 import { ProviderStatusLine } from "./provider-status-line";
@@ -30,6 +32,8 @@ interface ProviderRowProps {
   entry: ProviderEntry;
   // 已装版本；daemon 不支持 providerVersions 时不传。
   version: string | undefined;
+  // 有新版本时的最新版本。
+  latestVersion: string | undefined;
   enabled: boolean;
   isToggling: boolean;
   isFirst: boolean;
@@ -47,6 +51,7 @@ function ProviderRow({
   def,
   entry,
   version,
+  latestVersion,
   enabled,
   isToggling,
   isFirst,
@@ -99,7 +104,11 @@ function ProviderRow({
               <Text style={settingsStyles.rowTitle} numberOfLines={1}>
                 {def.label}
               </Text>
-              <ProviderStatusLine status={statusLine} version={version} />
+              <ProviderStatusLine
+                status={statusLine}
+                version={version}
+                latestVersion={latestVersion}
+              />
             </View>
           </View>
           <View style={styles.trailingControls}>
@@ -131,6 +140,10 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
   // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
   const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
   const { entries, isLoading } = useProvidersSnapshot(serverId);
+  // 检查由 Providers 页发起，这里只读结果。
+  const { results: versionCheckResults } = useProviderVersionCheck(serverId, {
+    checkOnMount: false,
+  });
   const { patchConfig } = useDaemonConfig(serverId);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
   // 开关失败的原因，留在列表卡片顶部直到关闭或下一次开关。
@@ -236,13 +249,20 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
             {providerDefinitions.map((def, index) => {
               const entry = listedEntries?.find((candidate) => candidate.provider === def.id);
               if (!entry) return null;
+              const version = hostSupportsProviderVersions ? entry.version : undefined;
+              const latestVersion = selectNewerVersion({
+                provider: def.id,
+                installedVersion: version,
+                results: versionCheckResults,
+              });
               return (
                 <ProviderRow
                   key={def.id}
                   serverId={serverId}
                   def={def}
                   entry={entry}
-                  version={hostSupportsProviderVersions ? entry.version : undefined}
+                  version={version}
+                  latestVersion={latestVersion ?? undefined}
                   enabled={entry.enabled ?? true}
                   isToggling={pendingProviderId === def.id}
                   isFirst={index === 0 && !hasErrorRowAbove}

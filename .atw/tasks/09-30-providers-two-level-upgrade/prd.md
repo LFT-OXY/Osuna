@@ -127,9 +127,10 @@
   | pi | `@earendil-works/pi-coding-agent` |
   | omp | `@oh-my-pi/pi-coding-agent` |
 
-  包名和升级命令一样，放在每个提供方的 manifest 或定义里，统一维护在一处。
+  包名写在 protocol 的 provider manifest（`npmPackage`），升级命令和包名放在一处维护。
 - **版本检查服务**：新建一个模块，负责查询最新版本、缓存结果和比较版本。
-  - 结果在 daemon 内存里缓存 1 小时，`force` 跳过缓存。同一个提供方同时发起的多次查询合并成一次。
+  - 结果在 daemon 内存里缓存 1 小时，`force` 跳过缓存；联网失败不缓存。同一个提供方同时发起的多次查询合并成一次，`force` 也加入正在进行的那次。
+  - 快照里没有 `version` 的提供方（停用、未安装、读不出版本）不联网，只回 `updateAvailable: false`。
   - 只在收到 `provider.version.check.request` 时才联网，不在启动时查，也不定时查。
   - 版本比较按 semver，解析不了就视为"没有更新"。
   - 联网失败只写进这一项的 `error`，其他提供方照常返回。
@@ -160,7 +161,7 @@
   - 写入失败时，错误留在弹窗里显示，标题沿用添加失败的"无法添加提供方"。
   - 搜索框同时过滤两组。
   - 弹窗标题改为"添加提供方"。
-- **版本数据**：Providers 页挂载时发一次 `provider.version.check.request`。页头或详情页的刷新按钮会带 `force` 再发一次。结果按提供方存在 App 的状态里，列表和详情页共用。连着旧版本 daemon（`providerVersions` 没打开）时不发请求。
+- **版本数据**：Providers 页（列表或详情地址）每次挂载都发一次 `provider.version.check.request`，不带 `force`；1 小时内不重复联网靠 daemon 的缓存。详情页的刷新（页头或正文）先刷新快照，再带 `force` 重查这一个提供方。列表页没有刷新按钮，不新增（2026-10-01 用户确认）。结果按提供方存在 App 的查询缓存里，列表和详情页共用；检查结果里的已装版本和快照不一致时视为过期，不显示新版本。composer 弹窗的详情不发检查、刷新时不重查，也不显示新版本。连着旧版本 daemon（`providerVersions` 没打开）时不发请求。
 - **升级动作**：一个 hook 负责发 `provider.upgrade.request`，并记录"正在升级的提供方"和"每个提供方的失败输出"，列表行和详情页的版本一节共用。升级成功后，用返回的版本更新本地显示；快照随后也会推来新的 `version`。
 - **详情页**：`ProviderDetailSurface` 的版块顺序改为：删除失败 → 启动错误 → 继承接口提示 → **版本**（新增）→ 安装指引（仅未安装时）→ 第三方接口 → Models → 诊断。版本一节只在内置提供方已安装、并且 daemon 支持时出现。它和安装指引一样，由调用方通过 render 插槽注入。组件顶部的顺序注释同步更新。
 - **i18n**：新增的文案（"未启用""已停用""未安装""升级""v{from} → v{to}"、各种升级错误、空列表提示、"添加提供方"等）9 个语言文件都要补上，zh-CN 用 glossary 里定下的词。
@@ -178,7 +179,7 @@
 
 测试分三层，从上往下只在必要时往下走：
 
-1. **daemon e2e（主力层）**：放在现有的 `daemon-e2e/` 下，沿用 `api-endpoint-codex.e2e.test.ts` 的做法，用 `providerOverrides.<id>.command` 指向临时目录里的假 CLI 脚本。脚本按参数返回版本号，或者模拟升级：记下参数，把版本文件改成新版本号，也可以按设定失败。最新版本的查询通过测试 daemon 注入桩函数，不真的联网。要覆盖的场景：
+1. **daemon e2e（主力层）**：放在现有的 `daemon-e2e/` 下，沿用 `api-endpoint-codex.e2e.test.ts` 的做法，用 `providerOverrides.<id>.command` 指向临时目录里的假 CLI 脚本。脚本按参数返回版本号，或者模拟升级：记下参数，把版本文件改成新版本号，也可以按设定失败。最新版本的查询通过测试 daemon 注入桩函数，不真的联网。这是 `docs/testing.md`「End-to-end means end-to-end」的有意例外（2026-10-01 用户确认）：CI 不依赖外网和 npm 的可用性。要覆盖的场景：
    - 快照带上 `version`
    - 检查结果带上 `latestVersion` 和 `updateAvailable`，缓存生效，`force` 跳过缓存
    - 某一家联网失败只影响那一项

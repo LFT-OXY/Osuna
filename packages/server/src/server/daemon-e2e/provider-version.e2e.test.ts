@@ -15,8 +15,16 @@ describe.skipIf(process.platform === "win32")(
     let root: string;
     let daemon: TestPaseoDaemon | undefined;
     let client: DaemonClient | undefined;
+    // 桩 registry：按包名返回 latest；不在表里的包一律失败，于是意外的联网会变成可见的 error。
+    const registry = new Map<string, string>();
+    const fetchLatestVersion = async ({ npmPackage }: { npmPackage: string }) => {
+      const latest = registry.get(npmPackage);
+      if (!latest) throw new Error(`registry unreachable for ${npmPackage}`);
+      return latest;
+    };
 
     beforeEach(async () => {
+      registry.clear();
       root = await mkdtemp(path.join(os.tmpdir(), "paseo-provider-version-"));
       tempRoots.push(root);
       await mkdir(path.join(root, "bin"));
@@ -50,6 +58,7 @@ describe.skipIf(process.platform === "win32")(
     ): Promise<void> {
       daemon = await createTestPaseoDaemon({
         agentClients: {},
+        providerVersions: { fetchLatestVersion },
         providerOverrides: {
           codex: { enabled: false },
           pi: { enabled: false },
@@ -138,6 +147,103 @@ describe.skipIf(process.platform === "win32")(
       const disabled = await settledEntry("copilot");
       expect(disabled).toMatchObject({ enabled: false, status: "unavailable" });
       expect(disabled.version).toBeUndefined();
+    });
+
+    function copilotOverride(command: string) {
+      return { enabled: true, command: [command], models: [{ id: "gpt-5", label: "GPT-5" }] };
+    }
+
+    test("reports the npm latest version and whether it is newer", async () => {
+      registry.set("@anthropic-ai/claude-code", "2.1.285");
+      const claude = await writeFakeCli("claude", "2.1.280 (Claude Code)");
+      await startDaemon({ claude: claudeOverride(claude) });
+      await settledEntry("claude");
+
+      const { results } = await client!.checkProviderVersions({ providers: ["claude"] });
+
+      expect(results).toEqual([
+        {
+          provider: "claude",
+          installedVersion: "2.1.280",
+          latestVersion: "2.1.285",
+          updateAvailable: true,
+        },
+      ]);
+    });
+
+    test("an up-to-date CLI has no update", async () => {
+      registry.set("@anthropic-ai/claude-code", "2.1.280");
+      const claude = await writeFakeCli("claude", "2.1.280 (Claude Code)");
+      await startDaemon({ claude: claudeOverride(claude) });
+      await settledEntry("claude");
+
+      const { results } = await client!.checkProviderVersions({ providers: ["claude"] });
+
+      expect(results).toEqual([
+        {
+          provider: "claude",
+          installedVersion: "2.1.280",
+          latestVersion: "2.1.280",
+          updateAvailable: false,
+        },
+      ]);
+    });
+
+    test("answers from the cache until force asks npm again", async () => {
+      registry.set("@anthropic-ai/claude-code", "2.1.285");
+      const claude = await writeFakeCli("claude", "2.1.280 (Claude Code)");
+      await startDaemon({ claude: claudeOverride(claude) });
+      await settledEntry("claude");
+      await client!.checkProviderVersions({ providers: ["claude"] });
+
+      // npm 上出了新版本；一小时内再查仍是缓存里的那个。
+      registry.set("@anthropic-ai/claude-code", "2.1.290");
+      const cached = await client!.checkProviderVersions({ providers: ["claude"] });
+      expect(cached.results[0]?.latestVersion).toBe("2.1.285");
+
+      const forced = await client!.checkProviderVersions({ providers: ["claude"], force: true });
+      expect(forced.results[0]?.latestVersion).toBe("2.1.290");
+    });
+
+    test("a failed lookup only marks that provider", async () => {
+      registry.set("@anthropic-ai/claude-code", "2.1.285");
+      const claude = await writeFakeCli("claude", "2.1.280 (Claude Code)");
+      const copilot = await writeFakeCli("copilot", "GitHub Copilot CLI 1.0.89.");
+      await startDaemon({ claude: claudeOverride(claude), copilot: copilotOverride(copilot) });
+      await settledEntry("claude");
+      await settledEntry("copilot");
+
+      const { results } = await client!.checkProviderVersions();
+      const byProvider = new Map(results.map((result) => [result.provider, result]));
+
+      expect(byProvider.get("claude")).toMatchObject({
+        latestVersion: "2.1.285",
+        updateAvailable: true,
+      });
+      expect(byProvider.get("copilot")).toMatchObject({
+        installedVersion: "1.0.89",
+        updateAvailable: false,
+        error: "registry unreachable for @github/copilot",
+      });
+      expect(byProvider.get("copilot")?.latestVersion).toBeUndefined();
+    });
+
+    test("providers without an installed version are not looked up", async () => {
+      const claude = await writeFakeCli("claude", "Claude Code (dev build)");
+      await startDaemon({ claude: claudeOverride(claude) });
+      await settledEntry("claude");
+
+      const { results } = await client!.checkProviderVersions();
+
+      // 读不出版本的 claude 和停用的 codex 都不去 registry，否则桩会给它们写上 error。
+      expect(results.find((result) => result.provider === "claude")).toEqual({
+        provider: "claude",
+        updateAvailable: false,
+      });
+      expect(results.find((result) => result.provider === "codex")).toEqual({
+        provider: "codex",
+        updateAvailable: false,
+      });
     });
   },
 );

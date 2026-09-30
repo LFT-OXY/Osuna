@@ -9,17 +9,22 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-// Providers 列表行与「添加提供方」弹窗行名称下面的一行：状态点加文字，列表行已装的内置提供方再接版本号。
+// Providers 列表行与「添加提供方」弹窗行名称下面的一行：状态点加文字，列表行已装的内置提供方再接版本号，
+// 有新版本时接成"v{当前} → v{最新}"。
 export function ProviderStatusLine({
   status,
   version,
+  latestVersion,
 }: {
   status: ProviderStatusDisplay;
   version?: string;
+  latestVersion?: string;
 }) {
   const { t } = useTranslation();
   let label = t(status.label.key, status.label.params);
-  if (version) {
+  if (version && latestVersion) {
+    label = `${label} · ${t("settings.providers.version.update", { from: version, to: latestVersion })}`;
+  } else if (version) {
     label = `${label} · ${t("settings.providers.version.value", { version })}`;
   }
   return (

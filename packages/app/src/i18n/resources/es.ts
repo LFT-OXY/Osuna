@@ -2905,6 +2905,7 @@ export const es: TranslationResources = {
         title: "Versión",
         installed: "Instalada",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "Modelos",

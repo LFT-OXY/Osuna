@@ -104,6 +104,10 @@ import type { WorkspaceLabelService } from "./workspace-labels/index.js";
 import type { UsageService } from "./usage/service.js";
 import type { ApiEndpointService } from "./api-endpoints/service.js";
 import {
+  ProviderVersionCheckService,
+  type FetchLatestVersion,
+} from "./agent/provider-version-check.js";
+import {
   APPLICATION_SOCKET_LEASE_CHECK_INTERVAL_MS,
   ApplicationSocketLease,
   MAX_PHYSICAL_SOCKET_BUFFERED_BYTES,
@@ -542,6 +546,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly workspaceLabelService: WorkspaceLabelService | null;
   private readonly usageService: UsageService | null;
   private readonly apiEndpointService: ApiEndpointService | undefined;
+  private readonly providerVersionCheckService: ProviderVersionCheckService;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
   private readonly github: ForgeService;
@@ -661,6 +666,8 @@ export class VoiceAssistantWebSocketServer {
     workspaceLabelService?: WorkspaceLabelService,
     usageService?: UsageService,
     apiEndpointService?: ApiEndpointService,
+    // 查 CLI 最新版本的联网函数；缺省查 npm registry，测试 daemon 注入桩。
+    fetchLatestVersion?: FetchLatestVersion,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -722,6 +729,12 @@ export class VoiceAssistantWebSocketServer {
       throw new Error("providerSnapshotManager is required");
     }
     this.providerSnapshotManager = providerSnapshotManager;
+    this.providerVersionCheckService = new ProviderVersionCheckService({
+      // 设置页那份快照，等还在探测的提供方探测完再比版本。
+      listProviders: () => providerSnapshotManager.listProviders({ wait: true }),
+      fetchLatestVersion,
+      logger: this.logger.child({ module: "provider-version-check" }),
+    });
     this.serverCapabilities = buildServerCapabilities({
       readiness: this.speech?.getReadiness() ?? null,
     });
@@ -1115,6 +1128,7 @@ export class VoiceAssistantWebSocketServer {
 
     await Promise.all(cleanupPromises);
     this.providerSnapshotManager.destroy();
+    this.providerVersionCheckService.dispose();
     this.checkoutDiffManager.dispose();
     await this.workspaceGitService.dispose();
     this.pendingConnections.clear();
@@ -1486,6 +1500,7 @@ export class VoiceAssistantWebSocketServer {
       terminalManager: this.terminalManager,
       providerSnapshotManager: this.providerSnapshotManager,
       providerUsageService: this.providerUsageService,
+      providerVersionCheckService: this.providerVersionCheckService,
       hubExecutionAgents: options.hubExecutionAgents,
       hubRelationships: options.hubRelationships,
       serviceProxy: this.serviceProxy ?? undefined,

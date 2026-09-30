@@ -2886,6 +2886,7 @@ export const ptBR: TranslationResources = {
         title: "Versão",
         installed: "Instalada",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "Modelos",

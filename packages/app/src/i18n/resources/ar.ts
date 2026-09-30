@@ -2839,6 +2839,7 @@ export const ar: TranslationResources = {
         title: "الإصدار",
         installed: "المثبّت",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "النماذج",

@@ -44,6 +44,16 @@ return selectAgentCommandsState({ canFetch, data: query.data, error: query.error
 
 Expose the result as a discriminated union (`unavailable | loading | error | ready`), not `{ isLoading, error, data }`. Two rules live in the selector: data wins over error, so a failed background refresh keeps the old list instead of replacing it with an error row; and "cannot fetch and never had data" (host disconnected) is `unavailable`, which hides the menu instead of showing a loading row that never ends.
 
+### One observer checks, the others read; a forced recheck goes through `prefetchQuery`
+
+Provider version checks (`provider-detail/version-check.ts`) have one owner: `ProvidersPage` mounts `useProviderVersionCheck(serverId, { checkOnMount: true })` with `staleTimeMs: 0`, so every open asks the daemon, which answers from its own one-hour cache. The list row and the detail read the same key with `checkOnMount: false` (`enabled: false`), so they never start a request. The composer popup renders the same detail with `checksVersions: false`: no recheck on refresh and no update arrow.
+
+A refresh that must bypass the daemon cache calls `recheckProviderVersions`, which runs `queryClient.prefetchQuery({ staleTime: 0, retry: false, queryFn })` and merges the rechecked providers into the cached list. Don't write `try { … } catch {}` around the RPC to keep the old list on failure: `prefetchQuery` already records the error on the query and keeps the previous data, which is the "check failed → show nothing new" behavior.
+
+`prefetchQuery` (like `fetchQuery`) joins a fetch already in flight on the same key instead of starting its own, so a forced recheck issued while the page's first check is still pending would silently return the unforced answer. `recheckProviderVersions` waits for the in-flight fetch (`isFetching({ queryKey }) > 0` → one `prefetchQuery` that joins it), then prefetches again. The test "still forces the recheck when the page's check has not answered yet" holds the first answer open to prove it.
+
+Test it in Node with `QueryObserver` and a fake client (`version-check.test.ts`); "did not check" is `fetchStatus === "idle"` plus an empty call list.
+
 ## Hook shape
 
 A hook that does real work has a pure module beside it and a test for that module:

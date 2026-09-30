@@ -2891,6 +2891,7 @@ export const ru: TranslationResources = {
         title: "Версия",
         installed: "Установлена",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "Модели",

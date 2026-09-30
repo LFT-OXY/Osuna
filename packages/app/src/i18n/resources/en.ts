@@ -2961,6 +2961,7 @@ export const en = {
         title: "Version",
         installed: "Installed",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "Models",

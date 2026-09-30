@@ -26,6 +26,8 @@ import {
 } from "./diagnostic";
 import { ProviderDetailSurface } from "./index";
 import { dismissProviderRemovalError, removeProvider, useProviderRemoval } from "./removal";
+import { useProviderVersionCheck } from "./use-version-check";
+import { selectNewerVersion } from "./version-check";
 import { ProviderVersionSection } from "./version-section";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
@@ -52,7 +54,39 @@ export function useProviderDiagnosticActions(serverId: string, provider: string)
   return { run, diagnose };
 }
 
-export function ProviderDetail({ serverId, provider }: { serverId: string; provider: string }) {
+/*
+ * 刷新一个提供方：先刷新快照（重新取已装版本）。Providers 页上再强制重查新版本；
+ * composer 弹窗不查版本，也就不联网。
+ */
+function useRefreshProvider({
+  serverId,
+  provider,
+  checksVersions,
+}: {
+  serverId: string;
+  provider: string;
+  checksVersions: boolean;
+}) {
+  const { refresh } = useProvidersSnapshot(serverId);
+  const { recheck } = useProviderVersionCheck(serverId, { checkOnMount: false });
+  return useCallback(() => {
+    // 快照刷新失败也照样重查。
+    void refresh([provider]).finally(() => {
+      if (checksVersions) void recheck([provider]);
+    });
+  }, [checksVersions, provider, recheck, refresh]);
+}
+
+export function ProviderDetail({
+  serverId,
+  provider,
+  checksVersions,
+}: {
+  serverId: string;
+  provider: string;
+  // 设置页的 Providers 页为 true：刷新时重查、显示新版本。composer 弹窗为 false，只显示已装版本。
+  checksVersions: boolean;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
@@ -89,6 +123,9 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
   const hostSupportsApiEndpoints = useHostFeature(serverId, "apiEndpoints");
   // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
   const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
+  const { results: versionCheckResults } = useProviderVersionCheck(serverId, {
+    checkOnMount: false,
+  });
 
   const stableDiscoveredRef = useRef<ProviderDiscoveredModelsCache | null>(null);
   const currentModels = providerEntry?.models;
@@ -102,9 +139,7 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
   });
   stableDiscoveredRef.current = nextDiscoveredCache;
 
-  const handleRefresh = useCallback(() => {
-    void refresh([provider]);
-  }, [provider, refresh]);
+  const handleRefresh = useRefreshProvider({ serverId, provider, checksVersions });
 
   const handleDeleteCustomModel = useCallback(
     (modelId: string) => {
@@ -154,8 +189,20 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
   );
 
   const renderVersion = useCallback(
-    (installedVersion: string) => <ProviderVersionSection installedVersion={installedVersion} />,
-    [],
+    (installedVersion: string) => {
+      const latestVersion = selectNewerVersion({
+        provider,
+        installedVersion,
+        results: checksVersions ? versionCheckResults : undefined,
+      });
+      return (
+        <ProviderVersionSection
+          installedVersion={installedVersion}
+          latestVersion={latestVersion ?? undefined}
+        />
+      );
+    },
+    [checksVersions, provider, versionCheckResults],
   );
 
   const extendsProvider = config?.providers?.[provider]?.extends;
@@ -193,10 +240,10 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
 export function useProviderDetailHeader(
   serverId: string,
   provider: string,
-  options?: { onRemoved?: () => void },
+  options: { checksVersions: boolean; onRemoved?: () => void },
 ) {
   const { t } = useTranslation();
-  const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
+  const { entries, isRefreshing } = useProvidersSnapshot(serverId);
   const { patchConfig } = useDaemonConfig(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const removal = useProviderRemoval(serverId, provider);
@@ -216,14 +263,16 @@ export function useProviderDetailHeader(
   const glyph = resolveProviderGlyph({ provider, serverId, tone: "brand" });
   const label = resolveProviderLabel(provider, entries);
 
-  const handleRefresh = useCallback(() => {
-    void refresh([provider]);
-  }, [provider, refresh]);
+  const handleRefresh = useRefreshProvider({
+    serverId,
+    provider,
+    checksVersions: options.checksVersions,
+  });
   const providerSource = providerEntry?.source;
   const isRemoving = removal.status === "removing";
 
   // 删除成功后提供方从快照里消失，设置页由地址修正回到第一个提供方或列表；弹窗经 onRemoved 关闭。
-  const onRemoved = options?.onRemoved;
+  const onRemoved = options.onRemoved;
   const handleRemove = useCallback(() => {
     void removeProvider(serverId, provider, {
       confirm: () =>
@@ -301,7 +350,7 @@ export function ProviderDetailPage({
   // 手机上「刷新」和 ⋯ 在顶栏，头部块只留图标、名称、徽章和模型数。
   hasScreenHeaderActions: boolean;
 }) {
-  const header = useProviderDetailHeader(serverId, provider);
+  const header = useProviderDetailHeader(serverId, provider, { checksVersions: true });
   const renderActions = useCallback(
     () => <ProviderDetailActions serverId={serverId} provider={provider} header={header} />,
     [header, provider, serverId],
@@ -317,7 +366,7 @@ export function ProviderDetailPage({
         renderActions={hasScreenHeaderActions ? undefined : renderActions}
         testID={`provider-detail-header-${provider}`}
       />
-      <ProviderDetail serverId={serverId} provider={provider} />
+      <ProviderDetail serverId={serverId} provider={provider} checksVersions />
     </>
   );
 }

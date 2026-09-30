@@ -27,7 +27,10 @@ export function ProviderDiagnosticSheet({
   onRemoved,
   serverId,
 }: ProviderDiagnosticSheetProps) {
-  const header = useProviderDetailHeader(serverId, provider, { onRemoved });
+  const header = useProviderDetailHeader(serverId, provider, {
+    checksVersions: false,
+    onRemoved,
+  });
   // 手机上文字「刷新」会把名称挤没，改成仅图标。
   const isCompact = useIsCompactFormFactor();
 
@@ -58,7 +61,7 @@ export function ProviderDiagnosticSheet({
       desktopMaxWidth={640}
       contentStyle={styles.content}
     >
-      <ProviderDetail serverId={serverId} provider={provider} />
+      <ProviderDetail serverId={serverId} provider={provider} checksVersions={false} />
     </AdaptiveModalSheet>
   );
 }

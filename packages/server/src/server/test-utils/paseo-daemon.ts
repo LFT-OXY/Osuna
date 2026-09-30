@@ -54,6 +54,7 @@ interface TestPaseoDaemonOptions {
   plugins?: PaseoDaemonConfig["plugins"];
   usage?: PaseoDaemonConfig["usage"];
   apiEndpoints?: PaseoDaemonConfig["apiEndpoints"];
+  providerVersions?: PaseoDaemonConfig["providerVersions"];
 }
 
 export interface TestPaseoDaemon {
@@ -225,6 +226,12 @@ async function prepareTestDaemonConfig(
         CODEX_HOME: path.join(paseoHomeRoot, "codex-home"),
       },
       homeDir: paseoHomeRoot,
+    },
+    // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
+    providerVersions: options.providerVersions ?? {
+      fetchLatestVersion: async ({ npmPackage }) => {
+        throw new Error(`Test daemon does not query npm for ${npmPackage}`);
+      },
     },
   };
   return { config, paseoHomeRoot, paseoHome, staticDir };

@@ -2867,6 +2867,7 @@ export const ja: TranslationResources = {
         title: "バージョン",
         installed: "インストール済み",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "モデル",

@@ -1869,6 +1869,17 @@ export const ProviderUsageListRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+/**
+ * 查内置提供方有没有新版本。省略 providers 表示全部内置提供方；force 跳过 daemon 的缓存。
+ * daemon 只在收到这条请求时才联网（npm registry）。
+ */
+export const ProviderVersionCheckRequestSchema = z.object({
+  type: z.literal("provider.version.check.request"),
+  requestId: z.string(),
+  providers: z.array(z.string()).optional(),
+  force: z.boolean().optional(),
+});
+
 export const ResumeAgentRequestMessageSchema = z.object({
   type: z.literal("resume_agent_request"),
   handle: AgentPersistenceHandleSchema,
@@ -3350,6 +3361,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   RefreshProvidersSnapshotRequestMessageSchema,
   ProviderDiagnosticRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
+  ProviderVersionCheckRequestSchema,
   ResumeAgentRequestMessageSchema,
   ImportAgentRequestMessageSchema,
   RefreshAgentRequestMessageSchema,
@@ -3841,7 +3853,7 @@ export const ServerInfoStatusPayloadSchema = z
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
-        // 快照带内置提供方的已装版本 version。
+        // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.*。
         providerVersions: z.boolean().optional(),
       })
       .optional(),
@@ -6371,6 +6383,27 @@ export const ProviderUsageListResponseMessageSchema = z.object({
   }),
 });
 
+/**
+ * 一个内置提供方的检查结果。没装或读不出已装版本时不联网，只有 updateAvailable: false；
+ * 查最新版本失败时 error 是原因，其他提供方照常返回。
+ */
+export const ProviderVersionCheckResultSchema = z.object({
+  provider: z.string(),
+  installedVersion: z.string().optional(),
+  latestVersion: z.string().optional(),
+  updateAvailable: z.boolean(),
+  error: z.string().optional(),
+});
+export type ProviderVersionCheckResult = z.infer<typeof ProviderVersionCheckResultSchema>;
+
+export const ProviderVersionCheckResponseSchema = z.object({
+  type: z.literal("provider.version.check.response"),
+  payload: z.object({
+    requestId: z.string(),
+    results: z.array(ProviderVersionCheckResultSchema),
+  }),
+});
+
 const AgentSlashCommandSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -7018,6 +7051,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   RefreshProvidersSnapshotResponseMessageSchema,
   ProviderDiagnosticResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
+  ProviderVersionCheckResponseSchema,
   ListCommandsResponseSchema,
   ListTerminalsResponseSchema,
   TerminalsChangedSchema,

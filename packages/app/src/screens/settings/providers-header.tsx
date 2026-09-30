@@ -40,7 +40,7 @@ export function ProvidersBreadcrumb({
   onPressProviders,
 }: ProviderHeaderProps & { onPressProviders: () => void }) {
   const providersView = useProvidersView(serverId, provider);
-  const { label } = useProviderDetailHeader(serverId, provider);
+  const { label } = useProviderDetailHeader(serverId, provider, { checksVersions: true });
 
   if (providersView.kind !== "detail") {
     return <ScreenTitle testID="settings-detail-header-title">{sectionTitle}</ScreenTitle>;
@@ -79,7 +79,7 @@ export function ProviderDetailBackHeader({
     hostSupportsRemoval,
     isRemoving,
     onRemove,
-  } = useProviderDetailHeader(serverId, provider);
+  } = useProviderDetailHeader(serverId, provider, { checksVersions: true });
   // ⋯ 在顶栏、诊断节在正文，经 provider-detail/diagnostic.ts 的 store 让正文滚到诊断节并运行。
   const { diagnose } = useProviderDiagnosticActions(serverId, provider);
   const refreshStyle = useCallback(

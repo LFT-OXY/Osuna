@@ -464,6 +464,19 @@ describe("ProviderDetailSurface", () => {
     expect(text).toContain("v2.1.280");
   });
 
+  it("shows the newer version next to the installed one", () => {
+    renderDetail({
+      entries: [entry({ version: "2.1.280" })],
+      renderVersion: (installedVersion) => (
+        <ProviderVersionSection installedVersion={installedVersion} latestVersion="2.1.285" />
+      ),
+    });
+
+    expect(screen.getByTestId("provider-version-section").textContent).toContain(
+      "v2.1.280 → v2.1.285",
+    );
+  });
+
   it("orders errors, the version, API endpoints, Models, then the diagnostic", () => {
     // 启动出错的提供方快照里不带版本，这里用删除失败提示代表顶部的错误类提示。
     renderDetail({ entries: [entry({ version: "2.1.280" })], removalError: "boom" });

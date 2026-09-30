@@ -2803,6 +2803,7 @@ export const zhCN: TranslationResources = {
         title: "版本",
         installed: "已安装",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "Models",

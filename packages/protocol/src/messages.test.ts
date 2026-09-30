@@ -169,6 +169,61 @@ describe("workspace descriptor message compatibility", () => {
   });
 });
 
+describe("provider version check message contract", () => {
+  test("accepts the check request with and without its optional fields", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "provider.version.check.request",
+        requestId: "check-1",
+      }),
+    ).toEqual({ type: "provider.version.check.request", requestId: "check-1" });
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "provider.version.check.request",
+        requestId: "check-2",
+        providers: ["claude", "a-provider-this-client-has-never-seen"],
+        force: true,
+      }),
+    ).toMatchObject({
+      providers: ["claude", "a-provider-this-client-has-never-seen"],
+      force: true,
+    });
+  });
+
+  test("accepts results that omit the versions and the error", () => {
+    const parsed = SessionOutboundMessageSchema.parse({
+      type: "provider.version.check.response",
+      payload: {
+        requestId: "check-3",
+        results: [
+          {
+            provider: "claude",
+            installedVersion: "2.1.280",
+            latestVersion: "2.1.285",
+            updateAvailable: true,
+          },
+          { provider: "codex", updateAvailable: false },
+          {
+            provider: "copilot",
+            installedVersion: "1.0.89",
+            updateAvailable: false,
+            error: "timeout",
+          },
+        ],
+      },
+    });
+
+    if (parsed.type !== "provider.version.check.response") {
+      throw new Error("Expected provider.version.check.response");
+    }
+    expect(parsed.payload.results.map((result) => result.provider)).toEqual([
+      "claude",
+      "codex",
+      "copilot",
+    ]);
+  });
+});
+
 describe("provider usage list message contract", () => {
   test("accepts the usage list request as a namespaced correlated RPC", () => {
     const parsed = SessionInboundMessageSchema.parse({

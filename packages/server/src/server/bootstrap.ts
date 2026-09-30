@@ -151,6 +151,7 @@ import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
+import type { FetchLatestVersion } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
@@ -459,6 +460,8 @@ export interface PaseoDaemonConfig {
   usage?: UsageConfig;
   // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
   apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck">;
+  // 查内置提供方 CLI 最新版本的联网函数；缺省查 npm registry，测试换成桩。
+  providerVersions?: { fetchLatestVersion?: FetchLatestVersion };
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;
@@ -1801,6 +1804,7 @@ export async function createPaseoDaemon(
               workspaceLabelService,
               usageService,
               apiEndpointService,
+              config.providerVersions?.fetchLatestVersion,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

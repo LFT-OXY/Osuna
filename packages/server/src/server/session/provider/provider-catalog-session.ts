@@ -20,6 +20,7 @@ import {
 } from "../../agent/agent-sdk-types.js";
 import type { ProviderAvailability } from "../../agent/agent-manager.js";
 import type { ProviderUsageService } from "../../../services/quota-fetcher/service.js";
+import type { ProviderVersionCheckService } from "../../agent/provider-version-check.js";
 import { expandTilde } from "../../../utils/path.js";
 
 // COMPAT(customModeIcons): the only mode icons known to clients before v0.1.84. Any
@@ -57,6 +58,7 @@ export interface ProviderCatalogSessionOptions {
   host: ProviderCatalogSessionHost;
   providerSnapshotManager: ProviderSnapshotManager;
   providerUsageService: ProviderUsageService;
+  providerVersionCheckService: ProviderVersionCheckService;
   logger: pino.Logger;
 }
 
@@ -71,6 +73,7 @@ export class ProviderCatalogSession {
   private readonly host: ProviderCatalogSessionHost;
   private readonly providerSnapshotManager: ProviderSnapshotManager;
   private readonly providerUsageService: ProviderUsageService;
+  private readonly providerVersionCheckService: ProviderVersionCheckService;
   private readonly logger: pino.Logger;
   private unsubscribeSnapshotEvents: (() => void) | null = null;
 
@@ -78,6 +81,7 @@ export class ProviderCatalogSession {
     this.host = options.host;
     this.providerSnapshotManager = options.providerSnapshotManager;
     this.providerUsageService = options.providerUsageService;
+    this.providerVersionCheckService = options.providerVersionCheckService;
     this.logger = options.logger;
   }
 
@@ -510,6 +514,34 @@ export class ProviderCatalogSession {
           requestType: msg.type,
           error: `Failed to list provider usage: ${err.message}`,
           code: "provider_usage_list_failed",
+        },
+      });
+    }
+  }
+
+  async handleProviderVersionCheckRequest(
+    msg: Extract<SessionInboundMessage, { type: "provider.version.check.request" }>,
+  ): Promise<void> {
+    // 单个提供方查询失败已经写进它那一项；这里只兜底读快照本身出错。
+    try {
+      const results = await this.providerVersionCheckService.check({
+        providers: msg.providers,
+        force: msg.force,
+      });
+      this.host.emit({
+        type: "provider.version.check.response",
+        payload: { requestId: msg.requestId, results },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to check provider versions");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to check provider versions: ${err.message}`,
+          code: "provider_version_check_failed",
         },
       });
     }

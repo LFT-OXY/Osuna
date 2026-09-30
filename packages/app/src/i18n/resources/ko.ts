@@ -2856,6 +2856,7 @@ export const ko: TranslationResources = {
         title: "버전",
         installed: "설치됨",
         value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
       },
       models: {
         title: "모델",
