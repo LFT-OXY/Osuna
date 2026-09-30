@@ -14,12 +14,25 @@ import type pino from "pino";
 import type { ApiEndpoint, ApiEndpointModel } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
+import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
+import {
+  codexVersionAtLeast,
+  normalizeOpenAICompatibleBaseUrl,
+} from "../agent/providers/codex-app-server-agent.js";
 import { PRIVATE_FILE_MODE } from "../private-files.js";
 import {
   applyClaudeApiEndpoint,
   buildClaudeEndpointEnv,
   restoreClaudeOfficial,
 } from "./claude-settings-patch.js";
+import { buildCodexAuthCommand } from "./codex-auth-command.js";
+import {
+  applyCodexApiEndpoint,
+  removeCodexProviderTable,
+  replaceCodexProviderTable,
+  restoreCodexOfficial,
+  type CodexProviderTable,
+} from "./codex-config-patch.js";
 import {
   API_ENDPOINT_PROVIDERS,
   ApiEndpointStore,
@@ -31,7 +44,11 @@ export type ApiEndpointErrorCode =
   | "unsupported_provider"
   | "invalid_input"
   | "not_found"
-  | "config_unparsable";
+  | "config_unparsable"
+  | "codex_version_unsupported";
+
+// auth.command 从这个版本开始才有（ADR 0004）。
+const CODEX_AUTH_COMMAND_MIN_VERSION: readonly [number, number, number] = [0, 118, 0];
 
 export class ApiEndpointRequestError extends Error {
   readonly code: ApiEndpointErrorCode;
@@ -60,6 +77,8 @@ export interface ApiEndpointServiceOptions {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   now?: () => Date;
+  // `codex --version` 的输出；启用 Codex 接口前检查版本。
+  probeCodexVersion: () => Promise<string>;
 }
 
 /**
@@ -72,6 +91,7 @@ export class ApiEndpointService {
   private readonly env: NodeJS.ProcessEnv;
   private readonly homeDir: string;
   private readonly now: () => Date;
+  private readonly probeCodexVersion: () => Promise<string>;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ApiEndpointServiceOptions) {
@@ -80,6 +100,7 @@ export class ApiEndpointService {
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
     this.now = options.now ?? (() => new Date());
+    this.probeCodexVersion = options.probeCodexVersion;
   }
 
   list(provider: string): { endpoints: ApiEndpoint[]; activeEndpointId: string | null } {
@@ -113,12 +134,21 @@ export class ApiEndpointService {
       };
 
       // 编辑当前启用的接口：先按新配置改文件，改不成就整个不保存。
-      if (this.store.getActiveEndpointId(supported) === endpoint.id) {
+      // 官方模式下编辑 Codex 专用表所属的接口：只刷新专用表和 key 文件，旧会话恢复时用的是新配置。
+      const isActive = this.store.getActiveEndpointId(supported) === endpoint.id;
+      const ownsCodexTable =
+        supported === "codex" &&
+        this.store.readCodexTakeover().providerTable?.endpointId === endpoint.id;
+      if (isActive || ownsCodexTable) {
         const resolvedKey = apiKey ?? this.store.getApiKey(endpoint.id);
         if (resolvedKey === null) {
           throw new ApiEndpointRequestError("not_found", "API key for this endpoint is missing");
         }
-        this.writeClaudeEndpoint(endpoint, resolvedKey);
+        if (isActive) {
+          this.writeEndpoint(endpoint, resolvedKey);
+        } else {
+          this.refreshCodexProviderTable(endpoint, resolvedKey);
+        }
       }
       this.store.upsertEndpoint(endpoint, apiKey);
       return this.toWire(endpoint);
@@ -133,9 +163,10 @@ export class ApiEndpointService {
       }
       // 删除启用中的接口前先切回官方，CLI 不能停在一个已经不存在的配置上。
       if (this.store.getActiveEndpointId(supported) === endpointId) {
-        this.restoreClaudeOfficial();
+        this.restoreOfficial(supported);
         this.store.setActiveEndpointId(supported, null);
       }
+      if (supported === "codex") this.removeCodexProviderTable(endpointId);
       this.store.removeEndpoint(supported, endpointId);
       return { activeEndpointId: this.store.getActiveEndpointId(supported) };
     });
@@ -145,10 +176,10 @@ export class ApiEndpointService {
     provider: string,
     endpointId: string | null,
   ): Promise<{ activeEndpointId: string | null }> {
-    return this.exclusive(() => {
+    return this.exclusive(async () => {
       const supported = requireProvider(provider);
       if (endpointId === null) {
-        this.restoreClaudeOfficial();
+        this.restoreOfficial(supported);
         this.store.setActiveEndpointId(supported, null);
         return { activeEndpointId: null };
       }
@@ -157,7 +188,8 @@ export class ApiEndpointService {
       if (!endpoint || apiKey === null) {
         throw new ApiEndpointRequestError("not_found", "API endpoint not found");
       }
-      this.writeClaudeEndpoint(endpoint, apiKey);
+      if (supported === "codex") await this.requireCodexAuthCommand();
+      this.writeEndpoint(endpoint, apiKey);
       this.store.setActiveEndpointId(supported, endpointId);
       return { activeEndpointId: endpointId };
     });
@@ -168,6 +200,31 @@ export class ApiEndpointService {
       env: this.env,
       homeDir: this.homeDir,
     });
+  }
+
+  /** 与终端 hooks 安装器同一套规则：CODEX_HOME 优先，缺省 ~/.codex。 */
+  resolveCodexConfigPath(): string {
+    const hooksPath = resolveAgentHookConfigPath(codexAgentHookProvider, {
+      env: this.env,
+      homeDir: this.homeDir,
+    });
+    return path.join(path.dirname(hooksPath), "config.toml");
+  }
+
+  private writeEndpoint(endpoint: StoredApiEndpoint, apiKey: string): void {
+    if (endpoint.provider === "codex") {
+      this.writeCodexEndpoint(endpoint, apiKey);
+    } else {
+      this.writeClaudeEndpoint(endpoint, apiKey);
+    }
+  }
+
+  private restoreOfficial(provider: ApiEndpointProvider): void {
+    if (provider === "codex") {
+      this.restoreCodexOfficial();
+    } else {
+      this.restoreClaudeOfficial();
+    }
   }
 
   private writeClaudeEndpoint(endpoint: StoredApiEndpoint, apiKey: string): void {
@@ -226,6 +283,143 @@ export class ApiEndpointService {
     this.logger.info({ settingsPath }, "Claude settings restored to Official");
   }
 
+  private async requireCodexAuthCommand(): Promise<void> {
+    const versionOutput = await this.probeCodexVersion();
+    if (!codexVersionAtLeast(versionOutput, CODEX_AUTH_COMMAND_MIN_VERSION)) {
+      throw new ApiEndpointRequestError(
+        "codex_version_unsupported",
+        `API endpoints need Codex ${CODEX_AUTH_COMMAND_MIN_VERSION.join(".")} or later, which reads the API key through auth.command. Found: ${versionOutput}`,
+      );
+    }
+  }
+
+  /**
+   * 先算好 config.toml 的新内容（解析失败就什么都不写），再写 key 文件，最后写 config.toml。
+   * config.toml 写不成时 key 文件和接管记录都退回切换前的样子。
+   */
+  private writeCodexEndpoint(endpoint: StoredApiEndpoint, apiKey: string): void {
+    const configPath = this.resolveCodexConfigPath();
+    const current = readOptionalFile(configPath);
+    const record = this.store.readCodexTakeover();
+    const result = applyCodexApiEndpoint({
+      text: current?.toString("utf8") ?? null,
+      model: endpoint.defaultModelId,
+      table: this.buildCodexProviderTable(endpoint),
+      takeover: record.takeover,
+    });
+    if (result.kind === "unparsable") {
+      throw unparsable(configPath, result.message);
+    }
+
+    const backup = record.backup ?? {
+      path: this.store.writeCodexConfigBackup(current, this.now()),
+    };
+    const previousKey = readOptionalFile(this.store.codexKeyFilePath);
+    this.store.writeCodexKeyFile(apiKey);
+    this.store.writeCodexTakeover({
+      takeover: result.takeover,
+      providerTable: { endpointId: endpoint.id },
+      backup,
+    });
+    try {
+      writeConfigFileKeepingMode(configPath, result.text);
+    } catch (error) {
+      this.store.writeCodexTakeover(record);
+      this.store.writeCodexKeyFile(previousKey);
+      throw error;
+    }
+    this.logger.info(
+      { configPath, endpointId: endpoint.id },
+      "Codex config switched to API endpoint",
+    );
+  }
+
+  private refreshCodexProviderTable(endpoint: StoredApiEndpoint, apiKey: string): void {
+    const configPath = this.resolveCodexConfigPath();
+    const current = readOptionalFile(configPath);
+    const result = replaceCodexProviderTable({
+      text: current?.toString("utf8") ?? null,
+      table: this.buildCodexProviderTable(endpoint),
+    });
+    if (result.kind === "unparsable") {
+      throw unparsable(configPath, result.message);
+    }
+    // 文件已经不在了：专用表也就不在了，没什么可刷新的。
+    if (result.kind === "missing") return;
+    const previousKey = readOptionalFile(this.store.codexKeyFilePath);
+    this.store.writeCodexKeyFile(apiKey);
+    try {
+      writeConfigFileKeepingMode(configPath, result.text);
+    } catch (error) {
+      this.store.writeCodexKeyFile(previousKey);
+      throw error;
+    }
+    this.logger.info(
+      { configPath, endpointId: endpoint.id },
+      "Codex API endpoint provider table refreshed",
+    );
+  }
+
+  private buildCodexProviderTable(endpoint: StoredApiEndpoint): CodexProviderTable {
+    // 保存时已校验过 URL，这里归一化不会落空；落空就是数据坏了，直接报错。
+    const baseUrl = normalizeOpenAICompatibleBaseUrl(endpoint.baseUrl);
+    if (baseUrl === null) {
+      throw new ApiEndpointRequestError("invalid_input", "Base URL is empty");
+    }
+    return {
+      name: endpoint.name,
+      baseUrl,
+      auth: buildCodexAuthCommand({
+        platform: process.platform,
+        keyFilePath: this.store.codexKeyFilePath,
+        systemRoot: this.env.SystemRoot,
+      }),
+    };
+  }
+
+  private restoreCodexOfficial(): void {
+    const record = this.store.readCodexTakeover();
+    if (!record.takeover) return;
+    const configPath = this.resolveCodexConfigPath();
+    const current = readOptionalFile(configPath);
+    const result = restoreCodexOfficial({
+      text: current?.toString("utf8") ?? null,
+      takeover: record.takeover,
+    });
+    if (result.kind === "unparsable") {
+      throw unparsable(configPath, result.message);
+    }
+    if (result.kind === "patched") {
+      writeConfigFileKeepingMode(configPath, result.text);
+    }
+    // 专用表和 key 文件都留着，第三方模式下的 Codex 会话还能恢复。
+    this.store.writeCodexTakeover({ ...record, takeover: null });
+    this.logger.info({ configPath }, "Codex config restored to Official");
+  }
+
+  /** 删除的是专用表当前所属的接口时，拿掉专用表和 key 文件。调用前已切回官方。 */
+  private removeCodexProviderTable(endpointId: string): void {
+    const record = this.store.readCodexTakeover();
+    if (record.providerTable?.endpointId !== endpointId) return;
+    const configPath = this.resolveCodexConfigPath();
+    const current = readOptionalFile(configPath);
+    const result = removeCodexProviderTable({ text: current?.toString("utf8") ?? null });
+    if (result.kind === "unparsable") {
+      throw unparsable(configPath, result.message);
+    }
+    if (result.kind === "patched") {
+      // 接管前没有这个文件、现在又只剩 Osuna 写的东西：删掉，回到原样。
+      if (result.text === "" && record.backup?.path === null) {
+        rmSync(configPath, { force: true });
+      } else {
+        writeConfigFileKeepingMode(configPath, result.text);
+      }
+    }
+    this.store.writeCodexKeyFile(null);
+    this.store.writeCodexTakeover({ ...record, providerTable: null });
+    this.logger.info({ configPath, endpointId }, "Codex API endpoint provider table removed");
+  }
+
   private toWire(endpoint: StoredApiEndpoint): ApiEndpoint {
     return {
       id: endpoint.id,
@@ -238,7 +432,7 @@ export class ApiEndpointService {
     };
   }
 
-  private exclusive<T>(run: () => T): Promise<T> {
+  private exclusive<T>(run: () => T | Promise<T>): Promise<T> {
     const next = this.queue.then(run);
     this.queue = next.catch(() => undefined);
     return next;

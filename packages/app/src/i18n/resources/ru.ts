@@ -2876,6 +2876,8 @@ export const ru: TranslationResources = {
         deleteMessage: "Его URL, API-ключ и модели будут удалены с этого хоста.",
         deleteActiveMessage:
           "Он используется, поэтому {{provider}} сначала вернётся на официальный. Запущенные сессии и {{provider}} в терминале тоже переключатся.",
+        codexVersionUnsupported:
+          "Чтобы использовать API-эндпоинт, обновите Codex до версии 0.118.0 или новее.",
         configUnparsable:
           "Не удалось разобрать файл настроек {{provider}}, поэтому ничего не изменено.",
         form: {

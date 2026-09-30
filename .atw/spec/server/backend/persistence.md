@@ -130,7 +130,7 @@ same `commandCatalogPath` reads the entry back (daemon restart), and a
 
 ## Scenario: rewriting a config file another program owns
 
-Reference implementation: API endpoints (api-endpoint ticket 01). `server/api-endpoints/` rewrites Claude Code's `settings.json` so the CLI itself switches to a third-party endpoint. The rules are in `docs/adr/0004-api-endpoint-rewrites-cli-config.md`; this is how the code keeps them.
+Reference implementation: API endpoints (api-endpoint tickets 01–02). `server/api-endpoints/` rewrites Claude Code's `settings.json` and Codex's `config.toml` so the CLI itself switches to a third-party endpoint. The rules are in `docs/adr/0004-api-endpoint-rewrites-cli-config.md`; this is how the code keeps them.
 
 ### 1. Scope / Trigger
 
@@ -141,7 +141,9 @@ Reference implementation: API endpoints (api-endpoint ticket 01). `server/api-en
 - Pure patch: `applyClaudeApiEndpoint({ text: string | null, env, takeover }) → { kind: "patched", text, takeover } | { kind: "unparsable", message }` and `restoreClaudeOfficial({ text, takeover }) → patched | { kind: "delete" } | { kind: "missing" } | unparsable` in `claude-settings-patch.ts`. No I/O.
 - Store: `ApiEndpointStore` (`store.ts`): endpoints, keys, `readClaudeTakeover` / `writeClaudeTakeover`, `writeClaudeSettingsBackup(bytes, at)`.
 - Service: `ApiEndpointService` (`service.ts`) resolves the path (`resolveAgentHookConfigPath(claudeAgentHookProvider, { env, homeDir })`, so `CLAUDE_CONFIG_DIR` wins), serializes every mutation through one promise queue, and does the file I/O.
-- Injection: `PaseoDaemonConfig.apiEndpoints: { env?, homeDir? }`. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR`, so no test daemon can touch the real `~/.claude`.
+- Codex pure patch (`codex-config-patch.ts`): `applyCodexApiEndpoint({ text, model, table, takeover }) → patched { text, takeover } | unparsable`, `restoreCodexOfficial({ text, takeover })`, `replaceCodexProviderTable({ text, table })`, `removeCodexProviderTable({ text })`, the last three → `patched | missing | unparsable`. `buildCodexAuthCommand({ platform, keyFilePath, systemRoot? }) → { command, args, timeoutMs }` in `codex-auth-command.ts`.
+- Codex path: `resolveCodexConfigPath()` takes the directory of the Codex hooks installer path (`CODEX_HOME` wins) plus `config.toml`.
+- Injection: `PaseoDaemonConfig.apiEndpoints: { env?, homeDir? }`. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so no test daemon can touch the real `~/.claude` or `~/.codex`. `ApiEndpointServiceOptions.probeCodexVersion` is required; bootstrap wires it to `probeCodexVersion(providerSnapshotManager.getRuntimeSettings("codex"))`, so a test sets `providerOverrides.codex.command` to a fake binary.
 
 ### 3. Contracts
 
@@ -149,23 +151,34 @@ Reference implementation: API endpoints (api-endpoint ticket 01). `server/api-en
 - Order of writes on switch: takeover record first, then the CLI file; if the CLI write throws, the previous record is written back. The reverse order loses the originals on a crash.
 - The backup is taken once per file lifetime: `backup: null` = never rewritten, `{ path: null }` = the file did not exist at the first write. Never back up a file the daemon already wrote.
 - The CLI file is replaced atomically with its previous mode bits (new file: `0600`, because it now holds a token). `writePrivateFileAtomicSync` is wrong here: it forces `0600` on the file and `0700` on `~/.claude`.
+- Codex: edit TOML by splicing text at `toml-eslint-parser` node ranges, never by re-serializing. `original` for a top-level key is `{ present: true, raw }`, the value's source text with its quotes. Every edit re-parses its output and checks the written values; failure is `unparsable`.
+- Codex switch order: compute the patch (nothing written on `unparsable`) → write `codex-api-key` → write `takeover-codex.json` → write `config.toml`. If `config.toml` throws, write back the previous takeover record and the previous key bytes (or delete the key file), then rethrow; `setActiveEndpointId` runs only after success.
+- `providerTable.endpointId` outlives Official. Saving that endpoint while Official calls `replaceCodexProviderTable` and rewrites the key file; deleting it removes the table and the key file, and deletes `config.toml` when nothing is left and `backup.path === null`.
 
 ### 4. Validation & Error Matrix
 
 - Not JSON, not an object, `env` not an object, `permissions.deny` not an array → `config_unparsable`, nothing written, active endpoint unchanged.
 - File missing on switch → created. File missing on restore → nothing written (`missing`).
 - Restore leaves `{}` and `originalFile` was `absent` → file deleted; `empty` → original bytes back.
+- Codex: invalid TOML (1.0), `model` / `model_provider` not a string, `model_providers` not a table, or a result that would not parse (e.g. `model_providers` as an inline table) → `config_unparsable`, nothing written. `codex --version` below 0.118.0 or unparsable → `codex_version_unsupported`, nothing written. Codex binary missing → `unknown` with the launch error.
+- Codex BOM: the parser rejects it, so each entry point strips a leading BOM and puts it back.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: canonical 2-space file with hooks and permissions; switch and back gives identical bytes.
 - Base: a compact one-line `env` object receives a key; that line is re-indented (`jsonc-parser` formats the edited line).
 - Bad: `JSON.stringify` of the parsed file (loses the user's formatting); deleting keys that were absent-but-empty (`""` is present, not absent).
+- Codex good: `model = 'x'   # note` becomes `model = "relay/gpt"   # note` and comes back as `'x'`; the dedicated table stays after Official.
+- Codex base: no top-level keys → inserted at the top of the file; removed byte-exact on Official.
+- Codex bad: `@decimalturn/toml-patch` (drops the comment above a key it removes); `smol-toml` stringify (rewrites the whole file).
 
 ### 6. Tests Required
 
 - `claude-settings-patch.test.ts`: exact expected text after apply; restore equals the input byte for byte; empty-string original; absent file → `delete`; user's `{\n}` kept; user-owned `"WebSearch"` survives; unparsable shapes.
 - `daemon-e2e/api-endpoint-claude.e2e.test.ts`: create → activate → file → Official → file; key absent from every response and from `config.json`; `keys.json` mode `0600`; `settings.json` keeps `0644`; no backup when the file started absent.
+- `codex-config-patch.test.ts`: exact text after apply; Official restores the top-level bytes and keeps the table; apply twice is identical; CRLF and BOM kept; inline `model_providers` refused; the dedicated id fails `ProviderOverridesSchema`.
+- `codex-auth-command.test.ts`: executes the generated command with `execFile` and asserts stdout equals the key file exactly; this runs on the Windows server CI job.
+- `daemon-e2e/api-endpoint-codex.e2e.test.ts` (POSIX; fake `codex` shell script): `auth.json` byte-identical; version below 0.118.0 refused; unparsable refused with no key file; read-only `CODEX_HOME` keeps the previous mode and key.
 
 ### 7. Wrong vs Correct
 

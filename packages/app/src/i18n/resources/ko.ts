@@ -2844,6 +2844,8 @@ export const ko: TranslationResources = {
         deleteMessage: "이 호스트에 저장된 URL, API 키, 모델이 삭제됩니다.",
         deleteActiveMessage:
           "사용 중이므로 {{provider}}을(를) 먼저 공식으로 되돌립니다. 실행 중인 세션과 터미널의 {{provider}}도 함께 전환됩니다.",
+        codexVersionUnsupported:
+          "API 엔드포인트를 사용하려면 Codex를 0.118.0 이상으로 업데이트하세요.",
         configUnparsable: "{{provider}} 설정 파일을 해석할 수 없어 아무것도 변경하지 않았습니다.",
         form: {
           createTitle: "새 API 엔드포인트",

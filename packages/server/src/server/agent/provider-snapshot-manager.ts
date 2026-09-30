@@ -31,6 +31,7 @@ import type { OpenCodeBridge } from "./providers/opencode/bridge.js";
 import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
+  ProviderRuntimeSettings,
 } from "./provider-launch-config.js";
 import {
   buildProviderRegistry,
@@ -356,6 +357,11 @@ export class ProviderSnapshotManager {
 
   getProviderLabel(provider: AgentProvider): string {
     return this.generation.definitions[provider]?.label ?? provider;
+  }
+
+  /** 当前生效的启动设置（含 config.json 里配置的命令），供需要自己执行 CLI 的服务使用。 */
+  getRuntimeSettings(provider: AgentProvider): ProviderRuntimeSettings | undefined {
+    return this.generation.definitions[provider]?.configuration?.runtimeSettings;
   }
 
   getAgentManagerProviderState(): AgentManagerProviderState {

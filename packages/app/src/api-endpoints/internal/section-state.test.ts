@@ -64,9 +64,12 @@ describe("selectApiEndpointsState", () => {
 });
 
 describe("apiEndpointErrorMessageKey", () => {
-  it("localizes an unparsable settings file and passes other codes through", () => {
+  it("localizes an unparsable settings file and an outdated Codex, and passes other codes through", () => {
     expect(apiEndpointErrorMessageKey({ code: "config_unparsable", message: "x" })).toBe(
       "settings.providers.apiEndpoints.configUnparsable",
+    );
+    expect(apiEndpointErrorMessageKey({ code: "codex_version_unsupported", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.codexVersionUnsupported",
     );
     expect(apiEndpointErrorMessageKey({ code: "invalid_input", message: "x" })).toBeNull();
   });

@@ -2872,6 +2872,8 @@ export const ptBR: TranslationResources = {
         deleteMessage: "A URL, a chave de API e os modelos dele são removidos deste host.",
         deleteActiveMessage:
           "Ele está em uso, então o {{provider}} volta primeiro para Oficial. As sessões em execução e o {{provider}} no seu terminal também mudam.",
+        codexVersionUnsupported:
+          "Atualize o Codex para a versão 0.118.0 ou mais recente para usar um endpoint de API.",
         configUnparsable:
           "Não foi possível interpretar o arquivo de configuração do {{provider}}, então nada foi alterado.",
         form: {

@@ -214,9 +214,12 @@ async function prepareTestDaemonConfig(
       // the refresh schedule turns it back on.
       pricing: { autoUpdate: false, ...options.usage?.pricing },
     },
-    // 第三方接口会改写 CLI 配置文件；测试 daemon 默认指向临时目录，绝不碰真实的 ~/.claude。
+    // 第三方接口会改写 CLI 配置文件；测试 daemon 默认指向临时目录，绝不碰真实的 ~/.claude 和 ~/.codex。
     apiEndpoints: options.apiEndpoints ?? {
-      env: { CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config") },
+      env: {
+        CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config"),
+        CODEX_HOME: path.join(paseoHomeRoot, "codex-home"),
+      },
       homeDir: paseoHomeRoot,
     },
   };

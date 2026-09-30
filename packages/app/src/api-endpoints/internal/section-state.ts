@@ -37,5 +37,8 @@ export function apiEndpointErrorMessageKey(error: ApiEndpointError): string | nu
   if (error.code === "config_unparsable") {
     return "settings.providers.apiEndpoints.configUnparsable";
   }
+  if (error.code === "codex_version_unsupported") {
+    return "settings.providers.apiEndpoints.codexVersionUnsupported";
+  }
   return null;
 }

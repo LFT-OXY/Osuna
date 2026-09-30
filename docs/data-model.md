@@ -70,6 +70,8 @@ $PASEO_HOME/
 │   ├── endpoints.json                   # Saved endpoints and the active one per provider, without keys
 │   ├── keys.json                        # API keys; no RPC ever returns them
 │   ├── takeover-claude.json             # Original values of the keys the daemon owns in Claude's settings.json
+│   ├── takeover-codex.json              # Same for Codex's config.toml, plus which endpoint the dedicated provider table holds
+│   ├── codex-api-key                    # The key Codex reads through auth.command; bare bytes, no newline
 │   └── backups/                         # Byte copy of a CLI config file before its first managed write
 ├── command-catalog.json                 # Last process-reported command list per provider + cwd
 ├── usage/
@@ -697,6 +699,8 @@ The command list the provider's running process last reported, one entry per pro
 | `endpoints.json`       | `{ endpoints: [{ id, provider, name, baseUrl, models: [{ id, label? }], defaultModelId, createdAt, updatedAt }], active: { [provider]: endpointId } }` | No `active` entry for a provider means Official.                                                                                                                                                                                   |
 | `keys.json`            | `{ keys: { [endpointId]: apiKey } }`                                                                                                                   | Kept apart from `config.json` because `get_daemon_config` sends `agents.providers` to clients as is. No RPC returns a key; responses carry `hasApiKey`.                                                                            |
 | `takeover-claude.json` | `{ takeover: { originalFile, env: { [key]: { original, written } }, envCreated, webSearchDeny } \| null, backup: { path } \| null }`                   | `takeover` is null in Official. `original` can hold a token the user wrote by hand, which is why the file is private. `backup: null` means Claude's `settings.json` was never rewritten; `path: null` means it did not exist then. |
+| `takeover-codex.json`  | `{ takeover: { keys: { [key]: { original, written } } } \| null, providerTable: { endpointId } \| null, backup: { path } \| null }`                    | `original` is `{ present: true, raw }` with the value as the user spelled it, or `{ present: false }`. `providerTable` survives the switch back to Official and is cleared when that endpoint is deleted.                          |
+| `codex-api-key`        | The API key of the endpoint the dedicated provider table points at                                                                                     | Read by `/bin/cat` (PowerShell on Windows) from `model_providers.osuna_api_endpoint.auth`. Deleted with the table.                                                                                                                 |
 | `backups/`             | Byte copies of a CLI config file                                                                                                                       | One per file, taken before its first managed write. Never restored automatically.                                                                                                                                                  |
 
 ---

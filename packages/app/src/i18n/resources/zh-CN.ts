@@ -2795,6 +2795,7 @@ export const zhCN: TranslationResources = {
         deleteMessage: "此主机上保存的地址、API key 和模型都会被移除。",
         deleteActiveMessage:
           "它正在使用中，{{provider}} 会先切回官方。正在运行的会话和终端里的 {{provider}} 也会一起切换。",
+        codexVersionUnsupported: "请先把 Codex 升级到 0.118.0 或更高版本，才能使用第三方接口。",
         configUnparsable: "无法解析 {{provider}} 的配置文件，未做任何改动。",
         form: {
           createTitle: "新建第三方接口",

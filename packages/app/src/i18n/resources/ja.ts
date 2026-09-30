@@ -2853,6 +2853,8 @@ export const ja: TranslationResources = {
         deleteMessage: "このホストに保存された URL、API キー、モデルが削除されます。",
         deleteActiveMessage:
           "使用中のため、先に {{provider}} を公式に戻します。実行中のセッションとターミナルの {{provider}} も切り替わります。",
+        codexVersionUnsupported:
+          "API エンドポイントを使うには Codex を 0.118.0 以降に更新してください。",
         configUnparsable:
           "{{provider}} の設定ファイルを解析できなかったため、何も変更していません。",
         form: {

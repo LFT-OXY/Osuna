@@ -2898,6 +2898,8 @@ export const fr: TranslationResources = {
         deleteMessage: "Son URL, sa clé d'API et ses modèles sont supprimés de cet hôte.",
         deleteActiveMessage:
           "Il est utilisé : {{provider}} repasse d'abord sur Officiel. Les sessions en cours et {{provider}} dans votre terminal basculent aussi.",
+        codexVersionUnsupported:
+          "Mettez à jour Codex vers la version 0.118.0 ou ultérieure pour utiliser un endpoint d'API.",
         configUnparsable:
           "Le fichier de configuration de {{provider}} n'a pas pu être analysé ; rien n'a été modifié.",
         form: {

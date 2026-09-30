@@ -13,13 +13,13 @@
 **Blocked by:** 01
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 选定一个改写后能保留注释和格式的 TOML 方案（不能用 `smol-toml` 整份重写），并把选择和理由补写进 ADR 0004。
-- [ ] Codex 补丁纯函数的测试覆盖：用户原有的注释和格式保留、已有 `model_provider` 和 `model`、恢复到「原本不存在」、专用表在切回后仍然保留、输出稳定、无法解析。
-- [ ] 专用 provider id 不能与 Codex 的保留 id 冲突，也不能与现有自定义 Codex 提供方注入时用的 id 冲突。有测试证明两者共存时不会合并出错误的配置。
-- [ ] 启用前先切换 key 文件，再写 `config.toml`。`config.toml` 写入失败时，模式保持为切换前的状态。
-- [ ] 按平台生成的 `auth.command`：macOS/Linux 用系统的读文件命令，Windows 用 PowerShell 的绝对路径，并调大超时。单元测试执行生成出来的命令，断言输出与 key 文件内容完全一致；这条测试在 CI 的 Windows server 测试里通过。
-- [ ] 进程内 daemon 测试使用临时 `CODEX_HOME` 和一个只会打印版本号的假 `codex` 可执行文件，覆盖：版本不足时拒绝、启用和切回官方后的文件内容、`auth.json` 前后字节一致。
-- [ ] 文件位置遵循 daemon 环境里的 `CODEX_HOME`，缺省为 `~/.codex`。
-- [ ] 新文案 9 种语言齐全；`npm run typecheck`、`npm run lint`、改动涉及的测试文件都通过。
+- [x] 选定一个改写后能保留注释和格式的 TOML 方案（不能用 `smol-toml` 整份重写），并把选择和理由补写进 ADR 0004。
+- [x] Codex 补丁纯函数的测试覆盖：用户原有的注释和格式保留、已有 `model_provider` 和 `model`、恢复到「原本不存在」、专用表在切回后仍然保留、输出稳定、无法解析。
+- [x] 专用 provider id 不能与 Codex 的保留 id 冲突，也不能与现有自定义 Codex 提供方注入时用的 id 冲突。有测试证明两者共存时不会合并出错误的配置。
+- [x] 启用前先切换 key 文件，再写 `config.toml`。`config.toml` 写入失败时，模式保持为切换前的状态。
+- [ ] 按平台生成的 `auth.command`：macOS/Linux 用系统的读文件命令，Windows 用 PowerShell 的绝对路径，并调大超时。单元测试执行生成出来的命令，断言输出与 key 文件内容完全一致；这条测试在 CI 的 Windows server 测试里通过。 （本机 macOS 已通过；Windows 待推送后看 CI 的 server-tests (windows-latest)。）
+- [x] 进程内 daemon 测试使用临时 `CODEX_HOME` 和一个只会打印版本号的假 `codex` 可执行文件，覆盖：版本不足时拒绝、启用和切回官方后的文件内容、`auth.json` 前后字节一致。
+- [x] 文件位置遵循 daemon 环境里的 `CODEX_HOME`，缺省为 `~/.codex`。
+- [x] 新文案 9 种语言齐全；`npm run typecheck`、`npm run lint`、改动涉及的测试文件都通过。

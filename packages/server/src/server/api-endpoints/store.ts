@@ -1,19 +1,22 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
+import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
 
 /*
  * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
  * - endpoints.json：接口本身与每个提供方当前启用的接口，不含 key；
  * - keys.json：API key，只有 daemon 读，任何 RPC 都不返回；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
+ * - takeover-codex.json：config.toml 的接管记录，以及专用 provider 表当前属于哪个接口；
+ * - codex-api-key：Codex 通过 auth.command 读取的 key，只有内容本身，没有换行；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
  */
 
-export const API_ENDPOINT_PROVIDERS = ["claude"] as const;
+export const API_ENDPOINT_PROVIDERS = ["claude", "codex"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
 const StoredApiEndpointSchema = z.object({
@@ -45,6 +48,17 @@ const ClaudeTakeoverFileSchema = z.object({
 });
 export type ClaudeTakeoverFile = z.infer<typeof ClaudeTakeoverFileSchema>;
 
+const CodexTakeoverFileSchema = z.object({
+  // null：当前没有接管（官方模式）。
+  takeover: CodexConfigTakeoverSchema.nullable(),
+  // config.toml 里的专用 provider 表写的是哪个接口；切回官方后仍在，删除该接口时连同 key 文件一起删。
+  providerTable: z.object({ endpointId: z.string() }).nullable(),
+  backup: z.object({ path: z.string().nullable() }).nullable(),
+});
+export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
+
+const CODEX_KEY_FILE = "codex-api-key";
+
 export class ApiEndpointStore {
   private readonly root: string;
 
@@ -54,11 +68,11 @@ export class ApiEndpointStore {
 
   /** 把首次改写前的字节原样存一份，返回副本路径；文件不存在时返回 null。 */
   writeClaudeSettingsBackup(bytes: Buffer | null, at: Date): string | null {
-    if (bytes === null) return null;
-    const stamp = at.toISOString().replaceAll(":", "-");
-    const backupPath = path.join(this.root, "backups", `claude-settings.${stamp}.json`);
-    writePrivateFileAtomicSync(backupPath, bytes);
-    return backupPath;
+    return this.writeBackup({ bytes, at, prefix: "claude-settings", extension: "json" });
+  }
+
+  writeCodexConfigBackup(bytes: Buffer | null, at: Date): string | null {
+    return this.writeBackup({ bytes, at, prefix: "codex-config", extension: "toml" });
   }
 
   listEndpoints(provider: ApiEndpointProvider): StoredApiEndpoint[] {
@@ -120,6 +134,47 @@ export class ApiEndpointStore {
 
   writeClaudeTakeover(file: ClaudeTakeoverFile): void {
     this.writeJson("takeover-claude.json", ClaudeTakeoverFileSchema.parse(file));
+  }
+
+  readCodexTakeover(): CodexTakeoverFile {
+    const raw = this.readJson("takeover-codex.json");
+    return raw === null
+      ? { takeover: null, providerTable: null, backup: null }
+      : CodexTakeoverFileSchema.parse(raw);
+  }
+
+  writeCodexTakeover(file: CodexTakeoverFile): void {
+    this.writeJson("takeover-codex.json", CodexTakeoverFileSchema.parse(file));
+  }
+
+  get codexKeyFilePath(): string {
+    return path.join(this.root, CODEX_KEY_FILE);
+  }
+
+  /** null 表示删掉。 */
+  writeCodexKeyFile(bytes: string | Buffer | null): void {
+    if (bytes === null) {
+      rmSync(this.codexKeyFilePath, { force: true });
+      return;
+    }
+    writePrivateFileAtomicSync(this.codexKeyFilePath, bytes);
+  }
+
+  private writeBackup(input: {
+    bytes: Buffer | null;
+    at: Date;
+    prefix: string;
+    extension: string;
+  }): string | null {
+    if (input.bytes === null) return null;
+    const stamp = input.at.toISOString().replaceAll(":", "-");
+    const backupPath = path.join(
+      this.root,
+      "backups",
+      `${input.prefix}.${stamp}.${input.extension}`,
+    );
+    writePrivateFileAtomicSync(backupPath, input.bytes);
+    return backupPath;
   }
 
   private readEndpoints(): EndpointsFile {

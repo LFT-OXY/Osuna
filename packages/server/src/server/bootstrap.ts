@@ -151,6 +151,7 @@ import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
+import { probeCodexVersion } from "./agent/providers/codex-app-server-agent.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
@@ -1385,6 +1386,7 @@ export async function createPaseoDaemon(
   const apiEndpointService = new ApiEndpointService({
     paseoHome: config.paseoHome,
     logger,
+    probeCodexVersion: () => probeCodexVersion(providerSnapshotManager.getRuntimeSettings("codex")),
     ...config.apiEndpoints,
   });
   logger.info({ elapsed: elapsed() }, "Loading persisted agent registry");

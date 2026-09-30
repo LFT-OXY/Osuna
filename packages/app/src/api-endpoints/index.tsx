@@ -26,7 +26,7 @@ export {
 import type { ApiEndpointsLoadState } from "./internal/section-state";
 
 /** 能切第三方接口的内置提供方；自定义提供方不在此列。 */
-const API_ENDPOINT_PROVIDERS = new Set(["claude"]);
+const API_ENDPOINT_PROVIDERS = new Set(["claude", "codex"]);
 
 export function supportsApiEndpoints(provider: string): boolean {
   return API_ENDPOINT_PROVIDERS.has(provider);

@@ -111,11 +111,11 @@
 
 - 第三方接口是 daemon 端的数据，按主机保存。每条记录包含：id、所属提供方（`claude` 或 `codex`）、名称、Base URL、勾选的模型列表（id、可选的显示名）、默认模型 id（必须是列表中的一个）、Claude 的四档映射（可选）。
 - 每个提供方记录当前启用的接口 id，没有启用就是「官方」。
-- 全部放在 `$PASEO_HOME/api-endpoints/` 下，每个文件都是 0600（布局见 `docs/data-model.md` 第 9 节）：`endpoints.json`（接口与各提供方启用的接口）、`keys.json`、`takeover-claude.json`（接管记录）、`backups/`。
+- 全部放在 `$PASEO_HOME/api-endpoints/` 下，每个文件都是 0600（布局见 `docs/data-model.md` 第 9 节）：`endpoints.json`（接口与各提供方启用的接口）、`keys.json`、`takeover-claude.json` 与 `takeover-codex.json`（接管记录）、`codex-api-key`、`backups/`。
 - **API key 与其他字段分开存放，放在 daemon 自己的私有文件里，权限 0600。**
   - key 不进入 `config.json` 的 `agents.providers`，因为 `get_daemon_config` 会把这部分原样返回给客户端。
   - 任何 RPC 都不返回 key。只返回「是否已设置」。
-- Codex 的 key 另外保存为一个单独的 0600 文件，供 `auth.command` 读取。
+- Codex 的 key 另外保存为一个单独的 0600 文件 `codex-api-key`，供 `auth.command` 读取。全局只有一个，内容是专用表当前所属接口的 key，不带换行。`takeover-codex.json` 的 `providerTable.endpointId` 记录专用表属于哪个接口；切回官方后保留，删除该接口时连同 key 文件一起清掉。
 - 「接管记录」同样由 daemon 私有保存，每个被管理的文件一份。内容包括：
   - 负责的每个键的原值，以及这个键原本是否存在；
   - 上次写入的值，用来检测外部改动；
@@ -134,7 +134,7 @@
   - 测试连接；
   - 启用接口或切回官方；
   - 重新应用（处理外部修改时使用）。
-- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`，意外错误为 `unknown`。App 只把 `config_unparsable` 换成本地化文案，其余显示 daemon 原文。
+- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`、`codex_version_unsupported`，意外错误为 `unknown`（例如找不到 codex 可执行文件）。App 把 `config_unparsable` 和 `codex_version_unsupported` 换成本地化文案，后面接 daemon 原文；其余只显示 daemon 原文。
 - `provider` 在线上是字符串而非枚举；daemon 只接受已支持的内置提供方，其余返回 `unsupported_provider`。
 - 状态查询返回四类信息：
   - 当前模式；
@@ -160,8 +160,11 @@
   - Codex 补丁作用于 `config.toml`。负责的键：
     - 顶层 `model_provider` 和 `model`
     - 一个专用的 `[model_providers.<Osuna 专用 id>]` 表，包含 name、base_url、`wire_api = "responses"`，以及 `auth` 的 command、args、timeout_ms
-  - Osuna 专用的 Codex provider id 必须满足两个条件：不能与 Codex 的保留 id 重复；不能与现有「自定义 Codex 提供方」注入时用的 id 重复。
-- **TOML 必须用能保留格式的方式改写**，用户原有的注释和排版不能丢。依赖树里现有的 `smol-toml` 会重新序列化整份文件，所以不能用。具体选哪个库，在第一张工单里确定，并补写进 ADR 0004。
+  - Osuna 专用的 Codex provider id 是 `osuna_api_endpoint`：带下划线，而自定义提供方 id 只能是 `[a-z][a-z0-9-]*`，所以不会和请求级注入的 id 重复；也不是 Codex 的保留 id。全局只有这一张专用表，内容是最后启用的那个接口。
+  - 专用表整块生成、放在文件末尾；顶层键原地替换值（行尾注释保留），原本没有就插在最后一个顶层键之后，没有顶层键就放在文件开头。原值按文件里的写法（含引号）记录，恢复时原样放回。
+  - 官方模式下编辑专用表所属的接口：只重写专用表和 key 文件，不动顶层键，旧会话恢复时拿到新的 URL 和 key。
+- **TOML 必须用能保留格式的方式改写**，用户原有的注释和排版不能丢。选定 `toml-eslint-parser`：按节点位置拼接文本，同时做 TOML 1.0 严格校验；每次拼完再解析一遍，拼不出合法文件（例如 `model_providers` 是内联表）就按 `config_unparsable` 拒绝。它不认 BOM，先摘下再放回。否决的方案及理由见 ADR 0004。
+  - 已知限制：删除接口拿掉末尾的专用表时，文件末尾的多个空行会收成一个；原文件末尾没有换行时，删除后会多出一个换行。
 - **补丁的输出要稳定**：同样的输入永远得到同样的输出，文件里不相关的字节不变。
 - JSON（`settings.json`）用 `jsonc-parser` 的 `modify` 只改被编辑的属性，插入处那一行按文件自身的缩进重排。
 - 写 CLI 配置文件时原子替换并保留原权限位，不动所在目录的权限；新建的文件按 0600 创建。接管前文件不存在、切回官方后只剩空对象时，删除该文件；接管前是空对象时，按原文逐字节还原。
@@ -176,7 +179,7 @@
   - macOS / Linux：使用系统自带的读文件命令（`/bin/cat`），参数是 key 文件的绝对路径。
   - Windows：使用 PowerShell 的绝对路径，参数为 `-NoProfile -Command` 加读文件的写法，`timeout_ms` 调大。
   - 生成逻辑是一个纯函数，按平台输出 command 和 args。
-- **Codex 版本检查**：启用前复用现有的 Codex 版本探测，低于 0.118.0 就拒绝，并返回原因。
+- **Codex 版本检查**：启用前复用现有的 Codex 版本探测（按 `config.json` 里配置的 codex 命令执行 `--version`），低于 0.118.0 或无法解析版本就返回 `codex_version_unsupported`，消息里带探测到的原始输出。只查 Osuna 使用的 codex；终端里 PATH 上的 codex 若是另一个旧版本，查不到。
 - **Codex profile 检查**：启用前检查当前生效的 profile 是否覆盖了负责的顶层键。如果覆盖了，就标为健康状态之一，并给出提示。
 
 ### 上游请求

@@ -2949,6 +2949,7 @@ export const en = {
         deleteMessage: "Its URL, API key, and models are removed from this host.",
         deleteActiveMessage:
           "It's in use, so {{provider}} switches back to Official first. Running sessions and {{provider}} in your terminal switch too.",
+        codexVersionUnsupported: "Update Codex to 0.118.0 or later to use an API endpoint.",
         configUnparsable:
           "{{provider}}'s settings file couldn't be parsed, so nothing was changed.",
         form: {

@@ -2827,6 +2827,7 @@ export const ar: TranslationResources = {
         deleteMessage: "ستُزال عنوان URL ومفتاح API والنماذج الخاصة به من هذا المضيف.",
         deleteActiveMessage:
           "إنه قيد الاستخدام، لذا سيعود {{provider}} أولًا إلى الرسمي. ستتبدّل الجلسات الجارية و{{provider}} في الطرفية أيضًا.",
+        codexVersionUnsupported: "حدِّث Codex إلى 0.118.0 أو أحدث لاستخدام نقطة نهاية API.",
         configUnparsable: "تعذّر تحليل ملف إعدادات {{provider}}، لذا لم يتغيّر شيء.",
         form: {
           createTitle: "نقطة نهاية API جديدة",
