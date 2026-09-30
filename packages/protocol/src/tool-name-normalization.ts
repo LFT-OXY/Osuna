@@ -1,3 +1,6 @@
+// OpenCode、Pi、OMP 的原生写法各不相同，adapter 统一改成这个名字，app 不认 provider 各自的拼法。
+export const PASEO_CREATE_AGENT_TOOL_NAME = "paseo.create_agent";
+
 const TOOL_TOKEN_REGEX = /[a-z0-9]+/g;
 const STANDARD_NAMESPACE_SEPARATOR_REGEX = /[.:/]/;
 

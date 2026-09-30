@@ -68,6 +68,21 @@ Paseo tools are not implemented as MCP tools internally. They live in a shared t
 
 A provider that can register runtime tools directly should set `supportsNativePaseoTools: true` and consume the already-filtered `launchContext.paseoTools` in `createSession`/`resumeSession`. When native tools are present, `AgentManager` strips the internal Paseo MCP server from the provider launch config so the provider does not receive the same tools twice. Providers that only know MCP should keep `supportsMcpServers: true` and let the daemon inject `/mcp/agents`; the MCP server builds the same policy-filtered catalog for that caller. Filtering is enforced at catalog registration in both paths. Browser tools remain subject to the daemon browser-tools setting and browser-host availability.
 
+The app links a `create_agent` card in the parent timeline to the subagent it produced by matching the item's `callId` against the child's daemon-owned `paseo.parent-tool-call-id` label (gated by `server_info.features.subagentCallLinks`). A new provider has two jobs:
+
+- **Hand the daemon the provider's tool call id**, the same value the adapter writes as the timeline `callId`. Put it in `PaseoToolExecutionContext.providerToolCallId` at the channel boundary; the tool never knows which provider called it. The model's own `labels` value for that key is always dropped. With no id, the child gets no label and the app shows the generic tool card.
+- **Name the timeline item `paseo.create_agent` with the tool's own arguments as the input** (`PASEO_CREATE_AGENT_TOOL_NAME` in `@getpaseo/protocol/tool-name-normalization`). Claude's `mcp__paseo__create_agent` already resolves to the same Paseo leaf name; the app does not learn provider-specific spellings.
+
+| Provider | Tool call id source                              | Timeline name as the provider emits it                                          |
+| -------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Claude   | MCP `_meta["claudecode/toolUseId"]`              | `mcp__paseo__create_agent`                                                      |
+| Codex    | MCP `_meta.callId` (Codex 0.148+)                | `paseo.create_agent`                                                            |
+| Pi       | MCP `_meta["pi-mcp-adapter/toolCallId"]` (3.0+)  | `mcp` proxy or `mcp__paseo` with `{tool, args}`, or direct `paseo_create_agent` |
+| OpenCode | Bridge plugin `context.callID`, sent as a header | `paseo_create_agent`                                                            |
+| OMP      | `host_tool_call.toolCallId`                      | bare `create_agent`                                                             |
+
+OpenCode's `context.callID` is missing from the plugin's public types, so a future OpenCode release can drop it without warning. Pi calls that do not name the `paseo` server — a proxy `{tool: "create_agent"}` without `server`, or a direct tool under `toolPrefix: "none"` — keep their raw name and show the generic tool card.
+
 Pi is a process-backed provider. Paseo requires the user to have the `pi` binary installed and talks to it through `pi --mode rpc`; the server package does not embed Pi's SDK/runtime packages.
 
 Paseo's per-agent and daemon-wide system prompts are appended by its generated Pi integration extension. Paseo deliberately does not pass `--append-system-prompt`, because that flag replaces Pi's automatic `APPEND_SYSTEM.md` discovery instead of composing with it.

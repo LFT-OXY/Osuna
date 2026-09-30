@@ -3792,6 +3792,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(agentMentions): added in v0.12.x, remove gate after 2027-09-30.
         // 快照带 canCreateAgents 与原因码，app 据此开放 @ 智能体分组。
         agentMentions: z.boolean().optional(),
+        // COMPAT(subagentCallLinks): added in v0.12.x, remove gate after 2027-09-30.
+        // create_agent 的子智能体带 paseo.parent-tool-call-id，时间线工具名规范成 paseo.create_agent。
+        subagentCallLinks: z.boolean().optional(),
       })
       .optional(),
   })

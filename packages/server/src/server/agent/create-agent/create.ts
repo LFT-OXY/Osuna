@@ -25,7 +25,7 @@ import {
   appendTimelineItemIfAgentKnown,
   emitLiveTimelineItemIfAgentKnown,
 } from "../timeline-append.js";
-import { resolveCreateAgentIntent } from "./intent.js";
+import { resolveCreateAgentIntent, withParentToolCallIdLabel } from "./intent.js";
 
 export interface CreateAgentSessionWorktreeResult {
   sessionConfig: AgentSessionConfig;
@@ -104,6 +104,8 @@ export interface CreateAgentFromMcpInput {
   }) => void;
   onWorktreeCreated?: (createdWorktree: CreatePaseoWorktreeWorkflowResult) => void;
   callerAgentId?: string;
+  // 调用方 provider 侧的 tool call id；有父智能体时写成 PARENT_TOOL_CALL_ID_LABEL。
+  parentToolCallId?: string;
   callerContext?: {
     lockedCwd?: string;
     allowCustomCwd?: boolean;
@@ -338,6 +340,11 @@ async function resolveMcpCreateAgent(
       cwd: resolvedCwd,
     }),
   });
+  const labels = withParentToolCallIdLabel({
+    labels: intent.labels,
+    parentAgentId: intent.parentAgentId,
+    parentToolCallId: input.parentToolCallId,
+  });
   const resolvedCreateConfig = await resolveMcpProviderCreateConfig({
     dependencies,
     input,
@@ -358,7 +365,7 @@ async function resolveMcpCreateAgent(
       resolvedFeatures: resolvedCreateConfig.featureValues,
     }),
     createOptions: {
-      ...(Object.keys(intent.labels).length > 0 ? { labels: intent.labels } : {}),
+      ...(Object.keys(labels).length > 0 ? { labels } : {}),
       workspaceId: intent.workspaceId,
       owner: input.owner,
       env: input.env,

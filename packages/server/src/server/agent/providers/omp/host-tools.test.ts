@@ -197,6 +197,29 @@ describe("OMP host tools", () => {
     ]);
   });
 
+  test("hands the OMP tool call id to the Paseo tool", async () => {
+    const seenToolCallIds: Array<string | undefined> = [];
+    const omp = await OmpHostToolHarness.withTools([
+      {
+        name: "create_agent",
+        description: "Create a Paseo agent.",
+        handler: async (_input, context) => {
+          seenToolCallIds.push(context.providerToolCallId);
+          return { content: [], structuredContent: { agentId: "child-1" } };
+        },
+      },
+    ]);
+
+    await omp.call({
+      id: "host-1",
+      toolCallId: "omp-tool-call-1",
+      toolName: "create_agent",
+      arguments: { initialPrompt: "Inspect the bug" },
+    });
+
+    expect(seenToolCallIds).toEqual(["omp-tool-call-1"]);
+  });
+
   test("cancels an in-flight host tool and drops its late result", async () => {
     const omp = await OmpHostToolHarness.cancellable();
 

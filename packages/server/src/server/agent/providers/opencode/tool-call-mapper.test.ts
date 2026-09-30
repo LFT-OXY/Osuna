@@ -527,6 +527,21 @@ describe("opencode tool-call mapper", () => {
     });
   });
 
+  it("names bridged Paseo create_agent calls paseo.create_agent with flat input", () => {
+    const input = { title: "Review", provider: "codex/gpt-5.4", initialPrompt: "Review it" };
+    const item = expectMapped(
+      mapOpencodeToolCall({
+        toolName: "paseo_create_agent",
+        callId: "opencode-call-create-1",
+        status: "running",
+        input,
+      }),
+    );
+
+    expect(item.name).toBe("paseo.create_agent");
+    expect(item.detail).toEqual({ type: "unknown", input, output: null });
+  });
+
   it("drops tool calls when callId is missing", () => {
     const item = mapOpencodeToolCall({
       toolName: "read_file",

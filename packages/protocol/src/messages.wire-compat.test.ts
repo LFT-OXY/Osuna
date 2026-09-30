@@ -351,6 +351,22 @@ describe("wire schema compatibility", () => {
     expect(current.features?.agentMentions).toBe(true);
   });
 
+  test("server_info advertises subagentCallLinks as an optional feature", () => {
+    const legacy = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "old-daemon",
+      features: {},
+    });
+    const current = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "new-daemon",
+      features: { subagentCallLinks: true },
+    });
+
+    expect(legacy.features?.subagentCallLinks).toBeUndefined();
+    expect(current.features?.subagentCallLinks).toBe(true);
+  });
+
   test("notification timeline items parse their level and message", () => {
     expect(
       AgentTimelineItemPayloadSchema.parse({

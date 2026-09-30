@@ -425,6 +425,69 @@ if (this.paseoToolsEnabled && isPaseoToolPolicyEnabled(policy) && client.capabil
 if (isPaseoToolPolicyEnabled(paseoToolPolicy) && client.capabilities.supportsNativePaseoTools) {
 ```
 
+## Scenario: a daemon-owned agent label fed from the provider's tool call
+
+Reference implementation: `paseo.parent-tool-call-id` (multi-agent ticket 04). Reuse this shape when a Paseo tool needs a fact only the provider channel knows.
+
+### 1. Scope / Trigger
+
+- A tool handler needs provider-side call identity (the id that becomes the timeline `callId`), and the result must be a label the model cannot forge. No wire schema change: labels are already `Record<string, string>`; the feature is gated by `server_info.features.subagentCallLinks`.
+
+### 2. Signatures
+
+- `PaseoToolExecutionContext.providerToolCallId?: string` (`agent/tools/types.ts`).
+- Channel boundaries fill it: `mcp-server.ts` `readProviderToolCallId(context)` from `_meta` keys `claudecode/toolUseId` → `callId` → `pi-mcp-adapter/toolCallId`; `opencode/bridge-plugin.mjs` sends `context.callID` as header `X-Paseo-Tool-Call-Id`, `opencode/bridge.ts` reads it; `omp/host-tools.ts` passes `request.toolCallId`.
+- `CreateAgentFromMcpInput.parentToolCallId?: string`; `withParentToolCallIdLabel({ labels, parentAgentId, parentToolCallId })` in `create-agent/intent.ts`, applied in `resolveMcpCreateAgent` only.
+- Constants: `PARENT_TOOL_CALL_ID_LABEL` (`@getpaseo/protocol/agent-labels`), `PASEO_CREATE_AGENT_TOOL_NAME = "paseo.create_agent"` (`@getpaseo/protocol/tool-name-normalization`).
+
+### 3. Contracts
+
+- The tool-created path (`kind: "mcp"`) always drops a model-supplied value for the key (from `labels` or `childAgentDefaultLabels`), then writes it only when there is a parent agent and an id. Legacy detached create gets no label.
+- The WebSocket session create path (`session.ts`) does not strip it: that caller is the user/app, and app e2e seeds children through labels.
+- Detach keeps the label (`detachedAgentLabelPatch` clears only the parent and open-tab labels).
+- Timeline names: OpenCode `paseo_create_agent`, OMP bare `create_agent`, and Pi `mcp` proxy / `mcp__paseo` `{tool, args}` / direct `paseo_create_agent` / `mcp__paseo_create_agent` become `paseo.create_agent` with flat input, in the adapters' `parseToolArgs` / tool-call mapper so live and history share it. Other Paseo tools keep their names.
+
+### 4. Validation & Error Matrix
+
+- No id (old Claude Code, Codex < 0.148, pi-mcp-adapter < 3.0, ACP providers) → no label, no error.
+- Id empty or whitespace → treated as absent; otherwise trimmed.
+- Pi proxy `{tool: "create_agent"}` without `server: "paseo"`, or Pi direct tool under `toolPrefix: "none"` → not renamed (ambiguous server).
+- Pi end event without a tracked start → name may still resolve from `result.details`, but input is `null`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Codex parent calls `create_agent` with `_meta.callId`; child carries parent id and call id; app matches the timeline item.
+- Base: provider sends no id; child has only the parent label; app shows the generic tool card.
+- Bad: reading the id inside the tool from provider-specific shapes — the tool would learn about providers, and OpenCode/OMP never reach MCP.
+
+### 6. Tests Required
+
+- Unit `agent/mcp-server.test.ts` "parent tool call id label": each `_meta` key, override of a model value, no id → no label (in-memory MCP client, real `AgentManager` + `AgentStorage`).
+- `opencode/bridge.test.ts`: plugin with and without `callID` → `providerToolCallId` seen by the catalog. `omp/host-tools.test.ts`: `toolCallId` reaches the handler.
+- Mapper tests for OpenCode, Pi (all six shapes), OMP: name `paseo.create_agent`, detail `{ type: "unknown", input: <flat args>, output: null }`.
+- Daemon E2E `daemon-e2e/subagent-call-links.e2e.test.ts`: `features.subagentCallLinks`, real `/mcp/agents?callerAgentId=` with and without `_meta`.
+- Protocol `messages.wire-compat.test.ts`: `subagentCallLinks` optional.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Strips in the shared intent: the app's WS create path loses labels it set on purpose.
+const { [PARENT_TOOL_CALL_ID_LABEL]: _dropped, ...labels } = { ...input.labels };
+```
+
+#### Correct
+
+```ts
+// resolveMcpCreateAgent — tool path only.
+const labels = withParentToolCallIdLabel({
+  labels: intent.labels,
+  parentAgentId: intent.parentAgentId,
+  parentToolCallId: input.parentToolCallId,
+});
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

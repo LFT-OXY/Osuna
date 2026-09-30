@@ -8,10 +8,10 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] daemon 测试：带 `_meta` tool call id 调 `/mcp/agents?callerAgentId=<父>` 的 `create_agent`，子智能体带 `paseo.parent-tool-call-id`；模型在 labels 里传同名键时被覆盖；不带 id 时没有该标签。
-- [ ] adapter 单测：五个来源各自取到 id；OpenCode、Pi、OMP 的时间线工具名为 `paseo.create_agent`，入参平铺。
-- [ ] `server_info.features.subagentCallLinks` 存在。
-- [ ] `docs/providers.md` 已更新。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] daemon 测试：带 `_meta` tool call id 调 `/mcp/agents?callerAgentId=<父>` 的 `create_agent`，子智能体带 `paseo.parent-tool-call-id`；模型在 labels 里传同名键时被覆盖；不带 id 时没有该标签。
+- [x] adapter 单测：五个来源各自取到 id；OpenCode、Pi、OMP 的时间线工具名为 `paseo.create_agent`，入参平铺。
+- [x] `server_info.features.subagentCallLinks` 存在。
+- [x] `docs/providers.md` 已更新。
+- [x] `npm run typecheck`、`npm run lint` 通过。

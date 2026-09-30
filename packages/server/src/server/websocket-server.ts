@@ -1689,6 +1689,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.usageService ? { usage: true } : {}),
         // COMPAT(agentMentions): added in v0.12.x, remove gate after 2027-09-30.
         agentMentions: true,
+        // COMPAT(subagentCallLinks): added in v0.12.x, remove gate after 2027-09-30.
+        subagentCallLinks: true,
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,

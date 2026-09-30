@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PASEO_CREATE_AGENT_TOOL_NAME } from "@getpaseo/protocol/tool-name-normalization";
 
 import type { ToolCallTimelineItem } from "../../agent-sdk-types.js";
 import { normalizeToolCallStatus } from "../tool-call-mapper-utils.js";
@@ -13,6 +14,9 @@ interface OpencodeToolCallParams {
   error?: unknown;
   metadata?: Record<string, unknown>;
 }
+
+// bridge 插件和 OpenCode 的 MCP 客户端都把 Paseo 工具命名为 paseo_<name>。
+const OPENCODE_CREATE_AGENT_TOOL_NAME = "paseo_create_agent";
 
 const OpencodeRawToolCallSchema = z
   .object({
@@ -37,7 +41,8 @@ export function mapOpencodeToolCall(params: OpencodeToolCallParams): ToolCallTim
   if (callId === null) {
     return null;
   }
-  const name = raw.toolName.trim();
+  const rawName = raw.toolName.trim();
+  const name = rawName === OPENCODE_CREATE_AGENT_TOOL_NAME ? PASEO_CREATE_AGENT_TOOL_NAME : rawName;
   const input = raw.input ?? null;
   const output = raw.output ?? null;
   const error = raw.error ?? null;

@@ -145,7 +145,8 @@ Rules:
 ### 子智能体关联（server adapter）
 
 - daemon 读出 provider 侧的 tool call id，经工具执行上下文传给 `create_agent`，作为 daemon 自有的子智能体标签 `paseo.parent-tool-call-id` 写入，覆盖模型传入的同名键。来源：Claude `_meta["claudecode/toolUseId"]`、Codex `_meta.callId`、Pi `_meta["pi-mcp-adapter/toolCallId"]`、OpenCode 插件的 `context.callID`、OMP `toolCallId`。拿不到 id 就不写标签，不从工具结果里补。
-- OpenCode、Pi、OMP 的 adapter 往时间线写条目时，统一把工具名规范成 `paseo.create_agent`、入参平铺（Pi 要拆掉 `{tool, args}` 这层）。app 只认标准写法。
+  - 只在工具创建路径（MCP、OpenCode bridge、OMP host tool）剥掉模型传入的同名键；WebSocket 会话创建路径不剥，app e2e 靠它按标签种入子智能体。只有存在父智能体时才写，旧式 detached 创建不写。脱离（detach）保留这个标签。
+- OpenCode、Pi、OMP 的 adapter 往时间线写条目时，统一把工具名规范成 `paseo.create_agent`、入参平铺（Pi 要拆掉 `{tool, args}` 这层）。app 只认标准写法。只改 `create_agent`，其他 Paseo 工具保持原名。Pi 没有指明 `paseo` 服务器的调用（代理里不带 `server` 的裸 `create_agent`、`toolPrefix: "none"` 的直连工具）不改名，退回通用工具卡。
 - 各 adapter 在 provider 子智能体的权限请求 `metadata` 里补上子智能体 id：Codex 用 `threadId`，Claude 用 SDK 的 `agentID`，OpenCode 用 `sessionID`。OMP 没有来源，v1 不归属。不扩展 provider 子智能体描述符的 status。
 
 ### 子智能体权限的通知与提醒（server）
