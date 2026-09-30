@@ -7,6 +7,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { PluginClientStateProvider } from "@getpaseo/plugin/client/host";
 import { CircleAlert } from "lucide-react-native";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Platform, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import invariant from "tiny-invariant";
@@ -65,7 +66,7 @@ function PluginPanelBody({ theme }: { theme: PluginTheme }) {
     return <PluginPanelUnavailable />;
   }
   if (!client) {
-    return <PluginPanelUnavailable message="Plugin host is offline." />;
+    return <PluginPanelUnavailable hostOffline />;
   }
 
   let panel;
@@ -118,14 +119,13 @@ function PluginPanel() {
   return <ThemedPluginPanelBody uniProps={pluginThemeMapping} />;
 }
 
-function PluginPanelUnavailable({
-  message = "This plugin panel is unavailable.",
-}: {
-  message?: string;
-}) {
+function PluginPanelUnavailable({ hostOffline = false }: { hostOffline?: boolean }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.unavailable}>
-      <Text style={styles.unavailableText}>{message}</Text>
+      <Text style={styles.unavailableText}>
+        {hostOffline ? t("panels.plugin.hostOffline") : t("panels.plugin.unavailable")}
+      </Text>
     </View>
   );
 }
@@ -134,15 +134,16 @@ function usePluginPanelDescriptor(
   target: Extract<import("@/workspace-tabs/model").WorkspaceTabTarget, { kind: "plugin" }>,
   context: { serverId: string },
 ): PanelDescriptor {
+  const { t } = useTranslation();
   const plugin = useInstalledPlugin(context.serverId, target.pluginId);
   const panel = plugin?.workspacePanels.find(
     (contribution) => contribution.id === target.panelId && contribution.context === target.context,
   );
   if (!panel) {
     return {
-      label: "Plugin unavailable",
+      label: t("panels.plugin.unavailableLabel"),
       subtitle: target.pluginId,
-      tooltip: "This plugin panel is unavailable",
+      tooltip: t("panels.plugin.unavailableTooltip"),
       titleState: "ready",
       icon: CircleAlert,
       statusBucket: null,

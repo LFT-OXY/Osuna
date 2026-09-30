@@ -121,7 +121,7 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
     [additionalModels, patchConfig, provider, refresh],
   );
 
-  // 写入成功即算添加成功，刷新不阻塞添加行收起；新模型经配置先出现在「自定义 Models」里。
+  // 写入成功即算添加成功，刷新不阻塞添加行收起；新模型经配置先出现在「自定义模型」里。
   const handleAddCustomModel = useCallback(
     async (modelId: string) => {
       await patchConfig({

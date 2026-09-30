@@ -60,6 +60,14 @@ export function renderWorkspaceRouteGate(input: {
           onManageHost={input.actions.onManageHost}
         />
       );
+    case "needsAppUpdate":
+      return (
+        <WorkspaceEmptyState
+          titleKey="workspace.route.recovery.unavailableTitle"
+          descriptionKey="workspace.route.recovery.updateToRecover"
+          onDismiss={input.actions.onDismissMissingWorkspace}
+        />
+      );
     case "recoveryUnavailable":
       return (
         <WorkspaceEmptyState
@@ -255,11 +263,13 @@ function WorkspaceEmptyState({
   titleKey,
   hostName,
   description,
+  descriptionKey,
   onDismiss,
 }: {
   titleKey: "workspace.route.needsHostUpgrade" | "workspace.route.recovery.unavailableTitle";
   hostName?: string;
   description?: string;
+  descriptionKey?: "workspace.route.recovery.updateToRecover";
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
@@ -268,7 +278,9 @@ function WorkspaceEmptyState({
     <View style={styles.emptyState}>
       <View style={styles.textStack}>
         <Text style={styles.title}>{t(titleKey)}</Text>
-        <Text style={styles.description}>{description ?? hostName}</Text>
+        <Text style={styles.description}>
+          {descriptionKey ? t(descriptionKey) : (description ?? hostName)}
+        </Text>
       </View>
       <View style={styles.actions}>
         <Button size="sm" variant="default" leftIcon={ArrowLeftToLine} onPress={onDismiss}>

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { HostProfile } from "@/types/host-connection";
@@ -41,12 +42,13 @@ export function HostFilter({
   triggerTestID,
   hostOptionTestID,
 }: HostFilterProps): ReactElement {
+  const { t } = useTranslation();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterAnchorRef = useRef<View>(null);
 
   const selectedHostLabel = useMemo(
-    () => getHostPickerLabel(hosts, selectedHost, { includeAllHost }),
-    [hosts, includeAllHost, selectedHost],
+    () => getHostPickerLabel(t, hosts, selectedHost, { includeAllHost }),
+    [hosts, includeAllHost, selectedHost, t],
   );
 
   const handleFilterOpen = useCallback(() => setIsFilterOpen(true), []);
@@ -70,7 +72,7 @@ export function HostFilter({
       anchorRef={filterAnchorRef}
       includeAllHost={includeAllHost}
       searchable={false}
-      title="Filter by host"
+      title={t("hostPicker.filter.title")}
       desktopPlacement="bottom-start"
       hostOptionTestID={hostOptionTestID}
     >
@@ -80,7 +82,9 @@ export function HostFilter({
           style={filterTriggerStyle}
           testID={triggerTestID}
           accessibilityRole="button"
-          accessibilityLabel={`Filter: ${selectedHostLabel}`}
+          accessibilityLabel={t("hostPicker.filter.accessibilityLabel", {
+            host: selectedHostLabel,
+          })}
         >
           {selectedHost === ALL_HOSTS_OPTION_ID ? (
             <ThemedServer size={14} uniProps={mutedColorMapping} />

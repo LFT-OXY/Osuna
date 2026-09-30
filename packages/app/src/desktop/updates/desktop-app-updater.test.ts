@@ -1012,7 +1012,7 @@ describe("formatStatusText", () => {
   it("uses the active app language for local status wrappers", async () => {
     await i18n.changeLanguage("zh-CN");
     try {
-      expect(format({ status: "checking" })).toBe("正在检查 app 更新...");
+      expect(format({ status: "checking" })).toBe("正在检查应用更新...");
       expect(format({ status: "available", targetVersion: "1.2.3" })).toBe("有可用更新：v1.2.3");
       expect(format({ status: "downloaded", targetVersion: "1.2.3" })).toBe("更新已就绪：v1.2.3");
     } finally {

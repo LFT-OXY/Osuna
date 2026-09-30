@@ -67,7 +67,12 @@ import type { Theme } from "@/styles/theme";
 import { getProviderIcon } from "@/components/provider-icons";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
 import { MentionDefaultsSection } from "./mention-defaults-section";
-import { restartDaemonFromSettings, updateDaemonFromSettings } from "./daemon-lifecycle";
+import {
+  describeDaemonLifecycleFailure,
+  renderDaemonLifecycleText,
+  restartDaemonFromSettings,
+  updateDaemonFromSettings,
+} from "./daemon-lifecycle";
 
 const ThemedRestart = withUnistyles(RotateCw);
 const ThemedUpdate = withUnistyles(ArrowUpToLine);
@@ -587,7 +592,7 @@ function RestartDaemonCard({ host }: { host: HostProfile }) {
       } catch (error) {
         Alert.alert(
           t("settings.host.daemon.restart.requestFailedTitle"),
-          error instanceof Error ? error.message : String(error),
+          renderDaemonLifecycleText(t, describeDaemonLifecycleFailure(error)),
         );
       } finally {
         if (isMountedRef.current) setIsRestarting(false);
@@ -792,7 +797,10 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
               status: "failed",
               title: t("settings.host.daemon.update.requestFailedTitle"),
               message: t("settings.host.daemon.update.requestFailedMessage", {
-                error: error instanceof Error ? error.message : "Unknown error",
+                error:
+                  error instanceof Error
+                    ? renderDaemonLifecycleText(t, describeDaemonLifecycleFailure(error))
+                    : t("settings.host.daemon.lifecycleErrors.unknown"),
               }),
             });
           });
@@ -902,6 +910,7 @@ function InjectPaseoToolsCard({ serverId }: { serverId: string }) {
 }
 
 function AutoArchiveMergedWorkspacesCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
 
@@ -910,12 +919,12 @@ function AutoArchiveMergedWorkspacesCard({ serverId }: { serverId: string }) {
       void patchConfig({ autoArchiveAfterMerge: next }).catch((error) => {
         console.error("[HostPage] Failed to update auto-archive after merge", error);
         Alert.alert(
-          "Unable to update workspaces",
+          t("settings.host.workspaces.autoArchiveMerged.updateFailed"),
           error instanceof Error ? error.message : String(error),
         );
       });
     },
-    [patchConfig],
+    [patchConfig, t],
   );
 
   if (!isConnected) return null;
@@ -924,15 +933,17 @@ function AutoArchiveMergedWorkspacesCard({ serverId }: { serverId: string }) {
     <View style={settingsStyles.card} testID="host-page-auto-archive-merged-workspaces-card">
       <View style={settingsStyles.row}>
         <View style={settingsStyles.rowContent}>
-          <Text style={settingsStyles.rowTitle}>Archive merged PR workspaces</Text>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.workspaces.autoArchiveMerged.title")}
+          </Text>
           <Text style={settingsStyles.rowHint}>
-            Automatically archive clean Osuna workspaces after their pull request is merged
+            {t("settings.host.workspaces.autoArchiveMerged.hint")}
           </Text>
         </View>
         <Switch
           value={config?.autoArchiveAfterMerge === true}
           onValueChange={handleValueChange}
-          accessibilityLabel="Archive merged PR workspaces"
+          accessibilityLabel={t("settings.host.workspaces.autoArchiveMerged.accessibilityLabel")}
           testID="host-page-auto-archive-merged-workspaces-switch"
         />
       </View>
@@ -941,6 +952,7 @@ function AutoArchiveMergedWorkspacesCard({ serverId }: { serverId: string }) {
 }
 
 function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
 
@@ -949,12 +961,12 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
       void patchConfig({ enableTerminalAgentHooks: next }).catch((error) => {
         console.error("[HostPage] Failed to update terminal agent hooks", error);
         Alert.alert(
-          "Unable to update terminal agent hooks",
+          t("settings.host.terminalAgents.hooks.updateFailed"),
           error instanceof Error ? error.message : String(error),
         );
       });
     },
-    [patchConfig],
+    [patchConfig, t],
   );
 
   if (!isConnected) return null;
@@ -963,16 +975,15 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
     <View style={settingsStyles.card} testID="host-page-terminal-agent-hooks-card">
       <View style={settingsStyles.row}>
         <View style={settingsStyles.rowContent}>
-          <Text style={settingsStyles.rowTitle}>Enable terminal agent hooks</Text>
-          <Text style={settingsStyles.rowHint}>
-            Get notifications and status from terminal agents. This installs hooks in your agent
-            config files.
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.terminalAgents.hooks.title")}
           </Text>
+          <Text style={settingsStyles.rowHint}>{t("settings.host.terminalAgents.hooks.hint")}</Text>
         </View>
         <Switch
           value={config?.enableTerminalAgentHooks === true}
           onValueChange={handleValueChange}
-          accessibilityLabel="Enable terminal agent hooks"
+          accessibilityLabel={t("settings.host.terminalAgents.hooks.accessibilityLabel")}
           testID="host-page-terminal-agent-hooks-switch"
         />
       </View>
@@ -1647,6 +1658,7 @@ function TerminalProfilesSection({ serverId }: { serverId: string }) {
 }
 
 export function HostTerminalsPage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const host = useHostProfile(serverId);
 
   if (!host) {
@@ -1655,7 +1667,7 @@ export function HostTerminalsPage({ serverId }: { serverId: string }) {
 
   return (
     <View>
-      <SettingsSection title="Terminal agents">
+      <SettingsSection title={t("settings.host.terminalAgents.sectionTitle")}>
         <EnableTerminalAgentHooksCard serverId={serverId} />
       </SettingsSection>
       <TerminalProfilesSection serverId={serverId} />

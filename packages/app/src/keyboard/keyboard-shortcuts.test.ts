@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import { formatShortcut } from "@/utils/format-shortcut";
 import {
   buildKeyboardShortcutHelpSections,
@@ -801,6 +802,26 @@ describe("keyboard-shortcut help sections", () => {
     expect(openProject?.label).toBe("Open project");
     expect(cycleAgentMode?.labelKey).toBe("settings.shortcuts.help.cycleAgentMode");
     expect(showShortcuts?.noteKey).toBe("settings.shortcuts.helpNotes.showKeyboardShortcuts");
+  });
+
+  it("gives every help row a translated label", () => {
+    const platforms = [
+      { isMac: true, isDesktop: true },
+      { isMac: false, isDesktop: true },
+      { isMac: true, isDesktop: false },
+      { isMac: false, isDesktop: false },
+    ];
+    const untranslated: string[] = [];
+    for (const platform of platforms) {
+      for (const section of buildKeyboardShortcutHelpSections(platform)) {
+        for (const row of section.rows) {
+          if (i18n.exists(row.labelKey)) continue;
+          untranslated.push(`${section.id}:${row.id}`);
+        }
+      }
+    }
+
+    expect(untranslated).toEqual([]);
   });
 
   it("gives every help row an explicit place in its section's order", () => {

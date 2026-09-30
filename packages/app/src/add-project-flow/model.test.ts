@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import {
   backAddProjectPage,
   chooseAddProjectHost,
@@ -16,10 +17,13 @@ import {
   type AddProjectHost,
 } from "./model";
 import {
+  ADD_PROJECT_PAGE_KEYS,
   addProjectMethodEmptyText,
   buildAddProjectMethods,
   buildCloneLocationOptions,
   buildManualGithubRepositoryChoices,
+  renderAddProjectCopy,
+  type AddProjectCopy,
 } from "./options";
 
 const HOST: AddProjectHost = {
@@ -115,7 +119,7 @@ describe("Add Project options", () => {
     const outdatedHost = { ...HOST, canAddProject: false };
 
     expect(buildAddProjectMethods(outdatedHost)).toEqual([]);
-    expect(addProjectMethodEmptyText(outdatedHost)).toBe("Update the host to use Add Project.");
+    expect(addProjectMethodEmptyText(outdatedHost)).toEqual({ key: "addProject.empty.updateHost" });
   });
 
   it("keeps host-upgrade methods discoverable while hiding local-only Browse", () => {
@@ -130,19 +134,22 @@ describe("Add Project options", () => {
     ).toEqual([
       {
         id: "directory-search",
-        label: "Search for directory",
-        description: "Find a directory on Local",
+        label: { key: "addProject.methods.directorySearch.label" },
+        description: {
+          key: "addProject.methods.directorySearch.description",
+          params: { host: "Local" },
+        },
       },
       {
         id: "github",
-        label: "Clone from GitHub",
-        description: "Update this host to clone GitHub repositories",
+        label: { key: "addProject.methods.github.label" },
+        description: { key: "addProject.methods.github.updateHost" },
         disabled: true,
       },
       {
         id: "new-directory",
-        label: "New directory",
-        description: "Update this host to create directories",
+        label: { key: "addProject.methods.newDirectory.label" },
+        description: { key: "addProject.methods.newDirectory.updateHost" },
         disabled: true,
       },
     ]);
@@ -154,11 +161,20 @@ describe("Add Project options", () => {
         id: "manual:git@github.com:getpaseo/paseo.git",
         nameWithOwner: "getpaseo/paseo",
         cloneUrl: "git@github.com:getpaseo/paseo.git",
+        hint: { key: "addProject.rows.cloneRepositoryUrl" },
       }),
     ]);
     expect(buildManualGithubRepositoryChoices("getpaseo/paseo")).toEqual([
-      expect.objectContaining({ cloneProtocol: "https", cloneUrl: "getpaseo/paseo" }),
-      expect.objectContaining({ cloneProtocol: "ssh", cloneUrl: "getpaseo/paseo" }),
+      expect.objectContaining({
+        cloneProtocol: "https",
+        cloneUrl: "getpaseo/paseo",
+        hint: { key: "addProject.rows.cloneOwnerRepoVia", params: { protocol: "HTTPS" } },
+      }),
+      expect.objectContaining({
+        cloneProtocol: "ssh",
+        cloneUrl: "getpaseo/paseo",
+        hint: { key: "addProject.rows.cloneOwnerRepoVia", params: { protocol: "SSH" } },
+      }),
     ]);
     expect(buildManualGithubRepositoryChoices("paseo")).toEqual([]);
   });
@@ -175,14 +191,14 @@ describe("Add Project options", () => {
         id: "~/dev",
         path: "~/dev",
         displayPath: "~/dev/paseo",
-        secondaryText: "Parent directory: ~/dev",
+        secondaryText: { key: "addProject.rows.parentDirectory", params: { path: "~/dev" } },
         disabled: false,
       },
       {
         id: "~/workspace",
         path: "~/workspace",
         displayPath: "~/workspace/paseo",
-        secondaryText: "Already exists",
+        secondaryText: { key: "addProject.rows.alreadyExists" },
         disabled: true,
       },
     ]);
@@ -200,9 +216,87 @@ describe("Add Project options", () => {
         id: "/Users/moboudra/dev",
         path: "/Users/moboudra/dev",
         displayPath: "/Users/moboudra/dev/dotfiles",
-        secondaryText: "Parent directory: /Users/moboudra/dev",
+        secondaryText: {
+          key: "addProject.rows.parentDirectory",
+          params: { path: "/Users/moboudra/dev" },
+        },
         disabled: false,
       },
     ]);
+  });
+});
+
+describe("Add Project options rendered in English", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+    await i18n.changeLanguage("en");
+  });
+
+  function render(copy: AddProjectCopy): string {
+    return renderAddProjectCopy(i18n.t, copy);
+  }
+
+  it("keeps the method labels and descriptions", () => {
+    const methods = buildAddProjectMethods({ ...HOST, canSearchGithubRepositories: false });
+    expect(methods.map((method) => [render(method.label), render(method.description)])).toEqual([
+      ["Search for directory", "Find a directory on Local"],
+      ["Browse", "Choose or create a directory in Finder"],
+      ["Clone from GitHub", "Enter a GitHub URL or owner/repo"],
+      ["New directory", "Create an empty directory on Local"],
+    ]);
+    expect(
+      render(
+        buildAddProjectMethods(HOST).find((method) => method.id === "github")?.description ?? {
+          key: "missing",
+        },
+      ),
+    ).toBe("Search projects available to your GitHub account");
+    expect(
+      buildAddProjectMethods({
+        ...HOST,
+        canCloneGithubRepositories: false,
+        canCreateDirectory: false,
+      })
+        .filter((method) => method.disabled)
+        .map((method) => render(method.description)),
+    ).toEqual([
+      "Update this host to clone GitHub repositories",
+      "Update this host to create directories",
+    ]);
+  });
+
+  it("resolves a title and panel label for every page", () => {
+    for (const pageKey of Object.values(ADD_PROJECT_PAGE_KEYS)) {
+      expect(i18n.exists(`addProject.titles.${pageKey}`), pageKey).toBe(true);
+      expect(i18n.exists(`addProject.panelAccessibilityLabels.${pageKey}`), pageKey).toBe(true);
+    }
+    expect(i18n.t("addProject.panelAccessibilityLabels.githubSearch")).toBe(
+      "Add project: github-search",
+    );
+  });
+
+  it("keeps the empty, manual clone, and destination hints", () => {
+    expect(render(addProjectMethodEmptyText({ ...HOST, canAddProject: false }))).toBe(
+      "Update the host to use Add Project.",
+    );
+    expect(render(addProjectMethodEmptyText(HOST))).toBe("No matching options");
+    expect(render(addProjectMethodEmptyText(null))).toBe("No matching options");
+    expect(
+      buildManualGithubRepositoryChoices("getpaseo/paseo").map((choice) => render(choice.hint)),
+    ).toEqual(["Clone owner/repo via HTTPS", "Clone owner/repo via SSH"]);
+    expect(
+      buildManualGithubRepositoryChoices("https://github.com/getpaseo/paseo.git").map((choice) =>
+        render(choice.hint),
+      ),
+    ).toEqual(["Clone this repository URL"]);
+    expect(
+      buildCloneLocationOptions({
+        parents: ["~/dev", "~/workspace"],
+        repositoryName: "paseo",
+        existingPaths: ["~/workspace/paseo"],
+      }).map((option) => render(option.secondaryText)),
+    ).toEqual(["Parent directory: ~/dev", "Already exists"]);
   });
 });
