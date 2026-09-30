@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { realpath } from "node:fs/promises";
 import type { ChildProcess } from "node:child_process";
 import type { Logger } from "pino";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
@@ -90,7 +91,7 @@ export class ProviderUpgradeService {
     if (entry?.source !== "builtin") {
       return unsupported(provider);
     }
-    // 没有升级命令的提供方（codex 在安装方式判断之前）不必先找可执行文件。
+    // 没有升级命令的提供方不必先找可执行文件。
     if (!hasProviderUpgradeCommand(provider)) {
       return unsupported(provider);
     }
@@ -103,17 +104,33 @@ export class ProviderUpgradeService {
         error: `The ${provider} CLI was not found`,
       };
     }
-    const command = resolveProviderUpgradeCommand({ provider, launch });
+    // 解析不了（比如刚被删掉）就按原路径判断：只会更可能落到"判断不出"，不会选错升级方式。
+    const executableRealPath = await realpath(launch.executable).catch(() => launch.executable);
+    const command = resolveProviderUpgradeCommand({
+      provider,
+      launch,
+      executableRealPath,
+      platform: process.platform,
+    });
     if (command.kind === "unsupported") {
       return unsupported(provider);
+    }
+    if (command.kind === "install_method_unknown") {
+      return {
+        provider,
+        ok: false,
+        errorCode: "install_method_unknown",
+        error: `Could not tell how ${provider} was installed from ${executableRealPath}`,
+      };
     }
 
     const commandLine = [command.command, ...command.args].join(" ");
     this.options.logger.info({ provider, command: commandLine }, "Upgrading provider CLI");
+    const envOverlay = { ...launch.env.envOverlay, ...command.env };
     const outcome = await runUpgradeCommand({
       command: command.command,
       args: command.args,
-      env: launch.env,
+      env: { ...launch.env, envOverlay },
       timeoutMs: this.timeoutMs,
       signal: this.abort.signal,
     });

@@ -138,12 +138,12 @@
 - **升级服务**：新建一个模块，负责选定升级命令、执行命令、执行后重新探测。
   - 升级命令：claude 用 `update`，copilot 用 `update`，opencode 用 `upgrade`，pi 用 `update`，omp 用 `update`，都用这个提供方实际使用的可执行文件来执行。
     - 可执行文件由各家 client 的 `resolveCliLaunch` 给出。config 用 replace 模式换掉的命令，前面的 argv 保留；append 模式追加的是会话启动参数，升级时丢掉，否则 CLI 会把子命令当成提示词。
-    - 没有升级命令的提供方在找可执行文件之前就返回"不支持"（06 里的 codex，停用时也一样）。
-  - Codex 按可执行文件的真实路径判断安装方式：
-    - 路径在官方独立安装目录下：重跑官方安装脚本，并设 `CODEX_NON_INTERACTIVE=1`；Windows 用官方的 PowerShell 安装脚本
-    - 路径在 Homebrew 前缀下：`brew upgrade --cask codex`
-    - 路径在 npm 全局目录下：`npm install -g @openai/codex@latest`
-    - 其他情况（包括 Microsoft Store 版）：返回"判断不出安装方式"
+    - 没有升级命令的提供方在找可执行文件之前就返回"不支持"。Codex 有了按安装方式的升级之后，停用或找不到可执行文件时返回"找不到可执行文件"（`not_installed`）。
+  - Codex 按可执行文件的真实路径（解析过符号链接）判断安装方式，规则和命令对齐上游 `codex-rs/install-context` 与 `update_action.rs`：
+    - 路径在 `$CODEX_HOME/packages/standalone/releases/` 下：重跑官方安装脚本，并设 `CODEX_NON_INTERACTIVE=1`；Windows 用官方的 PowerShell 安装脚本。同时把从路径里取出的 `CODEX_HOME` 传给脚本，否则用户改过 `CODEX_HOME` 时，缺省的 `~/.codex` 会装出第二份。
+    - 路径在 npm 全局目录下（POSIX `<前缀>/lib/node_modules/@openai/codex/`，Windows 名为 `npm` 的全局目录，缺省 `%APPDATA%\npm`）：`npm install -g --prefix <前缀> @openai/codex@latest`。带 `--prefix` 是因为 PATH 上先找到的 npm 可能属于另一个 node（nvm、Homebrew），不指定会装到别处。Homebrew 的 node 把全局包放在 `/opt/homebrew/lib/node_modules` 下，这属于 npm 安装，所以 Homebrew 只认 `Caskroom/codex`，不按前缀认。
+    - macOS 上路径在 `/opt/homebrew/Caskroom/codex/` 或 `/usr/local/Caskroom/codex/` 下：`<前缀>/bin/brew upgrade --cask codex`。只认 cask：formula 版和手放进 `/usr/local/bin` 的执行 `--cask` 升级会失败，交给用户手动升级。
+    - 其他情况：返回"判断不出安装方式"。包括 Microsoft Store 版、bun 和 pnpm 的全局目录（用 npm 升级会装出第二份）、Homebrew formula、手放的二进制，以及 replace 模式配成 `node cli.js` 这类命令（可执行文件是解释器）。
   - 同一个提供方同时只允许一次升级，第二次请求直接返回"已有升级在进行"。
   - 超时 10 分钟，超时或 daemon 关闭时终止整棵进程树。stdout 和 stderr 按到达顺序合在一起，只保留结尾 32000 个字符；stdin 接空。
   - 以 CLI 进程退出为准，不等管道关闭：自更新留下的后台进程会继承 stdout，管道可能一直不关。退出后最多再等 2 秒收尾输出。
@@ -166,7 +166,7 @@
   - 搜索框同时过滤两组。
   - 弹窗标题改为"添加提供方"。
 - **版本数据**：Providers 页（列表或详情地址）每次挂载都发一次 `provider.version.check.request`，不带 `force`；1 小时内不重复联网靠 daemon 的缓存。详情页的刷新（页头或正文）先刷新快照，再带 `force` 重查这一个提供方。列表页没有刷新按钮，不新增（2026-10-01 用户确认）。结果按提供方存在 App 的查询缓存里，列表和详情页共用；检查结果里的已装版本和快照不一致时视为过期，不显示新版本。composer 弹窗的详情不发检查、刷新时不重查，也不显示新版本。连着旧版本 daemon（`providerVersions` 没打开）时不发请求。
-- **升级动作**：一个 hook 负责发 `provider.upgrade.request`，并记录"正在升级的提供方"和"每个提供方的失败输出"，列表行和详情页的版本一节共用。升级成功后，用返回的版本改写本地的检查结果（`applyUpgradedVersion`，不再联网）：升到最新版本时按钮消失，升到别的版本（例如 stable 通道）时按钮保留；新的 `version` 随快照推送在响应之前到达。失败块显示按 `errorCode` 翻译的原因，没有对应文案时附上 `error` 原文；有 `output` 时用等宽、可选中的代码面板显示，可以关掉。
+- **升级动作**：一个 hook 负责发 `provider.upgrade.request`，并记录"正在升级的提供方"和"每个提供方的失败输出"，列表行和详情页的版本一节共用。升级成功后，用返回的版本改写本地的检查结果（`applyUpgradedVersion`，不再联网）：升到最新版本时按钮消失，升到别的版本（例如 stable 通道）时按钮保留；新的 `version` 随快照推送在响应之前到达。失败块显示按 `errorCode` 翻译的原因，没有对应文案时附上 `error` 原文；有 `output` 时用等宽、可选中的代码面板显示，可以关掉。"判断不出安装方式"时不显示 `error` 原文，改为"请用当初安装它的方式手动升级，或参照官方文档"的提示，并附该提供方安装指引里的官方文档链接。
 - **详情页**：`ProviderDetailSurface` 的版块顺序改为：删除失败 → 启动错误 → 继承接口提示 → **版本**（新增）→ 安装指引（仅未安装时）→ 第三方接口 → Models → 诊断。版本一节只在内置提供方已安装、并且 daemon 支持时出现。它和安装指引一样，由调用方通过 render 插槽注入。组件顶部的顺序注释同步更新。
 - **i18n**：新增的文案（"未启用""已停用""未安装""升级""v{from} → v{to}"、各种升级错误、空列表提示、"添加提供方"等）9 个语言文件都要补上，zh-CN 用 glossary 里定下的词。
 

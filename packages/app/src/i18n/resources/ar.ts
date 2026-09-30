@@ -2844,6 +2844,7 @@ export const ar: TranslationResources = {
       upgrade: {
         action: "ترقية",
         actionLabel: "ترقية {{name}}",
+        manualHint: "قم بترقيتها يدويًا بالأداة التي ثبّتها بها، أو اتبع الوثائق الرسمية.",
         errors: {
           failed: "فشلت الترقية",
           unsupported: "لا يمكن ترقية هذا المزود تلقائيًا",

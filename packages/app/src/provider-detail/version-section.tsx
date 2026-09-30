@@ -9,10 +9,12 @@ import type { ProviderUpgradeState } from "./upgrade";
 import { ProviderUpgradeButton, ProviderUpgradeFailure } from "./upgrade-view";
 
 export interface ProviderVersionUpgrade {
+  provider: string;
   providerLabel: string;
   state: ProviderUpgradeState;
   onUpgrade: () => void;
   onDismissFailure: () => void;
+  onOpenDocs: (url: string) => void;
 }
 
 // 详情页的"版本"一节：已装的内置提供方才出现，和安装指引互斥；有新版本时显示"v{当前} → v{最新}"。
@@ -56,7 +58,13 @@ export function ProviderVersionSection({
         </View>
         {upgrade && failure ? (
           <View style={[settingsStyles.rowBorder, styles.failureRow]}>
-            <ProviderUpgradeFailure state={failure} onDismiss={upgrade.onDismissFailure} />
+            <ProviderUpgradeFailure
+              provider={upgrade.provider}
+              providerLabel={upgrade.providerLabel}
+              state={failure}
+              onDismiss={upgrade.onDismissFailure}
+              onOpenDocs={upgrade.onOpenDocs}
+            />
           </View>
         ) : null}
       </View>

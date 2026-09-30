@@ -1014,7 +1014,7 @@ this.providerVersionCheckService = new ProviderVersionCheckService({
 
 ## Scenario: a request that runs a command on the host
 
-Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade subcommand (`claude update`, `opencode upgrade`, …).
+Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade subcommand (`claude update`, `opencode upgrade`, …), or, for Codex, the official upgrade for the way it was installed.
 
 ### 1. Scope / Trigger
 
@@ -1023,14 +1023,29 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
 ### 2. Signatures
 
 - Protocol: `ProviderUpgradeRequestSchema { requestId, provider }`; response payload `ProviderUpgradeResponsePayload { requestId, provider, ok, version?, output?, errorCode?: string, error? }`; known codes `PROVIDER_UPGRADE_ERROR_CODES` (`unsupported | install_method_unknown | not_installed | in_progress | command_failed | timeout`). `errorCode` is a plain string on the wire so a newer daemon's code never fails an older client's parse.
-- Pure: `hasProviderUpgradeCommand(provider)`, `resolveProviderUpgradeCommand({ provider, launch })`, `clipUpgradeOutput(output, limit = 32_000)` (`agent/provider-upgrade-command.ts`).
+- Pure (`agent/provider-upgrade-command.ts`):
+  - `hasProviderUpgradeCommand(provider)` — true for the subcommand table plus `codex`.
+  - `resolveProviderUpgradeCommand({ provider, launch, executableRealPath, platform })` → `{ kind: "run"; command; args; env? } | { kind: "install_method_unknown" } | { kind: "unsupported" }`. `env` is overlaid on the provider's `envOverlay` by the service.
+  - `detectCodexInstallMethod({ realPath, platform })` → `{ method: "standalone"; codexHome } | { method: "homebrew"; prefix } | { method: "npm"; prefix } | { method: "unknown" }`.
+  - `clipUpgradeOutput(output, limit = 32_000)`.
 - Launch: `AgentClient.resolveCliLaunch?(): Promise<ProviderCliLaunch | null>` (`{ executable, args, source, env }`, built on `resolveProviderCliLaunch` in `agent/provider-cli-version.ts`), forwarded in `wrapClientProvider`, reached through `ProviderSnapshotManager.resolveCliLaunch(provider)` (null when disabled).
 - Service: `ProviderUpgradeService.upgrade(provider)` returns `Omit<ProviderUpgradeResponsePayload, "requestId">` (`agent/provider-upgrade.ts`). `createProviderVersionServices` in `websocket-server.ts` builds it next to the version check; `PaseoDaemonConfig.providerVersions.upgradeTimeoutMs` (default 10 min) is the test seam.
 - Client: `DaemonClient.upgradeProvider({ provider })`, request timeout 20 min.
 
 ### 3. Contracts
 
-- Order of refusals, none of which runs anything: non-builtin entry → `unsupported`; no row in the subcommand table → `unsupported` (checked before the executable is looked up, so a disabled Codex still answers `unsupported`); no executable → `not_installed`.
+- Order of refusals, none of which runs anything: non-builtin entry → `unsupported`; no upgrade command → `unsupported` (checked before the executable is looked up); no executable → `not_installed` (so a disabled Codex answers `not_installed`, not `unsupported`); Codex install method not recognised → `install_method_unknown`, `error` names the real path.
+- Codex has no upgrade subcommand. The service passes `fs.realpath(launch.executable)` (the unresolved path when realpath throws — that can only push the result towards `install_method_unknown`) and `process.platform`. Rules, in this order, mirroring upstream `codex-rs/install-context` and the commands in `codex-rs/tui/src/update_action.rs`:
+
+  | Real path (Windows: `\` → `/`, compared lower-case) | Method | Command |
+  |---|---|---|
+  | basename does not start with `codex` (replace-mode `node cli.js`: the executable is the interpreter) | unknown | — |
+  | contains `/packages/standalone/releases/` | standalone, `codexHome` = the part before it | POSIX `sh -c "curl -fsSL https://chatgpt.com/codex/install.sh \| CODEX_NON_INTERACTIVE=1 sh"`; Windows `powershell -ExecutionPolicy Bypass -c "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 \| iex"`; both with `env: { CODEX_HOME: codexHome }` |
+  | POSIX contains `/lib/node_modules/@openai/codex/`; Windows `/npm/node_modules/@openai/codex/` or ends in `/npm/codex`, `/npm/codex.cmd` or `/npm/codex.ps1` | npm, `prefix` = the part before `/lib` (Windows: the `npm` dir) | `npm install -g --prefix <prefix> @openai/codex@latest` (package name from the manifest's `npmPackage`) |
+  | macOS and starts with `/opt/homebrew/Caskroom/codex/` or `/usr/local/Caskroom/codex/` | homebrew | `<prefix>/bin/brew upgrade --cask codex` |
+  | anything else: Microsoft Store, bun / pnpm global dirs, the Homebrew formula (`Cellar/codex`), a binary placed by hand, Linux `/usr/local` | unknown | — |
+
+  A Homebrew node keeps npm globals under `/opt/homebrew/lib/node_modules`: that path is npm, not Homebrew, which is why the Homebrew rule matches `Caskroom/codex` and not the bare prefix.
 - One run per provider: the provider id is added to the running set before the first `await`; a second request gets `in_progress` with no `output`.
 - The executable is the provider's resolved one with its env. Replace-mode argv stays in front of the subcommand; append-mode args are dropped (a CLI reads a subcommand after session flags as a prompt).
 - stdin is ignored; stdout and stderr are appended in arrival order and clipped to the tail while streaming.
@@ -1055,8 +1070,9 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
 
 ### 6. Tests Required
 
-- Unit `provider-upgrade-command.test.ts`: each provider's subcommand; replace argv kept; append args dropped; `codex` / custom / ACP ids unsupported; tail clipping.
-- Daemon e2e `daemon-e2e/provider-upgrade.e2e.test.ts` with a fake `sh` CLI (version file + `update` branch): success updates the snapshot `version` and the exact argv; cached latest forgotten; raw output on failure; `in_progress` while a run holds a file lock; timeout with `upgradeTimeoutMs: 1000` keeps partial output; a background `sleep 30 &` does not hold the answer; codex and custom providers `unsupported`.
+- Unit `provider-upgrade-command.test.ts`: each provider's subcommand; replace argv kept; append args dropped; custom / ACP ids unsupported; every row of the Codex table (macOS / Linux / Windows standalone with `codexHome`, both Caskroom prefixes, npm under Homebrew node / official installer / nvm / Windows package and shim with the exact `prefix`, Store, bun, pnpm, formula, hand-placed, interpreter) and the exact command + `env` per method; tail clipping.
+- Daemon e2e `daemon-e2e/provider-upgrade.e2e.test.ts` with a fake `sh` CLI (version file + `update` branch): success updates the snapshot `version` and the exact argv; cached latest forgotten; raw output on failure; `in_progress` while a run holds a file lock; timeout with `upgradeTimeoutMs: 1000` keeps partial output; a background `sleep 30 &` does not hold the answer; custom providers `unsupported`.
+- Same e2e, Codex: `<tmp>/npm-prefix/bin/codex` symlinked to `lib/node_modules/@openai/codex/bin/codex.js`, a recording fake `npm` first on the provider env's `PATH` → argv is `install -g --prefix <realpath of the prefix> @openai/codex@latest` (assert on the argv, not `version`: the fake Codex has no app-server, so its entry is `error` and carries no version); a Codex outside every known layout → `install_method_unknown`, no `output`, npm never called.
 - `provider-registry.test.ts`: a wrapped profile still exposes `resolveCliLaunch`.
 - Protocol `messages.test.ts`: request for an unknown provider id; response with an unknown `errorCode`.
 
@@ -1075,6 +1091,19 @@ const exitCode = await new Promise<number | null>((resolve) => child.once("close
 const closed = once(child, "close").then(() => undefined, () => undefined);
 [exitCode] = (await once(child, "exit")) as [number | null];
 await drainOutput({ child, closed }); // race with a 2 s cap, then destroy the pipes
+```
+
+#### Wrong
+
+```ts
+// Upgrades with whichever npm PATH finds first: codex under nvm, npm from Homebrew → a second codex.
+return { kind: "run", command: "npm", args: ["install", "-g", "@openai/codex@latest"] };
+```
+
+#### Correct
+
+```ts
+return { kind: "run", command: "npm", args: ["install", "-g", "--prefix", install.prefix, `${npmPackage}@latest`] };
 ```
 
 ## Errors on the wire

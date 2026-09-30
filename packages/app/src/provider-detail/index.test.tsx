@@ -479,19 +479,24 @@ describe("ProviderDetailSurface", () => {
   });
 
   function renderUpgradableVersion(input: {
+    provider?: string;
+    providerLabel?: string;
     latestVersion?: string;
     state: ProviderUpgradeState;
     onUpgrade?: () => void;
     onDismissFailure?: () => void;
+    onOpenDocs?: (url: string) => void;
   }) {
     // 经展开传入：upgrade 是对象，直接写在 JSX 属性上会被 react-perf 规则拦下。
     const sectionProps = {
       latestVersion: input.latestVersion,
       upgrade: {
-        providerLabel: "Claude Code",
+        provider: input.provider ?? "claude",
+        providerLabel: input.providerLabel ?? "Claude Code",
         state: input.state,
         onUpgrade: input.onUpgrade ?? noop,
         onDismissFailure: input.onDismissFailure ?? noop,
+        onOpenDocs: input.onOpenDocs ?? noop,
       },
     };
     renderDetail({
@@ -575,6 +580,35 @@ describe("ProviderDetailSurface", () => {
     expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.errors.failed"));
     expect(failure.textContent).toContain("Transport not connected");
     expect(within(failure).queryByTestId("provider-upgrade-output")).toBeNull();
+  });
+
+  it("points to manual upgrade instructions when the install method is unknown", () => {
+    const onOpenDocs = vi.fn();
+    renderUpgradableVersion({
+      onOpenDocs,
+      provider: "codex",
+      providerLabel: "Codex",
+      latestVersion: "0.131.0",
+      state: {
+        status: "failed",
+        errorCode: "install_method_unknown",
+        error: "Could not tell how codex was installed from /home/me/bin/codex",
+        output: null,
+      },
+    });
+
+    const failure = screen.getByTestId("provider-upgrade-failure");
+    expect(failure.textContent).toContain(
+      i18n.t("settings.providers.upgrade.errors.installMethodUnknown"),
+    );
+    expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.manualHint"));
+    expect(failure.textContent).not.toContain("/home/me/bin/codex");
+    fireEvent.click(
+      within(failure).getByRole("link", {
+        name: i18n.t("settings.providers.install.docsFor", { name: "Codex" }),
+      }),
+    );
+    expect(onOpenDocs).toHaveBeenCalledWith("https://learn.chatgpt.com/docs/codex/cli");
   });
 
   it("orders errors, the version, API endpoints, Models, then the diagnostic", () => {

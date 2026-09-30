@@ -141,7 +141,13 @@ function ProviderRow({
       </Pressable>
       {upgrade.state.status === "failed" ? (
         <View style={styles.upgradeFailure}>
-          <ProviderUpgradeFailure state={upgrade.state} onDismiss={upgrade.dismiss} />
+          <ProviderUpgradeFailure
+            provider={def.id}
+            providerLabel={def.label}
+            state={upgrade.state}
+            onDismiss={upgrade.dismiss}
+            onOpenDocs={upgrade.openDocs}
+          />
         </View>
       ) : null}
     </View>

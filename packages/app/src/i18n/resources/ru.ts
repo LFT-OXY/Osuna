@@ -2896,6 +2896,8 @@ export const ru: TranslationResources = {
       upgrade: {
         action: "Обновить",
         actionLabel: "Обновить {{name}}",
+        manualHint:
+          "Обновите его вручную тем же способом, каким устанавливали, или следуйте официальной документации.",
         errors: {
           failed: "Не удалось обновить",
           unsupported: "Этот провайдер нельзя обновить автоматически",

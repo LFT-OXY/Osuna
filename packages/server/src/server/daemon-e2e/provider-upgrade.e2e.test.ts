@@ -1,4 +1,14 @@
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -248,15 +258,98 @@ describe.skipIf(process.platform === "win32")("one-click provider CLI upgrade", 
     expect(result.output).toContain("Updated; cleaning up in the background");
   }, 20_000);
 
-  test("codex has no upgrade command yet", async () => {
-    // Codex 没有自带的升级命令，要按安装方式选；在支持之前一律回"不支持"。
+  // 假 Codex CLI：`--version` 读版本文件，其余参数一律失败。
+  async function writeFakeCodex(cliPath: string, version: string): Promise<void> {
+    await writeFile(file("codex.version"), version);
+    await mkdir(path.dirname(cliPath), { recursive: true });
+    await writeFile(
+      cliPath,
+      [
+        "#!/bin/sh",
+        'if [ "$1" = "--version" ]; then',
+        `  printf 'codex-cli %s\\n' "$(cat '${file("codex.version")}')"`,
+        "  exit 0",
+        "fi",
+        "exit 1",
+        "",
+      ].join("\n"),
+    );
+    await chmod(cliPath, 0o755);
+  }
+
+  // 放在 PATH 最前面的假 npm：只记下参数。
+  async function writeFakeNpm(): Promise<string> {
+    const toolsDir = file("tools");
+    await mkdir(toolsDir);
+    const npm = path.join(toolsDir, "npm");
+    await writeFile(
+      npm,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' "$*" >> '${file("npm.calls")}'`,
+        `echo 'added 1 package in 2s'`,
+        "",
+      ].join("\n"),
+    );
+    await chmod(npm, 0o755);
+    return toolsDir;
+  }
+
+  // 假 npm 放在 PATH 最前面，CODEX_HOME 指向临时目录，不碰本机的 Codex 配置。
+  function codexOverride(input: { codex: string; toolsDir: string }) {
+    return {
+      command: [input.codex],
+      env: {
+        PATH: `${input.toolsDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        CODEX_HOME: file("codex-home"),
+      },
+    };
+  }
+
+  test("upgrades an npm-installed codex through npm, into the prefix it was installed in", async () => {
+    // npm 全局安装的结构：前缀的 bin/codex 链到 lib/node_modules/@openai/codex 里的入口脚本。
+    const prefix = file("npm-prefix");
+    await writeFakeCodex(
+      path.join(prefix, "lib", "node_modules", "@openai", "codex", "bin", "codex.js"),
+      "0.130.0",
+    );
+    await mkdir(path.join(prefix, "bin"));
+    const codex = path.join(prefix, "bin", "codex");
+    await symlink("../lib/node_modules/@openai/codex/bin/codex.js", codex);
+    const toolsDir = await writeFakeNpm();
     const claude = await writeFakeClaude({ version: "2.1.280", onUpdate: "  exit 0" });
-    await startDaemon({ claude });
+    await startDaemon({ claude, extraProviders: { codex: codexOverride({ codex, toolsDir }) } });
     await settledEntry("codex");
 
     const result = await client!.upgradeProvider({ provider: "codex" });
 
-    expect(result).toMatchObject({ provider: "codex", ok: false, errorCode: "unsupported" });
+    // 假 Codex 不会跑 app-server，目录探测失败，快照不带版本，所以这里只看执行了哪条命令。
+    expect(result).toMatchObject({ provider: "codex", ok: true });
+    expect(result.output).toContain("added 1 package");
+    // 前缀取自解析过符号链接的路径（macOS 的临时目录会解析到 /private 下）。
+    const installedPrefix = await realpath(prefix);
+    expect(await readFile(file("npm.calls"), "utf8")).toBe(
+      `install -g --prefix ${installedPrefix} @openai/codex@latest\n`,
+    );
+  });
+
+  test("refuses to upgrade a codex whose install method it cannot tell", async () => {
+    const codex = file("hand-copied/codex");
+    await writeFakeCodex(codex, "0.130.0");
+    const toolsDir = await writeFakeNpm();
+    const claude = await writeFakeClaude({ version: "2.1.280", onUpdate: "  exit 0" });
+    await startDaemon({ claude, extraProviders: { codex: codexOverride({ codex, toolsDir }) } });
+    await settledEntry("codex");
+
+    const result = await client!.upgradeProvider({ provider: "codex" });
+
+    expect(result).toMatchObject({
+      provider: "codex",
+      ok: false,
+      errorCode: "install_method_unknown",
+    });
+    expect(result.output).toBeUndefined();
+    expect(await exists(file("npm.calls"))).toBe(false);
   });
 
   test("a custom provider cannot be upgraded", async () => {

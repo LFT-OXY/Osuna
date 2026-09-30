@@ -2808,6 +2808,7 @@ export const zhCN: TranslationResources = {
       upgrade: {
         action: "升级",
         actionLabel: "升级 {{name}}",
+        manualHint: "请用当初安装它的方式手动升级，或参照官方文档。",
         errors: {
           failed: "升级失败",
           unsupported: "这个提供方不支持自动升级",

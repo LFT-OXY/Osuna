@@ -2861,6 +2861,7 @@ export const ko: TranslationResources = {
       upgrade: {
         action: "업그레이드",
         actionLabel: "{{name}} 업그레이드",
+        manualHint: "설치할 때 사용한 방법으로 직접 업그레이드하거나 공식 문서를 참고하세요.",
         errors: {
           failed: "업그레이드하지 못했습니다",
           unsupported: "이 프로바이더는 자동으로 업그레이드할 수 없습니다",

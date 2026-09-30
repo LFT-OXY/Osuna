@@ -2891,6 +2891,8 @@ export const ptBR: TranslationResources = {
       upgrade: {
         action: "Atualizar",
         actionLabel: "Atualizar {{name}}",
+        manualHint:
+          "Atualize-a manualmente com a ferramenta que você usou para instalá-la, ou siga a documentação oficial.",
         errors: {
           failed: "Falha ao atualizar",
           unsupported: "Este provedor não pode ser atualizado automaticamente",

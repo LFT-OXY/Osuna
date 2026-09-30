@@ -2910,6 +2910,8 @@ export const es: TranslationResources = {
       upgrade: {
         action: "Actualizar",
         actionLabel: "Actualizar {{name}}",
+        manualHint:
+          "Actualízala manualmente con la herramienta con la que la instalaste, o sigue la documentación oficial.",
         errors: {
           failed: "No se pudo actualizar",
           unsupported: "Este proveedor no se puede actualizar automáticamente",

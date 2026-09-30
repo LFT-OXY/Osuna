@@ -3,7 +3,7 @@
   "name": "providers-two-level-upgrade",
   "title": "Providers 设置改为两级结构，显示版本并支持一键升级",
   "description": "设置 → Providers 统一为列表 → 详情两级；列表只放已启用且已安装的提供方，其余进「添加提供方」；内置提供方显示版本、检查更新并一键升级；Copilot/OpenCode 默认关闭、OMP 默认开启",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -23,6 +23,6 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "e625c22e91c8660cc8b782c4669a1d2cf7364024"
+    "implementation_base_sha": "ede2a167aebe8f3fca25db7314106e8e87cc7c41"
   }
 }

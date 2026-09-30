@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ProviderVersionCheckResult } from "@getpaseo/protocol/messages";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { openExternalUrl } from "@/utils/open-external-url";
 import {
   dismissProviderUpgradeError,
   upgradeProvider,
@@ -15,6 +16,12 @@ export interface ProviderUpgradeControls {
   state: ProviderUpgradeState;
   upgrade: () => void;
   dismiss: () => void;
+  // 判断不出安装方式时，失败块里的手动升级指引用它打开官方文档。
+  openDocs: (url: string) => void;
+}
+
+function openDocs(url: string): void {
+  void openExternalUrl(url);
 }
 
 // 列表行和详情页的版本一节共用：同一个提供方的升级状态只有一份。
@@ -45,5 +52,5 @@ export function useProviderUpgrade(serverId: string, provider: string): Provider
     [provider, serverId],
   );
 
-  return { state, upgrade, dismiss };
+  return { state, upgrade, dismiss, openDocs };
 }

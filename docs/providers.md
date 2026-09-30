@@ -334,7 +334,7 @@ A built-in provider also needs three things for Settings → Providers to show i
 
 - **npm package**: set `npmPackage` on the entry. The installed version is compared with that package's `latest`; without it the provider never shows an update.
 - **Version parsing**: implement `resolveInstalledVersion` and `resolveCliLaunch` on the client with the same default binary it launches. `parseCliVersion` takes the first bare `x.y.z` from `--version`; add the CLI's real output to `provider-cli-version.test.ts`, and parse it yourself if the first `x.y.z` is not the CLI's version.
-- **Upgrade command**: add the CLI's own upgrade subcommand to `UPGRADE_SUBCOMMANDS` in `provider-upgrade-command.ts`. It runs with the provider's resolved executable, not whatever `PATH` finds. A CLI without its own upgrade command answers `unsupported` until it gets install-method detection.
+- **Upgrade command**: add the CLI's own upgrade subcommand to `UPGRADE_SUBCOMMANDS` in `provider-upgrade-command.ts`. It runs with the provider's resolved executable, not whatever `PATH` finds. A CLI without its own upgrade command needs install-method detection from the executable's real path, like Codex's `detectCodexInstallMethod`; until then it answers `unsupported`. Upgrading with a package manager the user did not install it with leaves a second copy on `PATH`, so a path you can't classify answers `install_method_unknown` instead of guessing.
 
 First, define the modes with visual metadata:
 

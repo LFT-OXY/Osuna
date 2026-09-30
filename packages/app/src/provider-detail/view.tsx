@@ -132,12 +132,22 @@ export function ProviderDetail({
   const versionUpgrade = useMemo((): ProviderVersionUpgrade | undefined => {
     if (!checksVersions) return undefined;
     return {
+      provider,
       providerLabel: resolveProviderLabel(provider, entries),
       state: upgrade.state,
       onUpgrade: upgrade.upgrade,
       onDismissFailure: upgrade.dismiss,
+      onOpenDocs: upgrade.openDocs,
     };
-  }, [checksVersions, entries, provider, upgrade.dismiss, upgrade.state, upgrade.upgrade]);
+  }, [
+    checksVersions,
+    entries,
+    provider,
+    upgrade.dismiss,
+    upgrade.openDocs,
+    upgrade.state,
+    upgrade.upgrade,
+  ]);
 
   const stableDiscoveredRef = useRef<ProviderDiscoveredModelsCache | null>(null);
   const currentModels = providerEntry?.models;
