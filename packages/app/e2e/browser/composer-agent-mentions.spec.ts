@@ -3,9 +3,9 @@ import { expect, test, type Page } from "../support/fixtures";
 import { composerLocator, expectComposerVisible } from "../support/helpers/composer";
 import { expectAgentIdle } from "../support/helpers/agent-stream";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
-import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { expectInlineBlocks } from "../support/helpers/inline-blocks";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import { installHostWithoutAgentMentions } from "../support/helpers/mention-defaults";
 import { getServerId } from "../support/helpers/server-id";
 
 // 本文件的 worker daemon 注入 Osuna tools，mock 智能体可以派发。置灰用例在建智能体前关掉注入：
@@ -63,28 +63,6 @@ async function openAgentComposer(page: Page, input: { agentId: string; workspace
 
 function readClipboardText(page: Page): Promise<string> {
   return page.evaluate(() => navigator.clipboard.readText());
-}
-
-/** 从 server_info 去掉 `agentMentions`，模拟没有 Agent mention 的老 Host。 */
-async function installHostWithoutAgentMentions(page: Page): Promise<void> {
-  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
-    const server = ws.connectToServer();
-    ws.onMessage((message) => server.send(message));
-    server.onMessage((message) => {
-      if (typeof message !== "string" || !message.includes('"server_info"')) {
-        ws.send(message);
-        return;
-      }
-      const envelope = JSON.parse(message) as {
-        message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
-      };
-      const payload = envelope.message?.payload;
-      if (payload?.status === "server_info" && payload.features) {
-        delete payload.features.agentMentions;
-      }
-      ws.send(JSON.stringify(envelope));
-    });
-  });
 }
 
 test.describe("@ list agent group", () => {

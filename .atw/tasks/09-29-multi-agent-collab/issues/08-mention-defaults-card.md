@@ -7,11 +7,15 @@
 
 **Blocked by:** 07
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 浏览器 e2e：选择后刷新页面值仍在；选"默认（X）"清除覆盖；换模型后档位清回默认并出现提示。
-- [ ] 浏览器 e2e：失效值显示警示与"将使用默认（X）"；全部恢复默认清空该 provider 配置。
-- [ ] 浏览器 e2e：保存失败时界面显示错误并可重试。
-- [ ] Osuna tools 关闭提示与老 Host 提示正确。
-- [ ] Electron QA 截图：浅色、深色各一张（含展开行与失效值）。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] 浏览器 e2e：选择后刷新页面值仍在；选"默认（X）"清除覆盖；换模型后档位清回默认并出现提示。
+- [x] 浏览器 e2e：失效值显示警示与"将使用默认（X）"；全部恢复默认清空该 provider 配置。
+- [x] 浏览器 e2e：保存失败时界面显示错误并可重试。
+- [x] Osuna tools 关闭提示与老 Host 提示正确。
+- [x] Electron QA 截图：浅色、深色各一张（含展开行与失效值）。
+- [x] `npm run typecheck`、`npm run lint` 通过。
+
+**实现备注（2026-09-30）：** 卡片的 e2e 跑在自定义 ACP provider（`e2e/support/fixtures/thinking-modes-acp.cjs`）上，不用 `mock`：daemon 拒绝保存 `providers.mock.*`，dev provider 不在 `ProviderOverridesSchema` 的内置 id 里。用户选了这个做法；"换到没有档位的模型 → 不支持"只由单测覆盖。第一条 e2e 的"换模型后档位清回默认"用一个目录里没有的档位触发。Electron 截图：`qa/08-mention-defaults-dark.png`、`qa/08-mention-defaults-light.png`。
+
+**后续（未排期）：** dev 的 `mock` / `mock-slow` 存不了任何 `providers.<id>.*` 配置（Providers 页的启用开关、本卡片都会报 `Custom provider "mock" must declare extends`）。要修得同时放宽 schema 并让生产 registry 忽略这类条目，超出本票范围。

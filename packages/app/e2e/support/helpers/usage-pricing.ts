@@ -94,14 +94,21 @@ export async function installPricingRefreshFixture(
  * Answers `set_daemon_config_request` with an `rpc_error`, the way the daemon
  * does when it refuses a write. The price table has no other way to reach its
  * save-failure branch from a browser: a real daemon accepts these writes.
+ * `times` limits the failures to the first N writes, so a retry goes through.
  */
-export async function installDaemonConfigFailureFixture(page: Page, reason: string): Promise<void> {
+export async function installDaemonConfigFailureFixture(
+  page: Page,
+  reason: string,
+  options: { times?: number } = {},
+): Promise<void> {
+  let remainingFailures = options.times ?? Number.POSITIVE_INFINITY;
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
     const server = ws.connectToServer();
 
     ws.onMessage((message) => {
       const sessionMessage = getSessionMessage(message);
-      if (sessionMessage?.type === "set_daemon_config_request") {
+      if (sessionMessage?.type === "set_daemon_config_request" && remainingFailures > 0) {
+        remainingFailures -= 1;
         const requestId = sessionMessage.requestId;
         if (typeof requestId !== "string") {
           throw new Error("set_daemon_config_request missing requestId");

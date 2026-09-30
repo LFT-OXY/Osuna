@@ -176,6 +176,8 @@ Rules:
 - 快照加载中 → 下拉置灰带小转圈，摘要写"加载模型列表..."；出错 → 下拉置灰、显示原值，另起红色一行写"无法读取模型列表，发送时原样使用已保存的值"。
 - Osuna tools 关闭时卡片照常可编辑，顶部提示"Osuna tools 已关闭，@ 提及智能体暂不可用。这里的设置在开启后生效"。老 Host 只显示一行"更新 Host 后可以设置提及智能体默认值"。
 - 有意保留"默认（X）"虚拟项，与 Agent profile 表单删掉"Provider default"的做法不同。
+- 快照 `unavailable` 的 provider 照样列出，摘要写"Provider 不可用"，下拉置灰。保存进行中该 provider 的三条下拉置灰；失败时在该行底部显示"保存失败：<原因>"和"重试"，原因经 `extractFailureReason` 去掉 `requestType=` / `code=` 后缀。
+- 展开指示用 `ChevronDown`，展开时转 180°；`ChevronRight` 在设计规范里表示跳转。卡片的显示与回退规则在 `packages/app/src/screens/settings/mention-defaults-model.ts`，与 daemon 的 `resolveAgainstCatalog` 同规则。
 
 ### 时间线派发组（app）
 
@@ -217,7 +219,7 @@ Rules:
 - **接缝 3 · 各 adapter 单元测试**（放进现有测试文件，不新开套件）：取 tool call id（Claude、Codex、Pi 的 `_meta`，OpenCode bridge 的 `context.callID`，OMP 的 `toolCallId`）；工具名规范成 `paseo.create_agent`，包括拆 Pi 的 `{tool, args}`；权限 `metadata` 补子智能体 id（Codex `threadId`、Claude `agentID`、OpenCode `sessionID`）。参照 `mcp-server.test.ts`、`opencode-bridge-adapter.test.ts`、`tool-name-normalization.test.ts`、OpenCode event translator 的测试、`permission-response.test.ts`。
 - **接缝 4 · app Playwright 浏览器端到端 + 真实 daemon + `mock` provider**：`mock` provider 新增两个能力，一是声明 `supportsMcpServers`，二是一个脚本化 prompt，往时间线写一条带 callId 的 `paseo.create_agent` 工具调用；子智能体用 `seedParentWithSubagent` 按标签种入。覆盖：
   - `@` 智能体分组的排序、过滤、插入块、发送文本、各原因码的置灰文案与开启入口、老 Host 提示；
-  - 提及智能体默认值卡片：即时保存（刷新后仍在）、思考档位联动与提示、失效值显示、全部恢复默认、Osuna tools 关闭提示；保存失败时界面上能看到可重试的错误；
+  - 提及智能体默认值卡片：即时保存（刷新后仍在）、思考档位联动与提示、失效值显示、全部恢复默认、Osuna tools 关闭提示；保存失败时界面上能看到可重试的错误。卡片的 e2e 不用 `mock`：daemon 拒绝保存 `providers.mock.*`（dev provider 不是内置 id，只放宽 `ProviderOverridesSchema` 会让生产 daemon 建 registry 时抛错），改用自定义 ACP provider（`e2e/support/fixtures/thinking-modes-acp.cjs`）。ACP 的模型共用一组档位，"换到没有档位的模型 → 不支持"只由 `mention-defaults-model.test.ts` 覆盖；
   - 派发组：组头计数、行状态实时变化、等待批准、点开去向、启动中、已归档、已独立、退回通用卡；
   - track 行的等待批准。
   - 参照：`composer-inline-blocks.spec.ts`、`composer-autocomplete.spec.ts`、`subagent-detach.spec.ts`、`archive-finished-subagents.spec.ts`、`agent-profiles-settings.spec.ts`、`creation-old-daemon.spec.ts`。

@@ -2643,6 +2643,41 @@ export const fr: TranslationResources = {
       agents: {
         unavailable: "Connect to this host to manage agents",
       },
+      mentionDefaults: {
+        title: "Valeurs par défaut des mentions",
+        info: "Le modèle, le niveau de réflexion et le mode avec lesquels démarre un nouveau sous-agent quand vous mentionnez un fournisseur avec @. Les champs non définis utilisent les valeurs par défaut du fournisseur et n'héritent jamais du mode de l'agent actuel. Un profil Agent mentionné utilise d'abord ses propres réglages.",
+        hostOutdated: "Mettez à jour l'hôte pour définir les valeurs par défaut des mentions",
+        toolsOff:
+          "Osuna tools est désactivé : impossible de mentionner des agents avec @. Ces réglages s'appliqueront une fois activé.",
+        noProviders: "Aucun fournisseur activé",
+        model: "Modèle",
+        thinking: "Réflexion",
+        mode: "Mode",
+        modelAccessibilityLabel: "Modèle de mention pour {{provider}}",
+        thinkingAccessibilityLabel: "Niveau de réflexion de mention pour {{provider}}",
+        modeAccessibilityLabel: "Mode de mention pour {{provider}}",
+        rowAccessibilityLabel: "Valeurs par défaut des mentions pour {{provider}}",
+        default: "Par défaut",
+        defaultWithValue: "Par défaut ({{value}})",
+        unsupported: "Non pris en charge",
+        unavailableOption: "{{value}} (indisponible)",
+        staleWithFallback:
+          "{{value}} est indisponible ; la valeur par défaut ({{fallback}}) sera utilisée",
+        staleIgnored: "{{value}} est indisponible et ne sera pas utilisé",
+        summaryAllDefault: "Tout par défaut",
+        summaryOthersDefault: "le reste par défaut",
+        summaryLoading: "Chargement des modèles...",
+        summaryUnavailable: "Fournisseur indisponible",
+        catalogError:
+          "Impossible de lire la liste des modèles ; les valeurs enregistrées sont envoyées telles quelles",
+        thinkingReset: "Niveau de réflexion remis à la valeur par défaut du modèle ({{value}})",
+        thinkingResetNoLabel: "Niveau de réflexion remis à la valeur par défaut du modèle",
+        thinkingUnsupported:
+          "{{model}} n'a pas de niveaux de réflexion ; le niveau enregistré a été effacé",
+        resetAll: "Tout réinitialiser",
+        saveFailed: "Enregistrement impossible : {{error}}",
+        retry: "Réessayer",
+      },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",
       },
