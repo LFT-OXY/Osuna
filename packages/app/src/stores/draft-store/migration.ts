@@ -82,7 +82,7 @@ const LegacyAttachmentMetadataSchema = AttachmentMetadataSchema.extend({
 });
 type PersistedImage = PersistedDraftImage | z.infer<typeof LegacyAttachmentMetadataSchema>;
 
-// COMPAT(skill-chip-draft): added after v0.12.0, remove after 2027-03-29.
+// COMPAT(skill-chip-draft): added in v0.13.0, remove after 2027-03-29.
 // 升级前的草稿把 Command menu 选中的 skill 存成 Attachment tray 里的 chip，正文不含 `/name`。
 const LegacySkillChipSchema = z.strictObject({
   name: z.string().min(1),
@@ -97,7 +97,7 @@ const RawDraftInputSchema = z.strictObject({
       z.union([AttachmentMetadataSchema, LegacyAttachmentMetadataSchema, LegacyDraftImageSchema]),
     )
     .optional(),
-  // COMPAT(skill-chip-draft): added after v0.12.0, remove after 2027-03-29.
+  // COMPAT(skill-chip-draft): added in v0.13.0, remove after 2027-03-29.
   skills: z.array(LegacySkillChipSchema).optional(),
   segments: z.array(InlineSegmentSchema).optional(),
   cwd: z.string().optional(),
@@ -169,7 +169,7 @@ interface MigratedDraftText {
   segments?: InlineSegment[];
 }
 
-// COMPAT(skill-chip-draft): added after v0.12.0, remove after 2027-03-29.
+// COMPAT(skill-chip-draft): added in v0.13.0, remove after 2027-03-29.
 // chip 变成正文开头的 Skill block，与现在从 Command menu 选中的一样。
 function foldLegacySkillChips(rawInput: z.infer<typeof RawDraftInputSchema>): MigratedDraftText {
   const text = rawInput.text ?? "";

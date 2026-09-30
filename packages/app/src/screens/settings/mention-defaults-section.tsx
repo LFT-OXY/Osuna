@@ -218,6 +218,7 @@ function useMentionDefaultsSave(provider: string, onSave: SaveMentionDefaults): 
 
 export function MentionDefaultsSection({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
+  // COMPAT(agentMentions): added in v0.13.0, remove gate after 2027-09-30.
   const supportsAgentMentions = useHostFeatureAvailability(serverId, "agentMentions");
   if (supportsAgentMentions === null) return null;
 

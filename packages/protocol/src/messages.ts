@@ -3829,13 +3829,13 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
         // daemon 解析本机 CLI 会话日志并回答 usage.* 查询。
         usage: z.boolean().optional(),
-        // COMPAT(agentMentions): added in v0.12.x, remove gate after 2027-09-30.
+        // COMPAT(agentMentions): added in v0.13.0, remove gate after 2027-09-30.
         // 快照带 canCreateAgents 与原因码，app 据此开放 @ 智能体分组。
         agentMentions: z.boolean().optional(),
-        // COMPAT(subagentCallLinks): added in v0.12.x, remove gate after 2027-09-30.
+        // COMPAT(subagentCallLinks): added in v0.13.0, remove gate after 2027-09-30.
         // create_agent 的子智能体带 paseo.parent-tool-call-id，时间线工具名规范成 paseo.create_agent。
         subagentCallLinks: z.boolean().optional(),
-        // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
+        // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),
       })

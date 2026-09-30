@@ -84,7 +84,7 @@ export function useDispatchGroupsEnabled(input: {
   serverId: string;
   canOpenSubagents: boolean;
 }): boolean {
-  // COMPAT(subagentCallLinks): added in v0.12.x, remove gate after 2027-09-30.
+  // COMPAT(subagentCallLinks): added in v0.13.0, remove gate after 2027-09-30.
   const supportsCallLinks = useHostFeature(input.serverId, "subagentCallLinks");
   return supportsCallLinks && input.canOpenSubagents;
 }

@@ -141,7 +141,7 @@ export function ProviderDetailSurface({
     if (!isNotInstalled) return null;
     return resolveProviderInstallGuide({ provider, extendsProvider, hostPlatform });
   }, [extendsProvider, hostPlatform, isNotInstalled, provider]);
-  // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
+  // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
   const showApiEndpoints = hostSupportsApiEndpoints && supportsApiEndpoints(provider);
   const providerSnapshotRefreshing = providerEntry?.status === "loading";
   const providerErrorMessage =
