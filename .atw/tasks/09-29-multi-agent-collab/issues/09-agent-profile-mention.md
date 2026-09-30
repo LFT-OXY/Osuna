@@ -7,9 +7,9 @@
 
 **Blocked by:** 06, 07
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 浏览器 e2e：profile 排在 provider 后面，显示正确的图标与名字，选中插入 `paseo://agent/profile/<id>` 块。
-- [ ] daemon 测试：profile 字段优先、缺的字段取 Mention defaults、再缺取运行时默认；`featureValues` 进入 settings。
-- [ ] daemon 测试：profile 已删除、provider 已停用时写原因，其余 mention 照常。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] 浏览器 e2e：profile 排在 provider 后面，显示正确的图标与名字，选中插入 `paseo://agent/profile/<id>` 块。
+- [x] daemon 测试：profile 字段优先、缺的字段取 Mention defaults、再缺取运行时默认；`featureValues` 进入 settings。
+- [x] daemon 测试：profile 已删除、provider 已停用时写原因，其余 mention 照常。
+- [x] `npm run typecheck`、`npm run lint` 通过。

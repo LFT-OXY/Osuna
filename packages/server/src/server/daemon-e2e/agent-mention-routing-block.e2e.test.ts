@@ -423,3 +423,102 @@ describe("Mention defaults", () => {
     ]);
   });
 });
+
+describe("Agent profile mentions", () => {
+  test("profile fields win, missing fields come from Mention defaults, then runtime defaults", async () => {
+    const scenario = await startDaemon({}, { fetchCatalog: claudeCatalog });
+    const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    await scenario.client.patchDaemonConfig({
+      providers: {
+        claude: { mentionDefaults: { model: "sonnet", thinkingOptionId: "max", modeId: "plan" } },
+      },
+      agentProfiles: [
+        {
+          id: "fast-reviewer",
+          name: "Fast reviewer",
+          provider: "claude",
+          model: "haiku",
+          thinkingOptionId: "high",
+          modeId: "auto",
+          featureValues: { fast_mode: true },
+        },
+        { id: "thinker", name: "Thinker", provider: "claude", thinkingOptionId: "medium" },
+        { id: "tester", name: "Tester", provider: "codex" },
+      ],
+    });
+    const text = [
+      "[@Fast reviewer](paseo://agent/profile/fast-reviewer) review,",
+      "[@Thinker](paseo://agent/profile/thinker) plan,",
+      "[@Tester](paseo://agent/profile/tester) test",
+    ].join(" ");
+
+    await sendAndFinish({ scenario, agentId: parent.id, text });
+
+    expect(routedLines(scenario.prompts.at(-1))).toEqual([
+      '1. @Fast reviewer -> provider "claude/haiku", settings {"modeId":"auto","thinkingOptionId":"high","features":{"fast_mode":true}}',
+      '2. @Thinker -> provider "claude/sonnet", settings {"modeId":"plan","thinkingOptionId":"medium"}',
+      '3. @Tester -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}',
+    ]);
+    expect(await userMessages(scenario, parent.id)).toEqual([text]);
+  });
+
+  test("a stale profile value falls back to Mention defaults before runtime defaults", async () => {
+    const scenario = await startDaemon({}, { fetchCatalog: claudeCatalog });
+    const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    await scenario.client.patchDaemonConfig({
+      providers: {
+        claude: { mentionDefaults: { model: "sonnet", thinkingOptionId: "max", modeId: "plan" } },
+      },
+      agentProfiles: [
+        // 模型已下线：退到 Mention defaults 的模型，profile 的档位随失效的模型一起不用。
+        {
+          id: "retired",
+          name: "Retired",
+          provider: "claude",
+          model: "opus-retired",
+          thinkingOptionId: "high",
+          modeId: "retired-mode",
+        },
+        // 档位不属于 Mention defaults 的模型：退到 Mention defaults 的档位。
+        { id: "odd-thinking", name: "Odd thinking", provider: "claude", thinkingOptionId: "low" },
+      ],
+    });
+    const text = [
+      "[@Retired](paseo://agent/profile/retired) review,",
+      "[@Odd thinking](paseo://agent/profile/odd-thinking) plan",
+    ].join(" ");
+
+    await sendAndFinish({ scenario, agentId: parent.id, text });
+
+    expect(routedLines(scenario.prompts.at(-1))).toEqual([
+      '1. @Retired -> provider "claude/sonnet", settings {"modeId":"plan","thinkingOptionId":"max"}',
+      '2. @Odd thinking -> provider "claude/sonnet", settings {"modeId":"plan","thinkingOptionId":"max"}',
+    ]);
+  });
+
+  test("a deleted profile or one whose provider is disabled or unknown gets a cannot-start line while other mentions still route", async () => {
+    const scenario = await startDaemon({ providerOverrides: { claude: { enabled: false } } });
+    const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    await scenario.client.patchDaemonConfig({
+      agentProfiles: [
+        { id: "reviewer", name: "Reviewer", provider: "claude" },
+        { id: "planner", name: "Planner", provider: "grok" },
+      ],
+    });
+    const text = [
+      "[@Gone](paseo://agent/profile/gone) plan,",
+      "[@Reviewer](paseo://agent/profile/reviewer) review,",
+      "[@Planner](paseo://agent/profile/planner) plan,",
+      `${CODEX} test`,
+    ].join(" ");
+
+    await sendAndFinish({ scenario, agentId: parent.id, text });
+
+    expect(routedLines(scenario.prompts.at(-1))).toEqual([
+      '1. @Gone -> cannot start: agent profile "gone" no longer exists. Tell the user.',
+      '2. @Reviewer -> cannot start: provider "claude" is disabled. Tell the user.',
+      '3. @Planner -> cannot start: provider "grok" is not configured. Tell the user.',
+      '4. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}',
+    ]);
+  });
+});

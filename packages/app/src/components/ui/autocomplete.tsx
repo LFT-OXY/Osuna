@@ -11,6 +11,7 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Box, File, Folder, SquareSlash } from "lucide-react-native";
+import { AgentProfileGlyph, type AgentProfile } from "@/agent-profiles";
 import type { ProviderIconComponent } from "@/components/provider-icons";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -37,6 +38,8 @@ export interface AutocompleteOption {
   kind?: "command" | "skill" | "file" | "directory" | "agent";
   /** 行首图标；不传时按 kind 取。 */
   Icon?: ProviderIconComponent;
+  /** Agent profile 行：按 profile 的图标与颜色画行首，认不出图标时用 `Icon`。 */
+  profileGlyph?: Pick<AgentProfile, "icon" | "color">;
   disabled?: SelectableOption["disabled"];
 }
 
@@ -103,7 +106,21 @@ function OptionIconSlot({
 
 const ThemedOptionIcon = withUnistyles(OptionIconSlot);
 
-function AutocompleteOptionIcon({ kind, Icon }: Pick<AutocompleteOption, "kind" | "Icon">) {
+function AutocompleteOptionIcon({
+  kind,
+  Icon,
+  profileGlyph,
+}: Pick<AutocompleteOption, "kind" | "Icon" | "profileGlyph">) {
+  if (profileGlyph) {
+    return (
+      <AgentProfileGlyph
+        icon={profileGlyph.icon}
+        color={profileGlyph.color}
+        size={ICON_SIZE.md}
+        fallbackIcon={Icon}
+      />
+    );
+  }
   if (Icon) return <ThemedOptionIcon Icon={Icon} size={ICON_SIZE.md} uniProps={mutedIconColor} />;
   switch (kind) {
     case "skill":
@@ -145,6 +162,12 @@ function AutocompleteRow({
   const handlePointerMove = useCallback(() => onHighlight?.(index), [index, onHighlight]);
   const handlePress = useCallback(() => onSelect(option), [onSelect, option]);
   const disabled = option.disabled === true;
+  // glyph 是 svg 带不上属性，把 profile 的图标与颜色挂在图标槽上给 e2e 读。
+  const profileGlyph = option.profileGlyph;
+  const profileGlyphDataSet = useMemo(
+    () => (profileGlyph ? { icon: profileGlyph.icon, color: profileGlyph.color } : undefined),
+    [profileGlyph],
+  );
   const pressableStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
       styles.row,
@@ -169,8 +192,16 @@ function AutocompleteRow({
         onPress={handlePress}
         style={pressableStyle}
       >
-        <View style={styles.rowIcon}>
-          <AutocompleteOptionIcon kind={option.kind} Icon={option.Icon} />
+        <View
+          style={styles.rowIcon}
+          testID={profileGlyph ? "agent-profile-glyph" : undefined}
+          dataSet={profileGlyphDataSet}
+        >
+          <AutocompleteOptionIcon
+            kind={option.kind}
+            Icon={option.Icon}
+            profileGlyph={profileGlyph}
+          />
         </View>
         <Text
           variant="label"

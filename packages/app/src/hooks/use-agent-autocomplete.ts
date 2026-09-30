@@ -4,6 +4,8 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/shallow";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import { isAgentMentionTarget, type AgentMentionTarget } from "@getpaseo/protocol/message-links";
+import type { AgentProfile } from "@/agent-profiles";
 import type {
   AutocompleteGroupNotice,
   AutocompleteGroupNotices,
@@ -61,6 +63,8 @@ interface UseAgentAutocompleteInput {
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
+  /** daemon 配置里的 Agent profile，`@` 列表排在 provider 后面；配置未到时为 null。 */
+  agentProfiles: readonly AgentProfile[] | null;
 }
 
 interface AgentAutocompleteKeyPressEvent {
@@ -82,7 +86,7 @@ export type AgentAutocompleteOption =
       entryKind: FileEntryKind;
       mention: FileMentionRange;
     })
-  | (AutocompleteOption & { type: "agent_mention"; providerId: string });
+  | (AutocompleteOption & { type: "agent_mention"; target: AgentMentionTarget });
 
 interface AgentAutocompleteResult {
   isVisible: boolean;
@@ -306,45 +310,73 @@ export function resolveAgentMentionNotice(
 
 export interface AgentMentionOptionsInput {
   entries: readonly ProviderSnapshotEntry[] | undefined;
+  /** daemon 配置里的 Agent profile；配置还没到时为空。 */
+  profiles: readonly AgentProfile[];
   query: string;
   disabled: boolean;
   serverId: string;
 }
 
-/** Providers 设置里已启用的 provider，保持设置里的顺序；按显示名或 id 过滤。 */
+/**
+ * Providers 设置里已启用的 provider，保持设置里的顺序，按显示名或 id 过滤；
+ * 其后是 provider 已启用的 Agent profile，按 profile 名过滤，副文字写所属 provider。
+ */
 export function buildAgentMentionOptions(
   input: AgentMentionOptionsInput,
 ): AgentAutocompleteOption[] {
   // provider id 满足 PROVIDER_ID_PATTERN，本身就是小写。
   const query = input.query.toLowerCase();
-  return (input.entries ?? []).flatMap((entry): AgentAutocompleteOption[] => {
-    if (entry.enabled === false) return [];
-    const label = entry.label ?? entry.provider;
-    const matchesQuery = label.toLowerCase().includes(query) || entry.provider.includes(query);
-    if (!matchesQuery) return [];
+  const providerLabels = new Map(
+    (input.entries ?? [])
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.provider, entry.label ?? entry.provider]),
+  );
+  const providerOptions = [...providerLabels].flatMap(
+    ([provider, label]): AgentAutocompleteOption[] => {
+      const matchesQuery = label.toLowerCase().includes(query) || provider.includes(query);
+      if (!matchesQuery) return [];
+      return [
+        {
+          type: "agent_mention",
+          id: `agent:provider:${provider}`,
+          label,
+          kind: "agent",
+          Icon: getProviderIcon(provider, input.serverId),
+          disabled: input.disabled,
+          target: { kind: "provider", id: provider },
+        },
+      ];
+    },
+  );
+  const profileOptions = input.profiles.flatMap((profile): AgentAutocompleteOption[] => {
+    const providerLabel = providerLabels.get(profile.provider);
+    if (providerLabel === undefined) return [];
+    // 手改配置可能写出含 `/` 或为空的 id，写不成链接，选中后只剩文字、不会派发。
+    const target: AgentMentionTarget = { kind: "profile", id: profile.id };
+    if (!isAgentMentionTarget(target)) return [];
+    if (!profile.name.toLowerCase().includes(query)) return [];
     return [
       {
         type: "agent_mention",
-        id: `agent:provider:${entry.provider}`,
-        label,
+        id: `agent:profile:${profile.id}`,
+        label: profile.name,
+        description: providerLabel,
         kind: "agent",
-        Icon: getProviderIcon(entry.provider, input.serverId),
+        Icon: getProviderIcon(profile.provider, input.serverId),
+        profileGlyph: { icon: profile.icon, color: profile.color },
         disabled: input.disabled,
-        providerId: entry.provider,
+        target,
       },
     ];
   });
+  return [...providerOptions, ...profileOptions];
 }
 
 /** `@` 列表选中的行变成 File mention 或 Agent mention；置灰行与命令不产生块。 */
 export function resolvePickedMentionBlock(selected: AgentAutocompleteOption): InlineBlock | null {
   if (selected.disabled) return null;
   if (selected.type === "agent_mention") {
-    return {
-      kind: "agent",
-      target: { kind: "provider", id: selected.providerId },
-      name: selected.label,
-    };
+    return { kind: "agent", target: selected.target, name: selected.label };
   }
   if (selected.type === "workspace_entry") {
     return { kind: "file", path: selected.entryPath, entryKind: selected.entryKind };
@@ -362,6 +394,7 @@ interface AgentMentionGroupInput {
   cwd: string;
   query: string;
   enabled: boolean;
+  agentProfiles: readonly AgentProfile[] | null;
 }
 
 interface AgentMentionGroup {
@@ -400,12 +433,13 @@ function useAgentMentionGroup(input: AgentMentionGroupInput): AgentMentionGroup 
       visible
         ? buildAgentMentionOptions({
             entries,
+            profiles: input.agentProfiles ?? EMPTY_PROFILES,
             query: input.query,
             disabled: availability.kind !== "available",
             serverId,
           })
         : [],
-    [availability.kind, entries, input.query, serverId, visible],
+    [availability.kind, entries, input.agentProfiles, input.query, serverId, visible],
   );
   const groupNotices = useMemo<AutocompleteGroupNotices | undefined>(() => {
     if (options.length === 0) return undefined;
@@ -421,6 +455,7 @@ function useAgentMentionGroup(input: AgentMentionGroupInput): AgentMentionGroup 
 }
 
 const EMPTY_COMMANDS: AgentSlashCommand[] = [];
+const EMPTY_PROFILES: AgentProfile[] = [];
 
 interface BuildAutocompleteOptionsInput {
   isVisible: boolean;
@@ -619,6 +654,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     onClientSlashCommand,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
+    agentProfiles,
   } = input;
 
   const activeSlashCommand = useMemo(
@@ -737,6 +773,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     cwd: agentCwd,
     query: fileFilterQuery,
     enabled: !isDraftContext && mode === "file",
+    agentProfiles,
   });
 
   const options = useMemo<AgentAutocompleteOption[]>(

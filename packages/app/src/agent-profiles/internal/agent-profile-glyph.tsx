@@ -32,6 +32,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react-native";
+import type { ProviderIconComponent } from "@/components/provider-icons";
 import { identityForeground } from "@/styles/identity-colors";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
@@ -45,6 +46,20 @@ import {
 
 /** Drawn when a profile names no icon, and as the "default" cell in the picker grid. */
 const ThemedDefaultIcon = withUnistyles(Star);
+
+function FallbackIconSlot({
+  Icon,
+  size,
+  color,
+}: {
+  Icon: ProviderIconComponent;
+  size: number;
+  color: string;
+}) {
+  return <Icon size={size} color={color} />;
+}
+
+const ThemedFallbackIcon = withUnistyles(FallbackIconSlot);
 
 const PROFILE_ICONS: Record<AgentProfileIconKey, LucideIcon> = {
   code: Code,
@@ -125,13 +140,19 @@ export function AgentProfileGlyph({
   icon,
   color,
   size = ICON_SIZE.md,
+  fallbackIcon,
 }: {
   icon?: string | undefined;
   color?: string | undefined;
   size?: number;
+  /** 认不出 icon 时代替默认星形，如 `@` 列表里用所属 provider 的图标。 */
+  fallbackIcon?: ProviderIconComponent;
 }) {
   const iconKey = resolveAgentProfileIconKey(icon);
   const mapping = COLOR_MAPPINGS[resolveAgentProfileColor(color)];
+  if (!iconKey && fallbackIcon) {
+    return <ThemedFallbackIcon Icon={fallbackIcon} size={size} uniProps={mapping} />;
+  }
   const Icon = (iconKey && THEMED_ICONS.get(iconKey)) || ThemedDefaultIcon;
   return <Icon size={size} uniProps={mapping} />;
 }

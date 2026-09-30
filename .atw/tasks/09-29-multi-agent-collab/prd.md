@@ -120,7 +120,8 @@ Rules:
 ### Mention defaults 的存储与解析
 
 - daemon 配置 `providers.<id>.mentionDefaults: { model?, thinkingOptionId?, modeId? }`，三项都可选，缺省就是"默认"；读写沿用 `get_daemon_config` / `set_daemon_config`，不加新 RPC，支持热重载；删除 provider 时一并清除。patch 时整个 `mentionDefaults` 对象替换而不是深合并，省略某项即恢复默认；保存时不校验。
-- 解析顺序：Agent profile 写了的字段 → 该 provider 的 Mention defaults → 运行时默认。profile 的 `featureValues` 原样放进 `settings.features`。卡片不列 Agent profile，也不支持 feature。
+- 解析顺序：Agent profile 写了的字段 → 该 provider 的 Mention defaults → 运行时默认，逐字段取第一个仍然有效的层：profile 的值在目录里失效时先退到 Mention defaults，再退到运行时默认；某层写的模型已失效时，该层的档位一起作废（票 09 与用户确认）。profile 的 `featureValues` 非空时原样放进 `settings.features`，不校验。卡片不列 Agent profile，也不支持 feature。
+- `@` 列表不列 id 写不成链接的 profile（空或含 `/`，只会出自手改配置）；profile 行的图标规则与块相同，认不出时画所属 provider 的图标，用 profile 的颜色。
 - 运行时默认：模型取快照里 `isDefault` 的那个，没有就取第一个；档位取所选模型的 `defaultThinkingOptionId`；模式取 provider 快照的 `defaultModeId`，它不在快照模式列表里（或为空）时取第一个模式，与 app 新建界面一致；不继承父会话模式。选择函数与元数据生成共用。目录就绪时 daemon 总是写出目录里有的明确 `modeId`；provider 完全没有模式时不写。
 - 发送时逐项回退，不阻断：模型不在快照目录里 → 默认模型及其默认档位；档位不属于所选模型 → 该模型的默认档位（模型为"默认"时按当时的默认模型校验）；模式不在快照模式列表里 → 运行时默认模式。快照未就绪时等待，受现有刷新超时约束；等待后仍未就绪或出错时配置值原样透传，这时没配 `modeId` 就写不出模式，是"总是写出 `modeId`"的例外（`create_agent` 本身也要等快照就绪）。
 - 默认值只作用于 mention 新派出的子智能体，创建后用户仍可在子智能体标签里改。

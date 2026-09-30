@@ -4,6 +4,7 @@ import { composerLocator, expectComposerVisible } from "../support/helpers/compo
 import { expectAgentIdle } from "../support/helpers/agent-stream";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { expectInlineBlocks } from "../support/helpers/inline-blocks";
+import { seedAgentProfiles } from "../support/helpers/agent-profiles";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { installHostWithoutAgentMentions } from "../support/helpers/mention-defaults";
 import { getServerId } from "../support/helpers/server-id";
@@ -61,6 +62,19 @@ async function openAgentComposer(page: Page, input: { agentId: string; workspace
   return composer;
 }
 
+/** 行首图标画出来的几何形状（各图元的标签与 `d`），不含颜色。 */
+function iconShape(row: Locator): Promise<string[]> {
+  return row
+    .locator("svg")
+    .first()
+    .evaluate((svg) =>
+      Array.from(
+        svg.querySelectorAll("*"),
+        (node) => `${node.tagName}:${node.getAttribute("d") ?? ""}`,
+      ),
+    );
+}
+
 function readClipboardText(page: Page): Promise<string> {
   return page.evaluate(() => navigator.clipboard.readText());
 }
@@ -114,6 +128,75 @@ test.describe("@ list agent group", () => {
       await expect.poll(() => readClipboardText(page)).toBe(sent);
     } finally {
       await agent.cleanup();
+    }
+  });
+});
+
+test.describe("@ list agent profiles", () => {
+  test("lists enabled providers' profiles after the providers, with their glyph, and sends a profile link", async ({
+    page,
+    context,
+  }, testInfo) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const profiles = await seedAgentProfiles([
+      {
+        id: "e2e-reviewer",
+        name: "Careful reviewer",
+        provider: "mock",
+        icon: "eye",
+        color: "emerald",
+      },
+      // 没写图标：画所属 provider 的图标。
+      { id: "e2e-plain", name: "Plain helper", provider: "mock" },
+      // provider 没注册：不列出。
+      { id: "e2e-orphan", name: "Orphan helper", provider: "not-installed" },
+    ]);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `agent-mentions-profile-${testInfo.workerIndex}-`,
+      title: "Agent profile mentions",
+      repo: { files: REPO_FILES },
+    });
+    try {
+      const composer = await openAgentComposer(page, agent);
+
+      await page.keyboard.type("ask @");
+      const reviewer = agentRow(page, "Careful reviewer");
+      await expect(reviewer).toBeVisible({ timeout: 30_000 });
+      await expect.poll(() => readList(page)).toContain("README.md");
+      const list = await readList(page);
+      expect(list).not.toContain("Orphan helper");
+      expect(list.indexOf("Careful reviewer")).toBeGreaterThan(list.indexOf("Mock Load Test"));
+      expect(list.indexOf("Files")).toBeGreaterThan(list.indexOf("Careful reviewer"));
+      // 副文字写所属 provider，图标与颜色取自 profile。
+      await expect(reviewer).toContainText("Mock Load Test");
+      const glyph = reviewer.getByTestId("agent-profile-glyph");
+      await expect(glyph).toHaveAttribute("data-icon", "eye");
+      await expect(glyph).toHaveAttribute("data-color", "emerald");
+      const providerShape = await iconShape(agentRow(page, "Mock Load Test").first());
+      expect(providerShape.length).toBeGreaterThan(0);
+      expect(await iconShape(reviewer)).not.toEqual(providerShape);
+      expect(await iconShape(agentRow(page, "Plain helper"))).toEqual(providerShape);
+
+      // 过滤匹配 profile 名，provider 行随之消失。
+      await page.keyboard.type("careful");
+      await expect.poll(() => readList(page)).not.toContain("Mock Load Test");
+      await expect(reviewer).toBeVisible();
+
+      await reviewer.click();
+      await expectInlineBlocks(composer, [{ variant: "agent", label: "Agent: Careful reviewer" }]);
+      await page.keyboard.type("to review the diff");
+      await page.keyboard.press("Enter");
+      await expectAgentIdle(page);
+
+      const sent = "ask [@Careful reviewer](paseo://agent/profile/e2e-reviewer) to review the diff";
+      const bubble = page.getByTestId("user-message").filter({ hasText: "review the diff" }).last();
+      await expectInlineBlocks(bubble, [{ variant: "agent", label: "Agent: Careful reviewer" }]);
+      await bubble.getByTestId("user-message-bubble").hover();
+      await bubble.getByRole("button", { name: "Copy message" }).click();
+      await expect.poll(() => readClipboardText(page)).toBe(sent);
+    } finally {
+      await agent.cleanup();
+      await profiles.restore();
     }
   });
 });

@@ -23,6 +23,7 @@ test("a provider whose catalog failed to load still dispatches with the provider
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => undefined,
+    agentProfiles: [],
     providers: providersReturning({
       provider: "codex",
       status: "error",
@@ -40,6 +41,7 @@ test("a provider still loading after the wait gets the configured values as writ
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => ({ model: "gpt-9", thinkingOptionId: "xhigh", modeId: "read-only" }),
+    agentProfiles: [],
     providers: providersReturning({ provider: "codex", status: "loading", enabled: true }),
   });
 
@@ -54,6 +56,7 @@ test("a provider still loading after the wait dispatches with the provider id on
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => undefined,
+    agentProfiles: [],
     providers: providersReturning({ provider: "codex", status: "loading", enabled: true }),
   });
 
@@ -69,6 +72,7 @@ test("a snapshot read that throws rejects instead of guessing defaults", async (
       cwd: "/tmp/project",
       canCreateAgents: true,
       mentionDefaults: () => undefined,
+      agentProfiles: [],
       providers: {
         hasProvider: () => true,
         getProvider: async () => {
@@ -85,6 +89,7 @@ test("a provider without a default mode dispatches in its first mode instead of 
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => undefined,
+    agentProfiles: [],
     providers: providersReturning({
       provider: "codex",
       status: "ready",
@@ -109,6 +114,7 @@ test("a default mode missing from the catalog falls back to the first mode", asy
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => undefined,
+    agentProfiles: [],
     providers: providersReturning({
       provider: "codex",
       status: "ready",
@@ -133,6 +139,7 @@ test("a provider with no modes at all dispatches without a mode", async () => {
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => ({ modeId: "plan" }),
+    agentProfiles: [],
     providers: providersReturning({
       provider: "codex",
       status: "ready",
@@ -144,4 +151,48 @@ test("a provider with no modes at all dispatches without a mode", async () => {
   });
 
   expect(mentionLines(block)).toEqual(['1. @Codex -> provider "codex", settings {}']);
+});
+
+test("a profile whose provider's catalog failed to load gets its fields over Mention defaults as written", async () => {
+  const block = await resolveRoutingBlock({
+    text: "[@Reviewer](paseo://agent/profile/reviewer) review it",
+    cwd: "/tmp/project",
+    canCreateAgents: true,
+    mentionDefaults: () => ({ model: "gpt-9", modeId: "read-only" }),
+    agentProfiles: [
+      {
+        id: "reviewer",
+        name: "Reviewer",
+        provider: "codex",
+        thinkingOptionId: "xhigh",
+        modeId: "auto",
+        featureValues: { fast_mode: true },
+      },
+    ],
+    providers: providersReturning({
+      provider: "codex",
+      status: "error",
+      enabled: true,
+      error: "model list timed out",
+    }),
+  });
+
+  expect(mentionLines(block)).toEqual([
+    '1. @Reviewer -> provider "codex/gpt-9", settings {"modeId":"auto","thinkingOptionId":"xhigh","features":{"fast_mode":true}}',
+  ]);
+});
+
+test("a profile whose provider is unavailable gets a cannot-start line", async () => {
+  const block = await resolveRoutingBlock({
+    text: "[@Reviewer](paseo://agent/profile/reviewer) review it",
+    cwd: "/tmp/project",
+    canCreateAgents: true,
+    mentionDefaults: () => undefined,
+    agentProfiles: [{ id: "reviewer", name: "Reviewer", provider: "codex" }],
+    providers: providersReturning({ provider: "codex", status: "unavailable", enabled: true }),
+  });
+
+  expect(mentionLines(block)).toEqual([
+    '1. @Reviewer -> cannot start: provider "codex" is not available. Tell the user.',
+  ]);
 });

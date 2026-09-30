@@ -8103,6 +8103,7 @@ export class Session {
               canCreateAgents: agent.createAgentsCapability?.canCreateAgents === true,
               mentionDefaults: (providerId) =>
                 this.daemonConfigStore.get().providers[providerId]?.mentionDefaults,
+              agentProfiles: this.daemonConfigStore.get().agentProfiles ?? [],
               providers: this.providerSnapshotManager,
             }),
           logger: this.sessionLogger,

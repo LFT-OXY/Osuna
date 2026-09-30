@@ -1,4 +1,9 @@
-import { findMarkdownLinks, parseAgentMentionLink } from "@getpaseo/protocol/message-links";
+import type { AgentProfile } from "@getpaseo/protocol/messages";
+import {
+  findMarkdownLinks,
+  parseAgentMentionLink,
+  type AgentMentionTarget,
+} from "@getpaseo/protocol/message-links";
 import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config";
 
 import { filterSelectableAgentModels, type ProviderSnapshotEntry } from "./agent-sdk-types.js";
@@ -9,6 +14,7 @@ import { resolveThinkingOptionId, selectDefaultModel } from "./structured-genera
 export interface RoutingBlockSettings {
   modeId?: string;
   thinkingOptionId?: string;
+  features?: AgentProfile["featureValues"];
 }
 
 export type RoutingBlockTarget =
@@ -31,6 +37,8 @@ export interface ResolveRoutingBlockInput {
   canCreateAgents: boolean;
   /** 发送时现读，改完配置下一条消息即生效。 */
   mentionDefaults: (providerId: string) => ProviderMentionDefaults | undefined;
+  /** 发送时的 Agent profile 列表；profile mention 按 id 在这里找。 */
+  agentProfiles: readonly AgentProfile[];
   providers: RoutingBlockProviderSource;
 }
 
@@ -63,10 +71,31 @@ export function formatRoutingBlock(mentions: readonly RoutingBlockMention[]): st
   );
 }
 
-async function resolveProviderTarget(
+type UnavailableTarget = Extract<RoutingBlockTarget, { status: "unavailable" }>;
+
+type ProviderLookup = UnavailableTarget | { status: "available"; entry: ProviderSnapshotEntry };
+
+/** 一条 mention 要派给的 provider，profile mention 还带上 profile 自己的字段。 */
+type MentionRequest =
+  | UnavailableTarget
+  | { status: "resolvable"; providerId: string; profile?: AgentProfile };
+
+function toMentionRequest(
+  target: AgentMentionTarget,
+  profiles: readonly AgentProfile[],
+): MentionRequest {
+  if (target.kind === "provider") return { status: "resolvable", providerId: target.id };
+  const profile = profiles.find((candidate) => candidate.id === target.id);
+  if (!profile) {
+    return { status: "unavailable", reason: `agent profile "${target.id}" no longer exists` };
+  }
+  return { status: "resolvable", providerId: profile.provider, profile };
+}
+
+async function lookupProvider(
   providerId: string,
   input: ResolveRoutingBlockInput,
-): Promise<RoutingBlockTarget> {
+): Promise<ProviderLookup> {
   if (!input.providers.hasProvider(providerId)) {
     return { status: "unavailable", reason: `provider "${providerId}" is not configured` };
   }
@@ -81,9 +110,38 @@ async function resolveProviderTarget(
   if (entry.status === "unavailable") {
     return { status: "unavailable", reason: `provider "${providerId}" is not available` };
   }
-  const defaults = input.mentionDefaults(providerId) ?? {};
+  return { status: "available", entry };
+}
+
+/** 未经目录校验时逐字段取第一个写了的层。 */
+function overlayLayers(layers: readonly ProviderMentionDefaults[]): ProviderMentionDefaults {
+  return {
+    model: layers.find((layer) => layer.model !== undefined)?.model,
+    thinkingOptionId: layers.find((layer) => layer.thinkingOptionId !== undefined)
+      ?.thinkingOptionId,
+    modeId: layers.find((layer) => layer.modeId !== undefined)?.modeId,
+  };
+}
+
+interface ResolveTargetInput {
+  providerId: string;
+  entry: ProviderSnapshotEntry;
+  profile: AgentProfile | undefined;
+  defaults: ProviderMentionDefaults;
+}
+
+function resolveTarget({
+  providerId,
+  entry,
+  profile,
+  defaults,
+}: ResolveTargetInput): RoutingBlockTarget {
+  // profile 写了的字段在前，该 provider 的 Mention defaults 在后。
+  const layers = profile ? [profile, defaults] : [defaults];
   // 目录没就绪或加载出错时无从校验：配置值原样透传，未设的项交给 create_agent 按 provider 默认。
-  const values = entry.status === "ready" ? resolveAgainstCatalog(entry, defaults) : defaults;
+  const values =
+    entry.status === "ready" ? resolveAgainstCatalog(entry, layers) : overlayLayers(layers);
+  const features = profile?.featureValues;
   return {
     status: "ready",
     provider: providerId,
@@ -91,29 +149,36 @@ async function resolveProviderTarget(
     settings: {
       ...(values.modeId ? { modeId: values.modeId } : {}),
       ...(values.thinkingOptionId ? { thinkingOptionId: values.thinkingOptionId } : {}),
+      ...(features && Object.keys(features).length > 0 ? { features } : {}),
     },
   };
 }
 
-/** 按已加载的目录校验 Mention defaults，失效项逐项回退到运行时默认。 */
+/**
+ * 按已加载的目录逐字段校验各层配置：每个字段取第一个仍然有效的层，都失效或都没写时回退到运行时默认。
+ */
 function resolveAgainstCatalog(
   entry: ProviderSnapshotEntry,
-  defaults: ProviderMentionDefaults,
+  layers: readonly ProviderMentionDefaults[],
 ): ProviderMentionDefaults {
   const models = filterSelectableAgentModels(entry.models);
-  const configuredModel = defaults.model
-    ? models.find((candidate) => candidate.id === defaults.model)
-    : undefined;
-  const model = configuredModel ?? selectDefaultModel(models);
-  // 配置的模型已下线时连同档位一起退回默认模型的默认档位。
-  const modelIsStale = defaults.model !== undefined && !configuredModel;
+  const findModel = (id: string | undefined) =>
+    id === undefined ? undefined : models.find((candidate) => candidate.id === id);
+  const model =
+    layers.map((layer) => findModel(layer.model)).find((found) => found !== undefined) ??
+    selectDefaultModel(models);
+  // 某层写的模型已下线时，该层的档位随之作废，不再套到别的模型上。
+  const thinkingOptionId = layers
+    .filter((layer) => layer.model === undefined || findModel(layer.model) !== undefined)
+    .map((layer) => layer.thinkingOptionId)
+    .find((id) => model?.thinkingOptions?.some((option) => option.id === id));
   return {
     model: model?.id,
-    thinkingOptionId: resolveThinkingOptionId(
-      model,
-      modelIsStale ? undefined : defaults.thinkingOptionId,
+    thinkingOptionId: resolveThinkingOptionId(model, thinkingOptionId),
+    modeId: resolveModeId(
+      entry,
+      layers.map((layer) => layer.modeId),
     ),
-    modeId: resolveModeId(entry, defaults.modeId),
   };
 }
 
@@ -121,37 +186,52 @@ function resolveAgainstCatalog(
 // 写了目录外的模式则直接报 Invalid mode。默认模式不在目录里时退到第一个模式，与 app 新建界面一致。
 function resolveModeId(
   entry: ProviderSnapshotEntry,
-  configuredModeId: string | undefined,
+  configuredModeIds: readonly (string | undefined)[],
 ): string | undefined {
   const modeIds = (entry.modes ?? []).map((mode) => mode.id);
-  const candidates = [configuredModeId, entry.defaultModeId ?? undefined];
+  const candidates = [...configuredModeIds, entry.defaultModeId ?? undefined];
   return candidates.find((id) => id !== undefined && modeIds.includes(id)) ?? modeIds[0];
 }
 
 /**
- * Routing block for the provider mentions in a client-sent user message, or null
- * when the message mentions no provider or the session cannot dispatch.
+ * Routing block for the agent mentions in a client-sent user message, or null
+ * when the message mentions no agent or the session cannot dispatch.
  */
 export async function resolveRoutingBlock(input: ResolveRoutingBlockInput): Promise<string | null> {
   if (!input.canCreateAgents) return null;
   const mentions = findMarkdownLinks(input.text).flatMap((link) => {
     const mention = parseAgentMentionLink(link);
-    return mention?.target.kind === "provider"
-      ? [{ label: link.label, id: mention.target.id }]
+    return mention
+      ? [{ label: link.label, request: toMentionRequest(mention.target, input.agentProfiles) }]
       : [];
   });
   if (mentions.length === 0) return null;
 
-  const providerIds = [...new Set(mentions.map((mention) => mention.id))];
-  const targets = new Map(
+  const providerIds = [
+    ...new Set(
+      mentions.flatMap(({ request }) =>
+        request.status === "resolvable" ? [request.providerId] : [],
+      ),
+    ),
+  ];
+  const lookups = new Map(
     await Promise.all(
-      providerIds.map(async (id) => [id, await resolveProviderTarget(id, input)] as const),
+      providerIds.map(async (id) => [id, await lookupProvider(id, input)] as const),
     ),
   );
   return formatRoutingBlock(
-    mentions.flatMap(({ label, id }) => {
-      const target = targets.get(id);
-      return target ? [{ label, target }] : [];
+    mentions.flatMap(({ label, request }): RoutingBlockMention[] => {
+      if (request.status === "unavailable") return [{ label, target: request }];
+      const lookup = lookups.get(request.providerId);
+      if (!lookup) return [];
+      if (lookup.status === "unavailable") return [{ label, target: lookup }];
+      const target = resolveTarget({
+        providerId: request.providerId,
+        entry: lookup.entry,
+        profile: request.profile,
+        defaults: input.mentionDefaults(request.providerId) ?? {},
+      });
+      return [{ label, target }];
     }),
   );
 }

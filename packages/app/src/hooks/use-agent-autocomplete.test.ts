@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { AgentProfile } from "@/agent-profiles";
 import { i18n } from "@/i18n/i18next";
 import {
   buildAgentMentionOptions,
@@ -197,27 +198,48 @@ const PROVIDERS = [
   providerEntry("my-agent", "Reviewer Bot"),
 ];
 
+const PROFILES: AgentProfile[] = [
+  { id: "p-review", name: "Careful reviewer", provider: "claude", icon: "eye", color: "blue" },
+  { id: "p-pi", name: "Pi helper", provider: "pi" },
+  { id: "p-gone", name: "Orphan", provider: "grok" },
+  // id 写不成 Agent mention 链接（含 `/` 或为空）：选中后只会剩文字，不列出。
+  { id: "team/review", name: "Slash reviewer", provider: "claude" },
+  { id: "", name: "Blank reviewer", provider: "claude" },
+  { id: "p-fast", name: "Fast coder", provider: "codex" },
+];
+
 function agentRows(input: { query: string; disabled?: boolean }) {
   return buildAgentMentionOptions({
     entries: PROVIDERS,
+    profiles: PROFILES,
     query: input.query,
     disabled: input.disabled ?? false,
     serverId: "server-1",
-  }).map((option) => ({ label: option.label, disabled: option.disabled }));
+  }).map((option) => ({
+    label: option.label,
+    description: option.description,
+    disabled: option.disabled,
+  }));
 }
 
 describe("@ list agent group", () => {
-  it("lists enabled providers in the Providers settings order", () => {
-    expect(agentRows({ query: "" }).map((row) => row.label)).toEqual([
-      "Codex",
-      "Claude",
-      "Reviewer Bot",
+  it("lists enabled providers in the Providers settings order, then their profiles", () => {
+    expect(agentRows({ query: "" }).map((row) => [row.label, row.description])).toEqual([
+      ["Codex", undefined],
+      ["Claude", undefined],
+      ["Reviewer Bot", undefined],
+      ["Careful reviewer", "Claude"],
+      ["Fast coder", "Codex"],
     ]);
   });
 
-  it("filters by display name and by provider id, ignoring case", () => {
+  it("filters providers by display name or id and profiles by name, ignoring case", () => {
     expect(agentRows({ query: "CLA" }).map((row) => row.label)).toEqual(["Claude"]);
     expect(agentRows({ query: "my-a" }).map((row) => row.label)).toEqual(["Reviewer Bot"]);
+    expect(agentRows({ query: "review" }).map((row) => row.label)).toEqual([
+      "Reviewer Bot",
+      "Careful reviewer",
+    ]);
     expect(agentRows({ query: "pi" })).toEqual([]);
   });
 
@@ -239,6 +261,7 @@ describe("@ list agent group", () => {
       activeFileMention: mention,
       agentMentionOptions: buildAgentMentionOptions({
         entries: PROVIDERS,
+        profiles: [],
         query: "c",
         disabled: false,
         serverId: "server-1",
@@ -333,8 +356,9 @@ describe("@ list agent group notice", () => {
 });
 
 describe("resolvePickedMentionBlock", () => {
-  const [claude] = buildAgentMentionOptions({
+  const [claude, reviewer] = buildAgentMentionOptions({
     entries: [providerEntry("claude", "Claude")],
+    profiles: [PROFILES[0]!],
     query: "",
     disabled: false,
     serverId: "server-1",
@@ -345,6 +369,14 @@ describe("resolvePickedMentionBlock", () => {
       kind: "agent",
       target: { kind: "provider", id: "claude" },
       name: "Claude",
+    });
+  });
+
+  it("turns a picked profile into an Agent mention of that profile named after it", () => {
+    expect(resolvePickedMentionBlock(reviewer!)).toEqual({
+      kind: "agent",
+      target: { kind: "profile", id: "p-review" },
+      name: "Careful reviewer",
     });
   });
 

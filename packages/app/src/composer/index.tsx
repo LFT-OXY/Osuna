@@ -92,6 +92,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
+import { useAgentProfiles } from "@/agent-profiles";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
 import {
   useAgentAutocomplete,
@@ -1107,7 +1108,7 @@ function ComposerAutocompleteBinding({
   selection: StoreApi<ComposerLiveSelection>;
   configuration: Omit<
     Parameters<typeof useAgentAutocomplete>[0],
-    "userInput" | "cursorIndex" | "blockBoundary" | "onAutocompleteApplied"
+    "userInput" | "cursorIndex" | "blockBoundary" | "onAutocompleteApplied" | "agentProfiles"
   >;
   inputRef: React.RefObject<MessageInputRef | null>;
   anchorRef: React.RefObject<View | null>;
@@ -1116,8 +1117,10 @@ function ComposerAutocompleteBinding({
 }) {
   const userInput = useSyncExternalStore(text.subscribe, text.getSnapshot, text.getSnapshot);
   const liveSelection = useStore(selection);
+  const { profiles: agentProfiles } = useAgentProfiles(configuration.serverId);
   const autocomplete = useAgentAutocomplete({
     ...configuration,
+    agentProfiles,
     userInput,
     cursorIndex: Math.min(liveSelection.start, userInput.length),
     blockBoundary: Math.min(liveSelection.blockBoundary, userInput.length),
