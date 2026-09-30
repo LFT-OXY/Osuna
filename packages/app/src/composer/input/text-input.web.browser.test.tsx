@@ -205,6 +205,25 @@ describe("Composer text input on web", () => {
     expect(mounted.handle.getText()).toBe("");
   });
 
+  it("does not bring back deleted text when undoing after a programmatic replacement", async () => {
+    const mounted = mount();
+    await focusAtEnd(mounted);
+    await userEvent.keyboard("abc{Backspace}");
+
+    act(() => mounted.handle.reset());
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+    expect(mounted.handle.getText()).toBe("");
+
+    await userEvent.keyboard("/comp");
+    act(() => mounted.handle.replaceText("/compact "));
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+    expect(mounted.handle.getText()).toBe("/compact ");
+
+    act(() => mounted.handle.replaceSegments?.([{ type: "text", text: "restored draft" }]));
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+    expect(mounted.handle.getText()).toBe("restored draft");
+  });
+
   it("clears on reset and keeps focus", async () => {
     const mounted = mount({ initialValue: "line one\nline two" });
     await focusAtEnd(mounted);

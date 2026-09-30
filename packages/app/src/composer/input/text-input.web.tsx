@@ -20,7 +20,7 @@ import { Text } from "@tiptap/extension-text";
 import { UndoRedo } from "@tiptap/extensions";
 import { EditorContent, useEditor, type Editor, type UseEditorOptions } from "@tiptap/react";
 import { Fragment } from "@tiptap/pm/model";
-import { TextSelection, type EditorState } from "@tiptap/pm/state";
+import { EditorState, TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
   addLeadingSkillBlocks,
@@ -144,6 +144,20 @@ function setTextSelection(
 }
 
 /**
+ * 与 textarea 赋值一致：程序替换后撤销不回到替换前。只给替换事务标 addToHistory: false 不够——
+ * 历史里更早的步骤会映射到新文档上继续生效，撤销时把已删掉的文字插回来；只能用同一文档、
+ * 选区和插件重建状态来清空历史。
+ */
+function dispatchWithoutUndoHistory(editor: Editor, tr: EditorState["tr"]): void {
+  tr.setMeta("addToHistory", false);
+  editor.view.dispatch(tr);
+  const { state } = editor.view;
+  editor.view.updateState(
+    EditorState.create({ doc: state.doc, selection: state.selection, plugins: state.plugins }),
+  );
+}
+
+/**
  * Composer 以整段文字替换内容（补全命令、语音、清空、草稿恢复）。只替换与当前文字不同的那一段，
  * 前后没变的块原样保留；变化范围碰到的块整块换成新文字。
  */
@@ -169,12 +183,10 @@ function replaceDocumentText(
     textToFragment(state.schema, text.slice(keptStart, text.length - keptEnd)),
   );
   setTextSelection(tr, selection ?? { start: text.length, end: text.length }, text.length);
-  // 与 textarea 赋值一致：程序替换不进撤销栈。
-  tr.setMeta("addToHistory", false);
-  editor.view.dispatch(tr);
+  dispatchWithoutUndoHistory(editor, tr);
 }
 
-/** 草稿、排队项、Rewind 写回：整体换成分段结构，块仍是块。与 replaceDocumentText 一样不进撤销栈。 */
+/** 草稿、排队项、Rewind 写回：整体换成分段结构，块仍是块。与 replaceDocumentText 一样清空撤销历史。 */
 function replaceDocumentSegments(
   editor: Editor,
   segments: readonly InlineSegment[],
@@ -190,8 +202,7 @@ function replaceDocumentSegments(
   );
   const length = docText(tr.doc).length;
   setTextSelection(tr, selection ?? { start: length, end: length }, length);
-  tr.setMeta("addToHistory", false);
-  editor.view.dispatch(tr);
+  dispatchWithoutUndoHistory(editor, tr);
 }
 
 /**
