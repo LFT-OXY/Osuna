@@ -2833,14 +2833,14 @@ export const ptBR: TranslationResources = {
       },
       diagnostic: {
         title: "Diagnóstico",
-        button: "Diagnóstico",
+        description:
+          "Veja de onde vem o comando de {{name}}, o caminho resolvido, a versão e se está disponível.",
         refresh: "Atualizar",
         refreshing: "Atualizando...",
         copyLabel: "diagnóstico",
         copyAccessibility: "Copiar diagnóstico",
         copyFailed: "Falha ao copiar diagnóstico",
         refreshAccessibility: "Atualizar diagnóstico",
-        refreshingAccessibility: "Atualizando diagnóstico",
         running: "Executando diagnóstico...",
         none: "Nenhum diagnóstico disponível",
         failedToFetch: "Falha ao buscar diagnóstico",

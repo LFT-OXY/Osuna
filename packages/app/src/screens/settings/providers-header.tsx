@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { RotateCw } from "lucide-react-native";
 import { BackHeader } from "@/components/headers/back-header";
 import { ScreenTitle } from "@/components/headers/screen-title";
-import { DiagnosticSubSheet } from "@/components/provider-diagnostic-sheet";
 import { Button } from "@/components/ui/button";
 import {
   iconButtonChromeGlyphSize,
@@ -15,7 +14,7 @@ import {
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Text } from "@/components/ui/text";
 import { ProviderDetailMenu } from "@/provider-detail/header";
-import { useProviderDetailHeader } from "@/provider-detail/view";
+import { useProviderDetailHeader, useProviderDiagnosticActions } from "@/provider-detail/view";
 import { useStackedProvidersView } from "./providers-page";
 
 /*
@@ -81,9 +80,8 @@ export function ProviderDetailBackHeader({
     isRemoving,
     onRemove,
   } = useProviderDetailHeader(serverId, provider);
-  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
-  const openDiagnostic = useCallback(() => setIsDiagnosticOpen(true), []);
-  const closeDiagnostic = useCallback(() => setIsDiagnosticOpen(false), []);
+  // ⋯ 在顶栏、诊断节在正文，经 provider-detail/diagnostic.ts 的 store 让正文滚到诊断节并运行。
+  const { diagnose } = useProviderDiagnosticActions(serverId, provider);
   const refreshStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) =>
       iconButtonChromeStyle({
@@ -124,20 +122,20 @@ export function ProviderDetailBackHeader({
           providerSource={providerSource}
           hostSupportsRemoval={hostSupportsRemoval}
           isRemoving={isRemoving}
-          onDiagnose={openDiagnostic}
+          onDiagnose={diagnose}
           onRemove={onRemove}
           placement="screenHeader"
         />
       </View>
     ),
     [
+      diagnose,
       hostSupportsRemoval,
       isRefreshing,
       isRemoving,
       label,
       onRefresh,
       onRemove,
-      openDiagnostic,
       provider,
       providerSource,
       refreshAccessibilityState,
@@ -150,17 +148,7 @@ export function ProviderDetailBackHeader({
     return <BackHeader title={sectionTitle} onBack={onBack} borderless />;
   }
 
-  return (
-    <>
-      <BackHeader title={label} rightContent={rightContent} onBack={onBack} borderless />
-      <DiagnosticSubSheet
-        provider={provider}
-        serverId={serverId}
-        visible={isDiagnosticOpen}
-        onClose={closeDiagnostic}
-      />
-    </>
-  );
+  return <BackHeader title={label} rightContent={rightContent} onBack={onBack} borderless />;
 }
 
 const styles = StyleSheet.create((theme) => ({

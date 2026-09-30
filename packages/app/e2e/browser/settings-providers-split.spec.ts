@@ -27,6 +27,16 @@ async function readTwoProviderIds(page: Page): Promise<[string, string]> {
   return [first, second];
 }
 
+// ⋯ 菜单的「诊断」让详情滚到最底部的诊断节并运行，结果就地出现。
+async function diagnoseFromMenu(page: Page, provider: string): Promise<void> {
+  await page.getByTestId(`provider-actions-${provider}`).click();
+  await page.getByTestId(`provider-diagnose-${provider}`).click();
+  await expect(page.getByTestId("provider-diagnostic-output")).toBeInViewport({
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("provider-diagnostic-sheet")).toHaveCount(0);
+}
+
 function readHistoryLength(page: Page): Promise<number> {
   return page.evaluate(() => window.history.length);
 }
@@ -43,6 +53,10 @@ test.describe("Settings providers list and detail", () => {
 
     await test.step("entering the section selects the first provider", async () => {
       await expectProviderSelected(page, serverId, first);
+    });
+
+    await test.step("Diagnostic in the ⋯ menu runs the diagnostic in place", async () => {
+      await diagnoseFromMenu(page, first);
     });
 
     await test.step("pressing a row replaces the address with that provider", async () => {
@@ -136,6 +150,10 @@ test.describe("Settings providers list and detail on a phone", () => {
           .getByTestId(`provider-detail-header-${first}`)
           .getByRole("button", { name: "Refresh", exact: true }),
       ).toHaveCount(0);
+    });
+
+    await test.step("Diagnostic in the screen header ⋯ runs the diagnostic in the body", async () => {
+      await diagnoseFromMenu(page, first);
     });
 
     await test.step("Back returns to the list", async () => {

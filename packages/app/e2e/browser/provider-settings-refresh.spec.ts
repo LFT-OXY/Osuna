@@ -95,10 +95,14 @@ async function hasFocusWithin(locator: Locator): Promise<boolean> {
 async function expectProviderSettingsVisible(page: Page) {
   await expect(page.getByTestId("provider-settings-sheet")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: "Add model" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Diagnostic", exact: true })).toBeVisible();
+  await expect(page.getByTestId("provider-diagnostic-section")).toBeVisible();
 }
 
-async function exerciseProviderSettingsStack(page: Page) {
+// 诊断结果按主机与提供方保留，第二次打开弹窗时诊断节已有上次的输出，入口是「重新运行」。
+async function exerciseProviderSettingsStack(
+  page: Page,
+  diagnosticAction: "Run diagnostic" | "Refresh diagnostic",
+) {
   await expectProviderSettingsVisible(page);
 
   // 添加 Model 在弹窗里就地展开一行，不再叠子弹窗。
@@ -110,14 +114,13 @@ async function exerciseProviderSettingsStack(page: Page) {
   await expect(modelIdInput).not.toBeVisible({ timeout: 10_000 });
   await expectProviderSettingsVisible(page);
 
-  await page.getByRole("button", { name: "Diagnostic", exact: true }).click();
-  await expect(page.getByTestId("provider-diagnostic-sheet")).toBeVisible({ timeout: 10_000 });
-  await page.getByRole("button", { name: /Refresh diagnostic/ }).click();
-  await expect(page.getByTestId("provider-diagnostic-sheet")).toBeVisible({ timeout: 10_000 });
-  await closeSheetByHeaderButton(page, "provider-diagnostic-sheet");
-  await expectProviderSettingsVisible(page);
-
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  // 诊断在弹窗底部就地运行，也不再叠子弹窗。
+  const diagnostic = page.getByTestId("provider-diagnostic-section");
+  await diagnostic.getByRole("button", { name: diagnosticAction, exact: true }).click();
+  await expect(diagnostic.getByTestId("provider-diagnostic-output")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("provider-diagnostic-sheet")).toHaveCount(0);
   await expectProviderSettingsVisible(page);
 }
 
@@ -193,13 +196,13 @@ test.describe("provider settings overlay stack", () => {
 
     try {
       await openProviderSettingsFromModelSelector(page);
-      await exerciseProviderSettingsStack(page);
+      await exerciseProviderSettingsStack(page, "Run diagnostic");
       await closeSheetByHeaderButton(page, "provider-settings-sheet");
 
       await expectModelBrowserVisible(page);
       await page.getByRole("button", { name: /Open .* settings/ }).click();
       await expect(page.getByTestId("provider-settings-sheet")).toBeVisible({ timeout: 10_000 });
-      await exerciseProviderSettingsStack(page);
+      await exerciseProviderSettingsStack(page, "Refresh diagnostic");
       await closeSheetByHeaderButton(page, "provider-settings-sheet");
 
       await expectModelBrowserVisible(page);

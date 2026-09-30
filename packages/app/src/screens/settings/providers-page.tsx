@@ -1,9 +1,8 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { DiagnosticSubSheet } from "@/components/provider-diagnostic-sheet";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ProviderDetailPage } from "@/provider-detail/view";
@@ -62,10 +61,6 @@ export function ProvidersPage({ serverId, requestedProvider, layout }: Providers
     providerIds: selectableProviderIds,
   });
   const stackedView = useStackedProvidersView(serverId, requestedProvider);
-  // 诊断弹窗是模态的，打开期间显示的提供方不会变。
-  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
-  const openDiagnostic = useCallback(() => setIsDiagnosticOpen(true), []);
-  const closeDiagnostic = useCallback(() => setIsDiagnosticOpen(false), []);
   const addressLagsSelection =
     layout === "split" && selectedProvider !== null && selectedProvider !== requestedProvider;
   const addressNamesMissingProvider = layout === "stacked" && stackedView.kind === "missing";
@@ -95,30 +90,15 @@ export function ProvidersPage({ serverId, requestedProvider, layout }: Providers
 
   if (layout === null) return null;
 
-  const stackedProvider = stackedView.kind === "detail" ? stackedView.provider : null;
-  const shownProvider = layout === "stacked" ? stackedProvider : selectedProvider;
-  const diagnosticSheet = shownProvider ? (
-    <DiagnosticSubSheet
-      provider={shownProvider}
-      serverId={serverId}
-      visible={isDiagnosticOpen}
-      onClose={closeDiagnostic}
-    />
-  ) : null;
-
   if (layout === "stacked") {
     if (stackedView.kind === "detail") {
       return (
-        <>
-          <ProviderDetailPage
-            key={stackedView.provider}
-            serverId={serverId}
-            provider={stackedView.provider}
-            hasScreenHeaderActions={isCompact}
-            onRunDiagnostic={openDiagnostic}
-          />
-          {diagnosticSheet}
-        </>
+        <ProviderDetailPage
+          key={stackedView.provider}
+          serverId={serverId}
+          provider={stackedView.provider}
+          hasScreenHeaderActions={isCompact}
+        />
       );
     }
     return (
@@ -148,11 +128,9 @@ export function ProvidersPage({ serverId, requestedProvider, layout }: Providers
             serverId={serverId}
             provider={selectedProvider}
             hasScreenHeaderActions={false}
-            onRunDiagnostic={openDiagnostic}
           />
         ) : null}
       </View>
-      {diagnosticSheet}
     </View>
   );
 }

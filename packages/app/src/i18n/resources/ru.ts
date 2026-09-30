@@ -2837,14 +2837,14 @@ export const ru: TranslationResources = {
       },
       diagnostic: {
         title: "Диагностика",
-        button: "Диагностика",
+        description:
+          "Показывает, откуда берётся команда {{name}}, куда она разрешается, её версию и доступность.",
         refresh: "Обновить",
         refreshing: "Обновление...",
         copyLabel: "результаты диагностики",
         copyAccessibility: "Скопировать результаты диагностики",
         copyFailed: "Не удалось скопировать результаты диагностики",
         refreshAccessibility: "Обновить диагностику",
-        refreshingAccessibility: "Диагностика обновляется",
         running: "Выполняется диагностика...",
         none: "Диагностика недоступна",
         failedToFetch: "Не удалось получить диагностику.",

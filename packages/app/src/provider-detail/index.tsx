@@ -13,10 +13,12 @@ import { resolveProviderInstallGuide, type ProviderInstallGuide } from "@/provid
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { settingsStyles } from "@/styles/settings";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
+import type { ProviderDiagnosticState } from "./diagnostic";
+import { ProviderDiagnosticSection } from "./diagnostic-section";
 import { ProviderModelsSection } from "./models";
 
 /*
- * 提供方详情的内容区，区块顺序固定：删除失败 → 错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models。
+ * 提供方详情的内容区，区块顺序固定：删除失败 → 错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models → 诊断。
  * 外框（弹窗或页面）由调用方决定。
  * 这里只收 props，方便 jsdom 测试；运行时接线在 view.tsx。
  * 安装指引与第三方接口的运行时视图在单测运行器里无法加载，所以由调用方经 render 插槽注入。
@@ -35,8 +37,15 @@ export interface ProviderDetailSurfaceProps {
   deletingModelId: string | null;
   // 删除这个提供方失败的原因；从 ⋯ 菜单删除，失败提示显示在详情顶部。
   removalError: string | null;
+  diagnostic: ProviderDiagnosticState;
+  // ⋯ 菜单或错误卡要看诊断时加一，诊断节随之滚进视野。
+  diagnosticRevealRequest: number;
   onRefresh: () => void;
+  // 错误卡的「运行诊断」：同 ⋯ 菜单，滚到诊断节再运行。
+  onDiagnose: () => void;
+  // 诊断节里的运行、重新运行、重试。
   onRunDiagnostic: () => void;
+  onCopyDiagnostic: (output: string) => void;
   onDismissRemovalError: () => void;
   onDeleteCustomModel: (modelId: string) => void;
   onAddCustomModel: (modelId: string) => Promise<void>;
@@ -49,13 +58,13 @@ function ProviderStartErrorAlert({
   message,
   isRefreshing,
   onRefresh,
-  onRunDiagnostic,
+  onDiagnose,
 }: {
   providerLabel: string;
   message: string;
   isRefreshing: boolean;
   onRefresh: () => void;
-  onRunDiagnostic: () => void;
+  onDiagnose: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -88,7 +97,7 @@ function ProviderStartErrorAlert({
                 ? t("settings.providers.diagnostic.refreshing")
                 : t("settings.providers.diagnostic.refresh")}
             </Button>
-            <Button variant="outline" size="sm" leftIcon={FileText} onPress={onRunDiagnostic}>
+            <Button variant="outline" size="sm" leftIcon={FileText} onPress={onDiagnose}>
               {t("settings.providers.diagnostic.run")}
             </Button>
           </View>
@@ -109,8 +118,12 @@ export function ProviderDetailSurface({
   isRefreshing,
   deletingModelId,
   removalError,
+  diagnostic,
+  diagnosticRevealRequest,
   onRefresh,
+  onDiagnose,
   onRunDiagnostic,
+  onCopyDiagnostic,
   onDismissRemovalError,
   onDeleteCustomModel,
   onAddCustomModel,
@@ -171,7 +184,7 @@ export function ProviderDetailSurface({
           message={startErrorMessage}
           isRefreshing={modelsRefreshing}
           onRefresh={onRefresh}
-          onRunDiagnostic={onRunDiagnostic}
+          onDiagnose={onDiagnose}
         />
       ) : null}
       {inheritedApiEndpoint ? (
@@ -199,6 +212,13 @@ export function ProviderDetailSurface({
         deletingModelId={deletingModelId}
         onDeleteCustomModel={onDeleteCustomModel}
         onAddCustomModel={onAddCustomModel}
+      />
+      <ProviderDiagnosticSection
+        providerLabel={providerLabel}
+        diagnostic={diagnostic}
+        revealRequest={diagnosticRevealRequest}
+        onRun={onRunDiagnostic}
+        onCopy={onCopyDiagnostic}
       />
     </>
   );

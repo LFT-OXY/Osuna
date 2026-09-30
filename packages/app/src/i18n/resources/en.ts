@@ -2910,14 +2910,14 @@ export const en = {
       },
       diagnostic: {
         title: "Diagnostic",
-        button: "Diagnostic",
+        description:
+          "See where {{name}}'s command comes from, the path it resolves to, its version, and whether it's available.",
         refresh: "Refresh",
         refreshing: "Refreshing...",
         copyLabel: "diagnostic",
         copyAccessibility: "Copy diagnostic",
         copyFailed: "Failed to copy diagnostic",
         refreshAccessibility: "Refresh diagnostic",
-        refreshingAccessibility: "Refreshing diagnostic",
         running: "Running diagnostic...",
         none: "No diagnostic available",
         failedToFetch: "Failed to fetch diagnostic",

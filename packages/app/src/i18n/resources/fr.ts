@@ -2859,14 +2859,14 @@ export const fr: TranslationResources = {
       },
       diagnostic: {
         title: "Diagnostique",
-        button: "Diagnostique",
+        description:
+          "Voir d'où vient la commande de {{name}}, le chemin résolu, sa version et sa disponibilité.",
         refresh: "Rafraîchir",
         refreshing: "Rafraîchissant...",
         copyLabel: "diagnostic",
         copyAccessibility: "Copier le diagnostic",
         copyFailed: "Échec de la copie du diagnostic",
         refreshAccessibility: "Actualiser le diagnostic",
-        refreshingAccessibility: "Diagnostic rafraîchissant",
         running: "Exécution du diagnostic...",
         none: "Aucun diagnostic disponible",
         failedToFetch: "Échec de la récupération du diagnostic",

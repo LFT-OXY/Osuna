@@ -2814,14 +2814,14 @@ export const ja: TranslationResources = {
       },
       diagnostic: {
         title: "診断",
-        button: "診断",
+        description:
+          "{{name}} のコマンドの出どころ、解決されたパス、バージョン、利用可否を確認します。",
         refresh: "更新",
         refreshing: "更新中...",
         copyLabel: "診断",
         copyAccessibility: "診断をコピー",
         copyFailed: "診断のコピーに失敗しました",
         refreshAccessibility: "診断を更新",
-        refreshingAccessibility: "診断を更新中",
         running: "診断を実行中...",
         none: "利用可能な診断がありません",
         failedToFetch: "診断の取得に失敗しました",

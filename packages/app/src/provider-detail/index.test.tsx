@@ -15,6 +15,7 @@ import {
   type ProviderDetailHeaderProps,
   type ProviderDetailMenuProps,
 } from "./header";
+import type { ProviderDiagnosticState } from "./diagnostic";
 import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
 
 function entry(overrides: Partial<ProviderSnapshotEntry>): ProviderSnapshotEntry {
@@ -82,6 +83,8 @@ function renderApiEndpoints(providerLabel: string) {
   return <div data-testid="api-endpoints-slot">{providerLabel}</div>;
 }
 
+const IDLE_DIAGNOSTIC: ProviderDiagnosticState = { status: "idle" };
+
 function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
   render(
     <ProviderDetailSurface
@@ -95,8 +98,12 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       isRefreshing={false}
       deletingModelId={null}
       removalError={null}
+      diagnostic={IDLE_DIAGNOSTIC}
+      diagnosticRevealRequest={0}
       onRefresh={noop}
+      onDiagnose={noop}
       onRunDiagnostic={noop}
+      onCopyDiagnostic={noop}
       onDismissRemovalError={noop}
       onDeleteCustomModel={noop}
       onAddCustomModel={resolved}
@@ -328,12 +335,14 @@ describe("ProviderDetailSurface", () => {
 
   it("opens with an error card naming the provider, its full error and the next steps", () => {
     const onRefresh = vi.fn();
+    const onDiagnose = vi.fn();
     const onRunDiagnostic = vi.fn();
     const error = "opencode exited 1\n  at spawn (node:child_process:420)";
     renderDetail({
       provider: "opencode",
       entries: [entry({ provider: "opencode", label: "OpenCode", status: "error", error })],
       onRefresh,
+      onDiagnose,
       onRunDiagnostic,
     });
 
@@ -348,7 +357,9 @@ describe("ProviderDetailSurface", () => {
     fireEvent.click(within(card).getByText(i18n.t("settings.providers.diagnostic.run")));
 
     expect(onRefresh).toHaveBeenCalledTimes(1);
-    expect(onRunDiagnostic).toHaveBeenCalledTimes(1);
+    // 错误卡的「运行诊断」同 ⋯ 菜单：滚到诊断节再运行。
+    expect(onDiagnose).toHaveBeenCalledTimes(1);
+    expect(onRunDiagnostic).not.toHaveBeenCalled();
   });
 
   it("shows no error card for a disabled or healthy provider", () => {
@@ -435,6 +446,93 @@ describe("ProviderDetailSurface", () => {
     expect(
       blockOrder(["provider-install-platform-macos", "provider-inherited-api-endpoint"]),
     ).toEqual(["provider-inherited-api-endpoint", "provider-install-platform-macos"]);
+  });
+
+  it("offers the diagnostic at the bottom, explaining what it checks", () => {
+    const onRunDiagnostic = vi.fn();
+    renderDetail({ onRunDiagnostic });
+
+    const section = screen.getByTestId("provider-diagnostic-section");
+    expect(within(section).getByText(i18n.t("settings.providers.diagnostic.title"))).toBeTruthy();
+    expect(
+      within(section).getByText(
+        i18n.t("settings.providers.diagnostic.description", { name: "Claude Code" }),
+      ),
+    ).toBeTruthy();
+    expect(blockOrder(["provider-models-section", "provider-diagnostic-section"])).toEqual([
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ]);
+
+    fireEvent.click(within(section).getByText(i18n.t("settings.providers.diagnostic.run")));
+    expect(onRunDiagnostic).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the diagnostic running in place", () => {
+    renderDetail({ diagnostic: { status: "running" } });
+
+    const section = screen.getByTestId("provider-diagnostic-section");
+    expect(within(section).getByText(i18n.t("settings.providers.diagnostic.running"))).toBeTruthy();
+    expect(within(section).queryByText(i18n.t("settings.providers.diagnostic.run"))).toBeNull();
+  });
+
+  it("shows the output with when it ran, and copies exactly what it shows", () => {
+    const output = "Codex\n  Binary: /usr/local/bin/codex\n  Version: 0.41.0";
+    const onCopyDiagnostic = vi.fn();
+    const onRunDiagnostic = vi.fn();
+    renderDetail({
+      diagnostic: { status: "ready", output, ranAt: new Date().toISOString() },
+      onCopyDiagnostic,
+      onRunDiagnostic,
+    });
+
+    const section = screen.getByTestId("provider-diagnostic-section");
+    // 代码面逐行渲染，每行都要在。
+    const surface = screen.getByTestId("provider-diagnostic-output");
+    for (const line of output.split("\n")) {
+      expect(within(surface).getByText(line, { normalizer: (text) => text })).toBeTruthy();
+    }
+    expect(within(section).getByText("just now")).toBeTruthy();
+
+    fireEvent.click(
+      within(section).getByLabelText(i18n.t("settings.providers.diagnostic.copyAccessibility")),
+    );
+    expect(onCopyDiagnostic).toHaveBeenCalledWith(output);
+
+    fireEvent.click(
+      within(section).getByLabelText(i18n.t("settings.providers.diagnostic.refreshAccessibility")),
+    );
+    expect(onRunDiagnostic).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers nothing to copy when the diagnostic came back empty", () => {
+    renderDetail({ diagnostic: { status: "ready", output: "", ranAt: new Date().toISOString() } });
+
+    const section = screen.getByTestId("provider-diagnostic-section");
+    expect(within(section).getByText(i18n.t("settings.providers.diagnostic.none"))).toBeTruthy();
+    expect(
+      within(section).queryByLabelText(i18n.t("settings.providers.diagnostic.copyAccessibility")),
+    ).toBeNull();
+    expect(
+      within(section).getByLabelText(i18n.t("settings.providers.diagnostic.refreshAccessibility")),
+    ).toBeTruthy();
+  });
+
+  it("shows why the diagnostic failed and lets it be retried", () => {
+    const onRunDiagnostic = vi.fn();
+    renderDetail({
+      diagnostic: { status: "failed", message: "daemon unreachable" },
+      onRunDiagnostic,
+    });
+
+    const section = screen.getByTestId("provider-diagnostic-section");
+    expect(
+      within(section).getByText(i18n.t("settings.providers.diagnostic.failedToFetch")),
+    ).toBeTruthy();
+    expect(within(section).getByText("daemon unreachable")).toBeTruthy();
+
+    fireEvent.click(within(section).getByText(i18n.t("common.actions.retry")));
+    expect(onRunDiagnostic).toHaveBeenCalledTimes(1);
   });
 
   it("deletes a custom model by id", () => {

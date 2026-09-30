@@ -179,14 +179,21 @@
   - 未运行时是一行卡片：左侧说明「查看 {名称} 的命令来源、解析路径、版本和可用状态。」（新增），右侧 outline「运行诊断」（新增，带 `FileText` 图标）。
   - 运行中显示「正在运行诊断...」。
   - 完成后显示 ScrollableCodeSurface（等宽 12/18，横向滚动，不折行）；节标题 trailing 是运行时间（time-ago）、复制和重新运行两个仅图标按钮。
-  - 失败时显示「获取诊断失败」加原因和重试。
-  - ⋯ 菜单里的「诊断」滚动到这一节并触发运行。
-  - 原「诊断」子弹窗移除。
+  - 失败时显示「获取诊断失败」加原因和重试（outline「重试」，`common.actions.retry`）。原因为空时显示「未知错误」；主机没有连接也走失败态，不静默。
+  - 输出为空时显示「没有可用诊断」，trailing 只留时间和重新运行，不给复制。
+  - 重新运行时输出换成「正在运行诊断...」，不保留旧输出。
+  - 复制与重新运行是 ghost sm 仅图标 `Button`（`Copy`、`RotateCw`），不手工画 Pressable。复制成功 toast「已复制 诊断」，失败 toast「复制诊断失败」。
+  - ⋯ 菜单里的「诊断」和错误卡的「运行诊断」滚动到这一节并触发运行；诊断节自己的「运行诊断」「重新运行」「重试」只运行、不滚动。
+  - 原「诊断」子弹窗移除，composer 弹窗的底部栏一并移除。08 之前 composer 弹窗没有独立的「刷新」（错误卡里仍有），07 与 08 一起交付。
+  - 状态在 `provider-detail/diagnostic.ts`：按主机加提供方分键的 store，`idle | running | ready{output, ranAt} | failed{message}`，同一提供方同时只跑一次。手机上 ⋯ 在顶栏、诊断节在正文，两处不在同一棵组件树，所以和删除状态一样不用组件 state。结果留在 store 里：离开详情再回来、或在 composer 弹窗里看同一个提供方，都显示上次结果和运行时间。
+  - 「滚到这一节」是同一 store 里的请求计数 `reveals`：入口每点一次加一，诊断节看到计数变化（挂载时的值不算）就把自己滚进视野。滚动在「运行中」那一刻发生，此时诊断节只有一行，页面可能滚到底，输出到达后向下增长。
+  - 滚动只在 Web（含 Electron）：`provider-detail/reveal.web.ts` 找最近的可滚动祖先改 `scrollTop`（不用 `scrollIntoView`，它会连带滚动外层容器）。原生端 `reveal.ts` 不滚动：拿不到设置页外层 ScrollView 的 ref。诊断照常运行，用户自己下滑看结果（用户确认的取舍）。
+  - 入口的接线是 `provider-detail/view.tsx` 的 `useProviderDiagnosticActions(serverId, provider)`，返回 `run`（就地运行）和 `diagnose`（滚动加运行）；页内头部块、手机顶栏、详情内容三处共用。
 - **⋯ 菜单**：DropdownMenu，align end，宽 220。菜单项是「诊断」（`FileText`）；自定义提供方且主机支持 `providerRemoval` 时，加分隔线和 destructive「Remove provider」（`Trash2`）。删除仍走现有 `confirmDialog`；失败时在详情顶部显示 Alert error，不再用 `Alert.alert`。
   - 组件是 `provider-detail/header.tsx` 的 `ProviderDetailMenu`，收 `providerSource` 和 `hostSupportsRemoval`，自己判定有没有删除项；`placement` 区分页内头部块（28 的按钮）和手机顶栏（顶栏图标按钮尺寸）。
   - 删除状态在 `provider-detail/removal.ts`：按主机加提供方分键的 store，`idle | removing | failed`。手机上 ⋯ 在顶栏、失败提示在正文，两处不在同一棵组件树，所以不用组件 state。确认框弹出期间就是 `removing`，菜单项显示「正在删除...」。
   - 删除失败的 Alert 标题复用 `settings.providers.remove.errorTitle`，描述是原因，带 outline「关闭」；重试删除时也清掉。删除成功后提供方从快照消失，由页面的地址修正回到第一个提供方或列表。
-  - 「诊断」和错误卡的「运行诊断」在 07 之前打开 `components/provider-diagnostic-sheet.tsx` 导出的 `DiagnosticSubSheet`：设置页正文一个实例（`providers-page.tsx`），手机顶栏另一个（`providers-header.tsx`）。
+  - 「诊断」和错误卡的「运行诊断」走 `useProviderDiagnosticActions` 的 `diagnose`，见上面「诊断（就地）」。`DiagnosticSubSheet` 已删除。
 
 ### ACP 目录弹窗
 
@@ -220,7 +227,7 @@
   - 「添加 Provider」按钮的无障碍名称（复用 `settings.providers.addProvider`）；
   - 列表错误行的「关闭」（复用 `common.actions.dismiss`）。
 - 写在 `en.ts`，其余 8 种语言同步补齐。
-- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。06 删了 `models.addCustomTitle`、`models.modelId`、`models.retry`、`models.retrying`。05 已删 `install.howTo`、`install.howToFor`、`apiEndpoints.inheritedNote`、`updateErrorTitle`，以及只剩测试在用的 `hasProviderInstallGuide`。
+- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。07 新增 `diagnostic.description`，删了 `diagnostic.button`、`diagnostic.refreshingAccessibility`。06 删了 `models.addCustomTitle`、`models.modelId`、`models.retry`、`models.retrying`。05 已删 `install.howTo`、`install.howToFor`、`apiEndpoints.inheritedNote`、`updateErrorTitle`，以及只剩测试在用的 `hasProviderInstallGuide`。
 
 ## Testing Decisions
 
@@ -238,7 +245,7 @@
      - ⋯ 菜单项按自定义与否变化；
      - 菜单「诊断」触发运行；
      - 添加 Model 的提交中、成功、失败；
-     - 诊断的运行中、成功、失败；
+     - 诊断的未运行、运行中、成功（复制的就是显示的输出）、空输出、失败；
      - 删除失败时顶部出现错误；
      - 名称与 id 相同的模型只显示一次。
   3. **纯函数单测**：布局判定（宽度 → 两列或栈式，含 736 边界和紧凑优先）；选中项解析（地址里的 provider 存在、不存在、列表为空）。
@@ -246,6 +253,7 @@
      - 更新受影响的四个 spec：ACP 目录添加改走「+」弹窗；删除改走详情 ⋯ 菜单；设置页 Providers 卡片断言；composer 齿轮弹窗（`provider-settings-sheet` 不变，确认不再有子弹窗）。
      - 新增一条宽屏选择和深链：点行后地址变化、直接打开子路由会选中对应提供方。
      - 新增一条手机推入和返回。
+     - 宽屏和手机各一步：⋯「诊断」后诊断输出出现在视口里（`settings-providers-split.spec.ts`），覆盖 Web 的滚动和手机顶栏到正文的跨树传递。
      - 会失败的操作按 `docs/testing.md` 各补一条失败路径的可见断言；无法用真实 daemon 稳定造出失败的，在组件测试里覆盖，并在测试旁注明原因。
 - 只运行改动涉及的测试文件，不跑整个套件；全量交给 CI。
 - 截图验收按 `docs/qa.md`：桌面端（Electron）宽屏、窄窗栈式、composer 弹窗，浅色和深色，和原型逐屏对照。原生端按项目惯例注明免验收。

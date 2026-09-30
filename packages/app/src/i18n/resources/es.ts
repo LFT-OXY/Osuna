@@ -2851,14 +2851,14 @@ export const es: TranslationResources = {
       },
       diagnostic: {
         title: "Diagnóstico",
-        button: "Diagnóstico",
+        description:
+          "Consulta de dónde viene el comando de {{name}}, la ruta resuelta, su versión y si está disponible.",
         refresh: "Refrescar",
         refreshing: "Refrescante...",
         copyLabel: "diagnóstico",
         copyAccessibility: "Copiar diagnóstico",
         copyFailed: "No se pudo copiar el diagnóstico",
         refreshAccessibility: "Actualizar diagnóstico",
-        refreshingAccessibility: "Diagnóstico refrescante",
         running: "Ejecutando diagnóstico...",
         none: "No hay diagnóstico disponible",
         failedToFetch: "No se pudo recuperar el diagnóstico",

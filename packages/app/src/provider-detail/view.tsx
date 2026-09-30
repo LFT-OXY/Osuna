@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiEndpointsView } from "@/api-endpoints/view";
@@ -6,15 +7,23 @@ import {
   type ProviderDiscoveredModelsCache,
 } from "@/components/provider-diagnostic-models";
 import { getProviderIcon } from "@/components/provider-icons";
+import { useToast } from "@/contexts/toast-context";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import type { ProviderInstallGuide } from "@/provider-install-guide";
 import { ProviderInstallGuideView } from "@/provider-install-guide/view";
 import { useHostFeature } from "@/runtime/host-features";
+import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { ProviderDetailHeader, ProviderDetailMenu, ProviderDetailRefreshButton } from "./header";
+import {
+  revealProviderDiagnostic,
+  runProviderDiagnostic,
+  useProviderDiagnostic,
+  useProviderDiagnosticReveal,
+} from "./diagnostic";
 import { ProviderDetailSurface } from "./index";
 import { dismissProviderRemovalError, removeProvider, useProviderRemoval } from "./removal";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
@@ -24,19 +33,42 @@ import { countSelectableModels, describeProviderModelCount, resolveProviderStatu
  * 无法解析的模块，所以只在这里导入；调用方从这里导入。
  */
 
-export function ProviderDetail({
-  serverId,
-  provider,
-  onRunDiagnostic,
-}: {
-  serverId: string;
-  provider: string;
-  onRunDiagnostic: () => void;
-}) {
+// 诊断的两种入口：诊断节里就地运行；⋯ 菜单和错误卡先让诊断节滚进视野再运行。
+export function useProviderDiagnosticActions(serverId: string, provider: string) {
+  const client = useHostRuntimeClient(serverId);
+  const run = useCallback(() => {
+    void runProviderDiagnostic(serverId, provider, async () => {
+      // 没有连接时照样进入失败态，原因为空，诊断节显示「未知错误」。
+      if (!client) throw new Error();
+      const result = await client.getProviderDiagnostic(provider);
+      return result.diagnostic;
+    });
+  }, [client, provider, serverId]);
+  const diagnose = useCallback(() => {
+    revealProviderDiagnostic(serverId, provider);
+    run();
+  }, [provider, run, serverId]);
+  return { run, diagnose };
+}
+
+export function ProviderDetail({ serverId, provider }: { serverId: string; provider: string }) {
+  const { t } = useTranslation();
+  const toast = useToast();
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const removal = useProviderRemoval(serverId, provider);
+  const diagnostic = useProviderDiagnostic(serverId, provider);
+  const diagnosticRevealRequest = useProviderDiagnosticReveal(serverId, provider);
+  const { run: runDiagnostic, diagnose } = useProviderDiagnosticActions(serverId, provider);
+  const handleCopyDiagnostic = useCallback(
+    (output: string) => {
+      void Clipboard.setStringAsync(output)
+        .then(() => toast.copied(t("settings.providers.diagnostic.copyLabel")))
+        .catch(() => toast.error(t("settings.providers.diagnostic.copyFailed")));
+    },
+    [t, toast],
+  );
   const handleDismissRemovalError = useCallback(
     () => dismissProviderRemovalError(serverId, provider),
     [provider, serverId],
@@ -132,8 +164,12 @@ export function ProviderDetail({
       isRefreshing={isRefreshing}
       deletingModelId={deletingModelId}
       removalError={removal.status === "failed" ? removal.message : null}
+      diagnostic={diagnostic}
+      diagnosticRevealRequest={diagnosticRevealRequest}
       onRefresh={handleRefresh}
-      onRunDiagnostic={onRunDiagnostic}
+      onDiagnose={diagnose}
+      onRunDiagnostic={runDiagnostic}
+      onCopyDiagnostic={handleCopyDiagnostic}
       onDismissRemovalError={handleDismissRemovalError}
       onDeleteCustomModel={handleDeleteCustomModel}
       onAddCustomModel={handleAddCustomModel}
@@ -205,15 +241,14 @@ export function ProviderDetailPage({
   serverId,
   provider,
   hasScreenHeaderActions,
-  onRunDiagnostic,
 }: {
   serverId: string;
   provider: string;
   // 手机上「刷新」和 ⋯ 在顶栏，头部块只留图标、名称、徽章和模型数。
   hasScreenHeaderActions: boolean;
-  onRunDiagnostic: () => void;
 }) {
   const header = useProviderDetailHeader(serverId, provider);
+  const { diagnose } = useProviderDiagnosticActions(serverId, provider);
   const {
     label,
     isRefreshing,
@@ -233,20 +268,20 @@ export function ProviderDetailPage({
           providerSource={providerSource}
           hostSupportsRemoval={hostSupportsRemoval}
           isRemoving={isRemoving}
-          onDiagnose={onRunDiagnostic}
+          onDiagnose={diagnose}
           onRemove={onRemove}
           placement="inline"
         />
       </>
     ),
     [
+      diagnose,
       hostSupportsRemoval,
       isRefreshing,
       isRemoving,
       label,
       onRefresh,
       onRemove,
-      onRunDiagnostic,
       provider,
       providerSource,
     ],
@@ -262,7 +297,7 @@ export function ProviderDetailPage({
         renderActions={hasScreenHeaderActions ? undefined : renderActions}
         testID={`provider-detail-header-${provider}`}
       />
-      <ProviderDetail serverId={serverId} provider={provider} onRunDiagnostic={onRunDiagnostic} />
+      <ProviderDetail serverId={serverId} provider={provider} />
     </>
   );
 }

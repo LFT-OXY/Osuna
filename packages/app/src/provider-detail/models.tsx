@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Pressable,
@@ -22,7 +22,7 @@ import { Text as UiText } from "@/components/ui/text";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import { formatTimeAgo } from "@/utils/time";
+import { useTimeAgoLabel } from "./time-ago";
 
 /*
  * 详情里的 Models 节：搜索行 → 就地添加行 →「已发现」组 →「自定义 Models」组，同在一张卡片里。
@@ -49,7 +49,6 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const destructiveIconColorMapping = (theme: Theme) => ({ color: theme.colors.destructive });
 // FormTextInput 会压平 style 拆成外框与文字，Unistyles 样式在 Web 上压平后没有值，所以用普通对象。
 const ADD_MODEL_INPUT_STYLE = { flex: 1 };
-const UPDATED_TICK_MS = 10_000;
 
 function rankModels<T>(items: T[], query: string, fields: (item: T) => string[]): T[] {
   if (!query) return items;
@@ -60,20 +59,6 @@ function rankModels<T>(items: T[], query: string, fields: (item: T) => string[])
     );
   scored.sort((a, b) => compareMatchScores(a.score, b.score));
   return scored.map((entry) => entry.item);
-}
-
-function useUpdatedLabel(fetchedAt: string | undefined): string | null {
-  const [clockTick, setClockTick] = useState(0);
-  useEffect(() => {
-    if (!fetchedAt) return;
-    const id = setInterval(() => setClockTick((tick) => tick + 1), UPDATED_TICK_MS);
-    return () => clearInterval(id);
-  }, [fetchedAt]);
-  return useMemo(() => {
-    if (!fetchedAt) return null;
-    void clockTick;
-    return formatTimeAgo(new Date(fetchedAt));
-  }, [clockTick, fetchedAt]);
 }
 
 function ModelRow({
@@ -287,7 +272,7 @@ export function ProviderModelsSection({
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const updatedLabel = useUpdatedLabel(fetchedAt);
+  const updatedLabel = useTimeAgoLabel(fetchedAt);
   const openAddRow = useCallback(() => setIsAddOpen(true), []);
   const closeAddRow = useCallback(() => setIsAddOpen(false), []);
 
