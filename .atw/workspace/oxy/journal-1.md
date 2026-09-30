@@ -560,3 +560,28 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 21: 第三方接口：工单 09 文档收尾、截图验收与 CI 回归修复，任务归档
+<!-- atw-session: v=2 fp=fee6a0463c4e18e9 -->
+
+**Date**: 2026-09-30
+**Task**: 第三方接口：工单 09 文档收尾、截图验收与 CI 回归修复，任务归档
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+工单 09：custom-providers 新增「While an API endpoint is active」，ADR 0004 按实现补齐，词汇表对齐界面文案；桌面端浅色/深色各一套截图（临时 CLAUDE_CONFIG_DIR/CODEX_HOME + 桩 CLI + 假上游隔离，真实配置 mtime 未变）。推送后 CI server-tests 在 Linux/Windows 挂在 claude.test.ts「bootstrap 不得含提供方名字」，把 Codex 版本探测挪进 ApiEndpointService、bootstrap 改传通用 providerRuntimeSettings 后全绿（含 Windows）；spec 补这条约束。Nix 两项失败为既有 npm hash 问题。任务验收并归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9255915d9` | docs: 第三方接口文档收尾，ADR 0004 按实现补齐，补自定义提供方的相互影响与桌面端截图验收 |
+| `0a853a263` | chore: 第三方接口任务进入验收 |
+| `48411967a` | fix(server): Codex 版本探测挪进第三方接口服务，bootstrap 不再出现提供方名字 |
+
+### Status
+
+[OK] **Completed**

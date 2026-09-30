@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-09-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~562 | Active |
+| `journal-1.md` | ~587 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-09-30 | 第三方接口：工单 09 文档收尾、截图验收与 CI 回归修复，任务归档 | `9255915d9`, `0a853a263`, `48411967a` | `main` |
 | 20 | 2026-09-30 | 提供方安装指引 | `bbb132e50` | `main` |
 | 18 | 2026-09-29 | Pi 思考档位按 thinkingLevelMap 过滤 | `c1c21c76d` | `main` |
 | 17 | 2026-09-29 | 桌面端更新：设置 → 关于对齐新流程（06）并完成验收归档 | `c1f3e9f7a` | `main` |
