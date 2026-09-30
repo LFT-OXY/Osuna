@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ProviderSnapshotEntrySchema,
   ServerInfoStatusPayloadSchema,
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
@@ -279,5 +280,23 @@ describe("server_info.features.apiEndpoints", () => {
   it("reads an older host without the flag as not supported", () => {
     const parsed = ServerInfoStatusPayloadSchema.parse({ ...base, features: { usage: true } });
     expect(parsed.features?.apiEndpoints).toBeUndefined();
+  });
+});
+
+describe("providers snapshot isModelListAuthoritative", () => {
+  const entry = {
+    provider: "claude",
+    status: "ready" as const,
+    enabled: true,
+    models: [{ provider: "claude", id: "relay/sonnet", label: "relay/sonnet", isDefault: true }],
+  };
+
+  it("parses an entry whose models come from an active API endpoint", () => {
+    const parsed = ProviderSnapshotEntrySchema.parse({ ...entry, isModelListAuthoritative: true });
+    expect(parsed.isModelListAuthoritative).toBe(true);
+  });
+
+  it("reads an older host without the flag as a non-authoritative list", () => {
+    expect(ProviderSnapshotEntrySchema.parse(entry).isModelListAuthoritative).toBeUndefined();
   });
 });

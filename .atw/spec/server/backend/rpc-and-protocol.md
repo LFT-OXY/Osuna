@@ -432,6 +432,68 @@ const signal = AbortSignal.any([input.signal, timeout]); // input.signal = clien
 // catch: input.signal.aborted → cancelled; timeout.aborted → upstream_timeout
 ```
 
+## Scenario: host state that replaces a provider's model catalogue
+
+Reference implementation: the active API endpoint (api-endpoint ticket 05). Reuse this shape for any host-side mode that decides which models a provider may run.
+
+### 1. Scope / Trigger
+
+- Something on the host, not the provider's own catalogue, decides the exact set of models a built-in provider accepts, and the set changes at runtime without a config reload.
+
+### 2. Signatures
+
+- `ProviderModelOverride = (provider: AgentProvider) => AgentModelDefinition[] | null` in `server/agent/agent-sdk-types.ts`; `null` means "use the provider's catalogue".
+- `ApiEndpointService.activeModels(provider: string): AgentModelDefinition[] | null` is the single source: the active endpoint's checked models with real ids, `isDefault` on the endpoint's default model.
+- Injected twice from `bootstrap.ts`: `ProviderSnapshotManagerOptions.modelOverride` and `AgentManagerOptions.modelOverride`.
+- `ApiEndpointServiceOptions.onActiveEndpointChanged(provider)` → `providerSnapshotManager.refreshSettingsSnapshot({ providers: [provider] })`, with `.catch` logging `{ err }`.
+- Wire: `ProviderSnapshotEntry.isModelListAuthoritative?: boolean` in `packages/protocol/src/messages.ts` and both hand-written `ProviderSnapshotEntry` interfaces (`protocol/src/agent-types.ts`, `server/agent/agent-sdk-types.ts`).
+
+### 3. Contracts
+
+- `ProviderSnapshotManager.refreshProvider` still runs availability and `fetchCatalog` (modes, default mode come from there), then replaces `catalog.models` wholesale with the override, passes each row through `client.resolveConfiguredModel` like config.json profile models, and sets `isModelListAuthoritative: true`. Nothing the provider appended survives — Claude's `settings.json` rows (`ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_*_MODEL`) would otherwise duplicate the endpoint's models.
+- `AgentManager.resolveDefaultModelId` reads the override before `client.fetchCatalog`. It bypasses the snapshot, so without this a CLI / MCP / schedule create with no model gets the official default.
+- The override reads the store on every call; there is no cache to invalidate. The refresh only republishes. Refresh after: activate, back to Official, save of the active endpoint, delete of the active endpoint (ticket 06 adds external-change detection).
+- `ApiEndpointService` is constructed before `createAgentProviderRuntime` and the `AgentManager`; its callbacks close over `providerSnapshotManager`, declared later, and run only after startup.
+- The field is optional and needs no capability gate: an old host never sends it and the app treats absence as non-authoritative; an old app ignores it.
+
+### 4. Validation & Error Matrix
+
+- Official, or a provider with no endpoint support → override `null`, catalogue unchanged, field absent.
+- Endpoint store unreadable → thrown inside `refreshProvider`'s try, the entry becomes `status: "error"`; inside `resolveDefaultModelId` it is outside the try and propagates.
+- Custom provider that `extends: claude` → id is not `claude`, override `null`; its catalogue is not replaced.
+
+### 5. Good/Base/Bad Cases
+
+- Good: activate → snapshot lists only `relay/*`, `isModelListAuthoritative: true`; a create with no model runs `relay/haiku`.
+- Base: back to Official → the next refresh publishes the provider's own catalogue and drops the field.
+- Bad: replacing models only in the snapshot — the picker looks right, but `paseo run` with no `--model` still sends `claude-opus-*` to the relay.
+
+### 6. Tests Required
+
+- Daemon E2E (`daemon-e2e/api-endpoint-claude.e2e.test.ts` "provider snapshot follows…", `api-endpoint-codex.e2e.test.ts`): `expect.poll` the snapshot after activate / edit / Official / delete; `createAgent` with no model asserts `agent.model` is the endpoint's default id.
+- Unit (`provider-snapshot-manager.test.ts`): override replaces rows the catalogue returned, runs `resolveConfiguredModel`, sets and clears the flag; a real `ClaudeAgentClient` on a temp `settings.json` (version injected, `isAvailable` overridden, no CLI run) proves the settings rows disappear.
+- Protocol (`messages.api-endpoint.test.ts`): entry parses with and without the field.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Snapshot-only: AgentManager.resolveDefaultModelId still asks client.fetchCatalog.
+const models = override ?? catalog.models;
+```
+
+#### Correct
+
+```ts
+// bootstrap.ts — one source, two consumers.
+function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
+  return apiEndpointService.activeModels(provider);
+}
+// snapshotManager: { modelOverride: apiEndpointModelOverride }
+// new AgentManager({ modelOverride: apiEndpointModelOverride, ... })
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

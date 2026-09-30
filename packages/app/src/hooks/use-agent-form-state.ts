@@ -28,6 +28,7 @@ import {
   mergeSelectedComposerPreferences,
   buildProviderDefinitionMap,
   buildProviderDefinitionMapForStatuses,
+  buildAuthoritativeModelProviders,
   INITIAL_AGENT_FORM_RESOLUTION,
   INITIAL_USER_MODIFIED,
   RESOLVABLE_PROVIDER_STATUSES,
@@ -123,19 +124,25 @@ async function persistProviderPreferences(input: {
   provider: AgentProvider;
   formState: FormState;
   availableModels: AgentModelDefinition[] | null;
+  isModelListAuthoritative: boolean;
   updatePreferences: (
     updates: Partial<FormPreferences> | ((current: FormPreferences) => FormPreferences),
   ) => Promise<FormPreferences>;
 }): Promise<void> {
-  const { provider, formState, availableModels, updatePreferences } = input;
+  const { provider, formState, availableModels, isModelListAuthoritative, updatePreferences } =
+    input;
   const resolvedModel = resolveEffectiveModel(availableModels, formState.model);
   const modelId = resolvedModel?.id ?? formState.model;
+  // 权威列表下的模型可能只是回退出来的默认值；写进记忆会盖掉官方模式下选的模型。
+  // 用户手动选的模型在选择时已经记下了。
+  const submittedModelId = modelId || undefined;
+  const modelIdToRemember = isModelListAuthoritative ? undefined : submittedModelId;
   await updatePreferences((current) =>
     mergeProviderPreferences({
       preferences: current,
       provider,
       updates: {
-        model: modelId || undefined,
+        model: modelIdToRemember,
         mode: formState.modeId || undefined,
         ...(modelId && formState.thinkingOptionId
           ? { thinkingByModel: { [modelId]: formState.thinkingOptionId } }
@@ -220,6 +227,10 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     () => buildProviderModelsByProvider(snapshotEntries),
     [snapshotEntries],
   );
+  const snapshotAuthoritativeModelProviders = useMemo(
+    () => buildAuthoritativeModelProviders(snapshotEntries),
+    [snapshotEntries],
+  );
   const snapshotModelSelectorProviders = useMemo(
     () => buildSelectableProviderSelectorProviders(snapshotEntries),
     [snapshotEntries],
@@ -262,6 +273,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       initialValues,
       preferences,
       providerModelsByProvider: snapshotProviderModelsByProvider,
+      authoritativeModelProviders: snapshotAuthoritativeModelProviders,
       allowedProviderMap: snapshotResolvableProviderDefinitionMap,
     });
   }, [
@@ -273,6 +285,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     initialValues,
     preferences,
     snapshotProviderModelsByProvider,
+    snapshotAuthoritativeModelProviders,
     snapshotResolvableProviderDefinitionMap,
   ]);
 
@@ -286,7 +299,13 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       const { provider, modelId, providerDef, providerModels } = input;
       const providerPrefs = preferenceOverlayRef.current.current().providerPreferences?.[provider];
       const normalizedModelId = normalizeSelectedModelId(modelId);
-      const nextModelId = normalizedModelId || resolveDefaultModelId(providerModels);
+      // 权威列表下没有可记的模型时，默认模型只是回退值，不写进记忆。
+      const hasChosenModel = normalizedModelId !== "";
+      const mayRememberDefault = !snapshotAuthoritativeModelProviders.has(provider);
+      let nextModelId = normalizedModelId;
+      if (!hasChosenModel && mayRememberDefault) {
+        nextModelId = resolveDefaultModelId(providerModels);
+      }
 
       dispatch({
         type: "SET_PROVIDER_AND_MODEL_FROM_USER",
@@ -306,7 +325,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         }),
       );
     },
-    [updateCurrentPreferences],
+    [snapshotAuthoritativeModelProviders, updateCurrentPreferences],
   );
 
   const setProviderAndModelFromUser = useCallback(
@@ -492,13 +511,15 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     if (!formState.provider) {
       return;
     }
+    const isModelListAuthoritative = snapshotAuthoritativeModelProviders.has(formState.provider);
     await persistProviderPreferences({
       provider: formState.provider,
       formState,
       availableModels,
+      isModelListAuthoritative,
       updatePreferences: updateCurrentPreferences,
     });
-  }, [availableModels, formState, updateCurrentPreferences]);
+  }, [availableModels, formState, snapshotAuthoritativeModelProviders, updateCurrentPreferences]);
 
   const agentDefinition = formState.provider
     ? providerDefinitionMap.get(formState.provider)

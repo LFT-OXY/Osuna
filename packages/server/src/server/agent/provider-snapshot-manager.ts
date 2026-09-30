@@ -18,6 +18,7 @@ import {
   type AgentModelDefinition,
   type AgentProvider,
   type FetchCatalogOptions,
+  type ProviderModelOverride,
   type ProviderSnapshotEntry,
 } from "./agent-sdk-types.js";
 import {
@@ -123,6 +124,7 @@ export interface ProviderSnapshotManagerOptions {
   refreshTimeoutMs?: number;
   diagnosticTimeoutMs?: number;
   openCodeBridge?: OpenCodeBridge;
+  modelOverride?: ProviderModelOverride;
 }
 
 interface ProviderSnapshotRefreshOptions {
@@ -253,6 +255,7 @@ export class ProviderSnapshotManager {
   private readonly openCodeBridge?: OpenCodeBridge;
   private readonly isDev: boolean;
   private readonly extraClients: Partial<Record<AgentProvider, AgentClient>>;
+  private readonly modelOverride?: ProviderModelOverride;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -271,6 +274,7 @@ export class ProviderSnapshotManager {
     this.openCodeBridge = options.openCodeBridge;
     this.isDev = options.isDev === true;
     this.extraClients = options.extraClients ?? {};
+    this.modelOverride = options.modelOverride;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -1031,10 +1035,16 @@ export class ProviderSnapshotManager {
         return;
       }
 
-      const models = normalizeAgentModelCatalog(catalog.models);
-      if (models.length !== catalog.models.length) {
+      // 覆盖的模型与 config.json 里配置的模型一样，交给提供方补齐思考档位等信息。
+      const overriddenModels = this.modelOverride?.(provider)?.map(
+        (model) => client.resolveConfiguredModel?.(model) ?? model,
+      );
+      const catalogModels = overriddenModels ?? catalog.models;
+      const isModelListAuthoritative = overriddenModels ? true : undefined;
+      const models = normalizeAgentModelCatalog(catalogModels);
+      if (models.length !== catalogModels.length) {
         this.logger.warn(
-          { provider, discardedRows: catalog.models.length - models.length },
+          { provider, discardedRows: catalogModels.length - models.length },
           "Provider catalog contains repeated model IDs; retaining the first definition",
         );
       }
@@ -1045,6 +1055,7 @@ export class ProviderSnapshotManager {
         status: "ready",
         enabled: true,
         models,
+        isModelListAuthoritative,
         modes: catalog.modes,
         fetchedAt: new Date().toISOString(),
       });

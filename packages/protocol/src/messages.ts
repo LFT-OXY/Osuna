@@ -452,6 +452,8 @@ export const ProviderSnapshotEntrySchema = z.object({
   description: z.string().optional(),
   iconSvg: z.string().optional(),
   defaultModeId: z.string().nullable().optional(),
+  // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
+  isModelListAuthoritative: z.boolean().optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({

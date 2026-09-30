@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAuthoritativeModelProviders,
   resolveAgentForm,
   resolveFormState,
   resolveEffectiveModel,
@@ -805,6 +806,101 @@ it("keeps the explicit model when a refreshed catalogue no longer lists it", () 
   expect(resolveEffectiveModel(CODEX_MODELS, resolved.model)).toBeNull();
 });
 
+describe("authoritative model lists (an API endpoint is active)", () => {
+  const RELAY_MODELS: AgentModelDefinition[] = [
+    { provider: "claude", id: "relay/sonnet", label: "relay/sonnet" },
+    { provider: "claude", id: "relay/haiku", label: "relay/haiku", isDefault: true },
+  ];
+  const ENDPOINT_ACTIVE = new Set<AgentProvider>(["claude"]);
+
+  it("falls back to the endpoint's default instead of a remembered Official model", () => {
+    const opened = resolveAgentForm(makeState(), {
+      type: "COMPLETE_RESOLUTION",
+      initialValues: undefined,
+      preferences: {
+        provider: "claude",
+        providerPreferences: { claude: { model: "claude-opus-5-5" } },
+      },
+      providerModelsByProvider: makeProviderModelsByProvider([["claude", RELAY_MODELS]]),
+      authoritativeModelProviders: ENDPOINT_ACTIVE,
+      allowedProviderMap: claudeProviderMap,
+    });
+    expect(opened.form.model).toBe("relay/haiku");
+  });
+
+  it("falls back for an explicit initial model the endpoint does not list", () => {
+    const opened = resolveAgentForm(makeState(), {
+      type: "COMPLETE_RESOLUTION",
+      initialValues: { provider: "claude", model: "claude-opus-5-5" },
+      preferences: null,
+      providerModelsByProvider: makeProviderModelsByProvider([["claude", RELAY_MODELS]]),
+      authoritativeModelProviders: ENDPOINT_ACTIVE,
+      allowedProviderMap: claudeProviderMap,
+    });
+    expect(opened.form.model).toBe("relay/haiku");
+  });
+
+  it("keeps a remembered model the endpoint lists", () => {
+    const opened = resolveAgentForm(makeState(), {
+      type: "COMPLETE_RESOLUTION",
+      initialValues: undefined,
+      preferences: {
+        provider: "claude",
+        providerPreferences: { claude: { model: "relay/sonnet" } },
+      },
+      providerModelsByProvider: makeProviderModelsByProvider([["claude", RELAY_MODELS]]),
+      authoritativeModelProviders: ENDPOINT_ACTIVE,
+      allowedProviderMap: claudeProviderMap,
+    });
+    expect(opened.form.model).toBe("relay/sonnet");
+  });
+
+  it("moves an open draft off a model the newly authoritative list lacks", () => {
+    const official = {
+      type: "INPUTS_CHANGED" as const,
+      serverId: "host",
+      isVisible: true,
+      isCreateFlow: true,
+      isPreferencesLoading: false,
+      hasSnapshot: true,
+      initialValues: undefined,
+      preferences: {
+        provider: "claude",
+        providerPreferences: { claude: { model: "claude-opus-5-5" } },
+      },
+      allowedProviderMap: claudeProviderMap,
+      providerModelsByProvider: makeProviderModelsByProvider([
+        ["claude", [{ provider: "claude", id: "claude-opus-5-5", label: "Opus", isDefault: true }]],
+      ]),
+      authoritativeModelProviders: new Set<AgentProvider>(),
+    };
+    const draft = resolveAgentForm(makeState(), official);
+    expect(draft.form.model).toBe("claude-opus-5-5");
+
+    // 草稿还开着时启用了第三方接口：快照换成接口的权威列表。
+    const switched = resolveAgentForm(draft, {
+      ...official,
+      providerModelsByProvider: makeProviderModelsByProvider([["claude", RELAY_MODELS]]),
+      authoritativeModelProviders: ENDPOINT_ACTIVE,
+    });
+    expect(switched.form.model).toBe("relay/haiku");
+  });
+
+  it("marks only providers whose snapshot says the list is authoritative", () => {
+    const entries: ProviderSnapshotEntry[] = [
+      {
+        provider: "claude",
+        status: "ready",
+        enabled: true,
+        models: RELAY_MODELS,
+        isModelListAuthoritative: true,
+      },
+      { provider: "codex", status: "ready", enabled: true, models: CODEX_MODELS },
+    ];
+    expect([...buildAuthoritativeModelProviders(entries)]).toEqual(["claude"]);
+  });
+});
+
 describe("resolveAgentForm", () => {
   describe("resolution state", () => {
     it.each(["error", "unavailable"] as const)(
@@ -827,6 +923,7 @@ describe("resolveAgentForm", () => {
           initialValues: undefined,
           preferences,
           providerModelsByProvider: makeProviderModelsByProvider([["codex", []]]),
+          authoritativeModelProviders: new Set<AgentProvider>(),
           allowedProviderMap: buildProviderDefinitionMapForStatuses({
             snapshotEntries,
             providerDefinitions: buildProviderDefinitions(snapshotEntries),
@@ -838,6 +935,7 @@ describe("resolveAgentForm", () => {
           initialValues: undefined,
           preferences,
           providerModelsByProvider: makeProviderModelsByProvider([["codex", CODEX_MODELS]]),
+          authoritativeModelProviders: new Set<AgentProvider>(),
           allowedProviderMap: codexProviderMap,
         });
 
@@ -873,6 +971,7 @@ describe("resolveAgentForm", () => {
           providerPreferences: { codex: { model: "gpt-5.3-codex" } },
         },
         providerModelsByProvider: makeProviderModelsByProvider([["codex", CODEX_MODELS]]),
+        authoritativeModelProviders: new Set<AgentProvider>(),
         allowedProviderMap: codexProviderMap,
       });
 
@@ -892,6 +991,7 @@ describe("resolveAgentForm", () => {
           providerPreferences: { codex: { model: "gpt-5.3-codex" } },
         },
         providerModelsByProvider: makeProviderModelsByProvider([["codex", CODEX_MODELS]]),
+        authoritativeModelProviders: new Set<AgentProvider>(),
         allowedProviderMap: codexProviderMap,
       });
       const backgroundModels: AgentModelDefinition[] = [
@@ -905,6 +1005,7 @@ describe("resolveAgentForm", () => {
           providerPreferences: { codex: { model: "gpt-5.4-codex" } },
         },
         providerModelsByProvider: makeProviderModelsByProvider([["codex", backgroundModels]]),
+        authoritativeModelProviders: new Set<AgentProvider>(),
         allowedProviderMap: codexProviderMap,
       });
 
@@ -925,6 +1026,7 @@ describe("resolveAgentForm", () => {
         },
         preferences: { provider: "claude" },
         providerModelsByProvider: makeProviderModelsByProvider([["codex", CODEX_MODELS]]),
+        authoritativeModelProviders: new Set<AgentProvider>(),
         allowedProviderMap: bothProviderMap,
       });
 
@@ -947,6 +1049,7 @@ describe("resolveAgentForm", () => {
           providerPreferences: { codex: { model: "gpt-5.3-codex" } },
         },
         providerModelsByProvider: makeProviderModelsByProvider([["codex", alternateModels]]),
+        authoritativeModelProviders: new Set<AgentProvider>(),
         allowedProviderMap: codexProviderMap,
       });
       const userChanged = resolveAgentForm(settled, {
@@ -963,6 +1066,7 @@ describe("resolveAgentForm", () => {
           providerPreferences: { codex: { model: "gpt-5.3-codex" } },
         },
         providerModelsByProvider: makeProviderModelsByProvider([["codex", CODEX_MODELS]]),
+        authoritativeModelProviders: new Set<AgentProvider>(),
         allowedProviderMap: codexProviderMap,
       });
 
@@ -978,6 +1082,7 @@ describe("resolveAgentForm", () => {
         initialValues: undefined,
         preferences: { provider: "claude" },
         providerModelsByProvider: makeProviderModelsByProvider([]),
+        authoritativeModelProviders: new Set<AgentProvider>(),
         allowedProviderMap: bothProviderMap,
       });
 
@@ -1251,6 +1356,7 @@ it("owns input readiness, reopening and user edits in the reducer", () => {
     preferences: { provider: "codex", providerPreferences: { codex: { model: "astra" } } },
     allowedProviderMap: new Map(),
     providerModelsByProvider: new Map(),
+    authoritativeModelProviders: new Set<AgentProvider>(),
   };
   let state = resolveAgentForm(makeState(), inputs);
   expect(state.resolution.status).toBe("pending");

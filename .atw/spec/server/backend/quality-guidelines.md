@@ -4,6 +4,7 @@
 
 ## Daemon-specific rules
 
+- **The density sweep in [the app checklist](../../app/frontend/quality-guidelines.md#checks-reviewers-run) applies here too.** Review applies `docs/coding-standards.md` §Density to daemon code and tests the same way.
 - **Validate at the boundary, then trust the type.** Boundaries here are the WebSocket (zod-aot generated validation), `$PASEO_HOME` files (Zod in the store), process output (`utils/run-git-command.ts`, `utils/tool-call-parsers.ts`), and plugin/MCP inputs. Past those, no `?.`, no `??`, no re-checking.
 - **Spawn through `utils/spawn.ts`; run Git through `utils/run-git-command.ts`.** Git is scheduled by `utils/git-process-scheduler.ts` under the limits in daemon config (`docs/data-model.md` "Git process limits") and traced by `utils/git-command-trace.ts`. A raw `child_process.spawn("git", …)` bypasses all of that.
 - **Path handling goes through `utils/path.ts`** (`createRealpathAwarePathMatcher`, normalization) and `server/path-utils.ts`. Workspace ids are opaque; never derive a path from one.

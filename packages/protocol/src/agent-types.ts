@@ -126,6 +126,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
+  isModelListAuthoritative?: boolean;
 }
 
 export interface AgentFeatureToggle {

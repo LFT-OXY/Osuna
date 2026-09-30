@@ -36,6 +36,7 @@ import {
   type AgentLaunchContext,
   type AgentSlashCommand,
   type AgentMode,
+  type AgentModelDefinition,
   type AgentPermissionRequest,
   type AgentPermissionResponse,
   type AgentPermissionResult,
@@ -56,6 +57,7 @@ import {
   type ImportedTimelineEntry,
   type ImportableProviderSession,
   type ListImportableSessionsOptions,
+  type ProviderModelOverride,
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import { CommandCatalog, type CommandCatalogResult } from "./command-catalog.js";
@@ -165,6 +167,11 @@ interface TimeoutOptions {
   operation: Promise<void>;
   timeoutMs: number;
   onLateError?: (error: unknown) => void;
+}
+
+function pickDefaultModelId(models: AgentModelDefinition[]): string | undefined {
+  const defaultModel = models.find((model) => model.isDefault) ?? models[0];
+  return defaultModel?.id;
 }
 
 function formatProviderList(providers: readonly string[]): string {
@@ -319,6 +326,8 @@ export interface AgentManagerOptions {
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
+  /** 与提供方快照同一个来源：不带模型新建会话时，默认模型从覆盖后的目录里选。 */
+  modelOverride?: ProviderModelOverride;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
@@ -771,6 +780,7 @@ export class AgentManager {
   private readonly resolvePaseoToolPolicy: (
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
+  private readonly modelOverride?: ProviderModelOverride;
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -791,6 +801,7 @@ export class AgentManager {
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
+    this.modelOverride = options.modelOverride;
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.commandCatalog = new CommandCatalog({
@@ -5133,13 +5144,17 @@ export class AgentManager {
     if (!client) {
       return undefined;
     }
+    const overriddenModels = this.modelOverride?.(config.provider);
+    if (overriddenModels) {
+      return pickDefaultModelId(overriddenModels);
+    }
     try {
       const catalog = await client.fetchCatalog({
         scope: "workspace",
         cwd: config.cwd,
         force: false,
       });
-      return (catalog.models.find((model) => model.isDefault) ?? catalog.models[0])?.id;
+      return pickDefaultModelId(catalog.models);
     } catch {
       // Provider may not support model listing — leave model undefined.
       return undefined;

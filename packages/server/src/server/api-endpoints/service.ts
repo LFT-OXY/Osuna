@@ -22,6 +22,7 @@ import {
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
+import type { AgentModelDefinition } from "../agent/agent-sdk-types.js";
 import {
   codexVersionAtLeast,
   normalizeOpenAICompatibleBaseUrl,
@@ -106,6 +107,8 @@ export interface ApiEndpointServiceOptions {
   now?: () => Date;
   // `codex --version` 的输出；启用 Codex 接口前检查版本。
   probeCodexVersion: () => Promise<string>;
+  // 启用、切回、编辑或删除启用中的接口之后调用；daemon 据此刷新该提供方的快照。
+  onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
 }
@@ -121,6 +124,7 @@ export class ApiEndpointService {
   private readonly homeDir: string;
   private readonly now: () => Date;
   private readonly probeCodexVersion: () => Promise<string>;
+  private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private queue: Promise<unknown> = Promise.resolve();
@@ -132,6 +136,7 @@ export class ApiEndpointService {
     this.homeDir = options.homeDir ?? homedir();
     this.now = options.now ?? (() => new Date());
     this.probeCodexVersion = options.probeCodexVersion;
+    this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
@@ -143,6 +148,24 @@ export class ApiEndpointService {
       endpoints: this.store.listEndpoints(supported).map((endpoint) => this.toWire(endpoint)),
       activeEndpointId: this.store.getActiveEndpointId(supported),
     };
+  }
+
+  /**
+   * 启用中的接口勾选的模型，id 就是传给 CLI 的真实 id，默认模型即接口的默认模型。
+   * 官方模式或不支持的提供方返回 null，模型目录照旧。
+   */
+  activeModels(provider: string): AgentModelDefinition[] | null {
+    const supported = findProvider(provider);
+    if (!supported) return null;
+    const activeEndpointId = this.store.getActiveEndpointId(supported);
+    if (!activeEndpointId) return null;
+    const endpoint = this.store.getEndpoint(supported, activeEndpointId);
+    if (!endpoint) return null;
+    return endpoint.models.map((model) => {
+      const label = model.label ?? model.id;
+      const isDefault = model.id === endpoint.defaultModelId;
+      return { provider: supported, id: model.id, label, isDefault };
+    });
   }
 
   save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
@@ -185,6 +208,7 @@ export class ApiEndpointService {
         }
       }
       this.store.upsertEndpoint(endpoint, apiKey);
+      if (isActive) this.onActiveEndpointChanged(supported);
       return this.toWire(endpoint);
     });
   }
@@ -196,12 +220,14 @@ export class ApiEndpointService {
         throw new ApiEndpointRequestError("not_found", "API endpoint not found");
       }
       // 删除启用中的接口前先切回官方，CLI 不能停在一个已经不存在的配置上。
-      if (this.store.getActiveEndpointId(supported) === endpointId) {
+      const wasActive = this.store.getActiveEndpointId(supported) === endpointId;
+      if (wasActive) {
         this.restoreOfficial(supported);
         this.store.setActiveEndpointId(supported, null);
       }
       if (supported === "codex") this.removeCodexProviderTable(endpointId);
       this.store.removeEndpoint(supported, endpointId);
+      if (wasActive) this.onActiveEndpointChanged(supported);
       return { activeEndpointId: this.store.getActiveEndpointId(supported) };
     });
   }
@@ -215,6 +241,7 @@ export class ApiEndpointService {
       if (endpointId === null) {
         this.restoreOfficial(supported);
         this.store.setActiveEndpointId(supported, null);
+        this.onActiveEndpointChanged(supported);
         return { activeEndpointId: null };
       }
       const endpoint = this.store.getEndpoint(supported, endpointId);
@@ -225,6 +252,7 @@ export class ApiEndpointService {
       if (supported === "codex") await this.requireCodexAuthCommand();
       this.writeEndpoint(endpoint, apiKey);
       this.store.setActiveEndpointId(supported, endpointId);
+      this.onActiveEndpointChanged(supported);
       return { activeEndpointId: endpointId };
     });
   }
@@ -547,8 +575,12 @@ export class ApiEndpointService {
   }
 }
 
+function findProvider(provider: string): ApiEndpointProvider | undefined {
+  return API_ENDPOINT_PROVIDERS.find((candidate) => candidate === provider);
+}
+
 function requireProvider(provider: string): ApiEndpointProvider {
-  const supported = API_ENDPOINT_PROVIDERS.find((candidate) => candidate === provider);
+  const supported = findProvider(provider);
   if (!supported) {
     throw new ApiEndpointRequestError(
       "unsupported_provider",

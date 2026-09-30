@@ -127,6 +127,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
+  isModelListAuthoritative?: boolean;
 }
 
 export interface AgentCreateConfigParent {
@@ -734,6 +736,12 @@ export interface ProviderCatalog {
   modes: AgentMode[];
   defaultModeId?: string | null;
 }
+
+/**
+ * 整份替换某个提供方的模型目录；null 表示照常用提供方自己的目录。
+ * 第三方接口启用时由它给出接口里勾选的模型（ADR 0004）。
+ */
+export type ProviderModelOverride = (provider: AgentProvider) => AgentModelDefinition[] | null;
 
 export interface ResolveAgentDefaultModeInput {
   config: AgentSessionConfig;

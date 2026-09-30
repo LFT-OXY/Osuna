@@ -177,7 +177,7 @@ import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import type { PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
-import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
+import type { AgentClient, AgentModelDefinition, AgentProvider } from "./agent/agent-sdk-types.js";
 import type {
   AgentProfile,
   AgentSkillSelection,
@@ -907,6 +907,24 @@ export async function createPaseoDaemon(
     workspaceGitService,
     logger,
   });
+  // 先于提供方快照创建：第三方接口启用时，快照和新会话的默认模型都取自它。
+  // 两个回调里的 providerSnapshotManager 在下面创建，回调只在 daemon 启动后才会被调用。
+  const apiEndpointService = new ApiEndpointService({
+    paseoHome: config.paseoHome,
+    logger,
+    probeCodexVersion: () => probeCodexVersion(providerSnapshotManager.getRuntimeSettings("codex")),
+    onActiveEndpointChanged: (provider) => {
+      void providerSnapshotManager
+        .refreshSettingsSnapshot({ providers: [provider] })
+        .catch((error) => {
+          logger.warn({ err: error, provider }, "Failed to refresh provider snapshot");
+        });
+    },
+    ...config.apiEndpoints,
+  });
+  function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
+    return apiEndpointService.activeModels(provider);
+  }
   const agentProviderRuntime = await createAgentProviderRuntime({
     paseoHome: config.paseoHome,
     logger,
@@ -918,6 +936,7 @@ export async function createPaseoDaemon(
       managedProcesses,
       isDev: config.isDev === true,
       extraClients: config.agentClients,
+      modelOverride: apiEndpointModelOverride,
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;
@@ -946,6 +965,7 @@ export async function createPaseoDaemon(
     mcpAuthToken: agentMcpAuthToken,
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
+    modelOverride: apiEndpointModelOverride,
     logger,
   });
   const syncPluginProviders = () => {
@@ -1383,12 +1403,6 @@ export async function createPaseoDaemon(
     },
   });
   daemonConfigStore.onChange(() => usageService.applyPricingConfig());
-  const apiEndpointService = new ApiEndpointService({
-    paseoHome: config.paseoHome,
-    logger,
-    probeCodexVersion: () => probeCodexVersion(providerSnapshotManager.getRuntimeSettings("codex")),
-    ...config.apiEndpoints,
-  });
   logger.info({ elapsed: elapsed() }, "Loading persisted agent registry");
   const persistedRecords = await agentStorage.list();
   logger.info(

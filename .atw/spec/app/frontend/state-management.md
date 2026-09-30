@@ -57,6 +57,17 @@ Forms are a non-React model with an explicit lifecycle (`construct`, `hydrate`, 
 
 When a form model starts a request of its own (the API endpoint form's `fetchModels` and `testConnection`), the model owns an `AbortController` per request and passes its `signal` to the dependency. `cancelFetch()` and `close()` abort it, and a result only lands if its controller is still the current one, so a late answer after cancel or refetch is dropped. The dependency returns a result union (`ok | failed | cancelled`) instead of throwing; the hook that implements it turns the signal into the daemon's cancel RPC. Clear a result that no longer describes the inputs: editing the Base URL or key aborts a pending connection test and resets it to idle. See `api-endpoints/internal/form-model.ts` and `use-api-endpoints.ts`.
 
+### A remembered model against an authoritative list
+
+`ProviderSnapshotEntry.isModelListAuthoritative` (an API endpoint is active) means the list is every model the CLI accepts; any other id will be rejected. Off that flag the app keeps unknown ids on purpose (a new model may not be in the catalogue yet — `resolve-agent-form.test.ts` "keeps the explicit model when a refreshed catalogue no longer lists it"). The rules, all in `provider-selection/resolve-agent-form.ts` and its callers:
+
+- **Resolve against a copy, never rewrite memory.** `resolveFormStateFromProviderModels` takes `authoritativeModelProviders` (from `buildAuthoritativeModelProviders(entries)`) and, for those providers, swaps an unlisted remembered or initial model for the list default in a copy before `resolveFormState`. Preferences stay untouched, so switching back to Official restores the old choice.
+- **An open draft moves too.** `receiveInputs` runs `moveOffUnlistedModel` after resolution, because `completeResolution` returns early once completed.
+- **Submitting never writes a fallback.** `persistProviderPreferences` skips `model` when the list is authoritative (it cannot tell fallback from memory); `selectProviderAndModel` does not write the list default when nothing was remembered. The schedule form writes only at submit and knows `userModified.model`, so it exposes `shouldRememberSelectedModel` instead. Editing a saved schedule never swaps its model.
+- User actions (pick a model, apply a profile) still record what the form resolved, as in Official.
+
+Known gap: a model picked in endpoint mode is remembered and reaches the Official CLI after switching back; fixing it needs memory keyed per mode (see the task PRD's known limitation).
+
 ## Workspace tab kinds
 
 A new `WorkspaceTabTarget` kind is one logical change spread over fixed touchpoints; miss one and the tab persists wrong, shows the wrong label, or cannot be toggled. The Explorer-only singleton `session_history` (`session-history/`, `panels/session-history-panel.tsx`) is the worked example; `pull_request` is the two-host one.

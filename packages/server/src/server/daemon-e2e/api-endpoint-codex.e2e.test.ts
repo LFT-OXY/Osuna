@@ -149,6 +149,24 @@ timeout_ms = 5000
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
 
+  test("the model picker lists only the endpoint's models while it is active", async () => {
+    async function codexModels(): Promise<string[] | null> {
+      const snapshot = await client.getProvidersSnapshot();
+      const entry = snapshot.entries.find((candidate) => candidate.provider === "codex");
+      if (entry?.status !== "ready") return null;
+      return (entry.models ?? []).map((model) => `${model.id}${model.isDefault ? " *" : ""}`);
+    }
+    // 测试 daemon 的假 Codex 提供方只列出 gpt-5.4-mini。
+    await expect.poll(codexModels, { timeout: 10_000 }).toEqual(["gpt-5.4-mini *"]);
+    const endpointId = await createEndpoint();
+
+    await client.apiEndpointSetActive("codex", endpointId);
+    await expect.poll(codexModels, { timeout: 10_000 }).toEqual(["relay/gpt *", "relay/mini"]);
+
+    await client.apiEndpointSetActive("codex", null);
+    await expect.poll(codexModels, { timeout: 10_000 }).toEqual(["gpt-5.4-mini *"]);
+  });
+
   test("deleting the endpoint removes the dedicated table and the key file", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);

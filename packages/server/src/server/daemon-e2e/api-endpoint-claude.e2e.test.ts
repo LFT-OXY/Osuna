@@ -26,6 +26,18 @@ const USER_SETTINGS = `{
 
 const SECRET = "sk-relay-secret-value";
 
+// 模型选择器里的一行：id 与是否为默认模型。
+interface ModelRow {
+  id: string;
+  isDefault: boolean;
+}
+
+// 测试 daemon 的假 Claude 提供方列出官方模型 haiku（默认）和 sonnet。
+const OFFICIAL_MODELS: ModelRow[] = [
+  { id: "haiku", isDefault: true },
+  { id: "sonnet", isDefault: false },
+];
+
 const tempRoots: string[] = [];
 
 async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
@@ -263,5 +275,134 @@ describe("Claude API endpoint over the daemon RPC", () => {
 
     const unsupported = await client.apiEndpointList("opencode");
     expect(unsupported.error?.code).toBe("unsupported_provider");
+  });
+});
+
+describe("provider snapshot follows the Claude API endpoint mode", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let cwd: string;
+
+  beforeEach(async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-snapshot-"));
+    tempRoots.push(root);
+    cwd = path.join(root, "project");
+    await mkdir(cwd);
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: { env: { CLAUDE_CONFIG_DIR: path.join(root, "claude") }, homeDir: root },
+    });
+    client = await connect(daemon);
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function claudeEntry() {
+    const snapshot = await client.getProvidersSnapshot();
+    return snapshot.entries.find((entry) => entry.provider === "claude");
+  }
+
+  async function claudeModels(): Promise<ModelRow[] | null> {
+    const entry = await claudeEntry();
+    if (entry?.status !== "ready") return null;
+    return (entry.models ?? []).map((model) => {
+      const isDefault = model.isDefault === true;
+      return { id: model.id, isDefault };
+    });
+  }
+
+  async function expectClaudeModels(expected: ModelRow[]): Promise<void> {
+    await expect.poll(claudeModels, { timeout: 10_000 }).toEqual(expected);
+  }
+
+  async function createEndpoint(): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrl: "https://relay.example/api",
+      apiKey: "sk-relay-secret",
+      models: [{ id: "relay/sonnet", label: "Relay Sonnet" }, { id: "relay/haiku" }],
+      defaultModelId: "relay/haiku",
+    });
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
+
+  test("enabling lists only the endpoint's models; Official restores the official list", async () => {
+    await expectClaudeModels(OFFICIAL_MODELS);
+    const endpointId = await createEndpoint();
+    // 只保存不启用：模型列表不变。
+    await expectClaudeModels(OFFICIAL_MODELS);
+
+    expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
+    await expectClaudeModels([
+      { id: "relay/sonnet", isDefault: false },
+      { id: "relay/haiku", isDefault: true },
+    ]);
+    const claude = await claudeEntry();
+    expect(claude?.models?.map((model) => model.label)).toEqual(["Relay Sonnet", "relay/haiku"]);
+    // 客户端据此不再保留列表外的记忆模型（比如官方模式下选过的模型）。
+    expect(claude?.isModelListAuthoritative).toBe(true);
+
+    expect(await client.apiEndpointSetActive("claude", null)).toMatchObject({ error: null });
+    await expectClaudeModels(OFFICIAL_MODELS);
+    const official = await claudeEntry();
+    expect(official?.isModelListAuthoritative).toBeUndefined();
+  });
+
+  test("a new agent without a model gets the endpoint's real default model id", async () => {
+    const endpointId = await createEndpoint();
+    expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
+
+    const agent = await client.createAgent({ provider: "claude", cwd, title: "Relay agent" });
+    expect(agent.model).toBe("relay/haiku");
+
+    expect(await client.apiEndpointSetActive("claude", null)).toMatchObject({ error: null });
+    const official = await client.createAgent({ provider: "claude", cwd, title: "Official" });
+    expect(official.model).toBe("haiku");
+  });
+
+  test("editing the active endpoint refreshes the models right away", async () => {
+    const endpointId = await createEndpoint();
+    expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
+    await expectClaudeModels([
+      { id: "relay/sonnet", isDefault: false },
+      { id: "relay/haiku", isDefault: true },
+    ]);
+
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrl: "https://relay.example/api",
+      models: [{ id: "relay/opus" }, { id: "relay/sonnet" }],
+      defaultModelId: "relay/opus",
+    });
+    expect(edited.error).toBeNull();
+    await expectClaudeModels([
+      { id: "relay/opus", isDefault: true },
+      { id: "relay/sonnet", isDefault: false },
+    ]);
+  });
+
+  test("deleting the active endpoint brings the official models back", async () => {
+    const endpointId = await createEndpoint();
+    expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
+    await expectClaudeModels([
+      { id: "relay/sonnet", isDefault: false },
+      { id: "relay/haiku", isDefault: true },
+    ]);
+
+    expect(await client.apiEndpointDelete("claude", endpointId)).toMatchObject({
+      activeEndpointId: null,
+      error: null,
+    });
+    await expectClaudeModels(OFFICIAL_MODELS);
   });
 });
