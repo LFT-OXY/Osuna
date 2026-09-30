@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
@@ -35,51 +34,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
-import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
-import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { Text as UiText } from "@/components/ui/text";
 import { hasProviderInstallGuide } from "@/provider-install-guide";
+import {
+  countSelectableModels,
+  resolveProviderStatusLine,
+  type ProviderStatusDisplay,
+} from "@/provider-detail/status";
+import type { ProvidersLayout } from "./providers-layout";
 import { ChevronRight, MoreHorizontal, Trash2 } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
 type ProviderEntry = NonNullable<ReturnType<typeof useProvidersSnapshot>["entries"]>[number];
-
-type StatusTone = "success" | "warning" | "danger" | "muted" | "loading";
-
-interface ProviderStatus {
-  tone: StatusTone;
-  label: string;
-  modelCount: number | null;
-}
-
-function getProviderStatus(
-  status: string,
-  enabled: boolean,
-  modelCount: number,
-  t: TFunction,
-): ProviderStatus {
-  if (!enabled)
-    return { tone: "muted", label: t("settings.providers.statuses.disabled"), modelCount: null };
-  if (status === "loading") {
-    return { tone: "loading", label: t("settings.providers.statuses.loading"), modelCount: null };
-  }
-  if (status === "error") {
-    return { tone: "danger", label: t("settings.providers.statuses.error"), modelCount: null };
-  }
-  if (status === "ready") {
-    return {
-      tone: "success",
-      label: t("settings.providers.statuses.available"),
-      modelCount: modelCount > 0 ? modelCount : null,
-    };
-  }
-  return {
-    tone: "warning",
-    label: t("settings.providers.statuses.notInstalled"),
-    modelCount: null,
-  };
-}
 
 interface ProviderRowProps {
   serverId: string;
@@ -93,6 +60,8 @@ interface ProviderRowProps {
   // 继承 claude 的自定义提供方在 Claude 启用第三方接口时也走这个接口。
   inheritedApiEndpoint: ApiEndpointRef | null;
   isFirst: boolean;
+  isSelected: boolean;
+  showChevron: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
   onRemove: (providerId: string, providerLabel: string) => void;
@@ -190,6 +159,8 @@ function ProviderRow({
   hasInstallGuide,
   inheritedApiEndpoint,
   isFirst,
+  isSelected,
+  showChevron,
   onPress,
   onToggleEnabled,
   onRemove,
@@ -205,14 +176,14 @@ function ProviderRow({
     entry.error.trim().length > 0
       ? entry.error.trim()
       : null;
-  const modelCount = filterSelectableModels(entry.models ?? null)?.length ?? 0;
-  const providerStatus = getProviderStatus(entry.status, enabled, modelCount, t);
-  let modelCountLabel: string | null = null;
-  if (providerStatus.modelCount === 1) {
-    modelCountLabel = t("settings.providers.models.one");
-  } else if (providerStatus.modelCount !== null) {
-    modelCountLabel = t("settings.providers.models.many", { count: providerStatus.modelCount });
-  }
+  const modelCount = countSelectableModels(entry.models);
+  const activeApiEndpointName = entry.activeApiEndpoint?.name ?? null;
+  const statusLine = resolveProviderStatusLine({
+    status: entry.status,
+    enabled,
+    modelCount,
+    activeApiEndpointName,
+  });
 
   const handlePress = useCallback(() => {
     onPress(def.id);
@@ -232,14 +203,15 @@ function ProviderRow({
     },
     [def.id, onToggleEnabled],
   );
+  const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
   const rowStyle = useCallback(
     ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
       settingsStyles.row,
       !isFirst && settingsStyles.rowBorder,
-      hovered && styles.rowHovered,
+      (hovered || isSelected) && styles.rowHovered,
       pressed && styles.rowPressed,
     ],
-    [isFirst],
+    [isFirst, isSelected],
   );
 
   return (
@@ -248,6 +220,9 @@ function ProviderRow({
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={t("settings.providers.providerDetails", { name: def.label })}
+      accessibilityState={accessibilityState}
+      aria-selected={isSelected}
+      testID={`provider-row-${def.id}`}
     >
       {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
         <>
@@ -259,14 +234,10 @@ function ProviderRow({
               <Text style={settingsStyles.rowTitle} numberOfLines={1}>
                 {def.label}
               </Text>
+              <StatusLine status={statusLine} />
               {providerError && !isCompact ? (
                 <Text style={styles.errorText} numberOfLines={3}>
                   {providerError}
-                </Text>
-              ) : null}
-              {!providerError && modelCountLabel ? (
-                <Text style={settingsStyles.rowHint} numberOfLines={1}>
-                  {modelCountLabel}
                 </Text>
               ) : null}
               {inheritedApiEndpoint ? (
@@ -281,9 +252,7 @@ function ProviderRow({
           <View style={styles.trailingControls}>
             {showInstallEntry ? (
               <InstallEntry providerLabel={def.label} onPress={handleInstallPress} />
-            ) : (
-              <StatusIndicator status={providerStatus} compact={isCompact} />
-            )}
+            ) : null}
             <Switch
               value={enabled}
               onValueChange={handleToggleValueChange}
@@ -300,10 +269,12 @@ function ProviderRow({
                 />
               ) : null}
             </View>
-            <ThemedChevronRight
-              size={ICON_SIZE.sm}
-              uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
-            />
+            {showChevron ? (
+              <ThemedChevronRight
+                size={ICON_SIZE.sm}
+                uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
+              />
+            ) : null}
           </View>
         </>
       )}
@@ -311,15 +282,21 @@ function ProviderRow({
   );
 }
 
-function StatusIndicator({ status, compact }: { status: ProviderStatus; compact: boolean }) {
+function StatusLine({ status }: { status: ProviderStatusDisplay }) {
+  const { t } = useTranslation();
   return (
-    <View style={styles.statusRow}>
+    <View style={styles.statusLine}>
       {status.tone === "loading" ? (
         <ThemedLoadingSpinner size={10} uniProps={foregroundMutedColorMapping} />
       ) : (
-        <View style={[styles.statusDot, statusDotStyles[status.tone]]} />
+        <View
+          style={[styles.statusDot, statusDotStyles[status.tone]]}
+          testID={`provider-status-dot-${status.tone}`}
+        />
       )}
-      {!compact ? <Text style={styles.statusLabel}>{status.label}</Text> : null}
+      <Text style={styles.statusLabel} numberOfLines={1}>
+        {t(status.label.key, status.label.params)}
+      </Text>
     </View>
   );
 }
@@ -350,29 +327,31 @@ function InstallEntry({
 
 export interface ProvidersSectionProps {
   serverId: string;
+  layout: ProvidersLayout;
+  // 两列布局下右侧详情对应的提供方，栈式不高亮。
+  selectedProvider: string | null;
+  onSelectProvider: (providerId: string) => void;
 }
 
-export function ProvidersSection({ serverId }: ProvidersSectionProps) {
+export function ProvidersSection({
+  serverId,
+  layout,
+  selectedProvider,
+  onSelectProvider,
+}: ProvidersSectionProps) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const { entries, isLoading, refresh } = useProvidersSnapshot(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
-  const openProviderSettings = useProviderSettingsStore((state) => state.open);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
   const removingProviderIdRef = useRef<string | null>(null);
   const [installingProviderId, setInstallingProviderId] = useState<string | null>(null);
 
   const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
+  const highlightedProvider = layout === "split" ? selectedProvider : null;
   const hasServer = serverId.length > 0;
-
-  const handleOpenProviderSettings = useCallback(
-    (providerId: string) => {
-      openProviderSettings({ serverId, provider: providerId });
-    },
-    [openProviderSettings, serverId],
-  );
 
   const handleToggleEnabled = useCallback(
     async (providerId: string, enabled: boolean) => {
@@ -487,7 +466,9 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   hasInstallGuide={hasInstallGuide}
                   inheritedApiEndpoint={inheritedApiEndpoint}
                   isFirst={index === 0}
-                  onPress={handleOpenProviderSettings}
+                  isSelected={highlightedProvider === def.id}
+                  showChevron={layout === "stacked"}
+                  onPress={onSelectProvider}
                   onToggleEnabled={handleToggleEnabled}
                   onRemove={handleRemoveProvider}
                 />
@@ -547,12 +528,19 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[1.5],
   },
+  statusLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+    marginTop: theme.spacing[0.5],
+  },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
   statusLabel: {
+    flexShrink: 1,
     color: theme.colors.foregroundMuted,
     ...theme.typeScale.caption,
   },

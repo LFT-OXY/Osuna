@@ -2827,6 +2827,7 @@ export const es: TranslationResources = {
         error: "Error",
         available: "Disponible",
         notInstalled: "No instalado",
+        apiEndpoint: "Endpoint de API: {{name}}",
       },
       models: {
         one: "1 modelo",

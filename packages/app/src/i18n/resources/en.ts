@@ -2886,6 +2886,7 @@ export const en = {
         error: "Error",
         available: "Available",
         notInstalled: "Not installed",
+        apiEndpoint: "API endpoint: {{name}}",
       },
       models: {
         one: "1 model",

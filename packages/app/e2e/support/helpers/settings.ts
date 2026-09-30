@@ -3,6 +3,7 @@ import { buildCreateAgentPreferences, buildSeededHost, TEST_HOST_LABEL } from ".
 import { getServerId } from "./server-id";
 import { expectAppRoute } from "./route-assertions";
 import {
+  buildProviderSettingsRoute,
   buildSettingsHostSectionRoute,
   buildSettingsRoute,
   buildSettingsSectionRoute,
@@ -66,7 +67,22 @@ export async function openSettingsHostSection(
   section: HostSection,
 ): Promise<void> {
   await page.getByTestId(`settings-host-section-${section}`).click();
+  if (section === "providers") {
+    await expectProvidersSettingsRoute(page, serverId);
+    return;
+  }
   await expectAppRoute(page, buildSettingsHostSectionRoute(serverId, section));
+}
+
+// Providers 两列布局会把分区地址 replace 成第一个提供方的子路由，栈式停在分区地址。
+async function expectProvidersSettingsRoute(page: Page, serverId: string): Promise<void> {
+  const sectionRoute = buildSettingsHostSectionRoute(serverId, "providers");
+  await expect
+    .poll(() => {
+      const { pathname } = new URL(page.url());
+      return pathname === sectionRoute || pathname.startsWith(`${sectionRoute}/`);
+    })
+    .toBe(true);
 }
 
 export async function expectSettingsHeader(page: Page, title: string): Promise<void> {
@@ -339,6 +355,34 @@ export async function expectHostActionCards(page: Page, serverId: string): Promi
 export async function expectHostProvidersCard(page: Page, serverId: string): Promise<void> {
   await openSettingsHostSection(page, serverId, "providers");
   await expect(page.getByTestId("host-page-providers-card")).toBeVisible();
+}
+
+export function providerRows(page: Page) {
+  return page.getByTestId("host-page-providers-card").locator('[data-testid^="provider-row-"]');
+}
+
+export async function readProviderRowIds(page: Page): Promise<string[]> {
+  await expect(providerRows(page).first()).toBeVisible();
+  const testIds = await providerRows(page).evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute("data-testid") ?? ""),
+  );
+  return testIds.map((testId) => testId.slice("provider-row-".length));
+}
+
+// 两列布局：地址、左侧高亮行和右侧详情头部都指向同一个提供方。
+export async function expectProviderSelected(
+  page: Page,
+  serverId: string,
+  provider: string,
+): Promise<void> {
+  await expectAppRoute(page, buildProviderSettingsRoute(serverId, provider));
+  await expect(page.getByTestId(`provider-row-${provider}`)).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(
+    page.getByTestId("provider-detail-pane").getByTestId(`provider-detail-header-${provider}`),
+  ).toBeVisible();
 }
 
 export async function serveJson(page: Page, url: string, body: unknown): Promise<void> {

@@ -93,8 +93,8 @@ Plugin settings use the distinct `settings/hosts/[serverId]/plugins/[pluginId]/[
 Back returns to that host's Plugins page.
 
 Settings detail routes are separate siblings on purpose. Keep
-`settings/[section]`, the host routes, the projects index, and project detail as
-distinct route names. `router.dismissTo()` ultimately matches stack entries by
+`settings/[section]`, the host routes, the projects index, project detail, the
+providers index, and provider detail as distinct route names. `router.dismissTo()` ultimately matches stack entries by
 route name. A single catch-all Settings route would make project detail and the
 projects index the same route; Back would update params in place and leave a
 phantom detail entry underneath. The host routes also stay outside the

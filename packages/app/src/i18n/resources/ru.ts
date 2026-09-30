@@ -2813,6 +2813,7 @@ export const ru: TranslationResources = {
         error: "Ошибка",
         available: "Доступен",
         notInstalled: "Не установлен",
+        apiEndpoint: "API-эндпоинт: {{name}}",
       },
       models: {
         one: "1 модель",

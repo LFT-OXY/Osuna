@@ -2809,6 +2809,7 @@ export const ptBR: TranslationResources = {
         error: "Erro",
         available: "Disponível",
         notInstalled: "Não instalado",
+        apiEndpoint: "Endpoint de API: {{name}}",
       },
       models: {
         one: "1 modelo",

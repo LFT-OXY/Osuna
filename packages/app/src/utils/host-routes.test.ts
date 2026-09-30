@@ -11,6 +11,7 @@ import {
   buildSettingsAddHostRoute,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
+  buildProviderSettingsRoute,
   decodeFilePathFromPathSegment,
   decodeWorkspaceIdFromPathSegment,
   encodeFilePathForPathSegment,
@@ -200,6 +201,12 @@ describe("projects settings routes", () => {
   it("buildProjectSettingsRoute addresses a host-local project id", () => {
     expect(buildProjectSettingsRoute("host a", "project/1")).toBe(
       "/settings/hosts/host%20a/projects/project%2F1",
+    );
+  });
+
+  it("buildProviderSettingsRoute addresses a host-local provider id", () => {
+    expect(buildProviderSettingsRoute("host a", "work claude")).toBe(
+      "/settings/hosts/host%20a/providers/work%20claude",
     );
   });
 

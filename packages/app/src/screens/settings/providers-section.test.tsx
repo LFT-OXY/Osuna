@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-const { theme, snapshotState, configState, patchConfigMock, openProviderSettingsMock } = vi.hoisted(
+const { theme, snapshotState, configState, patchConfigMock, selectProviderMock } = vi.hoisted(
   () => ({
     theme: {
       spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
@@ -54,7 +54,7 @@ const { theme, snapshotState, configState, patchConfigMock, openProviderSettings
       config: null as MutableDaemonConfig | null,
     },
     patchConfigMock: vi.fn(async () => undefined),
-    openProviderSettingsMock: vi.fn(),
+    selectProviderMock: vi.fn(),
   }),
 );
 
@@ -88,6 +88,7 @@ vi.mock("react-native", () => ({
     onHoverOut,
     accessibilityRole,
     accessibilityLabel,
+    accessibilityState,
     disabled,
     testID,
   }: {
@@ -99,6 +100,7 @@ vi.mock("react-native", () => ({
     onHoverOut?: () => void;
     accessibilityRole?: string;
     accessibilityLabel?: string;
+    accessibilityState?: { selected?: boolean };
     disabled?: boolean;
     testID?: string;
   }) =>
@@ -107,6 +109,7 @@ vi.mock("react-native", () => ({
       {
         role: accessibilityRole,
         "aria-label": accessibilityLabel,
+        "aria-selected": accessibilityState?.selected ? "true" : undefined,
         "aria-disabled": disabled ? "true" : undefined,
         "data-testid": testID,
         onClick: disabled ? undefined : onPress,
@@ -161,6 +164,7 @@ vi.mock("react-i18next", () => ({
           "settings.providers.statuses.loading": "Loading",
           "settings.providers.statuses.error": "Error",
           "settings.providers.statuses.notInstalled": "Not installed",
+          "settings.providers.statuses.apiEndpoint": "API endpoint: {{name}}",
           "settings.providers.models.one": "1 model",
           "settings.providers.models.many": "{{count}} models",
           "settings.providers.addErrorTitle": "Unable to add provider",
@@ -287,11 +291,6 @@ vi.mock("@/components/provider-icons", () => ({
     React.createElement("span", { "data-icon": `provider-${provider}` }),
 }));
 
-vi.mock("@/stores/provider-settings-store", () => ({
-  useProviderSettingsStore: (selector: (state: unknown) => unknown) =>
-    selector({ open: openProviderSettingsMock }),
-}));
-
 vi.mock("@/components/provider-catalog-list", () => ({
   ProviderCatalogList: () => null,
 }));
@@ -330,6 +329,7 @@ vi.mock("@/utils/confirm-dialog", () => ({
 }));
 
 import { ProvidersSection } from "./providers-section";
+import type { ProvidersLayout } from "./providers-layout";
 
 const claudeEntry: ProviderSnapshotEntry = {
   provider: "claude",
@@ -425,7 +425,7 @@ describe("ProvidersSection", () => {
     configState.config = null;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
-    openProviderSettingsMock.mockReset();
+    selectProviderMock.mockReset();
   });
 
   afterEach(() => {
@@ -440,9 +440,18 @@ describe("ProvidersSection", () => {
     vi.unstubAllGlobals();
   });
 
-  function render(): void {
+  function render(
+    options: { layout?: ProvidersLayout; selectedProvider?: string | null } = {},
+  ): void {
     act(() => {
-      root?.render(<ProvidersSection serverId="server-1" />);
+      root?.render(
+        <ProvidersSection
+          serverId="server-1"
+          layout={options.layout ?? "split"}
+          selectedProvider={options.selectedProvider ?? null}
+          onSelectProvider={selectProviderMock}
+        />,
+      );
     });
   }
 
@@ -476,7 +485,7 @@ describe("ProvidersSection", () => {
     expect(indexOfText(codexNodes, "Disabled")).toBeGreaterThanOrEqual(0);
   });
 
-  it("composes the row as icon, label, model count, status, switch, then chevron", () => {
+  it("composes the row as icon, label, status line, then switch", () => {
     snapshotState.entries = [claudeEntry];
     configState.config = makeConfig();
 
@@ -486,37 +495,116 @@ describe("ProvidersSection", () => {
     const nodes = descendants(row);
     const icon = indexOfMatches(nodes, '[data-icon="provider-claude"]');
     const label = indexOfText(nodes, "Claude");
-    const modelCount = indexOfText(nodes, "3 models");
-    const status = indexOfText(nodes, "Available");
+    const statusDot = indexOfMatches(nodes, '[data-testid="provider-status-dot-success"]');
+    const statusText = nodes.findIndex(
+      (node) => node.tagName === "SPAN" && node.textContent === "3 models",
+    );
     const switchEl = indexOfMatches(nodes, '[role="switch"]');
-    const chevron = indexOfMatches(nodes, '[data-icon="ChevronRight"]');
 
     expect(icon).toBeGreaterThanOrEqual(0);
     expect(label).toBeGreaterThan(icon);
-    expect(modelCount).toBeGreaterThan(label);
-    expect(status).toBeGreaterThan(modelCount);
-    expect(switchEl).toBeGreaterThan(status);
-    expect(chevron).toBeGreaterThan(switchEl);
+    expect(statusDot).toBeGreaterThan(label);
+    expect(statusText).toBeGreaterThan(statusDot);
+    expect(switchEl).toBeGreaterThan(statusText);
+    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBe(-1);
+    expect(indexOfText(nodes, "Available")).toBe(-1);
   });
 
-  it("opens the diagnostic sheet when the outer row is pressed for a disabled provider", () => {
-    snapshotState.entries = [disabledCodexEntry];
+  it("adds a chevron to each row in the stacked layout", () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+
+    render({ layout: "stacked" });
+
+    const nodes = descendants(findRow("Claude provider details"));
+    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBeGreaterThan(
+      indexOfMatches(nodes, '[role="switch"]'),
+    );
+  });
+
+  it.each([
+    ["disabled", { ...claudeEntry, enabled: false }, "muted", "Disabled"],
+    ["loading", { ...claudeEntry, status: "loading" }, null, "Loading"],
+    ["error", { ...claudeEntry, status: "error", error: "boom" }, "danger", "Error"],
+    [
+      "using an API endpoint",
+      { ...claudeEntry, activeApiEndpoint: { id: "ep_1", name: "Relay" } },
+      "success",
+      "API endpoint: Relay",
+    ],
+    ["available", claudeEntry, "success", "3 models"],
+    [
+      "available with one model",
+      { ...claudeEntry, models: claudeEntry.models?.slice(0, 1) },
+      "success",
+      "1 model",
+    ],
+    [
+      "not installed",
+      { ...claudeEntry, status: "unavailable", models: [] },
+      "warning",
+      "Not installed",
+    ],
+  ] as const)("shows the %s status line", (_name, entry, dotTone, text) => {
+    snapshotState.entries = [entry as ProviderSnapshotEntry];
+    configState.config = makeConfig();
+
+    render();
+
+    const row = findRow("Claude provider details");
+    const nodes = descendants(row);
+    expect(indexOfText(nodes, text)).toBeGreaterThan(-1);
+    if (dotTone) {
+      expect(row.querySelector(`[data-testid="provider-status-dot-${dotTone}"]`)).not.toBeNull();
+    } else {
+      expect(row.querySelector('[data-testid="loading-spinner"]')).not.toBeNull();
+    }
+  });
+
+  it("selects the provider when its row is pressed", () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
     configState.config = makeConfig({ codex: { enabled: false } });
 
     render();
 
-    expect(openProviderSettingsMock).not.toHaveBeenCalled();
-
-    const row = findRow("Codex provider details");
     act(() => {
-      row.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      findRow("Codex provider details").dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true }),
+      );
     });
 
-    expect(openProviderSettingsMock).toHaveBeenCalledTimes(1);
-    expect(openProviderSettingsMock).toHaveBeenCalledWith({
-      serverId: "server-1",
-      provider: "codex",
+    expect(selectProviderMock).toHaveBeenCalledTimes(1);
+    expect(selectProviderMock).toHaveBeenCalledWith("codex");
+  });
+
+  it("highlights the selected row only in the split layout", () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render({ selectedProvider: "codex" });
+
+    expect(findRow("Codex provider details").getAttribute("aria-selected")).toBe("true");
+    expect(findRow("Claude provider details").getAttribute("aria-selected")).toBeNull();
+
+    render({ layout: "stacked", selectedProvider: "codex" });
+
+    expect(findRow("Codex provider details").getAttribute("aria-selected")).toBeNull();
+  });
+
+  it("does not select the row when its switch is pressed", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+
+    render();
+
+    const switchEl =
+      findRow("Claude provider details").querySelector<HTMLElement>('[role="switch"]');
+    await act(async () => {
+      switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     });
+
+    expect(patchConfigMock).toHaveBeenCalledTimes(1);
+    expect(selectProviderMock).not.toHaveBeenCalled();
   });
 
   function findInstallEntry(providerLabel: string): HTMLElement | null {
@@ -527,7 +615,7 @@ describe("ProvidersSection", () => {
     );
   }
 
-  it("offers a how-to-install entry on a not-installed provider that opens its details", () => {
+  it("offers a how-to-install entry on a not-installed provider that selects it", () => {
     snapshotState.entries = [claudeEntry, notInstalledCodexEntry];
     configState.config = makeConfig();
 
@@ -538,17 +626,13 @@ describe("ProvidersSection", () => {
     expect(entry).not.toBeNull();
     expect(codexRow.contains(entry)).toBe(true);
     expect(entry?.textContent).toBe("How to install");
-    expect(indexOfText(descendants(codexRow), "Not installed")).toBe(-1);
 
     act(() => {
       entry?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     });
 
-    expect(openProviderSettingsMock).toHaveBeenCalledTimes(1);
-    expect(openProviderSettingsMock).toHaveBeenCalledWith({
-      serverId: "server-1",
-      provider: "codex",
-    });
+    expect(selectProviderMock).toHaveBeenCalledTimes(1);
+    expect(selectProviderMock).toHaveBeenCalledWith("codex");
   });
 
   it("keeps installed providers and providers without a guide unchanged", () => {

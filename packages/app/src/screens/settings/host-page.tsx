@@ -49,7 +49,8 @@ import {
   useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
-import { ProvidersSection } from "@/screens/settings/providers-section";
+import { ProvidersPage } from "@/screens/settings/providers-page";
+import type { ProvidersLayout } from "@/screens/settings/providers-layout";
 import { PriceTableSection } from "@/price-table/price-table-section";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -317,7 +318,15 @@ export function HostWorkspacesPage({ serverId }: { serverId: string }) {
   );
 }
 
-export function HostProvidersPage({ serverId }: { serverId: string }) {
+export function HostProvidersPage({
+  serverId,
+  requestedProvider,
+  layout,
+}: {
+  serverId: string;
+  requestedProvider: string | null;
+  layout: ProvidersLayout | null;
+}) {
   const host = useHostProfile(serverId);
 
   if (!host) {
@@ -326,7 +335,7 @@ export function HostProvidersPage({ serverId }: { serverId: string }) {
 
   return (
     <View>
-      <ProvidersSection serverId={serverId} />
+      <ProvidersPage serverId={serverId} requestedProvider={requestedProvider} layout={layout} />
     </View>
   );
 }

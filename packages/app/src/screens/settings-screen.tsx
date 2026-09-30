@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type PressableStateCallbackType,
+} from "react-native";
 import { FormTextInput } from "@/components/ui/form-field";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -119,6 +126,11 @@ import { resolvePluginIcon } from "@/plugins/icons";
 import { PluginSettingsContent } from "@/plugins/settings";
 import { useInstalledPlugins } from "@/plugins/registry";
 import { HostPluginsPage } from "@/screens/settings/plugins-page";
+import {
+  PROVIDERS_SPLIT_MAX_WIDTH,
+  resolveProvidersLayout,
+  type ProvidersLayout,
+} from "@/screens/settings/providers-layout";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import ProjectsScreen from "@/screens/projects-screen";
 import ProjectSettingsScreen from "@/screens/project-settings-screen";
@@ -203,9 +215,25 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "plugins", labelKey: "settings.hostSections.plugins", icon: Blocks },
 ];
 
+function isProvidersSettingsView(view: SettingsView): boolean {
+  return view.kind === "provider" || (view.kind === "host" && view.section === "providers");
+}
+
+// 紧凑布局一律栈式。桌面量到详情区宽度前不判定：应用侧栏可能和设置页并排，
+// 按窗口估算会先用错的布局 redirect。
+function resolveSettingsProvidersLayout(
+  isCompact: boolean,
+  detailPaneWidth: number | null,
+): ProvidersLayout | null {
+  if (isCompact) return "stacked";
+  if (detailPaneWidth === null) return null;
+  return resolveProvidersLayout({ contentWidth: detailPaneWidth, isCompact });
+}
+
 function renderHostSettingsContent(
   view: Extract<SettingsView, { kind: "host" }>,
   onHostRemoved: () => void,
+  providersLayout: ProvidersLayout | null,
 ): ReactNode {
   switch (view.section) {
     case "projects":
@@ -221,7 +249,13 @@ function renderHostSettingsContent(
     case "workspaces":
       return <HostWorkspacesPage serverId={view.serverId} />;
     case "providers":
-      return <HostProvidersPage serverId={view.serverId} />;
+      return (
+        <HostProvidersPage
+          serverId={view.serverId}
+          requestedProvider={null}
+          layout={providersLayout}
+        />
+      );
     case "usage":
       return <HostPriceTablePage serverId={view.serverId} />;
     case "terminals":
@@ -1053,6 +1087,7 @@ function SettingsSidebar({
   let selectedHostSection: HostSectionSlug | null = null;
   if (view.kind === "host") selectedHostSection = view.section;
   if (view.kind === "project") selectedHostSection = "projects";
+  if (view.kind === "provider") selectedHostSection = "providers";
   if (view.kind === "plugin") selectedHostSection = "plugins";
 
   const sidebarBody = (
@@ -1196,10 +1231,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   const localServerId = useLocalDaemonServerId();
   const sortedHosts = useSortedHosts(hosts, localServerId);
   const lastWorkspaceSelection = useLastWorkspaceSelection();
-  const routedSettingsHostServerId =
-    view.kind === "host" || view.kind === "project" || view.kind === "plugin"
-      ? view.serverId
-      : null;
+  const routedSettingsHostServerId = "serverId" in view ? view.serverId : null;
   const [selectedSettingsHostServerId, setSelectedSettingsHostServerId] = useState<string | null>(
     routedSettingsHostServerId ?? lastWorkspaceSelection?.serverId ?? null,
   );
@@ -1214,15 +1246,14 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   // The host the four sections scope to: the host on the active view, otherwise
   // the picker choice, otherwise the connected local daemon, otherwise the first host.
   const activeHostServerId = useMemo(() => {
-    if (view.kind === "host" || view.kind === "project" || view.kind === "plugin")
-      return view.serverId;
+    if (routedSettingsHostServerId) return routedSettingsHostServerId;
     return resolveActiveHostServerId({
       selectedServerId: selectedSettingsHostServerId,
       localServerId,
       hosts,
       orderedHosts: sortedHosts,
     });
-  }, [view, selectedSettingsHostServerId, localServerId, hosts, sortedHosts]);
+  }, [routedSettingsHostServerId, selectedSettingsHostServerId, localServerId, hosts, sortedHosts]);
 
   const handleSendBehaviorChange = useCallback(
     (behavior: SendBehavior) => {
@@ -1358,8 +1389,11 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   const handleSelectHost = useCallback(
     (serverId: string) => {
       setSelectedSettingsHostServerId(serverId);
-      if (view.kind === "project") {
-        const target = buildSettingsHostSectionRoute(serverId, "projects");
+      if (view.kind === "project" || view.kind === "provider") {
+        const target = buildSettingsHostSectionRoute(
+          serverId,
+          view.kind === "project" ? "projects" : "providers",
+        );
         if (isCompactLayout) {
           router.push(target);
         } else {
@@ -1421,6 +1455,17 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
     returnFromSettings({ kind: "root" });
   }, []);
 
+  const [detailPaneWidth, setDetailPaneWidth] = useState<number | null>(null);
+  const handleDetailPaneLayout = useCallback((event: LayoutChangeEvent) => {
+    setDetailPaneWidth(event.nativeEvent.layout.width);
+  }, []);
+  const providersLayout = resolveSettingsProvidersLayout(isCompactLayout, detailPaneWidth);
+  const isProvidersSplit = isProvidersSettingsView(view) && providersLayout === "split";
+  // Providers 两列时整体放宽到 1056，是 §7 设置详情页 720 的例外。
+  const desktopContentStyle = isProvidersSplit
+    ? [styles.content, styles.contentProvidersSplit]
+    : styles.content;
+
   const installedPlugins = useInstalledPlugins();
   const detailHeader = ((): {
     title: string;
@@ -1449,12 +1494,23 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
     if (view.kind === "project") {
       return { title: t("settings.projects"), Icon: FolderGit2 };
     }
+    if (view.kind === "provider") {
+      return { title: t("settings.hostSections.providers"), Icon: Boxes };
+    }
     return null;
   })();
 
   let content: ReactNode;
   if (view.kind === "section" && view.section === "layout") {
     content = isDesktopApp ? <LayoutSection /> : null;
+  } else if (view.kind === "provider") {
+    content = (
+      <HostProvidersPage
+        serverId={view.serverId}
+        requestedProvider={view.provider}
+        layout={providersLayout}
+      />
+    );
   } else {
     content = (() => {
       if (view.kind === "plugin")
@@ -1466,7 +1522,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
           />
         );
       if (view.kind === "host") {
-        return renderHostSettingsContent(view, handleHostRemoved);
+        return renderHostSettingsContent(view, handleHostRemoved, providersLayout);
       }
       if (view.kind === "project") {
         return (
@@ -1638,14 +1694,18 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
           />
         </WindowChromeRegion>
         <WindowChromeRegion corners="top-right">
-          <View style={desktopStyles.contentPane} testID="settings-detail-pane">
+          <View
+            style={desktopStyles.contentPane}
+            testID="settings-detail-pane"
+            onLayout={handleDetailPaneLayout}
+          >
             <ScreenHeader
               borderless
               left={desktopDetailHeaderLeft}
               leftStyle={desktopStyles.detailLeft}
             />
             <ScrollView style={styles.scrollView} contentContainerStyle={insetBottomStyle}>
-              <View style={styles.content}>{content}</View>
+              <View style={desktopContentStyle}>{content}</View>
             </ScrollView>
           </View>
         </WindowChromeRegion>
@@ -1683,6 +1743,9 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: 720,
     alignSelf: "center",
+  },
+  contentProvidersSplit: {
+    maxWidth: PROVIDERS_SPLIT_MAX_WIDTH,
   },
   aboutVersionMismatch: {
     color: theme.colors.palette.amber[500],

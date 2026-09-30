@@ -2729,6 +2729,7 @@ export const zhCN: TranslationResources = {
         error: "错误",
         available: "可用",
         notInstalled: "未安装",
+        apiEndpoint: "第三方接口：{{name}}",
       },
       models: {
         one: "1 个 Model",

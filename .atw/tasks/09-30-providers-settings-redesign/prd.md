@@ -111,10 +111,12 @@
 - 栈式（窄桌面与手机）：Providers 分区显示列表，点行用 push 进入子路由，返回回到列表。
 - 地址里的提供方不存在时，宽屏 redirect 到第一个提供方，栈式回到列表。刚删掉当前选中的自定义提供方时同样处理。
 - 选中项不再经过全局的 provider-settings store；这个 store 只留给 composer 齿轮入口。
+- 路由是 `providers/index` 与 `providers/[provider]` 两个 sibling，照搬 `projects/index` 与 `projects/[projectId]`；`providers/index` 取代 `[hostSection]` 对 `providers` 的匹配。
 
 ### 布局判定
 
 - 用一个纯函数，由内容区宽度决定「两列」还是「栈式」：内容区宽度 ≥ 16 + 280 + 24 + 400 + 16 = 736 时两列，否则栈式。紧凑判定（`useIsCompactFormFactor`）为真时一律栈式。
+- 内容区宽度是设置详情区的实测宽度（`onLayout`），不能用「窗口宽 − 设置侧栏」估算：桌面端应用侧栏可以和设置页并排。量到之前不判定布局，页面不渲染、也不 redirect。
 - 两列容器最大宽 1056（左右 padding 16、列表 280、间距 24、详情最大 720），在内容区里居中。列表列 sticky，跟着页面滚动时停在顶部。
 - 这是 `docs/design.md` §7「设置详情页最大宽 720」的例外，也是 §9 列表+详情模式在设置页内部的一个用法。实现时改写 `docs/design.md` 对应段落，不新开 ADR：它可以低成本改回，不满足 ADR 的三个条件。
 
@@ -125,6 +127,7 @@
   - 左侧依次是 28 的图标框、名称（`rowTitle`）、状态行（6 的状态点，间距 6，caption muted 文字）；
   - 右侧是 Switch，栈式下 Switch 后面再跟 ›。
 - 选中行底色用 surface2，与悬停相同。原因：用 surface3 会和关闭状态的开关轨道同色，看不出开关。
+- 状态行与详情头部徽章共用 `provider-detail/status.ts` 的判定，它是纯模块，返回 `{ key, params }` 文案描述，由组件经 `t` 渲染。
 - 状态行规则（来自原型，按顺序判断，第一条命中即用）：
 
   | 条件 | 状态点 | 文字 |

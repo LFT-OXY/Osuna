@@ -4,13 +4,17 @@ import {
   resolveProviderDiscoveredModels,
   type ProviderDiscoveredModelsCache,
 } from "@/components/provider-diagnostic-models";
+import { getProviderIcon } from "@/components/provider-icons";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import type { ProviderInstallGuide } from "@/provider-install-guide";
 import { ProviderInstallGuideView } from "@/provider-install-guide/view";
 import { useHostFeature } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
+import { resolveProviderLabel } from "@/utils/provider-definitions";
+import { ProviderDetailHeader } from "./header";
 import { ProviderDetailSurface } from "./index";
+import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
 /*
  * 运行时接线：快照、daemon 配置、主机能力。安装指引与第三方接口的视图会拉进单测运行器
@@ -111,5 +115,41 @@ export function ProviderDetail({
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
     />
+  );
+}
+
+// 设置页的页面外框：头部块加详情内容。
+export function ProviderDetailPage({ serverId, provider }: { serverId: string; provider: string }) {
+  const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
+  const providerEntry = useMemo(
+    () => entries?.find((entry) => entry.provider === provider),
+    [entries, provider],
+  );
+  const snapshotStatus = providerEntry?.status ?? "loading";
+  const enabled = providerEntry?.enabled ?? true;
+  const status = resolveProviderStatus({ status: snapshotStatus, enabled });
+  const isAvailable = status.tone === "success";
+  const modelCount = isAvailable
+    ? describeProviderModelCount(countSelectableModels(providerEntry?.models))
+    : null;
+  const isProviderRefreshing = isRefreshing || status.tone === "loading";
+
+  const handleRefresh = useCallback(() => {
+    void refresh([provider]);
+  }, [provider, refresh]);
+
+  return (
+    <>
+      <ProviderDetailHeader
+        icon={getProviderIcon(provider, serverId)}
+        label={resolveProviderLabel(provider, entries)}
+        status={status}
+        modelCount={modelCount}
+        isRefreshing={isProviderRefreshing}
+        onRefresh={handleRefresh}
+        testID={`provider-detail-header-${provider}`}
+      />
+      <ProviderDetail serverId={serverId} provider={provider} modelQuery="" />
+    </>
   );
 }

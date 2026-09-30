@@ -2790,6 +2790,7 @@ export const ja: TranslationResources = {
         error: "エラー",
         available: "利用可能",
         notInstalled: "未インストール",
+        apiEndpoint: "API エンドポイント：{{name}}",
       },
       models: {
         one: "1つのモデル",

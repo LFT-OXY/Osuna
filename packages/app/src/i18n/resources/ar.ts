@@ -2764,6 +2764,7 @@ export const ar: TranslationResources = {
         error: "خطأ",
         available: "متاح",
         notInstalled: "غير مثبت",
+        apiEndpoint: "نقطة نهاية API: {{name}}",
       },
       models: {
         one: "1 نموذج",

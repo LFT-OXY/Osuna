@@ -8,6 +8,7 @@ import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/prot
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
 import { i18n } from "@/i18n/i18next";
 import { ProviderInstallGuideSurface, type ProviderInstallGuide } from "@/provider-install-guide";
+import { ProviderDetailHeader, type ProviderDetailHeaderProps } from "./header";
 import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
 
 function entry(overrides: Partial<ProviderSnapshotEntry>): ProviderSnapshotEntry {
@@ -191,5 +192,74 @@ describe("ProviderDetailSurface", () => {
       screen.getByLabelText(i18n.t("settings.providers.models.removeModel", { id: "relay/gpt" })),
     );
     expect(onDeleteCustomModel).toHaveBeenCalledWith("relay/gpt");
+  });
+});
+
+function ProviderGlyph() {
+  return <span data-testid="provider-glyph" />;
+}
+
+const AVAILABLE: ProviderDetailHeaderProps["status"] = {
+  tone: "success",
+  label: { key: "settings.providers.statuses.available" },
+};
+const NOT_INSTALLED: ProviderDetailHeaderProps["status"] = {
+  tone: "warning",
+  label: { key: "settings.providers.statuses.notInstalled" },
+};
+const THREE_MODELS = { key: "settings.providers.models.many", params: { count: 3 } };
+
+function renderHeader(overrides: Partial<ProviderDetailHeaderProps>) {
+  const onRefresh = vi.fn();
+  render(
+    <ProviderDetailHeader
+      icon={ProviderGlyph}
+      label="Claude Code"
+      status={AVAILABLE}
+      modelCount={THREE_MODELS}
+      isRefreshing={false}
+      onRefresh={onRefresh}
+      {...overrides}
+    />,
+  );
+  return { onRefresh };
+}
+
+describe("ProviderDetailHeader", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows the icon, name, status badge and model count", () => {
+    renderHeader({});
+
+    expect(screen.getByTestId("provider-glyph")).toBeTruthy();
+    expect(screen.getByText("Claude Code")).toBeTruthy();
+    expect(screen.getByText(i18n.t("settings.providers.statuses.available"))).toBeTruthy();
+    expect(screen.getByText(i18n.t("settings.providers.models.many", { count: 3 }))).toBeTruthy();
+  });
+
+  it("omits the model count when none is given", () => {
+    renderHeader({ status: NOT_INSTALLED, modelCount: null });
+
+    expect(screen.getByText(i18n.t("settings.providers.statuses.notInstalled"))).toBeTruthy();
+    expect(screen.queryByText(i18n.t("settings.providers.models.many", { count: 3 }))).toBeNull();
+  });
+
+  it("refreshes the provider from the header", () => {
+    const { onRefresh } = renderHeader({});
+
+    fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refresh")));
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows refresh in progress and blocks another refresh", () => {
+    const { onRefresh } = renderHeader({ isRefreshing: true });
+
+    fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refreshing")));
+
+    expect(screen.queryByText(i18n.t("settings.providers.diagnostic.refresh"))).toBeNull();
+    expect(onRefresh).not.toHaveBeenCalled();
   });
 });
