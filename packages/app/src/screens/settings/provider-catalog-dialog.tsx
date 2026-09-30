@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -16,26 +16,29 @@ export interface ProviderCatalogDialogProps {
   serverId: string;
   visible: boolean;
   onClose: () => void;
-  // 配置已写入即添加成功；快照刷新已尝试过，新提供方通常已经在列表里。
+  // 配置已写入即添加成功；新提供方已在快照里（通常还在探测），或快照刷新已结束。
   onAdded: (providerId: string) => void;
 }
 
 type AddState =
   | { status: "idle" }
-  | { status: "adding"; providerId: string }
+  | { status: "adding"; providerId: string; configWritten: boolean }
   | { status: "failed"; message: string };
 
 type AddAction =
   | { type: "started"; providerId: string }
+  | { type: "configWritten" }
   | { type: "failed"; message: string }
   | { type: "reset" };
 
 const IDLE: AddState = { status: "idle" };
 
-function addReducer(_state: AddState, action: AddAction): AddState {
+function addReducer(state: AddState, action: AddAction): AddState {
   switch (action.type) {
     case "started":
-      return { status: "adding", providerId: action.providerId };
+      return { status: "adding", providerId: action.providerId, configWritten: false };
+    case "configWritten":
+      return state.status === "adding" ? { ...state, configWritten: true } : state;
     case "failed":
       return { status: "failed", message: action.message };
     case "reset":
@@ -50,7 +53,7 @@ export function ProviderCatalogDialog({
   onAdded,
 }: ProviderCatalogDialogProps) {
   const { t } = useTranslation();
-  const { refresh } = useProvidersSnapshot(serverId);
+  const { entries, refresh } = useProvidersSnapshot(serverId);
   const { patchConfig } = useDaemonConfig(serverId);
   const [query, setQuery] = useState("");
   const [addState, dispatch] = useReducer(addReducer, IDLE);
@@ -64,6 +67,17 @@ export function ProviderCatalogDialog({
     dispatch({ type: "reset" });
     onClose();
   }, [onClose]);
+
+  const finishAttempt = useCallback(
+    (attempt: AbortController, providerId: string) => {
+      if (attempt.signal.aborted || attemptRef.current !== attempt) return;
+      attemptRef.current = null;
+      setQuery("");
+      dispatch({ type: "reset" });
+      onAdded(providerId);
+    },
+    [onAdded],
+  );
 
   const handleInstall = useCallback(
     async (entry: AcpProviderCatalogItem) => {
@@ -82,17 +96,28 @@ export function ProviderCatalogDialog({
         });
         return;
       }
-      // 先等快照带上新提供方再导航，否则地址修正会把它当成不存在的提供方。配置已经写入，
-      // 刷新失败也不算添加失败：daemon 的快照推送随后会把它补进列表。
-      await refresh([entry.id]).catch(() => undefined);
       if (attempt.signal.aborted) return;
-      attemptRef.current = null;
-      setQuery("");
-      dispatch({ type: "reset" });
-      onAdded(entry.id);
+      // 快照带上新提供方就导航（见下方 effect），否则地址修正会把它当成不存在的提供方。
+      // daemon 提交配置时已把它以 loading 推进快照并在后台探测，不等刷新：未安装的 CLI
+      // 可能探测很久。刷新只作兜底，结束或失败都算添加成功——配置已经写入。
+      dispatch({ type: "configWritten" });
+      void refresh([entry.id])
+        .catch(() => undefined)
+        .then(() => finishAttempt(attempt, entry.id));
     },
-    [onAdded, patchConfig, refresh],
+    [finishAttempt, patchConfig, refresh],
   );
+
+  const awaitingProviderId =
+    addState.status === "adding" && addState.configWritten ? addState.providerId : null;
+  const isAwaitedProviderInSnapshot =
+    awaitingProviderId !== null &&
+    (entries?.some((candidate) => candidate.provider === awaitingProviderId) ?? false);
+  useEffect(() => {
+    const attempt = attemptRef.current;
+    if (!isAwaitedProviderInSnapshot || !awaitingProviderId || !attempt) return;
+    finishAttempt(attempt, awaitingProviderId);
+  }, [awaitingProviderId, finishAttempt, isAwaitedProviderInSnapshot]);
 
   // resetKey 随打开 / 关闭变化，清空头部不受控的搜索框，与 query 保持一致。
   const header = useMemo<SheetHeader>(

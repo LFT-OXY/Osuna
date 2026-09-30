@@ -794,6 +794,29 @@ describe("ProvidersSection", () => {
     expect(selectProviderMock).toHaveBeenCalledWith(minimax.id);
   });
 
+  it("selects the new provider once the snapshot has it, without waiting for its probe", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+    refreshMock.mockImplementationOnce(() => new Promise<undefined>(() => {}));
+
+    render();
+    openCatalogDialog();
+    await pressAddInCatalog();
+
+    expect(findCatalogAddButton(minimax.id)?.textContent).toContain("Adding");
+    expect(selectProviderMock).not.toHaveBeenCalled();
+
+    snapshotState.entries = [
+      claudeEntry,
+      { ...claudeEntry, provider: minimax.id, status: "loading", label: minimax.title },
+    ];
+    render();
+
+    expect(findCatalogDialog()).toBeNull();
+    expect(selectProviderMock).toHaveBeenCalledTimes(1);
+    expect(selectProviderMock).toHaveBeenCalledWith(minimax.id);
+  });
+
   // 真实 daemon 无法稳定造出配置写入失败，失败路径只在这里覆盖（docs/testing.md）。
   it("keeps the dialog open with a visible error when adding fails, and lets you retry", async () => {
     snapshotState.entries = [claudeEntry];
