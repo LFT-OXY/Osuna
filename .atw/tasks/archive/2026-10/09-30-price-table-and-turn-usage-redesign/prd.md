@@ -154,7 +154,7 @@ customRows.sort((a, b) => (a.priceSource === null ? 0 : 1) - (b.priceSource === 
 - [x] 本轮有无价格数据的模型时：明细里该模型标「无价格数据」，总成本带点状下划线，底部有提示说明它按 $0 计入、可在设置 › 价格表自定义。
 - [x] 新增和修改的文案在 9 种界面语言里都有，不再使用的键已删除；资源测试通过。
 - [x] 编辑、移除自定义价格两个图标按钮和用量段有无障碍标签。
-- [ ] 单元测试、面板的浏览器组件测试、价格表 e2e 按 Testing Decisions 补齐；CI 通过；`npm run typecheck`、`npm run lint` 通过。（2026-10-01 归档时：本机单测、面板浏览器组件测试、typecheck、lint 已过；价格表 e2e 未在本次会话复跑；分支未推送，CI 未跑）
+- [x] 单元测试、面板的浏览器组件测试、价格表 e2e 按 Testing Decisions 补齐；CI 通过；`npm run typecheck`、`npm run lint` 通过。（PR #8 的 CI 全绿：app-tests、format、lint、typecheck、playwright 4 个分片；以 merge commit `7cc4c88fb` 合入 main）
 - [x] `docs/usage.md` 里描述价格表界面的句子已同步。
 - [x] 原生端（iOS/Android）实机验收：免验（没有模拟环境）。
 
