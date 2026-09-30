@@ -240,6 +240,18 @@ export const es: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "Esta sesión se creó con el endpoint de API {{created}}, pero el modo actual es Oficial. Es posible que no pueda continuar.",
+      deletedToOfficial:
+        "Esta sesión se creó con un endpoint de API que ya se eliminó, pero el modo actual es Oficial. Es posible que no pueda continuar.",
+      officialToEndpoint:
+        "Esta sesión se creó en Oficial, pero el modo actual es el endpoint de API {{current}}. Es posible que no pueda continuar.",
+      endpointToEndpoint:
+        "Esta sesión se creó con el endpoint de API {{created}}, pero el modo actual es el endpoint de API {{current}}. Es posible que no pueda continuar.",
+      deletedToEndpoint:
+        "Esta sesión se creó con un endpoint de API que ya se eliminó, pero el modo actual es el endpoint de API {{current}}. Es posible que no pueda continuar.",
+    },
     empty: "Comience a chatear con este agente...",
     scrollToBottom: "Desplazarse hacia abajo",
     historyLoadFailed: "No se pudo cargar el historial del agente",
@@ -2921,6 +2933,8 @@ export const es: TranslationResources = {
           reapplyMessage:
             "Esto vuelve a escribir el endpoint en el archivo de configuración de {{provider}} y reemplaza los cambios externos en las claves que gestiona Osuna.",
         },
+        inheritedNote:
+          "También usa el endpoint de API {{name}} de Claude Code: el env del settings.json de Claude tiene prioridad sobre el entorno de este proveedor.",
         form: {
           createTitle: "Nuevo endpoint de API",
           editTitle: "Editar endpoint de API",
@@ -3282,6 +3296,7 @@ export const es: TranslationResources = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      apiEndpointNote: "Usando el endpoint de API {{name}}. Esta cuota no refleja el consumo real.",
       title: "Uso del plan",
       refresh: "Actualizar",
       refreshing: "Actualizando...",

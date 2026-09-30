@@ -237,6 +237,15 @@ export const zhCN: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial: "此会话创建于第三方接口 {{created}}，当前为官方，可能无法继续。",
+      deletedToOfficial: "此会话创建于一个已删除的第三方接口，当前为官方，可能无法继续。",
+      officialToEndpoint: "此会话创建于官方，当前为第三方接口 {{current}}，可能无法继续。",
+      endpointToEndpoint:
+        "此会话创建于第三方接口 {{created}}，当前为第三方接口 {{current}}，可能无法继续。",
+      deletedToEndpoint:
+        "此会话创建于一个已删除的第三方接口，当前为第三方接口 {{current}}，可能无法继续。",
+    },
     empty: "开始和这个 Agent 对话...",
     scrollToBottom: "滚动到底部",
     historyLoadFailed: "无法加载智能体历史记录",
@@ -2817,6 +2826,8 @@ export const zhCN: TranslationResources = {
           reapplyMessage:
             "这会把接口重新写入 {{provider}} 自身的配置文件，覆盖外部对 Osuna 所管理的键的改动。",
         },
+        inheritedNote:
+          "也会走 Claude Code 启用的第三方接口 {{name}}：Claude 的 settings.json 里的 env 优先于这个提供方的环境变量。",
         form: {
           createTitle: "新建第三方接口",
           editTitle: "编辑第三方接口",
@@ -3174,6 +3185,7 @@ export const zhCN: TranslationResources = {
       cell: "{{day}} · {{tokens}} token",
     },
     planUsage: {
+      apiEndpointNote: "当前使用第三方接口 {{name}}，此额度不代表实际消耗。",
       title: "套餐用量",
       refresh: "刷新",
       refreshing: "刷新中…",

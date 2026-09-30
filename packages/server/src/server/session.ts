@@ -4475,9 +4475,20 @@ export class Session {
       const effectiveOverrides = matched
         ? { ...buildConfigOverrides(matched.record), ...overrides }
         : overrides;
+      // 恢复成新 id，AgentManager 查不到原记录，创建时的模式由这里带过去。
+      let resumeOptions: { apiEndpointId: string | null } | undefined;
+      if (matched) {
+        const apiEndpointId = matched.record.apiEndpointId ?? null;
+        resumeOptions = { apiEndpointId };
+      }
       let snapshot: ManagedAgent;
       try {
-        snapshot = await this.agentManager.resumeAgentFromPersistence(handle, effectiveOverrides);
+        snapshot = await this.agentManager.resumeAgentFromPersistence(
+          handle,
+          effectiveOverrides,
+          undefined,
+          resumeOptions,
+        );
       } catch (error) {
         if (matched?.didUnarchive && matched.originalArchivedAt) {
           await this.agentManager.archiveSnapshot(matched.record.id, matched.originalArchivedAt);

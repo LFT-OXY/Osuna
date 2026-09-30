@@ -18,6 +18,7 @@ import {
   type AgentModelDefinition,
   type AgentProvider,
   type FetchCatalogOptions,
+  type ActiveApiEndpointLookup,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
 } from "./agent-sdk-types.js";
@@ -125,6 +126,7 @@ export interface ProviderSnapshotManagerOptions {
   diagnosticTimeoutMs?: number;
   openCodeBridge?: OpenCodeBridge;
   modelOverride?: ProviderModelOverride;
+  activeApiEndpoint?: ActiveApiEndpointLookup;
 }
 
 interface ProviderSnapshotRefreshOptions {
@@ -256,6 +258,7 @@ export class ProviderSnapshotManager {
   private readonly isDev: boolean;
   private readonly extraClients: Partial<Record<AgentProvider, AgentClient>>;
   private readonly modelOverride?: ProviderModelOverride;
+  private readonly activeApiEndpoint?: ActiveApiEndpointLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -275,6 +278,7 @@ export class ProviderSnapshotManager {
     this.isDev = options.isDev === true;
     this.extraClients = options.extraClients ?? {};
     this.modelOverride = options.modelOverride;
+    this.activeApiEndpoint = options.activeApiEndpoint;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -1041,6 +1045,7 @@ export class ProviderSnapshotManager {
       );
       const catalogModels = overriddenModels ?? catalog.models;
       const isModelListAuthoritative = overriddenModels ? true : undefined;
+      const activeApiEndpoint = this.activeApiEndpoint?.(provider) ?? undefined;
       const models = normalizeAgentModelCatalog(catalogModels);
       if (models.length !== catalogModels.length) {
         this.logger.warn(
@@ -1056,6 +1061,7 @@ export class ProviderSnapshotManager {
         enabled: true,
         models,
         isModelListAuthoritative,
+        activeApiEndpoint,
         modes: catalog.modes,
         fetchedAt: new Date().toISOString(),
       });

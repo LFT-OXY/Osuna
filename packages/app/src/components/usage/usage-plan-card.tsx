@@ -6,6 +6,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { UsageCard } from "@/components/usage/usage-card";
+import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ProviderUsageList } from "@/provider-usage/list";
 import type { ProviderUsageView } from "@/provider-usage/types";
 import { useProviderUsageHosts } from "@/provider-usage/use-provider-usage-hosts";
@@ -56,7 +57,7 @@ export function UsagePlanCard({ hosts, isMultiHost }: UsagePlanCardProps) {
           {groups.map((group) => (
             <Fragment key={group.serverId}>
               {isMultiHost ? <Text style={styles.host}>{group.serverName}</Text> : null}
-              <PlanUsageBody view={group.view} onRetry={refresh} />
+              <PlanUsageBody serverId={group.serverId} view={group.view} onRetry={refresh} />
             </Fragment>
           ))}
         </View>
@@ -65,8 +66,17 @@ export function UsagePlanCard({ hosts, isMultiHost }: UsagePlanCardProps) {
   );
 }
 
-function PlanUsageBody({ view, onRetry }: { view: ProviderUsageView; onRetry: () => void }) {
+function PlanUsageBody({
+  serverId,
+  view,
+  onRetry,
+}: {
+  serverId: string;
+  view: ProviderUsageView;
+  onRetry: () => void;
+}) {
   const { t } = useTranslation();
+  const { entries } = useProvidersSnapshot(serverId);
 
   if (view.kind === "loading") {
     return <Text style={styles.message}>{t("usage.planUsage.loading")}</Text>;
@@ -90,7 +100,7 @@ function PlanUsageBody({ view, onRetry }: { view: ProviderUsageView; onRetry: ()
     return <Text style={styles.message}>{t("usage.planUsage.empty")}</Text>;
   }
 
-  return <ProviderUsageList providers={view.payload.providers} />;
+  return <ProviderUsageList providers={view.payload.providers} snapshotEntries={entries} />;
 }
 
 const styles = StyleSheet.create((theme) => {

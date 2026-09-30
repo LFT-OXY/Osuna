@@ -242,6 +242,18 @@ export const fr: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "Cette session a été créée avec l'endpoint d'API {{created}}, mais le mode actuel est Officiel. Elle risque de ne pas pouvoir continuer.",
+      deletedToOfficial:
+        "Cette session a été créée avec un endpoint d'API supprimé depuis, mais le mode actuel est Officiel. Elle risque de ne pas pouvoir continuer.",
+      officialToEndpoint:
+        "Cette session a été créée en mode Officiel, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
+      endpointToEndpoint:
+        "Cette session a été créée avec l'endpoint d'API {{created}}, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
+      deletedToEndpoint:
+        "Cette session a été créée avec un endpoint d'API supprimé depuis, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
+    },
     empty: "Commencez à discuter avec cet agent...",
     scrollToBottom: "Faire défiler vers le bas",
     historyLoadFailed: "Impossible de charger l’historique de l’agent",
@@ -2928,6 +2940,8 @@ export const fr: TranslationResources = {
           reapplyMessage:
             "L'endpoint est réécrit dans le fichier de réglages de {{provider}}, ce qui remplace les modifications externes des clés gérées par Osuna.",
         },
+        inheritedNote:
+          "Utilise aussi l'endpoint d'API {{name}} de Claude Code : l'env du settings.json de Claude prime sur l'environnement de ce fournisseur.",
         form: {
           createTitle: "Nouvel endpoint d'API",
           editTitle: "Modifier l'endpoint d'API",
@@ -3291,6 +3305,8 @@ export const fr: TranslationResources = {
       cell: "{{day}} · {{tokens}} jetons",
     },
     planUsage: {
+      apiEndpointNote:
+        "Endpoint d'API {{name}} utilisé. Ce quota ne reflète pas la consommation réelle.",
       title: "Consommation du forfait",
       refresh: "Actualiser",
       refreshing: "Actualisation...",

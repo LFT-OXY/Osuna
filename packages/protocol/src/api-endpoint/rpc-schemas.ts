@@ -70,6 +70,29 @@ export const ApiEndpointListRequestSchema = z.object({
 });
 export type ApiEndpointListRequest = z.infer<typeof ApiEndpointListRequestSchema>;
 
+/** 一个已保存的第三方接口：提供方快照里当前启用的接口、会话恢复提示里的当前模式都用它。 */
+export const ApiEndpointRefSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+export type ApiEndpointRef = z.infer<typeof ApiEndpointRefSchema>;
+
+/**
+ * 恢复的会话创建时所处的模式与当前模式不同，挂在时间线的 notification 上，App 据此本地化。
+ * null 即「官方」；name 为 null 表示该接口已被删除。
+ */
+export const ApiEndpointCreatedRefSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+});
+export type ApiEndpointCreatedRef = z.infer<typeof ApiEndpointCreatedRefSchema>;
+
+export const ApiEndpointModeMismatchSchema = z.object({
+  createdIn: ApiEndpointCreatedRefSchema.nullable(),
+  current: ApiEndpointRefSchema.nullable(),
+});
+export type ApiEndpointModeMismatch = z.infer<typeof ApiEndpointModeMismatchSchema>;
+
 /**
  * CLI 配置文件的一条健康问题，列表查询时读真实文件得出。`code` 是字符串：
  * modified_externally、config_unparsable、codex_version_unsupported、codex_profile_override。

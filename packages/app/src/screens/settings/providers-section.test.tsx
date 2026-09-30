@@ -36,7 +36,13 @@ const { theme, snapshotState, configState, patchConfigMock, openProviderSettings
         statusSuccess: "#00ff00",
         statusWarning: "#ff9500",
         statusDanger: "#ff0000",
-        palette: { red: { 300: "#ff6b6b" }, white: "#fff" },
+        // Alert（经 @/api-endpoints 入口引入）读 blue / amber。
+        palette: {
+          red: { 300: "#ff6b6b" },
+          blue: { 300: "#93c5fd" },
+          amber: { 500: "#f59e0b" },
+          white: "#fff",
+        },
       },
     },
     snapshotState: {
@@ -128,11 +134,18 @@ vi.mock("react-native-unistyles", () => ({
 vi.mock("lucide-react-native", () => {
   const icon = (name: string) => () => React.createElement("span", { "data-icon": name });
   return {
+    // 继承提示经 @/api-endpoints 入口引入，入口带着模式区与 Alert 的图标。
+    AlertTriangle: icon("AlertTriangle"),
+    CheckCircle2: icon("CheckCircle2"),
     ChevronRight: icon("ChevronRight"),
     Copy: icon("Copy"),
     ExternalLink: icon("ExternalLink"),
+    Info: icon("Info"),
     MoreHorizontal: icon("MoreHorizontal"),
+    Pencil: icon("Pencil"),
+    Plus: icon("Plus"),
     Trash2: icon("Trash2"),
+    XCircle: icon("XCircle"),
   };
 });
 
@@ -162,6 +175,8 @@ vi.mock("react-i18next", () => ({
           "settings.providers.remove.errorTitle": "Unable to remove provider",
           "settings.providers.install.howTo": "How to install",
           "settings.providers.install.howToFor": "How to install {{name}}",
+          "settings.providers.apiEndpoints.inheritedNote":
+            "Also uses Claude Code's API endpoint {{name}}",
         })[key] ?? key
       )
         .replaceAll("{{name}}", String(values?.name ?? ""))
@@ -558,6 +573,35 @@ describe("ProvidersSection", () => {
     render();
 
     expect(findInstallEntry("Work Claude")).not.toBeNull();
+  });
+
+  it("tells a custom provider that extends claude it uses Claude's API endpoint too", () => {
+    const workClaude: ProviderSnapshotEntry = {
+      ...notInstalledCustomClaudeEntry,
+      status: "ready",
+      models: claudeEntry.models,
+    };
+    const note = "Also uses Claude Code's API endpoint Relay";
+    snapshotState.entries = [
+      { ...claudeEntry, activeApiEndpoint: { id: "ep_1", name: "Relay" } },
+      workClaude,
+    ];
+    configState.config = makeConfig({
+      "work-claude": { extends: "claude", label: "Work Claude" },
+    });
+
+    render();
+
+    expect(indexOfText(descendants(findRow("Work Claude provider details")), note)).toBeGreaterThan(
+      -1,
+    );
+    // Claude 自己那一行已经在详情里显示当前接口，不重复提示。
+    expect(indexOfText(descendants(findRow("Claude provider details")), note)).toBe(-1);
+
+    snapshotState.entries = [claudeEntry, workClaude];
+    render();
+
+    expect(indexOfText(descendants(findRow("Work Claude provider details")), note)).toBe(-1);
   });
 
   it("toggles the provider enabled flag through patchConfig when the switch is pressed", async () => {

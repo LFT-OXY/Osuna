@@ -27,6 +27,11 @@ export {
   selectApiEndpointsState,
   type ApiEndpointsLoadState,
 } from "./internal/section-state";
+export {
+  describeApiEndpointModeMismatch,
+  selectActiveApiEndpoint,
+  selectInheritedApiEndpoint,
+} from "./internal/notices";
 import {
   apiEndpointHealthMessageKey,
   selectApiEndpointHealthView,

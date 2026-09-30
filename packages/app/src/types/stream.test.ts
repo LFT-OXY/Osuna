@@ -2268,6 +2268,35 @@ describe("notification timeline items", () => {
     ]);
   });
 
+  it("keeps the API endpoint modes of a resumed session for localized rendering", () => {
+    const apiEndpointModeMismatch = {
+      createdIn: { id: "ep_1", name: "Relay" },
+      current: null,
+    };
+    const state = hydrateStreamState(
+      [
+        {
+          event: {
+            type: "timeline",
+            provider: "claude",
+            item: {
+              type: "notification",
+              level: "warning",
+              message: "This session was created with the API endpoint Relay",
+              apiEndpointModeMismatch,
+            },
+          },
+          timestamp: new Date("2026-09-30T10:00:00.000Z"),
+        },
+      ],
+      { source: "canonical" },
+    );
+
+    expect(state).toMatchObject([
+      { kind: "notification", level: "warning", apiEndpointModeMismatch },
+    ]);
+  });
+
   it("keeps repeated notifications with the same text in the same millisecond", () => {
     const timestamp = new Date("2026-07-26T10:00:00.000Z");
     const state = hydrateStreamState(

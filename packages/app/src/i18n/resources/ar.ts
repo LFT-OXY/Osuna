@@ -237,6 +237,18 @@ export const ar: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API {{created}}، لكن الوضع الحالي هو الرسمي. قد لا تتمكن من المتابعة.",
+      deletedToOfficial:
+        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API حُذفت لاحقًا، لكن الوضع الحالي هو الرسمي. قد لا تتمكن من المتابعة.",
+      officialToEndpoint:
+        "أُنشئت هذه الجلسة في الوضع الرسمي، لكن الوضع الحالي هو نقطة نهاية API {{current}}. قد لا تتمكن من المتابعة.",
+      endpointToEndpoint:
+        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API {{created}}، لكن الوضع الحالي هو نقطة نهاية API {{current}}. قد لا تتمكن من المتابعة.",
+      deletedToEndpoint:
+        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API حُذفت لاحقًا، لكن الوضع الحالي هو نقطة نهاية API {{current}}. قد لا تتمكن من المتابعة.",
+    },
     empty: "ابدأ الدردشة مع هذا الوكيل...",
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",
@@ -2851,6 +2863,8 @@ export const ar: TranslationResources = {
           reapplyMessage:
             "يكتب هذا نقطة النهاية مجددًا في ملف إعدادات {{provider}} نفسه ويستبدل التغييرات الخارجية على المفاتيح التي يديرها Osuna.",
         },
+        inheritedNote:
+          "يستخدم أيضًا نقطة نهاية API {{name}} الخاصة بـ Claude Code: قيم env في ملف settings.json الخاص بـ Claude لها الأولوية على بيئة هذا المزوّد.",
         form: {
           createTitle: "نقطة نهاية API جديدة",
           editTitle: "تعديل نقطة نهاية API",
@@ -3209,6 +3223,7 @@ export const ar: TranslationResources = {
       cell: "{{day}} · {{tokens}} رمز",
     },
     planUsage: {
+      apiEndpointNote: "تستخدم نقطة نهاية API {{name}}. هذه الحصة لا تعكس الاستهلاك الفعلي.",
       title: "استهلاك الخطة",
       refresh: "تحديث",
       refreshing: "جارٍ التحديث...",

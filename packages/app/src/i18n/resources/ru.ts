@@ -239,6 +239,18 @@ export const ru: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "Эта сессия создана с API-эндпоинтом {{created}}, а сейчас режим «Официальный». Продолжить её может не получиться.",
+      deletedToOfficial:
+        "Эта сессия создана с API-эндпоинтом, который уже удалён, а сейчас режим «Официальный». Продолжить её может не получиться.",
+      officialToEndpoint:
+        "Эта сессия создана в режиме «Официальный», а сейчас используется API-эндпоинт {{current}}. Продолжить её может не получиться.",
+      endpointToEndpoint:
+        "Эта сессия создана с API-эндпоинтом {{created}}, а сейчас используется API-эндпоинт {{current}}. Продолжить её может не получиться.",
+      deletedToEndpoint:
+        "Эта сессия создана с API-эндпоинтом, который уже удалён, а сейчас используется API-эндпоинт {{current}}. Продолжить её может не получиться.",
+    },
     empty: "Начните общаться с этим агентом...",
     scrollToBottom: "Прокрутить вниз",
     historyLoadFailed: "Не удалось загрузить историю агента",
@@ -2905,6 +2917,8 @@ export const ru: TranslationResources = {
           reapplyMessage:
             "Эндпоинт снова записывается в собственный файл настроек {{provider}}, внешние изменения ключей, которыми управляет Osuna, заменяются.",
         },
+        inheritedNote:
+          "Тоже идёт через API-эндпоинт {{name}} из Claude Code: env в settings.json Claude важнее окружения этого провайдера.",
         form: {
           createTitle: "Новый API-эндпоинт",
           editTitle: "Изменить API-эндпоинт",
@@ -3267,6 +3281,8 @@ export const ru: TranslationResources = {
       cell: "{{day}} · {{tokens}} токенов",
     },
     planUsage: {
+      apiEndpointNote:
+        "Используется API-эндпоинт {{name}}. Этот лимит не отражает реальный расход.",
       title: "Расход по тарифу",
       refresh: "Обновить",
       refreshing: "Обновление...",

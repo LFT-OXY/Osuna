@@ -239,6 +239,18 @@ export const ja: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "このセッションは API エンドポイント {{created}} で作成されましたが、現在は公式です。続行できない可能性があります。",
+      deletedToOfficial:
+        "このセッションは削除済みの API エンドポイントで作成されましたが、現在は公式です。続行できない可能性があります。",
+      officialToEndpoint:
+        "このセッションは公式で作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
+      endpointToEndpoint:
+        "このセッションは API エンドポイント {{created}} で作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
+      deletedToEndpoint:
+        "このセッションは削除済みの API エンドポイントで作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
+    },
     empty: "このエージェントとチャットを始めましょう...",
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",
@@ -2882,6 +2894,8 @@ export const ja: TranslationResources = {
           reapplyMessage:
             "{{provider}} 自身の設定ファイルにエンドポイントをもう一度書き込み、Osuna が管理するキーへの外部の変更を置き換えます。",
         },
+        inheritedNote:
+          "Claude Code の API エンドポイント {{name}} も使われます。Claude の settings.json の env はこのプロバイダーの環境変数より優先されます。",
         form: {
           createTitle: "新しい API エンドポイント",
           editTitle: "API エンドポイントを編集",
@@ -3242,6 +3256,8 @@ export const ja: TranslationResources = {
       cell: "{{day}} · {{tokens}} トークン",
     },
     planUsage: {
+      apiEndpointNote:
+        "API エンドポイント {{name}} を使用中です。この枠は実際の消費量を表しません。",
       title: "プラン使用量",
       refresh: "更新",
       refreshing: "更新中...",

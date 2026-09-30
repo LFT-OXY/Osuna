@@ -72,6 +72,8 @@ All user-visible strings go through i18next: `const { t } = useTranslation()` an
 
 - **English stays byte-identical to what it replaced.** Playwright specs locate controls by English accessible name (`getByLabel("Schedule name")`, `getByRole("button", { name: "Create schedule" })`); the e2e run is the proof the migration changed nothing. When a localized wrapper has nothing to add in English, the English value is the bare placeholder (`schedules.cadence.errors.invalid: "{{detail}}"` wraps the cron library's English reason; zh-CN is `"无效的 cron 表达式：{{detail}}"`).
 - **`utils/time.ts` `formatTimeAgo` ("5m ago") is deliberately English** and shared app-wide; localize the prefix around it (`"Created {{ago}}"`), not the value.
+- **Daemon-authored timeline text is localized from structured facts, not from `message`.** A `notification` the daemon adds carries an optional field with the facts (`apiEndpointModeMismatch`), and `message` stays the English fallback for old clients. The render site asks a pure function for `{ key, params } | null` and keeps `message` on `null` (`agent-stream/view.tsx` → `describeApiEndpointModeMismatch`). Vary by key per case (`agentStream.apiEndpointMode.{endpointToOfficial,deletedToOfficial,officialToEndpoint,endpointToEndpoint,deletedToEndpoint}`), not by interpolating "Official" as a noun.
+- **Key a string by the surface that shows it, not by the feature that owns the data.** The API endpoint feature's strings live in three namespaces: the conversation notice under `agentStream.apiEndpointMode.*`, the plan usage label under `usage.planUsage.apiEndpointNote`, the provider-row hint under `settings.providers.apiEndpoints.inheritedNote` (`docs/i18n.md`).
 
 ## React rules that matter most here
 

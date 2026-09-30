@@ -45,6 +45,16 @@ only the last handle. Three rules make it safe without a migration.
 Add the field to `docs/data-model.md` in the same change, including the sentence
 that says what readers do when it is missing.
 
+### Adding a field that records host state at creation
+
+`apiEndpointId` on the agent record (api-endpoint ticket 08) records the API
+endpoint active when the session was created. Unlike `providerSessionIds` it is
+set once and never updated.
+
+- **Absent is a real value.** Missing means Official for old and new records alike, so an Official session writes nothing; no `null`, no backfill.
+- **Every path that rebuilds a `ManagedAgent` carries it:** `registerSession` options (create, import, resume, reload), `dispatchStoredAgentState` for closed records, and `toStoredAgentRecord`. A path that forgets it silently turns the session into "Official" on the next persist.
+- The resume comparison and the notice it produces are in [RPC and Protocol](./rpc-and-protocol.md#scenario-a-one-off-timeline-notice-the-daemon-adds-on-resume).
+
 ### Gotcha: a cursor file that fails to parse replays everything
 
 `UsageStore.loadScanState()` drops the whole file and returns an empty state when

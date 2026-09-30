@@ -15,6 +15,8 @@ import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useHostFeature } from "@/runtime/host-features";
+import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { selectInheritedApiEndpoint } from "@/api-endpoints";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
@@ -88,6 +90,8 @@ interface ProviderRowProps {
   isRemoving: boolean;
   canRemove: boolean;
   hasInstallGuide: boolean;
+  // 继承 claude 的自定义提供方在 Claude 启用第三方接口时也走这个接口。
+  inheritedApiEndpoint: ApiEndpointRef | null;
   isFirst: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
@@ -184,6 +188,7 @@ function ProviderRow({
   isRemoving,
   canRemove,
   hasInstallGuide,
+  inheritedApiEndpoint,
   isFirst,
   onPress,
   onToggleEnabled,
@@ -262,6 +267,13 @@ function ProviderRow({
               {!providerError && modelCountLabel ? (
                 <Text style={settingsStyles.rowHint} numberOfLines={1}>
                   {modelCountLabel}
+                </Text>
+              ) : null}
+              {inheritedApiEndpoint ? (
+                <Text style={settingsStyles.rowHint} numberOfLines={2}>
+                  {t("settings.providers.apiEndpoints.inheritedNote", {
+                    name: inheritedApiEndpoint.name,
+                  })}
                 </Text>
               ) : null}
             </View>
@@ -452,9 +464,15 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
             {providerDefinitions.map((def, index) => {
               const entry = entries?.find((candidate) => candidate.provider === def.id);
               if (!entry) return null;
+              const extendsProvider = config?.providers?.[def.id]?.extends;
               const hasInstallGuide = hasProviderInstallGuide({
                 provider: def.id,
-                extendsProvider: config?.providers?.[def.id]?.extends,
+                extendsProvider,
+              });
+              const inheritedApiEndpoint = selectInheritedApiEndpoint({
+                provider: def.id,
+                extendsProvider,
+                entries,
               });
               return (
                 <ProviderRow
@@ -467,6 +485,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   isRemoving={removingProviderId === def.id}
                   canRemove={supportsProviderRemoval && entry.source === "custom"}
                   hasInstallGuide={hasInstallGuide}
+                  inheritedApiEndpoint={inheritedApiEndpoint}
                   isFirst={index === 0}
                   onPress={handleOpenProviderSettings}
                   onToggleEnabled={handleToggleEnabled}

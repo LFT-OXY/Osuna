@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentTimelineItemPayloadSchema,
   ProviderSnapshotEntrySchema,
   ServerInfoStatusPayloadSchema,
   SessionInboundMessageSchema,
@@ -355,5 +356,42 @@ describe("providers snapshot isModelListAuthoritative", () => {
 
   it("reads an older host without the flag as a non-authoritative list", () => {
     expect(ProviderSnapshotEntrySchema.parse(entry).isModelListAuthoritative).toBeUndefined();
+  });
+});
+
+describe("providers snapshot activeApiEndpoint", () => {
+  const entry = { provider: "claude", status: "ready" as const, enabled: true };
+
+  it("parses the endpoint a provider currently uses", () => {
+    const parsed = ProviderSnapshotEntrySchema.parse({
+      ...entry,
+      activeApiEndpoint: { id: "ep_1", name: "OpenRouter" },
+    });
+    expect(parsed.activeApiEndpoint).toEqual({ id: "ep_1", name: "OpenRouter" });
+  });
+
+  it("reads an older host without the field as Official", () => {
+    expect(ProviderSnapshotEntrySchema.parse(entry).activeApiEndpoint).toBeUndefined();
+  });
+});
+
+describe("timeline notification apiEndpointModeMismatch", () => {
+  const notification = {
+    type: "notification" as const,
+    level: "warning" as const,
+    message:
+      'This session was created with the API endpoint "OpenRouter", but the current mode is Official. It may not be able to continue.',
+  };
+
+  it("parses the modes of a resumed session, including a deleted endpoint", () => {
+    const item = {
+      ...notification,
+      apiEndpointModeMismatch: { createdIn: { id: "ep_1", name: null }, current: null },
+    };
+    expect(AgentTimelineItemPayloadSchema.parse(item)).toEqual(item);
+  });
+
+  it("parses a notification from an older host without the field", () => {
+    expect(AgentTimelineItemPayloadSchema.parse(notification)).toEqual(notification);
   });
 });

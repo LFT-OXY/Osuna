@@ -240,6 +240,18 @@ export const ptBR: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "Esta sessão foi criada com o endpoint de API {{created}}, mas o modo atual é Oficial. Talvez ela não consiga continuar.",
+      deletedToOfficial:
+        "Esta sessão foi criada com um endpoint de API que já foi excluído, mas o modo atual é Oficial. Talvez ela não consiga continuar.",
+      officialToEndpoint:
+        "Esta sessão foi criada no Oficial, mas o modo atual é o endpoint de API {{current}}. Talvez ela não consiga continuar.",
+      endpointToEndpoint:
+        "Esta sessão foi criada com o endpoint de API {{created}}, mas o modo atual é o endpoint de API {{current}}. Talvez ela não consiga continuar.",
+      deletedToEndpoint:
+        "Esta sessão foi criada com um endpoint de API que já foi excluído, mas o modo atual é o endpoint de API {{current}}. Talvez ela não consiga continuar.",
+    },
     empty: "Comece a conversar com este agente...",
     scrollToBottom: "Rolar para o fim",
     historyLoadFailed: "Não foi possível carregar o histórico do agente",
@@ -2902,6 +2914,8 @@ export const ptBR: TranslationResources = {
           reapplyMessage:
             "Isso grava o endpoint de novo no arquivo de configuração do {{provider}} e substitui as mudanças externas nas chaves que o Osuna gerencia.",
         },
+        inheritedNote:
+          "Também usa o endpoint de API {{name}} do Claude Code: o env do settings.json do Claude tem prioridade sobre o ambiente deste provedor.",
         form: {
           createTitle: "Novo endpoint de API",
           editTitle: "Editar endpoint de API",
@@ -3262,6 +3276,7 @@ export const ptBR: TranslationResources = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      apiEndpointNote: "Usando o endpoint de API {{name}}. Esta cota não reflete o consumo real.",
       title: "Uso do plano",
       refresh: "Atualizar",
       refreshing: "Atualizando...",

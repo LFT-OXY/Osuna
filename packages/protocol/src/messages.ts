@@ -70,6 +70,8 @@ import {
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointListRequestSchema,
   ApiEndpointListResponseSchema,
+  ApiEndpointModeMismatchSchema,
+  ApiEndpointRefSchema,
   ApiEndpointSaveRequestSchema,
   ApiEndpointSaveResponseSchema,
   ApiEndpointSetActiveRequestSchema,
@@ -454,6 +456,8 @@ export const ProviderSnapshotEntrySchema = z.object({
   defaultModeId: z.string().nullable().optional(),
   // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
   isModelListAuthoritative: z.boolean().optional(),
+  // 当前启用的第三方接口；官方模式下没有。
+  activeApiEndpoint: ApiEndpointRefSchema.optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({
@@ -814,6 +818,8 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     type: z.literal("notification"),
     level: z.enum(["info", "warning", "error"]),
     message: z.string(),
+    // 有它时 App 按它本地化，message 是给老客户端的英文原文。
+    apiEndpointModeMismatch: ApiEndpointModeMismatchSchema.optional(),
   }),
   z.object({
     type: z.literal("compaction"),

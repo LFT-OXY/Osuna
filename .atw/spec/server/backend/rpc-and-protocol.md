@@ -447,6 +447,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 - Injected twice from `bootstrap.ts`: `ProviderSnapshotManagerOptions.modelOverride` and `AgentManagerOptions.modelOverride`.
 - `ApiEndpointServiceOptions.onActiveEndpointChanged(provider)` → `providerSnapshotManager.refreshSettingsSnapshot({ providers: [provider] })`, with `.catch` logging `{ err }`.
 - Wire: `ProviderSnapshotEntry.isModelListAuthoritative?: boolean` in `packages/protocol/src/messages.ts` and both hand-written `ProviderSnapshotEntry` interfaces (`protocol/src/agent-types.ts`, `server/agent/agent-sdk-types.ts`).
+- The same refresh also publishes `ProviderSnapshotEntry.activeApiEndpoint?: ApiEndpointRef` (`{ id, name }`), from `ProviderSnapshotManagerOptions.activeApiEndpoint: ActiveApiEndpointLookup`. It is the app's only source for "this provider is on an endpoint" outside the provider panel (plan usage label, the inherited-endpoint hint); set on `ready` entries only, like the model override.
 
 ### 3. Contracts
 
@@ -555,6 +556,66 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
   const reason = error instanceof Error ? error.message : String(error);
   return { code: "codex_unavailable", message: `Couldn't run codex --version: ${reason}` };
 }
+```
+
+## Scenario: a one-off timeline notice the daemon adds on resume
+
+Reference implementation: the API endpoint mode notice (api-endpoint ticket 08). Reuse the shape when resuming a session should tell the user something the provider history can't.
+
+### 1. Scope / Trigger
+
+- A persisted agent carries host state from its creation (here: which API endpoint was active), and resuming it under different host state deserves a warning in the conversation. The text must be localized, but timeline items are daemon-authored.
+
+### 2. Signatures
+
+- Record: `StoredAgentRecord.apiEndpointId?: string` (`agent-storage.ts`), `ManagedAgentBase.apiEndpointId?: string`, projected by `toStoredAgentRecord` and carried by `dispatchStoredAgentState`, reload, and `registerSession({ apiEndpointId })`.
+- Port: `ApiEndpointModeSource { active(provider): ApiEndpointRef | null; endpointName(provider, id): string | null }` in `agent-sdk-types.ts`, wired in `bootstrap.ts` to `ApiEndpointService.activeEndpoint` / `endpointName`; `AgentManagerOptions.apiEndpointMode`.
+- Builder: `buildApiEndpointModeNotice({ modes, provider, createdIn: string | null }) → notification | null` in `server/agent/api-endpoint-mode-notice.ts`.
+- Wire: `notification.apiEndpointModeMismatch?: { createdIn: ApiEndpointCreatedRef | null; current: ApiEndpointRef | null }` (`ApiEndpointCreatedRef.name` is `null` for a deleted endpoint) in `protocol/src/api-endpoint/rpc-schemas.ts`, on the `messages.ts` timeline union and both hand-written `AgentTimelineItem` types.
+- `resumeAgentFromPersistence(handle, overrides, agentId, options: { …, apiEndpointId?: string | null })`: the caller's value is used only when no record exists under `agentId` (`session.ts` `resume_agent_request` resumes under a new id and passes the matched record's mode).
+
+### 3. Contracts
+
+- Stamp at create and import with `active(provider)?.id`; absent means Official, including records written before the field existed. Resume never rewrites it.
+- Creation mode on resume: record by id → `record.apiEndpointId ?? null`; else the caller's value; else unknown → stamp the current mode and queue nothing.
+- The notice is queued after `registerSession` and appended by `hydrateTimelineFromProvider` after the history rows, so it lands at the end of the conversation, not before the replayed history. `appendTimelineItem` is fine: `registerSession` already touched `updatedAt` on this resume.
+- Not queued for `purpose: "history"` (viewing an archived session). Dropped when a deep-equal notice is already in the retained timeline: `closeAgent` keeps `timelineStore`, so an in-process re-resume would otherwise add a second copy. After a daemon restart the timeline is rebuilt and one notice appears again — "once per resume" by design; nothing extra is persisted.
+- `message` is the English fallback for old clients; the app renders `apiEndpointModeMismatch` through `describeApiEndpointModeMismatch` (`app/src/api-endpoints/internal/notices.ts`, exported from `@/api-endpoints`), which returns `null` for Official→Official and the app keeps `message`.
+
+### 4. Validation & Error Matrix
+
+- Provider without endpoint support (`findProvider` misses) → `active` returns null, record has no field → no notice.
+- Created under an endpoint since deleted → `createdIn: { id, name: null }`, "…an API endpoint that has since been deleted…".
+- Record without a persistence handle → `ensureAgentLoaded` creates a new provider session with the same id; it is stamped with the current mode, no notice (a new session is not a continuation).
+- No `apiEndpointMode` injected (unit suites) → nothing stamped, nothing queued.
+
+### 5. Good/Base/Bad Cases
+
+- Good: created on endpoint "Relay", switched to Official, daemon restarted → fetching the timeline resumes it and ends with one warning naming "Relay".
+- Base: created and resumed in the same mode → no notice; record keeps its field.
+- Bad: appending the notice right after `resumeSession` — history hydration then replays the provider log after it, and the warning sits above the conversation it is about.
+
+### 6. Tests Required
+
+- Daemon E2E (`api-endpoint-claude.e2e.test.ts` "an agent session remembers…"): record has `apiEndpointId` under an endpoint and none under Official or for Codex; restart → exactly one notice with the full `apiEndpointModeMismatch`, still one after a second fetch and after `agentManager.closeAgent` + fetch; old/Official record resumed under an endpoint → `createdIn: null`; deleted endpoint → `name: null`; archived agent fetched after restart → no notice.
+- Protocol (`messages.api-endpoint.test.ts`): notification parses with and without the field; snapshot entry with and without `activeApiEndpoint`.
+- App (`api-endpoints/internal/notices.test.ts`): every created/current combination → key and params; `undefined` and Official→Official → `null`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Localizing on the daemon, or a one-shot flag persisted on the record.
+item = { type: "notification", level: "warning", message: t("…") };
+```
+
+#### Correct
+
+```ts
+// Structured facts for the app, English for old clients, queued until history is in.
+const notice = buildApiEndpointModeNotice({ modes: this.apiEndpointMode, provider, createdIn });
+if (notice) this.pendingApiEndpointModeNotices.set(agentId, notice);
 ```
 
 ## Errors on the wire

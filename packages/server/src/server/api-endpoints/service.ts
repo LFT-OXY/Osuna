@@ -10,6 +10,7 @@ import {
   type ApiEndpointListResponse,
   type ApiEndpointModel,
   type ApiEndpointModelMapping,
+  type ApiEndpointRef,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
@@ -204,21 +205,39 @@ export class ApiEndpointService {
     return this.store.getActiveEndpointId(requireProvider(provider));
   }
 
+  /** 当前启用的接口；官方模式或不支持的提供方为 null。 */
+  activeEndpoint(provider: string): ApiEndpointRef | null {
+    const endpoint = this.findActiveEndpoint(provider);
+    if (!endpoint) return null;
+    return { id: endpoint.id, name: endpoint.name };
+  }
+
+  private findActiveEndpoint(provider: string): StoredApiEndpoint | null {
+    const supported = findProvider(provider);
+    if (!supported) return null;
+    const activeEndpointId = this.store.getActiveEndpointId(supported);
+    if (!activeEndpointId) return null;
+    return this.store.getEndpoint(supported, activeEndpointId);
+  }
+
+  /** 已删除的接口返回 null。 */
+  endpointName(provider: string, endpointId: string): string | null {
+    const supported = findProvider(provider);
+    if (!supported) return null;
+    return this.store.getEndpoint(supported, endpointId)?.name ?? null;
+  }
+
   /**
    * 启用中的接口勾选的模型，id 就是传给 CLI 的真实 id，默认模型即接口的默认模型。
    * 官方模式或不支持的提供方返回 null，模型目录照旧。
    */
   activeModels(provider: string): AgentModelDefinition[] | null {
-    const supported = findProvider(provider);
-    if (!supported) return null;
-    const activeEndpointId = this.store.getActiveEndpointId(supported);
-    if (!activeEndpointId) return null;
-    const endpoint = this.store.getEndpoint(supported, activeEndpointId);
+    const endpoint = this.findActiveEndpoint(provider);
     if (!endpoint) return null;
     return endpoint.models.map((model) => {
       const label = model.label ?? model.id;
       const isDefault = model.id === endpoint.defaultModelId;
-      return { provider: supported, id: model.id, label, isDefault };
+      return { provider: endpoint.provider, id: model.id, label, isDefault };
     });
   }
 

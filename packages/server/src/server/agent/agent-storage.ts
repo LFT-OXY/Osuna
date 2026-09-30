@@ -80,6 +80,8 @@ const STORED_AGENT_SCHEMA = z.object({
   internal: z.boolean().optional(),
   archivedAt: z.string().nullable().optional(),
   owner: AgentOwnerSchema.optional(),
+  /** 创建时启用的第三方接口 id；没有即「官方」，字段出现之前写下的记录也按官方处理。 */
+  apiEndpointId: z.string().optional(),
 });
 
 export type SerializableAgentConfig = Pick<
