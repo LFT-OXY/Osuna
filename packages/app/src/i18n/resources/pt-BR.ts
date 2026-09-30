@@ -355,18 +355,26 @@ export const ptBR: TranslationResources = {
     },
     turnUsage: {
       title: "Uso do turno",
-      total: "Total",
-      duration: "Duração",
+      estimatedCost: "Custo estimado",
+      model: "Modelo",
+      byModel: "Por modelo",
       note: "Custo estimado · pelos preços públicos da API",
       unpriced: "Sem dados de preço",
-      reasoning: "({{tokens}} de raciocínio)",
+      unpricedWarningOne:
+        "{{models}} não tem dados de preço e conta como $0. Defina um preço personalizado em Configurações › Tabela de preços.",
+      unpricedWarningMany:
+        "{{models}} não têm dados de preço e contam como $0. Defina preços personalizados em Configurações › Tabela de preços.",
+      modelSeparator: ", ",
       accessibility: "Uso do turno: {{input}} de entrada, {{output}} de saída, {{cost}}",
-      columns: {
-        model: "Modelo",
+      stats: {
         input: "Entrada",
         cache: "Cache",
         output: "Saída",
-        cost: "Custo",
+        reasoning: "Incl. raciocínio",
+      },
+      amounts: {
+        cache: "cache {{tokens}}",
+        reasoning: "raciocínio {{tokens}}",
       },
     },
     diagram: {

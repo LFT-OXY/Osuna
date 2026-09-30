@@ -354,18 +354,26 @@ export const ja: TranslationResources = {
     },
     turnUsage: {
       title: "このターンの使用量",
-      total: "合計",
-      duration: "所要時間",
+      estimatedCost: "推定コスト",
+      model: "モデル",
+      byModel: "モデル別",
       note: "推定コスト · 公開 API 料金で算出",
       unpriced: "料金データなし",
-      reasoning: "（推論 {{tokens}}）",
+      unpricedWarningOne:
+        "{{models}} は価格データがないため $0 として計上しています。「設定 › 料金表」でカスタム価格を設定できます。",
+      unpricedWarningMany:
+        "{{models}} は価格データがないため $0 として計上しています。「設定 › 料金表」でカスタム価格を設定できます。",
+      modelSeparator: "、",
       accessibility: "このターンの使用量: 入力 {{input}}、出力 {{output}}、{{cost}}",
-      columns: {
-        model: "モデル",
+      stats: {
         input: "入力",
         cache: "キャッシュ",
         output: "出力",
-        cost: "コスト",
+        reasoning: "うち推論",
+      },
+      amounts: {
+        cache: "キャッシュ {{tokens}}",
+        reasoning: "推論 {{tokens}}",
       },
     },
     diagram: {

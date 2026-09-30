@@ -353,18 +353,26 @@ export const ru: TranslationResources = {
     },
     turnUsage: {
       title: "Расход за ход",
-      total: "Итого",
-      duration: "Длительность",
+      estimatedCost: "Оценочная стоимость",
+      model: "Модель",
+      byModel: "По моделям",
       note: "Оценочная стоимость · по публичным тарифам API",
       unpriced: "Нет данных о цене",
-      reasoning: "({{tokens}} на рассуждение)",
+      unpricedWarningOne:
+        "У {{models}} нет данных о цене, модель учтена как $0. Задайте свою цену в разделе Настройки › Таблица цен.",
+      unpricedWarningMany:
+        "У {{models}} нет данных о цене, модели учтены как $0. Задайте свои цены в разделе Настройки › Таблица цен.",
+      modelSeparator: ", ",
       accessibility: "Расход за ход: ввод {{input}}, вывод {{output}}, {{cost}}",
-      columns: {
-        model: "Модель",
+      stats: {
         input: "Ввод",
         cache: "Кэш",
         output: "Вывод",
-        cost: "Стоимость",
+        reasoning: "В т. ч. рассуждение",
+      },
+      amounts: {
+        cache: "кэш {{tokens}}",
+        reasoning: "рассуждение {{tokens}}",
       },
     },
     diagram: {

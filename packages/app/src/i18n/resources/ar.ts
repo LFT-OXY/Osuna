@@ -349,18 +349,26 @@ export const ar: TranslationResources = {
     },
     turnUsage: {
       title: "استهلاك هذه الجولة",
-      total: "الإجمالي",
-      duration: "المدة",
+      estimatedCost: "التكلفة التقديرية",
+      model: "النموذج",
+      byModel: "حسب النموذج",
       note: "التكلفة التقديرية · بأسعار واجهة البرمجة العلنية",
       unpriced: "لا توجد بيانات تسعير",
-      reasoning: "({{tokens}} للاستدلال)",
+      unpricedWarningOne:
+        "لا توجد بيانات تسعير لـ {{models}}، لذا يُحتسب بـ $0. يمكنك تعيين سعر مخصّص من إعدادات › جدول الأسعار.",
+      unpricedWarningMany:
+        "لا توجد بيانات تسعير لـ {{models}}، لذا تُحتسب بـ $0. يمكنك تعيين أسعار مخصّصة من إعدادات › جدول الأسعار.",
+      modelSeparator: "، ",
       accessibility: "استهلاك هذه الجولة: {{input}} إدخال، {{output}} إخراج، {{cost}}",
-      columns: {
-        model: "النموذج",
+      stats: {
         input: "الإدخال",
         cache: "التخزين المؤقت",
         output: "الإخراج",
-        cost: "التكلفة",
+        reasoning: "منها الاستدلال",
+      },
+      amounts: {
+        cache: "التخزين المؤقت {{tokens}}",
+        reasoning: "الاستدلال {{tokens}}",
       },
     },
     diagram: {

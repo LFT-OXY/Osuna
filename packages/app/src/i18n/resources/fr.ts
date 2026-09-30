@@ -356,18 +356,26 @@ export const fr: TranslationResources = {
     },
     turnUsage: {
       title: "Utilisation du tour",
-      total: "Total",
-      duration: "Durée",
+      estimatedCost: "Coût estimé",
+      model: "Modèle",
+      byModel: "Par modèle",
       note: "Coût estimé · selon les tarifs publics de l'API",
       unpriced: "Aucune donnée tarifaire",
-      reasoning: "({{tokens}} de raisonnement)",
+      unpricedWarningOne:
+        "{{models}} n'a aucune donnée tarifaire et compte pour $0. Définissez un prix personnalisé dans Paramètres › Table des prix.",
+      unpricedWarningMany:
+        "{{models}} n'ont aucune donnée tarifaire et comptent pour $0. Définissez des prix personnalisés dans Paramètres › Table des prix.",
+      modelSeparator: ", ",
       accessibility: "Utilisation du tour : {{input}} en entrée, {{output}} en sortie, {{cost}}",
-      columns: {
-        model: "Modèle",
+      stats: {
         input: "Entrée",
         cache: "Cache",
         output: "Sortie",
-        cost: "Coût",
+        reasoning: "Dont raisonnement",
+      },
+      amounts: {
+        cache: "cache {{tokens}}",
+        reasoning: "raisonnement {{tokens}}",
       },
     },
     diagram: {

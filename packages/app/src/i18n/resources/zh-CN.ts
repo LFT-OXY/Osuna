@@ -346,18 +346,26 @@ export const zhCN: TranslationResources = {
     },
     turnUsage: {
       title: "本轮用量",
-      total: "合计",
-      duration: "耗时",
+      estimatedCost: "估算成本",
+      model: "模型",
+      byModel: "按模型",
       note: "估算成本 · 按公开 API 价格计算",
       unpriced: "无价格数据",
-      reasoning: "（{{tokens}} 推理）",
+      unpricedWarningOne:
+        "{{models}} 没有价格数据，按 $0 计入。可在「设置 › 价格表」设置自定义价格。",
+      unpricedWarningMany:
+        "{{models}} 没有价格数据，按 $0 计入。可在「设置 › 价格表」设置自定义价格。",
+      modelSeparator: "、",
       accessibility: "本轮用量：输入 {{input}}，输出 {{output}}，{{cost}}",
-      columns: {
-        model: "模型",
+      stats: {
         input: "输入",
         cache: "缓存",
         output: "输出",
-        cost: "估算成本",
+        reasoning: "其中推理",
+      },
+      amounts: {
+        cache: "缓存 {{tokens}}",
+        reasoning: "推理 {{tokens}}",
       },
     },
     diagram: {

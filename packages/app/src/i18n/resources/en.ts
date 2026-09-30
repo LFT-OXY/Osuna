@@ -346,18 +346,26 @@ export const en = {
     },
     turnUsage: {
       title: "Turn usage",
-      total: "Total",
-      duration: "Duration",
+      estimatedCost: "Estimated cost",
+      model: "Model",
+      byModel: "By model",
       note: "Estimated cost · priced at public API rates",
       unpriced: "No price data",
-      reasoning: "({{tokens}} reasoning)",
+      unpricedWarningOne:
+        "{{models}} has no price data and counts as $0. Set a custom price in Settings › Price table.",
+      unpricedWarningMany:
+        "{{models}} have no price data and count as $0. Set custom prices in Settings › Price table.",
+      modelSeparator: ", ",
       accessibility: "Turn usage: {{input}} in, {{output}} out, {{cost}}",
-      columns: {
-        model: "Model",
+      stats: {
         input: "Input",
         cache: "Cache",
         output: "Output",
-        cost: "Cost",
+        reasoning: "Incl. reasoning",
+      },
+      amounts: {
+        cache: "cache {{tokens}}",
+        reasoning: "reasoning {{tokens}}",
       },
     },
     diagram: {

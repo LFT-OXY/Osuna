@@ -350,18 +350,26 @@ export const ko: TranslationResources = {
     },
     turnUsage: {
       title: "이번 턴 사용량",
-      total: "합계",
-      duration: "소요 시간",
+      estimatedCost: "추정 비용",
+      model: "모델",
+      byModel: "모델별",
       note: "추정 비용 · 공개 API 요금 기준",
       unpriced: "가격 정보 없음",
-      reasoning: "(추론 {{tokens}})",
+      unpricedWarningOne:
+        "{{models}} 모델은 가격 정보가 없어 $0으로 계산했습니다. 설정 › 가격표에서 맞춤 가격을 설정할 수 있습니다.",
+      unpricedWarningMany:
+        "{{models}} 모델은 가격 정보가 없어 $0으로 계산했습니다. 설정 › 가격표에서 맞춤 가격을 설정할 수 있습니다.",
+      modelSeparator: ", ",
       accessibility: "이번 턴 사용량: 입력 {{input}}, 출력 {{output}}, {{cost}}",
-      columns: {
-        model: "모델",
+      stats: {
         input: "입력",
         cache: "캐시",
         output: "출력",
-        cost: "비용",
+        reasoning: "그중 추론",
+      },
+      amounts: {
+        cache: "캐시 {{tokens}}",
+        reasoning: "추론 {{tokens}}",
       },
     },
     diagram: {
