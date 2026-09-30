@@ -2829,8 +2829,6 @@ export const es: TranslationResources = {
       },
       priceTable: {
         title: "Tabla de precios",
-        subtitle:
-          "$ por millón de tokens · instantánea de LiteLLM, actualizada {{ago}}, {{models}}",
         modelCountOne: "1 modelo",
         modelCountMany: "{{count}} modelos",
         autoUpdate: "Actualización automática",
@@ -2847,19 +2845,40 @@ export const es: TranslationResources = {
         save: "Guardar",
         saveFailed: "No se pudo guardar este precio.",
         invalidPrice: "Introduce un número en las cuatro columnas.",
+        edit: "Editar",
+        editAccessibility: "Editar el precio personalizado de {{model}}",
+        customGroup: {
+          title: "Precios personalizados",
+          intro:
+            "Aquí aparecen los modelos sin precio en LiteLLM. Rellena las cuatro columnas en $ por millón de tokens; 0 significa gratis.",
+          empty: "Todos los modelos tienen precio.",
+          unpricedCount: "Sin datos de precio {{count}}",
+        },
+        litellmGroup: {
+          title: "Precios de LiteLLM",
+          subtitle: {
+            snapshot:
+              "Instantánea de LiteLLM incluida, actualizada {{ago}} · $ por millón de tokens",
+            cache:
+              "Precios de LiteLLM descargados en línea, actualizados {{ago}} · $ por millón de tokens",
+          },
+          summary: "{{models}} con precio de LiteLLM",
+          expand: "Mostrar",
+          collapse: "Ocultar",
+          autoUpdate: "Actualizar precios de LiteLLM automáticamente",
+        },
         columns: {
           model: "Modelo",
           input: "Entrada",
           cacheRead: "Lectura de caché",
           cacheWrite: "Escritura de caché",
           output: "Salida",
-          source: "Fuente",
-          actions: "Acciones",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Personalizado",
-          none: "—",
+          short: {
+            input: "Entrada {{price}}",
+            cacheRead: "Lectura {{price}}",
+            cacheWrite: "Escritura {{price}}",
+            output: "Salida {{price}}",
+          },
         },
       },
     },

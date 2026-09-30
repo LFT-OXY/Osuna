@@ -2839,7 +2839,6 @@ export const fr: TranslationResources = {
       },
       priceTable: {
         title: "Table des prix",
-        subtitle: "$ par million de tokens · instantané LiteLLM, mis à jour {{ago}}, {{models}}",
         modelCountOne: "1 modèle",
         modelCountMany: "{{count}} modèles",
         autoUpdate: "Mise à jour auto",
@@ -2856,19 +2855,38 @@ export const fr: TranslationResources = {
         save: "Enregistrer",
         saveFailed: "Impossible d'enregistrer ce prix.",
         invalidPrice: "Saisissez un nombre dans les quatre colonnes.",
+        edit: "Modifier",
+        editAccessibility: "Modifier le prix personnalisé de {{model}}",
+        customGroup: {
+          title: "Prix personnalisés",
+          intro:
+            "Les modèles sans prix LiteLLM sont listés ici. Remplissez les quatre colonnes en $ par million de tokens ; 0 signifie gratuit.",
+          empty: "Tous les modèles ont un prix.",
+          unpricedCount: "Aucun prix {{count}}",
+        },
+        litellmGroup: {
+          title: "Prix LiteLLM",
+          subtitle: {
+            snapshot: "Instantané LiteLLM intégré, mis à jour {{ago}} · $ par million de tokens",
+            cache: "Prix LiteLLM récupérés en ligne, mis à jour {{ago}} · $ par million de tokens",
+          },
+          summary: "{{models}} tarifés par LiteLLM",
+          expand: "Afficher",
+          collapse: "Masquer",
+          autoUpdate: "Mise à jour auto des prix LiteLLM",
+        },
         columns: {
           model: "Modèle",
           input: "Entrée",
           cacheRead: "Lecture de cache",
           cacheWrite: "Écriture de cache",
           output: "Sortie",
-          source: "Source",
-          actions: "Actions",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Personnalisé",
-          none: "—",
+          short: {
+            input: "Entrée {{price}}",
+            cacheRead: "Lecture {{price}}",
+            cacheWrite: "Écriture {{price}}",
+            output: "Sortie {{price}}",
+          },
         },
       },
     },

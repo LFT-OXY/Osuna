@@ -2886,7 +2886,6 @@ export const en = {
       },
       priceTable: {
         title: "Price table",
-        subtitle: "$ per million tokens · LiteLLM snapshot, updated {{ago}}, {{models}}",
         modelCountOne: "1 model",
         modelCountMany: "{{count}} models",
         autoUpdate: "Auto-update",
@@ -2903,19 +2902,38 @@ export const en = {
         save: "Save",
         saveFailed: "Could not save this price.",
         invalidPrice: "Enter a number in all four columns.",
+        edit: "Edit",
+        editAccessibility: "Edit the custom price of {{model}}",
+        customGroup: {
+          title: "Custom prices",
+          intro:
+            "Models LiteLLM has no price for are listed here. Fill in all four columns in $ per million tokens; 0 means free.",
+          empty: "Every model has a price.",
+          unpricedCount: "No price data {{count}}",
+        },
+        litellmGroup: {
+          title: "LiteLLM prices",
+          subtitle: {
+            snapshot: "Bundled LiteLLM snapshot, updated {{ago}} · $ per million tokens",
+            cache: "LiteLLM prices fetched online, updated {{ago}} · $ per million tokens",
+          },
+          summary: "{{models}} priced by LiteLLM",
+          expand: "Show",
+          collapse: "Hide",
+          autoUpdate: "Auto-update LiteLLM prices",
+        },
         columns: {
           model: "Model",
           input: "Input",
           cacheRead: "Cache read",
           cacheWrite: "Cache write",
           output: "Output",
-          source: "Source",
-          actions: "Actions",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Custom",
-          none: "—",
+          short: {
+            input: "In {{price}}",
+            cacheRead: "Read {{price}}",
+            cacheWrite: "Write {{price}}",
+            output: "Out {{price}}",
+          },
         },
       },
     },

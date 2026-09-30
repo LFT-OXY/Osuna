@@ -2792,7 +2792,6 @@ export const ja: TranslationResources = {
       },
       priceTable: {
         title: "料金表",
-        subtitle: "100万トークンあたりのドル · LiteLLM スナップショット、{{ago}}に更新、{{models}}",
         modelCountOne: "1 モデル",
         modelCountMany: "{{count}} モデル",
         autoUpdate: "自動更新",
@@ -2809,19 +2808,38 @@ export const ja: TranslationResources = {
         save: "保存",
         saveFailed: "この価格を保存できませんでした。",
         invalidPrice: "4 つの列すべてに数値を入力してください。",
+        edit: "編集",
+        editAccessibility: "{{model}} のカスタム価格を編集",
+        customGroup: {
+          title: "カスタム価格",
+          intro:
+            "LiteLLM に価格がないモデルをここに表示します。4 列すべてを 100万トークンあたりのドルで入力してください。0 は無料です。",
+          empty: "すべてのモデルに価格があります。",
+          unpricedCount: "価格データなし {{count}}",
+        },
+        litellmGroup: {
+          title: "LiteLLM 価格",
+          subtitle: {
+            snapshot: "同梱の LiteLLM スナップショット、{{ago}}に更新 · 100万トークンあたりのドル",
+            cache: "オンラインで取得した LiteLLM 価格、{{ago}}に更新 · 100万トークンあたりのドル",
+          },
+          summary: "{{models}}の価格は LiteLLM によるもの",
+          expand: "表示",
+          collapse: "閉じる",
+          autoUpdate: "LiteLLM 価格を自動更新",
+        },
         columns: {
           model: "モデル",
           input: "入力",
           cacheRead: "キャッシュ読み取り",
           cacheWrite: "キャッシュ書き込み",
           output: "出力",
-          source: "ソース",
-          actions: "操作",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "カスタム",
-          none: "—",
+          short: {
+            input: "入 {{price}}",
+            cacheRead: "読 {{price}}",
+            cacheWrite: "書 {{price}}",
+            output: "出 {{price}}",
+          },
         },
       },
     },

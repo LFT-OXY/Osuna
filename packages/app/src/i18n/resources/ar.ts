@@ -2764,7 +2764,6 @@ export const ar: TranslationResources = {
       },
       priceTable: {
         title: "جدول الأسعار",
-        subtitle: "دولار لكل مليون رمز · لقطة LiteLLM، تم التحديث {{ago}}، {{models}}",
         modelCountOne: "نموذج واحد",
         modelCountMany: "{{count}} نماذج",
         autoUpdate: "تحديث تلقائي",
@@ -2781,19 +2780,38 @@ export const ar: TranslationResources = {
         save: "حفظ",
         saveFailed: "تعذّر حفظ هذا السعر.",
         invalidPrice: "أدخل رقمًا في الأعمدة الأربعة جميعها.",
+        edit: "تعديل",
+        editAccessibility: "تعديل السعر المخصّص لـ {{model}}",
+        customGroup: {
+          title: "الأسعار المخصّصة",
+          intro:
+            "تظهر هنا النماذج التي لا يعرف LiteLLM سعرها. املأ الأعمدة الأربعة بالدولار لكل مليون رمز؛ 0 يعني مجانًا.",
+          empty: "لكل النماذج سعر.",
+          unpricedCount: "لا توجد بيانات سعر {{count}}",
+        },
+        litellmGroup: {
+          title: "أسعار LiteLLM",
+          subtitle: {
+            snapshot: "لقطة LiteLLM المضمّنة، تم التحديث {{ago}} · دولار لكل مليون رمز",
+            cache: "أسعار LiteLLM المجلوبة عبر الإنترنت، تم التحديث {{ago}} · دولار لكل مليون رمز",
+          },
+          summary: "{{models}} بأسعار LiteLLM",
+          expand: "عرض",
+          collapse: "إخفاء",
+          autoUpdate: "تحديث أسعار LiteLLM تلقائيًا",
+        },
         columns: {
           model: "النموذج",
           input: "الإدخال",
           cacheRead: "قراءة الذاكرة المؤقتة",
           cacheWrite: "كتابة الذاكرة المؤقتة",
           output: "الإخراج",
-          source: "المصدر",
-          actions: "الإجراءات",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "مخصّص",
-          none: "—",
+          short: {
+            input: "إدخال {{price}}",
+            cacheRead: "قراءة {{price}}",
+            cacheWrite: "كتابة {{price}}",
+            output: "إخراج {{price}}",
+          },
         },
       },
     },

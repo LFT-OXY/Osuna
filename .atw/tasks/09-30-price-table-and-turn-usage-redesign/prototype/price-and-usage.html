@@ -1,0 +1,1335 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>价格表分组 + 每轮用量面板 · 原型</title>
+<style>
+/*
+ * 数值来源：
+ *   research/ui-tokens.md（源码解析，带 file:line）
+ *   research/screens/dom-*.json（真实 App 的计算样式，Expo Web，zh-CN，2026-09-30）
+ */
+:root {
+  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.theme-light {
+  --surface0: #fcfcfc;
+  --surface1: #fafafa;
+  --surface2: #f4f4f5;
+  --surface3: #e4e4e7;
+  --sidebar: #fafafa;
+  --sidebar-hover: #f1f1f1;
+  --nav-selected: #eaeaea;
+  --nav-selected-ring: #dadada;
+  --card: #ffffff;
+  --border: #e4e4e7;
+  --border-accent: #d4d4d8;
+  --border-input: #d4d4d8;
+  --row-border: rgba(228, 228, 231, 0.5);
+  --fg: #27272a;
+  --muted: #71717b;
+  --extra-muted: #a1a1aa;
+  --accent: #1b4ed8;
+  --accent-fg: #ffffff;
+  --destructive: #c10007;
+  --hover: rgba(0, 0, 0, 0.06);
+  --success: #3e704a;
+  --danger: #9d433b;
+  --warning: #7b5d39;
+  --surface-warning: rgba(245, 158, 11, 0.1);
+  --amber: #f59e0b;
+  --glass: rgba(255, 255, 255, 0.8);
+  --dialog-footer: rgba(244, 244, 245, 0.7);
+  --scrim: rgba(0, 0, 0, 0.18);
+  --shadow-dialog: rgba(0, 0, 0, 0.45);
+  --shadow-popover: rgba(0, 0, 0, 0.35);
+  --inset-highlight: transparent;
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.04);
+  color-scheme: light;
+}
+.theme-dark {
+  --surface0: #0a0a0a;
+  --surface1: #111111;
+  --surface2: #171717;
+  --surface3: #262626;
+  --sidebar: #000000;
+  --sidebar-hover: #0a0a0a;
+  --nav-selected: #131313;
+  --nav-selected-ring: #212121;
+  --card: #111111;
+  --border: #191919;
+  --border-accent: #262626;
+  --border-input: #1e1e1e;
+  --row-border: rgba(25, 25, 25, 0.5);
+  --fg: #f5f5f5;
+  --muted: #818181;
+  --extra-muted: #555555;
+  --accent: #346bf1;
+  --accent-fg: #ffffff;
+  --destructive: #c44a4a;
+  --hover: rgba(255, 255, 255, 0.08);
+  --success: #6cb17b;
+  --danger: #d8847b;
+  --warning: #c09664;
+  --surface-warning: rgba(245, 158, 11, 0.1);
+  --amber: #f59e0b;
+  --glass: rgba(17, 17, 17, 0.8);
+  --dialog-footer: rgba(23, 23, 23, 0.7);
+  --scrim: rgba(0, 0, 0, 0.35);
+  --shadow-dialog: rgba(0, 0, 0, 0.9);
+  --shadow-popover: rgba(0, 0, 0, 0.8);
+  --inset-highlight: rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.2);
+  color-scheme: dark;
+}
+
+/* ───────── 原型外壳（不属于 App） ───────── */
+html, body { margin: 0; height: 100%; }
+body.proto {
+  background: #dcdce0;
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+body.proto.page-dark { background: #1d1d20; }
+.proto-bar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+  padding: 10px 16px;
+  background: rgba(250, 250, 252, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #d4d4d8;
+  font-size: 12px; color: #3f3f46;
+}
+.page-dark .proto-bar { background: rgba(28, 28, 31, 0.92); border-color: #2a2a2e; color: #d4d4d8; }
+.proto-bar .grp { display: flex; align-items: center; gap: 4px; }
+.proto-bar .grp-label { color: #8a8a93; margin-right: 2px; }
+.proto-bar button {
+  font: inherit; color: inherit; cursor: pointer;
+  border: 1px solid transparent; background: transparent;
+  padding: 3px 8px; border-radius: 6px;
+}
+.proto-bar button:hover { background: rgba(0, 0, 0, 0.06); }
+.page-dark .proto-bar button:hover { background: rgba(255, 255, 255, 0.08); }
+.proto-bar button.on { background: #27272a; color: #fff; }
+.page-dark .proto-bar button.on { background: #f4f4f5; color: #18181b; }
+.proto-bar .sep { width: 1px; height: 16px; background: #c4c4ca; }
+.page-dark .proto-bar .sep { background: #3a3a40; }
+.proto-stage { padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.proto-caption { font-size: 12px; color: #6b6b73; max-width: 1440px; text-align: center; line-height: 18px; }
+.page-dark .proto-caption { color: #9a9aa3; }
+.frame-holder { position: relative; }
+.frame-shadow { box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25), 0 20px 60px -20px rgba(0, 0, 0, 0.35); border-radius: 10px; }
+.frame-shadow.phone { border-radius: 28px; }
+body.bare { background: transparent; }
+body.bare .proto-stage { padding: 0; align-items: flex-start; }
+body.bare .frame-shadow { box-shadow: none; border-radius: 0; }
+
+/* ───────── App 画框 ───────── */
+.frame {
+  position: relative; overflow: hidden;
+  background: var(--surface0); color: var(--fg);
+  font-family: var(--font); font-size: 14px;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  border-radius: 10px;
+  transform-origin: top left;
+}
+.frame.phone { border-radius: 28px; }
+body.bare .frame { border-radius: 0; }
+.frame *, .frame *::before, .frame *::after { box-sizing: border-box; }
+.frame::after {
+  content: ""; position: absolute; inset: 0; z-index: 9999; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-repeat: repeat; background-size: 256px 256px;
+}
+.frame .scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--extra-muted) 40%, transparent) transparent; }
+.frame .scroll::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+.frame .scroll::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in srgb, var(--extra-muted) 40%, transparent); background-clip: content-box; }
+.frame .no-scrollbar { scrollbar-width: none; }
+.frame .no-scrollbar::-webkit-scrollbar { display: none; }
+:where(.frame) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
+:where(.frame) input { font: inherit; }
+:where(.frame) a { color: inherit; text-decoration: none; }
+.frame svg { display: block; flex-shrink: 0; }
+.frame .mono { font-family: var(--mono); }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+.app { display: flex; width: 100%; height: 100%; }
+
+/* ───────── 设置侧栏（settings-screen.tsx） ───────── */
+.snav { width: 320px; flex-shrink: 0; height: 100%; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--border); }
+.snav-chrome { height: 45px; position: relative; flex-shrink: 0; }
+.traffic { position: absolute; left: 16px; top: 14px; display: flex; gap: 8px; }
+.traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18); }
+.traffic i:nth-child(1) { background: #ff5f57; }
+.traffic i:nth-child(2) { background: #febc2e; }
+.traffic i:nth-child(3) { background: #28c840; }
+.snav-back { height: 36px; padding: 0 12px; display: flex; align-items: center; flex-shrink: 0; }
+.snav-back .rowmd { flex: 1; min-height: 36px; padding: 8px; gap: 8px; display: flex; align-items: center; border-radius: 8px; color: var(--muted); font-size: 13px; line-height: 18px; }
+.snav-scroll { flex: 1; overflow: hidden; }
+.snav-list { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.snav-label { padding: 4px 8px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.snav-item { min-height: 32px; padding: 6px 8px; gap: 8px; display: flex; align-items: center; border-radius: 8px; color: var(--muted); font-size: 13px; line-height: 18px; }
+.snav-item:hover { background: var(--sidebar-hover); color: var(--fg); }
+.snav-item.sel { background: var(--nav-selected); box-shadow: inset 0 0 0 1px var(--nav-selected-ring); color: var(--fg); }
+.snav-host { color: var(--fg); }
+.snav-host .hdot { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.snav-host .hdot i { width: 8px; height: 8px; border-radius: 4px; background: var(--success); display: block; }
+.snav-host .chev { margin-left: auto; color: var(--muted); transform: translateY(1px); }
+
+/* ───────── 内容区头部（ScreenHeader） ───────── */
+.pane { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+.shdr { height: 36px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid transparent; background: var(--surface0); }
+.hbadge { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.stitle { font-size: 14px; font-weight: 300; line-height: normal; color: var(--fg); white-space: nowrap; }
+.crumb-parent { font-size: 14px; font-weight: 300; color: var(--muted); border-radius: 6px; padding: 2px 4px; margin: 0 -4px; }
+.crumb-parent:hover { color: var(--fg); background: var(--hover); }
+.crumb-sep { font-size: 14px; font-weight: 300; color: var(--extra-muted); }
+.pscroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; position: relative; }
+
+/* 现有设置页内容列：maxWidth 720，padding 16，paddingTop 24 */
+.column { width: 100%; max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+
+/* 新布局：列表列 280 + 间距 24 + 详情列（最大 720），整体居中 */
+.split { display: flex; align-items: flex-start; gap: 24px; width: 100%; max-width: 1056px; margin: 0 auto; padding: 24px 16px 48px; }
+.list-col { width: 280px; flex-shrink: 0; position: sticky; top: 24px; }
+.detail-col { flex: 1; min-width: 0; max-width: 720px; }
+
+/* ───────── SettingsSection / 卡片 / 行（styles/settings.ts） ───────── */
+.sec { margin-bottom: 24px; }
+.sec:last-child { margin-bottom: 0; }
+.sec-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px 2px; min-height: 18px; }
+.sec-title { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.sec-count { font-weight: 500; color: var(--extra-muted); }
+.sec-trail { display: flex; align-items: center; gap: 8px; }
+.sec-c { display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 8px 16px; }
+.card > * + * { border-top: 1px solid var(--row-border); }
+.row-content { flex: 1; min-width: 0; }
+.row-lead { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.row-title { font-size: 14px; line-height: 20px; color: var(--fg); }
+.row-hint { font-size: 12px; line-height: 16px; color: var(--muted); margin-top: 2px; }
+.caption { font-size: 12px; line-height: 16px; }
+.muted { color: var(--muted); }
+.fg { color: var(--fg); }
+.iconframe { width: 28px; height: 28px; border-radius: 6px; background: var(--surface2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--fg); }
+.iconframe.lg { width: 40px; height: 40px; border-radius: 10px; }
+.trail { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ───────── 状态点 / 徽章 ───────── */
+.st { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dot { width: 6px; height: 6px; border-radius: 3px; flex-shrink: 0; }
+.dot.success { background: var(--success); }
+.dot.warning { background: var(--warning); }
+.dot.danger { background: var(--danger); }
+.dot.muted { background: var(--muted); }
+.spin { animation: spin 0.75s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 9999px; border: 1px solid var(--border); background: var(--surface3); padding: 3px 8px; font-size: 12px; line-height: normal; color: var(--muted); white-space: nowrap; }
+.badge.success { color: var(--success); }
+.badge.warning { color: var(--warning); }
+.badge.danger { color: var(--danger); }
+
+/* ───────── Switch（components/ui/switch.tsx） ───────── */
+.sw-wrap { min-height: 32px; display: flex; align-items: center; flex-shrink: 0; }
+.sw { width: 32px; height: 18px; border-radius: 9px; padding: 2px; background: var(--surface3); display: flex; align-items: center; transition: background-color 180ms ease-in-out; }
+.sw i { width: 14px; height: 14px; border-radius: 7px; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); display: block; transition: transform 180ms ease-in-out; }
+.sw.on { background: var(--accent); }
+.sw.on i { transform: translateX(14px); }
+
+/* ───────── Button（components/ui/button.tsx） ───────── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: 8px; font-size: 14px; line-height: normal; white-space: nowrap; flex-shrink: 0; color: var(--fg); min-height: 28px; padding: 0 12px; }
+.btn.md { min-height: 32px; padding: 0 16px; }
+.btn.xs { min-height: 24px; border-radius: 6px; font-size: 12px; }
+.btn.default { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.secondary { background: var(--surface3); border-color: var(--surface3); }
+.btn.outline { border-color: var(--border-accent); }
+.btn.outline:hover { background: var(--hover); }
+.btn.ghost { color: var(--muted); }
+.btn.ghost:hover { background: var(--hover); color: var(--fg); }
+.btn.icon { padding: 0 12px; }
+.btn.square { width: 28px; padding: 0; }
+.btn:active { opacity: 0.85; }
+.btn.w92 { width: 92px; }
+.iconbtn { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--muted); flex-shrink: 0; }
+.iconbtn:hover, .iconbtn.open { background: var(--surface2); color: var(--fg); }
+.link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; line-height: 16px; }
+.link:hover { color: var(--fg); }
+
+/* ───────── 提供方列表行 ───────── */
+.prow { cursor: pointer; }
+.prow .row-lead { gap: 12px; }
+.prow:hover { background: var(--surface2); }
+.prow.sel { background: var(--surface2); }
+.prow .st-line { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--muted); min-width: 0; }
+.prow .chev { color: var(--muted); }
+.prow:hover .chev { color: var(--fg); }
+
+/* ───────── 详情头部 ───────── */
+.dhead { display: flex; align-items: center; gap: 12px; margin: 0 0 24px; min-height: 40px; }
+.dhead-text { flex: 1; min-width: 0; }
+.dhead-name { font-size: 16px; line-height: 24px; color: var(--fg); }
+.dhead-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.dhead-actions { display: flex; align-items: center; gap: 8px; position: relative; }
+
+/* ───────── Alert（components/ui/alert.tsx） ───────── */
+.alert { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+.alert .a-icon { padding-top: 2px; }
+.alert .a-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.alert .a-title { font-size: 14px; font-weight: 500; line-height: normal; }
+.alert .a-desc { font-size: 12px; line-height: 16px; color: var(--muted); overflow-wrap: anywhere; }
+.alert .a-actions { display: flex; gap: 8px; margin-top: 8px; }
+.alert.error { border-color: var(--destructive); }
+.alert.error .a-icon, .alert.error .a-title { color: var(--destructive); }
+.alert.warning { border-color: transparent; background: var(--surface-warning); border-radius: 8px; }
+.alert.warning .a-icon, .alert.warning .a-title { color: var(--amber); }
+
+/* ───────── 分段控件（segmented-control.tsx，sm） ───────── */
+.seg { display: inline-flex; align-items: center; gap: 2px; min-height: 28px; padding: 2px; border-radius: 8px; background: var(--surface2); }
+.seg button { min-height: 24px; padding: 0 8px; border-radius: 6px; font-size: 14px; line-height: normal; color: var(--muted); display: flex; align-items: center; }
+.seg button:hover { background: var(--hover); }
+.seg button.on { background: var(--surface3); color: var(--fg); }
+
+/* ───────── 模型区 ───────── */
+.msearch { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; color: var(--muted); }
+.msearch input { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; line-height: 20px; color: var(--fg); padding: 10px 0; }
+.msearch input::placeholder { color: var(--muted); }
+.mgroup { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 6px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.card > .mgroup + .mrow { border-top: 0; }
+.mrow { display: flex; align-items: center; gap: 12px; padding: 8px 16px; min-height: 34px; }
+.mrow .m-name { font-size: 14px; line-height: normal; color: var(--fg); flex-shrink: 0; }
+.mrow .m-id { font-family: var(--mono); font-size: 12px; line-height: normal; color: var(--muted); flex-shrink: 0; }
+.mrow .m-desc { font-size: 12px; line-height: normal; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow .m-fill { flex: 1; }
+.mrow .m-del { width: 28px; height: 28px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: var(--destructive); margin: -6px -6px -6px 0; }
+.mrow .m-del:hover { background: var(--surface2); }
+.madd { display: flex; align-items: center; gap: 8px; padding: 10px 16px; }
+.empty { padding: 32px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; line-height: 20px; text-align: center; }
+
+/* ───────── 表单输入（form-field.tsx，sm） ───────── */
+.input { flex: 1; min-width: 0; display: flex; align-items: center; min-height: 28px; padding: 3px 12px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border-input); }
+.input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; padding: 0; font: inherit; font-size: 14px; line-height: 20px; color: var(--fg); }
+.input input::placeholder { color: var(--muted); }
+.input.focus { border-color: var(--border-accent); outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ───────── 代码面（scrollable-code-surface.tsx） ───────── */
+.code { font-family: var(--mono); font-size: 12px; line-height: 18px; color: var(--fg); padding: 12px 16px; background: var(--surface1); border: 1px solid var(--border); border-radius: 8px; white-space: pre; overflow-x: auto; }
+.code .k { color: var(--muted); }
+
+/* ───────── 下拉菜单（components/ui/menu） ───────── */
+.menu { position: absolute; z-index: 40; min-width: 180px; padding: 4px 0; background: var(--glass); -webkit-backdrop-filter: blur(12px) saturate(1.14); backdrop-filter: blur(12px) saturate(1.14); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 40px -18px var(--shadow-popover), inset 0 1px 0 var(--inset-highlight); overflow: hidden; }
+.mi { display: flex; align-items: center; gap: 8px; min-height: 30px; margin: 0 4px; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; font-size: 14px; line-height: 18px; color: var(--fg); width: calc(100% - 8px); }
+.mi:hover, .mi.hl { background: var(--hover); }
+.mi .mi-icon { width: 16px; display: flex; justify-content: center; color: var(--muted); }
+.mi.danger { color: var(--destructive); }
+.mi.danger .mi-icon { color: var(--danger); }
+.msep { height: 1px; margin: 4px 6px; background: var(--border); }
+
+/* ───────── 弹窗（adaptive-modal-sheet.tsx） ───────── */
+.overlay { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.scrim { position: absolute; inset: 0; background: var(--scrim); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.dialog { position: relative; width: 100%; max-width: 520px; max-height: 85%; display: flex; flex-direction: column; overflow: hidden; background: var(--glass); -webkit-backdrop-filter: blur(12px) saturate(1.14); backdrop-filter: blur(12px) saturate(1.14); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 24px 64px -24px var(--shadow-dialog), inset 0 1px 0 var(--inset-highlight); }
+.dlg-head { border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.dlg-row { display: flex; align-items: center; gap: 8px; padding: 16px 24px; }
+.dlg-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; line-height: normal; color: var(--fg); display: flex; align-items: center; gap: 8px; }
+.dlg-actions { display: flex; align-items: center; gap: 8px; position: relative; }
+.dlg-close { padding: 8px; border-radius: 8px; color: var(--muted); margin: -8px -8px -8px 0; }
+.dlg-close:hover { color: var(--fg); }
+.dlg-search { display: flex; align-items: center; gap: 8px; padding: 0 24px 12px; color: var(--muted); }
+.dlg-search input { flex: 1; border: 0; outline: 0; background: transparent; padding: 8px 0; font: inherit; font-size: 14px; color: var(--fg); }
+.dlg-search input::placeholder { color: var(--muted); }
+.dlg-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.dlg-body.sections { gap: 0; }
+.backdrop-img { position: absolute; inset: 0; background-size: 100% 100%; }
+
+/* 紧凑底部 sheet（gorhom） */
+.bs-overlay { position: absolute; inset: 0; z-index: 30; }
+.bs-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
+.bs { position: absolute; left: 0; right: 0; bottom: 0; height: 90%; background: var(--card); border-radius: 18px 18px 0 0; display: flex; flex-direction: column; overflow: hidden; }
+.bs-handle { height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bs-handle i { width: 36px; height: 4px; border-radius: 2px; background: #52525b; display: block; }
+
+/* ───────── ACP 目录行（provider-catalog-list.tsx） ───────── */
+.cat-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cat-name { font-size: 14px; line-height: 20px; color: var(--fg); }
+.cat-ver { font-size: 12px; line-height: 16px; color: var(--muted); }
+
+/* ───────── 第三方接口（api-endpoints/view.tsx） ───────── */
+.ep-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; min-width: 0; }
+.ep-url { font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--muted); flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.inuse { font-size: 12px; line-height: 16px; color: var(--success); padding: 0 12px; }
+
+/* ───────── 安装指引 ───────── */
+.cmd { font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--fg); overflow-wrap: anywhere; user-select: text; }
+
+/* ───────── Toast（toast-host.tsx） ───────── */
+.toast { position: absolute; z-index: 60; top: 16px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 480px; display: flex; align-items: center; gap: 8px; background: var(--surface0); border: 1px solid var(--border); border-radius: 16px; padding: 8px 12px; box-shadow: var(--shadow-md); font-size: 14px; color: var(--fg); }
+.toast .t-icon { color: var(--success); }
+
+/* ───────── 紧凑页头（BackHeader） ───────── */
+.bhdr { height: 64px; padding: 8px 8px 0; flex-shrink: 0; display: flex; align-items: center; gap: 8px; background: var(--surface0); }
+.bhdr .back { width: 44px; height: 44px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.bhdr .btitle { flex: 1; min-width: 0; font-size: 14px; font-weight: 400; line-height: normal; color: var(--fg); }
+.bhdr .bactions { display: flex; align-items: center; gap: 0; position: relative; }
+.bhdr .hbtn { width: 44px; height: 44px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.phone .btn { min-height: 32px; }
+.phone .seg { min-height: 32px; }
+.phone .seg button { min-height: 28px; }
+.phone .mi { min-height: 40px; }
+
+/*
+ * 本任务新增样式。基础 token、设置页外壳、Button/Switch/输入框沿用 base.css（上一个原型的 1:1 取值）。
+ * 数值来源：research/ui-tokens-supplement.md
+ */
+.theme-light { --card-hover: #fafafa; --tip-bg: #ffffff; }
+.theme-dark { --card-hover: #151515; --tip-bg: #111111; }
+.tnum { font-variant-numeric: tabular-nums; }
+.proto-note { font-size: 12px; color: #6b6b73; max-width: 980px; line-height: 18px; text-align: left; }
+.page-dark .proto-note { color: #9a9aa3; }
+.proto-note b { color: inherit; }
+
+/* ═════════ 现状：价格表（price-table-section.tsx / price-row.tsx） ═════════ */
+.cur-sub { font-size: 12px; line-height: normal; color: var(--muted); padding: 12px 16px 0; }
+.cur-err { font-size: 12px; line-height: 16.8px; min-height: 33.6px; padding: 8px 16px 0; color: var(--danger); }
+.cur-scroll { overflow-x: auto; }
+.cur-table { padding: 0 12px 8px; width: max-content; }
+.cur-hrow, .cur-row { display: flex; align-items: center; gap: 6px; }
+.cur-hrow { padding: 8px 0; }
+.cur-hrow > * { font-size: 12px; line-height: normal; color: var(--muted); }
+.cur-block { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid var(--row-border); }
+.c-model { width: 154px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
+.c-price { width: 70px; text-align: right; }
+.c-source { width: 64px; padding-left: 6px; }
+.c-actions { width: 120px; display: flex; align-items: center; gap: 4px; }
+.cur-row .c-model span.id { font-size: 12px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cur-row .c-price { font-size: 12px; color: var(--fg); }
+.cur-row .c-source { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.cur-row .input { min-height: 28px; }
+.cur-rowerr { font-size: 12px; line-height: 16.8px; min-height: 16.8px; color: var(--danger); }
+.cur-badge { align-self: flex-start; }
+
+/* ═════════ 共用：价格输入框（$ 前缀、右对齐、定宽） ═════════ */
+.pin { display: flex; align-items: center; gap: 2px; height: 28px; padding: 0 10px 0 8px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border-input); min-width: 0; }
+.pin:hover { border-color: var(--border-accent); }
+.pin:focus-within { border-color: var(--border-accent); outline: 2px solid var(--accent); outline-offset: 1px; }
+.pin .cur { font-size: 12px; color: var(--extra-muted); flex-shrink: 0; }
+.pin input { flex: 1; min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; padding: 0; font-size: 13px; line-height: 18px; color: var(--fg); text-align: right; font-variant-numeric: tabular-nums; }
+.pin input::placeholder { color: var(--extra-muted); }
+.pin .unit { font-size: 12px; color: var(--extra-muted); flex-shrink: 0; margin-left: 2px; }
+.pin.bad { border-color: var(--danger); }
+.phone .pin { height: 32px; }
+
+/* 通用：状态行（模型名下面的一行） */
+.st-line2 { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: var(--muted); min-width: 0; }
+.st-line2.err { color: var(--danger); }
+.st-line2 .ellipsis { min-width: 0; }
+.dot.accent { background: var(--accent); }
+.dot.amber { background: var(--amber); }
+
+/* 分组标题可折叠 */
+.sec-title.tog { cursor: pointer; user-select: none; }
+.sec-title.tog:hover { color: var(--fg); }
+.sec-title .chev-ic { color: var(--extra-muted); display: flex; transition: transform 120ms ease; }
+.sec-title .chev-ic.open { transform: rotate(90deg); }
+.sec-sub { font-size: 12px; line-height: 16px; color: var(--muted); margin: -2px 0 0 2px; }
+.ctl { display: flex; align-items: center; gap: 8px; }
+.ctl .lbl { font-size: 12px; color: var(--muted); }
+
+/* ═════════ 方案一：对齐表格 ═════════ */
+.ta-intro { padding: 12px 16px 4px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.ta-grid { display: grid; grid-template-columns: minmax(0, 1fr) repeat(4, 88px) 104px; column-gap: 8px; align-items: center; }
+.ta-head { padding: 8px 16px 6px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.ta-head .r { text-align: right; padding-right: 11px; }
+.card > .ta-head { border-top: 0; }
+.ta-row { padding: 10px 16px; min-height: 60px; }
+.ta-row.hl { background: color-mix(in srgb, var(--amber) 4%, transparent); }
+.ta-model { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ta-model .id { font-size: 13px; line-height: 18px; color: var(--fg); }
+.ta-val { font-size: 13px; line-height: 18px; color: var(--fg); text-align: right; padding-right: 11px; font-variant-numeric: tabular-nums; }
+.ta-val.zero { color: var(--extra-muted); }
+.ta-act { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.ta-empty { display: flex; align-items: center; gap: 10px; padding: 16px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.ta-empty .ok { color: var(--success); display: flex; }
+.lt-toggle { display: flex; align-items: center; gap: 8px; padding: 12px 16px; cursor: pointer; font-size: 13px; line-height: 18px; color: var(--muted); }
+.lt-toggle:hover { background: var(--card-hover); color: var(--fg); }
+.lt-toggle .grow { flex: 1; }
+.lt-row { padding: 7px 16px; min-height: 40px; }
+.lt-row .id { font-size: 13px; line-height: 18px; color: var(--fg); }
+.lt-row .hover-only { opacity: 0; transition: opacity 80ms; }
+.lt-row:hover { background: var(--card-hover); }
+.lt-row:hover .hover-only, .phone .lt-row .hover-only, .lt-row.force .hover-only { opacity: 1; }
+.lt-search { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; color: var(--muted); }
+.lt-search input { flex: 1; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; line-height: 18px; color: var(--fg); padding: 10px 0; }
+.lt-search input::placeholder { color: var(--muted); }
+.lt-none { padding: 20px 16px; font-size: 13px; color: var(--muted); text-align: center; }
+/* 手机：模型名独占一行，四格在下 */
+.phone .ta-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 6px; row-gap: 8px; }
+.phone .ta-grid > .ta-model, .phone .ta-grid > .ta-act { grid-column: 1 / -1; }
+.phone .ta-head > span:first-child, .phone .ta-head > span:last-child { display: none; }
+.phone .ta-act { justify-content: flex-start; }
+.phone .ta-head .r, .phone .ta-val { padding-right: 11px; }
+.phone .lt-grid { grid-template-columns: minmax(0, 1fr) auto; }
+
+/* ═════════ 方案二：卡片 ═════════ */
+.cb-list { display: flex; flex-direction: column; gap: 12px; }
+.cb { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px 14px; display: flex; flex-direction: column; gap: 14px; }
+.cb.pending { border-color: color-mix(in srgb, var(--amber) 35%, var(--border)); }
+.cb-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.cb-head .id { font-size: 14px; line-height: 20px; color: var(--fg); font-weight: 500; }
+.cb-head .meta { font-size: 12px; color: var(--muted); }
+.cb-head .grow { flex: 1; }
+.cb-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.phone .cb-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 10px; }
+.cb-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cb-field label { font-size: 12px; line-height: 16px; color: var(--muted); }
+.cb-field .pin { height: 32px; }
+.cb-read { display: flex; align-items: baseline; gap: 2px; height: 32px; padding: 0 1px; font-size: 15px; line-height: 32px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cb-read .cur, .cb-read .unit { font-size: 12px; color: var(--extra-muted); }
+.cb-foot { display: flex; align-items: center; gap: 8px; }
+.cb-foot .hint { flex: 1; min-width: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+.cb-foot .hint.err { color: var(--danger); }
+.pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 9999px; padding: 2px 8px; font-size: 11px; line-height: 15px; white-space: nowrap; }
+.pill.warn { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--warning); }
+.pill.neutral { background: var(--surface2); color: var(--muted); }
+.pill.accent { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.cb-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; text-align: center; }
+.cb-empty .ok { width: 32px; height: 32px; border-radius: 16px; background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); display: flex; align-items: center; justify-content: center; }
+.cb-empty .t1 { font-size: 14px; line-height: 20px; color: var(--fg); }
+.cb-empty .t2 { font-size: 12px; line-height: 16px; color: var(--muted); max-width: 360px; }
+.cl-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; min-height: 44px; }
+.cl-row .id { flex: 1; min-width: 0; font-size: 13px; line-height: 18px; color: var(--fg); }
+.cl-row:hover { background: var(--card-hover); }
+.cl-prices { display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 16px; color: var(--fg); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cl-prices .k { color: var(--extra-muted); margin-right: 3px; }
+.cl-prices .z { color: var(--extra-muted); }
+.cl-row .hover-only { opacity: 0; }
+.cl-row:hover .hover-only, .phone .cl-row .hover-only { opacity: 1; }
+.phone .cl-row { flex-wrap: wrap; row-gap: 4px; }
+.phone .cl-row .id { flex-basis: 100%; }
+.phone .cl-prices { flex: 1; }
+
+/* ═════════ 对话流（用量段所在的 footer） ═════════ */
+.chat { position: absolute; inset: 0; background: var(--surface0); overflow: hidden; }
+.chat-top { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 300; color: var(--fg); }
+.stream { width: 100%; max-width: 820px; margin: 0 auto; padding: 200px 8px 0; }
+.phone .stream { padding-top: 330px; }
+.umsg { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.umsg .bubble { max-width: 75%; background: var(--surface2); border-radius: 16px; padding: 8px 14px; font-size: 14px; line-height: 22px; color: var(--fg); }
+.amsg { font-size: 15px; line-height: 24px; color: var(--fg); }
+.amsg p { margin: 0 0 12px; }
+.amsg code { font-family: var(--mono); font-size: 12.5px; background: var(--surface2); border-radius: 4px; padding: 1px 4px; }
+.tfoot { margin-top: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 24px; padding-bottom: 32px; }
+.tfoot .ic { padding: 4px; color: var(--muted); display: flex; }
+.tfoot .ic:first-child { margin-left: -4px; }
+.tfoot .worked { font-size: 13px; line-height: normal; color: var(--muted); }
+.seg-wrap { position: relative; display: inline-flex; }
+.useg { display: inline-flex; align-items: center; border-radius: 4px; padding: 0 2px; font-size: 13px; line-height: normal; color: var(--muted); font-variant-numeric: tabular-nums; cursor: default; white-space: pre; }
+.useg:hover, .useg.on { background: var(--hover); }
+.useg .unp { text-decoration: underline dotted; }
+
+/* 浮层外框（tooltip.tsx content） */
+.tip { position: absolute; z-index: 20; background: var(--tip-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 16px 40px -18px var(--shadow-popover), inset 0 1px 0 var(--inset-highlight); color: var(--fg); }
+
+/* ── 现状面板（1:1 复刻，含溢出） ── */
+.tip.cur { max-width: 280px; padding: 4px 8px; }
+.tc { display: flex; flex-direction: column; gap: 4px; min-width: 280px; }
+.tc .title { font-size: 14px; line-height: normal; margin-bottom: 2px; }
+.tc .r { display: flex; align-items: center; gap: 8px; }
+.tc .m { display: flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; font-size: 12px; line-height: normal; }
+.tc .m .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
+.tc .n { min-width: 56px; text-align: right; font-size: 12px; line-height: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tc .h { color: var(--muted); }
+.tc .tot { font-weight: 500; }
+.tc .amber { color: var(--amber); font-size: 12px; white-space: nowrap; }
+.tc .dur { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 12px; line-height: normal; }
+.tc .note { font-size: 12px; line-height: normal; color: var(--muted); }
+
+/* ── 方案一：总览 + 明细 ── */
+.tip.ov { width: 300px; padding: 0; border-radius: 10px; }
+.ov-top { padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+.ov-h { display: flex; align-items: center; justify-content: space-between; font-size: 12px; line-height: 16px; color: var(--muted); }
+.ov-h .dur { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.ov-cost { display: flex; align-items: baseline; gap: 6px; }
+.ov-cost .v { font-size: 24px; line-height: 28px; font-weight: 500; letter-spacing: -0.2px; font-variant-numeric: tabular-nums; }
+.ov-cost .k { font-size: 12px; color: var(--muted); }
+.ov-cost .v.unp { text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.ov-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+.ov-stat .k { font-size: 11px; line-height: 15px; color: var(--muted); }
+.ov-stat .v { font-size: 13px; line-height: 18px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.ov-sep { height: 1px; background: var(--border); }
+.ov-models { padding: 8px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ov-mh { font-size: 11px; line-height: 15px; color: var(--muted); }
+.ov-m { display: flex; flex-direction: column; gap: 1px; }
+.ov-m .l1 { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 16px; }
+.ov-m .l1 .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-m .l1 .c { font-variant-numeric: tabular-nums; }
+.ov-m .l1 .c.none { color: var(--warning); }
+.ov-m .l2 { font-size: 11px; line-height: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ov-single { padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 16px; }
+.ov-single .k { color: var(--muted); }
+.ov-foot { padding: 8px 14px 10px; font-size: 11px; line-height: 15px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.ov-foot .warn { color: var(--warning); display: flex; gap: 6px; align-items: flex-start; }
+.ov-foot .warn .dot { margin-top: 5px; }
+
+/* ── 方案二：精修表格 ── */
+.tip.tb { padding: 12px 14px 10px; border-radius: 10px; }
+.tb-h { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.tb-h .t { font-size: 13px; line-height: 18px; font-weight: 500; }
+.tb-h .d { font-size: 12px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tb-g { display: grid; column-gap: 0; font-size: 12px; line-height: 16px; }
+.tb-g > * { padding: 5px 0; white-space: nowrap; }
+.tb-g .num { padding-left: 16px; text-align: right; font-variant-numeric: tabular-nums; }
+.tb-g .hd { color: var(--muted); border-bottom: 1px solid var(--border); padding-top: 0; }
+.tb-g .nm { max-width: 220px; overflow: hidden; text-overflow: ellipsis; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.tb-g .nm span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.tb-g .tt { font-weight: 500; border-top: 1px solid var(--border); }
+.tb-g .rz { color: var(--muted); }
+.tb-g .none { color: var(--warning); }
+.tb-note { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 11px; line-height: 15px; color: var(--muted); }
+.tb-note .warn { color: var(--warning); display: block; margin-top: 2px; }
+.phone .tip.tb { width: 340px; }
+
+</style>
+</head>
+<body class="proto">
+<div id="root"></div>
+<script>
+// 图标原文：提供方与 ACP 目录图标取自真实 App DOM；其余取自 lucide-react-native 0.546.0（与 App 同版本）
+const ICONS = {
+"p-claude": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\" fill-rule=\"evenodd\"><path d=\"M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z\"></path></svg>",
+"p-codex": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\" fill-rule=\"evenodd\"><path d=\"M21.55 10.004a5.416 5.416 0 00-.478-4.501c-1.217-2.09-3.662-3.166-6.05-2.66A5.59 5.59 0 0010.831 1C8.39.995 6.224 2.546 5.473 4.838A5.553 5.553 0 001.76 7.496a5.487 5.487 0 00.691 6.5 5.416 5.416 0 00.477 4.502c1.217 2.09 3.662 3.165 6.05 2.66A5.586 5.586 0 0013.168 23c2.443.006 4.61-1.546 5.361-3.84a5.553 5.553 0 003.715-2.66 5.488 5.488 0 00-.693-6.497v.001zm-8.381 11.558a4.199 4.199 0 01-2.675-.954c.034-.018.093-.05.132-.074l4.44-2.53a.71.71 0 00.364-.623v-6.176l1.877 1.069c.02.01.033.029.036.05v5.115c-.003 2.274-1.87 4.118-4.174 4.123zM4.192 17.78a4.059 4.059 0 01-.498-2.763c.032.02.09.055.131.078l4.44 2.53c.225.13.504.13.73 0l5.42-3.088v2.138a.068.068 0 01-.027.057L9.9 19.288c-1.999 1.136-4.552.46-5.707-1.51h-.001zM3.023 8.216A4.15 4.15 0 015.198 6.41l-.002.151v5.06a.711.711 0 00.364.624l5.42 3.087-1.876 1.07a.067.067 0 01-.063.005l-4.489-2.559c-1.995-1.14-2.679-3.658-1.53-5.63h.001zm15.417 3.54l-5.42-3.088L14.896 7.6a.067.067 0 01.063-.006l4.489 2.557c1.998 1.14 2.683 3.662 1.529 5.633a4.163 4.163 0 01-2.174 1.807V12.38a.71.71 0 00-.363-.623zm1.867-2.773a6.04 6.04 0 00-.132-.078l-4.44-2.53a.731.731 0 00-.729 0l-5.42 3.088V7.325a.068.068 0 01.027-.057L14.1 4.713c2-1.137 4.555-.46 5.707 1.513.487.833.664 1.809.499 2.757h.001zm-11.741 3.81l-1.877-1.068a.065.065 0 01-.036-.051V6.559c.001-2.277 1.873-4.122 4.181-4.12.976 0 1.92.338 2.671.954-.034.018-.092.05-.131.073l-4.44 2.53a.71.71 0 00-.365.623l-.003 6.173v.002zm1.02-2.168L12 9.25l2.414 1.375v2.75L12 14.75l-2.415-1.375v-2.75z\"></path></svg>",
+"p-copilot": "<svg viewBox=\"0 0 512 416\" fill=\"currentColor\"><path d=\"M181.33 266.143c0-11.497 9.32-20.818 20.818-20.818 11.498 0 20.819 9.321 20.819 20.818v38.373c0 11.497-9.321 20.818-20.819 20.818-11.497 0-20.818-9.32-20.818-20.818v-38.373zM308.807 245.325c-11.477 0-20.798 9.321-20.798 20.818v38.373c0 11.497 9.32 20.818 20.798 20.818 11.497 0 20.818-9.32 20.818-20.818v-38.373c0-11.497-9.32-20.818-20.818-20.818z\" fill-rule=\"nonzero\"></path><path d=\"M512.002 246.393v57.384c-.02 7.411-3.696 14.638-9.67 19.011C431.767 374.444 344.695 416 256 416c-98.138 0-196.379-56.542-246.33-93.21-5.975-4.374-9.65-11.6-9.671-19.012v-57.384a35.347 35.347 0 016.857-20.922l15.583-21.085c8.336-11.312 20.757-14.31 33.98-14.31 4.988-56.953 16.794-97.604 45.024-127.354C155.194 5.77 226.56 0 256 0c29.441 0 100.807 5.77 154.557 62.722 28.19 29.75 40.036 70.401 45.025 127.354 13.263 0 25.602 2.936 33.958 14.31l15.583 21.127c4.476 6.077 6.878 13.345 6.878 20.88zm-97.666-26.075c-.677-13.058-11.292-18.19-22.338-21.824-11.64 7.309-25.848 10.183-39.46 10.183-14.454 0-41.432-3.47-63.872-25.869-5.667-5.625-9.527-14.454-12.155-24.247a212.902 212.902 0 00-20.469-1.088c-6.098 0-13.099.349-20.551 1.088-2.628 9.793-6.509 18.622-12.155 24.247-22.4 22.4-49.418 25.87-63.872 25.87-13.612 0-27.86-2.855-39.501-10.184-11.005 3.613-21.558 8.828-22.277 21.824-1.17 24.555-1.272 49.11-1.375 73.645-.041 12.318-.082 24.658-.288 36.976.062 7.166 4.374 13.818 10.882 16.774 52.97 24.124 103.045 36.278 149.137 36.278 46.01 0 96.085-12.154 149.014-36.278 6.508-2.956 10.84-9.608 10.881-16.774.637-36.832.124-73.809-1.642-110.62h.041zM107.521 168.97c8.643 8.623 24.966 14.392 42.56 14.392 13.448 0 39.03-2.874 60.156-24.329 9.28-8.951 15.05-31.35 14.413-54.079-.657-18.231-5.769-33.28-13.448-39.665-8.315-7.371-27.203-10.574-48.33-8.644-22.399 2.238-41.267 9.588-50.875 19.833-20.798 22.728-16.323 80.317-4.476 92.492zm130.556-56.008c.637 3.51.965 7.35 1.273 11.517 0 2.875 0 5.77-.308 8.952 6.406-.636 11.847-.636 16.959-.636s10.553 0 16.959.636c-.329-3.182-.329-6.077-.329-8.952.329-4.167.657-8.007 1.294-11.517-6.735-.637-12.812-.965-17.924-.965s-11.21.328-17.924.965zm49.275-8.008c-.637 22.728 5.133 45.128 14.413 54.08 21.105 21.454 46.708 24.328 60.155 24.328 17.596 0 33.918-5.769 42.561-14.392 11.847-12.175 16.322-69.764-4.476-92.492-9.608-10.245-28.476-17.595-50.875-19.833-21.127-1.93-40.015 1.273-48.33 8.644-7.679 6.385-12.791 21.434-13.448 39.665z\"></path></svg>",
+"p-opencode": "<svg viewBox=\"96 64 288 384\" fill=\"currentColor\"><path d=\"M320 224V352H192V224H320Z\" opacity=\"0.4\"></path><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M384 416H128V96H384V416ZM320 160H192V352H320V160Z\"></path></svg>",
+"p-pi": "<svg viewBox=\"100 100 600 600\" fill=\"currentColor\"><path d=\"M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z\" fill=\"currentColor\" fill-rule=\"evenodd\"></path><path d=\"M517.36 400 H634.72 V634.72 H517.36 Z\" fill=\"currentColor\"></path></svg>",
+"p-omp": "<svg viewBox=\"4 4 56 56\" fill=\"currentColor\"><path d=\"M10 14h44v9H43v33h-9V23h-9v22h-9V23H10z\"></path></svg>",
+"acp-0": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" fill=\"none\"><circle cx=\"8\" cy=\"8\" r=\"7\" stroke=\"currentColor\" stroke-width=\"1.5\"></circle><path d=\"M5.5 10.5L8 4L10.5 10.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path><line x1=\"6.25\" y1=\"8.75\" x2=\"9.75\" y2=\"8.75\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\"></line></svg>",
+"acp-1": "<svg viewBox=\"0 0 28 28\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M13.9197 13.61L17.3816 26.566L14.242 27.4049L11.2645 16.2643L0.119926 13.2906L0.957817 10.15L13.9197 13.61Z\" fill=\"currentColor\"></path><path d=\"M13.7391 16.0892L4.88169 24.9056L2.58872 22.6019L11.4461 13.7865L13.7391 16.0892Z\" fill=\"currentColor\"></path><path d=\"M18.9386 8.58315L22.4005 21.5392L19.2609 22.3781L16.2833 11.2374L5.13879 8.26381L5.97668 5.12318L18.9386 8.58315Z\" fill=\"currentColor\"></path><path d=\"M23.9803 3.55632L27.4422 16.5124L24.3025 17.3512L21.325 6.21062L10.1805 3.23698L11.0183 0.0963593L23.9803 3.55632Z\" fill=\"currentColor\"></path></svg>",
+"acp-2": "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M9.972 13.193h2.577q.187 0 .277-.09t.091-.294V10.47q0-.324.133-.59.135-.27.36-.424a1 1 0 0 1 .099-.06 1 1 0 0 1-.1-.058 1.1 1.1 0 0 1-.359-.424 1.3 1.3 0 0 1-.133-.59v-2.33q0-.202-.091-.293t-.277-.089H9.972a.38.38 0 0 1-.294-.124.4.4 0 0 1-.108-.281q.002-.176.131-.293a.46.46 0 0 1 .313-.111h2.775c.36 0 .642.097.836.288q.293.29.294.832V8.24q0 .39.152.562.148.168.555.178a.4.4 0 0 1 .27.128.41.41 0 0 1 .104.287.44.44 0 0 1-.1.282.34.34 0 0 1-.277.132c-.266.006-.452.066-.55.177q-.151.174-.152.573v2.318c0 .235-.043.44-.128.607a.85.85 0 0 1-.389.387 1.3 1.3 0 0 1-.534.124V14h-2.854a.45.45 0 0 1-.315-.118.38.38 0 0 1-.129-.286q0-.164.109-.282a.38.38 0 0 1 .293-.123zM1.103 9.108a.4.4 0 0 1 .276-.128q.4-.008.55-.177.15-.173.151-.562V5.923q.002-.543.294-.832c.195-.191.477-.288.836-.288h2.775q.188 0 .313.111a.37.37 0 0 1 .131.293.4.4 0 0 1-.108.281.38.38 0 0 1-.293.123H3.45q-.186 0-.277.09t-.092.292v2.33c0 .213-.044.413-.133.59a1.1 1.1 0 0 1-.359.424 1 1 0 0 1-.1.059 1 1 0 0 1 .1.059q.225.156.359.423t.133.59v2.34q0 .203.092.293.088.09.277.089h2.577a.38.38 0 0 1 .294.123q.108.12.108.281a.38.38 0 0 1-.13.286.45.45 0 0 1-.314.118l-2.775-.003a1.4 1.4 0 0 1-.613-.126.87.87 0 0 1-.388-.387 1.34 1.34 0 0 1-.129-.608v-2.318q0-.4-.151-.572-.151-.168-.55-.177a.35.35 0 0 1-.278-.132.42.42 0 0 1-.102-.28q0-.173.103-.287\"></path><path fill=\"currentColor\" d=\"M5.437 10.36a.986.986 0 0 1-.994-.975c0-.538.446-.976.994-.976s.994.438.994.976a.986.986 0 0 1-.994.976M10.562 8.41c.548 0 .994.437.994.975a.986.986 0 0 1-.994.976.986.986 0 0 1-.994-.976c0-.538.446-.976.994-.976M8.74 2c.37 0 .446.15.446.275v.034q0 .034-.009.201-.01.162-.017.549-.018.378-.044 1.06c0 .106-.065.233-.375.233-.311 0-.376-.126-.376-.23l-.07-1.835v-.003c0-.13.078-.284.446-.284M7.256 2c.369 0 .446.15.446.275v.034q0 .034-.01.201-.007.162-.017.549-.017.378-.043 1.06c0 .106-.065.233-.376.233-.31 0-.375-.126-.375-.23l-.07-1.835v-.003C6.81 2.154 6.887 2 7.256 2\"></path></svg>",
+"acp-3": "<svg viewBox=\"0 0 16 16\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M4.66949 9.56637C4.66949 8.92122 4.13288 8.39823 3.47094 8.39823C2.809 8.39823 2.2724 8.92122 2.2724 9.56637C2.2724 10.2115 2.809 10.7345 3.47094 10.7345V11C2.65856 11 2 10.3581 2 9.56637C2 8.7746 2.65856 8.13274 3.47094 8.13274C4.28332 8.13274 4.94189 8.7746 4.94189 9.56637C4.94189 10.3581 4.28332 11 3.47094 11V10.7345C4.13288 10.7345 4.66949 10.2115 4.66949 9.56637Z\" fill=\"currentColor\"></path><path d=\"M3.90678 9.59292C3.90678 9.81286 3.72385 9.99115 3.49818 9.99115C3.27252 9.99115 3.08959 9.81286 3.08959 9.59292C3.08959 9.37298 3.27252 9.19469 3.49818 9.19469C3.72385 9.19469 3.90678 9.37298 3.90678 9.59292Z\" fill=\"currentColor\"></path><path d=\"M3.8523 9.59292C3.8523 9.40231 3.69376 9.24779 3.49818 9.24779C3.30261 9.24779 3.14407 9.40231 3.14407 9.59292C3.14407 9.78353 3.30261 9.93805 3.49818 9.93805V9.99115C3.27252 9.99115 3.08959 9.81286 3.08959 9.59292C3.08959 9.37298 3.27252 9.19469 3.49818 9.19469C3.72385 9.19469 3.90678 9.37298 3.90678 9.59292C3.90678 9.81286 3.72385 9.99115 3.49818 9.99115V9.93805C3.69376 9.93805 3.8523 9.78353 3.8523 9.59292Z\" fill=\"currentColor\"></path><path d=\"M4.66949 6.43363C4.66949 5.78848 4.13288 5.26549 3.47094 5.26549C2.809 5.26549 2.2724 5.78848 2.2724 6.43363C2.2724 7.07878 2.809 7.60177 3.47094 7.60177V7.86726C2.65856 7.86726 2 7.2254 2 6.43363C2 5.64186 2.65856 5 3.47094 5C4.28332 5 4.94189 5.64186 4.94189 6.43363C4.94189 7.2254 4.28332 7.86726 3.47094 7.86726V7.60177C4.13288 7.60177 4.66949 7.07878 4.66949 6.43363Z\" fill=\"currentColor\"></path><path d=\"M3.90678 6.46018C3.90678 6.68011 3.72385 6.85841 3.49818 6.85841C3.27252 6.85841 3.08959 6.68011 3.08959 6.46018C3.08959 6.24024 3.27252 6.06195 3.49818 6.06195C3.72385 6.06195 3.90678 6.24024 3.90678 6.46018Z\" fill=\"currentColor\"></path><path d=\"M3.8523 6.46018C3.8523 6.26957 3.69376 6.11504 3.49818 6.11504C3.30261 6.11504 3.14407 6.26957 3.14407 6.46018C3.14407 6.65079 3.30261 6.80531 3.49818 6.80531V6.85841C3.27252 6.85841 3.08959 6.68011 3.08959 6.46018C3.08959 6.24024 3.27252 6.06195 3.49818 6.06195C3.72385 6.06195 3.90678 6.24024 3.90678 6.46018C3.90678 6.68011 3.72385 6.85841 3.49818 6.85841V6.80531C3.69376 6.80531 3.8523 6.65079 3.8523 6.46018Z\" fill=\"currentColor\"></path><path d=\"M8.04722 9.56637C8.04722 8.92122 7.51061 8.39823 6.84867 8.39823C6.18673 8.39823 5.65012 8.92122 5.65012 9.56637C5.65012 10.2115 6.18673 10.7345 6.84867 10.7345V11C6.03629 11 5.37772 10.3581 5.37772 9.56637C5.37772 8.7746 6.03629 8.13274 6.84867 8.13274C7.66105 8.13274 8.31961 8.7746 8.31961 9.56637C8.31961 10.3581 7.66105 11 6.84867 11V10.7345C7.51061 10.7345 8.04722 10.2115 8.04722 9.56637Z\" fill=\"currentColor\"></path><path d=\"M7.2845 9.59292C7.2845 9.81286 7.10157 9.99115 6.87591 9.99115C6.65025 9.99115 6.46731 9.81286 6.46731 9.59292C6.46731 9.37298 6.65025 9.19469 6.87591 9.19469C7.10157 9.19469 7.2845 9.37298 7.2845 9.59292Z\" fill=\"currentColor\"></path><path d=\"M7.23002 9.59292C7.23002 9.40231 7.07148 9.24779 6.87591 9.24779C6.68033 9.24779 6.52179 9.40231 6.52179 9.59292C6.52179 9.78353 6.68033 9.93805 6.87591 9.93805V9.99115C6.65025 9.99115 6.46731 9.81286 6.46731 9.59292C6.46731 9.37298 6.65025 9.19469 6.87591 9.19469C7.10157 9.19469 7.2845 9.37298 7.2845 9.59292C7.2845 9.81286 7.10157 9.99115 6.87591 9.99115V9.93805C7.07148 9.93805 7.23002 9.78353 7.23002 9.59292Z\" fill=\"currentColor\"></path><path d=\"M8.04722 6.43363C8.04722 5.78848 7.51061 5.26549 6.84867 5.26549C6.18673 5.26549 5.65012 5.78848 5.65012 6.43363C5.65012 7.07878 6.18673 7.60177 6.84867 7.60177V7.86726C6.03629 7.86726 5.37772 7.2254 5.37772 6.43363C5.37772 5.64186 6.03629 5 6.84867 5C7.66105 5 8.31961 5.64186 8.31961 6.43363C8.31961 7.2254 7.66105 7.86726 6.84867 7.86726V7.60177C7.51061 7.60177 8.04722 7.07878 8.04722 6.43363Z\" fill=\"currentColor\"></path><path d=\"M7.2845 6.46018C7.2845 6.68011 7.10157 6.85841 6.87591 6.85841C6.65025 6.85841 6.46731 6.68011 6.46731 6.46018C6.46731 6.24024 6.65025 6.06195 6.87591 6.06195C7.10157 6.06195 7.2845 6.24024 7.2845 6.46018Z\" fill=\"currentColor\"></path><path d=\"M7.23002 6.46018C7.23002 6.26957 7.07148 6.11504 6.87591 6.11504C6.68033 6.11504 6.52179 6.26957 6.52179 6.46018C6.52179 6.65079 6.68033 6.80531 6.87591 6.80531V6.85841C6.65025 6.85841 6.46731 6.68011 6.46731 6.46018C6.46731 6.24024 6.65025 6.06195 6.87591 6.06195C7.10157 6.06195 7.2845 6.24024 7.2845 6.46018C7.2845 6.68011 7.10157 6.85841 6.87591 6.85841V6.80531C7.07148 6.80531 7.23002 6.65079 7.23002 6.46018Z\" fill=\"currentColor\"></path><path d=\"M11.207 9.56637C11.207 8.92122 10.6704 8.39823 10.0085 8.39823C9.34653 8.39823 8.80993 8.92122 8.80993 9.56637C8.80993 10.2115 9.34653 10.7345 10.0085 10.7345V11C9.19609 11 8.53753 10.3581 8.53753 9.56637C8.53753 8.7746 9.19609 8.13274 10.0085 8.13274C10.8209 8.13274 11.4794 8.7746 11.4794 9.56637C11.4794 10.3581 10.8209 11 10.0085 11V10.7345C10.6704 10.7345 11.207 10.2115 11.207 9.56637Z\" fill=\"currentColor\"></path><path d=\"M10.4443 9.59292C10.4443 9.81286 10.2614 9.99115 10.0357 9.99115C9.81005 9.99115 9.62712 9.81286 9.62712 9.59292C9.62712 9.37298 9.81005 9.19469 10.0357 9.19469C10.2614 9.19469 10.4443 9.37298 10.4443 9.59292Z\" fill=\"currentColor\"></path><path d=\"M10.3898 9.59292C10.3898 9.40231 10.2313 9.24779 10.0357 9.24779C9.84014 9.24779 9.6816 9.40231 9.6816 9.59292C9.6816 9.78353 9.84014 9.93805 10.0357 9.93805V9.99115C9.81005 9.99115 9.62712 9.81286 9.62712 9.59292C9.62712 9.37298 9.81005 9.19469 10.0357 9.19469C10.2614 9.19469 10.4443 9.37298 10.4443 9.59292C10.4443 9.81286 10.2614 9.99115 10.0357 9.99115V9.93805C10.2313 9.93805 10.3898 9.78353 10.3898 9.59292Z\" fill=\"currentColor\"></path><path d=\"M11.207 6.43363C11.207 5.78848 10.6704 5.26549 10.0085 5.26549C9.34653 5.26549 8.80993 5.78848 8.80993 6.43363C8.80993 7.07878 9.34653 7.60177 10.0085 7.60177V7.86726C9.19609 7.86726 8.53753 7.2254 8.53753 6.43363C8.53753 5.64186 9.19609 5 10.0085 5C10.8209 5 11.4794 5.64186 11.4794 6.43363C11.4794 7.2254 10.8209 7.86726 10.0085 7.86726V7.60177C10.6704 7.60177 11.207 7.07878 11.207 6.43363Z\" fill=\"currentColor\"></path><path d=\"M10.4443 6.46018C10.4443 6.68011 10.2614 6.85841 10.0357 6.85841C9.81005 6.85841 9.62712 6.68011 9.62712 6.46018C9.62712 6.24024 9.81005 6.06195 10.0357 6.06195C10.2614 6.06195 10.4443 6.24024 10.4443 6.46018Z\" fill=\"currentColor\"></path><path d=\"M10.3898 6.46018C10.3898 6.26957 10.2313 6.11504 10.0357 6.11504C9.84014 6.11504 9.6816 6.26957 9.6816 6.46018C9.6816 6.65079 9.84014 6.80531 10.0357 6.80531V6.85841C9.81005 6.85841 9.62712 6.68011 9.62712 6.46018C9.62712 6.24024 9.81005 6.06195 10.0357 6.06195C10.2614 6.06195 10.4443 6.24024 10.4443 6.46018C10.4443 6.68011 10.2614 6.85841 10.0357 6.85841V6.80531C10.2313 6.80531 10.3898 6.65079 10.3898 6.46018Z\" fill=\"currentColor\"></path><path d=\"M14.5847 9.56637C14.5847 8.92122 14.0481 8.39823 13.3862 8.39823C12.7243 8.39823 12.1877 8.92122 12.1877 9.56637C12.1877 10.2115 12.7243 10.7345 13.3862 10.7345V11C12.5738 11 11.9153 10.3581 11.9153 9.56637C11.9153 8.7746 12.5738 8.13274 13.3862 8.13274C14.1986 8.13274 14.8571 8.7746 14.8571 9.56637C14.8571 10.3581 14.1986 11 13.3862 11V10.7345C14.0481 10.7345 14.5847 10.2115 14.5847 9.56637Z\" fill=\"currentColor\"></path><path d=\"M13.822 9.59292C13.822 9.81286 13.6391 9.99115 13.4134 9.99115C13.1878 9.99115 13.0048 9.81286 13.0048 9.59292C13.0048 9.37298 13.1878 9.19469 13.4134 9.19469C13.6391 9.19469 13.822 9.37298 13.822 9.59292Z\" fill=\"currentColor\"></path><path d=\"M13.7676 9.59292C13.7676 9.40231 13.609 9.24779 13.4134 9.24779C13.2179 9.24779 13.0593 9.40231 13.0593 9.59292C13.0593 9.78353 13.2179 9.93805 13.4134 9.93805V9.99115C13.1878 9.99115 13.0048 9.81286 13.0048 9.59292C13.0048 9.37298 13.1878 9.19469 13.4134 9.19469C13.6391 9.19469 13.822 9.37298 13.822 9.59292C13.822 9.81286 13.6391 9.99115 13.4134 9.99115V9.93805C13.609 9.93805 13.7676 9.78353 13.7676 9.59292Z\" fill=\"currentColor\"></path><path d=\"M14.5847 6.43363C14.5847 5.78848 14.0481 5.26549 13.3862 5.26549C12.7243 5.26549 12.1877 5.78848 12.1877 6.43363C12.1877 7.07878 12.7243 7.60177 13.3862 7.60177V7.86726C12.5738 7.86726 11.9153 7.2254 11.9153 6.43363C11.9153 5.64186 12.5738 5 13.3862 5C14.1986 5 14.8571 5.64186 14.8571 6.43363C14.8571 7.2254 14.1986 7.86726 13.3862 7.86726V7.60177C14.0481 7.60177 14.5847 7.07878 14.5847 6.43363Z\" fill=\"currentColor\"></path><path d=\"M13.822 6.46018C13.822 6.68011 13.6391 6.85841 13.4134 6.85841C13.1878 6.85841 13.0048 6.68011 13.0048 6.46018C13.0048 6.24024 13.1878 6.06195 13.4134 6.06195C13.6391 6.06195 13.822 6.24024 13.822 6.46018Z\" fill=\"currentColor\"></path><path d=\"M13.7676 6.46018C13.7676 6.26957 13.609 6.11504 13.4134 6.11504C13.2179 6.11504 13.0593 6.26957 13.0593 6.46018C13.0593 6.65079 13.2179 6.80531 13.4134 6.80531V6.85841C13.1878 6.85841 13.0048 6.68011 13.0048 6.46018C13.0048 6.24024 13.1878 6.06195 13.4134 6.06195C13.6391 6.06195 13.822 6.24024 13.822 6.46018C13.822 6.68011 13.6391 6.85841 13.4134 6.85841V6.80531C13.609 6.80531 13.7676 6.65079 13.7676 6.46018Z\" fill=\"currentColor\"></path></svg>",
+"acp-4": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 92 96\" fill=\"currentColor\"><path d=\"M65.45 16.3c10.89 0 19.71 8.86 19.71 19.8v6.6l5.74 11.46a4.48 4.48 0 0 1-.01 3.6L85.16 69.1v6.6c0 10.94-8.83 19.8-19.71 19.8H26.02c-10.89 0-19.71-8.86-19.71-19.8v-6.6L.45 57.8a4.48 4.48 0 0 1-.01-3.67L6.31 42.7v-6.6c0-10.94 8.83-19.8 19.71-19.8h39.43zm-2.52 5.7H29.19c-9.32 0-16.87 7.56-16.87 16.88v5.62l-4.88 9.46a4.48 4.48 0 0 0 .01 3.68l4.87 9.36v5.62c0 9.32 7.55 16.88 16.87 16.88h33.74c9.32 0 16.87-7.55 16.87-16.88V67l4.77-9.39a4.48 4.48 0 0 0 0-3.61L79.8 44.5v-5.62C79.8 29.56 72.25 22 62.93 22z\" fill-rule=\"nonzero\"></path><circle cx=\"45.73\" cy=\"11\" r=\"11\"></circle><rect stroke=\"currentColor\" stroke-width=\"8\" x=\"31\" y=\"44.5\" width=\"5\" height=\"22\" rx=\"2.5\"></rect><rect stroke=\"currentColor\" stroke-width=\"8\" x=\"55\" y=\"44.5\" width=\"5\" height=\"22\" rx=\"2.5\"></rect></svg>",
+"acp-5": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><path fill=\"currentColor\" d=\"M12.13 1.25c.15-.14.16-.14.28-.15.18 0 .36.08.64.34.68.62 1.61 1.89 2.2 2.97l.22.42.32.16c.3.16.81.48 1.02.65.09.08.11.08.21.04.45-.18 1.09.05 1.65.6.51.49 1 1.33 1.18 2.03.03.11.06.36.07.54.04.64-.16 1.14-.55 1.37-.08.04-.08.06-.08.26.02.95-.23 1.89-.74 2.82-.58 1.04-1.6 2.11-2.98 3.12-.74.55-2.5 1.58-3.3 1.95-1.9.86-3.43 1.2-4.76 1.03-.79-.09-1.69-.41-2.22-.77-.14-.1-.16-.1-.27-.07-.57.16-1.31-.18-1.94-.88-.25-.28-.66-.98-.79-1.35-.3-.87-.25-1.65.16-2.12.11-.12.09-.33.09-.33-.04-.33-.05-.82-.04-1.14v-.3l-.43-.79c-.68-1.23-1.12-2.25-1.28-3.04-.09-.43-.09-.62.02-.77.07-.09.28-.18.54-.22.66-.12 2.09-.01 3.69.27l.16.03.36-.32c.61-.54 1.01-.84 1.75-1.31.77-.48 1.64-.89 2.62-1.2l.32-.1.17-.46c.62-1.65 1.25-2.86 1.71-3.27h0Zm-5.19 8.45c-.7.41-1.05.61-1.3.84-1.04.93-1.43 2.39-.99 3.71.11.33.31.68.71 1.39.41.71.61 1.06.83 1.32.92 1.05 2.37 1.45 3.68 1 .32-.11.68-.31 1.38-.72l4.02-2.34c.7-.41 1.05-.61 1.3-.84 1.04-.93 1.43-2.39.99-3.71-.11-.33-.31-.68-.71-1.39s-.61-1.06-.83-1.32c-.92-1.05-2.37-1.45-3.68-1-.32.11-.67.31-1.38.72l-4.02 2.34Z\"></path><path fill=\"currentColor\" fill-opacity=\"0.4\" d=\"M8.02 12.13c.38-.22.87-.09 1.09.29l.86 1.5c.22.38.09.88-.29 1.09-.38.22-.86.09-1.09-.29l-.86-1.5c-.22-.38-.09-.87.29-1.09Z\"></path><path fill=\"currentColor\" fill-opacity=\"0.4\" d=\"M12.31 9.64c.38-.22.87-.09 1.09.29l.86 1.5c.22.38.09.87-.29 1.09s-.87.09-1.09-.29l-.86-1.5c-.22-.38-.09-.88.29-1.09Z\"></path></svg>",
+"plus": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>",
+"ellipsis": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/></svg>",
+"copy": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/></svg>",
+"rotate-cw": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/></svg>",
+"refresh-cw": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg>",
+"file-text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"/><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"/><path d=\"M10 9H8\"/><path d=\"M16 13H8\"/><path d=\"M16 17H8\"/></svg>",
+"x": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>",
+"trash-2": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/></svg>",
+"check": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6 9 17l-5-5\"/></svg>",
+"circle-x": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m15 9-6 6\"/><path d=\"m9 9 6 6\"/></svg>",
+"circle-alert": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/></svg>",
+"triangle-alert": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/></svg>",
+"chevron-right": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg>",
+"chevron-left": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m15 18-6-6 6-6\"/></svg>",
+"chevron-down": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m6 9 6 6 6-6\"/></svg>",
+"arrow-left": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/></svg>",
+"search": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/></svg>",
+"external-link": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 3h6v6\"/><path d=\"M10 14 21 3\"/><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"/></svg>",
+"boxes": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z\"/><path d=\"m7 16.5-4.74-2.85\"/><path d=\"m7 16.5 5-3\"/><path d=\"M7 16.5v5.17\"/><path d=\"M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z\"/><path d=\"m17 16.5-5-3\"/><path d=\"m17 16.5 4.74-2.85\"/><path d=\"M17 16.5v5.17\"/><path d=\"M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z\"/><path d=\"M12 8 7.26 5.15\"/><path d=\"m12 8 4.74-2.85\"/><path d=\"M12 13.5V8\"/></svg>",
+"bot": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 8V4H8\"/><rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"/><path d=\"M2 14h2\"/><path d=\"M20 14h2\"/><path d=\"M15 13v2\"/><path d=\"M9 13v2\"/></svg>",
+"package-plus": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 16h6\"/><path d=\"M19 13v6\"/><path d=\"M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14\"/><path d=\"m7.5 4.27 9 5.15\"/><polyline points=\"3.29 7 12 12 20.71 7\"/><line x1=\"12\" x2=\"12\" y1=\"22\" y2=\"12\"/></svg>",
+"square": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/></svg>",
+"square-check": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"m9 12 2 2 4-4\"/></svg>",
+"circle-check": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m9 12 2 2 4-4\"/></svg>",
+"pencil": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/><path d=\"m15 5 4 4\"/></svg>",
+"settings": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>",
+"palette": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z\"/><circle cx=\"13.5\" cy=\"6.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"17.5\" cy=\"10.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"6.5\" cy=\"12.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"8.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/></svg>",
+"panels-top-left": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M9 21V9\"/></svg>",
+"code-xml": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m18 16 4-4-4-4\"/><path d=\"m6 8-4 4 4 4\"/><path d=\"m14.5 4-5 16\"/></svg>",
+"keyboard": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 8h.01\"/><path d=\"M12 12h.01\"/><path d=\"M14 8h.01\"/><path d=\"M16 12h.01\"/><path d=\"M18 8h.01\"/><path d=\"M6 8h.01\"/><path d=\"M7 16h10\"/><path d=\"M8 12h.01\"/><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\"/></svg>",
+"puzzle": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z\"/></svg>",
+"bell": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.268 21a2 2 0 0 0 3.464 0\"/><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"/></svg>",
+"shield": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"/></svg>",
+"stethoscope": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11 2v2\"/><path d=\"M5 2v2\"/><path d=\"M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1\"/><path d=\"M8 15a6 6 0 0 0 12 0v-3\"/><circle cx=\"20\" cy=\"10\" r=\"2\"/></svg>",
+"info": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/></svg>",
+"server": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"20\" height=\"8\" x=\"2\" y=\"2\" rx=\"2\" ry=\"2\"/><rect width=\"20\" height=\"8\" x=\"2\" y=\"14\" rx=\"2\" ry=\"2\"/><line x1=\"6\" x2=\"6.01\" y1=\"6\" y2=\"6\"/><line x1=\"6\" x2=\"6.01\" y1=\"18\" y2=\"18\"/></svg>",
+"folder-git-2": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5\"/><circle cx=\"13\" cy=\"12\" r=\"2\"/><path d=\"M18 19c-2.8 0-5-2.2-5-5v8\"/><circle cx=\"20\" cy=\"19\" r=\"2\"/></svg>",
+"network": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"16\" y=\"16\" width=\"6\" height=\"6\" rx=\"1\"/><rect x=\"2\" y=\"16\" width=\"6\" height=\"6\" rx=\"1\"/><rect x=\"9\" y=\"2\" width=\"6\" height=\"6\" rx=\"1\"/><path d=\"M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3\"/><path d=\"M12 12V8\"/></svg>",
+"smartphone": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"20\" x=\"5\" y=\"2\" rx=\"2\" ry=\"2\"/><path d=\"M12 18h.01\"/></svg>",
+"sparkles": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/></svg>",
+"gauge": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m12 14 4-4\"/><path d=\"M3.34 19a10 10 0 1 1 17.32 0\"/></svg>",
+"square-terminal": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m7 11 2-2-2-2\"/><path d=\"M11 13h4\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" ry=\"2\"/></svg>",
+"blocks": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2\"/><rect x=\"14\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/></svg>",
+"sliders-horizontal": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 5H3\"/><path d=\"M12 19H3\"/><path d=\"M14 3v4\"/><path d=\"M16 17v4\"/><path d=\"M21 12h-9\"/><path d=\"M21 19h-5\"/><path d=\"M21 5h-7\"/><path d=\"M8 10v4\"/><path d=\"M8 12H3\"/></svg>",
+"message-square": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"/></svg>",
+"git-branch": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"6\" x2=\"6\" y1=\"3\" y2=\"15\"/><circle cx=\"18\" cy=\"6\" r=\"3\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><path d=\"M18 9a9 9 0 0 1-9 9\"/></svg>",
+"paperclip": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551\"/></svg>",
+"mic": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19v3\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><rect x=\"9\" y=\"2\" width=\"6\" height=\"13\" rx=\"3\"/></svg>",
+"arrow-up": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/></svg>",
+"settings-2": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 17H5\"/><path d=\"M19 7h-9\"/><circle cx=\"17\" cy=\"17\" r=\"3\"/><circle cx=\"7\" cy=\"7\" r=\"3\"/></svg>",
+"history": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/><path d=\"M12 7v5l4 2\"/></svg>",
+"calendar-clock": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 14v2.2l1.6 1\"/><path d=\"M16 2v4\"/><path d=\"M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5\"/><path d=\"M3 10h5\"/><path d=\"M8 2v4\"/><circle cx=\"16\" cy=\"16\" r=\"6\"/></svg>",
+"chart-no-axes-column": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 21v-6\"/><path d=\"M12 21V3\"/><path d=\"M19 21V9\"/></svg>"
+};
+// 追加：lucide-react-native 0.546.0
+Object.assign(ICONS, {
+"split": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 3h5v5\"></path><path d=\"M8 3H3v5\"></path><path d=\"M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3\"></path><path d=\"m15 9 6-6\"></path></svg>",
+"clock": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 6v6l4 2\"></path><circle cx=\"12\" cy=\"12\" r=\"10\"></circle></svg>",
+"chevron-up": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m18 15-6-6-6 6\"></path></svg>",
+"undo-2": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 14 4 9l5-5\"></path><path d=\"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11\"></path></svg>",
+"brain": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 18V5\"></path><path d=\"M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4\"></path><path d=\"M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5\"></path><path d=\"M17.997 5.125a4 4 0 0 1 2.526 5.77\"></path><path d=\"M18 18a4 4 0 0 0 2-7.464\"></path><path d=\"M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517\"></path><path d=\"M6 18a4 4 0 0 1-2-7.464\"></path><path d=\"M6.003 5.125a4 4 0 0 0-2.526 5.77\"></path></svg>",
+"coins": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"8\" cy=\"8\" r=\"6\"></circle><path d=\"M18.09 10.37A6 6 0 1 1 10.34 18\"></path><path d=\"M7 6h1v4\"></path><path d=\"m16.71 13.88.7.71-2.82 2.82\"></path></svg>",
+});
+
+// ───────── 示例数据（research/ui-tokens-supplement.md §3.3、§6） ─────────
+// 价格单位：每百万 token 美元；LiteLLM 行取自 snapshot.json，自定义价为虚构示例
+const PRICE_MODELS_INITIAL = [
+  { model: "glm-4.6", priceSource: null, price: null, cli: "Claude Code" },
+  { model: "qwen3-coder-plus", priceSource: null, price: null, cli: "Claude Code" },
+  { model: "orcarouter/Qwen3.8-27B-Instruct-MLX", priceSource: null, price: null, cli: "OMP · orcarouter" },
+  { model: "kimi-k2-turbo-preview", priceSource: null, price: null, cli: "Pi · Moonshot" },
+  { model: "deepseek-v3.2-exp", priceSource: "override", price: { input: 0.28, cachedInput: 0.028, cacheWrite: 0, output: 0.42 }, cli: "Claude Code" },
+  { model: "claude-sonnet-4-5", priceSource: "table", price: { input: 3, cachedInput: 0.3, cacheWrite: 3.75, output: 15 } },
+  { model: "claude-opus-4-5", priceSource: "table", price: { input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 25 } },
+  { model: "gpt-5-codex", priceSource: "table", price: { input: 1.25, cachedInput: 0.125, cacheWrite: 0, output: 10 } },
+  { model: "claude-haiku-4-5", priceSource: "table", price: { input: 1, cachedInput: 0.1, cacheWrite: 1.25, output: 5 } },
+  { model: "gpt-5", priceSource: "table", price: { input: 1.25, cachedInput: 0.125, cacheWrite: 0, output: 10 } },
+  { model: "claude-opus-4-1", priceSource: "table", price: { input: 15, cachedInput: 1.5, cacheWrite: 18.75, output: 75 } },
+  { model: "gemini-2.5-pro", priceSource: "table", price: { input: 1.25, cachedInput: 0.125, cacheWrite: 0, output: 10 } },
+  { model: "gpt-5-mini", priceSource: "table", price: { input: 0.25, cachedInput: 0.025, cacheWrite: 0, output: 2 } },
+  { model: "gemini-2.5-flash", priceSource: "table", price: { input: 0.3, cachedInput: 0.03, cacheWrite: 0, output: 2.5 } },
+];
+
+const PRICE_FIELDS = [
+  { field: "input", label: "输入", short: "入" },
+  { field: "cachedInput", label: "缓存读", short: "读" },
+  { field: "cacheWrite", label: "缓存写", short: "写" },
+  { field: "output", label: "输出", short: "出" },
+];
+
+// ───────── 每轮用量示例（ui-tokens-supplement.md §3.3） ─────────
+const TURNS = {
+  multi: {
+    durationMs: 132000,
+    rows: [
+      { model: "claude-sonnet-4-5", input: 14312, cache: 188600, output: 4580, reasoning: 0, cost: 0.189606, priced: true },
+      { model: "claude-haiku-4-5", input: 2100, cache: 12000, output: 640, reasoning: 0, cost: 0.0065, priced: true },
+    ],
+  },
+  single: {
+    durationMs: 47000,
+    rows: [{ model: "gpt-5-codex", input: 8420, cache: 51200, output: 3120, reasoning: 1856, cost: 0.048125, priced: true }],
+  },
+  unpriced: {
+    durationMs: 3900000,
+    rows: [
+      { model: "glm-4.6", input: 22840, cache: 310400, output: 6120, reasoning: 0, cost: 0, priced: false },
+      { model: "claude-haiku-4-5", input: 3200, cache: 18000, output: 910, reasoning: 0, cost: 0.00953, priced: true },
+    ],
+  },
+};
+
+// PROTOTYPE — 一次性原型，只回答「价格表与每轮用量面板应该长什么样」。不进仓库主线。
+// 用法：?s=<画面>&t=light|dark&bare=1（原尺寸截图）；← → 切画面
+
+// ───────── 画面清单 ─────────
+const FRAMES = {
+  settings: { w: 1440, h: 900, kind: "settings" },
+  phone: { w: 390, h: 844, kind: "settings", phone: true },
+  chat: { w: 1100, h: 560, kind: "chat" },
+  chatPhone: { w: 390, h: 700, kind: "chat", phone: true },
+};
+const SCREENS = [
+  { id: "P0", group: "价格表 · 现状", label: "现状", frame: "settings", v: "cur", note: "现在的实现：一张 7 列定宽表，横向滚动；无价格的行一进来就是 4 个 70 宽的输入框（可用文字宽 44）。" },
+  { id: "PM0", group: "价格表 · 现状", label: "现状 · 手机", frame: "phone", v: "cur" },
+
+  { id: "A1", group: "价格表 · 方案一 对齐表格", label: "默认", frame: "settings", v: "A" },
+  { id: "A2", group: "价格表 · 方案一 对齐表格", label: "LiteLLM 展开 + 搜索", frame: "settings", v: "A", set: { liteOpen: true, query: "claude", forceHover: "claude-sonnet-4-5" } },
+  { id: "A3", group: "价格表 · 方案一 对齐表格", label: "编辑已有 + 出错", frame: "settings", v: "A", set: { edit: ["deepseek-v3.2-exp"], errors: { "qwen3-coder-plus": "四列都要填数字。" }, drafts: { "qwen3-coder-plus": { input: "0.8", cachedInput: "", cacheWrite: "", output: "3.2" } } } },
+  { id: "A4", group: "价格表 · 方案一 对齐表格", label: "自定义组为空", frame: "settings", v: "A", set: { allPriced: true } },
+  { id: "AM", group: "价格表 · 方案一 对齐表格", label: "手机", frame: "phone", v: "A" },
+
+  { id: "B1", group: "价格表 · 方案二 卡片", label: "默认", frame: "settings", v: "B" },
+  { id: "B2", group: "价格表 · 方案二 卡片", label: "LiteLLM 展开 + 搜索", frame: "settings", v: "B", set: { liteOpen: true, query: "claude", forceHover: "claude-sonnet-4-5" } },
+  { id: "B3", group: "价格表 · 方案二 卡片", label: "编辑已有 + 出错", frame: "settings", v: "B", set: { edit: ["deepseek-v3.2-exp"], errors: { "qwen3-coder-plus": "四列都要填数字。" }, drafts: { "qwen3-coder-plus": { input: "0.8", cachedInput: "", cacheWrite: "", output: "3.2" } } } },
+  { id: "B4", group: "价格表 · 方案二 卡片", label: "自定义组为空", frame: "settings", v: "B", set: { allPriced: true } },
+  { id: "BM", group: "价格表 · 方案二 卡片", label: "手机", frame: "phone", v: "B" },
+
+  { id: "T0", group: "用量面板 · 现状", label: "两个模型", frame: "chat", v: "cur", turn: "multi", note: "现状 1:1 复刻：外框 max-width 280（含 padding 与边框），内层 min-width 280，内容向右溢出 18px；定位按外框 280 居中。" },
+  { id: "T0b", group: "用量面板 · 现状", label: "单模型带推理", frame: "chat", v: "cur", turn: "single", note: "输出格拼上「（1.9K 推理）」后只撑宽这一行，表头与数据行的列对不上。" },
+
+  { id: "U1", group: "用量面板 · 方案一 总览+明细", label: "两个模型", frame: "chat", v: "ov", turn: "multi" },
+  { id: "U2", group: "用量面板 · 方案一 总览+明细", label: "单模型带推理", frame: "chat", v: "ov", turn: "single" },
+  { id: "U3", group: "用量面板 · 方案一 总览+明细", label: "含无价格模型", frame: "chat", v: "ov", turn: "unpriced" },
+  { id: "UM", group: "用量面板 · 方案一 总览+明细", label: "手机点按", frame: "chatPhone", v: "ov", turn: "multi" },
+
+  { id: "V1", group: "用量面板 · 方案二 精修表格", label: "两个模型", frame: "chat", v: "tb", turn: "multi" },
+  { id: "V2", group: "用量面板 · 方案二 精修表格", label: "单模型带推理", frame: "chat", v: "tb", turn: "single" },
+  { id: "V3", group: "用量面板 · 方案二 精修表格", label: "含无价格模型", frame: "chat", v: "tb", turn: "unpriced" },
+  { id: "VM", group: "用量面板 · 方案二 精修表格", label: "手机点按", frame: "chatPhone", v: "tb", turn: "multi", note: "窄屏（<720）隐藏「缓存」「推理」两列，推理并入输出格的小字。" },
+];
+
+const params = new URLSearchParams(location.search);
+const S = {
+  screen: params.get("s") || "A1",
+  theme: params.get("t") || "light",
+  bare: params.get("bare") === "1",
+  tipOpen: true,
+};
+
+// ───────── 价格表状态 ─────────
+const P = {};
+function resetPrice(set = {}) {
+  P.models = PRICE_MODELS_INITIAL.map((m) => ({ ...m, origin: m.priceSource, price: m.price && { ...m.price } }));
+  if (set.allPriced) {
+    P.models = P.models.filter((m) => m.priceSource === "table");
+  }
+  P.drafts = {};
+  P.editing = new Set(set.edit || []);
+  P.errors = { ...(set.errors || {}) };
+  P.liteOpen = !!set.liteOpen;
+  P.query = set.query || "";
+  P.forceHover = set.forceHover || null;
+  P.pinned = new Set(); // 从 LiteLLM 组点「自定义」后临时进入自定义组的模型
+  for (const [m, d] of Object.entries(set.drafts || {})) P.drafts[m] = { ...d };
+  for (const m of P.editing) {
+    const row = P.models.find((x) => x.model === m);
+    if (row && !P.drafts[m]) P.drafts[m] = draftOf(row.price);
+  }
+}
+function applyScreen(id) {
+  const sc = SCREENS.find((x) => x.id === id) || SCREENS[0];
+  S.screen = sc.id;
+  S.tipOpen = true;
+  resetPrice(sc.set || {});
+}
+const screen = () => SCREENS.find((x) => x.id === S.screen) || SCREENS[0];
+
+// ───────── 小工具 ─────────
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function icon(name, size = 16, extra = "") {
+  const svg = ICONS[name];
+  if (!svg) return `<span style="width:${size}px;height:${size}px;display:inline-block"></span>`;
+  return svg.replace("<svg", `<svg width="${size}" height="${size}" ${extra}`);
+}
+function fmtPrice(v) {
+  if (!Number.isFinite(v)) return "—";
+  if (v === 0) return "0";
+  const t = v.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+  return t === "0" ? "<0.000001" : t;
+}
+function draftOf(price) {
+  const d = {};
+  for (const f of PRICE_FIELDS) d[f.field] = price ? fmtPrice(price[f.field]) : "";
+  return d;
+}
+function parseDraft(d) {
+  const out = {};
+  for (const f of PRICE_FIELDS) {
+    const t = (d?.[f.field] ?? "").trim();
+    const v = Number(t);
+    if (t === "" || !Number.isFinite(v) || v < 0) return null;
+    out[f.field] = v;
+  }
+  return out;
+}
+const tok = (v) => {
+  const r = Math.round(v);
+  if (Math.abs(r) >= 1e9) return (r / 1e9).toFixed(1) + "B";
+  if (Math.abs(r) >= 1e6) return (r / 1e6).toFixed(1) + "M";
+  if (Math.abs(r) >= 1e3) return (r / 1e3).toFixed(1) + "K";
+  return String(r);
+};
+const cost = (v) => (!Number.isFinite(v) || v <= 0 ? "$0.00" : v < 0.01 ? "$" + v.toFixed(4) : "$" + v.toFixed(2));
+function dur(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  if (h) return m ? `${h}h ${m}m` : `${h}h`;
+  return r ? `${m}m ${r}s` : `${m}m`;
+}
+const sw = (on, act) => `<div class="sw-wrap" data-act="${act}"><div class="sw ${on ? "on" : ""}"><i></i></div></div>`;
+
+// 分组：自定义组 = 无价格 + 自定义价 + 临时从 LiteLLM 拉进来编辑的
+function isCustomGroup(m) {
+  return m.priceSource !== "table" || P.pinned.has(m.model);
+}
+function customRows() {
+  const rows = P.models.filter(isCustomGroup);
+  // 无价格在前，自定义在后
+  return rows.sort((a, b) => (a.priceSource === null ? 0 : 1) - (b.priceSource === null ? 0 : 1));
+}
+function liteRows() {
+  const q = P.query.trim().toLowerCase();
+  return P.models.filter((m) => !isCustomGroup(m) && (!q || m.model.toLowerCase().includes(q)));
+}
+const liteTotal = () => P.models.filter((m) => !isCustomGroup(m)).length;
+const isEditing = (m) => m.priceSource === null || P.editing.has(m.model);
+
+// ───────── 设置页外壳（沿用上一个原型的 1:1 取值） ─────────
+const APP_ITEMS = [
+  ["settings", "通用"], ["palette", "外观"], ["panels-top-left", "Layout"], ["code-xml", "编辑器"], ["keyboard", "快捷键"],
+  ["puzzle", "集成"], ["bell", "通知"], ["shield", "权限"], ["stethoscope", "诊断"], ["info", "关于"],
+];
+const HOST_ITEMS = [
+  ["server", "概览"], ["folder-git-2", "项目"], ["network", "连接"], ["smartphone", "配对设备"], ["bot", "Agents"],
+  ["sparkles", "元数据"], ["folder-git-2", "Workspaces"], ["boxes", "Providers"], ["gauge", "价格表"], ["square-terminal", "Terminals"], ["blocks", "插件"],
+];
+function settingsSidebar() {
+  const item = ([ic, label], sel) =>
+    `<div class="snav-item ${sel ? "sel" : ""}">${icon(ic, 16)}<span class="ellipsis">${label}</span></div>`;
+  return `<nav class="snav">
+    <div class="snav-chrome"><div class="traffic"><i></i><i></i><i></i></div></div>
+    <div class="snav-back"><div class="rowmd">${icon("arrow-left", 14)}<span>返回</span></div></div>
+    <div class="snav-scroll no-scrollbar">
+      <div class="snav-list"><div class="snav-label">应用</div>${APP_ITEMS.map((x) => item(x, false)).join("")}</div>
+      <div class="snav-list"><div class="snav-label">主机</div>
+        <div class="snav-item snav-host"><span class="hdot"><i></i></span><span class="ellipsis">oxydeMacBook-Pro.local</span><span class="chev">${icon("chevron-down", 14)}</span></div>
+        ${HOST_ITEMS.map((x) => item(x, x[1] === "价格表")).join("")}
+      </div>
+    </div>
+  </nav>`;
+}
+function section({ title, count, trail = "", body, toggle, open, sub }) {
+  const chev = toggle ? `<span class="chev-ic ${open ? "open" : ""}">${icon("chevron-right", 14)}</span>` : "";
+  return `<section class="sec">
+    <div class="sec-h"><div class="sec-title ${toggle ? "tog" : ""}" ${toggle ? `data-act="${toggle}"` : ""}>${chev}${title}${count != null ? `<span class="sec-count">${count}</span>` : ""}</div>${trail ? `<div class="sec-trail">${trail}</div>` : ""}</div>
+    ${sub ? `<div class="sec-sub">${sub}</div>` : ""}
+    <div class="sec-c">${body}</div>
+  </section>`;
+}
+const LITE_SUB = "LiteLLM 快照，3 小时前更新 · 每百万 token 美元";
+const liteControls = () =>
+  `<div class="ctl"><span class="lbl">自动更新</span>${sw(true, "noop")}<button class="btn ghost" data-act="noop">${icon("refresh-cw", 14)}<span>立即刷新</span></button></div>`;
+
+// ═════════ 现状价格表 ═════════
+function currentPriceTable() {
+  const controls = liteControls();
+  const rows = PRICE_MODELS_INITIAL.map((m) => {
+    const priced = m.priceSource !== null;
+    const cells = PRICE_FIELDS.map((f) =>
+      priced
+        ? `<span class="c-price">${fmtPrice(m.price[f.field])}</span>`
+        : `<span class="c-price"><div class="input" style="padding:3px 12px"><input value="" /></div></span>`,
+    ).join("");
+    const source = m.priceSource === "table" ? "LiteLLM" : m.priceSource === "override" ? "自定义" : "—";
+    const act = priced
+      ? `<button class="btn ghost">自定义价格</button>`
+      : `<button class="btn default">保存</button>`;
+    return `<div class="cur-block"><div class="cur-row">
+      <div class="c-model"><span class="id">${esc(m.model)}</span>${priced ? "" : `<span class="badge warning cur-badge">无价格数据 · 估算 $0</span>`}</div>
+      ${cells}<span class="c-source">${source}</span><div class="c-actions">${act}</div></div>
+      <div class="cur-rowerr"></div></div>`;
+  }).join("");
+  const body = `<div class="card" style="overflow:hidden">
+    <div class="cur-sub">每百万 token 美元 · LiteLLM 快照，3 小时前更新，${PRICE_MODELS_INITIAL.length} 个模型</div>
+    <div class="cur-err" style="border:0"></div>
+    <div class="cur-scroll scroll" style="border:0"><div class="cur-table">
+      <div class="cur-hrow"><span class="c-model">模型</span>${PRICE_FIELDS.map((f) => `<span class="c-price">${f.label}</span>`).join("")}<span class="c-source">来源</span><span class="c-actions">操作</span></div>
+      ${rows}
+    </div></div>
+  </div>`;
+  return section({ title: "价格表", trail: controls, body });
+}
+
+// ═════════ 方案一：对齐表格 ═════════
+function priceInput(m, f) {
+  const d = P.drafts[m.model] || draftOf(null);
+  const bad = P.errors[m.model] && (d[f.field] ?? "").trim() === "";
+  return `<label class="pin ${bad ? "bad" : ""}"><span class="cur">$</span><input inputmode="decimal" placeholder="0.00" value="${esc(d[f.field] ?? "")}" data-draft="${esc(m.model)}" data-field="${f.field}" aria-label="${esc(m.model)} ${f.label}" /></label>`;
+}
+function statusLine(m) {
+  if (P.errors[m.model]) return `<div class="st-line2 err">${icon("circle-alert", 12)}<span class="ellipsis">${esc(P.errors[m.model])}</span></div>`;
+  if (m.priceSource === null) return `<div class="st-line2"><span class="dot amber"></span><span class="ellipsis">未定价 · 目前按 $0 估算</span></div>`;
+  if (P.pinned.has(m.model) && m.priceSource === "table") return `<div class="st-line2"><span class="dot muted"></span><span class="ellipsis">正在覆盖 LiteLLM 价格</span></div>`;
+  return `<div class="st-line2"><span class="dot accent"></span><span class="ellipsis">自定义价格${m.origin === "table" ? " · 覆盖 LiteLLM" : ""}</span></div>`;
+}
+function variantA() {
+  const phone = FRAMES[screen().frame].phone;
+  const rows = customRows();
+  let customBody;
+  if (rows.length === 0) {
+    customBody = `<div class="card"><div class="ta-empty"><span class="ok">${icon("circle-check", 16)}</span><span>所有模型都有价格。LiteLLM 查不到价格的模型出现时，会列在这里等你填写。</span></div></div>`;
+  } else {
+    const head = `<div class="ta-grid ta-head"><span>模型</span>${PRICE_FIELDS.map((f) => `<span class="r">${f.label}</span>`).join("")}<span></span></div>`;
+    const body = rows
+      .map((m) => {
+        const editing = isEditing(m);
+        const cells = PRICE_FIELDS.map((f) =>
+          editing ? priceInput(m, f) : `<span class="ta-val ${m.price[f.field] === 0 ? "zero" : ""}">${fmtPrice(m.price[f.field])}</span>`,
+        ).join("");
+        let act;
+        if (editing) {
+          const cancel = m.priceSource !== null ? `<button class="btn ghost" data-act="cancel" data-m="${esc(m.model)}">取消</button>` : "";
+          act = `${cancel}<button class="btn default" data-act="save" data-m="${esc(m.model)}">保存</button>`;
+        } else {
+          act = `<button class="btn ghost square" title="编辑" data-act="edit" data-m="${esc(m.model)}">${icon("pencil", 14)}</button><button class="btn ghost square" title="移除自定义价格" data-act="remove" data-m="${esc(m.model)}">${icon("undo-2", 14)}</button>`;
+        }
+        return `<div class="ta-grid ta-row ${m.priceSource === null ? "hl" : ""}">
+          <div class="ta-model"><span class="id ellipsis">${esc(m.model)}</span>${statusLine(m)}</div>
+          ${cells}<div class="ta-act">${act}</div></div>`;
+      })
+      .join("");
+    customBody = `<div class="card"><div class="ta-intro" style="border:0">LiteLLM 查不到价格的模型列在这里。按每百万 token 美元填写四列，0 表示免费。</div>${head}${body}</div>`;
+  }
+  const pending = rows.filter((m) => m.priceSource === null).length;
+  const s1 = section({ title: "自定义价格", count: rows.length || null, body: customBody, trail: pending ? `<span class="pill warn"><span class="dot amber"></span>${pending} 个待填写</span>` : "" });
+
+  const total = liteTotal();
+  let liteBody;
+  if (!P.liteOpen) {
+    liteBody = `<div class="card"><div class="lt-toggle" data-act="lite"><span>${icon("chevron-right", 14)}</span><span class="grow">${total} 个模型由 LiteLLM 定价</span><span>展开</span></div></div>`;
+  } else {
+    const list = liteRows();
+    const head = `<div class="ta-grid lt-grid ta-head" style="border-top:1px solid var(--row-border)"><span>模型</span>${phone ? "" : PRICE_FIELDS.map((f) => `<span class="r">${f.label}</span>`).join("")}<span></span></div>`;
+    const rowsHtml = list.length
+      ? list
+          .map((m) => {
+            const vals = phone
+              ? ""
+              : PRICE_FIELDS.map((f) => `<span class="ta-val ${m.price[f.field] === 0 ? "zero" : ""}">${fmtPrice(m.price[f.field])}</span>`).join("");
+            const phoneVals = phone
+              ? `<div class="st-line2 tnum">${PRICE_FIELDS.map((f) => `<span>${f.short} ${fmtPrice(m.price[f.field])}</span>`).join("<span>·</span>")}</div>`
+              : "";
+            return `<div class="ta-grid lt-grid lt-row ${P.forceHover === m.model ? "force" : ""}"><div class="ta-model"><span class="id ellipsis">${esc(m.model)}</span>${phoneVals}</div>${vals}<div class="ta-act"><button class="btn ghost xs hover-only" data-act="custom" data-m="${esc(m.model)}">自定义</button></div></div>`;
+          })
+          .join("")
+      : `<div class="lt-none">没有名称包含「${esc(P.query)}」的模型。</div>`;
+    liteBody = `<div class="card">
+      <div class="lt-toggle" data-act="lite"><span style="display:flex;transform:rotate(90deg)">${icon("chevron-right", 14)}</span><span class="grow">${total} 个模型由 LiteLLM 定价</span><span>收起</span></div>
+      <div class="lt-search">${icon("search", 14)}<input placeholder="搜索模型" value="${esc(P.query)}" data-act-input="query" /></div>
+      ${head}${rowsHtml}</div>`;
+  }
+  const s2 = section({ title: "LiteLLM 价格", count: total, trail: phone ? "" : liteControls(), body: liteBody, sub: LITE_SUB });
+  const phoneCtl = phone ? `<div class="card" style="margin-bottom:24px"><div class="row" style="min-height:48px"><span class="row-title">自动更新 LiteLLM 价格</span>${sw(true, "noop")}</div><div class="row" style="min-height:48px"><span class="row-title">立即刷新</span><button class="btn ghost square">${icon("refresh-cw", 14)}</button></div></div>` : "";
+  return s1 + s2 + phoneCtl;
+}
+
+// ═════════ 方案二：卡片 ═════════
+function variantB() {
+  const phone = FRAMES[screen().frame].phone;
+  const rows = customRows();
+  let customBody;
+  if (rows.length === 0) {
+    customBody = `<div class="card"><div class="cb-empty"><span class="ok">${icon("check", 16)}</span><div class="t1">所有模型都有价格</div><div class="t2">LiteLLM 查不到价格的模型出现时，会在这里等你填写。</div></div></div>`;
+  } else {
+    customBody = `<div class="cb-list">${rows
+      .map((m) => {
+        const editing = isEditing(m);
+        const pill =
+          m.priceSource === null
+            ? `<span class="pill warn"><span class="dot amber"></span>待定价</span>`
+            : P.pinned.has(m.model) && m.priceSource === "table"
+              ? `<span class="pill neutral">LiteLLM</span>`
+              : `<span class="pill accent">自定义${m.origin === "table" ? " · 覆盖 LiteLLM" : ""}</span>`;
+        const headActs = editing
+          ? ""
+          : `<button class="btn ghost square" title="编辑" data-act="edit" data-m="${esc(m.model)}">${icon("pencil", 14)}</button><button class="btn ghost" data-act="remove" data-m="${esc(m.model)}">${icon("undo-2", 14)}<span>移除</span></button>`;
+        const fields = PRICE_FIELDS.map((f) => {
+          const inner = editing
+            ? priceInput(m, f).replace("</label>", `<span class="unit">/M</span></label>`)
+            : `<div class="cb-read"><span class="cur">$</span>${fmtPrice(m.price[f.field])}<span class="unit">/M</span></div>`;
+          return `<div class="cb-field"><label>${f.label}</label>${inner}</div>`;
+        }).join("");
+        const err = P.errors[m.model];
+        const hint = err
+          ? `<div class="hint err">${esc(err)}</div>`
+          : `<div class="hint">${m.priceSource === null ? "保存前这个模型的用量按 $0 估算。四项都要填，0 表示免费。" : "四项都要填，0 表示免费。"}</div>`;
+        const foot = editing
+          ? `<div class="cb-foot">${hint}${m.priceSource !== null ? `<button class="btn ghost" data-act="cancel" data-m="${esc(m.model)}">取消</button>` : ""}<button class="btn default" data-act="save" data-m="${esc(m.model)}">保存价格</button></div>`
+          : "";
+        return `<div class="cb ${m.priceSource === null ? "pending" : ""}">
+          <div class="cb-head"><span class="id ellipsis">${esc(m.model)}</span>${pill}<span class="grow"></span>${headActs}</div>
+          <div class="cb-fields">${fields}</div>${foot}</div>`;
+      })
+      .join("")}</div>`;
+  }
+  const s1 = section({ title: "自定义价格", count: rows.length || null, body: customBody, sub: rows.length ? "LiteLLM 查不到价格的模型需要你来定价，单位是每百万 token 美元。" : "" });
+
+  const total = liteTotal();
+  let liteBody;
+  if (!P.liteOpen) {
+    liteBody = `<div class="card"><div class="lt-toggle" data-act="lite"><span>${icon("chevron-right", 14)}</span><span class="grow">${total} 个模型由 LiteLLM 定价</span><span>展开</span></div></div>`;
+  } else {
+    const list = liteRows();
+    const rowsHtml = list.length
+      ? list
+          .map(
+            (m) => `<div class="cl-row ${P.forceHover === m.model ? "force" : ""}"><span class="id ellipsis">${esc(m.model)}</span>
+            <span class="cl-prices">${PRICE_FIELDS.map((f) => `<span><span class="k">${f.label}</span><span class="${m.price[f.field] === 0 ? "z" : ""}">${fmtPrice(m.price[f.field])}</span></span>`).join("")}</span>
+            <button class="btn ghost xs hover-only" ${P.forceHover === m.model ? 'style="opacity:1"' : ""} data-act="custom" data-m="${esc(m.model)}">自定义</button></div>`,
+          )
+          .join("")
+      : `<div class="lt-none">没有名称包含「${esc(P.query)}」的模型。</div>`;
+    liteBody = `<div class="card">
+      <div class="lt-toggle" data-act="lite"><span style="display:flex;transform:rotate(90deg)">${icon("chevron-right", 14)}</span><span class="grow">${total} 个模型由 LiteLLM 定价</span><span>收起</span></div>
+      <div class="lt-search">${icon("search", 14)}<input placeholder="搜索模型" value="${esc(P.query)}" data-act-input="query" /></div>
+      ${rowsHtml}</div>`;
+  }
+  const s2 = section({ title: "LiteLLM 价格", count: total, trail: phone ? "" : liteControls(), body: liteBody, sub: LITE_SUB });
+  const phoneCtl = phone ? `<div class="card" style="margin-bottom:24px"><div class="row" style="min-height:48px"><span class="row-title">自动更新 LiteLLM 价格</span>${sw(true, "noop")}</div><div class="row" style="min-height:48px"><span class="row-title">立即刷新</span><button class="btn ghost square">${icon("refresh-cw", 14)}</button></div></div>` : "";
+  return s1 + s2 + phoneCtl;
+}
+
+function settingsFrame() {
+  const sc = screen();
+  const f = FRAMES[sc.frame];
+  const content = sc.v === "cur" ? currentPriceTable() : sc.v === "A" ? variantA() : variantB();
+  if (f.phone) {
+    return `<div class="app" style="flex-direction:column">
+      <div class="bhdr"><span class="back">${icon("arrow-left", 20)}</span><span class="btitle">价格表</span></div>
+      <div class="pscroll scroll"><div class="column" style="padding-top:8px">${content}</div></div></div>`;
+  }
+  return `<div class="app">${settingsSidebar()}<div class="pane">
+    <div class="shdr"><div class="hbadge">${icon("gauge", 16)}</div><span class="stitle">价格表</span></div>
+    <div class="pscroll scroll"><div class="column">${content}</div></div></div></div>`;
+}
+
+// ═════════ 每轮用量面板 ═════════
+function totalsOf(turn) {
+  const t = { input: 0, cache: 0, output: 0, reasoning: 0, cost: 0, priced: true };
+  for (const r of turn.rows) {
+    t.input += r.input; t.cache += r.cache; t.output += r.output; t.reasoning += r.reasoning; t.cost += r.cost;
+    t.priced = t.priced && r.priced;
+  }
+  return t;
+}
+function tipCurrent(turn) {
+  const t = totalsOf(turn);
+  const cells = (a, cls = "") => {
+    const out = a.reasoning > 0 ? `${tok(a.output)} （${tok(a.reasoning)} 推理）` : tok(a.output);
+    return `<span class="n ${cls}">${tok(a.input)}</span><span class="n ${cls}">${tok(a.cache)}</span><span class="n ${cls}">${out}</span><span class="n ${cls}">${cost(a.cost)}</span>`;
+  };
+  const rows = turn.rows
+    .map((r) => `<div class="r"><div class="m"><span class="nm">${esc(r.model)}</span>${r.priced ? "" : `<span class="amber">无价格数据</span>`}</div>${cells(r)}</div>`)
+    .join("");
+  const total = turn.rows.length >= 2 ? `<div class="r"><span class="m tot">合计</span>${cells(t, "tot")}</div>` : "";
+  return `<div class="tip cur" data-tip><div class="tc">
+    <div class="title">本轮用量</div>
+    <div class="r"><span class="m h">模型</span><span class="n h">输入</span><span class="n h">缓存</span><span class="n h">输出</span><span class="n h">估算成本</span></div>
+    ${rows}${total}
+    <div class="dur"><span class="h" style="color:var(--muted)">耗时</span><span class="tnum">${dur(turn.durationMs)}</span></div>
+    <div class="note">估算成本 · 按公开 API 价格计算</div></div></div>`;
+}
+function tipOverview(turn) {
+  const t = totalsOf(turn);
+  const stats = [["输入", tok(t.input)], ["缓存", tok(t.cache)], ["输出", tok(t.output)]];
+  if (t.reasoning > 0) stats.push(["其中推理", tok(t.reasoning)]);
+  const unpriced = turn.rows.filter((r) => !r.priced);
+  let models;
+  if (turn.rows.length === 1) {
+    const r = turn.rows[0];
+    models = `<div class="ov-sep"></div><div class="ov-single"><span class="k">模型</span><span class="ellipsis">${esc(r.model)}</span></div>`;
+  } else {
+    models = `<div class="ov-sep"></div><div class="ov-models"><div class="ov-mh">按模型</div>${turn.rows
+      .map(
+        (r) => `<div class="ov-m"><div class="l1"><span class="nm">${esc(r.model)}</span><span class="c ${r.priced ? "" : "none"}">${r.priced ? cost(r.cost) : "无价格"}</span></div>
+        <div class="l2">↑${tok(r.input)} · 缓存 ${tok(r.cache)} · ↓${tok(r.output)}${r.reasoning ? `（推理 ${tok(r.reasoning)}）` : ""}</div></div>`,
+      )
+      .join("")}</div>`;
+  }
+  const warn = unpriced.length
+    ? `<div class="warn"><span class="dot amber"></span><span>${unpriced.map((r) => esc(r.model)).join("、")} 没有价格数据，按 $0 计入。可在 设置 › 价格表 自定义。</span></div>`
+    : "";
+  return `<div class="tip ov" data-tip>
+    <div class="ov-top">
+      <div class="ov-h"><span>本轮用量</span><span class="dur">${icon("clock", 12)}${dur(turn.durationMs)}</span></div>
+      <div class="ov-cost"><span class="v ${t.priced ? "" : "unp"}">${cost(t.cost)}</span><span class="k">估算成本</span></div>
+      <div class="ov-stats">${stats.map(([k, v]) => `<div class="ov-stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("")}</div>
+    </div>
+    ${models}
+    <div class="ov-sep"></div>
+    <div class="ov-foot">${warn}<span>估算成本 · 按公开 API 价格计算</span></div>
+  </div>`;
+}
+function tipTable(turn, phone) {
+  const t = totalsOf(turn);
+  const showCache = !phone;
+  const showReason = !phone && t.reasoning > 0;
+  const cols = [phone ? "minmax(0, 1fr)" : "max-content", "auto"];
+  if (showCache) cols.push("auto");
+  cols.push("auto");
+  if (showReason) cols.push("auto");
+  cols.push("auto");
+  const out = (a) => (phone && a.reasoning > 0 ? `${tok(a.output)}<span class="rz">（推理 ${tok(a.reasoning)}）</span>` : tok(a.output));
+  const line = (name, a, cls = "", extra = "") => {
+    const c = [`<span class="nm ${cls}">${name}${extra}</span>`, `<span class="num ${cls}">${tok(a.input)}</span>`];
+    if (showCache) c.push(`<span class="num ${cls}">${tok(a.cache)}</span>`);
+    c.push(`<span class="num ${cls}">${out(a)}</span>`);
+    if (showReason) c.push(`<span class="num ${cls} ${cls ? "" : "rz"}">${a.reasoning ? tok(a.reasoning) : "—"}</span>`);
+    c.push(`<span class="num ${cls} ${a.priced === false ? "none" : ""}">${a.priced === false ? "—" : cost(a.cost)}</span>`);
+    return c.join("");
+  };
+  const hd = ["模型", "输入"];
+  if (showCache) hd.push("缓存");
+  hd.push("输出");
+  if (showReason) hd.push("推理");
+  hd.push("估算成本");
+  const header = hd.map((h, i) => `<span class="hd ${i ? "num" : ""}">${h}</span>`).join("");
+  const rows = turn.rows.map((r) => line(`<span>${esc(r.model)}</span>`, r, "", r.priced ? "" : `<span class="pill warn">无价格</span>`)).join("");
+  const total = turn.rows.length >= 2 ? line("合计", t, "tt") : "";
+  const unpriced = turn.rows.filter((r) => !r.priced);
+  const warn = unpriced.length ? `<span class="warn">${unpriced.map((r) => esc(r.model)).join("、")} 没有价格数据，按 $0 计入。</span>` : "";
+  return `<div class="tip tb" data-tip>
+    <div class="tb-h"><span class="t">本轮用量</span><span class="d">耗时 ${dur(turn.durationMs)}</span></div>
+    <div class="tb-g" style="grid-template-columns:${cols.join(" ")}">${header}${rows}${total}</div>
+    <div class="tb-note">估算成本 · 按公开 API 价格计算${warn}</div>
+  </div>`;
+}
+function chatFrame() {
+  const sc = screen();
+  const f = FRAMES[sc.frame];
+  const turn = TURNS[sc.turn];
+  const t = totalsOf(turn);
+  const tip = !S.tipOpen ? "" : sc.v === "cur" ? tipCurrent(turn) : sc.v === "ov" ? tipOverview(turn) : tipTable(turn, f.phone);
+  const segText = `· ↑${tok(t.input)} ↓${tok(t.output)} · `;
+  return `<div class="chat">
+    <div class="chat-top">${icon("message-square", 14)}<span>整理价格表的列宽</span></div>
+    <div class="stream">
+      <div class="umsg"><div class="bubble">把价格表的输入框对齐一下，顺便看看悬浮面板为什么是歪的。</div></div>
+      <div class="amsg">
+        <p>已经看过了。面板外框默认 <code>maxWidth</code> 是 280，内层又要求 <code>minWidth: 280</code>，再加上外框的内边距，内容会溢出边框。</p>
+        <p>另外，带推理 token 的行把「（N 推理）」拼进了输出列，这一列只在那一行变宽，所以各行的列对不齐。</p>
+      </div>
+      <div class="tfoot">
+        <span class="ic">${icon("copy", 14)}</span><span class="ic">${icon("split", 14)}</span>
+        <span class="worked">已工作 ${dur(turn.durationMs)}</span>
+        <span class="seg-wrap"><span class="useg ${S.tipOpen ? "on" : ""}" data-act="tip">${segText}<span class="${t.priced ? "" : "unp"}">${cost(t.cost)}</span></span>${tip}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// 浮层定位：与 tooltip.tsx 相同——在触发器上方 offset 8，水平居中，夹紧到窗口内 8px
+function placeTip() {
+  const frame = document.querySelector(".frame");
+  const tipEl = document.querySelector("[data-tip]");
+  const seg = document.querySelector(".useg");
+  if (!frame || !tipEl || !seg) return;
+  const scale = frame.getBoundingClientRect().width / frame.offsetWidth || 1;
+  const fr = frame.getBoundingClientRect();
+  const sr = seg.getBoundingClientRect();
+  const tw = tipEl.offsetWidth, th = tipEl.offsetHeight;
+  const segX = (sr.left - fr.left) / scale, segY = (sr.top - fr.top) / scale, segW = sr.width / scale;
+  let x = segX + (segW - tw) / 2;
+  let y = segY - th - 8;
+  x = Math.max(8, Math.min(frame.offsetWidth - tw - 8, x));
+  y = Math.max(8, y);
+  // tip 挂在 seg-wrap 里，换算成相对 seg-wrap 的坐标
+  const wrap = tipEl.parentElement.getBoundingClientRect();
+  tipEl.style.left = x - (wrap.left - fr.left) / scale + "px";
+  tipEl.style.top = y - (wrap.top - fr.top) / scale + "px";
+}
+
+// ───────── 外壳 ─────────
+function protoBar() {
+  const groups = [];
+  for (const sc of SCREENS) {
+    let g = groups.find((x) => x.name === sc.group);
+    if (!g) groups.push((g = { name: sc.group, items: [] }));
+    g.items.push(sc);
+  }
+  return `<div class="proto-bar">
+    ${groups.map((g) => `<div class="grp"><span class="grp-label">${g.name}</span>${g.items.map((sc) => `<button class="${sc.id === S.screen ? "on" : ""}" data-screen="${sc.id}">${sc.label}</button>`).join("")}</div>`).join('<span class="sep"></span>')}
+    <span class="sep"></span>
+    <div class="grp"><span class="grp-label">主题</span><button class="${S.theme === "light" ? "on" : ""}" data-theme="light">亮</button><button class="${S.theme === "dark" ? "on" : ""}" data-theme="dark">暗</button></div>
+    <div class="grp"><span class="grp-label">← → 切换画面</span></div>
+  </div>`;
+}
+function render() {
+  const sc = screen();
+  const f = FRAMES[sc.frame];
+  document.body.className = `proto ${S.bare ? "bare" : ""} ${S.theme === "dark" ? "page-dark" : ""}`;
+  const inner = f.kind === "settings" ? settingsFrame() : chatFrame();
+  const cap = `${sc.group} · ${sc.label}　${f.w}×${f.h}`;
+  const root = document.getElementById("root");
+  root.innerHTML = `${S.bare ? "" : protoBar()}<div class="proto-stage">
+    ${S.bare ? "" : `<div class="proto-caption">${esc(cap)}</div>`}
+    ${!S.bare && sc.note ? `<div class="proto-note">${esc(sc.note)}</div>` : ""}
+    <div class="frame-holder"><div class="frame-shadow ${f.phone ? "phone" : ""}"><div class="frame theme-${S.theme} ${f.phone ? "phone" : ""}" style="width:${f.w}px;height:${f.h}px">${inner}</div></div></div>
+  </div>`;
+  fit();
+  placeTip();
+  const url = new URL(location.href);
+  url.searchParams.set("s", S.screen);
+  url.searchParams.set("t", S.theme);
+  history.replaceState(null, "", url);
+}
+function fit() {
+  if (S.bare) return;
+  const holder = document.querySelector(".frame-holder");
+  const frame = document.querySelector(".frame");
+  const f = FRAMES[screen().frame];
+  const avail = window.innerWidth - 48;
+  const k = Math.min(1, avail / f.w);
+  frame.style.transform = k < 1 ? `scale(${k})` : "";
+  holder.style.width = f.w * k + "px";
+  holder.style.height = f.h * k + "px";
+}
+
+// ───────── 交互 ─────────
+document.addEventListener("click", (e) => {
+  const scBtn = e.target.closest("[data-screen]");
+  if (scBtn) { applyScreen(scBtn.dataset.screen); return render(); }
+  const th = e.target.closest("[data-theme]");
+  if (th) { S.theme = th.dataset.theme; return render(); }
+  const a = e.target.closest("[data-act]");
+  if (!a) return;
+  const m = a.dataset.m;
+  const row = m && P.models.find((x) => x.model === m);
+  switch (a.dataset.act) {
+    case "lite": P.liteOpen = !P.liteOpen; break;
+    case "tip": S.tipOpen = !S.tipOpen; break;
+    case "edit": P.editing.add(m); P.drafts[m] = draftOf(row.price); delete P.errors[m]; break;
+    case "custom": P.pinned.add(m); P.editing.add(m); P.drafts[m] = draftOf(row.price); P.forceHover = null; break;
+    case "cancel":
+      P.editing.delete(m); P.pinned.delete(m); delete P.drafts[m]; delete P.errors[m]; break;
+    case "save": {
+      const price = parseDraft(P.drafts[m]);
+      if (!price) { P.errors[m] = "四列都要填数字。"; break; }
+      row.price = price; row.priceSource = "override";
+      P.editing.delete(m); P.pinned.delete(m); delete P.drafts[m]; delete P.errors[m];
+      break;
+    }
+    case "remove": {
+      // 移除自定义价：原本 LiteLLM 有价 → 回到 LiteLLM；原本没价 → 回到待定价
+      const orig = PRICE_MODELS_INITIAL.find((x) => x.model === m);
+      if (row.origin === "table" && orig?.priceSource === "table") { row.priceSource = "table"; row.price = { ...orig.price }; }
+      else if (row.origin === "table") { row.priceSource = "table"; }
+      else { row.priceSource = null; row.price = null; P.drafts[m] = draftOf(null); }
+      P.editing.delete(m);
+      break;
+    }
+    default: return;
+  }
+  render();
+});
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.dataset.draft) {
+    const m = el.dataset.draft;
+    P.drafts[m] = { ...(P.drafts[m] || draftOf(null)), [el.dataset.field]: el.value };
+    return;
+  }
+  if (el.dataset.actInput === "query") {
+    P.query = el.value;
+    const pos = el.selectionStart;
+    render();
+    const again = document.querySelector('[data-act-input="query"]');
+    again.focus();
+    again.setSelectionRange(pos, pos);
+  }
+});
+document.addEventListener("mouseover", (e) => {
+  if (e.target.closest(".useg") && !S.tipOpen) { S.tipOpen = true; render(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, textarea, [contenteditable]")) return;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  const i = SCREENS.findIndex((x) => x.id === S.screen);
+  const n = SCREENS.length;
+  applyScreen(SCREENS[(i + (e.key === "ArrowRight" ? 1 : n - 1)) % n].id);
+  render();
+});
+window.addEventListener("resize", () => { fit(); placeTip(); });
+
+applyScreen(S.screen);
+render();
+
+</script>
+</body>
+</html>

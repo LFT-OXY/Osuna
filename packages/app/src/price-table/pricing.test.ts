@@ -3,16 +3,19 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { describeTimeAgo } from "@/usage/relative-time";
 import { renderUsageText } from "@/usage/text";
+import { resolvePriceTableLayout } from "./price-columns";
 import {
   EMPTY_PRICE_DRAFT,
   PRICE_COLUMNS,
   buildPriceDraft,
+  countUnpricedModels,
   dedupePricingModels,
   extractFailureReason,
+  describeLiteLLMSubtitle,
+  describeLiteLLMSummary,
   describeModelCount,
-  describePriceSource,
-  describePriceTableSubtitle,
   formatPriceCell,
+  groupPricingModels,
   parsePriceDraft,
   parsePriceInput,
   upsertPricingOverride,
@@ -181,51 +184,120 @@ describe("the reason a write was refused", () => {
   });
 });
 
-describe("price table descriptions", () => {
-  it("names where a row's price came from", () => {
-    expect(describePriceSource(model({ priceSource: "table" }))).toEqual({
-      key: "settings.host.priceTable.source.table",
+const UNPRICED = { priced: false, priceSource: null, matchedKey: null, pricePerMillion: null };
+const CUSTOM = { priceSource: "override" as const };
+
+describe("the two groups of the price table", () => {
+  const groupNames = (
+    models: UsagePricingModel[],
+    customizing: ReadonlySet<string> = new Set(),
+  ) => {
+    const groups = groupPricingModels(models, customizing);
+    return {
+      custom: groups.custom.map((row) => row.model),
+      litellm: groups.litellm.map((row) => row.model),
+    };
+  };
+
+  it("puts unpriced and custom-priced models in the custom group, unpriced first", () => {
+    const rows = [
+      model({ model: "claude-opus-5" }),
+      model({ model: "deepseek-v3.2", ...CUSTOM }),
+      model({ model: "glm-4.6", ...UNPRICED }),
+      model({ model: "gpt-5.5" }),
+      model({ model: "qwen3-coder", ...UNPRICED }),
+    ];
+
+    expect(groupNames(rows)).toEqual({
+      custom: ["glm-4.6", "qwen3-coder", "deepseek-v3.2"],
+      litellm: ["claude-opus-5", "gpt-5.5"],
     });
-    expect(describePriceSource(model({ priceSource: "override" }))).toEqual({
-      key: "settings.host.priceTable.source.override",
-    });
-    expect(
-      describePriceSource(
-        model({ priced: false, priceSource: null, matchedKey: null, pricePerMillion: null }),
-      ),
-    ).toEqual({ key: "settings.host.priceTable.source.none" });
   });
 
-  it("counts models with two keys rather than a plural suffix", () => {
+  it("keeps the daemon's order inside each group", () => {
+    const rows = [
+      model({ model: "b-custom", ...CUSTOM }),
+      model({ model: "z-table" }),
+      model({ model: "a-custom", ...CUSTOM }),
+      model({ model: "a-table" }),
+    ];
+
+    expect(groupNames(rows)).toEqual({
+      custom: ["b-custom", "a-custom"],
+      litellm: ["z-table", "a-table"],
+    });
+  });
+
+  it("moves a LiteLLM model being customized into the custom group only", () => {
+    const rows = [model({ model: "claude-opus-5" }), model({ model: "gpt-5.5" })];
+
+    expect(groupNames(rows, new Set(["gpt-5.5"]))).toEqual({
+      custom: ["gpt-5.5"],
+      litellm: ["claude-opus-5"],
+    });
+  });
+
+  it("gives each model of a deduplicated list exactly one row", () => {
+    const rows = dedupePricingModels([
+      model({ model: "glm-4.6", ...UNPRICED }),
+      model({ model: "glm-4.6", cli: "pi", backend: "zai", ...UNPRICED }),
+      model({ model: "gpt-5.5" }),
+      model({ model: "GPT-5.5", cli: "omp", backend: "openai" }),
+    ]);
+    const { custom, litellm } = groupNames(rows, new Set(["gpt-5.5"]));
+
+    expect([...custom, ...litellm].sort()).toEqual(["glm-4.6", "gpt-5.5"]);
+  });
+
+  it("counts the models that still have no price data", () => {
+    const { custom } = groupPricingModels(
+      [
+        model({ model: "glm-4.6", ...UNPRICED }),
+        model({ model: "deepseek-v3.2", ...CUSTOM }),
+        model({ model: "qwen3-coder", ...UNPRICED }),
+      ],
+      new Set(),
+    );
+
+    expect(countUnpricedModels(custom)).toBe(2);
+    expect(countUnpricedModels([])).toBe(0);
+  });
+});
+
+describe("the LiteLLM group's copy", () => {
+  it("says whether the prices are the bundled snapshot or fetched online", () => {
+    const fetchedAgo = describeTimeAgo("2026-06-19T09:00:00.000Z", NOW);
+
+    expect(
+      renderUsageText(i18n.t, describeLiteLLMSubtitle({ source: "snapshot", fetchedAgo })),
+    ).toBe("Bundled LiteLLM snapshot, updated 3h ago · $ per million tokens");
+    expect(renderUsageText(i18n.t, describeLiteLLMSubtitle({ source: "cache", fetchedAgo }))).toBe(
+      "LiteLLM prices fetched online, updated 3h ago · $ per million tokens",
+    );
+    // 协议保证 `fetchedAt` 非空，所以描述不出来时不替 daemon 断言「刚刚更新」。
+    expect(
+      renderUsageText(i18n.t, describeLiteLLMSubtitle({ source: "snapshot", fetchedAgo: null })),
+    ).toBe("Bundled LiteLLM snapshot, updated — · $ per million tokens");
+  });
+
+  it("counts the folded models with two keys rather than a plural suffix", () => {
     expect(describeModelCount(1)).toEqual({ key: "settings.host.priceTable.modelCountOne" });
     expect(describeModelCount(7)).toEqual({
       key: "settings.host.priceTable.modelCountMany",
       params: { count: 7 },
     });
-  });
-
-  it("renders the subtitle the card shows", () => {
-    const subtitle = describePriceTableSubtitle({
-      fetchedAgo: describeTimeAgo("2026-06-19T09:00:00.000Z", NOW),
-      modelCount: 7,
-    });
-    expect(renderUsageText(i18n.t, subtitle)).toBe(
-      "$ per million tokens · LiteLLM snapshot, updated 3h ago, 7 models",
-    );
-    // 协议保证 `fetchedAt` 非空，所以描述不出来时不替 daemon 断言「刚刚更新」。
-    expect(
-      renderUsageText(i18n.t, describePriceTableSubtitle({ fetchedAgo: null, modelCount: 1 })),
-    ).toBe("$ per million tokens · LiteLLM snapshot, updated —, 1 model");
+    expect(renderUsageText(i18n.t, describeLiteLLMSummary(1))).toBe("1 model priced by LiteLLM");
+    expect(renderUsageText(i18n.t, describeLiteLLMSummary(9))).toBe("9 models priced by LiteLLM");
   });
 
   it("has a key for every runtime-assembled name", () => {
     for (const key of [
-      "settings.host.priceTable.source.table",
-      "settings.host.priceTable.source.override",
-      "settings.host.priceTable.source.none",
       "settings.host.priceTable.modelCountOne",
       "settings.host.priceTable.modelCountMany",
+      "settings.host.priceTable.litellmGroup.subtitle.snapshot",
+      "settings.host.priceTable.litellmGroup.subtitle.cache",
       ...PRICE_COLUMNS.map((column) => column.labelKey),
+      ...PRICE_COLUMNS.map((column) => column.shortLabelKey),
       "usage.common.time.justNow",
       "usage.common.time.minutesAgo",
       "usage.common.time.hoursAgo",
@@ -237,11 +309,30 @@ describe("price table descriptions", () => {
 
   it("keeps the four price columns in the order the table header prints them", () => {
     // 表头与单元格都从这一份读，所以这里锁住的是「第几列对应哪个字段」。
-    expect(PRICE_COLUMNS).toEqual([
-      { field: "input", labelKey: "settings.host.priceTable.columns.input" },
-      { field: "cachedInput", labelKey: "settings.host.priceTable.columns.cacheRead" },
-      { field: "cacheWrite", labelKey: "settings.host.priceTable.columns.cacheWrite" },
-      { field: "output", labelKey: "settings.host.priceTable.columns.output" },
+    expect(PRICE_COLUMNS.map((column) => [column.field, column.labelKey])).toEqual([
+      ["input", "settings.host.priceTable.columns.input"],
+      ["cachedInput", "settings.host.priceTable.columns.cacheRead"],
+      ["cacheWrite", "settings.host.priceTable.columns.cacheWrite"],
+      ["output", "settings.host.priceTable.columns.output"],
     ]);
+  });
+});
+
+describe("the price table layout", () => {
+  it("stacks the rows on a compact form factor whatever the width", () => {
+    expect(resolvePriceTableLayout({ contentWidth: 686, isCompact: true })).toBe("stacked");
+  });
+
+  it("keeps the aligned table in the full settings column", () => {
+    expect(resolvePriceTableLayout({ contentWidth: 686, isCompact: false })).toBe("table");
+  });
+
+  it("stacks the rows when a narrow desktop pane cannot fit the columns", () => {
+    expect(resolvePriceTableLayout({ contentWidth: 520, isCompact: false })).toBe("stacked");
+  });
+
+  it("uses the form factor until the section has been measured", () => {
+    expect(resolvePriceTableLayout({ contentWidth: null, isCompact: false })).toBe("table");
+    expect(resolvePriceTableLayout({ contentWidth: null, isCompact: true })).toBe("stacked");
   });
 });

@@ -2811,7 +2811,6 @@ export const ptBR: TranslationResources = {
       },
       priceTable: {
         title: "Tabela de preços",
-        subtitle: "$ por milhão de tokens · snapshot do LiteLLM, atualizado {{ago}}, {{models}}",
         modelCountOne: "1 modelo",
         modelCountMany: "{{count}} modelos",
         autoUpdate: "Atualização automática",
@@ -2828,19 +2827,39 @@ export const ptBR: TranslationResources = {
         save: "Salvar",
         saveFailed: "Não foi possível salvar este preço.",
         invalidPrice: "Digite um número nas quatro colunas.",
+        edit: "Editar",
+        editAccessibility: "Editar o preço personalizado de {{model}}",
+        customGroup: {
+          title: "Preços personalizados",
+          intro:
+            "Os modelos sem preço no LiteLLM aparecem aqui. Preencha as quatro colunas em $ por milhão de tokens; 0 significa grátis.",
+          empty: "Todos os modelos têm preço.",
+          unpricedCount: "Sem dados de preço {{count}}",
+        },
+        litellmGroup: {
+          title: "Preços do LiteLLM",
+          subtitle: {
+            snapshot: "Snapshot do LiteLLM incluído, atualizado {{ago}} · $ por milhão de tokens",
+            cache:
+              "Preços do LiteLLM baixados on-line, atualizados {{ago}} · $ por milhão de tokens",
+          },
+          summary: "{{models}} com preço do LiteLLM",
+          expand: "Mostrar",
+          collapse: "Ocultar",
+          autoUpdate: "Atualizar preços do LiteLLM automaticamente",
+        },
         columns: {
           model: "Modelo",
           input: "Entrada",
           cacheRead: "Leitura de cache",
           cacheWrite: "Escrita de cache",
           output: "Saída",
-          source: "Origem",
-          actions: "Ações",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Personalizado",
-          none: "—",
+          short: {
+            input: "Entrada {{price}}",
+            cacheRead: "Leitura {{price}}",
+            cacheWrite: "Escrita {{price}}",
+            output: "Saída {{price}}",
+          },
         },
       },
     },

@@ -2780,7 +2780,6 @@ export const ko: TranslationResources = {
       },
       priceTable: {
         title: "가격표",
-        subtitle: "100만 토큰당 달러 · LiteLLM 스냅샷, {{ago}} 업데이트, {{models}}",
         modelCountOne: "모델 1개",
         modelCountMany: "모델 {{count}}개",
         autoUpdate: "자동 업데이트",
@@ -2797,19 +2796,38 @@ export const ko: TranslationResources = {
         save: "저장",
         saveFailed: "이 가격을 저장할 수 없습니다.",
         invalidPrice: "네 열 모두에 숫자를 입력하세요.",
+        edit: "편집",
+        editAccessibility: "{{model}}의 맞춤 가격 편집",
+        customGroup: {
+          title: "맞춤 가격",
+          intro:
+            "LiteLLM에 가격이 없는 모델이 여기에 표시됩니다. 네 열 모두 100만 토큰당 달러로 입력하세요. 0은 무료입니다.",
+          empty: "모든 모델에 가격이 있습니다.",
+          unpricedCount: "가격 정보 없음 {{count}}",
+        },
+        litellmGroup: {
+          title: "LiteLLM 가격",
+          subtitle: {
+            snapshot: "내장 LiteLLM 스냅샷, {{ago}} 업데이트 · 100만 토큰당 달러",
+            cache: "온라인으로 받은 LiteLLM 가격, {{ago}} 업데이트 · 100만 토큰당 달러",
+          },
+          summary: "LiteLLM 가격이 적용된 {{models}}",
+          expand: "펼치기",
+          collapse: "접기",
+          autoUpdate: "LiteLLM 가격 자동 업데이트",
+        },
         columns: {
           model: "모델",
           input: "입력",
           cacheRead: "캐시 읽기",
           cacheWrite: "캐시 쓰기",
           output: "출력",
-          source: "출처",
-          actions: "작업",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "맞춤",
-          none: "—",
+          short: {
+            input: "입력 {{price}}",
+            cacheRead: "읽기 {{price}}",
+            cacheWrite: "쓰기 {{price}}",
+            output: "출력 {{price}}",
+          },
         },
       },
     },

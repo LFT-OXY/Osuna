@@ -2815,7 +2815,6 @@ export const ru: TranslationResources = {
       },
       priceTable: {
         title: "Таблица цен",
-        subtitle: "$ за миллион токенов · снимок LiteLLM, обновлён {{ago}}, {{models}}",
         modelCountOne: "1 модель",
         modelCountMany: "{{count}} моделей",
         autoUpdate: "Автообновление",
@@ -2832,19 +2831,38 @@ export const ru: TranslationResources = {
         save: "Сохранить",
         saveFailed: "Не удалось сохранить эту цену.",
         invalidPrice: "Введите число во все четыре столбца.",
+        edit: "Изменить",
+        editAccessibility: "Изменить свою цену для {{model}}",
+        customGroup: {
+          title: "Свои цены",
+          intro:
+            "Здесь перечислены модели, для которых у LiteLLM нет цены. Заполните все четыре столбца в $ за миллион токенов; 0 означает бесплатно.",
+          empty: "У всех моделей есть цена.",
+          unpricedCount: "Нет данных о цене: {{count}}",
+        },
+        litellmGroup: {
+          title: "Цены LiteLLM",
+          subtitle: {
+            snapshot: "Встроенный снимок LiteLLM, обновлён {{ago}} · $ за миллион токенов",
+            cache: "Цены LiteLLM из сети, обновлены {{ago}} · $ за миллион токенов",
+          },
+          summary: "Цены LiteLLM: {{models}}",
+          expand: "Показать",
+          collapse: "Скрыть",
+          autoUpdate: "Автообновление цен LiteLLM",
+        },
         columns: {
           model: "Модель",
           input: "Ввод",
           cacheRead: "Чтение кэша",
           cacheWrite: "Запись кэша",
           output: "Вывод",
-          source: "Источник",
-          actions: "Действия",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Своя",
-          none: "—",
+          short: {
+            input: "Ввод {{price}}",
+            cacheRead: "Чтение {{price}}",
+            cacheWrite: "Запись {{price}}",
+            output: "Вывод {{price}}",
+          },
         },
       },
     },
