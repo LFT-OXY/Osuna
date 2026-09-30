@@ -2,20 +2,20 @@ import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { getServerId } from "../support/helpers/server-id";
 import {
-  expectProviderDetailStacked,
-  expectProviderSelected,
-  expectProvidersListStacked,
+  expectProviderDetail,
+  expectProvidersList,
   goBackInSettings,
   openCompactSettings,
   openSettingsHost,
   openSettingsHostSection,
   providerRow,
+  returnToProvidersList,
   readProviderRowIds,
 } from "../support/helpers/settings";
 import { buildOpenProjectRoute, buildProviderSettingsRoute } from "@/utils/host-routes";
 
 const WIDE_VIEWPORT = { width: 1280, height: 800 };
-// 设置侧栏 320，内容区 580，放不下两列（736），又不到紧凑断点。
+// 设置侧栏 320，内容区 580，又不到紧凑断点。
 const NARROW_DESKTOP_VIEWPORT = { width: 900, height: 800 };
 const PHONE_VIEWPORT = { width: 390, height: 844 };
 
@@ -37,51 +37,52 @@ async function diagnoseFromMenu(page: Page, provider: string): Promise<void> {
   await expect(page.getByTestId("provider-diagnostic-sheet")).toHaveCount(0);
 }
 
-function readHistoryLength(page: Page): Promise<number> {
-  return page.evaluate(() => window.history.length);
-}
-
 test.describe("Settings providers list and detail", () => {
-  test("selects providers through the address on a wide window", async ({ page }) => {
+  test("pushes the detail and returns through the breadcrumb on a wide window", async ({
+    page,
+  }) => {
     const serverId = getServerId();
     await gotoAppShell(page);
     await openSettings(page);
     await openSettingsHost(page, serverId);
     await openSettingsHostSection(page, serverId, "providers");
 
+    await test.step("entering the section shows only the list", async () => {
+      await expectProvidersList(page, serverId);
+    });
+
     const [first, second] = await readTwoProviderIds(page);
 
-    await test.step("entering the section selects the first provider", async () => {
-      await expectProviderSelected(page, serverId, first);
+    await test.step("pressing a row pushes its detail", async () => {
+      await providerRow(page, second).click();
+      await expectProviderDetail(page, serverId, second);
+      await expect(page.getByTestId("settings-providers-breadcrumb")).toBeVisible();
     });
 
     await test.step("Diagnostic in the ⋯ menu runs the diagnostic in place", async () => {
-      await diagnoseFromMenu(page, first);
+      await diagnoseFromMenu(page, second);
     });
 
-    await test.step("pressing a row replaces the address with that provider", async () => {
-      const historyLength = await readHistoryLength(page);
-      await providerRow(page, second).click();
-      await expectProviderSelected(page, serverId, second);
-      await expect(providerRow(page, first)).not.toHaveAttribute("aria-selected", "true");
-      expect(await readHistoryLength(page)).toBe(historyLength);
+    await test.step("the breadcrumb returns to the list", async () => {
+      await returnToProvidersList(page);
+      await expectProvidersList(page, serverId);
     });
 
-    await test.step("opening a provider address directly selects it", async () => {
+    await test.step("browser Back returns from the detail to the list", async () => {
+      await providerRow(page, first).click();
+      await expectProviderDetail(page, serverId, first);
+      await page.goBack();
+      await expectProvidersList(page, serverId);
+    });
+
+    await test.step("opening a provider address directly shows its detail", async () => {
       await page.goto(buildProviderSettingsRoute(serverId, second));
-      await expectProviderSelected(page, serverId, second);
+      await expectProviderDetail(page, serverId, second);
     });
 
-    await test.step("an unknown provider address falls back to the first provider", async () => {
+    await test.step("an unknown provider address returns to the list", async () => {
       await page.goto(buildProviderSettingsRoute(serverId, "no-such-provider"));
-      await expectProviderSelected(page, serverId, first);
-    });
-
-    await test.step("narrowing keeps the selection and the breadcrumb returns to the list", async () => {
-      await page.setViewportSize(NARROW_DESKTOP_VIEWPORT);
-      await expectProviderDetailStacked(page, serverId, first);
-      await page.getByTestId("settings-providers-breadcrumb").click();
-      await expectProvidersListStacked(page, serverId);
+      await expectProvidersList(page, serverId);
     });
   });
 });
@@ -95,32 +96,32 @@ test.describe("Settings providers list and detail on a narrow desktop window", (
     await openSettings(page);
     await openSettingsHost(page, serverId);
     await openSettingsHostSection(page, serverId, "providers");
-    await expectProvidersListStacked(page, serverId);
+    await expectProvidersList(page, serverId);
     const [, second] = await readTwoProviderIds(page);
 
     await test.step("pressing a row pushes its detail", async () => {
       await providerRow(page, second).click();
-      await expectProviderDetailStacked(page, serverId, second);
+      await expectProviderDetail(page, serverId, second);
       await expect(page.getByTestId("settings-providers-breadcrumb")).toBeVisible();
     });
 
     await test.step("the breadcrumb returns to the list", async () => {
-      await page.getByTestId("settings-providers-breadcrumb").click();
-      await expectProvidersListStacked(page, serverId);
+      await returnToProvidersList(page);
+      await expectProvidersList(page, serverId);
     });
 
-    await test.step("resizing keeps the selected provider", async () => {
+    await test.step("resizing keeps the detail", async () => {
       await providerRow(page, second).click();
-      await expectProviderDetailStacked(page, serverId, second);
+      await expectProviderDetail(page, serverId, second);
       await page.setViewportSize(WIDE_VIEWPORT);
-      await expectProviderSelected(page, serverId, second);
+      await expectProviderDetail(page, serverId, second);
       await page.setViewportSize(NARROW_DESKTOP_VIEWPORT);
-      await expectProviderDetailStacked(page, serverId, second);
+      await expectProviderDetail(page, serverId, second);
     });
 
     await test.step("an unknown provider address returns to the list", async () => {
       await page.goto(buildProviderSettingsRoute(serverId, "no-such-provider"));
-      await expectProvidersListStacked(page, serverId);
+      await expectProvidersList(page, serverId);
     });
   });
 });
@@ -133,13 +134,13 @@ test.describe("Settings providers list and detail on a phone", () => {
     await gotoAppShell(page);
     await openCompactSettings(page, buildOpenProjectRoute());
     await openSettingsHostSection(page, serverId, "providers");
-    await expectProvidersListStacked(page, serverId);
+    await expectProvidersList(page, serverId);
     const [first] = await readTwoProviderIds(page);
 
     await test.step("pressing a row pushes its full-screen detail", async () => {
       const [label] = (await providerRow(page, first).innerText()).split("\n");
       await providerRow(page, first).click();
-      await expectProviderDetailStacked(page, serverId, first);
+      await expectProviderDetail(page, serverId, first);
       await expect(page.getByTestId("provider-detail-refresh")).toBeVisible();
       // 顶栏标题与页内头部块各显示一次名称。
       await expect(
@@ -158,12 +159,12 @@ test.describe("Settings providers list and detail on a phone", () => {
 
     await test.step("Back returns to the list", async () => {
       await goBackInSettings(page);
-      await expectProvidersListStacked(page, serverId);
+      await expectProvidersList(page, serverId);
     });
 
     await test.step("an unknown provider address returns to the list", async () => {
       await page.goto(buildProviderSettingsRoute(serverId, "no-such-provider"));
-      await expectProvidersListStacked(page, serverId);
+      await expectProvidersList(page, serverId);
     });
   });
 });

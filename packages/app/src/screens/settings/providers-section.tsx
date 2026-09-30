@@ -21,7 +21,6 @@ import {
 } from "@/provider-detail/status";
 import { ProviderIconFrame } from "@/provider-detail/icon-frame";
 import { ProviderCatalogDialog } from "./provider-catalog-dialog";
-import type { ProvidersLayout } from "./providers-layout";
 import { ChevronRight, Plus } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
@@ -34,8 +33,6 @@ interface ProviderRowProps {
   enabled: boolean;
   isToggling: boolean;
   isFirst: boolean;
-  isSelected: boolean;
-  showChevron: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
 }
@@ -53,8 +50,6 @@ function ProviderRow({
   enabled,
   isToggling,
   isFirst,
-  isSelected,
-  showChevron,
   onPress,
   onToggleEnabled,
 }: ProviderRowProps) {
@@ -78,15 +73,14 @@ function ProviderRow({
     },
     [def.id, onToggleEnabled],
   );
-  const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
   const rowStyle = useCallback(
     ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
       settingsStyles.row,
       !isFirst && settingsStyles.rowBorder,
-      (hovered || isSelected) && styles.rowHovered,
+      hovered && styles.rowHovered,
       pressed && styles.rowPressed,
     ],
-    [isFirst, isSelected],
+    [isFirst],
   );
 
   return (
@@ -95,8 +89,6 @@ function ProviderRow({
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={t("settings.providers.providerDetails", { name: def.label })}
-      accessibilityState={accessibilityState}
-      aria-selected={isSelected}
       testID={`provider-row-${def.id}`}
     >
       {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
@@ -117,12 +109,10 @@ function ProviderRow({
               disabled={isToggling}
               accessibilityLabel={t("settings.providers.enableProvider", { name: def.label })}
             />
-            {showChevron ? (
-              <ThemedChevronRight
-                size={ICON_SIZE.sm}
-                uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
-              />
-            ) : null}
+            <ThemedChevronRight
+              size={ICON_SIZE.sm}
+              uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
+            />
           </View>
         </>
       )}
@@ -151,18 +141,10 @@ function StatusLine({ status }: { status: ProviderStatusDisplay }) {
 
 export interface ProvidersSectionProps {
   serverId: string;
-  layout: ProvidersLayout;
-  // 两列布局下右侧详情对应的提供方，栈式不高亮。
-  selectedProvider: string | null;
   onSelectProvider: (providerId: string) => void;
 }
 
-export function ProvidersSection({
-  serverId,
-  layout,
-  selectedProvider,
-  onSelectProvider,
-}: ProvidersSectionProps) {
+export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectionProps) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { entries, isLoading } = useProvidersSnapshot(serverId);
@@ -173,7 +155,6 @@ export function ProvidersSection({
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
-  const highlightedProvider = layout === "split" ? selectedProvider : null;
   const hasServer = serverId.length > 0;
 
   const handleToggleEnabled = useCallback(
@@ -267,8 +248,6 @@ export function ProvidersSection({
                   enabled={entry.enabled ?? true}
                   isToggling={pendingProviderId === def.id}
                   isFirst={index === 0 && !hasErrorRowAbove}
-                  isSelected={highlightedProvider === def.id}
-                  showChevron={layout === "stacked"}
                   onPress={onSelectProvider}
                   onToggleEnabled={handleToggleEnabled}
                 />

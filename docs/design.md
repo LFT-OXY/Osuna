@@ -148,8 +148,6 @@ On web and Electron these surfaces and the composer are glass: `surfaceGlass` (t
 
 Settings detail pages, the projects detail page, and any list+detail content sit inside a centered, max-width 720 column (`packages/app/src/screens/settings-screen.tsx`, `packages/app/src/screens/projects-screen.tsx`). Lines stay readable, the eye does not have to track wide horizontal distances. Form modals carry their own narrower content frame (`packages/app/src/components/add-host-modal.tsx`).
 
-The Providers settings page is the one exception. In its two-column layout the frame widens to 1056: 16 padding on each side, a 280 list, a 24 gap, and the detail column capped at 720 (`packages/app/src/screens/settings/providers-layout.ts`). In the stacked layout the page goes back to the 720 column. When to use two columns is in [§9](#9-responsiveness).
-
 Workspace and chat surfaces use the full width — these are working surfaces, not reading surfaces. The composer carries `MAX_CONTENT_WIDTH` from `packages/app/src/constants/layout.ts` to keep lines readable while letting the workspace pane fill the rest.
 
 Sections sit apart. `<SettingsSection>` owns its own bottom margin; the next thing is wrapped in another `<SettingsSection>`. Its title is `label`, `medium`, `foregroundMuted`, 8px above the card; a `<SettingsGroup>` title above several sections is `body` `medium` in `foreground`. The agent-list `sectionHeading` carries the same `marginTop`/`marginBottom` rhythm (`packages/app/src/components/agent-list.tsx:511-517`). Adding `marginBottom` to a section is wrong.
@@ -189,12 +187,7 @@ The list+detail pattern is canonical and reused across surfaces. The settings sh
 
 The branching is one `useIsCompactFormFactor()` check at the top of the screen component. The list and the detail are the same components in both layouts; only the framing changes.
 
-A settings page can nest its own list+detail inside the settings detail pane when its items are peers the user switches between. Providers is the one instance (`packages/app/src/screens/settings/providers-page.tsx`). It decides from the measured width of the settings detail pane, not from the window, because the app sidebar can sit beside settings on desktop:
-
-- Two columns when the pane is at least 736 wide (16 + 280 list + 24 + 400 minimum detail + 16). On web the list is sticky. Selecting a row replaces the route, so Back does not step through earlier selections.
-- Stacked below 736, and always when `useIsCompactFormFactor()` is true. The list shows first and a row pushes the detail. On narrow desktop the header shows "Providers / {name}" with "Providers" returning to the list; on compact the detail gets the settings shell's `<BackHeader>`.
-
-Measure the pane with `onLayout` and neither render nor redirect until the first measurement; a guessed layout redirects the route for the wrong one.
+A settings page with its own list of items stacks the list and the detail inside the settings detail pane at every width. Providers is the instance (`packages/app/src/screens/settings/providers-page.tsx`): the section route shows the list, and a row pushes a route that shows only that provider's detail. On desktop the header shows "Providers / {name}" with "Providers" returning to the list; on compact the detail gets the settings shell's `<BackHeader>`. Both stay in the 720 column from [§7](#7-density-and-rhythm).
 
 The workspace screen (`packages/app/src/screens/workspace/workspace-screen.tsx`) follows a different but parallel rule: tabs collapse on compact, panes split on desktop. The sidebar (`packages/app/src/components/left-sidebar.tsx`) is overlaid on compact and pinned on desktop.
 

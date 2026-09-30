@@ -88,7 +88,6 @@ vi.mock("react-native", () => ({
     onHoverOut,
     accessibilityRole,
     accessibilityLabel,
-    accessibilityState,
     disabled,
     testID,
   }: {
@@ -100,7 +99,6 @@ vi.mock("react-native", () => ({
     onHoverOut?: () => void;
     accessibilityRole?: string;
     accessibilityLabel?: string;
-    accessibilityState?: { selected?: boolean };
     disabled?: boolean;
     testID?: string;
   }) =>
@@ -109,7 +107,6 @@ vi.mock("react-native", () => ({
       {
         role: accessibilityRole,
         "aria-label": accessibilityLabel,
-        "aria-selected": accessibilityState?.selected ? "true" : undefined,
         "aria-disabled": disabled ? "true" : undefined,
         "data-testid": testID,
         onClick: disabled ? undefined : onPress,
@@ -301,7 +298,6 @@ import {
   getAcpProviderCatalog,
 } from "@/hooks/use-acp-provider-catalog";
 import { ProvidersSection } from "./providers-section";
-import type { ProvidersLayout } from "./providers-layout";
 
 const catalog = getAcpProviderCatalog();
 const minimax = (() => {
@@ -411,18 +407,9 @@ describe("ProvidersSection", () => {
     vi.unstubAllGlobals();
   });
 
-  function render(
-    options: { layout?: ProvidersLayout; selectedProvider?: string | null } = {},
-  ): void {
+  function render(): void {
     act(() => {
-      root?.render(
-        <ProvidersSection
-          serverId="server-1"
-          layout={options.layout ?? "split"}
-          selectedProvider={options.selectedProvider ?? null}
-          onSelectProvider={selectProviderMock}
-        />,
-      );
+      root?.render(<ProvidersSection serverId="server-1" onSelectProvider={selectProviderMock} />);
     });
   }
 
@@ -456,7 +443,7 @@ describe("ProvidersSection", () => {
     expect(indexOfText(codexNodes, "Disabled")).toBeGreaterThanOrEqual(0);
   });
 
-  it("composes the row as brand icon, label, status line, then switch", () => {
+  it("composes the row as brand icon, label, status line, switch, then chevron", () => {
     snapshotState.entries = [claudeEntry];
     configState.config = makeConfig();
 
@@ -477,20 +464,8 @@ describe("ProvidersSection", () => {
     expect(statusDot).toBeGreaterThan(label);
     expect(statusText).toBeGreaterThan(statusDot);
     expect(switchEl).toBeGreaterThan(statusText);
-    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBe(-1);
+    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBeGreaterThan(switchEl);
     expect(indexOfText(nodes, "Available")).toBe(-1);
-  });
-
-  it("adds a chevron to each row in the stacked layout", () => {
-    snapshotState.entries = [claudeEntry];
-    configState.config = makeConfig();
-
-    render({ layout: "stacked" });
-
-    const nodes = descendants(findRow("Claude provider details"));
-    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBeGreaterThan(
-      indexOfMatches(nodes, '[role="switch"]'),
-    );
   });
 
   it.each([
@@ -546,20 +521,6 @@ describe("ProvidersSection", () => {
 
     expect(selectProviderMock).toHaveBeenCalledTimes(1);
     expect(selectProviderMock).toHaveBeenCalledWith("codex");
-  });
-
-  it("highlights the selected row only in the split layout", () => {
-    snapshotState.entries = [claudeEntry, disabledCodexEntry];
-    configState.config = makeConfig({ codex: { enabled: false } });
-
-    render({ selectedProvider: "codex" });
-
-    expect(findRow("Codex provider details").getAttribute("aria-selected")).toBe("true");
-    expect(findRow("Claude provider details").getAttribute("aria-selected")).toBeNull();
-
-    render({ layout: "stacked", selectedProvider: "codex" });
-
-    expect(findRow("Codex provider details").getAttribute("aria-selected")).toBeNull();
   });
 
   it("does not select the row when its switch is pressed", async () => {

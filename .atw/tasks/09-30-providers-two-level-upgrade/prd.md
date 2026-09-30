@@ -194,8 +194,8 @@
      - 有新版本时出现"升级"按钮，点击后转圈；失败时显示输出原文
      - daemon 不支持 `providerVersions` 时不显示版本
    - `provider-detail/index.test.tsx`：测试详情页的版块顺序，以及版本和安装指引互斥
-   - `providers-layout.test.ts`：跟着删掉的函数一起修改
-   - 手机和窄屏的导航沿用现有测试，宽屏改为同样的栈式断言
+   - `providers-view.test.ts`（原 `providers-layout.test.ts`）：跟着删掉的函数一起修改
+   - 列表 → 详情 → 返回的导航不做 jsdom 页面测试（需要 mock 路由，违反 `docs/testing.md`），由 Playwright 规格 `e2e/browser/settings-providers-list-detail.spec.ts` 覆盖：宽屏、窄桌面、手机三种宽度用同样的栈式断言
 
 原生端不做实机验收（见项目约定）。Web 和 Electron 用截图验收：列表、弹窗两组、升级转圈和失败状态、详情页顺序。
 

@@ -14,8 +14,7 @@ import {
   expectHostInjectMcpCard,
   expectHostActionCards,
   expectHostProvidersCard,
-  expectProviderSelected,
-  readProviderRowIds,
+  expectProvidersList,
   expectHostNoDaemonLifecycleRow,
   expectRetiredSidebarSectionsAbsent,
   expectHostPageVisible,
@@ -38,12 +37,10 @@ test.describe("Settings host page", () => {
       await expectSettingsHeader(page, "Agents");
       await expectHostInjectMcpCard(page);
     });
-    await test.step("providers section shows the providers list and selects the first one", async () => {
+    await test.step("providers section shows only the providers list", async () => {
       await expectHostProvidersCard(page, serverId);
       await expectSettingsHeader(page, "Providers");
-      const [firstProvider] = await readProviderRowIds(page);
-      if (!firstProvider) throw new Error("Expected at least one provider row.");
-      await expectProviderSelected(page, serverId, firstProvider);
+      await expectProvidersList(page, serverId);
     });
     await test.step("host section shows the host label and restart/remove action cards", async () => {
       await openHostSection(page, serverId, "host");

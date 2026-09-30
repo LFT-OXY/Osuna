@@ -15,10 +15,10 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Text } from "@/components/ui/text";
 import { ProviderDetailMenu } from "@/provider-detail/header";
 import { useProviderDetailHeader, useProviderDiagnosticActions } from "@/provider-detail/view";
-import { useStackedProvidersView } from "./providers-page";
+import { useProvidersView } from "./providers-page";
 
 /*
- * 栈式详情的页头。窄桌面是「Providers / {名称}」面包屑；手机是 BackHeader，
+ * 提供方详情的页头。桌面是「Providers / {名称}」面包屑；手机是 BackHeader，
  * 标题为提供方名称，右侧放仅图标的「刷新」和 ⋯ 菜单。正文还没显示详情（列表未到、主机未连接、
  * 地址里的提供方不存在）时，页头退回分区标题，和正文保持一致。
  */
@@ -26,7 +26,7 @@ import { useStackedProvidersView } from "./providers-page";
 const ThemedRotateCw = withUnistyles(RotateCw);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
-interface StackedProviderHeaderProps {
+interface ProviderHeaderProps {
   serverId: string;
   provider: string;
   // 正文不是详情时显示的分区标题，也是面包屑的上一级。
@@ -38,11 +38,11 @@ export function ProvidersBreadcrumb({
   provider,
   sectionTitle,
   onPressProviders,
-}: StackedProviderHeaderProps & { onPressProviders: () => void }) {
-  const stackedView = useStackedProvidersView(serverId, provider);
+}: ProviderHeaderProps & { onPressProviders: () => void }) {
+  const providersView = useProvidersView(serverId, provider);
   const { label } = useProviderDetailHeader(serverId, provider);
 
-  if (stackedView.kind !== "detail") {
+  if (providersView.kind !== "detail") {
     return <ScreenTitle testID="settings-detail-header-title">{sectionTitle}</ScreenTitle>;
   }
 
@@ -68,9 +68,9 @@ export function ProviderDetailBackHeader({
   provider,
   sectionTitle,
   onBack,
-}: StackedProviderHeaderProps & { onBack: () => void }) {
+}: ProviderHeaderProps & { onBack: () => void }) {
   const { t } = useTranslation();
-  const stackedView = useStackedProvidersView(serverId, provider);
+  const providersView = useProvidersView(serverId, provider);
   const {
     label,
     isRefreshing,
@@ -144,7 +144,7 @@ export function ProviderDetailBackHeader({
     ],
   );
 
-  if (stackedView.kind !== "detail") {
+  if (providersView.kind !== "detail") {
     return <BackHeader title={sectionTitle} onBack={onBack} borderless />;
   }
 
