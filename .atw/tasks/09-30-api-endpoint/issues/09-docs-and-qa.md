@@ -10,10 +10,10 @@
 **Blocked by:** 01, 02, 03, 04, 05, 06, 07, 08
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] `docs/custom-providers.md` 更新完成，并遵守 CLAUDE.md 的写文档规范：把内容融入已有的章节，不在末尾追加段落。
-- [ ] ADR 0004 与实现一致。
-- [ ] 词汇表的 API endpoint 词条与界面文案一致。
-- [ ] 截图齐全，放在任务目录下，覆盖上面列出的全部界面和两种主题。
-- [ ] 截图过程中，没有使用开发者真实的 `~/.claude` 和 `~/.codex`：用临时的 `CLAUDE_CONFIG_DIR` 和 `CODEX_HOME` 启动 dev daemon，上游用假服务或测试 key。
+- [x] `docs/custom-providers.md` 更新完成，并遵守 CLAUDE.md 的写文档规范：把内容融入已有的章节，不在末尾追加段落。
+- [x] ADR 0004 与实现一致。
+- [x] 词汇表的 API endpoint 词条与界面文案一致。
+- [x] 截图齐全，放在任务目录下，覆盖上面列出的全部界面和两种主题。
+- [x] 截图过程中，没有使用开发者真实的 `~/.claude` 和 `~/.codex`：用临时的 `CLAUDE_CONFIG_DIR` 和 `CODEX_HOME` 启动 dev daemon，上游用假服务或测试 key。
