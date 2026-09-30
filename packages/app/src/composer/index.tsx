@@ -92,7 +92,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
-import { useAgentProfiles } from "@/agent-profiles";
+import { AgentProfileGlyph, useAgentProfiles } from "@/agent-profiles";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
 import {
   useAgentAutocomplete,
@@ -706,6 +706,18 @@ function ComposerKeyboardRegistration({
   return null;
 }
 
+// profile 的 glyph 在这里画：通用的 autocomplete 引 agent-profiles 会把设置页整条依赖带进浏览器测试。
+function renderAgentProfileOptionIcon(option: AutocompleteOption): React.ReactElement | null {
+  if (!option.profileGlyph) return null;
+  return (
+    <AgentProfileGlyph
+      icon={option.profileGlyph.icon}
+      color={option.profileGlyph.color}
+      fallbackIcon={option.Icon}
+    />
+  );
+}
+
 function ComposerAutocomplete(props: React.ComponentProps<typeof AutocompletePopover>) {
   const { isActiveComposer } = useComposerKeyboardScope();
   return <AutocompletePopover {...props} visible={isActiveComposer && props.visible} />;
@@ -1148,6 +1160,7 @@ function ComposerAutocompleteBinding({
       emptyText={autocomplete.emptyText}
       footerText={autocomplete.footerText}
       groupNotices={autocomplete.groupNotices}
+      renderOptionIcon={renderAgentProfileOptionIcon}
     />
   );
 }

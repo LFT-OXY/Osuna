@@ -21,6 +21,7 @@ import {
   Autocomplete,
   type AutocompleteGroupNotices,
   type AutocompleteOption,
+  type AutocompleteOptionIconRenderer,
 } from "@/components/ui/autocomplete";
 import { hasSelectableAutocompleteOption } from "@/components/ui/autocomplete-utils";
 import {
@@ -71,6 +72,7 @@ interface AutocompletePopoverProps {
   emptyText?: string;
   footerText?: string;
   groupNotices?: AutocompleteGroupNotices;
+  renderOptionIcon?: AutocompleteOptionIconRenderer;
 }
 
 export function AutocompletePopover({
@@ -86,6 +88,7 @@ export function AutocompletePopover({
   emptyText,
   footerText,
   groupNotices,
+  renderOptionIcon,
 }: AutocompletePopoverProps): ReactElement | null {
   "use no memo";
   // React Compiler memoizes effect captures by reading SharedValue.value during render.
@@ -188,6 +191,7 @@ export function AutocompletePopover({
             emptyText={emptyText}
             footerText={footerText}
             groupNotices={groupNotices}
+            renderOptionIcon={renderOptionIcon}
           />
         </Animated.View>
       </View>

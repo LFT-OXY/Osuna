@@ -11,7 +11,6 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Box, File, Folder, SquareSlash } from "lucide-react-native";
-import { AgentProfileGlyph, type AgentProfile } from "@/agent-profiles";
 import type { ProviderIconComponent } from "@/components/provider-icons";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -38,8 +37,8 @@ export interface AutocompleteOption {
   kind?: "command" | "skill" | "file" | "directory" | "agent";
   /** 行首图标；不传时按 kind 取。 */
   Icon?: ProviderIconComponent;
-  /** Agent profile 行：按 profile 的图标与颜色画行首，认不出图标时用 `Icon`。 */
-  profileGlyph?: Pick<AgentProfile, "icon" | "color">;
+  /** Agent profile 行的图标与颜色；由 `renderOptionIcon` 画出，并挂在图标槽上给 e2e 读。 */
+  profileGlyph?: { icon?: string; color?: string };
   disabled?: SelectableOption["disabled"];
 }
 
@@ -66,6 +65,7 @@ interface AutocompleteProps {
   footerText?: string;
   maxHeight?: number;
   groupNotices?: AutocompleteGroupNotices;
+  renderOptionIcon?: AutocompleteOptionIconRenderer;
 }
 
 const GROUP_TITLE_KEYS = {
@@ -106,21 +106,19 @@ function OptionIconSlot({
 
 const ThemedOptionIcon = withUnistyles(OptionIconSlot);
 
+/** 调用方接管某些行的行首，返回 null 时按 `Icon` 与 kind 画。 */
+export type AutocompleteOptionIconRenderer = (option: AutocompleteOption) => ReactElement | null;
+
 function AutocompleteOptionIcon({
-  kind,
-  Icon,
-  profileGlyph,
-}: Pick<AutocompleteOption, "kind" | "Icon" | "profileGlyph">) {
-  if (profileGlyph) {
-    return (
-      <AgentProfileGlyph
-        icon={profileGlyph.icon}
-        color={profileGlyph.color}
-        size={ICON_SIZE.md}
-        fallbackIcon={Icon}
-      />
-    );
-  }
+  option,
+  renderOptionIcon,
+}: {
+  option: AutocompleteOption;
+  renderOptionIcon?: AutocompleteOptionIconRenderer;
+}) {
+  const custom = renderOptionIcon?.(option);
+  if (custom) return custom;
+  const { kind, Icon } = option;
   if (Icon) return <ThemedOptionIcon Icon={Icon} size={ICON_SIZE.md} uniProps={mutedIconColor} />;
   switch (kind) {
     case "skill":
@@ -141,6 +139,7 @@ interface AutocompleteRowProps {
   onSelect: (option: AutocompleteOption) => void;
   onHighlight?: (index: number) => void;
   onRowLayout: (index: number, event: LayoutChangeEvent) => void;
+  renderOptionIcon?: AutocompleteOptionIconRenderer;
 }
 
 function AutocompleteRow({
@@ -150,6 +149,7 @@ function AutocompleteRow({
   onSelect,
   onHighlight,
   onRowLayout,
+  renderOptionIcon,
 }: AutocompleteRowProps) {
   const label = removeBoltGlyphs(option.label) ?? option.label;
   const description = removeBoltGlyphs(option.description);
@@ -197,11 +197,7 @@ function AutocompleteRow({
           testID={profileGlyph ? "agent-profile-glyph" : undefined}
           dataSet={profileGlyphDataSet}
         >
-          <AutocompleteOptionIcon
-            kind={option.kind}
-            Icon={option.Icon}
-            profileGlyph={profileGlyph}
-          />
+          <AutocompleteOptionIcon option={option} renderOptionIcon={renderOptionIcon} />
         </View>
         <Text
           variant="label"
@@ -332,6 +328,7 @@ export function Autocomplete({
   footerText,
   maxHeight = 300,
   groupNotices,
+  renderOptionIcon,
 }: AutocompleteProps) {
   const { t } = useTranslation();
   const resolvedLoadingText = loadingText ?? t("common.states.loading");
@@ -501,6 +498,7 @@ export function Autocomplete({
         onSelect={onSelect}
         onHighlight={onHighlight}
         onRowLayout={handleRowLayout}
+        renderOptionIcon={renderOptionIcon}
       />,
     );
   });
