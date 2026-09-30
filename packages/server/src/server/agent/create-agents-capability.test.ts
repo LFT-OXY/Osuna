@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
-import { resolveCreateAgentsCapability } from "./create-agents-capability.js";
+import {
+  predictCreateAgentsCapability,
+  resolveCreateAgentsCapability,
+} from "./create-agents-capability.js";
 import type { PaseoToolCatalog, PaseoToolDefinition } from "./tools/types.js";
 
 const baseConfig: AgentSessionConfig = { provider: "codex", cwd: "/tmp/project" };
@@ -111,5 +114,63 @@ describe("resolveCreateAgentsCapability", () => {
       canCreateAgents: false,
       unavailableReason: "tools_not_delivered",
     });
+  });
+});
+
+describe("predictCreateAgentsCapability", () => {
+  test("checks the global gate, then the provider policy", () => {
+    const clientCapabilities = { supportsMcpServers: true };
+    expect(
+      predictCreateAgentsCapability({
+        gateReason: "tools_not_injected",
+        paseoToolPolicy: { enabled: false },
+        clientCapabilities,
+      }),
+    ).toEqual({ canCreateAgents: false, unavailableReason: "tools_not_injected" });
+    expect(
+      predictCreateAgentsCapability({
+        gateReason: null,
+        paseoToolPolicy: { disabledTools: ["create_agent"] },
+        clientCapabilities,
+      }),
+    ).toEqual({ canCreateAgents: false, unavailableReason: "create_agent_not_allowed" });
+  });
+
+  test("a client with native Paseo tools delivers create_agent without MCP", () => {
+    expect(
+      predictCreateAgentsCapability({
+        gateReason: null,
+        paseoToolPolicy: undefined,
+        clientCapabilities: { supportsMcpServers: false, supportsNativePaseoTools: true },
+      }),
+    ).toEqual({ canCreateAgents: true });
+  });
+
+  test("makes no prediction when MCP support is decided per session", () => {
+    // Pi 装没装 adapter 要按 cwd 起会话才知道。
+    expect(
+      predictCreateAgentsCapability({
+        gateReason: null,
+        paseoToolPolicy: undefined,
+        clientCapabilities: { supportsMcpServers: false, mcpServersDecidedPerSession: true },
+      }),
+    ).toBeNull();
+    expect(
+      predictCreateAgentsCapability({
+        gateReason: "tools_not_injected",
+        paseoToolPolicy: undefined,
+        clientCapabilities: { supportsMcpServers: false, mcpServersDecidedPerSession: true },
+      }),
+    ).toEqual({ canCreateAgents: false, unavailableReason: "tools_not_injected" });
+  });
+
+  test("a client that cannot take MCP servers predicts tools_not_delivered", () => {
+    expect(
+      predictCreateAgentsCapability({
+        gateReason: null,
+        paseoToolPolicy: undefined,
+        clientCapabilities: { supportsMcpServers: false },
+      }),
+    ).toEqual({ canCreateAgents: false, unavailableReason: "tools_not_delivered" });
   });
 });

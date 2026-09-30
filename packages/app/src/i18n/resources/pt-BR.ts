@@ -1627,6 +1627,7 @@ export const ptBR: TranslationResources = {
       toolsNotInjected: "As Osuna tools estão desativadas para este agente",
       toolsNotInjectedDetail:
         "Ative-as em Configurações → Host → Agentes e recarregue este agente.",
+      toolsNotInjectedDraftDetail: "Ative-as em Configurações → Host → Agentes.",
       openAgentsSettings: "Abrir configurações",
       mcpDisabled: "O MCP está desativado neste host",
       createAgentNotAllowed: "A política de Osuna tools deste provider não permite create_agent",

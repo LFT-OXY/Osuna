@@ -1575,6 +1575,7 @@ export const zhCN: TranslationResources = {
     agentMentions: {
       toolsNotInjected: "当前智能体未启用 Osuna tools",
       toolsNotInjectedDetail: "在设置 → Host → Agents 中开启后，需要重新加载当前智能体。",
+      toolsNotInjectedDraftDetail: "在设置 → Host → Agents 中开启。",
       openAgentsSettings: "去开启",
       mcpDisabled: "Host 已关闭 MCP",
       createAgentNotAllowed: "当前 provider 的 Osuna tools 策略未允许 create_agent",

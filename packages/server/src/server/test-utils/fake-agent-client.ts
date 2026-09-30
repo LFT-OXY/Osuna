@@ -77,6 +77,8 @@ export interface TestAgentClientOptions {
   closeSession?: () => Promise<void>;
   onStartTurn?: (prompt: AgentPromptInput) => void;
   supportsMcpServers?: boolean;
+  /** 像 Pi 一样声明 client 上的 MCP 支持要按会话决定。 */
+  mcpServersDecidedPerSession?: boolean;
   /** 替换内置目录；reject 时 provider 快照停在 `error`。 */
   fetchCatalog?: () => Promise<ProviderCatalog>;
 }
@@ -1240,6 +1242,7 @@ class FakeAgentClient implements AgentClient {
     this.capabilities = {
       ...TEST_CAPABILITIES,
       supportsMcpServers: options.supportsMcpServers === true,
+      ...(options.mcpServersDecidedPerSession ? { mcpServersDecidedPerSession: true } : {}),
     };
   }
 

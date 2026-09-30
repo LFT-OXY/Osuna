@@ -155,6 +155,7 @@ import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-sto
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
+import type { PaseoToolsGate } from "./agent/create-agents-capability.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
@@ -944,6 +945,14 @@ export async function createPaseoDaemon(
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     logger,
   });
+  providerSnapshotManager.setCreateAgentsPredictor((provider, clientCapabilities) =>
+    agentManager.predictCreateAgentsCapability(provider, clientCapabilities),
+  );
+  // provider 快照的预测字段跟着开关走，所以改开关后要重发快照。
+  const setPaseoToolsGate = (gate: PaseoToolsGate) => {
+    agentManager.setPaseoToolsGate(gate);
+    providerSnapshotManager.refreshCreateAgentsPredictions();
+  };
   const syncPluginProviders = () => {
     agentManager.updateProviderRegistry(
       providerSnapshotManager.replacePluginProviders(pluginRuntime.getProviderRegistrations()),
@@ -1461,7 +1470,7 @@ export async function createPaseoDaemon(
     agentProviderRuntime.setPaseoToolCatalog(enabled ? createAgentToolCatalog({}) : null);
   };
   agentManager.setPaseoToolCatalogFactory(createAgentToolCatalog);
-  agentManager.setPaseoToolsGate({
+  setPaseoToolsGate({
     mcpEnabled: config.mcpEnabled !== false,
     injectIntoAgents: config.mcpInjectIntoAgents !== false,
   });
@@ -1637,7 +1646,7 @@ export async function createPaseoDaemon(
             agentMcpBaseUrl =
               !mcpEnabled || config.mcpInjectIntoAgents === false ? null : mcpBaseUrl;
             agentManager.setMcpBaseUrl(agentMcpBaseUrl);
-            agentManager.setPaseoToolsGate({
+            setPaseoToolsGate({
               mcpEnabled,
               injectIntoAgents: config.mcpInjectIntoAgents !== false,
             });
@@ -1645,12 +1654,12 @@ export async function createPaseoDaemon(
               mcpEnabled = value !== false;
               const inject = daemonConfigStore.get().mcp.injectIntoAgents !== false;
               agentManager.setMcpBaseUrl(mcpEnabled && inject ? mcpBaseUrl : null);
-              agentManager.setPaseoToolsGate({ mcpEnabled, injectIntoAgents: inject });
+              setPaseoToolsGate({ mcpEnabled, injectIntoAgents: inject });
               setAgentProviderToolsEnabled(mcpEnabled && inject);
             });
             daemonConfigStore.onFieldChange("mcp.injectIntoAgents", (value) => {
               agentManager.setMcpBaseUrl(mcpEnabled && value ? mcpBaseUrl : null);
-              agentManager.setPaseoToolsGate({ mcpEnabled, injectIntoAgents: value !== false });
+              setPaseoToolsGate({ mcpEnabled, injectIntoAgents: value !== false });
               setAgentProviderToolsEnabled(mcpEnabled && value !== false);
             });
             daemonConfigStore.onFieldChange("appendSystemPrompt", (value) => {

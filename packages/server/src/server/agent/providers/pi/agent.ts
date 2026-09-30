@@ -210,7 +210,7 @@ interface PiPersistenceMetadata {
 }
 
 function capabilitiesForClient(): AgentCapabilityFlags {
-  return withPiCapabilities(false);
+  return { ...withPiCapabilities(false), mcpServersDecidedPerSession: true };
 }
 
 function capabilitiesForSession(hasMcpConfig: boolean): AgentCapabilityFlags {

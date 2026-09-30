@@ -1610,6 +1610,7 @@ export const ja: TranslationResources = {
       toolsNotInjected: "このエージェントでは Osuna tools が無効です",
       toolsNotInjectedDetail:
         "設定 → Host → エージェント で有効にしてから、このエージェントを再読み込みしてください。",
+      toolsNotInjectedDraftDetail: "設定 → Host → エージェント で有効にしてください。",
       openAgentsSettings: "設定を開く",
       mcpDisabled: "この Host では MCP が無効です",
       createAgentNotAllowed:

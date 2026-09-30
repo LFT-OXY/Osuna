@@ -440,6 +440,9 @@ export const ProviderSnapshotEntrySchema = z.object({
   description: z.string().optional(),
   iconSvg: z.string().optional(),
   defaultModeId: z.string().nullable().optional(),
+  // 预测用这个 provider 新建的会话能否调用 create_agent，与 agent 快照同名同义；新建界面据此置灰。
+  canCreateAgents: z.boolean().optional(),
+  createAgentsUnavailableReason: z.string().optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({

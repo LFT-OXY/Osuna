@@ -88,6 +88,7 @@ import { stripTrailingRoutingBlock } from "./trailing-routing-block.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import {
+  predictCreateAgentsCapability,
   resolveCreateAgentsCapability,
   resolvePaseoToolsGateReason,
   type CreateAgentsCapability,
@@ -917,6 +918,18 @@ export class AgentManager {
 
   private get paseoToolsEnabled(): boolean {
     return this.paseoToolsGateReason === null;
+  }
+
+  /** 按当前开关与 provider 策略预测新建会话能否派发，供 provider 快照的预测字段用；null 表示不预测。 */
+  predictCreateAgentsCapability(
+    provider: AgentProvider,
+    clientCapabilities: AgentCapabilityFlags,
+  ): CreateAgentsCapability | null {
+    return predictCreateAgentsCapability({
+      gateReason: this.paseoToolsGateReason,
+      paseoToolPolicy: this.resolvePaseoToolPolicy(provider),
+      clientCapabilities,
+    });
   }
 
   setPaseoToolCatalogFactory(factory: PaseoToolCatalogFactory | null): void {

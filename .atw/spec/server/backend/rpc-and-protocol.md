@@ -379,6 +379,7 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 - Global gate: `AgentManager.setPaseoToolsGate({ mcpEnabled, injectIntoAgents })`, called from `bootstrap.ts` (initial, on listen, and in the `mcp.enabled` / `mcp.injectIntoAgents` field-change callbacks). There is no boolean setter any more.
 - Storage: `ManagedAgent.createAgentsCapability`, written only by `registerSession` (its `options.createAgentsCapability` is required); projected in `toAgentPayload`.
 - Wire: `AgentSnapshotPayloadSchema.canCreateAgents: z.boolean().optional()`, `createAgentsUnavailableReason: z.string().optional()`; `server_info.features.agentMentions`.
+- Prediction (ticket 10), for the new agent screen before any session exists: `predictCreateAgentsCapability({ gateReason, paseoToolPolicy, clientCapabilities })` → `CreateAgentsCapability | null`, wrapped by `AgentManager.predictCreateAgentsCapability(provider, clientCapabilities)`. `ProviderSnapshotManager.setCreateAgentsPredictor(predictor)` (wired once in `bootstrap.ts`) and `refreshCreateAgentsPredictions()`. Wire: the same two optional fields on `ProviderSnapshotEntrySchema` (and the hand-written `ProviderSnapshotEntry` in `protocol/agent-types.ts` and `server/agent/agent-sdk-types.ts`). Client flag `AgentCapabilityFlags.mcpServersDecidedPerSession?` (client only; Pi sets it in `capabilitiesForClient`).
 
 ### 3. Contracts
 
@@ -387,6 +388,9 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 - Delivery: a native catalog on the launch context decides alone (`getTool("create_agent")`); OpenCode's bridge manifest is policy-free and never counts. Otherwise the launch config must hold the daemon's internal `paseo` MCP server and the session must accept MCP. A user-owned server named `paseo` is not delivery.
 - The gate is read once, in `prepareSessionConfig`, and folded into `paseoToolPolicy` (`{ enabled: false }` when closed). `buildLaunchContext` reads only that policy, so a toggle between the two awaits cannot make the catalog and the snapshot disagree.
 - Stored (not loaded) agents from `buildStoredAgentPayload` omit both fields; sending to them resumes, which decides.
+- Prediction uses the same gate and policy, then only the client's declared channel: `supportsNativePaseoTools || supportsMcpServers` → true; `mcpServersDecidedPerSession` → `null`, no fields written (Pi: the adapter probe needs a session per cwd; decided with the user on 2026-09-30 so a working Pi is not grayed out); otherwise `tools_not_delivered`. Gate and policy reasons are still written for Pi. The daemon decides for real once the session exists, and attaches the Routing block only then.
+- Fields are overlaid in `ProviderSnapshotManager.withCreateAgentsPrediction`, called from `publishTargets` and `getOrCreateTarget`. The overlaid record goes through `identifyEntry`, so the prediction is part of `contentHash`: a toggle pushes `providers_snapshot_update` and `ifNoneMatch` sees the change. A `WeakMap` keyed by the catalog record keeps the overlaid record stable while the prediction is unchanged. Disabled providers and providers without a materialized client get no fields.
+- Republishing: `bootstrap.ts` wraps every gate change in a local `setPaseoToolsGate` that calls `refreshCreateAgentsPredictions()`. Provider policy changes need nothing extra: `set_daemon_config` → `prepareMutableProviderConfig().commit()` → `installGeneration` → `publishTargets`, and the predictor reads `daemonConfigStore.get().providers` live.
 
 ### 4. Validation & Error Matrix
 
@@ -395,6 +399,7 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 - Provider `paseoTools.enabled: false` or `disabledTools` has `create_agent` → `create_agent_not_allowed`.
 - Session without MCP support, native catalog without `create_agent`, or internal server not injected → `tools_not_delivered`.
 - Config changed while running → snapshot unchanged until reload/resume. Known gap: turning `mcp.enabled` off in the config file kills the MCP endpoint immediately, but the snapshot still says `true` (the app cannot change that key).
+- Provider snapshot prediction, by contrast, follows config changes immediately. Known gap: before the daemon listens, `mcpBaseUrl` is null, so an MCP-channel prediction of `true` can precede a session that gets `tools_not_delivered`.
 
 ### 5. Good/Base/Bad Cases
 
@@ -406,7 +411,9 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 
 - Daemon E2E `daemon-e2e/agent-create-agents-capability.e2e.test.ts`: each reason from one config (`mcpEnabled`, `mcpInjectIntoAgents`, `providerOverrides.<id>.paseoTools`, fake client `supportsMcpServers`), the true case with no reason, and `patchDaemonConfig` → unchanged → `refreshAgent` → updated.
 - Unit `agent/create-agents-capability.test.ts`: native catalog with/without `create_agent`, user-owned `paseo` server, internal server with/without session MCP support.
-- Protocol `messages.wire-compat.test.ts`: snapshot without the fields, with an unknown reason string, and `agentMentions` optional.
+- Protocol `messages.wire-compat.test.ts`: snapshot without the fields, with an unknown reason string, and `agentMentions` optional; provider snapshot entry likewise.
+- Daemon E2E `describe("provider snapshot create-agents prediction")` in the same file: each config → the predicted fields equal what `createAgent` then reports; `mcpServersDecidedPerSession` → no fields, session still decides; `patchDaemonConfig` of `mcp.injectIntoAgents` and `paseoTools` updates `getProvidersSnapshot` without a reload (`paseoTools` patches merge, so reset with `disabledTools: []`, not `{}`).
+- Unit `predictCreateAgentsCapability` in `agent/create-agents-capability.test.ts`: gate before policy, native channel, per-session channel → `null` unless gate/policy blocks.
 
 ### 7. Wrong vs Correct
 
@@ -416,6 +423,17 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 // Reads the live gate a second time; a toggle between prepare and launch leaves
 // the MCP server injected but no native catalog, and the snapshot misreports.
 if (this.paseoToolsEnabled && isPaseoToolPolicyEnabled(policy) && client.capabilities.supportsNativePaseoTools) {
+
+// Prediction added in the catalog session after hashing: snapshotHash and
+// sameSnapshotRecords never see it, so toggling injection pushes nothing.
+entries.map((entry) => ({ ...entry, canCreateAgents: predict(entry.provider) }));
+```
+
+#### Correct
+
+```ts
+// Overlay before publishing, re-identified so contentHash covers the prediction.
+const records = order.map((provider) => this.withCreateAgentsPrediction(record(provider)));
 ```
 
 #### Correct
@@ -498,7 +516,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 
 ### 2. Signatures
 
-- `StartAgentRunOptions.resolveRoutingBlock?: () => Promise<string | null>` and `SendPromptToAgentParams.resolveRoutingBlock?: (agent: ManagedAgent) => Promise<string | null>` (`agent/agent-prompt.ts`); `appendRoutingBlock(prompt, block)`.
+- `StartAgentRunOptions.resolveRoutingBlock?: () => Promise<string | null>`; `type RoutingBlockResolver = (agent: ManagedAgent) => Promise<string | null>` on `SendPromptToAgentParams.resolveRoutingBlock` and `StartCreatedAgentInitialPromptParams.resolveRoutingBlock` (`agent/agent-prompt.ts`), and on `CreateAgentFromSessionInput.resolveRoutingBlock` (`agent/create-agent/create.ts`, carried through `ResolvedCreateAgent` to `sendInitialPrompt`); `appendRoutingBlock(prompt, block)`.
 - `AgentRunOptions.submittedPrompt?: AgentPromptInput` (`agent/agent-sdk-types.ts`): the original, read by the `recordSubmittedPrompt` calls in `agent-manager.ts` `streamAgent` (after the turn is accepted) and `recordAcceptedSteer`.
 - `resolveRoutingBlock({ text, cwd, canCreateAgents, mentionDefaults, agentProfiles, providers })` (`agent/routing-block.ts`); `mentionDefaults: (providerId) => ProviderMentionDefaults | undefined` reads `daemonConfigStore.get().providers[id]?.mentionDefaults` and `agentProfiles` is `daemonConfigStore.get().agentProfiles ?? []`, both taken when the message is sent, so a `set_daemon_config` applies to the next message. `RoutingBlockSettings` is `{ modeId?, thinkingOptionId?, features? }`. Model and thinking fallbacks use `selectDefaultModel` / `resolveThinkingOptionId` shared with metadata generation.
 - Config: `ProviderMentionDefaultsSchema = { model?, thinkingOptionId?, modeId? }` (each `z.string().min(1)`) in `packages/protocol/src/provider-config.ts`, on both `ProviderOverrideSchema` (persisted `agents.providers.<id>`) and `MutableDaemonProviderConfigSchema` (wire). Documented in `docs/data-model.md` "Mention defaults".
@@ -506,7 +524,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 
 ### 3. Contracts
 
-- Only `session.ts` `handleSendAgentMessageRequest` passes `resolveRoutingBlock`. MCP `send_agent_prompt`, schedule fires, and finish notifications never do, so a parent forwarding the user's text cannot chain-dispatch.
+- Only client requests pass a resolver, built by `Session.routingBlockResolver(text)`: `handleSendAgentMessageRequest`, and `createSessionAgent` for the first message of `create_agent_request`, `agent.create.request`, and `workspace.create.request` (all three funnel into `createSessionAgent`; hub execution creates do not). The create path resolves against the freshly registered `ManagedAgent`, so its real `createAgentsCapability` decides, not the provider snapshot prediction. MCP `send_agent_prompt` and `create_agent` (`kind: "mcp"`), schedule fires, and finish notifications never pass one, so a parent forwarding the user's text cannot chain-dispatch.
 - `startAgentRun` runs `tryRunOutOfBand` on the original first, then calls the resolver. Out-of-band commands never wait on the provider snapshot.
 - Array prompts get a trailing text block; string prompts get `\n\n` + block. The timeline records `submittedPrompt`, reconciled by `clientMessageId`.
 - A profile mention (`paseo://agent/profile/<id>`) resolves to its profile's `provider` and stacks layers: the profile's `model` / `thinkingOptionId` / `modeId` first, then that provider's Mention defaults (`resolveAgainstCatalog(entry, layers)`). Its non-empty `featureValues` go to `settings.features` as written; they are never validated.
@@ -531,7 +549,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 
 ### 6. Tests Required
 
-- Daemon E2E `daemon-e2e/agent-mention-routing-block.e2e.test.ts`: exact block text and order, same provider twice, steer via permission park, sequential sends, `/fake-oob`, `mcpInjectIntoAgents: false`, disabled/unknown provider lines, MCP + schedule prompt arrays, recorded-as-written.
+- Daemon E2E `daemon-e2e/agent-mention-routing-block.e2e.test.ts`: exact block text and order, same provider twice, steer via permission park, sequential sends, `/fake-oob`, `mcpInjectIntoAgents: false`, disabled/unknown provider lines, MCP + schedule prompt arrays, recorded-as-written. `describe("Routing block for the first message of a new agent")`: `test.each` over the three create requests (`create_agent_request` as a raw frame through its own WebSocket, since `DaemonClient.createAgent` negotiates `agent.create.request`), each with and without injection, and MCP `create_agent` (needs `provider: "codex/<model>"`) receiving the text unchanged.
 - `agent-manager.test.ts` (`fakeCodexEmitting` turn/history items, resumed `streamHistory`, `importSession`): echo, force hydrate, prime, import rows and imported title.
 - Daemon E2E `describe("Mention defaults")` in the same file: `set_daemon_config` read-back and next-send effect, unset fields at runtime defaults, the four stale cases (stale model drops the thinking option, thinking outside the model, thinking against the default model valid and invalid), catalog `error` pass-through, wholesale replace, `removeProviders` clearing memory and `config.json`. The fake client's `fetchCatalog` option supplies thinking options or a rejecting catalog.
 - Daemon E2E `describe("Agent profile mentions")`: profile fields over Mention defaults over runtime defaults with `features`, stale profile values falling back to Mention defaults, deleted profile and profiles on a disabled or unregistered provider. `routing-block.test.ts` covers a profile on an `error` snapshot and on an `unavailable` provider.
@@ -555,9 +573,9 @@ settings: { ...(entry.defaultModeId ? { modeId: entry.defaultModeId } : {}) }
 ```ts
 await sendPromptToAgent({
   ...params,
-  resolveRoutingBlock: (agent) =>
-    resolveRoutingBlock({ text: msg.text, cwd: agent.cwd, canCreateAgents, mentionDefaults, providers }),
+  resolveRoutingBlock: this.routingBlockResolver(msg.text),
 });
+// createSessionAgent → createAgentCommand({ kind: "session", resolveRoutingBlock: this.routingBlockResolver(trimmedPrompt) })
 
 // Only a catalog mode, and always one when the catalog has modes.
 const modeIds = (entry.modes ?? []).map((mode) => mode.id);

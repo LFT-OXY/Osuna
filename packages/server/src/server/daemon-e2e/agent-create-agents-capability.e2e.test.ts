@@ -12,13 +12,18 @@ let daemon: TestPaseoDaemon | null = null;
 let client: DaemonClient | null = null;
 
 async function startDaemon(
-  options: Parameters<typeof createTestPaseoDaemon>[0] & { supportsMcpServers?: boolean },
+  options: Parameters<typeof createTestPaseoDaemon>[0] & {
+    supportsMcpServers?: boolean;
+    mcpServersDecidedPerSession?: boolean;
+  },
 ): Promise<{ daemon: TestPaseoDaemon; client: DaemonClient; cwd: string }> {
-  const { supportsMcpServers = true, ...daemonOptions } = options;
+  const { supportsMcpServers = true, mcpServersDecidedPerSession, ...daemonOptions } = options;
   const cwd = await mkdtemp(path.join(os.tmpdir(), "paseo-create-agents-cwd-"));
   tempDirs.push(cwd);
   daemon = await createTestPaseoDaemon({
-    agentClients: { codex: createTestAgentClient("codex", { supportsMcpServers }) },
+    agentClients: {
+      codex: createTestAgentClient("codex", { supportsMcpServers, mcpServersDecidedPerSession }),
+    },
     ...daemonOptions,
   });
   client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
@@ -31,6 +36,17 @@ function createAgentsFields(agent: AgentSnapshotPayload) {
   return {
     canCreateAgents: agent.canCreateAgents,
     createAgentsUnavailableReason: agent.createAgentsUnavailableReason,
+  };
+}
+
+/** provider 快照里 codex 条目的预测字段，新建界面据此置灰。 */
+async function predictedCreateAgentsFields(daemonClient: DaemonClient, cwd: string) {
+  const snapshot = await daemonClient.getProvidersSnapshot({ cwd });
+  const entry = snapshot.entries.find((candidate) => candidate.provider === "codex");
+  if (!entry) throw new Error("codex is missing from the provider snapshot");
+  return {
+    canCreateAgents: entry.canCreateAgents,
+    createAgentsUnavailableReason: entry.createAgentsUnavailableReason,
   };
 }
 
@@ -153,6 +169,91 @@ describe("agent snapshot create-agents capability", () => {
     expect(await fetchCreateAgentsFields(started.client, agent.id)).toEqual({
       canCreateAgents: false,
       createAgentsUnavailableReason: "create_agent_not_allowed",
+    });
+  });
+});
+
+describe("provider snapshot create-agents prediction", () => {
+  test.each([
+    { name: "everything on", options: {}, expected: { canCreateAgents: true } },
+    {
+      name: "MCP endpoint off",
+      options: { mcpEnabled: false },
+      expected: { canCreateAgents: false, createAgentsUnavailableReason: "mcp_disabled" },
+    },
+    {
+      name: "injection off",
+      options: { mcpInjectIntoAgents: false },
+      expected: { canCreateAgents: false, createAgentsUnavailableReason: "tools_not_injected" },
+    },
+    {
+      name: "provider policy disables create_agent",
+      options: {
+        providerOverrides: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+      },
+      expected: {
+        canCreateAgents: false,
+        createAgentsUnavailableReason: "create_agent_not_allowed",
+      },
+    },
+    {
+      name: "provider cannot take MCP servers",
+      options: { supportsMcpServers: false },
+      expected: { canCreateAgents: false, createAgentsUnavailableReason: "tools_not_delivered" },
+    },
+  ])("matches what a new session would get: $name", async ({ options, expected }) => {
+    const started = await startDaemon(options);
+
+    const predicted = await predictedCreateAgentsFields(started.client, started.cwd);
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    expect(predicted).toEqual({ createAgentsUnavailableReason: undefined, ...expected });
+    expect(createAgentsFields(agent)).toEqual(predicted);
+  });
+
+  test("makes no prediction when MCP support is decided per session, leaving it to the new session", async () => {
+    const started = await startDaemon({
+      supportsMcpServers: false,
+      mcpServersDecidedPerSession: true,
+    });
+
+    const predicted = await predictedCreateAgentsFields(started.client, started.cwd);
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    expect(predicted).toEqual({
+      canCreateAgents: undefined,
+      createAgentsUnavailableReason: undefined,
+    });
+    expect(createAgentsFields(agent)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "tools_not_delivered",
+    });
+  });
+
+  test("follows runtime changes to injection and provider policy", async () => {
+    const started = await startDaemon({});
+
+    await started.client.patchDaemonConfig({ mcp: { injectIntoAgents: false } });
+    expect(await predictedCreateAgentsFields(started.client, started.cwd)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "tools_not_injected",
+    });
+
+    await started.client.patchDaemonConfig({
+      mcp: { injectIntoAgents: true },
+      providers: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+    });
+    expect(await predictedCreateAgentsFields(started.client, started.cwd)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "create_agent_not_allowed",
+    });
+
+    await started.client.patchDaemonConfig({
+      providers: { codex: { paseoTools: { disabledTools: [] } } },
+    });
+    expect(await predictedCreateAgentsFields(started.client, started.cwd)).toEqual({
+      canCreateAgents: true,
+      createAgentsUnavailableReason: undefined,
     });
   });
 });

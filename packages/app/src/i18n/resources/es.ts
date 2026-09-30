@@ -1641,6 +1641,7 @@ export const es: TranslationResources = {
     agentMentions: {
       toolsNotInjected: "Las Osuna tools están desactivadas para este agente",
       toolsNotInjectedDetail: "Actívalas en Ajustes → Host → Agents y vuelve a cargar este agente.",
+      toolsNotInjectedDraftDetail: "Actívalas en Ajustes → Host → Agents.",
       openAgentsSettings: "Abrir ajustes",
       mcpDisabled: "MCP está desactivado en este host",
       createAgentNotAllowed: "La política de Osuna tools de este provider no permite create_agent",

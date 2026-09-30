@@ -1622,6 +1622,7 @@ export const ru: TranslationResources = {
       toolsNotInjected: "Для этого агента Osuna tools выключены",
       toolsNotInjectedDetail:
         "Включите их в Настройки → Host → Агенты, затем перезагрузите этого агента.",
+      toolsNotInjectedDraftDetail: "Включите их в Настройки → Host → Агенты.",
       openAgentsSettings: "Открыть настройки",
       mcpDisabled: "На этом хосте MCP выключен",
       createAgentNotAllowed: "Политика Osuna tools этого provider не разрешает create_agent",

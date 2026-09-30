@@ -1605,6 +1605,7 @@ export const ko: TranslationResources = {
     agentMentions: {
       toolsNotInjected: "이 에이전트에서 Osuna tools가 꺼져 있습니다",
       toolsNotInjectedDetail: "설정 → Host → 에이전트에서 켠 다음 이 에이전트를 다시 불러오세요.",
+      toolsNotInjectedDraftDetail: "설정 → Host → 에이전트에서 켜세요.",
       openAgentsSettings: "설정 열기",
       mcpDisabled: "이 Host에서 MCP가 꺼져 있습니다",
       createAgentNotAllowed: "이 provider의 Osuna tools 정책이 create_agent를 허용하지 않습니다",

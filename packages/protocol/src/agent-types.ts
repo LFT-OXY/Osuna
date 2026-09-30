@@ -126,6 +126,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  canCreateAgents?: boolean;
+  createAgentsUnavailableReason?: string;
 }
 
 export interface AgentFeatureToggle {

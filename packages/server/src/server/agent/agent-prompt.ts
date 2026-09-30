@@ -26,6 +26,9 @@ export type AgentRunController = Pick<
   reloadAgentSession(agentId: string): Promise<unknown>;
 };
 
+/** 按会话判定生成 Routing block；null 表示这条消息不附。只有客户端发来的用户消息会带。 */
+export type RoutingBlockResolver = (agent: ManagedAgent) => Promise<string | null>;
+
 export interface StartAgentRunOptions {
   replaceRunning?: boolean;
   activeTurnBehavior?: ActiveTurnBehavior;
@@ -265,7 +268,7 @@ export interface SendPromptToAgentParams {
    * Builds the Routing block for the loaded agent. Only user messages sent by a
    * client pass this; system-injected prompts never dispatch.
    */
-  resolveRoutingBlock?: (agent: ManagedAgent) => Promise<string | null>;
+  resolveRoutingBlock?: RoutingBlockResolver;
   logger: Logger;
 }
 
@@ -275,6 +278,8 @@ export interface StartCreatedAgentInitialPromptParams {
   snapshot?: ManagedAgent;
   prompt: AgentPromptInput | null;
   runOptions?: AgentRunOptions;
+  /** Only client create requests pass it. */
+  resolveRoutingBlock?: RoutingBlockResolver;
   logger: Logger;
 }
 
@@ -378,6 +383,7 @@ export async function startCreatedAgentInitialPrompt(
     return currentSnapshot;
   }
 
+  const resolveAgentRoutingBlock = params.resolveRoutingBlock;
   const dispatchResult = await startAgentRun(
     params.agentManager,
     params.agentId,
@@ -385,6 +391,8 @@ export async function startCreatedAgentInitialPrompt(
     params.logger,
     {
       runOptions: params.runOptions,
+      resolveRoutingBlock:
+        resolveAgentRoutingBlock && (() => resolveAgentRoutingBlock(currentSnapshot)),
     },
   );
 

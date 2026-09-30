@@ -132,7 +132,7 @@ Rules:
 - 在会话 create、resume、import、reload 时判定一次，运行中改开关不影响已运行的会话，reload 后才生效。
 - 原因码按 `mcp_disabled` → `tools_not_injected` → `create_agent_not_allowed` → `tools_not_delivered` 的顺序取第一个；能派发时不带原因码。已知缺口：用配置文件关掉 `mcp.enabled` 时 MCP 通道立即失效，但已运行会话的快照仍为 `true`（app 改不了这个开关，接受）。
 - agent 快照顶层新增可选字段 `canCreateAgents: boolean` 和 `createAgentsUnavailableReason: string`，后者是 `z.string()`，不用 enum。v1 的原因码：`mcp_disabled`、`tools_not_injected`、`create_agent_not_allowed`（provider 策略）、`tools_not_delivered`（通道没接通，如 Pi 没装 adapter、generic ACP 不支持 MCP、OpenCode 目录里没有）。app 认不出的原因码用通用文案。
-- provider 快照的每个 provider 条目加同名的预测字段，新建界面据此置灰（OpenCode 可能偏保守，已接受）；会话建好后，daemon 按实际判定结果决定附不附 Routing block。
+- provider 快照的每个 provider 条目加同名的预测字段，新建界面据此置灰；会话建好后，daemon 按实际判定结果决定附不附 Routing block。预测按全局开关、provider 策略和 client 声明的通道算，开关或策略改动后快照随即重推，不用重新加载。能否接 MCP 要起会话才知道的 provider（Pi，client 声明 `mcpServersDecidedPerSession`）只写开关与策略的原因码，通道不预测、不写字段，按可用处理（2026-09-30 与用户确认，取代原先"OpenCode 偏保守"的说法：OpenCode 走原生通道，可以准确预测）。
 - `injectIntoAgents` 保持默认关闭。
 - `server_info.features.agentMentions` 控制 `@` 智能体分组、提及智能体默认值卡片和 Routing block；`server_info.features.subagentCallLinks` 控制子智能体关联标签与工具名规范化，缺失时退回通用工具卡。两个开关分开。
 - 所有新字段都是可选的，wire schema 不加 transform；不加新权限（发 prompt 属于 `workspace.write`，mention 不扩大调用方的能力）。
@@ -162,8 +162,8 @@ Rules:
 
 - `@` 列表智能体分组在上、文件在下，输入后两组同时过滤。provider 按 Providers 设置的顺序排列，Agent profile 排在后面；只列已启用的 provider，以及 provider 已启用的 profile。profile 行显示它的名字、图标和颜色，副文字写所属 provider。过滤匹配 provider 显示名、provider id、profile 名。
 - 选中后，输入框（Web/Electron）插入 Agent mention 块；原生端插入链接文字（与 File mention 一致）。
-- 置灰时整组条目仍可见但不可选，组顶显示一行原因说明：`tools_not_injected` → "当前智能体未启用 Osuna tools"，附去设置 → Host → Agents 开启的入口，并说明开启后需要重新加载当前智能体；`mcp_disabled` → Host 已关闭 MCP；`create_agent_not_allowed` → 当前 provider 的 Osuna tools 策略未允许 `create_agent`；`tools_not_delivered` → 当前智能体无法调用 Osuna tools；认不出的原因码 → 当前智能体无法派发子智能体。老 Host（没有 `agentMentions`）整组置灰，提示更新 Host。新建界面按 provider 快照的预测字段置灰。
-- 智能体分组只在已加载会话的输入框里出现（快照带 `canCreateAgents` 的那种）；新建界面在票 10 按预测字段接入之前不显示分组。已收到 `agentMentions` 但会话快照没带 `canCreateAgents`（未加载的存档智能体、本地缓存）时按可用处理，发送会恢复会话，由 daemon 判定。
+- 置灰时整组条目仍可见但不可选，组顶显示一行原因说明：`tools_not_injected` → "当前智能体未启用 Osuna tools"，附去设置 → Host → Agents 开启的入口，并说明开启后需要重新加载当前智能体（新建界面改为只说"在设置 → Host → Agents 中开启"：预测随开关即时更新，没有要重新加载的智能体）；`mcp_disabled` → Host 已关闭 MCP；`create_agent_not_allowed` → 当前 provider 的 Osuna tools 策略未允许 `create_agent`；`tools_not_delivered` → 当前智能体无法调用 Osuna tools；认不出的原因码 → 当前智能体无法派发子智能体。老 Host（没有 `agentMentions`）整组置灰，提示更新 Host。新建界面按 provider 快照的预测字段置灰。
+- 智能体分组出现在已加载会话的输入框里，以及新建界面（新建智能体标签、新建工作区、工作区设置对话框）的输入框里；新建界面按所选 provider 在该 cwd 的 provider 快照里的预测字段判定，没有预测字段时按可用处理。已收到 `agentMentions` 但会话快照没带 `canCreateAgents`（未加载的存档智能体、本地缓存）时按可用处理，发送会恢复会话，由 daemon 判定。
 - 置灰组连同原因说明排在文件上面，列表放不下时打开后停在顶部，原因说明优先于第一个可选文件露出；按方向键后照常跟随高亮。只剩置灰行时 Enter 照常发送，与空列表一致。
 - 所有新增文案补齐九种语言。
 

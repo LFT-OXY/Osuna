@@ -127,6 +127,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  canCreateAgents?: boolean;
+  createAgentsUnavailableReason?: string;
 }
 
 export interface AgentCreateConfigParent {
@@ -186,6 +188,8 @@ export interface AgentCapabilityFlags {
   supportsSessionListing?: boolean;
   supportsDynamicModes: boolean;
   supportsMcpServers: boolean;
+  /** 只用于 client：能否接 MCP 要按 cwd 起会话才知道（如 Pi 的 adapter），client 上的 supportsMcpServers 不算数。 */
+  mcpServersDecidedPerSession?: boolean;
   supportsNativePaseoTools?: boolean;
   supportsReasoningStream: boolean;
   supportsToolInvocations: boolean;

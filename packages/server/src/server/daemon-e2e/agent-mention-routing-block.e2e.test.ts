@@ -1,9 +1,12 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { WebSocket } from "ws";
 import { afterEach, describe, expect, test } from "vitest";
+import { WSOutboundMessageSchema, type SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import type {
   AgentMode,
   AgentModelDefinition,
@@ -143,6 +146,99 @@ async function connectAsCaller(port: number, callerAgentId: string): Promise<Cli
   );
   return mcpClient;
 }
+
+interface CreateWithPromptInput {
+  scenario: Scenario;
+  text: string;
+  clientMessageId: string;
+}
+
+/** 老客户端的 create_agent_request：直接发原始帧，不经 DaemonClient 的新建协商。 */
+async function createViaLegacyRequest({
+  scenario,
+  text,
+  clientMessageId,
+}: CreateWithPromptInput): Promise<string> {
+  const socket = new WebSocket(`ws://127.0.0.1:${scenario.daemon.port}/ws`);
+  const frames: SessionOutboundMessage[] = [];
+  socket.on("message", (data) => {
+    const frame = WSOutboundMessageSchema.parse(JSON.parse(data.toString()));
+    if (frame.type === "session") frames.push(frame.message);
+  });
+  await new Promise<void>((resolve, reject) => {
+    socket.once("open", resolve);
+    socket.once("error", reject);
+  });
+  try {
+    socket.send(
+      JSON.stringify({
+        type: "hello",
+        clientType: "browser",
+        clientId: randomUUID(),
+        protocolVersion: 1,
+        appVersion: "0.8.0",
+      }),
+    );
+    const requestId = randomUUID();
+    socket.send(
+      JSON.stringify({
+        type: "session",
+        message: {
+          type: "create_agent_request",
+          requestId,
+          config: { provider: "codex", cwd: scenario.cwd },
+          initialPrompt: text,
+          clientMessageId,
+        },
+      }),
+    );
+    const created = () =>
+      frames.flatMap((message) =>
+        message.type === "status" &&
+        message.payload.status === "agent_created" &&
+        message.payload.requestId === requestId
+          ? [message.payload.agentId]
+          : [],
+      )[0];
+    await expect.poll(created, { timeout: WAIT_MS }).toBeDefined();
+    return created()!;
+  } finally {
+    socket.close();
+  }
+}
+
+async function createViaAgentCreateRequest({
+  scenario,
+  text,
+  clientMessageId,
+}: CreateWithPromptInput): Promise<string> {
+  const agent = await scenario.client.createAgent({
+    provider: "codex",
+    cwd: scenario.cwd,
+    initialPrompt: text,
+    clientMessageId,
+  });
+  return agent.id;
+}
+
+async function createViaWorkspaceCreateRequest({
+  scenario,
+  text,
+  clientMessageId,
+}: CreateWithPromptInput): Promise<string> {
+  const result = await scenario.client.createWorkspace({
+    source: { kind: "directory", path: scenario.cwd },
+    agent: { provider: "codex", cwd: scenario.cwd, initialPrompt: text, clientMessageId },
+  });
+  if (!result.agent) throw new Error(result.error ?? "Expected the workspace's first agent");
+  return result.agent.id;
+}
+
+const CREATE_REQUESTS = [
+  { type: "create_agent_request", create: createViaLegacyRequest },
+  { type: "agent.create.request", create: createViaAgentCreateRequest },
+  { type: "workspace.create.request", create: createViaWorkspaceCreateRequest },
+];
 
 interface PersistedProviderConfig {
   mentionDefaults?: unknown;
@@ -315,6 +411,60 @@ Rules:
       text,
       `<paseo-system>\nSchedule fired (id=${created.schedule.id}, run=${runId}).\n${text}\n</paseo-system>`,
     ]);
+  });
+});
+
+describe("Routing block for the first message of a new agent", () => {
+  test.each(CREATE_REQUESTS)(
+    "$type sends the Routing block to the provider and keeps the original text in the timeline",
+    async ({ create }) => {
+      const scenario = await startDaemon();
+      const text = `${CLAUDE} write the code, ${CODEX} review it`;
+
+      const agentId = await create({ scenario, text, clientMessageId: randomUUID() });
+      await scenario.client.waitForFinish(agentId, WAIT_MS);
+
+      expect(scenario.prompts).toHaveLength(1);
+      expect(scenario.prompts[0]?.startsWith(`${text}\n\n<paseo-system>\n`)).toBe(true);
+      expect(routedLines(scenario.prompts[0])).toEqual([
+        '1. @Claude -> provider "claude/haiku", settings {"modeId":"auto"}',
+        '2. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}',
+      ]);
+      expect(await userMessages(scenario, agentId)).toEqual([text]);
+    },
+  );
+
+  test.each(CREATE_REQUESTS)(
+    "$type sends the original text only when the new session cannot create agents",
+    async ({ create }) => {
+      const scenario = await startDaemon({ mcpInjectIntoAgents: false });
+      const text = `${CLAUDE} write tests`;
+
+      const agentId = await create({ scenario, text, clientMessageId: randomUUID() });
+      await scenario.client.waitForFinish(agentId, WAIT_MS);
+
+      expect(scenario.prompts).toEqual([text]);
+    },
+  );
+
+  test("MCP create_agent never gets a Routing block", async () => {
+    const scenario = await startDaemon();
+    const caller = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    const text = `${CLAUDE} write tests`;
+
+    const mcp = await connectAsCaller(scenario.daemon.port, caller.id);
+    await mcp.callTool({
+      name: "create_agent",
+      arguments: {
+        relationship: { kind: "subagent" },
+        workspace: { kind: "current" },
+        title: "Child",
+        provider: "codex/gpt-5.4-mini",
+        initialPrompt: text,
+      },
+    });
+
+    await expect.poll(() => scenario.prompts, { timeout: WAIT_MS }).toEqual([text]);
   });
 });
 

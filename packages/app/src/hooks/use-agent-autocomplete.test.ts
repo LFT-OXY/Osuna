@@ -7,6 +7,7 @@ import {
   buildCommandAutocompleteOptions,
   resolveAgentMentionAvailability,
   resolveAgentMentionNotice,
+  resolveDraftCreateAgentsVerdict,
   resolvePickedMentionBlock,
   resolveAutocompleteIsLoading,
   resolveAutocompleteIsVisible,
@@ -306,6 +307,50 @@ describe("@ list agent group availability", () => {
         unavailableReason: undefined,
       }),
     ).toEqual({ kind: "available" });
+  });
+});
+
+describe("@ list agent group on the new agent screen", () => {
+  const entries: ProviderSnapshotEntry[] = [
+    { ...providerEntry("claude", "Claude"), canCreateAgents: true },
+    {
+      ...providerEntry("pi", "Pi"),
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "tools_not_delivered",
+    },
+  ];
+
+  it("follows the prediction of the selected provider", () => {
+    expect(resolveDraftCreateAgentsVerdict(entries, "claude")).toEqual({
+      canCreateAgents: true,
+      unavailableReason: undefined,
+    });
+    expect(resolveDraftCreateAgentsVerdict(entries, "pi")).toEqual({
+      canCreateAgents: false,
+      unavailableReason: "tools_not_delivered",
+    });
+  });
+
+  it("has no verdict while the snapshot has not listed the provider", () => {
+    expect(resolveDraftCreateAgentsVerdict(undefined, "claude")).toEqual({
+      canCreateAgents: undefined,
+      unavailableReason: undefined,
+    });
+    expect(resolveDraftCreateAgentsVerdict(entries, "codex")).toEqual({
+      canCreateAgents: undefined,
+      unavailableReason: undefined,
+    });
+  });
+
+  it("does not ask to reload an agent that does not exist yet", () => {
+    const result = resolveAgentMentionNotice({
+      availability: { kind: "unavailable", reason: "tools_not_injected" },
+      isDraft: true,
+      t,
+      onOpenAgentsSettings: vi.fn(),
+    });
+    expect(result?.message).toBe("Osuna tools are off for this agent");
+    expect(result?.detail).toBe("Turn them on in Settings → Host → Agents.");
   });
 });
 

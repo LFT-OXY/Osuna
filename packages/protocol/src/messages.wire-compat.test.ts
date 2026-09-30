@@ -9,6 +9,7 @@ import {
   WorkspaceSetupSnapshotSchema,
   WorkspaceSetupProgressMessageSchema,
   AgentTimelineEntryPayloadSchema,
+  ProviderSnapshotEntrySchema,
 } from "./messages.js";
 
 test("terminal listings accept older rows and retain new per-terminal directories", () => {
@@ -333,6 +334,27 @@ describe("wire schema compatibility", () => {
     expect(withFutureReason.canCreateAgents).toBe(false);
     expect(withFutureReason.createAgentsUnavailableReason).toBe("reason_from_a_newer_daemon");
     expect(oldClient.id).toBe("agent-1");
+  });
+
+  test("provider snapshot entries keep the create-agents prediction optional and reason codes open", () => {
+    const entry = { provider: "claude", status: "ready", enabled: true };
+
+    const fromOldDaemon = ProviderSnapshotEntrySchema.parse(entry);
+    const withFutureReason = ProviderSnapshotEntrySchema.parse({
+      ...entry,
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "reason_from_a_newer_daemon",
+    });
+    const oldClient = ProviderSnapshotEntrySchema.omit({
+      canCreateAgents: true,
+      createAgentsUnavailableReason: true,
+    }).parse({ ...entry, canCreateAgents: true });
+
+    expect(fromOldDaemon.canCreateAgents).toBeUndefined();
+    expect(fromOldDaemon.createAgentsUnavailableReason).toBeUndefined();
+    expect(withFutureReason.canCreateAgents).toBe(false);
+    expect(withFutureReason.createAgentsUnavailableReason).toBe("reason_from_a_newer_daemon");
+    expect(oldClient.provider).toBe("claude");
   });
 
   test("server_info advertises agentMentions as an optional feature", () => {

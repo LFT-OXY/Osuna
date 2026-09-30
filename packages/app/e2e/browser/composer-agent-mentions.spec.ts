@@ -6,7 +6,19 @@ import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { expectInlineBlocks } from "../support/helpers/inline-blocks";
 import { seedAgentProfiles } from "../support/helpers/agent-profiles";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
-import { installHostWithoutAgentMentions } from "../support/helpers/mention-defaults";
+import {
+  installHostWithoutAgentMentions,
+  installThinkingModesProvider,
+  THINKING_MODES_PROVIDER,
+} from "../support/helpers/mention-defaults";
+import { gotoWorkspace } from "../support/helpers/launcher";
+import { seedWorkspace } from "../support/helpers/seed-client";
+import { openCommandCenter } from "../support/helpers/command-center";
+import { runWorkspaceActionFromCommandCenter } from "../support/helpers/command-center-workspace-actions";
+import {
+  chooseCommandCenterAgentControl,
+  waitForDraftComposer,
+} from "../support/helpers/command-center-agent-controls";
 import { getServerId } from "../support/helpers/server-id";
 
 // 本文件的 worker daemon 注入 Osuna tools，mock 智能体可以派发。置灰用例在建智能体前关掉注入：
@@ -16,13 +28,18 @@ test.use({ e2eInjectPaseoTools: true });
 interface DaemonConfigClient {
   connect(): Promise<void>;
   close(): Promise<void>;
-  patchDaemonConfig(config: { mcp: { injectIntoAgents: boolean } }): Promise<unknown>;
+  patchDaemonConfig(config: {
+    mcp?: { injectIntoAgents: boolean };
+    providers?: Record<string, { paseoTools: { disabledTools: string[] } }>;
+  }): Promise<unknown>;
+}
+
+function connectConfigClient(): Promise<DaemonConfigClient> {
+  return connectDaemonClient<DaemonConfigClient>({ clientIdPrefix: "agent-mentions-e2e" });
 }
 
 async function withOsunaToolsOff<T>(run: () => Promise<T>): Promise<T> {
-  const client = await connectDaemonClient<DaemonConfigClient>({
-    clientIdPrefix: "agent-mentions-e2e",
-  });
+  const client = await connectConfigClient();
   try {
     await client.patchDaemonConfig({ mcp: { injectIntoAgents: false } });
     return await run();
@@ -197,6 +214,86 @@ test.describe("@ list agent profiles", () => {
     } finally {
       await agent.cleanup();
       await profiles.restore();
+    }
+  });
+});
+
+/** 在工作区里开一个新建智能体标签，聚焦它的输入框。 */
+async function openNewAgentDraft(page: Page, workspaceId: string): Promise<Locator> {
+  await gotoWorkspace(page, workspaceId);
+  await runWorkspaceActionFromCommandCenter(page, "New agent");
+  await waitForDraftComposer(page);
+  const composer = page.getByRole("textbox", { name: "Message agent..." }).first();
+  await composer.click();
+  return composer;
+}
+
+test.describe("@ list agent group on the new agent screen", () => {
+  test.describe.configure({ timeout: 180_000 });
+
+  test("follows the selected provider's prediction", async ({ page }, testInfo) => {
+    const acp = await installThinkingModesProvider();
+    const configClient = await connectConfigClient();
+    const workspace = await seedWorkspace({
+      repoPrefix: `agent-mentions-draft-${testInfo.workerIndex}-`,
+    });
+    try {
+      await configClient.patchDaemonConfig({
+        providers: {
+          [THINKING_MODES_PROVIDER.id]: { paseoTools: { disabledTools: ["create_agent"] } },
+        },
+      });
+      const composer = await openNewAgentDraft(page, workspace.workspaceId);
+
+      await page.keyboard.type("@");
+      await expect(agentRow(page, "Mock Load Test")).toBeVisible({ timeout: 30_000 });
+      await expect(agentRow(page, "Mock Load Test")).not.toHaveAttribute("aria-disabled", "true");
+      await expect(popover(page).getByTestId("autocomplete-group-notice")).toHaveCount(0);
+
+      await composer.fill("");
+      await openCommandCenter(page);
+      await chooseCommandCenterAgentControl({
+        page,
+        query: "swift",
+        choice: `Model › ${THINKING_MODES_PROVIDER.label} › Swift`,
+      });
+      await composer.click();
+      await page.keyboard.type("@");
+
+      const notice = popover(page).getByTestId("autocomplete-group-notice");
+      await expect(notice).toHaveText(
+        "This provider's Osuna tools policy doesn't allow create_agent",
+        { timeout: 30_000 },
+      );
+      await expect(agentRow(page, "Mock Load Test")).toHaveAttribute("aria-disabled", "true");
+    } finally {
+      await workspace.cleanup();
+      await configClient.close().catch(() => undefined);
+      await acp.remove();
+    }
+  });
+
+  test("grays out as soon as Osuna tools are turned off, without asking to reload", async ({
+    page,
+  }, testInfo) => {
+    const workspace = await seedWorkspace({
+      repoPrefix: `agent-mentions-draft-off-${testInfo.workerIndex}-`,
+    });
+    try {
+      await openNewAgentDraft(page, workspace.workspaceId);
+
+      await withOsunaToolsOff(async () => {
+        await page.keyboard.type("@");
+        const notice = popover(page).getByTestId("autocomplete-group-notice");
+        await expect(notice).toContainText("Osuna tools are off for this agent", {
+          timeout: 30_000,
+        });
+        await expect(notice).toContainText("Turn them on in Settings → Host → Agents.");
+        await expect(notice).not.toContainText("reload");
+        await expect(agentRow(page, "Mock Load Test")).toHaveAttribute("aria-disabled", "true");
+      });
+    } finally {
+      await workspace.cleanup();
     }
   });
 });

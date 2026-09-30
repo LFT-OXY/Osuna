@@ -264,6 +264,20 @@ export function resolveAgentMentionAvailability(
   return { kind: "available" };
 }
 
+export type CreateAgentsVerdict = Omit<AgentMentionAvailabilityInput, "supportsAgentMentions">;
+
+/** 新建界面还没有会话，按所选 provider 在快照里的预测字段判定；快照还没列出它时没有结论。 */
+export function resolveDraftCreateAgentsVerdict(
+  entries: readonly ProviderSnapshotEntry[] | undefined,
+  provider: string,
+): CreateAgentsVerdict {
+  const entry = entries?.find((candidate) => candidate.provider === provider);
+  return {
+    canCreateAgents: entry?.canCreateAgents,
+    unavailableReason: entry?.createAgentsUnavailableReason,
+  };
+}
+
 // wire 上原因码是开放的字符串（新 daemon 可能加码），这里只列 app 认得、只有一句说明的几个。
 type PlainUnavailableReason = "mcp_disabled" | "create_agent_not_allowed" | "tools_not_delivered";
 
@@ -279,6 +293,8 @@ function isPlainUnavailableReason(reason: string | undefined): reason is PlainUn
 
 export interface AgentMentionNoticeInput {
   availability: AgentMentionAvailability;
+  /** 新建界面：开启后预测随即更新，不用重新加载。 */
+  isDraft?: boolean;
   t: TFunction;
   onOpenAgentsSettings: () => void;
 }
@@ -295,7 +311,11 @@ export function resolveAgentMentionNotice(
   if (availability.reason === "tools_not_injected") {
     return {
       message: t("agentAutocomplete.agentMentions.toolsNotInjected"),
-      detail: t("agentAutocomplete.agentMentions.toolsNotInjectedDetail"),
+      detail: t(
+        input.isDraft
+          ? "agentAutocomplete.agentMentions.toolsNotInjectedDraftDetail"
+          : "agentAutocomplete.agentMentions.toolsNotInjectedDetail",
+      ),
       action: {
         label: t("agentAutocomplete.agentMentions.openAgentsSettings"),
         onPress: input.onOpenAgentsSettings,
@@ -385,12 +405,14 @@ export function resolvePickedMentionBlock(selected: AgentAutocompleteOption): In
 }
 
 /**
- * `@` 列表的智能体分组：行与组顶说明。只在已有会话的输入框里出现，派发由当前会话的 daemon 判定决定；
- * 还没收到 server_info 时（断线不等于老 Host）不显示。
+ * `@` 列表的智能体分组：行与组顶说明。已有会话按 daemon 对当前会话的判定；新建界面按所选 provider
+ * 在快照里的预测。还没收到 server_info 时（断线不等于老 Host）不显示。
  */
 interface AgentMentionGroupInput {
   serverId: string;
   agentId: string;
+  /** 新建界面所选的 provider；已有会话的输入框不传。 */
+  draftProvider: string | undefined;
   cwd: string;
   query: string;
   enabled: boolean;
@@ -416,17 +438,30 @@ function useAgentMentionGroup(input: AgentMentionGroupInput): AgentMentionGroup 
     }),
   );
   const supportsAgentMentions = useHostFeatureAvailability(serverId, "agentMentions");
-  const visible = input.enabled && agentState.hasAgent && supportsAgentMentions !== null;
+  const { draftProvider } = input;
+  const isDraft = draftProvider !== undefined;
+  const visible =
+    input.enabled && (agentState.hasAgent || isDraft) && supportsAgentMentions !== null;
   const { entries } = useProvidersSnapshot(serverId, { cwd: input.cwd, enabled: visible });
 
+  const verdict = useMemo(
+    () =>
+      draftProvider === undefined
+        ? {
+            canCreateAgents: agentState.canCreateAgents,
+            unavailableReason: agentState.unavailableReason,
+          }
+        : resolveDraftCreateAgentsVerdict(entries, draftProvider),
+    [agentState.canCreateAgents, agentState.unavailableReason, draftProvider, entries],
+  );
   const availability = useMemo(
     () =>
       resolveAgentMentionAvailability({
         supportsAgentMentions: supportsAgentMentions === true,
-        canCreateAgents: agentState.canCreateAgents,
-        unavailableReason: agentState.unavailableReason,
+        canCreateAgents: verdict.canCreateAgents,
+        unavailableReason: verdict.unavailableReason,
       }),
-    [agentState.canCreateAgents, agentState.unavailableReason, supportsAgentMentions],
+    [supportsAgentMentions, verdict.canCreateAgents, verdict.unavailableReason],
   );
   const options = useMemo(
     () =>
@@ -445,11 +480,12 @@ function useAgentMentionGroup(input: AgentMentionGroupInput): AgentMentionGroup 
     if (options.length === 0) return undefined;
     const notice = resolveAgentMentionNotice({
       availability,
+      isDraft,
       t,
       onOpenAgentsSettings: () => openHostSettingsSection(serverId, "agents"),
     });
     return notice ? { agents: notice } : undefined;
-  }, [availability, options.length, serverId, t]);
+  }, [availability, isDraft, options.length, serverId, t]);
 
   return { options, groupNotices };
 }
@@ -770,9 +806,10 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const { options: agentMentionOptions, groupNotices } = useAgentMentionGroup({
     serverId,
     agentId,
-    cwd: agentCwd,
+    draftProvider: normalizedDraftConfig?.provider,
+    cwd: autocompleteCwd,
     query: fileFilterQuery,
-    enabled: !isDraftContext && mode === "file",
+    enabled: mode === "file",
     agentProfiles,
   });
 
