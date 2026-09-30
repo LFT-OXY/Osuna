@@ -647,3 +647,36 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 ### Status
 
 [OK] **Completed**
+
+
+## Session 25: 补齐简体中文界面翻译：工单 06 PR 面板/插件/会话页/侧栏迁移，任务验收并归档
+<!-- atw-session: v=2 fp=28d7b196da288179 -->
+
+**Date**: 2026-10-01
+**Task**: 补齐简体中文界面翻译：工单 06 PR 面板/插件/会话页/侧栏迁移，任务验收并归档
+**Package**: app
+**Branch**: `fix/settings-menu-zh-i18n`
+
+### Summary
+
+工单 06：PR 面板按用户确认的范围全部迁移（动态、评论/讨论主题操作、已解决/已过时、添加到聊天，以及检查摘要标题与计数行、状态徽标、活动动词）；summarizeChecks 改为只返回状态与计数，formatChecks*(t, …) 生成文案，中文 countLine 写 {{parts}}，得到「3 项失败，21 项成功，1 项已跳过」；data.ts 改返回已有 states/activity 键，e2e 助手改读 en 资源。插件界面与面板、会话页、侧栏工作区标题、显示偏好、标记已读/未读及失败提示改走翻译；docs/i18n.md 补 Batch 5C，组件规格补计数行包裹写法。双轴审查后修正批次记录位置与编号，统一「动态」「项手动」译法。dev 桌面端中文 QA：临时注册离线主机测会话页空状态（已还原），/tmp 临时克隆检出 PR #5 分支测 PR 面板（克隆已删）。PRD 9 条验收逐条核对满足，用户验收，任务归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `02f131c94` | fix(app): 迁移 PR 面板、插件、会话页、侧栏剩余硬编码英文到翻译键 |
+| `5140793d3` | chore(atw): 工单 06 桌面端中文验收通过，关闭工单，任务进入验收 |
+
+### Testing
+
+- [OK] PR 面板与插件目录 34 个测试文件 293 条、resources.test.ts 38 条通过；全仓 typecheck、lint 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 推送 fix/settings-menu-zh-i18n 并开 PR 合进 main（待用户确认）
+- 下次开 dev 桌面端时归档 dev daemon 里的 osuna-pr 工作区（目录已删）
