@@ -2548,6 +2548,57 @@ describe("Codex app-server provider", () => {
     expect(env.PASEO_TEST_FLAG).toBe(launchContext.env?.PASEO_TEST_FLAG);
   });
 
+  test("tags approvals from a collab child thread with the subagent that asked", () => {
+    const session = createSession();
+    const internals = castInternals<{
+      handleCommandApprovalRequest(params: unknown): Promise<unknown>;
+      handleFileChangeApprovalRequest(params: unknown): Promise<unknown>;
+      handleToolApprovalRequest(params: unknown): Promise<unknown>;
+      handleMcpElicitationRequest(params: unknown, serverRequestId: number): Promise<unknown>;
+    }>(session);
+
+    void internals.handleCommandApprovalRequest({
+      itemId: "child-command",
+      threadId: "child-thread",
+      turnId: "child-turn",
+      command: "npm test",
+    });
+    void internals.handleFileChangeApprovalRequest({
+      itemId: "child-file",
+      threadId: "child-thread",
+      turnId: "child-turn",
+    });
+    void internals.handleToolApprovalRequest({
+      itemId: "child-question",
+      threadId: "child-thread",
+      turnId: "child-turn",
+      questions: [],
+    });
+    void internals.handleMcpElicitationRequest(
+      {
+        threadId: "child-thread",
+        serverName: "paseo",
+        mode: "form",
+        message: "Allow?",
+      },
+      1,
+    );
+    void internals.handleFileChangeApprovalRequest({
+      itemId: "parent-file",
+      threadId: "test-thread",
+      turnId: "test-turn",
+    });
+
+    const requests = session.getPendingPermissions();
+    expect(requests.map((request) => request.metadata?.providerSubagentId)).toEqual([
+      "child-thread",
+      "child-thread",
+      "child-thread",
+      "child-thread",
+      undefined,
+    ]);
+  });
+
   test("projects request_user_input into a question permission and running timeline tool call", () => {
     const session = createSession();
     const events: AgentStreamEvent[] = [];
@@ -2555,7 +2606,7 @@ describe("Codex app-server provider", () => {
 
     void asInternals(session).handleToolApprovalRequest({
       itemId: "call-question-1",
-      threadId: "thread-1",
+      threadId: "test-thread",
       turnId: "turn-1",
       questions: [
         {
@@ -2622,7 +2673,7 @@ describe("Codex app-server provider", () => {
           },
           metadata: {
             itemId: "call-question-1",
-            threadId: "thread-1",
+            threadId: "test-thread",
             turnId: "turn-1",
             questions: [
               {

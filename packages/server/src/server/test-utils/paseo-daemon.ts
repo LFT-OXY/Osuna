@@ -22,6 +22,7 @@ interface TestPaseoDaemonOptions {
   listen?: string;
   logger?: Parameters<typeof createPaseoDaemon>[1];
   mcpEnabled?: boolean;
+  mcpInjectIntoAgents?: boolean;
   mcpDebug?: boolean;
   isDev?: boolean;
   relayEnabled?: boolean;
@@ -178,6 +179,7 @@ async function prepareTestDaemonConfig(
     corsAllowedOrigins: options.corsAllowedOrigins ?? [],
     hostnames: true,
     mcpEnabled: options.mcpEnabled ?? true,
+    mcpInjectIntoAgents: options.mcpInjectIntoAgents,
     staticDir,
     mcpDebug: options.mcpDebug ?? false,
     isDev: options.isDev,

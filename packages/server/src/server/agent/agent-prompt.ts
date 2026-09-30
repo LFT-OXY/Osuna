@@ -26,12 +26,20 @@ export type AgentRunController = Pick<
   reloadAgentSession(agentId: string): Promise<unknown>;
 };
 
+/** 按会话判定生成 Routing block；null 表示这条消息不附。只有客户端发来的用户消息会带。 */
+export type RoutingBlockResolver = (agent: ManagedAgent) => Promise<string | null>;
+
 export interface StartAgentRunOptions {
   replaceRunning?: boolean;
   activeTurnBehavior?: ActiveTurnBehavior;
   runOptions?: AgentRunOptions;
   /** Ask the provider to deny permissions blocking this steer. */
   clearPendingPermissions?: boolean;
+  /**
+   * Builds the Routing block. Runs after out-of-band detection, so commands never
+   * wait on it; the block goes to the provider and the timeline keeps the original.
+   */
+  resolveRoutingBlock?: () => Promise<string | null>;
 }
 
 export type PromptDispatchDisposition = "out_of_band" | "steered" | "turn_started";
@@ -115,16 +123,32 @@ export async function startAgentRun(
   if (agentManager.tryRunOutOfBand(agentId, prompt, options?.runOptions)) {
     return { disposition: "out_of_band" };
   }
+  const routingBlock = await options?.resolveRoutingBlock?.();
+  const providerPrompt = routingBlock ? appendRoutingBlock(prompt, routingBlock) : prompt;
+  const runOptions = routingBlock
+    ? { ...options?.runOptions, submittedPrompt: prompt }
+    : options?.runOptions;
+  const runStartOptions = { ...options, runOptions };
   try {
-    return await startAgentRunInner(agentManager, agentId, prompt, logger, options);
+    return await startAgentRunInner(agentManager, agentId, providerPrompt, logger, runStartOptions);
   } catch (error) {
     if (!isStaleProviderSessionError(error)) throw error;
     logger.info({ agentId, err: error }, "Provider session went stale; reopening from persistence");
     // The live session belongs to a retired plugin runtime. Reload swaps in a
     // fresh session on the current runtime while preserving history and labels.
     await agentManager.reloadAgentSession(agentId);
-    return await startAgentRunInner(agentManager, agentId, prompt, logger, options);
+    return await startAgentRunInner(agentManager, agentId, providerPrompt, logger, runStartOptions);
   }
+}
+
+export function appendRoutingBlock(
+  prompt: AgentPromptInput,
+  routingBlock: string,
+): AgentPromptInput {
+  if (typeof prompt === "string") {
+    return `${prompt}\n\n${routingBlock}`;
+  }
+  return [...prompt, { type: "text", text: routingBlock }];
 }
 
 async function startAgentRunInner(
@@ -240,6 +264,11 @@ export interface SendPromptToAgentParams {
   unarchive?: boolean;
   /** See {@link StartAgentRunOptions.clearPendingPermissions}. */
   clearPendingPermissions?: boolean;
+  /**
+   * Builds the Routing block for the loaded agent. Only user messages sent by a
+   * client pass this; system-injected prompts never dispatch.
+   */
+  resolveRoutingBlock?: RoutingBlockResolver;
   logger: Logger;
 }
 
@@ -249,6 +278,8 @@ export interface StartCreatedAgentInitialPromptParams {
   snapshot?: ManagedAgent;
   prompt: AgentPromptInput | null;
   runOptions?: AgentRunOptions;
+  /** Only client create requests pass it. */
+  resolveRoutingBlock?: RoutingBlockResolver;
   logger: Logger;
 }
 
@@ -316,7 +347,7 @@ export async function sendPromptToAgent(
     await unarchiveAgentState(params.agentStorage, params.agentManager, params.agentId);
   }
 
-  await ensureAgentLoaded(params.agentId, {
+  const agent = await ensureAgentLoaded(params.agentId, {
     agentManager: params.agentManager,
     agentStorage: params.agentStorage,
     logger: params.logger,
@@ -329,12 +360,14 @@ export async function sendPromptToAgent(
   const runOptions = params.messageId
     ? { ...params.runOptions, clientMessageId: params.messageId }
     : params.runOptions;
+  const resolveAgentRoutingBlock = params.resolveRoutingBlock;
 
   return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
     replaceRunning: true,
     activeTurnBehavior: params.activeTurnBehavior,
     clearPendingPermissions: params.clearPendingPermissions,
     runOptions,
+    resolveRoutingBlock: resolveAgentRoutingBlock && (() => resolveAgentRoutingBlock(agent)),
   });
 }
 
@@ -350,6 +383,7 @@ export async function startCreatedAgentInitialPrompt(
     return currentSnapshot;
   }
 
+  const resolveAgentRoutingBlock = params.resolveRoutingBlock;
   const dispatchResult = await startAgentRun(
     params.agentManager,
     params.agentId,
@@ -357,6 +391,8 @@ export async function startCreatedAgentInitialPrompt(
     params.logger,
     {
       runOptions: params.runOptions,
+      resolveRoutingBlock:
+        resolveAgentRoutingBlock && (() => resolveAgentRoutingBlock(currentSnapshot)),
     },
   );
 
@@ -397,7 +433,7 @@ function formatFinishNotificationBody(params: FinishNotificationBodyInput): stri
   const sections = [statusLine];
   if (params.reason === "needs permission" && params.permissionRequest) {
     sections.push(
-      "Respond with `respond_to_permission` using the `agentId` and `requestId` below.",
+      "The user will approve this in the subagent's session. Do not answer it with `respond_to_permission` unless the user explicitly asked you to manage this subagent's permissions.",
       `<permission-request>\n${JSON.stringify(
         {
           agentId: params.childAgentId,

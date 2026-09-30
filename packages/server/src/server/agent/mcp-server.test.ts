@@ -51,7 +51,7 @@ import type { GeneratedWorkspaceName } from "../worktree-branch-name-generator.j
 import type { ForgeService } from "../../services/forge-service.js";
 import { areEquivalentPaths } from "../../utils/path.js";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
-import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { PARENT_AGENT_ID_LABEL, PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { MutableDaemonConfigSchema, type AgentProfile } from "@getpaseo/protocol/messages";
 import type { DaemonConfigStore } from "../daemon-config-store.js";
 import type { BrowserToolsBroker, BrowserToolsExecuteInput } from "../browser-tools/broker.js";
@@ -3411,6 +3411,84 @@ describe("create_agent MCP tool", () => {
     } finally {
       rmSync(workdir, { recursive: true, force: true });
     }
+  });
+
+  describe("parent tool call id label", () => {
+    async function createChildThroughMcp(input: {
+      meta?: Record<string, unknown>;
+      labels?: Record<string, string>;
+    }): Promise<Record<string, string>> {
+      const workdir = await mkdtemp(join(tmpdir(), "mcp-parent-tool-call-"));
+      const storage = new AgentStorage(join(workdir, "agents"), logger);
+      const agentManager = new AgentManager({
+        clients: createTestAgentClients(),
+        registry: storage,
+        logger,
+      });
+      try {
+        const parent = await agentManager.createAgent(
+          { provider: "codex", cwd: existingCwd },
+          undefined,
+          { workspaceId: "wks_parent" },
+        );
+        const server = await createAgentMcpServer({
+          agentManager,
+          agentStorage: storage,
+          callerAgentId: parent.id,
+          providerSnapshotManager: createOpenCodeManager().manager,
+          logger,
+        });
+        const client = await connectInMemoryMcpClient(server);
+        const result = await client.callTool({
+          name: "create_agent",
+          arguments: {
+            ...subagentCurrentWorkspace(),
+            title: "Child",
+            provider: "codex/gpt-5.4",
+            initialPrompt: "Do work",
+            ...(input.labels ? { labels: input.labels } : {}),
+          },
+          ...(input.meta ? { _meta: input.meta } : {}),
+        });
+        await client.close();
+        const childId = z.object({ agentId: z.string() }).parse(result.structuredContent).agentId;
+        const storedChild = await storage.get(childId);
+        return storedChild?.labels ?? {};
+      } finally {
+        rmSync(workdir, { recursive: true, force: true });
+      }
+    }
+
+    it.each([
+      ["Claude", { "claudecode/toolUseId": "toolu_claude" }, "toolu_claude"],
+      ["Codex", { callId: "call_codex" }, "call_codex"],
+      ["Pi", { "pi-mcp-adapter/toolCallId": "pi_call" }, "pi_call"],
+    ])(
+      "labels the child with the %s tool call id from _meta",
+      async (_provider, meta, expected) => {
+        const labels = await createChildThroughMcp({ meta });
+
+        expect(labels[PARENT_TOOL_CALL_ID_LABEL]).toBe(expected);
+      },
+    );
+
+    it("overrides a model-supplied parent tool call id label", async () => {
+      const labels = await createChildThroughMcp({
+        meta: { callId: "call_real" },
+        labels: { [PARENT_TOOL_CALL_ID_LABEL]: "call_spoofed", purpose: "review" },
+      });
+
+      expect(labels[PARENT_TOOL_CALL_ID_LABEL]).toBe("call_real");
+      expect(labels.purpose).toBe("review");
+    });
+
+    it("writes no parent tool call id label when the provider sends no id", async () => {
+      const labels = await createChildThroughMcp({
+        labels: { [PARENT_TOOL_CALL_ID_LABEL]: "call_spoofed" },
+      });
+
+      expect(labels).not.toHaveProperty(PARENT_TOOL_CALL_ID_LABEL);
+    });
   });
 
   it("delegates MCP injection to AgentManager and passes through an undefined agent ID", async () => {

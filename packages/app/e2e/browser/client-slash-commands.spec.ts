@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "../support/fixtures";
-import { composerLocator, expectComposerVisible, submitMessage } from "../support/helpers/composer";
+import {
+  composerLocator,
+  expectComposerVisible,
+  submitMessage,
+  expectComposerText,
+} from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import {
   expectSessionRowArchived,
@@ -47,7 +52,7 @@ async function runClientSlashCommand(page: Page, command: "/quit" | "/clear"): P
   const input = composerLocator(page);
   await expect(input).toBeEditable({ timeout: 30_000 });
   await input.fill(command);
-  await expect(input).toHaveValue(command);
+  await expectComposerText(input, command);
   await input.press("Enter");
 }
 

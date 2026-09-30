@@ -589,7 +589,7 @@ export function WorkspaceDraftAgentTab({
           cwd: submission.cwd,
         });
     void createPromise.catch(() => {
-      replaceDraftText(submission.text);
+      replaceDraftText(submission.text, submission.segments);
       setDraftAttachments(composerWorkspaceAttachment.userAttachmentsOnly(submission.attachments));
       autoSubmitKeyRef.current = null;
     });
@@ -687,8 +687,6 @@ export function WorkspaceDraftAgentTab({
               attachmentScopeKeys={attachmentScopeKeys}
               onOpenWorkspaceAttachment={handleOpenWorkspaceAttachment}
               onChangeAttachments={draftInput.setAttachments}
-              skillChips={draftInput.skillChips}
-              onChangeSkillChips={draftInput.setSkillChips}
               cwd={composerState.workingDir}
               clearDraft={draftInput.clear}
               autoFocus={shouldAutoFocusWorkspaceDraftComposer({ isPaneFocused, isSubmitting })}

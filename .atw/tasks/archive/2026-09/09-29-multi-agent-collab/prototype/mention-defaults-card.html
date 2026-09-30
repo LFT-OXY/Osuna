@@ -1,0 +1,665 @@
+<!doctype html>
+<!--
+  PROTOTYPE — 一次性原型，用完即弃。06 号票："提及智能体默认值"设置卡长什么样。
+  四个方案挂在同一个仿制的 设置 → Host → Agents 页上，?variant=A|B|C|D 切换，底部浮条或 ←/→ 键切换。
+  右侧深色面板是原型控制台：切场景（手机宽度、Osuna tools 关闭、老 Host、快照加载中/出错），
+  并实时显示 daemon 配置 providers.<id>.mentionDefaults、最近一次 set_daemon_config 补丁、发送时的解析结果。
+  数据全是假的，存在内存里，刷新即还原。颜色取自 packages/app/src/styles/theme.ts 的亮色主题。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>PROTOTYPE — 提及智能体默认值设置卡</title>
+<style>
+  :root {
+    --canvas: #fcfcfc; --sidebar: #fafafa; --card: #ffffff; --s2: #f4f4f5; --s3: #e4e4e7;
+    --border: #e4e4e7; --row-border: rgba(228, 228, 231, 0.5); --input: #d4d4d8; --border-accent: #d4d4d8;
+    --fg: #27272a; --muted: #71717b; --extra: #a1a1aa; --accent: #1b4ed8;
+    --warn: #7b5d39; --warn-bg: #faf3e8; --danger: #c10007; --hl: rgba(0, 0, 0, 0.06);
+    --sel: #ededee; --sel-ring: #dcdcdd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ec; color: var(--fg); font: 14px/20px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- 仿制的设置外壳 ---------- */
+  .stage { display: flex; justify-content: center; padding: 24px 360px 96px 24px; min-height: 100vh; }
+  .frame { background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 8px 30px rgba(0,0,0,.08); }
+  .frame.desktop { width: 1100px; min-height: 860px; }
+  .frame.phone { width: 390px; min-height: 844px; flex-direction: column; }
+  .nav { width: 320px; background: var(--sidebar); padding: 16px 12px; flex-shrink: 0; }
+  .nav .group { color: var(--muted); font-size: 12px; font-weight: 500; margin: 16px 8px 6px; }
+  .nav .item { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+  .nav .item.on { background: var(--sel); box-shadow: inset 0 0 0 1px var(--sel-ring); color: var(--fg); }
+  .nav .item .ic { width: 16px; height: 16px; border-radius: 4px; background: var(--s3); }
+  .detail { flex: 1; min-width: 0; overflow: auto; }
+  .detail-header { height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 24px; }
+  .detail-header .badge { width: 24px; height: 24px; border-radius: 6px; background: var(--s2); display: grid; place-items: center; font-size: 12px; }
+  .detail-header .title { font-size: 14px; font-weight: 300; }
+  .phone .detail-header { padding: 0 12px; }
+  .phone .detail-header .title { font-weight: 400; }
+  .column { max-width: 720px; margin: 0 auto; padding: 16px 24px 48px; }
+  .phone .column { padding: 8px 16px 48px; }
+
+  /* ---------- settings primitives ---------- */
+  .section { margin-bottom: 24px; }
+  .section-head { display: flex; align-items: center; gap: 6px; margin: 0 0 12px 4px; color: var(--muted); font-size: 13px; font-weight: 500; }
+  .info { width: 14px; height: 14px; border-radius: 50%; border: 1.25px solid var(--muted); display: inline-grid; place-items: center; font-size: 9px; font-weight: 600; cursor: help; position: relative; }
+  .info:hover::after { content: attr(data-tip); position: absolute; left: 20px; top: -6px; width: 300px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-weight: 400; font-size: 12px; line-height: 17px; box-shadow: 0 6px 20px rgba(0,0,0,.1); z-index: 30; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .card + .card { margin-top: 12px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 8px 16px; }
+  .row + .row, .row-border { border-top: 1px solid var(--row-border); }
+  .row-content { flex: 1; min-width: 0; }
+  .row-title { font-size: 14px; line-height: 20px; }
+  .row-hint { color: var(--muted); font-size: 12px; line-height: 16px; margin-top: 2px; }
+  .row-hint.warn { color: var(--warn); }
+  .row-hint.danger { color: var(--danger); }
+  .row-hint.flash { color: var(--accent); }
+  .switch { width: 32px; height: 18px; border-radius: 9px; background: var(--s3); position: relative; cursor: pointer; flex-shrink: 0; border: 0; padding: 0; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .12s; }
+  .switch.on { background: var(--accent); }
+  .switch.on::after { left: 16px; }
+  .btn { height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid transparent; background: var(--s3); cursor: pointer; font-size: 13px; white-space: nowrap; }
+  .btn.outline { background: transparent; border-color: var(--border-accent); }
+  .btn.ghost { background: transparent; color: var(--muted); }
+  .btn.ghost:hover, .btn.outline:hover { background: var(--hl); color: var(--fg); }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .stub { color: var(--muted); font-size: 13px; }
+
+  /* DropdownTrigger：sm 按钮盒、borderInput 描边、值 + chevron */
+  .trig { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px 0 10px; border: 1px solid var(--input); border-radius: 8px; background: transparent; cursor: pointer; font-size: 13px; max-width: 170px; min-width: 0; }
+  .trig:hover, .trig.open { border-color: #a1a1aa; }
+  .trig .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trig .v.unset { color: var(--muted); }
+  .trig .chev { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+  .trig.warn { border-color: #d9c3a3; }
+  .trig.warn .v { color: var(--warn); }
+  .trig[disabled] { opacity: .5; cursor: default; }
+  .trig.full { width: 100%; max-width: none; justify-content: space-between; height: 32px; }
+  .spin { width: 10px; height: 10px; border: 1.5px solid var(--s3); border-top-color: var(--muted); border-radius: 50%; animation: r .8s linear infinite; flex-shrink: 0; }
+  @keyframes r { to { transform: rotate(360deg); } }
+
+  .picon { width: 28px; height: 28px; border-radius: 8px; background: var(--s2); display: grid; place-items: center; flex-shrink: 0; font-size: 12px; font-weight: 600; }
+  .pname { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  .dot.warn { background: #c09664; }
+
+  /* 菜单：popoverSurface，行高 30，行内缩 4 */
+  .menu { position: fixed; z-index: 50; min-width: 200px; max-width: 320px; max-height: 340px; overflow: auto; background: rgba(255,255,255,.96); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 4px; }
+  .mi { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 6px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+  .mi:hover { background: var(--hl); }
+  .mi .ck { width: 14px; color: var(--fg); flex-shrink: 0; }
+  .mi .lb { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .mi .sub { color: var(--muted); font-size: 12px; }
+  .mi.warn .lb { color: var(--warn); }
+  .mi.dis { opacity: .5; cursor: default; }
+  .msep { height: 1px; background: var(--row-border); margin: 4px 6px; }
+
+  /* 变体 A：行内三下拉 */
+  .a-head { display: flex; align-items: center; min-height: 32px; padding: 0 16px; color: var(--muted); font-size: 12px; background: transparent; }
+  .a-head .cols, .a-row .cols { display: grid; grid-template-columns: repeat(3, 150px); gap: 8px; }
+  .a-row { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 16px; border-top: 1px solid var(--row-border); }
+  .a-row .trig { max-width: none; width: 150px; justify-content: space-between; }
+  .phone .a-head { display: none; }
+  .phone .a-row { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 16px; }
+  .phone .a-row .cols { grid-template-columns: 1fr; }
+  .phone .a-row .trig { width: 100%; height: 32px; }
+  .phone .a-row .cols .lbl { display: flex; align-items: center; gap: 8px; }
+  .a-row .cols .lbl > span { display: none; }
+  .phone .a-row .cols .lbl > span { display: inline; width: 36px; flex-shrink: 0; color: var(--muted); font-size: 12px; }
+
+  /* 变体 B：可展开行 */
+  .b-row { cursor: pointer; }
+  .b-row:hover { background: rgba(0,0,0,.015); }
+  .b-caret { color: var(--muted); font-size: 11px; transition: transform .12s; }
+  .b-caret.open { transform: rotate(90deg); }
+  .b-sub { padding-left: 54px; }
+  .b-sub .row { padding-left: 0; }
+  .b-sub .row + .row { border-top: 1px solid var(--row-border); }
+  .b-sub-foot { display: flex; justify-content: flex-end; padding: 0 16px 10px 0; }
+
+  /* 变体 C：codeg 式标签 */
+  .c-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px; }
+  .c-tab { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 13px; }
+  .c-tab.on { background: var(--s3); border-color: var(--s3); }
+  .c-tab .mini { width: 16px; height: 16px; border-radius: 4px; font-size: 9px; display: grid; place-items: center; background: var(--s2); font-weight: 600; }
+  .c-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px; background: rgba(244,244,245,.6); border-top: 1px solid var(--row-border); }
+
+  /* 变体 D：行 + 弹窗 */
+  .d-row { cursor: pointer; }
+  .d-row:hover { background: rgba(0,0,0,.015); }
+  .chev-r { color: var(--muted); font-size: 14px; }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.28); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 40; }
+  .phone .scrim { align-items: flex-end; }
+  .sheet { width: 440px; background: var(--card); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.2); overflow: hidden; }
+  .phone .sheet { width: 100%; border-radius: 18px 18px 0 0; }
+  .sheet-h { padding: 16px 20px 4px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+  .sheet-b { padding: 8px 20px 16px; }
+  .field { margin-top: 14px; }
+  .field .fl { font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+  .field .fh { margin-top: 4px; }
+  .sheet-f { display: flex; justify-content: space-between; gap: 8px; padding: 12px 20px; background: rgba(244,244,245,.6); border-top: 1px solid var(--border); }
+  .frame { position: relative; }
+
+  /* 卡片级状态 */
+  .notice { display: flex; gap: 8px; align-items: flex-start; padding: 12px 16px; color: var(--muted); font-size: 12px; line-height: 16px; }
+  .notice .i { color: var(--accent); }
+  .dimmed { opacity: .5; pointer-events: none; }
+  .one-line { padding: 16px; color: var(--muted); font-size: 13px; }
+
+  /* ---------- 原型控制台（刻意与设计无关的深色） ---------- */
+  .panel { position: fixed; right: 16px; top: 16px; bottom: 80px; width: 330px; background: #17171a; color: #e4e4e7; border-radius: 12px; padding: 14px; overflow: auto; font-size: 12px; line-height: 17px; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+  .panel h4 { margin: 12px 0 6px; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .04em; }
+  .panel h4:first-child { margin-top: 0; }
+  .panel label { display: flex; gap: 6px; align-items: center; margin: 3px 0; cursor: pointer; }
+  .panel pre { margin: 0; background: #0b0b0c; border-radius: 8px; padding: 8px; white-space: pre-wrap; word-break: break-all; font: 11px/15px ui-monospace, Menlo, monospace; color: #d4d4d8; }
+  .panel .q { color: #fbbf24; }
+  .panel .seg { display: inline-flex; background: #27272a; border-radius: 6px; padding: 2px; }
+  .panel .seg button { background: none; border: 0; color: #a1a1aa; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .panel .seg button.on { background: #3f3f46; color: #fff; }
+  .panel .reset { margin-top: 6px; background: #27272a; border: 0; color: #e4e4e7; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .switcher { position: fixed; left: calc(50% - 170px); bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; background: #111; color: #fff; border-radius: 999px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.35); z-index: 60; font-size: 13px; }
+  .switcher button { background: #2a2a2e; border: 0; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 15px; }
+  .switcher .lbl { padding: 0 14px; min-width: 260px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="stage"><div id="frame" class="frame desktop"></div></div>
+<div class="panel" id="panel"></div>
+<div class="switcher">
+  <button id="prev" title="上一个方案（←）">←</button>
+  <div class="lbl" id="vlabel"></div>
+  <button id="next" title="下一个方案（→）">→</button>
+</div>
+<div id="menu" class="menu" hidden></div>
+
+<script>
+// ============ 假数据：已启用的 provider 及其快照 ============
+const PROVIDERS = [
+  { id: "claude", name: "Claude", glyph: "✳", color: "#d97757", defaultModeId: "default",
+    models: [
+      { id: "claude-opus-5-5", label: "Opus 5.5", isDefault: true, defaultThinking: "high",
+        thinking: [["low", "低"], ["medium", "中"], ["high", "高"], ["max", "最高"]] },
+      { id: "claude-sonnet-5", label: "Sonnet 5", defaultThinking: "medium",
+        thinking: [["low", "低"], ["medium", "中"], ["high", "高"]] },
+      { id: "claude-haiku-4-5", label: "Haiku 4.5", thinking: [] },
+    ],
+    modes: [["default", "Always Ask"], ["acceptEdits", "Accept File Edits"], ["plan", "Plan Mode"], ["auto", "Auto mode"], ["bypassPermissions", "Bypass"]] },
+  { id: "codex", name: "Codex", glyph: "◎", color: "#111", defaultModeId: "default",
+    models: [
+      { id: "gpt-5.5", label: "GPT-5.5", isDefault: true, defaultThinking: "medium",
+        thinking: [["low", "低"], ["medium", "中"], ["high", "高"], ["xhigh", "超高"]] },
+      { id: "gpt-5.5-mini", label: "GPT-5.5 mini", defaultThinking: "medium",
+        thinking: [["low", "低"], ["medium", "中"], ["high", "高"]] },
+    ],
+    modes: [["default", "Default Permissions"], ["auto-review", "Auto-review"], ["full-access", "Full Access"]] },
+  { id: "opencode", name: "OpenCode", glyph: "▢", color: "#333", defaultModeId: "build",
+    models: [
+      { id: "anthropic/claude-sonnet-5", label: "anthropic/claude-sonnet-5", isDefault: true, defaultThinking: "default",
+        thinking: [["default", "default"], ["high", "high"], ["max", "max"]] },
+      { id: "openai/gpt-5.5", label: "openai/gpt-5.5", defaultThinking: "medium",
+        thinking: [["low", "low"], ["medium", "medium"], ["high", "high"]] },
+      { id: "zai/glm-5", label: "zai/glm-5", thinking: [] },
+      { id: "moonshot/kimi-k3", label: "moonshot/kimi-k3", thinking: [] },
+      { id: "deepseek/deepseek-v4", label: "deepseek/deepseek-v4", thinking: [] },
+      { id: "google/gemini-3-pro", label: "google/gemini-3-pro", defaultThinking: "high", thinking: [["low", "low"], ["high", "high"]] },
+      { id: "qwen/qwen4-coder", label: "qwen/qwen4-coder", thinking: [] },
+      { id: "xai/grok-5", label: "xai/grok-5", thinking: [] },
+    ],
+    modes: [["build", "build"], ["plan", "plan"]] },
+  { id: "pi", name: "Pi", glyph: "π", color: "#555", defaultModeId: null,
+    models: [
+      { id: "claude-sonnet-5", label: "claude-sonnet-5", isDefault: true, defaultThinking: "medium",
+        thinking: [["off", "off"], ["minimal", "minimal"], ["low", "low"], ["medium", "medium"], ["high", "high"]] },
+      { id: "gpt-5.5", label: "gpt-5.5", defaultThinking: "medium",
+        thinking: [["off", "off"], ["low", "low"], ["medium", "medium"], ["high", "high"]] },
+    ],
+    modes: [] },
+  { id: "copilot", name: "Copilot", glyph: "⌘", color: "#444", defaultModeId: "agent",
+    models: [
+      { id: "claude-sonnet-5", label: "Claude Sonnet 5", isDefault: true, thinking: [] },
+      { id: "gpt-5.5", label: "GPT-5.5", thinking: [] },
+    ],
+    modes: [["agent", "Agent"], ["autopilot", "Autopilot"]] },
+];
+const P = Object.fromEntries(PROVIDERS.map((p) => [p.id, p]));
+const FIELDS = [["model", "模型"], ["thinkingOptionId", "思考"], ["modeId", "模式"]];
+
+// daemon 配置 providers.<id>.mentionDefaults（缺省键 = 默认）
+const INITIAL = {
+  claude: { model: "claude-sonnet-5", thinkingOptionId: "high" },
+  codex: { model: "gpt-5.2-codex" }, // 已下线的模型 → 失效
+  opencode: {},
+  pi: { thinkingOptionId: "high" },
+  copilot: { modeId: "autopilot" },
+};
+let config = structuredClone(INITIAL);
+let lastPatch = null;
+const flash = {}; // pid → 短暂提示（思考档位随模型重置）
+
+const VARIANTS = {
+  A: "行内三下拉（即时保存）",
+  B: "可展开行（即时保存）",
+  C: "codeg 式标签 + 保存按钮",
+  D: "行 + 弹窗编辑（保存/取消）",
+};
+const scen = { width: "desktop", toolsOff: false, toolsOffStyle: "notice", oldHost: false, opencodeLoading: false, copilotError: false };
+let variant = new URLSearchParams(location.search).get("variant") || "A";
+if (!VARIANTS[variant]) variant = "A";
+
+// 变体局部状态
+const bOpen = new Set(["claude"]);
+let cTab = "claude";
+let cDrafts = structuredClone(config);
+let dSheet = null; // { pid, draft }
+
+// ============ 解析：05 号票规则 4、7 ============
+function snapState(pid) {
+  if (pid === "opencode" && scen.opencodeLoading) return "loading";
+  if (pid === "copilot" && scen.copilotError) return "error";
+  return "ready";
+}
+const defModel = (p) => p.models.find((m) => m.isDefault) || p.models[0];
+const findModel = (p, id) => p.models.find((m) => m.id === id);
+const defThinking = (m) => (m && m.thinking.length ? m.defaultThinking || m.thinking[0][0] : null);
+const thinkingLabel = (m, id) => (m && m.thinking.find((t) => t[0] === id) || [])[1];
+const modeLabel = (p, id) => (p.modes.find((x) => x[0] === id) || [])[1];
+
+function analyze(pid, cfg) {
+  const p = P[pid];
+  const st = snapState(pid);
+  const out = { st, stale: {}, eff: {} };
+  if (st !== "ready") return out;
+  const cfgModel = cfg.model ? findModel(p, cfg.model) : null;
+  out.stale.model = Boolean(cfg.model && !cfgModel);
+  const effModel = cfgModel || defModel(p);
+  out.eff.model = effModel;
+  if (effModel.thinking.length) {
+    const ok = cfg.thinkingOptionId && effModel.thinking.some((t) => t[0] === cfg.thinkingOptionId);
+    // 模型失效 → 默认模型及其默认档位
+    out.stale.thinkingOptionId = Boolean(cfg.thinkingOptionId && (!ok || out.stale.model));
+    out.eff.thinking = ok && !out.stale.model ? cfg.thinkingOptionId : defThinking(effModel);
+  } else {
+    out.stale.thinkingOptionId = Boolean(cfg.thinkingOptionId);
+    out.eff.thinking = null;
+  }
+  if (p.modes.length) {
+    const ok = cfg.modeId && p.modes.some((m) => m[0] === cfg.modeId);
+    out.stale.modeId = Boolean(cfg.modeId && !ok);
+    out.eff.mode = ok ? cfg.modeId : p.defaultModeId;
+  } else {
+    out.stale.modeId = Boolean(cfg.modeId);
+    out.eff.mode = null;
+  }
+  return out;
+}
+
+// 路由提示里写的确定值（未就绪时原样透传）
+function routing(pid) {
+  const cfg = config[pid];
+  const a = analyze(pid, cfg);
+  if (a.st !== "ready") {
+    const s = {};
+    if (cfg.thinkingOptionId) s.thinkingOptionId = cfg.thinkingOptionId;
+    if (cfg.modeId) s.modeId = cfg.modeId;
+    return { provider: cfg.model ? `${pid}/${cfg.model}` : pid, settings: s, note: a.st === "loading" ? "快照未就绪：等待刷新，超时则原样透传" : "快照出错：原样透传" };
+  }
+  const s = {};
+  if (a.eff.thinking) s.thinkingOptionId = a.eff.thinking;
+  if (a.eff.mode) s.modeId = a.eff.mode;
+  return { provider: `${pid}/${a.eff.model.id}`, settings: s };
+}
+
+// ============ 字段显示 ============
+function fieldView(pid, field, cfg) {
+  const p = P[pid];
+  const a = analyze(pid, cfg);
+  const v = cfg[field];
+  if (a.st === "loading") return { text: v || "默认", unset: !v, loading: true, disabled: true };
+  if (a.st === "error") return { text: v || "默认", unset: !v, disabled: true };
+  if (field === "model") {
+    const dm = defModel(p);
+    if (!v) return { text: `默认（${dm.label}）`, unset: true };
+    if (a.stale.model) return { text: v, warn: true, fallback: dm.label };
+    return { text: findModel(p, v).label };
+  }
+  if (field === "thinkingOptionId") {
+    const m = a.eff.model;
+    if (!m.thinking.length) return { text: "不支持", unset: true, disabled: !v, warn: Boolean(v), fallback: "无" };
+    const dl = thinkingLabel(m, defThinking(m));
+    if (!v) return { text: `默认（${dl}）`, unset: true };
+    if (a.stale.thinkingOptionId) return { text: thinkingLabel(m, v) || v, warn: true, fallback: dl };
+    return { text: thinkingLabel(m, v) };
+  }
+  if (!p.modes.length) return { text: "不支持", unset: true, disabled: true };
+  const dl = modeLabel(p, p.defaultModeId);
+  if (!v) return { text: `默认（${dl}）`, unset: true };
+  if (a.stale.modeId) return { text: v, warn: true, fallback: dl };
+  return { text: modeLabel(p, v) };
+}
+
+function trigger(pid, field, scope, full) {
+  const cfg = cfgFor(scope, pid);
+  const f = fieldView(pid, field, cfg);
+  const cls = ["trig", full ? "full" : "", f.warn ? "warn" : ""].join(" ");
+  return `<button class="${cls}" data-trig="${scope}:${pid}:${field}" ${f.disabled ? "disabled" : ""} title="${esc(f.text)}">
+    ${f.loading ? '<span class="spin"></span>' : ""}<span class="v ${f.unset ? "unset" : ""}">${f.warn ? "⚠ " : ""}${esc(f.text)}</span><span class="chev">▾</span></button>`;
+}
+
+// 一行的附注：失效、快照状态、联动提示
+function rowNotes(pid, cfg) {
+  const a = analyze(pid, cfg);
+  if (a.st === "loading") return `<div class="row-hint">加载模型列表...</div>`;
+  if (a.st === "error") return `<div class="row-hint danger">无法读取模型列表，发送时原样使用已保存的值</div>`;
+  const parts = [];
+  for (const [field, name] of FIELDS) {
+    if (!a.stale[field]) continue;
+    const f = fieldView(pid, field, cfg);
+    parts.push(`${name} ${esc(cfg[field])} 不可用，将使用默认（${esc(f.fallback)}）`);
+  }
+  let html = parts.map((t) => `<div class="row-hint warn">${t}</div>`).join("");
+  if (flash[pid]) html += `<div class="row-hint flash">${flash[pid]}</div>`;
+  return html;
+}
+
+function summary(pid, cfg) {
+  const a = analyze(pid, cfg);
+  if (a.st === "loading") return "加载模型列表...";
+  if (a.st === "error") return Object.values(cfg).length ? Object.values(cfg).join(" · ") : "全部使用默认";
+  if (!Object.keys(cfg).length) return "全部使用默认";
+  return FIELDS.map(([field, name]) => {
+    const f = fieldView(pid, field, cfg);
+    if (f.unset) return null;
+    return (f.warn ? "⚠ " : "") + f.text;
+  }).filter(Boolean).join(" · ") + (Object.keys(cfg).length < 3 ? " · 其余默认" : "");
+}
+function hasWarn(pid, cfg) { const a = analyze(pid, cfg); return Object.values(a.stale).some(Boolean); }
+
+function cfgFor(scope, pid) {
+  if (scope === "live") return config[pid];
+  if (scope === "tab") return cDrafts[pid];
+  return dSheet.draft;
+}
+
+// ============ 菜单 ============
+function menuItems(pid, field, cfg) {
+  const p = P[pid];
+  const a = analyze(pid, cfg);
+  const cur = cfg[field];
+  const items = [];
+  const f = fieldView(pid, field, cfg);
+  if (field === "model") {
+    items.push({ value: "", label: `默认（${defModel(p).label}）`, checked: !cur });
+    items.push({ sep: true });
+    if (a.stale.model) items.push({ value: cur, label: `${cur}（不可用）`, checked: true, warn: true });
+    for (const m of p.models) items.push({ value: m.id, label: m.label, sub: m.thinking.length ? "" : "无思考档位", checked: cur === m.id });
+  } else if (field === "thinkingOptionId") {
+    const m = a.eff.model;
+    items.push({ value: "", label: `默认（${thinkingLabel(m, defThinking(m))}）`, checked: !cur, sub: `随 ${m.label}` });
+    items.push({ sep: true });
+    if (a.stale.thinkingOptionId) items.push({ value: cur, label: `${cur}（不可用）`, checked: true, warn: true });
+    for (const t of m.thinking) items.push({ value: t[0], label: t[1], checked: cur === t[0] && !a.stale.thinkingOptionId });
+  } else {
+    items.push({ value: "", label: `默认（${modeLabel(p, p.defaultModeId)}）`, checked: !cur });
+    items.push({ sep: true });
+    if (a.stale.modeId) items.push({ value: cur, label: `${cur}（不可用）`, checked: true, warn: true });
+    for (const x of p.modes) items.push({ value: x[0], label: x[1], checked: cur === x[0] });
+  }
+  return items;
+}
+
+const menuEl = document.getElementById("menu");
+let menuCtx = null;
+function openMenu(btn) {
+  const [scope, pid, field] = btn.dataset.trig.split(":");
+  const items = menuItems(pid, field, cfgFor(scope, pid));
+  menuEl.innerHTML = items.map((it, i) => it.sep ? '<div class="msep"></div>' :
+    `<div class="mi ${it.warn ? "warn" : ""}" data-i="${i}"><span class="ck">${it.checked ? "✓" : ""}</span><span class="lb">${esc(it.label)}</span>${it.sub ? `<span class="sub">${esc(it.sub)}</span>` : ""}</div>`).join("");
+  const r = btn.getBoundingClientRect();
+  menuEl.hidden = false;
+  menuEl.style.minWidth = Math.max(200, r.width) + "px";
+  menuEl.style.left = Math.min(r.left, innerWidth - 340) + "px";
+  const h = menuEl.offsetHeight;
+  menuEl.style.top = (r.bottom + 4 + h > innerHeight ? r.top - 4 - h : r.bottom + 4) + "px";
+  menuCtx = { scope, pid, field, items, btn };
+  btn.classList.add("open");
+}
+function closeMenu() { if (menuCtx) menuCtx.btn.classList.remove("open"); menuEl.hidden = true; menuCtx = null; }
+menuEl.addEventListener("click", (e) => {
+  const el = e.target.closest(".mi");
+  if (!el || !menuCtx) return;
+  const it = menuCtx.items[+el.dataset.i];
+  const { scope, pid, field } = menuCtx;
+  closeMenu();
+  pick(scope, pid, field, it.value);
+});
+document.addEventListener("mousedown", (e) => { if (menuCtx && !menuEl.contains(e.target) && !e.target.closest("[data-trig]")) closeMenu(); });
+
+function pick(scope, pid, field, value) {
+  const cfg = cfgFor(scope, pid);
+  if (value) cfg[field] = value; else delete cfg[field];
+  // 联动：换模型后，已选档位不属于新模型 → 清回默认，并短暂提示
+  if (field === "model" && cfg.thinkingOptionId) {
+    const p = P[pid];
+    const m = findModel(p, cfg.model) || defModel(p);
+    if (!m.thinking.some((t) => t[0] === cfg.thinkingOptionId)) {
+      delete cfg.thinkingOptionId;
+      flash[pid] = m.thinking.length ? `思考档位已随模型改回默认（${thinkingLabel(m, defThinking(m))}）` : `${m.label} 没有思考档位，已清除`;
+      setTimeout(() => { delete flash[pid]; render(); }, 3500);
+    }
+  }
+  if (scope === "live") commit([pid]);
+  render();
+}
+
+function commit(pids) {
+  const patch = { providers: {} };
+  for (const pid of pids) patch.providers[pid] = { mentionDefaults: structuredClone(config[pid]) };
+  lastPatch = patch;
+}
+
+// ============ 页面外壳 ============
+function shell(inner) {
+  const phone = scen.width === "phone";
+  const nav = phone ? "" : `<div class="nav">
+    <div class="group">App</div>
+    ${["通用", "外观", "快捷键"].map((x) => `<div class="item"><span class="ic"></span>${x}</div>`).join("")}
+    <div class="group">Host · MacBook</div>
+    ${["概览", "连接", "Agents", "元数据", "Workspaces", "Providers", "价格表", "插件"].map((x) => `<div class="item ${x === "Agents" ? "on" : ""}"><span class="ic"></span>${x}</div>`).join("")}
+  </div>`;
+  const header = phone
+    ? `<div class="detail-header"><span style="color:var(--muted)">‹</span><span class="title">Agents</span></div>`
+    : `<div class="detail-header"><span class="badge">⚙</span><span class="title">Agents</span></div>`;
+  return `${nav}<div class="detail">${header}<div class="column">
+    <div class="section"><div class="section-head">Agents</div>
+      <div class="card"><div class="row"><div class="row-content"><div class="row-title">启用 Osuna tools</div><div class="row-hint">Agent 将能够管理 worktree、Agent 和计划</div></div>
+        <button class="switch ${scen.toolsOff ? "" : "on"}" data-act="toggle-tools"></button></div></div>
+      <div class="card"><div class="row"><div class="row-content"><div class="row-title">浏览器工具</div><div class="row-hint">让 Agent 控制内置浏览器</div></div><button class="switch"></button></div></div>
+      <div class="card"><div class="row"><div class="row-content"><div class="row-title">System prompt</div><div class="row-hint">为所有 Agent 添加 system prompt</div></div><button class="btn outline">编辑</button></div></div>
+    </div>
+    ${inner}
+    <div class="section"><div class="section-head">Skills</div><div class="card"><div class="row"><span class="stub">（现有 Skills 区块，略）</span></div></div></div>
+    <div class="section"><div class="section-head">Agent 配置</div><div class="card"><div class="row"><span class="stub">（现有 Agent profile 列表，略；Agent profile 不进上面的卡片）</span></div></div></div>
+  </div></div>${dSheet ? sheetHtml() : ""}`;
+}
+
+const TIP = "用 @ 提及某个 provider 时，新子智能体使用的模型、思考档位和模式。未设置的项使用该 provider 的默认值，不继承当前智能体的模式。@ Agent 配置时先用它自己的设置";
+function section(cardInner, opts = {}) {
+  let body;
+  if (scen.oldHost) {
+    body = `<div class="card"><div class="one-line">更新 Host 后可以设置提及智能体默认值</div></div>`;
+  } else {
+    const notice = scen.toolsOff ? `<div class="notice"><span class="i">ⓘ</span><span>Osuna tools 已关闭，@ 提及智能体暂不可用。这里的设置在开启后生效</span></div>` : "";
+    const dim = scen.toolsOff && scen.toolsOffStyle === "dim";
+    body = `<div class="card">${notice}<div class="${dim ? "dimmed" : ""}" style="${notice ? "border-top:1px solid var(--row-border)" : ""}">${cardInner}</div></div>`;
+  }
+  return `<div class="section"><div class="section-head">提及智能体默认值 <span class="info" data-tip="${TIP}">i</span></div>${body}</div>`;
+}
+const icon = (p) => `<span class="picon" style="color:${p.color}">${p.glyph}</span>`;
+
+// ============ 变体 A：每 provider 一行，三个下拉并排 ============
+function variantA() {
+  const head = `<div class="a-head"><div style="flex:1">Provider</div><div class="cols"><div>模型</div><div>思考</div><div>模式</div></div></div>`;
+  const rows = PROVIDERS.map((p) => `<div class="a-row">
+      <div class="row-content"><div class="pname">${icon(p)}<div style="min-width:0"><div class="row-title">${p.name}</div>${rowNotes(p.id, config[p.id])}</div></div></div>
+      <div class="cols">${FIELDS.map(([f, n]) => `<div class="lbl"><span>${n}</span>${trigger(p.id, f, "live")}</div>`).join("")}</div>
+    </div>`).join("");
+  return section(head + `<div style="margin-top:-1px">${rows}</div>`);
+}
+
+// ============ 变体 B：可展开行，展开后是标准设置行 ============
+function variantB() {
+  return section(PROVIDERS.map((p, i) => {
+    const open = bOpen.has(p.id);
+    const cfg = config[p.id];
+    const head = `<div class="row b-row ${i ? "row-border" : ""}" data-act="b-toggle" data-pid="${p.id}">
+      <div class="row-content"><div class="pname">${icon(p)}<div style="min-width:0"><div class="row-title">${p.name}</div>
+        <div class="row-hint ${hasWarn(p.id, cfg) ? "warn" : ""}">${esc(summary(p.id, cfg))}</div></div></div></div>
+      <span class="b-caret ${open ? "open" : ""}">▶</span></div>`;
+    if (!open) return head;
+    const sub = `<div class="b-sub">${FIELDS.map(([f, n]) => {
+      const a = analyze(p.id, cfg);
+      const note = a.stale[f] ? `<div class="row-hint warn">${esc(cfg[f])} 不可用，将使用默认（${esc(fieldView(p.id, f, cfg).fallback)}）</div>` : "";
+      const fl = f === "thinkingOptionId" && flash[p.id] ? `<div class="row-hint flash">${flash[p.id]}</div>` : "";
+      const st = f === "model" && a.st === "error" ? `<div class="row-hint danger">无法读取模型列表，发送时原样使用已保存的值</div>` : "";
+      return `<div class="row"><div class="row-content"><div class="row-title">${n}</div>${note}${fl}${st}</div>${trigger(p.id, f, "live")}</div>`;
+    }).join("")}
+      ${Object.keys(cfg).length ? `<div class="b-sub-foot"><button class="btn ghost" data-act="b-reset" data-pid="${p.id}">全部恢复默认</button></div>` : ""}</div>`;
+    return head + sub;
+  }).join(""));
+}
+
+// ============ 变体 C：codeg 式，一次编辑一个 provider，底部保存 ============
+function variantC() {
+  const dirty = (pid) => JSON.stringify(cDrafts[pid]) !== JSON.stringify(config[pid]);
+  const anyDirty = PROVIDERS.some((p) => dirty(p.id));
+  const tabs = `<div class="c-tabs">${PROVIDERS.map((p) => `<button class="c-tab ${cTab === p.id ? "on" : ""}" data-act="c-tab" data-pid="${p.id}">
+      <span class="mini" style="color:${p.color}">${p.glyph}</span>${p.name}
+      ${dirty(p.id) ? '<span class="dot" title="未保存"></span>' : hasWarn(p.id, config[p.id]) ? '<span class="dot warn" title="有不可用的值"></span>' : ""}</button>`).join("")}</div>`;
+  const cfg = cDrafts[cTab];
+  const a = analyze(cTab, cfg);
+  const rows = FIELDS.map(([f, n]) => {
+    const note = a.stale[f] ? `<div class="row-hint warn">${esc(cfg[f])} 不可用，将使用默认（${esc(fieldView(cTab, f, cfg).fallback)}）</div>` : "";
+    const fl = f === "thinkingOptionId" && flash[cTab] ? `<div class="row-hint flash">${flash[cTab]}</div>` : "";
+    const st = f === "model" && a.st !== "ready" ? rowNotes(cTab, cfg) : "";
+    return `<div class="row"><div class="row-content"><div class="row-title">${n}</div>${note}${fl}${st}</div>${trigger(cTab, f, "tab")}</div>`;
+  }).join("");
+  const foot = `<div class="c-foot"><button class="btn ghost" data-act="c-clear" ${Object.keys(cfg).length ? "" : "disabled"}>${P[cTab].name} 恢复默认</button>
+    <div style="display:flex;gap:8px"><button class="btn" data-act="c-discard" ${anyDirty ? "" : "disabled"}>放弃</button><button class="btn primary" data-act="c-save" ${anyDirty ? "" : "disabled"}>保存</button></div></div>`;
+  return section(tabs + `<div style="border-top:1px solid var(--row-border)">${rows}</div>` + foot);
+}
+
+// ============ 变体 D：每 provider 一行摘要，点开弹窗编辑 ============
+function variantD() {
+  return section(PROVIDERS.map((p, i) => {
+    const cfg = config[p.id];
+    return `<div class="row d-row ${i ? "row-border" : ""}" data-act="d-open" data-pid="${p.id}">
+      <div class="row-content"><div class="pname">${icon(p)}<div style="min-width:0"><div class="row-title">${p.name}</div>
+      <div class="row-hint ${hasWarn(p.id, cfg) ? "warn" : ""}">${esc(summary(p.id, cfg))}</div></div></div></div>
+      <span class="chev-r">›</span></div>`;
+  }).join(""));
+}
+function sheetHtml() {
+  const p = P[dSheet.pid];
+  const cfg = dSheet.draft;
+  const a = analyze(p.id, cfg);
+  const fields = FIELDS.map(([f, n]) => {
+    const note = a.stale[f] ? `<div class="row-hint warn fh">${esc(cfg[f])} 不可用，将使用默认（${esc(fieldView(p.id, f, cfg).fallback)}）</div>` : "";
+    const fl = f === "thinkingOptionId" && flash[p.id] ? `<div class="row-hint flash fh">${flash[p.id]}</div>` : "";
+    return `<div class="field"><div class="fl">${n}</div>${trigger(p.id, f, "sheet", true)}${note}${fl}</div>`;
+  }).join("");
+  const st = a.st !== "ready" ? rowNotes(p.id, cfg) : "";
+  return `<div class="scrim" data-act="d-close-bg"><div class="sheet">
+    <div class="sheet-h">${icon(p)}${p.name} 的提及默认值</div>
+    <div class="sheet-b">${st}${fields}</div>
+    <div class="sheet-f"><button class="btn ghost" data-act="d-clear" ${Object.keys(cfg).length ? "" : "disabled"}>全部恢复默认</button>
+      <div style="display:flex;gap:8px"><button class="btn" data-act="d-cancel">取消</button><button class="btn primary" data-act="d-save">保存</button></div></div>
+  </div></div>`;
+}
+
+// ============ 控制台 ============
+function renderPanel() {
+  const res = Object.fromEntries(PROVIDERS.map((p) => [p.id, routing(p.id)]));
+  document.getElementById("panel").innerHTML = `
+    <h4>方案</h4><div class="seg">${Object.keys(VARIANTS).map((k) => `<button class="${k === variant ? "on" : ""}" data-v="${k}">${k}</button>`).join("")}</div>
+    <h4>宽度</h4><div class="seg"><button data-w="desktop" class="${scen.width === "desktop" ? "on" : ""}">桌面</button><button data-w="phone" class="${scen.width === "phone" ? "on" : ""}">手机</button></div>
+    <h4>场景</h4>
+    <label><input type="checkbox" data-s="toolsOff" ${scen.toolsOff ? "checked" : ""}> Osuna tools 关闭（也可点页面上的开关）</label>
+    <div style="margin-left:22px">关闭时卡片：<span class="seg"><button data-ts="notice" class="${scen.toolsOffStyle === "notice" ? "on" : ""}">可编辑+提示</button><button data-ts="dim" class="${scen.toolsOffStyle === "dim" ? "on" : ""}">整卡置灰</button></span></div>
+    <label><input type="checkbox" data-s="oldHost" ${scen.oldHost ? "checked" : ""}> 老 Host（无能力开关）</label>
+    <label><input type="checkbox" data-s="opencodeLoading" ${scen.opencodeLoading ? "checked" : ""}> OpenCode 快照加载中</label>
+    <label><input type="checkbox" data-s="copilotError" ${scen.copilotError ? "checked" : ""}> Copilot 快照出错</label>
+    <button class="reset" data-act="reset-all">还原初始数据</button>
+    <h4>daemon 配置 mentionDefaults</h4><pre>${esc(JSON.stringify(config, null, 1))}</pre>
+    <h4>最近一次 set_daemon_config 补丁</h4><pre>${lastPatch ? esc(JSON.stringify(lastPatch)) : "（无）"}</pre>
+    <h4>此刻 @ 每个 provider，路由提示写入</h4><pre>${esc(Object.entries(res).map(([k, r]) => `${r.provider}  ${JSON.stringify(r.settings)}${r.note ? "\n  ↳ " + r.note : ""}`).join("\n"))}</pre>
+    <h4>待你拍板</h4><div class="q">1. 选哪个方案（或拼哪几块）<br>2. 即时保存 vs 保存按钮<br>3. tools 关闭：可编辑+提示 vs 置灰<br>4. 失效值的呈现是否够用</div>`;
+}
+
+function render() {
+  const f = document.getElementById("frame");
+  f.className = `frame ${scen.width}`;
+  const inner = { A: variantA, B: variantB, C: variantC, D: variantD }[variant]();
+  f.innerHTML = shell(inner);
+  document.getElementById("vlabel").textContent = `${variant} — ${VARIANTS[variant]}`;
+  renderPanel();
+}
+
+function setVariant(v) {
+  variant = v;
+  const u = new URL(location.href); u.searchParams.set("variant", v); history.replaceState(null, "", u);
+  cDrafts = structuredClone(config); dSheet = null; closeMenu(); render();
+}
+const keys = Object.keys(VARIANTS);
+const step = (d) => setVariant(keys[(keys.indexOf(variant) + d + keys.length) % keys.length]);
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input,textarea,[contenteditable]")) return;
+  if (e.key === "Escape") { closeMenu(); if (dSheet) { dSheet = null; render(); } }
+  if (menuCtx) return;
+  if (e.key === "ArrowLeft") step(-1);
+  if (e.key === "ArrowRight") step(1);
+});
+
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  const trig = t.closest("[data-trig]");
+  if (trig) { if (menuCtx && menuCtx.btn === trig) closeMenu(); else { closeMenu(); openMenu(trig); } return; }
+  const pv = t.closest("[data-v]"); if (pv) return setVariant(pv.dataset.v);
+  const pw = t.closest("[data-w]"); if (pw) { scen.width = pw.dataset.w; return render(); }
+  const ts = t.closest("[data-ts]"); if (ts) { scen.toolsOffStyle = ts.dataset.ts; return render(); }
+  const act = t.closest("[data-act]");
+  if (!act) return;
+  const pid = act.dataset.pid;
+  switch (act.dataset.act) {
+    case "toggle-tools": scen.toolsOff = !scen.toolsOff; break;
+    case "reset-all": config = structuredClone(INITIAL); cDrafts = structuredClone(config); lastPatch = null; dSheet = null; break;
+    case "b-toggle": bOpen.has(pid) ? bOpen.delete(pid) : bOpen.add(pid); break;
+    case "b-reset": config[pid] = {}; commit([pid]); break;
+    case "c-tab": cTab = pid; break;
+    case "c-clear": cDrafts[cTab] = {}; break;
+    case "c-discard": cDrafts = structuredClone(config); break;
+    case "c-save": {
+      const changed = PROVIDERS.filter((p) => JSON.stringify(cDrafts[p.id]) !== JSON.stringify(config[p.id])).map((p) => p.id);
+      config = structuredClone(cDrafts); commit(changed); break;
+    }
+    case "d-open": dSheet = { pid, draft: structuredClone(config[pid]) }; break;
+    case "d-close-bg": if (t !== act) return; dSheet = null; break;
+    case "d-cancel": dSheet = null; break;
+    case "d-clear": dSheet.draft = {}; break;
+    case "d-save": config[dSheet.pid] = dSheet.draft; commit([dSheet.pid]); dSheet = null; break;
+  }
+  render();
+});
+document.addEventListener("change", (e) => {
+  const s = e.target.dataset.s; if (s) { scen[s] = e.target.checked; render(); }
+});
+
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+render();
+</script>
+</body>
+</html>

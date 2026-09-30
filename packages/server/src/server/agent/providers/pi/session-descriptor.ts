@@ -9,6 +9,7 @@ import type {
 } from "../../agent-sdk-types.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 import { createRealpathAwarePathMatcher } from "../../../../utils/path.js";
+import { stripTrailingRoutingBlock } from "../../trailing-routing-block.js";
 
 const PI_CONFIG_DIR_NAME = ".pi";
 const PI_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
@@ -439,7 +440,7 @@ function readNonEmptyString(value: unknown): string | null {
 }
 
 function normalizePromptPreview(text: string | null): string | null {
-  const normalized = text?.trim().replace(/\s+/g, " ") ?? "";
+  const normalized = text ? stripTrailingRoutingBlock(text).trim().replace(/\s+/g, " ") : "";
   if (!normalized) return null;
   return normalized.length > 160 ? normalized.slice(0, 160) : normalized;
 }

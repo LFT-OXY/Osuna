@@ -103,7 +103,7 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `lastActivityAt`     | `string?` (ISO 8601)                     | Last activity timestamp                                                                                                                                                                                                                                                                                                                                                             |
 | `lastUserMessageAt`  | `string?` (ISO 8601)                     | Last user message timestamp                                                                                                                                                                                                                                                                                                                                                         |
 | `title`              | `string?`                                | User-visible title                                                                                                                                                                                                                                                                                                                                                                  |
-| `labels`             | `Record<string, string>`                 | Key-value labels (default `{}`). Paseo uses `paseo.parent-agent-id` for parentage and client-scoped `paseo.open-agent-tab.*` labels while managed subagent tabs are open — see [agent-lifecycle.md](./agent-lifecycle.md)                                                                                                                                                           |
+| `labels`             | `Record<string, string>`                 | Key-value labels (default `{}`). Paseo uses `paseo.parent-agent-id` for parentage, `paseo.parent-tool-call-id` for the parent's `create_agent` call, and client-scoped `paseo.open-agent-tab.*` labels while managed subagent tabs are open — see [agent-lifecycle.md](./agent-lifecycle.md)                                                                                        |
 | `lastStatus`         | `AgentStatus`                            | One of: `"initializing"`, `"idle"`, `"running"`, `"error"`, `"closed"`. `closed` means the record is resumable but has no live provider runtime; archive remains represented separately by `archivedAt`.                                                                                                                                                                            |
 | `lastModeId`         | `string?`                                | Last active mode ID                                                                                                                                                                                                                                                                                                                                                                 |
 | `config`             | `SerializableConfig?`                    | Agent session configuration (see below)                                                                                                                                                                                                                                                                                                                                             |
@@ -329,6 +329,29 @@ session is created, resumed, imported, or reloaded, so configuration changes aff
 session rather than an already-running one.
 
 `agents.metadataGeneration.providers` controls the preferred structured-generation fallback order for daemon-side metadata tasks such as commit messages, PR text, branch names, and generated agent titles. Entries are tried first in the configured order, then Paseo falls through to dynamically discovered defaults and finally the current selection when available.
+
+### Mention defaults
+
+`agents.providers.<id>.mentionDefaults` holds the model, thinking option, and mode an Agent mention
+dispatches with. All three fields are optional; a missing field, or a missing object, means the
+provider's runtime default:
+
+```json
+{
+  "agents": {
+    "providers": {
+      "codex": {
+        "mentionDefaults": { "model": "gpt-5.4", "thinkingOptionId": "high", "modeId": "auto" }
+      }
+    }
+  }
+}
+```
+
+A `set_daemon_config` patch replaces a provider's `mentionDefaults` as a whole, so leaving a field
+out resets it to default. `removeProviders` drops it with the rest of the provider entry. The daemon
+reads it when it builds each Routing block and does not validate it on save: a stale value falls back
+at send time (`packages/server/src/server/agent/routing-block.ts`).
 
 ### Git process limits
 
@@ -760,7 +783,7 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
     input: {
       text: string,
       attachments: UserComposerAttachment[],
-      skills?: { name: string, description?: string }[]  // Skill chips; absent on older drafts
+      segments?: InlineSegment[]  // only when the text holds an inline block; restores blocks as blocks
     },
     lifecycle: "active" | "abandoned" | "sent",
     updatedAt: number,     // epoch ms
@@ -771,6 +794,8 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
 ```
 
 Both schemas are strict: `PersistedDraftStoreSchema` (`stores/draft-store/migration.ts`) validates every read and write, and `CanonicalDraftInputSchema` (`state.ts`) is the in-memory shape. A new input field must be added to both as optional. If the persisted schema rejects a write, `createValidatedPersistStorage` removes the whole `paseo-drafts` key, so every draft is lost, not just the new field. The same happens when an older app build reads a draft with a field it does not know.
+
+To retire a field, drop it from `CanonicalDraftInputSchema` but keep it in `PersistedDraftStoreSchema` under a `COMPAT` tag. A stored record that still has it fails `isCanonicalDraftInput`, so startup hands it to `migrateDraftInput`, which rewrites it into the current shape. The old Skill chip `skills` field goes this way: its names become leading Skill blocks in `text` and `segments`.
 
 ### Attachment Store (Web)
 

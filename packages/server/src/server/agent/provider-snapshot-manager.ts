@@ -12,6 +12,7 @@ import { expandTilde } from "../../utils/path.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
 import {
   filterSelectableAgentModels,
+  type AgentCapabilityFlags,
   type AgentClient,
   type AgentCreateConfigParent,
   type AgentMode,
@@ -27,6 +28,7 @@ import {
   runProviderRefreshWithDeadline,
 } from "./provider-refresh-deadline.js";
 import type { ManagedAgent } from "./agent-manager.js";
+import type { CreateAgentsCapability } from "./create-agents-capability.js";
 import type { WorkspaceGitService } from "../workspace-git-service.js";
 import type { ManagedProcessRegistry } from "../managed-processes/managed-processes.js";
 import type { OpenCodeBridge } from "./providers/opencode/bridge.js";
@@ -113,6 +115,12 @@ export interface ProviderSnapshotTransition {
 }
 
 type ProviderSnapshotChangeListener = (transition: ProviderSnapshotTransition) => void;
+
+/** 按 provider 与其 client 声明的通道，预测新建会话能否调用 create_agent；null 表示不预测。 */
+export type CreateAgentsPredictor = (
+  provider: AgentProvider,
+  clientCapabilities: AgentCapabilityFlags,
+) => CreateAgentsCapability | null;
 
 export interface ProviderSnapshotManagerOptions {
   logger: Logger;
@@ -266,6 +274,11 @@ export class ProviderSnapshotManager {
   private providerClients: Record<AgentProvider, AgentClient>;
   private readonly ownedClients = new Set<AgentClient>();
   private readonly pluginProviders: PluginAgentClientRegistry;
+  private createAgentsPredictor: CreateAgentsPredictor | null = null;
+  private readonly predictedRecords = new WeakMap<
+    ProviderSnapshotRecord,
+    { key: string; record: ProviderSnapshotRecord }
+  >();
 
   constructor(options: ProviderSnapshotManagerOptions) {
     this.logger = options.logger;
@@ -664,6 +677,19 @@ export class ProviderSnapshotManager {
         providers,
       );
     }
+  }
+
+  setCreateAgentsPredictor(predictor: CreateAgentsPredictor): void {
+    this.createAgentsPredictor = predictor;
+    this.refreshCreateAgentsPredictions();
+  }
+
+  /**
+   * 目录没变时重发预测。全局开关由 bootstrap 在改开关后调用；provider 策略的变化走
+   * applyMutableProviderConfig → installGeneration，本身就会重发。
+   */
+  refreshCreateAgentsPredictions(): void {
+    this.publishTargets(this.targets.keys());
   }
 
   setRefreshTimeoutMs(refreshTimeoutMs: number | undefined): void {
@@ -1091,7 +1117,9 @@ export class ProviderSnapshotManager {
         const result = binding?.key
           ? this.catalogs.get(binding.key)?.get(provider)?.result
           : undefined;
-        return binding?.failure ?? result ?? this.generation.providerStates.get(provider)!.initial;
+        return this.withCreateAgentsPrediction(
+          binding?.failure ?? result ?? this.generation.providerStates.get(provider)!.initial,
+        );
       });
       const previous = target.snapshot;
       if (sameSnapshotRecords(previous.records, records)) continue;
@@ -1120,14 +1148,32 @@ export class ProviderSnapshotManager {
         bindings: new Map(),
         snapshot: {
           cwd,
-          records: this.generation.order.map(
-            (provider) => this.generation.providerStates.get(provider)!.initial,
+          records: this.generation.order.map((provider) =>
+            this.withCreateAgentsPrediction(this.generation.providerStates.get(provider)!.initial),
           ),
         },
       };
       this.targets.set(cwd, target);
     }
     return target;
+  }
+
+  // 预测字段叠在目录记录上并参与 contentHash，这样开关变化也会推送、ifNoneMatch 不会误判未变。
+  private withCreateAgentsPrediction(record: ProviderSnapshotRecord): ProviderSnapshotRecord {
+    const client = this.providerClients[record.entry.provider];
+    if (!this.createAgentsPredictor || !client || !record.entry.enabled) return record;
+    const prediction = this.createAgentsPredictor(record.entry.provider, client.capabilities);
+    if (!prediction) return record;
+    const fields: Pick<ProviderSnapshotEntry, "canCreateAgents" | "createAgentsUnavailableReason"> =
+      prediction.canCreateAgents
+        ? { canCreateAgents: true }
+        : { canCreateAgents: false, createAgentsUnavailableReason: prediction.unavailableReason };
+    const key = JSON.stringify(fields);
+    const cached = this.predictedRecords.get(record);
+    if (cached?.key === key) return cached.record;
+    const predicted = identifyEntry({ ...record.entry, ...fields });
+    this.predictedRecords.set(record, { key, record: predicted });
+    return predicted;
   }
 
   private getProviderIds(): AgentProvider[] {

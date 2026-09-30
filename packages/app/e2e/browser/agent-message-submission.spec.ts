@@ -23,6 +23,7 @@ import {
   sendDraftToQueue,
   startRunningMockAgent,
   submitMessage,
+  expectComposerText,
 } from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { seedWorkspace } from "../support/helpers/seed-client";
@@ -176,13 +177,12 @@ async function submitMessageWithImage(page: Page, prompt: string): Promise<Locat
       }>((resolve) => {
         requestAnimationFrame(() => {
           const rows = Array.from(document.querySelectorAll('[data-testid="user-message"]'));
-          const composerInput = composerElement as HTMLInputElement | HTMLTextAreaElement;
           resolve({
             rowPresent: rows.some((row) => row.textContent?.includes(submittedPrompt)),
             workingPresent: Boolean(
               document.querySelector('[data-testid="turn-working-indicator"]'),
             ),
-            composerValue: composerInput.value,
+            composerValue: composerElement.textContent,
             attachmentPresent: Boolean(
               document.querySelector('[data-testid="composer-image-attachment-pill"]'),
             ),
@@ -213,7 +213,7 @@ async function submitImageOnlyMessage(page: Page): Promise<Locator> {
 async function expectPendingSubmission(page: Page, userMessage: Locator): Promise<void> {
   await expect(userMessage).toBeVisible();
   await expect(page.getByTestId("turn-working-indicator")).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Message agent..." }).first()).toHaveValue("");
+  await expectComposerText(page.getByRole("textbox", { name: "Message agent..." }).first(), "");
   await expect(page.getByTestId("composer-image-attachment-pill")).toHaveCount(0);
   await expect(userMessage.getByTestId("user-message-timestamp")).toBeAttached();
   await expect(userMessage.getByTestId("user-message-trailing-row")).toHaveCSS("opacity", "0");
@@ -1111,7 +1111,7 @@ test.describe("Agent message submission", () => {
       await expectPrimaryActionsWhole(composer, stop, send);
 
       await send.click();
-      await expect(input).toHaveValue("");
+      await expectComposerText(input, "");
       await expect(
         page.getByTestId("user-message").filter({ hasText: "Draft beside the running turn." }),
       ).toBeVisible({ timeout: 30_000 });
@@ -1223,7 +1223,7 @@ test.describe("Agent message submission", () => {
     const prompt = "Hold this submission.";
     const composer = page.getByRole("textbox", { name: "Message agent..." }).first();
     await composer.fill(prompt);
-    await expect(composer).toHaveValue(prompt);
+    await expectComposerText(composer, prompt);
     await expect(
       page.getByTestId("user-message").filter({ hasText: submissionScenario.existingPrompt }),
     ).toBeVisible();

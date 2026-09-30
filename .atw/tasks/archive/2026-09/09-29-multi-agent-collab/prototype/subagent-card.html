@@ -1,0 +1,677 @@
+<!doctype html>
+<!--
+  PROTOTYPE — 一次性原型，用完即弃。07 号票：时间线子智能体卡片长什么样、怎么交互。
+  三个方案挂在同一段仿制的对话时间线上，?variant=A|B|C 切换（底部浮条或 ←/→ 键）。
+  右侧深色面板是原型控制台：切场景、切手机宽度、切"拿不到 call id 时"的策略，
+  并实时显示每个 create_agent 调用的解析过程（工具名识别 → 关联键 → store 命中 → 渲染决定）。
+  数据全是假的，存在内存里，刷新即还原。颜色取自 packages/app/src/styles/theme.ts 的亮色主题。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>PROTOTYPE — 时间线子智能体卡片</title>
+<style>
+  :root {
+    --canvas: #fcfcfc; --card: #ffffff; --s2: #f4f4f5; --s3: #e4e4e7; --msg: #f4f4f5;
+    --border: #e4e4e7; --fg: #27272a; --prose: rgba(39,39,42,.86); --muted: #71717b; --extra: #a1a1aa;
+    --accent: #1b4ed8; --ok: #3e704a; --danger: #9d433b; --warn: #7b5d39; --warn-bg: #faf3e8;
+    --hl: rgba(0,0,0,.05);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ec; color: var(--fg); font: 14px/20px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .stage { display: flex; justify-content: center; padding: 24px 400px 110px 24px; min-height: 100vh; }
+  .frame { background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.08); display: flex; flex-direction: column; }
+  .frame.desktop { width: 820px; min-height: 820px; }
+  .frame.phone { width: 390px; min-height: 844px; }
+  .tabbar { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .tabbar .tab { padding: 4px 10px; border-radius: 6px; background: var(--s2); color: var(--fg); }
+  .tabbar .archived { margin-left: auto; font-size: 12px; color: var(--warn); background: var(--warn-bg); padding: 2px 8px; border-radius: 6px; }
+  .chat { flex: 1; padding: 20px 0 16px; }
+  .col { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+  .phone .col { padding: 0 14px; }
+  .user { display: flex; justify-content: flex-end; margin-bottom: 18px; }
+  .bubble { background: var(--msg); border-radius: 18px; padding: 10px 14px; max-width: 80%; font-size: 15px; line-height: 22px; }
+  .iblock { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 6px; background: #fff; border: 1px solid var(--border); font-size: 14px; line-height: 20px; vertical-align: 1px; }
+  .prose { color: var(--prose); font-size: 15px; line-height: 24px; margin: 6px 0 10px; }
+  .footer { color: var(--muted); font-size: 12px; display: flex; gap: 12px; margin-top: 10px; }
+  .shimmer { background: linear-gradient(90deg, var(--muted) 30%, #c8c8cc 50%, var(--muted) 70%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent !important; animation: sh 1.6s steps(10) infinite; }
+  @keyframes sh { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+  /* provider 图标 */
+  .pi { width: 14px; height: 14px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .pi.lg { width: 18px; height: 18px; border-radius: 5px; font-size: 11px; }
+
+  /* 状态标记（借 sidebar 的桶） */
+  .mark { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .mark.needs_input { background: #d4a24c; }
+  .mark.failed { background: var(--danger); }
+  .mark.attention { background: var(--accent); }
+  .spin { width: 10px; height: 10px; border: 1.5px solid var(--s3); border-top-color: var(--muted); border-radius: 50%; animation: rot .8s linear infinite; flex-shrink: 0; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .warn { color: var(--warn); }
+  .dim { opacity: .55; }
+
+  /* 通用工具行（现状） */
+  .trow { height: 26px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; border-radius: 6px; }
+  .trow:hover { background: var(--hl); }
+  .trow .name { color: var(--fg); }
+  .trow .sum { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+  .ticon { width: 14px; height: 14px; border: 1.5px solid var(--muted); border-radius: 3px; flex-shrink: 0; }
+  .expand { margin: 2px 0 8px 22px; background: var(--s2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 18px; color: var(--fg); }
+  .expand .h { color: var(--muted); font-weight: 500; margin-top: 6px; }
+  .expand .h:first-child { margin-top: 0; }
+  .expand pre { margin: 2px 0 0; white-space: pre-wrap; font: 12px/18px ui-monospace, Menlo, monospace; }
+
+  /* 方案 A：升级后的工具行 */
+  .arow { height: 26px; display: flex; align-items: center; gap: 8px; font-size: 13px; border-radius: 6px; padding-right: 4px; cursor: pointer; }
+  .arow:hover { background: var(--hl); }
+  .arow .title { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+  .arow .meta { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+  .arow .open { color: var(--muted); font-size: 12px; padding: 0 6px; border-radius: 4px; border: 0; background: none; visibility: hidden; flex-shrink: 0; }
+  .arow:hover .open, .phone .arow .open { visibility: visible; }
+  .arow .open:hover { color: var(--fg); background: var(--hl); }
+
+  /* 方案 B：独立卡片 */
+  .bcard { border: 1px solid var(--border); background: var(--card); border-radius: 10px; margin: 6px 0; cursor: pointer; }
+  .bcard:hover { border-color: #d4d4d8; }
+  .bcard .top { display: flex; align-items: center; gap: 8px; padding: 10px 12px 2px; }
+  .bcard .title { font-size: 14px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: 12px; line-height: 18px; padding: 0 8px; border-radius: 9px; background: var(--s2); color: var(--muted); display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  .badge.needs_input { background: var(--warn-bg); color: var(--warn); }
+  .badge.failed { background: #f8eceb; color: var(--danger); }
+  .bcard .meta { padding: 0 12px 0 38px; font-size: 12px; color: var(--muted); }
+  .bcard .task { padding: 4px 12px 10px 38px; font-size: 13px; color: var(--prose); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .bcard .perm { margin: 0 12px 10px 38px; padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+
+  /* 方案 C：派发组 */
+  .cgroup { border: 1px solid var(--border); border-radius: 10px; margin: 6px 0; background: var(--card); overflow: hidden; }
+  .cgroup .head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+  .cgroup .head .n { font-weight: 500; }
+  .cgroup .head .segs { color: var(--muted); display: flex; gap: 10px; align-items: center; margin-left: auto; font-size: 12px; }
+  .cgroup .head .segs span { display: inline-flex; align-items: center; gap: 5px; }
+  .crow { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; border-top: 1px solid rgba(228,228,231,.6); cursor: pointer; }
+  .crow:hover { background: var(--hl); }
+  .crow .lbl { flex: 1; min-width: 0; }
+  .crow .lbl .t { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crow .lbl .s { font-size: 12px; color: var(--muted); line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crow .time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* composer + track pill（同源演示） */
+  .composer-wrap { padding: 0 24px 18px; }
+  .phone .composer-wrap { padding: 0 10px 12px; }
+  .track { display: flex; gap: 6px; margin: 0 auto 6px; max-width: 680px; padding: 0 12px; }
+  .pill { font-size: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; display: inline-flex; gap: 8px; align-items: center; color: var(--muted); }
+  .pill span { display: inline-flex; align-items: center; gap: 5px; }
+  .composer { max-width: 680px; margin: 0 auto; background: var(--card); border: 1px solid rgba(39,39,42,.09); border-radius: 24px; padding: 12px 14px; color: var(--extra); box-shadow: 0 4px 16px rgba(0,0,0,.05); }
+
+  /* 右侧控制台 */
+  .console { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; overflow: auto; background: #18181b; color: #e4e4e7; padding: 14px 14px 90px; font-size: 12px; line-height: 17px; }
+  .console h3 { margin: 14px 0 6px; font-size: 12px; color: #a1a1aa; font-weight: 600; letter-spacing: .02em; }
+  .console h3:first-child { margin-top: 0; }
+  .console .btns { display: flex; flex-wrap: wrap; gap: 4px; }
+  .console .btns button { background: #27272a; border: 1px solid #3f3f46; color: #e4e4e7; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+  .console .btns button.on { background: #1b4ed8; border-color: #1b4ed8; }
+  .console .note { color: #a1a1aa; margin: 6px 0; }
+  .console pre { background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 8px; margin: 4px 0; white-space: pre-wrap; font: 11px/15px ui-monospace, Menlo, monospace; color: #d4d4d8; }
+  .console .dec { background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 8px 10px; margin: 4px 0; }
+  .console .dec b { color: #fafafa; }
+  .console .dec .rec { color: #86efac; }
+  .console .dec .alt { color: #a1a1aa; }
+
+  .toast { position: fixed; left: calc(50% - 190px); transform: translateX(-50%); bottom: 72px; background: #18181b; color: #fafafa; padding: 8px 14px; border-radius: 8px; font-size: 12px; max-width: 520px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .switcher { position: fixed; left: calc(50% - 190px); transform: translateX(-50%); bottom: 20px; background: #09090b; color: #fafafa; border-radius: 999px; display: flex; align-items: center; gap: 4px; padding: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.3); z-index: 10; }
+  .switcher button { background: none; border: 0; color: #fafafa; width: 30px; height: 30px; border-radius: 50%; }
+  .switcher button:hover { background: #27272a; }
+  .switcher .lbl { padding: 0 10px; font-size: 13px; min-width: 200px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="stage"><div id="frame" class="frame desktop"></div></div>
+<aside class="console" id="console"></aside>
+<div class="toast" id="toast"></div>
+<div class="switcher">
+  <button id="prev" title="上一个 (←)">‹</button>
+  <div class="lbl" id="vlabel"></div>
+  <button id="next" title="下一个 (→)">›</button>
+</div>
+
+<script>
+// ---------- 假数据 ----------
+const PROVIDERS = {
+  claude: { name: "Claude", color: "#d97757", ch: "C" },
+  codex: { name: "Codex", color: "#111", ch: "X" },
+  opencode: { name: "OpenCode", color: "#4b5563", ch: "O" },
+  pi: { name: "Pi", color: "#7c3aed", ch: "π" },
+  omp: { name: "Oh My Pi", color: "#0f766e", ch: "Ω" },
+  copilot: { name: "Copilot", color: "#1f2937", ch: "G" },
+};
+const VARIANTS = {
+  A: "A — 升级工具行",
+  B: "B — 独立卡片",
+  C: "C — 派发组",
+};
+const now = Date.now();
+const min = 60000;
+
+function paseoCall(o) {
+  return Object.assign({
+    source: "paseo", callStatus: "completed", hasCallId: true, workspaceId: "ws_1",
+    toolName: "mcp__paseo__create_agent", wrapped: false,
+  }, o);
+}
+function child(o) {
+  return Object.assign({
+    status: "running", turnOpen: true, pending: [], archived: false, inStore: true,
+    startedAt: now - 83 * 1000, durationMs: null, model: "gpt-6-astra", mode: "auto-review",
+  }, o);
+}
+
+const TASK_REVIEW = "只读审查 src/sum.js，找出实际缺陷与边界情况，按严重程度列出，每条给出行号与复现输入。不要改文件。";
+const TASK_TEST = "为 src/sum.js 补单元测试，覆盖空数组、负数、浮点精度；测试放 test/sum.test.js，跑 npm test 确认通过后汇报。";
+const TASK_DOCS = "通读 docs/ 下与 sum 有关的说明，列出与实现不一致的地方。只读。";
+
+const SCENARIOS = {
+  fanout: {
+    label: "实时 fan-out",
+    desc: "Claude 父智能体收到 @Codex @Codex @Claude，派出三个 Paseo 子智能体：一个在跑、一个等待批准、一个已完成。",
+    parent: "claude", turn: "running",
+    user: ['{Codex}', " 审查 sum.js，", '{Codex}', " 对照 docs 查不一致，", '{Claude}', " 补测试。"],
+    before: "我按你的分工派三个子智能体，它们完成后我会汇总结果。",
+    after: "三个子智能体都已派出。完成通知到了我再合并结论。",
+    calls: [
+      paseoCall({ callId: "toolu_01A", args: { title: "审查 sum.js 的缺陷与边界情况", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_7f2", provider: "codex", title: "审查 sum.js 的缺陷与边界情况" }) }),
+      paseoCall({ callId: "toolu_01B", args: { title: "对照 docs 查实现不一致", provider: "codex/gpt-6-astra", initialPrompt: TASK_DOCS },
+        child: child({ id: "ag_8c1", provider: "codex", title: "对照 docs 查实现不一致", startedAt: now - 70 * 1000,
+          pending: [{ tool: "Bash", detail: "rg -n sum docs/" }] }) }),
+      paseoCall({ callId: "toolu_01C", args: { title: "为 sum.js 补单元测试", provider: "claude/opus-5-5", initialPrompt: TASK_TEST },
+        child: child({ id: "ag_9d4", provider: "claude", title: "为 sum.js 补单元测试", model: "opus-5-5", mode: "default",
+          status: "idle", turnOpen: false, durationMs: 134000 }) }),
+    ],
+  },
+  starting: {
+    label: "刚派出（未关联）",
+    desc: "create_agent 调用还在执行，子智能体还没进 app store。按「模拟子智能体入库」看过渡。",
+    parent: "claude", turn: "running",
+    user: ['{Codex}', " 审查 sum.js"],
+    before: "我派一个 Codex 子智能体去审查。",
+    after: null,
+    calls: [
+      paseoCall({ callId: "toolu_02A", callStatus: "running", args: { title: "审查 sum.js 的缺陷与边界情况", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_a11", provider: "codex", title: "审查 sum.js 的缺陷与边界情况", inStore: false, startedAt: now }) }),
+    ],
+  },
+  provider: {
+    label: "provider 子智能体",
+    desc: "Claude 父智能体自己用 Task 工具派了两个 Explore 子智能体（不是 create_agent）。点开是只读面板；等待批准来自父 agent 的 pendingPermissions 按 agentID 归属。",
+    parent: "claude", turn: "running",
+    user: ["看看仓库里 sum 相关的代码和测试都在哪"],
+    before: "我并行派两个 Explore 去找。",
+    after: null,
+    calls: [
+      { source: "provider", callId: "toolu_03A", toolName: "Task", callStatus: "running", hasCallId: true,
+        args: { subagent_type: "Explore", description: "找 sum 的实现与调用点", prompt: "找出 sum 的实现与所有调用点" },
+        child: child({ id: "task_1", provider: "claude", title: "Explore", subtitle: "Explore · sonnet · 12 次工具调用", pending: [{ tool: "Bash", detail: "find . -name '*sum*'" }], startedAt: now - 40000 }),
+        log: "Grep sum src/\nRead src/sum.js\nBash find . -name '*sum*'  ← 等待批准" },
+      { source: "provider", callId: "toolu_03B", toolName: "Task", callStatus: "completed", hasCallId: true,
+        args: { subagent_type: "Explore", description: "找 sum 的测试", prompt: "找出 sum 的测试文件" },
+        child: child({ id: "task_2", provider: "claude", title: "Explore", subtitle: "Explore · sonnet · 6 次工具调用", status: "completed", turnOpen: false, durationMs: 31000 }),
+        log: "Glob test/**/*sum*\nRead test/sum.test.js" },
+    ],
+  },
+  canceled: {
+    label: "父轮次已取消",
+    desc: "用户在父智能体派发后按了 Stop。PRD：取消轮次不停止已派出的子智能体，卡片继续实时。",
+    parent: "claude", turn: "canceled",
+    user: ['{Codex}', " 审查 sum.js，", '{Claude}', " 补测试。"],
+    before: "我派两个子智能体。",
+    after: null,
+    calls: [
+      paseoCall({ callId: "toolu_04A", args: { title: "审查 sum.js 的缺陷与边界情况", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_b21", provider: "codex", title: "审查 sum.js 的缺陷与边界情况" }) }),
+      paseoCall({ callId: "toolu_04B", args: { title: "为 sum.js 补单元测试", provider: "claude/opus-5-5", initialPrompt: TASK_TEST },
+        child: child({ id: "ag_b22", provider: "claude", title: "为 sum.js 补单元测试", model: "opus-5-5", mode: "default", startedAt: now - 50000 }) }),
+    ],
+  },
+  archived: {
+    label: "父已归档（看历史）",
+    desc: "父智能体已归档，子智能体随之级联归档，都不在 active 目录里。卡片按标签 paseo.parent-tool-call-id 查一次（fetch_agents + includeArchived）。",
+    parent: "claude", turn: "completed", parentArchived: true,
+    user: ['{Codex}', " 审查 sum.js，", '{Claude}', " 补测试。"],
+    before: "我派两个子智能体。",
+    after: "两边都完成了：审查发现 3 个问题，测试已补齐并通过。",
+    calls: [
+      paseoCall({ callId: "toolu_05A", args: { title: "审查 sum.js 的缺陷与边界情况", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_c31", provider: "codex", title: "审查 sum.js 的缺陷与边界情况", status: "idle", turnOpen: false, durationMs: 212000, archived: true, inStore: false }) }),
+      paseoCall({ callId: "toolu_05B", args: { title: "为 sum.js 补单元测试", provider: "claude/opus-5-5", initialPrompt: TASK_TEST },
+        child: child({ id: "ag_c32", provider: "claude", title: "为 sum.js 补单元测试", model: "opus-5-5", mode: "default", status: "error", turnOpen: false, durationMs: 95000, archived: true, inStore: false }) }),
+    ],
+  },
+  nocallid: {
+    label: "拿不到 call id",
+    desc: "父智能体是 Copilot（ACP 类）或旧版 CLI：MCP 请求里没有 tool call id，daemon 没法给子智能体写标签。看控制台里的策略开关。",
+    parent: "copilot", turn: "running",
+    user: ['{Codex}', " 审查 sum.js"],
+    before: "我派一个 Codex 子智能体。",
+    after: null,
+    calls: [
+      paseoCall({ callId: "call_x9", hasCallId: false, args: { title: "审查 sum.js 的缺陷与边界情况", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_d41", provider: "codex", title: "审查 sum.js 的缺陷与边界情况" }) }),
+    ],
+  },
+  imported: {
+    label: "导入的会话",
+    desc: "从 provider 历史导入的会话：父 agent 换了新 id，子智能体标签指向旧父 id，关联不上。",
+    parent: "claude", turn: "completed", imported: true,
+    user: ['{Codex}', " 审查 sum.js"],
+    before: "我派一个 Codex 子智能体。",
+    after: "审查完成，发现 3 个问题。",
+    calls: [
+      paseoCall({ callId: "toolu_07A", args: { title: "审查 sum.js 的缺陷与边界情况", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_e51", provider: "codex", title: "审查 sum.js 的缺陷与边界情况", inStore: false, archived: true, status: "idle", turnOpen: false, durationMs: 200000 }) }),
+    ],
+  },
+  toolnames: {
+    label: "各 provider 工具名",
+    desc: "同一件事在各父 provider 下的原始工具名：Pi 经 adapter 是 paseo.create_agent 但入参包成 {tool,args}；OpenCode 是 paseo_create_agent；OMP 是裸名 create_agent。看控制台「非标准工具名在哪识别」开关。",
+    parent: "pi", turn: "running",
+    user: ['{Codex}', " 审查 sum.js（同一请求在三个父 provider 下的样子）"],
+    before: "（以下三条分别来自 Pi、OpenCode、OMP 父会话，拼在一起对比）",
+    after: null,
+    calls: [
+      paseoCall({ callId: "call_nyE|fc_0b6", toolName: "paseo.create_agent", wrapped: true, parentOverride: "pi",
+        args: { title: "审查 sum.js（Pi 父）", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_f61", provider: "codex", title: "审查 sum.js（Pi 父）" }) }),
+      paseoCall({ callId: "call_oc1", toolName: "paseo_create_agent", parentOverride: "opencode",
+        args: { title: "审查 sum.js（OpenCode 父）", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_f62", provider: "codex", title: "审查 sum.js（OpenCode 父）" }) }),
+      paseoCall({ callId: "tc_omp1", toolName: "create_agent", parentOverride: "omp",
+        args: { title: "审查 sum.js（OMP 父）", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_f63", provider: "codex", title: "审查 sum.js（OMP 父）" }) }),
+    ],
+  },
+  oldhost: {
+    label: "老 Host",
+    desc: "Host 没有 server_info.features 的子智能体关联开关：一律按现状渲染通用工具卡，不猜。",
+    parent: "claude", turn: "running", oldHost: true,
+    user: ['{Codex}', " 审查 sum.js"],
+    before: "我派一个 Codex 子智能体。",
+    after: null,
+    calls: [
+      paseoCall({ callId: "toolu_09A", args: { title: "审查 sum.js 的缺陷与边界情况", provider: "codex/gpt-6-astra", initialPrompt: TASK_REVIEW },
+        child: child({ id: "ag_g71", provider: "codex", title: "审查 sum.js 的缺陷与边界情况" }) }),
+    ],
+  },
+  toplevel: {
+    label: "顶层 create_agent",
+    desc: "不带 workspaceId 的 create_agent 建的是顶层 agent，不是 Subagent（map 访谈 Q6）：仍用通用工具卡，不进 track。",
+    parent: "claude", turn: "completed",
+    user: ["在 ~/scratch 新开一个工作区跑个 Codex 看看"],
+    before: "好，我新开一个。",
+    after: "已创建，它在侧栏的新工作区里。",
+    calls: [
+      paseoCall({ callId: "toolu_10A", workspaceId: null, args: { title: "scratch 实验", provider: "codex/gpt-6-astra", cwd: "~/scratch", initialPrompt: "随便看看这个目录" },
+        child: child({ id: "ag_h81", provider: "codex", title: "scratch 实验" }) }),
+    ],
+  },
+};
+
+// ---------- 原型状态 ----------
+const params = new URLSearchParams(location.search);
+const state = {
+  variant: VARIANTS[params.get("variant")] ? params.get("variant") : "A",
+  scenario: SCENARIOS[params.get("scenario")] ? params.get("scenario") : "fanout",
+  phone: params.get("phone") === "1",
+  noCallIdPolicy: "generic",   // generic | daemonFill
+  nameFix: "daemon",           // none | app | daemon
+  expanded: new Set(),
+  lastOpen: null,
+};
+
+// ---------- 解析：一个工具调用 → 渲染决定 ----------
+function recognize(call, parentProvider) {
+  const raw = call.toolName;
+  if (call.source === "provider") return { kind: "provider", via: "provider 子智能体描述符（toolCallId）" };
+  const std = /^mcp__paseo__create_agent$/.test(raw) || raw === "paseo.create_agent";
+  if (std && !call.wrapped) return { kind: "create_agent", via: "getPaseoToolLeafName 现状即可识别" };
+  if (state.nameFix === "none") {
+    if (std && call.wrapped) return { kind: "create_agent", via: "识别到 paseo.create_agent，但入参是 {tool,args}，取不到 title/provider", brokenArgs: true };
+    return { kind: null, via: `getPaseoToolLeafName("${raw}") = null` };
+  }
+  if (state.nameFix === "app") {
+    return { kind: "create_agent", via: call.wrapped ? "app 端拆 {tool,args}" : `app 端按父 provider=${parentProvider} 识别 "${raw}"` };
+  }
+  return { kind: "create_agent", via: "daemon 在 adapter 出时间线时规范成 paseo.create_agent + 平铺入参" };
+}
+
+function resolveCall(sc, call) {
+  const parentProvider = call.parentOverride || sc.parent;
+  const trace = { callId: call.callId, rawToolName: call.toolName, parentProvider };
+  const rec = recognize(call, parentProvider);
+  trace.recognize = rec.via;
+  if (!rec.kind) return { render: "generic", reason: "工具名识别不了", trace };
+  if (sc.oldHost) return { render: "generic", reason: "Host 无关联能力开关", trace };
+  if (rec.kind === "create_agent" && !call.workspaceId) return { render: "generic", reason: "顶层 create_agent，不是 Subagent", trace };
+  if (rec.brokenArgs) return { render: "generic", reason: "入参包了一层，卡片拿不到字段", trace };
+  const c = call.child;
+  if (rec.kind === "provider") {
+    trace.linkKey = { parentAgentId: "ag_parent", toolCallId: call.callId };
+    trace.store = "provider-store 命中（app 需保留描述符的 toolCallId）";
+    return { render: "card", phase: "live", trace };
+  }
+  if (!call.hasCallId) {
+    trace.linkKey = null;
+    if (state.noCallIdPolicy === "generic") return { render: "generic", reason: "provider 没给 tool call id，子智能体没有关联标签", trace };
+    trace.linkKey = { parentAgentId: "ag_parent", callId: call.callId, labelWrittenBy: "daemon 从自己产出的工具结果补写" };
+    if (call.callStatus === "running") return { render: "card", phase: "starting", trace, note: "工具结果出来前无法补标签" };
+  } else {
+    trace.linkKey = { parentAgentId: sc.imported ? "ag_parent_NEW" : "ag_parent", callId: call.callId };
+  }
+  if (c.inStore) {
+    trace.store = "session.agents 命中（active 目录）";
+    return { render: "card", phase: "live", trace };
+  }
+  if (call.callStatus === "running") {
+    trace.store = "未命中，调用仍在执行";
+    return { render: "card", phase: "starting", trace };
+  }
+  trace.store = "active 目录未命中 → fetch_agents({labels:{paseo.parent-tool-call-id}, includeArchived:true})";
+  if (sc.imported) {
+    trace.labelQuery = "0 条（标签指向旧父 id）";
+    return { render: "generic", reason: "导入会话，关联不上", trace };
+  }
+  if (c.archived) {
+    trace.labelQuery = `命中 ${c.id}（archivedAt 已设）`;
+    return { render: "card", phase: "archived", trace };
+  }
+  return { render: "generic", reason: "查不到", trace };
+}
+
+function bucketOf(c, phase) {
+  if (phase === "starting") return "starting";
+  if (c.pending.length) return "needs_input";
+  if (c.status === "error" || c.status === "failed") return "failed";
+  if (c.turnOpen || c.status === "running") return "running";
+  return "done";
+}
+const BUCKET_TEXT = { starting: "启动中", needs_input: "等待批准", failed: "失败", running: "运行中", done: "已完成" };
+function fmtDur(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function elapsed(c, phase) {
+  if (phase === "starting") return "";
+  if (c.durationMs != null) return fmtDur(c.durationMs);
+  return fmtDur(Date.now() - c.startedAt);
+}
+function pIcon(id, lg) { const p = PROVIDERS[id]; return `<span class="pi${lg ? " lg" : ""}" style="background:${p.color}">${p.ch}</span>`; }
+function markHtml(b) {
+  if (b === "running" || b === "starting") return `<span class="spin"></span>`;
+  if (b === "done") return "";
+  return `<span class="mark ${b}"></span>`;
+}
+function esc(s) { return String(s).replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[m]); }
+
+function cardModel(sc, call, res) {
+  const c = call.child;
+  const phase = res.phase;
+  const b = bucketOf(c, phase);
+  const isProvider = call.source === "provider";
+  const providerId = isProvider ? c.provider : call.args.provider.split("/")[0];
+  const title = isProvider ? call.args.description : (c.title || call.args.title);
+  const meta = isProvider ? c.subtitle
+    : `${PROVIDERS[providerId].name} · ${call.args.provider.split("/")[1]}${c.mode ? " · " + c.mode : ""}`;
+  const task = isProvider ? call.args.prompt : call.args.initialPrompt;
+  return { c, phase, b, isProvider, providerId, title, meta, task, openable: phase !== "starting" };
+}
+
+// ---------- 渲染：通用工具行（现状） ----------
+function genericRow(sc, call, res, key) {
+  const isProvider = call.source === "provider";
+  const name = isProvider ? "Task" : "Create agent";
+  const summary = isProvider ? call.args.description : (call.wrapped && state.nameFix === "none" ? "" : call.args.title);
+  const running = call.callStatus === "running";
+  const open = state.expanded.has(key);
+  let html = `<div class="trow" data-toggle="${key}"><span class="ticon"></span><span class="name ${running ? "shimmer" : ""}">${name}</span><span class="sum">${esc(summary || "")}</span></div>`;
+  if (open) {
+    const input = call.wrapped && state.nameFix === "none" ? { tool: "paseo_create_agent", args: call.args } : call.args;
+    html += `<div class="expand"><div class="h">Prompt</div><pre>${esc(call.args.initialPrompt || call.args.prompt || "")}</pre><div class="h">Details</div><pre>${esc(JSON.stringify(input, null, 2))}</pre>${call.callStatus === "completed" ? `<div class="h">Result</div><pre>availableModes_count=4\nagentId: ${call.child.id} …</pre>` : ""}</div>`;
+  }
+  return html;
+}
+
+// ---------- 方案 A：升级工具行 ----------
+function variantA(sc, items) {
+  return items.map(({ call, res, key }) => {
+    if (res.render === "generic") return genericRow(sc, call, res, key);
+    const m = cardModel(sc, call, res);
+    const statusText = m.phase === "archived" ? `${BUCKET_TEXT[m.b]} · 已归档` : BUCKET_TEXT[m.b];
+    const perm = m.b === "needs_input" ? `<span class="warn">等待批准 ${m.c.pending.length}</span>` : "";
+    const metaText = m.b === "needs_input" ? "" : `${statusText}${elapsed(m.c, m.phase) ? " · " + elapsed(m.c, m.phase) : ""}`;
+    const open = state.expanded.has(key);
+    let html = `<div class="arow ${m.phase === "archived" ? "" : ""}" data-toggle="${key}">
+      ${pIcon(m.providerId)}
+      <span class="title ${m.b === "running" || m.b === "starting" ? "shimmer" : ""}">${esc(m.title)}</span>
+      <span class="meta">${perm}${metaText ? esc(metaText) : ""}</span>
+      ${markHtml(m.b)}
+      ${m.openable ? `<button class="open" data-open="${key}">打开 ›</button>` : ""}
+    </div>`;
+    if (open) {
+      if (m.isProvider) {
+        html += `<div class="expand"><div class="h">活动（SubAgentDetailSection 原样保留）</div><pre>${esc(call.log)}</pre></div>`;
+      } else {
+        html += `<div class="expand"><div class="h">任务</div><pre>${esc(m.task)}</pre><div class="h">设置</div><pre>${esc(m.meta)}</pre></div>`;
+      }
+    }
+    return html;
+  }).join("");
+}
+
+// ---------- 方案 B：独立卡片 ----------
+function variantB(sc, items) {
+  return items.map(({ call, res, key }) => {
+    if (res.render === "generic") return genericRow(sc, call, res, key);
+    const m = cardModel(sc, call, res);
+    const t = elapsed(m.c, m.phase);
+    const badge = `<span class="badge ${m.b}">${markHtml(m.b)}${BUCKET_TEXT[m.b]}${t ? " · " + t : ""}</span>`;
+    const arch = m.phase === "archived" ? `<span class="badge">已归档</span>` : "";
+    const perm = m.b === "needs_input"
+      ? `<div class="perm"><span>${esc(m.c.pending[0].tool)}：<code>${esc(m.c.pending[0].detail)}</code></span><span>进子会话批准 ›</span></div>` : "";
+    return `<div class="bcard ${m.openable ? "" : "dim"}" ${m.openable ? `data-open="${key}"` : ""}>
+      <div class="top">${pIcon(m.providerId, true)}<span class="title">${esc(m.title)}</span>${arch}${badge}</div>
+      <div class="meta">${esc(m.meta || "")}</div>
+      <div class="task">${esc(m.task)}</div>
+      ${perm}
+    </div>`;
+  }).join("");
+}
+
+// ---------- 方案 C：派发组 ----------
+function variantC(sc, items) {
+  // 连续的子智能体调用合成一组；通用卡照常单独一行
+  const out = [];
+  let group = [];
+  const flush = () => {
+    if (!group.length) return;
+    const models = group.map(({ call, res }) => cardModel(sc, call, res));
+    const counts = {};
+    models.forEach((m) => { counts[m.b] = (counts[m.b] || 0) + 1; });
+    const order = ["needs_input", "failed", "running", "starting", "done"];
+    const segs = order.filter((b) => counts[b]).map((b) => `<span>${markHtml(b)}${counts[b]} ${BUCKET_TEXT[b]}</span>`).join("");
+    const gkey = "g_" + group[0].key;
+    const collapsed = state.expanded.has(gkey);
+    const n = group.length;
+    const verb = models[0].isProvider ? `派出 ${n} 个 ${PROVIDERS[models[0].providerId].name} 子智能体` : `派出 ${n} 个子智能体`;
+    let html = `<div class="cgroup"><div class="head" data-toggle="${gkey}"><span>${collapsed ? "▸" : "▾"}</span><span class="n">${verb}</span><span class="segs">${segs}</span></div>`;
+    if (!collapsed) {
+      html += group.map(({ key }, i) => {
+        const m = models[i];
+        const sub = m.b === "needs_input" ? `<span class="warn">等待批准 · ${esc(m.c.pending[0].tool)}</span>` : esc(m.meta || "") + (m.phase === "archived" ? " · 已归档" : "");
+        return `<div class="crow ${m.openable ? "" : "dim"}" ${m.openable ? `data-open="${key}"` : ""}>${pIcon(m.providerId, true)}
+          <div class="lbl"><div class="t">${esc(m.title)}</div><div class="s">${sub}</div></div>
+          <span class="time">${elapsed(m.c, m.phase) || BUCKET_TEXT[m.b]}</span>${markHtml(m.b)}</div>`;
+      }).join("");
+    }
+    out.push(html + "</div>");
+    group = [];
+  };
+  items.forEach((it) => {
+    if (it.res.render === "generic") { flush(); out.push(genericRow(sc, it.call, it.res, it.key)); }
+    else group.push(it);
+  });
+  flush();
+  return out.join("");
+}
+
+// ---------- 页面 ----------
+function userBubble(sc) {
+  return sc.user.map((part) => {
+    const m = /^\{(\w+)\}$/.exec(part);
+    if (!m) return esc(part);
+    const id = Object.keys(PROVIDERS).find((k) => PROVIDERS[k].name === m[1]);
+    return `<span class="iblock">${pIcon(id)}${m[1]}</span>`;
+  }).join("");
+}
+
+function trackPill(sc, items) {
+  if (sc.parentArchived) return "";
+  const rows = items.filter((it) => it.res.render === "card" && it.res.phase === "live");
+  if (!rows.length) return "";
+  const counts = {};
+  rows.forEach(({ call, res }) => { const b = bucketOf(call.child, res.phase); counts[b] = (counts[b] || 0) + 1; });
+  const segs = ["needs_input", "failed", "running"].filter((b) => counts[b])
+    .map((b) => `<span>${markHtml(b)}${counts[b]} ${BUCKET_TEXT[b]}</span>`).join("");
+  return `<div class="track"><span class="pill">${segs || `${rows.length} 个子智能体`}</span><span class="pill" style="border-style:dashed">↑ Subagents track，与卡片同一份数据</span></div>`;
+}
+
+function render() {
+  const sc = SCENARIOS[state.scenario];
+  const items = sc.calls.map((call, i) => ({ call, res: resolveCall(sc, call), key: `${state.scenario}_${i}` }));
+  const body = state.variant === "A" ? variantA(sc, items) : state.variant === "B" ? variantB(sc, items) : variantC(sc, items);
+  const frame = document.getElementById("frame");
+  frame.className = `frame ${state.phone ? "phone" : "desktop"}`;
+  const turnFoot = sc.turn === "running" ? `<span class="shimmer">Working for 1:24</span>`
+    : sc.turn === "canceled" ? `<span>已取消 · 0:41</span>` : `<span>复制 · 分叉 · 3:52</span>`;
+  frame.innerHTML = `
+    <div class="tabbar"><span class="tab">${pIcon(sc.parent)} 父智能体</span>${sc.parentArchived ? `<span class="archived">已归档</span>` : ""}${sc.imported ? `<span class="archived">从 Claude 历史导入</span>` : ""}</div>
+    <div class="chat"><div class="col">
+      <div class="user"><div class="bubble">${userBubble(sc)}</div></div>
+      <div class="prose">${esc(sc.before)}</div>
+      ${body}
+      ${sc.after ? `<div class="prose">${esc(sc.after)}</div>` : ""}
+      <div class="footer">${turnFoot}</div>
+    </div></div>
+    ${sc.parentArchived ? "" : `<div class="composer-wrap">${trackPill(sc, items)}<div class="composer">给父智能体发消息…</div></div>`}`;
+  document.getElementById("vlabel").textContent = VARIANTS[state.variant];
+  renderConsole(sc, items);
+  bind(items);
+}
+
+function openTarget(sc, it) {
+  const m = cardModel(sc, it.call, it.res);
+  const where = state.phone ? "手机：整页导航" : "桌面：按「在侧栏打开」偏好分屏或新标签（与 track 同一 handler）";
+  const target = m.isProvider
+    ? `provider_subagent 标签 {parentAgentId, subagentId: ${m.c.id}}，只读${m.b === "needs_input" ? "；权限卡按 父 agentId + 子 id 重组后在这里批准" : ""}`
+    : `agent 标签 ${m.c.id}，普通可交互${m.phase === "archived" ? "；已归档，顶部显示归档 callout" : ""}${m.b === "needs_input" ? "；权限卡就在子会话里" : ""}`;
+  state.lastOpen = `${where} → ${target}`;
+  toast(state.lastOpen);
+  renderConsole(sc, [it].concat());
+}
+
+function bind(items) {
+  const sc = SCENARIOS[state.scenario];
+  document.querySelectorAll("[data-toggle]").forEach((el) => el.addEventListener("click", (e) => {
+    if (e.target.closest("[data-open]") && e.target.closest("[data-open]") !== el) return;
+    const k = el.dataset.toggle;
+    state.expanded.has(k) ? state.expanded.delete(k) : state.expanded.add(k);
+    render();
+  }));
+  document.querySelectorAll("[data-open]").forEach((el) => el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const it = items.find((x) => x.key === el.dataset.open);
+    if (it) openTarget(sc, it);
+  }));
+}
+
+function toast(text) {
+  const t = document.getElementById("toast");
+  t.textContent = text; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+// ---------- 控制台 ----------
+const DECISIONS = [
+  ["卡片字段", "provider 图标、标题（Paseo 用 create_agent 的 title；provider 子智能体用 description）、状态、运行时长（运行中实时走、结束后定格）、等待批准。", "不显示「最后一条消息」：快照里没有，要为每个子智能体订阅时间线。任务原文放展开区或卡片第二行。"],
+  ["等待批准", "卡片只报「等待批准」，不放批准按钮；点开进子会话批准（PRD）。provider 子智能体靠 adapter 在权限 metadata 里补子 id 归属（03 号票）。", "Claude/OpenCode 要改 adapter 补 id；OMP 没有来源，v1 不显示。"],
+  ["与 SubAgentDetailSection", "provider 子智能体：卡片替换原 Task 行的头，展开仍是原活动日志。Paseo 子智能体：展开是任务原文与设置。", ""],
+  ["点开去向", "复用 track 的 handleOpenSubagent / handleOpenProviderSubagent：桌面按「在侧栏打开」偏好，手机整页导航。", "Paseo → agent 标签（可交互）；provider → provider_subagent 只读标签。"],
+  ["过渡态", "create_agent 还在执行、子智能体没入库：用入参的 provider/title 画卡片，状态「启动中」，不可点开。", "调用已完成仍未命中 → 按标签查一次；查不到就退回通用工具卡。"],
+  ["取消轮次", "子智能体不停，卡片照常实时，父轮次页脚显示已取消。", ""],
+  ["已归档 / 父已归档", "active 目录不含已归档 agent（session.ts:5415）。卡片按标签 fetch_agents({labels, includeArchived:true}) 查一次，显示最终状态 +「已归档」，点开是带归档 callout 的 agent 页。", "替代：已归档一律退回通用卡（便宜，但历史里的卡片会整体消失）。"],
+  ["拿不到 tool call id", "看控制台开关。推荐：退回通用工具卡。", "替代：daemon 从自己产出的工具结果里对上 agentId 后补写标签——Copilot/ACP 父会话也能出卡片，但多一条关联路径，且调用执行中无法关联。"],
+  ["工具名识别", "推荐：daemon 在 OpenCode/Pi/OMP adapter 出时间线时规范成 paseo.create_agent + 平铺入参。", "替代：app 端按父 provider 识别三种写法并拆 {tool,args}。daemon 做一次，卡片、详情、标题一起受益；老 Host 本来就走能力开关不出卡片。"],
+  ["脱离（detach）的子智能体", "未在原型里模拟。detach 后 parentAgentId 变化，按 (父 id, callId) 查不到。", "待定：卡片显示「已独立」还是退回通用卡——需要先查 detach 是否保留 parentAgentId/标签。"],
+];
+
+function renderConsole(sc, items) {
+  const el = document.getElementById("console");
+  const btn = (group, key, label, on) => `<button data-${group}="${key}" class="${on ? "on" : ""}">${label}</button>`;
+  el.innerHTML = `
+    <h3>方案</h3><div class="btns">${Object.keys(VARIANTS).map((k) => btn("v", k, VARIANTS[k], state.variant === k)).join("")}</div>
+    <h3>场景</h3><div class="btns">${Object.keys(SCENARIOS).map((k) => btn("s", k, SCENARIOS[k].label, state.scenario === k)).join("")}</div>
+    <div class="note">${esc(sc.desc)}</div>
+    ${state.scenario === "starting" ? `<div class="btns"><button data-act="land">模拟子智能体入库</button></div>` : ""}
+    <h3>视口</h3><div class="btns">${btn("p", "0", "桌面", !state.phone)}${btn("p", "1", "手机 390", state.phone)}</div>
+    <h3>拿不到 call id 时</h3><div class="btns">${btn("nc", "generic", "退回通用卡", state.noCallIdPolicy === "generic")}${btn("nc", "daemonFill", "daemon 从结果补标签", state.noCallIdPolicy === "daemonFill")}</div>
+    <h3>非标准工具名在哪识别</h3><div class="btns">${btn("nf", "none", "现状（不识别）", state.nameFix === "none")}${btn("nf", "app", "app 端", state.nameFix === "app")}${btn("nf", "daemon", "daemon adapter", state.nameFix === "daemon")}</div>
+    <h3>每个调用的解析</h3>
+    ${sc.calls.map((call, i) => { const r = resolveCall(sc, call); return `<pre>${esc(JSON.stringify(Object.assign({ render: r.render === "card" ? `card(${r.phase})` : "generic", reason: r.reason }, r.trace), null, 2))}</pre>`; }).join("")}
+    ${state.lastOpen ? `<h3>最近一次点开</h3><pre>${esc(state.lastOpen)}</pre>` : ""}
+    <h3>待拍板（绿色是推荐）</h3>
+    ${DECISIONS.map(([k, rec, alt]) => `<div class="dec"><b>${k}</b><div class="rec">${esc(rec)}</div>${alt ? `<div class="alt">${esc(alt)}</div>` : ""}</div>`).join("")}
+  `;
+  el.querySelectorAll("[data-v]").forEach((b) => b.onclick = () => setVariant(b.dataset.v));
+  el.querySelectorAll("[data-s]").forEach((b) => b.onclick = () => { state.scenario = b.dataset.s; state.lastOpen = null; syncUrl(); resetScenario(); render(); });
+  el.querySelectorAll("[data-p]").forEach((b) => b.onclick = () => { state.phone = b.dataset.p === "1"; syncUrl(); render(); });
+  el.querySelectorAll("[data-nc]").forEach((b) => b.onclick = () => { state.noCallIdPolicy = b.dataset.nc; render(); });
+  el.querySelectorAll("[data-nf]").forEach((b) => b.onclick = () => { state.nameFix = b.dataset.nf; render(); });
+  el.querySelectorAll("[data-act=land]").forEach((b) => b.onclick = () => {
+    const call = SCENARIOS.starting.calls[0];
+    call.callStatus = "completed"; call.child.inStore = true; call.child.startedAt = Date.now();
+    render();
+  });
+}
+
+function resetScenario() {
+  const call = SCENARIOS.starting.calls[0];
+  call.callStatus = "running"; call.child.inStore = false;
+}
+
+function syncUrl() {
+  const p = new URLSearchParams({ variant: state.variant, scenario: state.scenario });
+  if (state.phone) p.set("phone", "1");
+  history.replaceState(null, "", `?${p}`);
+}
+function setVariant(v) { state.variant = v; syncUrl(); render(); }
+function cycle(d) { const ks = Object.keys(VARIANTS); setVariant(ks[(ks.indexOf(state.variant) + d + ks.length) % ks.length]); }
+document.getElementById("prev").onclick = () => cycle(-1);
+document.getElementById("next").onclick = () => cycle(1);
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, textarea, [contenteditable]")) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+
+// 运行时长每秒走一次，只刷新时间线
+setInterval(() => {
+  const sc = SCENARIOS[state.scenario];
+  if (sc.calls.some((c) => c.child && c.child.durationMs == null)) {
+    const scrollY = window.scrollY; const cs = document.getElementById("console").scrollTop;
+    render(); window.scrollTo(0, scrollY); document.getElementById("console").scrollTop = cs;
+  }
+}, 1000);
+
+syncUrl();
+render();
+</script>
+</body>
+</html>

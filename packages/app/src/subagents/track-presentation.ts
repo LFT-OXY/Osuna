@@ -2,7 +2,7 @@ import type { TFunction } from "i18next";
 import type { ComposerTrackPillSegment } from "@/composer/tracks";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { deriveSidebarStateBucket, STATUS_BUCKET_ORDER } from "@/utils/sidebar-agent-state";
-import type { SubagentRow } from "./select";
+import type { DispatchRowState, DispatchSubagent, SubagentRow } from "./select";
 import { isFinishedSubagent } from "./archive-finished";
 import { providerSubagentLifecycleStatus } from "./provider-store";
 
@@ -38,8 +38,10 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
     label: label ?? "",
     subtitle: subtitle ?? "",
     titleState: label ? "ready" : "loading",
+    // requiresAttention 保持 false，否则已完成的子智能体会亮"待查看"；等待批准只看待批准计数。
     statusBucket: deriveSidebarStateBucket({
       status,
+      pendingPermissionCount: row.pendingPermissionCount,
       requiresAttention: false,
     }),
   };
@@ -72,8 +74,8 @@ export interface SubagentPillPresentation {
  * "1 failed" over a child that is still working says the fan-out has stopped. Every state present
  * gets its own mark and its own count, in the order the sidebar's status groups list them.
  *
- * It stays one line because subagent rows only ever reach three states — see
- * `buildSubagentRowPresentationData`, which reports no attention of its own — so the pill is two
+ * It stays one line because subagent rows only ever reach four states — see
+ * `buildSubagentRowPresentationData`, which reports no attention of its own — so the pill is three
  * segments at worst, and falls back to naming what it opens once nothing is happening.
  */
 export function buildSubagentPillPresentation(
@@ -141,4 +143,176 @@ export function resolveRowLabel(title: string | null | undefined): string | null
     return null;
   }
   return normalized;
+}
+
+/** 派发组的行多一个"启动中"：调用还在跑、子智能体还没进 store。 */
+export type DispatchRowBucket = SidebarStateBucket | "starting";
+
+/** 组头分段的顺序：track 的桶顺序，启动中排在已完成前面。 */
+const DISPATCH_BUCKET_ORDER: readonly DispatchRowBucket[] = [
+  ...ACTIVE_STATUS_BUCKET_ORDER,
+  "starting",
+  "done",
+];
+
+/**
+ * 行尾显示什么。快照里没有"结束时间"，停下后用最后一次更新近似；归档会把最后一次更新改成
+ * 归档时刻，所以已归档的行不显示时长。
+ */
+export type DispatchRowTiming =
+  | { kind: "starting" }
+  | { kind: "live"; startedAt: Date }
+  | { kind: "frozen"; durationMs: number }
+  | { kind: "none" };
+
+/** 点开一行去哪：Paseo 子智能体是普通 agent 标签，provider 子智能体是只读面板。 */
+export type DispatchOpenTarget =
+  | { kind: "agent"; agentId: string }
+  | { kind: "provider_subagent"; parentAgentId: string; subagentId: string };
+
+export interface DispatchRowPresentation {
+  key: string;
+  /** 启动中没有子智能体可开，为 null。 */
+  open: DispatchOpenTarget | null;
+  provider: string | null;
+  label: string;
+  subtitle: string;
+  tone: "default" | "warning";
+  bucket: DispatchRowBucket;
+  timing: DispatchRowTiming;
+}
+
+export interface DispatchGroupHeaderSegment {
+  bucket: DispatchRowBucket;
+  text: string;
+}
+
+export interface DispatchGroupHeaderPresentation {
+  title: string;
+  segments: DispatchGroupHeaderSegment[];
+  accessibilityLabel: string;
+}
+
+export function dispatchRowBucket(state: DispatchRowState): DispatchRowBucket {
+  if (state.kind === "starting") return "starting";
+  return buildSubagentRowPresentationData(state.subagent.row).statusBucket ?? "done";
+}
+
+function joinParts(parts: readonly (string | null | undefined)[]): string {
+  return parts.filter((part): part is string => Boolean(part)).join(" · ");
+}
+
+function subagentTiming(subagent: DispatchSubagent, bucket: DispatchRowBucket): DispatchRowTiming {
+  if (subagent.archived) return { kind: "none" };
+  const startedAt = subagent.row.createdAt;
+  if (bucket === "running" || bucket === "needs_input") return { kind: "live", startedAt };
+  return { kind: "frozen", durationMs: subagent.updatedAt.getTime() - startedAt.getTime() };
+}
+
+function subagentSubtitle(
+  t: TFunction,
+  subagent: DispatchSubagent,
+  providerLabelOf: (provider: string) => string,
+): string {
+  if (subagent.row.kind === "provider") {
+    return buildSubagentRowPresentationData(subagent.row).subtitle;
+  }
+  const archivedSuffix = subagent.archived ? t("subagents.dispatchArchived") : null;
+  const detachedSuffix = subagent.detached ? t("subagents.dispatchDetached") : null;
+  return joinParts([
+    providerLabelOf(subagent.row.provider),
+    subagent.model,
+    subagent.modeLabel,
+    archivedSuffix,
+    detachedSuffix,
+  ]);
+}
+
+function openTarget(row: SubagentRow): DispatchOpenTarget {
+  if (row.kind === "provider") {
+    return { kind: "provider_subagent", parentAgentId: row.parentAgentId, subagentId: row.id };
+  }
+  return { kind: "agent", agentId: row.id };
+}
+
+/**
+ * Paseo 子智能体的标题取 `create_agent` 入参的 title，后来被改名，行上仍是派发时写的任务；
+ * provider 子智能体没有入参，与 track 一样先取 description。
+ */
+export function buildDispatchRowPresentation({
+  t,
+  state,
+  providerLabelOf,
+}: {
+  t: TFunction;
+  state: DispatchRowState;
+  providerLabelOf: (provider: string) => string;
+}): DispatchRowPresentation {
+  if (state.kind === "starting") {
+    const { provider, model, modeId } = state.input;
+    const providerLabel = provider ? providerLabelOf(provider) : null;
+    return {
+      key: state.key,
+      open: null,
+      provider,
+      label: resolveRowLabel(state.input.title) ?? "",
+      subtitle: joinParts([providerLabel, model, modeId]),
+      tone: "default",
+      bucket: "starting",
+      timing: { kind: "starting" },
+    };
+  }
+  const { subagent } = state;
+  const bucket = dispatchRowBucket(state);
+  const pendingTool = bucket === "needs_input" ? subagent.pendingPermissionName : null;
+  const subtitle = pendingTool
+    ? t("subagents.dispatchWaitingForApproval", { tool: pendingTool })
+    : subagentSubtitle(t, subagent, providerLabelOf);
+  const callTitle = state.kind === "subagent" ? resolveRowLabel(state.input.title) : null;
+  const label = callTitle ?? buildSubagentRowPresentationData(subagent.row).label;
+  const tone = pendingTool ? "warning" : "default";
+  return {
+    key: state.key,
+    open: openTarget(subagent.row),
+    provider: subagent.row.provider,
+    label,
+    subtitle,
+    tone,
+    bucket,
+    timing: subagentTiming(subagent, bucket),
+  };
+}
+
+// 组头照原型写"等待批准"，不用 pill 的"需要输入"：派发组的行只会因为权限请求进这个桶。
+function dispatchStatusLabel(t: TFunction, bucket: DispatchRowBucket, count: number): string {
+  switch (bucket) {
+    case "needs_input":
+      return t("subagents.dispatchWaitingCount", { count });
+    case "starting":
+      return t("subagents.dispatchStarting", { count });
+    case "done":
+      return t("subagents.dispatchDone", { count });
+    default:
+      return statusLabel(t, bucket, count);
+  }
+}
+
+export function buildDispatchGroupHeaderPresentation(
+  t: TFunction,
+  rows: readonly DispatchRowState[],
+): DispatchGroupHeaderPresentation {
+  const buckets = rows.map(dispatchRowBucket);
+  const segments = DISPATCH_BUCKET_ORDER.flatMap((bucket) => {
+    const count = buckets.filter((candidate) => candidate === bucket).length;
+    return count > 0 ? [{ bucket, text: dispatchStatusLabel(t, bucket, count) }] : [];
+  });
+  const title =
+    rows.length === 1
+      ? t("subagents.dispatchTitleOne")
+      : t("subagents.dispatchTitleMany", { count: rows.length });
+  return {
+    title,
+    segments,
+    accessibilityLabel: `${title}: ${segments.map((segment) => segment.text).join(", ")}`,
+  };
 }

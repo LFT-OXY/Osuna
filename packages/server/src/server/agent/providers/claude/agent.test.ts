@@ -1076,6 +1076,61 @@ describe("ClaudeAgentSession features", () => {
     }
   });
 
+  test("tags a subagent's permission request with the subagent it came from", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({ provider: "claude", cwd: process.cwd() });
+    const internal = session as unknown as {
+      handlePermissionRequest(
+        name: string,
+        input: Record<string, unknown>,
+        options: Record<string, unknown>,
+      ): Promise<PermissionResult>;
+      translateMessageToEvents(message: SDKMessage): AgentStreamEvent[];
+    };
+
+    try {
+      await session.startTurn("first turn");
+      internal.translateMessageToEvents({
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-1",
+        tool_use_id: "toolu_task",
+        task_type: "local_agent",
+        subagent_type: "general-purpose",
+        description: "Write the tests",
+        prompt: "Write the tests",
+      } as unknown as SDKMessage);
+
+      const fromSubagent = internal.handlePermissionRequest(
+        "Write",
+        { file_path: "CHILD.md" },
+        { toolUseID: "tool-child", agentID: "task-1" },
+      );
+      const fromParent = internal.handlePermissionRequest(
+        "Write",
+        { file_path: "PARENT.md" },
+        { toolUseID: "tool-parent" },
+      );
+
+      const [childRequest, parentRequest] = session.getPendingPermissions();
+      expect(childRequest?.metadata).toMatchObject({ providerSubagentId: "toolu_task" });
+      expect(parentRequest?.metadata).not.toHaveProperty("providerSubagentId");
+
+      for (const request of session.getPendingPermissions()) {
+        await session.respondToPermission(request.id, { behavior: "deny", message: "cleanup" });
+      }
+      await expect(fromSubagent).resolves.toMatchObject({ behavior: "deny" });
+      await expect(fromParent).resolves.toMatchObject({ behavior: "deny" });
+    } finally {
+      await session.close();
+    }
+  });
+
   test.each([
     ["supported model", "claude-opus-4-8", { type: "disabled" }, undefined],
     ["unsupported model", "claude-fable-5", { type: "adaptive" }, "high"],
@@ -1501,6 +1556,48 @@ describe("normalizeClaudeAskUserQuestionUpdatedInput", () => {
 });
 
 describe("ClaudeAgentClient.listImportableSessions", () => {
+  test("drops the Routing block from import previews", async () => {
+    const tmpConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-claude-import-routing-"));
+    const previousConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = tmpConfigDir;
+    const original = "[@Codex](paseo://agent/provider/codex) review it";
+
+    try {
+      const projectDir = path.join(tmpConfigDir, "projects", "routing-fixture");
+      await fs.mkdir(projectDir, { recursive: true });
+      await fs.writeFile(
+        path.join(projectDir, "routed-session.jsonl"),
+        `${JSON.stringify({
+          type: "user",
+          message: {
+            role: "user",
+            content: `${original}\n\n<paseo-system>\n1. @Codex -> provider "codex", settings {}\n</paseo-system>`,
+          },
+          cwd: "/tmp/paseo-claude-routing",
+          sessionId: "routed-session",
+        })}\n`,
+      );
+      const client = new ClaudeAgentClient({
+        logger: createTestLogger(),
+        resolveBinary: async () => "/test/claude/bin",
+      });
+
+      const [session] = await client.listImportableSessions({ limit: 1 });
+
+      expect({
+        firstPromptPreview: session?.firstPromptPreview,
+        lastPromptPreview: session?.lastPromptPreview,
+      }).toEqual({ firstPromptPreview: original, lastPromptPreview: original });
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      } else {
+        process.env.CLAUDE_CONFIG_DIR = previousConfigDir;
+      }
+      await fs.rm(tmpConfigDir, { recursive: true, force: true });
+    }
+  });
+
   test("uses the latest native custom title and leaves fixture mtimes unchanged", async () => {
     const tmpConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-claude-import-"));
     const previousConfigDir = process.env.CLAUDE_CONFIG_DIR;

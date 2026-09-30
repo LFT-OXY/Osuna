@@ -95,7 +95,6 @@ import type { ComposerAttachment } from "@/attachments/types";
 import { useDraftWorkspaceAttachmentScopeKey } from "@/attachments/workspace-attachments-store";
 import type { MessagePayload } from "@/composer/types";
 import type { UserComposerAttachment } from "@/attachments/types";
-import type { SkillChip } from "@/composer/skill-chips";
 import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
@@ -134,6 +133,7 @@ import {
 } from "./workspace/terminals/state";
 import { captureWorkspaceDraftCleanup } from "./new-workspace/background-handoff";
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
+import type { InlineSegment } from "@/inline-blocks";
 
 const ThemedFolderPlus = withUnistyles(FolderPlus);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -196,11 +196,9 @@ interface NewWorkspaceScreenProps {
 }
 
 // A terminal launch sends argv, not a message: there is nothing to attach and
-// no draft to persist, so the composer's attachment, skill chip, and draft seams are inert.
+// no draft to persist, so the composer's attachment and draft seams are inert.
 const NO_TERMINAL_ATTACHMENTS: UserComposerAttachment[] = [];
 function noopChangeAttachments() {}
-const NO_TERMINAL_SKILL_CHIPS: readonly SkillChip[] = [];
-function noopChangeSkillChips() {}
 function noopClearDraft() {}
 
 const PROJECT_ICON_FALLBACK_FONT_SIZE = 10;
@@ -781,6 +779,7 @@ interface SubmitDraftInput {
   workspaceId: string;
   workspaceDirectory: string;
   text: string;
+  segments: readonly InlineSegment[] | undefined;
   attachments: ComposerAttachment[];
   provider: AgentProvider;
   composerState: NewWorkspaceComposerState;
@@ -954,7 +953,7 @@ function runCreateChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome>
 async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
   const { payload, composerState, ensureWorkspace, serverId, clearDraft } = input;
   const clearConsumedDraft = captureWorkspaceDraftCleanup(input);
-  const { text, attachments, cwd } = payload;
+  const { text, segments, attachments, cwd } = payload;
   if (!composerState) {
     throw new Error(input.labels.composerStateRequired);
   }
@@ -1023,6 +1022,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
           workspaceId: workspace.id,
           workspaceDirectory: workspace.workspaceDirectory,
           text,
+          segments,
           attachments,
           provider,
           composerState,
@@ -1155,6 +1155,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     workspaceId,
     draftId,
     text: text.trim(),
+    ...(input.segments ? { segments: input.segments } : {}),
     attachments,
     cwd: submission.cwd,
     provider: submission.provider,
@@ -2424,8 +2425,6 @@ export function NewWorkspaceScreen({
                 textReplacement={terminalTextReplacement}
                 attachments={NO_TERMINAL_ATTACHMENTS}
                 onChangeAttachments={noopChangeAttachments}
-                skillChips={NO_TERMINAL_SKILL_CHIPS}
-                onChangeSkillChips={noopChangeSkillChips}
                 cwd={selectedSourceDirectory ?? ""}
                 clearDraft={noopClearDraft}
                 autoFocus={terminalTakesPrompt}
@@ -2453,8 +2452,6 @@ export function NewWorkspaceScreen({
                 attachments={chatDraft.attachments}
                 attachmentScopeKeys={visibleDraftContextScopeKeys}
                 onChangeAttachments={chatDraft.setAttachments}
-                skillChips={chatDraft.skillChips}
-                onChangeSkillChips={chatDraft.setSkillChips}
                 onForgeChangeRequestDetected={handleForgeChangeRequestDetected}
                 onForgeChangeRequestAutoAttach={handleForgeChangeRequestAutoAttach}
                 cwd={selectedSourceDirectory ?? ""}

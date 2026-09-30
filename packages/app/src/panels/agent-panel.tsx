@@ -96,12 +96,14 @@ import type { PendingPermission } from "@/types/shared";
 import type { StreamItem, TodoEntry } from "@/types/stream";
 import type { ViewedTimelineStatus, ViewedTimelineUiBridge } from "@/timeline/viewed-timeline-sync";
 import { useArchiveFinishedSubagents, useSubagentsForParent } from "@/subagents";
+import { useOpenSubagent } from "@/subagents/use-open-subagent";
 import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { buildDraftAgentSetup, type ClientSlashCommand } from "@/client-slash-commands";
+import { useAgentSkillNames } from "@/inline-blocks/view";
 
 interface ChatAgentStateShape {
   serverId: string | null;
@@ -1191,8 +1193,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     textReplacement,
     attachments,
     setAttachments,
-    skillChips,
-    setSkillChips,
     clear,
     isHydrated,
     attachmentFocusRequestId,
@@ -1206,8 +1206,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       textReplacement,
       attachments,
       setAttachments,
-      skillChips,
-      setSkillChips,
       clear,
       isHydrated,
       attachmentFocusRequestId,
@@ -1220,14 +1218,13 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       textReplacement,
       attachments,
       setAttachments,
-      skillChips,
-      setSkillChips,
       clear,
       isHydrated,
       attachmentFocusRequestId,
       composerState,
     ],
   );
+  const skillNames = useAgentSkillNames({ serverId, agentId });
   const composerSection = (
     <RenderProfile id={`AgentComposerSection:${agentId}`}>
       <AgentComposerSection
@@ -1283,6 +1280,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   return (
     <RewindComposerRestoreProvider
       textSource={agentInputDraft.textSource}
+      skillNames={skillNames}
       setText={agentInputDraft.replaceText}
       onRewindComplete={handleRewindComplete}
     >
@@ -1375,6 +1373,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
 }) {
   const isCompactFormFactor = useIsCompactFormFactor();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
+  const { openSubagent, openProviderSubagent } = useOpenSubagent({ serverId, workspaceId });
   const hasVisibleComposerTracks =
     hasActiveComposer && (hasVisibleAgentTracks || hasWorkspaceDiffStat);
   const bottomOverlayTailClearance = hasVisibleComposerTracks
@@ -1444,6 +1443,8 @@ const AgentStreamSection = memo(function AgentStreamSection({
       pendingMessageSubmissions={pendingMessageSubmissions}
       turnPresentation={turnPresentation}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
+      onOpenSubagent={openSubagent}
+      onOpenProviderSubagent={openProviderSubagent}
     />
   );
 });
@@ -1620,8 +1621,6 @@ function ActiveAgentComposer({
         attachmentScopeKeys={attachmentScopeKeys}
         onOpenWorkspaceAttachment={handleOpenWorkspaceAttachment}
         onChangeAttachments={agentInputDraft.setAttachments}
-        skillChips={agentInputDraft.skillChips}
-        onChangeSkillChips={agentInputDraft.setSkillChips}
         cwd={cwd}
         clearDraft={agentInputDraft.clear}
         autoFocus

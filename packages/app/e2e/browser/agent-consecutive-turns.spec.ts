@@ -6,6 +6,7 @@ import {
   expectAttachmentPill,
   expectComposerVisible,
   submitMessage,
+  expectComposerText,
 } from "../support/helpers/composer";
 import { clickNewChat, gotoWorkspace } from "../support/helpers/launcher";
 import { seedWorkspace } from "../support/helpers/seed-client";
@@ -283,10 +284,7 @@ async function recordTurnFrames(page: Page, prompt: string): Promise<void> {
         primaryActionCount,
         composer: {
           ...snapshot(composerRoot ?? composer),
-          value:
-            composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
-              ? composer.value
-              : null,
+          value: composer ? (composer.textContent ?? "") : null,
         },
         contentChildren,
         scroll: {
@@ -762,7 +760,7 @@ async function recordDelayedRunningTransition(
   let responseReleased = false;
   try {
     await expect(page.getByTestId("user-message").filter({ hasText: prompt })).toBeVisible();
-    await expect(page.getByRole("textbox", { name: "Message agent..." }).first()).toHaveValue("");
+    await expectComposerText(page.getByRole("textbox", { name: "Message agent..." }).first(), "");
     await gate.waitForAgentStreamItem("user_message");
     await waitForActivityOracleArmed(page);
     const elapsedBeforeAuthoritative = await page.getByTestId("turn-working-elapsed").count();

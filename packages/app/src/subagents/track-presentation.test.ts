@@ -1,7 +1,15 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import type { PaseoSubagentRow, ProviderSubagentRow, SubagentRow } from "./select";
+import type {
+  DispatchRowState,
+  DispatchSubagent,
+  PaseoSubagentRow,
+  ProviderSubagentRow,
+  SubagentRow,
+} from "./select";
 import {
+  buildDispatchGroupHeaderPresentation,
+  buildDispatchRowPresentation,
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
@@ -25,6 +33,7 @@ function row(
         ? { phase: "open", turnId: null, startedAt: null, cancellationRequestId: null }
         : { phase: "idle", cancellationRequestId: null }),
     requiresAttention: overrides.requiresAttention ?? false,
+    pendingPermissionCount: overrides.pendingPermissionCount ?? 0,
     createdAt: overrides.createdAt ?? new Date("2026-04-20T00:00:00.000Z"),
   };
 }
@@ -76,6 +85,23 @@ describe("buildSubagentPillPresentation", () => {
     });
   });
 
+  it("puts a child waiting for approval ahead of the others", () => {
+    expect(
+      pill([
+        row({ id: "a", status: "running" }),
+        row({ id: "b", status: "running", pendingPermissionCount: 1 }),
+        row({ id: "c", status: "error" }),
+      ]),
+    ).toEqual({
+      segments: [
+        { bucket: "needs_input", text: "1 needs input" },
+        { bucket: "failed", text: "1 failed" },
+        { bucket: "running", text: "1 working" },
+      ],
+      accessibilityLabel: "1 needs input, 1 failed, 1 working",
+    });
+  });
+
   it("names what it opens once every child is done", () => {
     expect(pill([row({ id: "a" }), row({ id: "b" })])).toEqual({
       segments: [{ bucket: null, text: "2 subagents" }],
@@ -111,7 +137,9 @@ describe("countFinishedSubagents", () => {
         subtitle: null,
         status: "running",
         requiresAttention: false,
+        pendingPermissionCount: 0,
         createdAt: new Date("2026-04-20T00:00:00.000Z"),
+        toolCallId: null,
       },
       {
         kind: "provider",
@@ -123,7 +151,9 @@ describe("countFinishedSubagents", () => {
         subtitle: null,
         status: "failed",
         requiresAttention: true,
+        pendingPermissionCount: 0,
         createdAt: new Date("2026-04-20T00:00:01.000Z"),
+        toolCallId: null,
       },
     ];
 
@@ -204,6 +234,18 @@ describe("buildSubagentRowPresentationData", () => {
         .statusBucket,
     ).toBe("done");
   });
+
+  it("puts a row waiting for approval in needs input, even while its turn is open", () => {
+    expect(
+      buildSubagentRowPresentationData(row({ id: "a", status: "idle", pendingPermissionCount: 1 }))
+        .statusBucket,
+    ).toBe("needs_input");
+    expect(
+      buildSubagentRowPresentationData(
+        row({ id: "b", status: "running", pendingPermissionCount: 2 }),
+      ).statusBucket,
+    ).toBe("needs_input");
+  });
 });
 
 describe("buildSubagentRowPresentationData for provider rows", () => {
@@ -218,9 +260,18 @@ describe("buildSubagentRowPresentationData for provider rows", () => {
       subtitle: overrides.subtitle ?? null,
       status: overrides.status ?? "running",
       requiresAttention: false,
+      pendingPermissionCount: overrides.pendingPermissionCount ?? 0,
       createdAt: overrides.createdAt ?? new Date("2026-07-26T00:00:00.000Z"),
+      toolCallId: overrides.toolCallId ?? null,
     };
   }
+
+  it("waits for approval while the parent holds a permission the subagent asked for", () => {
+    expect(
+      buildSubagentRowPresentationData(providerRow({ pendingPermissionCount: 1 })).statusBucket,
+    ).toBe("needs_input");
+    expect(buildSubagentRowPresentationData(providerRow()).statusBucket).toBe("running");
+  });
 
   it("names the row after the task and demotes the subagent type", () => {
     const presentation = buildSubagentRowPresentationData(
@@ -272,7 +323,9 @@ describe("provider-owned row subtitles", () => {
       subtitle: null,
       status: "running",
       requiresAttention: false,
+      pendingPermissionCount: 0,
       createdAt: new Date("2026-07-26T00:00:00.000Z"),
+      toolCallId: null,
       ...overrides,
     };
   }
@@ -295,5 +348,250 @@ describe("provider-owned row subtitles", () => {
         providerRow({ description: null, subtitle: null, title: "general-purpose" }),
       ).subtitle,
     ).toBe("");
+  });
+});
+
+describe("dispatch group presentation", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+    await i18n.changeLanguage("en");
+  });
+
+  const CALL_INPUT = { title: "Write tests", provider: "codex", model: "gpt-5.4", modeId: "auto" };
+  const providerLabel = (provider: string) => (provider === "codex" ? "Codex" : provider);
+
+  function subagent(
+    overrides: Partial<PaseoSubagentRow> & Pick<PaseoSubagentRow, "id">,
+    extra: Partial<Omit<DispatchSubagent, "row">> = {},
+  ): DispatchRowState {
+    return {
+      kind: "subagent",
+      key: `call-${overrides.id}`,
+      callId: `call-${overrides.id}`,
+      input: CALL_INPUT,
+      subagent: {
+        row: row(overrides),
+        model: "gpt-5.4",
+        modeLabel: "Auto",
+        pendingPermissionName: null,
+        updatedAt: new Date("2026-04-20T00:02:05.000Z"),
+        archived: false,
+        detached: false,
+        ...extra,
+      },
+    };
+  }
+
+  const starting: DispatchRowState = {
+    kind: "starting",
+    key: "call-s",
+    callId: "call-s",
+    input: CALL_INPUT,
+  };
+
+  function providerSubagent(
+    overrides: Partial<ProviderSubagentRow> = {},
+    extra: Partial<Omit<DispatchSubagent, "row">> = {},
+  ): DispatchRowState {
+    return {
+      kind: "provider",
+      key: "toolu_1:toolu_1",
+      callId: "toolu_1",
+      subagent: {
+        row: {
+          kind: "provider",
+          id: "toolu_1",
+          parentAgentId: "parent",
+          provider: "claude",
+          title: "Explore",
+          description: "Map the router",
+          subtitle: "Explore · Sonnet 5 · 3.1k tokens",
+          status: "running",
+          requiresAttention: false,
+          pendingPermissionCount: 0,
+          createdAt: new Date("2026-04-20T00:00:00.000Z"),
+          toolCallId: "toolu_1",
+          ...overrides,
+        },
+        model: null,
+        modeLabel: null,
+        pendingPermissionName: null,
+        updatedAt: new Date("2026-04-20T00:00:42.000Z"),
+        archived: false,
+        detached: false,
+        ...extra,
+      },
+    };
+  }
+
+  it("counts rows in the track's order with starting before done", () => {
+    const header = buildDispatchGroupHeaderPresentation(i18n.t, [
+      subagent({ id: "a" }),
+      starting,
+      subagent({ id: "b", status: "running" }),
+      subagent({ id: "c", pendingPermissionCount: 1 }),
+      subagent({ id: "d", status: "error" }),
+    ]);
+
+    expect(header).toEqual({
+      title: "Dispatched 5 subagents",
+      segments: [
+        { bucket: "needs_input", text: "1 waiting for approval" },
+        { bucket: "failed", text: "1 failed" },
+        { bucket: "running", text: "1 working" },
+        { bucket: "starting", text: "1 starting" },
+        { bucket: "done", text: "1 done" },
+      ],
+      accessibilityLabel:
+        "Dispatched 5 subagents: 1 waiting for approval, 1 failed, 1 working, 1 starting, 1 done",
+    });
+  });
+
+  it("names a lone dispatch in the singular", () => {
+    expect(buildDispatchGroupHeaderPresentation(i18n.t, [starting]).title).toBe(
+      "Dispatched 1 subagent",
+    );
+  });
+
+  it("draws a starting row from the call input and does not open it", () => {
+    expect(
+      buildDispatchRowPresentation({ t: i18n.t, state: starting, providerLabelOf: providerLabel }),
+    ).toEqual({
+      key: "call-s",
+      open: null,
+      provider: "codex",
+      label: "Write tests",
+      subtitle: "Codex · gpt-5.4 · auto",
+      tone: "default",
+      bucket: "starting",
+      timing: { kind: "starting" },
+    });
+  });
+
+  it("shows provider, model, and mode under a running row and times it live", () => {
+    const presentation = buildDispatchRowPresentation({
+      t: i18n.t,
+      state: subagent({ id: "a", title: "Write tests", status: "running" }),
+      providerLabelOf: providerLabel,
+    });
+
+    expect(presentation).toMatchObject({
+      open: { kind: "agent", agentId: "a" },
+      label: "Write tests",
+      subtitle: "Codex · gpt-5.4 · Auto",
+      bucket: "running",
+      timing: { kind: "live", startedAt: new Date("2026-04-20T00:00:00.000Z") },
+    });
+  });
+
+  it("swaps the subtitle for the pending tool while it waits for approval", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: subagent({ id: "a", pendingPermissionCount: 1 }, { pendingPermissionName: "Bash" }),
+        providerLabelOf: providerLabel,
+      }),
+    ).toMatchObject({
+      subtitle: "Waiting for approval · Bash",
+      tone: "warning",
+      bucket: "needs_input",
+    });
+  });
+
+  it("freezes the duration at the last update once the subagent stops", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: subagent({ id: "a" }),
+        providerLabelOf: providerLabel,
+      }).timing,
+    ).toEqual({ kind: "frozen", durationMs: 125_000 });
+  });
+
+  it("marks archived and detached rows and drops the duration the archive time would inflate", () => {
+    const archived = buildDispatchRowPresentation({
+      t: i18n.t,
+      state: subagent({ id: "a" }, { archived: true }),
+      providerLabelOf: providerLabel,
+    });
+    const detached = buildDispatchRowPresentation({
+      t: i18n.t,
+      state: subagent({ id: "b" }, { detached: true }),
+      providerLabelOf: providerLabel,
+    });
+
+    expect(archived).toMatchObject({
+      subtitle: "Codex · gpt-5.4 · Auto · Archived",
+      bucket: "done",
+      timing: { kind: "none" },
+    });
+    expect(detached.subtitle).toBe("Codex · gpt-5.4 · Auto · Detached");
+  });
+
+  it("names the row after the dispatched task even once the child is renamed", () => {
+    const renamed = subagent({ id: "a", title: "Renamed later" });
+
+    expect(
+      buildDispatchRowPresentation({ t: i18n.t, state: renamed, providerLabelOf: providerLabel })
+        .label,
+    ).toBe("Write tests");
+  });
+
+  it("names a provider row after its task, shows the provider's subtitle, and opens read-only", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: providerSubagent(),
+        providerLabelOf: providerLabel,
+      }),
+    ).toEqual({
+      key: "toolu_1:toolu_1",
+      open: { kind: "provider_subagent", parentAgentId: "parent", subagentId: "toolu_1" },
+      provider: "claude",
+      label: "Map the router",
+      subtitle: "Explore · Sonnet 5 · 3.1k tokens",
+      tone: "default",
+      bucket: "running",
+      timing: { kind: "live", startedAt: new Date("2026-04-20T00:00:00.000Z") },
+    });
+  });
+
+  it("shows a provider row waiting for the approval its parent holds", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: providerSubagent({ pendingPermissionCount: 1 }, { pendingPermissionName: "Write" }),
+        providerLabelOf: providerLabel,
+      }),
+    ).toMatchObject({
+      subtitle: "Waiting for approval · Write",
+      tone: "warning",
+      bucket: "needs_input",
+    });
+  });
+
+  it("falls back to the subagent type when a provider row has no task", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: providerSubagent({ description: null, subtitle: null }),
+        providerLabelOf: providerLabel,
+      }),
+    ).toMatchObject({ label: "Explore", subtitle: "" });
+  });
+
+  it("counts finished and failed provider rows and freezes their duration", () => {
+    const completed = providerSubagent({ status: "completed" });
+    const failed = providerSubagent({ status: "failed" });
+
+    expect(
+      buildDispatchRowPresentation({ t: i18n.t, state: completed, providerLabelOf: providerLabel }),
+    ).toMatchObject({ bucket: "done", timing: { kind: "frozen", durationMs: 42_000 } });
+    expect(buildDispatchGroupHeaderPresentation(i18n.t, [completed, failed]).segments).toEqual([
+      { bucket: "failed", text: "1 failed" },
+      { bucket: "done", text: "1 done" },
+    ]);
   });
 });

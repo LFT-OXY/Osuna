@@ -7,6 +7,7 @@ const styles = StyleSheet.create((theme) => ({
   surface0: { backgroundColor: theme.colors.surface0 },
   surface1: { backgroundColor: theme.colors.surface1 },
   surface2: { backgroundColor: theme.colors.surface2 },
+  surfaceCard: { backgroundColor: theme.colors.surfaceCard },
   surfaceSidebar: { backgroundColor: theme.colors.surfaceSidebar },
   surfaceSidebarHover: { backgroundColor: theme.colors.surfaceSidebarHover },
   surfaceSidebarActive: { backgroundColor: theme.colors.surfaceSidebarActive },

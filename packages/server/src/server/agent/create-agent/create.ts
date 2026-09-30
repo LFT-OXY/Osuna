@@ -16,7 +16,11 @@ import type { AgentPromptInput, AgentRunOptions, AgentSessionConfig } from "../a
 import type { AgentStorage } from "../agent-storage.js";
 import type { AgentOwner } from "../agent-owner.js";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
-import { setupFinishNotification, startCreatedAgentInitialPrompt } from "../agent-prompt.js";
+import {
+  setupFinishNotification,
+  startCreatedAgentInitialPrompt,
+  type RoutingBlockResolver,
+} from "../agent-prompt.js";
 import { resolveCreateAgentTitles } from "../create-agent-title.js";
 import { buildAgentPrompt } from "../prompt-attachments.js";
 import { normalizeClientMessageId, resolveClientMessageId } from "../../client-message-id.js";
@@ -25,7 +29,7 @@ import {
   appendTimelineItemIfAgentKnown,
   emitLiveTimelineItemIfAgentKnown,
 } from "../timeline-append.js";
-import { resolveCreateAgentIntent } from "./intent.js";
+import { resolveCreateAgentIntent, withParentToolCallIdLabel } from "./intent.js";
 
 export interface CreateAgentSessionWorktreeResult {
   sessionConfig: AgentSessionConfig;
@@ -70,6 +74,8 @@ export interface CreateAgentFromSessionInput {
   env?: Record<string, string>;
   provisionalTitle: string | null;
   firstAgentContext: FirstAgentContext;
+  /** 客户端新建请求的首条消息带 Agent mention 时，按建好的会话判定并生成 Routing block。 */
+  resolveRoutingBlock?: RoutingBlockResolver;
   buildSessionConfig: (
     config: AgentSessionConfig,
     gitOptions?: GitSetupOptions,
@@ -104,6 +110,8 @@ export interface CreateAgentFromMcpInput {
   }) => void;
   onWorktreeCreated?: (createdWorktree: CreatePaseoWorktreeWorkflowResult) => void;
   callerAgentId?: string;
+  // 调用方 provider 侧的 tool call id；有父智能体时写成 PARENT_TOOL_CALL_ID_LABEL。
+  parentToolCallId?: string;
   callerContext?: {
     lockedCwd?: string;
     allowCustomCwd?: boolean;
@@ -165,6 +173,7 @@ interface ResolvedCreateAgent {
   createOptions: CreateAgentOptions;
   prompt?: AgentPromptInput;
   runOptions?: AgentRunOptions;
+  resolveRoutingBlock?: RoutingBlockResolver;
   setupContinuation?: AgentWorktreeSetupContinuation;
   background: boolean;
   promptFailure: CreateAgentPromptFailureMode;
@@ -294,6 +303,7 @@ async function resolveSessionCreateAgent(
     },
     prompt: hasPromptContent ? prompt : undefined,
     runOptions,
+    resolveRoutingBlock: input.resolveRoutingBlock,
     setupContinuation,
     background: true,
     promptFailure: "throw",
@@ -338,6 +348,11 @@ async function resolveMcpCreateAgent(
       cwd: resolvedCwd,
     }),
   });
+  const labels = withParentToolCallIdLabel({
+    labels: intent.labels,
+    parentAgentId: intent.parentAgentId,
+    parentToolCallId: input.parentToolCallId,
+  });
   const resolvedCreateConfig = await resolveMcpProviderCreateConfig({
     dependencies,
     input,
@@ -358,7 +373,7 @@ async function resolveMcpCreateAgent(
       resolvedFeatures: resolvedCreateConfig.featureValues,
     }),
     createOptions: {
-      ...(Object.keys(intent.labels).length > 0 ? { labels: intent.labels } : {}),
+      ...(Object.keys(labels).length > 0 ? { labels } : {}),
       workspaceId: intent.workspaceId,
       owner: input.owner,
       env: input.env,
@@ -464,6 +479,7 @@ async function sendInitialPrompt(
       snapshot,
       prompt,
       runOptions: resolved.runOptions,
+      resolveRoutingBlock: resolved.resolveRoutingBlock,
       logger: resolved.promptLogger ?? dependencies.logger,
     });
     return { started: true, liveSnapshot };

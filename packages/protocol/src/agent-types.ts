@@ -127,6 +127,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  canCreateAgents?: boolean;
+  createAgentsUnavailableReason?: string;
   // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
   isModelListAuthoritative?: boolean;
   // 当前启用的第三方接口；官方模式下没有。

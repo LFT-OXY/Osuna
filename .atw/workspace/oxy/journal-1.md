@@ -539,6 +539,17 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 [OK] **Completed**
 
 
+## Session 19: 工单 05：Skill block 取代 Skill chip；手动验收修复，任务归档
+<!-- atw-session: v=2 fp=e2fed0023d5b0613 -->
+
+**Date**: 2026-09-30
+**Task**: 工单 05：Skill block 取代 Skill chip；手动验收修复，任务归档
+**Package**: app
+**Branch**: `feat/multi-agent-collab`
+
+### Summary
+
+实现工单 05：从 Command menu 选中的 skill 变成输入框开头的 Skill block，发送时序列化为 /a /b 正文；删除 Skill chip，旧草稿的 skills 字段按 COMPAT(skill-chip-draft) 迁移；原生端改为在开头插入 /name。手动验收修了三处：编辑器段落默认外边距导致光标比 placeholder 低一截；块名字号从 caption 改为 body，与正文同为 fontSize.content；排队行正文改用 fontSize.content。提交 glossary（不含多智能体任务的 Agent mention 条目）与 ADR 0005，归档任务。遗留：开头有多个 skill 时，Codex/opencode（大概率 Claude Code 也是）只把第一个当正式调用，后面的作为参数文字，建议另开任务核实。dev 桌面端在这个 worktree 需 PASEO_LISTEN=127.0.0.1:6769。
 ## Session 20: 提供方安装指引
 <!-- atw-session: v=2 fp=ecc1226f81485b94 -->
 
@@ -555,6 +566,33 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 
 | Hash | Message |
 |------|---------|
+| `6da8e5994` | feat(app): Skill block 取代 Skill chip，选中的 skill 进输入框开头 |
+| `cb631fc83` | docs(glossary): Skill chip 改为 Inline block / Skill block / File mention，Attachment tray 只放附件 |
+| `0b6b6ff34` | fix(app): 输入框光标与 placeholder 对齐，块名与排队行字号随 Content size 与正文一致 |
+| `cccdc40df` | docs(adr): 0005 行内块以普通文字存在消息里，协议不加字段 |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 22: 多智能体协作票 13：provider 子智能体权限归属与验收归档
+<!-- atw-session: v=2 fp=6c693908e538a60d -->
+
+**Date**: 2026-09-30
+**Task**: 多智能体协作票 13：provider 子智能体权限归属与验收归档
+**Package**: app
+**Branch**: `feat/multi-agent-collab`
+
+### Summary
+
+Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智能体，track 与派发组行显示等待批准，只读面板可批准；三轮双轴审查，dev 桌面端实测后验收并归档 09-29-multi-agent-collab。遗留观察：Codex 父会话派发行一度停在启动中（服务端关联数据正确）、mock 行时长待确认、子标签直接对话不再通知父智能体（现有设计）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ecbcc7c36` | feat(protocol,server,app): provider 子智能体权限按 metadata.providerSubagentId 归属，track 与派发组行显示等待批准，只读面板可批准 |
 | `bbb132e50` | feat(app): 未安装的提供方按主机系统显示安装指引 |
 
 ### Status

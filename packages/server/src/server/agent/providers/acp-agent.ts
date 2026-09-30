@@ -125,6 +125,7 @@ import {
   truncateForDiagnostic,
 } from "./diagnostic-utils.js";
 import { withTimeout } from "../../../utils/promise-timeout.js";
+import { stripTrailingRoutingBlock } from "../trailing-routing-block.js";
 
 const ACP_AUTO_ACCEPT_FEATURE_ID = "auto_accept";
 
@@ -3387,7 +3388,7 @@ function contentBlockToText(content: ContentBlock): string {
 }
 
 function normalizeACPImportPromptPreview(text: string | null): string | null {
-  const normalized = text?.trim().replace(/\s+/g, " ") ?? "";
+  const normalized = text ? stripTrailingRoutingBlock(text).trim().replace(/\s+/g, " ") : "";
   if (!normalized) return null;
   return normalized.length > 160 ? normalized.slice(0, 160) : normalized;
 }

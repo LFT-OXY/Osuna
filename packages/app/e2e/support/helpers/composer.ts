@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { buildHostWorkspaceRoute } from "@/utils/host-routes";
 import { createTempGitRepo } from "./workspace";
 import { connectSeedClient, type SeedDaemonClient } from "./seed-client";
@@ -25,13 +25,71 @@ export async function expectComposerVisible(
 }
 
 export async function expectComposerDisabled(page: Page): Promise<void> {
-  // React Native TextInput with editable={false} renders as <textarea readonly> on web,
-  // not <textarea disabled>. Use not.toBeEditable() to match either form.
+  // 锁定时编辑器仍在 DOM 里，只是变成只读（aria-readonly）。
   await expect(composerInput(page)).not.toBeEditable({ timeout: 10_000 });
 }
 
+export interface ComposerInputState {
+  text: string;
+  /** 光标在 `text` 中的偏移；选区不在 Composer 里时为 null。 */
+  caret: number | null;
+}
+
+/**
+ * Composer 是 contenteditable 编辑器，没有 `value`。正文是编辑器里的文字，每个 `<br>` 算一个换行；
+ * ProseMirror 在行尾补的占位 `<br>` 不算内容。
+ */
+export async function readComposerInput(input: Locator): Promise<ComposerInputState> {
+  return input.evaluate((root) => {
+    const serialize = (node: Node): string => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+      if (node instanceof HTMLBRElement) {
+        return node.classList.contains("ProseMirror-trailingBreak") ? "" : "\n";
+      }
+      return Array.from(node.childNodes).map(serialize).join("");
+    };
+    const selection = window.getSelection();
+    let caret: number | null = null;
+    const caretInComposer =
+      selection !== null && selection.rangeCount > 0 && root.contains(selection.focusNode);
+    if (caretInComposer) {
+      const beforeCaret = document.createRange();
+      beforeCaret.setStart(root, 0);
+      beforeCaret.setEnd(selection.focusNode as Node, selection.focusOffset);
+      caret = serialize(beforeCaret.cloneContents()).length;
+    }
+    return { text: serialize(root), caret };
+  });
+}
+
+interface ComposerTestEditorChain {
+  insertContent(text: string): ComposerTestEditorChain;
+  setTextSelection(position: number): ComposerTestEditorChain;
+  run(): boolean;
+}
+
+/**
+ * Tiptap 为测试把编辑器挂在可编辑元素上（`element.editor`）。用例借它在同一次 evaluate 里改草稿，
+ * 赶在 Composer 延迟发布草稿之前。
+ */
+export interface ComposerTestEditor {
+  chain(): ComposerTestEditorChain;
+}
+
+export async function expectComposerText(
+  input: Locator,
+  text: string,
+  options?: { timeout?: number },
+): Promise<void> {
+  await expect
+    .poll(async () => (await readComposerInput(input)).text, {
+      timeout: options?.timeout ?? 10_000,
+    })
+    .toBe(text);
+}
+
 export async function expectComposerDraft(page: Page, text: string): Promise<void> {
-  await expect(composerInput(page)).toHaveValue(text, { timeout: 5_000 });
+  await expectComposerText(composerInput(page), text, { timeout: 5_000 });
 }
 
 export async function expectComposerEditable(page: Page): Promise<void> {

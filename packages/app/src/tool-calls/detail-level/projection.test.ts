@@ -45,20 +45,35 @@ function assistant(id: string): AssistantMessageItem {
   };
 }
 
+function createAgentCall(
+  id: string,
+  options: { name?: string; status?: "running" | "completed" } = {},
+): ToolCallItem {
+  return toolCall(
+    id,
+    { type: "unknown", input: { title: `Task ${id}`, provider: "codex/gpt-5.4" }, output: null },
+    { name: options.name ?? "paseo.create_agent", status: options.status },
+  );
+}
+
 function project(input: {
   level: ToolCallDetailLevel;
   tail?: StreamItem[];
   head?: StreamItem[];
   isTurnActive?: boolean;
   preparedHistory?: PreparedToolCallHistory | null;
+  dispatchGroups?: boolean;
 }) {
   const tail = input.tail ?? [];
+  const dispatchGroups = input.dispatchGroups ?? false;
   return projectToolCallDetailLevel({
     level: input.level,
     tail,
     head: input.head ?? [],
-    preparedHistory: input.preparedHistory ?? prepareToolCallHistory(input.level, tail),
+    preparedHistory:
+      input.preparedHistory ?? prepareToolCallHistory({ level: input.level, tail, dispatchGroups }),
     isTurnActive: input.isTurnActive ?? false,
+    dispatchGroups,
   });
 }
 
@@ -89,7 +104,7 @@ describe("tool call detail-level projection", () => {
     const tail = [toolCall("1", { type: "shell", command: "one" })];
     const head = [toolCall("2", { type: "shell", command: "two" })];
 
-    const prepared = prepareToolCallHistory("detailed", tail);
+    const prepared = prepareToolCallHistory({ level: "detailed", tail, dispatchGroups: false });
     const result = project({ level: "detailed", tail, head, preparedHistory: prepared });
 
     expect(prepared).toBeNull();
@@ -101,7 +116,7 @@ describe("tool call detail-level projection", () => {
   it("keeps one stable overview host as a run grows", () => {
     const firstCall = toolCall("1", { type: "shell", command: "one" });
     const secondCall = toolCall("2", { type: "read", filePath: "/repo/a.ts" });
-    const prepared = prepareToolCallHistory("overview", []);
+    const prepared = prepareToolCallHistory({ level: "overview", tail: [], dispatchGroups: false });
 
     const single = project({
       level: "overview",
@@ -139,7 +154,7 @@ describe("tool call detail-level projection", () => {
     ];
     const result = project({ level: "overview", head: calls, isTurnActive: true });
 
-    expect(result.groupsByHostId.get("1")?.isLoading).toBe(true);
+    expect(result.groupsByHostId.get("1")).toMatchObject({ isLoading: true });
   });
 
   it("builds a loading aggregate for a one-call run", () => {
@@ -163,7 +178,7 @@ describe("tool call detail-level projection", () => {
       toolCall("3", { type: "read", filePath: "/repo/b.ts" }),
       toolCall("4", { type: "edit", filePath: "/repo/a.ts" }),
     ];
-    const prepared = prepareToolCallHistory("overview", []);
+    const prepared = prepareToolCallHistory({ level: "overview", tail: [], dispatchGroups: false });
     const active = project({
       level: "overview",
       head: calls,
@@ -210,7 +225,7 @@ describe("tool call detail-level projection", () => {
 
   it("seals the trailing overview group only when the turn ends", () => {
     const calls = ["1", "2", "3", "4"].map((id) => toolCall(id, { type: "shell", command: id }));
-    const prepared = prepareToolCallHistory("overview", []);
+    const prepared = prepareToolCallHistory({ level: "overview", tail: [], dispatchGroups: false });
 
     const betweenCalls = project({
       level: "overview",
@@ -355,7 +370,7 @@ describe("tool call detail-level projection", () => {
       toolCall(id, { type: "shell", command: id }),
     );
     const tail = [...historicalCalls, assistant("boundary")];
-    const prepared = prepareToolCallHistory("overview", tail);
+    const prepared = prepareToolCallHistory({ level: "overview", tail, dispatchGroups: false });
     if (!prepared) {
       throw new Error("Overview history must be prepared");
     }
@@ -396,7 +411,7 @@ describe("tool call detail-level projection", () => {
       toolCall("2", { type: "read", filePath: "/repo/a.ts" }),
     ];
     const tail = [assistant("before"), ...trailingCalls];
-    const prepared = prepareToolCallHistory("overview", tail);
+    const prepared = prepareToolCallHistory({ level: "overview", tail, dispatchGroups: false });
     if (!prepared) {
       throw new Error("Overview history must be prepared");
     }
@@ -478,5 +493,116 @@ describe("tool call detail-level projection", () => {
     expect(result.head).toEqual([singleCall, plan, speak]);
     expect(result.groupsByHostId.get(singleCall.id)?.run.calls).toEqual([singleCall]);
     expect(result.groupsByHostId.size).toBe(1);
+  });
+});
+
+describe("dispatch groups", () => {
+  it.each(["detailed", "overview"] as const)(
+    "joins consecutive create_agent calls into one %s dispatch group",
+    (level) => {
+      const calls = [
+        createAgentCall("1"),
+        createAgentCall("2", { name: "mcp__paseo__create_agent" }),
+      ];
+      const result = project({ level, tail: calls, dispatchGroups: true });
+
+      expect(result.tail).toEqual([expect.objectContaining({ id: "1" })]);
+      expect(result.groupsByHostId.get("1")).toMatchObject({
+        mode: "dispatch",
+        run: { calls },
+      });
+    },
+  );
+
+  it("splits dispatch groups at prose and at other tool calls", () => {
+    const tail = [
+      createAgentCall("1"),
+      assistant("between"),
+      createAgentCall("2"),
+      toolCall("3", { type: "shell", command: "ls" }),
+      createAgentCall("4"),
+    ];
+    const result = project({ level: "detailed", tail, dispatchGroups: true });
+
+    expect(result.tail.map((item) => item.id)).toEqual(["1", "between", "2", "3", "4"]);
+    const modes = ["1", "2", "4"].map((id) => result.groupsByHostId.get(id)?.mode);
+    expect(modes).toEqual(["dispatch", "dispatch", "dispatch"]);
+    expect(result.groupsByHostId.has("3")).toBe(false);
+  });
+
+  it("keeps create_agent calls out of overview groups beside them", () => {
+    const tail = [
+      toolCall("1", { type: "shell", command: "ls" }),
+      createAgentCall("2"),
+      createAgentCall("3"),
+      toolCall("4", { type: "read", filePath: "/repo/a.ts" }),
+    ];
+    const result = project({ level: "overview", tail, dispatchGroups: true });
+
+    expect(result.tail.map((item) => item.id)).toEqual(["1", "2", "4"]);
+    expect(result.groupsByHostId.get("1")).toMatchObject({
+      mode: "overview",
+      run: { calls: [tail[0]] },
+    });
+    expect(result.groupsByHostId.get("2")).toMatchObject({
+      mode: "dispatch",
+      run: { calls: [tail[1], tail[2]] },
+    });
+    expect(result.groupsByHostId.get("4")).toMatchObject({ mode: "overview" });
+  });
+
+  it("leaves create_agent calls ordinary when the host has no call links", () => {
+    const tail = [createAgentCall("1"), createAgentCall("2")];
+
+    expect(project({ level: "detailed", tail }).groupsByHostId.size).toBe(0);
+    expect(project({ level: "overview", tail }).groupsByHostId.get("1")).toMatchObject({
+      mode: "overview",
+      summary: { paseoCallCount: 2 },
+    });
+  });
+
+  it("does not treat other Paseo tools or provider-native names as dispatches", () => {
+    const tail = [
+      toolCall("1", { type: "unknown", input: {}, output: null }, { name: "paseo.list_agents" }),
+      createAgentCall("2", { name: "create_agent" }),
+    ];
+
+    expect(project({ level: "detailed", tail, dispatchGroups: true }).groupsByHostId.size).toBe(0);
+  });
+
+  it("joins provider subagent calls into the same dispatch group as create_agent", () => {
+    const subAgent = (id: string) =>
+      toolCall(id, { type: "sub_agent", subAgentType: "Explore", log: "" }, { name: "Task" });
+    const tail = [subAgent("1"), createAgentCall("2"), subAgent("3"), assistant("after")];
+
+    const result = project({ level: "detailed", tail, dispatchGroups: true });
+
+    expect(result.tail.map((item) => item.id)).toEqual(["1", "after"]);
+    expect(result.groupsByHostId.get("1")).toMatchObject({
+      mode: "dispatch",
+      calls: [tail[0], tail[1], tail[2]],
+    });
+    expect(project({ level: "detailed", tail }).groupsByHostId.size).toBe(0);
+  });
+
+  it("grows a history dispatch group with the live head", () => {
+    const first = createAgentCall("1");
+    const second = createAgentCall("2", { status: "running" });
+    const tail = [first];
+    const prepared = prepareToolCallHistory({ level: "detailed", tail, dispatchGroups: true });
+    const result = project({
+      level: "detailed",
+      tail,
+      head: [second],
+      isTurnActive: true,
+      preparedHistory: prepared,
+      dispatchGroups: true,
+    });
+
+    expect(result.head).toEqual([]);
+    expect(result.historyGroupUpdatesByHostId.get("1")).toMatchObject({
+      mode: "dispatch",
+      run: { calls: [first, second] },
+    });
   });
 });

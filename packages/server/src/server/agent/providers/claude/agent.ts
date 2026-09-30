@@ -20,6 +20,7 @@ import {
   type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { Logger } from "pino";
+import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-subagent-permission";
 import {
   mapClaudeCanceledToolCall,
   mapClaudeCompletedToolCall,
@@ -147,6 +148,7 @@ import { withTimeout } from "../../../../utils/promise-timeout.js";
 import { terminateWithTreeKill } from "../../../../utils/tree-kill.js";
 import { execCommand } from "../../../../utils/spawn.js";
 import { composeSystemPromptParts } from "../../system-prompt.js";
+import { stripTrailingRoutingBlock } from "../../trailing-routing-block.js";
 
 const fsPromises = promises;
 const CLAUDE_SETTING_SOURCES: NonNullable<ClaudeOptions["settingSources"]> = [
@@ -4650,6 +4652,12 @@ class ClaudeAgentSession implements AgentSession {
     if (options.toolUseID) {
       metadata.toolUseId = options.toolUseID;
     }
+    const subagentId = options.agentID
+      ? this.taskProtocolSource.resolveTaskSubagentId(options.agentID)
+      : undefined;
+    if (subagentId) {
+      Object.assign(metadata, providerSubagentPermissionMetadata(subagentId));
+    }
     if (toolName === "ExitPlanMode" && typeof input.plan === "string") {
       metadata.planText = input.plan;
     }
@@ -6320,7 +6328,7 @@ function normalizeClaudeSessionTitle(title: string | null): string | null {
 }
 
 function normalizeImportablePromptPreview(text: string): string | null {
-  const normalized = text.trim().replace(/\s+/g, " ");
+  const normalized = stripTrailingRoutingBlock(text).trim().replace(/\s+/g, " ");
   if (!normalized) return null;
   return normalized.length > 160 ? normalized.slice(0, 160) : normalized;
 }

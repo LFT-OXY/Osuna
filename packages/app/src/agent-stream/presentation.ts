@@ -15,6 +15,8 @@ interface PresentationInput {
   transform: TimelineItemTransform | undefined;
   level: ToolCallDetailLevel;
   isTurnActive: boolean;
+  /** Host 能把 `create_agent` 调用关联到子智能体时，连续的调用合成派发组。 */
+  dispatchGroups: boolean;
 }
 
 function retainItems(previous: StreamItem[], next: StreamItem[]): StreamItem[] {
@@ -52,6 +54,7 @@ export function createStreamPresentation() {
   let promotedRows: StreamItem[] = [];
   let preparedTail: StreamItem[] | undefined;
   let preparedLevel: ToolCallDetailLevel | undefined;
+  let preparedDispatchGroups: boolean | undefined;
   let preparedHistory: PreparedToolCallHistory | null = null;
 
   function nativeBlocks(item: StreamItem): StreamItem[] {
@@ -140,10 +143,19 @@ export function createStreamPresentation() {
       displayHistory = historyRows;
       promotedRows = nextPromoted;
     }
-    if (preparedTail !== displayTail || preparedLevel !== input.level) {
-      preparedHistory = prepareToolCallHistory(input.level, displayTail);
+    if (
+      preparedTail !== displayTail ||
+      preparedLevel !== input.level ||
+      preparedDispatchGroups !== input.dispatchGroups
+    ) {
+      preparedHistory = prepareToolCallHistory({
+        level: input.level,
+        tail: displayTail,
+        dispatchGroups: input.dispatchGroups,
+      });
       preparedTail = displayTail;
       preparedLevel = input.level;
+      preparedDispatchGroups = input.dispatchGroups;
     }
     return projectToolCallDetailLevel({
       level: input.level,
@@ -151,6 +163,7 @@ export function createStreamPresentation() {
       head,
       preparedHistory,
       isTurnActive: input.isTurnActive,
+      dispatchGroups: input.dispatchGroups,
     });
   };
 }

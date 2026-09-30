@@ -176,8 +176,13 @@ export const es: TranslationResources = {
       removeBrowserElement: "Eliminar el archivo adjunto del elemento del navegador",
       openReview: "Abrir archivo adjunto de reseña",
       removeReview: "Eliminar archivo adjunto de reseña",
-      skillChip: "Habilidad: {{name}}",
-      removeSkill: "Eliminar",
+    },
+    inlineBlocks: {
+      skill: "Habilidad: {{name}}",
+      file: "Archivo: {{name}}",
+      directory: "Carpeta: {{name}}",
+      image: "Imagen: {{name}}",
+      agent: "Agente: {{name}}",
     },
     errors: {
       failedToSend: "No se pudo enviar el mensaje",
@@ -1642,6 +1647,19 @@ export const es: TranslationResources = {
     groups: {
       commands: "Comandos",
       skills: "Habilidades",
+      agents: "Agentes",
+      files: "Archivos",
+    },
+    agentMentions: {
+      toolsNotInjected: "Las Osuna tools están desactivadas para este agente",
+      toolsNotInjectedDetail: "Actívalas en Ajustes → Host → Agents y vuelve a cargar este agente.",
+      toolsNotInjectedDraftDetail: "Actívalas en Ajustes → Host → Agents.",
+      openAgentsSettings: "Abrir ajustes",
+      mcpDisabled: "MCP está desactivado en este host",
+      createAgentNotAllowed: "La política de Osuna tools de este provider no permite create_agent",
+      toolsNotDelivered: "Este agente no puede llamar a las Osuna tools",
+      unknownReason: "Este agente no puede iniciar subagentes",
+      hostOutdated: "Actualiza el host para mencionar agentes",
     },
   },
   loadOlderHistory: {
@@ -1926,6 +1944,15 @@ export const es: TranslationResources = {
     archiveTooltip: "Subagente de archivo",
     archiveFinishedAction: "Archivar subagentes finalizados",
     archiveFinishedRetry: "Reintentar ({{failed}}/{{total}})",
+    dispatchTitleOne: "1 subagente enviado",
+    dispatchTitleMany: "{{count}} subagentes enviados",
+    dispatchStartingRow: "Iniciando",
+    dispatchStarting: "{{count}} iniciando",
+    dispatchDone: "{{count}} finalizados",
+    dispatchWaitingCount: "{{count}} esperando aprobación",
+    dispatchWaitingForApproval: "Esperando aprobación · {{tool}}",
+    dispatchArchived: "Archivado",
+    dispatchDetached: "Separado",
   },
   panels: {
     draft: {
@@ -2629,6 +2656,41 @@ export const es: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
+      },
+      mentionDefaults: {
+        title: "Valores predeterminados de mención",
+        info: "El modelo, el nivel de razonamiento y el modo con que arranca un subagente nuevo cuando mencionas un proveedor con @. Los campos sin definir usan los valores predeterminados de ese proveedor y nunca heredan el modo del agente actual. Un perfil de Agent mencionado usa primero su propia configuración.",
+        hostOutdated: "Actualiza el host para configurar los valores predeterminados de mención",
+        toolsOff:
+          "Osuna tools está desactivado, así que no puedes mencionar agentes con @. Esta configuración se aplicará cuando lo actives.",
+        noProviders: "No hay proveedores activados",
+        model: "Modelo",
+        thinking: "Razonamiento",
+        mode: "Modo",
+        modelAccessibilityLabel: "Modelo de mención de {{provider}}",
+        thinkingAccessibilityLabel: "Nivel de razonamiento de mención de {{provider}}",
+        modeAccessibilityLabel: "Modo de mención de {{provider}}",
+        rowAccessibilityLabel: "Valores predeterminados de mención de {{provider}}",
+        default: "Predeterminado",
+        defaultWithValue: "Predeterminado ({{value}})",
+        unsupported: "No compatible",
+        unavailableOption: "{{value}} (no disponible)",
+        staleWithFallback:
+          "{{value}} no está disponible; se usará el predeterminado ({{fallback}})",
+        staleIgnored: "{{value}} no está disponible y no se usará",
+        summaryAllDefault: "Todo predeterminado",
+        summaryOthersDefault: "el resto predeterminado",
+        summaryLoading: "Cargando modelos...",
+        summaryUnavailable: "Proveedor no disponible",
+        catalogError:
+          "No se pudo leer la lista de modelos; los valores guardados se envían tal cual",
+        thinkingReset: "El nivel de razonamiento volvió al predeterminado del modelo ({{value}})",
+        thinkingResetNoLabel: "El nivel de razonamiento volvió al predeterminado del modelo",
+        thinkingUnsupported:
+          "{{model}} no tiene niveles de razonamiento; se borró el nivel guardado",
+        resetAll: "Restablecer todo",
+        saveFailed: "No se pudo guardar: {{error}}",
+        retry: "Reintentar",
       },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",

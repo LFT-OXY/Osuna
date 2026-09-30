@@ -178,8 +178,13 @@ export const fr: TranslationResources = {
       removeBrowserElement: "Supprimer la pièce jointe d'un élément de navigateur",
       openReview: "Ouvrir la pièce jointe de l'avis",
       removeReview: "Supprimer la pièce jointe de l'avis",
-      skillChip: "Compétence : {{name}}",
-      removeSkill: "Supprimer",
+    },
+    inlineBlocks: {
+      skill: "Compétence : {{name}}",
+      file: "Fichier : {{name}}",
+      directory: "Dossier : {{name}}",
+      image: "Image : {{name}}",
+      agent: "Agent : {{name}}",
     },
     errors: {
       failedToSend: "Échec de l'envoi du message",
@@ -1648,6 +1653,20 @@ export const fr: TranslationResources = {
     groups: {
       commands: "Commandes",
       skills: "Compétences",
+      agents: "Agents",
+      files: "Fichiers",
+    },
+    agentMentions: {
+      toolsNotInjected: "Les Osuna tools sont désactivés pour cet agent",
+      toolsNotInjectedDetail:
+        "Activez-les dans Réglages → Host → Agents, puis rechargez cet agent.",
+      toolsNotInjectedDraftDetail: "Activez-les dans Réglages → Host → Agents.",
+      openAgentsSettings: "Ouvrir les réglages",
+      mcpDisabled: "MCP est désactivé sur cet hôte",
+      createAgentNotAllowed: "La politique Osuna tools de ce provider n'autorise pas create_agent",
+      toolsNotDelivered: "Cet agent ne peut pas appeler les Osuna tools",
+      unknownReason: "Cet agent ne peut pas lancer de sous-agents",
+      hostOutdated: "Mettez à jour l'hôte pour mentionner des agents",
     },
   },
   loadOlderHistory: {
@@ -1932,6 +1951,15 @@ export const fr: TranslationResources = {
     archiveTooltip: "Sous-agent d'archivage",
     archiveFinishedAction: "Archiver les sous-agents terminés",
     archiveFinishedRetry: "Réessayer ({{failed}}/{{total}})",
+    dispatchTitleOne: "1 sous-agent lancé",
+    dispatchTitleMany: "{{count}} sous-agents lancés",
+    dispatchStartingRow: "Démarrage",
+    dispatchStarting: "{{count}} en démarrage",
+    dispatchDone: "{{count}} terminés",
+    dispatchWaitingCount: "{{count}} en attente d'approbation",
+    dispatchWaitingForApproval: "En attente d'approbation · {{tool}}",
+    dispatchArchived: "Archivé",
+    dispatchDetached: "Détaché",
   },
   panels: {
     draft: {
@@ -2636,6 +2664,41 @@ export const fr: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
+      },
+      mentionDefaults: {
+        title: "Valeurs par défaut des mentions",
+        info: "Le modèle, le niveau de réflexion et le mode avec lesquels démarre un nouveau sous-agent quand vous mentionnez un fournisseur avec @. Les champs non définis utilisent les valeurs par défaut du fournisseur et n'héritent jamais du mode de l'agent actuel. Un profil Agent mentionné utilise d'abord ses propres réglages.",
+        hostOutdated: "Mettez à jour l'hôte pour définir les valeurs par défaut des mentions",
+        toolsOff:
+          "Osuna tools est désactivé : impossible de mentionner des agents avec @. Ces réglages s'appliqueront une fois activé.",
+        noProviders: "Aucun fournisseur activé",
+        model: "Modèle",
+        thinking: "Réflexion",
+        mode: "Mode",
+        modelAccessibilityLabel: "Modèle de mention pour {{provider}}",
+        thinkingAccessibilityLabel: "Niveau de réflexion de mention pour {{provider}}",
+        modeAccessibilityLabel: "Mode de mention pour {{provider}}",
+        rowAccessibilityLabel: "Valeurs par défaut des mentions pour {{provider}}",
+        default: "Par défaut",
+        defaultWithValue: "Par défaut ({{value}})",
+        unsupported: "Non pris en charge",
+        unavailableOption: "{{value}} (indisponible)",
+        staleWithFallback:
+          "{{value}} est indisponible ; la valeur par défaut ({{fallback}}) sera utilisée",
+        staleIgnored: "{{value}} est indisponible et ne sera pas utilisé",
+        summaryAllDefault: "Tout par défaut",
+        summaryOthersDefault: "le reste par défaut",
+        summaryLoading: "Chargement des modèles...",
+        summaryUnavailable: "Fournisseur indisponible",
+        catalogError:
+          "Impossible de lire la liste des modèles ; les valeurs enregistrées sont envoyées telles quelles",
+        thinkingReset: "Niveau de réflexion remis à la valeur par défaut du modèle ({{value}})",
+        thinkingResetNoLabel: "Niveau de réflexion remis à la valeur par défaut du modèle",
+        thinkingUnsupported:
+          "{{model}} n'a pas de niveaux de réflexion ; le niveau enregistré a été effacé",
+        resetAll: "Tout réinitialiser",
+        saveFailed: "Enregistrement impossible : {{error}}",
+        retry: "Réessayer",
       },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",

@@ -14,6 +14,7 @@ import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-cli
 import { getServerId } from "../support/helpers/server-id";
 import { seedSavedSettingsHosts } from "../support/helpers/settings";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
+import type { ComposerTestEditor } from "../support/helpers/composer";
 
 const DRAFT = `Please investigate the workspace startup failure.
 
@@ -103,22 +104,10 @@ test.describe("New workspace composer draft", () => {
       await expect(createButton).toBeEnabled({ timeout: 30_000 });
 
       await composer.evaluate((element, draft) => {
-        if (!(element instanceof HTMLTextAreaElement)) {
-          throw new Error("Composer input is not a textarea");
-        }
-        const valueSetter = Object.getOwnPropertyDescriptor(
-          HTMLTextAreaElement.prototype,
-          "value",
-        )?.set;
-        if (!valueSetter) throw new Error("Textarea value setter is unavailable");
-        valueSetter.call(element, draft);
-        element.dispatchEvent(
-          new InputEvent("input", {
-            bubbles: true,
-            data: draft,
-            inputType: "insertText",
-          }),
-        );
+        // 直接改编辑器内容，赶在 Composer 延迟发布草稿之前提交。
+        const editor = (element as HTMLElement & { editor?: ComposerTestEditor }).editor;
+        if (!editor) throw new Error("Composer editor is unavailable");
+        editor.chain().insertContent(draft).run();
         const button = document.querySelector('[data-testid="workspace-create-submit"]');
         if (!(button instanceof HTMLElement)) {
           throw new Error("Create button is unavailable");

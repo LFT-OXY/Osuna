@@ -1,0 +1,55 @@
+{
+  "runId": "pi-same-2",
+  "parentProvider": "pi",
+  "scenario": "same",
+  "expected": [
+    {
+      "index": 1,
+      "label": "[@Claude Code](paseo://agent/claude)",
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "settings": {
+        "modeId": "auto",
+        "thinkingOptionId": "low"
+      }
+    },
+    {
+      "index": 2,
+      "label": "[@Claude Code](paseo://agent/claude)",
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "settings": {
+        "modeId": "auto",
+        "thinkingOptionId": "low"
+      }
+    }
+  ],
+  "message": "[@Claude Code](paseo://agent/claude) write unit tests for src/sum.js using node:test, and [@Claude Code](paseo://agent/claude) write a short README.md section that documents src/format.js.\n\n<paseo-system>\nThe user's message above mentions agents as links of the form [@Name](paseo://agent/<id>). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:\n\n1. [@Claude Code](paseo://agent/claude) -> provider \"claude/claude-opus-5-5\", settings {\"modeId\":\"auto\",\"thinkingOptionId\":\"low\"}\n2. [@Claude Code](paseo://agent/claude) -> provider \"claude/claude-opus-5-5\", settings {\"modeId\":\"auto\",\"thinkingOptionId\":\"low\"}\n\nRules:\n- Call `create_agent` exactly once per numbered mention, in the order listed. Two mentions of the same agent mean two separate subagents.\n- Pass `provider` and `settings` exactly as listed. Do not change the model, mode, or thinking option. Do not call `list_providers`, `list_models`, or `inspect_provider` first; the values are already resolved.\n- Do not do a mentioned part yourself, and do not hand it to your own subagent or task tools. Only `create_agent` counts.\n- The subagent cannot see this conversation. Write `initialPrompt` so it stands alone: the goal, the relevant files and context, constraints, and what to report back.\n- Keep `notifyOnFinish` at its default. You will be notified as each subagent finishes; then combine the results for the user.\n- If a subagent asks for permission, the user approves it in that subagent's session. Do not answer it with `respond_to_permission`.\n- Do any part of the message addressed to you (not to a mention) yourself, after the subagents are started.\n</paseo-system>",
+  "parentId": "aef0623e-7ba0-42b7-8158-225d4db9ce42",
+  "parentModel": "anthropic/claude-fable-5",
+  "parentMode": null,
+  "durationMs": 12251,
+  "timeline": [
+    {
+      "type": "user_message",
+      "text": "[@Claude Code](paseo://agent/claude) write unit tests for src/sum.js using node:test, and [@Claude Code](paseo://agent/claude) write a short README.md section that documents src/format.js.\n\n<paseo-system>\nThe user's message above mentions agents as links of the form [@Name](paseo://agent/<id>). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:\n\n1. [@Claude Code](paseo://agent/claude) -> provider \"claude/claude-opus-5-5\", settings {\"modeId\":\"auto\",\"thinkingOptionId\":\"low\"}\n2. [@Claude Code](paseo://agent/claude) -> provider \"claude/claude-opus-5-5\", settings {\"modeId\":\"auto\",\"thinkingOptionId\":\"low\"}\n\nRules:\n- Call `create_agent` exactly once per numbered mention, in the order listed. Two mentions of the same agent mean two separate subagents.\n- Pass `provider` and `settings` exactly as listed. Do not change the model, mode, or thinking option. Do not call `list_providers`, `list_models`, or `inspect_provider` first; the values are already resolved.\n- Do not do a mentioned part yourself, and do not hand it to your own subagent or task tools. Only `create_agent` counts.\n- The subagent cannot see this conversation. Write `initialPrompt` so it stands alone: the goal, the relevant files and context, constraints, and what to report back.\n- Keep `notifyOnFinish` at its default. You will be notified as each subagent finishes; then combine the results for the user.\n- If a subagent asks for permission, the user approves it in that subagent's session. Do not answer it with `respond_to_permission`.\n- Do any part of the message addressed to you (not to a mention) yourself, after the subagents are started.\n</paseo-system>",
+      "clientMessageId": "bf5b1086-066a-4a1f-8b7a-f2fd414e8b77",
+      "messageId": "bf5b1086-066a-4a1f-8b7a-f2fd414e8b77"
+    },
+    {
+      "type": "notification",
+      "level": "info",
+      "message": "Initializing workspace history for this project. The first prompt may take a moment."
+    },
+    {
+      "type": "assistant_message",
+      "text": "[System Error] OAuth refresh failed for anthropic: Anthropic token refresh request failed. url=https://platform.claude.com/v1/oauth/token; details=Error: HTTP request failed. status=400; url=https://platform.claude.com/v1/oauth/token; body={\"error\": \"invalid_grant\", \"error_description\": \"Refresh token not found or invalid\"}; stack=Error: HTTP request failed. status=400; url=https://platform.claude.com/v1/oauth/token; body={\"error\": \"invalid_grant\", \"error_description\": \"Refresh token not found or invalid\"}\n    at postJson (file:///Users/oxy/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/anthropic.js:75:4438)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async refreshAnthropicToken (file:///Users/oxy/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/anthropic.js:75:7484)\n    at async credentials.modify.signal.signal (file:///Users/oxy/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-RCZIEVGO.js:11:9286)\n    at async file:///Users/oxy/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-OJP47DM6.js:611:16602\n    at async FileAuthStorageBackend.withLockAsync (file:///Users/oxy/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-OJP47DM6.js:611:10678)\n    at async _AuthStorage.modify (file:///Users/oxy/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-OJP47DM6.js:611:16501)\n    at async resolveStoredOAuth (file:///Users/oxy/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-RCZIEVGO.js:11:9076) (stopReason=error, model=anthropic/claude-fable-5)"
+    },
+    {
+      "type": "notification",
+      "level": "warning",
+      "message": "Observational memory: observer skipped — authentication failed for provider \"anthropic\" — OAuth credentials may have expired; run '/login anthropic' to re-authenticate"
+    }
+  ],
+  "children": []
+}

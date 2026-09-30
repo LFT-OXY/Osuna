@@ -3,9 +3,10 @@ import path from "node:path";
 import { test, expect, type Page } from "../support/fixtures";
 import { seedMockAgentWorkspace, openAgentRoute } from "../support/helpers/mock-agent";
 import { openChangesPanel } from "../support/helpers/workspace-tabs";
+import { expectComposerText } from "../support/helpers/composer";
 
 function visibleComposer(page: Page) {
-  return page.locator("textarea[data-composer-input]").filter({ visible: true }).first();
+  return page.locator('[data-composer-input] [role="textbox"]').filter({ visible: true }).first();
 }
 
 test("adds a changed file to the focused chat without replacing its composer draft", async ({
@@ -41,7 +42,7 @@ test("adds a changed file to the focused chat without replacing its composer dra
     const attachment = page.getByTestId("composer-workspace-file-attachment-pill");
     await expect(attachment).toContainText("changed file.ts");
     await expect(attachment).toContainText(relativePath);
-    await expect(agentComposer).toHaveValue("Preserve this thought");
+    await expectComposerText(agentComposer, "Preserve this thought");
     await expect(agentComposer).toBeFocused();
   } finally {
     await workspace.cleanup();

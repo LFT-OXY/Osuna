@@ -1,4 +1,6 @@
 export const PARENT_AGENT_ID_LABEL = "paseo.parent-agent-id";
+// daemon 自有：父智能体里那次 create_agent 的 provider tool call id，等于父时间线条目的 callId。
+export const PARENT_TOOL_CALL_ID_LABEL = "paseo.parent-tool-call-id";
 const OPEN_AGENT_TAB_LABEL_PREFIX = "paseo.open-agent-tab.";
 
 export function getOpenAgentTabLabel(clientId: string): string {

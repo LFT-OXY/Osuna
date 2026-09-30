@@ -9,6 +9,7 @@ import {
   WorkspaceSetupSnapshotSchema,
   WorkspaceSetupProgressMessageSchema,
   AgentTimelineEntryPayloadSchema,
+  ProviderSnapshotEntrySchema,
 } from "./messages.js";
 
 test("terminal listings accept older rows and retain new per-terminal directories", () => {
@@ -289,6 +290,103 @@ describe("wire schema compatibility", () => {
     expect(parsed.capabilities.supportsRewindConversation).toBe(false);
     expect(parsed.capabilities.supportsRewindFiles).toBe(false);
     expect(parsed.capabilities.supportsRewindBoth).toBe(false);
+  });
+
+  test("agent snapshots keep create-agents fields optional and reason codes open", () => {
+    const snapshot = {
+      id: "agent-1",
+      provider: "claude",
+      cwd: "/tmp/project",
+      model: null,
+      createdAt: "2026-09-30T00:00:00.000Z",
+      updatedAt: "2026-09-30T00:00:00.000Z",
+      lastUserMessageAt: null,
+      status: "idle",
+      capabilities: {
+        supportsStreaming: true,
+        supportsSessionPersistence: true,
+        supportsDynamicModes: true,
+        supportsMcpServers: true,
+        supportsReasoningStream: true,
+        supportsToolInvocations: true,
+      },
+      currentModeId: null,
+      availableModes: [],
+      pendingPermissions: [],
+      persistence: null,
+      title: null,
+      labels: {},
+    };
+
+    const fromOldDaemon = AgentSnapshotPayloadSchema.parse(snapshot);
+    const withFutureReason = AgentSnapshotPayloadSchema.parse({
+      ...snapshot,
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "reason_from_a_newer_daemon",
+    });
+    const oldClient = LegacyAgentSnapshotPayloadSchema.parse({
+      ...snapshot,
+      canCreateAgents: true,
+    });
+
+    expect(fromOldDaemon.canCreateAgents).toBeUndefined();
+    expect(fromOldDaemon.createAgentsUnavailableReason).toBeUndefined();
+    expect(withFutureReason.canCreateAgents).toBe(false);
+    expect(withFutureReason.createAgentsUnavailableReason).toBe("reason_from_a_newer_daemon");
+    expect(oldClient.id).toBe("agent-1");
+  });
+
+  test("provider snapshot entries keep the create-agents prediction optional and reason codes open", () => {
+    const entry = { provider: "claude", status: "ready", enabled: true };
+
+    const fromOldDaemon = ProviderSnapshotEntrySchema.parse(entry);
+    const withFutureReason = ProviderSnapshotEntrySchema.parse({
+      ...entry,
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "reason_from_a_newer_daemon",
+    });
+    const oldClient = ProviderSnapshotEntrySchema.omit({
+      canCreateAgents: true,
+      createAgentsUnavailableReason: true,
+    }).parse({ ...entry, canCreateAgents: true });
+
+    expect(fromOldDaemon.canCreateAgents).toBeUndefined();
+    expect(fromOldDaemon.createAgentsUnavailableReason).toBeUndefined();
+    expect(withFutureReason.canCreateAgents).toBe(false);
+    expect(withFutureReason.createAgentsUnavailableReason).toBe("reason_from_a_newer_daemon");
+    expect(oldClient.provider).toBe("claude");
+  });
+
+  test("server_info advertises agentMentions as an optional feature", () => {
+    const legacy = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "old-daemon",
+      features: {},
+    });
+    const current = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "new-daemon",
+      features: { agentMentions: true },
+    });
+
+    expect(legacy.features?.agentMentions).toBeUndefined();
+    expect(current.features?.agentMentions).toBe(true);
+  });
+
+  test("server_info advertises subagentCallLinks as an optional feature", () => {
+    const legacy = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "old-daemon",
+      features: {},
+    });
+    const current = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "new-daemon",
+      features: { subagentCallLinks: true },
+    });
+
+    expect(legacy.features?.subagentCallLinks).toBeUndefined();
+    expect(current.features?.subagentCallLinks).toBe(true);
   });
 
   test("notification timeline items parse their level and message", () => {

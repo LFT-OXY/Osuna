@@ -56,6 +56,7 @@ import { resolveToolCallIcon } from "@/utils/tool-call-icon";
 import { getMarkdownListMarker, getMarkdownListSpacing } from "@/utils/markdown-list";
 import { markdownNodeContainsType } from "@/utils/markdown-ast";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { InlineBlockText } from "@/inline-blocks/view";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
 import { MarkdownFenceBlock } from "@/components/markdown/fence";
 import type { MarkdownPhase } from "@/components/markdown/fence/types";
@@ -119,6 +120,8 @@ interface UserMessageProps {
   agentId?: string;
   messageId?: string;
   message: string;
+  /** 该 agent 的 skill 名，用于把开头的 `/name` 显示为 Skill block；未加载时为 null。 */
+  skillNames: ReadonlySet<string> | null;
   images?: UserMessageImageAttachment[];
   attachments?: AgentAttachment[];
   timestamp: number;
@@ -383,6 +386,7 @@ export const UserMessage = memo(function UserMessage({
   agentId,
   messageId,
   message,
+  skillNames,
   images = [],
   attachments = [],
   timestamp,
@@ -497,9 +501,14 @@ export const UserMessage = memo(function UserMessage({
             </View>
           ) : null}
           {hasText ? (
-            <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
-              {message}
-            </Text>
+            <InlineBlockText
+              text={message}
+              skillNames={skillNames}
+              serverId={serverId ?? null}
+              selectable
+              style={userMessageStylesheet.text}
+              dataSet={MESSAGE_TEXT_DATASET}
+            />
           ) : null}
         </View>
         {hasText ? (

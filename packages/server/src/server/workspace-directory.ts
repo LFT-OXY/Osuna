@@ -360,7 +360,7 @@ export class WorkspaceDirectory {
   // keeping the highest-priority bucket. A record's owner IS its `workspaceId`;
   // status never fans out to same-cwd siblings. A subagent in another workspace
   // is a root for that workspace. Same-workspace descendants contribute only
-  // running activity to the nearest ancestor in that workspace.
+  // running or needs-input activity to the nearest ancestor in that workspace.
   private applyAgentBucketContributions(params: {
     activeAgents: AgentSnapshotPayload[];
     descriptorsByWorkspaceId: Map<string, WorkspaceDescriptorPayload>;
@@ -374,9 +374,6 @@ export class WorkspaceDirectory {
         continue;
       }
       const isWorkspaceRoot = workspaceAgent.id === agent.id;
-      if (!isWorkspaceRoot && agent.status !== "running") {
-        continue;
-      }
       const bucket = isWorkspaceRoot
         ? deriveAgentStateBucket({
             status: agent.status,
@@ -384,7 +381,10 @@ export class WorkspaceDirectory {
             requiresAttention: agent.requiresAttention,
             attentionReason: agent.attentionReason ?? null,
           })
-        : "running";
+        : deriveSameWorkspaceDescendantBucket(agent);
+      if (!bucket) {
+        continue;
+      }
 
       const workspaceId = workspaceAgent.workspaceId;
       if (!workspaceId) {
@@ -712,6 +712,19 @@ function groupAgentsByWorkspaceId(
     byWorkspaceId.set(workspaceId, entries);
   }
   return byWorkspaceId;
+}
+
+// 同工作区子智能体的完成、出错与 attention 留在父智能体的 track，只有运行和等待批准会冒到工作区。
+function deriveSameWorkspaceDescendantBucket(
+  agent: AgentSnapshotPayload,
+): WorkspaceStateBucket | null {
+  const bucket = deriveAgentStateBucket({
+    status: agent.status,
+    pendingPermissionCount: agent.pendingPermissions.length,
+    requiresAttention: false,
+    attentionReason: null,
+  });
+  return bucket === "needs_input" || bucket === "running" ? bucket : null;
 }
 
 export function resolveWorkspaceRootAgent(

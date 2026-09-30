@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { ComposerAttachment } from "@/attachments/types";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
+import type { InlineSegment } from "@/inline-blocks";
 
 export interface PendingWorkspaceDraftSubmission {
   /** Already-running creation. Mounting the draft only observes its result. */
@@ -15,6 +16,8 @@ export interface PendingWorkspaceDraftSubmission {
   workspaceId: string;
   draftId: string;
   text: string;
+  /** text 的分段结构；建 agent 失败写回草稿 tab 输入框时块仍是块。 */
+  segments?: readonly InlineSegment[];
   attachments: ComposerAttachment[];
   cwd: string;
   provider: AgentProvider;

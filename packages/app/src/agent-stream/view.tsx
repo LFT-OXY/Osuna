@@ -66,6 +66,12 @@ import { QuestionFormCard } from "@/components/question-form-card";
 import { ToolCallSheetProvider } from "@/components/tool-call-sheet";
 import { createStreamPresentation } from "./presentation";
 import { OverviewToolCallGroupView } from "@/tool-calls/detail-level/overview/view";
+import {
+  DispatchGroupView,
+  DispatchSubagentIndexProvider,
+  useDispatchGroupsEnabled,
+  useDispatchSubagentIndex,
+} from "@/subagents/dispatch-group";
 import { type AgentStreamRenderModel, buildAgentStreamRenderModel } from "./model";
 import { resolveStreamRenderStrategy } from "./strategy-resolver";
 import { type StreamSegmentRenderers, type StreamViewportHandle } from "./strategy";
@@ -109,6 +115,7 @@ import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins/timeline";
 import { AgentUsageScopeProvider } from "@/usage/agent-scope";
+import { useAgentSkillNames } from "@/inline-blocks/view";
 
 function renderLiveAuxiliaryNode(input: {
   pendingPermissions: ReactNode;
@@ -284,6 +291,8 @@ export interface AgentStreamViewProps {
   streamItems: StreamItem[];
   streamHead?: StreamItem[];
   pendingPermissions: Map<string, PendingPermission>;
+  /** 权限归属的 agent，缺省为 `agentId`。provider 子智能体面板的权限挂在父 agent 上。 */
+  permissionAgentId?: string;
   pendingMessageSubmissions?: readonly PendingMessageSubmission[];
   turnPresentation: TurnPresentation;
   routeBottomAnchorRequest?: BottomAnchorRouteRequest | null;
@@ -294,6 +303,10 @@ export interface AgentStreamViewProps {
   bottomOverlayControlClearance?: number;
   toast?: ToastApi | null;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
+  /** 给了才把 `create_agent` 调用画成派发组；只读面板与草稿不给，照常是通用工具卡。 */
+  onOpenSubagent?: (agentId: string) => void;
+  /** 派发组里 provider 子智能体的行点开只读面板。 */
+  onOpenProviderSubagent?: (parentAgentId: string, subagentId: string) => void;
   readOnly?: boolean;
   historyPagination?: {
     hasOlder: boolean;
@@ -340,6 +353,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       streamItems,
       streamHead: providedStreamHead,
       pendingPermissions,
+      permissionAgentId,
       pendingMessageSubmissions = EMPTY_PENDING_MESSAGE_SUBMISSIONS,
       turnPresentation,
       routeBottomAnchorRequest = null,
@@ -348,6 +362,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       bottomOverlayControlClearance,
       toast,
       onOpenWorkspaceFile,
+      onOpenSubagent,
+      onOpenProviderSubagent,
       readOnly = false,
       historyPagination,
     },
@@ -384,6 +400,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const transformTimelineItem = useInstalledTimelineTransform(resolvedServerId);
 
     const client = useSessionStore((state) => state.sessions[resolvedServerId]?.client ?? null);
+    const skillNames = useAgentSkillNames({ serverId: resolvedServerId, agentId });
     const sessionStreamHead = useSessionStore((state) =>
       state.sessions[resolvedServerId]?.agentStreamHead?.get(agentId),
     );
@@ -393,6 +410,15 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       (state) =>
         state.sessions[resolvedServerId]?.serverInfo?.features?.agentForkContextCursor === true,
     );
+    const dispatchGroups = useDispatchGroupsEnabled({
+      serverId: resolvedServerId,
+      canOpenSubagents: onOpenSubagent !== undefined,
+    });
+    const dispatchSubagentIndex = useDispatchSubagentIndex({
+      serverId: resolvedServerId,
+      parentAgentId: agentId,
+      enabled: dispatchGroups,
+    });
     const supportsChatOutline = useSessionStore(
       (state) =>
         state.sessions[resolvedServerId]?.serverInfo?.features?.agentTimelinePromptIndex === true,
@@ -557,6 +583,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           transform: transformTimelineItem,
           level: toolCallDetailLevel,
           isTurnActive,
+          dispatchGroups,
         }),
       [
         presentStream,
@@ -565,6 +592,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         transformTimelineItem,
         toolCallDetailLevel,
         isTurnActive,
+        dispatchGroups,
       ],
     );
     const {
@@ -705,6 +733,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             agentId={agentId}
             messageId={item.messageId}
             message={item.text}
+            skillNames={skillNames}
             images={item.images}
             attachments={item.attachments}
             timestamp={item.timestamp.getTime()}
@@ -719,7 +748,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           />
         );
       },
-      [context.capabilities, agentId, client, pendingClientMessageIds, resolvedServerId],
+      [
+        context.capabilities,
+        agentId,
+        client,
+        pendingClientMessageIds,
+        resolvedServerId,
+        skillNames,
+      ],
     );
 
     const renderAssistantMessageItem = useCallback(
@@ -849,11 +885,32 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         handleToolCallOpenFile,
       ],
     );
+    const handleOpenSubagent = useStableEvent((subagentId: string) => {
+      onOpenSubagent?.(subagentId);
+    });
+    const handleOpenProviderSubagent = useStableEvent(
+      (parentAgentId: string, subagentId: string) => {
+        onOpenProviderSubagent?.(parentAgentId, subagentId);
+      },
+    );
     const renderToolCallItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "tool_call" }>) => {
         const group = getToolCallGroup(item.id);
         if (!group) {
           return renderSingleToolCallItem(item, layoutItem.isLastInToolSequence);
+        }
+        if (group.mode === "dispatch") {
+          return (
+            <DispatchGroupView
+              serverId={resolvedServerId}
+              parentAgentId={agentId}
+              calls={group.calls}
+              isLastInSequence={layoutItem.isLastInToolSequence}
+              onOpenSubagent={handleOpenSubagent}
+              onOpenProviderSubagent={handleOpenProviderSubagent}
+              renderGenericCall={renderSingleToolCallItem}
+            />
+          );
         }
         const expanded = expandedToolCallGroupIds.has(group.run.id);
         return (
@@ -878,9 +935,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         );
       },
       [
+        agentId,
         expandedToolCallGroupIds,
         getToolCallGroup,
+        handleOpenProviderSubagent,
+        handleOpenSubagent,
         renderSingleToolCallItem,
+        resolvedServerId,
         setToolCallGroupExpanded,
       ],
     );
@@ -962,10 +1023,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       ],
     );
 
-    const pendingPermissionItems = useMemo(
-      () => Array.from(pendingPermissions.values()).filter((perm) => perm.agentId === agentId),
-      [pendingPermissions, agentId],
-    );
+    const pendingPermissionItems = useMemo(() => {
+      const ownerAgentId = permissionAgentId ?? agentId;
+      return Array.from(pendingPermissions.values()).filter(
+        (perm) => perm.agentId === ownerAgentId,
+      );
+    }, [pendingPermissions, permissionAgentId, agentId]);
 
     const pendingPermissionsNode = useMemo(
       () =>
@@ -1191,7 +1254,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     return (
       <AgentUsageScopeProvider serverId={resolvedServerId} agentId={agentId}>
         <TurnChangedFilesProvider value={turnChangedFilesActions}>
-          {streamSurface}
+          <DispatchSubagentIndexProvider value={dispatchSubagentIndex}>
+            {streamSurface}
+          </DispatchSubagentIndexProvider>
         </TurnChangedFilesProvider>
       </AgentUsageScopeProvider>
     );
@@ -1296,6 +1361,7 @@ function agentStreamViewPropsEqual(
   if (left.streamItems !== right.streamItems) reasons.push("streamItems");
   if (left.streamHead !== right.streamHead) reasons.push("streamHead");
   if (left.pendingPermissions !== right.pendingPermissions) reasons.push("pendingPermissions");
+  if (left.permissionAgentId !== right.permissionAgentId) reasons.push("permissionAgentId");
   if (left.pendingMessageSubmissions !== right.pendingMessageSubmissions) {
     reasons.push("pendingMessageSubmissions");
   }

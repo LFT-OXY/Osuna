@@ -14,6 +14,24 @@ export type AgentMcpServerOptions = PaseoToolHostDependencies;
 
 type McpToolContext = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
+// Claude、Codex、Pi（pi-mcp-adapter）各自在 tools/call 的 _meta 里放 tool call id 的键。
+const PROVIDER_TOOL_CALL_ID_META_KEYS = [
+  "claudecode/toolUseId",
+  "callId",
+  "pi-mcp-adapter/toolCallId",
+] as const;
+
+function readProviderToolCallId(context: McpToolContext | undefined): string | undefined {
+  const meta: Record<string, unknown> | undefined = context?._meta;
+  for (const key of PROVIDER_TOOL_CALL_ID_META_KEYS) {
+    const value = meta?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
 function toMcpToolResult(result: PaseoToolResult): CallToolResult {
   const modelVisibleResult = addModelVisibleStructuredContent(result);
   return {
@@ -43,8 +61,15 @@ export async function createAgentMcpServer(options: AgentMcpServerOptions): Prom
         description: tool.description,
         inputSchema: tool.inputSchema,
       },
-      async (args: unknown, context?: McpToolContext) =>
-        toMcpToolResult(await catalog.executeTool(tool.name, args, { signal: context?.signal })),
+      async (args: unknown, context?: McpToolContext) => {
+        const providerToolCallId = readProviderToolCallId(context);
+        return toMcpToolResult(
+          await catalog.executeTool(tool.name, args, {
+            signal: context?.signal,
+            ...(providerToolCallId ? { providerToolCallId } : {}),
+          }),
+        );
+      },
     );
   }
 

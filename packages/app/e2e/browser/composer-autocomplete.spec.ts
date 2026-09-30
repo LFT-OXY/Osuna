@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "../support/fixtures";
-import { composerLocator, expectComposerVisible } from "../support/helpers/composer";
+import {
+  composerLocator,
+  expectComposerVisible,
+  expectComposerText,
+  readComposerInput,
+  type ComposerTestEditor,
+} from "../support/helpers/composer";
 import {
   openAgentRoute,
   seedMockAgentWorkspace,
@@ -475,7 +481,7 @@ test.describe("Composer autocomplete", () => {
       const beforeDelete = await visiblePopoverBox(page);
 
       await input.press("Backspace");
-      await expect(input).toHaveValue("/he");
+      await expectComposerText(input, "/he");
       await expect(popover.getByText("/help", { exact: true }).first()).toBeVisible({
         timeout: 30_000,
       });
@@ -562,11 +568,10 @@ test.describe("Composer autocomplete", () => {
       ).toBeVisible({ timeout: 30_000 });
 
       await input.evaluate((element) => {
-        if (!(element instanceof HTMLTextAreaElement)) {
-          throw new Error("Composer input is not a textarea");
-        }
-        element.setSelectionRange(0, 0);
-        element.dispatchEvent(new Event("select", { bubbles: true }));
+        // 在编辑器里移动光标，赶在 Composer 发布光标之前按 Tab。
+        const editor = (element as HTMLElement & { editor?: ComposerTestEditor }).editor;
+        if (!editor) throw new Error("Composer editor is unavailable");
+        editor.chain().setTextSelection(1).run();
         element.dispatchEvent(
           new KeyboardEvent("keydown", {
             key: "Tab",
@@ -576,11 +581,8 @@ test.describe("Composer autocomplete", () => {
         );
       });
 
-      await expect(input).toHaveValue("/tdd");
-      const selectionStart = await input.evaluate(
-        (element) => (element as HTMLTextAreaElement).selectionStart,
-      );
-      expect(selectionStart).toBe(0);
+      await expectComposerText(input, "/tdd");
+      expect((await readComposerInput(input)).caret).toBe(0);
     } finally {
       await agent.cleanup();
     }
@@ -601,28 +603,18 @@ test.describe("Composer autocomplete", () => {
       await expect(option).toBeVisible({ timeout: 30_000 });
 
       await option.evaluate((element) => {
-        const textarea = document.querySelector('textarea[aria-label="Message agent..."]');
-        if (!(textarea instanceof HTMLTextAreaElement)) {
-          throw new Error("Composer input is not a textarea");
-        }
-        const valueSetter = Object.getOwnPropertyDescriptor(
-          HTMLTextAreaElement.prototype,
-          "value",
-        )?.set;
-        if (!valueSetter) throw new Error("Textarea value setter is unavailable");
-        valueSetter.call(textarea, "/tdd suffix");
-        textarea.setSelectionRange(4, 4);
-        textarea.dispatchEvent(
-          new InputEvent("input", {
-            bubbles: true,
-            data: "d suffix",
-            inputType: "insertText",
-          }),
-        );
+        // 直接改编辑器内容，赶在 Composer 延迟发布草稿之前点击。
+        const editor = (
+          document.querySelector('[role="textbox"][aria-label="Message agent..."]') as
+            | (HTMLElement & { editor?: ComposerTestEditor })
+            | null
+        )?.editor;
+        if (!editor) throw new Error("Composer editor is unavailable");
+        editor.chain().insertContent("d suffix").setTextSelection(5).run();
         (element as HTMLElement).click();
       });
 
-      await expect(input).toHaveValue("/tdd suffix");
+      await expectComposerText(input, "/tdd suffix");
     } finally {
       await agent.cleanup();
     }
