@@ -1,0 +1,15 @@
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "价格表与面板组件的写法约定"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 用法，新输入框与面板样式"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "折叠、搜索、从 LiteLLM 行自定义的临时状态"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "单元、浏览器组件、e2e 三层测试约定"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "质量底线与孤儿代码清理"}
+{"file": ".atw/spec/guides/code-reuse-thinking-guide.md", "reason": "复用现有纯函数、列宽模块与 Tooltip，不新增抽象"}
+{"file": "docs/design.md", "reason": "按钮、层次、密度、对齐规则"}
+{"file": "docs/hover.md", "reason": "LiteLLM 行悬停出现「自定义」的标准写法"}
+{"file": "docs/unistyles.md", "reason": "禁止 useUnistyles 等样式陷阱"}
+{"file": "docs/glossary.md", "reason": "价格表、自定义价格、无价格数据、估算成本、本轮用量的规范叫法"}
+{"file": "docs/usage.md", "reason": "价格表与自定义价格的行为，需同步的界面描述"}
+{"file": "docs/testing.md", "reason": "测试确定性与只跑单文件的规则"}
+{"file": ".atw/tasks/09-30-price-table-and-turn-usage-redesign/research/interview-decisions.md", "reason": "Q1–Q15 设计决定"}
+{"file": ".atw/tasks/09-30-price-table-and-turn-usage-redesign/research/ui-tokens-supplement.md", "reason": "价格表与面板的源码取值和文案"}
+{"file": ".atw/tasks/09-30-price-table-and-turn-usage-redesign/research/baseline-dom.md", "reason": "现状实测与面板歪斜的量测根因"}

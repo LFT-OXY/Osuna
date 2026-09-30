@@ -67,11 +67,7 @@ const zhCNEnglishAllowlist = {
     "settings.providers.apiEndpoints.form.baseUrl",
     "settings.providers.apiEndpoints.form.apiKey",
   ],
-  brands: [
-    "sidebar.help.appName",
-    "panels.sessionHistory.row.paseo",
-    "settings.host.priceTable.source.table",
-  ],
+  brands: ["sidebar.help.appName", "panels.sessionHistory.row.paseo"],
   namedThemes: [
     "settings.appearance.theme.options.zinc",
     "settings.appearance.theme.options.midnight",

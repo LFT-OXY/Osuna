@@ -51,6 +51,8 @@ A list row that needs a hover kebab **and** a right-click / long-press menu is `
 
 A hover envelope that also shows a tooltip wraps the plain `View` in `TooltipTrigger asChild`: the trigger composes its own `onPointerEnter` / `onPointerLeave` with the envelope's, so one element drives both the hover state and the tooltip, and moving onto the inner `Pressable` does not close it (`pointerleave` ignores descendants).
 
+A tooltip that is a panel rather than a one-line hint sizes its frame, not its content. Pass `maxWidth` to `TooltipContent` and put `width`, `paddingVertical: 0` / `paddingHorizontal: 0`, and the radius in its `style`; the sections inside pad themselves. Never give the inner content a `minWidth`: the frame is `border-box` with its own border and default padding, so inner `minWidth` equal to the frame's `maxWidth` draws past the border on one side (the old turn usage panel overflowed by 18px and read as off-centre, because positioning centres the frame, not the content). Change the `TooltipContent` defaults only for every caller at once. Reference: `agent-stream/turn-usage-panel.tsx`.
+
 A highlight the arrow keys also move (the Command menu) listens to `onPointerMove` on the envelope and has no leave handler; `docs/hover.md` "A highlight the keyboard also moves" says why.
 
 `onHoverIn` / `onHoverOut` has one legitimate use: a `Pressable` styling itself (`components/ui/button.tsx`), preferably through the render-prop `style={({ hovered }) => …}`. The moment hover state is read by anything else, use the envelope. Never put both handler kinds on one element.

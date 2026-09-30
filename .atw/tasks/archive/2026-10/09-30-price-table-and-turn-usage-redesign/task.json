@@ -1,0 +1,28 @@
+{
+  "id": "price-table-and-turn-usage-redesign",
+  "name": "price-table-and-turn-usage-redesign",
+  "title": "价格表分组重设计与每轮用量悬浮面板重设计",
+  "description": "价格表分为自定义/LiteLLM两组并美化；turn footer 用量悬浮面板修复歪斜并重新设计；先出本地 HTML 原型",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-30",
+  "completedAt": "2026-10-01",
+  "branch": "enhance-pricing-hover-panel",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "808192cee6be14161a7a9a267f9917e1db8e9299"
+  }
+}

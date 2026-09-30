@@ -64,6 +64,10 @@ export function Field({ label, children, hint, error, testID }: FieldProps) {
 
 type FormTextInputProps = AdaptiveTextInputProps & {
   size?: FieldControlSize;
+  /** 框内、文字前的固定前缀（如货币符号），不属于输入的值。 */
+  prefix?: string;
+  /** 校验没过：边框换成危险色，聚焦环照旧。 */
+  invalid?: boolean;
 };
 
 type FlatFormTextInputStyle = ViewStyle & TextStyle;
@@ -157,7 +161,10 @@ function assignTextInputRef(
 }
 
 export const FormTextInput = forwardRef<EditingTextInputHandle, FormTextInputProps>(
-  function FormTextInput({ size = "md", style, onFocus, onBlur, editable, ...props }, ref) {
+  function FormTextInput(
+    { size = "md", prefix, invalid = false, style, onFocus, onBlur, editable, ...props },
+    ref,
+  ) {
     const [focused, setFocused] = useState(false);
     const isDisabled = editable === false;
     const chromeSizeStyle = size === "sm" ? formInputStyles.chromeSm : formInputStyles.chromeMd;
@@ -191,6 +198,7 @@ export const FormTextInput = forwardRef<EditingTextInputHandle, FormTextInputPro
       ({ hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
         formInputStyles.chrome,
         chromeSizeStyle,
+        prefix ? formInputStyles.chromeWithPrefix : null,
         resolveControlInteractionStyles(
           {
             controlRest: formInputStyles.controlRest,
@@ -204,13 +212,15 @@ export const FormTextInput = forwardRef<EditingTextInputHandle, FormTextInputPro
             disabled: isDisabled,
           },
         ),
+        invalid ? formInputStyles.controlInvalid : null,
         splitStyle.chromeStyle,
       ],
-      [chromeSizeStyle, focused, isDisabled, splitStyle.chromeStyle],
+      [chromeSizeStyle, focused, invalid, isDisabled, prefix, splitStyle.chromeStyle],
     );
 
     return (
       <Pressable disabled={isDisabled} style={chromeStyle}>
+        {prefix ? <Text style={formInputStyles.prefix}>{prefix}</Text> : null}
         <AdaptiveTextInput
           ref={setInputRef}
           editable={editable}
@@ -258,6 +268,15 @@ const formInputStyles = StyleSheet.create((theme) => {
     chromeMd: {
       ...geometry.fieldControlMd,
     },
+    chromeWithPrefix: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing[1],
+    },
+    prefix: {
+      color: theme.colors.foregroundMuted,
+      fontSize: theme.fontSize.sm,
+    },
     // 带颜色的条目直接引用 theme 才会被记为主题依赖（.atw/spec/app/frontend/styling.md）。
     controlRest: {
       ...createControlGeometry(theme).controlRest,
@@ -270,6 +289,9 @@ const formInputStyles = StyleSheet.create((theme) => {
     },
     controlDisabled: {
       ...geometry.controlDisabled,
+    },
+    controlInvalid: {
+      borderColor: theme.colors.statusDanger,
     },
     input: {
       flex: 1,

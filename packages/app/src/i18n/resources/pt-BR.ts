@@ -358,18 +358,26 @@ export const ptBR: TranslationResources = {
     },
     turnUsage: {
       title: "Uso do turno",
-      total: "Total",
-      duration: "Duração",
+      estimatedCost: "Custo estimado",
+      model: "Modelo",
+      byModel: "Por modelo",
       note: "Custo estimado · pelos preços públicos da API",
       unpriced: "Sem dados de preço",
-      reasoning: "({{tokens}} de raciocínio)",
+      unpricedWarningOne:
+        "{{models}} não tem dados de preço e conta como $0. Defina um preço personalizado em Configurações › Tabela de preços.",
+      unpricedWarningMany:
+        "{{models}} não têm dados de preço e contam como $0. Defina preços personalizados em Configurações › Tabela de preços.",
+      modelSeparator: ", ",
       accessibility: "Uso do turno: {{input}} de entrada, {{output}} de saída, {{cost}}",
-      columns: {
-        model: "Modelo",
+      stats: {
         input: "Entrada",
         cache: "Cache",
         output: "Saída",
-        cost: "Custo",
+        reasoning: "Incl. raciocínio",
+      },
+      amounts: {
+        cache: "cache {{tokens}}",
+        reasoning: "raciocínio {{tokens}}",
       },
     },
     diagram: {
@@ -3031,7 +3039,6 @@ export const ptBR: TranslationResources = {
       },
       priceTable: {
         title: "Tabela de preços",
-        subtitle: "$ por milhão de tokens · snapshot do LiteLLM, atualizado {{ago}}, {{models}}",
         modelCountOne: "1 modelo",
         modelCountMany: "{{count}} modelos",
         autoUpdate: "Atualização automática",
@@ -3048,19 +3055,48 @@ export const ptBR: TranslationResources = {
         save: "Salvar",
         saveFailed: "Não foi possível salvar este preço.",
         invalidPrice: "Digite um número nas quatro colunas.",
+        edit: "Editar",
+        editAccessibility: "Editar o preço personalizado de {{model}}",
+        removeCustomPrice: "Remover preço personalizado",
+        removeCustomPriceAccessibility: "Remover o preço personalizado de {{model}}",
+        removeFailed: "Não foi possível remover este preço personalizado.",
+        customize: "Personalizar",
+        customizeAccessibility: "Definir um preço personalizado para {{model}}",
+        litellmPrice: "Preço do LiteLLM",
+        customGroup: {
+          title: "Preços personalizados",
+          intro:
+            "Os modelos sem preço no LiteLLM aparecem aqui. Preencha as quatro colunas em $ por milhão de tokens; 0 significa grátis.",
+          empty: "Todos os modelos têm preço.",
+          unpricedCount: "Sem dados de preço {{count}}",
+        },
+        litellmGroup: {
+          title: "Preços do LiteLLM",
+          subtitle: {
+            snapshot: "Snapshot do LiteLLM incluído, atualizado {{ago}} · $ por milhão de tokens",
+            cache:
+              "Preços do LiteLLM baixados on-line, atualizados {{ago}} · $ por milhão de tokens",
+          },
+          summary: "{{models}} com preço do LiteLLM",
+          expand: "Mostrar",
+          collapse: "Ocultar",
+          autoUpdate: "Atualizar preços do LiteLLM automaticamente",
+          search: "Buscar modelos",
+          clearSearch: "Limpar busca",
+          noMatches: "Nenhum nome de modelo contém “{{query}}”.",
+        },
         columns: {
           model: "Modelo",
           input: "Entrada",
           cacheRead: "Leitura de cache",
           cacheWrite: "Escrita de cache",
           output: "Saída",
-          source: "Origem",
-          actions: "Ações",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Personalizado",
-          none: "—",
+          short: {
+            input: "Entrada {{price}}",
+            cacheRead: "Leitura {{price}}",
+            cacheWrite: "Escrita {{price}}",
+            output: "Saída {{price}}",
+          },
         },
       },
     },

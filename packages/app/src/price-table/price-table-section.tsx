@@ -1,42 +1,43 @@
-import { RefreshCw } from "lucide-react-native";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import type { UsagePricingModel } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingOverride } from "@getpaseo/protocol/usage/types";
+import { useCallback, useMemo, useReducer, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
+import { View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
-import { ScrollView } from "@/components/ui/scroll-view";
-import { Switch } from "@/components/ui/switch";
+import { Text } from "@/components/ui/text";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
-import { describeTimeAgo } from "@/usage/relative-time";
 import { renderUsageText } from "@/usage/text";
-import { PRICE_COLUMN_GAP, priceColumns } from "./price-columns";
-import { PriceRow } from "./price-row";
+import { CustomPriceGroup } from "./custom-price-group";
+import { LiteLLMPriceGroup } from "./litellm-price-group";
+import { resolvePriceTableLayout } from "./price-columns";
 import {
   EMPTY_PRICE_DRAFT,
-  PRICE_COLUMNS,
-  buildPriceDraft,
   dedupePricingModels,
-  describePriceTableSubtitle,
   extractFailureReason,
+  groupPricingModels,
   parsePriceDraft,
+  removePricingOverride,
   upsertPricingOverride,
-  type PriceDraft,
   type PriceField,
 } from "./pricing";
+import { INITIAL_PRICE_ROWS, priceRowsReducer } from "./price-rows";
 import { usePriceTable, type PriceTableView } from "./use-price-table";
 
 const PRICE_SAVE_FAILED_KEY = "settings.host.priceTable.saveFailed";
+const PRICE_REMOVE_FAILED_KEY = "settings.host.priceTable.removeFailed";
 const AUTO_UPDATE_FAILED_KEY = "settings.host.priceTable.autoUpdateFailed";
 const REFRESH_FAILED_KEY = "settings.host.priceTable.refreshFailed";
 
-interface RowError {
+interface OverridesWrite {
   model: string;
-  message: string;
+  failedKey: typeof PRICE_SAVE_FAILED_KEY | typeof PRICE_REMOVE_FAILED_KEY;
+  /** 由当前的覆盖表算出要整段写回的新表。 */
+  next: (current: readonly UsagePricingOverride[]) => UsagePricingOverride[];
 }
 
 /**
@@ -54,88 +55,116 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
   const { view, refetch } = usePriceTable(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
 
-  const [drafts, setDrafts] = useState<Record<string, PriceDraft>>({});
-  const [savingModel, setSavingModel] = useState<string | null>(null);
-  const [rowError, setRowError] = useState<RowError | null>(null);
-  const [draftToken, setDraftToken] = useState(0);
+  const [rows, dispatchRows] = useReducer(priceRowsReducer, INITIAL_PRICE_ROWS);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  /** 卡片头部那两个控件（开关、立即刷新）共用的一行错误。 */
+  /** LiteLLM 组那两个控件（开关、立即刷新）共用的一行错误。 */
   const [controlError, setControlError] = useState<string | null>(null);
+  // 折叠状态只在这一页里：离开再回来又是折叠的，最显眼的始终是要填的那一组。
+  const [litellmExpanded, setLitellmExpanded] = useState(false);
+  const [litellmQuery, setLitellmQuery] = useState("");
+  const [contentWidth, setContentWidth] = useState<number | null>(null);
+  const isCompact = useIsCompactFormFactor();
+  const layout = resolvePriceTableLayout({ contentWidth, isCompact });
 
   const payload = view.kind === "ready" ? view.payload : null;
   // 开关从 daemon 配置读，和它写回去的是同一条记录：`patchConfig` 会把响应写回这条
   // query，所以开关立刻动，不依赖 daemon 在只改 autoUpdate 时也广播 pricing.updated。
   const autoUpdate = config?.usage?.pricing?.autoUpdate ?? true;
   const models = useMemo(() => dedupePricingModels(payload?.models ?? []), [payload]);
+  const groups = useMemo(
+    () => groupPricingModels(models, rows.customizing),
+    [models, rows.customizing],
+  );
 
-  const handleEdit = useCallback(
-    (model: string) => {
-      const row = models.find((candidate) => candidate.model === model);
-      setRowError(null);
-      setDrafts((current) => ({
-        ...current,
-        [model]: buildPriceDraft(row?.pricePerMillion ?? null),
-      }));
-    },
+  const priceOf = useCallback(
+    (model: string) =>
+      models.find((candidate) => candidate.model === model)?.pricePerMillion ?? null,
     [models],
   );
 
+  const handleEdit = useCallback(
+    (model: string) => dispatchRows({ type: "editOpened", model, price: priceOf(model) }),
+    [priceOf],
+  );
+
+  /** 从 LiteLLM 行自定义：拉进自定义组，以当前 LiteLLM 价格预填。只是界面状态，什么也不写。 */
+  const handleCustomize = useCallback(
+    (model: string) => dispatchRows({ type: "customizeOpened", model, price: priceOf(model) }),
+    [priceOf],
+  );
+
   const handleCancel = useCallback((model: string) => {
-    setRowError(null);
-    setDraftToken((token) => token + 1);
-    setDrafts((current) => {
-      const { [model]: _dropped, ...rest } = current;
-      return rest;
-    });
+    dispatchRows({ type: "cancelled", model });
   }, []);
 
   const handleChangeField = useCallback((model: string, field: PriceField, value: string) => {
-    setDrafts((current) => ({
-      ...current,
-      [model]: { ...(current[model] ?? EMPTY_PRICE_DRAFT), [field]: value },
-    }));
+    dispatchRows({ type: "fieldChanged", model, field, value });
   }, []);
+
+  /**
+   * 覆盖表整段写回：daemon 收到后广播 usage.pricing.updated，报表与这张表一起重算。
+   * 保存与移除共用这一条路径，失败都落在这一行的状态行上。
+   */
+  const writeOverrides = useCallback(
+    async ({ model, failedKey, next }: OverridesWrite): Promise<boolean> => {
+      function fail(message: string): false {
+        dispatchRows({ type: "writeFailed", model, message });
+        return false;
+      }
+      // 配置还没读到时不能拿空表去算：写回去会把其他模型的覆盖项一起删掉。
+      if (!config) return fail(t(failedKey));
+      const overrides = next(config.usage?.pricing?.overrides ?? []);
+      dispatchRows({ type: "writeStarted", model });
+      let saved: Awaited<ReturnType<typeof patchConfig>>;
+      try {
+        saved = await patchConfig({ usage: { pricing: { overrides } } });
+      } catch (cause) {
+        console.error("[PriceTable] Failed to write the custom prices", cause);
+        return fail(describeFailure(t, failedKey, cause));
+      }
+      // 主机在渲染与点击之间掉线时 patchConfig 直接 resolve undefined，什么也没写；
+      // 不拦住的话这一行会静默地停在写之前的样子。
+      if (!saved) return fail(t(failedKey));
+      return true;
+    },
+    [config, patchConfig, t],
+  );
 
   const handleSave = useCallback(
     (model: string) => {
-      const pricePerMillion = parsePriceDraft(drafts[model] ?? EMPTY_PRICE_DRAFT);
+      const pricePerMillion = parsePriceDraft(rows.drafts[model] ?? EMPTY_PRICE_DRAFT);
       if (!pricePerMillion) {
-        setRowError({ model, message: t("settings.host.priceTable.invalidPrice") });
+        dispatchRows({
+          type: "draftRejected",
+          model,
+          message: t("settings.host.priceTable.invalidPrice"),
+        });
         return;
       }
-      setRowError(null);
-      setSavingModel(model);
-      // 覆盖表整段写回：daemon 收到后广播 usage.pricing.updated，报表与这张表一起重算。
-      const overrides = upsertPricingOverride(
-        config?.usage?.pricing?.overrides ?? [],
-        model,
-        pricePerMillion,
-      );
       void (async () => {
-        let saved: Awaited<ReturnType<typeof patchConfig>>;
-        try {
-          saved = await patchConfig({ usage: { pricing: { overrides } } });
-        } catch (cause) {
-          console.error("[PriceTable] Failed to save a custom price", cause);
-          setRowError({ model, message: describeFailure(t, PRICE_SAVE_FAILED_KEY, cause) });
-          setSavingModel(null);
-          return;
-        }
-        setSavingModel(null);
-        // 主机在渲染与点击之间掉线时 patchConfig 直接 resolve undefined，什么也没写；
-        // 不拦住的话这一行会静默地变回已计价态。
-        if (!saved) {
-          setRowError({ model, message: t(PRICE_SAVE_FAILED_KEY) });
-          return;
-        }
-        setDraftToken((token) => token + 1);
-        setDrafts((current) => {
-          const { [model]: _saved, ...rest } = current;
-          return rest;
+        const saved = await writeOverrides({
+          model,
+          failedKey: PRICE_SAVE_FAILED_KEY,
+          next: (current) => upsertPricingOverride(current, model, pricePerMillion),
         });
+        if (saved) dispatchRows({ type: "saved", model });
       })();
     },
-    [config?.usage?.pricing?.overrides, drafts, patchConfig, t],
+    [rows.drafts, t, writeOverrides],
+  );
+
+  const handleRemove = useCallback(
+    (model: string) => {
+      void (async () => {
+        const removed = await writeOverrides({
+          model,
+          failedKey: PRICE_REMOVE_FAILED_KEY,
+          next: (current) => removePricingOverride(current, model),
+        });
+        if (removed) dispatchRows({ type: "removed", model });
+      })();
+    },
+    [writeOverrides],
   );
 
   const handleAutoUpdateChange = useCallback(
@@ -178,172 +207,91 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
     })();
   }, [client, refetch, t]);
 
-  const controls = useMemo(() => {
-    if (!payload) return null;
-    return (
-      <View style={styles.controls}>
-        <Text style={styles.autoUpdateLabel}>{t("settings.host.priceTable.autoUpdate")}</Text>
-        <Switch
-          value={autoUpdate}
-          onValueChange={handleAutoUpdateChange}
-          accessibilityLabel={t("settings.host.priceTable.autoUpdate")}
-          testID="price-table-auto-update-switch"
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={RefreshCw}
-          loading={isRefreshing}
-          onPress={handleRefresh}
-          accessibilityLabel={t("settings.host.priceTable.refresh")}
-          testID="price-table-refresh"
-        >
-          {isRefreshing
-            ? t("settings.host.priceTable.refreshing")
-            : t("settings.host.priceTable.refresh")}
-        </Button>
-      </View>
-    );
-  }, [autoUpdate, handleAutoUpdateChange, handleRefresh, isRefreshing, payload, t]);
+  const handleToggleLitellm = useCallback(() => setLitellmExpanded((current) => !current), []);
 
-  const subtitle = payload
-    ? renderUsageText(
-        t,
-        describePriceTableSubtitle({
-          fetchedAgo: describeTimeAgo(payload.table.fetchedAt, Date.now()),
-          modelCount: models.length,
-        }),
-      )
-    : null;
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    setContentWidth(event.nativeEvent.layout.width);
+  }, []);
 
   return (
-    <SettingsSection
-      title={t("settings.host.priceTable.title")}
-      trailing={controls}
-      testID="host-page-price-table-card"
-    >
-      <View style={settingsStyles.card}>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        {/* 常驻一行：条件挂载会在出错时把整张表下推，正好吞掉用户接下来那一次点击。 */}
-        <Text style={styles.error} numberOfLines={2} testID="price-table-control-error">
-          {controlError ?? ""}
-        </Text>
-        <PriceTableBody
-          view={view}
-          models={models}
-          drafts={drafts}
-          draftToken={draftToken}
-          savingModel={savingModel}
-          rowError={rowError}
-          onRetry={refetch}
-          onEdit={handleEdit}
-          onCancel={handleCancel}
-          onChangeField={handleChangeField}
-          onSave={handleSave}
-        />
-      </View>
-    </SettingsSection>
+    <View onLayout={handleLayout} testID="host-page-price-table-card">
+      {payload && models.length > 0 ? (
+        <>
+          <CustomPriceGroup
+            models={groups.custom}
+            layout={layout}
+            rows={rows}
+            onEdit={handleEdit}
+            onCancel={handleCancel}
+            onChangeField={handleChangeField}
+            onSave={handleSave}
+            onRemove={handleRemove}
+          />
+          <LiteLLMPriceGroup
+            models={groups.litellm}
+            table={payload.table}
+            layout={layout}
+            controlError={controlError}
+            expanded={litellmExpanded}
+            onToggleExpanded={handleToggleLitellm}
+            query={litellmQuery}
+            onQueryChange={setLitellmQuery}
+            onCustomize={handleCustomize}
+            autoUpdate={autoUpdate}
+            isRefreshing={isRefreshing}
+            onAutoUpdateChange={handleAutoUpdateChange}
+            onRefresh={handleRefresh}
+          />
+        </>
+      ) : (
+        <SettingsSection title={t("settings.host.priceTable.title")}>
+          <View style={settingsStyles.card}>
+            <PriceTableStatus view={view} onRetry={refetch} />
+          </View>
+        </SettingsSection>
+      )}
+    </View>
   );
 }
 
-interface PriceTableBodyProps {
-  view: PriceTableView;
-  /** 已按模型名去重，和副标题里的 M 个模型同源。 */
-  models: readonly UsagePricingModel[];
-  drafts: Record<string, PriceDraft>;
-  draftToken: number;
-  savingModel: string | null;
-  rowError: RowError | null;
-  onRetry: () => void;
-  onEdit: (model: string) => void;
-  onCancel: (model: string) => void;
-  onChangeField: (model: string, field: PriceField, value: string) => void;
-  onSave: (model: string) => void;
-}
-
-function PriceTableBody(props: PriceTableBodyProps): ReactNode {
+/** 两组还不能画出来时的那一张卡片：加载中、不可用、出错、没用过任何模型。 */
+function PriceTableStatus({ view, onRetry }: { view: PriceTableView; onRetry: () => void }) {
   const { t } = useTranslation();
-  const { view } = props;
 
   if (view.kind === "loading") {
-    return <Text style={styles.message}>{t("settings.host.priceTable.loading")}</Text>;
+    return (
+      <Text color="foregroundMuted" style={styles.message}>
+        {t("settings.host.priceTable.loading")}
+      </Text>
+    );
   }
   // 重试对这两种状态没有意义：查询本身是关着的。
   if (view.kind === "unavailable") {
-    return <Text style={styles.message}>{renderUsageText(t, view.message)}</Text>;
+    return (
+      <Text color="foregroundMuted" style={styles.message}>
+        {renderUsageText(t, view.message)}
+      </Text>
+    );
   }
   if (view.kind === "error") {
     return (
       <View style={styles.errorBlock}>
-        <Text style={styles.error}>{renderUsageText(t, view.message)}</Text>
-        <Button variant="ghost" size="sm" onPress={props.onRetry}>
+        <Text color="statusDanger">{renderUsageText(t, view.message)}</Text>
+        <Button variant="ghost" size="sm" onPress={onRetry}>
           {t("common.actions.retry")}
         </Button>
       </View>
     );
   }
-  if (props.models.length === 0) {
-    return <Text style={styles.message}>{t("settings.host.priceTable.empty")}</Text>;
-  }
-
   return (
-    // 七列在手机上放不下，整张表横向滚动，而不是把列折成两行。
-    <ScrollView horizontal>
-      <View style={styles.table}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.headerCell, styles.modelHeader]}>
-            {t("settings.host.priceTable.columns.model")}
-          </Text>
-          {PRICE_COLUMNS.map((column) => (
-            <Text key={column.field} style={[styles.headerCell, styles.priceHeader]}>
-              {t(column.labelKey)}
-            </Text>
-          ))}
-          <Text style={[styles.headerCell, styles.sourceHeader]}>
-            {t("settings.host.priceTable.columns.source")}
-          </Text>
-          <Text style={[styles.headerCell, styles.actionsHeader]}>
-            {t("settings.host.priceTable.columns.actions")}
-          </Text>
-        </View>
-        {props.models.map((model) => (
-          <PriceRow
-            key={model.model}
-            model={model}
-            draft={props.drafts[model.model] ?? (model.priced ? null : EMPTY_PRICE_DRAFT)}
-            draftToken={props.draftToken}
-            isSaving={props.savingModel === model.model}
-            error={props.rowError?.model === model.model ? props.rowError.message : null}
-            onEdit={props.onEdit}
-            onCancel={props.onCancel}
-            onChangeField={props.onChangeField}
-            onSave={props.onSave}
-          />
-        ))}
-      </View>
-    </ScrollView>
+    <Text color="foregroundMuted" style={styles.message}>
+      {t("settings.host.priceTable.empty")}
+    </Text>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  controls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-  },
-  autoUpdateLabel: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  subtitle: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    paddingHorizontal: theme.spacing[4],
-    paddingTop: theme.spacing[3],
-  },
   message: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
     padding: theme.spacing[4],
   },
   errorBlock: {
@@ -351,34 +299,4 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "flex-start",
     padding: theme.spacing[4],
   },
-  error: {
-    color: theme.colors.statusDanger,
-    fontSize: theme.fontSize.sm,
-    lineHeight: theme.fontSize.sm * 1.4,
-    // 常驻两行：一句本地化文案加上 daemon 给的原因在设置列里常常折行，只留一行仍会下推。
-    minHeight: theme.fontSize.sm * 2.8,
-    paddingHorizontal: theme.spacing[4],
-    paddingTop: theme.spacing[2],
-  },
-  table: {
-    paddingHorizontal: theme.spacing[3],
-    paddingBottom: theme.spacing[2],
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: PRICE_COLUMN_GAP,
-    paddingVertical: theme.spacing[2],
-  },
-  headerCell: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  modelHeader: priceColumns.model,
-  priceHeader: {
-    ...priceColumns.price,
-    textAlign: "right",
-  },
-  sourceHeader: priceColumns.source,
-  actionsHeader: priceColumns.actions,
 }));
