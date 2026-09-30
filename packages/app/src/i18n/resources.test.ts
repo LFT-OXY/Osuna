@@ -57,22 +57,94 @@ function findInterpolationMismatches(resource: unknown): string[] {
   });
 }
 
+// zh-CN 中有意与英文相同的值，只收 docs/i18n.md 列出的保留类别
+const zhCNEnglishAllowlist = {
+  coreTerms: ["workspace.tabs.fallback.agent", "workspace.tabs.toasts.agentIdCopiedLabel"],
+  abbreviations: [
+    "desktop.daemon.status.pid",
+    "desktop.updates.callout.downloadProgress",
+    "contextWindow.tokens",
+    "settings.providers.apiEndpoints.form.baseUrl",
+    "settings.providers.apiEndpoints.form.apiKey",
+  ],
+  brands: [
+    "sidebar.help.appName",
+    "panels.sessionHistory.row.paseo",
+    "settings.host.priceTable.source.table",
+  ],
+  namedThemes: [
+    "settings.appearance.theme.options.zinc",
+    "settings.appearance.theme.options.midnight",
+    "settings.appearance.theme.options.claude",
+    "settings.appearance.theme.options.ghostty",
+    "settings.appearance.theme.options.dracula",
+    "settings.appearance.theme.options.nord",
+    "settings.appearance.theme.options.tokyoNight",
+    "settings.appearance.theme.options.catppuccinMocha",
+    "settings.appearance.theme.options.gruvboxDark",
+    "settings.appearance.theme.options.solarizedDark",
+    "settings.appearance.theme.options.oneDark",
+    "settings.appearance.theme.options.rosePine",
+    "settings.appearance.theme.options.catppuccinLatte",
+    "settings.appearance.theme.options.solarizedLight",
+    "settings.appearance.theme.options.oneLight",
+    "settings.appearance.theme.options.rosePineDawn",
+    "settings.appearance.theme.options.githubLight",
+  ],
+  placeholders: [
+    "settings.plugins.directoryPlaceholder",
+    "settings.host.appearance.preview.workspaceName",
+    "settings.host.terminalProfiles.namePlaceholder",
+    "settings.host.terminalProfiles.commandPlaceholder",
+    "settings.host.terminalProfiles.argsPlaceholder",
+    "settings.providers.apiEndpoints.form.namePlaceholder",
+  ],
+  languageOptions: ["settings.general.language.options.en"],
+} satisfies Record<string, readonly string[]>;
+
+// 去掉插值后仍含字母才算需要翻译，只含插值和标点的值无需进白名单
+function hasTranslatableLetters(value: string): boolean {
+  return /[A-Za-z]/.test(value.replace(/\{\{[^}]+\}\}/g, ""));
+}
+
+function findUnlistedEnglishValues(resource: unknown, allowlist: ReadonlySet<string>): string[] {
+  const englishStrings = flattenStrings(en);
+  const localeStrings = flattenStrings(resource);
+  return Object.entries(englishStrings)
+    .filter(
+      ([key, value]) =>
+        localeStrings[key] === value && hasTranslatableLetters(value) && !allowlist.has(key),
+    )
+    .map(([key, value]) => `${key}: ${value}`);
+}
+
+function findStaleAllowlistKeys(resource: unknown, allowlist: ReadonlySet<string>): string[] {
+  const englishStrings = flattenStrings(en);
+  const localeStrings = flattenStrings(resource);
+  return [...allowlist].filter(
+    (key) => englishStrings[key] === undefined || localeStrings[key] !== englishStrings[key],
+  );
+}
+
 const appSourceRoot = join(__dirname, "..");
-const untranslatedConnectionErrors = [
-  "Daemon unavailable",
-  "Daemon client unavailable",
-  "Daemon client not available",
-  "Daemon client is disconnected",
-  "Host is not connected",
-] as const;
-const untranslatedLocalFallbacks = [
-  "No file found for ",
-  "Unable to load pull request status",
-  "Unable to load pull request activity",
-  "An unexpected error occurred while handling dictation.",
-  "Unable to load desktop settings.",
-  "Unable to save desktop settings.",
-] as const;
+// 已迁移到翻译键的英文字面量，app 源码里不应再出现；后续迁移按界面追加分组
+const migratedSourceLiterals = {
+  connectionErrors: [
+    "Daemon unavailable",
+    "Daemon client unavailable",
+    "Daemon client not available",
+    "Daemon client is disconnected",
+    "Host is not connected",
+  ],
+  localFallbacks: [
+    "No file found for ",
+    "Unable to load pull request status",
+    "Unable to load pull request activity",
+    "An unexpected error occurred while handling dictation.",
+    "Unable to load desktop settings.",
+    "Unable to save desktop settings.",
+  ],
+} satisfies Record<string, readonly string[]>;
 
 function collectSourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -90,10 +162,11 @@ function collectSourceFiles(directory: string): string[] {
   });
 }
 
-function findUntranslatedConnectionErrors(): string[] {
+function findMigratedLiteralsInSource(): string[] {
+  const literals = Object.values(migratedSourceLiterals).flat();
   return collectSourceFiles(appSourceRoot).flatMap((path) => {
     const contents = readFileSync(path, "utf8");
-    const matches = [...untranslatedConnectionErrors, ...untranslatedLocalFallbacks].filter(
+    const matches = literals.filter(
       (text) => contents.includes(`"${text}"`) || contents.includes(`\`${text}`),
     );
     if (matches.length === 0) {
@@ -127,6 +200,12 @@ describe("translation resources", () => {
     expect(countMatchingEnglishStrings(ptBR)).toBeLessThan(maxFallbackStrings);
     expect(countMatchingEnglishStrings(ru)).toBeLessThan(maxFallbackStrings);
     expect(countMatchingEnglishStrings(zhCN)).toBeLessThan(maxFallbackStrings);
+  });
+
+  it("keeps zh-CN values that match English on the allowlist", () => {
+    const allowlist = new Set<string>(Object.values(zhCNEnglishAllowlist).flat());
+    expect(findUnlistedEnglishValues(zhCN, allowlist)).toEqual([]);
+    expect(findStaleAllowlistKeys(zhCN, allowlist)).toEqual([]);
   });
 
   it("localizes the pull request empty state in every supported language", () => {
@@ -187,8 +266,8 @@ describe("translation resources", () => {
     expect(en.workspace.fileActions.addToChat).toBe("Add to chat");
   });
 
-  it("keeps local connection fallback errors translated", () => {
-    expect(findUntranslatedConnectionErrors()).toEqual([]);
+  it("keeps migrated English literals out of app source", () => {
+    expect(findMigratedLiteralsInSource()).toEqual([]);
   });
 
   it("includes shared shell keys for the Batch 1 migration", () => {

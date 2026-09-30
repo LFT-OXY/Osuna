@@ -1,0 +1,8 @@
+{"file": ".atw/tasks/09-30-zh-cn-i18n-gaps/research/zh-cn-audit.md", "reason": "缺口清单与访谈结论，核对迁移范围与术语决策"}
+{"file": ".atw/tasks/09-30-zh-cn-i18n-gaps/research/zh-cn-terminology-practice.md", "reason": "中文译法原则的依据"}
+{"file": "docs/i18n.md", "reason": "翻译范围边界、useTranslation 与 i18n.t 的使用边界、资源分组约定"}
+{"file": "docs/glossary.md", "reason": "术语与 zh-CN UI 写法"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件层 i18n 约定"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "app 测试组织与运行方式"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "app 质量检查与验证命令"}
+{"file": ".atw/tasks/09-30-zh-cn-i18n-gaps/issues/01-resource-gaps-and-whitelist.md", "reason": "ATW current ticket"}
