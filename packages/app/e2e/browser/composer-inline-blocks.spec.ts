@@ -278,10 +278,9 @@ test.describe("Inline blocks in the composer", () => {
       await openWorkspaceWithAgents(page, [other, drafting]);
       const input = await focusComposer(page);
       // A typed known /skill stays text, even once a later pick puts a Skill block before it
-      // and it reads like a leading skill. Escape closes the Command menu it opens.
-      await page.keyboard.type("/atw-askme");
-      await page.keyboard.press("Escape");
-      await page.keyboard.type(" read ");
+      // and it reads like a leading skill. The space ends the query and closes the Command menu;
+      // Escape would clear the whole input while the menu is open.
+      await page.keyboard.type("/atw-askme read ");
       await pickFileMention(page, "widget", "src/widget.ts");
       await page.keyboard.type("not [notes.md](docs/notes.md) ");
       await pickSkill(page, "atw-t", "atw-tdd");
