@@ -20,7 +20,9 @@ import type { AgentModelDefinition } from "../agent/agent-sdk-types.js";
 import {
   codexVersionAtLeast,
   normalizeOpenAICompatibleBaseUrl,
+  probeCodexVersion,
 } from "../agent/providers/codex-app-server-agent.js";
+import type { ProviderRuntimeSettings } from "../agent/provider-launch-config.js";
 import {
   applyClaudeApiEndpoint,
   buildClaudeEndpointEnv,
@@ -110,8 +112,8 @@ export interface ApiEndpointServiceOptions {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   now?: () => Date;
-  // `codex --version` 的输出；启用 Codex 接口前检查版本。
-  probeCodexVersion: () => Promise<string>;
+  // 提供方当前生效的启动设置（含 config.json 里配置的命令）；目前只用来跑 `codex --version` 检查版本。
+  providerRuntimeSettings: (provider: ApiEndpointProvider) => ProviderRuntimeSettings | undefined;
   // 启用、切回、编辑或删除启用中的接口之后调用；daemon 据此刷新该提供方的快照。
   onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
   // 该提供方下还活着的 Agent session 数；改写 CLI 配置会影响到它们，列表查询时带给 App 写进确认框。
@@ -159,7 +161,9 @@ export class ApiEndpointService {
   private readonly env: NodeJS.ProcessEnv;
   private readonly homeDir: string;
   private readonly now: () => Date;
-  private readonly probeCodexVersion: () => Promise<string>;
+  private readonly providerRuntimeSettings: (
+    provider: ApiEndpointProvider,
+  ) => ProviderRuntimeSettings | undefined;
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
   private readonly upstreamTimeoutMs: number;
@@ -173,7 +177,7 @@ export class ApiEndpointService {
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
     this.now = options.now ?? (() => new Date());
-    this.probeCodexVersion = options.probeCodexVersion;
+    this.providerRuntimeSettings = options.providerRuntimeSettings;
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.countLiveSessions = options.countLiveSessions;
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
@@ -507,7 +511,7 @@ export class ApiEndpointService {
   }
 
   private async requireCodexAuthCommand(): Promise<void> {
-    const versionOutput = await this.probeCodexVersion();
+    const versionOutput = await probeCodexVersion(this.providerRuntimeSettings("codex"));
     if (!codexVersionAtLeast(versionOutput, CODEX_AUTH_COMMAND_MIN_VERSION)) {
       throw new ApiEndpointRequestError(
         "codex_version_unsupported",
@@ -736,7 +740,7 @@ export class ApiEndpointService {
   private async checkCodexVersion(): Promise<HealthIssue | null> {
     let versionOutput: string;
     try {
-      versionOutput = await this.probeCodexVersion();
+      versionOutput = await probeCodexVersion(this.providerRuntimeSettings("codex"));
     } catch (error) {
       // 探测失败不是「版本不足」：原因照实报出，列表照常返回。
       const reason = error instanceof Error ? error.message : String(error);

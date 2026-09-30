@@ -151,7 +151,6 @@ import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
-import { probeCodexVersion } from "./agent/providers/codex-app-server-agent.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
@@ -457,7 +456,7 @@ export interface PaseoDaemonConfig {
   };
   providerOverrides?: Record<string, ProviderOverride>;
   usage?: UsageConfig;
-  // 定位 Claude/Codex 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
+  // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
   apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck">;
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
@@ -917,7 +916,7 @@ export async function createPaseoDaemon(
   const apiEndpointService = new ApiEndpointService({
     paseoHome: config.paseoHome,
     logger,
-    probeCodexVersion: () => probeCodexVersion(providerSnapshotManager.getRuntimeSettings("codex")),
+    providerRuntimeSettings: (provider) => providerSnapshotManager.getRuntimeSettings(provider),
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
