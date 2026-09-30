@@ -25,7 +25,7 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { useTimeAgoLabel } from "./time-ago";
 
 /*
- * 详情里的 Models 节：搜索行 → 就地添加行 →「已发现」组 →「自定义 Models」组，同在一张卡片里。
+ * 详情里的「模型」节：搜索行 → 就地添加行 →「已发现」组 →「自定义模型」组，同在一张卡片里。
  * 搜索词和添加行都是这一节自己的状态，调用方按提供方加 key，换提供方时一起清掉。
  */
 

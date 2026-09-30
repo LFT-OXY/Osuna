@@ -126,6 +126,30 @@ function findStaleAllowlistKeys(resource: unknown, allowlist: ReadonlySet<string
   );
 }
 
+// zh-CN 界面名词的旧写法，统一后不应再出现；插值、行内代码和占位示例值不算界面名词
+const zhCNRetiredTermPattern =
+  /智能体|供应商|变更|思考模式|思考强度|Agent Provider|\b(?:worktrees?|daemons?|diffs?|prompts?|models?|modes?|projects?|commits?|push|pull|providers?|setup|teardown|beta|hosts?|workspaces?|terminals?|merge|auto-merge|features?|thinking|scripts?|issues?|reviews?|stash(?:ed)?|relay|server|runtime|app|refs?|remote|repository|composer)\b/gi;
+
+// 值里的英文是配置键名、斜杠命令或占位示例，原样保留
+const zhCNRetiredTermExemptKeys = [
+  ...zhCNEnglishAllowlist.placeholders,
+  "settings.providers.apiEndpoints.health.codexProfileOverride",
+  "settings.providers.apiEndpoints.form.mappingHint",
+  "settings.project.metadata.commitMessagePlaceholder",
+];
+
+function findRetiredZhCNTerms(): string[] {
+  const exemptKeys = new Set<string>(zhCNRetiredTermExemptKeys);
+  return Object.entries(flattenStrings(zhCN)).flatMap(([key, value]) => {
+    if (exemptKeys.has(key)) {
+      return [];
+    }
+    const text = value.replace(/\{\{[^}]+\}\}/g, "").replace(/`[^`]*`/g, "");
+    const matches = text.match(zhCNRetiredTermPattern);
+    return matches ? [`${key}: ${matches.join(", ")}`] : [];
+  });
+}
+
 const appSourceRoot = join(__dirname, "..");
 // 已迁移到翻译键的英文字面量，app 源码里不应再出现；后续迁移按界面追加分组
 const migratedSourceLiterals = {
@@ -208,6 +232,10 @@ describe("translation resources", () => {
     expect(findStaleAllowlistKeys(zhCN, allowlist)).toEqual([]);
   });
 
+  it("rejects retired zh-CN terms", () => {
+    expect(findRetiredZhCNTerms()).toEqual([]);
+  });
+
   it("localizes the pull request empty state in every supported language", () => {
     for (const resource of [ar, es, fr, ja, ko, ptBR, ru, zhCN]) {
       expect(resource.panels.pullRequest.emptyTitle).not.toBe(en.panels.pullRequest.emptyTitle);
@@ -254,7 +282,7 @@ describe("translation resources", () => {
     expect(ja.settings.providers.models.many).toBe("{{count}}つのモデル");
     expect(ptBR.settings.providers.models.many).toBe("{{count}} modelos");
     expect(ru.settings.providers.models.many).toBe("{{count}} моделей");
-    expect(zhCN.settings.providers.models.many).toBe("{{count}} 个 Model");
+    expect(zhCN.settings.providers.models.many).toBe("{{count}} 个模型");
   });
 
   it("preserves reviewed Korean status labels", () => {
