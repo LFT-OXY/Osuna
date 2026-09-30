@@ -303,9 +303,12 @@ export const zhCN: TranslationResources = {
     tooManyMatches: "匹配过多 — 请缩小搜索范围",
     hostLoadFailed: "{{host}}：无法加载历史",
     searchPlaceholder: "搜索历史",
+    emptyHost: "此主机没有会话",
+    loadFailed: "无法加载会话",
     actions: {
       loadMore: "加载更多",
       clearSearch: "清除搜索",
+      tryAgain: "重试",
     },
   },
   agentList: {
@@ -1024,6 +1027,9 @@ export const zhCN: TranslationResources = {
         actions: {
           viewPullRequest: "查看",
           openOn: "在 {{brand}} 上打开",
+          addToChat: "添加到聊天",
+          addAllToChat: "全部添加到聊天",
+          addingToChat: "正在添加...",
         },
         checksSummary: {
           passedLabel: "通过",
@@ -1037,14 +1043,40 @@ export const zhCN: TranslationResources = {
           checks: "检查",
           pipeline: "流水线",
           reviews: "审查",
+          activity: "动态",
         },
         empty: {
           noJobs: "无作业",
           loadingPipeline: "正在加载流水线...",
           pipelineJobsLoadFailed: "无法加载流水线作业",
           allowedToFail: "允许失败",
+          noActivity: "暂无动态",
         },
         approvals: "{{given}} / {{required}} 批准",
+        checks: {
+          headline: {
+            actionRequired: "部分检查需要你处理",
+            failure: "部分检查未通过",
+            pending: "部分检查尚未完成",
+            success: "所有检查均已通过",
+            none: "没有检查",
+          },
+          count: {
+            actionRequired: "{{count}} 项需要操作",
+            warning: "{{count}} 项警告",
+            failure: "{{count}} 项失败",
+            pending: "{{count}} 项进行中",
+            manual: "{{count}} 项手动",
+            success: "{{count}} 项成功",
+            ignored: "{{count}} 项已跳过",
+          },
+          countSeparator: "，",
+          countLine: {
+            one: "{{parts}}",
+            many: "{{parts}}",
+          },
+          accessibilityLabel: "{{headline}}。{{detail}}",
+        },
         accessibility: {
           pullRequest: "拉取请求 #{{number}}",
           pullRequest_mr: "合并请求 !{{number}}",
@@ -1058,6 +1090,8 @@ export const zhCN: TranslationResources = {
             skipped: "已跳过",
             cancelled: "已取消",
           },
+          commentActions: "评论操作",
+          threadActions: "讨论主题操作",
         },
         states: {
           draft: "草稿",
@@ -1076,10 +1110,12 @@ export const zhCN: TranslationResources = {
         },
         thread: {
           discussion: "讨论主题",
+          resolved: "已解决",
+          outdated: "已过时",
         },
         errors: {
           statusLoadFailed: "无法加载拉取请求状态",
-          activityLoadFailed: "无法加载拉取请求活动",
+          activityLoadFailed: "无法加载拉取请求动态",
         },
       },
       forgeSetup: {
@@ -1216,6 +1252,7 @@ export const zhCN: TranslationResources = {
       search: "搜索",
       schedules: "计划",
       usage: "用量",
+      workspaces: "工作区",
     },
     worktreeSetup: {
       title: "设置工作树脚本",
@@ -1279,6 +1316,8 @@ export const zhCN: TranslationResources = {
         hideFromSidebar: "从侧边栏隐藏",
         archiving: "正在归档...",
         hiding: "正在隐藏...",
+        markAsRead: "标记为已读",
+        markAsUnread: "标记为未读",
       },
       confirmations: {
         hideTitle: "隐藏工作区？",
@@ -1298,6 +1337,8 @@ export const zhCN: TranslationResources = {
         hostDisconnected: "主机未连接",
         hideFailed: "隐藏工作区失败",
         archiveFailed: "归档工作区失败",
+        markAsReadFailed: "将工作区标记为已读失败",
+        markAsUnreadFailed: "将工作区标记为未读失败",
       },
     },
   },
@@ -2021,6 +2062,14 @@ export const zhCN: TranslationResources = {
     dispatchArchived: "已归档",
     dispatchDetached: "已分离",
   },
+  pluginSurface: {
+    fallbackTitle: "插件",
+    chooseHost: "选择插件主机",
+    hostSwitcher: "插件主机：{{host}}",
+    close: "关闭插件",
+    hostOffline: "插件主机离线。",
+    unavailable: "此插件界面不可用。",
+  },
   panels: {
     draft: {
       newAgent: "新建 Agent",
@@ -2077,6 +2126,12 @@ export const zhCN: TranslationResources = {
       subtitle: "拉取请求详情",
       emptyTitle: "尚无拉取请求",
       emptyDescription: "为此检出创建拉取请求后，可在此处查看其详情。",
+    },
+    plugin: {
+      unavailableLabel: "插件不可用",
+      unavailableTooltip: "此插件面板不可用",
+      unavailable: "此插件面板不可用。",
+      hostOffline: "插件主机离线。",
     },
     sessionHistory: {
       label: "会话历史",

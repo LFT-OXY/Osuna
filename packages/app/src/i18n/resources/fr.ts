@@ -313,9 +313,12 @@ export const fr: TranslationResources = {
     tooManyMatches: "Trop de résultats — affinez la recherche",
     hostLoadFailed: "{{host}} : Impossible de charger l'historique",
     searchPlaceholder: "Rechercher dans l'historique",
+    emptyHost: "No sessions for this host",
+    loadFailed: "Unable to load sessions",
     actions: {
       loadMore: "Charger plus",
       clearSearch: "Effacer la recherche",
+      tryAgain: "Try again",
     },
   },
   agentList: {
@@ -1069,6 +1072,9 @@ export const fr: TranslationResources = {
         actions: {
           viewPullRequest: "Voir",
           openOn: "Ouvrir sur {{brand}}",
+          addToChat: "Add to chat",
+          addAllToChat: "Add all to chat",
+          addingToChat: "Adding...",
         },
         checksSummary: {
           passedLabel: "succès",
@@ -1082,14 +1088,40 @@ export const fr: TranslationResources = {
           checks: "Chèques",
           pipeline: "Pipeline",
           reviews: "Avis",
+          activity: "Activity",
         },
         empty: {
           noJobs: "Aucune tâche",
           loadingPipeline: "Chargement du pipeline...",
           pipelineJobsLoadFailed: "Impossible de charger les tâches du pipeline",
           allowedToFail: "autorisé à échouer",
+          noActivity: "No activity yet",
         },
         approvals: "{{given}} sur {{required}} approbations",
+        checks: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          countSeparator: ", ",
+          countLine: {
+            one: "{{parts}} check",
+            many: "{{parts}} checks",
+          },
+          accessibilityLabel: "{{headline}}. {{detail}}",
+        },
         accessibility: {
           pullRequest: "Demande de tirage #{{number}}",
           pullRequest_mr: "Demande de fusion !{{number}}",
@@ -1103,6 +1135,8 @@ export const fr: TranslationResources = {
             skipped: "Ignoré",
             cancelled: "Annulé",
           },
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
         },
         states: {
           draft: "Brouillon",
@@ -1121,6 +1155,8 @@ export const fr: TranslationResources = {
         },
         thread: {
           discussion: "Fil de discussion",
+          resolved: "Resolved",
+          outdated: "Outdated",
         },
         errors: {
           statusLoadFailed: "Impossible de charger le statut de la demande d'extraction",
@@ -1265,6 +1301,7 @@ export const fr: TranslationResources = {
       search: "Rechercher",
       schedules: "Planifications",
       usage: "Consommation",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "Configurer les scripts d'arbre de travail",
@@ -1330,6 +1367,8 @@ export const fr: TranslationResources = {
         hideFromSidebar: "Masquer de la barre latérale",
         archiving: "Archivage...",
         hiding: "Dissimulation...",
+        markAsRead: "Mark as read",
+        markAsUnread: "Mark as unread",
       },
       confirmations: {
         hideTitle: "Masquer l'espace de travail?",
@@ -1350,6 +1389,8 @@ export const fr: TranslationResources = {
         hostDisconnected: "Hostn'est pas connecté",
         hideFailed: "Échec du masquage de l'espace de travail",
         archiveFailed: "Échec de l'archivage de l'espace de travail",
+        markAsReadFailed: "Failed to mark workspace as read",
+        markAsUnreadFailed: "Failed to mark workspace as unread",
       },
     },
   },
@@ -2089,6 +2130,14 @@ export const fr: TranslationResources = {
     dispatchArchived: "Archivé",
     dispatchDetached: "Détaché",
   },
+  pluginSurface: {
+    fallbackTitle: "Plugin",
+    chooseHost: "Choose plugin host",
+    hostSwitcher: "Plugin host: {{host}}",
+    close: "Close plugin",
+    hostOffline: "Plugin host is offline.",
+    unavailable: "This plugin surface is unavailable.",
+  },
   panels: {
     draft: {
       newAgent: "Nouvel agent",
@@ -2146,6 +2195,12 @@ export const fr: TranslationResources = {
       emptyTitle: "Aucune demande de fusion pour le moment",
       emptyDescription:
         "Créez une demande de fusion pour cette copie de travail afin d’afficher ses détails ici.",
+    },
+    plugin: {
+      unavailableLabel: "Plugin unavailable",
+      unavailableTooltip: "This plugin panel is unavailable",
+      unavailable: "This plugin panel is unavailable.",
+      hostOffline: "Plugin host is offline.",
     },
     sessionHistory: {
       label: "Historique des sessions",

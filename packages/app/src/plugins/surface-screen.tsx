@@ -3,6 +3,7 @@ import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { ChevronDown, X } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState, type ComponentType } from "react";
+import { useTranslation } from "react-i18next";
 import { Platform, Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
@@ -100,6 +101,7 @@ function PluginHostSwitcher({
     () => allHosts.filter((host) => serverIds.includes(host.serverId)),
     [allHosts, serverIds],
   );
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<View | null>(null);
   const selectedLabel = hosts.find((host) => host.serverId === serverId)?.label ?? serverId;
@@ -122,13 +124,13 @@ function PluginHostSwitcher({
       open={open}
       onOpenChange={setOpen}
       anchorRef={anchorRef}
-      title="Choose plugin host"
+      title={t("pluginSurface.chooseHost")}
       desktopPlacement="bottom-start"
     >
       <View ref={anchorRef} collapsable={false}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Plugin host: ${selectedLabel}`}
+          accessibilityLabel={t("pluginSurface.hostSwitcher", { host: selectedLabel })}
           testID="plugin-host-switcher"
           onPress={openPicker}
           style={styles.hostSwitcher}
@@ -150,6 +152,7 @@ export function PluginSurfaceScreen() {
     contributionKind?: string | string[];
     contributionId?: string | string[];
   }>();
+  const { t } = useTranslation();
   const serverId = routeParam(params.serverId);
   const pluginId = routeParam(params.pluginId);
   const contributionKind = routeParam(params.contributionKind);
@@ -173,7 +176,7 @@ export function PluginSurfaceScreen() {
       identity ? getPluginSurfaceContributionServerIds(installations, pluginId, identity) : [],
     [identity, installations, pluginId],
   );
-  const title = sidebarItem?.title ?? surface?.id ?? (pluginId || "Plugin");
+  const title = sidebarItem?.title ?? surface?.id ?? (pluginId || t("pluginSurface.fallbackTitle"));
   const Icon = sidebarItem ? resolvePluginIcon(sidebarItem.icon) : null;
   const close = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -206,18 +209,18 @@ export function PluginSurfaceScreen() {
           />
         ) : null}
         <HeaderToggleButton
-          accessibilityLabel="Close plugin"
+          accessibilityLabel={t("pluginSurface.close")}
           onPress={close}
           testID="plugin-surface-close"
           tooltipKeys={EMPTY_SHORTCUT_KEYS}
-          tooltipLabel="Close"
+          tooltipLabel={t("common.actions.close")}
           tooltipSide="bottom"
         >
           <ThemedX size={18} uniProps={mutedColorMapping} />
         </HeaderToggleButton>
       </>
     ),
-    [close, contributionServerIds, identity, pluginId, serverId],
+    [close, contributionServerIds, identity, pluginId, serverId, t],
   );
 
   return (
@@ -241,7 +244,7 @@ export function PluginSurfaceScreen() {
           </SurfaceErrorBoundary>
         ) : (
           <Text style={styles.errorText}>
-            {plugin && surface ? "Plugin host is offline." : "This plugin surface is unavailable."}
+            {plugin && surface ? t("pluginSurface.hostOffline") : t("pluginSurface.unavailable")}
           </Text>
         )}
       </View>
