@@ -2818,6 +2818,16 @@ export const zhCN: TranslationResources = {
           moreModelsHidden: "另有 {{count}} 个未显示，输入关键词缩小范围。",
           modelsUnsupported: "这个接口不支持列出模型，请在下方手动添加模型 ID。",
           fetchTimeout: "接口没有及时响应。",
+          testConnection: "测试连接",
+          testHint:
+            "从这台主机用选中的模型发一条简短消息。它只验证接口本身：CLI 这一侧的问题（比如 Claude 的登录冲突）要到第一次真实对话时才会暴露，遇到时可以在终端里试试 /logout。",
+          testPick: "选择模型并测试",
+          testing: "正在测试...",
+          testMenuTitle: "用这个模型测试",
+          testSucceeded: "连接成功",
+          testFailed: "连接失败",
+          testProtocolUnsupported:
+            "这个地址没有 {{provider}} 需要的 {{protocol}} 协议。请检查 Base URL，或换一个支持它的接口。",
           selectedModels: "使用的模型",
           modelIdPlaceholder: "手动添加模型 ID",
           addModel: "添加",

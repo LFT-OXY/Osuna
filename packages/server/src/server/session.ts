@@ -3054,6 +3054,7 @@ export class Session {
       case "provider.api_endpoint.delete.request":
       case "provider.api_endpoint.set_active.request":
       case "provider.api_endpoint.fetch_models.request":
+      case "provider.api_endpoint.test_connection.request":
       case "provider.api_endpoint.cancel.request":
         if (!this.apiEndpointSession) {
           // 没声明 apiEndpoints 能力的 daemon 明确拒绝，而不是沉默。

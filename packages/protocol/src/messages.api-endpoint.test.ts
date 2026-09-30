@@ -198,6 +198,57 @@ describe("provider.api_endpoint.fetch_models", () => {
   });
 });
 
+describe("provider.api_endpoint.test_connection", () => {
+  it("parses a request that reuses the saved key", () => {
+    const request = {
+      type: "provider.api_endpoint.test_connection.request" as const,
+      requestId: "req-11",
+      provider: "codex",
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example/v1",
+      modelId: "gpt-5",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  });
+
+  it("parses a success, an upstream failure without a response, and a rejected request", () => {
+    const success = {
+      type: "provider.api_endpoint.test_connection.response" as const,
+      payload: {
+        requestId: "req-11",
+        result: { ok: true, status: 200, durationMs: 812, error: null },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(success)).toEqual(success);
+
+    const timedOut = {
+      type: "provider.api_endpoint.test_connection.response" as const,
+      payload: {
+        requestId: "req-12",
+        result: {
+          ok: false,
+          status: null,
+          durationMs: 30000,
+          error: { code: "upstream_timeout", message: "No response within 30s" },
+        },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(timedOut)).toEqual(timedOut);
+
+    const rejected = {
+      type: "provider.api_endpoint.test_connection.response" as const,
+      payload: {
+        requestId: "req-13",
+        result: null,
+        error: { code: "invalid_input", message: "API key is required" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(rejected)).toEqual(rejected);
+  });
+});
+
 describe("provider.api_endpoint.cancel", () => {
   it("parses request and response", () => {
     const request = {

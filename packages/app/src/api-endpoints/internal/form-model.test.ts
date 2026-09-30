@@ -5,6 +5,8 @@ import {
   type ApiEndpointFetchModelsRequestInput,
   type ApiEndpointFetchModelsResult,
   type ApiEndpointSaveResult,
+  type ApiEndpointTestConnectionOutcome,
+  type ApiEndpointTestConnectionRequestInput,
 } from "./form-model";
 
 const SAVED: ApiEndpoint = {
@@ -23,9 +25,16 @@ interface PendingFetch {
   resolve: (result: ApiEndpointFetchModelsResult) => void;
 }
 
+interface PendingTest {
+  request: ApiEndpointTestConnectionRequestInput;
+  signal: AbortSignal;
+  resolve: (outcome: ApiEndpointTestConnectionOutcome) => void;
+}
+
 function createForm(seed: Parameters<typeof createApiEndpointFormModel>[0]) {
   const requests: unknown[] = [];
   const fetches: PendingFetch[] = [];
+  const tests: PendingTest[] = [];
   let result: ApiEndpointSaveResult = { ok: true };
   const model = createApiEndpointFormModel(seed, {
     save: async (request) => {
@@ -36,11 +45,16 @@ function createForm(seed: Parameters<typeof createApiEndpointFormModel>[0]) {
       new Promise((resolve) => {
         fetches.push({ request, signal, resolve });
       }),
+    testConnection: (request, signal) =>
+      new Promise((resolve) => {
+        tests.push({ request, signal, resolve });
+      }),
   });
   return {
     model,
     requests,
     fetches,
+    tests,
     failNext(message: string) {
       result = { ok: false, message };
     },
@@ -408,5 +422,120 @@ describe("createApiEndpointFormModel: Claude model mapping", () => {
     await model.submit();
 
     expect(requests[0]).not.toHaveProperty("modelMapping");
+  });
+});
+
+describe("createApiEndpointFormModel: testing the connection", () => {
+  const SUCCESS = { ok: true, status: 200, durationMs: 640, error: null };
+
+  it("needs a URL, a key, and a model before it can test", () => {
+    const { model } = createForm({ mode: "create", provider: "claude" });
+    model.setBaseUrl("https://relay.example/api");
+    model.setApiKey("sk-relay");
+    expect(model.getState().canTest).toBe(false);
+
+    model.setModelDraft("relay/sonnet");
+    model.addModel();
+    expect(model.getState().canTest).toBe(true);
+
+    model.setApiKey("");
+    expect(model.getState().canTest).toBe(false);
+  });
+
+  it("tests an unsaved endpoint with the typed key and the picked model", async () => {
+    const { model, tests } = createForm({ mode: "create", provider: "codex" });
+    fillValidCreate(model);
+
+    model.testConnection("relay/sonnet");
+
+    expect(tests[0]?.request).toEqual({
+      provider: "codex",
+      baseUrl: "https://relay.example/api",
+      apiKey: "sk-relay",
+      modelId: "relay/sonnet",
+    });
+    expect(model.getState().test).toEqual({ status: "testing", modelId: "relay/sonnet" });
+    expect(model.getState().canTest).toBe(false);
+
+    tests[0]?.resolve({ status: "done", result: SUCCESS });
+    await settle();
+    expect(model.getState().test).toEqual({
+      status: "done",
+      modelId: "relay/sonnet",
+      result: SUCCESS,
+    });
+  });
+
+  it("tests an edit with the saved key by leaving the key out", () => {
+    const { model, tests } = createForm({ mode: "edit", provider: "claude", endpoint: SAVED });
+
+    model.testConnection("relay/haiku");
+
+    expect(tests[0]?.request).toEqual({
+      provider: "claude",
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example/api",
+      modelId: "relay/haiku",
+    });
+  });
+
+  it("only tests one of the models to use", () => {
+    const { model, tests } = createForm({ mode: "edit", provider: "claude", endpoint: SAVED });
+
+    model.testConnection("relay/unknown");
+
+    expect(tests).toHaveLength(0);
+    expect(model.getState().test).toEqual({ status: "idle" });
+  });
+
+  it("shows why the request itself was refused", async () => {
+    const { model, tests } = createForm({ mode: "edit", provider: "claude", endpoint: SAVED });
+    model.testConnection("relay/haiku");
+
+    tests[0]?.resolve({ status: "failed", message: "API endpoint not found" });
+    await settle();
+
+    expect(model.getState().test).toEqual({
+      status: "failed",
+      modelId: "relay/haiku",
+      message: "API endpoint not found",
+    });
+  });
+
+  it("cancels a pending test and ignores its late result", async () => {
+    const { model, tests } = createForm({ mode: "edit", provider: "claude", endpoint: SAVED });
+    model.testConnection("relay/haiku");
+    model.cancelTest();
+
+    expect(tests[0]?.signal.aborted).toBe(true);
+    expect(model.getState().test).toEqual({ status: "idle" });
+
+    tests[0]?.resolve({ status: "done", result: SUCCESS });
+    await settle();
+    expect(model.getState().test).toEqual({ status: "idle" });
+  });
+
+  it("drops the result once the URL or key changes, and aborts a pending test", async () => {
+    const { model, tests } = createForm({ mode: "edit", provider: "claude", endpoint: SAVED });
+    model.testConnection("relay/haiku");
+    tests[0]?.resolve({ status: "done", result: SUCCESS });
+    await settle();
+
+    model.setBaseUrl("https://other.example/api");
+    expect(model.getState().test).toEqual({ status: "idle" });
+
+    model.testConnection("relay/haiku");
+    model.setApiKey("sk-new");
+    expect(tests[1]?.signal.aborted).toBe(true);
+    expect(model.getState().test).toEqual({ status: "idle" });
+  });
+
+  it("aborts a pending test when the form closes", () => {
+    const { model, tests } = createForm({ mode: "edit", provider: "claude", endpoint: SAVED });
+    model.testConnection("relay/haiku");
+
+    model.close();
+
+    expect(tests[0]?.signal.aborted).toBe(true);
   });
 });

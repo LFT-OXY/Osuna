@@ -17,6 +17,7 @@ import {
   type ApiEndpoint,
   type ApiEndpointModel,
   type ApiEndpointModelMapping,
+  type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
@@ -45,6 +46,7 @@ import {
   type ApiEndpointProvider,
   type StoredApiEndpoint,
 } from "./store.js";
+import { testUpstreamConnection } from "./upstream-connection.js";
 import { fetchUpstreamModels, type UpstreamFailureCode } from "./upstream-models.js";
 
 export type ApiEndpointErrorCode =
@@ -56,6 +58,8 @@ export type ApiEndpointErrorCode =
   | UpstreamFailureCode;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
+// 测试连接要等模型真正回一句话，比列出模型慢。
+const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 30_000;
 
 // auth.command 从这个版本开始才有（ADR 0004）。
 const CODEX_AUTH_COMMAND_MIN_VERSION: readonly [number, number, number] = [0, 118, 0];
@@ -81,11 +85,16 @@ export interface ApiEndpointSaveInput {
   modelMapping?: ApiEndpointModelMapping;
 }
 
-export interface ApiEndpointFetchModelsInput {
+// 拉取模型和测试连接都要的上游地址与 key。
+export interface ApiEndpointUpstreamInput {
   // 编辑已保存的接口时带上；apiKey 留空就用它已保存的 key。
   endpointId?: string;
   baseUrl: string;
   apiKey?: string;
+}
+
+export interface ApiEndpointTestConnectionInput extends ApiEndpointUpstreamInput {
+  modelId: string;
 }
 
 export interface ApiEndpointServiceOptions {
@@ -98,6 +107,7 @@ export interface ApiEndpointServiceOptions {
   // `codex --version` 的输出；启用 Codex 接口前检查版本。
   probeCodexVersion: () => Promise<string>;
   upstreamTimeoutMs?: number;
+  connectionTestTimeoutMs?: number;
 }
 
 /**
@@ -112,6 +122,7 @@ export class ApiEndpointService {
   private readonly now: () => Date;
   private readonly probeCodexVersion: () => Promise<string>;
   private readonly upstreamTimeoutMs: number;
+  private readonly connectionTestTimeoutMs: number;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ApiEndpointServiceOptions) {
@@ -122,6 +133,8 @@ export class ApiEndpointService {
     this.now = options.now ?? (() => new Date());
     this.probeCodexVersion = options.probeCodexVersion;
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
+    this.connectionTestTimeoutMs =
+      options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
   }
 
   list(provider: string): { endpoints: ApiEndpoint[]; activeEndpointId: string | null } {
@@ -222,7 +235,7 @@ export class ApiEndpointService {
    */
   async fetchModels(
     provider: string,
-    input: ApiEndpointFetchModelsInput,
+    input: ApiEndpointUpstreamInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointModel[]> {
     const supported = requireProvider(provider);
@@ -239,10 +252,42 @@ export class ApiEndpointService {
     return result.models;
   }
 
+  /**
+   * 用选中的模型向上游发一条最小对话请求。和拉取模型一样只读、不进串行队列。
+   * 上游的结论（含失败）放在返回值里；请求本身不成立或被取消才抛 ApiEndpointRequestError。
+   */
+  async testConnection(
+    provider: string,
+    input: ApiEndpointTestConnectionInput,
+    signal: AbortSignal,
+  ): Promise<ApiEndpointTestConnectionResult> {
+    const supported = requireProvider(provider);
+    const modelId = input.modelId.trim();
+    if (!modelId) {
+      throw new ApiEndpointRequestError("invalid_input", "A model is required");
+    }
+    const baseUrl = normalizeBaseUrl(input.baseUrl);
+    const apiKey = this.resolveRequestKey(supported, input);
+    const outcome = await testUpstreamConnection({
+      provider: supported,
+      // Codex 和写进 config.toml 的 base_url 一样补 /v1。
+      baseUrl:
+        supported === "codex" ? (normalizeOpenAICompatibleBaseUrl(baseUrl) ?? baseUrl) : baseUrl,
+      apiKey,
+      modelId,
+      signal,
+      timeoutMs: this.connectionTestTimeoutMs,
+    });
+    if (outcome.kind === "cancelled") {
+      throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+    }
+    return outcome.result;
+  }
+
   /** 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。key 从不回给客户端。 */
   private resolveRequestKey(
     provider: ApiEndpointProvider,
-    input: ApiEndpointFetchModelsInput,
+    input: ApiEndpointUpstreamInput,
   ): string {
     const typed = input.apiKey?.trim();
     if (typed) return typed;

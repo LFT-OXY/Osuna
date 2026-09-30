@@ -16,6 +16,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.delete.request"
       | "provider.api_endpoint.set_active.request"
       | "provider.api_endpoint.fetch_models.request"
+      | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.cancel.request";
   }
 >;
@@ -61,6 +62,8 @@ export class ApiEndpointSession {
         return this.handleSetActive(request);
       case "provider.api_endpoint.fetch_models.request":
         return this.handleFetchModels(request, connectionSignal);
+      case "provider.api_endpoint.test_connection.request":
+        return this.handleTestConnection(request, connectionSignal);
       case "provider.api_endpoint.cancel.request":
         return this.handleCancel(request);
     }
@@ -174,9 +177,7 @@ export class ApiEndpointSession {
     request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.fetch_models.request" }>,
     connectionSignal: AbortSignal,
   ): Promise<void> {
-    const controller = new AbortController();
-    this.upstreamRequests.set(request.requestId, controller);
-    const signal = AbortSignal.any([controller.signal, connectionSignal]);
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
     try {
       const models = await this.service.fetchModels(
         request.provider,
@@ -201,8 +202,55 @@ export class ApiEndpointSession {
         },
       });
     } finally {
-      this.upstreamRequests.delete(request.requestId);
+      release();
     }
+  }
+
+  private async handleTestConnection(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.test_connection.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    try {
+      const result = await this.service.testConnection(
+        request.provider,
+        {
+          ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
+          baseUrl: request.baseUrl,
+          ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+          modelId: request.modelId,
+        },
+        signal,
+      );
+      this.host.emit({
+        type: "provider.api_endpoint.test_connection.response",
+        payload: { requestId: request.requestId, result, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.test_connection.response",
+        payload: {
+          requestId: request.requestId,
+          result: null,
+          error: this.toWireError(error, request),
+        },
+      });
+    } finally {
+      release();
+    }
+  }
+
+  /** 登记一条可按 requestId 取消的上游请求；连接断开时一并取消。 */
+  private trackUpstreamRequest(
+    requestId: string,
+    connectionSignal: AbortSignal,
+  ): { signal: AbortSignal; release: () => void } {
+    const controller = new AbortController();
+    this.upstreamRequests.set(requestId, controller);
+    return {
+      signal: AbortSignal.any([controller.signal, connectionSignal]),
+      release: () => this.upstreamRequests.delete(requestId),
+    };
   }
 
   private async handleCancel(

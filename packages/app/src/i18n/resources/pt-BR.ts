@@ -2899,6 +2899,16 @@ export const ptBR: TranslationResources = {
           modelsUnsupported:
             "Este endpoint não consegue listar modelos. Adicione os IDs de modelo manualmente abaixo.",
           fetchTimeout: "O endpoint não respondeu a tempo.",
+          testConnection: "Testar conexão",
+          testHint:
+            "Envia uma mensagem curta com o modelo escolhido a partir deste host. Verifica só o endpoint: problemas do lado da CLI, como um conflito de login do Claude, só aparecem na primeira conversa real. Se isso acontecer, tente /logout no terminal.",
+          testPick: "Escolha um modelo para testar",
+          testing: "Testando...",
+          testMenuTitle: "Testar com",
+          testSucceeded: "Conectado",
+          testFailed: "Falhou",
+          testProtocolUnsupported:
+            "Este endereço não oferece a API {{protocol}} de que o {{provider}} precisa. Confira a URL base ou use um endpoint que a suporte.",
           selectedModels: "Modelos em uso",
           modelIdPlaceholder: "Adicionar um ID de modelo manualmente",
           addModel: "Adicionar",

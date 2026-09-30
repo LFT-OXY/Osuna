@@ -2870,6 +2870,16 @@ export const ko: TranslationResources = {
           modelsUnsupported:
             "이 엔드포인트는 모델 목록을 지원하지 않습니다. 아래에서 모델 ID를 직접 추가하세요.",
           fetchTimeout: "엔드포인트가 제때 응답하지 않았습니다.",
+          testConnection: "연결 테스트",
+          testHint:
+            "이 호스트에서 선택한 모델로 짧은 메시지를 한 번 보냅니다. 엔드포인트만 확인합니다. Claude 로그인 충돌 같은 CLI 쪽 문제는 첫 실제 대화에서야 드러납니다. 그럴 때는 터미널에서 /logout을 시도해 보세요.",
+          testPick: "모델을 골라 테스트",
+          testing: "테스트 중...",
+          testMenuTitle: "테스트할 모델",
+          testSucceeded: "연결 성공",
+          testFailed: "연결 실패",
+          testProtocolUnsupported:
+            "이 주소에서는 {{provider}}에 필요한 {{protocol}} API를 쓸 수 없습니다. 기본 URL을 확인하거나 이를 지원하는 엔드포인트를 사용하세요.",
           selectedModels: "사용할 모델",
           modelIdPlaceholder: "모델 ID 직접 추가",
           addModel: "추가",

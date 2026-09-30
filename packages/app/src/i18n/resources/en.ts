@@ -2973,6 +2973,16 @@ export const en = {
           moreModelsHidden: "Not shown: {{count}}. Search to narrow the list.",
           modelsUnsupported: "This endpoint can't list models. Add model IDs by hand below.",
           fetchTimeout: "The endpoint didn't answer in time.",
+          testConnection: "Test connection",
+          testHint:
+            "Sends one short message with the chosen model from this host. It checks the endpoint only: problems on the CLI side, like a Claude login conflict, show up in the first real chat. If that happens, try /logout in the terminal.",
+          testPick: "Pick a model to test",
+          testing: "Testing...",
+          testMenuTitle: "Test with",
+          testSucceeded: "Connected",
+          testFailed: "Failed",
+          testProtocolUnsupported:
+            "This address doesn't serve the {{protocol}} API that {{provider}} needs. Check the Base URL, or use an endpoint that supports it.",
           selectedModels: "Models to use",
           modelIdPlaceholder: "Add a model ID by hand",
           addModel: "Add",

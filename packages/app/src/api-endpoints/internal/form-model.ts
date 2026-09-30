@@ -7,12 +7,14 @@ import {
   type ApiEndpointModelMapping,
   type ApiEndpointModelTier,
   type ApiEndpointSaveRequest,
+  type ApiEndpointTestConnectionRequest,
+  type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
  * 第三方接口的新建/编辑表单模型：纯 TypeScript，无 React（docs/forms.md）。
  * API key 只写不读：编辑时输入框从空开始，留空提交就不带 apiKey，daemon 保留原 key；
- * 拉取模型同理，留空就带 endpointId 让 daemon 用已保存的 key。
+ * 拉取模型、测试连接同理，留空就带 endpointId 让 daemon 用已保存的 key。
  * `models` 是勾选的模型（拉取后勾选的 + 手动添加的），只保存它们；默认模型和 Claude 的映射都只能从中选。
  */
 
@@ -40,6 +42,23 @@ export type ApiEndpointFetchState =
   | { status: "fetched"; models: ApiEndpointModel[] }
   | { status: "failed"; message: string };
 
+export type ApiEndpointTestConnectionRequestInput = Omit<
+  ApiEndpointTestConnectionRequest,
+  "type" | "requestId"
+>;
+
+// done：上游给出了结论（成功或失败都在 result 里）；failed：请求本身没成立（缺 key、断线……）。
+export type ApiEndpointTestConnectionOutcome =
+  | { status: "done"; result: ApiEndpointTestConnectionResult }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+export type ApiEndpointTestState =
+  | { status: "idle" }
+  | { status: "testing"; modelId: string }
+  | { status: "done"; modelId: string; result: ApiEndpointTestConnectionResult }
+  | { status: "failed"; modelId: string; message: string };
+
 export interface ApiEndpointFetchedRow {
   model: ApiEndpointModel;
   checked: boolean;
@@ -66,8 +85,10 @@ export interface ApiEndpointFormState {
   hiddenFetchedCount: number;
   showMapping: boolean;
   mapping: ApiEndpointModelMapping;
+  test: ApiEndpointTestState;
   baseUrlInvalid: boolean;
   canFetch: boolean;
+  canTest: boolean;
   canAddModel: boolean;
   canSubmit: boolean;
   submitting: boolean;
@@ -91,6 +112,9 @@ export interface ApiEndpointFormModel {
   toggleModel(id: string): void;
   // null 表示这一档不映射；不是勾选的模型就忽略。
   setMapping(tier: ApiEndpointModelTier, modelId: string | null): void;
+  // 用「使用的模型」里的一个发最小对话请求；改了 URL 或 key 后结果作废。
+  testConnection(modelId: string): void;
+  cancelTest(): void;
   submit(): Promise<boolean>;
   close(): void;
 }
@@ -106,6 +130,7 @@ interface Values {
   fetch: ApiEndpointFetchState;
   modelSearch: string;
   mapping: ApiEndpointModelMapping;
+  test: ApiEndpointTestState;
   submitting: boolean;
   submitError: string | null;
 }
@@ -116,6 +141,10 @@ export interface ApiEndpointFormDeps {
     request: ApiEndpointFetchModelsRequestInput,
     signal: AbortSignal,
   ) => Promise<ApiEndpointFetchModelsResult>;
+  testConnection: (
+    request: ApiEndpointTestConnectionRequestInput,
+    signal: AbortSignal,
+  ) => Promise<ApiEndpointTestConnectionOutcome>;
 }
 
 export function createApiEndpointFormModel(
@@ -127,6 +156,8 @@ export function createApiEndpointFormModel(
   let closed = false;
   // 当前这次拉取；取消或重新拉取后，旧请求晚到的结果不再生效。
   let pendingFetch: AbortController | null = null;
+  // 同理，当前这次测试连接。
+  let pendingTest: AbortController | null = null;
   let values: Values =
     seed.mode === "edit"
       ? {
@@ -140,6 +171,7 @@ export function createApiEndpointFormModel(
           fetch: { status: "idle" },
           modelSearch: "",
           mapping: showMapping ? { ...seed.endpoint.modelMapping } : {},
+          test: { status: "idle" },
           submitting: false,
           submitError: null,
         }
@@ -154,6 +186,7 @@ export function createApiEndpointFormModel(
           fetch: { status: "idle" },
           modelSearch: "",
           mapping: {},
+          test: { status: "idle" },
           submitting: false,
           submitError: null,
         };
@@ -167,6 +200,8 @@ export function createApiEndpointFormModel(
     const hasValidUrl = next.baseUrl.trim() !== "" && !baseUrlInvalid;
     const isFetching = next.fetch.status === "fetching";
     const canFetch = !isFetching && hasValidUrl && hasKey;
+    const canTest =
+      next.test.status !== "testing" && hasValidUrl && hasKey && next.models.length > 0;
     const fetched = deriveFetchedRows(next);
     return {
       mode: seed.mode,
@@ -176,6 +211,7 @@ export function createApiEndpointFormModel(
       showMapping,
       baseUrlInvalid,
       canFetch,
+      canTest,
       canAddModel: draft !== "" && !next.models.some((model) => model.id === draft),
       canSubmit:
         !next.submitting &&
@@ -210,7 +246,7 @@ export function createApiEndpointFormModel(
     };
   }
 
-  function buildFetchRequest(): ApiEndpointFetchModelsRequestInput {
+  function buildUpstreamRequest(): ApiEndpointFetchModelsRequestInput {
     const apiKey = values.apiKey.trim();
     return {
       provider: seed.provider,
@@ -218,6 +254,27 @@ export function createApiEndpointFormModel(
       baseUrl: values.baseUrl.trim(),
       ...(apiKey ? { apiKey } : {}),
     };
+  }
+
+  async function runTest(controller: AbortController, modelId: string): Promise<void> {
+    const outcome = await deps.testConnection(
+      { ...buildUpstreamRequest(), modelId },
+      controller.signal,
+    );
+    if (pendingTest !== controller) return;
+    pendingTest = null;
+    if (outcome.status === "done") {
+      update({ test: { status: "done", modelId, result: outcome.result } });
+    } else if (outcome.status === "failed") {
+      update({ test: { status: "failed", modelId, message: outcome.message } });
+    } else {
+      update({ test: { status: "idle" } });
+    }
+  }
+
+  function abortPendingTest(): void {
+    pendingTest?.abort();
+    pendingTest = null;
   }
 
   /** 去掉一个勾选的模型：默认模型顺延到剩下的第一个，指向它的映射档位清空。 */
@@ -244,7 +301,7 @@ export function createApiEndpointFormModel(
   }
 
   async function runFetch(controller: AbortController): Promise<void> {
-    const result = await deps.fetchModels(buildFetchRequest(), controller.signal);
+    const result = await deps.fetchModels(buildUpstreamRequest(), controller.signal);
     if (pendingFetch !== controller) return;
     pendingFetch = null;
     if (result.status === "ok") {
@@ -268,8 +325,14 @@ export function createApiEndpointFormModel(
       return () => listeners.delete(listener);
     },
     setName: (name) => update({ name }),
-    setBaseUrl: (baseUrl) => update({ baseUrl }),
-    setApiKey: (apiKey) => update({ apiKey }),
+    setBaseUrl(baseUrl) {
+      abortPendingTest();
+      update({ baseUrl, test: { status: "idle" } });
+    },
+    setApiKey(apiKey) {
+      abortPendingTest();
+      update({ apiKey, test: { status: "idle" } });
+    },
     setModelDraft: (modelDraft) => update({ modelDraft }),
     addModel() {
       if (!state.canAddModel) return;
@@ -317,6 +380,18 @@ export function createApiEndpointFormModel(
       const { [tier]: _previous, ...rest } = values.mapping;
       update({ mapping: modelId === null ? rest : { ...rest, [tier]: modelId } });
     },
+    testConnection(modelId) {
+      if (!state.canTest || !values.models.some((model) => model.id === modelId)) return;
+      const controller = new AbortController();
+      pendingTest = controller;
+      update({ test: { status: "testing", modelId } });
+      void runTest(controller, modelId);
+    },
+    cancelTest() {
+      if (!pendingTest) return;
+      abortPendingTest();
+      update({ test: { status: "idle" } });
+    },
     async submit() {
       const request = buildRequest();
       if (!request) return false;
@@ -327,6 +402,7 @@ export function createApiEndpointFormModel(
     },
     close() {
       abortPendingFetch();
+      abortPendingTest();
       closed = true;
       listeners.clear();
     },

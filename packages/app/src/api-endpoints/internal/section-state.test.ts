@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { apiEndpointErrorMessageKey, selectApiEndpointsState } from "./section-state";
+import {
+  apiEndpointErrorMessageKey,
+  formatApiEndpointTestDuration,
+  selectApiEndpointsState,
+} from "./section-state";
 
 const ENDPOINT = {
   id: "ep_1",
@@ -82,5 +86,18 @@ describe("apiEndpointErrorMessageKey", () => {
       "settings.providers.apiEndpoints.form.fetchTimeout",
     );
     expect(apiEndpointErrorMessageKey({ code: "upstream_error", message: "x" })).toBeNull();
+  });
+
+  it("localizes an endpoint that doesn't speak the CLI's protocol", () => {
+    expect(apiEndpointErrorMessageKey({ code: "protocol_unsupported", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.form.testProtocolUnsupported",
+    );
+  });
+});
+
+describe("formatApiEndpointTestDuration", () => {
+  it("uses milliseconds under a second and seconds above", () => {
+    expect(formatApiEndpointTestDuration(640)).toBe("640 ms");
+    expect(formatApiEndpointTestDuration(1234)).toBe("1.2 s");
   });
 });

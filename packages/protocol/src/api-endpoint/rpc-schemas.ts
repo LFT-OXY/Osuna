@@ -26,6 +26,16 @@ export function apiEndpointHasModelMapping(provider: string): boolean {
   return MODEL_MAPPING_PROVIDERS.has(provider);
 }
 
+/** 测试连接用的、也是 CLI 自己说的协议；App 在「不支持该协议」的提示里显示它。 */
+const TEST_PROTOCOL_NAMES: Readonly<Record<string, string>> = {
+  claude: "Anthropic Messages",
+  codex: "OpenAI Responses",
+};
+
+export function apiEndpointProtocolName(provider: string): string {
+  return TEST_PROTOCOL_NAMES[provider] ?? provider;
+}
+
 export const ApiEndpointModelMappingSchema = z.object({
   opus: z.string().optional(),
   sonnet: z.string().optional(),
@@ -182,3 +192,45 @@ export const ApiEndpointCancelResponseSchema = z.object({
   }),
 });
 export type ApiEndpointCancelResponse = z.infer<typeof ApiEndpointCancelResponseSchema>;
+
+/**
+ * 测试连接：daemon 在主机上用 CLI 实际使用的协议发一条最小对话请求（Claude 走 Anthropic Messages，
+ * Codex 走 OpenAI Responses）。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ */
+export const ApiEndpointTestConnectionRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_connection.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  endpointId: z.string().optional(),
+  baseUrl: z.string(),
+  apiKey: z.string().optional(),
+  modelId: z.string(),
+});
+export type ApiEndpointTestConnectionRequest = z.infer<
+  typeof ApiEndpointTestConnectionRequestSchema
+>;
+
+/**
+ * 上游给出的结论。`status` 是 HTTP 状态码，没收到响应（连不上、超时）时为 null；
+ * `error` 是上游侧的失败，code 如 upstream_error、protocol_unsupported。
+ */
+export const ApiEndpointTestConnectionResultSchema = z.object({
+  ok: z.boolean(),
+  status: z.number().nullable(),
+  durationMs: z.number(),
+  error: ApiEndpointErrorSchema.nullable(),
+});
+export type ApiEndpointTestConnectionResult = z.infer<typeof ApiEndpointTestConnectionResultSchema>;
+
+/** 请求本身被拒（缺 key、找不到接口、被取消）时 `result` 为 null，原因在 `error`。 */
+export const ApiEndpointTestConnectionResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_connection.response"),
+  payload: z.object({
+    requestId: z.string(),
+    result: ApiEndpointTestConnectionResultSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointTestConnectionResponse = z.infer<
+  typeof ApiEndpointTestConnectionResponseSchema
+>;

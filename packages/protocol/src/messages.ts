@@ -74,6 +74,8 @@ import {
   ApiEndpointSaveResponseSchema,
   ApiEndpointSetActiveRequestSchema,
   ApiEndpointSetActiveResponseSchema,
+  ApiEndpointTestConnectionRequestSchema,
+  ApiEndpointTestConnectionResponseSchema,
 } from "./api-endpoint/rpc-schemas.js";
 import {
   LoopRunRequestSchema,
@@ -3462,6 +3464,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointDeleteRequestSchema,
   ApiEndpointSetActiveRequestSchema,
   ApiEndpointFetchModelsRequestSchema,
+  ApiEndpointTestConnectionRequestSchema,
   ApiEndpointCancelRequestSchema,
 ]);
 
@@ -7032,6 +7035,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointDeleteResponseSchema,
   ApiEndpointSetActiveResponseSchema,
   ApiEndpointFetchModelsResponseSchema,
+  ApiEndpointTestConnectionResponseSchema,
   ApiEndpointCancelResponseSchema,
 ]);
 

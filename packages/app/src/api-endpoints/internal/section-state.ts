@@ -46,5 +46,14 @@ export function apiEndpointErrorMessageKey(error: ApiEndpointError): string | nu
   if (error.code === "upstream_timeout") {
     return "settings.providers.apiEndpoints.form.fetchTimeout";
   }
+  if (error.code === "protocol_unsupported") {
+    return "settings.providers.apiEndpoints.form.testProtocolUnsupported";
+  }
   return null;
+}
+
+/** 测试耗时：一秒以内按毫秒，否则按秒保留一位小数。单位不翻译。 */
+export function formatApiEndpointTestDuration(durationMs: number): string {
+  if (durationMs < 1000) return `${Math.round(durationMs)} ms`;
+  return `${(durationMs / 1000).toFixed(1)} s`;
 }

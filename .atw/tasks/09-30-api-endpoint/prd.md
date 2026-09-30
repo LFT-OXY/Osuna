@@ -131,11 +131,11 @@
   - `delete`：`{ provider, endpointId }` → `{ activeEndpointId, error }`；
   - `set_active`：`{ provider, endpointId | null }`，null 为切回官方 → `{ activeEndpointId, error }`；失败时回报的是真实的当前启用接口；
   - `fetch_models`：`{ provider, baseUrl, endpointId?, apiKey? }` → `{ models, error }`。`apiKey` 省略或空白且带 `endpointId` 时用已保存的 key；两者都没有返回 `invalid_input`；
-  - `cancel`：`{ targetRequestId }` → `{ cancelled }`，取消同一连接上还在进行的上游请求（拉取模型，之后测试连接也用它）；被取消的请求照常回一条 `cancelled` 错误。连接断开时 daemon 也会取消；
-  - 测试连接；
+  - `cancel`：`{ targetRequestId }` → `{ cancelled }`，取消同一连接上还在进行的上游请求（拉取模型与测试连接）；被取消的请求照常回一条 `cancelled` 错误。连接断开时 daemon 也会取消；
+  - `test_connection`：`{ provider, baseUrl, endpointId?, apiKey?, modelId }` → `{ result, error }`。key 规则同 `fetch_models`，同为 `daemon.manage`，可用 `cancel` 取消。`result` 是上游给出的结论 `{ ok, status, durationMs, error }`：`status` 是 HTTP 状态码，没收到响应时为 null；`error` 是上游侧的失败。请求本身不成立（缺 key、缺模型、找不到接口、被取消）时 `result` 为 null，原因在外层 `error`；
   - 启用接口或切回官方；
   - 重新应用（处理外部修改时使用）。
-- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`、`codex_version_unsupported`；上游请求另有 `upstream_error`（非 404/405 的状态码，message 形如 `GET <url>: HTTP 401: <上游信息>`）、`upstream_unreachable`、`upstream_timeout`、`models_unsupported`、`cancelled`；意外错误为 `unknown`（例如找不到 codex 可执行文件）。App 把 `config_unparsable`、`codex_version_unsupported`、`models_unsupported`、`upstream_timeout` 换成本地化文案，后面接 daemon 原文；`cancelled` 不显示；其余只显示 daemon 原文。
+- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`、`codex_version_unsupported`；上游请求另有 `upstream_error`（非 404/405 的状态码，message 形如 `GET <url>: HTTP 401: <上游信息>`）、`upstream_unreachable`、`upstream_timeout`、`models_unsupported`、`cancelled`；测试连接的结果里另有 `protocol_unsupported`（地址上没有 CLI 需要的协议）；意外错误为 `unknown`（例如找不到 codex 可执行文件）。App 把 `config_unparsable`、`codex_version_unsupported`、`models_unsupported`、`upstream_timeout`、`protocol_unsupported` 换成本地化文案，后面接 daemon 原文；`cancelled` 不显示；其余只显示 daemon 原文。
 - `provider` 在线上是字符串而非枚举；daemon 只接受已支持的内置提供方，其余返回 `unsupported_provider`。
 - 状态查询返回四类信息：
   - 当前模式；
@@ -189,13 +189,15 @@
 - **拉取模型**（`server/api-endpoints/upstream-models.ts`）：先请求 `<base>/v1/models`，失败再请求 `<base>/models`。返回格式兼容 `data[].id` 和 `models[].slug` 两种，显示名取 `display_name` 或 `name`，按 id 去重；`has_more` + `last_id` 时带 `after_id` 翻页，最多 20 页。认证方式：
   - Claude 接口同时带 Bearer、`x-api-key` 和 `anthropic-version`；
   - Codex 接口带 Bearer。
-  - 两个地址都失败时，非 404/405 的状态码优先报 `upstream_error`，都连不上报 `upstream_unreachable`，其余报 `models_unsupported`。上游错误信息截断到 300 字，其中出现的 key 替换成 `***`。
+  - 两个地址都失败时，非 404/405 的状态码优先报 `upstream_error`，都连不上报 `upstream_unreachable`，其余报 `models_unsupported`。上游错误信息中出现的 key 先替换成 `***`，再截断到 300 字（先截断会把 key 切成两半，前半截替换不掉）。
   - 超时是两个地址共用的 15 秒（`ApiEndpointServiceOptions.upstreamTimeoutMs`）；超时后不再试第二个地址。拉取不进串行队列，慢的上游不挡切换。
   - 编辑时改了 Base URL 而 key 留空，照样用已保存的 key 去新地址拉取，和保存时「只改地址不用重新粘贴 key」一致；该 RPC 与保存同为 `daemon.manage`。
-- **测试连接**：用 CLI 实际使用的协议，发一条最小请求：
-  - Claude：Anthropic Messages，`max_tokens` 取最小值；
-  - Codex：OpenAI Responses，不带 `store` 和 `previous_response_id`。
-  - 结果返回：成功或失败、HTTP 状态码、上游错误信息（截断到合理长度），以及耗时。
+- **测试连接**（`server/api-endpoints/upstream-connection.ts`）：用 CLI 实际使用的协议，发一条最小请求：
+  - Claude：`POST <base>/v1/messages`，Anthropic Messages，`max_tokens: 1`。只带 Bearer 和 `anthropic-version`，不带 `x-api-key`，和 Claude Code 用 `ANTHROPIC_AUTH_TOKEN` 时一致；
+  - Codex：`POST <base>/responses`（base 按 Codex 规则补 `/v1`），OpenAI Responses，不带 `store`、`previous_response_id`，也不带 `max_output_tokens`（Codex 自己不发，有的中转站会拒绝）。
+  - 结果返回：成功或失败、HTTP 状态码、上游错误信息（规则同拉取模型），以及耗时。
+  - 判定：405，或 404 且错误体只是框架默认回复（非 JSON、或信息以 `Not Found` / `Invalid URL` 开头），报 `protocol_unsupported`；2xx 但响应体不是该协议的对象（`type: "message"` / `object: "response"`）也是 `protocol_unsupported`；其余非 2xx 报 `upstream_error`，404「模型不存在」属于这一类。
+  - 超时 30 秒（`ApiEndpointServiceOptions.connectionTestTimeoutMs`），比拉取模型长，因为要等模型真正回一句话。不进串行队列。
 - **URL 归一化与 Codex CLI 保持一致**：去掉末尾的斜杠；Codex 的 base_url 如果不以 `/v1` 结尾，就补上 `/v1`，和现有自定义 Codex 提供方的处理方式相同。
 - 所有上游请求都设置超时，并且可以取消。测试连接的界面文案要写明：它只验证接口本身，不验证 CLI 这一侧。
 
@@ -219,7 +221,7 @@
   - 「使用的模型」列表放勾选和手动添加的模型，在这里指定默认模型；取消勾选默认模型时默认顺延到剩下的第一个，指向它的映射档位清空。
   - 映射每档是一个下拉，选项为「不映射」加勾选的模型。
   - 拉取中可以取消；关闭表单也会取消。取消后晚到的结果不生效。
-- 测试连接先弹出模型选择，再展示结果。
+- 测试连接先弹出模型选择，再展示结果：「测试连接」区的下拉按钮列出「使用的模型」，选一个就发请求，测试中可以取消；结果一行写成功或失败、HTTP 状态码、耗时和模型，失败时下面接上游原因。字段说明写明它只验证接口本身，并提示可以在终端试 `/logout`。改了 Base URL 或 key 后，旧结果作废，进行中的测试取消。「不支持协议」的文案同时提示检查 Base URL，因为裸 404 也可能只是地址填错。
 - 以下操作需要二次确认：切换、编辑当前启用的接口、删除当前启用的接口。确认框写明受影响的正在运行的会话数，以及「终端里的 CLI 也会切换」。
 - 健康状态的展示：
   - 「已被外部修改」时，提供「重新应用 / 切回官方」两个按钮；

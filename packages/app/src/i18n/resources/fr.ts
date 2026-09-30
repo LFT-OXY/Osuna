@@ -2926,6 +2926,16 @@ export const fr: TranslationResources = {
           modelsUnsupported:
             "Ce point de terminaison ne sait pas lister les modèles. Ajoutez les ID de modèle à la main ci-dessous.",
           fetchTimeout: "Le point de terminaison n'a pas répondu à temps.",
+          testConnection: "Tester la connexion",
+          testHint:
+            "Envoie un court message avec le modèle choisi depuis cet hôte. Seul le point de terminaison est vérifié : les problèmes côté CLI, comme un conflit de connexion Claude, n'apparaissent qu'à la première vraie conversation. Dans ce cas, essayez /logout dans le terminal.",
+          testPick: "Choisir un modèle à tester",
+          testing: "Test en cours...",
+          testMenuTitle: "Tester avec",
+          testSucceeded: "Connecté",
+          testFailed: "Échec",
+          testProtocolUnsupported:
+            "Cette adresse ne fournit pas l'API {{protocol}} dont {{provider}} a besoin. Vérifiez l'URL de base ou utilisez un point de terminaison qui la prend en charge.",
           selectedModels: "Modèles utilisés",
           modelIdPlaceholder: "Ajouter un ID de modèle à la main",
           addModel: "Ajouter",

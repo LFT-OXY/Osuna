@@ -19,12 +19,21 @@ export function ApiEndpointsView({
   provider: string;
   providerLabel: string;
 }) {
-  const { state, busy, actionError, dismissActionError, activate, remove, save, fetchModels } =
-    useApiEndpoints({
-      serverId,
-      provider,
-      providerLabel,
-    });
+  const {
+    state,
+    busy,
+    actionError,
+    dismissActionError,
+    activate,
+    remove,
+    save,
+    fetchModels,
+    testConnection,
+  } = useApiEndpoints({
+    serverId,
+    provider,
+    providerLabel,
+  });
   const [form, setForm] = useState<ApiEndpointFormSeed | null>(null);
 
   const handleAdd = useCallback(() => setForm({ mode: "create", provider }), [provider]);
@@ -53,6 +62,7 @@ export function ApiEndpointsView({
           seed={form}
           onSave={save}
           onFetchModels={fetchModels}
+          onTestConnection={testConnection}
           onClose={handleCloseForm}
         />
       ) : null}

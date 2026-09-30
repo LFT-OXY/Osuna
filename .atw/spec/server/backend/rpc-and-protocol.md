@@ -367,7 +367,7 @@ await client.observeEvents(["usage.pricing.updated"]);
 
 ## Scenario: the daemon calls an upstream with a secret the client never sees
 
-Reference implementation: `provider.api_endpoint.fetch_models` / `provider.api_endpoint.cancel` (api-endpoint ticket 03).
+Reference implementations: `provider.api_endpoint.fetch_models` / `provider.api_endpoint.cancel` (api-endpoint ticket 03) and `provider.api_endpoint.test_connection` (ticket 04), which share the cancel RPC and the session's pending-request map.
 
 ### 1. Scope / Trigger
 
@@ -376,15 +376,20 @@ Reference implementation: `provider.api_endpoint.fetch_models` / `provider.api_e
 ### 2. Signatures
 
 - `fetchUpstreamModels({ provider, baseUrl, apiKey, signal, timeoutMs }) → { ok: true, models } | { ok: false, error: UpstreamFailure }` in `server/api-endpoints/upstream-models.ts`; no throw, no logging.
-- `ApiEndpointService.fetchModels(provider, { endpointId?, baseUrl, apiKey? }, signal) → ApiEndpointModel[]`, throws `ApiEndpointRequestError`.
+- `testUpstreamConnection({ provider, baseUrl, apiKey, modelId, signal, timeoutMs }) → { kind: "result", result: ApiEndpointTestConnectionResult } | { kind: "cancelled" }` in `server/api-endpoints/upstream-connection.ts`. Upstream failures are a `result` with `ok: false`, not a thrown error.
+- Shared helpers (`extractErrorDetail(text, apiKey)`, `structuredErrorMessage`, `describeNetworkError`, `ANTHROPIC_VERSION`) live in `server/api-endpoints/upstream-http.ts`.
+- `ApiEndpointService.fetchModels(provider, ApiEndpointUpstreamInput, signal) → ApiEndpointModel[]` and `testConnection(provider, ApiEndpointUpstreamInput & { modelId }, signal) → ApiEndpointTestConnectionResult`; both throw `ApiEndpointRequestError` for request-level failures (`invalid_input`, `not_found`, `cancelled`).
 - `ApiEndpointSession.handle(request, connectionSignal)`: session passes `this.delivery.requestSignal`. `dispose()` aborts every pending upstream request; `Session.cleanup` calls it.
-- Client: `apiEndpointFetchModels(options, requestId?)`, `apiEndpointCancel(targetRequestId)`. The caller picks the `requestId` so it can cancel it.
+- Client: `apiEndpointFetchModels(options, requestId?)`, `apiEndpointTestConnection(options, requestId?)`, `apiEndpointCancel(targetRequestId)`. The caller picks the `requestId` so it can cancel it.
 
 ### 3. Contracts
 
 - Pending requests live in a `Map<requestId, AbortController>` per session; the upstream signal is `AbortSignal.any([controller.signal, connectionSignal])`, and the timeout is added inside `fetchUpstreamModels` so `cancelled` and `upstream_timeout` stay distinguishable.
 - A cancelled request still gets its response, with `error.code: "cancelled"`. `cancel` answers `cancelled: false` when the target already finished.
-- The key comes from the request, else from the saved endpoint; it is never in a response or a log, and `redact` replaces it in echoed upstream text.
+- The key comes from the request, else from the saved endpoint; it is never in a response or a log. Echoed upstream text has the key replaced with `***` **before** it is truncated to 300 characters — truncating first can cut the key in half and leak the first half.
+- `test_connection` response: `{ requestId, result: { ok, status: number | null, durationMs, error } | null, error }`. `result` carries the upstream verdict (`status: null` when nothing came back); the top-level `error` is set only when the request itself was refused or cancelled, and then `result` is `null`.
+- Test requests mirror the CLI: Claude `POST <base>/v1/messages` with Bearer + `anthropic-version` only (no `x-api-key`, as Claude Code sends with `ANTHROPIC_AUTH_TOKEN`), body `{ model, max_tokens: 1, messages: [ping] }`; Codex `POST <base with /v1>/responses` with Bearer, body `{ model, input: [message] }` — no `store`, `previous_response_id`, or `max_output_tokens`. Timeout 30 s (`connectionTestTimeoutMs`), fetch is 15 s.
+- The protocol name shown to users comes from `apiEndpointProtocolName(provider)` in `@getpaseo/protocol/api-endpoint/rpc-schemas`; daemon and App both read it.
 - Read-only upstream calls stay out of the service's mutation queue.
 
 ### 4. Validation & Error Matrix
@@ -392,17 +397,22 @@ Reference implementation: `provider.api_endpoint.fetch_models` / `provider.api_e
 - No typed key and no `endpointId` with a saved key → `invalid_input`, no request sent. Unknown `endpointId` → `not_found`.
 - Non-404/405 status on either address → `upstream_error` (`HTTP <status>: <detail>`). Both addresses unreachable → `upstream_unreachable`. Otherwise (404, not a model list) → `models_unsupported`.
 - Timeout → `upstream_timeout`, second address not tried. Client cancel or disconnect → `cancelled`.
+- Test connection, inside `result.error`: 405, or 404 whose body is a framework default (no JSON error, or a message starting `Not Found` / `Invalid URL`) → `protocol_unsupported`; any other non-2xx → `upstream_error` with `POST <url>: HTTP <status>: <detail>` (a 404 "model does not exist" stays here); 2xx whose body is not the protocol's object (`type: "message"` / `object: "response"`) → `protocol_unsupported`; no response → `upstream_unreachable` or `upstream_timeout` with `status: null`. No model → `invalid_input` before any request.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: Codex base `https://relay/v1` → `/v1/v1/models` 404 → `/v1/models` lists `models[].slug`.
 - Base: upstream returns `data: []` → `ok` with no models; the form says so and offers manual add.
 - Bad: reporting the second address's 404 when the first returned 401 (hides the real cause).
+- Good (test): Codex relay with only Chat Completions → bare 404 on `/v1/responses` → `protocol_unsupported`; the App says the address lacks OpenAI Responses and to check the Base URL.
+- Bad (test): treating every 404 as "protocol unsupported" — OpenAI and Anthropic answer an unknown model with a JSON 404 too.
 
 ### 6. Tests Required
 
 - `upstream-models.test.ts` against a local `node:http` server: both addresses, both shapes, pagination, 401 without the key in the message, unsupported, timeout (one request only), cancel, unreachable.
 - `daemon-e2e/api-endpoint-models.e2e.test.ts`: typed key; saved key with a blank field (upstream sees it, response does not); Codex fallback; 401; no key → no request; cancel by `requestId`; mapping written and restored.
+- `upstream-connection.test.ts` against a local `node:http` server: exact request body and headers per provider; 401 message with `***`; unknown model stays `upstream_error`; key echoed across the 300-char cut not leaked; bare and framework-JSON 404 plus a Chat Completions 200 → `protocol_unsupported`; timeout and unreachable with `status: null`; cancel → `{ kind: "cancelled" }`.
+- `daemon-e2e/api-endpoint-test-connection.e2e.test.ts`: saved key with a blank field; 401 and unknown model with status and upstream text; Codex base without `/v1` hits `/v1/responses`; chat-only relay → `protocol_unsupported`; no key / blank model → no request; cancel by `requestId`.
 - `messages.api-endpoint.test.ts`: request/response parse, including an error code the client has never seen.
 
 ### 7. Wrong vs Correct

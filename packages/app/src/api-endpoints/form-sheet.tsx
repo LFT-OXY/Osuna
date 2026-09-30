@@ -10,6 +10,13 @@ import {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SearchField } from "@/components/ui/search-field";
 import {
@@ -31,7 +38,11 @@ import type {
   ApiEndpointFormState,
   ApiEndpointSaveRequestInput,
   ApiEndpointSaveResult,
+  ApiEndpointTestConnectionOutcome,
+  ApiEndpointTestConnectionRequestInput,
+  ApiEndpointTestState,
 } from "./internal/form-model";
+import { formatApiEndpointTestDuration } from "./internal/section-state";
 
 export interface ApiEndpointFormSheetProps {
   seed: ApiEndpointFormSeed;
@@ -40,6 +51,10 @@ export interface ApiEndpointFormSheetProps {
     request: ApiEndpointFetchModelsRequestInput,
     signal: AbortSignal,
   ) => Promise<ApiEndpointFetchModelsResult>;
+  onTestConnection: (
+    request: ApiEndpointTestConnectionRequestInput,
+    signal: AbortSignal,
+  ) => Promise<ApiEndpointTestConnectionOutcome>;
   onClose: () => void;
 }
 
@@ -70,12 +85,17 @@ export function ApiEndpointFormSheet({
   seed,
   onSave,
   onFetchModels,
+  onTestConnection,
   onClose,
 }: ApiEndpointFormSheetProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const fieldSize = isCompact ? "md" : "sm";
-  const model = useApiEndpointFormModel(seed, { save: onSave, fetchModels: onFetchModels });
+  const model = useApiEndpointFormModel(seed, {
+    save: onSave,
+    fetchModels: onFetchModels,
+    testConnection: onTestConnection,
+  });
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
 
   const handleSubmit = useCallback(() => {
@@ -221,6 +241,12 @@ export function ApiEndpointFormSheet({
             </View>
           </Field>
         ) : null}
+        <Field
+          label={t("settings.providers.apiEndpoints.form.testConnection")}
+          hint={t("settings.providers.apiEndpoints.form.testHint")}
+        >
+          <TestConnectionSection state={state} model={model} />
+        </Field>
         {state.submitError ? (
           <Text variant="caption" color="statusDanger" selectable testID="api-endpoint-form-error">
             {state.submitError}
@@ -262,7 +288,7 @@ function FetchModelsSection({
 
   return (
     <View style={styles.stack}>
-      <View style={styles.fetchActions}>
+      <View style={styles.inlineActions}>
         <Button
           variant="outline"
           size="sm"
@@ -304,6 +330,117 @@ function FetchModelsSection({
           search={state.modelSearch}
           model={model}
         />
+      ) : null}
+    </View>
+  );
+}
+
+function TestConnectionSection({
+  state,
+  model,
+}: {
+  state: ApiEndpointFormState;
+  model: ApiEndpointFormModel;
+}) {
+  const { t } = useTranslation();
+  const testing = state.test.status === "testing";
+  const handleCancel = useCallback(() => model.cancelTest(), [model]);
+
+  return (
+    <View style={styles.stack}>
+      <View style={styles.inlineActions}>
+        <DropdownMenu>
+          <DropdownTrigger
+            disabled={!state.canTest}
+            accessibilityRole="button"
+            accessibilityLabel={t("settings.providers.apiEndpoints.form.testPick")}
+            testID="api-endpoint-form-test"
+          >
+            <Text>
+              {testing
+                ? t("settings.providers.apiEndpoints.form.testing")
+                : t("settings.providers.apiEndpoints.form.testPick")}
+            </Text>
+          </DropdownTrigger>
+          <DropdownMenuContent side="bottom" align="start" width={280}>
+            <DropdownMenuLabel>
+              {t("settings.providers.apiEndpoints.form.testMenuTitle")}
+            </DropdownMenuLabel>
+            {state.models.map((entry) => (
+              <TestModelItem key={entry.id} modelId={entry.id} onSelect={model.testConnection} />
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {testing ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleCancel}
+            testID="api-endpoint-form-cancel-test"
+          >
+            {t("common.actions.cancel")}
+          </Button>
+        ) : null}
+      </View>
+      <TestConnectionResult test={state.test} />
+    </View>
+  );
+}
+
+function TestModelItem({
+  modelId,
+  onSelect,
+}: {
+  modelId: string;
+  onSelect: (modelId: string) => void;
+}) {
+  const handleSelect = useCallback(() => onSelect(modelId), [modelId, onSelect]);
+  return (
+    <DropdownMenuItem onSelect={handleSelect} testID={`api-endpoint-form-test-model-${modelId}`}>
+      {modelId}
+    </DropdownMenuItem>
+  );
+}
+
+/** 一行结论（成功/失败 · HTTP 状态码 · 耗时 · 模型），失败时下面接上游或 daemon 给的原因。 */
+function TestConnectionResult({ test }: { test: ApiEndpointTestState }) {
+  const { t } = useTranslation();
+  if (test.status === "idle" || test.status === "testing") return null;
+
+  if (test.status === "failed") {
+    return (
+      <Text variant="caption" color="statusDanger" selectable testID="api-endpoint-form-test-error">
+        {test.message}
+      </Text>
+    );
+  }
+
+  const { result } = test;
+  const summary = [
+    result.ok
+      ? t("settings.providers.apiEndpoints.form.testSucceeded")
+      : t("settings.providers.apiEndpoints.form.testFailed"),
+    result.status === null ? null : `HTTP ${result.status}`,
+    formatApiEndpointTestDuration(result.durationMs),
+    test.modelId,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
+
+  return (
+    <View style={styles.testResult} testID="api-endpoint-form-test-result">
+      <Text
+        variant="caption"
+        weight="medium"
+        color={result.ok ? "statusSuccess" : "statusDanger"}
+        selectable
+      >
+        {summary}
+      </Text>
+      {result.error ? (
+        <Text variant="caption" color="foregroundMuted" selectable>
+          {result.error.message}
+        </Text>
       ) : null}
     </View>
   );
@@ -558,7 +695,7 @@ const styles = StyleSheet.create((theme) => ({
   stack: {
     gap: theme.spacing[2],
   },
-  fetchActions: {
+  inlineActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
@@ -587,6 +724,9 @@ const styles = StyleSheet.create((theme) => ({
   mappingSelect: {
     flex: 1,
     minWidth: 0,
+  },
+  testResult: {
+    gap: theme.spacing[1],
   },
   defaultBadge: {
     paddingHorizontal: theme.spacing[3],

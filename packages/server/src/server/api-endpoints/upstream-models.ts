@@ -1,5 +1,12 @@
 import type { ApiEndpointModel } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointProvider } from "./store.js";
+import {
+  ANTHROPIC_VERSION,
+  describeNetworkError,
+  extractErrorDetail,
+  isRecord,
+  parseJson,
+} from "./upstream-http.js";
 
 /*
  * 从第三方接口列出模型。daemon 在主机上发请求，key 不经过客户端。
@@ -31,8 +38,6 @@ type Attempt =
 type FailedAttempt = Exclude<Attempt, { kind: "ok" }>;
 
 const MAX_PAGES = 20;
-const MAX_DETAIL_LENGTH = 300;
-const ANTHROPIC_VERSION = "2023-06-01";
 
 export async function fetchUpstreamModels(input: {
   provider: ApiEndpointProvider;
@@ -51,7 +56,7 @@ export async function fetchUpstreamModels(input: {
   const attempts: FailedAttempt[] = [];
   for (const url of [`${base}/v1/models`, `${base}/models`]) {
     try {
-      const attempt = await listModels(url, headers, signal);
+      const attempt = await listModels({ url, headers, signal, apiKey: input.apiKey });
       if (attempt.kind === "ok") return { ok: true, models: attempt.models };
       attempts.push(attempt);
     } catch (error) {
@@ -86,18 +91,25 @@ function buildHeaders(provider: ApiEndpointProvider, apiKey: string): Record<str
   return headers;
 }
 
-async function listModels(
-  url: string,
-  headers: Record<string, string>,
-  signal: AbortSignal,
-): Promise<Attempt> {
+async function listModels(input: {
+  url: string;
+  headers: Record<string, string>;
+  signal: AbortSignal;
+  apiKey: string;
+}): Promise<Attempt> {
+  const { url, headers, signal } = input;
   const models: ApiEndpointModel[] = [];
   let pageUrl = url;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const response = await fetch(pageUrl, { headers, signal });
     const text = await response.text();
     if (!response.ok) {
-      return { kind: "http", url, status: response.status, detail: extractErrorDetail(text) };
+      return {
+        kind: "http",
+        url,
+        status: response.status,
+        detail: extractErrorDetail(text, input.apiKey),
+      };
     }
     const body = parseJson(text);
     const pageModels = body === undefined ? null : readModels(body);
@@ -166,41 +178,4 @@ function describeAttempt(attempt: FailedAttempt): string {
       : `${prefix} HTTP ${attempt.status}`;
   }
   return `${prefix} ${attempt.detail}`;
-}
-
-/** 上游错误体常见的几种写法：{error:{message}}、{error:"..."}、{message}、{detail}；否则取原文。 */
-function extractErrorDetail(text: string): string {
-  const body = parseJson(text);
-  const candidates = isRecord(body)
-    ? [isRecord(body.error) ? body.error.message : undefined, body.error, body.message, body.detail]
-    : [];
-  const message = candidates.find(
-    (candidate): candidate is string => typeof candidate === "string",
-  );
-  return truncate((message ?? text).replace(/\s+/g, " ").trim());
-}
-
-function describeNetworkError(error: unknown): string {
-  if (error instanceof Error) {
-    // undici 把真正的原因（ECONNREFUSED、ENOTFOUND……）放在 cause 里。
-    const cause = error.cause instanceof Error ? error.cause.message : null;
-    return truncate(cause ? `${error.message}: ${cause}` : error.message);
-  }
-  return truncate(String(error));
-}
-
-function truncate(text: string): string {
-  return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

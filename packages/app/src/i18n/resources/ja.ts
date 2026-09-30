@@ -2880,6 +2880,16 @@ export const ja: TranslationResources = {
           modelsUnsupported:
             "このエンドポイントはモデル一覧に対応していません。下でモデル ID を手動で追加してください。",
           fetchTimeout: "エンドポイントが時間内に応答しませんでした。",
+          testConnection: "接続テスト",
+          testHint:
+            "このホストから選んだモデルで短いメッセージを 1 件送ります。確認できるのはエンドポイントだけです。Claude のログイン競合など CLI 側の問題は、最初の実際の会話で初めて表面化します。その場合はターミナルで /logout を試してください。",
+          testPick: "モデルを選んでテスト",
+          testing: "テスト中...",
+          testMenuTitle: "テストに使うモデル",
+          testSucceeded: "接続成功",
+          testFailed: "接続失敗",
+          testProtocolUnsupported:
+            "このアドレスでは {{provider}} が必要とする {{protocol}} API を利用できません。ベース URL を確認するか、対応しているエンドポイントを使ってください。",
           selectedModels: "使用するモデル",
           modelIdPlaceholder: "モデル ID を手動で追加",
           addModel: "追加",

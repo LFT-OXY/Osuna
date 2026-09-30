@@ -55,7 +55,7 @@ Forms are a non-React model with an explicit lifecycle (`construct`, `hydrate`, 
 
 ### An async request owned by a form model
 
-When a form model starts a request of its own (the API endpoint form's `fetchModels`), the model owns an `AbortController` per request and passes its `signal` to the dependency. `cancelFetch()` and `close()` abort it, and a result only lands if its controller is still the current one, so a late answer after cancel or refetch is dropped. The dependency returns a result union (`ok | failed | cancelled`) instead of throwing; the hook that implements it turns the signal into the daemon's cancel RPC. See `api-endpoints/internal/form-model.ts` and `use-api-endpoints.ts`.
+When a form model starts a request of its own (the API endpoint form's `fetchModels` and `testConnection`), the model owns an `AbortController` per request and passes its `signal` to the dependency. `cancelFetch()` and `close()` abort it, and a result only lands if its controller is still the current one, so a late answer after cancel or refetch is dropped. The dependency returns a result union (`ok | failed | cancelled`) instead of throwing; the hook that implements it turns the signal into the daemon's cancel RPC. Clear a result that no longer describes the inputs: editing the Base URL or key aborts a pending connection test and resets it to idle. See `api-endpoints/internal/form-model.ts` and `use-api-endpoints.ts`.
 
 ## Workspace tab kinds
 

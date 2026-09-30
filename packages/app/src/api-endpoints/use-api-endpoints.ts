@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ApiEndpoint, ApiEndpointError } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  apiEndpointProtocolName,
+  type ApiEndpoint,
+  type ApiEndpointError,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { confirmDialog, type ConfirmDialogInput } from "@/utils/confirm-dialog";
@@ -10,6 +14,8 @@ import type {
   ApiEndpointFetchModelsResult,
   ApiEndpointSaveRequestInput,
   ApiEndpointSaveResult,
+  ApiEndpointTestConnectionOutcome,
+  ApiEndpointTestConnectionRequestInput,
 } from "./internal/form-model";
 import {
   apiEndpointErrorMessageKey,
@@ -34,6 +40,10 @@ export interface UseApiEndpointsResult {
     request: ApiEndpointFetchModelsRequestInput,
     signal: AbortSignal,
   ) => Promise<ApiEndpointFetchModelsResult>;
+  testConnection: (
+    request: ApiEndpointTestConnectionRequestInput,
+    signal: AbortSignal,
+  ) => Promise<ApiEndpointTestConnectionOutcome>;
 }
 
 interface ActionOutcome {
@@ -44,12 +54,12 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-let fetchRequestCounter = 0;
+let upstreamRequestCounter = 0;
 
 // 自己生成 requestId，取消时才知道要取消哪一条。
-function createFetchRequestId(): string {
-  fetchRequestCounter += 1;
-  return `api-endpoint-fetch-${Date.now().toString(36)}-${fetchRequestCounter}`;
+function createUpstreamRequestId(): string {
+  upstreamRequestCounter += 1;
+  return `api-endpoint-upstream-${Date.now().toString(36)}-${upstreamRequestCounter}`;
 }
 
 /**
@@ -86,9 +96,11 @@ export function useApiEndpoints(input: {
   const describeError = useCallback(
     (error: ApiEndpointError): string => {
       const key = apiEndpointErrorMessageKey(error);
-      return key ? `${t(key, { provider: providerLabel })}\n${error.message}` : error.message;
+      if (!key) return error.message;
+      const text = t(key, { provider: providerLabel, protocol: apiEndpointProtocolName(provider) });
+      return `${text}\n${error.message}`;
     },
-    [providerLabel, t],
+    [provider, providerLabel, t],
   );
 
   const refresh = useCallback(
@@ -179,12 +191,8 @@ export function useApiEndpoints(input: {
       signal: AbortSignal,
     ): Promise<ApiEndpointFetchModelsResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
-      const requestId = createFetchRequestId();
-      const cancel = () => {
-        // 取消只是尽力而为：连接已断时 daemon 那边也会随连接一起取消。
-        void client.apiEndpointCancel(requestId).catch(() => undefined);
-      };
-      signal.addEventListener("abort", cancel, { once: true });
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
       try {
         const result = await client.apiEndpointFetchModels(request, requestId);
         if (signal.aborted || result.error?.code === "cancelled") return { status: "cancelled" };
@@ -194,7 +202,41 @@ export function useApiEndpoints(input: {
         if (signal.aborted) return { status: "cancelled" };
         return { status: "failed", message: errorText(error) };
       } finally {
-        signal.removeEventListener("abort", cancel);
+        unlink();
+      }
+    },
+    [client, describeError, t],
+  );
+
+  const testConnection = useCallback(
+    async (
+      request: ApiEndpointTestConnectionRequestInput,
+      signal: AbortSignal,
+    ): Promise<ApiEndpointTestConnectionOutcome> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointTestConnection(request, requestId);
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: describeError(response.error) };
+        if (!response.result) throw new Error("The host returned neither a result nor an error");
+        const upstreamError = response.result.error;
+        // 上游侧的失败同样按错误码换成本地化文案，后面接 daemon 原文。
+        return {
+          status: "done",
+          result: {
+            ...response.result,
+            error: upstreamError
+              ? { code: upstreamError.code, message: describeError(upstreamError) }
+              : null,
+          },
+        };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: errorText(error) };
+      } finally {
+        unlink();
       }
     },
     [client, describeError, t],
@@ -202,5 +244,23 @@ export function useApiEndpoints(input: {
 
   const dismissActionError = useCallback(() => setActionError(null), []);
 
-  return { state, busy, actionError, dismissActionError, activate, remove, save, fetchModels };
+  return {
+    state,
+    busy,
+    actionError,
+    dismissActionError,
+    activate,
+    remove,
+    save,
+    fetchModels,
+    testConnection,
+  };
+}
+
+/** 调用方取消时通知 daemon 取消对应的上游请求；返回解除监听的函数。 */
+function linkAbortToCancel(signal: AbortSignal, cancel: () => Promise<unknown>): () => void {
+  // 取消只是尽力而为：连接已断时 daemon 那边也会随连接一起取消。
+  const onAbort = () => void cancel().catch(() => undefined);
+  signal.addEventListener("abort", onAbort, { once: true });
+  return () => signal.removeEventListener("abort", onAbort);
 }

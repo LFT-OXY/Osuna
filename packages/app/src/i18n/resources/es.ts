@@ -2917,6 +2917,16 @@ export const es: TranslationResources = {
           modelsUnsupported:
             "Este endpoint no puede listar modelos. Agrega los ID de modelo a mano abajo.",
           fetchTimeout: "El endpoint no respondió a tiempo.",
+          testConnection: "Probar conexión",
+          testHint:
+            "Envía un mensaje corto con el modelo elegido desde este host. Solo comprueba el endpoint: los problemas del lado de la CLI, como un conflicto de inicio de sesión de Claude, aparecen en la primera conversación real. Si pasa, prueba /logout en la terminal.",
+          testPick: "Elige un modelo para probar",
+          testing: "Probando...",
+          testMenuTitle: "Probar con",
+          testSucceeded: "Conectado",
+          testFailed: "Falló",
+          testProtocolUnsupported:
+            "Esta dirección no ofrece la API {{protocol}} que necesita {{provider}}. Revisa la URL base o usa un endpoint que la admita.",
           selectedModels: "Modelos que se usan",
           modelIdPlaceholder: "Agregar un ID de modelo a mano",
           addModel: "Añadir",
