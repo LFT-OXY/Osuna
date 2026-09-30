@@ -1,0 +1,28 @@
+{
+  "id": "zh-cn-i18n-gaps",
+  "name": "zh-cn-i18n-gaps",
+  "title": "补齐简体中文界面翻译",
+  "description": "设置界面 Layout/Agents/Workspaces/Providers/Terminals 等在 zh-CN 下显示英文；补齐 zh-CN 资源漏翻、迁移硬编码英文、统一术语并加防回归测试",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-30",
+  "completedAt": null,
+  "branch": "fix/settings-menu-zh-i18n",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "55092b01b6454e686200c3714b8f5784a2b60e5e"
+  }
+}
