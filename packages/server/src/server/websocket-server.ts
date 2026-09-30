@@ -1687,6 +1687,8 @@ export class VoiceAssistantWebSocketServer {
         sessionHistory: true,
         // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
         ...(this.usageService ? { usage: true } : {}),
+        // COMPAT(agentMentions): added in v0.12.x, remove gate after 2027-09-30.
+        agentMentions: true,
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,

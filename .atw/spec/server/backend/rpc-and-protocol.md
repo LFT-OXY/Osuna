@@ -365,6 +365,66 @@ function sessionEventCategory(message: SessionOutboundMessage) {
 await client.observeEvents(["usage.pricing.updated"]);
 ```
 
+## Scenario: an agent snapshot field the daemon decides at session start
+
+Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (multi-agent ticket 02). Reuse this shape for any per-agent fact that depends on daemon config plus what the provider session actually accepted.
+
+### 1. Scope / Trigger
+
+- The app needs a per-agent answer that is neither a provider capability (`session.capabilities`) nor persisted state, and that must not change under a running session when config changes.
+
+### 2. Signatures
+
+- Pure decision: `resolveCreateAgentsCapability(input)` in `server/agent/create-agents-capability.ts` → `{ canCreateAgents: true } | { canCreateAgents: false; unavailableReason }`.
+- Global gate: `AgentManager.setPaseoToolsGate({ mcpEnabled, injectIntoAgents })`, called from `bootstrap.ts` (initial, on listen, and in the `mcp.enabled` / `mcp.injectIntoAgents` field-change callbacks). There is no boolean setter any more.
+- Storage: `ManagedAgent.createAgentsCapability`, written only by `registerSession` (its `options.createAgentsCapability` is required); projected in `toAgentPayload`.
+- Wire: `AgentSnapshotPayloadSchema.canCreateAgents: z.boolean().optional()`, `createAgentsUnavailableReason: z.string().optional()`; `server_info.features.agentMentions`.
+
+### 3. Contracts
+
+- Computed on all four registration paths — create, resume, import, reload — after the provider session exists, because Pi's MCP support is only known from `session.capabilities.supportsMcpServers`.
+- Reason precedence: `mcp_disabled` → `tools_not_injected` → `create_agent_not_allowed` → `tools_not_delivered`. The reason is present only when `canCreateAgents` is false.
+- Delivery: a native catalog on the launch context decides alone (`getTool("create_agent")`); OpenCode's bridge manifest is policy-free and never counts. Otherwise the launch config must hold the daemon's internal `paseo` MCP server and the session must accept MCP. A user-owned server named `paseo` is not delivery.
+- The gate is read once, in `prepareSessionConfig`, and folded into `paseoToolPolicy` (`{ enabled: false }` when closed). `buildLaunchContext` reads only that policy, so a toggle between the two awaits cannot make the catalog and the snapshot disagree.
+- Stored (not loaded) agents from `buildStoredAgentPayload` omit both fields; sending to them resumes, which decides.
+
+### 4. Validation & Error Matrix
+
+- `mcp.enabled` false → `mcp_disabled`.
+- `mcp.enabled` true, `injectIntoAgents` false → `tools_not_injected`.
+- Provider `paseoTools.enabled: false` or `disabledTools` has `create_agent` → `create_agent_not_allowed`.
+- Session without MCP support, native catalog without `create_agent`, or internal server not injected → `tools_not_delivered`.
+- Config changed while running → snapshot unchanged until reload/resume. Known gap: turning `mcp.enabled` off in the config file kills the MCP endpoint immediately, but the snapshot still says `true` (the app cannot change that key).
+
+### 5. Good/Base/Bad Cases
+
+- Good: new app + new daemon; app gates on `features.agentMentions`, then reads the two fields.
+- Base: old daemon; fields absent, `agentMentions` absent, app tells the user to update the host.
+- Bad: putting the flag into `capabilities` — replica-cache stores capabilities with a `z.strictObject` key list and the key means "provider can", not "daemon injected".
+
+### 6. Tests Required
+
+- Daemon E2E `daemon-e2e/agent-create-agents-capability.e2e.test.ts`: each reason from one config (`mcpEnabled`, `mcpInjectIntoAgents`, `providerOverrides.<id>.paseoTools`, fake client `supportsMcpServers`), the true case with no reason, and `patchDaemonConfig` → unchanged → `refreshAgent` → updated.
+- Unit `agent/create-agents-capability.test.ts`: native catalog with/without `create_agent`, user-owned `paseo` server, internal server with/without session MCP support.
+- Protocol `messages.wire-compat.test.ts`: snapshot without the fields, with an unknown reason string, and `agentMentions` optional.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Reads the live gate a second time; a toggle between prepare and launch leaves
+// the MCP server injected but no native catalog, and the snapshot misreports.
+if (this.paseoToolsEnabled && isPaseoToolPolicyEnabled(policy) && client.capabilities.supportsNativePaseoTools) {
+```
+
+#### Correct
+
+```ts
+// prepareSessionConfig captured the gate and folded it into the policy.
+if (isPaseoToolPolicyEnabled(paseoToolPolicy) && client.capabilities.supportsNativePaseoTools) {
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

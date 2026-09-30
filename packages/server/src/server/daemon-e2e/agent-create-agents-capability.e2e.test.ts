@@ -1,0 +1,158 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
+import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import { createTestAgentClient } from "../test-utils/fake-agent-client.js";
+import { DaemonClient } from "../test-utils/daemon-client.js";
+import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+
+const tempDirs: string[] = [];
+let daemon: TestPaseoDaemon | null = null;
+let client: DaemonClient | null = null;
+
+async function startDaemon(
+  options: Parameters<typeof createTestPaseoDaemon>[0] & { supportsMcpServers?: boolean },
+): Promise<{ daemon: TestPaseoDaemon; client: DaemonClient; cwd: string }> {
+  const { supportsMcpServers = true, ...daemonOptions } = options;
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "paseo-create-agents-cwd-"));
+  tempDirs.push(cwd);
+  daemon = await createTestPaseoDaemon({
+    agentClients: { codex: createTestAgentClient("codex", { supportsMcpServers }) },
+    ...daemonOptions,
+  });
+  client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  await client.connect();
+  await client.fetchAgents({ subscribe: {} });
+  return { daemon, client, cwd };
+}
+
+function createAgentsFields(agent: AgentSnapshotPayload) {
+  return {
+    canCreateAgents: agent.canCreateAgents,
+    createAgentsUnavailableReason: agent.createAgentsUnavailableReason,
+  };
+}
+
+async function fetchCreateAgentsFields(daemonClient: DaemonClient, agentId: string) {
+  const result = await daemonClient.fetchAgent(agentId);
+  if (!result) throw new Error(`Agent ${agentId} not found`);
+  return createAgentsFields(result.agent);
+}
+
+afterEach(async () => {
+  await client?.close().catch(() => undefined);
+  await daemon?.close().catch(() => undefined);
+  client = null;
+  daemon = null;
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+describe("agent snapshot create-agents capability", () => {
+  test("advertises agentMentions in server_info", async () => {
+    const started = await startDaemon({});
+
+    expect(started.client.getLastServerInfoMessage()?.features?.agentMentions).toBe(true);
+  });
+
+  test("a session with the internal paseo MCP server delivered can create agents", async () => {
+    const started = await startDaemon({});
+
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    expect(createAgentsFields(agent)).toEqual({
+      canCreateAgents: true,
+      createAgentsUnavailableReason: undefined,
+    });
+    expect(await fetchCreateAgentsFields(started.client, agent.id)).toEqual({
+      canCreateAgents: true,
+      createAgentsUnavailableReason: undefined,
+    });
+  });
+
+  test("reports mcp_disabled when the daemon MCP endpoint is off", async () => {
+    const started = await startDaemon({ mcpEnabled: false });
+
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    expect(createAgentsFields(agent)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "mcp_disabled",
+    });
+  });
+
+  test("reports tools_not_injected when injection into agents is off", async () => {
+    const started = await startDaemon({ mcpInjectIntoAgents: false });
+
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    expect(createAgentsFields(agent)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "tools_not_injected",
+    });
+  });
+
+  test("reports create_agent_not_allowed when the provider policy disables create_agent", async () => {
+    const started = await startDaemon({
+      providerOverrides: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+    });
+
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    expect(createAgentsFields(agent)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "create_agent_not_allowed",
+    });
+  });
+
+  test("reports tools_not_delivered when the session cannot take MCP servers", async () => {
+    const started = await startDaemon({ supportsMcpServers: false });
+
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    expect(createAgentsFields(agent)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "tools_not_delivered",
+    });
+  });
+
+  test("runtime config changes leave running sessions alone until they reload", async () => {
+    const started = await startDaemon({});
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    await started.client.patchDaemonConfig({ mcp: { injectIntoAgents: false } });
+
+    expect(await fetchCreateAgentsFields(started.client, agent.id)).toEqual({
+      canCreateAgents: true,
+      createAgentsUnavailableReason: undefined,
+    });
+
+    await started.client.refreshAgent(agent.id);
+
+    expect(await fetchCreateAgentsFields(started.client, agent.id)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "tools_not_injected",
+    });
+  });
+
+  test("provider policy changes apply on reload", async () => {
+    const started = await startDaemon({});
+    const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
+
+    await started.client.patchDaemonConfig({
+      providers: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+    });
+
+    expect(await fetchCreateAgentsFields(started.client, agent.id)).toEqual({
+      canCreateAgents: true,
+      createAgentsUnavailableReason: undefined,
+    });
+
+    await started.client.refreshAgent(agent.id);
+
+    expect(await fetchCreateAgentsFields(started.client, agent.id)).toEqual({
+      canCreateAgents: false,
+      createAgentsUnavailableReason: "create_agent_not_allowed",
+    });
+  });
+});

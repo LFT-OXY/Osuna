@@ -8,9 +8,9 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 进程内 daemon 测试：四种原因各一个配置组合，快照字段与原因码正确；可以派发时 `canCreateAgents` 为 true 且没有原因码。
-- [ ] 运行中改全局开关或 provider 策略，已运行会话的字段不变；reload 后更新。
-- [ ] `server_info.features.agentMentions` 存在；新字段都是可选的，wire schema 没有 transform。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] 进程内 daemon 测试：四种原因各一个配置组合，快照字段与原因码正确；可以派发时 `canCreateAgents` 为 true 且没有原因码。
+- [x] 运行中改全局开关或 provider 策略，已运行会话的字段不变；reload 后更新。
+- [x] `server_info.features.agentMentions` 存在；新字段都是可选的，wire schema 没有 transform。
+- [x] `npm run typecheck`、`npm run lint` 通过。

@@ -151,6 +151,14 @@ export function toAgentPayload(
     payload.lastError = agent.lastError;
   }
 
+  const createAgentsCapability = agent.createAgentsCapability;
+  if (createAgentsCapability) {
+    payload.canCreateAgents = createAgentsCapability.canCreateAgents;
+    if (!createAgentsCapability.canCreateAgents) {
+      payload.createAgentsUnavailableReason = createAgentsCapability.unavailableReason;
+    }
+  }
+
   // Handle attention state
   payload.requiresAttention = agent.attention.requiresAttention;
   if (agent.attention.requiresAttention) {

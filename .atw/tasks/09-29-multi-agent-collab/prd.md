@@ -129,6 +129,7 @@ Rules:
 
 - 判定同时满足三层：全局 `mcp.enabled && mcp.injectIntoAgents`；该 provider 的 `paseoTools` 策略允许 `create_agent`；工具确实送进了会话（原生通道看会话绑定的工具目录；MCP 通道看是否注入了内部 paseo 服务器，且会话 `supportsMcpServers`）。OpenCode 必须看会话目录，manifest 不算数。
 - 在会话 create、resume、import、reload 时判定一次，运行中改开关不影响已运行的会话，reload 后才生效。
+- 原因码按 `mcp_disabled` → `tools_not_injected` → `create_agent_not_allowed` → `tools_not_delivered` 的顺序取第一个；能派发时不带原因码。已知缺口：用配置文件关掉 `mcp.enabled` 时 MCP 通道立即失效，但已运行会话的快照仍为 `true`（app 改不了这个开关，接受）。
 - agent 快照顶层新增可选字段 `canCreateAgents: boolean` 和 `createAgentsUnavailableReason: string`，后者是 `z.string()`，不用 enum。v1 的原因码：`mcp_disabled`、`tools_not_injected`、`create_agent_not_allowed`（provider 策略）、`tools_not_delivered`（通道没接通，如 Pi 没装 adapter、generic ACP 不支持 MCP、OpenCode 目录里没有）。app 认不出的原因码用通用文案。
 - provider 快照的每个 provider 条目加同名的预测字段，新建界面据此置灰（OpenCode 可能偏保守，已接受）；会话建好后，daemon 按实际判定结果决定附不附 Routing block。
 - `injectIntoAgents` 保持默认关闭。

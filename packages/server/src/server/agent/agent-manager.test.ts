@@ -3414,7 +3414,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     registry: storage,
     logger,
     mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
-    paseoToolsEnabled: false,
+    paseoToolsGate: { mcpEnabled: true, injectIntoAgents: false },
     resolvePaseoToolPolicy: () => ({ enabled: true }),
     paseoToolCatalogFactory: () => {
       catalogFactoryCalls += 1;

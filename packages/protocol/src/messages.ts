@@ -934,6 +934,10 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
+  // 会话启动时判定能否调用 create_agent；未加载的存档智能体不带。
+  canCreateAgents: z.boolean().optional(),
+  // 原因码不用 enum：新增原因码时老 app 仍能解析，认不出的走通用文案。
+  createAgentsUnavailableReason: z.string().optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -3785,6 +3789,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
         // daemon 解析本机 CLI 会话日志并回答 usage.* 查询。
         usage: z.boolean().optional(),
+        // COMPAT(agentMentions): added in v0.12.x, remove gate after 2027-09-30.
+        // 快照带 canCreateAgents 与原因码，app 据此开放 @ 智能体分组。
+        agentMentions: z.boolean().optional(),
       })
       .optional(),
   })
