@@ -563,3 +563,26 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 22: 多智能体协作票 13：provider 子智能体权限归属与验收归档
+<!-- atw-session: v=2 fp=6c693908e538a60d -->
+
+**Date**: 2026-09-30
+**Task**: 多智能体协作票 13：provider 子智能体权限归属与验收归档
+**Package**: app
+**Branch**: `feat/multi-agent-collab`
+
+### Summary
+
+Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智能体，track 与派发组行显示等待批准，只读面板可批准；三轮双轴审查，dev 桌面端实测后验收并归档 09-29-multi-agent-collab。遗留观察：Codex 父会话派发行一度停在启动中（服务端关联数据正确）、mock 行时长待确认、子标签直接对话不再通知父智能体（现有设计）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ecbcc7c36` | feat(protocol,server,app): provider 子智能体权限按 metadata.providerSubagentId 归属，track 与派发组行显示等待批准，只读面板可批准 |
+
+### Status
+
+[OK] **Completed**
