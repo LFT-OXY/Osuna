@@ -2904,6 +2904,9 @@ export const en = {
         invalidPrice: "Enter a number in all four columns.",
         edit: "Edit",
         editAccessibility: "Edit the custom price of {{model}}",
+        removeCustomPrice: "Remove custom price",
+        removeCustomPriceAccessibility: "Remove the custom price of {{model}}",
+        removeFailed: "Could not remove this custom price.",
         customGroup: {
           title: "Custom prices",
           intro:

@@ -1,5 +1,5 @@
 import type { UsagePricingModel } from "@getpaseo/protocol/usage/types";
-import { CircleAlert, Pencil, X, type LucideIcon } from "lucide-react-native";
+import { CircleAlert, Pencil, Undo2, X, type LucideIcon } from "lucide-react-native";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type TextStyle } from "react-native";
@@ -23,15 +23,10 @@ import {
   type PriceDraft,
   type PriceField,
 } from "./pricing";
+import type { PriceRowError, RowWriteState } from "./price-rows";
 
 const dangerIconMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
 const ThemedCircleAlert = withUnistyles(CircleAlert, dangerIconMapping);
-
-export interface CustomPriceRowErrorState {
-  message: string;
-  /** 校验没过（而不是 daemon 拒绝）：没填或填错的格子要标出来。 */
-  invalid: boolean;
-}
 
 export interface CustomPriceRowProps {
   model: UsagePricingModel;
@@ -40,12 +35,14 @@ export interface CustomPriceRowProps {
   draft: PriceDraft | null;
   /** 草稿被外部丢弃（取消、保存成功）时变值，把非受控输入框重新播种。 */
   draftToken: number;
-  isSaving: boolean;
-  error: CustomPriceRowErrorState | null;
+  /** 保存与移除自定义价格都是写回 daemon 配置。 */
+  writeState: RowWriteState;
+  error: PriceRowError | null;
   onEdit: (model: string) => void;
   onCancel: (model: string) => void;
   onChangeField: (model: string, field: PriceField, value: string) => void;
   onSave: (model: string) => void;
+  onRemove: (model: string) => void;
 }
 
 /** 「自定义价格」组的一行：模型名与状态行、四个价格、操作。 */
@@ -54,12 +51,13 @@ export function CustomPriceRow({
   layout,
   draft,
   draftToken,
-  isSaving,
+  writeState,
   error,
   onEdit,
   onCancel,
   onChangeField,
   onSave,
+  onRemove,
 }: CustomPriceRowProps) {
   const { t } = useTranslation();
   const modelId = model.model;
@@ -67,9 +65,12 @@ export function CustomPriceRow({
   const unpriced = model.priceSource === null;
   // 只有校验没过才标格子：daemon 拒绝时四格都填对了。
   const flagInvalidCells = error?.invalid === true;
+  const isWriting = writeState === "writing";
+  const isLocked = writeState === "locked";
   const handleEdit = useCallback(() => onEdit(modelId), [modelId, onEdit]);
   const handleCancel = useCallback(() => onCancel(modelId), [modelId, onCancel]);
   const handleSave = useCallback(() => onSave(modelId), [modelId, onSave]);
+  const handleRemove = useCallback(() => onRemove(modelId), [modelId, onRemove]);
 
   return (
     <View
@@ -119,6 +120,8 @@ export function CustomPriceRow({
               <IconAction
                 icon={X}
                 label={t("common.actions.cancel")}
+                // 写回途中取消会丢掉草稿，而写入还可能失败、需要它重试。
+                disabled={isWriting}
                 onPress={handleCancel}
                 testID={`price-table-cancel-${modelId}`}
               />
@@ -126,7 +129,8 @@ export function CustomPriceRow({
             <Button
               variant="default"
               size="sm"
-              loading={isSaving}
+              loading={isWriting}
+              disabled={isLocked}
               onPress={handleSave}
               testID={`price-table-save-${modelId}`}
             >
@@ -134,13 +138,30 @@ export function CustomPriceRow({
             </Button>
           </>
         ) : (
-          <IconAction
-            icon={Pencil}
-            label={t("settings.host.priceTable.edit")}
-            accessibilityLabel={t("settings.host.priceTable.editAccessibility", { model: modelId })}
-            onPress={handleEdit}
-            testID={`price-table-edit-${modelId}`}
-          />
+          <>
+            <IconAction
+              icon={Pencil}
+              label={t("settings.host.priceTable.edit")}
+              accessibilityLabel={t("settings.host.priceTable.editAccessibility", {
+                model: modelId,
+              })}
+              disabled={isWriting}
+              onPress={handleEdit}
+              testID={`price-table-edit-${modelId}`}
+            />
+            {/* 不弹确认：移除后要么回到 LiteLLM 价格，要么回到可以直接重填的无价格数据。 */}
+            <IconAction
+              icon={Undo2}
+              label={t("settings.host.priceTable.removeCustomPrice")}
+              accessibilityLabel={t("settings.host.priceTable.removeCustomPriceAccessibility", {
+                model: modelId,
+              })}
+              loading={isWriting}
+              disabled={isLocked}
+              onPress={handleRemove}
+              testID={`price-table-remove-${modelId}`}
+            />
+          </>
         )}
       </View>
     </View>
@@ -155,6 +176,8 @@ function IconAction({
   icon,
   label,
   accessibilityLabel,
+  loading,
+  disabled,
   onPress,
   testID,
 }: {
@@ -162,6 +185,8 @@ function IconAction({
   /** tooltip 里的短标签；没给 `accessibilityLabel` 时也是读屏读到的名字。 */
   label: string;
   accessibilityLabel?: string;
+  loading?: boolean;
+  disabled?: boolean;
   onPress: () => void;
   testID: string;
 }) {
@@ -173,6 +198,8 @@ function IconAction({
             variant="ghost"
             size="sm"
             leftIcon={icon}
+            loading={loading}
+            disabled={disabled}
             onPress={onPress}
             style={styles.iconAction}
             accessibilityLabel={accessibilityLabel ?? label}
@@ -196,7 +223,7 @@ function PriceRowStatus({
   error,
 }: {
   model: UsagePricingModel;
-  error: CustomPriceRowErrorState | null;
+  error: PriceRowError | null;
 }) {
   const { t } = useTranslation();
   if (error) {

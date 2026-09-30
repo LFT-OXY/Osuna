@@ -2857,6 +2857,9 @@ export const fr: TranslationResources = {
         invalidPrice: "Saisissez un nombre dans les quatre colonnes.",
         edit: "Modifier",
         editAccessibility: "Modifier le prix personnalisé de {{model}}",
+        removeCustomPrice: "Supprimer le prix personnalisé",
+        removeCustomPriceAccessibility: "Supprimer le prix personnalisé de {{model}}",
+        removeFailed: "Impossible de supprimer ce prix personnalisé.",
         customGroup: {
           title: "Prix personnalisés",
           intro:

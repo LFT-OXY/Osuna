@@ -2810,6 +2810,9 @@ export const ja: TranslationResources = {
         invalidPrice: "4 つの列すべてに数値を入力してください。",
         edit: "編集",
         editAccessibility: "{{model}} のカスタム価格を編集",
+        removeCustomPrice: "カスタム価格を削除",
+        removeCustomPriceAccessibility: "{{model}} のカスタム価格を削除",
+        removeFailed: "このカスタム価格を削除できませんでした。",
         customGroup: {
           title: "カスタム価格",
           intro:

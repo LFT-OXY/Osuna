@@ -1,3 +1,5 @@
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { UsagePricingOverride } from "@getpaseo/protocol/usage/types";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
@@ -17,38 +19,43 @@ test.use({ e2eDaemonEnvironment: fixtures.environment });
 /** Token totals come only from the parsers, so they are exact. */
 const FIXTURE_TOKENS = "180,248";
 
-interface PricingConfigClient {
-  connect(): Promise<void>;
-  close(): Promise<void>;
-  getDaemonConfig(): Promise<{
-    config: { usage?: { pricing?: { autoUpdate?: boolean } } };
-  }>;
-  patchDaemonConfig(patch: { usage: { pricing: { overrides: [] } } }): Promise<unknown>;
-}
+const ONE_DOLLAR = { input: 1, cachedInput: 1, cacheWrite: 1, output: 1 };
 
-/** 清空覆盖价：同一个 worker daemon 上前面的用例可能已经给无价格的模型定过价。 */
-async function clearCustomPrices(): Promise<void> {
-  const client = await connectDaemonClient<PricingConfigClient>({
+async function withPricingClient<T>(run: (client: DaemonClient) => Promise<T>): Promise<T> {
+  const client = await connectDaemonClient<DaemonClient>({
     clientIdPrefix: "price-table-e2e",
   });
   try {
-    await client.patchDaemonConfig({ usage: { pricing: { overrides: [] } } });
+    return await run(client);
   } finally {
     await client.close().catch(() => undefined);
   }
+}
+
+/**
+ * 直接写 daemon 配置，不经过页面：布置前提、模拟在 App 外改的 `config.json`，
+ * 或者传空表清掉同一个 worker daemon 上前面的用例定过的价。
+ */
+async function writeCustomPrices(overrides: UsagePricingOverride[]): Promise<void> {
+  await withPricingClient((client) =>
+    client.patchDaemonConfig({ usage: { pricing: { overrides } } }),
+  );
+}
+
+/** 从 daemon 读回覆盖表，而不是从写它的页面读。 */
+async function readCustomPrices(): Promise<UsagePricingOverride[] | undefined> {
+  return withPricingClient(async (client) => {
+    const { config } = await client.getDaemonConfig();
+    return config.usage?.pricing?.overrides;
+  });
 }
 
 /** Reads the switch back out of the daemon, not out of the page it just set. */
 async function readAutoUpdate(): Promise<boolean | undefined> {
-  const client = await connectDaemonClient<PricingConfigClient>({
-    clientIdPrefix: "price-table-e2e",
-  });
-  try {
+  return withPricingClient(async (client) => {
     const { config } = await client.getDaemonConfig();
     return config.usage?.pricing?.autoUpdate;
-  } finally {
-    await client.close().catch(() => undefined);
-  }
+  });
 }
 
 /** LiteLLM 组的副标题：daemon 读的是内置快照还是联网缓存都认。 */
@@ -71,7 +78,7 @@ async function topRowModel(page: Page): Promise<string> {
 }
 
 /**
- * 自定义组第一行的模型。调用前先 `clearCustomPrices()`：这样它一定是无价格数据的
+ * 自定义组第一行的模型。调用前先 `writeCustomPrices([])`：这样它一定是无价格数据的
  * 那一行，输入框一进来就开着。
  */
 async function openUnpricedRowEditor(page: Page): Promise<string> {
@@ -156,6 +163,110 @@ test.describe("Price table", () => {
     });
   });
 
+  test("removing a custom price hands the model back to no price data", async ({ page }) => {
+    const serverId = getServerId();
+    // 一条在 App 外写的覆盖项：移除别的模型时它和它的 note 都要原样留下。
+    const kept: UsagePricingOverride = {
+      model: "e2e-model-never-seen",
+      pricePerMillion: ONE_DOLLAR,
+      note: "negotiated rate",
+    };
+    await writeCustomPrices([kept]);
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const model = await openUnpricedRowEditor(page);
+    const row = page
+      .getByTestId("price-table-custom-group")
+      .getByTestId(`price-table-row-${model}`);
+
+    await test.step("save a custom price for the unpriced model", async () => {
+      for (const field of ["input", "cachedInput", "cacheWrite", "output"]) {
+        await page.getByTestId(`price-table-input-${model}-${field}`).fill("2");
+      }
+      await page.getByTestId(`price-table-save-${model}`).click();
+      await expect(row).toContainText("Custom price", { timeout: 30_000 });
+      await expect(page.getByTestId(`price-table-remove-${model}`)).toBeVisible();
+    });
+
+    await test.step("remove it without a confirmation", async () => {
+      await page.getByTestId(`price-table-remove-${model}`).click();
+
+      // LiteLLM 没有它的价格，所以它回到无价格数据、输入框开着，可以直接重填。
+      await expect(row).toContainText("No price data · estimated $0", { timeout: 30_000 });
+      await expect(page.getByTestId(`price-table-input-${model}-input`)).toHaveValue("");
+      await expect(page.getByTestId(`price-table-remove-${model}`)).toHaveCount(0);
+      await expect(page.getByTestId(`price-table-edit-${model}`)).toHaveCount(0);
+    });
+
+    expect(await readCustomPrices()).toEqual([kept]);
+  });
+
+  test("removing a custom price hands a LiteLLM model back to its group", async ({ page }) => {
+    const serverId = getServerId();
+    await writeCustomPrices([]);
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const litellmGroup = page.getByTestId("price-table-litellm-group");
+    const customGroup = page.getByTestId("price-table-custom-group");
+    const toggle = page.getByTestId("price-table-litellm-toggle");
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await toggle.click();
+    const firstRow = litellmGroup.locator('[data-testid^="price-table-row-"]').first();
+    await expect(firstRow).toBeVisible();
+    const testId = await firstRow.getAttribute("data-testid");
+    if (!testId) throw new Error("Expected a LiteLLM row to carry a testID.");
+    const model = testId.replace("price-table-row-", "");
+
+    // 覆盖一个 LiteLLM 定过价的模型：它搬进自定义组。
+    await writeCustomPrices([{ model, pricePerMillion: ONE_DOLLAR }]);
+    await expect(customGroup.getByTestId(`price-table-row-${model}`)).toContainText(
+      "Custom price",
+      { timeout: 30_000 },
+    );
+
+    await page.getByTestId(`price-table-remove-${model}`).click();
+
+    await expect(litellmGroup.getByTestId(`price-table-row-${model}`)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(customGroup.getByTestId(`price-table-row-${model}`)).toHaveCount(0);
+    expect(await readCustomPrices()).toEqual([]);
+  });
+
+  test("a refused removal keeps the custom price and names the daemon's reason", async ({
+    page,
+  }) => {
+    const serverId = getServerId();
+    await writeCustomPrices([]);
+    await installDaemonConfigFailureFixture(page, "config is read-only on this host");
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const model = await openUnpricedRowEditor(page);
+    // 覆盖项绕开页面直接写进 daemon：页面的写入都会被夹具拒掉。
+    await writeCustomPrices([{ model, pricePerMillion: ONE_DOLLAR }]);
+    const remove = page.getByTestId(`price-table-remove-${model}`);
+    await expect(remove).toBeVisible({ timeout: 30_000 });
+
+    await remove.click();
+
+    await expect(page.getByTestId(`price-table-error-${model}`)).toHaveText(
+      "Could not remove this custom price. config is read-only on this host",
+    );
+    // 这一行保持原状：仍是只读的自定义价格，可以再试一次。
+    await expect(page.getByTestId(`price-table-edit-${model}`)).toBeVisible();
+    await expect(remove).toBeEnabled();
+    expect(await readCustomPrices()).toEqual([{ model, pricePerMillion: ONE_DOLLAR }]);
+  });
+
   test("the auto-update switch writes through to the daemon config", async ({ page }) => {
     const serverId = getServerId();
     await gotoAppShell(page);
@@ -179,7 +290,7 @@ test.describe("Price table", () => {
 
   test("a refused save keeps the row open and names the daemon's reason", async ({ page }) => {
     const serverId = getServerId();
-    await clearCustomPrices();
+    await writeCustomPrices([]);
     await installDaemonConfigFailureFixture(page, "config is read-only on this host");
 
     await gotoAppShell(page);

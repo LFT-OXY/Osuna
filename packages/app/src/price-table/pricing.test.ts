@@ -18,6 +18,7 @@ import {
   groupPricingModels,
   parsePriceDraft,
   parsePriceInput,
+  removePricingOverride,
   upsertPricingOverride,
 } from "./pricing";
 
@@ -123,6 +124,34 @@ describe("the override list written back to the daemon", () => {
     expect(upsertPricingOverride([], "gpt-5.5", price)).toEqual([
       { model: "gpt-5.5", pricePerMillion: price },
     ]);
+  });
+});
+
+describe("removing a custom price from the override list", () => {
+  const price = { input: 1, cachedInput: 1, cacheWrite: 1, output: 1 };
+  const existing: UsagePricingOverride[] = [
+    { model: "gpt-5.5", pricePerMillion: price },
+    { model: "glm-5", pricePerMillion: price, note: "via Z.AI" },
+  ];
+
+  it("drops the model's entry, ignoring case and space", () => {
+    expect(removePricingOverride(existing, " GPT-5.5 ")).toEqual([existing[1]]);
+  });
+
+  it("keeps every other entry and its note as it was", () => {
+    expect(removePricingOverride(existing, "gpt-5.5")).toEqual([
+      { model: "glm-5", pricePerMillion: price, note: "via Z.AI" },
+    ]);
+  });
+
+  it("drops a repeated entry too, so no stale price takes over", () => {
+    // daemon 取同名的最后一条；只删一条会让另一条接着生效。
+    const repeated = [...existing, { model: "GPT-5.5", pricePerMillion: price }];
+    expect(removePricingOverride(repeated, "gpt-5.5")).toEqual([existing[1]]);
+  });
+
+  it("returns the list unchanged when the model has no entry", () => {
+    expect(removePricingOverride(existing, "claude-opus-5")).toEqual(existing);
   });
 });
 

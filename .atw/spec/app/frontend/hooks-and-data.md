@@ -44,6 +44,16 @@ return selectAgentCommandsState({ canFetch, data: query.data, error: query.error
 
 Expose the result as a discriminated union (`unavailable | loading | error | ready`), not `{ isLoading, error, data }`. Two rules live in the selector: data wins over error, so a failed background refresh keeps the old list instead of replacing it with an error row; and "cannot fetch and never had data" (host disconnected) is `unavailable`, which hides the menu instead of showing a loading row that never ends.
 
+### A list in daemon config is written back whole
+
+`useDaemonConfig().patchConfig` replaces an array field (`usage.pricing.overrides`, profiles) rather than merging into it, so every edit to one entry sends the whole list. Three rules follow, all in `price-table/price-table-section.tsx` `writeOverrides`:
+
+- Compute the new list from the loaded `config`. When `config` is still `null`, fail the write with the row's localized error instead of starting from `config?.… ?? []`; an empty base sends a one-entry list and deletes every other entry, notes included.
+- One write at a time per list. Two writes started from the same snapshot each drop the other's change. Hold the rows that write the list while one is in flight (`price-table/price-rows.ts` `resolveRowWriteState` → `idle | writing | locked`). Releasing the lock right after `patchConfig` resolves is safe: it writes the response into the config query before it returns, so the next write reads the new list.
+- Removing an entry removes every entry the daemon would match (`pricing.ts` `removePricingOverride`, case- and space-insensitive). The daemon takes the last duplicate, so deleting one leaves the other in force.
+
+Test the list functions in Node (`pricing.test.ts`) and read the list back from the daemon in e2e (`usage-price-table.spec.ts` `readCustomPrices`), not from the page that wrote it.
+
 ## Hook shape
 
 A hook that does real work has a pure module beside it and a test for that module:

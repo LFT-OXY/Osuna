@@ -2798,6 +2798,9 @@ export const ko: TranslationResources = {
         invalidPrice: "네 열 모두에 숫자를 입력하세요.",
         edit: "편집",
         editAccessibility: "{{model}}의 맞춤 가격 편집",
+        removeCustomPrice: "맞춤 가격 제거",
+        removeCustomPriceAccessibility: "{{model}}의 맞춤 가격 제거",
+        removeFailed: "이 맞춤 가격을 제거할 수 없습니다.",
         customGroup: {
           title: "맞춤 가격",
           intro:

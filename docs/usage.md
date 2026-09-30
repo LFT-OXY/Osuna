@@ -145,7 +145,8 @@ surrounding space — no normalization, no prefix stripping, so an override
 applies to the id as your logs spell it and to nothing else. All four columns
 are required; zero is a price, which is how you mark a model as free rather than
 as unknown. A repeated model takes its last entry. Removing the entry removes
-the price.
+the price; "Remove custom price" in the price table deletes every entry for that
+model and leaves the rest, notes included.
 
 An override wins over the table. Everything else falls back to the table through
 the lookup order in `packages/server/src/server/usage/pricing/matcher.ts`: the

@@ -2782,6 +2782,9 @@ export const ar: TranslationResources = {
         invalidPrice: "أدخل رقمًا في الأعمدة الأربعة جميعها.",
         edit: "تعديل",
         editAccessibility: "تعديل السعر المخصّص لـ {{model}}",
+        removeCustomPrice: "إزالة السعر المخصّص",
+        removeCustomPriceAccessibility: "إزالة السعر المخصّص لـ {{model}}",
+        removeFailed: "تعذّرت إزالة هذا السعر المخصّص.",
         customGroup: {
           title: "الأسعار المخصّصة",
           intro:

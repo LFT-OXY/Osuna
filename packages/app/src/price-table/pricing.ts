@@ -96,23 +96,40 @@ export function parsePriceDraft(draft: PriceDraft): UsagePricePerMillion | null 
   return { input, cachedInput, cacheWrite, output };
 }
 
+/** 覆盖价按模型名匹配：忽略大小写与首尾空格，与 daemon 的匹配规则一致。 */
+function modelMatchKey(model: string): string {
+  return model.trim().toLowerCase();
+}
+
 /**
- * 覆盖表整段写回 daemon 配置，所以这里返回的是完整的新数组。同名按大小写不敏感
- * 匹配（与 daemon 的匹配规则一致），命中就替换价格并保留原来的备注。
+ * 覆盖表整段写回 daemon 配置，所以这里返回的是完整的新数组。命中就替换价格并
+ * 保留原来的备注。
  */
 export function upsertPricingOverride(
   overrides: readonly UsagePricingOverride[],
   model: string,
   pricePerMillion: UsagePricePerMillion,
 ): UsagePricingOverride[] {
-  const target = model.trim().toLowerCase();
+  const target = modelMatchKey(model);
   let replaced = false;
   const next = overrides.map((override) => {
-    if (override.model.trim().toLowerCase() !== target) return override;
+    if (modelMatchKey(override.model) !== target) return override;
     replaced = true;
     return { ...override, pricePerMillion };
   });
   return replaced ? next : [...next, { model, pricePerMillion }];
+}
+
+/**
+ * 「移除自定义价格」：删掉该模型的覆盖项，匹配规则与 `upsertPricingOverride` 相同。
+ * 同名的每一条都删——daemon 取最后一条，只删一条会让剩下的那条接着生效。
+ */
+export function removePricingOverride(
+  overrides: readonly UsagePricingOverride[],
+  model: string,
+): UsagePricingOverride[] {
+  const target = modelMatchKey(model);
+  return overrides.filter((override) => modelMatchKey(override.model) !== target);
 }
 
 /**
@@ -124,7 +141,7 @@ export function upsertPricingOverride(
 export function dedupePricingModels(models: readonly UsagePricingModel[]): UsagePricingModel[] {
   const seen = new Set<string>();
   return models.filter((model) => {
-    const key = model.model.trim().toLowerCase();
+    const key = modelMatchKey(model.model);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

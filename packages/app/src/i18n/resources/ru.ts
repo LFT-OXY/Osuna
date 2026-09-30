@@ -2833,6 +2833,9 @@ export const ru: TranslationResources = {
         invalidPrice: "Введите число во все четыре столбца.",
         edit: "Изменить",
         editAccessibility: "Изменить свою цену для {{model}}",
+        removeCustomPrice: "Убрать свою цену",
+        removeCustomPriceAccessibility: "Убрать свою цену для {{model}}",
+        removeFailed: "Не удалось убрать эту цену.",
         customGroup: {
           title: "Свои цены",
           intro:

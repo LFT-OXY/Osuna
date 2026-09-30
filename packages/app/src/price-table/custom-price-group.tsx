@@ -8,29 +8,19 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Text } from "@/components/ui/text";
 import { settingsStyles } from "@/styles/settings";
 import type { PriceTableLayout } from "./price-columns";
-import { CustomPriceRow, PriceTableHeader, type CustomPriceRowErrorState } from "./price-row";
-import {
-  EMPTY_PRICE_DRAFT,
-  countUnpricedModels,
-  type PriceDraft,
-  type PriceField,
-} from "./pricing";
-
-export interface CustomPriceRowError extends CustomPriceRowErrorState {
-  model: string;
-}
+import { CustomPriceRow, PriceTableHeader } from "./price-row";
+import { EMPTY_PRICE_DRAFT, countUnpricedModels, type PriceField } from "./pricing";
+import { resolveRowWriteState, type PriceRowsState } from "./price-rows";
 
 interface CustomPriceGroupProps {
   models: readonly UsagePricingModel[];
   layout: PriceTableLayout;
-  drafts: Record<string, PriceDraft>;
-  draftToken: number;
-  savingModel: string | null;
-  rowError: CustomPriceRowError | null;
+  rows: PriceRowsState;
   onEdit: (model: string) => void;
   onCancel: (model: string) => void;
   onChangeField: (model: string, field: PriceField, value: string) => void;
   onSave: (model: string) => void;
+  onRemove: (model: string) => void;
 }
 
 /**
@@ -39,7 +29,7 @@ interface CustomPriceGroupProps {
  */
 export function CustomPriceGroup(props: CustomPriceGroupProps) {
   const { t } = useTranslation();
-  const { models, layout } = props;
+  const { models, layout, rows } = props;
   const unpricedCount = countUnpricedModels(models);
   const trailing = useMemo(
     () =>
@@ -75,21 +65,22 @@ export function CustomPriceGroup(props: CustomPriceGroupProps) {
             {models.map((model) => {
               // 无价格数据的行一直开着输入框，没有草稿时从空的四格开始。
               const openDraft = model.priceSource === null ? EMPTY_PRICE_DRAFT : null;
-              const draft = props.drafts[model.model] ?? openDraft;
-              const error = props.rowError?.model === model.model ? props.rowError : null;
+              const draft = rows.drafts[model.model] ?? openDraft;
+              const error = rows.error?.model === model.model ? rows.error : null;
               return (
                 <CustomPriceRow
                   key={model.model}
                   model={model}
                   layout={layout}
                   draft={draft}
-                  draftToken={props.draftToken}
-                  isSaving={props.savingModel === model.model}
+                  draftToken={rows.draftToken}
+                  writeState={resolveRowWriteState(rows.writingModel, model.model)}
                   error={error}
                   onEdit={props.onEdit}
                   onCancel={props.onCancel}
                   onChangeField={props.onChangeField}
                   onSave={props.onSave}
+                  onRemove={props.onRemove}
                 />
               );
             })}

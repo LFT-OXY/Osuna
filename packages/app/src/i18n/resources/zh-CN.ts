@@ -2746,6 +2746,9 @@ export const zhCN: TranslationResources = {
         invalidPrice: "四列都要填数字。",
         edit: "编辑",
         editAccessibility: "编辑 {{model}} 的自定义价格",
+        removeCustomPrice: "移除自定义价格",
+        removeCustomPriceAccessibility: "移除 {{model}} 的自定义价格",
+        removeFailed: "无法移除这个自定义价格。",
         customGroup: {
           title: "自定义价格",
           intro: "LiteLLM 查不到价格的模型列在这里。按每百万 token 美元填写四列，0 表示免费。",

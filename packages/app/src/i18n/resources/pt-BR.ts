@@ -2829,6 +2829,9 @@ export const ptBR: TranslationResources = {
         invalidPrice: "Digite um número nas quatro colunas.",
         edit: "Editar",
         editAccessibility: "Editar o preço personalizado de {{model}}",
+        removeCustomPrice: "Remover preço personalizado",
+        removeCustomPriceAccessibility: "Remover o preço personalizado de {{model}}",
+        removeFailed: "Não foi possível remover este preço personalizado.",
         customGroup: {
           title: "Preços personalizados",
           intro:

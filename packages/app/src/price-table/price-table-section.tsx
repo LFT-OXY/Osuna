@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+import type { UsagePricingOverride } from "@getpaseo/protocol/usage/types";
+import { useCallback, useMemo, useReducer, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { View, type LayoutChangeEvent } from "react-native";
@@ -11,25 +12,33 @@ import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
 import { renderUsageText } from "@/usage/text";
-import { CustomPriceGroup, type CustomPriceRowError } from "./custom-price-group";
+import { CustomPriceGroup } from "./custom-price-group";
 import { LiteLLMPriceGroup } from "./litellm-price-group";
 import { resolvePriceTableLayout } from "./price-columns";
 import {
   EMPTY_PRICE_DRAFT,
-  buildPriceDraft,
   dedupePricingModels,
   extractFailureReason,
   groupPricingModels,
   parsePriceDraft,
+  removePricingOverride,
   upsertPricingOverride,
-  type PriceDraft,
   type PriceField,
 } from "./pricing";
+import { INITIAL_PRICE_ROWS, priceRowsReducer } from "./price-rows";
 import { usePriceTable, type PriceTableView } from "./use-price-table";
 
 const PRICE_SAVE_FAILED_KEY = "settings.host.priceTable.saveFailed";
+const PRICE_REMOVE_FAILED_KEY = "settings.host.priceTable.removeFailed";
 const AUTO_UPDATE_FAILED_KEY = "settings.host.priceTable.autoUpdateFailed";
 const REFRESH_FAILED_KEY = "settings.host.priceTable.refreshFailed";
+
+interface OverridesWrite {
+  model: string;
+  failedKey: typeof PRICE_SAVE_FAILED_KEY | typeof PRICE_REMOVE_FAILED_KEY;
+  /** 由当前的覆盖表算出要整段写回的新表。 */
+  next: (current: readonly UsagePricingOverride[]) => UsagePricingOverride[];
+}
 
 /** 本票还没有从 LiteLLM 行自定义的入口，这一组始终为空。 */
 const NO_CUSTOMIZING: ReadonlySet<string> = new Set();
@@ -49,10 +58,7 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
   const { view, refetch } = usePriceTable(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
 
-  const [drafts, setDrafts] = useState<Record<string, PriceDraft>>({});
-  const [savingModel, setSavingModel] = useState<string | null>(null);
-  const [rowError, setRowError] = useState<CustomPriceRowError | null>(null);
-  const [draftToken, setDraftToken] = useState(0);
+  const [rows, dispatchRows] = useReducer(priceRowsReducer, INITIAL_PRICE_ROWS);
   const [isRefreshing, setIsRefreshing] = useState(false);
   /** LiteLLM 组那两个控件（开关、立即刷新）共用的一行错误。 */
   const [controlError, setControlError] = useState<string | null>(null);
@@ -72,75 +78,83 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
   const handleEdit = useCallback(
     (model: string) => {
       const row = models.find((candidate) => candidate.model === model);
-      setRowError(null);
-      setDrafts((current) => ({
-        ...current,
-        [model]: buildPriceDraft(row?.pricePerMillion ?? null),
-      }));
+      dispatchRows({ type: "editOpened", model, price: row?.pricePerMillion ?? null });
     },
     [models],
   );
 
   const handleCancel = useCallback((model: string) => {
-    setRowError(null);
-    setDraftToken((token) => token + 1);
-    setDrafts((current) => {
-      const { [model]: _dropped, ...rest } = current;
-      return rest;
-    });
+    dispatchRows({ type: "cancelled", model });
   }, []);
 
   const handleChangeField = useCallback((model: string, field: PriceField, value: string) => {
-    setDrafts((current) => ({
-      ...current,
-      [model]: { ...(current[model] ?? EMPTY_PRICE_DRAFT), [field]: value },
-    }));
+    dispatchRows({ type: "fieldChanged", model, field, value });
   }, []);
+
+  /**
+   * 覆盖表整段写回：daemon 收到后广播 usage.pricing.updated，报表与这张表一起重算。
+   * 保存与移除共用这一条路径，失败都落在这一行的状态行上。
+   */
+  const writeOverrides = useCallback(
+    async ({ model, failedKey, next }: OverridesWrite): Promise<boolean> => {
+      function fail(message: string): false {
+        dispatchRows({ type: "writeFailed", model, message });
+        return false;
+      }
+      // 配置还没读到时不能拿空表去算：写回去会把其他模型的覆盖项一起删掉。
+      if (!config) return fail(t(failedKey));
+      const overrides = next(config.usage?.pricing?.overrides ?? []);
+      dispatchRows({ type: "writeStarted", model });
+      let saved: Awaited<ReturnType<typeof patchConfig>>;
+      try {
+        saved = await patchConfig({ usage: { pricing: { overrides } } });
+      } catch (cause) {
+        console.error("[PriceTable] Failed to write the custom prices", cause);
+        return fail(describeFailure(t, failedKey, cause));
+      }
+      // 主机在渲染与点击之间掉线时 patchConfig 直接 resolve undefined，什么也没写；
+      // 不拦住的话这一行会静默地停在写之前的样子。
+      if (!saved) return fail(t(failedKey));
+      return true;
+    },
+    [config, patchConfig, t],
+  );
 
   const handleSave = useCallback(
     (model: string) => {
-      const pricePerMillion = parsePriceDraft(drafts[model] ?? EMPTY_PRICE_DRAFT);
+      const pricePerMillion = parsePriceDraft(rows.drafts[model] ?? EMPTY_PRICE_DRAFT);
       if (!pricePerMillion) {
-        setRowError({ model, message: t("settings.host.priceTable.invalidPrice"), invalid: true });
+        dispatchRows({
+          type: "draftRejected",
+          model,
+          message: t("settings.host.priceTable.invalidPrice"),
+        });
         return;
       }
-      setRowError(null);
-      setSavingModel(model);
-      // 覆盖表整段写回：daemon 收到后广播 usage.pricing.updated，报表与这张表一起重算。
-      const overrides = upsertPricingOverride(
-        config?.usage?.pricing?.overrides ?? [],
-        model,
-        pricePerMillion,
-      );
       void (async () => {
-        let saved: Awaited<ReturnType<typeof patchConfig>>;
-        try {
-          saved = await patchConfig({ usage: { pricing: { overrides } } });
-        } catch (cause) {
-          console.error("[PriceTable] Failed to save a custom price", cause);
-          setRowError({
-            model,
-            message: describeFailure(t, PRICE_SAVE_FAILED_KEY, cause),
-            invalid: false,
-          });
-          setSavingModel(null);
-          return;
-        }
-        setSavingModel(null);
-        // 主机在渲染与点击之间掉线时 patchConfig 直接 resolve undefined，什么也没写；
-        // 不拦住的话这一行会静默地变回已计价态。
-        if (!saved) {
-          setRowError({ model, message: t(PRICE_SAVE_FAILED_KEY), invalid: false });
-          return;
-        }
-        setDraftToken((token) => token + 1);
-        setDrafts((current) => {
-          const { [model]: _saved, ...rest } = current;
-          return rest;
+        const saved = await writeOverrides({
+          model,
+          failedKey: PRICE_SAVE_FAILED_KEY,
+          next: (current) => upsertPricingOverride(current, model, pricePerMillion),
         });
+        if (saved) dispatchRows({ type: "saved", model });
       })();
     },
-    [config?.usage?.pricing?.overrides, drafts, patchConfig, t],
+    [rows.drafts, t, writeOverrides],
+  );
+
+  const handleRemove = useCallback(
+    (model: string) => {
+      void (async () => {
+        const removed = await writeOverrides({
+          model,
+          failedKey: PRICE_REMOVE_FAILED_KEY,
+          next: (current) => removePricingOverride(current, model),
+        });
+        if (removed) dispatchRows({ type: "removed", model });
+      })();
+    },
+    [writeOverrides],
   );
 
   const handleAutoUpdateChange = useCallback(
@@ -196,14 +210,12 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
           <CustomPriceGroup
             models={groups.custom}
             layout={layout}
-            drafts={drafts}
-            draftToken={draftToken}
-            savingModel={savingModel}
-            rowError={rowError}
+            rows={rows}
             onEdit={handleEdit}
             onCancel={handleCancel}
             onChangeField={handleChangeField}
             onSave={handleSave}
+            onRemove={handleRemove}
           />
           <LiteLLMPriceGroup
             models={groups.litellm}
