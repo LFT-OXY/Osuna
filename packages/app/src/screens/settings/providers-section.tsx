@@ -19,12 +19,8 @@ import { selectInheritedApiEndpoint } from "@/api-endpoints";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
-import {
-  buildAcpProviderConfigPatch,
-  type AcpProviderCatalogItem,
-} from "@/hooks/use-acp-provider-catalog";
-import { ProviderCatalogList } from "@/components/provider-catalog-list";
 import { getProviderIcon } from "@/components/provider-icons";
+import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -42,8 +38,9 @@ import {
   resolveProviderStatusLine,
   type ProviderStatusDisplay,
 } from "@/provider-detail/status";
+import { ProviderCatalogDialog } from "./provider-catalog-dialog";
 import type { ProvidersLayout } from "./providers-layout";
-import { ChevronRight, MoreHorizontal, Trash2 } from "lucide-react-native";
+import { ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
 type ProviderEntry = NonNullable<ReturnType<typeof useProvidersSnapshot>["entries"]>[number];
@@ -342,12 +339,12 @@ export function ProvidersSection({
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
-  const { entries, isLoading, refresh } = useProvidersSnapshot(serverId);
+  const { entries, isLoading } = useProvidersSnapshot(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
   const removingProviderIdRef = useRef<string | null>(null);
-  const [installingProviderId, setInstallingProviderId] = useState<string | null>(null);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
   const highlightedProvider = layout === "split" ? selectedProvider : null;
@@ -402,29 +399,37 @@ export function ProvidersSection({
     [patchConfig, t],
   );
 
-  const handleInstall = useCallback(
-    async (entry: AcpProviderCatalogItem) => {
-      if (installingProviderId) return;
-      setInstallingProviderId(entry.id);
-      try {
-        await patchConfig(buildAcpProviderConfigPatch(entry));
-        await refresh([entry.id]);
-      } catch (error) {
-        Alert.alert(
-          t("settings.providers.addErrorTitle"),
-          error instanceof Error ? error.message : String(error),
-        );
-      } finally {
-        setInstallingProviderId((current) => (current === entry.id ? null : current));
-      }
+  const handleOpenCatalog = useCallback(() => setIsCatalogOpen(true), []);
+  const handleCloseCatalog = useCallback(() => setIsCatalogOpen(false), []);
+  const handleProviderAdded = useCallback(
+    (providerId: string) => {
+      setIsCatalogOpen(false);
+      onSelectProvider(providerId);
     },
-    [installingProviderId, patchConfig, refresh, t],
+    [onSelectProvider],
+  );
+
+  const canAddProvider = hasServer && isConnected;
+  const addProviderButton = useMemo(
+    () =>
+      canAddProvider ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={Plus}
+          onPress={handleOpenCatalog}
+          accessibilityLabel={t("settings.providers.addProvider")}
+          testID="providers-add-button"
+        />
+      ) : null,
+    [canAddProvider, handleOpenCatalog, t],
   );
 
   return (
     <>
       <SettingsSection
         title={t("settings.providers.title")}
+        trailing={addProviderButton}
         testID="host-page-providers-card"
         style={styles.sectionSpacing}
       >
@@ -478,18 +483,13 @@ export function ProvidersSection({
         ) : null}
       </SettingsSection>
 
-      {hasServer && isConnected ? (
-        <SettingsSection
-          title={t("settings.providers.addProvider")}
-          testID="host-page-add-provider-card"
-          style={styles.addProviderSection}
-        >
-          <ProviderCatalogList
-            serverId={serverId}
-            installingProviderId={installingProviderId}
-            onInstall={handleInstall}
-          />
-        </SettingsSection>
+      {canAddProvider ? (
+        <ProviderCatalogDialog
+          serverId={serverId}
+          visible={isCatalogOpen}
+          onClose={handleCloseCatalog}
+          onAdded={handleProviderAdded}
+        />
       ) : null}
     </>
   );
@@ -498,9 +498,6 @@ export function ProvidersSection({
 const styles = StyleSheet.create((theme) => ({
   sectionSpacing: {
     marginBottom: theme.spacing[4],
-  },
-  addProviderSection: {
-    marginTop: theme.spacing[4],
   },
   emptyCard: {
     padding: theme.spacing[4],

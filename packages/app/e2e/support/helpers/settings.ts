@@ -426,19 +426,30 @@ export async function serveJson(page: Page, url: string, body: unknown): Promise
   });
 }
 
-export async function openAddProviderArea(page: Page): Promise<void> {
-  await page.getByTestId("host-page-add-provider-card").scrollIntoViewIfNeeded();
+function providerCatalogDialog(page: Page) {
+  return page.getByTestId("provider-catalog-dialog").filter({ visible: true });
+}
+
+// ACP 目录在 Providers 列表标题右侧「+」打开的弹窗里。
+export async function openProviderCatalog(page: Page): Promise<void> {
+  await page.getByTestId("providers-add-button").filter({ visible: true }).click();
+  await expect(providerCatalogDialog(page)).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Search providers" })).toBeVisible();
 }
 
+// 紧凑端的 testID 只在 sheet 头部，目录内容按可见性找，不按弹窗限定。
 export async function findAcpCatalogProvider(page: Page, providerName: string): Promise<void> {
   await page.getByRole("textbox", { name: "Search providers" }).fill(providerName);
-  await expect(page.getByText(providerName, { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(providerName, { exact: true }).filter({ visible: true }),
+  ).toBeVisible();
 }
 
+// 搜索后只剩这一条，添加成功后弹窗关闭。
 export async function installAcpCatalogProvider(page: Page, providerName: string): Promise<void> {
   await findAcpCatalogProvider(page, providerName);
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).filter({ visible: true }).click();
+  await expect(providerCatalogDialog(page)).toHaveCount(0);
 }
 
 export async function expectProviderInstalledInSettings(

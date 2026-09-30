@@ -6,7 +6,7 @@ import { getServerId } from "../support/helpers/server-id";
 import {
   expectProviderInstalledInSettings,
   installAcpCatalogProvider,
-  openAddProviderArea,
+  openProviderCatalog,
   openSettingsHost,
   openSettingsHostSection,
 } from "../support/helpers/settings";
@@ -72,7 +72,7 @@ test.describe("provider removal", () => {
       await openSettingsHostSection(page, getServerId(), "providers");
 
       await expect(page.getByTestId("provider-actions-claude")).toHaveCount(0);
-      await openAddProviderArea(page);
+      await openProviderCatalog(page);
       await installAcpCatalogProvider(page, CUSTOM_PROVIDER.name);
       await expectProviderInstalledInSettings(page, CUSTOM_PROVIDER.name);
       await expectProviderSource(client, "custom");

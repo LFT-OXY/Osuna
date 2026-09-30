@@ -10,11 +10,11 @@
 **Blocked by:** 02
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] Providers 页不再有「添加 Provider」一节；列表标题右侧的「+」打开目录弹窗。
-- [ ] 弹窗头部搜索能过滤目录。
-- [ ] 添加成功后弹窗关闭，列表出现并选中新提供方（手机上推入它的详情）。
-- [ ] 添加失败时弹窗内显示可见错误，弹窗保持打开，可以重试。组件测试覆盖成功和失败。
-- [ ] 更新 `acp-provider-catalog` e2e 和设置页 e2e 辅助函数，改走「+」弹窗。
-- [ ] `npm run typecheck`、`npm run lint`、改动涉及的测试文件都通过。
+- [x] Providers 页不再有「添加 Provider」一节；列表标题右侧的「+」打开目录弹窗。
+- [x] 弹窗头部搜索能过滤目录。
+- [x] 添加成功后弹窗关闭，列表出现并选中新提供方（手机上推入它的详情）。
+- [x] 添加失败时弹窗内显示可见错误，弹窗保持打开，可以重试。组件测试覆盖成功和失败。
+- [x] 更新 `acp-provider-catalog` e2e 和设置页 e2e 辅助函数，改走「+」弹窗。
+- [x] `npm run typecheck`、`npm run lint`、改动涉及的测试文件都通过。

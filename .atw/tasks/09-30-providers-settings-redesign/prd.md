@@ -183,6 +183,10 @@
 
 - 用 AdaptiveModalSheet（桌面居中卡片宽 520，紧凑是底部 sheet），标题沿用 `providerCatalog.title`，搜索放在弹窗头部，占位「搜索 providers」。内容是现有目录列表的行，目录列表原来自带的搜索框改为读取弹窗头部的查询。
 - 添加进行中沿用「正在添加」加 spinner。成功后关闭弹窗，并导航到新提供方的子路由（宽屏 replace，栈式 push）。失败时在弹窗内容顶部显示可见错误，弹窗不关闭。
+- 弹窗是 `screens/settings/provider-catalog-dialog.tsx` 的 `ProviderCatalogDialog`，自己持有配置写入和快照刷新；列表只管开关弹窗，`onAdded` 里关弹窗再走 `onSelectProvider`。「+」和弹窗只在主机已连接时出现，与原来整节的显示条件一致。
+- 错误是 Alert error：标题复用 `settings.providers.addErrorTitle`，描述是错误原文。重试或关闭弹窗时清掉。
+- 添加成功的判定是配置写入成功。导航前先等快照刷新，让新提供方先进列表，否则两种布局的地址修正会把它当成不存在的提供方；刷新失败不算添加失败，照常关闭并导航，列表随 daemon 的快照推送补上。
+- 添加进行中关掉弹窗，丢弃这次的结果：不导航，也不把错误留给下次打开。
 
 ### composer 齿轮入口
 

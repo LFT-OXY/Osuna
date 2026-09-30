@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ExternalLink, PackagePlus, Search } from "lucide-react-native";
+import { ExternalLink, PackagePlus } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
-import { isWeb } from "@/constants/platform";
 import {
   useAcpProviderCatalog,
   type AcpProviderCatalogItem,
@@ -14,10 +13,11 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
-import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 
 interface ProviderCatalogListProps {
   serverId: string;
+  // 搜索框在弹窗头部，列表只按它的查询过滤。
+  query: string;
   installingProviderId: string | null;
   onInstall: (entry: AcpProviderCatalogItem) => Promise<void> | void;
 }
@@ -26,11 +26,7 @@ const PROVIDER_REMOTE_ICON_SIZE = ICON_SIZE.lg;
 
 const ThemedPackagePlus = withUnistyles(PackagePlus);
 const ThemedSvgXml = withUnistyles(SvgXml);
-const ThemedSearch = withUnistyles(Search);
 const ThemedExternalLink = withUnistyles(ExternalLink);
-const ThemedTextInput = withUnistyles(TextInput, (theme) => ({
-  placeholderTextColor: theme.colors.foregroundMuted,
-}));
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({
@@ -122,13 +118,13 @@ function CatalogRow({ entry, installing, isFirst, onInstall }: CatalogRowProps) 
 
 export function ProviderCatalogList({
   serverId,
+  query,
   installingProviderId,
   onInstall,
 }: ProviderCatalogListProps) {
   const { t } = useTranslation();
   const { entries: catalogEntries } = useAcpProviderCatalog();
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
-  const [search, setSearch] = useState("");
 
   const installedIds = useMemo(
     () => new Set(providerEntries?.map((entry) => entry.provider) ?? []),
@@ -139,29 +135,12 @@ export function ProviderCatalogList({
     () =>
       catalogEntries
         .filter((entry) => !installedIds.has(entry.id))
-        .filter((entry) => matchesSearch(entry, search)),
-    [catalogEntries, installedIds, search],
+        .filter((entry) => matchesSearch(entry, query)),
+    [catalogEntries, installedIds, query],
   );
 
   return (
     <View>
-      <View style={styles.searchField}>
-        <View style={styles.searchIcon}>
-          <ThemedSearch size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />
-        </View>
-        <ThemedTextInput
-          testID="provider-catalog-search"
-          initialValue={search}
-          onChangeText={setSearch}
-          accessibilityLabel={t("providerCatalog.search")}
-          placeholder={t("providerCatalog.search")}
-          // @ts-expect-error - outlineStyle is web-only
-          style={[styles.searchInput, isWeb && { outlineStyle: "none" }]}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
-
       {availableEntries.length === 0 ? (
         <View style={styles.stateBox}>
           <Text style={styles.stateText}>{t("providerCatalog.noProviders")}</Text>
@@ -184,28 +163,6 @@ export function ProviderCatalogList({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  searchField: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    backgroundColor: theme.colors.surface2,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.borderInput,
-    paddingHorizontal: theme.spacing[3],
-    marginBottom: theme.spacing[3],
-  },
-  searchIcon: {
-    width: 18,
-    alignItems: "center",
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: theme.spacing[2],
-    color: theme.colors.foreground,
-    ...theme.typeScale.body,
-  },
   textColumn: {
     flex: 1,
     minWidth: 0,

@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-const { theme, snapshotState, configState, patchConfigMock, selectProviderMock } = vi.hoisted(
-  () => ({
+const { theme, snapshotState, configState, patchConfigMock, refreshMock, selectProviderMock } =
+  vi.hoisted(() => ({
     theme: {
       spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
       iconSize: { sm: 14, md: 20 },
@@ -53,10 +53,10 @@ const { theme, snapshotState, configState, patchConfigMock, selectProviderMock }
     configState: {
       config: null as MutableDaemonConfig | null,
     },
-    patchConfigMock: vi.fn(async () => undefined),
+    patchConfigMock: vi.fn(async (_patch: unknown) => undefined),
+    refreshMock: vi.fn(async (_providers?: string[]) => undefined),
     selectProviderMock: vi.fn(),
-  }),
-);
+  }));
 
 vi.mock("react-native", () => ({
   Platform: {
@@ -145,6 +145,7 @@ vi.mock("lucide-react-native", () => {
     ExternalLink: icon("ExternalLink"),
     Info: icon("Info"),
     MoreHorizontal: icon("MoreHorizontal"),
+    PackagePlus: icon("PackagePlus"),
     Pencil: icon("Pencil"),
     Plus: icon("Plus"),
     Trash2: icon("Trash2"),
@@ -167,7 +168,14 @@ vi.mock("react-i18next", () => ({
           "settings.providers.statuses.apiEndpoint": "API endpoint: {{name}}",
           "settings.providers.models.one": "1 model",
           "settings.providers.models.many": "{{count}} models",
+          "settings.providers.addProvider": "Add provider",
           "settings.providers.addErrorTitle": "Unable to add provider",
+          "providerCatalog.title": "Add provider",
+          "providerCatalog.search": "Search providers",
+          "providerCatalog.noProviders": "No providers found",
+          "providerCatalog.actions.add": "Add",
+          "providerCatalog.actions.adding": "Adding",
+          "providerCatalog.actions.installInstructions": "Install instructions",
           "settings.providers.updateErrorTitle": "Unable to update provider",
           "settings.providers.actions.menu": "{{name}} actions",
           "settings.providers.actions.remove": "Remove provider",
@@ -291,8 +299,46 @@ vi.mock("@/components/provider-icons", () => ({
     React.createElement("span", { "data-icon": `provider-${provider}` }),
 }));
 
-vi.mock("@/components/provider-catalog-list", () => ({
-  ProviderCatalogList: () => null,
+// 目录行的图标与安装链接不在断言范围内。
+vi.mock("react-native-svg", () => ({
+  SvgXml: () => React.createElement("span", { "data-icon": "catalog-svg" }),
+}));
+
+vi.mock("@/utils/open-external-url", () => ({
+  openExternalUrl: vi.fn(async () => undefined),
+}));
+
+// 真实的底部 sheet / 居中卡片依赖原生手势与动画，这里只保留标题、头部搜索和内容。
+vi.mock("@/components/adaptive-modal-sheet", () => ({
+  AdaptiveModalSheet: ({
+    header,
+    visible,
+    children,
+    onClose,
+    testID,
+  }: {
+    header: { title: string; search?: { onChange: (value: string) => void; placeholder?: string } };
+    visible: boolean;
+    children?: React.ReactNode;
+    onClose: () => void;
+    testID?: string;
+  }) =>
+    visible
+      ? React.createElement(
+          "div",
+          { role: "dialog", "data-testid": testID },
+          React.createElement("h2", null, header.title),
+          header.search
+            ? React.createElement("input", {
+                "aria-label": header.search.placeholder,
+                onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+                  header.search?.onChange(event.target.value),
+              })
+            : null,
+          React.createElement("button", { type: "button", onClick: onClose }, "Close"),
+          children,
+        )
+      : null,
 }));
 
 vi.mock("@/hooks/use-providers-snapshot", () => ({
@@ -303,7 +349,7 @@ vi.mock("@/hooks/use-providers-snapshot", () => ({
     isRefreshing: snapshotState.isRefreshing,
     error: null,
     supportsSnapshot: true,
-    refresh: vi.fn(async () => {}),
+    refresh: refreshMock,
     refetchIfStale: vi.fn(),
   }),
 }));
@@ -328,8 +374,19 @@ vi.mock("@/utils/confirm-dialog", () => ({
   confirmDialog: vi.fn(async () => true),
 }));
 
+import {
+  buildAcpProviderConfigPatch,
+  getAcpProviderCatalog,
+} from "@/hooks/use-acp-provider-catalog";
 import { ProvidersSection } from "./providers-section";
 import type { ProvidersLayout } from "./providers-layout";
+
+const catalog = getAcpProviderCatalog();
+const minimax = (() => {
+  const entry = catalog.find((candidate) => candidate.id === "minimax-code");
+  if (!entry) throw new Error("Expected MiniMax Code in the ACP catalog");
+  return entry;
+})();
 
 const claudeEntry: ProviderSnapshotEntry = {
   provider: "claude",
@@ -425,6 +482,8 @@ describe("ProvidersSection", () => {
     configState.config = null;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
+    refreshMock.mockReset();
+    refreshMock.mockResolvedValue(undefined);
     selectProviderMock.mockReset();
   });
 
@@ -707,5 +766,174 @@ describe("ProvidersSection", () => {
     expect(patchConfigMock).toHaveBeenCalledWith({
       providers: { claude: { enabled: false } },
     });
+  });
+
+  function findCatalogDialog(): HTMLElement | null {
+    return container?.querySelector<HTMLElement>('[data-testid="provider-catalog-dialog"]') ?? null;
+  }
+
+  function requireCatalogDialog(): HTMLElement {
+    const dialog = findCatalogDialog();
+    if (!dialog) throw new Error("Expected the catalog dialog to be open");
+    return dialog;
+  }
+
+  function click(element: HTMLElement): void {
+    element.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  }
+
+  function openCatalogDialog(): HTMLElement {
+    const addButton = container?.querySelector<HTMLElement>(
+      '[role="button"][aria-label="Add provider"]',
+    );
+    if (!addButton) throw new Error("Expected the Add provider button in the list header");
+    act(() => click(addButton));
+    return requireCatalogDialog();
+  }
+
+  function findCatalogAddButton(providerId: string): HTMLElement | null {
+    return (
+      findCatalogDialog()?.querySelector<HTMLElement>(
+        `[data-testid="install-provider-${providerId}"]`,
+      ) ?? null
+    );
+  }
+
+  async function pressAddInCatalog(): Promise<void> {
+    const addButton = findCatalogAddButton(minimax.id);
+    if (!addButton) throw new Error("Expected the catalog entry's Add button");
+    await act(async () => click(addButton));
+  }
+
+  function closeCatalogDialog(): void {
+    const closeButton = Array.from(
+      requireCatalogDialog().querySelectorAll<HTMLElement>("button"),
+    ).find((button) => button.textContent === "Close");
+    if (!closeButton) throw new Error("Expected the dialog close button");
+    act(() => click(closeButton));
+  }
+
+  function deferPatch(): () => Promise<void> {
+    let resolvePatch: () => void = () => {};
+    patchConfigMock.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolvePatch = () => resolve(undefined);
+        }),
+    );
+    return async () => {
+      await act(async () => resolvePatch());
+    };
+  }
+
+  it("opens the ACP catalog from the list header instead of an Add provider section", () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+
+    render();
+
+    expect(findCatalogDialog()).toBeNull();
+    expect(container?.textContent).not.toContain("Add provider");
+
+    const dialog = openCatalogDialog();
+
+    expect(dialog.querySelector("h2")?.textContent).toBe("Add provider");
+    expect(findCatalogAddButton(minimax.id)).not.toBeNull();
+  });
+
+  it("filters the catalog with the dialog header search", () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+
+    render();
+    const dialog = openCatalogDialog();
+    const otherEntry = catalog.find((entry) => entry.id !== minimax.id);
+    if (!otherEntry) throw new Error("Expected more than one ACP catalog entry");
+    expect(findCatalogAddButton(otherEntry.id)).not.toBeNull();
+
+    const search = dialog.querySelector<HTMLInputElement>('input[aria-label="Search providers"]');
+    if (!search) throw new Error("Expected the search field in the dialog header");
+    act(() => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setValue?.call(search, "MiniMax Code");
+      search.dispatchEvent(new window.Event("input", { bubbles: true }));
+    });
+
+    expect(findCatalogAddButton(minimax.id)).not.toBeNull();
+    expect(findCatalogAddButton(otherEntry.id)).toBeNull();
+  });
+
+  it("adds the provider, closes the dialog, then selects the new provider", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+    const resolvePatch = deferPatch();
+
+    render();
+    openCatalogDialog();
+    await pressAddInCatalog();
+
+    expect(patchConfigMock).toHaveBeenCalledWith(buildAcpProviderConfigPatch(minimax));
+    expect(findCatalogAddButton(minimax.id)?.textContent).toContain("Adding");
+    expect(selectProviderMock).not.toHaveBeenCalled();
+
+    await resolvePatch();
+
+    expect(refreshMock).toHaveBeenCalledWith([minimax.id]);
+    expect(findCatalogDialog()).toBeNull();
+    expect(selectProviderMock).toHaveBeenCalledTimes(1);
+    expect(selectProviderMock).toHaveBeenCalledWith(minimax.id);
+  });
+
+  // 真实 daemon 无法稳定造出配置写入失败，失败路径只在这里覆盖（docs/testing.md）。
+  it("keeps the dialog open with a visible error when adding fails, and lets you retry", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+    patchConfigMock.mockRejectedValueOnce(new Error("config.json is read-only"));
+
+    render();
+    openCatalogDialog();
+    await pressAddInCatalog();
+
+    const dialogText = requireCatalogDialog().textContent;
+    expect(dialogText).toContain("Unable to add provider");
+    expect(dialogText).toContain("config.json is read-only");
+    expect(findCatalogAddButton(minimax.id)?.textContent).not.toContain("Adding");
+    expect(selectProviderMock).not.toHaveBeenCalled();
+
+    await pressAddInCatalog();
+
+    expect(patchConfigMock).toHaveBeenCalledTimes(2);
+    expect(findCatalogDialog()).toBeNull();
+    expect(selectProviderMock).toHaveBeenCalledWith(minimax.id);
+  });
+
+  it("treats the provider as added when only the snapshot refresh fails", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+    refreshMock.mockRejectedValueOnce(new Error("snapshot timed out"));
+
+    render();
+    openCatalogDialog();
+    await pressAddInCatalog();
+
+    expect(findCatalogDialog()).toBeNull();
+    expect(selectProviderMock).toHaveBeenCalledWith(minimax.id);
+  });
+
+  it("drops the result of an add that was still running when the dialog closed", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+    const resolvePatch = deferPatch();
+
+    render();
+    openCatalogDialog();
+    await pressAddInCatalog();
+    closeCatalogDialog();
+    await resolvePatch();
+
+    expect(selectProviderMock).not.toHaveBeenCalled();
+    openCatalogDialog();
+    expect(requireCatalogDialog().textContent).not.toContain("Unable to add provider");
+    expect(findCatalogAddButton(minimax.id)?.textContent).not.toContain("Adding");
   });
 });
