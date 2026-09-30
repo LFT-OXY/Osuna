@@ -182,6 +182,11 @@ import {
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
 import { createUsageSession, type UsageSession } from "./session/usage/usage-session.js";
 import type { UsageService } from "./usage/service.js";
+import type { ApiEndpointService } from "./api-endpoints/service.js";
+import {
+  createApiEndpointSession,
+  type ApiEndpointSession,
+} from "./session/api-endpoint/api-endpoint-session.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
@@ -470,6 +475,7 @@ export interface SessionOptions {
   filesystem?: SessionFileSystem;
   scheduleService: ScheduleService;
   usageService?: UsageService;
+  apiEndpointService?: ApiEndpointService;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -780,6 +786,7 @@ export class Session {
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
   private readonly usageSession: UsageSession | null;
+  private readonly apiEndpointSession: ApiEndpointSession | null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
@@ -818,6 +825,7 @@ export class Session {
       filesystem,
       scheduleService,
       usageService,
+      apiEndpointService,
       checkoutDiffManager,
       github,
       renameCurrentBranch,
@@ -958,6 +966,11 @@ export class Session {
     this.usageSession = createUsageSession({
       host: { emit: (msg) => this.emit(msg) },
       usageService,
+      logger: this.sessionLogger,
+    });
+    this.apiEndpointSession = createApiEndpointSession({
+      host: { emit: (msg) => this.emit(msg) },
+      service: apiEndpointService,
       logger: this.sessionLogger,
     });
     this.providerCatalogSession = new ProviderCatalogSession({
@@ -3038,6 +3051,28 @@ export class Session {
       case "usage.agent.turns.list.request":
         await this.handleUsageRequest(msg);
         return;
+      case "provider.api_endpoint.list.request":
+      case "provider.api_endpoint.save.request":
+      case "provider.api_endpoint.delete.request":
+      case "provider.api_endpoint.set_active.request":
+      case "provider.api_endpoint.fetch_models.request":
+      case "provider.api_endpoint.test_connection.request":
+      case "provider.api_endpoint.cancel.request":
+        if (!this.apiEndpointSession) {
+          // 没声明 apiEndpoints 能力的 daemon 明确拒绝，而不是沉默。
+          this.emit({
+            type: "rpc_error",
+            payload: {
+              requestId: msg.requestId,
+              requestType: msg.type,
+              error: "API endpoints are not available on this daemon",
+              code: "api_endpoints_unavailable",
+            },
+          });
+          return;
+        }
+        await this.apiEndpointSession.handle(msg, this.delivery.requestSignal);
+        return;
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
         return;
@@ -4443,9 +4478,20 @@ export class Session {
       const effectiveOverrides = matched
         ? { ...buildConfigOverrides(matched.record), ...overrides }
         : overrides;
+      // 恢复成新 id，AgentManager 查不到原记录，创建时的模式由这里带过去。
+      let resumeOptions: { apiEndpointId: string | null } | undefined;
+      if (matched) {
+        const apiEndpointId = matched.record.apiEndpointId ?? null;
+        resumeOptions = { apiEndpointId };
+      }
       let snapshot: ManagedAgent;
       try {
-        snapshot = await this.agentManager.resumeAgentFromPersistence(handle, effectiveOverrides);
+        snapshot = await this.agentManager.resumeAgentFromPersistence(
+          handle,
+          effectiveOverrides,
+          undefined,
+          resumeOptions,
+        );
       } catch (error) {
         if (matched?.didUnarchive && matched.originalArchivedAt) {
           await this.agentManager.archiveSnapshot(matched.record.id, matched.originalArchivedAt);
@@ -8470,6 +8516,7 @@ export class Session {
       this.unsubscribeTerminalWorkspaceContributionEvents = null;
     }
     this.providerCatalogSession.dispose();
+    this.apiEndpointSession?.dispose();
 
     this.terminalController.dispose();
 

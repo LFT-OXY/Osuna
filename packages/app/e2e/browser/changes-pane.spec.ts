@@ -1843,11 +1843,14 @@ async function changeCodeTypographyFromSettings(
   await page.getByTestId("sidebar-settings").click();
   await expect(page).toHaveURL(new RegExp(`${buildSettingsSectionRoute("general")}|/settings$`));
   await page.getByRole("button", { name: "Appearance" }).click();
-  await page.getByLabel("Code font family").fill(typography.fontFamily);
-  await page.getByLabel("Code font family").press("Enter");
+  await page.getByLabel("Code font family: System default", { exact: true }).click();
+  await page.getByPlaceholder("Search fonts").fill(typography.fontFamily);
+  await page.getByTestId("font-picker-custom-option").click();
   await page.getByLabel("Code font size").fill(String(typography.fontSize));
   await page.getByLabel("Code font size").press("Enter");
-  await expect(page.getByLabel("Code font family")).toHaveValue(typography.fontFamily);
+  await expect(
+    page.getByLabel(`Code font family: ${typography.fontFamily}`, { exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel("Code font size")).toHaveValue(String(typography.fontSize));
   await expectStoredCodeFontSize(page, typography.fontSize);
 }

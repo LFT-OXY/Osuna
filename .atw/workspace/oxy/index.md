@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~588 | Active |
+| `journal-1.md` | ~600 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -31,6 +31,7 @@
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
 | 22 | 2026-09-30 | 多智能体协作票 13：provider 子智能体权限归属与验收归档 | `ecbcc7c36` | `feat/multi-agent-collab` |
+| 20 | 2026-09-30 | 提供方安装指引 | `bbb132e50` | `main` |
 | 19 | 2026-09-30 | 工单 05：Skill block 取代 Skill chip；手动验收修复，任务归档 | `6da8e5994`, `cb631fc83`, `0b6b6ff34`, `cccdc40df` | `feat/multi-agent-collab` |
 | 18 | 2026-09-29 | Pi 思考档位按 thinkingLevelMap 过滤 | `c1c21c76d` | `main` |
 | 17 | 2026-09-29 | 桌面端更新：设置 → 关于对齐新流程（06）并完成验收归档 | `c1f3e9f7a` | `main` |

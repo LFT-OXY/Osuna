@@ -693,6 +693,58 @@ describe("schedule form model", () => {
     });
   });
 
+  it("keeps an edited schedule's saved model even when an authoritative list lacks it", () => {
+    const edit = open({
+      mode: "edit",
+      schedule: scheduleOnHost({
+        serverId: "host-a",
+        serverName: "Host A",
+        cwd: "/repo/a",
+        model: "official-only-model",
+      }),
+      defaults: { serverId: null, projectTargets: PROJECT_TARGETS, preferences: {} },
+    });
+    const [entry] = providerSnapshot(ALL_MODELS).entries;
+    edit.applyProviderSnapshot("host-a", {
+      entries: [{ ...entry!, isModelListAuthoritative: true }],
+    });
+
+    expect(edit.getState()).toMatchObject({
+      selectedModel: "official-only-model",
+      shouldRememberSelectedModel: true,
+    });
+  });
+
+  it("uses the endpoint's default instead of a remembered model an authoritative list lacks", () => {
+    const create = open({
+      mode: "create",
+      defaults: { serverId: "host-a", projectTargets: PROJECT_TARGETS, preferences: {} },
+    });
+    const [entry] = providerSnapshot(ALL_MODELS).entries;
+    create.applyProviderSnapshot("host-a", {
+      entries: [{ ...entry!, isModelListAuthoritative: true }],
+    });
+
+    applyPreferences(create, {
+      provider: "mock",
+      providerPreferences: { mock: { model: "official-only-model" } },
+    });
+
+    // 回退出来的模型不写回偏好，官方模式下记住的模型保留。
+    expect(create.getState()).toMatchObject({
+      selectedProvider: "mock",
+      selectedModel: "model-a",
+      shouldRememberSelectedModel: false,
+    });
+
+    // 手动选的模型照常记下。
+    create.setModel("mock", "model-b");
+    expect(create.getState()).toMatchObject({
+      selectedModel: "model-b",
+      shouldRememberSelectedModel: true,
+    });
+  });
+
   it("hydrates late create preferences without overwriting user changes or edited schedules", () => {
     const savedPreferences: FormPreferences = {
       provider: "mock",

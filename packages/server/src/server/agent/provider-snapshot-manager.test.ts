@@ -1,6 +1,7 @@
 import pino from "pino";
-import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import type { ProviderEvent, ProviderRegistration } from "@getpaseo/plugin/server/provider";
 
@@ -22,6 +23,7 @@ import {
   resolveSnapshotCwd,
 } from "./provider-snapshot-manager.js";
 import { OpenCodeAgentClient } from "./providers/opencode-agent.js";
+import { ClaudeAgentClient } from "./providers/claude/agent.js";
 
 const TEST_CAPABILITIES = {
   supportsStreaming: false,
@@ -163,6 +165,118 @@ describe("ProviderSnapshotManager public surface", () => {
       expect(claude.models).toEqual([{ ...first, provider: "claude" }]);
     } finally {
       manager.destroy();
+    }
+  });
+
+  test("a model override replaces the whole catalog until a refresh finds it cleared", async () => {
+    const official = { provider: "claude", id: "claude-opus-5-5", label: "Opus", isDefault: true };
+    // 第三方模式下 settings.json 的 env 里写着接口的模型，Claude 目录会把它们追加进来。
+    const fromSettings = {
+      provider: "claude",
+      id: "relay/haiku",
+      label: "relay/haiku",
+      description: "From Claude settings.json env.ANTHROPIC_MODEL",
+    };
+    let override: AgentModelDefinition[] | null = [
+      { provider: "claude", id: "relay/sonnet", label: "Relay Sonnet", isDefault: false },
+      { provider: "claude", id: "relay/haiku", label: "relay/haiku", isDefault: true },
+    ];
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      modelOverride: (provider) => (provider === "claude" ? override : null),
+      extraClients: {
+        claude: createExtraClient("claude", {
+          isAvailable: async () => true,
+          fetchCatalog: async () => ({ models: [official, fromSettings], modes: [] }),
+          resolveConfiguredModel: (model) => ({
+            ...model,
+            thinkingOptions: [{ id: "high", label: "High" }],
+          }),
+        }),
+        codex: createExtraClient("codex", {
+          isAvailable: async () => true,
+          fetchCatalog: async () => ({
+            models: [{ provider: "codex", id: "gpt-5.4-mini", label: "GPT", isDefault: true }],
+            modes: [],
+          }),
+        }),
+      },
+    });
+    try {
+      const claude = await manager.getProvider({ provider: "claude", wait: true });
+      expect(claude.models).toEqual([
+        {
+          provider: "claude",
+          id: "relay/sonnet",
+          label: "Relay Sonnet",
+          isDefault: false,
+          thinkingOptions: [{ id: "high", label: "High" }],
+        },
+        {
+          provider: "claude",
+          id: "relay/haiku",
+          label: "relay/haiku",
+          isDefault: true,
+          thinkingOptions: [{ id: "high", label: "High" }],
+        },
+      ]);
+      expect(claude.isModelListAuthoritative).toBe(true);
+      const codex = await manager.getProvider({ provider: "codex", wait: true });
+      expect(codex.models?.map((model) => model.id)).toEqual(["gpt-5.4-mini"]);
+      expect(codex.isModelListAuthoritative).toBeUndefined();
+
+      override = null;
+      await manager.refreshSettingsSnapshot({ providers: ["claude"] });
+      const restored = await manager.getProvider({ provider: "claude", wait: true });
+      expect(restored.models).toEqual([official, fromSettings]);
+      expect(restored.isModelListAuthoritative).toBeUndefined();
+    } finally {
+      manager.destroy();
+    }
+  });
+
+  test("the override leaves no rows from the Claude settings.json the endpoint rewrote", async () => {
+    // 启用接口后 settings.json 里写着接口的模型；真实的 Claude 目录会把它们追加进来。
+    const configDir = await mkdtemp(join(tmpdir(), "paseo-snapshot-claude-"));
+    await writeFile(
+      join(configDir, "settings.json"),
+      JSON.stringify({
+        env: { ANTHROPIC_MODEL: "relay/haiku", ANTHROPIC_DEFAULT_OPUS_MODEL: "relay/sonnet" },
+      }),
+    );
+    // 不运行 claude：版本注入，可用性直接视为已安装。
+    class InstalledClaudeClient extends ClaudeAgentClient {
+      override async isAvailable(): Promise<boolean> {
+        return true;
+      }
+    }
+    const claude = new InstalledClaudeClient({
+      logger: createTestLogger(),
+      configDir,
+      resolveVersion: async () => "2.1.0",
+    });
+    let override: AgentModelDefinition[] | null = null;
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      modelOverride: (provider) => (provider === "claude" ? override : null),
+      extraClients: { claude },
+    });
+    try {
+      const official = await manager.getProvider({ provider: "claude", wait: true });
+      const officialIds = official.models?.map((model) => model.id) ?? [];
+      expect(officialIds).toEqual(expect.arrayContaining(["relay/haiku", "relay/sonnet"]));
+      expect(officialIds.length).toBeGreaterThan(2);
+
+      override = [
+        { provider: "claude", id: "relay/sonnet", label: "relay/sonnet", isDefault: false },
+        { provider: "claude", id: "relay/haiku", label: "relay/haiku", isDefault: true },
+      ];
+      await manager.refreshSettingsSnapshot({ providers: ["claude"] });
+      const relay = await manager.getProvider({ provider: "claude", wait: true });
+      expect(relay.models?.map((model) => model.id)).toEqual(["relay/sonnet", "relay/haiku"]);
+    } finally {
+      manager.destroy();
+      await rm(configDir, { recursive: true, force: true });
     }
   });
 

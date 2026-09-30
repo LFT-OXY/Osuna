@@ -247,6 +247,18 @@ export const fr: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "Cette session a été créée avec l'endpoint d'API {{created}}, mais le mode actuel est Officiel. Elle risque de ne pas pouvoir continuer.",
+      deletedToOfficial:
+        "Cette session a été créée avec un endpoint d'API supprimé depuis, mais le mode actuel est Officiel. Elle risque de ne pas pouvoir continuer.",
+      officialToEndpoint:
+        "Cette session a été créée en mode Officiel, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
+      endpointToEndpoint:
+        "Cette session a été créée avec l'endpoint d'API {{created}}, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
+      deletedToEndpoint:
+        "Cette session a été créée avec un endpoint d'API supprimé depuis, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
+    },
     empty: "Commencez à discuter avec cet agent...",
     scrollToBottom: "Faire défiler vers le bas",
     historyLoadFailed: "Impossible de charger l’historique de l’agent",
@@ -2923,6 +2935,126 @@ export const fr: TranslationResources = {
         failedToFetch: "Échec de la récupération du diagnostic",
         unknownError: "Erreur inconnue",
       },
+      install: {
+        howTo: "Comment installer",
+        howToFor: "Comment installer {{name}}",
+        title: "Installer {{name}}",
+        hostHint: "À exécuter sur la machine où tourne le daemon Osuna",
+        choosePlatform: "Choisissez le système d'exploitation de l'hôte",
+        copy: "Copier",
+        copyAccessibility: "Copier {{command}}",
+        copyLabel: "commande",
+        copyFailed: "Impossible de copier la commande",
+        docs: "Documentation officielle",
+        docsFor: "Documentation officielle de {{name}}",
+      },
+      apiEndpoints: {
+        title: "Endpoint d'API",
+        add: "Ajouter",
+        addAccessibility: "Ajouter un endpoint d'API",
+        loading: "Chargement des endpoints d'API…",
+        loadFailed: "Impossible de charger les endpoints d'API",
+        official: "Officiel",
+        officialHint: "La configuration propre à {{name}}, en général votre abonnement",
+        inUse: "Utilisé",
+        use: "Utiliser",
+        useAccessibility: "Utiliser {{name}}",
+        editAccessibility: "Modifier {{name}}",
+        deleteAccessibility: "Supprimer {{name}}",
+        modelCount_one: "{{count}} modèle",
+        modelCount_other: "{{count}} modèles",
+        switchTitle: "Basculer {{provider}} vers {{name}} ?",
+        switchOfficialTitle: "Remettre {{provider}} sur Officiel ?",
+        switchMessage: "Cela réécrit le fichier de configuration de {{provider}}.",
+        switchConfirm: "Basculer",
+        delete: "Supprimer",
+        deleteTitle: "Supprimer {{name}} ?",
+        deleteMessage: "Son URL, sa clé d'API et ses modèles sont supprimés de cet hôte.",
+        deleteActiveMessage:
+          "Il est utilisé : {{provider}} repasse d'abord sur Officiel, puis il est supprimé.",
+        saveActiveTitle: "Enregistrer les modifications de {{name}} ?",
+        saveActiveMessage:
+          "Il est utilisé : le fichier de configuration de {{provider}} est réécrit tout de suite avec les modifications.",
+        saveActiveConfirm: "Enregistrer",
+        impact: {
+          sessions:
+            "Sessions {{provider}} en cours qui passent tout de suite à la nouvelle configuration : {{count}}",
+          sessionsMaybe: "Sessions {{provider}} en cours qui peuvent être affectées : {{count}}",
+          noSessions: "Aucune session {{provider}} en cours.",
+          terminal: "{{provider}} dans votre terminal bascule aussi.",
+        },
+        codexVersionUnsupported:
+          "Mettez à jour Codex vers la version 0.118.0 ou ultérieure pour utiliser un endpoint d'API.",
+        configUnparsable:
+          "Le fichier de configuration de {{provider}} n'a pas pu être analysé ; rien n'a été modifié.",
+        configConflict:
+          "Le fichier de réglages de {{provider}} a changé en continu pendant qu'Osuna l'écrivait, donc rien n'a été modifié. Réessayez.",
+        health: {
+          modifiedExternally:
+            "Le fichier de réglages de {{provider}} a été modifié en dehors d'Osuna",
+          unparsable:
+            "Le fichier de réglages de {{provider}} est illisible. Osuna n'y écrira pas tant qu'il n'est pas corrigé.",
+          codexProfileOverride:
+            "Un profil Codex remplace l'endpoint d'API, donc le changement risque de ne pas s'appliquer. Retirez model_provider et model de ce profil, ou ne le sélectionnez plus.",
+          officialTarget: "Les réglages propres de {{provider}} pointent vers {{url}}",
+          reapply: "Réappliquer",
+          switchToOfficial: "Revenir à Officiel",
+          reapplyTitle: "Réappliquer {{name}} à {{provider}} ?",
+          reapplyMessage:
+            "L'endpoint est réécrit dans le fichier de réglages de {{provider}}, ce qui remplace les modifications externes des clés gérées par Osuna.",
+        },
+        inheritedNote:
+          "Utilise aussi l'endpoint d'API {{name}} de Claude Code : l'env du settings.json de Claude prime sur l'environnement de ce fournisseur.",
+        form: {
+          createTitle: "Nouvel endpoint d'API",
+          editTitle: "Modifier l'endpoint d'API",
+          name: "Nom",
+          namePlaceholder: "OpenRouter",
+          baseUrl: "URL de base",
+          baseUrlInvalid: "Saisissez une URL commençant par http:// ou https://",
+          apiKey: "Clé d'API",
+          apiKeyPlaceholder: "Collez la clé d'API",
+          apiKeySavedPlaceholder: "Enregistrée. Laissez vide pour la conserver",
+          models: "Modèles",
+          modelsHint:
+            "Récupérez la liste de ce point de terminaison et cochez les modèles à utiliser.",
+          fetchModels: "Récupérer les modèles",
+          refetchModels: "Récupérer à nouveau",
+          searchModels: "Rechercher des modèles ({{count}})",
+          clearSearch: "Effacer la recherche",
+          noUpstreamModels:
+            "Le point de terminaison n'a renvoyé aucun modèle. Ajoutez les ID de modèle à la main ci-dessous.",
+          noMatchingModels: "Aucun modèle correspondant",
+          moreModelsHidden: "Non affichés : {{count}}. Recherchez pour affiner la liste.",
+          modelsUnsupported:
+            "Ce point de terminaison ne sait pas lister les modèles. Ajoutez les ID de modèle à la main ci-dessous.",
+          fetchTimeout: "Le point de terminaison n'a pas répondu à temps.",
+          testConnection: "Tester la connexion",
+          testHint:
+            "Envoie un court message avec le modèle choisi depuis cet hôte. Seul le point de terminaison est vérifié : les problèmes côté CLI, comme un conflit de connexion Claude, n'apparaissent qu'à la première vraie conversation. Dans ce cas, essayez /logout dans le terminal.",
+          testPick: "Choisir un modèle à tester",
+          testing: "Test en cours...",
+          testMenuTitle: "Tester avec",
+          testSucceeded: "Connecté",
+          testFailed: "Échec",
+          testProtocolUnsupported:
+            "Cette adresse ne fournit pas l'API {{protocol}} dont {{provider}} a besoin. Vérifiez l'URL de base ou utilisez un point de terminaison qui la prend en charge.",
+          selectedModels: "Modèles utilisés",
+          modelIdPlaceholder: "Ajouter un ID de modèle à la main",
+          addModel: "Ajouter",
+          noModels: "Cochez ou ajoutez au moins un modèle",
+          default: "Par défaut",
+          makeDefault: "Définir par défaut",
+          removeModel: "Retirer {{id}}",
+          mapping: "Correspondance des modèles (facultatif)",
+          mappingHint:
+            "Les alias comme /model opus dans le terminal et les tâches en arrière-plan utilisent le modèle associé. Les niveaux sans correspondance ne sont pas écrits.",
+          mappingTitle: "Associer {{tier}} à",
+          unmapped: "Aucune correspondance",
+          save: "Enregistrer",
+          saving: "Enregistrement…",
+        },
+      },
     },
     project: {
       noEditableTarget: "Ce projet n'est pas modifiable sur cet hôte.",
@@ -3236,6 +3368,8 @@ export const fr: TranslationResources = {
       cell: "{{day}} · {{tokens}} jetons",
     },
     planUsage: {
+      apiEndpointNote:
+        "Endpoint d'API {{name}} utilisé. Ce quota ne reflète pas la consommation réelle.",
       title: "Consommation du forfait",
       refresh: "Actualiser",
       refreshing: "Actualisation...",

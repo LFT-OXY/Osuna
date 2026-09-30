@@ -1,9 +1,11 @@
 import { useMemo } from "react";
+import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { getProviderIcon } from "@/components/provider-icons";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Text as UiText } from "@/components/ui/text";
 import type { Theme } from "@/styles/theme";
 import { renderUsageText } from "@/usage/text";
 import { ProviderUsageBalanceBar } from "./balance-bar";
@@ -26,8 +28,14 @@ const ThemedProviderUsageIcon = withUnistyles(ProviderUsageIcon);
 
 const mutedIconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
+interface ProviderUsageCardProps {
+  usage: ProviderUsage;
+  // 该提供方当前启用的第三方接口；套餐额度这时不代表实际消耗。
+  activeApiEndpoint: ApiEndpointRef | null;
+}
+
 /** 外壳由调用方给（「用量」页的 `UsageCard`、环形表弹层），卡片自己不带内边距。 */
-export function ProviderUsageCard({ usage }: { usage: ProviderUsage }) {
+export function ProviderUsageCard({ usage, activeApiEndpoint }: ProviderUsageCardProps) {
   const { t } = useTranslation();
   const statusDescription = describeStatus(usage.status);
   const status = statusDescription ? renderUsageText(t, statusDescription) : null;
@@ -62,6 +70,12 @@ export function ProviderUsageCard({ usage }: { usage: ProviderUsage }) {
           </View>
         ) : null}
       </View>
+
+      {activeApiEndpoint ? (
+        <UiText variant="label" color="foregroundMuted">
+          {t("usage.planUsage.apiEndpointNote", { name: activeApiEndpoint.name })}
+        </UiText>
+      ) : null}
 
       {usage.error ? (
         <Text style={styles.error} numberOfLines={3}>

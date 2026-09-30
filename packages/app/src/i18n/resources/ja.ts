@@ -244,6 +244,18 @@ export const ja: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "このセッションは API エンドポイント {{created}} で作成されましたが、現在は公式です。続行できない可能性があります。",
+      deletedToOfficial:
+        "このセッションは削除済みの API エンドポイントで作成されましたが、現在は公式です。続行できない可能性があります。",
+      officialToEndpoint:
+        "このセッションは公式で作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
+      endpointToEndpoint:
+        "このセッションは API エンドポイント {{created}} で作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
+      deletedToEndpoint:
+        "このセッションは削除済みの API エンドポイントで作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
+    },
     empty: "このエージェントとチャットを始めましょう...",
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",
@@ -2876,6 +2888,124 @@ export const ja: TranslationResources = {
         failedToFetch: "診断の取得に失敗しました",
         unknownError: "不明なエラー",
       },
+      install: {
+        howTo: "インストール方法",
+        howToFor: "{{name}} のインストール方法",
+        title: "{{name}} をインストール",
+        hostHint: "Osuna daemon が動作しているマシンで実行してください",
+        choosePlatform: "Host の OS を選択",
+        copy: "コピー",
+        copyAccessibility: "{{command}} をコピー",
+        copyLabel: "コマンド",
+        copyFailed: "コマンドのコピーに失敗しました",
+        docs: "公式ドキュメント",
+        docsFor: "{{name}} の公式ドキュメント",
+      },
+      apiEndpoints: {
+        title: "API エンドポイント",
+        add: "追加",
+        addAccessibility: "API エンドポイントを追加",
+        loading: "API エンドポイントを読み込み中…",
+        loadFailed: "API エンドポイントを読み込めませんでした",
+        official: "公式",
+        officialHint: "{{name}} 自身の設定（通常はサブスクリプションのログイン）を使います",
+        inUse: "使用中",
+        use: "使用",
+        useAccessibility: "{{name}} を使用",
+        editAccessibility: "{{name}} を編集",
+        deleteAccessibility: "{{name}} を削除",
+        modelCount_one: "{{count}} 個のモデル",
+        modelCount_other: "{{count}} 個のモデル",
+        switchTitle: "{{provider}} を {{name}} に切り替えますか？",
+        switchOfficialTitle: "{{provider}} を公式に戻しますか？",
+        switchMessage: "{{provider}} 自身の設定ファイルを書き換えます。",
+        switchConfirm: "切り替える",
+        delete: "削除",
+        deleteTitle: "{{name}} を削除しますか？",
+        deleteMessage: "このホストに保存された URL、API キー、モデルが削除されます。",
+        deleteActiveMessage: "使用中のため、先に {{provider}} を公式に戻してから削除します。",
+        saveActiveTitle: "{{name}} への変更を保存しますか？",
+        saveActiveMessage:
+          "使用中のため、保存すると {{provider}} 自身の設定ファイルがすぐに新しい設定で書き換えられます。",
+        saveActiveConfirm: "保存",
+        impact: {
+          sessions:
+            "実行中の {{provider}} セッション {{count}} 件がすぐに新しい設定に切り替わります。",
+          sessionsMaybe:
+            "実行中の {{provider}} セッション {{count}} 件が影響を受ける可能性があります。",
+          noSessions: "実行中の {{provider}} セッションはありません。",
+          terminal: "ターミナルの {{provider}} も切り替わります。",
+        },
+        codexVersionUnsupported:
+          "API エンドポイントを使うには Codex を 0.118.0 以降に更新してください。",
+        configUnparsable:
+          "{{provider}} の設定ファイルを解析できなかったため、何も変更していません。",
+        configConflict:
+          "書き込み中に {{provider}} の設定ファイルが変更され続けたため、何も変更していません。もう一度お試しください。",
+        health: {
+          modifiedExternally: "{{provider}} の設定ファイルが Osuna の外で変更されました",
+          unparsable:
+            "{{provider}} の設定ファイルを解析できません。修正されるまで Osuna は書き込みません。",
+          codexProfileOverride:
+            "Codex のプロファイルが API エンドポイントを上書きしているため、切り替えが反映されない可能性があります。そのプロファイルから model_provider と model を削除するか、選択をやめてください。",
+          officialTarget: "{{provider}} 自身の設定は {{url}} を指しています",
+          reapply: "再適用",
+          switchToOfficial: "公式に戻す",
+          reapplyTitle: "{{name}} を {{provider}} に再適用しますか？",
+          reapplyMessage:
+            "{{provider}} 自身の設定ファイルにエンドポイントをもう一度書き込み、Osuna が管理するキーへの外部の変更を置き換えます。",
+        },
+        inheritedNote:
+          "Claude Code の API エンドポイント {{name}} も使われます。Claude の settings.json の env はこのプロバイダーの環境変数より優先されます。",
+        form: {
+          createTitle: "新しい API エンドポイント",
+          editTitle: "API エンドポイントを編集",
+          name: "名前",
+          namePlaceholder: "OpenRouter",
+          baseUrl: "ベース URL",
+          baseUrlInvalid: "http:// または https:// で始まる URL を入力してください",
+          apiKey: "API キー",
+          apiKeyPlaceholder: "API キーを貼り付け",
+          apiKeySavedPlaceholder: "設定済み。空欄のままなら維持します",
+          models: "モデル",
+          modelsHint: "このエンドポイントからモデル一覧を取得し、使うモデルにチェックを入れます。",
+          fetchModels: "モデルを取得",
+          refetchModels: "再取得",
+          searchModels: "モデルを検索（{{count}} 件）",
+          clearSearch: "検索をクリア",
+          noUpstreamModels:
+            "エンドポイントからモデルが返されませんでした。下でモデル ID を手動で追加してください。",
+          noMatchingModels: "一致するモデルはありません",
+          moreModelsHidden: "ほかに {{count}} 件あります。検索して絞り込んでください。",
+          modelsUnsupported:
+            "このエンドポイントはモデル一覧に対応していません。下でモデル ID を手動で追加してください。",
+          fetchTimeout: "エンドポイントが時間内に応答しませんでした。",
+          testConnection: "接続テスト",
+          testHint:
+            "このホストから選んだモデルで短いメッセージを 1 件送ります。確認できるのはエンドポイントだけです。Claude のログイン競合など CLI 側の問題は、最初の実際の会話で初めて表面化します。その場合はターミナルで /logout を試してください。",
+          testPick: "モデルを選んでテスト",
+          testing: "テスト中...",
+          testMenuTitle: "テストに使うモデル",
+          testSucceeded: "接続成功",
+          testFailed: "接続失敗",
+          testProtocolUnsupported:
+            "このアドレスでは {{provider}} が必要とする {{protocol}} API を利用できません。ベース URL を確認するか、対応しているエンドポイントを使ってください。",
+          selectedModels: "使用するモデル",
+          modelIdPlaceholder: "モデル ID を手動で追加",
+          addModel: "追加",
+          noModels: "モデルを 1 つ以上チェックするか追加してください",
+          default: "デフォルト",
+          makeDefault: "デフォルトにする",
+          removeModel: "{{id}} を削除",
+          mapping: "モデルのマッピング（任意）",
+          mappingHint:
+            "ターミナルの /model opus のようなエイリアスとバックグラウンドタスクは、マッピングしたモデルを使います。マッピングしない階層は書き込みません。",
+          mappingTitle: "{{tier}} のマッピング先",
+          unmapped: "マッピングしない",
+          save: "保存",
+          saving: "保存中…",
+        },
+      },
     },
     project: {
       noEditableTarget: "このホストではこのプロジェクトを編集できません。",
@@ -3187,6 +3317,8 @@ export const ja: TranslationResources = {
       cell: "{{day}} · {{tokens}} トークン",
     },
     planUsage: {
+      apiEndpointNote:
+        "API エンドポイント {{name}} を使用中です。この枠は実際の消費量を表しません。",
       title: "プラン使用量",
       refresh: "更新",
       refreshing: "更新中...",

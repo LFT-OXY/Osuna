@@ -1,0 +1,28 @@
+{
+  "id": "api-endpoint",
+  "name": "api-endpoint",
+  "title": "第三方接口",
+  "description": "Claude Code/Codex 在官方与第三方接口间切换：改写 CLI 自身配置（只改自有键）、上游拉取模型、测试连接、key 只写不读",
+  "status": "accept",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-30",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-30-provider-install-and-api-endpoint",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "ef6eff53758ffcb0627da452837df16a607c487a"
+  }
+}

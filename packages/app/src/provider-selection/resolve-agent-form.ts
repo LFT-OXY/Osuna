@@ -34,6 +34,20 @@ export interface UserModifiedFields {
 
 export type ProviderModelsByProvider = Map<AgentProvider, AgentModelDefinition[] | null>;
 
+/**
+ * 快照声明模型列表就是全部可用模型的提供方（第三方接口启用时）。
+ * 这些提供方不保留列表外的记忆模型，改用列表的默认模型；记忆本身不改写，切回官方后照旧生效。
+ */
+export function buildAuthoritativeModelProviders(
+  snapshotEntries: readonly ProviderSnapshotEntry[] | undefined,
+): ReadonlySet<AgentProvider> {
+  const authoritativeEntries = (snapshotEntries ?? []).filter(
+    (entry) => entry.isModelListAuthoritative === true,
+  );
+  const providers = authoritativeEntries.map((entry) => entry.provider);
+  return new Set(providers);
+}
+
 export type AgentFormResolutionState = { status: "pending" } | { status: "completed" };
 
 export interface AgentFormReducerState {
@@ -75,6 +89,7 @@ interface AgentFormInputs {
   initialValues: FormInitialValues | undefined;
   preferences: FormPreferences | null;
   providerModelsByProvider: ProviderModelsByProvider;
+  authoritativeModelProviders: ReadonlySet<AgentProvider>;
   allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
 }
 
@@ -86,6 +101,7 @@ export type AgentFormAction =
       initialValues: FormInitialValues | undefined;
       preferences: FormPreferences | null;
       providerModelsByProvider: ProviderModelsByProvider;
+      authoritativeModelProviders: ReadonlySet<AgentProvider>;
       allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
     }
   | {
@@ -419,34 +435,107 @@ export function resolveFormState(
   return result;
 }
 
+export interface ResolveFormStateFromProviderModelsInput {
+  initialValues: FormInitialValues | undefined;
+  preferences: FormPreferences | null;
+  providerModelsByProvider: ProviderModelsByProvider;
+  authoritativeModelProviders: ReadonlySet<AgentProvider>;
+  userModified: UserModifiedFields;
+  currentState: FormState;
+  allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
+}
+
 export function resolveFormStateFromProviderModels(
-  initialValues: FormInitialValues | undefined,
-  preferences: FormPreferences | null,
-  providerModelsByProvider: ProviderModelsByProvider,
-  userModified: UserModifiedFields,
-  currentState: FormState,
-  allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>,
+  input: ResolveFormStateFromProviderModelsInput,
 ): FormState {
+  const { providerModelsByProvider, userModified, currentState, allowedProviderMap } = input;
   const providerResolved = resolveFormState(
-    initialValues,
-    preferences,
+    input.initialValues,
+    input.preferences,
     null,
     userModified,
     currentState,
     allowedProviderMap,
   );
-  const availableModels = providerResolved.provider
-    ? (providerModelsByProvider.get(providerResolved.provider) ?? null)
-    : null;
+  const provider = providerResolved.provider;
+  const availableModels = lookupProviderModels(providerModelsByProvider, provider);
+  const isModelListAuthoritative =
+    provider !== null &&
+    availableModels !== null &&
+    input.authoritativeModelProviders.has(provider);
+  let remembered: RememberedFormValues = {
+    initialValues: input.initialValues,
+    preferences: input.preferences,
+  };
+  if (isModelListAuthoritative) {
+    remembered = replaceUnlistedRememberedModel({
+      ...remembered,
+      provider,
+      models: availableModels,
+    });
+  }
 
   return resolveFormState(
-    initialValues,
-    preferences,
+    remembered.initialValues,
+    remembered.preferences,
     availableModels,
     userModified,
     currentState,
     allowedProviderMap,
   );
+}
+
+function lookupProviderModels(
+  providerModelsByProvider: ProviderModelsByProvider,
+  provider: AgentProvider | null,
+): AgentModelDefinition[] | null {
+  if (!provider) return null;
+  return providerModelsByProvider.get(provider) ?? null;
+}
+
+interface RememberedFormValues {
+  initialValues: FormInitialValues | undefined;
+  preferences: FormPreferences | null;
+}
+
+interface ReplaceUnlistedRememberedModelInput extends RememberedFormValues {
+  provider: AgentProvider;
+  models: AgentModelDefinition[];
+}
+
+/**
+ * 权威列表（第三方接口启用时）不认识的记忆模型发出去只会被拒绝，这次解析改用列表的默认模型。
+ * 只换解析用的副本，偏好本身不改，切回官方后照旧生效。
+ */
+function replaceUnlistedRememberedModel(
+  input: ReplaceUnlistedRememberedModelInput,
+): RememberedFormValues {
+  const { provider, models, initialValues, preferences } = input;
+  let nextInitialValues = initialValues;
+  if (initialValues) {
+    const model = resolveListedOrDefaultModelId(models, initialValues.model);
+    nextInitialValues = { ...initialValues, model };
+  }
+  const unchangedPreferences = { initialValues: nextInitialValues, preferences };
+  if (!preferences) return unchangedPreferences;
+  const providerPrefs = preferences.providerPreferences?.[provider];
+  if (!providerPrefs) return unchangedPreferences;
+  const model = resolveListedOrDefaultModelId(models, providerPrefs.model) ?? undefined;
+  const providerPreferences = {
+    ...preferences.providerPreferences,
+    [provider]: { ...providerPrefs, model },
+  };
+  return { initialValues: nextInitialValues, preferences: { ...preferences, providerPreferences } };
+}
+
+/** 空值原样返回：没有记忆就交给后面的默认逻辑。 */
+function resolveListedOrDefaultModelId(
+  models: AgentModelDefinition[],
+  modelId: string | null | undefined,
+): string | null | undefined {
+  const normalized = normalizeSelectedModelId(modelId);
+  if (!normalized) return modelId;
+  return resolveCanonicalModelId(models, normalized) || resolveDefaultModelId(models);
 }
 
 function pickNextModeForProvider(input: {
@@ -524,14 +613,15 @@ function completeResolution(
   if (state.resolution.status === "completed") {
     return state;
   }
-  const resolved = resolveFormStateFromProviderModels(
-    action.initialValues,
-    action.preferences,
-    action.providerModelsByProvider,
-    state.userModified,
-    state.form,
-    action.allowedProviderMap,
-  );
+  const resolved = resolveFormStateFromProviderModels({
+    initialValues: action.initialValues,
+    preferences: action.preferences,
+    providerModelsByProvider: action.providerModelsByProvider,
+    authoritativeModelProviders: action.authoritativeModelProviders,
+    userModified: state.userModified,
+    currentState: state.form,
+    allowedProviderMap: action.allowedProviderMap,
+  });
   const nextState = { ...state, resolution: { status: "completed" } as const };
   if (!hasFormStateChanged(state.form, resolved)) return nextState;
   return { ...nextState, form: resolved };
@@ -605,7 +695,33 @@ function receiveInputs(
   }
   if (!active || action.isPreferencesLoading || !action.serverId || !action.hasSnapshot)
     return next;
-  return completeResolution(next, { ...action, type: "COMPLETE_RESOLUTION" });
+  const resolved = completeResolution(next, { ...action, type: "COMPLETE_RESOLUTION" });
+  return moveOffUnlistedModel(resolved, action);
+}
+
+/**
+ * 草稿打开期间启用了第三方接口：已选的模型不在新的权威列表里，发出去只会被拒绝，换成列表的默认模型。
+ * 只改表单，不改偏好。
+ */
+function moveOffUnlistedModel(
+  state: AgentFormReducerState,
+  action: AgentFormInputs,
+): AgentFormReducerState {
+  const provider = state.form.provider;
+  if (!provider) return state;
+  if (!action.authoritativeModelProviders.has(provider)) return state;
+  const models = action.providerModelsByProvider.get(provider);
+  if (!models) return state;
+  const model = resolveListedOrDefaultModelId(models, state.form.model);
+  const keepsCurrentModel = !model || model === state.form.model;
+  if (keepsCurrentModel) return state;
+  const providerPrefs = action.preferences?.providerPreferences?.[provider];
+  const thinkingOptionId = pickNextThinkingOptionForProvider({
+    providerModels: models,
+    providerPrefs,
+    modelId: model,
+  });
+  return { ...state, form: { ...state.form, model, thinkingOptionId } };
 }
 
 export function resolveAgentForm(

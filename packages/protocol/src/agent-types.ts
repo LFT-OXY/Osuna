@@ -1,3 +1,4 @@
+import type { ApiEndpointModeMismatch, ApiEndpointRef } from "./api-endpoint/rpc-schemas.js";
 import type { AgentAttachment } from "./messages.js";
 
 export type AgentProvider = string;
@@ -128,6 +129,10 @@ export interface ProviderSnapshotEntry {
   defaultModeId?: string | null;
   canCreateAgents?: boolean;
   createAgentsUnavailableReason?: string;
+  // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
+  isModelListAuthoritative?: boolean;
+  // 当前启用的第三方接口；官方模式下没有。
+  activeApiEndpoint?: ApiEndpointRef;
 }
 
 export interface AgentFeatureToggle {
@@ -381,6 +386,7 @@ export type AgentTimelineItem =
       type: "notification";
       level: "info" | "warning" | "error";
       message: string;
+      apiEndpointModeMismatch?: ApiEndpointModeMismatch;
     }
   | CompactionTimelineItem
   | PluginTimelineItem;

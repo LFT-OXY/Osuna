@@ -4,6 +4,7 @@
 
 ## Checks reviewers run
 
+- **`docs/coding-standards.md` §Density is checked line by line on every `+` line.** The shapes review kept catching: a ternary whose branch is a call or object (`:59`, use `if`); an `a && b` / `a || b` guard mixing two concerns (`:60`, name each condition or return early twice); a call, lookup or comparison in an object-literal property (`:61`, compute a local first — this includes `foo({ x: bar(y) })`); `new Set(xs.filter().map())` (`:62`). Sweep the whole diff for them before asking for review, not one at a time.
 - **Cross-platform by default.** Any `isWeb`, `isNative`, `getIsElectron()`, or `Platform.OS` has a specific reason in the diff. Layout decisions use `useIsCompactFormFactor()`, never `Platform.OS`. Large platform branches are separate `.web.ts` / `.native.ts` / `.electron.tsx` files.
 - **No `useUnistyles()` added.** See [Styling](./styling.md).
 - **Hover follows `docs/hover.md`**, and hover-revealed controls are visible on native and compact.
@@ -37,4 +38,4 @@ npx vitest run <the file you changed> --bail=1
 npm run format          # before committing
 ```
 
-Lint is oxlint (`.oxlintrc.json`) with `correctness`, `suspicious`, and `perf` as errors plus the React rules that matter here: `react/no-array-index-key`, `react/jsx-no-constructed-context-values`, `react/jsx-no-useless-fragment`. Fix the code, do not disable the rule. For UI changes, `docs/qa.md` asks for a recording or before/after screenshots and the platforms you tested; `npm run dev:app` starts Expo against the dev daemon.
+Lint is oxlint (`.oxlintrc.json`) with `correctness`, `suspicious`, and `perf` as errors plus the React rules that matter here: `react/no-array-index-key`, `react/jsx-no-constructed-context-values`, `react/jsx-no-useless-fragment`. Fix the code, do not disable the rule. For UI changes, `docs/qa.md` asks for a recording or before/after screenshots and the platforms you tested; `npm run dev:app` starts Expo against the dev daemon. On Electron, OS dialogs from `confirmDialog()` are not in the renderer, so a CDP screenshot misses them: capture the dev window with `screencapture -x -o -l <window id>`, never the full screen, which records the user's other windows. UI that rewrites a CLI's own config (API endpoints) runs against temporary `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `CLAUDE_HOME`, stub `claude` / `codex` commands in the dev `config.json`, and a local fake upstream; compare the real files' mtimes before and after. The setup is recorded in `.atw/tasks/09-30-api-endpoint/qa/README.md`.

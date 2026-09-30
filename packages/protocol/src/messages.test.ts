@@ -359,6 +359,32 @@ describe("agent detach RPC", () => {
     }
     expect(parsed.features?.importSessionSearch).toBe(true);
   });
+
+  test("keeps the reported host platform", () => {
+    const parsed = parseServerInfoStatusPayload({
+      status: "server_info",
+      serverId: "srv-test",
+      hostPlatform: "win32",
+    });
+
+    if (!parsed) {
+      throw new Error("Expected server info payload to parse");
+    }
+    expect(parsed.hostPlatform).toBe("win32");
+  });
+
+  test("parses an older daemon that omits the host platform", () => {
+    const parsed = parseServerInfoStatusPayload({
+      status: "server_info",
+      serverId: "old-daemon",
+      features: {},
+    });
+
+    if (!parsed) {
+      throw new Error("Expected server info payload to parse");
+    }
+    expect(parsed.hostPlatform).toBeUndefined();
+  });
 });
 
 describe("agent setting action responses", () => {

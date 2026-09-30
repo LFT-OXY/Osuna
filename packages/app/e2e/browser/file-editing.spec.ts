@@ -478,11 +478,12 @@ test.describe("CodeMirror workspace file editing", () => {
 
     await page.getByTestId(`workspace-tab-file_${relativePath}`).first().hover();
 
+    // 自选界面字体前插到默认字体栈。
     await expect(
       page
         .getByTestId(`workspace-tab-tooltip-file_${relativePath}`)
         .getByText(relativePath, { exact: true }),
-    ).toHaveCSS("font-family", "monospace");
+    ).toHaveCSS("font-family", /^monospace, /);
   });
 
   test("wraps Markdown while source code remains horizontally scrollable", async ({

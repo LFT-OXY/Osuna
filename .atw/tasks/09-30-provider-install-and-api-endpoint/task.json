@@ -1,0 +1,29 @@
+{
+  "id": "provider-install-and-api-endpoint",
+  "name": "provider-install-and-api-endpoint",
+  "title": "提供方安装指引与第三方接口",
+  "description": "为 Claude Code/Codex/Pi/OMP 提供按主机系统的安装指引，并为 Claude Code/Codex 提供可切换的第三方接口（URL+key+上游模型）",
+  "status": "discover",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-30",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-30-provider-install-guide",
+    "09-30-api-endpoint"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

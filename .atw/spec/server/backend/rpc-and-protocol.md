@@ -641,6 +641,259 @@ const modeId = [configuredModeId, entry.defaultModeId ?? undefined].find(
 ) ?? modeIds[0];
 ```
 
+## Scenario: the daemon calls an upstream with a secret the client never sees
+
+Reference implementations: `provider.api_endpoint.fetch_models` / `provider.api_endpoint.cancel` (api-endpoint ticket 03) and `provider.api_endpoint.test_connection` (ticket 04), which share the cancel RPC and the session's pending-request map.
+
+### 1. Scope / Trigger
+
+- An RPC makes an outbound HTTP request with a key stored on the host. The key must not reach the client, the request must time out, and the client must be able to cancel it.
+
+### 2. Signatures
+
+- `fetchUpstreamModels({ provider, baseUrl, apiKey, signal, timeoutMs }) → { ok: true, models } | { ok: false, error: UpstreamFailure }` in `server/api-endpoints/upstream-models.ts`; no throw, no logging.
+- `testUpstreamConnection({ provider, baseUrl, apiKey, modelId, signal, timeoutMs }) → { kind: "result", result: ApiEndpointTestConnectionResult } | { kind: "cancelled" }` in `server/api-endpoints/upstream-connection.ts`. Upstream failures are a `result` with `ok: false`, not a thrown error.
+- Shared helpers (`extractErrorDetail(text, apiKey)`, `structuredErrorMessage`, `describeNetworkError`, `ANTHROPIC_VERSION`) live in `server/api-endpoints/upstream-http.ts`.
+- `ApiEndpointService.fetchModels(provider, ApiEndpointUpstreamInput, signal) → ApiEndpointModel[]` and `testConnection(provider, ApiEndpointUpstreamInput & { modelId }, signal) → ApiEndpointTestConnectionResult`; both throw `ApiEndpointRequestError` for request-level failures (`invalid_input`, `not_found`, `cancelled`).
+- `ApiEndpointSession.handle(request, connectionSignal)`: session passes `this.delivery.requestSignal`. `dispose()` aborts every pending upstream request; `Session.cleanup` calls it.
+- Client: `apiEndpointFetchModels(options, requestId?)`, `apiEndpointTestConnection(options, requestId?)`, `apiEndpointCancel(targetRequestId)`. The caller picks the `requestId` so it can cancel it.
+
+### 3. Contracts
+
+- Pending requests live in a `Map<requestId, AbortController>` per session; the upstream signal is `AbortSignal.any([controller.signal, connectionSignal])`, and the timeout is added inside `fetchUpstreamModels` so `cancelled` and `upstream_timeout` stay distinguishable.
+- A cancelled request still gets its response, with `error.code: "cancelled"`. `cancel` answers `cancelled: false` when the target already finished.
+- The key comes from the request, else from the saved endpoint; it is never in a response or a log. Echoed upstream text has the key replaced with `***` **before** it is truncated to 300 characters — truncating first can cut the key in half and leak the first half.
+- `test_connection` response: `{ requestId, result: { ok, status: number | null, durationMs, error } | null, error }`. `result` carries the upstream verdict (`status: null` when nothing came back); the top-level `error` is set only when the request itself was refused or cancelled, and then `result` is `null`.
+- Test requests mirror the CLI: Claude `POST <base>/v1/messages` with Bearer + `anthropic-version` only (no `x-api-key`, as Claude Code sends with `ANTHROPIC_AUTH_TOKEN`), body `{ model, max_tokens: 1, messages: [ping] }`; Codex `POST <base with /v1>/responses` with Bearer, body `{ model, input: [message] }` — no `store`, `previous_response_id`, or `max_output_tokens`. Timeout 30 s (`connectionTestTimeoutMs`), fetch is 15 s.
+- The protocol name shown to users comes from `apiEndpointProtocolName(provider)` in `@getpaseo/protocol/api-endpoint/rpc-schemas`; daemon and App both read it.
+- Read-only upstream calls stay out of the service's mutation queue.
+
+### 4. Validation & Error Matrix
+
+- No typed key and no `endpointId` with a saved key → `invalid_input`, no request sent. Unknown `endpointId` → `not_found`.
+- Non-404/405 status on either address → `upstream_error` (`HTTP <status>: <detail>`). Both addresses unreachable → `upstream_unreachable`. Otherwise (404, not a model list) → `models_unsupported`.
+- Timeout → `upstream_timeout`, second address not tried. Client cancel or disconnect → `cancelled`.
+- Test connection, inside `result.error`: 405, or 404 whose body is a framework default (no JSON error, or a message starting `Not Found` / `Invalid URL`) → `protocol_unsupported`; any other non-2xx → `upstream_error` with `POST <url>: HTTP <status>: <detail>` (a 404 "model does not exist" stays here); 2xx whose body is not the protocol's object (`type: "message"` / `object: "response"`) → `protocol_unsupported`; no response → `upstream_unreachable` or `upstream_timeout` with `status: null`. No model → `invalid_input` before any request.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Codex base `https://relay/v1` → `/v1/v1/models` 404 → `/v1/models` lists `models[].slug`.
+- Base: upstream returns `data: []` → `ok` with no models; the form says so and offers manual add.
+- Bad: reporting the second address's 404 when the first returned 401 (hides the real cause).
+- Good (test): Codex relay with only Chat Completions → bare 404 on `/v1/responses` → `protocol_unsupported`; the App says the address lacks OpenAI Responses and to check the Base URL.
+- Bad (test): treating every 404 as "protocol unsupported" — OpenAI and Anthropic answer an unknown model with a JSON 404 too.
+
+### 6. Tests Required
+
+- `upstream-models.test.ts` against a local `node:http` server: both addresses, both shapes, pagination, 401 without the key in the message, unsupported, timeout (one request only), cancel, unreachable.
+- `daemon-e2e/api-endpoint-models.e2e.test.ts`: typed key; saved key with a blank field (upstream sees it, response does not); Codex fallback; 401; no key → no request; cancel by `requestId`; mapping written and restored.
+- `upstream-connection.test.ts` against a local `node:http` server: exact request body and headers per provider; 401 message with `***`; unknown model stays `upstream_error`; key echoed across the 300-char cut not leaked; bare and framework-JSON 404 plus a Chat Completions 200 → `protocol_unsupported`; timeout and unreachable with `status: null`; cancel → `{ kind: "cancelled" }`.
+- `daemon-e2e/api-endpoint-test-connection.e2e.test.ts`: saved key with a blank field; 401 and unknown model with status and upstream text; Codex base without `/v1` hits `/v1/responses`; chat-only relay → `protocol_unsupported`; no key / blank model → no request; cancel by `requestId`.
+- `messages.api-endpoint.test.ts`: request/response parse, including an error code the client has never seen.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// 客户端放弃等待，daemon 仍然挂着请求直到超时，也分不清超时和取消
+const result = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+```
+
+#### Correct
+
+```ts
+const timeout = AbortSignal.timeout(input.timeoutMs);
+const signal = AbortSignal.any([input.signal, timeout]); // input.signal = client cancel + disconnect
+// catch: input.signal.aborted → cancelled; timeout.aborted → upstream_timeout
+```
+
+## Scenario: host state that replaces a provider's model catalogue
+
+Reference implementation: the active API endpoint (api-endpoint ticket 05). Reuse this shape for any host-side mode that decides which models a provider may run.
+
+### 1. Scope / Trigger
+
+- Something on the host, not the provider's own catalogue, decides the exact set of models a built-in provider accepts, and the set changes at runtime without a config reload.
+
+### 2. Signatures
+
+- `ProviderModelOverride = (provider: AgentProvider) => AgentModelDefinition[] | null` in `server/agent/agent-sdk-types.ts`; `null` means "use the provider's catalogue".
+- `ApiEndpointService.activeModels(provider: string): AgentModelDefinition[] | null` is the single source: the active endpoint's checked models with real ids, `isDefault` on the endpoint's default model.
+- Injected twice from `bootstrap.ts`: `ProviderSnapshotManagerOptions.modelOverride` and `AgentManagerOptions.modelOverride`.
+- `ApiEndpointServiceOptions.onActiveEndpointChanged(provider)` → `providerSnapshotManager.refreshSettingsSnapshot({ providers: [provider] })`, with `.catch` logging `{ err }`.
+- Wire: `ProviderSnapshotEntry.isModelListAuthoritative?: boolean` in `packages/protocol/src/messages.ts` and both hand-written `ProviderSnapshotEntry` interfaces (`protocol/src/agent-types.ts`, `server/agent/agent-sdk-types.ts`).
+- The same refresh also publishes `ProviderSnapshotEntry.activeApiEndpoint?: ApiEndpointRef` (`{ id, name }`), from `ProviderSnapshotManagerOptions.activeApiEndpoint: ActiveApiEndpointLookup`. It is the app's only source for "this provider is on an endpoint" outside the provider panel (plan usage label, the inherited-endpoint hint); set on `ready` entries only, like the model override.
+
+### 3. Contracts
+
+- `ProviderSnapshotManager.refreshProvider` still runs availability and `fetchCatalog` (modes, default mode come from there), then replaces `catalog.models` wholesale with the override, passes each row through `client.resolveConfiguredModel` like config.json profile models, and sets `isModelListAuthoritative: true`. Nothing the provider appended survives — Claude's `settings.json` rows (`ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_*_MODEL`) would otherwise duplicate the endpoint's models.
+- `AgentManager.resolveDefaultModelId` reads the override before `client.fetchCatalog`. It bypasses the snapshot, so without this a CLI / MCP / schedule create with no model gets the official default.
+- The override reads the store on every call; there is no cache to invalidate. The refresh only republishes. Refresh after: activate, back to Official, save of the active endpoint, delete of the active endpoint. Detecting an external change does not refresh: the override reads the store, which an outside edit to the CLI file does not touch, so a refresh would publish the same list.
+- `ApiEndpointService` is constructed before `createAgentProviderRuntime` and the `AgentManager`; its callbacks close over `providerSnapshotManager` and `agentManager`, declared later, and run only after startup.
+- The field is optional and needs no capability gate: an old host never sends it and the app treats absence as non-authoritative; an old app ignores it.
+
+### 4. Validation & Error Matrix
+
+- Official, or a provider with no endpoint support → override `null`, catalogue unchanged, field absent.
+- Endpoint store unreadable → thrown inside `refreshProvider`'s try, the entry becomes `status: "error"`; inside `resolveDefaultModelId` it is outside the try and propagates.
+- Custom provider that `extends: claude` → id is not `claude`, override `null`; its catalogue is not replaced.
+
+### 5. Good/Base/Bad Cases
+
+- Good: activate → snapshot lists only `relay/*`, `isModelListAuthoritative: true`; a create with no model runs `relay/haiku`.
+- Base: back to Official → the next refresh publishes the provider's own catalogue and drops the field.
+- Bad: replacing models only in the snapshot — the picker looks right, but `paseo run` with no `--model` still sends `claude-opus-*` to the relay.
+
+### 6. Tests Required
+
+- Daemon E2E (`daemon-e2e/api-endpoint-claude.e2e.test.ts` "provider snapshot follows…", `api-endpoint-codex.e2e.test.ts`): `expect.poll` the snapshot after activate / edit / Official / delete; `createAgent` with no model asserts `agent.model` is the endpoint's default id.
+- Unit (`provider-snapshot-manager.test.ts`): override replaces rows the catalogue returned, runs `resolveConfiguredModel`, sets and clears the flag; a real `ClaudeAgentClient` on a temp `settings.json` (version injected, `isAvailable` overridden, no CLI run) proves the settings rows disappear.
+- Protocol (`messages.api-endpoint.test.ts`): entry parses with and without the field.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Snapshot-only: AgentManager.resolveDefaultModelId still asks client.fetchCatalog.
+const models = override ?? catalog.models;
+```
+
+#### Correct
+
+```ts
+// bootstrap.ts — one source, two consumers.
+function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
+  return apiEndpointService.activeModels(provider);
+}
+// snapshotManager: { modelOverride: apiEndpointModelOverride }
+// new AgentManager({ modelOverride: apiEndpointModelOverride, ... })
+```
+
+## Scenario: a listing that reports the health of a file the daemon doesn't own
+
+Reference implementation: `provider.api_endpoint.list` health (api-endpoint ticket 06) and the live session count (ticket 07).
+
+### 1. Scope / Trigger
+
+- The daemon writes a file others also write, and the client has to show whether the file still holds what the daemon wrote, without a watcher.
+
+### 2. Signatures
+
+- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]`, `cliBaseUrl?: string | null`, and `runningSessionCount?: number`.
+- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (async; `ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount">>`), `activeEndpointId(provider)` for the sync error path. Internal `ApiEndpointHealthCode` union.
+- Count: required option `ApiEndpointServiceOptions.countLiveSessions(provider) => number`, wired in bootstrap to `AgentManager.countLiveAgents(provider)` (non-internal agents of exactly that provider whose lifecycle is `initializing`, `idle`, or `running`).
+- App: `selectApiEndpointHealthView(state) → { alert: { variant, issues, activeEndpoint } | null, officialTarget }`, `apiEndpointHealthMessageKey(issue)` in `api-endpoints/internal/section-state.ts`.
+
+### 3. Contracts
+
+- Codes: `modified_externally` (an owned key no longer holds `written`; message names the keys), `config_unparsable`, `codex_version_unsupported` (active Codex endpoint and `codex --version` below 0.118.0), `codex_unavailable` (the probe itself failed; never reported as "outdated"), `codex_profile_override` (legacy top-level `profile` whose `[profiles.<name>]` sets `model_provider` / `model`; reported in both modes so it shows before enabling).
+- `cliBaseUrl` is set only in Official: Claude `env.ANTHROPIC_BASE_URL`; Codex the effective provider (profile over top level, default `openai`), its `model_providers.<id>.base_url`, or `openai_base_url` for `openai`.
+- Re-apply has no RPC of its own: it is `set_active` with the active id, so it runs the same version check and conflict guard. "Switch to Official" is `set_active(null)`.
+- New write error `config_conflict` (file kept changing during the write). The app localizes it and `modified_externally`, `config_unparsable` (health wording), `codex_profile_override`; other codes show the daemon message.
+- `runningSessionCount` counts live sessions, not only `running` ones: an idle Claude process re-reads `settings.json` on its next turn, so it is affected too. Custom providers that extend `claude` are not counted. The count answers "how many sessions does rewriting the CLI config touch", so it lives on the list and the app fetches the list again right before each confirmation.
+- The app reads the optional fields with `?? []` / `?? null`: the protocol keeps new fields optional, so this default is permanent, not a COMPAT shim. A `null` count drops the session line from the confirmation and keeps the terminal line.
+
+### 4. Validation & Error Matrix
+
+- Owned key edited → `modified_externally`; other keys edited → no issue.
+- File deleted while an endpoint is active → every owned key listed as modified.
+- File does not parse → `config_unparsable` in `health`; the list itself still succeeds.
+- Codex binary missing → `codex_unavailable` in `health`; `list.error` stays null.
+
+### 5. Good/Base/Bad Cases
+
+- Good: another tool rewrites `env.ANTHROPIC_BASE_URL` → the panel shows one error Alert with Re-apply and Switch to Official.
+- Base: Official with a hand-written relay → no Alert, the Official row says where the CLI's own settings point.
+- Bad: a watcher that rewrites the file when it changes (ADR 0004: never overwrite silently).
+
+### 6. Tests Required
+
+- Pure: `inspectClaudeSettings` / `inspectCodexConfig` cases in the patch tests (owned vs other keys, deleted file, WebSearch entry only when added, every table field, legacy profile, base URL resolution).
+- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; downgraded and missing Codex; `runningSessionCount` counts two Claude agents and not the Codex one, and drops after `archiveAgent`.
+- App: `section-state.test.ts` for the view derivation; `index.test.tsx` for the Alert buttons and the Official hint.
+- Protocol: payload parses with health/cliBaseUrl/runningSessionCount and without them.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+} catch (error) {
+  return { code: "codex_version_unsupported", message: String(error) }; // "update Codex" for a missing binary
+}
+```
+
+#### Correct
+
+```ts
+} catch (error) {
+  const reason = error instanceof Error ? error.message : String(error);
+  return { code: "codex_unavailable", message: `Couldn't run codex --version: ${reason}` };
+}
+```
+
+## Scenario: a one-off timeline notice the daemon adds on resume
+
+Reference implementation: the API endpoint mode notice (api-endpoint ticket 08). Reuse the shape when resuming a session should tell the user something the provider history can't.
+
+### 1. Scope / Trigger
+
+- A persisted agent carries host state from its creation (here: which API endpoint was active), and resuming it under different host state deserves a warning in the conversation. The text must be localized, but timeline items are daemon-authored.
+
+### 2. Signatures
+
+- Record: `StoredAgentRecord.apiEndpointId?: string` (`agent-storage.ts`), `ManagedAgentBase.apiEndpointId?: string`, projected by `toStoredAgentRecord` and carried by `dispatchStoredAgentState`, reload, and `registerSession({ apiEndpointId })`.
+- Port: `ApiEndpointModeSource { active(provider): ApiEndpointRef | null; endpointName(provider, id): string | null }` in `agent-sdk-types.ts`, wired in `bootstrap.ts` to `ApiEndpointService.activeEndpoint` / `endpointName`; `AgentManagerOptions.apiEndpointMode`.
+- Builder: `buildApiEndpointModeNotice({ modes, provider, createdIn: string | null }) → notification | null` in `server/agent/api-endpoint-mode-notice.ts`.
+- Wire: `notification.apiEndpointModeMismatch?: { createdIn: ApiEndpointCreatedRef | null; current: ApiEndpointRef | null }` (`ApiEndpointCreatedRef.name` is `null` for a deleted endpoint) in `protocol/src/api-endpoint/rpc-schemas.ts`, on the `messages.ts` timeline union and both hand-written `AgentTimelineItem` types.
+- `resumeAgentFromPersistence(handle, overrides, agentId, options: { …, apiEndpointId?: string | null })`: the caller's value is used only when no record exists under `agentId` (`session.ts` `resume_agent_request` resumes under a new id and passes the matched record's mode).
+
+### 3. Contracts
+
+- Stamp at create and import with `active(provider)?.id`; absent means Official, including records written before the field existed. Resume never rewrites it.
+- Creation mode on resume: record by id → `record.apiEndpointId ?? null`; else the caller's value; else unknown → stamp the current mode and queue nothing.
+- The notice is queued after `registerSession` and appended by `hydrateTimelineFromProvider` after the history rows, so it lands at the end of the conversation, not before the replayed history. `appendTimelineItem` is fine: `registerSession` already touched `updatedAt` on this resume.
+- Not queued for `purpose: "history"` (viewing an archived session). Dropped when a deep-equal notice is already in the retained timeline: `closeAgent` keeps `timelineStore`, so an in-process re-resume would otherwise add a second copy. After a daemon restart the timeline is rebuilt and one notice appears again — "once per resume" by design; nothing extra is persisted.
+- `message` is the English fallback for old clients; the app renders `apiEndpointModeMismatch` through `describeApiEndpointModeMismatch` (`app/src/api-endpoints/internal/notices.ts`, exported from `@/api-endpoints`), which returns `null` for Official→Official and the app keeps `message`.
+
+### 4. Validation & Error Matrix
+
+- Provider without endpoint support (`findProvider` misses) → `active` returns null, record has no field → no notice.
+- Created under an endpoint since deleted → `createdIn: { id, name: null }`, "…an API endpoint that has since been deleted…".
+- Record without a persistence handle → `ensureAgentLoaded` creates a new provider session with the same id; it is stamped with the current mode, no notice (a new session is not a continuation).
+- No `apiEndpointMode` injected (unit suites) → nothing stamped, nothing queued.
+
+### 5. Good/Base/Bad Cases
+
+- Good: created on endpoint "Relay", switched to Official, daemon restarted → fetching the timeline resumes it and ends with one warning naming "Relay".
+- Base: created and resumed in the same mode → no notice; record keeps its field.
+- Bad: appending the notice right after `resumeSession` — history hydration then replays the provider log after it, and the warning sits above the conversation it is about.
+
+### 6. Tests Required
+
+- Daemon E2E (`api-endpoint-claude.e2e.test.ts` "an agent session remembers…"): record has `apiEndpointId` under an endpoint and none under Official or for Codex; restart → exactly one notice with the full `apiEndpointModeMismatch`, still one after a second fetch and after `agentManager.closeAgent` + fetch; old/Official record resumed under an endpoint → `createdIn: null`; deleted endpoint → `name: null`; archived agent fetched after restart → no notice.
+- Protocol (`messages.api-endpoint.test.ts`): notification parses with and without the field; snapshot entry with and without `activeApiEndpoint`.
+- App (`api-endpoints/internal/notices.test.ts`): every created/current combination → key and params; `undefined` and Official→Official → `null`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Localizing on the daemon, or a one-shot flag persisted on the record.
+item = { type: "notification", level: "warning", message: t("…") };
+```
+
+#### Correct
+
+```ts
+// Structured facts for the app, English for old clients, queued until history is in.
+const notice = buildApiEndpointModeNotice({ modes: this.apiEndpointMode, provider, createdIn });
+if (notice) this.pendingApiEndpointModeNotices.set(agentId, notice);
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

@@ -238,6 +238,18 @@ export const en = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "This session was created with the API endpoint {{created}}, but the current mode is Official. It may not be able to continue.",
+      deletedToOfficial:
+        "This session was created with an API endpoint that has since been deleted, but the current mode is Official. It may not be able to continue.",
+      officialToEndpoint:
+        "This session was created on Official, but the current mode is the API endpoint {{current}}. It may not be able to continue.",
+      endpointToEndpoint:
+        "This session was created with the API endpoint {{created}}, but the current mode is the API endpoint {{current}}. It may not be able to continue.",
+      deletedToEndpoint:
+        "This session was created with an API endpoint that has since been deleted, but the current mode is the API endpoint {{current}}. It may not be able to continue.",
+    },
     empty: "Start chatting with this agent...",
     scrollToBottom: "Scroll to bottom",
     historyLoadFailed: "Couldn't load agent history",
@@ -2970,6 +2982,121 @@ export const en = {
         failedToFetch: "Failed to fetch diagnostic",
         unknownError: "Unknown error",
       },
+      install: {
+        howTo: "How to install",
+        howToFor: "How to install {{name}}",
+        title: "Install {{name}}",
+        hostHint: "Run on the machine where the Osuna daemon runs",
+        choosePlatform: "Choose the host's operating system",
+        copy: "Copy",
+        copyAccessibility: "Copy {{command}}",
+        copyLabel: "command",
+        copyFailed: "Failed to copy command",
+        docs: "Official docs",
+        docsFor: "{{name}} official docs",
+      },
+      apiEndpoints: {
+        title: "API endpoint",
+        add: "Add",
+        addAccessibility: "Add API endpoint",
+        loading: "Loading API endpoints…",
+        loadFailed: "Couldn't load API endpoints",
+        official: "Official",
+        officialHint: "{{name}}'s own setup, usually your subscription login",
+        inUse: "In use",
+        use: "Use",
+        useAccessibility: "Use {{name}}",
+        editAccessibility: "Edit {{name}}",
+        deleteAccessibility: "Delete {{name}}",
+        modelCount_one: "{{count}} model",
+        modelCount_other: "{{count}} models",
+        switchTitle: "Switch {{provider}} to {{name}}?",
+        switchOfficialTitle: "Switch {{provider}} back to Official?",
+        switchMessage: "This rewrites {{provider}}'s own settings file.",
+        switchConfirm: "Switch",
+        delete: "Delete",
+        deleteTitle: "Delete {{name}}?",
+        deleteMessage: "Its URL, API key, and models are removed from this host.",
+        deleteActiveMessage:
+          "It's in use, so {{provider}} switches back to Official first, then it's deleted.",
+        saveActiveTitle: "Save changes to {{name}}?",
+        saveActiveMessage:
+          "It's in use, so {{provider}}'s own settings file is rewritten with the changes right away.",
+        saveActiveConfirm: "Save",
+        impact: {
+          sessions:
+            "Running {{provider}} sessions that switch to the new settings right away: {{count}}",
+          sessionsMaybe: "Running {{provider}} sessions that may be affected: {{count}}",
+          noSessions: "No {{provider}} sessions are running.",
+          terminal: "{{provider}} in your terminal switches too.",
+        },
+        codexVersionUnsupported: "Update Codex to 0.118.0 or later to use an API endpoint.",
+        configUnparsable:
+          "{{provider}}'s settings file couldn't be parsed, so nothing was changed.",
+        configConflict:
+          "{{provider}}'s settings file kept changing while Osuna was writing it, so nothing was changed. Try again.",
+        health: {
+          modifiedExternally: "{{provider}}'s settings file was changed outside Osuna",
+          unparsable:
+            "{{provider}}'s settings file can't be parsed. Osuna won't write to it until it's fixed.",
+          codexProfileOverride:
+            "A Codex profile overrides the API endpoint, so the switch may not take effect. Remove model_provider and model from that profile, or stop selecting it.",
+          officialTarget: "{{provider}}'s own settings point to {{url}}",
+          reapply: "Re-apply",
+          switchToOfficial: "Switch to Official",
+          reapplyTitle: "Re-apply {{name}} to {{provider}}?",
+          reapplyMessage:
+            "This writes the endpoint into {{provider}}'s own settings file again and replaces the outside changes to the keys Osuna manages.",
+        },
+        inheritedNote:
+          "Also uses Claude Code's API endpoint {{name}}: the env in Claude's settings.json takes precedence over this provider's environment.",
+        form: {
+          createTitle: "New API endpoint",
+          editTitle: "Edit API endpoint",
+          name: "Name",
+          namePlaceholder: "OpenRouter",
+          baseUrl: "Base URL",
+          baseUrlInvalid: "Enter a URL that starts with http:// or https://",
+          apiKey: "API key",
+          apiKeyPlaceholder: "Paste the API key",
+          apiKeySavedPlaceholder: "Saved. Leave blank to keep it",
+          models: "Models",
+          modelsHint: "Fetch the list from this endpoint and check the models to use.",
+          fetchModels: "Fetch models",
+          refetchModels: "Fetch again",
+          searchModels: "Search models ({{count}})",
+          clearSearch: "Clear search",
+          noUpstreamModels: "The endpoint returned no models. Add model IDs by hand below.",
+          noMatchingModels: "No matching models",
+          moreModelsHidden: "Not shown: {{count}}. Search to narrow the list.",
+          modelsUnsupported: "This endpoint can't list models. Add model IDs by hand below.",
+          fetchTimeout: "The endpoint didn't answer in time.",
+          testConnection: "Test connection",
+          testHint:
+            "Sends one short message with the chosen model from this host. It checks the endpoint only: problems on the CLI side, like a Claude login conflict, show up in the first real chat. If that happens, try /logout in the terminal.",
+          testPick: "Pick a model to test",
+          testing: "Testing...",
+          testMenuTitle: "Test with",
+          testSucceeded: "Connected",
+          testFailed: "Failed",
+          testProtocolUnsupported:
+            "This address doesn't serve the {{protocol}} API that {{provider}} needs. Check the Base URL, or use an endpoint that supports it.",
+          selectedModels: "Models to use",
+          modelIdPlaceholder: "Add a model ID by hand",
+          addModel: "Add",
+          noModels: "Check or add at least one model",
+          default: "Default",
+          makeDefault: "Make default",
+          removeModel: "Remove {{id}}",
+          mapping: "Model mapping (optional)",
+          mappingHint:
+            "Aliases like /model opus in the terminal, and background tasks, use the mapped model. Unmapped tiers aren't written.",
+          mappingTitle: "Map {{tier}} to",
+          unmapped: "Not mapped",
+          save: "Save",
+          saving: "Saving…",
+        },
+      },
     },
     project: {
       noEditableTarget: "This project isn't editable on this host.",
@@ -3281,6 +3408,7 @@ export const en = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      apiEndpointNote: "Using the API endpoint {{name}}. This quota doesn't reflect actual usage.",
       title: "Plan usage",
       refresh: "Refresh",
       refreshing: "Refreshing...",

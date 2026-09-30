@@ -65,6 +65,24 @@ import {
 } from "./usage/rpc-schemas.js";
 import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
+  ApiEndpointCancelRequestSchema,
+  ApiEndpointCancelResponseSchema,
+  ApiEndpointDeleteRequestSchema,
+  ApiEndpointDeleteResponseSchema,
+  ApiEndpointFetchModelsRequestSchema,
+  ApiEndpointFetchModelsResponseSchema,
+  ApiEndpointListRequestSchema,
+  ApiEndpointListResponseSchema,
+  ApiEndpointModeMismatchSchema,
+  ApiEndpointRefSchema,
+  ApiEndpointSaveRequestSchema,
+  ApiEndpointSaveResponseSchema,
+  ApiEndpointSetActiveRequestSchema,
+  ApiEndpointSetActiveResponseSchema,
+  ApiEndpointTestConnectionRequestSchema,
+  ApiEndpointTestConnectionResponseSchema,
+} from "./api-endpoint/rpc-schemas.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -443,6 +461,10 @@ export const ProviderSnapshotEntrySchema = z.object({
   // 预测用这个 provider 新建的会话能否调用 create_agent，与 agent 快照同名同义；新建界面据此置灰。
   canCreateAgents: z.boolean().optional(),
   createAgentsUnavailableReason: z.string().optional(),
+  // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
+  isModelListAuthoritative: z.boolean().optional(),
+  // 当前启用的第三方接口；官方模式下没有。
+  activeApiEndpoint: ApiEndpointRefSchema.optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({
@@ -803,6 +825,8 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     type: z.literal("notification"),
     level: z.enum(["info", "warning", "error"]),
     message: z.string(),
+    // 有它时 App 按它本地化，message 是给老客户端的英文原文。
+    apiEndpointModeMismatch: ApiEndpointModeMismatchSchema.optional(),
   }),
   z.object({
     type: z.literal("compaction"),
@@ -3454,6 +3478,13 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UsagePricingRefreshRequestSchema,
   UsageAgentGetRequestSchema,
   UsageAgentTurnsListRequestSchema,
+  ApiEndpointListRequestSchema,
+  ApiEndpointSaveRequestSchema,
+  ApiEndpointDeleteRequestSchema,
+  ApiEndpointSetActiveRequestSchema,
+  ApiEndpointFetchModelsRequestSchema,
+  ApiEndpointTestConnectionRequestSchema,
+  ApiEndpointCancelRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3619,6 +3650,8 @@ export const ServerInfoStatusPayloadSchema = z
     permissions: z.array(DaemonPermissionSchema).optional(),
     // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
     desktopManaged: z.boolean().optional(),
+    // daemon 的 process.platform（darwin / linux / win32 …）。用字符串而非枚举，新值不会让老客户端解析失败。
+    hostPlatform: z.string().optional(),
     capabilities: ServerCapabilitiesFromUnknownSchema.optional(),
     // COMPAT(providersSnapshot): added in v0.1.48, remove gating when all clients use snapshot
     features: z
@@ -3802,6 +3835,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(subagentCallLinks): added in v0.12.x, remove gate after 2027-09-30.
         // create_agent 的子智能体带 paseo.parent-tool-call-id，时间线工具名规范成 paseo.create_agent。
         subagentCallLinks: z.boolean().optional(),
+        // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
+        // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
+        apiEndpoints: z.boolean().optional(),
       })
       .optional(),
   })
@@ -7019,6 +7055,13 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   UsagePricingUpdatedMessageSchema,
   UsageAgentGetResponseSchema,
   UsageAgentTurnsListResponseSchema,
+  ApiEndpointListResponseSchema,
+  ApiEndpointSaveResponseSchema,
+  ApiEndpointDeleteResponseSchema,
+  ApiEndpointSetActiveResponseSchema,
+  ApiEndpointFetchModelsResponseSchema,
+  ApiEndpointTestConnectionResponseSchema,
+  ApiEndpointCancelResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

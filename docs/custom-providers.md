@@ -76,6 +76,16 @@ Required fields for custom providers:
 
 See [Codex with a custom OpenAI-compatible endpoint](#codex-with-a-custom-openai-compatible-endpoint) below for the dedicated Codex example.
 
+A custom provider only sets the environment of the agent sessions Paseo starts for its own row. To move Claude Code or Codex itself onto a third-party endpoint, add an **API endpoint** in that provider's settings instead ([glossary](glossary.md), [ADR 0004](adr/0004-api-endpoint-rewrites-cli-config.md)).
+
+### While an API endpoint is active
+
+**Claude:** the active endpoint lives in `settings.json` `env` ([ADR 0004](adr/0004-api-endpoint-rewrites-cli-config.md) lists the keys), and that outranks the process environment. So every custom provider that extends `"claude"` reaches the active endpoint with its key, whatever its own `env` says. Its own model list still picks the session's model, so those IDs have to exist on that endpoint, while aliases like `opus` and background tasks use the endpoint's mapped tiers. The `"WebSearch"` deny rule the endpoint adds applies to it too. Its row in the provider list says which endpoint it goes through. Switch Claude Code back to Official to give these providers their own `env` again.
+
+**Codex:** a custom provider with `OPENAI_BASE_URL` sets its own `model_provider` per request ([What Paseo wires up](#what-paseo-wires-up)), so it keeps its own endpoint. One without `OPENAI_BASE_URL` reads the top-level `model_provider` from `config.toml` and follows the active endpoint. Model IDs in its `models` have to exist on that endpoint.
+
+The switch confirmation counts running sessions of `claude` and `codex` only. Sessions of custom providers are not in that number.
+
 ---
 
 ## Z.AI (Zhipu) coding plan
@@ -719,6 +729,8 @@ Each entry in the `models` array:
 The built-in `claude` provider appends concrete model IDs from `~/.claude/settings.json` to its first-party Claude model list. Paseo reads the top-level `model` field and these `env` keys: `ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, and `ANTHROPIC_DEFAULT_HAIKU_MODEL`.
 
 This lets users who already configured Claude Code for Bedrock, OpenRouter, ollama, Z.AI, or another Anthropic-compatible gateway select the exact model ID in Paseo. Explicit model IDs are passed unchanged to Claude Code, even when the same string is a compatibility alias for a built-in model. When `agents.providers.claude.models` is set it **replaces** both the hardcoded first-party Claude list and any settings.json-discovered entries; use `agents.providers.claude.additionalModels` to keep the first-party list and append curated entries on top.
+
+While a Claude Code or Codex API endpoint is active, that provider's model list is exactly the models picked for the endpoint. settings.json discovery, `models`, and `additionalModels` for that provider come back when you switch to Official.
 
 ### Gotcha: `extends: "claude"` with third-party endpoints
 

@@ -179,7 +179,7 @@ function parseCodexVersion(versionOutput: string): [number, number, number] | nu
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
-function codexVersionAtLeast(
+export function codexVersionAtLeast(
   versionOutput: string,
   min: readonly [number, number, number],
 ): boolean {
@@ -533,6 +533,14 @@ async function resolveCodexLaunchPrefix(runtimeSettings?: ProviderRuntimeSetting
       launch.source === "override" ? launch.command : (availability.resolvedPath ?? launch.command),
     args: launch.args,
   };
+}
+
+/** `codex --version` 的原始输出，按用户配置的 codex 命令执行；找不到 codex 时抛错。 */
+export async function probeCodexVersion(
+  runtimeSettings: ProviderRuntimeSettings | undefined,
+): Promise<string> {
+  const launchPrefix = await resolveCodexLaunchPrefix(runtimeSettings);
+  return resolveBinaryVersion(launchPrefix.command);
 }
 
 async function resolveCodexLaunch(
@@ -3221,7 +3229,7 @@ function buildCodexAppServerInitializeParams(): {
   };
 }
 
-function normalizeOpenAICompatibleBaseUrl(value: string): string | null {
+export function normalizeOpenAICompatibleBaseUrl(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
     return null;

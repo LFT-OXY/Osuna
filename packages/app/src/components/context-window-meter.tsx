@@ -4,6 +4,8 @@ import Svg, { Circle } from "react-native-svg";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { selectActiveApiEndpoint } from "@/api-endpoints";
+import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { formatSessionCost, formatTokenArrows, formatUsageTokensCompact } from "@/usage/format";
@@ -138,6 +140,10 @@ export function ContextWindowMeter({
     serverId ?? null,
     { enabled: isTooltipOpen },
   );
+  const { entries: providerEntries } = useProvidersSnapshot(serverId ?? null, {
+    enabled: isTooltipOpen,
+  });
+  const activeApiEndpoint = selectActiveApiEndpoint(providerEntries, provider);
   const usageScope = useMemo<AgentUsageScope | null>(
     () => (usageSupport === true && serverId && agentId ? { serverId, agentId } : null),
     [agentId, serverId, usageSupport],
@@ -270,7 +276,11 @@ export function ContextWindowMeter({
             provider={provider}
             runningTurnStartedAt={runningTurnStartedAt}
           />
-          <ProviderUsageTooltipSection view={providerUsageView} activeProviderId={provider} />
+          <ProviderUsageTooltipSection
+            view={providerUsageView}
+            activeProviderId={provider}
+            activeApiEndpoint={activeApiEndpoint}
+          />
         </View>
       </TooltipContent>
     </Tooltip>

@@ -5,6 +5,7 @@ import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { randomUUID } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { stat } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import {
   AGENT_LIFECYCLE_STATUSES,
   type AgentLifecycleStatus,
@@ -36,6 +37,7 @@ import {
   type AgentLaunchContext,
   type AgentSlashCommand,
   type AgentMode,
+  type AgentModelDefinition,
   type AgentPermissionRequest,
   type AgentPermissionResponse,
   type AgentPermissionResult,
@@ -56,8 +58,11 @@ import {
   type ImportedTimelineEntry,
   type ImportableProviderSession,
   type ListImportableSessionsOptions,
+  type ApiEndpointModeSource,
+  type ProviderModelOverride,
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
+import { buildApiEndpointModeNotice } from "./api-endpoint-mode-notice.js";
 import { CommandCatalog, type CommandCatalogResult } from "./command-catalog.js";
 import { restoreProviderSessionIds } from "./agent-storage.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
@@ -189,6 +194,11 @@ interface TimeoutOptions {
   operation: Promise<void>;
   timeoutMs: number;
   onLateError?: (error: unknown) => void;
+}
+
+function pickDefaultModelId(models: AgentModelDefinition[]): string | undefined {
+  const defaultModel = models.find((model) => model.isDefault) ?? models[0];
+  return defaultModel?.id;
 }
 
 function formatProviderList(providers: readonly string[]): string {
@@ -343,6 +353,10 @@ export interface AgentManagerOptions {
   paseoToolsGate?: PaseoToolsGate;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
+  /** 与提供方快照同一个来源：不带模型新建会话时，默认模型从覆盖后的目录里选。 */
+  modelOverride?: ProviderModelOverride;
+  /** 会话记下创建时启用的第三方接口，恢复时与当前模式对照。 */
+  apiEndpointMode?: ApiEndpointModeSource;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
@@ -426,6 +440,8 @@ interface ManagedAgentBase {
    */
   workspaceId?: string;
   owner?: AgentOwner;
+  /** 创建时启用的第三方接口；没有即「官方」，老记录也按官方处理。 */
+  apiEndpointId?: string;
   capabilities: AgentCapabilityFlags;
   /**
    * 会话启动时判定一次，运行中改开关或策略不影响，reload 后重新判定。
@@ -628,6 +644,8 @@ interface SteerEventBarrier {
 }
 
 const BUSY_STATUSES: Set<AgentLifecycleStatus> = new Set(["initializing", "running"]);
+// 运行时还在的状态：空闲的会话进程也活着，下一轮对话就会读到改过的 CLI 配置。
+const LIVE_STATUSES: Set<AgentLifecycleStatus> = new Set(["initializing", "idle", "running"]);
 const AgentIdSchema = z.guid();
 
 function isAgentBusy(status: AgentLifecycleStatus): boolean {
@@ -800,6 +818,10 @@ export class AgentManager {
   private readonly resolvePaseoToolPolicy: (
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
+  private readonly modelOverride?: ProviderModelOverride;
+  private readonly apiEndpointMode?: ApiEndpointModeSource;
+  // 恢复时发现模式不一致，等时间线从提供方历史重建完再追加提示，否则提示会排在历史前面。
+  private readonly pendingApiEndpointModeNotices = new Map<string, AgentTimelineItem>();
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -820,6 +842,8 @@ export class AgentManager {
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
+    this.modelOverride = options.modelOverride;
+    this.apiEndpointMode = options.apiEndpointMode;
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.commandCatalog = new CommandCatalog({
@@ -1064,6 +1088,17 @@ export class AgentManager {
     return Array.from(this.agents.values())
       .filter((agent) => !agent.internal)
       .map((agent) => Object.assign({}, agent));
+  }
+
+  /** 该提供方下运行时还在的会话数；第三方接口改写 CLI 配置时会影响到它们。 */
+  countLiveAgents(provider: AgentProvider): number {
+    let count = 0;
+    for (const agent of this.agents.values()) {
+      if (!agent.internal && agent.provider === provider && LIVE_STATUSES.has(agent.lifecycle)) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   async listImportableSessions(
@@ -1362,6 +1397,7 @@ export class AgentManager {
     const createOptions = this.buildCreateSessionOptions(options);
     const session = await client.createSession(providerLaunchConfig, launchContext, createOptions);
     await this.requireExternalMcpSupport(session, storedConfig);
+    const apiEndpointId = this.currentApiEndpointId(storedConfig.provider);
     const agent = await this.registerSession(session, storedConfig, resolvedAgentId, {
       labels: options.labels,
       initialTitle: options.initialTitle,
@@ -1374,6 +1410,7 @@ export class AgentManager {
       }),
       workspaceId: options.workspaceId,
       owner: options.owner,
+      apiEndpointId,
       historyPrimed: true,
     });
     if (!agent.internal) {
@@ -1405,6 +1442,8 @@ export class AgentManager {
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
+      // 没有同 id 记录时由调用方给出创建时的模式；null 为官方，缺省表示不知道，按当前模式记。
+      apiEndpointId?: string | null;
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1436,6 +1475,8 @@ export class AgentManager {
       labels?: Record<string, string>;
       workspaceId?: string;
       owner?: AgentOwner;
+      // 没有同 id 记录时由调用方给出创建时的模式；null 为官方，缺省表示不知道，按当前模式记。
+      apiEndpointId?: string | null;
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1487,8 +1528,14 @@ export class AgentManager {
       currentResumeOptions,
     );
     await this.requireExternalMcpSupport(session, storedConfig);
-    return this.registerSession(session, storedConfig, resolvedAgentId, {
+    const createdIn = resolveCreatedApiEndpointId(record, options?.apiEndpointId);
+    let apiEndpointId = createdIn ?? undefined;
+    if (createdIn === undefined) {
+      apiEndpointId = this.currentApiEndpointId(handle.provider);
+    }
+    const agent = await this.registerSession(session, storedConfig, resolvedAgentId, {
       ...options,
+      apiEndpointId,
       persistence: handle,
       createAgentsCapability: resolveCreateAgentsCapability({
         gateReason: paseoToolsGateReason,
@@ -1498,6 +1545,48 @@ export class AgentManager {
         sessionSupportsMcpServers: session.capabilities.supportsMcpServers,
       }),
     });
+    this.queueApiEndpointModeNotice({
+      agentId: agent.id,
+      provider: handle.provider,
+      createdIn,
+      purpose: currentResumeOptions?.purpose,
+    });
+    return agent;
+  }
+
+  private currentApiEndpointId(provider: AgentProvider): string | undefined {
+    return this.apiEndpointMode?.active(provider)?.id;
+  }
+
+  private queueApiEndpointModeNotice(input: {
+    agentId: string;
+    provider: AgentProvider;
+    createdIn: string | null | undefined;
+    purpose: AgentResumeSessionOptions["purpose"] | undefined;
+  }): void {
+    const { agentId, provider, createdIn, purpose } = input;
+    this.pendingApiEndpointModeNotices.delete(agentId);
+    // 不知道创建时的模式，就无从对照。
+    if (createdIn === undefined) return;
+    if (!this.apiEndpointMode) return;
+    // 只看归档会话的历史，不会继续对话。
+    if (purpose === "history") return;
+    const notice = buildApiEndpointModeNotice({
+      modes: this.apiEndpointMode,
+      provider,
+      createdIn,
+    });
+    if (notice) this.pendingApiEndpointModeNotices.set(agentId, notice);
+  }
+
+  /** 关闭后在同一进程里再恢复，时间线原样保留；里面已有同样的提示就不再追加。 */
+  private takePendingApiEndpointModeNotice(agentId: string): AgentTimelineItem | null {
+    const notice = this.pendingApiEndpointModeNotices.get(agentId);
+    this.pendingApiEndpointModeNotices.delete(agentId);
+    if (!notice) return null;
+    const rows = this.timelineStore.getRows(agentId);
+    const alreadyShown = rows.some((row) => isDeepStrictEqual(row.item, notice));
+    return alreadyShown ? null : notice;
   }
 
   importProviderSession(input: {
@@ -1559,6 +1648,7 @@ export class AgentManager {
       const timelineRows = buildImportedTimelineRows(imported.timeline);
       const initialTitle = resolveImportedAgentTitle(importedConfig, timelineRows);
 
+      const apiEndpointId = this.currentApiEndpointId(input.provider);
       handedToRegistration = true;
       const agent = await this.registerSession(imported.session, importedConfig, resolvedAgentId, {
         labels: input.labels,
@@ -1570,6 +1660,7 @@ export class AgentManager {
           sessionSupportsMcpServers: imported.session.capabilities.supportsMcpServers,
         }),
         workspaceId: input.workspaceId,
+        apiEndpointId,
         timelineRows,
         timelineNextSeq: timelineRows.length + 1,
         persistence: imported.persistence,
@@ -1692,6 +1783,7 @@ export class AgentManager {
         }),
         workspaceId: existing.workspaceId,
         owner: existing.owner,
+        apiEndpointId: existing.apiEndpointId,
         createdAt: existing.createdAt,
         updatedAt: existing.updatedAt,
         lastUserMessageAt: existing.lastUserMessageAt,
@@ -1994,6 +2086,7 @@ export class AgentManager {
         cwd: record.cwd,
         workspaceId: record.workspaceId,
         owner: record.owner,
+        apiEndpointId: record.apiEndpointId,
         session: null,
         capabilities: STORED_AGENT_CAPABILITIES,
         config: buildStoredAgentConfig(record),
@@ -3246,6 +3339,10 @@ export class AgentManager {
   ): Promise<void> {
     const agent = this.requireSessionAgent(agentId);
     await this.hydrateTimelineFromLegacyProviderHistory(agent, options);
+    const notice = this.takePendingApiEndpointModeNotice(agentId);
+    if (notice) {
+      await this.appendTimelineItem(agentId, notice);
+    }
   }
 
   async rewind(agentId: string, messageId: string, mode: RewindMode): Promise<void> {
@@ -3566,6 +3663,7 @@ export class AgentManager {
       workspaceId?: string;
       owner?: AgentOwner;
       createAgentsCapability: CreateAgentsCapability;
+      apiEndpointId?: string;
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -3588,12 +3686,14 @@ export class AgentManager {
         options,
       });
 
+      const apiEndpointId = options?.apiEndpointId;
       const managed = this.buildManagedAgentForRegister({
         resolvedAgentId,
         session,
         config,
         now,
         durableTimelineHasRows,
+        apiEndpointId,
         options,
         createAgentsCapability: options.createAgentsCapability,
       });
@@ -3705,6 +3805,7 @@ export class AgentManager {
     config: AgentSessionConfig;
     now: Date;
     durableTimelineHasRows: boolean;
+    apiEndpointId: string | undefined;
     options:
       | {
           createdAt?: Date;
@@ -3722,7 +3823,15 @@ export class AgentManager {
       | undefined;
     createAgentsCapability: CreateAgentsCapability;
   }): ActiveManagedAgent {
-    const { resolvedAgentId, session, config, now, durableTimelineHasRows, options } = params;
+    const {
+      resolvedAgentId,
+      session,
+      config,
+      now,
+      durableTimelineHasRows,
+      apiEndpointId,
+      options,
+    } = params;
     const persistence = attachPersistenceCwd(
       options?.persistence ?? session.describePersistence(),
       config.cwd,
@@ -3733,6 +3842,7 @@ export class AgentManager {
       cwd: config.cwd,
       workspaceId: options?.workspaceId,
       owner: options?.owner,
+      apiEndpointId,
       session,
       capabilities: session.capabilities,
       createAgentsCapability: params.createAgentsCapability,
@@ -3816,6 +3926,7 @@ export class AgentManager {
   private discardRetainedAgentState(agentId: string): void {
     this.timelineStore.delete(agentId);
     this.paseoToolPolicies.delete(agentId);
+    this.pendingApiEndpointModeNotices.delete(agentId);
     for (const event of this.providerSubagents.deleteParent(agentId)) {
       this.dispatch({ type: "provider_subagent", event });
     }
@@ -5215,13 +5326,17 @@ export class AgentManager {
     if (!client) {
       return undefined;
     }
+    const overriddenModels = this.modelOverride?.(config.provider);
+    if (overriddenModels) {
+      return pickDefaultModelId(overriddenModels);
+    }
     try {
       const catalog = await client.fetchCatalog({
         scope: "workspace",
         cwd: config.cwd,
         force: false,
       });
-      return (catalog.models.find((model) => model.isDefault) ?? catalog.models[0])?.id;
+      return pickDefaultModelId(catalog.models);
     } catch {
       // Provider may not support model listing — leave model undefined.
       return undefined;
@@ -5446,4 +5561,13 @@ export function commandMayHaveChangedExternalState(command: string): boolean {
     // ahead/behind counts can drift stale until the next refresh.
     /\bgit\s+fetch\b/.test(normalized)
   );
+}
+
+/** 创建时的模式：有记录读记录，缺字段即官方；没有记录用调用方给的；都没有返回 undefined，表示不知道。 */
+function resolveCreatedApiEndpointId(
+  record: StoredAgentRecord | null,
+  fallback: string | null | undefined,
+): string | null | undefined {
+  if (record) return record.apiEndpointId ?? null;
+  return fallback;
 }

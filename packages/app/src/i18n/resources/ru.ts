@@ -244,6 +244,18 @@ export const ru: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "Эта сессия создана с API-эндпоинтом {{created}}, а сейчас режим «Официальный». Продолжить её может не получиться.",
+      deletedToOfficial:
+        "Эта сессия создана с API-эндпоинтом, который уже удалён, а сейчас режим «Официальный». Продолжить её может не получиться.",
+      officialToEndpoint:
+        "Эта сессия создана в режиме «Официальный», а сейчас используется API-эндпоинт {{current}}. Продолжить её может не получиться.",
+      endpointToEndpoint:
+        "Эта сессия создана с API-эндпоинтом {{created}}, а сейчас используется API-эндпоинт {{current}}. Продолжить её может не получиться.",
+      deletedToEndpoint:
+        "Эта сессия создана с API-эндпоинтом, который уже удалён, а сейчас используется API-эндпоинт {{current}}. Продолжить её может не получиться.",
+    },
     empty: "Начните общаться с этим агентом...",
     scrollToBottom: "Прокрутить вниз",
     historyLoadFailed: "Не удалось загрузить историю агента",
@@ -2900,6 +2912,124 @@ export const ru: TranslationResources = {
         failedToFetch: "Не удалось получить диагностику.",
         unknownError: "Неизвестная ошибка",
       },
+      install: {
+        howTo: "Как установить",
+        howToFor: "Как установить {{name}}",
+        title: "Установка {{name}}",
+        hostHint: "Выполните на машине, где запущен daemon Osuna",
+        choosePlatform: "Выберите операционную систему хоста",
+        copy: "Копировать",
+        copyAccessibility: "Копировать {{command}}",
+        copyLabel: "команду",
+        copyFailed: "Не удалось скопировать команду",
+        docs: "Официальная документация",
+        docsFor: "Официальная документация {{name}}",
+      },
+      apiEndpoints: {
+        title: "API-эндпоинт",
+        add: "Добавить",
+        addAccessibility: "Добавить API-эндпоинт",
+        loading: "Загрузка API-эндпоинтов…",
+        loadFailed: "Не удалось загрузить API-эндпоинты",
+        official: "Официальный",
+        officialHint: "Собственные настройки {{name}}, обычно вход по подписке",
+        inUse: "Используется",
+        use: "Использовать",
+        useAccessibility: "Использовать {{name}}",
+        editAccessibility: "Изменить {{name}}",
+        deleteAccessibility: "Удалить {{name}}",
+        modelCount_one: "{{count}} модель",
+        modelCount_other: "Моделей: {{count}}",
+        switchTitle: "Переключить {{provider}} на {{name}}?",
+        switchOfficialTitle: "Вернуть {{provider}} на официальный?",
+        switchMessage: "Это перезапишет файл настроек {{provider}}.",
+        switchConfirm: "Переключить",
+        delete: "Удалить",
+        deleteTitle: "Удалить {{name}}?",
+        deleteMessage: "Его URL, API-ключ и модели будут удалены с этого хоста.",
+        deleteActiveMessage:
+          "Он используется, поэтому {{provider}} сначала вернётся на официальный, а затем он будет удалён.",
+        saveActiveTitle: "Сохранить изменения в {{name}}?",
+        saveActiveMessage:
+          "Он используется, поэтому файл настроек {{provider}} сразу перезапишется с изменениями.",
+        saveActiveConfirm: "Сохранить",
+        impact: {
+          sessions:
+            "Запущенные сессии {{provider}}, которые сразу перейдут на новые настройки: {{count}}",
+          sessionsMaybe: "Запущенные сессии {{provider}}, которые это может затронуть: {{count}}",
+          noSessions: "Запущенных сессий {{provider}} нет.",
+          terminal: "{{provider}} в терминале тоже переключится.",
+        },
+        codexVersionUnsupported:
+          "Чтобы использовать API-эндпоинт, обновите Codex до версии 0.118.0 или новее.",
+        configUnparsable:
+          "Не удалось разобрать файл настроек {{provider}}, поэтому ничего не изменено.",
+        configConflict:
+          "Файл настроек {{provider}} постоянно менялся, пока Osuna его записывала, поэтому ничего не изменено. Попробуйте ещё раз.",
+        health: {
+          modifiedExternally: "Файл настроек {{provider}} изменён вне Osuna",
+          unparsable:
+            "Не удаётся разобрать файл настроек {{provider}}. Osuna не будет в него записывать, пока его не исправят.",
+          codexProfileOverride:
+            "Профиль Codex переопределяет API-эндпоинт, поэтому переключение может не сработать. Уберите model_provider и model из этого профиля или перестаньте его выбирать.",
+          officialTarget: "Собственные настройки {{provider}} указывают на {{url}}",
+          reapply: "Применить заново",
+          switchToOfficial: "Вернуть официальный",
+          reapplyTitle: "Заново применить {{name}} к {{provider}}?",
+          reapplyMessage:
+            "Эндпоинт снова записывается в собственный файл настроек {{provider}}, внешние изменения ключей, которыми управляет Osuna, заменяются.",
+        },
+        inheritedNote:
+          "Тоже идёт через API-эндпоинт {{name}} из Claude Code: env в settings.json Claude важнее окружения этого провайдера.",
+        form: {
+          createTitle: "Новый API-эндпоинт",
+          editTitle: "Изменить API-эндпоинт",
+          name: "Название",
+          namePlaceholder: "OpenRouter",
+          baseUrl: "Базовый URL",
+          baseUrlInvalid: "Введите URL, начинающийся с http:// или https://",
+          apiKey: "API-ключ",
+          apiKeyPlaceholder: "Вставьте API-ключ",
+          apiKeySavedPlaceholder: "Сохранён. Оставьте пустым, чтобы не менять",
+          models: "Модели",
+          modelsHint:
+            "Загрузите список с этого эндпоинта и отметьте модели, которые будете использовать.",
+          fetchModels: "Загрузить модели",
+          refetchModels: "Загрузить снова",
+          searchModels: "Поиск моделей ({{count}})",
+          clearSearch: "Очистить поиск",
+          noUpstreamModels: "Эндпоинт не вернул ни одной модели. Добавьте ID моделей вручную ниже.",
+          noMatchingModels: "Нет подходящих моделей",
+          moreModelsHidden: "Не показано: {{count}}. Уточните поиск.",
+          modelsUnsupported:
+            "Этот эндпоинт не умеет выдавать список моделей. Добавьте ID моделей вручную ниже.",
+          fetchTimeout: "Эндпоинт не ответил вовремя.",
+          testConnection: "Проверить подключение",
+          testHint:
+            "Отправляет с этого хоста одно короткое сообщение выбранной модели. Проверяется только эндпоинт: проблемы на стороне CLI, например конфликт входа в Claude, проявятся лишь в первом настоящем диалоге. В таком случае попробуйте /logout в терминале.",
+          testPick: "Выберите модель для проверки",
+          testing: "Проверка...",
+          testMenuTitle: "Проверить с моделью",
+          testSucceeded: "Подключено",
+          testFailed: "Ошибка",
+          testProtocolUnsupported:
+            "По этому адресу нет API {{protocol}}, нужного {{provider}}. Проверьте базовый URL или используйте эндпоинт, который его поддерживает.",
+          selectedModels: "Используемые модели",
+          modelIdPlaceholder: "Добавить ID модели вручную",
+          addModel: "Добавить",
+          noModels: "Отметьте или добавьте хотя бы одну модель",
+          default: "По умолчанию",
+          makeDefault: "Сделать по умолчанию",
+          removeModel: "Удалить {{id}}",
+          mapping: "Сопоставление моделей (необязательно)",
+          mappingHint:
+            "Псевдонимы вроде /model opus в терминале и фоновые задачи используют сопоставленную модель. Несопоставленные уровни не записываются.",
+          mappingTitle: "Сопоставить {{tier}} с",
+          unmapped: "Не сопоставлять",
+          save: "Сохранить",
+          saving: "Сохранение…",
+        },
+      },
     },
     project: {
       noEditableTarget: "Этот проект нельзя редактировать на этом хосте.",
@@ -3213,6 +3343,8 @@ export const ru: TranslationResources = {
       cell: "{{day}} · {{tokens}} токенов",
     },
     planUsage: {
+      apiEndpointNote:
+        "Используется API-эндпоинт {{name}}. Этот лимит не отражает реальный расход.",
       title: "Расход по тарифу",
       refresh: "Обновить",
       refreshing: "Обновление...",

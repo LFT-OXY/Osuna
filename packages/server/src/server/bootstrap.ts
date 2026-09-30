@@ -150,6 +150,7 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
+import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
@@ -176,7 +177,12 @@ import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import type { PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
-import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
+import type {
+  AgentClient,
+  AgentModelDefinition,
+  AgentProvider,
+  ApiEndpointModeSource,
+} from "./agent/agent-sdk-types.js";
 import type {
   AgentProfile,
   AgentSkillSelection,
@@ -451,6 +457,8 @@ export interface PaseoDaemonConfig {
   };
   providerOverrides?: Record<string, ProviderOverride>;
   usage?: UsageConfig;
+  // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
+  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck">;
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;
@@ -904,6 +912,30 @@ export async function createPaseoDaemon(
     workspaceGitService,
     logger,
   });
+  // 先于提供方快照创建：第三方接口启用时，快照和新会话的默认模型都取自它。
+  // 两个回调里的 providerSnapshotManager 在下面创建，回调只在 daemon 启动后才会被调用。
+  const apiEndpointService = new ApiEndpointService({
+    paseoHome: config.paseoHome,
+    logger,
+    providerRuntimeSettings: (provider) => providerSnapshotManager.getRuntimeSettings(provider),
+    onActiveEndpointChanged: (provider) => {
+      void providerSnapshotManager
+        .refreshSettingsSnapshot({ providers: [provider] })
+        .catch((error) => {
+          logger.warn({ err: error, provider }, "Failed to refresh provider snapshot");
+        });
+    },
+    // agentManager 在下面创建；只有列表查询会调用，那时 daemon 已经启动。
+    countLiveSessions: (provider) => agentManager.countLiveAgents(provider),
+    ...config.apiEndpoints,
+  });
+  function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
+    return apiEndpointService.activeModels(provider);
+  }
+  const apiEndpointMode: ApiEndpointModeSource = {
+    active: (provider) => apiEndpointService.activeEndpoint(provider),
+    endpointName: (provider, endpointId) => apiEndpointService.endpointName(provider, endpointId),
+  };
   const agentProviderRuntime = await createAgentProviderRuntime({
     paseoHome: config.paseoHome,
     logger,
@@ -915,6 +947,8 @@ export async function createPaseoDaemon(
       managedProcesses,
       isDev: config.isDev === true,
       extraClients: config.agentClients,
+      modelOverride: apiEndpointModelOverride,
+      activeApiEndpoint: apiEndpointMode.active,
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;
@@ -943,6 +977,8 @@ export async function createPaseoDaemon(
     mcpAuthToken: agentMcpAuthToken,
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
+    modelOverride: apiEndpointModelOverride,
+    apiEndpointMode,
     logger,
   });
   providerSnapshotManager.setCreateAgentsPredictor((provider, clientCapabilities) =>
@@ -1764,6 +1800,7 @@ export async function createPaseoDaemon(
               orchestrationSkills,
               workspaceLabelService,
               usageService,
+              apiEndpointService,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

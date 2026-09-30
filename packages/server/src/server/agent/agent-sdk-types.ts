@@ -6,6 +6,10 @@ import type {
   ToolPolicy,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type {
+  ApiEndpointModeMismatch,
+  ApiEndpointRef,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
 export type { AgentProviderNotice, AgentTaskItem };
@@ -129,6 +133,10 @@ export interface ProviderSnapshotEntry {
   defaultModeId?: string | null;
   canCreateAgents?: boolean;
   createAgentsUnavailableReason?: string;
+  // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
+  isModelListAuthoritative?: boolean;
+  // 当前启用的第三方接口；官方模式下没有。
+  activeApiEndpoint?: ApiEndpointRef;
 }
 
 export interface AgentCreateConfigParent {
@@ -418,6 +426,7 @@ export type AgentTimelineItem =
       type: "notification";
       level: "info" | "warning" | "error";
       message: string;
+      apiEndpointModeMismatch?: ApiEndpointModeMismatch;
     }
   | CompactionTimelineItem
   | PluginTimelineItem;
@@ -739,6 +748,21 @@ export interface ProviderCatalog {
   models: AgentModelDefinition[];
   modes: AgentMode[];
   defaultModeId?: string | null;
+}
+
+/**
+ * 整份替换某个提供方的模型目录；null 表示照常用提供方自己的目录。
+ * 第三方接口启用时由它给出接口里勾选的模型（ADR 0004）。
+ */
+export type ProviderModelOverride = (provider: AgentProvider) => AgentModelDefinition[] | null;
+
+/** 当前启用的第三方接口；官方模式或不支持的提供方为 null。 */
+export type ActiveApiEndpointLookup = (provider: AgentProvider) => ApiEndpointRef | null;
+
+/** 会话按创建时的模式记录接口 id，恢复时对照当前模式；接口已删除时 endpointName 为 null。 */
+export interface ApiEndpointModeSource {
+  active: ActiveApiEndpointLookup;
+  endpointName(provider: AgentProvider, endpointId: string): string | null;
 }
 
 export interface ResolveAgentDefaultModeInput {

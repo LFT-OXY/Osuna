@@ -13,6 +13,7 @@ import {
 } from "@/provider-selection/provider-selection";
 import { filterSelectableModels, findModelByReference } from "@/provider-selection/model-catalog";
 import {
+  buildAuthoritativeModelProviders,
   buildProviderDefinitionMapForStatuses,
   INITIAL_USER_MODIFIED,
   RESOLVABLE_PROVIDER_STATUSES,
@@ -96,6 +97,11 @@ export interface ScheduleFormState {
   selectedModel: string;
   selectedMode: string;
   selectedThinkingOptionId: string;
+  /**
+   * 提交时是否把模型写回偏好。新建定时任务时，权威列表（第三方接口启用时）下没手动选过的模型
+   * 可能只是回退出来的默认值，写进去会盖掉官方模式下记住的模型。
+   */
+  shouldRememberSelectedModel: boolean;
   workingDir: string;
   projectDisplay: ScheduleFormDisplay | null;
   selectedProjectOptionId: string;
@@ -567,6 +573,7 @@ function resolveCanSubmit(state: ScheduleFormState): boolean {
 
 function updateDerivedState(input: {
   state: ScheduleFormState;
+  isModelUserChosen: boolean;
   hosts: readonly ScheduleFormHost[];
   targets: readonly ScheduleProjectTarget[];
   providerEntries: readonly ProviderSnapshotEntry[];
@@ -586,6 +593,13 @@ function updateDerivedState(input: {
     hosts: input.hosts,
     selectedServerId: input.state.selectedServerId,
   });
+  const selectedProvider = input.state.selectedProvider;
+  const authoritativeProviders = buildAuthoritativeModelProviders(input.providerEntries);
+  const isSelectedModelListAuthoritative =
+    selectedProvider !== null && authoritativeProviders.has(selectedProvider);
+  const mayBeFallbackModel =
+    input.state.mode === "create" && isSelectedModelListAuthoritative && !input.isModelUserChosen;
+  const shouldRememberSelectedModel = !mayBeFallbackModel;
   const effectiveIsolation = resolveEffectiveIsolation({
     isolation: input.state.isolation,
     canUseWorktreeIsolation,
@@ -607,6 +621,7 @@ function updateDerivedState(input: {
       cwd: input.state.workingDir,
     }),
     selectedProjectOptionId: projectTarget?.optionId ?? input.state.selectedProjectOptionId,
+    shouldRememberSelectedModel,
     selectedModelDisplay: resolveModelDisplay({
       entries: input.providerEntries,
       provider: input.state.selectedProvider,
@@ -667,6 +682,7 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
     selectedModel: initialModel,
     selectedMode: initialMode,
     selectedThinkingOptionId: initialThinking,
+    shouldRememberSelectedModel: true,
     workingDir,
     projectDisplay: buildInitialProjectDisplay({
       config,
@@ -701,6 +717,7 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
   };
   return updateDerivedState({
     state,
+    isModelUserChosen: false,
     hosts: snapshot.hosts,
     targets: snapshot.defaults.projectTargets,
     providerEntries: [],
@@ -740,15 +757,31 @@ function resolveSnapshotSelection(input: {
     providerDefinitions,
     statuses: RESOLVABLE_PROVIDER_STATUSES,
   });
-  const resolved = resolveFormStateFromProviderModels(
-    input.initialValues,
-    input.preferences,
-    buildProviderModelsByProvider(input.providerEntries),
-    input.userModified,
-    toFormState(input.state),
-    allowedProviderMap,
+  const authoritativeModelProviders = authoritativeProvidersForSnapshotResolution(
+    input.snapshot,
+    input.providerEntries,
   );
+  const providerModelsByProvider = buildProviderModelsByProvider(input.providerEntries);
+  const currentState = toFormState(input.state);
+  const resolved = resolveFormStateFromProviderModels({
+    initialValues: input.initialValues,
+    preferences: input.preferences,
+    providerModelsByProvider,
+    authoritativeModelProviders,
+    userModified: input.userModified,
+    currentState,
+    allowedProviderMap,
+  });
   return applyResolvedFormState(input.state, resolved);
+}
+
+/** 编辑已保存的定时任务时保留它自己的模型，不按当前接口悄悄改掉。 */
+function authoritativeProvidersForSnapshotResolution(
+  snapshot: ScheduleFormSnapshot,
+  entries: readonly ProviderSnapshotEntry[],
+): ReadonlySet<AgentProvider> {
+  if (snapshot.mode === "edit") return new Set();
+  return buildAuthoritativeModelProviders(entries);
 }
 
 function preferencesForSnapshotResolution(
@@ -869,6 +902,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
     }
     state = updateDerivedState({
       state: nextState,
+      isModelUserChosen: userModified.model,
       hosts,
       targets: projectTargets,
       providerEntries,
@@ -905,6 +939,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       selectedModel: "",
       selectedMode: "",
       selectedThinkingOptionId: "",
+      shouldRememberSelectedModel: true,
       modelSelectorProviders: [],
       modeOptions: [],
       availableThinkingOptions: [],

@@ -163,11 +163,14 @@ function updateSelectionPreferences(input: {
   preferences: FormPreferences;
   provider: AgentProvider;
   model: string;
+  shouldRememberModel: boolean;
   mode: string;
   thinkingOptionId: string;
   isolation: "local" | "worktree";
 }): FormPreferences {
   const model = input.model.trim();
+  const submittedModel = model || undefined;
+  const modelToRemember = input.shouldRememberModel ? submittedModel : undefined;
   const mode = input.mode.trim();
   const thinkingOptionId = input.thinkingOptionId.trim();
   return {
@@ -175,7 +178,7 @@ function updateSelectionPreferences(input: {
       preferences: input.preferences,
       provider: input.provider,
       updates: {
-        model: model || undefined,
+        model: modelToRemember,
         mode: mode || undefined,
         ...(model && thinkingOptionId ? { thinkingByModel: { [model]: thinkingOptionId } } : {}),
       },
@@ -307,6 +310,7 @@ function OpenScheduleFormSheet({
         preferences: current,
         provider,
         model: state.selectedModel,
+        shouldRememberModel: state.shouldRememberSelectedModel,
         mode: state.selectedMode,
         thinkingOptionId: state.selectedThinkingOptionId,
         isolation: state.isolation,
@@ -316,6 +320,7 @@ function OpenScheduleFormSheet({
     state.isolation,
     state.selectedMode,
     state.selectedModel,
+    state.shouldRememberSelectedModel,
     state.selectedProvider,
     state.selectedThinkingOptionId,
     updatePreferences,

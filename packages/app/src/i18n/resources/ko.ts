@@ -242,6 +242,18 @@ export const ko: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "이 세션은 API 엔드포인트 {{created}}에서 만들어졌지만 현재는 공식입니다. 계속할 수 없을 수 있습니다.",
+      deletedToOfficial:
+        "이 세션은 삭제된 API 엔드포인트에서 만들어졌지만 현재는 공식입니다. 계속할 수 없을 수 있습니다.",
+      officialToEndpoint:
+        "이 세션은 공식에서 만들어졌지만 현재는 API 엔드포인트 {{current}}입니다. 계속할 수 없을 수 있습니다.",
+      endpointToEndpoint:
+        "이 세션은 API 엔드포인트 {{created}}에서 만들어졌지만 현재는 API 엔드포인트 {{current}}입니다. 계속할 수 없을 수 있습니다.",
+      deletedToEndpoint:
+        "이 세션은 삭제된 API 엔드포인트에서 만들어졌지만 현재는 API 엔드포인트 {{current}}입니다. 계속할 수 없을 수 있습니다.",
+    },
     empty: "이 에이전트와 대화를 시작하세요...",
     scrollToBottom: "맨 아래로 스크롤",
     historyLoadFailed: "에이전트 기록을 로드할 수 없습니다.",
@@ -2865,6 +2877,121 @@ export const ko: TranslationResources = {
         failedToFetch: "진단을 가져오지 못했습니다",
         unknownError: "알 수 없는 오류",
       },
+      install: {
+        howTo: "설치 방법",
+        howToFor: "{{name}} 설치 방법",
+        title: "{{name}} 설치",
+        hostHint: "Osuna daemon이 실행 중인 머신에서 실행하세요",
+        choosePlatform: "Host의 운영체제를 선택하세요",
+        copy: "복사",
+        copyAccessibility: "{{command}} 복사",
+        copyLabel: "명령",
+        copyFailed: "명령을 복사하지 못했습니다",
+        docs: "공식 문서",
+        docsFor: "{{name}} 공식 문서",
+      },
+      apiEndpoints: {
+        title: "API 엔드포인트",
+        add: "추가",
+        addAccessibility: "API 엔드포인트 추가",
+        loading: "API 엔드포인트를 불러오는 중…",
+        loadFailed: "API 엔드포인트를 불러오지 못했습니다",
+        official: "공식",
+        officialHint: "{{name}} 자체 설정(보통 구독 로그인)을 사용합니다",
+        inUse: "사용 중",
+        use: "사용",
+        useAccessibility: "{{name}} 사용",
+        editAccessibility: "{{name}} 편집",
+        deleteAccessibility: "{{name}} 삭제",
+        modelCount_one: "모델 {{count}}개",
+        modelCount_other: "모델 {{count}}개",
+        switchTitle: "{{provider}}을(를) {{name}}(으)로 전환할까요?",
+        switchOfficialTitle: "{{provider}}을(를) 공식으로 되돌릴까요?",
+        switchMessage: "{{provider}} 자체 설정 파일을 수정합니다.",
+        switchConfirm: "전환",
+        delete: "삭제",
+        deleteTitle: "{{name}}을(를) 삭제할까요?",
+        deleteMessage: "이 호스트에 저장된 URL, API 키, 모델이 삭제됩니다.",
+        deleteActiveMessage: "사용 중이므로 {{provider}}을(를) 먼저 공식으로 되돌린 뒤 삭제합니다.",
+        saveActiveTitle: "{{name}}의 변경 사항을 저장할까요?",
+        saveActiveMessage:
+          "사용 중이므로 저장하면 {{provider}} 자체 설정 파일이 새 설정으로 바로 수정됩니다.",
+        saveActiveConfirm: "저장",
+        impact: {
+          sessions: "실행 중인 {{provider}} 세션 {{count}}개가 바로 새 설정으로 전환됩니다.",
+          sessionsMaybe: "실행 중인 {{provider}} 세션 {{count}}개가 영향을 받을 수 있습니다.",
+          noSessions: "실행 중인 {{provider}} 세션이 없습니다.",
+          terminal: "터미널의 {{provider}}도 함께 전환됩니다.",
+        },
+        codexVersionUnsupported:
+          "API 엔드포인트를 사용하려면 Codex를 0.118.0 이상으로 업데이트하세요.",
+        configUnparsable: "{{provider}} 설정 파일을 해석할 수 없어 아무것도 변경하지 않았습니다.",
+        configConflict:
+          "Osuna가 쓰는 동안 {{provider}} 설정 파일이 계속 바뀌어 아무것도 변경하지 않았습니다. 다시 시도하세요.",
+        health: {
+          modifiedExternally: "{{provider}} 설정 파일이 Osuna 밖에서 변경되었습니다",
+          unparsable:
+            "{{provider}} 설정 파일을 해석할 수 없습니다. 고쳐질 때까지 Osuna는 이 파일에 쓰지 않습니다.",
+          codexProfileOverride:
+            "Codex 프로필이 API 엔드포인트를 덮어써서 전환이 적용되지 않을 수 있습니다. 해당 프로필에서 model_provider와 model을 지우거나 그 프로필을 선택하지 마세요.",
+          officialTarget: "{{provider}} 자체 설정이 {{url}}을(를) 가리킵니다",
+          reapply: "다시 적용",
+          switchToOfficial: "공식으로 전환",
+          reapplyTitle: "{{name}}을(를) {{provider}}에 다시 적용할까요?",
+          reapplyMessage:
+            "{{provider}} 자체 설정 파일에 엔드포인트를 다시 쓰고, Osuna가 관리하는 키에 대한 외부 변경을 덮어씁니다.",
+        },
+        inheritedNote:
+          "Claude Code의 API 엔드포인트 {{name}}도 사용합니다. Claude settings.json의 env가 이 제공자의 환경 변수보다 우선합니다.",
+        form: {
+          createTitle: "새 API 엔드포인트",
+          editTitle: "API 엔드포인트 편집",
+          name: "이름",
+          namePlaceholder: "OpenRouter",
+          baseUrl: "기본 URL",
+          baseUrlInvalid: "http:// 또는 https://로 시작하는 URL을 입력하세요",
+          apiKey: "API 키",
+          apiKeyPlaceholder: "API 키 붙여넣기",
+          apiKeySavedPlaceholder: "설정됨. 비워 두면 유지됩니다",
+          models: "모델",
+          modelsHint: "이 엔드포인트에서 모델 목록을 가져와 사용할 모델을 선택하세요.",
+          fetchModels: "모델 가져오기",
+          refetchModels: "다시 가져오기",
+          searchModels: "모델 검색 ({{count}}개)",
+          clearSearch: "검색 지우기",
+          noUpstreamModels:
+            "엔드포인트가 모델을 반환하지 않았습니다. 아래에서 모델 ID를 직접 추가하세요.",
+          noMatchingModels: "일치하는 모델이 없습니다",
+          moreModelsHidden: "표시되지 않은 모델: {{count}}개. 검색해서 범위를 좁히세요.",
+          modelsUnsupported:
+            "이 엔드포인트는 모델 목록을 지원하지 않습니다. 아래에서 모델 ID를 직접 추가하세요.",
+          fetchTimeout: "엔드포인트가 제때 응답하지 않았습니다.",
+          testConnection: "연결 테스트",
+          testHint:
+            "이 호스트에서 선택한 모델로 짧은 메시지를 한 번 보냅니다. 엔드포인트만 확인합니다. Claude 로그인 충돌 같은 CLI 쪽 문제는 첫 실제 대화에서야 드러납니다. 그럴 때는 터미널에서 /logout을 시도해 보세요.",
+          testPick: "모델을 골라 테스트",
+          testing: "테스트 중...",
+          testMenuTitle: "테스트할 모델",
+          testSucceeded: "연결 성공",
+          testFailed: "연결 실패",
+          testProtocolUnsupported:
+            "이 주소에서는 {{provider}}에 필요한 {{protocol}} API를 쓸 수 없습니다. 기본 URL을 확인하거나 이를 지원하는 엔드포인트를 사용하세요.",
+          selectedModels: "사용할 모델",
+          modelIdPlaceholder: "모델 ID 직접 추가",
+          addModel: "추가",
+          noModels: "모델을 하나 이상 선택하거나 추가하세요",
+          default: "기본값",
+          makeDefault: "기본값으로 설정",
+          removeModel: "{{id}} 제거",
+          mapping: "모델 매핑(선택)",
+          mappingHint:
+            "터미널의 /model opus 같은 별칭과 백그라운드 작업은 매핑한 모델을 사용합니다. 매핑하지 않은 등급은 기록하지 않습니다.",
+          mappingTitle: "{{tier}} 매핑 대상",
+          unmapped: "매핑 안 함",
+          save: "저장",
+          saving: "저장 중…",
+        },
+      },
     },
     project: {
       noEditableTarget: "이 호스트에서는 이 프로젝트를 편집할 수 없습니다.",
@@ -3176,6 +3303,8 @@ export const ko: TranslationResources = {
       cell: "{{day}} · {{tokens}} 토큰",
     },
     planUsage: {
+      apiEndpointNote:
+        "API 엔드포인트 {{name}}을(를) 사용 중입니다. 이 한도는 실제 사용량을 나타내지 않습니다.",
       title: "플랜 사용량",
       refresh: "새로고침",
       refreshing: "새로고침 중...",

@@ -245,6 +245,18 @@ export const ptBR: TranslationResources = {
     },
   },
   agentStream: {
+    apiEndpointMode: {
+      endpointToOfficial:
+        "Esta sessão foi criada com o endpoint de API {{created}}, mas o modo atual é Oficial. Talvez ela não consiga continuar.",
+      deletedToOfficial:
+        "Esta sessão foi criada com um endpoint de API que já foi excluído, mas o modo atual é Oficial. Talvez ela não consiga continuar.",
+      officialToEndpoint:
+        "Esta sessão foi criada no Oficial, mas o modo atual é o endpoint de API {{current}}. Talvez ela não consiga continuar.",
+      endpointToEndpoint:
+        "Esta sessão foi criada com o endpoint de API {{created}}, mas o modo atual é o endpoint de API {{current}}. Talvez ela não consiga continuar.",
+      deletedToEndpoint:
+        "Esta sessão foi criada com um endpoint de API que já foi excluído, mas o modo atual é o endpoint de API {{current}}. Talvez ela não consiga continuar.",
+    },
     empty: "Comece a conversar com este agente...",
     scrollToBottom: "Rolar para o fim",
     historyLoadFailed: "Não foi possível carregar o histórico do agente",
@@ -2895,6 +2907,125 @@ export const ptBR: TranslationResources = {
         failedToFetch: "Falha ao buscar diagnóstico",
         unknownError: "Erro desconhecido",
       },
+      install: {
+        howTo: "Como instalar",
+        howToFor: "Como instalar {{name}}",
+        title: "Instalar {{name}}",
+        hostHint: "Execute na máquina onde o daemon do Osuna está rodando",
+        choosePlatform: "Escolha o sistema operacional do host",
+        copy: "Copiar",
+        copyAccessibility: "Copiar {{command}}",
+        copyLabel: "comando",
+        copyFailed: "Falha ao copiar o comando",
+        docs: "Documentação oficial",
+        docsFor: "Documentação oficial de {{name}}",
+      },
+      apiEndpoints: {
+        title: "Endpoint de API",
+        add: "Adicionar",
+        addAccessibility: "Adicionar endpoint de API",
+        loading: "Carregando endpoints de API…",
+        loadFailed: "Não foi possível carregar os endpoints de API",
+        official: "Oficial",
+        officialHint: "A configuração do próprio {{name}}, normalmente sua assinatura",
+        inUse: "Em uso",
+        use: "Usar",
+        useAccessibility: "Usar {{name}}",
+        editAccessibility: "Editar {{name}}",
+        deleteAccessibility: "Excluir {{name}}",
+        modelCount_one: "{{count}} modelo",
+        modelCount_other: "{{count}} modelos",
+        switchTitle: "Mudar {{provider}} para {{name}}?",
+        switchOfficialTitle: "Voltar {{provider}} para Oficial?",
+        switchMessage: "Isso reescreve o arquivo de configuração do {{provider}}.",
+        switchConfirm: "Mudar",
+        delete: "Excluir",
+        deleteTitle: "Excluir {{name}}?",
+        deleteMessage: "A URL, a chave de API e os modelos dele são removidos deste host.",
+        deleteActiveMessage:
+          "Ele está em uso, então o {{provider}} volta primeiro para Oficial e depois ele é excluído.",
+        saveActiveTitle: "Salvar as alterações em {{name}}?",
+        saveActiveMessage:
+          "Ele está em uso, então o arquivo de configuração do {{provider}} é reescrito com as alterações na hora.",
+        saveActiveConfirm: "Salvar",
+        impact: {
+          sessions:
+            "Sessões do {{provider}} em execução que passam a usar a nova configuração na hora: {{count}}",
+          sessionsMaybe: "Sessões do {{provider}} em execução que podem ser afetadas: {{count}}",
+          noSessions: "Nenhuma sessão do {{provider}} em execução.",
+          terminal: "O {{provider}} no seu terminal também muda.",
+        },
+        codexVersionUnsupported:
+          "Atualize o Codex para a versão 0.118.0 ou mais recente para usar um endpoint de API.",
+        configUnparsable:
+          "Não foi possível interpretar o arquivo de configuração do {{provider}}, então nada foi alterado.",
+        configConflict:
+          "O arquivo de configuração do {{provider}} continuou mudando enquanto o Osuna o gravava, então nada foi alterado. Tente de novo.",
+        health: {
+          modifiedExternally:
+            "O arquivo de configuração do {{provider}} foi alterado fora do Osuna",
+          unparsable:
+            "Não é possível ler o arquivo de configuração do {{provider}}. O Osuna não vai gravar nele até que seja corrigido.",
+          codexProfileOverride:
+            "Um perfil do Codex substitui o endpoint de API, então a troca pode não ter efeito. Remova model_provider e model desse perfil ou deixe de selecioná-lo.",
+          officialTarget: "A configuração própria do {{provider}} aponta para {{url}}",
+          reapply: "Aplicar de novo",
+          switchToOfficial: "Voltar ao Oficial",
+          reapplyTitle: "Aplicar {{name}} de novo ao {{provider}}?",
+          reapplyMessage:
+            "Isso grava o endpoint de novo no arquivo de configuração do {{provider}} e substitui as mudanças externas nas chaves que o Osuna gerencia.",
+        },
+        inheritedNote:
+          "Também usa o endpoint de API {{name}} do Claude Code: o env do settings.json do Claude tem prioridade sobre o ambiente deste provedor.",
+        form: {
+          createTitle: "Novo endpoint de API",
+          editTitle: "Editar endpoint de API",
+          name: "Nome",
+          namePlaceholder: "OpenRouter",
+          baseUrl: "URL base",
+          baseUrlInvalid: "Digite uma URL que comece com http:// ou https://",
+          apiKey: "Chave de API",
+          apiKeyPlaceholder: "Cole a chave de API",
+          apiKeySavedPlaceholder: "Salva. Deixe em branco para mantê-la",
+          models: "Modelos",
+          modelsHint: "Busque a lista deste endpoint e marque os modelos que vai usar.",
+          fetchModels: "Buscar modelos",
+          refetchModels: "Buscar de novo",
+          searchModels: "Pesquisar modelos ({{count}})",
+          clearSearch: "Limpar pesquisa",
+          noUpstreamModels:
+            "O endpoint não retornou modelos. Adicione os IDs de modelo manualmente abaixo.",
+          noMatchingModels: "Nenhum modelo corresponde",
+          moreModelsHidden: "Não exibidos: {{count}}. Pesquise para filtrar a lista.",
+          modelsUnsupported:
+            "Este endpoint não consegue listar modelos. Adicione os IDs de modelo manualmente abaixo.",
+          fetchTimeout: "O endpoint não respondeu a tempo.",
+          testConnection: "Testar conexão",
+          testHint:
+            "Envia uma mensagem curta com o modelo escolhido a partir deste host. Verifica só o endpoint: problemas do lado da CLI, como um conflito de login do Claude, só aparecem na primeira conversa real. Se isso acontecer, tente /logout no terminal.",
+          testPick: "Escolha um modelo para testar",
+          testing: "Testando...",
+          testMenuTitle: "Testar com",
+          testSucceeded: "Conectado",
+          testFailed: "Falhou",
+          testProtocolUnsupported:
+            "Este endereço não oferece a API {{protocol}} de que o {{provider}} precisa. Confira a URL base ou use um endpoint que a suporte.",
+          selectedModels: "Modelos em uso",
+          modelIdPlaceholder: "Adicionar um ID de modelo manualmente",
+          addModel: "Adicionar",
+          noModels: "Marque ou adicione pelo menos um modelo",
+          default: "Padrão",
+          makeDefault: "Tornar padrão",
+          removeModel: "Remover {{id}}",
+          mapping: "Mapeamento de modelos (opcional)",
+          mappingHint:
+            "Aliases como /model opus no terminal e tarefas em segundo plano usam o modelo mapeado. Níveis sem mapeamento não são gravados.",
+          mappingTitle: "Mapear {{tier}} para",
+          unmapped: "Sem mapeamento",
+          save: "Salvar",
+          saving: "Salvando…",
+        },
+      },
     },
     project: {
       noEditableTarget: "Este projeto não pode ser editado neste host.",
@@ -3206,6 +3337,7 @@ export const ptBR: TranslationResources = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
+      apiEndpointNote: "Usando o endpoint de API {{name}}. Esta cota não reflete o consumo real.",
       title: "Uso do plano",
       refresh: "Atualizar",
       refreshing: "Atualizando...",

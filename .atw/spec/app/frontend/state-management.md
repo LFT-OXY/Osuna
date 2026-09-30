@@ -90,6 +90,25 @@ When the Electron main process owns a state that every window shows (the app upd
 
 Forms are a non-React model with an explicit lifecycle (`construct`, `hydrate`, `resolve`, `destroy`) rendered by a thin component. `schedules/schedule-form-model.ts` + `use-schedule-form-model.ts` + `components/schedules/schedule-form-sheet.tsx` is the golden example. `docs/forms.md` lists the anti-patterns rejected on sight: `useEffect` choreography, one mounted instance serving create and edit, `useMemo`-keyed model construction on live-data identity, `isLoading`/`isEmpty` boolean bags where a load-state union belongs.
 
+### An async request owned by a form model
+
+When a form model starts a request of its own (the API endpoint form's `fetchModels` and `testConnection`), the model owns an `AbortController` per request and passes its `signal` to the dependency. `cancelFetch()` and `close()` abort it, and a result only lands if its controller is still the current one, so a late answer after cancel or refetch is dropped. The dependency returns a result union (`ok | failed | cancelled`) instead of throwing; `save` does the same (`saved | failed | cancelled`), where `cancelled` means the user declined the confirmation, so the form stays open with no error; the hook that implements it turns the signal into the daemon's cancel RPC. Clear a result that no longer describes the inputs: editing the Base URL or key aborts a pending connection test and resets it to idle. See `api-endpoints/internal/form-model.ts` and `use-api-endpoints.ts`.
+
+Status that comes with a list (the API endpoint `health` and `cliBaseUrl`) is derived by one pure selector next to the load state, not in the component: `selectApiEndpointHealthView` sorts the actionable issue first, picks the Alert variant (warning only when every issue is advisory), and returns the active endpoint only when re-apply makes sense. The section renders a single `<Alert>` for all issues (`docs/design.md`: one Alert per region). Re-apply confirms like a switch and calls `set_active` with the active id. See `api-endpoints/internal/section-state.ts`.
+
+Every action that rewrites the CLI config confirms first: switch, re-apply, and saving or deleting the endpoint in use (`isActiveApiEndpoint`). The hook refetches the list before it shows the dialog (`loadLatestState` in `use-api-endpoints.ts`) and decides from that list, not from the rendered state: a list loaded minutes ago can miss an endpoint another client just enabled, and the save would rewrite the file without asking. `selectApiEndpointImpact({ provider, runningSessionCount })` returns the impact lines as keys (session count, Claude "switch right away" vs "may be affected" for everything else, then the terminal line), appended after the action sentence.
+
+### A remembered model against an authoritative list
+
+`ProviderSnapshotEntry.isModelListAuthoritative` (an API endpoint is active) means the list is every model the CLI accepts; any other id will be rejected. Off that flag the app keeps unknown ids on purpose (a new model may not be in the catalogue yet — `resolve-agent-form.test.ts` "keeps the explicit model when a refreshed catalogue no longer lists it"). The rules, all in `provider-selection/resolve-agent-form.ts` and its callers:
+
+- **Resolve against a copy, never rewrite memory.** `resolveFormStateFromProviderModels` takes `authoritativeModelProviders` (from `buildAuthoritativeModelProviders(entries)`) and, for those providers, swaps an unlisted remembered or initial model for the list default in a copy before `resolveFormState`. Preferences stay untouched, so switching back to Official restores the old choice.
+- **An open draft moves too.** `receiveInputs` runs `moveOffUnlistedModel` after resolution, because `completeResolution` returns early once completed.
+- **Submitting never writes a fallback.** `persistProviderPreferences` skips `model` when the list is authoritative (it cannot tell fallback from memory); `selectProviderAndModel` does not write the list default when nothing was remembered. The schedule form writes only at submit and knows `userModified.model`, so it exposes `shouldRememberSelectedModel` instead. Editing a saved schedule never swaps its model.
+- User actions (pick a model, apply a profile) still record what the form resolved, as in Official.
+
+Known gap: a model picked in endpoint mode is remembered and reaches the Official CLI after switching back; fixing it needs memory keyed per mode (see the task PRD's known limitation).
+
 ## Workspace tab kinds
 
 A new `WorkspaceTabTarget` kind is one logical change spread over fixed touchpoints; miss one and the tab persists wrong, shows the wrong label, or cannot be toggled. The Explorer-only singleton `session_history` (`session-history/`, `panels/session-history-panel.tsx`) is the worked example; `pull_request` is the two-host one.

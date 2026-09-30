@@ -550,6 +550,17 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 ### Summary
 
 实现工单 05：从 Command menu 选中的 skill 变成输入框开头的 Skill block，发送时序列化为 /a /b 正文；删除 Skill chip，旧草稿的 skills 字段按 COMPAT(skill-chip-draft) 迁移；原生端改为在开头插入 /name。手动验收修了三处：编辑器段落默认外边距导致光标比 placeholder 低一截；块名字号从 caption 改为 body，与正文同为 fontSize.content；排队行正文改用 fontSize.content。提交 glossary（不含多智能体任务的 Agent mention 条目）与 ADR 0005，归档任务。遗留：开头有多个 skill 时，Codex/opencode（大概率 Claude Code 也是）只把第一个当正式调用，后面的作为参数文字，建议另开任务核实。dev 桌面端在这个 worktree 需 PASEO_LISTEN=127.0.0.1:6769。
+## Session 20: 提供方安装指引
+<!-- atw-session: v=2 fp=ecc1226f81485b94 -->
+
+**Date**: 2026-09-30
+**Task**: 提供方安装指引
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+实现 09-30-provider-install-guide：server_info 新增 hostPlatform；未安装的 Claude Code/Codex/Pi/OMP 在列表显示「如何安装」，详情面板按主机系统展示官方安装命令（可复制）与文档链接，自定义提供方显示所继承 CLI 的指引。命令已对照官方页面核对（Codex 文档改用 learn.chatgpt.com）；Pi Windows 按规格用 npm。双轴审查后迁入 provider-install-guide 特性目录、改用 Text 原语、补 surface 测试；桌面端浅/深色截图入任务 qa/。
 
 ### Git Commits
 
@@ -582,6 +593,7 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 | Hash | Message |
 |------|---------|
 | `ecbcc7c36` | feat(protocol,server,app): provider 子智能体权限按 metadata.providerSubagentId 归属，track 与派发组行显示等待批准，只读面板可批准 |
+| `bbb132e50` | feat(app): 未安装的提供方按主机系统显示安装指引 |
 
 ### Status
 

@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { renderUsageText } from "@/usage/text";
@@ -20,9 +21,12 @@ function matchProvider(
 export function ProviderUsageTooltipSection({
   view,
   activeProviderId,
+  activeApiEndpoint,
 }: {
   view: ProviderUsageView;
   activeProviderId: string | null | undefined;
+  // 该提供方当前启用的第三方接口；套餐额度这时不代表实际消耗。
+  activeApiEndpoint: ApiEndpointRef | null;
 }) {
   const { t } = useTranslation();
 
@@ -50,7 +54,7 @@ export function ProviderUsageTooltipSection({
   return (
     <>
       <View style={styles.divider} />
-      <ProviderUsageCard usage={usage} />
+      <ProviderUsageCard usage={usage} activeApiEndpoint={activeApiEndpoint} />
     </>
   );
 }
