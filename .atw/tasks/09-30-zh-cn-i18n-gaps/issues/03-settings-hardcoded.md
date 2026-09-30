@@ -5,7 +5,7 @@
 **Blocked by:** 01
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 上述文案在中文下显示中文，英文界面文案不变
 - [ ] 「Pin chat」对应的快捷键有帮助标签键，中文下显示中文
@@ -13,3 +13,5 @@
 - [ ] 所有语言资源的键和英文一致，插值占位符一致
 - [ ] 资源测试文件、typecheck、lint 通过
 - [ ] Electron 桌面端中文截图检查主机设置（工作区、终端 Agent、浏览器工具）、插件页、快捷键设置
+
+**Notes:** 「Pin chat」仍是快捷键注册表的英文回退标签，「Plugin host is offline」在工单 06 范围的插件文件里仍有，这两条没有进源码扫描清单。守护进程生命周期的客户端错误英文保持逐字不变，嵌套错误的 "Error: " 前缀走 `nestedError` 键；唯一例外是新工作进程没报版本时，英文从 "null" 改为 "unknown"，避免中文界面出现 null。自动归档说明里的 "pull request" 没有 `_mr` 变体：这是主机级设置，界面上没有确定的 forge。

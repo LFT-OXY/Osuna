@@ -2468,6 +2468,7 @@ export const zhCN: TranslationResources = {
         queueMessage: "消息排队",
         muteUnmuteVoiceMode: "静音/取消静音语音模式",
         switchProject: "切换项目",
+        pinChat: "置顶对话",
       },
       helpNotes: {
         showKeyboardShortcuts: "焦点不在文本输入框或终端内时可用。",
@@ -2617,6 +2618,13 @@ export const zhCN: TranslationResources = {
         },
       },
       agents: {
+        browserTools: {
+          title: "浏览器工具",
+          warning:
+            "允许 Agent 访问和控制 Osuna 浏览器标签页，包括已登录的浏览器状态。只为你信任的 Agent 启用。",
+          updating: "正在更新浏览器工具…",
+          accessibilityLabel: "启用浏览器工具",
+        },
         unavailable: "连接到这个主机以管理 Agent",
       },
       mentionDefaults: {
@@ -2651,7 +2659,22 @@ export const zhCN: TranslationResources = {
         retry: "重试",
       },
       workspaces: {
+        autoArchiveMerged: {
+          title: "合并 PR 后自动归档工作区",
+          hint: "拉取请求合并后，自动归档干净的 Osuna 工作区",
+          accessibilityLabel: "合并 PR 后自动归档工作区",
+          updateFailed: "无法更新工作区设置",
+        },
         unavailable: "连接到这个主机以管理工作区",
+      },
+      terminalAgents: {
+        sectionTitle: "终端 Agent",
+        hooks: {
+          title: "启用终端 Agent Hooks",
+          hint: "接收终端 Agent 的通知和状态。这会在你的 Agent 配置文件中安装 Hooks。",
+          accessibilityLabel: "启用终端 Agent Hooks",
+          updateFailed: "无法更新终端 Agent Hooks",
+        },
       },
       terminalProfiles: {
         unavailable: "连接此主机以管理终端配置",
@@ -2714,6 +2737,18 @@ export const zhCN: TranslationResources = {
         moveDown: "下移",
       },
       daemon: {
+        lifecycleErrors: {
+          restartAcknowledged: "守护进程已确认重启请求。{{detail}}",
+          restartUnacknowledged: "未收到守护进程对重启请求的确认。{{detail}}",
+          packageInstallFailed: "包安装失败",
+          versionUnconfirmed: "包已安装，但未能确认新工作进程的版本。{{detail}}",
+          versionMismatch: "应安装版本 {{expected}}，实际工作进程版本 {{observed}}。",
+          nestedError: "错误：{{detail}}",
+          unknownVersion: "未知",
+          identityChanged: "守护进程身份已变化",
+          replacementTimeout: "无法确认新的工作进程已启动。请检查守护进程状态和日志。",
+          unknown: "未知错误",
+        },
         rename: {
           editLabel: "编辑标签",
           title: "重命名主机",

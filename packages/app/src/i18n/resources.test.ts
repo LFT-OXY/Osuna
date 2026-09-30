@@ -168,6 +168,25 @@ const migratedSourceLiterals = {
     "Unable to load desktop settings.",
     "Unable to save desktop settings.",
   ],
+  settings: [
+    "Unable to update workspaces",
+    "Archive merged PR workspaces",
+    "Automatically archive clean Osuna workspaces after their pull request is merged",
+    "Unable to update terminal agent hooks",
+    "Enable terminal agent hooks",
+    "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+    "Terminal agents",
+    "Browser tools",
+    "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+    "Enable browser tools",
+    "Updating browser tools…",
+    "Package installation failed",
+    "Daemon identity changed",
+    "Replacement worker could not be confirmed. Check daemon status and logs.",
+    "Restart acknowledged: ",
+    "Expected installed version ",
+    "Package installed; replacement worker version was not confirmed. ",
+  ],
 } satisfies Record<string, readonly string[]>;
 
 function collectSourceFiles(directory: string): string[] {
