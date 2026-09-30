@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
-import { AlertTriangle, Copy, FileText, Plus, RotateCw, Trash2 } from "lucide-react-native";
+import { Copy, FileText, Plus, RotateCw } from "lucide-react-native";
 import type { TFunction } from "i18next";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, type PressableStateCallbackType, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -16,132 +16,19 @@ import { ScrollableCodeSurface, SurfaceCard } from "@/components/ui/scrollable-c
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import { useToast } from "@/contexts/toast-context";
-import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
+import { ProviderDetail } from "@/provider-detail/view";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
-import { useSessionStore } from "@/stores/session-store";
-import { settingsStyles } from "@/styles/settings";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
-import { resolveProviderInstallGuide } from "@/provider-install-guide";
-import { ProviderInstallGuideView } from "@/provider-install-guide/view";
-import { supportsApiEndpoints } from "@/api-endpoints";
-import { ApiEndpointsView } from "@/api-endpoints/view";
-import { useHostFeature } from "@/runtime/host-features";
 import { formatTimeAgo } from "@/utils/time";
-import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
-import type { AgentModelDefinition, AgentProvider } from "@getpaseo/protocol/agent-types";
-import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
-import {
-  resolveProviderDiscoveredModels,
-  type ProviderDiscoveredModelsCache,
-} from "./provider-diagnostic-models";
+import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 
 interface ProviderDiagnosticSheetProps {
   provider: string;
   visible: boolean;
   onClose: () => void;
   serverId: string;
-}
-
-function rankModels<T>(items: T[], query: string, fields: (item: T) => string[]): T[] {
-  if (!query.trim()) return items;
-  const scored = items
-    .map((item) => ({ item, score: scoreTextFields(query, fields(item)) }))
-    .filter(
-      (entry): entry is { item: T; score: NonNullable<typeof entry.score> } => entry.score !== null,
-    );
-  scored.sort((a, b) => compareMatchScores(a.score, b.score));
-  return scored.map((entry) => entry.item);
-}
-
-function DiscoveredModelRow({ model }: { model: AgentModelDefinition }) {
-  return (
-    <View style={sheetStyles.modelRow}>
-      <Text style={sheetStyles.modelTitle} numberOfLines={1}>
-        {model.label}
-      </Text>
-      <Text
-        style={sheetStyles.monoHint}
-        numberOfLines={1}
-        selectable
-        dataSet={CODE_SURFACE_DATASET}
-      >
-        {model.id}
-      </Text>
-      {model.description ? (
-        <Text style={sheetStyles.descriptionInline} numberOfLines={1}>
-          {model.description}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-function CustomModelRow({
-  model,
-  deleting,
-  onDelete,
-}: {
-  model: ProviderProfileModel;
-  deleting: boolean;
-  onDelete: (modelId: string) => void;
-}) {
-  const { t } = useTranslation();
-  const { theme } = useUnistyles();
-  const handleDelete = useCallback(() => onDelete(model.id), [model.id, onDelete]);
-  const deleteButtonStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
-      sheetStyles.iconButton,
-      (Boolean(hovered) || pressed) && sheetStyles.iconButtonHovered,
-      deleting ? sheetStyles.disabled : null,
-    ],
-    [deleting],
-  );
-
-  return (
-    <View style={sheetStyles.modelRow}>
-      <Text style={sheetStyles.modelTitle} numberOfLines={1}>
-        {model.label}
-      </Text>
-      <Text
-        style={sheetStyles.monoHint}
-        numberOfLines={1}
-        selectable
-        dataSet={CODE_SURFACE_DATASET}
-      >
-        {model.id}
-      </Text>
-      <View style={sheetStyles.modelRowFiller} />
-      <Pressable
-        onPress={handleDelete}
-        disabled={deleting}
-        hitSlop={8}
-        style={deleteButtonStyle}
-        accessibilityRole="button"
-        accessibilityLabel={t("settings.providers.models.removeModel", { id: model.id })}
-      >
-        <Trash2 size={theme.iconSize.sm} color={theme.colors.destructive} />
-      </Pressable>
-    </View>
-  );
-}
-
-function SectionHeader({ title, count, hint }: { title: string; count?: number; hint?: string }) {
-  return (
-    <View style={sheetStyles.sectionHeader}>
-      <Text style={settingsStyles.sectionHeaderTitle}>{title}</Text>
-      <View style={sheetStyles.sectionHeaderMeta}>
-        {count !== undefined ? (
-          <Text style={settingsStyles.sectionHeaderTitle}>{count}</Text>
-        ) : null}
-        {count !== undefined && hint ? (
-          <Text style={settingsStyles.sectionHeaderTitle}>·</Text>
-        ) : null}
-        {hint ? <Text style={settingsStyles.sectionHeaderTitle}>{hint}</Text> : null}
-      </View>
-    </View>
-  );
 }
 
 function AddCustomModelSubSheet({
@@ -399,21 +286,6 @@ function DiagnosticSubSheet({
   );
 }
 
-interface ProviderModalBodyProps {
-  discoveredCount: number;
-  additionalCount: number;
-  providerSnapshotRefreshing: boolean;
-  providerErrorMessage: string | null;
-  modelsRefreshing: boolean;
-  searchActive: boolean;
-  filteredDiscovered: AgentModelDefinition[];
-  filteredCustom: ProviderProfileModel[];
-  deletingModelId: string | null;
-  onRefresh: () => void;
-  onDeleteCustom: (modelId: string) => void;
-  theme: { iconSize: { md: number }; colors: { foregroundMuted: string } };
-}
-
 interface ProviderSheetFooterInput {
   fetchedAtLabel: string | null;
   isCompact: boolean;
@@ -483,95 +355,6 @@ function renderProviderSheetFooter({
   );
 }
 
-function ProviderModalBody(props: ProviderModalBodyProps) {
-  const { t } = useTranslation();
-  const {
-    discoveredCount,
-    additionalCount,
-    providerSnapshotRefreshing,
-    providerErrorMessage,
-    modelsRefreshing,
-    searchActive,
-    filteredDiscovered,
-    filteredCustom,
-    deletingModelId,
-    onRefresh,
-    onDeleteCustom,
-    theme,
-  } = props;
-
-  if (discoveredCount === 0 && additionalCount === 0 && providerSnapshotRefreshing) {
-    return (
-      <View style={sheetStyles.emptyState}>
-        <LoadingSpinner size="small" color={theme.colors.foregroundMuted} />
-        <Text style={sheetStyles.mutedText}>{t("settings.providers.models.loading")}</Text>
-      </View>
-    );
-  }
-  if (discoveredCount === 0 && additionalCount === 0 && providerErrorMessage) {
-    return (
-      <View style={sheetStyles.emptyState}>
-        <AlertTriangle size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
-        <Text style={sheetStyles.mutedText}>{providerErrorMessage}</Text>
-        <Button variant="default" size="sm" onPress={onRefresh} disabled={modelsRefreshing}>
-          {modelsRefreshing
-            ? t("settings.providers.models.retrying")
-            : t("settings.providers.models.retry")}
-        </Button>
-      </View>
-    );
-  }
-  if (filteredDiscovered.length === 0 && filteredCustom.length === 0 && searchActive) {
-    return (
-      <View style={sheetStyles.emptyState}>
-        <Text style={sheetStyles.mutedText}>{t("settings.providers.models.noSearchMatches")}</Text>
-      </View>
-    );
-  }
-  if (discoveredCount === 0 && additionalCount === 0) {
-    return (
-      <View style={sheetStyles.emptyState}>
-        <Text style={sheetStyles.mutedText}>{t("settings.providers.models.noneDetected")}</Text>
-      </View>
-    );
-  }
-  return (
-    <>
-      {filteredDiscovered.length > 0 ? (
-        <View style={sheetStyles.section}>
-          <SectionHeader
-            title={t("settings.providers.models.discovered")}
-            count={filteredDiscovered.length}
-          />
-          <View style={settingsStyles.card}>
-            {filteredDiscovered.map((model) => (
-              <DiscoveredModelRow key={model.id} model={model} />
-            ))}
-          </View>
-        </View>
-      ) : null}
-      {filteredCustom.length > 0 ? (
-        <View style={sheetStyles.section}>
-          <SectionHeader
-            title={t("settings.providers.models.custom")}
-            count={filteredCustom.length}
-          />
-          <View style={settingsStyles.card}>
-            {filteredCustom.map((model) => (
-              <CustomModelRow
-                key={model.id}
-                model={model}
-                deleting={deletingModelId === model.id}
-                onDelete={onDeleteCustom}
-              />
-            ))}
-          </View>
-        </View>
-      ) : null}
-    </>
-  );
-}
-
 export function ProviderDiagnosticSheet({
   provider,
   visible,
@@ -579,53 +362,18 @@ export function ProviderDiagnosticSheet({
   serverId,
 }: ProviderDiagnosticSheetProps) {
   const { t } = useTranslation();
-  const { theme } = useUnistyles();
   const isCompact = useIsCompactFormFactor();
   const { entries: snapshotEntries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
-  const { config, patchConfig } = useDaemonConfig(serverId);
   const [query, setQuery] = useState("");
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [diagSheetOpen, setDiagSheetOpen] = useState(false);
-  const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
 
   const providerLabel = resolveProviderLabel(provider, snapshotEntries);
   const providerEntry = useMemo(
     () => snapshotEntries?.find((entry) => entry.provider === provider),
     [snapshotEntries, provider],
   );
-  const additionalModels = useMemo(
-    () => config?.providers?.[provider]?.additionalModels ?? [],
-    [config?.providers, provider],
-  );
-  const hostPlatform = useSessionStore(
-    (state) => state.sessions[serverId]?.serverInfo?.hostPlatform,
-  );
-  const extendsProvider = config?.providers?.[provider]?.extends;
-  const isNotInstalled = providerEntry?.status === "unavailable";
-  const installGuide = useMemo(() => {
-    if (!isNotInstalled) return null;
-    return resolveProviderInstallGuide({ provider, extendsProvider, hostPlatform });
-  }, [extendsProvider, hostPlatform, isNotInstalled, provider]);
-  // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
-  const hostSupportsApiEndpoints = useHostFeature(serverId, "apiEndpoints");
-  const showApiEndpoints = hostSupportsApiEndpoints && supportsApiEndpoints(provider);
-  const providerSnapshotRefreshing = providerEntry?.status === "loading";
-  const providerErrorMessage =
-    providerEntry?.status === "error"
-      ? (providerEntry.error ?? t("settings.providers.diagnostic.unknownError"))
-      : null;
-  const modelsRefreshing = isRefreshing || providerSnapshotRefreshing;
-
-  const stableDiscoveredRef = useRef<ProviderDiscoveredModelsCache | null>(null);
-  const currentModels = providerEntry?.models;
-  const { models: discoveredModels, cache: nextDiscoveredCache } = resolveProviderDiscoveredModels({
-    serverId,
-    provider,
-    currentModels,
-    providerSnapshotRefreshing,
-    previousCache: stableDiscoveredRef.current,
-  });
-  stableDiscoveredRef.current = nextDiscoveredCache;
+  const modelsRefreshing = isRefreshing || providerEntry?.status === "loading";
 
   const [clockTick, setClockTick] = useState(0);
   useEffect(() => {
@@ -647,16 +395,6 @@ export function ProviderDiagnosticSheet({
     }
   }, [visible]);
 
-  const q = query.trim();
-  const filteredDiscovered = useMemo(
-    () => rankModels(discoveredModels, q, (m) => [m.label, m.id, m.description ?? ""]),
-    [discoveredModels, q],
-  );
-  const filteredCustom = useMemo(
-    () => rankModels(additionalModels, q, (m) => [m.label, m.id]),
-    [additionalModels, q],
-  );
-
   const handleRefreshModels = useCallback(() => {
     void refresh([provider]);
   }, [provider, refresh]);
@@ -665,24 +403,6 @@ export function ProviderDiagnosticSheet({
   const handleCloseAddSheet = useCallback(() => setAddSheetOpen(false), []);
   const handleOpenDiagSheet = useCallback(() => setDiagSheetOpen(true), []);
   const handleCloseDiagSheet = useCallback(() => setDiagSheetOpen(false), []);
-
-  const handleDeleteCustom = useCallback(
-    (modelId: string) => {
-      setDeletingModelId(modelId);
-      void patchConfig({
-        providers: {
-          [provider]: {
-            additionalModels: additionalModels.filter((model) => model.id !== modelId),
-          },
-        },
-      })
-        .then(() => refresh([provider]))
-        .finally(() => {
-          setDeletingModelId((current) => (current === modelId ? null : current));
-        });
-    },
-    [additionalModels, patchConfig, provider, refresh],
-  );
 
   const sheetHeader = useMemo<SheetHeader>(
     () => ({
@@ -714,29 +434,7 @@ export function ProviderDiagnosticSheet({
         })}
         snapPoints={MAIN_SNAP_POINTS}
       >
-        {installGuide ? (
-          <ProviderInstallGuideView
-            guide={installGuide}
-            cliLabel={resolveProviderLabel(installGuide.provider, snapshotEntries)}
-          />
-        ) : null}
-        {showApiEndpoints ? (
-          <ApiEndpointsView serverId={serverId} provider={provider} providerLabel={providerLabel} />
-        ) : null}
-        <ProviderModalBody
-          discoveredCount={discoveredModels.length}
-          additionalCount={additionalModels.length}
-          providerSnapshotRefreshing={providerSnapshotRefreshing}
-          providerErrorMessage={providerErrorMessage}
-          modelsRefreshing={modelsRefreshing}
-          searchActive={Boolean(q)}
-          filteredDiscovered={filteredDiscovered}
-          filteredCustom={filteredCustom}
-          deletingModelId={deletingModelId}
-          onRefresh={handleRefreshModels}
-          onDeleteCustom={handleDeleteCustom}
-          theme={theme}
-        />
+        <ProviderDetail serverId={serverId} provider={provider} modelQuery={query} />
       </AdaptiveModalSheet>
       <AddCustomModelSubSheet
         provider={provider}
@@ -758,17 +456,6 @@ export function ProviderDiagnosticSheet({
 const sheetStyles = StyleSheet.create((theme) => ({
   mutedText: {
     fontSize: theme.fontSize.base,
-    color: theme.colors.foregroundMuted,
-  },
-  monoHint: {
-    fontFamily: theme.fontFamily.mono,
-    fontSize: theme.fontSize.code,
-    color: theme.colors.foregroundMuted,
-    flexShrink: 0,
-  },
-  descriptionInline: {
-    flex: 1,
-    fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },
   errorText: {
@@ -802,44 +489,6 @@ const sheetStyles = StyleSheet.create((theme) => ({
   },
   disabled: {
     opacity: 0.5,
-  },
-  section: {
-    marginBottom: theme.spacing[4],
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing[2],
-    marginBottom: theme.spacing[2],
-    marginLeft: theme.spacing[1],
-  },
-  sectionHeaderMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-  },
-  modelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[4],
-    gap: theme.spacing[3],
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.borderCardRow,
-  },
-  modelTitle: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    flexShrink: 0,
-  },
-  modelRowFiller: {
-    flex: 1,
-  },
-  emptyState: {
-    paddingVertical: theme.spacing[8],
-    alignItems: "center",
-    gap: theme.spacing[3],
   },
   footerContent: {
     flex: 1,

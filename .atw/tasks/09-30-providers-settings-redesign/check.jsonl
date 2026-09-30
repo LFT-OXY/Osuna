@@ -1,0 +1,10 @@
+{"file": ".atw/tasks/09-30-providers-settings-redesign/research/interview.md", "reason": "三轮访谈的决定 1–13 与默认处理，规格的来源"}
+{"file": ".atw/tasks/09-30-providers-settings-redesign/research/ui-tokens.md", "reason": "源码解析的 token、组件几何与 zh-CN 文案，视觉核对依据"}
+{"file": "docs/design.md", "reason": "设计系统；§7/§9 本任务要改写的宽度与列表+详情规则，§6 弹窗、§12 列表行"}
+{"file": "docs/expo-router.md", "reason": "设置子路由必须是独立 sibling 路由名，不能 catch-all"}
+{"file": "docs/testing.md", "reason": "会失败的操作要有可见的进行中/成功/失败状态；Alert.alert 在 Web 无效"}
+{"file": "docs/qa.md", "reason": "截图验收的平台矩阵与证据要求"}
+{"file": "docs/i18n.md", "reason": "新增文案 9 种语言、命令与 URL 不翻译"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 前端分层规范入口"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件拆分与复用约定"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与样式约定"}

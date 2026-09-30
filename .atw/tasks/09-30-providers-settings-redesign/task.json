@@ -1,0 +1,28 @@
+{
+  "id": "providers-settings-redesign",
+  "name": "providers-settings-redesign",
+  "title": "提供方设置页重新布局",
+  "description": "设置里的提供方页改为页内列表+详情（桌面）/推入详情（紧凑），只重排现有能力，先出本地 HTML 原型",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-30",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "48411967a9391a0a7a578971192f118f59e89806"
+  }
+}

@@ -1,0 +1,23 @@
+import { chromium } from "playwright";
+const OUT = "/Users/oxy/Documents/code/My/Osuna/.atw/tasks/09-30-providers-settings-redesign/research/screens";
+const theme = process.argv[2] ?? "light";
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: theme, locale: "zh-CN" });
+const page = await ctx.newPage();
+await page.goto("http://localhost:8081/", { waitUntil: "domcontentloaded" });
+await page.getByText("设置 providers").waitFor({ timeout: 60000 });
+await page.getByText("设置 providers").click();
+await page.waitForTimeout(6000);
+console.log("url:", page.url());
+await page.screenshot({ path: `${OUT}/01-providers-page-${theme}.png` });
+// 滚到底看 ACP 目录
+await page.evaluate(() => { for (const el of document.querySelectorAll("*")) { if (el.scrollHeight > el.clientHeight + 50 && getComputedStyle(el).overflowY !== "visible") el.scrollTop = el.scrollHeight; } });
+await page.waitForTimeout(1000);
+await page.screenshot({ path: `${OUT}/02-providers-page-bottom-${theme}.png` });
+await page.evaluate(() => { for (const el of document.querySelectorAll("*")) { if (el.scrollHeight > el.clientHeight + 50) el.scrollTop = 0; } });
+const row = page.getByRole("button", { name: /Claude/ }).first();
+console.log("row label:", await row.getAttribute("aria-label"));
+await row.click();
+await page.waitForTimeout(3000);
+await page.screenshot({ path: `${OUT}/03-claude-sheet-${theme}.png` });
+await browser.close();
