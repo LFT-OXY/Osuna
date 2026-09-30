@@ -20,6 +20,7 @@ import type {
   AgentSlashCommand,
   AgentUsage,
   FetchCatalogOptions,
+  ProviderCatalog,
 } from "../agent/agent-sdk-types.js";
 import type { AgentPermissionRequest, AgentPermissionResponse } from "../agent/agent-sdk-types.js";
 import { isLikelyExternalToolName } from "@getpaseo/protocol/tool-name-normalization";
@@ -76,6 +77,8 @@ export interface TestAgentClientOptions {
   closeSession?: () => Promise<void>;
   onStartTurn?: (prompt: AgentPromptInput) => void;
   supportsMcpServers?: boolean;
+  /** 替换内置目录；reject 时 provider 快照停在 `error`。 */
+  fetchCatalog?: () => Promise<ProviderCatalog>;
 }
 
 function createDeferred<T>(): Deferred<T> {
@@ -1286,6 +1289,9 @@ class FakeAgentClient implements AgentClient {
   async fetchCatalog(
     _options: FetchCatalogOptions,
   ): Promise<{ models: AgentModelDefinition[]; modes: AgentMode[] }> {
+    if (this.options.fetchCatalog) {
+      return this.options.fetchCatalog();
+    }
     if (this.provider === "claude") {
       return {
         models: [

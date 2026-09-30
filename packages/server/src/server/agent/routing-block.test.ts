@@ -22,6 +22,7 @@ test("a provider whose catalog failed to load still dispatches with the provider
     text: TEXT,
     cwd: "/tmp/project",
     canCreateAgents: true,
+    mentionDefaults: () => undefined,
     providers: providersReturning({
       provider: "codex",
       status: "error",
@@ -33,11 +34,26 @@ test("a provider whose catalog failed to load still dispatches with the provider
   expect(mentionLines(block)).toEqual(['1. @Codex -> provider "codex", settings {}']);
 });
 
+test("a provider still loading after the wait gets the configured values as written", async () => {
+  const block = await resolveRoutingBlock({
+    text: TEXT,
+    cwd: "/tmp/project",
+    canCreateAgents: true,
+    mentionDefaults: () => ({ model: "gpt-9", thinkingOptionId: "xhigh", modeId: "read-only" }),
+    providers: providersReturning({ provider: "codex", status: "loading", enabled: true }),
+  });
+
+  expect(mentionLines(block)).toEqual([
+    '1. @Codex -> provider "codex/gpt-9", settings {"modeId":"read-only","thinkingOptionId":"xhigh"}',
+  ]);
+});
+
 test("a provider still loading after the wait dispatches with the provider id only", async () => {
   const block = await resolveRoutingBlock({
     text: TEXT,
     cwd: "/tmp/project",
     canCreateAgents: true,
+    mentionDefaults: () => undefined,
     providers: providersReturning({ provider: "codex", status: "loading", enabled: true }),
   });
 
@@ -52,6 +68,7 @@ test("a snapshot read that throws rejects instead of guessing defaults", async (
       text: TEXT,
       cwd: "/tmp/project",
       canCreateAgents: true,
+      mentionDefaults: () => undefined,
       providers: {
         hasProvider: () => true,
         getProvider: async () => {
@@ -60,4 +77,71 @@ test("a snapshot read that throws rejects instead of guessing defaults", async (
       },
     }),
   ).rejects.toBe(failure);
+});
+
+test("a provider without a default mode dispatches in its first mode instead of the parent's", async () => {
+  const block = await resolveRoutingBlock({
+    text: TEXT,
+    cwd: "/tmp/project",
+    canCreateAgents: true,
+    mentionDefaults: () => undefined,
+    providers: providersReturning({
+      provider: "codex",
+      status: "ready",
+      enabled: true,
+      defaultModeId: null,
+      models: [],
+      modes: [
+        { id: "build", label: "Build" },
+        { id: "plan", label: "Plan" },
+      ],
+    }),
+  });
+
+  expect(mentionLines(block)).toEqual([
+    '1. @Codex -> provider "codex", settings {"modeId":"build"}',
+  ]);
+});
+
+test("a default mode missing from the catalog falls back to the first mode", async () => {
+  const block = await resolveRoutingBlock({
+    text: TEXT,
+    cwd: "/tmp/project",
+    canCreateAgents: true,
+    mentionDefaults: () => undefined,
+    providers: providersReturning({
+      provider: "codex",
+      status: "ready",
+      enabled: true,
+      defaultModeId: "auto-review",
+      models: [],
+      modes: [
+        { id: "read-only", label: "Read only" },
+        { id: "auto", label: "Auto" },
+      ],
+    }),
+  });
+
+  expect(mentionLines(block)).toEqual([
+    '1. @Codex -> provider "codex", settings {"modeId":"read-only"}',
+  ]);
+});
+
+test("a provider with no modes at all dispatches without a mode", async () => {
+  const block = await resolveRoutingBlock({
+    text: TEXT,
+    cwd: "/tmp/project",
+    canCreateAgents: true,
+    mentionDefaults: () => ({ modeId: "plan" }),
+    providers: providersReturning({
+      provider: "codex",
+      status: "ready",
+      enabled: true,
+      defaultModeId: null,
+      models: [],
+      modes: [],
+    }),
+  });
+
+  expect(mentionLines(block)).toEqual(['1. @Codex -> provider "codex", settings {}']);
 });

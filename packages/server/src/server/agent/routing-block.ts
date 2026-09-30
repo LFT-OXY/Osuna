@@ -1,6 +1,7 @@
 import { findMarkdownLinks, parseAgentMentionLink } from "@getpaseo/protocol/message-links";
+import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config";
 
-import { filterSelectableAgentModels } from "./agent-sdk-types.js";
+import { filterSelectableAgentModels, type ProviderSnapshotEntry } from "./agent-sdk-types.js";
 import type { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
 import { formatSystemNotificationPrompt } from "./agent-prompt.js";
 import { resolveThinkingOptionId, selectDefaultModel } from "./structured-generation-providers.js";
@@ -28,6 +29,8 @@ export interface ResolveRoutingBlockInput {
   text: string;
   cwd: string;
   canCreateAgents: boolean;
+  /** 发送时现读，改完配置下一条消息即生效。 */
+  mentionDefaults: (providerId: string) => ProviderMentionDefaults | undefined;
   providers: RoutingBlockProviderSource;
 }
 
@@ -78,22 +81,51 @@ async function resolveProviderTarget(
   if (entry.status === "unavailable") {
     return { status: "unavailable", reason: `provider "${providerId}" is not available` };
   }
-  // 目录没就绪或加载出错时取不到默认值：只写 provider，由 create_agent 按 provider 默认启动。
-  if (entry.status !== "ready") {
-    return { status: "ready", provider: providerId, settings: {} };
-  }
-  const model = selectDefaultModel(filterSelectableAgentModels(entry.models));
-  const thinkingOptionId = resolveThinkingOptionId(model, undefined);
-  const modeId = entry.defaultModeId ?? undefined;
+  const defaults = input.mentionDefaults(providerId) ?? {};
+  // 目录没就绪或加载出错时无从校验：配置值原样透传，未设的项交给 create_agent 按 provider 默认。
+  const values = entry.status === "ready" ? resolveAgainstCatalog(entry, defaults) : defaults;
   return {
     status: "ready",
     provider: providerId,
-    ...(model ? { model: model.id } : {}),
+    ...(values.model ? { model: values.model } : {}),
     settings: {
-      ...(modeId ? { modeId } : {}),
-      ...(thinkingOptionId ? { thinkingOptionId } : {}),
+      ...(values.modeId ? { modeId: values.modeId } : {}),
+      ...(values.thinkingOptionId ? { thinkingOptionId: values.thinkingOptionId } : {}),
     },
   };
+}
+
+/** 按已加载的目录校验 Mention defaults，失效项逐项回退到运行时默认。 */
+function resolveAgainstCatalog(
+  entry: ProviderSnapshotEntry,
+  defaults: ProviderMentionDefaults,
+): ProviderMentionDefaults {
+  const models = filterSelectableAgentModels(entry.models);
+  const configuredModel = defaults.model
+    ? models.find((candidate) => candidate.id === defaults.model)
+    : undefined;
+  const model = configuredModel ?? selectDefaultModel(models);
+  // 配置的模型已下线时连同档位一起退回默认模型的默认档位。
+  const modelIsStale = defaults.model !== undefined && !configuredModel;
+  return {
+    model: model?.id,
+    thinkingOptionId: resolveThinkingOptionId(
+      model,
+      modelIsStale ? undefined : defaults.thinkingOptionId,
+    ),
+    modeId: resolveModeId(entry, defaults.modeId),
+  };
+}
+
+// 只写目录里有的模式，且总是写出一个：create_agent 缺 mode 时会继承父会话或对跨 provider 报错，
+// 写了目录外的模式则直接报 Invalid mode。默认模式不在目录里时退到第一个模式，与 app 新建界面一致。
+function resolveModeId(
+  entry: ProviderSnapshotEntry,
+  configuredModeId: string | undefined,
+): string | undefined {
+  const modeIds = (entry.modes ?? []).map((mode) => mode.id);
+  const candidates = [configuredModeId, entry.defaultModeId ?? undefined];
+  return candidates.find((id) => id !== undefined && modeIds.includes(id)) ?? modeIds[0];
 }
 
 /**

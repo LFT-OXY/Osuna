@@ -8101,6 +8101,8 @@ export class Session {
               text: msg.text,
               cwd: agent.cwd,
               canCreateAgents: agent.createAgentsCapability?.canCreateAgents === true,
+              mentionDefaults: (providerId) =>
+                this.daemonConfigStore.get().providers[providerId]?.mentionDefaults,
               providers: this.providerSnapshotManager,
             }),
           logger: this.sessionLogger,

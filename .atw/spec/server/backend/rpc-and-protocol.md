@@ -490,7 +490,7 @@ const labels = withParentToolCallIdLabel({
 
 ## Scenario: a provider-bound prompt that differs from what the user sent
 
-Reference implementation: the Routing block for Agent mentions (multi-agent ticket 05). Reuse this shape when the daemon appends system text to a user message on its way to the provider.
+Reference implementation: the Routing block for Agent mentions (multi-agent tickets 05 and 07). Reuse this shape when the daemon appends system text to a user message on its way to the provider.
 
 ### 1. Scope / Trigger
 
@@ -500,7 +500,8 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 
 - `StartAgentRunOptions.resolveRoutingBlock?: () => Promise<string | null>` and `SendPromptToAgentParams.resolveRoutingBlock?: (agent: ManagedAgent) => Promise<string | null>` (`agent/agent-prompt.ts`); `appendRoutingBlock(prompt, block)`.
 - `AgentRunOptions.submittedPrompt?: AgentPromptInput` (`agent/agent-sdk-types.ts`): the original, read by the `recordSubmittedPrompt` calls in `agent-manager.ts` `streamAgent` (after the turn is accepted) and `recordAcceptedSteer`.
-- `resolveRoutingBlock({ text, cwd, canCreateAgents, providers })` (`agent/routing-block.ts`); defaults via `selectDefaultModel` / `resolveThinkingOptionId` shared with metadata generation.
+- `resolveRoutingBlock({ text, cwd, canCreateAgents, mentionDefaults, providers })` (`agent/routing-block.ts`); `mentionDefaults: (providerId) => ProviderMentionDefaults | undefined` reads `daemonConfigStore.get().providers[id]?.mentionDefaults` at send time, so a `set_daemon_config` applies to the next message. Model and thinking fallbacks use `selectDefaultModel` / `resolveThinkingOptionId` shared with metadata generation.
+- Config: `ProviderMentionDefaultsSchema = { model?, thinkingOptionId?, modeId? }` (each `z.string().min(1)`) in `packages/protocol/src/provider-config.ts`, on both `ProviderOverrideSchema` (persisted `agents.providers.<id>`) and `MutableDaemonProviderConfigSchema` (wire). Documented in `docs/data-model.md` "Mention defaults".
 - `stripTrailingRoutingBlock(text)` (`agent/trailing-routing-block.ts`, a leaf module so providers can import it).
 
 ### 3. Contracts
@@ -508,13 +509,16 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 - Only `session.ts` `handleSendAgentMessageRequest` passes `resolveRoutingBlock`. MCP `send_agent_prompt`, schedule fires, and finish notifications never do, so a parent forwarding the user's text cannot chain-dispatch.
 - `startAgentRun` runs `tryRunOutOfBand` on the original first, then calls the resolver. Out-of-band commands never wait on the provider snapshot.
 - Array prompts get a trailing text block; string prompts get `\n\n` + block. The timeline records `submittedPrompt`, reconciled by `clientMessageId`.
+- Mention defaults resolve per field against a `ready` snapshot: model not in the selectable catalog → default model **and its** default thinking option (the configured thinking option is dropped); thinking option not offered by the chosen model → that model's default (an unset model means the current default model); mode → configured if in `entry.modes`, else `defaultModeId` if in `entry.modes`, else `modes[0]`; no modes at all → no `modeId`. Only catalog modes are written because `create_agent` rejects a mode outside `availableModes` and, given none, inherits the parent's mode (same provider) or throws (cross provider).
+- `DaemonConfigStore.applySupportedPatch` replaces a provider's `mentionDefaults` wholesale instead of deep-merging, so the card resets a field by omitting it. The persisted side already replaces it through the shallow spread in `applyMutableProviderConfigToOverrides`. `removeProviders` drops it with the entry. Changing it does not rebuild provider catalogs: `mentionDefaults` is not part of a provider definition's `configuration`.
 - `stripTrailingRoutingBlock` needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
 
 ### 4. Validation & Error Matrix
 
 - Session `canCreateAgents` false → no block, original text sent.
 - Mention of an unregistered, disabled, or `unavailable` provider → line `N. @Label -> cannot start: <reason>. Tell the user.`; other mentions still route.
-- Snapshot `loading` / `error` → dispatch with `provider "<id>"` and `settings {}`.
+- Snapshot `loading` / `error` → configured values passed through unvalidated (`provider "<id>/<model>"` when a model is set); unset fields are omitted, so with no configured `modeId` the block carries none. `create_agent` then waits for a ready snapshot itself and fails if it never becomes ready.
+- Stale Mention defaults → per-field fallback above; the send is never blocked and nothing is logged.
 - `getProvider` throwing → the send fails (snapshot inconsistency, not swallowed).
 - Profile mentions → ignored until ticket 09.
 
@@ -528,7 +532,8 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 
 - Daemon E2E `daemon-e2e/agent-mention-routing-block.e2e.test.ts`: exact block text and order, same provider twice, steer via permission park, sequential sends, `/fake-oob`, `mcpInjectIntoAgents: false`, disabled/unknown provider lines, MCP + schedule prompt arrays, recorded-as-written.
 - `agent-manager.test.ts` (`fakeCodexEmitting` turn/history items, resumed `streamHistory`, `importSession`): echo, force hydrate, prime, import rows and imported title.
-- `routing-block.test.ts` (snapshot `error` / `loading` → provider only; `getProvider` throwing rejects), `trailing-routing-block.test.ts`, `agent-projections.test.ts`, import previews in `claude/agent.test.ts`, `omp/` and `pi/session-descriptor.test.ts`, `session.create-agent-title.test.ts` (links → labels). ACP previews share the same one-line change and have no fixture for loaded prompts.
+- Daemon E2E `describe("Mention defaults")` in the same file: `set_daemon_config` read-back and next-send effect, unset fields at runtime defaults, the four stale cases (stale model drops the thinking option, thinking outside the model, thinking against the default model valid and invalid), catalog `error` pass-through, wholesale replace, `removeProviders` clearing memory and `config.json`. The fake client's `fetchCatalog` option supplies thinking options or a rejecting catalog.
+- `routing-block.test.ts` (snapshot `error` / `loading` → provider only, `loading` passes configured values through; `defaultModeId` null or outside the catalog → first mode; no modes → no `modeId`; `getProvider` throwing rejects), `trailing-routing-block.test.ts`, `agent-projections.test.ts`, import previews in `claude/agent.test.ts`, `omp/` and `pi/session-descriptor.test.ts`, `session.create-agent-title.test.ts` (links → labels). ACP previews share the same one-line change and have no fixture for loaded prompts.
 
 ### 7. Wrong vs Correct
 
@@ -538,6 +543,9 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 // Resolved before startAgentRun: /goal waits on the snapshot, and the block rides into OOB parsing.
 const block = await resolveRoutingBlock(input);
 await startAgentRun(manager, id, appendRoutingBlock(prompt, block), logger);
+
+// Mode left to create_agent: a same-provider parent's mode leaks into the subagent.
+settings: { ...(entry.defaultModeId ? { modeId: entry.defaultModeId } : {}) }
 ```
 
 #### Correct
@@ -546,8 +554,14 @@ await startAgentRun(manager, id, appendRoutingBlock(prompt, block), logger);
 await sendPromptToAgent({
   ...params,
   resolveRoutingBlock: (agent) =>
-    resolveRoutingBlock({ text: msg.text, cwd: agent.cwd, canCreateAgents, providers }),
+    resolveRoutingBlock({ text: msg.text, cwd: agent.cwd, canCreateAgents, mentionDefaults, providers }),
 });
+
+// Only a catalog mode, and always one when the catalog has modes.
+const modeIds = (entry.modes ?? []).map((mode) => mode.id);
+const modeId = [configuredModeId, entry.defaultModeId ?? undefined].find(
+  (id) => id !== undefined && modeIds.includes(id),
+) ?? modeIds[0];
 ```
 
 ## Errors on the wire

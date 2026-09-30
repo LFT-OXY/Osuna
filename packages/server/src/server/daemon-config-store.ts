@@ -374,6 +374,14 @@ export class DaemonConfigStore {
       merged.skills = { selection: parsedPatch.skills.selection };
     }
     if (parsedPatch.plugins !== undefined) merged.plugins = parsedPatch.plugins;
+    // mentionDefaults 整体替换：省略某项即恢复默认，深合并会把旧值留下。
+    for (const [providerId, providerPatch] of Object.entries(parsedPatch.providers ?? {})) {
+      if (providerPatch.mentionDefaults === undefined) continue;
+      merged.providers[providerId] = {
+        ...merged.providers[providerId],
+        mentionDefaults: providerPatch.mentionDefaults,
+      };
+    }
     const next = MutableDaemonConfigSchema.parse(
       omitMetadataGenerationProvidersFromConfig(
         omitProvidersFromConfig(merged, removedProviders),

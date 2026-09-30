@@ -322,6 +322,29 @@ session rather than an already-running one.
 
 `agents.metadataGeneration.providers` controls the preferred structured-generation fallback order for daemon-side metadata tasks such as commit messages, PR text, branch names, and generated agent titles. Entries are tried first in the configured order, then Paseo falls through to dynamically discovered defaults and finally the current selection when available.
 
+### Mention defaults
+
+`agents.providers.<id>.mentionDefaults` holds the model, thinking option, and mode an Agent mention
+dispatches with. All three fields are optional; a missing field, or a missing object, means the
+provider's runtime default:
+
+```json
+{
+  "agents": {
+    "providers": {
+      "codex": {
+        "mentionDefaults": { "model": "gpt-5.4", "thinkingOptionId": "high", "modeId": "auto" }
+      }
+    }
+  }
+}
+```
+
+A `set_daemon_config` patch replaces a provider's `mentionDefaults` as a whole, so leaving a field
+out resets it to default. `removeProviders` drops it with the rest of the provider entry. The daemon
+reads it when it builds each Routing block and does not validate it on save: a stale value falls back
+at send time (`packages/server/src/server/agent/routing-block.ts`).
+
 ### Git process limits
 
 Git process limits are global to one daemon. The start-rate limit defaults to `64` processes per

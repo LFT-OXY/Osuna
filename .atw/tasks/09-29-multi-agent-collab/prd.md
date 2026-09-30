@@ -114,15 +114,15 @@ Rules:
 </paseo-system>
 ```
 
-- 某项确定值取不到时不写进块：`provider` 只写 id，`settings` 里省略该键。provider 快照状态为 `loading` 或 `error`（目录没取到）时照样派发，只写 provider id、`settings` 为 `{}`；只有未注册、已停用、`unavailable` 才算"无法启动"。这与 `validateAgentConfiguration` 把 `error` 算作不可用的口径不同，是有意的：目录读不到不等于 provider 用不了。
+- 某项确定值取不到时不写进块：`provider` 只写 id，`settings` 里省略该键。provider 快照状态为 `loading` 或 `error`（目录没取到）时照样派发，Mention defaults 配置了的项原样写入，没配的项不写（都没配就是只写 provider id、`settings` 为 `{}`）；只有未注册、已停用、`unavailable` 才算"无法启动"。这与 `validateAgentConfiguration` 把 `error` 算作不可用的口径不同，是有意的：目录读不到不等于 provider 用不了。
 - 实测结果：Claude、Codex、Pi 共 18 次派发全部正确，v1 不按父 provider 置灰。
 
 ### Mention defaults 的存储与解析
 
-- daemon 配置 `providers.<id>.mentionDefaults: { model?, thinkingOptionId?, modeId? }`，三项都可选，缺省就是"默认"；读写沿用 `get_daemon_config` / `set_daemon_config`，不加新 RPC，支持热重载；删除 provider 时一并清除。
+- daemon 配置 `providers.<id>.mentionDefaults: { model?, thinkingOptionId?, modeId? }`，三项都可选，缺省就是"默认"；读写沿用 `get_daemon_config` / `set_daemon_config`，不加新 RPC，支持热重载；删除 provider 时一并清除。patch 时整个 `mentionDefaults` 对象替换而不是深合并，省略某项即恢复默认；保存时不校验。
 - 解析顺序：Agent profile 写了的字段 → 该 provider 的 Mention defaults → 运行时默认。profile 的 `featureValues` 原样放进 `settings.features`。卡片不列 Agent profile，也不支持 feature。
-- 运行时默认：模型取快照里 `isDefault` 的那个，没有就取第一个；档位取所选模型的 `defaultThinkingOptionId`；模式取 provider 快照的 `defaultModeId`，不继承父会话模式。选择函数与元数据生成共用。daemon 总是写出明确的 `modeId`。
-- 发送时逐项回退，不阻断：模型不在快照目录里 → 默认模型及其默认档位；档位不属于所选模型 → 该模型的默认档位（模型为"默认"时按当时的默认模型校验）；模式不存在 → `defaultModeId`。快照未就绪时等待，受现有刷新超时约束；快照出错时配置值原样透传。
+- 运行时默认：模型取快照里 `isDefault` 的那个，没有就取第一个；档位取所选模型的 `defaultThinkingOptionId`；模式取 provider 快照的 `defaultModeId`，它不在快照模式列表里（或为空）时取第一个模式，与 app 新建界面一致；不继承父会话模式。选择函数与元数据生成共用。目录就绪时 daemon 总是写出目录里有的明确 `modeId`；provider 完全没有模式时不写。
+- 发送时逐项回退，不阻断：模型不在快照目录里 → 默认模型及其默认档位；档位不属于所选模型 → 该模型的默认档位（模型为"默认"时按当时的默认模型校验）；模式不在快照模式列表里 → 运行时默认模式。快照未就绪时等待，受现有刷新超时约束；等待后仍未就绪或出错时配置值原样透传，这时没配 `modeId` 就写不出模式，是"总是写出 `modeId`"的例外（`create_agent` 本身也要等快照就绪）。
 - 默认值只作用于 mention 新派出的子智能体，创建后用户仍可在子智能体标签里改。
 
 ### 可派发判定与协议字段

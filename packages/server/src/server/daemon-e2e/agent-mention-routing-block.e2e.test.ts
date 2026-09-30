@@ -1,11 +1,19 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, describe, expect, test } from "vitest";
-import type { AgentPromptInput } from "../agent/agent-sdk-types.js";
-import { createTestAgentClient } from "../test-utils/fake-agent-client.js";
+import type {
+  AgentMode,
+  AgentModelDefinition,
+  AgentPromptInput,
+  ProviderCatalog,
+} from "../agent/agent-sdk-types.js";
+import {
+  createTestAgentClient,
+  type TestAgentClientOptions,
+} from "../test-utils/fake-agent-client.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { getAskModeConfig } from "./agent-configs.js";
@@ -13,8 +21,39 @@ import { getAskModeConfig } from "./agent-configs.js";
 const WAIT_MS = 15_000;
 const CLAUDE = "[@Claude](paseo://agent/provider/claude)";
 const CODEX = "[@Codex](paseo://agent/provider/codex)";
+const CLAUDE_MODES: AgentMode[] = [
+  { id: "auto", label: "Auto" },
+  { id: "plan", label: "Plan" },
+];
+const CLAUDE_MODELS: AgentModelDefinition[] = [
+  {
+    provider: "claude",
+    id: "haiku",
+    label: "Haiku",
+    isDefault: true,
+    thinkingOptions: [
+      { id: "low", label: "Low" },
+      { id: "high", label: "High" },
+    ],
+    defaultThinkingOptionId: "low",
+  },
+  {
+    provider: "claude",
+    id: "sonnet",
+    label: "Sonnet",
+    thinkingOptions: [
+      { id: "medium", label: "Medium" },
+      { id: "max", label: "Max" },
+    ],
+    defaultThinkingOptionId: "medium",
+  },
+];
 const PERMISSION_PROMPT =
   'Use your shell tool to run: `printf "ok" > x.txt`. Request permission and wait.';
+
+async function claudeCatalog(): Promise<ProviderCatalog> {
+  return { models: CLAUDE_MODELS, modes: CLAUDE_MODES };
+}
 
 const tempDirs: string[] = [];
 let daemon: TestPaseoDaemon | null = null;
@@ -35,6 +74,7 @@ function promptText(prompt: AgentPromptInput): string {
 
 async function startDaemon(
   options: Parameters<typeof createTestPaseoDaemon>[0] = {},
+  claudeOptions: TestAgentClientOptions = {},
 ): Promise<Scenario> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "paseo-routing-block-"));
   tempDirs.push(cwd);
@@ -43,7 +83,11 @@ async function startDaemon(
   daemon = await createTestPaseoDaemon({
     agentClients: {
       codex: createTestAgentClient("codex", { supportsMcpServers: true, onStartTurn }),
-      claude: createTestAgentClient("claude", { supportsMcpServers: true, onStartTurn }),
+      claude: createTestAgentClient("claude", {
+        supportsMcpServers: true,
+        onStartTurn,
+        ...claudeOptions,
+      }),
     },
     ...options,
   });
@@ -100,6 +144,20 @@ async function connectAsCaller(port: number, callerAgentId: string): Promise<Cli
   return mcpClient;
 }
 
+interface PersistedProviderConfig {
+  mentionDefaults?: unknown;
+}
+
+/** config.json 里 claude 这一项，读盘确认持久化结果。 */
+async function persistedClaudeConfig(
+  scenario: Scenario,
+): Promise<PersistedProviderConfig | undefined> {
+  const raw: { agents?: { providers?: Record<string, PersistedProviderConfig> } } = JSON.parse(
+    await readFile(path.join(scenario.daemon.paseoHome, "config.json"), "utf8"),
+  );
+  return raw.agents?.providers?.claude;
+}
+
 afterEach(async () => {
   await mcpClient?.close().catch(() => undefined);
   await client?.close().catch(() => undefined);
@@ -124,7 +182,7 @@ describe("Routing block for agent mentions", () => {
 The user's message above mentions agents as links of the form [@Name](paseo://agent/...). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:
 
 1. @Claude -> provider "claude/haiku", settings {"modeId":"auto"}
-2. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"auto-review"}
+2. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}
 3. @Claude -> provider "claude/haiku", settings {"modeId":"auto"}
 
 Rules:
@@ -150,7 +208,7 @@ Rules:
 
     expect(scenario.prompts.map(routedLines)).toEqual([
       ['1. @Claude -> provider "claude/haiku", settings {"modeId":"auto"}'],
-      ['1. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"auto-review"}'],
+      ['1. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}'],
     ]);
     expect(await userMessages(scenario, parent.id)).toEqual([first, second]);
   });
@@ -184,7 +242,7 @@ Rules:
     });
 
     expect(routedLines(scenario.prompts.at(-1))).toEqual([
-      '1. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"auto-review"}',
+      '1. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}',
     ]);
     expect(await userMessages(scenario, parent.id)).toEqual([PERMISSION_PROMPT, text]);
   });
@@ -226,7 +284,7 @@ Rules:
     expect(routedLines(scenario.prompts.at(-1))).toEqual([
       '1. @Claude -> cannot start: provider "claude" is disabled. Tell the user.',
       '2. @Grok -> cannot start: provider "grok" is not configured. Tell the user.',
-      '3. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"auto-review"}',
+      '3. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}',
     ]);
   });
 
@@ -256,6 +314,112 @@ Rules:
     expect(scenario.prompts).toEqual([
       text,
       `<paseo-system>\nSchedule fired (id=${created.schedule.id}, run=${runId}).\n${text}\n</paseo-system>`,
+    ]);
+  });
+});
+
+describe("Mention defaults", () => {
+  test("values set through set_daemon_config apply to the next send and unset fields follow runtime defaults", async () => {
+    const scenario = await startDaemon({}, { fetchCatalog: claudeCatalog });
+    const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    const claudeDefaults = { model: "sonnet", thinkingOptionId: "max", modeId: "plan" };
+
+    await scenario.client.patchDaemonConfig({
+      providers: {
+        claude: { mentionDefaults: claudeDefaults },
+        codex: { mentionDefaults: { modeId: "always-ask" } },
+      },
+    });
+    const { config } = await scenario.client.getDaemonConfig();
+    expect(config.providers.claude?.mentionDefaults).toEqual(claudeDefaults);
+    expect(config.providers.codex?.mentionDefaults).toEqual({ modeId: "always-ask" });
+
+    await sendAndFinish({ scenario, agentId: parent.id, text: `${CLAUDE} write, ${CODEX} review` });
+
+    expect(routedLines(scenario.prompts.at(-1))).toEqual([
+      '1. @Claude -> provider "claude/sonnet", settings {"modeId":"plan","thinkingOptionId":"max"}',
+      '2. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"always-ask"}',
+    ]);
+  });
+
+  test("stale values fall back field by field and the send still goes out", async () => {
+    const scenario = await startDaemon({}, { fetchCatalog: claudeCatalog });
+    const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    const cases = [
+      // 模型不在目录里：退到默认模型及其默认档位，配置的档位不再沿用。
+      { model: "opus-retired", thinkingOptionId: "high", modeId: "retired-mode" },
+      // 档位不属于所选模型：退到该模型的默认档位。
+      { model: "sonnet", thinkingOptionId: "high" },
+      // 模型为"默认"时，档位按当时的默认模型校验。
+      { thinkingOptionId: "high" },
+      { thinkingOptionId: "max" },
+    ];
+
+    for (const mentionDefaults of cases) {
+      await scenario.client.patchDaemonConfig({ providers: { claude: { mentionDefaults } } });
+      await sendAndFinish({ scenario, agentId: parent.id, text: `${CLAUDE} write` });
+    }
+
+    expect(scenario.prompts.map(routedLines)).toEqual([
+      [
+        '1. @Claude -> provider "claude/haiku", settings {"modeId":"auto","thinkingOptionId":"low"}',
+      ],
+      [
+        '1. @Claude -> provider "claude/sonnet", settings {"modeId":"auto","thinkingOptionId":"medium"}',
+      ],
+      [
+        '1. @Claude -> provider "claude/haiku", settings {"modeId":"auto","thinkingOptionId":"high"}',
+      ],
+      [
+        '1. @Claude -> provider "claude/haiku", settings {"modeId":"auto","thinkingOptionId":"low"}',
+      ],
+    ]);
+  });
+
+  test("a provider whose catalog failed to load gets the configured values as written", async () => {
+    const scenario = await startDaemon(
+      {
+        providerOverrides: {
+          claude: { mentionDefaults: { model: "sonnet", thinkingOptionId: "max", modeId: "plan" } },
+        },
+      },
+      {
+        fetchCatalog: async () => {
+          throw new Error("model list timed out");
+        },
+      },
+    );
+    const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+
+    await sendAndFinish({ scenario, agentId: parent.id, text: `${CLAUDE} write` });
+
+    expect(routedLines(scenario.prompts.at(-1))).toEqual([
+      '1. @Claude -> provider "claude/sonnet", settings {"modeId":"plan","thinkingOptionId":"max"}',
+    ]);
+  });
+
+  test("a patch replaces a provider's values as a whole and removing the provider clears them", async () => {
+    const scenario = await startDaemon({}, { fetchCatalog: claudeCatalog });
+    const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+
+    await scenario.client.patchDaemonConfig({
+      providers: { claude: { mentionDefaults: { model: "sonnet", modeId: "plan" } } },
+    });
+    await scenario.client.patchDaemonConfig({
+      providers: { claude: { mentionDefaults: { modeId: "plan" } } },
+    });
+    expect(
+      (await scenario.client.getDaemonConfig()).config.providers.claude?.mentionDefaults,
+    ).toEqual({ modeId: "plan" });
+    expect((await persistedClaudeConfig(scenario))?.mentionDefaults).toEqual({ modeId: "plan" });
+
+    await scenario.client.patchDaemonConfig({ removeProviders: ["claude"] });
+    expect((await scenario.client.getDaemonConfig()).config.providers.claude).toBeUndefined();
+    expect(await persistedClaudeConfig(scenario)).toBeUndefined();
+
+    await sendAndFinish({ scenario, agentId: parent.id, text: `${CLAUDE} write` });
+    expect(routedLines(scenario.prompts.at(-1))).toEqual([
+      '1. @Claude -> provider "claude/haiku", settings {"modeId":"auto","thinkingOptionId":"low"}',
     ]);
   });
 });
