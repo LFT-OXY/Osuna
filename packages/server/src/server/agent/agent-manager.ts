@@ -608,6 +608,8 @@ interface SteerEventBarrier {
 }
 
 const BUSY_STATUSES: Set<AgentLifecycleStatus> = new Set(["initializing", "running"]);
+// 运行时还在的状态：空闲的会话进程也活着，下一轮对话就会读到改过的 CLI 配置。
+const LIVE_STATUSES: Set<AgentLifecycleStatus> = new Set(["initializing", "idle", "running"]);
 const AgentIdSchema = z.guid();
 
 function isAgentBusy(status: AgentLifecycleStatus): boolean {
@@ -1028,6 +1030,17 @@ export class AgentManager {
     return Array.from(this.agents.values())
       .filter((agent) => !agent.internal)
       .map((agent) => Object.assign({}, agent));
+  }
+
+  /** 该提供方下运行时还在的会话数；第三方接口改写 CLI 配置时会影响到它们。 */
+  countLiveAgents(provider: AgentProvider): number {
+    let count = 0;
+    for (const agent of this.agents.values()) {
+      if (!agent.internal && agent.provider === provider && LIVE_STATUSES.has(agent.lifecycle)) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   async listImportableSessions(

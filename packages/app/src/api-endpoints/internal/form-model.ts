@@ -24,7 +24,11 @@ export type ApiEndpointFormSeed =
 
 export type ApiEndpointSaveRequestInput = Omit<ApiEndpointSaveRequest, "type" | "requestId">;
 
-export type ApiEndpointSaveResult = { ok: true } | { ok: false; message: string };
+// cancelled：保存当前启用的接口前要确认，用户取消了；表单留着，不显示错误。
+export type ApiEndpointSaveResult =
+  | { status: "saved" }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
 
 export type ApiEndpointFetchModelsRequestInput = Omit<
   ApiEndpointFetchModelsRequest,
@@ -397,8 +401,11 @@ export function createApiEndpointFormModel(
       if (!request) return false;
       update({ submitting: true, submitError: null });
       const result = await deps.save(request);
-      update({ submitting: false, submitError: result.ok ? null : result.message });
-      return result.ok;
+      update({
+        submitting: false,
+        submitError: result.status === "failed" ? result.message : null,
+      });
+      return result.status === "saved";
     },
     close() {
       abortPendingFetch();

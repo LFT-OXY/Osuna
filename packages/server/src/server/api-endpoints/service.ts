@@ -113,6 +113,8 @@ export interface ApiEndpointServiceOptions {
   probeCodexVersion: () => Promise<string>;
   // 启用、切回、编辑或删除启用中的接口之后调用；daemon 据此刷新该提供方的快照。
   onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
+  // 该提供方下还活着的 Agent session 数；改写 CLI 配置会影响到它们，列表查询时带给 App 写进确认框。
+  countLiveSessions: (provider: ApiEndpointProvider) => number;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
   // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
@@ -137,7 +139,7 @@ interface HealthIssue extends ApiEndpointHealthIssue {
 export type ApiEndpointListResult = Required<
   Pick<
     ApiEndpointListResponse["payload"],
-    "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl"
+    "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount"
   >
 >;
 
@@ -158,6 +160,7 @@ export class ApiEndpointService {
   private readonly now: () => Date;
   private readonly probeCodexVersion: () => Promise<string>;
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
+  private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
@@ -171,6 +174,7 @@ export class ApiEndpointService {
     this.now = options.now ?? (() => new Date());
     this.probeCodexVersion = options.probeCodexVersion;
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
+    this.countLiveSessions = options.countLiveSessions;
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
@@ -192,6 +196,7 @@ export class ApiEndpointService {
       activeEndpointId,
       health: status.health,
       cliBaseUrl: active ? null : status.baseUrl,
+      runningSessionCount: this.countLiveSessions(supported),
     };
   }
 

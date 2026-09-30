@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import {
   apiEndpointErrorMessageKey,
   apiEndpointHealthMessageKey,
+  isActiveApiEndpoint,
   formatApiEndpointTestDuration,
   selectApiEndpointHealthView,
+  selectApiEndpointImpact,
   selectApiEndpointsState,
   type ApiEndpointsLoadState,
 } from "./section-state";
@@ -43,6 +46,7 @@ describe("selectApiEndpointsState", () => {
       activeEndpointId: null,
       health: [],
       cliBaseUrl: null,
+      runningSessionCount: null,
     });
   });
 
@@ -57,6 +61,7 @@ describe("selectApiEndpointsState", () => {
           activeEndpointId: null,
           health,
           cliBaseUrl: "https://mine.example",
+          runningSessionCount: 2,
           error: null,
         },
         error: null,
@@ -67,6 +72,7 @@ describe("selectApiEndpointsState", () => {
       activeEndpointId: null,
       health,
       cliBaseUrl: "https://mine.example",
+      runningSessionCount: 2,
     });
   });
 
@@ -87,6 +93,7 @@ describe("selectApiEndpointsState", () => {
       activeEndpointId: "ep_1",
       health: [],
       cliBaseUrl: null,
+      runningSessionCount: null,
     });
   });
 
@@ -177,6 +184,7 @@ describe("selectApiEndpointHealthView", () => {
       activeEndpointId: "ep_1",
       health: [],
       cliBaseUrl: null,
+      runningSessionCount: 0,
       ...overrides,
     };
   }
@@ -221,5 +229,65 @@ describe("selectApiEndpointHealthView", () => {
     expect(
       selectApiEndpointHealthView(ready({ cliBaseUrl: "https://mine.example" })).officialTarget,
     ).toBeNull();
+  });
+});
+
+describe("isActiveApiEndpoint", () => {
+  const READY: ApiEndpointsLoadState = {
+    status: "ready",
+    endpoints: [ENDPOINT],
+    activeEndpointId: "ep_1",
+    health: [],
+    cliBaseUrl: null,
+    runningSessionCount: 1,
+  };
+
+  it("is true only for the endpoint in use, so saving or deleting it asks first", () => {
+    expect(isActiveApiEndpoint(READY, "ep_1")).toBe(true);
+    expect(isActiveApiEndpoint(READY, "ep_2")).toBe(false);
+    expect(isActiveApiEndpoint(READY, undefined)).toBe(false);
+    expect(isActiveApiEndpoint({ ...READY, activeEndpointId: null }, "ep_1")).toBe(false);
+    expect(isActiveApiEndpoint({ status: "loading" }, "ep_1")).toBe(false);
+  });
+});
+
+describe("selectApiEndpointImpact", () => {
+  const TERMINAL = { key: "settings.providers.apiEndpoints.impact.terminal" };
+
+  it("says Claude's running sessions switch right away, and the terminal too", () => {
+    expect(selectApiEndpointImpact({ provider: "claude", runningSessionCount: 2 })).toEqual([
+      { key: "settings.providers.apiEndpoints.impact.sessions", count: 2 },
+      TERMINAL,
+    ]);
+  });
+
+  it("says Codex's running sessions may be affected", () => {
+    expect(selectApiEndpointImpact({ provider: "codex", runningSessionCount: 1 })).toEqual([
+      { key: "settings.providers.apiEndpoints.impact.sessionsMaybe", count: 1 },
+      TERMINAL,
+    ]);
+  });
+
+  it("says no session is running when there are none", () => {
+    expect(selectApiEndpointImpact({ provider: "codex", runningSessionCount: 0 })).toEqual([
+      { key: "settings.providers.apiEndpoints.impact.noSessions" },
+      TERMINAL,
+    ]);
+  });
+
+  it("only names keys that exist", () => {
+    for (const runningSessionCount of [0, 1, null]) {
+      for (const provider of ["claude", "codex"]) {
+        for (const { key } of selectApiEndpointImpact({ provider, runningSessionCount })) {
+          expect(i18n.exists(key)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("names only the terminal when the host doesn't count sessions", () => {
+    expect(selectApiEndpointImpact({ provider: "claude", runningSessionCount: null })).toEqual([
+      TERMINAL,
+    ]);
   });
 });

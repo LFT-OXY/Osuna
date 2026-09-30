@@ -2882,14 +2882,25 @@ export const es: TranslationResources = {
         modelCount_other: "{{count}} modelos",
         switchTitle: "¿Cambiar {{provider}} a {{name}}?",
         switchOfficialTitle: "¿Volver {{provider}} a Oficial?",
-        switchMessage:
-          "Esto reescribe el archivo de configuración de {{provider}}, así que las sesiones en ejecución y {{provider}} en tu terminal también cambian.",
+        switchMessage: "Esto reescribe el archivo de configuración de {{provider}}.",
         switchConfirm: "Cambiar",
         delete: "Eliminar",
         deleteTitle: "¿Eliminar {{name}}?",
         deleteMessage: "Se eliminan de este host su URL, su clave de API y sus modelos.",
         deleteActiveMessage:
-          "Está en uso, así que {{provider}} vuelve primero a Oficial. Las sesiones en ejecución y {{provider}} en tu terminal también cambian.",
+          "Está en uso, así que {{provider}} vuelve primero a Oficial y después se elimina.",
+        saveActiveTitle: "¿Guardar los cambios en {{name}}?",
+        saveActiveMessage:
+          "Está en uso, así que el archivo de configuración de {{provider}} se reescribe con los cambios de inmediato.",
+        saveActiveConfirm: "Guardar",
+        impact: {
+          sessions:
+            "Sesiones de {{provider}} en ejecución que cambian a la nueva configuración de inmediato: {{count}}",
+          sessionsMaybe:
+            "Sesiones de {{provider}} en ejecución que pueden verse afectadas: {{count}}",
+          noSessions: "No hay sesiones de {{provider}} en ejecución.",
+          terminal: "{{provider}} en tu terminal también cambia.",
+        },
         codexVersionUnsupported:
           "Actualiza Codex a la versión 0.118.0 o posterior para usar un endpoint de API.",
         configUnparsable:
@@ -2908,7 +2919,7 @@ export const es: TranslationResources = {
           switchToOfficial: "Volver a Oficial",
           reapplyTitle: "¿Volver a aplicar {{name}} en {{provider}}?",
           reapplyMessage:
-            "Esto vuelve a escribir el endpoint en el archivo de configuración de {{provider}} y reemplaza los cambios externos en las claves que gestiona Osuna. Las sesiones en curso y {{provider}} en tu terminal también cambian.",
+            "Esto vuelve a escribir el endpoint en el archivo de configuración de {{provider}} y reemplaza los cambios externos en las claves que gestiona Osuna.",
         },
         form: {
           createTitle: "Nuevo endpoint de API",

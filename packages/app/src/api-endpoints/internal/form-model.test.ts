@@ -35,7 +35,7 @@ function createForm(seed: Parameters<typeof createApiEndpointFormModel>[0]) {
   const requests: unknown[] = [];
   const fetches: PendingFetch[] = [];
   const tests: PendingTest[] = [];
-  let result: ApiEndpointSaveResult = { ok: true };
+  let result: ApiEndpointSaveResult = { status: "saved" };
   const model = createApiEndpointFormModel(seed, {
     save: async (request) => {
       requests.push(request);
@@ -56,7 +56,10 @@ function createForm(seed: Parameters<typeof createApiEndpointFormModel>[0]) {
     fetches,
     tests,
     failNext(message: string) {
-      result = { ok: false, message };
+      result = { status: "failed", message };
+    },
+    cancelNext() {
+      result = { status: "cancelled" };
     },
   };
 }
@@ -199,6 +202,15 @@ describe("createApiEndpointFormModel", () => {
       submitting: false,
       submitError: "settings.json could not be parsed",
     });
+  });
+
+  it("stays open without an error when the switch confirmation is declined", async () => {
+    const { model, cancelNext } = createForm({ mode: "edit", provider: "claude", endpoint: SAVED });
+    cancelNext();
+
+    await expect(model.submit()).resolves.toBe(false);
+
+    expect(model.getState()).toMatchObject({ submitting: false, submitError: null });
   });
 
   it("notifies subscribers on every change and stops after close", () => {

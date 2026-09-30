@@ -2941,14 +2941,24 @@ export const en = {
         modelCount_other: "{{count}} models",
         switchTitle: "Switch {{provider}} to {{name}}?",
         switchOfficialTitle: "Switch {{provider}} back to Official?",
-        switchMessage:
-          "This rewrites {{provider}}'s own settings file, so running sessions and {{provider}} in your terminal switch too.",
+        switchMessage: "This rewrites {{provider}}'s own settings file.",
         switchConfirm: "Switch",
         delete: "Delete",
         deleteTitle: "Delete {{name}}?",
         deleteMessage: "Its URL, API key, and models are removed from this host.",
         deleteActiveMessage:
-          "It's in use, so {{provider}} switches back to Official first. Running sessions and {{provider}} in your terminal switch too.",
+          "It's in use, so {{provider}} switches back to Official first, then it's deleted.",
+        saveActiveTitle: "Save changes to {{name}}?",
+        saveActiveMessage:
+          "It's in use, so {{provider}}'s own settings file is rewritten with the changes right away.",
+        saveActiveConfirm: "Save",
+        impact: {
+          sessions:
+            "Running {{provider}} sessions that switch to the new settings right away: {{count}}",
+          sessionsMaybe: "Running {{provider}} sessions that may be affected: {{count}}",
+          noSessions: "No {{provider}} sessions are running.",
+          terminal: "{{provider}} in your terminal switches too.",
+        },
         codexVersionUnsupported: "Update Codex to 0.118.0 or later to use an API endpoint.",
         configUnparsable:
           "{{provider}}'s settings file couldn't be parsed, so nothing was changed.",
@@ -2965,7 +2975,7 @@ export const en = {
           switchToOfficial: "Switch to Official",
           reapplyTitle: "Re-apply {{name}} to {{provider}}?",
           reapplyMessage:
-            "This writes the endpoint into {{provider}}'s own settings file again and replaces the outside changes to the keys Osuna manages. Running sessions and {{provider}} in your terminal switch too.",
+            "This writes the endpoint into {{provider}}'s own settings file again and replaces the outside changes to the keys Osuna manages.",
         },
         form: {
           createTitle: "New API endpoint",

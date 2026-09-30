@@ -50,6 +50,7 @@ describe("ApiEndpointsSection", () => {
       activeEndpointId: null,
       health: [],
       cliBaseUrl: null,
+      runningSessionCount: 0,
     });
 
     expect(screen.getByTestId("api-endpoints-use-official-active")).toBeTruthy();
@@ -70,6 +71,7 @@ describe("ApiEndpointsSection", () => {
       activeEndpointId: "ep_1",
       health: [],
       cliBaseUrl: null,
+      runningSessionCount: 0,
     });
 
     expect(screen.getByTestId("api-endpoint-use-ep_1-active")).toBeTruthy();
@@ -97,7 +99,14 @@ describe("ApiEndpointsSection failure", () => {
 
   it("keeps a failed switch visible above the modes until dismissed", () => {
     const handlers = renderSection(
-      { status: "ready", endpoints: [RELAY], activeEndpointId: null, health: [], cliBaseUrl: null },
+      {
+        status: "ready",
+        endpoints: [RELAY],
+        activeEndpointId: null,
+        health: [],
+        cliBaseUrl: null,
+        runningSessionCount: 0,
+      },
       "settings.json could not be parsed",
     );
 
@@ -126,6 +135,7 @@ describe("ApiEndpointsSection health", () => {
         { code: "some_future_code", message: "Something new" },
       ],
       cliBaseUrl: null,
+      runningSessionCount: 0,
     });
 
     const alert = screen.getByTestId("api-endpoints-health");
@@ -150,6 +160,7 @@ describe("ApiEndpointsSection health", () => {
       activeEndpointId: null,
       health: [{ code: "codex_profile_override", message: 'profile "work"' }],
       cliBaseUrl: null,
+      runningSessionCount: 0,
     });
 
     expect(screen.getByTestId("api-endpoints-health").textContent).toContain('profile "work"');
@@ -163,6 +174,7 @@ describe("ApiEndpointsSection health", () => {
       activeEndpointId: null,
       health: [],
       cliBaseUrl: "https://hand-written.example",
+      runningSessionCount: 0,
     });
 
     expect(screen.getByTestId("api-endpoints-official-target").textContent).toBe(

@@ -2868,14 +2868,24 @@ export const ru: TranslationResources = {
         modelCount_other: "Моделей: {{count}}",
         switchTitle: "Переключить {{provider}} на {{name}}?",
         switchOfficialTitle: "Вернуть {{provider}} на официальный?",
-        switchMessage:
-          "Это перезапишет файл настроек {{provider}}, поэтому запущенные сессии и {{provider}} в терминале тоже переключатся.",
+        switchMessage: "Это перезапишет файл настроек {{provider}}.",
         switchConfirm: "Переключить",
         delete: "Удалить",
         deleteTitle: "Удалить {{name}}?",
         deleteMessage: "Его URL, API-ключ и модели будут удалены с этого хоста.",
         deleteActiveMessage:
-          "Он используется, поэтому {{provider}} сначала вернётся на официальный. Запущенные сессии и {{provider}} в терминале тоже переключатся.",
+          "Он используется, поэтому {{provider}} сначала вернётся на официальный, а затем он будет удалён.",
+        saveActiveTitle: "Сохранить изменения в {{name}}?",
+        saveActiveMessage:
+          "Он используется, поэтому файл настроек {{provider}} сразу перезапишется с изменениями.",
+        saveActiveConfirm: "Сохранить",
+        impact: {
+          sessions:
+            "Запущенные сессии {{provider}}, которые сразу перейдут на новые настройки: {{count}}",
+          sessionsMaybe: "Запущенные сессии {{provider}}, которые это может затронуть: {{count}}",
+          noSessions: "Запущенных сессий {{provider}} нет.",
+          terminal: "{{provider}} в терминале тоже переключится.",
+        },
         codexVersionUnsupported:
           "Чтобы использовать API-эндпоинт, обновите Codex до версии 0.118.0 или новее.",
         configUnparsable:
@@ -2893,7 +2903,7 @@ export const ru: TranslationResources = {
           switchToOfficial: "Вернуть официальный",
           reapplyTitle: "Заново применить {{name}} к {{provider}}?",
           reapplyMessage:
-            "Эндпоинт снова записывается в собственный файл настроек {{provider}}, внешние изменения ключей, которыми управляет Osuna, заменяются. Запущенные сессии и {{provider}} в терминале тоже переключатся.",
+            "Эндпоинт снова записывается в собственный файл настроек {{provider}}, внешние изменения ключей, которыми управляет Osuna, заменяются.",
         },
         form: {
           createTitle: "Новый API-эндпоинт",

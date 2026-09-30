@@ -2819,14 +2819,22 @@ export const ar: TranslationResources = {
         modelCount_other: "{{count}} نماذج",
         switchTitle: "تبديل {{provider}} إلى {{name}}؟",
         switchOfficialTitle: "إعادة {{provider}} إلى الرسمي؟",
-        switchMessage:
-          "سيُعاد كتابة ملف إعدادات {{provider}} نفسه، لذا ستتبدّل الجلسات الجارية و{{provider}} في الطرفية أيضًا.",
+        switchMessage: "سيُعاد كتابة ملف إعدادات {{provider}} نفسه.",
         switchConfirm: "تبديل",
         delete: "حذف",
         deleteTitle: "حذف {{name}}؟",
         deleteMessage: "ستُزال عنوان URL ومفتاح API والنماذج الخاصة به من هذا المضيف.",
-        deleteActiveMessage:
-          "إنه قيد الاستخدام، لذا سيعود {{provider}} أولًا إلى الرسمي. ستتبدّل الجلسات الجارية و{{provider}} في الطرفية أيضًا.",
+        deleteActiveMessage: "إنه قيد الاستخدام، لذا سيعود {{provider}} أولًا إلى الرسمي ثم يُحذف.",
+        saveActiveTitle: "حفظ التغييرات على {{name}}؟",
+        saveActiveMessage:
+          "إنه قيد الاستخدام، لذا سيُعاد كتابة ملف إعدادات {{provider}} نفسه بالتغييرات فورًا.",
+        saveActiveConfirm: "حفظ",
+        impact: {
+          sessions: "جلسات {{provider}} الجارية التي ستنتقل إلى الإعدادات الجديدة فورًا: {{count}}",
+          sessionsMaybe: "جلسات {{provider}} الجارية التي قد تتأثر: {{count}}",
+          noSessions: "لا توجد جلسات {{provider}} جارية.",
+          terminal: "سيتبدّل {{provider}} في الطرفية أيضًا.",
+        },
         codexVersionUnsupported: "حدِّث Codex إلى 0.118.0 أو أحدث لاستخدام نقطة نهاية API.",
         configUnparsable: "تعذّر تحليل ملف إعدادات {{provider}}، لذا لم يتغيّر شيء.",
         configConflict:
@@ -2841,7 +2849,7 @@ export const ar: TranslationResources = {
           switchToOfficial: "العودة إلى الرسمي",
           reapplyTitle: "إعادة تطبيق {{name}} على {{provider}}؟",
           reapplyMessage:
-            "يكتب هذا نقطة النهاية مجددًا في ملف إعدادات {{provider}} نفسه ويستبدل التغييرات الخارجية على المفاتيح التي يديرها Osuna. تتبدّل الجلسات الجارية و{{provider}} في الطرفية أيضًا.",
+            "يكتب هذا نقطة النهاية مجددًا في ملف إعدادات {{provider}} نفسه ويستبدل التغييرات الخارجية على المفاتيح التي يديرها Osuna.",
         },
         form: {
           createTitle: "نقطة نهاية API جديدة",

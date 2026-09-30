@@ -187,6 +187,62 @@ timeout_ms = 5000
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
 
+  test("deleting an endpoint that isn't active removes only its own dedicated table", async () => {
+    const owner = await createEndpoint();
+    await client.apiEndpointSetActive("codex", owner);
+    await client.apiEndpointSetActive("codex", null);
+    const officialConfig = await readFile(configPath, "utf8");
+    const other = await createEndpoint("Other");
+
+    // 专用表不属于它：文件和 key 文件都不动。
+    expect(await client.apiEndpointDelete("codex", other)).toMatchObject({
+      activeEndpointId: null,
+      error: null,
+    });
+    expect(await readFile(configPath, "utf8")).toBe(officialConfig);
+    expect(await readFile(keyFilePath(), "utf8")).toBe(SECRET);
+
+    // 专用表的主人：只拿掉这张表，用户自己的 [model_providers.mine] 留着。
+    expect(await client.apiEndpointDelete("codex", owner)).toMatchObject({ error: null });
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await client.apiEndpointList("codex")).endpoints).toEqual([]);
+  });
+
+  test("deleting the active endpoint restores the original values after an outside change", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("codex", endpointId);
+    const switched = await readFile(configPath, "utf8");
+    await writeFile(configPath, switched.replace(`model = "relay/gpt"`, `model = "other-tool"`));
+    expect((await client.apiEndpointList("codex")).health?.[0]?.code).toBe("modified_externally");
+
+    expect(await client.apiEndpointDelete("codex", endpointId)).toMatchObject({
+      activeEndpointId: null,
+      error: null,
+    });
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+  });
+
+  test("deleting the active endpoint while config.toml keeps changing deletes nothing", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("codex", endpointId);
+    const switched = await readFile(configPath, "utf8");
+    let changes = 0;
+    onRecheck = (filePath) => {
+      changes += 1;
+      writeFileSync(filePath, `${switched}# rev ${changes}\n`);
+    };
+
+    const deleted = await client.apiEndpointDelete("codex", endpointId);
+
+    expect(deleted.error?.code).toBe("config_conflict");
+    onRecheck = null;
+    const listed = await client.apiEndpointList("codex");
+    expect(listed.activeEndpointId).toBe(endpointId);
+    expect(listed.endpoints.map((endpoint) => endpoint.id)).toEqual([endpointId]);
+    expect(await readFile(keyFilePath(), "utf8")).toBe(SECRET);
+  });
+
   test("an absent config.toml is created on switch and removed with the endpoint", async () => {
     await rm(configPath);
     const endpointId = await createEndpoint();

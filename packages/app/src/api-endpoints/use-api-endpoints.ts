@@ -5,6 +5,7 @@ import {
   apiEndpointProtocolName,
   type ApiEndpoint,
   type ApiEndpointError,
+  type ApiEndpointListResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -19,6 +20,8 @@ import type {
 } from "./internal/form-model";
 import {
   apiEndpointErrorMessageKey,
+  isActiveApiEndpoint,
+  selectApiEndpointImpact,
   selectApiEndpointsState,
   type ApiEndpointsLoadState,
 } from "./internal/section-state";
@@ -66,7 +69,7 @@ function createUpstreamRequestId(): string {
 
 /**
  * 调用方已经确认主机声明了 apiEndpoints 能力、provider 受支持。
- * 切换和删除都先确认：启用会改写 CLI 自身的配置文件，终端里的 CLI 也跟着变。
+ * 切换、删除、保存启用中的接口都先确认：会改写 CLI 自身的配置文件，正在运行的会话和终端里的 CLI 也跟着变。
  */
 export function useApiEndpoints(input: {
   serverId: string;
@@ -110,9 +113,31 @@ export function useApiEndpoints(input: {
     [queryClient, queryKey],
   );
 
+  /** 弹确认框前现取列表：是否启用中、会话数都以它为准，渲染时的列表可能是很久以前加载的。 */
+  const loadLatestState = useCallback(async (): Promise<ApiEndpointsLoadState> => {
+    await refresh();
+    return selectApiEndpointsState({
+      data: queryClient.getQueryData<ApiEndpointListResponse["payload"]>(queryKey),
+      error: null,
+    });
+  }, [queryClient, queryKey, refresh]);
+
+  /** 改写 CLI 配置前的确认：在说明后面写明受影响的会话数，以及终端里的 CLI 也会切换。 */
+  const confirmRewrite = useCallback(
+    (confirm: ConfirmDialogInput, latest: ApiEndpointsLoadState): Promise<boolean> => {
+      const runningSessionCount = latest.status === "ready" ? latest.runningSessionCount : null;
+      const impactLines = selectApiEndpointImpact({ provider, runningSessionCount }).map(
+        ({ key, count }) => t(key, { provider: providerLabel, count }),
+      );
+      const message = `${confirm.message}\n\n${impactLines.join("\n")}`;
+      return confirmDialog({ ...confirm, message });
+    },
+    [provider, providerLabel, t],
+  );
+
   const confirmAndRun = useCallback(
-    async (confirm: ConfirmDialogInput, run: () => Promise<ActionOutcome>) => {
-      if (!(await confirmDialog(confirm))) return;
+    async (confirm: () => Promise<boolean>, run: () => Promise<ActionOutcome>) => {
+      if (!(await confirm())) return;
       setBusy(true);
       setActionError(null);
       try {
@@ -137,76 +162,94 @@ export function useApiEndpoints(input: {
             name: endpoint.name,
           })
         : t("settings.providers.apiEndpoints.switchOfficialTitle", { provider: providerLabel });
+      const confirm: ConfirmDialogInput = {
+        title,
+        message: t("settings.providers.apiEndpoints.switchMessage", { provider: providerLabel }),
+        confirmLabel: t("settings.providers.apiEndpoints.switchConfirm"),
+        cancelLabel: t("common.actions.cancel"),
+      };
       void confirmAndRun(
-        {
-          title,
-          message: t("settings.providers.apiEndpoints.switchMessage", { provider: providerLabel }),
-          confirmLabel: t("settings.providers.apiEndpoints.switchConfirm"),
-          cancelLabel: t("common.actions.cancel"),
-        },
+        async () => confirmRewrite(confirm, await loadLatestState()),
         () => client.apiEndpointSetActive(provider, endpoint?.id ?? null),
       );
     },
-    [client, confirmAndRun, provider, providerLabel, t],
+    [client, confirmAndRun, confirmRewrite, loadLatestState, provider, providerLabel, t],
   );
 
   const reapply = useCallback(
     (endpoint: ApiEndpoint) => {
       if (!client) return;
+      const confirm: ConfirmDialogInput = {
+        title: t("settings.providers.apiEndpoints.health.reapplyTitle", {
+          provider: providerLabel,
+          name: endpoint.name,
+        }),
+        message: t("settings.providers.apiEndpoints.health.reapplyMessage", {
+          provider: providerLabel,
+        }),
+        confirmLabel: t("settings.providers.apiEndpoints.health.reapply"),
+        cancelLabel: t("common.actions.cancel"),
+      };
       void confirmAndRun(
-        {
-          title: t("settings.providers.apiEndpoints.health.reapplyTitle", {
-            provider: providerLabel,
-            name: endpoint.name,
-          }),
-          message: t("settings.providers.apiEndpoints.health.reapplyMessage", {
-            provider: providerLabel,
-          }),
-          confirmLabel: t("settings.providers.apiEndpoints.health.reapply"),
-          cancelLabel: t("common.actions.cancel"),
-        },
+        async () => confirmRewrite(confirm, await loadLatestState()),
         // 重新应用就是再启用一次当前接口，同样经过写入时的冲突保护。
         () => client.apiEndpointSetActive(provider, endpoint.id),
       );
     },
-    [client, confirmAndRun, provider, providerLabel, t],
+    [client, confirmAndRun, confirmRewrite, loadLatestState, provider, providerLabel, t],
   );
 
   const remove = useCallback(
     (endpoint: ApiEndpoint) => {
       if (!client) return;
-      const isActive = state.status === "ready" && state.activeEndpointId === endpoint.id;
-      const message = isActive
-        ? t("settings.providers.apiEndpoints.deleteActiveMessage", { provider: providerLabel })
-        : t("settings.providers.apiEndpoints.deleteMessage");
-      void confirmAndRun(
-        {
-          title: t("settings.providers.apiEndpoints.deleteTitle", { name: endpoint.name }),
-          message,
-          confirmLabel: t("settings.providers.apiEndpoints.delete"),
-          cancelLabel: t("common.actions.cancel"),
-          destructive: true,
-        },
-        () => client.apiEndpointDelete(provider, endpoint.id),
-      );
+      const title = t("settings.providers.apiEndpoints.deleteTitle", { name: endpoint.name });
+      const confirmLabel = t("settings.providers.apiEndpoints.delete");
+      const cancelLabel = t("common.actions.cancel");
+      // 删除启用中的接口会先切回官方，和切换一样写明影响；其余只是删掉一条记录。
+      async function confirmDelete(): Promise<boolean> {
+        const latest = await loadLatestState();
+        if (!isActiveApiEndpoint(latest, endpoint.id)) {
+          const message = t("settings.providers.apiEndpoints.deleteMessage");
+          return confirmDialog({ title, message, confirmLabel, cancelLabel, destructive: true });
+        }
+        const message = t("settings.providers.apiEndpoints.deleteActiveMessage", {
+          provider: providerLabel,
+        });
+        const confirm = { title, message, confirmLabel, cancelLabel, destructive: true };
+        return confirmRewrite(confirm, latest);
+      }
+      void confirmAndRun(confirmDelete, () => client.apiEndpointDelete(provider, endpoint.id));
     },
-    [client, confirmAndRun, provider, providerLabel, state, t],
+    [client, confirmAndRun, confirmRewrite, loadLatestState, provider, providerLabel, t],
   );
 
   const save = useCallback(
     async (request: ApiEndpointSaveRequestInput): Promise<ApiEndpointSaveResult> => {
-      if (!client) return { ok: false, message: t("workspace.terminal.hostDisconnected") };
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      // 保存启用中的接口会立即按新配置重写 CLI 配置，和切换一样先确认。
+      const latest = await loadLatestState();
+      if (isActiveApiEndpoint(latest, request.endpointId)) {
+        const confirm: ConfirmDialogInput = {
+          title: t("settings.providers.apiEndpoints.saveActiveTitle", { name: request.name }),
+          message: t("settings.providers.apiEndpoints.saveActiveMessage", {
+            provider: providerLabel,
+          }),
+          confirmLabel: t("settings.providers.apiEndpoints.saveActiveConfirm"),
+          cancelLabel: t("common.actions.cancel"),
+        };
+        if (!(await confirmRewrite(confirm, latest))) return { status: "cancelled" };
+      }
       try {
         const result = await client.apiEndpointSave(request);
-        if (result.error) return { ok: false, message: describeError(result.error) };
-        return { ok: true };
+        if (result.error) return { status: "failed", message: describeError(result.error) };
+        return { status: "saved" };
       } catch (error) {
-        return { ok: false, message: errorText(error) };
+        return { status: "failed", message: errorText(error) };
       } finally {
         await refresh();
       }
     },
-    [client, describeError, refresh, t],
+    [client, confirmRewrite, describeError, loadLatestState, providerLabel, refresh, t],
   );
 
   const fetchModels = useCallback(

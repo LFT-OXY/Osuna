@@ -83,6 +83,8 @@ export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema
 /**
  * `activeEndpointId: null` 表示「官方」。`health` 为空即正常；
  * `cliBaseUrl` 只在官方模式下给出，是 CLI 自身配置实际指向的地址。
+ * `runningSessionCount` 是该提供方下还活着的 Agent session 数（初始化中、空闲、运行中），
+ * 切换或改写配置会影响到它们；App 写进确认框。
  */
 export const ApiEndpointListResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.list.response"),
@@ -93,6 +95,7 @@ export const ApiEndpointListResponseSchema = z.object({
     activeEndpointId: z.string().nullable(),
     health: z.array(ApiEndpointHealthIssueSchema).optional(),
     cliBaseUrl: z.string().nullable().optional(),
+    runningSessionCount: z.number().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

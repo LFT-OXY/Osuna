@@ -2845,14 +2845,24 @@ export const ja: TranslationResources = {
         modelCount_other: "{{count}} 個のモデル",
         switchTitle: "{{provider}} を {{name}} に切り替えますか？",
         switchOfficialTitle: "{{provider}} を公式に戻しますか？",
-        switchMessage:
-          "{{provider}} 自身の設定ファイルを書き換えるため、実行中のセッションとターミナルの {{provider}} も切り替わります。",
+        switchMessage: "{{provider}} 自身の設定ファイルを書き換えます。",
         switchConfirm: "切り替える",
         delete: "削除",
         deleteTitle: "{{name}} を削除しますか？",
         deleteMessage: "このホストに保存された URL、API キー、モデルが削除されます。",
-        deleteActiveMessage:
-          "使用中のため、先に {{provider}} を公式に戻します。実行中のセッションとターミナルの {{provider}} も切り替わります。",
+        deleteActiveMessage: "使用中のため、先に {{provider}} を公式に戻してから削除します。",
+        saveActiveTitle: "{{name}} への変更を保存しますか？",
+        saveActiveMessage:
+          "使用中のため、保存すると {{provider}} 自身の設定ファイルがすぐに新しい設定で書き換えられます。",
+        saveActiveConfirm: "保存",
+        impact: {
+          sessions:
+            "実行中の {{provider}} セッション {{count}} 件がすぐに新しい設定に切り替わります。",
+          sessionsMaybe:
+            "実行中の {{provider}} セッション {{count}} 件が影響を受ける可能性があります。",
+          noSessions: "実行中の {{provider}} セッションはありません。",
+          terminal: "ターミナルの {{provider}} も切り替わります。",
+        },
         codexVersionUnsupported:
           "API エンドポイントを使うには Codex を 0.118.0 以降に更新してください。",
         configUnparsable:
@@ -2870,7 +2880,7 @@ export const ja: TranslationResources = {
           switchToOfficial: "公式に戻す",
           reapplyTitle: "{{name}} を {{provider}} に再適用しますか？",
           reapplyMessage:
-            "{{provider}} 自身の設定ファイルにエンドポイントをもう一度書き込み、Osuna が管理するキーへの外部の変更を置き換えます。実行中のセッションとターミナルの {{provider}} も切り替わります。",
+            "{{provider}} 自身の設定ファイルにエンドポイントをもう一度書き込み、Osuna が管理するキーへの外部の変更を置き換えます。",
         },
         form: {
           createTitle: "新しい API エンドポイント",

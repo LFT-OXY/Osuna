@@ -2787,14 +2787,21 @@ export const zhCN: TranslationResources = {
         modelCount_other: "{{count}} 个模型",
         switchTitle: "将 {{provider}} 切换到 {{name}}？",
         switchOfficialTitle: "将 {{provider}} 切回官方？",
-        switchMessage:
-          "这会改写 {{provider}} 自身的配置文件，正在运行的会话和终端里的 {{provider}} 也会一起切换。",
+        switchMessage: "这会改写 {{provider}} 自身的配置文件。",
         switchConfirm: "切换",
         delete: "删除",
         deleteTitle: "删除 {{name}}？",
         deleteMessage: "此主机上保存的地址、API key 和模型都会被移除。",
-        deleteActiveMessage:
-          "它正在使用中，{{provider}} 会先切回官方。正在运行的会话和终端里的 {{provider}} 也会一起切换。",
+        deleteActiveMessage: "它正在使用中，{{provider}} 会先切回官方，然后再删除。",
+        saveActiveTitle: "保存对 {{name}} 的修改？",
+        saveActiveMessage: "它正在使用中，保存后会立即按新配置改写 {{provider}} 自身的配置文件。",
+        saveActiveConfirm: "保存",
+        impact: {
+          sessions: "{{count}} 个正在运行的 {{provider}} 会话会立即改用新配置。",
+          sessionsMaybe: "{{count}} 个正在运行的 {{provider}} 会话可能受影响。",
+          noSessions: "当前没有正在运行的 {{provider}} 会话。",
+          terminal: "终端里的 {{provider}} 也会跟着切换。",
+        },
         codexVersionUnsupported: "请先把 Codex 升级到 0.118.0 或更高版本，才能使用第三方接口。",
         configUnparsable: "无法解析 {{provider}} 的配置文件，未做任何改动。",
         configConflict: "写入期间 {{provider}} 的配置文件一直在被改动，未做任何改动。请重试。",
@@ -2808,7 +2815,7 @@ export const zhCN: TranslationResources = {
           switchToOfficial: "切回官方",
           reapplyTitle: "重新将 {{name}} 应用到 {{provider}}？",
           reapplyMessage:
-            "这会把接口重新写入 {{provider}} 自身的配置文件，覆盖外部对 Osuna 所管理的键的改动。正在运行的会话和终端里的 {{provider}} 也会一起切换。",
+            "这会把接口重新写入 {{provider}} 自身的配置文件，覆盖外部对 Osuna 所管理的键的改动。",
         },
         form: {
           createTitle: "新建第三方接口",

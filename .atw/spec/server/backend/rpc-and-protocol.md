@@ -453,7 +453,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 - `ProviderSnapshotManager.refreshProvider` still runs availability and `fetchCatalog` (modes, default mode come from there), then replaces `catalog.models` wholesale with the override, passes each row through `client.resolveConfiguredModel` like config.json profile models, and sets `isModelListAuthoritative: true`. Nothing the provider appended survives — Claude's `settings.json` rows (`ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_*_MODEL`) would otherwise duplicate the endpoint's models.
 - `AgentManager.resolveDefaultModelId` reads the override before `client.fetchCatalog`. It bypasses the snapshot, so without this a CLI / MCP / schedule create with no model gets the official default.
 - The override reads the store on every call; there is no cache to invalidate. The refresh only republishes. Refresh after: activate, back to Official, save of the active endpoint, delete of the active endpoint. Detecting an external change does not refresh: the override reads the store, which an outside edit to the CLI file does not touch, so a refresh would publish the same list.
-- `ApiEndpointService` is constructed before `createAgentProviderRuntime` and the `AgentManager`; its callbacks close over `providerSnapshotManager`, declared later, and run only after startup.
+- `ApiEndpointService` is constructed before `createAgentProviderRuntime` and the `AgentManager`; its callbacks close over `providerSnapshotManager` and `agentManager`, declared later, and run only after startup.
 - The field is optional and needs no capability gate: an old host never sends it and the app treats absence as non-authoritative; an old app ignores it.
 
 ### 4. Validation & Error Matrix
@@ -496,7 +496,7 @@ function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition
 
 ## Scenario: a listing that reports the health of a file the daemon doesn't own
 
-Reference implementation: `provider.api_endpoint.list` health (api-endpoint ticket 06).
+Reference implementation: `provider.api_endpoint.list` health (api-endpoint ticket 06) and the live session count (ticket 07).
 
 ### 1. Scope / Trigger
 
@@ -504,8 +504,9 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 
 ### 2. Signatures
 
-- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]` and `cliBaseUrl?: string | null`.
-- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (async; `ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl">>`), `activeEndpointId(provider)` for the sync error path. Internal `ApiEndpointHealthCode` union.
+- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]`, `cliBaseUrl?: string | null`, and `runningSessionCount?: number`.
+- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (async; `ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount">>`), `activeEndpointId(provider)` for the sync error path. Internal `ApiEndpointHealthCode` union.
+- Count: required option `ApiEndpointServiceOptions.countLiveSessions(provider) => number`, wired in bootstrap to `AgentManager.countLiveAgents(provider)` (non-internal agents of exactly that provider whose lifecycle is `initializing`, `idle`, or `running`).
 - App: `selectApiEndpointHealthView(state) → { alert: { variant, issues, activeEndpoint } | null, officialTarget }`, `apiEndpointHealthMessageKey(issue)` in `api-endpoints/internal/section-state.ts`.
 
 ### 3. Contracts
@@ -514,7 +515,8 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 - `cliBaseUrl` is set only in Official: Claude `env.ANTHROPIC_BASE_URL`; Codex the effective provider (profile over top level, default `openai`), its `model_providers.<id>.base_url`, or `openai_base_url` for `openai`.
 - Re-apply has no RPC of its own: it is `set_active` with the active id, so it runs the same version check and conflict guard. "Switch to Official" is `set_active(null)`.
 - New write error `config_conflict` (file kept changing during the write). The app localizes it and `modified_externally`, `config_unparsable` (health wording), `codex_profile_override`; other codes show the daemon message.
-- The app reads the optional fields with `?? []` / `?? null`: the protocol keeps new fields optional, so this default is permanent, not a COMPAT shim.
+- `runningSessionCount` counts live sessions, not only `running` ones: an idle Claude process re-reads `settings.json` on its next turn, so it is affected too. Custom providers that extend `claude` are not counted. The count answers "how many sessions does rewriting the CLI config touch", so it lives on the list and the app fetches the list again right before each confirmation.
+- The app reads the optional fields with `?? []` / `?? null`: the protocol keeps new fields optional, so this default is permanent, not a COMPAT shim. A `null` count drops the session line from the confirmation and keeps the terminal line.
 
 ### 4. Validation & Error Matrix
 
@@ -532,9 +534,9 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 ### 6. Tests Required
 
 - Pure: `inspectClaudeSettings` / `inspectCodexConfig` cases in the patch tests (owned vs other keys, deleted file, WebSearch entry only when added, every table field, legacy profile, base URL resolution).
-- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; downgraded and missing Codex.
+- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; downgraded and missing Codex; `runningSessionCount` counts two Claude agents and not the Codex one, and drops after `archiveAgent`.
 - App: `section-state.test.ts` for the view derivation; `index.test.tsx` for the Alert buttons and the Official hint.
-- Protocol: payload parses with health/cliBaseUrl and without them.
+- Protocol: payload parses with health/cliBaseUrl/runningSessionCount and without them.
 
 ### 7. Wrong vs Correct
 

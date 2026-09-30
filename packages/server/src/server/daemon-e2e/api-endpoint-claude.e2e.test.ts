@@ -248,6 +248,40 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
   });
 
+  test("deleting the active endpoint restores the original values after an outside change", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("claude", endpointId);
+    const switched = await readFile(settingsPath, "utf8");
+    await writeFile(
+      settingsPath,
+      switched.replace('"https://relay.example/api"', '"https://other-tool.example"'),
+    );
+
+    expect(await client.apiEndpointDelete("claude", endpointId)).toMatchObject({
+      activeEndpointId: null,
+      error: null,
+    });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("deleting the active endpoint while settings.json keeps changing deletes nothing", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("claude", endpointId);
+    let changes = 0;
+    onRecheck = (filePath) => {
+      changes += 1;
+      writeFileSync(filePath, `{ "rev": ${changes} }`);
+    };
+
+    const deleted = await client.apiEndpointDelete("claude", endpointId);
+
+    expect(deleted.error?.code).toBe("config_conflict");
+    onRecheck = null;
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.activeEndpointId).toBe(endpointId);
+    expect(listed.endpoints.map((endpoint) => endpoint.id)).toEqual([endpointId]);
+  });
+
   test("refuses to write when settings.json does not parse", async () => {
     const endpointId = await createEndpoint();
     const broken = `{ "env": { "A": "1", } }`;
@@ -496,6 +530,20 @@ describe("provider snapshot follows the Claude API endpoint mode", () => {
     expect(await client.apiEndpointSetActive("claude", null)).toMatchObject({ error: null });
     const official = await client.createAgent({ provider: "claude", cwd, title: "Official" });
     expect(official.model).toBe("haiku");
+  });
+
+  test("the list counts the live sessions of this provider that a switch would move", async () => {
+    expect((await client.apiEndpointList("claude")).runningSessionCount).toBe(0);
+
+    const first = await client.createAgent({ provider: "claude", cwd, title: "One" });
+    await client.createAgent({ provider: "claude", cwd, title: "Two" });
+    await client.createAgent({ provider: "codex", cwd, title: "Codex" });
+    // 空闲的会话也算：进程还在，下一轮对话就走新配置。
+    expect((await client.apiEndpointList("claude")).runningSessionCount).toBe(2);
+    expect((await client.apiEndpointList("codex")).runningSessionCount).toBe(1);
+
+    await client.archiveAgent(first.id);
+    expect((await client.apiEndpointList("claude")).runningSessionCount).toBe(1);
   });
 
   test("editing the active endpoint refreshes the models right away", async () => {

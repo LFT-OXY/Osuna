@@ -72,6 +72,30 @@ describe("provider.api_endpoint.list", () => {
     ).toBe(undefined);
   });
 
+  it("parses the live session count, and an older host that doesn't send it", () => {
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-1d",
+        provider: "codex",
+        endpoints: [],
+        activeEndpointId: null,
+        runningSessionCount: 3,
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+
+    const olderHost = SessionOutboundMessageSchema.parse({
+      ...response,
+      payload: { ...response.payload, runningSessionCount: undefined },
+    });
+    expect(
+      olderHost.type === "provider.api_endpoint.list.response" &&
+        olderHost.payload.runningSessionCount,
+    ).toBe(undefined);
+  });
+
   it("parses an error response with a code the client has never seen", () => {
     const response = {
       type: "provider.api_endpoint.list.response" as const,

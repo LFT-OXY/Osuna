@@ -2836,14 +2836,22 @@ export const ko: TranslationResources = {
         modelCount_other: "모델 {{count}}개",
         switchTitle: "{{provider}}을(를) {{name}}(으)로 전환할까요?",
         switchOfficialTitle: "{{provider}}을(를) 공식으로 되돌릴까요?",
-        switchMessage:
-          "{{provider}} 자체 설정 파일을 수정하므로 실행 중인 세션과 터미널의 {{provider}}도 함께 전환됩니다.",
+        switchMessage: "{{provider}} 자체 설정 파일을 수정합니다.",
         switchConfirm: "전환",
         delete: "삭제",
         deleteTitle: "{{name}}을(를) 삭제할까요?",
         deleteMessage: "이 호스트에 저장된 URL, API 키, 모델이 삭제됩니다.",
-        deleteActiveMessage:
-          "사용 중이므로 {{provider}}을(를) 먼저 공식으로 되돌립니다. 실행 중인 세션과 터미널의 {{provider}}도 함께 전환됩니다.",
+        deleteActiveMessage: "사용 중이므로 {{provider}}을(를) 먼저 공식으로 되돌린 뒤 삭제합니다.",
+        saveActiveTitle: "{{name}}의 변경 사항을 저장할까요?",
+        saveActiveMessage:
+          "사용 중이므로 저장하면 {{provider}} 자체 설정 파일이 새 설정으로 바로 수정됩니다.",
+        saveActiveConfirm: "저장",
+        impact: {
+          sessions: "실행 중인 {{provider}} 세션 {{count}}개가 바로 새 설정으로 전환됩니다.",
+          sessionsMaybe: "실행 중인 {{provider}} 세션 {{count}}개가 영향을 받을 수 있습니다.",
+          noSessions: "실행 중인 {{provider}} 세션이 없습니다.",
+          terminal: "터미널의 {{provider}}도 함께 전환됩니다.",
+        },
         codexVersionUnsupported:
           "API 엔드포인트를 사용하려면 Codex를 0.118.0 이상으로 업데이트하세요.",
         configUnparsable: "{{provider}} 설정 파일을 해석할 수 없어 아무것도 변경하지 않았습니다.",
@@ -2860,7 +2868,7 @@ export const ko: TranslationResources = {
           switchToOfficial: "공식으로 전환",
           reapplyTitle: "{{name}}을(를) {{provider}}에 다시 적용할까요?",
           reapplyMessage:
-            "{{provider}} 자체 설정 파일에 엔드포인트를 다시 쓰고, Osuna가 관리하는 키에 대한 외부 변경을 덮어씁니다. 실행 중인 세션과 터미널의 {{provider}}도 함께 전환됩니다.",
+            "{{provider}} 자체 설정 파일에 엔드포인트를 다시 쓰고, Osuna가 관리하는 키에 대한 외부 변경을 덮어씁니다.",
         },
         form: {
           createTitle: "새 API 엔드포인트",

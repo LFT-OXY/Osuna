@@ -920,6 +920,8 @@ export async function createPaseoDaemon(
           logger.warn({ err: error, provider }, "Failed to refresh provider snapshot");
         });
     },
+    // agentManager 在下面创建；只有列表查询会调用，那时 daemon 已经启动。
+    countLiveSessions: (provider) => agentManager.countLiveAgents(provider),
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {

@@ -2890,14 +2890,24 @@ export const fr: TranslationResources = {
         modelCount_other: "{{count}} modèles",
         switchTitle: "Basculer {{provider}} vers {{name}} ?",
         switchOfficialTitle: "Remettre {{provider}} sur Officiel ?",
-        switchMessage:
-          "Cela réécrit le fichier de configuration de {{provider}} : les sessions en cours et {{provider}} dans votre terminal basculent aussi.",
+        switchMessage: "Cela réécrit le fichier de configuration de {{provider}}.",
         switchConfirm: "Basculer",
         delete: "Supprimer",
         deleteTitle: "Supprimer {{name}} ?",
         deleteMessage: "Son URL, sa clé d'API et ses modèles sont supprimés de cet hôte.",
         deleteActiveMessage:
-          "Il est utilisé : {{provider}} repasse d'abord sur Officiel. Les sessions en cours et {{provider}} dans votre terminal basculent aussi.",
+          "Il est utilisé : {{provider}} repasse d'abord sur Officiel, puis il est supprimé.",
+        saveActiveTitle: "Enregistrer les modifications de {{name}} ?",
+        saveActiveMessage:
+          "Il est utilisé : le fichier de configuration de {{provider}} est réécrit tout de suite avec les modifications.",
+        saveActiveConfirm: "Enregistrer",
+        impact: {
+          sessions:
+            "Sessions {{provider}} en cours qui passent tout de suite à la nouvelle configuration : {{count}}",
+          sessionsMaybe: "Sessions {{provider}} en cours qui peuvent être affectées : {{count}}",
+          noSessions: "Aucune session {{provider}} en cours.",
+          terminal: "{{provider}} dans votre terminal bascule aussi.",
+        },
         codexVersionUnsupported:
           "Mettez à jour Codex vers la version 0.118.0 ou ultérieure pour utiliser un endpoint d'API.",
         configUnparsable:
@@ -2916,7 +2926,7 @@ export const fr: TranslationResources = {
           switchToOfficial: "Revenir à Officiel",
           reapplyTitle: "Réappliquer {{name}} à {{provider}} ?",
           reapplyMessage:
-            "L'endpoint est réécrit dans le fichier de réglages de {{provider}}, ce qui remplace les modifications externes des clés gérées par Osuna. Les sessions en cours et {{provider}} dans votre terminal basculent aussi.",
+            "L'endpoint est réécrit dans le fichier de réglages de {{provider}}, ce qui remplace les modifications externes des clés gérées par Osuna.",
         },
         form: {
           createTitle: "Nouvel endpoint d'API",

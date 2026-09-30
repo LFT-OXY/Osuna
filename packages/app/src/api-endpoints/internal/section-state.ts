@@ -16,6 +16,8 @@ export type ApiEndpointsLoadState =
       activeEndpointId: string | null;
       health: ApiEndpointHealthIssue[];
       cliBaseUrl: string | null;
+      // 该提供方下还活着的会话数；主机没给时为 null，确认框里就不写数字。
+      runningSessionCount: number | null;
     };
 
 /** 数据优先于错误：后台刷新失败时保留已有列表，而不是换成错误行。 */
@@ -31,6 +33,7 @@ export function selectApiEndpointsState(input: {
       // 协议规定新字段可选，读取时补上「没有问题」「没有指向」的默认值；不是可删除的兼容分支。
       health: input.data.health ?? [],
       cliBaseUrl: input.data.cliBaseUrl ?? null,
+      runningSessionCount: input.data.runningSessionCount ?? null,
     };
   }
   if (input.data?.error) {
@@ -114,6 +117,43 @@ export function selectApiEndpointHealthView(state: ApiEndpointsLoadState): ApiEn
     activeEndpoint: canReapply ? active : null,
   };
   return { alert, officialTarget };
+}
+
+/**
+ * 保存或删除的是当前启用的接口：会立即改写 CLI 配置，和切换一样先确认、写明影响；
+ * 其余保存和删除只动 Osuna 自己的记录。
+ */
+export function isActiveApiEndpoint(
+  state: ApiEndpointsLoadState,
+  endpointId: string | undefined,
+): boolean {
+  return (
+    state.status === "ready" && endpointId !== undefined && state.activeEndpointId === endpointId
+  );
+}
+
+export interface ApiEndpointTranslation {
+  key: string;
+  count?: number;
+}
+
+// Claude Code 会把 settings.json 的 env 改动重新应用到正在运行的会话上；
+// Codex 是否立即生效以它的实际行为为准，其余提供方同样按「可能受影响」措辞。
+const IMMEDIATE_SWITCH_PROVIDERS: ReadonlySet<string> = new Set(["claude"]);
+
+/** 切换类确认框的影响说明：受影响的会话数，以及终端里的 CLI 也会切换。 */
+export function selectApiEndpointImpact(input: {
+  provider: string;
+  runningSessionCount: number | null;
+}): ApiEndpointTranslation[] {
+  const terminal = { key: "settings.providers.apiEndpoints.impact.terminal" };
+  const count = input.runningSessionCount;
+  if (count === null) return [terminal];
+  if (count === 0) return [{ key: "settings.providers.apiEndpoints.impact.noSessions" }, terminal];
+  const key = IMMEDIATE_SWITCH_PROVIDERS.has(input.provider)
+    ? "settings.providers.apiEndpoints.impact.sessions"
+    : "settings.providers.apiEndpoints.impact.sessionsMaybe";
+  return [{ key, count }, terminal];
 }
 
 /** 测试耗时：一秒以内按毫秒，否则按秒保留一位小数。单位不翻译。 */
