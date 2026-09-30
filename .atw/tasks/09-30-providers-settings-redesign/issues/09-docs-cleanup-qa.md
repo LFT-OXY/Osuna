@@ -10,11 +10,11 @@
 **Blocked by:** 03, 04, 08
 
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] `docs/design.md` 的 §7 / §9 已改写，宽度例外和切换条件写清楚。
-- [ ] 本次改动产生的孤儿 i18n 键已删除，i18n 一致性测试通过。
-- [ ] 宽屏、窄窗、composer 弹窗在浅色和深色下的截图齐全，并与原型对照；差异逐条说明。
-- [ ] 提供方设置相关界面里没有 `Alert.alert`。
-- [ ] prd 的验收标准逐条核对并勾选。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] `docs/design.md` 的 §7 / §9 已改写，宽度例外和切换条件写清楚。
+- [x] 本次改动产生的孤儿 i18n 键已删除，i18n 一致性测试通过。
+- [x] 宽屏、窄窗、composer 弹窗在浅色和深色下的截图齐全，并与原型对照；差异逐条说明。
+- [x] 提供方设置相关界面里没有 `Alert.alert`。
+- [x] prd 的验收标准逐条核对并勾选。
+- [x] `npm run typecheck`、`npm run lint` 通过。

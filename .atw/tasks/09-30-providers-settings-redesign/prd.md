@@ -120,7 +120,7 @@
 
 - 用一个纯函数，由内容区宽度决定「两列」还是「栈式」：内容区宽度 ≥ 16 + 280 + 24 + 400 + 16 = 736 时两列，否则栈式。紧凑判定（`useIsCompactFormFactor`）为真时一律栈式。
 - 内容区宽度是设置详情区的实测宽度（`onLayout`），不能用「窗口宽 − 设置侧栏」估算：桌面端应用侧栏可以和设置页并排。量到之前不判定布局，页面不渲染、也不 redirect。
-- 两列容器最大宽 1056（左右 padding 16、列表 280、间距 24、详情最大 720），在内容区里居中。列表列 sticky，跟着页面滚动时停在顶部。
+- 两列容器最大宽 1056（左右 padding 16、列表 280、间距 24、详情最大 720），在内容区里居中。Web 上列表列 sticky，跟着页面滚动时停在顶部；原生平板的两列不 sticky（`_web` 样式）。
 - 这是 `docs/design.md` §7「设置详情页最大宽 720」的例外，也是 §9 列表+详情模式在设置页内部的一个用法。实现时改写 `docs/design.md` 对应段落，不新开 ADR：它可以低成本改回，不满足 ADR 的三个条件。
 
 ### 列表
@@ -238,7 +238,7 @@
   - 「添加 Provider」按钮的无障碍名称（复用 `settings.providers.addProvider`）；
   - 列表错误行的「关闭」（复用 `common.actions.dismiss`）。
 - 写在 `en.ts`，其余 8 种语言同步补齐。
-- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。07 新增 `diagnostic.description`，删了 `diagnostic.button`、`diagnostic.refreshingAccessibility`。06 删了 `models.addCustomTitle`、`models.modelId`、`models.retry`、`models.retrying`。05 已删 `install.howTo`、`install.howToFor`、`apiEndpoints.inheritedNote`、`updateErrorTitle`，以及只剩测试在用的 `hasProviderInstallGuide`。
+- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。07 新增 `diagnostic.description`，删了 `diagnostic.button`、`diagnostic.refreshingAccessibility`。06 删了 `models.addCustomTitle`、`models.modelId`、`models.retry`、`models.retrying`。05 已删 `install.howTo`、`install.howToFor`、`apiEndpoints.inheritedNote`、`updateErrorTitle`，以及只剩测试在用的 `hasProviderInstallGuide`。09 按「任务开始前（a9e5781a6）有字面引用、现在没有」比对 en.ts 全部键，本任务没有留下新的孤儿；en.ts 里另有 5 个无引用键（`modelSelector.defaultModel`、`modelSelector.editProfiles`、`providerCatalog.actions.installed`、`providerCatalog.actions.cancel`、`providerCatalog.errors.unableToInstall`）在任务开始前就没人用，不属于本任务，未删。
 
 ## Testing Decisions
 
@@ -267,7 +267,7 @@
      - 宽屏和手机各一步：⋯「诊断」后诊断输出出现在视口里（`settings-providers-split.spec.ts`），覆盖 Web 的滚动和手机顶栏到正文的跨树传递。
      - 会失败的操作按 `docs/testing.md` 各补一条失败路径的可见断言；无法用真实 daemon 稳定造出失败的，在组件测试里覆盖，并在测试旁注明原因。
 - 只运行改动涉及的测试文件，不跑整个套件；全量交给 CI。
-- 截图验收按 `docs/qa.md`：桌面端（Electron）宽屏、窄窗栈式、composer 弹窗，浅色和深色，和原型逐屏对照。原生端按项目惯例注明免验收。
+- 截图验收按 `docs/qa.md`：桌面端（Electron）宽屏、窄窗栈式、composer 弹窗，浅色和深色，和原型逐屏对照。原生端按项目惯例注明免验收。截图、差异说明、受影响 e2e 与单测的运行输出记在 `qa/README.md`。
 
 ## Out of Scope
 
@@ -280,20 +280,20 @@
 
 ## Acceptance Criteria
 
-- [ ] 桌面端宽窗口下，Providers 页左边是列表、右边是详情，进入页面默认选中第一个提供方，地址指向它的子路由；点其他行切换详情和地址，返回键不会逐个回退选中项。
-- [ ] 直接打开某个提供方的子路由会选中它；地址里的提供方不存在时回到第一个提供方（栈式下回到列表）。
-- [ ] 内容区放不下两列时（窄桌面）改为「列表 → 详情」栈式，页头显示「Providers / {名称}」，点「Providers」回到列表；手机上点行推入全屏详情，返回回到列表。
-- [ ] 列表行只有图标、名称、状态行和开关（栈式另有 ›），状态行符合规则表；点开关不改变选中项；开关失败时列表里出现可关闭的错误行。
-- [ ] 「添加 Provider」整节消失；列表标题右侧的「+」打开 ACP 目录弹窗；添加成功后弹窗关闭，并选中新提供方；添加失败时弹窗内显示错误、不关闭。
-- [ ] 详情区块按「错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models → 诊断」出现，各自只在规定的条件下显示；安装指引和第三方接口的行为与改动前一致。
-- [ ] ⋯ 菜单有「诊断」；自定义提供方（且主机支持删除）另有「Remove provider」。删除确认后提供方消失，并按规则回到第一个；删除失败时详情顶部显示错误。
-- [ ] 添加 Model 和诊断都在页面里就地展开，提交中、成功、失败三种状态都能在原位看到；设置页和 composer 弹窗里都不再有子弹窗。
-- [ ] composer 模型选择器的齿轮打开的弹窗显示同一套详情区块，头部有名称、徽章、「刷新」和 ⋯。
-- [ ] 提供方设置相关的界面里不再调用 `Alert.alert`。
-- [ ] 新增文案 9 种语言齐全，本次改动产生的孤儿键已删除，i18n 一致性测试通过。
-- [ ] `docs/design.md` 的 §7 / §9 写明这一页的宽度例外和两列 / 栈式的切换条件。
-- [ ] 列表与详情的组件测试、布局与选中项的纯函数单测、受影响和新增的浏览器 e2e 都通过；`npm run typecheck` 和 `npm run lint` 通过。
-- [ ] 桌面端宽屏、窄窗、composer 弹窗在浅色和深色下都有截图，并与原型逐屏对照；原生端注明免验收。
+- [x] 桌面端宽窗口下，Providers 页左边是列表、右边是详情，进入页面默认选中第一个提供方，地址指向它的子路由；点其他行切换详情和地址，返回键不会逐个回退选中项。
+- [x] 直接打开某个提供方的子路由会选中它；地址里的提供方不存在时回到第一个提供方（栈式下回到列表）。
+- [x] 内容区放不下两列时（窄桌面）改为「列表 → 详情」栈式，页头显示「Providers / {名称}」，点「Providers」回到列表；手机上点行推入全屏详情，返回回到列表。
+- [x] 列表行只有图标、名称、状态行和开关（栈式另有 ›），状态行符合规则表；点开关不改变选中项；开关失败时列表里出现可关闭的错误行。
+- [x] 「添加 Provider」整节消失；列表标题右侧的「+」打开 ACP 目录弹窗；添加成功后弹窗关闭，并选中新提供方；添加失败时弹窗内显示错误、不关闭。
+- [x] 详情区块按「错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models → 诊断」出现，各自只在规定的条件下显示；安装指引和第三方接口的行为与改动前一致。
+- [x] ⋯ 菜单有「诊断」；自定义提供方（且主机支持删除）另有「Remove provider」。删除确认后提供方消失，并按规则回到第一个；删除失败时详情顶部显示错误。
+- [x] 添加 Model 和诊断都在页面里就地展开，提交中、成功、失败三种状态都能在原位看到；设置页和 composer 弹窗里都不再有子弹窗。
+- [x] composer 模型选择器的齿轮打开的弹窗显示同一套详情区块，头部有名称、徽章、「刷新」和 ⋯。
+- [x] 提供方设置相关的界面里不再调用 `Alert.alert`。
+- [x] 新增文案 9 种语言齐全，本次改动产生的孤儿键已删除，i18n 一致性测试通过。
+- [x] `docs/design.md` 的 §7 / §9 写明这一页的宽度例外和两列 / 栈式的切换条件。
+- [x] 列表与详情的组件测试、布局与选中项的纯函数单测、受影响和新增的浏览器 e2e 都通过；`npm run typecheck` 和 `npm run lint` 通过。
+- [x] 桌面端宽屏、窄窗、composer 弹窗在浅色和深色下都有截图，并与原型逐屏对照；原生端注明免验收。
 
 ## Further Notes
 
