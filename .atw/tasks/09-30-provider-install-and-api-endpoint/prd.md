@@ -102,7 +102,10 @@ Osuna 靠底层的 CLI 提供方（Claude Code、Codex、Pi、OMP 等）干活�
 
 ## Acceptance Criteria
 
-- [ ] 子任务 A、B 各自验收并归档
-- [ ] `docs/glossary.md` 的 Provider、Custom provider、API endpoint 词条与最终界面文案一致
-- [ ] ADR 0004 的规则与 B 的实现一致；如果实现中推翻了某条规则，同步修改 ADR
-- [ ] 全程没有在开发者本机运行 `claude` 或 `codex` 做验证
+- [x] 子任务 A、B 各自验收并归档
+- [x] `docs/glossary.md` 的 Provider、Custom provider、API endpoint 词条与最终界面文案一致
+  - 验收时发现 Custom provider 词条写了 zh-CN 界面叫「自定义提供方」，但界面上没有这个标签，已删去这半句。
+  - Provider 的 zh-CN 界面：侧栏是「提供方」，设置页仍有「Providers」「添加 Provider」「选择一个 Provider」（2026-06-11 上游 i18n 迁移遗留）。翻译移交给 `09-30-providers-settings-redesign`，那边正在改同一批文案。
+- [x] ADR 0004 的规则与 B 的实现一致；如果实现中推翻了某条规则，同步修改 ADR
+- [x] 全程没有在开发者本机运行 `claude` 或 `codex` 做验证
+  - B 的 e2e 用假 codex；截图用桩 CLI、临时 `CLAUDE_CONFIG_DIR`/`CODEX_HOME` 和假上游，真实配置 mtime 未变；Windows 读 key 命令只在 CI 验证。A 只展示命令，不运行 CLI。
