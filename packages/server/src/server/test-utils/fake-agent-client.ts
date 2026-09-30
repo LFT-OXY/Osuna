@@ -448,6 +448,22 @@ class FakeAgentSession implements AgentSession {
     return { sessionId: this.id, finalText: resultText, timeline, usage };
   }
 
+  /** `/fake-oob …` stands in for provider commands like Codex `/goal pause`; it echoes what it received. */
+  tryHandleOutOfBand(
+    prompt: AgentPromptInput,
+  ): { run(ctx: { emit: (event: AgentStreamEvent) => void }): Promise<void> } | null {
+    if (typeof prompt !== "string" || !prompt.startsWith("/fake-oob")) return null;
+    return {
+      run: async ({ emit }) => {
+        emit({
+          type: "timeline",
+          provider: this.providerName,
+          item: { type: "assistant_message", text: `Out-of-band: ${prompt}` },
+        });
+      },
+    };
+  }
+
   async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
     if (this.activeForegroundTurnId) {
       throw new Error("A foreground turn is already active");

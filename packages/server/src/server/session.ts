@@ -56,6 +56,7 @@ import {
   waitForAgentRunStartWithTimeout,
   unarchiveAgentState,
 } from "./agent/agent-prompt.js";
+import { resolveRoutingBlock } from "./agent/routing-block.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -8095,6 +8096,13 @@ export class Session {
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           clearPendingPermissions: true,
+          resolveRoutingBlock: (agent) =>
+            resolveRoutingBlock({
+              text: msg.text,
+              cwd: agent.cwd,
+              canCreateAgents: agent.createAgentsCapability?.canCreateAgents === true,
+              providers: this.providerSnapshotManager,
+            }),
           logger: this.sessionLogger,
         });
         if (result.disposition === "turn_started") {

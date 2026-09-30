@@ -1,10 +1,22 @@
 import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "@getpaseo/protocol/agent-title-limits";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+import { findMarkdownLinks } from "@getpaseo/protocol/message-links";
 
 const MAX_INITIAL_AGENT_TITLE_CHARS = Math.min(60, MAX_EXPLICIT_AGENT_TITLE_CHARS);
 
+/** Agent mention、文件与普通链接在标题里只显示 label（`@Claude`、`index.ts`）。 */
+function replaceMarkdownLinksWithLabels(text: string): string {
+  let result = "";
+  let cursor = 0;
+  for (const link of findMarkdownLinks(text)) {
+    result += text.slice(cursor, link.index) + link.label;
+    cursor = link.index + link.raw.length;
+  }
+  return result + text.slice(cursor);
+}
+
 function deriveInitialAgentTitle(prompt: string): string | null {
-  const firstContentLine = prompt
+  const firstContentLine = replaceMarkdownLinksWithLabels(prompt)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0);

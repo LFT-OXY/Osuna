@@ -91,7 +91,7 @@
 ### 触发来源与 Routing block（server session 层）
 
 - 只有客户端发来的用户消息会触发：`send_agent_message_request`（包括 steer 与 app 端排队出队后的发送），以及 `create_agent_request`、`agent.create.request`、`workspace.create.request` 的首条消息。MCP 的 `send_agent_prompt` 和 `create_agent`、schedule、完成通知等系统注入的消息都不触发，避免父智能体转发原文时连锁派发。不区分是哪种客户端发来的。
-- 由 session 的处理函数负责：解析 mention、读 provider 快照、解析各 mention 的确定值、生成 Routing block 内容，作为运行选项传给 `startAgentRun`。`startAgentRun` 先按原文做带外命令判定，之后再追加 Routing block：数组 prompt 追加一个独立的末尾文本块，字符串 prompt 追加 `\n\n` 加块。
+- 由 session 的处理函数负责：解析 mention、读 provider 快照、解析各 mention 的确定值、生成 Routing block 内容。生成函数作为运行选项 `resolveRoutingBlock` 传给 `startAgentRun`，`startAgentRun` 先按原文做带外命令判定，之后才调用它并追加 Routing block，带外命令因此不等快照：数组 prompt 追加一个独立的末尾文本块，字符串 prompt 追加 `\n\n` 加块。代码在 `packages/server/src/server/agent/routing-block.ts`。
 - 整个会话不能派发时（快照可派发字段为 false）不附 Routing block，原文照发。
 - 单个目标不可用（provider 未启用或不可用、profile 已删除、profile 的 provider 不可用）时照常发送，在块里对该 mention 写明无法启动的原因并要求告诉用户，不给 provider 和 settings，其余 mention 照常。
 - Routing block 文本以原型 v2 定稿（节选自 `prototype/routing-prompt-v2.md`，链接形式已按新格式更新，并补上不可用行）：
@@ -114,7 +114,7 @@ Rules:
 </paseo-system>
 ```
 
-- 某项确定值取不到时不写进块：`provider` 只写 id，`settings` 里省略该键。
+- 某项确定值取不到时不写进块：`provider` 只写 id，`settings` 里省略该键。provider 快照状态为 `loading` 或 `error`（目录没取到）时照样派发，只写 provider id、`settings` 为 `{}`；只有未注册、已停用、`unavailable` 才算"无法启动"。这与 `validateAgentConfiguration` 把 `error` 算作不可用的口径不同，是有意的：目录读不到不等于 provider 用不了。
 - 实测结果：Claude、Codex、Pi 共 18 次派发全部正确，v1 不按父 provider 置灰。
 
 ### Mention defaults 的存储与解析
@@ -138,9 +138,9 @@ Rules:
 
 ### 时间线存储、剥离与标题
 
-- 时间线记发送前的原文：`recordSubmittedPrompt` 改记原文，对账按 `clientMessageId`，不比对文本。Routing block 只出现在发给 provider 的那份里。
-- 新增"剥掉用户消息末尾 `<paseo-system>…</paseo-system>` 块"的函数，按形状剥离、不看内容、不带版本，与现有的整条信封判定并列。用在：不带 `clientMessageId` 的实时回显、force hydrate、prime、历史导入，以及导入选择器的首条 prompt 预览。
-- 取会话标题时，把所有 Markdown 链接换成 label（agent → `@Claude`，文件 → `index.ts`，普通链接 → 链接文字）。工作区自动命名与分支名输入保持原文。
+- 时间线记发送前的原文：附加了 Routing block 时，原文经 `AgentRunOptions.submittedPrompt` 带到 `recordSubmittedPrompt`，对账按 `clientMessageId`，不比对文本。没附块的消息（包括用户自己写的、恰好以 `<paseo-system>` 块结尾的消息）实时记录时原样保留，不剥。已知代价：force hydrate、prime 与导入从 provider 历史重建时按形状剥，用户自己写在末尾的这种块会在重建后消失；历史里分不清是谁写的，接受。Routing block 只出现在发给 provider 的那份里。
+- 新增"剥掉用户消息末尾 `<paseo-system>…</paseo-system>` 块"的函数 `stripTrailingRoutingBlock`（`agent/trailing-routing-block.ts`），按形状剥离、不看内容、不带版本，与现有的整条信封判定并列。只用在 provider 来源的文本：实时回显（含找不到对账记录的带 `clientMessageId` 回显）、force hydrate、prime、历史导入，以及导入选择器的标题与首条、末条 prompt 预览。它要求结尾的闭合标签，只能作用在原文上：折叠空白并截断预览的 provider（Claude、ACP、OMP、Pi）在各自的预览规范化函数里先剥再折叠；直接给原文的（Codex 的 thread preview）在投影层剥。
+- 取会话标题时，把所有 Markdown 链接换成 label（agent → `@Claude`，文件 → `index.ts`，普通链接 → 链接文字）。这发生在共用的首行标题推导里，所以工作区的临时标题（自动命名结果出来之前显示的那个）同样换成 label。工作区自动命名与分支名生成的输入（`firstAgentContext.prompt`）保持原文。
 
 ### 子智能体关联（server adapter）
 
@@ -204,7 +204,8 @@ Rules:
 - **接缝 1 · 进程内 daemon 集成测试（主测试层）**：进程内 daemon 夹具（`docs/ad-hoc-daemon-testing.md`）+ `DaemonClient` + `createTestAgentClients`。假 provider 开启 `supportsMcpServers`，用 `onStartTurn` 抓取 provider 收到的 prompt。测试扮演父智能体，带 `_meta` tool call id 调 `/mcp/agents?callerAgentId=<父>`，做法参照 `agent-mcp.e2e.test.ts`。覆盖：
   - Routing block：顺序、同 provider 多次、Mention defaults 解析与逐项回退、Agent profile 叠加、目标不可用时写原因、会话不能派发时不附、快照出错时原样透传；
   - 触发来源：steer、排队、新建首条会触发，MCP `send_agent_prompt`、schedule 不触发；带外命令仍按原文识别；
-  - 时间线记原文，回显、hydrate、导入、导入预览不带 Routing block；标题里的链接换成 label；
+  - 时间线记原文，没附块的消息原样记录；标题里的链接换成 label；
+  - 回显、hydrate、prime、导入与导入预览的剥离放在 `AgentManager` 单测（脚本化 session 的 `streamHistory`）与 provider 描述符、投影单测里，不进进程内 daemon 测试：假 provider 不往历史里写 `user_message`，为此改它会波及所有 daemon 测试；
   - 快照的 `canCreateAgents` 与原因码（全局未注入、MCP 关闭、策略未允许、通道没接通）、provider 快照的预测字段、`server_info.features` 的两个开关；
   - `create_agent` 带 tool call id 时子智能体得到 `paseo.parent-tool-call-id`，模型传入的同名键被覆盖；不带 id 时没有这个标签；
   - 子智能体请求权限：父智能体收到新的通知正文与载荷；客户端收到子智能体的 `agent_attention_required`，`finished`/`error` 仍然没有；工作区状态显示"需要批准"；

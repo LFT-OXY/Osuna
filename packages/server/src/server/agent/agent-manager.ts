@@ -84,6 +84,7 @@ import {
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { stripTrailingRoutingBlock } from "./trailing-routing-block.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import {
@@ -134,6 +135,20 @@ function submittedPromptText(prompt: AgentPromptInput): string {
     .flatMap((block) => (block.type === "text" && !("mimeType" in block) ? [block.text] : []))
     .join("\n")
     .trim();
+}
+
+/** Provider-sourced user messages show what the user wrote; the Routing block only went to the provider. */
+function withoutTrailingRoutingBlock<T extends AgentTimelineItem>(item: T): T {
+  if (item.type !== "user_message") return item;
+  const text = stripTrailingRoutingBlock(item.text);
+  return text === item.text ? item : { ...item, text };
+}
+
+interface AcceptedSteerRecord {
+  agent: ActiveManagedAgent;
+  prompt: AgentPromptInput;
+  options?: AgentRunOptions;
+  expectedTurnId: string;
 }
 
 export class AgentManagerShuttingDownError extends Error {
@@ -695,7 +710,7 @@ function buildImportedTimelineRows(entries: readonly ImportedTimelineEntry[]): A
     rows.push({
       seq: rows.length + 1,
       timestamp: entry.timestamp ?? new Date().toISOString(),
-      item: limitAgentTimelineItemContent(entry.item),
+      item: limitAgentTimelineItemContent(withoutTrailingRoutingBlock(entry.item)),
     });
   }
   return rows;
@@ -2622,14 +2637,19 @@ export class AgentManager {
           )
         : undefined;
       if (options?.clientMessageId) {
-        this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, {
-          messageId: options.clientMessageId,
-          turnId,
-          providerMessageId:
-            stagedSubmittedPromptEcho?.item.type === "user_message"
-              ? stagedSubmittedPromptEcho.item.messageId
-              : undefined,
-        });
+        this.recordSubmittedPrompt(
+          agent,
+          options.submittedPrompt ?? prompt,
+          options.clientMessageId,
+          {
+            messageId: options.clientMessageId,
+            turnId,
+            providerMessageId:
+              stagedSubmittedPromptEcho?.item.type === "user_message"
+                ? stagedSubmittedPromptEcho.item.messageId
+                : undefined,
+          },
+        );
       }
       for (const stagedEvent of pendingRun.stagedEvents.splice(0)) {
         const isAcceptedTurnStart =
@@ -2789,7 +2809,7 @@ export class AgentManager {
         expectedTurnId,
       });
       if (admission.status === "accepted") {
-        await this.recordAcceptedSteer(agent, prompt, options?.clientMessageId, expectedTurnId);
+        await this.recordAcceptedSteer({ agent, prompt, options, expectedTurnId });
       }
       return admission;
     });
@@ -2819,7 +2839,7 @@ export class AgentManager {
             expectedTurnId,
           });
           if (admission.status === "accepted") {
-            await this.recordAcceptedSteer(agent, prompt, options?.clientMessageId, expectedTurnId);
+            await this.recordAcceptedSteer({ agent, prompt, options, expectedTurnId });
           }
           return admission;
         })
@@ -2919,16 +2939,17 @@ export class AgentManager {
     }
   }
 
-  private async recordAcceptedSteer(
-    agent: ActiveManagedAgent,
-    prompt: AgentPromptInput,
-    clientMessageId: string | undefined,
-    expectedTurnId: string,
-  ): Promise<void> {
+  private async recordAcceptedSteer({
+    agent,
+    prompt,
+    options,
+    expectedTurnId,
+  }: AcceptedSteerRecord): Promise<void> {
+    const clientMessageId = options?.clientMessageId;
     if (!clientMessageId) {
       return;
     }
-    this.recordSubmittedPrompt(agent, prompt, clientMessageId, {
+    this.recordSubmittedPrompt(agent, options.submittedPrompt ?? prompt, clientMessageId, {
       messageId: clientMessageId,
       turnId: expectedTurnId,
     });
@@ -4059,7 +4080,7 @@ export class AgentManager {
         if (event.item.type === "user_message" && isSystemInjectedEnvelope(event.item.text)) {
           continue;
         }
-        historyEvents.push(event);
+        historyEvents.push({ ...event, item: withoutTrailingRoutingBlock(event.item) });
       } else if (event.type === "provider_subagent") {
         providerSubagentEvents.push(event);
       }
@@ -4130,15 +4151,16 @@ export class AgentManager {
         if (event.item.type === "user_message" && isSystemInjectedEnvelope(event.item.text)) {
           continue;
         }
+        const historyEvent = { ...event, item: withoutTrailingRoutingBlock(event.item) };
         const row = this.recordTimeline(
           agent.id,
-          event.item,
-          event.timestamp ? { timestamp: event.timestamp } : undefined,
+          historyEvent.item,
+          historyEvent.timestamp ? { timestamp: historyEvent.timestamp } : undefined,
         );
         if (deferredBroadcast) {
-          timelineEvents.push({ event, row });
+          timelineEvents.push({ event: historyEvent, row });
         } else if (broadcast) {
-          this.dispatchStream(agent.id, event, {
+          this.dispatchStream(agent.id, historyEvent, {
             seq: row.seq,
             epoch: this.timelineStore.getEpoch(agent.id),
             timestamp: row.timestamp,
@@ -4453,10 +4475,11 @@ export class AgentManager {
       return;
     }
 
+    const item = withoutTrailingRoutingBlock(event.item);
     if (options?.fromHistory) {
       this.recordTimeline(
         agent.id,
-        event.item,
+        item,
         event.timestamp ? { timestamp: event.timestamp } : undefined,
       );
       flags.shouldDispatchEvent = false;
@@ -4464,7 +4487,7 @@ export class AgentManager {
       return;
     }
 
-    this.recordAndDispatchTimelineItem(agent.id, event.item, event.provider, event.turnId);
+    this.recordAndDispatchTimelineItem(agent.id, item, event.provider, event.turnId);
     if (event.item.type === "user_message") {
       agent.lastUserMessageAt = new Date();
       this.emitState(agent);
@@ -4738,7 +4761,7 @@ export class AgentManager {
     if (!clientMessageId) return null;
     let existing = this.timelineStore.getSubmittedUserMessage(agent.id, clientMessageId);
     if (!existing) {
-      this.recordSubmittedPrompt(agent, item.text, clientMessageId, {
+      this.recordSubmittedPrompt(agent, stripTrailingRoutingBlock(item.text), clientMessageId, {
         messageId: clientMessageId,
         ...(messageId ? { providerMessageId: messageId } : {}),
         ...(turnId ? { turnId } : {}),

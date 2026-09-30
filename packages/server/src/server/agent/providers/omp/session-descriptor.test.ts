@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, onTestFinished, test } from "vitest";
 
 import { resolveOmpProviderParams, resolveOmpSessionPaths } from "./provider-config.js";
 import { listOmpImportableSessions, readOmpImportSessionConfig } from "./session-descriptor.js";
@@ -94,6 +94,45 @@ describe("OMP session descriptor", () => {
     await expect(readOmpImportSessionConfig(sessionFile)).resolves.toEqual({
       model: "openai-codex/gpt-5.1",
     });
+  });
+
+  test("OMP import previews drop the Routing block the provider received", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-routing-block-"));
+    onTestFinished(() => rm(root, { recursive: true, force: true }));
+    const cwd = path.join(root, "repo");
+    const original = "[@Claude](paseo://agent/provider/claude) write tests";
+    await writeSession(root, "project/session.jsonl", [
+      {
+        type: "session",
+        version: 3,
+        id: "session-routed",
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd,
+      },
+      {
+        type: "message",
+        id: "user-1",
+        timestamp: "2026-06-09T00:00:01.000Z",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `${original}\n\n<paseo-system>\n1. @Claude -> provider "claude", settings {}\n</paseo-system>`,
+            },
+          ],
+        },
+      },
+    ]);
+
+    const [descriptor] = await listOmpImportableSessions({
+      sessionDir: path.join(root, "sessions"),
+    });
+
+    expect({
+      firstPromptPreview: descriptor?.firstPromptPreview,
+      lastPromptPreview: descriptor?.lastPromptPreview,
+    }).toEqual({ firstPromptPreview: original, lastPromptPreview: original });
   });
 
   test("keeps recent nested OMP subagent sessions importable", async () => {

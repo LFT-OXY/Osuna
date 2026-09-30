@@ -1501,6 +1501,48 @@ describe("normalizeClaudeAskUserQuestionUpdatedInput", () => {
 });
 
 describe("ClaudeAgentClient.listImportableSessions", () => {
+  test("drops the Routing block from import previews", async () => {
+    const tmpConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-claude-import-routing-"));
+    const previousConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = tmpConfigDir;
+    const original = "[@Codex](paseo://agent/provider/codex) review it";
+
+    try {
+      const projectDir = path.join(tmpConfigDir, "projects", "routing-fixture");
+      await fs.mkdir(projectDir, { recursive: true });
+      await fs.writeFile(
+        path.join(projectDir, "routed-session.jsonl"),
+        `${JSON.stringify({
+          type: "user",
+          message: {
+            role: "user",
+            content: `${original}\n\n<paseo-system>\n1. @Codex -> provider "codex", settings {}\n</paseo-system>`,
+          },
+          cwd: "/tmp/paseo-claude-routing",
+          sessionId: "routed-session",
+        })}\n`,
+      );
+      const client = new ClaudeAgentClient({
+        logger: createTestLogger(),
+        resolveBinary: async () => "/test/claude/bin",
+      });
+
+      const [session] = await client.listImportableSessions({ limit: 1 });
+
+      expect({
+        firstPromptPreview: session?.firstPromptPreview,
+        lastPromptPreview: session?.lastPromptPreview,
+      }).toEqual({ firstPromptPreview: original, lastPromptPreview: original });
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      } else {
+        process.env.CLAUDE_CONFIG_DIR = previousConfigDir;
+      }
+      await fs.rm(tmpConfigDir, { recursive: true, force: true });
+    }
+  });
+
   test("uses the latest native custom title and leaves fixture mtimes unchanged", async () => {
     const tmpConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-claude-import-"));
     const previousConfigDir = process.env.CLAUDE_CONFIG_DIR;

@@ -9,6 +9,7 @@ import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentManager } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
 import {
+  appendRoutingBlock,
   formatSystemNotificationPrompt,
   isSystemInjectedEnvelope,
   setupFinishNotification,
@@ -262,6 +263,18 @@ function createFinishNotificationScenario(
 test("isSystemInjectedEnvelope matches the envelope formatSystemNotificationPrompt produces", () => {
   expect(isSystemInjectedEnvelope(formatSystemNotificationPrompt("child finished"))).toBe(true);
   expect(isSystemInjectedEnvelope("hello world")).toBe(false);
+});
+
+test("appendRoutingBlock adds the block after string text or as a trailing text block", () => {
+  const block = formatSystemNotificationPrompt(
+    "1. @Claude -> cannot start: reason. Tell the user.",
+  );
+
+  expect(appendRoutingBlock("write tests", block)).toBe(`write tests\n\n${block}`);
+  expect(appendRoutingBlock([{ type: "text", text: "review this" }], block)).toEqual([
+    { type: "text", text: "review this" },
+    { type: "text", text: block },
+  ]);
 });
 
 test("finish notifications tell the parent the child's last assistant message", async () => {

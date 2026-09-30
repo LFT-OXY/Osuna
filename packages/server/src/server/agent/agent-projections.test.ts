@@ -505,6 +505,31 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
     expect(payload).not.toHaveProperty("nativeHandle");
   });
 
+  it("hides a trailing Routing block in provider-supplied titles and previews", () => {
+    const original = "[@Claude](paseo://agent/provider/claude) write tests";
+    const routed = `${original}\n\n<paseo-system>\n1. @Claude -> provider "claude", settings {}\n</paseo-system>`;
+    const session: ImportableProviderSession & { provider: string } = {
+      provider: "codex",
+      providerHandleId: "thread-with-mention",
+      cwd: "/tmp/project",
+      title: routed,
+      firstPromptPreview: routed,
+      lastPromptPreview: "thanks",
+      lastActivityAt: new Date("2026-04-30T12:34:56.000Z"),
+    };
+
+    expect(toRecentProviderSessionDescriptorPayload(session, { providerLabel: "Codex" })).toEqual({
+      providerId: "codex",
+      providerLabel: "Codex",
+      providerHandleId: "thread-with-mention",
+      cwd: "/tmp/project",
+      title: original,
+      firstPromptPreview: original,
+      lastPromptPreview: "thanks",
+      lastActivityAt: "2026-04-30T12:34:56.000Z",
+    });
+  });
+
   it("carries the owning Paseo agent id only when the caller supplies one", () => {
     const session: ImportableProviderSession & { provider: string } = {
       provider: "claude",

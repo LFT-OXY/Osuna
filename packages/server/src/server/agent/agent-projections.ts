@@ -20,6 +20,7 @@ import type {
 import type { ManagedAgent } from "./agent-manager.js";
 import type { JsonValue } from "../json-utils.js";
 import { isStoredAgentProviderAvailable, toAgentPersistenceHandle } from "../persistence-hooks.js";
+import { stripTrailingRoutingBlock } from "./trailing-routing-block.js";
 export type { ManagedAgent };
 
 interface ProjectionOptions {
@@ -284,6 +285,12 @@ export function toAgentListItemPayload(agent: AgentSnapshotPayload): AgentListIt
   };
 }
 
+// provider 给的标题与预览可能是 prompt 原文（如 Codex 的 thread preview），带着 Routing block。
+// 先折叠空白再截断的 provider 在各自的规范化函数里剥。
+function stripNullableRoutingBlock(text: string | null): string | null {
+  return text === null ? null : stripTrailingRoutingBlock(text);
+}
+
 export function toRecentProviderSessionDescriptorPayload(
   session: ImportableProviderSession & { provider: string },
   options: RecentProviderSessionProjectionOptions,
@@ -293,9 +300,9 @@ export function toRecentProviderSessionDescriptorPayload(
     providerLabel: options.providerLabel,
     providerHandleId: session.providerHandleId,
     cwd: session.cwd,
-    title: session.title,
-    firstPromptPreview: session.firstPromptPreview,
-    lastPromptPreview: session.lastPromptPreview,
+    title: stripNullableRoutingBlock(session.title),
+    firstPromptPreview: stripNullableRoutingBlock(session.firstPromptPreview),
+    lastPromptPreview: stripNullableRoutingBlock(session.lastPromptPreview),
     lastActivityAt: session.lastActivityAt.toISOString(),
     ...(options.importedAgentId ? { importedAgentId: options.importedAgentId } : {}),
     ...(options.importedAgentWorkspaceId

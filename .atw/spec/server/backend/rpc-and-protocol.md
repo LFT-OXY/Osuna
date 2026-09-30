@@ -488,6 +488,68 @@ const labels = withParentToolCallIdLabel({
 });
 ```
 
+## Scenario: a provider-bound prompt that differs from what the user sent
+
+Reference implementation: the Routing block for Agent mentions (multi-agent ticket 05). Reuse this shape when the daemon appends system text to a user message on its way to the provider.
+
+### 1. Scope / Trigger
+
+- The provider must see extra instructions, while the timeline, bubble, title, history replay, and import picker show only what the user wrote. No wire change; gated by `server_info.features.agentMentions`.
+
+### 2. Signatures
+
+- `StartAgentRunOptions.resolveRoutingBlock?: () => Promise<string | null>` and `SendPromptToAgentParams.resolveRoutingBlock?: (agent: ManagedAgent) => Promise<string | null>` (`agent/agent-prompt.ts`); `appendRoutingBlock(prompt, block)`.
+- `AgentRunOptions.submittedPrompt?: AgentPromptInput` (`agent/agent-sdk-types.ts`): the original, read by the `recordSubmittedPrompt` calls in `agent-manager.ts` `streamAgent` (after the turn is accepted) and `recordAcceptedSteer`.
+- `resolveRoutingBlock({ text, cwd, canCreateAgents, providers })` (`agent/routing-block.ts`); defaults via `selectDefaultModel` / `resolveThinkingOptionId` shared with metadata generation.
+- `stripTrailingRoutingBlock(text)` (`agent/trailing-routing-block.ts`, a leaf module so providers can import it).
+
+### 3. Contracts
+
+- Only `session.ts` `handleSendAgentMessageRequest` passes `resolveRoutingBlock`. MCP `send_agent_prompt`, schedule fires, and finish notifications never do, so a parent forwarding the user's text cannot chain-dispatch.
+- `startAgentRun` runs `tryRunOutOfBand` on the original first, then calls the resolver. Out-of-band commands never wait on the provider snapshot.
+- Array prompts get a trailing text block; string prompts get `\n\n` + block. The timeline records `submittedPrompt`, reconciled by `clientMessageId`.
+- `stripTrailingRoutingBlock` needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
+
+### 4. Validation & Error Matrix
+
+- Session `canCreateAgents` false → no block, original text sent.
+- Mention of an unregistered, disabled, or `unavailable` provider → line `N. @Label -> cannot start: <reason>. Tell the user.`; other mentions still route.
+- Snapshot `loading` / `error` → dispatch with `provider "<id>"` and `settings {}`.
+- `getProvider` throwing → the send fails (snapshot inconsistency, not swallowed).
+- Profile mentions → ignored until ticket 09.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `[@Claude](paseo://agent/provider/claude) write tests` → provider gets text + block; timeline shows the text.
+- Base: a message without mentions that ends in a user-written `<paseo-system>` block → sent and recorded unchanged.
+- Bad: stripping in `submittedPromptText` — every entrypoint loses user-written trailing blocks, including MCP and schedule prompts that never carried one.
+
+### 6. Tests Required
+
+- Daemon E2E `daemon-e2e/agent-mention-routing-block.e2e.test.ts`: exact block text and order, same provider twice, steer via permission park, sequential sends, `/fake-oob`, `mcpInjectIntoAgents: false`, disabled/unknown provider lines, MCP + schedule prompt arrays, recorded-as-written.
+- `agent-manager.test.ts` (`fakeCodexEmitting` turn/history items, resumed `streamHistory`, `importSession`): echo, force hydrate, prime, import rows and imported title.
+- `routing-block.test.ts` (snapshot `error` / `loading` → provider only; `getProvider` throwing rejects), `trailing-routing-block.test.ts`, `agent-projections.test.ts`, import previews in `claude/agent.test.ts`, `omp/` and `pi/session-descriptor.test.ts`, `session.create-agent-title.test.ts` (links → labels). ACP previews share the same one-line change and have no fixture for loaded prompts.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Resolved before startAgentRun: /goal waits on the snapshot, and the block rides into OOB parsing.
+const block = await resolveRoutingBlock(input);
+await startAgentRun(manager, id, appendRoutingBlock(prompt, block), logger);
+```
+
+#### Correct
+
+```ts
+await sendPromptToAgent({
+  ...params,
+  resolveRoutingBlock: (agent) =>
+    resolveRoutingBlock({ text: msg.text, cwd: agent.cwd, canCreateAgents, providers }),
+});
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

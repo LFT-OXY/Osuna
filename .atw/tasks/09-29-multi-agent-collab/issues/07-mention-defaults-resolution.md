@@ -5,6 +5,8 @@
 - Routing block 按"Mention defaults → 运行时默认"逐字段解析；失效值逐项回退（模型不在目录 → 默认模型及其默认档位；档位不属于所选模型 → 该模型默认档位；模式不存在 → `defaultModeId`），不阻断发送；快照未就绪时等待（受刷新超时约束），出错时配置值原样透传。模式不继承父会话，daemon 总是写出明确的 `modeId`。
 - 选择函数与元数据生成共用。
 
+05 号票留下的缺口：provider 快照没有 `defaultModeId` 时，Routing block 的 `settings` 里不写 `modeId`，`create_agent` 会经 `ProviderSnapshotManager.resolveCreateConfig` 把父会话交给 provider 的 `resolveCreateConfig`，可能回落到父会话的模式，违背"模式不继承父会话"。本票要让 daemon 总是写出明确的 `modeId`。
+
 **Blocked by:** 05
 **Status:** ready-for-agent
 **Impl:** ready

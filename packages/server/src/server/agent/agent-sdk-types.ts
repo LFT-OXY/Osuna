@@ -214,6 +214,8 @@ export interface AgentRunOptions {
   resumeFrom?: AgentPersistenceHandle;
   maxThinkingTokens?: number;
   clientMessageId?: string;
+  /** What the user sent, recorded in the timeline when the provider prompt carries a Routing block. */
+  submittedPrompt?: AgentPromptInput;
 }
 
 export interface AgentSteerOptions extends AgentRunOptions {

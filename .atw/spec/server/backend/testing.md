@@ -36,6 +36,8 @@ The fake codex client parks on a permission in ask mode (`getAskModeConfig("code
 
 In `workspace-directory.test.ts`, `hasDelegatedAgent` labels the child with parent `parent-agent`. A root seeded under any other id leaves the child orphaned, so `resolveWorkspaceRootAgent` returns null and the child is skipped: the assertion passes without exercising descendant aggregation. Seed the root as `parent-agent`.
 
+The fake session (`fake-agent-client.ts`) handles string prompts starting with `/fake-oob` out of band and emits `Out-of-band: <prompt>`; use it to prove something runs after out-of-band detection. `onStartTurn` sees exactly what the provider receives, so assert the whole `prompts` array. The fake never writes `user_message` into its history, so tests about replaying provider user messages (hydrate, prime, import) belong in `agent/agent-manager.test.ts` with `fakeCodexEmitting({ historyItems })` or a `TestAgentSession` overriding `streamHistory`, not in daemon E2E.
+
 ## Rules
 
 - **No `vi.mock` of the module under test, no `vi.spyOn` on own exports.** If you need one, the module is missing a port. Add the injectable interface, write a fake next to the real adapter, test against that. The existing `vi.spyOn(logger, "warn")` pattern is for asserting on logging, not for stubbing behavior.
