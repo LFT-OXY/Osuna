@@ -2,13 +2,15 @@ import React, { useCallback, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, type PressableStateCallbackType, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { AlertTriangle, Trash2 } from "lucide-react-native";
+import { AlertTriangle, FileText, RotateCw, Trash2 } from "lucide-react-native";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
 import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
-import { supportsApiEndpoints } from "@/api-endpoints";
+import { selectInheritedApiEndpoint, supportsApiEndpoints } from "@/api-endpoints";
 import { mutedIconColorMapping } from "@/components/ui/icon-color";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Text as UiText } from "@/components/ui/text";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { resolveProviderInstallGuide, type ProviderInstallGuide } from "@/provider-install-guide";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
@@ -17,7 +19,8 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 
 /*
- * 提供方详情的内容区：安装指引、第三方接口、模型。外框（弹窗或页面）由调用方决定。
+ * 提供方详情的内容区，区块顺序固定：删除失败 → 错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → 模型。
+ * 外框（弹窗或页面）由调用方决定。
  * 这里只收 props，方便 jsdom 测试；运行时接线在 view.tsx。
  * 安装指引与第三方接口的运行时视图在单测运行器里无法加载，所以由调用方经 render 插槽注入。
  */
@@ -34,7 +37,11 @@ export interface ProviderDetailSurfaceProps {
   modelQuery: string;
   isRefreshing: boolean;
   deletingModelId: string | null;
+  // 删除这个提供方失败的原因；从 ⋯ 菜单删除，失败提示显示在详情顶部。
+  removalError: string | null;
   onRefresh: () => void;
+  onRunDiagnostic: () => void;
+  onDismissRemovalError: () => void;
   onDeleteCustomModel: (modelId: string) => void;
   renderInstallGuide: (guide: ProviderInstallGuide, cliLabel: string) => ReactNode;
   renderApiEndpoints: (providerLabel: string) => ReactNode;
@@ -113,6 +120,60 @@ function CustomModelRow({
       >
         <ThemedTrash2 size={ICON_SIZE.sm} uniProps={destructiveIconColorMapping} />
       </Pressable>
+    </View>
+  );
+}
+
+function ProviderStartErrorAlert({
+  providerLabel,
+  message,
+  isRefreshing,
+  onRefresh,
+  onRunDiagnostic,
+}: {
+  providerLabel: string;
+  message: string;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+  onRunDiagnostic: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={settingsStyles.section}>
+      <Alert
+        variant="error"
+        title={t("settings.providers.startErrorTitle", { name: providerLabel })}
+        testID="provider-start-error"
+      >
+        {/* 原文要等宽，description 只收字符串，所以原文和按钮一起放进 children。 */}
+        <View style={styles.startErrorBody}>
+          <UiText
+            variant="caption"
+            color="foregroundMuted"
+            style={styles.errorOutput}
+            selectable
+            dataSet={CODE_SURFACE_DATASET}
+          >
+            {message}
+          </UiText>
+          <View style={styles.startErrorActions}>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={isRefreshing ? undefined : RotateCw}
+              onPress={onRefresh}
+              disabled={isRefreshing}
+            >
+              {isRefreshing
+                ? t("settings.providers.diagnostic.refreshing")
+                : t("settings.providers.diagnostic.refresh")}
+            </Button>
+            <Button variant="outline" size="sm" leftIcon={FileText} onPress={onRunDiagnostic}>
+              {t("settings.providers.diagnostic.run")}
+            </Button>
+          </View>
+        </View>
+      </Alert>
     </View>
   );
 }
@@ -241,7 +302,10 @@ export function ProviderDetailSurface({
   modelQuery,
   isRefreshing,
   deletingModelId,
+  removalError,
   onRefresh,
+  onRunDiagnostic,
+  onDismissRemovalError,
   onDeleteCustomModel,
   renderInstallGuide,
   renderApiEndpoints,
@@ -265,6 +329,8 @@ export function ProviderDetailSurface({
       ? (providerEntry.error ?? t("settings.providers.diagnostic.unknownError"))
       : null;
   const modelsRefreshing = isRefreshing || providerSnapshotRefreshing;
+  const startErrorMessage = providerEntry?.enabled === false ? null : providerErrorMessage;
+  const inheritedApiEndpoint = selectInheritedApiEndpoint({ provider, extendsProvider, entries });
 
   const q = modelQuery.trim();
   const filteredDiscovered = useMemo(
@@ -288,6 +354,41 @@ export function ProviderDetailSurface({
 
   return (
     <>
+      {removalError ? (
+        <View style={settingsStyles.section}>
+          <Alert
+            variant="error"
+            title={t("settings.providers.remove.errorTitle")}
+            description={removalError}
+            testID="provider-removal-error"
+          >
+            <Button variant="outline" size="sm" onPress={onDismissRemovalError}>
+              {t("common.actions.dismiss")}
+            </Button>
+          </Alert>
+        </View>
+      ) : null}
+      {startErrorMessage ? (
+        <ProviderStartErrorAlert
+          providerLabel={providerLabel}
+          message={startErrorMessage}
+          isRefreshing={modelsRefreshing}
+          onRefresh={onRefresh}
+          onRunDiagnostic={onRunDiagnostic}
+        />
+      ) : null}
+      {inheritedApiEndpoint ? (
+        <View style={settingsStyles.section}>
+          <Alert
+            variant="warning"
+            title={t("settings.providers.apiEndpoints.inheritedTitle", {
+              name: inheritedApiEndpoint.name,
+            })}
+            description={t("settings.providers.apiEndpoints.inheritedDescription")}
+            testID="provider-inherited-api-endpoint"
+          />
+        </View>
+      ) : null}
       {installGuideContent}
       {apiEndpointsContent}
       <ProviderModelsBody
@@ -317,6 +418,21 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.code,
     color: theme.colors.foregroundMuted,
     flexShrink: 0,
+  },
+  // Alert 的 children 槽自带 8 的上间距，抵掉它，原文就和 description 一样离标题 4。
+  startErrorBody: {
+    flex: 1,
+    minWidth: 0,
+    marginTop: -theme.spacing[2],
+    gap: theme.spacing[2],
+  },
+  startErrorActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+  },
+  errorOutput: {
+    fontFamily: theme.fontFamily.mono,
   },
   descriptionInline: {
     flex: 1,

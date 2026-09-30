@@ -7,6 +7,8 @@
 - 最大宽 640，测试 id 保持 `provider-settings-sheet`。
 - 弹窗上不再叠子弹窗。第三方接口的新建和编辑表单除外，它是多字段表单，仍然是弹窗。
 
+- 弹窗头部的 ⋯ 复用 `ProviderDetailMenu`。删除状态按主机加提供方存在 `provider-detail/removal.ts`，弹窗里的详情也会显示同一个提供方在设置页删除失败的提示，确认这是想要的。
+
 **Blocked by:** 07
 
 **Status:** ready-for-agent

@@ -36,7 +36,7 @@ const { theme, snapshotState, configState, patchConfigMock, refreshMock, selectP
         statusSuccess: "#00ff00",
         statusWarning: "#ff9500",
         statusDanger: "#ff0000",
-        // Alert（经 @/api-endpoints 入口引入）读 blue / amber。
+        // 目录弹窗的 Alert 读 blue / amber。
         palette: {
           red: { 300: "#ff6b6b" },
           blue: { 300: "#93c5fd" },
@@ -137,7 +137,7 @@ vi.mock("react-native-unistyles", () => ({
 vi.mock("lucide-react-native", () => {
   const icon = (name: string) => () => React.createElement("span", { "data-icon": name });
   return {
-    // 继承提示经 @/api-endpoints 入口引入，入口带着模式区与 Alert 的图标。
+    // 目录弹窗的 Alert 与目录行的图标。
     AlertTriangle: icon("AlertTriangle"),
     CheckCircle2: icon("CheckCircle2"),
     ChevronRight: icon("ChevronRight"),
@@ -176,19 +176,7 @@ vi.mock("react-i18next", () => ({
           "providerCatalog.actions.add": "Add",
           "providerCatalog.actions.adding": "Adding",
           "providerCatalog.actions.installInstructions": "Install instructions",
-          "settings.providers.updateErrorTitle": "Unable to update provider",
-          "settings.providers.actions.menu": "{{name}} actions",
-          "settings.providers.actions.remove": "Remove provider",
-          "settings.providers.actions.removing": "Removing...",
-          "settings.providers.remove.confirmTitle": "Remove {{name}}?",
-          "settings.providers.remove.confirmMessage":
-            "This deletes the provider entry from config.json. It cannot be undone.",
-          "settings.providers.remove.confirm": "Remove",
-          "settings.providers.remove.errorTitle": "Unable to remove provider",
-          "settings.providers.install.howTo": "How to install",
-          "settings.providers.install.howToFor": "How to install {{name}}",
-          "settings.providers.apiEndpoints.inheritedNote":
-            "Also uses Claude Code's API endpoint {{name}}",
+          "common.actions.dismiss": "Dismiss",
         })[key] ?? key
       )
         .replaceAll("{{name}}", String(values?.name ?? ""))
@@ -230,68 +218,6 @@ vi.mock("@/components/ui/loading-spinner", () => ({
 
 vi.mock("@/components/settings/headings/settings-info-tip", () => ({
   SettingsInfoTip: () => null,
-}));
-
-vi.mock("@/components/ui/dropdown-menu", () => ({
-  DropdownMenu: ({ children }: { children?: React.ReactNode }) =>
-    React.createElement("div", null, children),
-  DropdownMenuTrigger: ({
-    children,
-    onPressIn,
-    accessibilityRole,
-    accessibilityLabel,
-    testID,
-  }: {
-    children?:
-      | React.ReactNode
-      | ((state: { pressed: boolean; hovered: boolean; open: boolean }) => React.ReactNode);
-    onPressIn?: (event: { stopPropagation: () => void }) => void;
-    accessibilityRole?: string;
-    accessibilityLabel?: string;
-    testID?: string;
-  }) =>
-    React.createElement(
-      "button",
-      {
-        type: "button",
-        role: accessibilityRole,
-        "aria-label": accessibilityLabel,
-        "data-testid": testID,
-        onMouseDown: (event: React.MouseEvent) => onPressIn?.(event),
-        onClick: (event: React.MouseEvent) => event.stopPropagation(),
-      },
-      typeof children === "function"
-        ? children({ pressed: false, hovered: false, open: false })
-        : children,
-    ),
-  DropdownMenuContent: ({ children }: { children?: React.ReactNode }) =>
-    React.createElement("div", null, children),
-  DropdownMenuItem: ({
-    children,
-    onSelect,
-    status,
-    pendingLabel,
-    testID,
-  }: {
-    children?: React.ReactNode;
-    onSelect?: () => void;
-    status?: "idle" | "pending" | "success";
-    pendingLabel?: string;
-    testID?: string;
-  }) =>
-    React.createElement(
-      "button",
-      {
-        type: "button",
-        "data-testid": testID,
-        disabled: status === "pending" || status === "success",
-        onClick: (event: React.MouseEvent) => {
-          event.stopPropagation();
-          onSelect?.();
-        },
-      },
-      status === "pending" ? pendingLabel : children,
-    ),
 }));
 
 vi.mock("@/components/provider-icons", () => ({
@@ -366,14 +292,6 @@ vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeIsConnected: () => true,
 }));
 
-vi.mock("@/runtime/host-features", () => ({
-  useHostFeature: () => false,
-}));
-
-vi.mock("@/utils/confirm-dialog", () => ({
-  confirmDialog: vi.fn(async () => true),
-}));
-
 import {
   buildAcpProviderConfigPatch,
   getAcpProviderCatalog,
@@ -416,16 +334,6 @@ const disabledCodexEntry: ProviderSnapshotEntry = {
 const notInstalledCodexEntry: ProviderSnapshotEntry = {
   ...disabledCodexEntry,
   enabled: true,
-};
-
-const notInstalledOpenCodeEntry: ProviderSnapshotEntry = {
-  provider: "opencode",
-  status: "unavailable",
-  enabled: true,
-  label: "OpenCode",
-  description: "OpenCode",
-  defaultModeId: null,
-  modes: [],
 };
 
 const notInstalledCustomClaudeEntry: ProviderSnapshotEntry = {
@@ -666,67 +574,15 @@ describe("ProvidersSection", () => {
     expect(selectProviderMock).not.toHaveBeenCalled();
   });
 
-  function findInstallEntry(providerLabel: string): HTMLElement | null {
-    return (
-      container?.querySelector<HTMLElement>(
-        `[role="link"][aria-label="How to install ${providerLabel}"]`,
-      ) ?? null
-    );
-  }
-
-  it("offers a how-to-install entry on a not-installed provider that selects it", () => {
-    snapshotState.entries = [claudeEntry, notInstalledCodexEntry];
-    configState.config = makeConfig();
-
-    render();
-
-    const codexRow = findRow("Codex provider details");
-    const entry = findInstallEntry("Codex");
-    expect(entry).not.toBeNull();
-    expect(codexRow.contains(entry)).toBe(true);
-    expect(entry?.textContent).toBe("How to install");
-
-    act(() => {
-      entry?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(selectProviderMock).toHaveBeenCalledTimes(1);
-    expect(selectProviderMock).toHaveBeenCalledWith("codex");
-  });
-
-  it("keeps installed providers and providers without a guide unchanged", () => {
-    snapshotState.entries = [claudeEntry, notInstalledOpenCodeEntry];
-    configState.config = makeConfig();
-
-    render();
-
-    expect(findInstallEntry("Claude")).toBeNull();
-    expect(findInstallEntry("OpenCode")).toBeNull();
-    expect(
-      indexOfText(descendants(findRow("OpenCode provider details")), "Not installed"),
-    ).toBeGreaterThanOrEqual(0);
-  });
-
-  it("offers the entry on a custom provider that extends a guided provider", () => {
-    snapshotState.entries = [notInstalledCustomClaudeEntry];
-    configState.config = makeConfig({
-      "work-claude": { extends: "claude", label: "Work Claude" },
-    });
-
-    render();
-
-    expect(findInstallEntry("Work Claude")).not.toBeNull();
-  });
-
-  it("tells a custom provider that extends claude it uses Claude's API endpoint too", () => {
+  it("keeps errors, install links, menus and API endpoint notes out of the rows", () => {
     const workClaude: ProviderSnapshotEntry = {
       ...notInstalledCustomClaudeEntry,
-      status: "ready",
-      models: claudeEntry.models,
+      status: "error",
+      error: "work-claude exited 1",
     };
-    const note = "Also uses Claude Code's API endpoint Relay";
     snapshotState.entries = [
       { ...claudeEntry, activeApiEndpoint: { id: "ep_1", name: "Relay" } },
+      notInstalledCodexEntry,
       workClaude,
     ];
     configState.config = makeConfig({
@@ -735,16 +591,66 @@ describe("ProvidersSection", () => {
 
     render();
 
-    expect(indexOfText(descendants(findRow("Work Claude provider details")), note)).toBeGreaterThan(
-      -1,
-    );
-    // Claude 自己那一行已经在详情里显示当前接口，不重复提示。
-    expect(indexOfText(descendants(findRow("Claude provider details")), note)).toBe(-1);
+    const text = container?.textContent ?? "";
+    expect(text).not.toContain("work-claude exited 1");
+    expect(text).not.toContain("How to install");
+    expect(text).not.toContain("Also uses Claude Code's API endpoint");
+    expect(container?.querySelector('[data-icon="MoreHorizontal"]')).toBeNull();
+    expect(container?.querySelector('[role="link"]')).toBeNull();
+    expect(
+      indexOfText(descendants(findRow("Work Claude provider details")), "Error"),
+    ).toBeGreaterThan(-1);
+  });
 
-    snapshotState.entries = [claudeEntry, workClaude];
+  it("shows a failed switch at the top of the list until dismissed", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+    patchConfigMock.mockRejectedValueOnce(new Error("config.json is read-only"));
+
     render();
 
-    expect(indexOfText(descendants(findRow("Work Claude provider details")), note)).toBe(-1);
+    const switchEl =
+      findRow("Claude provider details").querySelector<HTMLElement>('[role="switch"]');
+    await act(async () => {
+      switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    const errorRow = container?.querySelector<HTMLElement>(
+      '[data-testid="providers-toggle-error"]',
+    );
+    expect(errorRow?.textContent).toContain("config.json is read-only");
+    expect(selectProviderMock).not.toHaveBeenCalled();
+
+    const dismiss = Array.from(errorRow?.querySelectorAll<HTMLElement>("*") ?? []).find(
+      (node) => node.getAttribute("role") === "button" && node.textContent === "Dismiss",
+    );
+    if (!dismiss) throw new Error("Expected the Dismiss button on the error row");
+    act(() => {
+      dismiss.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container?.querySelector('[data-testid="providers-toggle-error"]')).toBeNull();
+  });
+
+  it("clears a failed switch when the next switch starts", async () => {
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+    patchConfigMock.mockRejectedValueOnce(new Error("config.json is read-only"));
+
+    render();
+
+    const switchEl =
+      findRow("Claude provider details").querySelector<HTMLElement>('[role="switch"]');
+    await act(async () => {
+      switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    expect(container?.querySelector('[data-testid="providers-toggle-error"]')).not.toBeNull();
+
+    await act(async () => {
+      switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container?.querySelector('[data-testid="providers-toggle-error"]')).toBeNull();
   });
 
   it("toggles the provider enabled flag through patchConfig when the switch is pressed", async () => {

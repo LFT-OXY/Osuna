@@ -46,10 +46,6 @@ function toInstallPlatform(hostPlatform: string | undefined): InstallPlatform | 
   return HOST_PLATFORM_TO_INSTALL_PLATFORM[hostPlatform];
 }
 
-export function hasProviderInstallGuide(target: ProviderInstallGuideTarget): boolean {
-  return resolveGuidedProvider(target) !== null;
-}
-
 export function resolveProviderInstallGuide(
   input: ProviderInstallGuideTarget & { hostPlatform: string | undefined },
 ): ProviderInstallGuide | null {

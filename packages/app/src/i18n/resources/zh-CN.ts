@@ -2711,7 +2711,7 @@ export const zhCN: TranslationResources = {
       unavailable: "连接到这个 Host 以查看 Providers",
       loading: "正在加载...",
       addErrorTitle: "无法添加 Provider",
-      updateErrorTitle: "无法更新 Provider",
+      startErrorTitle: "{{name}} 无法启动",
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -2765,11 +2765,10 @@ export const zhCN: TranslationResources = {
         running: "正在运行诊断...",
         none: "没有可用诊断",
         failedToFetch: "获取诊断失败",
+        run: "运行诊断",
         unknownError: "未知错误",
       },
       install: {
-        howTo: "如何安装",
-        howToFor: "如何安装 {{name}}",
         title: "安装 {{name}}",
         hostHint: "在运行 Osuna daemon 的机器上执行",
         choosePlatform: "选择 Host 的操作系统",
@@ -2827,8 +2826,8 @@ export const zhCN: TranslationResources = {
           reapplyMessage:
             "这会把接口重新写入 {{provider}} 自身的配置文件，覆盖外部对 Osuna 所管理的键的改动。",
         },
-        inheritedNote:
-          "也会走 Claude Code 启用的第三方接口 {{name}}：Claude 的 settings.json 里的 env 优先于这个提供方的环境变量。",
+        inheritedTitle: "也会走 Claude Code 启用的第三方接口 {{name}}",
+        inheritedDescription: "Claude 的 settings.json 里的 env 优先于这个提供方的环境变量。",
         form: {
           createTitle: "新建第三方接口",
           editTitle: "编辑第三方接口",

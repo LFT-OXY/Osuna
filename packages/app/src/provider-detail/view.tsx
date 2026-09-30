@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiEndpointsView } from "@/api-endpoints/view";
 import {
   resolveProviderDiscoveredModels,
@@ -11,9 +12,11 @@ import type { ProviderInstallGuide } from "@/provider-install-guide";
 import { ProviderInstallGuideView } from "@/provider-install-guide/view";
 import { useHostFeature } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
+import { confirmDialog } from "@/utils/confirm-dialog";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
-import { ProviderDetailHeader, ProviderDetailRefreshButton } from "./header";
+import { ProviderDetailHeader, ProviderDetailMenu, ProviderDetailRefreshButton } from "./header";
 import { ProviderDetailSurface } from "./index";
+import { dismissProviderRemovalError, removeProvider, useProviderRemoval } from "./removal";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
 /*
@@ -25,15 +28,22 @@ export function ProviderDetail({
   serverId,
   provider,
   modelQuery,
+  onRunDiagnostic,
 }: {
   serverId: string;
   provider: string;
   // 弹窗外框把模型搜索放在自己的头部，查询从外框传进来。
   modelQuery: string;
+  onRunDiagnostic: () => void;
 }) {
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
+  const removal = useProviderRemoval(serverId, provider);
+  const handleDismissRemovalError = useCallback(
+    () => dismissProviderRemovalError(serverId, provider),
+    [provider, serverId],
+  );
 
   const providerEntry = useMemo(
     () => entries?.find((entry) => entry.provider === provider),
@@ -110,7 +120,10 @@ export function ProviderDetail({
       modelQuery={modelQuery}
       isRefreshing={isRefreshing}
       deletingModelId={deletingModelId}
+      removalError={removal.status === "failed" ? removal.message : null}
       onRefresh={handleRefresh}
+      onRunDiagnostic={onRunDiagnostic}
+      onDismissRemovalError={handleDismissRemovalError}
       onDeleteCustomModel={handleDeleteCustomModel}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
@@ -120,7 +133,11 @@ export function ProviderDetail({
 
 // 详情头部要的数据：设置页的头部块和手机顶栏共用。
 export function useProviderDetailHeader(serverId: string, provider: string) {
+  const { t } = useTranslation();
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
+  const { patchConfig } = useDaemonConfig(serverId);
+  const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
+  const removal = useProviderRemoval(serverId, provider);
   const providerEntry = useMemo(
     () => entries?.find((entry) => entry.provider === provider),
     [entries, provider],
@@ -140,6 +157,22 @@ export function useProviderDetailHeader(serverId: string, provider: string) {
   const handleRefresh = useCallback(() => {
     void refresh([provider]);
   }, [provider, refresh]);
+  const providerSource = providerEntry?.source;
+  const isRemoving = removal.status === "removing";
+
+  // 删除成功后提供方从快照里消失，由页面的地址修正回到第一个提供方或列表。
+  const handleRemove = useCallback(() => {
+    void removeProvider(serverId, provider, {
+      confirm: () =>
+        confirmDialog({
+          title: t("settings.providers.remove.confirmTitle", { name: label }),
+          message: t("settings.providers.remove.confirmMessage"),
+          confirmLabel: t("settings.providers.remove.confirm"),
+          destructive: true,
+        }),
+      remove: () => patchConfig({ removeProviders: [provider] }),
+    });
+  }, [label, patchConfig, provider, serverId, t]);
 
   return {
     icon,
@@ -148,6 +181,10 @@ export function useProviderDetailHeader(serverId: string, provider: string) {
     modelCount,
     isRefreshing: isProviderRefreshing,
     onRefresh: handleRefresh,
+    providerSource,
+    hostSupportsRemoval: supportsProviderRemoval,
+    isRemoving,
+    onRemove: handleRemove,
   };
 }
 
@@ -156,17 +193,51 @@ export function ProviderDetailPage({
   serverId,
   provider,
   hasScreenHeaderActions,
+  onRunDiagnostic,
 }: {
   serverId: string;
   provider: string;
-  // 手机上「刷新」在顶栏，头部块只留图标、名称、徽章和模型数。
+  // 手机上「刷新」和 ⋯ 在顶栏，头部块只留图标、名称、徽章和模型数。
   hasScreenHeaderActions: boolean;
+  onRunDiagnostic: () => void;
 }) {
   const header = useProviderDetailHeader(serverId, provider);
-  const { isRefreshing, onRefresh } = header;
+  const {
+    label,
+    isRefreshing,
+    onRefresh,
+    providerSource,
+    hostSupportsRemoval,
+    isRemoving,
+    onRemove,
+  } = header;
   const renderActions = useCallback(
-    () => <ProviderDetailRefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />,
-    [isRefreshing, onRefresh],
+    () => (
+      <>
+        <ProviderDetailRefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />
+        <ProviderDetailMenu
+          provider={provider}
+          providerLabel={label}
+          providerSource={providerSource}
+          hostSupportsRemoval={hostSupportsRemoval}
+          isRemoving={isRemoving}
+          onDiagnose={onRunDiagnostic}
+          onRemove={onRemove}
+          placement="inline"
+        />
+      </>
+    ),
+    [
+      hostSupportsRemoval,
+      isRefreshing,
+      isRemoving,
+      label,
+      onRefresh,
+      onRemove,
+      onRunDiagnostic,
+      provider,
+      providerSource,
+    ],
   );
 
   return (
@@ -179,7 +250,12 @@ export function ProviderDetailPage({
         renderActions={hasScreenHeaderActions ? undefined : renderActions}
         testID={`provider-detail-header-${provider}`}
       />
-      <ProviderDetail serverId={serverId} provider={provider} modelQuery="" />
+      <ProviderDetail
+        serverId={serverId}
+        provider={provider}
+        modelQuery=""
+        onRunDiagnostic={onRunDiagnostic}
+      />
     </>
   );
 }

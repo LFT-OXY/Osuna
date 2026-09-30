@@ -2746,7 +2746,7 @@ export const ar: TranslationResources = {
       unavailable: "اتصل بهذا المضيف لرؤية مقدمي الخدمة",
       loading: "تحميل...",
       addErrorTitle: "Unable to add provider",
-      updateErrorTitle: "غير قادر على تحديث الموفر",
+      startErrorTitle: "تعذّر تشغيل {{name}}",
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -2800,11 +2800,10 @@ export const ar: TranslationResources = {
         running: "تشغيل التشخيص...",
         none: "لا يوجد تشخيص متاح",
         failedToFetch: "فشل جلب التشخيص",
+        run: "تشغيل التشخيص",
         unknownError: "خطأ غير معروف",
       },
       install: {
-        howTo: "طريقة التثبيت",
-        howToFor: "طريقة تثبيت {{name}}",
         title: "تثبيت {{name}}",
         hostHint: "نفّذ الأمر على الجهاز الذي يعمل عليه daemon الخاص بـ Osuna",
         choosePlatform: "اختر نظام تشغيل المضيف",
@@ -2864,8 +2863,9 @@ export const ar: TranslationResources = {
           reapplyMessage:
             "يكتب هذا نقطة النهاية مجددًا في ملف إعدادات {{provider}} نفسه ويستبدل التغييرات الخارجية على المفاتيح التي يديرها Osuna.",
         },
-        inheritedNote:
-          "يستخدم أيضًا نقطة نهاية API {{name}} الخاصة بـ Claude Code: قيم env في ملف settings.json الخاص بـ Claude لها الأولوية على بيئة هذا المزوّد.",
+        inheritedTitle: "يستخدم أيضًا نقطة نهاية API {{name}} الخاصة بـ Claude Code",
+        inheritedDescription:
+          "قيم env في ملف settings.json الخاص بـ Claude لها الأولوية على بيئة هذا المزوّد.",
         form: {
           createTitle: "نقطة نهاية API جديدة",
           editTitle: "تعديل نقطة نهاية API",

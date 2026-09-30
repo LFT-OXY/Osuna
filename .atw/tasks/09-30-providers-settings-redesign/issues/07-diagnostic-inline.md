@@ -9,6 +9,8 @@
 - ⋯ 菜单和错误卡里的「运行诊断」都改为：滚动到这一节并运行。
 - 移除诊断子弹窗和详情弹窗的底部栏。
 
+- 05 里这两个入口打开 `DiagnosticSubSheet`，正文与手机顶栏各挂一个。手机顶栏的 ⋯ 触发正文里的诊断节也跨组件树，参照 `provider-detail/removal.ts` 按主机加提供方分键传递。
+
 **Blocked by:** 05, 06
 
 **Status:** ready-for-agent

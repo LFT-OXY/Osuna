@@ -2791,7 +2791,7 @@ export const ptBR: TranslationResources = {
       unavailable: "Conecte-se a este host para ver provedores",
       loading: "Carregando...",
       addErrorTitle: "Não foi possível adicionar provedor",
-      updateErrorTitle: "Não foi possível atualizar provedor",
+      startErrorTitle: "{{name}} não consegue iniciar",
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -2845,11 +2845,10 @@ export const ptBR: TranslationResources = {
         running: "Executando diagnóstico...",
         none: "Nenhum diagnóstico disponível",
         failedToFetch: "Falha ao buscar diagnóstico",
+        run: "Executar diagnóstico",
         unknownError: "Erro desconhecido",
       },
       install: {
-        howTo: "Como instalar",
-        howToFor: "Como instalar {{name}}",
         title: "Instalar {{name}}",
         hostHint: "Execute na máquina onde o daemon do Osuna está rodando",
         choosePlatform: "Escolha o sistema operacional do host",
@@ -2915,8 +2914,9 @@ export const ptBR: TranslationResources = {
           reapplyMessage:
             "Isso grava o endpoint de novo no arquivo de configuração do {{provider}} e substitui as mudanças externas nas chaves que o Osuna gerencia.",
         },
-        inheritedNote:
-          "Também usa o endpoint de API {{name}} do Claude Code: o env do settings.json do Claude tem prioridade sobre o ambiente deste provedor.",
+        inheritedTitle: "Também usa o endpoint de API {{name}} do Claude Code",
+        inheritedDescription:
+          "O env do settings.json do Claude tem prioridade sobre o ambiente deste provedor.",
         form: {
           createTitle: "Novo endpoint de API",
           editTitle: "Editar endpoint de API",

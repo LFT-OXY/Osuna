@@ -2772,7 +2772,7 @@ export const ja: TranslationResources = {
       unavailable: "プロバイダーを見るにはこのホストに接続してください",
       loading: "読み込み中...",
       addErrorTitle: "プロバイダーを追加できません",
-      updateErrorTitle: "プロバイダーを更新できません",
+      startErrorTitle: "{{name}} を起動できません",
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -2826,11 +2826,10 @@ export const ja: TranslationResources = {
         running: "診断を実行中...",
         none: "利用可能な診断がありません",
         failedToFetch: "診断の取得に失敗しました",
+        run: "診断を実行",
         unknownError: "不明なエラー",
       },
       install: {
-        howTo: "インストール方法",
-        howToFor: "{{name}} のインストール方法",
         title: "{{name}} をインストール",
         hostHint: "Osuna daemon が動作しているマシンで実行してください",
         choosePlatform: "Host の OS を選択",
@@ -2895,8 +2894,9 @@ export const ja: TranslationResources = {
           reapplyMessage:
             "{{provider}} 自身の設定ファイルにエンドポイントをもう一度書き込み、Osuna が管理するキーへの外部の変更を置き換えます。",
         },
-        inheritedNote:
-          "Claude Code の API エンドポイント {{name}} も使われます。Claude の settings.json の env はこのプロバイダーの環境変数より優先されます。",
+        inheritedTitle: "Claude Code の API エンドポイント {{name}} も使われます",
+        inheritedDescription:
+          "Claude の settings.json の env はこのプロバイダーの環境変数より優先されます。",
         form: {
           createTitle: "新しい API エンドポイント",
           editTitle: "API エンドポイントを編集",

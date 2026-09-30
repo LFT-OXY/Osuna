@@ -2794,7 +2794,7 @@ export const ru: TranslationResources = {
       unavailable: "Подключитесь к этому хосту, чтобы увидеть провайдеров",
       loading: "Загрузка...",
       addErrorTitle: "Не удалось добавить провайдера",
-      updateErrorTitle: "Не удалось обновить провайдера",
+      startErrorTitle: "Не удаётся запустить {{name}}",
       actions: {
         menu: "Действия с {{name}}",
         remove: "Удалить провайдера",
@@ -2849,11 +2849,10 @@ export const ru: TranslationResources = {
         running: "Выполняется диагностика...",
         none: "Диагностика недоступна",
         failedToFetch: "Не удалось получить диагностику.",
+        run: "Запустить диагностику",
         unknownError: "Неизвестная ошибка",
       },
       install: {
-        howTo: "Как установить",
-        howToFor: "Как установить {{name}}",
         title: "Установка {{name}}",
         hostHint: "Выполните на машине, где запущен daemon Osuna",
         choosePlatform: "Выберите операционную систему хоста",
@@ -2918,8 +2917,8 @@ export const ru: TranslationResources = {
           reapplyMessage:
             "Эндпоинт снова записывается в собственный файл настроек {{provider}}, внешние изменения ключей, которыми управляет Osuna, заменяются.",
         },
-        inheritedNote:
-          "Тоже идёт через API-эндпоинт {{name}} из Claude Code: env в settings.json Claude важнее окружения этого провайдера.",
+        inheritedTitle: "Тоже идёт через API-эндпоинт {{name}} из Claude Code",
+        inheritedDescription: "env в settings.json Claude важнее окружения этого провайдера.",
         form: {
           createTitle: "Новый API-эндпоинт",
           editTitle: "Изменить API-эндпоинт",

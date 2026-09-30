@@ -2868,7 +2868,7 @@ export const en = {
       unavailable: "Connect to this host to see providers",
       loading: "Loading...",
       addErrorTitle: "Unable to add provider",
-      updateErrorTitle: "Unable to update provider",
+      startErrorTitle: "{{name}} can't start",
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -2922,11 +2922,10 @@ export const en = {
         running: "Running diagnostic...",
         none: "No diagnostic available",
         failedToFetch: "Failed to fetch diagnostic",
+        run: "Run diagnostic",
         unknownError: "Unknown error",
       },
       install: {
-        howTo: "How to install",
-        howToFor: "How to install {{name}}",
         title: "Install {{name}}",
         hostHint: "Run on the machine where the Osuna daemon runs",
         choosePlatform: "Choose the host's operating system",
@@ -2990,8 +2989,9 @@ export const en = {
           reapplyMessage:
             "This writes the endpoint into {{provider}}'s own settings file again and replaces the outside changes to the keys Osuna manages.",
         },
-        inheritedNote:
-          "Also uses Claude Code's API endpoint {{name}}: the env in Claude's settings.json takes precedence over this provider's environment.",
+        inheritedTitle: "Also uses Claude Code's API endpoint {{name}}",
+        inheritedDescription:
+          "The env in Claude's settings.json takes precedence over this provider's environment.",
         form: {
           createTitle: "New API endpoint",
           editTitle: "Edit API endpoint",

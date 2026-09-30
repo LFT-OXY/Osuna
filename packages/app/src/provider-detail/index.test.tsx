@@ -10,8 +10,10 @@ import { i18n } from "@/i18n/i18next";
 import { ProviderInstallGuideSurface, type ProviderInstallGuide } from "@/provider-install-guide";
 import {
   ProviderDetailHeader,
+  ProviderDetailMenu,
   ProviderDetailRefreshButton,
   type ProviderDetailHeaderProps,
+  type ProviderDetailMenuProps,
 } from "./header";
 import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
 
@@ -61,7 +63,10 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       modelQuery=""
       isRefreshing={false}
       deletingModelId={null}
+      removalError={null}
       onRefresh={noop}
+      onRunDiagnostic={noop}
+      onDismissRemovalError={noop}
       onDeleteCustomModel={noop}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
@@ -176,7 +181,7 @@ describe("ProviderDetailSurface", () => {
     const onRefresh = vi.fn();
     renderDetail({ entries: [entry({ status: "error", error: "opencode exited 1" })], onRefresh });
 
-    expect(screen.getByText("opencode exited 1")).toBeTruthy();
+    expect(screen.getAllByText("opencode exited 1").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByText(i18n.t("settings.providers.models.retry")));
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
@@ -186,6 +191,117 @@ describe("ProviderDetailSurface", () => {
 
     expect(screen.getByText(i18n.t("settings.providers.models.retrying"))).toBeTruthy();
     expect(screen.queryByText(i18n.t("settings.providers.models.retry"))).toBeNull();
+  });
+
+  it("opens with an error card naming the provider, its full error and the next steps", () => {
+    const onRefresh = vi.fn();
+    const onRunDiagnostic = vi.fn();
+    const error = "opencode exited 1\n  at spawn (node:child_process:420)";
+    renderDetail({
+      provider: "opencode",
+      entries: [entry({ provider: "opencode", label: "OpenCode", status: "error", error })],
+      onRefresh,
+      onRunDiagnostic,
+    });
+
+    const card = screen.getByTestId("provider-start-error");
+    expect(
+      within(card).getByText(i18n.t("settings.providers.startErrorTitle", { name: "OpenCode" })),
+    ).toBeTruthy();
+    // 原文完整保留，换行不折叠。
+    expect(within(card).getByText(error, { normalizer: (text) => text })).toBeTruthy();
+
+    fireEvent.click(within(card).getByText(i18n.t("settings.providers.diagnostic.refresh")));
+    fireEvent.click(within(card).getByText(i18n.t("settings.providers.diagnostic.run")));
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onRunDiagnostic).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no error card for a disabled or healthy provider", () => {
+    renderDetail({ entries: [entry({ status: "error", error: "boom", enabled: false })] });
+    expect(screen.queryByTestId("provider-start-error")).toBeNull();
+    cleanup();
+
+    renderDetail({ entries: [entry({})] });
+    expect(screen.queryByTestId("provider-start-error")).toBeNull();
+  });
+
+  it("warns a custom provider extending Claude Code only while Claude Code uses an API endpoint", () => {
+    const workClaude = entry({ provider: "work-claude", label: "Work Claude", source: "custom" });
+    const claudeWithEndpoint = entry({ activeApiEndpoint: { id: "ep_1", name: "Relay" } });
+    const title = i18n.t("settings.providers.apiEndpoints.inheritedTitle", { name: "Relay" });
+
+    renderDetail({
+      provider: "work-claude",
+      entries: [claudeWithEndpoint, workClaude],
+      extendsProvider: "claude",
+    });
+    const alert = screen.getByTestId("provider-inherited-api-endpoint");
+    expect(within(alert).getByText(title)).toBeTruthy();
+    expect(
+      within(alert).getByText(i18n.t("settings.providers.apiEndpoints.inheritedDescription")),
+    ).toBeTruthy();
+    cleanup();
+
+    renderDetail({
+      provider: "work-claude",
+      entries: [entry({}), workClaude],
+      extendsProvider: "claude",
+    });
+    expect(screen.queryByTestId("provider-inherited-api-endpoint")).toBeNull();
+    cleanup();
+
+    renderDetail({ entries: [claudeWithEndpoint] });
+    expect(screen.queryByTestId("provider-inherited-api-endpoint")).toBeNull();
+  });
+
+  it("shows a failed removal at the top until dismissed", () => {
+    const onDismissRemovalError = vi.fn();
+    renderDetail({
+      entries: [entry({ status: "error", error: "boom" })],
+      removalError: "config.json is read-only",
+      onDismissRemovalError,
+    });
+
+    const alert = screen.getByTestId("provider-removal-error");
+    expect(within(alert).getByText(i18n.t("settings.providers.remove.errorTitle"))).toBeTruthy();
+    expect(within(alert).getByText("config.json is read-only")).toBeTruthy();
+    expect(blockOrder(["provider-removal-error", "provider-start-error"])).toEqual([
+      "provider-removal-error",
+      "provider-start-error",
+    ]);
+
+    fireEvent.click(within(alert).getByText(i18n.t("common.actions.dismiss")));
+    expect(onDismissRemovalError).toHaveBeenCalledTimes(1);
+  });
+
+  it("orders the error card, the inherited endpoint warning, then the install guide", () => {
+    renderDetail({
+      provider: "work-claude",
+      entries: [
+        entry({ activeApiEndpoint: { id: "ep_1", name: "Relay" } }),
+        entry({ provider: "work-claude", label: "Work Claude", status: "error", error: "boom" }),
+      ],
+      extendsProvider: "claude",
+    });
+    expect(blockOrder(["provider-inherited-api-endpoint", "provider-start-error"])).toEqual([
+      "provider-start-error",
+      "provider-inherited-api-endpoint",
+    ]);
+    cleanup();
+
+    renderDetail({
+      provider: "work-claude",
+      entries: [
+        entry({ activeApiEndpoint: { id: "ep_1", name: "Relay" } }),
+        entry({ provider: "work-claude", label: "Work Claude", status: "unavailable" }),
+      ],
+      extendsProvider: "claude",
+    });
+    expect(
+      blockOrder(["provider-install-platform-macos", "provider-inherited-api-endpoint"]),
+    ).toEqual(["provider-inherited-api-endpoint", "provider-install-platform-macos"]);
   });
 
   it("deletes a custom model by id", () => {
@@ -198,6 +314,15 @@ describe("ProviderDetailSurface", () => {
     expect(onDeleteCustomModel).toHaveBeenCalledWith("relay/gpt");
   });
 });
+
+// 按文档顺序返回这些 testID。
+function blockOrder(testIds: string[]): string[] {
+  const nodes = testIds.map((testId) => screen.getByTestId(testId));
+  return nodes
+    .slice()
+    .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+    .map((node) => node.getAttribute("data-testid") ?? "");
+}
 
 function ProviderGlyph() {
   return <span data-testid="provider-glyph" />;
@@ -280,5 +405,71 @@ describe("ProviderDetailRefreshButton", () => {
 
     expect(screen.queryByText(i18n.t("settings.providers.diagnostic.refresh"))).toBeNull();
     expect(onRefresh).not.toHaveBeenCalled();
+  });
+});
+
+function renderMenu(overrides: Partial<ProviderDetailMenuProps> = {}) {
+  const onDiagnose = vi.fn();
+  const onRemove = vi.fn();
+  render(
+    <ProviderDetailMenu
+      provider="work-claude"
+      providerLabel="Work Claude"
+      providerSource="custom"
+      hostSupportsRemoval
+      isRemoving={false}
+      onDiagnose={onDiagnose}
+      onRemove={onRemove}
+      placement="inline"
+      {...overrides}
+    />,
+  );
+  fireEvent.click(
+    screen.getByLabelText(i18n.t("settings.providers.actions.menu", { name: "Work Claude" })),
+  );
+  return { onDiagnose, onRemove };
+}
+
+describe("ProviderDetailMenu", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("offers the diagnostic", () => {
+    const { onDiagnose } = renderMenu();
+
+    fireEvent.click(screen.getByTestId("provider-diagnose-work-claude"));
+
+    expect(onDiagnose).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["a built-in provider", { providerSource: "builtin" as const }],
+    ["a provider without a source", { providerSource: undefined }],
+    ["a custom provider on a host that cannot remove providers", { hostSupportsRemoval: false }],
+  ])("offers no removal for %s", (_name, overrides) => {
+    renderMenu(overrides);
+
+    expect(screen.getByTestId("provider-diagnose-work-claude")).toBeTruthy();
+    expect(screen.queryByTestId("provider-remove-work-claude")).toBeNull();
+  });
+
+  it("adds Remove provider for a custom provider on a host that can remove it", () => {
+    const { onRemove } = renderMenu();
+
+    expect(screen.getByTestId("provider-diagnose-work-claude")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("provider-remove-work-claude"));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the removal in progress", () => {
+    renderMenu({ isRemoving: true });
+
+    expect(
+      within(screen.getByTestId("provider-remove-work-claude")).getByText(
+        i18n.t("settings.providers.actions.removing"),
+      ),
+    ).toBeTruthy();
   });
 });

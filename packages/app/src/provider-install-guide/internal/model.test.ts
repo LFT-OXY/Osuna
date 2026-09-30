@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { INSTALL_PLATFORMS } from "./commands";
-import {
-  hasProviderInstallGuide,
-  resolveProviderInstallGuide,
-  type ProviderInstallGuide,
-} from "./model";
+import { resolveProviderInstallGuide, type ProviderInstallGuide } from "./model";
 
 function requireGuide(guide: ProviderInstallGuide | null): ProviderInstallGuide {
   if (!guide) throw new Error("Expected an install guide");
@@ -85,16 +81,27 @@ describe("resolveProviderInstallGuide", () => {
     expect(custom.provider).toBe("claude");
   });
 
-  it("reports whether a provider has a guide without a host platform", () => {
-    expect(hasProviderInstallGuide({ provider: "omp" })).toBe(true);
-    expect(hasProviderInstallGuide({ provider: "work-codex", extendsProvider: "codex" })).toBe(
-      true,
-    );
-    expect(hasProviderInstallGuide({ provider: "opencode" })).toBe(false);
-    expect(hasProviderInstallGuide({ provider: "my-acp", extendsProvider: "acp" })).toBe(false);
-    expect(hasProviderInstallGuide({ provider: "odd", extendsProvider: "constructor" })).toBe(
-      false,
-    );
+  it("has no guide for a provider outside the guided CLIs", () => {
+    const hostPlatform = undefined;
+    expect(resolveProviderInstallGuide({ provider: "omp", hostPlatform })).not.toBeNull();
+    expect(
+      resolveProviderInstallGuide({
+        provider: "work-codex",
+        extendsProvider: "codex",
+        hostPlatform,
+      }),
+    ).not.toBeNull();
+    expect(resolveProviderInstallGuide({ provider: "opencode", hostPlatform })).toBeNull();
+    expect(
+      resolveProviderInstallGuide({ provider: "my-acp", extendsProvider: "acp", hostPlatform }),
+    ).toBeNull();
+    expect(
+      resolveProviderInstallGuide({
+        provider: "odd",
+        extendsProvider: "constructor",
+        hostPlatform,
+      }),
+    ).toBeNull();
   });
 
   it("uses the extended built-in provider's guide for a custom provider", () => {

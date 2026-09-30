@@ -127,7 +127,8 @@ function AddCustomModelSubSheet({
   );
 }
 
-function DiagnosticSubSheet({
+// 诊断输出弹窗。设置页详情的 ⋯「诊断」与错误卡「运行诊断」也打开它。
+export function DiagnosticSubSheet({
   provider,
   serverId,
   visible,
@@ -434,7 +435,12 @@ export function ProviderDiagnosticSheet({
         })}
         snapPoints={MAIN_SNAP_POINTS}
       >
-        <ProviderDetail serverId={serverId} provider={provider} modelQuery={query} />
+        <ProviderDetail
+          serverId={serverId}
+          provider={provider}
+          modelQuery={query}
+          onRunDiagnostic={handleOpenDiagSheet}
+        />
       </AdaptiveModalSheet>
       <AddCustomModelSubSheet
         provider={provider}

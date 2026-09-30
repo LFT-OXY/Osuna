@@ -227,7 +227,7 @@ Loading is inline by default. A small `foregroundMuted` `<LoadingSpinner>` sits 
 
 Empty states are short noun phrases. Centered, muted, one or two lines. Sessions screen pairs the empty noun with a single ghost button to navigate back (`packages/app/src/screens/sessions-screen.tsx:74-81`); that pairing is the maximum elaboration. Illustrations and CTAs disguised as empty states are wrong.
 
-Inline errors are a single sentence in `palette.red[300]` `caption`, sitting under the field or inside the card it relates to (the provider error under its name, `ProviderRow` in `packages/app/src/screens/settings/providers-section.tsx`).
+Inline errors are a single sentence in `palette.red[300]` `caption`, sitting under the field or inside the card it relates to.
 
 Page-level alerts — informational notices, success confirmations, warnings, or recoverable errors that need a small visible block on the page — use `<Alert>` (`packages/app/src/components/ui/alert.tsx`). Variants: `default`, `info`, `success`, `warning`, `error`. The chrome is quiet by design: a 1px tinted border, transparent background, a small variant-tinted icon, the title in the variant accent, the description in `foregroundMuted`. `warning` is the risk block instead: no border, a `surfaceWarning` fill, `radius.md` corners. It is the warning a dialog shows before a risky action (the pairing-link warning in `packages/app/src/desktop/components/pair-device-section.tsx`). Actions go in the `children` slot as `<Button variant="outline" size="sm">` — recovery actions are low-frequency and outline keeps them quiet alongside the alert's accent (`packages/app/src/screens/project-settings-screen.tsx`). One `<Alert>` at a time per region.
 

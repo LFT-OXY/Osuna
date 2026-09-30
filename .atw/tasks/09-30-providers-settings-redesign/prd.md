@@ -145,7 +145,7 @@
   模型数按现有规则只算可选模型。
 - 从行里移除：错误原文、继承接口提示（移到详情）、「如何安装」链接、⋯ 菜单。
 - 移除整节「添加 Provider」。
-- 列表操作失败（开关）时，在卡片顶部插一行错误：caption statusDanger 显示原因，右侧 ghost「关闭」。样式照搬第三方接口区的 actionError 行。不再使用 `Alert.alert`。
+- 列表操作失败（开关）时，在卡片顶部插一行错误：caption statusDanger 显示原因，右侧 ghost「关闭」。样式照搬第三方接口区的 actionError 行，只有原因一行，不加标题。发起下一次开关时清掉。不再使用 `Alert.alert`。
 
 ### 详情组件
 
@@ -155,7 +155,8 @@
   - 紧凑页面：「刷新」和 ⋯ 放到 BackHeader 右侧，改成仅图标按钮；页内头部块只保留图标、名称、徽章和模型数。头部块的操作区是 `renderActions` 插槽，手机上不传。
   - 弹窗外框：名称、徽章、「刷新」、⋯ 放进弹窗头部。
 - 区块顺序固定：错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models → 诊断。每块是一个 SettingsSection，Alert 类区块除外。块与块之间保留 SettingsSection 默认的 24 间距。
-- **错误卡**：Alert error。标题「{名称} 无法启动」（新增），描述是 daemon 返回的错误原文，等宽、可选中；actions 是 outline「刷新」和 outline「运行诊断」。仅在已启用且出错时显示。
+- **错误卡**：Alert error。标题「{名称} 无法启动」（新增），下面是 daemon 返回的错误原文，等宽、可选中；再下面是 outline「刷新」和 outline「运行诊断」（`settings.providers.diagnostic.run`，05 新增，07 的诊断节复用）。仅在已启用且出错时显示。
+  - 原文和按钮一起放在 Alert 的 children 里：`description` 只收字符串，用 `useMemo` 包 JSX 能躲过 lint，但仍是 JSX 经 prop 传递。
 - **继承接口提示**：Alert warning。把现有 `inheritedNote` 拆成标题「也会走 Claude Code 启用的第三方接口 {名称}」和描述「Claude 的 settings.json 里的 env 优先于这个提供方的环境变量。」，两条都是新文案，取代原来的 `inheritedNote`。显示条件不变。
 - **安装指引**、**第三方接口**：沿用现有组件和行为，只是从弹窗搬进详情。第三方接口的新建和编辑表单仍然是 AdaptiveModalSheet（多字段表单，按 `docs/design.md` §6 属于弹窗）。
 - **Models**：
@@ -178,6 +179,10 @@
   - ⋯ 菜单里的「诊断」滚动到这一节并触发运行。
   - 原「诊断」子弹窗移除。
 - **⋯ 菜单**：DropdownMenu，align end，宽 220。菜单项是「诊断」（`FileText`）；自定义提供方且主机支持 `providerRemoval` 时，加分隔线和 destructive「Remove provider」（`Trash2`）。删除仍走现有 `confirmDialog`；失败时在详情顶部显示 Alert error，不再用 `Alert.alert`。
+  - 组件是 `provider-detail/header.tsx` 的 `ProviderDetailMenu`，收 `providerSource` 和 `hostSupportsRemoval`，自己判定有没有删除项；`placement` 区分页内头部块（28 的按钮）和手机顶栏（顶栏图标按钮尺寸）。
+  - 删除状态在 `provider-detail/removal.ts`：按主机加提供方分键的 store，`idle | removing | failed`。手机上 ⋯ 在顶栏、失败提示在正文，两处不在同一棵组件树，所以不用组件 state。确认框弹出期间就是 `removing`，菜单项显示「正在删除...」。
+  - 删除失败的 Alert 标题复用 `settings.providers.remove.errorTitle`，描述是原因，带 outline「关闭」；重试删除时也清掉。删除成功后提供方从快照消失，由页面的地址修正回到第一个提供方或列表。
+  - 「诊断」和错误卡的「运行诊断」在 07 之前打开 `components/provider-diagnostic-sheet.tsx` 导出的 `DiagnosticSubSheet`：设置页正文一个实例（`providers-page.tsx`），手机顶栏另一个（`providers-header.tsx`）。
 
 ### ACP 目录弹窗
 
@@ -210,7 +215,7 @@
   - 「添加 Provider」按钮的无障碍名称（复用 `settings.providers.addProvider`）；
   - 列表错误行的「关闭」（复用 `common.actions.dismiss`）。
 - 写在 `en.ts`，其余 8 种语言同步补齐。
-- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。
+- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。05 已删 `install.howTo`、`install.howToFor`、`apiEndpoints.inheritedNote`、`updateErrorTitle`，以及只剩测试在用的 `hasProviderInstallGuide`。
 
 ## Testing Decisions
 

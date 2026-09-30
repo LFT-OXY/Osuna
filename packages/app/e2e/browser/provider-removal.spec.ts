@@ -4,11 +4,13 @@ import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { getServerId } from "../support/helpers/server-id";
 import {
-  expectProviderInstalledInSettings,
+  expectProviderSelected,
   installAcpCatalogProvider,
   openProviderCatalog,
   openSettingsHost,
   openSettingsHostSection,
+  providerRow,
+  readProviderRowIds,
 } from "../support/helpers/settings";
 
 const CUSTOM_PROVIDER = {
@@ -41,6 +43,15 @@ async function expectProviderSource(
     .toBe(source);
 }
 
+function visibleByTestId(page: Page, testId: string) {
+  return page.getByTestId(testId).filter({ visible: true });
+}
+
+async function openDetailMenu(page: Page, provider: string): Promise<void> {
+  await visibleByTestId(page, `provider-actions-${provider}`).click();
+  await expect(visibleByTestId(page, `provider-diagnose-${provider}`)).toBeVisible();
+}
+
 async function clickRemoveProviderAndAcceptWarning(page: Page): Promise<Dialog> {
   let warning: Dialog | undefined;
   page.once("dialog", (dialog) => {
@@ -49,15 +60,16 @@ async function clickRemoveProviderAndAcceptWarning(page: Page): Promise<Dialog> 
     expect(dialog.message()).toContain("This deletes the provider entry from config.json.");
     void dialog.accept();
   });
-  await page.getByTestId(`provider-remove-${CUSTOM_PROVIDER.id}`).click();
+  await visibleByTestId(page, `provider-remove-${CUSTOM_PROVIDER.id}`).click();
   if (!warning) {
     throw new Error("Expected a provider removal confirmation dialog, but none was shown.");
   }
   return warning;
 }
 
+// 删除失败无法用真实 daemon 稳定造出，由 provider-detail 的组件测试覆盖。
 test.describe("provider removal", () => {
-  test("removes a custom provider from Settings", async ({ page }) => {
+  test("removes a custom provider from its detail menu", async ({ page }) => {
     test.setTimeout(120_000);
     const client = await connectDaemonClient<ProviderRemovalDaemonClient>({
       clientIdPrefix: "provider-removal-e2e",
@@ -70,23 +82,26 @@ test.describe("provider removal", () => {
       await openSettings(page);
       await openSettingsHost(page, getServerId());
       await openSettingsHostSection(page, getServerId(), "providers");
+      const [firstProvider] = await readProviderRowIds(page);
+      await expectProviderSelected(page, getServerId(), firstProvider);
 
-      await expect(page.getByTestId("provider-actions-claude")).toHaveCount(0);
+      // 内置提供方的菜单只有「诊断」。
+      await openDetailMenu(page, firstProvider);
+      await expect(visibleByTestId(page, `provider-remove-${firstProvider}`)).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(visibleByTestId(page, `provider-diagnose-${firstProvider}`)).toHaveCount(0);
+
       await openProviderCatalog(page);
       await installAcpCatalogProvider(page, CUSTOM_PROVIDER.name);
-      await expectProviderInstalledInSettings(page, CUSTOM_PROVIDER.name);
+      await expectProviderSelected(page, getServerId(), CUSTOM_PROVIDER.id);
       await expectProviderSource(client, "custom");
 
-      await page.getByTestId(`provider-actions-${CUSTOM_PROVIDER.id}`).click();
-      await expect(page.getByTestId(`provider-remove-${CUSTOM_PROVIDER.id}`)).toBeVisible();
+      await openDetailMenu(page, CUSTOM_PROVIDER.id);
+      await expect(visibleByTestId(page, `provider-remove-${CUSTOM_PROVIDER.id}`)).toBeVisible();
       await clickRemoveProviderAndAcceptWarning(page);
 
-      await expect(
-        page.getByRole("button", {
-          name: `${CUSTOM_PROVIDER.name} provider details`,
-          exact: true,
-        }),
-      ).toHaveCount(0);
+      await expect(providerRow(page, CUSTOM_PROVIDER.id)).toHaveCount(0);
+      await expectProviderSelected(page, getServerId(), firstProvider);
       await expectProviderSource(client, undefined);
     } finally {
       await removeCustomProvider(client).catch(() => undefined);

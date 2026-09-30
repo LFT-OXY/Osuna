@@ -2817,7 +2817,7 @@ export const fr: TranslationResources = {
       unavailable: "Connectez-vous à cet hôte pour voir les fournisseurs",
       loading: "Chargement...",
       addErrorTitle: "Unable to add provider",
-      updateErrorTitle: "Impossible de mettre à jour le fournisseur",
+      startErrorTitle: "Impossible de démarrer {{name}}",
       actions: {
         menu: "{{name}} actions",
         remove: "Remove provider",
@@ -2871,11 +2871,10 @@ export const fr: TranslationResources = {
         running: "Exécution du diagnostic...",
         none: "Aucun diagnostic disponible",
         failedToFetch: "Échec de la récupération du diagnostic",
+        run: "Lancer le diagnostic",
         unknownError: "Erreur inconnue",
       },
       install: {
-        howTo: "Comment installer",
-        howToFor: "Comment installer {{name}}",
         title: "Installer {{name}}",
         hostHint: "À exécuter sur la machine où tourne le daemon Osuna",
         choosePlatform: "Choisissez le système d'exploitation de l'hôte",
@@ -2941,8 +2940,9 @@ export const fr: TranslationResources = {
           reapplyMessage:
             "L'endpoint est réécrit dans le fichier de réglages de {{provider}}, ce qui remplace les modifications externes des clés gérées par Osuna.",
         },
-        inheritedNote:
-          "Utilise aussi l'endpoint d'API {{name}} de Claude Code : l'env du settings.json de Claude prime sur l'environnement de ce fournisseur.",
+        inheritedTitle: "Utilise aussi l'endpoint d'API {{name}} de Claude Code",
+        inheritedDescription:
+          "L'env du settings.json de Claude prime sur l'environnement de ce fournisseur.",
         form: {
           createTitle: "Nouvel endpoint d'API",
           editTitle: "Modifier l'endpoint d'API",

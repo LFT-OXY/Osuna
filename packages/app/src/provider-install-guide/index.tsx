@@ -17,11 +17,7 @@ import {
 } from "./internal/commands";
 import type { ProviderInstallGuide } from "./internal/model";
 
-export {
-  hasProviderInstallGuide,
-  resolveProviderInstallGuide,
-  type ProviderInstallGuide,
-} from "./internal/model";
+export { resolveProviderInstallGuide, type ProviderInstallGuide } from "./internal/model";
 
 // 主机系统未知时没有默认标签；分段控件需要一个值，用不对应任何选项的哨兵。
 type PlatformTab = InstallPlatform | "none";

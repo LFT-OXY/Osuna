@@ -1,21 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Alert,
-  Pressable,
-  Text,
-  View,
-  type GestureResponderEvent,
-  type PressableStateCallbackType,
-} from "react-native";
+import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
-import { useHostFeature } from "@/runtime/host-features";
-import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { selectInheritedApiEndpoint } from "@/api-endpoints";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
@@ -23,16 +12,8 @@ import { getProviderIcon } from "@/components/provider-icons";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Switch } from "@/components/ui/switch";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
-import { confirmDialog } from "@/utils/confirm-dialog";
 import { Text as UiText } from "@/components/ui/text";
-import { hasProviderInstallGuide } from "@/provider-install-guide";
 import {
   countSelectableModels,
   resolveProviderStatusLine,
@@ -40,7 +21,7 @@ import {
 } from "@/provider-detail/status";
 import { ProviderCatalogDialog } from "./provider-catalog-dialog";
 import type { ProvidersLayout } from "./providers-layout";
-import { ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react-native";
+import { ChevronRight, Plus } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
 type ProviderEntry = NonNullable<ReturnType<typeof useProvidersSnapshot>["entries"]>[number];
@@ -51,99 +32,18 @@ interface ProviderRowProps {
   entry: ProviderEntry;
   enabled: boolean;
   isToggling: boolean;
-  isRemoving: boolean;
-  canRemove: boolean;
-  hasInstallGuide: boolean;
-  // 继承 claude 的自定义提供方在 Claude 启用第三方接口时也走这个接口。
-  inheritedApiEndpoint: ApiEndpointRef | null;
   isFirst: boolean;
   isSelected: boolean;
   showChevron: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
-  onRemove: (providerId: string, providerLabel: string) => void;
 }
 
-function stopPressInPropagation(event: GestureResponderEvent) {
-  event.stopPropagation();
-}
-
-const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
-const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedChevronRight = withUnistyles(ChevronRight);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
-
-interface ProviderActionsMenuProps {
-  providerId: string;
-  providerLabel: string;
-  isRemoving: boolean;
-  onRemove: (providerId: string, providerLabel: string) => void;
-}
-
-function ProviderActionsMenu({
-  providerId,
-  providerLabel,
-  isRemoving,
-  onRemove,
-}: ProviderActionsMenuProps) {
-  const { t } = useTranslation();
-  const handleRemove = useCallback(() => {
-    onRemove(providerId, providerLabel);
-  }, [onRemove, providerId, providerLabel]);
-  const triggerStyle = useCallback(
-    ({
-      pressed,
-      hovered,
-      open,
-    }: PressableStateCallbackType & { hovered?: boolean; open?: boolean }) => [
-      styles.menuButton,
-      (hovered || open) && styles.menuButtonHovered,
-      pressed && styles.menuButtonPressed,
-    ],
-    [],
-  );
-  const trashLeading = useMemo(
-    () => <ThemedTrash2 size={ICON_SIZE.md} uniProps={dangerColorMapping} />,
-    [],
-  );
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        disabled={isRemoving}
-        hitSlop={8}
-        onPressIn={stopPressInPropagation}
-        style={triggerStyle}
-        accessibilityRole="button"
-        accessibilityLabel={t("settings.providers.actions.menu", { name: providerLabel })}
-        testID={`provider-actions-${providerId}`}
-      >
-        {({ hovered, open }) => (
-          <ThemedMoreHorizontal
-            size={ICON_SIZE.sm}
-            uniProps={hovered || open ? foregroundColorMapping : foregroundMutedColorMapping}
-          />
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" width={220}>
-        <DropdownMenuItem
-          destructive
-          leading={trashLeading}
-          onSelect={handleRemove}
-          status={isRemoving ? "pending" : "idle"}
-          pendingLabel={t("settings.providers.actions.removing")}
-          testID={`provider-remove-${providerId}`}
-        >
-          {t("settings.providers.actions.remove")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 function ProviderRow({
   serverId,
@@ -151,28 +51,15 @@ function ProviderRow({
   entry,
   enabled,
   isToggling,
-  isRemoving,
-  canRemove,
-  hasInstallGuide,
-  inheritedApiEndpoint,
   isFirst,
   isSelected,
   showChevron,
   onPress,
   onToggleEnabled,
-  onRemove,
 }: ProviderRowProps) {
   const { t } = useTranslation();
-  const isCompact = useIsCompactFormFactor();
   const providerIcon = getProviderIcon(def.id, serverId);
   const ThemedProviderIcon = useMemo(() => withUnistyles(providerIcon), [providerIcon]);
-  const providerError =
-    enabled &&
-    entry.status === "error" &&
-    typeof entry.error === "string" &&
-    entry.error.trim().length > 0
-      ? entry.error.trim()
-      : null;
   const modelCount = countSelectableModels(entry.models);
   const activeApiEndpointName = entry.activeApiEndpoint?.name ?? null;
   const statusLine = resolveProviderStatusLine({
@@ -185,15 +72,6 @@ function ProviderRow({
   const handlePress = useCallback(() => {
     onPress(def.id);
   }, [def.id, onPress]);
-  const handleInstallPress = useCallback(
-    (event: GestureResponderEvent) => {
-      // 外层整行也会打开详情面板，这里拦住冒泡，避免打开两次。
-      event.stopPropagation();
-      onPress(def.id);
-    },
-    [def.id, onPress],
-  );
-  const showInstallEntry = hasInstallGuide && enabled && entry.status === "unavailable";
   const handleToggleValueChange = useCallback(
     (value: boolean) => {
       onToggleEnabled(def.id, value);
@@ -232,40 +110,15 @@ function ProviderRow({
                 {def.label}
               </Text>
               <StatusLine status={statusLine} />
-              {providerError && !isCompact ? (
-                <Text style={styles.errorText} numberOfLines={3}>
-                  {providerError}
-                </Text>
-              ) : null}
-              {inheritedApiEndpoint ? (
-                <Text style={settingsStyles.rowHint} numberOfLines={2}>
-                  {t("settings.providers.apiEndpoints.inheritedNote", {
-                    name: inheritedApiEndpoint.name,
-                  })}
-                </Text>
-              ) : null}
             </View>
           </View>
           <View style={styles.trailingControls}>
-            {showInstallEntry ? (
-              <InstallEntry providerLabel={def.label} onPress={handleInstallPress} />
-            ) : null}
             <Switch
               value={enabled}
               onValueChange={handleToggleValueChange}
-              disabled={isToggling || isRemoving}
+              disabled={isToggling}
               accessibilityLabel={t("settings.providers.enableProvider", { name: def.label })}
             />
-            <View style={styles.menuSlot}>
-              {canRemove ? (
-                <ProviderActionsMenu
-                  providerId={def.id}
-                  providerLabel={def.label}
-                  isRemoving={isRemoving}
-                  onRemove={onRemove}
-                />
-              ) : null}
-            </View>
             {showChevron ? (
               <ThemedChevronRight
                 size={ICON_SIZE.sm}
@@ -298,30 +151,6 @@ function StatusLine({ status }: { status: ProviderStatusDisplay }) {
   );
 }
 
-function InstallEntry({
-  providerLabel,
-  onPress,
-}: {
-  providerLabel: string;
-  onPress: (event: GestureResponderEvent) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <View style={styles.statusRow}>
-      <View style={[styles.statusDot, statusDotStyles.warning]} />
-      <UiText
-        variant="caption"
-        accessibilityRole="link"
-        accessibilityLabel={t("settings.providers.install.howToFor", { name: providerLabel })}
-        onPress={onPress}
-        style={styles.installEntryLabel}
-      >
-        {t("settings.providers.install.howTo")}
-      </UiText>
-    </View>
-  );
-}
-
 export interface ProvidersSectionProps {
   serverId: string;
   layout: ProvidersLayout;
@@ -338,12 +167,11 @@ export function ProvidersSection({
 }: ProvidersSectionProps) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
-  const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const { entries, isLoading } = useProvidersSnapshot(serverId);
-  const { config, patchConfig } = useDaemonConfig(serverId);
+  const { patchConfig } = useDaemonConfig(serverId);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
-  const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
-  const removingProviderIdRef = useRef<string | null>(null);
+  // 开关失败的原因，留在列表卡片顶部直到关闭或下一次开关。
+  const [toggleError, setToggleError] = useState<string | null>(null);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
@@ -353,51 +181,18 @@ export function ProvidersSection({
   const handleToggleEnabled = useCallback(
     async (providerId: string, enabled: boolean) => {
       setPendingProviderId(providerId);
+      setToggleError(null);
       try {
         await patchConfig({ providers: { [providerId]: { enabled } } });
       } catch (error) {
-        Alert.alert(
-          t("settings.providers.updateErrorTitle"),
-          error instanceof Error ? error.message : String(error),
-        );
+        setToggleError(error instanceof Error ? error.message : String(error));
       } finally {
         setPendingProviderId((current) => (current === providerId ? null : current));
       }
     },
-    [patchConfig, t],
+    [patchConfig],
   );
-
-  const handleRemoveProvider = useCallback(
-    async (providerId: string, providerLabel: string) => {
-      if (removingProviderIdRef.current) return;
-      removingProviderIdRef.current = providerId;
-      setRemovingProviderId(providerId);
-      try {
-        const confirmed = await confirmDialog({
-          title: t("settings.providers.remove.confirmTitle", { name: providerLabel }),
-          message: t("settings.providers.remove.confirmMessage"),
-          confirmLabel: t("settings.providers.remove.confirm"),
-          destructive: true,
-        });
-        if (!confirmed) {
-          return;
-        }
-
-        await patchConfig({ removeProviders: [providerId] });
-      } catch (error) {
-        Alert.alert(
-          t("settings.providers.remove.errorTitle"),
-          error instanceof Error ? error.message : String(error),
-        );
-      } finally {
-        if (removingProviderIdRef.current === providerId) {
-          removingProviderIdRef.current = null;
-        }
-        setRemovingProviderId((current) => (current === providerId ? null : current));
-      }
-    },
-    [patchConfig, t],
-  );
+  const handleDismissToggleError = useCallback(() => setToggleError(null), []);
 
   const handleOpenCatalog = useCallback(() => setIsCatalogOpen(true), []);
   const handleCloseCatalog = useCallback(() => setIsCatalogOpen(false), []);
@@ -410,6 +205,8 @@ export function ProvidersSection({
   );
 
   const canAddProvider = hasServer && isConnected;
+  // 错误行占了卡片第一行，下面的提供方行都要带分隔线。
+  const hasErrorRowAbove = toggleError !== null;
   const addProviderButton = useMemo(
     () =>
       canAddProvider ? (
@@ -445,19 +242,24 @@ export function ProvidersSection({
         ) : null}
         {hasServer && isConnected && !isLoading && providerDefinitions.length > 0 ? (
           <View style={settingsStyles.card}>
+            {toggleError ? (
+              <View style={settingsStyles.row} testID="providers-toggle-error">
+                <UiText
+                  variant="caption"
+                  color="statusDanger"
+                  selectable
+                  style={styles.toggleError}
+                >
+                  {toggleError}
+                </UiText>
+                <Button variant="ghost" size="sm" onPress={handleDismissToggleError}>
+                  {t("common.actions.dismiss")}
+                </Button>
+              </View>
+            ) : null}
             {providerDefinitions.map((def, index) => {
               const entry = entries?.find((candidate) => candidate.provider === def.id);
               if (!entry) return null;
-              const extendsProvider = config?.providers?.[def.id]?.extends;
-              const hasInstallGuide = hasProviderInstallGuide({
-                provider: def.id,
-                extendsProvider,
-              });
-              const inheritedApiEndpoint = selectInheritedApiEndpoint({
-                provider: def.id,
-                extendsProvider,
-                entries,
-              });
               return (
                 <ProviderRow
                   key={def.id}
@@ -466,16 +268,11 @@ export function ProvidersSection({
                   entry={entry}
                   enabled={entry.enabled ?? true}
                   isToggling={pendingProviderId === def.id}
-                  isRemoving={removingProviderId === def.id}
-                  canRemove={supportsProviderRemoval && entry.source === "custom"}
-                  hasInstallGuide={hasInstallGuide}
-                  inheritedApiEndpoint={inheritedApiEndpoint}
-                  isFirst={index === 0}
+                  isFirst={index === 0 && !hasErrorRowAbove}
                   isSelected={highlightedProvider === def.id}
                   showChevron={layout === "stacked"}
                   onPress={onSelectProvider}
                   onToggleEnabled={handleToggleEnabled}
-                  onRemove={handleRemoveProvider}
                 />
               );
             })}
@@ -520,11 +317,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[3],
   },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1.5],
-  },
   statusLine: {
     flexDirection: "row",
     alignItems: "center",
@@ -541,35 +333,13 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     ...theme.typeScale.caption,
   },
-  installEntryLabel: {
-    textDecorationLine: "underline",
-  },
-  errorText: {
-    color: theme.colors.palette.red[300],
-    ...theme.typeScale.caption,
-    marginTop: theme.spacing[0.5],
+  toggleError: {
+    flex: 1,
   },
   trailingControls: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-  },
-  menuButton: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuSlot: {
-    width: 28,
-    height: 28,
-  },
-  menuButtonHovered: {
-    backgroundColor: theme.colors.surface2,
-  },
-  menuButtonPressed: {
-    backgroundColor: theme.colors.surface3,
   },
 }));
 

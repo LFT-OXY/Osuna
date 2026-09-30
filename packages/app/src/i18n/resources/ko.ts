@@ -2762,7 +2762,7 @@ export const ko: TranslationResources = {
       unavailable: "프로바이더를 보려면 이 호스트에 연결하세요",
       loading: "불러오는 중...",
       addErrorTitle: "프로바이더를 추가할 수 없습니다",
-      updateErrorTitle: "프로바이더를 업데이트할 수 없습니다",
+      startErrorTitle: "{{name}}을(를) 시작할 수 없습니다",
       actions: {
         menu: "{{name}} 작업",
         remove: "프로바이더 제거",
@@ -2817,11 +2817,10 @@ export const ko: TranslationResources = {
         running: "진단 실행 중...",
         none: "사용 가능한 진단이 없습니다",
         failedToFetch: "진단을 가져오지 못했습니다",
+        run: "진단 실행",
         unknownError: "알 수 없는 오류",
       },
       install: {
-        howTo: "설치 방법",
-        howToFor: "{{name}} 설치 방법",
         title: "{{name}} 설치",
         hostHint: "Osuna daemon이 실행 중인 머신에서 실행하세요",
         choosePlatform: "Host의 운영체제를 선택하세요",
@@ -2883,8 +2882,8 @@ export const ko: TranslationResources = {
           reapplyMessage:
             "{{provider}} 자체 설정 파일에 엔드포인트를 다시 쓰고, Osuna가 관리하는 키에 대한 외부 변경을 덮어씁니다.",
         },
-        inheritedNote:
-          "Claude Code의 API 엔드포인트 {{name}}도 사용합니다. Claude settings.json의 env가 이 제공자의 환경 변수보다 우선합니다.",
+        inheritedTitle: "Claude Code의 API 엔드포인트 {{name}}도 사용합니다",
+        inheritedDescription: "Claude settings.json의 env가 이 제공자의 환경 변수보다 우선합니다.",
         form: {
           createTitle: "새 API 엔드포인트",
           editTitle: "API 엔드포인트 편집",
