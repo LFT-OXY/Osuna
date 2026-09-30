@@ -1,0 +1,182 @@
+import type pino from "pino";
+import type { ApiEndpointError } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
+import { ApiEndpointRequestError, type ApiEndpointService } from "../../api-endpoints/service.js";
+
+export interface ApiEndpointSessionHost {
+  emit(msg: SessionOutboundMessage): void;
+}
+
+type ApiEndpointRequest = Extract<
+  SessionInboundMessage,
+  {
+    type:
+      | "provider.api_endpoint.list.request"
+      | "provider.api_endpoint.save.request"
+      | "provider.api_endpoint.delete.request"
+      | "provider.api_endpoint.set_active.request";
+  }
+>;
+
+/** daemon 没有这项服务时为 null，同时也不声明 apiEndpoints 能力。 */
+export function createApiEndpointSession(options: {
+  host: ApiEndpointSessionHost;
+  service: ApiEndpointService | undefined;
+  logger: pino.Logger;
+}): ApiEndpointSession | null {
+  if (!options.service) return null;
+  return new ApiEndpointSession({ ...options, service: options.service });
+}
+
+/** 失败放进响应的 error 字段，App 按 code 选文案；请求里的 API key 从不写日志。 */
+export class ApiEndpointSession {
+  private readonly host: ApiEndpointSessionHost;
+  private readonly service: ApiEndpointService;
+  private readonly logger: pino.Logger;
+
+  constructor(options: {
+    host: ApiEndpointSessionHost;
+    service: ApiEndpointService;
+    logger: pino.Logger;
+  }) {
+    this.host = options.host;
+    this.service = options.service;
+    this.logger = options.logger;
+  }
+
+  async handle(request: ApiEndpointRequest): Promise<void> {
+    switch (request.type) {
+      case "provider.api_endpoint.list.request":
+        return this.handleList(request);
+      case "provider.api_endpoint.save.request":
+        return this.handleSave(request);
+      case "provider.api_endpoint.delete.request":
+        return this.handleDelete(request);
+      case "provider.api_endpoint.set_active.request":
+        return this.handleSetActive(request);
+    }
+  }
+
+  private async handleList(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.list.request" }>,
+  ): Promise<void> {
+    try {
+      const result = this.service.list(request.provider);
+      this.host.emit({
+        type: "provider.api_endpoint.list.response",
+        payload: {
+          requestId: request.requestId,
+          provider: request.provider,
+          ...result,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.list.response",
+        payload: {
+          requestId: request.requestId,
+          provider: request.provider,
+          endpoints: [],
+          activeEndpointId: null,
+          error: this.toWireError(error, request),
+        },
+      });
+    }
+  }
+
+  private async handleSave(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.save.request" }>,
+  ): Promise<void> {
+    try {
+      const endpoint = await this.service.save(request.provider, {
+        ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
+        name: request.name,
+        baseUrl: request.baseUrl,
+        ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+        models: request.models,
+        defaultModelId: request.defaultModelId,
+      });
+      this.host.emit({
+        type: "provider.api_endpoint.save.response",
+        payload: { requestId: request.requestId, endpoint, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.save.response",
+        payload: {
+          requestId: request.requestId,
+          endpoint: null,
+          error: this.toWireError(error, request),
+        },
+      });
+    }
+  }
+
+  private async handleDelete(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.delete.request" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.service.delete(request.provider, request.endpointId);
+      this.host.emit({
+        type: "provider.api_endpoint.delete.response",
+        payload: { requestId: request.requestId, ...result, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.delete.response",
+        payload: {
+          requestId: request.requestId,
+          activeEndpointId: this.currentActive(request.provider),
+          error: this.toWireError(error, request),
+        },
+      });
+    }
+  }
+
+  private async handleSetActive(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.set_active.request" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.service.setActive(request.provider, request.endpointId);
+      this.host.emit({
+        type: "provider.api_endpoint.set_active.response",
+        payload: { requestId: request.requestId, ...result, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.set_active.response",
+        payload: {
+          requestId: request.requestId,
+          activeEndpointId: this.currentActive(request.provider),
+          error: this.toWireError(error, request),
+        },
+      });
+    }
+  }
+
+  /** 失败后状态保持切换前的样子，回报真实的当前启用接口。 */
+  private currentActive(provider: string): string | null {
+    try {
+      return this.service.list(provider).activeEndpointId;
+    } catch (error) {
+      if (error instanceof ApiEndpointRequestError) return null;
+      throw error;
+    }
+  }
+
+  private toWireError(error: unknown, request: ApiEndpointRequest): ApiEndpointError {
+    if (error instanceof ApiEndpointRequestError) {
+      this.logger.warn(
+        { code: error.code, requestType: request.type },
+        "API endpoint request rejected",
+      );
+      return { code: error.code, message: error.message };
+    }
+    this.logger.error({ err: error, requestType: request.type }, "API endpoint request failed");
+    return {
+      code: "unknown",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}

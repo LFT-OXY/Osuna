@@ -25,6 +25,9 @@ import { settingsStyles } from "@/styles/settings";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { resolveProviderInstallGuide } from "@/provider-install-guide";
 import { ProviderInstallGuideView } from "@/provider-install-guide/view";
+import { supportsApiEndpoints } from "@/api-endpoints";
+import { ApiEndpointsView } from "@/api-endpoints/view";
+import { useHostFeature } from "@/runtime/host-features";
 import { formatTimeAgo } from "@/utils/time";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
 import type { AgentModelDefinition, AgentProvider } from "@getpaseo/protocol/agent-types";
@@ -603,6 +606,9 @@ export function ProviderDiagnosticSheet({
     if (!isNotInstalled) return null;
     return resolveProviderInstallGuide({ provider, extendsProvider, hostPlatform });
   }, [extendsProvider, hostPlatform, isNotInstalled, provider]);
+  // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
+  const hostSupportsApiEndpoints = useHostFeature(serverId, "apiEndpoints");
+  const showApiEndpoints = hostSupportsApiEndpoints && supportsApiEndpoints(provider);
   const providerSnapshotRefreshing = providerEntry?.status === "loading";
   const providerErrorMessage =
     providerEntry?.status === "error"
@@ -713,6 +719,9 @@ export function ProviderDiagnosticSheet({
             guide={installGuide}
             cliLabel={resolveProviderLabel(installGuide.provider, snapshotEntries)}
           />
+        ) : null}
+        {showApiEndpoints ? (
+          <ApiEndpointsView serverId={serverId} provider={provider} providerLabel={providerLabel} />
         ) : null}
         <ProviderModalBody
           discoveredCount={discoveredModels.length}

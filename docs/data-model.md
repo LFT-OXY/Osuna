@@ -66,6 +66,11 @@ $PASEO_HOME/
 ├── plugins/
 │   ├── sources.json                      # Git origin, ref, commit, and managed checkout ownership
 │   └── {pluginId}/{version}/checkout/    # Source checkout for one installed Git commit
+├── api-endpoints/                       # API endpoints (ADR 0004); every file is mode 0600
+│   ├── endpoints.json                   # Saved endpoints and the active one per provider, without keys
+│   ├── keys.json                        # API keys; no RPC ever returns them
+│   ├── takeover-claude.json             # Original values of the keys the daemon owns in Claude's settings.json
+│   └── backups/                         # Byte copy of a CLI config file before its first managed write
 ├── command-catalog.json                 # Last process-reported command list per provider + cwd
 ├── usage/
 │   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)
@@ -683,7 +688,20 @@ The command list the provider's running process last reported, one entry per pro
 
 ---
 
-## 9. Daemon meta files
+## 9. API endpoints
+
+**Path:** `$PASEO_HOME/api-endpoints/`. Every file is written with mode `0600` through `private-files.ts`. Owned by `packages/server/src/server/api-endpoints/store.ts`; the rules for the CLI files it rewrites are in [ADR 0004](adr/0004-api-endpoint-rewrites-cli-config.md).
+
+| File                   | Shape                                                                                                                                                  | Notes                                                                                                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `endpoints.json`       | `{ endpoints: [{ id, provider, name, baseUrl, models: [{ id, label? }], defaultModelId, createdAt, updatedAt }], active: { [provider]: endpointId } }` | No `active` entry for a provider means Official.                                                                                                                                                                                   |
+| `keys.json`            | `{ keys: { [endpointId]: apiKey } }`                                                                                                                   | Kept apart from `config.json` because `get_daemon_config` sends `agents.providers` to clients as is. No RPC returns a key; responses carry `hasApiKey`.                                                                            |
+| `takeover-claude.json` | `{ takeover: { originalFile, env: { [key]: { original, written } }, envCreated, webSearchDeny } \| null, backup: { path } \| null }`                   | `takeover` is null in Official. `original` can hold a token the user wrote by hand, which is why the file is private. `backup: null` means Claude's `settings.json` was never rewritten; `path: null` means it did not exist then. |
+| `backups/`             | Byte copies of a CLI config file                                                                                                                       | One per file, taken before its first managed write. Never restored automatically.                                                                                                                                                  |
+
+---
+
+## 10. Daemon meta files
 
 These small files are not validated as full Zod schemas but are persisted under `$PASEO_HOME` for daemon identity and runtime coordination.
 

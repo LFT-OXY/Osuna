@@ -62,6 +62,16 @@ import {
 } from "./usage/rpc-schemas.js";
 import { UsagePricingOverrideSchema } from "./usage/types.js";
 import {
+  ApiEndpointDeleteRequestSchema,
+  ApiEndpointDeleteResponseSchema,
+  ApiEndpointListRequestSchema,
+  ApiEndpointListResponseSchema,
+  ApiEndpointSaveRequestSchema,
+  ApiEndpointSaveResponseSchema,
+  ApiEndpointSetActiveRequestSchema,
+  ApiEndpointSetActiveResponseSchema,
+} from "./api-endpoint/rpc-schemas.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -3443,6 +3453,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UsagePricingRefreshRequestSchema,
   UsageAgentGetRequestSchema,
   UsageAgentTurnsListRequestSchema,
+  ApiEndpointListRequestSchema,
+  ApiEndpointSaveRequestSchema,
+  ApiEndpointDeleteRequestSchema,
+  ApiEndpointSetActiveRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3787,6 +3801,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
         // daemon 解析本机 CLI 会话日志并回答 usage.* 查询。
         usage: z.boolean().optional(),
+        // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
+        // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
+        apiEndpoints: z.boolean().optional(),
       })
       .optional(),
   })
@@ -7004,6 +7021,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   UsagePricingUpdatedMessageSchema,
   UsageAgentGetResponseSchema,
   UsageAgentTurnsListResponseSchema,
+  ApiEndpointListResponseSchema,
+  ApiEndpointSaveResponseSchema,
+  ApiEndpointDeleteResponseSchema,
+  ApiEndpointSetActiveResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

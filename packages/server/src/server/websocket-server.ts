@@ -102,6 +102,7 @@ import { DirectorySyncService } from "./directory-sync/index.js";
 import { OWNER_PERMISSIONS, type DaemonPermission } from "./authorization/index.js";
 import type { WorkspaceLabelService } from "./workspace-labels/index.js";
 import type { UsageService } from "./usage/service.js";
+import type { ApiEndpointService } from "./api-endpoints/service.js";
 import {
   APPLICATION_SOCKET_LEASE_CHECK_INTERVAL_MS,
   ApplicationSocketLease,
@@ -540,6 +541,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly workspaceLabelService: WorkspaceLabelService | null;
   private readonly usageService: UsageService | null;
+  private readonly apiEndpointService: ApiEndpointService | undefined;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
   private readonly github: ForgeService;
@@ -658,6 +660,7 @@ export class VoiceAssistantWebSocketServer {
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
     usageService?: UsageService,
+    apiEndpointService?: ApiEndpointService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -687,6 +690,7 @@ export class VoiceAssistantWebSocketServer {
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
     this.workspaceLabelService = workspaceLabelService ?? null;
     this.usageService = usageService ?? null;
+    this.apiEndpointService = apiEndpointService;
     const requiredServices = requireWebSocketServices({
       scheduleService,
       checkoutDiffManager,
@@ -1465,6 +1469,7 @@ export class VoiceAssistantWebSocketServer {
       workspaceRegistry: this.workspaceRegistry,
       workspaceLabelService: this.workspaceLabelService ?? undefined,
       usageService: this.usageService ?? undefined,
+      apiEndpointService: this.apiEndpointService,
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
       checkoutDiffManager: this.checkoutDiffManager,
@@ -1688,6 +1693,8 @@ export class VoiceAssistantWebSocketServer {
         sessionHistory: true,
         // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
         ...(this.usageService ? { usage: true } : {}),
+        // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
+        ...(this.apiEndpointService ? { apiEndpoints: true } : {}),
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,

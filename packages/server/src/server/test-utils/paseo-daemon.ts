@@ -51,6 +51,7 @@ interface TestPaseoDaemonOptions {
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
   plugins?: PaseoDaemonConfig["plugins"];
   usage?: PaseoDaemonConfig["usage"];
+  apiEndpoints?: PaseoDaemonConfig["apiEndpoints"];
 }
 
 export interface TestPaseoDaemon {
@@ -212,6 +213,11 @@ async function prepareTestDaemonConfig(
       // No test daemon reaches out for a price table on its own; a suite about
       // the refresh schedule turns it back on.
       pricing: { autoUpdate: false, ...options.usage?.pricing },
+    },
+    // 第三方接口会改写 CLI 配置文件；测试 daemon 默认指向临时目录，绝不碰真实的 ~/.claude。
+    apiEndpoints: options.apiEndpoints ?? {
+      env: { CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config") },
+      homeDir: paseoHomeRoot,
     },
   };
   return { config, paseoHomeRoot, paseoHome, staticDir };

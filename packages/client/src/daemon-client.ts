@@ -562,6 +562,27 @@ type UsageAgentTurnsListPayload = Extract<
   SessionOutboundMessage,
   { type: "usage.agent.turns.list.response" }
 >["payload"];
+type ApiEndpointListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.list.response" }
+>["payload"];
+type ApiEndpointSavePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.save.response" }
+>["payload"];
+type ApiEndpointDeletePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.delete.response" }
+>["payload"];
+type ApiEndpointSetActivePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_active.response" }
+>["payload"];
+
+export type ApiEndpointSaveOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.save.request" }>,
+  "type" | "requestId"
+>;
 
 export interface UsageReportOptions {
   /** Client-local `YYYY-MM-DD` bounds; `from: null` asks for all time. */
@@ -5904,6 +5925,47 @@ export class DaemonClient {
       requestId,
       message: { type: "usage.pricing.refresh.request" },
       responseType: "usage.pricing.refresh.response",
+    });
+  }
+
+  async apiEndpointList(provider: string, requestId?: string): Promise<ApiEndpointListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.list.request", provider },
+    });
+  }
+
+  /** 省略 apiKey 表示保留已保存的 key。 */
+  async apiEndpointSave(
+    options: ApiEndpointSaveOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSavePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.save.request", ...options },
+    });
+  }
+
+  async apiEndpointDelete(
+    provider: string,
+    endpointId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointDeletePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.delete.request", provider, endpointId },
+    });
+  }
+
+  /** `endpointId: null` 切回官方。 */
+  async apiEndpointSetActive(
+    provider: string,
+    endpointId: string | null,
+    requestId?: string,
+  ): Promise<ApiEndpointSetActivePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_active.request", provider, endpointId },
     });
   }
 

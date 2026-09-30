@@ -1,0 +1,26 @@
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "改文件规则的权威来源，实现必须一致"}
+{"file": ".atw/tasks/09-30-provider-install-and-api-endpoint/prd.md", "reason": "父任务已定决策清单"}
+{"file": ".atw/tasks/09-30-provider-install-and-api-endpoint/research/claude-third-party.md", "reason": "Claude 认证优先级、settings 覆盖、模型别名事实"}
+{"file": ".atw/tasks/09-30-provider-install-and-api-endpoint/research/codex-auth-command.md", "reason": "auth.command 语义、跨平台写法、与现有注入的交互"}
+{"file": ".atw/tasks/09-30-provider-install-and-api-endpoint/research/reference-projects.md", "reason": "cc-switch live 规则与参考项目对比"}
+{"file": "docs/glossary.md", "reason": "API endpoint / Custom provider 术语"}
+{"file": "docs/protocol-compatibility.md", "reason": "新字段可选、能力门控、COMPAT 标记"}
+{"file": "docs/rpc-namespacing.md", "reason": "新 RPC 点号命名"}
+{"file": "docs/protocol-validation.md", "reason": "wire schema 纯净性"}
+{"file": "docs/data-model.md", "reason": "持久化与原子写入约定、Agent 记录新增字段"}
+{"file": "docs/testing.md", "reason": "真实依赖优先、确定性"}
+{"file": "docs/ad-hoc-daemon-testing.md", "reason": "主测试层：进程内 daemon 测试工具"}
+{"file": "docs/forms.md", "reason": "App 表单模型"}
+{"file": "docs/design.md", "reason": "设置面板视觉与禁止项"}
+{"file": "docs/i18n.md", "reason": "9 语言文案规则"}
+{"file": "docs/qa.md", "reason": "截图验收"}
+{"file": "docs/custom-providers.md", "reason": "现有自定义提供方与 Codex 注入逻辑，需同步更新"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "服务端 RPC 与协议规范"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "服务端持久化规范"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "服务端错误处理"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "服务端测试规范"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "服务端质量检查"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "App 组件原语与 i18n"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "App 状态与表单"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 测试写法"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon→协议→App 跨层检查"}

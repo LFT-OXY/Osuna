@@ -128,6 +128,62 @@ same `commandCatalogPath` reads the entry back (daemon restart), and a
 - `paseo.pid` is a lock and endpoint record owned by the supervisor; read it, never write it from a feature (`docs/architecture.md` "Storage").
 - Temporary directories in tests come from `mkdtemp` and are removed in `afterEach`; the harness in `server/test-utils/paseo-daemon.ts` does this for you.
 
+## Scenario: rewriting a config file another program owns
+
+Reference implementation: API endpoints (api-endpoint ticket 01). `server/api-endpoints/` rewrites Claude Code's `settings.json` so the CLI itself switches to a third-party endpoint. The rules are in `docs/adr/0004-api-endpoint-rewrites-cli-config.md`; this is how the code keeps them.
+
+### 1. Scope / Trigger
+
+- The daemon writes a file that the CLI, the user, other tools, and Osuna's own terminal hooks also write. Anything outside the keys the daemon owns is someone else's data, including formatting and permission bits.
+
+### 2. Signatures
+
+- Pure patch: `applyClaudeApiEndpoint({ text: string | null, env, takeover }) → { kind: "patched", text, takeover } | { kind: "unparsable", message }` and `restoreClaudeOfficial({ text, takeover }) → patched | { kind: "delete" } | { kind: "missing" } | unparsable` in `claude-settings-patch.ts`. No I/O.
+- Store: `ApiEndpointStore` (`store.ts`): endpoints, keys, `readClaudeTakeover` / `writeClaudeTakeover`, `writeClaudeSettingsBackup(bytes, at)`.
+- Service: `ApiEndpointService` (`service.ts`) resolves the path (`resolveAgentHookConfigPath(claudeAgentHookProvider, { env, homeDir })`, so `CLAUDE_CONFIG_DIR` wins), serializes every mutation through one promise queue, and does the file I/O.
+- Injection: `PaseoDaemonConfig.apiEndpoints: { env?, homeDir? }`. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR`, so no test daemon can touch the real `~/.claude`.
+
+### 3. Contracts
+
+- The takeover record keeps each owned key's `original` (`{ present: false }` or `{ present: true, value }`) and `written`, plus `originalFile` (`absent` / `empty` with its text / `content`). Originals are taken from the first takeover only; switching endpoint A to B keeps them.
+- Order of writes on switch: takeover record first, then the CLI file; if the CLI write throws, the previous record is written back. The reverse order loses the originals on a crash.
+- The backup is taken once per file lifetime: `backup: null` = never rewritten, `{ path: null }` = the file did not exist at the first write. Never back up a file the daemon already wrote.
+- The CLI file is replaced atomically with its previous mode bits (new file: `0600`, because it now holds a token). `writePrivateFileAtomicSync` is wrong here: it forces `0600` on the file and `0700` on `~/.claude`.
+
+### 4. Validation & Error Matrix
+
+- Not JSON, not an object, `env` not an object, `permissions.deny` not an array → `config_unparsable`, nothing written, active endpoint unchanged.
+- File missing on switch → created. File missing on restore → nothing written (`missing`).
+- Restore leaves `{}` and `originalFile` was `absent` → file deleted; `empty` → original bytes back.
+
+### 5. Good/Base/Bad Cases
+
+- Good: canonical 2-space file with hooks and permissions; switch and back gives identical bytes.
+- Base: a compact one-line `env` object receives a key; that line is re-indented (`jsonc-parser` formats the edited line).
+- Bad: `JSON.stringify` of the parsed file (loses the user's formatting); deleting keys that were absent-but-empty (`""` is present, not absent).
+
+### 6. Tests Required
+
+- `claude-settings-patch.test.ts`: exact expected text after apply; restore equals the input byte for byte; empty-string original; absent file → `delete`; user's `{\n}` kept; user-owned `"WebSearch"` survives; unparsable shapes.
+- `daemon-e2e/api-endpoint-claude.e2e.test.ts`: create → activate → file → Official → file; key absent from every response and from `config.json`; `keys.json` mode `0600`; `settings.json` keeps `0644`; no backup when the file started absent.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const backupPath = record.backupPath ?? backUp(current); // null "file absent" re-triggers on the next write
+writePrivateFileAtomicSync(settingsPath, text); // chmods the user's file and ~/.claude
+```
+
+#### Correct
+
+```ts
+const backup = record.backup ?? { path: store.writeClaudeSettingsBackup(current, now()) };
+store.writeClaudeTakeover({ takeover: result.takeover, backup });
+writeConfigFileKeepingMode(settingsPath, result.text);
+```
+
 ## Anti-patterns
 
 - `JSON.parse(raw) as StoredAgentRecord`. Parse with the schema.
