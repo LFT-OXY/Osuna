@@ -49,7 +49,11 @@ import {
   type ProviderRuntimeSettings,
   type ResolvedProviderLaunch,
 } from "../../provider-launch-config.js";
-import { resolveProviderCliVersion } from "../../provider-cli-version.js";
+import {
+  resolveProviderCliLaunch,
+  resolveProviderCliVersion,
+  type ProviderCliLaunch,
+} from "../../provider-cli-version.js";
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
 import { composeSystemPromptParts } from "../../system-prompt.js";
 import {
@@ -2840,6 +2844,13 @@ export class PiRpcAgentClient implements AgentClient {
       runtimeSettings: this.runtimeSettings,
       defaultBinary: PI_BINARY_COMMAND,
       signal,
+    });
+  }
+
+  async resolveCliLaunch(): Promise<ProviderCliLaunch | null> {
+    return await resolveProviderCliLaunch({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: PI_BINARY_COMMAND,
     });
   }
 

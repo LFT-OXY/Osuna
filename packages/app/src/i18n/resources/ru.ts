@@ -2893,6 +2893,20 @@ export const ru: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "Обновить",
+        actionLabel: "Обновить {{name}}",
+        errors: {
+          failed: "Не удалось обновить",
+          unsupported: "Этот провайдер нельзя обновить автоматически",
+          installMethodUnknown:
+            "Не удалось определить, как установлен этот CLI, поэтому обновить его автоматически нельзя",
+          notInstalled: "CLI не найден на хосте",
+          inProgress: "Обновление уже выполняется",
+          timeout: "Обновление превысило время ожидания и было остановлено",
+          hostDisconnected: "Хост не подключён",
+        },
+      },
       models: {
         title: "Модели",
         one: "1 модель",

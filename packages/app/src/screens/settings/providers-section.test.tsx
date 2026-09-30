@@ -3,61 +3,69 @@
  */
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-const { theme, snapshotState, configState, patchConfigMock, refreshMock, selectProviderMock } =
-  vi.hoisted(() => ({
-    theme: {
-      spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
-      iconSize: { sm: 14, md: 20 },
-      fontSize: { xs: 11, sm: 13, base: 15 },
-      fontWeight: { normal: "400" },
-      fontFamily: { ui: "system-ui", mono: "monospace" },
-      borderRadius: { lg: 8 },
-      radius: { sm: 6, md: 8, lg: 10 },
-      // 安装指引区渲染 Button / SegmentedControl，createControlGeometry 读这两组 token。
-      borderWidth: { 1: 1 },
-      controlHeight: { sm: 24, md: 28, lg: 32 },
-      typeScale: {
-        caption: { fontSize: 12, lineHeight: 16 },
-        body: { fontSize: 14, lineHeight: 20 },
+const {
+  theme,
+  snapshotState,
+  configState,
+  patchConfigMock,
+  refreshMock,
+  selectProviderMock,
+  upgradeProviderMock,
+} = vi.hoisted(() => ({
+  theme: {
+    spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
+    iconSize: { sm: 14, md: 20 },
+    fontSize: { xs: 11, sm: 13, base: 15 },
+    fontWeight: { normal: "400" },
+    fontFamily: { ui: "system-ui", mono: "monospace" },
+    borderRadius: { lg: 8 },
+    radius: { sm: 6, md: 8, lg: 10 },
+    // 安装指引区渲染 Button / SegmentedControl，createControlGeometry 读这两组 token。
+    borderWidth: { 1: 1 },
+    controlHeight: { sm: 24, md: 28, lg: 32 },
+    typeScale: {
+      caption: { fontSize: 12, lineHeight: 16 },
+      body: { fontSize: 14, lineHeight: 20 },
+    },
+    opacity: { 50: 0.5 },
+    colors: {
+      surface1: "#111",
+      surface2: "#222",
+      surface3: "#333",
+      foreground: "#fff",
+      foregroundMuted: "#aaa",
+      border: "#555",
+      accent: "#0a84ff",
+      statusSuccess: "#00ff00",
+      statusWarning: "#ff9500",
+      statusDanger: "#ff0000",
+      // 目录弹窗的 Alert 读 blue / amber。
+      palette: {
+        red: { 300: "#ff6b6b" },
+        blue: { 300: "#93c5fd" },
+        amber: { 500: "#f59e0b" },
+        white: "#fff",
       },
-      opacity: { 50: 0.5 },
-      colors: {
-        surface1: "#111",
-        surface2: "#222",
-        surface3: "#333",
-        foreground: "#fff",
-        foregroundMuted: "#aaa",
-        border: "#555",
-        accent: "#0a84ff",
-        statusSuccess: "#00ff00",
-        statusWarning: "#ff9500",
-        statusDanger: "#ff0000",
-        // 目录弹窗的 Alert 读 blue / amber。
-        palette: {
-          red: { 300: "#ff6b6b" },
-          blue: { 300: "#93c5fd" },
-          amber: { 500: "#f59e0b" },
-          white: "#fff",
-        },
-      },
     },
-    snapshotState: {
-      entries: undefined as ProviderSnapshotEntry[] | undefined,
-      isLoading: false,
-      isRefreshing: false,
-    },
-    configState: {
-      config: null as MutableDaemonConfig | null,
-    },
-    patchConfigMock: vi.fn(async (_patch: unknown) => undefined),
-    refreshMock: vi.fn(async (_providers?: string[]) => undefined),
-    selectProviderMock: vi.fn(),
-  }));
+  },
+  snapshotState: {
+    entries: undefined as ProviderSnapshotEntry[] | undefined,
+    isLoading: false,
+    isRefreshing: false,
+  },
+  configState: {
+    config: null as MutableDaemonConfig | null,
+  },
+  patchConfigMock: vi.fn(async (_patch: unknown) => undefined),
+  refreshMock: vi.fn(async (_providers?: string[]) => undefined),
+  selectProviderMock: vi.fn(),
+  upgradeProviderMock: vi.fn(),
+}));
 
 vi.mock("react-native", () => ({
   Platform: {
@@ -183,6 +191,9 @@ vi.mock("react-i18next", () => ({
           "providerCatalog.marks.notInstalled": "Not installed",
           "settings.providers.empty": "No providers in use. Press + to add one.",
           "common.actions.dismiss": "Dismiss",
+          "settings.providers.upgrade.action": "Upgrade",
+          "settings.providers.upgrade.actionLabel": "Upgrade {{name}}",
+          "settings.providers.upgrade.errors.failed": "Upgrade failed",
         })[key] ?? key
       )
         .replaceAll("{{name}}", String(values?.name ?? ""))
@@ -303,8 +314,24 @@ vi.mock("@/hooks/use-daemon-config", () => ({
 
 vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeIsConnected: () => true,
-  // 列表只读 Providers 页的版本检查结果，不会用它发请求。
-  useHostRuntimeClient: () => ({}),
+  // 列表只读 Providers 页的版本检查结果，不会用它发检查请求；升级经它发请求。
+  useHostRuntimeClient: () => ({ upgradeProvider: upgradeProviderMock }),
+}));
+
+// 真实的 Tooltip 依赖 reanimated 与 createPortal，在整体 mock 掉 react-native 的套件里加载不了；
+// 这里把提示文字直接渲染出来。
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  TooltipTrigger: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  TooltipContent: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement("span", { "data-testid": "tooltip-content" }, children),
+}));
+
+vi.mock("@/components/ui/scrollable-code-surface", () => ({
+  ScrollableCodeSurface: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
+    React.createElement("pre", { "data-testid": testID }, children),
 }));
 
 import {
@@ -314,6 +341,8 @@ import {
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useSessionStore } from "@/stores/session-store";
 import { providerVersionCheckQueryKey } from "@/provider-detail/version-check";
+import { useProviderUpgradeStore } from "@/provider-detail/upgrade";
+import type { ProviderUpgradeResponsePayload as ProviderUpgradeResponse } from "@getpaseo/protocol/messages";
 import { ProvidersSection } from "./providers-section";
 
 const catalog = getAcpProviderCatalog();
@@ -389,6 +418,9 @@ function indexOfText(nodes: HTMLElement[], text: string): number {
   return nodes.findIndex((node) => node.textContent?.trim() === text);
 }
 
+// React Query 默认用 setTimeout(0) 通知观察者，act 不一定等得到；升级成功后改写检查结果要同步落到界面上。
+notifyManager.setScheduler((callback) => callback());
+
 describe("ProvidersSection", () => {
   let root: Root | null = null;
   let queryClient = new QueryClient();
@@ -412,6 +444,8 @@ describe("ProvidersSection", () => {
     refreshMock.mockReset();
     refreshMock.mockResolvedValue(undefined);
     selectProviderMock.mockReset();
+    upgradeProviderMock.mockReset();
+    useProviderUpgradeStore.setState({ byKey: {} });
   });
 
   afterEach(() => {
@@ -600,6 +634,134 @@ describe("ProvidersSection", () => {
     const row = findRow("Claude provider details");
     expect(indexOfText(descendants(row), "3 models · v2.1.280")).toBeGreaterThan(-1);
     expect(row.textContent).not.toContain("registry unreachable");
+  });
+
+  function offerClaudeUpdate(): void {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.280",
+        latestVersion: "2.1.285",
+        updateAvailable: true,
+      },
+    ]);
+    configState.config = makeConfig();
+  }
+
+  function queryUpgradeButton(): HTMLElement | null {
+    return findRow("Claude provider details").querySelector<HTMLElement>(
+      '[role="button"][aria-label="Upgrade Claude"]',
+    );
+  }
+
+  function holdUpgradeAnswer(): (answer: Omit<ProviderUpgradeResponse, "requestId">) => void {
+    let answer: (value: ProviderUpgradeResponse) => void = () => {};
+    upgradeProviderMock.mockImplementation(
+      () =>
+        new Promise<ProviderUpgradeResponse>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    return (value) => answer({ requestId: "upgrade-1", ...value });
+  }
+
+  async function pressUpgrade(): Promise<void> {
+    await act(async () => {
+      queryUpgradeButton()?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+  }
+
+  it("offers an upgrade before the switch, with the versions in its tooltip", () => {
+    offerClaudeUpdate();
+
+    render();
+
+    const nodes = descendants(findRow("Claude provider details"));
+    const upgrade = indexOfMatches(nodes, '[role="button"][aria-label="Upgrade Claude"]');
+    expect(upgrade).toBeGreaterThan(-1);
+    expect(indexOfMatches(nodes, '[role="switch"]')).toBeGreaterThan(upgrade);
+    expect(
+      findRow("Claude provider details").querySelector('[data-testid="tooltip-content"]')
+        ?.textContent,
+    ).toBe("v2.1.280 → v2.1.285");
+  });
+
+  it("offers no upgrade when the installed CLI is current", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.285" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.285",
+        latestVersion: "2.1.285",
+        updateAvailable: false,
+      },
+    ]);
+    configState.config = makeConfig();
+
+    render();
+
+    expect(queryUpgradeButton()).toBeNull();
+  });
+
+  it("spins while upgrading and drops the button once the new version is in", async () => {
+    offerClaudeUpdate();
+    const answer = holdUpgradeAnswer();
+    render();
+
+    await pressUpgrade();
+
+    expect(upgradeProviderMock).toHaveBeenCalledWith({ provider: "claude" });
+    expect(queryUpgradeButton()?.getAttribute("aria-disabled")).toBe("true");
+    expect(queryUpgradeButton()?.querySelector('[data-testid="loading-spinner"]')).not.toBeNull();
+
+    await pressUpgrade();
+    expect(upgradeProviderMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      answer({ provider: "claude", ok: true, version: "2.1.285" });
+    });
+
+    expect(queryUpgradeButton()).toBeNull();
+    expect(container?.querySelector('[data-testid="provider-upgrade-failure"]')).toBeNull();
+  });
+
+  it("shows the command output under the row when the upgrade fails, until dismissed", async () => {
+    offerClaudeUpdate();
+    const answer = holdUpgradeAnswer();
+    render();
+
+    await pressUpgrade();
+    await act(async () => {
+      answer({
+        provider: "claude",
+        ok: false,
+        errorCode: "command_failed",
+        error: "claude update exited with code 1",
+        output: "EACCES: permission denied\n",
+      });
+    });
+
+    const failure = container?.querySelector<HTMLElement>(
+      '[data-testid="provider-upgrade-failure"]',
+    );
+    expect(failure?.textContent).toContain("Upgrade failed");
+    expect(failure?.querySelector('[data-testid="provider-upgrade-output"]')?.textContent).toBe(
+      "EACCES: permission denied\n",
+    );
+    // 失败块挂在行外，点它不会进详情。
+    expect(findRow("Claude provider details").contains(failure ?? null)).toBe(false);
+    expect(queryUpgradeButton()?.getAttribute("aria-disabled")).toBeNull();
+
+    const dismiss = Array.from(
+      failure?.querySelectorAll<HTMLElement>('[role="button"]') ?? [],
+    ).find((button) => button.textContent === "Dismiss");
+    await act(async () => {
+      dismiss?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    expect(container?.querySelector('[data-testid="provider-upgrade-failure"]')).toBeNull();
   });
 
   it("shows no version when the host does not report provider versions", () => {

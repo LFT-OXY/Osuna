@@ -127,6 +127,15 @@ vi.mock("./providers/claude/agent.js", async () => {
         return [{ name: "scanned", description: cwd, argumentHint: "", kind: "skill" }];
       }
 
+      async resolveCliLaunch() {
+        return {
+          executable: "/usr/local/bin/claude",
+          args: [],
+          source: "default" as const,
+          env: { envOverlay: {} },
+        };
+      }
+
       async isAvailable(): Promise<boolean> {
         const command: { mode?: string; argv?: string[] } | undefined =
           typeof this.runtimeSettings === "object" && this.runtimeSettings !== null
@@ -675,6 +684,24 @@ test("wrapped claude profile keeps no-process command discovery", async () => {
   await expect(registry.zai.createClient(logger).discoverCommands?.("/tmp/zai")).resolves.toEqual([
     { name: "scanned", description: "/tmp/zai", argumentHint: "", kind: "skill" },
   ]);
+});
+
+test("wrapped claude profile keeps the CLI launch the upgrade runs with", async () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: {
+      zai: {
+        extends: "claude",
+        label: "ZAI",
+      },
+    },
+  });
+
+  await expect(registry.zai.createClient(logger).resolveCliLaunch?.()).resolves.toEqual({
+    executable: "/usr/local/bin/claude",
+    args: [],
+    source: "default",
+    env: { envOverlay: {} },
+  });
 });
 
 test("built-in OMP override keeps the real OMP adapter enabled and launchable", async () => {

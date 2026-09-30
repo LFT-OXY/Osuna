@@ -2841,6 +2841,20 @@ export const ar: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "ترقية",
+        actionLabel: "ترقية {{name}}",
+        errors: {
+          failed: "فشلت الترقية",
+          unsupported: "لا يمكن ترقية هذا المزود تلقائيًا",
+          installMethodUnknown:
+            "تعذّر تحديد طريقة تثبيت واجهة سطر الأوامر هذه، لذا لا يمكن ترقيتها تلقائيًا",
+          notInstalled: "لم يتم العثور على واجهة سطر الأوامر على المضيف",
+          inProgress: "هناك ترقية قيد التنفيذ بالفعل",
+          timeout: "انتهت مهلة الترقية وتم إيقافها",
+          hostDisconnected: "المضيف غير متصل",
+        },
+      },
       models: {
         title: "النماذج",
         one: "1 نموذج",

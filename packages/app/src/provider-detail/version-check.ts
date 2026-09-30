@@ -24,7 +24,8 @@ export function providerVersionCheckQueryInputs(input: {
     staleTimeMs: 0,
     enabled: input.enabled && client !== null,
     queryFn: async (): Promise<ProviderVersionCheckResult[]> => {
-      if (!client) throw new Error("Host is not connected");
+      // enabled 已要求有 client，这里只为收窄类型。
+      if (!client) throw new Error();
       const { results } = await client.checkProviderVersions();
       return results;
     },
@@ -88,4 +89,36 @@ export function mergeProviderVersionResults(
   const merged = (previous ?? []).map((result) => byProvider.get(result.provider) ?? result);
   const known = new Set(merged.map((result) => result.provider));
   return [...merged, ...next.filter((result) => !known.has(result.provider))];
+}
+
+/**
+ * 升级成功后把 daemon 重新探测到的版本写进检查结果，不再联网。升到的正是最新版本时不再提示；
+ * 升到了别的版本（例如 Claude Code 的 stable 通道）仍然提示；读不出新版本时不提示。
+ */
+export function applyUpgradedVersion(input: {
+  results: readonly ProviderVersionCheckResult[] | undefined;
+  provider: string;
+  version: string | undefined;
+}): ProviderVersionCheckResult[] | undefined {
+  const { results, provider, version } = input;
+  if (!results) return undefined;
+  return results.map((result) =>
+    result.provider === provider ? withUpgradedVersion(result, version) : result,
+  );
+}
+
+function withUpgradedVersion(
+  result: ProviderVersionCheckResult,
+  version: string | undefined,
+): ProviderVersionCheckResult {
+  const landedOnLatest = result.latestVersion === version;
+  const stillBehind = version !== undefined && result.updateAvailable && !landedOnLatest;
+  const upgraded: ProviderVersionCheckResult = {
+    provider: result.provider,
+    updateAvailable: stillBehind,
+  };
+  if (version) upgraded.installedVersion = version;
+  if (result.latestVersion) upgraded.latestVersion = result.latestVersion;
+  if (result.error) upgraded.error = result.error;
+  return upgraded;
 }

@@ -38,6 +38,7 @@ import type {
   ProviderOverride,
   ProviderRuntimeSettings,
 } from "./provider-launch-config.js";
+import type { ProviderCliLaunch } from "./provider-cli-version.js";
 import {
   buildProviderRegistry,
   shutdownAgentClients,
@@ -384,6 +385,14 @@ export class ProviderSnapshotManager {
   /** 当前生效的启动设置（含 config.json 里配置的命令），供需要自己执行 CLI 的服务使用。 */
   getRuntimeSettings(provider: AgentProvider): ProviderRuntimeSettings | undefined {
     return this.generation.definitions[provider]?.configuration?.runtimeSettings;
+  }
+
+  /** 启用的提供方实际启动的 CLI，供升级命令执行；停用、未配置、找不到或提供方不支持时为 null。 */
+  async resolveCliLaunch(provider: AgentProvider): Promise<ProviderCliLaunch | null> {
+    const definition = this.generation.definitions[provider];
+    if (!definition?.enabled) return null;
+    const client = this.ensureClient(provider, definition);
+    return (await client.resolveCliLaunch?.()) ?? null;
   }
 
   getAgentManagerProviderState(): AgentManagerProviderState {

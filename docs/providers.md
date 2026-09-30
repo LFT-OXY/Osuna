@@ -182,6 +182,10 @@ cannot turn a ready entry into an error. A provider whose catalog probe already 
 An unreadable version omits the field and never changes the entry's status.
 `provider.version.check.request` compares that `version` with the npm `latest` of the manifest's
 `npmPackage`; the request is described in [usage.md](usage.md#the-one-outbound-request).
+`provider.upgrade.request` runs the CLI's upgrade subcommand, then refreshes that entry and forgets
+its cached `latest` whether the command succeeded or not, so the next check compares the new
+`version`. Appended launch args are dropped for the upgrade: placed before the subcommand, a CLI reads
+the subcommand as a prompt.
 
 Saved provider/model choices are user intent. Catalogue failure must not erase them or substitute
 another model. Creation reads the caller's host and directory directly; an earlier global snapshot
@@ -326,7 +330,11 @@ export class CopilotACPAgentClient extends ACPAgentClient {
 
 In `packages/server/src/server/agent/provider-manifest.ts`, add mode definitions with UI metadata (icons, color tiers) and a provider definition entry.
 
-Set `npmPackage` on the entry when the CLI is published on npm. Settings → Providers compares the installed version with that package's `latest`; without it the provider never shows an update.
+A built-in provider also needs three things for Settings → Providers to show its version and offer a one-click upgrade:
+
+- **npm package**: set `npmPackage` on the entry. The installed version is compared with that package's `latest`; without it the provider never shows an update.
+- **Version parsing**: implement `resolveInstalledVersion` and `resolveCliLaunch` on the client with the same default binary it launches. `parseCliVersion` takes the first bare `x.y.z` from `--version`; add the CLI's real output to `provider-cli-version.test.ts`, and parse it yourself if the first `x.y.z` is not the CLI's version.
+- **Upgrade command**: add the CLI's own upgrade subcommand to `UPGRADE_SUBCOMMANDS` in `provider-upgrade-command.ts`. It runs with the provider's resolved executable, not whatever `PATH` finds. A CLI without its own upgrade command answers `unsupported` until it gets install-method detection.
 
 First, define the modes with visual metadata:
 
@@ -514,6 +522,8 @@ interface AgentClient {
   getDiagnostic?(): Promise<{ diagnostic: string }>;
   // Built-in providers only: run the configured command with `--version`, return x.y.z or null.
   resolveInstalledVersion?(signal?: AbortSignal): Promise<string | null>;
+  // Built-in providers only: the resolved executable, prefix args and env the upgrade runs with.
+  resolveCliLaunch?(): Promise<ProviderCliLaunch | null>;
 }
 ```
 

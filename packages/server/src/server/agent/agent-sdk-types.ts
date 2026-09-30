@@ -11,6 +11,7 @@ import type {
   ApiEndpointRef,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { PaseoToolCatalog } from "./tools/types.js";
+import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
 export type { AgentProviderNotice, AgentTaskItem };
 
@@ -832,6 +833,8 @@ export interface AgentClient {
   isAvailable(signal?: AbortSignal, options?: FetchCatalogOptions): Promise<boolean>;
   /** 已装 CLI 的版本（x.y.z），用实际启动的命令跑 `--version`；取不到返回 null 或抛错，调用方都当作没有版本。只有内置提供方实现。 */
   resolveInstalledVersion?(signal?: AbortSignal): Promise<string | null>;
+  /** 实际启动的 CLI（可执行文件、前置参数、环境变量），升级命令用它来执行；找不到时返回 null。只有内置提供方实现。 */
+  resolveCliLaunch?(): Promise<ProviderCliLaunch | null>;
   getDiagnostic?(): Promise<{ diagnostic: string }>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().

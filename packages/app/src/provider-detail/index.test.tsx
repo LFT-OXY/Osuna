@@ -17,6 +17,7 @@ import {
 } from "./header";
 import type { ProviderDiagnosticState } from "./diagnostic";
 import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
+import type { ProviderUpgradeState } from "./upgrade";
 import { ProviderVersionSection } from "./version-section";
 
 function entry(overrides: Partial<ProviderSnapshotEntry>): ProviderSnapshotEntry {
@@ -475,6 +476,105 @@ describe("ProviderDetailSurface", () => {
     expect(screen.getByTestId("provider-version-section").textContent).toContain(
       "v2.1.280 → v2.1.285",
     );
+  });
+
+  function renderUpgradableVersion(input: {
+    latestVersion?: string;
+    state: ProviderUpgradeState;
+    onUpgrade?: () => void;
+    onDismissFailure?: () => void;
+  }) {
+    // 经展开传入：upgrade 是对象，直接写在 JSX 属性上会被 react-perf 规则拦下。
+    const sectionProps = {
+      latestVersion: input.latestVersion,
+      upgrade: {
+        providerLabel: "Claude Code",
+        state: input.state,
+        onUpgrade: input.onUpgrade ?? noop,
+        onDismissFailure: input.onDismissFailure ?? noop,
+      },
+    };
+    renderDetail({
+      entries: [entry({ version: "2.1.280" })],
+      renderVersion: (installedVersion) => (
+        <ProviderVersionSection installedVersion={installedVersion} {...sectionProps} />
+      ),
+    });
+  }
+
+  function upgradeButton() {
+    return within(screen.getByTestId("provider-version-section")).getByRole("button", {
+      name: i18n.t("settings.providers.upgrade.actionLabel", { name: "Claude Code" }),
+    });
+  }
+
+  it("offers an upgrade in the version section when a newer version exists", () => {
+    const onUpgrade = vi.fn();
+    renderUpgradableVersion({ latestVersion: "2.1.285", state: { status: "idle" }, onUpgrade });
+
+    fireEvent.click(upgradeButton());
+
+    expect(onUpgrade).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no upgrade without a newer version", () => {
+    renderUpgradableVersion({ state: { status: "idle" } });
+
+    expect(
+      within(screen.getByTestId("provider-version-section")).queryByRole("button", {
+        name: i18n.t("settings.providers.upgrade.actionLabel", { name: "Claude Code" }),
+      }),
+    ).toBeNull();
+  });
+
+  it("disables the upgrade while it runs", () => {
+    const onUpgrade = vi.fn();
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: { status: "upgrading" },
+      onUpgrade,
+    });
+
+    fireEvent.click(upgradeButton());
+
+    expect(upgradeButton().getAttribute("aria-disabled")).toBe("true");
+    expect(onUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("shows a failed upgrade's output in the version section until dismissed", () => {
+    const onDismissFailure = vi.fn();
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: {
+        status: "failed",
+        errorCode: "timeout",
+        error: "claude update timed out after 600s",
+        output: "Downloading 2.1.285...",
+      },
+      onDismissFailure,
+    });
+
+    const failure = within(screen.getByTestId("provider-version-section")).getByTestId(
+      "provider-upgrade-failure",
+    );
+    expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.errors.timeout"));
+    expect(within(failure).getByTestId("provider-upgrade-output").textContent).toContain(
+      "Downloading 2.1.285...",
+    );
+    fireEvent.click(within(failure).getByText(i18n.t("common.actions.dismiss")));
+    expect(onDismissFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains a failure it has no message for with the raw error", () => {
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: { status: "failed", errorCode: null, error: "Transport not connected", output: null },
+    });
+
+    const failure = screen.getByTestId("provider-upgrade-failure");
+    expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.errors.failed"));
+    expect(failure.textContent).toContain("Transport not connected");
+    expect(within(failure).queryByTestId("provider-upgrade-output")).toBeNull();
   });
 
   it("orders errors, the version, API endpoints, Models, then the diagnostic", () => {

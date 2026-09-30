@@ -18,6 +18,14 @@ const NpmDistTagsSchema = z.object({ latest: z.string() });
 /** 查一个 npm 包 latest 标签对应的版本号；失败时抛错。测试里换成桩，不真的联网。 */
 export type FetchLatestVersion = (input: FetchLatestVersionInput) => Promise<string>;
 
+/** 测试 daemon 在配置边界注入的版本相关依赖：查 npm 的联网函数与升级命令的超时。 */
+export interface ProviderVersionsConfig {
+  // 缺省查 npm registry；测试换成桩。
+  fetchLatestVersion?: FetchLatestVersion;
+  // 缺省 10 分钟；测试用短超时走超时路径。
+  upgradeTimeoutMs?: number;
+}
+
 export interface FetchLatestVersionInput {
   npmPackage: string;
   signal: AbortSignal;
@@ -126,6 +134,11 @@ export class ProviderVersionCheckService {
       return [this.checkEntry({ entry, npmPackage, force })];
     });
     return Promise.all(checks);
+  }
+
+  /** 升级之后调用：下一次检查重新查 npm。 */
+  forget(provider: string): void {
+    this.cache.delete(provider);
   }
 
   dispose(): void {

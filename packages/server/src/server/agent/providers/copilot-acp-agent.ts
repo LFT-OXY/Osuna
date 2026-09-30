@@ -7,7 +7,11 @@ import {
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
 } from "../provider-launch-config.js";
-import { resolveProviderCliVersion } from "../provider-cli-version.js";
+import {
+  resolveProviderCliLaunch,
+  resolveProviderCliVersion,
+  type ProviderCliLaunch,
+} from "../provider-cli-version.js";
 import {
   ACPAgentClient,
   type ACPConfigFeatureOption,
@@ -106,6 +110,13 @@ export class CopilotACPAgentClient extends ACPAgentClient {
       runtimeSettings: this.runtimeSettings,
       defaultBinary: "copilot",
       signal,
+    });
+  }
+
+  async resolveCliLaunch(): Promise<ProviderCliLaunch | null> {
+    return await resolveProviderCliLaunch({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: "copilot",
     });
   }
 

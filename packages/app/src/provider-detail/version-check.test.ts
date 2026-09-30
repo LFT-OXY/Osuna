@@ -4,6 +4,7 @@ import type { ProviderVersionCheckResult } from "@getpaseo/protocol/messages";
 import { fetchQueryOptions } from "@/data/query";
 import {
   type ProviderVersionCheckClient,
+  applyUpgradedVersion,
   mergeProviderVersionResults,
   providerVersionCheckQueryInputs,
   recheckProviderVersions,
@@ -219,5 +220,48 @@ describe("mergeProviderVersionResults", () => {
 
     expect(mergeProviderVersionResults([claude, codex], [rechecked])).toEqual([rechecked, codex]);
     expect(mergeProviderVersionResults(undefined, [rechecked])).toEqual([rechecked]);
+  });
+});
+
+describe("applyUpgradedVersion", () => {
+  it("records the upgraded version so the update is no longer offered", () => {
+    const results = applyUpgradedVersion({
+      results: [claude, codex],
+      provider: "claude",
+      version: "2.1.285",
+    });
+
+    expect(results).toEqual([
+      { ...claude, installedVersion: "2.1.285", updateAvailable: false },
+      codex,
+    ]);
+    expect(
+      selectNewerVersion({ provider: "claude", installedVersion: "2.1.285", results }),
+    ).toBeNull();
+  });
+
+  it("keeps offering the update when the upgrade landed on another version", () => {
+    // 例如 Claude Code 的 stable 通道：claude update 只升到 stable，比 npm latest 旧。
+    const results = applyUpgradedVersion({
+      results: [claude],
+      provider: "claude",
+      version: "2.1.282",
+    });
+
+    expect(selectNewerVersion({ provider: "claude", installedVersion: "2.1.282", results })).toBe(
+      "2.1.285",
+    );
+  });
+
+  it("offers nothing when the new version could not be read", () => {
+    expect(
+      applyUpgradedVersion({ results: [claude], provider: "claude", version: undefined }),
+    ).toEqual([{ provider: "claude", latestVersion: "2.1.285", updateAvailable: false }]);
+  });
+
+  it("leaves the results alone before any check answered", () => {
+    expect(
+      applyUpgradedVersion({ results: undefined, provider: "claude", version: "2.1.285" }),
+    ).toBeUndefined();
   });
 });

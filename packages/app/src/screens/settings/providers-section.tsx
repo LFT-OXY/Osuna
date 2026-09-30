@@ -16,6 +16,8 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { Text as UiText } from "@/components/ui/text";
 import { countSelectableModels, resolveProviderStatusLine } from "@/provider-detail/status";
 import { ProviderIconFrame } from "@/provider-detail/icon-frame";
+import { useProviderUpgrade } from "@/provider-detail/use-upgrade";
+import { ProviderUpgradeButton, ProviderUpgradeFailure } from "@/provider-detail/upgrade-view";
 import { useProviderVersionCheck } from "@/provider-detail/use-version-check";
 import { selectNewerVersion } from "@/provider-detail/version-check";
 import { ProviderCatalogDialog } from "./provider-catalog-dialog";
@@ -59,6 +61,7 @@ function ProviderRow({
   onToggleEnabled,
 }: ProviderRowProps) {
   const { t } = useTranslation();
+  const upgrade = useProviderUpgrade(serverId, def.id);
   const glyph = resolveProviderGlyph({ provider: def.id, serverId, tone: "brand" });
   const modelCount = countSelectableModels(entry.models);
   const activeApiEndpointName = entry.activeApiEndpoint?.name ?? null;
@@ -81,51 +84,67 @@ function ProviderRow({
   const rowStyle = useCallback(
     ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
       settingsStyles.row,
-      !isFirst && settingsStyles.rowBorder,
       hovered && styles.rowHovered,
       pressed && styles.rowPressed,
     ],
-    [isFirst],
+    [],
   );
 
+  // 升级失败的输出挂在这一行下面，分隔线放在行和失败块的外层。
   return (
-    <Pressable
-      style={rowStyle}
-      onPress={handlePress}
-      accessibilityRole="button"
-      accessibilityLabel={t("settings.providers.providerDetails", { name: def.label })}
-      testID={`provider-row-${def.id}`}
-    >
-      {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
-        <>
-          <View style={styles.rowContent}>
-            <ProviderIconFrame glyph={glyph} size="sm" />
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle} numberOfLines={1}>
-                {def.label}
-              </Text>
-              <ProviderStatusLine
-                status={statusLine}
-                version={version}
-                latestVersion={latestVersion}
+    <View style={isFirst ? null : settingsStyles.rowBorder}>
+      <Pressable
+        style={rowStyle}
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={t("settings.providers.providerDetails", { name: def.label })}
+        testID={`provider-row-${def.id}`}
+      >
+        {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
+          <>
+            <View style={styles.rowContent}>
+              <ProviderIconFrame glyph={glyph} size="sm" />
+              <View style={settingsStyles.rowContent}>
+                <Text style={settingsStyles.rowTitle} numberOfLines={1}>
+                  {def.label}
+                </Text>
+                <ProviderStatusLine
+                  status={statusLine}
+                  version={version}
+                  latestVersion={latestVersion}
+                />
+              </View>
+            </View>
+            <View style={styles.trailingControls}>
+              {version && latestVersion ? (
+                <ProviderUpgradeButton
+                  providerLabel={def.label}
+                  installedVersion={version}
+                  latestVersion={latestVersion}
+                  isUpgrading={upgrade.state.status === "upgrading"}
+                  onUpgrade={upgrade.upgrade}
+                />
+              ) : null}
+              <Switch
+                value={enabled}
+                onValueChange={handleToggleValueChange}
+                disabled={isToggling}
+                accessibilityLabel={t("settings.providers.enableProvider", { name: def.label })}
+              />
+              <ThemedChevronRight
+                size={ICON_SIZE.sm}
+                uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
               />
             </View>
-          </View>
-          <View style={styles.trailingControls}>
-            <Switch
-              value={enabled}
-              onValueChange={handleToggleValueChange}
-              disabled={isToggling}
-              accessibilityLabel={t("settings.providers.enableProvider", { name: def.label })}
-            />
-            <ThemedChevronRight
-              size={ICON_SIZE.sm}
-              uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
-            />
-          </View>
-        </>
-      )}
-    </Pressable>
+          </>
+        )}
+      </Pressable>
+      {upgrade.state.status === "failed" ? (
+        <View style={styles.upgradeFailure}>
+          <ProviderUpgradeFailure state={upgrade.state} onDismiss={upgrade.dismiss} />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -314,6 +333,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   toggleError: {
     flex: 1,
+  },
+  upgradeFailure: {
+    paddingHorizontal: theme.spacing[4],
+    paddingBottom: theme.spacing[3],
   },
   trailingControls: {
     flexDirection: "row",

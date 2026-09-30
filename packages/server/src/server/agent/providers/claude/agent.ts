@@ -145,6 +145,7 @@ import {
   type ProviderRuntimeSettings,
   type ResolvedProviderLaunch,
 } from "../../provider-launch-config.js";
+import { resolveProviderCliLaunch, type ProviderCliLaunch } from "../../provider-cli-version.js";
 import { withTimeout } from "../../../../utils/promise-timeout.js";
 import { terminateWithTreeKill } from "../../../../utils/tree-kill.js";
 import { execCommand } from "../../../../utils/spawn.js";
@@ -1584,6 +1585,13 @@ export class ClaudeAgentClient implements AgentClient {
 
   async resolveInstalledVersion(signal?: AbortSignal): Promise<string> {
     return await this.resolveVersion(signal);
+  }
+
+  async resolveCliLaunch(): Promise<ProviderCliLaunch | null> {
+    return await resolveProviderCliLaunch({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: "claude",
+    });
   }
 
   async resolveDefaultModeId({ env: launchEnv }: ResolveAgentDefaultModeInput): Promise<string> {

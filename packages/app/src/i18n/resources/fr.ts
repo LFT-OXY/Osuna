@@ -2916,6 +2916,20 @@ export const fr: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "Mettre à jour",
+        actionLabel: "Mettre à jour {{name}}",
+        errors: {
+          failed: "Échec de la mise à jour",
+          unsupported: "Ce fournisseur ne peut pas être mis à jour automatiquement",
+          installMethodUnknown:
+            "Impossible de déterminer comment cette CLI a été installée, la mise à jour automatique est donc impossible",
+          notInstalled: "La CLI est introuvable sur l'hôte",
+          inProgress: "Une mise à jour est déjà en cours",
+          timeout: "La mise à jour a dépassé le délai et a été arrêtée",
+          hostDisconnected: "L'hôte n'est pas connecté",
+        },
+      },
       models: {
         title: "Modèles",
         one: "1 modèle",

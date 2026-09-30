@@ -105,8 +105,9 @@ import type { UsageService } from "./usage/service.js";
 import type { ApiEndpointService } from "./api-endpoints/service.js";
 import {
   ProviderVersionCheckService,
-  type FetchLatestVersion,
+  type ProviderVersionsConfig,
 } from "./agent/provider-version-check.js";
+import { ProviderUpgradeService } from "./agent/provider-upgrade.js";
 import {
   APPLICATION_SOCKET_LEASE_CHECK_INTERVAL_MS,
   ApplicationSocketLease,
@@ -193,6 +194,37 @@ function resolveTerminalAttentionReason(input: {
 
 function terminalAttentionTitle(reason: TerminalAttentionReason): string {
   return reason === "needs_input" ? "Terminal needs input" : "Terminal finished";
+}
+
+interface ProviderVersionServices {
+  versionCheck: ProviderVersionCheckService;
+  upgrade: ProviderUpgradeService;
+}
+
+// 版本检查与一键升级共用设置页那份快照；升级结束后清掉检查服务里这个提供方的缓存。
+function createProviderVersionServices(input: {
+  providerSnapshotManager: ProviderSnapshotManager;
+  config: ProviderVersionsConfig | undefined;
+  logger: pino.Logger;
+}): ProviderVersionServices {
+  const { providerSnapshotManager, config, logger } = input;
+  const versionCheck = new ProviderVersionCheckService({
+    // 等还在探测的提供方探测完再比版本。
+    listProviders: () => providerSnapshotManager.listProviders({ wait: true }),
+    fetchLatestVersion: config?.fetchLatestVersion,
+    logger: logger.child({ module: "provider-version-check" }),
+  });
+  const upgrade = new ProviderUpgradeService({
+    readProvider: async (provider) =>
+      (await providerSnapshotManager.listProviders({ providers: [provider] }))[0],
+    resolveCliLaunch: (provider) => providerSnapshotManager.resolveCliLaunch(provider),
+    refreshProvider: (provider) =>
+      providerSnapshotManager.refreshSettingsSnapshot({ providers: [provider] }),
+    forgetLatestVersion: (provider) => versionCheck.forget(provider),
+    timeoutMs: config?.upgradeTimeoutMs,
+    logger: logger.child({ module: "provider-upgrade" }),
+  });
+  return { versionCheck, upgrade };
 }
 
 function createFallbackWorkspaceGitSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {
@@ -547,6 +579,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly usageService: UsageService | null;
   private readonly apiEndpointService: ApiEndpointService | undefined;
   private readonly providerVersionCheckService: ProviderVersionCheckService;
+  private readonly providerUpgradeService: ProviderUpgradeService;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
   private readonly github: ForgeService;
@@ -666,8 +699,8 @@ export class VoiceAssistantWebSocketServer {
     workspaceLabelService?: WorkspaceLabelService,
     usageService?: UsageService,
     apiEndpointService?: ApiEndpointService,
-    // 查 CLI 最新版本的联网函数；缺省查 npm registry，测试 daemon 注入桩。
-    fetchLatestVersion?: FetchLatestVersion,
+    // 查 CLI 最新版本的联网函数与升级超时；缺省查 npm registry，测试 daemon 注入桩。
+    providerVersions?: ProviderVersionsConfig,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -729,12 +762,13 @@ export class VoiceAssistantWebSocketServer {
       throw new Error("providerSnapshotManager is required");
     }
     this.providerSnapshotManager = providerSnapshotManager;
-    this.providerVersionCheckService = new ProviderVersionCheckService({
-      // 设置页那份快照，等还在探测的提供方探测完再比版本。
-      listProviders: () => providerSnapshotManager.listProviders({ wait: true }),
-      fetchLatestVersion,
-      logger: this.logger.child({ module: "provider-version-check" }),
+    const providerVersionServices = createProviderVersionServices({
+      providerSnapshotManager,
+      config: providerVersions,
+      logger: this.logger,
     });
+    this.providerVersionCheckService = providerVersionServices.versionCheck;
+    this.providerUpgradeService = providerVersionServices.upgrade;
     this.serverCapabilities = buildServerCapabilities({
       readiness: this.speech?.getReadiness() ?? null,
     });
@@ -1129,6 +1163,7 @@ export class VoiceAssistantWebSocketServer {
     await Promise.all(cleanupPromises);
     this.providerSnapshotManager.destroy();
     this.providerVersionCheckService.dispose();
+    this.providerUpgradeService.dispose();
     this.checkoutDiffManager.dispose();
     await this.workspaceGitService.dispose();
     this.pendingConnections.clear();
@@ -1501,6 +1536,7 @@ export class VoiceAssistantWebSocketServer {
       providerSnapshotManager: this.providerSnapshotManager,
       providerUsageService: this.providerUsageService,
       providerVersionCheckService: this.providerVersionCheckService,
+      providerUpgradeService: this.providerUpgradeService,
       hubExecutionAgents: options.hubExecutionAgents,
       hubRelationships: options.hubRelationships,
       serviceProxy: this.serviceProxy ?? undefined,

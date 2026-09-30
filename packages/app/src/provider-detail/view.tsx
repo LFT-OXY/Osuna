@@ -26,9 +26,10 @@ import {
 } from "./diagnostic";
 import { ProviderDetailSurface } from "./index";
 import { dismissProviderRemovalError, removeProvider, useProviderRemoval } from "./removal";
+import { useProviderUpgrade } from "./use-upgrade";
 import { useProviderVersionCheck } from "./use-version-check";
 import { selectNewerVersion } from "./version-check";
-import { ProviderVersionSection } from "./version-section";
+import { ProviderVersionSection, type ProviderVersionUpgrade } from "./version-section";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
 /*
@@ -126,6 +127,17 @@ export function ProviderDetail({
   const { results: versionCheckResults } = useProviderVersionCheck(serverId, {
     checkOnMount: false,
   });
+  const upgrade = useProviderUpgrade(serverId, provider);
+  // composer 弹窗不显示新版本，也就没有升级。
+  const versionUpgrade = useMemo((): ProviderVersionUpgrade | undefined => {
+    if (!checksVersions) return undefined;
+    return {
+      providerLabel: resolveProviderLabel(provider, entries),
+      state: upgrade.state,
+      onUpgrade: upgrade.upgrade,
+      onDismissFailure: upgrade.dismiss,
+    };
+  }, [checksVersions, entries, provider, upgrade.dismiss, upgrade.state, upgrade.upgrade]);
 
   const stableDiscoveredRef = useRef<ProviderDiscoveredModelsCache | null>(null);
   const currentModels = providerEntry?.models;
@@ -199,10 +211,11 @@ export function ProviderDetail({
         <ProviderVersionSection
           installedVersion={installedVersion}
           latestVersion={latestVersion ?? undefined}
+          upgrade={versionUpgrade}
         />
       );
     },
-    [checksVersions, provider, versionCheckResults],
+    [checksVersions, provider, versionCheckResults, versionUpgrade],
   );
 
   const extendsProvider = config?.providers?.[provider]?.extends;

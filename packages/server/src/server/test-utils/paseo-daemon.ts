@@ -228,10 +228,11 @@ async function prepareTestDaemonConfig(
       homeDir: paseoHomeRoot,
     },
     // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
-    providerVersions: options.providerVersions ?? {
+    providerVersions: {
       fetchLatestVersion: async ({ npmPackage }) => {
         throw new Error(`Test daemon does not query npm for ${npmPackage}`);
       },
+      ...options.providerVersions,
     },
   };
   return { config, paseoHomeRoot, paseoHome, staticDir };

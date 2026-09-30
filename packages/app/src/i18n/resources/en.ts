@@ -2963,6 +2963,20 @@ export const en = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "Upgrade",
+        actionLabel: "Upgrade {{name}}",
+        errors: {
+          failed: "Upgrade failed",
+          unsupported: "This provider can't be upgraded automatically",
+          installMethodUnknown:
+            "Couldn't tell how this CLI was installed, so it can't be upgraded automatically",
+          notInstalled: "The CLI wasn't found on the host",
+          inProgress: "An upgrade is already running",
+          timeout: "The upgrade timed out and was stopped",
+          hostDisconnected: "Host is not connected",
+        },
+      },
       models: {
         title: "Models",
         one: "1 model",

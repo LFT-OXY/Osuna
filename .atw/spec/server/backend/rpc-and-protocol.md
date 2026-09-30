@@ -1012,6 +1012,71 @@ this.providerVersionCheckService = new ProviderVersionCheckService({
 });
 ```
 
+## Scenario: a request that runs a command on the host
+
+Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade subcommand (`claude update`, `opencode upgrade`, …).
+
+### 1. Scope / Trigger
+
+- An RPC that executes a program on the daemon host, can run for minutes, and must report the program's raw output. Permission is `daemon.manage` both ways (same class as plugin install/update).
+
+### 2. Signatures
+
+- Protocol: `ProviderUpgradeRequestSchema { requestId, provider }`; response payload `ProviderUpgradeResponsePayload { requestId, provider, ok, version?, output?, errorCode?: string, error? }`; known codes `PROVIDER_UPGRADE_ERROR_CODES` (`unsupported | install_method_unknown | not_installed | in_progress | command_failed | timeout`). `errorCode` is a plain string on the wire so a newer daemon's code never fails an older client's parse.
+- Pure: `hasProviderUpgradeCommand(provider)`, `resolveProviderUpgradeCommand({ provider, launch })`, `clipUpgradeOutput(output, limit = 32_000)` (`agent/provider-upgrade-command.ts`).
+- Launch: `AgentClient.resolveCliLaunch?(): Promise<ProviderCliLaunch | null>` (`{ executable, args, source, env }`, built on `resolveProviderCliLaunch` in `agent/provider-cli-version.ts`), forwarded in `wrapClientProvider`, reached through `ProviderSnapshotManager.resolveCliLaunch(provider)` (null when disabled).
+- Service: `ProviderUpgradeService.upgrade(provider)` returns `Omit<ProviderUpgradeResponsePayload, "requestId">` (`agent/provider-upgrade.ts`). `createProviderVersionServices` in `websocket-server.ts` builds it next to the version check; `PaseoDaemonConfig.providerVersions.upgradeTimeoutMs` (default 10 min) is the test seam.
+- Client: `DaemonClient.upgradeProvider({ provider })`, request timeout 20 min.
+
+### 3. Contracts
+
+- Order of refusals, none of which runs anything: non-builtin entry → `unsupported`; no row in the subcommand table → `unsupported` (checked before the executable is looked up, so a disabled Codex still answers `unsupported`); no executable → `not_installed`.
+- One run per provider: the provider id is added to the running set before the first `await`; a second request gets `in_progress` with no `output`.
+- The executable is the provider's resolved one with its env. Replace-mode argv stays in front of the subcommand; append-mode args are dropped (a CLI reads a subcommand after session flags as a prompt).
+- stdin is ignored; stdout and stderr are appended in arrival order and clipped to the tail while streaming.
+- The run ends on the child's `exit`, not on `close`: a self-updater can leave a background process that inherits stdout, and `close` then never comes. After `exit` wait at most 2 s for `close` (listen for it before awaiting `exit`, it can fire synchronously right after), then destroy both pipes.
+- Timeout and daemon shutdown kill the process tree (`terminateWithTreeKill`, 3 s grace).
+- Whenever the command ran, success or not: forget the provider's cached latest version, `refreshSettingsSnapshot({ providers: [provider] })`, then read the entry's `version` into the response. The snapshot push therefore reaches the client before the response.
+
+### 4. Validation & Error Matrix
+
+- Exit 0 → `ok: true`, `output`, `version` if readable.
+- Non-zero exit → `command_failed`, `error: "<command line> exited with code N"`, `output`.
+- Spawn failure → `command_failed`, `error` is the spawn error, `output` (possibly empty).
+- Past the timeout → `timeout`, partial `output`.
+- Snapshot refresh throws → logged at `warn`, result unchanged.
+- The service itself throws → `rpc_error` code `provider_upgrade_failed`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: installed `2.1.280`, `claude update` writes `2.1.285` → `{ ok: true, version: "2.1.285" }`, the next check re-queries npm without `force`.
+- Base: the CLI prints `EACCES` to stderr and exits 1 → `command_failed` with both streams in order and `version` still `2.1.280`.
+- Bad: waiting on `close` — `claude update` exits but its background helper holds the pipe, the request never answers, and every later upgrade of that provider gets `in_progress` until the daemon restarts.
+
+### 6. Tests Required
+
+- Unit `provider-upgrade-command.test.ts`: each provider's subcommand; replace argv kept; append args dropped; `codex` / custom / ACP ids unsupported; tail clipping.
+- Daemon e2e `daemon-e2e/provider-upgrade.e2e.test.ts` with a fake `sh` CLI (version file + `update` branch): success updates the snapshot `version` and the exact argv; cached latest forgotten; raw output on failure; `in_progress` while a run holds a file lock; timeout with `upgradeTimeoutMs: 1000` keeps partial output; a background `sleep 30 &` does not hold the answer; codex and custom providers `unsupported`.
+- `provider-registry.test.ts`: a wrapped profile still exposes `resolveCliLaunch`.
+- Protocol `messages.test.ts`: request for an unknown provider id; response with an unknown `errorCode`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Hangs forever when a grandchild inherits stdout.
+const exitCode = await new Promise<number | null>((resolve) => child.once("close", resolve));
+```
+
+#### Correct
+
+```ts
+const closed = once(child, "close").then(() => undefined, () => undefined);
+[exitCode] = (await once(child, "exit")) as [number | null];
+await drainOutput({ child, closed }); // race with a 2 s cap, then destroy the pipes
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

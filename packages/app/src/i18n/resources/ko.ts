@@ -2858,6 +2858,19 @@ export const ko: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "업그레이드",
+        actionLabel: "{{name}} 업그레이드",
+        errors: {
+          failed: "업그레이드하지 못했습니다",
+          unsupported: "이 프로바이더는 자동으로 업그레이드할 수 없습니다",
+          installMethodUnknown: "이 CLI의 설치 방법을 알 수 없어 자동으로 업그레이드할 수 없습니다",
+          notInstalled: "호스트에서 CLI를 찾을 수 없습니다",
+          inProgress: "이미 업그레이드가 진행 중입니다",
+          timeout: "업그레이드 시간이 초과되어 중지했습니다",
+          hostDisconnected: "호스트가 연결되어 있지 않습니다",
+        },
+      },
       models: {
         title: "모델",
         one: "모델 1개",

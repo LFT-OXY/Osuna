@@ -2869,6 +2869,20 @@ export const ja: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "アップグレード",
+        actionLabel: "{{name}} をアップグレード",
+        errors: {
+          failed: "アップグレードに失敗しました",
+          unsupported: "このプロバイダーは自動でアップグレードできません",
+          installMethodUnknown:
+            "この CLI のインストール方法を判別できないため、自動でアップグレードできません",
+          notInstalled: "ホスト上に CLI が見つかりません",
+          inProgress: "アップグレードはすでに実行中です",
+          timeout: "アップグレードがタイムアウトしたため停止しました",
+          hostDisconnected: "ホストが接続されていません",
+        },
+      },
       models: {
         title: "モデル",
         one: "1つのモデル",

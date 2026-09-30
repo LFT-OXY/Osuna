@@ -2907,6 +2907,20 @@ export const es: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "Actualizar",
+        actionLabel: "Actualizar {{name}}",
+        errors: {
+          failed: "No se pudo actualizar",
+          unsupported: "Este proveedor no se puede actualizar automáticamente",
+          installMethodUnknown:
+            "No se pudo determinar cómo se instaló esta CLI, así que no se puede actualizar automáticamente",
+          notInstalled: "No se encontró la CLI en el host",
+          inProgress: "Ya hay una actualización en curso",
+          timeout: "La actualización superó el tiempo límite y se detuvo",
+          hostDisconnected: "El host no está conectado",
+        },
+      },
       models: {
         title: "Modelos",
         one: "1 modelo",

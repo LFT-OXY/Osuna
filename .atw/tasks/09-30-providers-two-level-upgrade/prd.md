@@ -105,7 +105,7 @@
 - `ProviderSnapshotEntry` 新增可选字段 `version: string`，表示 daemon 探测到的已装 CLI 版本（纯版本号，例如 `2.1.285`）。只有内置提供方会填写。旧客户端会忽略它。
 - 新增两个 RPC，命名遵循 `docs/rpc-namespacing.md`，和现有的 `provider.api_endpoint.*` 放在同一个 `provider.*` 命名空间下：
   - `provider.version.check.request` / `.response`：请求可选带 `providers`（只查这几个）和 `force`（跳过缓存）。响应是一个数组，每项为 `{ provider, installedVersion?, latestVersion?, updateAvailable, error? }`。
-  - `provider.upgrade.request` / `.response`：请求带 `provider`。响应为 `{ provider, ok, version?, output?, errorCode?, error? }`，其中 `output` 是命令输出的原文，失败时一定会带上。`errorCode` 至少要区分这几种：不支持、判断不出安装方式、已有升级在进行、命令失败、超时。
+  - `provider.upgrade.request` / `.response`：请求带 `provider`。响应为 `{ provider, ok, version?, output?, errorCode?, error? }`，其中 `output` 是命令输出的原文，失败时一定会带上。`errorCode` 至少要区分这几种：不支持、判断不出安装方式、已有升级在进行、命令失败、超时。实现另加了"找不到可执行文件"（`not_installed`）；线上是普通字符串，已知取值在 `PROVIDER_UPGRADE_ERROR_CODES`，旧 App 遇到新码按通用失败显示。
 - `server_info.features` 新增一个可选开关 `providerVersions`，同时覆盖快照里的 `version` 字段和上面两个 RPC。App 只在这个开关打开时显示版本和升级功能，门控处加 `COMPAT(providerVersions)` 标签。
 - 权限：`provider.version.check.request` 需要 `daemon.read`；`provider.upgrade.request` 需要 `daemon.manage`，因为它会在主机上执行命令，性质和 plugin 安装、更新一样。
 
@@ -137,13 +137,17 @@
   - 联网函数通过依赖注入传入，测试时替换成桩。
 - **升级服务**：新建一个模块，负责选定升级命令、执行命令、执行后重新探测。
   - 升级命令：claude 用 `update`，copilot 用 `update`，opencode 用 `upgrade`，pi 用 `update`，omp 用 `update`，都用这个提供方实际使用的可执行文件来执行。
+    - 可执行文件由各家 client 的 `resolveCliLaunch` 给出。config 用 replace 模式换掉的命令，前面的 argv 保留；append 模式追加的是会话启动参数，升级时丢掉，否则 CLI 会把子命令当成提示词。
+    - 没有升级命令的提供方在找可执行文件之前就返回"不支持"（06 里的 codex，停用时也一样）。
   - Codex 按可执行文件的真实路径判断安装方式：
     - 路径在官方独立安装目录下：重跑官方安装脚本，并设 `CODEX_NON_INTERACTIVE=1`；Windows 用官方的 PowerShell 安装脚本
     - 路径在 Homebrew 前缀下：`brew upgrade --cask codex`
     - 路径在 npm 全局目录下：`npm install -g @openai/codex@latest`
     - 其他情况（包括 Microsoft Store 版）：返回"判断不出安装方式"
   - 同一个提供方同时只允许一次升级，第二次请求直接返回"已有升级在进行"。
-  - 超时 10 分钟。stdout 和 stderr 合在一起保留，截断到一个合理的长度。
+  - 超时 10 分钟，超时或 daemon 关闭时终止整棵进程树。stdout 和 stderr 按到达顺序合在一起，只保留结尾 32000 个字符；stdin 接空。
+  - 以 CLI 进程退出为准，不等管道关闭：自更新留下的后台进程会继承 stdout，管道可能一直不关。退出后最多再等 2 秒收尾输出。
+  - App 的请求超时 20 分钟，覆盖命令超时加两段快照刷新期限。
   - 升级结束后，不论成功还是失败，都刷新这个提供方的快照（会重新取 `version`），并清掉这个提供方的最新版本缓存。
   - 正在跑的 agent 会话不受影响，不做拦截。
   - 升级命令表和版本解析都是纯函数，单独放，方便以后新增提供方。
@@ -162,7 +166,7 @@
   - 搜索框同时过滤两组。
   - 弹窗标题改为"添加提供方"。
 - **版本数据**：Providers 页（列表或详情地址）每次挂载都发一次 `provider.version.check.request`，不带 `force`；1 小时内不重复联网靠 daemon 的缓存。详情页的刷新（页头或正文）先刷新快照，再带 `force` 重查这一个提供方。列表页没有刷新按钮，不新增（2026-10-01 用户确认）。结果按提供方存在 App 的查询缓存里，列表和详情页共用；检查结果里的已装版本和快照不一致时视为过期，不显示新版本。composer 弹窗的详情不发检查、刷新时不重查，也不显示新版本。连着旧版本 daemon（`providerVersions` 没打开）时不发请求。
-- **升级动作**：一个 hook 负责发 `provider.upgrade.request`，并记录"正在升级的提供方"和"每个提供方的失败输出"，列表行和详情页的版本一节共用。升级成功后，用返回的版本更新本地显示；快照随后也会推来新的 `version`。
+- **升级动作**：一个 hook 负责发 `provider.upgrade.request`，并记录"正在升级的提供方"和"每个提供方的失败输出"，列表行和详情页的版本一节共用。升级成功后，用返回的版本改写本地的检查结果（`applyUpgradedVersion`，不再联网）：升到最新版本时按钮消失，升到别的版本（例如 stable 通道）时按钮保留；新的 `version` 随快照推送在响应之前到达。失败块显示按 `errorCode` 翻译的原因，没有对应文案时附上 `error` 原文；有 `output` 时用等宽、可选中的代码面板显示，可以关掉。
 - **详情页**：`ProviderDetailSurface` 的版块顺序改为：删除失败 → 启动错误 → 继承接口提示 → **版本**（新增）→ 安装指引（仅未安装时）→ 第三方接口 → Models → 诊断。版本一节只在内置提供方已安装、并且 daemon 支持时出现。它和安装指引一样，由调用方通过 render 插槽注入。组件顶部的顺序注释同步更新。
 - **i18n**：新增的文案（"未启用""已停用""未安装""升级""v{from} → v{to}"、各种升级错误、空列表提示、"添加提供方"等）9 个语言文件都要补上，zh-CN 用 glossary 里定下的词。
 

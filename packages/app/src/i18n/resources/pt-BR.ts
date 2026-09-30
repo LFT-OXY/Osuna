@@ -2888,6 +2888,20 @@ export const ptBR: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "Atualizar",
+        actionLabel: "Atualizar {{name}}",
+        errors: {
+          failed: "Falha ao atualizar",
+          unsupported: "Este provedor não pode ser atualizado automaticamente",
+          installMethodUnknown:
+            "Não foi possível identificar como esta CLI foi instalada, então ela não pode ser atualizada automaticamente",
+          notInstalled: "A CLI não foi encontrada no host",
+          inProgress: "Já há uma atualização em andamento",
+          timeout: "A atualização excedeu o tempo limite e foi interrompida",
+          hostDisconnected: "O host não está conectado",
+        },
+      },
       models: {
         title: "Modelos",
         one: "1 modelo",

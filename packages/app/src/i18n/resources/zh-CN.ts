@@ -2805,6 +2805,19 @@ export const zhCN: TranslationResources = {
         value: "v{{version}}",
         update: "v{{from}} → v{{to}}",
       },
+      upgrade: {
+        action: "升级",
+        actionLabel: "升级 {{name}}",
+        errors: {
+          failed: "升级失败",
+          unsupported: "这个提供方不支持自动升级",
+          installMethodUnknown: "判断不出这个 CLI 的安装方式，无法自动升级",
+          notInstalled: "主机上找不到这个 CLI",
+          inProgress: "已有升级在进行",
+          timeout: "升级超时，已终止",
+          hostDisconnected: "主机未连接",
+        },
+      },
       models: {
         title: "Models",
         one: "1 个 Model",
