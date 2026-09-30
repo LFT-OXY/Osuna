@@ -1,0 +1,682 @@
+[
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     12,
+     0,
+     295,
+     36
+    ],
+    "borderRadius": "8px",
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     12,
+     0,
+     295,
+     36
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     319,
+     36
+    ],
+    "paddingRight": "12px",
+    "paddingLeft": "12px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     20,
+     9,
+     14,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     20,
+     11,
+     14,
+     14
+    ]
+   },
+   {
+    "t": "path",
+    "role": null,
+    "box": [
+     23,
+     14,
+     4,
+     8
+    ]
+   }
+  ]
+ },
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     8,
+     72,
+     303,
+     32
+    ],
+    "borderRadius": "8px",
+    "paddingTop": "6px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     8,
+     72,
+     303,
+     32
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     36,
+     319,
+     220
+    ],
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "4px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     16,
+     79,
+     16,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     16,
+     80,
+     16,
+     16
+    ]
+   },
+   {
+    "t": "path",
+    "role": null,
+    "box": [
+     18,
+     81,
+     12,
+     13
+    ]
+   }
+  ]
+ },
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     8,
+     108,
+     303,
+     32
+    ],
+    "backgroundColor": "rgb(234, 234, 234)",
+    "borderRadius": "8px",
+    "paddingTop": "6px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px",
+    "boxShadow": "rgb(218, 218, 218) 0px 0px 0px 1px inset"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     8,
+     108,
+     303,
+     32
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     36,
+     319,
+     220
+    ],
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "4px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     16,
+     115,
+     16,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     16,
+     116,
+     16,
+     16
+    ]
+   },
+   {
+    "t": "path",
+    "role": null,
+    "box": [
+     17,
+     117,
+     13,
+     13
+    ]
+   }
+  ]
+ },
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     8,
+     144,
+     303,
+     32
+    ],
+    "borderRadius": "8px",
+    "paddingTop": "6px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     8,
+     144,
+     303,
+     32
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     36,
+     319,
+     220
+    ],
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "4px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     16,
+     151,
+     16,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     16,
+     152,
+     16,
+     16
+    ]
+   },
+   {
+    "t": "path",
+    "role": null,
+    "box": [
+     28,
+     157,
+     3,
+     5
+    ]
+   }
+  ]
+ },
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     8,
+     180,
+     303,
+     32
+    ],
+    "borderRadius": "8px",
+    "paddingTop": "6px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     8,
+     180,
+     303,
+     32
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     36,
+     319,
+     220
+    ],
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "4px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     16,
+     187,
+     16,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     16,
+     188,
+     16,
+     16
+    ]
+   },
+   {
+    "t": "path",
+    "role": null,
+    "box": [
+     23,
+     189,
+     0,
+     1
+    ]
+   }
+  ]
+ },
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     8,
+     216,
+     303,
+     32
+    ],
+    "borderRadius": "8px",
+    "paddingTop": "6px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     8,
+     216,
+     303,
+     32
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     36,
+     319,
+     220
+    ],
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "4px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     16,
+     223,
+     16,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     16,
+     224,
+     16,
+     16
+    ]
+   },
+   {
+    "t": "circle",
+    "role": null,
+    "box": [
+     17,
+     225,
+     13,
+     13
+    ]
+   }
+  ]
+ },
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     8,
+     328,
+     303,
+     32
+    ],
+    "borderRadius": "8px",
+    "paddingTop": "6px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     8,
+     328,
+     303,
+     32
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     256,
+     319,
+     472
+    ],
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "4px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     16,
+     335,
+     16,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     16,
+     336,
+     16,
+     16
+    ]
+   },
+   {
+    "t": "rect",
+    "role": null,
+    "box": [
+     17,
+     337,
+     13,
+     5
+    ]
+   }
+  ]
+ },
+ {
+  "chain": [
+   {
+    "t": "button",
+    "role": "button",
+    "box": [
+     8,
+     364,
+     303,
+     32
+    ],
+    "borderRadius": "8px",
+    "paddingTop": "6px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "8px"
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     8,
+     364,
+     303,
+     32
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     256,
+     319,
+     472
+    ],
+    "paddingTop": "8px",
+    "paddingRight": "8px",
+    "paddingLeft": "8px",
+    "gap": "4px"
+   }
+  ],
+  "inner": [
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     16,
+     371,
+     16,
+     18
+    ]
+   },
+   {
+    "t": "div",
+    "role": null,
+    "box": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "t": "svg",
+    "role": null,
+    "box": [
+     16,
+     372,
+     16,
+     16
+    ]
+   },
+   {
+    "t": "path",
+    "role": null,
+    "box": [
+     17,
+     374,
+     13,
+     11
+    ]
+   }
+  ]
+ }
+]

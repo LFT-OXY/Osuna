@@ -29,7 +29,7 @@
 - **数据不同。** 本机 Claude 没配第三方接口，官方行显示「使用中」、列表状态行是「15 个 Model」；原型是 OpenRouter 启用中。本机 Codex 启用了接口 chinhae，且 `~/.codex/config.toml` 被外部改过，所以第三方接口节顶部多一张「已被外部修改」卡片，这是上一任务的既有行为。列表里多了两个 dev 构建才有的 Mock 提供方。本机 OpenCode 已停用，所以没有截到错误卡（D4），错误卡由 `provider-detail/index.test.tsx` 覆盖。
 - **composer 弹窗里是 Codex。** 齿轮打开的是当前 Agent 的提供方，本机当前 Agent 用的是 Codex；原型画的是 Claude。
 - **没有红绿灯。** CDP 截图只含网页内容，不含 macOS 原生窗口按钮；侧栏顶部留白与原型相同。
-- **开关与主按钮的颜色。** 真实截图里开关和「添加」是偏紫的蓝（像素约 `#454dc3`），原型是 `#1b4ed8`。开关读的是主题 `accent`（`components/ui/switch.tsx:71`），浅色主题源码里就是 `#1b4ed8`（`styles/theme.ts:556`）；做原型时从 Web（Playwright 无头 Chromium）取的基准截图 `research/screens/01-providers-page-light.png` 里，同一个开关是 `(30, 80, 216)`，与源码一致；只有 Electron 的 CDP 截图偏紫，工作区里的分支徽标也一样偏。偏色出在 Electron 的渲染或截图环节，不是页面取值；具体是色彩空间还是别的原因没有继续查。本任务没有改颜色相关的代码。
+- **开关与主按钮的颜色。** 真实截图里开关和「添加」是偏紫的蓝（像素约 `#454dc3`），原型是 `#1b4ed8`。开关读的是主题 `accent`（`components/ui/switch.tsx:71`），浅色主题源码里就是 `#1b4ed8`（`styles/theme.ts:556`）；做原型时从 Web（Playwright 无头 Chromium）取的基准截图 `research/screens/01-providers-page-light.jpg` 里，同一个开关是 `(30, 80, 216)`（转 jpg 前在原 PNG 上取的值），与源码一致；只有 Electron 的 CDP 截图偏紫，工作区里的分支徽标也一样偏。偏色出在 Electron 的渲染或截图环节，不是页面取值；具体是色彩空间还是别的原因没有继续查。本任务没有改颜色相关的代码。
 - **滚动条占宽。** 内容超出时 Electron 显示常驻滚动条：宽屏两列整体左移约 5px、窄窗和弹窗里的卡片右缘内缩约 11px。原型的画面内容没有溢出，也就没有滚动条。
 - **弹窗头部高 4px 左右。** composer 弹窗和目录弹窗的头部比原型高约 4px。两边的上下内边距都是 16，差在头部行内元素的高度；头部是全局 `SheetHeader`，本任务没有改它。
 - **目录弹窗更高。** 真实目录有几十项，弹窗撑到最大高度；原型只画了 6 项。「安装说明」链接在原型里带下划线，真实行里没有，目录行沿用现有组件，不在本任务范围。
