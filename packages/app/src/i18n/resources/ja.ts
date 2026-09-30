@@ -2857,6 +2857,21 @@ export const ja: TranslationResources = {
           "API エンドポイントを使うには Codex を 0.118.0 以降に更新してください。",
         configUnparsable:
           "{{provider}} の設定ファイルを解析できなかったため、何も変更していません。",
+        configConflict:
+          "書き込み中に {{provider}} の設定ファイルが変更され続けたため、何も変更していません。もう一度お試しください。",
+        health: {
+          modifiedExternally: "{{provider}} の設定ファイルが Osuna の外で変更されました",
+          unparsable:
+            "{{provider}} の設定ファイルを解析できません。修正されるまで Osuna は書き込みません。",
+          codexProfileOverride:
+            "Codex のプロファイルが API エンドポイントを上書きしているため、切り替えが反映されない可能性があります。そのプロファイルから model_provider と model を削除するか、選択をやめてください。",
+          officialTarget: "{{provider}} 自身の設定は {{url}} を指しています",
+          reapply: "再適用",
+          switchToOfficial: "公式に戻す",
+          reapplyTitle: "{{name}} を {{provider}} に再適用しますか？",
+          reapplyMessage:
+            "{{provider}} 自身の設定ファイルにエンドポイントをもう一度書き込み、Osuna が管理するキーへの外部の変更を置き換えます。実行中のセッションとターミナルの {{provider}} も切り替わります。",
+        },
         form: {
           createTitle: "新しい API エンドポイント",
           editTitle: "API エンドポイントを編集",

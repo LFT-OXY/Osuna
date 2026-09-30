@@ -4,6 +4,7 @@ import { ProviderOverridesSchema } from "../agent/provider-launch-config.js";
 import {
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
+  inspectCodexConfig,
   removeCodexProviderTable,
   replaceCodexProviderTable,
   restoreCodexOfficial,
@@ -435,3 +436,118 @@ function deepMerge(
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+describe("inspectCodexConfig", () => {
+  function inspect(
+    text: string | null,
+    active: { takeover: CodexConfigTakeover; table: CodexProviderTable } | null,
+  ) {
+    const result = inspectCodexConfig({
+      text,
+      takeover: active?.takeover ?? null,
+      table: active?.table ?? null,
+    });
+    if (result.kind !== "parsed") throw new Error(`Expected a parsed file, got ${result.kind}`);
+    return result;
+  }
+
+  it("finds nothing modified right after the switch", () => {
+    const { text, takeover } = apply(USER_CONFIG);
+    expect(inspect(text, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([]);
+  });
+
+  it("names the owned keys and the dedicated table when they no longer hold what was written", () => {
+    const { text, takeover } = apply(USER_CONFIG);
+    const edited = text
+      .replace(`model = "relay/gpt"`, `model = "gpt-5"`)
+      .replace(`base_url = "https://relay.example/v1"`, `base_url = "https://other.example/v1"`);
+    expect(inspect(edited, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
+      "model",
+      `model_providers.${ID}`,
+    ]);
+
+    const tableEdits: Array<[string, string]> = [
+      [`wire_api = "responses"`, `wire_api = "chat"`],
+      ["timeout_ms = 5000", "timeout_ms = 9000"],
+      [`name = "Relay"`, `name = "Renamed"`],
+    ];
+    for (const [written, replacement] of tableEdits) {
+      const tampered = text.replace(written, replacement);
+      expect(inspect(tampered, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
+        `model_providers.${ID}`,
+      ]);
+    }
+
+    const withoutProvider = text.replace(`model_provider = "${ID}"\n`, "");
+    expect(inspect(withoutProvider, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
+      "model_provider",
+    ]);
+  });
+
+  it("does not count edits to keys it doesn't own", () => {
+    const { text, takeover } = apply(USER_CONFIG);
+    const edited = text
+      .replace(`approval_policy = "on-request"`, `approval_policy = "never"`)
+      .replace(`base_url = "https://mine.example/v1"`, `base_url = "https://mine2.example/v1"`);
+    expect(inspect(edited, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([]);
+  });
+
+  it("counts everything it owns as modified when the file is gone", () => {
+    const { takeover } = apply(USER_CONFIG);
+    expect(inspect(null, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
+      "model_provider",
+      "model",
+      `model_providers.${ID}`,
+    ]);
+  });
+
+  it("names the selected legacy profile that overrides the owned top-level keys", () => {
+    const config = `profile = "work"
+model = "gpt-5"
+
+[profiles.work]
+model_provider = "azure"
+model = "gpt-5-azure"
+approval_policy = "never"
+
+[profiles.home]
+model = "o3"
+`;
+    expect(inspect(config, null).profileOverride).toEqual({
+      profile: "work",
+      keys: ["model_provider", "model"],
+    });
+    expect(
+      inspect(config.replace(`profile = "work"`, `profile = "none"`), null).profileOverride,
+    ).toBeNull();
+    expect(
+      inspect(config.replace(`profile = "work"`, `profile = "home"`), null).profileOverride,
+    ).toEqual({ profile: "home", keys: ["model"] });
+    expect(inspect(USER_CONFIG, null).profileOverride).toBeNull();
+  });
+
+  it("reports where the effective provider points", () => {
+    expect(inspect(USER_CONFIG, null).baseUrl).toBe("https://mine.example/v1");
+    expect(inspect(`openai_base_url = "https://proxy.example/v1"\n`, null).baseUrl).toBe(
+      "https://proxy.example/v1",
+    );
+    expect(inspect(`model = "gpt-5"\n`, null).baseUrl).toBeNull();
+    expect(inspect(`model_provider = "ollama"\n`, null).baseUrl).toBeNull();
+    expect(inspect(null, null).baseUrl).toBeNull();
+    const viaProfile = `${USER_CONFIG.replace("# my codex config", 'profile = "p"')}
+[profiles.p]
+model_provider = "other"
+
+[model_providers.other]
+name = "Other"
+base_url = "https://other.example/v1"
+`;
+    expect(inspect(viaProfile, null).baseUrl).toBe("https://other.example/v1");
+  });
+
+  it("reports a file that does not parse", () => {
+    expect(inspectCodexConfig({ text: "model = ", takeover: null, table: null }).kind).toBe(
+      "unparsable",
+    );
+  });
+});

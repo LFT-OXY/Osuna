@@ -2894,6 +2894,22 @@ export const es: TranslationResources = {
           "Actualiza Codex a la versión 0.118.0 o posterior para usar un endpoint de API.",
         configUnparsable:
           "No se pudo analizar el archivo de configuración de {{provider}}, así que no se cambió nada.",
+        configConflict:
+          "El archivo de configuración de {{provider}} siguió cambiando mientras Osuna lo escribía, así que no se cambió nada. Vuelve a intentarlo.",
+        health: {
+          modifiedExternally:
+            "El archivo de configuración de {{provider}} se cambió fuera de Osuna",
+          unparsable:
+            "No se puede analizar el archivo de configuración de {{provider}}. Osuna no escribirá en él hasta que se corrija.",
+          codexProfileOverride:
+            "Un perfil de Codex anula el endpoint de API, así que el cambio podría no aplicarse. Quita model_provider y model de ese perfil o deja de seleccionarlo.",
+          officialTarget: "La configuración propia de {{provider}} apunta a {{url}}",
+          reapply: "Volver a aplicar",
+          switchToOfficial: "Volver a Oficial",
+          reapplyTitle: "¿Volver a aplicar {{name}} en {{provider}}?",
+          reapplyMessage:
+            "Esto vuelve a escribir el endpoint en el archivo de configuración de {{provider}} y reemplaza los cambios externos en las claves que gestiona Osuna. Las sesiones en curso y {{provider}} en tu terminal también cambian.",
+        },
         form: {
           createTitle: "Nuevo endpoint de API",
           editTitle: "Editar endpoint de API",

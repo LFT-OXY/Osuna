@@ -78,6 +78,11 @@ export class ApiEndpointStore {
     return this.writeBackup({ bytes, at, prefix: "codex-config", extension: "toml" });
   }
 
+  /** 收回一份没能记进接管记录的副本。 */
+  discardBackup(backupPath: string): void {
+    rmSync(backupPath, { force: true });
+  }
+
   listEndpoints(provider: ApiEndpointProvider): StoredApiEndpoint[] {
     return this.readEndpoints().endpoints.filter((endpoint) => endpoint.provider === provider);
   }

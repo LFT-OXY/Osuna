@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyClaudeApiEndpoint,
   buildClaudeEndpointEnv,
+  inspectClaudeSettings,
   restoreClaudeOfficial,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
@@ -353,5 +354,77 @@ describe("restoreClaudeOfficial", () => {
   it("refuses to restore into a file that no longer parses", () => {
     const { takeover } = apply(USER_SETTINGS);
     expect(restoreClaudeOfficial({ text: "{ nope", takeover }).kind).toBe("unparsable");
+  });
+});
+
+describe("inspectClaudeSettings", () => {
+  function inspect(text: string | null, takeover: ClaudeSettingsTakeover | null) {
+    const result = inspectClaudeSettings({ text, takeover });
+    if (result.kind !== "parsed") throw new Error(`Expected a parsed file, got ${result.kind}`);
+    return result;
+  }
+
+  it("finds nothing modified right after the switch", () => {
+    const { text, takeover } = apply(USER_SETTINGS);
+    expect(inspect(text, takeover).modifiedKeys).toEqual([]);
+  });
+
+  it("names the owned keys that no longer hold what was written", () => {
+    const { text, takeover } = apply(USER_SETTINGS);
+    const edited = text
+      .replace('"https://relay.example/api"', '"https://other-tool.example"')
+      .replace('"ANTHROPIC_MODEL": "relay/sonnet"', '"X": "1"');
+    expect(inspect(edited, takeover).modifiedKeys).toEqual([
+      "env.ANTHROPIC_BASE_URL",
+      "env.ANTHROPIC_MODEL",
+    ]);
+  });
+
+  it("does not count edits to keys it doesn't own", () => {
+    const { text, takeover } = apply(USER_SETTINGS);
+    const edited = text
+      .replace(`"theme": "dark"`, `"theme": "light"`)
+      .replace(`"DISABLE_TELEMETRY": "1"`, `"DISABLE_TELEMETRY": "0"`)
+      .replace(`"Read(./.env)",`, "");
+    expect(inspect(edited, takeover).modifiedKeys).toEqual([]);
+  });
+
+  it("counts a removed WebSearch deny entry only when it added that entry", () => {
+    const added = apply(USER_SETTINGS);
+    const withoutRule = added.text.replace(`,\n      "WebSearch"`, "");
+    expect(inspect(withoutRule, added.takeover).modifiedKeys).toEqual([
+      'permissions.deny "WebSearch"',
+    ]);
+
+    const userOwned = apply('{ "permissions": { "deny": ["WebSearch"] } }\n');
+    const removed = userOwned.text.replace(`"WebSearch"`, `"Read(./x)"`);
+    expect(inspect(removed, userOwned.takeover).modifiedKeys).toEqual([]);
+  });
+
+  it("counts every owned key as modified when the file is gone", () => {
+    const { takeover } = apply(USER_SETTINGS);
+    expect(inspect(null, takeover).modifiedKeys).toEqual([
+      "env.ANTHROPIC_BASE_URL",
+      "env.ANTHROPIC_AUTH_TOKEN",
+      "env.ANTHROPIC_API_KEY",
+      "env.ANTHROPIC_MODEL",
+      'permissions.deny "WebSearch"',
+    ]);
+  });
+
+  it("reports the base URL the file itself points at", () => {
+    const handWritten = '{ "env": { "ANTHROPIC_BASE_URL": "https://mine.example" } }';
+    expect(inspect(handWritten, null)).toEqual({
+      kind: "parsed",
+      modifiedKeys: [],
+      baseUrl: "https://mine.example",
+    });
+    expect(inspect(USER_SETTINGS, null).baseUrl).toBeNull();
+    expect(inspect('{ "env": { "ANTHROPIC_BASE_URL": "  " } }', null).baseUrl).toBeNull();
+    expect(inspect(null, null).baseUrl).toBeNull();
+  });
+
+  it("reports a file that does not parse", () => {
+    expect(inspectClaudeSettings({ text: "{ nope", takeover: null }).kind).toBe("unparsable");
   });
 });

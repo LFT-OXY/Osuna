@@ -452,7 +452,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 
 - `ProviderSnapshotManager.refreshProvider` still runs availability and `fetchCatalog` (modes, default mode come from there), then replaces `catalog.models` wholesale with the override, passes each row through `client.resolveConfiguredModel` like config.json profile models, and sets `isModelListAuthoritative: true`. Nothing the provider appended survives — Claude's `settings.json` rows (`ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_*_MODEL`) would otherwise duplicate the endpoint's models.
 - `AgentManager.resolveDefaultModelId` reads the override before `client.fetchCatalog`. It bypasses the snapshot, so without this a CLI / MCP / schedule create with no model gets the official default.
-- The override reads the store on every call; there is no cache to invalidate. The refresh only republishes. Refresh after: activate, back to Official, save of the active endpoint, delete of the active endpoint (ticket 06 adds external-change detection).
+- The override reads the store on every call; there is no cache to invalidate. The refresh only republishes. Refresh after: activate, back to Official, save of the active endpoint, delete of the active endpoint. Detecting an external change does not refresh: the override reads the store, which an outside edit to the CLI file does not touch, so a refresh would publish the same list.
 - `ApiEndpointService` is constructed before `createAgentProviderRuntime` and the `AgentManager`; its callbacks close over `providerSnapshotManager`, declared later, and run only after startup.
 - The field is optional and needs no capability gate: an old host never sends it and the app treats absence as non-authoritative; an old app ignores it.
 
@@ -492,6 +492,67 @@ function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition
 }
 // snapshotManager: { modelOverride: apiEndpointModelOverride }
 // new AgentManager({ modelOverride: apiEndpointModelOverride, ... })
+```
+
+## Scenario: a listing that reports the health of a file the daemon doesn't own
+
+Reference implementation: `provider.api_endpoint.list` health (api-endpoint ticket 06).
+
+### 1. Scope / Trigger
+
+- The daemon writes a file others also write, and the client has to show whether the file still holds what the daemon wrote, without a watcher.
+
+### 2. Signatures
+
+- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]` and `cliBaseUrl?: string | null`.
+- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (async; `ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl">>`), `activeEndpointId(provider)` for the sync error path. Internal `ApiEndpointHealthCode` union.
+- App: `selectApiEndpointHealthView(state) → { alert: { variant, issues, activeEndpoint } | null, officialTarget }`, `apiEndpointHealthMessageKey(issue)` in `api-endpoints/internal/section-state.ts`.
+
+### 3. Contracts
+
+- Codes: `modified_externally` (an owned key no longer holds `written`; message names the keys), `config_unparsable`, `codex_version_unsupported` (active Codex endpoint and `codex --version` below 0.118.0), `codex_unavailable` (the probe itself failed; never reported as "outdated"), `codex_profile_override` (legacy top-level `profile` whose `[profiles.<name>]` sets `model_provider` / `model`; reported in both modes so it shows before enabling).
+- `cliBaseUrl` is set only in Official: Claude `env.ANTHROPIC_BASE_URL`; Codex the effective provider (profile over top level, default `openai`), its `model_providers.<id>.base_url`, or `openai_base_url` for `openai`.
+- Re-apply has no RPC of its own: it is `set_active` with the active id, so it runs the same version check and conflict guard. "Switch to Official" is `set_active(null)`.
+- New write error `config_conflict` (file kept changing during the write). The app localizes it and `modified_externally`, `config_unparsable` (health wording), `codex_profile_override`; other codes show the daemon message.
+- The app reads the optional fields with `?? []` / `?? null`: the protocol keeps new fields optional, so this default is permanent, not a COMPAT shim.
+
+### 4. Validation & Error Matrix
+
+- Owned key edited → `modified_externally`; other keys edited → no issue.
+- File deleted while an endpoint is active → every owned key listed as modified.
+- File does not parse → `config_unparsable` in `health`; the list itself still succeeds.
+- Codex binary missing → `codex_unavailable` in `health`; `list.error` stays null.
+
+### 5. Good/Base/Bad Cases
+
+- Good: another tool rewrites `env.ANTHROPIC_BASE_URL` → the panel shows one error Alert with Re-apply and Switch to Official.
+- Base: Official with a hand-written relay → no Alert, the Official row says where the CLI's own settings point.
+- Bad: a watcher that rewrites the file when it changes (ADR 0004: never overwrite silently).
+
+### 6. Tests Required
+
+- Pure: `inspectClaudeSettings` / `inspectCodexConfig` cases in the patch tests (owned vs other keys, deleted file, WebSearch entry only when added, every table field, legacy profile, base URL resolution).
+- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; downgraded and missing Codex.
+- App: `section-state.test.ts` for the view derivation; `index.test.tsx` for the Alert buttons and the Official hint.
+- Protocol: payload parses with health/cliBaseUrl and without them.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+} catch (error) {
+  return { code: "codex_version_unsupported", message: String(error) }; // "update Codex" for a missing binary
+}
+```
+
+#### Correct
+
+```ts
+} catch (error) {
+  const reason = error instanceof Error ? error.message : String(error);
+  return { code: "codex_unavailable", message: `Couldn't run codex --version: ${reason}` };
+}
 ```
 
 ## Errors on the wire

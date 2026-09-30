@@ -78,7 +78,7 @@ export class ApiEndpointSession {
     request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.list.request" }>,
   ): Promise<void> {
     try {
-      const result = this.service.list(request.provider);
+      const result = await this.service.list(request.provider);
       this.host.emit({
         type: "provider.api_endpoint.list.response",
         payload: {
@@ -267,7 +267,7 @@ export class ApiEndpointSession {
   /** 失败后状态保持切换前的样子，回报真实的当前启用接口。 */
   private currentActive(provider: string): string | null {
     try {
-      return this.service.list(provider).activeEndpointId;
+      return this.service.activeEndpointId(provider);
     } catch (error) {
       if (error instanceof ApiEndpointRequestError) return null;
       throw error;

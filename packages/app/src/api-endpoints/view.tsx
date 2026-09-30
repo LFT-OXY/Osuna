@@ -25,6 +25,7 @@ export function ApiEndpointsView({
     actionError,
     dismissActionError,
     activate,
+    reapply,
     remove,
     save,
     fetchModels,
@@ -52,6 +53,7 @@ export function ApiEndpointsView({
         actionError={actionError}
         onDismissError={dismissActionError}
         onActivate={activate}
+        onReapply={reapply}
         onAdd={handleAdd}
         onEdit={handleEdit}
         onDelete={remove}

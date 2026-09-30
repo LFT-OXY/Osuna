@@ -155,7 +155,87 @@ export function removeCodexProviderTable(input: { text: string | null }): CodexC
   return verify(text, () => true) ?? { kind: "patched", text: text === "" ? "" : bom + text };
 }
 
-type ParseResult = { kind: "parsed"; program: AST.TOMLProgram } | Unparsable;
+export interface CodexProfileOverride {
+  profile: string;
+  // 这个 profile 覆盖掉的负责的顶层键。
+  keys: TopLevelKey[];
+}
+
+export type CodexConfigInspection =
+  | {
+      kind: "parsed";
+      // 不再是上次写入值的负责键，专用表内容不对时记为 model_providers.<id>；没有接管记录时为空。
+      modifiedKeys: string[];
+      profileOverride: CodexProfileOverride | null;
+      // 当前生效的 provider 指向的地址：官方模式下用来提示 CLI 自身配置指向哪里。
+      baseUrl: string | null;
+    }
+  | Unparsable;
+
+/**
+ * 读真实文件判断健康状态。`takeover` 与 `table` 是启用中的接口上次写入的内容，官方模式下都为 null。
+ * profile 只认 Codex 0.118–0.133 的旧写法：顶层 `profile` 选中 `[profiles.<name>]`，覆盖顶层键。
+ * 0.134 起顶层 `profile` 直接报错，profile 改成 `<name>.config.toml`、只能用命令行 `--profile` 选，
+ * 文件里查不到；Osuna 启动 app-server 不带 `--profile`，自己的会话不受影响。
+ */
+export function inspectCodexConfig(input: {
+  text: string | null;
+  takeover: CodexConfigTakeover | null;
+  table: CodexProviderTable | null;
+}): CodexConfigInspection {
+  let value: Record<string, unknown> = {};
+  if (input.text !== null) {
+    const parsed = parseConfig(splitBom(input.text)[1]);
+    if (parsed.kind === "unparsable") return parsed;
+    value = parsed.value;
+  }
+
+  const modifiedKeys: string[] = [];
+  for (const key of TOP_LEVEL_KEYS) {
+    const record = input.takeover?.keys[key];
+    if (record && value[key] !== record.written) modifiedKeys.push(key);
+  }
+  if (input.table && !holdsProviderTable(value, input.table)) {
+    modifiedKeys.push(`model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`);
+  }
+
+  const profile = typeof value.profile === "string" ? value.profile : null;
+  const profiles = isRecord(value.profiles) ? value.profiles : {};
+  const selected = profile ? profiles[profile] : undefined;
+  const profileTable = isRecord(selected) ? selected : {};
+  const overriddenKeys = TOP_LEVEL_KEYS.filter((key) => profileTable[key] !== undefined);
+  const profileOverride =
+    profile && overriddenKeys.length > 0 ? { profile, keys: overriddenKeys } : null;
+
+  return {
+    kind: "parsed",
+    modifiedKeys,
+    profileOverride,
+    baseUrl: effectiveBaseUrl(value, profileTable),
+  };
+}
+
+/** 生效的 provider：profile 优先于顶层，缺省是内置 openai，它的地址由 openai_base_url 覆盖。 */
+function effectiveBaseUrl(
+  value: Record<string, unknown>,
+  profileTable: Record<string, unknown>,
+): string | null {
+  const providerId = profileTable.model_provider ?? value.model_provider ?? "openai";
+  const providers = value.model_providers;
+  const table =
+    isRecord(providers) && typeof providerId === "string" ? providers[providerId] : undefined;
+  let baseUrl: unknown;
+  if (providerId === "openai") {
+    baseUrl = value.openai_base_url;
+  } else if (isRecord(table)) {
+    baseUrl = table.base_url;
+  }
+  return typeof baseUrl === "string" && baseUrl.trim() !== "" ? baseUrl.trim() : null;
+}
+
+type ParseResult =
+  | { kind: "parsed"; program: AST.TOMLProgram; value: Record<string, unknown> }
+  | Unparsable;
 
 /** 解析器不认 BOM：先摘下来，改完再放回去。 */
 function splitBom(text: string): [string, string] {
@@ -185,7 +265,7 @@ function parseConfig(text: string): ParseResult {
   if (value.model_providers !== undefined && !isRecord(value.model_providers)) {
     return { kind: "unparsable", message: '"model_providers" in config.toml is not a table' };
   }
-  return { kind: "parsed", program };
+  return { kind: "parsed", program, value };
 }
 
 /** 拼出来的文本必须仍是合法 TOML 且真的写进去了；做不到（例如内联表没法追加子表）就整个拒绝。 */
@@ -203,14 +283,23 @@ function verify(
   return isRecord(value) && holds(value) ? null : { kind: "unparsable", message: unsafe };
 }
 
+/** 专用表整张都归 Osuna：每个写入的字段都要和这次的接口一致。 */
 function holdsProviderTable(value: Record<string, unknown>, table: CodexProviderTable): boolean {
   const providers = value.model_providers;
   const written = isRecord(providers) ? providers[CODEX_API_ENDPOINT_PROVIDER_ID] : undefined;
+  if (!isRecord(written) || !isRecord(written.auth)) return false;
+  const { auth } = written;
+  const argsMatch =
+    Array.isArray(auth.args) &&
+    auth.args.length === table.auth.args.length &&
+    auth.args.every((arg, index) => arg === table.auth.args[index]);
   return (
-    isRecord(written) &&
+    written.name === table.name &&
     written.base_url === table.baseUrl &&
-    isRecord(written.auth) &&
-    written.auth.command === table.auth.command
+    written.wire_api === "responses" &&
+    auth.command === table.auth.command &&
+    argsMatch &&
+    auth.timeout_ms === table.auth.timeoutMs
   );
 }
 

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   apiEndpointErrorMessageKey,
+  apiEndpointHealthMessageKey,
   formatApiEndpointTestDuration,
+  selectApiEndpointHealthView,
   selectApiEndpointsState,
+  type ApiEndpointsLoadState,
 } from "./section-state";
 
 const ENDPOINT = {
@@ -34,7 +37,37 @@ describe("selectApiEndpointsState", () => {
         },
         error: null,
       }),
-    ).toEqual({ status: "ready", endpoints: [ENDPOINT], activeEndpointId: null });
+    ).toEqual({
+      status: "ready",
+      endpoints: [ENDPOINT],
+      activeEndpointId: null,
+      health: [],
+      cliBaseUrl: null,
+    });
+  });
+
+  it("carries the health issues and the CLI's own base URL", () => {
+    const health = [{ code: "config_unparsable", message: "bad" }];
+    expect(
+      selectApiEndpointsState({
+        data: {
+          requestId: "r",
+          provider: "claude",
+          endpoints: [],
+          activeEndpointId: null,
+          health,
+          cliBaseUrl: "https://mine.example",
+          error: null,
+        },
+        error: null,
+      }),
+    ).toEqual({
+      status: "ready",
+      endpoints: [],
+      activeEndpointId: null,
+      health,
+      cliBaseUrl: "https://mine.example",
+    });
   });
 
   it("keeps the last list when a background refresh fails", () => {
@@ -48,7 +81,13 @@ describe("selectApiEndpointsState", () => {
       },
       error: new Error("socket closed"),
     });
-    expect(state).toEqual({ status: "ready", endpoints: [ENDPOINT], activeEndpointId: "ep_1" });
+    expect(state).toEqual({
+      status: "ready",
+      endpoints: [ENDPOINT],
+      activeEndpointId: "ep_1",
+      health: [],
+      cliBaseUrl: null,
+    });
   });
 
   it("shows the daemon's error when the list itself failed", () => {
@@ -88,6 +127,12 @@ describe("apiEndpointErrorMessageKey", () => {
     expect(apiEndpointErrorMessageKey({ code: "upstream_error", message: "x" })).toBeNull();
   });
 
+  it("localizes a settings file that kept changing during the write", () => {
+    expect(apiEndpointErrorMessageKey({ code: "config_conflict", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.configConflict",
+    );
+  });
+
   it("localizes an endpoint that doesn't speak the CLI's protocol", () => {
     expect(apiEndpointErrorMessageKey({ code: "protocol_unsupported", message: "x" })).toBe(
       "settings.providers.apiEndpoints.form.testProtocolUnsupported",
@@ -99,5 +144,82 @@ describe("formatApiEndpointTestDuration", () => {
   it("uses milliseconds under a second and seconds above", () => {
     expect(formatApiEndpointTestDuration(640)).toBe("640 ms");
     expect(formatApiEndpointTestDuration(1234)).toBe("1.2 s");
+  });
+});
+
+describe("apiEndpointHealthMessageKey", () => {
+  it("localizes each known health issue and passes unknown ones through", () => {
+    expect(apiEndpointHealthMessageKey({ code: "modified_externally", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.health.modifiedExternally",
+    );
+    expect(apiEndpointHealthMessageKey({ code: "config_unparsable", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.health.unparsable",
+    );
+    expect(apiEndpointHealthMessageKey({ code: "codex_version_unsupported", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.codexVersionUnsupported",
+    );
+    expect(apiEndpointHealthMessageKey({ code: "codex_profile_override", message: "x" })).toBe(
+      "settings.providers.apiEndpoints.health.codexProfileOverride",
+    );
+    expect(apiEndpointHealthMessageKey({ code: "some_future_code", message: "x" })).toBeNull();
+  });
+});
+
+describe("selectApiEndpointHealthView", () => {
+  const MODIFIED = { code: "modified_externally", message: "env.ANTHROPIC_BASE_URL" };
+  const PROFILE = { code: "codex_profile_override", message: "profile work" };
+  const UNPARSABLE = { code: "config_unparsable", message: "bad" };
+
+  function ready(overrides: Partial<Extract<ApiEndpointsLoadState, { status: "ready" }>>) {
+    return {
+      status: "ready" as const,
+      endpoints: [ENDPOINT],
+      activeEndpointId: "ep_1",
+      health: [],
+      cliBaseUrl: null,
+      ...overrides,
+    };
+  }
+
+  it("shows nothing while loading, on error, or when everything is fine", () => {
+    const none = { alert: null, officialTarget: null };
+    expect(selectApiEndpointHealthView({ status: "loading" })).toEqual(none);
+    expect(selectApiEndpointHealthView({ status: "error", message: "x" })).toEqual(none);
+    expect(selectApiEndpointHealthView(ready({}))).toEqual(none);
+  });
+
+  it("offers re-apply and Official when an active endpoint was modified externally, listed first", () => {
+    expect(selectApiEndpointHealthView(ready({ health: [PROFILE, MODIFIED] }))).toEqual({
+      alert: { variant: "error", issues: [MODIFIED, PROFILE], activeEndpoint: ENDPOINT },
+      officialTarget: null,
+    });
+  });
+
+  it("has no actions for a modified file without an active endpoint", () => {
+    expect(
+      selectApiEndpointHealthView(ready({ activeEndpointId: null, health: [MODIFIED] })).alert,
+    ).toEqual({ variant: "error", issues: [MODIFIED], activeEndpoint: null });
+  });
+
+  it("is an error for a broken file and a warning for a profile that only may override", () => {
+    expect(selectApiEndpointHealthView(ready({ health: [UNPARSABLE] })).alert?.variant).toBe(
+      "error",
+    );
+    expect(selectApiEndpointHealthView(ready({ health: [PROFILE] })).alert).toEqual({
+      variant: "warning",
+      issues: [PROFILE],
+      activeEndpoint: null,
+    });
+  });
+
+  it("names where the CLI's own settings point, only in Official", () => {
+    expect(
+      selectApiEndpointHealthView(
+        ready({ activeEndpointId: null, cliBaseUrl: "https://mine.example" }),
+      ).officialTarget,
+    ).toBe("https://mine.example");
+    expect(
+      selectApiEndpointHealthView(ready({ cliBaseUrl: "https://mine.example" })).officialTarget,
+    ).toBeNull();
   });
 });

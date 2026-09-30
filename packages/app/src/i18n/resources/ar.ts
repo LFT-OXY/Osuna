@@ -2829,6 +2829,20 @@ export const ar: TranslationResources = {
           "إنه قيد الاستخدام، لذا سيعود {{provider}} أولًا إلى الرسمي. ستتبدّل الجلسات الجارية و{{provider}} في الطرفية أيضًا.",
         codexVersionUnsupported: "حدِّث Codex إلى 0.118.0 أو أحدث لاستخدام نقطة نهاية API.",
         configUnparsable: "تعذّر تحليل ملف إعدادات {{provider}}، لذا لم يتغيّر شيء.",
+        configConflict:
+          "استمر ملف إعدادات {{provider}} في التغيّر أثناء كتابة Osuna له، لذلك لم يتغيّر شيء. حاول مرة أخرى.",
+        health: {
+          modifiedExternally: "تم تغيير ملف إعدادات {{provider}} خارج Osuna",
+          unparsable: "تعذّر تحليل ملف إعدادات {{provider}}. لن يكتب Osuna فيه حتى يتم إصلاحه.",
+          codexProfileOverride:
+            "يتجاوز ملف تعريف Codex نقطة نهاية API، لذا قد لا يسري التبديل. احذف model_provider و model من ملف التعريف هذا أو توقّف عن اختياره.",
+          officialTarget: "تشير إعدادات {{provider}} نفسها إلى {{url}}",
+          reapply: "إعادة التطبيق",
+          switchToOfficial: "العودة إلى الرسمي",
+          reapplyTitle: "إعادة تطبيق {{name}} على {{provider}}؟",
+          reapplyMessage:
+            "يكتب هذا نقطة النهاية مجددًا في ملف إعدادات {{provider}} نفسه ويستبدل التغييرات الخارجية على المفاتيح التي يديرها Osuna. تتبدّل الجلسات الجارية و{{provider}} في الطرفية أيضًا.",
+        },
         form: {
           createTitle: "نقطة نهاية API جديدة",
           editTitle: "تعديل نقطة نهاية API",

@@ -39,6 +39,39 @@ describe("provider.api_endpoint.list", () => {
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
 
+  it("parses health issues and the CLI's own base URL, and an older host that sends neither", () => {
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-1b",
+        provider: "claude",
+        endpoints: [ENDPOINT],
+        activeEndpointId: null,
+        health: [
+          { code: "config_unparsable", message: "settings.json could not be parsed" },
+          { code: "some_future_code", message: "Something new" },
+        ],
+        cliBaseUrl: "https://hand-written.example",
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+
+    const olderHost = SessionOutboundMessageSchema.parse({
+      type: "provider.api_endpoint.list.response",
+      payload: {
+        requestId: "req-1c",
+        provider: "claude",
+        endpoints: [],
+        activeEndpointId: null,
+        error: null,
+      },
+    });
+    expect(
+      olderHost.type === "provider.api_endpoint.list.response" && olderHost.payload.health,
+    ).toBe(undefined);
+  });
+
   it("parses an error response with a code the client has never seen", () => {
     const response = {
       type: "provider.api_endpoint.list.response" as const,

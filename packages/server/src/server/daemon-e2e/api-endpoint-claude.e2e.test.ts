@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -55,8 +56,11 @@ describe("Claude API endpoint over the daemon RPC", () => {
   let client: DaemonClient;
   let claudeConfigDir: string;
   let settingsPath: string;
+  // 改写配置时、替换文件前调用，模拟别的工具同时在改这份文件。
+  let onRecheck: ((filePath: string) => void) | null;
 
   beforeEach(async () => {
+    onRecheck = null;
     const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-"));
     tempRoots.push(root);
     claudeConfigDir = path.join(root, "claude");
@@ -64,7 +68,11 @@ describe("Claude API endpoint over the daemon RPC", () => {
     await mkdir(claudeConfigDir, { recursive: true });
     await writeFile(settingsPath, USER_SETTINGS);
     daemon = await createTestPaseoDaemon({
-      apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root },
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
+        homeDir: root,
+        beforeConfigRecheck: (filePath) => onRecheck?.(filePath),
+      },
     });
     client = await connect(daemon);
   });
@@ -251,6 +259,128 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect(activated.error?.code).toBe("config_unparsable");
     expect(await readFile(settingsPath, "utf8")).toBe(broken);
     expect((await client.apiEndpointList("claude")).activeEndpointId).toBeNull();
+  });
+
+  test("an owned key changed outside Osuna shows as modified; other keys don't count", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("claude", endpointId);
+    expect(await client.apiEndpointList("claude")).toMatchObject({ health: [], cliBaseUrl: null });
+
+    const switched = await readFile(settingsPath, "utf8");
+    const otherKeyEdited = switched.replace(`"demo@market": true`, `"demo@market": false`);
+    await writeFile(settingsPath, otherKeyEdited);
+    expect((await client.apiEndpointList("claude")).health).toEqual([]);
+
+    await writeFile(
+      settingsPath,
+      otherKeyEdited.replace('"https://relay.example/api"', '"https://other-tool.example"'),
+    );
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.activeEndpointId).toBe(endpointId);
+    expect(listed.health).toEqual([
+      {
+        code: "modified_externally",
+        message: expect.stringContaining("env.ANTHROPIC_BASE_URL"),
+      },
+    ]);
+  });
+
+  test("re-apply writes the endpoint again; Official restores the original values", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("claude", endpointId);
+    const switched = await readFile(settingsPath, "utf8");
+    const modified = switched.replace(
+      '"https://relay.example/api"',
+      '"https://other-tool.example"',
+    );
+    await writeFile(settingsPath, modified);
+
+    // 「重新应用」就是再启用一次当前接口。
+    expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
+    expect(await readFile(settingsPath, "utf8")).toBe(switched);
+    expect((await client.apiEndpointList("claude")).health).toEqual([]);
+
+    await writeFile(settingsPath, modified);
+    expect(await client.apiEndpointSetActive("claude", null)).toMatchObject({ error: null });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("Official shows where settings.json itself points", async () => {
+    const endpointId = await createEndpoint();
+    expect(await client.apiEndpointList("claude")).toMatchObject({
+      activeEndpointId: null,
+      health: [],
+      cliBaseUrl: "https://hand-written.example",
+    });
+
+    await client.apiEndpointSetActive("claude", endpointId);
+    expect((await client.apiEndpointList("claude")).cliBaseUrl).toBeNull();
+  });
+
+  test("reports a settings.json that does not parse", async () => {
+    await writeFile(settingsPath, `{ "env": { "A": "1", } }`);
+
+    expect((await client.apiEndpointList("claude")).health).toEqual([
+      { code: "config_unparsable", message: expect.stringContaining(settingsPath) },
+    ]);
+  });
+
+  test("a change made while it writes is kept: the patch is recomputed on the new content", async () => {
+    const endpointId = await createEndpoint();
+    let changes = 0;
+    onRecheck = (filePath) => {
+      changes += 1;
+      if (changes === 1)
+        writeFileSync(filePath, USER_SETTINGS.replace("{\n", '{\n  "theme": "dark",\n'));
+    };
+
+    expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({
+      activeEndpointId: endpointId,
+      error: null,
+    });
+
+    const written = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(written.theme).toBe("dark");
+    expect(written.env.ANTHROPIC_AUTH_TOKEN).toBe(SECRET);
+    // 首次改写的完整副本只留一份：重算前做的那份随回滚收回。
+    const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
+    const backups = await readdir(backupsDir);
+    expect(backups).toHaveLength(1);
+    expect(await readFile(path.join(backupsDir, backups[0]!), "utf8")).toContain('"theme": "dark"');
+    onRecheck = null;
+    await client.apiEndpointSetActive("claude", null);
+    expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual({
+      theme: "dark",
+      ...JSON.parse(USER_SETTINGS),
+    });
+  });
+
+  test("a file that keeps changing is a conflict for switching and for Official alike", async () => {
+    const endpointId = await createEndpoint();
+    let changes = 0;
+    onRecheck = (filePath) => {
+      changes += 1;
+      writeFileSync(filePath, USER_SETTINGS.replace("{\n", `{\n  "rev": ${changes},\n`));
+    };
+
+    const activated = await client.apiEndpointSetActive("claude", endpointId);
+    expect(activated).toMatchObject({ activeEndpointId: null, error: { code: "config_conflict" } });
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).env).toEqual({
+      ANTHROPIC_BASE_URL: "https://hand-written.example",
+    });
+
+    onRecheck = null;
+    await client.apiEndpointSetActive("claude", endpointId);
+    onRecheck = (filePath) => {
+      changes += 1;
+      writeFileSync(filePath, `{ "rev": ${changes} }`);
+    };
+    const official = await client.apiEndpointSetActive("claude", null);
+    expect(official).toMatchObject({
+      activeEndpointId: endpointId,
+      error: { code: "config_conflict" },
+    });
+    expect((await client.apiEndpointList("claude")).activeEndpointId).toBe(endpointId);
   });
 
   test("rejects invalid input and unsupported providers with a code", async () => {

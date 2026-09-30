@@ -21,6 +21,7 @@ function renderSection(state: ApiEndpointsLoadState, actionError: string | null 
   const handlers = {
     onDismissError: vi.fn(),
     onActivate: vi.fn(),
+    onReapply: vi.fn(),
     onAdd: vi.fn(),
     onEdit: vi.fn(),
     onDelete: vi.fn(),
@@ -47,6 +48,8 @@ describe("ApiEndpointsSection", () => {
       status: "ready",
       endpoints: [RELAY],
       activeEndpointId: null,
+      health: [],
+      cliBaseUrl: null,
     });
 
     expect(screen.getByTestId("api-endpoints-use-official-active")).toBeTruthy();
@@ -65,6 +68,8 @@ describe("ApiEndpointsSection", () => {
       status: "ready",
       endpoints: [RELAY],
       activeEndpointId: "ep_1",
+      health: [],
+      cliBaseUrl: null,
     });
 
     expect(screen.getByTestId("api-endpoint-use-ep_1-active")).toBeTruthy();
@@ -92,7 +97,7 @@ describe("ApiEndpointsSection failure", () => {
 
   it("keeps a failed switch visible above the modes until dismissed", () => {
     const handlers = renderSection(
-      { status: "ready", endpoints: [RELAY], activeEndpointId: null },
+      { status: "ready", endpoints: [RELAY], activeEndpointId: null, health: [], cliBaseUrl: null },
       "settings.json could not be parsed",
     );
 
@@ -103,6 +108,70 @@ describe("ApiEndpointsSection failure", () => {
 
     fireEvent.click(screen.getByText(i18n.t("common.actions.dismiss")));
     expect(handlers.onDismissError).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ApiEndpointsSection health", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("offers re-apply and Official when the settings file was modified externally", () => {
+    const handlers = renderSection({
+      status: "ready",
+      endpoints: [RELAY],
+      activeEndpointId: "ep_1",
+      health: [
+        { code: "modified_externally", message: "settings.json: env.ANTHROPIC_BASE_URL" },
+        { code: "some_future_code", message: "Something new" },
+      ],
+      cliBaseUrl: null,
+    });
+
+    const alert = screen.getByTestId("api-endpoints-health");
+    expect(alert.textContent).toContain(
+      i18n.t("settings.providers.apiEndpoints.health.modifiedExternally", {
+        provider: "Claude Code",
+      }),
+    );
+    expect(alert.textContent).toContain("settings.json: env.ANTHROPIC_BASE_URL");
+    expect(alert.textContent).toContain("Something new");
+
+    fireEvent.click(screen.getByTestId("api-endpoints-reapply"));
+    expect(handlers.onReapply).toHaveBeenCalledWith(RELAY);
+    fireEvent.click(screen.getByTestId("api-endpoints-health-official"));
+    expect(handlers.onActivate).toHaveBeenCalledWith(null);
+  });
+
+  it("explains a problem without offering actions", () => {
+    renderSection({
+      status: "ready",
+      endpoints: [RELAY],
+      activeEndpointId: null,
+      health: [{ code: "codex_profile_override", message: 'profile "work"' }],
+      cliBaseUrl: null,
+    });
+
+    expect(screen.getByTestId("api-endpoints-health").textContent).toContain('profile "work"');
+    expect(screen.queryByTestId("api-endpoints-reapply")).toBeNull();
+  });
+
+  it("names where the CLI's own settings point while Official is in use", () => {
+    renderSection({
+      status: "ready",
+      endpoints: [],
+      activeEndpointId: null,
+      health: [],
+      cliBaseUrl: "https://hand-written.example",
+    });
+
+    expect(screen.getByTestId("api-endpoints-official-target").textContent).toBe(
+      i18n.t("settings.providers.apiEndpoints.health.officialTarget", {
+        provider: "Claude Code",
+        url: "https://hand-written.example",
+      }),
+    );
+    expect(screen.queryByTestId("api-endpoints-health")).toBeNull();
   });
 });
 

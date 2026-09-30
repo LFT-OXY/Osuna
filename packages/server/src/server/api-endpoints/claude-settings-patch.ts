@@ -171,6 +171,44 @@ export function restoreClaudeOfficial(input: {
   return { kind: "patched", text };
 }
 
+export type ClaudeSettingsInspection =
+  | {
+      kind: "parsed";
+      // 不再是上次写入值的负责键；没有接管记录时为空。
+      modifiedKeys: string[];
+      // env.ANTHROPIC_BASE_URL：官方模式下用来提示 CLI 自身配置指向哪里。
+      baseUrl: string | null;
+    }
+  | { kind: "unparsable"; message: string };
+
+const WEB_SEARCH_DENY_LABEL = `permissions.deny "${WEB_SEARCH_RULE}"`;
+
+/** 读真实文件判断外部改动：负责的键和上次写入的值比对，其余键怎么改都不算。 */
+export function inspectClaudeSettings(input: {
+  text: string | null;
+  takeover: ClaudeSettingsTakeover | null;
+}): ClaudeSettingsInspection {
+  let settings: ParsedSettings = {};
+  if (input.text !== null) {
+    const parsed = parseSettings(input.text);
+    if (parsed.kind === "unparsable") return parsed;
+    settings = parsed.settings;
+  }
+  const modifiedKeys: string[] = [];
+  for (const [key, record] of Object.entries(input.takeover?.env ?? {})) {
+    if (settings.env?.[key] !== record.written) modifiedKeys.push(`env.${key}`);
+  }
+  if (
+    input.takeover?.webSearchDeny.added &&
+    !settings.permissions?.deny?.includes(WEB_SEARCH_RULE)
+  ) {
+    modifiedKeys.push(WEB_SEARCH_DENY_LABEL);
+  }
+  const rawBaseUrl = settings.env?.ANTHROPIC_BASE_URL;
+  const baseUrl = typeof rawBaseUrl === "string" ? rawBaseUrl.trim() : "";
+  return { kind: "parsed", modifiedKeys, baseUrl: baseUrl === "" ? null : baseUrl };
+}
+
 function classifyOriginalFile(text: string | null): OriginalFile {
   if (text === null) return { kind: "absent" };
   if (text.trim() === "") return { kind: "empty", text };

@@ -133,18 +133,17 @@
   - `fetch_models`：`{ provider, baseUrl, endpointId?, apiKey? }` → `{ models, error }`。`apiKey` 省略或空白且带 `endpointId` 时用已保存的 key；两者都没有返回 `invalid_input`；
   - `cancel`：`{ targetRequestId }` → `{ cancelled }`，取消同一连接上还在进行的上游请求（拉取模型与测试连接）；被取消的请求照常回一条 `cancelled` 错误。连接断开时 daemon 也会取消；
   - `test_connection`：`{ provider, baseUrl, endpointId?, apiKey?, modelId }` → `{ result, error }`。key 规则同 `fetch_models`，同为 `daemon.manage`，可用 `cancel` 取消。`result` 是上游给出的结论 `{ ok, status, durationMs, error }`：`status` 是 HTTP 状态码，没收到响应时为 null；`error` 是上游侧的失败。请求本身不成立（缺 key、缺模型、找不到接口、被取消）时 `result` 为 null，原因在外层 `error`；
-  - 启用接口或切回官方；
-  - 重新应用（处理外部修改时使用）。
-- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`、`codex_version_unsupported`；上游请求另有 `upstream_error`（非 404/405 的状态码，message 形如 `GET <url>: HTTP 401: <上游信息>`）、`upstream_unreachable`、`upstream_timeout`、`models_unsupported`、`cancelled`；测试连接的结果里另有 `protocol_unsupported`（地址上没有 CLI 需要的协议）；意外错误为 `unknown`（例如找不到 codex 可执行文件）。App 把 `config_unparsable`、`codex_version_unsupported`、`models_unsupported`、`upstream_timeout`、`protocol_unsupported` 换成本地化文案，后面接 daemon 原文；`cancelled` 不显示；其余只显示 daemon 原文。
+  - 重新应用（处理外部修改时使用）没有单独的 RPC：就是对当前启用的接口再调一次 `set_active`，同样经过版本检查和冲突保护。
+- 失败放在响应的 `error: { code, message } | null` 里，不走 `rpc_error`。`code` 在线上是字符串，老客户端遇到新码照常显示 message。已有的码：`unsupported_provider`、`invalid_input`、`not_found`、`config_unparsable`、`config_conflict`（写入时文件一直在变，重试三次后放弃，什么都没写）、`codex_version_unsupported`；上游请求另有 `upstream_error`（非 404/405 的状态码，message 形如 `GET <url>: HTTP 401: <上游信息>`）、`upstream_unreachable`、`upstream_timeout`、`models_unsupported`、`cancelled`；测试连接的结果里另有 `protocol_unsupported`（地址上没有 CLI 需要的协议）；意外错误为 `unknown`（例如找不到 codex 可执行文件）。App 把 `config_unparsable`、`config_conflict`、`codex_version_unsupported`、`models_unsupported`、`upstream_timeout`、`protocol_unsupported` 换成本地化文案，后面接 daemon 原文；`cancelled` 不显示；其余只显示 daemon 原文。
 - `provider` 在线上是字符串而非枚举；daemon 只接受已支持的内置提供方，其余返回 `unsupported_provider`。
-- 状态查询返回四类信息：
-  - 当前模式；
-  - 文件的健康状态：正常、已被外部修改、无法解析、Codex 版本不足、Codex profile 会覆盖；
-  - 「官方」模式下 CLI 自身配置实际指向的地址；
-  - 受影响的正在运行的会话数。
+- 状态查询就是 `list`，每次都读真实文件，返回四类信息：
+  - 当前模式：`activeEndpointId`；
+  - 文件的健康状态：可选字段 `health: { code, message }[]`，空数组即正常。`code` 有 `modified_externally`（负责的键不再是上次写入的值，message 列出这些键）、`config_unparsable`、`codex_version_unsupported`（启用中时 `codex --version` 低于 0.118.0）、`codex_unavailable`（跑不了 `codex --version`，照实报原因，不当成版本不足）、`codex_profile_override`（两种模式下都报，启用前就能看到）；
+  - 「官方」模式下 CLI 自身配置实际指向的地址：可选字段 `cliBaseUrl`，只在官方模式下给出；
+  - 受影响的正在运行的会话数（工单 07）。
 - 能力门控：`server_info.features` 新增 `apiEndpoints`。App 只在主机声明了这个能力时显示「第三方接口」模式；老主机上不显示，也不提供降级路径（`docs/protocol-compatibility.md`）。
 - 新增字段全部可选。wire schema 保持纯净：不用 transform、catch 或 preprocess。
-- 接口状态变化后（启用、切回、编辑当前启用的接口、检测到外部修改），daemon 触发一次对应提供方的快照刷新，客户端的模型选择器由此更新。
+- 接口状态变化后（启用、切回、编辑当前启用的接口、删除当前启用的接口），daemon 触发一次对应提供方的快照刷新，客户端的模型选择器由此更新。检测到外部修改不刷新：快照的模型列表取自接口数据，外部改 CLI 文件不影响它，刷新也发不出新内容。
 
 ### 改写 CLI 配置（服务端核心）
 
@@ -172,7 +171,7 @@
 - **文件写入服务**负责：
   - 确定文件位置：分别遵循 daemon 环境里的 `CLAUDE_CONFIG_DIR` 和 `CODEX_HOME`，默认是 `~/.claude` 和 `~/.codex`。确定方式沿用终端 agent hooks 安装器的做法。
   - 首次写入前做一次完整副本。
-  - 计算 hash，重读文件后再做原子替换，最多重试 3 次。
+  - 计算 hash，重读文件后再做原子替换，最多重试 3 次（`server/api-endpoints/config-file.ts`）。每次尝试的顺序：读字节并算 hash → 算补丁 → 写好临时文件 → 落接管记录、首次写入的完整副本和 Codex key 文件 → 重读比对 → rename。比对不通过就回滚（含收回这次做的副本），基于新内容重算；三次都不通过报 `config_conflict`。先落记录再重读，是为了让比对和替换之间不再夹着别的写盘。
   - 一个文件解析失败时，所有文件都不写。
   - 检测外部改动。
 - **切换的原子性**：Codex 切换涉及 `config.toml` 和 key 文件两处。先写 key 文件，再写 `config.toml`。`config.toml` 写入失败时，状态保持为切换前的模式。
@@ -181,7 +180,8 @@
   - Windows：使用 PowerShell 的绝对路径，参数为 `-NoProfile -Command` 加读文件的写法，`timeout_ms` 调大。
   - 生成逻辑是一个纯函数，按平台输出 command 和 args。
 - **Codex 版本检查**：启用前复用现有的 Codex 版本探测（按 `config.json` 里配置的 codex 命令执行 `--version`），低于 0.118.0 或无法解析版本就返回 `codex_version_unsupported`，消息里带探测到的原始输出。只查 Osuna 使用的 codex；终端里 PATH 上的 codex 若是另一个旧版本，查不到。
-- **Codex profile 检查**：启用前检查当前生效的 profile 是否覆盖了负责的顶层键。如果覆盖了，就标为健康状态之一，并给出提示。
+- **Codex profile 检查**：检查当前生效的 profile 是否覆盖了负责的顶层键，覆盖了就在健康状态里报 `codex_profile_override`，不阻止启用。只查得到 Codex 0.118–0.133 的旧写法（顶层 `profile` 选中 `[profiles.<name>]`）；0.134 起顶层 `profile` 会让 Codex 报错，新 profile 只能用命令行 `--profile` 选，文件里查不到。Osuna 启动 app-server 不带 `--profile`。事实见 `research/codex-profile-override.md`。
+- **外部改动检测**：只比对负责的键：Claude 的 `env.*` 与 daemon 自己加的 WebSearch 拒绝规则；Codex 的 `model_provider`、`model` 与专用表的每个字段。其他键怎么改都不算。
 
 ### 上游请求
 
@@ -229,10 +229,10 @@
   - 拉取中可以取消；关闭表单也会取消。取消后晚到的结果不生效。
 - 测试连接先弹出模型选择，再展示结果：「测试连接」区的下拉按钮列出「使用的模型」，选一个就发请求，测试中可以取消；结果一行写成功或失败、HTTP 状态码、耗时和模型，失败时下面接上游原因。字段说明写明它只验证接口本身，并提示可以在终端试 `/logout`。改了 Base URL 或 key 后，旧结果作废，进行中的测试取消。「不支持协议」的文案同时提示检查 Base URL，因为裸 404 也可能只是地址填错。
 - 以下操作需要二次确认：切换、编辑当前启用的接口、删除当前启用的接口。确认框写明受影响的正在运行的会话数，以及「终端里的 CLI 也会切换」。
-- 健康状态的展示：
-  - 「已被外部修改」时，提供「重新应用 / 切回官方」两个按钮；
-  - 「无法解析」「版本不足」「profile 覆盖」时，显示原因和建议。
-- 「官方」模式下，如果 CLI 自身配置指向了第三方，就显示一句提示。
+- 健康状态的展示：模式区上方只放一个 `<Alert>`，所有问题都在里面，第一条作标题，每条后面接 daemon 原文。
+  - 「已被外部修改」排在最前，且有启用中的接口时，提供「重新应用 / 切回官方」两个按钮；「重新应用」按切换一样先确认；
+  - 「无法解析」「版本不足」「profile 覆盖」时，显示原因和建议；只有 profile 覆盖时是 warning，其余是 error。
+- 「官方」模式下，如果 CLI 自身配置指向了第三方，就在「官方」那一行下面显示一句提示。
 - 套餐用量区域：对应提供方启用了第三方接口时，显示一条标注。
 - 继承 `claude` 的自定义提供方：Claude 启用第三方接口时，在这些提供方的行上显示提示。
 - i18n：9 种语言齐全。URL、模型 id、上游错误信息都不翻译。

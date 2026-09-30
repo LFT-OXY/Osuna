@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -48,8 +49,11 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
   let configPath: string;
   let authPath: string;
   let versionPath: string;
+  // 改写配置时、替换文件前调用，模拟别的工具同时在改这份文件。
+  let onRecheck: ((filePath: string) => void) | null;
 
   beforeEach(async () => {
+    onRecheck = null;
     const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-"));
     tempRoots.push(root);
     codexHome = path.join(root, "codex-home");
@@ -68,7 +72,11 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
     await chmod(fakeCodex, 0o755);
 
     daemon = await createTestPaseoDaemon({
-      apiEndpoints: { env: { CODEX_HOME: codexHome }, homeDir: root },
+      apiEndpoints: {
+        env: { CODEX_HOME: codexHome },
+        homeDir: root,
+        beforeConfigRecheck: (filePath) => onRecheck?.(filePath),
+      },
       providerOverrides: { codex: { command: [fakeCodex] } },
     });
     client = await connect(daemon);
@@ -257,6 +265,90 @@ timeout_ms = 5000
     expect(activated.error?.code).toBe("config_unparsable");
     expect(await readFile(configPath, "utf8")).toBe(broken);
     await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("an owned key changed outside Osuna shows as modified; re-apply writes it back", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("codex", endpointId);
+    expect(await client.apiEndpointList("codex")).toMatchObject({ health: [], cliBaseUrl: null });
+    const switched = await readFile(configPath, "utf8");
+
+    await writeFile(
+      configPath,
+      switched.replace(`trust_level = "trusted"`, `trust_level = "untrusted"`),
+    );
+    expect((await client.apiEndpointList("codex")).health).toEqual([]);
+
+    await writeFile(configPath, switched.replace(`model = "relay/gpt"`, `model = "gpt-5"`));
+    expect((await client.apiEndpointList("codex")).health).toEqual([
+      { code: "modified_externally", message: expect.stringContaining("model") },
+    ]);
+
+    expect(await client.apiEndpointSetActive("codex", endpointId)).toMatchObject({ error: null });
+    expect(await readFile(configPath, "utf8")).toBe(switched);
+    expect((await client.apiEndpointList("codex")).health).toEqual([]);
+  });
+
+  test("Official shows where config.toml itself points", async () => {
+    expect(await client.apiEndpointList("codex")).toMatchObject({
+      activeEndpointId: null,
+      health: [],
+      cliBaseUrl: "https://mine.example/v1",
+    });
+  });
+
+  test("warns when the selected legacy profile overrides the owned keys", async () => {
+    await writeFile(
+      configPath,
+      `profile = "work"\n${USER_CONFIG}\n[profiles.work]\nmodel_provider = "azure"\n`,
+    );
+    const expected = {
+      code: "codex_profile_override",
+      message: expect.stringContaining(`[profiles.work] sets model_provider`),
+    };
+    expect((await client.apiEndpointList("codex")).health).toEqual([expected]);
+
+    const endpointId = await createEndpoint();
+    expect(await client.apiEndpointSetActive("codex", endpointId)).toMatchObject({ error: null });
+    expect((await client.apiEndpointList("codex")).health).toEqual([expected]);
+  });
+
+  test("reports a Codex downgraded below 0.118.0 while an endpoint is active", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("codex", endpointId);
+    await writeFile(versionPath, "codex-cli 0.117.0\n");
+
+    expect((await client.apiEndpointList("codex")).health).toEqual([
+      { code: "codex_version_unsupported", message: expect.stringContaining("0.117.0") },
+    ]);
+  });
+
+  test("reports a Codex that can't be run, not as an outdated one", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("codex", endpointId);
+    await rm(path.join(path.dirname(versionPath), "codex"));
+
+    const listed = await client.apiEndpointList("codex");
+    expect(listed.error).toBeNull();
+    expect(listed.health).toEqual([
+      { code: "codex_unavailable", message: expect.stringContaining("codex --version") },
+    ]);
+  });
+
+  test("a config.toml that keeps changing is a conflict: neither the key file nor the mode moves", async () => {
+    const endpointId = await createEndpoint();
+    let changes = 0;
+    onRecheck = (filePath) => {
+      changes += 1;
+      writeFileSync(filePath, `${USER_CONFIG}# rev ${changes}\n`);
+    };
+
+    const activated = await client.apiEndpointSetActive("codex", endpointId);
+
+    expect(activated).toMatchObject({ activeEndpointId: null, error: { code: "config_conflict" } });
+    expect(await readFile(configPath, "utf8")).toBe(`${USER_CONFIG}# rev 3\n`);
+    await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await client.apiEndpointList("codex")).activeEndpointId).toBeNull();
   });
 
   test("keeps the mode when config.toml cannot be replaced", async () => {

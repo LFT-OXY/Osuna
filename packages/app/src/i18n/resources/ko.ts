@@ -2847,6 +2847,21 @@ export const ko: TranslationResources = {
         codexVersionUnsupported:
           "API 엔드포인트를 사용하려면 Codex를 0.118.0 이상으로 업데이트하세요.",
         configUnparsable: "{{provider}} 설정 파일을 해석할 수 없어 아무것도 변경하지 않았습니다.",
+        configConflict:
+          "Osuna가 쓰는 동안 {{provider}} 설정 파일이 계속 바뀌어 아무것도 변경하지 않았습니다. 다시 시도하세요.",
+        health: {
+          modifiedExternally: "{{provider}} 설정 파일이 Osuna 밖에서 변경되었습니다",
+          unparsable:
+            "{{provider}} 설정 파일을 해석할 수 없습니다. 고쳐질 때까지 Osuna는 이 파일에 쓰지 않습니다.",
+          codexProfileOverride:
+            "Codex 프로필이 API 엔드포인트를 덮어써서 전환이 적용되지 않을 수 있습니다. 해당 프로필에서 model_provider와 model을 지우거나 그 프로필을 선택하지 마세요.",
+          officialTarget: "{{provider}} 자체 설정이 {{url}}을(를) 가리킵니다",
+          reapply: "다시 적용",
+          switchToOfficial: "공식으로 전환",
+          reapplyTitle: "{{name}}을(를) {{provider}}에 다시 적용할까요?",
+          reapplyMessage:
+            "{{provider}} 자체 설정 파일에 엔드포인트를 다시 쓰고, Osuna가 관리하는 키에 대한 외부 변경을 덮어씁니다. 실행 중인 세션과 터미널의 {{provider}}도 함께 전환됩니다.",
+        },
         form: {
           createTitle: "새 API 엔드포인트",
           editTitle: "API 엔드포인트 편집",

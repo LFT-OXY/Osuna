@@ -2797,6 +2797,19 @@ export const zhCN: TranslationResources = {
           "它正在使用中，{{provider}} 会先切回官方。正在运行的会话和终端里的 {{provider}} 也会一起切换。",
         codexVersionUnsupported: "请先把 Codex 升级到 0.118.0 或更高版本，才能使用第三方接口。",
         configUnparsable: "无法解析 {{provider}} 的配置文件，未做任何改动。",
+        configConflict: "写入期间 {{provider}} 的配置文件一直在被改动，未做任何改动。请重试。",
+        health: {
+          modifiedExternally: "{{provider}} 的配置文件已被外部修改",
+          unparsable: "无法解析 {{provider}} 的配置文件。修好之前，Osuna 不会写入它。",
+          codexProfileOverride:
+            "有一个 Codex profile 覆盖了第三方接口，切换可能不生效。请从该 profile 中删除 model_provider 和 model，或不再选用它。",
+          officialTarget: "当前 {{provider}} 自身配置指向 {{url}}",
+          reapply: "重新应用",
+          switchToOfficial: "切回官方",
+          reapplyTitle: "重新将 {{name}} 应用到 {{provider}}？",
+          reapplyMessage:
+            "这会把接口重新写入 {{provider}} 自身的配置文件，覆盖外部对 Osuna 所管理的键的改动。正在运行的会话和终端里的 {{provider}} 也会一起切换。",
+        },
         form: {
           createTitle: "新建第三方接口",
           editTitle: "编辑第三方接口",

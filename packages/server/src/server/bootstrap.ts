@@ -453,7 +453,7 @@ export interface PaseoDaemonConfig {
   providerOverrides?: Record<string, ProviderOverride>;
   usage?: UsageConfig;
   // 定位 Claude/Codex 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
-  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir">;
+  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck">;
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;

@@ -70,7 +70,20 @@ export const ApiEndpointListRequestSchema = z.object({
 });
 export type ApiEndpointListRequest = z.infer<typeof ApiEndpointListRequestSchema>;
 
-/** `activeEndpointId: null` 表示「官方」。 */
+/**
+ * CLI 配置文件的一条健康问题，列表查询时读真实文件得出。`code` 是字符串：
+ * modified_externally、config_unparsable、codex_version_unsupported、codex_profile_override。
+ */
+export const ApiEndpointHealthIssueSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+});
+export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema>;
+
+/**
+ * `activeEndpointId: null` 表示「官方」。`health` 为空即正常；
+ * `cliBaseUrl` 只在官方模式下给出，是 CLI 自身配置实际指向的地址。
+ */
 export const ApiEndpointListResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.list.response"),
   payload: z.object({
@@ -78,6 +91,8 @@ export const ApiEndpointListResponseSchema = z.object({
     provider: z.string(),
     endpoints: z.array(ApiEndpointSchema),
     activeEndpointId: z.string().nullable(),
+    health: z.array(ApiEndpointHealthIssueSchema).optional(),
+    cliBaseUrl: z.string().nullable().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

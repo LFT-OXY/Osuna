@@ -2952,6 +2952,21 @@ export const en = {
         codexVersionUnsupported: "Update Codex to 0.118.0 or later to use an API endpoint.",
         configUnparsable:
           "{{provider}}'s settings file couldn't be parsed, so nothing was changed.",
+        configConflict:
+          "{{provider}}'s settings file kept changing while Osuna was writing it, so nothing was changed. Try again.",
+        health: {
+          modifiedExternally: "{{provider}}'s settings file was changed outside Osuna",
+          unparsable:
+            "{{provider}}'s settings file can't be parsed. Osuna won't write to it until it's fixed.",
+          codexProfileOverride:
+            "A Codex profile overrides the API endpoint, so the switch may not take effect. Remove model_provider and model from that profile, or stop selecting it.",
+          officialTarget: "{{provider}}'s own settings point to {{url}}",
+          reapply: "Re-apply",
+          switchToOfficial: "Switch to Official",
+          reapplyTitle: "Re-apply {{name}} to {{provider}}?",
+          reapplyMessage:
+            "This writes the endpoint into {{provider}}'s own settings file again and replaces the outside changes to the keys Osuna manages. Running sessions and {{provider}} in your terminal switch too.",
+        },
         form: {
           createTitle: "New API endpoint",
           editTitle: "Edit API endpoint",

@@ -1,13 +1,4 @@
 import { randomUUID } from "node:crypto";
-import {
-  chmodSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import type pino from "pino";
@@ -15,6 +6,8 @@ import {
   API_ENDPOINT_MODEL_TIERS,
   apiEndpointHasModelMapping,
   type ApiEndpoint,
+  type ApiEndpointHealthIssue,
+  type ApiEndpointListResponse,
   type ApiEndpointModel,
   type ApiEndpointModelMapping,
   type ApiEndpointTestConnectionResult,
@@ -27,20 +20,29 @@ import {
   codexVersionAtLeast,
   normalizeOpenAICompatibleBaseUrl,
 } from "../agent/providers/codex-app-server-agent.js";
-import { PRIVATE_FILE_MODE } from "../private-files.js";
 import {
   applyClaudeApiEndpoint,
   buildClaudeEndpointEnv,
+  inspectClaudeSettings,
   restoreClaudeOfficial,
+  type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
 import { buildCodexAuthCommand } from "./codex-auth-command.js";
 import {
   applyCodexApiEndpoint,
+  inspectCodexConfig,
   removeCodexProviderTable,
   replaceCodexProviderTable,
   restoreCodexOfficial,
+  type CodexConfigTakeover,
   type CodexProviderTable,
 } from "./codex-config-patch.js";
+import {
+  readOptionalFile,
+  writeConfigFileGuarded,
+  type ConfigFileChange,
+  type ConfigFilePlan,
+} from "./config-file.js";
 import {
   API_ENDPOINT_PROVIDERS,
   ApiEndpointStore,
@@ -55,6 +57,8 @@ export type ApiEndpointErrorCode =
   | "invalid_input"
   | "not_found"
   | "config_unparsable"
+  // 写入时文件一直在被别人改，重试三次后放弃，什么都没写。
+  | "config_conflict"
   | "codex_version_unsupported"
   | UpstreamFailureCode;
 
@@ -111,6 +115,35 @@ export interface ApiEndpointServiceOptions {
   onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
+  // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
+  // 只给进程内 daemon 测试模拟「别的工具同时在改这份文件」，生产不传。
+  beforeConfigRecheck?: (filePath: string) => void;
+}
+
+/** 线上 `code` 是字符串；daemon 这一侧只会发这几种。 */
+type ApiEndpointHealthCode =
+  | "modified_externally"
+  | "config_unparsable"
+  | "codex_version_unsupported"
+  // 跑不了 `codex --version`，例如找不到 codex；App 显示 daemon 原文。
+  | "codex_unavailable"
+  | "codex_profile_override";
+
+interface HealthIssue extends ApiEndpointHealthIssue {
+  code: ApiEndpointHealthCode;
+}
+
+/** health 为空即正常；cliBaseUrl 只在官方模式下给出。 */
+export type ApiEndpointListResult = Required<
+  Pick<
+    ApiEndpointListResponse["payload"],
+    "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl"
+  >
+>;
+
+interface ApiEndpointFileStatus {
+  health: HealthIssue[];
+  baseUrl: string | null;
 }
 
 /**
@@ -127,6 +160,7 @@ export class ApiEndpointService {
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
+  private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ApiEndpointServiceOptions) {
@@ -140,14 +174,29 @@ export class ApiEndpointService {
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
+    this.beforeConfigRecheck = options.beforeConfigRecheck;
   }
 
-  list(provider: string): { endpoints: ApiEndpoint[]; activeEndpointId: string | null } {
+  /**
+   * 列表连同健康状态：每次都读真实文件，负责的键不再是上次写入的值就报「已被外部修改」。
+   * 只在这里和写入时检测，不在后台监听文件。
+   */
+  async list(provider: string): Promise<ApiEndpointListResult> {
     const supported = requireProvider(provider);
+    const activeEndpointId = this.store.getActiveEndpointId(supported);
+    const active = activeEndpointId ? this.store.getEndpoint(supported, activeEndpointId) : null;
+    const status =
+      supported === "codex" ? await this.inspectCodex(active) : this.inspectClaude(active);
     return {
       endpoints: this.store.listEndpoints(supported).map((endpoint) => this.toWire(endpoint)),
-      activeEndpointId: this.store.getActiveEndpointId(supported),
+      activeEndpointId,
+      health: status.health,
+      cliBaseUrl: active ? null : status.baseUrl,
     };
+  }
+
+  activeEndpointId(provider: string): string | null {
+    return this.store.getActiveEndpointId(requireProvider(provider));
   }
 
   /**
@@ -225,9 +274,13 @@ export class ApiEndpointService {
         this.restoreOfficial(supported);
         this.store.setActiveEndpointId(supported, null);
       }
-      if (supported === "codex") this.removeCodexProviderTable(endpointId);
-      this.store.removeEndpoint(supported, endpointId);
-      if (wasActive) this.onActiveEndpointChanged(supported);
+      try {
+        if (supported === "codex") this.removeCodexProviderTable(endpointId);
+        this.store.removeEndpoint(supported, endpointId);
+      } finally {
+        // 删表失败时接口还在、模式已是官方；快照照样要跟着回到官方。
+        if (wasActive) this.onActiveEndpointChanged(supported);
+      }
       return { activeEndpointId: this.store.getActiveEndpointId(supported) };
     });
   }
@@ -363,33 +416,45 @@ export class ApiEndpointService {
 
   private writeClaudeEndpoint(endpoint: StoredApiEndpoint, apiKey: string): void {
     const settingsPath = this.resolveClaudeSettingsPath();
-    const current = readOptionalFile(settingsPath);
     const record = this.store.readClaudeTakeover();
-    const result = applyClaudeApiEndpoint({
-      text: current?.toString("utf8") ?? null,
-      env: buildClaudeEndpointEnv({
-        baseUrl: endpoint.baseUrl,
-        apiKey,
-        defaultModelId: endpoint.defaultModelId,
-        modelMapping: endpoint.modelMapping,
-      }),
-      takeover: record.takeover,
+    const env = buildClaudeEndpointEnv({
+      baseUrl: endpoint.baseUrl,
+      apiKey,
+      defaultModelId: endpoint.defaultModelId,
+      modelMapping: endpoint.modelMapping,
     });
-    if (result.kind === "unparsable") {
-      throw unparsable(settingsPath, result.message);
-    }
-
-    const backup = record.backup ?? {
-      path: this.store.writeClaudeSettingsBackup(current, this.now()),
-    };
-    // 先记接管记录再写文件：写文件失败时接管记录回滚；反过来会丢掉原值。
-    this.store.writeClaudeTakeover({ takeover: result.takeover, backup });
-    try {
-      writeConfigFileKeepingMode(settingsPath, result.text);
-    } catch (error) {
-      this.store.writeClaudeTakeover(record);
-      throw error;
-    }
+    // 这次首次改写做出的副本；比对不通过重试时收回，免得留下多份。
+    let createdBackup: string | null = null;
+    this.writeConfigFile<{ takeover: ClaudeSettingsTakeover; current: Buffer | null }>({
+      filePath: settingsPath,
+      compute: (text, current) => {
+        const result = applyClaudeApiEndpoint({
+          text,
+          env,
+          takeover: record.takeover,
+        });
+        if (result.kind === "unparsable") throw unparsable(settingsPath, result.message);
+        return {
+          change: { kind: "write", text: result.text },
+          value: { takeover: result.takeover, current },
+        };
+      },
+      // 先记接管记录再替换文件：替换失败时接管记录回滚；反过来会丢掉原值。
+      commit: ({ takeover, current }) => {
+        if (!record.backup) {
+          createdBackup = this.store.writeClaudeSettingsBackup(current, this.now());
+        }
+        this.store.writeClaudeTakeover({
+          takeover,
+          backup: record.backup ?? { path: createdBackup },
+        });
+      },
+      rollback: () => {
+        this.store.writeClaudeTakeover(record);
+        if (createdBackup) this.store.discardBackup(createdBackup);
+        createdBackup = null;
+      },
+    });
     this.logger.info(
       { settingsPath, endpointId: endpoint.id },
       "Claude settings switched to API endpoint",
@@ -398,23 +463,22 @@ export class ApiEndpointService {
 
   private restoreClaudeOfficial(): void {
     const record = this.store.readClaudeTakeover();
-    if (!record.takeover) return;
+    const { takeover } = record;
+    if (!takeover) return;
     const settingsPath = this.resolveClaudeSettingsPath();
-    const current = readOptionalFile(settingsPath);
-    const result = restoreClaudeOfficial({
-      text: current?.toString("utf8") ?? null,
-      takeover: record.takeover,
+    this.writeConfigFile({
+      filePath: settingsPath,
+      compute: (text) => {
+        const result = restoreClaudeOfficial({ text, takeover });
+        if (result.kind === "unparsable") throw unparsable(settingsPath, result.message);
+        let change: ConfigFileChange = { kind: "keep" };
+        if (result.kind === "patched") change = { kind: "write", text: result.text };
+        if (result.kind === "delete") change = { kind: "delete" };
+        return { change, value: null };
+      },
+      commit: () => this.store.writeClaudeTakeover({ takeover: null, backup: record.backup }),
+      rollback: () => this.store.writeClaudeTakeover(record),
     });
-    if (result.kind === "unparsable") {
-      throw unparsable(settingsPath, result.message);
-    }
-    if (result.kind === "patched") {
-      writeConfigFileKeepingMode(settingsPath, result.text);
-    }
-    if (result.kind === "delete") {
-      rmSync(settingsPath, { force: true });
-    }
-    this.store.writeClaudeTakeover({ takeover: null, backup: record.backup });
     this.logger.info({ settingsPath }, "Claude settings restored to Official");
   }
 
@@ -423,46 +487,54 @@ export class ApiEndpointService {
     if (!codexVersionAtLeast(versionOutput, CODEX_AUTH_COMMAND_MIN_VERSION)) {
       throw new ApiEndpointRequestError(
         "codex_version_unsupported",
-        `API endpoints need Codex ${CODEX_AUTH_COMMAND_MIN_VERSION.join(".")} or later, which reads the API key through auth.command. Found: ${versionOutput}`,
+        codexVersionUnsupportedMessage(versionOutput),
       );
     }
   }
 
   /**
-   * 先算好 config.toml 的新内容（解析失败就什么都不写），再写 key 文件，最后写 config.toml。
-   * config.toml 写不成时 key 文件和接管记录都退回切换前的样子。
+   * 先算好 config.toml 的新内容（解析失败就什么都不写），再写 key 文件和接管记录，重读比对通过后替换 config.toml。
+   * config.toml 替换不成时 key 文件和接管记录都退回切换前的样子。
    */
   private writeCodexEndpoint(endpoint: StoredApiEndpoint, apiKey: string): void {
     const configPath = this.resolveCodexConfigPath();
-    const current = readOptionalFile(configPath);
     const record = this.store.readCodexTakeover();
-    const result = applyCodexApiEndpoint({
-      text: current?.toString("utf8") ?? null,
-      model: endpoint.defaultModelId,
-      table: this.buildCodexProviderTable(endpoint),
-      takeover: record.takeover,
-    });
-    if (result.kind === "unparsable") {
-      throw unparsable(configPath, result.message);
-    }
-
-    const backup = record.backup ?? {
-      path: this.store.writeCodexConfigBackup(current, this.now()),
-    };
+    const table = this.buildCodexProviderTable(endpoint);
     const previousKey = readOptionalFile(this.store.codexKeyFilePath);
-    this.store.writeCodexKeyFile(apiKey);
-    this.store.writeCodexTakeover({
-      takeover: result.takeover,
-      providerTable: { endpointId: endpoint.id },
-      backup,
+    let createdBackup: string | null = null;
+    this.writeConfigFile<{ takeover: CodexConfigTakeover; current: Buffer | null }>({
+      filePath: configPath,
+      compute: (text, current) => {
+        const result = applyCodexApiEndpoint({
+          text,
+          model: endpoint.defaultModelId,
+          table,
+          takeover: record.takeover,
+        });
+        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
+        return {
+          change: { kind: "write", text: result.text },
+          value: { takeover: result.takeover, current },
+        };
+      },
+      commit: ({ takeover, current }) => {
+        if (!record.backup) {
+          createdBackup = this.store.writeCodexConfigBackup(current, this.now());
+        }
+        this.store.writeCodexKeyFile(apiKey);
+        this.store.writeCodexTakeover({
+          takeover,
+          providerTable: { endpointId: endpoint.id },
+          backup: record.backup ?? { path: createdBackup },
+        });
+      },
+      rollback: () => {
+        this.store.writeCodexTakeover(record);
+        this.store.writeCodexKeyFile(previousKey);
+        if (createdBackup) this.store.discardBackup(createdBackup);
+        createdBackup = null;
+      },
     });
-    try {
-      writeConfigFileKeepingMode(configPath, result.text);
-    } catch (error) {
-      this.store.writeCodexTakeover(record);
-      this.store.writeCodexKeyFile(previousKey);
-      throw error;
-    }
     this.logger.info(
       { configPath, endpointId: endpoint.id },
       "Codex config switched to API endpoint",
@@ -471,24 +543,26 @@ export class ApiEndpointService {
 
   private refreshCodexProviderTable(endpoint: StoredApiEndpoint, apiKey: string): void {
     const configPath = this.resolveCodexConfigPath();
-    const current = readOptionalFile(configPath);
-    const result = replaceCodexProviderTable({
-      text: current?.toString("utf8") ?? null,
-      table: this.buildCodexProviderTable(endpoint),
-    });
-    if (result.kind === "unparsable") {
-      throw unparsable(configPath, result.message);
-    }
-    // 文件已经不在了：专用表也就不在了，没什么可刷新的。
-    if (result.kind === "missing") return;
+    const table = this.buildCodexProviderTable(endpoint);
     const previousKey = readOptionalFile(this.store.codexKeyFilePath);
-    this.store.writeCodexKeyFile(apiKey);
-    try {
-      writeConfigFileKeepingMode(configPath, result.text);
-    } catch (error) {
-      this.store.writeCodexKeyFile(previousKey);
-      throw error;
-    }
+    const refreshed = this.writeConfigFile({
+      filePath: configPath,
+      compute: (text) => {
+        const result = replaceCodexProviderTable({
+          text,
+          table,
+        });
+        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
+        // 文件已经不在了：专用表也就不在了，没什么可刷新的。
+        if (result.kind === "missing") return { change: { kind: "keep" }, value: false };
+        return { change: { kind: "write", text: result.text }, value: true };
+      },
+      commit: (writesTable) => {
+        if (writesTable) this.store.writeCodexKeyFile(apiKey);
+      },
+      rollback: () => this.store.writeCodexKeyFile(previousKey),
+    });
+    if (!refreshed) return;
     this.logger.info(
       { configPath, endpointId: endpoint.id },
       "Codex API endpoint provider table refreshed",
@@ -514,21 +588,22 @@ export class ApiEndpointService {
 
   private restoreCodexOfficial(): void {
     const record = this.store.readCodexTakeover();
-    if (!record.takeover) return;
+    const { takeover } = record;
+    if (!takeover) return;
     const configPath = this.resolveCodexConfigPath();
-    const current = readOptionalFile(configPath);
-    const result = restoreCodexOfficial({
-      text: current?.toString("utf8") ?? null,
-      takeover: record.takeover,
+    this.writeConfigFile({
+      filePath: configPath,
+      compute: (text) => {
+        const result = restoreCodexOfficial({ text, takeover });
+        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
+        const change: ConfigFileChange =
+          result.kind === "patched" ? { kind: "write", text: result.text } : { kind: "keep" };
+        return { change, value: null };
+      },
+      // 专用表和 key 文件都留着，第三方模式下的 Codex 会话还能恢复。
+      commit: () => this.store.writeCodexTakeover({ ...record, takeover: null }),
+      rollback: () => this.store.writeCodexTakeover(record),
     });
-    if (result.kind === "unparsable") {
-      throw unparsable(configPath, result.message);
-    }
-    if (result.kind === "patched") {
-      writeConfigFileKeepingMode(configPath, result.text);
-    }
-    // 专用表和 key 文件都留着，第三方模式下的 Codex 会话还能恢复。
-    this.store.writeCodexTakeover({ ...record, takeover: null });
     this.logger.info({ configPath }, "Codex config restored to Official");
   }
 
@@ -537,22 +612,117 @@ export class ApiEndpointService {
     const record = this.store.readCodexTakeover();
     if (record.providerTable?.endpointId !== endpointId) return;
     const configPath = this.resolveCodexConfigPath();
-    const current = readOptionalFile(configPath);
-    const result = removeCodexProviderTable({ text: current?.toString("utf8") ?? null });
-    if (result.kind === "unparsable") {
-      throw unparsable(configPath, result.message);
-    }
-    if (result.kind === "patched") {
-      // 接管前没有这个文件、现在又只剩 Osuna 写的东西：删掉，回到原样。
-      if (result.text === "" && record.backup?.path === null) {
-        rmSync(configPath, { force: true });
-      } else {
-        writeConfigFileKeepingMode(configPath, result.text);
-      }
-    }
-    this.store.writeCodexKeyFile(null);
-    this.store.writeCodexTakeover({ ...record, providerTable: null });
+    const previousKey = readOptionalFile(this.store.codexKeyFilePath);
+    this.writeConfigFile({
+      filePath: configPath,
+      compute: (text) => {
+        const result = removeCodexProviderTable({ text });
+        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
+        let change: ConfigFileChange = { kind: "keep" };
+        if (result.kind === "patched") {
+          // 接管前没有这个文件、现在又只剩 Osuna 写的东西：删掉，回到原样。
+          change =
+            result.text === "" && record.backup?.path === null
+              ? { kind: "delete" }
+              : { kind: "write", text: result.text };
+        }
+        return { change, value: null };
+      },
+      commit: () => {
+        this.store.writeCodexKeyFile(null);
+        this.store.writeCodexTakeover({ ...record, providerTable: null });
+      },
+      rollback: () => {
+        this.store.writeCodexTakeover(record);
+        this.store.writeCodexKeyFile(previousKey);
+      },
+    });
     this.logger.info({ configPath, endpointId }, "Codex API endpoint provider table removed");
+  }
+
+  /** 冲突保护见 writeConfigFileGuarded；三次都没写成就报 config_conflict。 */
+  private writeConfigFile<T>(input: {
+    filePath: string;
+    // `current` 是原始字节，首次改写时拿去做完整副本。
+    compute: (text: string | null, current: Buffer | null) => ConfigFilePlan<T>;
+    commit: (value: T) => void;
+    rollback: () => void;
+  }): T {
+    const result = writeConfigFileGuarded({
+      filePath: input.filePath,
+      compute: (current) => input.compute(current?.toString("utf8") ?? null, current),
+      commit: input.commit,
+      rollback: input.rollback,
+      ...(this.beforeConfigRecheck ? { beforeRecheck: this.beforeConfigRecheck } : {}),
+    });
+    if (result.kind === "conflict") {
+      throw new ApiEndpointRequestError(
+        "config_conflict",
+        `${input.filePath} kept changing while Osuna was writing it, so nothing was written`,
+      );
+    }
+    return result.value;
+  }
+
+  private inspectClaude(active: StoredApiEndpoint | null): ApiEndpointFileStatus {
+    const settingsPath = this.resolveClaudeSettingsPath();
+    const result = inspectClaudeSettings({
+      text: readOptionalFile(settingsPath)?.toString("utf8") ?? null,
+      takeover: active ? this.store.readClaudeTakeover().takeover : null,
+    });
+    if (result.kind === "unparsable") {
+      return { health: [unparsableIssue(settingsPath, result.message)], baseUrl: null };
+    }
+    return {
+      health: modifiedExternallyIssues(settingsPath, result.modifiedKeys),
+      baseUrl: result.baseUrl,
+    };
+  }
+
+  private async inspectCodex(active: StoredApiEndpoint | null): Promise<ApiEndpointFileStatus> {
+    const configPath = this.resolveCodexConfigPath();
+    const result = inspectCodexConfig({
+      text: readOptionalFile(configPath)?.toString("utf8") ?? null,
+      takeover: active ? this.store.readCodexTakeover().takeover : null,
+      table: active ? this.buildCodexProviderTable(active) : null,
+    });
+    const health: HealthIssue[] = [];
+    let baseUrl: string | null = null;
+    if (result.kind === "unparsable") {
+      health.push(unparsableIssue(configPath, result.message));
+    } else {
+      health.push(...modifiedExternallyIssues(configPath, result.modifiedKeys));
+      if (result.profileOverride) {
+        const { profile, keys } = result.profileOverride;
+        health.push({
+          code: "codex_profile_override",
+          message: `${configPath} selects profile "${profile}", and [profiles.${profile}] sets ${keys.join(", ")}, which overrides the API endpoint`,
+        });
+      }
+      baseUrl = result.baseUrl;
+    }
+    // Codex 被降级到不认 auth.command 的版本时，启用中的接口已经不能用了。
+    if (active) {
+      const issue = await this.checkCodexVersion();
+      if (issue) health.push(issue);
+    }
+    return { health, baseUrl };
+  }
+
+  private async checkCodexVersion(): Promise<HealthIssue | null> {
+    let versionOutput: string;
+    try {
+      versionOutput = await this.probeCodexVersion();
+    } catch (error) {
+      // 探测失败不是「版本不足」：原因照实报出，列表照常返回。
+      const reason = error instanceof Error ? error.message : String(error);
+      return { code: "codex_unavailable", message: `Couldn't run codex --version: ${reason}` };
+    }
+    if (codexVersionAtLeast(versionOutput, CODEX_AUTH_COMMAND_MIN_VERSION)) return null;
+    return {
+      code: "codex_version_unsupported",
+      message: codexVersionUnsupportedMessage(versionOutput),
+    };
   }
 
   private toWire(endpoint: StoredApiEndpoint): ApiEndpoint {
@@ -668,43 +838,20 @@ function unparsable(filePath: string, detail: string): ApiEndpointRequestError {
   );
 }
 
-/**
- * 原子替换 CLI 自己的配置文件，保留原有权限位、不动所在目录的权限。
- * 新建的文件含 token，按 0600 创建。
- */
-function writeConfigFileKeepingMode(filePath: string, text: string): void {
-  const mode = readOptionalMode(filePath) ?? PRIVATE_FILE_MODE;
-  const directory = path.dirname(filePath);
-  mkdirSync(directory, { recursive: true });
-  const temporary = path.join(
-    directory,
-    `.${path.basename(filePath)}.${process.pid}.${randomUUID()}`,
-  );
-  try {
-    writeFileSync(temporary, text, { mode });
-    // writeFileSync 的 mode 会被 umask 削掉，显式再设一次。
-    if (process.platform !== "win32") chmodSync(temporary, mode);
-    renameSync(temporary, filePath);
-  } catch (error) {
-    rmSync(temporary, { force: true });
-    throw error;
-  }
+function unparsableIssue(filePath: string, detail: string): HealthIssue {
+  return { code: "config_unparsable", message: `${filePath} could not be parsed: ${detail}` };
 }
 
-function readOptionalMode(filePath: string): number | null {
-  try {
-    return statSync(filePath).mode & 0o777;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
+function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue[] {
+  if (keys.length === 0) return [];
+  return [
+    {
+      code: "modified_externally",
+      message: `${filePath} was changed outside Osuna: ${keys.join(", ")}`,
+    },
+  ];
 }
 
-function readOptionalFile(filePath: string): Buffer | null {
-  try {
-    return readFileSync(filePath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
+function codexVersionUnsupportedMessage(versionOutput: string): string {
+  return `API endpoints need Codex ${CODEX_AUTH_COMMAND_MIN_VERSION.join(".")} or later, which reads the API key through auth.command. Found: ${versionOutput}`;
 }

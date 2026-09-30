@@ -130,7 +130,7 @@ same `commandCatalogPath` reads the entry back (daemon restart), and a
 
 ## Scenario: rewriting a config file another program owns
 
-Reference implementation: API endpoints (api-endpoint tickets 01–02). `server/api-endpoints/` rewrites Claude Code's `settings.json` and Codex's `config.toml` so the CLI itself switches to a third-party endpoint. The rules are in `docs/adr/0004-api-endpoint-rewrites-cli-config.md`; this is how the code keeps them.
+Reference implementation: API endpoints (api-endpoint tickets 01–02, conflict guard and health in 06). `server/api-endpoints/` rewrites Claude Code's `settings.json` and Codex's `config.toml` so the CLI itself switches to a third-party endpoint. The rules are in `docs/adr/0004-api-endpoint-rewrites-cli-config.md`; this is how the code keeps them.
 
 ### 1. Scope / Trigger
 
@@ -143,16 +143,21 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02). `server/
 - Service: `ApiEndpointService` (`service.ts`) resolves the path (`resolveAgentHookConfigPath(claudeAgentHookProvider, { env, homeDir })`, so `CLAUDE_CONFIG_DIR` wins), serializes every mutation through one promise queue, and does the file I/O.
 - Codex pure patch (`codex-config-patch.ts`): `applyCodexApiEndpoint({ text, model, table, takeover }) → patched { text, takeover } | unparsable`, `restoreCodexOfficial({ text, takeover })`, `replaceCodexProviderTable({ text, table })`, `removeCodexProviderTable({ text })`, the last three → `patched | missing | unparsable`. `buildCodexAuthCommand({ platform, keyFilePath, systemRoot? }) → { command, args, timeoutMs }` in `codex-auth-command.ts`.
 - Codex path: `resolveCodexConfigPath()` takes the directory of the Codex hooks installer path (`CODEX_HOME` wins) plus `config.toml`.
-- Injection: `PaseoDaemonConfig.apiEndpoints: { env?, homeDir? }`. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so no test daemon can touch the real `~/.claude` or `~/.codex`. `ApiEndpointServiceOptions.probeCodexVersion` is required; bootstrap wires it to `probeCodexVersion(providerSnapshotManager.getRuntimeSettings("codex"))`, so a test sets `providerOverrides.codex.command` to a fake binary.
+- Guarded write (`config-file.ts`): `writeConfigFileGuarded<T>({ filePath, compute(current: Buffer | null) → { change: write{text} | delete | keep, value: T }, commit(value), rollback(), beforeRecheck? }) → { kind: "written", value } | { kind: "conflict" }`. The service wraps it as `writeConfigFile`, passes `compute(text, bytes)`, and turns `conflict` into `ApiEndpointRequestError("config_conflict")`. Every write and restore of `settings.json` / `config.toml` goes through it.
+- Inspect (pure, for health): `inspectClaudeSettings({ text, takeover }) → { kind: "parsed", modifiedKeys, baseUrl } | unparsable`; `inspectCodexConfig({ text, takeover, table }) → { kind: "parsed", modifiedKeys, profileOverride: { profile, keys } | null, baseUrl } | unparsable`. `takeover`/`table` are null in Official.
+- Injection: `PaseoDaemonConfig.apiEndpoints: { env?, homeDir?, beforeConfigRecheck? }`. `beforeConfigRecheck` is a test seam only: the daemon tests write the file from it to simulate another tool. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so no test daemon can touch the real `~/.claude` or `~/.codex`. `ApiEndpointServiceOptions.probeCodexVersion` is required; bootstrap wires it to `probeCodexVersion(providerSnapshotManager.getRuntimeSettings("codex"))`, so a test sets `providerOverrides.codex.command` to a fake binary.
 
 ### 3. Contracts
 
 - The takeover record keeps each owned key's `original` (`{ present: false }` or `{ present: true, value }`) and `written`, plus `originalFile` (`absent` / `empty` with its text / `content`). Originals are taken from the first takeover only; switching endpoint A to B keeps them.
-- Order of writes on switch: takeover record first, then the CLI file; if the CLI write throws, the previous record is written back. The reverse order loses the originals on a crash.
+- Order of one guarded attempt: read bytes + sha256 → `compute` (throws `config_unparsable` before anything is written) → stage a temp file next to the target → `commit` (takeover record, first-write backup, Codex key file) → `beforeRecheck` → re-read and compare the hash → `rename` (or `rm` for `delete`). A changed hash calls `rollback` and recomputes on the new content; after three attempts the result is `conflict` and nothing is left changed. `commit` goes before the re-read so the gap between the check and the rename holds no other disk writes (ADR 0004: "re-read it just before the atomic rename"). The reverse order (file first, record second) loses the originals on a crash.
+- `rollback` restores the previous takeover record and key bytes and deletes a backup made in that attempt, so a retried first write leaves exactly one backup.
 - The backup is taken once per file lifetime: `backup: null` = never rewritten, `{ path: null }` = the file did not exist at the first write. Never back up a file the daemon already wrote.
 - The CLI file is replaced atomically with its previous mode bits (new file: `0600`, because it now holds a token). `writePrivateFileAtomicSync` is wrong here: it forces `0600` on the file and `0700` on `~/.claude`.
 - Codex: edit TOML by splicing text at `toml-eslint-parser` node ranges, never by re-serializing. `original` for a top-level key is `{ present: true, raw }`, the value's source text with its quotes. Every edit re-parses its output and checks the written values; failure is `unparsable`.
-- Codex switch order: compute the patch (nothing written on `unparsable`) → write `codex-api-key` → write `takeover-codex.json` → write `config.toml`. If `config.toml` throws, write back the previous takeover record and the previous key bytes (or delete the key file), then rethrow; `setActiveEndpointId` runs only after success.
+- Codex switch order: compute the patch (nothing written on `unparsable`) → commit writes `codex-api-key` then `takeover-codex.json` → re-read check → replace `config.toml`. A failed check or replace writes back the previous takeover record and the previous key bytes (or deletes the key file); `setActiveEndpointId` runs only after success.
+- Delete of the active endpoint: restore Official and clear the active id, then remove the Codex table. If the second step fails (`config_conflict`), the endpoint stays, the mode stays Official, and `onActiveEndpointChanged` still fires (`finally`), so the snapshot matches.
+- Health is read on `list` only, never by a watcher: owned keys vs `written` (Claude `env.*`, the WebSearch deny entry the daemon added; Codex `model_provider`, `model`, and every field of the dedicated table). Other keys never count.
 - `providerTable.endpointId` outlives Official. Saving that endpoint while Official calls `replaceCodexProviderTable` and rewrites the key file; deleting it removes the table and the key file, and deletes `config.toml` when nothing is left and `backup.path === null`.
 
 ### 4. Validation & Error Matrix
@@ -162,6 +167,7 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02). `server/
 - Restore leaves `{}` and `originalFile` was `absent` → file deleted; `empty` → original bytes back.
 - Codex: invalid TOML (1.0), `model` / `model_provider` not a string, `model_providers` not a table, or a result that would not parse (e.g. `model_providers` as an inline table) → `config_unparsable`, nothing written. `codex --version` below 0.118.0 or unparsable → `codex_version_unsupported`, nothing written. Codex binary missing → `unknown` with the launch error.
 - Codex BOM: the parser rejects it, so each entry point strips a leading BOM and puts it back.
+- The file changes between the hash and the rename three times running → `config_conflict`, nothing written, takeover and key file as before.
 
 ### 5. Good/Base/Bad Cases
 
@@ -180,6 +186,8 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02). `server/
 - `codex-auth-command.test.ts`: executes the generated command with `execFile` and asserts stdout equals the key file exactly; this runs on the Windows server CI job.
 - `claude-settings-patch.test.ts` also: only mapped tiers are written; a tier dropped on the next apply gets the user's own value back.
 - `daemon-e2e/api-endpoint-codex.e2e.test.ts` (POSIX; fake `codex` shell script): `auth.json` byte-identical; version below 0.118.0 refused; unparsable refused with no key file; read-only `CODEX_HOME` keeps the previous mode and key.
+- `config-file.test.ts`: one write commits before the replace; a change before the re-check recomputes on the new bytes; three changes → `conflict`, record rolled back, no temp file left; a file that appears mid-write is noticed.
+- Daemon tests with `beforeConfigRecheck`: a one-time change keeps the other tool's key and leaves one backup; a file that keeps changing is `config_conflict` for switching and for Official, and the active id does not move; Codex conflict leaves no key file.
 
 ### 7. Wrong vs Correct
 
@@ -190,12 +198,23 @@ const backupPath = record.backupPath ?? backUp(current); // null "file absent" r
 writePrivateFileAtomicSync(settingsPath, text); // chmods the user's file and ~/.claude
 ```
 
+```ts
+const result = applyClaudeApiEndpoint({ text: readFile(settingsPath), env, takeover });
+writeFile(settingsPath, result.text); // another tool's edit between the read and here is lost
+```
+
 #### Correct
 
 ```ts
-const backup = record.backup ?? { path: store.writeClaudeSettingsBackup(current, now()) };
-store.writeClaudeTakeover({ takeover: result.takeover, backup });
-writeConfigFileKeepingMode(settingsPath, result.text);
+this.writeConfigFile({
+  filePath: settingsPath,
+  compute: (text, current) => ({ change: { kind: "write", text: apply(text).text }, value: { current } }),
+  commit: ({ current }) => {
+    if (!record.backup) createdBackup = store.writeClaudeSettingsBackup(current, now());
+    store.writeClaudeTakeover({ takeover, backup: record.backup ?? { path: createdBackup } });
+  },
+  rollback: () => { store.writeClaudeTakeover(record); /* and discard createdBackup */ },
+});
 ```
 
 ## Anti-patterns

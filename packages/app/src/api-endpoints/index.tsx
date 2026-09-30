@@ -3,8 +3,12 @@ import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Pencil, Plus, Trash2 } from "lucide-react-native";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpoint,
+  ApiEndpointHealthIssue,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
@@ -23,7 +27,12 @@ export {
   selectApiEndpointsState,
   type ApiEndpointsLoadState,
 } from "./internal/section-state";
-import type { ApiEndpointsLoadState } from "./internal/section-state";
+import {
+  apiEndpointHealthMessageKey,
+  selectApiEndpointHealthView,
+  type ApiEndpointHealthAlert,
+  type ApiEndpointsLoadState,
+} from "./internal/section-state";
 
 /** 能切第三方接口的内置提供方；自定义提供方不在此列。 */
 const API_ENDPOINT_PROVIDERS = new Set(["claude", "codex"]);
@@ -41,6 +50,8 @@ export interface ApiEndpointsSectionProps {
   actionError: string | null;
   onDismissError: () => void;
   onActivate: (endpoint: ApiEndpoint | null) => void;
+  // 「已被外部修改」时按当前接口重新写入。
+  onReapply: (endpoint: ApiEndpoint) => void;
   onAdd: () => void;
   onEdit: (endpoint: ApiEndpoint) => void;
   onDelete: (endpoint: ApiEndpoint) => void;
@@ -54,12 +65,14 @@ export function ApiEndpointsSection({
   actionError,
   onDismissError,
   onActivate,
+  onReapply,
   onAdd,
   onEdit,
   onDelete,
 }: ApiEndpointsSectionProps) {
   const { t } = useTranslation();
   const handleUseOfficial = useCallback(() => onActivate(null), [onActivate]);
+  const health = selectApiEndpointHealthView(state);
 
   const canAdd = !busy && state.status === "ready";
   const addButton = useMemo(
@@ -85,6 +98,15 @@ export function ApiEndpointsSection({
       trailing={addButton}
       testID="api-endpoints-section"
     >
+      {health.alert ? (
+        <HealthAlert
+          alert={health.alert}
+          providerLabel={providerLabel}
+          busy={busy}
+          onReapply={onReapply}
+          onUseOfficial={handleUseOfficial}
+        />
+      ) : null}
       <View style={settingsStyles.card}>
         {actionError ? (
           <View style={settingsStyles.row} testID="api-endpoints-action-error">
@@ -124,6 +146,19 @@ export function ApiEndpointsSection({
                 <Text variant="caption" color="foregroundMuted">
                   {t("settings.providers.apiEndpoints.officialHint", { name: providerLabel })}
                 </Text>
+                {health.officialTarget ? (
+                  <Text
+                    variant="caption"
+                    color="foregroundMuted"
+                    selectable
+                    testID="api-endpoints-official-target"
+                  >
+                    {t("settings.providers.apiEndpoints.health.officialTarget", {
+                      provider: providerLabel,
+                      url: health.officialTarget,
+                    })}
+                  </Text>
+                ) : null}
               </View>
               <UseControl
                 active={state.activeEndpointId === null}
@@ -148,6 +183,87 @@ export function ApiEndpointsSection({
         ) : null}
       </View>
     </SettingsSection>
+  );
+}
+
+/** 模式区唯一的 Alert：第一条问题作标题，其余逐条列在下面，每条都带 daemon 原文。 */
+function HealthAlert({
+  alert,
+  providerLabel,
+  busy,
+  onReapply,
+  onUseOfficial,
+}: {
+  alert: ApiEndpointHealthAlert;
+  providerLabel: string;
+  busy: boolean;
+  onReapply: (endpoint: ApiEndpoint) => void;
+  onUseOfficial: () => void;
+}) {
+  const { t } = useTranslation();
+  const { activeEndpoint } = alert;
+  const handleReapply = useCallback(() => {
+    if (activeEndpoint) onReapply(activeEndpoint);
+  }, [activeEndpoint, onReapply]);
+  function describe(issue: ApiEndpointHealthIssue): string | null {
+    const key = apiEndpointHealthMessageKey(issue);
+    return key ? t(key, { provider: providerLabel }) : null;
+  }
+
+  const [first, ...rest] = alert.issues;
+  if (!first) return null;
+  const firstText = describe(first);
+  return (
+    <Alert
+      variant={alert.variant}
+      title={firstText ?? first.message}
+      testID="api-endpoints-health"
+      description={
+        <>
+          {firstText ? <IssueDetail message={first.message} /> : null}
+          {rest.map((issue) => {
+            const text = describe(issue);
+            return (
+              <View key={issue.code} style={styles.issue}>
+                {text ? <Text variant="caption">{text}</Text> : null}
+                <IssueDetail message={issue.message} />
+              </View>
+            );
+          })}
+        </>
+      }
+    >
+      {activeEndpoint ? (
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleReapply}
+            disabled={busy}
+            testID="api-endpoints-reapply"
+          >
+            {t("settings.providers.apiEndpoints.health.reapply")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={onUseOfficial}
+            disabled={busy}
+            testID="api-endpoints-health-official"
+          >
+            {t("settings.providers.apiEndpoints.health.switchToOfficial")}
+          </Button>
+        </>
+      ) : null}
+    </Alert>
+  );
+}
+
+function IssueDetail({ message }: { message: string }) {
+  return (
+    <Text variant="caption" color="foregroundMuted" selectable>
+      {message}
+    </Text>
   );
 }
 
@@ -292,6 +408,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   actionError: {
     flex: 1,
+  },
+  issue: {
+    gap: theme.spacing[0.5],
   },
   inUse: {
     // 与「使用」按钮同宽附近，避免切换时行内控件跳动过大。

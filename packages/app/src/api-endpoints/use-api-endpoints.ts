@@ -34,6 +34,8 @@ export interface UseApiEndpointsResult {
   actionError: string | null;
   dismissActionError: () => void;
   activate: (endpoint: ApiEndpoint | null) => void;
+  // 「已被外部修改」时按当前接口重新写入；切回官方用 activate(null)。
+  reapply: (endpoint: ApiEndpoint) => void;
   remove: (endpoint: ApiEndpoint) => void;
   save: (request: ApiEndpointSaveRequestInput) => Promise<ApiEndpointSaveResult>;
   fetchModels: (
@@ -148,6 +150,28 @@ export function useApiEndpoints(input: {
     [client, confirmAndRun, provider, providerLabel, t],
   );
 
+  const reapply = useCallback(
+    (endpoint: ApiEndpoint) => {
+      if (!client) return;
+      void confirmAndRun(
+        {
+          title: t("settings.providers.apiEndpoints.health.reapplyTitle", {
+            provider: providerLabel,
+            name: endpoint.name,
+          }),
+          message: t("settings.providers.apiEndpoints.health.reapplyMessage", {
+            provider: providerLabel,
+          }),
+          confirmLabel: t("settings.providers.apiEndpoints.health.reapply"),
+          cancelLabel: t("common.actions.cancel"),
+        },
+        // 重新应用就是再启用一次当前接口，同样经过写入时的冲突保护。
+        () => client.apiEndpointSetActive(provider, endpoint.id),
+      );
+    },
+    [client, confirmAndRun, provider, providerLabel, t],
+  );
+
   const remove = useCallback(
     (endpoint: ApiEndpoint) => {
       if (!client) return;
@@ -250,6 +274,7 @@ export function useApiEndpoints(input: {
     actionError,
     dismissActionError,
     activate,
+    reapply,
     remove,
     save,
     fetchModels,
