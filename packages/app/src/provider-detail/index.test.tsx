@@ -559,6 +559,8 @@ function ProviderGlyph() {
   return <span data-testid="provider-glyph" />;
 }
 
+const GLYPH = { Icon: ProviderGlyph, brandColor: null };
+
 const AVAILABLE: ProviderDetailHeaderProps["status"] = {
   tone: "success",
   label: { key: "settings.providers.statuses.available" },
@@ -572,7 +574,7 @@ const THREE_MODELS = { key: "settings.providers.models.many", params: { count: 3
 function renderHeader(overrides: Partial<ProviderDetailHeaderProps> = {}) {
   render(
     <ProviderDetailHeader
-      icon={ProviderGlyph}
+      glyph={GLYPH}
       label="Claude Code"
       status={AVAILABLE}
       modelCount={THREE_MODELS}

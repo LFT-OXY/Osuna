@@ -223,6 +223,10 @@ vi.mock("@/components/settings/headings/settings-info-tip", () => ({
 vi.mock("@/components/provider-icons", () => ({
   getProviderIcon: (provider: string) => () =>
     React.createElement("span", { "data-icon": `provider-${provider}` }),
+  resolveProviderGlyph: ({ provider, tone }: { provider: string; tone: string }) => ({
+    Icon: () => React.createElement("span", { "data-icon": `provider-${provider}-${tone}` }),
+    brandColor: null,
+  }),
 }));
 
 // 目录行的图标与安装链接不在断言范围内。
@@ -452,7 +456,7 @@ describe("ProvidersSection", () => {
     expect(indexOfText(codexNodes, "Disabled")).toBeGreaterThanOrEqual(0);
   });
 
-  it("composes the row as icon, label, status line, then switch", () => {
+  it("composes the row as brand icon, label, status line, then switch", () => {
     snapshotState.entries = [claudeEntry];
     configState.config = makeConfig();
 
@@ -460,7 +464,7 @@ describe("ProvidersSection", () => {
 
     const row = findRow("Claude provider details");
     const nodes = descendants(row);
-    const icon = indexOfMatches(nodes, '[data-icon="provider-claude"]');
+    const icon = indexOfMatches(nodes, '[data-icon="provider-claude-brand"]');
     const label = indexOfText(nodes, "Claude");
     const statusDot = indexOfMatches(nodes, '[data-testid="provider-status-dot-success"]');
     const statusText = nodes.findIndex(

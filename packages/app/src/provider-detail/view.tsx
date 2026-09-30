@@ -6,7 +6,7 @@ import {
   resolveProviderDiscoveredModels,
   type ProviderDiscoveredModelsCache,
 } from "@/components/provider-diagnostic-models";
-import { getProviderIcon } from "@/components/provider-icons";
+import { resolveProviderGlyph } from "@/components/provider-icons";
 import { useToast } from "@/contexts/toast-context";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
@@ -203,7 +203,7 @@ export function useProviderDetailHeader(
     : null;
 
   const isProviderRefreshing = isRefreshing || status.tone === "loading";
-  const icon = getProviderIcon(provider, serverId);
+  const glyph = resolveProviderGlyph({ provider, serverId, tone: "brand" });
   const label = resolveProviderLabel(provider, entries);
 
   const handleRefresh = useCallback(() => {
@@ -231,7 +231,7 @@ export function useProviderDetailHeader(
   }, [label, onRemoved, patchConfig, provider, serverId, t]);
 
   return {
-    icon,
+    glyph,
     label,
     status,
     modelCount,
@@ -300,7 +300,7 @@ export function ProviderDetailPage({
   return (
     <>
       <ProviderDetailHeader
-        icon={header.icon}
+        glyph={header.glyph}
         label={header.label}
         status={header.status}
         modelCount={header.modelCount}

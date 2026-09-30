@@ -224,6 +224,7 @@
 
 - 遵循 `docs/design.md`，全部复用现有组件和 token：SettingsSection、settingsStyles、Switch、Button 的 default/secondary/outline/ghost、StatusBadge、Alert、SegmentedControl、FormTextInput、DropdownMenu、AdaptiveModalSheet、ScrollableCodeSurface。不新增设计 token。
 - 数值以 `research/ui-tokens.md` 和原型为准。原型里的 CSS 只作视觉参照，不要照搬进代码。
+- 提供方图标用 `resolveProviderGlyph({ tone: "brand" })`，与 Composer 工具栏和模型列表一致（验收时用户决定，原型画的是单色）：有彩色 SVG 的用彩色版（Codex、Oh My Pi，及目录里的 Kimi、Kiro、MiniMax、Gemini），有品牌色的用单色加品牌色（Claude `#d97757`），其余是前景色单色。列表行、详情头部和 composer 弹窗头部共用 `provider-detail/icon-frame.tsx` 的 `ProviderIconFrame`。
 
 ### 文案
 

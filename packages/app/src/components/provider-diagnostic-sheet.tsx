@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { ProviderIconFrame, ProviderStatusBadge } from "@/provider-detail/header";
+import { ProviderIconFrame } from "@/provider-detail/icon-frame";
+import { ProviderStatusBadge } from "@/provider-detail/header";
 import {
   ProviderDetail,
   ProviderDetailActions,
@@ -33,7 +34,7 @@ export function ProviderDiagnosticSheet({
   const sheetHeader = useMemo<SheetHeader>(
     () => ({
       title: header.label,
-      leading: <ProviderIconFrame icon={header.icon} size="sm" />,
+      leading: <ProviderIconFrame glyph={header.glyph} size="sm" />,
       titleAccessory: <ProviderStatusBadge status={header.status} />,
       actions: (
         <ProviderDetailActions

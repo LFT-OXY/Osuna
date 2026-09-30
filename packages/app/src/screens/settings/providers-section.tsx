@@ -8,7 +8,7 @@ import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
-import { getProviderIcon } from "@/components/provider-icons";
+import { resolveProviderGlyph } from "@/components/provider-icons";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Switch } from "@/components/ui/switch";
@@ -19,6 +19,7 @@ import {
   resolveProviderStatusLine,
   type ProviderStatusDisplay,
 } from "@/provider-detail/status";
+import { ProviderIconFrame } from "@/provider-detail/icon-frame";
 import { ProviderCatalogDialog } from "./provider-catalog-dialog";
 import type { ProvidersLayout } from "./providers-layout";
 import { ChevronRight, Plus } from "lucide-react-native";
@@ -58,8 +59,7 @@ function ProviderRow({
   onToggleEnabled,
 }: ProviderRowProps) {
   const { t } = useTranslation();
-  const providerIcon = getProviderIcon(def.id, serverId);
-  const ThemedProviderIcon = useMemo(() => withUnistyles(providerIcon), [providerIcon]);
+  const glyph = resolveProviderGlyph({ provider: def.id, serverId, tone: "brand" });
   const modelCount = countSelectableModels(entry.models);
   const activeApiEndpointName = entry.activeApiEndpoint?.name ?? null;
   const statusLine = resolveProviderStatusLine({
@@ -102,9 +102,7 @@ function ProviderRow({
       {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
         <>
           <View style={styles.rowContent}>
-            <View style={settingsStyles.rowIconFrame}>
-              <ThemedProviderIcon size={ICON_SIZE.md} uniProps={foregroundColorMapping} />
-            </View>
+            <ProviderIconFrame glyph={glyph} size="sm" />
             <View style={settingsStyles.rowContent}>
               <Text style={settingsStyles.rowTitle} numberOfLines={1}>
                 {def.label}

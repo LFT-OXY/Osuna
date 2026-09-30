@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, type ComponentType, type ReactNode } from "react";
+import React, { useCallback, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -19,9 +19,10 @@ import {
 } from "@/components/ui/icon-button-chrome";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Text } from "@/components/ui/text";
-import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import { ProviderIconFrame } from "./icon-frame";
+import type { ProviderGlyph } from "@/components/provider-icons";
 import type { ProviderStatusCopy, ProviderStatusDisplay, ProviderStatusTone } from "./status";
 
 /*
@@ -30,7 +31,7 @@ import type { ProviderStatusCopy, ProviderStatusDisplay, ProviderStatusTone } fr
  */
 
 export interface ProviderDetailHeaderProps {
-  icon: ComponentType<{ size: number; color: string }>;
+  glyph: ProviderGlyph;
   label: string;
   status: ProviderStatusDisplay;
   // 只在可用时给出。
@@ -54,24 +55,6 @@ const ThemedTrash2 = withUnistyles(Trash2);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
 
-// 页内头部块是 40 的框；弹窗头部和列表行一样是 28 的框。
-const ICON_FRAME_GLYPH = { lg: ICON_SIZE.lg, sm: ICON_SIZE.md } as const;
-
-export function ProviderIconFrame({
-  icon,
-  size,
-}: {
-  icon: ComponentType<{ size: number; color: string }>;
-  size: keyof typeof ICON_FRAME_GLYPH;
-}) {
-  const ThemedIcon = useMemo(() => withUnistyles(icon), [icon]);
-  return (
-    <View style={size === "lg" ? styles.iconFrame : settingsStyles.rowIconFrame}>
-      <ThemedIcon size={ICON_FRAME_GLYPH[size]} uniProps={foregroundColorMapping} />
-    </View>
-  );
-}
-
 export function ProviderStatusBadge({ status }: { status: ProviderStatusDisplay }) {
   const { t } = useTranslation();
   return (
@@ -83,7 +66,7 @@ export function ProviderStatusBadge({ status }: { status: ProviderStatusDisplay 
 }
 
 export function ProviderDetailHeader({
-  icon,
+  glyph,
   label,
   status,
   modelCount,
@@ -94,7 +77,7 @@ export function ProviderDetailHeader({
 
   return (
     <View style={styles.header} testID={testID}>
-      <ProviderIconFrame icon={icon} size="lg" />
+      <ProviderIconFrame glyph={glyph} size="lg" />
       <View style={styles.text}>
         <Text variant="title-sm" numberOfLines={1}>
           {label}
@@ -262,15 +245,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[3],
     minHeight: 40,
     marginBottom: theme.spacing[6],
-  },
-  iconFrame: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.surface2,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
   text: {
     flex: 1,
