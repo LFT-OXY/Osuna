@@ -1,4 +1,4 @@
-import React, { useMemo, type ComponentType } from "react";
+import React, { useMemo, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -11,7 +11,7 @@ import type { ProviderStatusCopy, ProviderStatusDisplay, ProviderStatusTone } fr
 
 /*
  * 设置页里详情的头部块：图标、名称、状态徽章与模型数，右侧「刷新」。
- * 弹窗外框自己画头部，不用这里。
+ * 手机上「刷新」放到顶栏，头部块不带操作。弹窗外框自己画头部，不用这里。
  */
 
 export interface ProviderDetailHeaderProps {
@@ -20,8 +20,7 @@ export interface ProviderDetailHeaderProps {
   status: ProviderStatusDisplay;
   // 只在可用时给出。
   modelCount: ProviderStatusCopy | null;
-  isRefreshing: boolean;
-  onRefresh: () => void;
+  renderActions?: () => ReactNode;
   testID?: string;
 }
 
@@ -40,15 +39,11 @@ export function ProviderDetailHeader({
   label,
   status,
   modelCount,
-  isRefreshing,
-  onRefresh,
+  renderActions,
   testID,
 }: ProviderDetailHeaderProps) {
   const { t } = useTranslation();
   const ThemedIcon = useMemo(() => withUnistyles(icon), [icon]);
-  const refreshKey = isRefreshing
-    ? "settings.providers.diagnostic.refreshing"
-    : "settings.providers.diagnostic.refresh";
 
   return (
     <View style={styles.header} testID={testID}>
@@ -71,18 +66,32 @@ export function ProviderDetailHeader({
           ) : null}
         </View>
       </View>
-      <View style={styles.actions}>
-        <Button
-          variant="secondary"
-          size="sm"
-          leftIcon={isRefreshing ? undefined : RotateCw}
-          onPress={onRefresh}
-          disabled={isRefreshing}
-        >
-          {t(refreshKey)}
-        </Button>
-      </View>
+      {renderActions ? <View style={styles.actions}>{renderActions()}</View> : null}
     </View>
+  );
+}
+
+export function ProviderDetailRefreshButton({
+  isRefreshing,
+  onRefresh,
+}: {
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const refreshKey = isRefreshing
+    ? "settings.providers.diagnostic.refreshing"
+    : "settings.providers.diagnostic.refresh";
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      leftIcon={isRefreshing ? undefined : RotateCw}
+      onPress={onRefresh}
+      disabled={isRefreshing}
+    >
+      {t(refreshKey)}
+    </Button>
   );
 }
 

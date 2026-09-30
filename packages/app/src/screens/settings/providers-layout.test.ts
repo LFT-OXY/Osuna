@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveProvidersLayout, resolveSelectedProvider } from "./providers-layout";
+import {
+  resolveProvidersLayout,
+  resolveSelectedProvider,
+  resolveStackedProvidersView,
+} from "./providers-layout";
 
 describe("resolveProvidersLayout", () => {
   it.each([
@@ -26,5 +30,37 @@ describe("resolveSelectedProvider", () => {
 
   it("selects nothing when the list is empty", () => {
     expect(resolveSelectedProvider({ requested: "claude", providerIds: [] })).toBeNull();
+  });
+});
+
+describe("resolveStackedProvidersView", () => {
+  const providerIds = ["claude", "codex"];
+
+  it("shows the list on the section address", () => {
+    expect(resolveStackedProvidersView({ requested: null, providerIds })).toEqual({
+      kind: "list",
+    });
+  });
+
+  it("shows the detail of the provider named in the address", () => {
+    expect(resolveStackedProvidersView({ requested: "codex", providerIds })).toEqual({
+      kind: "detail",
+      provider: "codex",
+    });
+  });
+
+  it("returns to the list when the address names an unknown provider", () => {
+    expect(resolveStackedProvidersView({ requested: "gone", providerIds })).toEqual({
+      kind: "missing",
+    });
+    expect(resolveStackedProvidersView({ requested: "claude", providerIds: [] })).toEqual({
+      kind: "missing",
+    });
+  });
+
+  it("keeps the address while the list has not arrived", () => {
+    expect(resolveStackedProvidersView({ requested: "codex", providerIds: null })).toEqual({
+      kind: "list",
+    });
   });
 });

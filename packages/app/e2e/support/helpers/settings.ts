@@ -357,8 +357,20 @@ export async function expectHostProvidersCard(page: Page, serverId: string): Pro
   await expect(page.getByTestId("host-page-providers-card")).toBeVisible();
 }
 
+// Stack 下层被盖住的 Providers 页仍在 DOM 里，只看可见的那一页。
 export function providerRows(page: Page) {
-  return page.getByTestId("host-page-providers-card").locator('[data-testid^="provider-row-"]');
+  return page
+    .getByTestId("host-page-providers-card")
+    .locator('[data-testid^="provider-row-"]')
+    .filter({ visible: true });
+}
+
+export function providerRow(page: Page, provider: string) {
+  return page.getByTestId(`provider-row-${provider}`).filter({ visible: true });
+}
+
+function visibleProviderDetailPane(page: Page) {
+  return page.getByTestId("provider-detail-pane").filter({ visible: true });
 }
 
 export async function readProviderRowIds(page: Page): Promise<string[]> {
@@ -376,13 +388,32 @@ export async function expectProviderSelected(
   provider: string,
 ): Promise<void> {
   await expectAppRoute(page, buildProviderSettingsRoute(serverId, provider));
-  await expect(page.getByTestId(`provider-row-${provider}`)).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(providerRow(page, provider)).toHaveAttribute("aria-selected", "true");
   await expect(
-    page.getByTestId("provider-detail-pane").getByTestId(`provider-detail-header-${provider}`),
+    visibleProviderDetailPane(page).getByTestId(`provider-detail-header-${provider}`),
   ).toBeVisible();
+}
+
+// 栈式布局：地址指向提供方，内容区只有它的详情，没有列表。
+export async function expectProviderDetailStacked(
+  page: Page,
+  serverId: string,
+  provider: string,
+): Promise<void> {
+  await expectAppRoute(page, buildProviderSettingsRoute(serverId, provider));
+  await expect(
+    page.getByTestId(`provider-detail-header-${provider}`).filter({ visible: true }),
+  ).toBeVisible();
+  await expect(visibleProviderDetailPane(page)).toHaveCount(0);
+  await expect(providerRows(page)).toHaveCount(0);
+}
+
+// 栈式布局：停在分区地址，只有列表，没有选中项。
+export async function expectProvidersListStacked(page: Page, serverId: string): Promise<void> {
+  await expectAppRoute(page, buildSettingsHostSectionRoute(serverId, "providers"));
+  await expect(providerRows(page).first()).toBeVisible();
+  await expect(visibleProviderDetailPane(page)).toHaveCount(0);
+  await expect(providerRows(page).and(page.locator('[aria-selected="true"]'))).toHaveCount(0);
 }
 
 export async function serveJson(page: Page, url: string, body: unknown): Promise<void> {

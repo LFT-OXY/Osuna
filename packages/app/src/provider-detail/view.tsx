@@ -12,7 +12,7 @@ import { ProviderInstallGuideView } from "@/provider-install-guide/view";
 import { useHostFeature } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
-import { ProviderDetailHeader } from "./header";
+import { ProviderDetailHeader, ProviderDetailRefreshButton } from "./header";
 import { ProviderDetailSurface } from "./index";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
@@ -118,8 +118,8 @@ export function ProviderDetail({
   );
 }
 
-// 设置页的页面外框：头部块加详情内容。
-export function ProviderDetailPage({ serverId, provider }: { serverId: string; provider: string }) {
+// 详情头部要的数据：设置页的头部块和手机顶栏共用。
+export function useProviderDetailHeader(serverId: string, provider: string) {
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
   const providerEntry = useMemo(
     () => entries?.find((entry) => entry.provider === provider),
@@ -132,21 +132,51 @@ export function ProviderDetailPage({ serverId, provider }: { serverId: string; p
   const modelCount = isAvailable
     ? describeProviderModelCount(countSelectableModels(providerEntry?.models))
     : null;
+
   const isProviderRefreshing = isRefreshing || status.tone === "loading";
+  const icon = getProviderIcon(provider, serverId);
+  const label = resolveProviderLabel(provider, entries);
 
   const handleRefresh = useCallback(() => {
     void refresh([provider]);
   }, [provider, refresh]);
 
+  return {
+    icon,
+    label,
+    status,
+    modelCount,
+    isRefreshing: isProviderRefreshing,
+    onRefresh: handleRefresh,
+  };
+}
+
+// 设置页的页面外框：头部块加详情内容。
+export function ProviderDetailPage({
+  serverId,
+  provider,
+  hasScreenHeaderActions,
+}: {
+  serverId: string;
+  provider: string;
+  // 手机上「刷新」在顶栏，头部块只留图标、名称、徽章和模型数。
+  hasScreenHeaderActions: boolean;
+}) {
+  const header = useProviderDetailHeader(serverId, provider);
+  const { isRefreshing, onRefresh } = header;
+  const renderActions = useCallback(
+    () => <ProviderDetailRefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />,
+    [isRefreshing, onRefresh],
+  );
+
   return (
     <>
       <ProviderDetailHeader
-        icon={getProviderIcon(provider, serverId)}
-        label={resolveProviderLabel(provider, entries)}
-        status={status}
-        modelCount={modelCount}
-        isRefreshing={isProviderRefreshing}
-        onRefresh={handleRefresh}
+        icon={header.icon}
+        label={header.label}
+        status={header.status}
+        modelCount={header.modelCount}
+        renderActions={hasScreenHeaderActions ? undefined : renderActions}
         testID={`provider-detail-header-${provider}`}
       />
       <ProviderDetail serverId={serverId} provider={provider} modelQuery="" />

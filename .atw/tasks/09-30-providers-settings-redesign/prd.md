@@ -112,6 +112,9 @@
 - 地址里的提供方不存在时，宽屏 redirect 到第一个提供方，栈式回到列表。刚删掉当前选中的自定义提供方时同样处理。
 - 选中项不再经过全局的 provider-settings store；这个 store 只留给 composer 齿轮入口。
 - 路由是 `providers/index` 与 `providers/[provider]` 两个 sibling，照搬 `projects/index` 与 `projects/[projectId]`；`providers/index` 取代 `[hostSection]` 对 `providers` 的匹配。
+- 栈式下地址的判定是纯函数 `resolveStackedProvidersView`（list / detail / missing）：列表未到或主机未连接时一律按列表处理，不判定地址。页头（窄桌面面包屑、手机 BackHeader）与正文经 `useStackedProvidersView` 共用这一判定；正文不是详情时页头退回分区标题。
+- 两种布局的地址修正（宽屏 replace 到第一个、栈式回到列表）只在聚焦页执行：Stack 下层被盖住的设置页仍然挂载。
+- 面包屑的「Providers」和手机返回都走 `returnFromSettings` → `dismissTo(Providers 分区)`；宽屏进入时地址是 replace 进来的，返回栈里可能没有分区页，此时 `dismissTo` 按 expo-router 的约定改为 replace。
 
 ### 布局判定
 
@@ -149,7 +152,7 @@
 - 设置页两列、栈式详情页、composer 弹窗三处共用同一个详情组件。组件只接收 host 与 provider，外框由调用方决定：
   - 模块是 `packages/app/src/provider-detail/`：`index.tsx` 的 `ProviderDetailSurface` 只收 props，决定显示哪些区块；`view.tsx` 的 `ProviderDetail` 接快照、配置和主机能力。安装指引与第三方接口的运行时视图在 unit 运行器里无法加载，由 view 经 `renderInstallGuide` / `renderApiEndpoints` 插槽注入（工单 01）。
   - 页面外框：渲染头部块。头部块是 40 的图标框（圆角 10），名称用 title-sm，下面一行是 StatusBadge 加「{N} 个 Model」，右侧是 secondary sm「刷新」和 28 的 ⋯ 按钮。
-  - 紧凑页面：「刷新」和 ⋯ 放到 BackHeader 右侧，改成仅图标按钮；页内头部块只保留图标、名称、徽章和模型数。
+  - 紧凑页面：「刷新」和 ⋯ 放到 BackHeader 右侧，改成仅图标按钮；页内头部块只保留图标、名称、徽章和模型数。头部块的操作区是 `renderActions` 插槽，手机上不传。
   - 弹窗外框：名称、徽章、「刷新」、⋯ 放进弹窗头部。
 - 区块顺序固定：错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models → 诊断。每块是一个 SettingsSection，Alert 类区块除外。块与块之间保留 SettingsSection 默认的 24 间距。
 - **错误卡**：Alert error。标题「{名称} 无法启动」（新增），描述是 daemon 返回的错误原文，等宽、可选中；actions 是 outline「刷新」和 outline「运行诊断」。仅在已启用且出错时显示。

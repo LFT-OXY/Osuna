@@ -8,7 +8,11 @@ import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/prot
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
 import { i18n } from "@/i18n/i18next";
 import { ProviderInstallGuideSurface, type ProviderInstallGuide } from "@/provider-install-guide";
-import { ProviderDetailHeader, type ProviderDetailHeaderProps } from "./header";
+import {
+  ProviderDetailHeader,
+  ProviderDetailRefreshButton,
+  type ProviderDetailHeaderProps,
+} from "./header";
 import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
 
 function entry(overrides: Partial<ProviderSnapshotEntry>): ProviderSnapshotEntry {
@@ -209,19 +213,21 @@ const NOT_INSTALLED: ProviderDetailHeaderProps["status"] = {
 };
 const THREE_MODELS = { key: "settings.providers.models.many", params: { count: 3 } };
 
-function renderHeader(overrides: Partial<ProviderDetailHeaderProps>) {
-  const onRefresh = vi.fn();
+function renderHeader(overrides: Partial<ProviderDetailHeaderProps> = {}) {
   render(
     <ProviderDetailHeader
       icon={ProviderGlyph}
       label="Claude Code"
       status={AVAILABLE}
       modelCount={THREE_MODELS}
-      isRefreshing={false}
-      onRefresh={onRefresh}
       {...overrides}
     />,
   );
+}
+
+function renderRefreshButton(isRefreshing: boolean) {
+  const onRefresh = vi.fn();
+  render(<ProviderDetailRefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />);
   return { onRefresh };
 }
 
@@ -231,7 +237,7 @@ describe("ProviderDetailHeader", () => {
   });
 
   it("shows the icon, name, status badge and model count", () => {
-    renderHeader({});
+    renderHeader();
 
     expect(screen.getByTestId("provider-glyph")).toBeTruthy();
     expect(screen.getByText("Claude Code")).toBeTruthy();
@@ -246,8 +252,21 @@ describe("ProviderDetailHeader", () => {
     expect(screen.queryByText(i18n.t("settings.providers.models.many", { count: 3 }))).toBeNull();
   });
 
-  it("refreshes the provider from the header", () => {
-    const { onRefresh } = renderHeader({});
+  it("leaves refresh to the screen header when given no actions", () => {
+    renderHeader({ renderActions: undefined });
+
+    expect(screen.getByText("Claude Code")).toBeTruthy();
+    expect(screen.queryByText(i18n.t("settings.providers.diagnostic.refresh"))).toBeNull();
+  });
+});
+
+describe("ProviderDetailRefreshButton", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("refreshes the provider", () => {
+    const { onRefresh } = renderRefreshButton(false);
 
     fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refresh")));
 
@@ -255,7 +274,7 @@ describe("ProviderDetailHeader", () => {
   });
 
   it("shows refresh in progress and blocks another refresh", () => {
-    const { onRefresh } = renderHeader({ isRefreshing: true });
+    const { onRefresh } = renderRefreshButton(true);
 
     fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refreshing")));
 

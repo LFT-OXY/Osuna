@@ -131,6 +131,7 @@ import {
   resolveProvidersLayout,
   type ProvidersLayout,
 } from "@/screens/settings/providers-layout";
+import { ProviderDetailBackHeader, ProvidersBreadcrumb } from "@/screens/settings/providers-header";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import ProjectsScreen from "@/screens/projects-screen";
 import ProjectSettingsScreen from "@/screens/project-settings-screen";
@@ -1204,6 +1205,62 @@ function DetailHeaderIcon({ icon }: { icon: ComponentType<{ size: number; color:
   return <ThemedIcon size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />;
 }
 
+type ProviderSettingsView = Extract<SettingsView, { kind: "provider" }>;
+
+// 栈式时提供方详情占满内容区，页头换成它自己的面包屑 / 顶栏。
+function resolveStackedProviderView(
+  view: SettingsView,
+  providersLayout: ProvidersLayout | null,
+): ProviderSettingsView | null {
+  return view.kind === "provider" && providersLayout === "stacked" ? view : null;
+}
+
+function DesktopDetailTitle({
+  title,
+  stackedProviderView,
+  onBack,
+}: {
+  title: string;
+  stackedProviderView: ProviderSettingsView | null;
+  onBack: () => void;
+}) {
+  if (stackedProviderView) {
+    return (
+      <ProvidersBreadcrumb
+        serverId={stackedProviderView.serverId}
+        provider={stackedProviderView.provider}
+        sectionTitle={title}
+        onPressProviders={onBack}
+      />
+    );
+  }
+  return <ScreenTitle testID="settings-detail-header-title">{title}</ScreenTitle>;
+}
+
+function CompactDetailHeader({
+  title,
+  titleAccessory,
+  stackedProviderView,
+  onBack,
+}: {
+  title: string | undefined;
+  titleAccessory: ReactNode;
+  stackedProviderView: ProviderSettingsView | null;
+  onBack: () => void;
+}) {
+  if (stackedProviderView && title) {
+    return (
+      <ProviderDetailBackHeader
+        serverId={stackedProviderView.serverId}
+        provider={stackedProviderView.provider}
+        sectionTitle={title}
+        onBack={onBack}
+      />
+    );
+  }
+  return <BackHeader title={title} titleAccessory={titleAccessory} onBack={onBack} borderless />;
+}
+
 export interface SettingsScreenProps {
   view: SettingsView;
   openAddHostIntent?: string | null;
@@ -1595,12 +1652,18 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
     );
   }
 
+  const stackedProviderView = resolveStackedProviderView(view, providersLayout);
+
   const desktopDetailHeaderLeft = detailHeader ? (
     <>
       <HeaderIconBadge>
         <DetailHeaderIcon icon={detailHeader.Icon} />
       </HeaderIconBadge>
-      <ScreenTitle testID="settings-detail-header-title">{detailHeader.title}</ScreenTitle>
+      <DesktopDetailTitle
+        title={detailHeader.title}
+        stackedProviderView={stackedProviderView}
+        onBack={handleBackFromDetail}
+      />
       {detailHeader.titleAccessory}
     </>
   ) : null;
@@ -1661,11 +1724,11 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   if (isCompactLayout) {
     return (
       <View style={styles.container}>
-        <BackHeader
+        <CompactDetailHeader
           title={detailHeader?.title}
           titleAccessory={detailHeader?.titleAccessory}
+          stackedProviderView={stackedProviderView}
           onBack={handleBackFromDetail}
-          borderless
         />
         <ScrollView style={styles.scrollView} contentContainerStyle={insetBottomStyle}>
           <View style={styles.content}>{content}</View>
