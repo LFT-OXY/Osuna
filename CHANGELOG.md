@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- 默认启用的提供方改为 Claude Code、Codex、Pi 和 Oh My Pi；Copilot 和 OpenCode 改为默认关闭。config 里已经写了 `enabled` 的提供方不受影响。要重新打开 Copilot 或 OpenCode，在 设置 → Host → Providers 里打开它的开关，或在 `config.json` 的 `agents.providers` 下写 `"opencode": { "enabled": true }`
+
 ## 0.13.0 - 2026-09-30
 
 内部分发版。输入框里选中的文件和 skill 变成行内块；消息里可以 @ 其他智能体，由当前智能体派出子智能体；Claude Code 和 Codex 可以切换到第三方接口；设置 → Providers 重新布局。

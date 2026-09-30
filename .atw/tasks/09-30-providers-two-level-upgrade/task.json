@@ -1,0 +1,28 @@
+{
+  "id": "providers-two-level-upgrade",
+  "name": "providers-two-level-upgrade",
+  "title": "Providers 设置改为两级结构，显示版本并支持一键升级",
+  "description": "设置 → Providers 统一为列表 → 详情两级；列表只放已启用且已安装的提供方，其余进「添加提供方」；内置提供方显示版本、检查更新并一键升级；Copilot/OpenCode 默认关闭、OMP 默认开启",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-09-30",
+  "completedAt": null,
+  "branch": "split-providers-models-menu",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "55092b01b6454e686200c3714b8f5784a2b60e5e"
+  }
+}

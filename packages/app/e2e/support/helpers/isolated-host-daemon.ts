@@ -1,5 +1,6 @@
 import { spawn, execFileSync, type ChildProcess, type SpawnOptions } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -77,6 +78,30 @@ async function waitForServer(port: number, child: ChildProcess): Promise<void> {
   );
 }
 
+// OpenCode 默认停用，而 createIdleAgent 和 OpenCode 的 real spec 都要用它。spec 自己写了 enabled 的不动。
+async function enableOpenCode(paseoHome: string): Promise<void> {
+  const configPath = path.join(paseoHome, "config.json");
+  const existing = existsSync(configPath)
+    ? JSON.parse(await readFile(configPath, "utf8"))
+    : { version: 1 };
+  const openCode = existing.agents?.providers?.opencode;
+  if (openCode?.enabled !== undefined) return;
+  await writeFile(
+    configPath,
+    `${JSON.stringify(
+      {
+        ...existing,
+        agents: {
+          ...existing.agents,
+          providers: { ...existing.agents?.providers, opencode: { ...openCode, enabled: true } },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 export async function startIsolatedHostDaemon(
   serverId: string,
   options: IsolatedHostDaemonOptions = {},
@@ -144,6 +169,7 @@ export async function startIsolatedHostDaemon(
       })}\n`,
     );
   }
+  await enableOpenCode(paseoHome);
   const serverDir = publishedPackageRoot
     ? path.join(publishedPackageRoot, "node_modules", "@getpaseo", "server")
     : path.resolve(__dirname, "../../../../server");

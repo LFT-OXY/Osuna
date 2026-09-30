@@ -1,0 +1,11 @@
+{"file": ".atw/tasks/09-30-providers-two-level-upgrade/research/interview-decisions.md", "reason": "访谈 Q1–Q21 的全部用户决策，PRD 的依据"}
+{"file": ".atw/tasks/09-30-providers-two-level-upgrade/research/provider-cli-version-update.md", "reason": "各 CLI 升级命令、npm 包名、安装方式特征与仓库事实"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "App 前端编码规范"}
+{"file": ".atw/spec/guides/index.md", "reason": "跨层思考指南"}
+{"file": "docs/protocol-compatibility.md", "reason": "新增快照字段与 RPC 的兼容、features 门控、COMPAT 标签"}
+{"file": "docs/rpc-namespacing.md", "reason": "provider.version.check / provider.upgrade 命名"}
+{"file": "docs/permissions.md", "reason": "daemon.read / daemon.manage 权限归属"}
+{"file": "docs/usage.md", "reason": "daemon 主动联网约束，版本检查需更新该节"}
+{"file": "docs/testing.md", "reason": "测试约定：真实依赖优先、确定性"}
+{"file": "docs/i18n.md", "reason": "新增文案需补全各语言"}
+{"file": "docs/glossary.md", "reason": "Provider / Custom provider / API endpoint / Add provider 术语"}
