@@ -186,10 +186,12 @@ Rules:
 - 每行：provider 图标、标题（Paseo 子智能体取 `create_agent` 的 title，provider 子智能体取 description）、副行（provider · 模型 · 模式；provider 子智能体用描述符的 subtitle；等待批准时换成"等待批准 · 工具名"）、运行时长（运行中实时走，结束后定格）、状态标记。行数据与 Subagents track 同源；组和 track 的内容会重复，这一点接受。不显示子智能体的最后一条消息，不放批准按钮。
 - 时长：从子智能体创建起算，完成后被再次唤醒时也算上中间的空闲。快照里没有结束时间，停下后按"最后一次更新 − 创建"近似；归档会把最后一次更新改成归档时刻，所以已归档的行不显示时长，行尾留空，最终状态看图标上的标记和副行的"已归档"。完成后再脱离或改名会让时长略偏大，这一点接受。
 - 点击一行即打开，复用 track 的打开处理：Paseo 子智能体打开普通 agent 标签，provider 子智能体打开 `provider_subagent` 只读标签。派发组的行不再展开 provider 子智能体的活动日志，完整时间线在只读面板里。
-- 关联：Paseo 子智能体按 `paseo.parent-tool-call-id` 标签，在 store 里找 callId 对得上、且父标签是本父智能体或已被脱离清空的智能体，不按 `parentAgentId` 找，这样脱离后也能找到。脱离会清掉父标签，所以已脱离的只能靠 callId 对；tool call id 由 provider 随机生成，不会撞到别的会话。代价是导入的会话会关联到原会话里已脱离的子智能体，这一点接受。provider 子智能体按父 agentId 加描述符的 `toolCallId` 找，app 要保留描述符上已有的 `toolCallId`。
+- 关联：Paseo 子智能体按 `paseo.parent-tool-call-id` 标签，在 store 里找 callId 对得上、且父标签是本父智能体或已被脱离清空的智能体，不按 `parentAgentId` 找，这样脱离后也能找到。脱离会清掉父标签，所以已脱离的只能靠 callId 对；tool call id 由 provider 随机生成，不会撞到别的会话。代价是导入的会话会关联到原会话里已脱离的子智能体，这一点接受。provider 子智能体按父 agentId 加描述符的 `toolCallId` 找，app 要保留描述符上已有的 `toolCallId`（`ProviderSubagentRow.toolCallId`）。provider 子智能体调用按细节类型 `sub_agent` 识别；一次调用可能派出多个（OMP 的 task），每个一行。在 track 里被"归档已完成"收起的 provider 子智能体，派发组照样显示。
 - 过渡态：调用还在执行、store 里还没有这个子智能体时，用入参里的 provider 和 title 画一行"启动中"，不可点（降到半透明）。app 事先不知道 provider 有没有给 tool call id，所以拿不到 id 的调用执行中也先画"启动中"，调用结束、按标签查不到后才退回通用卡；打开历史会话时，已完成但还在按标签查询的调用同样先画"启动中"。调用完成后仍未命中，就按标签调一次 `fetch_agents` 并带上 `includeArchived`；查到已归档的，显示最终状态加"已归档"；还查不到就退回通用工具卡。
 - 已脱离的子智能体，行上显示"已分离"（与 track 的"分离"同一个词，术语表不许同义词）。
 - 退回通用工具卡的情况：拿不到 tool call id、老 Host（没有 `subagentCallLinks`）、导入的会话、不带 workspaceId 的顶层 `create_agent`（它不是 Subagent，也不进 track）。
+- provider 子智能体调用没有"启动中"：描述符到之前是通用卡，到了就换成行。app 分不出哪些 provider 发描述符，Pi 就不发，画启动中会让 Pi 的调用停在打不开的行上。代价：工具调用细节级别为 overview 时，Pi 这类调用离开 overview 组，单独显示为通用卡。
+- provider 子智能体只读面板不启用派发组，面板里嵌套的 provider 子智能体调用仍是通用卡。
 
 ### Subagents track 与只读面板（app）
 

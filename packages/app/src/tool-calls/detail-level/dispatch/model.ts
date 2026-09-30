@@ -2,7 +2,10 @@ import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization
 import { isAgentToolCallItem, type AgentToolCallItem, type StreamItem } from "@/types/stream";
 import type { ToolCallRun } from "../grouping";
 
-/** 同一段输出里连续的 `create_agent` 调用；每个调用能否关联到子智能体在渲染时才定。 */
+/**
+ * 同一段输出里连续的子智能体调用：`create_agent` 与 provider 子智能体调用混在一组；
+ * 每个调用能否关联到子智能体在渲染时才定。
+ */
 export interface DispatchToolCallGroup {
   mode: "dispatch";
   run: ToolCallRun;
@@ -18,12 +21,25 @@ export interface CreateAgentCallInput {
 
 // 只认 Paseo 工具的两种标准写法：OpenCode、Pi、OMP 的 adapter 规范出的 `paseo.create_agent`，
 // 以及 Claude、Codex 原生的 `mcp__paseo__create_agent`。认不出的照常走通用工具卡。
-export function isDispatchToolCall(item: StreamItem): item is AgentToolCallItem {
+export function isCreateAgentCall(item: StreamItem): item is AgentToolCallItem {
   return (
     item.kind === "tool_call" &&
     item.payload.source === "agent" &&
     getPaseoToolLeafName(item.payload.data.name) === "create_agent"
   );
+}
+
+/** provider 自己的子智能体调用，adapter 把它们的细节统一成 `sub_agent`。关联不上描述符的照常是通用卡。 */
+export function isProviderSubagentCall(item: StreamItem): item is AgentToolCallItem {
+  return (
+    item.kind === "tool_call" &&
+    item.payload.source === "agent" &&
+    item.payload.data.detail.type === "sub_agent"
+  );
+}
+
+export function isDispatchToolCall(item: StreamItem): item is AgentToolCallItem {
+  return isCreateAgentCall(item) || isProviderSubagentCall(item);
 }
 
 export function buildDispatchGroup(run: ToolCallRun): DispatchToolCallGroup {

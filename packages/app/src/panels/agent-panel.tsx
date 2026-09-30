@@ -1373,7 +1373,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
 }) {
   const isCompactFormFactor = useIsCompactFormFactor();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
-  const { openSubagent } = useOpenSubagent({ serverId, workspaceId });
+  const { openSubagent, openProviderSubagent } = useOpenSubagent({ serverId, workspaceId });
   const hasVisibleComposerTracks =
     hasActiveComposer && (hasVisibleAgentTracks || hasWorkspaceDiffStat);
   const bottomOverlayTailClearance = hasVisibleComposerTracks
@@ -1444,6 +1444,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
       turnPresentation={turnPresentation}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
       onOpenSubagent={openSubagent}
+      onOpenProviderSubagent={openProviderSubagent}
     />
   );
 });

@@ -7,9 +7,9 @@
 
 **Blocked by:** 11
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] provider 子智能体调用显示为派发组的行，状态实时更新，点开是只读面板。
-- [ ] app 保留 `toolCallId` 并用它关联，有单测。
-- [ ] `docs/agent-lifecycle.md` 已更新。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] provider 子智能体调用显示为派发组的行，状态实时更新，点开是只读面板。
+- [x] app 保留 `toolCallId` 并用它关联，有单测。
+- [x] `docs/agent-lifecycle.md` 已更新。
+- [x] `npm run typecheck`、`npm run lint` 通过。

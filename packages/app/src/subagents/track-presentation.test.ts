@@ -138,6 +138,7 @@ describe("countFinishedSubagents", () => {
         status: "running",
         requiresAttention: false,
         createdAt: new Date("2026-04-20T00:00:00.000Z"),
+        toolCallId: null,
       },
       {
         kind: "provider",
@@ -150,6 +151,7 @@ describe("countFinishedSubagents", () => {
         status: "failed",
         requiresAttention: true,
         createdAt: new Date("2026-04-20T00:00:01.000Z"),
+        toolCallId: null,
       },
     ];
 
@@ -257,6 +259,7 @@ describe("buildSubagentRowPresentationData for provider rows", () => {
       status: overrides.status ?? "running",
       requiresAttention: false,
       createdAt: overrides.createdAt ?? new Date("2026-07-26T00:00:00.000Z"),
+      toolCallId: overrides.toolCallId ?? null,
     };
   }
 
@@ -311,6 +314,7 @@ describe("provider-owned row subtitles", () => {
       status: "running",
       requiresAttention: false,
       createdAt: new Date("2026-07-26T00:00:00.000Z"),
+      toolCallId: null,
       ...overrides,
     };
   }
@@ -353,6 +357,7 @@ describe("dispatch group presentation", () => {
   ): DispatchRowState {
     return {
       kind: "subagent",
+      key: `call-${overrides.id}`,
       callId: `call-${overrides.id}`,
       input: CALL_INPUT,
       subagent: {
@@ -368,7 +373,42 @@ describe("dispatch group presentation", () => {
     };
   }
 
-  const starting: DispatchRowState = { kind: "starting", callId: "call-s", input: CALL_INPUT };
+  const starting: DispatchRowState = {
+    kind: "starting",
+    key: "call-s",
+    callId: "call-s",
+    input: CALL_INPUT,
+  };
+
+  function providerSubagent(overrides: Partial<ProviderSubagentRow> = {}): DispatchRowState {
+    return {
+      kind: "provider",
+      key: "toolu_1:toolu_1",
+      callId: "toolu_1",
+      subagent: {
+        row: {
+          kind: "provider",
+          id: "toolu_1",
+          parentAgentId: "parent",
+          provider: "claude",
+          title: "Explore",
+          description: "Map the router",
+          subtitle: "Explore · Sonnet 5 · 3.1k tokens",
+          status: "running",
+          requiresAttention: false,
+          createdAt: new Date("2026-04-20T00:00:00.000Z"),
+          toolCallId: "toolu_1",
+          ...overrides,
+        },
+        model: null,
+        modeLabel: null,
+        pendingPermissionName: null,
+        updatedAt: new Date("2026-04-20T00:00:42.000Z"),
+        archived: false,
+        detached: false,
+      },
+    };
+  }
 
   it("counts rows in the track's order with starting before done", () => {
     const header = buildDispatchGroupHeaderPresentation(i18n.t, [
@@ -404,7 +444,7 @@ describe("dispatch group presentation", () => {
       buildDispatchRowPresentation({ t: i18n.t, state: starting, providerLabelOf: providerLabel }),
     ).toEqual({
       key: "call-s",
-      agentId: null,
+      open: null,
       provider: "codex",
       label: "Write tests",
       subtitle: "Codex · gpt-5.4 · auto",
@@ -422,7 +462,7 @@ describe("dispatch group presentation", () => {
     });
 
     expect(presentation).toMatchObject({
-      agentId: "a",
+      open: { kind: "agent", agentId: "a" },
       label: "Write tests",
       subtitle: "Codex · gpt-5.4 · Auto",
       bucket: "running",
@@ -481,5 +521,47 @@ describe("dispatch group presentation", () => {
       buildDispatchRowPresentation({ t: i18n.t, state: renamed, providerLabelOf: providerLabel })
         .label,
     ).toBe("Write tests");
+  });
+
+  it("names a provider row after its task, shows the provider's subtitle, and opens read-only", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: providerSubagent(),
+        providerLabelOf: providerLabel,
+      }),
+    ).toEqual({
+      key: "toolu_1:toolu_1",
+      open: { kind: "provider_subagent", parentAgentId: "parent", subagentId: "toolu_1" },
+      provider: "claude",
+      label: "Map the router",
+      subtitle: "Explore · Sonnet 5 · 3.1k tokens",
+      tone: "default",
+      bucket: "running",
+      timing: { kind: "live", startedAt: new Date("2026-04-20T00:00:00.000Z") },
+    });
+  });
+
+  it("falls back to the subagent type when a provider row has no task", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: providerSubagent({ description: null, subtitle: null }),
+        providerLabelOf: providerLabel,
+      }),
+    ).toMatchObject({ label: "Explore", subtitle: "" });
+  });
+
+  it("counts finished and failed provider rows and freezes their duration", () => {
+    const completed = providerSubagent({ status: "completed" });
+    const failed = providerSubagent({ status: "failed" });
+
+    expect(
+      buildDispatchRowPresentation({ t: i18n.t, state: completed, providerLabelOf: providerLabel }),
+    ).toMatchObject({ bucket: "done", timing: { kind: "frozen", durationMs: 42_000 } });
+    expect(buildDispatchGroupHeaderPresentation(i18n.t, [completed, failed]).segments).toEqual([
+      { bucket: "failed", text: "1 failed" },
+      { bucket: "done", text: "1 done" },
+    ]);
   });
 });

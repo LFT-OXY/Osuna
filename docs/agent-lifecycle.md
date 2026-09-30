@@ -79,12 +79,6 @@ The permission notification tells the caller that the user approves in the child
 The user hears about it directly: a child's permission request raises attention and a push pointed at the child, suppressed the same way as any agent's attention when the user is already looking at it. A child's finish and error raise none; they stay in the parent's subagents track.
 A watched child that closes before its finish event also notifies the caller so delegated work cannot disappear silently during archive or workspace teardown.
 
-## Provider-managed child agents
-
-Some providers can create their own child sessions inside one provider runtime. OMP's task tool reports these with `child_session` events; `AgentManager` imports the live provider handle, stamps `paseo.parent-agent-id`, and surfaces the result as a normal subagent in the parent's subagents track.
-
-The provider still owns the underlying runtime. Paseo keeps an agent record so the child can be opened, tracked, archived, and cascaded with the parent, but prompts and history hydration route through the provider adapter for that native child handle.
-
 ## Archive
 
 Archive is a **soft delete**: the agent record stays on disk with `archivedAt` set, the runtime is closed, and the agent disappears from active lists. Archive is **global** — it lives on the server and propagates to every connected client.
@@ -177,13 +171,24 @@ The rows combine two kinds of children:
 parentAgentId === thisAgent.id  AND  !archivedAt
 ```
 
-- **Provider subagents** are child executions owned by Claude, Codex, or OpenCode. They are not inserted into `AgentManager` as managed agents. Providers emit a separate descriptor and timeline stream through `agent.provider_subagents.*`; the client keeps that state outside the normal agent store and merges only the presentation rows into the track. A descriptor's optional `parentSubagentId` identifies its direct provider-subagent parent; an absent value identifies a direct child of the managed agent.
+- **Provider subagents** are child executions owned by Claude, Codex, OpenCode, or OMP. They are not inserted into `AgentManager` as managed agents. Providers emit a separate descriptor and timeline stream through `agent.provider_subagents.*`; the client keeps that state outside the normal agent store and merges only the presentation rows into the track. A descriptor's optional `parentSubagentId` identifies its direct provider-subagent parent; an absent value identifies a direct child of the managed agent.
 
 Clicking either kind opens a workspace tab. A Paseo subagent tab is a normal interactive agent pane. A provider subagent tab is a read-only timeline pane with no composer, archive, detach, rewind, or fork actions. It shows its own direct children in a subagents track. Both panes use `AgentStreamView`, so message, reasoning, tool-call, and layout rendering stay identical.
 
 Provider timelines use the same structural timeline item format but deliberately have a separate lifecycle and transport. A provider thread/session identifier is not a Paseo agent identifier, and closing its tab is always layout-only.
 
 Provider descriptors may include one compact subtitle. The provider owns its contents and formatting; clients display and truncate it without interpreting provider-specific model, thinking, or usage fields.
+
+### Dispatch groups in the timeline
+
+Consecutive subagent calls in one stretch of the parent's timeline render as a dispatch group (`packages/app/src/subagents/dispatch-group.tsx`) instead of generic tool cards. Each row reads the same data as the track and opens through the same handler (`packages/app/src/subagents/use-open-subagent.ts`). Prose or any other tool call between two calls starts a new group.
+
+How a call finds its subagent:
+
+- **Paseo subagents** carry `paseo.parent-tool-call-id`, which the daemon writes from the provider's own tool call id when a parent calls `create_agent`. Match on the call id plus a parent label that is this agent or empty. Do not match on `parentAgentId` alone: detach clears the parent label, and the row must survive it. Archived children are not in the active directory, so a finished call with no match queries once with `includeArchived`.
+- **Provider subagents** match on the parent agent id plus the descriptor's `toolCallId`. One call may start several subagents (OMP's task), and each gets its own row.
+
+A call that matches nothing stays a generic tool card. That covers calls without a tool call id, imported sessions, and top-level `create_agent` without a workspace. A running `create_agent` call draws a "Starting" row, since its child cannot exist before the call returns. A provider call does not, because the app cannot tell which providers publish descriptors: Pi publishes none, and its calls would wait on a row that never opens. Hosts without `server_info.features.subagentCallLinks` keep every call on the generic card.
 
 ### Claude provider subagents: the task protocol
 

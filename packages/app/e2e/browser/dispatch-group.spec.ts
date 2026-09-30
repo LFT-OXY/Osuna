@@ -9,6 +9,7 @@ import {
   expectDispatchHeader,
   installHostWithoutSubagentCallLinks,
   parkSubagentOnPermission,
+  providerDispatchRow,
   seedDispatchChild,
   seedDispatchParent,
 } from "../support/helpers/subagents";
@@ -133,6 +134,42 @@ test.describe("Dispatch group", () => {
 
     await workspace.client.respondToPermission(child, requestId, { behavior: "deny" });
     await expectDispatchHeader(page, 0, "Dispatched 1 subagent: 1 done");
+  });
+
+  test("a provider subagent call joins the group, follows its subagent live, and opens read-only", async ({
+    page,
+  }) => {
+    const parentId = await seedDispatchParent(workspace, "Provider parent");
+    await seedDispatchChild(workspace, { parentId, callId: "call-paseo", title: "Paseo child" });
+
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: parentId });
+    await emitDispatchCalls(workspace, parentId, [
+      { callId: "call-paseo", title: "Paseo child" },
+      {
+        callId: "toolu_native",
+        providerSubagent: {
+          id: "native-sub",
+          description: "Map the router",
+          subtitle: "Explore · 3.1k tokens",
+          runningMs: 5_000,
+        },
+      },
+    ]);
+
+    const row = providerDispatchRow(page, "toolu_native", "native-sub");
+    await expect(row).toContainText("Map the router", { timeout: 30_000 });
+    await expect(row).toContainText("Explore · 3.1k tokens");
+    await expect(dispatchGroups(page)).toHaveCount(1);
+    await expectDispatchHeader(page, 0, "Dispatched 2 subagents: 1 working, 1 done");
+    await expect(row.locator('[aria-label="Agent running"]')).toBeVisible();
+
+    await expectDispatchHeader(page, 0, "Dispatched 2 subagents: 2 done");
+    await expect(page.getByTestId("tool-call-badge")).toHaveCount(0);
+
+    await row.click();
+    const panel = page.getByTestId("provider-subagent-panel").filter({ visible: true });
+    await expect(panel).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByText("Map the router").first()).toBeVisible();
   });
 
   test("a call no subagent carries the label of falls back to the generic tool card", async ({

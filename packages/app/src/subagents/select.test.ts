@@ -2,11 +2,15 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { afterEach, describe, expect, it } from "vitest";
 import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import type { AgentToolCallItem } from "@/types/stream";
+import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
 import {
   createDispatchSubagentsSelector,
+  createProviderDispatchSubagentsSelector,
   PENDING_DISPATCH_LOOKUP,
   resolveDispatchCall,
+  resolveProviderDispatchCall,
   selectDispatchSubagents,
+  selectProviderDispatchSubagents,
   selectProviderSubagentsForParent,
   selectSubagentsForParent,
   splitDispatchSegments,
@@ -109,6 +113,10 @@ describe("selectSubagentsForParent", () => {
       selectProviderSubagentsForParent(useProviderSubagentStore.getState(), params, true)[0]
         ?.subtitle,
     ).toBe("Codex worker · 4.2k tokens");
+    expect(
+      selectProviderSubagentsForParent(useProviderSubagentStore.getState(), params, true)[0]
+        ?.toolCallId,
+    ).toBe("call-1");
   });
 
   it("hides locally dismissed provider children while retaining their descriptor", () => {
@@ -564,6 +572,7 @@ describe("dispatch groups", () => {
       }),
     ).toEqual({
       kind: "starting",
+      key: "call-a",
       callId: "call-a",
       input: { title: "Task call-a", provider: "codex", model: "gpt-5.4", modeId: "auto" },
     });
@@ -643,5 +652,150 @@ describe("dispatch groups", () => {
       key: "c",
       rows: [{ callId: "c" }, { callId: "d" }],
     });
+  });
+});
+
+function providerSubagentCall(
+  callId: string,
+  status: "running" | "completed" | "failed" = "completed",
+): AgentToolCallItem {
+  return {
+    kind: "tool_call",
+    id: callId,
+    timestamp: AGENT_TIMESTAMP,
+    payload: {
+      source: "agent",
+      data: {
+        provider: "claude",
+        callId,
+        name: "Task",
+        status,
+        error: null,
+        detail: { type: "sub_agent", subAgentType: "Explore", description: "Find it", log: "" },
+      },
+    },
+  };
+}
+
+function upsertProviderSubagent(
+  input: Partial<ProviderSubagentDescriptorPayload> & Pick<ProviderSubagentDescriptorPayload, "id">,
+): void {
+  useProviderSubagentStore.getState().applyUpdate(SERVER_ID, {
+    kind: "upsert",
+    subagent: {
+      parentAgentId: "parent",
+      provider: "claude",
+      title: "Explore",
+      description: `Task ${input.id}`,
+      status: "running",
+      createdAt: "2026-03-08T10:01:00.000Z",
+      updatedAt: "2026-03-08T10:02:00.000Z",
+      toolCallId: null,
+      ...input,
+    },
+  });
+}
+
+describe("provider subagents in dispatch groups", () => {
+  const params = { serverId: SERVER_ID, parentAgentId: "parent" };
+
+  it("indexes this parent's provider subagents by the tool call that started them", () => {
+    upsertProviderSubagent({ id: "a", toolCallId: "call-a" });
+    upsertProviderSubagent({ id: "no-call" });
+    upsertProviderSubagent({ id: "elsewhere", parentAgentId: "other", toolCallId: "call-x" });
+    // Dismissing finished children from the track does not take them out of the timeline.
+    upsertProviderSubagent({ id: "dismissed", toolCallId: "call-d", status: "completed" });
+    useProviderSubagentStore.getState().hideFromTrack(SERVER_ID, "parent", ["dismissed"]);
+
+    const linked = selectProviderDispatchSubagents(useProviderSubagentStore.getState(), params);
+
+    expect(Object.keys(linked).sort()).toEqual(["call-a", "call-d"]);
+    expect(linked["call-a"]).toMatchObject([
+      {
+        row: { kind: "provider", id: "a", parentAgentId: "parent", toolCallId: "call-a" },
+        model: null,
+        modeLabel: null,
+        pendingPermissionName: null,
+        updatedAt: new Date("2026-03-08T10:02:00.000Z"),
+        archived: false,
+        detached: false,
+      },
+    ]);
+  });
+
+  it("keeps every subagent one call started, oldest first", () => {
+    upsertProviderSubagent({
+      id: "second",
+      toolCallId: "call-a",
+      createdAt: "2026-03-08T10:03:00.000Z",
+    });
+    upsertProviderSubagent({ id: "first", toolCallId: "call-a" });
+
+    const linked = selectProviderDispatchSubagents(useProviderSubagentStore.getState(), params);
+
+    expect(linked["call-a"]?.map((subagent) => subagent.row.id)).toEqual(["first", "second"]);
+  });
+
+  it("reuses the last result until the descriptors change", () => {
+    upsertProviderSubagent({ id: "a", toolCallId: "call-a" });
+    const select = createProviderDispatchSubagentsSelector(params);
+
+    const first = select(useProviderSubagentStore.getState());
+    expect(select(useProviderSubagentStore.getState())).toBe(first);
+
+    upsertProviderSubagent({ id: "a", toolCallId: "call-a", status: "completed" });
+    expect(select(useProviderSubagentStore.getState())).toMatchObject({
+      "call-a": [{ row: { status: "completed" } }],
+    });
+  });
+
+  it("turns a linked provider call into one row per subagent", () => {
+    upsertProviderSubagent({ id: "a1", toolCallId: "call-a" });
+    upsertProviderSubagent({ id: "a2", toolCallId: "call-a" });
+    const subagents = selectProviderDispatchSubagents(useProviderSubagentStore.getState(), params)[
+      "call-a"
+    ];
+
+    expect(
+      resolveProviderDispatchCall({ call: providerSubagentCall("call-a"), subagents }),
+    ).toMatchObject([
+      { kind: "provider", key: "call-a:a1", callId: "call-a" },
+      { kind: "provider", key: "call-a:a2", callId: "call-a" },
+    ]);
+  });
+
+  it("leaves an unlinked provider call on the generic card, running or not", () => {
+    for (const status of ["running", "completed"] as const) {
+      const call = providerSubagentCall("call-a", status);
+      expect(resolveProviderDispatchCall({ call, subagents: undefined })).toEqual([
+        { kind: "generic", call },
+      ]);
+    }
+  });
+
+  it("joins provider rows and Paseo rows in one group and splits at a generic call", () => {
+    upsertProviderSubagent({ id: "a", toolCallId: "call-a" });
+    const providerSubagents = selectProviderDispatchSubagents(
+      useProviderSubagentStore.getState(),
+      params,
+    );
+    const generic = providerSubagentCall("call-b");
+    const states = [
+      ...resolveProviderDispatchCall({
+        call: providerSubagentCall("call-a"),
+        subagents: providerSubagents["call-a"],
+      }),
+      resolveDispatchCall({
+        call: createAgentCall("call-p", "running"),
+        subagent: undefined,
+        lookup: PENDING_DISPATCH_LOOKUP,
+      }),
+      ...resolveProviderDispatchCall({ call: generic, subagents: undefined }),
+    ];
+
+    expect(splitDispatchSegments(states)).toMatchObject([
+      { kind: "group", key: "call-a:a", rows: [{ key: "call-a:a" }, { key: "call-p" }] },
+      { kind: "generic", call: generic },
+    ]);
   });
 });

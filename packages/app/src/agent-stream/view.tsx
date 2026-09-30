@@ -302,6 +302,8 @@ export interface AgentStreamViewProps {
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
   /** 给了才把 `create_agent` 调用画成派发组；只读面板与草稿不给，照常是通用工具卡。 */
   onOpenSubagent?: (agentId: string) => void;
+  /** 派发组里 provider 子智能体的行点开只读面板。 */
+  onOpenProviderSubagent?: (parentAgentId: string, subagentId: string) => void;
   readOnly?: boolean;
   historyPagination?: {
     hasOlder: boolean;
@@ -357,6 +359,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       toast,
       onOpenWorkspaceFile,
       onOpenSubagent,
+      onOpenProviderSubagent,
       readOnly = false,
       historyPagination,
     },
@@ -881,6 +884,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const handleOpenSubagent = useStableEvent((subagentId: string) => {
       onOpenSubagent?.(subagentId);
     });
+    const handleOpenProviderSubagent = useStableEvent(
+      (parentAgentId: string, subagentId: string) => {
+        onOpenProviderSubagent?.(parentAgentId, subagentId);
+      },
+    );
     const renderToolCallItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "tool_call" }>) => {
         const group = getToolCallGroup(item.id);
@@ -895,6 +903,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               calls={group.calls}
               isLastInSequence={layoutItem.isLastInToolSequence}
               onOpenSubagent={handleOpenSubagent}
+              onOpenProviderSubagent={handleOpenProviderSubagent}
               renderGenericCall={renderSingleToolCallItem}
             />
           );
@@ -925,6 +934,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         agentId,
         expandedToolCallGroupIds,
         getToolCallGroup,
+        handleOpenProviderSubagent,
         handleOpenSubagent,
         renderSingleToolCallItem,
         resolvedServerId,

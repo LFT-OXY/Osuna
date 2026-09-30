@@ -364,9 +364,16 @@ export async function detachSubagentFromTrack(page: Page, childId: string): Prom
   await detachButton.click();
 }
 
-/** 一步派发脚本：一次 `paseo.create_agent` 调用，或夹在调用之间的一段正文。 */
+/**
+ * 一步派发脚本：一次 `paseo.create_agent` 调用、一次带描述符的 provider 子智能体调用，
+ * 或夹在调用之间的一段正文。
+ */
 export type DispatchStep =
   | { callId: string; title: string; provider?: string; runningMs?: number }
+  | {
+      callId: string;
+      providerSubagent: { id: string; description: string; subtitle?: string; runningMs?: number };
+    }
   | { text: string };
 
 export async function seedDispatchParent(
@@ -422,6 +429,11 @@ export function dispatchGroups(page: Page) {
 
 export function dispatchRow(page: Page, callId: string) {
   return page.getByTestId(`dispatch-group-row-${callId}`);
+}
+
+/** provider 子智能体的行按调用与子智能体一起定位：一次调用可能派出多个。 */
+export function providerDispatchRow(page: Page, callId: string, subagentId: string) {
+  return dispatchRow(page, `${callId}:${subagentId}`);
 }
 
 export async function expectDispatchHeader(page: Page, index: number, label: string | RegExp) {

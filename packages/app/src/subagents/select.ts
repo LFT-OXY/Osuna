@@ -42,6 +42,8 @@ export interface ProviderSubagentRow {
   status: ProviderSubagentDescriptorPayload["status"];
   requiresAttention: boolean;
   createdAt: Date;
+  /** 派出它的那次工具调用；时间线派发组按父 agentId 加它关联。 */
+  toolCallId: string | null;
 }
 
 export type SubagentRow = PaseoSubagentRow | ProviderSubagentRow;
@@ -105,6 +107,22 @@ export function selectSubagentsForParent(
   return rows;
 }
 
+function toProviderSubagentRow(subagent: ProviderSubagentDescriptorPayload): ProviderSubagentRow {
+  return {
+    kind: "provider",
+    id: subagent.id,
+    parentAgentId: subagent.parentAgentId,
+    provider: subagent.provider,
+    title: subagent.title,
+    description: subagent.description,
+    subtitle: subagent.subtitle ?? null,
+    status: subagent.status,
+    requiresAttention: subagent.status === "failed",
+    createdAt: new Date(subagent.createdAt),
+    toolCallId: subagent.toolCallId,
+  };
+}
+
 export function selectProviderSubagentsForParent(
   state: ProviderSubagentStoreSnapshot,
   params: SelectSubagentsParams,
@@ -123,18 +141,7 @@ export function selectProviderSubagentsForParent(
     ) {
       continue;
     }
-    rows.push({
-      kind: "provider",
-      id: subagent.id,
-      parentAgentId: subagent.parentAgentId,
-      provider: subagent.provider,
-      title: subagent.title,
-      description: subagent.description,
-      subtitle: subagent.subtitle ?? null,
-      status: subagent.status,
-      requiresAttention: subagent.status === "failed",
-      createdAt: new Date(subagent.createdAt),
-    });
+    rows.push(toProviderSubagentRow(subagent));
   }
   rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   return rows;
@@ -177,9 +184,9 @@ export function useSubagentsForParent(params: SelectSubagentsParams): SubagentRo
   }, [params.providerParentSubagentId, paseoRows, providerRows]);
 }
 
-/** 派发组一行需要的子智能体数据。状态与 Subagents track 同源，都从 `PaseoSubagentRow` 分桶。 */
+/** 派发组一行需要的子智能体数据。状态与 Subagents track 同源，都从 `SubagentRow` 分桶。 */
 export interface DispatchSubagent {
-  row: PaseoSubagentRow;
+  row: SubagentRow;
   model: string | null;
   modeLabel: string | null;
   pendingPermissionName: string | null;
@@ -257,6 +264,57 @@ export function createDispatchSubagentsSelector(
   };
 }
 
+/** provider 子智能体没有模型、模式与归档这些 Paseo 字段；等待批准的归属由 adapter 另补。 */
+function toProviderDispatchSubagent(subagent: ProviderSubagentDescriptorPayload): DispatchSubagent {
+  return {
+    row: toProviderSubagentRow(subagent),
+    model: null,
+    modeLabel: null,
+    pendingPermissionName: null,
+    updatedAt: new Date(subagent.updatedAt),
+    archived: false,
+    detached: false,
+  };
+}
+
+/**
+ * 本父智能体的 provider 子智能体，按描述符的 `toolCallId` 建索引。一次调用可能派出多个（OMP 的 task），
+ * 按创建时间排。track 里被收起的照样在：那只是把 track 清空，时间线上的调用还在。
+ */
+export function selectProviderDispatchSubagents(
+  state: ProviderSubagentStoreSnapshot,
+  params: DispatchSubagentsParams,
+): Record<string, DispatchSubagent[]> {
+  const linked: Record<string, DispatchSubagent[]> = {};
+  const prefix = `${params.serverId}\0${params.parentAgentId}\0`;
+  for (const [key, subagent] of state.descriptors) {
+    const belongsToParent = key.startsWith(prefix);
+    if (!belongsToParent || !subagent.toolCallId) continue;
+    const subagents = linked[subagent.toolCallId] ?? [];
+    subagents.push(toProviderDispatchSubagent(subagent));
+    linked[subagent.toolCallId] = subagents;
+  }
+  for (const subagents of Object.values(linked)) {
+    subagents.sort((left, right) => left.row.createdAt.getTime() - right.row.createdAt.getTime());
+  }
+  return linked;
+}
+
+/** 与 `createDispatchSubagentsSelector` 同理：描述符表没换就返回上次的结果。 */
+export function createProviderDispatchSubagentsSelector(
+  params: DispatchSubagentsParams,
+): (state: ProviderSubagentStoreSnapshot) => Record<string, DispatchSubagent[]> {
+  let lastDescriptors: ProviderSubagentStoreSnapshot["descriptors"] | undefined;
+  let lastLinked: Record<string, DispatchSubagent[]> = {};
+  return (state) => {
+    if (state.descriptors !== lastDescriptors) {
+      lastDescriptors = state.descriptors;
+      lastLinked = selectProviderDispatchSubagents(state, params);
+    }
+    return lastLinked;
+  };
+}
+
 /** active 目录之外按关联标签查一次（含已归档）的结果。 */
 export type DispatchLookup =
   | { status: "pending" }
@@ -265,9 +323,20 @@ export type DispatchLookup =
 
 export const PENDING_DISPATCH_LOOKUP: DispatchLookup = { status: "pending" };
 
+/**
+ * `key` 在一组里唯一：Paseo 子智能体一次调用一个，就用 callId；provider 的一次调用可能派出多个，
+ * 用 callId 加子智能体 id。provider 行没有 `create_agent` 入参。
+ */
 export type DispatchCallState =
-  | { kind: "subagent"; callId: string; input: CreateAgentCallInput; subagent: DispatchSubagent }
-  | { kind: "starting"; callId: string; input: CreateAgentCallInput }
+  | {
+      kind: "subagent";
+      key: string;
+      callId: string;
+      input: CreateAgentCallInput;
+      subagent: DispatchSubagent;
+    }
+  | { kind: "provider"; key: string; callId: string; subagent: DispatchSubagent }
+  | { kind: "starting"; key: string; callId: string; input: CreateAgentCallInput }
   | { kind: "generic"; call: AgentToolCallItem };
 
 export type DispatchRowState = Exclude<DispatchCallState, { kind: "generic" }>;
@@ -290,12 +359,32 @@ export function resolveDispatchCall(input: {
   const lookedUp = input.lookup.status === "found" ? input.lookup.subagent : undefined;
   const subagent = input.subagent ?? lookedUp;
   if (subagent) {
-    return { kind: "subagent", callId, input: callInput, subagent };
+    return { kind: "subagent", key: callId, callId, input: callInput, subagent };
   }
   if (input.call.payload.data.status === "running" || input.lookup.status === "pending") {
-    return { kind: "starting", callId, input: callInput };
+    return { kind: "starting", key: callId, callId, input: callInput };
   }
   return { kind: "generic", call: input.call };
+}
+
+/**
+ * provider 子智能体调用落到哪种呈现。没有"启动中"：app 分不出哪些 provider 会发描述符（Pi 就
+ * 不发），执行中先画启动中会让它们一直停在不可点的行上；描述符一到，通用卡就换成行。
+ */
+export function resolveProviderDispatchCall(input: {
+  call: AgentToolCallItem;
+  subagents: readonly DispatchSubagent[] | undefined;
+}): DispatchCallState[] {
+  const callId = input.call.payload.data.callId;
+  if (!input.subagents) {
+    return [{ kind: "generic", call: input.call }];
+  }
+  return input.subagents.map((subagent) => ({
+    kind: "provider",
+    key: `${callId}:${subagent.row.id}`,
+    callId,
+    subagent,
+  }));
 }
 
 /** 退回通用卡的调用把一组切开，两边各成一张卡，与原型的连续规则一致。 */
@@ -305,7 +394,7 @@ export function splitDispatchSegments(states: readonly DispatchCallState[]): Dis
   const flush = () => {
     const first = rows[0];
     if (first) {
-      segments.push({ kind: "group", key: first.callId, rows });
+      segments.push({ kind: "group", key: first.key, rows });
     }
     rows = [];
   };

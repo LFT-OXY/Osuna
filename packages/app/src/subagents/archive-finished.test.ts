@@ -36,6 +36,7 @@ function provider(
     status,
     requiresAttention: false,
     createdAt: new Date(),
+    toolCallId: null,
   };
 }
 

@@ -584,6 +584,62 @@ describe("MockLoadTestAgentClient", () => {
     unsubscribe();
   });
 
+  test("emits a scripted provider subagent call with a descriptor that carries its call id", async () => {
+    vi.useFakeTimers();
+    const client = new MockLoadTestAgentClient();
+    const session = await client.createSession({
+      provider: "mock",
+      cwd: process.cwd(),
+      model: "ten-second-stream",
+    });
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+    const subagentEvents = () =>
+      events.flatMap((event) => (event.type === "provider_subagent" ? [event.event] : []));
+
+    const resultPromise = session.run(
+      `Emit synthetic create_agent calls: ${JSON.stringify([
+        {
+          callId: "toolu_1",
+          providerSubagent: { id: "sub-1", description: "Map the router", runningMs: 1000 },
+        },
+      ])}`,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "timeline",
+        item: expect.objectContaining({
+          type: "tool_call",
+          callId: "toolu_1",
+          status: "running",
+          detail: expect.objectContaining({ type: "sub_agent", description: "Map the router" }),
+        }),
+      }),
+    );
+    expect(subagentEvents()).toEqual([
+      expect.objectContaining({
+        type: "upsert",
+        id: "sub-1",
+        description: "Map the router",
+        status: "running",
+        toolCallId: "toolu_1",
+      }),
+      { type: "timeline", id: "sub-1", item: { type: "user_message", text: "Map the router" } },
+    ]);
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(subagentEvents().at(-1)).toMatchObject({
+      type: "upsert",
+      id: "sub-1",
+      status: "completed",
+    });
+    await expect(resultPromise).resolves.toMatchObject({ canceled: false });
+    unsubscribe();
+  });
+
   test("agent manager coalesces adjacent assistant tokens into fewer messages", async () => {
     vi.useFakeTimers();
     const workdir = mkdtempSync(join(tmpdir(), "paseo-mock-load-test-"));

@@ -262,6 +262,15 @@ const SyntheticDispatchStepsSchema = z.array(
       provider: z.string().optional(),
       runningMs: z.number().optional(),
     }),
+    z.object({
+      callId: z.string(),
+      providerSubagent: z.object({
+        id: z.string(),
+        description: z.string(),
+        subtitle: z.string().optional(),
+        runningMs: z.number().optional(),
+      }),
+    }),
     z.object({ text: z.string() }),
   ]),
 );
@@ -269,7 +278,8 @@ const SyntheticDispatchStepsSchema = z.array(
 type SyntheticDispatchStep = z.infer<typeof SyntheticDispatchStepsSchema>[number];
 
 // 浏览器 e2e 用它往父时间线写带 callId 的 `paseo.create_agent` 调用；子智能体由测试按标签另外种入。
-// 步骤依次执行，`runningMs` 让该调用停在执行中，好验证派发组的"启动中"。脚本写错直接抛错。
+// `providerSubagent` 步骤写一次 provider 子智能体调用，连同带同一 `toolCallId` 的描述符一起发出。
+// 步骤依次执行，`runningMs` 让该调用停在执行中，好验证派发组的"启动中"与实时状态。脚本写错直接抛错。
 function parseSyntheticDispatchSteps(prompt: AgentPromptInput): SyntheticDispatchStep[] | null {
   const match = /^emit synthetic create_agent calls:\s*(\[[\s\S]*\])\s*$/i.exec(
     promptToText(prompt),
@@ -1279,6 +1289,10 @@ export class MockLoadTestAgentSession implements AgentSession {
         runStep(index + 1);
         return;
       }
+      if ("providerSubagent" in step) {
+        this.emitSyntheticProviderSubagent(turn, step, () => runStep(index + 1));
+        return;
+      }
       const detail: ToolCallDetail = {
         type: "unknown",
         input: {
@@ -1309,6 +1323,64 @@ export class MockLoadTestAgentSession implements AgentSession {
       turn.timer.unref?.();
     };
     turn.timer = setTimeout(() => runStep(0), 0);
+    turn.timer.unref?.();
+  }
+
+  private emitSyntheticProviderSubagent(
+    turn: ActiveTurn,
+    step: Extract<SyntheticDispatchStep, { providerSubagent: unknown }>,
+    next: () => void,
+  ): void {
+    const { callId, providerSubagent } = step;
+    const detail: ToolCallDetail = {
+      type: "sub_agent",
+      subAgentType: "Explore",
+      description: providerSubagent.description,
+      log: "",
+    };
+    const emitSubagent = (status: "running" | "completed") => {
+      this.emit({
+        type: "provider_subagent",
+        provider: this.provider,
+        event: {
+          type: "upsert",
+          id: providerSubagent.id,
+          title: "Explore",
+          description: providerSubagent.description,
+          subtitle: providerSubagent.subtitle ?? null,
+          status,
+          toolCallId: callId,
+        },
+      });
+    };
+    this.emitTimeline(
+      turn.turnId,
+      createToolCall({ callId, name: "Task", status: "running", detail }),
+    );
+    emitSubagent("running");
+    this.emit({
+      type: "provider_subagent",
+      provider: this.provider,
+      event: {
+        type: "timeline",
+        id: providerSubagent.id,
+        item: { type: "user_message", text: providerSubagent.description },
+      },
+    });
+    const complete = () => {
+      if (this.activeTurn !== turn) return;
+      emitSubagent("completed");
+      this.emitTimeline(
+        turn.turnId,
+        createToolCall({ callId, name: "Task", status: "completed", detail }),
+      );
+      next();
+    };
+    if (!providerSubagent.runningMs) {
+      complete();
+      return;
+    }
+    turn.timer = setTimeout(complete, providerSubagent.runningMs);
     turn.timer.unref?.();
   }
 

@@ -107,11 +107,13 @@ Both render through `components/ui/autocomplete.tsx`; `hooks/use-agent-autocompl
 | level | `dispatchGroups` | key |
 |---|---|---|
 | `detailed` | false | none, calls pass through |
-| `detailed` | true | `create_agent` → `"dispatch"`, the rest `null` |
+| `detailed` | true | subagent call → `"dispatch"`, the rest `null` |
 | `overview` | false | every groupable call → `"overview"` |
-| `overview` | true | `create_agent` → `"dispatch"`, other groupable calls → `"overview"` |
+| `overview` | true | subagent call → `"dispatch"`, other groupable calls → `"overview"` |
 
-`ToolCallDetailGroup` is a union on `mode`, and `agent-stream/view.tsx` branches on it. A new kind of group adds a mode and a key, and must not become a second grouping pass. `dispatchGroups` is `useDispatchGroupsEnabled`: the host has `subagentCallLinks` and the view was given `onOpenSubagent`. The read-only provider-subagent panel and drafts don't pass it, so their `create_agent` calls stay generic cards. Whether a call links to a child is decided at render time (`resolveDispatchCall` in `subagents/select.ts`). A call that doesn't link splits its card and renders through the generic tool-call renderer passed in as `renderGenericCall`. The projection can't know ahead of time.
+A subagent call is `isDispatchToolCall` in `tool-calls/detail-level/dispatch/model.ts`: `isCreateAgentCall` (the Paseo tool leaf name is `create_agent`) or `isProviderSubagentCall` (`detail.type === "sub_agent"`). The key is decided from the item alone, so a `sub_agent` call from a provider that never publishes descriptors (Pi) still leaves its overview group and renders as a standalone generic card. That cost is accepted.
+
+`ToolCallDetailGroup` is a union on `mode`, and `agent-stream/view.tsx` branches on it. A new kind of group adds a mode and a key, and must not become a second grouping pass. `dispatchGroups` is `useDispatchGroupsEnabled`: the host has `subagentCallLinks` and the view was given `onOpenSubagent`. The read-only provider-subagent panel and drafts don't pass it, so their `create_agent` calls stay generic cards. Whether a call links to a child is decided at render time in `subagents/select.ts`. `resolveDispatchCall` handles `create_agent`: store hit → row, running or lookup pending → `starting`, else generic. `resolveProviderDispatchCall` handles provider calls: one `provider` row per descriptor whose `toolCallId` is the call id (OMP's task starts several), row key `${callId}:${subagentId}`, else generic. Provider calls get no `starting` state: the app cannot tell which providers publish descriptors, and a Pi call would sit on a row that never opens. Only `create_agent` calls get the `includeArchived` lookup. Provider subagents hidden from the track by "Archive finished" still render in the group. A call that doesn't link splits its card and renders through the generic tool-call renderer passed in as `renderGenericCall`. The projection can't know ahead of time.
 
 ## React rules that matter most here
 

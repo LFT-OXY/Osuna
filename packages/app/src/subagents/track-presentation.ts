@@ -165,10 +165,15 @@ export type DispatchRowTiming =
   | { kind: "frozen"; durationMs: number }
   | { kind: "none" };
 
+/** 点开一行去哪：Paseo 子智能体是普通 agent 标签，provider 子智能体是只读面板。 */
+export type DispatchOpenTarget =
+  | { kind: "agent"; agentId: string }
+  | { kind: "provider_subagent"; parentAgentId: string; subagentId: string };
+
 export interface DispatchRowPresentation {
   key: string;
   /** 启动中没有子智能体可开，为 null。 */
-  agentId: string | null;
+  open: DispatchOpenTarget | null;
   provider: string | null;
   label: string;
   subtitle: string;
@@ -209,6 +214,9 @@ function subagentSubtitle(
   subagent: DispatchSubagent,
   providerLabelOf: (provider: string) => string,
 ): string {
+  if (subagent.row.kind === "provider") {
+    return buildSubagentRowPresentationData(subagent.row).subtitle;
+  }
   const archivedSuffix = subagent.archived ? t("subagents.dispatchArchived") : null;
   const detachedSuffix = subagent.detached ? t("subagents.dispatchDetached") : null;
   return joinParts([
@@ -220,7 +228,17 @@ function subagentSubtitle(
   ]);
 }
 
-/** 标题取 `create_agent` 入参的 title；子智能体后来被改名，行上仍是派发时写的任务。 */
+function openTarget(row: SubagentRow): DispatchOpenTarget {
+  if (row.kind === "provider") {
+    return { kind: "provider_subagent", parentAgentId: row.parentAgentId, subagentId: row.id };
+  }
+  return { kind: "agent", agentId: row.id };
+}
+
+/**
+ * Paseo 子智能体的标题取 `create_agent` 入参的 title，后来被改名，行上仍是派发时写的任务；
+ * provider 子智能体没有入参，与 track 一样先取 description。
+ */
 export function buildDispatchRowPresentation({
   t,
   state,
@@ -230,15 +248,14 @@ export function buildDispatchRowPresentation({
   state: DispatchRowState;
   providerLabelOf: (provider: string) => string;
 }): DispatchRowPresentation {
-  const callTitle = resolveRowLabel(state.input.title);
   if (state.kind === "starting") {
     const { provider, model, modeId } = state.input;
     const providerLabel = provider ? providerLabelOf(provider) : null;
     return {
-      key: state.callId,
-      agentId: null,
+      key: state.key,
+      open: null,
       provider,
-      label: callTitle ?? "",
+      label: resolveRowLabel(state.input.title) ?? "",
       subtitle: joinParts([providerLabel, model, modeId]),
       tone: "default",
       bucket: "starting",
@@ -251,11 +268,12 @@ export function buildDispatchRowPresentation({
   const subtitle = pendingTool
     ? t("subagents.dispatchWaitingForApproval", { tool: pendingTool })
     : subagentSubtitle(t, subagent, providerLabelOf);
-  const label = callTitle ?? resolveRowLabel(subagent.row.title) ?? "";
+  const callTitle = state.kind === "subagent" ? resolveRowLabel(state.input.title) : null;
+  const label = callTitle ?? buildSubagentRowPresentationData(subagent.row).label;
   const tone = pendingTool ? "warning" : "default";
   return {
-    key: state.callId,
-    agentId: subagent.row.id,
+    key: state.key,
+    open: openTarget(subagent.row),
     provider: subagent.row.provider,
     label,
     subtitle,

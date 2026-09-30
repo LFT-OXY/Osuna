@@ -28,17 +28,21 @@ import {
   type WorkspaceTabPresentation,
 } from "@/screens/workspace/workspace-tab-presentation";
 import { useSessionStore } from "@/stores/session-store";
+import { isCreateAgentCall } from "@/tool-calls/detail-level/dispatch/model";
 import { settingsStyles } from "@/styles/settings";
 import type { Theme } from "@/styles/theme";
 import type { AgentToolCallItem } from "@/types/stream";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { formatDuration } from "@/utils/time";
+import { useProviderSubagentStore } from "./provider-store";
 import {
   createDispatchSubagentsSelector,
+  createProviderDispatchSubagentsSelector,
   isDispatchChildOf,
   PENDING_DISPATCH_LOOKUP,
   resolveDispatchCall,
+  resolveProviderDispatchCall,
   splitDispatchSegments,
   toDispatchSubagent,
   type DispatchLookup,
@@ -48,6 +52,7 @@ import {
 import {
   buildDispatchGroupHeaderPresentation,
   buildDispatchRowPresentation,
+  type DispatchOpenTarget,
   type DispatchRowBucket,
   type DispatchRowPresentation,
 } from "./track-presentation";
@@ -63,6 +68,7 @@ export interface DispatchGroupViewProps {
   calls: readonly AgentToolCallItem[];
   isLastInSequence: boolean;
   onOpenSubagent: (agentId: string) => void;
+  onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   /** 关联不上的调用退回通用工具卡，由时间线按原样渲染。 */
   renderGenericCall: (call: AgentToolCallItem, isLastInSequence: boolean) => ReactNode;
 }
@@ -80,12 +86,25 @@ export function useDispatchGroupsEnabled(input: {
   return supportsCallLinks && input.canOpenSubagents;
 }
 
-type DispatchSubagentIndex = Record<string, DispatchSubagent>;
+/** 两种子智能体各自的 callId 索引：Paseo 按关联标签一对一，provider 按描述符的 `toolCallId` 一对多。 */
+interface DispatchSubagentIndex {
+  paseo: Record<string, DispatchSubagent>;
+  provider: Record<string, DispatchSubagent[]>;
+}
 
-const EMPTY_DISPATCH_SUBAGENT_INDEX: DispatchSubagentIndex = {};
+const EMPTY_PASEO_DISPATCH_SUBAGENTS: Record<string, DispatchSubagent> = {};
+const EMPTY_PROVIDER_DISPATCH_SUBAGENTS: Record<string, DispatchSubagent[]> = {};
+const EMPTY_DISPATCH_SUBAGENT_INDEX: DispatchSubagentIndex = {
+  paseo: EMPTY_PASEO_DISPATCH_SUBAGENTS,
+  provider: EMPTY_PROVIDER_DISPATCH_SUBAGENTS,
+};
 
-function selectNoDispatchSubagents(): DispatchSubagentIndex {
-  return EMPTY_DISPATCH_SUBAGENT_INDEX;
+function selectNoPaseoDispatchSubagents(): Record<string, DispatchSubagent> {
+  return EMPTY_PASEO_DISPATCH_SUBAGENTS;
+}
+
+function selectNoProviderDispatchSubagents(): Record<string, DispatchSubagent[]> {
+  return EMPTY_PROVIDER_DISPATCH_SUBAGENTS;
 }
 
 const DispatchSubagentIndexContext = createContext<DispatchSubagentIndex>(
@@ -104,14 +123,23 @@ export function useDispatchSubagentIndex(input: {
   enabled: boolean;
 }): DispatchSubagentIndex {
   const { serverId, parentAgentId, enabled } = input;
-  const select = useMemo(
+  const selectPaseo = useMemo(
     () =>
       enabled
         ? createDispatchSubagentsSelector({ serverId, parentAgentId })
-        : selectNoDispatchSubagents,
+        : selectNoPaseoDispatchSubagents,
     [enabled, parentAgentId, serverId],
   );
-  return useStoreWithEqualityFn(useSessionStore, select, equal);
+  const selectProvider = useMemo(
+    () =>
+      enabled
+        ? createProviderDispatchSubagentsSelector({ serverId, parentAgentId })
+        : selectNoProviderDispatchSubagents,
+    [enabled, parentAgentId, serverId],
+  );
+  const paseo = useStoreWithEqualityFn(useSessionStore, selectPaseo, equal);
+  const provider = useStoreWithEqualityFn(useProviderSubagentStore, selectProvider, equal);
+  return useMemo(() => ({ paseo, provider }), [paseo, provider]);
 }
 
 export function dispatchSubagentLookupQueryKey(input: {
@@ -169,8 +197,9 @@ function useArchivedDispatchLookups(input: {
 }
 
 /**
- * 时间线派发组：同一段输出里连续的 `create_agent` 调用。每行与 Subagents track 用同一份子智能体
- * 数据，点击打开子会话；关联不上的调用切开这一组，按通用工具卡原样显示。
+ * 时间线派发组：同一段输出里连续的子智能体调用（`create_agent` 与 provider 子智能体调用）。每行与
+ * Subagents track 用同一份子智能体数据，点击打开子会话或只读面板；关联不上的调用切开这一组，
+ * 按通用工具卡原样显示。
  */
 export const DispatchGroupView = memo(function DispatchGroupView({
   serverId,
@@ -178,15 +207,20 @@ export const DispatchGroupView = memo(function DispatchGroupView({
   calls,
   isLastInSequence,
   onOpenSubagent,
+  onOpenProviderSubagent,
   renderGenericCall,
 }: DispatchGroupViewProps): ReactElement {
   const linked = useContext(DispatchSubagentIndexContext);
+  // 只有 `create_agent` 的子智能体会归档出 active 目录，provider 子智能体不用补查。
   const unlinkedFinishedCallIds = useMemo(
     () =>
       calls
-        .filter((call) => call.payload.data.status !== "running")
+        .filter((call) => {
+          const isFinished = call.payload.data.status !== "running";
+          return isCreateAgentCall(call) && isFinished;
+        })
         .map((call) => call.payload.data.callId)
-        .filter((callId) => !linked[callId]),
+        .filter((callId) => !linked.paseo[callId]),
     [calls, linked],
   );
   const lookups = useArchivedDispatchLookups({
@@ -197,15 +231,28 @@ export const DispatchGroupView = memo(function DispatchGroupView({
   const segments = useMemo(
     () =>
       splitDispatchSegments(
-        calls.map((call) => {
+        calls.flatMap((call) => {
           const callId = call.payload.data.callId;
+          if (!isCreateAgentCall(call)) {
+            return resolveProviderDispatchCall({ call, subagents: linked.provider[callId] });
+          }
           const lookup = lookups[callId] ?? PENDING_DISPATCH_LOOKUP;
-          return resolveDispatchCall({ call, subagent: linked[callId], lookup });
+          return [resolveDispatchCall({ call, subagent: linked.paseo[callId], lookup })];
         }),
       ),
     [calls, linked, lookups],
   );
   const lastIndex = segments.length - 1;
+  const handleOpen = useCallback(
+    (target: DispatchOpenTarget) => {
+      if (target.kind === "agent") {
+        onOpenSubagent(target.agentId);
+        return;
+      }
+      onOpenProviderSubagent(target.parentAgentId, target.subagentId);
+    },
+    [onOpenProviderSubagent, onOpenSubagent],
+  );
 
   return (
     <View style={styles.stack}>
@@ -219,7 +266,7 @@ export const DispatchGroupView = memo(function DispatchGroupView({
             key={segment.key}
             serverId={serverId}
             rows={segment.rows}
-            onOpenSubagent={onOpenSubagent}
+            onOpen={handleOpen}
           />
         ),
       )}
@@ -230,11 +277,11 @@ export const DispatchGroupView = memo(function DispatchGroupView({
 function DispatchGroupCard({
   serverId,
   rows,
-  onOpenSubagent,
+  onOpen,
 }: {
   serverId: string;
   rows: DispatchRowState[];
-  onOpenSubagent: (agentId: string) => void;
+  onOpen: (target: DispatchOpenTarget) => void;
 }): ReactElement {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
@@ -279,10 +326,10 @@ function DispatchGroupCard({
         ? null
         : rows.map((row) => (
             <DispatchGroupRow
-              key={row.callId}
+              key={row.key}
               serverId={serverId}
               presentation={buildDispatchRowPresentation({ t, state: row, providerLabelOf })}
-              onOpenSubagent={onOpenSubagent}
+              onOpen={onOpen}
             />
           ))}
     </View>
@@ -297,23 +344,23 @@ function markBucket(bucket: DispatchRowBucket) {
 function DispatchGroupRow({
   serverId,
   presentation,
-  onOpenSubagent,
+  onOpen,
 }: {
   serverId: string;
   presentation: DispatchRowPresentation;
-  onOpenSubagent: (agentId: string) => void;
+  onOpen: (target: DispatchOpenTarget) => void;
 }): ReactElement {
-  const { agentId } = presentation;
-  const openable = agentId !== null;
+  const { open } = presentation;
+  const openable = open !== null;
   const iconPresentation = useMemo(
     () => buildIconPresentation(presentation, serverId),
     [presentation, serverId],
   );
   const handlePress = useCallback(() => {
-    if (agentId) {
-      onOpenSubagent(agentId);
+    if (open) {
+      onOpen(open);
     }
-  }, [agentId, onOpenSubagent]);
+  }, [open, onOpen]);
   const renderRow = useCallback(
     ({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => {
       const active = openable && (Boolean(hovered) || pressed);

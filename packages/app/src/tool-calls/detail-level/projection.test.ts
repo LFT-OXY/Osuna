@@ -570,6 +570,21 @@ describe("dispatch groups", () => {
     expect(project({ level: "detailed", tail, dispatchGroups: true }).groupsByHostId.size).toBe(0);
   });
 
+  it("joins provider subagent calls into the same dispatch group as create_agent", () => {
+    const subAgent = (id: string) =>
+      toolCall(id, { type: "sub_agent", subAgentType: "Explore", log: "" }, { name: "Task" });
+    const tail = [subAgent("1"), createAgentCall("2"), subAgent("3"), assistant("after")];
+
+    const result = project({ level: "detailed", tail, dispatchGroups: true });
+
+    expect(result.tail.map((item) => item.id)).toEqual(["1", "after"]);
+    expect(result.groupsByHostId.get("1")).toMatchObject({
+      mode: "dispatch",
+      calls: [tail[0], tail[1], tail[2]],
+    });
+    expect(project({ level: "detailed", tail }).groupsByHostId.size).toBe(0);
+  });
+
   it("grows a history dispatch group with the live head", () => {
     const first = createAgentCall("1");
     const second = createAgentCall("2", { status: "running" });
