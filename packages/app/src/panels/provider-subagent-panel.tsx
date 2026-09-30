@@ -3,6 +3,8 @@ import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import invariant from "tiny-invariant";
 import { useShallow } from "zustand/react/shallow";
+import { shallow } from "zustand/shallow";
+import { useStoreWithEqualityFn } from "zustand/traditional";
 import { AgentStreamView } from "@/agent-stream/view";
 import { getProviderIcon } from "@/components/provider-icons";
 import {
@@ -15,7 +17,11 @@ import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { usePaneContext } from "@/panels/pane-context";
 import { definePanel, type PanelDescriptor } from "@/panels/panel-registry";
 import { useSessionStore } from "@/stores/session-store";
-import { useSubagentsForParent } from "@/subagents/select";
+import {
+  createProviderSubagentOwnedPermissionsSelector,
+  useSubagentsForParent,
+  type ProviderSubagentOwnedPermissionsParams,
+} from "@/subagents/select";
 import { SubagentsTrack } from "@/subagents/track";
 import {
   providerSubagentKey,
@@ -31,7 +37,6 @@ import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
 
-const EMPTY_PERMISSIONS = new Map<string, PendingPermission>();
 const EMPTY_STREAM_ITEMS: StreamItem[] = [];
 const NOOP_SUBAGENT = () => undefined;
 
@@ -64,6 +69,18 @@ function ProviderSubagentChildTrack({
       />
     </ComposerTrackBar>
   );
+}
+
+/** 卡片里的 `agentId` 仍是父 agent，批准照常回给父 agent；批准不算写入会话，只读面板照样显示。 */
+function useProviderSubagentPendingPermissions(
+  params: ProviderSubagentOwnedPermissionsParams,
+): Map<string, PendingPermission> {
+  const { serverId, parentAgentId, subagentId } = params;
+  const selectOwned = useMemo(
+    () => createProviderSubagentOwnedPermissionsSelector({ serverId, parentAgentId, subagentId }),
+    [parentAgentId, serverId, subagentId],
+  );
+  return useStoreWithEqualityFn(useSessionStore, selectOwned, shallow);
 }
 
 function formatProviderLabel(provider: string): string {
@@ -137,6 +154,11 @@ function ProviderSubagentPanel() {
     providerParentSubagentId: target.subagentId,
   });
   const childTrackClearance = resolveChildTrackClearance(childRows.length, isCompact);
+  const pendingPermissions = useProviderSubagentPendingPermissions({
+    serverId,
+    parentAgentId: target.parentAgentId,
+    subagentId: target.subagentId,
+  });
   const openProviderChild = useCallback(
     (parentAgentId: string, subagentId: string) => {
       openTab({ kind: "provider_subagent", parentAgentId, subagentId });
@@ -261,7 +283,8 @@ function ProviderSubagentPanel() {
         streamItems={timeline?.tail ?? EMPTY_STREAM_ITEMS}
         streamHead={timeline?.head ?? EMPTY_STREAM_ITEMS}
         turnPresentation={turnPresentation}
-        pendingPermissions={EMPTY_PERMISSIONS}
+        pendingPermissions={pendingPermissions}
+        permissionAgentId={target.parentAgentId}
         isAuthoritativeHistoryReady
         onOpenWorkspaceFile={openFileInWorkspace}
         readOnly

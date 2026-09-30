@@ -83,6 +83,8 @@ The app links a `create_agent` card in the parent timeline to the subagent it pr
 
 OpenCode's `context.callID` is missing from the plugin's public types, so a future OpenCode release can drop it without warning. Pi calls that do not name the `paseo` server — a proxy `{tool: "create_agent"}` without `server`, or a direct tool under `toolPrefix: "none"` — keep their raw name and show the generic tool card.
 
+A provider subagent runs inside the parent's provider runtime, so its permission requests reach `AgentManager` under the parent agent. Tag each one with the subagent's descriptor id through `providerSubagentPermissionMetadata` (`@getpaseo/protocol/provider-subagent-permission`); an untagged request shows only on the parent ([agent-lifecycle.md](agent-lifecycle.md#the-subagents-track)). OMP's `extension_ui_request` carries no subagent id, so OMP permissions stay on the parent. Claude's `canUseTool` `agentID` is read as the `task_id` of `task_started`, which has not been checked against a live CLI.
+
 Pi is a process-backed provider. Paseo requires the user to have the `pi` binary installed and talks to it through `pi --mode rpc`; the server package does not embed Pi's SDK/runtime packages.
 
 Paseo's per-agent and daemon-wide system prompts are appended by its generated Pi integration extension. Paseo deliberately does not pass `--append-system-prompt`, because that flag replaces Pi's automatic `APPEND_SYSTEM.md` discovery instead of composing with it.

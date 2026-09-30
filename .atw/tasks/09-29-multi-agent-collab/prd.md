@@ -148,7 +148,7 @@ Rules:
 - daemon 读出 provider 侧的 tool call id，经工具执行上下文传给 `create_agent`，作为 daemon 自有的子智能体标签 `paseo.parent-tool-call-id` 写入，覆盖模型传入的同名键。来源：Claude `_meta["claudecode/toolUseId"]`、Codex `_meta.callId`、Pi `_meta["pi-mcp-adapter/toolCallId"]`、OpenCode 插件的 `context.callID`、OMP `toolCallId`。拿不到 id 就不写标签，不从工具结果里补。
   - 只在工具创建路径（MCP、OpenCode bridge、OMP host tool）剥掉模型传入的同名键；WebSocket 会话创建路径不剥，app e2e 靠它按标签种入子智能体。只有存在父智能体时才写，旧式 detached 创建不写。脱离（detach）保留这个标签。
 - OpenCode、Pi、OMP 的 adapter 往时间线写条目时，统一把工具名规范成 `paseo.create_agent`、入参平铺（Pi 要拆掉 `{tool, args}` 这层）。app 只认标准写法。只改 `create_agent`，其他 Paseo 工具保持原名。Pi 没有指明 `paseo` 服务器的调用（代理里不带 `server` 的裸 `create_agent`、`toolPrefix: "none"` 的直连工具）不改名，退回通用工具卡。
-- 各 adapter 在 provider 子智能体的权限请求 `metadata` 里补上子智能体 id：Codex 用 `threadId`，Claude 用 SDK 的 `agentID`，OpenCode 用 `sessionID`。OMP 没有来源，v1 不归属。不扩展 provider 子智能体描述符的 status。
+- 各 adapter 在 provider 子智能体的权限请求 `metadata.providerSubagentId` 里补上子智能体（描述符）id，读写都走 `@getpaseo/protocol/provider-subagent-permission`：Codex 用非父线程的 `threadId`（四类审批都补），Claude 用 SDK 的 `agentID` 经 `task_started.task_id` 映射到描述符 id（二者相等尚未线上核实，映射不到时留在父 agent），OpenCode 用子会话的 `sessionID`（权限与转上来的子会话提问都补）。OMP 没有来源，v1 不归属。不扩展 provider 子智能体描述符的 status。
 
 ### 子智能体权限的通知与提醒（server）
 
@@ -195,9 +195,9 @@ Rules:
 
 ### Subagents track 与只读面板（app）
 
-- Paseo 子智能体行把待批准计数交给状态分桶，出现"等待批准"桶；`requiresAttention` 保持 false，不复活"已完成=待查看"。"等待批准"桶即 `needs_input`，pill 与行图标沿用它的现有文案与角标。`PaseoSubagentRow` 带 `pendingPermissionCount`；provider 行暂按 0 计，归属后由票 13 接上。行图标的需要输入角标带无障碍标签 `Agent needs input`（与 `Agent running` 同一写法），e2e 按它断言行状态。
+- Paseo 子智能体行把待批准计数交给状态分桶，出现"等待批准"桶；`requiresAttention` 保持 false，不复活"已完成=待查看"。"等待批准"桶即 `needs_input`，pill 与行图标沿用它的现有文案与角标。`PaseoSubagentRow` 与 `ProviderSubagentRow` 都带 `pendingPermissionCount`。行图标的需要输入角标带无障碍标签 `Agent needs input`（与 `Agent running` 同一写法），e2e 按它断言行状态。
 - provider 子智能体行从父 agent 的待批准权限里，按 `metadata` 中的子智能体 id 计数。
-- provider 子智能体只读面板：从父 agent 的待批准权限里取出归属本子智能体的项，显示权限卡并允许批准，回应仍走父 agentId。批准不算"写入会话"，与只读语义不冲突；面板仍然没有输入框。
+- provider 子智能体只读面板：从父 agent 的待批准权限里取出归属本子智能体的项，显示权限卡并允许批准，回应仍走父 agentId（`AgentStreamView` 的 `permissionAgentId`）。批准不算"写入会话"，与只读语义不冲突；面板仍然没有输入框。行上的计数读父 agent 快照的 `pendingPermissions`，面板的卡读会话级待批准表（与父面板同源）。
 
 ### 文档
 

@@ -43,11 +43,14 @@ import {
   PENDING_DISPATCH_LOOKUP,
   resolveDispatchCall,
   resolveProviderDispatchCall,
+  createProviderSubagentPermissionsSelector,
+  NO_PROVIDER_SUBAGENT_PERMISSIONS,
   splitDispatchSegments,
   toDispatchSubagent,
   type DispatchLookup,
   type DispatchRowState,
   type DispatchSubagent,
+  type ProviderSubagentPermissions,
 } from "./select";
 import {
   buildDispatchGroupHeaderPresentation,
@@ -103,6 +106,10 @@ function selectNoPaseoDispatchSubagents(): Record<string, DispatchSubagent> {
   return EMPTY_PASEO_DISPATCH_SUBAGENTS;
 }
 
+function selectNoProviderSubagentPermissions(): ProviderSubagentPermissions {
+  return NO_PROVIDER_SUBAGENT_PERMISSIONS;
+}
+
 function selectNoProviderDispatchSubagents(): Record<string, DispatchSubagent[]> {
   return EMPTY_PROVIDER_DISPATCH_SUBAGENTS;
 }
@@ -130,12 +137,25 @@ export function useDispatchSubagentIndex(input: {
         : selectNoPaseoDispatchSubagents,
     [enabled, parentAgentId, serverId],
   );
+  // provider 子智能体的权限挂在父 agent 上，按 adapter 标的子智能体 id 归到各行。
+  const selectPermissions = useMemo(
+    () =>
+      enabled
+        ? createProviderSubagentPermissionsSelector({ serverId, parentAgentId })
+        : selectNoProviderSubagentPermissions,
+    [enabled, parentAgentId, serverId],
+  );
+  const providerPermissions = useSessionStore(selectPermissions);
   const selectProvider = useMemo(
     () =>
       enabled
-        ? createProviderDispatchSubagentsSelector({ serverId, parentAgentId })
+        ? createProviderDispatchSubagentsSelector({
+            serverId,
+            parentAgentId,
+            permissions: providerPermissions,
+          })
         : selectNoProviderDispatchSubagents,
-    [enabled, parentAgentId, serverId],
+    [enabled, parentAgentId, providerPermissions, serverId],
   );
   const paseo = useStoreWithEqualityFn(useSessionStore, selectPaseo, equal);
   const provider = useStoreWithEqualityFn(useProviderSubagentStore, selectProvider, equal);

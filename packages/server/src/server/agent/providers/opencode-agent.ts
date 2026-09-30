@@ -17,6 +17,7 @@ import { isDeepStrictEqual } from "node:util";
 import { createPathEquivalenceMatcher } from "../../../utils/path.js";
 import pLimit from "p-limit";
 import type { Logger } from "pino";
+import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-subagent-permission";
 import { z } from "zod";
 
 import {
@@ -2982,6 +2983,9 @@ function appendOpenCodePermissionAsked(
     cwd,
   });
   const description = buildOpenCodePermissionDescription({ reason, patterns });
+  // 子会话的权限也挂在父会话上；子会话 id 就是 provider 子智能体描述符的 id。
+  const childSessionId =
+    event.properties.sessionID === state.sessionId ? null : event.properties.sessionID;
 
   events.push({
     type: "permission_requested",
@@ -2996,6 +3000,7 @@ function appendOpenCodePermissionAsked(
       input,
       detail,
       actions: buildOpenCodePermissionActions(),
+      ...(childSessionId ? { metadata: providerSubagentPermissionMetadata(childSessionId) } : {}),
     },
   });
 }
@@ -5191,7 +5196,16 @@ class OpenCodeAgentSession implements AgentSession {
         childEvent.type === "permission_requested" &&
         childEvent.request.kind === "question"
       ) {
-        events.push(childEvent);
+        events.push({
+          ...childEvent,
+          request: {
+            ...childEvent.request,
+            metadata: {
+              ...childEvent.request.metadata,
+              ...providerSubagentPermissionMetadata(sessionId),
+            },
+          },
+        });
       }
     }
     return events;

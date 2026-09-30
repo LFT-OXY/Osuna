@@ -41,7 +41,7 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
     // requiresAttention 保持 false，否则已完成的子智能体会亮"待查看"；等待批准只看待批准计数。
     statusBucket: deriveSidebarStateBucket({
       status,
-      pendingPermissionCount: row.kind === "paseo" ? row.pendingPermissionCount : 0,
+      pendingPermissionCount: row.pendingPermissionCount,
       requiresAttention: false,
     }),
   };

@@ -35,6 +35,7 @@ function provider(
     subtitle: null,
     status,
     requiresAttention: false,
+    pendingPermissionCount: 0,
     createdAt: new Date(),
     toolCallId: null,
   };

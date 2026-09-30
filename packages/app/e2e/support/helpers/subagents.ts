@@ -372,7 +372,14 @@ export type DispatchStep =
   | { callId: string; title: string; provider?: string; runningMs?: number }
   | {
       callId: string;
-      providerSubagent: { id: string; description: string; subtitle?: string; runningMs?: number };
+      providerSubagent: {
+        id: string;
+        description: string;
+        subtitle?: string;
+        runningMs?: number;
+        /** 在父会话上发一条归属该子智能体的权限请求，批准后才完成。 */
+        permission?: { name: string };
+      };
     }
   | { text: string };
 

@@ -7,7 +7,9 @@ import {
   dispatchRow,
   emitDispatchCalls,
   expectDispatchHeader,
+  expectSubagentRowNeedsInput,
   installHostWithoutSubagentCallLinks,
+  openSubagentsTrack,
   parkSubagentOnPermission,
   providerDispatchRow,
   seedDispatchChild,
@@ -170,6 +172,47 @@ test.describe("Dispatch group", () => {
     const panel = page.getByTestId("provider-subagent-panel").filter({ visible: true });
     await expect(panel).toBeVisible({ timeout: 30_000 });
     await expect(panel.getByText("Map the router").first()).toBeVisible();
+  });
+
+  test("a provider subagent's permission waits on its rows and is approved from its read-only panel", async ({
+    page,
+  }) => {
+    const parentId = await seedDispatchParent(workspace, "Provider approval parent");
+
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: parentId });
+    await emitDispatchCalls(workspace, parentId, [
+      {
+        callId: "toolu_write",
+        providerSubagent: {
+          id: "native-writer",
+          description: "Edit the router",
+          permission: { name: "Write" },
+        },
+      },
+    ]);
+
+    const row = providerDispatchRow(page, "toolu_write", "native-writer");
+    await expect(row).toContainText("Waiting for approval · Write", { timeout: 30_000 });
+    await expect(row.locator('[aria-label="Agent needs input"]')).toBeVisible();
+    await expectDispatchHeader(page, 0, "Dispatched 1 subagent: 1 waiting for approval");
+    // 父面板照旧显示这条权限。
+    await expect(page.getByTestId("permission-request-accept")).toBeVisible();
+    await openSubagentsTrack(page);
+    await expectSubagentRowNeedsInput(page, "native-writer");
+
+    await page.getByTestId("subagents-track-row-native-writer").click();
+    const panel = page.getByTestId("provider-subagent-panel").filter({ visible: true });
+    await expect(panel).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByRole("textbox", { name: "Message agent..." })).toHaveCount(0);
+    await panel.getByTestId("permission-request-accept").click();
+
+    // 批准回给父 agent，mock 收到后才让子智能体完成。
+    await expect(panel.getByTestId("permission-request-accept")).toHaveCount(0, {
+      timeout: 30_000,
+    });
+    await expect
+      .poll(() => workspace.client.fetchAgent({ agentId: parentId }), { timeout: 30_000 })
+      .toMatchObject({ agent: { pendingPermissions: [] } });
   });
 
   test("a call no subagent carries the label of falls back to the generic tool card", async ({

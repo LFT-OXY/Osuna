@@ -653,6 +653,7 @@ describe("translateOpenCodeEvent", () => {
             output: null,
           },
           actions: openCodePermissionActions,
+          metadata: { providerSubagentId: "child-session-1" },
         },
       },
     ]);

@@ -10,14 +10,19 @@ import {
   resolveDispatchCall,
   resolveProviderDispatchCall,
   selectDispatchSubagents,
+  createProviderSubagentOwnedPermissionsSelector,
+  createProviderSubagentPermissionsSelector,
+  NO_PROVIDER_SUBAGENT_PERMISSIONS,
   selectProviderDispatchSubagents,
   selectProviderSubagentsForParent,
+  type ProviderSubagentRowsInput,
   selectSubagentsForParent,
   splitDispatchSegments,
   toDispatchSubagent,
 } from "./select";
 import { useProviderSubagentStore } from "./provider-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
+import type { AgentPermissionRequest } from "@getpaseo/protocol/agent-types";
 
 const SERVER_ID = "server-1";
 const AGENT_TIMESTAMP = new Date("2026-03-08T10:00:00.000Z");
@@ -82,6 +87,18 @@ afterEach(() => {
   });
 });
 
+function providerRowsInput(
+  input: Partial<ProviderSubagentRowsInput> & Pick<ProviderSubagentRowsInput, "parentAgentId">,
+): ProviderSubagentRowsInput {
+  return {
+    serverId: SERVER_ID,
+    supported: true,
+    nestingSupported: false,
+    permissions: NO_PROVIDER_SUBAGENT_PERMISSIONS,
+    ...input,
+  };
+}
+
 describe("selectSubagentsForParent", () => {
   it("hides cached provider children when the host does not support them", () => {
     useProviderSubagentStore.getState().applyUpdate(SERVER_ID, {
@@ -99,24 +116,18 @@ describe("selectSubagentsForParent", () => {
         toolCallId: "call-1",
       },
     });
-    const params = { serverId: SERVER_ID, parentAgentId: "parent-a" };
+    const input = providerRowsInput({ parentAgentId: "parent-a" });
 
     expect(
-      selectProviderSubagentsForParent(useProviderSubagentStore.getState(), params, false),
+      selectProviderSubagentsForParent(useProviderSubagentStore.getState(), {
+        ...input,
+        supported: false,
+      }),
     ).toEqual([]);
-    expect(
-      selectProviderSubagentsForParent(useProviderSubagentStore.getState(), params, true).map(
-        (row) => row.id,
-      ),
-    ).toEqual(["provider-child"]);
-    expect(
-      selectProviderSubagentsForParent(useProviderSubagentStore.getState(), params, true)[0]
-        ?.subtitle,
-    ).toBe("Codex worker · 4.2k tokens");
-    expect(
-      selectProviderSubagentsForParent(useProviderSubagentStore.getState(), params, true)[0]
-        ?.toolCallId,
-    ).toBe("call-1");
+    const [row] = selectProviderSubagentsForParent(useProviderSubagentStore.getState(), input);
+    expect(row?.id).toBe("provider-child");
+    expect(row?.subtitle).toBe("Codex worker · 4.2k tokens");
+    expect(row?.toolCallId).toBe("call-1");
   });
 
   it("hides locally dismissed provider children while retaining their descriptor", () => {
@@ -140,8 +151,7 @@ describe("selectSubagentsForParent", () => {
     expect(
       selectProviderSubagentsForParent(
         useProviderSubagentStore.getState(),
-        { serverId: SERVER_ID, parentAgentId: "parent-a" },
-        true,
+        providerRowsInput({ parentAgentId: "parent-a" }),
       ),
     ).toEqual([]);
     expect(useProviderSubagentStore.getState().descriptors.size).toBe(1);
@@ -176,21 +186,17 @@ describe("selectSubagentsForParent", () => {
     expect(
       selectProviderSubagentsForParent(
         useProviderSubagentStore.getState(),
-        { serverId: SERVER_ID, parentAgentId: "parent-a" },
-        true,
-        true,
+        providerRowsInput({ parentAgentId: "parent-a", nestingSupported: true }),
       ).map((row) => row.id),
     ).toEqual(["direct"]);
     expect(
       selectProviderSubagentsForParent(
         useProviderSubagentStore.getState(),
-        {
-          serverId: SERVER_ID,
+        providerRowsInput({
           parentAgentId: "parent-a",
           providerParentSubagentId: "direct",
-        },
-        true,
-        true,
+          nestingSupported: true,
+        }),
       ).map((row) => row.id),
     ).toEqual(["nested"]);
   });
@@ -697,7 +703,11 @@ function upsertProviderSubagent(
 }
 
 describe("provider subagents in dispatch groups", () => {
-  const params = { serverId: SERVER_ID, parentAgentId: "parent" };
+  const params = {
+    serverId: SERVER_ID,
+    parentAgentId: "parent",
+    permissions: NO_PROVIDER_SUBAGENT_PERMISSIONS,
+  };
 
   it("indexes this parent's provider subagents by the tool call that started them", () => {
     upsertProviderSubagent({ id: "a", toolCallId: "call-a" });
@@ -796,6 +806,114 @@ describe("provider subagents in dispatch groups", () => {
     expect(splitDispatchSegments(states)).toMatchObject([
       { kind: "group", key: "call-a:a", rows: [{ key: "call-a:a" }, { key: "call-p" }] },
       { kind: "generic", call: generic },
+    ]);
+  });
+});
+
+function permission(id: string, name: string, providerSubagentId?: string): AgentPermissionRequest {
+  return {
+    id,
+    provider: "claude",
+    name,
+    kind: "tool",
+    ...(providerSubagentId ? { metadata: { providerSubagentId } } : {}),
+  };
+}
+
+describe("provider subagent permissions", () => {
+  const params = { serverId: SERVER_ID, parentAgentId: "parent" };
+
+  function setParentPermissions(pendingPermissions: AgentPermissionRequest[]): void {
+    setAgents([
+      makeAgent({ id: "parent", pendingPermissions }),
+      makeAgent({
+        id: "other-parent",
+        pendingPermissions: [permission("other", "Write", "a")],
+      }),
+    ]);
+  }
+
+  it("groups the parent's pending permissions by the provider subagent that asked", () => {
+    setParentPermissions([
+      permission("p1", "Write", "a"),
+      permission("p2", "Parent's own"),
+      permission("p3", "Bash", "a"),
+      permission("p4", "Edit", "b"),
+    ]);
+
+    expect(createProviderSubagentPermissionsSelector(params)(useSessionStore.getState())).toEqual({
+      a: ["Write", "Bash"],
+      b: ["Edit"],
+    });
+  });
+
+  it("counts them on the subagent's track row, and leaves untagged permissions on the parent", () => {
+    setParentPermissions([permission("p1", "Write", "a"), permission("p2", "Parent's own")]);
+    upsertProviderSubagent({ id: "a" });
+    upsertProviderSubagent({ id: "untagged" });
+    const permissions = createProviderSubagentPermissionsSelector(params)(
+      useSessionStore.getState(),
+    );
+
+    const rows = selectProviderSubagentsForParent(
+      useProviderSubagentStore.getState(),
+      providerRowsInput({ ...params, permissions }),
+    );
+
+    expect(rows.map((row) => [row.id, row.pendingPermissionCount])).toEqual([
+      ["a", 1],
+      ["untagged", 0],
+    ]);
+  });
+
+  it("reuses the last grouping until the parent's pending list changes", () => {
+    setParentPermissions([permission("p1", "Write", "a")]);
+    const select = createProviderSubagentPermissionsSelector(params);
+
+    const first = select(useSessionStore.getState());
+    expect(select(useSessionStore.getState())).toBe(first);
+
+    setParentPermissions([]);
+    expect(select(useSessionStore.getState())).toEqual({});
+  });
+
+  it("hands the read-only panel only the cards its subagent asked for, keyed as on the parent", () => {
+    const pending = new Map(
+      [
+        permission("p1", "Write", "a"),
+        permission("p2", "Parent's own"),
+        permission("p3", "Edit", "b"),
+      ].map((request) => [
+        `parent:${request.id}`,
+        { key: `parent:${request.id}`, agentId: "parent", request },
+      ]),
+    );
+    pending.set("other:x", {
+      key: "other:x",
+      agentId: "other-parent",
+      request: permission("x", "Write", "a"),
+    });
+    setAgents([makeAgent({ id: "parent" })]);
+    useSessionStore.getState().setPendingPermissions(SERVER_ID, pending);
+    const select = createProviderSubagentOwnedPermissionsSelector({ ...params, subagentId: "a" });
+
+    const owned = select(useSessionStore.getState());
+
+    expect([...owned.keys()]).toEqual(["parent:p1"]);
+    expect(select(useSessionStore.getState())).toBe(owned);
+  });
+
+  it("names the first pending tool on the subagent's dispatch row", () => {
+    setParentPermissions([permission("p1", "Write", "a"), permission("p2", "Bash", "a")]);
+    upsertProviderSubagent({ id: "a", toolCallId: "call-a" });
+    const permissions = createProviderSubagentPermissionsSelector(params)(
+      useSessionStore.getState(),
+    );
+
+    const select = createProviderDispatchSubagentsSelector({ ...params, permissions });
+
+    expect(select(useProviderSubagentStore.getState())["call-a"]).toMatchObject([
+      { row: { id: "a", pendingPermissionCount: 2 }, pendingPermissionName: "Write" },
     ]);
   });
 });

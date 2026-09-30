@@ -640,6 +640,47 @@ describe("MockLoadTestAgentClient", () => {
     unsubscribe();
   });
 
+  test("parks a scripted provider subagent on a permission tagged with its id until answered", async () => {
+    const client = new MockLoadTestAgentClient();
+    const session = await client.createSession({
+      provider: "mock",
+      cwd: process.cwd(),
+      model: "ten-second-stream",
+    });
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+    const subagentStatuses = () =>
+      events.flatMap((event) =>
+        event.type === "provider_subagent" && event.event.type === "upsert"
+          ? [event.event.status]
+          : [],
+      );
+
+    const resultPromise = session.run(
+      `Emit synthetic create_agent calls: ${JSON.stringify([
+        {
+          callId: "toolu_1",
+          providerSubagent: {
+            id: "sub-1",
+            description: "Edit the router",
+            permission: { name: "Write" },
+          },
+        },
+      ])}`,
+    );
+    await vi.waitFor(() => expect(session.getPendingPermissions()).toHaveLength(1));
+
+    const [request] = session.getPendingPermissions();
+    expect(request).toMatchObject({ name: "Write", metadata: { providerSubagentId: "sub-1" } });
+    expect(subagentStatuses()).toEqual(["running"]);
+
+    await session.respondToPermission(request!.id, { behavior: "allow" });
+
+    await expect(resultPromise).resolves.toMatchObject({ canceled: false });
+    expect(subagentStatuses()).toEqual(["running", "completed"]);
+    unsubscribe();
+  });
+
   test("agent manager coalesces adjacent assistant tokens into fewer messages", async () => {
     vi.useFakeTimers();
     const workdir = mkdtempSync(join(tmpdir(), "paseo-mock-load-test-"));

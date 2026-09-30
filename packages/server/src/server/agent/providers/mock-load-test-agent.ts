@@ -33,6 +33,7 @@ import type {
 } from "../agent-sdk-types.js";
 import { importSessionFromPersistence } from "../provider-session-import.js";
 import { getAgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
+import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-subagent-permission";
 
 export const MOCK_LOAD_TEST_PROVIDER_ID = "mock";
 export const MOCK_LOAD_TEST_DEFAULT_MODEL_ID = "five-minute-stream";
@@ -269,6 +270,7 @@ const SyntheticDispatchStepsSchema = z.array(
         description: z.string(),
         subtitle: z.string().optional(),
         runningMs: z.number().optional(),
+        permission: z.object({ name: z.string() }).optional(),
       }),
     }),
     z.object({ text: z.string() }),
@@ -279,7 +281,8 @@ type SyntheticDispatchStep = z.infer<typeof SyntheticDispatchStepsSchema>[number
 
 // 浏览器 e2e 用它往父时间线写带 callId 的 `paseo.create_agent` 调用；子智能体由测试按标签另外种入。
 // `providerSubagent` 步骤写一次 provider 子智能体调用，连同带同一 `toolCallId` 的描述符一起发出。
-// 步骤依次执行，`runningMs` 让该调用停在执行中，好验证派发组的"启动中"与实时状态。脚本写错直接抛错。
+// 步骤依次执行，`runningMs` 让该调用停在执行中，好验证派发组的"启动中"与实时状态。带 `permission`
+// 的 provider 子智能体在父会话上发一条归属它的权限请求，回应后才完成。脚本写错直接抛错。
 function parseSyntheticDispatchSteps(prompt: AgentPromptInput): SyntheticDispatchStep[] | null {
   const match = /^emit synthetic create_agent calls:\s*(\[[\s\S]*\])\s*$/i.exec(
     promptToText(prompt),
@@ -809,6 +812,8 @@ export class MockLoadTestAgentSession implements AgentSession {
   private readonly logger?: Logger;
   private activeTurn: ActiveTurn | null = null;
   private pendingPermissions = new Map<string, AgentPermissionRequest>();
+  /** 脚本里 provider 子智能体停在权限上时，回应后接着跑的步骤。 */
+  private readonly permissionContinuations = new Map<string, () => void>();
   private modeId: string | null;
   private modelId: string | null;
   private readonly assistantResponse: string | null;
@@ -1063,6 +1068,13 @@ export class MockLoadTestAgentSession implements AgentSession {
       resolution: response,
       ...(turn ? { turnId: turn.turnId } : {}),
     });
+
+    const continuation = this.permissionContinuations.get(requestId);
+    if (continuation) {
+      this.permissionContinuations.delete(requestId);
+      continuation();
+      return undefined;
+    }
 
     if (turn) {
       if (request.kind === "question") {
@@ -1376,6 +1388,25 @@ export class MockLoadTestAgentSession implements AgentSession {
       );
       next();
     };
+    if (providerSubagent.permission) {
+      const request: AgentPermissionRequest = {
+        id: `mock-subagent-permission-${providerSubagent.id}`,
+        provider: this.provider,
+        name: providerSubagent.permission.name,
+        kind: "tool",
+        title: providerSubagent.permission.name,
+        metadata: providerSubagentPermissionMetadata(providerSubagent.id),
+      };
+      this.pendingPermissions.set(request.id, request);
+      this.permissionContinuations.set(request.id, complete);
+      this.emit({
+        type: "permission_requested",
+        provider: this.provider,
+        request,
+        turnId: turn.turnId,
+      });
+      return;
+    }
     if (!providerSubagent.runningMs) {
       complete();
       return;

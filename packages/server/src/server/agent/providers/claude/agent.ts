@@ -20,6 +20,7 @@ import {
   type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { Logger } from "pino";
+import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-subagent-permission";
 import {
   mapClaudeCanceledToolCall,
   mapClaudeCompletedToolCall,
@@ -4650,6 +4651,12 @@ class ClaudeAgentSession implements AgentSession {
     const metadata: AgentMetadata = {};
     if (options.toolUseID) {
       metadata.toolUseId = options.toolUseID;
+    }
+    const subagentId = options.agentID
+      ? this.taskProtocolSource.resolveTaskSubagentId(options.agentID)
+      : undefined;
+    if (subagentId) {
+      Object.assign(metadata, providerSubagentPermissionMetadata(subagentId));
     }
     if (toolName === "ExitPlanMode" && typeof input.plan === "string") {
       metadata.planText = input.plan;

@@ -8,10 +8,10 @@
 
 **Blocked by:** 12
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] adapter 单测：三个 provider 的权限请求 `metadata` 带子智能体 id。
-- [ ] 只读面板显示并能批准归属本子智能体的权限；父面板行为不变。
-- [ ] track 行与派发组行显示 provider 子智能体的等待批准；OMP 不显示。
-- [ ] `docs/providers.md` 已更新。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] adapter 单测：三个 provider 的权限请求 `metadata` 带子智能体 id。
+- [x] 只读面板显示并能批准归属本子智能体的权限；父面板行为不变。
+- [x] track 行与派发组行显示 provider 子智能体的等待批准；OMP 不显示。
+- [x] `docs/providers.md` 已更新。
+- [x] `npm run typecheck`、`npm run lint` 通过。

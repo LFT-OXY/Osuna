@@ -6,7 +6,9 @@ import { useSessionStore, type Agent } from "@/stores/session-store";
 import { refreshProviderSubagents, useProviderSubagentStore } from "./provider-store";
 import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
 import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { getProviderSubagentIdFromPermission } from "@getpaseo/protocol/provider-subagent-permission";
 import type { AgentToolCallItem } from "@/types/stream";
+import type { PendingPermission } from "@/types/shared";
 import {
   readCreateAgentCallInput,
   type CreateAgentCallInput,
@@ -41,6 +43,8 @@ export interface ProviderSubagentRow {
   subtitle: string | null;
   status: ProviderSubagentDescriptorPayload["status"];
   requiresAttention: boolean;
+  /** 权限挂在父 agent 上，按 adapter 在 `metadata` 里写的子智能体 id 归到这一行。 */
+  pendingPermissionCount: number;
   createdAt: Date;
   /** 派出它的那次工具调用；时间线派发组按父 agentId 加它关联。 */
   toolCallId: string | null;
@@ -60,6 +64,12 @@ interface SelectSubagentsParams {
 
 const EMPTY_SUBAGENT_ROWS: SubagentRow[] = [];
 const EMPTY_PROVIDER_SUBAGENT_ROWS: ProviderSubagentRow[] = [];
+
+/** provider 子智能体 id → 它在父 agent 上待批准的权限的工具名，按到达顺序。 */
+export type ProviderSubagentPermissions = Readonly<Record<string, readonly string[]>>;
+
+export const NO_PROVIDER_SUBAGENT_PERMISSIONS: ProviderSubagentPermissions = {};
+const NO_PENDING_TOOLS: readonly string[] = [];
 
 function toSubagentRow(agent: Agent): PaseoSubagentRow {
   return {
@@ -107,7 +117,95 @@ export function selectSubagentsForParent(
   return rows;
 }
 
-function toProviderSubagentRow(subagent: ProviderSubagentDescriptorPayload): ProviderSubagentRow {
+function readParentPendingPermissions(
+  state: SessionStoreSnapshot,
+  params: DispatchSubagentsParams,
+): Agent["pendingPermissions"] | undefined {
+  return state.sessions[params.serverId]?.agents.get(params.parentAgentId)?.pendingPermissions;
+}
+
+function groupProviderSubagentPermissions(
+  pending: Agent["pendingPermissions"] | undefined,
+): ProviderSubagentPermissions {
+  if (!pending || pending.length === 0) {
+    return NO_PROVIDER_SUBAGENT_PERMISSIONS;
+  }
+  const bySubagent: Record<string, string[]> = {};
+  for (const request of pending) {
+    const subagentId = getProviderSubagentIdFromPermission(request);
+    if (subagentId) {
+      (bySubagent[subagentId] ??= []).push(request.name);
+    }
+  }
+  return Object.keys(bySubagent).length > 0 ? bySubagent : NO_PROVIDER_SUBAGENT_PERMISSIONS;
+}
+
+/**
+ * provider 子智能体跑在父 agent 的 runtime 里，它的权限请求落在父 agent 的待批准列表上，按 adapter
+ * 标的子智能体 id 归组。OMP 这类给不出 id 的，权限只留在父 agent。session store 是热 store：
+ * 待批准列表没换就返回上次的结果，不在每次更新时重扫。
+ */
+export function createProviderSubagentPermissionsSelector(
+  params: DispatchSubagentsParams,
+): (state: SessionStoreSnapshot) => ProviderSubagentPermissions {
+  let lastPending: Agent["pendingPermissions"] | undefined;
+  let lastPermissions = NO_PROVIDER_SUBAGENT_PERMISSIONS;
+  return (state) => {
+    const pending = readParentPendingPermissions(state, params);
+    if (pending !== lastPending) {
+      lastPending = pending;
+      lastPermissions = groupProviderSubagentPermissions(pending);
+    }
+    return lastPermissions;
+  };
+}
+
+export interface ProviderSubagentOwnedPermissionsParams extends DispatchSubagentsParams {
+  subagentId: string;
+}
+
+const NO_OWNED_PERMISSIONS = new Map<string, PendingPermission>();
+
+/**
+ * 只读面板要的权限卡：会话待批准表里挂在父 agent 上、归属这个子智能体的项。与行上的计数同一规则，
+ * 取会话表是因为卡片要带 key 与 agentId，和父面板同源。待批准表没换就返回上次的结果。
+ */
+export function createProviderSubagentOwnedPermissionsSelector(
+  params: ProviderSubagentOwnedPermissionsParams,
+): (state: SessionStoreSnapshot) => Map<string, PendingPermission> {
+  let lastAll: Map<string, PendingPermission> | undefined;
+  let lastOwned = NO_OWNED_PERMISSIONS;
+  return (state) => {
+    const all = state.sessions[params.serverId]?.pendingPermissions;
+    if (all !== lastAll) {
+      lastAll = all;
+      lastOwned = collectOwnedPermissions(all, params);
+    }
+    return lastOwned;
+  };
+}
+
+function collectOwnedPermissions(
+  all: Map<string, PendingPermission> | undefined,
+  params: ProviderSubagentOwnedPermissionsParams,
+): Map<string, PendingPermission> {
+  if (!all) return NO_OWNED_PERMISSIONS;
+  const owned = new Map<string, PendingPermission>();
+  for (const [key, permission] of all) {
+    if (
+      permission.agentId === params.parentAgentId &&
+      getProviderSubagentIdFromPermission(permission.request) === params.subagentId
+    ) {
+      owned.set(key, permission);
+    }
+  }
+  return owned.size > 0 ? owned : NO_OWNED_PERMISSIONS;
+}
+
+function toProviderSubagentRow(
+  subagent: ProviderSubagentDescriptorPayload,
+  pendingTools: readonly string[],
+): ProviderSubagentRow {
   return {
     kind: "provider",
     id: subagent.id,
@@ -118,17 +216,23 @@ function toProviderSubagentRow(subagent: ProviderSubagentDescriptorPayload): Pro
     subtitle: subagent.subtitle ?? null,
     status: subagent.status,
     requiresAttention: subagent.status === "failed",
+    pendingPermissionCount: pendingTools.length,
     createdAt: new Date(subagent.createdAt),
     toolCallId: subagent.toolCallId,
   };
 }
 
+export interface ProviderSubagentRowsInput extends SelectSubagentsParams {
+  supported: boolean;
+  nestingSupported: boolean;
+  permissions: ProviderSubagentPermissions;
+}
+
 export function selectProviderSubagentsForParent(
   state: ProviderSubagentStoreSnapshot,
-  params: SelectSubagentsParams,
-  supported: boolean,
-  nestingSupported = false,
+  input: ProviderSubagentRowsInput,
 ): ProviderSubagentRow[] {
+  const { supported, nestingSupported, permissions, ...params } = input;
   if (!supported) return EMPTY_PROVIDER_SUBAGENT_ROWS;
   if (params.providerParentSubagentId && !nestingSupported) return EMPTY_PROVIDER_SUBAGENT_ROWS;
   const rows: ProviderSubagentRow[] = [];
@@ -141,7 +245,7 @@ export function selectProviderSubagentsForParent(
     ) {
       continue;
     }
-    rows.push(toProviderSubagentRow(subagent));
+    rows.push(toProviderSubagentRow(subagent, permissions[subagent.id] ?? NO_PENDING_TOOLS));
   }
   rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   return rows;
@@ -161,9 +265,24 @@ export function useSubagentsForParent(params: SelectSubagentsParams): SubagentRo
     (state) =>
       state.sessions[params.serverId]?.serverInfo?.features?.providerSubagentNesting === true,
   );
+  const selectPermissions = useMemo(
+    () =>
+      createProviderSubagentPermissionsSelector({
+        serverId: params.serverId,
+        parentAgentId: params.parentAgentId,
+      }),
+    [params.parentAgentId, params.serverId],
+  );
+  const permissions = useSessionStore(selectPermissions);
   const providerRows = useStoreWithEqualityFn(
     useProviderSubagentStore,
-    (state) => selectProviderSubagentsForParent(state, params, supported, nestingSupported),
+    (state) =>
+      selectProviderSubagentsForParent(state, {
+        ...params,
+        supported,
+        nestingSupported,
+        permissions,
+      }),
     equal,
   );
   const client = useSessionStore((state) => state.sessions[params.serverId]?.client ?? null);
@@ -264,17 +383,24 @@ export function createDispatchSubagentsSelector(
   };
 }
 
-/** provider 子智能体没有模型、模式与归档这些 Paseo 字段；等待批准的归属由 adapter 另补。 */
-function toProviderDispatchSubagent(subagent: ProviderSubagentDescriptorPayload): DispatchSubagent {
+/** provider 子智能体没有模型、模式与归档这些 Paseo 字段。 */
+function toProviderDispatchSubagent(
+  subagent: ProviderSubagentDescriptorPayload,
+  pendingTools: readonly string[],
+): DispatchSubagent {
   return {
-    row: toProviderSubagentRow(subagent),
+    row: toProviderSubagentRow(subagent, pendingTools),
     model: null,
     modeLabel: null,
-    pendingPermissionName: null,
+    pendingPermissionName: pendingTools[0] ?? null,
     updatedAt: new Date(subagent.updatedAt),
     archived: false,
     detached: false,
   };
+}
+
+export interface ProviderDispatchSubagentsParams extends DispatchSubagentsParams {
+  permissions: ProviderSubagentPermissions;
 }
 
 /**
@@ -283,7 +409,7 @@ function toProviderDispatchSubagent(subagent: ProviderSubagentDescriptorPayload)
  */
 export function selectProviderDispatchSubagents(
   state: ProviderSubagentStoreSnapshot,
-  params: DispatchSubagentsParams,
+  params: ProviderDispatchSubagentsParams,
 ): Record<string, DispatchSubagent[]> {
   const linked: Record<string, DispatchSubagent[]> = {};
   const prefix = `${params.serverId}\0${params.parentAgentId}\0`;
@@ -291,7 +417,9 @@ export function selectProviderDispatchSubagents(
     const belongsToParent = key.startsWith(prefix);
     if (!belongsToParent || !subagent.toolCallId) continue;
     const subagents = linked[subagent.toolCallId] ?? [];
-    subagents.push(toProviderDispatchSubagent(subagent));
+    subagents.push(
+      toProviderDispatchSubagent(subagent, params.permissions[subagent.id] ?? NO_PENDING_TOOLS),
+    );
     linked[subagent.toolCallId] = subagents;
   }
   for (const subagents of Object.values(linked)) {
@@ -300,9 +428,12 @@ export function selectProviderDispatchSubagents(
   return linked;
 }
 
-/** 与 `createDispatchSubagentsSelector` 同理：描述符表没换就返回上次的结果。 */
+/**
+ * 与 `createDispatchSubagentsSelector` 同理：描述符表没换就返回上次的结果。权限归属换了就换一个
+ * selector。
+ */
 export function createProviderDispatchSubagentsSelector(
-  params: DispatchSubagentsParams,
+  params: ProviderDispatchSubagentsParams,
 ): (state: ProviderSubagentStoreSnapshot) => Record<string, DispatchSubagent[]> {
   let lastDescriptors: ProviderSubagentStoreSnapshot["descriptors"] | undefined;
   let lastLinked: Record<string, DispatchSubagent[]> = {};

@@ -506,6 +506,63 @@ const labels = withParentToolCallIdLabel({
 });
 ```
 
+## Scenario: a provider subagent's permission, attributed on the parent
+
+Reference implementation: multi-agent ticket 13. Reuse this shape when a request raised inside a provider-owned child must be told apart on the parent agent.
+
+### 1. Scope / Trigger
+
+- Provider subagents run in the parent's provider runtime, so their `permission_requested` events reach `AgentManager` under the parent agentId. The app needs to know which descriptor asked. No wire schema change: the id rides in the existing `AgentPermissionRequest.metadata` record, and no feature flag gates it (an old app ignores the key; an old daemon never sends it). The descriptor `status` enum is not extended.
+
+### 2. Signatures
+
+- `@getpaseo/protocol/provider-subagent-permission`: `PROVIDER_SUBAGENT_ID_METADATA_KEY = "providerSubagentId"`, `providerSubagentPermissionMetadata(subagentId): Record<string, string>` (write), `getProviderSubagentIdFromPermission(request: Pick<AgentPermissionRequest, "metadata">): string | null` (read).
+- Claude: `ClaudeTaskProtocolSource.resolveTaskSubagentId(taskId)` (`claude/subagents/live-source.ts`), called with `canUseTool`'s `options.agentID` in `handlePermissionRequest`.
+- Codex: `CodexAppServerAgentSession.providerSubagentMetadata(threadId)` spread into all four approval handlers (command, file change, `request_user_input`, MCP elicitation).
+- OpenCode: `appendOpenCodePermissionAsked` (parent translator) and the forwarded child `question` in `translateProviderSubagentEvent`.
+
+### 3. Contracts
+
+- The value is the provider-subagent descriptor id: Claude the declared Task `tool_use_id` (via `task_id`), Codex the child `threadId`, OpenCode the child `sessionID`.
+- Only a child's request is tagged: Codex skips `threadId === currentThreadId` (and a null current thread), OpenCode skips `sessionID === state.sessionId`, Claude tags only when `agentID` maps to a declared task.
+- The request still belongs to the parent agent: `respondToPermission` goes to the parent agentId; the app's read-only panel passes `permissionAgentId={parentAgentId}` to `AgentStreamView`.
+
+### 4. Validation & Error Matrix
+
+- Claude `agentID` absent, unknown, or an undeclared task → no key, request stays parent-only. `agentID == task_started.task_id` is assumed from the hook `agent_id` rule and not verified live.
+- Codex approval before `currentThreadId` is known → no key. Codex child async questions are still dropped (`receiveAsyncQuestion`), unchanged.
+- OMP `extension_ui_request` has no child id → never tagged.
+- Key present but empty/non-string → reader returns `null`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Codex child thread asks for a command approval → `metadata.providerSubagentId = "<child thread>"` → track row and dispatch row show waiting for approval; the read-only tab shows the card.
+- Base: parent's own approval → no key, only the parent panel shows it.
+- Bad: adding a `waiting_for_approval` descriptor status — narrows old clients' enum parse and duplicates state the parent snapshot already carries.
+
+### 6. Tests Required
+
+- `claude/agent.test.ts` "tags a subagent's permission request…": `task_started` then `canUseTool` with/without `agentID`.
+- `codex-app-server-agent.test.ts` "tags approvals from a collab child thread…": four child handlers tagged, parent thread untagged.
+- `opencode/event-translator.test.ts` child `permission.asked` expects the key; `opencode-agent.test.ts` forwarded child question carries it.
+- `mock-load-test-agent.test.ts`: scripted `providerSubagent.permission` parks until answered, then the subagent completes.
+- App: `subagents/select.test.ts` (grouping, row counts, dispatch pending name, owned-permissions selector identity), browser `dispatch-group.spec.ts` provider permission case.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Hand-built key in each adapter — a typo silently detaches the permission from its row.
+metadata: { providerSubagentID: childSessionId },
+```
+
+#### Correct
+
+```ts
+...(childSessionId ? { metadata: providerSubagentPermissionMetadata(childSessionId) } : {}),
+```
+
 ## Scenario: a provider-bound prompt that differs from what the user sent
 
 Reference implementation: the Routing block for Agent mentions (multi-agent tickets 05, 07 and 09). Reuse this shape when the daemon appends system text to a user message on its way to the provider.

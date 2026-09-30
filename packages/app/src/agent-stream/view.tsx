@@ -290,6 +290,8 @@ export interface AgentStreamViewProps {
   streamItems: StreamItem[];
   streamHead?: StreamItem[];
   pendingPermissions: Map<string, PendingPermission>;
+  /** 权限归属的 agent，缺省为 `agentId`。provider 子智能体面板的权限挂在父 agent 上。 */
+  permissionAgentId?: string;
   pendingMessageSubmissions?: readonly PendingMessageSubmission[];
   turnPresentation: TurnPresentation;
   routeBottomAnchorRequest?: BottomAnchorRouteRequest | null;
@@ -350,6 +352,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       streamItems,
       streamHead: providedStreamHead,
       pendingPermissions,
+      permissionAgentId,
       pendingMessageSubmissions = EMPTY_PENDING_MESSAGE_SUBMISSIONS,
       turnPresentation,
       routeBottomAnchorRequest = null,
@@ -1014,10 +1017,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       ],
     );
 
-    const pendingPermissionItems = useMemo(
-      () => Array.from(pendingPermissions.values()).filter((perm) => perm.agentId === agentId),
-      [pendingPermissions, agentId],
-    );
+    const pendingPermissionItems = useMemo(() => {
+      const ownerAgentId = permissionAgentId ?? agentId;
+      return Array.from(pendingPermissions.values()).filter(
+        (perm) => perm.agentId === ownerAgentId,
+      );
+    }, [pendingPermissions, permissionAgentId, agentId]);
 
     const pendingPermissionsNode = useMemo(
       () =>
@@ -1350,6 +1355,7 @@ function agentStreamViewPropsEqual(
   if (left.streamItems !== right.streamItems) reasons.push("streamItems");
   if (left.streamHead !== right.streamHead) reasons.push("streamHead");
   if (left.pendingPermissions !== right.pendingPermissions) reasons.push("pendingPermissions");
+  if (left.permissionAgentId !== right.permissionAgentId) reasons.push("permissionAgentId");
   if (left.pendingMessageSubmissions !== right.pendingMessageSubmissions) {
     reasons.push("pendingMessageSubmissions");
   }

@@ -137,6 +137,7 @@ describe("countFinishedSubagents", () => {
         subtitle: null,
         status: "running",
         requiresAttention: false,
+        pendingPermissionCount: 0,
         createdAt: new Date("2026-04-20T00:00:00.000Z"),
         toolCallId: null,
       },
@@ -150,6 +151,7 @@ describe("countFinishedSubagents", () => {
         subtitle: null,
         status: "failed",
         requiresAttention: true,
+        pendingPermissionCount: 0,
         createdAt: new Date("2026-04-20T00:00:01.000Z"),
         toolCallId: null,
       },
@@ -258,10 +260,18 @@ describe("buildSubagentRowPresentationData for provider rows", () => {
       subtitle: overrides.subtitle ?? null,
       status: overrides.status ?? "running",
       requiresAttention: false,
+      pendingPermissionCount: overrides.pendingPermissionCount ?? 0,
       createdAt: overrides.createdAt ?? new Date("2026-07-26T00:00:00.000Z"),
       toolCallId: overrides.toolCallId ?? null,
     };
   }
+
+  it("waits for approval while the parent holds a permission the subagent asked for", () => {
+    expect(
+      buildSubagentRowPresentationData(providerRow({ pendingPermissionCount: 1 })).statusBucket,
+    ).toBe("needs_input");
+    expect(buildSubagentRowPresentationData(providerRow()).statusBucket).toBe("running");
+  });
 
   it("names the row after the task and demotes the subagent type", () => {
     const presentation = buildSubagentRowPresentationData(
@@ -313,6 +323,7 @@ describe("provider-owned row subtitles", () => {
       subtitle: null,
       status: "running",
       requiresAttention: false,
+      pendingPermissionCount: 0,
       createdAt: new Date("2026-07-26T00:00:00.000Z"),
       toolCallId: null,
       ...overrides,
@@ -380,7 +391,10 @@ describe("dispatch group presentation", () => {
     input: CALL_INPUT,
   };
 
-  function providerSubagent(overrides: Partial<ProviderSubagentRow> = {}): DispatchRowState {
+  function providerSubagent(
+    overrides: Partial<ProviderSubagentRow> = {},
+    extra: Partial<Omit<DispatchSubagent, "row">> = {},
+  ): DispatchRowState {
     return {
       kind: "provider",
       key: "toolu_1:toolu_1",
@@ -396,6 +410,7 @@ describe("dispatch group presentation", () => {
           subtitle: "Explore · Sonnet 5 · 3.1k tokens",
           status: "running",
           requiresAttention: false,
+          pendingPermissionCount: 0,
           createdAt: new Date("2026-04-20T00:00:00.000Z"),
           toolCallId: "toolu_1",
           ...overrides,
@@ -406,6 +421,7 @@ describe("dispatch group presentation", () => {
         updatedAt: new Date("2026-04-20T00:00:42.000Z"),
         archived: false,
         detached: false,
+        ...extra,
       },
     };
   }
@@ -539,6 +555,20 @@ describe("dispatch group presentation", () => {
       tone: "default",
       bucket: "running",
       timing: { kind: "live", startedAt: new Date("2026-04-20T00:00:00.000Z") },
+    });
+  });
+
+  it("shows a provider row waiting for the approval its parent holds", () => {
+    expect(
+      buildDispatchRowPresentation({
+        t: i18n.t,
+        state: providerSubagent({ pendingPermissionCount: 1 }, { pendingPermissionName: "Write" }),
+        providerLabelOf: providerLabel,
+      }),
+    ).toMatchObject({
+      subtitle: "Waiting for approval · Write",
+      tone: "warning",
+      bucket: "needs_input",
     });
   });
 
