@@ -40,9 +40,6 @@ interface OverridesWrite {
   next: (current: readonly UsagePricingOverride[]) => UsagePricingOverride[];
 }
 
-/** 本票还没有从 LiteLLM 行自定义的入口，这一组始终为空。 */
-const NO_CUSTOMIZING: ReadonlySet<string> = new Set();
-
 /**
  * 本地化的句子在前，daemon 给的原因在后。只给原因等于把英文异常丢给 9 种语言的
  * 用户；只给句子则把「为什么」整个吞掉，而那正是用户唯一能据以行动的东西。
@@ -64,6 +61,7 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
   const [controlError, setControlError] = useState<string | null>(null);
   // 折叠状态只在这一页里：离开再回来又是折叠的，最显眼的始终是要填的那一组。
   const [litellmExpanded, setLitellmExpanded] = useState(false);
+  const [litellmQuery, setLitellmQuery] = useState("");
   const [contentWidth, setContentWidth] = useState<number | null>(null);
   const isCompact = useIsCompactFormFactor();
   const layout = resolvePriceTableLayout({ contentWidth, isCompact });
@@ -73,14 +71,26 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
   // query，所以开关立刻动，不依赖 daemon 在只改 autoUpdate 时也广播 pricing.updated。
   const autoUpdate = config?.usage?.pricing?.autoUpdate ?? true;
   const models = useMemo(() => dedupePricingModels(payload?.models ?? []), [payload]);
-  const groups = useMemo(() => groupPricingModels(models, NO_CUSTOMIZING), [models]);
+  const groups = useMemo(
+    () => groupPricingModels(models, rows.customizing),
+    [models, rows.customizing],
+  );
+
+  const priceOf = useCallback(
+    (model: string) =>
+      models.find((candidate) => candidate.model === model)?.pricePerMillion ?? null,
+    [models],
+  );
 
   const handleEdit = useCallback(
-    (model: string) => {
-      const row = models.find((candidate) => candidate.model === model);
-      dispatchRows({ type: "editOpened", model, price: row?.pricePerMillion ?? null });
-    },
-    [models],
+    (model: string) => dispatchRows({ type: "editOpened", model, price: priceOf(model) }),
+    [priceOf],
+  );
+
+  /** 从 LiteLLM 行自定义：拉进自定义组，以当前 LiteLLM 价格预填。只是界面状态，什么也不写。 */
+  const handleCustomize = useCallback(
+    (model: string) => dispatchRows({ type: "customizeOpened", model, price: priceOf(model) }),
+    [priceOf],
   );
 
   const handleCancel = useCallback((model: string) => {
@@ -224,6 +234,9 @@ export function PriceTableSection({ serverId }: { serverId: string }) {
             controlError={controlError}
             expanded={litellmExpanded}
             onToggleExpanded={handleToggleLitellm}
+            query={litellmQuery}
+            onQueryChange={setLitellmQuery}
+            onCustomize={handleCustomize}
             autoUpdate={autoUpdate}
             isRefreshing={isRefreshing}
             onAutoUpdateChange={handleAutoUpdateChange}

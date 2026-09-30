@@ -2832,6 +2832,9 @@ export const ptBR: TranslationResources = {
         removeCustomPrice: "Remover preço personalizado",
         removeCustomPriceAccessibility: "Remover o preço personalizado de {{model}}",
         removeFailed: "Não foi possível remover este preço personalizado.",
+        customize: "Personalizar",
+        customizeAccessibility: "Definir um preço personalizado para {{model}}",
+        litellmPrice: "Preço do LiteLLM",
         customGroup: {
           title: "Preços personalizados",
           intro:
@@ -2850,6 +2853,9 @@ export const ptBR: TranslationResources = {
           expand: "Mostrar",
           collapse: "Ocultar",
           autoUpdate: "Atualizar preços do LiteLLM automaticamente",
+          search: "Buscar modelos",
+          clearSearch: "Limpar busca",
+          noMatches: "Nenhum nome de modelo contém “{{query}}”.",
         },
         columns: {
           model: "Modelo",

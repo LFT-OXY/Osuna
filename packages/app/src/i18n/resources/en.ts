@@ -2907,6 +2907,9 @@ export const en = {
         removeCustomPrice: "Remove custom price",
         removeCustomPriceAccessibility: "Remove the custom price of {{model}}",
         removeFailed: "Could not remove this custom price.",
+        customize: "Customize",
+        customizeAccessibility: "Set a custom price for {{model}}",
+        litellmPrice: "LiteLLM price",
         customGroup: {
           title: "Custom prices",
           intro:
@@ -2924,6 +2927,9 @@ export const en = {
           expand: "Show",
           collapse: "Hide",
           autoUpdate: "Auto-update LiteLLM prices",
+          search: "Search models",
+          clearSearch: "Clear search",
+          noMatches: "No model names contain “{{query}}”.",
         },
         columns: {
           model: "Model",

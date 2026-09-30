@@ -70,7 +70,7 @@
 - 搜索：只作用于 LiteLLM 组，按模型 id 做不区分大小写的子串匹配，去掉首尾空格。
 - 移除覆盖项：从覆盖项列表里删掉与该模型匹配的每一项（daemon 取同名的最后一条，只删一条会让剩下的接着生效）。匹配规则与现有的写入函数相同（忽略大小写和首尾空格），其余项原样保留，包括在 App 外设置的 `note`。
 - 无价格数据的计数：自定义组里 `priceSource === null` 的个数。
-- 自定义组各行的编辑与写回状态（草稿、重新播种输入框的 token、行错误、正在写回的行）是一个纯 reducer（`price-table/price-rows.ts`），组件只 dispatch。覆盖表整段写回，所以一次只写一行：一行在保存或移除时，其余行的「保存」「移除」停用，本行的「编辑」「取消」也停用；daemon 配置还没读到时保存和移除都直接在状态行报错，不拿空表写回。
+- 自定义组各行的编辑与写回状态（草稿、重新播种输入框的 token、行错误、正在写回的行、正在从 LiteLLM 行自定义的模型集合）是一个纯 reducer（`price-table/price-rows.ts`），组件只 dispatch。「自定义」（`customizeOpened`）把模型加进集合并以 LiteLLM 价格预填草稿；取消与移除自定义价格把它拿出集合；保存成功后仍留在集合里——daemon 广播新价格表之前它还是 LiteLLM 价格，拿掉会让这一行在两组之间跳一下，之后它已是自定义价格，留着不改变分组。覆盖表整段写回，所以一次只写一行：一行在保存或移除时，其余行的「保存」「移除」停用，本行的「编辑」「取消」也停用；daemon 配置还没读到时保存和移除都直接在状态行报错，不拿空表写回。
 
 原型里的分组规则（`prototype/src/render.js`）：
 
@@ -91,11 +91,11 @@ customRows.sort((a, b) => (a.priceSource === null ? 0 : 1) - (b.priceSource === 
 - 无价格数据的行底色用主题现成的警示底色 `surfaceWarning`（amber 10%；原型的 amber 4% 需要新增一档更淡的变体，`docs/design.md` §13 不允许，且 Web 上主题色是 CSS 变量，样式表里不能换算）。徽标用 `StatusBadge` warning。组标题右侧的徽标显示无价格数据的个数，为 0 时不显示，文案沿用术语「无价格数据」（例如「无价格数据 3」），不用「待填写」「未定价」。
 - 操作：编辑态是「保存」（default sm，文字），已有价格的行在它左边再加「取消」（✕ 图标按钮，tooltip 与无障碍标签「取消」，testID `price-table-cancel-*`）；只读态是「编辑」（铅笔）和「移除自定义价格」（撤销图标）两个 ghost 图标按钮，都带无障碍标签和 tooltip。图标按钮左右内边距 6，28×28。无价格数据的行始终处于编辑态，没有「取消」。移除不弹确认框：移除后要么回到 LiteLLM 价格，要么回到可以直接重填的无价格数据状态，都能挽回。移除按钮 testID `price-table-remove-*`，写回途中显示 loading；失败时状态行显示「无法移除这个自定义价格。」加 daemon 原因，行保持原状。
 - 输入框：新的定宽价格输入样式，带 `$` 前缀，数字右对齐、等宽数字，占位符是 `foregroundMuted` 的 `0.00`（`docs/design.md` §14 不允许比它更淡的占位符）；聚焦和悬停与现有表单输入框一致。实现是给 `FormTextInput` 加两个可选参数：`prefix`（框内文字前的固定前缀）和 `invalid`（危险色边框）。沿用现有的非受控输入加 `resetKey` 重新播种方式。
-- LiteLLM 组：标题右侧（仅非紧凑布局）放自动更新开关和「立即刷新」按钮。卡片内第一行是副标题，按 `table.source` 选两个整句键之一（`litellmGroup.subtitle.snapshot` / `.cache`，不往一句里插来源名词，否则 es / pt-BR 的性数对不上），句中是相对时间和单位。卡片折叠时是一行可点的「N 个模型由 LiteLLM 定价 · 展开」；展开后依次是折叠行、搜索框、表头、只读行（最小高度约 40，四列数值与自定义组同一套列宽，0 用 `foregroundMuted`，`foregroundExtraMuted` 留给被动 chrome）。「自定义」是 ghost xs 按钮：桌面上悬停行时出现（按 docs/hover.md 的模式），原生和紧凑布局常显。
+- LiteLLM 组：标题右侧（仅非紧凑布局）放自动更新开关和「立即刷新」按钮。卡片内第一行是副标题，按 `table.source` 选两个整句键之一（`litellmGroup.subtitle.snapshot` / `.cache`，不往一句里插来源名词，否则 es / pt-BR 的性数对不上），句中是相对时间和单位。卡片折叠时是一行可点的「N 个模型由 LiteLLM 定价 · 展开」；展开后依次是折叠行、搜索框、表头、只读行（最小高度约 40，四列数值与自定义组同一套列宽，0 用 `foregroundMuted`，`foregroundExtraMuted` 留给被动 chrome）。搜索框复用 `SearchField`（自带清除按钮）；搜索词去掉首尾空格后非空且没有匹配时，表头换成一行居中的「没有名称包含「X」的模型。」。搜索只作用于 LiteLLM 组：正在自定义的模型已在上面一组，不参与匹配。「自定义」是 ghost xs 按钮：桌面上悬停行时出现（按 docs/hover.md 的模式：外层普通 View 管 pointerenter/leave，按钮用 opacity + pointerEvents 隐藏、不卸载），原生和紧凑布局常显；表格排法放在操作列里右对齐，窄排放在行的右侧。
 - 折叠状态和搜索词只存在组件状态里，离开页面就重置，默认折叠。
 - 控件错误（自动更新或刷新失败）换下 LiteLLM 组的副标题，占同一块预留两行 caption 高的位置，出错与恢复都不挪动下面的行；沿用「本地化句子 + daemon 原因」的拼法。没有错误时 `price-table-control-error` 节点不存在，副标题是 `price-table-litellm-subtitle`。
 - 窄排（紧凑布局 <720，或价格表自己量到的宽度 < 680——桌面上设置侧栏与应用侧栏会让详情栏窄于 720，`resolvePriceTableLayout`，没量到之前按形态先猜）：自定义组的行变成模型名和状态占一整行，四个输入框排成一行 4 格，操作放在最下面；表头只保留四个价格列名，放不下时折行。LiteLLM 行把四个价格压成模型名下面的一行小字（「入 3 · 读 0.3 · 写 3.75 · 出 15」，每格一个带 `{{price}}` 的短标签键），LiteLLM 组展开后不画表头。自动更新和刷新移到页面底部单独一张卡片。整张表不再横向滚动。
-- 保持现有 testID 可用（`price-table-row-*`、`price-table-input-*-*`、`price-table-save-*`、`price-table-edit-*`、`price-table-error-*`、`price-table-auto-update-switch`、`price-table-refresh`），另加移除、分组、折叠开关、搜索框的 testID。
+- 保持现有 testID 可用（`price-table-row-*`、`price-table-input-*-*`、`price-table-save-*`、`price-table-edit-*`、`price-table-error-*`、`price-table-auto-update-switch`、`price-table-refresh`），另加移除（`price-table-remove-*`）、分组（`price-table-custom-group` / `price-table-litellm-group`）、折叠开关（`price-table-litellm-toggle`）、搜索框（`price-table-litellm-search`、清除 `price-table-litellm-search-clear`、无结果 `price-table-litellm-no-matches`）、「自定义」（`price-table-customize-*`）的 testID。
 
 **本轮用量面板**：
 

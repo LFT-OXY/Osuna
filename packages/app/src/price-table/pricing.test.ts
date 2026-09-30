@@ -12,6 +12,7 @@ import {
   dedupePricingModels,
   extractFailureReason,
   describeLiteLLMSubtitle,
+  filterPricingModels,
   describeLiteLLMSummary,
   describeModelCount,
   formatPriceCell,
@@ -290,6 +291,33 @@ describe("the two groups of the price table", () => {
 
     expect(countUnpricedModels(custom)).toBe(2);
     expect(countUnpricedModels([])).toBe(0);
+  });
+});
+
+describe("searching the LiteLLM group", () => {
+  const rows = [
+    model({ model: "claude-sonnet-4-5" }),
+    model({ model: "gpt-5.5" }),
+    model({ model: "Claude-Opus-4-1" }),
+  ];
+  const search = (query: string) => filterPricingModels(rows, query).map((row) => row.model);
+
+  it("matches a substring of the model id regardless of case", () => {
+    expect(search("CLAUDE")).toEqual(["claude-sonnet-4-5", "Claude-Opus-4-1"]);
+    expect(search("opus")).toEqual(["Claude-Opus-4-1"]);
+  });
+
+  it("ignores spaces around the search term", () => {
+    expect(search("  gpt  ")).toEqual(["gpt-5.5"]);
+  });
+
+  it("returns every model for an empty or blank search term", () => {
+    expect(search("")).toEqual(["claude-sonnet-4-5", "gpt-5.5", "Claude-Opus-4-1"]);
+    expect(search("   ")).toEqual(["claude-sonnet-4-5", "gpt-5.5", "Claude-Opus-4-1"]);
+  });
+
+  it("returns nothing when no model id contains the term", () => {
+    expect(search("gemini")).toEqual([]);
   });
 });
 

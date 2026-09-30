@@ -2749,6 +2749,9 @@ export const zhCN: TranslationResources = {
         removeCustomPrice: "移除自定义价格",
         removeCustomPriceAccessibility: "移除 {{model}} 的自定义价格",
         removeFailed: "无法移除这个自定义价格。",
+        customize: "自定义",
+        customizeAccessibility: "为 {{model}} 设置自定义价格",
+        litellmPrice: "LiteLLM 价格",
         customGroup: {
           title: "自定义价格",
           intro: "LiteLLM 查不到价格的模型列在这里。按每百万 token 美元填写四列，0 表示免费。",
@@ -2765,6 +2768,9 @@ export const zhCN: TranslationResources = {
           expand: "展开",
           collapse: "收起",
           autoUpdate: "自动更新 LiteLLM 价格",
+          search: "搜索模型",
+          clearSearch: "清除搜索",
+          noMatches: "没有名称包含「{{query}}」的模型。",
         },
         columns: {
           model: "模型",

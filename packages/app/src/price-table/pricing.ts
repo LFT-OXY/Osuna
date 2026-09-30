@@ -195,6 +195,16 @@ export function groupPricingModels(
   return { custom: [...unpriced, ...custom], litellm };
 }
 
+/** LiteLLM 组的搜索：模型 id 子串匹配，不区分大小写。 */
+export function filterPricingModels(
+  models: readonly UsagePricingModel[],
+  query: string,
+): readonly UsagePricingModel[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return models;
+  return models.filter((model) => model.model.toLowerCase().includes(needle));
+}
+
 export function countUnpricedModels(models: readonly UsagePricingModel[]): number {
   return models.filter((model) => model.priceSource === null).length;
 }

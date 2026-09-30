@@ -2801,6 +2801,9 @@ export const ko: TranslationResources = {
         removeCustomPrice: "맞춤 가격 제거",
         removeCustomPriceAccessibility: "{{model}}의 맞춤 가격 제거",
         removeFailed: "이 맞춤 가격을 제거할 수 없습니다.",
+        customize: "맞춤 설정",
+        customizeAccessibility: "{{model}}에 맞춤 가격 설정",
+        litellmPrice: "LiteLLM 가격",
         customGroup: {
           title: "맞춤 가격",
           intro:
@@ -2818,6 +2821,9 @@ export const ko: TranslationResources = {
           expand: "펼치기",
           collapse: "접기",
           autoUpdate: "LiteLLM 가격 자동 업데이트",
+          search: "모델 검색",
+          clearSearch: "검색 지우기",
+          noMatches: "이름에 '{{query}}'이(가) 포함된 모델이 없습니다.",
         },
         columns: {
           model: "모델",

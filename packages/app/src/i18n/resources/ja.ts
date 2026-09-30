@@ -2813,6 +2813,9 @@ export const ja: TranslationResources = {
         removeCustomPrice: "カスタム価格を削除",
         removeCustomPriceAccessibility: "{{model}} のカスタム価格を削除",
         removeFailed: "このカスタム価格を削除できませんでした。",
+        customize: "カスタマイズ",
+        customizeAccessibility: "{{model}} にカスタム価格を設定",
+        litellmPrice: "LiteLLM 価格",
         customGroup: {
           title: "カスタム価格",
           intro:
@@ -2830,6 +2833,9 @@ export const ja: TranslationResources = {
           expand: "表示",
           collapse: "閉じる",
           autoUpdate: "LiteLLM 価格を自動更新",
+          search: "モデルを検索",
+          clearSearch: "検索をクリア",
+          noMatches: "名前に「{{query}}」を含むモデルはありません。",
         },
         columns: {
           model: "モデル",

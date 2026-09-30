@@ -2785,6 +2785,9 @@ export const ar: TranslationResources = {
         removeCustomPrice: "إزالة السعر المخصّص",
         removeCustomPriceAccessibility: "إزالة السعر المخصّص لـ {{model}}",
         removeFailed: "تعذّرت إزالة هذا السعر المخصّص.",
+        customize: "تخصيص",
+        customizeAccessibility: "تعيين سعر مخصّص لـ {{model}}",
+        litellmPrice: "سعر LiteLLM",
         customGroup: {
           title: "الأسعار المخصّصة",
           intro:
@@ -2802,6 +2805,9 @@ export const ar: TranslationResources = {
           expand: "عرض",
           collapse: "إخفاء",
           autoUpdate: "تحديث أسعار LiteLLM تلقائيًا",
+          search: "البحث عن نموذج",
+          clearSearch: "مسح البحث",
+          noMatches: "لا توجد نماذج يحتوي اسمها على «{{query}}».",
         },
         columns: {
           model: "النموذج",

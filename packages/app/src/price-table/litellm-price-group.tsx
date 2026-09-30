@@ -1,14 +1,17 @@
 import type { UsagePricingModel, UsagePricingTableInfo } from "@getpaseo/protocol/usage/types";
 import { ChevronRight, RefreshCw } from "lucide-react-native";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
 import { mutedIconColorMapping } from "@/components/ui/icon-color";
+import { SearchField } from "@/components/ui/search-field";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { isNative } from "@/constants/platform";
 import { ICON_SIZE } from "@/styles/theme";
 import { settingsStyles } from "@/styles/settings";
 import { describeTimeAgo } from "@/usage/relative-time";
@@ -19,6 +22,7 @@ import {
   PRICE_COLUMNS,
   describeLiteLLMSubtitle,
   describeLiteLLMSummary,
+  filterPricingModels,
   formatPriceCell,
 } from "./pricing";
 
@@ -39,6 +43,10 @@ interface LiteLLMPriceGroupProps extends LiteLLMControlsProps {
   controlError: string | null;
   expanded: boolean;
   onToggleExpanded: () => void;
+  /** 搜索词只过滤这一组，和折叠状态一样只在这一页里。 */
+  query: string;
+  onQueryChange: (query: string) => void;
+  onCustomize: (model: string) => void;
 }
 
 /**
@@ -52,10 +60,16 @@ export function LiteLLMPriceGroup({
   controlError,
   expanded,
   onToggleExpanded,
+  query,
+  onQueryChange,
+  onCustomize,
   ...controls
 }: LiteLLMPriceGroupProps) {
   const { t } = useTranslation();
   const stacked = layout === "stacked";
+  // 手机上没有悬停，「自定义」一直露着。
+  const alwaysShowCustomize = useIsCompactFormFactor() || isNative;
+  const matches = useMemo(() => filterPricingModels(models, query), [models, query]);
   const subtitle = renderUsageText(
     t,
     describeLiteLLMSubtitle({
@@ -118,14 +132,39 @@ export function LiteLLMPriceGroup({
         <LiteLLMToggleRow count={models.length} expanded={expanded} onPress={onToggleExpanded} />
         {expanded ? (
           <>
+            <View style={styles.search}>
+              <SearchField
+                value={query}
+                onChangeText={onQueryChange}
+                placeholder={t("settings.host.priceTable.litellmGroup.search")}
+                clearAccessibilityLabel={t("settings.host.priceTable.litellmGroup.clearSearch")}
+                testID="price-table-litellm-search"
+                clearTestID="price-table-litellm-search-clear"
+              />
+            </View>
+            {matches.length === 0 && query.trim() !== "" ? (
+              <Text
+                color="foregroundMuted"
+                style={styles.noMatches}
+                testID="price-table-litellm-no-matches"
+              >
+                {t("settings.host.priceTable.litellmGroup.noMatches", { query: query.trim() })}
+              </Text>
+            ) : null}
             {/* 窄屏的行把四个价格压成一行小字，列头对不上任何东西。 */}
-            {stacked ? null : (
+            {stacked || matches.length === 0 ? null : (
               <View style={styles.headerBorder}>
                 <PriceTableHeader layout={layout} />
               </View>
             )}
-            {models.map((model) => (
-              <LiteLLMPriceRow key={model.model} model={model} layout={layout} />
+            {matches.map((model) => (
+              <LiteLLMPriceRow
+                key={model.model}
+                model={model}
+                layout={layout}
+                alwaysShowCustomize={alwaysShowCustomize}
+                onCustomize={onCustomize}
+              />
             ))}
           </>
         ) : null}
@@ -178,42 +217,90 @@ function LiteLLMToggleRow({
   );
 }
 
+/**
+ * 只读的一行，悬停时露出「自定义」。悬停按 docs/hover.md：外层普通 View 只管
+ * pointerenter/leave，按钮用 opacity + pointerEvents 藏起来而不是卸载，行高不变。
+ */
 function LiteLLMPriceRow({
   model,
   layout,
+  alwaysShowCustomize,
+  onCustomize,
 }: {
   model: UsagePricingModel;
   layout: PriceTableLayout;
+  alwaysShowCustomize: boolean;
+  onCustomize: (model: string) => void;
 }) {
   const { t } = useTranslation();
+  const [isHovered, setIsHovered] = useState(false);
+  const handlePointerEnter = useCallback(() => setIsHovered(true), []);
+  const handlePointerLeave = useCallback(() => setIsHovered(false), []);
+  const modelId = model.model;
+  const handleCustomize = useCallback(() => onCustomize(modelId), [modelId, onCustomize]);
   const price = model.pricePerMillion;
-  if (layout === "stacked") {
+  const stacked = layout === "stacked";
+  const customizeVisible = isHovered || alwaysShowCustomize;
+  const customize = (
+    <View
+      style={customizeVisible ? null : styles.customizeHidden}
+      pointerEvents={customizeVisible ? "auto" : "none"}
+    >
+      <Button
+        variant="ghost"
+        size="xs"
+        onPress={handleCustomize}
+        accessibilityLabel={t("settings.host.priceTable.customizeAccessibility", {
+          model: modelId,
+        })}
+        testID={`price-table-customize-${modelId}`}
+      >
+        {t("settings.host.priceTable.customize")}
+      </Button>
+    </View>
+  );
+
+  let content;
+  if (stacked) {
     const cells = PRICE_COLUMNS.map((column) => {
       const value = price ? formatPriceCell(price[column.field]) : "—";
       return t(column.shortLabelKey, { price: value });
     });
-    return (
-      <View style={styles.row} testID={`price-table-row-${model.model}`}>
+    content = (
+      <>
         <View style={priceColumns.model}>
-          <ModelIdText modelId={model.model} />
+          <ModelIdText modelId={modelId} />
           <Text variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.tabular}>
             {cells.join(" · ")}
           </Text>
         </View>
-      </View>
+        {customize}
+      </>
+    );
+  } else {
+    content = (
+      <>
+        <View style={priceColumns.model}>
+          <ModelIdText modelId={modelId} />
+        </View>
+        {PRICE_COLUMNS.map((column) => (
+          <View key={column.field} style={priceColumns.price}>
+            <PriceValue value={price?.[column.field] ?? null} />
+          </View>
+        ))}
+        <View style={styles.actions}>{customize}</View>
+      </>
     );
   }
+
   return (
-    <View style={[styles.row, styles.rowTable]} testID={`price-table-row-${model.model}`}>
-      <View style={priceColumns.model}>
-        <ModelIdText modelId={model.model} />
-      </View>
-      {PRICE_COLUMNS.map((column) => (
-        <View key={column.field} style={priceColumns.price}>
-          <PriceValue value={price?.[column.field] ?? null} />
-        </View>
-      ))}
-      <View style={priceColumns.actions} />
+    <View
+      style={styles.rowEnvelope}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+      testID={`price-table-row-${modelId}`}
+    >
+      <View style={styles.row}>{content}</View>
     </View>
   );
 }
@@ -331,18 +418,39 @@ const styles = StyleSheet.create((theme) => ({
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderCardRow,
   },
-  row: {
-    minHeight: 40,
-    justifyContent: "center",
+  search: {
+    flexDirection: "row",
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[2],
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderCardRow,
   },
-  rowTable: {
+  noMatches: {
+    padding: theme.spacing[4],
+    textAlign: "center",
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderCardRow,
+  },
+  rowEnvelope: {
+    position: "relative",
+  },
+  row: {
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
     gap: PRICE_COLUMN_GAP,
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderCardRow,
+  },
+  actions: {
+    ...priceColumns.actions,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  customizeHidden: {
+    opacity: 0,
   },
   tabular: {
     fontVariant: ["tabular-nums"],

@@ -17,10 +17,17 @@ export interface PriceRowsState {
   error: PriceRowError | null;
   /** 正在写回覆盖表的那一行：保存或移除自定义价格。 */
   writingModel: string | null;
+  /**
+   * 从 LiteLLM 行点了「自定义」、暂时拉进自定义组的模型。保存后仍留着：daemon 广播
+   * 新价格表之前这个模型还是 LiteLLM 价格，从集合里拿掉会让它在两组之间跳一下；
+   * 之后它已是自定义价格，留在集合里不改变分组。取消与移除自定义价格时拿掉。
+   */
+  customizing: ReadonlySet<string>;
 }
 
 export type PriceRowsAction =
   | { type: "editOpened"; model: string; price: UsagePricePerMillion | null }
+  | { type: "customizeOpened"; model: string; price: UsagePricePerMillion | null }
   | { type: "cancelled"; model: string }
   | { type: "fieldChanged"; model: string; field: PriceField; value: string }
   | { type: "draftRejected"; model: string; message: string }
@@ -34,7 +41,15 @@ export const INITIAL_PRICE_ROWS: PriceRowsState = {
   draftToken: 0,
   error: null,
   writingModel: null,
+  customizing: new Set(),
 };
+
+function withoutModel(set: ReadonlySet<string>, model: string): ReadonlySet<string> {
+  if (!set.has(model)) return set;
+  const next = new Set(set);
+  next.delete(model);
+  return next;
+}
 
 function dropDraft(drafts: Record<string, PriceDraft>, model: string): Record<string, PriceDraft> {
   const { [model]: _dropped, ...rest } = drafts;
@@ -49,12 +64,18 @@ export function priceRowsReducer(state: PriceRowsState, action: PriceRowsAction)
         error: null,
         drafts: { ...state.drafts, [action.model]: buildPriceDraft(action.price) },
       };
+    case "customizeOpened":
+      return {
+        ...priceRowsReducer(state, { ...action, type: "editOpened" }),
+        customizing: new Set(state.customizing).add(action.model),
+      };
     case "cancelled":
       return {
         ...state,
         error: null,
         draftToken: state.draftToken + 1,
         drafts: dropDraft(state.drafts, action.model),
+        customizing: withoutModel(state.customizing, action.model),
       };
     case "fieldChanged": {
       // 无价格数据的行一直开着输入框，没有草稿时从空的四格开始。
@@ -84,7 +105,11 @@ export function priceRowsReducer(state: PriceRowsState, action: PriceRowsAction)
       };
     case "removed":
       // 行怎么变由 daemon 广播后的价格表决定；别的行正在输入的草稿不能被重新播种。
-      return { ...state, writingModel: null };
+      return {
+        ...state,
+        writingModel: null,
+        customizing: withoutModel(state.customizing, action.model),
+      };
   }
 }
 

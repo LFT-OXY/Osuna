@@ -2836,6 +2836,9 @@ export const ru: TranslationResources = {
         removeCustomPrice: "Убрать свою цену",
         removeCustomPriceAccessibility: "Убрать свою цену для {{model}}",
         removeFailed: "Не удалось убрать эту цену.",
+        customize: "Настроить",
+        customizeAccessibility: "Задать свою цену для {{model}}",
+        litellmPrice: "Цена LiteLLM",
         customGroup: {
           title: "Свои цены",
           intro:
@@ -2853,6 +2856,9 @@ export const ru: TranslationResources = {
           expand: "Показать",
           collapse: "Скрыть",
           autoUpdate: "Автообновление цен LiteLLM",
+          search: "Поиск моделей",
+          clearSearch: "Очистить поиск",
+          noMatches: "Нет моделей, в названии которых есть «{{query}}».",
         },
         columns: {
           model: "Модель",

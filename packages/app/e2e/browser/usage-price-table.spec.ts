@@ -1,5 +1,5 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { UsagePricingOverride } from "@getpaseo/protocol/usage/types";
+import type { UsagePricePerMillion, UsagePricingOverride } from "@getpaseo/protocol/usage/types";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
@@ -50,6 +50,16 @@ async function readCustomPrices(): Promise<UsagePricingOverride[] | undefined> {
   });
 }
 
+/** daemon 当前给这个模型的 LiteLLM 价格：「自定义」要以它预填。 */
+async function readTablePrice(model: string): Promise<UsagePricePerMillion> {
+  return withPricingClient(async (client) => {
+    const { models } = await client.usagePricingList();
+    const price = models.find((row) => row.model === model)?.pricePerMillion;
+    if (!price) throw new Error(`Expected ${model} to have a LiteLLM price.`);
+    return price;
+  });
+}
+
 /** Reads the switch back out of the daemon, not out of the page it just set. */
 async function readAutoUpdate(): Promise<boolean | undefined> {
   return withPricingClient(async (client) => {
@@ -85,6 +95,22 @@ async function openUnpricedRowEditor(page: Page): Promise<string> {
   const model = await topRowModel(page);
   await expect(page.getByTestId(`price-table-input-${model}-input`)).toBeVisible();
   return model;
+}
+
+function readTestIds(nodes: Element[]): string[] {
+  return nodes.map((node) => node.getAttribute("data-testid") ?? "");
+}
+
+/** LiteLLM 组展开后第一行的模型：内置快照每次发版都会变，不写死是哪个。 */
+async function firstLiteLLMRowModel(page: Page): Promise<string> {
+  const firstRow = page
+    .getByTestId("price-table-litellm-group")
+    .locator('[data-testid^="price-table-row-"]')
+    .first();
+  await expect(firstRow).toBeVisible();
+  const testId = await firstRow.getAttribute("data-testid");
+  if (!testId) throw new Error("Expected a LiteLLM row to carry a testID.");
+  return testId.replace("price-table-row-", "");
 }
 
 test.describe("Price table", () => {
@@ -217,11 +243,7 @@ test.describe("Price table", () => {
     const toggle = page.getByTestId("price-table-litellm-toggle");
     await expect(toggle).toBeVisible({ timeout: 30_000 });
     await toggle.click();
-    const firstRow = litellmGroup.locator('[data-testid^="price-table-row-"]').first();
-    await expect(firstRow).toBeVisible();
-    const testId = await firstRow.getAttribute("data-testid");
-    if (!testId) throw new Error("Expected a LiteLLM row to carry a testID.");
-    const model = testId.replace("price-table-row-", "");
+    const model = await firstLiteLLMRowModel(page);
 
     // 覆盖一个 LiteLLM 定过价的模型：它搬进自定义组。
     await writeCustomPrices([{ model, pricePerMillion: ONE_DOLLAR }]);
@@ -401,5 +423,105 @@ test.describe("Price table", () => {
 
     await toggle.click();
     await expect(group.locator('[data-testid^="price-table-row-"]')).toHaveCount(0);
+  });
+
+  test("searching the LiteLLM group filters it by model name", async ({ page }) => {
+    const serverId = getServerId();
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const group = page.getByTestId("price-table-litellm-group");
+    const toggle = page.getByTestId("price-table-litellm-toggle");
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await toggle.click();
+    const model = await firstLiteLLMRowModel(page);
+    const rows = group.locator('[data-testid^="price-table-row-"]');
+    const search = page.getByTestId("price-table-litellm-search");
+
+    // 不区分大小写、去首尾空格的子串匹配。
+    await search.fill(`  ${model.toUpperCase()}  `);
+    await expect(group.getByTestId(`price-table-row-${model}`)).toBeVisible();
+    const matchedIds = await rows.evaluateAll(readTestIds);
+    for (const testId of matchedIds) {
+      expect(testId.toLowerCase()).toContain(model.toLowerCase());
+    }
+
+    await search.fill("e2e-no-such-model");
+    await expect(page.getByTestId("price-table-litellm-no-matches")).toHaveText(
+      "No model names contain “e2e-no-such-model”.",
+    );
+    await expect(rows).toHaveCount(0);
+
+    await page.getByTestId("price-table-litellm-search-clear").click();
+    await expect(page.getByTestId("price-table-litellm-no-matches")).toHaveCount(0);
+    await expect(group.getByTestId(`price-table-row-${model}`)).toBeVisible();
+  });
+
+  test("customizing a LiteLLM row prices it by hand or leaves it alone", async ({ page }) => {
+    const serverId = getServerId();
+    await writeCustomPrices([]);
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHostSection(page, serverId, "usage");
+
+    const litellmGroup = page.getByTestId("price-table-litellm-group");
+    const customGroup = page.getByTestId("price-table-custom-group");
+    const toggle = page.getByTestId("price-table-litellm-toggle");
+    await expect(toggle).toBeVisible({ timeout: 30_000 });
+    await toggle.click();
+    const model = await firstLiteLLMRowModel(page);
+    const litellmRow = litellmGroup.getByTestId(`price-table-row-${model}`);
+    const customRow = customGroup.getByTestId(`price-table-row-${model}`);
+    const customize = page.getByTestId(`price-table-customize-${model}`);
+
+    try {
+      await test.step("the customize action shows on hover", async () => {
+        // 按钮用 opacity 藏起来而不是卸载，行高不变；它的外层是那一层透明度。
+        const slot = customize.locator("xpath=..");
+        await page.mouse.move(0, 0);
+        await expect(slot).toHaveCSS("opacity", "0");
+        await litellmRow.hover();
+        await expect(slot).toHaveCSS("opacity", "1");
+      });
+
+      await test.step("customize pulls the row up, prefilled with the LiteLLM price", async () => {
+        const litellmPrice = await readTablePrice(model);
+        await customize.click();
+        await expect(customRow).toContainText("LiteLLM price");
+        await expect(litellmRow).toHaveCount(0);
+        for (const field of ["input", "cachedInput", "cacheWrite", "output"] as const) {
+          const input = page.getByTestId(`price-table-input-${model}-${field}`);
+          await expect(input).not.toHaveValue("");
+          expect(Number(await input.inputValue())).toBeCloseTo(litellmPrice[field], 6);
+        }
+      });
+
+      await test.step("cancel sends it back and writes nothing", async () => {
+        await page.getByTestId(`price-table-cancel-${model}`).click();
+        await expect(customRow).toHaveCount(0);
+        await expect(litellmRow).toBeVisible();
+        expect(await readCustomPrices()).toEqual([]);
+      });
+
+      await test.step("save turns it into a custom price that stays up top", async () => {
+        await litellmRow.hover();
+        await customize.click();
+        await page.getByTestId(`price-table-input-${model}-input`).fill("7");
+        await page.getByTestId(`price-table-save-${model}`).click();
+
+        await expect(customRow).toContainText("Custom price", { timeout: 30_000 });
+        await expect(page.getByTestId(`price-table-edit-${model}`)).toBeVisible();
+        await expect(litellmRow).toHaveCount(0);
+        const saved = await readCustomPrices();
+        expect(saved).toHaveLength(1);
+        expect(saved?.[0]?.model).toBe(model);
+        expect(saved?.[0]?.pricePerMillion.input).toBe(7);
+      });
+    } finally {
+      // 同一个 worker daemon 上后面的用例从干净的覆盖表开始。
+      await writeCustomPrices([]);
+    }
   });
 });

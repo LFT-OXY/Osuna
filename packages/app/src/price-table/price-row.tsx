@@ -250,18 +250,23 @@ function PriceRowStatus({
       </Tooltip>
     );
   }
-  const unpriced = model.priceSource === null;
+  const status = ROW_STATUS[model.priceSource ?? "unpriced"];
   return (
     <View style={styles.status}>
-      <View style={[styles.dot, unpriced ? styles.dotUnpriced : styles.dotCustom]} />
+      <View style={[styles.dot, styles[status.dot]]} />
       <Text variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.statusText}>
-        {unpriced
-          ? t("settings.host.priceTable.unpriced")
-          : t("settings.host.priceTable.customPrice")}
+        {t(status.labelKey)}
       </Text>
     </View>
   );
 }
+
+/** `table`：从 LiteLLM 行点了「自定义」、还没保存的行，写的是它现在的价格来源。 */
+const ROW_STATUS = {
+  unpriced: { dot: "dotUnpriced", labelKey: "settings.host.priceTable.unpriced" },
+  override: { dot: "dotCustom", labelKey: "settings.host.priceTable.customPrice" },
+  table: { dot: "dotLitellm", labelKey: "settings.host.priceTable.litellmPrice" },
+} as const;
 
 /**
  * 模型 id 单行省略；列放不下时悬停看完整 id，好分清两个相近的模型。
@@ -422,6 +427,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   dotCustom: {
     backgroundColor: theme.colors.accent,
+  },
+  dotLitellm: {
+    backgroundColor: theme.colors.foregroundMuted,
   },
   prices: {
     flexDirection: "row",

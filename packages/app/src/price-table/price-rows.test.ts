@@ -103,6 +103,60 @@ describe("writing the override list back", () => {
   });
 });
 
+describe("customizing a LiteLLM row", () => {
+  it("pulls the model into the custom group with the LiteLLM price as the draft", () => {
+    const state = run({ type: "customizeOpened", model: "claude-opus-4-1", price: PRICE });
+    expect(state.customizing.has("claude-opus-4-1")).toBe(true);
+    expect(state.drafts["claude-opus-4-1"]).toEqual({
+      input: "15",
+      cachedInput: "1.5",
+      cacheWrite: "18.75",
+      output: "75",
+    });
+  });
+
+  it("sends the model back to the LiteLLM group on cancel, writing nothing", () => {
+    const state = run(
+      { type: "customizeOpened", model: "claude-opus-4-1", price: PRICE },
+      { type: "fieldChanged", model: "claude-opus-4-1", field: "input", value: "9" },
+      { type: "cancelled", model: "claude-opus-4-1" },
+    );
+    expect(state.customizing.has("claude-opus-4-1")).toBe(false);
+    expect(state.drafts).toEqual({});
+    expect(state.writingModel).toBeNull();
+  });
+
+  it("keeps the model in the custom group after the save, until the daemon's table catches up", () => {
+    const state = run(
+      { type: "customizeOpened", model: "claude-opus-4-1", price: PRICE },
+      { type: "writeStarted", model: "claude-opus-4-1" },
+      { type: "saved", model: "claude-opus-4-1" },
+    );
+    expect(state.customizing.has("claude-opus-4-1")).toBe(true);
+    expect(state.drafts).toEqual({});
+  });
+
+  it("keeps the model in the custom group when the save is refused", () => {
+    const state = run(
+      { type: "customizeOpened", model: "claude-opus-4-1", price: PRICE },
+      { type: "writeStarted", model: "claude-opus-4-1" },
+      { type: "writeFailed", model: "claude-opus-4-1", message: "Could not save this price." },
+    );
+    expect(state.customizing.has("claude-opus-4-1")).toBe(true);
+    expect(state.drafts["claude-opus-4-1"]?.input).toBe("15");
+  });
+
+  it("lets the model return to the LiteLLM group once its custom price is removed", () => {
+    const state = run(
+      { type: "customizeOpened", model: "claude-opus-4-1", price: PRICE },
+      { type: "saved", model: "claude-opus-4-1" },
+      { type: "writeStarted", model: "claude-opus-4-1" },
+      { type: "removed", model: "claude-opus-4-1" },
+    );
+    expect(state.customizing.has("claude-opus-4-1")).toBe(false);
+  });
+});
+
 describe("one write at a time", () => {
   it("lets every row write while nothing is in flight", () => {
     expect(resolveRowWriteState(null, "glm-5")).toBe("idle");
