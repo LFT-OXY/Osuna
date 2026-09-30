@@ -1,6 +1,7 @@
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { expect, type Page } from "@playwright/test";
 import { daemonWsRoutePattern } from "./daemon-port";
+import { loadSessionMessageReaders } from "./new-workspace";
 import type { SeededWorkspace } from "./seed-client";
 
 type WebSocketMessage = string | Buffer;
@@ -141,10 +142,64 @@ export async function openSubagentsTrack(page: Page): Promise<void> {
   await expect(panel).toBeVisible({ timeout: 30_000 });
 }
 
+export async function expectSubagentsPill(page: Page, label: string): Promise<void> {
+  await expect(page.getByTestId("subagents-track-header")).toHaveAttribute("aria-label", label, {
+    timeout: 30_000,
+  });
+}
+
+/** Parks a seeded child on the mock provider's plan approval and returns the request id. */
+export async function parkSubagentOnPermission(
+  workspace: Pick<SeededWorkspace, "client">,
+  childId: string,
+): Promise<string> {
+  await workspace.client.sendAgentMessage(childId, "Emit synthetic plan approval.");
+  const parked = await workspace.client.waitForAgentUpsert(
+    childId,
+    (snapshot) => snapshot.pendingPermissions.length > 0,
+    30_000,
+  );
+  const requestId = parked.pendingPermissions[0]?.id;
+  if (!requestId) throw new Error(`Subagent ${childId} has no pending permission`);
+  return requestId;
+}
+
+export interface AgentAttentionFrame {
+  agentId: string;
+  reason: "finished" | "error" | "permission";
+  notificationAgentId: string | null;
+}
+
+/** Records every `agent_attention_required` the daemon sends this page. */
+export async function observeAgentAttention(page: Page): Promise<{
+  framesFor(agentId: string): AgentAttentionFrame[];
+}> {
+  const readers = await loadSessionMessageReaders();
+  const frames: AgentAttentionFrame[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framereceived", ({ payload }) => {
+      const message = readers.server(payload);
+      if (message?.type !== "agent_attention_required") return;
+      frames.push({
+        agentId: message.payload.agentId,
+        reason: message.payload.reason,
+        notificationAgentId: message.payload.notification?.data.agentId ?? null,
+      });
+    });
+  });
+  return { framesFor: (agentId) => frames.filter((frame) => frame.agentId === agentId) };
+}
+
 export async function expectSubagentRowVisible(page: Page, childId: string): Promise<void> {
   await expect(page.getByTestId(`subagents-track-row-${childId}`)).toBeVisible({
     timeout: 30_000,
   });
+}
+
+export async function expectSubagentRowNeedsInput(page: Page, childId: string): Promise<void> {
+  await expect(
+    page.getByTestId(`subagents-track-row-${childId}`).locator('[aria-label="Agent needs input"]'),
+  ).toBeVisible({ timeout: 30_000 });
 }
 
 export async function expectSubagentRowGone(page: Page, childId: string): Promise<void> {

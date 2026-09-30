@@ -9,11 +9,11 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] daemon 测试：子智能体请求权限时，父智能体收到的通知正文是新文案且带载荷。
-- [ ] daemon 测试：客户端收到子智能体的 `agent_attention_required`（reason 为 permission）；子智能体完成或出错时没有。
-- [ ] daemon 测试：同工作区子智能体等待批准时，工作区状态为"需要批准"；批准后恢复。
-- [ ] 浏览器 e2e：track 行在子智能体等待批准时显示等待批准；推送载荷的 agentId 是子智能体。
-- [ ] `docs/agent-lifecycle.md` 已更新。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] daemon 测试：子智能体请求权限时，父智能体收到的通知正文是新文案且带载荷。
+- [x] daemon 测试：客户端收到子智能体的 `agent_attention_required`（reason 为 permission）；子智能体完成或出错时没有。
+- [x] daemon 测试：同工作区子智能体等待批准时，工作区状态为"需要批准"；批准后恢复。
+- [x] 浏览器 e2e：track 行在子智能体等待批准时显示等待批准；推送载荷的 agentId 是子智能体。
+- [x] `docs/agent-lifecycle.md` 已更新。
+- [x] `npm run typecheck`、`npm run lint` 通过。

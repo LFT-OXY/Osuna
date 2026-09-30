@@ -318,6 +318,9 @@ test("finish notifications survive permission responses", async () => {
     expect(scenario.parentPrompts()).toHaveLength(1);
   });
   expect(scenario.parentPrompts()[0]).toContain("needs permission.");
+  expect(scenario.parentPrompts()[0]).toContain(
+    "The user will approve this in the subagent's session. Do not answer it with `respond_to_permission` unless the user explicitly asked you to manage this subagent's permissions.",
+  );
   const permissionPayload = scenario
     .parentPrompts()[0]
     .match(/<permission-request>\n([\s\S]+?)\n<\/permission-request>/)?.[1];

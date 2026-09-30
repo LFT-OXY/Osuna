@@ -38,8 +38,10 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
     label: label ?? "",
     subtitle: subtitle ?? "",
     titleState: label ? "ready" : "loading",
+    // requiresAttention 保持 false，否则已完成的子智能体会亮"待查看"；等待批准只看待批准计数。
     statusBucket: deriveSidebarStateBucket({
       status,
+      pendingPermissionCount: row.kind === "paseo" ? row.pendingPermissionCount : 0,
       requiresAttention: false,
     }),
   };
@@ -72,8 +74,8 @@ export interface SubagentPillPresentation {
  * "1 failed" over a child that is still working says the fan-out has stopped. Every state present
  * gets its own mark and its own count, in the order the sidebar's status groups list them.
  *
- * It stays one line because subagent rows only ever reach three states — see
- * `buildSubagentRowPresentationData`, which reports no attention of its own — so the pill is two
+ * It stays one line because subagent rows only ever reach four states — see
+ * `buildSubagentRowPresentationData`, which reports no attention of its own — so the pill is three
  * segments at worst, and falls back to naming what it opens once nothing is happening.
  */
 export function buildSubagentPillPresentation(

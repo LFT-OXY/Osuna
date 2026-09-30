@@ -397,7 +397,7 @@ function formatFinishNotificationBody(params: FinishNotificationBodyInput): stri
   const sections = [statusLine];
   if (params.reason === "needs permission" && params.permissionRequest) {
     sections.push(
-      "Respond with `respond_to_permission` using the `agentId` and `requestId` below.",
+      "The user will approve this in the subagent's session. Do not answer it with `respond_to_permission` unless the user explicitly asked you to manage this subagent's permissions.",
       `<permission-request>\n${JSON.stringify(
         {
           agentId: params.childAgentId,

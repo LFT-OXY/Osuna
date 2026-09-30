@@ -293,23 +293,37 @@ function createAgent(
 }
 
 describe("WorkspaceDirectory", () => {
-  test("uses root agent activity, not delegated child activity, for workspace status", async () => {
+  test("keeps delegated child errors and attention out of workspace status", async () => {
     const workspace = new WorkspaceStatus();
 
-    workspace.hasRootAgent({ id: "root-agent", status: "running" });
-    workspace.hasDelegatedAgent({
-      id: "child-needs-input",
-      status: "idle",
-      pendingPermissionCount: 1,
-    });
+    workspace.hasRootAgent({ id: "parent-agent", status: "idle" });
     workspace.hasDelegatedAgent({
       id: "child-error",
       status: "error",
       requiresAttention: true,
       attentionReason: "error",
     });
+    workspace.hasDelegatedAgent({
+      id: "child-finished",
+      status: "idle",
+      requiresAttention: true,
+      attentionReason: "finished",
+    });
 
-    await expect(workspace.workspaceStatus()).resolves.toBe("running");
+    await expect(workspace.workspaceStatus()).resolves.toBe("done");
+  });
+
+  test("same-workspace subagent waiting for approval puts its parent workspace in needs input", async () => {
+    const workspace = new WorkspaceStatus();
+
+    workspace.hasRootAgent({ id: "parent-agent", status: "running" });
+    workspace.hasDelegatedAgent({
+      id: "child-needs-input",
+      status: "idle",
+      pendingPermissionCount: 1,
+    });
+
+    await expect(workspace.workspaceStatus()).resolves.toBe("needs_input");
   });
 
   test("same-cwd workspaces attribute agent status only to the owner", async () => {

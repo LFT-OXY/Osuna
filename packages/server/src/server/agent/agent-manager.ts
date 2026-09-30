@@ -5002,7 +5002,8 @@ export class AgentManager {
     agent: ManagedAgent,
     reason: "finished" | "error" | "permission",
   ): void {
-    if (isDelegatedAgent(agent)) {
+    // 子智能体只把权限请求交给用户（在子会话里批准）；完成与出错仍留在父智能体的 track。
+    if (isDelegatedAgent(agent) && reason !== "permission") {
       return;
     }
 

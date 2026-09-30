@@ -178,7 +178,7 @@ export function WorkspaceTabIcon({
       ) : null}
       {statusDotColor ? <View style={statusDotStyle} /> : null}
       {showNeedsInputAlert ? (
-        <View style={styles.statusAlertOverlay}>
+        <View style={styles.statusAlertOverlay} accessibilityLabel="Agent needs input">
           <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputAlertMapping} />
         </View>
       ) : null}

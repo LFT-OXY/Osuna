@@ -25,6 +25,7 @@ function row(
         ? { phase: "open", turnId: null, startedAt: null, cancellationRequestId: null }
         : { phase: "idle", cancellationRequestId: null }),
     requiresAttention: overrides.requiresAttention ?? false,
+    pendingPermissionCount: overrides.pendingPermissionCount ?? 0,
     createdAt: overrides.createdAt ?? new Date("2026-04-20T00:00:00.000Z"),
   };
 }
@@ -73,6 +74,23 @@ describe("buildSubagentPillPresentation", () => {
         { bucket: "running", text: "1 working" },
       ],
       accessibilityLabel: "2 failed, 1 working",
+    });
+  });
+
+  it("puts a child waiting for approval ahead of the others", () => {
+    expect(
+      pill([
+        row({ id: "a", status: "running" }),
+        row({ id: "b", status: "running", pendingPermissionCount: 1 }),
+        row({ id: "c", status: "error" }),
+      ]),
+    ).toEqual({
+      segments: [
+        { bucket: "needs_input", text: "1 needs input" },
+        { bucket: "failed", text: "1 failed" },
+        { bucket: "running", text: "1 working" },
+      ],
+      accessibilityLabel: "1 needs input, 1 failed, 1 working",
     });
   });
 
@@ -203,6 +221,18 @@ describe("buildSubagentRowPresentationData", () => {
       buildSubagentRowPresentationData(row({ id: "a", status: "idle", requiresAttention: true }))
         .statusBucket,
     ).toBe("done");
+  });
+
+  it("puts a row waiting for approval in needs input, even while its turn is open", () => {
+    expect(
+      buildSubagentRowPresentationData(row({ id: "a", status: "idle", pendingPermissionCount: 1 }))
+        .statusBucket,
+    ).toBe("needs_input");
+    expect(
+      buildSubagentRowPresentationData(
+        row({ id: "b", status: "running", pendingPermissionCount: 2 }),
+      ).statusBucket,
+    ).toBe("needs_input");
   });
 });
 

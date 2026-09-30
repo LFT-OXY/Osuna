@@ -152,7 +152,8 @@ Rules:
 
 - 完成通知里的 needs permission 段全局改写为：用户会在子智能体的会话里批准，不要用 `respond_to_permission` 回应，除非用户明确让你管理这个子智能体的权限。`<permission-request>` 载荷照常附上。对所有 `notifyOnFinish` 的 `create_agent` 与 `send_agent_prompt` 生效，不区分是否由 mention 触发。
 - attention 广播对带父标签的智能体，只放行 `permission` 原因（推送与系统通知，焦点目标是子智能体本身，沿用现有通知计划的压制规则），`finished` 与 `error` 仍然跳过。
-- 同工作区的子智能体有待批准权限时，给祖先所在的工作区贡献"需要批准"档；`error` 与 attention 仍只留在 track。
+- 同工作区的子智能体有待批准权限时，给祖先所在的工作区贡献"需要批准"档；`error` 与 attention 仍只留在 track。"需要批准"就是现有的 `needs_input` 桶，沿用它的 UI 文案（侧边栏状态点、track pill 的"1 needs input / 1 个需要输入"），不新增文案。实现为 `workspace-directory.ts` 的 `deriveSameWorkspaceDescendantBucket`：复用 `deriveAgentStateBucket` 并把 `requiresAttention` 置 false，只收 `needs_input` 与 `running`。
+- 通知正文定稿（英文，原样发给父智能体）："The user will approve this in the subagent's session. Do not answer it with `respond_to_permission` unless the user explicitly asked you to manage this subagent's permissions."
 - provider 子智能体的权限仍挂在父 agent 上，推送跳父会话，不做到只读面板的深链。
 
 ### `@` 列表智能体分组（app）
@@ -185,7 +186,7 @@ Rules:
 
 ### Subagents track 与只读面板（app）
 
-- Paseo 子智能体行把待批准计数交给状态分桶，出现"等待批准"桶；`requiresAttention` 保持 false，不复活"已完成=待查看"。
+- Paseo 子智能体行把待批准计数交给状态分桶，出现"等待批准"桶；`requiresAttention` 保持 false，不复活"已完成=待查看"。"等待批准"桶即 `needs_input`，pill 与行图标沿用它的现有文案与角标。`PaseoSubagentRow` 带 `pendingPermissionCount`；provider 行暂按 0 计，归属后由票 13 接上。行图标的需要输入角标带无障碍标签 `Agent needs input`（与 `Agent running` 同一写法），e2e 按它断言行状态。
 - provider 子智能体行从父 agent 的待批准权限里，按 `metadata` 中的子智能体 id 计数。
 - provider 子智能体只读面板：从父 agent 的待批准权限里取出归属本子智能体的项，显示权限卡并允许批准，回应仍走父 agentId。批准不算"写入会话"，与只读语义不冲突；面板仍然没有输入框。
 

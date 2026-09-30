@@ -75,7 +75,8 @@ Users can also detach an existing subagent from the subagents track. Detach is d
 
 `notifyOnFinish` defaults to `true` for agent-scoped creation and background prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` only for truly fire-and-forget agents or prompts.
 Permission requests are notification checkpoints, not the end of that subscription. The caller is notified again after a permission response when the child finishes, errors, or requests another permission.
-The permission notification includes the normalized request plus the child and request IDs, so the caller can inspect it and respond without fetching agent status.
+The permission notification tells the caller that the user approves in the child's session, and not to answer with `respond_to_permission` unless the user asked it to manage that child's permissions. It still carries the normalized request plus the child and request IDs, so a caller the user did authorize can respond without fetching agent status.
+The user hears about it directly: a child's permission request raises attention and a push pointed at the child, suppressed the same way as any agent's attention when the user is already looking at it. A child's finish and error raise none; they stay in the parent's subagents track.
 A watched child that closes before its finish event also notifies the caller so delegated work cannot disappear silently during archive or workspace teardown.
 
 ## Provider-managed child agents
@@ -156,7 +157,7 @@ The asymmetry is intentional: a subagent's persistent relationship lives in the 
 
 Agent lifecycle status stays literal: a parent agent is `idle` when its own turn is idle, even if a child is running.
 
-Workspace status is an aggregate activity signal computed **per `workspaceId`**. Ownership is never derived from `cwd` — many workspaces may share one directory, and same-`cwd` siblings do not clump under one status. Root agents and cross-workspace subagents contribute their normal state bucket to their own workspace. Same-workspace descendants contribute `running` to the nearest ancestor in that workspace; their non-running attention, permission, and error states stay in the parent's subagents track. This makes a cross-workspace subagent behave like a detached agent for workspace visibility and status without removing its parent relationship.
+Workspace status is an aggregate activity signal computed **per `workspaceId`**. Ownership is never derived from `cwd` — many workspaces may share one directory, and same-`cwd` siblings do not clump under one status. Root agents and cross-workspace subagents contribute their normal state bucket to their own workspace. Same-workspace descendants contribute `running`, or `needs_input` while a permission is pending, to the nearest ancestor in that workspace; their attention and error states stay in the parent's subagents track. This makes a cross-workspace subagent behave like a detached agent for workspace visibility and status without removing its parent relationship. The track also shows a Paseo subagent waiting for approval.
 
 Running provider-native subagents contribute `running` to the workspace owned by their parent agent. Their completed, failed, and canceled states stay in the parent's subagents track.
 

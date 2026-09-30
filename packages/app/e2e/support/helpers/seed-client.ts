@@ -21,6 +21,11 @@ interface SeedProjectDescriptor {
   projectKey?: string;
 }
 
+interface SeedAgentUpsert {
+  status: string;
+  pendingPermissions: Array<{ id: string }>;
+}
+
 /**
  * The general-purpose E2E daemon client used to seed and drive state out of
  * band (workspaces, agents, terminals) while the UI is exercised through the
@@ -143,10 +148,15 @@ export interface SeedDaemonClient {
   setAgentMode(agentId: string, modeId: string): Promise<unknown>;
   waitForAgentUpsert(
     agentId: string,
-    predicate: (snapshot: { status: string }) => boolean,
+    predicate: (snapshot: SeedAgentUpsert) => boolean,
     timeout?: number,
-  ): Promise<{ status: string }>;
+  ): Promise<SeedAgentUpsert>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
+  respondToPermission(
+    agentId: string,
+    requestId: string,
+    response: { behavior: "allow" | "deny" },
+  ): Promise<void>;
   waitForFinish(
     agentId: string,
     timeout?: number,
