@@ -7,6 +7,7 @@ import {
   type AgentFeature,
   type AgentLaunchContext,
   type AgentResumeSessionOptions,
+  type AgentMetadata,
   type AgentMode,
   type AgentModelDefinition,
   type McpServerConfig,
@@ -41,6 +42,7 @@ import {
 import { importSessionFromPersistence } from "../provider-session-import.js";
 import { runProviderRefreshActivity } from "../provider-refresh-deadline.js";
 import type { Logger } from "pino";
+import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-subagent-permission";
 
 import type { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -6795,6 +6797,12 @@ export class CodexAppServerAgentSession implements AgentSession {
     );
   }
 
+  // collab 子线程的审批也由父 app-server client 收到；子线程 id 就是 provider 子智能体描述符的 id。
+  private providerSubagentMetadata(threadId: string): AgentMetadata {
+    if (!this.currentThreadId || threadId === this.currentThreadId) return {};
+    return providerSubagentPermissionMetadata(threadId);
+  }
+
   private handleCommandApprovalRequest(params: unknown): Promise<unknown> {
     const parsed = z
       .object({
@@ -6837,6 +6845,7 @@ export class CodexAppServerAgentSession implements AgentSession {
         itemId: parsed.itemId,
         threadId: parsed.threadId,
         turnId: parsed.turnId,
+        ...this.providerSubagentMetadata(parsed.threadId),
       },
     };
     this.pendingPermissions.set(requestId, request);
@@ -6874,6 +6883,7 @@ export class CodexAppServerAgentSession implements AgentSession {
         itemId: parsed.itemId,
         threadId: parsed.threadId,
         turnId: parsed.turnId,
+        ...this.providerSubagentMetadata(parsed.threadId),
       },
     };
     this.pendingPermissions.set(requestId, request);
@@ -6912,6 +6922,7 @@ export class CodexAppServerAgentSession implements AgentSession {
         threadId: parsed.threadId,
         turnId: parsed.turnId,
         questions,
+        ...this.providerSubagentMetadata(parsed.threadId),
       },
     };
     this.pendingPermissions.set(requestId, request);
@@ -6972,6 +6983,7 @@ export class CodexAppServerAgentSession implements AgentSession {
         turnId: parsed.turnId ?? null,
         serverName: parsed.serverName,
         elicitationId: parsed.elicitationId ?? null,
+        ...this.providerSubagentMetadata(parsed.threadId),
       },
     };
     this.pendingPermissions.set(requestId, request);

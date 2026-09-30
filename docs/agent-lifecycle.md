@@ -75,14 +75,9 @@ Users can also detach an existing subagent from the subagents track. Detach is d
 
 `notifyOnFinish` defaults to `true` for agent-scoped creation and background prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` only for truly fire-and-forget agents or prompts.
 Permission requests are notification checkpoints, not the end of that subscription. The caller is notified again after a permission response when the child finishes, errors, or requests another permission.
-The permission notification includes the normalized request plus the child and request IDs, so the caller can inspect it and respond without fetching agent status.
+The permission notification tells the caller that the user approves in the child's session, and not to answer with `respond_to_permission` unless the user asked it to manage that child's permissions. It still carries the normalized request plus the child and request IDs, so a caller the user did authorize can respond without fetching agent status.
+The user hears about it directly: a child's permission request raises attention and a push pointed at the child, suppressed the same way as any agent's attention when the user is already looking at it. A child's finish and error raise none; they stay in the parent's subagents track.
 A watched child that closes before its finish event also notifies the caller so delegated work cannot disappear silently during archive or workspace teardown.
-
-## Provider-managed child agents
-
-Some providers can create their own child sessions inside one provider runtime. OMP's task tool reports these with `child_session` events; `AgentManager` imports the live provider handle, stamps `paseo.parent-agent-id`, and surfaces the result as a normal subagent in the parent's subagents track.
-
-The provider still owns the underlying runtime. Paseo keeps an agent record so the child can be opened, tracked, archived, and cascaded with the parent, but prompts and history hydration route through the provider adapter for that native child handle.
 
 ## Archive
 
@@ -156,7 +151,7 @@ The asymmetry is intentional: a subagent's persistent relationship lives in the 
 
 Agent lifecycle status stays literal: a parent agent is `idle` when its own turn is idle, even if a child is running.
 
-Workspace status is an aggregate activity signal computed **per `workspaceId`**. Ownership is never derived from `cwd` — many workspaces may share one directory, and same-`cwd` siblings do not clump under one status. Root agents and cross-workspace subagents contribute their normal state bucket to their own workspace. Same-workspace descendants contribute `running` to the nearest ancestor in that workspace; their non-running attention, permission, and error states stay in the parent's subagents track. This makes a cross-workspace subagent behave like a detached agent for workspace visibility and status without removing its parent relationship.
+Workspace status is an aggregate activity signal computed **per `workspaceId`**. Ownership is never derived from `cwd` — many workspaces may share one directory, and same-`cwd` siblings do not clump under one status. Root agents and cross-workspace subagents contribute their normal state bucket to their own workspace. Same-workspace descendants contribute `running`, or `needs_input` while a permission is pending, to the nearest ancestor in that workspace; their attention and error states stay in the parent's subagents track. This makes a cross-workspace subagent behave like a detached agent for workspace visibility and status without removing its parent relationship. The track also shows a subagent waiting for approval; for a provider subagent that needs its adapter to tag the request ([providers.md](providers.md#direct)).
 
 Running provider-native subagents contribute `running` to the workspace owned by their parent agent. Their completed, failed, and canceled states stay in the parent's subagents track.
 
@@ -176,13 +171,24 @@ The rows combine two kinds of children:
 parentAgentId === thisAgent.id  AND  !archivedAt
 ```
 
-- **Provider subagents** are child executions owned by Claude, Codex, or OpenCode. They are not inserted into `AgentManager` as managed agents. Providers emit a separate descriptor and timeline stream through `agent.provider_subagents.*`; the client keeps that state outside the normal agent store and merges only the presentation rows into the track. A descriptor's optional `parentSubagentId` identifies its direct provider-subagent parent; an absent value identifies a direct child of the managed agent.
+- **Provider subagents** are child executions owned by Claude, Codex, OpenCode, or OMP. They are not inserted into `AgentManager` as managed agents. Providers emit a separate descriptor and timeline stream through `agent.provider_subagents.*`; the client keeps that state outside the normal agent store and merges only the presentation rows into the track. A descriptor's optional `parentSubagentId` identifies its direct provider-subagent parent; an absent value identifies a direct child of the managed agent.
 
-Clicking either kind opens a workspace tab. A Paseo subagent tab is a normal interactive agent pane. A provider subagent tab is a read-only timeline pane with no composer, archive, detach, rewind, or fork actions. It shows its own direct children in a subagents track. Both panes use `AgentStreamView`, so message, reasoning, tool-call, and layout rendering stay identical.
+Clicking either kind opens a workspace tab. A Paseo subagent tab is a normal interactive agent pane. A provider subagent tab is a read-only timeline pane with no composer, archive, detach, rewind, or fork actions. It still shows the permission requests tagged for that subagent and lets you answer them; the answer goes to the parent agent, which owns the request. It shows its own direct children in a subagents track. Both panes use `AgentStreamView`, so message, reasoning, tool-call, and layout rendering stay identical.
 
 Provider timelines use the same structural timeline item format but deliberately have a separate lifecycle and transport. A provider thread/session identifier is not a Paseo agent identifier, and closing its tab is always layout-only.
 
 Provider descriptors may include one compact subtitle. The provider owns its contents and formatting; clients display and truncate it without interpreting provider-specific model, thinking, or usage fields.
+
+### Dispatch groups in the timeline
+
+Consecutive subagent calls in one stretch of the parent's timeline render as a dispatch group (`packages/app/src/subagents/dispatch-group.tsx`) instead of generic tool cards. Each row reads the same data as the track and opens through the same handler (`packages/app/src/subagents/use-open-subagent.ts`). Prose or any other tool call between two calls starts a new group.
+
+How a call finds its subagent:
+
+- **Paseo subagents** carry `paseo.parent-tool-call-id`, which the daemon writes from the provider's own tool call id when a parent calls `create_agent`. Match on the call id plus a parent label that is this agent or empty. Do not match on `parentAgentId` alone: detach clears the parent label, and the row must survive it. Archived children are not in the active directory, so a finished call with no match queries once with `includeArchived`.
+- **Provider subagents** match on the parent agent id plus the descriptor's `toolCallId`. One call may start several subagents (OMP's task), and each gets its own row.
+
+A call that matches nothing stays a generic tool card. That covers calls without a tool call id, imported sessions, and top-level `create_agent` without a workspace. A running `create_agent` call draws a "Starting" row, since its child cannot exist before the call returns. A provider call does not, because the app cannot tell which providers publish descriptors: Pi publishes none, and its calls would wait on a row that never opens. Hosts without `server_info.features.subagentCallLinks` keep every call on the generic card.
 
 ### Claude provider subagents: the task protocol
 
@@ -236,12 +242,13 @@ $PASEO_HOME/agents/{cwd-with-dashes}/{agent-id}.json
 
 Each agent is a single JSON file. Fields relevant to this doc:
 
-| Field                                        | Type          | Meaning                                                                            |
-| -------------------------------------------- | ------------- | ---------------------------------------------------------------------------------- |
-| `id`                                         | `string`      | Stable identifier                                                                  |
-| `archivedAt`                                 | `string?`     | Soft-delete timestamp (ISO 8601)                                                   |
-| `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach |
-| `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | `"true"` protects an open tab on that client; detach clears every matching label   |
-| `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                           |
+| Field                                        | Type          | Meaning                                                                             |
+| -------------------------------------------- | ------------- | ----------------------------------------------------------------------------------- |
+| `id`                                         | `string`      | Stable identifier                                                                   |
+| `archivedAt`                                 | `string?`     | Soft-delete timestamp (ISO 8601)                                                    |
+| `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach  |
+| `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | `"true"` protects an open tab on that client; detach clears every matching label    |
+| `labels["paseo.parent-tool-call-id"]`        | `string?`     | Timeline `callId` of the parent's `create_agent` call; daemon-owned, kept on detach |
+| `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                            |
 
 See [`docs/data-model.md`](./data-model.md) for the full agent record.

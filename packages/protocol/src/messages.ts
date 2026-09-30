@@ -4,7 +4,10 @@ import { CLIENT_CAPS } from "./client-capabilities.js";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-lifecycle.js";
 import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "./agent-title-limits.js";
 import { AgentProviderSchema } from "./provider-manifest.js";
-import { ProviderPaseoToolsPolicySchema } from "./provider-config.js";
+import {
+  ProviderMentionDefaultsSchema,
+  ProviderPaseoToolsPolicySchema,
+} from "./provider-config.js";
 import { TOOL_CALL_ICON_NAMES } from "./agent-types.js";
 import { WORKSPACE_LABEL_COLORS } from "./workspace-labels.js";
 import {
@@ -157,6 +160,7 @@ const MutableDaemonProviderModelSchema = z
 const MutableDaemonProviderConfigSchema = z
   .object({
     paseoTools: ProviderPaseoToolsPolicySchema.optional(),
+    mentionDefaults: ProviderMentionDefaultsSchema.optional(),
     enabled: z.boolean().optional(),
     additionalModels: z.array(MutableDaemonProviderModelSchema).optional(),
   })
@@ -454,6 +458,9 @@ export const ProviderSnapshotEntrySchema = z.object({
   description: z.string().optional(),
   iconSvg: z.string().optional(),
   defaultModeId: z.string().nullable().optional(),
+  // 预测用这个 provider 新建的会话能否调用 create_agent，与 agent 快照同名同义；新建界面据此置灰。
+  canCreateAgents: z.boolean().optional(),
+  createAgentsUnavailableReason: z.string().optional(),
   // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
   isModelListAuthoritative: z.boolean().optional(),
   // 当前启用的第三方接口；官方模式下没有。
@@ -958,6 +965,10 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
+  // 会话启动时判定能否调用 create_agent；未加载的存档智能体不带。
+  canCreateAgents: z.boolean().optional(),
+  // 原因码不用 enum：新增原因码时老 app 仍能解析，认不出的走通用文案。
+  createAgentsUnavailableReason: z.string().optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -3818,6 +3829,12 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
         // daemon 解析本机 CLI 会话日志并回答 usage.* 查询。
         usage: z.boolean().optional(),
+        // COMPAT(agentMentions): added in v0.12.x, remove gate after 2027-09-30.
+        // 快照带 canCreateAgents 与原因码，app 据此开放 @ 智能体分组。
+        agentMentions: z.boolean().optional(),
+        // COMPAT(subagentCallLinks): added in v0.12.x, remove gate after 2027-09-30.
+        // create_agent 的子智能体带 paseo.parent-tool-call-id，时间线工具名规范成 paseo.create_agent。
+        subagentCallLinks: z.boolean().optional(),
         // COMPAT(apiEndpoints): added in v0.12.1, remove gate after 2027-03-30.
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),

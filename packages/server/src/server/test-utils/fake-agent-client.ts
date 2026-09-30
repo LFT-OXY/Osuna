@@ -20,6 +20,7 @@ import type {
   AgentSlashCommand,
   AgentUsage,
   FetchCatalogOptions,
+  ProviderCatalog,
 } from "../agent/agent-sdk-types.js";
 import type { AgentPermissionRequest, AgentPermissionResponse } from "../agent/agent-sdk-types.js";
 import { isLikelyExternalToolName } from "@getpaseo/protocol/tool-name-normalization";
@@ -76,6 +77,10 @@ export interface TestAgentClientOptions {
   closeSession?: () => Promise<void>;
   onStartTurn?: (prompt: AgentPromptInput) => void;
   supportsMcpServers?: boolean;
+  /** 像 Pi 一样声明 client 上的 MCP 支持要按会话决定。 */
+  mcpServersDecidedPerSession?: boolean;
+  /** 替换内置目录；reject 时 provider 快照停在 `error`。 */
+  fetchCatalog?: () => Promise<ProviderCatalog>;
 }
 
 function createDeferred<T>(): Deferred<T> {
@@ -446,6 +451,22 @@ class FakeAgentSession implements AgentSession {
     timeline.push({ type: "assistant_message", text: resultText });
     const usage: AgentUsage | undefined = options ? { inputTokens: 1, outputTokens: 1 } : undefined;
     return { sessionId: this.id, finalText: resultText, timeline, usage };
+  }
+
+  /** `/fake-oob …` stands in for provider commands like Codex `/goal pause`; it echoes what it received. */
+  tryHandleOutOfBand(
+    prompt: AgentPromptInput,
+  ): { run(ctx: { emit: (event: AgentStreamEvent) => void }): Promise<void> } | null {
+    if (typeof prompt !== "string" || !prompt.startsWith("/fake-oob")) return null;
+    return {
+      run: async ({ emit }) => {
+        emit({
+          type: "timeline",
+          provider: this.providerName,
+          item: { type: "assistant_message", text: `Out-of-band: ${prompt}` },
+        });
+      },
+    };
   }
 
   async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
@@ -1221,6 +1242,7 @@ class FakeAgentClient implements AgentClient {
     this.capabilities = {
       ...TEST_CAPABILITIES,
       supportsMcpServers: options.supportsMcpServers === true,
+      ...(options.mcpServersDecidedPerSession ? { mcpServersDecidedPerSession: true } : {}),
     };
   }
 
@@ -1270,6 +1292,9 @@ class FakeAgentClient implements AgentClient {
   async fetchCatalog(
     _options: FetchCatalogOptions,
   ): Promise<{ models: AgentModelDefinition[]; modes: AgentMode[] }> {
+    if (this.options.fetchCatalog) {
+      return this.options.fetchCatalog();
+    }
     if (this.provider === "claude") {
       return {
         models: [

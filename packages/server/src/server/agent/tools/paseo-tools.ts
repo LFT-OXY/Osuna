@@ -1423,7 +1423,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         guidance: z.string().optional(),
       },
     },
-    async (args: unknown) => {
+    async (args: unknown, context: PaseoToolExecutionContext) => {
       const resolvedArgs = await resolveCreateAgentToolArgs(args);
       const { parsedArgs, worktree } = resolvedArgs;
       let requestedBackground: boolean;
@@ -1473,6 +1473,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           callerAgentId,
           callerContext,
           worktree,
+          parentToolCallId: context.providerToolCallId,
         },
       );
 

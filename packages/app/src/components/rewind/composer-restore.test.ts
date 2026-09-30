@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { restoreComposerTextIfEmpty } from "./composer-restore";
+import { resolveRewoundComposerContent, restoreComposerTextIfEmpty } from "./composer-restore";
 import { shouldRestoreComposerForRewindMode } from "./rewind-mode";
 
 describe("restoreComposerTextIfEmpty", () => {
@@ -27,5 +27,31 @@ describe("shouldRestoreComposerForRewindMode", () => {
     expect(shouldRestoreComposerForRewindMode("conversation")).toBe(true);
     expect(shouldRestoreComposerForRewindMode("files")).toBe(false);
     expect(shouldRestoreComposerForRewindMode("both")).toBe(true);
+  });
+});
+
+describe("resolveRewoundComposerContent", () => {
+  test("brings leading skills, file and agent mentions back as blocks", () => {
+    const rewound = "/atw-tdd ask [@Claude](paseo://agent/provider/claude) about [x.ts](src/x.ts)";
+    expect(resolveRewoundComposerContent(rewound, new Set(["atw-tdd"]))).toEqual({
+      text: rewound,
+      segments: [
+        { type: "block", block: { kind: "skill", name: "atw-tdd" } },
+        { type: "text", text: " ask " },
+        {
+          type: "block",
+          block: { kind: "agent", target: { kind: "provider", id: "claude" }, name: "Claude" },
+        },
+        { type: "text", text: " about " },
+        { type: "block", block: { kind: "file", path: "src/x.ts", entryKind: "file" } },
+      ],
+    });
+  });
+
+  test("keeps a leading /name as text while the skill list is unknown", () => {
+    expect(resolveRewoundComposerContent("/atw-tdd go", null)).toEqual({
+      text: "/atw-tdd go",
+      segments: [{ type: "text", text: "/atw-tdd go" }],
+    });
   });
 });

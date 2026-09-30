@@ -253,11 +253,13 @@ function readConfiguredProviders(
   return Array.isArray(providers) ? providers : [];
 }
 
-function selectDefaultModel(models: readonly AgentModelDefinition[]): AgentModelDefinition | null {
+export function selectDefaultModel(
+  models: readonly AgentModelDefinition[],
+): AgentModelDefinition | null {
   return models.find((model) => model.isDefault) ?? models[0] ?? null;
 }
 
-function resolveThinkingOptionId(
+export function resolveThinkingOptionId(
   model: AgentModelDefinition | null | undefined,
   preferredThinkingOptionId: string | null | undefined,
 ): string | undefined {

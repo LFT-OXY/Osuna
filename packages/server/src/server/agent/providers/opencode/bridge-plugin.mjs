@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const INTERNAL_PREFIX = "/_internal/opencode";
+const TOOL_CALL_ID_HEADER = "X-Paseo-Tool-Call-Id";
 
 export default async function paseoPlugin(input, options) {
   const request = async (pathname, init) => {
@@ -39,7 +40,10 @@ export default async function paseoPlugin(input, options) {
             `${INTERNAL_PREFIX}/sessions/${encodeURIComponent(context.sessionID)}/tools/${encodeURIComponent(definition.name)}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                ...toolCallIdHeader(context.callID),
+              },
               body: JSON.stringify(args),
             },
           );
@@ -70,6 +74,13 @@ export default async function paseoPlugin(input, options) {
       Object.assign(output.env, context.env);
     },
   };
+}
+
+// callID 不在 OpenCode 插件的公开类型里，但运行时上下文带着它；读不到就不带。
+function toolCallIdHeader(callID) {
+  return typeof callID === "string" && callID.trim()
+    ? { [TOOL_CALL_ID_HEADER]: callID.trim() }
+    : {};
 }
 
 function logPluginError(stage, context, error) {

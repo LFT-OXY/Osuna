@@ -5231,6 +5231,7 @@ describe("OpenCode provider subagent contract", () => {
           input: expect.objectContaining({
             questions: [expect.objectContaining({ question: "Which path?" })],
           }),
+          metadata: expect.objectContaining({ providerSubagentId: "ses_provider_child_question" }),
         }),
       ]);
     });

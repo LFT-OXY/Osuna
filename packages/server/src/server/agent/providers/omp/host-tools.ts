@@ -195,6 +195,7 @@ class OmpHostToolRouter {
     try {
       const result = await this.catalog.executeTool(request.toolName, request.arguments, {
         signal: entry.controller.signal,
+        providerToolCallId: request.toolCallId,
         sendUpdate: (update) => {
           if (entry.canceled || entry.controller.signal.aborted) {
             return;

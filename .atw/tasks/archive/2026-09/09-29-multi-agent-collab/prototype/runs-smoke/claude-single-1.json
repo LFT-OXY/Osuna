@@ -1,0 +1,391 @@
+{
+  "runId": "claude-single-1",
+  "parentProvider": "claude",
+  "scenario": "single",
+  "expected": [
+    {
+      "index": 1,
+      "label": "[@Codex](paseo://agent/codex)",
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "settings": {
+        "modeId": "auto-review",
+        "thinkingOptionId": "medium"
+      }
+    }
+  ],
+  "message": "[@Codex](paseo://agent/codex) review src/sum.js for bugs and missed edge cases. Meanwhile, add a one-line JSDoc comment above the function in src/format.js yourself.\n\n<paseo-system>\nThe user's message above mentions agents as links of the form [@Name](paseo://agent/<id>). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:\n\n1. [@Codex](paseo://agent/codex) -> provider \"codex/gpt-6-astra\", settings {\"modeId\":\"auto-review\",\"thinkingOptionId\":\"medium\"}\n\nRules:\n- Call `create_agent` exactly once per numbered mention, in the order listed. Two mentions of the same agent mean two separate subagents.\n- Pass `provider` and `settings` exactly as listed. Do not change the model, mode, or thinking option. Do not call `list_providers`, `list_models`, or `inspect_provider` first; the values are already resolved.\n- Do not do a mentioned part yourself, and do not hand it to your own subagent or task tools. Only `create_agent` counts.\n- The subagent cannot see this conversation. Write `initialPrompt` so it stands alone: the goal, the relevant files and context, constraints, and what to report back.\n- Keep `notifyOnFinish` at its default. You will be notified as each subagent finishes; then combine the results for the user.\n- If a subagent asks for permission, the user approves it in that subagent's session. Do not answer it with `respond_to_permission`.\n- Do any part of the message addressed to you (not to a mention) yourself, after the subagents are started.\n</paseo-system>",
+  "parentId": "ed4d3641-7968-47e1-87ed-65a49bafa15c",
+  "parentModel": "claude-opus-5-5",
+  "parentMode": "bypassPermissions",
+  "durationMs": 40158,
+  "timeline": [
+    {
+      "type": "user_message",
+      "text": "[@Codex](paseo://agent/codex) review src/sum.js for bugs and missed edge cases. Meanwhile, add a one-line JSDoc comment above the function in src/format.js yourself.\n\n<paseo-system>\nThe user's message above mentions agents as links of the form [@Name](paseo://agent/<id>). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:\n\n1. [@Codex](paseo://agent/codex) -> provider \"codex/gpt-6-astra\", settings {\"modeId\":\"auto-review\",\"thinkingOptionId\":\"medium\"}\n\nRules:\n- Call `create_agent` exactly once per numbered mention, in the order listed. Two mentions of the same agent mean two separate subagents.\n- Pass `provider` and `settings` exactly as listed. Do not change the model, mode, or thinking option. Do not call `list_providers`, `list_models`, or `inspect_provider` first; the values are already resolved.\n- Do not do a mentioned part yourself, and do not hand it to your own subagent or task tools. Only `create_agent` counts.\n- The subagent cannot see this conversation. Write `initialPrompt` so it stands alone: the goal, the relevant files and context, constraints, and what to report back.\n- Keep `notifyOnFinish` at its default. You will be notified as each subagent finishes; then combine the results for the user.\n- If a subagent asks for permission, the user approves it in that subagent's session. Do not answer it with `respond_to_permission`.\n- Do any part of the message addressed to you (not to a mention) yourself, after the subagents are started.\n</paseo-system>",
+      "clientMessageId": "d0967253-1474-4d59-9054-937a9040a758",
+      "messageId": "d0967253-1474-4d59-9054-937a9040a758"
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01Hx31vq4DRj17denGBoLAFi",
+      "name": "ToolSearch",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "query": "select:mcp__paseo__create_agent",
+          "max_results": 1
+        },
+        "output": {
+          "output": [
+            {
+              "tool_name": "mcp__paseo__create_agent",
+              "type": "tool_reference"
+            }
+          ]
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01RpA9JrU8FwiWqt2M9Y7EEa",
+      "name": "mcp__paseo__create_agent",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "title": "Review src/sum.js for bugs",
+          "provider": "codex/gpt-6-astra",
+          "settings": {
+            "modeId": "auto-review",
+            "thinkingOptionId": "medium"
+          },
+          "initialPrompt": "请审查当前仓库中的 src/sum.js，找出其中的 bug 以及遗漏的边界情况（例如空输入、非数字元素、NaN/Infinity、浮点精度、超大数、稀疏数组、非数组参数、字符串数字等，按函数实际语义判断哪些相关）。可查看仓库内其他文件（如测试、调用方）以理解预期行为。\n\n约束：只做审查，不要修改任何文件。\n\n请用简体中文汇报：\n1. 每个问题的位置（文件:行号）、描述、触发的具体输入与错误结果；\n2. 严重程度（高/中/低）；\n3. 建议的修复方式（简短描述或代码片段）；\n如果没有发现问题，请明确说明。"
+        },
+        "output": {
+          "output": {
+            "agentId": "4c4218cd-3c73-4758-b66a-1e1f6f2ec355",
+            "type": "codex",
+            "status": "running",
+            "cwd": "/var/folders/ny/600nlw_d2kn0_lbd7956b15c0000gn/T/proto-routing-claude-single-1-68yQtA",
+            "workspaceId": "wks_e335e38d1d4f130f",
+            "currentModeId": "auto-review",
+            "availableModes": [
+              {
+                "id": "auto",
+                "label": "Default Permissions",
+                "description": "Edit files and run commands with Codex's default approval flow."
+              },
+              {
+                "id": "auto-review",
+                "label": "Auto-review",
+                "description": "Same workspace-write permissions as Default, but eligible `on-request` approvals are routed through the auto-reviewer subagent."
+              },
+              {
+                "id": "full-access",
+                "label": "Full Access",
+                "description": "Edit files, run commands, and access the network without additional prompts."
+              }
+            ],
+            "lastMessage": null,
+            "permission": null,
+            "guidance": "You will get notified when the created agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives."
+          }
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01PJFxvM9s9Y8Q56ePbEBoEN",
+      "name": "Read",
+      "detail": {
+        "type": "read",
+        "filePath": "/private/var/folders/ny/600nlw_d2kn0_lbd7956b15c0000gn/T/proto-routing-claude-single-1-68yQtA/src/format.js",
+        "content": "export function formatPrice(cents) {\n  return '$' + (cents / 100).toFixed(2);\n}\n",
+        "offset": 1
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_011LNBiEQLpAELAvfGs4oxCj",
+      "name": "Edit",
+      "detail": {
+        "type": "edit",
+        "filePath": "/private/var/folders/ny/600nlw_d2kn0_lbd7956b15c0000gn/T/proto-routing-claude-single-1-68yQtA/src/format.js",
+        "oldString": "export function formatPrice(cents) {",
+        "newString": "/** 将以分为单位的金额格式化为带两位小数的美元字符串，如 1234 -> \"$12.34\"。 */\nexport function formatPrice(cents) {"
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "assistant_message",
+      "text": "我在 `src/format.js:1` 的 `formatPrice` 上方加了一行 JSDoc：\n\n```js\n/** 将以分为单位的金额格式化为带两位小数的美元字符串，如 1234 -> \"$12.34\"。 */\n```\n\n这次改动只加了注释，没有运行任何测试。\n\nCodex 已经开始审查 `src/sum.js`（模型 `codex/gpt-6-astra`，auto-review 模式，medium 思考强度）。我让它只审查、不改文件，逐条报告问题所在的行号、能触发问题的输入、严重程度和修复建议。它还没跑完，结果出来后我再整理给你。",
+      "messageId": "msg_011CfYiXsfra8Gkh7SkJ5heu"
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01CC4Ga9DNXhzV4gFpN43d1x",
+      "name": "ToolSearch",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "query": "select:mcp__paseo__get_agent_activity",
+          "max_results": 1
+        },
+        "output": {
+          "output": [
+            {
+              "tool_name": "mcp__paseo__get_agent_activity",
+              "type": "tool_reference"
+            }
+          ]
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01MDZ3PsNWoffae5p5dNf4Ct",
+      "name": "mcp__paseo__get_agent_activity",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "agentId": "4c4218cd-3c73-4758-b66a-1e1f6f2ec355"
+        },
+        "output": {
+          "output": {
+            "agentId": "4c4218cd-3c73-4758-b66a-1e1f6f2ec355",
+            "updateCount": 0,
+            "currentModeId": "auto-review",
+            "content": "Showing all 0 activities\n\nNo activity to display."
+          }
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01XjsmKT7g6CXZBRhwNhhGSa",
+      "name": "Read",
+      "detail": {
+        "type": "read",
+        "filePath": "/private/var/folders/ny/600nlw_d2kn0_lbd7956b15c0000gn/T/proto-routing-claude-single-1-68yQtA/src/sum.js",
+        "content": "export function sum(values) {\n  let total = 0;\n  for (let i = 1; i < values.length; i++) total += values[i];\n  return total;\n}\n",
+        "offset": 1
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01XKd2twFuVzB4ocdaEB2MKA",
+      "name": "ToolSearch",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "query": "select:mcp__paseo__get_agent_status",
+          "max_results": 1
+        },
+        "output": {
+          "output": [
+            {
+              "tool_name": "mcp__paseo__get_agent_status",
+              "type": "tool_reference"
+            }
+          ]
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_012PvUHEzugKU8JSxAgiFa5J",
+      "name": "mcp__paseo__get_agent_status",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "agentId": "4c4218cd-3c73-4758-b66a-1e1f6f2ec355"
+        },
+        "output": {
+          "output": {
+            "status": "idle",
+            "snapshot": {
+              "id": "4c4218cd-3c73-4758-b66a-1e1f6f2ec355",
+              "provider": "codex",
+              "cwd": "/var/folders/ny/600nlw_d2kn0_lbd7956b15c0000gn/T/proto-routing-claude-single-1-68yQtA",
+              "workspaceId": "wks_e335e38d1d4f130f",
+              "model": "gpt-6-astra",
+              "thinkingOptionId": "medium",
+              "effectiveThinkingOptionId": "medium",
+              "runtimeInfo": {
+                "provider": "codex",
+                "sessionId": "01a0efd1-e6f8-7f83-bfe4-f1551b6f7836",
+                "model": "gpt-6-astra",
+                "thinkingOptionId": "medium",
+                "modeId": "auto-review",
+                "extra": {
+                  "collaborationMode": "Default"
+                }
+              },
+              "createdAt": "2026-09-30T00:58:25.902Z",
+              "updatedAt": "2026-09-30T00:58:29.446Z",
+              "lastUserMessageAt": null,
+              "status": "idle",
+              "activeTurn": null,
+              "capabilities": {
+                "supportsStreaming": true,
+                "supportsSessionPersistence": true,
+                "supportsSessionListing": true,
+                "supportsDynamicModes": false,
+                "supportsMcpServers": true,
+                "supportsReasoningStream": true,
+                "supportsToolInvocations": true,
+                "supportsRewindConversation": true,
+                "supportsRewindFiles": false,
+                "supportsRewindBoth": false
+              },
+              "currentModeId": "auto-review",
+              "availableModes": [
+                {
+                  "id": "auto",
+                  "label": "Default Permissions",
+                  "description": "Edit files and run commands with Codex's default approval flow."
+                },
+                {
+                  "id": "auto-review",
+                  "label": "Auto-review",
+                  "description": "Same workspace-write permissions as Default, but eligible `on-request` approvals are routed through the auto-reviewer subagent."
+                },
+                {
+                  "id": "full-access",
+                  "label": "Full Access",
+                  "description": "Edit files, run commands, and access the network without additional prompts."
+                }
+              ],
+              "features": [
+                {
+                  "type": "toggle",
+                  "id": "fast_mode",
+                  "label": "Fast",
+                  "description": "Priority inference at increased usage",
+                  "tooltip": "Toggle fast mode",
+                  "icon": "zap",
+                  "value": false
+                },
+                {
+                  "type": "toggle",
+                  "id": "plan_mode",
+                  "label": "Plan",
+                  "description": "Switch Codex into planning-only collaboration mode",
+                  "tooltip": "Toggle plan mode",
+                  "icon": "list-todo",
+                  "value": false
+                }
+              ],
+              "pendingPermissions": [],
+              "persistence": {
+                "provider": "codex",
+                "sessionId": "01a0efd1-e6f8-7f83-bfe4-f1551b6f7836",
+                "nativeHandle": "01a0efd1-e6f8-7f83-bfe4-f1551b6f7836",
+                "metadata": {
+                  "provider": "codex",
+                  "cwd": "/var/folders/ny/600nlw_d2kn0_lbd7956b15c0000gn/T/proto-routing-claude-single-1-68yQtA",
+                  "title": "Review src/sum.js for bugs",
+                  "threadId": "01a0efd1-e6f8-7f83-bfe4-f1551b6f7836",
+                  "modeId": "auto-review",
+                  "model": "gpt-6-astra",
+                  "thinkingOptionId": "medium",
+                  "asyncQuestions": []
+                }
+              },
+              "title": "Review src/sum.js for bugs",
+              "labels": {
+                "paseo.parent-agent-id": "ed4d3641-7968-47e1-87ed-65a49bafa15c"
+              },
+              "requiresAttention": true,
+              "attentionReason": "finished",
+              "attentionTimestamp": "2026-09-30T00:58:29.445Z"
+            }
+          }
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01B7xMjGhWprPZyomwjvaYPu",
+      "name": "ToolSearch",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "query": "select:mcp__paseo__send_agent_prompt",
+          "max_results": 1
+        },
+        "output": {
+          "output": [
+            {
+              "tool_name": "mcp__paseo__send_agent_prompt",
+              "type": "tool_reference"
+            }
+          ]
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "assistant_message",
+      "text": "Codex 那边显示已完成，但没有任何活动记录和输出，任务看起来并没有真正跑起来。我把同一份审查任务再发给这个 Codex 代理一次。",
+      "messageId": "msg_011CfYiYwsPZeW1YC2Q8A32R"
+    },
+    {
+      "type": "tool_call",
+      "callId": "toolu_01FhHZS6YrNwhdk8EAs8pX62",
+      "name": "mcp__paseo__send_agent_prompt",
+      "detail": {
+        "type": "unknown",
+        "input": {
+          "agentId": "4c4218cd-3c73-4758-b66a-1e1f6f2ec355",
+          "prompt": "请审查当前仓库中的 src/sum.js，找出其中的 bug 以及遗漏的边界情况（例如空输入、非数字元素、NaN/Infinity、浮点精度、超大数、稀疏数组、非数组参数、字符串数字等，按函数实际语义判断哪些相关）。可查看仓库内其他文件（如测试、调用方）以理解预期行为。\n\n约束：只做审查，不要修改任何文件。\n\n请用简体中文汇报：\n1. 每个问题的位置（文件:行号）、描述、触发的具体输入与错误结果；\n2. 严重程度（高/中/低）；\n3. 建议的修复方式（简短描述或代码片段）；\n如果没有发现问题，请明确说明。"
+        },
+        "output": {
+          "output": {
+            "success": true,
+            "status": "idle",
+            "lastMessage": null,
+            "permission": null,
+            "guidance": "You will get notified when the prompted agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives."
+          }
+        }
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "type": "assistant_message",
+      "text": "Codex 对 `src/sum.js` 的审查还没有结果。第一次它标记为\"完成\"，但没有任何活动记录，也没有输出，任务实际上并没有跑起来。我已经把同一份审查要求重新发给了这个 Codex 代理，等它结束后再把结果整理给你。\n\n这次重发后它的状态仍显示为空闲、也没有返回内容，可能又是同样的情况。如果再次没有输出，我会告诉你，由你决定是新建一个代理重试，还是改由我来审查。按你的要求，审查这部分我没有自己做。\n\n你交给我的那部分已经完成：`src/format.js` 的 `formatPrice` 上方加好了那行 JSDoc。",
+      "messageId": "msg_011CfYiZGNP98TxDYXgWaRsy"
+    }
+  ],
+  "children": [
+    {
+      "id": "4c4218cd-3c73-4758-b66a-1e1f6f2ec355",
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "currentModeId": "auto-review",
+      "thinkingOptionId": "medium",
+      "title": "Review src/sum.js for bugs",
+      "initialPrompt": null
+    }
+  ]
+}

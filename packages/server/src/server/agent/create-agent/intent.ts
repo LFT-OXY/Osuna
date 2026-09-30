@@ -1,4 +1,4 @@
-import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { PARENT_AGENT_ID_LABEL, PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 
 export interface CreateAgentCaller {
   id: string;
@@ -43,6 +43,20 @@ export async function resolveCreateAgentIntent(input: {
   }
 
   return { ...placement, parentAgentId, labels };
+}
+
+// 工具创建路径专用：标签归 daemon 所有，模型经 labels 传入的同名键一律丢掉，
+// 只有拿到 provider tool call id 且确实是子智能体时才写。
+export function withParentToolCallIdLabel(input: {
+  labels: Record<string, string>;
+  parentAgentId: string | null;
+  parentToolCallId?: string;
+}): Record<string, string> {
+  const { [PARENT_TOOL_CALL_ID_LABEL]: _modelSupplied, ...labels } = input.labels;
+  if (input.parentAgentId && input.parentToolCallId) {
+    labels[PARENT_TOOL_CALL_ID_LABEL] = input.parentToolCallId;
+  }
+  return labels;
 }
 
 async function resolvePlacement(input: {

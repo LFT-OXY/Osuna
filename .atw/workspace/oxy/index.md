@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~611 | Active |
+| `journal-1.md` | ~649 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -31,8 +31,10 @@
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
 | 23 | 2026-09-30 | 提供方设置页重排：工单 09 文档收尾与截图验收、Providers 页改用彩色图标，任务归档 | `fe7b4914d`, `20a0911f7` | `main` |
+| 22 | 2026-09-30 | 多智能体协作票 13：provider 子智能体权限归属与验收归档 | `ecbcc7c36` | `feat/multi-agent-collab` |
 | 21 | 2026-09-30 | 第三方接口：工单 09 文档收尾、截图验收与 CI 回归修复，任务归档 | `9255915d9`, `0a853a263`, `48411967a` | `main` |
 | 20 | 2026-09-30 | 提供方安装指引 | `bbb132e50` | `main` |
+| 19 | 2026-09-30 | 工单 05：Skill block 取代 Skill chip；手动验收修复，任务归档 | `6da8e5994`, `cb631fc83`, `0b6b6ff34`, `cccdc40df` | `feat/multi-agent-collab` |
 | 18 | 2026-09-29 | Pi 思考档位按 thinkingLevelMap 过滤 | `c1c21c76d` | `main` |
 | 17 | 2026-09-29 | 桌面端更新：设置 → 关于对齐新流程（06）并完成验收归档 | `c1f3e9f7a` | `main` |
 | 16 | 2026-09-29 | font-picker 工单 04：终端预览样例与字号重置，任务归档 | `accd7aa08` | `main` |

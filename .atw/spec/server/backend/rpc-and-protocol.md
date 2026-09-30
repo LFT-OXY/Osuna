@@ -365,6 +365,282 @@ function sessionEventCategory(message: SessionOutboundMessage) {
 await client.observeEvents(["usage.pricing.updated"]);
 ```
 
+## Scenario: an agent snapshot field the daemon decides at session start
+
+Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (multi-agent ticket 02). Reuse this shape for any per-agent fact that depends on daemon config plus what the provider session actually accepted.
+
+### 1. Scope / Trigger
+
+- The app needs a per-agent answer that is neither a provider capability (`session.capabilities`) nor persisted state, and that must not change under a running session when config changes.
+
+### 2. Signatures
+
+- Pure decision: `resolveCreateAgentsCapability(input)` in `server/agent/create-agents-capability.ts` → `{ canCreateAgents: true } | { canCreateAgents: false; unavailableReason }`.
+- Global gate: `AgentManager.setPaseoToolsGate({ mcpEnabled, injectIntoAgents })`, called from `bootstrap.ts` (initial, on listen, and in the `mcp.enabled` / `mcp.injectIntoAgents` field-change callbacks). There is no boolean setter any more.
+- Storage: `ManagedAgent.createAgentsCapability`, written only by `registerSession` (its `options.createAgentsCapability` is required); projected in `toAgentPayload`.
+- Wire: `AgentSnapshotPayloadSchema.canCreateAgents: z.boolean().optional()`, `createAgentsUnavailableReason: z.string().optional()`; `server_info.features.agentMentions`.
+- Prediction (ticket 10), for the new agent screen before any session exists: `predictCreateAgentsCapability({ gateReason, paseoToolPolicy, clientCapabilities })` → `CreateAgentsCapability | null`, wrapped by `AgentManager.predictCreateAgentsCapability(provider, clientCapabilities)`. `ProviderSnapshotManager.setCreateAgentsPredictor(predictor)` (wired once in `bootstrap.ts`) and `refreshCreateAgentsPredictions()`. Wire: the same two optional fields on `ProviderSnapshotEntrySchema` (and the hand-written `ProviderSnapshotEntry` in `protocol/agent-types.ts` and `server/agent/agent-sdk-types.ts`). Client flag `AgentCapabilityFlags.mcpServersDecidedPerSession?` (client only; Pi sets it in `capabilitiesForClient`).
+
+### 3. Contracts
+
+- Computed on all four registration paths — create, resume, import, reload — after the provider session exists, because Pi's MCP support is only known from `session.capabilities.supportsMcpServers`.
+- Reason precedence: `mcp_disabled` → `tools_not_injected` → `create_agent_not_allowed` → `tools_not_delivered`. The reason is present only when `canCreateAgents` is false.
+- Delivery: a native catalog on the launch context decides alone (`getTool("create_agent")`); OpenCode's bridge manifest is policy-free and never counts. Otherwise the launch config must hold the daemon's internal `paseo` MCP server and the session must accept MCP. A user-owned server named `paseo` is not delivery.
+- The gate is read once, in `prepareSessionConfig`, and folded into `paseoToolPolicy` (`{ enabled: false }` when closed). `buildLaunchContext` reads only that policy, so a toggle between the two awaits cannot make the catalog and the snapshot disagree.
+- Stored (not loaded) agents from `buildStoredAgentPayload` omit both fields; sending to them resumes, which decides.
+- Prediction uses the same gate and policy, then only the client's declared channel: `supportsNativePaseoTools || supportsMcpServers` → true; `mcpServersDecidedPerSession` → `null`, no fields written (Pi: the adapter probe needs a session per cwd; decided with the user on 2026-09-30 so a working Pi is not grayed out); otherwise `tools_not_delivered`. Gate and policy reasons are still written for Pi. The daemon decides for real once the session exists, and attaches the Routing block only then.
+- Fields are overlaid in `ProviderSnapshotManager.withCreateAgentsPrediction`, called from `publishTargets` and `getOrCreateTarget`. The overlaid record goes through `identifyEntry`, so the prediction is part of `contentHash`: a toggle pushes `providers_snapshot_update` and `ifNoneMatch` sees the change. A `WeakMap` keyed by the catalog record keeps the overlaid record stable while the prediction is unchanged. Disabled providers and providers without a materialized client get no fields.
+- Republishing: `bootstrap.ts` wraps every gate change in a local `setPaseoToolsGate` that calls `refreshCreateAgentsPredictions()`. Provider policy changes need nothing extra: `set_daemon_config` → `prepareMutableProviderConfig().commit()` → `installGeneration` → `publishTargets`, and the predictor reads `daemonConfigStore.get().providers` live.
+
+### 4. Validation & Error Matrix
+
+- `mcp.enabled` false → `mcp_disabled`.
+- `mcp.enabled` true, `injectIntoAgents` false → `tools_not_injected`.
+- Provider `paseoTools.enabled: false` or `disabledTools` has `create_agent` → `create_agent_not_allowed`.
+- Session without MCP support, native catalog without `create_agent`, or internal server not injected → `tools_not_delivered`.
+- Config changed while running → snapshot unchanged until reload/resume. Known gap: turning `mcp.enabled` off in the config file kills the MCP endpoint immediately, but the snapshot still says `true` (the app cannot change that key).
+- Provider snapshot prediction, by contrast, follows config changes immediately. Known gap: before the daemon listens, `mcpBaseUrl` is null, so an MCP-channel prediction of `true` can precede a session that gets `tools_not_delivered`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: new app + new daemon; app gates on `features.agentMentions`, then reads the two fields.
+- Base: old daemon; fields absent, `agentMentions` absent, app tells the user to update the host.
+- Bad: putting the flag into `capabilities` — replica-cache stores capabilities with a `z.strictObject` key list and the key means "provider can", not "daemon injected".
+
+### 6. Tests Required
+
+- Daemon E2E `daemon-e2e/agent-create-agents-capability.e2e.test.ts`: each reason from one config (`mcpEnabled`, `mcpInjectIntoAgents`, `providerOverrides.<id>.paseoTools`, fake client `supportsMcpServers`), the true case with no reason, and `patchDaemonConfig` → unchanged → `refreshAgent` → updated.
+- Unit `agent/create-agents-capability.test.ts`: native catalog with/without `create_agent`, user-owned `paseo` server, internal server with/without session MCP support.
+- Protocol `messages.wire-compat.test.ts`: snapshot without the fields, with an unknown reason string, and `agentMentions` optional; provider snapshot entry likewise.
+- Daemon E2E `describe("provider snapshot create-agents prediction")` in the same file: each config → the predicted fields equal what `createAgent` then reports; `mcpServersDecidedPerSession` → no fields, session still decides; `patchDaemonConfig` of `mcp.injectIntoAgents` and `paseoTools` updates `getProvidersSnapshot` without a reload (`paseoTools` patches merge, so reset with `disabledTools: []`, not `{}`).
+- Unit `predictCreateAgentsCapability` in `agent/create-agents-capability.test.ts`: gate before policy, native channel, per-session channel → `null` unless gate/policy blocks.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Reads the live gate a second time; a toggle between prepare and launch leaves
+// the MCP server injected but no native catalog, and the snapshot misreports.
+if (this.paseoToolsEnabled && isPaseoToolPolicyEnabled(policy) && client.capabilities.supportsNativePaseoTools) {
+
+// Prediction added in the catalog session after hashing: snapshotHash and
+// sameSnapshotRecords never see it, so toggling injection pushes nothing.
+entries.map((entry) => ({ ...entry, canCreateAgents: predict(entry.provider) }));
+```
+
+#### Correct
+
+```ts
+// Overlay before publishing, re-identified so contentHash covers the prediction.
+const records = order.map((provider) => this.withCreateAgentsPrediction(record(provider)));
+```
+
+#### Correct
+
+```ts
+// prepareSessionConfig captured the gate and folded it into the policy.
+if (isPaseoToolPolicyEnabled(paseoToolPolicy) && client.capabilities.supportsNativePaseoTools) {
+```
+
+## Scenario: a daemon-owned agent label fed from the provider's tool call
+
+Reference implementation: `paseo.parent-tool-call-id` (multi-agent ticket 04). Reuse this shape when a Paseo tool needs a fact only the provider channel knows.
+
+### 1. Scope / Trigger
+
+- A tool handler needs provider-side call identity (the id that becomes the timeline `callId`), and the result must be a label the model cannot forge. No wire schema change: labels are already `Record<string, string>`; the feature is gated by `server_info.features.subagentCallLinks`.
+
+### 2. Signatures
+
+- `PaseoToolExecutionContext.providerToolCallId?: string` (`agent/tools/types.ts`).
+- Channel boundaries fill it: `mcp-server.ts` `readProviderToolCallId(context)` from `_meta` keys `claudecode/toolUseId` → `callId` → `pi-mcp-adapter/toolCallId`; `opencode/bridge-plugin.mjs` sends `context.callID` as header `X-Paseo-Tool-Call-Id`, `opencode/bridge.ts` reads it; `omp/host-tools.ts` passes `request.toolCallId`.
+- `CreateAgentFromMcpInput.parentToolCallId?: string`; `withParentToolCallIdLabel({ labels, parentAgentId, parentToolCallId })` in `create-agent/intent.ts`, applied in `resolveMcpCreateAgent` only.
+- Constants: `PARENT_TOOL_CALL_ID_LABEL` (`@getpaseo/protocol/agent-labels`), `PASEO_CREATE_AGENT_TOOL_NAME = "paseo.create_agent"` (`@getpaseo/protocol/tool-name-normalization`).
+
+### 3. Contracts
+
+- The tool-created path (`kind: "mcp"`) always drops a model-supplied value for the key (from `labels` or `childAgentDefaultLabels`), then writes it only when there is a parent agent and an id. Legacy detached create gets no label.
+- The WebSocket session create path (`session.ts`) does not strip it: that caller is the user/app, and app e2e seeds children through labels.
+- Detach keeps the label (`detachedAgentLabelPatch` clears only the parent and open-tab labels).
+- Timeline names: OpenCode `paseo_create_agent`, OMP bare `create_agent`, and Pi `mcp` proxy / `mcp__paseo` `{tool, args}` / direct `paseo_create_agent` / `mcp__paseo_create_agent` become `paseo.create_agent` with flat input, in the adapters' `parseToolArgs` / tool-call mapper so live and history share it. Other Paseo tools keep their names.
+
+### 4. Validation & Error Matrix
+
+- No id (old Claude Code, Codex < 0.148, pi-mcp-adapter < 3.0, ACP providers) → no label, no error.
+- Id empty or whitespace → treated as absent; otherwise trimmed.
+- Pi proxy `{tool: "create_agent"}` without `server: "paseo"`, or Pi direct tool under `toolPrefix: "none"` → not renamed (ambiguous server).
+- Pi end event without a tracked start → name may still resolve from `result.details`, but input is `null`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Codex parent calls `create_agent` with `_meta.callId`; child carries parent id and call id; app matches the timeline item.
+- Base: provider sends no id; child has only the parent label; app shows the generic tool card.
+- Bad: reading the id inside the tool from provider-specific shapes — the tool would learn about providers, and OpenCode/OMP never reach MCP.
+
+### 6. Tests Required
+
+- Unit `agent/mcp-server.test.ts` "parent tool call id label": each `_meta` key, override of a model value, no id → no label (in-memory MCP client, real `AgentManager` + `AgentStorage`).
+- `opencode/bridge.test.ts`: plugin with and without `callID` → `providerToolCallId` seen by the catalog. `omp/host-tools.test.ts`: `toolCallId` reaches the handler.
+- Mapper tests for OpenCode, Pi (all six shapes), OMP: name `paseo.create_agent`, detail `{ type: "unknown", input: <flat args>, output: null }`.
+- Daemon E2E `daemon-e2e/subagent-call-links.e2e.test.ts`: `features.subagentCallLinks`, real `/mcp/agents?callerAgentId=` with and without `_meta`.
+- Protocol `messages.wire-compat.test.ts`: `subagentCallLinks` optional.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Strips in the shared intent: the app's WS create path loses labels it set on purpose.
+const { [PARENT_TOOL_CALL_ID_LABEL]: _dropped, ...labels } = { ...input.labels };
+```
+
+#### Correct
+
+```ts
+// resolveMcpCreateAgent — tool path only.
+const labels = withParentToolCallIdLabel({
+  labels: intent.labels,
+  parentAgentId: intent.parentAgentId,
+  parentToolCallId: input.parentToolCallId,
+});
+```
+
+## Scenario: a provider subagent's permission, attributed on the parent
+
+Reference implementation: multi-agent ticket 13. Reuse this shape when a request raised inside a provider-owned child must be told apart on the parent agent.
+
+### 1. Scope / Trigger
+
+- Provider subagents run in the parent's provider runtime, so their `permission_requested` events reach `AgentManager` under the parent agentId. The app needs to know which descriptor asked. No wire schema change: the id rides in the existing `AgentPermissionRequest.metadata` record, and no feature flag gates it (an old app ignores the key; an old daemon never sends it). The descriptor `status` enum is not extended.
+
+### 2. Signatures
+
+- `@getpaseo/protocol/provider-subagent-permission`: `PROVIDER_SUBAGENT_ID_METADATA_KEY = "providerSubagentId"`, `providerSubagentPermissionMetadata(subagentId): Record<string, string>` (write), `getProviderSubagentIdFromPermission(request: Pick<AgentPermissionRequest, "metadata">): string | null` (read).
+- Claude: `ClaudeTaskProtocolSource.resolveTaskSubagentId(taskId)` (`claude/subagents/live-source.ts`), called with `canUseTool`'s `options.agentID` in `handlePermissionRequest`.
+- Codex: `CodexAppServerAgentSession.providerSubagentMetadata(threadId)` spread into all four approval handlers (command, file change, `request_user_input`, MCP elicitation).
+- OpenCode: `appendOpenCodePermissionAsked` (parent translator) and the forwarded child `question` in `translateProviderSubagentEvent`.
+
+### 3. Contracts
+
+- The value is the provider-subagent descriptor id: Claude the declared Task `tool_use_id` (via `task_id`), Codex the child `threadId`, OpenCode the child `sessionID`.
+- Only a child's request is tagged: Codex skips `threadId === currentThreadId` (and a null current thread), OpenCode skips `sessionID === state.sessionId`, Claude tags only when `agentID` maps to a declared task.
+- The request still belongs to the parent agent: `respondToPermission` goes to the parent agentId; the app's read-only panel passes `permissionAgentId={parentAgentId}` to `AgentStreamView`.
+
+### 4. Validation & Error Matrix
+
+- Claude `agentID` absent, unknown, or an undeclared task → no key, request stays parent-only. `agentID == task_started.task_id` is assumed from the hook `agent_id` rule and not verified live.
+- Codex approval before `currentThreadId` is known → no key. Codex child async questions are still dropped (`receiveAsyncQuestion`), unchanged.
+- OMP `extension_ui_request` has no child id → never tagged.
+- Key present but empty/non-string → reader returns `null`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Codex child thread asks for a command approval → `metadata.providerSubagentId = "<child thread>"` → track row and dispatch row show waiting for approval; the read-only tab shows the card.
+- Base: parent's own approval → no key, only the parent panel shows it.
+- Bad: adding a `waiting_for_approval` descriptor status — narrows old clients' enum parse and duplicates state the parent snapshot already carries.
+
+### 6. Tests Required
+
+- `claude/agent.test.ts` "tags a subagent's permission request…": `task_started` then `canUseTool` with/without `agentID`.
+- `codex-app-server-agent.test.ts` "tags approvals from a collab child thread…": four child handlers tagged, parent thread untagged.
+- `opencode/event-translator.test.ts` child `permission.asked` expects the key; `opencode-agent.test.ts` forwarded child question carries it.
+- `mock-load-test-agent.test.ts`: scripted `providerSubagent.permission` parks until answered, then the subagent completes.
+- App: `subagents/select.test.ts` (grouping, row counts, dispatch pending name, owned-permissions selector identity), browser `dispatch-group.spec.ts` provider permission case.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Hand-built key in each adapter — a typo silently detaches the permission from its row.
+metadata: { providerSubagentID: childSessionId },
+```
+
+#### Correct
+
+```ts
+...(childSessionId ? { metadata: providerSubagentPermissionMetadata(childSessionId) } : {}),
+```
+
+## Scenario: a provider-bound prompt that differs from what the user sent
+
+Reference implementation: the Routing block for Agent mentions (multi-agent tickets 05, 07 and 09). Reuse this shape when the daemon appends system text to a user message on its way to the provider.
+
+### 1. Scope / Trigger
+
+- The provider must see extra instructions, while the timeline, bubble, title, history replay, and import picker show only what the user wrote. No wire change; gated by `server_info.features.agentMentions`.
+
+### 2. Signatures
+
+- `StartAgentRunOptions.resolveRoutingBlock?: () => Promise<string | null>`; `type RoutingBlockResolver = (agent: ManagedAgent) => Promise<string | null>` on `SendPromptToAgentParams.resolveRoutingBlock` and `StartCreatedAgentInitialPromptParams.resolveRoutingBlock` (`agent/agent-prompt.ts`), and on `CreateAgentFromSessionInput.resolveRoutingBlock` (`agent/create-agent/create.ts`, carried through `ResolvedCreateAgent` to `sendInitialPrompt`); `appendRoutingBlock(prompt, block)`.
+- `AgentRunOptions.submittedPrompt?: AgentPromptInput` (`agent/agent-sdk-types.ts`): the original, read by the `recordSubmittedPrompt` calls in `agent-manager.ts` `streamAgent` (after the turn is accepted) and `recordAcceptedSteer`.
+- `resolveRoutingBlock({ text, cwd, canCreateAgents, mentionDefaults, agentProfiles, providers })` (`agent/routing-block.ts`); `mentionDefaults: (providerId) => ProviderMentionDefaults | undefined` reads `daemonConfigStore.get().providers[id]?.mentionDefaults` and `agentProfiles` is `daemonConfigStore.get().agentProfiles ?? []`, both taken when the message is sent, so a `set_daemon_config` applies to the next message. `RoutingBlockSettings` is `{ modeId?, thinkingOptionId?, features? }`. Model and thinking fallbacks use `selectDefaultModel` / `resolveThinkingOptionId` shared with metadata generation.
+- Config: `ProviderMentionDefaultsSchema = { model?, thinkingOptionId?, modeId? }` (each `z.string().min(1)`) in `packages/protocol/src/provider-config.ts`, on both `ProviderOverrideSchema` (persisted `agents.providers.<id>`) and `MutableDaemonProviderConfigSchema` (wire). Documented in `docs/data-model.md` "Mention defaults".
+- `stripTrailingRoutingBlock(text)` (`agent/trailing-routing-block.ts`, a leaf module so providers can import it).
+
+### 3. Contracts
+
+- Only client requests pass a resolver, built by `Session.routingBlockResolver(text)`: `handleSendAgentMessageRequest`, and `createSessionAgent` for the first message of `create_agent_request`, `agent.create.request`, and `workspace.create.request` (all three funnel into `createSessionAgent`; hub execution creates do not). The create path resolves against the freshly registered `ManagedAgent`, so its real `createAgentsCapability` decides, not the provider snapshot prediction. MCP `send_agent_prompt` and `create_agent` (`kind: "mcp"`), schedule fires, and finish notifications never pass one, so a parent forwarding the user's text cannot chain-dispatch.
+- `startAgentRun` runs `tryRunOutOfBand` on the original first, then calls the resolver. Out-of-band commands never wait on the provider snapshot.
+- Array prompts get a trailing text block; string prompts get `\n\n` + block. The timeline records `submittedPrompt`, reconciled by `clientMessageId`.
+- A profile mention (`paseo://agent/profile/<id>`) resolves to its profile's `provider` and stacks layers: the profile's `model` / `thinkingOptionId` / `modeId` first, then that provider's Mention defaults (`resolveAgainstCatalog(entry, layers)`). Its non-empty `featureValues` go to `settings.features` as written; they are never validated.
+- Layers resolve per field against a `ready` snapshot, first valid layer wins: model → first layer model in the selectable catalog, else the default model; thinking option → first layer value the chosen model offers, skipping any layer whose own model is stale (a retired model takes its thinking option with it), else that model's default (an unset model means the current default model); mode → first layer mode in `entry.modes`, else `defaultModeId` if in `entry.modes`, else `modes[0]`; no modes at all → no `modeId`. A stale profile value therefore falls back to Mention defaults before runtime defaults (decided with the user in ticket 09). A valid lower-layer thinking option applies to a profile's model when that model offers it. Only catalog modes are written because `create_agent` rejects a mode outside `availableModes` and, given none, inherits the parent's mode (same provider) or throws (cross provider).
+- `DaemonConfigStore.applySupportedPatch` replaces a provider's `mentionDefaults` wholesale instead of deep-merging, so the card resets a field by omitting it. The persisted side already replaces it through the shallow spread in `applyMutableProviderConfigToOverrides`. `removeProviders` drops it with the entry. Changing it does not rebuild provider catalogs: `mentionDefaults` is not part of a provider definition's `configuration`.
+- `stripTrailingRoutingBlock` needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
+
+### 4. Validation & Error Matrix
+
+- Session `canCreateAgents` false → no block, original text sent.
+- Mention of an unregistered, disabled, or `unavailable` provider, directly or through a profile → line `N. @Label -> cannot start: <reason>. Tell the user.` with the provider's reason; other mentions still route.
+- Profile id not in `agentProfiles` → `cannot start: agent profile "<id>" no longer exists`.
+- Snapshot `loading` / `error` → configured values (profile over Mention defaults, per field) passed through unvalidated (`provider "<id>/<model>"` when a model is set); unset fields are omitted, so with no configured `modeId` the block carries none. `create_agent` then waits for a ready snapshot itself and fails if it never becomes ready.
+- Stale Mention defaults → per-field fallback above; the send is never blocked and nothing is logged.
+- `getProvider` throwing → the send fails (snapshot inconsistency, not swallowed).
+
+### 5. Good/Base/Bad Cases
+
+- Good: `[@Claude](paseo://agent/provider/claude) write tests` → provider gets text + block; timeline shows the text.
+- Base: a message without mentions that ends in a user-written `<paseo-system>` block → sent and recorded unchanged.
+- Bad: stripping in `submittedPromptText` — every entrypoint loses user-written trailing blocks, including MCP and schedule prompts that never carried one.
+
+### 6. Tests Required
+
+- Daemon E2E `daemon-e2e/agent-mention-routing-block.e2e.test.ts`: exact block text and order, same provider twice, steer via permission park, sequential sends, `/fake-oob`, `mcpInjectIntoAgents: false`, disabled/unknown provider lines, MCP + schedule prompt arrays, recorded-as-written. `describe("Routing block for the first message of a new agent")`: `test.each` over the three create requests (`create_agent_request` as a raw frame through its own WebSocket, since `DaemonClient.createAgent` negotiates `agent.create.request`), each with and without injection, and MCP `create_agent` (needs `provider: "codex/<model>"`) receiving the text unchanged.
+- `agent-manager.test.ts` (`fakeCodexEmitting` turn/history items, resumed `streamHistory`, `importSession`): echo, force hydrate, prime, import rows and imported title.
+- Daemon E2E `describe("Mention defaults")` in the same file: `set_daemon_config` read-back and next-send effect, unset fields at runtime defaults, the four stale cases (stale model drops the thinking option, thinking outside the model, thinking against the default model valid and invalid), catalog `error` pass-through, wholesale replace, `removeProviders` clearing memory and `config.json`. The fake client's `fetchCatalog` option supplies thinking options or a rejecting catalog.
+- Daemon E2E `describe("Agent profile mentions")`: profile fields over Mention defaults over runtime defaults with `features`, stale profile values falling back to Mention defaults, deleted profile and profiles on a disabled or unregistered provider. `routing-block.test.ts` covers a profile on an `error` snapshot and on an `unavailable` provider.
+- `routing-block.test.ts` (snapshot `error` / `loading` → provider only, `loading` passes configured values through; `defaultModeId` null or outside the catalog → first mode; no modes → no `modeId`; `getProvider` throwing rejects), `trailing-routing-block.test.ts`, `agent-projections.test.ts`, import previews in `claude/agent.test.ts`, `omp/` and `pi/session-descriptor.test.ts`, `session.create-agent-title.test.ts` (links → labels). ACP previews share the same one-line change and have no fixture for loaded prompts.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Resolved before startAgentRun: /goal waits on the snapshot, and the block rides into OOB parsing.
+const block = await resolveRoutingBlock(input);
+await startAgentRun(manager, id, appendRoutingBlock(prompt, block), logger);
+
+// Mode left to create_agent: a same-provider parent's mode leaks into the subagent.
+settings: { ...(entry.defaultModeId ? { modeId: entry.defaultModeId } : {}) }
+```
+
+#### Correct
+
+```ts
+await sendPromptToAgent({
+  ...params,
+  resolveRoutingBlock: this.routingBlockResolver(msg.text),
+});
+// createSessionAgent → createAgentCommand({ kind: "session", resolveRoutingBlock: this.routingBlockResolver(trimmedPrompt) })
+
+// Only a catalog mode, and always one when the catalog has modes.
+const modeIds = (entry.modes ?? []).map((mode) => mode.id);
+const modeId = [configuredModeId, entry.defaultModeId ?? undefined].find(
+  (id) => id !== undefined && modeIds.includes(id),
+) ?? modeIds[0];
+```
+
 ## Scenario: the daemon calls an upstream with a secret the client never sees
 
 Reference implementations: `provider.api_endpoint.fetch_models` / `provider.api_endpoint.cancel` (api-endpoint ticket 03) and `provider.api_endpoint.test_connection` (ticket 04), which share the cancel RPC and the session's pending-request map.

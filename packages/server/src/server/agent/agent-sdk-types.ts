@@ -131,6 +131,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  canCreateAgents?: boolean;
+  createAgentsUnavailableReason?: string;
   // true：models 就是全部可用模型（第三方接口启用时），客户端不保留列表外的记忆模型。
   isModelListAuthoritative?: boolean;
   // 当前启用的第三方接口；官方模式下没有。
@@ -194,6 +196,8 @@ export interface AgentCapabilityFlags {
   supportsSessionListing?: boolean;
   supportsDynamicModes: boolean;
   supportsMcpServers: boolean;
+  /** 只用于 client：能否接 MCP 要按 cwd 起会话才知道（如 Pi 的 adapter），client 上的 supportsMcpServers 不算数。 */
+  mcpServersDecidedPerSession?: boolean;
   supportsNativePaseoTools?: boolean;
   supportsReasoningStream: boolean;
   supportsToolInvocations: boolean;
@@ -222,6 +226,8 @@ export interface AgentRunOptions {
   resumeFrom?: AgentPersistenceHandle;
   maxThinkingTokens?: number;
   clientMessageId?: string;
+  /** What the user sent, recorded in the timeline when the provider prompt carries a Routing block. */
+  submittedPrompt?: AgentPromptInput;
 }
 
 export interface AgentSteerOptions extends AgentRunOptions {

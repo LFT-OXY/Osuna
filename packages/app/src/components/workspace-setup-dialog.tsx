@@ -457,8 +457,6 @@ export function WorkspaceSetupDialog() {
           textReplacement={chatDraft.textReplacement}
           attachments={chatDraft.attachments}
           onChangeAttachments={chatDraft.setAttachments}
-          skillChips={chatDraft.skillChips}
-          onChangeSkillChips={chatDraft.setSkillChips}
           cwd={sourceDirectory}
           clearDraft={chatDraft.clear}
           autoFocus

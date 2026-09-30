@@ -1,9 +1,15 @@
 import type { AttachmentMetadata, UserComposerAttachment } from "@/attachments/types";
 import { isLegacyNewWorkspaceDraftKey, NEW_WORKSPACE_DRAFT_KEY } from "@/stores/draft-keys";
 import { z } from "zod";
-import { SkillChipSchema } from "@/composer/skill-chips";
+import {
+  inlineSegmentsText,
+  leadingSkillSegments,
+  type InlineSegment,
+  type SkillBlock,
+} from "@/inline-blocks";
 import {
   AttachmentMetadataSchema,
+  InlineSegmentSchema,
   LegacyDraftImageSchema,
   normalizeAttachmentMetadata,
   normalizeComposerAttachment,
@@ -76,6 +82,13 @@ const LegacyAttachmentMetadataSchema = AttachmentMetadataSchema.extend({
 });
 type PersistedImage = PersistedDraftImage | z.infer<typeof LegacyAttachmentMetadataSchema>;
 
+// COMPAT(skill-chip-draft): added after v0.12.0, remove after 2027-03-29.
+// 升级前的草稿把 Command menu 选中的 skill 存成 Attachment tray 里的 chip，正文不含 `/name`。
+const LegacySkillChipSchema = z.strictObject({
+  name: z.string().min(1),
+  description: z.string().optional(),
+});
+
 const RawDraftInputSchema = z.strictObject({
   text: z.string().optional(),
   attachments: z.array(PersistedComposerAttachmentSchema).optional(),
@@ -84,7 +97,9 @@ const RawDraftInputSchema = z.strictObject({
       z.union([AttachmentMetadataSchema, LegacyAttachmentMetadataSchema, LegacyDraftImageSchema]),
     )
     .optional(),
-  skills: z.array(SkillChipSchema).optional(),
+  // COMPAT(skill-chip-draft): added after v0.12.0, remove after 2027-03-29.
+  skills: z.array(LegacySkillChipSchema).optional(),
+  segments: z.array(InlineSegmentSchema).optional(),
   cwd: z.string().optional(),
 });
 const DraftLifecycleSchema = z.enum(["active", "abandoned", "sent"]);
@@ -149,6 +164,29 @@ function normalizePersistedComposerAttachment(
   return normalizeComposerAttachment(result.data);
 }
 
+interface MigratedDraftText {
+  text: string;
+  segments?: InlineSegment[];
+}
+
+// COMPAT(skill-chip-draft): added after v0.12.0, remove after 2027-03-29.
+// chip 变成正文开头的 Skill block，与现在从 Command menu 选中的一样。
+function foldLegacySkillChips(rawInput: z.infer<typeof RawDraftInputSchema>): MigratedDraftText {
+  const text = rawInput.text ?? "";
+  const segments = rawInput.segments ?? (text ? [{ type: "text" as const, text }] : []);
+  if (!rawInput.skills?.length) {
+    return { text, ...(rawInput.segments ? { segments: rawInput.segments } : {}) };
+  }
+  const blocks = rawInput.skills.map(
+    (chip): SkillBlock =>
+      chip.description === undefined
+        ? { kind: "skill", name: chip.name }
+        : { kind: "skill", name: chip.name, description: chip.description },
+  );
+  const folded = leadingSkillSegments(blocks, segments);
+  return { text: inlineSegmentsText(folded), segments: folded };
+}
+
 export async function migrateDraftInput(
   input: { rawInput: unknown },
   ports: { migrateLegacyImages: MigrateLegacyImages },
@@ -162,9 +200,8 @@ export async function migrateDraftInput(
   const migratedImages = await ports.migrateLegacyImages(legacyImages);
 
   return {
-    text: typeof rawInput.text === "string" ? rawInput.text : "",
+    ...foldLegacySkillChips(rawInput),
     attachments: [...attachments, ...legacyImagesToAttachments(migratedImages)],
-    ...(rawInput.skills ? { skills: rawInput.skills } : {}),
   };
 }
 

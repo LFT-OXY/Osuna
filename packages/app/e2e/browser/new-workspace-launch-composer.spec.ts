@@ -19,6 +19,7 @@ import {
   type TerminalProfile,
   type TerminalProfileSeed,
 } from "../support/helpers/new-workspace-launch";
+import { expectComposerText } from "../support/helpers/composer";
 
 const PROFILE: TerminalProfile = {
   id: "e2e-composer-profile",
@@ -57,7 +58,7 @@ test.describe("New workspace: the composer is one control in two modes", () => {
       await fillNewWorkspaceDraft(page, "a chat-only draft");
       await selectLaunchOption(page, PROFILE.id);
       await expectTerminalComposerActive(page);
-      await expect(terminalPromptInput(page)).toHaveValue("");
+      await expectComposerText(terminalPromptInput(page), "");
     });
 
     await test.step("the attachment button and mic are absent in terminal mode, and the submit button is inside the same surface", async () => {
@@ -80,7 +81,7 @@ test.describe("New workspace: the composer is one control in two modes", () => {
     await test.step("each side keeps its own draft across toggles, without either leaking into the other", async () => {
       await selectLaunchOption(page, PROFILE.id);
       await expectTerminalComposerActive(page);
-      await expect(terminalPromptInput(page)).toHaveValue("a terminal-only draft");
+      await expectComposerText(terminalPromptInput(page), "a terminal-only draft");
     });
   });
 });

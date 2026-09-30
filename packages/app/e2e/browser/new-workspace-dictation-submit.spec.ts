@@ -7,6 +7,7 @@ import {
 } from "../support/helpers/new-workspace";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
+import { expectComposerText } from "../support/helpers/composer";
 
 type WebSocketMessage = string | Buffer;
 
@@ -183,13 +184,13 @@ test.describe("New Workspace dictation submit", () => {
       await harness.waitForCreateRequest();
 
       const composer = page.getByRole("textbox", { name: "Message agent..." });
-      await expect(composer).toHaveValue(TRANSCRIPT);
+      await expectComposerText(composer, TRANSCRIPT);
       await expect(composer).not.toBeEditable();
 
       harness.failWorkspaceCreation();
 
       await expect(composer).toBeEditable();
-      await expect(composer).toHaveValue(TRANSCRIPT);
+      await expectComposerText(composer, TRANSCRIPT);
       await expect(page.getByText(CREATE_FAILURE).first()).toBeVisible();
     } finally {
       await seeded.cleanup();

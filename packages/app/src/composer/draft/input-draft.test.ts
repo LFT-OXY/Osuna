@@ -31,13 +31,6 @@ describe("hasDraftContent", () => {
   it("preserves whitespace-only text while the user is editing", () => {
     expect(hasDraftContent({ text: "\n\n\n\n\n", attachments: [] })).toBe(true);
   });
-
-  it("counts skill chips without text as content", () => {
-    expect(hasDraftContent({ text: "", attachments: [], skills: [{ name: "atw-askme" }] })).toBe(
-      true,
-    );
-    expect(hasDraftContent({ text: "", attachments: [], skills: [] })).toBe(false);
-  });
 });
 
 describe("resolveEffectiveComposerModelId", () => {

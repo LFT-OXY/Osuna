@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PASEO_CREATE_AGENT_TOOL_NAME } from "@getpaseo/protocol/tool-name-normalization";
 
 import type { ToolCallDetail } from "../../agent-sdk-types.js";
 
@@ -271,6 +272,10 @@ export function extractTextFromToolResult(result: OmpToolResult): string | undef
 }
 
 export function parseToolArgs(toolName: string, rawArgs: unknown): OmpTrackedToolCall {
+  // OMP 的 host tool 只有 Paseo 目录，create_agent 以裸名出现。
+  if (toolName === "create_agent") {
+    return { kind: "unknown", toolName: PASEO_CREATE_AGENT_TOOL_NAME, args: rawArgs ?? null };
+  }
   if (toolName === "edit") {
     return parseEditToolArgs(rawArgs);
   }

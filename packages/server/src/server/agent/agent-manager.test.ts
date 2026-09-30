@@ -3414,7 +3414,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     registry: storage,
     logger,
     mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
-    paseoToolsEnabled: false,
+    paseoToolsGate: { mcpEnabled: true, injectIntoAgents: false },
     resolvePaseoToolPolicy: () => ({ enabled: true }),
     paseoToolCatalogFactory: () => {
       catalogFactoryCalls += 1;
@@ -11040,6 +11040,124 @@ test("user_message events wrapping a paseo-system envelope are not restored duri
 
   expect(userMessages).toHaveLength(1);
   expect(userMessages[0].text).toBe("real user message");
+});
+
+const ROUTED_USER_TEXT = "[@Claude](paseo://agent/provider/claude) write tests";
+const ROUTED_PROVIDER_TEXT = `${ROUTED_USER_TEXT}\n\n${formatSystemNotificationPrompt(
+  '1. @Claude -> provider "claude/haiku", settings {}',
+)}`;
+
+function userMessageTexts(timeline: readonly AgentTimelineItem[]): string[] {
+  return timeline.flatMap((item) => (item.type === "user_message" ? [item.text] : []));
+}
+
+test("live user_message echoes without a clientMessageId drop the trailing Routing block", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-routing-echo-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const codex = fakeCodexEmitting({
+    turnItems: [{ type: "user_message", text: ROUTED_PROVIDER_TEXT }],
+  });
+  const manager = new AgentManager({ clients: { codex }, logger });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  await manager.runAgent(snapshot.id, { text: "do something" });
+
+  expect(userMessageTexts(manager.getTimeline(snapshot.id))).toEqual([ROUTED_USER_TEXT]);
+});
+
+test("force hydration drops the trailing Routing block from provider history", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-routing-hydrate-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const codex = fakeCodexEmitting({
+    historyItems: [
+      { type: "user_message", text: ROUTED_PROVIDER_TEXT, messageId: "msg_routed" },
+      { type: "assistant_message", text: "reply" },
+    ],
+  });
+  const manager = new AgentManager({ clients: { codex }, logger });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  await manager.hydrateTimelineFromProvider(snapshot.id, { force: true });
+
+  expect(userMessageTexts(manager.getTimeline(snapshot.id))).toEqual([ROUTED_USER_TEXT]);
+});
+
+test("priming a resumed agent drops the trailing Routing block from provider history", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-routing-prime-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  class RoutedHistorySession extends TestAgentSession {
+    override async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
+      yield {
+        type: "timeline",
+        provider: "codex",
+        item: { type: "user_message", text: ROUTED_PROVIDER_TEXT },
+      };
+    }
+  }
+  const manager = new AgentManager({
+    clients: {
+      codex: new (class extends TestAgentClient {
+        override async resumeSession(
+          _handle: AgentPersistenceHandle,
+          config?: Partial<AgentSessionConfig>,
+        ): Promise<AgentSession> {
+          return new RoutedHistorySession({ provider: "codex", cwd: config?.cwd ?? workdir });
+        }
+      })(),
+    },
+    logger,
+  });
+
+  const agent = await manager.resumeAgentFromPersistence(
+    { provider: "codex", sessionId: "routed-history" },
+    { cwd: workdir },
+  );
+  await manager.hydrateTimelineFromProvider(agent.id);
+
+  expect(userMessageTexts(manager.getTimeline(agent.id))).toEqual([ROUTED_USER_TEXT]);
+  await manager.closeAgent(agent.id);
+});
+
+test("importing a provider session drops the trailing Routing block and titles by labels", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-routing-import-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  class RoutedImportClient extends TestAgentClient {
+    async importSession(input: ImportProviderSessionInput) {
+      return {
+        session: new TestAgentSession({ provider: "codex", cwd: workdir }),
+        config: { provider: "codex" as const, cwd: workdir },
+        persistence: {
+          provider: "codex" as const,
+          sessionId: input.providerHandleId,
+          nativeHandle: input.providerHandleId,
+          metadata: { provider: "codex", cwd: workdir },
+        },
+        timeline: [{ item: { type: "user_message" as const, text: ROUTED_PROVIDER_TEXT } }],
+      };
+    }
+  }
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new RoutedImportClient() },
+    registry: storage,
+    logger,
+  });
+
+  const imported = await manager.importProviderSession({
+    provider: "codex",
+    providerHandleId: "thread-routed",
+    cwd: workdir,
+  });
+  await manager.flush();
+
+  expect({
+    title: (await storage.get(imported.id))?.title,
+    userMessages: userMessageTexts(manager.getTimeline(imported.id)),
+  }).toEqual({ title: "@Claude write tests", userMessages: [ROUTED_USER_TEXT] });
 });
 
 test("commandMayHaveChangedExternalState matches remote-state commands", () => {

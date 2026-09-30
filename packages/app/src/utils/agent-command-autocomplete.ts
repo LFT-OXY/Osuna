@@ -28,6 +28,8 @@ export interface SlashCommandRange {
 interface FindActiveSlashCommandInput {
   text: string;
   cursorIndex: number;
+  /** 光标前最后一个行内块的结束偏移：`/` 不能在块里或块之前。 */
+  blockBoundary: number;
 }
 
 interface ApplySlashCommandReplacementInput {
@@ -104,6 +106,7 @@ export function findActiveSlashCommand(
     if (INVALID_SLASH_COMMAND_QUERY_CHARS.test(query)) {
       continue;
     }
+    if (slashIndex < input.blockBoundary) return null;
 
     return {
       start: slashIndex,

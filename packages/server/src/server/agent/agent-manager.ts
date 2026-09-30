@@ -89,8 +89,17 @@ import {
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
+import { stripTrailingRoutingBlock } from "./trailing-routing-block.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
+import {
+  predictCreateAgentsCapability,
+  resolveCreateAgentsCapability,
+  resolvePaseoToolsGateReason,
+  type CreateAgentsCapability,
+  type PaseoToolsGate,
+  type PaseoToolsGateReason,
+} from "./create-agents-capability.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
@@ -134,6 +143,20 @@ function submittedPromptText(prompt: AgentPromptInput): string {
     .trim();
 }
 
+/** Provider-sourced user messages show what the user wrote; the Routing block only went to the provider. */
+function withoutTrailingRoutingBlock<T extends AgentTimelineItem>(item: T): T {
+  if (item.type !== "user_message") return item;
+  const text = stripTrailingRoutingBlock(item.text);
+  return text === item.text ? item : { ...item, text };
+}
+
+interface AcceptedSteerRecord {
+  agent: ActiveManagedAgent;
+  prompt: AgentPromptInput;
+  options?: AgentRunOptions;
+  expectedTurnId: string;
+}
+
 export class AgentManagerShuttingDownError extends Error {
   constructor() {
     super("Agent manager is shutting down");
@@ -159,6 +182,7 @@ interface PreparedSessionConfig {
   storedConfig: AgentSessionConfig;
   launchConfig: AgentSessionConfig;
   paseoToolPolicy: ProviderPaseoToolsPolicy | undefined;
+  paseoToolsGateReason: PaseoToolsGateReason | null;
 }
 
 interface NormalizeConfigOptions {
@@ -326,7 +350,7 @@ export interface AgentManagerOptions {
   terminalManager?: TerminalManager | null;
   mcpBaseUrl?: string;
   mcpAuthToken?: string;
-  paseoToolsEnabled?: boolean;
+  paseoToolsGate?: PaseoToolsGate;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
   /** 与提供方快照同一个来源：不带模型新建会话时，默认模型从覆盖后的目录里选。 */
@@ -419,6 +443,11 @@ interface ManagedAgentBase {
   /** 创建时启用的第三方接口；没有即「官方」，老记录也按官方处理。 */
   apiEndpointId?: string;
   capabilities: AgentCapabilityFlags;
+  /**
+   * 会话启动时判定一次，运行中改开关或策略不影响，reload 后重新判定。
+   * 只有 registerSession 会写入；可选是因为测试里手搭的 ManagedAgent 不经过它。
+   */
+  createAgentsCapability?: CreateAgentsCapability;
   config: AgentSessionConfig;
   runtimeInfo?: AgentRuntimeInfo;
   createdAt: Date;
@@ -700,7 +729,7 @@ function buildImportedTimelineRows(entries: readonly ImportedTimelineEntry[]): A
     rows.push({
       seq: rows.length + 1,
       timestamp: entry.timestamp ?? new Date().toISOString(),
-      item: limitAgentTimelineItemContent(entry.item),
+      item: limitAgentTimelineItemContent(withoutTrailingRoutingBlock(entry.item)),
     });
   }
   return rows;
@@ -783,7 +812,7 @@ export class AgentManager {
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
   private readonly mcpAuthToken: string | null;
-  private paseoToolsEnabled = true;
+  private paseoToolsGateReason: PaseoToolsGateReason | null = null;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
   private readonly resolvePaseoToolPolicy: (
@@ -843,7 +872,9 @@ export class AgentManager {
   }
 
   private configurePaseoTools(options: AgentManagerOptions): void {
-    this.paseoToolsEnabled = options.paseoToolsEnabled ?? true;
+    this.paseoToolsGateReason = options.paseoToolsGate
+      ? resolvePaseoToolsGateReason(options.paseoToolsGate)
+      : null;
     this.paseoToolCatalogFactory = options.paseoToolCatalogFactory ?? null;
   }
 
@@ -905,8 +936,24 @@ export class AgentManager {
     this.acceptingAgentRegistrations = false;
   }
 
-  setPaseoToolsEnabled(enabled: boolean): void {
-    this.paseoToolsEnabled = enabled;
+  setPaseoToolsGate(gate: PaseoToolsGate): void {
+    this.paseoToolsGateReason = resolvePaseoToolsGateReason(gate);
+  }
+
+  private get paseoToolsEnabled(): boolean {
+    return this.paseoToolsGateReason === null;
+  }
+
+  /** 按当前开关与 provider 策略预测新建会话能否派发，供 provider 快照的预测字段用；null 表示不预测。 */
+  predictCreateAgentsCapability(
+    provider: AgentProvider,
+    clientCapabilities: AgentCapabilityFlags,
+  ): CreateAgentsCapability | null {
+    return predictCreateAgentsCapability({
+      gateReason: this.paseoToolsGateReason,
+      paseoToolPolicy: this.resolvePaseoToolPolicy(provider),
+      clientCapabilities,
+    });
   }
 
   setPaseoToolCatalogFactory(factory: PaseoToolCatalogFactory | null): void {
@@ -1331,11 +1378,8 @@ export class AgentManager {
       options = { ...options, env: request.env };
     }
     await this.deleteAgentState(resolvedAgentId);
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      config,
-      resolvedAgentId,
-      options?.env,
-    );
+    const { storedConfig, launchConfig, paseoToolPolicy, paseoToolsGateReason } =
+      await this.prepareSessionConfig(config, resolvedAgentId, options?.env);
     this.requireEnabledProvider(storedConfig.provider);
     const client = await this.requireAvailableClient({
       provider: storedConfig.provider,
@@ -1357,6 +1401,13 @@ export class AgentManager {
     const agent = await this.registerSession(session, storedConfig, resolvedAgentId, {
       labels: options.labels,
       initialTitle: options.initialTitle,
+      createAgentsCapability: resolveCreateAgentsCapability({
+        gateReason: paseoToolsGateReason,
+        paseoToolPolicy,
+        launchContext,
+        providerLaunchConfig,
+        sessionSupportsMcpServers: session.capabilities.supportsMcpServers,
+      }),
       workspaceId: options.workspaceId,
       owner: options.owner,
       apiEndpointId,
@@ -1440,10 +1491,8 @@ export class AgentManager {
       ...overrides,
       provider: handle.provider,
     } as AgentSessionConfig;
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      mergedConfig,
-      resolvedAgentId,
-    );
+    const { storedConfig, launchConfig, paseoToolPolicy, paseoToolsGateReason } =
+      await this.prepareSessionConfig(mergedConfig, resolvedAgentId);
 
     // Decide residency from durable state inside the lifecycle lane. A loader may
     // have read the record before a queued archive or restore completed.
@@ -1488,6 +1537,13 @@ export class AgentManager {
       ...options,
       apiEndpointId,
       persistence: handle,
+      createAgentsCapability: resolveCreateAgentsCapability({
+        gateReason: paseoToolsGateReason,
+        paseoToolPolicy,
+        launchContext,
+        providerLaunchConfig,
+        sessionSupportsMcpServers: session.capabilities.supportsMcpServers,
+      }),
     });
     this.queueApiEndpointModeNotice({
       agentId: agent.id,
@@ -1559,13 +1615,14 @@ export class AgentManager {
       throw new Error(`Provider '${input.provider}' does not support importing sessions`);
     }
 
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      {
-        provider: input.provider,
-        cwd: input.cwd,
-      },
-      resolvedAgentId,
-    );
+    const { storedConfig, launchConfig, paseoToolPolicy, paseoToolsGateReason } =
+      await this.prepareSessionConfig(
+        {
+          provider: input.provider,
+          cwd: input.cwd,
+        },
+        resolvedAgentId,
+      );
     this.paseoToolPolicies.set(resolvedAgentId, paseoToolPolicy);
     const launchContext = await this.buildLaunchContext(
       resolvedAgentId,
@@ -1595,6 +1652,13 @@ export class AgentManager {
       handedToRegistration = true;
       const agent = await this.registerSession(imported.session, importedConfig, resolvedAgentId, {
         labels: input.labels,
+        createAgentsCapability: resolveCreateAgentsCapability({
+          gateReason: paseoToolsGateReason,
+          paseoToolPolicy,
+          launchContext,
+          providerLaunchConfig,
+          sessionSupportsMcpServers: imported.session.capabilities.supportsMcpServers,
+        }),
         workspaceId: input.workspaceId,
         apiEndpointId,
         timelineRows,
@@ -1658,10 +1722,8 @@ export class AgentManager {
       ...overrides,
       provider,
     } as AgentSessionConfig;
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      refreshConfig,
-      agentId,
-    );
+    const { storedConfig, launchConfig, paseoToolPolicy, paseoToolsGateReason } =
+      await this.prepareSessionConfig(refreshConfig, agentId);
     const hadPreviousPaseoToolPolicy = this.paseoToolPolicies.has(agentId);
     const previousPaseoToolPolicy = this.paseoToolPolicies.get(agentId);
     const launchContext = await this.buildLaunchContext(
@@ -1712,6 +1774,13 @@ export class AgentManager {
       handedToRegistration = true;
       return this.registerSession(session, storedConfig, agentId, {
         labels: existing.labels,
+        createAgentsCapability: resolveCreateAgentsCapability({
+          gateReason: paseoToolsGateReason,
+          paseoToolPolicy,
+          launchContext,
+          providerLaunchConfig,
+          sessionSupportsMcpServers: session.capabilities.supportsMcpServers,
+        }),
         workspaceId: existing.workspaceId,
         owner: existing.owner,
         apiEndpointId: existing.apiEndpointId,
@@ -2674,14 +2743,19 @@ export class AgentManager {
           )
         : undefined;
       if (options?.clientMessageId) {
-        this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, {
-          messageId: options.clientMessageId,
-          turnId,
-          providerMessageId:
-            stagedSubmittedPromptEcho?.item.type === "user_message"
-              ? stagedSubmittedPromptEcho.item.messageId
-              : undefined,
-        });
+        this.recordSubmittedPrompt(
+          agent,
+          options.submittedPrompt ?? prompt,
+          options.clientMessageId,
+          {
+            messageId: options.clientMessageId,
+            turnId,
+            providerMessageId:
+              stagedSubmittedPromptEcho?.item.type === "user_message"
+                ? stagedSubmittedPromptEcho.item.messageId
+                : undefined,
+          },
+        );
       }
       for (const stagedEvent of pendingRun.stagedEvents.splice(0)) {
         const isAcceptedTurnStart =
@@ -2841,7 +2915,7 @@ export class AgentManager {
         expectedTurnId,
       });
       if (admission.status === "accepted") {
-        await this.recordAcceptedSteer(agent, prompt, options?.clientMessageId, expectedTurnId);
+        await this.recordAcceptedSteer({ agent, prompt, options, expectedTurnId });
       }
       return admission;
     });
@@ -2871,7 +2945,7 @@ export class AgentManager {
             expectedTurnId,
           });
           if (admission.status === "accepted") {
-            await this.recordAcceptedSteer(agent, prompt, options?.clientMessageId, expectedTurnId);
+            await this.recordAcceptedSteer({ agent, prompt, options, expectedTurnId });
           }
           return admission;
         })
@@ -2971,16 +3045,17 @@ export class AgentManager {
     }
   }
 
-  private async recordAcceptedSteer(
-    agent: ActiveManagedAgent,
-    prompt: AgentPromptInput,
-    clientMessageId: string | undefined,
-    expectedTurnId: string,
-  ): Promise<void> {
+  private async recordAcceptedSteer({
+    agent,
+    prompt,
+    options,
+    expectedTurnId,
+  }: AcceptedSteerRecord): Promise<void> {
+    const clientMessageId = options?.clientMessageId;
     if (!clientMessageId) {
       return;
     }
-    this.recordSubmittedPrompt(agent, prompt, clientMessageId, {
+    this.recordSubmittedPrompt(agent, options.submittedPrompt ?? prompt, clientMessageId, {
       messageId: clientMessageId,
       turnId: expectedTurnId,
     });
@@ -3570,7 +3645,7 @@ export class AgentManager {
     session: AgentSession,
     config: AgentSessionConfig,
     agentId: string,
-    options?: {
+    options: {
       createdAt?: Date;
       updatedAt?: Date;
       lastUserMessageAt?: Date | null;
@@ -3587,6 +3662,7 @@ export class AgentManager {
       publishWhenReady?: boolean;
       workspaceId?: string;
       owner?: AgentOwner;
+      createAgentsCapability: CreateAgentsCapability;
       apiEndpointId?: string;
     },
   ): Promise<ManagedAgent> {
@@ -3619,6 +3695,7 @@ export class AgentManager {
         durableTimelineHasRows,
         apiEndpointId,
         options,
+        createAgentsCapability: options.createAgentsCapability,
       });
 
       this.assertAcceptingAgentRegistrations();
@@ -3744,6 +3821,7 @@ export class AgentManager {
           owner?: AgentOwner;
         }
       | undefined;
+    createAgentsCapability: CreateAgentsCapability;
   }): ActiveManagedAgent {
     const {
       resolvedAgentId,
@@ -3767,6 +3845,7 @@ export class AgentManager {
       apiEndpointId,
       session,
       capabilities: session.capabilities,
+      createAgentsCapability: params.createAgentsCapability,
       config,
       runtimeInfo: undefined,
       lifecycle: "initializing",
@@ -4125,7 +4204,7 @@ export class AgentManager {
         if (event.item.type === "user_message" && isSystemInjectedEnvelope(event.item.text)) {
           continue;
         }
-        historyEvents.push(event);
+        historyEvents.push({ ...event, item: withoutTrailingRoutingBlock(event.item) });
       } else if (event.type === "provider_subagent") {
         providerSubagentEvents.push(event);
       }
@@ -4196,15 +4275,16 @@ export class AgentManager {
         if (event.item.type === "user_message" && isSystemInjectedEnvelope(event.item.text)) {
           continue;
         }
+        const historyEvent = { ...event, item: withoutTrailingRoutingBlock(event.item) };
         const row = this.recordTimeline(
           agent.id,
-          event.item,
-          event.timestamp ? { timestamp: event.timestamp } : undefined,
+          historyEvent.item,
+          historyEvent.timestamp ? { timestamp: historyEvent.timestamp } : undefined,
         );
         if (deferredBroadcast) {
-          timelineEvents.push({ event, row });
+          timelineEvents.push({ event: historyEvent, row });
         } else if (broadcast) {
-          this.dispatchStream(agent.id, event, {
+          this.dispatchStream(agent.id, historyEvent, {
             seq: row.seq,
             epoch: this.timelineStore.getEpoch(agent.id),
             timestamp: row.timestamp,
@@ -4519,10 +4599,11 @@ export class AgentManager {
       return;
     }
 
+    const item = withoutTrailingRoutingBlock(event.item);
     if (options?.fromHistory) {
       this.recordTimeline(
         agent.id,
-        event.item,
+        item,
         event.timestamp ? { timestamp: event.timestamp } : undefined,
       );
       flags.shouldDispatchEvent = false;
@@ -4530,7 +4611,7 @@ export class AgentManager {
       return;
     }
 
-    this.recordAndDispatchTimelineItem(agent.id, event.item, event.provider, event.turnId);
+    this.recordAndDispatchTimelineItem(agent.id, item, event.provider, event.turnId);
     if (event.item.type === "user_message") {
       agent.lastUserMessageAt = new Date();
       this.emitState(agent);
@@ -4804,7 +4885,7 @@ export class AgentManager {
     if (!clientMessageId) return null;
     let existing = this.timelineStore.getSubmittedUserMessage(agent.id, clientMessageId);
     if (!existing) {
-      this.recordSubmittedPrompt(agent, item.text, clientMessageId, {
+      this.recordSubmittedPrompt(agent, stripTrailingRoutingBlock(item.text), clientMessageId, {
         messageId: clientMessageId,
         ...(messageId ? { providerMessageId: messageId } : {}),
         ...(turnId ? { turnId } : {}),
@@ -5068,7 +5149,8 @@ export class AgentManager {
     agent: ManagedAgent,
     reason: "finished" | "error" | "permission",
   ): void {
-    if (isDelegatedAgent(agent)) {
+    // 子智能体只把权限请求交给用户（在子会话里批准）；完成与出错仍留在父智能体的 track。
+    if (isDelegatedAgent(agent) && reason !== "permission") {
       return;
     }
 
@@ -5267,6 +5349,7 @@ export class AgentManager {
     env?: Record<string, string>,
   ): Promise<PreparedSessionConfig> {
     const storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), { env });
+    const paseoToolsGateReason = this.paseoToolsGateReason;
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
@@ -5281,7 +5364,7 @@ export class AgentManager {
         mcpAuthToken: this.mcpAuthToken,
       }),
     );
-    return { storedConfig, launchConfig, paseoToolPolicy };
+    return { storedConfig, launchConfig, paseoToolPolicy, paseoToolsGateReason };
   }
 
   private applyDaemonAppendSystemPrompt(config: AgentSessionConfig): AgentSessionConfig {
@@ -5330,8 +5413,9 @@ export class AgentManager {
         PASEO_AGENT_CWD: cwd,
       },
     };
+    // 全局开关已在 prepareSessionConfig 折进 paseoToolPolicy；这里不再读实时开关，
+    // 否则两次读取之间切换开关会让目录与快照的判定不一致。
     if (
-      this.paseoToolsEnabled &&
       isPaseoToolPolicyEnabled(paseoToolPolicy) &&
       client.capabilities.supportsNativePaseoTools &&
       this.paseoToolCatalogFactory

@@ -22,6 +22,10 @@ export function openHostOverview(serverId: string): void {
   router.push(buildSettingsHostSectionRoute(serverId, "host"));
 }
 
+export function openHostSettingsSection(serverId: string, section: HostSectionSlug): void {
+  router.push(buildSettingsHostSectionRoute(serverId, section));
+}
+
 export function openProjectSettings(serverId: string, projectId: string): void {
   router.push(buildProjectSettingsRoute(serverId, projectId));
 }

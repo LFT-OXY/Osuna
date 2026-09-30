@@ -334,12 +334,11 @@ describe("queueComposerInput", () => {
       cwd: "/repo",
       onQueue,
       replaceText,
-      onMinimizeHeight: () => undefined,
     });
     return { onQueue, replaceText };
   }
 
-  it("queues content held outside the text, such as skill chips, with an empty prompt", () => {
+  it("queues content held outside the text with an empty prompt", () => {
     const { onQueue, replaceText } = queueContext({ value: "  ", hasExternalContent: true });
     expect(onQueue).toHaveBeenCalledWith({ text: "", attachments: [], cwd: "/repo" });
     expect(replaceText).toHaveBeenCalledWith("");

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { parseToolArgs, parseToolResult } from "./tool-call-detail.js";
+import { parseToolArgs, parseToolResult, resolveToolCallName } from "./tool-call-detail.js";
 import { mapOmpToolDetail } from "./tool-call-mapper.js";
 
 describe("OMP tool call mapper", () => {
@@ -114,6 +114,18 @@ describe("OMP tool call mapper", () => {
     expect(mapOmpToolDetail(parseToolArgs("lsp", { op: "hover" }), null)).toEqual({
       type: "unknown",
       input: { op: "hover" },
+      output: null,
+    });
+  });
+
+  test("names Paseo create_agent host tool calls paseo.create_agent with flat input", () => {
+    const args = { title: "Review", provider: "codex/gpt-5.4", initialPrompt: "Review it" };
+    const toolCall = parseToolArgs("create_agent", args);
+
+    expect(resolveToolCallName(toolCall, null)).toBe("paseo.create_agent");
+    expect(mapOmpToolDetail(toolCall, null)).toEqual({
+      type: "unknown",
+      input: args,
       output: null,
     });
   });

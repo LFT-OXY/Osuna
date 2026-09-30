@@ -214,8 +214,10 @@ export class OpenCodeBridge {
     input.request.once("aborted", () =>
       controller.abort(new Error("OpenCode tool request was aborted")),
     );
+    const providerToolCallId = readToolCallIdHeader(input.request);
     const result = await binding.tools.executeTool(input.toolName, body, {
       signal: controller.signal,
+      ...(providerToolCallId ? { providerToolCallId } : {}),
     });
     sendJson(input.response, 200, addModelVisibleStructuredContent(result));
   }
@@ -229,6 +231,12 @@ export class OpenCodeBridge {
     if (!this.pluginUrl) throw new Error("OpenCode bridge plugin is not materialized");
     return this.pluginUrl;
   }
+}
+
+// 插件从 OpenCode 工具上下文的 callID 带过来，见 bridge-plugin.mjs。
+function readToolCallIdHeader(request: IncomingMessage): string | undefined {
+  const value = request.headers["x-paseo-tool-call-id"];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 type CompileOpenCodeBridgePlugin = (sourcePath: string) => Promise<Uint8Array>;

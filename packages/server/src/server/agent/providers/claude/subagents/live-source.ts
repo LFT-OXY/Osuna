@@ -233,6 +233,17 @@ export class ClaudeTaskProtocolSource {
     return subagentId !== undefined && this.declaredIds.has(subagentId);
   }
 
+  /**
+   * Resolve a task id to the descriptor id it was declared as. `canUseTool` inside a subagent
+   * reports an `agentID`, read as the `task_id` of `task_started` — the rule hooks' `agent_id`
+   * follows (docs/providers.md, provider subagent permissions). An undeclared task resolves to
+   * nothing, and its permission stays on the parent.
+   */
+  resolveTaskSubagentId(taskId: string): string | undefined {
+    const subagentId = this.subagentIdByTaskId.get(taskId);
+    return subagentId && this.declaredIds.has(subagentId) ? subagentId : undefined;
+  }
+
   /** Resolve a non-subagent task (for example local_bash) to its emitting sidechain. */
   resolveTaskOwner(taskId: string, toolUseId?: string): string | undefined {
     return (

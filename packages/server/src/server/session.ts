@@ -55,7 +55,9 @@ import {
   sendPromptToAgent,
   waitForAgentRunStartWithTimeout,
   unarchiveAgentState,
+  type RoutingBlockResolver,
 } from "./agent/agent-prompt.js";
+import { resolveRoutingBlock } from "./agent/routing-block.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -4354,6 +4356,7 @@ export class Session {
           env,
           provisionalTitle,
           firstAgentContext,
+          resolveRoutingBlock: trimmedPrompt ? this.routingBlockResolver(trimmedPrompt) : undefined,
           buildSessionConfig: (sessionConfig, gitOptions, legacyWorktreeName, ctx) =>
             this.buildAgentSessionConfig(sessionConfig, gitOptions, legacyWorktreeName, ctx),
         },
@@ -8089,6 +8092,20 @@ export class Session {
     }
   }
 
+  /** 客户端发来的用户消息按发出时的会话判定生成 Routing block；配置在发送时现读。 */
+  private routingBlockResolver(text: string): RoutingBlockResolver {
+    return (agent) =>
+      resolveRoutingBlock({
+        text,
+        cwd: agent.cwd,
+        canCreateAgents: agent.createAgentsCapability?.canCreateAgents === true,
+        mentionDefaults: (providerId) =>
+          this.daemonConfigStore.get().providers[providerId]?.mentionDefaults,
+        agentProfiles: this.daemonConfigStore.get().agentProfiles ?? [],
+        providers: this.providerSnapshotManager,
+      });
+  }
+
   private async prepareAgentMessage(agentId: string, text: string): Promise<void> {
     await ensureAgentLoaded(agentId, {
       agentManager: this.agentManager,
@@ -8141,6 +8158,7 @@ export class Session {
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           clearPendingPermissions: true,
+          resolveRoutingBlock: this.routingBlockResolver(msg.text),
           logger: this.sessionLogger,
         });
         if (result.disposition === "turn_started") {

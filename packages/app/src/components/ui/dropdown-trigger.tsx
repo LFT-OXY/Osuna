@@ -15,6 +15,8 @@ const ThemedChevronDown = withUnistyles(ChevronDown);
 interface DropdownTriggerProps extends Omit<DropdownMenuTriggerProps, "children" | "style"> {
   children?: ReactNode;
   chevron?: ReactNode | null;
+  /** 已存的值失效：描边换成警示色，悬停与展开时也不变。 */
+  tone?: "warning";
 }
 
 const chevronColorMapping = (theme: Theme) => ({
@@ -29,15 +31,17 @@ export function DropdownTrigger({
   children,
   chevron,
   disabled,
+  tone,
   ...props
 }: DropdownTriggerProps): ReactElement {
   const triggerStyle = useCallback(
     ({ hovered, open }: DropdownMenuTriggerState) => [
       styles.trigger,
       (hovered || open) && !disabled ? styles.triggerHover : null,
+      tone === "warning" ? styles.triggerWarning : null,
       disabled ? styles.triggerDisabled : null,
     ],
-    [disabled],
+    [disabled, tone],
   );
   return (
     <DropdownMenuTrigger {...props} disabled={disabled} style={triggerStyle}>
@@ -67,6 +71,9 @@ const styles = StyleSheet.create((theme) => {
     },
     triggerHover: {
       borderColor: theme.colors.borderAccent,
+    },
+    triggerWarning: {
+      borderColor: theme.colors.statusWarning,
     },
     triggerDisabled: {
       opacity: theme.opacity[50],

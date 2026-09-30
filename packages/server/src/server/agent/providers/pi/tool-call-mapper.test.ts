@@ -192,4 +192,40 @@ describe("Pi tool call mapper", () => {
 
     expect(resolveToolCallName(toolCall, result)).toBe("paseo.list_models");
   });
+
+  describe("Paseo create_agent calls", () => {
+    const createArgs = { title: "Review", provider: "codex/gpt-5.4", initialPrompt: "Review it" };
+
+    test.each([
+      ["mcp proxy with a prefixed tool", "mcp", { tool: "paseo_create_agent", args: createArgs }],
+      [
+        "mcp proxy with JSON string args",
+        "mcp",
+        { tool: "paseo_create_agent", args: JSON.stringify(createArgs) },
+      ],
+      [
+        "mcp proxy with an explicit server",
+        "mcp",
+        { server: "paseo", tool: "create_agent", args: createArgs },
+      ],
+      ["mcp__paseo namespace tool", "mcp__paseo", { tool: "create_agent", args: createArgs }],
+      ["server-prefixed direct tool", "paseo_create_agent", createArgs],
+      ["mcp-prefixed direct tool", "mcp__paseo_create_agent", createArgs],
+    ])("normalizes the %s to paseo.create_agent with flat input", (_shape, toolName, args) => {
+      const toolCall = parseToolArgs(toolName, args);
+
+      expect(resolveToolCallName(toolCall, null)).toBe("paseo.create_agent");
+      expect(mapToolDetail(toolCall, null)).toEqual({
+        type: "unknown",
+        input: createArgs,
+        output: null,
+      });
+    });
+
+    test("leaves other Paseo tools behind the mcp proxy unchanged", () => {
+      const toolCall = parseToolArgs("mcp", { tool: "paseo_list_agents", args: {} });
+
+      expect(resolveToolCallName(toolCall, null)).toBe("paseo.list_agents");
+    });
+  });
 });

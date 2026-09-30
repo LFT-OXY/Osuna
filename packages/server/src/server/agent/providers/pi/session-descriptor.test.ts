@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 
 import { listPiImportableSessions, readPiImportSessionConfig } from "./session-descriptor.js";
 
@@ -119,6 +119,38 @@ test("Pi import config preserves the latest recorded model and thinking level", 
     model: "openrouter/anthropic/claude-sonnet-4.5",
     thinkingOptionId: "high",
   });
+});
+
+test("Pi import previews drop the Routing block the provider received", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-routing-block-"));
+  onTestFinished(() => rm(root, { recursive: true, force: true }));
+  const cwd = path.join(root, "repo");
+  const original = "[@Claude](paseo://agent/provider/claude) write tests";
+  await writeSession(root, [
+    { type: "session", version: 3, id: "session-1", timestamp: "2026-06-09T00:00:00.000Z", cwd },
+    {
+      type: "message",
+      id: "user-1",
+      timestamp: "2026-06-09T00:00:02.000Z",
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: original },
+          {
+            type: "text",
+            text: '<paseo-system>\n1. @Claude -> provider "claude", settings {}\n</paseo-system>',
+          },
+        ],
+      },
+    },
+  ]);
+
+  const [descriptor] = await listPiImportableSessions({ sessionDir: path.join(root, "sessions") });
+
+  expect({
+    firstPromptPreview: descriptor?.firstPromptPreview,
+    lastPromptPreview: descriptor?.lastPromptPreview,
+  }).toEqual({ firstPromptPreview: original, lastPromptPreview: original });
 });
 
 test("Pi import config can infer model from assistant messages", async () => {

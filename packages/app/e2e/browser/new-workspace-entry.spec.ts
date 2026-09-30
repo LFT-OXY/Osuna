@@ -23,6 +23,7 @@ import {
   switchWorkspaceViaSidebar,
   waitForSidebarHydration,
 } from "../support/helpers/workspace-ui";
+import { expectComposerText } from "../support/helpers/composer";
 
 // Model B entry points into the New Workspace screen. The surviving entries are
 // the global button (universal) and each project's per-row New workspace icon
@@ -185,13 +186,13 @@ test.describe("New workspace entry points", () => {
       const composer = page.getByRole("textbox", { name: "Message agent..." });
       await expect(composer).toBeEditable({ timeout: 30_000 });
       await composer.fill(draftText);
-      await expect(composer).toHaveValue(draftText);
+      await expectComposerText(composer, draftText);
 
       await clickArchiveWorkspaceMenuItem(page, rememberedProject.workspaceId);
       await expectWorkspaceAbsentFromSidebar(page, rememberedProject.workspaceId);
 
       await expect(page).toHaveURL(/\/new(?:\?.*)?$/, { timeout: 30_000 });
-      await expect(composer).toHaveValue(draftText);
+      await expectComposerText(composer, draftText);
       await expectNewWorkspaceProjectSelected(page, rememberedProject.projectDisplayName);
     } finally {
       await otherProject.cleanup();

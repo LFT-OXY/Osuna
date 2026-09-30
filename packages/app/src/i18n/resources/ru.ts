@@ -175,8 +175,13 @@ export const ru: TranslationResources = {
       removeBrowserElement: "Удалить вложение с элементом браузера",
       openReview: "Открыть вложение проверки",
       removeReview: "Удалить вложение проверки",
-      skillChip: "Навык: {{name}}",
-      removeSkill: "Удалить",
+    },
+    inlineBlocks: {
+      skill: "Навык: {{name}}",
+      file: "Файл: {{name}}",
+      directory: "Папка: {{name}}",
+      image: "Изображение: {{name}}",
+      agent: "Агент: {{name}}",
     },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
@@ -1622,6 +1627,20 @@ export const ru: TranslationResources = {
     groups: {
       commands: "Команды",
       skills: "Навыки",
+      agents: "Агенты",
+      files: "Файлы",
+    },
+    agentMentions: {
+      toolsNotInjected: "Для этого агента Osuna tools выключены",
+      toolsNotInjectedDetail:
+        "Включите их в Настройки → Host → Агенты, затем перезагрузите этого агента.",
+      toolsNotInjectedDraftDetail: "Включите их в Настройки → Host → Агенты.",
+      openAgentsSettings: "Открыть настройки",
+      mcpDisabled: "На этом хосте MCP выключен",
+      createAgentNotAllowed: "Политика Osuna tools этого provider не разрешает create_agent",
+      toolsNotDelivered: "Этот агент не может вызывать Osuna tools",
+      unknownReason: "Этот агент не может запускать субагентов",
+      hostOutdated: "Обновите хост, чтобы упоминать агентов",
     },
   },
   loadOlderHistory: {
@@ -1907,6 +1926,15 @@ export const ru: TranslationResources = {
     archiveTooltip: "Архивировать субагента",
     archiveFinishedAction: "Архивировать завершенные субагенты",
     archiveFinishedRetry: "Повторить ({{failed}}/{{total}})",
+    dispatchTitleOne: "Запущен 1 субагент",
+    dispatchTitleMany: "Запущено субагентов: {{count}}",
+    dispatchStartingRow: "Запуск",
+    dispatchStarting: "{{count}} запускается",
+    dispatchDone: "{{count}} завершено",
+    dispatchWaitingCount: "{{count}} ожидает одобрения",
+    dispatchWaitingForApproval: "Ожидает одобрения · {{tool}}",
+    dispatchArchived: "В архиве",
+    dispatchDetached: "Отсоединён",
   },
   panels: {
     draft: {
@@ -2614,6 +2642,40 @@ export const ru: TranslationResources = {
       },
       agents: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять агентами",
+      },
+      mentionDefaults: {
+        title: "Параметры упоминания по умолчанию",
+        info: "Модель, уровень размышления и режим, с которыми запускается новый субагент, когда вы упоминаете провайдера через @. Незаданные поля берут значения провайдера по умолчанию и не наследуют режим текущего агента. Упомянутый профиль Agent сначала использует свои настройки.",
+        hostOutdated: "Обновите хост, чтобы задать параметры упоминания по умолчанию",
+        toolsOff:
+          "Osuna tools выключены, поэтому упоминать агентов через @ нельзя. Эти настройки заработают после включения.",
+        noProviders: "Нет включённых провайдеров",
+        model: "Модель",
+        thinking: "Размышление",
+        mode: "Режим",
+        modelAccessibilityLabel: "Модель упоминания для {{provider}}",
+        thinkingAccessibilityLabel: "Уровень размышления упоминания для {{provider}}",
+        modeAccessibilityLabel: "Режим упоминания для {{provider}}",
+        rowAccessibilityLabel: "Параметры упоминания для {{provider}}",
+        default: "По умолчанию",
+        defaultWithValue: "По умолчанию ({{value}})",
+        unsupported: "Не поддерживается",
+        unavailableOption: "{{value}} (недоступно)",
+        staleWithFallback:
+          "{{value}} недоступно; будет использовано значение по умолчанию ({{fallback}})",
+        staleIgnored: "{{value}} недоступно и не будет использовано",
+        summaryAllDefault: "Всё по умолчанию",
+        summaryOthersDefault: "остальное по умолчанию",
+        summaryLoading: "Загрузка моделей...",
+        summaryUnavailable: "Провайдер недоступен",
+        catalogError:
+          "Не удалось прочитать список моделей; сохранённые значения отправляются как есть",
+        thinkingReset: "Уровень размышления сброшен на значение модели по умолчанию ({{value}})",
+        thinkingResetNoLabel: "Уровень размышления сброшен на значение модели по умолчанию",
+        thinkingUnsupported: "У {{model}} нет уровней размышления; сохранённый уровень удалён",
+        resetAll: "Сбросить всё",
+        saveFailed: "Не удалось сохранить: {{error}}",
+        retry: "Повторить",
       },
       workspaces: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять рабочими пространствами",

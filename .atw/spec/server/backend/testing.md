@@ -30,6 +30,14 @@ Everything reusable lives in `server/test-utils/`:
 
 `docs/ad-hoc-daemon-testing.md` has the full harness walkthrough and seven gotchas. Two that bite most often: `appVersion` on `DaemonClient` gates which providers are visible, and `fetchAgents` must run before most other operations.
 
+Attention is delivered only to a connection that owns an event subscription for it. `client.onAgentAttentionRequired(...)` alone receives nothing on a modern client; also `await client.observeEvents(["agent_attention_required"], { notifications: true }).ready`, the same subscription the app opens in `session-context.tsx`. To prove an attention was *not* raised (a subagent's `finished`/`error`), finish a root agent afterwards and wait for its `finished` attention, then assert on the list; `daemon-e2e/subagent-permission.e2e.test.ts` `flushAttentionThroughParent` is the reference.
+
+The fake codex client parks on a permission in ask mode (`getAskModeConfig("codex")`) when prompted with ``Use your shell tool to run: `printf "ok" > x.txt`. Request permission and wait.``; `waitForFinish` then returns `status: "permission"` with the request in `final.pendingPermissions`. `"Emit a turn failure"` drives it to `error`.
+
+In `workspace-directory.test.ts`, `hasDelegatedAgent` labels the child with parent `parent-agent`. A root seeded under any other id leaves the child orphaned, so `resolveWorkspaceRootAgent` returns null and the child is skipped: the assertion passes without exercising descendant aggregation. Seed the root as `parent-agent`.
+
+The fake session (`fake-agent-client.ts`) handles string prompts starting with `/fake-oob` out of band and emits `Out-of-band: <prompt>`; use it to prove something runs after out-of-band detection. `onStartTurn` sees exactly what the provider receives, so assert the whole `prompts` array. The fake never writes `user_message` into its history, so tests about replaying provider user messages (hydrate, prime, import) belong in `agent/agent-manager.test.ts` with `fakeCodexEmitting({ historyItems })` or a `TestAgentSession` overriding `streamHistory`, not in daemon E2E.
+
 ## Rules
 
 - **No `vi.mock` of the module under test, no `vi.spyOn` on own exports.** If you need one, the module is missing a port. Add the injectable interface, write a fake next to the real adapter, test against that. The existing `vi.spyOn(logger, "warn")` pattern is for asserting on logging, not for stubbing behavior.

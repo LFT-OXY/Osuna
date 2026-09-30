@@ -9,6 +9,7 @@ import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentManager } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
 import {
+  appendRoutingBlock,
   formatSystemNotificationPrompt,
   isSystemInjectedEnvelope,
   setupFinishNotification,
@@ -264,6 +265,18 @@ test("isSystemInjectedEnvelope matches the envelope formatSystemNotificationProm
   expect(isSystemInjectedEnvelope("hello world")).toBe(false);
 });
 
+test("appendRoutingBlock adds the block after string text or as a trailing text block", () => {
+  const block = formatSystemNotificationPrompt(
+    "1. @Claude -> cannot start: reason. Tell the user.",
+  );
+
+  expect(appendRoutingBlock("write tests", block)).toBe(`write tests\n\n${block}`);
+  expect(appendRoutingBlock([{ type: "text", text: "review this" }], block)).toEqual([
+    { type: "text", text: "review this" },
+    { type: "text", text: block },
+  ]);
+});
+
 test("finish notifications tell the parent the child's last assistant message", async () => {
   const scenario = createFinishNotificationScenario({
     childLastAssistantMessage: "Implemented the cleanup and all checks pass.",
@@ -318,6 +331,9 @@ test("finish notifications survive permission responses", async () => {
     expect(scenario.parentPrompts()).toHaveLength(1);
   });
   expect(scenario.parentPrompts()[0]).toContain("needs permission.");
+  expect(scenario.parentPrompts()[0]).toContain(
+    "The user will approve this in the subagent's session. Do not answer it with `respond_to_permission` unless the user explicitly asked you to manage this subagent's permissions.",
+  );
   const permissionPayload = scenario
     .parentPrompts()[0]
     .match(/<permission-request>\n([\s\S]+?)\n<\/permission-request>/)?.[1];

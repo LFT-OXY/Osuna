@@ -30,11 +30,14 @@ import {
   Terminal,
   TestTube,
   Wrench,
+  type LucideIcon,
 } from "lucide-react-native";
+import type { ProviderIconComponent } from "@/components/provider-icons";
 import { identityForeground } from "@/styles/identity-colors";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
   AGENT_PROFILE_COLORS,
+  AGENT_PROFILE_ICON_KEYS,
   resolveAgentProfileColor,
   resolveAgentProfileIconKey,
   type AgentProfileColor,
@@ -44,46 +47,67 @@ import {
 /** Drawn when a profile names no icon, and as the "default" cell in the picker grid. */
 const ThemedDefaultIcon = withUnistyles(Star);
 
-/**
- * `withUnistyles` has to wrap each icon once at module scope, so the registry
- * stores the themed component rather than the raw lucide one.
- */
-const THEMED_ICONS: Record<AgentProfileIconKey, typeof ThemedDefaultIcon> = {
-  code: withUnistyles(Code),
-  terminal: withUnistyles(Terminal),
-  bug: withUnistyles(Bug),
-  wrench: withUnistyles(Wrench),
-  hammer: withUnistyles(Hammer),
+function FallbackIconSlot({
+  Icon,
+  size,
+  color,
+}: {
+  Icon: ProviderIconComponent;
+  size: number;
+  color: string;
+}) {
+  return <Icon size={size} color={color} />;
+}
 
-  flask: withUnistyles(FlaskConical),
-  testTube: withUnistyles(TestTube),
-  microscope: withUnistyles(Microscope),
-  search: withUnistyles(Search),
-  eye: withUnistyles(Eye),
+const ThemedFallbackIcon = withUnistyles(FallbackIconSlot);
 
-  palette: withUnistyles(Palette),
-  feather: withUnistyles(Feather),
-  pencil: withUnistyles(Pencil),
-  fileText: withUnistyles(FileText),
-  book: withUnistyles(BookOpen),
+const PROFILE_ICONS: Record<AgentProfileIconKey, LucideIcon> = {
+  code: Code,
+  terminal: Terminal,
+  bug: Bug,
+  wrench: Wrench,
+  hammer: Hammer,
 
-  rocket: withUnistyles(Rocket),
-  package: withUnistyles(Package),
-  boxes: withUnistyles(Boxes),
-  server: withUnistyles(Server),
-  database: withUnistyles(Database),
+  flask: FlaskConical,
+  testTube: TestTube,
+  microscope: Microscope,
+  search: Search,
+  eye: Eye,
 
-  cpu: withUnistyles(Cpu),
-  cloud: withUnistyles(Cloud),
-  globe: withUnistyles(Globe),
-  gitBranch: withUnistyles(GitBranch),
-  layers: withUnistyles(Layers),
+  palette: Palette,
+  feather: Feather,
+  pencil: Pencil,
+  fileText: FileText,
+  book: BookOpen,
 
-  compass: withUnistyles(Compass),
-  brain: withUnistyles(Brain),
-  sparkles: withUnistyles(Sparkles),
-  shield: withUnistyles(Shield),
+  rocket: Rocket,
+  package: Package,
+  boxes: Boxes,
+  server: Server,
+  database: Database,
+
+  cpu: Cpu,
+  cloud: Cloud,
+  globe: Globe,
+  gitBranch: GitBranch,
+  layers: Layers,
+
+  compass: Compass,
+  brain: Brain,
+  sparkles: Sparkles,
+  shield: Shield,
 };
+
+/** `withUnistyles` has to wrap each icon once at module scope, not per render. */
+const THEMED_ICONS = new Map(
+  AGENT_PROFILE_ICON_KEYS.map((key) => [key, withUnistyles(PROFILE_ICONS[key])]),
+);
+
+/** The raw icon for callers that theme it themselves; `null` when the profile names none we know. */
+export function getAgentProfileIcon(icon: string | undefined): LucideIcon | null {
+  const iconKey = resolveAgentProfileIconKey(icon);
+  return iconKey ? PROFILE_ICONS[iconKey] : null;
+}
 
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -116,13 +140,19 @@ export function AgentProfileGlyph({
   icon,
   color,
   size = ICON_SIZE.md,
+  fallbackIcon,
 }: {
   icon?: string | undefined;
   color?: string | undefined;
   size?: number;
+  /** 认不出 icon 时代替默认星形，如 `@` 列表里用所属 provider 的图标。 */
+  fallbackIcon?: ProviderIconComponent;
 }) {
   const iconKey = resolveAgentProfileIconKey(icon);
   const mapping = COLOR_MAPPINGS[resolveAgentProfileColor(color)];
-  const Icon = iconKey ? THEMED_ICONS[iconKey] : ThemedDefaultIcon;
+  if (!iconKey && fallbackIcon) {
+    return <ThemedFallbackIcon Icon={fallbackIcon} size={size} uniProps={mapping} />;
+  }
+  const Icon = (iconKey && THEMED_ICONS.get(iconKey)) || ThemedDefaultIcon;
   return <Icon size={size} uniProps={mapping} />;
 }

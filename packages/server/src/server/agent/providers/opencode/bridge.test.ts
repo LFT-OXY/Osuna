@@ -7,7 +7,7 @@ import { z } from "zod";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
-import type { PaseoToolCatalog } from "../../tools/types.js";
+import type { PaseoToolCatalog, PaseoToolExecutionContext } from "../../tools/types.js";
 import { OpenCodeBridge, loadOpenCodeBridgePluginArtifact } from "./bridge.js";
 
 const temporaryDirectories: string[] = [];
@@ -190,6 +190,49 @@ describe("OpenCodeBridge", () => {
         { headers },
       );
       expect(released.status).toBe(404);
+    } finally {
+      release();
+      await bridge.close();
+    }
+  });
+
+  test("forwards the OpenCode tool call id from the plugin context to the tool", async () => {
+    const paseoHome = await mkdtemp(path.join(tmpdir(), "paseo-opencode-bridge-call-id-"));
+    temporaryDirectories.push(paseoHome);
+    const catalog = createCatalog();
+    const seenContexts: PaseoToolExecutionContext[] = [];
+    const recordingCatalog: PaseoToolCatalog = {
+      ...catalog,
+      async executeTool(name, input, context) {
+        seenContexts.push(context ?? {});
+        return await catalog.executeTool(name, input, context);
+      },
+    };
+    const bridge = new OpenCodeBridge({ paseoHome, logger: createTestLogger() });
+    await bridge.start();
+    bridge.setManifestCatalog(catalog);
+    const release = bridge.bindSession({ sessionId: "ses_one", env: {}, tools: recordingCatalog });
+
+    try {
+      const plugin = readPluginOptions(bridge.decorateServerEnv({}));
+      const pluginModule = await import(plugin.pluginUrl);
+      const hooks = await pluginModule.default(
+        { client: { session: { get: async () => ({ data: {} }) } } },
+        { baseUrl: plugin.baseUrl, token: plugin.token },
+      );
+      await hooks.tool.paseo_echo_context.execute(
+        { value: "with call id" },
+        { sessionID: "ses_one", callID: "call_opencode" },
+      );
+      await hooks.tool.paseo_echo_context.execute(
+        { value: "no call id" },
+        { sessionID: "ses_one" },
+      );
+
+      expect(seenContexts.map((context) => context.providerToolCallId)).toEqual([
+        "call_opencode",
+        undefined,
+      ]);
     } finally {
       release();
       await bridge.close();

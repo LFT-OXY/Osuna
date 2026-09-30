@@ -57,6 +57,11 @@ export function withRuntimePaseoMcpServer(params: {
   };
 }
 
+export function hasInternalPaseoMcpServer(config: AgentSessionConfig): boolean {
+  const paseoServer = config.mcpServers?.[PASEO_MCP_SERVER_NAME];
+  return paseoServer !== undefined && isInternalPaseoMcpServer(paseoServer);
+}
+
 function isInternalPaseoMcpServer(config: McpServerConfig): boolean {
   if (config.type !== "http" && config.type !== "sse") {
     return false;

@@ -4,6 +4,8 @@ import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-confi
 export interface PaseoToolExecutionContext {
   signal?: AbortSignal;
   sendUpdate?: (update: PaseoToolResult) => void;
+  // provider 侧这次工具调用的 id，与父时间线条目的 callId 相同；由各通道边界读出。
+  providerToolCallId?: string;
 }
 
 export interface PaseoToolResult {

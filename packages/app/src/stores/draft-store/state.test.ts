@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   applyClearDraftRecord,
   pruneFinalizedDraftRecords,
-  selectDraftSkillChips,
   toDraftInputIfReady,
   editDraftRecordText,
   type DraftRecord,
@@ -21,50 +20,25 @@ describe("draft-store lifecycle", () => {
       updatedAt: 1,
       version: 1,
     };
-    const edited = editDraftRecordText(draft, "hello\n", 2);
+    const edited = editDraftRecordText({
+      record: draft,
+      text: "hello\n",
+      segments: undefined,
+      now: 2,
+    });
     expect(edited.input.text).toBe("hello\n");
     expect(edited.input.attachments).toBe(draft.input.attachments);
     expect(edited.version).toBe(2);
-    expect(editDraftRecordText(edited, "hello\n", 3)).toBe(edited);
-    expect(editDraftRecordText(edited, "", 3).lifecycle).toBe("active");
-    expect(editDraftRecordText(undefined, "", 3).lifecycle).toBe("abandoned");
+    expect(
+      editDraftRecordText({ record: edited, text: "hello\n", segments: undefined, now: 3 }),
+    ).toBe(edited);
+    expect(
+      editDraftRecordText({ record: edited, text: "", segments: undefined, now: 3 }).lifecycle,
+    ).toBe("active");
+    expect(
+      editDraftRecordText({ record: undefined, text: "", segments: undefined, now: 3 }).lifecycle,
+    ).toBe("abandoned");
   });
-  it("keeps skill chips across text edits and counts a chip-only draft as active", () => {
-    const skills = [{ name: "atw-askme", description: "Ask me first" }];
-    const draft: DraftRecord = {
-      input: { text: "hello", attachments: [], skills },
-      lifecycle: "active",
-      updatedAt: 1,
-      version: 1,
-    };
-
-    const emptied = editDraftRecordText(draft, "", 2);
-
-    expect(emptied.lifecycle).toBe("active");
-    expect(emptied.input.skills).toBe(skills);
-    expect(selectDraftSkillChips(emptied)).toBe(skills);
-  });
-
-  it("reads no skill chips from drafts that are not active or predate chips", () => {
-    const skills = [{ name: "atw-askme" }];
-    const sent: DraftRecord = {
-      input: { text: "", attachments: [], skills },
-      lifecycle: "sent",
-      updatedAt: 1,
-      version: 2,
-    };
-    const legacy: DraftRecord = {
-      input: { text: "hello", attachments: [] },
-      lifecycle: "active",
-      updatedAt: 1,
-      version: 1,
-    };
-
-    expect(selectDraftSkillChips(sent)).toEqual([]);
-    expect(selectDraftSkillChips(legacy)).toEqual([]);
-    expect(selectDraftSkillChips(undefined)).toEqual([]);
-  });
-
   it("prunes finalized tombstones after TTL", () => {
     const nowMs = 1_000_000;
     const drafts = {
@@ -134,19 +108,6 @@ describe("draft-store lifecycle", () => {
 });
 
 describe("draft-store normalization", () => {
-  it("preserves skill chips when hydrating a draft", () => {
-    const skills = [{ name: "atw-askme", description: "Ask me first" }, { name: "atw-tdd" }];
-
-    expect(
-      toDraftInputIfReady({
-        input: { text: "", attachments: [], skills },
-        lifecycle: "active",
-        updatedAt: 1,
-        version: 1,
-      }),
-    ).toEqual({ text: "", attachments: [], skills });
-  });
-
   it("preserves plugin resources when hydrating a draft", () => {
     const attachment = {
       kind: "plugin_resource" as const,

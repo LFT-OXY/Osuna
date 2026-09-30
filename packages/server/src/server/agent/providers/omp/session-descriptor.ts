@@ -9,6 +9,7 @@ import type {
 } from "../../agent-sdk-types.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 import { createRealpathAwarePathMatcher } from "../../../../utils/path.js";
+import { stripTrailingRoutingBlock } from "../../trailing-routing-block.js";
 import { resolveOmpSessionPaths } from "./provider-config.js";
 
 const OMP_CONFIG_DIR_NAME = ".omp";
@@ -445,7 +446,7 @@ function readNonEmptyString(value: unknown): string | null {
 }
 
 function normalizePromptPreview(text: string | null): string | null {
-  const normalized = text?.trim().replace(/\s+/g, " ") ?? "";
+  const normalized = text ? stripTrailingRoutingBlock(text).trim().replace(/\s+/g, " ") : "";
   if (!normalized) return null;
   return normalized.length > 160 ? normalized.slice(0, 160) : normalized;
 }

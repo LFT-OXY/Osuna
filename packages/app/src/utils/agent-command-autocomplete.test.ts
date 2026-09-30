@@ -41,6 +41,7 @@ describe("findActiveSlashCommand", () => {
       findActiveSlashCommand({
         text,
         cursorIndex: "use /tas".length,
+        blockBoundary: 0,
       }),
     ).toEqual({
       start: 4,
@@ -55,6 +56,7 @@ describe("findActiveSlashCommand", () => {
       findActiveSlashCommand({
         text: "/rew",
         cursorIndex: "/rew".length,
+        blockBoundary: 0,
       }),
     ).toEqual({
       start: 0,
@@ -69,6 +71,7 @@ describe("findActiveSlashCommand", () => {
       findActiveSlashCommand({
         text: "use /taste now",
         cursorIndex: "use /taste now".length,
+        blockBoundary: 0,
       }),
     ).toBeNull();
   });
@@ -78,7 +81,16 @@ describe("findActiveSlashCommand", () => {
       findActiveSlashCommand({
         text: "read /tmp/project",
         cursorIndex: "read /tmp/project".length,
+        blockBoundary: 0,
       }),
+    ).toBeNull();
+  });
+
+  it("does not reach back into an inline block", () => {
+    // 光标紧跟目标含空格的 File mention：`<my dir /x>` 里的 `/` 前面是空格。
+    const text = "see [x](<my dir /x>)";
+    expect(
+      findActiveSlashCommand({ text, cursorIndex: text.length, blockBoundary: text.length }),
     ).toBeNull();
   });
 });

@@ -32,4 +32,13 @@ describe("resolveCreateAgentTitles", () => {
     expect(resolved.explicitTitle).toBeNull();
     expect(resolved.provisionalTitle).toBeNull();
   });
+
+  test("shows links in the provisional title by their labels", () => {
+    const resolved = resolveCreateAgentTitles({
+      initialPrompt:
+        "[@Claude](paseo://agent/provider/claude) fix [index.ts](src/index.ts) per [the docs](https://example.com/a_(b))",
+    });
+
+    expect(resolved.provisionalTitle).toBe("@Claude fix index.ts per the docs");
+  });
 });
