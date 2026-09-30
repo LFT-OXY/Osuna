@@ -9,4 +9,3 @@
 {"file": "docs/testing.md", "reason": "测试约定：真实依赖优先、确定性"}
 {"file": "docs/i18n.md", "reason": "新增文案需补全各语言"}
 {"file": "docs/glossary.md", "reason": "Provider / Custom provider / API endpoint / Add provider 术语"}
-{"file": ".atw/tasks/09-30-providers-two-level-upgrade/issues/06-one-click-upgrade.md", "reason": "ATW current ticket"}

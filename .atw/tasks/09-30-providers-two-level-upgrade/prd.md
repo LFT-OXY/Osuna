@@ -227,7 +227,8 @@
 - Claude Code 原生安装和 Copilot 默认会自动更新，"有新版本"的提示可能过一会儿就没了。这符合预期（Q16）。
 - 如果用户 Claude Code 用的是 stable 更新通道，和 npm `latest` 比较时可能一直显示"有新版本"，而 `claude update` 只会升到 stable 版本。升级后版本号没变的话，按钮会一直在。先接受这个问题，有反馈再支持更新通道。
 - 启用了但没装的提供方（标"未安装"）在新建会话的提供方选择器里仍然显示为"不可用"，和现在一样。
-- Pi 的 npm 包名换过：旧包 `@mariozechner/pi-coding-agent` 已停更。用旧包装的 Pi 执行 `pi update` 会怎样，未核实，实现时要确认。
+- Pi 的 npm 包名换过：旧包 `@mariozechner/pi-coding-agent` 停在 0.73.1。2026-10-01 在隔离的 npm 前缀里实测：用旧包 0.73.1 装的 Pi 执行 `pi update`，会卸掉旧包、装上 `@earendil-works/pi-coding-agent`，版本升到 0.99.1，退出码 0，所以一键升级对旧包同样有效。比 0.73.1 更早的旧包未实测。
+- User Story 50（只读客户端点不了升级）只做到了 daemon 侧：升级需要 `daemon.manage`，只读客户端发请求会被拒，失败块显示原因。App 不知道自己持有哪些权限，所以按钮照常显示。要做到按钮不可点，得让协议把客户端权限告诉 App，超出本任务，留作后续（2026-10-01 用户确认）。
 - 升级执行的是主机上的真实命令，e2e 只用假 CLI 验证。真实升级留给人工验收：在自己机器上实际升级一个过时的 CLI，比如 Pi 或 OMP。
 
 ## Acceptance Criteria
