@@ -165,6 +165,7 @@ vi.mock("react-i18next", () => ({
           "settings.providers.statuses.apiEndpoint": "API endpoint: {{name}}",
           "settings.providers.models.one": "1 model",
           "settings.providers.models.many": "{{count}} models",
+          "settings.providers.version.value": "v{{version}}",
           "settings.providers.addProvider": "Add provider",
           "settings.providers.addErrorTitle": "Unable to add provider",
           "providerCatalog.title": "Add provider",
@@ -183,7 +184,8 @@ vi.mock("react-i18next", () => ({
         })[key] ?? key
       )
         .replaceAll("{{name}}", String(values?.name ?? ""))
-        .replaceAll("{{count}}", String(values?.count ?? "")),
+        .replaceAll("{{count}}", String(values?.count ?? ""))
+        .replaceAll("{{version}}", String(values?.version ?? "")),
   }),
 }));
 
@@ -303,6 +305,8 @@ import {
   buildAcpProviderConfigPatch,
   getAcpProviderCatalog,
 } from "@/hooks/use-acp-provider-catalog";
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { useSessionStore } from "@/stores/session-store";
 import { ProvidersSection } from "./providers-section";
 
 const catalog = getAcpProviderCatalog();
@@ -402,6 +406,7 @@ describe("ProvidersSection", () => {
   });
 
   afterEach(() => {
+    useSessionStore.getState().clearSession("server-1");
     if (root) {
       act(() => {
         root?.unmount();
@@ -515,6 +520,41 @@ describe("ProvidersSection", () => {
     } else {
       expect(row.querySelector('[data-testid="loading-spinner"]')).not.toBeNull();
     }
+  });
+
+  // 主机声明了 providerVersions 的 server_info。
+  function connectHostWithProviderVersions(): void {
+    const store = useSessionStore.getState();
+    store.initializeSession("server-1", null as unknown as DaemonClient);
+    store.updateSessionServerInfo("server-1", {
+      serverId: "server-1",
+      hostname: null,
+      version: "0.13.1",
+      features: { providerVersions: true },
+    });
+  }
+
+  it("adds the installed version after the status line", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    configState.config = makeConfig();
+
+    render();
+
+    expect(
+      indexOfText(descendants(findRow("Claude provider details")), "3 models · v2.1.280"),
+    ).toBeGreaterThan(-1);
+  });
+
+  it("shows no version when the host does not report provider versions", () => {
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    configState.config = makeConfig();
+
+    render();
+
+    const row = findRow("Claude provider details");
+    expect(indexOfText(descendants(row), "3 models")).toBeGreaterThan(-1);
+    expect(row.textContent).not.toContain("v2.1.280");
   });
 
   it("selects the provider when its row is pressed", () => {

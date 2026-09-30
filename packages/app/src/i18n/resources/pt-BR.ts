@@ -2882,6 +2882,11 @@ export const ptBR: TranslationResources = {
         notInstalled: "Não instalado",
         apiEndpoint: "Endpoint de API: {{name}}",
       },
+      version: {
+        title: "Versão",
+        installed: "Instalada",
+        value: "v{{version}}",
+      },
       models: {
         title: "Modelos",
         one: "1 modelo",

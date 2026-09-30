@@ -1699,6 +1699,8 @@ export class VoiceAssistantWebSocketServer {
         subagentCallLinks: true,
         // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
         ...(this.apiEndpointService ? { apiEndpoints: true } : {}),
+        // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+        providerVersions: true,
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,

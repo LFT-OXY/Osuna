@@ -2799,6 +2799,11 @@ export const zhCN: TranslationResources = {
         notInstalled: "未安装",
         apiEndpoint: "第三方接口：{{name}}",
       },
+      version: {
+        title: "版本",
+        installed: "已安装",
+        value: "v{{version}}",
+      },
       models: {
         title: "Models",
         one: "1 个 Model",

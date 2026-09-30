@@ -9,9 +9,19 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-// Providers 列表行与「添加提供方」弹窗行名称下面的一行：状态点加文字。
-export function ProviderStatusLine({ status }: { status: ProviderStatusDisplay }) {
+// Providers 列表行与「添加提供方」弹窗行名称下面的一行：状态点加文字，列表行已装的内置提供方再接版本号。
+export function ProviderStatusLine({
+  status,
+  version,
+}: {
+  status: ProviderStatusDisplay;
+  version?: string;
+}) {
   const { t } = useTranslation();
+  let label = t(status.label.key, status.label.params);
+  if (version) {
+    label = `${label} · ${t("settings.providers.version.value", { version })}`;
+  }
   return (
     <View style={styles.statusLine}>
       {status.tone === "loading" ? (
@@ -23,7 +33,7 @@ export function ProviderStatusLine({ status }: { status: ProviderStatusDisplay }
         />
       )}
       <Text style={styles.statusLabel} numberOfLines={1}>
-        {t(status.label.key, status.label.params)}
+        {label}
       </Text>
     </View>
   );

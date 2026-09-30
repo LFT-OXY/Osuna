@@ -2901,6 +2901,11 @@ export const es: TranslationResources = {
         notInstalled: "No instalado",
         apiEndpoint: "Endpoint de API: {{name}}",
       },
+      version: {
+        title: "Versión",
+        installed: "Instalada",
+        value: "v{{version}}",
+      },
       models: {
         title: "Modelos",
         one: "1 modelo",

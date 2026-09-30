@@ -2852,6 +2852,11 @@ export const ko: TranslationResources = {
         notInstalled: "설치되지 않음",
         apiEndpoint: "API 엔드포인트: {{name}}",
       },
+      version: {
+        title: "버전",
+        installed: "설치됨",
+        value: "v{{version}}",
+      },
       models: {
         title: "모델",
         one: "모델 1개",

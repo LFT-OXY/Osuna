@@ -2957,6 +2957,11 @@ export const en = {
         notInstalled: "Not installed",
         apiEndpoint: "API endpoint: {{name}}",
       },
+      version: {
+        title: "Version",
+        installed: "Installed",
+        value: "v{{version}}",
+      },
       models: {
         title: "Models",
         one: "1 model",

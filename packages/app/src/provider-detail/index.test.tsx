@@ -17,6 +17,7 @@ import {
 } from "./header";
 import type { ProviderDiagnosticState } from "./diagnostic";
 import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
+import { ProviderVersionSection } from "./version-section";
 
 function entry(overrides: Partial<ProviderSnapshotEntry>): ProviderSnapshotEntry {
   return {
@@ -83,6 +84,10 @@ function renderApiEndpoints(providerLabel: string) {
   return <div data-testid="api-endpoints-slot">{providerLabel}</div>;
 }
 
+function renderVersion(installedVersion: string) {
+  return <ProviderVersionSection installedVersion={installedVersion} />;
+}
+
 const IDLE_DIAGNOSTIC: ProviderDiagnosticState = { status: "idle" };
 
 function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
@@ -93,6 +98,7 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       extendsProvider={undefined}
       hostPlatform="darwin"
       hostSupportsApiEndpoints
+      hostSupportsProviderVersions
       discoveredModels={[]}
       additionalModels={[]}
       isRefreshing={false}
@@ -109,6 +115,7 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       onAddCustomModel={resolved}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
+      renderVersion={renderVersion}
       {...overrides}
     />,
   );
@@ -446,6 +453,58 @@ describe("ProviderDetailSurface", () => {
     expect(
       blockOrder(["provider-install-platform-macos", "provider-inherited-api-endpoint"]),
     ).toEqual(["provider-inherited-api-endpoint", "provider-install-platform-macos"]);
+  });
+
+  it("shows the installed version", () => {
+    renderDetail({ entries: [entry({ version: "2.1.280" })] });
+
+    const text = screen.getByTestId("provider-version-section").textContent;
+    expect(text).toContain(i18n.t("settings.providers.version.title"));
+    expect(text).toContain(i18n.t("settings.providers.version.installed"));
+    expect(text).toContain("v2.1.280");
+  });
+
+  it("orders errors, the version, API endpoints, Models, then the diagnostic", () => {
+    // 启动出错的提供方快照里不带版本，这里用删除失败提示代表顶部的错误类提示。
+    renderDetail({ entries: [entry({ version: "2.1.280" })], removalError: "boom" });
+
+    const blocks = [
+      "provider-removal-error",
+      "provider-version-section",
+      "api-endpoints-slot",
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ];
+    expect(blockOrder(blocks.toReversed())).toEqual(blocks);
+  });
+
+  it("shows the version or the install guide, never both", () => {
+    renderDetail({ entries: [entry({ version: "2.1.280" })] });
+    expect(screen.getByTestId("provider-version-section").textContent).toContain("v2.1.280");
+    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
+    cleanup();
+
+    // daemon 不会给未安装的提供方填 version；这里故意带上，验证互斥由详情页自己保证。
+    renderDetail({ entries: [entry({ status: "unavailable", version: "2.1.280" })] });
+    expect(screen.getByTestId("provider-install-guide").textContent).toContain(
+      i18n.t("settings.providers.install.title", { name: "Claude Code" }),
+    );
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
+  });
+
+  it("shows no version section when the version could not be read", () => {
+    renderDetail({ entries: [entry({})] });
+
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
+  });
+
+  it("hides the version when the host does not report provider versions", () => {
+    renderDetail({
+      entries: [entry({ version: "2.1.280" })],
+      hostSupportsProviderVersions: false,
+    });
+
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
   });
 
   it("offers the diagnostic at the bottom, explaining what it checks", () => {

@@ -465,6 +465,8 @@ export const ProviderSnapshotEntrySchema = z.object({
   isModelListAuthoritative: z.boolean().optional(),
   // 当前启用的第三方接口；官方模式下没有。
   activeApiEndpoint: ApiEndpointRefSchema.optional(),
+  // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
+  version: z.string().optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({
@@ -3838,6 +3840,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),
+        // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+        // 快照带内置提供方的已装版本 version。
+        providerVersions: z.boolean().optional(),
       })
       .optional(),
   })

@@ -26,6 +26,7 @@ import {
 } from "./diagnostic";
 import { ProviderDetailSurface } from "./index";
 import { dismissProviderRemovalError, removeProvider, useProviderRemoval } from "./removal";
+import { ProviderVersionSection } from "./version-section";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
 /*
@@ -86,6 +87,8 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
     (state) => state.sessions[serverId]?.serverInfo?.hostPlatform,
   );
   const hostSupportsApiEndpoints = useHostFeature(serverId, "apiEndpoints");
+  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
 
   const stableDiscoveredRef = useRef<ProviderDiscoveredModelsCache | null>(null);
   const currentModels = providerEntry?.models;
@@ -150,6 +153,11 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
     [provider, serverId],
   );
 
+  const renderVersion = useCallback(
+    (installedVersion: string) => <ProviderVersionSection installedVersion={installedVersion} />,
+    [],
+  );
+
   const extendsProvider = config?.providers?.[provider]?.extends;
 
   return (
@@ -159,6 +167,7 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
       extendsProvider={extendsProvider}
       hostPlatform={hostPlatform}
       hostSupportsApiEndpoints={hostSupportsApiEndpoints}
+      hostSupportsProviderVersions={hostSupportsProviderVersions}
       discoveredModels={discoveredModels}
       additionalModels={additionalModels}
       isRefreshing={isRefreshing}
@@ -175,6 +184,7 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
       onAddCustomModel={handleAddCustomModel}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
+      renderVersion={renderVersion}
     />
   );
 }

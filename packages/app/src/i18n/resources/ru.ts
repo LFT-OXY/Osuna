@@ -2887,6 +2887,11 @@ export const ru: TranslationResources = {
         notInstalled: "Не установлен",
         apiEndpoint: "API-эндпоинт: {{name}}",
       },
+      version: {
+        title: "Версия",
+        installed: "Установлена",
+        value: "v{{version}}",
+      },
       models: {
         title: "Модели",
         one: "1 модель",

@@ -2835,6 +2835,11 @@ export const ar: TranslationResources = {
         notInstalled: "غير مثبت",
         apiEndpoint: "نقطة نهاية API: {{name}}",
       },
+      version: {
+        title: "الإصدار",
+        installed: "المثبّت",
+        value: "v{{version}}",
+      },
       models: {
         title: "النماذج",
         one: "1 نموذج",

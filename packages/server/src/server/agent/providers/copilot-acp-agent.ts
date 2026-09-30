@@ -7,6 +7,7 @@ import {
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
 } from "../provider-launch-config.js";
+import { resolveProviderCliVersion } from "../provider-cli-version.js";
 import {
   ACPAgentClient,
   type ACPConfigFeatureOption,
@@ -98,6 +99,14 @@ export class CopilotACPAgentClient extends ACPAgentClient {
 
   override async isAvailable(): Promise<boolean> {
     return super.isAvailable();
+  }
+
+  async resolveInstalledVersion(signal?: AbortSignal): Promise<string | null> {
+    return await resolveProviderCliVersion({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: "copilot",
+      signal,
+    });
   }
 
   async getDiagnostic(): Promise<{ diagnostic: string }> {

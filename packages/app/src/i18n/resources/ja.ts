@@ -2863,6 +2863,11 @@ export const ja: TranslationResources = {
         notInstalled: "未インストール",
         apiEndpoint: "API エンドポイント：{{name}}",
       },
+      version: {
+        title: "バージョン",
+        installed: "インストール済み",
+        value: "v{{version}}",
+      },
       models: {
         title: "モデル",
         one: "1つのモデル",

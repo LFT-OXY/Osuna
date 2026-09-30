@@ -4,6 +4,7 @@ import { Pressable, Text, View, type PressableStateCallbackType } from "react-na
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
@@ -27,6 +28,8 @@ interface ProviderRowProps {
   serverId: string;
   def: ProviderDefinition;
   entry: ProviderEntry;
+  // 已装版本；daemon 不支持 providerVersions 时不传。
+  version: string | undefined;
   enabled: boolean;
   isToggling: boolean;
   isFirst: boolean;
@@ -43,6 +46,7 @@ function ProviderRow({
   serverId,
   def,
   entry,
+  version,
   enabled,
   isToggling,
   isFirst,
@@ -95,7 +99,7 @@ function ProviderRow({
               <Text style={settingsStyles.rowTitle} numberOfLines={1}>
                 {def.label}
               </Text>
-              <ProviderStatusLine status={statusLine} />
+              <ProviderStatusLine status={statusLine} version={version} />
             </View>
           </View>
           <View style={styles.trailingControls}>
@@ -124,6 +128,8 @@ export interface ProvidersSectionProps {
 export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectionProps) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
+  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
   const { entries, isLoading } = useProvidersSnapshot(serverId);
   const { patchConfig } = useDaemonConfig(serverId);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
@@ -236,6 +242,7 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
                   serverId={serverId}
                   def={def}
                   entry={entry}
+                  version={hostSupportsProviderVersions ? entry.version : undefined}
                   enabled={entry.enabled ?? true}
                   isToggling={pendingProviderId === def.id}
                   isFirst={index === 0 && !hasErrorRowAbove}

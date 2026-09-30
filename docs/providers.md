@@ -175,6 +175,12 @@ Catalogue results stay cached by identity until explicit refresh or a change to 
 Keys are resolved on each read so project configuration can select a different cached catalogue.
 Selector opening may read a loading or stale query, but does not force provider probing.
 
+After a successful catalog probe, the manager fills `version` for built-in providers only. The
+`--version` probe runs outside the refresh deadline with its own 5-second timeout, so a slow probe
+cannot turn a ready entry into an error. A provider whose catalog probe already ran `--version` returns it as
+`ProviderCatalog.installedVersion` so the manager does not run it twice (Claude does this).
+An unreadable version omits the field and never changes the entry's status.
+
 Saved provider/model choices are user intent. Catalogue failure must not erase them or substitute
 another model. Creation reads the caller's host and directory directly; an earlier global snapshot
 must not settle a project form's initial selection.
@@ -502,6 +508,8 @@ interface AgentClient {
     context: ImportProviderSessionContext,
   ): Promise<ImportedProviderSession>;
   getDiagnostic?(): Promise<{ diagnostic: string }>;
+  // Built-in providers only: run the configured command with `--version`, return x.y.z or null.
+  resolveInstalledVersion?(signal?: AbortSignal): Promise<string | null>;
 }
 ```
 

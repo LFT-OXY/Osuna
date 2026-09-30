@@ -2910,6 +2910,11 @@ export const fr: TranslationResources = {
         notInstalled: "Non installé",
         apiEndpoint: "Endpoint d'API : {{name}}",
       },
+      version: {
+        title: "Version",
+        installed: "Installée",
+        value: "v{{version}}",
+      },
       models: {
         title: "Modèles",
         one: "1 modèle",

@@ -18,10 +18,11 @@ import { ProviderDiagnosticSection } from "./diagnostic-section";
 import { ProviderModelsSection } from "./models";
 
 /*
- * 提供方详情的内容区，区块顺序固定：删除失败 → 错误卡 → 继承接口提示 → 安装指引 → 第三方接口 → Models → 诊断。
+ * 提供方详情的内容区，区块顺序固定：删除失败 → 错误卡 → 继承接口提示 → 版本 → 安装指引 → 第三方接口 → Models → 诊断。
+ * 版本只在已安装时出现，安装指引只在未安装时出现，两者互斥。
  * 外框（弹窗或页面）由调用方决定。
  * 这里只收 props，方便 jsdom 测试；运行时接线在 view.tsx。
- * 安装指引与第三方接口的运行时视图在单测运行器里无法加载，所以由调用方经 render 插槽注入。
+ * 版本、安装指引与第三方接口的运行时视图由调用方经 render 插槽注入；后两者在单测运行器里无法加载。
  */
 
 export interface ProviderDetailSurfaceProps {
@@ -31,6 +32,7 @@ export interface ProviderDetailSurfaceProps {
   extendsProvider: unknown;
   hostPlatform: string | undefined;
   hostSupportsApiEndpoints: boolean;
+  hostSupportsProviderVersions: boolean;
   discoveredModels: AgentModelDefinition[];
   additionalModels: ProviderProfileModel[];
   isRefreshing: boolean;
@@ -51,6 +53,7 @@ export interface ProviderDetailSurfaceProps {
   onAddCustomModel: (modelId: string) => Promise<void>;
   renderInstallGuide: (guide: ProviderInstallGuide, cliLabel: string) => ReactNode;
   renderApiEndpoints: (providerLabel: string) => ReactNode;
+  renderVersion: (installedVersion: string) => ReactNode;
 }
 
 function ProviderStartErrorAlert({
@@ -107,12 +110,25 @@ function ProviderStartErrorAlert({
   );
 }
 
+// 版本一节只给已安装的提供方；daemon 只给启用的内置提供方填 version，自定义和 ACP 提供方没有这个字段。
+function selectShownVersion(input: {
+  entry: ProviderSnapshotEntry | undefined;
+  hostSupportsProviderVersions: boolean;
+}): string | undefined {
+  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  if (!input.hostSupportsProviderVersions) return undefined;
+  const isInstalled = input.entry?.status !== "unavailable";
+  if (!isInstalled) return undefined;
+  return input.entry?.version;
+}
+
 export function ProviderDetailSurface({
   provider,
   entries,
   extendsProvider,
   hostPlatform,
   hostSupportsApiEndpoints,
+  hostSupportsProviderVersions,
   discoveredModels,
   additionalModels,
   isRefreshing,
@@ -129,6 +145,7 @@ export function ProviderDetailSurface({
   onAddCustomModel,
   renderInstallGuide,
   renderApiEndpoints,
+  renderVersion,
 }: ProviderDetailSurfaceProps) {
   const { t } = useTranslation();
   const providerLabel = resolveProviderLabel(provider, entries);
@@ -151,6 +168,15 @@ export function ProviderDetailSurface({
   const modelsRefreshing = isRefreshing || providerSnapshotRefreshing;
   const startErrorMessage = providerEntry?.enabled === false ? null : providerErrorMessage;
   const inheritedApiEndpoint = selectInheritedApiEndpoint({ provider, extendsProvider, entries });
+
+  const installedVersion = selectShownVersion({
+    entry: providerEntry,
+    hostSupportsProviderVersions,
+  });
+  let versionContent: ReactNode = null;
+  if (installedVersion) {
+    versionContent = renderVersion(installedVersion);
+  }
 
   let installGuideContent: ReactNode = null;
   if (installGuide) {
@@ -199,6 +225,7 @@ export function ProviderDetailSurface({
           />
         </View>
       ) : null}
+      {versionContent}
       {installGuideContent}
       {apiEndpointsContent}
       <ProviderModelsSection

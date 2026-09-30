@@ -894,6 +894,64 @@ const notice = buildApiEndpointModeNotice({ modes: this.apiEndpointMode, provide
 if (notice) this.pendingApiEndpointModeNotices.set(agentId, notice);
 ```
 
+## Scenario: optional snapshot field filled by a best-effort probe
+
+Example: `ProviderSnapshotEntry.version`, the installed CLI version of a built-in provider, gated by `server_info.features.providerVersions`.
+
+### 1. Scope / Trigger
+
+- A new optional field on a provider snapshot entry whose value comes from running a host command (`<cli> --version`), where failure must never change the entry's status.
+
+### 2. Signatures
+
+- Protocol: `ProviderSnapshotEntrySchema.version: z.string().optional()`; `features.providerVersions: z.boolean().optional()` (`packages/protocol/src/messages.ts`).
+- Server: `AgentClient.resolveInstalledVersion?(signal?): Promise<string | null>`; `ProviderCatalog.installedVersion?: DiscoveredCliVersion` where `DiscoveredCliVersion = { status: "found"; version } | { status: "unreadable" }` (`agent-sdk-types.ts`).
+- Helper: `parseCliVersion(output): string | null` and `resolveProviderCliVersion({ runtimeSettings, defaultBinary, signal })` (`agent/provider-cli-version.ts`).
+
+### 3. Contracts
+
+- `version` is the first plain `x.y.z` in stdout+stderr; prerelease suffixes are dropped.
+- Filled only when `entry.source === "builtin"` and the catalog probe succeeded; `error`, `unavailable`, disabled, custom and ACP entries omit it.
+- The probe runs the command the provider actually launches (config `command` + `env`), after the refresh deadline, with its own 5 s exec timeout.
+- A provider that already ran `--version` during `fetchCatalog` (Claude) reports it through `ProviderCatalog.installedVersion`; the manager then skips its own probe.
+- The daemon advertises `providerVersions: true` unconditionally; the app gates the list row and the detail "Version" section on it (`COMPAT(providerVersions)`).
+
+### 4. Validation & Error Matrix
+
+- Output has no `x.y.z` → field omitted, status unchanged.
+- Probe throws / times out → logged at debug, field omitted, status unchanged.
+- Catalog probe fails → status `error`, no probe, no field.
+- Old daemon → no flag → app shows no version.
+
+### 5. Good/Base/Bad Cases
+
+- Good: fake `copilot` prints `GitHub Copilot CLI 1.0.89.` → `{ status: "ready", version: "1.0.89" }`.
+- Base: unreadable output → `{ status: "ready" }` with no `version`.
+- Bad: putting the probe inside `runProviderRefreshWithDeadline` — a slow probe turns a ready entry into `error`.
+
+### 6. Tests Required
+
+- Unit `provider-cli-version.test.ts`: real samples for codex, copilot, opencode, pi, omp; unparseable inputs → `null`. Claude's sample lives in `claude/models.test.ts` (`parseClaudeCodeVersion`).
+- Daemon e2e `daemon-e2e/provider-version.e2e.test.ts` (real clients, fake sh CLIs): Claude ready + version; unreadable → ready without version on both the Claude and the generic path; custom and disabled entries carry none.
+- App jsdom: list row `"3 models · v2.1.280"` only with the flag; detail order and version/install-guide exclusivity.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Runs --version a second time for Claude and can time the whole refresh out.
+operation: async (context) => ({ catalog: await fetchCatalog(), version: await client.resolveInstalledVersion?.(context.signal) }),
+```
+
+#### Correct
+
+```ts
+const catalog = await runProviderRefreshWithDeadline({ … return await definition.fetchCatalog(…) });
+let version: string | undefined;
+if (base.source === "builtin") version = await this.readInstalledVersion({ provider, catalog, client });
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

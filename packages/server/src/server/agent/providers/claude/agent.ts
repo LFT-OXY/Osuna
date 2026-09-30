@@ -131,6 +131,7 @@ import {
   type ListImportableSessionsOptions,
   type McpServerConfig,
   type ProviderCatalog,
+  type DiscoveredCliVersion,
   type ProviderRefreshContext,
   type ResolveAgentDefaultModeInput,
 } from "../../agent-sdk-types.js";
@@ -1574,10 +1575,15 @@ export class ClaudeAgentClient implements AgentClient {
     const modeCatalog = claudeModeCatalog(
       createProviderEnv({ baseEnv: process.env, runtimeSettings: this.runtimeSettings }),
     );
-    return {
-      models,
-      ...modeCatalog,
-    };
+    let installedVersion: DiscoveredCliVersion = { status: "unreadable" };
+    if (claudeCodeVersion) {
+      installedVersion = { status: "found", version: claudeCodeVersion };
+    }
+    return { models, ...modeCatalog, installedVersion };
+  }
+
+  async resolveInstalledVersion(signal?: AbortSignal): Promise<string> {
+    return await this.resolveVersion(signal);
   }
 
   async resolveDefaultModeId({ env: launchEnv }: ResolveAgentDefaultModeInput): Promise<string> {
