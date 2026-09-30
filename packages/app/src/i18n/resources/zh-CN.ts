@@ -447,6 +447,7 @@ export const zhCN: TranslationResources = {
     },
     filters: {
       all: "全部",
+      byProvider: "按提供方筛选",
     },
     status: {
       connectHost: "连接到主机以导入会话",
@@ -455,6 +456,7 @@ export const zhCN: TranslationResources = {
       loading: "正在加载最近会话...",
       failedProvider: "无法加载 {{provider}} 的会话",
       failedImport: "无法导入所选会话。",
+      missingCwd: "会话缺少工作目录",
     },
     actions: {
       refresh: "刷新会话",
@@ -495,6 +497,7 @@ export const zhCN: TranslationResources = {
         restoringAction: "正在恢复...",
         unavailableTitle: "工作区不可用",
         checkFailedTitle: "无法检查工作区",
+        updateToRecover: "更新 Osuna 以恢复此工作区。",
       },
     },
     hoverCard: {
@@ -640,6 +643,9 @@ export const zhCN: TranslationResources = {
       devices: {
         label: "设备尺寸",
         responsive: "自适应",
+        laptop: "笔记本电脑",
+        desktop1080: "台式机 1080p",
+        desktop1440: "台式机 1440p",
       },
       errors: {
         failedToLoad: "页面加载失败",
@@ -651,6 +657,11 @@ export const zhCN: TranslationResources = {
       hostDisconnected: "主机未连接",
       updateHost: "请更新主机以使用原生终端渲染器。",
       unableToSubscribe: "无法订阅终端",
+      showKeyboard: "显示键盘",
+      hideKeyboard: "隐藏键盘",
+      paste: "粘贴",
+      copy: "复制",
+      scrollToBottom: "底部",
     },
     tabs: {
       loading: "正在加载...",
@@ -756,6 +767,10 @@ export const zhCN: TranslationResources = {
           tabs: "这会关闭 {{tabs}} 个标签。",
           agents: "这会归档 {{agents}} 个 Agent。",
         },
+      },
+      status: {
+        agentRunning: "Agent 运行中",
+        agentNeedsInput: "Agent 需要输入",
       },
     },
     header: {
@@ -1298,6 +1313,7 @@ export const zhCN: TranslationResources = {
       project: "项目",
       base: "基线",
       baseNotApplicable: "不适用",
+      host: "主机",
     },
     titlePlaceholder: "标题（可选）",
     errors: {
@@ -1305,6 +1321,9 @@ export const zhCN: TranslationResources = {
       createWorktreeFailed: "创建工作树失败",
       composerStateRequired: "输入区状态必填",
       selectModel: "请选择模型",
+      chooseProject: "请选择项目",
+      chooseHost: "请为此项目选择主机",
+      projectUnavailableOnHost: "所选主机上没有此项目",
     },
     tooltips: {
       project: "选择项目",
@@ -1329,6 +1348,14 @@ export const zhCN: TranslationResources = {
       submit: "启动",
       promptPlaceholder: "向 {{name}} 输入提示词",
       commandPlaceholder: "运行命令，留空则打开空白终端",
+    },
+    projectPicker: {
+      searchPlaceholder: "搜索项目",
+      empty: "暂无可用项目。",
+    },
+    accessibility: {
+      project: "工作区项目",
+      isolation: "工作区隔离方式",
     },
   },
   desktop: {

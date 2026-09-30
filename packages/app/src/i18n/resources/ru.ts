@@ -454,6 +454,7 @@ export const ru: TranslationResources = {
     },
     filters: {
       all: "Все",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "Подключитесь к хосту, чтобы импортировать сессии",
@@ -462,6 +463,7 @@ export const ru: TranslationResources = {
       loading: "Загрузка недавних сессий...",
       failedProvider: "Не удалось загрузить сессии провайдера {{provider}}",
       failedImport: "Не удалось импортировать выбранную сессию.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "Обновить список сессий",
@@ -503,6 +505,7 @@ export const ru: TranslationResources = {
         restoringAction: "Восстановление...",
         unavailableTitle: "Рабочая область недоступна",
         checkFailedTitle: "Не удалось проверить рабочее пространство",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -649,6 +652,9 @@ export const ru: TranslationResources = {
       devices: {
         label: "Размер экрана устройства",
         responsive: "Адаптивный режим",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "Не удалось загрузить страницу",
@@ -661,6 +667,11 @@ export const ru: TranslationResources = {
       hostDisconnected: "Хост не подключён",
       updateHost: "Обновите хост, чтобы использовать нативный рендерер терминала.",
       unableToSubscribe: "Не удалось подключиться к терминалу",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "Загрузка...",
@@ -771,6 +782,10 @@ export const ru: TranslationResources = {
           tabs: "Будут закрыты вкладки ({{tabs}}).",
           agents: "Будут архивированы агенты ({{agents}}).",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1331,6 +1346,7 @@ export const ru: TranslationResources = {
       project: "Проект",
       base: "Базовая ветка",
       baseNotApplicable: "Неприменимо",
+      host: "Host",
     },
     titlePlaceholder: "Заголовок (необязательно)",
     errors: {
@@ -1338,6 +1354,9 @@ export const ru: TranslationResources = {
       createWorktreeFailed: "Не удалось создать worktree.",
       composerStateRequired: "Редактор сообщения ещё не готов.",
       selectModel: "Выберите модель",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Выберите проект",
@@ -1363,6 +1382,14 @@ export const ru: TranslationResources = {
       promptPlaceholder: "Промпт для {{name}}",
       commandPlaceholder:
         "Введите команду или оставьте поле пустым, чтобы открыть терминал без запуска команды",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {

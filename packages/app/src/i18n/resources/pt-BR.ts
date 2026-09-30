@@ -456,6 +456,7 @@ export const ptBR: TranslationResources = {
     },
     filters: {
       all: "Tudo",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "Conecte-se a um host para importar sessões",
@@ -464,6 +465,7 @@ export const ptBR: TranslationResources = {
       loading: "Carregando sessões recentes...",
       failedProvider: "Não foi possível carregar as sessões de {{provider}}",
       failedImport: "Não foi possível importar a sessão selecionada.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "Atualizar sessões",
@@ -505,6 +507,7 @@ export const ptBR: TranslationResources = {
         restoringAction: "Restaurando...",
         unavailableTitle: "Workspace indisponível",
         checkFailedTitle: "Não foi possível verificar o workspace",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -650,6 +653,9 @@ export const ptBR: TranslationResources = {
       devices: {
         label: "Tamanho do dispositivo",
         responsive: "Responsivo",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "Falha ao carregar página",
@@ -661,6 +667,11 @@ export const ptBR: TranslationResources = {
       hostDisconnected: "Host não está conectado",
       updateHost: "Atualize o host para usar o renderizador de terminal nativo.",
       unableToSubscribe: "Não foi possível assinar o terminal",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "Carregando...",
@@ -770,6 +781,10 @@ export const ptBR: TranslationResources = {
           tabs: "Isso vai fechar {{tabs}} aba(s).",
           agents: "Isso vai arquivar {{agents}} agente(s).",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1341,6 +1356,7 @@ export const ptBR: TranslationResources = {
       project: "Projeto",
       base: "Base",
       baseNotApplicable: "Não aplicável",
+      host: "Host",
     },
     titlePlaceholder: "Título (opcional)",
     errors: {
@@ -1348,6 +1364,9 @@ export const ptBR: TranslationResources = {
       createWorktreeFailed: "Falha ao criar worktree",
       composerStateRequired: "O estado do composer é obrigatório",
       selectModel: "Selecione um modelo",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1372,6 +1391,14 @@ export const ptBR: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {

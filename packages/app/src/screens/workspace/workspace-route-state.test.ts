@@ -148,9 +148,8 @@ describe("resolveWorkspaceRouteState", () => {
         },
       }),
     ).toEqual({
-      kind: "recoveryUnavailable",
+      kind: "needsAppUpdate",
       hostName: "Laptop",
-      message: "Update Osuna to recover this workspace.",
     });
   });
 

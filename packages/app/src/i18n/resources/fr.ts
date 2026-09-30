@@ -457,6 +457,7 @@ export const fr: TranslationResources = {
     },
     filters: {
       all: "Tous",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "Connectez-vous à un hôte pour importer des sessions",
@@ -465,6 +466,7 @@ export const fr: TranslationResources = {
       loading: "Chargement des sessions récentes...",
       failedProvider: "Impossible de charger les sessions {{provider}}",
       failedImport: "Impossible d'importer la session sélectionnée.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "Sessions de rafraîchissement",
@@ -505,6 +507,7 @@ export const fr: TranslationResources = {
         restoringAction: "Restauration...",
         unavailableTitle: "Espace de travail indisponible",
         checkFailedTitle: "Impossible de vérifier l'espace de travail",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -650,6 +653,9 @@ export const fr: TranslationResources = {
       devices: {
         label: "Taille de l'appareil",
         responsive: "Adaptatif",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "Échec du chargement de la page",
@@ -661,6 +667,11 @@ export const fr: TranslationResources = {
       hostDisconnected: "Hostn'est pas connecté",
       updateHost: "Mettez à jour l’hôte pour utiliser le terminal natif.",
       unableToSubscribe: "Impossible de s'abonner au terminal",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "Chargement...",
@@ -772,6 +783,10 @@ export const fr: TranslationResources = {
           tabs: "Cela fermera les onglets{{tabs}}.",
           agents: "Cela archivera les agents{{agents}}.",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1350,6 +1365,7 @@ export const fr: TranslationResources = {
       project: "Projet",
       base: "Base",
       baseNotApplicable: "Non applicable",
+      host: "Host",
     },
     titlePlaceholder: "Titre (facultatif)",
     errors: {
@@ -1357,6 +1373,9 @@ export const fr: TranslationResources = {
       createWorktreeFailed: "Échec de la création de l'arbre de travail",
       composerStateRequired: "L'état du compositeur est requis",
       selectModel: "Sélectionnez un modèle",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1381,6 +1400,14 @@ export const fr: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {

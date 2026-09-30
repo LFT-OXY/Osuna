@@ -447,6 +447,7 @@ export const en = {
     },
     filters: {
       all: "All",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "Connect to a host to import sessions",
@@ -455,6 +456,7 @@ export const en = {
       loading: "Loading recent sessions...",
       failedProvider: "Could not load {{provider}} sessions",
       failedImport: "Could not import selected session.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "Refresh sessions",
@@ -495,6 +497,7 @@ export const en = {
         restoringAction: "Restoring...",
         unavailableTitle: "Workspace unavailable",
         checkFailedTitle: "Couldn't check workspace",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -640,6 +643,9 @@ export const en = {
       devices: {
         label: "Device size",
         responsive: "Responsive",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "Failed to load page",
@@ -651,6 +657,11 @@ export const en = {
       hostDisconnected: "Host is not connected",
       updateHost: "Update the host to use the native terminal renderer.",
       unableToSubscribe: "Unable to subscribe to terminal",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "Loading...",
@@ -759,6 +770,10 @@ export const en = {
           tabs: "This will close {{tabs}} tab(s).",
           agents: "This will archive {{agents}} agent(s).",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1321,6 +1336,7 @@ export const en = {
       project: "Project",
       base: "Base",
       baseNotApplicable: "Not applicable",
+      host: "Host",
     },
     titlePlaceholder: "Title (optional)",
     errors: {
@@ -1328,6 +1344,9 @@ export const en = {
       createWorktreeFailed: "Failed to create worktree",
       composerStateRequired: "Composer state is required",
       selectModel: "Select a model",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1352,6 +1371,14 @@ export const en = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {

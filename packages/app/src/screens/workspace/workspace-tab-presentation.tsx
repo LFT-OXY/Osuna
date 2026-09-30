@@ -141,6 +141,7 @@ export function WorkspaceTabIcon({
   statusDotBorderColor,
   backdrop,
 }: WorkspaceTabIconProps): ReactElement {
+  const { t } = useTranslation();
   const iconColor = active ? styles.iconActive.color : styles.iconInactive.color;
   const bucket = presentation.statusBucket;
   const isRunning = bucket === "running";
@@ -171,14 +172,17 @@ export function WorkspaceTabIcon({
         <View
           style={styles.statusRing}
           accessibilityRole="progressbar"
-          accessibilityLabel="Agent running"
+          accessibilityLabel={t("workspace.tabs.status.agentRunning")}
         >
           <StatusRing backdrop={backdrop} />
         </View>
       ) : null}
       {statusDotColor ? <View style={statusDotStyle} /> : null}
       {showNeedsInputAlert ? (
-        <View style={styles.statusAlertOverlay} accessibilityLabel="Agent needs input">
+        <View
+          style={styles.statusAlertOverlay}
+          accessibilityLabel={t("workspace.tabs.status.agentNeedsInput")}
+        >
           <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputAlertMapping} />
         </View>
       ) : null}

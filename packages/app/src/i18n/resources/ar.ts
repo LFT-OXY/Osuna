@@ -450,6 +450,7 @@ export const ar: TranslationResources = {
     },
     filters: {
       all: "الجميع",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "اتصل بمضيف لاستيراد الجلسات",
@@ -458,6 +459,7 @@ export const ar: TranslationResources = {
       loading: "جارٍ تحميل الجلسات الأخيرة...",
       failedProvider: "تعذر تحميل جلسات {{provider}}",
       failedImport: "تعذر استيراد الجلسة المحددة.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "تحديث الجلسات",
@@ -498,6 +500,7 @@ export const ar: TranslationResources = {
         restoringAction: "جارٍ الاستعادة...",
         unavailableTitle: "مساحة العمل غير متاحة",
         checkFailedTitle: "تعذر التحقق من مساحة العمل",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -643,6 +646,9 @@ export const ar: TranslationResources = {
       devices: {
         label: "حجم الجهاز",
         responsive: "متجاوب",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "فشل تحميل الصفحة",
@@ -654,6 +660,11 @@ export const ar: TranslationResources = {
       hostDisconnected: "Host غير متصل",
       updateHost: "حدّث المضيف لاستخدام عارض الطرفية الأصلي.",
       unableToSubscribe: "غير قادر على الاشتراك في المحطة",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "تحميل...",
@@ -764,6 +775,10 @@ export const ar: TranslationResources = {
           tabs: "سيؤدي هذا إلى إغلاق علامة التبويب (علامات التبويب){{tabs}}.",
           agents: "سيؤدي هذا إلى أرشفة وكيل (وكلاء){{agents}}.",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1313,6 +1328,7 @@ export const ar: TranslationResources = {
       project: "المشروع",
       base: "الأساس",
       baseNotApplicable: "غير قابل للتطبيق",
+      host: "Host",
     },
     titlePlaceholder: "العنوان (اختياري)",
     errors: {
@@ -1320,6 +1336,9 @@ export const ar: TranslationResources = {
       createWorktreeFailed: "فشل في إنشاء شجرة العمل",
       composerStateRequired: "حالة الملحن مطلوبة",
       selectModel: "اختر نموذجا",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1344,6 +1363,14 @@ export const ar: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {

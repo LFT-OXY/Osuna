@@ -12,6 +12,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { ITheme } from "@xterm/xterm";
 import type { TerminalState } from "@getpaseo/protocol/messages";
 import {
@@ -180,6 +181,7 @@ function NativeTerminalEmulator({
   focusRequestToken = 0,
   resizeRequestToken = 0,
 }: TerminalEmulatorProps) {
+  const { t } = useTranslation();
   const terminalRef = useRef<NativeHeadlessTerminal | null>(null);
   const mountInputRef = useRef({ streamKey, initialSnapshot });
   if (
@@ -1002,13 +1004,13 @@ function NativeTerminalEmulator({
       </View>
       {isScrolled ? (
         <Pressable
-          accessibilityLabel="Bottom"
+          accessibilityLabel={t("workspace.terminal.scrollToBottom")}
           accessibilityRole="button"
           onPress={returnToBottom}
           style={styles.followButton}
           testID="terminal-follow-bottom"
         >
-          <Text style={styles.followButtonText}>Bottom</Text>
+          <Text style={styles.followButtonText}>{t("workspace.terminal.scrollToBottom")}</Text>
         </Pressable>
       ) : null}
     </View>

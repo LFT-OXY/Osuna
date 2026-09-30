@@ -451,6 +451,7 @@ export const ko: TranslationResources = {
     },
     filters: {
       all: "전체",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "세션을 가져오려면 호스트에 연결하세요",
@@ -459,6 +460,7 @@ export const ko: TranslationResources = {
       loading: "최근 세션을 불러오는 중...",
       failedProvider: "{{provider}} 세션을 불러올 수 없습니다",
       failedImport: "선택한 세션을 가져올 수 없습니다.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "세션 새로고침",
@@ -499,6 +501,7 @@ export const ko: TranslationResources = {
         restoringAction: "복원 중...",
         unavailableTitle: "워크스페이스를 사용할 수 없습니다",
         checkFailedTitle: "워크스페이스를 확인하지 못했습니다",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -644,6 +647,9 @@ export const ko: TranslationResources = {
       devices: {
         label: "장치 크기",
         responsive: "반응형",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "페이지를 불러오지 못했습니다",
@@ -655,6 +661,11 @@ export const ko: TranslationResources = {
       hostDisconnected: "호스트가 연결되어 있지 않습니다",
       updateHost: "기본 터미널 렌더러를 사용하도록 호스트를 업데이트합니다.",
       unableToSubscribe: "터미널을 구독할 수 없습니다",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "불러오는 중...",
@@ -764,6 +775,10 @@ export const ko: TranslationResources = {
           tabs: "탭 {{tabs}}개를 닫습니다.",
           agents: "에이전트 {{agents}}개를 보관합니다.",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1320,6 +1335,7 @@ export const ko: TranslationResources = {
       project: "프로젝트",
       base: "기준",
       baseNotApplicable: "해당 없음",
+      host: "Host",
     },
     titlePlaceholder: "제목(선택 사항)",
     errors: {
@@ -1327,6 +1343,9 @@ export const ko: TranslationResources = {
       createWorktreeFailed: "워크트리를 생성하지 못했습니다",
       composerStateRequired: "작성기 상태가 필요합니다",
       selectModel: "모델을 선택하세요",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1351,6 +1370,14 @@ export const ko: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {

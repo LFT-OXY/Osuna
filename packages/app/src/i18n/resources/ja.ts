@@ -455,6 +455,7 @@ export const ja: TranslationResources = {
     },
     filters: {
       all: "すべて",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "セッションをインポートするにはホストに接続してください",
@@ -463,6 +464,7 @@ export const ja: TranslationResources = {
       loading: "最近のセッションを読み込み中...",
       failedProvider: "{{provider}} のセッションを読み込めませんでした",
       failedImport: "選択したセッションをインポートできませんでした。",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "セッションを更新",
@@ -504,6 +506,7 @@ export const ja: TranslationResources = {
         restoringAction: "復元中...",
         unavailableTitle: "ワークスペースを利用できません",
         checkFailedTitle: "ワークスペースを確認できませんでした",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -649,6 +652,9 @@ export const ja: TranslationResources = {
       devices: {
         label: "デバイスサイズ",
         responsive: "レスポンシブ",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "ページの読み込みに失敗しました",
@@ -660,6 +666,11 @@ export const ja: TranslationResources = {
       hostDisconnected: "ホストが接続されていません",
       updateHost: "ネイティブターミナルを使用するにはホストを更新してください。",
       unableToSubscribe: "ターミナルに接続できません",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "読み込み中...",
@@ -768,6 +779,10 @@ export const ja: TranslationResources = {
           tabs: "{{tabs}}件のタブを閉じます。",
           agents: "{{agents}}件のエージェントをアーカイブします。",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1327,6 +1342,7 @@ export const ja: TranslationResources = {
       project: "プロジェクト",
       base: "ベース",
       baseNotApplicable: "該当なし",
+      host: "Host",
     },
     titlePlaceholder: "タイトル（任意）",
     errors: {
@@ -1334,6 +1350,9 @@ export const ja: TranslationResources = {
       createWorktreeFailed: "ワークツリーの作成に失敗しました",
       composerStateRequired: "コンポーザーの状態が必要です",
       selectModel: "モデルを選択してください",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1358,6 +1377,14 @@ export const ja: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {
