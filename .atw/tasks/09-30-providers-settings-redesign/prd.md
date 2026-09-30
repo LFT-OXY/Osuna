@@ -79,7 +79,7 @@
 34. 作为用户，我想在添加 Model 的过程中看到进行中的状态，失败时在输入行下方看到原因，成功后输入行收起、新模型出现在「自定义 Models」里，以便知道结果。
 35. 作为用户，我想在自定义模型行的末尾删除它，以便清理手动加错的 id。
 36. 作为用户，我想在没有检测到模型时看到「未检测到 Model」，在提供方已禁用时看到「已禁用。启用后 Osuna 才会检测它的 Models。」，以便知道为什么是空的。
-37. 作为用户，我想在模型加载失败时看到原因和「重试」，以便恢复。
+37. 作为用户，我想在提供方启动失败、没有模型时，看到 Models 区说明「启动失败，没有检测到 Models。」，原因和「刷新」「运行诊断」在顶部的错误卡里，以便同一个错误只出现一次。
 
 ### 诊断
 
@@ -160,16 +160,20 @@
 - **继承接口提示**：Alert warning。把现有 `inheritedNote` 拆成标题「也会走 Claude Code 启用的第三方接口 {名称}」和描述「Claude 的 settings.json 里的 env 优先于这个提供方的环境变量。」，两条都是新文案，取代原来的 `inheritedNote`。显示条件不变。
 - **安装指引**、**第三方接口**：沿用现有组件和行为，只是从弹窗搬进详情。第三方接口的新建和编辑表单仍然是 AdaptiveModalSheet（多字段表单，按 `docs/design.md` §6 属于弹窗）。
 - **Models**：
-  - 节标题「Models」（新增）后面跟总数（extra-muted）；trailing 是 caption muted「已更新 {时间}」和 ghost「添加 Model」。
+  - 模块是 `provider-detail/models.tsx` 的 `ProviderModelsSection`。搜索词和添加行是它自己的 state，详情按提供方给它加 key，换提供方时一起清掉；弹窗头部不再传查询进来。
+  - 节标题「Models」（新增）后面跟总数（extra-muted，经 `SettingsSection` 的 `count`）；trailing 是 caption muted「已更新 {时间}」（每 10 秒重算）和 ghost「添加 Model」。
   - 卡片内依次是：搜索行（`Search` 16 加无边框输入，占位「搜索 Models」，有模型时才显示）→ 添加行（展开时）→「已发现 N」组 →「自定义 Models N」组。组标题行是 caption、medium、muted，数量右对齐。
   - 模型行沿用现有样式：名称 14、mono id 12、描述 12，单行省略。名称与 id 相同时只显示名称（新规则）。自定义模型行末尾是删除按钮。
-  - 空、加载、加载失败、搜索无匹配这几种状态沿用现有文案和「重试」。已禁用时空状态改为「已禁用。启用后 Osuna 才会检测它的 Models。」（新增）。
+  - 没有模型时按顺序判断：已禁用 →「已禁用。启用后 Osuna 才会检测它的 Models。」（新增）；加载中 → spinner 加「正在加载 Models...」；出错 →「启动失败，没有检测到 Models。」（新增 `models.startFailed`）；其余 →「未检测到 Model」。搜索无匹配沿用原文案。添加行展开时卡片里只放添加行，不放空状态。
+  - 出错时 Models 区不再重复错误原文和「重试」：原文和「刷新」「运行诊断」只在顶部错误卡里（工单 06 的决定，用户确认）。`models.retry` / `models.retrying` 随之删除。
   - 原弹窗头部的搜索、底部栏、「添加自定义 Model」子弹窗全部移除。
 - **添加 Model（就地）**：
   - 展开后一行是 FormTextInput sm（自动聚焦，占位沿用「例如 openai/gpt-5」）、default sm「添加」、ghost「取消」；回车提交，Esc 收起。
   - 提交中按钮显示「正在添加...」并禁用。
   - 失败时在输入行下方显示 caption statusDanger「保存 Model 失败」加原因，输入保留。
-  - 成功后收起，并刷新该提供方。
+  - 成功后收起，并刷新该提供方。成功的判定是配置写入成功；刷新不阻塞收起，新模型经配置先出现在「自定义 Models」里。
+  - 空 id 或已在自定义 Models 里的 id 不提交（「添加」禁用，回车无效）。
+  - 已知限制：桌面端 composer 弹窗在 window 捕获阶段接管 Esc（`lib/overlay-root.ts`），输入框收不到，按 Esc 会关掉整个弹窗；设置页和手机上 Esc 收起添加行。
   - 写入方式沿用现有 `additionalModels` 配置补丁。
 - **诊断（就地）**：
   - 未运行时是一行卡片：左侧说明「查看 {名称} 的命令来源、解析路径、版本和可用状态。」（新增），右侧 outline「运行诊断」（新增，带 `FileText` 图标）。
@@ -209,13 +213,14 @@
   - 「Models」节标题；
   - 状态行「第三方接口：{名称}」；
   - 错误卡标题「{名称} 无法启动」；
+  - Models 区出错时的空状态「启动失败，没有检测到 Models。」；
   - 继承提示的标题和描述（取代 `inheritedNote`）；
   - 已禁用时的空状态；
   - 诊断节说明和「运行诊断」；
   - 「添加 Provider」按钮的无障碍名称（复用 `settings.providers.addProvider`）；
   - 列表错误行的「关闭」（复用 `common.actions.dismiss`）。
 - 写在 `en.ts`，其余 8 种语言同步补齐。
-- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。05 已删 `install.howTo`、`install.howToFor`、`apiEndpoints.inheritedNote`、`updateErrorTitle`，以及只剩测试在用的 `hasProviderInstallGuide`。
+- 这次改动之后不再被引用的键一并删除，只删因本次改动变成孤儿的：「如何安装」入口的两个键、`inheritedNote`、子弹窗专用的标题等。实现时以代码引用为准核对。06 删了 `models.addCustomTitle`、`models.modelId`、`models.retry`、`models.retrying`。05 已删 `install.howTo`、`install.howToFor`、`apiEndpoints.inheritedNote`、`updateErrorTitle`，以及只剩测试在用的 `hasProviderInstallGuide`。
 
 ## Testing Decisions
 

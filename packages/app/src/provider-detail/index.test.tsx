@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import React from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
@@ -35,6 +35,38 @@ const CUSTOM: ProviderProfileModel[] = [{ id: "relay/gpt", label: "relay/gpt" }]
 
 function noop() {}
 
+function resolved() {
+  return Promise.resolve();
+}
+
+function deferred() {
+  let resolve: () => void = noop;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function typeInto(input: HTMLElement, value: string) {
+  fireEvent.change(input, { target: { value } });
+}
+
+function searchInput() {
+  return screen.getByPlaceholderText(i18n.t("settings.providers.models.searchPlaceholder"));
+}
+
+function openAddModelRow() {
+  fireEvent.click(screen.getByText(i18n.t("settings.providers.models.addModel")));
+}
+
+function addModelInput() {
+  return screen.getByPlaceholderText(i18n.t("settings.providers.models.modelIdPlaceholder"));
+}
+
+function queryAddModelInput() {
+  return screen.queryByPlaceholderText(i18n.t("settings.providers.models.modelIdPlaceholder"));
+}
+
 function renderInstallGuide(guide: ProviderInstallGuide, cliLabel: string) {
   return (
     <ProviderInstallGuideSurface
@@ -60,7 +92,6 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       hostSupportsApiEndpoints
       discoveredModels={[]}
       additionalModels={[]}
-      modelQuery=""
       isRefreshing={false}
       deletingModelId={null}
       removalError={null}
@@ -68,6 +99,7 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       onRunDiagnostic={noop}
       onDismissRemovalError={noop}
       onDeleteCustomModel={noop}
+      onAddCustomModel={resolved}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
       {...overrides}
@@ -134,6 +166,22 @@ describe("ProviderDetailSurface", () => {
     expect(screen.queryByTestId("api-endpoints-slot")).toBeNull();
   });
 
+  it("heads the Models section with the total, the last update and Add model", () => {
+    renderDetail({
+      entries: [entry({ fetchedAt: new Date().toISOString() })],
+      discoveredModels: DISCOVERED,
+      additionalModels: CUSTOM,
+    });
+
+    const section = screen.getByTestId("provider-models-section");
+    expect(within(section).getByText(i18n.t("settings.providers.models.title"))).toBeTruthy();
+    expect(within(section).getByText("3")).toBeTruthy();
+    expect(
+      within(section).getByText(i18n.t("settings.providers.models.updated", { time: "just now" })),
+    ).toBeTruthy();
+    expect(within(section).getByText(i18n.t("settings.providers.models.addModel"))).toBeTruthy();
+  });
+
   it("lists discovered and custom models in two groups", () => {
     renderDetail({ discoveredModels: DISCOVERED, additionalModels: CUSTOM });
 
@@ -148,27 +196,56 @@ describe("ProviderDetailSurface", () => {
     const customGroup = screen.getByTestId("provider-models-custom");
     expect(within(customGroup).getByText(i18n.t("settings.providers.models.custom"))).toBeTruthy();
     expect(within(customGroup).getByText("1")).toBeTruthy();
-    expect(within(customGroup).getAllByText("relay/gpt")).toHaveLength(2);
   });
 
-  it("filters both groups by the search query", () => {
-    renderDetail({ discoveredModels: DISCOVERED, additionalModels: CUSTOM, modelQuery: "opus" });
+  it("shows a model once when its name is its id", () => {
+    renderDetail({
+      discoveredModels: [...DISCOVERED, { provider: "claude", id: "haiku", label: "haiku" }],
+      additionalModels: CUSTOM,
+    });
+
+    expect(screen.getAllByText("haiku")).toHaveLength(1);
+    expect(screen.getAllByText("relay/gpt")).toHaveLength(1);
+    expect(screen.getByText("claude-opus")).toBeTruthy();
+  });
+
+  it("filters both groups by the search row", () => {
+    renderDetail({ discoveredModels: DISCOVERED, additionalModels: CUSTOM });
+
+    typeInto(searchInput(), "opus");
 
     expect(screen.getByText("Opus")).toBeTruthy();
     expect(screen.queryByText("Sonnet")).toBeNull();
     expect(screen.queryByTestId("provider-models-custom")).toBeNull();
+
+    typeInto(searchInput(), "relay");
+
+    expect(screen.queryByTestId("provider-models-discovered")).toBeNull();
+    expect(screen.getByText("relay/gpt")).toBeTruthy();
   });
 
   it("says so when the search matches nothing", () => {
-    renderDetail({ discoveredModels: DISCOVERED, additionalModels: CUSTOM, modelQuery: "zzz" });
+    renderDetail({ discoveredModels: DISCOVERED, additionalModels: CUSTOM });
+
+    typeInto(searchInput(), "zzz");
 
     expect(screen.getByText(i18n.t("settings.providers.models.noSearchMatches"))).toBeTruthy();
   });
 
-  it("says no models were detected when both groups are empty", () => {
+  it("offers no search while there are no models", () => {
     renderDetail({});
 
     expect(screen.getByText(i18n.t("settings.providers.models.noneDetected"))).toBeTruthy();
+    expect(
+      screen.queryByPlaceholderText(i18n.t("settings.providers.models.searchPlaceholder")),
+    ).toBeNull();
+  });
+
+  it("explains that a disabled provider has no models until enabled", () => {
+    renderDetail({ entries: [entry({ enabled: false })] });
+
+    expect(screen.getByText(i18n.t("settings.providers.models.disabledHint"))).toBeTruthy();
+    expect(screen.queryByText(i18n.t("settings.providers.models.noneDetected"))).toBeNull();
   });
 
   it("shows a loading state while the provider is loading and has no models yet", () => {
@@ -177,20 +254,76 @@ describe("ProviderDetailSurface", () => {
     expect(screen.getByText(i18n.t("settings.providers.models.loading"))).toBeTruthy();
   });
 
-  it("shows the provider error with a retry that refreshes", () => {
-    const onRefresh = vi.fn();
-    renderDetail({ entries: [entry({ status: "error", error: "opencode exited 1" })], onRefresh });
+  // 出错时顶部错误卡已有原文和「刷新」，Models 区只说明为什么没有模型。
+  it("leaves the provider error to the error card", () => {
+    renderDetail({ entries: [entry({ status: "error", error: "opencode exited 1" })] });
 
-    expect(screen.getAllByText("opencode exited 1").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByText(i18n.t("settings.providers.models.retry")));
-    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("opencode exited 1")).toHaveLength(1);
+    const section = screen.getByTestId("provider-models-section");
+    expect(within(section).getByText(i18n.t("settings.providers.models.startFailed"))).toBeTruthy();
+    expect(
+      within(section).queryByText(i18n.t("settings.providers.models.noneDetected")),
+    ).toBeNull();
   });
 
-  it("shows the retry as in progress while a refresh runs", () => {
-    renderDetail({ entries: [entry({ status: "error", error: "boom" })], isRefreshing: true });
+  it("adds a model in place: Enter submits, then the row folds away", async () => {
+    const pending = deferred();
+    const onAddCustomModel = vi.fn(() => pending.promise);
+    renderDetail({ discoveredModels: DISCOVERED, onAddCustomModel });
 
-    expect(screen.getByText(i18n.t("settings.providers.models.retrying"))).toBeTruthy();
-    expect(screen.queryByText(i18n.t("settings.providers.models.retry"))).toBeNull();
+    openAddModelRow();
+    const input = addModelInput();
+    expect(document.activeElement).toBe(input);
+    typeInto(input, "  openai/gpt-5 ");
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onAddCustomModel).toHaveBeenCalledWith("openai/gpt-5");
+    const adding = screen.getByText(i18n.t("settings.providers.models.adding"));
+    expect(adding.closest("[aria-disabled='true']")).toBeTruthy();
+
+    pending.resolve();
+    await waitFor(() => expect(queryAddModelInput()).toBeNull());
+  });
+
+  it("keeps the input and shows why when adding a model fails", async () => {
+    const onAddCustomModel = vi.fn(() => Promise.reject(new Error("config.json is read-only")));
+    renderDetail({ onAddCustomModel });
+
+    openAddModelRow();
+    typeInto(addModelInput(), "openai/gpt-5");
+    fireEvent.click(screen.getByTestId("provider-add-model-submit"));
+
+    const error = await screen.findByTestId("provider-add-model-error");
+    expect(within(error).getByText(i18n.t("settings.providers.models.failedToSave"))).toBeTruthy();
+    expect(within(error).getByText("config.json is read-only")).toBeTruthy();
+    expect((addModelInput() as HTMLInputElement).value).toBe("openai/gpt-5");
+    expect(screen.getByText(i18n.t("settings.providers.models.add"))).toBeTruthy();
+  });
+
+  it("folds the add row away on Escape or Cancel without adding", () => {
+    const onAddCustomModel = vi.fn(() => Promise.resolve());
+    renderDetail({ onAddCustomModel });
+
+    openAddModelRow();
+    fireEvent.keyDown(addModelInput(), { key: "Escape" });
+    expect(queryAddModelInput()).toBeNull();
+
+    openAddModelRow();
+    fireEvent.click(screen.getByText(i18n.t("common.actions.cancel")));
+    expect(queryAddModelInput()).toBeNull();
+    expect(onAddCustomModel).not.toHaveBeenCalled();
+  });
+
+  it("does not add an empty id or one already added", () => {
+    const onAddCustomModel = vi.fn(() => Promise.resolve());
+    renderDetail({ additionalModels: CUSTOM, onAddCustomModel });
+
+    openAddModelRow();
+    fireEvent.keyDown(addModelInput(), { key: "Enter" });
+    typeInto(addModelInput(), "relay/gpt");
+    fireEvent.keyDown(addModelInput(), { key: "Enter" });
+
+    expect(onAddCustomModel).not.toHaveBeenCalled();
   });
 
   it("opens with an error card naming the provider, its full error and the next steps", () => {

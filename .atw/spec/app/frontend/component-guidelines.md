@@ -18,7 +18,7 @@ Before writing markup, find the canonical surface in `docs/design.md` §15 and c
 | A destructive confirmation | `utils/confirm-dialog.ts` → `confirmDialog()` (OS dialog); with detail, `<AdaptiveModalSheet>` + `footer` | An unguarded action; a red button on the page      |
 | A picker                   | `components/ui/combobox.tsx`                                                               | A custom list                                      |
 | A trigger-anchored menu    | `components/ui/dropdown-menu.tsx`; right-click/long-press `components/ui/context-menu.tsx` | An ad hoc popover (`docs/menus.md`)                |
-| A settings section         | `components/settings/headings/settings-section.tsx`                                        | Bare `<Text>` headers                              |
+| A settings section         | `components/settings/headings/settings-section.tsx`; a count after the title (「Models 12」) is its `count` prop, drawn in `foregroundExtraMuted` | Bare `<Text>` headers; a count glued into `title` |
 | A settings card / row      | `styles/settings.ts` `settingsStyles` (`card`, `row`, `rowBorder`, `rowTitle`, `rowHint`, `rowValue`, `rowIconFrame`); a card row that draws its own divider uses `borderCardRow` | Local row padding, card radius, or title sizes; a row divider in `border` |
 | A value dropdown in a row  | `components/ui/dropdown-trigger.tsx` `<DropdownTrigger>` inside `<DropdownMenu>`           | A `DropdownMenuTrigger` with a hand-drawn outline  |
 | A form field               | `components/ui/form-field.tsx` with the model from `docs/forms.md`                         | `useEffect` choreography                           |
@@ -36,6 +36,10 @@ The Composer thinking control is `ThinkingPicker` (`composer/agent-controls/thin
 ## Fallible actions own their three states
 
 Every user action that can fail renders pending, success, and failure in the same context (`docs/testing.md` "Fallible user actions"). Disable the trigger while pending, show the result or an acknowledgement, keep an actionable error visible until retried or dismissed. `screens/settings/host-page.tsx` and `screens/project-settings-screen.tsx` are references. Eleven files still call `Alert.alert`; do not add a twelfth.
+
+An inline editor that expands in place (the Models section's add row, `provider-detail/models.tsx`) follows the same bar: the submit button reads "Adding..." and is disabled while the write runs, success folds the row away, failure stays under the input with the reason while the typed text is kept. Pass the write in as `(value) => Promise<void>` and let the row own its `idle | adding | failed` state; the jsdom test drives all three through a deferred promise.
+
+> **Warning**: Escape never reaches a text field inside a desktop `AdaptiveModalSheet`. `lib/overlay-root.ts` listens for `keydown` on `window` in the capture phase and the top modal's handler closes it with `stopImmediatePropagation`, so the field's `onKeyPress` does not fire. An "Esc collapses this row" rule holds on a settings page and on mobile (no overlay scope is registered there), not inside a desktop modal. Don't add a global listener to fight it (`docs/floating-panels.md`); give the row a visible Cancel.
 
 ## Hover
 

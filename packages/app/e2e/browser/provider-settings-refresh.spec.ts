@@ -101,10 +101,13 @@ async function expectProviderSettingsVisible(page: Page) {
 async function exerciseProviderSettingsStack(page: Page) {
   await expectProviderSettingsVisible(page);
 
+  // 添加 Model 在弹窗里就地展开一行，不再叠子弹窗。
   await page.getByRole("button", { name: "Add model" }).click();
-  await expect(page.getByTestId("add-custom-model-sheet")).toBeVisible({ timeout: 10_000 });
-  await closeSheetByHeaderButton(page, "add-custom-model-sheet");
-  await expect(page.getByPlaceholder("e.g. openai/gpt-5")).not.toBeVisible({ timeout: 10_000 });
+  const modelIdInput = page.getByPlaceholder("e.g. openai/gpt-5");
+  await expect(modelIdInput).toBeFocused({ timeout: 10_000 });
+  await expect(page.getByTestId("add-custom-model-sheet")).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(modelIdInput).not.toBeVisible({ timeout: 10_000 });
   await expectProviderSettingsVisible(page);
 
   await page.getByRole("button", { name: "Diagnostic", exact: true }).click();

@@ -11,6 +11,8 @@ interface SettingsSectionProps {
    * paragraph between the header and the card is wrong (docs/design.md §7).
    */
   info?: ReactNode;
+  /** A count after the title, dimmer than it, e.g. how many rows the card lists. */
+  count?: number;
   trailing?: ReactNode;
   testID?: string;
   style?: StyleProp<ViewStyle>;
@@ -30,6 +32,7 @@ interface SettingsSectionProps {
 export function SettingsSection({
   title,
   info,
+  count,
   trailing,
   testID,
   style,
@@ -45,6 +48,9 @@ export function SettingsSection({
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Text style={settingsStyles.sectionHeaderTitle}>{title}</Text>
+          {count === undefined ? null : (
+            <Text style={[settingsStyles.sectionHeaderTitle, styles.count]}>{count}</Text>
+          )}
           {info ? (
             <SettingsInfoTip
               title={title}
@@ -73,6 +79,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
+  },
+  count: {
+    color: theme.colors.foregroundExtraMuted,
   },
   content: {
     gap: theme.spacing[3],

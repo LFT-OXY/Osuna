@@ -27,13 +27,10 @@ import { countSelectableModels, describeProviderModelCount, resolveProviderStatu
 export function ProviderDetail({
   serverId,
   provider,
-  modelQuery,
   onRunDiagnostic,
 }: {
   serverId: string;
   provider: string;
-  // 弹窗外框把模型搜索放在自己的头部，查询从外框传进来。
-  modelQuery: string;
   onRunDiagnostic: () => void;
 }) {
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
@@ -92,6 +89,21 @@ export function ProviderDetail({
     [additionalModels, patchConfig, provider, refresh],
   );
 
+  // 写入成功即算添加成功，刷新不阻塞添加行收起；新模型经配置先出现在「自定义 Models」里。
+  const handleAddCustomModel = useCallback(
+    async (modelId: string) => {
+      await patchConfig({
+        providers: {
+          [provider]: {
+            additionalModels: [...additionalModels, { id: modelId, label: modelId }],
+          },
+        },
+      });
+      void refresh([provider]);
+    },
+    [additionalModels, patchConfig, provider, refresh],
+  );
+
   const renderInstallGuide = useCallback(
     (guide: ProviderInstallGuide, cliLabel: string) => (
       <ProviderInstallGuideView guide={guide} cliLabel={cliLabel} />
@@ -117,7 +129,6 @@ export function ProviderDetail({
       hostSupportsApiEndpoints={hostSupportsApiEndpoints}
       discoveredModels={discoveredModels}
       additionalModels={additionalModels}
-      modelQuery={modelQuery}
       isRefreshing={isRefreshing}
       deletingModelId={deletingModelId}
       removalError={removal.status === "failed" ? removal.message : null}
@@ -125,6 +136,7 @@ export function ProviderDetail({
       onRunDiagnostic={onRunDiagnostic}
       onDismissRemovalError={handleDismissRemovalError}
       onDeleteCustomModel={handleDeleteCustomModel}
+      onAddCustomModel={handleAddCustomModel}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
     />
@@ -250,12 +262,7 @@ export function ProviderDetailPage({
         renderActions={hasScreenHeaderActions ? undefined : renderActions}
         testID={`provider-detail-header-${provider}`}
       />
-      <ProviderDetail
-        serverId={serverId}
-        provider={provider}
-        modelQuery=""
-        onRunDiagnostic={onRunDiagnostic}
-      />
+      <ProviderDetail serverId={serverId} provider={provider} onRunDiagnostic={onRunDiagnostic} />
     </>
   );
 }
