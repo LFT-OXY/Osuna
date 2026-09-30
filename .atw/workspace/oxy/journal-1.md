@@ -585,3 +585,27 @@ Pi provider 按每个模型的 thinkingLevelMap（Pi getSupportedThinkingLevels 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 23: 提供方设置页重排：工单 09 文档收尾与截图验收、Providers 页改用彩色图标，任务归档
+<!-- atw-session: v=2 fp=6a6ed3a6c2c11091 -->
+
+**Date**: 2026-09-30
+**Task**: 提供方设置页重排：工单 09 文档收尾与截图验收、Providers 页改用彩色图标，任务归档
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+工单 09：docs/design.md §7 写明 Providers 两列整体最大 1056 的例外，§9 写明按设置详情区实测宽度 ≥736 两列、紧凑一律栈式；按任务前后字面引用比对 en.ts，本任务无新增孤儿键；提供方界面已无 Alert.alert。dev 桌面端 1440/1024 宽截宽屏、窄窗、composer 弹窗浅深色及菜单/诊断/添加 Model/目录，与原型逐条对照写入 qa/README.md（Electron CDP 截图偏紫、滚动条占宽、SheetHeader 高约 4px 等）；补跑受影响 5 个浏览器 e2e 共 11 例与 8 个单测文件 132 例全部通过。双轴审查修掉重复句、sticky 仅 Web、面包屑仅窄桌面等。验收时用户要求 Providers 页用彩色图标：列表行、详情头部、composer 弹窗头部改用 resolveProviderGlyph brand，ProviderIconFrame 拆到 provider-detail/icon-frame.tsx，同步 design.md 与 styling spec。规划产物 PNG 转 jpg（67MB→约 10MB）后随任务归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fe7b4914d` | docs: 设计文档写明 Providers 页的宽度例外与两列/栈式切换条件，补截图验收与 e2e 证据 |
+| `20a0911f7` | feat(app): 设置 → Providers 的列表行、详情头部与 composer 弹窗头部改用彩色提供方图标 |
+
+### Status
+
+[OK] **Completed**
