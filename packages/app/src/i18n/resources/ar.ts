@@ -2255,9 +2255,8 @@ export const ar: TranslationResources = {
   },
   contextWindow: {
     title: "نافذة السياق",
-    used: "تم استخدام{{percentage}}%",
-    tokens: "رموز{{used}}/{{max}}",
-    sessionCost: "التكلفة التقديرية {{cost}}",
+    usedLabel: "مستخدم",
+    tokens: "الرموز",
     accessibility: "نافذة السياق مستخدمة بنسبة {{percentage}}%، {{used}} من {{max}}",
     sessionTotal: {
       title: "إجمالي الجلسة",
@@ -3592,6 +3591,17 @@ export const ar: TranslationResources = {
       resettingNow: "تتم إعادة التعيين الآن",
       runsOut: "ينفد بعد {{duration}}",
       balanceLeft: "المتبقي {{amount}}",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "أسبوع",
+          codeReview: "مراجعة",
+        },
+        runsOut: "ينفد بعد {{duration}}",
+        planA11y: "خطة {{provider}}: {{plan}}",
+        windowA11y: "{{label}}: مستخدم {{percent}}، {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: مستخدم {{percent}}",
+      },
       status: {
         error: "خطأ",
         unavailable: "غير متاح",

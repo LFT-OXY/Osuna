@@ -2291,9 +2291,8 @@ export const ptBR: TranslationResources = {
   },
   contextWindow: {
     title: "Janela de contexto",
-    used: "{{percentage}}% usado",
-    tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "Custo estimado {{cost}}",
+    usedLabel: "usado",
+    tokens: "Tokens",
     accessibility: "Janela de contexto {{percentage}}% usada, {{used}} de {{max}}",
     sessionTotal: {
       title: "Total da sessão",
@@ -3650,6 +3649,17 @@ export const ptBR: TranslationResources = {
       resettingNow: "reiniciando agora",
       runsOut: "acaba em {{duration}}",
       balanceLeft: "{{amount}} restantes",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "Semana",
+          codeReview: "Revisão",
+        },
+        runsOut: "acaba em {{duration}}",
+        planA11y: "Plano {{provider}}: {{plan}}",
+        windowA11y: "{{label}}: {{percent}} usado, {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: {{percent}} usado",
+      },
       status: {
         error: "Erro",
         unavailable: "Indisponível",

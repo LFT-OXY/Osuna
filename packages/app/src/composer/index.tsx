@@ -47,7 +47,10 @@ import {
   DraftAgentControls,
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
-import { ContextWindowMeter } from "@/components/context-window-meter";
+import {
+  ContextWindowMeter,
+  type ContextWindowPopoverLayout,
+} from "@/components/context-window-meter";
 import { ComposerContextStrip } from "./context-strip";
 import type { BranchSwitchConditions, ComposerAgentPhase } from "./context-strip/model";
 import { KeyboardTranslateView } from "@/components/keyboard-translate-view";
@@ -287,7 +290,6 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
       status: agent?.status ?? null,
       contextWindowMaxTokens: agent?.lastUsage?.contextWindowMaxTokens ?? null,
       contextWindowUsedTokens: agent?.lastUsage?.contextWindowUsedTokens ?? null,
-      totalCostUsd: agent?.lastUsage?.totalCostUsd ?? null,
       model: agent?.model ?? null,
       provider: agent?.provider ?? null,
     };
@@ -297,7 +299,6 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
 interface ContextWindowMeterArgs {
   maxTokens: number | null;
   usedTokens: number | null;
-  totalCostUsd: number | null;
   serverId: string;
   agentId: string;
   provider: string | null;
@@ -306,6 +307,8 @@ interface ContextWindowMeterArgs {
   usageSupport: boolean | null;
   runningTurnStartedAt: Date | null;
   showTokenLabel: boolean;
+  showPlanUsage: boolean;
+  popoverLayout: ContextWindowPopoverLayout;
 }
 
 function renderContextWindowMeter(args: ContextWindowMeterArgs): ReactElement | null {
@@ -317,7 +320,6 @@ function renderContextWindowMeter(args: ContextWindowMeterArgs): ReactElement | 
     <ContextWindowMeter
       maxTokens={args.maxTokens}
       usedTokens={args.usedTokens}
-      totalCostUsd={args.totalCostUsd}
       showPercentage={false}
       serverId={args.serverId}
       agentId={args.agentId}
@@ -327,6 +329,8 @@ function renderContextWindowMeter(args: ContextWindowMeterArgs): ReactElement | 
       usageSupport={args.usageSupport}
       runningTurnStartedAt={args.runningTurnStartedAt}
       showTokenLabel={args.showTokenLabel}
+      showPlanUsage={args.showPlanUsage}
+      popoverLayout={args.popoverLayout}
     />
   );
 }
@@ -1323,6 +1327,7 @@ function ComposerSurfaceStack({
   cwd,
   gitStatus,
   branchSwitchConditions,
+  planUsageProviderId,
   showContextStrip,
   children,
 }: {
@@ -1331,6 +1336,7 @@ function ComposerSurfaceStack({
   cwd: string;
   gitStatus: CheckoutStatusPayload | null;
   branchSwitchConditions: BranchSwitchConditions;
+  planUsageProviderId: string | null;
   showContextStrip: boolean;
   children: ReactNode;
 }) {
@@ -1344,6 +1350,7 @@ function ComposerSurfaceStack({
           cwd={cwd}
           gitStatus={gitStatus}
           branchSwitchConditions={branchSwitchConditions}
+          planUsageProviderId={planUsageProviderId}
         />
       ) : null}
     </View>
@@ -1442,6 +1449,7 @@ function ComposerContentImpl({
   const isCompactLayout = resolveCompactLayout(isCompactLayoutOverride, isCompactFormFactor);
   const isDesktopWebBreakpoint = resolveIsDesktopWebBreakpoint(isCompactFormFactor);
   const isDesktopLayout = resolveIsDesktopWebBreakpoint(isCompactLayout);
+  const isContextStripVisible = showContextStrip && !isCompactFormFactor;
   const messagePlaceholder = resolveMessagePlaceholder(inputMode, isDesktopLayout, t, placeholder);
   const hasText = useSyncExternalStore(
     textSource.subscribe,
@@ -1795,6 +1803,8 @@ function ComposerContentImpl({
     if (resolveAgentControlsMode(agentControls) === "draft") agent = "draft";
     return { agent, isHostConnected: isConnected };
   }, [agentControls, isAgentRunning, isConnected]);
+  // 草稿还没有 agent，套餐用量跟着草稿里选中的提供方走。
+  const planUsageProviderId = agentControls ? agentControls.selectedProvider : agentState.provider;
 
   const queueWriter = useMemo<QueueWriter>(
     () => ({
@@ -2270,6 +2280,9 @@ function ComposerContentImpl({
   const contextWindowMeterGlyphSize = isCompactLayout ? ICON_SIZE.md : buttonIconSize;
   // A phone keeps the ring alone; the toolbar has no room for `84K / 200K`.
   const showContextWindowTokenLabel = !isCompactLayout;
+  const contextWindowPopoverLayout: ContextWindowPopoverLayout = isCompactLayout
+    ? "stacked"
+    : "columns";
   // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
   const usageSupport = useHostFeatureAvailability(serverId, "usage");
   const runningTurnStartedAt = useSessionStore(
@@ -2281,7 +2294,6 @@ function ComposerContentImpl({
       renderContextWindowMeter({
         maxTokens: contextWindowMaxTokens,
         usedTokens: contextWindowUsedTokens,
-        totalCostUsd: agentState.totalCostUsd,
         serverId,
         agentId,
         provider: agentState.provider,
@@ -2290,16 +2302,20 @@ function ComposerContentImpl({
         usageSupport,
         runningTurnStartedAt,
         showTokenLabel: showContextWindowTokenLabel,
+        // 窄栏可见时套餐用量在窄栏上，弹层不再重复；没有窄栏的输入框照旧放在弹层里。
+        showPlanUsage: !isContextStripVisible,
+        popoverLayout: contextWindowPopoverLayout,
       }),
     [
       agentId,
       contextWindowMaxTokens,
       contextWindowUsedTokens,
-      agentState.totalCostUsd,
       serverId,
       agentState.provider,
       contextWindowPending,
       contextWindowMeterGlyphSize,
+      contextWindowPopoverLayout,
+      isContextStripVisible,
       runningTurnStartedAt,
       showContextWindowTokenLabel,
       usageSupport,
@@ -2659,7 +2675,8 @@ function ComposerContentImpl({
                 cwd={cwd}
                 gitStatus={checkoutStatusQuery.status}
                 branchSwitchConditions={branchSwitchConditions}
-                showContextStrip={showContextStrip && !isCompactFormFactor}
+                planUsageProviderId={planUsageProviderId}
+                showContextStrip={isContextStripVisible}
               >
                 <StableMessageInput
                   ref={messageInputRef}

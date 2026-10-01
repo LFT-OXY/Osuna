@@ -1,0 +1,28 @@
+{
+  "id": "composer-plan-usage-strip",
+  "name": "composer-plan-usage-strip",
+  "title": "输入框下方常驻显示套餐用量并美化上下文弹层",
+  "description": "在 Composer context strip 显示当前提供方的套餐用量窗口（小圆环+百分比+重置时间），桌面端从上下文圆环弹层移除套餐部分，并美化上下文弹层",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-10-01",
+  "completedAt": "2026-10-01",
+  "branch": "agent-input-subscription-display",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "44f07ebee82ea7e5607d1b1c267a7b6e1f359b43"
+  }
+}

@@ -1,5 +1,5 @@
 import type { UsageText } from "@/usage/text";
-import type { ProviderUsageListPayload, ProviderUsageView } from "./types";
+import type { ProviderUsage, ProviderUsageListPayload, ProviderUsageView } from "./types";
 
 /**
  * 客户端还没建好时抛的哨兵。它是翻译键而不是句子：取数层不碰 i18n，渲染时才变成
@@ -42,4 +42,13 @@ export function resolveProviderUsageView(input: ProviderUsageViewInput): Provide
 function describeProviderUsageError(error: unknown): UsageText {
   const message = error instanceof Error ? error.message : String(error);
   return message === PROVIDER_USAGE_CLIENT_UNAVAILABLE_KEY ? { key: message } : { text: message };
+}
+
+/** 按提供方 id 找条目，不分大小写；窄栏和圆环弹层共用。 */
+export function findProviderUsage(
+  providers: ProviderUsage[],
+  providerId: string,
+): ProviderUsage | null {
+  const target = providerId.toLowerCase();
+  return providers.find((usage) => usage.providerId.toLowerCase() === target) ?? null;
 }

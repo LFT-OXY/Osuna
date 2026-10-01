@@ -2267,9 +2267,8 @@ export const ko: TranslationResources = {
   },
   contextWindow: {
     title: "컨텍스트 윈도우",
-    used: "{{percentage}}% 사용됨",
-    tokens: "{{used}} / {{max}} 토큰",
-    sessionCost: "추정 비용 {{cost}}",
+    usedLabel: "사용됨",
+    tokens: "토큰",
     accessibility: "컨텍스트 윈도우 {{percentage}}% 사용됨, {{used}} / {{max}}",
     sessionTotal: {
       title: "세션 합계",
@@ -3612,6 +3611,17 @@ export const ko: TranslationResources = {
       resettingNow: "초기화 중",
       runsOut: "{{duration}} 후 소진",
       balanceLeft: "{{amount}} 남음",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "주간",
+          codeReview: "리뷰",
+        },
+        runsOut: "{{duration}} 후 소진",
+        planA11y: "{{provider}} 플랜: {{plan}}",
+        windowA11y: "{{label}}: {{percent}} 사용, {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: {{percent}} 사용",
+      },
       status: {
         error: "오류",
         unavailable: "사용 불가",

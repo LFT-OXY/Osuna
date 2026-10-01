@@ -12,6 +12,7 @@ import { useToast } from "@/contexts/toast-context";
 import { useBranchSwitcher } from "@/hooks/use-branch-switcher";
 import {
   ToolbarLabelSelectTrigger,
+  ToolbarLabelTriggerIcon,
   toolbarLabelTriggerStyle,
   type ToolbarLabelTriggerState,
 } from "@/components/ui/toolbar-label-trigger";
@@ -42,27 +43,33 @@ interface StripBranchTriggerProps extends Omit<PressableProps, "children" | "sty
 }
 
 // 与上下文条里只读项同一副内容（分支图标 + caption 弱色文字），外框与高亮沿用工具栏标签触发器。
-const StripBranchTrigger = forwardRef<View, StripBranchTriggerProps>(function StripBranchTrigger(
-  { label, open, disabled, ...props },
-  ref,
-) {
-  const triggerStyle = useCallback(
-    (state: ToolbarLabelTriggerState) => [
-      toolbarLabelTriggerStyle({ ...state, open }),
-      styles.stripTrigger,
-      disabled ? styles.disabled : null,
-    ],
-    [disabled, open],
-  );
-  return (
-    <Pressable {...props} ref={ref} disabled={disabled} style={triggerStyle}>
-      <ThemedGitBranch size={HOST_BADGE_ICON_SIZE} uniProps={foregroundMutedIconColorMapping} />
-      <UiText variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.stripLabel}>
-        {label}
-      </UiText>
-    </Pressable>
-  );
-});
+export const StripBranchTrigger = forwardRef<View, StripBranchTriggerProps>(
+  function StripBranchTrigger({ label, open, disabled, ...props }, ref) {
+    const triggerStyle = useCallback(
+      (state: ToolbarLabelTriggerState) => [
+        toolbarLabelTriggerStyle({ ...state, open }),
+        styles.stripTrigger,
+        disabled ? styles.disabled : null,
+      ],
+      [disabled, open],
+    );
+    return (
+      <Pressable {...props} ref={ref} disabled={disabled} style={triggerStyle}>
+        <ToolbarLabelTriggerIcon>
+          <ThemedGitBranch size={HOST_BADGE_ICON_SIZE} uniProps={foregroundMutedIconColorMapping} />
+        </ToolbarLabelTriggerIcon>
+        <UiText
+          variant="caption"
+          color="foregroundMuted"
+          numberOfLines={1}
+          style={styles.stripLabel}
+        >
+          {label}
+        </UiText>
+      </Pressable>
+    );
+  },
+);
 
 export function BranchSwitcher({
   currentBranchName,

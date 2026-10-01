@@ -1,0 +1,10 @@
+{"file": ".atw/tasks/10-01-composer-plan-usage-strip/ui-direction.md", "reason": "选定的 03 分段仪表方向卡、尺寸与 token，视觉评审基准"}
+{"file": ".atw/tasks/10-01-composer-plan-usage-strip/research/interview-decisions.md", "reason": "17 项访谈决策与现状事实（窗口 id、取数时机、tone 规则）"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "可复用原语、悬停与平台门控、i18n"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 与 token 用法，禁用 useUnistyles"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "React Query 查询与刷新间隔的写法"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "unit / e2e 切入点、QueryObserver 测试参照"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "app 层禁用模式与验证命令"}
+{"file": "docs/design.md", "reason": "设计规范与禁用清单（无新色值、间距刻度、StatusBadge）"}
+{"file": "docs/hover.md", "reason": "窄栏悬停卡片的悬停模式"}
+{"file": "docs/glossary.md", "reason": "Plan usage / Composer context strip 术语"}

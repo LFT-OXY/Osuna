@@ -2313,9 +2313,8 @@ export const fr: TranslationResources = {
   },
   contextWindow: {
     title: "Fenêtre contextuelle",
-    used: "{{percentage}}% utilisé",
-    tokens: "Jetons{{used}}/{{max}}",
-    sessionCost: "Coût estimé {{cost}}",
+    usedLabel: "utilisé",
+    tokens: "Jetons",
     accessibility: "Fenêtre contextuelle {{percentage}}% utilisée, {{used}} sur {{max}}",
     sessionTotal: {
       title: "Total de la session",
@@ -3682,6 +3681,17 @@ export const fr: TranslationResources = {
       resettingNow: "réinitialisation en cours",
       runsOut: "épuisé dans {{duration}}",
       balanceLeft: "{{amount}} restants",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "Semaine",
+          codeReview: "Revue",
+        },
+        runsOut: "épuisé dans {{duration}}",
+        planA11y: "Forfait {{provider}} : {{plan}}",
+        windowA11y: "{{label}} : {{percent}} utilisé, {{trailing}}",
+        windowA11yNoTrailing: "{{label}} : {{percent}} utilisé",
+      },
       status: {
         error: "Erreur",
         unavailable: "Indisponible",

@@ -2288,9 +2288,8 @@ export const ru: TranslationResources = {
   },
   contextWindow: {
     title: "Контекстное окно",
-    used: "Использовано: {{percentage}}%",
-    tokens: "Токены: {{used}} / {{max}}",
-    sessionCost: "Оценочная стоимость: {{cost}}",
+    usedLabel: "использовано",
+    tokens: "Токены",
     accessibility: "Использовано {{percentage}}% контекстного окна, {{used}} из {{max}}",
     sessionTotal: {
       title: "Итого за сессию",
@@ -3656,6 +3655,17 @@ export const ru: TranslationResources = {
       resettingNow: "сбрасывается",
       runsOut: "закончится через {{duration}}",
       balanceLeft: "осталось {{amount}}",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "Неделя",
+          codeReview: "Ревью",
+        },
+        runsOut: "закончится через {{duration}}",
+        planA11y: "Тариф {{provider}}: {{plan}}",
+        windowA11y: "{{label}}: использовано {{percent}}, {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: использовано {{percent}}",
+      },
       status: {
         error: "Ошибка",
         unavailable: "Недоступно",

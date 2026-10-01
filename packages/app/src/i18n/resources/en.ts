@@ -2280,9 +2280,8 @@ export const en = {
   },
   contextWindow: {
     title: "Context window",
-    used: "{{percentage}}% used",
-    tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "Estimated cost {{cost}}",
+    usedLabel: "used",
+    tokens: "Tokens",
     accessibility: "Context window {{percentage}}% used, {{used}} of {{max}}",
     sessionTotal: {
       title: "Session total",
@@ -3720,6 +3719,17 @@ export const en = {
       resettingNow: "resetting now",
       runsOut: "runs out {{duration}}",
       balanceLeft: "{{amount}} left",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "Week",
+          codeReview: "Review",
+        },
+        runsOut: "out in {{duration}}",
+        planA11y: "{{provider}} plan: {{plan}}",
+        windowA11y: "{{label}}: {{percent}} used, {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: {{percent}} used",
+      },
       status: {
         error: "Error",
         unavailable: "Unavailable",

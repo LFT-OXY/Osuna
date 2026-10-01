@@ -2244,9 +2244,8 @@ export const zhCN: TranslationResources = {
   },
   contextWindow: {
     title: "上下文窗口",
-    used: "已使用 {{percentage}}%",
-    tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "估算成本 {{cost}}",
+    usedLabel: "已使用",
+    tokens: "Token",
     accessibility: "上下文窗口已使用 {{percentage}}%，{{used}} / {{max}}",
     sessionTotal: {
       title: "本会话合计",
@@ -3596,6 +3595,17 @@ export const zhCN: TranslationResources = {
       resettingNow: "正在重置",
       runsOut: "{{duration}} 后用完",
       balanceLeft: "剩余 {{amount}}",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "周",
+          codeReview: "审查",
+        },
+        runsOut: "{{duration}}后用完",
+        planA11y: "{{provider}} 套餐：{{plan}}",
+        windowA11y: "{{label}}：已用 {{percent}}，{{trailing}}",
+        windowA11yNoTrailing: "{{label}}：已用 {{percent}}",
+      },
       status: {
         error: "错误",
         unavailable: "不可用",

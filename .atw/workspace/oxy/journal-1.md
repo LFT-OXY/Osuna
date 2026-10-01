@@ -704,3 +704,26 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 
 - 推送 fix/settings-menu-zh-i18n 并开 PR 合进 main（待用户确认）
 - 下次开 dev 桌面端时归档 dev daemon 里的 osuna-pr 工作区（目录已删）
+
+
+## Session 27: 输入框窄栏套餐用量：工单 05 上下文弹层重整、验收与归档
+<!-- atw-session: v=2 fp=455910b77791e98c -->
+
+**Date**: 2026-10-01
+**Task**: 输入框窄栏套餐用量：工单 05 上下文弹层重整、验收与归档
+**Package**: app
+**Branch**: `agent-input-subscription-display`
+
+### Summary
+
+工单 05：上下文圆环弹层是否接套餐用量卡片改由所在输入框的窄栏是否可见决定（composer 的 isContextStripVisible），不接时打开弹层也不取套餐数据；宽屏左右两栏（上下文 | 本会话合计，每栏 192，竖线分隔），紧凑布局单栏 300；弹层右对齐圆环；删除上下文估算成本与 totalCostUsd 传递，文案改为 usedLabel + tokens 键值标签，9 语言同步。e2e：桌面断言弹层不含套餐用量且不多发请求；窄栏出错/主机不支持与用量页出错三条改用手机视口弹层作正向信号；相关 5 个 e2e 文件 17 例与 i18n 单测通过。三轴审查：修掉具名 props interface、Density 三处、断言范围过宽，视觉意见改为右对齐；键值行/进度条与套餐卡片重复、usedLabel 拆句语序留作判断项。截图里的本会话合计靠一次性脚本改写 usage.agent.get.response（mock Agent 无用量）。验收：9 条截图标准 8 条满足，第三方接口一项仅单测覆盖，用户按现状接受；dev 桌面端实测通过，任务归档。分支未推送，CI 未跑。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5e7029979` | feat(app): 上下文弹层改为两栏，窄栏可见时不再重复套餐用量 |
+
+### Status
+
+[OK] **Completed**
