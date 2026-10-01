@@ -134,7 +134,7 @@ function selectShownVersion(input: {
   entry: ProviderSnapshotEntry | undefined;
   hostSupportsProviderVersions: boolean;
 }): string | undefined {
-  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
   if (!input.hostSupportsProviderVersions) return undefined;
   const isInstalled = input.entry?.status !== "unavailable";
   if (!isInstalled) return undefined;

@@ -154,7 +154,7 @@ export function ProviderDetail({
     (state) => state.sessions[serverId]?.serverInfo?.hostPlatform,
   );
   const hostSupportsApiEndpoints = useHostFeature(serverId, "apiEndpoints");
-  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
   const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
   const { results: versionCheckResults } = useProviderVersionCheck(serverId, {
     checkOnMount: false,

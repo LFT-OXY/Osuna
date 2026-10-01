@@ -17,7 +17,7 @@ export function useProviderVersionCheck(
   const queryClient = useQueryClient();
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
-  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
   const supportsProviderVersions = useHostFeature(serverId, "providerVersions");
   const checkClient = isConnected && supportsProviderVersions ? client : null;
 

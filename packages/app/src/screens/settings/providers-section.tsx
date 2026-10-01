@@ -266,7 +266,7 @@ function useProviderToggle(serverId: string, entries: ProviderEntry[] | undefine
 export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectionProps) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
-  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
   const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
   const { entries, isLoading } = useProvidersSnapshot(serverId);
   // 检查由 Providers 页发起，这里只读结果。
