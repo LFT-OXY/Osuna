@@ -30,7 +30,6 @@ import { useTimeAgoLabel } from "./time-ago";
  */
 
 export interface ProviderModelsSectionProps {
-  providerEnabled: boolean;
   providerLoading: boolean;
   // 出错时原文和「刷新」在顶部错误卡里，这里只说明为什么没有模型。
   providerFailed: boolean;
@@ -259,7 +258,6 @@ function EmptyState({ loading, children }: { loading?: boolean; children: string
 }
 
 export function ProviderModelsSection({
-  providerEnabled,
   providerLoading,
   providerFailed,
   fetchedAt,
@@ -311,9 +309,7 @@ export function ProviderModelsSection({
 
   let emptyMessage: { text: string; loading?: boolean } | null = null;
   if (totalCount === 0) {
-    if (!providerEnabled) {
-      emptyMessage = { text: t("settings.providers.models.disabledHint") };
-    } else if (providerLoading) {
+    if (providerLoading) {
       emptyMessage = { text: t("settings.providers.models.loading"), loading: true };
     } else if (providerFailed) {
       emptyMessage = { text: t("settings.providers.models.startFailed") };

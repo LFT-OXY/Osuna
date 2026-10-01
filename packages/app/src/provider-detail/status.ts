@@ -50,8 +50,11 @@ export function describeProviderModelCount(count: number): ProviderStatusCopy {
   return { key: "settings.providers.models.many", params: { count } };
 }
 
-// 列表行的状态行：可用时换成第三方接口名或模型数，其余沿用状态文字。
+// 列表行的状态行：可用时换成第三方接口名或模型数；已停用的 daemon 不探测，不说装没装；其余沿用状态文字。
 export function resolveProviderStatusLine(input: ProviderStatusLineInput): ProviderStatusDisplay {
+  if (!input.enabled) {
+    return { tone: "muted", label: { key: "settings.providers.statuses.disabledUntilEnabled" } };
+  }
   const status = resolveProviderStatus(input);
   if (status.tone !== "success") return status;
   if (input.activeApiEndpointName) {

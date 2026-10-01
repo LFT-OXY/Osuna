@@ -127,6 +127,15 @@ vi.mock("./providers/claude/agent.js", async () => {
         return [{ name: "scanned", description: cwd, argumentHint: "", kind: "skill" }];
       }
 
+      async resolveCliLaunch() {
+        return {
+          executable: "/usr/local/bin/claude",
+          args: [],
+          source: "default" as const,
+          env: { envOverlay: {} },
+        };
+      }
+
       async isAvailable(): Promise<boolean> {
         const command: { mode?: string; argv?: string[] } | undefined =
           typeof this.runtimeSettings === "object" && this.runtimeSettings !== null
@@ -606,14 +615,14 @@ test("built-in override applies env", () => {
   });
 });
 
-test("OMP is a disabled built-in backed by the real OMP adapter", async () => {
+test("OMP is an enabled built-in backed by the real OMP adapter", async () => {
   const omp = new FakeOmp();
   const registry = buildProviderRegistry(logger, { ompRuntime: omp });
 
   expect(registry.omp).toMatchObject({
     id: "omp",
     label: "Oh My Pi",
-    enabled: false,
+    enabled: true,
     derivedFromProviderId: null,
   });
   const client = registry.omp.createClient(logger);
@@ -629,14 +638,20 @@ test("OMP is a disabled built-in backed by the real OMP adapter", async () => {
   await session.close();
 });
 
-test("OMP can be enabled without custom provider boilerplate", () => {
+test("Copilot and OpenCode are disabled by default and enabled by an explicit override", () => {
+  const defaults = buildProviderRegistry(logger);
+  expect(defaults.copilot.enabled).toBe(false);
+  expect(defaults.opencode.enabled).toBe(false);
+
   const registry = buildProviderRegistry(logger, {
     providerOverrides: {
-      omp: { enabled: true },
+      copilot: { enabled: true },
+      opencode: { enabled: true },
     },
   });
 
-  expect(registry.omp.enabled).toBe(true);
+  expect(registry.copilot.enabled).toBe(true);
+  expect(registry.opencode.enabled).toBe(true);
 });
 
 test("new provider extending claude appears in registry", () => {
@@ -669,6 +684,24 @@ test("wrapped claude profile keeps no-process command discovery", async () => {
   await expect(registry.zai.createClient(logger).discoverCommands?.("/tmp/zai")).resolves.toEqual([
     { name: "scanned", description: "/tmp/zai", argumentHint: "", kind: "skill" },
   ]);
+});
+
+test("wrapped claude profile keeps the CLI launch the upgrade runs with", async () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: {
+      zai: {
+        extends: "claude",
+        label: "ZAI",
+      },
+    },
+  });
+
+  await expect(registry.zai.createClient(logger).resolveCliLaunch?.()).resolves.toEqual({
+    executable: "/usr/local/bin/claude",
+    args: [],
+    source: "default",
+    env: { envOverlay: {} },
+  });
 });
 
 test("built-in OMP override keeps the real OMP adapter enabled and launchable", async () => {

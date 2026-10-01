@@ -3,6 +3,7 @@ import {
   GetProvidersSnapshotResponseMessageSchema,
   ProviderSnapshotEntrySchema,
   ProvidersSnapshotUpdateMessageSchema,
+  ServerInfoStatusPayloadSchema,
 } from "./messages.js";
 
 describe("provider snapshot message schemas", () => {
@@ -110,4 +111,43 @@ test("accepts a bodyless announcement with separate discovery freshness", async 
   expect(ProvidersSnapshotUpdateMessageSchema.parse(message)).toEqual(message);
   const result = validateWSOutboundMessage({ type: "session", message });
   expect(result.success).toBe(true);
+});
+
+// 已装版本号：新字段可选，旧 daemon 不带、旧客户端忽略。
+describe("provider snapshot version", () => {
+  test("carries the installed CLI version", () => {
+    const parsed = ProviderSnapshotEntrySchema.parse({
+      provider: "claude",
+      status: "ready",
+      version: "2.1.280",
+    });
+
+    expect(parsed.version).toBe("2.1.280");
+  });
+
+  test("reads an entry from an older daemon without a version", () => {
+    const parsed = ProviderSnapshotEntrySchema.parse({ provider: "claude", status: "ready" });
+
+    expect(parsed.version).toBeUndefined();
+  });
+
+  test("lets an older client parse an entry that has a version", () => {
+    const oldClient = ProviderSnapshotEntrySchema.omit({ version: true });
+
+    expect(
+      oldClient.safeParse({ provider: "claude", status: "ready", version: "2.1.280" }).success,
+    ).toBe(true);
+  });
+
+  test("advertises providerVersions as an optional feature", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+
+    expect(
+      ServerInfoStatusPayloadSchema.parse({ ...base, features: { providerVersions: true } })
+        .features?.providerVersions,
+    ).toBe(true);
+    expect(
+      ServerInfoStatusPayloadSchema.parse({ ...base, features: {} }).features?.providerVersions,
+    ).toBeUndefined();
+  });
 });

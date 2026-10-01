@@ -429,6 +429,10 @@ describe("normalizeClaudeRuntimeModelId", () => {
 });
 
 describe("parseClaudeCodeVersion", () => {
+  it("reads the real --version output", () => {
+    expect(parseClaudeCodeVersion("2.1.280 (Claude Code)\n")).toEqual([2, 1, 280]);
+  });
+
   it("prefers the Claude Code version over a wrapper banner", () => {
     expect(parseClaudeCodeVersion("wrapper 1.0.0\n2.1.219 (Claude Code)")).toEqual([2, 1, 219]);
   });

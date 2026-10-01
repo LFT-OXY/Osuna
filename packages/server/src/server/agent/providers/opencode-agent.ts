@@ -73,6 +73,11 @@ import {
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
 } from "../provider-launch-config.js";
+import {
+  resolveProviderCliLaunch,
+  resolveProviderCliVersion,
+  type ProviderCliLaunch,
+} from "../provider-cli-version.js";
 import { withTimeout } from "../../../utils/promise-timeout.js";
 import { execCommand } from "../../../utils/spawn.js";
 import { mapOpencodeToolCall } from "./opencode/tool-call-mapper.js";
@@ -1723,6 +1728,21 @@ export class OpenCodeAgentClient implements AgentClient {
     });
     const availability = await checkProviderLaunchAvailable(launch);
     return availability.available;
+  }
+
+  async resolveInstalledVersion(signal?: AbortSignal): Promise<string | null> {
+    return await resolveProviderCliVersion({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: "opencode",
+      signal,
+    });
+  }
+
+  async resolveCliLaunch(): Promise<ProviderCliLaunch | null> {
+    return await resolveProviderCliLaunch({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: "opencode",
+    });
   }
 
   async shutdown(): Promise<void> {

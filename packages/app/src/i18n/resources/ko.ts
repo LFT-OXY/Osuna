@@ -1875,6 +1875,9 @@ export const ko: TranslationResources = {
     errors: {
       unableToInstall: "프로바이더를 설치할 수 없습니다",
     },
+    groups: {
+      acpCatalog: "ACP 카탈로그",
+    },
   },
   providerSelection: {
     defaultModel: "기본값",
@@ -3069,12 +3072,27 @@ export const ko: TranslationResources = {
       },
     },
     providers: {
-      title: "프로바이더",
       addProvider: "프로바이더 추가",
       providerDetails: "{{name}} 프로바이더 세부 정보",
       enableProvider: "{{name}} 활성화",
       unavailable: "프로바이더를 보려면 이 호스트에 연결하세요",
       loading: "불러오는 중...",
+      empty: "활성화된 프로바이더가 없습니다. 비활성화됨에서 하나를 켜거나 +를 눌러 추가하세요.",
+      groups: {
+        enabled: "활성화됨",
+        disabled: "비활성화됨",
+      },
+      enablement: {
+        on: "활성화됨",
+        off: "비활성화됨",
+        enableErrorTitle: "{{name}}을(를) 활성화할 수 없습니다",
+        disableErrorTitle: "{{name}}을(를) 비활성화할 수 없습니다",
+      },
+      disabledCard: {
+        title: "{{name}}이(가) 비활성화됨",
+        description:
+          "비활성화된 프로바이더는 감지하지 않으며 새 세션에도 나타나지 않습니다. 헤더의 스위치를 켜면 활성화되고, 호스트에 {{name}}이(가) 설치되어 있는지 확인합니다.",
+      },
       addErrorTitle: "프로바이더를 추가할 수 없습니다",
       startErrorTitle: "{{name}}을(를) 시작할 수 없습니다",
       actions: {
@@ -3091,11 +3109,33 @@ export const ko: TranslationResources = {
       },
       statuses: {
         disabled: "비활성화됨",
+        disabledUntilEnabled: "비활성화됨 · 활성화하면 설치 여부를 확인합니다",
         loading: "불러오는 중",
         error: "오류",
         available: "사용 가능",
         notInstalled: "설치되지 않음",
         apiEndpoint: "API 엔드포인트: {{name}}",
+      },
+      version: {
+        title: "버전",
+        installed: "설치됨",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "업그레이드",
+        actionLabel: "{{name}} 업그레이드",
+        actionTo: "v{{version}}(으)로 업그레이드",
+        manualHint: "설치할 때 사용한 방법으로 직접 업그레이드하거나 공식 문서를 참고하세요.",
+        errors: {
+          failed: "업그레이드하지 못했습니다",
+          unsupported: "이 프로바이더는 자동으로 업그레이드할 수 없습니다",
+          installMethodUnknown: "이 CLI의 설치 방법을 알 수 없어 자동으로 업그레이드할 수 없습니다",
+          notInstalled: "호스트에서 CLI를 찾을 수 없습니다",
+          inProgress: "이미 업그레이드가 진행 중입니다",
+          timeout: "업그레이드 시간이 초과되어 중지했습니다",
+          hostDisconnected: "호스트가 연결되어 있지 않습니다",
+        },
       },
       models: {
         title: "모델",
@@ -3111,7 +3151,6 @@ export const ko: TranslationResources = {
         loading: "모델 불러오는 중...",
         noSearchMatches: "검색과 일치하는 모델이 없습니다",
         noneDetected: "감지된 모델이 없습니다",
-        disabledHint: "비활성화됨. 활성화하면 Osuna가 모델을 감지합니다.",
         startFailed: "시작하지 못해 모델을 감지하지 못했습니다.",
         discovered: "발견됨",
         custom: "사용자 지정 모델",

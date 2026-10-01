@@ -1892,6 +1892,9 @@ export const ru: TranslationResources = {
     errors: {
       unableToInstall: "Не удалось установить провайдера",
     },
+    groups: {
+      acpCatalog: "Каталог ACP",
+    },
   },
   providerSelection: {
     defaultModel: "По умолчанию",
@@ -3104,12 +3107,28 @@ export const ru: TranslationResources = {
       },
     },
     providers: {
-      title: "Провайдеры",
       addProvider: "Добавить провайдера",
       providerDetails: "Сведения о провайдере {{name}}",
       enableProvider: "Включить {{name}}",
       unavailable: "Подключитесь к этому хосту, чтобы увидеть провайдеров",
       loading: "Загрузка...",
+      empty:
+        "Нет включённых провайдеров. Включите один в разделе «Отключены» или нажмите +, чтобы добавить.",
+      groups: {
+        enabled: "Включены",
+        disabled: "Отключены",
+      },
+      enablement: {
+        on: "Включён",
+        off: "Отключён",
+        enableErrorTitle: "Не удалось включить {{name}}",
+        disableErrorTitle: "Не удалось отключить {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} отключён",
+        description:
+          "Отключённые провайдеры не проверяются и не появляются в новых сессиях. Включите переключатель в заголовке, чтобы включить его; затем Osuna проверит, установлен ли {{name}} на хосте.",
+      },
       addErrorTitle: "Не удалось добавить провайдера",
       startErrorTitle: "Не удаётся запустить {{name}}",
       actions: {
@@ -3126,11 +3145,35 @@ export const ru: TranslationResources = {
       },
       statuses: {
         disabled: "Отключён",
+        disabledUntilEnabled: "Отключён · Включите, чтобы проверить установку",
         loading: "Загрузка",
         error: "Ошибка",
         available: "Доступен",
         notInstalled: "Не установлен",
         apiEndpoint: "API-эндпоинт: {{name}}",
+      },
+      version: {
+        title: "Версия",
+        installed: "Установлена",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "Обновить",
+        actionLabel: "Обновить {{name}}",
+        actionTo: "Обновить до v{{version}}",
+        manualHint:
+          "Обновите его вручную тем же способом, каким устанавливали, или следуйте официальной документации.",
+        errors: {
+          failed: "Не удалось обновить",
+          unsupported: "Этот провайдер нельзя обновить автоматически",
+          installMethodUnknown:
+            "Не удалось определить, как установлен этот CLI, поэтому обновить его автоматически нельзя",
+          notInstalled: "CLI не найден на хосте",
+          inProgress: "Обновление уже выполняется",
+          timeout: "Обновление превысило время ожидания и было остановлено",
+          hostDisconnected: "Хост не подключён",
+        },
       },
       models: {
         title: "Модели",
@@ -3146,7 +3189,6 @@ export const ru: TranslationResources = {
         loading: "Загрузка моделей...",
         noSearchMatches: "Ни одна модель не соответствует вашему запросу",
         noneDetected: "Модели не обнаружены",
-        disabledHint: "Отключено. Osuna обнаружит его модели после включения.",
         startFailed: "Не удалось запустить, поэтому модели не обнаружены.",
         discovered: "Обнаруженные модели",
         custom: "Пользовательские модели",

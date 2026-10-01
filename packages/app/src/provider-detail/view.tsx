@@ -17,15 +17,29 @@ import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
-import { ProviderDetailHeader, ProviderDetailMenu, ProviderDetailRefreshButton } from "./header";
+import {
+  ProviderDetailEnabledSwitch,
+  ProviderDetailHeader,
+  ProviderDetailMenu,
+  ProviderDetailRefreshButton,
+} from "./header";
 import {
   revealProviderDiagnostic,
   runProviderDiagnostic,
   useProviderDiagnostic,
   useProviderDiagnosticReveal,
 } from "./diagnostic";
+import {
+  dismissProviderEnablementError,
+  setProviderEnabled,
+  useProviderEnablement,
+} from "./enablement";
 import { ProviderDetailSurface } from "./index";
 import { dismissProviderRemovalError, removeProvider, useProviderRemoval } from "./removal";
+import { useProviderUpgrade } from "./use-upgrade";
+import { useProviderVersionCheck } from "./use-version-check";
+import { selectNewerVersion } from "./version-check";
+import { ProviderVersionSection, type ProviderVersionUpgrade } from "./version-section";
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
 /*
@@ -51,13 +65,63 @@ export function useProviderDiagnosticActions(serverId: string, provider: string)
   return { run, diagnose };
 }
 
-export function ProviderDetail({ serverId, provider }: { serverId: string; provider: string }) {
+// 详情页头的启用开关：宽屏头部块和手机顶栏共用。写入失败的提示显示在正文顶部。
+// 不做乐观更新，开关等快照推送新的 enabled 再翻过去。
+export function useProviderEnabledSwitch(serverId: string, provider: string) {
+  const { patchConfig } = useDaemonConfig(serverId);
+  const enablement = useProviderEnablement(serverId, provider);
+  const onValueChange = useCallback(
+    (next: boolean) => {
+      void setProviderEnabled(serverId, provider, {
+        enabled: next,
+        write: () => patchConfig({ providers: { [provider]: { enabled: next } } }),
+      });
+    },
+    [patchConfig, provider, serverId],
+  );
+  return { isSaving: enablement.status === "saving", onValueChange };
+}
+
+/*
+ * 刷新一个提供方：先刷新快照（重新取已装版本）。Providers 页上再强制重查新版本；
+ * composer 弹窗不查版本，也就不联网。
+ */
+function useRefreshProvider({
+  serverId,
+  provider,
+  checksVersions,
+}: {
+  serverId: string;
+  provider: string;
+  checksVersions: boolean;
+}) {
+  const { refresh } = useProvidersSnapshot(serverId);
+  const { recheck } = useProviderVersionCheck(serverId, { checkOnMount: false });
+  return useCallback(() => {
+    // 快照刷新失败也照样重查。
+    void refresh([provider]).finally(() => {
+      if (checksVersions) void recheck([provider]);
+    });
+  }, [checksVersions, provider, recheck, refresh]);
+}
+
+export function ProviderDetail({
+  serverId,
+  provider,
+  checksVersions,
+}: {
+  serverId: string;
+  provider: string;
+  // 设置页的 Providers 页为 true：刷新时重查、显示新版本。composer 弹窗为 false，只显示已装版本。
+  checksVersions: boolean;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const removal = useProviderRemoval(serverId, provider);
+  const enablement = useProviderEnablement(serverId, provider);
   const diagnostic = useProviderDiagnostic(serverId, provider);
   const diagnosticRevealRequest = useProviderDiagnosticReveal(serverId, provider);
   const { run: runDiagnostic, diagnose } = useProviderDiagnosticActions(serverId, provider);
@@ -73,6 +137,10 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
     () => dismissProviderRemovalError(serverId, provider),
     [provider, serverId],
   );
+  const handleDismissEnablementError = useCallback(
+    () => dismissProviderEnablementError(serverId, provider),
+    [provider, serverId],
+  );
 
   const providerEntry = useMemo(
     () => entries?.find((entry) => entry.provider === provider),
@@ -86,6 +154,32 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
     (state) => state.sessions[serverId]?.serverInfo?.hostPlatform,
   );
   const hostSupportsApiEndpoints = useHostFeature(serverId, "apiEndpoints");
+  // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+  const hostSupportsProviderVersions = useHostFeature(serverId, "providerVersions");
+  const { results: versionCheckResults } = useProviderVersionCheck(serverId, {
+    checkOnMount: false,
+  });
+  const upgrade = useProviderUpgrade(serverId, provider);
+  // composer 弹窗不显示新版本，也就没有升级。
+  const versionUpgrade = useMemo((): ProviderVersionUpgrade | undefined => {
+    if (!checksVersions) return undefined;
+    return {
+      provider,
+      providerLabel: resolveProviderLabel(provider, entries),
+      state: upgrade.state,
+      onUpgrade: upgrade.upgrade,
+      onDismissFailure: upgrade.dismiss,
+      onOpenDocs: upgrade.openDocs,
+    };
+  }, [
+    checksVersions,
+    entries,
+    provider,
+    upgrade.dismiss,
+    upgrade.openDocs,
+    upgrade.state,
+    upgrade.upgrade,
+  ]);
 
   const stableDiscoveredRef = useRef<ProviderDiscoveredModelsCache | null>(null);
   const currentModels = providerEntry?.models;
@@ -99,9 +193,7 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
   });
   stableDiscoveredRef.current = nextDiscoveredCache;
 
-  const handleRefresh = useCallback(() => {
-    void refresh([provider]);
-  }, [provider, refresh]);
+  const handleRefresh = useRefreshProvider({ serverId, provider, checksVersions });
 
   const handleDeleteCustomModel = useCallback(
     (modelId: string) => {
@@ -150,6 +242,24 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
     [provider, serverId],
   );
 
+  const renderVersion = useCallback(
+    (installedVersion: string) => {
+      const latestVersion = selectNewerVersion({
+        provider,
+        installedVersion,
+        results: checksVersions ? versionCheckResults : undefined,
+      });
+      return (
+        <ProviderVersionSection
+          installedVersion={installedVersion}
+          latestVersion={latestVersion ?? undefined}
+          upgrade={versionUpgrade}
+        />
+      );
+    },
+    [checksVersions, provider, versionCheckResults, versionUpgrade],
+  );
+
   const extendsProvider = config?.providers?.[provider]?.extends;
 
   return (
@@ -159,11 +269,13 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
       extendsProvider={extendsProvider}
       hostPlatform={hostPlatform}
       hostSupportsApiEndpoints={hostSupportsApiEndpoints}
+      hostSupportsProviderVersions={hostSupportsProviderVersions}
       discoveredModels={discoveredModels}
       additionalModels={additionalModels}
       isRefreshing={isRefreshing}
       deletingModelId={deletingModelId}
       removalError={removal.status === "failed" ? removal.message : null}
+      enablementError={enablement.status === "failed" ? enablement : null}
       diagnostic={diagnostic}
       diagnosticRevealRequest={diagnosticRevealRequest}
       onRefresh={handleRefresh}
@@ -171,10 +283,12 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
       onRunDiagnostic={runDiagnostic}
       onCopyDiagnostic={handleCopyDiagnostic}
       onDismissRemovalError={handleDismissRemovalError}
+      onDismissEnablementError={handleDismissEnablementError}
       onDeleteCustomModel={handleDeleteCustomModel}
       onAddCustomModel={handleAddCustomModel}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
+      renderVersion={renderVersion}
     />
   );
 }
@@ -183,10 +297,10 @@ export function ProviderDetail({ serverId, provider }: { serverId: string; provi
 export function useProviderDetailHeader(
   serverId: string,
   provider: string,
-  options?: { onRemoved?: () => void },
+  options: { checksVersions: boolean; onRemoved?: () => void },
 ) {
   const { t } = useTranslation();
-  const { entries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
+  const { entries, isRefreshing } = useProvidersSnapshot(serverId);
   const { patchConfig } = useDaemonConfig(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const removal = useProviderRemoval(serverId, provider);
@@ -206,14 +320,16 @@ export function useProviderDetailHeader(
   const glyph = resolveProviderGlyph({ provider, serverId, tone: "brand" });
   const label = resolveProviderLabel(provider, entries);
 
-  const handleRefresh = useCallback(() => {
-    void refresh([provider]);
-  }, [provider, refresh]);
+  const handleRefresh = useRefreshProvider({
+    serverId,
+    provider,
+    checksVersions: options.checksVersions,
+  });
   const providerSource = providerEntry?.source;
   const isRemoving = removal.status === "removing";
 
   // 删除成功后提供方从快照里消失，设置页由地址修正回到第一个提供方或列表；弹窗经 onRemoved 关闭。
-  const onRemoved = options?.onRemoved;
+  const onRemoved = options.onRemoved;
   const handleRemove = useCallback(() => {
     void removeProvider(serverId, provider, {
       confirm: () =>
@@ -235,6 +351,7 @@ export function useProviderDetailHeader(
     label,
     status,
     modelCount,
+    enabled,
     isRefreshing: isProviderRefreshing,
     onRefresh: handleRefresh,
     providerSource,
@@ -263,6 +380,7 @@ export function ProviderDetailActions({
     <>
       <ProviderDetailRefreshButton
         isRefreshing={header.isRefreshing}
+        disabled={!header.enabled}
         onRefresh={header.onRefresh}
         iconOnly={iconOnlyRefresh}
       />
@@ -280,7 +398,7 @@ export function ProviderDetailActions({
   );
 }
 
-// 设置页的页面外框：头部块加详情内容。
+// 设置页的页面外框：头部块加详情内容。启用开关只在设置页，composer 弹窗不带。
 export function ProviderDetailPage({
   serverId,
   provider,
@@ -288,13 +406,25 @@ export function ProviderDetailPage({
 }: {
   serverId: string;
   provider: string;
-  // 手机上「刷新」和 ⋯ 在顶栏，头部块只留图标、名称、徽章和模型数。
+  // 手机上开关、「刷新」和 ⋯ 在顶栏，头部块只留图标、名称、徽章和模型数。
   hasScreenHeaderActions: boolean;
 }) {
-  const header = useProviderDetailHeader(serverId, provider);
+  const header = useProviderDetailHeader(serverId, provider, { checksVersions: true });
+  const { isSaving, onValueChange } = useProviderEnabledSwitch(serverId, provider);
   const renderActions = useCallback(
-    () => <ProviderDetailActions serverId={serverId} provider={provider} header={header} />,
-    [header, provider, serverId],
+    () => (
+      <>
+        <ProviderDetailEnabledSwitch
+          providerLabel={header.label}
+          enabled={header.enabled}
+          isSaving={isSaving}
+          showStateLabel
+          onValueChange={onValueChange}
+        />
+        <ProviderDetailActions serverId={serverId} provider={provider} header={header} />
+      </>
+    ),
+    [header, isSaving, onValueChange, provider, serverId],
   );
 
   return (
@@ -307,7 +437,7 @@ export function ProviderDetailPage({
         renderActions={hasScreenHeaderActions ? undefined : renderActions}
         testID={`provider-detail-header-${provider}`}
       />
-      <ProviderDetail serverId={serverId} provider={provider} />
+      <ProviderDetail serverId={serverId} provider={provider} checksVersions />
     </>
   );
 }

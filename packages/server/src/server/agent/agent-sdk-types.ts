@@ -11,6 +11,7 @@ import type {
   ApiEndpointRef,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { PaseoToolCatalog } from "./tools/types.js";
+import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
 export type { AgentProviderNotice, AgentTaskItem };
 
@@ -137,6 +138,8 @@ export interface ProviderSnapshotEntry {
   isModelListAuthoritative?: boolean;
   // 当前启用的第三方接口；官方模式下没有。
   activeApiEndpoint?: ApiEndpointRef;
+  // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
+  version?: string;
 }
 
 export interface AgentCreateConfigParent {
@@ -748,7 +751,11 @@ export interface ProviderCatalog {
   models: AgentModelDefinition[];
   modes: AgentMode[];
   defaultModeId?: string | null;
+  /** 发现目录时已经跑过的 `--version` 的结果；带上它，快照就不再单独跑一次。 */
+  installedVersion?: DiscoveredCliVersion;
 }
+
+export type DiscoveredCliVersion = { status: "found"; version: string } | { status: "unreadable" };
 
 /**
  * 整份替换某个提供方的模型目录；null 表示照常用提供方自己的目录。
@@ -824,6 +831,10 @@ export interface AgentClient {
    * Returns true if available, false otherwise.
    */
   isAvailable(signal?: AbortSignal, options?: FetchCatalogOptions): Promise<boolean>;
+  /** 已装 CLI 的版本（x.y.z），用实际启动的命令跑 `--version`；取不到返回 null 或抛错，调用方都当作没有版本。只有内置提供方实现。 */
+  resolveInstalledVersion?(signal?: AbortSignal): Promise<string | null>;
+  /** 实际启动的 CLI（可执行文件、前置参数、环境变量），升级命令用它来执行；找不到时返回 null。只有内置提供方实现。 */
+  resolveCliLaunch?(): Promise<ProviderCliLaunch | null>;
   getDiagnostic?(): Promise<{ diagnostic: string }>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().

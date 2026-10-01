@@ -8,6 +8,11 @@ import {
   type ProviderRuntimeSettings,
 } from "../provider-launch-config.js";
 import {
+  resolveProviderCliLaunch,
+  resolveProviderCliVersion,
+  type ProviderCliLaunch,
+} from "../provider-cli-version.js";
+import {
   ACPAgentClient,
   type ACPConfigFeatureOption,
   type ACPBeforeModeWriteResult,
@@ -98,6 +103,21 @@ export class CopilotACPAgentClient extends ACPAgentClient {
 
   override async isAvailable(): Promise<boolean> {
     return super.isAvailable();
+  }
+
+  async resolveInstalledVersion(signal?: AbortSignal): Promise<string | null> {
+    return await resolveProviderCliVersion({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: "copilot",
+      signal,
+    });
+  }
+
+  async resolveCliLaunch(): Promise<ProviderCliLaunch | null> {
+    return await resolveProviderCliLaunch({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: "copilot",
+    });
   }
 
   async getDiagnostic(): Promise<{ diagnostic: string }> {

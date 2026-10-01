@@ -649,6 +649,17 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 [OK] **Completed**
 
 
+## Session 26: Providers 两级结构：工单 10 升级按钮挪进状态行，任务验收归档
+<!-- atw-session: v=2 fp=23674731948486ce -->
+
+**Date**: 2026-10-01
+**Task**: Providers 两级结构：工单 10 升级按钮挪进状态行，任务验收归档
+**Package**: app
+**Branch**: `split-providers-models-menu`
+
+### Summary
+
+工单 10：列表行尾只剩开关和 ›，有新版本时状态行后接 xs outline「升级到 v{latest}」（ArrowUp，悬停 v{from} → v{to}），ProviderUpgradeButton 加 placement、ProviderStatusLine 用 children 接按钮且不再写版本箭头；9 语言补 actionTo。双轴审查：Standards 指出本地压到 18px 违反 design.md §4，改回 xs 原尺寸（行会略高），合并重复 Button 分支；Spec 建议补「点升级不进详情」断言，测试里 Pressable mock 改为像 RN-web PressResponder 一样 stopPropagation。真实 Web/Electron 点升级不跳详情；假 Claude CLI 下 Web 4 张、Electron 2 张截图入 qa/。design.md、frontend component-guidelines/testing、设计说明同步。用户 dev 桌面端实测通过。验收 16 条：14 达成，第 9 条（只读客户端被拒无自动测试）与第 15 条（真实升级只在 Web）用户接受，任务归档。
 ## Session 25: 补齐简体中文界面翻译：工单 06 PR 面板/插件/会话页/侧栏迁移，任务验收并归档
 <!-- atw-session: v=2 fp=28d7b196da288179 -->
 
@@ -676,6 +687,7 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 
 | Hash | Message |
 |------|---------|
+| `9e1c30297` | feat(app): Providers 列表行的升级按钮挪进状态行 |
 | `02f131c94` | fix(app): 迁移 PR 面板、插件、会话页、侧栏剩余硬编码英文到翻译键 |
 | `5140793d3` | chore(atw): 工单 06 桌面端中文验收通过，关闭工单，任务进入验收 |
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { View } from "react-native";
+import { Pressable, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { FileText, MoreHorizontal, RotateCw, Trash2 } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,9 @@ import {
   iconButtonChromeStyle,
   mutedIconColorMapping,
 } from "@/components/ui/icon-button-chrome";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
+import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
@@ -26,8 +28,8 @@ import type { ProviderGlyph } from "@/components/provider-icons";
 import type { ProviderStatusCopy, ProviderStatusDisplay, ProviderStatusTone } from "./status";
 
 /*
- * 设置页里详情的头部块：图标、名称、状态徽章与模型数，右侧「刷新」和 ⋯ 菜单。
- * 手机上这两个操作放到顶栏，头部块不带操作。composer 弹窗把图标框、徽章和这两个操作放进弹窗头部。
+ * 设置页里详情的头部块：图标、名称、状态徽章与模型数，右侧启用开关、「刷新」和 ⋯ 菜单。
+ * 手机上这些操作放到顶栏，头部块不带操作。composer 弹窗把图标框、徽章、「刷新」和 ⋯ 放进弹窗头部，不带开关。
  */
 
 export interface ProviderDetailHeaderProps {
@@ -49,6 +51,8 @@ const BADGE_VARIANTS: Record<ProviderStatusTone, StatusBadgeVariant> = {
 };
 
 const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
+const ThemedRotateCw = withUnistyles(RotateCw);
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedFileText = withUnistyles(FileText);
 const ThemedTrash2 = withUnistyles(Trash2);
 
@@ -96,12 +100,48 @@ export function ProviderDetailHeader({
   );
 }
 
+// 详情页头的启用开关。宽屏在开关左边写当前状态；手机顶栏放不下，只放开关，靠可访问名称说明用途。
+export function ProviderDetailEnabledSwitch({
+  providerLabel,
+  enabled,
+  isSaving,
+  showStateLabel,
+  onValueChange,
+}: {
+  providerLabel: string;
+  enabled: boolean;
+  isSaving: boolean;
+  showStateLabel: boolean;
+  onValueChange: (enabled: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.enabledSwitch}>
+      {showStateLabel ? (
+        <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+          {enabled ? t("settings.providers.enablement.on") : t("settings.providers.enablement.off")}
+        </Text>
+      ) : null}
+      <Switch
+        value={enabled}
+        onValueChange={onValueChange}
+        disabled={isSaving}
+        accessibilityLabel={t("settings.providers.enableProvider", { name: providerLabel })}
+        testID="provider-detail-enabled-switch"
+      />
+    </View>
+  );
+}
+
 export function ProviderDetailRefreshButton({
   isRefreshing,
+  disabled = false,
   onRefresh,
   iconOnly = false,
 }: {
   isRefreshing: boolean;
+  // 已停用时 daemon 不探测，刷新没有意义。
+  disabled?: boolean;
   onRefresh: () => void;
   // 手机上 composer 弹窗头部放不下文字按钮，改成仅图标，把宽度留给名称。
   iconOnly?: boolean;
@@ -114,6 +154,7 @@ export function ProviderDetailRefreshButton({
         size="sm"
         leftIcon={RotateCw}
         loading={isRefreshing}
+        disabled={disabled}
         onPress={onRefresh}
         accessibilityLabel={t("settings.providers.diagnostic.refresh")}
       />
@@ -128,10 +169,57 @@ export function ProviderDetailRefreshButton({
       size="sm"
       leftIcon={isRefreshing ? undefined : RotateCw}
       onPress={onRefresh}
-      disabled={isRefreshing}
+      disabled={isRefreshing || disabled}
     >
       {t(refreshKey)}
     </Button>
+  );
+}
+
+// 手机顶栏的「刷新」：仅图标，用顶栏图标按钮的尺寸。
+export function ProviderDetailScreenRefreshButton({
+  isRefreshing,
+  disabled,
+  onRefresh,
+}: {
+  isRefreshing: boolean;
+  disabled: boolean;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const isBlocked = isRefreshing || disabled;
+  const refreshStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) =>
+      iconButtonChromeStyle({
+        size: "large",
+        state: { hovered: Boolean(hovered), pressed },
+        disabled: isBlocked,
+      }),
+    [isBlocked],
+  );
+  const accessibilityState = useMemo(
+    () => ({ busy: isRefreshing, disabled: isBlocked }),
+    [isBlocked, isRefreshing],
+  );
+  return (
+    <Pressable
+      style={refreshStyle}
+      onPress={onRefresh}
+      disabled={isBlocked}
+      accessibilityRole="button"
+      accessibilityLabel={t("settings.providers.diagnostic.refresh")}
+      accessibilityState={accessibilityState}
+      testID="provider-detail-refresh"
+    >
+      {isRefreshing ? (
+        <ThemedLoadingSpinner uniProps={mutedIconColorMapping} />
+      ) : (
+        <ThemedRotateCw
+          size={iconButtonChromeGlyphSize("large")}
+          uniProps={mutedIconColorMapping}
+        />
+      )}
+    </Pressable>
   );
 }
 
@@ -257,6 +345,11 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing[0.5],
   },
   actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  enabledSwitch: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],

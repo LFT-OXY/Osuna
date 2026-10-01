@@ -66,6 +66,8 @@ const zhCNEnglishAllowlist = {
     "contextWindow.tokens",
     "settings.providers.apiEndpoints.form.baseUrl",
     "settings.providers.apiEndpoints.form.apiKey",
+    "settings.providers.version.value",
+    "settings.providers.version.update",
   ],
   brands: ["sidebar.help.appName", "panels.sessionHistory.row.paseo"],
   namedThemes: [
@@ -502,7 +504,7 @@ describe("translation resources", () => {
     expect(en.settings.host.connections.title).toBe("Connections");
     expect(en.settings.host.daemon.restart.title).toBe("Restart daemon");
     expect(en.settings.host.orchestration.enableTools.title).toBe("Enable Osuna tools");
-    expect(en.settings.providers.title).toBe("Providers");
+    expect(en.settings.providers.groups.enabled).toBe("Enabled");
     expect(en.settings.providers.models.addModel).toBe("Add model");
     expect(en.settings.providers.diagnostic.title).toBe("Diagnostic");
     expect(en.settings.project.worktree.title).toBe("Worktree lifecycle hooks");

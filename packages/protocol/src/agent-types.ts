@@ -133,6 +133,8 @@ export interface ProviderSnapshotEntry {
   isModelListAuthoritative?: boolean;
   // 当前启用的第三方接口；官方模式下没有。
   activeApiEndpoint?: ApiEndpointRef;
+  // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
+  version?: string;
 }
 
 export interface AgentFeatureToggle {

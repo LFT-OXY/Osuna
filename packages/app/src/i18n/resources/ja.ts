@@ -1881,6 +1881,9 @@ export const ja: TranslationResources = {
     errors: {
       unableToInstall: "プロバイダーをインストールできません",
     },
+    groups: {
+      acpCatalog: "ACP カタログ",
+    },
   },
   providerSelection: {
     defaultModel: "デフォルト",
@@ -3081,12 +3084,27 @@ export const ja: TranslationResources = {
       },
     },
     providers: {
-      title: "プロバイダー",
       addProvider: "プロバイダーを追加",
       providerDetails: "{{name}}プロバイダーの詳細",
       enableProvider: "{{name}}を有効にする",
       unavailable: "プロバイダーを見るにはこのホストに接続してください",
       loading: "読み込み中...",
+      empty: "有効なプロバイダーはありません。「無効」から有効にするか、+ を押して追加します。",
+      groups: {
+        enabled: "有効",
+        disabled: "無効",
+      },
+      enablement: {
+        on: "有効",
+        off: "無効",
+        enableErrorTitle: "{{name}} を有効にできません",
+        disableErrorTitle: "{{name}} を無効にできません",
+      },
+      disabledCard: {
+        title: "{{name}} は無効です",
+        description:
+          "無効なプロバイダーは検出されず、新しいセッションにも表示されません。ヘッダーのスイッチをオンにすると有効になり、ホストに {{name}} がインストールされているかを確認します。",
+      },
       addErrorTitle: "プロバイダーを追加できません",
       startErrorTitle: "{{name}} を起動できません",
       actions: {
@@ -3102,11 +3120,35 @@ export const ja: TranslationResources = {
       },
       statuses: {
         disabled: "無効",
+        disabledUntilEnabled: "無効 · 有効にするとインストール済みか確認します",
         loading: "読み込み中",
         error: "エラー",
         available: "利用可能",
         notInstalled: "未インストール",
         apiEndpoint: "API エンドポイント：{{name}}",
+      },
+      version: {
+        title: "バージョン",
+        installed: "インストール済み",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "アップグレード",
+        actionLabel: "{{name}} をアップグレード",
+        actionTo: "v{{version}} にアップグレード",
+        manualHint:
+          "インストールしたときと同じ方法で手動でアップグレードするか、公式ドキュメントを参照してください。",
+        errors: {
+          failed: "アップグレードに失敗しました",
+          unsupported: "このプロバイダーは自動でアップグレードできません",
+          installMethodUnknown:
+            "この CLI のインストール方法を判別できないため、自動でアップグレードできません",
+          notInstalled: "ホスト上に CLI が見つかりません",
+          inProgress: "アップグレードはすでに実行中です",
+          timeout: "アップグレードがタイムアウトしたため停止しました",
+          hostDisconnected: "ホストが接続されていません",
+        },
       },
       models: {
         title: "モデル",
@@ -3122,7 +3164,6 @@ export const ja: TranslationResources = {
         loading: "モデルを読み込み中...",
         noSearchMatches: "検索に一致するモデルがありません",
         noneDetected: "モデルが検出されませんでした",
-        disabledHint: "無効です。有効にすると Osuna がモデルを検出します。",
         startFailed: "起動に失敗したため、モデルを検出できませんでした。",
         discovered: "検出済み",
         custom: "カスタムモデル",

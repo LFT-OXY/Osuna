@@ -3,60 +3,82 @@
  */
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-const { theme, snapshotState, configState, patchConfigMock, refreshMock, selectProviderMock } =
-  vi.hoisted(() => ({
-    theme: {
-      spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
-      iconSize: { sm: 14, md: 20 },
-      fontSize: { xs: 11, sm: 13, base: 15 },
-      fontWeight: { normal: "400" },
-      fontFamily: { ui: "system-ui", mono: "monospace" },
-      borderRadius: { lg: 8 },
-      radius: { sm: 6, md: 8, lg: 10 },
-      // 安装指引区渲染 Button / SegmentedControl，createControlGeometry 读这两组 token。
-      borderWidth: { 1: 1 },
-      controlHeight: { sm: 24, md: 28, lg: 32 },
-      typeScale: {
-        caption: { fontSize: 12, lineHeight: 16 },
-        body: { fontSize: 14, lineHeight: 20 },
+const {
+  theme,
+  snapshotState,
+  configState,
+  patchConfigMock,
+  refreshMock,
+  selectProviderMock,
+  upgradeProviderMock,
+} = vi.hoisted(() => ({
+  theme: {
+    spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
+    iconSize: { sm: 14, md: 20 },
+    fontSize: { xs: 11, sm: 13, base: 15 },
+    fontWeight: { normal: "400" },
+    fontFamily: { ui: "system-ui", mono: "monospace" },
+    borderRadius: { lg: 8 },
+    radius: { sm: 6, md: 8, lg: 10 },
+    // 安装指引区渲染 Button / SegmentedControl，createControlGeometry 读这两组 token。
+    borderWidth: { 1: 1 },
+    controlHeight: { sm: 24, md: 28, lg: 32 },
+    typeScale: {
+      caption: { fontSize: 12, lineHeight: 16 },
+      body: { fontSize: 14, lineHeight: 20 },
+    },
+    opacity: { 50: 0.5 },
+    colors: {
+      surface1: "#111",
+      surface2: "#222",
+      surface3: "#333",
+      foreground: "#fff",
+      foregroundMuted: "#aaa",
+      border: "#555",
+      accent: "#0a84ff",
+      statusSuccess: "#00ff00",
+      statusWarning: "#ff9500",
+      statusDanger: "#ff0000",
+      // 目录弹窗的 Alert 读 blue / amber。
+      palette: {
+        red: { 300: "#ff6b6b" },
+        blue: { 300: "#93c5fd" },
+        amber: { 500: "#f59e0b" },
+        white: "#fff",
       },
-      opacity: { 50: 0.5 },
-      colors: {
-        surface1: "#111",
-        surface2: "#222",
-        surface3: "#333",
-        foreground: "#fff",
-        foregroundMuted: "#aaa",
-        border: "#555",
-        accent: "#0a84ff",
-        statusSuccess: "#00ff00",
-        statusWarning: "#ff9500",
-        statusDanger: "#ff0000",
-        // 目录弹窗的 Alert 读 blue / amber。
-        palette: {
-          red: { 300: "#ff6b6b" },
-          blue: { 300: "#93c5fd" },
-          amber: { 500: "#f59e0b" },
-          white: "#fff",
-        },
-      },
     },
-    snapshotState: {
-      entries: undefined as ProviderSnapshotEntry[] | undefined,
-      isLoading: false,
-      isRefreshing: false,
-    },
-    configState: {
-      config: null as MutableDaemonConfig | null,
-    },
-    patchConfigMock: vi.fn(async (_patch: unknown) => undefined),
-    refreshMock: vi.fn(async (_providers?: string[]) => undefined),
-    selectProviderMock: vi.fn(),
-  }));
+  },
+  snapshotState: {
+    entries: undefined as ProviderSnapshotEntry[] | undefined,
+    isLoading: false,
+    isRefreshing: false,
+  },
+  configState: {
+    config: null as MutableDaemonConfig | null,
+  },
+  patchConfigMock: vi.fn(async (_patch: unknown) => undefined),
+  refreshMock: vi.fn(async (_providers?: string[]) => undefined),
+  selectProviderMock: vi.fn(),
+  upgradeProviderMock: vi.fn(),
+}));
+
+// 解析 Pressable 的样式里最终的背景色：目录"添加"按钮的变体、行的高亮都只体现在背景上。
+function resolveBackground(style: unknown): string | undefined {
+  const resolved = typeof style === "function" ? style({ pressed: false, hovered: false }) : style;
+  const layers = Array.isArray(resolved) ? resolved.flat(Number.POSITIVE_INFINITY) : [resolved];
+  let background: string | undefined;
+  for (const layer of layers) {
+    if (layer && typeof layer === "object" && "backgroundColor" in layer) {
+      background = String(layer.backgroundColor);
+    }
+  }
+  return background;
+}
 
 vi.mock("react-native", () => ({
   Platform: {
@@ -88,19 +110,19 @@ vi.mock("react-native", () => ({
     onHoverOut,
     accessibilityRole,
     accessibilityLabel,
-    accessibilityState,
     disabled,
     testID,
+    style,
   }: {
     children?:
       | React.ReactNode
       | ((state: { pressed: boolean; hovered: boolean }) => React.ReactNode);
+    style?: unknown;
     onPress?: (event: React.MouseEvent) => void;
     onHoverIn?: () => void;
     onHoverOut?: () => void;
     accessibilityRole?: string;
     accessibilityLabel?: string;
-    accessibilityState?: { selected?: boolean };
     disabled?: boolean;
     testID?: string;
   }) =>
@@ -109,10 +131,14 @@ vi.mock("react-native", () => ({
       {
         role: accessibilityRole,
         "aria-label": accessibilityLabel,
-        "aria-selected": accessibilityState?.selected ? "true" : undefined,
         "aria-disabled": disabled ? "true" : undefined,
         "data-testid": testID,
-        onClick: disabled ? undefined : onPress,
+        "data-background": resolveBackground(style),
+        // 和 react-native-web 的 PressResponder 一样，点击不再冒泡到外层 Pressable。
+        onClick: (event: React.MouseEvent) => {
+          event.stopPropagation();
+          if (!disabled) onPress?.(event);
+        },
         onMouseEnter: onHoverIn,
         onMouseLeave: onHoverOut,
       },
@@ -139,6 +165,7 @@ vi.mock("lucide-react-native", () => {
   return {
     // 目录弹窗的 Alert 与目录行的图标。
     AlertTriangle: icon("AlertTriangle"),
+    ArrowUp: icon("ArrowUp"),
     CheckCircle2: icon("CheckCircle2"),
     ChevronRight: icon("ChevronRight"),
     Copy: icon("Copy"),
@@ -168,6 +195,8 @@ vi.mock("react-i18next", () => ({
           "settings.providers.statuses.apiEndpoint": "API endpoint: {{name}}",
           "settings.providers.models.one": "1 model",
           "settings.providers.models.many": "{{count}} models",
+          "settings.providers.version.value": "v{{version}}",
+          "settings.providers.version.update": "v{{from}} → v{{to}}",
           "settings.providers.addProvider": "Add provider",
           "settings.providers.addErrorTitle": "Unable to add provider",
           "providerCatalog.title": "Add provider",
@@ -176,11 +205,25 @@ vi.mock("react-i18next", () => ({
           "providerCatalog.actions.add": "Add",
           "providerCatalog.actions.adding": "Adding",
           "providerCatalog.actions.installInstructions": "Install instructions",
+          "providerCatalog.groups.acpCatalog": "ACP catalog",
+          "settings.providers.groups.enabled": "Enabled",
+          "settings.providers.groups.disabled": "Disabled",
+          "settings.providers.statuses.disabledUntilEnabled":
+            "Disabled · Enable to check if it's installed",
+          "settings.providers.empty":
+            "No providers enabled. Turn one on under Disabled, or press + to add one.",
           "common.actions.dismiss": "Dismiss",
+          "settings.providers.upgrade.action": "Upgrade",
+          "settings.providers.upgrade.actionLabel": "Upgrade {{name}}",
+          "settings.providers.upgrade.actionTo": "Upgrade to v{{version}}",
+          "settings.providers.upgrade.errors.failed": "Upgrade failed",
         })[key] ?? key
       )
         .replaceAll("{{name}}", String(values?.name ?? ""))
-        .replaceAll("{{count}}", String(values?.count ?? "")),
+        .replaceAll("{{count}}", String(values?.count ?? ""))
+        .replaceAll("{{version}}", String(values?.version ?? ""))
+        .replaceAll("{{from}}", String(values?.from ?? ""))
+        .replaceAll("{{to}}", String(values?.to ?? "")),
   }),
 }));
 
@@ -294,14 +337,36 @@ vi.mock("@/hooks/use-daemon-config", () => ({
 
 vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeIsConnected: () => true,
+  // 列表只读 Providers 页的版本检查结果，不会用它发检查请求；升级经它发请求。
+  useHostRuntimeClient: () => ({ upgradeProvider: upgradeProviderMock }),
+}));
+
+// 真实的 Tooltip 依赖 reanimated 与 createPortal，在整体 mock 掉 react-native 的套件里加载不了；
+// 这里把提示文字直接渲染出来。
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  TooltipTrigger: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  TooltipContent: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement("span", { "data-testid": "tooltip-content" }, children),
+}));
+
+vi.mock("@/components/ui/scrollable-code-surface", () => ({
+  ScrollableCodeSurface: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
+    React.createElement("pre", { "data-testid": testID }, children),
 }));
 
 import {
   buildAcpProviderConfigPatch,
   getAcpProviderCatalog,
 } from "@/hooks/use-acp-provider-catalog";
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { useSessionStore } from "@/stores/session-store";
+import { providerVersionCheckQueryKey } from "@/provider-detail/version-check";
+import { useProviderUpgradeStore } from "@/provider-detail/upgrade";
+import type { ProviderUpgradeResponsePayload as ProviderUpgradeResponse } from "@getpaseo/protocol/messages";
 import { ProvidersSection } from "./providers-section";
-import type { ProvidersLayout } from "./providers-layout";
 
 const catalog = getAcpProviderCatalog();
 const minimax = (() => {
@@ -376,8 +441,12 @@ function indexOfText(nodes: HTMLElement[], text: string): number {
   return nodes.findIndex((node) => node.textContent?.trim() === text);
 }
 
+// React Query 默认用 setTimeout(0) 通知观察者，act 不一定等得到；升级成功后改写检查结果要同步落到界面上。
+notifyManager.setScheduler((callback) => callback());
+
 describe("ProvidersSection", () => {
   let root: Root | null = null;
+  let queryClient = new QueryClient();
   let container: HTMLElement | null = null;
 
   beforeEach(() => {
@@ -392,14 +461,18 @@ describe("ProvidersSection", () => {
     snapshotState.isLoading = false;
     snapshotState.isRefreshing = false;
     configState.config = null;
+    queryClient = new QueryClient();
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
     refreshMock.mockReset();
     refreshMock.mockResolvedValue(undefined);
     selectProviderMock.mockReset();
+    upgradeProviderMock.mockReset();
+    useProviderUpgradeStore.setState({ byKey: {} });
   });
 
   afterEach(() => {
+    useSessionStore.getState().clearSession("server-1");
     if (root) {
       act(() => {
         root?.unmount();
@@ -409,19 +482,15 @@ describe("ProvidersSection", () => {
     container?.remove();
     container = null;
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
-  function render(
-    options: { layout?: ProvidersLayout; selectedProvider?: string | null } = {},
-  ): void {
+  function render(): void {
     act(() => {
       root?.render(
-        <ProvidersSection
-          serverId="server-1"
-          layout={options.layout ?? "split"}
-          selectedProvider={options.selectedProvider ?? null}
-          onSelectProvider={selectProviderMock}
-        />,
+        <QueryClientProvider client={queryClient}>
+          <ProvidersSection serverId="server-1" onSelectProvider={selectProviderMock} />
+        </QueryClientProvider>,
       );
     });
   }
@@ -434,29 +503,88 @@ describe("ProvidersSection", () => {
     return row;
   }
 
-  it("renders the disabled provider with its server-provided label in snapshot order", () => {
+  function groupRowIds(group: "enabled" | "disabled"): string[] {
+    const section = container?.querySelector(`[data-testid="providers-${group}-group"]`);
+    return Array.from(
+      section?.querySelectorAll<HTMLElement>('[data-testid^="provider-row-"]') ?? [],
+    ).map((row) => row.getAttribute("data-testid")?.slice("provider-row-".length) ?? "");
+  }
+
+  function findGroup(group: "enabled" | "disabled"): HTMLElement | null {
+    return (
+      container?.querySelector<HTMLElement>(`[data-testid="providers-${group}-group"]`) ?? null
+    );
+  }
+
+  it("puts every enabled provider in Enabled and turned-off ones in Disabled, in snapshot order", () => {
+    snapshotState.entries = [
+      claudeEntry,
+      disabledCodexEntry,
+      notInstalledCustomClaudeEntry,
+      { ...claudeEntry, provider: "opencode", label: "OpenCode", status: "loading" },
+      { ...claudeEntry, provider: "pi", label: "Pi", status: "error", error: "boom" },
+      {
+        ...claudeEntry,
+        provider: "copilot",
+        label: "Copilot",
+        enabled: false,
+        status: "unavailable",
+      },
+    ];
+    configState.config = makeConfig({ codex: { enabled: false }, copilot: { enabled: false } });
+
+    render();
+
+    expect(groupRowIds("enabled")).toEqual(["claude", "work-claude", "opencode", "pi"]);
+    expect(groupRowIds("disabled")).toEqual(["codex", "copilot"]);
+    expect(findGroup("enabled")?.textContent).toContain("Enabled4");
+    expect(findGroup("disabled")?.textContent).toContain("Disabled2");
+    expect(findRow("Work Claude provider details").textContent).toContain("Not installed");
+  });
+
+  it("shows the empty hint in Enabled, with + in its header, when every provider is turned off", () => {
+    snapshotState.entries = [disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render();
+
+    expect(groupRowIds("enabled")).toEqual([]);
+    expect(findGroup("enabled")?.textContent).toContain(
+      "No providers enabled. Turn one on under Disabled, or press + to add one.",
+    );
+    expect(
+      findGroup("enabled")?.querySelector('[role="button"][aria-label="Add provider"]'),
+    ).not.toBeNull();
+    expect(groupRowIds("disabled")).toEqual(["codex"]);
+  });
+
+  it("hides the Disabled group, title included, when every provider is enabled", () => {
+    snapshotState.entries = [claudeEntry, notInstalledCodexEntry];
+    configState.config = makeConfig();
+
+    render();
+
+    expect(findGroup("disabled")).toBeNull();
+    expect(container?.textContent).not.toContain("Disabled");
+  });
+
+  it("marks a turned-off row as disabled without claiming it is not installed", () => {
     snapshotState.entries = [claudeEntry, disabledCodexEntry];
     configState.config = makeConfig({ codex: { enabled: false } });
 
     render();
 
-    const rows = Array.from(
-      container?.querySelectorAll<HTMLElement>('[role="button"][aria-label$="provider details"]') ??
-        [],
-    );
-    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
-      "Claude provider details",
-      "Codex provider details",
-    ]);
-
-    const codexRow = findRow("Codex provider details");
-    const codexNodes = descendants(codexRow);
-    expect(indexOfText(codexNodes, "Codex")).toBeGreaterThanOrEqual(0);
-    expect(indexOfText(codexNodes, "codex")).toBe(-1);
-    expect(indexOfText(codexNodes, "Disabled")).toBeGreaterThanOrEqual(0);
+    const row = findRow("Codex provider details");
+    expect(
+      indexOfText(descendants(row), "Disabled · Enable to check if it's installed"),
+    ).toBeGreaterThan(-1);
+    expect(row.textContent).not.toContain("Not installed");
+    expect(row.querySelector('[data-testid="provider-status-dot-muted"]')).not.toBeNull();
+    expect(row.querySelector('[role="switch"]')?.getAttribute("aria-checked")).toBe("false");
+    expect(row.querySelector('[data-icon="ChevronRight"]')).not.toBeNull();
   });
 
-  it("composes the row as brand icon, label, status line, then switch", () => {
+  it("composes the row as brand icon, label, status line, switch, then chevron", () => {
     snapshotState.entries = [claudeEntry];
     configState.config = makeConfig();
 
@@ -477,24 +605,11 @@ describe("ProvidersSection", () => {
     expect(statusDot).toBeGreaterThan(label);
     expect(statusText).toBeGreaterThan(statusDot);
     expect(switchEl).toBeGreaterThan(statusText);
-    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBe(-1);
+    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBeGreaterThan(switchEl);
     expect(indexOfText(nodes, "Available")).toBe(-1);
   });
 
-  it("adds a chevron to each row in the stacked layout", () => {
-    snapshotState.entries = [claudeEntry];
-    configState.config = makeConfig();
-
-    render({ layout: "stacked" });
-
-    const nodes = descendants(findRow("Claude provider details"));
-    expect(indexOfMatches(nodes, '[data-icon="ChevronRight"]')).toBeGreaterThan(
-      indexOfMatches(nodes, '[role="switch"]'),
-    );
-  });
-
   it.each([
-    ["disabled", { ...claudeEntry, enabled: false }, "muted", "Disabled"],
     ["loading", { ...claudeEntry, status: "loading" }, null, "Loading"],
     ["error", { ...claudeEntry, status: "error", error: "boom" }, "danger", "Error"],
     [
@@ -509,12 +624,6 @@ describe("ProvidersSection", () => {
       { ...claudeEntry, models: claudeEntry.models?.slice(0, 1) },
       "success",
       "1 model",
-    ],
-    [
-      "not installed",
-      { ...claudeEntry, status: "unavailable", models: [] },
-      "warning",
-      "Not installed",
     ],
   ] as const)("shows the %s status line", (_name, entry, dotTone, text) => {
     snapshotState.entries = [entry as ProviderSnapshotEntry];
@@ -532,7 +641,219 @@ describe("ProvidersSection", () => {
     }
   });
 
-  it("selects the provider when its row is pressed", () => {
+  // 主机声明了 providerVersions 的 server_info。
+  function connectHostWithProviderVersions(): void {
+    const store = useSessionStore.getState();
+    store.initializeSession("server-1", null as unknown as DaemonClient);
+    store.updateSessionServerInfo("server-1", {
+      serverId: "server-1",
+      hostname: null,
+      version: "0.13.1",
+      features: { providerVersions: true },
+    });
+  }
+
+  it("adds the installed version after the status line", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    configState.config = makeConfig();
+
+    render();
+
+    expect(
+      indexOfText(descendants(findRow("Claude provider details")), "3 models · v2.1.280"),
+    ).toBeGreaterThan(-1);
+  });
+
+  it("keeps only the installed version in the status line when a newer one is out", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.280",
+        latestVersion: "2.1.285",
+        updateAvailable: true,
+      },
+    ]);
+    configState.config = makeConfig();
+
+    render();
+
+    const nodes = descendants(findRow("Claude provider details"));
+    expect(indexOfText(nodes, "3 models · v2.1.280")).toBeGreaterThan(-1);
+    expect(indexOfText(nodes, "3 models · v2.1.280 → v2.1.285")).toBe(-1);
+  });
+
+  it("keeps showing only the installed version when the check failed", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.280",
+        updateAvailable: false,
+        error: "registry unreachable",
+      },
+    ]);
+    configState.config = makeConfig();
+
+    render();
+
+    const row = findRow("Claude provider details");
+    expect(indexOfText(descendants(row), "3 models · v2.1.280")).toBeGreaterThan(-1);
+    expect(row.textContent).not.toContain("registry unreachable");
+  });
+
+  function offerClaudeUpdate(): void {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.280",
+        latestVersion: "2.1.285",
+        updateAvailable: true,
+      },
+    ]);
+    configState.config = makeConfig();
+  }
+
+  function queryUpgradeButton(): HTMLElement | null {
+    return findRow("Claude provider details").querySelector<HTMLElement>(
+      '[role="button"][aria-label="Upgrade Claude"]',
+    );
+  }
+
+  function holdUpgradeAnswer(): (answer: Omit<ProviderUpgradeResponse, "requestId">) => void {
+    let answer: (value: ProviderUpgradeResponse) => void = () => {};
+    upgradeProviderMock.mockImplementation(
+      () =>
+        new Promise<ProviderUpgradeResponse>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    return (value) => answer({ requestId: "upgrade-1", ...value });
+  }
+
+  async function pressUpgrade(): Promise<void> {
+    await act(async () => {
+      queryUpgradeButton()?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+  }
+
+  it("offers the upgrade in the status line, leaving only the switch and chevron trailing", () => {
+    offerClaudeUpdate();
+
+    render();
+
+    const statusLine = findRow("Claude provider details").querySelector<HTMLElement>(
+      '[data-testid="provider-status-line"]',
+    );
+    const upgrade = statusLine?.querySelector('[role="button"][aria-label="Upgrade Claude"]');
+    expect(upgrade?.textContent).toBe("Upgrade to v2.1.285");
+    expect(statusLine?.querySelector('[role="switch"]')).toBeNull();
+    expect(
+      findRow("Claude provider details").querySelectorAll(
+        '[role="button"][aria-label="Upgrade Claude"]',
+      ),
+    ).toHaveLength(1);
+    expect(
+      findRow("Claude provider details").querySelector('[data-testid="tooltip-content"]')
+        ?.textContent,
+    ).toBe("v2.1.280 → v2.1.285");
+  });
+
+  it("offers no upgrade when the installed CLI is current", () => {
+    connectHostWithProviderVersions();
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.285" }];
+    queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
+      {
+        provider: "claude",
+        installedVersion: "2.1.285",
+        latestVersion: "2.1.285",
+        updateAvailable: false,
+      },
+    ]);
+    configState.config = makeConfig();
+
+    render();
+
+    expect(queryUpgradeButton()).toBeNull();
+  });
+
+  it("spins while upgrading and drops the button once the new version is in", async () => {
+    offerClaudeUpdate();
+    const answer = holdUpgradeAnswer();
+    render();
+
+    await pressUpgrade();
+
+    expect(upgradeProviderMock).toHaveBeenCalledWith({ provider: "claude" });
+    // 按钮在整行里面，点它只升级，不进详情。
+    expect(selectProviderMock).not.toHaveBeenCalled();
+    expect(queryUpgradeButton()?.getAttribute("aria-disabled")).toBe("true");
+    expect(queryUpgradeButton()?.querySelector('[data-testid="loading-spinner"]')).not.toBeNull();
+
+    await pressUpgrade();
+    expect(upgradeProviderMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      answer({ provider: "claude", ok: true, version: "2.1.285" });
+    });
+
+    expect(queryUpgradeButton()).toBeNull();
+    expect(container?.querySelector('[data-testid="provider-upgrade-failure"]')).toBeNull();
+  });
+
+  it("shows the command output under the row when the upgrade fails, until dismissed", async () => {
+    offerClaudeUpdate();
+    const answer = holdUpgradeAnswer();
+    render();
+
+    await pressUpgrade();
+    await act(async () => {
+      answer({
+        provider: "claude",
+        ok: false,
+        errorCode: "command_failed",
+        error: "claude update exited with code 1",
+        output: "EACCES: permission denied\n",
+      });
+    });
+
+    const failure = container?.querySelector<HTMLElement>(
+      '[data-testid="provider-upgrade-failure"]',
+    );
+    expect(failure?.textContent).toContain("Upgrade failed");
+    expect(failure?.querySelector('[data-testid="provider-upgrade-output"]')?.textContent).toBe(
+      "EACCES: permission denied\n",
+    );
+    // 失败块挂在行外，点它不会进详情。
+    expect(findRow("Claude provider details").contains(failure ?? null)).toBe(false);
+    expect(queryUpgradeButton()?.getAttribute("aria-disabled")).toBeNull();
+
+    const dismiss = Array.from(
+      failure?.querySelectorAll<HTMLElement>('[role="button"]') ?? [],
+    ).find((button) => button.textContent === "Dismiss");
+    await act(async () => {
+      dismiss?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    expect(container?.querySelector('[data-testid="provider-upgrade-failure"]')).toBeNull();
+  });
+
+  it("shows no version when the host does not report provider versions", () => {
+    snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
+    configState.config = makeConfig();
+
+    render();
+
+    const row = findRow("Claude provider details");
+    expect(indexOfText(descendants(row), "3 models")).toBeGreaterThan(-1);
+    expect(row.textContent).not.toContain("v2.1.280");
+  });
+
+  it("only selects a turned-off provider when its row is pressed, writing no config", () => {
     snapshotState.entries = [claudeEntry, disabledCodexEntry];
     configState.config = makeConfig({ codex: { enabled: false } });
 
@@ -544,22 +865,27 @@ describe("ProvidersSection", () => {
       );
     });
 
-    expect(selectProviderMock).toHaveBeenCalledTimes(1);
     expect(selectProviderMock).toHaveBeenCalledWith("codex");
+    expect(patchConfigMock).not.toHaveBeenCalled();
   });
 
-  it("highlights the selected row only in the split layout", () => {
-    snapshotState.entries = [claudeEntry, disabledCodexEntry];
-    configState.config = makeConfig({ codex: { enabled: false } });
+  it("selects the provider when its row is pressed", () => {
+    snapshotState.entries = [
+      claudeEntry,
+      { ...disabledCodexEntry, enabled: true, status: "ready" },
+    ];
+    configState.config = makeConfig();
 
-    render({ selectedProvider: "codex" });
+    render();
 
-    expect(findRow("Codex provider details").getAttribute("aria-selected")).toBe("true");
-    expect(findRow("Claude provider details").getAttribute("aria-selected")).toBeNull();
+    act(() => {
+      findRow("Codex provider details").dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true }),
+      );
+    });
 
-    render({ layout: "stacked", selectedProvider: "codex" });
-
-    expect(findRow("Codex provider details").getAttribute("aria-selected")).toBeNull();
+    expect(selectProviderMock).toHaveBeenCalledTimes(1);
+    expect(selectProviderMock).toHaveBeenCalledWith("codex");
   });
 
   it("does not select the row when its switch is pressed", async () => {
@@ -676,6 +1002,63 @@ describe("ProvidersSection", () => {
     expect(patchConfigMock).toHaveBeenCalledWith({
       providers: { claude: { enabled: false } },
     });
+  });
+
+  async function pressSwitch(rowLabel: string): Promise<void> {
+    const switchEl = findRow(rowLabel).querySelector<HTMLElement>('[role="switch"]');
+    if (!switchEl) throw new Error(`Expected a switch on ${rowLabel}`);
+    await act(async () => {
+      switchEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+  }
+
+  function rowBackground(rowLabel: string): string | null {
+    return findRow(rowLabel).getAttribute("data-background");
+  }
+
+  it("turns a provider on from Disabled and moves it to Enabled once the snapshot says so", async () => {
+    vi.useFakeTimers();
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render();
+    await pressSwitch("Codex provider details");
+
+    expect(patchConfigMock).toHaveBeenCalledWith({ providers: { codex: { enabled: true } } });
+    expect(selectProviderMock).not.toHaveBeenCalled();
+    // 不做乐观更新：快照没变之前这一行留在原组。
+    expect(groupRowIds("disabled")).toEqual(["codex"]);
+
+    // daemon 随后推来启用后的快照，开始探测。
+    snapshotState.entries = [
+      claudeEntry,
+      { ...disabledCodexEntry, enabled: true, status: "loading" },
+    ];
+    render();
+
+    expect(groupRowIds("enabled")).toEqual(["claude", "codex"]);
+    expect(findGroup("disabled")).toBeNull();
+    expect(rowBackground("Codex provider details")).toBe(theme.colors.surface2);
+    expect(rowBackground("Claude provider details")).not.toBe(theme.colors.surface2);
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(rowBackground("Codex provider details")).not.toBe(theme.colors.surface2);
+  });
+
+  it("keeps a row in Disabled and shows the error on the Enabled card when turning it on fails", async () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+    patchConfigMock.mockRejectedValueOnce(new Error("config.json is read-only"));
+
+    render();
+    await pressSwitch("Codex provider details");
+
+    expect(
+      findGroup("enabled")?.querySelector('[data-testid="providers-toggle-error"]')?.textContent,
+    ).toContain("config.json is read-only");
+    expect(groupRowIds("disabled")).toEqual(["codex"]);
   });
 
   function findCatalogDialog(): HTMLElement | null {
@@ -868,5 +1251,58 @@ describe("ProvidersSection", () => {
     openCatalogDialog();
     expect(requireCatalogDialog().textContent).not.toContain("Unable to add provider");
     expect(findCatalogAddButton(minimax.id)?.textContent).not.toContain("Adding");
+  });
+
+  it("holds only the ACP catalog, with outline Add buttons", () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry, notInstalledCustomClaudeEntry];
+    configState.config = makeConfig({
+      codex: { enabled: false },
+      "work-claude": { extends: "claude", label: "Work Claude" },
+    });
+
+    render();
+    const dialog = openCatalogDialog();
+
+    expect(indexOfText(descendants(dialog), "ACP catalog")).toBeGreaterThanOrEqual(0);
+    // 停用的 Codex 和没装的 Work Claude 都留在 Providers 页，弹窗里没有它们。
+    expect(indexOfText(descendants(dialog), "Codex")).toBe(-1);
+    expect(dialog.textContent).not.toContain("Work Claude");
+    expect(dialog.textContent).not.toContain("Not enabled");
+    expect(dialog.textContent).not.toContain("Not installed");
+    expect(dialog.querySelector('[role="switch"]')).toBeNull();
+    // outline 是透明底；实心 accent 留给页面上唯一的主按钮。
+    expect(findCatalogAddButton(minimax.id)?.getAttribute("data-background")).toBe("transparent");
+  });
+
+  it("moves an ACP provider turned off in the list to Disabled without deleting its config", async () => {
+    const acpProvider: ProviderSnapshotEntry = {
+      ...claudeEntry,
+      provider: minimax.id,
+      label: minimax.title,
+      source: "custom",
+    };
+    snapshotState.entries = [claudeEntry, acpProvider];
+    configState.config = makeConfig();
+
+    render();
+    await pressSwitch(`${minimax.title} provider details`);
+
+    expect(patchConfigMock).toHaveBeenCalledTimes(1);
+    expect(patchConfigMock).toHaveBeenCalledWith({
+      providers: { [minimax.id]: { enabled: false } },
+    });
+
+    // daemon 随后推来停用后的快照。
+    snapshotState.entries = [
+      claudeEntry,
+      { ...acpProvider, enabled: false, status: "unavailable", models: [] },
+    ];
+    render();
+
+    expect(groupRowIds("enabled")).toEqual(["claude"]);
+    expect(groupRowIds("disabled")).toEqual([minimax.id]);
+    openCatalogDialog();
+    // 目录里不再重复出现同一个提供方。
+    expect(findCatalogAddButton(minimax.id)).toBeNull();
   });
 });

@@ -69,6 +69,11 @@ import {
   type ResolvedProviderLaunch,
 } from "../provider-launch-config.js";
 import {
+  resolveProviderCliLaunch,
+  resolveProviderCliVersion,
+  type ProviderCliLaunch,
+} from "../provider-cli-version.js";
+import {
   findExecutable,
   probeExecutable,
 } from "../../../executable-resolution/executable-resolution.js";
@@ -7360,6 +7365,21 @@ export class CodexAppServerAgentClient implements AgentClient {
     const launch = await resolveCodexLaunch(this.runtimeSettings);
     const availability = await checkCodexLaunchAvailable(launch);
     return availability.available;
+  }
+
+  async resolveInstalledVersion(signal?: AbortSignal): Promise<string | null> {
+    return await resolveProviderCliVersion({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: { command: "codex", resolvePath: findDefaultCodexBinary },
+      signal,
+    });
+  }
+
+  async resolveCliLaunch(): Promise<ProviderCliLaunch | null> {
+    return await resolveProviderCliLaunch({
+      runtimeSettings: this.runtimeSettings,
+      defaultBinary: { command: "codex", resolvePath: findDefaultCodexBinary },
+    });
   }
 
   async getDiagnostic(): Promise<{ diagnostic: string }> {

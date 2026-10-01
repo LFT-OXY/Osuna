@@ -13,6 +13,7 @@ import type { AgentClient, AgentProvider } from "../agent/agent-sdk-types.js";
 import { createTestAgentClients } from "./fake-agent-client.js";
 import type { PushNotificationSender } from "../push/index.js";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
+import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
 
 interface TestPaseoDaemonOptions {
   daemonVersion?: string;
@@ -53,6 +54,7 @@ interface TestPaseoDaemonOptions {
   plugins?: PaseoDaemonConfig["plugins"];
   usage?: PaseoDaemonConfig["usage"];
   apiEndpoints?: PaseoDaemonConfig["apiEndpoints"];
+  providerVersions?: PaseoDaemonConfig["providerVersions"];
 }
 
 export interface TestPaseoDaemon {
@@ -171,6 +173,7 @@ async function prepareTestDaemonConfig(
   await mkdir(paseoHome, { recursive: true });
   const staticDir = options.staticDir ?? (await mkdtemp(path.join(os.tmpdir(), "paseo-static-")));
   const listenHost = options.listen ?? "127.0.0.1";
+  const agentClients = options.agentClients ?? createTestAgentClients();
   const config: PaseoDaemonConfig = {
     listen: `${listenHost}:0`,
     paseoHome,
@@ -183,8 +186,8 @@ async function prepareTestDaemonConfig(
     staticDir,
     mcpDebug: options.mcpDebug ?? false,
     isDev: options.isDev,
-    agentClients: options.agentClients ?? createTestAgentClients(),
-    providerOverrides: options.providerOverrides,
+    agentClients,
+    providerOverrides: enableInjectedProviders(agentClients, options.providerOverrides),
     agentStoragePath: path.join(paseoHome, "agents"),
     relayEnabled: options.relayEnabled ?? false,
     relayEndpoint: options.relayEndpoint ?? "relay.paseo.sh:443",
@@ -224,8 +227,31 @@ async function prepareTestDaemonConfig(
       },
       homeDir: paseoHomeRoot,
     },
+    // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
+    providerVersions: {
+      fetchLatestVersion: async ({ npmPackage }) => {
+        throw new Error(`Test daemon does not query npm for ${npmPackage}`);
+      },
+      ...options.providerVersions,
+    },
   };
   return { config, paseoHomeRoot, paseoHome, staticDir };
+}
+
+// 测试注入了某个提供方的客户端，就是要用它；默认停用的内置提供方（如 opencode）需要补上 enabled: true。
+function enableInjectedProviders(
+  agentClients: Partial<Record<AgentProvider, AgentClient>>,
+  providerOverrides: PaseoDaemonConfig["providerOverrides"],
+): PaseoDaemonConfig["providerOverrides"] {
+  const overrides = { ...providerOverrides };
+  for (const definition of AGENT_PROVIDER_DEFINITIONS) {
+    const offByDefault = definition.enabledByDefault === false;
+    const injected = Boolean(agentClients[definition.id]);
+    const setByTest = overrides[definition.id]?.enabled !== undefined;
+    if (!offByDefault || !injected || setByTest) continue;
+    overrides[definition.id] = { ...overrides[definition.id], enabled: true };
+  }
+  return overrides;
 }
 
 function isAddressInUseError(error: unknown): boolean {

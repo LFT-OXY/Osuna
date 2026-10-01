@@ -178,13 +178,16 @@ Any agent that speaks [ACP](https://agentclientprotocol.com) over stdio can be a
 }
 ```
 
-## Disabling a provider
+## Enabling and disabling providers
+
+Claude Code, Codex, Pi, and OMP are enabled by default. Copilot and OpenCode are disabled by default; set `enabled: true` to turn them on.
 
 ```json
 {
   "agents": {
     "providers": {
-      "copilot": { "enabled": false }
+      "codex": { "enabled": false },
+      "opencode": { "enabled": true }
     }
   }
 }

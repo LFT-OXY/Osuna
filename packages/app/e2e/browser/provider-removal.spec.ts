@@ -4,12 +4,14 @@ import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { getServerId } from "../support/helpers/server-id";
 import {
-  expectProviderSelected,
+  expectProviderDetail,
+  expectProvidersList,
   installAcpCatalogProvider,
   openProviderCatalog,
   openSettingsHost,
   openSettingsHostSection,
   providerRow,
+  returnToProvidersList,
   readProviderRowIds,
 } from "../support/helpers/settings";
 
@@ -83,7 +85,8 @@ test.describe("provider removal", () => {
       await openSettingsHost(page, getServerId());
       await openSettingsHostSection(page, getServerId(), "providers");
       const [firstProvider] = await readProviderRowIds(page);
-      await expectProviderSelected(page, getServerId(), firstProvider);
+      await providerRow(page, firstProvider).click();
+      await expectProviderDetail(page, getServerId(), firstProvider);
 
       // 内置提供方的菜单只有「诊断」。
       await openDetailMenu(page, firstProvider);
@@ -91,17 +94,19 @@ test.describe("provider removal", () => {
       await page.keyboard.press("Escape");
       await expect(visibleByTestId(page, `provider-diagnose-${firstProvider}`)).toHaveCount(0);
 
+      await returnToProvidersList(page);
+      await expectProvidersList(page, getServerId());
       await openProviderCatalog(page);
       await installAcpCatalogProvider(page, CUSTOM_PROVIDER.name);
-      await expectProviderSelected(page, getServerId(), CUSTOM_PROVIDER.id);
+      await expectProviderDetail(page, getServerId(), CUSTOM_PROVIDER.id);
       await expectProviderSource(client, "custom");
 
       await openDetailMenu(page, CUSTOM_PROVIDER.id);
       await expect(visibleByTestId(page, `provider-remove-${CUSTOM_PROVIDER.id}`)).toBeVisible();
       await clickRemoveProviderAndAcceptWarning(page);
 
+      await expectProvidersList(page, getServerId());
       await expect(providerRow(page, CUSTOM_PROVIDER.id)).toHaveCount(0);
-      await expectProviderSelected(page, getServerId(), firstProvider);
       await expectProviderSource(client, undefined);
     } finally {
       await removeCustomProvider(client).catch(() => undefined);

@@ -1918,6 +1918,9 @@ export const fr: TranslationResources = {
     errors: {
       unableToInstall: "Impossible d'installer le fournisseur",
     },
+    groups: {
+      acpCatalog: "Catalogue ACP",
+    },
   },
   providerSelection: {
     defaultModel: "Défaut",
@@ -3128,12 +3131,28 @@ export const fr: TranslationResources = {
       },
     },
     providers: {
-      title: "Fournisseurs",
       addProvider: "Ajouter un fournisseur",
       providerDetails: "Détails du fournisseur{{name}}",
       enableProvider: "Activer{{name}}",
       unavailable: "Connectez-vous à cet hôte pour voir les fournisseurs",
       loading: "Chargement...",
+      empty:
+        "Aucun fournisseur activé. Activez-en un dans Désactivés, ou appuyez sur + pour en ajouter un.",
+      groups: {
+        enabled: "Activés",
+        disabled: "Désactivés",
+      },
+      enablement: {
+        on: "Activé",
+        off: "Désactivé",
+        enableErrorTitle: "Impossible d'activer {{name}}",
+        disableErrorTitle: "Impossible de désactiver {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} est désactivé",
+        description:
+          "Les fournisseurs désactivés ne sont pas vérifiés et n'apparaissent pas dans les nouvelles sessions. Activez l'interrupteur de l'en-tête pour l'activer ; Osuna vérifiera ensuite si {{name}} est installé sur l'hôte.",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "Impossible de démarrer {{name}}",
       actions: {
@@ -3149,11 +3168,35 @@ export const fr: TranslationResources = {
       },
       statuses: {
         disabled: "Désactivé",
+        disabledUntilEnabled: "Désactivé · Activez-le pour vérifier s'il est installé",
         loading: "Chargement",
         error: "Erreur",
         available: "Disponible",
         notInstalled: "Non installé",
         apiEndpoint: "Endpoint d'API : {{name}}",
+      },
+      version: {
+        title: "Version",
+        installed: "Installée",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "Mettre à jour",
+        actionLabel: "Mettre à jour {{name}}",
+        actionTo: "Mettre à jour vers v{{version}}",
+        manualHint:
+          "Mettez-la à jour manuellement avec l'outil qui a servi à l'installer, ou suivez la documentation officielle.",
+        errors: {
+          failed: "Échec de la mise à jour",
+          unsupported: "Ce fournisseur ne peut pas être mis à jour automatiquement",
+          installMethodUnknown:
+            "Impossible de déterminer comment cette CLI a été installée, la mise à jour automatique est donc impossible",
+          notInstalled: "La CLI est introuvable sur l'hôte",
+          inProgress: "Une mise à jour est déjà en cours",
+          timeout: "La mise à jour a dépassé le délai et a été arrêtée",
+          hostDisconnected: "L'hôte n'est pas connecté",
+        },
       },
       models: {
         title: "Modèles",
@@ -3169,7 +3212,6 @@ export const fr: TranslationResources = {
         loading: "Chargement des modèles...",
         noSearchMatches: "Aucun modèle ne correspond à votre recherche",
         noneDetected: "Aucun modèle détecté",
-        disabledHint: "Désactivé. Osuna détectera ses modèles une fois activé.",
         startFailed: "Échec du démarrage, aucun modèle détecté.",
         discovered: "Découvert",
         custom: "Modèles personnalisés",

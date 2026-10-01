@@ -161,6 +161,8 @@ let ctx: DaemonTestContext;
 beforeAll(async () => {
   ctx = await createDaemonTestContext({
     agentClients: {},
+    // OpenCode 默认停用，这里要跑真实的 OpenCode。
+    providerOverrides: { opencode: { enabled: true } },
     openai: { stt: { apiKey: openaiApiKey! }, tts: { apiKey: openaiApiKey! } },
     speech: {
       providers: {

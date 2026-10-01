@@ -41,7 +41,7 @@ catalog probe. `PASEO_PROVIDER_REFRESH_TIMEOUT_MS` sets it when the config field
 - [Codex with a custom OpenAI-compatible endpoint](#codex-with-a-custom-openai-compatible-endpoint)
 - [Multiple profiles for the same provider](#multiple-profiles-for-the-same-provider)
 - [Custom binary for a provider](#custom-binary-for-a-provider)
-- [Disabling a provider](#disabling-a-provider)
+- [Enabling and disabling providers](#enabling-and-disabling-providers)
 - [ACP providers](#acp-providers)
 - [Provider override reference](#provider-override-reference)
 
@@ -375,17 +375,7 @@ The `command` array completely replaces the default command for that provider. T
 
 ### OMP profiles and Pi-compatible forks
 
-OMP ships as a first-class built-in provider option. It is disabled by default; enable it with:
-
-```json
-{
-  "agents": {
-    "providers": {
-      "omp": { "enabled": true }
-    }
-  }
-}
-```
+OMP ships as a first-class built-in provider.
 
 Custom OMP profiles should extend `omp`. They inherit the OMP adapter's `rpc-ui` approvals, native Paseo host tools, provider-managed subagents, and import behavior:
 
@@ -442,22 +432,24 @@ This session directory is also import-only. Launching and resuming still go thro
 
 ---
 
-## Disabling a provider
+## Enabling and disabling providers
 
 Set `enabled: false` to hide a provider from the provider list. The provider will not appear in the app or CLI.
+
+Claude Code, Codex, Pi, and OMP are enabled by default. Copilot and OpenCode are disabled by default; set `enabled: true` to turn them on.
 
 ```json
 {
   "agents": {
     "providers": {
-      "copilot": { "enabled": false },
-      "codex": { "enabled": false }
+      "codex": { "enabled": false },
+      "opencode": { "enabled": true }
     }
   }
 }
 ```
 
-This works for both built-in and custom providers. To re-enable, set `enabled: true` or remove the `enabled` field entirely. Most providers are enabled by default; OMP is intentionally disabled by default and requires `enabled: true`.
+This works for both built-in and custom providers. Removing the `enabled` field returns a provider to its default.
 
 ---
 
@@ -700,7 +692,7 @@ Every entry under `agents.providers` accepts these fields:
 | `models`           | `ProviderProfileModel[]`  | No                | Static model list (overrides runtime discovery)                    |
 | `additionalModels` | `ProviderProfileModel[]`  | No                | Static model additions (merged with runtime discovery or `models`) |
 | `disallowedTools`  | `string[]`                | No                | Tool names to disable for this provider (e.g. `["WebSearch"]`)     |
-| `enabled`          | `boolean`                 | No                | Set to `false` to hide the provider (default: `true`)              |
+| `enabled`          | `boolean`                 | No                | Hide with `false` (default `true`; `copilot`, `opencode` off)      |
 | `order`            | `number`                  | No                | Sort order in the provider list                                    |
 
 ### Model definition
@@ -770,7 +762,7 @@ A config.json with multiple custom providers:
   "version": 1,
   "agents": {
     "providers": {
-      "copilot": { "enabled": false },
+      "opencode": { "enabled": true },
 
       "zai": {
         "extends": "claude",

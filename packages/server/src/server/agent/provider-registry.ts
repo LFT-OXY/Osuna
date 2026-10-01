@@ -578,6 +578,8 @@ function wrapClientProvider(
       : undefined,
     getCatalogCacheKey: inner.getCatalogCacheKey?.bind(inner),
     isAvailable: (signal, options) => inner.isAvailable(signal, options),
+    resolveInstalledVersion: inner.resolveInstalledVersion?.bind(inner),
+    resolveCliLaunch: inner.resolveCliLaunch?.bind(inner),
     getDiagnostic: inner.getDiagnostic?.bind(inner),
   };
 }

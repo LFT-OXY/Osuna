@@ -20,6 +20,7 @@ import {
   type AgentProvider,
   type FetchCatalogOptions,
   type ActiveApiEndpointLookup,
+  type ProviderCatalog as DiscoveredProviderCatalog,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
 } from "./agent-sdk-types.js";
@@ -37,6 +38,7 @@ import type {
   ProviderOverride,
   ProviderRuntimeSettings,
 } from "./provider-launch-config.js";
+import type { ProviderCliLaunch } from "./provider-cli-version.js";
 import {
   buildProviderRegistry,
   shutdownAgentClients,
@@ -383,6 +385,14 @@ export class ProviderSnapshotManager {
   /** 当前生效的启动设置（含 config.json 里配置的命令），供需要自己执行 CLI 的服务使用。 */
   getRuntimeSettings(provider: AgentProvider): ProviderRuntimeSettings | undefined {
     return this.generation.definitions[provider]?.configuration?.runtimeSettings;
+  }
+
+  /** 启用的提供方实际启动的 CLI，供升级命令执行；停用、未配置、找不到或提供方不支持时为 null。 */
+  async resolveCliLaunch(provider: AgentProvider): Promise<ProviderCliLaunch | null> {
+    const definition = this.generation.definitions[provider];
+    if (!definition?.enabled) return null;
+    const client = this.ensureClient(provider, definition);
+    return (await client.resolveCliLaunch?.()) ?? null;
   }
 
   getAgentManagerProviderState(): AgentManagerProviderState {
@@ -1064,6 +1074,12 @@ export class ProviderSnapshotManager {
         setEntry({ ...base, status: "unavailable", enabled: true });
         return;
       }
+      // 取版本放在刷新超时之外：它有自己的短超时，慢了也不会把快照拖成 error。
+      // 自定义提供方和 ACP 提供方复用内置 CLI 时不带版本，避免对同一个 CLI 重复升级。
+      let version: string | undefined;
+      if (base.source === "builtin") {
+        version = await this.readInstalledVersion({ provider, catalog, client });
+      }
 
       // 覆盖的模型与 config.json 里配置的模型一样，交给提供方补齐思考档位等信息。
       const overriddenModels = this.modelOverride?.(provider)?.map(
@@ -1089,6 +1105,7 @@ export class ProviderSnapshotManager {
         isModelListAuthoritative,
         activeApiEndpoint,
         modes: catalog.modes,
+        version,
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -1104,6 +1121,28 @@ export class ProviderSnapshotManager {
           "Failed to refresh provider snapshot",
         );
       }
+    }
+  }
+
+  // 目录发现已经跑过 `--version` 的（Claude）直接用那次结果，不再跑第二遍。
+  private async readInstalledVersion(input: {
+    provider: AgentProvider;
+    catalog: DiscoveredProviderCatalog;
+    client: AgentClient;
+  }): Promise<string | undefined> {
+    const { provider, catalog, client } = input;
+    const discovered = catalog.installedVersion;
+    if (discovered) {
+      return discovered.status === "found" ? discovered.version : undefined;
+    }
+    const probeVersion = client.resolveInstalledVersion?.bind(client);
+    if (!probeVersion) return undefined;
+    try {
+      return (await probeVersion()) ?? undefined;
+    } catch (error) {
+      // 规格要求：取不到版本不影响快照状态，只省略 version。
+      this.logger.debug({ err: error, provider }, "Failed to resolve provider CLI version");
+      return undefined;
     }
   }
 

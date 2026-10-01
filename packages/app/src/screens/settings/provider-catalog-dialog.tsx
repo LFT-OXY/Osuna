@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { ProviderCatalogList } from "@/components/provider-catalog-list";
+import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Alert } from "@/components/ui/alert";
 import {
   buildAcpProviderConfigPatch,
@@ -16,7 +17,7 @@ export interface ProviderCatalogDialogProps {
   serverId: string;
   visible: boolean;
   onClose: () => void;
-  // 配置已写入即添加成功；新提供方已在快照里（通常还在探测），或快照刷新已结束。
+  // 从 ACP 目录添加了新提供方：配置已写入即成功。
   onAdded: (providerId: string) => void;
 }
 
@@ -119,6 +120,8 @@ export function ProviderCatalogDialog({
     finishAttempt(attempt, awaitingProviderId);
   }, [awaitingProviderId, finishAttempt, isAwaitedProviderInSnapshot]);
 
+  const pendingProviderId = addState.status === "adding" ? addState.providerId : null;
+
   // resetKey 随打开 / 关闭变化，清空头部不受控的搜索框，与 query 保持一致。
   const header = useMemo<SheetHeader>(
     () => ({
@@ -150,12 +153,18 @@ export function ProviderCatalogDialog({
           />
         </View>
       ) : null}
-      <ProviderCatalogList
-        serverId={serverId}
-        query={query}
-        installingProviderId={addState.status === "adding" ? addState.providerId : null}
-        onInstall={handleInstall}
-      />
+      <SettingsSection
+        title={t("providerCatalog.groups.acpCatalog")}
+        flush
+        testID="provider-catalog-acp"
+      >
+        <ProviderCatalogList
+          serverId={serverId}
+          query={query}
+          installingProviderId={pendingProviderId}
+          onInstall={handleInstall}
+        />
+      </SettingsSection>
     </AdaptiveModalSheet>
   );
 }

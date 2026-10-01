@@ -493,6 +493,14 @@ type GetProvidersSnapshotPayload = GetProvidersSnapshotResponseMessage["payload"
 type RefreshProvidersSnapshotPayload = RefreshProvidersSnapshotResponseMessage["payload"];
 type ProviderDiagnosticPayload = ProviderDiagnosticResponseMessage["payload"];
 type ProviderUsageListPayload = ProviderUsageListResponseMessage["payload"];
+type ProviderVersionCheckPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.version.check.response" }
+>["payload"];
+type ProviderUpgradePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.upgrade.response" }
+>["payload"];
 type DaemonStatusPayload = DaemonGetStatusResponse["payload"];
 type DaemonPairingOfferPayload = DaemonGetPairingOfferResponse["payload"];
 type DiagnosticsPayload = DiagnosticsResponse["payload"];
@@ -5219,6 +5227,36 @@ export class DaemonClient {
       message: {
         type: "provider.usage.list.request",
       },
+    });
+  }
+
+  /** 省略 providers 查全部内置提供方；force 跳过 daemon 的 1 小时缓存。 */
+  async checkProviderVersions(options?: {
+    providers?: string[];
+    force?: boolean;
+    requestId?: string;
+  }): Promise<ProviderVersionCheckPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "provider.version.check.request",
+        ...(options?.providers ? { providers: options.providers } : {}),
+        ...(options?.force ? { force: true } : {}),
+      },
+    });
+  }
+
+  /** 在主机上执行这个内置提供方自带的升级命令；失败也正常返回，原因在 errorCode 与 output 里。 */
+  async upgradeProvider(options: {
+    provider: string;
+    requestId?: string;
+  }): Promise<ProviderUpgradePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: { type: "provider.upgrade.request", provider: options.provider },
+      // 比 daemon 端的最坏情况长：升级命令 10 分钟加终止宽限，之后先刷新全局快照、再刷新各工作区快照，
+      // 两段各受刷新期限（默认 2 分钟）约束。
+      timeout: 20 * 60 * 1000,
     });
   }
 

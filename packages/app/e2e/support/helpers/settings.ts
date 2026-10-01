@@ -67,22 +67,7 @@ export async function openSettingsHostSection(
   section: HostSection,
 ): Promise<void> {
   await page.getByTestId(`settings-host-section-${section}`).click();
-  if (section === "providers") {
-    await expectProvidersSettingsRoute(page, serverId);
-    return;
-  }
   await expectAppRoute(page, buildSettingsHostSectionRoute(serverId, section));
-}
-
-// Providers 两列布局会把分区地址 replace 成第一个提供方的子路由，栈式停在分区地址。
-async function expectProvidersSettingsRoute(page: Page, serverId: string): Promise<void> {
-  const sectionRoute = buildSettingsHostSectionRoute(serverId, "providers");
-  await expect
-    .poll(() => {
-      const { pathname } = new URL(page.url());
-      return pathname === sectionRoute || pathname.startsWith(`${sectionRoute}/`);
-    })
-    .toBe(true);
 }
 
 export async function expectSettingsHeader(page: Page, title: string): Promise<void> {
@@ -369,33 +354,24 @@ export function providerRow(page: Page, provider: string) {
   return page.getByTestId(`provider-row-${provider}`).filter({ visible: true });
 }
 
-function visibleProviderDetailPane(page: Page) {
-  return page.getByTestId("provider-detail-pane").filter({ visible: true });
+// "已启用"组的行；停用的提供方 daemon 不探测，详情页也没有诊断等区块。
+function enabledProviderRows(page: Page) {
+  return page
+    .getByTestId("providers-enabled-group")
+    .locator('[data-testid^="provider-row-"]')
+    .filter({ visible: true });
 }
 
 export async function readProviderRowIds(page: Page): Promise<string[]> {
-  await expect(providerRows(page).first()).toBeVisible();
-  const testIds = await providerRows(page).evaluateAll((rows) =>
+  await expect(enabledProviderRows(page).first()).toBeVisible();
+  const testIds = await enabledProviderRows(page).evaluateAll((rows) =>
     rows.map((row) => row.getAttribute("data-testid") ?? ""),
   );
   return testIds.map((testId) => testId.slice("provider-row-".length));
 }
 
-// 两列布局：地址、左侧高亮行和右侧详情头部都指向同一个提供方。
-export async function expectProviderSelected(
-  page: Page,
-  serverId: string,
-  provider: string,
-): Promise<void> {
-  await expectAppRoute(page, buildProviderSettingsRoute(serverId, provider));
-  await expect(providerRow(page, provider)).toHaveAttribute("aria-selected", "true");
-  await expect(
-    visibleProviderDetailPane(page).getByTestId(`provider-detail-header-${provider}`),
-  ).toBeVisible();
-}
-
-// 栈式布局：地址指向提供方，内容区只有它的详情，没有列表。
-export async function expectProviderDetailStacked(
+// 地址指向提供方，内容区只有它的详情，没有列表。
+export async function expectProviderDetail(
   page: Page,
   serverId: string,
   provider: string,
@@ -404,16 +380,21 @@ export async function expectProviderDetailStacked(
   await expect(
     page.getByTestId(`provider-detail-header-${provider}`).filter({ visible: true }),
   ).toBeVisible();
-  await expect(visibleProviderDetailPane(page)).toHaveCount(0);
   await expect(providerRows(page)).toHaveCount(0);
 }
 
-// 栈式布局：停在分区地址，只有列表，没有选中项。
-export async function expectProvidersListStacked(page: Page, serverId: string): Promise<void> {
+// 详情页头的「Providers」面包屑回到列表（桌面宽度）。
+export async function returnToProvidersList(page: Page): Promise<void> {
+  await page.getByTestId("settings-providers-breadcrumb").click();
+}
+
+// 停在分区地址，只有列表，没有详情。
+export async function expectProvidersList(page: Page, serverId: string): Promise<void> {
   await expectAppRoute(page, buildSettingsHostSectionRoute(serverId, "providers"));
   await expect(providerRows(page).first()).toBeVisible();
-  await expect(visibleProviderDetailPane(page)).toHaveCount(0);
-  await expect(providerRows(page).and(page.locator('[aria-selected="true"]'))).toHaveCount(0);
+  await expect(
+    page.locator('[data-testid^="provider-detail-header-"]').filter({ visible: true }),
+  ).toHaveCount(0);
 }
 
 export async function serveJson(page: Page, url: string, body: unknown): Promise<void> {
@@ -452,12 +433,16 @@ export async function installAcpCatalogProvider(page: Page, providerName: string
   await expect(providerCatalogDialog(page)).toHaveCount(0);
 }
 
+// 刚添加的提供方是启用的，不论 CLI 装没装都在"已启用"组。
 export async function expectProviderInstalledInSettings(
   page: Page,
   providerName: string,
 ): Promise<void> {
   await expect(
-    page.getByRole("button", { name: `${providerName} provider details`, exact: true }),
+    page
+      .getByTestId("providers-enabled-group")
+      .filter({ visible: true })
+      .getByRole("button", { name: `${providerName} provider details`, exact: true }),
   ).toBeVisible();
 }
 

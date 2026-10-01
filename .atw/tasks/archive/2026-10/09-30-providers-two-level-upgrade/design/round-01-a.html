@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Providers · 一张清单</title>
+<style>
+:root{
+  --canvas:#fcfcfc; --sidebar:#fafafa; --card:#ffffff; --border:#e4e4e7; --row:rgba(228,228,231,.5);
+  --fg:#27272a; --muted:#71717b; --xmuted:#a1a1aa; --accent:#1b4ed8;
+  --s2:#f4f4f5; --s3:#ececef; --hl:rgba(24,24,27,.05);
+  --ok:#3e704a; --warn:#7b5d39; --danger:#9d433b; --warnfill:rgba(245,158,11,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font:14px/20px system-ui,-apple-system,"PingFang SC",sans-serif;color:var(--fg);background:var(--canvas);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.app{display:flex;height:100vh}
+/* 侧栏 */
+.side{width:320px;flex:none;background:var(--sidebar);border-right:1px solid var(--border);padding:56px 12px 0}
+.side .back{display:flex;gap:10px;align-items:center;color:var(--muted);height:32px;padding:0 10px;margin-bottom:14px}
+.side h6{font-size:12px;font-weight:500;color:var(--muted);padding:0 10px;margin:12px 0 4px}
+.nav{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:8px;color:var(--fg)}
+.nav svg{width:16px;height:16px;color:var(--muted)}
+.nav.sel{background:#ececee;box-shadow:inset 0 0 0 1px #e1e1e4}
+.host{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;display:inline-block}
+/* 主区 */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.bar{height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 24px;font-size:15px}
+.bar .crumb{color:var(--muted);cursor:pointer}
+.bar .crumb:hover{color:var(--fg)}
+.bar .sep{color:var(--xmuted)}
+.bar svg{width:18px;height:18px;color:var(--muted)}
+.scroll{flex:1;overflow:auto;padding:20px 24px 80px}
+.col{max-width:720px;margin:0 auto}
+.sec{margin-bottom:28px}
+.sech{display:flex;align-items:center;justify-content:space-between;height:28px;margin-bottom:8px;padding:0 4px}
+.sech .t{font-size:14px;font-weight:500;color:var(--muted)}
+.sech .t b{font-weight:400;color:var(--xmuted);margin-left:6px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.row{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px 16px;position:relative;transition:background .15s}
+.row+.row,.rowwrap+.rowwrap{border-top:1px solid var(--row)}
+.row.click{cursor:pointer}
+.row.click:hover{background:var(--s2)}
+.lead{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.ico{width:32px;height:32px;border-radius:8px;background:var(--s2);display:grid;place-items:center;flex:none}
+.ico svg{width:18px;height:18px}
+.ico.lg{width:44px;height:44px;border-radius:12px}
+.ico.lg svg{width:24px;height:24px}
+.off .ico{opacity:.55;filter:grayscale(1)}
+.txt{min-width:0;flex:1}
+.name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.off .name{color:var(--muted)}
+.meta{font-size:12px;line-height:16px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px}
+.meta .dot{width:6px;height:6px}
+.trail{display:flex;align-items:center;gap:12px;flex:none}
+.chev{width:14px;height:14px;color:var(--xmuted)}
+.row.click:hover .chev{color:var(--fg)}
+/* 开关 */
+.sw{width:32px;height:18px;border-radius:9px;background:#d4d4d8;position:relative;flex:none;transition:background .18s;cursor:pointer}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.18);transition:transform .2s cubic-bezier(.3,.7,.3,1)}
+.sw.on{background:var(--accent)}
+.sw.on::after{transform:translateX(14px)}
+.swl{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+/* 按钮 */
+.btn{height:28px;padding:0 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.outline{border:1px solid var(--border);background:var(--card)}
+.btn.outline:hover,.btn.ghost:hover{background:var(--hl)}
+.btn.xs{height:22px;padding:0 8px;font-size:12px;border-radius:6px}
+.meta .btn.xs{height:18px;line-height:16px;padding:0 6px;margin:-1px 0 -1px 2px;gap:3px}
+.meta .btn.xs svg{width:11px;height:11px}
+.btn svg{width:14px;height:14px}
+.btn.icon{width:28px;padding:0;justify-content:center;color:var(--muted)}
+.btn.icon:hover{color:var(--fg)}
+.btn[disabled]{opacity:.5;pointer-events:none}
+.spin{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--xmuted);border-top-color:transparent;animation:sp .8s linear infinite;display:inline-block;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.badge{font-size:12px;line-height:20px;padding:0 8px;border-radius:6px;background:var(--s2);border:1px solid var(--border);white-space:nowrap}
+.up{color:var(--accent)}
+.lnk{color:var(--fg);text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:3px;cursor:pointer}
+.lnk:hover{text-decoration-color:var(--fg)}
+/* 动效：移入的行先亮一下 */
+.flash{animation:fl 1.6s ease-out}
+@keyframes fl{0%{background:rgba(27,78,216,.10)}100%{background:transparent}}
+.enter{animation:en .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes en{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.fill{animation:fi .45s ease-out both}
+@keyframes fi{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
+/* 详情 */
+.dh{display:flex;align-items:center;gap:14px;margin:4px 0 24px}
+.dh .nm{font-size:18px;line-height:24px}
+.dh .st{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:2px}
+.kv{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px 16px}
+.kv+.kv{border-top:1px solid var(--row)}
+.kv .k{flex:1}
+.kv .v{color:var(--muted)}
+.hint{font-size:12px;line-height:16px;color:var(--muted);margin-top:2px}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.cmd{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.cmd code{flex:1;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--fg)}
+.model{display:flex;gap:12px;align-items:baseline;min-height:40px;padding:10px 16px}
+.model+.model{border-top:1px solid var(--row)}
+.offcard{padding:28px 24px;text-align:center}
+.offcard .t{font-size:15px;margin-bottom:6px}
+.offcard .d{color:var(--muted);font-size:13px;line-height:20px;max-width:420px;margin:0 auto 16px}
+.offcard .swl{justify-content:center;color:var(--fg);font-size:14px}
+/* 弹窗 */
+.scrim{position:fixed;inset:0;background:rgba(24,24,27,.28);backdrop-filter:blur(4px);display:grid;place-items:center;animation:sc .18s}
+@keyframes sc{from{opacity:0}}
+.dlg{width:640px;max-height:760px;background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden;animation:dl .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes dl{from{opacity:0;transform:translateY(8px) scale(.985)}}
+.dlg .hd{padding:20px 24px 12px;display:flex;align-items:center;justify-content:space-between}
+.dlg .hd .t{font-weight:500;font-size:15px}
+.dlg .search{margin:0 24px 8px;height:36px;border-radius:10px;background:var(--s2);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--xmuted)}
+.dlg .search svg{width:15px;height:15px}
+.dlg .bd{overflow:auto;padding:12px 24px 24px}
+.desc{font-size:12px;line-height:16px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#18181b;color:#fff;border-radius:10px;padding:10px 14px;display:flex;gap:16px;align-items:center;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:en .25s}
+.toast button{color:#93c5fd}
+.note{font-size:12px;color:var(--muted);padding:10px 4px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side"></aside>
+  <main class="main"><div class="bar" id="bar"></div><div class="scroll"><div class="col" id="col"></div></div></main>
+</div>
+<div id="layer"></div>
+<script>
+const DIR = "a";
+const ICONS = {"claude": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#d97757\" fill-rule=\"evenodd\"><path d=\"M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z\"></path></svg>", "codex": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" xml=\"&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 24 24&quot;&gt;&lt;path d=&quot;M9.064 3.344a4.578 4.578 0 012.285-.312c1 .115 1.891.54 2.673 1.275.01.01.024.017.037.021a.09.09 0 00.043 0 4.55 4.55 0 013.046.275l.047.022.116.057a4.581 4.581 0 012.188 2.399c.209.51.313 1.041.315 1.595a4.24 4.24 0 01-.134 1.223.123.123 0 00.03.115c.594.607.988 1.33 1.183 2.17.289 1.425-.007 2.71-.887 3.854l-.136.166a4.548 4.548 0 01-2.201 1.388.123.123 0 00-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838-1.187-.006-2.239-.44-3.157-1.302a.107.107 0 00-.105-.024c-.388.125-.78.143-1.204.138a4.441 4.441 0 01-1.945-.466 4.544 4.544 0 01-1.61-1.335c-.152-.202-.303-.392-.414-.617a5.81 5.81 0 01-.37-.961 4.582 4.582 0 01-.014-2.298.124.124 0 00.006-.056.085.085 0 00-.027-.048 4.467 4.467 0 01-1.034-1.651 3.896 3.896 0 01-.251-1.192 5.189 5.189 0 01.141-1.6c.337-1.112.982-1.985 1.933-2.618.212-.141.413-.251.601-.33.215-.089.43-.164.646-.227a.098.098 0 00.065-.066 4.51 4.51 0 01.829-1.615 4.535 4.535 0 011.837-1.388zm3.482 10.565a.637.637 0 000 1.272h3.636a.637.637 0 100-1.272h-3.636zM8.462 9.23a.637.637 0 00-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 101.095.649l1.454-2.455a.636.636 0 00.005-.64L8.462 9.23z&quot; fill=&quot;url(#lobe-icons-codex-_R_0_-rd)&quot;/&gt;&lt;defs&gt;&lt;linearGradient gradientUnits=&quot;userSpaceOnUse&quot; id=&quot;lobe-icons-codex-_R_0_-rd&quot; x1=&quot;12&quot; x2=&quot;12&quot; y1=&quot;3&quot; y2=&quot;21&quot;&gt;&lt;stop stop-color=&quot;#B1A7FF&quot;/&gt;&lt;stop offset=&quot;.5&quot; stop-color=&quot;#7A9DFF&quot;/&gt;&lt;stop offset=&quot;1&quot; stop-color=&quot;#3941FF&quot;/&gt;&lt;/linearGradient&gt;&lt;/defs&gt;&lt;/svg&gt;\n\" width=\"16\" height=\"16\" color=\"#27272a\"><path d=\"M9.064 3.344a4.578 4.578 0 012.285-.312c1 .115 1.891.54 2.673 1.275.01.01.024.017.037.021a.09.09 0 00.043 0 4.55 4.55 0 013.046.275l.047.022.116.057a4.581 4.581 0 012.188 2.399c.209.51.313 1.041.315 1.595a4.24 4.24 0 01-.134 1.223.123.123 0 00.03.115c.594.607.988 1.33 1.183 2.17.289 1.425-.007 2.71-.887 3.854l-.136.166a4.548 4.548 0 01-2.201 1.388.123.123 0 00-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838-1.187-.006-2.239-.44-3.157-1.302a.107.107 0 00-.105-.024c-.388.125-.78.143-1.204.138a4.441 4.441 0 01-1.945-.466 4.544 4.544 0 01-1.61-1.335c-.152-.202-.303-.392-.414-.617a5.81 5.81 0 01-.37-.961 4.582 4.582 0 01-.014-2.298.124.124 0 00.006-.056.085.085 0 00-.027-.048 4.467 4.467 0 01-1.034-1.651 3.896 3.896 0 01-.251-1.192 5.189 5.189 0 01.141-1.6c.337-1.112.982-1.985 1.933-2.618.212-.141.413-.251.601-.33.215-.089.43-.164.646-.227a.098.098 0 00.065-.066 4.51 4.51 0 01.829-1.615 4.535 4.535 0 011.837-1.388zm3.482 10.565a.637.637 0 000 1.272h3.636a.637.637 0 100-1.272h-3.636zM8.462 9.23a.637.637 0 00-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 101.095.649l1.454-2.455a.636.636 0 00.005-.64L8.462 9.23z\" fill=\"url(#lobe-icons-codex-_R_0_-rd)\"></path><defs><linearGradient gradientUnits=\"userSpaceOnUse\" x1=\"12\" x2=\"12\" y1=\"3\" y2=\"21\" id=\"lobe-icons-codex-_R_0_-rd\"><stop stop-color=\"#B1A7FF\"></stop><stop offset=\"0.5\" stop-color=\"#7A9DFF\"></stop><stop offset=\"1\" stop-color=\"#3941FF\"></stop></linearGradient></defs></svg>", "pi": "<svg width=\"16\" height=\"16\" viewBox=\"100 100 600 600\" fill=\"#27272a\"><path d=\"M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z\" fill=\"#27272a\" fill-rule=\"evenodd\"></path><path d=\"M517.36 400 H634.72 V634.72 H517.36 Z\" fill=\"#27272a\"></path></svg>", "omp": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" xml=\"&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 64 64&quot;&gt;&lt;defs&gt;&lt;linearGradient id=&quot;omp-color-gradient-ri&quot; x1=&quot;0&quot; y1=&quot;0&quot; x2=&quot;1&quot; y2=&quot;1&quot;&gt;&lt;stop offset=&quot;0&quot; stop-color=&quot;#ed4abf&quot;/&gt;&lt;stop offset=&quot;.5&quot; stop-color=&quot;#9b4dff&quot;/&gt;&lt;stop offset=&quot;1&quot; stop-color=&quot;#5ad8e6&quot;/&gt;&lt;/linearGradient&gt;&lt;/defs&gt;&lt;rect width=&quot;64&quot; height=&quot;64&quot; rx=&quot;12&quot; fill=&quot;#0f0a14&quot;/&gt;&lt;path fill=&quot;url(#omp-color-gradient-ri)&quot; d=&quot;M14 16h36v8H40v32h-8V24h-6v22h-8V24h-4z&quot;/&gt;&lt;/svg&gt;\n\" width=\"16\" height=\"16\" color=\"#27272a\"><defs><linearGradient x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\" id=\"omp-color-gradient-ri\"><stop offset=\"0\" stop-color=\"#ed4abf\"></stop><stop offset=\"0.5\" stop-color=\"#9b4dff\"></stop><stop offset=\"1\" stop-color=\"#5ad8e6\"></stop></linearGradient></defs><rect width=\"64\" height=\"64\" rx=\"12\" fill=\"#0f0a14\"></rect><path fill=\"url(#omp-color-gradient-ri)\" d=\"M14 16h36v8H40v32h-8V24h-6v22h-8V24h-4z\"></path></svg>", "copilot": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 512 416\" fill=\"#27272a\"><path d=\"M181.33 266.143c0-11.497 9.32-20.818 20.818-20.818 11.498 0 20.819 9.321 20.819 20.818v38.373c0 11.497-9.321 20.818-20.819 20.818-11.497 0-20.818-9.32-20.818-20.818v-38.373zM308.807 245.325c-11.477 0-20.798 9.321-20.798 20.818v38.373c0 11.497 9.32 20.818 20.798 20.818 11.497 0 20.818-9.32 20.818-20.818v-38.373c0-11.497-9.32-20.818-20.818-20.818z\" fill-rule=\"nonzero\"></path><path d=\"M512.002 246.393v57.384c-.02 7.411-3.696 14.638-9.67 19.011C431.767 374.444 344.695 416 256 416c-98.138 0-196.379-56.542-246.33-93.21-5.975-4.374-9.65-11.6-9.671-19.012v-57.384a35.347 35.347 0 016.857-20.922l15.583-21.085c8.336-11.312 20.757-14.31 33.98-14.31 4.988-56.953 16.794-97.604 45.024-127.354C155.194 5.77 226.56 0 256 0c29.441 0 100.807 5.77 154.557 62.722 28.19 29.75 40.036 70.401 45.025 127.354 13.263 0 25.602 2.936 33.958 14.31l15.583 21.127c4.476 6.077 6.878 13.345 6.878 20.88zm-97.666-26.075c-.677-13.058-11.292-18.19-22.338-21.824-11.64 7.309-25.848 10.183-39.46 10.183-14.454 0-41.432-3.47-63.872-25.869-5.667-5.625-9.527-14.454-12.155-24.247a212.902 212.902 0 00-20.469-1.088c-6.098 0-13.099.349-20.551 1.088-2.628 9.793-6.509 18.622-12.155 24.247-22.4 22.4-49.418 25.87-63.872 25.87-13.612 0-27.86-2.855-39.501-10.184-11.005 3.613-21.558 8.828-22.277 21.824-1.17 24.555-1.272 49.11-1.375 73.645-.041 12.318-.082 24.658-.288 36.976.062 7.166 4.374 13.818 10.882 16.774 52.97 24.124 103.045 36.278 149.137 36.278 46.01 0 96.085-12.154 149.014-36.278 6.508-2.956 10.84-9.608 10.881-16.774.637-36.832.124-73.809-1.642-110.62h.041zM107.521 168.97c8.643 8.623 24.966 14.392 42.56 14.392 13.448 0 39.03-2.874 60.156-24.329 9.28-8.951 15.05-31.35 14.413-54.079-.657-18.231-5.769-33.28-13.448-39.665-8.315-7.371-27.203-10.574-48.33-8.644-22.399 2.238-41.267 9.588-50.875 19.833-20.798 22.728-16.323 80.317-4.476 92.492zm130.556-56.008c.637 3.51.965 7.35 1.273 11.517 0 2.875 0 5.77-.308 8.952 6.406-.636 11.847-.636 16.959-.636s10.553 0 16.959.636c-.329-3.182-.329-6.077-.329-8.952.329-4.167.657-8.007 1.294-11.517-6.735-.637-12.812-.965-17.924-.965s-11.21.328-17.924.965zm49.275-8.008c-.637 22.728 5.133 45.128 14.413 54.08 21.105 21.454 46.708 24.328 60.155 24.328 17.596 0 33.918-5.769 42.561-14.392 11.847-12.175 16.322-69.764-4.476-92.492-9.608-10.245-28.476-17.595-50.875-19.833-21.127-1.93-40.015 1.273-48.33 8.644-7.679 6.385-12.791 21.434-13.448 39.665z\"></path></svg>", "opencode": "<svg width=\"16\" height=\"16\" viewBox=\"96 64 288 384\" fill=\"#27272a\"><path d=\"M320 224V352H192V224H320Z\" opacity=\"0.4\"></path><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M384 416H128V96H384V416ZM320 160H192V352H320V160Z\"></path></svg>", "mock-slow": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#27272a\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path fill=\"none\" stroke=\"#27272a\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M12 8V4H8\"></path><rect fill=\"none\" stroke=\"#27272a\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect><path fill=\"none\" stroke=\"#27272a\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M2 14h2\"></path><path fill=\"none\" stroke=\"#27272a\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M20 14h2\"></path><path fill=\"none\" stroke=\"#27272a\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M15 13v2\"></path><path fill=\"none\" stroke=\"#27272a\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M9 13v2\"></path></svg>", "acpFirst": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 16 16\" fill=\"none\" color=\"#27272a\" xml=\"&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;16&quot; height=&quot;16&quot; viewBox=&quot;0 0 16 16&quot; fill=&quot;none&quot;&gt;\n  &lt;circle cx=&quot;8&quot; cy=&quot;8&quot; r=&quot;7&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.5&quot;/&gt;\n  &lt;path d=&quot;M5.5 10.5L8 4L10.5 10.5&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.5&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;/&gt;\n  &lt;line x1=&quot;6.25&quot; y1=&quot;8.75&quot; x2=&quot;9.75&quot; y2=&quot;8.75&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;1.2&quot; stroke-linecap=&quot;round&quot;/&gt;\n&lt;/svg&gt;\n\"><circle cx=\"8\" cy=\"8\" r=\"7\" stroke=\"currentColor\" stroke-width=\"1.5\"></circle><path d=\"M5.5 10.5L8 4L10.5 10.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path><line x1=\"6.25\" y1=\"8.75\" x2=\"9.75\" y2=\"8.75\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\"></line></svg>"};
+const I = {
+  chev:'<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  arrowUp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.2"/><circle cx="7" cy="16" r="3.2"/><circle cx="17" cy="16" r="3.2"/></svg>',
+  back:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  gen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
+  box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/></svg>',
+};
+const ACP = [
+  {name:"Agoragentic", v:"1.3.6", d:"Agent marketplace with 174+ AI capabilities. Browse, call and pay for agents", icon:ICONS.acpFirst},
+  {name:"Amp", v:"0.7.0", d:"ACP wrapper for Amp - the frontier coding agent"},
+  {name:"Auggie CLI", v:"0.33.0", d:"Augment Code's powerful software agent, backed by industry-leading context"},
+  {name:"Autohand Code", v:"0.2.1", d:"Autonomous coding agent for the terminal"},
+  {name:"Cline", v:"2.4.0", d:"Autonomous coding agent right in your IDE and terminal"},
+];
+const S = {
+  route: {page:"list"},
+  dialog: false,
+  toast: null,
+  flash: null,
+  providers: [
+    {id:"claude", label:"Claude", enabled:true, status:"ready", models:15, version:"2.1.280", latest:"2.1.286"},
+    {id:"codex", label:"Codex", enabled:true, status:"ready", models:8, version:"0.159.3", latest:null},
+    {id:"pi", label:"Pi", enabled:true, status:"ready", models:35, version:"0.99.1", latest:"0.99.2"},
+    {id:"omp", label:"Oh My Pi", enabled:true, status:"ready", models:68, version:"18.4.4", latest:"18.4.6"},
+    {id:"copilot", label:"Copilot", enabled:false, status:"off", probe:{status:"unavailable"}, install:"npm install -g @github/copilot"},
+    {id:"opencode", label:"OpenCode", enabled:false, status:"off", probe:{status:"ready", models:12, version:"1.14.2", latest:null}},
+  ],
+  upgrading: new Set(),
+};
+const P = id => S.providers.find(p => p.id === id);
+const icon = (p, cls="") => `<span class="ico ${cls}">${ICONS[p.id] || I.box}</span>`;
+const sw = (on, act) => `<span class="sw ${on?"on":""}" role="switch" aria-checked="${on}" data-act="${act}"></span>`;
+const dot = c => `<span class="dot" style="background:${c}"></span>`;
+
+function statusMeta(p, opts={}) {
+  if (p.status === "off") return `${dot("var(--xmuted)")}<span>已停用</span>${opts.offHint?`<span>· ${opts.offHint}</span>`:""}`;
+  if (p.status === "loading") return `<span class="spin"></span><span>正在检测…</span>`;
+  if (p.status === "unavailable") return `${dot("var(--warn)")}<span>未安装</span>`;
+  const parts = [`${p.models} 个 Model`, `v${p.version}`];
+  return `${dot("var(--ok)")}<span class="${opts.fill?"fill":""}">${parts.join(" · ")}</span>`;
+}
+function upgradeChip(p) {
+  if (!p.latest || p.status !== "ready") return "";
+  if (S.upgrading.has(p.id)) return `<span class="btn xs outline" disabled><span class="spin"></span>正在升级</span>`;
+  return `<button class="btn xs outline" data-act="upgrade:${p.id}" title="v${p.version} → v${p.latest}">${I.arrowUp}升级到 v${p.latest}</button>`;
+}
+function upgradeBtn(p) {
+  if (!p.latest || p.status !== "ready") return "";
+  if (S.upgrading.has(p.id)) return `<button class="btn outline" disabled><span class="spin"></span></button>`;
+  return `<button class="btn outline" data-act="upgrade:${p.id}" title="v${p.version} → v${p.latest}">升级</button>`;
+}
+
+const sv = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const NAVI = {
+  "通用": sv('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  "外观": sv('<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2a10 10 0 0 0 0 20c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7h2a5.6 5.6 0 0 0 5.5-5.5C22 6 17.5 2 12 2z"/>'),
+  "编辑器": sv('<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>'),
+  "快捷键": sv('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M7 15h10"/>'),
+  "通知": sv('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
+  "概览": sv('<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/>'),
+  "项目": sv('<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>'),
+  "Providers": I.layers,
+  "Agents": sv('<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4M9 13v2M15 13v2"/>'),
+  "配对设备": sv('<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 18h.01"/>'),
+};
+/* ---------- 侧栏与页头 ---------- */
+function renderSide() {
+  const nav = (t, sel) => `<div class="nav ${sel?"sel":""}">${NAVI[t]||I.gen}<span>${t}</span></div>`;
+  document.getElementById("side").innerHTML = `
+    <div class="back">${I.back}<span>返回</span></div>
+    <h6>应用</h6>${["通用","外观","编辑器","快捷键","通知"].map(t=>nav(t)).join("")}
+    <h6 style="margin-top:20px">主机</h6>
+    <div class="host">${dot("var(--ok)")}<span>oxydeMacBook-Pro.local</span></div>
+    ${nav("概览")}${nav("项目")}${nav("Providers", true)}${nav("Agents")}${nav("配对设备")}`;
+}
+function renderBar() {
+  const r = S.route;
+  let h = `${I.layers}`;
+  if (r.page === "list") h += `<span>Providers</span>`;
+  else if (r.page === "offlist") h += `<span class="crumb" data-act="nav:list">Providers</span><span class="sep">/</span><span>已停用</span>`;
+  else h += `<span class="crumb" data-act="nav:list">Providers</span><span class="sep">/</span>${r.from==="offlist"&&!P(r.id).enabled?`<span class="crumb" data-act="nav:offlist">已停用</span><span class="sep">/</span>`:""}<span>${P(r.id).label}</span>`;
+  document.getElementById("bar").innerHTML = h;
+}
+
+/* ---------- 列表 ---------- */
+function rowA(p) {
+  const off = !p.enabled;
+  return `<div class="row click ${off?"off":""} ${S.flash===p.id?"flash enter":""}" data-act="open:${p.id}">
+    <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div>
+      <div class="meta">${statusMeta(p,{offHint:"启用后检测是否已安装", fill:S.flash===p.id})}${p.status==="unavailable"?`<span>·</span><span class="lnk" data-act="open:${p.id}">安装方法</span>`:""}${upgradeChip(p)}</div></div></div>
+    <div class="trail">${sw(p.enabled, "toggle:"+p.id)}${I.chev}</div></div>`;
+}
+function rowB(p) {
+  let badge = "";
+  if (p.status === "unavailable") badge = `<span class="badge" style="color:var(--warn)">未安装</span>`;
+  else if (p.latest && p.status === "ready") badge = `<span class="badge up">可升级</span>`;
+  return `<div class="row click ${S.flash===p.id?"flash enter":""}" data-act="open:${p.id}">
+    <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${statusMeta(p)}</div></div></div>
+    <div class="trail">${badge}${I.chev}</div></div>`;
+}
+function rowC(p) {
+  return `<div class="row click ${S.flash===p.id?"flash enter":""}" data-act="open:${p.id}">
+    <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${statusMeta(p)}${p.latest&&p.status==="ready"?`<span>→ v${p.latest}</span>`:""}</div></div></div>
+    <div class="trail">${upgradeBtn(p)}${sw(p.enabled, "toggle:"+p.id)}${I.chev}</div></div>`;
+}
+function addBtn() { return `<button class="btn icon" data-act="dialog" aria-label="添加提供方">${I.plus}</button>`; }
+
+function renderList() {
+  const on = S.providers.filter(p => p.enabled);
+  const off = S.providers.filter(p => !p.enabled);
+  if (DIR === "a") {
+    return `<div class="sec"><div class="sech"><span class="t">已启用<b>${on.length}</b></span>${addBtn()}</div>
+      <div class="card">${on.map(rowA).join("")}</div></div>
+      ${off.length?`<div class="sec"><div class="sech"><span class="t">已停用<b>${off.length}</b></span></div>
+      <div class="card">${off.map(rowA).join("")}</div></div>`:""}`;
+  }
+  if (DIR === "b") {
+    return `<div class="sec"><div class="sech"><span class="t">已启用<b>${on.length}</b></span>${addBtn()}</div>
+      <div class="card">${on.map(rowB).join("")}</div>
+      ${off.length?`<div class="card" style="margin-top:12px"><div class="row click off" data-act="nav:offlist">
+        <div class="lead"><div class="txt"><div class="name" style="color:var(--fg)">${off.length} 个已停用</div><div class="meta">${off.map(p=>p.label).join("、")}</div></div></div>
+        <div class="trail">${I.chev}</div></div></div>`:""}</div>`;
+  }
+  const listed = S.providers.filter(p => p.enabled && p.status !== "unavailable");
+  return `<div class="sec"><div class="sech"><span class="t">Providers</span>${addBtn()}</div>
+    <div class="card">${listed.map(rowC).join("")}</div></div>`;
+}
+function renderOffList() {
+  const off = S.providers.filter(p => !p.enabled);
+  return `<div class="sec"><div class="sech"><span class="t">已停用<b>${off.length}</b></span></div>
+    <div class="card">${off.length?off.map(p=>`<div class="row click off" data-act="open:${p.id}:offlist">
+      <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${statusMeta(p,{offHint:"启用后检测是否已安装"})}</div></div></div>
+      <div class="trail">${I.chev}</div></div>`).join(""):`<div class="row"><span class="meta">没有已停用的提供方</span></div>`}</div>
+    <p class="note">已停用的提供方不检测，也不出现在新建会话里。点进去可以启用。</p></div>`;
+}
+
+/* ---------- 详情 ---------- */
+function models(p) {
+  const names = {claude:["Opus 5.5","claude-opus-5-5"],codex:["GPT-5.3 Codex","gpt-5.3-codex"],pi:["Sonnet 5","anthropic/claude-sonnet-5"],omp:["Opus 5.5","anthropic/claude-opus-5-5"],opencode:["Kimi K3","moonshot/kimi-k3"]}[p.id] || ["Default","default"];
+  const extra = [["Sonnet 5","claude-sonnet-5"],["Haiku 4.5","claude-haiku-4-5"]];
+  return `<div class="sec"><div class="sech"><span class="t">Models<b>${p.models}</b></span></div><div class="card">
+    ${[names,...extra].map(([n,id])=>`<div class="model"><span>${n}</span><span class="mono" style="color:var(--muted)">${id}</span></div>`).join("")}
+    <div class="model"><span class="meta">还有 ${p.models-3} 个</span></div></div></div>`;
+}
+function endpoints(p) {
+  if (!["claude","codex"].includes(p.id)) return "";
+  return `<div class="sec"><div class="sech"><span class="t">第三方接口</span><button class="btn ghost xs">${I.plus}添加</button></div><div class="card">
+    <div class="kv"><div class="k"><div>官方</div><div class="hint">沿用 ${p.label} 自身的配置，通常是订阅登录</div></div><span class="v" style="color:var(--ok)">使用中</span></div></div></div>`;
+}
+function installGuide(p) {
+  return `<div class="sec"><div class="sech"><span class="t">安装 ${p.label}</span></div><div class="card">
+    <div class="cmd"><code>${p.install||"npm install -g "+p.id}</code><button class="btn ghost xs">${I.copy}复制</button></div>
+    <div class="kv" style="border-top:1px solid var(--row)"><span class="hint" style="flex:1">在运行 Osuna daemon 的机器上执行，装好后点刷新</span><span class="lnk" style="font-size:12px">官方文档 ↗</span></div></div></div>`;
+}
+function headerTools(p, withSwitch) {
+  return `<div class="trail">${withSwitch?`<span class="swl">${p.enabled?"已启用":"已停用"}${sw(p.enabled,"toggle:"+p.id)}</span>`:""}
+    <button class="btn icon" data-act="refresh:${p.id}" aria-label="刷新" ${p.enabled?"":"disabled"}>${I.refresh}</button>
+    <button class="btn icon" aria-label="更多">${I.dots}</button></div>`;
+}
+function detailHead(p, withSwitch, noStatus) {
+  let st;
+  if (p.status==="off") st = `${dot("var(--xmuted)")}已停用`;
+  else if (p.status==="loading") st = `<span class="spin"></span>正在检测…`;
+  else if (p.status==="unavailable") st = `${dot("var(--warn)")}未安装`;
+  else st = `${dot("var(--ok)")}可用 · ${p.models} 个 Model`;
+  return `<div class="dh ${p.enabled?"":"off"}">${icon(p,"lg")}<div style="flex:1"><div class="nm">${p.label}</div>${noStatus?"":`<div class="st">${st}</div>`}</div>${headerTools(p, withSwitch)}</div>`;
+}
+function versionCard(p) {
+  if (p.status !== "ready") return "";
+  return `<div class="sec"><div class="sech"><span class="t">版本</span></div><div class="card"><div class="kv"><div class="k">已安装</div>
+    <span class="v">v${p.version}${p.latest?` → v${p.latest}`:""}</span>${upgradeBtn(p)}</div></div></div>`;
+}
+function body(p) {
+  if (p.status === "unavailable") return installGuide(p);
+  if (p.status === "ready") return versionCard(p) + endpoints(p) + models(p);
+  return "";
+}
+function renderDetail() {
+  const p = P(S.route.id);
+  if (DIR === "b") {
+    const fl = S.flash===p.id ? "fill" : "";
+    const v = (x) => `<span class="v ${fl}">${x}</span>`;
+    let state, ver;
+    if (p.status==="off") { state = `<span class="v">停用时不检测</span>`; ver = `<span class="v">—</span>`; }
+    else if (p.status==="loading") { state = `<span class="v" style="display:flex;gap:6px;align-items:center"><span class="spin"></span>正在检测…</span>`; ver = `<span class="v">—</span>`; }
+    else if (p.status==="unavailable") { state = `<span class="v ${fl}" style="color:var(--warn)">未安装</span>`; ver = `<span class="v">—</span>`; }
+    else { state = v(`可用 · ${p.models} 个 Model`); ver = `${v("v"+p.version+(p.latest?` → v${p.latest}`:""))}${upgradeBtn(p)}`; }
+    const overview = `<div class="sec"><div class="sech"><span class="t">概况</span></div><div class="card">
+      <div class="kv"><div class="k"><div>启用 ${p.label}</div><div class="hint">${p.enabled?"会出现在新建会话的提供方里":"停用时不检测，也不出现在新建会话里"}</div></div>${sw(p.enabled,"toggle:"+p.id)}</div>
+      <div class="kv"><div class="k">状态</div>${state}</div>
+      <div class="kv"><div class="k">版本</div>${ver}</div></div></div>`;
+    const rest = p.status==="unavailable" ? installGuide(p) : p.status==="ready" ? endpoints(p)+models(p) : "";
+    return detailHead(p,false,true) + overview + rest;
+  }
+  if (!p.enabled) {
+    return detailHead(p,true) + `<div class="card offcard"><div class="t">${p.label} 已停用</div>
+      <div class="d" style="margin-bottom:0">已停用的提供方不检测，也不出现在新建会话里。<br>用右上角的开关启用，启用后会检测主机上有没有装 ${p.label}。</div></div>`;
+  }
+  return detailHead(p,true) + (p.status==="loading" ? `<div class="card offcard"><div class="d" style="margin:0 auto;display:flex;gap:8px;justify-content:center;align-items:center"><span class="spin"></span>正在检测 ${p.label}…</div></div>` : body(p));
+}
+
+/* ---------- 添加提供方弹窗 ---------- */
+function renderDialog() {
+  const acp = `<div class="sec" style="margin-bottom:0"><div class="sech"><span class="t">ACP 目录</span></div><div class="card">
+    ${ACP.map(a=>`<div class="row"><div class="lead"><span class="ico">${a.icon||I.box}</span><div class="txt"><div class="name">${a.name} <span class="meta" style="display:inline">${a.v}</span></div><div class="desc">${a.d}</div></div></div><button class="btn outline">添加</button></div>`).join("")}</div></div>`;
+  let builtin = "";
+  if (DIR === "c") {
+    const items = S.providers.filter(p => !p.enabled || p.status === "unavailable" || p.justAdded);
+    if (items.length) builtin = `<div class="sec"><div class="sech"><span class="t">内置</span></div><div class="card">
+      ${items.map(p=>`<div class="row click ${p.enabled?"":"off"} ${p.justAdded?"flash":""}" data-act="open:${p.id}">
+        <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${
+          p.justAdded ? `${dot("var(--ok)")}<span class="fill">可用 · 已加入列表</span>` :
+          p.status==="unavailable" ? `${dot("var(--warn)")}<span>未安装</span><span>·</span><span class="lnk" data-act="open:${p.id}">安装方法</span>` :
+          statusMeta(p,{offHint:"打开后检测是否已安装"})}</div></div></div>
+        <div class="trail">${sw(p.enabled,"toggle:"+p.id)}${I.chev}</div></div>`).join("")}</div></div>`;
+  }
+  return `<div class="scrim" data-act="close"><div class="dlg" data-stop>
+    <div class="hd"><span class="t">添加提供方</span><button class="btn icon" data-act="close">${I.x}</button></div>
+    <div class="search">${I.search}<span>搜索提供方</span></div>
+    <div class="bd">${builtin}${acp}</div></div></div>`;
+}
+
+/* ---------- 渲染与事件 ---------- */
+function render() {
+  renderSide(); renderBar();
+  const r = S.route;
+  document.getElementById("col").innerHTML = r.page==="list" ? renderList() : r.page==="offlist" ? renderOffList() : renderDetail();
+  document.getElementById("layer").innerHTML = (S.dialog ? renderDialog() : "") + (S.toast ? `<div class="toast"><span>${S.toast.text}</span>${S.toast.undo?`<button data-act="undo:${S.toast.undo}">撤销</button>`:""}</div>` : "");
+}
+function setFlash(id) { S.flash = id; setTimeout(() => { if (S.flash === id) { S.flash = null; render(); } }, 1700); }
+let toastTimer;
+function toast(text, undo) { S.toast = {text, undo}; clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; render(); }, 4000); }
+function toggle(id) {
+  const p = P(id);
+  if (p.enabled) {
+    p.enabled = false; p.status = "off";
+    if (DIR === "a") setFlash(id);
+    if (DIR === "c" && S.route.page === "list") toast(`已停用 ${p.label}，可在「添加提供方」里重新打开`, id);
+  } else {
+    p.enabled = true; p.status = "loading"; setFlash(id);
+    setTimeout(() => {
+      Object.assign(p, p.probe || {status:"ready"});
+      if (DIR === "c" && S.dialog && p.status === "ready") { p.justAdded = true; setTimeout(() => { p.justAdded = false; render(); }, 1800); }
+      setFlash(id); render();
+    }, 1400);
+  }
+  render();
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-act]");
+  if (!t) return;
+  if (t.dataset.act === "close" && e.target.closest("[data-stop]") && !e.target.closest('button[data-act="close"]')) return;
+  const [act, arg, from] = t.dataset.act.split(":");
+  e.stopPropagation();
+  if (act === "toggle") return toggle(arg);
+  if (act === "open") { S.dialog = false; S.route = {page:"detail", id:arg, from}; return render(); }
+  if (act === "nav") { S.route = {page:arg}; return render(); }
+  if (act === "dialog") { S.dialog = true; return render(); }
+  if (act === "close") { S.dialog = false; return render(); }
+  if (act === "undo") { S.toast = null; toggle(arg); return; }
+  if (act === "refresh") return;
+  if (act === "upgrade") {
+    S.upgrading.add(arg); render();
+    setTimeout(() => { const p = P(arg); S.upgrading.delete(arg); p.version = p.latest; p.latest = null; setFlash(arg); render(); }, 1600);
+  }
+}, true);
+const start = new URLSearchParams(location.hash.slice(1));
+if (start.get("page")) S.route = {page:start.get("page"), id:start.get("id")};
+if (start.get("dialog")) S.dialog = true;
+render();
+</script>
+</body>
+</html>

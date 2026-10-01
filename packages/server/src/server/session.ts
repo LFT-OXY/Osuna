@@ -240,6 +240,8 @@ import {
 } from "../services/github-service.js";
 import type { ForgeService } from "../services/forge-service.js";
 import type { ProviderUsageService } from "../services/quota-fetcher/service.js";
+import type { ProviderVersionCheckService } from "./agent/provider-version-check.js";
+import type { ProviderUpgradeService } from "./agent/provider-upgrade.js";
 import {
   resolveWorkspaceRootAgent,
   summarizeFetchWorkspacesEntries,
@@ -523,6 +525,8 @@ export interface SessionOptions {
   terminalManager: TerminalManager | null;
   providerSnapshotManager: ProviderSnapshotManager;
   providerUsageService: ProviderUsageService;
+  providerVersionCheckService: ProviderVersionCheckService;
+  providerUpgradeService: ProviderUpgradeService;
   hubExecutionAgents?: HubExecutionAgents;
   hubRelationships?: HubRelationshipManagement;
   serviceProxy?: ServiceProxySubsystem;
@@ -840,6 +844,8 @@ export class Session {
       terminalManager,
       providerSnapshotManager,
       providerUsageService,
+      providerVersionCheckService,
+      providerUpgradeService,
       serviceProxy,
       scriptRuntimeStore,
       workspaceSetupSnapshots,
@@ -1006,6 +1012,8 @@ export class Session {
       },
       providerSnapshotManager,
       providerUsageService,
+      providerVersionCheckService,
+      providerUpgradeService,
       logger: this.sessionLogger,
     });
     this.agentConfigSession = new AgentConfigSession({
@@ -2993,6 +3001,10 @@ export class Session {
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
       case "provider.usage.list.request":
         return this.providerCatalogSession.handleProviderUsageListRequest(msg);
+      case "provider.version.check.request":
+        return this.providerCatalogSession.handleProviderVersionCheckRequest(msg);
+      case "provider.upgrade.request":
+        return this.providerCatalogSession.handleProviderUpgradeRequest(msg);
       default:
         return undefined;
     }

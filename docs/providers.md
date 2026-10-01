@@ -99,7 +99,7 @@ Pi control-plane RPCs wait 60 seconds by default. Override `params.rpcTimeoutMs`
 
 Pi import discovery reads Pi's persisted JSONL session files because Pi RPC does not expose a recent-session listing command. Resume and full history hydration still go through `pi --mode rpc` using the session file as `nativeHandle`.
 
-OMP is a first-class built-in provider, disabled by default. Its launch contract, typed runtime, agent/session behavior, history, permissions, imports, and test fake live under `providers/omp/`; only the provider-neutral JSONL child-process transport is shared with Pi. It launches `omp --mode rpc-ui`, uses OMP's `get_available_commands` RPC for slash-command discovery, bridges OMP `rpc-ui` approval dialogs into Paseo permissions, and imports terminal-started sessions from OMP's own sessions directory when enabled. `~/.omp/agent/sessions` is only the default; several environment variables move it, and [custom-providers.md](custom-providers.md#omp-profiles-and-pi-compatible-forks) has them.
+OMP is a first-class built-in provider. Its launch contract, typed runtime, agent/session behavior, history, permissions, imports, and test fake live under `providers/omp/`; only the provider-neutral JSONL child-process transport is shared with Pi. It launches `omp --mode rpc-ui`, uses OMP's `get_available_commands` RPC for slash-command discovery, bridges OMP `rpc-ui` approval dialogs into Paseo permissions, and imports terminal-started sessions from OMP's own sessions directory when enabled. `~/.omp/agent/sessions` is only the default; several environment variables move it, and [custom-providers.md](custom-providers.md#omp-profiles-and-pi-compatible-forks) has them.
 
 OMP supports native Paseo host tools. The adapter registers the full caller-scoped Paseo tool catalog directly with OMP, matching providers such as Claude that expose the full catalog through MCP. Serialize every OMP host definition with `loadMode: "essential"` so `create_agent`, `send_agent_prompt`, `wait_for_agent`, and related tools remain direct calls; omitting the field makes OMP mount non-built-in names under `xd://` instead. OMP's task subagents are provider subagents: the adapter publishes their descriptors and timelines, and the runtime stays owned by OMP ([agent-lifecycle.md](agent-lifecycle.md#the-subagents-track)). Custom OMP profiles should extend `omp`; other Pi-compatible forks can still extend `pi`, override `command`, and set `params.sessionDir` to their JSONL session directory.
 
@@ -174,6 +174,18 @@ that were still active when the deadline expired.
 Catalogue results stay cached by identity until explicit refresh or a change to that provider's configuration.
 Keys are resolved on each read so project configuration can select a different cached catalogue.
 Selector opening may read a loading or stale query, but does not force provider probing.
+
+After a successful catalog probe, the manager fills `version` for built-in providers only. The
+`--version` probe runs outside the refresh deadline with its own 5-second timeout, so a slow probe
+cannot turn a ready entry into an error. A provider whose catalog probe already ran `--version` returns it as
+`ProviderCatalog.installedVersion` so the manager does not run it twice (Claude does this).
+An unreadable version omits the field and never changes the entry's status.
+`provider.version.check.request` compares that `version` with the npm `latest` of the manifest's
+`npmPackage`; the request is described in [usage.md](usage.md#the-one-outbound-request).
+`provider.upgrade.request` runs the CLI's upgrade subcommand, then refreshes that entry and forgets
+its cached `latest` whether the command succeeded or not, so the next check compares the new
+`version`. Appended launch args are dropped for the upgrade: placed before the subcommand, a CLI reads
+the subcommand as a prompt.
 
 Saved provider/model choices are user intent. Catalogue failure must not erase them or substitute
 another model. Creation reads the caller's host and directory directly; an earlier global snapshot
@@ -317,6 +329,12 @@ export class CopilotACPAgentClient extends ACPAgentClient {
 ### 2. Add to the provider manifest
 
 In `packages/server/src/server/agent/provider-manifest.ts`, add mode definitions with UI metadata (icons, color tiers) and a provider definition entry.
+
+A built-in provider also needs three things for Settings → Providers to show its version and offer a one-click upgrade:
+
+- **npm package**: set `npmPackage` on the entry. The installed version is compared with that package's `latest`; without it the provider never shows an update.
+- **Version parsing**: implement `resolveInstalledVersion` and `resolveCliLaunch` on the client with the same default binary it launches. `parseCliVersion` takes the first bare `x.y.z` from `--version`; add the CLI's real output to `provider-cli-version.test.ts`, and parse it yourself if the first `x.y.z` is not the CLI's version.
+- **Upgrade command**: add the CLI's own upgrade subcommand to `UPGRADE_SUBCOMMANDS` in `provider-upgrade-command.ts`. It runs with the provider's resolved executable, not whatever `PATH` finds. A CLI without its own upgrade command needs install-method detection from the executable's real path, like Codex's `detectCodexInstallMethod`; until then it answers `unsupported`. Upgrading with a package manager the user did not install it with leaves a second copy on `PATH`, so a path you can't classify answers `install_method_unknown` instead of guessing.
 
 First, define the modes with visual metadata:
 
@@ -502,6 +520,10 @@ interface AgentClient {
     context: ImportProviderSessionContext,
   ): Promise<ImportedProviderSession>;
   getDiagnostic?(): Promise<{ diagnostic: string }>;
+  // Built-in providers only: run the configured command with `--version`, return x.y.z or null.
+  resolveInstalledVersion?(signal?: AbortSignal): Promise<string | null>;
+  // Built-in providers only: the resolved executable, prefix args and env the upgrade runs with.
+  resolveCliLaunch?(): Promise<ProviderCliLaunch | null>;
 }
 ```
 

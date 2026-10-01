@@ -894,6 +894,218 @@ const notice = buildApiEndpointModeNotice({ modes: this.apiEndpointMode, provide
 if (notice) this.pendingApiEndpointModeNotices.set(agentId, notice);
 ```
 
+## Scenario: optional snapshot field filled by a best-effort probe
+
+Example: `ProviderSnapshotEntry.version`, the installed CLI version of a built-in provider, gated by `server_info.features.providerVersions`.
+
+### 1. Scope / Trigger
+
+- A new optional field on a provider snapshot entry whose value comes from running a host command (`<cli> --version`), where failure must never change the entry's status.
+
+### 2. Signatures
+
+- Protocol: `ProviderSnapshotEntrySchema.version: z.string().optional()`; `features.providerVersions: z.boolean().optional()` (`packages/protocol/src/messages.ts`).
+- Server: `AgentClient.resolveInstalledVersion?(signal?): Promise<string | null>`; `ProviderCatalog.installedVersion?: DiscoveredCliVersion` where `DiscoveredCliVersion = { status: "found"; version } | { status: "unreadable" }` (`agent-sdk-types.ts`).
+- Helper: `parseCliVersion(output): string | null` and `resolveProviderCliVersion({ runtimeSettings, defaultBinary, signal })` (`agent/provider-cli-version.ts`).
+
+### 3. Contracts
+
+- `version` is the first plain `x.y.z` in stdout+stderr; prerelease suffixes are dropped.
+- Filled only when `entry.source === "builtin"` and the catalog probe succeeded; `error`, `unavailable`, disabled, custom and ACP entries omit it.
+- The probe runs the command the provider actually launches (config `command` + `env`), after the refresh deadline, with its own 5 s exec timeout.
+- A provider that already ran `--version` during `fetchCatalog` (Claude) reports it through `ProviderCatalog.installedVersion`; the manager then skips its own probe.
+- The daemon advertises `providerVersions: true` unconditionally; the app gates the list row and the detail "Version" section on it (`COMPAT(providerVersions)`).
+
+### 4. Validation & Error Matrix
+
+- Output has no `x.y.z` → field omitted, status unchanged.
+- Probe throws / times out → logged at debug, field omitted, status unchanged.
+- Catalog probe fails → status `error`, no probe, no field.
+- Old daemon → no flag → app shows no version.
+
+### 5. Good/Base/Bad Cases
+
+- Good: fake `copilot` prints `GitHub Copilot CLI 1.0.89.` → `{ status: "ready", version: "1.0.89" }`.
+- Base: unreadable output → `{ status: "ready" }` with no `version`.
+- Bad: putting the probe inside `runProviderRefreshWithDeadline` — a slow probe turns a ready entry into `error`.
+
+### 6. Tests Required
+
+- Unit `provider-cli-version.test.ts`: real samples for codex, copilot, opencode, pi, omp; unparseable inputs → `null`. Claude's sample lives in `claude/models.test.ts` (`parseClaudeCodeVersion`).
+- Daemon e2e `daemon-e2e/provider-version.e2e.test.ts` (real clients, fake sh CLIs): Claude ready + version; unreadable → ready without version on both the Claude and the generic path; custom and disabled entries carry none.
+- App jsdom: list row `"3 models · v2.1.280"` only with the flag; detail order and version/install-guide exclusivity.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Runs --version a second time for Claude and can time the whole refresh out.
+operation: async (context) => ({ catalog: await fetchCatalog(), version: await client.resolveInstalledVersion?.(context.signal) }),
+```
+
+#### Correct
+
+```ts
+const catalog = await runProviderRefreshWithDeadline({ … return await definition.fetchCatalog(…) });
+let version: string | undefined;
+if (base.source === "builtin") version = await this.readInstalledVersion({ provider, catalog, client });
+```
+
+## Scenario: a user-triggered outbound lookup cached in the daemon
+
+Example: `provider.version.check.request`, which compares each built-in CLI's installed `version` with npm's `latest`.
+
+### 1. Scope / Trigger
+
+- A read RPC whose answer needs the public internet. `docs/usage.md` ("The one outbound request") allows only one daemon-initiated request, so this one must run only when a client asks.
+
+### 2. Signatures
+
+- Protocol: `ProviderVersionCheckRequestSchema { requestId, providers?: string[], force?: boolean }`; response `{ requestId, results: ProviderVersionCheckResult[] }`, result `{ provider, installedVersion?, latestVersion?, updateAvailable, error? }` (`packages/protocol/src/messages.ts`). Permission `daemon.read` both ways.
+- Package names: `AgentProviderDefinition.npmPackage` (`packages/protocol/src/provider-manifest.ts`), one per built-in provider.
+- Server: `ProviderVersionCheckService.check({ providers?, force? })`, `isNewerVersion({ installed, latest })`, `FetchLatestVersion = ({ npmPackage, signal }) => Promise<string>` (`agent/provider-version-check.ts`). `WebSocketServer` builds the service from `providerSnapshotManager.listProviders({ wait: true })`; the fetcher comes from `PaseoDaemonConfig.providerVersions.fetchLatestVersion`, default `fetchNpmLatestVersion` (`registry.npmjs.org/-/package/<pkg>/dist-tags`, zod-parsed, 15 s timeout).
+- Client: `DaemonClient.checkProviderVersions({ providers?, force? })`.
+
+### 3. Contracts
+
+- Only `source === "builtin"` entries with an `npmPackage` appear in `results`.
+- An entry without `version` (disabled, not installed, unreadable) returns `{ provider, updateAvailable: false }` and is never looked up.
+- Latest versions are cached in memory per provider for 1 hour; failures are not cached. Concurrent lookups for one provider share one request, `force` included. `force` skips the cache.
+- `updateAvailable` is a semver compare; either side unparseable → `false`.
+- No lookup at startup or on a timer. `createTestPaseoDaemon` injects a fetcher that throws, so a test daemon never reaches npm.
+
+### 4. Validation & Error Matrix
+
+- npm non-2xx, timeout, or no `latest` tag → that result carries `error` (the message), `updateAvailable: false`, no `latestVersion`; logged at `warn`; other providers unaffected.
+- Snapshot read throws → `rpc_error` with code `provider_version_check_failed`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: installed `2.1.280`, latest `2.1.285` → `{ installedVersion: "2.1.280", latestVersion: "2.1.285", updateAvailable: true }`.
+- Base: registry unreachable for copilot → copilot has `error`, claude still answers.
+- Bad: querying npm for every built-in provider on daemon start "to warm the cache" — it breaks the outbound-request rule.
+
+### 6. Tests Required
+
+- Unit `provider-version-check.test.ts`: semver cases (numeric not lexical, prerelease, unparseable); cache expiry via injected `now`; concurrent checks share one lookup.
+- Daemon e2e `daemon-e2e/provider-version.e2e.test.ts` with a stub registry: latest + `updateAvailable`; cached answer until `force`; one failed lookup only marks that provider; entries without a version are not looked up (the stub would write an `error` if they were).
+- Protocol `messages.test.ts`: request with and without optional fields; results omitting versions and error.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Session-level optional service plus an rpc_error branch, only so in-process tests can omit it.
+providerVersionCheckService?: ProviderVersionCheckService;
+```
+
+#### Correct
+
+```ts
+// The WebSocketServer owns it; only the network function is injectable at the daemon config boundary.
+this.providerVersionCheckService = new ProviderVersionCheckService({
+  listProviders: () => providerSnapshotManager.listProviders({ wait: true }),
+  fetchLatestVersion,
+  logger: this.logger.child({ module: "provider-version-check" }),
+});
+```
+
+## Scenario: a request that runs a command on the host
+
+Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade subcommand (`claude update`, `opencode upgrade`, …), or, for Codex, the official upgrade for the way it was installed.
+
+### 1. Scope / Trigger
+
+- An RPC that executes a program on the daemon host, can run for minutes, and must report the program's raw output. Permission is `daemon.manage` both ways (same class as plugin install/update).
+
+### 2. Signatures
+
+- Protocol: `ProviderUpgradeRequestSchema { requestId, provider }`; response payload `ProviderUpgradeResponsePayload { requestId, provider, ok, version?, output?, errorCode?: string, error? }`; known codes `PROVIDER_UPGRADE_ERROR_CODES` (`unsupported | install_method_unknown | not_installed | in_progress | command_failed | timeout`). `errorCode` is a plain string on the wire so a newer daemon's code never fails an older client's parse.
+- Pure (`agent/provider-upgrade-command.ts`):
+  - `hasProviderUpgradeCommand(provider)` — true for the subcommand table plus `codex`.
+  - `resolveProviderUpgradeCommand({ provider, launch, executableRealPath, platform })` → `{ kind: "run"; command; args; env? } | { kind: "install_method_unknown" } | { kind: "unsupported" }`. `env` is overlaid on the provider's `envOverlay` by the service.
+  - `detectCodexInstallMethod({ realPath, platform })` → `{ method: "standalone"; codexHome } | { method: "homebrew"; prefix } | { method: "npm"; prefix } | { method: "unknown" }`.
+  - `clipUpgradeOutput(output, limit = 32_000)`.
+- Launch: `AgentClient.resolveCliLaunch?(): Promise<ProviderCliLaunch | null>` (`{ executable, args, source, env }`, built on `resolveProviderCliLaunch` in `agent/provider-cli-version.ts`), forwarded in `wrapClientProvider`, reached through `ProviderSnapshotManager.resolveCliLaunch(provider)` (null when disabled).
+- Service: `ProviderUpgradeService.upgrade(provider)` returns `Omit<ProviderUpgradeResponsePayload, "requestId">` (`agent/provider-upgrade.ts`). `createProviderVersionServices` in `websocket-server.ts` builds it next to the version check; `PaseoDaemonConfig.providerVersions.upgradeTimeoutMs` (default 10 min) is the test seam.
+- Client: `DaemonClient.upgradeProvider({ provider })`, request timeout 20 min.
+
+### 3. Contracts
+
+- Order of refusals, none of which runs anything: non-builtin entry → `unsupported`; no upgrade command → `unsupported` (checked before the executable is looked up); no executable → `not_installed` (so a disabled Codex answers `not_installed`, not `unsupported`); Codex install method not recognised → `install_method_unknown`, `error` names the real path.
+- Codex has no upgrade subcommand. The service passes `fs.realpath(launch.executable)` (the unresolved path when realpath throws — that can only push the result towards `install_method_unknown`) and `process.platform`. Rules, in this order, mirroring upstream `codex-rs/install-context` and the commands in `codex-rs/tui/src/update_action.rs`:
+
+  | Real path (Windows: `\` → `/`, compared lower-case) | Method | Command |
+  |---|---|---|
+  | basename does not start with `codex` (replace-mode `node cli.js`: the executable is the interpreter) | unknown | — |
+  | contains `/packages/standalone/releases/` | standalone, `codexHome` = the part before it | POSIX `sh -c "curl -fsSL https://chatgpt.com/codex/install.sh \| CODEX_NON_INTERACTIVE=1 sh"`; Windows `powershell -ExecutionPolicy Bypass -c "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 \| iex"`; both with `env: { CODEX_HOME: codexHome }` |
+  | POSIX contains `/lib/node_modules/@openai/codex/`; Windows `/npm/node_modules/@openai/codex/` or ends in `/npm/codex`, `/npm/codex.cmd` or `/npm/codex.ps1` | npm, `prefix` = the part before `/lib` (Windows: the `npm` dir) | `npm install -g --prefix <prefix> @openai/codex@latest` (package name from the manifest's `npmPackage`) |
+  | macOS and starts with `/opt/homebrew/Caskroom/codex/` or `/usr/local/Caskroom/codex/` | homebrew | `<prefix>/bin/brew upgrade --cask codex` |
+  | anything else: Microsoft Store, bun / pnpm global dirs, the Homebrew formula (`Cellar/codex`), a binary placed by hand, Linux `/usr/local` | unknown | — |
+
+  A Homebrew node keeps npm globals under `/opt/homebrew/lib/node_modules`: that path is npm, not Homebrew, which is why the Homebrew rule matches `Caskroom/codex` and not the bare prefix.
+- One run per provider: the provider id is added to the running set before the first `await`; a second request gets `in_progress` with no `output`.
+- The executable is the provider's resolved one with its env. Replace-mode argv stays in front of the subcommand; append-mode args are dropped (a CLI reads a subcommand after session flags as a prompt).
+- stdin is ignored; stdout and stderr are appended in arrival order and clipped to the tail while streaming.
+- The run ends on the child's `exit`, not on `close`: a self-updater can leave a background process that inherits stdout, and `close` then never comes. After `exit` wait at most 2 s for `close` (listen for it before awaiting `exit`, it can fire synchronously right after), then destroy both pipes.
+- Timeout and daemon shutdown kill the process tree (`terminateWithTreeKill`, 3 s grace).
+- Whenever the command ran, success or not: forget the provider's cached latest version, `refreshSettingsSnapshot({ providers: [provider] })`, then read the entry's `version` into the response. The snapshot push therefore reaches the client before the response.
+
+### 4. Validation & Error Matrix
+
+- Exit 0 → `ok: true`, `output`, `version` if readable.
+- Non-zero exit → `command_failed`, `error: "<command line> exited with code N"`, `output`.
+- Spawn failure → `command_failed`, `error` is the spawn error, `output` (possibly empty).
+- Past the timeout → `timeout`, partial `output`.
+- Snapshot refresh throws → logged at `warn`, result unchanged.
+- The service itself throws → `rpc_error` code `provider_upgrade_failed`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: installed `2.1.280`, `claude update` writes `2.1.285` → `{ ok: true, version: "2.1.285" }`, the next check re-queries npm without `force`.
+- Base: the CLI prints `EACCES` to stderr and exits 1 → `command_failed` with both streams in order and `version` still `2.1.280`.
+- Bad: waiting on `close` — `claude update` exits but its background helper holds the pipe, the request never answers, and every later upgrade of that provider gets `in_progress` until the daemon restarts.
+
+### 6. Tests Required
+
+- Unit `provider-upgrade-command.test.ts`: each provider's subcommand; replace argv kept; append args dropped; custom / ACP ids unsupported; every row of the Codex table (macOS / Linux / Windows standalone with `codexHome`, both Caskroom prefixes, npm under Homebrew node / official installer / nvm / Windows package and shim with the exact `prefix`, Store, bun, pnpm, formula, hand-placed, interpreter) and the exact command + `env` per method; tail clipping.
+- Daemon e2e `daemon-e2e/provider-upgrade.e2e.test.ts` with a fake `sh` CLI (version file + `update` branch): success updates the snapshot `version` and the exact argv; cached latest forgotten; raw output on failure; `in_progress` while a run holds a file lock; timeout with `upgradeTimeoutMs: 1000` keeps partial output; a background `sleep 30 &` does not hold the answer; custom providers `unsupported`.
+- Same e2e, Codex: `<tmp>/npm-prefix/bin/codex` symlinked to `lib/node_modules/@openai/codex/bin/codex.js`, a recording fake `npm` first on the provider env's `PATH` → argv is `install -g --prefix <realpath of the prefix> @openai/codex@latest` (assert on the argv, not `version`: the fake Codex has no app-server, so its entry is `error` and carries no version); a Codex outside every known layout → `install_method_unknown`, no `output`, npm never called.
+- `provider-registry.test.ts`: a wrapped profile still exposes `resolveCliLaunch`.
+- Protocol `messages.test.ts`: request for an unknown provider id; response with an unknown `errorCode`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Hangs forever when a grandchild inherits stdout.
+const exitCode = await new Promise<number | null>((resolve) => child.once("close", resolve));
+```
+
+#### Correct
+
+```ts
+const closed = once(child, "close").then(() => undefined, () => undefined);
+[exitCode] = (await once(child, "exit")) as [number | null];
+await drainOutput({ child, closed }); // race with a 2 s cap, then destroy the pipes
+```
+
+#### Wrong
+
+```ts
+// Upgrades with whichever npm PATH finds first: codex under nvm, npm from Homebrew → a second codex.
+return { kind: "run", command: "npm", args: ["install", "-g", "@openai/codex@latest"] };
+```
+
+#### Correct
+
+```ts
+return { kind: "run", command: "npm", args: ["install", "-g", "--prefix", install.prefix, `${npmPackage}@latest`] };
+```
+
 ## Errors on the wire
 
 Handlers do not throw across the socket. They catch at the handler boundary, map to a wire error with a string-literal `code`, log with `err`, and emit a failure payload. See [Error Handling](./error-handling.md) for `SessionRequestError` and the `toXWireError` mapping functions.

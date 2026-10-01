@@ -19,7 +19,7 @@ describe("agent provider runtime", () => {
     const runtime = await createAgentProviderRuntime({
       paseoHome: "/tmp/paseo-provider-runtime-test",
       logger: createTestLogger(),
-      snapshotManager: {},
+      snapshotManager: { providerOverrides: { opencode: { enabled: true } } },
     });
     const catalog = emptyCatalog();
 

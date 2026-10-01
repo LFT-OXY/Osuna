@@ -14,7 +14,7 @@
  * - provider ls --quiet outputs provider names only
  * - provider models claude lists claude models
  * - provider models codex lists codex models
- * - provider models opencode lists opencode models
+ * - provider models opencode lists opencode models once enabled
  * - provider models unknown fails with error
  * - provider models --json outputs valid JSON
  * - provider diagnostic shows the daemon's provider diagnostic
@@ -29,6 +29,7 @@ import {
   createTempDirs,
   runPaseoCli,
   startTestDaemon,
+  type TestDaemonContext,
 } from "./helpers/test-daemon.ts";
 
 console.log("=== Provider Commands ===\n");
@@ -146,11 +147,25 @@ let claudeModelsFromJson: ProviderModel[] = [];
 
 const ctx = await createE2ETestContext({ timeout: 120000 });
 
-async function runProviderModelsJson(provider: string): Promise<ProviderModel[]> {
+async function startDaemonWithProviders(
+  providers: Record<string, { enabled: boolean }>,
+): Promise<TestDaemonContext> {
+  const { paseoHome, workDir } = await createTempDirs();
+  await writeFile(
+    join(paseoHome, "config.json"),
+    JSON.stringify({ version: 1, agents: { providers } }, null, 2) + "\n",
+  );
+  return startTestDaemon({ paseoHome, workDir, timeout: 120000 });
+}
+
+async function runProviderModelsJson(
+  provider: string,
+  { daemon = ctx }: { daemon?: TestDaemonContext } = {},
+): Promise<ProviderModel[]> {
   const transientNeedles = ["transport closed", "timed out", "timeout", "socket", "econn"];
 
   async function attemptRun(attempt: number): Promise<ProviderModel[]> {
-    const result = await ctx.paseo(["provider", "models", provider, "--json"]);
+    const result = await runPaseoCli(daemon, ["provider", "models", provider, "--json"]);
     if (result.exitCode === 0) {
       return JSON.parse(result.stdout.trim()) as ProviderModel[];
     }
@@ -254,41 +269,26 @@ try {
       "should include opencode",
     );
     const rows = data as ProviderListRow[];
-    for (const provider of ["claude", "codex", "opencode"] as const) {
+    const defaultEnabled = {
+      claude: "Enabled",
+      codex: "Enabled",
+      pi: "Enabled",
+      omp: "Enabled",
+      copilot: "Disabled",
+      opencode: "Disabled",
+    };
+    for (const [provider, expected] of Object.entries(defaultEnabled)) {
       const row = rows.find((p) => p.provider === provider);
       assert(row, `should include ${provider}`);
-      assert.strictEqual(row.enabled, "Enabled", `${provider} should report Enabled`);
+      assert.strictEqual(row.enabled, expected, `${provider} should report ${expected} by default`);
     }
-
-    const omp = rows.find((p) => p.provider === "omp");
-    assert(omp, "should include omp");
-    assert.strictEqual(omp.enabled, "Disabled", "omp should report Disabled by default");
     console.log("✓ provider ls --json outputs valid JSON\n");
   }
 
   // Test 4: provider ls includes disabled providers
   {
     console.log("Test 4: provider ls includes disabled providers");
-    const { paseoHome, workDir } = await createTempDirs();
-    await writeFile(
-      join(paseoHome, "config.json"),
-      JSON.stringify(
-        {
-          version: 1,
-          agents: {
-            providers: {
-              claude: {
-                enabled: false,
-              },
-            },
-          },
-        },
-        null,
-        2,
-      ) + "\n",
-    );
-
-    const disabledCtx = await startTestDaemon({ paseoHome, workDir, timeout: 120000 });
+    const disabledCtx = await startDaemonWithProviders({ claude: { enabled: false } });
     try {
       const result = await runPaseoCli(disabledCtx, ["provider", "ls", "--json"]);
       assert.strictEqual(result.exitCode, 0, "provider ls should exit 0");
@@ -297,9 +297,9 @@ try {
       assert(claude, "disabled claude provider should stay in provider ls");
       assert.strictEqual(claude.enabled, "Disabled", "disabled provider should report Disabled");
 
-      const opencode = data.find((p) => p.provider === "opencode");
-      assert(opencode, "enabled opencode provider should stay in provider ls");
-      assert.strictEqual(opencode.enabled, "Enabled", "enabled provider should report Enabled");
+      const codex = data.find((p) => p.provider === "codex");
+      assert(codex, "enabled codex provider should stay in provider ls");
+      assert.strictEqual(codex.enabled, "Enabled", "enabled provider should report Enabled");
 
       const modelsResult = await runPaseoCli(disabledCtx, ["provider", "models", "claude"]);
       assert.notStrictEqual(
@@ -365,10 +365,31 @@ try {
     console.log("✓ provider models codex includes concrete codex model IDs\n");
   }
 
-  // Test 8: provider models opencode returns namespaced model IDs
+  // Test 8: provider models opencode returns namespaced model IDs once enabled
   {
     console.log("Test 8: provider models opencode returns namespaced model IDs");
-    const data = await runProviderModelsJson("opencode");
+    // Copilot 和 OpenCode 默认停用，要在 config 里显式打开。
+    const openCodeCtx = await startDaemonWithProviders({
+      copilot: { enabled: true },
+      opencode: { enabled: true },
+    });
+    let data: ProviderModel[];
+    try {
+      const lsResult = await runPaseoCli(openCodeCtx, ["provider", "ls", "--json"]);
+      assert.strictEqual(lsResult.exitCode, 0, "provider ls should exit 0");
+      const rows = JSON.parse(lsResult.stdout.trim()) as ProviderListRow[];
+      for (const provider of ["copilot", "opencode"]) {
+        const row = rows.find((p) => p.provider === provider);
+        assert.strictEqual(
+          row?.enabled,
+          "Enabled",
+          `${provider} enabled in config should report Enabled`,
+        );
+      }
+      data = await runProviderModelsJson("opencode", { daemon: openCodeCtx });
+    } finally {
+      await openCodeCtx.stop();
+    }
     assert(data.length >= 1, "opencode model list should not be empty");
     const ids = data.map((m) => m.id);
     assert(

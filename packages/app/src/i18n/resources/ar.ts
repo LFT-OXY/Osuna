@@ -1863,6 +1863,9 @@ export const ar: TranslationResources = {
     errors: {
       unableToInstall: "غير قادر على تثبيت الموفر",
     },
+    groups: {
+      acpCatalog: "كتالوج ACP",
+    },
   },
   providerSelection: {
     defaultModel: "تقصير",
@@ -3053,12 +3056,27 @@ export const ar: TranslationResources = {
       },
     },
     providers: {
-      title: "مقدمي الخدمات",
       addProvider: "إضافة مزود",
       providerDetails: "تفاصيل مزود{{name}}",
       enableProvider: "تمكين{{name}}",
       unavailable: "اتصل بهذا المضيف لرؤية مقدمي الخدمة",
       loading: "تحميل...",
+      empty: "لا يوجد مزودون مفعّلون. فعّل واحدًا من المتوقفة، أو اضغط + للإضافة.",
+      groups: {
+        enabled: "مفعّلة",
+        disabled: "متوقفة",
+      },
+      enablement: {
+        on: "مفعّل",
+        off: "متوقف",
+        enableErrorTitle: "تعذّر تفعيل {{name}}",
+        disableErrorTitle: "تعذّر إيقاف {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} متوقف",
+        description:
+          "لا يتم فحص المزوّدين المتوقفين ولا يظهرون في الجلسات الجديدة. شغّل المفتاح في الترويسة لتفعيله، وبعدها يتحقق Osuna مما إذا كان {{name}} مثبتًا على المضيف.",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "تعذّر تشغيل {{name}}",
       actions: {
@@ -3074,11 +3092,34 @@ export const ar: TranslationResources = {
       },
       statuses: {
         disabled: "عاجز",
+        disabledUntilEnabled: "متوقف · فعّله للتحقق مما إذا كان مثبتًا",
         loading: "تحميل",
         error: "خطأ",
         available: "متاح",
         notInstalled: "غير مثبت",
         apiEndpoint: "نقطة نهاية API: {{name}}",
+      },
+      version: {
+        title: "الإصدار",
+        installed: "المثبّت",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "ترقية",
+        actionLabel: "ترقية {{name}}",
+        actionTo: "ترقية إلى v{{version}}",
+        manualHint: "قم بترقيتها يدويًا بالأداة التي ثبّتها بها، أو اتبع الوثائق الرسمية.",
+        errors: {
+          failed: "فشلت الترقية",
+          unsupported: "لا يمكن ترقية هذا المزود تلقائيًا",
+          installMethodUnknown:
+            "تعذّر تحديد طريقة تثبيت واجهة سطر الأوامر هذه، لذا لا يمكن ترقيتها تلقائيًا",
+          notInstalled: "لم يتم العثور على واجهة سطر الأوامر على المضيف",
+          inProgress: "هناك ترقية قيد التنفيذ بالفعل",
+          timeout: "انتهت مهلة الترقية وتم إيقافها",
+          hostDisconnected: "المضيف غير متصل",
+        },
       },
       models: {
         title: "النماذج",
@@ -3094,7 +3135,6 @@ export const ar: TranslationResources = {
         loading: "جارٍ تحميل النماذج...",
         noSearchMatches: "لا توجد نماذج تطابق بحثك",
         noneDetected: "لم يتم اكتشاف أي نماذج",
-        disabledHint: "معطّل. سيكتشف Osuna نماذجه بعد تفعيله.",
         startFailed: "تعذّر التشغيل، لذا لم يتم اكتشاف أي نماذج.",
         discovered: "اكتشف",
         custom: "نماذج مخصصة",

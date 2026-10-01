@@ -1888,6 +1888,9 @@ export const en = {
     errors: {
       unableToInstall: "Unable to install provider",
     },
+    groups: {
+      acpCatalog: "ACP catalog",
+    },
   },
   providerSelection: {
     defaultModel: "Default",
@@ -3175,12 +3178,27 @@ export const en = {
       },
     },
     providers: {
-      title: "Providers",
       addProvider: "Add provider",
       providerDetails: "{{name}} provider details",
       enableProvider: "Enable {{name}}",
       unavailable: "Connect to this host to see providers",
       loading: "Loading...",
+      empty: "No providers enabled. Turn one on under Disabled, or press + to add one.",
+      groups: {
+        enabled: "Enabled",
+        disabled: "Disabled",
+      },
+      enablement: {
+        on: "Enabled",
+        off: "Disabled",
+        enableErrorTitle: "Unable to enable {{name}}",
+        disableErrorTitle: "Unable to disable {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} is disabled",
+        description:
+          "Disabled providers aren't checked and don't appear in new sessions. Turn on the switch in the header to enable it; Osuna then checks whether {{name}} is installed on the host.",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} can't start",
       actions: {
@@ -3196,11 +3214,35 @@ export const en = {
       },
       statuses: {
         disabled: "Disabled",
+        disabledUntilEnabled: "Disabled · Enable to check if it's installed",
         loading: "Loading",
         error: "Error",
         available: "Available",
         notInstalled: "Not installed",
         apiEndpoint: "API endpoint: {{name}}",
+      },
+      version: {
+        title: "Version",
+        installed: "Installed",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "Upgrade",
+        actionLabel: "Upgrade {{name}}",
+        actionTo: "Upgrade to v{{version}}",
+        manualHint:
+          "Upgrade it manually with the tool you installed it with, or follow the official docs.",
+        errors: {
+          failed: "Upgrade failed",
+          unsupported: "This provider can't be upgraded automatically",
+          installMethodUnknown:
+            "Couldn't tell how this CLI was installed, so it can't be upgraded automatically",
+          notInstalled: "The CLI wasn't found on the host",
+          inProgress: "An upgrade is already running",
+          timeout: "The upgrade timed out and was stopped",
+          hostDisconnected: "Host is not connected",
+        },
       },
       models: {
         title: "Models",
@@ -3216,7 +3258,6 @@ export const en = {
         loading: "Loading models...",
         noSearchMatches: "No models match your search",
         noneDetected: "No models detected",
-        disabledHint: "Disabled. Osuna detects its models once you enable it.",
         startFailed: "Couldn't start, so no models were detected.",
         discovered: "Discovered",
         custom: "Custom models",

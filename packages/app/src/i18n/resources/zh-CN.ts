@@ -1856,6 +1856,9 @@ export const zhCN: TranslationResources = {
     errors: {
       unableToInstall: "无法安装提供方",
     },
+    groups: {
+      acpCatalog: "ACP 目录",
+    },
   },
   providerSelection: {
     defaultModel: "默认",
@@ -3062,12 +3065,27 @@ export const zhCN: TranslationResources = {
       },
     },
     providers: {
-      title: "提供方",
       addProvider: "添加提供方",
       providerDetails: "{{name}} 提供方详情",
       enableProvider: "启用 {{name}}",
       unavailable: "连接到这个主机以查看提供方",
       loading: "正在加载...",
+      empty: "没有已启用的提供方。在“已停用”里打开一个，或点 + 添加。",
+      groups: {
+        enabled: "已启用",
+        disabled: "已停用",
+      },
+      enablement: {
+        on: "已启用",
+        off: "已停用",
+        enableErrorTitle: "无法启用 {{name}}",
+        disableErrorTitle: "无法停用 {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} 已停用",
+        description:
+          "已停用的提供方不检测，也不出现在新建会话里。打开页头的开关即可启用，启用后会检测主机上有没有装 {{name}}。",
+      },
       addErrorTitle: "无法添加提供方",
       startErrorTitle: "{{name}} 无法启动",
       actions: {
@@ -3083,11 +3101,33 @@ export const zhCN: TranslationResources = {
       },
       statuses: {
         disabled: "已禁用",
+        disabledUntilEnabled: "已停用 · 启用后检测是否已安装",
         loading: "正在加载",
         error: "错误",
         available: "可用",
         notInstalled: "未安装",
         apiEndpoint: "第三方接口：{{name}}",
+      },
+      version: {
+        title: "版本",
+        installed: "已安装",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "升级",
+        actionLabel: "升级 {{name}}",
+        actionTo: "升级到 v{{version}}",
+        manualHint: "请用当初安装它的方式手动升级，或参照官方文档。",
+        errors: {
+          failed: "升级失败",
+          unsupported: "这个提供方不支持自动升级",
+          installMethodUnknown: "判断不出这个 CLI 的安装方式，无法自动升级",
+          notInstalled: "主机上找不到这个 CLI",
+          inProgress: "已有升级在进行",
+          timeout: "升级超时，已终止",
+          hostDisconnected: "主机未连接",
+        },
       },
       models: {
         title: "模型",
@@ -3103,7 +3143,6 @@ export const zhCN: TranslationResources = {
         loading: "正在加载模型...",
         noSearchMatches: "没有匹配搜索的模型",
         noneDetected: "未检测到模型",
-        disabledHint: "已禁用。启用后 Osuna 才会检测它的模型。",
         startFailed: "启动失败，没有检测到模型。",
         discovered: "已发现",
         custom: "自定义模型",

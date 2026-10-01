@@ -465,6 +465,8 @@ export const ProviderSnapshotEntrySchema = z.object({
   isModelListAuthoritative: z.boolean().optional(),
   // 当前启用的第三方接口；官方模式下没有。
   activeApiEndpoint: ApiEndpointRefSchema.optional(),
+  // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
+  version: z.string().optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({
@@ -1865,6 +1867,24 @@ export const ProviderDiagnosticRequestMessageSchema = z.object({
 export const ProviderUsageListRequestMessageSchema = z.object({
   type: z.literal("provider.usage.list.request"),
   requestId: z.string(),
+});
+
+/**
+ * 查内置提供方有没有新版本。省略 providers 表示全部内置提供方；force 跳过 daemon 的缓存。
+ * daemon 只在收到这条请求时才联网（npm registry）。
+ */
+export const ProviderVersionCheckRequestSchema = z.object({
+  type: z.literal("provider.version.check.request"),
+  requestId: z.string(),
+  providers: z.array(z.string()).optional(),
+  force: z.boolean().optional(),
+});
+
+/** 用提供方自带的升级命令把这个内置提供方的 CLI 升到最新版本。会在主机上执行命令，需要 daemon.manage。 */
+export const ProviderUpgradeRequestSchema = z.object({
+  type: z.literal("provider.upgrade.request"),
+  requestId: z.string(),
+  provider: z.string(),
 });
 
 export const ResumeAgentRequestMessageSchema = z.object({
@@ -3348,6 +3368,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   RefreshProvidersSnapshotRequestMessageSchema,
   ProviderDiagnosticRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
+  ProviderVersionCheckRequestSchema,
+  ProviderUpgradeRequestSchema,
   ResumeAgentRequestMessageSchema,
   ImportAgentRequestMessageSchema,
   RefreshAgentRequestMessageSchema,
@@ -3838,6 +3860,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),
+        // COMPAT(providerVersions): added in v0.13.1, remove gate after 2027-04-01.
+        // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
+        providerVersions: z.boolean().optional(),
       })
       .optional(),
   })
@@ -6366,6 +6391,64 @@ export const ProviderUsageListResponseMessageSchema = z.object({
   }),
 });
 
+/**
+ * 一个内置提供方的检查结果。没装或读不出已装版本时不联网，只有 updateAvailable: false；
+ * 查最新版本失败时 error 是原因，其他提供方照常返回。
+ */
+export const ProviderVersionCheckResultSchema = z.object({
+  provider: z.string(),
+  installedVersion: z.string().optional(),
+  latestVersion: z.string().optional(),
+  updateAvailable: z.boolean(),
+  error: z.string().optional(),
+});
+export type ProviderVersionCheckResult = z.infer<typeof ProviderVersionCheckResultSchema>;
+
+export const ProviderVersionCheckResponseSchema = z.object({
+  type: z.literal("provider.version.check.response"),
+  payload: z.object({
+    requestId: z.string(),
+    results: z.array(ProviderVersionCheckResultSchema),
+  }),
+});
+
+/**
+ * provider.upgrade.response 的 errorCode 已知取值。线上是普通字符串，新 daemon 加的码旧 App 当作未知失败显示。
+ * - unsupported：这个提供方没有可用的升级命令（自定义、ACP 提供方等）
+ * - install_method_unknown：判断不出 CLI 的安装方式，无法选定升级命令
+ * - not_installed：找不到这个提供方的可执行文件
+ * - in_progress：同一个提供方已有升级在进行
+ * - command_failed：升级命令以非零状态退出或无法启动
+ * - timeout：升级命令超时被终止
+ */
+export const PROVIDER_UPGRADE_ERROR_CODES = [
+  "unsupported",
+  "install_method_unknown",
+  "not_installed",
+  "in_progress",
+  "command_failed",
+  "timeout",
+] as const;
+export type ProviderUpgradeErrorCode = (typeof PROVIDER_UPGRADE_ERROR_CODES)[number];
+
+/** ok 为假时 errorCode 说明原因；命令跑过就带上 output（stdout 与 stderr 按到达顺序合在一起，过长时只留结尾）。 */
+export const ProviderUpgradeResponseSchema = z.object({
+  type: z.literal("provider.upgrade.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: z.string(),
+    ok: z.boolean(),
+    // 升级后重新探测到的已装版本；读不出时省略。
+    version: z.string().optional(),
+    output: z.string().optional(),
+    errorCode: z.string().optional(),
+    error: z.string().optional(),
+  }),
+});
+export type ProviderUpgradeResponsePayload = z.infer<
+  typeof ProviderUpgradeResponseSchema
+>["payload"];
+
 const AgentSlashCommandSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -7013,6 +7096,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   RefreshProvidersSnapshotResponseMessageSchema,
   ProviderDiagnosticResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
+  ProviderVersionCheckResponseSchema,
+  ProviderUpgradeResponseSchema,
   ListCommandsResponseSchema,
   ListTerminalsResponseSchema,
   TerminalsChangedSchema,

@@ -12,11 +12,14 @@ import {
   ProviderDetailHeader,
   ProviderDetailMenu,
   ProviderDetailRefreshButton,
+  ProviderDetailScreenRefreshButton,
   type ProviderDetailHeaderProps,
   type ProviderDetailMenuProps,
 } from "./header";
 import type { ProviderDiagnosticState } from "./diagnostic";
 import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
+import type { ProviderUpgradeState } from "./upgrade";
+import { ProviderVersionSection } from "./version-section";
 
 function entry(overrides: Partial<ProviderSnapshotEntry>): ProviderSnapshotEntry {
   return {
@@ -83,21 +86,35 @@ function renderApiEndpoints(providerLabel: string) {
   return <div data-testid="api-endpoints-slot">{providerLabel}</div>;
 }
 
+function renderVersion(installedVersion: string) {
+  return <ProviderVersionSection installedVersion={installedVersion} />;
+}
+
 const IDLE_DIAGNOSTIC: ProviderDiagnosticState = { status: "idle" };
 
 function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
-  render(
+  const { rerender } = render(detailElement(overrides));
+  return {
+    rerender: (next: Partial<ProviderDetailSurfaceProps>) =>
+      rerender(detailElement({ ...overrides, ...next })),
+  };
+}
+
+function detailElement(overrides: Partial<ProviderDetailSurfaceProps>) {
+  return (
     <ProviderDetailSurface
       provider="claude"
       entries={[entry({})]}
       extendsProvider={undefined}
       hostPlatform="darwin"
       hostSupportsApiEndpoints
+      hostSupportsProviderVersions
       discoveredModels={[]}
       additionalModels={[]}
       isRefreshing={false}
       deletingModelId={null}
       removalError={null}
+      enablementError={null}
       diagnostic={IDLE_DIAGNOSTIC}
       diagnosticRevealRequest={0}
       onRefresh={noop}
@@ -105,12 +122,14 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       onRunDiagnostic={noop}
       onCopyDiagnostic={noop}
       onDismissRemovalError={noop}
+      onDismissEnablementError={noop}
       onDeleteCustomModel={noop}
       onAddCustomModel={resolved}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
+      renderVersion={renderVersion}
       {...overrides}
-    />,
+    />
   );
 }
 
@@ -246,13 +265,6 @@ describe("ProviderDetailSurface", () => {
     expect(
       screen.queryByPlaceholderText(i18n.t("settings.providers.models.searchPlaceholder")),
     ).toBeNull();
-  });
-
-  it("explains that a disabled provider has no models until enabled", () => {
-    renderDetail({ entries: [entry({ enabled: false })] });
-
-    expect(screen.getByText(i18n.t("settings.providers.models.disabledHint"))).toBeTruthy();
-    expect(screen.queryByText(i18n.t("settings.providers.models.noneDetected"))).toBeNull();
   });
 
   it("shows a loading state while the provider is loading and has no models yet", () => {
@@ -400,6 +412,86 @@ describe("ProviderDetailSurface", () => {
     expect(screen.queryByTestId("provider-inherited-api-endpoint")).toBeNull();
   });
 
+  // daemon 不探测已停用的提供方，快照里的 unavailable 不代表没装，所以不给安装指引。
+  it("shows only the disabled card for a disabled provider", () => {
+    renderDetail({
+      entries: [entry({ enabled: false, status: "unavailable", version: "2.1.280" })],
+    });
+
+    expect(screen.getByTestId("provider-disabled-card").textContent).toBe(
+      i18n.t("settings.providers.disabledCard.title", { name: "Claude Code" }) +
+        i18n.t("settings.providers.disabledCard.description", { name: "Claude Code" }),
+    );
+    for (const block of [
+      "provider-install-guide",
+      "provider-version-section",
+      "api-endpoints-slot",
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ]) {
+      expect(screen.queryByTestId(block)).toBeNull();
+    }
+  });
+
+  it("keeps a failed removal above the disabled card", () => {
+    renderDetail({
+      provider: "work-claude",
+      entries: [entry({ provider: "work-claude", label: "Work Claude", enabled: false })],
+      removalError: "config.json is read-only",
+    });
+
+    expect(blockOrder(["provider-disabled-card", "provider-removal-error"])).toEqual([
+      "provider-removal-error",
+      "provider-disabled-card",
+    ]);
+  });
+
+  it("turns the disabled card into the provider's sections in place once enabled", () => {
+    const { rerender } = renderDetail({ entries: [entry({ enabled: false })] });
+    expect(blockOrder(["provider-disabled-card"])).toEqual(["provider-disabled-card"]);
+
+    rerender({ entries: [entry({ status: "unavailable" })] });
+    expect(screen.queryByTestId("provider-disabled-card")).toBeNull();
+    expect(screen.getByTestId("provider-install-guide").textContent).toContain(
+      i18n.t("settings.providers.install.title", { name: "Claude Code" }),
+    );
+
+    rerender({ entries: [entry({ version: "2.1.280" })] });
+    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
+    expect(screen.getByTestId("provider-version-section").textContent).toContain("v2.1.280");
+    expect(blockOrder(["provider-diagnostic-section", "provider-models-section"])).toEqual([
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ]);
+  });
+
+  it.each([
+    [true, "settings.providers.enablement.enableErrorTitle"],
+    [false, "settings.providers.enablement.disableErrorTitle"],
+  ] as const)(
+    "shows a failed switch to enabled=%s at the top until dismissed",
+    (enabled, titleKey) => {
+      const onDismissEnablementError = vi.fn();
+      renderDetail({
+        entries: [entry({ enabled: !enabled })],
+        enablementError: { enabled, message: "config.json is read-only" },
+        onDismissEnablementError,
+      });
+
+      const alert = screen.getByTestId("provider-enablement-error");
+      expect(alert.textContent).toContain(i18n.t(titleKey, { name: "Claude Code" }));
+      expect(alert.textContent).toContain("config.json is read-only");
+      const firstBlock = enabled ? "provider-disabled-card" : "provider-models-section";
+      expect(blockOrder([firstBlock, "provider-enablement-error"])).toEqual([
+        "provider-enablement-error",
+        firstBlock,
+      ]);
+
+      fireEvent.click(within(alert).getByText(i18n.t("common.actions.dismiss")));
+      expect(onDismissEnablementError).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("shows a failed removal at the top until dismissed", () => {
     const onDismissRemovalError = vi.fn();
     renderDetail({
@@ -446,6 +538,204 @@ describe("ProviderDetailSurface", () => {
     expect(
       blockOrder(["provider-install-platform-macos", "provider-inherited-api-endpoint"]),
     ).toEqual(["provider-inherited-api-endpoint", "provider-install-platform-macos"]);
+  });
+
+  it("shows the installed version", () => {
+    renderDetail({ entries: [entry({ version: "2.1.280" })] });
+
+    const text = screen.getByTestId("provider-version-section").textContent;
+    expect(text).toContain(i18n.t("settings.providers.version.title"));
+    expect(text).toContain(i18n.t("settings.providers.version.installed"));
+    expect(text).toContain("v2.1.280");
+  });
+
+  it("shows the newer version next to the installed one", () => {
+    renderDetail({
+      entries: [entry({ version: "2.1.280" })],
+      renderVersion: (installedVersion) => (
+        <ProviderVersionSection installedVersion={installedVersion} latestVersion="2.1.285" />
+      ),
+    });
+
+    expect(screen.getByTestId("provider-version-section").textContent).toContain(
+      "v2.1.280 → v2.1.285",
+    );
+  });
+
+  function renderUpgradableVersion(input: {
+    provider?: string;
+    providerLabel?: string;
+    latestVersion?: string;
+    state: ProviderUpgradeState;
+    onUpgrade?: () => void;
+    onDismissFailure?: () => void;
+    onOpenDocs?: (url: string) => void;
+  }) {
+    // 经展开传入：upgrade 是对象，直接写在 JSX 属性上会被 react-perf 规则拦下。
+    const sectionProps = {
+      latestVersion: input.latestVersion,
+      upgrade: {
+        provider: input.provider ?? "claude",
+        providerLabel: input.providerLabel ?? "Claude Code",
+        state: input.state,
+        onUpgrade: input.onUpgrade ?? noop,
+        onDismissFailure: input.onDismissFailure ?? noop,
+        onOpenDocs: input.onOpenDocs ?? noop,
+      },
+    };
+    renderDetail({
+      entries: [entry({ version: "2.1.280" })],
+      renderVersion: (installedVersion) => (
+        <ProviderVersionSection installedVersion={installedVersion} {...sectionProps} />
+      ),
+    });
+  }
+
+  function upgradeButton() {
+    return within(screen.getByTestId("provider-version-section")).getByRole("button", {
+      name: i18n.t("settings.providers.upgrade.actionLabel", { name: "Claude Code" }),
+    });
+  }
+
+  it("offers an upgrade in the version section when a newer version exists", () => {
+    const onUpgrade = vi.fn();
+    renderUpgradableVersion({ latestVersion: "2.1.285", state: { status: "idle" }, onUpgrade });
+
+    fireEvent.click(upgradeButton());
+
+    expect(onUpgrade).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no upgrade without a newer version", () => {
+    renderUpgradableVersion({ state: { status: "idle" } });
+
+    expect(
+      within(screen.getByTestId("provider-version-section")).queryByRole("button", {
+        name: i18n.t("settings.providers.upgrade.actionLabel", { name: "Claude Code" }),
+      }),
+    ).toBeNull();
+  });
+
+  it("disables the upgrade while it runs", () => {
+    const onUpgrade = vi.fn();
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: { status: "upgrading" },
+      onUpgrade,
+    });
+
+    fireEvent.click(upgradeButton());
+
+    expect(upgradeButton().getAttribute("aria-disabled")).toBe("true");
+    expect(onUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("shows a failed upgrade's output in the version section until dismissed", () => {
+    const onDismissFailure = vi.fn();
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: {
+        status: "failed",
+        errorCode: "timeout",
+        error: "claude update timed out after 600s",
+        output: "Downloading 2.1.285...",
+      },
+      onDismissFailure,
+    });
+
+    const failure = within(screen.getByTestId("provider-version-section")).getByTestId(
+      "provider-upgrade-failure",
+    );
+    expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.errors.timeout"));
+    expect(within(failure).getByTestId("provider-upgrade-output").textContent).toContain(
+      "Downloading 2.1.285...",
+    );
+    fireEvent.click(within(failure).getByText(i18n.t("common.actions.dismiss")));
+    expect(onDismissFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains a failure it has no message for with the raw error", () => {
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: { status: "failed", errorCode: null, error: "Transport not connected", output: null },
+    });
+
+    const failure = screen.getByTestId("provider-upgrade-failure");
+    expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.errors.failed"));
+    expect(failure.textContent).toContain("Transport not connected");
+    expect(within(failure).queryByTestId("provider-upgrade-output")).toBeNull();
+  });
+
+  it("points to manual upgrade instructions when the install method is unknown", () => {
+    const onOpenDocs = vi.fn();
+    renderUpgradableVersion({
+      onOpenDocs,
+      provider: "codex",
+      providerLabel: "Codex",
+      latestVersion: "0.131.0",
+      state: {
+        status: "failed",
+        errorCode: "install_method_unknown",
+        error: "Could not tell how codex was installed from /home/me/bin/codex",
+        output: null,
+      },
+    });
+
+    const failure = screen.getByTestId("provider-upgrade-failure");
+    expect(failure.textContent).toContain(
+      i18n.t("settings.providers.upgrade.errors.installMethodUnknown"),
+    );
+    expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.manualHint"));
+    expect(failure.textContent).not.toContain("/home/me/bin/codex");
+    fireEvent.click(
+      within(failure).getByRole("link", {
+        name: i18n.t("settings.providers.install.docsFor", { name: "Codex" }),
+      }),
+    );
+    expect(onOpenDocs).toHaveBeenCalledWith("https://learn.chatgpt.com/docs/codex/cli");
+  });
+
+  it("orders errors, the version, API endpoints, Models, then the diagnostic", () => {
+    // 启动出错的提供方快照里不带版本，这里用删除失败提示代表顶部的错误类提示。
+    renderDetail({ entries: [entry({ version: "2.1.280" })], removalError: "boom" });
+
+    const blocks = [
+      "provider-removal-error",
+      "provider-version-section",
+      "api-endpoints-slot",
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ];
+    expect(blockOrder(blocks.toReversed())).toEqual(blocks);
+  });
+
+  it("shows the version or the install guide, never both", () => {
+    renderDetail({ entries: [entry({ version: "2.1.280" })] });
+    expect(screen.getByTestId("provider-version-section").textContent).toContain("v2.1.280");
+    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
+    cleanup();
+
+    // daemon 不会给未安装的提供方填 version；这里故意带上，验证互斥由详情页自己保证。
+    renderDetail({ entries: [entry({ status: "unavailable", version: "2.1.280" })] });
+    expect(screen.getByTestId("provider-install-guide").textContent).toContain(
+      i18n.t("settings.providers.install.title", { name: "Claude Code" }),
+    );
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
+  });
+
+  it("shows no version section when the version could not be read", () => {
+    renderDetail({ entries: [entry({})] });
+
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
+  });
+
+  it("hides the version when the host does not report provider versions", () => {
+    renderDetail({
+      entries: [entry({ version: "2.1.280" })],
+      hostSupportsProviderVersions: false,
+    });
+
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
   });
 
   it("offers the diagnostic at the bottom, explaining what it checks", () => {
@@ -583,9 +873,33 @@ function renderHeader(overrides: Partial<ProviderDetailHeaderProps> = {}) {
   );
 }
 
-function renderRefreshButton(isRefreshing: boolean) {
+function renderRefreshButton({
+  isRefreshing,
+  disabled = false,
+}: {
+  isRefreshing: boolean;
+  disabled?: boolean;
+}) {
   const onRefresh = vi.fn();
-  render(<ProviderDetailRefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />);
+  render(
+    <ProviderDetailRefreshButton
+      isRefreshing={isRefreshing}
+      disabled={disabled}
+      onRefresh={onRefresh}
+    />,
+  );
+  return { onRefresh };
+}
+
+function renderScreenRefreshButton({ disabled }: { disabled: boolean }) {
+  const onRefresh = vi.fn();
+  render(
+    <ProviderDetailScreenRefreshButton
+      isRefreshing={false}
+      disabled={disabled}
+      onRefresh={onRefresh}
+    />,
+  );
   return { onRefresh };
 }
 
@@ -624,7 +938,7 @@ describe("ProviderDetailRefreshButton", () => {
   });
 
   it("refreshes the provider", () => {
-    const { onRefresh } = renderRefreshButton(false);
+    const { onRefresh } = renderRefreshButton({ isRefreshing: false });
 
     fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refresh")));
 
@@ -632,11 +946,42 @@ describe("ProviderDetailRefreshButton", () => {
   });
 
   it("shows refresh in progress and blocks another refresh", () => {
-    const { onRefresh } = renderRefreshButton(true);
+    const { onRefresh } = renderRefreshButton({ isRefreshing: true });
 
     fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refreshing")));
 
     expect(screen.queryByText(i18n.t("settings.providers.diagnostic.refresh"))).toBeNull();
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  // daemon 不探测已停用的提供方，停用时刷新没有意义。
+  it("cannot refresh a disabled provider", () => {
+    const { onRefresh } = renderRefreshButton({ isRefreshing: false, disabled: true });
+
+    fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refresh")));
+
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProviderDetailScreenRefreshButton", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("refreshes the provider from the phone header", () => {
+    const { onRefresh } = renderScreenRefreshButton({ disabled: false });
+
+    fireEvent.click(screen.getByLabelText(i18n.t("settings.providers.diagnostic.refresh")));
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("cannot refresh a disabled provider", () => {
+    const { onRefresh } = renderScreenRefreshButton({ disabled: true });
+
+    fireEvent.click(screen.getByLabelText(i18n.t("settings.providers.diagnostic.refresh")));
+
     expect(onRefresh).not.toHaveBeenCalled();
   });
 });

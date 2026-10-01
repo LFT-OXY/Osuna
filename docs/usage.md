@@ -120,8 +120,8 @@ This is the only network request the daemon makes on its own initiative. It is
 a plain GET to `raw.githubusercontent.com` for that one public file: no
 authentication, no query string, no request body, nothing about you or your
 machine beyond the IP and user agent any HTTP request carries. Everything else
-the daemon fetches is either something you asked for or a connection you turned
-on.
+the daemon fetches is either something you asked for, such as the CLI update
+check below, or a connection you turned on.
 
 It runs 30 seconds after start and every 24 hours after that. It skips the
 request when the table it already fetched is younger than a day; a daemon still
@@ -133,9 +133,19 @@ hour later, and never replaces the table you already have.
 
 Turn it off with `features.usage.pricing.autoUpdate: false` in `config.json`, or
 `PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices from
-the built-in snapshot and your own prices, and never reaches the network —
+the built-in snapshot and your own prices, and never fetches the table —
 including on a host that has no network at all. The switch covers the automatic
 check only: "Refresh now" in the price table still fetches when you press it.
+
+The CLI update check runs only when you ask for it. Opening Settings →
+Providers, or pressing refresh on a provider there, makes the daemon look up the
+latest release of each installed built-in CLI: one GET per CLI to
+`registry.npmjs.org/-/package/<package>/dist-tags`. The package name is the
+whole request; your installed version is not sent, the daemon compares the two
+itself. The answers stay in memory for an hour, so reopening the page
+does not ask again; refresh does. Nothing is looked up at startup, on a timer,
+or for a CLI that is disabled, not installed, or whose version could not be read. The price table switch does not
+cover it.
 
 ## Your own prices
 

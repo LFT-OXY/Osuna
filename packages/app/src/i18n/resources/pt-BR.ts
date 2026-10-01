@@ -1897,6 +1897,9 @@ export const ptBR: TranslationResources = {
     errors: {
       unableToInstall: "Não foi possível instalar provedor",
     },
+    groups: {
+      acpCatalog: "Catálogo ACP",
+    },
   },
   providerSelection: {
     defaultModel: "Padrão",
@@ -3101,12 +3104,27 @@ export const ptBR: TranslationResources = {
       },
     },
     providers: {
-      title: "Provedores",
       addProvider: "Adicionar provedor",
       providerDetails: "Detalhes do provedor {{name}}",
       enableProvider: "Ativar {{name}}",
       unavailable: "Conecte-se a este host para ver provedores",
       loading: "Carregando...",
+      empty: "Nenhum provedor ativado. Ative um em Desativados ou toque em + para adicionar um.",
+      groups: {
+        enabled: "Ativados",
+        disabled: "Desativados",
+      },
+      enablement: {
+        on: "Ativado",
+        off: "Desativado",
+        enableErrorTitle: "Não foi possível ativar {{name}}",
+        disableErrorTitle: "Não foi possível desativar {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} está desativado",
+        description:
+          "Provedores desativados não são verificados e não aparecem em novas sessões. Ligue a chave no cabeçalho para ativá-lo; depois o Osuna verifica se {{name}} está instalado no host.",
+      },
       addErrorTitle: "Não foi possível adicionar provedor",
       startErrorTitle: "{{name}} não consegue iniciar",
       actions: {
@@ -3122,11 +3140,35 @@ export const ptBR: TranslationResources = {
       },
       statuses: {
         disabled: "Desativado",
+        disabledUntilEnabled: "Desativado · Ative para verificar se está instalado",
         loading: "Carregando",
         error: "Erro",
         available: "Disponível",
         notInstalled: "Não instalado",
         apiEndpoint: "Endpoint de API: {{name}}",
+      },
+      version: {
+        title: "Versão",
+        installed: "Instalada",
+        value: "v{{version}}",
+        update: "v{{from}} → v{{to}}",
+      },
+      upgrade: {
+        action: "Atualizar",
+        actionLabel: "Atualizar {{name}}",
+        actionTo: "Atualizar para v{{version}}",
+        manualHint:
+          "Atualize-a manualmente com a ferramenta que você usou para instalá-la, ou siga a documentação oficial.",
+        errors: {
+          failed: "Falha ao atualizar",
+          unsupported: "Este provedor não pode ser atualizado automaticamente",
+          installMethodUnknown:
+            "Não foi possível identificar como esta CLI foi instalada, então ela não pode ser atualizada automaticamente",
+          notInstalled: "A CLI não foi encontrada no host",
+          inProgress: "Já há uma atualização em andamento",
+          timeout: "A atualização excedeu o tempo limite e foi interrompida",
+          hostDisconnected: "O host não está conectado",
+        },
       },
       models: {
         title: "Modelos",
@@ -3142,7 +3184,6 @@ export const ptBR: TranslationResources = {
         loading: "Carregando modelos...",
         noSearchMatches: "Nenhum modelo corresponde à sua busca",
         noneDetected: "Nenhum modelo detectado",
-        disabledHint: "Desativado. O Osuna detecta os modelos dele quando você o ativar.",
         startFailed: "Não foi possível iniciar, então nenhum modelo foi detectado.",
         discovered: "Descobertos",
         custom: "Modelos personalizados",

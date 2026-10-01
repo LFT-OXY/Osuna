@@ -169,6 +169,109 @@ describe("workspace descriptor message compatibility", () => {
   });
 });
 
+describe("provider version check message contract", () => {
+  test("accepts the check request with and without its optional fields", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "provider.version.check.request",
+        requestId: "check-1",
+      }),
+    ).toEqual({ type: "provider.version.check.request", requestId: "check-1" });
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "provider.version.check.request",
+        requestId: "check-2",
+        providers: ["claude", "a-provider-this-client-has-never-seen"],
+        force: true,
+      }),
+    ).toMatchObject({
+      providers: ["claude", "a-provider-this-client-has-never-seen"],
+      force: true,
+    });
+  });
+
+  test("accepts results that omit the versions and the error", () => {
+    const parsed = SessionOutboundMessageSchema.parse({
+      type: "provider.version.check.response",
+      payload: {
+        requestId: "check-3",
+        results: [
+          {
+            provider: "claude",
+            installedVersion: "2.1.280",
+            latestVersion: "2.1.285",
+            updateAvailable: true,
+          },
+          { provider: "codex", updateAvailable: false },
+          {
+            provider: "copilot",
+            installedVersion: "1.0.89",
+            updateAvailable: false,
+            error: "timeout",
+          },
+        ],
+      },
+    });
+
+    if (parsed.type !== "provider.version.check.response") {
+      throw new Error("Expected provider.version.check.response");
+    }
+    expect(parsed.payload.results.map((result) => result.provider)).toEqual([
+      "claude",
+      "codex",
+      "copilot",
+    ]);
+  });
+});
+
+describe("provider upgrade message contract", () => {
+  test("accepts the upgrade request for any provider id", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "provider.upgrade.request",
+        requestId: "upgrade-1",
+        provider: "a-provider-this-client-has-never-seen",
+      }),
+    ).toEqual({
+      type: "provider.upgrade.request",
+      requestId: "upgrade-1",
+      provider: "a-provider-this-client-has-never-seen",
+    });
+  });
+
+  test("accepts a success without output and a failure with an unknown error code", () => {
+    const success = SessionOutboundMessageSchema.parse({
+      type: "provider.upgrade.response",
+      payload: { requestId: "upgrade-2", provider: "pi", ok: true, version: "0.80.0" },
+    });
+    const failure = SessionOutboundMessageSchema.parse({
+      type: "provider.upgrade.response",
+      payload: {
+        requestId: "upgrade-3",
+        provider: "pi",
+        ok: false,
+        output: "npm ERR! EACCES",
+        errorCode: "a_code_from_a_newer_daemon",
+        error: "pi update exited with code 1",
+      },
+    });
+
+    if (
+      success.type !== "provider.upgrade.response" ||
+      failure.type !== "provider.upgrade.response"
+    ) {
+      throw new Error("Expected provider.upgrade.response");
+    }
+    expect(success.payload).toEqual({
+      requestId: "upgrade-2",
+      provider: "pi",
+      ok: true,
+      version: "0.80.0",
+    });
+    expect(failure.payload.errorCode).toBe("a_code_from_a_newer_daemon");
+  });
+});
+
 describe("provider usage list message contract", () => {
   test("accepts the usage list request as a namespaced correlated RPC", () => {
     const parsed = SessionInboundMessageSchema.parse({

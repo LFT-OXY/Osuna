@@ -15,9 +15,35 @@ import {
 } from "../../agent/provider-snapshot-manager.js";
 import type { ProviderSnapshotEntry } from "../../agent/agent-sdk-types.js";
 import { ProviderUsageService } from "../../../services/quota-fetcher/service.js";
+import { ProviderVersionCheckService } from "../../agent/provider-version-check.js";
+import { ProviderUpgradeService } from "../../agent/provider-upgrade.js";
 import { expandProviderSnapshot } from "@getpaseo/protocol/provider-snapshot-codec";
 
 type SnapshotChangeHandler = (transition: ProviderSnapshotTransition) => void;
+
+// 这组测试不涉及版本检查；真要查就失败，而不是去联网。
+function createOfflineVersionCheckService(): ProviderVersionCheckService {
+  return new ProviderVersionCheckService({
+    listProviders: async () => [],
+    fetchLatestVersion: async ({ npmPackage }) => {
+      throw new Error(`No registry in this test for ${npmPackage}`);
+    },
+    logger: pino({ level: "silent" }),
+  });
+}
+
+// 这组测试不涉及升级；真要升级就失败，而不是去执行命令。
+function createUnusedUpgradeService(): ProviderUpgradeService {
+  return new ProviderUpgradeService({
+    readProvider: async (provider) => {
+      throw new Error(`No upgrades in this test for ${provider}`);
+    },
+    resolveCliLaunch: async () => null,
+    refreshProvider: async () => undefined,
+    forgetLatestVersion: () => undefined,
+    logger: pino({ level: "silent" }),
+  });
+}
 
 interface MakeOptions {
   visibleProviders?: Set<string>;
@@ -74,6 +100,8 @@ function makeSubsystem(options: MakeOptions = {}) {
     host,
     providerSnapshotManager,
     providerUsageService: createStub<ProviderUsageService>(options.usage ?? {}),
+    providerVersionCheckService: createOfflineVersionCheckService(),
+    providerUpgradeService: createUnusedUpgradeService(),
     logger: pino({ level: "silent" }),
   });
   function pushSnapshotChange(
@@ -392,6 +420,8 @@ it("announces shared content without retransmitting models or hashing discovery 
         logger: pino({ level: "silent" }),
         fetchers: [],
       }),
+      providerVersionCheckService: createOfflineVersionCheckService(),
+      providerUpgradeService: createUnusedUpgradeService(),
       host: {
         emit(message) {
           emitted.push(message);
