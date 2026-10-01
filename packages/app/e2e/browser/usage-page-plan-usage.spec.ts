@@ -189,13 +189,21 @@ test.describe("plan usage on the usage page", () => {
         timeout: 30_000,
       });
       await usageFixture.waitForRequestCount(1);
-      // 圆环弹层和窄栏读同一份取数结果：弹层已显示这条错误，窄栏也已按它渲染。
+      // 圆环弹层和窄栏读同一份取数结果。桌面弹层不含套餐用量，换到手机视口（没有窄栏，
+      // 弹层带套餐卡片）确认这条错误已经到了，再回桌面看窄栏。
+      await page.setViewportSize({ width: 390, height: 844 });
       await page.getByTestId("context-window-meter").hover();
-      await expect(page.getByText("Mock provider auth expired", { exact: true })).toBeVisible({
+      await expect(
+        page
+          .getByTestId("context-window-popover")
+          .getByText("Mock provider auth expired", { exact: true }),
+      ).toBeVisible({ timeout: 10_000 });
+      await page.mouse.move(0, 0);
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await expect(page.getByTestId("composer-context-strip-branch-switcher")).toBeVisible({
         timeout: 10_000,
       });
       await expect(page.getByTestId("composer-plan-usage")).toHaveCount(0);
-      await page.mouse.move(0, 0);
 
       await openUsagePageFromShell(page);
       const card = page.getByTestId("usage-plan-usage-card");

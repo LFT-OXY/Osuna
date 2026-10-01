@@ -2267,9 +2267,8 @@ export const ko: TranslationResources = {
   },
   contextWindow: {
     title: "컨텍스트 윈도우",
-    used: "{{percentage}}% 사용됨",
-    tokens: "{{used}} / {{max}} 토큰",
-    sessionCost: "추정 비용 {{cost}}",
+    usedLabel: "사용됨",
+    tokens: "토큰",
     accessibility: "컨텍스트 윈도우 {{percentage}}% 사용됨, {{used}} / {{max}}",
     sessionTotal: {
       title: "세션 합계",

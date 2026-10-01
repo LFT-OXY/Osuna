@@ -58,9 +58,9 @@ const styles = StyleSheet.create((theme) => ({
     // Same token the popover draws its own outline with, so the rule reads as the
     // popover's edge. `border` is invisible here (equals the popover background).
     backgroundColor: theme.colors.borderAccent,
-    marginVertical: theme.spacing[2],
+    marginVertical: theme.spacing[3],
     // Cancel the tooltip content's horizontal padding so the rule spans edge to edge.
-    marginHorizontal: -theme.spacing[2],
+    marginHorizontal: -theme.spacing[3],
   },
   detail: {
     color: theme.colors.foregroundMuted,

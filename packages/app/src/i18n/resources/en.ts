@@ -2280,9 +2280,8 @@ export const en = {
   },
   contextWindow: {
     title: "Context window",
-    used: "{{percentage}}% used",
-    tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "Estimated cost {{cost}}",
+    usedLabel: "used",
+    tokens: "Tokens",
     accessibility: "Context window {{percentage}}% used, {{used}} of {{max}}",
     sessionTotal: {
       title: "Session total",

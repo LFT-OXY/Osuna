@@ -63,7 +63,6 @@ const zhCNEnglishAllowlist = {
   abbreviations: [
     "desktop.daemon.status.pid",
     "desktop.updates.callout.downloadProgress",
-    "contextWindow.tokens",
     "usage.planUsage.strip.windows.fiveHour",
     "settings.providers.apiEndpoints.form.baseUrl",
     "settings.providers.apiEndpoints.form.apiKey",
@@ -782,7 +781,7 @@ describe("translation resources", () => {
     expect(en.renameModal.saving).toBe("Saving...");
     expect(en.sidebarCallout.dismiss).toBe("Dismiss");
     expect(en.contextWindow.title).toBe("Context window");
-    expect(en.contextWindow.used).toBe("{{percentage}}% used");
+    expect(en.contextWindow.usedLabel).toBe("used");
   });
 
   it("includes view-model and policy utility keys for the Batch 4N migration", () => {

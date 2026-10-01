@@ -2276,9 +2276,8 @@ export const ja: TranslationResources = {
   },
   contextWindow: {
     title: "コンテキストウィンドウ",
-    used: "{{percentage}}%使用",
-    tokens: "{{used}} / {{max}}トークン",
-    sessionCost: "推定コスト {{cost}}",
+    usedLabel: "使用",
+    tokens: "トークン",
     accessibility: "コンテキストウィンドウ {{percentage}}% 使用、{{used}} / {{max}}",
     sessionTotal: {
       title: "セッション合計",

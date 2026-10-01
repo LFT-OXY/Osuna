@@ -2244,9 +2244,8 @@ export const zhCN: TranslationResources = {
   },
   contextWindow: {
     title: "上下文窗口",
-    used: "已使用 {{percentage}}%",
-    tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "估算成本 {{cost}}",
+    usedLabel: "已使用",
+    tokens: "Token",
     accessibility: "上下文窗口已使用 {{percentage}}%，{{used}} / {{max}}",
     sessionTotal: {
       title: "本会话合计",

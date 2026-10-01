@@ -2313,9 +2313,8 @@ export const fr: TranslationResources = {
   },
   contextWindow: {
     title: "Fenêtre contextuelle",
-    used: "{{percentage}}% utilisé",
-    tokens: "Jetons{{used}}/{{max}}",
-    sessionCost: "Coût estimé {{cost}}",
+    usedLabel: "utilisé",
+    tokens: "Jetons",
     accessibility: "Fenêtre contextuelle {{percentage}}% utilisée, {{used}} sur {{max}}",
     sessionTotal: {
       title: "Total de la session",

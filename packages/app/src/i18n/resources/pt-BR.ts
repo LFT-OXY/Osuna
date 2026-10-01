@@ -2291,9 +2291,8 @@ export const ptBR: TranslationResources = {
   },
   contextWindow: {
     title: "Janela de contexto",
-    used: "{{percentage}}% usado",
-    tokens: "{{used}} / {{max}} tokens",
-    sessionCost: "Custo estimado {{cost}}",
+    usedLabel: "usado",
+    tokens: "Tokens",
     accessibility: "Janela de contexto {{percentage}}% usada, {{used}} de {{max}}",
     sessionTotal: {
       title: "Total da sessão",
