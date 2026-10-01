@@ -307,9 +307,12 @@ export const ko: TranslationResources = {
     tooManyMatches: "일치 항목이 너무 많습니다 — 검색 범위를 좁히세요",
     hostLoadFailed: "{{host}}: 기록을 불러오지 못했습니다",
     searchPlaceholder: "기록 검색",
+    emptyHost: "No sessions for this host",
+    loadFailed: "Unable to load sessions",
     actions: {
       loadMore: "더 불러오기",
       clearSearch: "검색 지우기",
+      tryAgain: "Try again",
     },
   },
   agentList: {
@@ -350,18 +353,26 @@ export const ko: TranslationResources = {
     },
     turnUsage: {
       title: "이번 턴 사용량",
-      total: "합계",
-      duration: "소요 시간",
+      estimatedCost: "추정 비용",
+      model: "모델",
+      byModel: "모델별",
       note: "추정 비용 · 공개 API 요금 기준",
       unpriced: "가격 정보 없음",
-      reasoning: "(추론 {{tokens}})",
+      unpricedWarningOne:
+        "{{models}} 모델은 가격 정보가 없어 $0으로 계산했습니다. 설정 › 가격표에서 맞춤 가격을 설정할 수 있습니다.",
+      unpricedWarningMany:
+        "{{models}} 모델은 가격 정보가 없어 $0으로 계산했습니다. 설정 › 가격표에서 맞춤 가격을 설정할 수 있습니다.",
+      modelSeparator: ", ",
       accessibility: "이번 턴 사용량: 입력 {{input}}, 출력 {{output}}, {{cost}}",
-      columns: {
-        model: "모델",
+      stats: {
         input: "입력",
         cache: "캐시",
         output: "출력",
-        cost: "비용",
+        reasoning: "그중 추론",
+      },
+      amounts: {
+        cache: "캐시 {{tokens}}",
+        reasoning: "추론 {{tokens}}",
       },
     },
     diagram: {
@@ -451,6 +462,7 @@ export const ko: TranslationResources = {
     },
     filters: {
       all: "전체",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "세션을 가져오려면 호스트에 연결하세요",
@@ -459,6 +471,7 @@ export const ko: TranslationResources = {
       loading: "최근 세션을 불러오는 중...",
       failedProvider: "{{provider}} 세션을 불러올 수 없습니다",
       failedImport: "선택한 세션을 가져올 수 없습니다.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "세션 새로고침",
@@ -499,6 +512,7 @@ export const ko: TranslationResources = {
         restoringAction: "복원 중...",
         unavailableTitle: "워크스페이스를 사용할 수 없습니다",
         checkFailedTitle: "워크스페이스를 확인하지 못했습니다",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -644,6 +658,9 @@ export const ko: TranslationResources = {
       devices: {
         label: "장치 크기",
         responsive: "반응형",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "페이지를 불러오지 못했습니다",
@@ -655,6 +672,11 @@ export const ko: TranslationResources = {
       hostDisconnected: "호스트가 연결되어 있지 않습니다",
       updateHost: "기본 터미널 렌더러를 사용하도록 호스트를 업데이트합니다.",
       unableToSubscribe: "터미널을 구독할 수 없습니다",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "불러오는 중...",
@@ -764,6 +786,10 @@ export const ko: TranslationResources = {
           tabs: "탭 {{tabs}}개를 닫습니다.",
           agents: "에이전트 {{agents}}개를 보관합니다.",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1028,6 +1054,9 @@ export const ko: TranslationResources = {
         actions: {
           viewPullRequest: "보기",
           openOn: "{{brand}}에서 열기",
+          addToChat: "Add to chat",
+          addAllToChat: "Add all to chat",
+          addingToChat: "Adding...",
         },
         checksSummary: {
           passedLabel: "통과",
@@ -1041,14 +1070,40 @@ export const ko: TranslationResources = {
           checks: "검사",
           pipeline: "파이프라인",
           reviews: "리뷰",
+          activity: "Activity",
         },
         empty: {
           noJobs: "작업 없음",
           loadingPipeline: "파이프라인 로드 중…",
           pipelineJobsLoadFailed: "파이프라인 작업을 로드할 수 없습니다.",
           allowedToFail: "실패가 허용됨",
+          noActivity: "No activity yet",
         },
         approvals: "{{required}} 중 {{given}} 승인",
+        checks: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          countSeparator: ", ",
+          countLine: {
+            one: "{{parts}} check",
+            many: "{{parts}} checks",
+          },
+          accessibilityLabel: "{{headline}}. {{detail}}",
+        },
         accessibility: {
           pullRequest: "풀 리퀘스트 #{{number}}",
           pullRequest_mr: "병합 요청 !{{number}}",
@@ -1062,6 +1117,8 @@ export const ko: TranslationResources = {
             skipped: "건너뜀",
             cancelled: "취소됨",
           },
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
         },
         states: {
           draft: "초안",
@@ -1080,6 +1137,8 @@ export const ko: TranslationResources = {
         },
         thread: {
           discussion: "토론 스레드",
+          resolved: "Resolved",
+          outdated: "Outdated",
         },
         errors: {
           statusLoadFailed: "풀 리퀘스트 상태를 불러올 수 없습니다",
@@ -1220,6 +1279,7 @@ export const ko: TranslationResources = {
       search: "검색",
       schedules: "일정",
       usage: "사용량",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "워크트리 스크립트 설정",
@@ -1285,6 +1345,8 @@ export const ko: TranslationResources = {
         hideFromSidebar: "사이드바에서 숨기기",
         archiving: "보관하는 중...",
         hiding: "숨기는 중...",
+        markAsRead: "Mark as read",
+        markAsUnread: "Mark as unread",
       },
       confirmations: {
         hideTitle: "워크스페이스를 숨길까요?",
@@ -1305,6 +1367,8 @@ export const ko: TranslationResources = {
         hostDisconnected: "호스트가 연결되어 있지 않습니다",
         hideFailed: "워크스페이스를 숨기지 못했습니다",
         archiveFailed: "워크스페이스를 보관하지 못했습니다.",
+        markAsReadFailed: "Failed to mark workspace as read",
+        markAsUnreadFailed: "Failed to mark workspace as unread",
       },
     },
   },
@@ -1320,6 +1384,7 @@ export const ko: TranslationResources = {
       project: "프로젝트",
       base: "기준",
       baseNotApplicable: "해당 없음",
+      host: "Host",
     },
     titlePlaceholder: "제목(선택 사항)",
     errors: {
@@ -1327,6 +1392,9 @@ export const ko: TranslationResources = {
       createWorktreeFailed: "워크트리를 생성하지 못했습니다",
       composerStateRequired: "작성기 상태가 필요합니다",
       selectModel: "모델을 선택하세요",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1351,6 +1419,14 @@ export const ko: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {
@@ -1562,6 +1638,107 @@ export const ko: TranslationResources = {
         title: "기기 페어링",
         description: "휴대폰을 이 데몬에 연결합니다",
       },
+    },
+  },
+  addProject: {
+    panelAccessibilityLabels: {
+      host: "Add project: host",
+      method: "Add project: method",
+      directorySearch: "Add project: directory-search",
+      githubSearch: "Add project: github-search",
+      githubLocation: "Add project: github-location",
+      newDirectoryParent: "Add project: new-directory-parent",
+      newDirectoryName: "Add project: new-directory-name",
+    },
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      directoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        updateHost: "Update this host to clone GitHub repositories",
+        search: "Search projects available to your GitHub account",
+        manual: "Enter a GitHub URL or owner/repo",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        updateHost: "Update this host to create directories",
+      },
+    },
+    rows: {
+      addHost: "Add host",
+      openPath: "Open this path",
+      useParent: "Use this parent",
+      repositoryVia: "{{repository}} via {{protocol}}",
+      cloneRepositoryUrl: "Clone this repository URL",
+      cloneOwnerRepoVia: "Clone owner/repo via {{protocol}}",
+      alreadyExists: "Already exists",
+      parentDirectory: "Parent directory: {{path}}",
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      adding: "Adding project...",
+    },
+    empty: {
+      noConnectedHosts: "No connected hosts",
+      githubSearch: "Enter a GitHub URL or owner/repo",
+      updateHost: "Update the host to use Add Project.",
+      noMatchingOptions: "No matching options",
+    },
+    errors: {
+      searchDirectories: "Unable to search directories",
+      searchGithub: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+      directoryNotFound: "Directory not found",
+      addProject: "Unable to add project",
+      browse: "Unable to browse for a directory",
+      cloneRepository: "Unable to clone repository",
+      directoryNameRequired: "Enter a directory name",
+      createDirectory: "Unable to create directory",
+    },
+    hints: {
+      navigate: "Navigate",
+    },
+  },
+  hostPicker: {
+    title: "Host",
+    searchPlaceholder: "Search hosts",
+    allHosts: "All hosts",
+    addHost: "Add host",
+    enableBuiltInDaemon: "Enable built-in daemon",
+    local: "Local",
+    openHostSettings: "Open {{host}} settings",
+    filter: {
+      title: "Filter by host",
+      accessibilityLabel: "Filter: {{host}}",
+    },
+    chooser: {
+      title: "Choose host",
+      searchPlaceholder: "Search hosts...",
+      empty: "No matching hosts",
     },
   },
   projectPicker: {
@@ -1919,6 +2096,14 @@ export const ko: TranslationResources = {
     dispatchArchived: "보관됨",
     dispatchDetached: "분리됨",
   },
+  pluginSurface: {
+    fallbackTitle: "Plugin",
+    chooseHost: "Choose plugin host",
+    hostSwitcher: "Plugin host: {{host}}",
+    close: "Close plugin",
+    hostOffline: "Plugin host is offline.",
+    unavailable: "This plugin surface is unavailable.",
+  },
   panels: {
     draft: {
       newAgent: "새 에이전트",
@@ -1975,6 +2160,12 @@ export const ko: TranslationResources = {
       subtitle: "풀 리퀘스트 세부 정보",
       emptyTitle: "아직 풀 리퀘스트가 없습니다",
       emptyDescription: "이 체크아웃에 풀 리퀘스트를 만들면 세부 정보가 여기에 표시됩니다.",
+    },
+    plugin: {
+      unavailableLabel: "Plugin unavailable",
+      unavailableTooltip: "This plugin panel is unavailable",
+      unavailable: "This plugin panel is unavailable.",
+      hostOffline: "Plugin host is offline.",
     },
     sessionHistory: {
       label: "세션 기록",
@@ -2464,6 +2655,7 @@ export const ko: TranslationResources = {
         queueMessage: "메시지 대기열에 추가",
         muteUnmuteVoiceMode: "음성 모드 음소거/해제",
         switchProject: "프로젝트 전환",
+        pinChat: "Pin chat",
       },
       helpNotes: {
         showKeyboardShortcuts: "포커스가 텍스트 필드나 터미널에 있지 않을 때 사용할 수 있습니다.",
@@ -2612,6 +2804,13 @@ export const ko: TranslationResources = {
         },
       },
       agents: {
+        browserTools: {
+          title: "Browser tools",
+          warning:
+            "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+          updating: "Updating browser tools…",
+          accessibilityLabel: "Enable browser tools",
+        },
         unavailable: "에이전트를 관리하려면 이 호스트에 연결하세요",
       },
       mentionDefaults: {
@@ -2647,7 +2846,22 @@ export const ko: TranslationResources = {
         retry: "다시 시도",
       },
       workspaces: {
+        autoArchiveMerged: {
+          title: "Archive merged PR workspaces",
+          hint: "Automatically archive clean Osuna workspaces after their pull request is merged",
+          accessibilityLabel: "Archive merged PR workspaces",
+          updateFailed: "Unable to update workspaces",
+        },
         unavailable: "워크스페이스를 관리하려면 이 호스트에 연결하세요",
+      },
+      terminalAgents: {
+        sectionTitle: "Terminal agents",
+        hooks: {
+          title: "Enable terminal agent hooks",
+          hint: "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+          accessibilityLabel: "Enable terminal agent hooks",
+          updateFailed: "Unable to update terminal agent hooks",
+        },
       },
       terminalProfiles: {
         unavailable: "터미널 프로필을 관리하려면 이 호스트에 연결하세요",
@@ -2711,6 +2925,20 @@ export const ko: TranslationResources = {
         moveDown: "아래로 이동",
       },
       daemon: {
+        lifecycleErrors: {
+          restartAcknowledged: "Restart acknowledged: true. {{detail}}",
+          restartUnacknowledged: "Restart acknowledged: false. {{detail}}",
+          packageInstallFailed: "Package installation failed",
+          versionUnconfirmed:
+            "Package installed; replacement worker version was not confirmed. {{detail}}",
+          versionMismatch: "Expected installed version {{expected}}; observed worker {{observed}}.",
+          nestedError: "Error: {{detail}}",
+          unknownVersion: "unknown",
+          identityChanged: "Daemon identity changed",
+          replacementTimeout:
+            "Replacement worker could not be confirmed. Check daemon status and logs.",
+          unknown: "Unknown error",
+        },
         rename: {
           editLabel: "레이블 편집",
           title: "호스트 이름 변경",
@@ -2783,7 +3011,6 @@ export const ko: TranslationResources = {
       },
       priceTable: {
         title: "가격표",
-        subtitle: "100만 토큰당 달러 · LiteLLM 스냅샷, {{ago}} 업데이트, {{models}}",
         modelCountOne: "모델 1개",
         modelCountMany: "모델 {{count}}개",
         autoUpdate: "자동 업데이트",
@@ -2800,19 +3027,47 @@ export const ko: TranslationResources = {
         save: "저장",
         saveFailed: "이 가격을 저장할 수 없습니다.",
         invalidPrice: "네 열 모두에 숫자를 입력하세요.",
+        edit: "편집",
+        editAccessibility: "{{model}}의 맞춤 가격 편집",
+        removeCustomPrice: "맞춤 가격 제거",
+        removeCustomPriceAccessibility: "{{model}}의 맞춤 가격 제거",
+        removeFailed: "이 맞춤 가격을 제거할 수 없습니다.",
+        customize: "맞춤 설정",
+        customizeAccessibility: "{{model}}에 맞춤 가격 설정",
+        litellmPrice: "LiteLLM 가격",
+        customGroup: {
+          title: "맞춤 가격",
+          intro:
+            "LiteLLM에 가격이 없는 모델이 여기에 표시됩니다. 네 열 모두 100만 토큰당 달러로 입력하세요. 0은 무료입니다.",
+          empty: "모든 모델에 가격이 있습니다.",
+          unpricedCount: "가격 정보 없음 {{count}}",
+        },
+        litellmGroup: {
+          title: "LiteLLM 가격",
+          subtitle: {
+            snapshot: "내장 LiteLLM 스냅샷, {{ago}} 업데이트 · 100만 토큰당 달러",
+            cache: "온라인으로 받은 LiteLLM 가격, {{ago}} 업데이트 · 100만 토큰당 달러",
+          },
+          summary: "LiteLLM 가격이 적용된 {{models}}",
+          expand: "펼치기",
+          collapse: "접기",
+          autoUpdate: "LiteLLM 가격 자동 업데이트",
+          search: "모델 검색",
+          clearSearch: "검색 지우기",
+          noMatches: "이름에 '{{query}}'이(가) 포함된 모델이 없습니다.",
+        },
         columns: {
           model: "모델",
           input: "입력",
           cacheRead: "캐시 읽기",
           cacheWrite: "캐시 쓰기",
           output: "출력",
-          source: "출처",
-          actions: "작업",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "맞춤",
-          none: "—",
+          short: {
+            input: "입력 {{price}}",
+            cacheRead: "읽기 {{price}}",
+            cacheWrite: "쓰기 {{price}}",
+            output: "출력 {{price}}",
+          },
         },
       },
     },

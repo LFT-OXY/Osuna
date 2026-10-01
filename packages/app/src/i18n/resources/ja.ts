@@ -311,9 +311,12 @@ export const ja: TranslationResources = {
     tooManyMatches: "一致が多すぎます — 検索条件を絞ってください",
     hostLoadFailed: "{{host}}: 履歴を読み込めませんでした",
     searchPlaceholder: "履歴を検索",
+    emptyHost: "No sessions for this host",
+    loadFailed: "Unable to load sessions",
     actions: {
       loadMore: "さらに読み込む",
       clearSearch: "検索をクリア",
+      tryAgain: "Try again",
     },
   },
   agentList: {
@@ -354,18 +357,26 @@ export const ja: TranslationResources = {
     },
     turnUsage: {
       title: "このターンの使用量",
-      total: "合計",
-      duration: "所要時間",
+      estimatedCost: "推定コスト",
+      model: "モデル",
+      byModel: "モデル別",
       note: "推定コスト · 公開 API 料金で算出",
       unpriced: "料金データなし",
-      reasoning: "（推論 {{tokens}}）",
+      unpricedWarningOne:
+        "{{models}} は価格データがないため $0 として計上しています。「設定 › 料金表」でカスタム価格を設定できます。",
+      unpricedWarningMany:
+        "{{models}} は価格データがないため $0 として計上しています。「設定 › 料金表」でカスタム価格を設定できます。",
+      modelSeparator: "、",
       accessibility: "このターンの使用量: 入力 {{input}}、出力 {{output}}、{{cost}}",
-      columns: {
-        model: "モデル",
+      stats: {
         input: "入力",
         cache: "キャッシュ",
         output: "出力",
-        cost: "コスト",
+        reasoning: "うち推論",
+      },
+      amounts: {
+        cache: "キャッシュ {{tokens}}",
+        reasoning: "推論 {{tokens}}",
       },
     },
     diagram: {
@@ -455,6 +466,7 @@ export const ja: TranslationResources = {
     },
     filters: {
       all: "すべて",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "セッションをインポートするにはホストに接続してください",
@@ -463,6 +475,7 @@ export const ja: TranslationResources = {
       loading: "最近のセッションを読み込み中...",
       failedProvider: "{{provider}} のセッションを読み込めませんでした",
       failedImport: "選択したセッションをインポートできませんでした。",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "セッションを更新",
@@ -504,6 +517,7 @@ export const ja: TranslationResources = {
         restoringAction: "復元中...",
         unavailableTitle: "ワークスペースを利用できません",
         checkFailedTitle: "ワークスペースを確認できませんでした",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -649,6 +663,9 @@ export const ja: TranslationResources = {
       devices: {
         label: "デバイスサイズ",
         responsive: "レスポンシブ",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "ページの読み込みに失敗しました",
@@ -660,6 +677,11 @@ export const ja: TranslationResources = {
       hostDisconnected: "ホストが接続されていません",
       updateHost: "ネイティブターミナルを使用するにはホストを更新してください。",
       unableToSubscribe: "ターミナルに接続できません",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "読み込み中...",
@@ -768,6 +790,10 @@ export const ja: TranslationResources = {
           tabs: "{{tabs}}件のタブを閉じます。",
           agents: "{{agents}}件のエージェントをアーカイブします。",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1034,6 +1060,9 @@ export const ja: TranslationResources = {
         actions: {
           viewPullRequest: "表示",
           openOn: "{{brand}}で開く",
+          addToChat: "Add to chat",
+          addAllToChat: "Add all to chat",
+          addingToChat: "Adding...",
         },
         checksSummary: {
           passedLabel: "成功",
@@ -1047,14 +1076,40 @@ export const ja: TranslationResources = {
           checks: "チェック",
           pipeline: "パイプライン",
           reviews: "レビュー",
+          activity: "Activity",
         },
         empty: {
           noJobs: "ジョブなし",
           loadingPipeline: "パイプラインを読み込み中...",
           pipelineJobsLoadFailed: "パイプラインのジョブを読み込めませんでした",
           allowedToFail: "失敗を許可",
+          noActivity: "No activity yet",
         },
         approvals: "{{given}} / {{required}} 承認",
+        checks: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          countSeparator: ", ",
+          countLine: {
+            one: "{{parts}} check",
+            many: "{{parts}} checks",
+          },
+          accessibilityLabel: "{{headline}}. {{detail}}",
+        },
         accessibility: {
           pullRequest: "プルリクエスト#{{number}}",
           pullRequest_mr: "マージリクエスト !{{number}}",
@@ -1068,6 +1123,8 @@ export const ja: TranslationResources = {
             skipped: "スキップ済み",
             cancelled: "キャンセル済み",
           },
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
         },
         states: {
           draft: "ドラフト",
@@ -1086,6 +1143,8 @@ export const ja: TranslationResources = {
         },
         thread: {
           discussion: "ディスカッションスレッド",
+          resolved: "Resolved",
+          outdated: "Outdated",
         },
         errors: {
           statusLoadFailed: "プルリクエストのステータスを読み込めません",
@@ -1227,6 +1286,7 @@ export const ja: TranslationResources = {
       search: "検索",
       schedules: "スケジュール",
       usage: "使用量",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "ワークツリースクリプトを設定",
@@ -1292,6 +1352,8 @@ export const ja: TranslationResources = {
         hideFromSidebar: "サイドバーから非表示",
         archiving: "アーカイブ中...",
         hiding: "非表示にしています...",
+        markAsRead: "Mark as read",
+        markAsUnread: "Mark as unread",
       },
       confirmations: {
         hideTitle: "ワークスペースを非表示にしますか？",
@@ -1312,6 +1374,8 @@ export const ja: TranslationResources = {
         hostDisconnected: "ホストが接続されていません",
         hideFailed: "ワークスペースの非表示に失敗しました",
         archiveFailed: "ワークスペースのアーカイブに失敗しました",
+        markAsReadFailed: "Failed to mark workspace as read",
+        markAsUnreadFailed: "Failed to mark workspace as unread",
       },
     },
   },
@@ -1327,6 +1391,7 @@ export const ja: TranslationResources = {
       project: "プロジェクト",
       base: "ベース",
       baseNotApplicable: "該当なし",
+      host: "Host",
     },
     titlePlaceholder: "タイトル（任意）",
     errors: {
@@ -1334,6 +1399,9 @@ export const ja: TranslationResources = {
       createWorktreeFailed: "ワークツリーの作成に失敗しました",
       composerStateRequired: "コンポーザーの状態が必要です",
       selectModel: "モデルを選択してください",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1358,6 +1426,14 @@ export const ja: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {
@@ -1567,6 +1643,107 @@ export const ja: TranslationResources = {
         title: "デバイスをペアリング",
         description: "このデーモンにスマートフォンを接続",
       },
+    },
+  },
+  addProject: {
+    panelAccessibilityLabels: {
+      host: "Add project: host",
+      method: "Add project: method",
+      directorySearch: "Add project: directory-search",
+      githubSearch: "Add project: github-search",
+      githubLocation: "Add project: github-location",
+      newDirectoryParent: "Add project: new-directory-parent",
+      newDirectoryName: "Add project: new-directory-name",
+    },
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      directoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        updateHost: "Update this host to clone GitHub repositories",
+        search: "Search projects available to your GitHub account",
+        manual: "Enter a GitHub URL or owner/repo",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        updateHost: "Update this host to create directories",
+      },
+    },
+    rows: {
+      addHost: "Add host",
+      openPath: "Open this path",
+      useParent: "Use this parent",
+      repositoryVia: "{{repository}} via {{protocol}}",
+      cloneRepositoryUrl: "Clone this repository URL",
+      cloneOwnerRepoVia: "Clone owner/repo via {{protocol}}",
+      alreadyExists: "Already exists",
+      parentDirectory: "Parent directory: {{path}}",
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      adding: "Adding project...",
+    },
+    empty: {
+      noConnectedHosts: "No connected hosts",
+      githubSearch: "Enter a GitHub URL or owner/repo",
+      updateHost: "Update the host to use Add Project.",
+      noMatchingOptions: "No matching options",
+    },
+    errors: {
+      searchDirectories: "Unable to search directories",
+      searchGithub: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+      directoryNotFound: "Directory not found",
+      addProject: "Unable to add project",
+      browse: "Unable to browse for a directory",
+      cloneRepository: "Unable to clone repository",
+      directoryNameRequired: "Enter a directory name",
+      createDirectory: "Unable to create directory",
+    },
+    hints: {
+      navigate: "Navigate",
+    },
+  },
+  hostPicker: {
+    title: "Host",
+    searchPlaceholder: "Search hosts",
+    allHosts: "All hosts",
+    addHost: "Add host",
+    enableBuiltInDaemon: "Enable built-in daemon",
+    local: "Local",
+    openHostSettings: "Open {{host}} settings",
+    filter: {
+      title: "Filter by host",
+      accessibilityLabel: "Filter: {{host}}",
+    },
+    chooser: {
+      title: "Choose host",
+      searchPlaceholder: "Search hosts...",
+      empty: "No matching hosts",
     },
   },
   projectPicker: {
@@ -1927,6 +2104,14 @@ export const ja: TranslationResources = {
     dispatchArchived: "アーカイブ済み",
     dispatchDetached: "切り離し済み",
   },
+  pluginSurface: {
+    fallbackTitle: "Plugin",
+    chooseHost: "Choose plugin host",
+    hostSwitcher: "Plugin host: {{host}}",
+    close: "Close plugin",
+    hostOffline: "Plugin host is offline.",
+    unavailable: "This plugin surface is unavailable.",
+  },
   panels: {
     draft: {
       newAgent: "新しいエージェント",
@@ -1984,6 +2169,12 @@ export const ja: TranslationResources = {
       emptyTitle: "プルリクエストはまだありません",
       emptyDescription:
         "このチェックアウトのプルリクエストを作成すると、ここに詳細が表示されます。",
+    },
+    plugin: {
+      unavailableLabel: "Plugin unavailable",
+      unavailableTooltip: "This plugin panel is unavailable",
+      unavailable: "This plugin panel is unavailable.",
+      hostOffline: "Plugin host is offline.",
     },
     sessionHistory: {
       label: "セッション履歴",
@@ -2473,6 +2664,7 @@ export const ja: TranslationResources = {
         queueMessage: "メッセージをキューに追加",
         muteUnmuteVoiceMode: "音声モードのミュートを切り替え",
         switchProject: "プロジェクトを切り替え",
+        pinChat: "Pin chat",
       },
       helpNotes: {
         showKeyboardShortcuts:
@@ -2623,6 +2815,13 @@ export const ja: TranslationResources = {
         },
       },
       agents: {
+        browserTools: {
+          title: "Browser tools",
+          warning:
+            "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+          updating: "Updating browser tools…",
+          accessibilityLabel: "Enable browser tools",
+        },
         unavailable: "エージェントを管理するにはこのホストに接続してください",
       },
       mentionDefaults: {
@@ -2658,7 +2857,22 @@ export const ja: TranslationResources = {
         retry: "再試行",
       },
       workspaces: {
+        autoArchiveMerged: {
+          title: "Archive merged PR workspaces",
+          hint: "Automatically archive clean Osuna workspaces after their pull request is merged",
+          accessibilityLabel: "Archive merged PR workspaces",
+          updateFailed: "Unable to update workspaces",
+        },
         unavailable: "ワークスペースを管理するにはこのホストに接続してください",
+      },
+      terminalAgents: {
+        sectionTitle: "Terminal agents",
+        hooks: {
+          title: "Enable terminal agent hooks",
+          hint: "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+          accessibilityLabel: "Enable terminal agent hooks",
+          updateFailed: "Unable to update terminal agent hooks",
+        },
       },
       terminalProfiles: {
         unavailable: "ターミナルプロファイルを管理するにはこのホストに接続してください",
@@ -2723,6 +2937,20 @@ export const ja: TranslationResources = {
         moveDown: "下に移動",
       },
       daemon: {
+        lifecycleErrors: {
+          restartAcknowledged: "Restart acknowledged: true. {{detail}}",
+          restartUnacknowledged: "Restart acknowledged: false. {{detail}}",
+          packageInstallFailed: "Package installation failed",
+          versionUnconfirmed:
+            "Package installed; replacement worker version was not confirmed. {{detail}}",
+          versionMismatch: "Expected installed version {{expected}}; observed worker {{observed}}.",
+          nestedError: "Error: {{detail}}",
+          unknownVersion: "unknown",
+          identityChanged: "Daemon identity changed",
+          replacementTimeout:
+            "Replacement worker could not be confirmed. Check daemon status and logs.",
+          unknown: "Unknown error",
+        },
         rename: {
           editLabel: "ラベルを編集",
           title: "ホストの名前を変更",
@@ -2795,7 +3023,6 @@ export const ja: TranslationResources = {
       },
       priceTable: {
         title: "料金表",
-        subtitle: "100万トークンあたりのドル · LiteLLM スナップショット、{{ago}}に更新、{{models}}",
         modelCountOne: "1 モデル",
         modelCountMany: "{{count}} モデル",
         autoUpdate: "自動更新",
@@ -2812,19 +3039,47 @@ export const ja: TranslationResources = {
         save: "保存",
         saveFailed: "この価格を保存できませんでした。",
         invalidPrice: "4 つの列すべてに数値を入力してください。",
+        edit: "編集",
+        editAccessibility: "{{model}} のカスタム価格を編集",
+        removeCustomPrice: "カスタム価格を削除",
+        removeCustomPriceAccessibility: "{{model}} のカスタム価格を削除",
+        removeFailed: "このカスタム価格を削除できませんでした。",
+        customize: "カスタマイズ",
+        customizeAccessibility: "{{model}} にカスタム価格を設定",
+        litellmPrice: "LiteLLM 価格",
+        customGroup: {
+          title: "カスタム価格",
+          intro:
+            "LiteLLM に価格がないモデルをここに表示します。4 列すべてを 100万トークンあたりのドルで入力してください。0 は無料です。",
+          empty: "すべてのモデルに価格があります。",
+          unpricedCount: "価格データなし {{count}}",
+        },
+        litellmGroup: {
+          title: "LiteLLM 価格",
+          subtitle: {
+            snapshot: "同梱の LiteLLM スナップショット、{{ago}}に更新 · 100万トークンあたりのドル",
+            cache: "オンラインで取得した LiteLLM 価格、{{ago}}に更新 · 100万トークンあたりのドル",
+          },
+          summary: "{{models}}の価格は LiteLLM によるもの",
+          expand: "表示",
+          collapse: "閉じる",
+          autoUpdate: "LiteLLM 価格を自動更新",
+          search: "モデルを検索",
+          clearSearch: "検索をクリア",
+          noMatches: "名前に「{{query}}」を含むモデルはありません。",
+        },
         columns: {
           model: "モデル",
           input: "入力",
           cacheRead: "キャッシュ読み取り",
           cacheWrite: "キャッシュ書き込み",
           output: "出力",
-          source: "ソース",
-          actions: "操作",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "カスタム",
-          none: "—",
+          short: {
+            input: "入 {{price}}",
+            cacheRead: "読 {{price}}",
+            cacheWrite: "書 {{price}}",
+            output: "出 {{price}}",
+          },
         },
       },
     },

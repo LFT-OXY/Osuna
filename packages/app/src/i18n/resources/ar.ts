@@ -306,9 +306,12 @@ export const ar: TranslationResources = {
     tooManyMatches: "نتائج كثيرة جدًا — ضيّق نطاق البحث",
     hostLoadFailed: "{{host}}: تعذر تحميل السجل",
     searchPlaceholder: "البحث في السجل",
+    emptyHost: "No sessions for this host",
+    loadFailed: "Unable to load sessions",
     actions: {
       loadMore: "تحميل المزيد",
       clearSearch: "مسح البحث",
+      tryAgain: "Try again",
     },
   },
   agentList: {
@@ -349,18 +352,26 @@ export const ar: TranslationResources = {
     },
     turnUsage: {
       title: "استهلاك هذه الجولة",
-      total: "الإجمالي",
-      duration: "المدة",
+      estimatedCost: "التكلفة التقديرية",
+      model: "النموذج",
+      byModel: "حسب النموذج",
       note: "التكلفة التقديرية · بأسعار واجهة البرمجة العلنية",
       unpriced: "لا توجد بيانات تسعير",
-      reasoning: "({{tokens}} للاستدلال)",
+      unpricedWarningOne:
+        "لا توجد بيانات تسعير لـ {{models}}، لذا يُحتسب بـ $0. يمكنك تعيين سعر مخصّص من إعدادات › جدول الأسعار.",
+      unpricedWarningMany:
+        "لا توجد بيانات تسعير لـ {{models}}، لذا تُحتسب بـ $0. يمكنك تعيين أسعار مخصّصة من إعدادات › جدول الأسعار.",
+      modelSeparator: "، ",
       accessibility: "استهلاك هذه الجولة: {{input}} إدخال، {{output}} إخراج، {{cost}}",
-      columns: {
-        model: "النموذج",
+      stats: {
         input: "الإدخال",
         cache: "التخزين المؤقت",
         output: "الإخراج",
-        cost: "التكلفة",
+        reasoning: "منها الاستدلال",
+      },
+      amounts: {
+        cache: "التخزين المؤقت {{tokens}}",
+        reasoning: "الاستدلال {{tokens}}",
       },
     },
     diagram: {
@@ -450,6 +461,7 @@ export const ar: TranslationResources = {
     },
     filters: {
       all: "الجميع",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "اتصل بمضيف لاستيراد الجلسات",
@@ -458,6 +470,7 @@ export const ar: TranslationResources = {
       loading: "جارٍ تحميل الجلسات الأخيرة...",
       failedProvider: "تعذر تحميل جلسات {{provider}}",
       failedImport: "تعذر استيراد الجلسة المحددة.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "تحديث الجلسات",
@@ -498,6 +511,7 @@ export const ar: TranslationResources = {
         restoringAction: "جارٍ الاستعادة...",
         unavailableTitle: "مساحة العمل غير متاحة",
         checkFailedTitle: "تعذر التحقق من مساحة العمل",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -643,6 +657,9 @@ export const ar: TranslationResources = {
       devices: {
         label: "حجم الجهاز",
         responsive: "متجاوب",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "فشل تحميل الصفحة",
@@ -654,6 +671,11 @@ export const ar: TranslationResources = {
       hostDisconnected: "Host غير متصل",
       updateHost: "حدّث المضيف لاستخدام عارض الطرفية الأصلي.",
       unableToSubscribe: "غير قادر على الاشتراك في المحطة",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "تحميل...",
@@ -764,6 +786,10 @@ export const ar: TranslationResources = {
           tabs: "سيؤدي هذا إلى إغلاق علامة التبويب (علامات التبويب){{tabs}}.",
           agents: "سيؤدي هذا إلى أرشفة وكيل (وكلاء){{agents}}.",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1021,6 +1047,9 @@ export const ar: TranslationResources = {
         actions: {
           viewPullRequest: "عرض",
           openOn: "فتح على {{brand}}",
+          addToChat: "Add to chat",
+          addAllToChat: "Add all to chat",
+          addingToChat: "Adding...",
         },
         checksSummary: {
           passedLabel: "نجح",
@@ -1034,14 +1063,40 @@ export const ar: TranslationResources = {
           checks: "الشيكات",
           pipeline: "خط المعالجة",
           reviews: "التعليقات",
+          activity: "Activity",
         },
         empty: {
           noJobs: "لا توجد مهام",
           loadingPipeline: "جارٍ تحميل خط المعالجة...",
           pipelineJobsLoadFailed: "تعذر تحميل مهام خط المعالجة",
           allowedToFail: "مسموح بالفشل",
+          noActivity: "No activity yet",
         },
         approvals: "{{given}} من {{required}} موافقات",
+        checks: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          countSeparator: ", ",
+          countLine: {
+            one: "{{parts}} check",
+            many: "{{parts}} checks",
+          },
+          accessibilityLabel: "{{headline}}. {{detail}}",
+        },
         accessibility: {
           pullRequest: "سحب الطلب #{{number}}",
           pullRequest_mr: "طلب دمج !{{number}}",
@@ -1055,6 +1110,8 @@ export const ar: TranslationResources = {
             skipped: "تم التخطي",
             cancelled: "تم الإلغاء",
           },
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
         },
         states: {
           draft: "مسودة",
@@ -1073,6 +1130,8 @@ export const ar: TranslationResources = {
         },
         thread: {
           discussion: "سلسلة المناقشة",
+          resolved: "Resolved",
+          outdated: "Outdated",
         },
         errors: {
           statusLoadFailed: "غير قادر على تحميل حالة طلب السحب",
@@ -1213,6 +1272,7 @@ export const ar: TranslationResources = {
       search: "بحث",
       schedules: "الجداول",
       usage: "الاستهلاك",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "إعداد البرامج النصية لشجرة العمل",
@@ -1278,6 +1338,8 @@ export const ar: TranslationResources = {
         hideFromSidebar: "إخفاء من الشريط الجانبي",
         archiving: "أرشفة...",
         hiding: "إخفاء...",
+        markAsRead: "Mark as read",
+        markAsUnread: "Mark as unread",
       },
       confirmations: {
         hideTitle: "إخفاء مساحة العمل؟",
@@ -1298,6 +1360,8 @@ export const ar: TranslationResources = {
         hostDisconnected: "Host غير متصل",
         hideFailed: "فشل في إخفاء مساحة العمل",
         archiveFailed: "فشل في أرشفة مساحة العمل",
+        markAsReadFailed: "Failed to mark workspace as read",
+        markAsUnreadFailed: "Failed to mark workspace as unread",
       },
     },
   },
@@ -1313,6 +1377,7 @@ export const ar: TranslationResources = {
       project: "المشروع",
       base: "الأساس",
       baseNotApplicable: "غير قابل للتطبيق",
+      host: "Host",
     },
     titlePlaceholder: "العنوان (اختياري)",
     errors: {
@@ -1320,6 +1385,9 @@ export const ar: TranslationResources = {
       createWorktreeFailed: "فشل في إنشاء شجرة العمل",
       composerStateRequired: "حالة الملحن مطلوبة",
       selectModel: "اختر نموذجا",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1344,6 +1412,14 @@ export const ar: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {
@@ -1552,6 +1628,107 @@ export const ar: TranslationResources = {
         title: "إقران الجهاز",
         description: "قم بتوصيل هاتفك بهذا البرنامج الخفي",
       },
+    },
+  },
+  addProject: {
+    panelAccessibilityLabels: {
+      host: "Add project: host",
+      method: "Add project: method",
+      directorySearch: "Add project: directory-search",
+      githubSearch: "Add project: github-search",
+      githubLocation: "Add project: github-location",
+      newDirectoryParent: "Add project: new-directory-parent",
+      newDirectoryName: "Add project: new-directory-name",
+    },
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      directoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        updateHost: "Update this host to clone GitHub repositories",
+        search: "Search projects available to your GitHub account",
+        manual: "Enter a GitHub URL or owner/repo",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        updateHost: "Update this host to create directories",
+      },
+    },
+    rows: {
+      addHost: "Add host",
+      openPath: "Open this path",
+      useParent: "Use this parent",
+      repositoryVia: "{{repository}} via {{protocol}}",
+      cloneRepositoryUrl: "Clone this repository URL",
+      cloneOwnerRepoVia: "Clone owner/repo via {{protocol}}",
+      alreadyExists: "Already exists",
+      parentDirectory: "Parent directory: {{path}}",
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      adding: "Adding project...",
+    },
+    empty: {
+      noConnectedHosts: "No connected hosts",
+      githubSearch: "Enter a GitHub URL or owner/repo",
+      updateHost: "Update the host to use Add Project.",
+      noMatchingOptions: "No matching options",
+    },
+    errors: {
+      searchDirectories: "Unable to search directories",
+      searchGithub: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+      directoryNotFound: "Directory not found",
+      addProject: "Unable to add project",
+      browse: "Unable to browse for a directory",
+      cloneRepository: "Unable to clone repository",
+      directoryNameRequired: "Enter a directory name",
+      createDirectory: "Unable to create directory",
+    },
+    hints: {
+      navigate: "Navigate",
+    },
+  },
+  hostPicker: {
+    title: "Host",
+    searchPlaceholder: "Search hosts",
+    allHosts: "All hosts",
+    addHost: "Add host",
+    enableBuiltInDaemon: "Enable built-in daemon",
+    local: "Local",
+    openHostSettings: "Open {{host}} settings",
+    filter: {
+      title: "Filter by host",
+      accessibilityLabel: "Filter: {{host}}",
+    },
+    chooser: {
+      title: "Choose host",
+      searchPlaceholder: "Search hosts...",
+      empty: "No matching hosts",
     },
   },
   projectPicker: {
@@ -1907,6 +2084,14 @@ export const ar: TranslationResources = {
     dispatchArchived: "مؤرشف",
     dispatchDetached: "منفصل",
   },
+  pluginSurface: {
+    fallbackTitle: "Plugin",
+    chooseHost: "Choose plugin host",
+    hostSwitcher: "Plugin host: {{host}}",
+    close: "Close plugin",
+    hostOffline: "Plugin host is offline.",
+    unavailable: "This plugin surface is unavailable.",
+  },
   panels: {
     draft: {
       newAgent: "وكيل جديد",
@@ -1963,6 +2148,12 @@ export const ar: TranslationResources = {
       subtitle: "تفاصيل طلب السحب",
       emptyTitle: "لا يوجد طلب سحب بعد",
       emptyDescription: "أنشئ طلب سحب لنسخة العمل هذه لعرض تفاصيله هنا.",
+    },
+    plugin: {
+      unavailableLabel: "Plugin unavailable",
+      unavailableTooltip: "This plugin panel is unavailable",
+      unavailable: "This plugin panel is unavailable.",
+      hostOffline: "Plugin host is offline.",
     },
     sessionHistory: {
       label: "سجل الجلسات",
@@ -2452,6 +2643,7 @@ export const ar: TranslationResources = {
         queueMessage: "رسالة قائمة الانتظار",
         muteUnmuteVoiceMode: "كتم وضع الصوت /unmute",
         switchProject: "تبديل المشروع",
+        pinChat: "Pin chat",
       },
       helpNotes: {
         showKeyboardShortcuts: "متاح عندما لا يكون التركيز في حقل نص أو محطة طرفية.",
@@ -2599,6 +2791,13 @@ export const ar: TranslationResources = {
         },
       },
       agents: {
+        browserTools: {
+          title: "Browser tools",
+          warning:
+            "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+          updating: "Updating browser tools…",
+          accessibilityLabel: "Enable browser tools",
+        },
         unavailable: "Connect to this host to manage agents",
       },
       mentionDefaults: {
@@ -2634,7 +2833,22 @@ export const ar: TranslationResources = {
         retry: "إعادة المحاولة",
       },
       workspaces: {
+        autoArchiveMerged: {
+          title: "Archive merged PR workspaces",
+          hint: "Automatically archive clean Osuna workspaces after their pull request is merged",
+          accessibilityLabel: "Archive merged PR workspaces",
+          updateFailed: "Unable to update workspaces",
+        },
         unavailable: "Connect to this host to manage workspaces",
+      },
+      terminalAgents: {
+        sectionTitle: "Terminal agents",
+        hooks: {
+          title: "Enable terminal agent hooks",
+          hint: "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+          accessibilityLabel: "Enable terminal agent hooks",
+          updateFailed: "Unable to update terminal agent hooks",
+        },
       },
       terminalProfiles: {
         unavailable: "Connect to this host to manage terminal profiles",
@@ -2697,6 +2911,20 @@ export const ar: TranslationResources = {
         moveDown: "نقل لأسفل",
       },
       daemon: {
+        lifecycleErrors: {
+          restartAcknowledged: "Restart acknowledged: true. {{detail}}",
+          restartUnacknowledged: "Restart acknowledged: false. {{detail}}",
+          packageInstallFailed: "Package installation failed",
+          versionUnconfirmed:
+            "Package installed; replacement worker version was not confirmed. {{detail}}",
+          versionMismatch: "Expected installed version {{expected}}; observed worker {{observed}}.",
+          nestedError: "Error: {{detail}}",
+          unknownVersion: "unknown",
+          identityChanged: "Daemon identity changed",
+          replacementTimeout:
+            "Replacement worker could not be confirmed. Check daemon status and logs.",
+          unknown: "Unknown error",
+        },
         rename: {
           editLabel: "تحرير التسمية",
           title: "إعادة تسمية المضيف",
@@ -2767,7 +2995,6 @@ export const ar: TranslationResources = {
       },
       priceTable: {
         title: "جدول الأسعار",
-        subtitle: "دولار لكل مليون رمز · لقطة LiteLLM، تم التحديث {{ago}}، {{models}}",
         modelCountOne: "نموذج واحد",
         modelCountMany: "{{count}} نماذج",
         autoUpdate: "تحديث تلقائي",
@@ -2784,19 +3011,47 @@ export const ar: TranslationResources = {
         save: "حفظ",
         saveFailed: "تعذّر حفظ هذا السعر.",
         invalidPrice: "أدخل رقمًا في الأعمدة الأربعة جميعها.",
+        edit: "تعديل",
+        editAccessibility: "تعديل السعر المخصّص لـ {{model}}",
+        removeCustomPrice: "إزالة السعر المخصّص",
+        removeCustomPriceAccessibility: "إزالة السعر المخصّص لـ {{model}}",
+        removeFailed: "تعذّرت إزالة هذا السعر المخصّص.",
+        customize: "تخصيص",
+        customizeAccessibility: "تعيين سعر مخصّص لـ {{model}}",
+        litellmPrice: "سعر LiteLLM",
+        customGroup: {
+          title: "الأسعار المخصّصة",
+          intro:
+            "تظهر هنا النماذج التي لا يعرف LiteLLM سعرها. املأ الأعمدة الأربعة بالدولار لكل مليون رمز؛ 0 يعني مجانًا.",
+          empty: "لكل النماذج سعر.",
+          unpricedCount: "لا توجد بيانات سعر {{count}}",
+        },
+        litellmGroup: {
+          title: "أسعار LiteLLM",
+          subtitle: {
+            snapshot: "لقطة LiteLLM المضمّنة، تم التحديث {{ago}} · دولار لكل مليون رمز",
+            cache: "أسعار LiteLLM المجلوبة عبر الإنترنت، تم التحديث {{ago}} · دولار لكل مليون رمز",
+          },
+          summary: "{{models}} بأسعار LiteLLM",
+          expand: "عرض",
+          collapse: "إخفاء",
+          autoUpdate: "تحديث أسعار LiteLLM تلقائيًا",
+          search: "البحث عن نموذج",
+          clearSearch: "مسح البحث",
+          noMatches: "لا توجد نماذج يحتوي اسمها على «{{query}}».",
+        },
         columns: {
           model: "النموذج",
           input: "الإدخال",
           cacheRead: "قراءة الذاكرة المؤقتة",
           cacheWrite: "كتابة الذاكرة المؤقتة",
           output: "الإخراج",
-          source: "المصدر",
-          actions: "الإجراءات",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "مخصّص",
-          none: "—",
+          short: {
+            input: "إدخال {{price}}",
+            cacheRead: "قراءة {{price}}",
+            cacheWrite: "كتابة {{price}}",
+            output: "إخراج {{price}}",
+          },
         },
       },
     },

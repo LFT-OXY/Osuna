@@ -6,7 +6,7 @@ import type {
 import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config";
 
 /**
- * 「提及智能体默认值」卡片的纯视图模型。回退规则与 daemon 的
+ * 「提及 Agent 默认值」卡片的纯视图模型。回退规则与 daemon 的
  * `packages/server/src/server/agent/routing-block.ts` `resolveAgainstCatalog` 一致：
  * 卡片显示的"默认（X）"和"将使用默认（X）"就是发送时 Routing block 写出的值。
  */

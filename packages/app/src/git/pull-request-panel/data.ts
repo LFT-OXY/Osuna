@@ -318,16 +318,20 @@ function parsePullRequestNumber(url: string): number | null {
   }
 }
 
-export function getStateLabel(state: PrState): string {
-  if (state === "draft") return "Draft";
-  if (state === "merged") return "Merged";
-  if (state === "closed") return "Closed";
-  return "Open";
+const STATE_LABEL_KEYS = {
+  draft: "workspace.git.pr.states.draft",
+  merged: "workspace.git.pr.states.merged",
+  closed: "workspace.git.pr.states.closed",
+  open: "workspace.git.pr.states.open",
+} as const satisfies Record<PrState, string>;
+
+export function getStateLabelKey(state: PrState): string {
+  return STATE_LABEL_KEYS[state];
 }
 
-export function getActivityVerb(item: Pick<PrPaneActivity, "kind" | "reviewState">): string {
-  if (item.kind === "comment") return "Commented";
-  if (item.reviewState === "approved") return "Approved";
-  if (item.reviewState === "changes_requested") return "Requested changes";
-  return "Reviewed";
+export function getActivityVerbKey(item: Pick<PrPaneActivity, "kind" | "reviewState">): string {
+  if (item.kind === "comment") return "workspace.git.pr.activity.commented";
+  if (item.reviewState === "approved") return "workspace.git.pr.activity.approved";
+  if (item.reviewState === "changes_requested") return "workspace.git.pr.activity.requestedChanges";
+  return "workspace.git.pr.activity.reviewed";
 }

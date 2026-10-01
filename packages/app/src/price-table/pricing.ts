@@ -2,6 +2,7 @@ import type {
   UsagePricePerMillion,
   UsagePricingModel,
   UsagePricingOverride,
+  UsagePricingTableInfo,
 } from "@getpaseo/protocol/usage/types";
 import type { UsageText } from "@/usage/text";
 
@@ -10,11 +11,32 @@ import type { UsageText } from "@/usage/text";
  * 表头静默地标错列，而没有任何东西会报错。
  */
 export const PRICE_COLUMNS = [
-  { field: "input", labelKey: "settings.host.priceTable.columns.input" },
-  { field: "cachedInput", labelKey: "settings.host.priceTable.columns.cacheRead" },
-  { field: "cacheWrite", labelKey: "settings.host.priceTable.columns.cacheWrite" },
-  { field: "output", labelKey: "settings.host.priceTable.columns.output" },
-] as const satisfies readonly { field: keyof UsagePricePerMillion; labelKey: string }[];
+  {
+    field: "input",
+    labelKey: "settings.host.priceTable.columns.input",
+    shortLabelKey: "settings.host.priceTable.columns.short.input",
+  },
+  {
+    field: "cachedInput",
+    labelKey: "settings.host.priceTable.columns.cacheRead",
+    shortLabelKey: "settings.host.priceTable.columns.short.cacheRead",
+  },
+  {
+    field: "cacheWrite",
+    labelKey: "settings.host.priceTable.columns.cacheWrite",
+    shortLabelKey: "settings.host.priceTable.columns.short.cacheWrite",
+  },
+  {
+    field: "output",
+    labelKey: "settings.host.priceTable.columns.output",
+    shortLabelKey: "settings.host.priceTable.columns.short.output",
+  },
+] as const satisfies readonly {
+  field: keyof UsagePricePerMillion;
+  labelKey: string;
+  /** 窄屏把四列压成一行小字时用的短标签，带 `{{price}}` 占位。 */
+  shortLabelKey: string;
+}[];
 
 export type PriceField = (typeof PRICE_COLUMNS)[number]["field"];
 
@@ -74,23 +96,40 @@ export function parsePriceDraft(draft: PriceDraft): UsagePricePerMillion | null 
   return { input, cachedInput, cacheWrite, output };
 }
 
+/** 覆盖价按模型名匹配：忽略大小写与首尾空格，与 daemon 的匹配规则一致。 */
+function modelMatchKey(model: string): string {
+  return model.trim().toLowerCase();
+}
+
 /**
- * 覆盖表整段写回 daemon 配置，所以这里返回的是完整的新数组。同名按大小写不敏感
- * 匹配（与 daemon 的匹配规则一致），命中就替换价格并保留原来的备注。
+ * 覆盖表整段写回 daemon 配置，所以这里返回的是完整的新数组。命中就替换价格并
+ * 保留原来的备注。
  */
 export function upsertPricingOverride(
   overrides: readonly UsagePricingOverride[],
   model: string,
   pricePerMillion: UsagePricePerMillion,
 ): UsagePricingOverride[] {
-  const target = model.trim().toLowerCase();
+  const target = modelMatchKey(model);
   let replaced = false;
   const next = overrides.map((override) => {
-    if (override.model.trim().toLowerCase() !== target) return override;
+    if (modelMatchKey(override.model) !== target) return override;
     replaced = true;
     return { ...override, pricePerMillion };
   });
   return replaced ? next : [...next, { model, pricePerMillion }];
+}
+
+/**
+ * 「移除自定义价格」：删掉该模型的覆盖项，匹配规则与 `upsertPricingOverride` 相同。
+ * 同名的每一条都删——daemon 取最后一条，只删一条会让剩下的那条接着生效。
+ */
+export function removePricingOverride(
+  overrides: readonly UsagePricingOverride[],
+  model: string,
+): UsagePricingOverride[] {
+  const target = modelMatchKey(model);
+  return overrides.filter((override) => modelMatchKey(override.model) !== target);
 }
 
 /**
@@ -102,7 +141,7 @@ export function upsertPricingOverride(
 export function dedupePricingModels(models: readonly UsagePricingModel[]): UsagePricingModel[] {
   const seen = new Set<string>();
   return models.filter((model) => {
-    const key = model.model.trim().toLowerCase();
+    const key = modelMatchKey(model.model);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -119,15 +158,6 @@ export function extractFailureReason(cause: unknown): string {
   return cause.message.split(/ (?:requestType|code)=/)[0]?.trim() ?? "";
 }
 
-export function describePriceSource(model: UsagePricingModel): UsageText {
-  if (!model.priced || model.priceSource === null) {
-    return { key: "settings.host.priceTable.source.none" };
-  }
-  return model.priceSource === "override"
-    ? { key: "settings.host.priceTable.source.override" }
-    : { key: "settings.host.priceTable.source.table" };
-}
-
 /**
  * 单复数用两个键、由这里选键，而不是 i18next 的 `_one` / `_other` 后缀：后缀形式
  * 在 ru / ar 下会回落成英文，资源测试拦不住。
@@ -138,17 +168,67 @@ export function describeModelCount(count: number): UsageText {
     : { key: "settings.host.priceTable.modelCountMany", params: { count } };
 }
 
-export function describePriceTableSubtitle(input: {
+export interface PricingModelGroups {
+  /** 无价格数据与已自定义的模型，加上正在从 LiteLLM 行自定义的模型。 */
+  custom: UsagePricingModel[];
+  litellm: UsagePricingModel[];
+}
+
+/**
+ * 价格表的两组。只能按当前来源分：设了自定义价格后 daemon 不再告诉客户端 LiteLLM
+ * 是否也有价格。无价格数据的排在已自定义的前面（那是用户来这一页要填的），组内
+ * 保持 daemon 的顺序。`customizing` 是从 LiteLLM 行点「自定义」后暂时拉进上面一组的
+ * 模型，只是界面状态。
+ */
+export function groupPricingModels(
+  models: readonly UsagePricingModel[],
+  customizing: ReadonlySet<string>,
+): PricingModelGroups {
+  const unpriced: UsagePricingModel[] = [];
+  const custom: UsagePricingModel[] = [];
+  const litellm: UsagePricingModel[] = [];
+  for (const model of models) {
+    if (model.priceSource === null) unpriced.push(model);
+    else if (model.priceSource === "override" || customizing.has(model.model)) custom.push(model);
+    else litellm.push(model);
+  }
+  return { custom: [...unpriced, ...custom], litellm };
+}
+
+/** LiteLLM 组的搜索：模型 id 子串匹配，不区分大小写。 */
+export function filterPricingModels(
+  models: readonly UsagePricingModel[],
+  query: string,
+): readonly UsagePricingModel[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return models;
+  return models.filter((model) => model.model.toLowerCase().includes(needle));
+}
+
+export function countUnpricedModels(models: readonly UsagePricingModel[]): number {
+  return models.filter((model) => model.priceSource === null).length;
+}
+
+/**
+ * 快照与联网更新各是一整句，而不是往一句里插来源名词：来源的性数会牵动后面的
+ * 「更新」（es「Instantánea … actualizada」与「Precios … actualizados」）。
+ */
+export function describeLiteLLMSubtitle(input: {
+  source: UsagePricingTableInfo["source"];
   fetchedAgo: UsageText | null;
-  modelCount: number;
 }): UsageText {
   return {
-    key: "settings.host.priceTable.subtitle",
-    params: {
-      // 协议保证 `fetchedAt` 非空，所以描述不出来只可能是时间戳不可解析。那正是
-      // 不该替 daemon 断言「刚刚更新」的场合，留一个破折号。
-      ago: input.fetchedAgo ?? { text: "—" },
-      models: describeModelCount(input.modelCount),
-    },
+    key: `settings.host.priceTable.litellmGroup.subtitle.${input.source}`,
+    // 协议保证 `fetchedAt` 非空，所以描述不出来只可能是时间戳不可解析。那正是
+    // 不该替 daemon 断言「刚刚更新」的场合，留一个破折号。
+    params: { ago: input.fetchedAgo ?? { text: "—" } },
+  };
+}
+
+/** LiteLLM 组折叠时唯一的那一行。 */
+export function describeLiteLLMSummary(count: number): UsageText {
+  return {
+    key: "settings.host.priceTable.litellmGroup.summary",
+    params: { models: describeModelCount(count) },
   };
 }

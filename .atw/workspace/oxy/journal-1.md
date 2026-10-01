@@ -660,13 +660,47 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 ### Summary
 
 工单 10：列表行尾只剩开关和 ›，有新版本时状态行后接 xs outline「升级到 v{latest}」（ArrowUp，悬停 v{from} → v{to}），ProviderUpgradeButton 加 placement、ProviderStatusLine 用 children 接按钮且不再写版本箭头；9 语言补 actionTo。双轴审查：Standards 指出本地压到 18px 违反 design.md §4，改回 xs 原尺寸（行会略高），合并重复 Button 分支；Spec 建议补「点升级不进详情」断言，测试里 Pressable mock 改为像 RN-web PressResponder 一样 stopPropagation。真实 Web/Electron 点升级不跳详情；假 Claude CLI 下 Web 4 张、Electron 2 张截图入 qa/。design.md、frontend component-guidelines/testing、设计说明同步。用户 dev 桌面端实测通过。验收 16 条：14 达成，第 9 条（只读客户端被拒无自动测试）与第 15 条（真实升级只在 Web）用户接受，任务归档。
+## Session 25: 补齐简体中文界面翻译：工单 06 PR 面板/插件/会话页/侧栏迁移，任务验收并归档
+<!-- atw-session: v=2 fp=28d7b196da288179 -->
+
+**Date**: 2026-10-01
+**Task**: 补齐简体中文界面翻译：工单 06 PR 面板/插件/会话页/侧栏迁移，任务验收并归档
+**Package**: app
+**Branch**: `fix/settings-menu-zh-i18n`
+
+### Summary
+
+工单 06：PR 面板按用户确认的范围全部迁移（动态、评论/讨论主题操作、已解决/已过时、添加到聊天，以及检查摘要标题与计数行、状态徽标、活动动词）；summarizeChecks 改为只返回状态与计数，formatChecks*(t, …) 生成文案，中文 countLine 写 {{parts}}，得到「3 项失败，21 项成功，1 项已跳过」；data.ts 改返回已有 states/activity 键，e2e 助手改读 en 资源。插件界面与面板、会话页、侧栏工作区标题、显示偏好、标记已读/未读及失败提示改走翻译；docs/i18n.md 补 Batch 5C，组件规格补计数行包裹写法。双轴审查后修正批次记录位置与编号，统一「动态」「项手动」译法。dev 桌面端中文 QA：临时注册离线主机测会话页空状态（已还原），/tmp 临时克隆检出 PR #5 分支测 PR 面板（克隆已删）。PRD 9 条验收逐条核对满足，用户验收，任务归档。
+## Session 24: 本轮用量面板重设计（工单 04）与任务归档
+<!-- atw-session: v=2 fp=2fd7698e71746561 -->
+
+**Date**: 2026-10-01
+**Task**: 本轮用量面板重设计（工单 04）与任务归档
+**Package**: app
+**Branch**: `enhance-pricing-hover-panel`
+
+### Summary
+
+实现 04 票：本轮用量面板改为「总览 + 明细」，外框经 TooltipContent 定宽 300、去内边距，修掉内容越出右边框 18px 的歪斜；推理单独成格，单/多模型分别呈现，无价格数据有明细标记、点状下划线与底部提示。buildTurnUsagePanel（none/single/multi 联合）取代旧明细函数，9 种语言文案补齐并删旧键。新增浏览器组件测试（三种轮次 × 1280/390）。两轴审查后修了联合、密度、嵌套与测试断言。真实 Web 与 dev 桌面端验收通过；多模型/无价格画面只在浏览器测试里以亮色渲染。前端规范补 Tooltip 面板定宽写法与 browser 项目三条坑。PRD 验收项除 CI 外全部勾选（分支未推送、CI 未跑），任务已归档。
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
 | `9e1c30297` | feat(app): Providers 列表行的升级按钮挪进状态行 |
+| `02f131c94` | fix(app): 迁移 PR 面板、插件、会话页、侧栏剩余硬编码英文到翻译键 |
+| `5140793d3` | chore(atw): 工单 06 桌面端中文验收通过，关闭工单，任务进入验收 |
+
+### Testing
+
+- [OK] PR 面板与插件目录 34 个测试文件 293 条、resources.test.ts 38 条通过；全仓 typecheck、lint 通过
+| `20d358e65` | feat(app): 本轮用量面板改为「总览 + 明细」，内容不再溢出边框 |
 
 ### Status
 
 [OK] **Completed**
+
+### Next Steps
+
+- 推送 fix/settings-menu-zh-i18n 并开 PR 合进 main（待用户确认）
+- 下次开 dev 桌面端时归档 dev daemon 里的 osuna-pr 工作区（目录已删）

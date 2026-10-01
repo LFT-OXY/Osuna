@@ -32,6 +32,7 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import * as Clipboard from "expo-clipboard";
 import { Button } from "@/components/ui/button";
 import { useRetainedPanelActive } from "@/components/retained-panel";
@@ -115,21 +116,34 @@ type DeviceSizeId =
   | "desktop-1080"
   | "desktop-1440";
 
-interface DeviceSizePreset {
+type DeviceSizePreset = {
   id: DeviceSizeId;
-  /** Display name (not translated — device names are proper nouns). */
-  name: string;
   /** Fixed CSS width, or null for "fill the available area". */
   width: number | null;
   height: number | null;
   icon: LucideIcon;
-}
+} & (
+  | {
+      /** Device model name, not translated — model names are proper nouns. */
+      name: string;
+    }
+  | {
+      /** Generic size names are translated. */
+      nameKey: string;
+    }
+);
 
 // Viewport presets for the in-app browser. "responsive" fills the pane; the
 // others render a fixed-size, centered frame so the user can preview how a page
 // behaves at common device sizes. Content is centered (not left-aligned).
 const DEVICE_SIZE_PRESETS: readonly DeviceSizePreset[] = [
-  { id: "responsive", name: "Responsive", width: null, height: null, icon: Maximize },
+  {
+    id: "responsive",
+    nameKey: "workspace.browser.devices.responsive",
+    width: null,
+    height: null,
+    icon: Maximize,
+  },
   { id: "iphone-se", name: "iPhone SE", width: 375, height: 667, icon: Smartphone },
   { id: "iphone-14", name: "iPhone 14", width: 390, height: 844, icon: Smartphone },
   { id: "iphone-14-pro-max", name: "iPhone 14 Pro Max", width: 430, height: 932, icon: Smartphone },
@@ -140,15 +154,31 @@ const DEVICE_SIZE_PRESETS: readonly DeviceSizePreset[] = [
   { id: "ipad-pro-11", name: 'iPad Pro 11"', width: 834, height: 1194, icon: Tablet },
   { id: "ipad-pro-12", name: 'iPad Pro 12.9"', width: 1024, height: 1366, icon: Tablet },
   { id: "surface-pro", name: "Surface Pro", width: 912, height: 1368, icon: Tablet },
-  { id: "laptop", name: "Laptop", width: 1366, height: 768, icon: Monitor },
-  { id: "desktop-1080", name: "Desktop 1080p", width: 1920, height: 1080, icon: Monitor },
-  { id: "desktop-1440", name: "Desktop 1440p", width: 2560, height: 1440, icon: Monitor },
+  {
+    id: "laptop",
+    nameKey: "workspace.browser.devices.laptop",
+    width: 1366,
+    height: 768,
+    icon: Monitor,
+  },
+  {
+    id: "desktop-1080",
+    nameKey: "workspace.browser.devices.desktop1080",
+    width: 1920,
+    height: 1080,
+    icon: Monitor,
+  },
+  {
+    id: "desktop-1440",
+    nameKey: "workspace.browser.devices.desktop1440",
+    width: 2560,
+    height: 1440,
+    icon: Monitor,
+  },
 ];
 
-const RESPONSIVE_DEVICE_LABEL_KEY = "workspace.browser.devices.responsive";
-
-function formatDevicePresetLabel(preset: DeviceSizePreset, responsiveLabel: string): string {
-  const name = preset.id === "responsive" ? responsiveLabel : preset.name;
+function formatDevicePresetLabel(preset: DeviceSizePreset, t: TFunction): string {
+  const name = "nameKey" in preset ? t(preset.nameKey) : preset.name;
   if (preset.width && preset.height) {
     return `${name} · ${preset.width}×${preset.height}`;
   }
@@ -553,7 +583,7 @@ function DeviceSizeMenu({
             key={preset.id}
             preset={preset}
             selected={preset.id === selectedId}
-            label={formatDevicePresetLabel(preset, t(RESPONSIVE_DEVICE_LABEL_KEY))}
+            label={formatDevicePresetLabel(preset, t)}
             onSelect={onSelect}
           />
         ))}

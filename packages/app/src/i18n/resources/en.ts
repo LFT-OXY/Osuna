@@ -303,9 +303,12 @@ export const en = {
     tooManyMatches: "Too many matches — narrow your search",
     hostLoadFailed: "{{host}}: Could not load history",
     searchPlaceholder: "Search history",
+    emptyHost: "No sessions for this host",
+    loadFailed: "Unable to load sessions",
     actions: {
       loadMore: "Load more",
       clearSearch: "Clear search",
+      tryAgain: "Try again",
     },
   },
   agentList: {
@@ -346,18 +349,26 @@ export const en = {
     },
     turnUsage: {
       title: "Turn usage",
-      total: "Total",
-      duration: "Duration",
+      estimatedCost: "Estimated cost",
+      model: "Model",
+      byModel: "By model",
       note: "Estimated cost · priced at public API rates",
       unpriced: "No price data",
-      reasoning: "({{tokens}} reasoning)",
+      unpricedWarningOne:
+        "{{models}} has no price data and counts as $0. Set a custom price in Settings › Price table.",
+      unpricedWarningMany:
+        "{{models}} have no price data and count as $0. Set custom prices in Settings › Price table.",
+      modelSeparator: ", ",
       accessibility: "Turn usage: {{input}} in, {{output}} out, {{cost}}",
-      columns: {
-        model: "Model",
+      stats: {
         input: "Input",
         cache: "Cache",
         output: "Output",
-        cost: "Cost",
+        reasoning: "Incl. reasoning",
+      },
+      amounts: {
+        cache: "cache {{tokens}}",
+        reasoning: "reasoning {{tokens}}",
       },
     },
     diagram: {
@@ -447,6 +458,7 @@ export const en = {
     },
     filters: {
       all: "All",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "Connect to a host to import sessions",
@@ -455,6 +467,7 @@ export const en = {
       loading: "Loading recent sessions...",
       failedProvider: "Could not load {{provider}} sessions",
       failedImport: "Could not import selected session.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "Refresh sessions",
@@ -495,6 +508,7 @@ export const en = {
         restoringAction: "Restoring...",
         unavailableTitle: "Workspace unavailable",
         checkFailedTitle: "Couldn't check workspace",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -640,6 +654,9 @@ export const en = {
       devices: {
         label: "Device size",
         responsive: "Responsive",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "Failed to load page",
@@ -651,6 +668,11 @@ export const en = {
       hostDisconnected: "Host is not connected",
       updateHost: "Update the host to use the native terminal renderer.",
       unableToSubscribe: "Unable to subscribe to terminal",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "Loading...",
@@ -759,6 +781,10 @@ export const en = {
           tabs: "This will close {{tabs}} tab(s).",
           agents: "This will archive {{agents}} agent(s).",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1029,6 +1055,9 @@ export const en = {
         actions: {
           viewPullRequest: "View",
           openOn: "Open on {{brand}}",
+          addToChat: "Add to chat",
+          addAllToChat: "Add all to chat",
+          addingToChat: "Adding...",
         },
         checksSummary: {
           passedLabel: "passed",
@@ -1042,14 +1071,40 @@ export const en = {
           checks: "Checks",
           pipeline: "Pipeline",
           reviews: "Reviews",
+          activity: "Activity",
         },
         empty: {
           noJobs: "No jobs",
           loadingPipeline: "Loading pipeline…",
           pipelineJobsLoadFailed: "Could not load pipeline jobs",
           allowedToFail: "allowed to fail",
+          noActivity: "No activity yet",
         },
         approvals: "{{given}} of {{required}} approvals",
+        checks: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          countSeparator: ", ",
+          countLine: {
+            one: "{{parts}} check",
+            many: "{{parts}} checks",
+          },
+          accessibilityLabel: "{{headline}}. {{detail}}",
+        },
         accessibility: {
           pullRequest: "Pull request #{{number}}",
           pullRequest_mr: "Merge request !{{number}}",
@@ -1063,6 +1118,8 @@ export const en = {
             skipped: "Skipped",
             cancelled: "Cancelled",
           },
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
         },
         states: {
           draft: "Draft",
@@ -1081,6 +1138,8 @@ export const en = {
         },
         thread: {
           discussion: "Discussion thread",
+          resolved: "Resolved",
+          outdated: "Outdated",
         },
         errors: {
           statusLoadFailed: "Unable to load pull request status",
@@ -1221,6 +1280,7 @@ export const en = {
       search: "Search",
       schedules: "Schedules",
       usage: "Usage",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "Set up worktree scripts",
@@ -1286,6 +1346,8 @@ export const en = {
         hideFromSidebar: "Hide from sidebar",
         archiving: "Archiving...",
         hiding: "Hiding...",
+        markAsRead: "Mark as read",
+        markAsUnread: "Mark as unread",
       },
       confirmations: {
         hideTitle: "Hide workspace?",
@@ -1306,6 +1368,8 @@ export const en = {
         hostDisconnected: "Host is not connected",
         hideFailed: "Failed to hide workspace",
         archiveFailed: "Failed to archive workspace",
+        markAsReadFailed: "Failed to mark workspace as read",
+        markAsUnreadFailed: "Failed to mark workspace as unread",
       },
     },
   },
@@ -1321,6 +1385,7 @@ export const en = {
       project: "Project",
       base: "Base",
       baseNotApplicable: "Not applicable",
+      host: "Host",
     },
     titlePlaceholder: "Title (optional)",
     errors: {
@@ -1328,6 +1393,9 @@ export const en = {
       createWorktreeFailed: "Failed to create worktree",
       composerStateRequired: "Composer state is required",
       selectModel: "Select a model",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1352,6 +1420,14 @@ export const en = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {
@@ -1576,6 +1652,107 @@ export const en = {
         title: "Pair device",
         description: "Connect your phone to this daemon",
       },
+    },
+  },
+  addProject: {
+    panelAccessibilityLabels: {
+      host: "Add project: host",
+      method: "Add project: method",
+      directorySearch: "Add project: directory-search",
+      githubSearch: "Add project: github-search",
+      githubLocation: "Add project: github-location",
+      newDirectoryParent: "Add project: new-directory-parent",
+      newDirectoryName: "Add project: new-directory-name",
+    },
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      directoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        updateHost: "Update this host to clone GitHub repositories",
+        search: "Search projects available to your GitHub account",
+        manual: "Enter a GitHub URL or owner/repo",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        updateHost: "Update this host to create directories",
+      },
+    },
+    rows: {
+      addHost: "Add host",
+      openPath: "Open this path",
+      useParent: "Use this parent",
+      repositoryVia: "{{repository}} via {{protocol}}",
+      cloneRepositoryUrl: "Clone this repository URL",
+      cloneOwnerRepoVia: "Clone owner/repo via {{protocol}}",
+      alreadyExists: "Already exists",
+      parentDirectory: "Parent directory: {{path}}",
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      adding: "Adding project...",
+    },
+    empty: {
+      noConnectedHosts: "No connected hosts",
+      githubSearch: "Enter a GitHub URL or owner/repo",
+      updateHost: "Update the host to use Add Project.",
+      noMatchingOptions: "No matching options",
+    },
+    errors: {
+      searchDirectories: "Unable to search directories",
+      searchGithub: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+      directoryNotFound: "Directory not found",
+      addProject: "Unable to add project",
+      browse: "Unable to browse for a directory",
+      cloneRepository: "Unable to clone repository",
+      directoryNameRequired: "Enter a directory name",
+      createDirectory: "Unable to create directory",
+    },
+    hints: {
+      navigate: "Navigate",
+    },
+  },
+  hostPicker: {
+    title: "Host",
+    searchPlaceholder: "Search hosts",
+    allHosts: "All hosts",
+    addHost: "Add host",
+    enableBuiltInDaemon: "Enable built-in daemon",
+    local: "Local",
+    openHostSettings: "Open {{host}} settings",
+    filter: {
+      title: "Filter by host",
+      accessibilityLabel: "Filter: {{host}}",
+    },
+    chooser: {
+      title: "Choose host",
+      searchPlaceholder: "Search hosts...",
+      empty: "No matching hosts",
     },
   },
   projectPicker: {
@@ -1932,6 +2109,14 @@ export const en = {
     dispatchArchived: "Archived",
     dispatchDetached: "Detached",
   },
+  pluginSurface: {
+    fallbackTitle: "Plugin",
+    chooseHost: "Choose plugin host",
+    hostSwitcher: "Plugin host: {{host}}",
+    close: "Close plugin",
+    hostOffline: "Plugin host is offline.",
+    unavailable: "This plugin surface is unavailable.",
+  },
   panels: {
     draft: {
       newAgent: "New Agent",
@@ -1988,6 +2173,12 @@ export const en = {
       subtitle: "Pull request details",
       emptyTitle: "No pull request yet",
       emptyDescription: "Create a pull request for this checkout to see its details here.",
+    },
+    plugin: {
+      unavailableLabel: "Plugin unavailable",
+      unavailableTooltip: "This plugin panel is unavailable",
+      unavailable: "This plugin panel is unavailable.",
+      hostOffline: "Plugin host is offline.",
     },
     sessionHistory: {
       label: "Session history",
@@ -2571,6 +2762,7 @@ export const en = {
         queueMessage: "Queue message",
         muteUnmuteVoiceMode: "Mute/unmute voice mode",
         switchProject: "Switch project",
+        pinChat: "Pin chat",
       },
       helpNotes: {
         showKeyboardShortcuts: "Available when focus is not in a text field or terminal.",
@@ -2720,6 +2912,13 @@ export const en = {
         },
       },
       agents: {
+        browserTools: {
+          title: "Browser tools",
+          warning:
+            "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+          updating: "Updating browser tools…",
+          accessibilityLabel: "Enable browser tools",
+        },
         unavailable: "Connect to this host to manage agents",
       },
       mentionDefaults: {
@@ -2755,7 +2954,22 @@ export const en = {
         retry: "Retry",
       },
       workspaces: {
+        autoArchiveMerged: {
+          title: "Archive merged PR workspaces",
+          hint: "Automatically archive clean Osuna workspaces after their pull request is merged",
+          accessibilityLabel: "Archive merged PR workspaces",
+          updateFailed: "Unable to update workspaces",
+        },
         unavailable: "Connect to this host to manage workspaces",
+      },
+      terminalAgents: {
+        sectionTitle: "Terminal agents",
+        hooks: {
+          title: "Enable terminal agent hooks",
+          hint: "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+          accessibilityLabel: "Enable terminal agent hooks",
+          updateFailed: "Unable to update terminal agent hooks",
+        },
       },
       terminalProfiles: {
         unavailable: "Connect to this host to manage terminal profiles",
@@ -2818,6 +3032,20 @@ export const en = {
         moveDown: "Move down",
       },
       daemon: {
+        lifecycleErrors: {
+          restartAcknowledged: "Restart acknowledged: true. {{detail}}",
+          restartUnacknowledged: "Restart acknowledged: false. {{detail}}",
+          packageInstallFailed: "Package installation failed",
+          versionUnconfirmed:
+            "Package installed; replacement worker version was not confirmed. {{detail}}",
+          versionMismatch: "Expected installed version {{expected}}; observed worker {{observed}}.",
+          nestedError: "Error: {{detail}}",
+          unknownVersion: "unknown",
+          identityChanged: "Daemon identity changed",
+          replacementTimeout:
+            "Replacement worker could not be confirmed. Check daemon status and logs.",
+          unknown: "Unknown error",
+        },
         rename: {
           editLabel: "Edit label",
           title: "Rename host",
@@ -2889,7 +3117,6 @@ export const en = {
       },
       priceTable: {
         title: "Price table",
-        subtitle: "$ per million tokens · LiteLLM snapshot, updated {{ago}}, {{models}}",
         modelCountOne: "1 model",
         modelCountMany: "{{count}} models",
         autoUpdate: "Auto-update",
@@ -2906,19 +3133,47 @@ export const en = {
         save: "Save",
         saveFailed: "Could not save this price.",
         invalidPrice: "Enter a number in all four columns.",
+        edit: "Edit",
+        editAccessibility: "Edit the custom price of {{model}}",
+        removeCustomPrice: "Remove custom price",
+        removeCustomPriceAccessibility: "Remove the custom price of {{model}}",
+        removeFailed: "Could not remove this custom price.",
+        customize: "Customize",
+        customizeAccessibility: "Set a custom price for {{model}}",
+        litellmPrice: "LiteLLM price",
+        customGroup: {
+          title: "Custom prices",
+          intro:
+            "Models LiteLLM has no price for are listed here. Fill in all four columns in $ per million tokens; 0 means free.",
+          empty: "Every model has a price.",
+          unpricedCount: "No price data {{count}}",
+        },
+        litellmGroup: {
+          title: "LiteLLM prices",
+          subtitle: {
+            snapshot: "Bundled LiteLLM snapshot, updated {{ago}} · $ per million tokens",
+            cache: "LiteLLM prices fetched online, updated {{ago}} · $ per million tokens",
+          },
+          summary: "{{models}} priced by LiteLLM",
+          expand: "Show",
+          collapse: "Hide",
+          autoUpdate: "Auto-update LiteLLM prices",
+          search: "Search models",
+          clearSearch: "Clear search",
+          noMatches: "No model names contain “{{query}}”.",
+        },
         columns: {
           model: "Model",
           input: "Input",
           cacheRead: "Cache read",
           cacheWrite: "Cache write",
           output: "Output",
-          source: "Source",
-          actions: "Actions",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Custom",
-          none: "—",
+          short: {
+            input: "In {{price}}",
+            cacheRead: "Read {{price}}",
+            cacheWrite: "Write {{price}}",
+            output: "Out {{price}}",
+          },
         },
       },
     },

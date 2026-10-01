@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, Text, View, type GestureResponderEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronDown, ChevronRight, MessageSquarePlus } from "lucide-react-native";
@@ -8,7 +9,13 @@ import { ICON_SIZE } from "@/styles/theme";
 import { classifyCheck, type CheckPresentation } from "@/git/check-presentation";
 import { CheckPresentationIcon } from "@/git/check-presentation.view";
 import { ChecksRing } from "./checks-ring";
-import { summarizeChecks, type ChecksGroup } from "./checks-summary";
+import {
+  formatChecksCount,
+  formatChecksGroupLabel,
+  formatChecksHeadline,
+  summarizeChecks,
+  type ChecksGroup,
+} from "./checks-summary";
 import { canAddPullRequestCheckLogsToChat } from "./context-attachment";
 import type { PrPaneCheck } from "./data";
 import { foregroundMutedColorMapping, sectionKitStyles } from "./section-kit";
@@ -22,19 +29,6 @@ const ThemedChevronRight = withUnistyles(ChevronRight);
  * timeline off the pane entirely, so past this height the list scrolls in place.
  */
 const LIST_MAX_HEIGHT = 268;
-
-/**
- * The three statuses the pane has always labelled for tests. Skipped has no id because
- * nothing asserts on it.
- */
-const PART_TEST_ID: Partial<Record<CheckPresentation, string>> = {
-  actionRequired: "pr-pane-check-action-required",
-  warning: "pr-pane-check-warning",
-  success: "pr-pane-check-passed",
-  failure: "pr-pane-check-failed",
-  pending: "pr-pane-check-pending",
-  manual: "pr-pane-check-manual",
-};
 
 /**
  * Identifies a check across refreshes. The forge's run id is stable where a forge exposes
@@ -71,7 +65,10 @@ export function ChecksSection({
   loadingCheckKeys,
   onAddLogsToChat,
 }: ChecksSectionProps) {
+  const { t } = useTranslation();
   const summary = useMemo(() => summarizeChecks(checks), [checks]);
+  const headline = formatChecksHeadline(t, summary.outcome);
+  const detail = formatChecksCount(t, summary.parts, summary.total);
   const { collapsedGroups, toggle: handleToggleGroup } = useCheckGroupState();
 
   return (
@@ -81,23 +78,17 @@ export function ChecksSection({
         style={headerPressableStyle}
         accessibilityRole="button"
         accessibilityLabel={
-          summary.detail ? `${summary.headline}. ${summary.detail}` : summary.headline
+          detail ? t("workspace.git.pr.checks.accessibilityLabel", { headline, detail }) : headline
         }
       >
         <ChecksRing summary={summary} size={ICON_SIZE.lg} />
         <View style={styles.headerText}>
           <Text style={styles.headline} numberOfLines={1}>
-            {summary.headline}
+            {headline}
           </Text>
-          {summary.parts.length > 0 ? (
+          {detail ? (
             <Text style={styles.detail} numberOfLines={1} testID="pr-pane-check-summary">
-              {summary.parts.map((part, index) => (
-                <Text key={part.status}>
-                  {index > 0 ? ", " : ""}
-                  <Text testID={PART_TEST_ID[part.status]}>{part.text}</Text>
-                </Text>
-              ))}
-              {` ${summary.countNoun}`}
+              {detail}
             </Text>
           ) : null}
         </View>
@@ -146,11 +137,12 @@ function CheckGroup({
   loadingCheckKeys: ReadonlySet<string>;
   onAddLogsToChat: (check: PrPaneCheck) => void;
 }) {
+  const { t } = useTranslation();
   const handlePress = useCallback(() => onToggle(group.status), [group.status, onToggle]);
   return (
     <View testID={`pr-pane-check-group-${group.status}`}>
       <Pressable onPress={handlePress} style={styles.groupHeader} accessibilityRole="button">
-        <Text style={styles.groupLabel}>{group.label}</Text>
+        <Text style={styles.groupLabel}>{formatChecksGroupLabel(t, group)}</Text>
         {collapsed ? (
           <ThemedChevronRight size={ICON_SIZE.xs} uniProps={foregroundMutedColorMapping} />
         ) : (
@@ -186,6 +178,7 @@ function CheckRow({
   isAddingLogsToChat: boolean;
   onAddLogsToChat: (check: PrPaneCheck) => void;
 }) {
+  const { t } = useTranslation();
   const handlePress = useCallback(() => {
     void openExternalUrl(check.url);
   }, [check.url]);
@@ -217,7 +210,9 @@ function CheckRow({
             onPress={handleAddLogsToChat}
             style={styles.addButton}
           >
-            {isAddingLogsToChat ? "Adding..." : "Add to chat"}
+            {isAddingLogsToChat
+              ? t("workspace.git.pr.actions.addingToChat")
+              : t("workspace.git.pr.actions.addToChat")}
           </Button>
         ) : null}
         {check.timing && <Text style={sectionKitStyles.checkDuration}>{check.timing}</Text>}

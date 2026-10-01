@@ -54,6 +54,17 @@ A refresh that must bypass the daemon cache calls `recheckProviderVersions`, whi
 
 Test it in Node with `QueryObserver` and a fake client (`version-check.test.ts`); "did not check" is `fetchStatus === "idle"` plus an empty call list.
 
+### A list in daemon config is written back whole
+
+`useDaemonConfig().patchConfig` replaces an array field (`usage.pricing.overrides`, profiles) rather than merging into it, so every edit to one entry sends the whole list. Three rules follow, all in `price-table/price-table-section.tsx` `writeOverrides`:
+
+- Compute the new list from the loaded `config`. When `config` is still `null`, fail the write with the row's localized error instead of starting from `config?.… ?? []`; an empty base sends a one-entry list and deletes every other entry, notes included.
+- One write at a time per list. Two writes started from the same snapshot each drop the other's change. Hold the rows that write the list while one is in flight (`price-table/price-rows.ts` `resolveRowWriteState` → `idle | writing | locked`). Releasing the lock right after `patchConfig` resolves is safe: it writes the response into the config query before it returns, so the next write reads the new list.
+- Removing an entry removes every entry the daemon would match (`pricing.ts` `removePricingOverride`, case- and space-insensitive). The daemon takes the last duplicate, so deleting one leaves the other in force.
+- A row that client state pulled into a group (the LiteLLM model being customized, `price-rows.ts` `customizing`) stays pulled in after its save lands. `patchConfig` resolves before the refetch triggered by `usage.pricing.updated` does, so the model is still `priceSource: "table"` for one round trip; dropping it on `saved` bounces the row into the other group and back. Drop it on `cancelled` and `removed`, where the daemon's list already puts it where it belongs.
+
+Test the list functions in Node (`pricing.test.ts`) and read the list back from the daemon in e2e (`usage-price-table.spec.ts` `readCustomPrices`), not from the page that wrote it.
+
 ## Hook shape
 
 A hook that does real work has a pure module beside it and a test for that module:

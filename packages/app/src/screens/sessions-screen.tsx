@@ -57,7 +57,7 @@ function resolveEmptyText(input: {
 }): string {
   if (input.isSearching) return input.t("sessions.noMatches");
   if (input.isAllHosts) return input.t("sessions.empty");
-  return "No sessions for this host";
+  return input.t("sessions.emptyHost");
 }
 
 export function SessionsScreen() {
@@ -144,7 +144,7 @@ function SessionsScreenContent() {
     return (
       <View style={styles.footer}>
         <Button variant="ghost" onPress={loadMore} disabled={isLoadingMore}>
-          {isLoadingMore ? "Loading..." : t("sessions.actions.loadMore")}
+          {isLoadingMore ? t("common.loading") : t("sessions.actions.loadMore")}
         </Button>
       </View>
     );
@@ -184,9 +184,9 @@ function SessionsScreenContent() {
       ) : null}
       {!isInitialLoad && showLoadError ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Unable to load sessions</Text>
+          <Text style={styles.emptyText}>{t("sessions.loadFailed")}</Text>
           <Button variant="ghost" onPress={handleRefresh}>
-            Try again
+            {t("sessions.actions.tryAgain")}
           </Button>
         </View>
       ) : null}
@@ -199,7 +199,7 @@ function SessionsScreenContent() {
             </Button>
           ) : (
             <Button variant="ghost" leftIcon={ChevronLeft} onPress={handleBack}>
-              Back
+              {t("common.back")}
             </Button>
           )}
           <Button variant="ghost" leftIcon={Import} onPress={importSession.open}>

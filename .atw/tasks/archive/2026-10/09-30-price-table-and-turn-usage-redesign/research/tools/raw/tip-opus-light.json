@@ -1,0 +1,468 @@
+[
+ {
+  "label": "trigger segment (hovered)",
+  "rect": [
+   530.2,
+   404,
+   114.73,
+   16
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0.06)",
+  "borderRadius": "4px",
+  "paddingLeft": "2px",
+  "paddingRight": "2px",
+  "height": "16px"
+ },
+ {
+  "label": "segment text 0",
+  "rect": [
+   532.2,
+   404,
+   74.5,
+   16
+  ],
+  "fontSize": "13px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(113, 113, 123)",
+  "fontVariantNumeric": "tabular-nums",
+  "textAlign": "start",
+  "minWidth": "auto",
+  "width": "74.5px",
+  "marginTop": "0px",
+  "marginBottom": "0px",
+  "text": "· ↑2 ↓529 · "
+ },
+ {
+  "label": "segment text 1",
+  "rect": [
+   606.7,
+   404,
+   36.23,
+   16
+  ],
+  "fontSize": "13px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(113, 113, 123)",
+  "fontVariantNumeric": "tabular-nums",
+  "textAlign": "start",
+  "minWidth": "auto",
+  "width": "36.2344px",
+  "marginTop": "0px",
+  "marginBottom": "0px",
+  "text": "$0.11"
+ },
+ {
+  "label": "segment parent",
+  "rect": [
+   398,
+   401,
+   246.94,
+   22
+  ],
+  "gap": "8px",
+  "height": "22px"
+ },
+ {
+  "label": "footer row text",
+  "text": "星期二 0:13\n已工作 7s\n· ↑2 ↓529 · \n$0.11"
+ },
+ {
+  "label": "ancestor 0 of title (0=tooltip inner View)",
+  "rect": [
+   456.56,
+   277,
+   280,
+   114
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "maxWidth": "none",
+  "minWidth": "280px",
+  "width": "280px",
+  "overflow": "visible",
+  "position": "relative",
+  "left": "0px",
+  "top": "0px",
+  "gap": "4px",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "ancestor 1 of title (0=tooltip inner View)",
+  "rect": [
+   447.56,
+   272,
+   280,
+   124
+  ],
+  "backgroundColor": "rgb(255, 255, 255)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgb(228, 228, 231)",
+  "borderRadius": "8px",
+  "paddingTop": "4px",
+  "paddingRight": "8px",
+  "paddingBottom": "4px",
+  "paddingLeft": "8px",
+  "boxShadow": "rgba(0, 0, 0, 0.35) 0px 16px 40px -18px, rgba(0, 0, 0, 0) 0px 1px 0px 0px inset",
+  "maxWidth": "280px",
+  "minWidth": "0px",
+  "width": "280px",
+  "overflow": "visible",
+  "position": "absolute",
+  "left": "447.57px",
+  "top": "272px",
+  "gap": "normal",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "ancestor 2 of title (0=tooltip inner View)",
+  "rect": [
+   0,
+   0,
+   1280,
+   900
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "maxWidth": "none",
+  "minWidth": "0px",
+  "width": "1280px",
+  "overflow": "visible",
+  "position": "absolute",
+  "left": "0px",
+  "top": "0px",
+  "gap": "normal",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "ancestor 3 of title (0=tooltip inner View)",
+  "rect": [
+   0,
+   0,
+   1280,
+   900
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "maxWidth": "none",
+  "minWidth": "0px",
+  "width": "1280px",
+  "overflow": "visible",
+  "position": "fixed",
+  "left": "0px",
+  "top": "0px",
+  "gap": "normal",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "inner scroll/client",
+  "scrollWidth": 280,
+  "clientWidth": 280
+ },
+ {
+  "label": "title 本轮用量",
+  "rect": [
+   456.56,
+   277,
+   280,
+   17
+  ],
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(39, 39, 42)",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "minWidth": "auto",
+  "width": "280px",
+  "marginTop": "0px",
+  "marginBottom": "2px",
+  "text": "本轮用量"
+ },
+ {
+  "label": "inner child 1",
+  "rect": [
+   456.56,
+   300,
+   280,
+   15
+  ],
+  "gap": "8px",
+  "height": "15px",
+  "justifyContent": "normal",
+  "marginTop": "0px",
+  "display": "flex",
+  "flexDirection": "row"
+ },
+ {
+  "label": "  cells of child 1",
+  "cells": [
+   {
+    "text": "模型",
+    "rect": [
+     456.56,
+     300,
+     24,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(113, 113, 123)",
+    "ta": "start",
+    "scrollW": 24,
+    "clientW": 24
+   },
+   {
+    "text": "输入",
+    "rect": [
+     488.56,
+     300,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(113, 113, 123)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "缓存",
+    "rect": [
+     552.56,
+     300,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(113, 113, 123)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "输出",
+    "rect": [
+     616.56,
+     300,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(113, 113, 123)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "估算成本",
+    "rect": [
+     680.56,
+     300,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(113, 113, 123)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   }
+  ]
+ },
+ {
+  "label": "inner child 2",
+  "rect": [
+   456.56,
+   319,
+   280,
+   30
+  ],
+  "gap": "8px",
+  "height": "30px",
+  "justifyContent": "normal",
+  "marginTop": "0px",
+  "display": "flex",
+  "flexDirection": "row"
+ },
+ {
+  "label": "  cells of child 2",
+  "cells": [
+   {
+    "text": "claude-opus-5-5",
+    "rect": [
+     456.56,
+     326.5,
+     0,
+     15
+    ],
+    "fs": "16px",
+    "fw": "400",
+    "color": "rgb(0, 0, 0)",
+    "ta": "start",
+    "scrollW": 0,
+    "clientW": 0
+   },
+   {
+    "text": "2",
+    "rect": [
+     464.56,
+     326.5,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(39, 39, 42)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "30.5K",
+    "rect": [
+     528.56,
+     326.5,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(39, 39, 42)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "529 （240 推理）",
+    "rect": [
+     592.56,
+     319,
+     80,
+     30
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(39, 39, 42)",
+    "ta": "right",
+    "scrollW": 80,
+    "clientW": 80
+   },
+   {
+    "text": "$0.11",
+    "rect": [
+     680.56,
+     326.5,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(39, 39, 42)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   }
+  ]
+ },
+ {
+  "label": "inner child 3",
+  "rect": [
+   456.56,
+   357,
+   280,
+   15
+  ],
+  "gap": "8px",
+  "height": "15px",
+  "justifyContent": "space-between",
+  "marginTop": "4px",
+  "display": "flex",
+  "flexDirection": "row"
+ },
+ {
+  "label": "  cells of child 3",
+  "cells": [
+   {
+    "text": "耗时",
+    "rect": [
+     456.56,
+     357,
+     23.84,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(113, 113, 123)",
+    "ta": "start",
+    "scrollW": 24,
+    "clientW": 24
+   },
+   {
+    "text": "7s",
+    "rect": [
+     722.72,
+     357,
+     13.84,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(39, 39, 42)",
+    "ta": "start",
+    "scrollW": 14,
+    "clientW": 14
+   }
+  ]
+ },
+ {
+  "label": "inner child 4",
+  "rect": [
+   456.56,
+   376,
+   280,
+   15
+  ],
+  "gap": "normal",
+  "height": "15px",
+  "justifyContent": "normal",
+  "marginTop": "0px",
+  "display": "block",
+  "flexDirection": "row",
+  "text": "估算成本 · 按公开 API 价格计算"
+ },
+ {
+  "label": "  cells of child 4",
+  "cells": []
+ }
+]

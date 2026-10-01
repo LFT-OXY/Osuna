@@ -592,7 +592,7 @@ export function ImportSessionSheet({
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
       if (!entry.cwd) {
-        throw new Error("Session is missing a working directory");
+        throw new Error(t("importSession.status.missingCwd"));
       }
       const target = resolveImportTarget({
         entryCwd: entry.cwd,
@@ -756,7 +756,7 @@ export function ImportSessionSheet({
             onSelect={handleFilterSelect}
             renderOption={renderFilterOption}
             searchable={false}
-            title="Filter by provider"
+            title={t("importSession.filters.byProvider")}
             open={isFilterOpen}
             onOpenChange={setIsFilterOpen}
             anchorRef={filterAnchorRef}

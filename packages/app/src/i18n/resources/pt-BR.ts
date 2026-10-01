@@ -312,9 +312,12 @@ export const ptBR: TranslationResources = {
     tooManyMatches: "Muitos resultados — refine a busca",
     hostLoadFailed: "{{host}}: Não foi possível carregar o histórico",
     searchPlaceholder: "Buscar no histórico",
+    emptyHost: "No sessions for this host",
+    loadFailed: "Unable to load sessions",
     actions: {
       loadMore: "Carregar mais",
       clearSearch: "Limpar busca",
+      tryAgain: "Try again",
     },
   },
   agentList: {
@@ -355,18 +358,26 @@ export const ptBR: TranslationResources = {
     },
     turnUsage: {
       title: "Uso do turno",
-      total: "Total",
-      duration: "Duração",
+      estimatedCost: "Custo estimado",
+      model: "Modelo",
+      byModel: "Por modelo",
       note: "Custo estimado · pelos preços públicos da API",
       unpriced: "Sem dados de preço",
-      reasoning: "({{tokens}} de raciocínio)",
+      unpricedWarningOne:
+        "{{models}} não tem dados de preço e conta como $0. Defina um preço personalizado em Configurações › Tabela de preços.",
+      unpricedWarningMany:
+        "{{models}} não têm dados de preço e contam como $0. Defina preços personalizados em Configurações › Tabela de preços.",
+      modelSeparator: ", ",
       accessibility: "Uso do turno: {{input}} de entrada, {{output}} de saída, {{cost}}",
-      columns: {
-        model: "Modelo",
+      stats: {
         input: "Entrada",
         cache: "Cache",
         output: "Saída",
-        cost: "Custo",
+        reasoning: "Incl. raciocínio",
+      },
+      amounts: {
+        cache: "cache {{tokens}}",
+        reasoning: "raciocínio {{tokens}}",
       },
     },
     diagram: {
@@ -456,6 +467,7 @@ export const ptBR: TranslationResources = {
     },
     filters: {
       all: "Tudo",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "Conecte-se a um host para importar sessões",
@@ -464,6 +476,7 @@ export const ptBR: TranslationResources = {
       loading: "Carregando sessões recentes...",
       failedProvider: "Não foi possível carregar as sessões de {{provider}}",
       failedImport: "Não foi possível importar a sessão selecionada.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "Atualizar sessões",
@@ -505,6 +518,7 @@ export const ptBR: TranslationResources = {
         restoringAction: "Restaurando...",
         unavailableTitle: "Workspace indisponível",
         checkFailedTitle: "Não foi possível verificar o workspace",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -650,6 +664,9 @@ export const ptBR: TranslationResources = {
       devices: {
         label: "Tamanho do dispositivo",
         responsive: "Responsivo",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "Falha ao carregar página",
@@ -661,6 +678,11 @@ export const ptBR: TranslationResources = {
       hostDisconnected: "Host não está conectado",
       updateHost: "Atualize o host para usar o renderizador de terminal nativo.",
       unableToSubscribe: "Não foi possível assinar o terminal",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "Carregando...",
@@ -770,6 +792,10 @@ export const ptBR: TranslationResources = {
           tabs: "Isso vai fechar {{tabs}} aba(s).",
           agents: "Isso vai arquivar {{agents}} agente(s).",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1046,6 +1072,9 @@ export const ptBR: TranslationResources = {
         actions: {
           viewPullRequest: "Ver",
           openOn: "Abrir no {{brand}}",
+          addToChat: "Add to chat",
+          addAllToChat: "Add all to chat",
+          addingToChat: "Adding...",
         },
         checksSummary: {
           passedLabel: "passou",
@@ -1059,14 +1088,40 @@ export const ptBR: TranslationResources = {
           checks: "Verificações",
           pipeline: "Pipeline",
           reviews: "Revisões",
+          activity: "Activity",
         },
         empty: {
           noJobs: "Sem jobs",
           loadingPipeline: "Carregando pipeline...",
           pipelineJobsLoadFailed: "Não foi possível carregar os jobs do pipeline",
           allowedToFail: "permitido falhar",
+          noActivity: "No activity yet",
         },
         approvals: "{{given}} de {{required}} aprovações",
+        checks: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          countSeparator: ", ",
+          countLine: {
+            one: "{{parts}} check",
+            many: "{{parts}} checks",
+          },
+          accessibilityLabel: "{{headline}}. {{detail}}",
+        },
         accessibility: {
           pullRequest: "Pull request #{{number}}",
           pullRequest_mr: "Merge request !{{number}}",
@@ -1080,6 +1135,8 @@ export const ptBR: TranslationResources = {
             skipped: "Ignorado",
             cancelled: "Cancelado",
           },
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
         },
         states: {
           draft: "Rascunho",
@@ -1098,6 +1155,8 @@ export const ptBR: TranslationResources = {
         },
         thread: {
           discussion: "Tópico de discussão",
+          resolved: "Resolved",
+          outdated: "Outdated",
         },
         errors: {
           statusLoadFailed: "Não foi possível carregar o status da pull request",
@@ -1241,6 +1300,7 @@ export const ptBR: TranslationResources = {
       search: "Buscar",
       schedules: "Agendamentos",
       usage: "Uso",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "Configurar scripts de worktree",
@@ -1306,6 +1366,8 @@ export const ptBR: TranslationResources = {
         hideFromSidebar: "Ocultar da barra lateral",
         archiving: "Arquivando...",
         hiding: "Ocultando...",
+        markAsRead: "Mark as read",
+        markAsUnread: "Mark as unread",
       },
       confirmations: {
         hideTitle: "Ocultar workspace?",
@@ -1326,6 +1388,8 @@ export const ptBR: TranslationResources = {
         hostDisconnected: "Host não está conectado",
         hideFailed: "Falha ao ocultar workspace",
         archiveFailed: "Falha ao arquivar workspace",
+        markAsReadFailed: "Failed to mark workspace as read",
+        markAsUnreadFailed: "Failed to mark workspace as unread",
       },
     },
   },
@@ -1341,6 +1405,7 @@ export const ptBR: TranslationResources = {
       project: "Projeto",
       base: "Base",
       baseNotApplicable: "Não aplicável",
+      host: "Host",
     },
     titlePlaceholder: "Título (opcional)",
     errors: {
@@ -1348,6 +1413,9 @@ export const ptBR: TranslationResources = {
       createWorktreeFailed: "Falha ao criar worktree",
       composerStateRequired: "O estado do composer é obrigatório",
       selectModel: "Selecione um modelo",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Choose the project",
@@ -1372,6 +1440,14 @@ export const ptBR: TranslationResources = {
       submit: "Launch",
       promptPlaceholder: "Prompt {{name}}",
       commandPlaceholder: "Run a command, or leave empty for a blank terminal",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {
@@ -1584,6 +1660,107 @@ export const ptBR: TranslationResources = {
         title: "Parear dispositivo",
         description: "Conecte seu celular a este daemon",
       },
+    },
+  },
+  addProject: {
+    panelAccessibilityLabels: {
+      host: "Add project: host",
+      method: "Add project: method",
+      directorySearch: "Add project: directory-search",
+      githubSearch: "Add project: github-search",
+      githubLocation: "Add project: github-location",
+      newDirectoryParent: "Add project: new-directory-parent",
+      newDirectoryName: "Add project: new-directory-name",
+    },
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      directoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        updateHost: "Update this host to clone GitHub repositories",
+        search: "Search projects available to your GitHub account",
+        manual: "Enter a GitHub URL or owner/repo",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        updateHost: "Update this host to create directories",
+      },
+    },
+    rows: {
+      addHost: "Add host",
+      openPath: "Open this path",
+      useParent: "Use this parent",
+      repositoryVia: "{{repository}} via {{protocol}}",
+      cloneRepositoryUrl: "Clone this repository URL",
+      cloneOwnerRepoVia: "Clone owner/repo via {{protocol}}",
+      alreadyExists: "Already exists",
+      parentDirectory: "Parent directory: {{path}}",
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      adding: "Adding project...",
+    },
+    empty: {
+      noConnectedHosts: "No connected hosts",
+      githubSearch: "Enter a GitHub URL or owner/repo",
+      updateHost: "Update the host to use Add Project.",
+      noMatchingOptions: "No matching options",
+    },
+    errors: {
+      searchDirectories: "Unable to search directories",
+      searchGithub: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+      directoryNotFound: "Directory not found",
+      addProject: "Unable to add project",
+      browse: "Unable to browse for a directory",
+      cloneRepository: "Unable to clone repository",
+      directoryNameRequired: "Enter a directory name",
+      createDirectory: "Unable to create directory",
+    },
+    hints: {
+      navigate: "Navigate",
+    },
+  },
+  hostPicker: {
+    title: "Host",
+    searchPlaceholder: "Search hosts",
+    allHosts: "All hosts",
+    addHost: "Add host",
+    enableBuiltInDaemon: "Enable built-in daemon",
+    local: "Local",
+    openHostSettings: "Open {{host}} settings",
+    filter: {
+      title: "Filter by host",
+      accessibilityLabel: "Filter: {{host}}",
+    },
+    chooser: {
+      title: "Choose host",
+      searchPlaceholder: "Search hosts...",
+      empty: "No matching hosts",
     },
   },
   projectPicker: {
@@ -1943,6 +2120,14 @@ export const ptBR: TranslationResources = {
     dispatchArchived: "Arquivado",
     dispatchDetached: "Desanexado",
   },
+  pluginSurface: {
+    fallbackTitle: "Plugin",
+    chooseHost: "Choose plugin host",
+    hostSwitcher: "Plugin host: {{host}}",
+    close: "Close plugin",
+    hostOffline: "Plugin host is offline.",
+    unavailable: "This plugin surface is unavailable.",
+  },
   panels: {
     draft: {
       newAgent: "Novo Agente",
@@ -1999,6 +2184,12 @@ export const ptBR: TranslationResources = {
       subtitle: "Detalhes do pull request",
       emptyTitle: "Ainda não há pull request",
       emptyDescription: "Crie um pull request para este checkout para ver os detalhes aqui.",
+    },
+    plugin: {
+      unavailableLabel: "Plugin unavailable",
+      unavailableTooltip: "This plugin panel is unavailable",
+      unavailable: "This plugin panel is unavailable.",
+      hostOffline: "Plugin host is offline.",
     },
     sessionHistory: {
       label: "Histórico de sessões",
@@ -2491,6 +2682,7 @@ export const ptBR: TranslationResources = {
         queueMessage: "Enfileirar mensagem",
         muteUnmuteVoiceMode: "Silenciar/ativar modo de voz",
         switchProject: "Trocar projeto",
+        pinChat: "Pin chat",
       },
       helpNotes: {
         showKeyboardShortcuts:
@@ -2641,6 +2833,13 @@ export const ptBR: TranslationResources = {
         },
       },
       agents: {
+        browserTools: {
+          title: "Browser tools",
+          warning:
+            "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+          updating: "Updating browser tools…",
+          accessibilityLabel: "Enable browser tools",
+        },
         unavailable: "Conecte-se a este host para gerenciar agentes",
       },
       mentionDefaults: {
@@ -2677,7 +2876,22 @@ export const ptBR: TranslationResources = {
         retry: "Tentar novamente",
       },
       workspaces: {
+        autoArchiveMerged: {
+          title: "Archive merged PR workspaces",
+          hint: "Automatically archive clean Osuna workspaces after their pull request is merged",
+          accessibilityLabel: "Archive merged PR workspaces",
+          updateFailed: "Unable to update workspaces",
+        },
         unavailable: "Conecte-se a este host para gerenciar workspaces",
+      },
+      terminalAgents: {
+        sectionTitle: "Terminal agents",
+        hooks: {
+          title: "Enable terminal agent hooks",
+          hint: "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+          accessibilityLabel: "Enable terminal agent hooks",
+          updateFailed: "Unable to update terminal agent hooks",
+        },
       },
       terminalProfiles: {
         unavailable: "Conecte-se a este host para gerenciar perfis de terminal",
@@ -2742,6 +2956,20 @@ export const ptBR: TranslationResources = {
         moveDown: "Mover para baixo",
       },
       daemon: {
+        lifecycleErrors: {
+          restartAcknowledged: "Restart acknowledged: true. {{detail}}",
+          restartUnacknowledged: "Restart acknowledged: false. {{detail}}",
+          packageInstallFailed: "Package installation failed",
+          versionUnconfirmed:
+            "Package installed; replacement worker version was not confirmed. {{detail}}",
+          versionMismatch: "Expected installed version {{expected}}; observed worker {{observed}}.",
+          nestedError: "Error: {{detail}}",
+          unknownVersion: "unknown",
+          identityChanged: "Daemon identity changed",
+          replacementTimeout:
+            "Replacement worker could not be confirmed. Check daemon status and logs.",
+          unknown: "Unknown error",
+        },
         rename: {
           editLabel: "Editar rótulo",
           title: "Renomear host",
@@ -2814,7 +3042,6 @@ export const ptBR: TranslationResources = {
       },
       priceTable: {
         title: "Tabela de preços",
-        subtitle: "$ por milhão de tokens · snapshot do LiteLLM, atualizado {{ago}}, {{models}}",
         modelCountOne: "1 modelo",
         modelCountMany: "{{count}} modelos",
         autoUpdate: "Atualização automática",
@@ -2831,19 +3058,48 @@ export const ptBR: TranslationResources = {
         save: "Salvar",
         saveFailed: "Não foi possível salvar este preço.",
         invalidPrice: "Digite um número nas quatro colunas.",
+        edit: "Editar",
+        editAccessibility: "Editar o preço personalizado de {{model}}",
+        removeCustomPrice: "Remover preço personalizado",
+        removeCustomPriceAccessibility: "Remover o preço personalizado de {{model}}",
+        removeFailed: "Não foi possível remover este preço personalizado.",
+        customize: "Personalizar",
+        customizeAccessibility: "Definir um preço personalizado para {{model}}",
+        litellmPrice: "Preço do LiteLLM",
+        customGroup: {
+          title: "Preços personalizados",
+          intro:
+            "Os modelos sem preço no LiteLLM aparecem aqui. Preencha as quatro colunas em $ por milhão de tokens; 0 significa grátis.",
+          empty: "Todos os modelos têm preço.",
+          unpricedCount: "Sem dados de preço {{count}}",
+        },
+        litellmGroup: {
+          title: "Preços do LiteLLM",
+          subtitle: {
+            snapshot: "Snapshot do LiteLLM incluído, atualizado {{ago}} · $ por milhão de tokens",
+            cache:
+              "Preços do LiteLLM baixados on-line, atualizados {{ago}} · $ por milhão de tokens",
+          },
+          summary: "{{models}} com preço do LiteLLM",
+          expand: "Mostrar",
+          collapse: "Ocultar",
+          autoUpdate: "Atualizar preços do LiteLLM automaticamente",
+          search: "Buscar modelos",
+          clearSearch: "Limpar busca",
+          noMatches: "Nenhum nome de modelo contém “{{query}}”.",
+        },
         columns: {
           model: "Modelo",
           input: "Entrada",
           cacheRead: "Leitura de cache",
           cacheWrite: "Escrita de cache",
           output: "Saída",
-          source: "Origem",
-          actions: "Ações",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Personalizado",
-          none: "—",
+          short: {
+            input: "Entrada {{price}}",
+            cacheRead: "Leitura {{price}}",
+            cacheWrite: "Escrita {{price}}",
+            output: "Saída {{price}}",
+          },
         },
       },
     },

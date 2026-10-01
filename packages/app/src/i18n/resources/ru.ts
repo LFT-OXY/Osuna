@@ -310,9 +310,12 @@ export const ru: TranslationResources = {
     tooManyMatches: "Слишком много совпадений — уточните запрос",
     hostLoadFailed: "{{host}}: не удалось загрузить историю",
     searchPlaceholder: "Поиск по истории",
+    emptyHost: "No sessions for this host",
+    loadFailed: "Unable to load sessions",
     actions: {
       loadMore: "Загрузить ещё",
       clearSearch: "Очистить поиск",
+      tryAgain: "Try again",
     },
   },
   agentList: {
@@ -353,18 +356,26 @@ export const ru: TranslationResources = {
     },
     turnUsage: {
       title: "Расход за ход",
-      total: "Итого",
-      duration: "Длительность",
+      estimatedCost: "Оценочная стоимость",
+      model: "Модель",
+      byModel: "По моделям",
       note: "Оценочная стоимость · по публичным тарифам API",
       unpriced: "Нет данных о цене",
-      reasoning: "({{tokens}} на рассуждение)",
+      unpricedWarningOne:
+        "У {{models}} нет данных о цене, модель учтена как $0. Задайте свою цену в разделе Настройки › Таблица цен.",
+      unpricedWarningMany:
+        "У {{models}} нет данных о цене, модели учтены как $0. Задайте свои цены в разделе Настройки › Таблица цен.",
+      modelSeparator: ", ",
       accessibility: "Расход за ход: ввод {{input}}, вывод {{output}}, {{cost}}",
-      columns: {
-        model: "Модель",
+      stats: {
         input: "Ввод",
         cache: "Кэш",
         output: "Вывод",
-        cost: "Стоимость",
+        reasoning: "В т. ч. рассуждение",
+      },
+      amounts: {
+        cache: "кэш {{tokens}}",
+        reasoning: "рассуждение {{tokens}}",
       },
     },
     diagram: {
@@ -454,6 +465,7 @@ export const ru: TranslationResources = {
     },
     filters: {
       all: "Все",
+      byProvider: "Filter by provider",
     },
     status: {
       connectHost: "Подключитесь к хосту, чтобы импортировать сессии",
@@ -462,6 +474,7 @@ export const ru: TranslationResources = {
       loading: "Загрузка недавних сессий...",
       failedProvider: "Не удалось загрузить сессии провайдера {{provider}}",
       failedImport: "Не удалось импортировать выбранную сессию.",
+      missingCwd: "Session is missing a working directory",
     },
     actions: {
       refresh: "Обновить список сессий",
@@ -503,6 +516,7 @@ export const ru: TranslationResources = {
         restoringAction: "Восстановление...",
         unavailableTitle: "Рабочая область недоступна",
         checkFailedTitle: "Не удалось проверить рабочее пространство",
+        updateToRecover: "Update Osuna to recover this workspace.",
       },
     },
     hoverCard: {
@@ -649,6 +663,9 @@ export const ru: TranslationResources = {
       devices: {
         label: "Размер экрана устройства",
         responsive: "Адаптивный режим",
+        laptop: "Laptop",
+        desktop1080: "Desktop 1080p",
+        desktop1440: "Desktop 1440p",
       },
       errors: {
         failedToLoad: "Не удалось загрузить страницу",
@@ -661,6 +678,11 @@ export const ru: TranslationResources = {
       hostDisconnected: "Хост не подключён",
       updateHost: "Обновите хост, чтобы использовать нативный рендерер терминала.",
       unableToSubscribe: "Не удалось подключиться к терминалу",
+      showKeyboard: "Show keyboard",
+      hideKeyboard: "Hide keyboard",
+      paste: "Paste",
+      copy: "Copy",
+      scrollToBottom: "Bottom",
     },
     tabs: {
       loading: "Загрузка...",
@@ -771,6 +793,10 @@ export const ru: TranslationResources = {
           tabs: "Будут закрыты вкладки ({{tabs}}).",
           agents: "Будут архивированы агенты ({{agents}}).",
         },
+      },
+      status: {
+        agentRunning: "Agent running",
+        agentNeedsInput: "Agent needs input",
       },
     },
     header: {
@@ -1038,6 +1064,9 @@ export const ru: TranslationResources = {
         actions: {
           viewPullRequest: "Просмотреть",
           openOn: "Открыть на {{brand}}",
+          addToChat: "Add to chat",
+          addAllToChat: "Add all to chat",
+          addingToChat: "Adding...",
         },
         checksSummary: {
           passedLabel: "успешно",
@@ -1051,14 +1080,40 @@ export const ru: TranslationResources = {
           checks: "Проверки",
           pipeline: "Пайплайн",
           reviews: "Ревью",
+          activity: "Activity",
         },
         empty: {
           noJobs: "Нет заданий",
           loadingPipeline: "Загрузка пайплайна...",
           pipelineJobsLoadFailed: "Не удалось загрузить задания пайплайна",
           allowedToFail: "допускается сбой",
+          noActivity: "No activity yet",
         },
         approvals: "Одобрено: {{given}} из {{required}}",
+        checks: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          countSeparator: ", ",
+          countLine: {
+            one: "{{parts}} check",
+            many: "{{parts}} checks",
+          },
+          accessibilityLabel: "{{headline}}. {{detail}}",
+        },
         accessibility: {
           pullRequest: "PR #{{number}}",
           pullRequest_mr: "MR !{{number}}",
@@ -1072,6 +1127,8 @@ export const ru: TranslationResources = {
             skipped: "Пропущено",
             cancelled: "Отменено",
           },
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
         },
         states: {
           draft: "Черновик",
@@ -1090,6 +1147,8 @@ export const ru: TranslationResources = {
         },
         thread: {
           discussion: "Ветка обсуждения",
+          resolved: "Resolved",
+          outdated: "Outdated",
         },
         errors: {
           statusLoadFailed: "Не удалось загрузить статус PR",
@@ -1231,6 +1290,7 @@ export const ru: TranslationResources = {
       search: "Поиск",
       schedules: "Расписания",
       usage: "Расход",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "Настроить скрипты worktree",
@@ -1296,6 +1356,8 @@ export const ru: TranslationResources = {
         hideFromSidebar: "Скрыть на боковой панели",
         archiving: "Архивирование...",
         hiding: "Скрытие...",
+        markAsRead: "Mark as read",
+        markAsUnread: "Mark as unread",
       },
       confirmations: {
         hideTitle: "Скрыть рабочее пространство?",
@@ -1316,6 +1378,8 @@ export const ru: TranslationResources = {
         hostDisconnected: "Хост не подключён",
         hideFailed: "Не удалось скрыть рабочее пространство",
         archiveFailed: "Не удалось архивировать рабочее пространство",
+        markAsReadFailed: "Failed to mark workspace as read",
+        markAsUnreadFailed: "Failed to mark workspace as unread",
       },
     },
   },
@@ -1331,6 +1395,7 @@ export const ru: TranslationResources = {
       project: "Проект",
       base: "Базовая ветка",
       baseNotApplicable: "Неприменимо",
+      host: "Host",
     },
     titlePlaceholder: "Заголовок (необязательно)",
     errors: {
@@ -1338,6 +1403,9 @@ export const ru: TranslationResources = {
       createWorktreeFailed: "Не удалось создать worktree.",
       composerStateRequired: "Редактор сообщения ещё не готов.",
       selectModel: "Выберите модель",
+      chooseProject: "Choose a project",
+      chooseHost: "Choose a host for this project",
+      projectUnavailableOnHost: "Project is not available on the selected host",
     },
     tooltips: {
       project: "Выберите проект",
@@ -1363,6 +1431,14 @@ export const ru: TranslationResources = {
       promptPlaceholder: "Промпт для {{name}}",
       commandPlaceholder:
         "Введите команду или оставьте поле пустым, чтобы открыть терминал без запуска команды",
+    },
+    projectPicker: {
+      searchPlaceholder: "Search projects",
+      empty: "No projects available.",
+    },
+    accessibility: {
+      project: "Workspace project",
+      isolation: "Workspace isolation",
     },
   },
   desktop: {
@@ -1578,6 +1654,107 @@ export const ru: TranslationResources = {
         title: "Подключить устройство",
         description: "Подключите свой телефон к этому демону",
       },
+    },
+  },
+  addProject: {
+    panelAccessibilityLabels: {
+      host: "Add project: host",
+      method: "Add project: method",
+      directorySearch: "Add project: directory-search",
+      githubSearch: "Add project: github-search",
+      githubLocation: "Add project: github-location",
+      newDirectoryParent: "Add project: new-directory-parent",
+      newDirectoryName: "Add project: new-directory-name",
+    },
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      directoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        updateHost: "Update this host to clone GitHub repositories",
+        search: "Search projects available to your GitHub account",
+        manual: "Enter a GitHub URL or owner/repo",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        updateHost: "Update this host to create directories",
+      },
+    },
+    rows: {
+      addHost: "Add host",
+      openPath: "Open this path",
+      useParent: "Use this parent",
+      repositoryVia: "{{repository}} via {{protocol}}",
+      cloneRepositoryUrl: "Clone this repository URL",
+      cloneOwnerRepoVia: "Clone owner/repo via {{protocol}}",
+      alreadyExists: "Already exists",
+      parentDirectory: "Parent directory: {{path}}",
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      adding: "Adding project...",
+    },
+    empty: {
+      noConnectedHosts: "No connected hosts",
+      githubSearch: "Enter a GitHub URL or owner/repo",
+      updateHost: "Update the host to use Add Project.",
+      noMatchingOptions: "No matching options",
+    },
+    errors: {
+      searchDirectories: "Unable to search directories",
+      searchGithub: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+      directoryNotFound: "Directory not found",
+      addProject: "Unable to add project",
+      browse: "Unable to browse for a directory",
+      cloneRepository: "Unable to clone repository",
+      directoryNameRequired: "Enter a directory name",
+      createDirectory: "Unable to create directory",
+    },
+    hints: {
+      navigate: "Navigate",
+    },
+  },
+  hostPicker: {
+    title: "Host",
+    searchPlaceholder: "Search hosts",
+    allHosts: "All hosts",
+    addHost: "Add host",
+    enableBuiltInDaemon: "Enable built-in daemon",
+    local: "Local",
+    openHostSettings: "Open {{host}} settings",
+    filter: {
+      title: "Filter by host",
+      accessibilityLabel: "Filter: {{host}}",
+    },
+    chooser: {
+      title: "Choose host",
+      searchPlaceholder: "Search hosts...",
+      empty: "No matching hosts",
     },
   },
   projectPicker: {
@@ -1939,6 +2116,14 @@ export const ru: TranslationResources = {
     dispatchArchived: "В архиве",
     dispatchDetached: "Отсоединён",
   },
+  pluginSurface: {
+    fallbackTitle: "Plugin",
+    chooseHost: "Choose plugin host",
+    hostSwitcher: "Plugin host: {{host}}",
+    close: "Close plugin",
+    hostOffline: "Plugin host is offline.",
+    unavailable: "This plugin surface is unavailable.",
+  },
   panels: {
     draft: {
       newAgent: "Новый агент",
@@ -1996,6 +2181,12 @@ export const ru: TranslationResources = {
       subtitle: "Сведения о PR",
       emptyTitle: "PR пока нет",
       emptyDescription: "Создайте PR для этой рабочей копии, чтобы увидеть здесь сведения о нём.",
+    },
+    plugin: {
+      unavailableLabel: "Plugin unavailable",
+      unavailableTooltip: "This plugin panel is unavailable",
+      unavailable: "This plugin panel is unavailable.",
+      hostOffline: "Plugin host is offline.",
     },
     sessionHistory: {
       label: "История сессий",
@@ -2494,6 +2685,7 @@ export const ru: TranslationResources = {
         queueMessage: "Поставить сообщение в очередь",
         muteUnmuteVoiceMode: "Выключить/включить звук в голосовом режиме",
         switchProject: "Сменить проект",
+        pinChat: "Pin chat",
       },
       helpNotes: {
         showKeyboardShortcuts: "Доступно, когда фокус находится не в текстовом поле или терминале.",
@@ -2644,6 +2836,13 @@ export const ru: TranslationResources = {
         },
       },
       agents: {
+        browserTools: {
+          title: "Browser tools",
+          warning:
+            "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+          updating: "Updating browser tools…",
+          accessibilityLabel: "Enable browser tools",
+        },
         unavailable: "Подключитесь к этому хосту, чтобы управлять агентами",
       },
       mentionDefaults: {
@@ -2681,7 +2880,22 @@ export const ru: TranslationResources = {
         retry: "Повторить",
       },
       workspaces: {
+        autoArchiveMerged: {
+          title: "Archive merged PR workspaces",
+          hint: "Automatically archive clean Osuna workspaces after their pull request is merged",
+          accessibilityLabel: "Archive merged PR workspaces",
+          updateFailed: "Unable to update workspaces",
+        },
         unavailable: "Подключитесь к этому хосту, чтобы управлять рабочими пространствами",
+      },
+      terminalAgents: {
+        sectionTitle: "Terminal agents",
+        hooks: {
+          title: "Enable terminal agent hooks",
+          hint: "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+          accessibilityLabel: "Enable terminal agent hooks",
+          updateFailed: "Unable to update terminal agent hooks",
+        },
       },
       terminalProfiles: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять профилями терминала",
@@ -2746,6 +2960,20 @@ export const ru: TranslationResources = {
         moveDown: "Переместить вниз",
       },
       daemon: {
+        lifecycleErrors: {
+          restartAcknowledged: "Restart acknowledged: true. {{detail}}",
+          restartUnacknowledged: "Restart acknowledged: false. {{detail}}",
+          packageInstallFailed: "Package installation failed",
+          versionUnconfirmed:
+            "Package installed; replacement worker version was not confirmed. {{detail}}",
+          versionMismatch: "Expected installed version {{expected}}; observed worker {{observed}}.",
+          nestedError: "Error: {{detail}}",
+          unknownVersion: "unknown",
+          identityChanged: "Daemon identity changed",
+          replacementTimeout:
+            "Replacement worker could not be confirmed. Check daemon status and logs.",
+          unknown: "Unknown error",
+        },
         rename: {
           editLabel: "Изменить название",
           title: "Переименовать хост",
@@ -2818,7 +3046,6 @@ export const ru: TranslationResources = {
       },
       priceTable: {
         title: "Таблица цен",
-        subtitle: "$ за миллион токенов · снимок LiteLLM, обновлён {{ago}}, {{models}}",
         modelCountOne: "1 модель",
         modelCountMany: "{{count}} моделей",
         autoUpdate: "Автообновление",
@@ -2835,19 +3062,47 @@ export const ru: TranslationResources = {
         save: "Сохранить",
         saveFailed: "Не удалось сохранить эту цену.",
         invalidPrice: "Введите число во все четыре столбца.",
+        edit: "Изменить",
+        editAccessibility: "Изменить свою цену для {{model}}",
+        removeCustomPrice: "Убрать свою цену",
+        removeCustomPriceAccessibility: "Убрать свою цену для {{model}}",
+        removeFailed: "Не удалось убрать эту цену.",
+        customize: "Настроить",
+        customizeAccessibility: "Задать свою цену для {{model}}",
+        litellmPrice: "Цена LiteLLM",
+        customGroup: {
+          title: "Свои цены",
+          intro:
+            "Здесь перечислены модели, для которых у LiteLLM нет цены. Заполните все четыре столбца в $ за миллион токенов; 0 означает бесплатно.",
+          empty: "У всех моделей есть цена.",
+          unpricedCount: "Нет данных о цене: {{count}}",
+        },
+        litellmGroup: {
+          title: "Цены LiteLLM",
+          subtitle: {
+            snapshot: "Встроенный снимок LiteLLM, обновлён {{ago}} · $ за миллион токенов",
+            cache: "Цены LiteLLM из сети, обновлены {{ago}} · $ за миллион токенов",
+          },
+          summary: "Цены LiteLLM: {{models}}",
+          expand: "Показать",
+          collapse: "Скрыть",
+          autoUpdate: "Автообновление цен LiteLLM",
+          search: "Поиск моделей",
+          clearSearch: "Очистить поиск",
+          noMatches: "Нет моделей, в названии которых есть «{{query}}».",
+        },
         columns: {
           model: "Модель",
           input: "Ввод",
           cacheRead: "Чтение кэша",
           cacheWrite: "Запись кэша",
           output: "Вывод",
-          source: "Источник",
-          actions: "Действия",
-        },
-        source: {
-          table: "LiteLLM",
-          override: "Своя",
-          none: "—",
+          short: {
+            input: "Ввод {{price}}",
+            cacheRead: "Чтение {{price}}",
+            cacheWrite: "Запись {{price}}",
+            output: "Вывод {{price}}",
+          },
         },
       },
     },

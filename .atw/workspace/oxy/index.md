@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~672 | Active |
+| `journal-1.md` | ~706 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -31,6 +31,8 @@
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
 | 26 | 2026-10-01 | Providers 两级结构：工单 10 升级按钮挪进状态行，任务验收归档 | `9e1c30297` | `split-providers-models-menu` |
+| 25 | 2026-10-01 | 补齐简体中文界面翻译：工单 06 PR 面板/插件/会话页/侧栏迁移，任务验收并归档 | `02f131c94`, `5140793d3` | `fix/settings-menu-zh-i18n` |
+| 24 | 2026-10-01 | 本轮用量面板重设计（工单 04）与任务归档 | `20d358e65` | `enhance-pricing-hover-panel` |
 | 23 | 2026-09-30 | 提供方设置页重排：工单 09 文档收尾与截图验收、Providers 页改用彩色图标，任务归档 | `fe7b4914d`, `20a0911f7` | `main` |
 | 22 | 2026-09-30 | 多智能体协作票 13：provider 子智能体权限归属与验收归档 | `ecbcc7c36` | `feat/multi-agent-collab` |
 | 21 | 2026-09-30 | 第三方接口：工单 09 文档收尾、截图验收与 CI 回归修复，任务归档 | `9255915d9`, `0a853a263`, `48411967a` | `main` |

@@ -57,22 +57,241 @@ function findInterpolationMismatches(resource: unknown): string[] {
   });
 }
 
+// zh-CN 中有意与英文相同的值，只收 docs/i18n.md 列出的保留类别
+const zhCNEnglishAllowlist = {
+  coreTerms: ["workspace.tabs.fallback.agent", "workspace.tabs.toasts.agentIdCopiedLabel"],
+  abbreviations: [
+    "desktop.daemon.status.pid",
+    "desktop.updates.callout.downloadProgress",
+    "contextWindow.tokens",
+    "settings.providers.apiEndpoints.form.baseUrl",
+    "settings.providers.apiEndpoints.form.apiKey",
+    "settings.providers.version.value",
+    "settings.providers.version.update",
+  ],
+  brands: ["sidebar.help.appName", "panels.sessionHistory.row.paseo"],
+  namedThemes: [
+    "settings.appearance.theme.options.zinc",
+    "settings.appearance.theme.options.midnight",
+    "settings.appearance.theme.options.claude",
+    "settings.appearance.theme.options.ghostty",
+    "settings.appearance.theme.options.dracula",
+    "settings.appearance.theme.options.nord",
+    "settings.appearance.theme.options.tokyoNight",
+    "settings.appearance.theme.options.catppuccinMocha",
+    "settings.appearance.theme.options.gruvboxDark",
+    "settings.appearance.theme.options.solarizedDark",
+    "settings.appearance.theme.options.oneDark",
+    "settings.appearance.theme.options.rosePine",
+    "settings.appearance.theme.options.catppuccinLatte",
+    "settings.appearance.theme.options.solarizedLight",
+    "settings.appearance.theme.options.oneLight",
+    "settings.appearance.theme.options.rosePineDawn",
+    "settings.appearance.theme.options.githubLight",
+  ],
+  placeholders: [
+    "settings.plugins.directoryPlaceholder",
+    "settings.host.appearance.preview.workspaceName",
+    "settings.host.terminalProfiles.namePlaceholder",
+    "settings.host.terminalProfiles.commandPlaceholder",
+    "settings.host.terminalProfiles.argsPlaceholder",
+    "settings.providers.apiEndpoints.form.namePlaceholder",
+  ],
+  languageOptions: ["settings.general.language.options.en"],
+} satisfies Record<string, readonly string[]>;
+
+// 去掉插值后仍含字母才算需要翻译，只含插值和标点的值无需进白名单
+function hasTranslatableLetters(value: string): boolean {
+  return /[A-Za-z]/.test(value.replace(/\{\{[^}]+\}\}/g, ""));
+}
+
+function findUnlistedEnglishValues(resource: unknown, allowlist: ReadonlySet<string>): string[] {
+  const englishStrings = flattenStrings(en);
+  const localeStrings = flattenStrings(resource);
+  return Object.entries(englishStrings)
+    .filter(
+      ([key, value]) =>
+        localeStrings[key] === value && hasTranslatableLetters(value) && !allowlist.has(key),
+    )
+    .map(([key, value]) => `${key}: ${value}`);
+}
+
+function findStaleAllowlistKeys(resource: unknown, allowlist: ReadonlySet<string>): string[] {
+  const englishStrings = flattenStrings(en);
+  const localeStrings = flattenStrings(resource);
+  return [...allowlist].filter(
+    (key) => englishStrings[key] === undefined || localeStrings[key] !== englishStrings[key],
+  );
+}
+
+// zh-CN 界面名词的旧写法，统一后不应再出现；插值、行内代码和占位示例值不算界面名词
+const zhCNRetiredTermPattern =
+  /智能体|供应商|变更|思考模式|思考强度|Agent Provider|\b(?:worktrees?|daemons?|diffs?|prompts?|models?|modes?|projects?|commits?|push|pull|providers?|setup|teardown|beta|hosts?|workspaces?|terminals?|merge|auto-merge|features?|thinking|scripts?|issues?|reviews?|stash(?:ed)?|relay|server|runtime|app|refs?|remote|repository|composer)\b/gi;
+
+// 值里的英文是配置键名、斜杠命令或占位示例，原样保留
+const zhCNRetiredTermExemptKeys = [
+  ...zhCNEnglishAllowlist.placeholders,
+  "settings.providers.apiEndpoints.health.codexProfileOverride",
+  "settings.providers.apiEndpoints.form.mappingHint",
+  "settings.project.metadata.commitMessagePlaceholder",
+];
+
+function findRetiredZhCNTerms(): string[] {
+  const exemptKeys = new Set<string>(zhCNRetiredTermExemptKeys);
+  return Object.entries(flattenStrings(zhCN)).flatMap(([key, value]) => {
+    if (exemptKeys.has(key)) {
+      return [];
+    }
+    const text = value.replace(/\{\{[^}]+\}\}/g, "").replace(/`[^`]*`/g, "");
+    const matches = text.match(zhCNRetiredTermPattern);
+    return matches ? [`${key}: ${matches.join(", ")}`] : [];
+  });
+}
+
 const appSourceRoot = join(__dirname, "..");
-const untranslatedConnectionErrors = [
-  "Daemon unavailable",
-  "Daemon client unavailable",
-  "Daemon client not available",
-  "Daemon client is disconnected",
-  "Host is not connected",
-] as const;
-const untranslatedLocalFallbacks = [
-  "No file found for ",
-  "Unable to load pull request status",
-  "Unable to load pull request activity",
-  "An unexpected error occurred while handling dictation.",
-  "Unable to load desktop settings.",
-  "Unable to save desktop settings.",
-] as const;
+// 已迁移到翻译键的英文字面量，app 源码里不应再出现；后续迁移按界面追加分组
+const migratedSourceLiterals = {
+  connectionErrors: [
+    "Daemon unavailable",
+    "Daemon client unavailable",
+    "Daemon client not available",
+    "Daemon client is disconnected",
+    "Host is not connected",
+  ],
+  localFallbacks: [
+    "No file found for ",
+    "Unable to load pull request status",
+    "Unable to load pull request activity",
+    "An unexpected error occurred while handling dictation.",
+    "Unable to load desktop settings.",
+    "Unable to save desktop settings.",
+  ],
+  settings: [
+    "Unable to update workspaces",
+    "Archive merged PR workspaces",
+    "Automatically archive clean Osuna workspaces after their pull request is merged",
+    "Unable to update terminal agent hooks",
+    "Enable terminal agent hooks",
+    "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
+    "Terminal agents",
+    "Browser tools",
+    "Allow agents to access and control Osuna browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+    "Enable browser tools",
+    "Updating browser tools…",
+    "Package installation failed",
+    "Daemon identity changed",
+    "Replacement worker could not be confirmed. Check daemon status and logs.",
+    "Restart acknowledged: ",
+    "Expected installed version ",
+    "Package installed; replacement worker version was not confirmed. ",
+  ],
+  addProjectAndHostPicker: [
+    "Add project: ",
+    "Add project",
+    "Select",
+    "Back",
+    "Open this path",
+    "Use this parent",
+    "Directory not found",
+    "Unable to add project",
+    "Name directory",
+    "Directory name",
+    "Search for directory",
+    "Clone from GitHub",
+    "New directory",
+    "No matching options",
+    "Already exists",
+    "Navigate",
+    "Search hosts",
+    "Choose destination",
+    "Choose parent directory",
+    "Search directories or enter a path...",
+    "Search or enter a GitHub repository...",
+    "Search parent directories or enter a path...",
+    "Find a directory on ",
+    "Choose or create a directory in Finder",
+    "Update this host to clone GitHub repositories",
+    "Search projects available to your GitHub account",
+    "Enter a GitHub URL or owner/repo",
+    "Create an empty directory on ",
+    "Update this host to create directories",
+    "Update the host to use Add Project.",
+    "Clone this repository URL",
+    "Clone owner/repo via ",
+    "Parent directory: ",
+    "Cloning project...",
+    "Creating directory...",
+    "Adding project...",
+    "No connected hosts",
+    "Unable to search directories",
+    "Unable to search GitHub repositories",
+    "GitHub search is unavailable",
+    "Unable to browse for a directory",
+    "Unable to clone repository",
+    "Enter a directory name",
+    "Unable to create directory",
+    "Choose host",
+    "Enable built-in daemon",
+    "Search hosts...",
+    "Filter by host",
+    "No matching hosts",
+  ],
+  newWorkspaceAndPanels: [
+    "Workspace project",
+    "Workspace isolation",
+    "Search projects",
+    "No projects available.",
+    "Choose a project",
+    "Choose a host for this project",
+    "Project is not available on the selected host",
+    "Agent running",
+    "Agent needs input",
+    "Update Osuna to recover this workspace.",
+    "Workspace directory not found",
+    "Workspace directory not found.",
+    "Hide keyboard",
+    "Show keyboard",
+    "Paste",
+    "Copy",
+    "Filter by provider",
+    "Session is missing a working directory",
+    "Laptop",
+    "Desktop 1080p",
+    "Desktop 1440p",
+  ],
+  prPanePluginsSessionsSidebar: [
+    "Activity",
+    "No activity yet",
+    "Add all to chat",
+    "Comment actions",
+    "Thread actions",
+    "Resolved",
+    "Outdated",
+    "Adding...",
+    "Some checks need your attention",
+    "Some checks were not successful",
+    "Some checks haven't completed yet",
+    "All checks have passed",
+    "No checks",
+    "Requested changes",
+    "Choose plugin host",
+    "Plugin host: ",
+    "Close plugin",
+    "Plugin host is offline.",
+    "This plugin surface is unavailable.",
+    "This plugin panel is unavailable.",
+    "This plugin panel is unavailable",
+    "Plugin unavailable",
+    "No sessions for this host",
+    "Unable to load sessions",
+    "Try again",
+    "Display preferences",
+    "Mark as read",
+    "Mark as unread",
+    "Failed to mark workspace as read",
+    "Failed to mark workspace as unread",
+  ],
+} satisfies Record<string, readonly string[]>;
 
 function collectSourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -90,10 +309,11 @@ function collectSourceFiles(directory: string): string[] {
   });
 }
 
-function findUntranslatedConnectionErrors(): string[] {
+function findMigratedLiteralsInSource(): string[] {
+  const literals = Object.values(migratedSourceLiterals).flat();
   return collectSourceFiles(appSourceRoot).flatMap((path) => {
     const contents = readFileSync(path, "utf8");
-    const matches = [...untranslatedConnectionErrors, ...untranslatedLocalFallbacks].filter(
+    const matches = literals.filter(
       (text) => contents.includes(`"${text}"`) || contents.includes(`\`${text}`),
     );
     if (matches.length === 0) {
@@ -127,6 +347,16 @@ describe("translation resources", () => {
     expect(countMatchingEnglishStrings(ptBR)).toBeLessThan(maxFallbackStrings);
     expect(countMatchingEnglishStrings(ru)).toBeLessThan(maxFallbackStrings);
     expect(countMatchingEnglishStrings(zhCN)).toBeLessThan(maxFallbackStrings);
+  });
+
+  it("keeps zh-CN values that match English on the allowlist", () => {
+    const allowlist = new Set<string>(Object.values(zhCNEnglishAllowlist).flat());
+    expect(findUnlistedEnglishValues(zhCN, allowlist)).toEqual([]);
+    expect(findStaleAllowlistKeys(zhCN, allowlist)).toEqual([]);
+  });
+
+  it("rejects retired zh-CN terms", () => {
+    expect(findRetiredZhCNTerms()).toEqual([]);
   });
 
   it("localizes the pull request empty state in every supported language", () => {
@@ -175,7 +405,7 @@ describe("translation resources", () => {
     expect(ja.settings.providers.models.many).toBe("{{count}}つのモデル");
     expect(ptBR.settings.providers.models.many).toBe("{{count}} modelos");
     expect(ru.settings.providers.models.many).toBe("{{count}} моделей");
-    expect(zhCN.settings.providers.models.many).toBe("{{count}} 个 Model");
+    expect(zhCN.settings.providers.models.many).toBe("{{count}} 个模型");
   });
 
   it("preserves reviewed Korean status labels", () => {
@@ -187,8 +417,8 @@ describe("translation resources", () => {
     expect(en.workspace.fileActions.addToChat).toBe("Add to chat");
   });
 
-  it("keeps local connection fallback errors translated", () => {
-    expect(findUntranslatedConnectionErrors()).toEqual([]);
+  it("keeps migrated English literals out of app source", () => {
+    expect(findMigratedLiteralsInSource()).toEqual([]);
   });
 
   it("includes shared shell keys for the Batch 1 migration", () => {

@@ -1,0 +1,835 @@
+[
+ {
+  "label": "section(testid)",
+  "tag": "div",
+  "testid": "host-page-price-table-card",
+  "rect": [
+   456,
+   36,
+   688,
+   1856.5
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "normal"
+ },
+ {
+  "label": "section title 价格表",
+  "tag": "div",
+  "rect": [
+   458,
+   43,
+   37.4,
+   18
+  ],
+  "fontSize": "13px",
+  "fontWeight": "500",
+  "lineHeight": "18px",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "text": "价格表"
+ },
+ {
+  "label": "自动更新 label",
+  "tag": "div",
+  "rect": [
+   944.7,
+   44.5,
+   47.7,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "text": "自动更新"
+ },
+ {
+  "label": "switch",
+  "tag": "div",
+  "testid": "price-table-auto-update-switch",
+  "rect": [
+   1000.4,
+   36,
+   32,
+   32
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "normal",
+  "width": "32px",
+  "height": "32px"
+ },
+ {
+  "label": "switch child 0",
+  "tag": "div",
+  "rect": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "width": "auto",
+  "height": "auto",
+  "borderRadius": "0px",
+  "boxShadow": "none"
+ },
+ {
+  "label": "switch child 1",
+  "tag": "div",
+  "rect": [
+   1000.4,
+   43,
+   32,
+   18
+  ],
+  "backgroundColor": "rgb(52, 107, 241)",
+  "width": "32px",
+  "height": "18px",
+  "borderRadius": "9px",
+  "boxShadow": "none"
+ },
+ {
+  "label": "switch child 2",
+  "tag": "div",
+  "rect": [
+   1016.4,
+   45,
+   14,
+   14
+  ],
+  "backgroundColor": "rgb(255, 255, 255)",
+  "width": "14px",
+  "height": "14px",
+  "borderRadius": "7px",
+  "boxShadow": "rgba(0, 0, 0, 0.25) 0px 1px 2px 0px",
+  "text": ""
+ },
+ {
+  "label": "refresh button (ghost sm)",
+  "tag": "button",
+  "testid": "price-table-refresh",
+  "rect": [
+   1040.4,
+   38,
+   103.6,
+   28
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgba(0, 0, 0, 0)",
+  "borderLeftColor": "rgba(0, 0, 0, 0)",
+  "borderRadius": "8px",
+  "paddingTop": "0px",
+  "paddingRight": "12px",
+  "paddingBottom": "0px",
+  "paddingLeft": "12px",
+  "boxShadow": "none",
+  "gap": "8px",
+  "height": "28px"
+ },
+ {
+  "label": "refresh label",
+  "tag": "div",
+  "rect": [
+   1075.4,
+   43.5,
+   55.6,
+   17
+  ],
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "text": "立即刷新"
+ },
+ {
+  "label": "refresh icon svg",
+  "tag": "svg",
+  "rect": [
+   1053.4,
+   45,
+   14,
+   14
+  ],
+  "width": "14px",
+  "height": "14px",
+  "color": "rgb(0, 0, 0)"
+ },
+ {
+  "label": "refresh icon stroke",
+  "stroke": "#818181"
+ },
+ {
+  "label": "card (settingsStyles.card)",
+  "tag": "div",
+  "rect": [
+   456,
+   76,
+   688,
+   1816.5
+  ],
+  "backgroundColor": "rgb(17, 17, 17)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgb(25, 25, 25)",
+  "borderLeftColor": "rgb(25, 25, 25)",
+  "borderRadius": "14px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "normal"
+ },
+ {
+  "label": "subtitle",
+  "tag": "div",
+  "rect": [
+   457,
+   77,
+   686,
+   27
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "paddingTop": "12px",
+  "paddingLeft": "16px",
+  "text": "每百万 token 美元 · LiteLLM 快照，1 分钟前更新，25 个模型"
+ },
+ {
+  "label": "control error placeholder",
+  "tag": "div",
+  "testid": "price-table-control-error",
+  "rect": [
+   457,
+   104,
+   686,
+   33.6
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "16.8px",
+  "color": "rgb(216, 132, 123)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "minHeight": "33.6px",
+  "text": ""
+ },
+ {
+  "label": "header row",
+  "tag": "div",
+  "rect": [
+   469,
+   137.6,
+   654,
+   31
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "8px",
+  "paddingRight": "0px",
+  "paddingBottom": "8px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "6px",
+  "height": "31px"
+ },
+ {
+  "label": "header cell 模型",
+  "tag": "div",
+  "rect": [
+   469,
+   145.6,
+   154,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "width": "154px",
+  "text": "模型"
+ },
+ {
+  "label": "header cell 输入",
+  "tag": "div",
+  "rect": [
+   629,
+   145.6,
+   70,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "right",
+  "width": "70px",
+  "text": "输入"
+ },
+ {
+  "label": "header cell 来源",
+  "tag": "div",
+  "rect": [
+   933,
+   145.6,
+   64,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "width": "64px",
+  "paddingLeft": "6px",
+  "text": "来源"
+ },
+ {
+  "label": "header cell 操作",
+  "tag": "div",
+  "rect": [
+   1003,
+   145.6,
+   120,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "width": "120px",
+  "text": "操作"
+ },
+ {
+  "label": "unpriced rowBlock",
+  "tag": "div",
+  "testid": "price-table-row-codex-auto-review",
+  "rect": [
+   469,
+   168.6,
+   654,
+   79.8
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgba(25, 25, 25, 0.5)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "8px",
+  "paddingRight": "0px",
+  "paddingBottom": "8px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "4px",
+  "height": "79.7969px"
+ },
+ {
+  "label": "unpriced row (flex)",
+  "tag": "div",
+  "rect": [
+   469,
+   177.6,
+   654,
+   42
+  ],
+  "gap": "6px",
+  "alignItems": "center",
+  "height": "42px"
+ },
+ {
+  "label": "unpriced model name",
+  "tag": "div",
+  "rect": [
+   469,
+   177.6,
+   154,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(245, 245, 245)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "width": "154px",
+  "text": "codex-auto-review"
+ },
+ {
+  "label": "unpriced model cell",
+  "tag": "div",
+  "rect": [
+   469,
+   177.6,
+   154,
+   42
+  ],
+  "width": "154px",
+  "gap": "4px"
+ },
+ {
+  "label": "unpriced row error placeholder",
+  "tag": "div",
+  "testid": "price-table-error-codex-auto-review",
+  "rect": [
+   469,
+   223.6,
+   654,
+   16.8
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "16.8px",
+  "color": "rgb(216, 132, 123)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "minHeight": "16.8px",
+  "text": ""
+ },
+ {
+  "label": "priced rowBlock",
+  "tag": "div",
+  "testid": "price-table-row-claude-opus-5-5",
+  "rect": [
+   469,
+   567.6,
+   654,
+   65.8
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgba(25, 25, 25, 0.5)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "8px",
+  "paddingRight": "0px",
+  "paddingBottom": "8px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "4px",
+  "height": "65.7969px"
+ },
+ {
+  "label": "priced row (flex)",
+  "tag": "div",
+  "rect": [
+   469,
+   576.6,
+   654,
+   28
+  ],
+  "gap": "6px",
+  "alignItems": "center",
+  "height": "28px"
+ },
+ {
+  "label": "priced model name",
+  "tag": "div",
+  "rect": [
+   469,
+   583.1,
+   154,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(245, 245, 245)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "width": "154px",
+  "text": "claude-opus-5-5"
+ },
+ {
+  "label": "priced model cell",
+  "tag": "div",
+  "rect": [
+   469,
+   583.1,
+   154,
+   15
+  ],
+  "width": "154px",
+  "gap": "4px"
+ },
+ {
+  "label": "priced row error placeholder",
+  "tag": "div",
+  "testid": "price-table-error-claude-opus-5-5",
+  "rect": [
+   469,
+   608.6,
+   654,
+   16.8
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "16.8px",
+  "color": "rgb(216, 132, 123)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "minHeight": "16.8px",
+  "text": ""
+ },
+ {
+  "label": "amber badge text",
+  "tag": "div",
+  "rect": [
+   478,
+   200.6,
+   112.2,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(192, 150, 100)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "text": "无价格数据 · 估算 $0"
+ },
+ {
+  "label": "amber badge box (parent)",
+  "tag": "div",
+  "rect": [
+   469,
+   196.6,
+   130.2,
+   23
+  ],
+  "backgroundColor": "rgb(38, 38, 38)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgb(25, 25, 25)",
+  "borderLeftColor": "rgb(25, 25, 25)",
+  "borderRadius": "9999px",
+  "paddingTop": "3px",
+  "paddingRight": "8px",
+  "paddingBottom": "3px",
+  "paddingLeft": "8px",
+  "boxShadow": "none",
+  "gap": "6px",
+  "height": "23px"
+ },
+ {
+  "label": "amber badge box (grandparent)",
+  "tag": "div",
+  "rect": [
+   469,
+   196.6,
+   154,
+   23
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "normal",
+  "height": "23px"
+ },
+ {
+  "label": "price input <input>",
+  "tag": "input",
+  "testid": "price-table-input-codex-auto-review-input",
+  "rect": [
+   642,
+   188.6,
+   44,
+   20
+  ],
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "lineHeight": "20px",
+  "color": "rgb(245, 245, 245)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "normal",
+  "width": "44px",
+  "height": "20px",
+  "outlineColor": "rgba(0, 0, 0, 0)",
+  "outlineStyle": "none",
+  "text": ""
+ },
+ {
+  "label": "price input wrapper",
+  "tag": "div",
+  "rect": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderLeftColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "gap": "normal",
+  "width": "auto",
+  "height": "auto"
+ },
+ {
+  "label": "price input wrapper2",
+  "tag": "div",
+  "rect": [
+   629,
+   184.6,
+   70,
+   28
+  ],
+  "backgroundColor": "rgb(23, 23, 23)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgb(30, 30, 30)",
+  "borderLeftColor": "rgb(30, 30, 30)",
+  "borderRadius": "8px",
+  "paddingTop": "3px",
+  "paddingRight": "12px",
+  "paddingBottom": "3px",
+  "paddingLeft": "12px",
+  "boxShadow": "none",
+  "gap": "normal",
+  "width": "70px",
+  "height": "28px"
+ },
+ {
+  "label": "保存 button (default sm)",
+  "tag": "button",
+  "testid": "price-table-save-codex-auto-review",
+  "rect": [
+   1003,
+   184.6,
+   53.8,
+   28
+  ],
+  "backgroundColor": "rgb(52, 107, 241)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgb(52, 107, 241)",
+  "borderLeftColor": "rgb(52, 107, 241)",
+  "borderRadius": "8px",
+  "paddingTop": "0px",
+  "paddingRight": "12px",
+  "paddingBottom": "0px",
+  "paddingLeft": "12px",
+  "boxShadow": "none",
+  "gap": "8px",
+  "height": "28px",
+  "width": "53.7969px"
+ },
+ {
+  "label": "保存 label",
+  "tag": "div",
+  "rect": [
+   1016,
+   190.1,
+   27.8,
+   17
+  ],
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(255, 255, 255)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "text": "保存"
+ },
+ {
+  "label": "unpriced source —",
+  "tag": "div",
+  "rect": [
+   933,
+   191.1,
+   64,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "width": "64px",
+  "paddingLeft": "6px",
+  "text": "—"
+ },
+ {
+  "label": "priced price number",
+  "tag": "div",
+  "rect": [
+   629,
+   583.1,
+   70,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(245, 245, 245)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "right",
+  "width": "70px",
+  "text": "4"
+ },
+ {
+  "label": "price cell",
+  "tag": "div",
+  "rect": [
+   629,
+   583.1,
+   70,
+   15
+  ],
+  "width": "70px"
+ },
+ {
+  "label": "source LiteLLM",
+  "tag": "div",
+  "rect": [
+   933,
+   583.1,
+   64,
+   15
+  ],
+  "fontSize": "12px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "width": "64px",
+  "paddingLeft": "6px",
+  "text": "LiteLLM"
+ },
+ {
+  "label": "自定义价格 button (ghost sm)",
+  "tag": "button",
+  "testid": "price-table-edit-claude-opus-5-5",
+  "rect": [
+   1003,
+   576.6,
+   95.5,
+   28
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgba(0, 0, 0, 0)",
+  "borderLeftColor": "rgba(0, 0, 0, 0)",
+  "borderRadius": "8px",
+  "paddingTop": "0px",
+  "paddingRight": "12px",
+  "paddingBottom": "0px",
+  "paddingLeft": "12px",
+  "boxShadow": "none",
+  "gap": "8px",
+  "height": "28px",
+  "width": "95.4688px"
+ },
+ {
+  "label": "自定义价格 label",
+  "tag": "div",
+  "rect": [
+   1016,
+   582.1,
+   69.5,
+   17
+  ],
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontFamily": "system-ui, -apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "text": "自定义价格"
+ },
+ {
+  "label": "body",
+  "tag": "body",
+  "rect": [
+   0,
+   0,
+   1280,
+   900
+  ],
+  "backgroundColor": "rgb(10, 10, 10)",
+  "fontFamily": "Times"
+ },
+ {
+  "label": "page bg at (700,40)",
+  "el": "DIV",
+  "bg": "rgba(0, 0, 0, 0)"
+ }
+]

@@ -9,12 +9,13 @@ import {
   isPipelineActiveStatus,
   mapPipelineStatus,
 } from "@/git/forges/gitlab";
+import { i18n } from "@/i18n/i18next";
 import { IDENTITY_COLOR_NAMES, identityColor } from "@/styles/identity-colors";
 import {
   deriveAvatarColor,
   formatAge,
-  getActivityVerb,
-  getStateLabel,
+  getActivityVerbKey,
+  getStateLabelKey,
   mapPrPaneData,
 } from "./data";
 
@@ -779,37 +780,36 @@ describe("formatAge", () => {
   });
 });
 
-describe("getStateLabel", () => {
+describe("getStateLabelKey", () => {
   it.each([
-    ["open", "Open"],
-    ["draft", "Draft"],
-    ["merged", "Merged"],
-    ["closed", "Closed"],
-  ] as const)("maps %s → %s", (state, expected) => {
-    expect(getStateLabel(state)).toBe(expected);
+    ["open", "workspace.git.pr.states.open", "Open"],
+    ["draft", "workspace.git.pr.states.draft", "Draft"],
+    ["merged", "workspace.git.pr.states.merged", "Merged"],
+    ["closed", "workspace.git.pr.states.closed", "Closed"],
+  ] as const)("maps %s → %s", (state, key, english) => {
+    expect(getStateLabelKey(state)).toBe(key);
+    expect(i18n.t(key)).toBe(english);
   });
 });
 
-describe("getActivityVerb", () => {
-  it("returns Commented for comment kind", () => {
-    expect(getActivityVerb({ kind: "comment" })).toBe("Commented");
-  });
-
-  it("returns Approved for approved review", () => {
-    expect(getActivityVerb({ kind: "review", reviewState: "approved" })).toBe("Approved");
-  });
-
-  it("returns Requested changes for changes_requested review", () => {
-    expect(getActivityVerb({ kind: "review", reviewState: "changes_requested" })).toBe(
+describe("getActivityVerbKey", () => {
+  it.each([
+    [{ kind: "comment" }, "workspace.git.pr.activity.commented", "Commented"],
+    [{ kind: "review", reviewState: "approved" }, "workspace.git.pr.activity.approved", "Approved"],
+    [
+      { kind: "review", reviewState: "changes_requested" },
+      "workspace.git.pr.activity.requestedChanges",
       "Requested changes",
-    );
-  });
-
-  it("returns Reviewed for a commented review with body (generic case)", () => {
-    expect(getActivityVerb({ kind: "review", reviewState: "commented" })).toBe("Reviewed");
-  });
-
-  it("returns Reviewed when reviewState is undefined", () => {
-    expect(getActivityVerb({ kind: "review" })).toBe("Reviewed");
+    ],
+    // 带正文的 commented 审查和缺失 reviewState 都按通用的「已审查」处理
+    [
+      { kind: "review", reviewState: "commented" },
+      "workspace.git.pr.activity.reviewed",
+      "Reviewed",
+    ],
+    [{ kind: "review" }, "workspace.git.pr.activity.reviewed", "Reviewed"],
+  ] as const)("maps %o → %s", (item, key, english) => {
+    expect(getActivityVerbKey(item)).toBe(key);
+    expect(i18n.t(key)).toBe(english);
   });
 });

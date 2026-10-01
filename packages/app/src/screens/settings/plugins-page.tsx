@@ -216,7 +216,7 @@ export function HostPluginsPage({ serverId }: { serverId: string }) {
   const plugins = useFetchQuery({
     queryKey,
     queryFn: async () => {
-      if (!client) throw new Error("Plugin host is offline");
+      if (!client) throw new Error(t("settings.plugins.states.offlineTitle"));
       return client.listPlugins();
     },
     enabled: Boolean(client && connected && supported),

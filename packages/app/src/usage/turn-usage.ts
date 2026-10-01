@@ -3,6 +3,7 @@ import type {
   UsageAgentTurn,
   UsageTokenTotals,
 } from "@getpaseo/protocol/usage/types";
+import type { UsageText } from "./text";
 
 /**
  * How a rendered turn names itself to the daemon's turn rows. `turnId` is
@@ -73,7 +74,7 @@ export function summarizeTurnUsage(turn: UsageAgentTurn): TurnUsageTotals {
   };
 }
 
-/** One row of the popover table. `cache` is cache reads plus cache writes. */
+/** `cache` is cache reads plus cache writes; `reasoning` is already inside `output`. */
 export interface TurnUsageAmounts {
   input: number;
   cache: number;
@@ -87,10 +88,18 @@ export interface TurnUsageModelRow extends TurnUsageAmounts {
   model: string;
 }
 
-export interface TurnUsageBreakdown {
-  rows: TurnUsageModelRow[];
-  /** Only when a turn ran more than one model; one model is its own total. */
-  total: TurnUsageAmounts | null;
+/** One model is named in a line; more get a per-model list. */
+export type TurnUsageModels =
+  | { kind: "none" }
+  | { kind: "single"; model: TurnUsageModelRow }
+  | { kind: "multi"; models: TurnUsageModelRow[] };
+
+/** What the turn usage popover reads. */
+export interface TurnUsagePanelModel {
+  totals: TurnUsageAmounts;
+  models: TurnUsageModels;
+  /** Counted at $0 in `totals.estimatedCost`. */
+  unpricedModels: string[];
 }
 
 function toAmounts(
@@ -108,15 +117,37 @@ function toAmounts(
   };
 }
 
-export function buildTurnUsageBreakdown(turn: UsageAgentTurn): TurnUsageBreakdown {
+function toModelList(rows: TurnUsageModelRow[]): TurnUsageModels {
+  const [first] = rows;
+  if (rows.length > 1) return { kind: "multi", models: rows };
+  if (first) return { kind: "single", model: first };
+  return { kind: "none" };
+}
+
+export function buildTurnUsagePanel(turn: UsageAgentTurn): TurnUsagePanelModel {
   const rows = turn.byModel.map((entry) => ({
     model: entry.model,
     ...toAmounts(entry.totals, entry.estimatedCost, entry.priced),
   }));
-  if (rows.length < 2) {
-    return { rows, total: null };
-  }
-  return { rows, total: toAmounts(turn.totals, turn.estimatedCost, turn.priced) };
+  const totals = toAmounts(turn.totals, turn.estimatedCost, turn.priced);
+  const models = toModelList(rows);
+  const unpricedRows = rows.filter((row) => !row.priced);
+  const unpricedModels = unpricedRows.map((row) => row.model);
+  return { totals, models, unpricedModels };
+}
+
+/**
+ * The popover's footnote for models counted at $0. Two keys chosen here rather
+ * than a plural suffix, same as the price table. `separator` is the UI
+ * language's list separator; the model ids themselves are never translated.
+ */
+export function describeUnpricedWarning(models: readonly string[], separator: string): UsageText {
+  const key =
+    models.length === 1
+      ? "message.turnUsage.unpricedWarningOne"
+      : "message.turnUsage.unpricedWarningMany";
+  const list = models.join(separator);
+  return { key, params: { models: { text: list } } };
 }
 
 /**

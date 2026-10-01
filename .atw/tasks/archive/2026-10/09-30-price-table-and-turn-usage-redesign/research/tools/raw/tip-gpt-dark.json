@@ -1,0 +1,468 @@
+[
+ {
+  "label": "trigger segment (hovered)",
+  "rect": [
+   519.13,
+   260,
+   135.13,
+   16
+  ],
+  "backgroundColor": "rgba(255, 255, 255, 0.08)",
+  "borderRadius": "4px",
+  "paddingLeft": "2px",
+  "paddingRight": "2px",
+  "height": "16px"
+ },
+ {
+  "label": "segment text 0",
+  "rect": [
+   521.13,
+   260,
+   94.89,
+   16
+  ],
+  "fontSize": "13px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontVariantNumeric": "tabular-nums",
+  "textAlign": "start",
+  "minWidth": "auto",
+  "width": "94.8906px",
+  "marginTop": "0px",
+  "marginBottom": "0px",
+  "text": "· ↑26.1K ↓12 · "
+ },
+ {
+  "label": "segment text 1",
+  "rect": [
+   616.02,
+   260,
+   36.23,
+   16
+  ],
+  "fontSize": "13px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(129, 129, 129)",
+  "fontVariantNumeric": "tabular-nums",
+  "textAlign": "start",
+  "minWidth": "auto",
+  "width": "36.2344px",
+  "marginTop": "0px",
+  "marginBottom": "0px",
+  "text": "$0.26"
+ },
+ {
+  "label": "segment parent",
+  "rect": [
+   398,
+   257,
+   256.25,
+   22
+  ],
+  "gap": "8px",
+  "height": "22px"
+ },
+ {
+  "label": "footer row text",
+  "text": "已工作 0s\n已工作 0s\n· ↑26.1K ↓12 · \n$0.26"
+ },
+ {
+  "label": "ancestor 0 of title (0=tooltip inner View)",
+  "rect": [
+   455.69,
+   148,
+   280,
+   99
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "maxWidth": "none",
+  "minWidth": "280px",
+  "width": "280px",
+  "overflow": "visible",
+  "position": "relative",
+  "left": "0px",
+  "top": "0px",
+  "gap": "4px",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "ancestor 1 of title (0=tooltip inner View)",
+  "rect": [
+   446.69,
+   143,
+   280,
+   109
+  ],
+  "backgroundColor": "rgb(17, 17, 17)",
+  "borderTopWidth": "1px",
+  "borderTopColor": "rgb(25, 25, 25)",
+  "borderRadius": "8px",
+  "paddingTop": "4px",
+  "paddingRight": "8px",
+  "paddingBottom": "4px",
+  "paddingLeft": "8px",
+  "boxShadow": "rgba(0, 0, 0, 0.8) 0px 16px 40px -18px, rgba(255, 255, 255, 0.04) 0px 1px 0px 0px inset",
+  "maxWidth": "280px",
+  "minWidth": "0px",
+  "width": "280px",
+  "overflow": "visible",
+  "position": "absolute",
+  "left": "446.688px",
+  "top": "143px",
+  "gap": "normal",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "ancestor 2 of title (0=tooltip inner View)",
+  "rect": [
+   0,
+   0,
+   1280,
+   900
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "maxWidth": "none",
+  "minWidth": "0px",
+  "width": "1280px",
+  "overflow": "visible",
+  "position": "absolute",
+  "left": "0px",
+  "top": "0px",
+  "gap": "normal",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "ancestor 3 of title (0=tooltip inner View)",
+  "rect": [
+   0,
+   0,
+   1280,
+   900
+  ],
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "borderTopWidth": "0px",
+  "borderTopColor": "rgb(0, 0, 0)",
+  "borderRadius": "0px",
+  "paddingTop": "0px",
+  "paddingRight": "0px",
+  "paddingBottom": "0px",
+  "paddingLeft": "0px",
+  "boxShadow": "none",
+  "maxWidth": "none",
+  "minWidth": "0px",
+  "width": "1280px",
+  "overflow": "visible",
+  "position": "fixed",
+  "left": "0px",
+  "top": "0px",
+  "gap": "normal",
+  "opacity": "1",
+  "backdropFilter": "none"
+ },
+ {
+  "label": "inner scroll/client",
+  "scrollWidth": 280,
+  "clientWidth": 280
+ },
+ {
+  "label": "title 本轮用量",
+  "rect": [
+   455.69,
+   148,
+   280,
+   17
+  ],
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "lineHeight": "normal",
+  "color": "rgb(245, 245, 245)",
+  "fontVariantNumeric": "normal",
+  "textAlign": "start",
+  "minWidth": "auto",
+  "width": "280px",
+  "marginTop": "0px",
+  "marginBottom": "2px",
+  "text": "本轮用量"
+ },
+ {
+  "label": "inner child 1",
+  "rect": [
+   455.69,
+   171,
+   280,
+   15
+  ],
+  "gap": "8px",
+  "height": "15px",
+  "justifyContent": "normal",
+  "marginTop": "0px",
+  "display": "flex",
+  "flexDirection": "row"
+ },
+ {
+  "label": "  cells of child 1",
+  "cells": [
+   {
+    "text": "模型",
+    "rect": [
+     455.69,
+     171,
+     24,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(129, 129, 129)",
+    "ta": "start",
+    "scrollW": 24,
+    "clientW": 24
+   },
+   {
+    "text": "输入",
+    "rect": [
+     487.69,
+     171,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(129, 129, 129)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "缓存",
+    "rect": [
+     551.69,
+     171,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(129, 129, 129)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "输出",
+    "rect": [
+     615.69,
+     171,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(129, 129, 129)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "估算成本",
+    "rect": [
+     679.69,
+     171,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(129, 129, 129)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   }
+  ]
+ },
+ {
+  "label": "inner child 2",
+  "rect": [
+   455.69,
+   190,
+   280,
+   15
+  ],
+  "gap": "8px",
+  "height": "15px",
+  "justifyContent": "normal",
+  "marginTop": "0px",
+  "display": "flex",
+  "flexDirection": "row"
+ },
+ {
+  "label": "  cells of child 2",
+  "cells": [
+   {
+    "text": "gpt-6-astra",
+    "rect": [
+     455.69,
+     190,
+     24,
+     15
+    ],
+    "fs": "16px",
+    "fw": "400",
+    "color": "rgb(0, 0, 0)",
+    "ta": "start",
+    "scrollW": 24,
+    "clientW": 24
+   },
+   {
+    "text": "26.1K",
+    "rect": [
+     487.69,
+     190,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(245, 245, 245)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "0",
+    "rect": [
+     551.69,
+     190,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(245, 245, 245)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "12",
+    "rect": [
+     615.69,
+     190,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(245, 245, 245)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   },
+   {
+    "text": "$0.26",
+    "rect": [
+     679.69,
+     190,
+     56,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(245, 245, 245)",
+    "ta": "right",
+    "scrollW": 56,
+    "clientW": 56
+   }
+  ]
+ },
+ {
+  "label": "inner child 3",
+  "rect": [
+   455.69,
+   213,
+   280,
+   15
+  ],
+  "gap": "8px",
+  "height": "15px",
+  "justifyContent": "space-between",
+  "marginTop": "4px",
+  "display": "flex",
+  "flexDirection": "row"
+ },
+ {
+  "label": "  cells of child 3",
+  "cells": [
+   {
+    "text": "耗时",
+    "rect": [
+     455.69,
+     213,
+     23.84,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(129, 129, 129)",
+    "ta": "start",
+    "scrollW": 24,
+    "clientW": 24
+   },
+   {
+    "text": "4s",
+    "rect": [
+     721.84,
+     213,
+     13.84,
+     15
+    ],
+    "fs": "12px",
+    "fw": "400",
+    "color": "rgb(245, 245, 245)",
+    "ta": "start",
+    "scrollW": 14,
+    "clientW": 14
+   }
+  ]
+ },
+ {
+  "label": "inner child 4",
+  "rect": [
+   455.69,
+   232,
+   280,
+   15
+  ],
+  "gap": "normal",
+  "height": "15px",
+  "justifyContent": "normal",
+  "marginTop": "0px",
+  "display": "block",
+  "flexDirection": "row",
+  "text": "估算成本 · 按公开 API 价格计算"
+ },
+ {
+  "label": "  cells of child 4",
+  "cells": []
+ }
+]

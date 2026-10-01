@@ -19,6 +19,7 @@ export type WorkspaceRouteState =
   | { kind: "loading"; hostName: string }
   | { kind: "missing"; hostName: string }
   | { kind: "needsHostUpgrade"; hostName: string }
+  | { kind: "needsAppUpdate"; hostName: string }
   | {
       kind: "archived";
       hostName: string;
@@ -81,11 +82,7 @@ export function resolveWorkspaceRouteState(input: {
         message: input.recovery.recovery.message,
       };
     case "unsupportedAction":
-      return {
-        kind: "recoveryUnavailable",
-        hostName: input.hostName,
-        message: "Update Osuna to recover this workspace.",
-      };
+      return { kind: "needsAppUpdate", hostName: input.hostName };
     case "inspectionFailed":
       return {
         kind: "recoveryInspectionFailed",
