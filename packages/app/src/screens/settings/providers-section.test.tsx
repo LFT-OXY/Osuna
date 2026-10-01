@@ -134,7 +134,11 @@ vi.mock("react-native", () => ({
         "aria-disabled": disabled ? "true" : undefined,
         "data-testid": testID,
         "data-background": resolveBackground(style),
-        onClick: disabled ? undefined : onPress,
+        // 和 react-native-web 的 PressResponder 一样，点击不再冒泡到外层 Pressable。
+        onClick: (event: React.MouseEvent) => {
+          event.stopPropagation();
+          if (!disabled) onPress?.(event);
+        },
         onMouseEnter: onHoverIn,
         onMouseLeave: onHoverOut,
       },
@@ -161,6 +165,7 @@ vi.mock("lucide-react-native", () => {
   return {
     // 目录弹窗的 Alert 与目录行的图标。
     AlertTriangle: icon("AlertTriangle"),
+    ArrowUp: icon("ArrowUp"),
     CheckCircle2: icon("CheckCircle2"),
     ChevronRight: icon("ChevronRight"),
     Copy: icon("Copy"),
@@ -210,6 +215,7 @@ vi.mock("react-i18next", () => ({
           "common.actions.dismiss": "Dismiss",
           "settings.providers.upgrade.action": "Upgrade",
           "settings.providers.upgrade.actionLabel": "Upgrade {{name}}",
+          "settings.providers.upgrade.actionTo": "Upgrade to v{{version}}",
           "settings.providers.upgrade.errors.failed": "Upgrade failed",
         })[key] ?? key
       )
@@ -659,7 +665,7 @@ describe("ProvidersSection", () => {
     ).toBeGreaterThan(-1);
   });
 
-  it("shows the newer version next to the installed one", () => {
+  it("keeps only the installed version in the status line when a newer one is out", () => {
     connectHostWithProviderVersions();
     snapshotState.entries = [{ ...claudeEntry, version: "2.1.280" }];
     queryClient.setQueryData(providerVersionCheckQueryKey("server-1"), [
@@ -674,12 +680,9 @@ describe("ProvidersSection", () => {
 
     render();
 
-    expect(
-      indexOfText(
-        descendants(findRow("Claude provider details")),
-        "3 models · v2.1.280 → v2.1.285",
-      ),
-    ).toBeGreaterThan(-1);
+    const nodes = descendants(findRow("Claude provider details"));
+    expect(indexOfText(nodes, "3 models · v2.1.280")).toBeGreaterThan(-1);
+    expect(indexOfText(nodes, "3 models · v2.1.280 → v2.1.285")).toBe(-1);
   });
 
   it("keeps showing only the installed version when the check failed", () => {
@@ -739,15 +742,22 @@ describe("ProvidersSection", () => {
     });
   }
 
-  it("offers an upgrade before the switch, with the versions in its tooltip", () => {
+  it("offers the upgrade in the status line, leaving only the switch and chevron trailing", () => {
     offerClaudeUpdate();
 
     render();
 
-    const nodes = descendants(findRow("Claude provider details"));
-    const upgrade = indexOfMatches(nodes, '[role="button"][aria-label="Upgrade Claude"]');
-    expect(upgrade).toBeGreaterThan(-1);
-    expect(indexOfMatches(nodes, '[role="switch"]')).toBeGreaterThan(upgrade);
+    const statusLine = findRow("Claude provider details").querySelector<HTMLElement>(
+      '[data-testid="provider-status-line"]',
+    );
+    const upgrade = statusLine?.querySelector('[role="button"][aria-label="Upgrade Claude"]');
+    expect(upgrade?.textContent).toBe("Upgrade to v2.1.285");
+    expect(statusLine?.querySelector('[role="switch"]')).toBeNull();
+    expect(
+      findRow("Claude provider details").querySelectorAll(
+        '[role="button"][aria-label="Upgrade Claude"]',
+      ),
+    ).toHaveLength(1);
     expect(
       findRow("Claude provider details").querySelector('[data-testid="tooltip-content"]')
         ?.textContent,
@@ -780,6 +790,8 @@ describe("ProvidersSection", () => {
     await pressUpgrade();
 
     expect(upgradeProviderMock).toHaveBeenCalledWith({ provider: "claude" });
+    // 按钮在整行里面，点它只升级，不进详情。
+    expect(selectProviderMock).not.toHaveBeenCalled();
     expect(queryUpgradeButton()?.getAttribute("aria-disabled")).toBe("true");
     expect(queryUpgradeButton()?.querySelector('[data-testid="loading-spinner"]')).not.toBeNull();
 

@@ -2975,6 +2975,7 @@ export const en = {
       upgrade: {
         action: "Upgrade",
         actionLabel: "Upgrade {{name}}",
+        actionTo: "Upgrade to v{{version}}",
         manualHint:
           "Upgrade it manually with the tool you installed it with, or follow the official docs.",
         errors: {

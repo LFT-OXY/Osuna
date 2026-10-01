@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -9,26 +10,24 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-// Providers 列表行名称下面的一行：状态点加文字，列表行已装的内置提供方再接版本号，
-// 有新版本时接成"v{当前} → v{最新}"。
+// Providers 列表行名称下面的一行：状态点加文字，已装的内置提供方再接版本号；
+// children 接在文字后面（有新版本时的"升级到 v{最新}"按钮）。
 export function ProviderStatusLine({
   status,
   version,
-  latestVersion,
+  children,
 }: {
   status: ProviderStatusDisplay;
   version?: string;
-  latestVersion?: string;
+  children?: ReactNode;
 }) {
   const { t } = useTranslation();
   let label = t(status.label.key, status.label.params);
-  if (version && latestVersion) {
-    label = `${label} · ${t("settings.providers.version.update", { from: version, to: latestVersion })}`;
-  } else if (version) {
+  if (version) {
     label = `${label} · ${t("settings.providers.version.value", { version })}`;
   }
   return (
-    <View style={styles.statusLine}>
+    <View style={styles.statusLine} testID="provider-status-line">
       {status.tone === "loading" ? (
         <ThemedLoadingSpinner size={10} uniProps={foregroundMutedColorMapping} />
       ) : (
@@ -40,6 +39,7 @@ export function ProviderStatusLine({
       <Text style={styles.statusLabel} numberOfLines={1}>
         {label}
       </Text>
+      {children}
     </View>
   );
 }

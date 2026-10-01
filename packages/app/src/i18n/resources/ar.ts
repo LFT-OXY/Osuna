@@ -2853,6 +2853,7 @@ export const ar: TranslationResources = {
       upgrade: {
         action: "ترقية",
         actionLabel: "ترقية {{name}}",
+        actionTo: "ترقية إلى v{{version}}",
         manualHint: "قم بترقيتها يدويًا بالأداة التي ثبّتها بها، أو اتبع الوثائق الرسمية.",
         errors: {
           failed: "فشلت الترقية",

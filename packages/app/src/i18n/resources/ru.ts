@@ -2906,6 +2906,7 @@ export const ru: TranslationResources = {
       upgrade: {
         action: "Обновить",
         actionLabel: "Обновить {{name}}",
+        actionTo: "Обновить до v{{version}}",
         manualHint:
           "Обновите его вручную тем же способом, каким устанавливали, или следуйте официальной документации.",
         errors: {

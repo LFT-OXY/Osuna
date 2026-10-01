@@ -2881,6 +2881,7 @@ export const ja: TranslationResources = {
       upgrade: {
         action: "アップグレード",
         actionLabel: "{{name}} をアップグレード",
+        actionTo: "v{{version}} にアップグレード",
         manualHint:
           "インストールしたときと同じ方法で手動でアップグレードするか、公式ドキュメントを参照してください。",
         errors: {

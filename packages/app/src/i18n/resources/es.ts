@@ -2920,6 +2920,7 @@ export const es: TranslationResources = {
       upgrade: {
         action: "Actualizar",
         actionLabel: "Actualizar {{name}}",
+        actionTo: "Actualizar a v{{version}}",
         manualHint:
           "Actualízala manualmente con la herramienta con la que la instalaste, o sigue la documentación oficial.",
         errors: {

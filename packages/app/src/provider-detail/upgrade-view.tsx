@@ -2,7 +2,7 @@ import React, { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ExternalLink } from "lucide-react-native";
+import { ArrowUp, ExternalLink } from "lucide-react-native";
 import type { ProviderUpgradeErrorCode } from "@getpaseo/protocol/messages";
 import { Button } from "@/components/ui/button";
 import { ScrollableCodeSurface } from "@/components/ui/scrollable-code-surface";
@@ -15,6 +15,7 @@ import type { ProviderUpgradeState } from "./upgrade";
 /*
  * 一键升级的按钮和失败块：列表行和详情页的版本一节共用。
  * 按钮只在有新版本时出现，悬停提示"v{当前} → v{最新}"；升级中转圈并禁用。
+ * 列表行的按钮放在状态行里，用 xs 尺寸，写成"升级到 v{最新}"。
  */
 
 const UPGRADE_OUTPUT_MAX_HEIGHT = 240;
@@ -41,21 +42,28 @@ export function ProviderUpgradeButton({
   latestVersion,
   isUpgrading,
   onUpgrade,
+  placement = "section",
 }: {
   providerLabel: string;
   installedVersion: string;
   latestVersion: string;
   isUpgrading: boolean;
   onUpgrade: () => void;
+  placement?: "statusLine" | "section";
 }) {
   const { t } = useTranslation();
+  const isStatusLine = placement === "statusLine";
+  const label = isStatusLine
+    ? t("settings.providers.upgrade.actionTo", { version: latestVersion })
+    : t("settings.providers.upgrade.action");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <View>
           <Button
             variant="outline"
-            size="sm"
+            size={isStatusLine ? "xs" : "sm"}
+            leftIcon={isStatusLine ? ArrowUp : undefined}
             loading={isUpgrading}
             onPress={onUpgrade}
             accessibilityLabel={t("settings.providers.upgrade.actionLabel", {
@@ -63,7 +71,7 @@ export function ProviderUpgradeButton({
             })}
             testID="provider-upgrade-button"
           >
-            {t("settings.providers.upgrade.action")}
+            {label}
           </Button>
         </View>
       </TooltipTrigger>

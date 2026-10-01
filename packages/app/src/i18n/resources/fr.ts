@@ -2929,6 +2929,7 @@ export const fr: TranslationResources = {
       upgrade: {
         action: "Mettre à jour",
         actionLabel: "Mettre à jour {{name}}",
+        actionTo: "Mettre à jour vers v{{version}}",
         manualHint:
           "Mettez-la à jour manuellement avec l'outil qui a servi à l'installer, ou suivez la documentation officielle.",
         errors: {

@@ -2900,6 +2900,7 @@ export const ptBR: TranslationResources = {
       upgrade: {
         action: "Atualizar",
         actionLabel: "Atualizar {{name}}",
+        actionTo: "Atualizar para v{{version}}",
         manualHint:
           "Atualize-a manualmente com a ferramenta que você usou para instalá-la, ou siga a documentação oficial.",
         errors: {

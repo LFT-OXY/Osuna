@@ -119,23 +119,21 @@ function ProviderRow({
                 >
                   {def.label}
                 </Text>
-                <ProviderStatusLine
-                  status={statusLine}
-                  version={version}
-                  latestVersion={latestVersion}
-                />
+                <ProviderStatusLine status={statusLine} version={version}>
+                  {version && latestVersion ? (
+                    <ProviderUpgradeButton
+                      providerLabel={def.label}
+                      installedVersion={version}
+                      latestVersion={latestVersion}
+                      isUpgrading={upgrade.state.status === "upgrading"}
+                      onUpgrade={upgrade.upgrade}
+                      placement="statusLine"
+                    />
+                  ) : null}
+                </ProviderStatusLine>
               </View>
             </View>
             <View style={styles.trailingControls}>
-              {version && latestVersion ? (
-                <ProviderUpgradeButton
-                  providerLabel={def.label}
-                  installedVersion={version}
-                  latestVersion={latestVersion}
-                  isUpgrading={upgrade.state.status === "upgrading"}
-                  onUpgrade={upgrade.upgrade}
-                />
-              ) : null}
               <Switch
                 value={enabled}
                 onValueChange={handleToggleValueChange}
