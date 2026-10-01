@@ -2,8 +2,17 @@ import type { ProviderUsage } from "@getpaseo/protocol/messages";
 import { expect, test, type Page } from "../support/fixtures";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import { gotoAppShell } from "../support/helpers/app";
+import { clickNewChat } from "../support/helpers/launcher";
 import { installProviderUsageFixture } from "../support/helpers/provider-usage";
+import { selectComposerProvider } from "../support/helpers/provider-selector";
+import { seedWorkspace } from "../support/helpers/seed-client";
+import { getServerId } from "../support/helpers/server-id";
 import { checkOutNewBranch } from "../support/helpers/workspace";
+import {
+  switchWorkspaceViaSidebar,
+  waitForSidebarHydration,
+} from "../support/helpers/workspace-ui";
 
 const DESKTOP_VIEWPORT = { width: 1280, height: 900 };
 const HOUR_MS = 60 * 60 * 1000;
@@ -59,6 +68,43 @@ async function openMockAgentOnDesktop(page: Page, options: { branch?: string } =
     timeout: 30_000,
   });
   return session;
+}
+
+function codexPlanUsage(): ProviderUsage {
+  return {
+    providerId: "codex",
+    displayName: "Codex",
+    status: "available",
+    planLabel: "Pro",
+    windows: [
+      { id: "session", label: "Session", usedPct: 12, resetsAt: fromNow(3 * HOUR_MS), tone: "ok" },
+      { id: "weekly", label: "Weekly", usedPct: 40, resetsAt: fromNow(4 * DAY_MS), tone: "ok" },
+      {
+        id: "code_review",
+        label: "Code review",
+        usedPct: 5,
+        resetsAt: fromNow(4 * DAY_MS),
+        tone: "ok",
+      },
+    ],
+  };
+}
+
+// 新打开的工作区先显示新建标签页，Composer 和窄栏随新建 Agent 的草稿标签页出现。
+async function openDraftTabOnDesktop(page: Page) {
+  await page.setViewportSize(DESKTOP_VIEWPORT);
+  const workspace = await seedWorkspace({ repoPrefix: "composer-plan-usage-draft-" });
+  await gotoAppShell(page);
+  await waitForSidebarHydration(page);
+  await switchWorkspaceViaSidebar({
+    page,
+    serverId: getServerId(),
+    workspaceId: workspace.workspaceId,
+  });
+  await clickNewChat(page);
+  await expectComposerVisible(page);
+  await expect(page.getByTestId("composer-context-strip")).toBeVisible({ timeout: 30_000 });
+  return workspace;
 }
 
 // 桌面端本机默认不显示主机徽标；e2e 的主机不算本机，这里手动隐藏，窄栏宽度与桌面端一致。
@@ -296,6 +342,50 @@ test.describe("plan usage in the composer context strip", () => {
       expect(fewest).toBe(EVERY_SEGMENT.length);
     } finally {
       await session.cleanup();
+    }
+  });
+
+  test("follows the provider selected in a new agent draft", async ({ page }) => {
+    test.setTimeout(180_000);
+    await hideHostBadges(page);
+    await installProviderUsageFixture(page, [
+      {
+        fetchedAt: new Date().toISOString(),
+        providers: [
+          mockPlanUsage({ providerId: "claude", displayName: "Claude" }),
+          codexPlanUsage(),
+        ],
+      },
+    ]);
+    const workspace = await openDraftTabOnDesktop(page);
+    try {
+      const gauge = page.getByTestId("composer-plan-usage");
+
+      await selectComposerProvider(page, "claude");
+      await expect.poll(() => readSegmentIds(page), { timeout: 10_000 }).toEqual(EVERY_SEGMENT);
+      await expect(gauge.getByTestId("composer-plan-usage-plan")).toHaveText("Max 20x");
+
+      await selectComposerProvider(page, "codex");
+      await expect
+        .poll(() => readSegmentIds(page), { timeout: 10_000 })
+        .toEqual([
+          "composer-plan-usage-plan",
+          "composer-plan-usage-window-session",
+          "composer-plan-usage-window-weekly",
+          "composer-plan-usage-window-code_review",
+        ]);
+      await expect(gauge.getByTestId("composer-plan-usage-plan")).toHaveText("Pro");
+      await expect(gauge.getByTestId("composer-plan-usage-window-session")).toHaveText("5h12%3h");
+      await expect(gauge.getByTestId("composer-plan-usage-window-code_review")).toHaveText(
+        "Review5%4d",
+      );
+
+      // mock 在套餐用量结果里没有条目。
+      await selectComposerProvider(page, "mock");
+      await expect(gauge).toHaveCount(0);
+      await expect(page.getByTestId("composer-context-strip-branch-switcher")).toBeVisible();
+    } finally {
+      await workspace.cleanup();
     }
   });
 });

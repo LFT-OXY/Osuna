@@ -4,8 +4,8 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 草稿标签页把当前选中的提供方传给窄栏；Agent 面板的行为不变
-- [ ] e2e：草稿标签页选中 Claude 时窄栏显示 Claude 的套餐仪表；切换到 Codex 后显示 Codex 的窗口；切换到没有套餐数据的提供方后套餐区消失
-- [ ] UI：草稿标签页 / 选中 Codex / 桌面 1280 — 窄栏右侧显示 Codex 图标、套餐名和 `5h`、`周`、`审查` 三段
+- [x] 草稿标签页把当前选中的提供方传给窄栏；Agent 面板的行为不变
+- [x] e2e：草稿标签页选中 Claude 时窄栏显示 Claude 的套餐仪表；切换到 Codex 后显示 Codex 的窗口；切换到没有套餐数据的提供方后套餐区消失
+- [x] UI：草稿标签页 / 选中 Codex / 桌面 1280 — 窄栏右侧显示 Codex 图标、套餐名和 `5h`、`周`、`审查` 三段

@@ -1798,6 +1798,8 @@ function ComposerContentImpl({
     if (resolveAgentControlsMode(agentControls) === "draft") agent = "draft";
     return { agent, isHostConnected: isConnected };
   }, [agentControls, isAgentRunning, isConnected]);
+  // 草稿还没有 agent，套餐用量跟着草稿里选中的提供方走。
+  const planUsageProviderId = agentControls ? agentControls.selectedProvider : agentState.provider;
 
   const queueWriter = useMemo<QueueWriter>(
     () => ({
@@ -2662,7 +2664,7 @@ function ComposerContentImpl({
                 cwd={cwd}
                 gitStatus={checkoutStatusQuery.status}
                 branchSwitchConditions={branchSwitchConditions}
-                planUsageProviderId={agentState.provider}
+                planUsageProviderId={planUsageProviderId}
                 showContextStrip={showContextStrip && !isCompactFormFactor}
               >
                 <StableMessageInput
