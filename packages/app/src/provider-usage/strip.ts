@@ -170,3 +170,39 @@ function describeWindow({ label, percent, trailing }: WindowDescriptionInput): U
     params: { label, percent, trailing: trailing.full },
   };
 }
+
+export interface PlanUsageStripMeasuredSegment extends Pick<PlanUsageStripSegment, "key" | "kind"> {
+  width: number;
+}
+
+/** 窄栏量出来、交给套餐仪表做取舍的空间。 */
+export interface PlanUsageStripSpace {
+  /** 分支名和套餐仪表一起能用的宽度，已扣除两者之间的间距。 */
+  availableWidth: number;
+  /** 空间不够时分支名要保留的宽度；没有分支名时为 0。 */
+  branchReservedWidth: number;
+}
+
+export interface PlanUsageStripFitInput extends PlanUsageStripSpace {
+  /** 按显示顺序排列的分段及其实测宽度（含仪表外框）。 */
+  segments: readonly PlanUsageStripMeasuredSegment[];
+}
+
+/**
+ * 窄栏放不下时的取舍，返回要显示的分段 key：先从末尾隐藏窗口段，再隐藏套餐名段，
+ * 第一个窗口段始终保留。分支名在剩下的空间里照常截断。
+ */
+export function fitPlanUsageStripSegments(input: PlanUsageStripFitInput): string[] {
+  const budget = input.availableWidth - input.branchReservedWidth;
+  const windows = input.segments.filter((segment) => segment.kind === "window");
+  const plans = input.segments.filter((segment) => segment.kind === "plan");
+  const hideOrder = [...windows.slice(1).toReversed(), ...plans];
+  let width = input.segments.reduce((total, segment) => total + segment.width, 0);
+  const hidden = new Set<string>();
+  for (const segment of hideOrder) {
+    if (width <= budget) break;
+    hidden.add(segment.key);
+    width -= segment.width;
+  }
+  return input.segments.filter((segment) => !hidden.has(segment.key)).map((segment) => segment.key);
+}

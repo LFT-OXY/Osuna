@@ -1,7 +1,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import type { UsageText } from "@/usage/text";
-import { resolvePlanUsageStrip, type PlanUsageStripInput } from "./strip";
+import {
+  fitPlanUsageStripSegments,
+  resolvePlanUsageStrip,
+  type PlanUsageStripInput,
+  type PlanUsageStripMeasuredSegment,
+} from "./strip";
 import type { ProviderUsage, ProviderUsageView, ProviderUsageWindow } from "./types";
 
 const NOW = Date.parse("2026-10-01T10:00:00.000Z");
@@ -359,5 +364,53 @@ describe("the plan usage gauge in the composer context strip", () => {
     for (const key of keys) {
       expect(i18n.exists(key), key).toBe(true);
     }
+  });
+});
+
+describe("fitPlanUsageStripSegments", () => {
+  // 套餐名段 80，三个窗口段各 100：仪表全宽 380。
+  const MEASURED: PlanUsageStripMeasuredSegment[] = [
+    { key: "plan", kind: "plan", width: 80 },
+    { key: "five_hour", kind: "window", width: 100 },
+    { key: "weekly", kind: "window", width: 100 },
+    { key: "weekly_model_fable", kind: "window", width: 100 },
+  ];
+
+  function fit(availableWidth: number, segments = MEASURED, branchReservedWidth = 80) {
+    return fitPlanUsageStripSegments({ availableWidth, branchReservedWidth, segments });
+  }
+
+  it("shows every segment when they fit beside the branch", () => {
+    expect(fit(460)).toEqual(["plan", "five_hour", "weekly", "weekly_model_fable"]);
+  });
+
+  it("hides the last window first", () => {
+    expect(fit(459)).toEqual(["plan", "five_hour", "weekly"]);
+  });
+
+  it("hides every later window before the plan", () => {
+    expect(fit(359)).toEqual(["plan", "five_hour"]);
+    expect(fit(260)).toEqual(["plan", "five_hour"]);
+  });
+
+  it("hides the plan once only the first window is left", () => {
+    expect(fit(259)).toEqual(["five_hour"]);
+  });
+
+  it("keeps the first window however narrow the strip gets", () => {
+    expect(fit(120)).toEqual(["five_hour"]);
+    expect(fit(0)).toEqual(["five_hour"]);
+  });
+
+  it("leaves the branch its reserved width, and nothing when there is no branch", () => {
+    expect(fit(380)).toEqual(["plan", "five_hour", "weekly"]);
+    expect(fit(380, MEASURED, 0)).toEqual(["plan", "five_hour", "weekly", "weekly_model_fable"]);
+  });
+
+  it("drops windows down to the first when there is no plan segment", () => {
+    const windows = MEASURED.slice(1);
+    expect(fit(380, windows)).toEqual(["five_hour", "weekly", "weekly_model_fable"]);
+    expect(fit(379, windows)).toEqual(["five_hour", "weekly"]);
+    expect(fit(100, windows)).toEqual(["five_hour"]);
   });
 });

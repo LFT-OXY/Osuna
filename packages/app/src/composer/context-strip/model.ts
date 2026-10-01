@@ -1,5 +1,6 @@
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
+import type { PlanUsageStripSpace } from "@/provider-usage/strip";
 
 type WorkspaceKind = Exclude<WorkspaceDescriptor["workspaceKind"], "checkout">;
 
@@ -60,4 +61,31 @@ export function resolveBranchSwitch(
     return { kind: "disabled", reason: "agent-running" };
   }
   return { kind: "enabled" };
+}
+
+export interface PlanUsageSpaceInput {
+  /** 分支名和套餐用量所在区域的宽度；还没量到时为 null。 */
+  regionWidth: number | null;
+  hasBranch: boolean;
+  /** 分支名不截断时的宽度；还没量到时为 null。 */
+  branchNaturalWidth: number | null;
+  itemGap: number;
+  /** 空间不够时分支名至少保留的宽度。 */
+  branchMinWidth: number;
+}
+
+/**
+ * 套餐用量做宽度取舍前要知道的空间。比最小值短的分支名只保留它自己的宽度。
+ * 区域或分支名还没量到时返回 null，套餐用量先不显示，免得按猜的宽度显示出来又收回。
+ */
+export function resolvePlanUsageSpace(input: PlanUsageSpaceInput): PlanUsageStripSpace | null {
+  if (input.regionWidth === null) return null;
+  // 区域里分支名（或没有分支名时的占位）与套餐用量之间一个间距。
+  const availableWidth = input.regionWidth - input.itemGap;
+  if (!input.hasBranch) return { availableWidth, branchReservedWidth: 0 };
+  if (input.branchNaturalWidth === null) return null;
+  return {
+    availableWidth,
+    branchReservedWidth: Math.min(input.branchMinWidth, input.branchNaturalWidth),
+  };
 }

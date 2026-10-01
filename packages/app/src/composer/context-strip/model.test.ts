@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
-import { resolveBranchSwitch, resolveComposerContext } from "./model";
+import {
+  resolveBranchSwitch,
+  resolveComposerContext,
+  resolvePlanUsageSpace,
+  type PlanUsageSpaceInput,
+} from "./model";
 
 const common = { cwd: "/repo", error: null, requestId: "req" };
 
@@ -139,5 +144,44 @@ describe("resolveBranchSwitch", () => {
         kind: "hidden",
       });
     }
+  });
+});
+
+describe("resolvePlanUsageSpace", () => {
+  function space(overrides: Partial<PlanUsageSpaceInput>) {
+    return resolvePlanUsageSpace({
+      regionWidth: 500,
+      branchNaturalWidth: 140,
+      hasBranch: true,
+      itemGap: 12,
+      branchMinWidth: 80,
+      ...overrides,
+    });
+  }
+
+  it("waits until the region is measured", () => {
+    expect(space({ regionWidth: null })).toBeNull();
+  });
+
+  it("waits for the branch measurement while a branch is shown", () => {
+    expect(space({ branchNaturalWidth: null })).toBeNull();
+  });
+
+  it("subtracts the gap before the plan usage and reserves the branch minimum", () => {
+    expect(space({})).toEqual({ availableWidth: 488, branchReservedWidth: 80 });
+  });
+
+  it("reserves only the branch's own width when it is shorter than the minimum", () => {
+    expect(space({ branchNaturalWidth: 51 })).toEqual({
+      availableWidth: 488,
+      branchReservedWidth: 51,
+    });
+  });
+
+  it("reserves nothing when there is no branch", () => {
+    expect(space({ hasBranch: false, branchNaturalWidth: null })).toEqual({
+      availableWidth: 488,
+      branchReservedWidth: 0,
+    });
   });
 });

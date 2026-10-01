@@ -3,6 +3,7 @@ import { expect, test, type Page } from "../support/fixtures";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { installProviderUsageFixture } from "../support/helpers/provider-usage";
+import { checkOutNewBranch } from "../support/helpers/workspace";
 
 const DESKTOP_VIEWPORT = { width: 1280, height: 900 };
 const HOUR_MS = 60 * 60 * 1000;
@@ -43,13 +44,14 @@ function mockPlanUsage(overrides: Partial<ProviderUsage> = {}): ProviderUsage {
   };
 }
 
-async function openMockAgentOnDesktop(page: Page) {
+async function openMockAgentOnDesktop(page: Page, options: { branch?: string } = {}) {
   await page.setViewportSize(DESKTOP_VIEWPORT);
   const session = await seedMockAgentWorkspace({
     repoPrefix: "composer-plan-usage-strip-",
     title: "Composer plan usage strip e2e",
     initialPrompt: "emit 1 coalesced agent stream update for the plan usage strip.",
   });
+  if (options.branch) checkOutNewBranch(session.cwd, options.branch);
   await openAgentRoute(page, session);
   await expectComposerVisible(page);
   await expect(page.getByTestId("composer-context-strip")).toBeVisible({ timeout: 30_000 });
@@ -58,6 +60,26 @@ async function openMockAgentOnDesktop(page: Page) {
   });
   return session;
 }
+
+// 桌面端本机默认不显示主机徽标；e2e 的主机不算本机，这里手动隐藏，窄栏宽度与桌面端一致。
+// 在 fixture 写入主机注册表之后运行。
+async function hideHostBadges(page: Page) {
+  await page.addInitScript(() => {
+    const key = "@paseo:daemon-registry";
+    const hosts = JSON.parse(localStorage.getItem(key) ?? "[]") as Record<string, unknown>[];
+    for (const host of hosts) {
+      host.appearance = { color: "none", badgeDisplay: "hidden" };
+    }
+    localStorage.setItem(key, JSON.stringify(hosts));
+  });
+}
+
+const EVERY_SEGMENT = [
+  "composer-plan-usage-plan",
+  "composer-plan-usage-window-five_hour",
+  "composer-plan-usage-window-weekly",
+  "composer-plan-usage-window-weekly_model_fable",
+];
 
 async function readSegmentIds(page: Page): Promise<string[]> {
   return page
@@ -187,6 +209,91 @@ test.describe("plan usage in the composer context strip", () => {
       });
       await expect(page.getByTestId("composer-plan-usage")).toHaveCount(0);
       expect(usageFixture.requestCount()).toBe(0);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  test("gives way as the composer narrows, keeping the branch readable", async ({ page }) => {
+    test.setTimeout(180_000);
+    await hideHostBadges(page);
+    await installProviderUsageFixture(page, [
+      { fetchedAt: new Date().toISOString(), providers: [mockPlanUsage()] },
+    ]);
+    const branch = "feature/plan-usage-strip-keeps-a-readable-branch-name";
+    const session = await openMockAgentOnDesktop(page, { branch });
+    try {
+      const strip = page.getByTestId("composer-context-strip");
+      const branchSwitcher = page.getByTestId("composer-context-strip-branch-switcher");
+      await expect(branchSwitcher).toContainText(branch, { timeout: 30_000 });
+      await expect.poll(() => readSegmentIds(page), { timeout: 10_000 }).toEqual(EVERY_SEGMENT);
+
+      // 输入框约 420px 宽：后面的窗口段和套餐名段都让位，第一个窗口段留下，分支名仍有约 80px。
+      await page.setViewportSize({ width: 772, height: DESKTOP_VIEWPORT.height });
+      await expect
+        .poll(() => readSegmentIds(page))
+        .toEqual(["composer-plan-usage-window-five_hour"]);
+      await expect(page.getByTestId("composer-plan-usage-window-five_hour")).toHaveText(
+        "5h82%out in 1h",
+      );
+      const narrowBranch = await branchSwitcher.boundingBox();
+      expect(narrowBranch?.width ?? 0).toBeGreaterThanOrEqual(80);
+      // 分支名截断（以省略号结尾），而不是被整个挤掉。
+      const isBranchTruncated = await branchSwitcher
+        .getByText(branch, { exact: true })
+        .evaluate((label) => label.scrollWidth > label.clientWidth);
+      expect(isBranchTruncated).toBe(true);
+      expect((await strip.boundingBox())?.height).toBe(28);
+
+      await page.setViewportSize(DESKTOP_VIEWPORT);
+      await expect.poll(() => readSegmentIds(page)).toEqual(EVERY_SEGMENT);
+      expect((await strip.boundingBox())?.height).toBe(28);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  test("keeps every segment while the agent panel is hidden and shown again", async ({ page }) => {
+    test.setTimeout(180_000);
+    await hideHostBadges(page);
+    await installProviderUsageFixture(page, [
+      { fetchedAt: new Date().toISOString(), providers: [mockPlanUsage()] },
+    ]);
+    const session = await openMockAgentOnDesktop(page);
+    try {
+      const created = await session.client.createTerminal(
+        session.cwd,
+        "plan-usage-other",
+        undefined,
+        {
+          workspaceId: session.workspaceId,
+        },
+      );
+      const terminalId = created.terminal?.id;
+      if (!terminalId) throw new Error(`Failed to create terminal: ${created.error}`);
+      await expect.poll(() => readSegmentIds(page), { timeout: 10_000 }).toEqual(EVERY_SEGMENT);
+
+      // 保留面板隐藏再显示，包括回来后的头几帧，仪表一段都不能少。Chromium 里隐藏期间
+      // onLayout 不会报 0 宽（2026-10-01 实测），这里守的是整个隐藏、显示过程不重排。
+      await page.getByTestId("composer-context-strip").evaluate((strip) => {
+        const count = () => strip.querySelectorAll('[data-testid^="composer-plan-usage-"]').length;
+        const record = window as unknown as { __fewestPlanUsageSegments: number };
+        record.__fewestPlanUsageSegments = count();
+        new MutationObserver(() => {
+          record.__fewestPlanUsageSegments = Math.min(record.__fewestPlanUsageSegments, count());
+        }).observe(strip, { childList: true, subtree: true });
+      });
+      await page.getByTestId(`workspace-tab-terminal_${terminalId}`).first().click();
+      await expect(page.getByTestId("composer-context-strip")).toBeHidden();
+      await page.getByTestId(`workspace-tab-agent_${session.agentId}`).first().click();
+      await expect(page.getByTestId("composer-context-strip")).toBeVisible();
+
+      expect(await readSegmentIds(page)).toEqual(EVERY_SEGMENT);
+      const fewest = await page.evaluate(
+        () =>
+          (window as unknown as { __fewestPlanUsageSegments: number }).__fewestPlanUsageSegments,
+      );
+      expect(fewest).toBe(EVERY_SEGMENT.length);
     } finally {
       await session.cleanup();
     }

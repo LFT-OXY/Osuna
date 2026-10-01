@@ -277,6 +277,11 @@ export function readUpstreamBranch(repoPath: string, branch: string): string {
     .trim();
 }
 
+/** Create `branch` at the current HEAD and check it out, without committing anything. */
+export function checkOutNewBranch(repoPath: string, branch: string): void {
+  execSync(`git checkout -b ${JSON.stringify(branch)}`, { cwd: repoPath, stdio: "ignore" });
+}
+
 /** Check `branch` out in a second, linked worktree so git refuses it everywhere else. */
 export async function checkOutBranchInLinkedWorktree(
   repoPath: string,
