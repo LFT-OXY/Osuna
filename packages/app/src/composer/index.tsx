@@ -1323,6 +1323,7 @@ function ComposerSurfaceStack({
   cwd,
   gitStatus,
   branchSwitchConditions,
+  planUsageProviderId,
   showContextStrip,
   children,
 }: {
@@ -1331,6 +1332,7 @@ function ComposerSurfaceStack({
   cwd: string;
   gitStatus: CheckoutStatusPayload | null;
   branchSwitchConditions: BranchSwitchConditions;
+  planUsageProviderId: string | null;
   showContextStrip: boolean;
   children: ReactNode;
 }) {
@@ -1344,6 +1346,7 @@ function ComposerSurfaceStack({
           cwd={cwd}
           gitStatus={gitStatus}
           branchSwitchConditions={branchSwitchConditions}
+          planUsageProviderId={planUsageProviderId}
         />
       ) : null}
     </View>
@@ -2659,6 +2662,7 @@ function ComposerContentImpl({
                 cwd={cwd}
                 gitStatus={checkoutStatusQuery.status}
                 branchSwitchConditions={branchSwitchConditions}
+                planUsageProviderId={agentState.provider}
                 showContextStrip={showContextStrip && !isCompactFormFactor}
               >
                 <StableMessageInput

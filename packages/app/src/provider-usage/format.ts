@@ -6,10 +6,18 @@ import type {
   ProviderUsageBalance,
   ProviderUsageBalanceUnit,
   ProviderUsageStatus,
+  ProviderUsageWindow,
 } from "./types";
 
 export function clampPct(value: number): number {
   return Math.max(0, Math.min(100, value));
+}
+
+/** daemon 可能只给剩余比例。两者都没有时是 null。 */
+export function resolveWindowUsedPct(window: ProviderUsageWindow): number | null {
+  if (window.usedPct != null) return window.usedPct;
+  if (window.remainingPct != null) return 100 - window.remainingPct;
+  return null;
 }
 
 export function formatPct(value: number): string {

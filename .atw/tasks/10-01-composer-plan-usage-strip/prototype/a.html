@@ -1,0 +1,176 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>A 随行文字</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#282a36}
+body{font-family:-apple-system,"SF Pro Text","PingFang SC","Helvetica Neue",system-ui,sans-serif;color:#f8f8f2;
+  -webkit-font-smoothing:antialiased;font-size:14px;line-height:20px;padding:28px;min-height:900px}
+.num{font-variant-numeric:tabular-nums}
+.dim{color:#a9adc6}
+.runs{color:#d8847b}
+.ring,.pi,.li{flex-shrink:0;display:block}
+.board{display:flex;gap:28px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:22px}
+.cap{font-size:11px;line-height:15px;color:#6272a4;margin-bottom:6px;letter-spacing:.02em}
+/* composer */
+.composer{display:flex;flex-direction:column}
+.input{background:#343746;border:1px solid rgba(248,248,242,0.09);border-radius:22px;padding:14px 14px 10px 18px;
+  display:flex;flex-direction:column;gap:14px}
+.draft{font-size:15px;line-height:22px;color:#f8f8f2}
+.toolbar{display:flex;align-items:center;justify-content:flex-end;gap:4px;height:28px}
+.tb{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:999px}
+.meter{display:flex;align-items:center;gap:4px;height:28px;padding:0 4px;font-size:12px;color:#a9adc6}
+.strip{display:flex;align-items:center;gap:12px;height:28px;margin:0 24px;padding:0 12px;background:#343746;
+  border:1px solid rgba(248,248,242,0.09);border-top:0;border-radius:0 0 14px 14px;overflow:hidden;
+  font-size:12px;line-height:16px;color:#a9adc6;white-space:nowrap}
+.si{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.branch{min-width:0;flex-shrink:1;overflow:hidden}
+.branch .bn{overflow:hidden;text-overflow:ellipsis}
+.spacer{flex-grow:1}
+/* 浮层外壳 */
+.pop{background:#2e303e;border:1px solid #44475a;border-radius:12px;padding:12px;
+  box-shadow:0 12px 32px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.25);font-size:12px;line-height:16px}
+
+.pu{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.pu .w{display:flex;align-items:center;gap:4px}
+.pu .w b{font-weight:400;color:#f8f8f2}
+.a-pop{width:262px;display:flex;flex-direction:column}
+.a-sec{display:flex;flex-direction:column;gap:6px}
+.a-sec+.a-sec{border-top:1px solid #363948;margin-top:12px;padding-top:12px}
+.a-head{display:flex;align-items:baseline;justify-content:space-between}
+.a-title{font-size:13px;line-height:18px;font-weight:500;color:#f8f8f2}
+.a-big{font-size:13px;line-height:18px;color:#f8f8f2}
+.a-bar{height:4px;border-radius:2px;background:#44475a;overflow:hidden;margin:2px 0}
+.a-bar i{display:block;height:4px;border-radius:2px}
+.a-row{display:flex;justify-content:space-between;gap:12px;color:#a9adc6}
+.a-row .v{color:#f8f8f2}
+.a-label{font-size:11px;line-height:15px;color:#6272a4;font-weight:500;letter-spacing:.04em}
+.a-card-head{display:flex;align-items:center;gap:6px}
+.badge{font-size:11px;line-height:15px;padding:1px 6px;border-radius:999px;background:#44475a;color:#a9adc6}
+.a-win{display:flex;flex-direction:column;gap:4px}
+.a-win .top{display:flex;justify-content:space-between;gap:8px}
+.a-foot{color:#6272a4;font-size:11px;line-height:15px}
+</style></head><body>
+<div class="board">
+  <div class="col"><div><div class="cap">Claude · 余量充足</div>
+<div class="composer" style="width:640px">
+  <div class="input">
+    <div class="draft">把套餐用量挪到输入框下方，悬停能看到完整卡片</div>
+    <div class="toolbar">
+      <div class="tb"><svg class="li" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>
+      <div class="meter"><svg class="ring" width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(-90deg)"><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#44475a" stroke-width="2"/><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.699" stroke-dashoffset="35.739"/></svg><span class="num">51.8K / 1.0M</span></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></div>
+    </div>
+  </div>
+  <div class="strip">
+    <div class="si"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>工作树</span></div>
+    <div class="si branch"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span class="bn">hopeful-walrus</span><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="spacer"></div>
+    <div class="pu"><svg class="pi" width="12" height="12" viewBox="0 0 24 24" fill="#a9adc6" fill-rule="evenodd"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"/></svg><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/></svg><span>5h</span><b class="num">0%</b><span class="dim">·</span><span class="dim">4h</span></span><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#6cb17b" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="32.201" stroke-dashoffset="17.711"/></svg><span>周</span><b class="num">45%</b><span class="dim">·</span><span class="dim">4d</span></span><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/></svg><span>Fable</span><b class="num">0%</b><span class="dim">·</span><span class="dim">4d</span></span></div>
+  </div>
+</div></div>
+<div><div class="cap">Claude · 紧张：5h 会在重置前用完，周额度 93%</div>
+<div class="composer" style="width:640px">
+  <div class="input">
+    <div class="draft">周额度快用完了，先把剩下的测试跑完</div>
+    <div class="toolbar">
+      <div class="tb"><svg class="li" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>
+      <div class="meter"><svg class="ring" width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(-90deg)"><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#44475a" stroke-width="2"/><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.699" stroke-dashoffset="35.739"/></svg><span class="num">51.8K / 1.0M</span></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></div>
+    </div>
+  </div>
+  <div class="strip">
+    <div class="si"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>工作树</span></div>
+    <div class="si branch"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span class="bn">hopeful-walrus</span><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="spacer"></div>
+    <div class="pu"><svg class="pi" width="12" height="12" viewBox="0 0 24 24" fill="#a9adc6" fill-rule="evenodd"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"/></svg><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#c09664" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="32.201" stroke-dashoffset="5.796"/></svg><span>5h</span><b class="num">82%</b><span class="dim">·</span><span class="runs">1h后用完</span></span><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#d8847b" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="32.201" stroke-dashoffset="2.254"/></svg><span>周</span><b class="num">93%</b><span class="dim">·</span><span class="dim">2d</span></span><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#c09664" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="32.201" stroke-dashoffset="9.338"/></svg><span>Fable</span><b class="num">71%</b><span class="dim">·</span><span class="dim">2d</span></span></div>
+  </div>
+</div></div>
+<div><div class="cap">Codex Agent</div>
+<div class="composer" style="width:640px">
+  <div class="input">
+    <div class="draft">检查一下 review 窗口的数据是不是对的</div>
+    <div class="toolbar">
+      <div class="tb"><svg class="li" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>
+      <div class="meter"><svg class="ring" width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(-90deg)"><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#44475a" stroke-width="2"/><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.699" stroke-dashoffset="35.739"/></svg><span class="num">51.8K / 1.0M</span></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></div>
+    </div>
+  </div>
+  <div class="strip">
+    <div class="si"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>工作树</span></div>
+    <div class="si branch"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span class="bn">hopeful-walrus</span><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="spacer"></div>
+    <div class="pu"><svg class="pi" width="12" height="12" viewBox="0 0 24 24" fill="#a9adc6" fill-rule="evenodd"><path d="M21.55 10.004a5.416 5.416 0 00-.478-4.501c-1.217-2.09-3.662-3.166-6.05-2.66A5.59 5.59 0 0010.831 1C8.39.995 6.224 2.546 5.473 4.838A5.553 5.553 0 001.76 7.496a5.487 5.487 0 00.691 6.5 5.416 5.416 0 00.477 4.502c1.217 2.09 3.662 3.165 6.05 2.66A5.586 5.586 0 0013.168 23c2.443.006 4.61-1.546 5.361-3.84a5.553 5.553 0 003.715-2.66 5.488 5.488 0 00-.693-6.497v.001zm-8.381 11.558a4.199 4.199 0 01-2.675-.954c.034-.018.093-.05.132-.074l4.44-2.53a.71.71 0 00.364-.623v-6.176l1.877 1.069c.02.01.033.029.036.05v5.115c-.003 2.274-1.87 4.118-4.174 4.123zM4.192 17.78a4.059 4.059 0 01-.498-2.763c.032.02.09.055.131.078l4.44 2.53c.225.13.504.13.73 0l5.42-3.088v2.138a.068.068 0 01-.027.057L9.9 19.288c-1.999 1.136-4.552.46-5.707-1.51h-.001zM3.023 8.216A4.15 4.15 0 015.198 6.41l-.002.151v5.06a.711.711 0 00.364.624l5.42 3.087-1.876 1.07a.067.067 0 01-.063.005l-4.489-2.559c-1.995-1.14-2.679-3.658-1.53-5.63h.001zm15.417 3.54l-5.42-3.088L14.896 7.6a.067.067 0 01.063-.006l4.489 2.557c1.998 1.14 2.683 3.662 1.529 5.633a4.163 4.163 0 01-2.174 1.807V12.38a.71.71 0 00-.363-.623zm1.867-2.773a6.04 6.04 0 00-.132-.078l-4.44-2.53a.731.731 0 00-.729 0l-5.42 3.088V7.325a.068.068 0 01.027-.057L14.1 4.713c2-1.137 4.555-.46 5.707 1.513.487.833.664 1.809.499 2.757h.001zm-11.741 3.81l-1.877-1.068a.065.065 0 01-.036-.051V6.559c.001-2.277 1.873-4.122 4.181-4.12.976 0 1.92.338 2.671.954-.034.018-.092.05-.131.073l-4.44 2.53a.71.71 0 00-.365.623l-.003 6.173v.002zm1.02-2.168L12 9.25l2.414 1.375v2.75L12 14.75l-2.415-1.375v-2.75z"/></svg><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#6cb17b" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="32.201" stroke-dashoffset="28.337"/></svg><span>5h</span><b class="num">12%</b><span class="dim">·</span><span class="dim">3h</span></span><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#6cb17b" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="32.201" stroke-dashoffset="11.592"/></svg><span>周</span><b class="num">64%</b><span class="dim">·</span><span class="dim">5d</span></span><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/></svg><span>审查</span><b class="num">0%</b><span class="dim">·</span><span class="dim">6d</span></span></div>
+  </div>
+</div></div>
+<div><div class="cap">窄窗口 · 长分支名先截断，再从末尾隐藏窗口</div>
+<div class="composer" style="width:420px">
+  <div class="input">
+    <div class="draft">窄一点也要能看到最紧张的那项</div>
+    <div class="toolbar">
+      <div class="tb"><svg class="li" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>
+      <div class="meter"><svg class="ring" width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(-90deg)"><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#44475a" stroke-width="2"/><circle cx="7.0" cy="7.0" r="6.000" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.699" stroke-dashoffset="35.739"/></svg><span class="num">51.8K / 1.0M</span></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+      <div class="tb"><svg class="li" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></div>
+    </div>
+  </div>
+  <div class="strip">
+    <div class="si"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>工作树</span></div>
+    <div class="si branch"><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span class="bn">feature/plan-usage-strip-with-a-very-long-name</span><svg class="li" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a9adc6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+    <div class="spacer"></div>
+    <div class="pu"><svg class="pi" width="12" height="12" viewBox="0 0 24 24" fill="#a9adc6" fill-rule="evenodd"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"/></svg><span class="w"><svg class="ring" width="12" height="12" viewBox="0 0 12 12" style="transform:rotate(-90deg)"><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#44475a" stroke-width="1.75"/><circle cx="6.0" cy="6.0" r="5.125" fill="none" stroke="#c09664" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="32.201" stroke-dashoffset="5.796"/></svg><span>5h</span><b class="num">82%</b><span class="dim">·</span><span class="runs">1h后用完</span></span></div>
+  </div>
+</div></div></div>
+  <div class="col">
+    <div><div class="cap">上下文弹层 · 桌面（套餐部分已移走）</div><div class="pop a-pop">
+<div class="a-sec">
+  <div class="a-head"><span class="a-title">上下文窗口</span><span class="a-big num">5%</span></div>
+  <div class="a-bar"><i style="width:5.2%;background:#a9adc6"></i></div>
+  <div class="a-row"><span class="num">51.8K / 1.0M tokens</span><span class="num">估算成本 $0.52</span></div>
+</div>
+<div class="a-sec">
+  <div class="a-label">本会话合计</div>
+  <div class="a-row"><span>Token</span><span class="v num">↑26 ↓4.0K</span></div><div class="a-row"><span>估算成本</span><span class="v num">$0.40</span></div><div class="a-row"><span>轮次</span><span class="v num">4</span></div><div class="a-row"><span>Agent 运行</span><span class="v num">1m</span></div><div class="a-row"><span>会话跨度</span><span class="v num">3m 32s</span></div>
+</div></div></div>
+    <div><div class="cap">悬停窄栏套餐区 → 套餐用量卡片</div><div class="pop a-pop">
+<div class="a-sec">
+  <div class="a-card-head"><svg class="pi" width="14" height="14" viewBox="0 0 24 24" fill="#a9adc6" fill-rule="evenodd"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"/></svg><span class="a-title">Claude</span><span class="badge">Max 20x</span>
+    <span class="spacer"></span><span class="a-foot">更新于 2 分钟前</span></div>
+  <div class="a-win"><div class="top"><span class="dim">Session</span>
+<span class="num">0% <span class="dim">·</span> <span class="dim">4h 后重置</span></span></div>
+<div class="a-bar"><i style="width:0%;background:#6cb17b"></i></div></div><div class="a-win"><div class="top"><span class="dim">Weekly</span>
+<span class="num">45% <span class="dim">·</span> <span class="dim">4d 后重置</span></span></div>
+<div class="a-bar"><i style="width:45%;background:#6cb17b"></i></div></div><div class="a-win"><div class="top"><span class="dim">Weekly · Fable</span>
+<span class="num">0% <span class="dim">·</span> <span class="dim">4d 后重置</span></span></div>
+<div class="a-bar"><i style="width:0%;background:#6cb17b"></i></div></div>
+  <div class="a-row"><span>Extra usage</span><span class="v">Disabled</span></div>
+</div></div></div>
+  </div>
+  <div class="col">
+    <div><div class="cap">上下文弹层 · 手机（没有窄栏，保留套餐）</div><div class="pop a-pop">
+<div class="a-sec">
+  <div class="a-head"><span class="a-title">上下文窗口</span><span class="a-big num">5%</span></div>
+  <div class="a-bar"><i style="width:5.2%;background:#a9adc6"></i></div>
+  <div class="a-row"><span class="num">51.8K / 1.0M tokens</span><span class="num">估算成本 $0.52</span></div>
+</div>
+<div class="a-sec">
+  <div class="a-label">本会话合计</div>
+  <div class="a-row"><span>Token</span><span class="v num">↑26 ↓4.0K</span></div><div class="a-row"><span>估算成本</span><span class="v num">$0.40</span></div><div class="a-row"><span>轮次</span><span class="v num">4</span></div><div class="a-row"><span>Agent 运行</span><span class="v num">1m</span></div><div class="a-row"><span>会话跨度</span><span class="v num">3m 32s</span></div>
+</div>
+<div class="a-sec">
+  <div class="a-card-head"><svg class="pi" width="14" height="14" viewBox="0 0 24 24" fill="#a9adc6" fill-rule="evenodd"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"/></svg><span class="a-title">Claude</span><span class="badge">Max 20x</span>
+    <span class="spacer"></span><span class="a-foot">更新于 2 分钟前</span></div>
+  <div class="a-win"><div class="top"><span class="dim">Session</span>
+<span class="num">0% <span class="dim">·</span> <span class="dim">4h 后重置</span></span></div>
+<div class="a-bar"><i style="width:0%;background:#6cb17b"></i></div></div><div class="a-win"><div class="top"><span class="dim">Weekly</span>
+<span class="num">45% <span class="dim">·</span> <span class="dim">4d 后重置</span></span></div>
+<div class="a-bar"><i style="width:45%;background:#6cb17b"></i></div></div><div class="a-win"><div class="top"><span class="dim">Weekly · Fable</span>
+<span class="num">0% <span class="dim">·</span> <span class="dim">4d 后重置</span></span></div>
+<div class="a-bar"><i style="width:0%;background:#6cb17b"></i></div></div>
+  <div class="a-row"><span>Extra usage</span><span class="v">Disabled</span></div>
+</div></div></div>
+  </div>
+</div></body></html>

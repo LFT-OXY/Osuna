@@ -4,20 +4,8 @@ import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { renderUsageText } from "@/usage/text";
 import { clampPct, describeReset, resolveBalanceAmount } from "./format";
+import { TONE_COLOR_TOKEN } from "./tone";
 import type { ProviderUsageBalance, ProviderUsageTone } from "./types";
-
-function fillToneStyle(tone: ProviderUsageTone) {
-  switch (tone) {
-    case "ok":
-      return styles.fillOk;
-    case "warning":
-      return styles.fillWarning;
-    case "danger":
-      return styles.fillDanger;
-    default:
-      return styles.fillDefault;
-  }
-}
 
 export function ProviderUsageBalanceBar({ balance }: { balance: ProviderUsageBalance }) {
   const { t } = useTranslation();
@@ -27,7 +15,7 @@ export function ProviderUsageBalanceBar({ balance }: { balance: ProviderUsageBal
   const reset = describeReset(balance.resetsAt, now);
 
   const fillStyle = useMemo<StyleProp<ViewStyle>>(
-    () => [styles.fill, fillToneStyle(tone), { width: `${clampPct(usedPct ?? 0)}%` }],
+    () => [styles.fill, styles.fillTone(tone), { width: `${clampPct(usedPct ?? 0)}%` }],
     [usedPct, tone],
   );
 
@@ -85,16 +73,7 @@ const styles = StyleSheet.create((theme) => ({
     height: 4,
     borderRadius: 2,
   },
-  fillDefault: {
-    backgroundColor: theme.colors.foregroundMuted,
-  },
-  fillOk: {
-    backgroundColor: theme.colors.statusSuccess,
-  },
-  fillWarning: {
-    backgroundColor: theme.colors.statusWarning,
-  },
-  fillDanger: {
-    backgroundColor: theme.colors.statusDanger,
-  },
+  fillTone: (tone: ProviderUsageTone) => ({
+    backgroundColor: theme.colors[TONE_COLOR_TOKEN[tone]],
+  }),
 }));

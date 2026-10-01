@@ -3650,6 +3650,17 @@ export const ptBR: TranslationResources = {
       resettingNow: "reiniciando agora",
       runsOut: "acaba em {{duration}}",
       balanceLeft: "{{amount}} restantes",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "Semana",
+          codeReview: "Revisão",
+        },
+        runsOut: "acaba em {{duration}}",
+        planA11y: "Plano {{provider}}: {{plan}}",
+        windowA11y: "{{label}}: {{percent}} usado, {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: {{percent}} usado",
+      },
       status: {
         error: "Erro",
         unavailable: "Indisponível",

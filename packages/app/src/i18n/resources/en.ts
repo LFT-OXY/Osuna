@@ -3720,6 +3720,17 @@ export const en = {
       resettingNow: "resetting now",
       runsOut: "runs out {{duration}}",
       balanceLeft: "{{amount}} left",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "Week",
+          codeReview: "Review",
+        },
+        runsOut: "out in {{duration}}",
+        planA11y: "{{provider}} plan: {{plan}}",
+        windowA11y: "{{label}}: {{percent}} used, {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: {{percent}} used",
+      },
       status: {
         error: "Error",
         unavailable: "Unavailable",

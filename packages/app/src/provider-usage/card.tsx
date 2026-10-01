@@ -19,7 +19,7 @@ interface ProviderUsageIconProps {
   color?: string;
 }
 
-function ProviderUsageIcon({ iconKey, size, color = "" }: ProviderUsageIconProps) {
+export function ProviderUsageIcon({ iconKey, size, color = "" }: ProviderUsageIconProps) {
   const Icon = getProviderIcon(iconKey);
   return <Icon size={size} color={color} />;
 }

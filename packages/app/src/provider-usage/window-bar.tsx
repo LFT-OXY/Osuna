@@ -3,38 +3,25 @@ import { useTranslation } from "react-i18next";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { renderUsageText } from "@/usage/text";
-import { clampPct, describeReset, describeRunsOut, formatPct } from "./format";
-import { deriveTone } from "./tone";
+import {
+  clampPct,
+  describeReset,
+  describeRunsOut,
+  formatPct,
+  resolveWindowUsedPct,
+} from "./format";
+import { deriveTone, TONE_COLOR_TOKEN } from "./tone";
 import type { ProviderUsageTone, ProviderUsageWindow } from "./types";
-
-function resolveUsedPct(window: ProviderUsageWindow): number | null {
-  if (window.usedPct != null) return window.usedPct;
-  if (window.remainingPct != null) return 100 - window.remainingPct;
-  return null;
-}
-
-function fillToneStyle(tone: ProviderUsageTone) {
-  switch (tone) {
-    case "ok":
-      return styles.fillOk;
-    case "warning":
-      return styles.fillWarning;
-    case "danger":
-      return styles.fillDanger;
-    default:
-      return styles.fillDefault;
-  }
-}
 
 export function ProviderUsageWindowBar({ window }: { window: ProviderUsageWindow }) {
   const { t } = useTranslation();
   const now = Date.now();
-  const usedPct = resolveUsedPct(window);
+  const usedPct = resolveWindowUsedPct(window);
   const tone = window.tone ?? deriveTone(usedPct);
 
   const fillWidth = clampPct(usedPct ?? 0);
   const fillStyle = useMemo<StyleProp<ViewStyle>>(
-    () => [styles.fill, fillToneStyle(tone), { width: `${fillWidth}%` }],
+    () => [styles.fill, styles.fillTone(tone), { width: `${fillWidth}%` }],
     [fillWidth, tone],
   );
 
@@ -103,16 +90,7 @@ const styles = StyleSheet.create((theme) => ({
     height: 4,
     borderRadius: 2,
   },
-  fillDefault: {
-    backgroundColor: theme.colors.foregroundMuted,
-  },
-  fillOk: {
-    backgroundColor: theme.colors.statusSuccess,
-  },
-  fillWarning: {
-    backgroundColor: theme.colors.statusWarning,
-  },
-  fillDanger: {
-    backgroundColor: theme.colors.statusDanger,
-  },
+  fillTone: (tone: ProviderUsageTone) => ({
+    backgroundColor: theme.colors[TONE_COLOR_TOKEN[tone]],
+  }),
 }));

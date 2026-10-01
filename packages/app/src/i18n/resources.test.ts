@@ -64,6 +64,7 @@ const zhCNEnglishAllowlist = {
     "desktop.daemon.status.pid",
     "desktop.updates.callout.downloadProgress",
     "contextWindow.tokens",
+    "usage.planUsage.strip.windows.fiveHour",
     "settings.providers.apiEndpoints.form.baseUrl",
     "settings.providers.apiEndpoints.form.apiKey",
     "settings.providers.version.value",

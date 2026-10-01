@@ -23,7 +23,7 @@ New code must not call it. It subscribes the component to every runtime change a
 
 1. `StyleSheet.create((theme) => …)` for anything that ends up in a `style` prop.
 2. A literal constant or a static import (`baseColors`, theme-name constants, `type Theme`) for genuinely static values.
-3. `withUnistyles(Component)` for a third-party prop that must be theme-reactive (`BlurView.tint`, `Image.tintColor`, bottom-sheet `backgroundStyle`). Mind the `> *` child-selector leak.
+3. `withUnistyles(Component)` for a third-party prop that must be theme-reactive (`BlurView.tint`, `Image.tintColor`, bottom-sheet `backgroundStyle`). Mind the `> *` child-selector leak. Wrap a whole SVG glyph, never an SVG child: `withUnistyles(Circle)` puts a `display: contents` `<div>` inside `<svg>` on web and the shape stops rendering. `UsageRingGlyph` in `provider-usage/strip-gauge.tsx` takes `trackColor` / `progressColor` as props and is wrapped once.
 4. There is no step 4. File an issue and stop.
 
 ## Theme values that leave the app

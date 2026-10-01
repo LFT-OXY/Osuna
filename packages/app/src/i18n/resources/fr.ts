@@ -3682,6 +3682,17 @@ export const fr: TranslationResources = {
       resettingNow: "réinitialisation en cours",
       runsOut: "épuisé dans {{duration}}",
       balanceLeft: "{{amount}} restants",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "Semaine",
+          codeReview: "Revue",
+        },
+        runsOut: "épuisé dans {{duration}}",
+        planA11y: "Forfait {{provider}} : {{plan}}",
+        windowA11y: "{{label}} : {{percent}} utilisé, {{trailing}}",
+        windowA11yNoTrailing: "{{label}} : {{percent}} utilisé",
+      },
       status: {
         error: "Erreur",
         unavailable: "Indisponible",

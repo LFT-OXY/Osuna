@@ -7,6 +7,18 @@ interface ProviderUsageFixturePayload {
   providers: ProviderUsage[];
 }
 
+/** 以 `rpc_error` 应答，和 daemon 取数失败时一样。 */
+interface ProviderUsageFixtureFailure {
+  rpcError: string;
+}
+
+type ProviderUsageFixtureAnswer = ProviderUsageFixturePayload | ProviderUsageFixtureFailure;
+
+interface ProviderUsageFixtureOptions {
+  /** `false` 表示主机没有 `features.providerUsageList`；默认 `true`。 */
+  supported?: boolean;
+}
+
 export interface ProviderUsageFixture {
   requestCount(): number;
   waitForRequestCount(count: number): Promise<void>;
@@ -38,7 +50,11 @@ function getSessionMessage(message: WebSocketMessage): Record<string, unknown> |
   return maybeEnvelope.message as Record<string, unknown>;
 }
 
-function withProviderUsageFeature(message: WebSocketMessage): string | null {
+function withProviderUsageFeature(input: {
+  message: WebSocketMessage;
+  supported: boolean;
+}): string | null {
+  const { message, supported } = input;
   const envelope = parseJson(message);
   if (!envelope || typeof envelope !== "object") {
     return null;
@@ -68,17 +84,37 @@ function withProviderUsageFeature(message: WebSocketMessage): string | null {
           ...(typeof payload.features === "object" && payload.features !== null
             ? payload.features
             : {}),
-          providerUsageList: true,
+          providerUsageList: supported,
         },
       },
     },
   });
 }
 
+function answerMessage(requestId: string, answer: ProviderUsageFixtureAnswer) {
+  if ("rpcError" in answer) {
+    return {
+      type: "rpc_error",
+      payload: {
+        requestId,
+        requestType: "provider.usage.list.request",
+        error: answer.rpcError,
+        code: "handler_error",
+      },
+    };
+  }
+  return {
+    type: "provider.usage.list.response",
+    payload: { requestId, fetchedAt: answer.fetchedAt, providers: answer.providers },
+  };
+}
+
 export async function installProviderUsageFixture(
   page: Page,
-  payloads: ProviderUsageFixturePayload[],
+  payloads: ProviderUsageFixtureAnswer[],
+  options: ProviderUsageFixtureOptions = {},
 ): Promise<ProviderUsageFixture> {
+  const supported = options.supported ?? true;
   let requests = 0;
   const waiters: Array<{ count: number; resolve: () => void }> = [];
 
@@ -92,7 +128,7 @@ export async function installProviderUsageFixture(
     }
   }
 
-  function payloadForRequest(): ProviderUsageFixturePayload {
+  function payloadForRequest(): ProviderUsageFixtureAnswer {
     const index = Math.min(requests - 1, payloads.length - 1);
     const payload = payloads[index];
     if (!payload) {
@@ -113,28 +149,20 @@ export async function installProviderUsageFixture(
           throw new Error("provider.usage.list.request missing requestId");
         }
         const payload = payloadForRequest();
+        // 先把应答发出去再通知，等到的请求数就包含了它的应答。
+        ws.send(JSON.stringify({ type: "session", message: answerMessage(requestId, payload) }));
         notifyWaiters();
-        ws.send(
-          JSON.stringify({
-            type: "session",
-            message: {
-              type: "provider.usage.list.response",
-              payload: {
-                requestId,
-                fetchedAt: payload.fetchedAt,
-                providers: payload.providers,
-              },
-            },
-          }),
-        );
         return;
       }
       server.send(message);
     });
 
     server.onMessage((message) => {
-      const serverInfo = typeof message === "string" ? withProviderUsageFeature(message) : null;
-      ws.send(serverInfo ?? message);
+      if (typeof message !== "string") {
+        ws.send(message);
+        return;
+      }
+      ws.send(withProviderUsageFeature({ message, supported }) ?? message);
     });
   });
 

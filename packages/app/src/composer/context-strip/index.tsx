@@ -7,6 +7,7 @@ import { Text } from "@/components/ui/text";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { HOST_BADGE_ICON_SIZE, HostBadge } from "@/hosts/host-badge";
 import { useHostBadges } from "@/hosts/use-host-badges";
+import { PlanUsageStripGauge } from "@/provider-usage/strip-gauge";
 import type { Theme } from "@/styles/theme";
 import { resolveBranchSwitch, resolveComposerContext, type BranchSwitchConditions } from "./model";
 
@@ -20,7 +21,8 @@ const BRANCH_SWITCH_DISABLED_REASON_KEYS = {
 
 /**
  * 附着在 Composer 底部的窄条。状态没到之前条本身照常占位，内容到了也不改变高度。
- * 分支名是切换分支的入口，工作区类型只读；host 按该 host 自己的徽标设置显示，本机默认隐藏。
+ * 分支名是切换分支的入口，工作区类型只读；右侧是当前提供方的套餐用量，host 按该 host
+ * 自己的徽标设置显示，本机默认隐藏。
  */
 export function ComposerContextStrip({
   serverId,
@@ -28,12 +30,15 @@ export function ComposerContextStrip({
   cwd,
   gitStatus,
   branchSwitchConditions,
+  planUsageProviderId,
 }: {
   serverId: string;
   workspaceId: string;
   cwd: string;
   gitStatus: CheckoutStatusPayload | null;
   branchSwitchConditions: BranchSwitchConditions;
+  /** 显示谁的套餐用量；没有提供方时不显示，也不取数。 */
+  planUsageProviderId: string | null;
 }) {
   const { t } = useTranslation();
   const hostBadge = useHostBadges({ enabled: true }).get(serverId) ?? null;
@@ -70,6 +75,9 @@ export function ComposerContextStrip({
         </View>
       )}
       <View style={styles.spacer} />
+      {planUsageProviderId ? (
+        <PlanUsageStripGauge serverId={serverId} providerId={planUsageProviderId} />
+      ) : null}
       {hostBadge ? <HostBadge badge={hostBadge} /> : null}
     </View>
   );

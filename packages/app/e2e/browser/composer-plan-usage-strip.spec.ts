@@ -1,0 +1,194 @@
+import type { ProviderUsage } from "@getpaseo/protocol/messages";
+import { expect, test, type Page } from "../support/fixtures";
+import { expectComposerVisible } from "../support/helpers/composer";
+import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import { installProviderUsageFixture } from "../support/helpers/provider-usage";
+
+const DESKTOP_VIEWPORT = { width: 1280, height: 900 };
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+// 时长按「还有多久」显示，所以重置时间相对此刻给出，并多留半小时，免得跨过整点。
+function fromNow(ms: number): string {
+  return new Date(Date.now() + ms + 30 * 60_000).toISOString();
+}
+
+function mockPlanUsage(overrides: Partial<ProviderUsage> = {}): ProviderUsage {
+  return {
+    providerId: "mock",
+    displayName: "Mock provider",
+    status: "available",
+    planLabel: "Max 20x",
+    windows: [
+      {
+        id: "five_hour",
+        label: "Session",
+        usedPct: 82,
+        resetsAt: fromNow(3 * HOUR_MS),
+        runsOutAt: fromNow(HOUR_MS),
+        shortfallPct: 18,
+        tone: "warning",
+      },
+      { id: "weekly", label: "Weekly", usedPct: 45, resetsAt: fromNow(4 * DAY_MS), tone: "ok" },
+      {
+        id: "weekly_model_fable",
+        label: "Weekly · Fable",
+        usedPct: 0,
+        resetsAt: fromNow(4 * DAY_MS),
+        tone: "ok",
+      },
+    ],
+    balances: [{ id: "extra", label: "Extra usage", unit: "usd", used: 3, limit: 50 }],
+    ...overrides,
+  };
+}
+
+async function openMockAgentOnDesktop(page: Page) {
+  await page.setViewportSize(DESKTOP_VIEWPORT);
+  const session = await seedMockAgentWorkspace({
+    repoPrefix: "composer-plan-usage-strip-",
+    title: "Composer plan usage strip e2e",
+    initialPrompt: "emit 1 coalesced agent stream update for the plan usage strip.",
+  });
+  await openAgentRoute(page, session);
+  await expectComposerVisible(page);
+  await expect(page.getByTestId("composer-context-strip")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("composer-context-strip-branch-switcher")).toBeVisible({
+    timeout: 30_000,
+  });
+  return session;
+}
+
+async function readSegmentIds(page: Page): Promise<string[]> {
+  return page
+    .getByTestId("composer-plan-usage")
+    .locator('[data-testid^="composer-plan-usage-"]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid") ?? ""));
+}
+
+test.describe("plan usage in the composer context strip", () => {
+  test("shows the current provider's plan and every window, fetched once on mount", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const usageFixture = await installProviderUsageFixture(page, [
+      {
+        fetchedAt: new Date().toISOString(),
+        providers: [
+          mockPlanUsage(),
+          {
+            providerId: "codex",
+            displayName: "Codex",
+            status: "available",
+            planLabel: "Pro",
+            windows: [{ id: "session", label: "Session", usedPct: 12 }],
+          },
+        ],
+      },
+    ]);
+    const session = await openMockAgentOnDesktop(page);
+    try {
+      const gauge = page.getByTestId("composer-plan-usage");
+      await expect(gauge).toBeVisible({ timeout: 10_000 });
+
+      expect(await readSegmentIds(page)).toEqual([
+        "composer-plan-usage-plan",
+        "composer-plan-usage-window-five_hour",
+        "composer-plan-usage-window-weekly",
+        "composer-plan-usage-window-weekly_model_fable",
+      ]);
+      await expect(gauge.getByTestId("composer-plan-usage-plan")).toHaveText("Max 20x");
+      await expect(gauge.getByTestId("composer-plan-usage-window-five_hour")).toHaveText(
+        "5h82%out in 1h",
+      );
+      await expect(gauge.getByTestId("composer-plan-usage-window-weekly")).toHaveText("Week45%4d");
+      await expect(gauge.getByTestId("composer-plan-usage-window-weekly_model_fable")).toHaveText(
+        "Fable0%4d",
+      );
+      // 按无障碍树里的 role 和名字找，名字没进无障碍树就找不到。
+      await expect(
+        page.getByRole("group", { name: "Weekly: 45% used, resets 4d", exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole("group", { name: "Plan usage", exact: true })).toBeVisible();
+      // 余额不进窄栏，其他提供方也不进。
+      await expect(gauge).not.toContainText("Extra usage");
+      await expect(gauge).not.toContainText("Pro");
+
+      expect(usageFixture.requestCount()).toBe(1);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  test("stays quiet when every attempt to fetch fails", async ({ page }) => {
+    test.setTimeout(180_000);
+    const usageFixture = await installProviderUsageFixture(page, [
+      { rpcError: "Provider usage is unavailable" },
+    ]);
+    const session = await openMockAgentOnDesktop(page);
+    try {
+      // 首次取数加上 React Query 默认的 3 次重试。
+      await usageFixture.waitForRequestCount(4);
+      // 圆环弹层和窄栏读同一份取数状态：弹层显示出错文案时，窄栏也已按出错状态渲染。
+      await page.getByTestId("context-window-meter").hover();
+      // 悬停会让窄栏的查询带着默认重试再取一轮（约 7 秒退避）才回到出错状态。
+      await expect(page.getByText("Provider usage is unavailable")).toBeVisible({
+        timeout: 20_000,
+      });
+      const strip = page.getByTestId("composer-context-strip");
+      await expect(strip.getByTestId("composer-plan-usage")).toHaveCount(0);
+      await expect(strip).not.toContainText("Provider usage is unavailable");
+      await expect(page.getByTestId("composer-context-strip-branch-switcher")).toBeVisible();
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  test("refreshes every five minutes and goes quiet once the provider has no plan usage", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await page.clock.install();
+    const usageFixture = await installProviderUsageFixture(page, [
+      { fetchedAt: new Date().toISOString(), providers: [mockPlanUsage()] },
+      {
+        fetchedAt: new Date().toISOString(),
+        providers: [mockPlanUsage({ providerId: "claude", displayName: "Claude" })],
+      },
+    ]);
+    const session = await openMockAgentOnDesktop(page);
+    try {
+      const gauge = page.getByTestId("composer-plan-usage");
+      await expect(gauge).toBeVisible({ timeout: 10_000 });
+      expect(usageFixture.requestCount()).toBe(1);
+
+      await page.clock.fastForward(5 * 60_000);
+      await usageFixture.waitForRequestCount(2);
+      await expect(gauge).toHaveCount(0);
+      await expect(page.getByTestId("composer-context-strip-branch-switcher")).toBeVisible();
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  test("stays quiet and never asks a host without plan usage", async ({ page }) => {
+    test.setTimeout(180_000);
+    const usageFixture = await installProviderUsageFixture(
+      page,
+      [{ fetchedAt: new Date().toISOString(), providers: [mockPlanUsage()] }],
+      { supported: false },
+    );
+    const session = await openMockAgentOnDesktop(page);
+    try {
+      // 弹层提示更新主机，说明主机特性已经读到；窄栏与它读的是同一个特性标志。
+      await page.getByTestId("context-window-meter").hover();
+      await expect(page.getByText("Update the host to see provider usage")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByTestId("composer-plan-usage")).toHaveCount(0);
+      expect(usageFixture.requestCount()).toBe(0);
+    } finally {
+      await session.cleanup();
+    }
+  });
+});

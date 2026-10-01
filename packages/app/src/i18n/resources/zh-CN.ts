@@ -3596,6 +3596,17 @@ export const zhCN: TranslationResources = {
       resettingNow: "正在重置",
       runsOut: "{{duration}} 后用完",
       balanceLeft: "剩余 {{amount}}",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "周",
+          codeReview: "审查",
+        },
+        runsOut: "{{duration}}后用完",
+        planA11y: "{{provider}} 套餐：{{plan}}",
+        windowA11y: "{{label}}：已用 {{percent}}，{{trailing}}",
+        windowA11yNoTrailing: "{{label}}：已用 {{percent}}",
+      },
       status: {
         error: "错误",
         unavailable: "不可用",

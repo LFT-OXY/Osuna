@@ -3612,6 +3612,17 @@ export const ko: TranslationResources = {
       resettingNow: "초기화 중",
       runsOut: "{{duration}} 후 소진",
       balanceLeft: "{{amount}} 남음",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "주간",
+          codeReview: "리뷰",
+        },
+        runsOut: "{{duration}} 후 소진",
+        planA11y: "{{provider}} 플랜: {{plan}}",
+        windowA11y: "{{label}}: {{percent}} 사용, {{trailing}}",
+        windowA11yNoTrailing: "{{label}}: {{percent}} 사용",
+      },
       status: {
         error: "오류",
         unavailable: "사용 불가",

@@ -3630,6 +3630,17 @@ export const ja: TranslationResources = {
       resettingNow: "リセット中",
       runsOut: "{{duration}}後に上限",
       balanceLeft: "残り {{amount}}",
+      strip: {
+        windows: {
+          fiveHour: "5h",
+          weekly: "週",
+          codeReview: "レビュー",
+        },
+        runsOut: "{{duration}}後に上限",
+        planA11y: "{{provider}} プラン：{{plan}}",
+        windowA11y: "{{label}}：{{percent}} 使用、{{trailing}}",
+        windowA11yNoTrailing: "{{label}}：{{percent}} 使用",
+      },
       status: {
         error: "エラー",
         unavailable: "利用不可",
