@@ -12,6 +12,7 @@ import {
   ProviderDetailHeader,
   ProviderDetailMenu,
   ProviderDetailRefreshButton,
+  ProviderDetailScreenRefreshButton,
   type ProviderDetailHeaderProps,
   type ProviderDetailMenuProps,
 } from "./header";
@@ -92,7 +93,15 @@ function renderVersion(installedVersion: string) {
 const IDLE_DIAGNOSTIC: ProviderDiagnosticState = { status: "idle" };
 
 function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
-  render(
+  const { rerender } = render(detailElement(overrides));
+  return {
+    rerender: (next: Partial<ProviderDetailSurfaceProps>) =>
+      rerender(detailElement({ ...overrides, ...next })),
+  };
+}
+
+function detailElement(overrides: Partial<ProviderDetailSurfaceProps>) {
+  return (
     <ProviderDetailSurface
       provider="claude"
       entries={[entry({})]}
@@ -105,6 +114,7 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       isRefreshing={false}
       deletingModelId={null}
       removalError={null}
+      enablementError={null}
       diagnostic={IDLE_DIAGNOSTIC}
       diagnosticRevealRequest={0}
       onRefresh={noop}
@@ -112,13 +122,14 @@ function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
       onRunDiagnostic={noop}
       onCopyDiagnostic={noop}
       onDismissRemovalError={noop}
+      onDismissEnablementError={noop}
       onDeleteCustomModel={noop}
       onAddCustomModel={resolved}
       renderInstallGuide={renderInstallGuide}
       renderApiEndpoints={renderApiEndpoints}
       renderVersion={renderVersion}
       {...overrides}
-    />,
+    />
   );
 }
 
@@ -254,13 +265,6 @@ describe("ProviderDetailSurface", () => {
     expect(
       screen.queryByPlaceholderText(i18n.t("settings.providers.models.searchPlaceholder")),
     ).toBeNull();
-  });
-
-  it("explains that a disabled provider has no models until enabled", () => {
-    renderDetail({ entries: [entry({ enabled: false })] });
-
-    expect(screen.getByText(i18n.t("settings.providers.models.disabledHint"))).toBeTruthy();
-    expect(screen.queryByText(i18n.t("settings.providers.models.noneDetected"))).toBeNull();
   });
 
   it("shows a loading state while the provider is loading and has no models yet", () => {
@@ -407,6 +411,86 @@ describe("ProviderDetailSurface", () => {
     renderDetail({ entries: [claudeWithEndpoint] });
     expect(screen.queryByTestId("provider-inherited-api-endpoint")).toBeNull();
   });
+
+  // daemon 不探测已停用的提供方，快照里的 unavailable 不代表没装，所以不给安装指引。
+  it("shows only the disabled card for a disabled provider", () => {
+    renderDetail({
+      entries: [entry({ enabled: false, status: "unavailable", version: "2.1.280" })],
+    });
+
+    expect(screen.getByTestId("provider-disabled-card").textContent).toBe(
+      i18n.t("settings.providers.disabledCard.title", { name: "Claude Code" }) +
+        i18n.t("settings.providers.disabledCard.description", { name: "Claude Code" }),
+    );
+    for (const block of [
+      "provider-install-guide",
+      "provider-version-section",
+      "api-endpoints-slot",
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ]) {
+      expect(screen.queryByTestId(block)).toBeNull();
+    }
+  });
+
+  it("keeps a failed removal above the disabled card", () => {
+    renderDetail({
+      provider: "work-claude",
+      entries: [entry({ provider: "work-claude", label: "Work Claude", enabled: false })],
+      removalError: "config.json is read-only",
+    });
+
+    expect(blockOrder(["provider-disabled-card", "provider-removal-error"])).toEqual([
+      "provider-removal-error",
+      "provider-disabled-card",
+    ]);
+  });
+
+  it("turns the disabled card into the provider's sections in place once enabled", () => {
+    const { rerender } = renderDetail({ entries: [entry({ enabled: false })] });
+    expect(blockOrder(["provider-disabled-card"])).toEqual(["provider-disabled-card"]);
+
+    rerender({ entries: [entry({ status: "unavailable" })] });
+    expect(screen.queryByTestId("provider-disabled-card")).toBeNull();
+    expect(screen.getByTestId("provider-install-guide").textContent).toContain(
+      i18n.t("settings.providers.install.title", { name: "Claude Code" }),
+    );
+
+    rerender({ entries: [entry({ version: "2.1.280" })] });
+    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
+    expect(screen.getByTestId("provider-version-section").textContent).toContain("v2.1.280");
+    expect(blockOrder(["provider-diagnostic-section", "provider-models-section"])).toEqual([
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ]);
+  });
+
+  it.each([
+    [true, "settings.providers.enablement.enableErrorTitle"],
+    [false, "settings.providers.enablement.disableErrorTitle"],
+  ] as const)(
+    "shows a failed switch to enabled=%s at the top until dismissed",
+    (enabled, titleKey) => {
+      const onDismissEnablementError = vi.fn();
+      renderDetail({
+        entries: [entry({ enabled: !enabled })],
+        enablementError: { enabled, message: "config.json is read-only" },
+        onDismissEnablementError,
+      });
+
+      const alert = screen.getByTestId("provider-enablement-error");
+      expect(alert.textContent).toContain(i18n.t(titleKey, { name: "Claude Code" }));
+      expect(alert.textContent).toContain("config.json is read-only");
+      const firstBlock = enabled ? "provider-disabled-card" : "provider-models-section";
+      expect(blockOrder([firstBlock, "provider-enablement-error"])).toEqual([
+        "provider-enablement-error",
+        firstBlock,
+      ]);
+
+      fireEvent.click(within(alert).getByText(i18n.t("common.actions.dismiss")));
+      expect(onDismissEnablementError).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("shows a failed removal at the top until dismissed", () => {
     const onDismissRemovalError = vi.fn();
@@ -789,9 +873,33 @@ function renderHeader(overrides: Partial<ProviderDetailHeaderProps> = {}) {
   );
 }
 
-function renderRefreshButton(isRefreshing: boolean) {
+function renderRefreshButton({
+  isRefreshing,
+  disabled = false,
+}: {
+  isRefreshing: boolean;
+  disabled?: boolean;
+}) {
   const onRefresh = vi.fn();
-  render(<ProviderDetailRefreshButton isRefreshing={isRefreshing} onRefresh={onRefresh} />);
+  render(
+    <ProviderDetailRefreshButton
+      isRefreshing={isRefreshing}
+      disabled={disabled}
+      onRefresh={onRefresh}
+    />,
+  );
+  return { onRefresh };
+}
+
+function renderScreenRefreshButton({ disabled }: { disabled: boolean }) {
+  const onRefresh = vi.fn();
+  render(
+    <ProviderDetailScreenRefreshButton
+      isRefreshing={false}
+      disabled={disabled}
+      onRefresh={onRefresh}
+    />,
+  );
   return { onRefresh };
 }
 
@@ -830,7 +938,7 @@ describe("ProviderDetailRefreshButton", () => {
   });
 
   it("refreshes the provider", () => {
-    const { onRefresh } = renderRefreshButton(false);
+    const { onRefresh } = renderRefreshButton({ isRefreshing: false });
 
     fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refresh")));
 
@@ -838,11 +946,42 @@ describe("ProviderDetailRefreshButton", () => {
   });
 
   it("shows refresh in progress and blocks another refresh", () => {
-    const { onRefresh } = renderRefreshButton(true);
+    const { onRefresh } = renderRefreshButton({ isRefreshing: true });
 
     fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refreshing")));
 
     expect(screen.queryByText(i18n.t("settings.providers.diagnostic.refresh"))).toBeNull();
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  // daemon 不探测已停用的提供方，停用时刷新没有意义。
+  it("cannot refresh a disabled provider", () => {
+    const { onRefresh } = renderRefreshButton({ isRefreshing: false, disabled: true });
+
+    fireEvent.click(screen.getByText(i18n.t("settings.providers.diagnostic.refresh")));
+
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProviderDetailScreenRefreshButton", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("refreshes the provider from the phone header", () => {
+    const { onRefresh } = renderScreenRefreshButton({ disabled: false });
+
+    fireEvent.click(screen.getByLabelText(i18n.t("settings.providers.diagnostic.refresh")));
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("cannot refresh a disabled provider", () => {
+    const { onRefresh } = renderScreenRefreshButton({ disabled: true });
+
+    fireEvent.click(screen.getByLabelText(i18n.t("settings.providers.diagnostic.refresh")));
+
     expect(onRefresh).not.toHaveBeenCalled();
   });
 });

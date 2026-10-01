@@ -2811,6 +2811,17 @@ export const ar: TranslationResources = {
         enabled: "مفعّلة",
         disabled: "متوقفة",
       },
+      enablement: {
+        on: "مفعّل",
+        off: "متوقف",
+        enableErrorTitle: "تعذّر تفعيل {{name}}",
+        disableErrorTitle: "تعذّر إيقاف {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} متوقف",
+        description:
+          "لا يتم فحص المزوّدين المتوقفين ولا يظهرون في الجلسات الجديدة. شغّل المفتاح في الترويسة لتفعيله، وبعدها يتحقق Osuna مما إذا كان {{name}} مثبتًا على المضيف.",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "تعذّر تشغيل {{name}}",
       actions: {
@@ -2868,7 +2879,6 @@ export const ar: TranslationResources = {
         loading: "جارٍ تحميل النماذج...",
         noSearchMatches: "لا توجد نماذج تطابق بحثك",
         noneDetected: "لم يتم اكتشاف أي نماذج",
-        disabledHint: "معطّل. سيكتشف Osuna نماذجه بعد تفعيله.",
         startFailed: "تعذّر التشغيل، لذا لم يتم اكتشاف أي نماذج.",
         discovered: "اكتشف",
         custom: "نماذج مخصصة",

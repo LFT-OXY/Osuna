@@ -2878,6 +2878,17 @@ export const es: TranslationResources = {
         enabled: "Habilitados",
         disabled: "Desactivados",
       },
+      enablement: {
+        on: "Habilitado",
+        off: "Desactivado",
+        enableErrorTitle: "No se pudo habilitar {{name}}",
+        disableErrorTitle: "No se pudo desactivar {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} está desactivado",
+        description:
+          "Los proveedores desactivados no se comprueban ni aparecen en las sesiones nuevas. Activa el interruptor del encabezado para habilitarlo; después Osuna comprobará si {{name}} está instalado en el host.",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} no puede iniciarse",
       actions: {
@@ -2936,7 +2947,6 @@ export const es: TranslationResources = {
         loading: "Cargando modelos...",
         noSearchMatches: "Ningún modelo coincide con tu búsqueda",
         noneDetected: "No se detectaron modelos",
-        disabledHint: "Desactivado. Osuna detectará sus modelos cuando lo actives.",
         startFailed: "No se pudo iniciar, así que no se detectaron modelos.",
         discovered: "descubierto",
         custom: "Modelos personalizados",

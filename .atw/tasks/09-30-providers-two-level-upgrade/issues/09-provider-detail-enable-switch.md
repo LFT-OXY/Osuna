@@ -4,12 +4,12 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] `enabled` 为假时只显示停用说明卡，不显示版本、安装指引、第三方接口、Models、诊断；详情组件测试覆盖
-- [ ] 设置页详情页头有启用开关，宽屏带状态文字；停用时刷新禁用；页头组件有 jsdom 测试
-- [ ] 开关失败时错误显示在详情顶部
-- [ ] 详情组件顶部的版块顺序注释写明停用状态
-- [ ] 新增文案 9 个语言文件都补上
-- [ ] Web 和 Electron 截图：已停用的详情页、启用后的检测结果
-- [ ] typecheck 和 lint 都通过
+- [x] `enabled` 为假时只显示停用说明卡，不显示版本、安装指引、第三方接口、Models、诊断；详情组件测试覆盖
+- [x] 设置页详情页头有启用开关，宽屏带状态文字；停用时刷新禁用；页头组件有 jsdom 测试（2026-10-01 用户确认：刷新按钮留 jsdom，开关改由 Playwright `settings-providers-list-detail.spec.ts` 覆盖成功与失败，见 PRD Testing Decisions）
+- [x] 开关失败时错误显示在详情顶部
+- [x] 详情组件顶部的版块顺序注释写明停用状态
+- [x] 新增文案 9 个语言文件都补上
+- [x] Web 和 Electron 截图：已停用的详情页、启用后的检测结果（`qa/09-*.png`，Web 含手机宽度）
+- [x] typecheck 和 lint 都通过

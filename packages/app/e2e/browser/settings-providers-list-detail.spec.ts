@@ -104,6 +104,89 @@ test.describe("Settings providers list and detail", () => {
   });
 });
 
+// 详情页头的启用开关（宽屏在头部块里，带状态文字）。
+function detailEnabledSwitch(page: Page, label: string) {
+  return page.getByRole("switch", { name: `Enable ${label}`, exact: true }).filter({
+    visible: true,
+  });
+}
+
+function detailRefreshButton(page: Page, provider: string) {
+  return page
+    .getByTestId(`provider-detail-header-${provider}`)
+    .getByRole("button", { name: "Refresh", exact: true });
+}
+
+async function openProviderDetail(page: Page, provider: string): Promise<void> {
+  const serverId = getServerId();
+  await gotoAppShell(page);
+  await openSettings(page);
+  await openSettingsHost(page, serverId);
+  await openSettingsHostSection(page, serverId, "providers");
+  await expectProvidersList(page, serverId);
+  await providerRow(page, provider).click();
+  await expectProviderDetail(page, serverId, provider);
+}
+
+test.describe("Settings provider detail enable switch", () => {
+  test("turns a provider off and back on from the detail header", async ({ page }) => {
+    const provider = "list-detail-studio";
+    const label = "List Detail Studio";
+    await openProviderDetail(page, provider);
+    const header = page.getByTestId(`provider-detail-header-${provider}`);
+    const enabledSwitch = detailEnabledSwitch(page, label);
+
+    await test.step("the header shows the switch on, with its state beside it", async () => {
+      await expect(enabledSwitch).toHaveAttribute("aria-checked", "true");
+      await expect(header.getByText("Enabled", { exact: true })).toBeVisible();
+      await expect(page.getByTestId("provider-models-section")).toBeVisible();
+    });
+
+    await test.step("turning it off leaves only the disabled card and disables Refresh", async () => {
+      await enabledSwitch.click();
+      await expect(page.getByTestId("provider-disabled-card")).toContainText(
+        `${label} is disabled`,
+      );
+      await expect(enabledSwitch).toHaveAttribute("aria-checked", "false");
+      await expect(header.getByText("Disabled", { exact: true }).first()).toBeVisible();
+      await expect(detailRefreshButton(page, provider)).toBeDisabled();
+      await expect(page.getByTestId("provider-models-section")).toHaveCount(0);
+      await expect(page.getByTestId("provider-diagnostic-section")).toHaveCount(0);
+    });
+
+    await test.step("turning it back on shows the checked provider in place", async () => {
+      await enabledSwitch.click();
+      await expect(page.getByTestId("provider-disabled-card")).toHaveCount(0);
+      await expect(enabledSwitch).toHaveAttribute("aria-checked", "true");
+      await expect(page.getByTestId("provider-models-section")).toContainText("Studio fast", {
+        timeout: 30_000,
+      });
+      await expect(detailRefreshButton(page, provider)).toBeEnabled();
+    });
+  });
+
+  // daemon 拒绝写 providers.mock.*，用它造一次真实的写入失败。
+  test("keeps a failed switch at the top of the detail until dismissed", async ({ page }) => {
+    await openProviderDetail(page, "mock");
+    const label = (
+      await page.getByTestId("settings-detail-header-title").filter({ visible: true }).innerText()
+    ).trim();
+    const enabledSwitch = detailEnabledSwitch(page, label);
+    await expect(enabledSwitch).toHaveAttribute("aria-checked", "true");
+
+    await enabledSwitch.click();
+
+    const failure = page.getByTestId("provider-enablement-error");
+    await expect(failure).toContainText(`Unable to disable ${label}`);
+    await expect(enabledSwitch).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("provider-disabled-card")).toHaveCount(0);
+    await expect(page.getByTestId("provider-models-section")).toBeVisible();
+
+    await failure.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await expect(failure).toHaveCount(0);
+  });
+});
+
 test.describe("Settings providers list and detail on a narrow desktop window", () => {
   test.use({ viewport: NARROW_DESKTOP_VIEWPORT });
 
@@ -163,10 +246,14 @@ test.describe("Settings providers list and detail on a phone", () => {
       await expect(
         page.getByText(label ?? "", { exact: true }).filter({ visible: true }),
       ).toHaveCount(2);
+      await expect(detailRefreshButton(page, first)).toHaveCount(0);
+      // 顶栏只放开关，不写状态文字。
+      await expect(detailEnabledSwitch(page, label ?? "")).toHaveAttribute("aria-checked", "true");
       await expect(
-        page
-          .getByTestId(`provider-detail-header-${first}`)
-          .getByRole("button", { name: "Refresh", exact: true }),
+        page.getByTestId(`provider-detail-header-${first}`).getByRole("switch"),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText("Enabled", { exact: true }).filter({ visible: true }),
       ).toHaveCount(0);
     });
 

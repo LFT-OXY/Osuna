@@ -2858,6 +2858,17 @@ export const ptBR: TranslationResources = {
         enabled: "Ativados",
         disabled: "Desativados",
       },
+      enablement: {
+        on: "Ativado",
+        off: "Desativado",
+        enableErrorTitle: "Não foi possível ativar {{name}}",
+        disableErrorTitle: "Não foi possível desativar {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} está desativado",
+        description:
+          "Provedores desativados não são verificados e não aparecem em novas sessões. Ligue a chave no cabeçalho para ativá-lo; depois o Osuna verifica se {{name}} está instalado no host.",
+      },
       addErrorTitle: "Não foi possível adicionar provedor",
       startErrorTitle: "{{name}} não consegue iniciar",
       actions: {
@@ -2916,7 +2927,6 @@ export const ptBR: TranslationResources = {
         loading: "Carregando modelos...",
         noSearchMatches: "Nenhum modelo corresponde à sua busca",
         noneDetected: "Nenhum modelo detectado",
-        disabledHint: "Desativado. O Osuna detecta os modelos dele quando você o ativar.",
         startFailed: "Não foi possível iniciar, então nenhum modelo foi detectado.",
         discovered: "Descobertos",
         custom: "Modelos personalizados",

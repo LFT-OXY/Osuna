@@ -2933,6 +2933,17 @@ export const en = {
         enabled: "Enabled",
         disabled: "Disabled",
       },
+      enablement: {
+        on: "Enabled",
+        off: "Disabled",
+        enableErrorTitle: "Unable to enable {{name}}",
+        disableErrorTitle: "Unable to disable {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} is disabled",
+        description:
+          "Disabled providers aren't checked and don't appear in new sessions. Turn on the switch in the header to enable it; Osuna then checks whether {{name}} is installed on the host.",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} can't start",
       actions: {
@@ -2991,7 +3002,6 @@ export const en = {
         loading: "Loading models...",
         noSearchMatches: "No models match your search",
         noneDetected: "No models detected",
-        disabledHint: "Disabled. Osuna detects its models once you enable it.",
         startFailed: "Couldn't start, so no models were detected.",
         discovered: "Discovered",
         custom: "Custom models",

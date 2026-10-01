@@ -2887,6 +2887,17 @@ export const fr: TranslationResources = {
         enabled: "Activés",
         disabled: "Désactivés",
       },
+      enablement: {
+        on: "Activé",
+        off: "Désactivé",
+        enableErrorTitle: "Impossible d'activer {{name}}",
+        disableErrorTitle: "Impossible de désactiver {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} est désactivé",
+        description:
+          "Les fournisseurs désactivés ne sont pas vérifiés et n'apparaissent pas dans les nouvelles sessions. Activez l'interrupteur de l'en-tête pour l'activer ; Osuna vérifiera ensuite si {{name}} est installé sur l'hôte.",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "Impossible de démarrer {{name}}",
       actions: {
@@ -2945,7 +2956,6 @@ export const fr: TranslationResources = {
         loading: "Chargement des modèles...",
         noSearchMatches: "Aucun modèle ne correspond à votre recherche",
         noneDetected: "Aucun modèle détecté",
-        disabledHint: "Désactivé. Osuna détectera ses modèles une fois activé.",
         startFailed: "Échec du démarrage, aucun modèle détecté.",
         discovered: "Découvert",
         custom: "Modèles personnalisés",

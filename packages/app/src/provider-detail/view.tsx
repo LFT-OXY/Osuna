@@ -17,13 +17,23 @@ import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
-import { ProviderDetailHeader, ProviderDetailMenu, ProviderDetailRefreshButton } from "./header";
+import {
+  ProviderDetailEnabledSwitch,
+  ProviderDetailHeader,
+  ProviderDetailMenu,
+  ProviderDetailRefreshButton,
+} from "./header";
 import {
   revealProviderDiagnostic,
   runProviderDiagnostic,
   useProviderDiagnostic,
   useProviderDiagnosticReveal,
 } from "./diagnostic";
+import {
+  dismissProviderEnablementError,
+  setProviderEnabled,
+  useProviderEnablement,
+} from "./enablement";
 import { ProviderDetailSurface } from "./index";
 import { dismissProviderRemovalError, removeProvider, useProviderRemoval } from "./removal";
 import { useProviderUpgrade } from "./use-upgrade";
@@ -53,6 +63,23 @@ export function useProviderDiagnosticActions(serverId: string, provider: string)
     run();
   }, [provider, run, serverId]);
   return { run, diagnose };
+}
+
+// 详情页头的启用开关：宽屏头部块和手机顶栏共用。写入失败的提示显示在正文顶部。
+// 不做乐观更新，开关等快照推送新的 enabled 再翻过去。
+export function useProviderEnabledSwitch(serverId: string, provider: string) {
+  const { patchConfig } = useDaemonConfig(serverId);
+  const enablement = useProviderEnablement(serverId, provider);
+  const onValueChange = useCallback(
+    (next: boolean) => {
+      void setProviderEnabled(serverId, provider, {
+        enabled: next,
+        write: () => patchConfig({ providers: { [provider]: { enabled: next } } }),
+      });
+    },
+    [patchConfig, provider, serverId],
+  );
+  return { isSaving: enablement.status === "saving", onValueChange };
 }
 
 /*
@@ -94,6 +121,7 @@ export function ProviderDetail({
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const removal = useProviderRemoval(serverId, provider);
+  const enablement = useProviderEnablement(serverId, provider);
   const diagnostic = useProviderDiagnostic(serverId, provider);
   const diagnosticRevealRequest = useProviderDiagnosticReveal(serverId, provider);
   const { run: runDiagnostic, diagnose } = useProviderDiagnosticActions(serverId, provider);
@@ -107,6 +135,10 @@ export function ProviderDetail({
   );
   const handleDismissRemovalError = useCallback(
     () => dismissProviderRemovalError(serverId, provider),
+    [provider, serverId],
+  );
+  const handleDismissEnablementError = useCallback(
+    () => dismissProviderEnablementError(serverId, provider),
     [provider, serverId],
   );
 
@@ -243,6 +275,7 @@ export function ProviderDetail({
       isRefreshing={isRefreshing}
       deletingModelId={deletingModelId}
       removalError={removal.status === "failed" ? removal.message : null}
+      enablementError={enablement.status === "failed" ? enablement : null}
       diagnostic={diagnostic}
       diagnosticRevealRequest={diagnosticRevealRequest}
       onRefresh={handleRefresh}
@@ -250,6 +283,7 @@ export function ProviderDetail({
       onRunDiagnostic={runDiagnostic}
       onCopyDiagnostic={handleCopyDiagnostic}
       onDismissRemovalError={handleDismissRemovalError}
+      onDismissEnablementError={handleDismissEnablementError}
       onDeleteCustomModel={handleDeleteCustomModel}
       onAddCustomModel={handleAddCustomModel}
       renderInstallGuide={renderInstallGuide}
@@ -317,6 +351,7 @@ export function useProviderDetailHeader(
     label,
     status,
     modelCount,
+    enabled,
     isRefreshing: isProviderRefreshing,
     onRefresh: handleRefresh,
     providerSource,
@@ -345,6 +380,7 @@ export function ProviderDetailActions({
     <>
       <ProviderDetailRefreshButton
         isRefreshing={header.isRefreshing}
+        disabled={!header.enabled}
         onRefresh={header.onRefresh}
         iconOnly={iconOnlyRefresh}
       />
@@ -362,7 +398,7 @@ export function ProviderDetailActions({
   );
 }
 
-// 设置页的页面外框：头部块加详情内容。
+// 设置页的页面外框：头部块加详情内容。启用开关只在设置页，composer 弹窗不带。
 export function ProviderDetailPage({
   serverId,
   provider,
@@ -370,13 +406,25 @@ export function ProviderDetailPage({
 }: {
   serverId: string;
   provider: string;
-  // 手机上「刷新」和 ⋯ 在顶栏，头部块只留图标、名称、徽章和模型数。
+  // 手机上开关、「刷新」和 ⋯ 在顶栏，头部块只留图标、名称、徽章和模型数。
   hasScreenHeaderActions: boolean;
 }) {
   const header = useProviderDetailHeader(serverId, provider, { checksVersions: true });
+  const { isSaving, onValueChange } = useProviderEnabledSwitch(serverId, provider);
   const renderActions = useCallback(
-    () => <ProviderDetailActions serverId={serverId} provider={provider} header={header} />,
-    [header, provider, serverId],
+    () => (
+      <>
+        <ProviderDetailEnabledSwitch
+          providerLabel={header.label}
+          enabled={header.enabled}
+          isSaving={isSaving}
+          showStateLabel
+          onValueChange={onValueChange}
+        />
+        <ProviderDetailActions serverId={serverId} provider={provider} header={header} />
+      </>
+    ),
+    [header, isSaving, onValueChange, provider, serverId],
   );
 
   return (

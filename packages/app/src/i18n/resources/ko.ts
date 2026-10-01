@@ -2827,6 +2827,17 @@ export const ko: TranslationResources = {
         enabled: "활성화됨",
         disabled: "비활성화됨",
       },
+      enablement: {
+        on: "활성화됨",
+        off: "비활성화됨",
+        enableErrorTitle: "{{name}}을(를) 활성화할 수 없습니다",
+        disableErrorTitle: "{{name}}을(를) 비활성화할 수 없습니다",
+      },
+      disabledCard: {
+        title: "{{name}}이(가) 비활성화됨",
+        description:
+          "비활성화된 프로바이더는 감지하지 않으며 새 세션에도 나타나지 않습니다. 헤더의 스위치를 켜면 활성화되고, 호스트에 {{name}}이(가) 설치되어 있는지 확인합니다.",
+      },
       addErrorTitle: "프로바이더를 추가할 수 없습니다",
       startErrorTitle: "{{name}}을(를) 시작할 수 없습니다",
       actions: {
@@ -2884,7 +2895,6 @@ export const ko: TranslationResources = {
         loading: "모델 불러오는 중...",
         noSearchMatches: "검색과 일치하는 모델이 없습니다",
         noneDetected: "감지된 모델이 없습니다",
-        disabledHint: "비활성화됨. 활성화하면 Osuna가 모델을 감지합니다.",
         startFailed: "시작하지 못해 모델을 감지하지 못했습니다.",
         discovered: "발견됨",
         custom: "사용자 지정 모델",

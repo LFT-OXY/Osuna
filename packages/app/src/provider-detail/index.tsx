@@ -14,12 +14,14 @@ import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { settingsStyles } from "@/styles/settings";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import type { ProviderDiagnosticState } from "./diagnostic";
+import type { ProviderEnablementError } from "./enablement";
 import { ProviderDiagnosticSection } from "./diagnostic-section";
 import { ProviderModelsSection } from "./models";
 
 /*
- * 提供方详情的内容区，区块顺序固定：删除失败 → 错误卡 → 继承接口提示 → 版本 → 安装指引 → 第三方接口 → Models → 诊断。
- * 版本只在已安装时出现，安装指引只在未安装时出现，两者互斥。
+ * 提供方详情的内容区，区块顺序固定：删除失败 → 开关失败 → 错误卡 → 继承接口提示 → 版本 → 安装指引 → 第三方接口 → Models → 诊断。
+ * 版本只在已安装时出现，安装指引只在启用且未安装时出现，两者互斥。
+ * 已停用时只有两个失败提示和一张停用说明卡：daemon 不探测已停用的提供方，快照里的状态说明不了装没装。
  * 外框（弹窗或页面）由调用方决定。
  * 这里只收 props，方便 jsdom 测试；运行时接线在 view.tsx。
  * 版本、安装指引与第三方接口的运行时视图由调用方经 render 插槽注入；后两者在单测运行器里无法加载。
@@ -39,6 +41,8 @@ export interface ProviderDetailSurfaceProps {
   deletingModelId: string | null;
   // 删除这个提供方失败的原因；从 ⋯ 菜单删除，失败提示显示在详情顶部。
   removalError: string | null;
+  // 页头开关写入失败：enabled 是要写入的值。
+  enablementError: ProviderEnablementError | null;
   diagnostic: ProviderDiagnosticState;
   // ⋯ 菜单或错误卡要看诊断时加一，诊断节随之滚进视野。
   diagnosticRevealRequest: number;
@@ -49,11 +53,26 @@ export interface ProviderDetailSurfaceProps {
   onRunDiagnostic: () => void;
   onCopyDiagnostic: (output: string) => void;
   onDismissRemovalError: () => void;
+  onDismissEnablementError: () => void;
   onDeleteCustomModel: (modelId: string) => void;
   onAddCustomModel: (modelId: string) => Promise<void>;
   renderInstallGuide: (guide: ProviderInstallGuide, cliLabel: string) => ReactNode;
   renderApiEndpoints: (providerLabel: string) => ReactNode;
   renderVersion: (installedVersion: string) => ReactNode;
+}
+
+function ProviderDisabledCard({ providerLabel }: { providerLabel: string }) {
+  const { t } = useTranslation();
+  return (
+    <View style={[settingsStyles.card, styles.disabledCard]} testID="provider-disabled-card">
+      <UiText variant="body" weight="medium" style={styles.disabledCardText}>
+        {t("settings.providers.disabledCard.title", { name: providerLabel })}
+      </UiText>
+      <UiText variant="caption" color="foregroundMuted" style={styles.disabledCardText}>
+        {t("settings.providers.disabledCard.description", { name: providerLabel })}
+      </UiText>
+    </View>
+  );
 }
 
 function ProviderStartErrorAlert({
@@ -134,6 +153,7 @@ export function ProviderDetailSurface({
   isRefreshing,
   deletingModelId,
   removalError,
+  enablementError,
   diagnostic,
   diagnosticRevealRequest,
   onRefresh,
@@ -141,6 +161,7 @@ export function ProviderDetailSurface({
   onRunDiagnostic,
   onCopyDiagnostic,
   onDismissRemovalError,
+  onDismissEnablementError,
   onDeleteCustomModel,
   onAddCustomModel,
   renderInstallGuide,
@@ -153,6 +174,7 @@ export function ProviderDetailSurface({
     () => entries?.find((entry) => entry.provider === provider),
     [entries, provider],
   );
+  const isDisabled = providerEntry?.enabled === false;
   const isNotInstalled = providerEntry?.status === "unavailable";
   const installGuide = useMemo(() => {
     if (!isNotInstalled) return null;
@@ -166,7 +188,6 @@ export function ProviderDetailSurface({
       ? (providerEntry.error ?? t("settings.providers.diagnostic.unknownError"))
       : null;
   const modelsRefreshing = isRefreshing || providerSnapshotRefreshing;
-  const startErrorMessage = providerEntry?.enabled === false ? null : providerErrorMessage;
   const inheritedApiEndpoint = selectInheritedApiEndpoint({ provider, extendsProvider, entries });
 
   const installedVersion = selectShownVersion({
@@ -188,7 +209,7 @@ export function ProviderDetailSurface({
     apiEndpointsContent = renderApiEndpoints(providerLabel);
   }
 
-  return (
+  const failureAlerts = (
     <>
       {removalError ? (
         <View style={settingsStyles.section}>
@@ -204,10 +225,44 @@ export function ProviderDetailSurface({
           </Alert>
         </View>
       ) : null}
-      {startErrorMessage ? (
+      {enablementError ? (
+        <View style={settingsStyles.section}>
+          <Alert
+            variant="error"
+            title={t(
+              enablementError.enabled
+                ? "settings.providers.enablement.enableErrorTitle"
+                : "settings.providers.enablement.disableErrorTitle",
+              { name: providerLabel },
+            )}
+            description={enablementError.message}
+            testID="provider-enablement-error"
+          >
+            <Button variant="outline" size="sm" onPress={onDismissEnablementError}>
+              {t("common.actions.dismiss")}
+            </Button>
+          </Alert>
+        </View>
+      ) : null}
+    </>
+  );
+
+  if (isDisabled) {
+    return (
+      <>
+        {failureAlerts}
+        <ProviderDisabledCard providerLabel={providerLabel} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {failureAlerts}
+      {providerErrorMessage ? (
         <ProviderStartErrorAlert
           providerLabel={providerLabel}
-          message={startErrorMessage}
+          message={providerErrorMessage}
           isRefreshing={modelsRefreshing}
           onRefresh={onRefresh}
           onDiagnose={onDiagnose}
@@ -230,7 +285,6 @@ export function ProviderDetailSurface({
       {apiEndpointsContent}
       <ProviderModelsSection
         key={provider}
-        providerEnabled={providerEntry?.enabled !== false}
         providerLoading={providerSnapshotRefreshing}
         providerFailed={providerErrorMessage !== null}
         fetchedAt={providerEntry?.fetchedAt}
@@ -266,5 +320,13 @@ const styles = StyleSheet.create((theme) => ({
   },
   errorOutput: {
     fontFamily: theme.fontFamily.mono,
+  },
+  disabledCard: {
+    padding: theme.spacing[6],
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  disabledCardText: {
+    textAlign: "center",
   },
 }));

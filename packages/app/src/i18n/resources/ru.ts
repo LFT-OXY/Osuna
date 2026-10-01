@@ -2863,6 +2863,17 @@ export const ru: TranslationResources = {
         enabled: "Включены",
         disabled: "Отключены",
       },
+      enablement: {
+        on: "Включён",
+        off: "Отключён",
+        enableErrorTitle: "Не удалось включить {{name}}",
+        disableErrorTitle: "Не удалось отключить {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} отключён",
+        description:
+          "Отключённые провайдеры не проверяются и не появляются в новых сессиях. Включите переключатель в заголовке, чтобы включить его; затем Osuna проверит, установлен ли {{name}} на хосте.",
+      },
       addErrorTitle: "Не удалось добавить провайдера",
       startErrorTitle: "Не удаётся запустить {{name}}",
       actions: {
@@ -2922,7 +2933,6 @@ export const ru: TranslationResources = {
         loading: "Загрузка моделей...",
         noSearchMatches: "Ни одна модель не соответствует вашему запросу",
         noneDetected: "Модели не обнаружены",
-        disabledHint: "Отключено. Osuna обнаружит его модели после включения.",
         startFailed: "Не удалось запустить, поэтому модели не обнаружены.",
         discovered: "Обнаруженные модели",
         custom: "Пользовательские модели",

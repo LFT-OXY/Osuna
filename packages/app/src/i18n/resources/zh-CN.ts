@@ -2775,6 +2775,17 @@ export const zhCN: TranslationResources = {
         enabled: "已启用",
         disabled: "已停用",
       },
+      enablement: {
+        on: "已启用",
+        off: "已停用",
+        enableErrorTitle: "无法启用 {{name}}",
+        disableErrorTitle: "无法停用 {{name}}",
+      },
+      disabledCard: {
+        title: "{{name}} 已停用",
+        description:
+          "已停用的提供方不检测，也不出现在新建会话里。打开页头的开关即可启用，启用后会检测主机上有没有装 {{name}}。",
+      },
       addErrorTitle: "无法添加提供方",
       startErrorTitle: "{{name}} 无法启动",
       actions: {
@@ -2831,7 +2842,6 @@ export const zhCN: TranslationResources = {
         loading: "正在加载 Models...",
         noSearchMatches: "没有匹配搜索的 Model",
         noneDetected: "未检测到 Model",
-        disabledHint: "已禁用。启用后 Osuna 才会检测它的 Models。",
         startFailed: "启动失败，没有检测到 Models。",
         discovered: "已发现",
         custom: "自定义 Models",
