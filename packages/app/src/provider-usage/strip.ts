@@ -1,13 +1,6 @@
 import { formatShortDuration } from "@/usage/relative-time";
 import type { UsageText } from "@/usage/text";
-import {
-  clampPct,
-  describeReset,
-  describeRunsOut,
-  formatPct,
-  resolveWindowUsedPct,
-} from "./format";
-import { deriveTone } from "./tone";
+import { resolveWindowRow, type ProviderUsageWindowTrailing } from "./format";
 import { findProviderUsage } from "./view";
 import type { ProviderUsageTone, ProviderUsageView, ProviderUsageWindow } from "./types";
 
@@ -39,14 +32,9 @@ export interface PlanUsageStripWindowSegment {
   ringPct: number;
   percentText: string;
   tone: ProviderUsageTone;
-  trailing: PlanUsageStripTrailing | null;
+  /** 短说法：只写时长，或者「X后用完」。 */
+  trailing: ProviderUsageWindowTrailing | null;
   accessibilityLabel: UsageText;
-}
-
-/** 窗口段尾部：重置时长，或者会在重置前用完时的「X后用完」（atRisk，危险色）。 */
-export interface PlanUsageStripTrailing {
-  text: UsageText;
-  atRisk: boolean;
 }
 
 export type PlanUsageStripSegment = PlanUsageStripPlanSegment | PlanUsageStripWindowSegment;
@@ -101,56 +89,41 @@ function resolveShortName(window: ProviderUsageWindow): UsageText {
   return { text: window.label };
 }
 
-interface WindowTrailing {
-  short: PlanUsageStripTrailing;
-  /** 无障碍描述里用完整说法（「4d 后重置」），窄栏上只写时长。 */
-  full: UsageText;
-}
-
-function resolveTrailing(window: ProviderUsageWindow, now: number): WindowTrailing | null {
-  const runsOutBeforeReset = window.runsOutAt != null && window.shortfallPct != null;
-  if (runsOutBeforeReset) {
+/** 窄栏只写时长；用完写「X后用完」，到点后没有时长可写，沿用完整说法「正在重置」。 */
+function shortenTrailing(
+  window: ProviderUsageWindow,
+  trailing: ProviderUsageWindowTrailing,
+  now: number,
+): ProviderUsageWindowTrailing {
+  if (trailing.atRisk) {
     const duration = formatShortDuration(window.runsOutAt, now);
-    const full = describeRunsOut(window.runsOutAt, now);
-    if (duration && full) {
-      const text: UsageText = { key: "usage.planUsage.strip.runsOut", params: { duration } };
-      return { short: { text, atRisk: true }, full };
-    }
+    if (!duration) return trailing;
+    return { text: { key: "usage.planUsage.strip.runsOut", params: { duration } }, atRisk: true };
   }
-  const full = describeReset(window.resetsAt, now);
-  if (!full) return null;
   const duration = formatShortDuration(window.resetsAt, now);
-  // 到点后没有时长可写，窄栏也说「正在重置」。
-  let text: UsageText = full;
-  if (duration) text = { text: duration };
-  return { short: { text, atRisk: false }, full };
+  return duration ? { text: { text: duration }, atRisk: false } : trailing;
 }
 
 function resolveWindowSegment(
   window: ProviderUsageWindow,
   now: number,
 ): PlanUsageStripWindowSegment {
-  const usedPct = resolveWindowUsedPct(window);
-  let percentText = "—";
-  if (usedPct !== null) percentText = formatPct(usedPct);
-  const ringPct = clampPct(usedPct ?? 0);
-  const tone = window.tone ?? deriveTone(usedPct);
+  const row = resolveWindowRow(window, now);
   const shortName = resolveShortName(window);
-  const trailing = resolveTrailing(window, now);
-  const shortTrailing = trailing ? trailing.short : null;
+  const trailing = row.trailing ? shortenTrailing(window, row.trailing, now) : null;
   const accessibilityLabel = describeWindow({
     label: window.label,
-    percent: percentText,
-    trailing,
+    percent: row.percentText,
+    trailing: row.trailing,
   });
   return {
     kind: "window",
     key: window.id,
     shortName,
-    ringPct,
-    percentText,
-    tone,
-    trailing: shortTrailing,
+    ringPct: row.fillPct,
+    percentText: row.percentText,
+    tone: row.tone,
+    trailing,
     accessibilityLabel,
   };
 }
@@ -158,7 +131,7 @@ function resolveWindowSegment(
 interface WindowDescriptionInput {
   label: string;
   percent: string;
-  trailing: WindowTrailing | null;
+  trailing: ProviderUsageWindowTrailing | null;
 }
 
 function describeWindow({ label, percent, trailing }: WindowDescriptionInput): UsageText {
@@ -167,7 +140,7 @@ function describeWindow({ label, percent, trailing }: WindowDescriptionInput): U
   }
   return {
     key: "usage.planUsage.strip.windowA11y",
-    params: { label, percent, trailing: trailing.full },
+    params: { label, percent, trailing: trailing.text },
   };
 }
 

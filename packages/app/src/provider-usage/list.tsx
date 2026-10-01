@@ -1,9 +1,9 @@
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { selectActiveApiEndpoint } from "@/api-endpoints";
-import { ProviderUsageCard } from "./card";
+import { ProviderUsageCard, providerUsageTableRowKeys, useProviderUsageTableColumns } from "./card";
 import type { ProviderUsage } from "./types";
 
 /**
@@ -18,6 +18,9 @@ export function ProviderUsageList({
   // 同一主机的提供方快照，用来标注启用了第三方接口的提供方。
   snapshotEntries: readonly ProviderSnapshotEntry[] | undefined;
 }) {
+  // 各提供方的表格共用一套列宽，进度条从同一条竖线开始。
+  const rowKeys = useMemo(() => providerUsageTableRowKeys(providers), [providers]);
+  const tableColumns = useProviderUsageTableColumns(rowKeys);
   return (
     <View style={styles.list}>
       {providers.map((usage, index) => {
@@ -25,7 +28,11 @@ export function ProviderUsageList({
         return (
           <Fragment key={usage.providerId}>
             {index > 0 ? <View style={styles.divider} /> : null}
-            <ProviderUsageCard usage={usage} activeApiEndpoint={activeApiEndpoint} />
+            <ProviderUsageCard
+              usage={usage}
+              activeApiEndpoint={activeApiEndpoint}
+              tableColumns={tableColumns}
+            />
           </Fragment>
         );
       })}

@@ -188,6 +188,67 @@ test.describe("plan usage in the composer context strip", () => {
     }
   });
 
+  test("shows the full plan usage card on hover and refreshes each time it opens", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const fetchedAt = new Date().toISOString();
+    const usageFixture = await installProviderUsageFixture(page, [
+      { fetchedAt, providers: [mockPlanUsage({ fetchedAt })] },
+      {
+        fetchedAt,
+        providers: [
+          mockPlanUsage({
+            fetchedAt,
+            windows: [
+              { id: "five_hour", label: "Session", usedPct: 12, resetsAt: fromNow(3 * HOUR_MS) },
+              {
+                id: "weekly",
+                label: "Weekly",
+                usedPct: 46,
+                resetsAt: fromNow(4 * DAY_MS),
+                tone: "ok",
+              },
+            ],
+          }),
+        ],
+      },
+    ]);
+    const session = await openMockAgentOnDesktop(page);
+    try {
+      const gauge = page.getByTestId("composer-plan-usage");
+      await expect(gauge).toBeVisible({ timeout: 10_000 });
+      expect(usageFixture.requestCount()).toBe(1);
+
+      const card = page.getByTestId("composer-plan-usage-card");
+      await gauge.hover();
+      await usageFixture.waitForRequestCount(2);
+      await expect(card).toBeVisible({ timeout: 10_000 });
+      // 第二次应答只剩两个窗口：卡片显示的是打开时刷新回来的数据。
+      await expect(card.getByTestId("provider-usage-window-five_hour")).toHaveText(
+        "Session12%resets 3h",
+      );
+      await expect(card.getByTestId("provider-usage-window-weekly")).toHaveText(
+        "Weekly46%resets 4d",
+      );
+      await expect(card.getByTestId("provider-usage-window-weekly_model_fable")).toHaveCount(0);
+      await expect(card.getByText("Max 20x", { exact: true })).toBeVisible();
+      await expect(card.getByText("Updated just now", { exact: true })).toBeVisible();
+      await expect(card.getByText("Extra usage", { exact: true })).toBeVisible();
+      await expect(card.getByText("$3.00 / $50.00", { exact: true })).toBeVisible();
+
+      await page.mouse.move(0, 0);
+      await expect(card).toHaveCount(0);
+
+      await gauge.hover();
+      await usageFixture.waitForRequestCount(3);
+      await expect(card).toBeVisible();
+      expect(usageFixture.requestCount()).toBe(3);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
   test("stays quiet when every attempt to fetch fails", async ({ page }) => {
     test.setTimeout(180_000);
     const usageFixture = await installProviderUsageFixture(page, [

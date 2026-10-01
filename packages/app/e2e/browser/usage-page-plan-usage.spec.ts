@@ -1,5 +1,7 @@
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
+import { expectComposerVisible } from "../support/helpers/composer";
+import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { installProviderUsageFixture } from "../support/helpers/provider-usage";
 import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
 import { openUsagePageFromShell } from "../support/helpers/usage-page";
@@ -152,5 +154,58 @@ test.describe("plan usage on the usage page", () => {
     await expect(card.getByText("Claude auth expired", { exact: true })).toBeVisible();
     await expect(card.getByText("Codex", { exact: true })).toBeVisible();
     await expect(card.getByText("71%")).toBeVisible();
+  });
+
+  // 窄栏只显示可用的套餐用量；出错说明在桌面端只出现在这里（Q18）。
+  test("a provider that fails to report stays off the composer strip and shows its error here", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const usageFixture = await installProviderUsageFixture(page, [
+      {
+        fetchedAt: new Date().toISOString(),
+        providers: [
+          {
+            providerId: "mock",
+            displayName: "Mock provider",
+            status: "error",
+            planLabel: "Max 20x",
+            windows: [],
+            error: "Mock provider auth expired",
+          },
+        ],
+      },
+    ]);
+    const session = await seedMockAgentWorkspace({
+      repoPrefix: "usage-plan-usage-error-",
+      title: "Plan usage error e2e",
+      initialPrompt: "emit 1 coalesced agent stream update for the plan usage error.",
+    });
+    try {
+      await openAgentRoute(page, session);
+      await expectComposerVisible(page);
+      await expect(page.getByTestId("composer-context-strip-branch-switcher")).toBeVisible({
+        timeout: 30_000,
+      });
+      await usageFixture.waitForRequestCount(1);
+      // 圆环弹层和窄栏读同一份取数结果：弹层已显示这条错误，窄栏也已按它渲染。
+      await page.getByTestId("context-window-meter").hover();
+      await expect(page.getByText("Mock provider auth expired", { exact: true })).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByTestId("composer-plan-usage")).toHaveCount(0);
+      await page.mouse.move(0, 0);
+
+      await openUsagePageFromShell(page);
+      const card = page.getByTestId("usage-plan-usage-card");
+      await expect(card.getByText("Mock provider auth expired", { exact: true })).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(card.getByText("Error", { exact: true })).toBeVisible();
+      await expect(card.getByText("Max 20x", { exact: true })).toBeVisible();
+    } finally {
+      await session.cleanup();
+    }
   });
 });

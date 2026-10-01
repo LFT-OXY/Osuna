@@ -2,16 +2,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { renderUsageText, type UsageText } from "@/usage/text";
 import {
+  describeBalanceAmount,
   describeFetchedAt,
-  describeFooterParts,
   describeReset,
   describeRunsOut,
   describeStatus,
   formatAmount,
   formatPct,
-  resolveBalanceAmount,
+  resolveWindowRow,
 } from "./format";
-import type { ProviderUsage } from "./types";
 
 const NOW = Date.parse("2026-06-19T12:00:00.000Z");
 
@@ -21,17 +20,6 @@ function at(offsetMs: number): string {
 
 function render(text: UsageText | null): string | null {
   return text ? renderUsageText(i18n.t, text) : null;
-}
-
-function usage(overrides: Partial<ProviderUsage>): ProviderUsage {
-  return {
-    providerId: "glm",
-    displayName: "GLM coding plan",
-    status: "available",
-    planLabel: null,
-    windows: [],
-    ...overrides,
-  };
 }
 
 beforeAll(async () => {
@@ -89,38 +77,74 @@ describe("plan usage descriptions", () => {
 
   it("reads a balance as used-of-limit, as what is left, or as a bare amount", () => {
     expect(
-      resolveBalanceAmount({ id: "a", label: "Extra", used: 5, limit: 20, unit: "usd" }),
-    ).toEqual({ amount: { text: "$5.00 / $20.00" }, usedPct: 25 });
+      describeBalanceAmount({ id: "a", label: "Extra", used: 5, limit: 20, unit: "usd" }),
+    ).toEqual({ text: "$5.00 / $20.00" });
     expect(
-      resolveBalanceAmount({ id: "b", label: "Credits", remaining: 1234, unit: "credits" }),
+      describeBalanceAmount({ id: "b", label: "Credits", remaining: 1234, unit: "credits" }),
+    ).toEqual({ key: "usage.planUsage.balanceLeft", params: { amount: "1,234" } });
+    expect(describeBalanceAmount({ id: "c", label: "Spent", used: 12, unit: "credits" })).toEqual({
+      text: "12",
+    });
+    expect(describeBalanceAmount({ id: "d", label: "Unknown", unit: "credits" })).toEqual({
+      text: "—",
+    });
+  });
+});
+
+describe("plan usage card table rows", () => {
+  it("shows the used share with the daemon's tone and when the window resets", () => {
+    expect(
+      resolveWindowRow(
+        { id: "weekly", label: "Weekly", usedPct: 45, resetsAt: at(4 * 86_400_000), tone: "ok" },
+        NOW,
+      ),
     ).toEqual({
-      amount: { key: "usage.planUsage.balanceLeft", params: { amount: "1,234" } },
-      usedPct: null,
-    });
-    expect(resolveBalanceAmount({ id: "c", label: "Spent", used: 12, unit: "credits" })).toEqual({
-      amount: { text: "12" },
-      usedPct: null,
-    });
-    expect(resolveBalanceAmount({ id: "d", label: "Unknown", unit: "credits" })).toEqual({
-      amount: { text: "—" },
-      usedPct: null,
+      id: "weekly",
+      label: "Weekly",
+      percentText: "45%",
+      fillPct: 45,
+      tone: "ok",
+      trailing: {
+        text: { key: "usage.planUsage.resets", params: { duration: "4d" } },
+        atRisk: false,
+      },
     });
   });
 
-  it("puts the source label before the fetch time in the footer", () => {
-    expect(
-      describeFooterParts(
-        usage({ sourceLabel: "OpenUsage 0.6.27", fetchedAt: at(-3 * 60_000) }),
-        NOW,
-      ),
-    ).toEqual([
-      { text: "OpenUsage 0.6.27" },
+  it("says when the window runs out instead of when it resets if it runs out first", () => {
+    const row = resolveWindowRow(
       {
-        key: "usage.planUsage.updated",
-        params: { ago: { key: "usage.common.time.minutesAgo", params: { count: 3 } } },
+        id: "five_hour",
+        label: "Session",
+        usedPct: 82,
+        resetsAt: at(3 * 3_600_000),
+        runsOutAt: at(3_600_000),
+        shortfallPct: 18,
       },
-    ]);
-    expect(describeFooterParts(usage({}), NOW)).toEqual([]);
+      NOW,
+    );
+    expect(row.trailing).toEqual({
+      text: { key: "usage.planUsage.runsOut", params: { duration: "1h" } },
+      atRisk: true,
+    });
+    // daemon 没给 tone 时按用量推导。
+    expect(row.tone).toBe("warning");
+  });
+
+  it("derives the share from the remaining share and clamps the bar", () => {
+    const row = resolveWindowRow({ id: "daily", label: "Daily", remainingPct: -20 }, NOW);
+    expect(row.percentText).toBe("100%");
+    expect(row.fillPct).toBe(100);
+    expect(row.tone).toBe("danger");
+    expect(row.trailing).toBe(null);
+  });
+
+  it("draws an empty bar and a dash when the share is unknown", () => {
+    const row = resolveWindowRow({ id: "x", label: "Mystery", resetsAt: at(-1_000) }, NOW);
+    expect(row.percentText).toBe("—");
+    expect(row.fillPct).toBe(0);
+    expect(row.tone).toBe("default");
+    expect(row.trailing).toEqual({ text: { key: "usage.planUsage.resettingNow" }, atRisk: false });
   });
 });
 
@@ -141,8 +165,7 @@ describe("plan usage English stays what it was", () => {
     expect(render(describeStatus("unavailable"))).toBe("Unavailable");
     expect(
       render(
-        resolveBalanceAmount({ id: "b", label: "Credits", remaining: 1234, unit: "credits" })
-          .amount,
+        describeBalanceAmount({ id: "b", label: "Credits", remaining: 1234, unit: "credits" }),
       ),
     ).toBe("1,234 left");
     expect(i18n.t("usage.planUsage.title")).toBe("Plan usage");
