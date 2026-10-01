@@ -9,3 +9,4 @@
 {"file": "docs/testing.md", "reason": "测试约定：真实依赖优先、确定性"}
 {"file": "docs/i18n.md", "reason": "新增文案需补全各语言"}
 {"file": "docs/glossary.md", "reason": "Provider / Custom provider / API endpoint / Add provider 术语"}
+{"file": ".atw/tasks/09-30-providers-two-level-upgrade/design/design-brief.md", "reason": "Providers 启停重新设计：选定方向 01 一张清单及其对 PRD 的改动"}

@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "project": "Osuna · Providers 启停与列表",
+  "brief": "设置 → Providers：看清每个提供方能否使用、显式启用或停用、一键升级、进详情配置。已停用的提供方装没装 App 不知道，启用后才检测。",
+  "round": "01",
+  "candidates": [
+    {
+      "id": "baseline",
+      "name": "现状",
+      "concept": "列表只放在用的；关掉就移进「添加提供方」，点「未启用」里的一项会直接启用它",
+      "typography": "system-ui / PingFang SC；行标题 14/20 常规，状态行 12/16",
+      "palette": [
+        "#fcfcfc",
+        "#ffffff",
+        "#27272a",
+        "#1b4ed8"
+      ],
+      "traits": [
+        "行尾升级 + 开关 + ›",
+        "未启用组无开关、点击即启用",
+        "ACP 目录每行一个蓝色实心按钮"
+      ],
+      "kind": "image",
+      "source": "baseline/00-current.png",
+      "baseline": true
+    },
+    {
+      "id": "one-list",
+      "name": "一张清单",
+      "concept": "所有内置提供方都在一页，开关决定它在「已启用」还是「已停用」一组，拨一下这一行当场移过去",
+      "typography": "system-ui / PingFang SC；组标题 14 中等灰，行标题 14/20，状态行 12/16 内嵌 18px 高的升级小按钮",
+      "palette": [
+        "#fcfcfc",
+        "#ffffff",
+        "#27272a",
+        "#71717b",
+        "#1b4ed8",
+        "#3e704a"
+      ],
+      "traits": [
+        "已停用的留在本页、带开关、图标去色",
+        "升级挪进状态行，行尾只剩开关和 ›",
+        "+ 只打开 ACP 目录",
+        "详情页头带开关；停用时只剩一张说明卡"
+      ],
+      "kind": "html",
+      "source": "round-01-a.html",
+      "interactive": true
+    },
+    {
+      "id": "detail-owns",
+      "name": "详情做主",
+      "concept": "列表只负责看和进；启用、状态、版本、升级集中在详情第一张「概况」卡里",
+      "typography": "system-ui / PingFang SC；概况卡 56px 键值行，值用 muted，开关行带一行说明",
+      "palette": [
+        "#fcfcfc",
+        "#ffffff",
+        "#27272a",
+        "#71717b",
+        "#1b4ed8"
+      ],
+      "traits": [
+        "列表无开关，行尾只有「可升级」标和 ›",
+        "底部一行「2 个已停用」进子页",
+        "在详情打开开关，状态和版本原地填进来",
+        "最冒险：列表上不能一键开关"
+      ],
+      "kind": "html",
+      "source": "round-01-b.html",
+      "interactive": true
+    },
+    {
+      "id": "catalog-toggle",
+      "name": "目录里开关",
+      "concept": "保留「列表只放在用的」，把显式开关放进「添加提供方」的内置组，原地检测、可用就加入列表",
+      "typography": "system-ui / PingFang SC；与现状一致",
+      "palette": [
+        "#fcfcfc",
+        "#ffffff",
+        "#27272a",
+        "#1b4ed8",
+        "#7b5d39"
+      ],
+      "traits": [
+        "弹窗内置组每行带开关，点行只进详情",
+        "未安装原地显示安装方法",
+        "关掉列表里的一项有可撤销提示",
+        "ACP「添加」改 outline"
+      ],
+      "kind": "html",
+      "source": "round-01-c.html",
+      "interactive": true
+    }
+  ]
+}

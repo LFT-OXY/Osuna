@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Providers · __TITLE__</title>
+<style>
+:root{
+  --canvas:#fcfcfc; --sidebar:#fafafa; --card:#ffffff; --border:#e4e4e7; --row:rgba(228,228,231,.5);
+  --fg:#27272a; --muted:#71717b; --xmuted:#a1a1aa; --accent:#1b4ed8;
+  --s2:#f4f4f5; --s3:#ececef; --hl:rgba(24,24,27,.05);
+  --ok:#3e704a; --warn:#7b5d39; --danger:#9d433b; --warnfill:rgba(245,158,11,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font:14px/20px system-ui,-apple-system,"PingFang SC",sans-serif;color:var(--fg);background:var(--canvas);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.app{display:flex;height:100vh}
+/* 侧栏 */
+.side{width:320px;flex:none;background:var(--sidebar);border-right:1px solid var(--border);padding:56px 12px 0}
+.side .back{display:flex;gap:10px;align-items:center;color:var(--muted);height:32px;padding:0 10px;margin-bottom:14px}
+.side h6{font-size:12px;font-weight:500;color:var(--muted);padding:0 10px;margin:12px 0 4px}
+.nav{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:8px;color:var(--fg)}
+.nav svg{width:16px;height:16px;color:var(--muted)}
+.nav.sel{background:#ececee;box-shadow:inset 0 0 0 1px #e1e1e4}
+.host{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;display:inline-block}
+/* 主区 */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.bar{height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 24px;font-size:15px}
+.bar .crumb{color:var(--muted);cursor:pointer}
+.bar .crumb:hover{color:var(--fg)}
+.bar .sep{color:var(--xmuted)}
+.bar svg{width:18px;height:18px;color:var(--muted)}
+.scroll{flex:1;overflow:auto;padding:20px 24px 80px}
+.col{max-width:720px;margin:0 auto}
+.sec{margin-bottom:28px}
+.sech{display:flex;align-items:center;justify-content:space-between;height:28px;margin-bottom:8px;padding:0 4px}
+.sech .t{font-size:14px;font-weight:500;color:var(--muted)}
+.sech .t b{font-weight:400;color:var(--xmuted);margin-left:6px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.row{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px 16px;position:relative;transition:background .15s}
+.row+.row,.rowwrap+.rowwrap{border-top:1px solid var(--row)}
+.row.click{cursor:pointer}
+.row.click:hover{background:var(--s2)}
+.lead{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.ico{width:32px;height:32px;border-radius:8px;background:var(--s2);display:grid;place-items:center;flex:none}
+.ico svg{width:18px;height:18px}
+.ico.lg{width:44px;height:44px;border-radius:12px}
+.ico.lg svg{width:24px;height:24px}
+.off .ico{opacity:.55;filter:grayscale(1)}
+.txt{min-width:0;flex:1}
+.name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.off .name{color:var(--muted)}
+.meta{font-size:12px;line-height:16px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px}
+.meta .dot{width:6px;height:6px}
+.trail{display:flex;align-items:center;gap:12px;flex:none}
+.chev{width:14px;height:14px;color:var(--xmuted)}
+.row.click:hover .chev{color:var(--fg)}
+/* 开关 */
+.sw{width:32px;height:18px;border-radius:9px;background:#d4d4d8;position:relative;flex:none;transition:background .18s;cursor:pointer}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.18);transition:transform .2s cubic-bezier(.3,.7,.3,1)}
+.sw.on{background:var(--accent)}
+.sw.on::after{transform:translateX(14px)}
+.swl{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+/* 按钮 */
+.btn{height:28px;padding:0 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.outline{border:1px solid var(--border);background:var(--card)}
+.btn.outline:hover,.btn.ghost:hover{background:var(--hl)}
+.btn.xs{height:22px;padding:0 8px;font-size:12px;border-radius:6px}
+.meta .btn.xs{height:18px;line-height:16px;padding:0 6px;margin:-1px 0 -1px 2px;gap:3px}
+.meta .btn.xs svg{width:11px;height:11px}
+.btn svg{width:14px;height:14px}
+.btn.icon{width:28px;padding:0;justify-content:center;color:var(--muted)}
+.btn.icon:hover{color:var(--fg)}
+.btn[disabled]{opacity:.5;pointer-events:none}
+.spin{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--xmuted);border-top-color:transparent;animation:sp .8s linear infinite;display:inline-block;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.badge{font-size:12px;line-height:20px;padding:0 8px;border-radius:6px;background:var(--s2);border:1px solid var(--border);white-space:nowrap}
+.up{color:var(--accent)}
+.lnk{color:var(--fg);text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:3px;cursor:pointer}
+.lnk:hover{text-decoration-color:var(--fg)}
+/* 动效：移入的行先亮一下 */
+.flash{animation:fl 1.6s ease-out}
+@keyframes fl{0%{background:rgba(27,78,216,.10)}100%{background:transparent}}
+.enter{animation:en .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes en{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.fill{animation:fi .45s ease-out both}
+@keyframes fi{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
+/* 详情 */
+.dh{display:flex;align-items:center;gap:14px;margin:4px 0 24px}
+.dh .nm{font-size:18px;line-height:24px}
+.dh .st{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:2px}
+.kv{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px 16px}
+.kv+.kv{border-top:1px solid var(--row)}
+.kv .k{flex:1}
+.kv .v{color:var(--muted)}
+.hint{font-size:12px;line-height:16px;color:var(--muted);margin-top:2px}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.cmd{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.cmd code{flex:1;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--fg)}
+.model{display:flex;gap:12px;align-items:baseline;min-height:40px;padding:10px 16px}
+.model+.model{border-top:1px solid var(--row)}
+.offcard{padding:28px 24px;text-align:center}
+.offcard .t{font-size:15px;margin-bottom:6px}
+.offcard .d{color:var(--muted);font-size:13px;line-height:20px;max-width:420px;margin:0 auto 16px}
+.offcard .swl{justify-content:center;color:var(--fg);font-size:14px}
+/* 弹窗 */
+.scrim{position:fixed;inset:0;background:rgba(24,24,27,.28);backdrop-filter:blur(4px);display:grid;place-items:center;animation:sc .18s}
+@keyframes sc{from{opacity:0}}
+.dlg{width:640px;max-height:760px;background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden;animation:dl .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes dl{from{opacity:0;transform:translateY(8px) scale(.985)}}
+.dlg .hd{padding:20px 24px 12px;display:flex;align-items:center;justify-content:space-between}
+.dlg .hd .t{font-weight:500;font-size:15px}
+.dlg .search{margin:0 24px 8px;height:36px;border-radius:10px;background:var(--s2);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--xmuted)}
+.dlg .search svg{width:15px;height:15px}
+.dlg .bd{overflow:auto;padding:12px 24px 24px}
+.desc{font-size:12px;line-height:16px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#18181b;color:#fff;border-radius:10px;padding:10px 14px;display:flex;gap:16px;align-items:center;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:en .25s}
+.toast button{color:#93c5fd}
+.note{font-size:12px;color:var(--muted);padding:10px 4px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side"></aside>
+  <main class="main"><div class="bar" id="bar"></div><div class="scroll"><div class="col" id="col"></div></div></main>
+</div>
+<div id="layer"></div>
+<script>
+const DIR = "__DIR__";
+const ICONS = __ICONS__;
+const I = {
+  chev:'<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  arrowUp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.2"/><circle cx="7" cy="16" r="3.2"/><circle cx="17" cy="16" r="3.2"/></svg>',
+  back:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  gen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
+  box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/></svg>',
+};
+const ACP = [
+  {name:"Agoragentic", v:"1.3.6", d:"Agent marketplace with 174+ AI capabilities. Browse, call and pay for agents", icon:ICONS.acpFirst},
+  {name:"Amp", v:"0.7.0", d:"ACP wrapper for Amp - the frontier coding agent"},
+  {name:"Auggie CLI", v:"0.33.0", d:"Augment Code's powerful software agent, backed by industry-leading context"},
+  {name:"Autohand Code", v:"0.2.1", d:"Autonomous coding agent for the terminal"},
+  {name:"Cline", v:"2.4.0", d:"Autonomous coding agent right in your IDE and terminal"},
+];
+const S = {
+  route: {page:"list"},
+  dialog: false,
+  toast: null,
+  flash: null,
+  providers: [
+    {id:"claude", label:"Claude", enabled:true, status:"ready", models:15, version:"2.1.280", latest:"2.1.286"},
+    {id:"codex", label:"Codex", enabled:true, status:"ready", models:8, version:"0.159.3", latest:null},
+    {id:"pi", label:"Pi", enabled:true, status:"ready", models:35, version:"0.99.1", latest:"0.99.2"},
+    {id:"omp", label:"Oh My Pi", enabled:true, status:"ready", models:68, version:"18.4.4", latest:"18.4.6"},
+    {id:"copilot", label:"Copilot", enabled:false, status:"off", probe:{status:"unavailable"}, install:"npm install -g @github/copilot"},
+    {id:"opencode", label:"OpenCode", enabled:false, status:"off", probe:{status:"ready", models:12, version:"1.14.2", latest:null}},
+  ],
+  upgrading: new Set(),
+};
+const P = id => S.providers.find(p => p.id === id);
+const icon = (p, cls="") => `<span class="ico ${cls}">${ICONS[p.id] || I.box}</span>`;
+const sw = (on, act) => `<span class="sw ${on?"on":""}" role="switch" aria-checked="${on}" data-act="${act}"></span>`;
+const dot = c => `<span class="dot" style="background:${c}"></span>`;
+
+function statusMeta(p, opts={}) {
+  if (p.status === "off") return `${dot("var(--xmuted)")}<span>已停用</span>${opts.offHint?`<span>· ${opts.offHint}</span>`:""}`;
+  if (p.status === "loading") return `<span class="spin"></span><span>正在检测…</span>`;
+  if (p.status === "unavailable") return `${dot("var(--warn)")}<span>未安装</span>`;
+  const parts = [`${p.models} 个 Model`, `v${p.version}`];
+  return `${dot("var(--ok)")}<span class="${opts.fill?"fill":""}">${parts.join(" · ")}</span>`;
+}
+function upgradeChip(p) {
+  if (!p.latest || p.status !== "ready") return "";
+  if (S.upgrading.has(p.id)) return `<span class="btn xs outline" disabled><span class="spin"></span>正在升级</span>`;
+  return `<button class="btn xs outline" data-act="upgrade:${p.id}" title="v${p.version} → v${p.latest}">${I.arrowUp}升级到 v${p.latest}</button>`;
+}
+function upgradeBtn(p) {
+  if (!p.latest || p.status !== "ready") return "";
+  if (S.upgrading.has(p.id)) return `<button class="btn outline" disabled><span class="spin"></span></button>`;
+  return `<button class="btn outline" data-act="upgrade:${p.id}" title="v${p.version} → v${p.latest}">升级</button>`;
+}
+
+const sv = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const NAVI = {
+  "通用": sv('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  "外观": sv('<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2a10 10 0 0 0 0 20c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7h2a5.6 5.6 0 0 0 5.5-5.5C22 6 17.5 2 12 2z"/>'),
+  "编辑器": sv('<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>'),
+  "快捷键": sv('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M7 15h10"/>'),
+  "通知": sv('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
+  "概览": sv('<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/>'),
+  "项目": sv('<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>'),
+  "Providers": I.layers,
+  "Agents": sv('<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4M9 13v2M15 13v2"/>'),
+  "配对设备": sv('<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 18h.01"/>'),
+};
+/* ---------- 侧栏与页头 ---------- */
+function renderSide() {
+  const nav = (t, sel) => `<div class="nav ${sel?"sel":""}">${NAVI[t]||I.gen}<span>${t}</span></div>`;
+  document.getElementById("side").innerHTML = `
+    <div class="back">${I.back}<span>返回</span></div>
+    <h6>应用</h6>${["通用","外观","编辑器","快捷键","通知"].map(t=>nav(t)).join("")}
+    <h6 style="margin-top:20px">主机</h6>
+    <div class="host">${dot("var(--ok)")}<span>oxydeMacBook-Pro.local</span></div>
+    ${nav("概览")}${nav("项目")}${nav("Providers", true)}${nav("Agents")}${nav("配对设备")}`;
+}
+function renderBar() {
+  const r = S.route;
+  let h = `${I.layers}`;
+  if (r.page === "list") h += `<span>Providers</span>`;
+  else if (r.page === "offlist") h += `<span class="crumb" data-act="nav:list">Providers</span><span class="sep">/</span><span>已停用</span>`;
+  else h += `<span class="crumb" data-act="nav:list">Providers</span><span class="sep">/</span>${r.from==="offlist"&&!P(r.id).enabled?`<span class="crumb" data-act="nav:offlist">已停用</span><span class="sep">/</span>`:""}<span>${P(r.id).label}</span>`;
+  document.getElementById("bar").innerHTML = h;
+}
+
+/* ---------- 列表 ---------- */
+function rowA(p) {
+  const off = !p.enabled;
+  return `<div class="row click ${off?"off":""} ${S.flash===p.id?"flash enter":""}" data-act="open:${p.id}">
+    <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div>
+      <div class="meta">${statusMeta(p,{offHint:"启用后检测是否已安装", fill:S.flash===p.id})}${p.status==="unavailable"?`<span>·</span><span class="lnk" data-act="open:${p.id}">安装方法</span>`:""}${upgradeChip(p)}</div></div></div>
+    <div class="trail">${sw(p.enabled, "toggle:"+p.id)}${I.chev}</div></div>`;
+}
+function rowB(p) {
+  let badge = "";
+  if (p.status === "unavailable") badge = `<span class="badge" style="color:var(--warn)">未安装</span>`;
+  else if (p.latest && p.status === "ready") badge = `<span class="badge up">可升级</span>`;
+  return `<div class="row click ${S.flash===p.id?"flash enter":""}" data-act="open:${p.id}">
+    <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${statusMeta(p)}</div></div></div>
+    <div class="trail">${badge}${I.chev}</div></div>`;
+}
+function rowC(p) {
+  return `<div class="row click ${S.flash===p.id?"flash enter":""}" data-act="open:${p.id}">
+    <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${statusMeta(p)}${p.latest&&p.status==="ready"?`<span>→ v${p.latest}</span>`:""}</div></div></div>
+    <div class="trail">${upgradeBtn(p)}${sw(p.enabled, "toggle:"+p.id)}${I.chev}</div></div>`;
+}
+function addBtn() { return `<button class="btn icon" data-act="dialog" aria-label="添加提供方">${I.plus}</button>`; }
+
+function renderList() {
+  const on = S.providers.filter(p => p.enabled);
+  const off = S.providers.filter(p => !p.enabled);
+  if (DIR === "a") {
+    return `<div class="sec"><div class="sech"><span class="t">已启用<b>${on.length}</b></span>${addBtn()}</div>
+      <div class="card">${on.map(rowA).join("")}</div></div>
+      ${off.length?`<div class="sec"><div class="sech"><span class="t">已停用<b>${off.length}</b></span></div>
+      <div class="card">${off.map(rowA).join("")}</div></div>`:""}`;
+  }
+  if (DIR === "b") {
+    return `<div class="sec"><div class="sech"><span class="t">已启用<b>${on.length}</b></span>${addBtn()}</div>
+      <div class="card">${on.map(rowB).join("")}</div>
+      ${off.length?`<div class="card" style="margin-top:12px"><div class="row click off" data-act="nav:offlist">
+        <div class="lead"><div class="txt"><div class="name" style="color:var(--fg)">${off.length} 个已停用</div><div class="meta">${off.map(p=>p.label).join("、")}</div></div></div>
+        <div class="trail">${I.chev}</div></div></div>`:""}</div>`;
+  }
+  const listed = S.providers.filter(p => p.enabled && p.status !== "unavailable");
+  return `<div class="sec"><div class="sech"><span class="t">Providers</span>${addBtn()}</div>
+    <div class="card">${listed.map(rowC).join("")}</div></div>`;
+}
+function renderOffList() {
+  const off = S.providers.filter(p => !p.enabled);
+  return `<div class="sec"><div class="sech"><span class="t">已停用<b>${off.length}</b></span></div>
+    <div class="card">${off.length?off.map(p=>`<div class="row click off" data-act="open:${p.id}:offlist">
+      <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${statusMeta(p,{offHint:"启用后检测是否已安装"})}</div></div></div>
+      <div class="trail">${I.chev}</div></div>`).join(""):`<div class="row"><span class="meta">没有已停用的提供方</span></div>`}</div>
+    <p class="note">已停用的提供方不检测，也不出现在新建会话里。点进去可以启用。</p></div>`;
+}
+
+/* ---------- 详情 ---------- */
+function models(p) {
+  const names = {claude:["Opus 5.5","claude-opus-5-5"],codex:["GPT-5.3 Codex","gpt-5.3-codex"],pi:["Sonnet 5","anthropic/claude-sonnet-5"],omp:["Opus 5.5","anthropic/claude-opus-5-5"],opencode:["Kimi K3","moonshot/kimi-k3"]}[p.id] || ["Default","default"];
+  const extra = [["Sonnet 5","claude-sonnet-5"],["Haiku 4.5","claude-haiku-4-5"]];
+  return `<div class="sec"><div class="sech"><span class="t">Models<b>${p.models}</b></span></div><div class="card">
+    ${[names,...extra].map(([n,id])=>`<div class="model"><span>${n}</span><span class="mono" style="color:var(--muted)">${id}</span></div>`).join("")}
+    <div class="model"><span class="meta">还有 ${p.models-3} 个</span></div></div></div>`;
+}
+function endpoints(p) {
+  if (!["claude","codex"].includes(p.id)) return "";
+  return `<div class="sec"><div class="sech"><span class="t">第三方接口</span><button class="btn ghost xs">${I.plus}添加</button></div><div class="card">
+    <div class="kv"><div class="k"><div>官方</div><div class="hint">沿用 ${p.label} 自身的配置，通常是订阅登录</div></div><span class="v" style="color:var(--ok)">使用中</span></div></div></div>`;
+}
+function installGuide(p) {
+  return `<div class="sec"><div class="sech"><span class="t">安装 ${p.label}</span></div><div class="card">
+    <div class="cmd"><code>${p.install||"npm install -g "+p.id}</code><button class="btn ghost xs">${I.copy}复制</button></div>
+    <div class="kv" style="border-top:1px solid var(--row)"><span class="hint" style="flex:1">在运行 Osuna daemon 的机器上执行，装好后点刷新</span><span class="lnk" style="font-size:12px">官方文档 ↗</span></div></div></div>`;
+}
+function headerTools(p, withSwitch) {
+  return `<div class="trail">${withSwitch?`<span class="swl">${p.enabled?"已启用":"已停用"}${sw(p.enabled,"toggle:"+p.id)}</span>`:""}
+    <button class="btn icon" data-act="refresh:${p.id}" aria-label="刷新" ${p.enabled?"":"disabled"}>${I.refresh}</button>
+    <button class="btn icon" aria-label="更多">${I.dots}</button></div>`;
+}
+function detailHead(p, withSwitch, noStatus) {
+  let st;
+  if (p.status==="off") st = `${dot("var(--xmuted)")}已停用`;
+  else if (p.status==="loading") st = `<span class="spin"></span>正在检测…`;
+  else if (p.status==="unavailable") st = `${dot("var(--warn)")}未安装`;
+  else st = `${dot("var(--ok)")}可用 · ${p.models} 个 Model`;
+  return `<div class="dh ${p.enabled?"":"off"}">${icon(p,"lg")}<div style="flex:1"><div class="nm">${p.label}</div>${noStatus?"":`<div class="st">${st}</div>`}</div>${headerTools(p, withSwitch)}</div>`;
+}
+function versionCard(p) {
+  if (p.status !== "ready") return "";
+  return `<div class="sec"><div class="sech"><span class="t">版本</span></div><div class="card"><div class="kv"><div class="k">已安装</div>
+    <span class="v">v${p.version}${p.latest?` → v${p.latest}`:""}</span>${upgradeBtn(p)}</div></div></div>`;
+}
+function body(p) {
+  if (p.status === "unavailable") return installGuide(p);
+  if (p.status === "ready") return versionCard(p) + endpoints(p) + models(p);
+  return "";
+}
+function renderDetail() {
+  const p = P(S.route.id);
+  if (DIR === "b") {
+    const fl = S.flash===p.id ? "fill" : "";
+    const v = (x) => `<span class="v ${fl}">${x}</span>`;
+    let state, ver;
+    if (p.status==="off") { state = `<span class="v">停用时不检测</span>`; ver = `<span class="v">—</span>`; }
+    else if (p.status==="loading") { state = `<span class="v" style="display:flex;gap:6px;align-items:center"><span class="spin"></span>正在检测…</span>`; ver = `<span class="v">—</span>`; }
+    else if (p.status==="unavailable") { state = `<span class="v ${fl}" style="color:var(--warn)">未安装</span>`; ver = `<span class="v">—</span>`; }
+    else { state = v(`可用 · ${p.models} 个 Model`); ver = `${v("v"+p.version+(p.latest?` → v${p.latest}`:""))}${upgradeBtn(p)}`; }
+    const overview = `<div class="sec"><div class="sech"><span class="t">概况</span></div><div class="card">
+      <div class="kv"><div class="k"><div>启用 ${p.label}</div><div class="hint">${p.enabled?"会出现在新建会话的提供方里":"停用时不检测，也不出现在新建会话里"}</div></div>${sw(p.enabled,"toggle:"+p.id)}</div>
+      <div class="kv"><div class="k">状态</div>${state}</div>
+      <div class="kv"><div class="k">版本</div>${ver}</div></div></div>`;
+    const rest = p.status==="unavailable" ? installGuide(p) : p.status==="ready" ? endpoints(p)+models(p) : "";
+    return detailHead(p,false,true) + overview + rest;
+  }
+  if (!p.enabled) {
+    return detailHead(p,true) + `<div class="card offcard"><div class="t">${p.label} 已停用</div>
+      <div class="d" style="margin-bottom:0">已停用的提供方不检测，也不出现在新建会话里。<br>用右上角的开关启用，启用后会检测主机上有没有装 ${p.label}。</div></div>`;
+  }
+  return detailHead(p,true) + (p.status==="loading" ? `<div class="card offcard"><div class="d" style="margin:0 auto;display:flex;gap:8px;justify-content:center;align-items:center"><span class="spin"></span>正在检测 ${p.label}…</div></div>` : body(p));
+}
+
+/* ---------- 添加提供方弹窗 ---------- */
+function renderDialog() {
+  const acp = `<div class="sec" style="margin-bottom:0"><div class="sech"><span class="t">ACP 目录</span></div><div class="card">
+    ${ACP.map(a=>`<div class="row"><div class="lead"><span class="ico">${a.icon||I.box}</span><div class="txt"><div class="name">${a.name} <span class="meta" style="display:inline">${a.v}</span></div><div class="desc">${a.d}</div></div></div><button class="btn outline">添加</button></div>`).join("")}</div></div>`;
+  let builtin = "";
+  if (DIR === "c") {
+    const items = S.providers.filter(p => !p.enabled || p.status === "unavailable" || p.justAdded);
+    if (items.length) builtin = `<div class="sec"><div class="sech"><span class="t">内置</span></div><div class="card">
+      ${items.map(p=>`<div class="row click ${p.enabled?"":"off"} ${p.justAdded?"flash":""}" data-act="open:${p.id}">
+        <div class="lead">${icon(p)}<div class="txt"><div class="name">${p.label}</div><div class="meta">${
+          p.justAdded ? `${dot("var(--ok)")}<span class="fill">可用 · 已加入列表</span>` :
+          p.status==="unavailable" ? `${dot("var(--warn)")}<span>未安装</span><span>·</span><span class="lnk" data-act="open:${p.id}">安装方法</span>` :
+          statusMeta(p,{offHint:"打开后检测是否已安装"})}</div></div></div>
+        <div class="trail">${sw(p.enabled,"toggle:"+p.id)}${I.chev}</div></div>`).join("")}</div></div>`;
+  }
+  return `<div class="scrim" data-act="close"><div class="dlg" data-stop>
+    <div class="hd"><span class="t">添加提供方</span><button class="btn icon" data-act="close">${I.x}</button></div>
+    <div class="search">${I.search}<span>搜索提供方</span></div>
+    <div class="bd">${builtin}${acp}</div></div></div>`;
+}
+
+/* ---------- 渲染与事件 ---------- */
+function render() {
+  renderSide(); renderBar();
+  const r = S.route;
+  document.getElementById("col").innerHTML = r.page==="list" ? renderList() : r.page==="offlist" ? renderOffList() : renderDetail();
+  document.getElementById("layer").innerHTML = (S.dialog ? renderDialog() : "") + (S.toast ? `<div class="toast"><span>${S.toast.text}</span>${S.toast.undo?`<button data-act="undo:${S.toast.undo}">撤销</button>`:""}</div>` : "");
+}
+function setFlash(id) { S.flash = id; setTimeout(() => { if (S.flash === id) { S.flash = null; render(); } }, 1700); }
+let toastTimer;
+function toast(text, undo) { S.toast = {text, undo}; clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; render(); }, 4000); }
+function toggle(id) {
+  const p = P(id);
+  if (p.enabled) {
+    p.enabled = false; p.status = "off";
+    if (DIR === "a") setFlash(id);
+    if (DIR === "c" && S.route.page === "list") toast(`已停用 ${p.label}，可在「添加提供方」里重新打开`, id);
+  } else {
+    p.enabled = true; p.status = "loading"; setFlash(id);
+    setTimeout(() => {
+      Object.assign(p, p.probe || {status:"ready"});
+      if (DIR === "c" && S.dialog && p.status === "ready") { p.justAdded = true; setTimeout(() => { p.justAdded = false; render(); }, 1800); }
+      setFlash(id); render();
+    }, 1400);
+  }
+  render();
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-act]");
+  if (!t) return;
+  if (t.dataset.act === "close" && e.target.closest("[data-stop]") && !e.target.closest('button[data-act="close"]')) return;
+  const [act, arg, from] = t.dataset.act.split(":");
+  e.stopPropagation();
+  if (act === "toggle") return toggle(arg);
+  if (act === "open") { S.dialog = false; S.route = {page:"detail", id:arg, from}; return render(); }
+  if (act === "nav") { S.route = {page:arg}; return render(); }
+  if (act === "dialog") { S.dialog = true; return render(); }
+  if (act === "close") { S.dialog = false; return render(); }
+  if (act === "undo") { S.toast = null; toggle(arg); return; }
+  if (act === "refresh") return;
+  if (act === "upgrade") {
+    S.upgrading.add(arg); render();
+    setTimeout(() => { const p = P(arg); S.upgrading.delete(arg); p.version = p.latest; p.latest = null; setFlash(arg); render(); }, 1600);
+  }
+}, true);
+const start = new URLSearchParams(location.hash.slice(1));
+if (start.get("page")) S.route = {page:start.get("page"), id:start.get("id")};
+if (start.get("dialog")) S.dialog = true;
+render();
+</script>
+</body>
+</html>
