@@ -1,64 +1,122 @@
-# UI Prototype
+# 界面原型
 
-Generate **several radically different UI variations** on a single route, switchable from a floating bottom bar. The user flips between variants in the browser, picks one (or steals bits from each), then throws the rest away.
+界面原型分两段：
 
-If the question is about logic/state rather than what something looks like — wrong branch. Use [LOGIC.md](LOGIC.md).
+- **第一段：选方向。** 做几个风格和结构都明显不同的方向，放进同一个对比页，由用户挑选，再说出具体喜欢和不喜欢哪里。
+- **第二段：深化成可交互原型。** 只在问题包含“用起来对不对”时才做：把选定方向做成完整页面，接上按 [LOGIC.md](LOGIC.md) 写的纯逻辑模块，让人能把真实业务流程完整点一遍。
 
-## When this is the right shape
+两段的产物都是用来做决定的，不是正式代码。选定之后的正式界面由 atw-ui 按设计说明重新实现。
 
-- "What should this page look like?"
-- "I want to see a few options for this dashboard before committing."
-- "Try a different layout for the settings screen."
-- Any time the user would otherwise spend a day picking between three vague mockups in their head.
+如果问题只关于逻辑或状态、与外观无关，分支选错了，改用 [LOGIC.md](LOGIC.md)。
 
-## Two sub-shapes — strongly prefer sub-shape A
+## 什么时候用
 
-A UI prototype is much easier to judge when it's **butting up against the rest of the app** — real header, real sidebar, real data, real density. A throwaway route on its own is a vacuum: every variant looks fine in isolation. Default to sub-shape A whenever there's a plausible existing page to host the variants. Only reach for sub-shape B if the prototype genuinely has no nearby home.
+- “这个页面应该长什么样？”
+- “正式做之前，我想先看看这个后台有几种可能。”
+- “给设置页换个布局试试。”
+- “这个下单流程连同规则，用起来顺不顺？”（两段都做）
+- 任何用户本来要在脑子里对着三张模糊草图纠结一整天的时候。
 
-### Sub-shape A — adjustment to an existing page (preferred)
+## 承载方式：优先挂在已有页面上
 
-The route already exists. Variants are rendered **on the same route**, gated by a `?variant=` URL search param. The existing data fetching, params, and auth all stay — only the rendering swaps. This is the default; pick it unless there's a specific reason not to.
+界面原型**贴着应用的其他部分**才好判断：真实的顶栏、侧栏、数据和密度。一个孤零零的新页面是真空，每个方案单独看都还行。所以只要有合理的宿主页面，就优先方式 A。
 
-If the prototype is for something that doesn't yet have a page but *would naturally live inside one* (a new section of the dashboard, a new card on the settings screen, a new step in an existing flow) — that's still sub-shape A. Mount the variants inside the host page.
+### 方式 A：在已有页面上调整（优先）
 
-### Sub-shape B — a new page (last resort)
+路由已经存在。各方案**在同一路由上**渲染，用 URL 参数 `?variant=` 切换。现有的数据获取、参数和权限都保留，只换渲染部分。
 
-Only use this when the thing being prototyped genuinely has no existing page to live inside — e.g. an entirely new top-level surface, or a flow that can't be embedded anywhere sensible.
+还没有页面、但*自然属于某个页面*的东西（后台里的新区块、设置页里的新卡片、现有流程中的新一步）也算方式 A：把方案挂在宿主页面里。
 
-Create a **throwaway route** following whatever routing convention the project already uses — don't invent a new top-level structure. Name it so it's obviously a prototype (e.g. include the word `prototype` in the path or filename). Same `?variant=` pattern.
+这些方案同时放进对比页作为本机地址候选（`"kind": "url"`），并把当前页面作为基线（`"baseline": true`），每个方向都和现状对照。见 [风格对比页](references/style-explorer.md)。
 
-Before committing to sub-shape B, sanity-check: is there really no existing page this could be embedded in? An empty route hides design problems that a populated one would expose.
+### 方式 B：独立小样（没有宿主页面时）
 
-In both sub-shapes the floating bottom bar is identical.
+只有确实没有可挂靠的页面时才用，例如全新的顶层界面、或嵌不进任何现有位置的流程。先确认：真的没有现有页面能挂吗？空页面会掩盖有数据时才暴露的设计问题。
 
-## Process
+方式 B 默认做成自包含的单个 HTML 小样，直接放进对比页，双击就能打开，不需要服务器。小样必须用到项目里的组件或框架时，按项目已有的路由约定建一个一次性路由，名字里带 `prototype`，同样用 `?variant=` 切换，并作为本机地址候选放进对比页。
 
-### 1. State the question and pick N
+## 第一段：选方向
 
-Default to **3 variants**. More than 5 stops being radically different and starts being noise — cap there.
+### 1. 写下问题，定方案数量
 
-Write down the plan in one line, in the prototype's location or a top-of-file comment:
+默认 **3 个方向**。超过 5 个就不再是“明显不同”而是噪音，上限 5。窄小的任务不强求多方案。
 
-> "Three variants of the settings page, switchable via `?variant=`, on the existing `/settings` route."
+把计划写成一句话，放在原型所在位置或文件顶部注释里：
 
-This works whether the user is here to push back or not.
+> “设置页的三个方向，用 `?variant=` 在现有 `/settings` 路由上切换，并汇总到对比页。”
 
-### 2. Generate radically different variants
+用户在不在场都适用。
 
-Draft each variant. Hold each one to:
+### 2. 定调性，写方向卡，做差异检验
 
-- The page's purpose and the data it has access to.
-- The project's component library / styling system (TailwindCSS, shadcn, MUI, plain CSS, whatever).
-- A clear exported component name, e.g. `VariantA`, `VariantB`, `VariantC`.
+方向未定时按 [设计方向](references/design-direction.md) 的顺序做：先从产品题材、受众和使用场合推出调性；每个方向从一个具体的生成引擎出发；写文案之前先定首屏骨架；为每个方向填方向卡，写下它的记忆点；最后逐条做差异检验。
 
-Variants must be **structurally different** — different layout, different information hierarchy, different primary affordance, not just different colours. Three slightly-tweaked card grids isn't a UI prototype, it's wallpaper. If two drafts come out too similar, redo one with explicit "do not use a card grid" guidance.
+方向**必须在结构上不同**：布局、信息层级、主要操作方式都不一样，不只是换颜色。三个微调过的卡片网格不是界面原型，是墙纸。两个方向做出来太像时，回到骨架表重选其中一个，不靠换装饰补救。
 
-### 3. Wire them together
+方向由用户的品味来定，不直接采用模型自己想出的方向。用户已经给定方向时跳过这一步，直接进入第二段或交给 atw-ui。
 
-Create a single switcher component on the route:
+### 3. 做小样
+
+每个方向只做首屏和最能体现方向的一两个区块；用户明确要完整页面时照做。挑能暴露方向优缺点的内容：含复杂表单的产品不能只做封面。
+
+每个方向要守住：
+
+- 页面的用途和它能拿到的数据；所有方向共享同样的核心内容和主要操作。
+- 方式 A 用项目已有的组件库和样式体系（TailwindCSS、shadcn、MUI、纯 CSS 等）；方式 B 的独立小样不受此限，但图标只内联用到的 SVG，不引用外部资源。
+- 方式 A 中每个方向导出清楚的组件名，例如 `VariantA`、`VariantB`、`VariantC`。
+
+示例内容按真实产品的样子写，避免整数指标和“标题”“描述”这类占位字；画面上不出现“示例”“示意图”“按钮未接入”这类制作说明，这些写进交付说明。视觉层级、字体、色彩和留白的判断见 [视觉语言](references/visual-language.md)。
+
+### 4. 生成对比页
+
+按 [风格对比页](references/style-explorer.md) 准备 `manifest.json`，把方向卡里的北极星、字体、色板和特征写进去，用内置生成器组装成一个离线 HTML。不要每次自己重做对比工具。对比页和 manifest 放在 ATW 任务目录（没有任务时放在原型旁边），不写进技能安装目录。
+
+### 5. 交给用户选
+
+给出简短的方向清单和对比页，附推荐理由，请用户选定，并说出具体喜欢和不喜欢哪里。用户只说“再高级一点”这类模糊词时，用设计方向里的翻译表追问，或拿两张小样让用户比较。
+
+交付对比页时，把一轮独立评审作为**推荐的下一步**告诉用户：说明它能改善什么（打破几个方向共用的模板骨架）、大约需要多少时间和调用，由用户决定是否执行，不默认派发。用户同意时按 [视觉评审协议](references/visual-review.md) 给每个方向各评审、修改一轮；用户直接选定方向时跳过。
+
+用户明确让你自行决定、或当前无法交互时，仍然先做小样、生成对比页留档，再按任务适配、辨识度和可执行性选定，并说明理由。
+
+选定后写一份简短的**设计说明**：用户任务、内容与主动作、选定方向（附方向卡）、用户的喜欢与不喜欢、视觉关系、关键状态、设备约束和验收重点。放在 ATW 任务目录的 `ui-direction.md`；已有说明直接更新。这份说明是第二段和 atw-ui 的依据。
+
+## 第二段：深化成可交互原型
+
+只有问题包含业务规则或完整操作流程时才做；只问外观时，第一段选定后就收尾。
+
+### 1. 先写逻辑模块
+
+按 [LOGIC.md](LOGIC.md) 第 2 步，把业务规则写成一个纯模块（reducer、状态机或纯函数），不碰 DOM。这部分以后能整体搬进正式代码，是第二段最值得保留的产物。
+
+### 2. 选定方向做成完整页面
+
+把选定方向从小样扩展成完整页面，作为逻辑模块外面的一层外壳：页面只调用模块、渲染模块返回的状态。关键状态都要在界面上有样子——空、加载、成功、失败、被拒绝的非法操作——不只做漂亮的默认状态。
+
+方向卡里的记忆点（某个动作的反馈、完成的那一刻）在这里做出来；动效遵循方向的调性。修改数据的动作一律经过逻辑模块，接口用桩代替，不接真实后端。
+
+默认只深化**一个**选定方向。用户要求同时比较两三个方向的完整体验时，多个外壳共用同一个逻辑模块，逻辑只写一次。
+
+### 3. 加一个状态抽屉
+
+LOGIC.md 里的“当前状态面板”和“引导演练”放进一个可开关的抽屉，供不写代码的人逐步走查业务规则：
+
+- 抽屉视觉上明显不属于设计本身（例如高对比的面板），和浮动切换条一样，不参与设计评判。
+- 抽屉里保持朴素：标签式的状态字段、标出刚变化的部分、按场景划分的演练按钮；不加动画。
+- 开始演练时重置到已知初始状态。
+- 生产构建中隐藏。
+
+### 4. 承载
+
+- **没有现成项目**：单个 HTML，脚本内联，双击即可打开；放进对比页时加 `"interactive": true`，单张查看时就能直接操作。
+- **有现成项目**：挂在已有页面上，用 `?variant=` 切换；作为本机地址候选放进对比页。
+
+## 接线（方式 A）
+
+在路由上建一个切换组件：
 
 ```tsx
-// pseudo-code — adapt to the project's framework
+// 伪代码——按项目框架改写
 const variant = searchParams.get('variant') ?? 'A';
 return (
   <>
@@ -70,43 +128,47 @@ return (
 );
 ```
 
-For sub-shape A (existing page): keep all the existing data fetching above the switcher; only the rendered subtree changes per variant.
+已有页面：现有数据获取都放在切换组件之上，各方向只替换渲染的子树。一次性路由：同一个切换组件挂在 `prototype` 路由下。
 
-For sub-shape B (new page): the throwaway route under `/prototype/<name>` mounts the same switcher.
+## 浮动切换条（方式 A）
 
-### 4. Build the floating switcher
+屏幕底部居中、固定位置的小条，三部分：
 
-A small fixed-position bar at the bottom-centre of the screen with three pieces:
+- **左箭头**：切到上一个方向（循环）。
+- **方向标签**：当前方向的编号，方向有名字时一并显示，例如 `B — 侧栏布局`。
+- **右箭头**：切到下一个方向（循环）。
 
-- **Left arrow** — cycles to the previous variant (wraps around).
-- **Variant label** — shows the current variant key and, if the variant exports a name, that name too. e.g. `B — Sidebar layout`.
-- **Right arrow** — cycles forward (wraps around).
+行为：
 
-Behaviour:
+- 点箭头时用框架的路由更新 URL 参数（Next 用 `router.replace`，React Router 用 `navigate` 等），保证方向可分享、刷新不丢。
+- 键盘 `←` `→` 也能切换。焦点在 `<input>`、`<textarea>` 或 `[contenteditable]` 上时不拦截方向键。
+- 视觉上明显区别于页面（例如高对比胶囊、轻阴影），一看就不属于被评判的设计。
+- 生产构建中隐藏——用 `process.env.NODE_ENV !== 'production'` 或等价判断，避免误合并后把切换条发给用户。
 
-- Clicking an arrow updates the URL search param (use the framework's router — `router.replace` on Next, `navigate` on React Router, etc) so the variant is shareable and reload-stable.
-- Keyboard: `←` and `→` arrow keys also cycle. Don't intercept arrow keys when an `<input>`, `<textarea>`, or `[contenteditable]` is focused.
-- Visually distinct from the page (e.g. high-contrast pill, subtle shadow) so it's obviously not part of the design being evaluated.
-- Hidden in production builds — gate on `process.env.NODE_ENV !== 'production'` or an equivalent check, so a stray prototype merge can't ship the bar to users.
+切换条做成一个共享组件，放在项目存放共享界面组件的位置。对比页适合并排比较；切换条适合在真实页面里来回看，开发服务器禁止被嵌入时也只能靠它。
 
-Put the switcher in a single shared component so both sub-shapes can reuse it. Locate it wherever shared UI lives in the project.
+## 交给用户
 
-### 5. Hand it over
+给出对比页路径、页面地址和 `?variant=` 的取值；第二段还要说明状态抽屉怎么打开、有哪些演练场景。用户有空时会翻看。最有价值的反馈常常是 **“我要 B 的顶栏配 C 的侧栏”**——那才是他们真正想要的设计。
 
-Surface the URL (and the `?variant=` keys). The user will flip through whenever they get to it. The interesting feedback is usually **"I want the header from B with the sidebar from C"** — that's the actual design they want.
+交付说明里写清：哪些是模拟数据、生成图片、未接入的动作；实际查看过哪些视口；哪一步没做以及原因。
 
-### 6. Capture the answer and clean up
+## 记录结论，收起原型
 
-Once a variant has won, capture the answer — which variant and why — then capture the prototype the way the [SKILL](SKILL.md) describes. Fold the winner into the real code and move the rest onto the throwaway branch, not into main:
+用户选定后，先记录结论——选了哪个方向、为什么、用户的喜欢与不喜欢——更新到 `ui-direction.md`，并把影响需求的部分写进任务的需求文档。然后按 [SKILL](SKILL.md) 的规则收起原型。所有方向、切换组件、对比页和 manifest 进入一次性分支，作为一手资料保存，不进主分支：
 
-- **Sub-shape A** — fold the winner into the existing page; drop the losing variants and the switcher from main.
-- **Sub-shape B** — promote the winning variant to a real route; drop the throwaway route and the switcher from main.
+- **方式 A**：主分支上去掉所有方向和切换条，现有页面保持原样。
+- **方式 B**：主分支上去掉一次性路由和切换条。
+- **第二段**：验证过的逻辑模块搬进正式代码；页面外壳留在一次性分支。
 
-The full set of variants is the primary source, so it lands on the throwaway branch, not the bin — variant components and the switcher left in the main branch rot fast and confuse the next reader.
+正式界面交给 atw-ui，按 `ui-direction.md` 在正式代码里重新实现。留在主分支的方向组件和切换条很快会腐烂，还会误导下一个读代码的人。
 
-## Anti-patterns
+## 反模式
 
-- **Variants that differ only in colour or copy.** That's a tweak, not a prototype. Real variants disagree about structure.
-- **Sharing too much code between variants.** A shared `<Header>` is fine; a shared `<Layout>` defeats the point. Each variant should be free to throw out the layout.
-- **Wiring variants to real mutations.** Read-only prototypes are fine. If a variant needs to mutate, point it at a stub — the question is "what should this look like", not "does the backend work".
-- **Promoting the prototype directly to production.** The variant code was written under prototype constraints (no tests, minimal error handling). Rewrite it properly when you fold it in.
+- **方向之间只差颜色或文案。** 那是微调，不是原型。真正的方向在结构上互不相同。
+- **按明暗分方向。** “一个亮、一个暗、一个暖”是最常见的失败；每个方向要有自己的色彩身份。
+- **默认左右分栏。** 一轮里最多一个方向用左右分栏，并写出为什么非它不可。
+- **方向之间共享太多代码。** 共享 `<Header>` 可以；共享 `<Layout>` 就失去意义了。每个方向都应该能推翻布局。
+- **把方向接到真实的写操作上。** 只读原型没问题；需要修改数据时经过逻辑模块、指向桩。问题是“它应该长什么样、用起来对不对”，不是“后端通不通”。
+- **把业务逻辑写进页面事件里。** 第二段的规则必须在纯模块里，否则既不能搬走，也没法在状态抽屉里走查。
+- **把原型直接提升为正式代码。** 原型代码是在原型约束下写的（没有测试、错误处理很少）。正式实现交给 atw-ui 和实现阶段重新写。

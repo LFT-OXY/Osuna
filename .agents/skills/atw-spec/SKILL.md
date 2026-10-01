@@ -56,6 +56,16 @@ Do NOT include specific file paths or code snippets. They may end up being outda
 
 Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
 
+## UI and Design
+
+Include this section only when the work changes what a user sees; omit it otherwise.
+
+- The chosen visual direction and the user's stated likes and dislikes. If `atw-prototype` left `ui-direction.md` in the task directory, summarise it here and point to it — do not restate the whole direction card.
+- The screens and states that must exist: empty, loading, success, failure, rejected actions.
+- The target viewports (e.g. desktop 1280, mobile 390).
+- Which project design rules apply: the `design-system.md` in the UI layer of `.atw/spec/`, if the project has one.
+- UI acceptance criteria phrased as things you can check on a screenshot: "on mobile 390 the primary action stays visible above the keyboard", not "looks clean".
+
 ## Testing Decisions
 
 A list of testing decisions that were made. Include:

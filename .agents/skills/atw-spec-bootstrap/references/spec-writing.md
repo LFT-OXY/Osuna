@@ -23,6 +23,10 @@ Keep the spec tree aligned with the project:
 - Delete template files that do not apply.
 - Add new files for important local patterns the template missed.
 
+## UI Layers
+
+When a package renders UI, fill `design-system.md` in its UI layer from the real theme: the token or theme file, CSS variables, Tailwind config, and the shared components screens actually use. Record color roles, the type scale, spacing and radius steps, and how key components look. Where the code is inconsistent — three button styles — record the majority usage and list the rest as to-unify, rather than inventing a cleaner system.
+
 ## Content Standards
 
 Good spec sections include:

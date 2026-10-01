@@ -39,6 +39,11 @@ Give each ticket its **blocking edges** — the other tickets that must complete
 
 **Wide refactors are the exception to vertical slicing.** A **wide refactor** is one mechanical change — rename a column, retype a shared symbol — whose **blast radius** fans across the whole codebase, so a single edit breaks thousands of call sites at once and no vertical slice can land green. Don't force it into a tracer bullet; sequence it as **expand–contract**. First expand: add the new form beside the old so nothing breaks. Then migrate the call sites over in batches sized by blast radius (per package, per directory), each batch its own ticket blocked by the expand, keeping CI green batch to batch because the old form still exists. Finally contract: delete the old form once no caller remains, in a ticket blocked by every migrate batch. When even the batches can't stay green alone, keep the sequence but let them share an integration branch that all block a final integrate-and-verify ticket — green is promised only there.
 
+**UI work stays inside the vertical slices.** Don't split "build the UI" into its own ticket — that is a horizontal slice. Instead, every ticket that changes what a user sees carries UI acceptance criteria next to its behavioural ones: which screen, which state, which viewport, checked against the spec's UI and Design section. Two optional exceptions, both sequenced like prefactoring and integration:
+
+- A **design-foundation** ticket first, when several slices need the same new design tokens or shared components. Every UI ticket that uses them is blocked by it.
+- A **visual pass** ticket last, only for multi-screen work: one consistency review across all the screens the slices produced, blocked by every UI ticket. It fixes drift between screens; it does not redesign them.
+
 ### 4. Quiz the user
 
 Present the proposed breakdown as a numbered list. For each ticket, show:
@@ -78,6 +83,7 @@ Do NOT close or modify any parent issue.
 
 - [ ] Acceptance criterion 1
 - [ ] Acceptance criterion 2
+- [ ] UI: <screen> / <state> / <viewport> — <what a screenshot must show> (only for tickets that change what a user sees)
 
 </local-ticket-template>
 

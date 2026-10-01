@@ -317,9 +317,9 @@ One ticket at a time. Run `tickets.py frontier`, pick one, `tickets.py claim NN`
 Stop ③: tell the user to run `/atw-implement` for the claimed ticket. You may not invoke it yourself, and you may not do the implementation inline instead. One user invocation per ticket.
 That one run is a closed chain and must not be broken up from the outside: implement (test-first where it fits) → run tests, full suite on the last pass → review → handle findings → write spec updates back → commit. Never instruct it to skip the review or the commit.
 Findings triage: spec-axis findings and anything the standards axis calls a hard violation get fixed first, then a full re-review, then the commit. Judgement calls ship and get reported.
-Relay both review reports to the user verbatim, even when the verdict is "nothing found". No report reaching you is not a passing review.
+Relay every review report to the user verbatim — Standards and Spec, plus Visual when the ticket changed UI — even when the verdict is "nothing found". No report reaching you is not a passing review.
 Any sub-agent dispatched from here starts its prompt with `Active task: <task path from task.py current>` — the role files read that line to find the task, and it is the context hooks' fallback when session resolution misses.
-Main-session default: run the process; the implementation itself is written inside `/atw-implement`, never by a dispatched `atw-implement-agent` — that role file is reserved and is not a step in this flow. The only sub-agent this phase raises is `atw-review` (twice, from inside `/atw-implement`). Sub-agent self-exemption: this breadcrumb reaches sub-agent turns on some hosts, so if you are already running as `atw-review`, do NOT spawn another `atw-review` — do the review you were dispatched for. Dispatch is main session only.
+Main-session default: run the process; the implementation itself is written inside `/atw-implement`, never by a dispatched `atw-implement-agent` — that role file is reserved and is not a step in this flow. The only sub-agent this phase raises is `atw-review` (twice, from inside `/atw-implement` — three times when the ticket changes UI and a Visual review runs). Sub-agent self-exemption: this breadcrumb reaches sub-agent turns on some hosts, so if you are already running as `atw-review`, do NOT spawn another `atw-review` — do the review you were dispatched for. Dispatch is main session only.
 Then `tickets.py done NN` and back to the frontier. When the frontier is empty, run `task.py set-status <task> accept`.
 [/workflow-state:implement]
 
@@ -332,7 +332,7 @@ Then `tickets.py done NN` and back to the frontier. When the frontier is empty, 
 
 [workflow-state:accept]
 Read-only from here. Do not open new work, do not fix things you notice — file them as tickets or a follow-up task instead.
-Walk the acceptance criteria in `prd.md` one by one and report which are met, with evidence. Confirm `tickets.py summary` shows every ticket `done` and `git status --porcelain` is clean.
+Walk the acceptance criteria in `prd.md` one by one and report which are met, with evidence; for UI criteria the evidence is a screenshot of the named screen, state and viewport (`/atw-ui` can review read-only). Confirm `tickets.py summary` shows every ticket `done` and `git status --porcelain` is clean.
 Stop ④: present that and wait for the user to accept. Acceptance is the user's judgement, not yours.
 Once accepted, run `task.py archive <task>` — status goes to `completed` and the task moves to `archive/`.
 [/workflow-state:accept]
@@ -363,6 +363,7 @@ When a user request matches one of these intents inside an active task, route fi
 - Writing or revising the spec → `/atw-spec`
 - Slicing a confirmed spec into tickets → `/atw-tickets`
 - Starting a claimed ticket → `/atw-implement` (the user runs it; stop ③)
+- Building or polishing a screen for a claimed ticket → `/atw-ui`, used from inside `/atw-implement`
 - Same bug fixed more than once → `/atw-diagnosing-bugs`
 - Knowledge worth keeping outside a ticket → `/atw-update-spec`
 
@@ -462,6 +463,7 @@ Curate `check.jsonl` so the review sub-agents dispatched during Phase 2 get the 
 
 - **Spec files** — `.atw/spec/<package>/<layer>/index.md` and any specific guideline files (`error-handling.md`, `conventions.md`, etc.) relevant to this task
 - **Research files** — `{TASK_DIR}/research/*.md` the review axes will need to consult
+- **UI design files**, when the task changes what a user sees — the UI layer's `design-system.md` and `{TASK_DIR}/ui-direction.md` if `/atw-prototype` left one
 
 **What NOT to put in**:
 
@@ -616,7 +618,7 @@ That single run is a closed chain:
 
 1. Implement, test-first where the change suits it
 2. Run tests periodically; a full-suite run on the last pass
-3. Review the change on both axes — spec compliance and coding standards
+3. Review the change on both axes — spec compliance and coding standards — plus a Visual axis on screenshots when the ticket changes UI (built with `/atw-ui`)
 4. Handle the findings (see triage below)
 5. Write new knowledge back into `.atw/spec/`
 6. Commit to the current branch
@@ -637,7 +639,7 @@ Spec updates belong in the same chain, before the commit — knowledge that land
 
 #### 2.3 Relay the review reports `[required · repeatable]`
 
-Pass both review reports back to the user **as written**. Do not merge them, do not re-rank them, do not pick a winner, and do not summarize a clean report away — "checked, nothing found" is still a report the user is entitled to see.
+Pass every review report back to the user **as written**. Do not merge them, do not re-rank them, do not pick a winner, and do not summarize a clean report away — "checked, nothing found" is still a report the user is entitled to see.
 
 Not receiving a report is not the same as a review that passed. If no report came back, the review did not run; say so and re-run it rather than proceeding.
 
@@ -674,7 +676,7 @@ Goal: confirm with the user that the work is actually done, then archive it.
 
 **Read-only.** Do not start new work here and do not fix problems you notice in passing — file them as tickets or a follow-up task. A "quick fix" at this point is unreviewed, uncommitted work sitting between the user's acceptance and the archive.
 
-Walk `prd.md`'s acceptance criteria one at a time and report, per criterion, whether it is met and what the evidence is. Also confirm:
+Walk `prd.md`'s acceptance criteria one at a time and report, per criterion, whether it is met and what the evidence is. For UI criteria the evidence is a screenshot of the named screen, state and viewport; `/atw-ui` can review the screens read-only against the spec and the project's `design-system.md`. Problems it finds become tickets, not fixes. Also confirm:
 
 ```bash
 python3 ./.atw/scripts/tickets.py summary   # every ticket done

@@ -51,6 +51,7 @@ For triggered tasks, include all sections below:
 | **Discovered a pattern** | Found a better way to structure code | Relevant spec file |
 | **Hit a gotcha** | Learned that X must be done before Y | Relevant spec + "Common Mistakes" section |
 | **Established a convention** | Team agreed on naming pattern | Quality guidelines |
+| **Settled a visual rule** | New design token, component variant, or spacing rule reused across screens | `design-system.md` in the UI layer |
 | **New thinking trigger** | "Don't forget to check X before doing Y" | `guides/*.md` (as a checklist item) |
 
 **Key Insight**: Code-spec updates are NOT just for problems. Every feature implementation contains design decisions and contracts that future AI/developers need to execute safely.

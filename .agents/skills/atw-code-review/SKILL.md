@@ -1,6 +1,6 @@
 ---
 name: atw-code-review
-description: "沿两个维度审查自某个固定点（提交、分支、标签或合并基点）以来的变更——标准（代码是否遵循了该仓库的文档化编码标准？）和规格（代码是否符合原始问题/规格的要求?）。在并行子代理中同时运行这两项审查，并将结果并排显示。当用户希望审查某个分支、拉取请求、进行中的更改，或要求“审查自 X 以来”的变更时，请使用此功能。"
+description: "沿两个维度审查自某个固定点（提交、分支、标签或合并基点）以来的变更——标准（代码是否遵循了该仓库的文档化编码标准？）和规格（代码是否符合原始问题/规格的要求?）。在并行子代理中同时运行这两项审查；变更涉及界面且调用方提供了截图时，再加第三个维度——视觉（渲染出来的画面是否满足界面验收标准和项目设计规范）。各维度结果并排显示。当用户希望审查某个分支、拉取请求、进行中的更改，或要求“审查自 X 以来”的变更时，请使用此功能。"
 ---
 
 Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
@@ -9,6 +9,12 @@ Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 - **Spec** — does the code faithfully implement the originating issue / spec?
 
 Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
+
+When the change touches what a user sees and the caller passed screenshots, a third axis runs alongside them:
+
+- **Visual** — does the screen, as rendered, meet the UI acceptance criteria and the project's design rules?
+
+It is skipped when no screenshots were passed, and the final report says so.
 
 **This skill only reports — it edits nothing.** Neither this skill nor either sub-agent writes to a source file: not to fix a finding, not to tidy something noticed in passing. They read the frozen patch and produce findings. Hand every finding back to whoever called the review — the user, or `/atw-implement` — and let the caller decide what changes. A reviewer that fixes what it found leaves no independent record of what was wrong, and the next review reads its own edits as the baseline.
 
@@ -41,7 +47,7 @@ git ls-files --others --exclude-standard -z |
 - `git ls-files --others` lists **files**, so no directory expansion is needed. (`git status --porcelain` reports a new directory as a single `?? newdir/` entry — that is why it isn't used here.)
 - `git diff --no-index` **exits 1 when it finds a difference**. That is the normal result, not a failure — hence the `|| true`.
 - Nothing writes to the index, so review stays read-only and never contends for `index.lock`.
-- Cap the size of any single untracked file you inline. `--binary` base64-encodes content, so one image or build artifact can swamp the patch and both sub-agents' context. Over the cap, record the path and skip the body, and leave a line in the patch saying so.
+- Cap the size of any single untracked file you inline. `--binary` base64-encodes content, so one image or build artifact can swamp the patch and both sub-agents' context. Over the cap, record the path and skip the body, and leave a line in the patch saying so. Screenshots in the task's `screenshots/` are evidence for the Visual axis, not code: always record their paths and skip their bodies.
 
 Check that `$patch` is non-empty — this replaces the old "diff is non-empty" check. Also note the commit list via `git log <fixed-point>..HEAD --oneline`. If the patch is large, check its total size before spawning: both sub-agents receive it, so the token cost is doubled.
 
@@ -79,9 +85,9 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 - **Middle Man** — a class or function that mostly just delegates onward. → cut it, call the real target direct.
 - **Refused Bequest** — a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
 
-### 4. Spawn both sub-agents in parallel
+### 4. Spawn the sub-agents in parallel
 
-Both sub-agents read the **frozen patch from step 1** and run **no git commands of their own** — same input, no chance of one axis seeing a file the other missed, and no re-deriving the untracked list from memory.
+The Standards and Spec sub-agents read the **frozen patch from step 1** and run **no git commands of their own** — same input, no chance of one axis seeing a file the other missed, and no re-deriving the untracked list from memory.
 
 **Standards sub-agent prompt** — include:
 
@@ -97,9 +103,18 @@ Both sub-agents read the **frozen patch from step 1** and run **no git commands 
 
 If the spec is missing, skip the Spec sub-agent and note this in the final report.
 
+**Visual sub-agent prompt** (only when screenshots were passed) — the Visual sub-agent judges what it sees, so it gets **no patch, no code, and no build history**. Include:
+
+- The screenshot paths, each labelled with screen, state and logical viewport.
+- The spec's UI and Design section and the ticket's UI acceptance criteria.
+- The path to the UI layer's `design-system.md` in `.atw/spec/`, if the project has one.
+- The brief: "Look at every screenshot before judging. Report: (a) UI acceptance criteria not met, citing the screenshot; (b) departures from the project's design rules — colours, type sizes, spacing or components outside them; (c) the one to three biggest visual problems — hierarchy, alignment, crowding, overflow, unreadable text — each with location, observation and a concrete fix. Distinguish observable defects from taste. Do not open source files. If you cannot view images, say so and stop. Under 400 words."
+
+This sub-agent needs a model that can view images. If none is available, skip it and say in the final report that the Visual axis did not run.
+
 ### 5. Aggregate
 
-Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings — the two axes are deliberately separate (see _Why two axes_).
+Present the reports under `## Standards` and `## Spec` headings — plus `## Visual` when that axis ran — verbatim or lightly cleaned. Do **not** merge or rerank findings — the axes are deliberately separate (see _Why two axes_).
 
 End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes — that's the reranking the separation exists to prevent.
 
@@ -111,3 +126,5 @@ A change can pass one axis and fail the other:
 - Code that does exactly what the issue asked but breaks the project's conventions → **Spec pass, Standards fail.**
 
 Reporting them separately stops one axis from masking the other.
+
+The Visual axis exists for the same reason: code can match the spec and every standard and still render as an unreadable, overflowing screen. Neither code-reading axis can see that.

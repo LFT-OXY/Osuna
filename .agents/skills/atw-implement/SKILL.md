@@ -10,7 +10,9 @@ Use `/atw-tdd` where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 
-Once done, use `/atw-code-review` to review the work.
+If the work changes what a user sees, build that part with `/atw-ui` — logic stays test-first, the UI is verified on real screens. Capture screenshots into the task directory's `screenshots/` for each UI acceptance criterion (screen, state, viewport in the file name), and look at them before calling the work done.
+
+Once done, use `/atw-code-review` to review the work. When screenshots were captured, pass their paths so the review runs its Visual axis.
 
 Work the findings before committing. Fix what the review raised, then re-run the tests it touched.
 
