@@ -1,29 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { resolveProviderPlacement } from "./provider-placement";
+import { groupProvidersByEnabled } from "./provider-placement";
 
-describe("resolveProviderPlacement", () => {
-  it.each(["ready", "loading", "error"] as const)(
-    "keeps an enabled provider that is %s in the list",
-    (status) => {
-      expect(resolveProviderPlacement({ status, enabled: true })).toEqual({ kind: "list" });
-    },
-  );
+describe("groupProvidersByEnabled", () => {
+  it("keeps every enabled provider in Enabled, whatever its status", () => {
+    const entries = [
+      { provider: "claude", status: "ready", enabled: true },
+      { provider: "codex", status: "unavailable", enabled: true },
+      { provider: "pi", status: "loading", enabled: true },
+      { provider: "omp", status: "error", enabled: true },
+    ] as const;
 
-  it("moves a turned-off provider to Not enabled, whatever its status", () => {
-    expect(resolveProviderPlacement({ status: "unavailable", enabled: false })).toEqual({
-      kind: "notEnabled",
-      mark: "turnedOff",
-    });
-    expect(resolveProviderPlacement({ status: "ready", enabled: false })).toEqual({
-      kind: "notEnabled",
-      mark: "turnedOff",
-    });
+    expect(groupProvidersByEnabled(entries)).toEqual({ enabled: entries, disabled: [] });
   });
 
-  it("moves an enabled provider whose CLI is missing to Not enabled as not installed", () => {
-    expect(resolveProviderPlacement({ status: "unavailable", enabled: true })).toEqual({
-      kind: "notEnabled",
-      mark: "notInstalled",
+  it("puts turned-off providers in Disabled, keeping snapshot order in both groups", () => {
+    const claude = { provider: "claude", enabled: true };
+    const copilot = { provider: "copilot", enabled: false };
+    const codex = { provider: "codex", enabled: true };
+    const opencode = { provider: "opencode", enabled: false };
+
+    expect(groupProvidersByEnabled([claude, copilot, codex, opencode])).toEqual({
+      enabled: [claude, codex],
+      disabled: [copilot, opencode],
     });
   });
 });

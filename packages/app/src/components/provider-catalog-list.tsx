@@ -103,7 +103,7 @@ function CatalogRow({ entry, installing, isFirst, onInstall }: CatalogRowProps) 
       </View>
       <Button
         size="sm"
-        variant="default"
+        variant="outline"
         disabled={installing}
         loading={installing}
         onPress={handleInstall}

@@ -1707,18 +1707,12 @@ export const en = {
       cancel: "Cancel",
       installInstructions: "Install instructions",
       installInstructionsFor: "{{provider}} install instructions",
-      open: "Open {{name}}",
     },
     errors: {
       unableToInstall: "Unable to install provider",
     },
     groups: {
-      notEnabled: "Not enabled",
       acpCatalog: "ACP catalog",
-    },
-    marks: {
-      turnedOff: "Turned off",
-      notInstalled: "Not installed",
     },
   },
   providerSelection: {
@@ -2929,13 +2923,16 @@ export const en = {
       },
     },
     providers: {
-      title: "Providers",
       addProvider: "Add provider",
       providerDetails: "{{name}} provider details",
       enableProvider: "Enable {{name}}",
       unavailable: "Connect to this host to see providers",
       loading: "Loading...",
-      empty: "No providers in use. Press + to add one.",
+      empty: "No providers enabled. Turn one on under Disabled, or press + to add one.",
+      groups: {
+        enabled: "Enabled",
+        disabled: "Disabled",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "{{name}} can't start",
       actions: {
@@ -2951,6 +2948,7 @@ export const en = {
       },
       statuses: {
         disabled: "Disabled",
+        disabledUntilEnabled: "Disabled · Enable to check if it's installed",
         loading: "Loading",
         error: "Error",
         available: "Available",

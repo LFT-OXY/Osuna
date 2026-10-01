@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -8,6 +8,7 @@ import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { useReduceMotionEnabled } from "@/hooks/use-reduce-motion-enabled";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
 import { resolveProviderGlyph } from "@/components/provider-icons";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { ProviderUpgradeButton, ProviderUpgradeFailure } from "@/provider-detail
 import { useProviderVersionCheck } from "@/provider-detail/use-version-check";
 import { selectNewerVersion } from "@/provider-detail/version-check";
 import { ProviderCatalogDialog } from "./provider-catalog-dialog";
-import { resolveProviderPlacement } from "./provider-placement";
+import { groupProvidersByEnabled } from "./provider-placement";
 import { ProviderStatusLine } from "./provider-status-line";
 import { ChevronRight, Plus } from "lucide-react-native";
 
@@ -38,6 +39,8 @@ interface ProviderRowProps {
   latestVersion: string | undefined;
   enabled: boolean;
   isToggling: boolean;
+  // 开关后刚移到这一组，背景短暂高亮。
+  isHighlighted: boolean;
   isFirst: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
@@ -56,6 +59,7 @@ function ProviderRow({
   latestVersion,
   enabled,
   isToggling,
+  isHighlighted,
   isFirst,
   onPress,
   onToggleEnabled,
@@ -84,10 +88,11 @@ function ProviderRow({
   const rowStyle = useCallback(
     ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [
       settingsStyles.row,
+      isHighlighted && styles.rowHighlighted,
       hovered && styles.rowHovered,
       pressed && styles.rowPressed,
     ],
-    [],
+    [isHighlighted],
   );
 
   // 升级失败的输出挂在这一行下面，分隔线放在行和失败块的外层。
@@ -103,9 +108,15 @@ function ProviderRow({
         {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
           <>
             <View style={styles.rowContent}>
-              <ProviderIconFrame glyph={glyph} size="sm" />
+              {/* 已停用是状态不是禁用：只把图标调淡、标题调灰，开关和整行照常可点。 */}
+              <View style={enabled ? null : styles.disabledIcon}>
+                <ProviderIconFrame glyph={glyph} size="sm" />
+              </View>
               <View style={settingsStyles.rowContent}>
-                <Text style={settingsStyles.rowTitle} numberOfLines={1}>
+                <Text
+                  style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}
+                  numberOfLines={1}
+                >
                   {def.label}
                 </Text>
                 <ProviderStatusLine
@@ -159,6 +170,101 @@ export interface ProvidersSectionProps {
   onSelectProvider: (providerId: string) => void;
 }
 
+// 开关后移到另一组的那一行，背景高亮的时长。
+const MOVED_ROW_HIGHLIGHT_MS = 1500;
+
+interface MovedProvider {
+  providerId: string;
+  enabled: boolean;
+}
+
+interface ToggleState {
+  pendingProviderId: string | null;
+  // 开关失败的原因，留在"已启用"卡片顶部直到关闭或下一次开关。
+  error: string | null;
+  // 开关写入成功的那一项；快照把它移到另一组后高亮一下，不提前移动。
+  moved: MovedProvider | null;
+}
+
+type ToggleAction =
+  | { type: "started"; providerId: string }
+  | { type: "succeeded"; moved: MovedProvider }
+  | { type: "failed"; providerId: string; message: string }
+  | { type: "errorDismissed" }
+  | { type: "highlightEnded" };
+
+const IDLE_TOGGLE: ToggleState = { pendingProviderId: null, error: null, moved: null };
+
+function settlePending(state: ToggleState, providerId: string): string | null {
+  return state.pendingProviderId === providerId ? null : state.pendingProviderId;
+}
+
+function toggleReducer(state: ToggleState, action: ToggleAction): ToggleState {
+  switch (action.type) {
+    case "started":
+      return { pendingProviderId: action.providerId, error: null, moved: null };
+    case "succeeded":
+      return {
+        ...state,
+        pendingProviderId: settlePending(state, action.moved.providerId),
+        moved: action.moved,
+      };
+    case "failed":
+      return {
+        ...state,
+        pendingProviderId: settlePending(state, action.providerId),
+        error: action.message,
+      };
+    case "errorDismissed":
+      return { ...state, error: null };
+    case "highlightEnded":
+      return { ...state, moved: null };
+  }
+}
+
+// 列表行的开关：写入 enabled，失败留下原因，成功后等快照把这一行移到另一组再短暂高亮；
+// 系统要求减少动态效果时不高亮。
+function useProviderToggle(serverId: string, entries: ProviderEntry[] | undefined) {
+  const { patchConfig } = useDaemonConfig(serverId);
+  const reduceMotion = useReduceMotionEnabled();
+  const [state, dispatch] = useReducer(toggleReducer, IDLE_TOGGLE);
+  const { moved } = state;
+  const hasMovedRowArrived =
+    moved !== null &&
+    (entries?.some(
+      (entry) => entry.provider === moved.providerId && entry.enabled === moved.enabled,
+    ) ??
+      false);
+  useEffect(() => {
+    if (!hasMovedRowArrived) return;
+    const timer = setTimeout(() => dispatch({ type: "highlightEnded" }), MOVED_ROW_HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [hasMovedRowArrived]);
+
+  const toggle = useCallback(
+    async (providerId: string, enabled: boolean) => {
+      dispatch({ type: "started", providerId });
+      try {
+        await patchConfig({ providers: { [providerId]: { enabled } } });
+        dispatch({ type: "succeeded", moved: { providerId, enabled } });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        dispatch({ type: "failed", providerId, message });
+      }
+    },
+    [patchConfig],
+  );
+  const dismissError = useCallback(() => dispatch({ type: "errorDismissed" }), []);
+
+  return {
+    pendingProviderId: state.pendingProviderId,
+    error: state.error,
+    highlightedProviderId: moved && hasMovedRowArrived && !reduceMotion ? moved.providerId : null,
+    toggle,
+    dismissError,
+  };
+}
+
 export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectionProps) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
@@ -169,38 +275,25 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
   const { results: versionCheckResults } = useProviderVersionCheck(serverId, {
     checkOnMount: false,
   });
-  const { patchConfig } = useDaemonConfig(serverId);
-  const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
-  // 开关失败的原因，留在列表卡片顶部直到关闭或下一次开关。
-  const [toggleError, setToggleError] = useState<string | null>(null);
+  const {
+    pendingProviderId,
+    error: toggleError,
+    highlightedProviderId,
+    toggle: handleToggleEnabled,
+    dismissError: handleDismissToggleError,
+  } = useProviderToggle(serverId, entries);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
-  // 只列在用的提供方；其余在「添加提供方」的"未启用"组里。
-  const listedEntries = useMemo(
-    () => entries?.filter((entry) => resolveProviderPlacement(entry).kind === "list"),
-    [entries],
+  const groups = useMemo(() => groupProvidersByEnabled(entries ?? []), [entries]);
+  const enabledDefinitions = useMemo(
+    () => buildProviderDefinitions(groups.enabled),
+    [groups.enabled],
   );
-  const providerDefinitions = useMemo(
-    () => buildProviderDefinitions(listedEntries),
-    [listedEntries],
+  const disabledDefinitions = useMemo(
+    () => buildProviderDefinitions(groups.disabled),
+    [groups.disabled],
   );
   const hasServer = serverId.length > 0;
-
-  const handleToggleEnabled = useCallback(
-    async (providerId: string, enabled: boolean) => {
-      setPendingProviderId(providerId);
-      setToggleError(null);
-      try {
-        await patchConfig({ providers: { [providerId]: { enabled } } });
-      } catch (error) {
-        setToggleError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setPendingProviderId((current) => (current === providerId ? null : current));
-      }
-    },
-    [patchConfig],
-  );
-  const handleDismissToggleError = useCallback(() => setToggleError(null), []);
 
   const handleOpenCatalog = useCallback(() => setIsCatalogOpen(true), []);
   const handleCloseCatalog = useCallback(() => setIsCatalogOpen(false), []);
@@ -214,7 +307,7 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
 
   const canAddProvider = hasServer && isConnected;
   const isListLoaded = canAddProvider && !isLoading;
-  // 错误行占了卡片第一行，下面的提供方行都要带分隔线。
+  // 错误行占了"已启用"卡片第一行，下面的行都要带分隔线。
   const hasErrorRowAbove = toggleError !== null;
   const addProviderButton = useMemo(
     () =>
@@ -231,30 +324,59 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
     [canAddProvider, handleOpenCatalog, t],
   );
 
+  // hasRowAbove：卡片里这一组上面还有一行（开关失败的错误行），第一行也要带分隔线。
+  function renderRows(
+    definitions: ProviderDefinition[],
+    groupEntries: ProviderEntry[],
+    hasRowAbove: boolean,
+  ) {
+    return definitions.map((def, index) => {
+      const entry = groupEntries.find((candidate) => candidate.provider === def.id);
+      if (!entry) return null;
+      const version = hostSupportsProviderVersions ? entry.version : undefined;
+      const latestVersion = selectNewerVersion({
+        provider: def.id,
+        installedVersion: version,
+        results: versionCheckResults,
+      });
+      return (
+        <ProviderRow
+          key={def.id}
+          serverId={serverId}
+          def={def}
+          entry={entry}
+          version={version}
+          latestVersion={latestVersion ?? undefined}
+          enabled={entry.enabled}
+          isToggling={pendingProviderId === def.id}
+          isHighlighted={highlightedProviderId === def.id}
+          isFirst={index === 0 && !hasRowAbove}
+          onPress={onSelectProvider}
+          onToggleEnabled={handleToggleEnabled}
+        />
+      );
+    });
+  }
+
   return (
-    <>
-      <SettingsSection
-        title={t("settings.providers.title")}
-        trailing={addProviderButton}
-        testID="host-page-providers-card"
-        style={styles.sectionSpacing}
-      >
-        {!hasServer || !isConnected ? (
-          <View style={[settingsStyles.card, styles.emptyCard]}>
-            <Text style={styles.emptyText}>{t("settings.providers.unavailable")}</Text>
-          </View>
-        ) : null}
-        {hasServer && isConnected && isLoading ? (
-          <View style={[settingsStyles.card, styles.emptyCard]}>
-            <Text style={styles.emptyText}>{t("settings.providers.loading")}</Text>
-          </View>
-        ) : null}
-        {isListLoaded && providerDefinitions.length === 0 ? (
-          <View style={[settingsStyles.card, styles.emptyCard]} testID="providers-empty">
-            <Text style={styles.emptyText}>{t("settings.providers.empty")}</Text>
-          </View>
-        ) : null}
-        {isListLoaded && providerDefinitions.length > 0 ? (
+    <View testID="host-page-providers-card">
+      {!hasServer || !isConnected ? (
+        <View style={[settingsStyles.card, styles.emptyCard]}>
+          <Text style={styles.emptyText}>{t("settings.providers.unavailable")}</Text>
+        </View>
+      ) : null}
+      {hasServer && isConnected && isLoading ? (
+        <View style={[settingsStyles.card, styles.emptyCard]}>
+          <Text style={styles.emptyText}>{t("settings.providers.loading")}</Text>
+        </View>
+      ) : null}
+      {isListLoaded ? (
+        <SettingsSection
+          title={t("settings.providers.groups.enabled")}
+          count={groups.enabled.length}
+          trailing={addProviderButton}
+          testID="providers-enabled-group"
+        >
           <View style={settingsStyles.card}>
             {toggleError ? (
               <View style={settingsStyles.row} testID="providers-toggle-error">
@@ -271,34 +393,30 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
                 </Button>
               </View>
             ) : null}
-            {providerDefinitions.map((def, index) => {
-              const entry = listedEntries?.find((candidate) => candidate.provider === def.id);
-              if (!entry) return null;
-              const version = hostSupportsProviderVersions ? entry.version : undefined;
-              const latestVersion = selectNewerVersion({
-                provider: def.id,
-                installedVersion: version,
-                results: versionCheckResults,
-              });
-              return (
-                <ProviderRow
-                  key={def.id}
-                  serverId={serverId}
-                  def={def}
-                  entry={entry}
-                  version={version}
-                  latestVersion={latestVersion ?? undefined}
-                  enabled={entry.enabled ?? true}
-                  isToggling={pendingProviderId === def.id}
-                  isFirst={index === 0 && !hasErrorRowAbove}
-                  onPress={onSelectProvider}
-                  onToggleEnabled={handleToggleEnabled}
-                />
-              );
-            })}
+            {enabledDefinitions.length === 0 ? (
+              <View
+                style={[styles.emptyCard, hasErrorRowAbove && settingsStyles.rowBorder]}
+                testID="providers-empty"
+              >
+                <Text style={styles.emptyText}>{t("settings.providers.empty")}</Text>
+              </View>
+            ) : (
+              renderRows(enabledDefinitions, groups.enabled, hasErrorRowAbove)
+            )}
           </View>
-        ) : null}
-      </SettingsSection>
+        </SettingsSection>
+      ) : null}
+      {isListLoaded && disabledDefinitions.length > 0 ? (
+        <SettingsSection
+          title={t("settings.providers.groups.disabled")}
+          count={groups.disabled.length}
+          testID="providers-disabled-group"
+        >
+          <View style={settingsStyles.card}>
+            {renderRows(disabledDefinitions, groups.disabled, false)}
+          </View>
+        </SettingsSection>
+      ) : null}
 
       {canAddProvider ? (
         <ProviderCatalogDialog
@@ -308,14 +426,11 @@ export function ProvidersSection({ serverId, onSelectProvider }: ProvidersSectio
           onAdded={handleProviderAdded}
         />
       ) : null}
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  sectionSpacing: {
-    marginBottom: theme.spacing[4],
-  },
   emptyCard: {
     padding: theme.spacing[4],
     alignItems: "center",
@@ -323,6 +438,9 @@ const styles = StyleSheet.create((theme) => ({
   emptyText: {
     color: theme.colors.foregroundMuted,
     ...theme.typeScale.body,
+  },
+  rowHighlighted: {
+    backgroundColor: theme.colors.surface2,
   },
   rowHovered: {
     backgroundColor: theme.colors.surface2,
@@ -336,6 +454,12 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[3],
+  },
+  disabledIcon: {
+    opacity: theme.opacity[50],
+  },
+  disabledTitle: {
+    color: theme.colors.foregroundMuted,
   },
   toggleError: {
     flex: 1,

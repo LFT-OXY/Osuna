@@ -20,7 +20,7 @@ const WIDE_VIEWPORT = { width: 1280, height: 800 };
 const NARROW_DESKTOP_VIEWPORT = { width: 900, height: 800 };
 const PHONE_VIEWPORT = { width: 390, height: 844 };
 
-// 列表只放已启用且 CLI 已找到的提供方；e2e daemon 自带的只有 mock 一定就绪，再补一家。
+// 前两行取自"已启用"组，要能跑诊断；e2e daemon 自带的只有 mock 一定就绪，再补一家。
 let secondListedProvider: HostSeed | null = null;
 
 test.beforeEach(async () => {

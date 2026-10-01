@@ -67,6 +67,19 @@ const {
   upgradeProviderMock: vi.fn(),
 }));
 
+// 解析 Pressable 的样式里最终的背景色：目录"添加"按钮的变体、行的高亮都只体现在背景上。
+function resolveBackground(style: unknown): string | undefined {
+  const resolved = typeof style === "function" ? style({ pressed: false, hovered: false }) : style;
+  const layers = Array.isArray(resolved) ? resolved.flat(Number.POSITIVE_INFINITY) : [resolved];
+  let background: string | undefined;
+  for (const layer of layers) {
+    if (layer && typeof layer === "object" && "backgroundColor" in layer) {
+      background = String(layer.backgroundColor);
+    }
+  }
+  return background;
+}
+
 vi.mock("react-native", () => ({
   Platform: {
     OS: "web",
@@ -99,10 +112,12 @@ vi.mock("react-native", () => ({
     accessibilityLabel,
     disabled,
     testID,
+    style,
   }: {
     children?:
       | React.ReactNode
       | ((state: { pressed: boolean; hovered: boolean }) => React.ReactNode);
+    style?: unknown;
     onPress?: (event: React.MouseEvent) => void;
     onHoverIn?: () => void;
     onHoverOut?: () => void;
@@ -118,6 +133,7 @@ vi.mock("react-native", () => ({
         "aria-label": accessibilityLabel,
         "aria-disabled": disabled ? "true" : undefined,
         "data-testid": testID,
+        "data-background": resolveBackground(style),
         onClick: disabled ? undefined : onPress,
         onMouseEnter: onHoverIn,
         onMouseLeave: onHoverOut,
@@ -184,12 +200,13 @@ vi.mock("react-i18next", () => ({
           "providerCatalog.actions.add": "Add",
           "providerCatalog.actions.adding": "Adding",
           "providerCatalog.actions.installInstructions": "Install instructions",
-          "providerCatalog.actions.open": "Open {{name}}",
-          "providerCatalog.groups.notEnabled": "Not enabled",
           "providerCatalog.groups.acpCatalog": "ACP catalog",
-          "providerCatalog.marks.turnedOff": "Turned off",
-          "providerCatalog.marks.notInstalled": "Not installed",
-          "settings.providers.empty": "No providers in use. Press + to add one.",
+          "settings.providers.groups.enabled": "Enabled",
+          "settings.providers.groups.disabled": "Disabled",
+          "settings.providers.statuses.disabledUntilEnabled":
+            "Disabled · Enable to check if it's installed",
+          "settings.providers.empty":
+            "No providers enabled. Turn one on under Disabled, or press + to add one.",
           "common.actions.dismiss": "Dismiss",
           "settings.providers.upgrade.action": "Upgrade",
           "settings.providers.upgrade.actionLabel": "Upgrade {{name}}",
@@ -459,6 +476,7 @@ describe("ProvidersSection", () => {
     container?.remove();
     container = null;
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   function render(): void {
@@ -479,37 +497,85 @@ describe("ProvidersSection", () => {
     return row;
   }
 
-  function listedRowIds(): string[] {
+  function groupRowIds(group: "enabled" | "disabled"): string[] {
+    const section = container?.querySelector(`[data-testid="providers-${group}-group"]`);
     return Array.from(
-      container?.querySelectorAll<HTMLElement>('[data-testid^="provider-row-"]') ?? [],
+      section?.querySelectorAll<HTMLElement>('[data-testid^="provider-row-"]') ?? [],
     ).map((row) => row.getAttribute("data-testid")?.slice("provider-row-".length) ?? "");
   }
 
-  it("lists only enabled providers whose CLI was found, in snapshot order", () => {
+  function findGroup(group: "enabled" | "disabled"): HTMLElement | null {
+    return (
+      container?.querySelector<HTMLElement>(`[data-testid="providers-${group}-group"]`) ?? null
+    );
+  }
+
+  it("puts every enabled provider in Enabled and turned-off ones in Disabled, in snapshot order", () => {
     snapshotState.entries = [
       claudeEntry,
       disabledCodexEntry,
       notInstalledCustomClaudeEntry,
       { ...claudeEntry, provider: "opencode", label: "OpenCode", status: "loading" },
       { ...claudeEntry, provider: "pi", label: "Pi", status: "error", error: "boom" },
+      {
+        ...claudeEntry,
+        provider: "copilot",
+        label: "Copilot",
+        enabled: false,
+        status: "unavailable",
+      },
     ];
-    configState.config = makeConfig({ codex: { enabled: false } });
+    configState.config = makeConfig({ codex: { enabled: false }, copilot: { enabled: false } });
 
     render();
 
-    expect(listedRowIds()).toEqual(["claude", "opencode", "pi"]);
-    expect(findRow("OpenCode provider details").textContent).toContain("OpenCode");
+    expect(groupRowIds("enabled")).toEqual(["claude", "work-claude", "opencode", "pi"]);
+    expect(groupRowIds("disabled")).toEqual(["codex", "copilot"]);
+    expect(findGroup("enabled")?.textContent).toContain("Enabled4");
+    expect(findGroup("disabled")?.textContent).toContain("Disabled2");
+    expect(findRow("Work Claude provider details").textContent).toContain("Not installed");
   });
 
-  it("points to + when no provider is in use", () => {
-    snapshotState.entries = [disabledCodexEntry, notInstalledCustomClaudeEntry];
+  it("shows the empty hint in Enabled, with + in its header, when every provider is turned off", () => {
+    snapshotState.entries = [disabledCodexEntry];
     configState.config = makeConfig({ codex: { enabled: false } });
 
     render();
 
-    expect(listedRowIds()).toEqual([]);
-    expect(container?.textContent).toContain("No providers in use. Press + to add one.");
-    expect(container?.querySelector('[role="button"][aria-label="Add provider"]')).not.toBeNull();
+    expect(groupRowIds("enabled")).toEqual([]);
+    expect(findGroup("enabled")?.textContent).toContain(
+      "No providers enabled. Turn one on under Disabled, or press + to add one.",
+    );
+    expect(
+      findGroup("enabled")?.querySelector('[role="button"][aria-label="Add provider"]'),
+    ).not.toBeNull();
+    expect(groupRowIds("disabled")).toEqual(["codex"]);
+  });
+
+  it("hides the Disabled group, title included, when every provider is enabled", () => {
+    snapshotState.entries = [claudeEntry, notInstalledCodexEntry];
+    configState.config = makeConfig();
+
+    render();
+
+    expect(findGroup("disabled")).toBeNull();
+    expect(container?.textContent).not.toContain("Disabled");
+  });
+
+  it("marks a turned-off row as disabled without claiming it is not installed", () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render();
+
+    const row = findRow("Codex provider details");
+    expect(
+      indexOfText(descendants(row), "Disabled · Enable to check if it's installed"),
+    ).toBeGreaterThan(-1);
+    expect(row.textContent).not.toContain("Not installed");
+    expect(row.querySelector('[data-testid="provider-status-dot-muted"]')).not.toBeNull();
+    expect(row.querySelector('[role="switch"]')?.getAttribute("aria-checked")).toBe("false");
+    expect(row.querySelector('[data-icon="ChevronRight"]')).not.toBeNull();
   });
 
   it("composes the row as brand icon, label, status line, switch, then chevron", () => {
@@ -775,6 +841,22 @@ describe("ProvidersSection", () => {
     expect(row.textContent).not.toContain("v2.1.280");
   });
 
+  it("only selects a turned-off provider when its row is pressed, writing no config", () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render();
+
+    act(() => {
+      findRow("Codex provider details").dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(selectProviderMock).toHaveBeenCalledWith("codex");
+    expect(patchConfigMock).not.toHaveBeenCalled();
+  });
+
   it("selects the provider when its row is pressed", () => {
     snapshotState.entries = [
       claudeEntry,
@@ -908,6 +990,63 @@ describe("ProvidersSection", () => {
     expect(patchConfigMock).toHaveBeenCalledWith({
       providers: { claude: { enabled: false } },
     });
+  });
+
+  async function pressSwitch(rowLabel: string): Promise<void> {
+    const switchEl = findRow(rowLabel).querySelector<HTMLElement>('[role="switch"]');
+    if (!switchEl) throw new Error(`Expected a switch on ${rowLabel}`);
+    await act(async () => {
+      switchEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+  }
+
+  function rowBackground(rowLabel: string): string | null {
+    return findRow(rowLabel).getAttribute("data-background");
+  }
+
+  it("turns a provider on from Disabled and moves it to Enabled once the snapshot says so", async () => {
+    vi.useFakeTimers();
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+
+    render();
+    await pressSwitch("Codex provider details");
+
+    expect(patchConfigMock).toHaveBeenCalledWith({ providers: { codex: { enabled: true } } });
+    expect(selectProviderMock).not.toHaveBeenCalled();
+    // 不做乐观更新：快照没变之前这一行留在原组。
+    expect(groupRowIds("disabled")).toEqual(["codex"]);
+
+    // daemon 随后推来启用后的快照，开始探测。
+    snapshotState.entries = [
+      claudeEntry,
+      { ...disabledCodexEntry, enabled: true, status: "loading" },
+    ];
+    render();
+
+    expect(groupRowIds("enabled")).toEqual(["claude", "codex"]);
+    expect(findGroup("disabled")).toBeNull();
+    expect(rowBackground("Codex provider details")).toBe(theme.colors.surface2);
+    expect(rowBackground("Claude provider details")).not.toBe(theme.colors.surface2);
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(rowBackground("Codex provider details")).not.toBe(theme.colors.surface2);
+  });
+
+  it("keeps a row in Disabled and shows the error on the Enabled card when turning it on fails", async () => {
+    snapshotState.entries = [claudeEntry, disabledCodexEntry];
+    configState.config = makeConfig({ codex: { enabled: false } });
+    patchConfigMock.mockRejectedValueOnce(new Error("config.json is read-only"));
+
+    render();
+    await pressSwitch("Codex provider details");
+
+    expect(
+      findGroup("enabled")?.querySelector('[data-testid="providers-toggle-error"]')?.textContent,
+    ).toContain("config.json is read-only");
+    expect(groupRowIds("disabled")).toEqual(["codex"]);
   });
 
   function findCatalogDialog(): HTMLElement | null {
@@ -1102,33 +1241,7 @@ describe("ProvidersSection", () => {
     expect(findCatalogAddButton(minimax.id)?.textContent).not.toContain("Adding");
   });
 
-  function searchCatalog(value: string): void {
-    const search = requireCatalogDialog().querySelector<HTMLInputElement>(
-      'input[aria-label="Search providers"]',
-    );
-    if (!search) throw new Error("Expected the search field in the dialog header");
-    act(() => {
-      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setValue?.call(search, value);
-      search.dispatchEvent(new window.Event("input", { bubbles: true }));
-    });
-  }
-
-  function findNotEnabledItem(providerId: string): HTMLElement | null {
-    return (
-      findCatalogDialog()?.querySelector<HTMLElement>(
-        `[data-testid="enable-provider-${providerId}"]`,
-      ) ?? null
-    );
-  }
-
-  function requireNotEnabledItem(providerId: string): HTMLElement {
-    const item = findNotEnabledItem(providerId);
-    if (!item) throw new Error(`Expected ${providerId} in the Not enabled group`);
-    return item;
-  }
-
-  it("lists turned-off and not-installed providers above the ACP catalog", () => {
+  it("holds only the ACP catalog, with outline Add buttons", () => {
     snapshotState.entries = [claudeEntry, disabledCodexEntry, notInstalledCustomClaudeEntry];
     configState.config = makeConfig({
       codex: { enabled: false },
@@ -1138,33 +1251,18 @@ describe("ProvidersSection", () => {
     render();
     const dialog = openCatalogDialog();
 
-    const nodes = descendants(dialog);
-    const notEnabledHeading = indexOfText(nodes, "Not enabled");
-    const catalogHeading = indexOfText(nodes, "ACP catalog");
-    const codexItem = indexOfMatches(nodes, '[data-testid="enable-provider-codex"]');
-    const catalogItem = indexOfMatches(nodes, `[data-testid="install-provider-${minimax.id}"]`);
-    expect(notEnabledHeading).toBeGreaterThanOrEqual(0);
-    expect(codexItem).toBeGreaterThan(notEnabledHeading);
-    expect(catalogHeading).toBeGreaterThan(codexItem);
-    expect(catalogItem).toBeGreaterThan(catalogHeading);
-
-    expect(findNotEnabledItem("claude")).toBeNull();
-    expect(requireNotEnabledItem("codex").textContent).toContain("Turned off");
-    expect(requireNotEnabledItem("work-claude").textContent).toContain("Not installed");
-  });
-
-  it("hides the Not enabled group when every provider is in use", () => {
-    snapshotState.entries = [claudeEntry];
-    configState.config = makeConfig();
-
-    render();
-    const dialog = openCatalogDialog();
-
-    expect(indexOfText(descendants(dialog), "Not enabled")).toBe(-1);
     expect(indexOfText(descendants(dialog), "ACP catalog")).toBeGreaterThanOrEqual(0);
+    // 停用的 Codex 和没装的 Work Claude 都留在 Providers 页，弹窗里没有它们。
+    expect(indexOfText(descendants(dialog), "Codex")).toBe(-1);
+    expect(dialog.textContent).not.toContain("Work Claude");
+    expect(dialog.textContent).not.toContain("Not enabled");
+    expect(dialog.textContent).not.toContain("Not installed");
+    expect(dialog.querySelector('[role="switch"]')).toBeNull();
+    // outline 是透明底；实心 accent 留给页面上唯一的主按钮。
+    expect(findCatalogAddButton(minimax.id)?.getAttribute("data-background")).toBe("transparent");
   });
 
-  it("moves a provider turned off in the list to Not enabled without deleting its config", async () => {
+  it("moves an ACP provider turned off in the list to Disabled without deleting its config", async () => {
     const acpProvider: ProviderSnapshotEntry = {
       ...claudeEntry,
       provider: minimax.id,
@@ -1175,13 +1273,9 @@ describe("ProvidersSection", () => {
     configState.config = makeConfig();
 
     render();
-    const switchEl = findRow(`${minimax.title} provider details`).querySelector<HTMLElement>(
-      '[role="switch"]',
-    );
-    await act(async () => {
-      switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    });
+    await pressSwitch(`${minimax.title} provider details`);
 
+    expect(patchConfigMock).toHaveBeenCalledTimes(1);
     expect(patchConfigMock).toHaveBeenCalledWith({
       providers: { [minimax.id]: { enabled: false } },
     });
@@ -1193,74 +1287,10 @@ describe("ProvidersSection", () => {
     ];
     render();
 
-    expect(listedRowIds()).toEqual(["claude"]);
+    expect(groupRowIds("enabled")).toEqual(["claude"]);
+    expect(groupRowIds("disabled")).toEqual([minimax.id]);
     openCatalogDialog();
-    expect(requireNotEnabledItem(minimax.id).textContent).toContain("Turned off");
     // 目录里不再重复出现同一个提供方。
-    expect(findCatalogAddButton(minimax.id)).toBeNull();
-  });
-
-  it("turns a turned-off provider on and opens its details", async () => {
-    snapshotState.entries = [claudeEntry, disabledCodexEntry];
-    configState.config = makeConfig({ codex: { enabled: false } });
-    const resolvePatch = deferPatch();
-
-    render();
-    openCatalogDialog();
-    await act(async () => click(requireNotEnabledItem("codex")));
-
-    expect(patchConfigMock).toHaveBeenCalledWith({ providers: { codex: { enabled: true } } });
-    expect(selectProviderMock).not.toHaveBeenCalled();
-
-    await resolvePatch();
-
-    expect(findCatalogDialog()).toBeNull();
-    expect(selectProviderMock).toHaveBeenCalledTimes(1);
-    expect(selectProviderMock).toHaveBeenCalledWith("codex");
-  });
-
-  it("opens a not-installed provider's details without writing config", async () => {
-    snapshotState.entries = [claudeEntry, notInstalledCodexEntry];
-    configState.config = makeConfig();
-
-    render();
-    openCatalogDialog();
-    await act(async () => click(requireNotEnabledItem("codex")));
-
-    expect(patchConfigMock).not.toHaveBeenCalled();
-    expect(findCatalogDialog()).toBeNull();
-    expect(selectProviderMock).toHaveBeenCalledWith("codex");
-  });
-
-  // 真实 daemon 无法稳定造出配置写入失败，失败路径只在这里覆盖（docs/testing.md）。
-  it("keeps the dialog open with a visible error when turning a provider on fails", async () => {
-    snapshotState.entries = [claudeEntry, disabledCodexEntry];
-    configState.config = makeConfig({ codex: { enabled: false } });
-    patchConfigMock.mockRejectedValueOnce(new Error("config.json is read-only"));
-
-    render();
-    openCatalogDialog();
-    await act(async () => click(requireNotEnabledItem("codex")));
-
-    const dialogText = requireCatalogDialog().textContent;
-    expect(dialogText).toContain("Unable to add provider");
-    expect(dialogText).toContain("config.json is read-only");
-    expect(selectProviderMock).not.toHaveBeenCalled();
-  });
-
-  it("filters both groups with the dialog header search", () => {
-    snapshotState.entries = [claudeEntry, disabledCodexEntry];
-    configState.config = makeConfig({ codex: { enabled: false } });
-
-    render();
-    openCatalogDialog();
-
-    searchCatalog("MiniMax Code");
-    expect(findNotEnabledItem("codex")).toBeNull();
-    expect(findCatalogAddButton(minimax.id)).not.toBeNull();
-
-    searchCatalog("codex");
-    expect(findNotEnabledItem("codex")).not.toBeNull();
     expect(findCatalogAddButton(minimax.id)).toBeNull();
   });
 });

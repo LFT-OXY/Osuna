@@ -9,7 +9,7 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-// Providers 列表行与「添加提供方」弹窗行名称下面的一行：状态点加文字，列表行已装的内置提供方再接版本号，
+// Providers 列表行名称下面的一行：状态点加文字，列表行已装的内置提供方再接版本号，
 // 有新版本时接成"v{当前} → v{最新}"。
 export function ProviderStatusLine({
   status,

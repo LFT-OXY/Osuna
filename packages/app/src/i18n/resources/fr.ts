@@ -1737,18 +1737,12 @@ export const fr: TranslationResources = {
       cancel: "Annuler",
       installInstructions: "Instructions d'installation",
       installInstructionsFor: "Instructions d'installation{{provider}}",
-      open: "Ouvrir {{name}}",
     },
     errors: {
       unableToInstall: "Impossible d'installer le fournisseur",
     },
     groups: {
-      notEnabled: "Non activés",
       acpCatalog: "Catalogue ACP",
-    },
-    marks: {
-      turnedOff: "Désactivé",
-      notInstalled: "Non installé",
     },
   },
   providerSelection: {
@@ -2882,13 +2876,17 @@ export const fr: TranslationResources = {
       },
     },
     providers: {
-      title: "Fournisseurs",
       addProvider: "Ajouter un fournisseur",
       providerDetails: "Détails du fournisseur{{name}}",
       enableProvider: "Activer{{name}}",
       unavailable: "Connectez-vous à cet hôte pour voir les fournisseurs",
       loading: "Chargement...",
-      empty: "Aucun fournisseur en service. Appuyez sur + pour en ajouter un.",
+      empty:
+        "Aucun fournisseur activé. Activez-en un dans Désactivés, ou appuyez sur + pour en ajouter un.",
+      groups: {
+        enabled: "Activés",
+        disabled: "Désactivés",
+      },
       addErrorTitle: "Unable to add provider",
       startErrorTitle: "Impossible de démarrer {{name}}",
       actions: {
@@ -2904,6 +2902,7 @@ export const fr: TranslationResources = {
       },
       statuses: {
         disabled: "Désactivé",
+        disabledUntilEnabled: "Désactivé · Activez-le pour vérifier s'il est installé",
         loading: "Chargement",
         error: "Erreur",
         available: "Disponible",

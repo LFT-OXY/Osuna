@@ -1716,18 +1716,12 @@ export const ptBR: TranslationResources = {
       cancel: "Cancelar",
       installInstructions: "Instruções de instalação",
       installInstructionsFor: "Instruções de instalação de {{provider}}",
-      open: "Abrir {{name}}",
     },
     errors: {
       unableToInstall: "Não foi possível instalar provedor",
     },
     groups: {
-      notEnabled: "Não ativados",
       acpCatalog: "Catálogo ACP",
-    },
-    marks: {
-      turnedOff: "Desativado",
-      notInstalled: "Não instalado",
     },
   },
   providerSelection: {
@@ -2854,13 +2848,16 @@ export const ptBR: TranslationResources = {
       },
     },
     providers: {
-      title: "Provedores",
       addProvider: "Adicionar provedor",
       providerDetails: "Detalhes do provedor {{name}}",
       enableProvider: "Ativar {{name}}",
       unavailable: "Conecte-se a este host para ver provedores",
       loading: "Carregando...",
-      empty: "Nenhum provedor em uso. Toque em + para adicionar um.",
+      empty: "Nenhum provedor ativado. Ative um em Desativados ou toque em + para adicionar um.",
+      groups: {
+        enabled: "Ativados",
+        disabled: "Desativados",
+      },
       addErrorTitle: "Não foi possível adicionar provedor",
       startErrorTitle: "{{name}} não consegue iniciar",
       actions: {
@@ -2876,6 +2873,7 @@ export const ptBR: TranslationResources = {
       },
       statuses: {
         disabled: "Desativado",
+        disabledUntilEnabled: "Desativado · Ative para verificar se está instalado",
         loading: "Carregando",
         error: "Erro",
         available: "Disponível",

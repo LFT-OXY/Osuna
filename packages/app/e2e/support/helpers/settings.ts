@@ -354,9 +354,17 @@ export function providerRow(page: Page, provider: string) {
   return page.getByTestId(`provider-row-${provider}`).filter({ visible: true });
 }
 
+// "已启用"组的行；停用的提供方 daemon 不探测，详情页也没有诊断等区块。
+function enabledProviderRows(page: Page) {
+  return page
+    .getByTestId("providers-enabled-group")
+    .locator('[data-testid^="provider-row-"]')
+    .filter({ visible: true });
+}
+
 export async function readProviderRowIds(page: Page): Promise<string[]> {
-  await expect(providerRows(page).first()).toBeVisible();
-  const testIds = await providerRows(page).evaluateAll((rows) =>
+  await expect(enabledProviderRows(page).first()).toBeVisible();
+  const testIds = await enabledProviderRows(page).evaluateAll((rows) =>
     rows.map((row) => row.getAttribute("data-testid") ?? ""),
   );
   return testIds.map((testId) => testId.slice("provider-row-".length));
@@ -425,12 +433,16 @@ export async function installAcpCatalogProvider(page: Page, providerName: string
   await expect(providerCatalogDialog(page)).toHaveCount(0);
 }
 
+// 刚添加的提供方是启用的，不论 CLI 装没装都在"已启用"组。
 export async function expectProviderInstalledInSettings(
   page: Page,
   providerName: string,
 ): Promise<void> {
   await expect(
-    page.getByRole("button", { name: `${providerName} provider details`, exact: true }),
+    page
+      .getByTestId("providers-enabled-group")
+      .filter({ visible: true })
+      .getByRole("button", { name: `${providerName} provider details`, exact: true }),
   ).toBeVisible();
 }
 

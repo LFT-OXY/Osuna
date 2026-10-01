@@ -12,10 +12,10 @@ const READY: ProviderStatusLineInput = {
 describe("resolveProviderStatusLine", () => {
   it.each([
     [
-      "disabled wins over every other state",
-      { ...READY, enabled: false, status: "error" },
+      "disabled wins over every other state, without guessing whether it is installed",
+      { ...READY, enabled: false, status: "unavailable" },
       "muted",
-      "Disabled",
+      "Disabled · Enable to check if it's installed",
     ],
     ["loading", { ...READY, status: "loading" }, "loading", "Loading"],
     ["error", { ...READY, status: "error" }, "danger", "Error"],
