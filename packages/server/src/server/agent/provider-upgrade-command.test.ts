@@ -52,6 +52,63 @@ describe("resolveProviderUpgradeCommand", () => {
     ).toEqual({ kind: "run", command: "/usr/local/bin/claude", args: ["update"] });
   });
 
+  test.each([
+    [
+      "/opt/homebrew/Caskroom/claude-code@latest/2.1.280/claude",
+      "/opt/homebrew/bin/brew",
+      "claude-code@latest",
+    ],
+    ["/usr/local/Caskroom/claude-code/2.1.280/claude", "/usr/local/bin/brew", "claude-code"],
+  ])(
+    "upgrades the Claude Code Homebrew cask instead of running `claude update` (%s)",
+    (realPath, brew, cask) => {
+      // `claude update` 对 Homebrew 装的版本只打印"由包管理器管理"然后正常退出。
+      expect(
+        resolveProviderUpgradeCommand({
+          provider: "claude",
+          launch: { executable: "/opt/homebrew/bin/claude", args: [], source: "default" },
+          executableRealPath: realPath,
+          platform: "darwin",
+        }),
+      ).toEqual({ kind: "run", command: brew, args: ["upgrade", "--cask", cask] });
+    },
+  );
+
+  test.each<[string, NodeJS.Platform, string]>([
+    ["off macOS", "linux", "/usr/local/Caskroom/claude-code/2.1.280/claude"],
+    ["outside the Caskroom", "darwin", "/Users/me/.local/share/claude/versions/2.1.280"],
+    ["under another cask", "darwin", "/opt/homebrew/Caskroom/claude-code-beta/2.1.280/claude"],
+  ])("keeps running `claude update` %s", (_name, platform, realPath) => {
+    expect(
+      resolveProviderUpgradeCommand({
+        provider: "claude",
+        launch: { executable: "/usr/local/bin/claude", args: [], source: "default" },
+        executableRealPath: realPath,
+        platform,
+      }),
+    ).toEqual({ kind: "run", command: "/usr/local/bin/claude", args: ["update"] });
+  });
+
+  test("keeps running `claude update` when a replaced command starts claude through an interpreter", () => {
+    // 真实路径是解释器本身，不在 Caskroom 下。
+    expect(
+      resolveProviderUpgradeCommand({
+        provider: "claude",
+        launch: {
+          executable: "/opt/homebrew/bin/node",
+          args: ["/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js"],
+          source: "override",
+        },
+        executableRealPath: "/opt/homebrew/Cellar/node/22.12.0/bin/node",
+        platform: "darwin",
+      }),
+    ).toEqual({
+      kind: "run",
+      command: "/opt/homebrew/bin/node",
+      args: ["/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js", "update"],
+    });
+  });
+
   test.each(["work-claude", "minimax-code"])("has no upgrade command for %s", (provider) => {
     const expected: ProviderUpgradeCommand = { kind: "unsupported" };
     expect(

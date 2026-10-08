@@ -1014,7 +1014,7 @@ this.providerVersionCheckService = new ProviderVersionCheckService({
 
 ## Scenario: a request that runs a command on the host
 
-Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade subcommand (`claude update`, `opencode upgrade`, …), or, for Codex, the official upgrade for the way it was installed.
+Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade subcommand (`claude update`, `opencode upgrade`, …), or, for Codex and a Homebrew-cask Claude Code, the official upgrade for the way it was installed.
 
 ### 1. Scope / Trigger
 
@@ -1046,6 +1046,8 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
   | anything else: Microsoft Store, bun / pnpm global dirs, the Homebrew formula (`Cellar/codex`), a binary placed by hand, Linux `/usr/local` | unknown | — |
 
   A Homebrew node keeps npm globals under `/opt/homebrew/lib/node_modules`: that path is npm, not Homebrew, which is why the Homebrew rule matches `Caskroom/codex` and not the bare prefix.
+- Homebrew cask rule, shared by Codex and Claude Code (`findHomebrewCask({ realPath, platform, caskNames })` → `{ prefix, cask } | null`): macOS only, prefix `/opt/homebrew` or `/usr/local`, real path starts with `<prefix>/Caskroom/<cask>/` for one of `caskNames`. Command: `<prefix>/bin/brew upgrade --cask <cask>` (absolute brew, the matched cask name).
+- Claude Code: `claude update` under a Homebrew cask prints "managed by Homebrew" and exits 0, so the service also passes the real path for `claude`. A match on `claude-code` or `claude-code@latest` runs that cask's brew upgrade; anything else (not macOS, outside the Caskroom, another cask name such as `claude-code-beta`, replace mode starting an interpreter whose real path is `node`) runs `claude update` with the usual replace/append argv handling. WinGet, apk and mise installs are not detected; they surface as `version_unchanged`.
 - One run per provider: the provider id is added to the running set before the first `await`; a second request gets `in_progress` with no `output`.
 - The executable is the provider's resolved one with its env. Replace-mode argv stays in front of the subcommand; append-mode args are dropped (a CLI reads a subcommand after session flags as a prompt).
 - stdin is ignored; stdout and stderr are appended in arrival order and clipped to the tail while streaming.
@@ -1068,12 +1070,13 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
 
 - Good: installed `2.1.280`, `claude update` writes `2.1.285` → `{ ok: true, version: "2.1.285" }`, the next check re-queries npm without `force`.
 - Base: the CLI prints `EACCES` to stderr and exits 1 → `command_failed` with both streams in order and `version` still `2.1.280`.
-- Base: `claude update` prints `Claude is managed by Homebrew…` and exits 0, version stays `2.1.280` → `version_unchanged` with that output; the App shows its own title over the output, and an older App shows "Upgrade failed" plus the raw `error`.
+- Base: `claude update` prints `Claude is managed by …` and exits 0 for an install nothing detects (WinGet, apk), version stays `2.1.280` → `version_unchanged` with that output; the App shows its own title over the output, and an older App shows "Upgrade failed" plus the raw `error`.
+- Good: Claude Code at `/opt/homebrew/Caskroom/claude-code@latest/2.1.280/claude` → runs `/opt/homebrew/bin/brew upgrade --cask claude-code@latest` (verified on a real install 2026-10-08, 2.1.280 → 2.1.293). Homebrew casks trail npm by hours; in that window the result is `version_unchanged`.
 - Bad: waiting on `close` — `claude update` exits but its background helper holds the pipe, the request never answers, and every later upgrade of that provider gets `in_progress` until the daemon restarts.
 
 ### 6. Tests Required
 
-- Unit `provider-upgrade-command.test.ts`: each provider's subcommand; replace argv kept; append args dropped; custom / ACP ids unsupported; every row of the Codex table (macOS / Linux / Windows standalone with `codexHome`, both Caskroom prefixes, npm under Homebrew node / official installer / nvm / Windows package and shim with the exact `prefix`, Store, bun, pnpm, formula, hand-placed, interpreter) and the exact command + `env` per method; tail clipping.
+- Unit `provider-upgrade-command.test.ts`: each provider's subcommand; replace argv kept; append args dropped; custom / ACP ids unsupported; Claude cask (`/opt/homebrew` + `claude-code@latest`, `/usr/local` + `claude-code`) → exact brew argv, and `claude update` off macOS, outside the Caskroom, under another cask, and for a replace-mode interpreter; every row of the Codex table (macOS / Linux / Windows standalone with `codexHome`, both Caskroom prefixes, npm under Homebrew node / official installer / nvm / Windows package and shim with the exact `prefix`, Store, bun, pnpm, formula, hand-placed, interpreter) and the exact command + `env` per method; tail clipping.
 - Daemon e2e `daemon-e2e/provider-upgrade.e2e.test.ts` with a fake `sh` CLI (version file + `update` branch): success updates the snapshot `version` and the exact argv; cached latest forgotten; raw output on failure; exit 0 with an unchanged version → `version_unchanged` with output and `version`; exit 0 with the version unreadable before, after, or both → `ok: true` (`test.each`); `in_progress` while a run holds a file lock; timeout with `upgradeTimeoutMs: 1000` keeps partial output; a background `sleep 30 &` does not hold the answer; custom providers `unsupported`.
 - Same e2e, Codex: `<tmp>/npm-prefix/bin/codex` symlinked to `lib/node_modules/@openai/codex/bin/codex.js`, a recording fake `npm` first on the provider env's `PATH` → argv is `install -g --prefix <realpath of the prefix> @openai/codex@latest` (assert on the argv, not `version`: the fake Codex has no app-server, so its entry is `error` and carries no version); a Codex outside every known layout → `install_method_unknown`, no `output`, npm never called.
 - `provider-registry.test.ts`: a wrapped profile still exposes `resolveCliLaunch`.

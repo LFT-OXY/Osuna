@@ -5,6 +5,7 @@ import type { ProviderCliLaunch } from "./provider-cli-version.js";
  * 内置提供方的升级命令：用提供方实际启动的可执行文件执行它自带的升级子命令。
  * 纯函数，新增提供方时在表里加一行。Codex 没有自带的升级命令，不在表里，
  * 按可执行文件的真实路径判断安装方式，再选对应的官方升级方式。
+ * Claude Code 的 `claude update` 对 Homebrew 装的版本只打印提示、正常退出，所以 cask 版改用 brew 升级。
  */
 
 const UPGRADE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
@@ -44,6 +45,8 @@ const CODEX_STANDALONE_WINDOWS_ARGS = [
   "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex",
 ];
 const HOMEBREW_PREFIXES = ["/opt/homebrew", "/usr/local"];
+// 官方文档写的是 claude-code，另有跟随最新版的 claude-code@latest。
+const CLAUDE_CASKS = ["claude-code", "claude-code@latest"];
 const STANDALONE_RELEASES_DIR = "/packages/standalone/releases/";
 
 export function hasProviderUpgradeCommand(provider: string): boolean {
@@ -82,13 +85,40 @@ export function detectCodexInstallMethod({
     const prefix = toNativePath({ forwardSlashPath: npmPrefix, isWindows });
     return { method: "npm", prefix };
   }
-  if (platform === "darwin") {
-    const prefix = HOMEBREW_PREFIXES.find((candidate) =>
-      comparablePath.startsWith(`${candidate}/Caskroom/codex/`),
-    );
-    if (prefix) return { method: "homebrew", prefix };
-  }
+  const cask = findHomebrewCask({ realPath, platform, caskNames: ["codex"] });
+  if (cask) return { method: "homebrew", prefix: cask.prefix };
   return { method: "unknown" };
+}
+
+/*
+ * Homebrew cask 只在 macOS 上认（Linux 上的 Homebrew 不在这两个前缀下），而且路径要落在
+ * <前缀>/Caskroom/<cask 名>/ 下面：手放进 bin 的和 formula 版都执行不了 `brew upgrade --cask`。
+ */
+function findHomebrewCask(input: {
+  realPath: string;
+  platform: NodeJS.Platform;
+  caskNames: readonly string[];
+}): { prefix: string; cask: string } | null {
+  if (input.platform !== "darwin") return null;
+  for (const prefix of HOMEBREW_PREFIXES) {
+    const cask = input.caskNames.find((name) =>
+      input.realPath.startsWith(`${prefix}/Caskroom/${name}/`),
+    );
+    if (cask) return { prefix, cask };
+  }
+  return null;
+}
+
+function homebrewCaskUpgradeCommand(input: {
+  prefix: string;
+  cask: string;
+}): ProviderUpgradeCommand {
+  // brew 总在它前缀的 bin 下；用绝对路径，不依赖 daemon 的 PATH。
+  return {
+    kind: "run",
+    command: `${input.prefix}/bin/brew`,
+    args: ["upgrade", "--cask", input.cask],
+  };
 }
 
 // Windows 路径统一成正斜杠；不分大小写，所以用小写的副本匹配，从原路径里截前缀。
@@ -144,12 +174,7 @@ function resolveCodexUpgradeCommand(input: {
       return { kind: "run", command, args: [...args], env: { CODEX_HOME: install.codexHome } };
     }
     case "homebrew":
-      // brew 总在它前缀的 bin 下；用绝对路径，不依赖 daemon 的 PATH。
-      return {
-        kind: "run",
-        command: `${install.prefix}/bin/brew`,
-        args: ["upgrade", "--cask", "codex"],
-      };
+      return homebrewCaskUpgradeCommand({ prefix: install.prefix, cask: "codex" });
     case "npm": {
       // PATH 上先找到的 npm 可能属于另一个 node（nvm、Homebrew），不指定前缀就会装进别处，留下第二份。
       const npmPackage = getAgentProviderDefinition("codex").npmPackage;
@@ -172,7 +197,7 @@ export function resolveProviderUpgradeCommand({
 }: {
   provider: string;
   launch: Pick<ProviderCliLaunch, "executable" | "args" | "source">;
-  // 可执行文件解析过符号链接的路径，只有 codex 用它判断安装方式。
+  // 可执行文件解析过符号链接的路径，codex 和 claude 用它判断安装方式。
   executableRealPath: string;
   platform: NodeJS.Platform;
 }): ProviderUpgradeCommand {
@@ -180,6 +205,15 @@ export function resolveProviderUpgradeCommand({
     return resolveCodexUpgradeCommand({ realPath: executableRealPath, platform });
   }
   if (!hasProviderUpgradeCommand(provider)) return { kind: "unsupported" };
+  if (provider === "claude") {
+    // replace 模式换成解释器启动时，真实路径是解释器，不在 Caskroom 下，照旧走 `claude update`。
+    const cask = findHomebrewCask({
+      realPath: executableRealPath,
+      platform,
+      caskNames: CLAUDE_CASKS,
+    });
+    if (cask) return homebrewCaskUpgradeCommand(cask);
+  }
   const subcommand = UPGRADE_SUBCOMMANDS[provider];
   // replace 模式的 argv 是可执行文件本身（如 `node cli.js`），要带上；append 模式追加的是会话启动参数，
   // 放在子命令前面会让 CLI 把子命令当成会话的提示词。
