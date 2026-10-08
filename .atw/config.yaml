@@ -111,9 +111,10 @@ channel:
 # Codex (dispatch behavior)
 #-------------------------------------------------------------------------------
 # Codex-only knob; other platforms ignore it. Default ("auto") dispatches
-# atw-review sub-agents for the two review axes. Implementation is never
-# dispatched on any platform: it runs inside `/atw-implement` in the main
-# session (`atw-implement-agent` ships only as a reserved role). This does
+# atw-review sub-agents for the two review axes. On the per-ticket path
+# implementation is never dispatched on any platform: it runs inside
+# `/atw-implement` in the main session (`atw-implement-agent` ships only as a
+# reserved role). Only a `/atw-implement-spec` run dispatches implementers. This does
 # not rely on inherited parent transcripts: `fork_turns` remains
 # caller-controlled, while Codex's native SubagentStart hook injects task
 # context when trusted and child-side loading remains the fallback when it is

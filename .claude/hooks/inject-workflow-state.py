@@ -326,13 +326,15 @@ def _codex_mode_banner(config: dict) -> str:
         meaning = (
             "auto: review work is dispatched to atw-review sub-agents; native Codex "
             "context injection is preferred and child-side loading is the fallback. "
-            "Implementation is never dispatched: code is written inside /atw-implement "
-            "in the main session, which also coordinates, clarifies, updates specs, commits, and finishes."
+            "Implementation is never dispatched on the per-ticket path: code is written inside /atw-implement "
+            "in the main session, which also coordinates, clarifies, updates specs, commits, and finishes. "
+            "Only a /atw-implement-spec run, started by the user, dispatches implementer sub-agents."
         )
     else:
         meaning = (
             "inline: the main session also reviews directly; "
-            "do not dispatch any ATW sub-agent. Implementation is in /atw-implement either way."
+            "do not dispatch any ATW sub-agent. Implementation is in /atw-implement; "
+            "/atw-implement-spec needs sub-agents and is unavailable in this mode."
         )
     return f"<codex-mode>{meaning}</codex-mode>"
 
@@ -379,6 +381,24 @@ def build_breadcrumb(
         body = "Refer to workflow.md for current step."
     header = f"Status: {status}" if task_id is None else f"Task: {task_id} ({status})"
     return f"<workflow-state>\n{header}\n{body}\n</workflow-state>"
+
+
+def _noob_mode_reminder(root: Path) -> str:
+    """The `<noob-mode>` block for a developer who switched noob mode on, else "".
+
+    Riding on the per-turn breadcrumb is the point of the feature: a skill
+    loaded once fades over a long conversation, this is said again every turn.
+    An install whose scripts predate the helper simply has no noob mode.
+    """
+    scripts_dir = root / ".atw" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.noob_mode import noob_mode_reminder  # type: ignore[import-not-found]
+
+        return noob_mode_reminder(root)
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +479,10 @@ def main() -> int:
         parts.append(_codex_mode_banner(config))
         parts.append(breadcrumb)
         breadcrumb = "\n\n".join(parts)
+
+    noob_mode = _noob_mode_reminder(root)
+    if noob_mode:
+        breadcrumb = f"{breadcrumb}\n\n{noob_mode}"
 
     # Kiro (CLI userPromptSubmit / IDE promptSubmit) adds a hook's stdout
     # directly to the conversation context — no JSON envelope. Emit the bare

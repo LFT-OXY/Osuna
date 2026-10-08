@@ -69,6 +69,12 @@ TICKET_BLOCKED_PREFIX = "**Blocked by:**"
 NO_CURRENT_TICKET = "No ticket in progress"
 MULTI_DOING_HEADLINE = "Multiple tickets marked doing"
 
+# `tickets.py claim --parallel` (the /atw-implement-spec run) marks the task
+# here. With it set, several `doing` tickets are the run, not a contradiction.
+META_TICKET_MODE = "ticket_mode"
+TICKET_MODE_PARALLEL = "parallel"
+PARALLEL_RUN_HEADLINE = "Parallel run"
+
 # =============================================================================
 # Subagent Constants (change here to rename subagent types)
 # =============================================================================
@@ -609,6 +615,17 @@ def scan_tickets(repo_root: str, task_dir: str) -> tuple[list[str], list[tuple[s
     return doing, frontier
 
 
+def is_parallel_run(repo_root: str, task_dir: str) -> bool:
+    """Whether ``tickets.py claim --parallel`` put this task in parallel mode."""
+    task_json = Path(repo_root) / task_dir / FILE_TASK_JSON
+    try:
+        data = json.loads(task_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    meta = data.get("meta") if isinstance(data, dict) else None
+    return isinstance(meta, dict) and meta.get(META_TICKET_MODE) == TICKET_MODE_PARALLEL
+
+
 def ticket_conflict_notice(repo_root: str, task_dir: str) -> str:
     """One-line warning for agents that do not consume the ticket axis.
 
@@ -620,7 +637,7 @@ def ticket_conflict_notice(repo_root: str, task_dir: str) -> str:
     only; no ticket content crosses this path while the state is broken.
     """
     doing, _ = scan_tickets(repo_root, task_dir)
-    if len(doing) < 2:
+    if len(doing) < 2 or is_parallel_run(repo_root, task_dir):
         return ""
     return (
         f"=== Ticket State ===\n"
@@ -640,12 +657,21 @@ def get_ticket_context(
     """Current ticket in full + frontier summary, injected every round.
 
     Raises MultipleTicketsDoing when the ticket state contradicts itself.
+    A parallel run holds several tickets at ``doing`` on purpose: those are
+    listed, and none is singled out as the current one.
     """
     doing, frontier = scan_tickets(repo_root, task_dir)
-    if len(doing) > 1:
+    if len(doing) > 1 and not is_parallel_run(repo_root, task_dir):
         raise MultipleTicketsDoing(doing)
 
-    if doing:
+    if len(doing) > 1:
+        in_progress = "\n".join(f"- {rel}" for rel in doing)
+        current = (
+            f"=== Tickets In Progress ===\n"
+            f"{PARALLEL_RUN_HEADLINE}: {len(doing)} tickets are in progress at "
+            f"once, so there is no single current ticket:\n{in_progress}"
+        )
+    elif doing:
         current = _materialize_artifact(
             repo_root,
             doing[0],

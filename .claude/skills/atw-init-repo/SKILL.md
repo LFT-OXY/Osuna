@@ -10,7 +10,7 @@ Scaffold the per-repo configuration the engineering skills assume:
 
 - **Issue tracker** — where issues live for this repo
 - **Triage labels** — the strings used for the five canonical triage roles
-- **Domain docs** — where `CONTEXT.md` and ADRs live, and the rules for reading them
+- **Domain docs** — where `GLOSSARY.md` and ADRs live, and the rules for reading them
 
 The output is three files under `docs/agents/`, plus an `## Agent skills` block in the repo's agent instructions file. Five skills read them: `atw-spec`, `atw-tickets`, `atw-triage`, `atw-map`, `atw-code-review`. `atw-research` reads the tracker doc for where findings go.
 
@@ -24,7 +24,7 @@ Look at the current repo to understand its starting state. Read whatever exists;
 
 - `git remote -v` — is this a GitHub repo? GitLab? No remote at all?
 - `CLAUDE.md` and `AGENTS.md` at the repo root — does either exist? Is there already an `## Agent skills` section in either?
-- `CONTEXT.md` and `CONTEXT-MAP.md` at the repo root
+- `GLOSSARY.md` and `GLOSSARY-MAP.md` at the repo root
 - `docs/adr/` and any `src/*/docs/adr/` directories
 - `docs/agents/` — does this skill's prior output already exist?
 - `.scratch/` — sign that a local-markdown issue tracker convention is already in use
@@ -58,9 +58,9 @@ Record the choice in `docs/agents/issue-tracker.md`. The GitHub and GitLab templ
 
 The defaults are the five canonical roles, each label string equal to its name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. On **yes**, write them as-is. Only if the user says no — usually because their tracker already uses other names (e.g. `bug:triage` for `needs-triage`) — collect the overrides so `atw-triage` applies existing labels instead of creating duplicates.
 
-**Section C — Domain docs.** Default to **single-context** — one `CONTEXT.md` + `docs/adr/` at the repo root. This fits almost every repo; write it without asking.
+**Section C — Domain docs.** Default to **single-context** — one `GLOSSARY.md` + `docs/adr/` at the repo root. This fits almost every repo; write it without asking.
 
-Offer **multi-context** — a root `CONTEXT-MAP.md` pointing to per-context `CONTEXT.md` files — only when exploration found monorepo signals. Then confirm which layout they want.
+Offer **multi-context** — a root `GLOSSARY-MAP.md` pointing to per-context `GLOSSARY.md` files — only when exploration found monorepo signals. Then confirm which layout they want.
 
 ### 3. Confirm and edit
 
@@ -100,6 +100,8 @@ The block:
 
 [one-line summary of layout — "single-context" or "multi-context"]. See `docs/agents/domain.md`.
 ```
+
+When triage runs on GitHub or GitLab — the GitHub or GitLab tracker, or the ATW task directory + GitHub variant, where `atw-triage` works the repo's GitHub Issues — create each configured label the tracker lacks (`gh label create` / `glab label create`).
 
 Then write the docs files using the seed templates in this skill's `references/` directory as a starting point:
 

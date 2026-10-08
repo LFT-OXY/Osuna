@@ -18,7 +18,7 @@ It is skipped when no screenshots were passed, and the final report says so.
 
 **This skill only reports — it edits nothing.** Neither this skill nor either sub-agent writes to a source file: not to fix a finding, not to tidy something noticed in passing. They read the frozen patch and produce findings. Hand every finding back to whoever called the review — the user, or `/atw-implement` — and let the caller decide what changes. A reviewer that fixes what it found leaves no independent record of what was wrong, and the next review reads its own edits as the baseline.
 
-The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to call the Skill tool for `atw-init-repo`, which asks which tracker this repo uses and writes that file.
+The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to run `/atw-init-repo`, which asks which tracker this repo uses and writes that file.
 
 ## Process
 
@@ -63,7 +63,7 @@ Look for the originating spec, in this order:
 
 ### 3. Identify the standards sources
 
-Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
+Search the repo for every file that documents how code should be written. When `CODING_STANDARDS.md` or `CONTRIBUTING.md` exists, it must be on the list.
 
 On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 
@@ -111,6 +111,8 @@ If the spec is missing, skip the Spec sub-agent and note this in the final repor
 - The brief: "Look at every screenshot before judging. Report: (a) UI acceptance criteria not met, citing the screenshot; (b) departures from the project's design rules — colours, type sizes, spacing or components outside them; (c) the one to three biggest visual problems — hierarchy, alignment, crowding, overflow, unreadable text — each with location, observation and a concrete fix. Distinguish observable defects from taste. Do not open source files. If you cannot view images, say so and stop. Under 400 words."
 
 This sub-agent needs a model that can view images. If none is available, skip it and say in the final report that the Visual axis did not run.
+
+Issue every sub-agent call together, in the foreground, and aggregate the reports they return.
 
 ### 5. Aggregate
 

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "skills": {
+    "explanation": {
+      "version": "1.0.0",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
+    },
+    "if5": {
+      "version": "1.0.0",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
+    },
+    "pr": {
+      "version": "1.0.0",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
+    },
+    "retro": {
+      "version": "1.0.0",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
+    },
+    "writing-for-agents": {
+      "version": "1.0.0",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
+    }
+  }
+}

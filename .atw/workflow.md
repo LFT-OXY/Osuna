@@ -7,7 +7,7 @@
 1. **Plan before code** — figure out what to do before you start
 2. **Specs injected, not remembered** — guidelines are injected via hook/skill, not recalled from memory
 3. **Persist everything** — research, decisions, and lessons all go to files; conversations get compacted, files don't
-4. **One ticket at a time** — serial execution; claim, finish, close, then take the next
+4. **One ticket at a time, unless the user asks for the whole spec at once** — serial by default: claim, finish, close, then take the next. `/atw-implement-spec` is the one parallel path, and only the user starts it
 5. **Capture learnings** — after each ticket, review and write new knowledge back to spec
 
 ---
@@ -23,6 +23,16 @@ python3 ./.atw/scripts/init_developer.py <your-name>
 ```
 
 Creates `.atw/.developer` (gitignored) + `.atw/workspace/<your-name>/`.
+
+### Noob Mode
+
+For a user who is not an engineer. While it is on, every reply in every stage is in plain language: terms explained where they appear, each action explained before it happens (what, why, how risky, what approving or declining leads to), errors and results retold with what they affect and what comes next. The full rules are `/atw-noob-mode`.
+
+```bash
+python3 ./.atw/scripts/noob_mode.py on|off|status
+```
+
+The user switches it by saying "开启小白模式" / "关闭小白模式" or running `/atw-noob-mode`; the skill runs the script. The switch is one line in that user's own `.atw/.developer`, so it is personal and never committed. It changes how the AI talks to the user — not the stages, the stops, or what goes into task files.
 
 ### Spec System
 
@@ -109,12 +119,15 @@ Implementation tickets live in `{TASK_DIR}/issues/NN-slug.md` and carry two fiel
 python3 ./.atw/scripts/tickets.py list       [--task-dir <dir>]   # every ticket + state
 python3 ./.atw/scripts/tickets.py frontier   [--task-dir <dir>]   # ready tickets with dependencies cleared
 python3 ./.atw/scripts/tickets.py claim NN   [--task-dir <dir>]   # ready → doing
+python3 ./.atw/scripts/tickets.py claim NN --parallel             # ready → doing alongside others (`/atw-implement-spec` only)
 python3 ./.atw/scripts/tickets.py done NN    [--task-dir <dir>]   # doing → done
 python3 ./.atw/scripts/tickets.py summary    [--task-dir <dir>]
 python3 ./.atw/scripts/tickets.py selfcheck
 ```
 
 **The current ticket is the single `issues/` ticket marked `**Impl:** doing`.** The per-turn hook reads that directly from the ticket files. Two tickets marked `doing` at once is a broken state, not a choice — clear it before continuing.
+
+The one exception is a `/atw-implement-spec` run. Its orchestrator claims with `--parallel`, which records `meta.ticket_mode = parallel` in `task.json`; with that set, the hook reads several `doing` tickets as the run in progress rather than a contradiction, and no single ticket is the current one. The next plain `claim` puts the task back in serial mode.
 
 Decision tickets from the map live in `{TASK_DIR}/map-issues/` and use a different vocabulary (`Type` / `Status` / `Blocked by`). **Never mix the two directories**: `tickets.py` only reads `issues/`, and a decision ticket filed there corrupts the frontier in both directions.
 
@@ -192,7 +205,7 @@ python3 ./.atw/scripts/get_context.py --mode phase --step <X.Y>  # detailed guid
 
 ```
 Phase 1: Plan    → discover, specify, and (when needed) slice into tickets
-Phase 2: Execute → one ticket at a time, each through the full implement chain
+Phase 2: Execute → one ticket at a time through the full implement chain, or the whole spec in one parallel run
 Phase 3: Finish  → read-only acceptance check, then archive
 ```
 
@@ -230,7 +243,7 @@ Outside these four, the AI advances stages on its own. It does not stop to ask "
 |---|---|---|
 | ① | Before creating a task | Does this work deserve a record — the user's |
 | ② | After the spec is written | Is the spec right — the user's |
-| ③ | Before each ticket starts | The user runs `/atw-implement`; the AI cannot invoke it |
+| ③ | Before implementation starts | The user runs `/atw-implement` per ticket, or `/atw-implement-spec` once for the whole spec; the AI cannot invoke either |
 | ④ | Before archiving | "This is done" — the user's acceptance |
 
 ### Planning Artifacts
@@ -265,6 +278,17 @@ The active task record could not be read. Do not create or activate another task
 Inspect the task directory named above and repair its task.json. It must be a valid JSON object with a non-empty status.
 Preserve existing task fields and artifacts. If the correct status cannot be determined safely, ask the user before reconstructing the record.
 [/workflow-state:task_error]
+
+<!-- Appended to every per-turn breadcrumb, whatever the status, while this developer has noob mode on. Not a task status. -->
+
+[workflow-state:noob_mode]
+Noob mode is ON — this user is not an engineer. Hold to these rules in every reply, in every stage (the full set is `/atw-noob-mode`):
+- Plain words in the user's language. Explain any unavoidable term, command, path or flag in the same sentence it appears in.
+- Before anything they must approve or that is hard to undo: what will happen, why, how risky it is, and what approving or declining leads to.
+- Say who did what, what you actually ran versus what you only expect, and every decision you made for them.
+- Retell sub-agent reports, command output and errors the same way: what happened, what it affects, what comes next.
+Only the user turns it off ("关闭小白模式" / "turn off noob mode"): run `python3 ./.atw/scripts/noob_mode.py off`.
+[/workflow-state:noob_mode]
 
 ### Phase 1: Plan
 
@@ -309,18 +333,20 @@ When the tickets are written, run `task.py start <task>` (step 1.5) to enter imp
 - 2.3 Relay the review reports `[required · repeatable]`
 - 2.4 Close the ticket `[required · repeatable]`
 - 2.5 Roll back `[on demand]`
+- 2.7 Whole-spec run `[alternative to 2.1–2.4 · once]` (stop ③; the user picks it)
 
 <!-- Per-turn breadcrumb: stage 'implement' — set by task.py start, held for all of Phase 2 -->
 
 [workflow-state:implement]
-One ticket at a time. Run `tickets.py frontier`, pick one, `tickets.py claim NN` — never hold two tickets at `doing`.
-Stop ③: tell the user to run `/atw-implement` for the claimed ticket. You may not invoke it yourself, and you may not do the implementation inline instead. One user invocation per ticket.
-That one run is a closed chain and must not be broken up from the outside: implement (test-first where it fits) → run tests, full suite on the last pass → review → handle findings → write spec updates back → commit. Never instruct it to skip the review or the commit.
+Stop ③: implementation is the user's to start. You may not invoke either skill below yourself, and you may not do the implementation inline instead. When the task has tickets, name both ways and let the user pick; a task with no tickets has only the first.
+Per-ticket path (the default): one ticket at a time. Run `tickets.py frontier`, pick one, `tickets.py claim NN` — never hold two tickets at `doing` — then tell the user to run `/atw-implement` for the claimed ticket. One user invocation per ticket.
+Whole-spec path: the user runs `/atw-implement-spec` once. It owns the run from the first claim to the closing commit: it claims with `tickets.py claim NN --parallel`, dispatches implementer sub-agents across the frontier, each in its own worktree, lands everything on one integration branch, marks each ticket `done` as its work merges, reviews that branch once at the end, and writes spec updates back before its closing commit. Do not claim, review or commit around it. It needs a platform that dispatches sub-agents.
+On the per-ticket path, that one `/atw-implement` run is a closed chain and must not be broken up from the outside: implement (test-first where it fits) → run tests, full suite on the last pass → review → handle findings → write spec updates back → commit. Never instruct it to skip the review or the commit.
 Findings triage: spec-axis findings and anything the standards axis calls a hard violation get fixed first, then a full re-review, then the commit. Judgement calls ship and get reported.
 Relay every review report to the user verbatim — Standards and Spec, plus Visual when the ticket changed UI — even when the verdict is "nothing found". No report reaching you is not a passing review.
 Any sub-agent dispatched from here starts its prompt with `Active task: <task path from task.py current>` — the role files read that line to find the task, and it is the context hooks' fallback when session resolution misses.
-Main-session default: run the process; the implementation itself is written inside `/atw-implement`, never by a dispatched `atw-implement-agent` — that role file is reserved and is not a step in this flow. The only sub-agent this phase raises is `atw-review` (twice, from inside `/atw-implement` — three times when the ticket changes UI and a Visual review runs). Sub-agent self-exemption: this breadcrumb reaches sub-agent turns on some hosts, so if you are already running as `atw-review`, do NOT spawn another `atw-review` — do the review you were dispatched for. Dispatch is main session only.
-Then `tickets.py done NN` and back to the frontier. When the frontier is empty, run `task.py set-status <task> accept`.
+Main-session default: run the process; on the per-ticket path the implementation itself is written inside `/atw-implement`, never by a dispatched `atw-implement-agent` — that role file is reserved and is not a step in this flow. The only sub-agent that path raises is `atw-review` (twice, from inside `/atw-implement` — three times when the ticket changes UI and a Visual review runs). Implementer sub-agents exist only inside a `/atw-implement-spec` run, dispatched by that skill and by nothing else. Sub-agent self-exemption: this breadcrumb reaches sub-agent turns on some hosts. If you are already running as `atw-review`, do NOT spawn another `atw-review` — do the review you were dispatched for. If you were dispatched by `/atw-implement-spec` as an implementer or merger, stop ③ is already satisfied — do the work you were dispatched for and dispatch nothing. Dispatch is main session only.
+Per-ticket path: then `tickets.py done NN` and back to the frontier. Either path: when the frontier is empty and every ticket is `done`, run `task.py set-status <task> accept`.
 [/workflow-state:implement]
 
 ### Phase 3: Finish
@@ -363,12 +389,15 @@ When a user request matches one of these intents inside an active task, route fi
 - Writing or revising the spec → `/atw-spec`
 - Slicing a confirmed spec into tickets → `/atw-tickets`
 - Starting a claimed ticket → `/atw-implement` (the user runs it; stop ③)
+- Implementing every ticket of a sliced spec in one parallel run → `/atw-implement-spec` (the user runs it; stop ③)
 - Building or polishing a screen for a claimed ticket → `/atw-ui`, used from inside `/atw-implement`
 - Same bug fixed more than once → `/atw-diagnosing-bugs`
 - Knowledge worth keeping outside a ticket → `/atw-update-spec`
+- The user cannot follow the terms, an approval prompt or an error, or says "开启小白模式" / "关闭小白模式" → `/atw-noob-mode` (in any stage, with or without a task)
 
-Six of these are user-triggered and the AI cannot invoke them: `/atw-askme`,
-`/atw-askme-with-docs`, `/atw-map`, `/atw-spec`, `/atw-tickets`, `/atw-implement`.
+Seven of these are user-triggered and the AI cannot invoke them: `/atw-askme`,
+`/atw-askme-with-docs`, `/atw-map`, `/atw-spec`, `/atw-tickets`, `/atw-implement`,
+`/atw-implement-spec`.
 Name the one that fits and let the user run it — calling the Skill tool on one
 returns an error and nothing else.
 
@@ -377,7 +406,7 @@ returns an error and nothing else.
 - Consent to create a task is not consent to implement. Implementation starts at `task.py start`, after the user confirms `prd.md`.
 - Stops ①–④ are the user's calls. Never advance through one by inferring the answer.
 - Planning must be persisted to task artifacts; the review chain must run before reporting a ticket complete.
-- Never mark two tickets `**Impl:** doing` at the same time.
+- Never mark two tickets `**Impl:** doing` at the same time. The only thing that may is a `/atw-implement-spec` run, through `tickets.py claim NN --parallel`.
 
 ### Loading Step Detail
 
@@ -558,9 +587,18 @@ Ready to leave Phase 1:
 
 ## Phase 2: Execute
 
-Goal: turn the confirmed spec into committed code, one ticket at a time, each one reviewed before it is closed.
+Goal: turn the confirmed spec into committed, reviewed code.
 
-The main session runs the process. It does not write the implementation itself and it does not dispatch an implementation sub-agent — the work happens inside `/atw-implement`, which the user starts.
+There are two ways through this phase, and the user picks at stop ③:
+
+| Path | What the user runs | How the tickets move |
+|---|---|---|
+| Per ticket (the default) | `/atw-implement`, once per ticket | Steps 2.1–2.4: one ticket at a time, each reviewed before it is closed |
+| Whole spec | `/atw-implement-spec`, once | Step 2.7: implementer sub-agents work the frontier in parallel on one integration branch, reviewed once at the end |
+
+A task with no tickets has only the per-ticket path. The whole-spec path also needs a platform that dispatches sub-agents; on one that does not, name only the per-ticket path.
+
+The main session runs the process. On the per-ticket path it does not write the implementation itself and it does not dispatch an implementation sub-agent — the work happens inside `/atw-implement`, which the user starts. On the whole-spec path the main session is the orchestrator `/atw-implement-spec` describes, and the implementers it dispatches are that skill's, not a step of this file.
 
 **Sub-agent dispatch protocol** — applies to every platform and every sub-agent
 dispatched anywhere in this workflow (the review sub-agents raised inside the
@@ -582,9 +620,12 @@ not spawn another `atw-review`.
 Without this the guidance a sub-agent inherits reads as an instruction to
 dispatch, and it dispatches itself.
 
-Implementation is never dispatched. `atw-implement-agent` ships as a reserved
-role file so the injection path stays wired (D23), but no step in this
-workflow spawns it — the code is written inside `/atw-implement`.
+Implementation is never dispatched on the per-ticket path. `atw-implement-agent`
+ships as a reserved role file so the injection path stays wired (D23), but no
+step in this workflow spawns it — the code is written inside `/atw-implement`.
+A `/atw-implement-spec` run does dispatch implementers, as general-purpose
+sub-agents carrying that skill's own brief — not `atw-implement-agent`, which
+may not commit.
 
 On Grok Build, use `spawn_subagent` with `subagent_type` set to the ATW agent
 name (e.g. `atw-review`). On Kimi Code, dispatch the built-in `coder` /
@@ -666,6 +707,26 @@ python3 ./.atw/scripts/task.py set-status <task-dir> accept
 
 If the same issue has now been fixed more than once, stop patching and tell the user to run `/atw-diagnosing-bugs` — it classifies the root cause, explains why the earlier fixes did not hold, and proposes prevention worth writing into `.atw/spec/`.
 
+#### 2.7 Whole-spec run `[alternative to 2.1–2.4 · once]`
+
+**Stop ③**, the other way through it: the user runs `/atw-implement-spec` instead of `/atw-implement`. You cannot invoke it, and you do not start it because it looks faster — the user is trading a per-ticket look at the work for one review at the end, and that trade is theirs.
+
+It replaces steps 2.1–2.4 for the whole task. The skill carries the procedure; what this file needs you to know is what changes around it:
+
+- **Tickets run in parallel.** The orchestrator claims with `tickets.py claim NN --parallel`, so several tickets sit at `**Impl:** doing` at once and none of them is "the current ticket". Do not claim by hand during the run.
+- **Work lands on an integration branch**, not the branch the task started on. Each implementer sub-agent works in its own worktree and its own branch; a merger sub-agent lands each one. `task.json.branch` records the integration branch.
+- **One review, at the end.** The review compares the code against the whole spec, so it only makes sense once every ticket has landed. Its findings are fixed once and re-checked once; whatever is still open after that comes back to the user rather than starting another round.
+- **Spec updates still land before the closing commit**, once for the run instead of once per ticket.
+- **Review reports are relayed as written** (step 2.3 applies unchanged).
+
+The run stops and reports when a ticket cannot be finished as written, a merge cannot be resolved, or the tests cannot be made to pass. Everything already merged stays. Roll back as in 2.5; a ticket left at `doing` by a stopped run is finished with `/atw-implement` or by running `/atw-implement-spec` again.
+
+When every ticket is `done`:
+
+```bash
+python3 ./.atw/scripts/task.py set-status <task-dir> accept
+```
+
 ---
 
 ## Phase 3: Finish
@@ -682,6 +743,8 @@ Walk `prd.md`'s acceptance criteria one at a time and report, per criterion, whe
 python3 ./.atw/scripts/tickets.py summary   # every ticket done
 git status --porcelain                      # clean tree; the chain commits as it goes
 ```
+
+After a whole-spec run the work sits on the integration branch named in `task.json.branch`. Say so in the report: merging it is the user's call, made after acceptance.
 
 **Stop ④**: present that and wait. Whether the work is done is the user's judgement, not yours — you can report that every criterion is met, but you cannot accept on their behalf.
 
@@ -709,7 +772,7 @@ Edit the corresponding step's walkthrough body in the Phase 1 / 2 / 3 sections a
 
 - No active task must triage first and ask for task-creation consent before creating an ATW task.
 - Each of the four stops must stay reachable and must stay the user's call.
-- Every execution path must keep the implement chain intact: review and spec update before the commit, never after.
+- Every execution path must keep review and spec update inside the run, never after it: before each ticket's commit on the per-ticket path, before the closing commit on the integration branch on the whole-spec path.
 
 Structure is guarded by `packages/cli/test/scripts/workflow-structure.test.ts`, which runs with `pnpm test` — there is no separate step to remember.
 
@@ -727,6 +790,7 @@ All tag blocks live in the `## Phase Index` section above, immediately after eac
 | All of Phase 2 | `[workflow-state:implement]` |
 | All of Phase 3 up to archive | `[workflow-state:accept]` |
 | Archive interrupted; task still under `.atw/tasks/` | `[workflow-state:completed]` |
+| Any of the above, while the developer has noob mode on (appended, not a status) | `[workflow-state:noob_mode]` |
 
 Directly edit the body of the corresponding `[workflow-state:STATUS]` block. After editing, run `atw update` (if you're a template maintainer) or restart your AI session (if you're customizing your own project) — no script changes required.
 

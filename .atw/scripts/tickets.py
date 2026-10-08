@@ -6,6 +6,8 @@
     claim <NN>           校验在 frontier 里 → Impl: doing
                          → 记 implementation_base_sha
                          → 把该票路径写进 <task>/check.jsonl
+    claim <NN> --parallel  并行批次认领（/atw-implement-spec 用）：允许多张票同时
+                         doing，不写 check.jsonl 的当前票行，meta.ticket_mode = parallel
     done <NN>            标记 Impl: done，并撤掉 check.jsonl 里的那行
     summary              汇总一行，给 workflow-state 用
     selfcheck            跑内置断言，不依赖仓库状态
@@ -14,7 +16,7 @@
     Blocker 引用不存在        → 失败
     Blocker 形成环            → 失败
     claim 不在 frontier 里的票 → 失败
-    已有别的票在 doing        → 失败（票默认串行）
+    已有别的票在 doing        → 失败（票默认串行；--parallel 除外）
 
 不要把这些函数塞进 task_utils.py / task.py：票是任务目录里的一层，任务目录和
 meta 的读写一律走 task.py，本脚本不直接写 task.json。
@@ -43,6 +45,12 @@ RE_BLOCKER = re.compile(r"#?(\d+)")
 # 我们只动带这个 reason 的行，用户手工加的条目原样保留。
 MANAGED_REASON = "ATW current ticket"
 MANIFEST_NAME = "check.jsonl"
+
+# 并行批次的标记写在 task.json 的 meta 里 —— 子代理注入 hook 靠它区分
+# 「并行跑着多张票」和「票状态自相矛盾」。
+META_TICKET_MODE = "ticket_mode"
+MODE_PARALLEL = "parallel"
+MODE_SERIAL = "serial"
 
 
 def field_pattern(name: str) -> re.Pattern[str]:
@@ -199,6 +207,17 @@ def task_dir(root: Path, override: str | None) -> Path:
     return (root / rel).resolve()
 
 
+def ticket_mode(task: Path) -> str:
+    """只读 meta.ticket_mode；写一律走 task.py set-meta。"""
+    try:
+        data = json.loads((task / "task.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return MODE_SERIAL
+    meta = data.get("meta") if isinstance(data, dict) else None
+    mode = meta.get(META_TICKET_MODE) if isinstance(meta, dict) else None
+    return MODE_PARALLEL if mode == MODE_PARALLEL else MODE_SERIAL
+
+
 def set_meta(root: Path, task: Path, key: str, value: str) -> None:
     run(
         [
@@ -289,14 +308,10 @@ def cmd_frontier(tickets: list[Ticket], **_) -> int:
     return 0
 
 
-def cmd_claim(tickets: list[Ticket], root: Path, task: Path, num: str, **_) -> int:
-    target = pick(tickets, num)
-    if target.impl == "doing":
-        print(f"{target.label} 已经在 doing，无需重复 claim")
-        return 0
-    # 票默认串行：同一任务一次只推进一张
+def ensure_claimable(tickets: list[Ticket], target: Ticket, parallel: bool) -> None:
+    # 票默认串行：同一任务一次只推进一张。并行批次是唯一的例外
     busy = [t for t in tickets if t.impl == "doing"]
-    if busy:
+    if busy and not parallel:
         raise TicketError(
             f"{busy[0].label} 还在 doing。票默认串行，先 done 它再 claim 下一张"
         )
@@ -307,9 +322,32 @@ def cmd_claim(tickets: list[Ticket], root: Path, task: Path, num: str, **_) -> i
             else f"Impl 是 {target.impl}，不是 ready"
         raise TicketError(f"{target.label} 不在 frontier 里（{reason}）")
 
+
+def cmd_claim(tickets: list[Ticket], root: Path, task: Path, num: str,
+              parallel: bool = False, **_) -> int:
+    target = pick(tickets, num)
+    if target.impl == "doing":
+        print(f"{target.label} 已经在 doing，无需重复 claim")
+        return 0
+    first_of_batch = not any(t.impl == "doing" for t in tickets)
+    ensure_claimable(tickets, target, parallel)
+
     set_impl(target, "doing")
+    if parallel:
+        # 基线只在批次的第一张票上记：之后 HEAD 随合并前移，再记就把已合并的
+        # 票排除在整批审查的 diff 之外了
+        if first_of_batch:
+            record_base_sha(root, task)
+        # 并行批次没有「唯一的当前票」，check.jsonl 里不留当前票行
+        rewrite_manifest(root, task, None)
+        if ticket_mode(task) != MODE_PARALLEL:
+            set_meta(root, task, META_TICKET_MODE, MODE_PARALLEL)
+        print(f"claimed {target.label} → Impl: doing（并行批次）")
+        return 0
     record_base_sha(root, task)
     rewrite_manifest(root, task, target)
+    if ticket_mode(task) == MODE_PARALLEL:
+        set_meta(root, task, META_TICKET_MODE, MODE_SERIAL)
     print(f"claimed {target.label} → Impl: doing")
     return 0
 
@@ -347,7 +385,7 @@ def cmd_summary(tickets: list[Ticket], **_) -> int:
     doing = [t for t in tickets if t.impl == "doing"]
     done = [t for t in tickets if t.impl == "done"]
     parts = [f"票 {len(tickets)} 张", f"done {len(done)}"]
-    parts.append(f"doing {doing[0].label}" if doing else "doing -")
+    parts.append("doing " + ("、".join(t.label for t in doing) or "-"))
     parts.append("frontier " + ("、".join(f"{t.num:02d}" for t in frontier(tickets)) or "-"))
     print(" | ".join(parts))
     return 0
@@ -416,6 +454,21 @@ def cmd_selfcheck(**_) -> int:
 
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
+        ts = build(tmp, [(1, "doing", "none"), (2, "ready", "none"), (3, "ready", "02")])
+        fails(lambda: ensure_claimable(ts, ts[1], parallel=False), "票默认串行")
+        ensure_claimable(ts, ts[1], parallel=True)  # 并行批次放行第二张 doing
+        # 并行不绕过阻塞：Blocker 没 done 的票照样认领不了
+        fails(lambda: ensure_claimable(ts, ts[2], parallel=True), "不在 frontier 里")
+
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        assert ticket_mode(tmp) == MODE_SERIAL  # 没有 task.json 按串行算
+        (tmp / "task.json").write_text(
+            json.dumps({"meta": {META_TICKET_MODE: MODE_PARALLEL}}), encoding="utf-8")
+        assert ticket_mode(tmp) == MODE_PARALLEL
+
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
         fails(lambda: build(tmp, [(1, "ready", "09")]), "不存在的票")
 
     with tempfile.TemporaryDirectory() as d:
@@ -473,6 +526,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("command", choices=sorted(COMMANDS))
     p.add_argument("num", nargs="?", help="票号，claim / done 用")
     p.add_argument("--task-dir", help="仓库相对的任务目录，缺省问 task.py current")
+    p.add_argument("--parallel", action="store_true",
+                   help="claim 用：并行批次认领，允许多张票同时 doing")
     args = p.parse_args(argv)
 
     try:
@@ -484,7 +539,8 @@ def main(argv: list[str] | None = None) -> int:
         task = task_dir(root, args.task_dir)
         tickets = load_tickets(task / "issues")
         return COMMANDS[args.command](
-            tickets=tickets, root=root, task=task, num=args.num
+            tickets=tickets, root=root, task=task, num=args.num,
+            parallel=args.parallel,
         )
     except TicketError as e:
         print(f"错误：{e}", file=sys.stderr)

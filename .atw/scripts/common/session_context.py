@@ -24,6 +24,7 @@ from pathlib import Path
 from .active_task import resolve_context_key
 from .config import get_git_packages
 from .git import run_git
+from .noob_mode import noob_mode_reminder
 from .packages_context import get_packages_section
 from .tasks import iter_active_tasks, load_task, get_all_statuses, children_progress
 from .paths import (
@@ -605,6 +606,12 @@ def get_context_text(repo_root: Path | None = None) -> str:
 
     lines.append(f"Name: {developer}")
     lines.append("")
+
+    # Platforms without a hook learn about noob mode from this output alone.
+    noob_mode = noob_mode_reminder(repo_root)
+    if noob_mode:
+        lines.append(noob_mode)
+        lines.append("")
 
     root_git_info = _collect_root_git_info(repo_root)
     _append_root_git_context(lines, root_git_info)

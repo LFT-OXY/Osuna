@@ -230,4 +230,4 @@ The five canonical roles with default label strings (`needs-triage`, `needs-info
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+single-context：根目录一个 `GLOSSARY.md` + `docs/adr/`。See `docs/agents/domain.md`.

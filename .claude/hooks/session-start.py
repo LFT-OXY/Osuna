@@ -82,6 +82,25 @@ This notice is one-shot: do not repeat it after the first visible assistant repl
 FIRST_REPLY_NOTICE = f"{_FIRST_REPLY_NOTICE_HEAD}\n{_FIRST_REPLY_NOTICE_TAIL}"
 
 
+def _noob_mode_reminder(project_dir: Path) -> str:
+    """The `<noob-mode>` block for a developer who switched noob mode on, else "".
+
+    Platforms with a per-turn hook hear this again every turn; here it covers
+    the ones that only have SessionStart (Cursor) and the first reply of a
+    session everywhere. An install whose scripts predate the helper simply has
+    no noob mode.
+    """
+    scripts_dir = project_dir / ".atw" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.noob_mode import noob_mode_reminder  # type: ignore[import-not-found]
+
+        return noob_mode_reminder(project_dir)
+    except Exception:
+        return ""
+
+
 def _build_first_reply_notice(update_hint: str | None) -> str:
     """First-reply notice, carrying the ATW update reminder when there is one.
 
@@ -814,6 +833,10 @@ ATW compact SessionStart context. Use it to orient the session; load details on 
 """)
     output.write(_build_first_reply_notice(_resolve_update_hint(atw_dir, context_key)))
     output.write("\n\n")
+
+    noob_mode = _noob_mode_reminder(project_dir)
+    if noob_mode:
+        output.write(f"{noob_mode}\n\n")
 
     # Legacy migration warning
     legacy_warning = _check_legacy_spec(atw_dir, is_mono, packages)

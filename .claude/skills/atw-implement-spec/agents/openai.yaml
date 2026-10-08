@@ -1,0 +1,5 @@
+interface:
+  display_name: "ATW Implement Spec"
+  short_description: "一次性并行实现整份规格与工单"
+policy:
+  allow_implicit_invocation: false
