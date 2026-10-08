@@ -3240,6 +3240,8 @@ export const en = {
           notInstalled: "The CLI wasn't found on the host",
           inProgress: "An upgrade is already running",
           timeout: "The upgrade timed out and was stopped",
+          versionUnchanged:
+            "The upgrade command finished but the version didn't change; the CLI may be managed by a package manager, or the package manager doesn't have the new version yet",
           hostDisconnected: "Host is not connected",
         },
       },

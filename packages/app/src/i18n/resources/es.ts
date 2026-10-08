@@ -3186,6 +3186,8 @@ export const es: TranslationResources = {
           notInstalled: "No se encontró la CLI en el host",
           inProgress: "Ya hay una actualización en curso",
           timeout: "La actualización superó el tiempo límite y se detuvo",
+          versionUnchanged:
+            "El comando de actualización terminó pero la versión no cambió; puede que un gestor de paquetes administre esta CLI o que aún no tenga la nueva versión",
           hostDisconnected: "El host no está conectado",
         },
       },

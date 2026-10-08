@@ -1,0 +1,14 @@
+{"file": ".atw/tasks/10-08-provider-install-upgrade-guide/research/interview-decisions.md", "reason": "Q1–Q20 用户决定，规格的来源"}
+{"file": ".atw/tasks/10-08-provider-install-upgrade-guide/research/official-commands.md", "reason": "逐字核实的官方安装/升级命令与文档链接"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "复用原语、设计禁止项、i18n 规则"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 单测与组件测试写法"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "App 质量检查与禁止模式"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "标签条与命令行的样式约定"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon 错误码 → 协议 → App 失败块的跨层检查"}
+{"file": "docs/protocol-compatibility.md", "reason": "新增错误码对旧 App 的兼容约束"}
+{"file": "docs/i18n.md", "reason": "9 语言文案、命令与标签名不翻译"}
+{"file": "docs/design.md", "reason": "区块视觉、分段标签、禁止项"}
+{"file": "docs/unistyles.md", "reason": "Unistyles 禁用写法"}
+{"file": "docs/qa.md", "reason": "截图验收标准"}
+{"file": "docs/glossary.md", "reason": "Install and upgrade / Provider / Custom provider 术语"}
+{"file": "docs/providers.md", "reason": "升级命令约定，需同步更新"}

@@ -202,6 +202,49 @@ describe.skipIf(process.platform === "win32")("one-click provider CLI upgrade", 
     expect(await snapshotVersion("claude")).toBe("2.1.280");
   });
 
+  test("reports a command that exits cleanly without changing the version as a failure", async () => {
+    // 包管理器装的 Claude Code：`claude update` 只打印提示，正常退出，版本不动。
+    registry.set("@anthropic-ai/claude-code", "2.1.285");
+    const claude = await writeFakeClaude({
+      version: "2.1.280",
+      onUpdate: "  echo 'Claude is managed by Homebrew. Run: brew upgrade claude-code'",
+    });
+    await startDaemon({ claude });
+    await settledEntry("claude");
+
+    const result = await client!.upgradeProvider({ provider: "claude" });
+
+    expect(result).toMatchObject({
+      provider: "claude",
+      ok: false,
+      errorCode: "version_unchanged",
+      version: "2.1.280",
+    });
+    expect(result.output).toBe("Claude is managed by Homebrew. Run: brew upgrade claude-code\n");
+  });
+
+  test.each([
+    { unreadable: "before and after", before: "unknown", after: "unknown" },
+    { unreadable: "before", before: "unknown", after: "2.1.285" },
+    { unreadable: "after", before: "2.1.280", after: "unknown" },
+  ])(
+    "judges by the exit code alone when the version $unreadable cannot be read",
+    async ({ before, after }) => {
+      const claude = await writeFakeClaude({
+        version: before,
+        onUpdate: [`  printf '${after}' > "$VERSION_FILE"`, "  echo 'Updated'"].join("\n"),
+      });
+      await startDaemon({ claude });
+      await settledEntry("claude");
+
+      const result = await client!.upgradeProvider({ provider: "claude" });
+
+      expect(result).toMatchObject({ provider: "claude", ok: true });
+      expect(result.errorCode).toBeUndefined();
+      expect(result.output).toBe("Updated\n");
+    },
+  );
+
   test("refuses a second upgrade of the same provider while one is running", async () => {
     const claude = await writeFakeClaude({
       version: "2.1.280",

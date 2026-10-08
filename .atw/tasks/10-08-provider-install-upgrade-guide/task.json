@@ -1,0 +1,28 @@
+{
+  "id": "provider-install-upgrade-guide",
+  "name": "provider-install-upgrade-guide",
+  "title": "提供方常驻安装与升级指引",
+  "description": "提供方详情页常驻显示安装与升级区块：按官方文档的标签（系统/包管理器）分别列安装命令和升级命令，附官方文档链接；纳入 Copilot、OpenCode；升级失败块统一指向该区块。",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-10-08",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "3831074c173d9ef43e4ad1aa1424e04b90c478eb"
+  }
+}

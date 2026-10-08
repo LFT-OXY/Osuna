@@ -1022,7 +1022,7 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
 
 ### 2. Signatures
 
-- Protocol: `ProviderUpgradeRequestSchema { requestId, provider }`; response payload `ProviderUpgradeResponsePayload { requestId, provider, ok, version?, output?, errorCode?: string, error? }`; known codes `PROVIDER_UPGRADE_ERROR_CODES` (`unsupported | install_method_unknown | not_installed | in_progress | command_failed | timeout`). `errorCode` is a plain string on the wire so a newer daemon's code never fails an older client's parse.
+- Protocol: `ProviderUpgradeRequestSchema { requestId, provider }`; response payload `ProviderUpgradeResponsePayload { requestId, provider, ok, version?, output?, errorCode?: string, error? }`; known codes `PROVIDER_UPGRADE_ERROR_CODES` (`unsupported | install_method_unknown | not_installed | in_progress | command_failed | timeout | version_unchanged`). `errorCode` is a plain string on the wire so a newer daemon's code never fails an older client's parse.
 - Pure (`agent/provider-upgrade-command.ts`):
   - `hasProviderUpgradeCommand(provider)` — true for the subcommand table plus `codex`.
   - `resolveProviderUpgradeCommand({ provider, launch, executableRealPath, platform })` → `{ kind: "run"; command; args; env? } | { kind: "install_method_unknown" } | { kind: "unsupported" }`. `env` is overlaid on the provider's `envOverlay` by the service.
@@ -1052,10 +1052,12 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
 - The run ends on the child's `exit`, not on `close`: a self-updater can leave a background process that inherits stdout, and `close` then never comes. After `exit` wait at most 2 s for `close` (listen for it before awaiting `exit`, it can fire synchronously right after), then destroy both pipes.
 - Timeout and daemon shutdown kill the process tree (`terminateWithTreeKill`, 3 s grace).
 - Whenever the command ran, success or not: forget the provider's cached latest version, `refreshSettingsSnapshot({ providers: [provider] })`, then read the entry's `version` into the response. The snapshot push therefore reaches the client before the response.
+- The "before" version is the snapshot entry's `version` read at the start of `runUpgrade` (no probe before the command); the "after" version is the refreshed entry's. Both come from the same snapshot source, so a parser difference can never make them disagree. A snapshot that is stale-old (the user upgraded outside Osuna) can only turn a would-be `version_unchanged` into `ok: true`, never the reverse.
 
 ### 4. Validation & Error Matrix
 
-- Exit 0 → `ok: true`, `output`, `version` if readable.
+- Exit 0, before and after both readable and equal → `version_unchanged`, `error: "<command line> exited cleanly but the version is still X"`, `output`, `version`. CLI self-update subcommands often only print a hint for a package-manager install (`claude update` under Homebrew) and exit 0; a lagging package manager looks the same.
+- Exit 0, otherwise (versions differ, or either is unreadable) → `ok: true`, `output`, `version` if readable.
 - Non-zero exit → `command_failed`, `error: "<command line> exited with code N"`, `output`.
 - Spawn failure → `command_failed`, `error` is the spawn error, `output` (possibly empty).
 - Past the timeout → `timeout`, partial `output`.
@@ -1066,12 +1068,13 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
 
 - Good: installed `2.1.280`, `claude update` writes `2.1.285` → `{ ok: true, version: "2.1.285" }`, the next check re-queries npm without `force`.
 - Base: the CLI prints `EACCES` to stderr and exits 1 → `command_failed` with both streams in order and `version` still `2.1.280`.
+- Base: `claude update` prints `Claude is managed by Homebrew…` and exits 0, version stays `2.1.280` → `version_unchanged` with that output; the App shows its own title over the output, and an older App shows "Upgrade failed" plus the raw `error`.
 - Bad: waiting on `close` — `claude update` exits but its background helper holds the pipe, the request never answers, and every later upgrade of that provider gets `in_progress` until the daemon restarts.
 
 ### 6. Tests Required
 
 - Unit `provider-upgrade-command.test.ts`: each provider's subcommand; replace argv kept; append args dropped; custom / ACP ids unsupported; every row of the Codex table (macOS / Linux / Windows standalone with `codexHome`, both Caskroom prefixes, npm under Homebrew node / official installer / nvm / Windows package and shim with the exact `prefix`, Store, bun, pnpm, formula, hand-placed, interpreter) and the exact command + `env` per method; tail clipping.
-- Daemon e2e `daemon-e2e/provider-upgrade.e2e.test.ts` with a fake `sh` CLI (version file + `update` branch): success updates the snapshot `version` and the exact argv; cached latest forgotten; raw output on failure; `in_progress` while a run holds a file lock; timeout with `upgradeTimeoutMs: 1000` keeps partial output; a background `sleep 30 &` does not hold the answer; custom providers `unsupported`.
+- Daemon e2e `daemon-e2e/provider-upgrade.e2e.test.ts` with a fake `sh` CLI (version file + `update` branch): success updates the snapshot `version` and the exact argv; cached latest forgotten; raw output on failure; exit 0 with an unchanged version → `version_unchanged` with output and `version`; exit 0 with the version unreadable before, after, or both → `ok: true` (`test.each`); `in_progress` while a run holds a file lock; timeout with `upgradeTimeoutMs: 1000` keeps partial output; a background `sleep 30 &` does not hold the answer; custom providers `unsupported`.
 - Same e2e, Codex: `<tmp>/npm-prefix/bin/codex` symlinked to `lib/node_modules/@openai/codex/bin/codex.js`, a recording fake `npm` first on the provider env's `PATH` → argv is `install -g --prefix <realpath of the prefix> @openai/codex@latest` (assert on the argv, not `version`: the fake Codex has no app-server, so its entry is `error` and carries no version); a Codex outside every known layout → `install_method_unknown`, no `output`, npm never called.
 - `provider-registry.test.ts`: a wrapped profile still exposes `resolveCliLaunch`.
 - Protocol `messages.test.ts`: request for an unknown provider id; response with an unknown `errorCode`.

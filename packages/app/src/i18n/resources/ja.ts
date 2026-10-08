@@ -3146,6 +3146,8 @@ export const ja: TranslationResources = {
           notInstalled: "ホスト上に CLI が見つかりません",
           inProgress: "アップグレードはすでに実行中です",
           timeout: "アップグレードがタイムアウトしたため停止しました",
+          versionUnchanged:
+            "アップグレードコマンドは完了しましたが、バージョンが変わっていません：パッケージマネージャーで管理されているか、パッケージマネージャーにまだ新しいバージョンがない可能性があります",
           hostDisconnected: "ホストが接続されていません",
         },
       },

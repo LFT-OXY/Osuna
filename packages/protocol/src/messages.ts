@@ -6420,6 +6420,7 @@ export const ProviderVersionCheckResponseSchema = z.object({
  * - in_progress：同一个提供方已有升级在进行
  * - command_failed：升级命令以非零状态退出或无法启动
  * - timeout：升级命令超时被终止
+ * - version_unchanged：升级命令正常退出，但前后读到的已装版本相同（包管理器管理的安装，或包管理器还没收到新版本）
  */
 export const PROVIDER_UPGRADE_ERROR_CODES = [
   "unsupported",
@@ -6428,6 +6429,7 @@ export const PROVIDER_UPGRADE_ERROR_CODES = [
   "in_progress",
   "command_failed",
   "timeout",
+  "version_unchanged",
 ] as const;
 export type ProviderUpgradeErrorCode = (typeof PROVIDER_UPGRADE_ERROR_CODES)[number];
 

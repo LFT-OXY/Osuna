@@ -140,7 +140,9 @@ export class ProviderUpgradeService {
     );
 
     const version = await this.settle(provider);
-    const failure = describeCommandFailure({ outcome, commandLine, timeoutMs: this.timeoutMs });
+    const failure =
+      describeCommandFailure({ outcome, commandLine, timeoutMs: this.timeoutMs }) ??
+      describeUnchangedVersion({ commandLine, before: entry.version, after: version });
     const result: ProviderUpgradeResult = {
       provider,
       ok: failure === null,
@@ -198,6 +200,22 @@ function describeCommandFailure(input: {
     };
   }
   return null;
+}
+
+// 退出码为 0 但版本没动：CLI 自带的升级子命令对包管理器装的版本常常只打印提示。
+// 前后任一次读不出版本时只按退出码判断，读不出不算失败。
+function describeUnchangedVersion(input: {
+  commandLine: string;
+  before: string | undefined;
+  after: string | undefined;
+}): UpgradeFailure | null {
+  const { before, after } = input;
+  const bothVersionsRead = Boolean(before) && Boolean(after);
+  if (!bothVersionsRead || before !== after) return null;
+  return {
+    errorCode: "version_unchanged",
+    error: `${input.commandLine} exited cleanly but the version is still ${after}`,
+  };
 }
 
 // stdout 与 stderr 按到达顺序合进一段文字；超时或 daemon 关闭时终止整棵进程树。

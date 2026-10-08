@@ -654,6 +654,27 @@ describe("ProviderDetailSurface", () => {
     expect(onDismissFailure).toHaveBeenCalledTimes(1);
   });
 
+  it("says the version didn't change when the command exited cleanly without upgrading", () => {
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: {
+        status: "failed",
+        errorCode: "version_unchanged",
+        error: "claude update exited cleanly but the version is still 2.1.280",
+        output: "Claude is managed by Homebrew. Run: brew upgrade claude-code",
+      },
+    });
+
+    const failure = screen.getByTestId("provider-upgrade-failure");
+    expect(failure.textContent).toContain(
+      i18n.t("settings.providers.upgrade.errors.versionUnchanged"),
+    );
+    expect(within(failure).getByTestId("provider-upgrade-output").textContent).toContain(
+      "Claude is managed by Homebrew. Run: brew upgrade claude-code",
+    );
+    expect(upgradeButton()).toBeTruthy();
+  });
+
   it("explains a failure it has no message for with the raw error", () => {
     renderUpgradableVersion({
       latestVersion: "2.1.285",

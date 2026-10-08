@@ -3125,6 +3125,8 @@ export const zhCN: TranslationResources = {
           notInstalled: "主机上找不到这个 CLI",
           inProgress: "已有升级在进行",
           timeout: "升级超时，已终止",
+          versionUnchanged:
+            "升级命令已执行完，但版本没有变化：可能是包管理器管理的安装，或包管理器还没有新版本",
           hostDisconnected: "主机未连接",
         },
       },

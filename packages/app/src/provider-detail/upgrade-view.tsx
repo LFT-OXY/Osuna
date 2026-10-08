@@ -30,6 +30,7 @@ const ERROR_MESSAGE_KEYS: Record<ProviderUpgradeErrorCode, string> = {
   in_progress: "settings.providers.upgrade.errors.inProgress",
   command_failed: "settings.providers.upgrade.errors.failed",
   timeout: "settings.providers.upgrade.errors.timeout",
+  version_unchanged: "settings.providers.upgrade.errors.versionUnchanged",
 };
 
 function isKnownErrorCode(code: string | null): code is ProviderUpgradeErrorCode {

@@ -3194,6 +3194,8 @@ export const fr: TranslationResources = {
           notInstalled: "La CLI est introuvable sur l'hôte",
           inProgress: "Une mise à jour est déjà en cours",
           timeout: "La mise à jour a dépassé le délai et a été arrêtée",
+          versionUnchanged:
+            "La commande de mise à jour s'est terminée mais la version n'a pas changé ; la CLI est peut-être gérée par un gestionnaire de paquets, ou celui-ci n'a pas encore la nouvelle version",
           hostDisconnected: "L'hôte n'est pas connecté",
         },
       },

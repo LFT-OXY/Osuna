@@ -3133,6 +3133,8 @@ export const ko: TranslationResources = {
           notInstalled: "호스트에서 CLI를 찾을 수 없습니다",
           inProgress: "이미 업그레이드가 진행 중입니다",
           timeout: "업그레이드 시간이 초과되어 중지했습니다",
+          versionUnchanged:
+            "업그레이드 명령은 끝났지만 버전이 바뀌지 않았습니다: 패키지 관리자가 관리하는 설치이거나 패키지 관리자에 아직 새 버전이 없을 수 있습니다",
           hostDisconnected: "호스트가 연결되어 있지 않습니다",
         },
       },
