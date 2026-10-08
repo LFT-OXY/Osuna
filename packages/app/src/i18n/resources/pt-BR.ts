@@ -3207,9 +3207,11 @@ export const ptBR: TranslationResources = {
         unknownError: "Erro desconhecido",
       },
       install: {
-        title: "Instalar {{name}}",
+        title: "Instalar e atualizar",
+        titleFor: "Instalar e atualizar {{name}}",
+        installHeading: "Instalar",
+        upgradeHeading: "Atualizar",
         hostHint: "Execute na máquina onde o daemon do Osuna está rodando",
-        choosePlatform: "Escolha o sistema operacional do host",
         copy: "Copiar",
         copyAccessibility: "Copiar {{command}}",
         copyLabel: "comando",

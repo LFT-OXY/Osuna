@@ -43,7 +43,7 @@ import { ProviderVersionSection, type ProviderVersionUpgrade } from "./version-s
 import { countSelectableModels, describeProviderModelCount, resolveProviderStatus } from "./status";
 
 /*
- * 运行时接线：快照、daemon 配置、主机能力。安装指引与第三方接口的视图会拉进单测运行器
+ * 运行时接线：快照、daemon 配置、主机能力。安装与升级、第三方接口的视图会拉进单测运行器
  * 无法解析的模块，所以只在这里导入；调用方从这里导入。
  */
 

@@ -3281,9 +3281,11 @@ export const en = {
         unknownError: "Unknown error",
       },
       install: {
-        title: "Install {{name}}",
+        title: "Install and upgrade",
+        titleFor: "Install and upgrade {{name}}",
+        installHeading: "Install",
+        upgradeHeading: "Upgrade",
         hostHint: "Run on the machine where the Osuna daemon runs",
-        choosePlatform: "Choose the host's operating system",
         copy: "Copy",
         copyAccessibility: "Copy {{command}}",
         copyLabel: "command",

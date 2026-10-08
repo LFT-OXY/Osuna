@@ -4,13 +4,16 @@ import {
   type GuidedProvider,
   type InstallPlatform,
   type ProviderInstallGuideData,
+  type ProviderInstallMethod,
 } from "./commands";
 
 export interface ProviderInstallGuide extends ProviderInstallGuideData {
-  // 指引所属的内置提供方；自定义提供方是它继承的那个，标题用它的名字。
+  // 区块所属的内置提供方；自定义提供方是它继承的那个。
   provider: GuidedProvider;
-  // 主机系统未上报或不在三者之内时为 null，界面不默认选中任何标签。
-  defaultPlatform: InstallPlatform | null;
+  // 自定义提供方沿用所继承 CLI 的区块时为 true，标题要点出是哪个 CLI。
+  isInherited: boolean;
+  // 官方顺序里第一个适用于主机系统的安装方式；主机系统未知时是第一个。
+  defaultMethod: ProviderInstallMethod;
 }
 
 export interface ProviderInstallGuideTarget {
@@ -46,14 +49,23 @@ function toInstallPlatform(hostPlatform: string | undefined): InstallPlatform | 
   return HOST_PLATFORM_TO_INSTALL_PLATFORM[hostPlatform];
 }
 
+function selectDefaultMethod(
+  methods: ProviderInstallGuideData["methods"],
+  platform: InstallPlatform | null,
+): ProviderInstallMethod {
+  const [first] = methods;
+  if (!platform) return first;
+  return methods.find((method) => method.platforms.includes(platform)) ?? first;
+}
+
 export function resolveProviderInstallGuide(
   input: ProviderInstallGuideTarget & { hostPlatform: string | undefined },
 ): ProviderInstallGuide | null {
   const provider = resolveGuidedProvider(input);
   if (!provider) return null;
-  return {
-    ...PROVIDER_INSTALL_GUIDES[provider],
-    provider,
-    defaultPlatform: toInstallPlatform(input.hostPlatform),
-  };
+  const data = PROVIDER_INSTALL_GUIDES[provider];
+  const platform = toInstallPlatform(input.hostPlatform);
+  const defaultMethod = selectDefaultMethod(data.methods, platform);
+  const isInherited = provider !== input.provider;
+  return { ...data, provider, isInherited, defaultMethod };
 }

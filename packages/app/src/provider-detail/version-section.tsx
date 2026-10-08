@@ -17,7 +17,7 @@ export interface ProviderVersionUpgrade {
   onOpenDocs: (url: string) => void;
 }
 
-// 详情页的"版本"一节：已装的内置提供方才出现，和安装指引互斥；有新版本时显示"v{当前} → v{最新}"。
+// 详情页的"版本"一节：已装的内置提供方才出现；有新版本时显示"v{当前} → v{最新}"。
 // 传了 upgrade（设置页的 Providers 页）时，有新版本就带"升级"按钮，失败的输出显示在这一节里。
 export function ProviderVersionSection({
   installedVersion,

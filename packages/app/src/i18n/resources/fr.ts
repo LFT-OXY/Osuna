@@ -3235,9 +3235,11 @@ export const fr: TranslationResources = {
         unknownError: "Erreur inconnue",
       },
       install: {
-        title: "Installer {{name}}",
+        title: "Installer et mettre à jour",
+        titleFor: "Installer et mettre à jour {{name}}",
+        installHeading: "Installer",
+        upgradeHeading: "Mettre à jour",
         hostHint: "À exécuter sur la machine où tourne le daemon Osuna",
-        choosePlatform: "Choisissez le système d'exploitation de l'hôte",
         copy: "Copier",
         copyAccessibility: "Copier {{command}}",
         copyLabel: "commande",

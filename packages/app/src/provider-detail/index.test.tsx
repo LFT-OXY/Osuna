@@ -90,6 +90,25 @@ function renderVersion(installedVersion: string) {
   return <ProviderVersionSection installedVersion={installedVersion} />;
 }
 
+function shownCommands(testID: string): string[] {
+  return screen.queryAllByTestId(testID).map((node) => node.textContent ?? "");
+}
+
+// 「安装与升级」区块的标题：区块里按文档顺序的第一段文字。
+function installSectionTitle(): string {
+  const section = screen.getByTestId("provider-install-guide");
+  const firstText = document.createTreeWalker(section, NodeFilter.SHOW_TEXT).nextNode();
+  if (!firstText) throw new Error("The install and upgrade section shows no text");
+  return firstText.textContent ?? "";
+}
+
+function selectedInstallMethods(): string[] {
+  return within(screen.getByTestId("provider-install-methods"))
+    .getAllByRole("button")
+    .filter((tab) => tab.getAttribute("aria-selected") === "true")
+    .map((tab) => tab.textContent ?? "");
+}
+
 const IDLE_DIAGNOSTIC: ProviderDiagnosticState = { status: "idle" };
 
 function renderDetail(overrides: Partial<ProviderDetailSurfaceProps>) {
@@ -138,18 +157,54 @@ describe("ProviderDetailSurface", () => {
     cleanup();
   });
 
-  it("shows the install guide for a provider that is not installed", () => {
-    renderDetail({ entries: [entry({ status: "unavailable" })] });
+  it.each([
+    ["not installed", entry({ status: "unavailable" })],
+    ["installed", entry({ status: "ready", version: "2.1.280" })],
+  ])("shows install and upgrade for a provider that is %s", (_name, providerEntry) => {
+    renderDetail({ entries: [providerEntry] });
 
-    expect(
-      screen.getByText(i18n.t("settings.providers.install.title", { name: "Claude Code" })),
-    ).toBeTruthy();
-    expect(
-      screen.getByTestId("provider-install-platform-macos").getAttribute("aria-selected"),
-    ).toBe("true");
+    expect(installSectionTitle()).toBe("Install and upgrade");
+    expect(selectedInstallMethods()).toEqual(["macOS/Linux"]);
+    expect(shownCommands("provider-install-command")).toEqual([
+      "curl -fsSL https://claude.ai/install.sh | bash",
+    ]);
+    expect(shownCommands("provider-upgrade-command")).toEqual(["claude update"]);
   });
 
-  it("guides a custom provider to the CLI it extends", () => {
+  it("switches the install and upgrade commands with the tab", () => {
+    renderDetail({ entries: [entry({ version: "2.1.280" })] });
+
+    fireEvent.click(screen.getByTestId("provider-install-method-homebrew"));
+
+    expect(selectedInstallMethods()).toEqual(["Homebrew"]);
+    expect(shownCommands("provider-install-command")).toEqual(["brew install --cask claude-code"]);
+    expect(shownCommands("provider-upgrade-command")).toEqual(["brew upgrade claude-code"]);
+  });
+
+  it("copies the command next to the pressed copy button", () => {
+    const onCopyCommand = vi.fn();
+    renderDetail({
+      entries: [entry({ version: "2.1.280" })],
+      renderInstallGuide: (guide, cliLabel) => (
+        <ProviderInstallGuideSurface
+          guide={guide}
+          cliLabel={cliLabel}
+          onCopyCommand={onCopyCommand}
+          onOpenDocs={noop}
+        />
+      ),
+    });
+
+    fireEvent.click(
+      screen.getByLabelText(
+        i18n.t("settings.providers.install.copyAccessibility", { command: "claude update" }),
+      ),
+    );
+
+    expect(onCopyCommand.mock.calls).toEqual([["claude update"]]);
+  });
+
+  it("shows a custom provider the install and upgrade commands of the CLI it extends", () => {
     renderDetail({
       provider: "work-claude",
       entries: [
@@ -159,15 +214,38 @@ describe("ProviderDetailSurface", () => {
       extendsProvider: "claude",
     });
 
-    expect(
-      screen.getByText(i18n.t("settings.providers.install.title", { name: "Claude Code" })),
-    ).toBeTruthy();
+    expect(installSectionTitle()).toBe("Install and upgrade Claude Code");
+    expect(shownCommands("provider-upgrade-command")).toEqual(["claude update"]);
   });
 
-  it("shows no install guide once the provider is installed", () => {
-    renderDetail({ entries: [entry({ status: "ready" })] });
+  it.each([
+    ["extends acp", "my-acp", "acp"],
+    ["extends nothing known", "odd", "not-a-provider"],
+  ])("shows no install and upgrade for a provider that %s", (_name, provider, extendsProvider) => {
+    renderDetail({
+      provider,
+      entries: [entry({ provider, label: "Custom agent", status: "unavailable" })],
+      extendsProvider,
+    });
 
-    expect(screen.queryByTestId("provider-install-platform-macos")).toBeNull();
+    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
+    expect(blockOrder(["provider-diagnostic-section", "provider-models-section"])).toEqual([
+      "provider-models-section",
+      "provider-diagnostic-section",
+    ]);
+  });
+
+  it.each([
+    ["copilot", "Copilot", "copilot update"],
+    ["opencode", "OpenCode", "opencode upgrade"],
+  ])("shows install and upgrade for %s", (provider, label, upgradeCommand) => {
+    renderDetail({ provider, entries: [entry({ provider, label })] });
+
+    expect(shownCommands("provider-upgrade-command")).toEqual([upgradeCommand]);
+    expect(blockOrder(["provider-models-section", "provider-install-guide"])).toEqual([
+      "provider-install-guide",
+      "provider-models-section",
+    ]);
   });
 
   it("shows API endpoints for Claude Code and Codex only", () => {
@@ -412,7 +490,7 @@ describe("ProviderDetailSurface", () => {
     expect(screen.queryByTestId("provider-inherited-api-endpoint")).toBeNull();
   });
 
-  // daemon 不探测已停用的提供方，快照里的 unavailable 不代表没装，所以不给安装指引。
+  // daemon 不探测已停用的提供方，快照里的 unavailable 不代表没装，所以不给安装与升级区块。
   it("shows only the disabled card for a disabled provider", () => {
     renderDetail({
       entries: [entry({ enabled: false, status: "unavailable", version: "2.1.280" })],
@@ -452,13 +530,12 @@ describe("ProviderDetailSurface", () => {
 
     rerender({ entries: [entry({ status: "unavailable" })] });
     expect(screen.queryByTestId("provider-disabled-card")).toBeNull();
-    expect(screen.getByTestId("provider-install-guide").textContent).toContain(
-      i18n.t("settings.providers.install.title", { name: "Claude Code" }),
-    );
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
+    expect(installSectionTitle()).toBe("Install and upgrade");
 
     rerender({ entries: [entry({ version: "2.1.280" })] });
-    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
     expect(screen.getByTestId("provider-version-section").textContent).toContain("v2.1.280");
+    expect(installSectionTitle()).toBe("Install and upgrade");
     expect(blockOrder(["provider-diagnostic-section", "provider-models-section"])).toEqual([
       "provider-models-section",
       "provider-diagnostic-section",
@@ -512,7 +589,7 @@ describe("ProviderDetailSurface", () => {
     expect(onDismissRemovalError).toHaveBeenCalledTimes(1);
   });
 
-  it("orders the error card, the inherited endpoint warning, then the install guide", () => {
+  it("orders the error card, the inherited endpoint warning, then install and upgrade", () => {
     renderDetail({
       provider: "work-claude",
       entries: [
@@ -535,9 +612,10 @@ describe("ProviderDetailSurface", () => {
       ],
       extendsProvider: "claude",
     });
-    expect(
-      blockOrder(["provider-install-platform-macos", "provider-inherited-api-endpoint"]),
-    ).toEqual(["provider-inherited-api-endpoint", "provider-install-platform-macos"]);
+    expect(blockOrder(["provider-install-guide", "provider-inherited-api-endpoint"])).toEqual([
+      "provider-inherited-api-endpoint",
+      "provider-install-guide",
+    ]);
   });
 
   it("shows the installed version", () => {
@@ -716,13 +794,14 @@ describe("ProviderDetailSurface", () => {
     expect(onOpenDocs).toHaveBeenCalledWith("https://learn.chatgpt.com/docs/codex/cli");
   });
 
-  it("orders errors, the version, API endpoints, Models, then the diagnostic", () => {
+  it("orders errors, the version, install and upgrade, API endpoints, Models, then the diagnostic", () => {
     // 启动出错的提供方快照里不带版本，这里用删除失败提示代表顶部的错误类提示。
     renderDetail({ entries: [entry({ version: "2.1.280" })], removalError: "boom" });
 
     const blocks = [
       "provider-removal-error",
       "provider-version-section",
+      "provider-install-guide",
       "api-endpoints-slot",
       "provider-models-section",
       "provider-diagnostic-section",
@@ -730,18 +809,20 @@ describe("ProviderDetailSurface", () => {
     expect(blockOrder(blocks.toReversed())).toEqual(blocks);
   });
 
-  it("shows the version or the install guide, never both", () => {
-    renderDetail({ entries: [entry({ version: "2.1.280" })] });
-    expect(screen.getByTestId("provider-version-section").textContent).toContain("v2.1.280");
-    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
-    cleanup();
+  it("keeps install and upgrade above API endpoints when the provider is not installed", () => {
+    renderDetail({ entries: [entry({ status: "unavailable" })] });
 
-    // daemon 不会给未安装的提供方填 version；这里故意带上，验证互斥由详情页自己保证。
-    renderDetail({ entries: [entry({ status: "unavailable", version: "2.1.280" })] });
-    expect(screen.getByTestId("provider-install-guide").textContent).toContain(
-      i18n.t("settings.providers.install.title", { name: "Claude Code" }),
-    );
     expect(screen.queryByTestId("provider-version-section")).toBeNull();
+    const blocks = ["provider-install-guide", "api-endpoints-slot", "provider-models-section"];
+    expect(blockOrder(blocks.toReversed())).toEqual(blocks);
+  });
+
+  it("shows no version for a provider that is not installed, even if the snapshot carries one", () => {
+    // daemon 不会给未安装的提供方填 version；这里故意带上，验证详情页自己不显示。
+    renderDetail({ entries: [entry({ status: "unavailable", version: "2.1.280" })] });
+
+    expect(screen.queryByTestId("provider-version-section")).toBeNull();
+    expect(shownCommands("provider-upgrade-command")).toEqual(["claude update"]);
   });
 
   it("shows no version section when the version could not be read", () => {

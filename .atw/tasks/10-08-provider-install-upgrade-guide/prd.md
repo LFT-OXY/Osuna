@@ -61,19 +61,19 @@
 |---|---|---|---|
 | Claude Code | macOS/Linux、Windows（PowerShell 和 CMD 两行安装命令）、Homebrew、WinGet、npm | 前两种是 `claude update`；Homebrew 是 `brew upgrade claude-code`；WinGet 是 `winget upgrade Anthropic.ClaudeCode`；npm 是 `npm install -g @anthropic-ai/claude-code@latest` | code.claude.com/docs/en/setup |
 | Codex | macOS/Linux、Windows、npm、Homebrew | 照抄官方的 Update 写法（重跑安装脚本、`npm install -g @openai/codex`、`brew upgrade --cask codex`），不带 `CODEX_NON_INTERACTIVE` | learn.chatgpt.com/docs/codex/cli |
-| Copilot | npm、WinGet、Homebrew、安装脚本 | 都是 `copilot update` | docs.github.com 上的 Copilot CLI 安装页 |
-| OpenCode | 安装脚本、npm、Bun、pnpm、Homebrew、Chocolatey、Scoop | 都是 `opencode upgrade` | opencode.ai/docs/#install |
+| Copilot | npm、WinGet、Homebrew、安装脚本（标签写作 Install script，列官方给的 curl 和 wget 两行） | 都是 `copilot update` | docs.github.com 上的 Copilot CLI 安装页 |
+| OpenCode | 安装脚本（标签写作 Install script）、npm、Bun、pnpm、Homebrew、Chocolatey、Scoop | 都是 `opencode upgrade` | opencode.ai/docs/#install |
 | Pi | curl、PowerShell、npm、pnpm、bun、Nix | Nix 是 `nix profile upgrade pi`，其余都是 `pi update` | github.com/earendil-works/pi 的 README |
-| Oh My Pi | macOS·Linux、Windows (PowerShell)、Homebrew、Bun、mise | 都是 `omp update` | github.com/can1357/oh-my-pi 的 README |
+| Oh My Pi | macOS · Linux、Windows (PowerShell)、Homebrew、Bun、mise（顺序按本表，README 里 Windows 排在 Bun 之后；README 的 "Bun (recommended)" "Pinned versions (mise)" 简写成 Bun、mise） | 都是 `omp update` | github.com/can1357/oh-my-pi 的 README（`#install` 一节） |
 
-- 默认标签取"官方顺序里第一个适用于主机系统的安装方式"。主机系统未知（旧 daemon 不上报）时选第一个标签。主机系统沿用 `server_info` 里已有的字段，不改协议。
-- 解析函数的输入和现在一样：提供方 id、配置里的 `extends`、主机系统。输出：所属的内置提供方、文档链接、安装方式列表、默认标签。内置提供方忽略 `extends`；自定义提供方使用它所继承的内置提供方的数据；继承的不是内置提供方（比如 `acp`），或者是未知 id，都返回"没有区块"。
+- 默认标签取"官方顺序里第一个适用于主机系统的安装方式"。主机系统未知（旧 daemon 不上报）时选第一个标签。主机系统沿用 `server_info` 里已有的字段，不改协议。主机系统可能晚于首次渲染才到：用户还没点过标签时，选中的标签跟着默认标签变；点过以后不再变。
+- 解析函数的输入和现在一样：提供方 id、配置里的 `extends`、主机系统。输出：所属的内置提供方、是不是沿用所继承提供方的区块、文档链接、安装方式列表、默认安装方式。内置提供方忽略 `extends`；自定义提供方使用它所继承的内置提供方的数据；继承的不是内置提供方（比如 `acp`），或者是未知 id，都返回"没有区块"。
 
 ### 详情页（App）
 
 - 区块放在版本一节下面，也就是现在安装指引的位置。装没装都显示；"版本和安装指引二选一"的规则取消。整体顺序：错误卡片 → 继承接口的警告 → 版本 → 安装与升级 → 第三方接口 → 模型 → 诊断。
 - 提供方被关闭时只显示"已关闭"卡片，和现在一样。
-- 区块标题是"安装与升级"（en："Install and upgrade"）。自定义提供方的标题带上它所继承 CLI 的名字（具体文案在实现时定，要能让人看出是哪个 CLI）。每个标签下的两组命令分别标"安装"和"升级"（en：Install / Upgrade）。
+- 区块标题是"安装与升级"（en："Install and upgrade"）。自定义提供方的标题带上它所继承 CLI 的名字："安装与升级 {CLI 名}"（en："Install and upgrade {name}"）。每个标签下的两组命令分别标"安装"和"升级"（en：Install / Upgrade）。
 - 区块底部一行：左边是"在运行 Osuna 守护进程的机器上执行"，右边是"官方文档"链接，沿用现有文案。
 - "选择主机的操作系统"这个占位已经用不到了，连同相关文案一起删掉。
 
@@ -103,8 +103,8 @@
 ## UI and Design
 
 - 视觉上沿用现在的安装指引：设置卡片里放等宽的命令行，右侧是幽灵按钮"复制"，底部一行是主机提示和文档链接。遵循 `docs/design.md`、`docs/unistyles.md` 和 `.atw/spec/app/frontend/component-guidelines.md`。
-- 标签数量会达到 7 个（OpenCode），放不进区块标题右侧那个位置。标签条移到卡片顶部单独占一行；宽度不够时横向滚动，或者换行，二者选一，前提是不截断标签文字，也不撑破卡片。
-- 一个标签下的内容：先是"安装"小标题，下面是一行或多行命令；再是"升级"小标题，下面是一行或多行命令。
+- 标签数量会达到 7 个（OpenCode），放不进区块标题右侧那个位置。标签条移到卡片顶部单独占一行；宽度不够时横向滚动（实现选了滚动，没选换行），不截断标签文字，也不撑破卡片。滚动视口收在卡片左右内边距以内，滚出去的标签在内容对齐线上被裁掉。
+- 一个标签下的内容：先是"安装"小标题，下面是一行或多行命令；再是"升级"小标题，下面是一行或多行命令。命令放不下时折行，不横向滚动；"复制"按钮和它那条命令垂直居中，按钮的字落在卡片的右对齐线上。
 - 需要的状态：已安装、未安装（两者内容相同）、主机系统未知（选中第一个标签）、复制失败（沿用现有的提示）。
 - 目标视口：桌面 Electron 1280，以及 Web 窄屏 390。原生端按约定不做实机验收。
 - 截图验收：

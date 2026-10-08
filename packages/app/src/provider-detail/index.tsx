@@ -19,18 +19,18 @@ import { ProviderDiagnosticSection } from "./diagnostic-section";
 import { ProviderModelsSection } from "./models";
 
 /*
- * 提供方详情的内容区，区块顺序固定：删除失败 → 开关失败 → 错误卡 → 继承接口提示 → 版本 → 安装指引 → 第三方接口 → Models → 诊断。
- * 版本只在已安装时出现，安装指引只在启用且未安装时出现，两者互斥。
+ * 提供方详情的内容区，区块顺序固定：删除失败 → 开关失败 → 错误卡 → 继承接口提示 → 版本 → 安装与升级 → 第三方接口 → Models → 诊断。
+ * 版本只在已安装时出现；安装与升级装没装都在同一处，一键升级失败时用户靠它手动升级。
  * 已停用时只有两个失败提示和一张停用说明卡：daemon 不探测已停用的提供方，快照里的状态说明不了装没装。
  * 外框（弹窗或页面）由调用方决定。
  * 这里只收 props，方便 jsdom 测试；运行时接线在 view.tsx。
- * 版本、安装指引与第三方接口的运行时视图由调用方经 render 插槽注入；后两者在单测运行器里无法加载。
+ * 版本、安装与升级、第三方接口的运行时视图由调用方经 render 插槽注入；后两者在单测运行器里无法加载。
  */
 
 export interface ProviderDetailSurfaceProps {
   provider: string;
   entries: ProviderSnapshotEntry[] | undefined;
-  // daemon 配置里该提供方的 extends 原值，未收窄，交给安装指引解析。
+  // daemon 配置里该提供方的 extends 原值，未收窄，交给安装与升级区块解析。
   extendsProvider: unknown;
   hostPlatform: string | undefined;
   hostSupportsApiEndpoints: boolean;
@@ -175,11 +175,10 @@ export function ProviderDetailSurface({
     [entries, provider],
   );
   const isDisabled = providerEntry?.enabled === false;
-  const isNotInstalled = providerEntry?.status === "unavailable";
-  const installGuide = useMemo(() => {
-    if (!isNotInstalled) return null;
-    return resolveProviderInstallGuide({ provider, extendsProvider, hostPlatform });
-  }, [extendsProvider, hostPlatform, isNotInstalled, provider]);
+  const installGuide = useMemo(
+    () => resolveProviderInstallGuide({ provider, extendsProvider, hostPlatform }),
+    [extendsProvider, hostPlatform, provider],
+  );
   // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
   const showApiEndpoints = hostSupportsApiEndpoints && supportsApiEndpoints(provider);
   const providerSnapshotRefreshing = providerEntry?.status === "loading";

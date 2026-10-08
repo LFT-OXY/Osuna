@@ -2,33 +2,75 @@
  * @vitest-environment jsdom
  */
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { ProviderInstallGuideSurface, resolveProviderInstallGuide } from "./index";
 
-function requireGuide(hostPlatform: string | undefined) {
-  const guide = resolveProviderInstallGuide({ provider: "claude", hostPlatform });
-  if (!guide) throw new Error("Expected the Claude Code install guide");
+interface GuideTarget {
+  provider?: string;
+  extendsProvider?: string;
+  hostPlatform: string | undefined;
+}
+
+interface SurfaceInput extends GuideTarget {
+  cliLabel?: string;
+}
+
+function requireGuide({ provider = "claude", extendsProvider, hostPlatform }: GuideTarget) {
+  const guide = resolveProviderInstallGuide({ provider, extendsProvider, hostPlatform });
+  if (!guide) throw new Error(`Expected install and upgrade data for ${provider}`);
   return guide;
 }
 
-function renderSurface(hostPlatform: string | undefined) {
+function renderSurface({ cliLabel = "Claude Code", ...target }: SurfaceInput) {
   const onCopyCommand = vi.fn();
   const onOpenDocs = vi.fn();
-  render(
-    <ProviderInstallGuideSurface
-      guide={requireGuide(hostPlatform)}
-      cliLabel="Claude"
-      onCopyCommand={onCopyCommand}
-      onOpenDocs={onOpenDocs}
-    />,
-  );
-  return { onCopyCommand, onOpenDocs };
+  function surface(next: GuideTarget) {
+    return (
+      <ProviderInstallGuideSurface
+        guide={requireGuide(next)}
+        cliLabel={cliLabel}
+        onCopyCommand={onCopyCommand}
+        onOpenDocs={onOpenDocs}
+      />
+    );
+  }
+  const { rerender } = render(surface(target));
+  return { onCopyCommand, onOpenDocs, rerender: (next: GuideTarget) => rerender(surface(next)) };
 }
 
-function shownCommands(): string[] {
-  return screen.queryAllByTestId("provider-install-command").map((node) => node.textContent ?? "");
+function shownCommands(testID: string): string[] {
+  return screen.queryAllByTestId(testID).map((node) => node.textContent ?? "");
+}
+
+function installCommands(): string[] {
+  return shownCommands("provider-install-command");
+}
+
+function upgradeCommands(): string[] {
+  return shownCommands("provider-upgrade-command");
+}
+
+function methodTab(id: string) {
+  return screen.getByTestId(`provider-install-method-${id}`);
+}
+
+// 按文档顺序列出一个区块里用户能读到的每段文字。
+function shownTexts(testID: string): string[] {
+  const walker = document.createTreeWalker(screen.getByTestId(testID), NodeFilter.SHOW_TEXT);
+  const texts: string[] = [];
+  while (walker.nextNode()) {
+    texts.push(walker.currentNode.textContent ?? "");
+  }
+  return texts;
+}
+
+function selectedMethods(): string[] {
+  return within(screen.getByTestId("provider-install-methods"))
+    .getAllByRole("button")
+    .filter((tab) => tab.getAttribute("aria-selected") === "true")
+    .map((tab) => tab.textContent ?? "");
 }
 
 describe("ProviderInstallGuideSurface", () => {
@@ -36,67 +78,157 @@ describe("ProviderInstallGuideSurface", () => {
     cleanup();
   });
 
-  it("opens on the host's platform and switches to another", () => {
-    renderSurface("darwin");
+  it("opens on the host's install method with its install and upgrade commands", () => {
+    renderSurface({ hostPlatform: "darwin" });
 
-    expect(
-      screen.getByText(i18n.t("settings.providers.install.title", { name: "Claude" })),
-    ).toBeTruthy();
-    expect(
-      screen.getByTestId("provider-install-platform-macos").getAttribute("aria-selected"),
-    ).toBe("true");
-    expect(shownCommands()).toEqual(["curl -fsSL https://claude.ai/install.sh | bash"]);
+    expect(selectedMethods()).toEqual(["macOS/Linux"]);
+    expect(shownTexts("provider-install-guide")).toEqual([
+      "Install and upgrade",
+      "macOS/Linux",
+      "Windows",
+      "Homebrew",
+      "WinGet",
+      "npm",
+      "Install",
+      "curl -fsSL https://claude.ai/install.sh | bash",
+      "Copy",
+      "Upgrade",
+      "claude update",
+      "Copy",
+      "Run on the machine where the Osuna daemon runs",
+      "Official docs",
+    ]);
+  });
 
-    fireEvent.click(screen.getByTestId("provider-install-platform-windows"));
+  it("switches both command groups with the tab", () => {
+    renderSurface({ hostPlatform: "darwin" });
 
-    expect(shownCommands()).toEqual([
+    fireEvent.click(methodTab("windows"));
+
+    expect(selectedMethods()).toEqual(["Windows"]);
+    expect(installCommands()).toEqual([
       "irm https://claude.ai/install.ps1 | iex",
       "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd",
     ]);
-    expect(screen.getByText("PowerShell")).toBeTruthy();
-    expect(screen.getByText("CMD")).toBeTruthy();
+    expect(shownTexts("provider-install-commands")).toEqual([
+      "Install",
+      "PowerShell",
+      "irm https://claude.ai/install.ps1 | iex",
+      "Copy",
+      "CMD",
+      "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd",
+      "Copy",
+    ]);
+    expect(upgradeCommands()).toEqual(["claude update"]);
+
+    fireEvent.click(methodTab("homebrew"));
+
+    expect(installCommands()).toEqual(["brew install --cask claude-code"]);
+    expect(upgradeCommands()).toEqual(["brew upgrade claude-code"]);
   });
 
-  it("selects no platform and shows no command when the host platform is unknown", () => {
-    renderSurface(undefined);
+  it("opens on the first method when the host platform is unknown", () => {
+    renderSurface({ hostPlatform: undefined });
 
-    for (const platform of ["macos", "linux", "windows"]) {
-      expect(
-        screen.getByTestId(`provider-install-platform-${platform}`).getAttribute("aria-selected"),
-      ).not.toBe("true");
-    }
-    expect(shownCommands()).toEqual([]);
-    expect(screen.getByText(i18n.t("settings.providers.install.choosePlatform"))).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId("provider-install-platform-linux"));
-
-    expect(shownCommands()).toEqual(["curl -fsSL https://claude.ai/install.sh | bash"]);
+    expect(selectedMethods()).toEqual(["macOS/Linux"]);
+    expect(installCommands()).toEqual(["curl -fsSL https://claude.ai/install.sh | bash"]);
+    expect(upgradeCommands()).toEqual(["claude update"]);
   });
 
-  it("copies exactly the command it shows", () => {
-    const { onCopyCommand } = renderSurface("win32");
-    const command =
-      "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd";
+  it("moves to the host's install method when the host platform arrives late", () => {
+    const { rerender } = renderSurface({ hostPlatform: undefined });
 
+    rerender({ hostPlatform: "win32" });
+
+    expect(selectedMethods()).toEqual(["Windows"]);
+    expect(upgradeCommands()).toEqual(["claude update"]);
+  });
+
+  it("keeps the tab the user picked when the host platform arrives late", () => {
+    const { rerender } = renderSurface({ hostPlatform: undefined });
+    fireEvent.click(methodTab("npm"));
+
+    rerender({ hostPlatform: "win32" });
+
+    expect(selectedMethods()).toEqual(["npm"]);
+    expect(upgradeCommands()).toEqual(["npm install -g @anthropic-ai/claude-code@latest"]);
+  });
+
+  it("offers every install method OpenCode documents as a tab", () => {
+    renderSurface({ provider: "opencode", hostPlatform: "win32", cliLabel: "OpenCode" });
+
+    const tabs = within(screen.getByTestId("provider-install-methods")).getAllByRole("button");
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Install script",
+      "npm",
+      "Bun",
+      "pnpm",
+      "Homebrew",
+      "Chocolatey",
+      "Scoop",
+    ]);
+    expect(selectedMethods()).toEqual(["npm"]);
+    expect(installCommands()).toEqual(["npm install -g opencode-ai"]);
+    expect(upgradeCommands()).toEqual(["opencode upgrade"]);
+  });
+
+  it("copies exactly the install or upgrade command it shows", () => {
+    const { onCopyCommand } = renderSurface({ hostPlatform: "darwin" });
+    fireEvent.click(methodTab("npm"));
+
+    const copyInstall = i18n.t("settings.providers.install.copyAccessibility", {
+      command: "npm install -g @anthropic-ai/claude-code",
+    });
     fireEvent.click(
-      screen.getByLabelText(i18n.t("settings.providers.install.copyAccessibility", { command })),
+      within(screen.getByTestId("provider-install-commands")).getByLabelText(copyInstall),
+    );
+    const copyUpgrade = i18n.t("settings.providers.install.copyAccessibility", {
+      command: "npm install -g @anthropic-ai/claude-code@latest",
+    });
+    fireEvent.click(
+      within(screen.getByTestId("provider-upgrade-commands")).getByLabelText(copyUpgrade),
     );
 
-    expect(onCopyCommand).toHaveBeenCalledTimes(1);
-    expect(onCopyCommand).toHaveBeenCalledWith(command);
-    expect(shownCommands()).toContain(command);
+    expect(onCopyCommand.mock.calls).toEqual([
+      ["npm install -g @anthropic-ai/claude-code"],
+      ["npm install -g @anthropic-ai/claude-code@latest"],
+    ]);
+  });
+
+  it("copies the upgrade command even when it repeats the install command", () => {
+    const { onCopyCommand } = renderSurface({
+      provider: "codex",
+      hostPlatform: "linux",
+      cliLabel: "Codex",
+    });
+    const command = "curl -fsSL https://chatgpt.com/codex/install.sh | sh";
+    expect(installCommands()).toEqual([command]);
+    expect(upgradeCommands()).toEqual([command]);
+
+    fireEvent.click(
+      within(screen.getByTestId("provider-upgrade-commands")).getByLabelText(
+        i18n.t("settings.providers.install.copyAccessibility", { command }),
+      ),
+    );
+
+    expect(onCopyCommand.mock.calls).toEqual([[command]]);
   });
 
   it("opens the official docs", () => {
-    const { onOpenDocs } = renderSurface("linux");
+    const { onOpenDocs } = renderSurface({ hostPlatform: "linux" });
 
     fireEvent.click(
       screen.getByRole("link", {
-        name: i18n.t("settings.providers.install.docsFor", { name: "Claude" }),
+        name: i18n.t("settings.providers.install.docsFor", { name: "Claude Code" }),
       }),
     );
 
-    expect(onOpenDocs).toHaveBeenCalledWith("https://code.claude.com/docs/en/setup");
-    expect(screen.getByText(i18n.t("settings.providers.install.hostHint"))).toBeTruthy();
+    expect(onOpenDocs.mock.calls).toEqual([["https://code.claude.com/docs/en/setup"]]);
+  });
+
+  it("names the CLI a custom provider installs in the title", () => {
+    renderSurface({ provider: "work-claude", extendsProvider: "claude", hostPlatform: "darwin" });
+
+    expect(shownTexts("provider-install-guide")[0]).toBe("Install and upgrade Claude Code");
   });
 });

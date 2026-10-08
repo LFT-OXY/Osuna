@@ -3212,9 +3212,11 @@ export const ru: TranslationResources = {
         unknownError: "Неизвестная ошибка",
       },
       install: {
-        title: "Установка {{name}}",
+        title: "Установка и обновление",
+        titleFor: "Установка и обновление {{name}}",
+        installHeading: "Установка",
+        upgradeHeading: "Обновление",
         hostHint: "Выполните на машине, где запущен daemon Osuna",
-        choosePlatform: "Выберите операционную систему хоста",
         copy: "Копировать",
         copyAccessibility: "Копировать {{command}}",
         copyLabel: "команду",

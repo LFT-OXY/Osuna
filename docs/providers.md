@@ -330,11 +330,12 @@ export class CopilotACPAgentClient extends ACPAgentClient {
 
 In `packages/server/src/server/agent/provider-manifest.ts`, add mode definitions with UI metadata (icons, color tiers) and a provider definition entry.
 
-A built-in provider also needs three things for Settings → Providers to show its version and offer a one-click upgrade:
+A built-in provider also needs four things for Settings → Providers to show its version, offer a one-click upgrade, and list its install and upgrade commands:
 
 - **npm package**: set `npmPackage` on the entry. The installed version is compared with that package's `latest`; without it the provider never shows an update.
 - **Version parsing**: implement `resolveInstalledVersion` and `resolveCliLaunch` on the client with the same default binary it launches. `parseCliVersion` takes the first bare `x.y.z` from `--version`; add the CLI's real output to `provider-cli-version.test.ts`, and parse it yourself if the first `x.y.z` is not the CLI's version.
 - **Upgrade command**: add the CLI's own upgrade subcommand to `UPGRADE_SUBCOMMANDS` in `provider-upgrade-command.ts`. It runs with the provider's resolved executable, not whatever `PATH` finds. A CLI without its own upgrade command needs install-method detection from the executable's real path, like Codex's `detectCodexInstallMethod`; until then it answers `unsupported`. Upgrading with a package manager the user did not install it with leaves a second copy on `PATH`, so a path you can't classify answers `install_method_unknown` instead of guessing. A CLI's own upgrade subcommand can also print a notice and exit 0 without touching a package-manager install: `claude update` does this for Homebrew, so a Claude Code Homebrew cask runs `brew upgrade --cask` instead. Installs nothing detects (WinGet, apk) come back as `version_unchanged`: the upgrade manager fails an upgrade that exits 0 with the same readable version before and after.
+- **Install and upgrade commands**: add the provider to `PROVIDER_INSTALL_GUIDES` in `packages/app/src/provider-install-guide/internal/commands.ts`, with the tab names, order, and commands copied from its official docs. List a method only when it installs with one command and the docs give its upgrade command; multi-step installs, prereleases, and methods whose upgrade is undocumented or fails stay behind the docs link. Without an entry the provider's details have no **Install and upgrade** section, so a failed one-click upgrade leaves the user with nothing to run.
 
 First, define the modes with visual metadata:
 

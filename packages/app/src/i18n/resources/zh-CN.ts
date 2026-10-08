@@ -3165,9 +3165,11 @@ export const zhCN: TranslationResources = {
         unknownError: "未知错误",
       },
       install: {
-        title: "安装 {{name}}",
+        title: "安装与升级",
+        titleFor: "安装与升级 {{name}}",
+        installHeading: "安装",
+        upgradeHeading: "升级",
         hostHint: "在运行 Osuna 守护进程的机器上执行",
-        choosePlatform: "选择主机的操作系统",
         copy: "复制",
         copyAccessibility: "复制 {{command}}",
         copyLabel: "命令",

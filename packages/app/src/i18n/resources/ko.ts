@@ -3173,9 +3173,11 @@ export const ko: TranslationResources = {
         unknownError: "알 수 없는 오류",
       },
       install: {
-        title: "{{name}} 설치",
+        title: "설치 및 업그레이드",
+        titleFor: "{{name}} 설치 및 업그레이드",
+        installHeading: "설치",
+        upgradeHeading: "업그레이드",
         hostHint: "Osuna daemon이 실행 중인 머신에서 실행하세요",
-        choosePlatform: "Host의 운영체제를 선택하세요",
         copy: "복사",
         copyAccessibility: "{{command}} 복사",
         copyLabel: "명령",

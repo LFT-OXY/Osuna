@@ -3157,9 +3157,11 @@ export const ar: TranslationResources = {
         unknownError: "خطأ غير معروف",
       },
       install: {
-        title: "تثبيت {{name}}",
+        title: "التثبيت والترقية",
+        titleFor: "تثبيت {{name}} وترقيته",
+        installHeading: "التثبيت",
+        upgradeHeading: "الترقية",
         hostHint: "نفّذ الأمر على الجهاز الذي يعمل عليه daemon الخاص بـ Osuna",
-        choosePlatform: "اختر نظام تشغيل المضيف",
         copy: "نسخ",
         copyAccessibility: "نسخ {{command}}",
         copyLabel: "الأمر",

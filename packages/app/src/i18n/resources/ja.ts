@@ -3187,9 +3187,11 @@ export const ja: TranslationResources = {
         unknownError: "不明なエラー",
       },
       install: {
-        title: "{{name}} をインストール",
+        title: "インストールとアップグレード",
+        titleFor: "{{name}} のインストールとアップグレード",
+        installHeading: "インストール",
+        upgradeHeading: "アップグレード",
         hostHint: "Osuna daemon が動作しているマシンで実行してください",
-        choosePlatform: "Host の OS を選択",
         copy: "コピー",
         copyAccessibility: "{{command}} をコピー",
         copyLabel: "コマンド",
