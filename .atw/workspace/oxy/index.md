@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 27
-- **Last Active**: 2026-10-01
+- **Total Sessions**: 28
+- **Last Active**: 2026-10-08
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~729 | Active |
+| `journal-1.md` | ~772 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 28 | 2026-10-08 | 提供方安装与升级指引：工单 04 与任务归档 | `805353437` | `main` |
 | 27 | 2026-10-01 | 输入框窄栏套餐用量：工单 05 上下文弹层重整、验收与归档 | `5e7029979` | `agent-input-subscription-display` |
 | 26 | 2026-10-01 | Providers 两级结构：工单 10 升级按钮挪进状态行，任务验收归档 | `9e1c30297` | `split-providers-models-menu` |
 | 25 | 2026-10-01 | 补齐简体中文界面翻译：工单 06 PR 面板/插件/会话页/侧栏迁移，任务验收并归档 | `02f131c94`, `5140793d3` | `fix/settings-menu-zh-i18n` |

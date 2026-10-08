@@ -727,3 +727,46 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 ### Status
 
 [OK] **Completed**
+
+
+## Session 28: 提供方安装与升级指引：工单 04 与任务归档
+<!-- atw-session: v=2 fp=a6a66e5a7b30d2a5 -->
+
+**Date**: 2026-10-08
+**Task**: 提供方安装与升级指引：工单 04 与任务归档
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+详情页的升级失败块加上指向「安装与升级」区块的引导，去掉旧的手动提示；任务四张工单全部完成并归档。
+
+### Main Changes
+
+- 详情页升级失败块在原因下面加一句引导（除 in_progress 外的失败都显示，没有区块的提供方不显示），文案补齐 9 种语言
+- 去掉只在 install_method_unknown 时出现的手动升级提示、文档链接和 openDocs
+- 列表行的失败块不带引导（用户决定，记为 Q21）；详情页经 ProviderVersionSlotContext.hasInstallSectionBelow 传入
+- 回写 state-management.md、prd.md、interview-decisions.md；任务归档到 archive/2026-10
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `805353437` | feat(app): 升级失败时引导去看「安装与升级」区块 |
+
+### Testing
+
+- [OK] provider-detail/index.test.tsx、providers-section.test.tsx、i18n/resources.test.ts、provider-detail/upgrade.test.ts：155 个用例通过
+- [OK] typecheck、lint 通过；未跑全量套件
+- [OK] Electron 1280 截图：详情页失败块带引导、列表行失败块不带引导（假 claude 脚本复现 version_unchanged）
+- [OK] 评审三轮：规范、规格终审无硬性问题；视觉一轮，验收标准满足
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 805353437 与归档提交尚未推送
+- 可另开票：升级失败时按安装方式预选「安装与升级」的标签（WinGet、apk 装的 Claude 默认标签仍是刚失败的 claude update；需改协议）
+- 改动前就有的视觉问题未处理：失败块「关闭」不在右对齐线上、单行输出框下半截留空、输出框与命令行等宽字号不一致
