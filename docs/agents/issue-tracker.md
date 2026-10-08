@@ -66,11 +66,14 @@ python3 .atw/scripts/tickets.py list        # all tickets + Impl state
 python3 .atw/scripts/tickets.py frontier    # Impl: ready with all blockers done
 python3 .atw/scripts/tickets.py claim <NN>  # → Impl: doing
 python3 .atw/scripts/tickets.py done <NN>   # → Impl: done
+python3 .atw/scripts/tickets.py claim <NN> --parallel  # → Impl: doing, alongside others (`/atw-implement-spec` only)
 ```
 
 `claim` refuses tickets that aren't on the frontier, and the parser rejects blocker references that don't exist or form a cycle. `claim` also records `implementation_base_sha` and writes the ticket's path into `$TASK/check.jsonl`, which is what review sub-agents read to know which ticket is live; `done` withdraws that line.
 
-**Tickets run one at a time by default.** `claim` hard-rejects a second ticket while another is at `Impl: doing`, but that check is read-then-write — it is serial execution, not an atomic exclusive claim. Don't run two implementers against one task directory.
+**Tickets run one at a time by default.** `claim` hard-rejects a second ticket while another is at `Impl: doing`, but that check is read-then-write — it is serial execution, not an atomic exclusive claim. Don't run two implementers against one task directory by hand.
+
+**The one parallel path is `/atw-implement-spec`.** Its orchestrator claims with `--parallel`, which lets several tickets sit at `Impl: doing`, records `implementation_base_sha` once for the whole run, and writes no current-ticket line into `$TASK/check.jsonl` — there is no single live ticket. Only the orchestrator writes ticket state; each implementer works in its own worktree.
 
 ## Wayfinding operations
 
@@ -91,7 +94,7 @@ These stay at the repo root, unchanged:
 
 ```text
 docs/adr/          architecture decisions          atw-domain-modeling
-CONTEXT.md         domain glossary                 atw-domain-modeling
+GLOSSARY.md        domain glossary                 atw-domain-modeling
 .out-of-scope/     rejected-concept records        atw-triage
 .atw/spec/         layered coding standards        ATW's own spec flow
 ```
