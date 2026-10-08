@@ -3,7 +3,7 @@
   "name": "provider-install-upgrade-guide",
   "title": "提供方常驻安装与升级指引",
   "description": "提供方详情页常驻显示安装与升级区块：按官方文档的标签（系统/包管理器）分别列安装命令和升级命令，附官方文档链接；纳入 Copilot、OpenCode；升级失败块统一指向该区块。",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",
@@ -23,6 +23,6 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "d5f450b0574b99f0ad1469f40dabf210116d152c"
+    "implementation_base_sha": "06d8c9c97c79dd2dab818108c5af9c7512fa11af"
   }
 }

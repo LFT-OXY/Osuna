@@ -17,7 +17,11 @@ import {
   type ProviderDetailMenuProps,
 } from "./header";
 import type { ProviderDiagnosticState } from "./diagnostic";
-import { ProviderDetailSurface, type ProviderDetailSurfaceProps } from "./index";
+import {
+  ProviderDetailSurface,
+  type ProviderDetailSurfaceProps,
+  type ProviderVersionSlotContext,
+} from "./index";
 import type { ProviderUpgradeState } from "./upgrade";
 import { ProviderVersionSection } from "./version-section";
 
@@ -86,20 +90,34 @@ function renderApiEndpoints(providerLabel: string) {
   return <div data-testid="api-endpoints-slot">{providerLabel}</div>;
 }
 
-function renderVersion(installedVersion: string) {
-  return <ProviderVersionSection installedVersion={installedVersion} />;
+function renderVersion({ installedVersion, hasInstallSectionBelow }: ProviderVersionSlotContext) {
+  return (
+    <ProviderVersionSection
+      installedVersion={installedVersion}
+      hasInstallSectionBelow={hasInstallSectionBelow}
+    />
+  );
 }
 
 function shownCommands(testID: string): string[] {
   return screen.queryAllByTestId(testID).map((node) => node.textContent ?? "");
 }
 
-// 「安装与升级」区块的标题：区块里按文档顺序的第一段文字。
+// 一个区块里按文档顺序出现的文字。
+function shownTexts(testID: string): string[] {
+  const walker = document.createTreeWalker(screen.getByTestId(testID), NodeFilter.SHOW_TEXT);
+  const texts: string[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    texts.push(node.textContent ?? "");
+  }
+  return texts;
+}
+
+// 「安装与升级」区块的标题：区块里的第一段文字。
 function installSectionTitle(): string {
-  const section = screen.getByTestId("provider-install-guide");
-  const firstText = document.createTreeWalker(section, NodeFilter.SHOW_TEXT).nextNode();
-  if (!firstText) throw new Error("The install and upgrade section shows no text");
-  return firstText.textContent ?? "";
+  const [title] = shownTexts("provider-install-guide");
+  if (title === undefined) throw new Error("The install and upgrade section shows no text");
+  return title;
 }
 
 function selectedInstallMethods(): string[] {
@@ -630,9 +648,7 @@ describe("ProviderDetailSurface", () => {
   it("shows the newer version next to the installed one", () => {
     renderDetail({
       entries: [entry({ version: "2.1.280" })],
-      renderVersion: (installedVersion) => (
-        <ProviderVersionSection installedVersion={installedVersion} latestVersion="2.1.285" />
-      ),
+      renderVersion: (slot) => <ProviderVersionSection {...slot} latestVersion="2.1.285" />,
     });
 
     expect(screen.getByTestId("provider-version-section").textContent).toContain(
@@ -641,31 +657,26 @@ describe("ProviderDetailSurface", () => {
   });
 
   function renderUpgradableVersion(input: {
-    provider?: string;
-    providerLabel?: string;
     latestVersion?: string;
     state: ProviderUpgradeState;
     onUpgrade?: () => void;
     onDismissFailure?: () => void;
-    onOpenDocs?: (url: string) => void;
+    overrides?: Partial<ProviderDetailSurfaceProps>;
   }) {
     // 经展开传入：upgrade 是对象，直接写在 JSX 属性上会被 react-perf 规则拦下。
     const sectionProps = {
       latestVersion: input.latestVersion,
       upgrade: {
-        provider: input.provider ?? "claude",
-        providerLabel: input.providerLabel ?? "Claude Code",
+        providerLabel: "Claude Code",
         state: input.state,
         onUpgrade: input.onUpgrade ?? noop,
         onDismissFailure: input.onDismissFailure ?? noop,
-        onOpenDocs: input.onOpenDocs ?? noop,
       },
     };
     renderDetail({
       entries: [entry({ version: "2.1.280" })],
-      renderVersion: (installedVersion) => (
-        <ProviderVersionSection installedVersion={installedVersion} {...sectionProps} />
-      ),
+      renderVersion: (slot) => <ProviderVersionSection {...slot} {...sectionProps} />,
+      ...input.overrides,
     });
   }
 
@@ -765,12 +776,64 @@ describe("ProviderDetailSurface", () => {
     expect(within(failure).queryByTestId("provider-upgrade-output")).toBeNull();
   });
 
-  it("points to manual upgrade instructions when the install method is unknown", () => {
-    const onOpenDocs = vi.fn();
+  const INSTALL_SECTION_HINT =
+    'Upgrade manually with the commands under "Install and upgrade" below, or see the official docs';
+
+  it.each([
+    ["the command failed", "command_failed", "npm exited with code 1", ["Upgrade failed"]],
+    [
+      "it timed out",
+      "timeout",
+      "claude update timed out after 600s",
+      ["The upgrade timed out and was stopped"],
+    ],
+    [
+      "the version didn't change",
+      "version_unchanged",
+      "claude update exited cleanly but the version is still 2.1.280",
+      [
+        "The upgrade command finished but the version didn't change; the CLI may be managed by a package manager, or the package manager doesn't have the new version yet",
+      ],
+    ],
+    [
+      "the CLI is gone from the host",
+      "not_installed",
+      "claude was not found",
+      ["The CLI wasn't found on the host"],
+    ],
+    [
+      "the provider can't be upgraded automatically",
+      "unsupported",
+      "claude has no upgrade command",
+      ["This provider can't be upgraded automatically"],
+    ],
+    [
+      "the request never arrived",
+      null,
+      "Transport not connected",
+      ["Upgrade failed", "Transport not connected"],
+    ],
+    [
+      "the daemon reports a reason this app doesn't know",
+      "disk_full",
+      "No space left on device",
+      ["Upgrade failed", "No space left on device"],
+    ],
+  ])("points a failed upgrade to install and upgrade when %s", (_name, errorCode, error, shown) => {
     renderUpgradableVersion({
-      onOpenDocs,
-      provider: "codex",
-      providerLabel: "Codex",
+      latestVersion: "2.1.285",
+      state: { status: "failed", errorCode, error, output: null },
+    });
+
+    expect(shownTexts("provider-upgrade-failure")).toEqual([
+      ...shown,
+      INSTALL_SECTION_HINT,
+      "Dismiss",
+    ]);
+  });
+
+  it("shows only the reason and the pointer, with no docs link, when the install method is unknown", () => {
+    renderUpgradableVersion({
       latestVersion: "0.131.0",
       state: {
         status: "failed",
@@ -778,20 +841,56 @@ describe("ProviderDetailSurface", () => {
         error: "Could not tell how codex was installed from /home/me/bin/codex",
         output: null,
       },
+      overrides: {
+        provider: "codex",
+        entries: [entry({ provider: "codex", label: "Codex", version: "0.130.0" })],
+      },
     });
 
+    expect(shownTexts("provider-upgrade-failure")).toEqual([
+      "Couldn't tell how this CLI was installed, so it can't be upgraded automatically",
+      INSTALL_SECTION_HINT,
+      "Dismiss",
+    ]);
     const failure = screen.getByTestId("provider-upgrade-failure");
-    expect(failure.textContent).toContain(
-      i18n.t("settings.providers.upgrade.errors.installMethodUnknown"),
-    );
-    expect(failure.textContent).toContain(i18n.t("settings.providers.upgrade.manualHint"));
-    expect(failure.textContent).not.toContain("/home/me/bin/codex");
-    fireEvent.click(
-      within(failure).getByRole("link", {
-        name: i18n.t("settings.providers.install.docsFor", { name: "Codex" }),
-      }),
-    );
-    expect(onOpenDocs).toHaveBeenCalledWith("https://learn.chatgpt.com/docs/codex/cli");
+    expect(within(failure).queryAllByRole("link")).toEqual([]);
+  });
+
+  it("doesn't point to install and upgrade while another upgrade is running", () => {
+    renderUpgradableVersion({
+      latestVersion: "2.1.285",
+      state: {
+        status: "failed",
+        errorCode: "in_progress",
+        error: "An upgrade of claude is already running",
+        output: null,
+      },
+    });
+
+    expect(shownTexts("provider-upgrade-failure")).toEqual([
+      "An upgrade is already running",
+      "Dismiss",
+    ]);
+  });
+
+  it("doesn't point to install and upgrade for a provider without that section", () => {
+    renderUpgradableVersion({
+      latestVersion: "1.1.0",
+      state: {
+        status: "failed",
+        errorCode: "command_failed",
+        error: "my-acp update exited with code 1",
+        output: null,
+      },
+      overrides: {
+        provider: "my-acp",
+        extendsProvider: "acp",
+        entries: [entry({ provider: "my-acp", label: "Custom agent", version: "1.0.0" })],
+      },
+    });
+
+    expect(screen.queryByTestId("provider-install-guide")).toBeNull();
+    expect(shownTexts("provider-upgrade-failure")).toEqual(["Upgrade failed", "Dismiss"]);
   });
 
   it("orders errors, the version, install and upgrade, API endpoints, Models, then the diagnostic", () => {

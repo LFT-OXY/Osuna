@@ -1,4 +1,4 @@
-{"file": ".atw/tasks/10-08-provider-install-upgrade-guide/research/interview-decisions.md", "reason": "Q1–Q20 用户决定，规格的来源"}
+{"file": ".atw/tasks/10-08-provider-install-upgrade-guide/research/interview-decisions.md", "reason": "Q1–Q21 用户决定，规格的来源"}
 {"file": ".atw/tasks/10-08-provider-install-upgrade-guide/research/official-commands.md", "reason": "逐字核实的官方安装/升级命令与文档链接"}
 {"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "复用原语、设计禁止项、i18n 规则"}
 {"file": ".atw/spec/app/frontend/testing.md", "reason": "App 单测与组件测试写法"}

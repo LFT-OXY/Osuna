@@ -3177,7 +3177,7 @@ export const es: TranslationResources = {
         actionLabel: "Actualizar {{name}}",
         actionTo: "Actualizar a v{{version}}",
         manualHint:
-          "Actualízala manualmente con la herramienta con la que la instalaste, o sigue la documentación oficial.",
+          'Actualiza manualmente con los comandos de "Instalar y actualizar", más abajo, o consulta la documentación oficial',
         errors: {
           failed: "No se pudo actualizar",
           unsupported: "Este proveedor no se puede actualizar automáticamente",

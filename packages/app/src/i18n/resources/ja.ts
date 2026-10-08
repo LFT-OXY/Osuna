@@ -3137,7 +3137,7 @@ export const ja: TranslationResources = {
         actionLabel: "{{name}} をアップグレード",
         actionTo: "v{{version}} にアップグレード",
         manualHint:
-          "インストールしたときと同じ方法で手動でアップグレードするか、公式ドキュメントを参照してください。",
+          "下の「インストールとアップグレード」にあるコマンドで手動アップグレードするか、公式ドキュメントを参照してください",
         errors: {
           failed: "アップグレードに失敗しました",
           unsupported: "このプロバイダーは自動でアップグレードできません",

@@ -825,7 +825,8 @@ describe("ProvidersSection", () => {
     const failure = container?.querySelector<HTMLElement>(
       '[data-testid="provider-upgrade-failure"]',
     );
-    expect(failure?.textContent).toContain("Upgrade failed");
+    // 「安装与升级」区块在详情页，行下面没有：原因和关闭按钮之间不带指向它的引导。
+    expect(failure?.textContent).toBe("Upgrade failedDismissEACCES: permission denied\n");
     expect(failure?.querySelector('[data-testid="provider-upgrade-output"]')?.textContent).toBe(
       "EACCES: permission denied\n",
     );

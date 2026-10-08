@@ -3185,7 +3185,7 @@ export const fr: TranslationResources = {
         actionLabel: "Mettre à jour {{name}}",
         actionTo: "Mettre à jour vers v{{version}}",
         manualHint:
-          "Mettez-la à jour manuellement avec l'outil qui a servi à l'installer, ou suivez la documentation officielle.",
+          "Mettez à jour manuellement avec les commandes de « Installer et mettre à jour » ci-dessous, ou consultez la documentation officielle",
         errors: {
           failed: "Échec de la mise à jour",
           unsupported: "Ce fournisseur ne peut pas être mis à jour automatiquement",

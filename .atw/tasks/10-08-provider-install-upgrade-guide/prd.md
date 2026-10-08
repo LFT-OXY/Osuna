@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 
-依据：`research/interview-decisions.md`（Q1–Q20 的决定）、`research/official-commands.md`（2026-10-08 逐字核实的官方命令）。术语见 `docs/glossary.md` 的 **Install and upgrade** 词条。
+依据：`research/interview-decisions.md`（Q1–Q21 的决定）、`research/official-commands.md`（2026-10-08 逐字核实的官方命令）。术语见 `docs/glossary.md` 的 **Install and upgrade** 词条。
 
 ## Problem Statement
 
@@ -13,7 +13,7 @@
 ## Solution
 
 - 内置提供方的详情页常驻一个"安装与升级"区块，提供方装没装都显示。区块按官方文档的分法分成若干标签，每个标签下列出这种安装方式的安装命令和升级命令，都能复制。区块底部写明"在运行 Osuna 守护进程的机器上执行"，旁边是官方文档链接。六家内置提供方都有这个区块。
-- 一键升级失败时（"正在升级"除外），失败块里加一句引导，让用户去看"安装与升级"区块。
+- 一键升级失败时（"正在升级"除外），详情页的失败块里加一句引导，让用户去看"安装与升级"区块。
 - 升级命令正常退出、但版本没变时，daemon 判为失败，带上命令输出，用户能看到 CLI 实际说了什么。
 - 在 macOS 上用 Homebrew 装的 Claude Code，一键升级直接执行 `brew upgrade --cask`，不再调用不起作用的 `claude update`。
 
@@ -36,7 +36,7 @@
 15. As a 继承了 Claude Code 的自定义提供方的用户, I want 看到 Claude Code 的区块，标题用 Claude Code 的名字, so that 我知道要装、要升级的是哪个 CLI。
 16. As a 用户, I want 被关闭的提供方仍然只显示"已关闭"卡片, so that 关闭的提供方不会占满详情页。
 17. As a ACP 提供方的用户, I want 不出现内容残缺的区块, so that 不会误以为 Osuna 知道它的安装命令（ACP 目录本身有安装链接）。
-18. As a 用户, I want 一键升级失败时，失败块提示我去看"安装与升级"区块, so that 我知道下一步该做什么。
+18. As a 用户, I want 一键升级失败时，详情页的失败块提示我去看"安装与升级"区块, so that 我知道下一步该做什么。
 19. As a 用户, I want 失败块里仍然能看到命令输出原文, so that 我能看到 CLI 自己给出的原因和建议。
 20. As a 用 Homebrew 装 Claude Code 的 macOS 用户, I want 点"升级"后真的升级, so that 一键升级不会对我无效。
 21. As a 装的是 `claude-code@latest` cask 的用户, I want 升级的就是这个 cask, so that 不会另外装一份 `claude-code`。
@@ -80,7 +80,8 @@
 ### 升级失败块（App）
 
 - 去掉只在 `install_method_unknown` 时出现的手动升级提示，以及它附带的文档链接。
-- 除 `in_progress` 外，所有失败（包括请求没送达、错误码不认识的情况）都在原因下面加一句固定引导："可以按下方「安装与升级」里的命令手动升级，或查看官方文档"。对没有区块的提供方（比如 ACP），不显示这句。
+- 除 `in_progress` 外，所有失败（包括 `unsupported`、请求没送达、错误码不认识的情况）都在原因下面加一句固定引导："可以按下方「安装与升级」里的命令手动升级，或查看官方文档"。对没有区块的提供方（比如 ACP），不显示这句。引导是一句纯文字，不带链接；文档链接在区块底部。
+- 引导只在详情页显示。失败块在提供方列表行里也会出现，但区块不在那一屏，"下方"没有它，所以列表行的失败块不带引导，也不再有 `install_method_unknown` 的手动提示和文档链接（Q21）。点进详情能看到同一个失败块加引导。
 - 新错误码 `version_unchanged` 要有自己的标题文案，说明：命令已经执行完，但版本没有变化；可能是由包管理器管理的安装，也可能是包管理器还没收到新版本。按 `docs/design.md` 行内错误是单句的规则，各语言都写成一句（zh-CN："升级命令已执行完，但版本没有变化：可能是包管理器管理的安装，或包管理器还没有新版本"）。
 - 关闭、重试、输出展示的行为不变。
 
@@ -132,7 +133,7 @@
    - 已安装、未安装都显示区块，位置在版本一节和第三方接口之间。改写现有的"版本和安装指引二选一""已安装不显示指引"两个用例，以及排序用例。
    - 被关闭的提供方不显示区块。
    - 切换标签后显示对应的安装命令和升级命令；点复制会带上那条命令。
-   - 失败块：`command_failed`、`timeout`、`version_unchanged`、请求没送达，都显示指向区块的引导；`in_progress` 不显示；`install_method_unknown` 不再显示单独的手动提示。改写现有的"手动升级提示"用例。
+   - 失败块：`command_failed`、`timeout`、`version_unchanged`、`not_installed`、`unsupported`、请求没送达、不认识的错误码，都显示指向区块的引导；没有区块的提供方不显示；`in_progress` 不显示；`install_method_unknown` 不再显示单独的手动提示。改写现有的"手动升级提示"用例。列表行的失败块不带引导，在列表的组件测试（`providers-section.test.tsx`）里断言。
 5. **i18n**：现有的 `resources.test.ts` 会检查各语言的文案键是否齐全，新文案要补齐 9 种语言。
 
 参照的已有测试：`provider-upgrade.e2e.test.ts` 里 Codex 走 npm 升级的用例（假包管理器加路径判断），`provider-upgrade-command.test.ts` 里 `detectCodexInstallMethod` 的 Homebrew 用例，`provider-detail/index.test.tsx` 里的安装指引和升级失败用例。
@@ -145,7 +146,7 @@
 - 给 Copilot、OpenCode、Pi、OMP 加安装方式识别（它们自带的升级子命令本身就会沿用原来的安装方式）。
 - 根据 daemon 识别出的安装方式自动选中对应标签（这需要改协议）。
 - 由 daemon 代为执行安装命令。
-- 提供方列表里的行、ACP 目录、没有继承内置提供方的自定义提供方。
+- 提供方列表里的行（唯一的例外是它的升级失败块去掉了手动提示，见"升级失败块"一节）、ACP 目录、没有继承内置提供方的自定义提供方。
 - 被关闭的提供方显示区块。
 - 每个提供方给多个文档链接。
 - 判断有没有新版本的数据源（仍然查 npm）。

@@ -3231,7 +3231,7 @@ export const en = {
         actionLabel: "Upgrade {{name}}",
         actionTo: "Upgrade to v{{version}}",
         manualHint:
-          "Upgrade it manually with the tool you installed it with, or follow the official docs.",
+          'Upgrade manually with the commands under "Install and upgrade" below, or see the official docs',
         errors: {
           failed: "Upgrade failed",
           unsupported: "This provider can't be upgraded automatically",

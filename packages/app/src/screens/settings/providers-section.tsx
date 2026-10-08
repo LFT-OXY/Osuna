@@ -150,12 +150,11 @@ function ProviderRow({
       </Pressable>
       {upgrade.state.status === "failed" ? (
         <View style={styles.upgradeFailure}>
+          {/* 「安装与升级」区块在详情页，列表行下面没有，不带指向它的引导。 */}
           <ProviderUpgradeFailure
-            provider={def.id}
-            providerLabel={def.label}
             state={upgrade.state}
+            hasInstallSectionBelow={false}
             onDismiss={upgrade.dismiss}
-            onOpenDocs={upgrade.openDocs}
           />
         </View>
       ) : null}

@@ -3108,7 +3108,8 @@ export const ar: TranslationResources = {
         action: "ترقية",
         actionLabel: "ترقية {{name}}",
         actionTo: "ترقية إلى v{{version}}",
-        manualHint: "قم بترقيتها يدويًا بالأداة التي ثبّتها بها، أو اتبع الوثائق الرسمية.",
+        manualHint:
+          'يمكنك الترقية يدويًا بالأوامر الموجودة في "التثبيت والترقية" أدناه، أو راجع الوثائق الرسمية',
         errors: {
           failed: "فشلت الترقية",
           unsupported: "لا يمكن ترقية هذا المزود تلقائيًا",

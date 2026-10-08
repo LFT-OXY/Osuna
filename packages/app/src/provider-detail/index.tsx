@@ -27,6 +27,12 @@ import { ProviderModelsSection } from "./models";
  * 版本、安装与升级、第三方接口的运行时视图由调用方经 render 插槽注入；后两者在单测运行器里无法加载。
  */
 
+export interface ProviderVersionSlotContext {
+  installedVersion: string;
+  // 版本一节下面有没有安装与升级区块；升级失败的引导指向它。
+  hasInstallSectionBelow: boolean;
+}
+
 export interface ProviderDetailSurfaceProps {
   provider: string;
   entries: ProviderSnapshotEntry[] | undefined;
@@ -58,7 +64,7 @@ export interface ProviderDetailSurfaceProps {
   onAddCustomModel: (modelId: string) => Promise<void>;
   renderInstallGuide: (guide: ProviderInstallGuide, cliLabel: string) => ReactNode;
   renderApiEndpoints: (providerLabel: string) => ReactNode;
-  renderVersion: (installedVersion: string) => ReactNode;
+  renderVersion: (slot: ProviderVersionSlotContext) => ReactNode;
 }
 
 function ProviderDisabledCard({ providerLabel }: { providerLabel: string }) {
@@ -195,7 +201,8 @@ export function ProviderDetailSurface({
   });
   let versionContent: ReactNode = null;
   if (installedVersion) {
-    versionContent = renderVersion(installedVersion);
+    const hasInstallSectionBelow = installGuide !== null;
+    versionContent = renderVersion({ installedVersion, hasInstallSectionBelow });
   }
 
   let installGuideContent: ReactNode = null;
