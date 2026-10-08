@@ -7,10 +7,10 @@
 
 ## Status
 
-- [ ] Review migration guide
-- [ ] Update custom files
-- [ ] Run `atw update --migrate`
-- [ ] Test workflows
+- [x] Review migration guide
+- [x] Update custom files
+- [x] Run `atw update --migrate`
+- [x] Test workflows
 
 ---
 
@@ -31,11 +31,11 @@
 
 ### What is left for you
 
-- [ ] **Multi-context repos:** rename each per-context `CONTEXT.md` to `GLOSSARY.md`, and fix the links inside `GLOSSARY-MAP.md` to match. The updater only knows the two root paths.
-- [ ] **`docs/agents/domain.md` and `docs/agents/issue-tracker.md`:** `/atw-init-repo` wrote these into your repo and they still name `CONTEXT.md`. Replace the name in both, or re-run `/atw-init-repo` to regenerate them.
-- [ ] **Open tasks:** `check.jsonl` and `implement.jsonl` under `.atw/tasks/<task>/` list files by path. A line that still names `CONTEXT.md` now points at a file that is gone, and the hook skips it without a word — the review sub-agent simply works without your glossary. Replace the name there, and in that task's `prd.md`, `map.md` and tickets. `python3 ./.atw/scripts/task.py validate <task-dir>` reports every line whose file is missing.
-- [ ] **Any other mention** of `CONTEXT.md` / `CONTEXT-MAP.md` in `AGENTS.md`, `CLAUDE.md`, ADRs under `docs/adr/`, or `.atw/spec/`.
-- [ ] **Edited copies of removed skills** the updater reported as kept: delete them if you no longer want them.
+- [x] **Multi-context repos:** rename each per-context `CONTEXT.md` to `GLOSSARY.md`, and fix the links inside `GLOSSARY-MAP.md` to match. The updater only knows the two root paths.
+- [x] **`docs/agents/domain.md` and `docs/agents/issue-tracker.md`:** `/atw-init-repo` wrote these into your repo and they still name `CONTEXT.md`. Replace the name in both, or re-run `/atw-init-repo` to regenerate them.
+- [x] **Open tasks:** `check.jsonl` and `implement.jsonl` under `.atw/tasks/<task>/` list files by path. A line that still names `CONTEXT.md` now points at a file that is gone, and the hook skips it without a word — the review sub-agent simply works without your glossary. Replace the name there, and in that task's `prd.md`, `map.md` and tickets. `python3 ./.atw/scripts/task.py validate <task-dir>` reports every line whose file is missing.
+- [x] **Any other mention** of `CONTEXT.md` / `CONTEXT-MAP.md` in `AGENTS.md`, `CLAUDE.md`, ADRs under `docs/adr/`, or `.atw/spec/`.
+- [x] **Edited copies of removed skills** the updater reported as kept: delete them if you no longer want them.
 
 Nothing else needs action. Ticket states and `task.json` files are compatible as they are.
 
