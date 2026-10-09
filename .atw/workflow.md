@@ -342,7 +342,7 @@ Stop ③: implementation is the user's to start. You may not invoke either skill
 Per-ticket path (the default): one ticket at a time. Run `tickets.py frontier`, pick one, `tickets.py claim NN` — never hold two tickets at `doing` — then tell the user to run `/atw-implement` for the claimed ticket. One user invocation per ticket.
 Whole-spec path: the user runs `/atw-implement-spec` once. It owns the run from the first claim to the closing commit: it claims with `tickets.py claim NN --parallel`, dispatches implementer sub-agents across the frontier, each in its own worktree, lands everything on one integration branch, marks each ticket `done` as its work merges, reviews that branch once at the end, and writes spec updates back before its closing commit. Do not claim, review or commit around it. It needs a platform that dispatches sub-agents.
 On the per-ticket path, that one `/atw-implement` run is a closed chain and must not be broken up from the outside: implement (test-first where it fits) → run tests, full suite on the last pass → review → handle findings → write spec updates back → commit. Never instruct it to skip the review or the commit.
-Findings triage: spec-axis findings and anything the standards axis calls a hard violation get fixed first, then a full re-review, then the commit. Judgement calls ship and get reported.
+Findings triage: spec-axis findings and anything the standards axis calls a hard violation get fixed once, then only what was fixed is re-checked, once, then the commit. No second full review and no loop: anything still open after that one re-check goes to the user before the commit. Judgement calls ship and get reported.
 Relay every review report to the user verbatim — Standards and Spec, plus Visual when the ticket changed UI — even when the verdict is "nothing found". No report reaching you is not a passing review.
 Any sub-agent dispatched from here starts its prompt with `Active task: <task path from task.py current>` — the role files read that line to find the task, and it is the context hooks' fallback when session resolution misses.
 Main-session default: run the process; on the per-ticket path the implementation itself is written inside `/atw-implement`, never by a dispatched `atw-implement-agent` — that role file is reserved and is not a step in this flow. The only sub-agent that path raises is `atw-review` (twice, from inside `/atw-implement` — three times when the ticket changes UI and a Visual review runs). Implementer sub-agents exist only inside a `/atw-implement-spec` run, dispatched by that skill and by nothing else. Sub-agent self-exemption: this breadcrumb reaches sub-agent turns on some hosts. If you are already running as `atw-review`, do NOT spawn another `atw-review` — do the review you were dispatched for. If you were dispatched by `/atw-implement-spec` as an implementer or merger, stop ③ is already satisfied — do the work you were dispatched for and dispatch nothing. Dispatch is main session only.
@@ -670,9 +670,11 @@ That single run is a closed chain:
 
 | Finding | Handling |
 |---|---|
-| Spec-axis finding (the change does not match `prd.md` or the ticket) | Fix first, then re-run the full review, then commit |
-| Standards-axis finding marked a hard violation | Same — fix, full re-review, then commit |
+| Spec-axis finding (the change does not match `prd.md` or the ticket) | Fix once, re-check only what was fixed, then commit |
+| Standards-axis finding marked a hard violation | Same — fix once, re-check the fix, then commit |
 | Standards-axis judgement call | Commit as-is and report it to the user |
+
+One fix round and one re-check, each once. Do not start a second full review and do not loop: a full review of freshly fixed code always finds something new, so a ticket that chases a clean report never lands. Whatever is still open after the re-check goes to the user before the commit — they decide whether it ships, gets another fix, or changes the spec.
 
 The hard gate on this work is the test suite, not the review. Reviews report; tests block.
 

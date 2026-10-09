@@ -16,7 +16,7 @@ If the work changes what a user sees, build that part by calling the Skill tool 
 
 Once done, call the Skill tool with "atw-code-review" to review the work. When screenshots were captured, pass their paths so the review runs its Visual axis.
 
-Work the findings before committing. Fix what the review raised, then re-run the tests it touched.
+Work the findings before committing. Fix what the review raised, then re-run the tests it touched. Then re-check **only the findings that were fixed**, once. Do not start a second full review, and do not loop: anything still open after that one re-check goes to the user.
 
 **If the review surfaces a hard problem, stop** — the spec is wrong or self-contradictory, the fix needs a decision nobody has made, or it reaches outside this ticket's slice. Don't paper over it and don't silently widen the scope to absorb it. Say what the finding is and what it blocks, and get the decision from the user before writing more code. If the answer changes what the work is supposed to do, that change lands in the spec via the step below, not only in the code.
 
