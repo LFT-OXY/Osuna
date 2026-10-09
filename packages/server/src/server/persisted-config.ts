@@ -362,21 +362,42 @@ export type PersistedConfig = Omit<PersistedConfigSchemaOutput, "agents"> & {
 };
 
 const CONFIG_FILENAME = "config.json";
+const DEFAULT_WEB_APP_ORIGIN = "https://osuna-app.chinhae.cc";
 const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
   version: 1,
   daemon: {
     listen: "127.0.0.1:6767",
     cors: {
-      allowedOrigins: ["https://osuna-app.chinhae.cc"],
+      allowedOrigins: [DEFAULT_WEB_APP_ORIGIN],
     },
     relay: {
       enabled: false,
     },
   },
   app: {
-    baseUrl: "https://osuna-app.chinhae.cc",
+    baseUrl: DEFAULT_WEB_APP_ORIGIN,
   },
 }) as PersistedConfig;
+
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 首次启动时把它自己的默认网页端写进了 config.json，升级后配对链接与来源白名单仍指着上游。
+// 那是当时的默认值而不是用户的选择：读进来时地址当作没设过，白名单里的那一项换成现在的默认来源。
+// 磁盘上的文件不动。
+const LEGACY_DEFAULT_WEB_APP_ORIGIN = "https://app.paseo.sh";
+
+function replaceLegacyWebAppDefaults(config: PersistedConfig): PersistedConfig {
+  const upgraded = structuredClone(config);
+  const app = upgraded.app;
+  if (app?.baseUrl === LEGACY_DEFAULT_WEB_APP_ORIGIN) delete app.baseUrl;
+  const cors = upgraded.daemon?.cors;
+  if (cors?.allowedOrigins?.includes(LEGACY_DEFAULT_WEB_APP_ORIGIN)) {
+    const replaced = cors.allowedOrigins.map((origin) =>
+      origin === LEGACY_DEFAULT_WEB_APP_ORIGIN ? DEFAULT_WEB_APP_ORIGIN : origin,
+    );
+    cors.allowedOrigins = [...new Set(replaced)];
+  }
+  return upgraded;
+}
 
 interface LoggerLike {
   child(bindings: Record<string, unknown>): LoggerLike;
@@ -478,7 +499,7 @@ export function loadPersistedConfig(osunaHome: string, logger?: LoggerLike): Per
   }
 
   log?.info(`Loaded from ${configPath}`);
-  return result.data as PersistedConfig;
+  return replaceLegacyWebAppDefaults(result.data as PersistedConfig);
 }
 
 /** Observe the file without initializing a home, identity, or default configuration. */
@@ -494,7 +515,8 @@ export function readPersistedConfig(
       return options.defaultsIfMissing ? structuredClone(DEFAULT_PERSISTED_CONFIG) : {};
     throw error;
   }
-  return PersistedConfigSchema.parse(stripRemovedConfigFields(JSON.parse(raw))) as PersistedConfig;
+  const stored = PersistedConfigSchema.parse(stripRemovedConfigFields(JSON.parse(raw)));
+  return replaceLegacyWebAppDefaults(stored as PersistedConfig);
 }
 
 function configPathParts(field: string): string[] {

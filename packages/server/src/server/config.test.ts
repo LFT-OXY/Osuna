@@ -1,11 +1,11 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { loadConfig, resolveBundledWebUiDistDir, resolveConfigFromPersisted } from "./config.js";
-import { loadPersistedConfig } from "./persisted-config.js";
+import { loadPersistedConfig, readPersistedConfig } from "./persisted-config.js";
 
 const roots: string[] = [];
 
@@ -213,5 +213,61 @@ describe("server config", () => {
         resourcesPath: packageRoot,
       }),
     ).toBe(path.join(packageRoot, "app-dist"));
+  });
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const LEGACY_WEB_APP_ORIGIN = "https://app.paseo.sh";
+
+  test("pairs an upgraded 0.14.x home with the Osuna web app, leaving its config file untouched", async () => {
+    const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-config-legacy-web-app-"));
+    roots.push(osunaHome);
+    // 0.14.x 首次启动时把自己的默认网页端写进了 config.json，用户并没有选过它。
+    const writtenByLegacyDaemon = `${JSON.stringify(
+      {
+        version: 1,
+        daemon: {
+          listen: "127.0.0.1:6767",
+          cors: { allowedOrigins: [LEGACY_WEB_APP_ORIGIN] },
+          relay: { enabled: true },
+        },
+        app: { baseUrl: LEGACY_WEB_APP_ORIGIN },
+      },
+      null,
+      2,
+    )}\n`;
+    await writeFile(path.join(osunaHome, "config.json"), writtenByLegacyDaemon);
+
+    const config = loadConfig(osunaHome, { env: {} });
+    const offline = resolveConfigFromPersisted(osunaHome, readPersistedConfig(osunaHome), {
+      env: {},
+    });
+
+    expect(config.appBaseUrl).toBe("https://osuna-app.chinhae.cc");
+    expect(config.corsAllowedOrigins).toEqual(["https://osuna-app.chinhae.cc"]);
+    expect(offline.appBaseUrl).toBe("https://osuna-app.chinhae.cc");
+    expect(await readFile(path.join(osunaHome, "config.json"), "utf8")).toBe(writtenByLegacyDaemon);
+  });
+
+  test("keeps a web app address the user chose and only replaces the 0.14.x default origin", async () => {
+    const osunaHome = await mkdtemp(path.join(os.tmpdir(), "osuna-config-custom-web-app-"));
+    roots.push(osunaHome);
+    await writeFile(
+      path.join(osunaHome, "config.json"),
+      JSON.stringify({
+        version: 1,
+        daemon: {
+          cors: { allowedOrigins: ["https://osuna.example.com", LEGACY_WEB_APP_ORIGIN] },
+        },
+        app: { baseUrl: "https://osuna.example.com" },
+      }),
+    );
+
+    const config = loadConfig(osunaHome, { env: {} });
+
+    expect(config.appBaseUrl).toBe("https://osuna.example.com");
+    expect(config.corsAllowedOrigins).toEqual([
+      "https://osuna.example.com",
+      "https://osuna-app.chinhae.cc",
+    ]);
   });
 });
