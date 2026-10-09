@@ -22,5 +22,8 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_base_sha": "4e48c86dcfa1d8762acd061692605cbc0633def8",
+    "ticket_mode": "parallel"
+  }
 }

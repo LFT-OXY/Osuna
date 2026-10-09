@@ -30,6 +30,16 @@ Clients talk to the daemon over one WebSocket session. Every inbound message is 
 
   `rg "COMPAT\("` is the cleanup backlog. Untagged back-compat is permanent by accident. The daemon currently carries well over a hundred tagged sites; follow the exact `COMPAT(name): added in vX, remove after <date>` form so the backlog stays greppable.
 
+- Deleting a feature does not delete what old daemons still send. A new client also parses messages from an old daemon, and one unknown enum member fails the whole message. Removing `hub.execute` from `DAEMON_PERMISSIONS` made a 1.0.0 client parse a 0.14.x `server_info` to `null`, because that daemon advertises the full permission set to an owner. Keep retired values in the schema that reads what the daemon advertises and out of the set anything checks:
+
+  ```ts
+  // COMPAT(hubExecutePermission): added in v1.0.0, remove after 2027-04-09 once no 0.14.x daemon is in use.
+  const RETIRED_DAEMON_PERMISSIONS = ["hub.execute"] as const;
+  const AdvertisedDaemonPermissionSchema = z.enum([...DAEMON_PERMISSIONS, ...RETIRED_DAEMON_PERMISSIONS]);
+  ```
+
+  Before removing an enum member or a required field, find every message that carries it in the daemon-to-client direction and add a wire test that parses the previous release's payload (`packages/protocol/src/messages.wire-compat.test.ts`).
+
 - Read `docs/protocol-compatibility.md` before touching `packages/protocol`.
 
 ## Scenario: optional request field gated by a daemon feature flag

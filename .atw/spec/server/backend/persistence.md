@@ -132,6 +132,53 @@ Tests: `agent-manager.test.ts` "listCommands …" — a second `AgentManager` on
 same `commandCatalogPath` reads the entry back (daemon restart), and a
 `"{ not json"` file yields `partial: true`.
 
+### Renaming something already on disk
+
+A rename of a file name, directory name, JSON key, label key, or string prefix
+that the daemon has ever persisted is a data migration, even when the rename is
+mechanical. The 1.0.0 rename from the upstream spelling changed nine such
+identifiers and only the directory move had a ticket; the rest surfaced in
+review as "old worktrees lost their base ref" and "tool restrictions in
+`config.json` silently stopped applying".
+
+- Read the new name first. Fall back to the old name only when the new one is
+  absent. Write the new name only. Never rewrite or delete what the old version
+  wrote: a rollback to that version must still find its data.
+- Tag every fallback with the migration's `COMPAT` tag, written in full on the
+  line above it. `findStoredMetadataPath` in `utils/worktree-metadata.ts` is the
+  shape for a file path; `persisted-config.ts` has the shape for a JSON key.
+- A persisted default is not a default. `config.json` stores the values the
+  first launch resolved, so changing a default in code does not reach upgraded
+  users. Treat the old default as unset on load; `persisted-config.ts` does this
+  for the web app base URL.
+- A file that is read in whole by one module (a migration, its tests) goes in
+  `MIGRATION_FILES` in `scripts/rename-guard.mjs` **and** carries the tag on its
+  first line. A first-line tag alone exempts nothing; the guard treats it as a
+  tagged block. Prose that must name the old spelling is registered in
+  `DOC_PASSAGE_EXCEPTIONS` by heading or by exact sentence, because a tag in
+  Markdown renders on the website.
+
+Before renaming, list what the old name is written into: `rg` the old literal
+across `packages/server/src`, `packages/protocol/src` and
+`packages/desktop/src`, and for each hit ask whether an installed copy has
+already put that string on disk or on the wire.
+
+### Gotcha: anything that resolves the default home moves the old one
+
+`migrateLegacyHomeIfDefault` (`server/legacy-home-migration.ts`) runs in the
+launcher, not in the daemon: the CLI `preAction` hook, `startDaemon()` in the
+desktop app, and the supervisor entrypoint. A managed daemon always receives an
+explicit `OSUNA_HOME` and its stderr is discarded, so it could neither detect
+the default case nor report a failure.
+
+It runs before every CLI command, including ones that target a remote host,
+because those write `cli-client-id` into the default home and an empty new home
+makes the move skip forever.
+
+The consequence for development: any process started from this repo without
+`OSUNA_HOME` or `--home` renames the developer's real 0.14.x data directory.
+See [Testing](./testing.md) for the isolation every test must have.
+
 ## Files and secrets
 
 - Keypairs and other private files go through `server/private-files.ts` (mode `0600`).
@@ -233,3 +280,4 @@ this.writeConfigFile({
 - A service reading and writing the JSON file itself instead of calling the store.
 - Adding a field to a persisted record without adding it to `docs/data-model.md`.
 - Catching a parse error and returning a partially built record. Invalid rows are dropped or reported, not repaired silently.
+- Renaming a persisted identifier with no fallback read. The schema drops the old key and the feature turns off with no error.

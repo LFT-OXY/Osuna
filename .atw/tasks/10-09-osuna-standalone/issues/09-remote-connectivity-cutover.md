@@ -4,11 +4,11 @@
 
 **Blocked by:** 04
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] daemon 默认中继端点 `osuna-relay.chinhae.cc:443`、默认网页端基址 `https://osuna-app.chinhae.cc`，TLS 判定随默认端点生效；配对 offer URL 指向新网页端；config 与 relay 配置的现有测试改为断言新默认值
-- [ ] 中继的 cutover 代理分支及其测试删除（Osuna 没有上游要代理）
-- [ ] 官网站点主机改 `https://osuna.chinhae.cc`，canonical URL 测试随改
-- [ ] `deploy-app` / `deploy-relay` / `deploy-website` 改读 Variable `CLOUDFLARE_ACCOUNT_ID` 与 Secret `CLOUDFLARE_API_TOKEN`，项目名 `osuna-app` / `osuna-relay` / `osuna-website`，`--workspace` 名随改名
-- [ ] pair-device-relay e2e 断言 offer URL 落在 `osuna-app.chinhae.cc`
+- [x] daemon 默认中继端点 `osuna-relay.chinhae.cc:443`、默认网页端基址 `https://osuna-app.chinhae.cc`，TLS 判定随默认端点生效；配对 offer URL 指向新网页端；config 与 relay 配置的现有测试改为断言新默认值
+- [x] 中继的 cutover 代理分支及其测试删除（Osuna 没有上游要代理）
+- [x] 官网站点主机改 `https://osuna.chinhae.cc`，canonical URL 测试随改
+- [x] `deploy-app` / `deploy-relay` / `deploy-website` 改读 Variable `CLOUDFLARE_ACCOUNT_ID` 与 Secret `CLOUDFLARE_API_TOKEN`，项目名 `osuna-app` / `osuna-relay` / `osuna-website`，`--workspace` 名随改名
+- [x] pair-device-relay e2e 断言 offer URL 落在 `osuna-app.chinhae.cc`
 - [ ] 推 main 后 `osuna-relay.chinhae.cc/health` 200，`osuna-app.chinhae.cc` 与 `osuna.chinhae.cc` 可访问（内容由后续票换皮）
