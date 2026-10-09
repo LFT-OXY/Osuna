@@ -1,51 +1,20 @@
-const fs = require("node:fs");
-const path = require("node:path");
 const pkg = require("./package.json");
 const withAndroidAsyncStorageSize = require("./plugins/with-android-async-storage-size");
 const withAndroidProfileable = require("./plugins/with-android-profileable");
+const withAndroidReleaseSigning = require("./plugins/with-android-release-signing");
 const withPasteInput = require("./plugins/with-paste-input");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isProfileBuild = process.env.OSUNA_PROFILE_BUILD === "1";
 
-function resolveSecretFile(params) {
-  const fromEnv = process.env[params.envKey];
-  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) {
-    return fromEnv.trim();
-  }
-
-  const fallbackAbsolutePath = path.resolve(__dirname, params.fallbackRelativePath);
-  if (fs.existsSync(fallbackAbsolutePath)) {
-    return params.fallbackRelativePath;
-  }
-
-  return undefined;
-}
-
 const variants = {
   production: {
     name: "Osuna",
     packageId: "com.chinhae.osuna",
-    googleServicesFile: resolveSecretFile({
-      envKey: "GOOGLE_SERVICES_FILE_PROD",
-      fallbackRelativePath: "./.secrets/google-services.prod.json",
-    }),
-    googleServiceInfoPlist: resolveSecretFile({
-      envKey: "GOOGLE_SERVICE_INFO_PLIST_PROD",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.prod.plist",
-    }),
   },
   development: {
     name: "Osuna Debug",
     packageId: "com.chinhae.osuna.debug",
-    googleServicesFile: resolveSecretFile({
-      envKey: "GOOGLE_SERVICES_FILE_DEBUG",
-      fallbackRelativePath: "./.secrets/google-services.debug.json",
-    }),
-    googleServiceInfoPlist: resolveSecretFile({
-      envKey: "GOOGLE_SERVICE_INFO_PLIST_DEBUG",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
-    }),
   },
 };
 
@@ -69,9 +38,6 @@ export default {
         ITSAppUsesNonExemptEncryption: false,
       },
       bundleIdentifier: variant.packageId,
-      ...(variant.googleServiceInfoPlist
-        ? { googleServicesFile: variant.googleServiceInfoPlist }
-        : {}),
       buildNumber: nativeReleaseVersion.iosBuildNumber,
     },
     android: {
@@ -93,7 +59,6 @@ export default {
       ],
       package: variant.packageId,
       versionCode: nativeReleaseVersion.androidVersionCode,
-      ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
     },
     web: {
       output: "single",
@@ -144,6 +109,7 @@ export default {
         },
       ],
       ...(isProfileBuild ? [withAndroidProfileable] : []),
+      withAndroidReleaseSigning,
     ],
     experiments: {
       typedRoutes: true,
@@ -153,10 +119,6 @@ export default {
     extra: {
       profileBuild: isProfileBuild,
       router: {},
-      eas: {
-        projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
-      },
     },
-    owner: "LFT-OXY",
   },
 };

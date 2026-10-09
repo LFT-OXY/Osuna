@@ -3,6 +3,7 @@ import path from "node:path";
 import { createOsunaDaemon, formatListenTarget } from "./bootstrap.js";
 import { loadConfig } from "./config.js";
 import { resolveOsunaHome } from "./osuna-home.js";
+import { describeLegacyEnvVars, findLegacyEnvVars } from "./legacy-env.js";
 import { createRootLogger } from "./logger.js";
 import type { DaemonLifecycleIntent } from "./bootstrap.js";
 import { getProcessDiagnostics } from "./process-diagnostics.js";
@@ -134,6 +135,12 @@ async function main() {
   let exitHookInstalled = false;
 
   applyCliFlagOverrides(config);
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const legacyEnvVars = findLegacyEnvVars(process.env);
+  if (legacyEnvVars.length > 0) {
+    logger.warn({ legacyEnvVars }, describeLegacyEnvVars(legacyEnvVars));
+  }
 
   const installExitHook = () => {
     if (exitHookInstalled || !shutdownPromise) {

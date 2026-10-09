@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
     env: {},
   })),
   spawnProcess: vi.fn(),
+  migrateLegacyHomeIfDefault: vi.fn(),
+  startDaemonInstance: vi.fn(),
   logInfo: vi.fn(),
   logError: vi.fn(),
   appLogPath: "",
@@ -56,6 +58,8 @@ vi.mock("electron-log/main", () => ({
 vi.mock("@osuna/server", () => ({
   resolveOsunaHome: vi.fn(() => mocks.osunaHome),
   spawnProcess: mocks.spawnProcess,
+  migrateLegacyHomeIfDefault: mocks.migrateLegacyHomeIfDefault,
+  startDaemonInstance: mocks.startDaemonInstance,
 }));
 
 vi.mock("../settings/desktop-settings-electron.js", () => ({
@@ -142,6 +146,8 @@ describe("daemon-manager commands", () => {
     mocks.createNodeEntrypointInvocation.mockReset();
     mocks.createNodeEntrypointInvocation.mockReturnValue({ command: "node", args: [], env: {} });
     mocks.spawnProcess.mockReset();
+    mocks.migrateLegacyHomeIfDefault.mockReset();
+    mocks.startDaemonInstance.mockReset();
     mocks.logInfo.mockReset();
     mocks.logError.mockReset();
     mocks.getElectronLogFile.mockReset();
@@ -189,6 +195,19 @@ describe("daemon-manager commands", () => {
     expect(appUpdates.channelSwitches).toEqual([
       { currentVersion: "1.2.3", releaseChannel: "beta" },
     ]);
+  });
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  it("reports a legacy home that cannot be moved instead of starting the daemon", async () => {
+    const refusal = "Could not move the legacy data directory.\n  mv old new && ln -s new old";
+    mocks.migrateLegacyHomeIfDefault.mockRejectedValue(new Error(refusal));
+    const handlers = createDaemonCommandHandlers({ appUpdates: createFakeAppUpdates() });
+
+    await expect(handlers.start_desktop_daemon()).rejects.toThrow(refusal);
+
+    expect(mocks.migrateLegacyHomeIfDefault).toHaveBeenCalledWith({ env: process.env });
+    expect(mocks.runExternalCliJsonCommand).not.toHaveBeenCalled();
+    expect(mocks.startDaemonInstance).not.toHaveBeenCalled();
   });
 
   it("exposes updater diagnostics through the desktop command boundary", () => {

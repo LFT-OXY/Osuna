@@ -16,6 +16,7 @@ import {
   BrowserWindow,
   ClipboardItem,
   clipboard,
+  dialog,
   Menu,
   ipcMain,
   nativeImage,
@@ -86,6 +87,11 @@ import {
   type OwnedDesktopWindow,
 } from "./window/desktop-window-owner.js";
 import { getDesktopSettingsStore } from "./settings/desktop-settings-electron.js";
+import {
+  describeUserDataMigrationFailure,
+  LEGACY_USER_DATA_DIR_NAME,
+  migrateLegacyUserData,
+} from "./settings/user-data-migration.js";
 import { clampWindowStateToWorkAreas, createWindowStateStore } from "./settings/window-state.js";
 import {
   isDesktopManagedDaemonRunningSync,
@@ -132,12 +138,66 @@ const bootstrapComplete = new Promise<void>((resolve) => {
 });
 let bootstrapIsComplete = false;
 
+// In dev mode, detect git worktrees and isolate each instance so multiple
+// Electron windows can run side-by-side (separate userData = separate lock).
+// Main checkout (e.g. "osuna") gets default userData — only worktrees diverge.
+function detectDevWorktreeName(): string | null {
+  try {
+    const topLevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      encoding: "utf-8",
+      timeout: 3000,
+      windowsHide: true,
+    }).trim();
+    const commonDir = path.resolve(
+      topLevel,
+      execFileSync("git", ["rev-parse", "--git-common-dir"], {
+        cwd: topLevel,
+        encoding: "utf-8",
+        timeout: 3000,
+        windowsHide: true,
+      }).trim(),
+    );
+    const isWorktree = path.resolve(topLevel, ".git") !== commonDir;
+    return isWorktree ? path.basename(topLevel) : null;
+  } catch {
+    return null;
+  }
+}
+
 app.setName(APP_NAME);
 const forcedUserDataDir = process.env.OSUNA_ELECTRON_USER_DATA_DIR?.trim();
-// 必须早于首次写日志：electron-log 在首次写入时缓存路径。下方的 worktree 隔离会
-// 再次 setPath，因此保持更高优先级。显式指定目录时不解析 appData：Windows 上
-// USERPROFILE 被改写（打包冒烟即如此）时 getPath("appData") 会直接抛错。
-app.setPath("userData", forcedUserDataDir || path.join(app.getPath("appData"), USER_DATA_DIR_NAME));
+const devWorktreeName = forcedUserDataDir || app.isPackaged ? null : detectDevWorktreeName();
+// 显式指定目录时不解析 appData：Windows 上 USERPROFILE 被改写（打包冒烟即如此）时
+// getPath("appData") 会直接抛错。
+const userDataDir =
+  forcedUserDataDir ||
+  path.join(
+    app.getPath("appData"),
+    devWorktreeName ? `Osuna-${devWorktreeName}` : USER_DATA_DIR_NAME,
+  );
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+// 只搬默认 userData，强制目录与 worktree 隔离目录不碰。必须早于下面的首条日志：
+// electron-log 在 Windows / Linux 上把日志目录建在默认 userData 里面，新目录先被建出来就搬不过去了。
+const userDataMigration =
+  forcedUserDataDir || devWorktreeName
+    ? null
+    : migrateLegacyUserData({
+        legacyDir: path.join(path.dirname(userDataDir), LEGACY_USER_DATA_DIR_NAME),
+        userDataDir,
+      });
+if (userDataMigration?.kind === "failed") {
+  const { title, content } = describeUserDataMigrationFailure({
+    failure: userDataMigration,
+    platform: process.platform,
+  });
+  // Electron 尚未 ready：macOS / Windows 弹模态错误框，Linux 只写到 stderr。
+  dialog.showErrorBox(title, content);
+  // ready 之前 app.exit 直接结束进程：后面的启动代码不执行，新目录不会被建出来，下次启动重试。
+  app.exit(1);
+}
+
+// 必须早于首次写日志：electron-log 在首次写入时缓存路径。
+app.setPath("userData", userDataDir);
 log.transports.file.setAppName(USER_DATA_DIR_NAME);
 log.info("[desktop] app startup", {
   version: app.getVersion(),
@@ -145,6 +205,19 @@ log.info("[desktop] app startup", {
   arch: process.arch,
   isPackaged: app.isPackaged,
 });
+if (forcedUserDataDir) {
+  log.info("[dev-user-data] forced userData dir:", forcedUserDataDir);
+} else if (devWorktreeName) {
+  log.info("[worktree] isolated userData for worktree:", devWorktreeName);
+}
+// COMPAT(paseoDataMigration): 与上面的搬迁同删。
+if (userDataMigration?.kind === "migrated") {
+  log.info("[user-data-migration] moved legacy userData", {
+    from: userDataMigration.legacyDir,
+    to: userDataMigration.userDataDir,
+    method: userDataMigration.method,
+  });
+}
 
 interface AttachedBrowserInput {
   browserId: string;
@@ -299,41 +372,6 @@ function installBrowserWindowOpenHandler(input: {
       mainWindow,
     });
   });
-}
-
-// In dev mode, detect git worktrees and isolate each instance so multiple
-// Electron windows can run side-by-side (separate userData = separate lock).
-let devWorktreeName: string | null = null;
-if (forcedUserDataDir) {
-  log.info("[dev-user-data] forced userData dir:", forcedUserDataDir);
-} else if (!app.isPackaged) {
-  try {
-    const topLevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      encoding: "utf-8",
-      timeout: 3000,
-      windowsHide: true,
-    }).trim();
-    devWorktreeName = path.basename(topLevel);
-    // Main checkout (e.g. "osuna") gets default userData — only worktrees diverge.
-    const commonDir = path.resolve(
-      topLevel,
-      execFileSync("git", ["rev-parse", "--git-common-dir"], {
-        cwd: topLevel,
-        encoding: "utf-8",
-        timeout: 3000,
-        windowsHide: true,
-      }).trim(),
-    );
-    const isWorktree = path.resolve(topLevel, ".git") !== commonDir;
-    if (isWorktree) {
-      app.setPath("userData", path.join(app.getPath("appData"), `Osuna-${devWorktreeName}`));
-      log.info("[worktree] isolated userData for worktree:", devWorktreeName);
-    } else {
-      devWorktreeName = null;
-    }
-  } catch {
-    devWorktreeName = null;
-  }
 }
 
 // Allow users to pass Chromium flags via OSUNA_ELECTRON_FLAGS for debugging

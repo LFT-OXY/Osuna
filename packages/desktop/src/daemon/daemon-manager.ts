@@ -3,6 +3,7 @@ import path from "node:path";
 import { app, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
 import {
+  migrateLegacyHomeIfDefault,
   resolveOsunaHome,
   startDaemonInstance,
   DaemonInstanceError,
@@ -258,6 +259,11 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
 
 async function startDaemon(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  // 赶在查状态与拉起 daemon 之前搬。搬不动就让启动命令原样失败：detached 的 supervisor 没有 stderr 通道，
+  // 只有这里抛出的错误能到达渲染层的 daemon 错误状态面。
+  await migrateLegacyHomeIfDefault({ env: process.env });
 
   const current = await resolveDesktopDaemonStatus();
   logDesktopDaemonLifecycle("initial status check before start", {
