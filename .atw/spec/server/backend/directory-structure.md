@@ -6,7 +6,7 @@ All daemon code is under `packages/server/src/`. ESM with `.js` import suffixes 
 
 | Directory                    | Owns                                                                                                                                                                              |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/`                    | The daemon: bootstrap, WebSocket server, session, agent manager, providers, stores, schedules, plugins, hub, speech                                                               |
+| `server/`                    | The daemon: bootstrap, WebSocket server, session, agent manager, providers, stores, schedules, plugins, speech                                                                    |
 | `server/session/<domain>/`   | Session RPC handlers split by domain: `checkout/`, `files/`, `provider/`, `schedule/`, `voice/`, `workspace-git-observer/`, `owned-subscriptions/`, …                             |
 | `server/agent/`              | Agent lifecycle (`agent-manager.ts`), persistence (`agent-storage.ts`), tool catalog (`tools/`), MCP adapter, `providers/`                                                        |
 | `server/test-utils/`         | Daemon E2E harness: `paseo-daemon.ts`, `daemon-client.ts`, `fake-agent-client.ts`, `session-stubs.ts`, `temp-github-repo.ts`                                                      |

@@ -143,7 +143,6 @@ export const DAEMON_PERMISSIONS = [
   "workspace.write",
   "workspace.manage",
   "automation.manage",
-  "hub.execute",
 ] as const;
 export const DaemonPermissionSchema = z.enum(DAEMON_PERMISSIONS);
 export type DaemonPermission = z.infer<typeof DaemonPermissionSchema>;
@@ -1521,29 +1520,6 @@ export const DaemonGetPairingOfferRequestSchema = z.object({
 export const DaemonConfigReloadRequestSchema = z.object({
   type: z.literal("daemon.config.reload.request"),
   requestId: z.string(),
-});
-
-export const HubManagementDaemonConnectRequestSchema = z.object({
-  type: z.literal("hub.management.daemon.connect.request"),
-  requestId: z.string(),
-  hubUrl: z.string(),
-  token: z.string(),
-  permissions: z.array(DaemonPermissionSchema).default([]),
-});
-export const HubManagementDaemonGetStatusRequestSchema = z.object({
-  type: z.literal("hub.management.daemon.get_status.request"),
-  requestId: z.string(),
-});
-export const HubManagementDaemonDisconnectRequestSchema = z.object({
-  type: z.literal("hub.management.daemon.disconnect.request"),
-  requestId: z.string(),
-  force: z.boolean().optional(),
-});
-export const HubManagementDaemonPermissionsUpdateRequestSchema = z.object({
-  type: z.literal("hub.management.daemon.permissions.update.request"),
-  requestId: z.string(),
-  grant: z.array(DaemonPermissionSchema).default([]),
-  revoke: z.array(DaemonPermissionSchema).default([]),
 });
 
 export const DiagnosticsRequestSchema = z.object({
@@ -3156,79 +3132,6 @@ export const CaptureTerminalRequestSchema = z.object({
   requestId: z.string(),
 });
 
-export const HubExecutionAgentCreateRequestSchema = z.object({
-  type: z.literal("hub.execution.agent.create.request"),
-  requestId: z.string(),
-  executionId: z.string(),
-  provider: z.string(),
-  cwd: z.string(),
-  prompt: z.string(),
-  // COMPAT(hubExecutionWorkspaceSelection): semantics retired in v0.3.1; remove after 2027-08-08 once the Hub floor no longer sends it.
-  workspaceId: z.string().optional(),
-  model: z.string().optional(),
-  modeId: z.string().optional(),
-  thinkingOptionId: z.string().optional(),
-  featureValues: z.record(z.string(), z.unknown()).optional(),
-  providerOptions: ProviderOptionsSchema.optional(),
-  toolPolicy: ToolPolicySchema.optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
-  worktree: CreateAgentWorktreeTargetSchema.optional(),
-});
-
-export type HubExecutionAgentCreateRequest = z.infer<typeof HubExecutionAgentCreateRequestSchema>;
-
-export const HubExecutionAgentValidateRequestSchema = z.object({
-  type: z.literal("hub.execution.agent.validate.request"),
-  requestId: z.string(),
-  provider: z.string(),
-  model: z.string().optional(),
-  modeId: z.string().optional(),
-  thinkingOptionId: z.string().optional(),
-  providerOptions: ProviderOptionsSchema.optional(),
-});
-
-export type HubExecutionAgentValidateRequest = z.infer<
-  typeof HubExecutionAgentValidateRequestSchema
->;
-
-const HubExecutionAgentCreateErrorSchema = z.discriminatedUnion("code", [
-  z.object({
-    code: z.literal("provider_options_invalid"),
-    provider: z.string(),
-    issues: z.array(
-      z.object({
-        path: z.array(z.union([z.string(), z.number()])),
-        message: z.string(),
-      }),
-    ),
-    message: z.string(),
-  }),
-  z.object({
-    code: z.literal("tool_policy_unsupported"),
-    provider: z.string(),
-    message: z.string(),
-  }),
-  z.object({
-    code: z.literal("create_failed"),
-    message: z.string(),
-  }),
-]);
-
-export type HubExecutionAgentCreateError = z.infer<typeof HubExecutionAgentCreateErrorSchema>;
-
-export const HubExecutionControlActionSchema = z.enum(["interrupt", "archive"]);
-export type HubExecutionControlAction = z.infer<typeof HubExecutionControlActionSchema>;
-
-export const HubExecutionControlRequestSchema = z.object({
-  type: z.literal("hub.execution.control.request"),
-  requestId: z.string(),
-  executionId: z.string(),
-  action: HubExecutionControlActionSchema,
-});
-
-export type HubExecutionControlRequest = z.infer<typeof HubExecutionControlRequestSchema>;
-
 // These connection event streams have no directory bootstrap or timeline membership.
 export const SessionEventSubscriptionSchema = z.enum([
   "project.update",
@@ -3246,8 +3149,6 @@ export const SessionEventSubscriptionSchema = z.enum([
   "status.plugin_catalog_changed",
   "status.plugin_settings_changed",
   "activity_log",
-  "hub.execution.agent.update",
-  "hub.execution.agent.stream",
   // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19. A client only
   // asks for these once `features.usage` is advertised; an older daemon would
   // reject the whole subscription request.
@@ -3292,9 +3193,6 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
-  HubExecutionAgentCreateRequestSchema,
-  HubExecutionAgentValidateRequestSchema,
-  HubExecutionControlRequestSchema,
   BrowserAutomationExecuteResponseSchema,
   VoiceAudioChunkMessageSchema,
   AbortRequestMessageSchema,
@@ -3327,10 +3225,6 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DaemonGetStatusRequestSchema,
   DaemonGetPairingOfferRequestSchema,
   DaemonConfigReloadRequestSchema,
-  HubManagementDaemonConnectRequestSchema,
-  HubManagementDaemonGetStatusRequestSchema,
-  HubManagementDaemonDisconnectRequestSchema,
-  HubManagementDaemonPermissionsUpdateRequestSchema,
   DiagnosticsRequestSchema,
   PluginCatalogGetRequestSchema,
   PluginListRequestSchema,
@@ -3683,8 +3577,6 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(workspaceRequestReceipts): added in v0.8.0; remove gate after 2027-03-07.
         workspaceRequestReceipts: z.boolean().optional(),
         creationLifecycle: z.boolean().optional(),
-        // COMPAT(hubAgentRpc): added in v0.8.0; remove gate after 2027-03-05.
-        hubAgentRpc: z.boolean().optional(),
         providersSnapshot: z.boolean().optional(),
         // COMPAT(providersSnapshotCwd): added in v0.3.2, remove gate after 2027-02-10.
         providersSnapshotCwd: z.boolean().optional(),
@@ -3790,8 +3682,6 @@ export const ServerInfoStatusPayloadSchema = z
         workspacePinning: z.boolean().optional(),
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: z.boolean().optional(),
-        // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
-        hubRelationship: z.boolean().optional(),
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.
         projectGithubClone: z.boolean().optional(),
         // COMPAT(workspaceGithubRepositorySearch): added in v0.1.108, remove gate after 2027-01-15.
@@ -5126,42 +5016,6 @@ export const DaemonGetStatusResponseSchema = z.object({
       ),
     })
     .passthrough(),
-});
-
-export const HubRelationshipStatusSchema = z.object({
-  state: z.enum([
-    "not_connected",
-    "connecting",
-    "connected",
-    "reconnecting",
-    "disconnecting",
-    "revoked",
-  ]),
-  daemonId: z.string().nullable(),
-  hubOrigin: z.string().nullable(),
-  permissions: z.array(DaemonPermissionSchema),
-  connectedAt: z.string().nullable(),
-  lastError: z.string().nullable(),
-});
-export const HubManagementDaemonConnectResponseSchema = z.object({
-  type: z.literal("hub.management.daemon.connect.response"),
-  payload: z.object({ requestId: z.string(), status: HubRelationshipStatusSchema }),
-});
-export const HubManagementDaemonGetStatusResponseSchema = z.object({
-  type: z.literal("hub.management.daemon.get_status.response"),
-  payload: z.object({ requestId: z.string(), status: HubRelationshipStatusSchema }),
-});
-export const HubManagementDaemonDisconnectResponseSchema = z.object({
-  type: z.literal("hub.management.daemon.disconnect.response"),
-  payload: z.object({
-    requestId: z.string(),
-    status: HubRelationshipStatusSchema,
-    warning: z.string().optional(),
-  }),
-});
-export const HubManagementDaemonPermissionsUpdateResponseSchema = z.object({
-  type: z.literal("hub.management.daemon.permissions.update.response"),
-  payload: z.object({ requestId: z.string(), status: HubRelationshipStatusSchema }),
 });
 
 export const DaemonGetPairingOfferResponseSchema = z.object({
@@ -6645,109 +6499,6 @@ export const DaemonUpdateProgressMessageSchema = z.object({
   }),
 });
 
-export const HubExecutionAgentCreateResponseSchema = z.object({
-  type: z.literal("hub.execution.agent.create.response"),
-  payload: z.object({
-    requestId: z.string(),
-    executionId: z.string(),
-    agentId: z.string().nullable(),
-    agent: AgentSnapshotPayloadSchema.nullable(),
-    success: z.boolean(),
-    toolPolicyApplied: z.literal(true).optional(),
-    error: HubExecutionAgentCreateErrorSchema.nullable(),
-  }),
-});
-
-export const HubExecutionAgentValidationIssueSchema = z.object({
-  path: z.array(z.union([z.string(), z.number()])),
-  message: z.string(),
-});
-
-export type HubExecutionAgentValidationIssue = z.infer<
-  typeof HubExecutionAgentValidationIssueSchema
->;
-
-export const HubExecutionAgentValidateResponseSchema = z.object({
-  type: z.literal("hub.execution.agent.validate.response"),
-  payload: z.object({
-    requestId: z.string(),
-    valid: z.boolean(),
-    issues: z.array(HubExecutionAgentValidationIssueSchema),
-    error: z.string().nullable(),
-  }),
-});
-
-export const HubExecutionControlResponseSchema = z.object({
-  type: z.literal("hub.execution.control.response"),
-  payload: z.object({
-    requestId: z.string(),
-    executionId: z.string(),
-    action: HubExecutionControlActionSchema,
-    success: z.boolean(),
-    error: z.string().nullable(),
-  }),
-});
-
-export const HubExecutionAgentUpdateSchema = z.object({
-  type: z.literal("hub.execution.agent.update"),
-  payload: z.object({
-    subscriptionId: z.string().optional(),
-    executionId: z.string(),
-    agentId: z.string(),
-    agent: AgentSnapshotPayloadSchema,
-  }),
-});
-
-export const HubExecutionAgentStreamSchema = z.object({
-  type: z.literal("hub.execution.agent.stream"),
-  payload: z.object({
-    subscriptionId: z.string().optional(),
-    executionId: z.string(),
-    agentId: z.string(),
-    event: AgentStreamEventPayloadSchema,
-  }),
-});
-
-export type HubExecutionAgentCreateResponse = z.infer<typeof HubExecutionAgentCreateResponseSchema>;
-export type HubExecutionAgentValidateResponse = z.infer<
-  typeof HubExecutionAgentValidateResponseSchema
->;
-export type HubExecutionControlResponse = z.infer<typeof HubExecutionControlResponseSchema>;
-export type HubExecutionAgentUpdate = z.infer<typeof HubExecutionAgentUpdateSchema>;
-export type HubExecutionAgentStream = z.infer<typeof HubExecutionAgentStreamSchema>;
-
-export const HubExecutionOutboundMessageSchema = z.discriminatedUnion("type", [
-  HubExecutionAgentCreateResponseSchema,
-  HubExecutionAgentValidateResponseSchema,
-  HubExecutionControlResponseSchema,
-  HubExecutionAgentUpdateSchema,
-  HubExecutionAgentStreamSchema,
-]);
-
-export type HubExecutionOutboundMessage = z.infer<typeof HubExecutionOutboundMessageSchema>;
-
-export class HubMessageCorrelationError extends Error {
-  constructor(messageType: HubExecutionOutboundMessage["type"]) {
-    super(`Hub message ${messageType} has mismatched agent correlation`);
-    this.name = "HubMessageCorrelationError";
-  }
-}
-
-export function parseHubExecutionOutboundMessage(value: unknown): HubExecutionOutboundMessage {
-  const message = HubExecutionOutboundMessageSchema.parse(value);
-  const payload = message.payload;
-  if (
-    "agent" in payload &&
-    payload.agent !== null &&
-    "agentId" in payload &&
-    payload.agentId !== null &&
-    payload.agent.id !== payload.agentId
-  ) {
-    throw new HubMessageCorrelationError(message.type);
-  }
-  return message;
-}
-
 export type DaemonUpdateProgressMessage = z.infer<typeof DaemonUpdateProgressMessageSchema>;
 
 export const PluginCatalogGetResponseSchema = z.object({
@@ -6914,11 +6665,6 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,
   SessionEventsSetSubscriptionResponseSchema,
-  HubExecutionAgentCreateResponseSchema,
-  HubExecutionAgentValidateResponseSchema,
-  HubExecutionControlResponseSchema,
-  HubExecutionAgentUpdateSchema,
-  HubExecutionAgentStreamSchema,
   BrowserAutomationExecuteRequestSchema,
   PluginCatalogGetResponseSchema,
   PluginListResponseSchema,
@@ -7011,10 +6757,6 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DaemonGetStatusResponseSchema,
   DaemonGetPairingOfferResponseSchema,
   DaemonConfigReloadResponseSchema,
-  HubManagementDaemonConnectResponseSchema,
-  HubManagementDaemonGetStatusResponseSchema,
-  HubManagementDaemonDisconnectResponseSchema,
-  HubManagementDaemonPermissionsUpdateResponseSchema,
   DiagnosticsResponseSchema,
   GetDaemonConfigResponseMessageSchema,
   SetDaemonConfigResponseMessageSchema,
@@ -7614,7 +7356,7 @@ export const WSPongMessageSchema = z.object({
 export const WSHelloMessageSchema = z.object({
   type: z.literal("hello"),
   clientId: z.string().min(1),
-  clientType: z.enum(["mobile", "browser", "cli", "mcp", "hub"]),
+  clientType: z.enum(["mobile", "browser", "cli", "mcp"]),
   protocolVersion: z.number().int(),
   appVersion: z.string().optional(),
   capabilities: z

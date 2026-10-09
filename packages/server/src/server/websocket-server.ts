@@ -40,9 +40,7 @@ import {
   type SessionOptions,
   type SessionRuntimeMetrics,
 } from "./session.js";
-import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
-import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import type { AgentProvider } from "./agent/agent-sdk-types.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import { attachMutableProviderConfigOwner } from "./agent/mutable-provider-config-owner.js";
@@ -121,16 +119,14 @@ import {
 const WS_CLOSE_DAEMON_AUTH_FAILED = 4401;
 
 export interface ExternalSocketMetadata {
-  transport: "relay" | "hub";
+  transport: "relay";
   externalSessionKey?: string;
   relayConnectionId?: string;
-  hubDaemonId?: string;
 }
 
 export interface SessionAdmission {
   principalId: string;
   permissions: readonly DaemonPermission[];
-  hubExecutionAgents?: HubExecutionAgents;
 }
 
 interface PendingConnection {
@@ -142,7 +138,7 @@ interface PendingConnection {
 
 interface WebSocketConnectionIdentity {
   connectionId: string;
-  transport: "direct" | "relay" | "hub";
+  transport: "direct" | "relay";
   peer: "loopback" | "local_ipc" | "external";
   browserOrigin: boolean;
   host?: string;
@@ -150,7 +146,6 @@ interface WebSocketConnectionIdentity {
   userAgent?: string;
   remoteAddress?: string;
   relayConnectionId?: string;
-  hubDaemonId?: string;
   clientId?: string;
   sessionId?: string;
   appVersion?: string;
@@ -504,8 +499,6 @@ interface SocketSessionOptions {
   onBinaryMessageToSource?: (source: object, frame: Uint8Array) => Promise<void>;
   getTransportBufferedAmount?: (source?: object) => number | null;
   onLifecycleIntent?: (intent: SessionLifecycleIntent) => void;
-  hubExecutionAgents?: HubExecutionAgents;
-  hubRelationships?: HubRelationshipManagement;
 }
 
 interface ClosePhysicalSocketParams {
@@ -624,7 +617,6 @@ export class VoiceAssistantWebSocketServer {
   private readonly providerUsageService: ProviderUsageService;
   private unsubscribeTerminalActivity: (() => void) | null = null;
   private readonly browserToolsBroker: BrowserToolsBroker | null;
-  private readonly hubRelationships: HubRelationshipManagement | null;
   private connectionLifecycle: "starting" | "accepting" | "stopping" = "accepting";
   private readonly advertiseDaemonStatusRpc: boolean;
   private readonly advertiseRelayConfig: boolean;
@@ -692,7 +684,6 @@ export class VoiceAssistantWebSocketServer {
     daemonRuntimeConfig?: DaemonRuntimeConfig,
     serviceProxyPublicBaseUrl?: string | null,
     browserToolsBroker?: BrowserToolsBroker | null,
-    hubRelationships?: HubRelationshipManagement | null,
     workspaceSetupRuntime: WorkspaceSetupRuntime = new WorkspaceSetupRuntime(),
     pluginRuntime?: SessionOptions["pluginRuntime"],
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
@@ -714,7 +705,6 @@ export class VoiceAssistantWebSocketServer {
     this.daemonVersion = daemonVersion.trim();
     this.daemonRuntimeConfig = daemonRuntimeConfig;
     this.browserToolsBroker = browserToolsBroker ?? null;
-    this.hubRelationships = hubRelationships ?? null;
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
     this.agentManager = agentManager;
@@ -1033,12 +1023,11 @@ export class VoiceAssistantWebSocketServer {
     ws: WebSocketLike,
     metadata?: ExternalSocketMetadata,
     admission: SessionAdmission = OWNER_SESSION_ADMISSION,
-    initialHello?: WSHelloMessage,
   ): Promise<void> {
     if (metadata?.transport === "relay") {
       this.incrementRuntimeCounter("relayExternalSocketAttached");
     }
-    await this.attachSocket(ws, undefined, metadata, false, admission, initialHello);
+    await this.attachSocket(ws, undefined, metadata, false, admission);
   }
 
   public async attachPluginSocket(
@@ -1062,22 +1051,6 @@ export class VoiceAssistantWebSocketServer {
       throw error;
     }
     return { closed };
-  }
-
-  public updatePrincipalPermissions(
-    principalId: string,
-    permissions: readonly DaemonPermission[],
-  ): void {
-    for (const pending of this.pendingConnections.values()) {
-      if (pending.admission.principalId === principalId) {
-        pending.admission = { ...pending.admission, permissions };
-      }
-    }
-    for (const connection of new Set(this.externalSessionsByKey.values())) {
-      if (connection.principalId === principalId) {
-        connection.session.setPermissions(permissions);
-      }
-    }
   }
 
   public prepareForShutdown(): void {
@@ -1340,7 +1313,6 @@ export class VoiceAssistantWebSocketServer {
     metadata?: ExternalSocketMetadata,
     allowDuringStartup = false,
     admission: SessionAdmission = OWNER_SESSION_ADMISSION,
-    initialHello?: WSHelloMessage,
   ): Promise<void> {
     if (
       this.connectionLifecycle === "stopping" ||
@@ -1395,9 +1367,6 @@ export class VoiceAssistantWebSocketServer {
       },
       "Client connected; awaiting hello",
     );
-    if (initialHello) {
-      this.handleHello({ ws, message: initialHello, pending });
-    }
   }
 
   private createSessionConnection(params: {
@@ -1463,8 +1432,6 @@ export class VoiceAssistantWebSocketServer {
       onLifecycleIntent: (intent) => {
         this.onLifecycleIntent?.(intent);
       },
-      hubExecutionAgents: admission.hubExecutionAgents,
-      hubRelationships: this.hubRelationships ?? undefined,
     });
 
     const base: SessionConnectionBase = {
@@ -1537,8 +1504,6 @@ export class VoiceAssistantWebSocketServer {
       providerUsageService: this.providerUsageService,
       providerVersionCheckService: this.providerVersionCheckService,
       providerUpgradeService: this.providerUpgradeService,
-      hubExecutionAgents: options.hubExecutionAgents,
-      hubRelationships: options.hubRelationships,
       serviceProxy: this.serviceProxy ?? undefined,
       scriptRuntimeStore: this.scriptRuntimeStore ?? undefined,
       workspaceSetupSnapshots: this.workspaceSetupSnapshots,
@@ -1755,7 +1720,6 @@ export class VoiceAssistantWebSocketServer {
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,
-        hubAgentRpc: true,
         // COMPAT(directorySync): added in v0.3.x, remove gate after 2027-02-12.
         directorySync: true,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
@@ -1856,8 +1820,6 @@ export class VoiceAssistantWebSocketServer {
         workspacePinning: true,
         // COMPAT(workspaceMarkUnread): added in v0.5.0, remove after 2027-08-20.
         workspaceMarkUnread: true,
-        // COMPAT(hubRelationship): added in v0.1.X, drop the gate when floor >= v0.1.X.
-        hubRelationship: true,
         // COMPAT(projectGithubClone): added in v0.1.108, remove gate after 2027-01-15.
         projectGithubClone: true,
         // COMPAT(workspaceGithubRepositorySearch): added in v0.1.108, remove gate after 2027-01-15.
@@ -2762,7 +2724,6 @@ function createWebSocketConnectionIdentity(
     ...(requestMetadata.userAgent ? { userAgent: requestMetadata.userAgent } : {}),
     ...(requestMetadata.remoteAddress ? { remoteAddress: requestMetadata.remoteAddress } : {}),
     ...(metadata?.relayConnectionId ? { relayConnectionId: metadata.relayConnectionId } : {}),
-    ...(metadata?.hubDaemonId ? { hubDaemonId: metadata.hubDaemonId } : {}),
   };
 }
 
@@ -2780,7 +2741,6 @@ function toConnectionLogFields(identity: WebSocketConnectionIdentity): Record<st
     ...(identity.userAgent ? { userAgent: identity.userAgent } : {}),
     ...(identity.remoteAddress ? { remoteAddress: identity.remoteAddress } : {}),
     ...(identity.relayConnectionId ? { relayConnectionId: identity.relayConnectionId } : {}),
-    ...(identity.hubDaemonId ? { hubDaemonId: identity.hubDaemonId } : {}),
     ...(identity.clientId ? { clientId: identity.clientId } : {}),
     ...(identity.sessionId ? { sessionId: identity.sessionId } : {}),
     ...(identity.appVersion ? { appVersion: identity.appVersion } : {}),

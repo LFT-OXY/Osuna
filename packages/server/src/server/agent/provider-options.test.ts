@@ -11,8 +11,8 @@ import {
 } from "./providers/opencode/options.js";
 import { buildProviderRegistry } from "./provider-registry.js";
 
-const hubPolicy = {
-  preapproved: [{ kind: "mcp" as const, server: "hub", tool: "finish_execution" }],
+const exactGrantPolicy = {
+  preapproved: [{ kind: "mcp" as const, server: "external", tool: "finish_execution" }],
 };
 
 describe("provider-owned option schemas", () => {
@@ -118,9 +118,9 @@ describe("exact MCP preapproval mappings", () => {
         {
           provider: "pi",
           cwd: "/tmp",
-          mcpServers: { hub: { type: "http", url: "http://127.0.0.1/hub" } },
+          mcpServers: { external: { type: "http", url: "http://127.0.0.1/mcp" } },
         },
-        hubPolicy,
+        exactGrantPolicy,
       ),
     ).toThrow("cannot preapprove exact MCP tools for unattended execution");
   });
@@ -130,16 +130,16 @@ describe("exact MCP preapproval mappings", () => {
       applyCodexToolPolicy(
         {
           mcp_servers: {
-            hub: { url: "http://127.0.0.1/hub" },
+            external: { url: "http://127.0.0.1/mcp" },
             unrelated: { url: "http://127.0.0.1/unrelated" },
           },
         },
-        hubPolicy,
+        exactGrantPolicy,
       ),
     ).toEqual({
       mcp_servers: {
-        hub: {
-          url: "http://127.0.0.1/hub",
+        external: {
+          url: "http://127.0.0.1/mcp",
           enabled_tools: ["finish_execution"],
           default_tools_approval_mode: "prompt",
           tools: { finish_execution: { approval_mode: "approve" } },
@@ -152,12 +152,12 @@ describe("exact MCP preapproval mappings", () => {
   test("Claude adds the exact MCP identity without replacing deny rules", () => {
     expect(
       applyClaudeToolPolicy(
-        { allowedTools: ["Read"], disallowedTools: ["Bash", "mcp__hub__reply"] },
-        hubPolicy,
+        { allowedTools: ["Read"], disallowedTools: ["Bash", "mcp__external__reply"] },
+        exactGrantPolicy,
       ),
     ).toEqual({
-      allowedTools: ["Read", "mcp__hub__finish_execution"],
-      disallowedTools: ["Bash", "mcp__hub__reply"],
+      allowedTools: ["Read", "mcp__external__finish_execution"],
+      disallowedTools: ["Bash", "mcp__external__reply"],
     });
   });
 
@@ -166,15 +166,15 @@ describe("exact MCP preapproval mappings", () => {
       buildOpenCodePermissionRules(
         {
           permission: {
-            hub_finish_execution: "deny",
+            external_finish_execution: "deny",
             bash: "ask",
           },
         },
-        hubPolicy,
+        exactGrantPolicy,
       ),
     ).toEqual([
-      { permission: "hub_finish_execution", pattern: "*", action: "allow" },
-      { permission: "hub_finish_execution", pattern: "*", action: "deny" },
+      { permission: "external_finish_execution", pattern: "*", action: "allow" },
+      { permission: "external_finish_execution", pattern: "*", action: "deny" },
       { permission: "bash", pattern: "*", action: "ask" },
     ]);
   });

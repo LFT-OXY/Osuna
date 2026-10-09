@@ -34,8 +34,8 @@ This Paseo version accepts these keys:
   application policy, not an OS sandbox.
 
 Each provider definition owns its option schema and exact MCP preapproval mapping. A new provider
-must fail closed for Hub unattended execution until it can approve one exact injected MCP server
-and tool identity without approving native tools.
+must fail closed for unattended execution until it can approve one exact injected MCP server and
+tool identity without approving native tools.
 
 ## Two Integration Patterns
 

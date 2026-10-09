@@ -15,8 +15,8 @@ const gatedCiJobs = new Map([
   ["format", { name: "format", contract: "format" }],
   ["lint", { name: "lint", contract: "quality" }],
   ["typecheck", { name: "typecheck", contract: "quality" }],
-  ["server-tests-ubuntu", { name: "server-tests (ubuntu-latest)", contracts: ["server", "hub"] }],
-  ["server-tests-windows", { name: "server-tests (windows-latest)", contracts: ["server", "hub"] }],
+  ["server-tests-ubuntu", { name: "server-tests (ubuntu-latest)", contract: "server" }],
+  ["server-tests-windows", { name: "server-tests (windows-latest)", contract: "server" }],
   ["desktop-tests-ubuntu", { name: "desktop-tests (ubuntu-latest)", contract: "desktop" }],
   ["desktop-tests-windows", { name: "desktop-tests (windows-latest)", contract: "desktop" }],
   ["app-tests", { name: "app-tests", contract: "app" }],
@@ -92,9 +92,7 @@ test("gated checks are statically named jobs with real job-level gating", () => 
     assert.ok(job, `missing static job ${jobId}`);
     assert.match(job, new RegExp(`^    name: ${expected.name.replace(/[()]/g, "\\$&")}$`, "m"));
     assert.match(job, /needs\.changes\.outputs\.full != 'false'/);
-    for (const contract of expected.contracts ?? [expected.contract]) {
-      assert.match(job, new RegExp(`needs\\.changes\\.outputs\\.${contract} != 'false'`));
-    }
+    assert.match(job, new RegExp(`needs\\.changes\\.outputs\\.${expected.contract} != 'false'`));
   }
 });
 
@@ -118,9 +116,7 @@ test("focused contracts stay inside existing required checks", () => {
   assert.match(changes, /scripts\/daemon-launch-contract\.test\.mjs/);
   assert.doesNotMatch(changes, /Install dependencies|npm run build/);
 
-  assert.match(server, /test:hub-cli-contract/);
   assert.match(server, /npm run test --workspace=@getpaseo\/server/);
-  assert.ok(!jobs.has("hub-cli-contract"));
 
   assert.match(desktop, /test:e2e:renderer/);
   assert.match(desktop, /test:e2e:browser-tabs/);
@@ -158,7 +154,6 @@ test("PR routing declares stable behavior ownership", () => {
       "packages/expo-two-way-audio/**",
     ],
     quality: ["**/*.{cjs,js,json,jsx,mjs,ts,tsx}", "packages/expo-two-way-audio/**"],
-    hub: ["packages/cli/src/commands/hub/**", "packages/server/src/server/hub/**"],
     server: ["packages/server/**", "packages/app/e2e/support/fixtures/recording.*"],
     desktop: [
       "packages/desktop/**",

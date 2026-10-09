@@ -2384,7 +2384,7 @@ describe("OpenCode adapter startTurn error handling", () => {
     await session.close();
   });
 
-  test("sends exact Hub MCP permission grants without approving unrelated tools", async () => {
+  test("sends exact MCP permission grants without approving unrelated tools", async () => {
     const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
     const fakeClient = {
       global: {
@@ -2403,9 +2403,9 @@ describe("OpenCode adapter startTurn error handling", () => {
       {
         provider: "opencode",
         cwd: "/tmp/test",
-        providerOptions: { permission: { bash: "ask", hub_reply: "deny" } },
+        providerOptions: { permission: { bash: "ask", external_reply: "deny" } },
         toolPolicy: {
-          preapproved: [{ kind: "mcp", server: "hub", tool: "finish_execution" }],
+          preapproved: [{ kind: "mcp", server: "external", tool: "finish_execution" }],
         },
       },
       fakeClient,
@@ -2418,9 +2418,9 @@ describe("OpenCode adapter startTurn error handling", () => {
     expect(promptAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         permission: [
-          { permission: "hub_finish_execution", pattern: "*", action: "allow" },
+          { permission: "external_finish_execution", pattern: "*", action: "allow" },
           { permission: "bash", pattern: "*", action: "ask" },
-          { permission: "hub_reply", pattern: "*", action: "deny" },
+          { permission: "external_reply", pattern: "*", action: "deny" },
         ],
       }),
     );

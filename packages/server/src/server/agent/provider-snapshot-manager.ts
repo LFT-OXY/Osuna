@@ -51,11 +51,6 @@ import {
   formatProviderDiagnosticError,
 } from "./providers/diagnostic-utils.js";
 import type { MutableDaemonConfig } from "../daemon-config-store.js";
-import type { HubExecutionAgentValidationIssue } from "@getpaseo/protocol/messages";
-import {
-  type AgentConfigurationValidationInput,
-  validateAgentConfigurationAgainstProvider,
-} from "./agent-configuration-validator.js";
 import type { ProviderRegistration } from "@getpaseo/plugin/server/provider";
 import { PluginAgentClientRegistry } from "./plugin-provider.js";
 
@@ -499,45 +494,6 @@ export class ProviderSnapshotManager {
       throw new Error(`Provider ${input.provider} is not configured`);
     }
     return entry;
-  }
-
-  async validateAgentConfiguration(
-    input: AgentConfigurationValidationInput,
-  ): Promise<HubExecutionAgentValidationIssue[]> {
-    if (!this.hasProvider(input.provider)) {
-      return [
-        {
-          path: ["provider"],
-          message: `Provider '${input.provider}' is not configured`,
-        },
-      ];
-    }
-
-    const provider = await this.getProvider({
-      provider: input.provider,
-      wait: true,
-    });
-    if (!provider.enabled) {
-      return [{ path: ["provider"], message: `Provider '${input.provider}' is disabled` }];
-    }
-    if (provider.status !== "ready") {
-      return [
-        {
-          path: ["provider"],
-          message:
-            provider.status === "error" && provider.error
-              ? provider.error
-              : `Provider '${input.provider}' is not available`,
-        },
-      ];
-    }
-
-    const definition = this.requireProvider(input.provider);
-    return validateAgentConfigurationAgainstProvider({
-      input,
-      provider,
-      validateOptions: definition.validateOptions,
-    });
   }
 
   async listModels(input: ProviderSnapshotProviderOptions): Promise<AgentModelDefinition[]> {

@@ -175,11 +175,6 @@ The production relay server lives in [getpaseo/paseo-relay](https://github.com/g
 
 See [SECURITY.md](../SECURITY.md) for the full threat model.
 
-### Paseo Hub
-
-The optional Hub relationship is daemon-outbound and does not use the relay. Its connection,
-authorization, ownership, persistence, and lifecycle contract is documented in [hub.md](hub.md).
-
 ### `packages/desktop` — Desktop app (Electron)
 
 Electron wrapper for macOS, Linux, and Windows.
@@ -346,8 +341,8 @@ the client package, as an exception to the default no-fallback feature policy.
 Creation executes through the existing Session capabilities. Connection-owned delivery
 controls observation only: detaching a socket or cleaning up its Session does not cancel
 accepted creation. Updates require an explicit subscription and go only to that socket;
-reconnect uses the shared subscription owner. Legacy consumers, including Hub, keep their
-existing response contract.
+reconnect uses the shared subscription owner. Legacy consumers keep their existing response
+contract.
 
 ## Agent lifecycle
 

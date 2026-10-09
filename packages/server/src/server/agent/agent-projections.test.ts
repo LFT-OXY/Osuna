@@ -333,7 +333,7 @@ describe("toAgentPayload", () => {
           restored: new Date("2025-03-01T00:00:00.000Z"),
           empty: {},
           mcpServers: {
-            hub: {
+            external: {
               type: "http",
               headers: { Authorization: "Bearer projection-secret" },
             },
@@ -360,7 +360,7 @@ describe("toAgentPayload", () => {
         persistence: {
           provider: "codex",
           sessionId: "persist-mcp-only",
-          metadata: { mcpServers: { hub: { type: "http", url: "https://hub.test/mcp" } } },
+          metadata: { mcpServers: { external: { type: "http", url: "https://mcp.test/mcp" } } },
         },
       }),
     );
@@ -382,7 +382,7 @@ describe("toAgentPayload", () => {
           metadata: {
             conversationId: "conversation-stored",
             mcpServers: {
-              hub: {
+              external: {
                 type: "http",
                 headers: { Authorization: "Bearer stored-projection-secret" },
               },
@@ -397,7 +397,7 @@ describe("toAgentPayload", () => {
     expect(record.persistence?.metadata).toEqual({
       conversationId: "conversation-stored",
       mcpServers: {
-        hub: {
+        external: {
           type: "http",
           headers: { Authorization: "Bearer stored-projection-secret" },
         },

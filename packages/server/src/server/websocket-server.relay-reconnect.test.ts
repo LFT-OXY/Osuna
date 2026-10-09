@@ -727,21 +727,21 @@ describe("relay external socket reconnect behavior", () => {
     const server = createServer();
     const clientId = "shared-client-id";
     const ownerSocket = new MockSocket();
-    const hubSocket = new MockSocket();
+    const guestSocket = new MockSocket();
 
     const ownerInfo = await attachRelayAndHello({ server, socket: ownerSocket, clientId });
     await server.attachExternalSocket(
-      hubSocket,
-      { transport: "hub", hubDaemonId: "daemon-1" },
-      { principalId: "hub:daemon-1", permissions: ["hub.execute"] },
+      guestSocket,
+      { transport: "relay" },
+      { principalId: "guest", permissions: ["workspace.read"] },
     );
-    hubSocket.emit("message", JSON.stringify(createHelloMessage(clientId)));
-    const hubEnvelope = parseSentEnvelope(hubSocket.sent[0]);
-    const hubInfo = parseServerInfoStatusPayload(hubEnvelope.message?.payload);
+    guestSocket.emit("message", JSON.stringify(createHelloMessage(clientId)));
+    const guestEnvelope = parseSentEnvelope(guestSocket.sent[0]);
+    const guestInfo = parseServerInfoStatusPayload(guestEnvelope.message?.payload);
 
     expect(sessionMock.instances).toHaveLength(2);
     expect(ownerInfo.permissions).toEqual(DAEMON_PERMISSIONS);
-    expect(hubInfo?.permissions).toEqual(["hub.execute"]);
+    expect(guestInfo?.permissions).toEqual(["workspace.read"]);
     await server.close();
   });
 

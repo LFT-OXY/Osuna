@@ -10,8 +10,6 @@ category: Getting started
 
 Your Paseo app connects to the daemon running on your computer or server. Paseo Desktop and the CLI can tunnel through SSH. Mobile clients can connect through the Paseo relay or directly with Tailscale.
 
-This is client-to-daemon transport. If you are looking for the service that starts agents from GitHub, Slack, and Discord events, that is [Hub](/docs/hub).
-
 - [SSH](#ssh)
 - [Paseo relay](#paseo-relay)
 - [Tailscale](#tailscale)

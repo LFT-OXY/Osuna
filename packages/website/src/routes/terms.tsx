@@ -4,11 +4,7 @@ import { pageMeta } from "~/meta";
 
 export const Route = createFileRoute("/terms")({
   head: () =>
-    pageMeta(
-      "Terms of Service - Paseo",
-      "Terms for the official Paseo Relay and hosted Paseo Hub services.",
-      "/terms",
-    ),
+    pageMeta("Terms of Service - Paseo", "Terms for the official Paseo Relay service.", "/terms"),
   component: Terms,
 });
 
@@ -16,9 +12,9 @@ function Terms() {
   return (
     <LegalPage title="Terms of Service" lastUpdated="August 29, 2026">
       <p>
-        These Terms govern the official services operated at paseo.sh, relay.paseo.sh, and
-        hub.paseo.sh. By using the official relay or hosted Hub, you agree to them. Our{" "}
-        <a href="/privacy">Privacy Policy</a> explains how those services process data.
+        These Terms govern the official services operated at paseo.sh and relay.paseo.sh. By using
+        the official relay, you agree to them. Our <a href="/privacy">Privacy Policy</a> explains
+        how those services process data.
       </p>
 
       <section>
@@ -30,12 +26,11 @@ function Terms() {
         <h2>Paseo&apos;s open-source software</h2>
         <p>
           Paseo is open-source software licensed under the Apache License 2.0. You can install,
-          modify, and self-host it under that license without purchasing Paseo Hub or using the
-          official relay.
+          modify, and self-host it under that license without using the official relay.
         </p>
         <p>
           These Terms do not replace or restrict the open-source license. They apply only to
-          services operated by Paseo. A self-hosted Hub or relay is operated by whoever hosts it.
+          services operated by Paseo. A self-hosted relay is operated by whoever hosts it.
         </p>
       </section>
 
@@ -53,22 +48,6 @@ function Terms() {
       </section>
 
       <section>
-        <h2>Paseo Hub</h2>
-        <p>
-          Hub lets you connect daemons, configure workflows, receive events from connected services,
-          and instruct agents running on your infrastructure. Hub does not provide AI inference.
-        </p>
-        <p>You are responsible for:</p>
-        <ul>
-          <li>The workflows, permissions, and connected services you configure</li>
-          <li>The people you invite and the access you give them</li>
-          <li>Actions performed by your agents and connected accounts</li>
-          <li>Reviewing generated code and other agent output</li>
-          <li>Maintaining backups of your repositories and local data</li>
-        </ul>
-      </section>
-
-      <section>
         <h2>Your content</h2>
         <p>
           You keep ownership of your prompts, workflow configuration, code, messages, and outputs.
@@ -83,8 +62,7 @@ function Terms() {
         <p>
           Keep your account credentials secure. Organization owners and administrators are
           responsible for invitations, permissions, connected services, and activity performed by
-          their members. If you use Hub for an organization, you confirm that you are authorized to
-          act for it and to process the data sent through its workflows.
+          their members.
         </p>
       </section>
 
@@ -132,10 +110,10 @@ function Terms() {
       <section>
         <h2>Availability and changes</h2>
         <p>
-          We work to keep the official relay and Hub available, but do not promise uninterrupted
-          service or a service level unless we agree one in writing. We may change features,
-          introduce reasonable limits, or suspend access when needed for security, abuse prevention,
-          legal compliance, or operation of the service.
+          We work to keep the official relay available, but do not promise uninterrupted service or
+          a service level unless we agree one in writing. We may change features, introduce
+          reasonable limits, or suspend access when needed for security, abuse prevention, legal
+          compliance, or operation of the service.
         </p>
         <p>
           Where practical, we will give reasonable notice before a change that materially reduces a

@@ -12,7 +12,6 @@ import {
   Puzzle,
   Smartphone,
   Terminal,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -74,7 +73,7 @@ import {
   OpenCodeIcon,
   PiIcon,
 } from "~/components/agent-icons";
-import { DiscordIcon, GitHubIcon, SlackIcon } from "~/components/brand-icons";
+import { GitHubIcon } from "~/components/brand-icons";
 import { ClaudeIcon, MobileChat, MobileDiff, MobileSidebar, PhoneFrame } from "~/components/mockup";
 import { FAQItem } from "~/components/faq-item";
 import { SiteFooter } from "~/components/site-footer";
@@ -476,7 +475,7 @@ function TurnkeySection() {
         </div>
 
         <div className="p-6 md:p-8">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <TurnkeyExtensionCard
               icon={Smartphone}
               title="Mobile and web"
@@ -491,14 +490,6 @@ function TurnkeySection() {
               ctaHref="/docs#server--cli"
               ctaLabel="Docs"
             />
-            <TurnkeyExtensionCard
-              icon={Users}
-              title="Teams and triggers"
-              description="Share access or start work from GitHub, Slack, and Discord"
-              ctaHref="/hub"
-              ctaLabel="Paseo Hub"
-              showIntegrationIcons
-            />
           </div>
         </div>
       </div>
@@ -512,26 +503,17 @@ function TurnkeyExtensionCard({
   description,
   ctaHref,
   ctaLabel,
-  showIntegrationIcons = false,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   ctaHref: string;
   ctaLabel: string;
-  showIntegrationIcons?: boolean;
 }) {
   return (
     <div className="flex min-h-48 flex-col rounded-xl border border-white/10 bg-white/[0.025] p-5">
       <div className="mb-5 flex items-center gap-3 text-muted-foreground">
         <Icon className="h-5 w-5" strokeWidth={1.5} />
-        {showIntegrationIcons ? (
-          <>
-            <GitHubIcon className="h-4 w-4" />
-            <SlackIcon className="h-4 w-4" />
-            <DiscordIcon className="h-4 w-4" />
-          </>
-        ) : null}
       </div>
       <h3 className="font-medium text-white/85">{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-white/45">{description}</p>

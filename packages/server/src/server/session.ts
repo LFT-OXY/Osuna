@@ -193,9 +193,6 @@ import { AgentConfigSession } from "./session/agent-config/agent-config-session.
 import { ProjectConfigSession } from "./session/project-config/project-config-session.js";
 import { DaemonSession, type DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
-import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
-import { HubExecutionController } from "./hub/execution-controller.js";
-import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import type { PushNotifications } from "./push/index.js";
 import {
@@ -527,8 +524,6 @@ export interface SessionOptions {
   providerUsageService: ProviderUsageService;
   providerVersionCheckService: ProviderVersionCheckService;
   providerUpgradeService: ProviderUpgradeService;
-  hubExecutionAgents?: HubExecutionAgents;
-  hubRelationships?: HubRelationshipManagement;
   serviceProxy?: ServiceProxySubsystem;
   scriptRuntimeStore?: WorkspaceScriptRuntimeStore;
   workspaceSetupSnapshots?: Map<string, WorkspaceSetupSnapshot>;
@@ -796,7 +791,6 @@ export class Session {
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
   private readonly daemonSession: DaemonSession;
-  private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
   private readonly messageReceipts: Pick<MessageReceipts, "send">;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
@@ -1064,7 +1058,6 @@ export class Session {
           this.unsubscribePluginChanges,
           this.unsubscribeTerminalWorkspaceContributionEvents,
           this.providerCatalogSession.isObserving,
-          this.hubExecutionController?.isObserving,
         ].filter(Boolean).length,
         "Git observations": this.workspaceGitObserver.getMetrics().subscriptionCount,
         "Terminal directories": this.terminalController.getMetrics().directorySubscriptionCount,
@@ -1075,17 +1068,8 @@ export class Session {
       listProjects: () => this.projectRegistry.list(),
       listWorkspaces: () => this.workspaceRegistry.list(),
       logger: this.sessionLogger,
-      hubRelationships: options.hubRelationships,
       reloadConfig: () => daemonConfigStore.reload(),
     });
-    this.hubExecutionController = options.hubExecutionAgents
-      ? new HubExecutionController({
-          agents: options.hubExecutionAgents,
-          validateAgentConfiguration: (input) =>
-            providerSnapshotManager.validateAgentConfiguration(input),
-          send: (message) => this.emit(message),
-        })
-      : null;
     this.daemonConfigStore = daemonConfigStore;
     this.terminalManager = terminalManager;
     this.terminalController = new TerminalSessionController({
@@ -1686,11 +1670,6 @@ export class Session {
   }
 
   private refreshCatalogProducers(legacy: boolean): void {
-    this.hubExecutionController?.setObserving(
-      legacy ||
-        this.wantsEvent("hub.execution.agent.update") ||
-        this.wantsEvent("hub.execution.agent.stream"),
-    );
     if (this.wantsEvent("providers_snapshot_update")) this.providerCatalogSession.start();
     else this.providerCatalogSession.dispose();
     if (
@@ -2303,7 +2282,6 @@ export class Session {
       this.dispatchAgentRewindMessage(msg, source) ??
       this.dispatchAgentRelationshipMessage(msg) ??
       this.dispatchAgentTimelineMessage(msg, source) ??
-      this.dispatchHubExecutionMessage(msg) ??
       this.dispatchCreationMessage(msg, source) ??
       this.dispatchAgentLifecycleMessage(msg) ??
       this.dispatchAgentConfigMessage(msg) ??
@@ -2670,19 +2648,6 @@ export class Session {
     }
   }
 
-  private dispatchHubExecutionMessage(msg: SessionInboundMessage): Promise<void> | undefined {
-    if (msg.type === "hub.execution.agent.create.request") {
-      return this.hubExecutionController?.createAgent(msg);
-    }
-    if (msg.type === "hub.execution.agent.validate.request") {
-      return this.hubExecutionController?.validateAgent(msg);
-    }
-    if (msg.type === "hub.execution.control.request") {
-      return this.hubExecutionController?.controlExecution(msg);
-    }
-    return undefined;
-  }
-
   private dispatchCreationMessage(
     msg: SessionInboundMessage,
     source?: object,
@@ -2769,11 +2734,6 @@ export class Session {
       case "daemon.config.reload.request":
         this.daemonSession.handleConfigReloadRequest(msg);
         return undefined;
-      case "hub.management.daemon.connect.request":
-      case "hub.management.daemon.get_status.request":
-      case "hub.management.daemon.disconnect.request":
-      case "hub.management.daemon.permissions.update.request":
-        return this.daemonSession.handleHubRelationshipRequest(msg);
       case "diagnostics.request":
         return this.daemonSession.handleDiagnosticsRequest(msg);
       case "daemon.update.request":
@@ -4117,11 +4077,7 @@ export class Session {
         )
       : undefined;
     try {
-      if (
-        request.agent &&
-        !this.authorization.allowsPermission("workspace.write") &&
-        !this.authorization.allowsPermission("hub.execute")
-      ) {
+      if (request.agent && !this.authorization.allowsPermission("workspace.write")) {
         throw new Error("Session is not authorized to create an agent");
       }
       const agentInput = request.agent;
@@ -8522,7 +8478,6 @@ export class Session {
     this.unsubscribeWorkspaceMutations?.();
     this.unsubscribeWorkspaceMutations = null;
     this.agentUpdates.dispose();
-    await this.hubExecutionController?.cleanup();
     if (this.unsubscribeTerminalWorkspaceContributionEvents) {
       this.unsubscribeTerminalWorkspaceContributionEvents();
       this.unsubscribeTerminalWorkspaceContributionEvents = null;
@@ -8602,8 +8557,6 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "agent.provider_subagents.update":
     case "terminal_attention_required":
     case "activity_log":
-    case "hub.execution.agent.update":
-    case "hub.execution.agent.stream":
     case "usage.backfill.progress":
     case "usage.updated":
     case "usage.pricing.updated":
@@ -8651,9 +8604,8 @@ function legacyWantsEvent(
     // received them without asking and none can be broken by withholding them.
     // The app subscribes (`useUsageReport`), and the implicit delivery above is
     // for events that predate subscriptions. Left in the default branch they
-    // reach every socket, including ones that only ever send RPCs: a backfill
-    // progress push landing between a request and its response is what broke
-    // the Hub relationship tests.
+    // reach every socket, including ones that only ever send RPCs, where a
+    // backfill progress push can land between a request and its response.
     case "usage.backfill.progress":
     case "usage.updated":
     case "usage.pricing.updated":
