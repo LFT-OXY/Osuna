@@ -7,13 +7,15 @@ interface LegalPageProps {
   children: ReactNode;
 }
 
+export const LEGAL_CONTACT_EMAIL = "autuhae@gmail.com";
+
 export function LegalPage({ title, lastUpdated, children }: LegalPageProps) {
   return (
     <SiteShell width="prose">
       <article className="space-y-8 text-white/70 leading-relaxed [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-white [&_h2]:text-xl [&_h2]:font-medium [&_h2]:text-white [&_li]:pl-1 [&_section]:space-y-3 [&_ul]:ml-5 [&_ul]:list-disc [&_ul]:space-y-1">
         <header className="space-y-3">
           <h1 className="text-3xl font-medium text-white">{title}</h1>
-          <p className="text-sm text-white/50">Last updated: {lastUpdated}</p>
+          <p className="text-sm text-white/50">最后更新：{lastUpdated}</p>
         </header>
         {children}
       </article>
@@ -21,18 +23,29 @@ export function LegalPage({ title, lastUpdated, children }: LegalPageProps) {
   );
 }
 
+// 仓库里没有的法律信息不自拟，统一用这个占位；上线前搜 LegalPlaceholder 逐个补上。
+export function LegalPlaceholder({ children }: { children: ReactNode }) {
+  return <span className="text-white/50">〔待补充：{children}〕</span>;
+}
+
+export function LegalContactLink() {
+  return <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>;
+}
+
 export function OsunaLegalIdentity() {
   return (
     <address className="not-italic">
-      <strong className="font-medium text-white">Mohamed Boudra Ziani</strong>, operating as Osuna
+      <strong className="font-medium text-white">LFT-OXY</strong>，Osuna 的维护者
       <br />
-      NIF/VAT ID: ES26617095T
+      <LegalPlaceholder>运营主体的法定名称与通讯地址</LegalPlaceholder>
       <br />
-      Roc Boronat 48, Bajos 2
+      邮箱：
+      <LegalContactLink />
       <br />
-      08005 Barcelona, Spain
-      <br />
-      Email: <a href="mailto:hello@moboudra.com">hello@moboudra.com</a>
+      仓库：
+      <a href="https://github.com/LFT-OXY/Osuna" target="_blank" rel="noopener noreferrer">
+        github.com/LFT-OXY/Osuna
+      </a>
     </address>
   );
 }

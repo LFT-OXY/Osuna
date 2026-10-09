@@ -1,166 +1,133 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LegalPage, OsunaLegalIdentity } from "~/components/legal-page";
+import {
+  LegalContactLink,
+  LegalPage,
+  LegalPlaceholder,
+  OsunaLegalIdentity,
+} from "~/components/legal-page";
 import { pageMeta } from "~/meta";
 
 export const Route = createFileRoute("/privacy")({
   head: () =>
-    pageMeta(
-      "Privacy Policy - Osuna",
-      "What stays on your machines and what the encrypted relay can see.",
-      "/privacy",
-    ),
+    pageMeta("隐私政策 - Osuna", "哪些数据留在你的机器上，加密中继又能看到什么。", "/privacy"),
   component: Privacy,
 });
 
 function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="August 29, 2026">
+    <LegalPage title="隐私政策" lastUpdated="2026 年 10 月 9 日">
       <p>
-        Osuna is local-first. Installing or using the open-source software does not send us your
-        code, prompts, files, terminal output, or agent conversations. This policy explains the
-        separate data boundaries for local Osuna, the optional official relay, and osuna.chinhae.cc.
+        Osuna 以本地优先的方式工作。安装或使用这款开源软件，不会把你的代码、提示词、文件、终端输出或
+        Agent 对话发给我们。本政策分别说明本地运行的 Osuna、可选的官方中继，以及 osuna.chinhae.cc
+        各自涉及哪些数据。
       </p>
 
       <section>
-        <h2>Who is responsible</h2>
+        <h2>谁负责</h2>
         <OsunaLegalIdentity />
         <p>
-          Mohamed Boudra Ziani is the data controller for personal data processed through the
-          official Osuna website and relay. Independently self-hosted daemons and relays are
-          controlled by their operators and are not covered by this policy.
+          LFT-OXY 负责官方网站与官方中继所处理的个人数据。自行托管的 daemon
+          与中继由各自的运营者负责，不在本政策范围内。
         </p>
       </section>
 
       <section>
-        <h2>Local Osuna apps and daemons</h2>
+        <h2>本地的 Osuna 应用与 daemon</h2>
+        <p>Osuna 运行在你自己的机器上，不向我们发送统计、遥测、广告标识或崩溃报告。</p>
         <p>
-          Osuna runs on your machines. It does not send us analytics, telemetry, advertising
-          identifiers, or crash reports.
+          打包的桌面端会向 GitHub Releases 检查更新。GitHub
+          会按它自己的隐私政策，收到响应这次请求所需的常规网络信息。
         </p>
         <p>
-          Packaged desktop apps check GitHub Releases for updates. GitHub receives the ordinary
-          network information needed to answer that request under its own privacy policy.
-        </p>
-        <p>
-          Agents such as Claude Code, Codex, and OpenCode communicate with their providers using
-          credentials on your machine. Osuna does not manage or intercept those provider API calls.
+          Claude Code、Codex、OpenCode 等 Agent 使用你机器上的凭据与各自的提供方通信。Osuna
+          不管理也不拦截这些 API 调用。
         </p>
       </section>
 
       <section>
-        <h2>The official relay</h2>
-        <p>The relay is optional. To connect your client and daemon, it processes:</p>
+        <h2>官方中继</h2>
+        <p>中继是可选的。为了把你的客户端和 daemon 连起来，它会处理：</p>
         <ul>
-          <li>IP addresses and connection timing</li>
-          <li>Session identifiers and public handshake keys</li>
-          <li>Message sizes and aggregate bandwidth</li>
-          <li>Temporary connection and routing state</li>
+          <li>IP 地址与连接时间</li>
+          <li>会话标识与握手用的公钥</li>
+          <li>消息大小与总流量</li>
+          <li>临时的连接与路由状态</li>
         </ul>
         <p>
-          Your client and daemon encrypt application traffic end-to-end with NaCl box encryption.
-          The relay carries ciphertext and cannot read your code, prompts, terminal output, or agent
-          conversations. Payloads exist in relay memory only while being forwarded. We do not store
-          message contents. Infrastructure may retain limited operational logs and aggregate metrics
-          for security, capacity planning, and troubleshooting.
+          你的客户端与 daemon 之间用 NaCl box
+          做端到端加密。中继只转发密文，读不到你的代码、提示词、终端输出或 Agent
+          对话。数据只在转发期间存在于中继的内存里，我们不存储消息内容。基础设施可能为安全、容量规划和排查问题保留有限的运行日志与汇总指标。
         </p>
       </section>
 
       <section>
-        <h2>Why we process data</h2>
-        <p>We process data to:</p>
+        <h2>为什么处理这些数据</h2>
+        <p>处理这些数据是为了：</p>
         <ul>
-          <li>Provide accounts, relay connectivity, billing, and support</li>
-          <li>Authenticate users, daemons, and connected services</li>
-          <li>Prevent abuse and protect the services</li>
-          <li>Maintain operational and audit records</li>
-          <li>Meet accounting, tax, and other legal obligations</li>
+          <li>提供中继连接</li>
+          <li>防止滥用并保护服务</li>
         </ul>
         <p>
-          The legal bases are performance of our contract with you, our legitimate interests in
-          operating and protecting the services, and compliance with legal obligations.
+          <LegalPlaceholder>处理数据的法律依据</LegalPlaceholder>
         </p>
       </section>
 
       <section>
-        <h2>Service providers</h2>
+        <h2>服务提供方</h2>
         <p>
-          We use Fly.io for hosted infrastructure, Stripe for subscriptions and payments, and GitHub
-          for software releases and connected GitHub features. Slack, Discord, Linear, and other
-          services receive data only when you choose to connect or use them.
+          官方网站、网页端与官方中继托管在 Cloudflare 上；软件版本通过 GitHub
+          发布。它们各自按自己的隐私政策处理数据。
         </p>
+        <p>我们不出售个人数据，不与广告商共享，也不用它训练 AI 模型。</p>
+      </section>
+
+      <section>
+        <h2>保留与删除</h2>
+        <p>Osuna 没有账户，我们不保存用户资料。中继不存储消息内容。</p>
         <p>
-          Some providers may process data outside the European Economic Area. Where required, we use
-          appropriate contractual safeguards for those transfers.
-        </p>
-        <p>
-          We do not sell personal data, share it with advertisers, or use it to train AI models.
+          <LegalPlaceholder>基础设施运行日志的保留期限</LegalPlaceholder>
         </p>
       </section>
 
       <section>
-        <h2>Retention and deletion</h2>
-        <p>
-          We keep account and organization data while your account remains active. We retain
-          operational, workflow, and audit records while needed to provide and protect the service.
-          Billing records may be kept for legally required accounting and tax periods. Short-lived
-          authorization codes and sessions expire automatically.
-        </p>
-        <p>
-          You can request account deletion by emailing us. Some records may remain where the law
-          requires it or where they form part of another organization&apos;s legitimate audit
-          history.
-        </p>
+        <h2>Cookie</h2>
+        <p>官方网站不使用统计或广告 Cookie。</p>
       </section>
 
       <section>
-        <h2>Cookies</h2>
-        <p>The marketing website does not use analytics or advertising cookies.</p>
-      </section>
-
-      <section>
-        <h2>Your rights</h2>
+        <h2>你的权利</h2>
         <p>
-          Depending on applicable law, you may request access, correction, deletion, restriction,
-          objection, or portability of your personal data. Email{" "}
-          <a href="mailto:hello@moboudra.com">hello@moboudra.com</a>. You may also complain to the{" "}
-          <a href="https://www.aepd.es/" target="_blank" rel="noopener noreferrer">
-            Spanish Data Protection Agency
-          </a>
-          .
+          根据适用法律，你可以要求访问、更正、删除你的个人数据，或限制、反对对它的处理。请发邮件至{" "}
+          <LegalContactLink />。
+        </p>
+        <p>
+          <LegalPlaceholder>数据保护监管机构与投诉渠道</LegalPlaceholder>
         </p>
       </section>
 
       <section>
-        <h2>Security</h2>
+        <h2>安全</h2>
         <p>
-          We use access controls, encrypted transport, and limited service permissions. No online
-          service can guarantee absolute security. Read Osuna&apos;s{" "}
+          任何在线服务都无法保证绝对安全。Osuna 的安全模型见{" "}
           <a
             href="https://github.com/LFT-OXY/Osuna/blob/main/SECURITY.md"
             target="_blank"
             rel="noopener noreferrer"
           >
-            security model
-          </a>{" "}
-          or report a vulnerability privately to{" "}
-          <a href="mailto:hello@moboudra.com">hello@moboudra.com</a>.
+            SECURITY.md
+          </a>
+          ；发现漏洞请私下报告至 <LegalContactLink />。
         </p>
       </section>
 
       <section>
-        <h2>Children</h2>
-        <p>
-          The official services are for professional developers and are not directed at children
-          under 16.
-        </p>
+        <h2>儿童</h2>
+        <p>官方服务面向开发者，不面向儿童。</p>
       </section>
 
       <section>
-        <h2>Changes</h2>
-        <p>
-          We will update this page and its date when our services or data practices materially
-          change.
-        </p>
+        <h2>变更</h2>
+        <p>服务或数据处理方式发生实质变化时，我们会更新本页及其日期。</p>
       </section>
     </LegalPage>
   );

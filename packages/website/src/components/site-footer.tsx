@@ -1,8 +1,8 @@
-import { appStoreUrl, playStoreUrl, webAppUrl } from "~/downloads";
-
 interface SiteFooterProps {
   width?: "default" | "prose";
 }
+
+const FOOTER_LINK_CLASS = "block text-muted-foreground hover:text-foreground transition-colors";
 
 export function SiteFooter({ width = "default" }: SiteFooterProps) {
   const widthClasses =
@@ -11,103 +11,27 @@ export function SiteFooter({ width = "default" }: SiteFooterProps) {
     <footer className={`${widthClasses} mx-auto`}>
       <div className="border-t border-white/10 pt-8 pb-4 grid grid-cols-2 sm:grid-cols-3 gap-8 text-sm">
         <div className="space-y-3">
-          <p className="text-white/60 font-medium">Product</p>
+          <p className="text-white/60 font-medium">产品</p>
           <div className="space-y-2">
-            <a
-              href="/docs"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Docs
+            <a href="/docs" className={FOOTER_LINK_CLASS}>
+              文档
             </a>
-            <a
-              href="/changelog"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Changelog
+            <a href="/changelog" className={FOOTER_LINK_CLASS}>
+              更新日志
             </a>
-            <a
-              href="/docs/cli"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              CLI
-            </a>
-            <a
-              href="/privacy"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Privacy
-            </a>
-            <a
-              href="/terms"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Terms
+            <a href="/download" className={FOOTER_LINK_CLASS}>
+              下载
             </a>
           </div>
         </div>
         <div className="space-y-3">
-          <p className="text-white/60 font-medium">Community</p>
+          <p className="text-white/60 font-medium">法律</p>
           <div className="space-y-2">
-            <a
-              href="https://discord.gg/jz8T2uahpH"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Discord
+            <a href="/privacy" className={FOOTER_LINK_CLASS}>
+              隐私
             </a>
-            <a
-              href="https://www.reddit.com/r/OsunaAI/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Reddit
-            </a>
-            <a
-              href="https://github.com/LFT-OXY/Osuna"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              GitHub
-            </a>
-          </div>
-        </div>
-        <div className="space-y-3">
-          <p className="text-white/60 font-medium">Download</p>
-          <div className="space-y-2">
-            <a
-              href={appStoreUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              App Store
-            </a>
-            <a
-              href={playStoreUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Google Play
-            </a>
-            <a
-              href="https://github.com/LFT-OXY/Osuna/releases"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Desktop
-            </a>
-            <a
-              href={webAppUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Web App
+            <a href="/terms" className={FOOTER_LINK_CLASS}>
+              条款
             </a>
           </div>
         </div>

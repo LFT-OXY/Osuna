@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
-// 从 packages/desktop/icon-source/osuna.png 派生桌面端与 Web 的全部图标。
+// 从 packages/desktop/icon-source/osuna.png 派生桌面端、Web 与官网的全部图标。
 // 换 logo 时只替换源图再运行：node scripts/generate-osuna-icons.mjs
 // 源图约定：方形 RGBA 画布，不透明的圆角底板按 Apple 图标栅格留白（约占 80%）。
 
@@ -12,6 +12,7 @@ const sourcePath = path.join(repoRoot, "packages/desktop/icon-source/osuna.png")
 const desktopAssets = path.join(repoRoot, "packages/desktop/assets");
 const appImages = path.join(repoRoot, "packages/app/assets/images");
 const appPublic = path.join(repoRoot, "packages/app/public");
+const websitePublic = path.join(repoRoot, "packages/website/public");
 
 // 边缘抗锯齿只有 1–2 像素；再往外、或 alpha 低于这个值的都是杂点。
 const EDGE_BAND_PX = 2;
@@ -253,6 +254,7 @@ const ICNS_TYPES = [
   ["ic10", 1024, "png"],
 ];
 const ICO_SIZES = [16, 24, 32, 48, 64, 256];
+const WEBSITE_ICO_SIZES = [16, 32, 48];
 
 async function faviconWithStatus(tile, status) {
   const base = resized(tile.data, tile.size, FAVICON_SIZE);
@@ -354,6 +356,24 @@ async function main() {
   ]) {
     outputs.set(path.join(appPublic, name), await resizedPng(tile.data, tile.size, px));
   }
+
+  // 官网：页眉 logo、favicon 与 apple-touch-icon，同样用底板满版裁切。
+  outputs.set(path.join(websitePublic, "logo.png"), await resizedPng(tile.data, tile.size, 96));
+  outputs.set(
+    path.join(websitePublic, "favicon.ico"),
+    encodeIco(
+      await Promise.all(
+        WEBSITE_ICO_SIZES.map(async (px) => ({
+          size: px,
+          png: await resizedPng(tile.data, tile.size, px),
+        })),
+      ),
+    ),
+  );
+  outputs.set(
+    path.join(websitePublic, "apple-touch-icon.png"),
+    await resizedPng(tile.data, tile.size, 180),
+  );
 
   for (const [filePath, buffer] of outputs) {
     mkdirSync(path.dirname(filePath), { recursive: true });

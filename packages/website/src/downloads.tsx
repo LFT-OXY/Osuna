@@ -7,7 +7,7 @@ export function releaseBase(version: string) {
 
 export interface ReleaseAssetInfo {
   version: string;
-  linuxAppImageAsset: string;
+  linuxAppImageAsset: string | null;
   windowsX64Asset: string | null;
   windowsArm64Asset: string | null;
 }
@@ -15,23 +15,24 @@ export interface ReleaseAssetInfo {
 export function downloadUrls(release: ReleaseAssetInfo) {
   const { version, linuxAppImageAsset, windowsX64Asset, windowsArm64Asset } = release;
   const base = releaseBase(version);
+  // AppImage、DEB、RPM 出自同一条 Linux 构建，没有 AppImage 就是这一版没出 Linux 包。
+  const hasLinux = linuxAppImageAsset !== null;
   return {
     macAppleSilicon: `${base}/Osuna-${version}-arm64.dmg`,
     macIntel: `${base}/Osuna-${version}-x64.dmg`,
-    linuxAppImage: `${base}/${linuxAppImageAsset}`,
-    linuxDeb: `${base}/Osuna-${version}-amd64.deb`,
-    linuxRpm: `${base}/Osuna-${version}-x86_64.rpm`,
+    linuxAppImage: hasLinux ? `${base}/${linuxAppImageAsset}` : null,
+    linuxDeb: hasLinux ? `${base}/Osuna-${version}-amd64.deb` : null,
+    linuxRpm: hasLinux ? `${base}/Osuna-${version}-x86_64.rpm` : null,
     windowsExeX64: `${base}/${windowsX64Asset ?? `Osuna-Setup-${version}.exe`}`,
     windowsExeArm64: windowsArm64Asset ? `${base}/${windowsArm64Asset}` : null,
     androidApk: `${base}/osuna-v${version}-android.apk`,
   };
 }
 
-export const appStoreUrl = "https://apps.apple.com/app/osuna-pocket-engineer/id6758887924";
-export const playStoreUrl = "https://play.google.com/store/apps/details?id=com.chinhae.osuna";
 export const webAppUrl = "https://osuna-app.chinhae.cc";
 
 export interface PrimaryDownload {
+  /** The full call-to-action text, e.g. "下载 Mac 版". */
   label: string;
   href: string;
   icon: (props: React.SVGProps<SVGSVGElement>) => React.ReactElement;
@@ -44,18 +45,28 @@ export function getDesktopDownload(
   const urls = downloadUrls(release);
   switch (platform) {
     case "windows":
-      return { label: "Windows", href: urls.windowsExeX64, icon: WindowsIcon };
+      return { label: "下载 Windows 版", href: urls.windowsExeX64, icon: WindowsIcon };
     case "linux":
-      return { label: "Linux", href: urls.linuxAppImage, icon: LinuxIcon };
+      return urls.linuxAppImage
+        ? { label: "下载 Linux 版", href: urls.linuxAppImage, icon: LinuxIcon }
+        : { label: "查看下载方式", href: "/download", icon: LinuxIcon };
     case "mac":
-      return { label: "Mac", href: urls.macAppleSilicon, icon: AppleIcon };
+      return { label: "下载 Mac 版", href: urls.macAppleSilicon, icon: AppleIcon };
   }
 }
 
-export const MOBILE_STORES: Record<MobilePlatform, PrimaryDownload> = {
-  ios: { label: "iPhone", href: appStoreUrl, icon: AppleIcon },
-  android: { label: "Android", href: playStoreUrl, icon: PlayStoreIcon },
-};
+// 手机端只有安卓 APK；没有 iOS 包，iPhone 访客走网页端。
+export function getMobileDownload(
+  release: ReleaseAssetInfo,
+  platform: MobilePlatform,
+): PrimaryDownload {
+  switch (platform) {
+    case "android":
+      return { label: "下载安卓 APK", href: downloadUrls(release).androidApk, icon: AndroidIcon };
+    case "ios":
+      return { label: "打开网页端", href: webAppUrl, icon: GlobeIcon };
+  }
+}
 
 export function AppleIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -81,26 +92,6 @@ export function AndroidIcon(props: React.SVGProps<SVGSVGElement>) {
       {...props}
     >
       <path d="M380.91,199l42.47-73.57a8.63,8.63,0,0,0-3.12-11.76,8.52,8.52,0,0,0-11.71,3.12l-43,74.52c-32.83-15-69.78-23.35-109.52-23.35s-76.69,8.36-109.52,23.35l-43-74.52a8.6,8.6,0,1,0-14.88,8.64L131,199C57.8,238.64,8.19,312.77,0,399.55H512C503.81,312.77,454.2,238.64,380.91,199ZM138.45,327.65a21.46,21.46,0,1,1,21.46-21.46A21.47,21.47,0,0,1,138.45,327.65Zm235,0A21.46,21.46,0,1,1,395,306.19,21.47,21.47,0,0,1,373.49,327.65Z" />
-    </svg>
-  );
-}
-
-export function PlayStoreIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M3.27 2.17c-.2.21-.32.55-.32 1v17.66c0 .45.12.79.33 1l9.87-9.84z" fill="#00F076" />
-      <path
-        d="m16.43 8.72-3.28 3.27 3.29 3.28 3.9-2.22c1.13-.64 1.13-1.42 0-2.06z"
-        fill="#FFCE00"
-      />
-      <path d="m13.15 11.99 3.28-3.27L4.63 2.01c-.56-.32-1.04-.28-1.36.16z" fill="#00D6FF" />
-      <path d="M3.28 21.83c.32.44.8.48 1.36.16l11.8-6.72-3.29-3.28z" fill="#FF3A44" />
     </svg>
   );
 }
