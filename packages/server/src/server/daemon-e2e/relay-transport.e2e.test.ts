@@ -184,7 +184,7 @@ async function waitForCapturedLog(
   let relayProcess: ChildProcess | null = null;
   let relayStdoutLines: string[] = [];
 
-  const startRelay = async (options: { useLocalRelay?: boolean } = {}) => {
+  const startRelay = async () => {
     relayStdoutLines = [];
     relayPort = await getAvailablePort();
     const relayDir = path.resolve(process.cwd(), "../relay");
@@ -199,9 +199,6 @@ async function waitForCapturedLog(
       "--live-reload=false",
       "--show-interactive-dev-session=false",
     ];
-    if (options.useLocalRelay) {
-      relayArgs.push("--var", "OSUNA_RELAY_UPSTREAM:");
-    }
     relayProcess = spawn("npx", relayArgs, {
       cwd: relayDir,
       env: { ...process.env },
@@ -386,7 +383,7 @@ async function waitForCapturedLog(
     process.env.OSUNA_PRIMARY_LAN_IP = "192.168.1.12";
 
     const { logger, lines } = createCapturingLogger();
-    await startRelay({ useLocalRelay: true });
+    await startRelay();
 
     const daemon = await createTestOsunaDaemon({
       listen: "127.0.0.1",

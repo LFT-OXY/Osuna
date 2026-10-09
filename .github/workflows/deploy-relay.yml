@@ -1,8 +1,11 @@
 name: Deploy Relay
 
 on:
-  # Manual-only while osuna-relay.chinhae.cc bridges traffic to the Fly deployment.
-  # A release or main push must not redeploy the temporary Cloudflare bridge.
+  push:
+    branches: [main]
+    paths:
+      - "packages/relay/**"
+      - ".github/workflows/deploy-relay.yml"
   workflow_dispatch:
 
 jobs:
@@ -27,3 +30,4 @@ jobs:
         run: cd packages/relay && npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

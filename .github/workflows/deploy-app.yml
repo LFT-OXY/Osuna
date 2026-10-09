@@ -1,7 +1,21 @@
 name: Deploy App
 
 on:
-  # 仅手动触发：部署依赖上游的 Cloudflare 账号，推 tag 在本 fork 下必然失败。
+  push:
+    branches: [main]
+    # 网页端打包会带上这些工作区包的源码，任何一个变了都要重新部署。
+    paths:
+      - "packages/app/**"
+      - "packages/client/**"
+      - "packages/expo-two-way-audio/**"
+      - "packages/highlight/**"
+      - "packages/plugin/**"
+      - "packages/protocol/**"
+      - "packages/relay/**"
+      - "package.json"
+      - "package-lock.json"
+      - "patches/**"
+      - ".github/workflows/deploy-app.yml"
   workflow_dispatch:
 
 jobs:
@@ -32,4 +46,4 @@ jobs:
         run: npm run deploy:web --workspace=@osuna/app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 10ed39a1dbf316e30abd0c409bed40d6
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
