@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatConnectionStatus } from "@/utils/daemons";
+import { MINIMUM_HOST_VERSION } from "@osuna/protocol/host-version";
 import type { WorkspaceRouteState } from "@/screens/workspace/workspace-route-state";
 import type { Theme } from "@/styles/theme";
 
@@ -100,7 +101,24 @@ function getWorkspaceHostStateTitle(
   if (state.connectionStatus === "offline") {
     return t("workspace.route.hostOffline", { hostName: state.hostName });
   }
+  if (state.connectionStatus === "outdated") {
+    return t("workspace.route.hostOutdated", { hostName: state.hostName });
+  }
   return t("workspace.route.cannotReachHost", { hostName: state.hostName });
+}
+
+function getWorkspaceHostStateDescription(
+  state: Extract<WorkspaceRouteState, { kind: "unreachable" }>,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (state.connectionStatus === "connecting" || state.connectionStatus === "idle") {
+    return state.hostName;
+  }
+  if (state.connectionStatus === "outdated") {
+    return t("workspace.route.hostOutdatedHint", { version: MINIMUM_HOST_VERSION });
+  }
+  const status = formatConnectionStatus(state.connectionStatus);
+  return t("workspace.route.hostStatus", { status });
 }
 
 function WorkspaceConnecting({ hostName }: { hostName: string }) {
@@ -216,7 +234,9 @@ function WorkspaceUnreachable({
   onManageHost: () => void;
 }) {
   const { t } = useTranslation();
+  // 主机升级前重试只会得到同一个结果，过旧时只留"管理主机"。
   const canRetry = state.connectionStatus === "offline" || state.connectionStatus === "error";
+  const canManageHost = canRetry || state.connectionStatus === "outdated";
 
   return (
     <View style={styles.emptyState}>
@@ -225,13 +245,7 @@ function WorkspaceUnreachable({
       ) : null}
       <View style={styles.textStack}>
         <Text style={styles.title}>{getWorkspaceHostStateTitle(state, t)}</Text>
-        <Text style={styles.description}>
-          {state.connectionStatus === "connecting" || state.connectionStatus === "idle"
-            ? state.hostName
-            : t("workspace.route.hostStatus", {
-                status: formatConnectionStatus(state.connectionStatus),
-              })}
-        </Text>
+        <Text style={styles.description}>{getWorkspaceHostStateDescription(state, t)}</Text>
         {state.lastError ? (
           <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
             <TooltipTrigger asChild>
@@ -245,12 +259,19 @@ function WorkspaceUnreachable({
           </Tooltip>
         ) : null}
       </View>
-      {canRetry ? (
+      {canManageHost ? (
         <View style={styles.actions}>
-          <Button size="sm" variant="default" leftIcon={RotateCw} onPress={onRetry}>
-            {t("common.actions.retry")}
-          </Button>
-          <Button size="sm" variant="outline" leftIcon={Settings} onPress={onManageHost}>
+          {canRetry ? (
+            <Button size="sm" variant="default" leftIcon={RotateCw} onPress={onRetry}>
+              {t("common.actions.retry")}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant={canRetry ? "outline" : "default"}
+            leftIcon={Settings}
+            onPress={onManageHost}
+          >
             {t("workspace.route.manageHost")}
           </Button>
         </View>

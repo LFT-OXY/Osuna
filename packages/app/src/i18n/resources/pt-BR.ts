@@ -297,6 +297,9 @@ export const ptBR: TranslationResources = {
       showSoon: "Mostraremos este agente em instantes.",
       showWhenOnline: "Mostraremos este agente quando o host estiver online.",
       reconnectingTo: "Reconectando a {{serverLabel}}...",
+      hostOutdated: "{{serverLabel}} precisa ser atualizado",
+      hostOutdatedHint:
+        "Este host executa uma versão do Osuna anterior à {{version}}. Atualize o Osuna no host para a versão {{version}} ou posterior e ele se reconectará automaticamente.",
       showAgainWhenReachable:
         "Mostraremos este agente novamente assim que o host estiver acessível.",
     },
@@ -503,6 +506,9 @@ export const ptBR: TranslationResources = {
       connecting: "Conectando",
       hostOffline: "{{hostName}} está offline",
       cannotReachHost: "Não é possível acessar {{hostName}}",
+      hostOutdated: "{{hostName}} precisa ser atualizado",
+      hostOutdatedHint:
+        "Este host executa uma versão do Osuna anterior à {{version}}. Atualize o Osuna no host para a versão {{version}} ou posterior e ele se reconectará automaticamente.",
       hostStatus: "Status do host: {{status}}",
       needsHostUpgrade: "Atualize o host para restaurar este workspace",
       manageHost: "Gerenciar host",
@@ -2749,6 +2755,12 @@ export const ptBR: TranslationResources = {
         },
       },
       notFound: "Host não encontrado",
+      outdated: {
+        badge: "Atualização necessária",
+        title: "{{hostName}} precisa ser atualizado",
+        description:
+          "Este host executa uma versão do Osuna anterior à {{version}}. Atualize o Osuna no host para a versão {{version}} ou posterior e ele se reconectará automaticamente.",
+      },
       badges: {
         relay: "Relay",
         local: "Local",

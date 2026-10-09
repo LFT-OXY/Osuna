@@ -292,6 +292,9 @@ export const ar: TranslationResources = {
       showSoon: "سوف نعرض هذا الوكيل في لحظة.",
       showWhenOnline: "سنعرض هذا الوكيل بمجرد اتصال المضيف بالإنترنت.",
       reconnectingTo: "جارٍ إعادة الاتصال بـ{{serverLabel}}...",
+      hostOutdated: "{{serverLabel}} يحتاج إلى تحديث",
+      hostOutdatedHint:
+        "يعمل هذا المضيف بإصدار من Osuna أقدم من {{version}}. حدّث Osuna على المضيف إلى الإصدار {{version}} أو أحدث وسيُعاد الاتصال تلقائيًا.",
       showAgainWhenReachable: "سنعرض هذا الوكيل مرة أخرى بمجرد الوصول إلى المضيف.",
     },
     archived: {
@@ -497,6 +500,9 @@ export const ar: TranslationResources = {
       connecting: "الاتصال",
       hostOffline: "{{hostName}}غير متواجد حالياً",
       cannotReachHost: "لا يمكن الوصول إلى{{hostName}}",
+      hostOutdated: "{{hostName}} يحتاج إلى تحديث",
+      hostOutdatedHint:
+        "يعمل هذا المضيف بإصدار من Osuna أقدم من {{version}}. حدّث Osuna على المضيف إلى الإصدار {{version}} أو أحدث وسيُعاد الاتصال تلقائيًا.",
       hostStatus: "حالة Host:{{status}}",
       needsHostUpgrade: "قم بتحديث مضيفك لاستعادة مساحة العمل هذه",
       manageHost: "إدارة المضيف",
@@ -2709,6 +2715,12 @@ export const ar: TranslationResources = {
         },
       },
       notFound: "لم يتم العثور على Host",
+      outdated: {
+        badge: "يحتاج إلى تحديث",
+        title: "{{hostName}} يحتاج إلى تحديث",
+        description:
+          "يعمل هذا المضيف بإصدار من Osuna أقدم من {{version}}. حدّث Osuna على المضيف إلى الإصدار {{version}} أو أحدث وسيُعاد الاتصال تلقائيًا.",
+      },
       badges: {
         relay: "تتابع",
         local: "محلي",

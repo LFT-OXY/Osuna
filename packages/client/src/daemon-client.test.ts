@@ -1,7 +1,9 @@
-import { afterEach, expect, expectTypeOf, test, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, test, vi } from "vitest";
 import { z } from "zod";
 import {
   DaemonClient,
+  DaemonHostOutdatedError,
+  type ConnectionState,
   type DaemonClientTrace,
   type CreateAgentRequestOptions,
   type DaemonTransport,
@@ -97,7 +99,11 @@ function createMockTransport() {
   return {
     transport,
     sent,
-    triggerOpen: (options?: { preserveSent?: boolean; features?: Record<string, boolean> }) => {
+    triggerOpen: (options?: {
+      preserveSent?: boolean;
+      features?: Record<string, boolean>;
+      serverInfo?: Record<string, unknown>;
+    }) => {
       onOpen();
       if (!options?.preserveSent) {
         // Ignore HELLO handshake payloads in assertions.
@@ -108,11 +114,11 @@ function createMockTransport() {
           type: "session",
           message: {
             type: "status",
-            payload: {
+            payload: options?.serverInfo ?? {
               status: "server_info",
               serverId: `srv_test_${serverInfoOrdinal++}`,
               hostname: null,
-              version: null,
+              version: "1.0.0",
               features: options?.features ?? { ownedSubscriptions: true },
             },
           },
@@ -662,7 +668,7 @@ class FakeDaemon {
             status: "server_info",
             serverId: "srv_heartbeat_test",
             hostname: null,
-            version: null,
+            version: "1.0.0",
           },
         },
       }),
@@ -884,10 +890,14 @@ test("passes password as HTTP bearer header and WebSocket subprotocol", async ()
   mock.triggerOpen();
   await connectPromise;
 
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  // 0.14.x 的 daemon 只认旧前缀。两个都带上，设了密码的旧主机才走得到 server_info 里的版本判定。
+  const protocolFor014Daemon = "paseo.bearer.shared-secret";
+
   expect(transportFactory).toHaveBeenCalledWith({
     url: "ws://test",
     headers: { Authorization: "Bearer shared-secret" },
-    protocols: ["osuna.bearer.shared-secret"],
+    protocols: ["osuna.bearer.shared-secret", protocolFor014Daemon],
   });
 });
 
@@ -942,6 +952,137 @@ test("advertises client capabilities in hello", async () => {
         hostKind: "desktop app",
       },
     },
+  });
+});
+
+// 0.14.2 的 daemon 实际下发的 server_info：owner 的全量权限里还有 hub.execute，
+// features 里还有两个已删除的 Hub 特性位。
+const SERVER_INFO_FROM_0_14_2 = {
+  status: "server_info",
+  serverId: "srv_legacy",
+  hostname: "old-host",
+  version: "0.14.2",
+  permissions: [
+    "daemon.read",
+    "daemon.manage",
+    "tunnel.manage",
+    "access.manage",
+    "workspace.read",
+    "workspace.write",
+    "workspace.manage",
+    "automation.manage",
+    "hub.execute",
+  ],
+  features: { providersSnapshot: true, hubAgentRpc: true, hubRelationship: true },
+};
+
+describe("a host below the 1.0.0 protocol floor", () => {
+  test("is refused at the handshake and receives nothing after hello", async () => {
+    vi.useFakeTimers();
+    try {
+      const mock = createMockTransport();
+      const transportFactory = vi.fn(() => mock.transport);
+      const client = new DaemonClient({
+        url: "ws://test",
+        clientId: "clsk_outdated_host",
+        reconnect: { enabled: true, baseDelayMs: 10, maxDelayMs: 10 },
+        transportFactory,
+      });
+      clients.push(client);
+      const statusMessages: unknown[] = [];
+      client.on("status", (message) => statusMessages.push(message));
+      const states: ConnectionState[] = [];
+      client.subscribeConnectionStatus((state) => states.push(state));
+
+      const refused = client.connect().then(
+        () => null,
+        (error: unknown) => error,
+      );
+      const queued = client.fetchAgents().then(
+        () => null,
+        (error: unknown) => error,
+      );
+      mock.triggerOpen({ preserveSent: true, serverInfo: SERVER_INFO_FROM_0_14_2 });
+
+      const error = await refused;
+      expect(error).toBeInstanceOf(DaemonHostOutdatedError);
+      expect(error).toMatchObject({
+        hostVersion: "0.14.2",
+        hostname: "old-host",
+        serverId: "srv_legacy",
+        message: "old-host runs Osuna 0.14.2. Update it to 1.0.0 or later to connect.",
+      });
+      expect(await queued).toBeInstanceOf(Error);
+
+      expect(states.at(-1)).toEqual({
+        status: "disconnected",
+        reason: "old-host runs Osuna 0.14.2. Update it to 1.0.0 or later to connect.",
+        outdatedHost: { version: "0.14.2" },
+      });
+      expect(states.map((state) => state.status)).not.toContain("connected");
+      expect(client.getLastServerInfoMessage()).toBeNull();
+      expect(statusMessages).toEqual([]);
+
+      // 主机升级之前重连只会得到同一个结果，client 不自己重试。
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(transportFactory).toHaveBeenCalledTimes(1);
+      expect(mock.sent.map((frame) => JSON.parse(assertStr(frame)).type)).toEqual(["hello"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("connects on the next attempt once the host reports 1.0.0", async () => {
+    const legacy = createMockTransport();
+    const upgraded = createMockTransport();
+    const transports = [legacy, upgraded];
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_upgraded_host",
+      reconnect: { enabled: false },
+      transportFactory: () => transports.shift()!.transport,
+    });
+    clients.push(client);
+
+    const refused = client.connect().catch((error: unknown) => error);
+    legacy.triggerOpen({ serverInfo: SERVER_INFO_FROM_0_14_2 });
+    expect(await refused).toBeInstanceOf(DaemonHostOutdatedError);
+
+    const connected = client.connect();
+    upgraded.triggerOpen({ serverInfo: { ...SERVER_INFO_FROM_0_14_2, version: "1.0.0" } });
+    await connected;
+
+    expect(client.getConnectionState()).toEqual({ status: "connected" });
+    expect(client.getLastServerInfoMessage()?.version).toBe("1.0.0");
+  });
+
+  test.each([
+    ["1.0.0-beta.1", true],
+    ["1.0.0", true],
+    ["1.2.3", true],
+    ["0.14.2", false],
+    ["0.99.0", false],
+    ["not-a-version", false],
+    [null, false],
+  ])("host version %s is supported: %s", async (version, supported) => {
+    const mock = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_host_version_floor",
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+
+    const outcome = client.connect().then(
+      () => "connected",
+      (error: unknown) => (error instanceof DaemonHostOutdatedError ? "outdated" : "failed"),
+    );
+    mock.triggerOpen({
+      serverInfo: { status: "server_info", serverId: "srv_floor", hostname: null, version },
+    });
+
+    expect(await outcome).toBe(supported ? "connected" : "outdated");
   });
 });
 

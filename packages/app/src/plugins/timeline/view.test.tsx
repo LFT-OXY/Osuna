@@ -235,7 +235,7 @@ it("releases a crashed renderer's observations and recovers a fresh scope in Str
               status: "server_info",
               serverId: "host-1",
               hostname: null,
-              version: null,
+              version: "1.0.0",
               features: { ownedSubscriptions: true },
             },
           });

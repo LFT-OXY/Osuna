@@ -29,6 +29,7 @@ import {
   type ServerInfoStatusPayload,
   type TerminalViewAttributes,
 } from "@osuna/protocol/messages";
+import { isSupportedHostVersion, MINIMUM_HOST_VERSION } from "@osuna/protocol/host-version";
 import { validateWSOutboundMessage } from "@osuna/protocol/validation/ws-outbound";
 import type {
   AgentStreamEventPayload,
@@ -214,6 +215,16 @@ function normalizePassword(value: string | undefined): string | null {
   return value.length > 0 ? value : null;
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 的 daemon 只认旧前缀的密码子协议。不同时带上它，设了密码的旧主机在握手前就以
+// "Password required" 断开，走不到 server_info 里的版本判定。两边各取自己认得的那个。
+const BEARER_PROTOCOL_PREFIX_BEFORE_1_0 = "paseo.bearer.";
+
+function bearerProtocols(password: string | null): string[] | undefined {
+  if (!password) return undefined;
+  return [`osuna.bearer.${password}`, `${BEARER_PROTOCOL_PREFIX_BEFORE_1_0}${password}`];
+}
+
 function extractCorrelatedResponseIdentity(input: unknown): CorrelatedResponseIdentity | null {
   if (!input || typeof input !== "object") {
     return null;
@@ -260,11 +271,19 @@ export type {
 
 export type { TerminalStreamEvent };
 
+interface DisconnectCause {
+  reason?: string;
+  event?: string;
+  reasonCode?: string;
+  outdatedHost?: DaemonHostOutdatedError;
+}
+
 export type ConnectionState =
   | { status: "idle" }
   | { status: "connecting"; attempt: number }
   | { status: "connected" }
-  | { status: "disconnected"; reason?: string }
+  // outdatedHost：握手时主机上报的版本低于协议下限。此时 client 不再自己重连。
+  | { status: "disconnected"; reason?: string; outdatedHost?: { version: string | null } }
   | { status: "disposed" };
 
 export type DaemonEvent =
@@ -1020,6 +1039,25 @@ export class DaemonConnectionError extends Error {
   }
 }
 
+export class DaemonHostOutdatedError extends Error {
+  readonly hostVersion: string | null;
+  readonly hostname: string | null;
+  readonly serverId: string;
+
+  constructor(serverInfo: Pick<ServerInfoStatusPayload, "serverId" | "hostname" | "version">) {
+    const hostVersion = serverInfo.version ?? null;
+    const hostname = serverInfo.hostname ?? null;
+    const subject = hostname ?? "This host";
+    let running = "an older Osuna";
+    if (hostVersion) running = `Osuna ${hostVersion}`;
+    super(`${subject} runs ${running}. Update it to ${MINIMUM_HOST_VERSION} or later to connect.`);
+    this.name = "DaemonHostOutdatedError";
+    this.hostVersion = hostVersion;
+    this.hostname = hostname;
+    this.serverId = serverInfo.serverId;
+  }
+}
+
 class DaemonRpcError extends Error {
   readonly requestId: string;
   readonly requestType?: string;
@@ -1378,7 +1416,7 @@ export class DaemonClient {
     } else if (this.config.authHeader) {
       headers.Authorization = this.config.authHeader;
     }
-    const protocols = password ? [`osuna.bearer.${password}`] : undefined;
+    const protocols = bearerProtocols(password);
 
     try {
       // Reconnect can overlap with browser close/error delivery ordering.
@@ -6487,11 +6525,21 @@ export class DaemonClient {
     }
   }
 
-  private scheduleReconnect(input?: {
-    reason?: string;
-    event?: string;
-    reasonCode?: string;
-  }): void {
+  // 低于协议下限的主机一条请求都不发：不进 connected，不起心跳，不恢复订阅，也不自己重连。
+  // 主机升级后由调用方再发起连接（connect / ensureConnected）。
+  private refuseOutdatedHost(serverInfo: ServerInfoStatusPayload): void {
+    const error = new DaemonHostOutdatedError(serverInfo);
+    this.shouldReconnect = false;
+    this.disposeTransport(1000, "Host outdated");
+    this.scheduleReconnect({
+      reason: error.message,
+      event: "HOST_OUTDATED",
+      reasonCode: "host_outdated",
+      outdatedHost: error,
+    });
+  }
+
+  private scheduleReconnect(input?: DisconnectCause): void {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -6520,7 +6568,9 @@ export class DaemonClient {
     }
     this.emitDisconnectedStateForReconnect(reason, input);
     if (!this.shouldReconnect || this.config.reconnect?.enabled === false) {
-      this.rejectConnect(new Error(reason ?? "Transport disconnected before connect"));
+      this.rejectConnect(
+        input?.outdatedHost ?? new Error(reason ?? "Transport disconnected before connect"),
+      );
       return;
     }
 
@@ -6529,19 +6579,20 @@ export class DaemonClient {
 
   private emitDisconnectedStateForReconnect(
     reason: string | undefined,
-    input: { reason?: string; event?: string; reasonCode?: string } | undefined,
+    input: DisconnectCause | undefined,
   ): void {
-    this.updateConnectionState(
-      {
-        status: "disconnected",
-        ...(reason ? { reason } : {}),
-      },
-      {
-        event: input?.event ?? "TRANSPORT_CLOSE",
-        ...(reason ? { reason } : {}),
-        ...(input?.reasonCode ? { reasonCode: input.reasonCode } : {}),
-      },
-    );
+    const disconnected: Extract<ConnectionState, { status: "disconnected" }> = {
+      status: "disconnected",
+    };
+    if (reason) disconnected.reason = reason;
+    if (input?.outdatedHost) {
+      disconnected.outdatedHost = { version: input.outdatedHost.hostVersion };
+    }
+    this.updateConnectionState(disconnected, {
+      event: input?.event ?? "TRANSPORT_CLOSE",
+      ...(reason ? { reason } : {}),
+      ...(input?.reasonCode ? { reasonCode: input.reasonCode } : {}),
+    });
   }
 
   private armReconnectTimer(): void {
@@ -6625,6 +6676,10 @@ export class DaemonClient {
 
     if (consumerMessage.type === "status") {
       const serverInfo = parseServerInfoStatusPayload(consumerMessage.payload);
+      if (serverInfo && !isSupportedHostVersion(serverInfo.version)) {
+        this.refuseOutdatedHost(serverInfo);
+        return;
+      }
       if (serverInfo) {
         this.lastServerInfoMessage = serverInfo;
         if (this.connectionState.status === "connecting") {

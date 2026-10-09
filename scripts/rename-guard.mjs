@@ -9,7 +9,8 @@ const execFileAsync = promisify(execFile);
 
 const OLD_SPELLING = /paseo/i;
 
-// 迁移代码读旧布局的地方打这个标签（docs/protocol-compatibility.md 的 COMPAT 约定）。
+// 为 0.14.x 而存在、必须写出旧名字的代码打这个标签（docs/protocol-compatibility.md 的 COMPAT 约定）：
+// 读旧布局的迁移代码，以及握手里给 0.14.x daemon 的旧密码子协议名、喂入旧消息名的测试。
 // 放行范围：标签所在行，以及标签行往下直到第一个空行。只对代码生效，Markdown 里的标签不放行任何东西。
 export const MIGRATION_COMPAT_TAG = "COMPAT(paseoDataMigration)";
 

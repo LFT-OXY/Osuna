@@ -289,6 +289,9 @@ export const zhCN: TranslationResources = {
       showSoon: "稍后将显示此 Agent。",
       showWhenOnline: "主机在线后将显示此 Agent。",
       reconnectingTo: "正在重新连接 {{serverLabel}}...",
+      hostOutdated: "{{serverLabel}} 需要更新",
+      hostOutdatedHint:
+        "这台主机上的 Osuna 早于 {{version}}，无法连接。请在主机上把 Osuna 更新到 {{version}} 或更高版本，之后会自动重新连接。",
       showAgainWhenReachable: "主机可访问后将再次显示此 Agent。",
     },
     archived: {
@@ -494,6 +497,9 @@ export const zhCN: TranslationResources = {
       connecting: "正在连接",
       hostOffline: "{{hostName}} 已离线",
       cannotReachHost: "无法连接 {{hostName}}",
+      hostOutdated: "{{hostName}} 需要更新",
+      hostOutdatedHint:
+        "这台主机上的 Osuna 早于 {{version}}，无法连接。请在主机上把 Osuna 更新到 {{version}} 或更高版本，之后会自动重新连接。",
       hostStatus: "主机状态：{{status}}",
       needsHostUpgrade: "更新你的主机以恢复此工作区",
       manageHost: "管理主机",
@@ -2728,6 +2734,12 @@ export const zhCN: TranslationResources = {
         },
       },
       notFound: "主机未找到",
+      outdated: {
+        badge: "需要更新",
+        title: "{{hostName}} 需要更新",
+        description:
+          "这台主机上的 Osuna 早于 {{version}}，无法连接。请在主机上把 Osuna 更新到 {{version}} 或更高版本，之后会自动重新连接。",
+      },
       badges: {
         relay: "中继",
         local: "本地",

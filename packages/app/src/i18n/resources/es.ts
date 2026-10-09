@@ -297,6 +297,9 @@ export const es: TranslationResources = {
       showSoon: "Le mostraremos a este agente en un momento.",
       showWhenOnline: "Le mostraremos a este agente una vez que el anfitrión esté en línea.",
       reconnectingTo: "Reconectándose a{{serverLabel}}...",
+      hostOutdated: "{{serverLabel}} necesita una actualización",
+      hostOutdatedHint:
+        "Este host ejecuta una versión de Osuna anterior a {{version}}. Actualiza Osuna en el host a la versión {{version}} o posterior y se volverá a conectar automáticamente.",
       showAgainWhenReachable:
         "Le mostraremos a este agente nuevamente tan pronto como podamos comunicarnos con el anfitrión.",
     },
@@ -503,6 +506,9 @@ export const es: TranslationResources = {
       connecting: "Conectando",
       hostOffline: "{{hostName}}está desconectado",
       cannotReachHost: "No se puede alcanzar{{hostName}}",
+      hostOutdated: "{{hostName}} necesita una actualización",
+      hostOutdatedHint:
+        "Este host ejecuta una versión de Osuna anterior a {{version}}. Actualiza Osuna en el host a la versión {{version}} o posterior y se volverá a conectar automáticamente.",
       hostStatus: "Estado deHost:{{status}}",
       needsHostUpgrade: "Actualiza tu host para restaurar este espacio de trabajo",
       manageHost: "Administrar host",
@@ -2766,6 +2772,12 @@ export const es: TranslationResources = {
         },
       },
       notFound: "Hostno encontrado",
+      outdated: {
+        badge: "Requiere actualización",
+        title: "{{hostName}} necesita una actualización",
+        description:
+          "Este host ejecuta una versión de Osuna anterior a {{version}}. Actualiza Osuna en el host a la versión {{version}} o posterior y se volverá a conectar automáticamente.",
+      },
       badges: {
         relay: "Relé",
         local: "Local",

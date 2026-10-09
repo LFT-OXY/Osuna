@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, View } from "react-native";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
+import { MINIMUM_HOST_VERSION } from "@osuna/protocol/host-version";
 import type { TerminalProfile } from "@osuna/protocol/messages";
 import {
   getTerminalProfileIcon,
@@ -46,6 +47,7 @@ import {
   useHostMutations,
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
+  useHostRuntimeConnectionStatus,
   useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
@@ -188,7 +190,9 @@ function HostStatusBadges({ serverId }: { serverId: string }) {
 
   const connectionStatus = snapshot?.connectionStatus ?? "connecting";
   const activeConnection = snapshot?.activeConnection ?? null;
-  const statusLabel = formatConnectionStatus(connectionStatus);
+  let statusLabel: string;
+  if (connectionStatus === "outdated") statusLabel = t("settings.host.outdated.badge");
+  else statusLabel = formatConnectionStatus(connectionStatus);
   const statusTone = getConnectionStatusTone(connectionStatus);
   let statusVariant: StatusBadgeVariant = "muted";
   let statusDotColor = theme.colors.foregroundMuted;
@@ -232,6 +236,22 @@ function HostStatusBadges({ serverId }: { serverId: string }) {
   );
 }
 
+function HostOutdatedNotice({ host }: { host: HostProfile }) {
+  const { t } = useTranslation();
+  const connectionStatus = useHostRuntimeConnectionStatus(host.serverId);
+  if (connectionStatus !== "outdated") return null;
+  return (
+    <View style={styles.outdatedNotice}>
+      <InlineAlert
+        variant="warning"
+        testID="host-page-outdated-notice"
+        title={t("settings.host.outdated.title", { hostName: host.label })}
+        description={t("settings.host.outdated.description", { version: MINIMUM_HOST_VERSION })}
+      />
+    </View>
+  );
+}
+
 function HostConnectionError({ serverId }: { serverId: string }) {
   const snapshot = useHostRuntimeSnapshot(serverId);
   const lastError = snapshot?.lastError ?? null;
@@ -250,6 +270,7 @@ export function HostConnectionsPage({ serverId }: { serverId: string }) {
 
   return (
     <View>
+      <HostOutdatedNotice host={host} />
       <HostConnectionError serverId={serverId} />
       <ConnectionsSection host={host} />
     </View>
@@ -384,6 +405,8 @@ export function HostSettingsPage({
 
       <HostStatusBadges serverId={serverId} />
 
+      <HostOutdatedNotice host={host} />
+
       <HostAppearanceSection host={host} />
 
       {isLocalDaemon ? <LocalDaemonSection /> : null}
@@ -400,6 +423,8 @@ function ConnectionsSection({ host }: { host: HostProfile }) {
   const { removeConnection } = useHostMutations();
   const snapshot = useHostRuntimeSnapshot(host.serverId);
   const probeByConnectionId = snapshot?.probeByConnectionId ?? new Map();
+  // 过旧的主机答复了握手，只是被客户端拒绝：不是超时，原因由页首的提示说明。
+  const isOutdated = snapshot?.connectionStatus === "outdated";
   const [pendingRemoveConnection, setPendingRemoveConnection] = useState<{
     connectionId: string;
     title: string;
@@ -476,6 +501,7 @@ function ConnectionsSection({ host }: { host: HostProfile }) {
       <View style={settingsStyles.card} testID="host-page-connections-card">
         {host.connections.map((conn, index) => {
           const probe = probeByConnectionId.get(conn.id);
+          const probeFailed = probe?.status === "unavailable";
           return (
             <ConnectionRow
               key={conn.id}
@@ -483,7 +509,7 @@ function ConnectionsSection({ host }: { host: HostProfile }) {
               showBorder={index > 0}
               latencyMs={probe?.status === "available" ? probe.latencyMs : undefined}
               latencyLoading={!probe || probe.status === "pending"}
-              latencyError={probe?.status === "unavailable"}
+              latencyError={probeFailed && !isOutdated}
               onRemove={handleRequestRemove}
             />
           );
@@ -1744,6 +1770,9 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.normal,
     color: theme.colors.foregroundMuted,
     flexShrink: 1,
+  },
+  outdatedNotice: {
+    marginBottom: theme.spacing[6],
   },
   errorText: {
     color: theme.colors.palette.red[300],

@@ -296,6 +296,9 @@ export const ru: TranslationResources = {
       showSoon: "Агент скоро появится.",
       showWhenOnline: "Агент появится, как только хост будет в сети.",
       reconnectingTo: "Повторное подключение к {{serverLabel}}...",
+      hostOutdated: "{{serverLabel}} требует обновления",
+      hostOutdatedHint:
+        "На этом хосте установлена версия Osuna старше {{version}}. Обновите Osuna на хосте до версии {{version}} или новее — подключение восстановится автоматически.",
       showAgainWhenReachable: "Агент снова появится, как только хост станет доступен.",
     },
     archived: {
@@ -501,6 +504,9 @@ export const ru: TranslationResources = {
       connecting: "Подключение",
       hostOffline: "{{hostName}} не в сети",
       cannotReachHost: "Не удаётся связаться с {{hostName}}",
+      hostOutdated: "{{hostName}} требует обновления",
+      hostOutdatedHint:
+        "На этом хосте установлена версия Osuna старше {{version}}. Обновите Osuna на хосте до версии {{version}} или новее — подключение восстановится автоматически.",
       hostStatus: "Статус хоста: {{status}}",
       needsHostUpgrade: "Обновите хост, чтобы восстановить это рабочее пространство",
       manageHost: "Управление хостом",
@@ -2751,6 +2757,12 @@ export const ru: TranslationResources = {
         },
       },
       notFound: "Хост не найден",
+      outdated: {
+        badge: "Требуется обновление",
+        title: "{{hostName}} требует обновления",
+        description:
+          "На этом хосте установлена версия Osuna старше {{version}}. Обновите Osuna на хосте до версии {{version}} или новее — подключение восстановится автоматически.",
+      },
       badges: {
         relay: "Ретранслятор",
         local: "Локальный",

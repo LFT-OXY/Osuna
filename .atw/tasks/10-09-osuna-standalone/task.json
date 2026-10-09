@@ -23,7 +23,7 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "4e48c86dcfa1d8762acd061692605cbc0633def8",
-    "ticket_mode": "parallel"
+    "implementation_base_sha": "7f0841a69597b6eab79ed580f84967b6e19b6c5f",
+    "ticket_mode": "serial"
   }
 }

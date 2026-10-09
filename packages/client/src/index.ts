@@ -68,7 +68,7 @@ export type ConnectionState =
   | { status: "idle" }
   | { status: "connecting"; attempt: number }
   | { status: "connected" }
-  | { status: "disconnected"; reason?: string }
+  | { status: "disconnected"; reason?: string; outdatedHost?: { version: string | null } }
   | { status: "disposed" };
 
 export interface OsunaLogger {

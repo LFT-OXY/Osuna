@@ -7,7 +7,7 @@ import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 test("a plugin transforms workspace creation once across receipt replays and observes its committed lifecycle", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "osuna-lifecycle-"));
-  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "1.0.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
@@ -74,7 +74,7 @@ export default function contribute(server) {
 
 test("plugins observe turns, answer permissions, and observe archive without blocking the agent", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "osuna-turn-hooks-"));
-  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "1.0.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
@@ -166,7 +166,7 @@ export default function contribute(server) {
 
 test("agent creation hooks change the provider and environment before the session opens", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "osuna-agent-hooks-"));
-  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "1.0.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
@@ -229,7 +229,7 @@ export default function contribute(server) {
 
 test("invalid output from an untyped plugin rejects creation before later callbacks run", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "osuna-invalid-hook-"));
-  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "1.0.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(

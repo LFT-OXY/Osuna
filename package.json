@@ -1,6 +1,6 @@
 {
   "name": "osuna",
-  "version": "0.14.2",
+  "version": "1.0.0-beta.1",
   "private": true,
   "description": "Osuna: voice-controlled development environment for local AI coding agents",
   "keywords": [

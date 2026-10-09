@@ -108,6 +108,7 @@ const daemonTest = metroTest.extend<
 const test = daemonTest.extend<{
   osunaE2ESetup: void;
   outdatedDaemon: OutdatedDaemon;
+  belowFloorDaemon: OutdatedDaemon;
   desktopManagedOutdatedDaemon: OutdatedDaemon;
   relayConfigOutdatedDaemon: OutdatedDaemon;
   projectPickerFixture: TrackedProjectPickerFixture;
@@ -199,6 +200,11 @@ const test = daemonTest.extend<{
   ],
   outdatedDaemon: async ({}, provide) => {
     const daemon = await startOutdatedDaemon();
+    await provide(daemon);
+    await daemon.close();
+  },
+  belowFloorDaemon: async ({}, provide) => {
+    const daemon = await startOutdatedDaemon({ daemonVersion: "0.14.2" });
     await provide(daemon);
     await daemon.close();
   },

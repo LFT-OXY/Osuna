@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppStateStatus } from "react-native";
 import { bindHostRuntimeAppState } from "@/navigation/host-runtime-bootstrap";
-import type {
-  DaemonClient,
-  ConnectionState,
-  FetchAgentsEntry,
-  FetchAgentsOptions,
+import {
+  DaemonHostOutdatedError,
+  type DaemonClient,
+  type ConnectionState,
+  type FetchAgentsEntry,
+  type FetchAgentsOptions,
 } from "@osuna/client/internal/daemon-client";
 import type { ConnectionOffer } from "@osuna/protocol/connection-offer";
 import type { SessionOutboundMessage } from "@osuna/protocol/messages";
@@ -573,6 +574,175 @@ class BrowserClientLifecycle {
     };
   }
 }
+
+describe("a host below the 1.0.0 protocol floor", () => {
+  const direct: HostConnection = { id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" };
+  const refusal = (serverId: string) =>
+    new DaemonHostOutdatedError({ serverId, hostname: "old-host", version: "0.14.2" });
+
+  it("is held as outdated without flapping, then comes online once it is upgraded", async () => {
+    useHostRuntimeClock();
+    const host = makeHost({ connections: [direct] });
+    let upgraded = false;
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => {
+          throw new Error("an outdated host must not get an active client");
+        },
+        connectToDaemon: async ({ host: probed }) => {
+          if (!upgraded) throw refusal(probed.serverId);
+          return {
+            client: makeConnectedProbeClient(5) as unknown as DaemonClient,
+            serverId: probed.serverId,
+            hostname: "old-host",
+          };
+        },
+        getClientId: async () => "cid_outdated_host",
+      },
+    });
+
+    await controller.start();
+    expect(controller.getSnapshot()).toMatchObject({
+      connectionStatus: "outdated",
+      activeConnectionId: null,
+      client: null,
+      lastError: null,
+    });
+
+    // 之后每一轮探测都得到同样的回答，状态不该在"连接中"和"过旧"之间来回跳。
+    const statuses: HostRuntimeConnectionStatus[] = [];
+    controller.subscribe(() => statuses.push(controller.getSnapshot().connectionStatus));
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(statuses.length).toBeGreaterThan(0);
+    expect(new Set(statuses)).toEqual(new Set(["outdated"]));
+
+    upgraded = true;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(controller.getSnapshot()).toMatchObject({
+      connectionStatus: "online",
+      activeConnectionId: direct.id,
+    });
+    await controller.stop();
+  });
+
+  it("is held as outdated when the selected connection is refused", async () => {
+    const host = makeHost({ connections: [direct] });
+    const client = new FakeDaemonClient();
+    client.connect = async () => {
+      throw refusal(host.serverId);
+    };
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => client as unknown as DaemonClient,
+        connectToDaemon: async () => {
+          throw new Error("probe unavailable");
+        },
+        getClientId: async () => "cid_outdated_host",
+      },
+    });
+
+    await controller.activateConnection({ connectionId: direct.id });
+
+    expect(controller.getSnapshot()).toMatchObject({
+      connectionStatus: "outdated",
+      activeConnectionId: null,
+      client: null,
+      lastError: null,
+    });
+    expect(client.isDisposed()).toBe(true);
+    await controller.stop();
+  });
+
+  it("drops a live host that reconnects below the floor", async () => {
+    const host = makeHost({ connections: [direct] });
+    const client = new FakeDaemonClient();
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => client as unknown as DaemonClient,
+        connectToDaemon: async () => {
+          throw new Error("probe unavailable");
+        },
+        getClientId: async () => "cid_outdated_host",
+      },
+    });
+    await controller.activateConnection({ connectionId: direct.id });
+    expect(controller.getSnapshot().connectionStatus).toBe("online");
+
+    client.setConnectionState({
+      status: "disconnected",
+      reason: refusal(host.serverId).message,
+      outdatedHost: { version: "0.14.2" },
+    });
+
+    expect(controller.getSnapshot()).toMatchObject({
+      connectionStatus: "outdated",
+      activeConnectionId: null,
+      client: null,
+      lastError: null,
+    });
+    expect(client.isDisposed()).toBe(true);
+    await controller.stop();
+  });
+
+  it("ignores an outdated answer from some other daemon on the same address", async () => {
+    const host = makeHost({ connections: [direct] });
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => {
+          throw new Error("should not create a client");
+        },
+        connectToDaemon: async () => {
+          throw refusal("srv_someone_else");
+        },
+        getClientId: async () => "cid_outdated_host",
+      },
+    });
+
+    await controller.start({ autoProbe: false });
+
+    expect(controller.getSnapshot().connectionStatus).toBe("connecting");
+    expect(controller.getSnapshot().probeByConnectionId.get(direct.id)).toEqual({
+      status: "unavailable",
+      latencyMs: null,
+    });
+    await controller.stop();
+  });
+
+  it("leaves the other hosts online", async () => {
+    const legacy = makeHost({ serverId: "srv_legacy", label: "old-host", connections: [direct] });
+    const current = makeHost({
+      serverId: "srv_current",
+      label: "new-host",
+      connections: [{ id: "direct:new:6767", type: "directTcp", endpoint: "new:6767" }],
+    });
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => {
+          throw new Error("should adopt the probe client");
+        },
+        connectToDaemon: async ({ host: probed }) => {
+          if (probed.serverId === legacy.serverId) throw refusal(probed.serverId);
+          return {
+            client: makeConnectedProbeClient(5) as unknown as DaemonClient,
+            serverId: probed.serverId,
+            hostname: probed.label ?? null,
+          };
+        },
+        getClientId: async () => "cid_outdated_host",
+      },
+    });
+
+    store.syncHosts([legacy, current]);
+    await vi.waitFor(() => {
+      expect(store.getSnapshot(legacy.serverId)?.connectionStatus).toBe("outdated");
+      expect(store.getSnapshot(current.serverId)?.connectionStatus).toBe("online");
+    });
+  });
+});
 
 describe("HostRuntimeController", () => {
   it("publishes an old host and mounts observations through the client interface", async () => {

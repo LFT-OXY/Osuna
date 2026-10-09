@@ -38,6 +38,7 @@ import { useHostRuntimeClient, useHostRuntimeSnapshot } from "@/runtime/host-run
 import { useHostFeature } from "@/runtime/host-features";
 import { useToast } from "@/contexts/toast-context";
 import { confirmDialog } from "@/utils/confirm-dialog";
+import { isHostKnownUnreachable } from "@/utils/daemons";
 import {
   applyDraftToConfig,
   configToDraft,
@@ -109,9 +110,7 @@ export default function ProjectSettingsScreen({
   const selectedHost = getProjectHostEntry(project, serverId, projectId);
   const selectedSnapshot = useHostRuntimeSnapshot(serverId);
   const isHostGone =
-    Boolean(serverId) &&
-    (selectedSnapshot?.connectionStatus === "offline" ||
-      selectedSnapshot?.connectionStatus === "error");
+    Boolean(serverId) && isHostKnownUnreachable(selectedSnapshot?.connectionStatus);
 
   const client = useHostRuntimeClient(serverId);
   const canEdit =

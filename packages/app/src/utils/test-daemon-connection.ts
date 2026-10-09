@@ -1,4 +1,4 @@
-import { DaemonClient } from "@osuna/client/internal/daemon-client";
+import { DaemonClient, DaemonHostOutdatedError } from "@osuna/client/internal/daemon-client";
 import type { DaemonClientConfig } from "@osuna/client/internal/daemon-client";
 import type { HostConnection } from "@/types/host-connection";
 import { getOrCreateClientId } from "./client-id";
@@ -241,6 +241,12 @@ export function connectAndProbe(
         })
         .catch((error) => {
           clearTimeout(timer);
+          // 主机版本过旧不是连接故障，调用方要靠类型认出它，不能被包成普通的连接错误。
+          if (error instanceof DaemonHostOutdatedError) {
+            void client.close().catch(() => undefined);
+            reject(error);
+            return;
+          }
           const reason = normalizeNonEmptyString(
             error instanceof Error ? error.message : String(error),
           );

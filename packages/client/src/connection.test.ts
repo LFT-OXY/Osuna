@@ -41,7 +41,7 @@ function connection(
                 status: "server_info",
                 serverId: "test",
                 hostname: null,
-                version: null,
+                version: "1.0.0",
                 features: {
                   ...(options.ownedSubscriptions === false ? {} : { ownedSubscriptions: true }),
                   workspaceMultiplicity: options.workspaceMultiplicity ?? true,

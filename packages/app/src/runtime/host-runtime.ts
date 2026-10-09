@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import equal from "fast-deep-equal/es6";
 import {
   DaemonClient,
+  DaemonHostOutdatedError,
   type DaemonClientConfig,
   type ConnectionState,
   type FetchAgentsOptions,
@@ -81,7 +82,14 @@ import { nativePerformanceTrace } from "@/performance/native-trace";
 import { revokePushNotifications } from "@/push-notifications";
 import { createAppWebSocketFactory } from "./websocket-factory";
 
-export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
+// outdated：主机握手时上报的版本低于协议下限，升级之前不会再向它发任何请求。
+export type HostRuntimeConnectionStatus =
+  | "idle"
+  | "connecting"
+  | "online"
+  | "offline"
+  | "error"
+  | "outdated";
 export type HostRegistryStatus = "loading" | "ready";
 
 export type ActiveConnection =
@@ -263,12 +271,15 @@ type HostRuntimeConnectionMachineState =
       activeConnectionId: string | null;
       activeConnection: ActiveConnection | null;
       message: string;
-    };
+    }
+  // 不保留 active 连接：后续探测照常进行，主机升级后第一条成功的探测会把它接回来。
+  | { tag: "outdated" };
 
 type HostRuntimeConnectionMachineEvent =
   | { type: "select_connection"; connectionId: string; connection: ActiveConnection }
   | { type: "client_state"; state: ConnectionState; lastError: string | null }
   | { type: "connect_failed"; message: string }
+  | { type: "host_outdated" }
   | { type: "no_connections" }
   | { type: "stopped" };
 
@@ -362,6 +373,10 @@ function nextConnectionMachineState(input: {
     };
   }
 
+  if (event.type === "host_outdated") {
+    return { tag: "outdated" };
+  }
+
   if (event.type === "connect_failed") {
     const failed = extractPreviousConnectionRef(state);
     return {
@@ -441,6 +456,16 @@ function toSnapshotConnectionPatch(
       activeConnectionId: state.activeConnectionId,
       activeConnection: state.activeConnection,
       connectionStatus: "offline",
+      lastError: null,
+      lastOnlineAt: null,
+      connectionEpoch,
+    };
+  }
+  if (state.tag === "outdated") {
+    return {
+      activeConnectionId: null,
+      activeConnection: null,
+      connectionStatus: "outdated",
       lastError: null,
       lastOnlineAt: null,
       connectionEpoch,
@@ -1030,13 +1055,14 @@ export class HostRuntimeController {
               latencyMs: rttMs,
             });
             publishProbeState();
-          } catch {
+          } catch (error) {
             if (this.isCurrentProbeRequest(requestVersion)) {
               probeByConnectionId.set(connection.id, {
                 status: "unavailable",
                 latencyMs: null,
               });
               publishProbeState();
+              this.holdAsOutdatedAfterProbe(error);
             }
           } finally {
             if (connectedClient && shouldCloseClient) {
@@ -1262,6 +1288,10 @@ export class HostRuntimeController {
       this.unsubscribeClientHandlers?.();
       this.unsubscribeClientHandlers = null;
       client.setReconnectEnabled(false);
+      if (this.isOutdatedAnswerFromThisHost(error)) {
+        this.holdAsOutdated();
+        return;
+      }
       this.applyConnectionEvent({ type: "connect_failed", message: toErrorMessage(error) });
       this.updateSnapshot({
         ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
@@ -1280,6 +1310,10 @@ export class HostRuntimeController {
         this.deps.mountClientHandlers?.({ client, host: this.host, connection }) ?? null;
       this.unsubscribeClientStatus = client.subscribeConnectionStatus((state) => {
         if (!this.isCurrentSwitchRequest(requestVersion) || this.activeClient !== client) return;
+        if (state.status === "disconnected" && state.outdatedHost) {
+          this.holdAsOutdated();
+          return;
+        }
         this.applyConnectionEvent({ type: "client_state", state, lastError: client.lastError });
         this.updateSnapshot({
           ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
@@ -1290,6 +1324,33 @@ export class HostRuntimeController {
     } catch (error) {
       await failConnection(error);
     }
+  }
+
+  // 探测连到的可能是同一地址上的另一个 daemon，它过不过旧与这台主机无关。
+  private isOutdatedAnswerFromThisHost(error: unknown): boolean {
+    return (
+      error instanceof DaemonHostOutdatedError &&
+      (error.serverId === this.host.serverId || isPlaceholderServerId(this.host.serverId))
+    );
+  }
+
+  private holdAsOutdatedAfterProbe(error: unknown): void {
+    if (!this.isOutdatedAnswerFromThisHost(error)) return;
+    // 有 active client 在连时由它自己报告，探测不抢。
+    const tag = this.connectionMachineState.tag;
+    const activeClientWillReport = tag === "connecting" || tag === "online";
+    if (activeClientWillReport) return;
+    this.holdAsOutdated();
+  }
+
+  private holdAsOutdated(): void {
+    void this.disposePreviousActiveClient();
+    this.applyConnectionEvent({ type: "host_outdated" });
+    this.updateSnapshot({
+      ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
+      ...this.buildAgentDirectoryStatusPatch(),
+      client: null,
+    });
   }
 
   adoptReconciledServerId(newServerId: string): void {

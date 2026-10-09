@@ -8,7 +8,7 @@ import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 test("workspace archive publishes agent archive hooks for both live and closed agents", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "osuna-archive-hooks-"));
-  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "1.0.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await client.connect();

@@ -5,6 +5,7 @@ import {
   type HostProjectListItem,
 } from "@/projects/host-projects";
 import type { HostRuntimeConnectionStatus } from "@/runtime/host-runtime";
+import { isHostKnownUnreachable } from "@/utils/daemons";
 
 export interface NewWorkspaceInitialServerInput {
   allServerIds: readonly string[];
@@ -110,8 +111,7 @@ function isKnownUnreachable(
   statuses: ReadonlyMap<string, HostRuntimeConnectionStatus>,
   serverId: string,
 ): boolean {
-  const status = statuses.get(serverId);
-  return status === "offline" || status === "error";
+  return isHostKnownUnreachable(statuses.get(serverId));
 }
 
 export function resolveNewWorkspaceInitialServerId(input: NewWorkspaceInitialServerInput): string {

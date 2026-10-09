@@ -533,7 +533,7 @@ test("an eviction starts and acknowledges B before A returns its late subscripti
         status: "server_info",
         serverId: "timeline-fixture",
         hostname: null,
-        version: null,
+        version: "1.0.0",
         features: { ownedSubscriptions: true },
       },
     });

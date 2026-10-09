@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { AgentRouteResolution } from "@/navigation/agent-route-resolution";
 import { formatConnectionStatus } from "@/utils/daemons";
+import { MINIMUM_HOST_VERSION } from "@osuna/protocol/host-version";
 import type { Theme } from "@/styles/theme";
 
 type VisibleAgentRouteResolution = Extract<
@@ -68,13 +69,22 @@ export function AgentRouteResolutionView({
     );
   }
 
-  const isConnecting =
-    resolution.connectionStatus === "connecting" || resolution.connectionStatus === "idle";
+  const status = resolution.connectionStatus;
+  const isConnecting = status === "connecting" || status === "idle";
+  // 主机升级前重试只会得到同一个结果，过旧时只留"管理主机"。
+  const isOutdated = status === "outdated";
   let title = t("workspace.route.cannotReachHost", { hostName });
-  if (isConnecting) {
+  let description: string;
+  if (status === "connecting" || status === "idle") {
     title = t("agentPanel.unavailable.connecting", { serverLabel: hostName });
-  } else if (resolution.connectionStatus === "offline") {
-    title = t("workspace.route.hostOffline", { hostName });
+    description = t("agentPanel.unavailable.showWhenOnline");
+  } else if (status === "outdated") {
+    title = t("workspace.route.hostOutdated", { hostName });
+    description = t("workspace.route.hostOutdatedHint", { version: MINIMUM_HOST_VERSION });
+  } else {
+    const statusLabel = formatConnectionStatus(status);
+    description = t("workspace.route.hostStatus", { status: statusLabel });
+    if (status === "offline") title = t("workspace.route.hostOffline", { hostName });
   }
 
   return (
@@ -84,21 +94,22 @@ export function AgentRouteResolutionView({
       ) : null}
       <View style={styles.textStack}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.description}>
-          {isConnecting
-            ? t("agentPanel.unavailable.showWhenOnline")
-            : t("workspace.route.hostStatus", {
-                status: formatConnectionStatus(resolution.connectionStatus),
-              })}
-        </Text>
+        <Text style={styles.description}>{description}</Text>
         {lastHostError ? <Text style={styles.error}>{lastHostError}</Text> : null}
       </View>
       {!isConnecting ? (
         <View style={styles.actions}>
-          <Button size="sm" variant="default" leftIcon={RotateCw} onPress={onRetry}>
-            {t("common.actions.retry")}
-          </Button>
-          <Button size="sm" variant="outline" leftIcon={Settings} onPress={onManageHost}>
+          {isOutdated ? null : (
+            <Button size="sm" variant="default" leftIcon={RotateCw} onPress={onRetry}>
+              {t("common.actions.retry")}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={isOutdated ? "default" : "outline"}
+            leftIcon={Settings}
+            onPress={onManageHost}
+          >
             {t("workspace.route.manageHost")}
           </Button>
         </View>

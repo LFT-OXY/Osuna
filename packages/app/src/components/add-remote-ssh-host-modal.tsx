@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { DaemonHostOutdatedError } from "@osuna/client/internal/daemon-client";
 import { DaemonConnectionTestError } from "@/utils/test-daemon-connection";
 import { AdaptiveModalSheet, type SheetHeader } from "./adaptive-modal-sheet";
 
@@ -96,10 +97,13 @@ export function AddRemoteSshHostModal({
       setErrorMessage("");
       result = await probeAndUpsertRemoteSshConnection(target);
     } catch (error) {
-      const message =
-        error instanceof DaemonConnectionTestError
-          ? t("pairing.remoteSsh.errors.failedToConnect", { detail: error.message })
-          : t("common.errors.unableToSave");
+      // 主机版本过旧不会被包成 DaemonConnectionTestError，它的原因同样要给用户看到。
+      const reachedTheHost =
+        error instanceof DaemonConnectionTestError || error instanceof DaemonHostOutdatedError;
+      let message = t("common.errors.unableToSave");
+      if (reachedTheHost) {
+        message = t("pairing.remoteSsh.errors.failedToConnect", { detail: error.message });
+      }
       setErrorMessage(message);
       return;
     } finally {

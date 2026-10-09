@@ -64,7 +64,8 @@ function bindTestSessionHost(service: PluginService): PluginService {
                 status: "server_info",
                 serverId: "plugin-service-test",
                 hostname: "plugin-service-test",
-                version: "0.4.0",
+                // 插件进程里的 client 握手要过 1.0.0 协议下限；服务自身的版本只用于插件兼容性检查。
+                version: "1.0.0",
                 features: {},
               },
             },

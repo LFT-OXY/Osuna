@@ -1,6 +1,6 @@
 {
   "name": "@osuna/protocol",
-  "version": "0.14.2",
+  "version": "1.0.0-beta.1",
   "description": "Osuna shared protocol schemas and wire types",
   "files": [
     "dist",

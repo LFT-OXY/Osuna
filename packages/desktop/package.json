@@ -1,6 +1,6 @@
 {
   "name": "@osuna/desktop",
-  "version": "0.14.2",
+  "version": "1.0.0-beta.1",
   "private": true,
   "description": "Osuna desktop app (Electron wrapper)",
   "homepage": "https://osuna.chinhae.cc",

@@ -109,7 +109,8 @@ function createTestRuntime(
                   status: "server_info",
                   serverId: "plugin-test",
                   hostname: "plugin-test",
-                  version,
+                  // 插件进程里的 client 握手要过 1.0.0 协议下限；`version` 只用于插件兼容性检查。
+                  version: "1.0.0",
                   features: {},
                 },
               },
@@ -165,7 +166,7 @@ function createTrackedSessionHost() {
                   status: "server_info",
                   serverId: "tracked-plugin-test",
                   hostname: "tracked-plugin-test",
-                  version: "0.4.0",
+                  version: "1.0.0",
                   features: {},
                 },
               },

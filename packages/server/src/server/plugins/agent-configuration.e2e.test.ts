@@ -10,7 +10,7 @@ import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 test("the configuration example adds MCP servers and overrides Codex options while preserving other configuration", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "osuna-config-example-"));
   const daemon = await createTestOsunaDaemon({
-    daemonVersion: "0.8.0",
+    daemonVersion: "1.0.0",
     agentClients: { codex: createTestAgentClient("codex", { supportsMcpServers: true }) },
     mcpEnabled: false,
   });

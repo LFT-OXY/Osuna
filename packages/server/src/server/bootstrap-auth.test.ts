@@ -9,12 +9,12 @@ const CORRECT_PASSWORD_HASH = "$2b$12$OLxyuuP9uLK30Uzc4wQX0O6liuU/Q1t5P2b0Ebf36m
 function connectWebSocket(params: {
   port: number;
   protocol?: string;
+  protocols?: string[];
 }): Promise<{ ws: WebSocket; protocol: string }> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(
-      `ws://127.0.0.1:${params.port}/ws`,
-      params.protocol ? [params.protocol] : undefined,
-    );
+    let offered = params.protocols;
+    if (params.protocol) offered = [params.protocol];
+    const ws = new WebSocket(`ws://127.0.0.1:${params.port}/ws`, offered);
     ws.once("open", () => resolve({ ws, protocol: ws.protocol }));
     ws.once("error", reject);
   });
@@ -147,6 +147,20 @@ describe("daemon bearer auth", () => {
       });
       expect(protocol).toBe("osuna.bearer.correct-password");
       ws.close();
+
+      // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+      // 1.0.0 的客户端握手时两个前缀都带，好让 0.14.x 的 daemon 也认得出密码。
+      const offeredByCurrentClient = [
+        "osuna.bearer.correct-password",
+        "paseo.bearer.correct-password",
+      ];
+
+      const withBothPrefixes = await connectWebSocket({
+        port: daemonHandle.port,
+        protocols: offeredByCurrentClient,
+      });
+      expect(withBothPrefixes.protocol).toBe("osuna.bearer.correct-password");
+      withBothPrefixes.ws.close();
     } finally {
       await daemonHandle.close();
     }

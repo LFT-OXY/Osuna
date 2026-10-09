@@ -289,6 +289,9 @@ export const en = {
       showSoon: "We will show this agent in a moment.",
       showWhenOnline: "We will show this agent once the host is online.",
       reconnectingTo: "Reconnecting to {{serverLabel}}...",
+      hostOutdated: "{{serverLabel}} needs an update",
+      hostOutdatedHint:
+        "This host runs a version of Osuna from before {{version}}. Update Osuna on the host to {{version}} or later and it reconnects on its own.",
       showAgainWhenReachable: "We will show this agent again as soon as the host is reachable.",
     },
     archived: {
@@ -494,6 +497,9 @@ export const en = {
       connecting: "Connecting",
       hostOffline: "{{hostName}} is offline",
       cannotReachHost: "Cannot reach {{hostName}}",
+      hostOutdated: "{{hostName}} needs an update",
+      hostOutdatedHint:
+        "This host runs a version of Osuna from before {{version}}. Update Osuna on the host to {{version}} or later and it reconnects on its own.",
       hostStatus: "Host status: {{status}}",
       needsHostUpgrade: "Update your host to restore this workspace",
       manageHost: "Manage host",
@@ -2828,6 +2834,12 @@ export const en = {
         },
       },
       notFound: "Host not found",
+      outdated: {
+        badge: "Needs update",
+        title: "{{hostName}} needs an update",
+        description:
+          "This host runs a version of Osuna from before {{version}}. Update Osuna on the host to {{version}} or later and it reconnects on its own.",
+      },
       badges: {
         relay: "Relay",
         local: "Local",

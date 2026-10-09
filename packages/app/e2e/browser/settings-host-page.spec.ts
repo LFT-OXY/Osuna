@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { getE2EDaemonPort } from "../support/helpers/daemon-port";
@@ -19,7 +20,21 @@ import {
   expectRetiredSidebarSectionsAbsent,
   expectHostPageVisible,
   seedSavedSettingsHosts,
+  selectSettingsHost,
 } from "../support/helpers/settings";
+
+// 应用会把回环地址规范成 localhost，所以按端口认这台主机的连接。
+function recordSentFrameTypes(page: Page, endpoint: string): string[] {
+  const port = endpoint.split(":").at(-1);
+  const types: string[] = [];
+  const record = (frame: { payload: string | Buffer }) => {
+    types.push(JSON.parse(String(frame.payload)).type);
+  };
+  page.on("websocket", (socket) => {
+    if (socket.url().includes(`:${port}/`)) socket.on("framesent", record);
+  });
+  return types;
+}
 
 test.describe("Settings host page", () => {
   test("visits host settings and opens the label editor", async ({ page }) => {
@@ -77,9 +92,47 @@ test.describe("Settings host page", () => {
     await openHostSection(page, outdatedDaemon.serverId, "host");
 
     // 版本徽标出现说明 server_info 已到，此时再断言缺席才有意义。
-    await expect(page.getByTestId("host-page-identity")).toContainText("0.0.0");
+    await expect(page.getByTestId("host-page-identity")).toContainText("1.0.0-alpha.0");
     await expect(page.getByTestId("host-page-restart-card")).toBeVisible();
     await expect(page.getByTestId("host-page-update-card")).toHaveCount(0);
+  });
+
+  test("a host below the 1.0.0 floor asks for an update while the current host stays online", async ({
+    page,
+    belowFloorDaemon,
+  }) => {
+    const currentHost = {
+      serverId: getServerId(),
+      label: TEST_HOST_LABEL,
+      endpoint: `127.0.0.1:${getE2EDaemonPort()}`,
+    };
+    // 被拒之后客户端不该再发任何请求：记下发往这台主机的每一帧的类型。
+    const sentFrameTypes = recordSentFrameTypes(page, belowFloorDaemon.endpoint);
+
+    await seedSavedSettingsHosts(page, [belowFloorDaemon, currentHost]);
+    await page.reload();
+    await openSettings(page);
+    await selectSettingsHost(page, belowFloorDaemon.serverId);
+    await openSettingsHost(page, belowFloorDaemon.serverId);
+
+    await test.step("the connections page names the host and the version to update to", async () => {
+      const notice = page.getByTestId("host-page-outdated-notice");
+      await expect(notice).toContainText(`${belowFloorDaemon.label} needs an update`);
+      await expect(notice).toContainText("Update Osuna on the host to 1.0.0 or later");
+      await expect(page.getByTestId("host-page-connections-card")).not.toContainText("Timeout");
+    });
+    await test.step("the overview shows the state instead of a connection error", async () => {
+      await openHostSection(page, belowFloorDaemon.serverId, "host");
+      await expect(page.getByTestId("host-page-identity")).toContainText("Needs update");
+      await expect(page.getByTestId("host-page-outdated-notice")).toBeVisible();
+    });
+    await test.step("the host on the current version is unaffected", async () => {
+      await selectSettingsHost(page, currentHost.serverId);
+      await openHostSection(page, currentHost.serverId, "host");
+      await expect(page.getByTestId("host-page-identity")).toContainText("Online");
+      await expect(page.getByTestId("host-page-outdated-notice")).toHaveCount(0);
+    });
+    expect(new Set(sentFrameTypes)).toEqual(new Set(["hello"]));
   });
 
   test("navigating to /settings/hosts/[serverId] redirects to the connections section", async ({

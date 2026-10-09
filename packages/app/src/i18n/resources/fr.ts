@@ -299,6 +299,9 @@ export const fr: TranslationResources = {
       showSoon: "Nous montrerons cet agent dans un instant.",
       showWhenOnline: "Nous afficherons cet agent une fois que l'hôte sera en ligne.",
       reconnectingTo: "Reconnexion à{{serverLabel}}...",
+      hostOutdated: "{{serverLabel}} doit être mis à jour",
+      hostOutdatedHint:
+        "Cet hôte exécute une version d'Osuna antérieure à {{version}}. Mettez à jour Osuna sur l'hôte vers la version {{version}} ou ultérieure : il se reconnectera automatiquement.",
       showAgainWhenReachable: "Nous afficherons à nouveau cet agent dès que l'hôte sera joignable.",
     },
     archived: {
@@ -504,6 +507,9 @@ export const fr: TranslationResources = {
       connecting: "De liaison",
       hostOffline: "{{hostName}}est hors ligne",
       cannotReachHost: "Impossible d'atteindre{{hostName}}",
+      hostOutdated: "{{hostName}} doit être mis à jour",
+      hostOutdatedHint:
+        "Cet hôte exécute une version d'Osuna antérieure à {{version}}. Mettez à jour Osuna sur l'hôte vers la version {{version}} ou ultérieure : il se reconnectera automatiquement.",
       hostStatus: "StatutHost:{{status}}",
       needsHostUpgrade: "Mettez à jour votre hôte pour restaurer cet espace de travail",
       manageHost: "Gérer l'hôte",
@@ -2773,6 +2779,12 @@ export const fr: TranslationResources = {
         },
       },
       notFound: "Hostintrouvable",
+      outdated: {
+        badge: "Mise à jour requise",
+        title: "{{hostName}} doit être mis à jour",
+        description:
+          "Cet hôte exécute une version d'Osuna antérieure à {{version}}. Mettez à jour Osuna sur l'hôte vers la version {{version}} ou ultérieure : il se reconnectera automatiquement.",
+      },
       badges: {
         relay: "Relais",
         local: "Locale",

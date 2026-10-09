@@ -296,6 +296,9 @@ export const ja: TranslationResources = {
       showSoon: "このエージェントはすぐに表示されます。",
       showWhenOnline: "ホストがオンラインになったらこのエージェントを表示します。",
       reconnectingTo: "{{serverLabel}}に再接続中...",
+      hostOutdated: "{{serverLabel}} の更新が必要です",
+      hostOutdatedHint:
+        "このホストの Osuna は {{version}} より前のバージョンです。ホスト上の Osuna を {{version}} 以降に更新すると、自動的に再接続します。",
       showAgainWhenReachable:
         "ホストに到達できるようになり次第、このエージェントを再び表示します。",
     },
@@ -502,6 +505,9 @@ export const ja: TranslationResources = {
       connecting: "接続中",
       hostOffline: "{{hostName}}はオフラインです",
       cannotReachHost: "{{hostName}}に到達できません",
+      hostOutdated: "{{hostName}} の更新が必要です",
+      hostOutdatedHint:
+        "このホストの Osuna は {{version}} より前のバージョンです。ホスト上の Osuna を {{version}} 以降に更新すると、自動的に再接続します。",
       hostStatus: "ホストの状態: {{status}}",
       needsHostUpgrade: "このワークスペースを復元するにはホストを更新してください",
       manageHost: "ホストを管理",
@@ -2731,6 +2737,12 @@ export const ja: TranslationResources = {
         },
       },
       notFound: "ホストが見つかりません",
+      outdated: {
+        badge: "更新が必要",
+        title: "{{hostName}} の更新が必要です",
+        description:
+          "このホストの Osuna は {{version}} より前のバージョンです。ホスト上の Osuna を {{version}} 以降に更新すると、自動的に再接続します。",
+      },
       badges: {
         relay: "リレー",
         local: "ローカル",

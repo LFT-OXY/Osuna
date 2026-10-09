@@ -1,4 +1,5 @@
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
+import { MINIMUM_HOST_VERSION } from "@osuna/protocol/host-version";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { DaemonClient } from "@osuna/client/internal/daemon-client";
@@ -1659,6 +1660,21 @@ function AgentSessionUnavailableState({
             {t("agentPanel.unavailable.unknownHost", { serverLabel })}
           </Text>
           <Text style={styles.statusText}>{t("agentPanel.unavailable.addHost")}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (connectionStatus === "outdated") {
+    return (
+      <View style={styles.container}>
+        <View style={styles.centerState}>
+          <Text style={styles.offlineTitle}>
+            {t("agentPanel.unavailable.hostOutdated", { serverLabel })}
+          </Text>
+          <Text style={styles.offlineDescription}>
+            {t("agentPanel.unavailable.hostOutdatedHint", { version: MINIMUM_HOST_VERSION })}
+          </Text>
         </View>
       </View>
     );

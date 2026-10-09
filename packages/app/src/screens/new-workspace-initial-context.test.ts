@@ -102,6 +102,22 @@ describe("resolveNewWorkspaceInitialServerId", () => {
     ).toBe("connecting");
   });
 
+  it("prefers a connecting project host over a last active project on a host that needs an update", () => {
+    expect(
+      resolveNewWorkspaceInitialServerId({
+        allServerIds: ["outdated", "connecting"],
+        routeServerId: null,
+        lastActiveProject: projectFor("outdated", "remembered"),
+        projects: [projectFor("outdated", "remembered"), projectFor("connecting", "current")],
+        hostConnectionStatusByServerId: statuses({
+          outdated: "outdated",
+          connecting: "connecting",
+        }),
+        workspaceMultiplicityByServerId: multiplicity(),
+      }),
+    ).toBe("connecting");
+  });
+
   it("prefers the online last active project over another hydrated online project", () => {
     expect(
       resolveNewWorkspaceInitialServerId({

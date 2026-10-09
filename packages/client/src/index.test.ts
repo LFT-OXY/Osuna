@@ -125,7 +125,7 @@ async function connectClient(
         status: "server_info",
         serverId: "srv_sdk_test",
         hostname: null,
-        version: null,
+        version: "1.0.0",
         features,
       },
     }),

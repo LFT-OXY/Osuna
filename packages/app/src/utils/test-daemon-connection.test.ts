@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DaemonClientConfig } from "@osuna/client/internal/daemon-client";
+import {
+  DaemonHostOutdatedError,
+  type DaemonClientConfig,
+} from "@osuna/client/internal/daemon-client";
 import type { DaemonConnectionDependencies, DaemonProbeClient } from "./test-daemon-connection";
 
 class FakeDaemonClient implements DaemonProbeClient {
@@ -260,6 +263,25 @@ describe("test-daemon-connection connectToDaemon", () => {
     ).rejects.toMatchObject({
       message: "Incorrect password",
     });
+  });
+
+  it("hands a host-outdated refusal through unchanged and closes the probe client", async () => {
+    const { connectToDaemon } = await import("./test-daemon-connection");
+    const refusal = new DaemonHostOutdatedError({
+      serverId: "srv_legacy",
+      hostname: "old-host",
+      version: "0.14.2",
+    });
+    probe.failNextConnection(refusal, refusal.message);
+
+    await expect(
+      connectToDaemon(
+        { id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" },
+        undefined,
+        probe.deps,
+      ),
+    ).rejects.toBe(refusal);
+    expect(probe.closedClients).toEqual(probe.createdClients);
   });
 
   it("keeps generic transport failures generic when a password was supplied", async () => {

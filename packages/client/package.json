@@ -1,6 +1,6 @@
 {
   "name": "@osuna/client",
-  "version": "0.14.2",
+  "version": "1.0.0-beta.1",
   "description": "Osuna client SDK package",
   "files": [
     "dist",
@@ -39,8 +39,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@osuna/protocol": "0.14.2",
-    "@osuna/relay": "0.14.2",
+    "@osuna/protocol": "1.0.0-beta.1",
+    "@osuna/relay": "1.0.0-beta.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

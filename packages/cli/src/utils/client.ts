@@ -13,7 +13,12 @@ import {
   type ConnectionOffer,
 } from "@osuna/protocol/connection-offer";
 import { parseSshTransportUri } from "@osuna/protocol/ssh-transport";
-import { DaemonClient, type WebSocketLike } from "@osuna/client/internal/daemon-client";
+import {
+  DaemonClient,
+  DaemonHostOutdatedError,
+  type WebSocketLike,
+} from "@osuna/client/internal/daemon-client";
+import { MINIMUM_HOST_VERSION } from "@osuna/protocol/host-version";
 import { WebSocket } from "ws";
 import { getOrCreateCliClientId } from "./client-id.js";
 import { resolveCliVersion } from "../version.js";
@@ -41,6 +46,13 @@ export function buildDaemonConnectionCommandError(options: ConnectOptions & { er
     message = message.replaceAll(options.target.host, describeDaemonTarget(options.target));
   if (message.startsWith("Cannot connect to daemon at "))
     return error as { code: string; message: string; details: string };
+  // daemon 在运行，只是版本太旧：不能落到下面"去启动 daemon"的提示里。
+  if (error instanceof DaemonHostOutdatedError)
+    return {
+      code: "HOST_OUTDATED",
+      message: `Cannot connect to daemon at ${describeDaemonTarget(options.target)}: ${message}`,
+      details: `Osuna ${MINIMUM_HOST_VERSION} changed the protocol. This CLI cannot talk to an older host.`,
+    };
   let code = "DAEMON_UNREACHABLE";
   if (typeof error === "object" && error !== null && "code" in error) code = String(error.code);
   else if (message === "Password required") code = "AUTH_REQUIRED";

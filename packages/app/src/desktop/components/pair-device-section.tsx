@@ -15,6 +15,7 @@ import { daemonPairingOfferQueryKey } from "@/data/daemon-pairing";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeClient, useHostRuntimeSnapshot } from "@/runtime/host-runtime";
 import type { Theme } from "@/styles/theme";
+import { isHostKnownUnreachable } from "@/utils/daemons";
 import {
   EditingTextInput as TextInput,
   type EditingTextInputHandle,
@@ -39,9 +40,7 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
   const client = useHostRuntimeClient(serverId);
   const runtimeSnapshot = useHostRuntimeSnapshot(serverId);
   const isConnected = runtimeSnapshot?.connectionStatus === "online";
-  const isDisconnected =
-    runtimeSnapshot?.connectionStatus === "offline" ||
-    runtimeSnapshot?.connectionStatus === "error";
+  const isDisconnected = isHostKnownUnreachable(runtimeSnapshot?.connectionStatus);
   const { patchConfig } = useDaemonConfig(serverId);
   const [copied, setCopied] = useState(false);
   const serverFeatures = client?.getLastServerInfoMessage()?.features;

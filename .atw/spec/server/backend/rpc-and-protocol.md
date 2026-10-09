@@ -40,6 +40,7 @@ Clients talk to the daemon over one WebSocket session. Every inbound message is 
 
   Before removing an enum member or a required field, find every message that carries it in the daemon-to-client direction and add a wire test that parses the previous release's payload (`packages/protocol/src/messages.wire-compat.test.ts`).
 
+- These rules hold from the 1.0.0 floor up. A host below `MINIMUM_HOST_VERSION` is refused at the handshake and never receives a request, so no shim and no feature gate is written for it. See the "host below the protocol floor" scenario below.
 - Read `docs/protocol-compatibility.md` before touching `packages/protocol`.
 
 ## Scenario: optional request field gated by a daemon feature flag
@@ -1120,6 +1121,69 @@ return { kind: "run", command: "npm", args: ["install", "-g", "@openai/codex@lat
 
 ```ts
 return { kind: "run", command: "npm", args: ["install", "-g", "--prefix", install.prefix, `${npmPackage}@latest`] };
+```
+
+## Scenario: a host below the protocol floor is refused at the handshake
+
+Reference implementation: the 1.0.0 floor (ticket 15 of `10-09-osuna-standalone`). The why is in `docs/protocol-compatibility.md` "The floor: 1.0.0"; this is the contract each layer implements.
+
+### 1. Scope / Trigger
+
+A cross-layer contract: the protocol package owns the floor, the client enforces it, the app and the CLI each render the refusal. It applies whenever a release stops speaking to older daemons. Raising the floor is a breaking release.
+
+### 2. Signatures
+
+- `packages/protocol/src/host-version.ts`: `MINIMUM_HOST_VERSION = "1.0.0"`, `isSupportedHostVersion(version: string | null | undefined): boolean`.
+- `packages/client/src/daemon-client.ts`: `class DaemonHostOutdatedError extends Error { hostVersion: string | null; hostname: string | null; serverId: string }`; `ConnectionState` `disconnected` gains `outdatedHost?: { version: string | null }`.
+- `packages/app/src/runtime/host-runtime.ts`: `HostRuntimeConnectionStatus` gains `"outdated"`.
+- `packages/cli/src/utils/client.ts`: `buildDaemonConnectionCommandError` returns `code: "HOST_OUTDATED"`.
+
+### 3. Contracts
+
+- The client decides on `server_info.version`, in `deliverSessionMessage`, before `lastServerInfoMessage` is set. Nothing else compares versions.
+- Comparison is on `major.minor.patch`; a prerelease of the floor passes. No version, or one that does not parse, is below the floor.
+- A refused client sends nothing after `hello`: it never reaches `connected`, starts no heartbeat, restores no subscription, rejects queued sends, and does not reconnect by itself. `connect()` or `ensureConnected()` tries again.
+- `connectAndProbe` (`packages/app/src/utils/test-daemon-connection.ts`) hands `DaemonHostOutdatedError` through unwrapped. Every other failure is still a `DaemonConnectionTestError`.
+- The app holds the host as `outdated` with no active connection and no client. Probes keep their normal cadence, and the first one that succeeds activates the host.
+- The handshake stays parseable across the floor: `hello`, `server_info` (retired enum members stay readable), and the password subprotocol, which the client offers under both the current and the pre-1.0 prefix (`bearerProtocols`). Nothing after `server_info` gets an alias.
+
+### 4. Validation & Error Matrix
+
+| Daemon reports | Client | App host status | CLI |
+| --- | --- | --- | --- |
+| `1.0.0`, `1.2.3`, `1.0.0-beta.1` | `connected` | `online` | runs |
+| `0.14.2`, `0.99.0` | `disconnected` + `outdatedHost`, `connect()` rejects with `DaemonHostOutdatedError` | `outdated` | `HOST_OUTDATED`, non-zero exit |
+| `null`, missing, `"not-a-version"` | same as above | `outdated` | `HOST_OUTDATED` |
+| outdated answer whose `serverId` is another daemon's | same as above | unchanged, probe `unavailable` | n/a |
+| old client sends a renamed request to a 1.0.0 daemon | n/a | n/a | daemon replies `rpc_error` with `code: "unknown_schema"`, logs a warn, keeps the session |
+
+### 5. Good/Base/Bad Cases
+
+- Good: a saved 0.14.x host shows "needs an update" with its name; the other hosts stay online; after the host is updated it comes back without being removed.
+- Base: every host is on the floor or above; nothing changes.
+- Bad: the host flips between `connecting` and `outdated` on every probe, or a renamed request reaches the old daemon and a parse error surfaces.
+
+### 6. Tests Required
+
+- Client (`daemon-client.test.ts`): with the real 0.14.2 `server_info` payload, `connect()` rejects with `DaemonHostOutdatedError`, the sent frames are `["hello"]`, the transport factory is called once after a long timer advance, and the version table above holds.
+- App (`host-runtime.test.ts`): `outdated` holds across probe cycles, a later successful probe brings `online`, a refused selected connection and a live host that reconnects below the floor both end `outdated`, an answer from another `serverId` is ignored, other hosts stay online.
+- Daemon (`bootstrap.smoke.test.ts`): pre-1.0 request type names get `unknown_schema`, a warn log each, and a later `ping` still gets its `pong`.
+- Playwright (`settings-host-page.spec.ts`): two real daemons, one reporting `0.14.2`; assert the notice, the badge, the other host online, and that the only frame type sent to the old host is `hello`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// A second place that knows the floor, and a fallback for the old host.
+if (semver.lt(serverInfo.version, "1.0.0")) return legacyFetchAgents(client);
+```
+
+#### Correct
+
+```ts
+// The client already refused it. The app only renders the state it was handed.
+if (connectionStatus === "outdated") return <HostOutdatedNotice host={host} />;
 ```
 
 ## Errors on the wire

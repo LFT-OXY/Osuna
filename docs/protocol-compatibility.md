@@ -26,6 +26,21 @@ If you can't answer both with yes, the change isn't done.
 
 Schemas live in `packages/protocol/src/messages.ts`. New RPC names follow [rpc-namespacing.md](rpc-namespacing.md).
 
+## The floor: 1.0.0
+
+The contract above holds between any two versions from 1.0.0 on. It does not reach back past 1.0.0. That release renamed the product, and the rename took wire names with it: message types such as `osuna_worktree_list_request` and fields such as `osunaTools` and `osunaOnly` carried the old product name until then. A 0.14.x daemon and a 1.0.0 client cannot read each other's messages. Aliasing every renamed name in both directions was rejected for a clean cut (decided 2026-10-09).
+
+The client enforces the cut, in one place. It reads the version in `server_info` and refuses a host below `MINIMUM_HOST_VERSION` (`packages/protocol/src/host-version.ts`) before it sends anything else: `refuseOutdatedHost` in `packages/client/src/daemon-client.ts`. `connect()` rejects with `DaemonHostOutdatedError` and the client stops reconnecting. The app holds that host as `outdated` and tells the user to update it. Its connection probes keep running, so the host comes back without being removed and re-added.
+
+- The comparison uses `major.minor.patch` only. `1.0.0-beta.N` already speaks the 1.0.0 protocol.
+- A host that reports no version, or one that does not parse, is below the floor.
+- The handshake has to survive the cut, or the client never learns the version. `hello` and `server_info` stay parseable across the floor, which is what `COMPAT(hubExecutePermission)` is for ([below](#the-100-exception-hub)). The daemon password rides in a WebSocket subprotocol whose prefix was renamed too, so the client offers both spellings and each daemon picks the one it knows (`bearerProtocols` in `packages/client/src/daemon-client.ts`, under the 0.14.x migration tag from [release.md](release.md#014x-数据迁移)). Those two are the whole list. Nothing after `server_info` gets an alias.
+- Write no fallback for a host below the floor, and gate no feature on "is this 0.14.x". Those hosts never reach `connected`.
+- Raising the floor is a breaking release. Don't raise it to drop a `COMPAT` shim early.
+- A test fixture that drives a real handshake reports a version at or above the floor.
+
+The other direction has no UI, because a shipped 0.14.x client cannot be changed. A 1.0.0 daemon accepts its `hello`, serves the requests whose names did not change, and rejects the renamed ones with an `rpc_error` carrying `unknown_schema` plus a warn log (`handleInvalidInboundMessage` in `packages/server/src/server/websocket-server.ts`). The session stays up.
+
 ## The feature contract: per feature, gated once
 
 Features don't have to work across versions. A new feature usually needs a new daemon capability, and old daemons don't have it.

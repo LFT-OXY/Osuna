@@ -71,6 +71,78 @@ describe("osuna daemon bootstrap", () => {
     }
   });
 
+  test("rejects the renamed requests of a 0.14.x client, logs them, and keeps serving its session", async () => {
+    const logged: Array<Record<string, unknown>> = [];
+    const logger = pino(
+      { level: "warn" },
+      { write: (line: string) => void logged.push(JSON.parse(line)) },
+    );
+    const daemonHandle = await createTestOsunaDaemon({ logger, mcpEnabled: false });
+    const socket = new WebSocket(`ws://127.0.0.1:${daemonHandle.port}/ws`);
+    const received: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    socket.on("message", (data) => {
+      const frame = JSON.parse(data.toString());
+      if (frame.type === "session") received.push(frame.message);
+    });
+    const send = (message: Record<string, unknown>) =>
+      socket.send(JSON.stringify({ type: "session", message }));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once("open", () => resolve());
+        socket.once("error", reject);
+      });
+      socket.send(
+        JSON.stringify({
+          type: "hello",
+          clientType: "browser",
+          clientId: "legacy-0.14-client",
+          protocolVersion: 1,
+          appVersion: "0.14.2",
+        }),
+      );
+      const isServerInfo = (message: (typeof received)[number]) =>
+        message.payload.status === "server_info";
+      await expect.poll(() => received.some(isServerInfo)).toBe(true);
+
+      // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+      // 0.14.x 里这两个请求的类型名，1.0.0 随改名换成了 osuna_ 前缀。
+      const legacyRequestTypes = ["paseo_worktree_list_request", "paseo_worktree_archive_request"];
+
+      for (const type of legacyRequestTypes) {
+        send({ type, requestId: `legacy:${type}`, repoRoot: "/repo" });
+      }
+
+      const rejections = () =>
+        received
+          .filter((message) => message.type === "rpc_error")
+          .map((message) => message.payload);
+      await expect.poll(() => rejections().length).toBe(2);
+      expect(rejections()).toEqual(
+        legacyRequestTypes.map((type) =>
+          expect.objectContaining({
+            requestId: `legacy:${type}`,
+            requestType: type,
+            code: "unknown_schema",
+          }),
+        ),
+      );
+      expect(
+        logged
+          .filter((entry) => entry.msg === "WS inbound message validation failed")
+          .map((entry) => entry.requestType),
+      ).toEqual(legacyRequestTypes);
+
+      send({ type: "ping", requestId: "still-serving" });
+      const isStillServingPong = (message: (typeof received)[number]) =>
+        message.type === "pong" && message.payload.requestId === "still-serving";
+      await expect.poll(() => received.some(isStillServingPong)).toBe(true);
+      expect(socket.readyState).toBe(WebSocket.OPEN);
+    } finally {
+      socket.terminate();
+      await daemonHandle.close();
+    }
+  });
+
   test("keeps timeline activity in memory and removes obsolete timeline files at startup", async () => {
     const osunaHomeRoot = await mkdtemp(path.join(os.tmpdir(), "osuna-timeline-cleanup-"));
     const osunaHome = path.join(osunaHomeRoot, ".osuna");

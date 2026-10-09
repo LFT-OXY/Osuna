@@ -78,7 +78,9 @@ Osuna 是 Paseo 的 fork，但对外仍处处是 Paseo：CLI 叫 `paseo`，数�
 - 人工改写要求：README 页尾一行致谢含上游链接，明确指上游的句子（如"不要从 npm 装 `@getpaseo/cli`，那是上游"）保留，其余 Paseo → Osuna；术语表 **Paseo** 条目保留为上游项目，其余条目的产品名改 Osuna，**Product discussion** 改指本仓库 Discussions。
 - 上游 URL 全部替换：`github.com/getpaseo/paseo` → `github.com/LFT-OXY/Osuna`；`app.paseo.sh` → `osuna-app.chinhae.cc`；`relay.paseo.sh` → `osuna-relay.chinhae.cc`；`paseo.sh/...` → `osuna.chinhae.cc/...`；配置 `$schema` → `https://osuna.chinhae.cc/schemas/osuna.config.v1.json`，官网必须实际托管该文件；文档示例域名改为 osuna 示例。
 - 随改名删除：`fastlane/metadata/` 整目录（以后上 F-Droid 从 git 历史取回）。
-- 改名的守线：仓库新增一条脚本级检查，扫描整棵树（含隐藏目录，不含 node_modules / dist / 锁文件）中的 `paseo` 字样，只允许例外清单与迁移代码里带 COMPAT 标签的读旧布局处出现；该检查跟随仓库脚本在每个 PR 上跑。
+- 改名的守线：仓库新增一条脚本级检查，扫描整棵树（含隐藏目录，不含 node_modules / dist / 锁文件）中的 `paseo` 字样，只允许例外清单与带 COMPAT 标签的代码处出现；该检查跟随仓库脚本在每个 PR 上跑。标签的适用范围是"为 0.14.x 而存在、必须写出旧名字的代码"：读旧布局的迁移代码，以及握手里给 0.14.x daemon 的旧密码子协议名、喂入 0.14.x 旧消息名的测试（2026-10-09 随 15 号票确认，到期日相同、一起删）。
+
+- 协议下限（15 号票，2026-10-09 确认）：1.0.0 与 0.14.x 不互通，干净切断，不加双向别名。判定只在 `@osuna/client` 握手处，依据 `server_info` 的版本，对桌面端、网页端、CLI 统一生效；低于 1.0.0 的主机一条后续请求都不发，App 把它标为"需要更新"，升级后自动恢复。握手本身要能过：`server_info` 里保留已删除的权限值（`COMPAT(hubExecutePermission)`），密码子协议同时提供新旧两个前缀。握手之后不加任何别名或回退。为此分支上各包版本先升到 `1.0.0-beta.1`（不打 tag）：daemon 上报的版本读自包版本，不升则分支自己的 daemon 也会被拒。
 
 ### B. Daemon 侧数据迁移（Q6、Q6c、08）
 

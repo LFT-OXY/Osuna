@@ -293,6 +293,9 @@ export const ko: TranslationResources = {
       showSoon: "잠시 후 이 에이전트를 표시합니다.",
       showWhenOnline: "호스트가 온라인 상태가 되면 이 에이전트를 표시합니다.",
       reconnectingTo: "{{serverLabel}}에 다시 연결하는 중...",
+      hostOutdated: "{{serverLabel}} 업데이트가 필요합니다",
+      hostOutdatedHint:
+        "이 호스트는 {{version}} 이전 버전의 Osuna를 실행하고 있습니다. 호스트의 Osuna를 {{version}} 이상으로 업데이트하면 자동으로 다시 연결됩니다.",
       showAgainWhenReachable: "호스트에 연결되는 즉시 이 에이전트를 다시 표시합니다.",
     },
     archived: {
@@ -498,6 +501,9 @@ export const ko: TranslationResources = {
       connecting: "연결 중",
       hostOffline: "{{hostName}}이(가) 오프라인입니다",
       cannotReachHost: "{{hostName}}에 연결할 수 없습니다",
+      hostOutdated: "{{hostName}} 업데이트가 필요합니다",
+      hostOutdatedHint:
+        "이 호스트는 {{version}} 이전 버전의 Osuna를 실행하고 있습니다. 호스트의 Osuna를 {{version}} 이상으로 업데이트하면 자동으로 다시 연결됩니다.",
       hostStatus: "호스트 상태: {{status}}",
       needsHostUpgrade: "이 워크스페이스를 복원하려면 호스트를 업데이트하세요.",
       manageHost: "호스트 관리",
@@ -2721,6 +2727,12 @@ export const ko: TranslationResources = {
         },
       },
       notFound: "호스트를 찾을 수 없습니다",
+      outdated: {
+        badge: "업데이트 필요",
+        title: "{{hostName}} 업데이트가 필요합니다",
+        description:
+          "이 호스트는 {{version}} 이전 버전의 Osuna를 실행하고 있습니다. 호스트의 Osuna를 {{version}} 이상으로 업데이트하면 자동으로 다시 연결됩니다.",
+      },
       badges: {
         relay: "릴레이",
         local: "로컬",

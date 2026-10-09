@@ -23,6 +23,8 @@ interface OutdatedDaemonErrorMessage {
 type OutdatedDaemonMessage = OutdatedDaemonReadyMessage | OutdatedDaemonErrorMessage;
 
 export async function startOutdatedDaemon(options?: {
+  /** 上报的版本号。低于 1.0.0 时客户端在握手处拒绝这台主机。 */
+  daemonVersion?: string;
   desktopManaged?: boolean;
   daemonStatusRpcCapability?: boolean;
   relayConfigCapability?: boolean;
@@ -38,6 +40,7 @@ export async function startOutdatedDaemon(options?: {
       env: {
         ...process.env,
         E2E_METRO_PORT: metroPort,
+        E2E_DAEMON_VERSION: options?.daemonVersion,
         E2E_DESKTOP_MANAGED: options?.desktopManaged === true ? "1" : "0",
         E2E_DAEMON_STATUS_RPC_CAPABILITY: options?.daemonStatusRpcCapability === false ? "0" : "1",
         E2E_RELAY_CONFIG_CAPABILITY: options?.relayConfigCapability === false ? "0" : "1",

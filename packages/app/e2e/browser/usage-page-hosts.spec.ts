@@ -24,9 +24,6 @@ const TWO_HOST_TOKENS = "360,496";
 const PRIMARY_LABEL = "Primary box";
 const SECONDARY_LABEL = "Secondary box";
 
-/** The last version published without `features.usage`. */
-const PRE_USAGE_DAEMON_VERSION = "0.8.0";
-
 test.describe("Usage page across hosts", () => {
   test.describe.configure({ timeout: 420_000 });
 
@@ -103,41 +100,6 @@ test.describe("Usage page across hosts", () => {
       });
     } finally {
       await secondaryDaemon.close().catch(() => undefined);
-    }
-  });
-
-  test("leaves a host without the usage feature out of the total", async ({ page }) => {
-    const outdatedServerId = `srv_usage_old_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-    const outdatedDaemon = await startIsolatedHostDaemon(outdatedServerId, {
-      publishedVersion: PRE_USAGE_DAEMON_VERSION,
-    });
-
-    try {
-      await openUsagePage(page);
-      await addConnectedHostAndReload(page, {
-        serverId: outdatedDaemon.serverId,
-        label: "Outdated box",
-        port: outdatedDaemon.port,
-        primaryLabel: PRIMARY_LABEL,
-      });
-      await openUsagePageFromShell(page);
-
-      await test.step("the total is the one host that can answer", async () => {
-        await waitForUsageTotal(page, ONE_HOST_TOKENS);
-      });
-
-      await test.step("the host behind on versions asks to be updated and cannot be picked", async () => {
-        await openUsageHostFilter(page);
-        await expect(page.getByTestId("usage-host-filter-counted")).toHaveText("1 host counted");
-        await expect(
-          page.getByTestId(`usage-host-filter-status-${outdatedDaemon.serverId}`),
-        ).toHaveText("Update host", { timeout: 30_000 });
-        await expect(
-          page.getByTestId(`usage-host-filter-item-${outdatedDaemon.serverId}`),
-        ).toBeDisabled();
-      });
-    } finally {
-      await outdatedDaemon.close().catch(() => undefined);
     }
   });
 });

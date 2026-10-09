@@ -22,6 +22,8 @@ export async function runSetupCommand(
 ): Promise<SingleResult<WorkspaceSetupResult>> {
   const host = getDaemonHost({ target: options.daemonTarget });
   const client = await connectToDaemon({ target: options.daemonTarget }).catch((error: unknown) => {
+    // connectToDaemon 已经给出结构化的原因（未运行、密码不对、主机版本过旧），原样交给上层。
+    if (error && typeof error === "object" && "code" in error) throw error;
     throw {
       code: "DAEMON_NOT_RUNNING",
       message: `Cannot connect to daemon at ${host}: ${error instanceof Error ? error.message : String(error)}`,

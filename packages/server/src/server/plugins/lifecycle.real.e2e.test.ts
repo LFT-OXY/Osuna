@@ -111,7 +111,7 @@ test.skipIf(process.platform !== "linux")(
     });
     const logger = pino({ level: "info" }, destination);
     const daemon = await createTestOsunaDaemon({
-      daemonVersion: "0.8.0",
+      daemonVersion: "1.0.0",
       logger,
       agentClients: {
         claude: new ClaudeAgentClient({ logger }),
