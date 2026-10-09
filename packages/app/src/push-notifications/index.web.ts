@@ -5,5 +5,5 @@ export function startPushNotifications(_input: StartPushNotificationsInput): () 
 }
 
 export async function revokePushNotifications(_input: RevokePushNotificationsInput): Promise<void> {
-  // Push notifications are native-only.
+  // Osuna 任何端都不提供推送通知。
 }

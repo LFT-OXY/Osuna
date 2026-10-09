@@ -1,12 +1,9 @@
-import { revokeSubscription, startSubscription } from "./internal/subscriptions";
 import type { RevokePushNotificationsInput, StartPushNotificationsInput } from "./internal/types";
 
-export function startPushNotifications(input: StartPushNotificationsInput): () => void {
-  return startSubscription(input);
+export function startPushNotifications(_input: StartPushNotificationsInput): () => void {
+  return () => undefined;
 }
 
-export function revokePushNotifications(input: RevokePushNotificationsInput): Promise<void> {
-  return revokeSubscription(input).catch((error) => {
-    console.warn("[PushNotifications] Failed to remove local push subscription", error);
-  });
+export async function revokePushNotifications(_input: RevokePushNotificationsInput): Promise<void> {
+  // Osuna 任何端都不提供推送通知。
 }
