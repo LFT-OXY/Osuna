@@ -284,6 +284,7 @@ Preserve existing task fields and artifacts. If the correct status cannot be det
 [workflow-state:noob_mode]
 Noob mode is ON — this user is not an engineer. Hold to these rules in every reply, in every stage (the full set is `/atw-noob-mode`):
 - Plain words in the user's language. Explain any unavoidable term, command, path or flag in the same sentence it appears in.
+- When they describe what they want by how it looks or behaves, open with one sentence saying what you understood and its usual name with the meaning beside it, then carry on without waiting.
 - Before anything they must approve or that is hard to undo: what will happen, why, how risky it is, and what approving or declining leads to.
 - Say who did what, what you actually ran versus what you only expect, and every decision you made for them.
 - Retell sub-agent reports, command output and errors the same way: what happened, what it affects, what comes next.
