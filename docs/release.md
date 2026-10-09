@@ -133,11 +133,11 @@ Before running any stable release command:
 
 ```bash
 # Run exactly one, matching the approved decision:
-npm run release:fork:patch
-npm run release:fork:minor
+npm run release:patch
+npm run release:minor
 ```
 
-Each one runs `version:all:<bump>` and then `release:push`: it bumps the version in every workspace, commits, tags `vX.Y.Z`, and pushes the branch and the tag to `origin`. The `fork` in the script names dates from when Osuna shipped as a fork. They are the release commands.
+Each one runs `version:all:<bump>` and then `release:push`: it bumps the version in every workspace, commits, tags `vX.Y.Z`, and pushes the branch and the tag to `origin`.
 
 A major release has no wrapper script. After explicit approval, run the two halves yourself:
 
@@ -145,7 +145,7 @@ A major release has no wrapper script. After explicit approval, run the two halv
 npm run version:all:major && npm run release:push
 ```
 
-Do not run `release:patch`, `release:minor`, `release:major`, `release:promote`, or any `release:beta:*` script. They call `npm publish` before they push.
+No script in `package.json` runs `npm publish`. Keep it that way.
 
 The push starts these workflows:
 
@@ -208,7 +208,7 @@ Drafts do not appear in GitHub's releases feed. Updater clients continue to see 
 
 ### Default behavior
 
-`npm run release:fork:patch` or `npm run release:fork:minor` → tag push → 36h ramp. No extra action needed.
+`npm run release:patch` or `npm run release:minor` → tag push → 36h ramp. No extra action needed.
 
 The `rollout_hours` input on `desktop-release.yml` is **only read on `workflow_dispatch`** — tag-push runs always default to 36. To get any other rollout duration on a fresh release, use the post-publish flip below.
 
@@ -218,7 +218,7 @@ For a fresh release that should admit everyone immediately (low-risk change, doc
 
 ```bash
 # 1. Cut and publish (default 36h ramp from tag push).
-npm run release:fork:patch
+npm run release:patch
 
 # 2. Immediately queue the flip — runs as soon as finalize-rollout completes.
 gh workflow run desktop-rollout.yml \
@@ -228,7 +228,7 @@ gh workflow run desktop-rollout.yml \
 
 **Why this is gap-free:** `desktop-release.yml`'s `finalize-rollout` job and `desktop-rollout.yml` share the concurrency group `desktop-rollout-<tag>`. Dispatching `desktop-rollout.yml` while the tag-push pipeline is still running queues it safely behind `finalize-rollout`. The first public manifests already carry `rolloutHours=36`, then `desktop-rollout.yml` flips them to `rolloutHours=0` shortly afterward. The renderer polls every 30 minutes, so active stable users pick up the new manifest on their next check.
 
-Run the dispatch right after `release:fork:patch` or `release:fork:minor` returns. Don't wait for the tag-push CI to finish.
+Run the dispatch right after `release:patch` or `release:minor` returns. Don't wait for the tag-push CI to finish.
 
 ### Adjusting an already-published release
 
@@ -266,7 +266,7 @@ gh workflow run desktop-release.yml \
   -f rollout_hours=6
 ```
 
-This does **not** apply to fresh releases cut via `npm run release:fork:patch` or `npm run release:fork:minor` — those paths always tag-push and stamp 36. For a fresh release with a custom ramp, cut normally and then dispatch `desktop-rollout.yml` (same pattern as the instant-admit flow above, with your chosen `rollout_hours`).
+This does **not** apply to fresh releases cut via `npm run release:patch` or `npm run release:minor` — those paths always tag-push and stamp 36. For a fresh release with a custom ramp, cut normally and then dispatch `desktop-rollout.yml` (same pattern as the instant-admit flow above, with your chosen `rollout_hours`).
 
 ### Releasing during an active rollout
 
@@ -766,7 +766,7 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Refresh the bundled price snapshot with `npm run usage:pricing:refresh` and include it in the release-preparation commits
 - [ ] Verify the changelog heading follows strict `## X.Y.Z - YYYY-MM-DD` format
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
-- [ ] `npm run release:fork:patch`, `npm run release:fork:minor`, or `npm run version:all:promote && npm run release:push` completes successfully
+- [ ] `npm run release:patch`, `npm run release:minor`, or `npm run version:all:promote && npm run release:push` completes successfully
 - [ ] Every GitHub Actions run for the complete release commit and tag is green
 - [ ] The GitHub Release was published only after both stable manifests were uploaded, and it has the changelog body and every expected macOS, Windows, and Android APK asset
 - [ ] GitHub `Desktop Release` workflow for the `v*` tag is green
