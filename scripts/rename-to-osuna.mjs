@@ -22,16 +22,21 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 
 import { isMainModule } from "./is-main-module.mjs";
-import { isOutsideRenameScope, isRenameException, listRepoFiles } from "./rename-guard.mjs";
+import {
+  isOutsideRenameScope,
+  isRenameException,
+  listRepoFiles,
+  resolveRootArgument,
+} from "./rename-guard.mjs";
 
 // 随改名整目录删除（prd 决策 A：以后上 F-Droid 从 git 历史取回）。
 const DELETED_DIRECTORIES = ["fastlane/metadata/"];
 
 // 锁文件不在守线范围内，但里面的工作区包名必须跟着改，否则 npm 认不出新的工作区。
-const RENAMED_LOCKFILES = new Set(["package-lock.json"]);
+const NPM_LOCKFILE = /(^|\/)package-lock\.json$/;
 
 // 顺序即优先级：先处理整段替换后拼写不同的 URL 与标识，最后才是三种大小写的通用替换。
 // 正则里的 `\\?` 让规则同样命中源码中转义过的写法（如正则字面量里的 `relay\.paseo\.sh`）。
@@ -40,6 +45,8 @@ const CONTENT_RULES = [
   [/ghcr\.io\/getpaseo\/paseo/g, "ghcr.io/lft-oxy/osuna"],
   // npm 作用域。
   [/@getpaseo(?![A-Za-z0-9])/g, "@osuna"],
+  // 项目键（remote:<host>/<owner>/<repo>）由 daemon 归一化成全小写。
+  [/(remote:[A-Za-z0-9.-]+\/)getpaseo\/paseo/g, "$1lft-oxy/osuna"],
   // 仓库：owner/name 两段一起换，覆盖 github.com、API、徽章、SSH 等所有写法。
   [/getpaseo(\\?\/)paseo/g, "LFT-OXY$1Osuna"],
   // 测试里与上面的仓库地址配对出现的仓库名字段。
@@ -56,6 +63,8 @@ const CONTENT_RULES = [
   // 安卓包名 / iOS bundle id 以及原生模块的 Java 包路径。
   [/(?<![A-Za-z0-9_])sh(\\?\.)paseo(?![A-Za-z0-9_])/g, "com$1chinhae$1osuna"],
   [/(?<![A-Za-z0-9_])sh\/paseo\//g, "com/chinhae/osuna/"],
+  // JNI 符号把包名里的点写成下划线，必须和上面的包名一起变，否则原生方法找不到。
+  [/Java_sh_paseo_/g, "Java_com_chinhae_osuna_"],
   // 通用替换。
   [/PASEO/g, "OSUNA"],
   [/Paseo/g, "Osuna"],
@@ -103,6 +112,16 @@ async function removeEmptyParents(root, file) {
   }
 }
 
+const REPLACEMENT_CHARACTER = String.fromCharCode(0xfffd);
+
+// 返回 null 表示内容不参与改名：非 UTF-8 的二进制文件按文本读出来带替换字符，写回去就坏了。
+async function readRenamableText(absolutePath, stats) {
+  if (stats.isSymbolicLink()) return readlink(absolutePath);
+  const text = await readFile(absolutePath, "utf8");
+  if (text.includes(REPLACEMENT_CHARACTER)) return null;
+  return text;
+}
+
 async function renameOneFile({ root, file, dryRun }) {
   const absolutePath = join(root, file);
   let stats;
@@ -114,12 +133,8 @@ async function renameOneFile({ root, file, dryRun }) {
   }
   if (!stats.isSymbolicLink() && !stats.isFile()) return null;
 
-  const original = stats.isSymbolicLink()
-    ? await readlink(absolutePath)
-    : await readFile(absolutePath, "utf8");
-  // 非 UTF-8 的二进制文件读出来会带替换字符，写回去就坏了；它们的内容不参与改名。
-  const isText = stats.isSymbolicLink() || !original.includes("�");
-  const renamed = isText ? renameContent(original) : original;
+  const original = await readRenamableText(absolutePath, stats);
+  const renamed = original === null ? null : renameContent(original);
   const target = renamePath(file);
   const contentChanged = renamed !== original;
   const pathChanged = target !== file;
@@ -146,28 +161,31 @@ async function renameOneFile({ root, file, dryRun }) {
 
 export async function renameTree(root, { dryRun = false } = {}) {
   const files = await listRepoFiles(root);
-  const deleted = files.filter(isDeleted);
+  const deleted = [];
   const results = [];
   for (const file of files) {
-    if (isDeleted(file) || isRenameException(file)) continue;
-    if (isOutsideRenameScope(file) && !RENAMED_LOCKFILES.has(file)) continue;
+    if (isDeleted(file)) {
+      if (await pathExists(join(root, file))) deleted.push(file);
+      continue;
+    }
+    if (isRenameException(file)) continue;
+    if (isOutsideRenameScope(file) && !NPM_LOCKFILE.test(file)) continue;
     const result = await renameOneFile({ root, file, dryRun });
     if (result) results.push(result);
   }
   if (!dryRun) {
     for (const directory of DELETED_DIRECTORIES) {
-      await rm(join(root, directory), { recursive: true, force: true });
+      if (!(await pathExists(join(root, directory)))) continue;
+      await rm(join(root, directory), { recursive: true });
+      await removeEmptyParents(root, directory.replace(/\/$/, ""));
     }
-    for (const file of deleted) await removeEmptyParents(root, file).catch(() => {});
   }
   return { results, deleted };
 }
 
 async function main(argv) {
   const dryRun = argv.includes("--dry-run");
-  const rootFlag = argv.indexOf("--root");
-  const root = resolve(rootFlag === -1 ? join(import.meta.dirname, "..") : argv[rootFlag + 1]);
-  const { results, deleted } = await renameTree(root, { dryRun });
+  const { results, deleted } = await renameTree(resolveRootArgument(argv), { dryRun });
 
   if (dryRun) {
     for (const { file, target, pathChanged } of results) {

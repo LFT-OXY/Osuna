@@ -112,10 +112,15 @@ function formatViolation({ file, line, text }) {
   return `${file}:${line}: ${text.trim().slice(0, 160)}`;
 }
 
-async function main(argv) {
+// 默认扫描本仓库；`--root <dir>` 换成别的目录（测试用临时目录）。
+export function resolveRootArgument(argv) {
   const rootFlag = argv.indexOf("--root");
-  const root = resolve(rootFlag === -1 ? join(import.meta.dirname, "..") : argv[rootFlag + 1]);
-  const violations = await findRenameViolations(root);
+  if (rootFlag === -1) return join(import.meta.dirname, "..");
+  return resolve(argv[rootFlag + 1]);
+}
+
+async function main(argv) {
+  const violations = await findRenameViolations(resolveRootArgument(argv));
   if (violations.length === 0) return;
 
   const fileCount = new Set(violations.map((violation) => violation.file)).size;
