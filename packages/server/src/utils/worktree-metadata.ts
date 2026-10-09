@@ -307,12 +307,25 @@ export function markOsunaWorktreeFirstAgentBranchAutoNameAttempted(
   return next;
 }
 
-export function readOsunaWorktreeMetadata(worktreeRoot: string): OsunaWorktreeMetadata | null {
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 把这份元数据写在 git 目录的 paseo/ 下。新位置没有时回退去读它；
+// 写入只落新位置，旧文件原样留着。
+const LEGACY_METADATA_DIRECTORY = "paseo";
+
+function findStoredMetadataPath(worktreeRoot: string): string | null {
   const metadataPath = getOsunaWorktreeMetadataPath(worktreeRoot);
-  if (!existsSync(metadataPath)) {
+  if (existsSync(metadataPath)) return metadataPath;
+  const gitDir = getGitDirForWorktreeRoot(worktreeRoot);
+  const legacyPath = join(gitDir, LEGACY_METADATA_DIRECTORY, "worktree.json");
+  return existsSync(legacyPath) ? legacyPath : null;
+}
+
+export function readOsunaWorktreeMetadata(worktreeRoot: string): OsunaWorktreeMetadata | null {
+  const storedPath = findStoredMetadataPath(worktreeRoot);
+  if (!storedPath) {
     return null;
   }
-  const parsed = JSON.parse(readFileSync(metadataPath, "utf8"));
+  const parsed = JSON.parse(readFileSync(storedPath, "utf8"));
   return OsunaWorktreeMetadataSchema.parse(parsed);
 }
 

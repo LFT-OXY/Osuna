@@ -88,9 +88,21 @@ function decodeAgentMentionId(encoded: string): string | null {
   }
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 写进历史消息的 mention 链接用的是旧 scheme。读的时候两种前缀都认，
+// 旧消息里的 mention 才会照样显示成行内块；写出去的永远是新 scheme。
+const LEGACY_AGENT_MENTION_HREF_PREFIX = "paseo://agent/";
+const READABLE_AGENT_MENTION_HREF_PREFIXES = [
+  AGENT_MENTION_HREF_PREFIX,
+  LEGACY_AGENT_MENTION_HREF_PREFIX,
+];
+
 export function parseAgentMentionHref(href: string): AgentMentionTarget | null {
-  if (!href.startsWith(AGENT_MENTION_HREF_PREFIX)) return null;
-  const [kind, encoded, ...extra] = href.slice(AGENT_MENTION_HREF_PREFIX.length).split("/");
+  const prefix = READABLE_AGENT_MENTION_HREF_PREFIXES.find((candidate) =>
+    href.startsWith(candidate),
+  );
+  if (prefix === undefined) return null;
+  const [kind, encoded, ...extra] = href.slice(prefix.length).split("/");
   if (extra.length > 0 || !encoded) return null;
   const target = { kind, id: decodeAgentMentionId(encoded) };
   return isAgentMentionTarget(target) ? target : null;

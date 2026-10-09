@@ -135,6 +135,13 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
   };
 }
 
+async function findRecordFiles(directory: string): Promise<string[]> {
+  const entries = await fs.readdir(directory, { recursive: true });
+  return entries
+    .filter((entry) => entry.endsWith(".json"))
+    .map((entry) => path.join(directory, entry));
+}
+
 describe("AgentStorage", () => {
   let tmpDir: string;
   let storagePath: string;
@@ -396,6 +403,34 @@ describe("AgentStorage", () => {
     const record = await storage.get(agentId);
     expect(record?.title).toBe("Generated title");
     expect(record?.archivedAt).toBe("2025-01-03T00:00:00.000Z");
+  });
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const LEGACY_LABELS = {
+    "paseo.parent-agent-id": "parent-1",
+    "paseo.parent-tool-call-id": "call-1",
+    "paseo.open-agent-tab.client-a": "true",
+    "paseo.worktree": "feature",
+  };
+
+  test("reads the labels 0.14.x wrote under its own prefix as Osuna labels", async () => {
+    await storage.applySnapshot(createManagedAgent({ id: "child-1", cwd: "/tmp/project" }));
+    const [recordFile] = await findRecordFiles(storagePath);
+    const record = JSON.parse(await fs.readFile(recordFile, "utf8"));
+    await fs.writeFile(
+      recordFile,
+      JSON.stringify({ ...record, labels: { team: "payments", ...LEGACY_LABELS } }),
+    );
+
+    const reloaded = new AgentStorage(storagePath, logger);
+
+    expect((await reloaded.get("child-1"))?.labels).toEqual({
+      team: "payments",
+      "osuna.parent-agent-id": "parent-1",
+      "osuna.parent-tool-call-id": "call-1",
+      "osuna.open-agent-tab.client-a": "true",
+      "osuna.worktree": "feature",
+    });
   });
 
   test("list returns all agents including internal ones", async () => {

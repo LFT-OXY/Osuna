@@ -3444,6 +3444,11 @@ function buildForgeSnapshot(
   };
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 切分支时自动存下的 stash 用的是旧前缀，它们还躺在用户的仓库里。
+// 列表两种前缀都认，升级后才还能在切回分支时提示恢复；新建的 stash 只用新前缀。
+const AUTO_STASH_PREFIXES = ["osuna-auto-stash:", "paseo-auto-stash:"];
+
 function parseWorkspaceGitStashList(
   stdout: string,
   options: { osunaOnly: boolean },
@@ -3465,10 +3470,11 @@ function parseWorkspaceGitStashList(
     }
 
     const index = Number(indexMatch[1]);
-    const prefix = "osuna-auto-stash:";
-    const prefixIdx = subject.indexOf(prefix);
-    const isOsuna = prefixIdx >= 0;
-    const branch = isOsuna ? subject.slice(prefixIdx + prefix.length).trim() || null : null;
+    const prefix = AUTO_STASH_PREFIXES.find((candidate) => subject.includes(candidate));
+    const isOsuna = prefix !== undefined;
+    const branch = isOsuna
+      ? subject.slice(subject.indexOf(prefix) + prefix.length).trim() || null
+      : null;
 
     if (options.osunaOnly && !isOsuna) {
       continue;

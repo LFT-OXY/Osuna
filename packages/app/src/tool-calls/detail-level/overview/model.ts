@@ -1,7 +1,9 @@
 import { isOsunaToolName } from "@osuna/protocol/tool-name-normalization";
 import { describeToolCall, type ToolCallRun } from "../grouping";
 
-const DIRECT_OSUNA_TOOL_PREFIX = "osuna_";
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 的时间线里，按前缀直连的工具还带旧前缀，照样计入 Osuna 调用。
+const DIRECT_OSUNA_TOOL_PREFIXES = ["osuna_", "paseo_"];
 const DIRECT_SEARCH_TOOL_SUFFIX_PATTERN = /(?:^|[_.:/])(?:web_search|llm_context)$/;
 
 export interface OverviewSummary {
@@ -21,7 +23,10 @@ export interface OverviewToolCallGroup {
 }
 
 function isOsunaCall(name: string, normalizedName: string): boolean {
-  return isOsunaToolName(name) || normalizedName.startsWith(DIRECT_OSUNA_TOOL_PREFIX);
+  const isDirectOsunaTool = DIRECT_OSUNA_TOOL_PREFIXES.some((prefix) =>
+    normalizedName.startsWith(prefix),
+  );
+  return isOsunaToolName(name) || isDirectOsunaTool;
 }
 
 function isSearchCall(name: string): boolean {

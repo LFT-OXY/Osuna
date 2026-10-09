@@ -1737,6 +1737,26 @@ describe("WorkspaceGitServiceImpl D2 read methods", () => {
     service.dispose();
   });
 
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const LEGACY_AUTO_STASH_SUBJECT = "On feature: paseo-auto-stash: feature";
+
+  test("listStashes still offers an auto-stash that 0.14.x left in the repository", async () => {
+    const runGitCommand = vi.fn().mockResolvedValue({
+      stdout: `stash@{0}\u0000${LEGACY_AUTO_STASH_SUBJECT}\nstash@{1}\u0000On main: my own stash\n`,
+      stderr: "",
+      truncated: false,
+      exitCode: 0,
+      signal: null,
+    });
+    const service = createService({ runGitCommand });
+
+    await expect(service.listStashes(REPO_CWD, { osunaOnly: true })).resolves.toEqual([
+      { index: 0, message: LEGACY_AUTO_STASH_SUBJECT, branch: "feature", isOsuna: true },
+    ]);
+
+    service.dispose();
+  });
+
   test("listStashes cold-loads, warms, forces, and coalesces per cwd", async () => {
     let nowMs = 0;
     const stashOutput = "stash@{0}\u0000osuna-auto-stash: feature\n";

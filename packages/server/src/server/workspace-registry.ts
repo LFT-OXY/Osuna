@@ -48,7 +48,22 @@ const PersistedProjectRecordSchema = z.object({
   archivedAt: z.string().nullable(),
 });
 
-const PersistedWorkspaceRecordSchema = z.object({
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 的记录把这个标记存在 isPaseoOwnedWorktree 下。读进来时改记到新字段，
+// 否则升级前建的 worktree 工作区会被当成普通检出，归档时不再清理 worktree。
+const LEGACY_OWNED_WORKTREE_FIELD = "isPaseoOwnedWorktree";
+
+function renameLegacyOwnedWorktreeField(record: unknown): unknown {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return record;
+  const { [LEGACY_OWNED_WORKTREE_FIELD]: legacyValue, ...stored } = record as Record<
+    string,
+    unknown
+  >;
+  if (legacyValue === undefined) return record;
+  return { ...stored, isOsunaOwnedWorktree: stored.isOsunaOwnedWorktree ?? legacyValue };
+}
+
+const PersistedWorkspaceRecordShape = z.object({
   workspaceId: z.string(),
   projectId: z.string(),
   cwd: z.string(),
@@ -103,6 +118,11 @@ const PersistedWorkspaceRecordSchema = z.object({
   labels: z.array(z.string()).optional(),
   untrustedSource: UntrustedWorkspaceSourceSchema.optional(),
 });
+
+const PersistedWorkspaceRecordSchema = z.preprocess(
+  renameLegacyOwnedWorktreeField,
+  PersistedWorkspaceRecordShape,
+);
 
 export type PersistedProjectRecord = z.infer<typeof PersistedProjectRecordSchema>;
 export type PersistedWorkspaceRecord = z.infer<typeof PersistedWorkspaceRecordSchema>;

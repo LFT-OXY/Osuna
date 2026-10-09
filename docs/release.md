@@ -403,6 +403,17 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 - **daemon home**：`~/.paseo` 改名为 `~/.osuna`，原位留符号链接（Windows 用 junction）。代码在 `packages/server/src/server/legacy-home-migration.ts`，由会读写 home 的一方在动手之前调用：CLI 的每条命令（`packages/cli/src/cli.ts` 的 `preAction` 钩子，连别的主机的命令也会把 `cli-client-id` 写进默认 home）、桌面端启动 daemon 之前、直接启动的 supervisor。daemon 进程自己不迁移。设了 `OSUNA_HOME` 或传了 `--home` 时跳过。
 - **Electron userData**：appData 下的 `Paseo` 目录改名为 `Osuna`，不留链接。代码在 `packages/desktop/src/settings/user-data-migration.ts`，调用点在 `main.ts` 写第一条日志之前。
 - **渲染层存储**：`paseo://app` 这个 origin 的 localStorage 与 IndexedDB 导入 `osuna://app`，旧 origin 不清空。代码在 `packages/desktop/src/settings/renderer-origin-migration/`，完成标记是 `desktop-settings.json` 的 `migrations.legacyRendererOriginImported`。
+- **内嵌浏览器分区**：userData 搬完后把 `Partitions/paseo-browser*` 改名为 `osuna-browser*`，登录态与 Cookie 跟着走。代码只认新分区名。和搬目录在同一个文件里，每次以默认 userData 启动都再试一遍。
+- **改了名的已存标识**：下面这些在 0.14.x 的数据里还是旧名字。读的一侧新名读不到时回退认旧名，写只写新名，磁盘上已有的文件不主动改写。
+  - git 目录里的 worktree 元数据 `paseo/worktree.json`（`packages/server/src/utils/worktree-metadata.ts`）。
+  - `workspaces.json` 的 `isPaseoOwnedWorktree`（`workspace-registry.ts`）与副本缓存行里的同名字段（`packages/app/src/runtime/replica-cache/index.ts`）。
+  - `config.json` 里每个 provider 的 `paseoTools`，以及 0.14.x 首启写入的默认网页端 `https://app.paseo.sh`（地址当作没设过，CORS 白名单里的那一项换成新的默认来源；`persisted-config.ts`）。
+  - Agent 记录上 `paseo.` 前缀的标签（`agent-storage.ts`）。
+  - 历史消息里 `paseo://agent/…` 的 mention 链接（`packages/protocol/src/message-links.ts`）。
+  - 历史时间线里 `mcp__paseo__*`、`paseo.*`、`paseo_*` 的工具名（`packages/protocol/src/tool-name-normalization.ts`）。
+  - 用户仓库里 `paseo-auto-stash:` 前缀的自动 stash（`workspace-git-service.ts`）。
+  - home 里的 `paseo.pid`：持有它的 daemon 还活着时 1.0.0 不启动（`pid-lock.ts`）。
+- 不回退的两项：用户仓库里的 `paseo.json` 与 MCP server 名 `paseo` 是规格定下的改名，升级后要用户自己改，写在发布说明的 Changed 里。
 - 残留的 `PASEO_*` 环境变量不生效，daemon 与 CLI 启动时逐个点名：`packages/server/src/server/legacy-env.ts`。
 - 迁移测试用的旧版样本在 `packages/desktop/e2e/fixtures/legacy-paseo/`。
 - 清理：`rg "COMPAT\(paseoDataMigration"` 列出全部位置。到期后把这些代码、上面的样本目录、`scripts/rename-guard.mjs` 里放行这个标签的规则、`MIGRATION_FILES` 登记表和本节在 `DOC_PASSAGE_EXCEPTIONS` 里的那一行一起删掉。

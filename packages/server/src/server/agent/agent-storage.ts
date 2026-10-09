@@ -108,8 +108,29 @@ export function restoreProviderSessionIds(record: {
   }
   return record.persistence?.sessionId ? [record.persistence.sessionId] : [];
 }
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 写下的标签带旧前缀：父 Agent、父工具调用、打开的标签页、worktree、定时任务。
+// 读进来时换成现在的前缀，否则升级前建的子 Agent 会从父 Agent 的子任务里消失。
+// 同名的新标签已经存在时以新标签为准。
+const LEGACY_LABEL_PREFIX = "paseo.";
+const LABEL_PREFIX = "osuna.";
+
+function renameLegacyLabels(labels: Record<string, string>): Record<string, string> {
+  const renamed: Record<string, string> = {};
+  for (const [label, value] of Object.entries(labels)) {
+    if (!label.startsWith(LEGACY_LABEL_PREFIX)) {
+      renamed[label] = value;
+      continue;
+    }
+    const currentLabel = `${LABEL_PREFIX}${label.slice(LEGACY_LABEL_PREFIX.length)}`;
+    if (!Object.hasOwn(labels, currentLabel)) renamed[currentLabel] = value;
+  }
+  return renamed;
+}
+
 export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
-  return STORED_AGENT_SCHEMA.parse(value);
+  const record = STORED_AGENT_SCHEMA.parse(value);
+  return { ...record, labels: renameLegacyLabels(record.labels) };
 }
 
 export class AgentStorage {

@@ -365,6 +365,26 @@ describe("tool call detail-level projection", () => {
     });
   });
 
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const LEGACY_TOOL_NAMES = [
+    "mcp__paseo__list_worktrees",
+    "paseo.list_agents",
+    "paseo_list_providers",
+  ];
+
+  it("counts the Osuna calls a 0.14.x timeline recorded under the old tool names", () => {
+    const unknownDetail = { type: "unknown" as const, input: null, output: null };
+    const calls = LEGACY_TOOL_NAMES.map((name, index) =>
+      toolCall(String(index + 1), unknownDetail, { name }),
+    );
+
+    const result = project({ level: "overview", head: calls });
+
+    expect(result.groupsByHostId.get("1")).toMatchObject({
+      summary: { otherToolCount: 0, osunaCallCount: 3 },
+    });
+  });
+
   it("reuses prepared history and sealed group models across live-head updates", () => {
     const historicalCalls = ["1", "2", "3", "4"].map((id) =>
       toolCall(id, { type: "shell", command: id }),

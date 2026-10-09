@@ -72,7 +72,8 @@ const MigrationsSchema = z
   .looseObject({
     legacyRendererSettingsImported: z.boolean().catch(false),
     daemonStopOnQuitDefaultApplied: z.boolean().catch(false),
-    // COMPAT(paseoDataMigration): 0.14.x 渲染层存储已导入新 origin，或用户选择了放弃旧数据。
+    // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+    // 0.14.x 渲染层存储已导入新 origin，或用户选择了放弃旧数据。
     legacyRendererOriginImported: z.boolean().catch(false),
   })
   .catch(() => ({

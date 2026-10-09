@@ -130,3 +130,22 @@ describe("isAgentMentionTarget", () => {
     expect(isAgentMentionTarget("claude")).toBe(false);
   });
 });
+
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+const LEGACY_MENTION_HREF = "paseo://agent/provider/claude";
+
+describe("Agent mentions written by 0.14.x", () => {
+  test("still resolve to their agent when an old message is read back", () => {
+    expect(parseAgentMentionHref(LEGACY_MENTION_HREF)).toEqual({ kind: "provider", id: "claude" });
+    expect(parseAgentMentionLink({ label: "@Claude", target: LEGACY_MENTION_HREF })).toEqual({
+      target: { kind: "provider", id: "claude" },
+      name: "Claude",
+    });
+  });
+
+  test("are never written again", () => {
+    expect(formatAgentMentionHref({ kind: "provider", id: "claude" })).toBe(
+      "osuna://agent/provider/claude",
+    );
+  });
+});

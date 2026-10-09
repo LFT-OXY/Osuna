@@ -44,3 +44,26 @@ describe("getOsunaToolLeafName", () => {
     expect(getOsunaToolLeafName("Bash")).toBeNull();
   });
 });
+
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+const LEGACY_TOOL_NAMES = {
+  claude: "mcp__paseo__create_agent",
+  voice: "mcp__paseo_voice__list_agents",
+  codex: "paseo.create_agent",
+  speak: "mcp__paseo__speak",
+};
+
+describe("tool calls recorded by 0.14.x", () => {
+  it("are still recognized as Osuna tools in an old timeline", () => {
+    expect(isOsunaToolName(LEGACY_TOOL_NAMES.claude)).toBe(true);
+    expect(isOsunaToolName(LEGACY_TOOL_NAMES.voice)).toBe(true);
+    expect(isOsunaToolName(LEGACY_TOOL_NAMES.codex)).toBe(true);
+    expect(isOsunaToolName(LEGACY_TOOL_NAMES.speak)).toBe(false);
+  });
+
+  it("resolve to the same leaf tool as their renamed counterparts", () => {
+    expect(getOsunaToolLeafName(LEGACY_TOOL_NAMES.claude)).toBe("create_agent");
+    expect(getOsunaToolLeafName(LEGACY_TOOL_NAMES.voice)).toBe("list_agents");
+    expect(getOsunaToolLeafName(LEGACY_TOOL_NAMES.codex)).toBe("create_agent");
+  });
+});

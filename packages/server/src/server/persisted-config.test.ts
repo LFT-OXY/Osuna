@@ -1,4 +1,12 @@
-import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -777,6 +785,40 @@ describe.skipIf(process.platform === "win32")("persisted config file permissions
 
       expect(modeOf(home)).toBe(PRIVATE_DIRECTORY_MODE);
       expect(modeOf(path.join(home, "config.json"))).toBe(PRIVATE_FILE_MODE);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const LEGACY_TOOLS_POLICY_KEY = "paseoTools";
+
+  test("keeps a tool restriction that 0.14.x saved under its old key", () => {
+    const parent = createTempHome();
+    const home = path.join(parent, "home");
+    try {
+      const writtenByLegacyDaemon = JSON.stringify({
+        version: 1,
+        agents: {
+          providers: {
+            codex: { [LEGACY_TOOLS_POLICY_KEY]: { disabledTools: ["create_agent"] } },
+            claude: {
+              [LEGACY_TOOLS_POLICY_KEY]: { enabled: false },
+              osunaTools: { enabled: true },
+            },
+          },
+        },
+      });
+      mkdirSync(home, { recursive: true });
+      writeFileSync(path.join(home, "config.json"), writtenByLegacyDaemon);
+
+      const config = loadPersistedConfig(home);
+
+      expect(config.agents?.providers).toEqual({
+        codex: { osunaTools: { disabledTools: ["create_agent"] } },
+        claude: { osunaTools: { enabled: true } },
+      });
+      expect(readFileSync(path.join(home, "config.json"), "utf8")).toBe(writtenByLegacyDaemon);
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }

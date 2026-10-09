@@ -42,6 +42,17 @@ export function isLikelyNamespacedToolName(name: string): boolean {
   return false;
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 的 MCP server 叫旧名字，升级前的时间线里记的是那个名字下的工具。
+// 认名字空间时两个都算，旧历史里的工具调用才会照样显示成 Osuna 工具。
+const TOOL_NAMESPACES = ["osuna", "paseo"];
+
+function isOsunaToolNamespace(segment: string): boolean {
+  return TOOL_NAMESPACES.some(
+    (namespace) => segment === namespace || segment.startsWith(`${namespace}_`),
+  );
+}
+
 export function isOsunaToolName(name: string): boolean {
   const normalized = normalizeToolName(name);
   if (isSpeakToolName(normalized)) {
@@ -49,15 +60,10 @@ export function isOsunaToolName(name: string): boolean {
   }
   if (normalized.includes("__")) {
     const segments = normalized.split("__").filter((s) => s.length > 0);
-    return (
-      segments.length >= 3 &&
-      segments[0] === "mcp" &&
-      (segments[1] === "osuna" || segments[1].startsWith("osuna_"))
-    );
+    return segments.length >= 3 && segments[0] === "mcp" && isOsunaToolNamespace(segments[1]);
   }
   if (normalized.includes(".")) {
-    const firstSegment = normalized.split(".")[0];
-    return firstSegment === "osuna" || firstSegment.startsWith("osuna_");
+    return isOsunaToolNamespace(normalized.split(".")[0]);
   }
   return false;
 }
@@ -66,18 +72,13 @@ export function getOsunaToolLeafName(name: string): string | null {
   const normalized = normalizeToolName(name);
   if (normalized.includes("__")) {
     const segments = normalized.split("__").filter((s) => s.length > 0);
-    if (
-      segments.length >= 3 &&
-      segments[0] === "mcp" &&
-      (segments[1] === "osuna" || segments[1].startsWith("osuna_"))
-    ) {
+    if (segments.length >= 3 && segments[0] === "mcp" && isOsunaToolNamespace(segments[1])) {
       return segments.slice(2).join("__");
     }
     return null;
   }
   if (normalized.includes(".")) {
-    const firstSegment = normalized.split(".")[0];
-    if (firstSegment === "osuna" || firstSegment.startsWith("osuna_")) {
+    if (isOsunaToolNamespace(normalized.split(".")[0])) {
       return normalized.split(".").slice(1).join(".");
     }
     return null;

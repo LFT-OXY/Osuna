@@ -413,6 +413,31 @@ describe("workspace registries", () => {
     expect(record?.displayName).toBe("acme/repo");
   });
 
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const LEGACY_OWNED_WORKTREE_FIELD = "isPaseoOwnedWorktree";
+
+  test("keeps a 0.14.x worktree workspace owned after the upgrade", async () => {
+    const writtenByLegacyDaemon = {
+      workspaceId: "ws-legacy",
+      projectId: "proj-1",
+      cwd: "/home/me/.osuna/worktrees/repo/feature",
+      kind: "worktree",
+      displayName: "feature",
+      worktreeRoot: "/home/me/.osuna/worktrees/repo/feature",
+      [LEGACY_OWNED_WORKTREE_FIELD]: true,
+      mainRepoRoot: "/home/me/repo",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+      archivedAt: null,
+    };
+    const filePath = path.join(tmpDir, "projects", "workspaces.json");
+    await writeJsonFileAtomic(filePath, [writtenByLegacyDaemon]);
+
+    await workspaceRegistry.initialize();
+
+    expect((await workspaceRegistry.get("ws-legacy"))?.isOsunaOwnedWorktree).toBe(true);
+  });
+
   test("creates, updates, archives, deletes, and lists workspace records", async () => {
     await workspaceRegistry.initialize();
     await workspaceRegistry.upsert(

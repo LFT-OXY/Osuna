@@ -209,17 +209,33 @@ function isLegacyProviderEntry(value: unknown): boolean {
   return typeof (command as Record<string, unknown>).mode === "string";
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 把每个 provider 的工具限制存在 paseoTools 下。读进来时改记到 osunaTools，
+// 两个键都有时以新键为准；不这样做这条限制会被 schema 悄悄丢掉。磁盘上的文件不动。
+const LEGACY_TOOLS_POLICY_KEY = "paseoTools";
+
+function renameLegacyToolsPolicy(entry: unknown): unknown {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+  const { [LEGACY_TOOLS_POLICY_KEY]: legacyPolicy, ...override } = entry as Record<string, unknown>;
+  if (legacyPolicy === undefined) return entry;
+  return { ...override, osunaTools: override.osunaTools ?? legacyPolicy };
+}
+
 function normalizeAgentProviders(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return value;
   }
 
-  const rawProviders = value as Record<string, unknown>;
+  const renamedEntries = Object.entries(value).map(([providerId, entry]) => [
+    providerId,
+    renameLegacyToolsPolicy(entry),
+  ]);
+  const rawProviders: Record<string, unknown> = Object.fromEntries(renamedEntries);
   const hasLegacyEntries = Object.values(rawProviders).some((entry) =>
     isLegacyProviderEntry(entry),
   );
   if (!hasLegacyEntries) {
-    return value;
+    return rawProviders;
   }
 
   const legacyEntries: Record<string, unknown> = {};
@@ -235,7 +251,7 @@ function normalizeAgentProviders(value: unknown): unknown {
 
   const parsedLegacyEntries = AgentProviderRuntimeSettingsMapSchema.safeParse(legacyEntries);
   if (!parsedLegacyEntries.success) {
-    return value;
+    return rawProviders;
   }
 
   return {

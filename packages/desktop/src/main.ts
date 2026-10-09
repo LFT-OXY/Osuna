@@ -91,6 +91,9 @@ import {
   describeUserDataMigrationFailure,
   LEGACY_USER_DATA_DIR_NAME,
   migrateLegacyUserData,
+  renameLegacyBrowserPartitions,
+  type BrowserPartitionRenameResult,
+  type UserDataMigrationResult,
 } from "./settings/user-data-migration.js";
 import {
   LEGACY_APP_SCHEME,
@@ -141,7 +144,8 @@ const bootstrapComplete = new Promise<void>((resolve) => {
   resolveBootstrapComplete = resolve;
 });
 let bootstrapIsComplete = false;
-// COMPAT(paseoDataMigration): 与 bootstrap() 里的渲染层存储迁移同删。
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+// 与 bootstrap() 里的渲染层存储迁移同删。
 let rendererOriginMigrationInProgress = false;
 
 // In dev mode, detect git worktrees and isolate each instance so multiple
@@ -172,7 +176,14 @@ function detectDevWorktreeName(): string | null {
 
 app.setName(APP_NAME);
 const forcedUserDataDir = process.env.OSUNA_ELECTRON_USER_DATA_DIR?.trim();
-const devWorktreeName = forcedUserDataDir || app.isPackaged ? null : detectDevWorktreeName();
+
+function resolveDevWorktreeName(): string | null {
+  if (forcedUserDataDir || app.isPackaged) return null;
+  return detectDevWorktreeName();
+}
+
+const devWorktreeName = resolveDevWorktreeName();
+const usesDefaultUserData = !forcedUserDataDir && !devWorktreeName;
 // 显式指定目录时不解析 appData：Windows 上 USERPROFILE 被改写（打包冒烟即如此）时
 // getPath("appData") 会直接抛错。
 const userDataDir =
@@ -184,22 +195,25 @@ const userDataDir =
 // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
 // 只搬默认 userData，强制目录与 worktree 隔离目录不碰。必须早于下面的首条日志：
 // electron-log 在 Windows / Linux 上把日志目录建在默认 userData 里面，新目录先被建出来就搬不过去了。
-const userDataMigration =
-  forcedUserDataDir || devWorktreeName
-    ? null
-    : migrateLegacyUserData({
-        legacyDir: path.join(path.dirname(userDataDir), LEGACY_USER_DATA_DIR_NAME),
-        userDataDir,
-      });
-if (userDataMigration?.kind === "failed") {
-  const { title, content } = describeUserDataMigrationFailure({
-    failure: userDataMigration,
-    platform: process.platform,
+let userDataMigration: UserDataMigrationResult | null = null;
+let browserPartitionRename: BrowserPartitionRenameResult | null = null;
+if (usesDefaultUserData) {
+  userDataMigration = migrateLegacyUserData({
+    legacyDir: path.join(path.dirname(userDataDir), LEGACY_USER_DATA_DIR_NAME),
+    userDataDir,
   });
-  // Electron 尚未 ready：macOS / Windows 弹模态错误框，Linux 只写到 stderr。
-  dialog.showErrorBox(title, content);
-  // ready 之前 app.exit 直接结束进程：后面的启动代码不执行，新目录不会被建出来，下次启动重试。
-  app.exit(1);
+  if (userDataMigration.kind === "failed") {
+    const { title, content } = describeUserDataMigrationFailure({
+      failure: userDataMigration,
+      platform: process.platform,
+    });
+    // Electron 尚未 ready：macOS / Windows 弹模态错误框，Linux 只写到 stderr。
+    dialog.showErrorBox(title, content);
+    // ready 之前 app.exit 直接结束进程：后面的启动代码不执行，新目录不会被建出来，下次启动重试。
+    app.exit(1);
+  }
+  // 也要早于 ready：内嵌浏览器的 session 一建出来，新名字的分区目录就被占了。
+  browserPartitionRename = renameLegacyBrowserPartitions(userDataDir);
 }
 
 // 必须早于首次写日志：electron-log 在首次写入时缓存路径。
@@ -216,12 +230,24 @@ if (forcedUserDataDir) {
 } else if (devWorktreeName) {
   log.info("[worktree] isolated userData for worktree:", devWorktreeName);
 }
-// COMPAT(paseoDataMigration): 与上面的搬迁同删。
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+// 与上面的搬迁同删。
 if (userDataMigration?.kind === "migrated") {
   log.info("[user-data-migration] moved legacy userData", {
     from: userDataMigration.legacyDir,
     to: userDataMigration.userDataDir,
     method: userDataMigration.method,
+  });
+}
+if (browserPartitionRename && browserPartitionRename.renamed.length > 0) {
+  log.info("[user-data-migration] renamed embedded browser partitions", {
+    partitions: browserPartitionRename.renamed,
+  });
+}
+for (const { partition, error } of browserPartitionRename?.failed ?? []) {
+  log.warn("[user-data-migration] could not rename embedded browser partition", {
+    partition,
+    error,
   });
 }
 
@@ -608,7 +634,8 @@ protocol.registerSchemesAsPrivileged([
     scheme: APP_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true },
   },
-  // COMPAT(paseoDataMigration): 旧 scheme 只为读出 0.14.x 的渲染层存储，不再提供应用本体。
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+  // 旧 scheme 只为读出 0.14.x 的渲染层存储，不再提供应用本体。
   LEGACY_APP_SCHEME,
 ]);
 
@@ -980,7 +1007,7 @@ async function bootstrap(): Promise<void> {
   // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
   // 渲染层存储跟着 scheme 换了 origin，要在首个窗口之前抄过来；也要早于下面接管 osuna scheme，
   // 导入页由迁移自己临时提供。与目录搬迁一样，强制目录和 worktree 隔离目录不迁移。
-  if (userDataMigration) {
+  if (usesDefaultUserData) {
     rendererOriginMigrationInProgress = true;
     const outcome = await runLegacyRendererOriginMigration(getDesktopSettingsStore());
     rendererOriginMigrationInProgress = false;
@@ -1127,7 +1154,8 @@ app.on("before-quit", quitLifecycle.handleBeforeQuit);
 registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
 
 app.on("window-all-closed", () => {
-  // COMPAT(paseoDataMigration): 迁移用的隐藏窗口关掉时主窗口还没建，不是用户关了最后一个窗口。
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+  // 迁移用的隐藏窗口关掉时主窗口还没建，不是用户关了最后一个窗口。
   if (rendererOriginMigrationInProgress) return;
   if (process.platform !== "darwin") {
     app.quit();

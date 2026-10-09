@@ -22,6 +22,7 @@ const LEGACY_WINDOW_STATE = {
   state: { x: 40, y: 40, width: 900, height: 700, isMaximized: false },
 };
 const LEGACY_MAC_LOG = "0.14.x log line\n";
+const LEGACY_BROWSER_PROFILE_MARKER = "embedded browser profile written by 0.14.x\n";
 const MIGRATED_LOG_LINE = "[user-data-migration] moved legacy userData";
 
 // HOME alone does not move Electron's appData on macOS (it follows
@@ -97,6 +98,12 @@ export async function verifyLegacyUserDataMigration({ repo, env: baseEnv }) {
     await mkdir(legacyDir, { recursive: true });
     await writeFile(path.join(legacyDir, "desktop-settings.json"), JSON.stringify(LEGACY_SETTINGS));
     await writeFile(path.join(legacyDir, "window-state.json"), JSON.stringify(LEGACY_WINDOW_STATE));
+    // 用标记文件而不是伪造的 Cookies：Chromium 会重建它认不出的 Cookies 数据库。
+    await mkdir(path.join(legacyDir, "Partitions/paseo-browser"), { recursive: true });
+    await writeFile(
+      path.join(legacyDir, "Partitions/paseo-browser/profile-marker.txt"),
+      LEGACY_BROWSER_PROFILE_MARKER,
+    );
     await mkdir(path.dirname(legacyMacLog), { recursive: true });
     await writeFile(legacyMacLog, LEGACY_MAC_LOG);
 
@@ -138,6 +145,15 @@ export async function verifyLegacyUserDataMigration({ repo, env: baseEnv }) {
       ["Osuna"],
     );
     assert.equal(await readFile(legacyMacLog, "utf8"), LEGACY_MAC_LOG);
+    // 内嵌浏览器只认新分区名：旧分区目录要跟着改名，登录态才还在。
+    assert.equal(
+      await readFile(path.join(userDataDir, "Partitions/osuna-browser/profile-marker.txt"), "utf8"),
+      LEGACY_BROWSER_PROFILE_MARKER,
+    );
+    assert.equal(
+      (await readdir(path.join(userDataDir, "Partitions"))).includes("paseo-browser"),
+      false,
+    );
     console.log(
       "PASS: legacy Paseo userData is served from the Osuna directory and the log directory is created after the move.",
     );

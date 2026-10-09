@@ -567,6 +567,55 @@ describe("ReplicaCache", () => {
     ]);
   });
 
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  const LEGACY_OWNED_WORKTREE_FIELD = "isPaseoOwnedWorktree";
+
+  it("restores the rows 0.14.x cached for a worktree workspace and its agent", async () => {
+    const storage = new MemoryStorage();
+    const writer = createCache(storage);
+    const worktreeWorkspace = normalizeWorkspaceDescriptor({
+      ...workspacePayload(),
+      workspaceKind: "worktree",
+      gitRuntime: { currentBranch: "feature", isOsunaOwnedWorktree: true },
+    });
+    const placedAgent: Agent = {
+      ...agent(),
+      projectPlacement: {
+        projectKey: "project-1",
+        projectName: "Osuna",
+        checkout: {
+          cwd: "/repo/osuna",
+          isGit: true,
+          currentBranch: "feature",
+          remoteUrl: null,
+          worktreeRoot: "/repo/osuna",
+          isOsunaOwnedWorktree: true,
+          mainRepoRoot: "/repo/main",
+        },
+      },
+    };
+    writer.commitDirectoryMutations(SERVER_ID, [
+      { kind: "agent", type: "upsert", id: placedAgent.id, value: placedAgent },
+      { kind: "workspace", type: "upsert", id: worktreeWorkspace.id, value: worktreeWorkspace },
+    ]);
+    await writer.flush();
+    for (const [key, row] of storage.rows) {
+      const writtenByLegacyApp = row.payload.replaceAll(
+        "isOsunaOwnedWorktree",
+        LEGACY_OWNED_WORKTREE_FIELD,
+      );
+      storage.rows.set(key, { ...row, payload: writtenByLegacyApp });
+    }
+
+    const restored = await createCache(storage).readDirectory(SERVER_ID);
+
+    expect(restored.workspaces.get("workspace-1")?.gitRuntime?.isOsunaOwnedWorktree).toBe(true);
+    expect(restored.agents.get("agent-1")?.projectPlacement?.checkout).toEqual(
+      placedAgent.projectPlacement?.checkout,
+    );
+    expect(storage.rows.size).toBe(2);
+  });
+
   it("treats a corrupt row as a scoped miss", async () => {
     const storage = new MemoryStorage();
     storage.rows.set(`${SERVER_ID}:agent:agent-1`, {

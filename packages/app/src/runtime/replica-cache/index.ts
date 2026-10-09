@@ -802,8 +802,23 @@ function rowBytes(row: ReplicaRow): number {
   return bytes;
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 桌面端迁移把 0.14.x 的缓存行原样搬了过来，行里的检出信息还用旧字段名 isPaseoOwnedWorktree。
+// 读的时候改记到新字段，升级后第一次打开、daemon 还没连上时缓存里的工作区与 Agent 才看得见。
+// 其余对不上 schema 的行照旧当作未命中丢弃。
+const LEGACY_OWNED_WORKTREE_FIELD = "isPaseoOwnedWorktree";
+
+function renameLegacyOwnedWorktreeField(_key: string, value: unknown): unknown {
+  if (!value || typeof value !== "object" || !(LEGACY_OWNED_WORKTREE_FIELD in value)) return value;
+  const { [LEGACY_OWNED_WORKTREE_FIELD]: legacyValue, ...stored } = value as Record<
+    string,
+    unknown
+  >;
+  return { ...stored, isOsunaOwnedWorktree: stored.isOsunaOwnedWorktree ?? legacyValue };
+}
+
 function parseJsonPayload(payload: string): unknown {
-  return JSON.parse(payload);
+  return JSON.parse(payload, renameLegacyOwnedWorktreeField);
 }
 
 function parseStoredPayload<Value>(schema: z.ZodType<Value>, payload: string): Value {

@@ -19,6 +19,7 @@ import {
   describeUserDataMigrationFailure,
   migrateLegacyUserData,
   nodeUserDataFileSystem,
+  renameLegacyBrowserPartitions,
 } from "./user-data-migration";
 
 const LEGACY_SETTINGS = JSON.stringify({ version: 1, settings: { releaseChannel: "beta" } });
@@ -214,6 +215,96 @@ describe("migrateLegacyUserData", () => {
 
     expect(result).toEqual({ kind: "migrated", method: "copy", legacyDir, userDataDir });
     expect((await readdir(userDataDir)).sort()).toEqual(["Local Storage", "desktop-settings.json"]);
+  });
+});
+
+describe("renameLegacyBrowserPartitions", () => {
+  const directories = new Set<string>();
+
+  afterEach(async () => {
+    await Promise.all(
+      [...directories].map((directory) => rm(directory, { recursive: true, force: true })),
+    );
+    directories.clear();
+  });
+
+  async function createUserDataWithPartitions(names: string[]): Promise<string> {
+    const userDataDir = await mkdtemp(path.join(os.tmpdir(), "osuna-browser-partitions-"));
+    directories.add(userDataDir);
+    for (const name of names) {
+      await mkdir(path.join(userDataDir, "Partitions", name), { recursive: true });
+      await writeFile(path.join(userDataDir, "Partitions", name, "Cookies"), `cookies of ${name}`);
+    }
+    return userDataDir;
+  }
+
+  it("carries the embedded browser's profile and its per-tab profiles over to the new names", async () => {
+    const userDataDir = await createUserDataWithPartitions([
+      "paseo-browser",
+      "paseo-browser-1760000000000-ab12",
+      "someone-elses-partition",
+    ]);
+
+    const result = renameLegacyBrowserPartitions(userDataDir);
+
+    expect(result).toEqual({
+      renamed: ["osuna-browser", "osuna-browser-1760000000000-ab12"],
+      failed: [],
+    });
+    expect((await readdir(path.join(userDataDir, "Partitions"))).sort()).toEqual([
+      "osuna-browser",
+      "osuna-browser-1760000000000-ab12",
+      "someone-elses-partition",
+    ]);
+    expect(
+      await readFile(path.join(userDataDir, "Partitions", "osuna-browser", "Cookies"), "utf8"),
+    ).toBe("cookies of paseo-browser");
+  });
+
+  it("keeps a profile the new app already created and leaves the legacy one beside it", async () => {
+    const userDataDir = await createUserDataWithPartitions(["paseo-browser", "osuna-browser"]);
+
+    const result = renameLegacyBrowserPartitions(userDataDir);
+
+    expect(result).toEqual({ renamed: [], failed: [] });
+    expect(
+      await readFile(path.join(userDataDir, "Partitions", "osuna-browser", "Cookies"), "utf8"),
+    ).toBe("cookies of osuna-browser");
+    expect(
+      await readFile(path.join(userDataDir, "Partitions", "paseo-browser", "Cookies"), "utf8"),
+    ).toBe("cookies of paseo-browser");
+  });
+
+  it("does nothing when the embedded browser was never used", async () => {
+    const userDataDir = await createUserDataWithPartitions([]);
+
+    expect(renameLegacyBrowserPartitions(userDataDir)).toEqual({ renamed: [], failed: [] });
+    expect(await readdir(userDataDir)).toEqual([]);
+  });
+
+  it("reports a profile it could not rename and still renames the others", async () => {
+    const userDataDir = await createUserDataWithPartitions([
+      "paseo-browser",
+      "paseo-browser-1760000000000-ab12",
+    ]);
+    const busy = errnoError("EBUSY", "resource busy or locked");
+
+    const result = renameLegacyBrowserPartitions(userDataDir, {
+      ...nodeUserDataFileSystem,
+      rename: (from, to) => {
+        if (path.basename(from) === "paseo-browser") throw busy;
+        nodeUserDataFileSystem.rename(from, to);
+      },
+    });
+
+    expect(result).toEqual({
+      renamed: ["osuna-browser-1760000000000-ab12"],
+      failed: [{ partition: "paseo-browser", error: busy }],
+    });
+    expect((await readdir(path.join(userDataDir, "Partitions"))).sort()).toEqual([
+      "osuna-browser-1760000000000-ab12",
+      "paseo-browser",
+    ]);
   });
 });
 
