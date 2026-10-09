@@ -152,6 +152,30 @@ CI 发出的 macOS 包（arm64 与 x64）都用同一张长期固定的自签名
   断言拦下），Release 留在草稿，而不是发出一个打断所有人更新链的版本。**轮换证书就意味着所有人重装一次**，
   改这个值之前先想清楚。
 
+### 安卓签名 keystore
+
+GitHub Release 上的 APK 用一把长期固定的 PKCS12 keystore 签名。Android 把签名证书当作
+应用身份：已装用户只接受同一证书签出的更新，换 keystore 等于让所有侧载用户卸载重装。
+
+- **存放位置**：本机 `~/.config/osuna/android/`（目录权限 700），里面是
+  `osuna-release.keystore`、口令 `osuna-release.keystore.password`（权限 600；PKCS12 不支持
+  store 与 key 两套口令，两者相同）和公开的 `osuna-release.pem`。alias 是 `osuna-release`。
+  仓库 Secrets 里有一份：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、
+  `ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。有效期 30 年，到 2056-10-01。
+- **必须备份**：与 macOS 证书相同，整个目录同步到云盘。
+- **证书指纹**，用户校验下载到的 APK 是否出自本仓库：
+
+  ```text
+  SHA-256: 39:16:AF:AB:5B:A3:EB:34:BF:71:58:43:30:0A:30:42:BC:A9:86:07:9E:8D:33:D0:38:D6:C5:C1:78:63:4E:A9
+  SHA-1:   B5:B8:41:13:5F:61:C1:17:27:91:E7:08:A0:88:01:59:BC:73:B3:77
+  ```
+
+  ```bash
+  keytool -printcert -jarfile osuna-vX.Y.Z-android.apk
+  ```
+
+  `apksigner verify --print-certs` 打出的是同一串字节，小写、无冒号。
+
 ### macOS 首次打开
 
 包用自签名证书签名，但没有公证。团队成员把应用拖进「应用程序」后首次打开会被

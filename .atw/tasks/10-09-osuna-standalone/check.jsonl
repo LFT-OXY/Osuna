@@ -1,0 +1,20 @@
+{"file": ".atw/spec/guides/index.md", "reason": "跨层与复用思考指南，所有票通用"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧改动入口：home 迁移、默认中继端点、Hub 删除、PASEO_* 警告"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "迁移硬失败要非零退出并带手工命令，错误形状按此规范"}
+{"file": ".atw/spec/server/backend/logging.md", "reason": "迁移成功静默只记 info、残留 PASEO_* 记 warn 的日志规范"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "home 目录搬迁与符号链接触碰持久化布局"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "Hub 协议消息、特性位、权限直接删除时的协议约束"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 迁移与 CLI 测试的接缝与写法"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "App 侧推送代码删除、F-Droid 档删除、存储键改名"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 侧测试约束"}
+{"file": "docs/protocol-compatibility.md", "reason": "Hub 删除不打 COMPAT 的边界与 COMPAT(paseoDataMigration) 标签规则"}
+{"file": "docs/data-model.md", "reason": "存储目录、原子写、Push Token Store 加注"}
+{"file": "docs/testing.md", "reason": "两类测试、PR 路由、禁止 mock 的规则"}
+{"file": "docs/qa.md", "reason": "1.0.0 发布前的 QA 证据标准"}
+{"file": "docs/expo-router.md", "reason": "渲染层存储迁移触碰启动恢复"}
+{"file": "docs/glossary.md", "reason": "Osuna / Paseo / Website / Public docs / Web app 等术语边界"}
+{"file": "docs/adr/0006-osuna-full-detach-from-paseo.md", "reason": "本任务的架构决策与例外边界"}
+{"file": ".atw/tasks/10-09-osuna-standalone/research/interview-decisions.md", "reason": "Q2–Q13 需求边界，不可重开"}
+{"file": ".atw/tasks/10-09-osuna-standalone/research/renderer-storage-migration.md", "reason": "桌面端 userData 与 origin 迁移的键清单、步骤、失败模式、测试建议"}
+{"file": ".atw/tasks/10-09-osuna-standalone/research/android-build-path.md", "reason": "安卓 GitHub Actions 工作流骨架、签名 config plugin、配套改动清单"}
+{"file": ".atw/tasks/10-09-osuna-standalone/map.md", "reason": "11 张决策票索引，细节在 map-issues/"}
