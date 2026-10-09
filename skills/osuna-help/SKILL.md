@@ -88,5 +88,4 @@ Offer to fix the PATH or symlink; do not change shell configuration silently.
 If the current docs and diagnostics do not resolve the problem, collect the app and daemon versions, OS, install method, connection method, exact error, minimal reproduction, and a small redacted log excerpt.
 
 - Bugs: [GitHub Issues](https://github.com/LFT-OXY/Osuna/issues)
-- Questions and quick help: [Osuna Discord](https://discord.gg/jz8T2uahpH)
-- Product workflow discussions: [GitHub Discussions](https://github.com/LFT-OXY/Osuna/discussions) or `#product` in Discord
+- Questions, quick help, and product workflow discussions: [GitHub Discussions](https://github.com/LFT-OXY/Osuna/discussions)
