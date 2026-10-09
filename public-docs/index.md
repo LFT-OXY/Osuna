@@ -30,6 +30,8 @@ The builds are not notarized by Apple and the Windows installer is not code-sign
   xattr -dr com.apple.quarantine /Applications/Osuna.app
   ```
 
+  If it is still blocked, open **System Settings → Privacy & Security** and choose **Open Anyway**.
+
 - **Windows:** when SmartScreen blocks the installer, choose **More info**, then **Run anyway**.
 
 ### Linux

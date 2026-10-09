@@ -52,7 +52,7 @@ Osuna는 코딩 에이전트를 관리하는 로컬 서버인 데몬을 실행�
 
 [GitHub 릴리스 페이지](https://github.com/LFT-OXY/Osuna/releases)에서 다운로드하세요. 앱을 열면 데몬이 자동으로 시작됩니다. 별도로 설치할 것은 없습니다.
 
-휴대폰에서 연결하려면 **Settings → 호스트 → Pair Device**를 열고 QR 코드를 스캔하세요. 링크를 열면 Osuna 웹 앱이 열립니다. Android에서는 릴리스 페이지의 APK를 설치할 수도 있습니다. 업스트림 Paseo 모바일 앱은 지원되는 클라이언트가 아닙니다.
+휴대폰에서 연결하려면 **Settings → 호스트 → Pair a device**를 열고 QR 코드를 스캔하세요. 링크를 열면 Osuna 웹 앱이 열립니다. Android에서는 릴리스 페이지의 APK를 설치할 수도 있습니다. 업스트림 Paseo 모바일 앱은 지원되는 클라이언트가 아닙니다.
 
 터미널에서 `osuna` 명령을 쓰려면 **Settings → Integrations → Command line**을 열고 **Install**을 클릭하세요. 명령이 `~/.local/bin`에 링크됩니다.
 

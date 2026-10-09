@@ -47,6 +47,8 @@ Osuna 从这一版起是独立产品，不再是 Paseo 的 fork。命令、数�
 - 数据目录从 `~/.paseo` 改为 `~/.osuna`
 - 环境变量前缀从 `PASEO_` 改为 `OSUNA_`，旧名字不再生效
 - 应用链接的 scheme 从 `paseo://` 改为 `osuna://`
+- 仓库里的项目配置文件从 `paseo.json` 改为 `osuna.json`，旧文件名不再读取，升级后请把它改名
+- MCP server 从 `paseo` 改名为 `osuna`，工具前缀随之变为 `mcp__osuna__*`；自己写的提示词、权限规则里引用了旧名字的要跟着改
 - 默认中继改为 `osuna-relay.chinhae.cc`，默认网页端改为 `osuna-app.chinhae.cc`
 - Docker 镜像改为 `ghcr.io/lft-oxy/osuna`，容器内的用户和 home 改为 `osuna` 与 `/home/osuna`
 - 插件清单文件改为 `osuna-plugin.json`，`requirements` 的键改为 `osuna`，SDK 包改为 `@osuna/plugin`
@@ -64,11 +66,8 @@ Osuna 从这一版起是独立产品，不再是 Paseo 的 fork。命令、数�
 
 下面是已知的升级缺口，怎么处理还没定。每条写的是现状，定下来之前不要写进上面的条目。
 
-- 用户仓库里的项目配置现在只读 `osuna.json`，不读 `paseo.json`；agent 标签、旧 scheme 的提及链接、旧 MCP 工具名、自动 stash 前缀、应用内浏览器分区这些旧标识也没有回退读取。
-- 0.14.x 写进 `config.json` 的旧网页端地址与 CORS 白名单会随 home 迁移带过来，这类主机的配对二维码仍指向上游。
-- `osuna daemon pair` 的离线路径和带 `--host` 的命令会抢先建出 `~/.osuna`，之后迁移被跳过。
-- `npm run dev:server` 在没设 `OSUNA_LOCAL_MODELS_DIR` 时会建出 `~/.osuna/models/local-speech`，同样让之后的迁移被跳过（本票核对 `scripts/dev-daemon.sh` 与 `scripts/dev.ps1` 时发现）。
-- pid 锁文件从 `paseo.pid` 改名为 `osuna.pid`，1.0.0 与仍在运行的 0.14.x daemon 之间没有互斥。
+- `npm run dev:server` 在没设 `OSUNA_LOCAL_MODELS_DIR` 时会建出 `~/.osuna/models/local-speech`，抢先建出的目录会让之后的迁移被跳过（本票核对 `scripts/dev-daemon.sh` 与 `scripts/dev.ps1` 时发现）。只影响从源码跑开发 daemon 的机器。
+- 回滚到 0.14.x 时两个版本仍可能同时写同一个 home：1.0.0 认得还活着的 `paseo.pid` 不会再起一个，但 0.14.x 不认得 `osuna.pid`。
 - 随迁移带过来的 `push-tokens.json` 如果非空，daemon 仍会向推送服务发请求。
 - Docker 容器内不留符号链接，升级后记录在旧路径下的 worktree 失效。
 - Release 目前没有 Linux 桌面包，也没有安卓 APK；`Android APK Release` 只能手动派发。

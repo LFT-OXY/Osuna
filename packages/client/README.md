@@ -1,6 +1,6 @@
 # @osuna/client
 
-TypeScript SDK for building integrations on top of a Osuna daemon.
+TypeScript SDK for building integrations on top of an Osuna daemon.
 
 `@osuna/client` is not published to npm. Inside this repository, build it with `npm run build:client`.
 

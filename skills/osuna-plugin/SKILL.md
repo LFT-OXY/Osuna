@@ -1,6 +1,6 @@
 ---
 name: osuna-plugin
-description: Build and manage trusted local Osuna plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Osuna plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a native surface, sidebar item, or workspace panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Osuna from plugin code; or add plugin RPCs.
+description: Build and manage trusted local Osuna plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot an Osuna plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a native surface, sidebar item, or workspace panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Osuna from plugin code; or add plugin RPCs.
 ---
 
 # Osuna plugins

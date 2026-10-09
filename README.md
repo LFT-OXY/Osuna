@@ -53,7 +53,7 @@ You need at least one agent CLI installed and configured with your credentials:
 
 Download it from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases). Open the app and the daemon starts automatically. Nothing else to install.
 
-To connect from your phone, open **Settings → your host → Pair Device** and scan the QR code. The link opens the Osuna web app. On Android you can also install the APK from the releases page. The upstream Paseo mobile app is not a supported client.
+To connect from your phone, open **Settings → your host → Pair a device** and scan the QR code. The link opens the Osuna web app. On Android you can also install the APK from the releases page. The upstream Paseo mobile app is not a supported client.
 
 To use the `osuna` command in a terminal, open **Settings → Integrations → Command line** and click **Install**. This links the command into `~/.local/bin`.
 

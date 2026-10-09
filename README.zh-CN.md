@@ -52,7 +52,7 @@ Osuna 会运行一个名为 daemon 的本地服务，用来管理你的 coding a
 
 从 [GitHub releases 页面](https://github.com/LFT-OXY/Osuna/releases)下载。打开 app 后 daemon 会自动启动，不需要再安装其他东西。
 
-如果要从手机连接，打开 **Settings → 你的 host → Pair Device** 并扫描二维码，链接会打开 Osuna 的 Web app。Android 也可以从 releases 页面安装 APK。上游的 Paseo 手机 app 不是受支持的客户端。
+如果要从手机连接，打开 **Settings → 你的 host → Pair a device** 并扫描二维码，链接会打开 Osuna 的 Web app。Android 也可以从 releases 页面安装 APK。上游的 Paseo 手机 app 不是受支持的客户端。
 
 如果要在终端里使用 `osuna` 命令，打开 **Settings → Integrations → Command line**，点击 **Install**。它会把命令链接到 `~/.local/bin`。
 

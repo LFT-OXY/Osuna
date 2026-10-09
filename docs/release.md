@@ -152,7 +152,7 @@ The push starts these workflows:
 | Workflow                                       | Runs on                                                                           | Result                                                                                                                                                      |
 | ---------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Desktop Release`                              | the `v*` tag                                                                      | Builds macOS (arm64, x64) and Windows (x64, arm64), uploads them to a draft GitHub Release, and publishes the draft once every updater manifest is uploaded |
-| `Docker`                                       | the `v*` tag                                                                      | Publishes `ghcr.io/lft-oxy/osuna:X.Y.Z`. A stable tag also moves `latest`; a beta tag publishes only its exact version                                      |
+| `Docker`                                       | the `v*` tag                                                                      | Publishes the image to `ghcr.io/lft-oxy/osuna`. [docker.md](docker.md#building-locally) has the tag rules                                                   |
 | `Release Notes Sync`                           | the `v*` tag                                                                      | Mirrors the matching changelog entry into the release body                                                                                                  |
 | `Deploy App`, `Deploy Website`, `Deploy Relay` | the release commit reaching `main`, see [Cloudflare deploys](#cloudflare-deploys) | Redeploys the web app, the website, and the relay                                                                                                           |
 
@@ -343,26 +343,11 @@ GitHub Release 上的 APK 用一把长期固定的 PKCS12 keystore 签名。Andr
 
   `apksigner verify --print-certs` 打出的是同一串字节，小写、无冒号。
 
-### macOS 首次打开
+### 首次打开的系统警告
 
-包用自签名证书签名，但没有公证。用户把应用拖进「应用程序」后首次打开会被
-Gatekeeper 拦住，提示「无法验证开发者」或「已损坏，无法打开」。按顺序试：
-
-1. 在「应用程序」里右键点 Osuna → 打开 → 在弹窗里再点一次「打开」。
-2. 如果提示的是「已损坏」，先去掉隔离属性再打开：
-
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Osuna.app
-   ```
-
-3. 仍被拦就去 系统设置 → 隐私与安全性，在底部点「仍要打开」。
-
-每次手动下载安装都要做一遍，之后正常启动。
-
-### Windows 首次安装
-
-安装包同样没有代码签名，SmartScreen 会弹「已阻止运行无法识别的应用」。点「更多信息」
-→「仍要运行」。这是预期行为，不是文件损坏。
+macOS 包没有公证，Windows 安装包没有代码签名，所以 Gatekeeper 与 SmartScreen 会在用户首次
+打开时拦一次，每次手动下载安装都会再拦。这是预期行为，不是文件损坏。用户要照做的步骤只在
+Public docs 的 [First launch warnings](../public-docs/index.md#first-launch-warnings) 里维护。
 
 ### 本地出一个 macOS 包
 

@@ -52,7 +52,7 @@ Osuna はコーディングエージェントを管理するローカルサー�
 
 [GitHub のリリースページ](https://github.com/LFT-OXY/Osuna/releases)からダウンロードしてください。アプリを開くとデーモンが自動的に起動します。追加のインストールは不要です。
 
-スマートフォンから接続するには、**Settings → ホスト → Pair Device** を開いて QR コードを読み取ってください。リンクから Osuna の Web アプリが開きます。Android ではリリースページの APK もインストールできます。上流の Paseo モバイルアプリはサポート対象のクライアントではありません。
+スマートフォンから接続するには、**Settings → ホスト → Pair a device** を開いて QR コードを読み取ってください。リンクから Osuna の Web アプリが開きます。Android ではリリースページの APK もインストールできます。上流の Paseo モバイルアプリはサポート対象のクライアントではありません。
 
 ターミナルで `osuna` コマンドを使うには、**Settings → Integrations → Command line** を開き、**Install** をクリックします。コマンドが `~/.local/bin` にリンクされます。
 
