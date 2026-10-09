@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { migrateLegacyHomeIfDefault } from "@osuna/server";
 import { selectDaemonTarget } from "./daemon-target.js";
 
 const JSON_OPTION_DESCRIPTION = "Output in JSON format";
@@ -34,9 +35,9 @@ export function addJsonAndDaemonHostOptions<T extends Command>(command: T): T {
 }
 
 export function withGlobalOptions<Args extends unknown[], Result>(
-  handler: (...args: Args) => Result,
-): (...args: Args) => Result {
-  return (...args) => {
+  handler: (...args: Args) => Result | Promise<Result>,
+): (...args: Args) => Promise<Result> {
+  return async (...args) => {
     const command = args.at(-1) as Command;
     const mergedArgs = [...args];
     const options = command.optsWithGlobals();
@@ -51,6 +52,13 @@ export function withGlobalOptions<Args extends unknown[], Result>(
       throw { code: "TARGET_AMBIGUOUS", message: "Conflicting duplicate daemon selectors." };
     const localOnly = localCommands.has(command);
     options.daemonTarget = selectDaemonTarget(options, process.env, localOnly);
+    // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+    // 本地命令直接读写 home（改配置、拉起 daemon），所以紧跟 home 解析、赶在它们动手之前搬。
+    if (localOnly) {
+      await migrateLegacyHomeIfDefault({
+        env: { OSUNA_HOME: options.home ?? process.env.OSUNA_HOME },
+      });
+    }
     mergedArgs[mergedArgs.length - 2] = options;
     return handler(...(mergedArgs as Args));
   };

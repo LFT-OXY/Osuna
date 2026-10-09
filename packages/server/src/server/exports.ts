@@ -2,6 +2,9 @@
 export { createOsunaDaemon, type OsunaDaemon, type OsunaDaemonConfig } from "./bootstrap.js";
 export { loadConfig, type CliConfigOverrides } from "./config.js";
 export { resolveOsunaHome } from "./osuna-home.js";
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+export { migrateLegacyHomeIfDefault } from "./legacy-home-migration.js";
+export { describeLegacyEnvVars, findLegacyEnvVars } from "./legacy-env.js";
 export { getOrCreateServerId } from "./server-id.js";
 export { createRootLogger, type LogLevel, type LogFormat } from "./logger.js";
 export {
