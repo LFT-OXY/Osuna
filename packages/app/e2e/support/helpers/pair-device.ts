@@ -11,6 +11,9 @@ import {
 import { expectAppRoute } from "./route-assertions";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 
+// 这些 daemon 没有覆盖网页端基址，配对链接必须落在默认的托管网页端上。
+const HOSTED_WEB_APP_PAIRING_LINK = /^https:\/\/osuna-app\.chinhae\.cc\/#offer=/;
+
 interface PairingHostInput {
   serverId: string;
   label: string;
@@ -103,13 +106,17 @@ export async function enableRelayAndExpectOffer(page: Page): Promise<void> {
   const enableButton = page.getByRole("button", { name: "Enable relay", exact: true });
   await enableButton.click();
   await expect(page.getByRole("img", { name: "Pairing QR code" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Pairing link" })).toHaveValue(/#offer=/);
+  await expect(page.getByRole("textbox", { name: "Pairing link" })).toHaveValue(
+    HOSTED_WEB_APP_PAIRING_LINK,
+  );
   await expect(page.getByText("Enable relay?", { exact: true })).toHaveCount(0);
 }
 
 export async function expectPairingOffer(page: Page): Promise<void> {
   await expect(page.getByRole("img", { name: "Pairing QR code" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Pairing link" })).toHaveValue(/#offer=/);
+  await expect(page.getByRole("textbox", { name: "Pairing link" })).toHaveValue(
+    HOSTED_WEB_APP_PAIRING_LINK,
+  );
   await expect(
     page.getByRole("alert").filter({
       hasText: "Treat this pairing link like a password. Anyone with it can access this daemon.",
