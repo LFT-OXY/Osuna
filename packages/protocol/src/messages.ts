@@ -147,6 +147,15 @@ export const DAEMON_PERMISSIONS = [
 export const DaemonPermissionSchema = z.enum(DAEMON_PERMISSIONS);
 export type DaemonPermission = z.infer<typeof DaemonPermissionSchema>;
 
+// COMPAT(hubExecutePermission): added in v1.0.0, remove after 2027-04-09 once no 0.14.x daemon is in use.
+// 0.14.x 的 daemon 给 owner 下发的全量权限里还有随 Hub 删除的 hub.execute。客户端要能解析这样的
+// server_info，否则连不上还没升级的主机。只在读 daemon 下发的权限时接受，没有任何操作再检查它。
+const RETIRED_DAEMON_PERMISSIONS = ["hub.execute"] as const;
+const AdvertisedDaemonPermissionSchema = z.enum([
+  ...DAEMON_PERMISSIONS,
+  ...RETIRED_DAEMON_PERMISSIONS,
+]);
+
 const MutableDaemonProviderModelSchema = z
   .object({
     id: z.string().min(1),
@@ -3563,7 +3572,7 @@ export const ServerInfoStatusPayloadSchema = z
     hostname: ServerInfoHostnameSchema.optional(),
     version: ServerInfoVersionSchema.optional(),
     // COMPAT(sessionPermissions): optional while clients support older daemons.
-    permissions: z.array(DaemonPermissionSchema).optional(),
+    permissions: z.array(AdvertisedDaemonPermissionSchema).optional(),
     // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
     desktopManaged: z.boolean().optional(),
     // daemon 的 process.platform（darwin / linux / win32 …）。用字符串而非枚举，新值不会让老客户端解析失败。

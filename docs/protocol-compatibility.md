@@ -88,6 +88,12 @@ A shim that exists for old-app or old-daemon support carries a comment naming it
 
 When a tag's condition is met, delete the shim and the tag in the same change.
 
+## The 1.0.0 exception: Hub
+
+1.0.0 removed the Hub messages, the `hub` client type, two Hub session events, and the `hub.execute` permission outright, with no `COMPAT` tags. That breaks "never remove" on purpose. The only sender of those messages was the Hub service, which Osuna does not have. Don't treat it as precedent for removing anything a shipped app or daemon still sends.
+
+One piece of it does cross versions. A 0.14.x daemon grants its owner every permission, so its `server_info` still lists `hub.execute`, and a 1.0.0 client has to parse that message to connect to a host that hasn't been updated. `server_info.permissions` therefore keeps accepting the retired value under `COMPAT(hubExecutePermission)`; nothing checks it. `packages/protocol/src/messages.server-info-compat.test.ts` holds the 0.14.x payload.
+
 ## QA
 
 Tests don't fully cover compatibility. If you touched `packages/protocol`, say in the pull request why an older app still parses your message and why an older daemon still satisfies your app. See [qa.md](qa.md).
