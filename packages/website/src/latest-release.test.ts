@@ -58,6 +58,30 @@ describe("getLatestAndroidVersionFromReleases", () => {
 });
 
 describe("selectReleaseChannels", () => {
+  it("offers a release that ships macOS and Windows installers but no Linux build", () => {
+    const channels = selectReleaseChannels([
+      {
+        tag_name: "v0.14.2",
+        assets: [
+          { name: "Osuna-0.14.2-arm64.dmg" },
+          { name: "Osuna-0.14.2-x64.dmg" },
+          { name: "Osuna-Setup-0.14.2-arm64.exe" },
+          { name: "Osuna-Setup-0.14.2-x64.exe" },
+          { name: "Osuna-Setup-0.14.2.exe" },
+        ],
+        prerelease: false,
+        draft: false,
+      },
+    ]);
+
+    expect(channels.stable).toEqual({
+      version: "0.14.2",
+      linuxAppImageAsset: null,
+      windowsX64Asset: "Osuna-Setup-0.14.2-x64.exe",
+      windowsArm64Asset: "Osuna-Setup-0.14.2-arm64.exe",
+    });
+  });
+
   it("offers the newest prerelease when it leads stable", () => {
     const channels = selectReleaseChannels([
       desktopRelease({ version: "0.3.0-beta.2", prerelease: true }),

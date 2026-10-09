@@ -1,4 +1,5 @@
 import { verifyAttachedDaemonControls } from "./daemon-lifecycle-renderer.electron.mjs";
+import { verifyLegacyRendererOriginMigration } from "./renderer-origin-migration.electron.mjs";
 import { verifyLegacyUserDataMigration } from "./user-data-migration.electron.mjs";
 import { once } from "node:events";
 import assert from "node:assert/strict";
@@ -87,7 +88,10 @@ async function command(name, args) {
 try {
   // Windows resolves appData through the shell's known folders, so this launch
   // cannot be pointed at a fixture profile there.
-  if (process.platform !== "win32") await verifyLegacyUserDataMigration({ repo, env });
+  if (process.platform !== "win32") {
+    await verifyLegacyUserDataMigration({ repo, env });
+    await verifyLegacyRendererOriginMigration({ repo, env });
+  }
   // Simulate a legacy independent launch that carries the old Desktop flag.
   const launch = await startDaemonInstance({
     home,

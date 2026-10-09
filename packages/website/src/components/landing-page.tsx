@@ -3,8 +3,6 @@ import {
   ArrowRight,
   Bot,
   BookOpen,
-  Braces,
-  Coffee,
   ExternalLink,
   GitFork,
   Laptop,
@@ -52,16 +50,8 @@ const AGENT_LIST_GRID_STYLE = {
 const PHONE_PERSPECTIVE_STYLE = { minHeight: 480, perspective: 700 };
 import { CursorFieldProvider } from "~/components/butterfly";
 import { CommandDialog } from "~/components/command-dialog";
-import {
-  appStoreUrl,
-  playStoreUrl,
-  getDesktopDownload,
-  MOBILE_STORES,
-  AppleIcon,
-  PlayStoreIcon,
-  TerminalIcon,
-} from "~/downloads";
-import type { DesktopPlatform, MobilePlatform } from "~/platform";
+import { getDesktopDownload, getMobileDownload, AndroidIcon, TerminalIcon } from "~/downloads";
+import type { VisitorPlatform } from "~/platform";
 import { isMobilePlatform } from "~/platform";
 import { useRelease, useVisitorPlatform } from "~/routes/__root";
 import { HeroMockup } from "~/components/hero-mockup";
@@ -73,7 +63,7 @@ import {
   PiIcon,
 } from "~/components/agent-icons";
 import { GitHubIcon } from "~/components/brand-icons";
-import { ClaudeIcon, MobileChat, MobileDiff, MobileSidebar, PhoneFrame } from "~/components/mockup";
+import { PhoneFrame } from "~/components/phone-frame";
 import { FAQItem } from "~/components/faq-item";
 import { SiteFooter } from "~/components/site-footer";
 import { SiteHeader } from "~/components/site-header";
@@ -112,7 +102,7 @@ export function LandingPage({ title, subtitle }: LandingPageProps) {
       <PhoneShowcase />
 
       {/* Content section */}
-      <div className="landing-content bg-background">
+      <div className="bg-background">
         <main className="p-6 md:p-20 md:pt-40 max-w-5xl mx-auto">
           <div className="space-y-24">
             <MultiProviderSection />
@@ -139,7 +129,7 @@ function Nav() {
 function Hero({ title, subtitle }: { title: React.ReactNode; subtitle: React.ReactNode }) {
   return (
     <div className="space-y-6 text-center">
-      <h1 className="text-4xl md:text-6xl font-medium tracking-tight leading-[0.95]">{title}</h1>
+      <h1 className="text-4xl md:text-6xl font-medium tracking-tight leading-[1.15]">{title}</h1>
       <p className="text-base leading-relaxed text-white/70 md:text-lg max-w-lg mx-auto">
         {subtitle}
       </p>
@@ -254,7 +244,7 @@ const PROVIDER_ICON_CLASS = "h-5 w-5 sm:h-7 sm:w-7";
 
 function MultiProviderSection() {
   const providers = [
-    { name: "Claude Code", icon: <ClaudeIcon className={PROVIDER_ICON_CLASS} /> },
+    { name: "Claude Code", icon: <ClaudeCodeIcon className={PROVIDER_ICON_CLASS} /> },
     { name: "Codex", icon: <CodexIcon className={PROVIDER_ICON_CLASS} /> },
     { name: "OpenCode", icon: <OpenCodeIcon className={PROVIDER_ICON_CLASS} /> },
     { name: "Pi", icon: <PiIcon className={PROVIDER_ICON_CLASS} /> },
@@ -262,10 +252,7 @@ function MultiProviderSection() {
   ];
 
   return (
-    <FeatureSection
-      title="Works with your tools"
-      description="Bring your subscriptions, skills and configuration"
-    >
+    <FeatureSection title="接入你已有的工具" description="沿用你的订阅、技能与配置">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
         {providers.map((p) => (
           <div
@@ -276,6 +263,13 @@ function MultiProviderSection() {
             <span className="truncate text-sm font-medium sm:text-base">{p.name}</span>
           </div>
         ))}
+        <a
+          href="/docs/supported-providers"
+          className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:gap-3 sm:px-5 sm:py-4 sm:text-base"
+        >
+          查看全部
+          <ArrowRight className="h-4 w-4 shrink-0" />
+        </a>
       </div>
     </FeatureSection>
   );
@@ -283,10 +277,7 @@ function MultiProviderSection() {
 
 function TurnkeySection() {
   return (
-    <FeatureSection
-      title="Run it anywhere"
-      description="Use Osuna locally, from another machine, or with a team"
-    >
+    <FeatureSection title="在哪里都能运行" description="在本机使用，或连接到另一台机器">
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
         <div className="flex flex-col gap-6 border-b border-white/10 p-6 sm:flex-row sm:items-center sm:justify-between md:p-8">
           <div className="flex items-start gap-4">
@@ -294,9 +285,9 @@ function TurnkeySection() {
               <Monitor className="h-6 w-6" strokeWidth={1.5} />
             </div>
             <div className="space-y-0.5">
-              <h3 className="text-xl font-medium text-white/90">Desktop app</h3>
+              <h3 className="text-xl font-medium text-white/90">桌面端</h3>
               <p className="max-w-lg text-sm leading-relaxed text-white/50">
-                The one click experience, download the app and it just works
+                下载后打开就能用，daemon 已经内置
               </p>
             </div>
           </div>
@@ -306,17 +297,17 @@ function TurnkeySection() {
           <div className="grid gap-4 md:grid-cols-2">
             <TurnkeyExtensionCard
               icon={Smartphone}
-              title="Mobile and web"
-              description="Connect to the same workspaces from any client"
+              title="手机与网页端"
+              description="从任意客户端连接到同一批工作区"
               ctaHref="/download"
-              ctaLabel="Download"
+              ctaLabel="下载"
             />
             <TurnkeyExtensionCard
               icon={Laptop}
-              title="Remote machines"
-              description="Run Osuna on a home lab, or a cloud machine"
-              ctaHref="/docs#server--cli"
-              ctaLabel="Docs"
+              title="远程机器"
+              description="把 Osuna 跑在家里的服务器或云主机上"
+              ctaHref="/docs/docker"
+              ctaLabel="文档"
             />
           </div>
         </div>
@@ -358,7 +349,7 @@ function TurnkeyExtensionCard({
   );
 }
 
-type AutomationKind = "mcp" | "cli" | "sdk";
+type AutomationKind = "mcp" | "cli";
 
 const AUTOMATION_OPTIONS: Array<{
   kind: AutomationKind;
@@ -369,27 +360,20 @@ const AUTOMATION_OPTIONS: Array<{
   {
     kind: "mcp",
     label: "MCP",
-    caption: "From another agent",
+    caption: "由另一个 Agent 调用",
     icon: Bot,
   },
   {
     kind: "cli",
     label: "CLI",
-    caption: "From the terminal",
+    caption: "在终端里调用",
     icon: Terminal,
-  },
-  {
-    kind: "sdk",
-    label: "SDK",
-    caption: "From code",
-    icon: Braces,
   },
 ];
 
 const AUTOMATION_LINKS = [
-  { href: "/docs/mcp", label: "MCP docs" },
-  { href: "/docs/cli", label: "CLI docs" },
-  { href: "/docs/sdk", label: "SDK docs" },
+  { href: "/docs/mcp", label: "MCP 文档" },
+  { href: "/docs/cli", label: "CLI 文档" },
 ] as const;
 
 function AutomationSection() {
@@ -397,8 +381,8 @@ function AutomationSection() {
 
   return (
     <FeatureSection
-      title="Built for automation"
-      description="Use MCP, the CLI, or the TypeScript SDK to automate Osuna"
+      title="为自动化而生"
+      description="用 MCP 或 CLI 驱动 Osuna"
       links={AUTOMATION_LINKS}
     >
       <div className="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
@@ -459,7 +443,6 @@ function AutomationDetail({ kind }: { kind: AutomationKind }) {
     >
       {kind === "mcp" ? <McpAutomationTranscript /> : null}
       {kind === "cli" ? <CliAutomationExample /> : null}
-      {kind === "sdk" ? <SdkAutomationExample /> : null}
     </div>
   );
 }
@@ -469,21 +452,21 @@ function McpAutomationTranscript() {
     <div className="space-y-5">
       <div className="ml-auto w-fit max-w-xl rounded-xl rounded-tr-none bg-white/[0.07] px-4 py-3">
         <p className="text-sm leading-relaxed text-white/75">
-          Take the open GitHub issues labeled ready and fan them out to separate worktree agents.
+          把标了 ready 的 GitHub issue 分给各自的工作树 Agent，并行处理。
         </p>
       </div>
       <div className="flex items-start gap-3">
         <Bot className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
         <div className="min-w-0 flex-1 space-y-4">
           <p className="text-sm leading-relaxed text-white/55">
-            I found two ready issues. I will run each in its own worktree.
+            找到两个 ready 的 issue，我在各自的工作树里分别启动。
           </p>
           <div className="space-y-2 font-mono text-[11px]">
             <McpAgentCall issue="#412" provider="claude/opus-4.6" />
             <McpAgentCall issue="#417" provider="codex/gpt-5.6-sol" />
           </div>
           <p className="text-sm leading-relaxed text-white/55">
-            Done, two agents are running. I will let you know when they finish.
+            两个 Agent 已经在运行，完成后我会通知你。
           </p>
         </div>
       </div>
@@ -527,7 +510,7 @@ function CliAutomationExample() {
         </div>
 
         <div>
-          <div className="text-white/30"># Target another host</div>
+          <div className="text-white/30"># 指定另一台主机</div>
           <ShellPrompt>
             <span className="text-white">osuna ls</span>{" "}
             <span className="text-sky-300/75">--host</span>{" "}
@@ -563,50 +546,20 @@ function AgentListOutput() {
   );
 }
 
-function SdkAutomationExample() {
-  return (
-    <pre className="overflow-x-auto font-mono text-[11px] leading-5 text-white/60">
-      <span className="text-purple-300">import</span> {"{"} createOsunaClient {"}"}{" "}
-      <span className="text-purple-300">from</span>{" "}
-      <span className="text-emerald-300/80">{'"@osuna/client"'}</span>;{"\n\n"}
-      <span className="text-purple-300">const</span> client ={" "}
-      <span className="text-sky-300">createOsunaClient</span>({"{"}
-      {"\n"} url: <span className="text-emerald-300/80">{'"ws://127.0.0.1:6767/ws"'}</span>,{"\n"}
-      {"}"});
-      {"\n"}
-      <span className="text-purple-300">await</span> client.
-      <span className="text-sky-300">connect</span>();
-      {"\n\n"}
-      <span className="text-purple-300">const</span> agent ={" "}
-      <span className="text-purple-300">await</span> client.agents.
-      <span className="text-sky-300">create</span>({"{"}
-      {"\n"} config: {"{"} provider:{" "}
-      <span className="text-emerald-300/80">{'"codex/gpt-5.6-sol"'}</span> {"}"},{"\n"} cwd:{" "}
-      <span className="text-emerald-300/80">{'"/Users/me/dev/osuna"'}</span>,{"\n"} prompt:{" "}
-      <span className="text-emerald-300/80">{'"Fix issue #412 and add tests."'}</span>,{"\n"}
-      {"}"});
-      {"\n\n"}
-      <span className="text-purple-300">const</span> result ={" "}
-      <span className="text-purple-300">await</span> agent.
-      <span className="text-sky-300">waitForFinish</span>();
-    </pre>
-  );
-}
-
 function ExtensibleSection() {
   return (
-    <FeatureSection title="Make it yours" description="Extend Osuna to work just the way you want">
+    <FeatureSection title="按你的方式定制" description="扩展 Osuna，让它贴合你的工作方式">
       <div className="grid gap-4 md:grid-cols-2">
         <ExtensibleCard
           icon={Puzzle}
-          title="Plugins"
-          description="Plugins can add server-side functionality and modify the client with custom components. They work across all clients, including mobile"
+          title="插件"
+          description="插件可以增加服务端功能，也能用自定义组件改造客户端，对包括手机在内的所有客户端生效"
           links={PLUGIN_CARD_LINKS}
         />
         <ExtensibleCard
           icon={GitFork}
-          title="Fork the repo"
-          description="Osuna is licensed under Apache 2.0. You can inspect the implementation, fork the project, and adapt it to your workflow or organization"
+          title="Fork 仓库"
+          description="Osuna 以 Apache 2.0 许可开源。你可以查看实现、fork 项目，并按自己的流程或组织改造它"
           links={FORK_CARD_LINKS}
         />
       </div>
@@ -619,25 +572,16 @@ interface ExtensibleCardLink {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   external?: boolean;
-  /** Accent links stand out without hover, for destinations worth noticing. */
-  accent?: boolean;
 }
 
 const PLUGIN_CARD_LINKS: ReadonlyArray<ExtensibleCardLink> = [
-  { href: "/docs/plugins", label: "Plugin documentation", icon: BookOpen },
-  {
-    href: "https://osuna.cafe",
-    label: "Community plugins",
-    icon: Coffee,
-    external: true,
-    accent: true,
-  },
+  { href: "/docs/plugins", label: "插件文档", icon: BookOpen },
 ];
 
 const FORK_CARD_LINKS: ReadonlyArray<ExtensibleCardLink> = [
   {
     href: "https://github.com/LFT-OXY/Osuna",
-    label: "View the repository",
+    label: "查看仓库",
     icon: GitHubIcon,
     external: true,
   },
@@ -667,11 +611,7 @@ function ExtensibleCard({
             key={link.href}
             href={link.href}
             {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-            className={
-              link.accent
-                ? "inline-flex items-center gap-2 text-sm text-emerald-300/85 transition-colors hover:text-emerald-200"
-                : "inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            }
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <link.icon className="h-4 w-4" />
             {link.label}
@@ -691,18 +631,14 @@ function GetStarted() {
           buttons never wrap and orphan one of themselves onto a line alone. It
           still hugs its label rather than stretching across the row. */}
       <div className="mx-auto flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-        {isMobilePlatform(platform) ? (
-          <StoreButton platform={platform} />
-        ) : (
-          <DesktopDownloadButton platform={platform} />
-        )}
+        <PrimaryDownloadButton platform={platform} />
         <div className="flex items-center justify-center gap-3">
-          {isMobilePlatform(platform) ? <DesktopAppLink /> : <StoreIconLinks />}
+          {isMobilePlatform(platform) ? <DesktopAppLink /> : <AndroidLink />}
           <ServerInstallButton />
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-6">
-        <span className="text-xs text-muted-foreground">Supports</span>
+        <span className="text-xs text-muted-foreground">支持</span>
         <div className="flex items-center gap-1">
           <AgentBadge name="Claude Code" icon={CLAUDE_CODE_BADGE_ICON} />
           <AgentBadge name="Codex" icon={CODEX_BADGE_ICON} />
@@ -720,24 +656,20 @@ const PRIMARY_CTA_CLASS =
 const SECONDARY_CTA_CLASS =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 px-3 py-2.5 text-sm text-white hover:bg-white/10 transition-colors";
 
-function DesktopDownloadButton({ platform }: { platform: DesktopPlatform }) {
-  const download = getDesktopDownload(useRelease(), platform);
+function PrimaryDownloadButton({ platform }: { platform: VisitorPlatform }) {
+  const release = useRelease();
+  const download = isMobilePlatform(platform)
+    ? getMobileDownload(release, platform)
+    : getDesktopDownload(release, platform);
   const Icon = download.icon;
+  // 站内链接（没有对应安装包时退到下载页）留在当前标签页。
+  const external = download.href.startsWith("/")
+    ? {}
+    : { target: "_blank", rel: "noopener noreferrer" };
   return (
-    <a href={download.href} target="_blank" rel="noopener noreferrer" className={PRIMARY_CTA_CLASS}>
+    <a href={download.href} {...external} className={PRIMARY_CTA_CLASS}>
       <Icon className="h-4 w-4" />
-      Download for {download.label}
-    </a>
-  );
-}
-
-function StoreButton({ platform }: { platform: MobilePlatform }) {
-  const store = MOBILE_STORES[platform];
-  const Icon = store.icon;
-  return (
-    <a href={store.href} target="_blank" rel="noopener noreferrer" className={PRIMARY_CTA_CLASS}>
-      <Icon className="h-4 w-4" />
-      Get the {store.label} app
+      {download.label}
     </a>
   );
 }
@@ -748,49 +680,38 @@ function DesktopAppLink() {
   return (
     <a href="/download" className={SECONDARY_CTA_CLASS}>
       <Monitor className="h-4 w-4" strokeWidth={1.5} />
-      Desktop app
+      桌面端
     </a>
   );
 }
 
-function StoreIconLinks() {
+function AndroidLink() {
   return (
-    <>
-      <a
-        href={appStoreUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={SECONDARY_CTA_CLASS}
-        aria-label="App Store"
-      >
-        <AppleIcon className="h-5 w-5" />
-      </a>
-      <a
-        href={playStoreUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={SECONDARY_CTA_CLASS}
-        aria-label="Google Play"
-      >
-        <PlayStoreIcon className="h-5 w-5" />
-      </a>
-    </>
+    <a href="/download" className={SECONDARY_CTA_CLASS} aria-label="安卓版">
+      <AndroidIcon className="h-5 w-5" />
+    </a>
   );
 }
 
 const SERVER_INSTALL_TRIGGER = (
   <span
     className="inline-flex items-center justify-center rounded-lg border border-white/12 px-3 py-2.5 text-white hover:bg-white/10 transition-colors"
-    aria-label="Install the daemon on a remote machine"
+    aria-label="在远程机器上运行 daemon"
   >
     <TerminalIcon className="h-5 w-5" />
   </span>
 );
 
+const SERVER_INSTALL_COMMAND =
+  'docker run -d --name osuna -p 6767:6767 -e OSUNA_PASSWORD=change-me -v "$PWD/osuna-home:/home/osuna" -v "$PWD:/workspace" ghcr.io/lft-oxy/osuna:latest';
+
 const SERVER_INSTALL_FOOTNOTE = (
   <>
-    Requires Node.js 18+. Run <span className="font-mono text-white/40">osuna</span> to start the
-    daemon.
+    镜像不含 Agent CLI。Compose 与反向代理的配置见{" "}
+    <a href="/docs/docker" className="underline hover:text-white/60">
+      Docker 文档
+    </a>
+    。
   </>
 );
 
@@ -798,12 +719,42 @@ function ServerInstallButton() {
   return (
     <CommandDialog
       trigger={SERVER_INSTALL_TRIGGER}
-      title="Run agents on a remote machine"
-      description="For headless machines you want to connect to from the Osuna apps. The desktop app already includes a built-in daemon"
-      command="npm install -g @osuna/cli && osuna"
+      title="在远程机器上运行 Agent"
+      description="用于没有界面的服务器，之后从 Osuna 的各个客户端连接。桌面端已经内置 daemon"
+      command={SERVER_INSTALL_COMMAND}
       footnote={SERVER_INSTALL_FOOTNOTE}
     />
   );
+}
+
+interface PhoneShotInfo {
+  src: string;
+  alt: string;
+  /** The colour at the top edge of the screenshot; the frame's status bar continues it. */
+  surface: string;
+}
+
+// 网页端在 402 x 820 视口下的实拍（2x），正好填满外框状态栏以下的屏幕区域。
+const PHONE_SHOTS = {
+  workspaces: {
+    src: "/app-phone-workspaces.webp",
+    alt: "Osuna 手机端的工作区列表",
+    surface: "#030403",
+  },
+  chat: {
+    src: "/app-phone-chat.webp",
+    alt: "Osuna 手机端与 Agent 的对话",
+    surface: "#0d0e0d",
+  },
+  changes: {
+    src: "/app-phone-changes.webp",
+    alt: "Osuna 手机端的改动差异",
+    surface: "#030403",
+  },
+} satisfies Record<string, PhoneShotInfo>;
+
+function PhoneShot({ shot }: { shot: PhoneShotInfo }) {
+  return <img src={shot.src} alt={shot.alt} width={402} height={820} className="h-full w-full" />;
 }
 
 function PhoneShowcase() {
@@ -866,10 +817,11 @@ function PhoneShowcase() {
           <path d="M12 5v14M5 12l7 7 7-7" />
         </svg>
         <p className="max-w-md text-balance text-center text-lg text-white/80">
-          When you want to step away from your desk, you can.
+          离开桌前，工作不用停。
         </p>
         <p className="max-w-sm text-balance text-center text-sm text-white/50">
-          The native mobile app has full feature parity with desktop.
+          <span className="inline-block">手机上用安卓 APK 或网页端，</span>
+          <span className="inline-block">查看进度、回复 Agent、审查改动。</span>
         </p>
       </motion.div>
 
@@ -879,14 +831,9 @@ function PhoneShowcase() {
         style={PHONE_PERSPECTIVE_STYLE}
       >
         {/* Left phone — workspace drawer, rotated to face inward */}
-        <motion.div
-          style={leftPhoneStyle}
-          className="w-[160px] md:w-[240px] absolute"
-          role="img"
-          aria-label="Osuna workspace drawer"
-        >
-          <PhoneFrame time="18:54" depth="right">
-            <MobileSidebar />
+        <motion.div style={leftPhoneStyle} className="w-[160px] md:w-[240px] absolute">
+          <PhoneFrame time="18:54" depth="right" surface={PHONE_SHOTS.workspaces.surface}>
+            <PhoneShot shot={PHONE_SHOTS.workspaces} />
           </PhoneFrame>
         </motion.div>
 
@@ -896,23 +843,16 @@ function PhoneShowcase() {
           animate={centerPhoneAnimate}
           transition={EASE_OUT_06_DELAY_01}
           className="w-[220px] md:w-[240px] relative z-10"
-          role="img"
-          aria-label="Osuna agent chat"
         >
-          <PhoneFrame time="18:53">
-            <MobileChat />
+          <PhoneFrame time="18:53" surface={PHONE_SHOTS.chat.surface}>
+            <PhoneShot shot={PHONE_SHOTS.chat} />
           </PhoneFrame>
         </motion.div>
 
         {/* Right phone — diff view, rotated to face inward */}
-        <motion.div
-          style={rightPhoneStyle}
-          className="w-[160px] md:w-[240px] absolute"
-          role="img"
-          aria-label="Osuna diff view"
-        >
-          <PhoneFrame time="18:55" depth="left">
-            <MobileDiff />
+        <motion.div style={rightPhoneStyle} className="w-[160px] md:w-[240px] absolute">
+          <PhoneFrame time="18:55" depth="left" surface={PHONE_SHOTS.changes.surface}>
+            <PhoneShot shot={PHONE_SHOTS.changes} />
           </PhoneFrame>
         </motion.div>
       </div>
@@ -929,72 +869,64 @@ function FAQ() {
       transition={EASE_OUT_05}
       className="space-y-6"
     >
-      <h2 className="text-3xl font-medium">FAQ</h2>
+      <h2 className="text-3xl font-medium">常见问题</h2>
       <div className="space-y-6">
-        <FAQItem question="Is this free?">
-          Yes. Osuna is free and open source. You need agent providers installed with your own
-          credentials. Voice is local-first by default and can optionally use cloud speech providers
-          if you configure them.
+        <FAQItem question="免费吗？">
+          免费。Osuna 是开源软件。你需要自己安装 Agent
+          的命令行工具，并使用自己的凭据。语音默认在本地处理，也可以按需配置云端语音服务。
         </FAQItem>
-        <FAQItem question="Does my code leave my machine?">
-          Osuna doesn&apos;t send your code anywhere. Agents run locally and talk to their own APIs
-          as they normally would. For remote access, you can use the optional{" "}
+        <FAQItem question="我的代码会离开我的机器吗？">
+          Osuna 不会把你的代码发到任何地方。Agent 在本机运行，照常访问各自的
+          API。远程访问可以用可选的
           <a href="/docs/security" className="underline hover:text-white/80">
-            end-to-end encrypted relay
+            端到端加密中继
           </a>
-          , connect directly over your local network, or use your own tunnel.
+          、局域网直连，或你自己的隧道。
         </FAQItem>
-        <FAQItem question="What agents does it support?">
-          Osuna supports many providers. It has custom implementations for Claude, Codex, OpenCode,
-          Pi, and OMP, and supports many more via ACP. See the full list here:{" "}
+        <FAQItem question="支持哪些 Agent？">
+          Osuna 为 Claude、Codex、OpenCode、Pi 和 OMP 做了专门适配，其余通过 ACP 接入。完整列表见
           <a href="/docs/supported-providers" className="underline hover:text-white/80">
-            all supported providers
+            支持的提供方
           </a>
-          .
+          。
         </FAQItem>
-        <FAQItem question="How does Osuna run providers?">
-          Osuna runs the providers installed on your machine as you&apos;d normally run them. Osuna
-          doesn&apos;t modify or change their behavior.
+        <FAQItem question="Osuna 怎么运行这些 Agent？">
+          直接运行你机器上已经装好的命令行工具，和你平时的用法一样。Osuna 不修改它们的行为。
         </FAQItem>
-        <FAQItem question="Do I need the desktop app?">
-          No. You can run the daemon headless and use any client to connect. The desktop app just
-          bundles the daemon with a UI.
+        <FAQItem question="必须用桌面端吗？">
+          不必。daemon 可以不带界面运行，再用任意客户端连接。桌面端只是把 daemon 和界面打包在一起。
         </FAQItem>
-        <FAQItem question="How does voice work?">
-          Voice runs locally on your device by default. You talk, the app transcribes and sends it
-          to your agent as text. Optionally, you can configure OpenAI speech providers for
-          higher-quality transcription and text-to-speech. See the{" "}
+        <FAQItem question="语音是怎么工作的？">
+          语音默认在你的设备上处理：你说话，应用转写成文字发给 Agent。也可以配置 OpenAI
+          的语音服务，换取更好的转写和朗读效果。见
           <a href="/docs/voice" className="underline hover:text-white/80">
-            voice docs
+            语音文档
           </a>
-          .
+          。
         </FAQItem>
-        <FAQItem question="Can I connect from outside my network?">
-          Yes. You can use the hosted relay (end-to-end encrypted, Osuna can&apos;t read your
-          traffic), set up your own tunnel (Tailscale, Cloudflare Tunnel, etc.), or expose the
-          daemon port directly. See{" "}
+        <FAQItem question="能从外网连接吗？">
+          可以。使用官方中继（端到端加密，Osuna
+          读不到你的流量）、自己搭的隧道（Tailscale、Cloudflare Tunnel 等），或者直接暴露 daemon
+          端口。见
           <a href="/docs/configuration" className="underline hover:text-white/80">
-            configuration
+            配置文档
           </a>
-          .
+          。
         </FAQItem>
-        <FAQItem question="Do I need git or GitHub?">
-          No. Osuna works in any directory. Worktrees are optional and only relevant if you use git.
-          You can run agents anywhere you&apos;d normally work.
+        <FAQItem question="需要 git 或 GitHub 吗？">
+          不需要。Osuna 在任何目录下都能工作。工作树是可选功能，只有用 git 时才相关。
         </FAQItem>
-        <FAQItem question="Can I get banned for using Osuna?">
-          Osuna is designed to use each provider&apos;s officially supported integration and does
-          not attempt to bypass its terms of service. It doesn&apos;t extract tokens or call
-          inference APIs directly.
+        <FAQItem question="用 Osuna 会被封号吗？">
+          Osuna 只使用各提供方官方支持的接入方式，不绕过它们的服务条款，不提取令牌，也不直接调用推理
+          API。
         </FAQItem>
-        <FAQItem question="How do worktrees work?">
-          When you launch an agent with the worktree option (from the app, desktop, or CLI), Osuna
-          creates a git worktree and runs the agent inside it. The agent works on an isolated branch
-          without touching your main working directory. See the{" "}
+        <FAQItem question="工作树是怎么工作的？">
+          启动 Agent 时选择工作树（应用、桌面端或 CLI 都可以），Osuna 会创建一个 git 工作树并让
+          Agent 在里面运行。Agent 在独立的分支上工作，不碰你的主工作目录。见
           <a href="/docs/worktrees" className="underline hover:text-white/80">
-            worktrees docs
+            工作树文档
           </a>
-          .
+          。
         </FAQItem>
       </div>
     </motion.div>

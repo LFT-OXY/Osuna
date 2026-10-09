@@ -92,6 +92,10 @@ import {
   LEGACY_USER_DATA_DIR_NAME,
   migrateLegacyUserData,
 } from "./settings/user-data-migration.js";
+import {
+  LEGACY_APP_SCHEME,
+  runLegacyRendererOriginMigration,
+} from "./settings/renderer-origin-migration/electron.js";
 import { clampWindowStateToWorkAreas, createWindowStateStore } from "./settings/window-state.js";
 import {
   isDesktopManagedDaemonRunningSync,
@@ -137,6 +141,8 @@ const bootstrapComplete = new Promise<void>((resolve) => {
   resolveBootstrapComplete = resolve;
 });
 let bootstrapIsComplete = false;
+// COMPAT(paseoDataMigration): 与 bootstrap() 里的渲染层存储迁移同删。
+let rendererOriginMigrationInProgress = false;
 
 // In dev mode, detect git worktrees and isolate each instance so multiple
 // Electron windows can run side-by-side (separate userData = separate lock).
@@ -602,6 +608,8 @@ protocol.registerSchemesAsPrivileged([
     scheme: APP_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true },
   },
+  // COMPAT(paseoDataMigration): 旧 scheme 只为读出 0.14.x 的渲染层存储，不再提供应用本体。
+  LEGACY_APP_SCHEME,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -969,6 +977,19 @@ async function bootstrap(): Promise<void> {
 
   await app.whenReady();
 
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+  // 渲染层存储跟着 scheme 换了 origin，要在首个窗口之前抄过来；也要早于下面接管 osuna scheme，
+  // 导入页由迁移自己临时提供。与目录搬迁一样，强制目录和 worktree 隔离目录不迁移。
+  if (userDataMigration) {
+    rendererOriginMigrationInProgress = true;
+    const outcome = await runLegacyRendererOriginMigration(getDesktopSettingsStore());
+    rendererOriginMigrationInProgress = false;
+    if (outcome.kind === "retry-on-next-launch") {
+      app.exit(1);
+      return;
+    }
+  }
+
   const appDistDir = getAppDistDir();
   protocol.handle(APP_SCHEME, (request) => {
     const { pathname, search, hash } = new URL(request.url);
@@ -1106,6 +1127,8 @@ app.on("before-quit", quitLifecycle.handleBeforeQuit);
 registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
 
 app.on("window-all-closed", () => {
+  // COMPAT(paseoDataMigration): 迁移用的隐藏窗口关掉时主窗口还没建，不是用户关了最后一个窗口。
+  if (rendererOriginMigrationInProgress) return;
   if (process.platform !== "darwin") {
     app.quit();
   }

@@ -13,7 +13,8 @@ export interface GitHubRelease {
 
 export interface ReleaseInfo {
   version: string;
-  linuxAppImageAsset: string;
+  /** Null when the release ships no Linux build. */
+  linuxAppImageAsset: string | null;
   windowsX64Asset: string | null;
   windowsArm64Asset: string | null;
 }
@@ -27,11 +28,8 @@ export interface ReleaseChannels {
 const LINUX_APPIMAGE_ASSET_PATTERN =
   /^Osuna-(?:\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)-)?x86_64\.AppImage$/;
 
-const REQUIRED_ASSET_PATTERNS = [
-  /Osuna-.*-arm64\.dmg$/,
-  LINUX_APPIMAGE_ASSET_PATTERN,
-  /Osuna-Setup-.*\.exe$/,
-];
+// Linux 包不在必需之列：发布流程目前只出 macOS 与 Windows（docs/release.md「加回 Linux」）。
+const REQUIRED_ASSET_PATTERNS = [/Osuna-.*-arm64\.dmg$/, /Osuna-Setup-.*\.exe$/];
 
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/LFT-OXY/Osuna/releases?per_page=10";
 const RELEASE_CACHE_KEY = "github-release:v2";
@@ -86,13 +84,10 @@ async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
 function toReleaseInfo(release: GitHubRelease): ReleaseInfo | null {
   if (release.draft || !hasRequiredAssets(release)) return null;
 
-  const linuxAppImageAsset = pickLinuxAppImageAsset(release.assets);
-  if (!linuxAppImageAsset) return null;
-
   const windowsAssets = pickWindowsAssets(release.assets);
   return {
     version: versionFromTag(release.tag_name),
-    linuxAppImageAsset,
+    linuxAppImageAsset: pickLinuxAppImageAsset(release.assets),
     windowsX64Asset: windowsAssets.x64,
     windowsArm64Asset: windowsAssets.arm64,
   };
@@ -164,11 +159,12 @@ function isReleaseInfo(value: unknown): value is ReleaseInfo {
   return (
     typeof record.version === "string" &&
     /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(record.version) &&
-    typeof record.linuxAppImageAsset === "string" &&
-    (record.linuxAppImageAsset === "Osuna-x86_64.AppImage" ||
-      new RegExp(`^Osuna-${record.version.replaceAll(".", "\\.")}-x86_64\\.AppImage$`).test(
-        record.linuxAppImageAsset,
-      )) &&
+    (record.linuxAppImageAsset === null ||
+      record.linuxAppImageAsset === "Osuna-x86_64.AppImage" ||
+      (typeof record.linuxAppImageAsset === "string" &&
+        new RegExp(`^Osuna-${record.version.replaceAll(".", "\\.")}-x86_64\\.AppImage$`).test(
+          record.linuxAppImageAsset,
+        ))) &&
     (typeof record.windowsX64Asset === "string" || record.windowsX64Asset === null) &&
     (typeof record.windowsArm64Asset === "string" || record.windowsArm64Asset === null) &&
     (record.windowsX64Asset === null ||

@@ -18,6 +18,8 @@ function createStoreMock(): DesktopSettingsStore {
         keepRunningAfterQuit: true,
       },
     })),
+    hasImportedLegacyRendererOrigin: vi.fn(async () => true),
+    markLegacyRendererOriginImported: vi.fn(async () => undefined),
   };
 }
 

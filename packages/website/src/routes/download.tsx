@@ -6,8 +6,6 @@ import { SiteShell } from "~/components/site-shell";
 import { pageMeta } from "~/meta";
 import {
   downloadUrls,
-  appStoreUrl,
-  playStoreUrl,
   webAppUrl,
   AppleIcon,
   AndroidIcon,
@@ -31,8 +29,8 @@ export const Route = createFileRoute("/download")({
     search.channel === "beta" ? { channel: "beta" } : {},
   head: () =>
     pageMeta(
-      "Download Osuna for macOS, Windows, Linux, iOS, and Android",
-      "Install Osuna on every platform. Native desktop apps for macOS, Windows, and Linux. Mobile apps for iOS and Android. Self-hosted, open source, free to download.",
+      "下载 Osuna – 桌面端与安卓",
+      "下载 Osuna 桌面端与安卓 APK，或用 Docker 把 daemon 跑在服务器上。自托管，开源，免费。",
       "/download",
     ),
   component: Download,
@@ -55,7 +53,7 @@ function Download() {
     <SiteShell width="default">
       <div className="mb-10 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mb-2">Download</h1>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mb-2">下载</h1>
           <p className="text-muted-foreground">
             v{version}
             <span className="mx-2 text-muted-foreground/40">·</span>
@@ -63,7 +61,7 @@ function Download() {
               {...changelogLink(version)}
               className="underline underline-offset-4 decoration-border hover:text-foreground hover:decoration-current transition-colors"
             >
-              What&apos;s new
+              更新内容
             </Link>
           </p>
         </div>
@@ -76,10 +74,8 @@ function Download() {
       <section className="rounded-xl border border-border bg-card/40 p-6 md:p-8 mb-6">
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h2 className="text-2xl font-semibold">Desktop</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Recommended, bundles everything you need
-            </p>
+            <h2 className="text-2xl font-semibold">桌面端</h2>
+            <p className="text-sm text-muted-foreground mt-1">推荐，开箱即用</p>
           </div>
           <MonitorIcon className="h-5 w-5 text-muted-foreground mt-1.5" />
         </div>
@@ -91,32 +87,32 @@ function Download() {
                 <DownloadPill href={urls.macAppleSilicon} label="Apple Silicon" />
                 <DownloadPill href={urls.macIntel} label="Intel" />
               </PillGroup>
-              <span className="text-xs text-muted-foreground">Requires macOS 13 or newer</span>
+              <span className="text-xs text-muted-foreground">需要 macOS 13 或更高版本</span>
             </div>
           </PlatformRow>
-
-          {!onBeta && (
-            <PlatformRow icon={TerminalIcon} label="Homebrew">
-              <CodeBlock size="sm">brew install --cask osuna</CodeBlock>
-            </PlatformRow>
-          )}
 
           <PlatformRow icon={WindowsIcon} label="Windows">
             <PillGroup>
               <DownloadPill
                 href={urls.windowsExeX64}
-                label={urls.windowsExeArm64 ? "Intel / x64" : "Download"}
+                label={urls.windowsExeArm64 ? "Intel / x64" : "下载"}
               />
               {urls.windowsExeArm64 && <DownloadPill href={urls.windowsExeArm64} label="ARM64" />}
             </PillGroup>
           </PlatformRow>
 
           <PlatformRow icon={LinuxIcon} label="Linux">
-            <PillGroup>
-              <DownloadPill href={urls.linuxAppImage} label="AppImage" />
-              <DownloadPill href={urls.linuxDeb} label="DEB" />
-              <DownloadPill href={urls.linuxRpm} label="RPM" />
-            </PillGroup>
+            {urls.linuxAppImage && urls.linuxDeb && urls.linuxRpm ? (
+              <PillGroup>
+                <DownloadPill href={urls.linuxAppImage} label="AppImage" />
+                <DownloadPill href={urls.linuxDeb} label="DEB" />
+                <DownloadPill href={urls.linuxRpm} label="RPM" />
+              </PillGroup>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                这一版没有 Linux 安装包，可以用 Docker 或源码构建
+              </span>
+            )}
           </PlatformRow>
         </div>
       </section>
@@ -124,25 +120,16 @@ function Download() {
       {/* Mobile */}
       <section className="rounded-xl border border-border bg-card/40 p-6 md:p-8 mb-6">
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-semibold">Mobile</h2>
+          <h2 className="text-2xl font-semibold">手机</h2>
           <PhoneIcon className="h-5 w-5 text-muted-foreground" />
         </div>
 
         <div className="divide-y divide-border">
-          <PlatformRow icon={AndroidIcon} label="Android">
+          <PlatformRow icon={AndroidIcon} label="安卓">
             <PillGroup>
-              {!onBeta && <DownloadPill href={playStoreUrl} label="Play Store" external />}
               <DownloadPill href={urls.androidApk} label="APK" />
             </PillGroup>
           </PlatformRow>
-
-          {!onBeta && (
-            <PlatformRow icon={AppleIcon} label="iOS">
-              <PillGroup>
-                <DownloadPill href={appStoreUrl} label="App Store" external />
-              </PillGroup>
-            </PlatformRow>
-          )}
         </div>
       </section>
 
@@ -151,18 +138,16 @@ function Download() {
         <section className="rounded-xl border border-border bg-card/40 p-6 md:p-8 mb-6">
           <div className="flex items-start justify-between mb-8">
             <div>
-              <h2 className="text-2xl font-semibold">Web</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Connect to a server from any browser
-              </p>
+              <h2 className="text-2xl font-semibold">网页端</h2>
+              <p className="text-sm text-muted-foreground mt-1">用浏览器连接到你的主机</p>
             </div>
             <GlobeIcon className="h-5 w-5 text-muted-foreground mt-1.5" />
           </div>
 
           <div className="divide-y divide-border">
-            <PlatformRow icon={GlobeIcon} label="Web App">
+            <PlatformRow icon={GlobeIcon} label="网页端">
               <PillGroup>
-                <DownloadPill href={webAppUrl} label="Open" external />
+                <DownloadPill href={webAppUrl} label="打开" external />
               </PillGroup>
             </PlatformRow>
           </div>
@@ -173,42 +158,43 @@ function Download() {
       <section className="rounded-xl border border-border bg-card/40 p-6 md:p-8">
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h2 className="text-2xl font-semibold">Server</h2>
+            <h2 className="text-2xl font-semibold">服务器</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Run the Osuna server anywhere, connect from any client
+              把 daemon 跑在任意机器上，再用任意客户端连接
             </p>
           </div>
           <TerminalIcon className="h-5 w-5 text-muted-foreground mt-1.5" />
         </div>
 
         <div className="divide-y divide-border">
-          <PlatformRow icon={TerminalIcon} label="npm">
+          <PlatformRow icon={TerminalIcon} label="Docker">
             <CodeBlock size="sm">
-              {onBeta
-                ? "npm install -g @osuna/cli@beta && osuna"
-                : "npm install -g @osuna/cli && osuna"}
+              {`docker pull ghcr.io/lft-oxy/osuna:${onBeta ? version : "latest"}`}
             </CodeBlock>
           </PlatformRow>
 
-          <PlatformRow icon={TerminalIcon} label="Nix">
-            <CodeBlock size="sm">
-              {onBeta ? `nix run github:LFT-OXY/Osuna/v${version}` : "nix run github:LFT-OXY/Osuna"}
-            </CodeBlock>
+          <PlatformRow icon={TerminalIcon} label="源码构建">
+            <a
+              href="/docs"
+              className="text-sm text-muted-foreground underline underline-offset-4 decoration-border hover:text-foreground hover:decoration-current transition-colors"
+            >
+              查看文档
+            </a>
           </PlatformRow>
         </div>
       </section>
 
       <p className="text-center text-xs text-muted-foreground mt-8">
-        All releases are available on{" "}
+        全部版本都在{" "}
         <a
           href="https://github.com/LFT-OXY/Osuna/releases"
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-foreground transition-colors"
         >
-          GitHub
+          GitHub Releases
         </a>
-        .
+        。
       </p>
     </SiteShell>
   );
@@ -217,10 +203,10 @@ function Download() {
 function ChannelSwitch({ onBeta }: { onBeta: boolean }) {
   return (
     <div
-      aria-label="Release channel"
+      aria-label="发布通道"
       className="inline-flex items-center gap-1 rounded-full border border-border bg-card/60 p-1"
     >
-      <ChannelOption label="Stable" active={!onBeta} search={STABLE_SEARCH} />
+      <ChannelOption label="稳定版" active={!onBeta} search={STABLE_SEARCH} />
       <ChannelOption label="Beta" active={onBeta} search={BETA_SEARCH} />
     </div>
   );
@@ -256,11 +242,10 @@ function ChannelOption({
 function BetaNotice() {
   return (
     <div className="mb-6 rounded-xl border border-primary/25 bg-primary/5 p-5 md:px-8 md:py-6">
-      <p className="text-sm">Beta builds ship ahead of stable and can break.</p>
+      <p className="text-sm">Beta 版先于稳定版发布，可能不稳定。</p>
       <p className="mt-1.5 text-sm text-muted-foreground">
-        Already running the desktop app? Set{" "}
-        <span className="text-foreground">Settings → Release channel → Beta</span> and it updates
-        itself from here on.
+        已经在用桌面端？在 <span className="text-foreground">设置 → 发布通道</span> 里选
+        Beta，之后它会自己更新。
       </p>
     </div>
   );

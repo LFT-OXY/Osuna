@@ -1,31 +1,27 @@
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
-import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import {
+  Outlet,
+  createRootRoute,
+  HeadContent,
+  Scripts,
+  useRouterState,
+} from "@tanstack/react-router";
 import type { ReleaseChannels, ReleaseInfo } from "~/latest-release";
 import type { VisitorPlatform } from "~/platform";
 import { getVisitorPlatform } from "~/platform";
 import { getLatestRelease } from "~/release";
-import { getStarCount } from "~/stars";
-
-interface StarsContext {
-  stars: string;
-}
 
 const ReleaseCtx = createContext<ReleaseChannels>({
   stable: {
     version: "",
-    linuxAppImageAsset: "",
+    linuxAppImageAsset: null,
     windowsX64Asset: null,
     windowsArm64Asset: null,
   },
   beta: null,
 });
-const StarsCtx = createContext<StarsContext>({ stars: "" });
 const PlatformCtx = createContext<VisitorPlatform>("mac");
-
-const PLAUSIBLE_INIT_SCRIPT = {
-  __html: `window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()`,
-};
 
 /** The latest stable release. Everything on the site points here by default. */
 export function useRelease(): ReleaseInfo {
@@ -37,10 +33,6 @@ export function useBetaRelease(): ReleaseInfo | null {
   return useContext(ReleaseCtx).beta;
 }
 
-export function useStars(): StarsContext {
-  return useContext(StarsCtx);
-}
-
 /** The platform the visitor is browsing from, resolved from the request user agent during SSR. */
 export function useVisitorPlatform(): VisitorPlatform {
   return useContext(PlatformCtx);
@@ -48,12 +40,8 @@ export function useVisitorPlatform(): VisitorPlatform {
 
 export const Route = createRootRoute({
   loader: async () => {
-    const [release, stars, platform] = await Promise.all([
-      getLatestRelease(),
-      getStarCount(),
-      getVisitorPlatform(),
-    ]);
-    return { release, platform, ...stars };
+    const [release, platform] = await Promise.all([getLatestRelease(), getVisitorPlatform()]);
+    return { release, platform };
   },
   head: () => ({
     meta: [
@@ -68,8 +56,8 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
-      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
-      { rel: "apple-touch-icon", href: "/favicon.svg" },
+      { rel: "icon", href: "/logo.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
     ],
   }),
   component: RootComponent,
@@ -79,24 +67,26 @@ function RootComponent() {
   const data = Route.useLoaderData();
   return (
     <ReleaseCtx value={data.release}>
-      <StarsCtx value={data}>
-        <PlatformCtx value={data.platform}>
-          <RootDocument>
-            <Outlet />
-          </RootDocument>
-        </PlatformCtx>
-      </StarsCtx>
+      <PlatformCtx value={data.platform}>
+        <RootDocument>
+          <Outlet />
+        </RootDocument>
+      </PlatformCtx>
     </ReleaseCtx>
   );
 }
 
+// 首页、下载页与法律页是中文；Public docs 和从 CHANGELOG 生成的更新日志保留英文。
+function documentLanguage(pathname: string): "en" | "zh-CN" {
+  return pathname.startsWith("/docs") || pathname.startsWith("/changelog") ? "en" : "zh-CN";
+}
+
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   return (
-    <html lang="en">
+    <html lang={documentLanguage(pathname)}>
       <head>
         <HeadContent />
-        <script async src="https://plausible.io/js/pa-cKNUoWbeH_Iksb2fh82s3.js" />
-        <script dangerouslySetInnerHTML={PLAUSIBLE_INIT_SCRIPT} />
       </head>
       <body className="antialiased bg-background text-foreground">
         {children}
