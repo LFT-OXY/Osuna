@@ -122,6 +122,28 @@ describe("daemon relay config", () => {
     expect(loadConfig(hostedHome, { env: {} }).relayUseTls).toBe(true);
   });
 
+  test("defaults to the Osuna hosted relay over TLS and the Osuna web app", async () => {
+    const home = await createOsunaHome({ version: 1, daemon: { relay: {} } });
+    const config = loadConfig(home, { env: {} });
+
+    expect(config.relayEndpoint).toBe("osuna-relay.chinhae.cc:443");
+    expect(config.relayPublicEndpoint).toBe("osuna-relay.chinhae.cc:443");
+    expect(config.relayUseTls).toBe(true);
+    expect(config.relayPublicUseTls).toBe(true);
+    expect(config.appBaseUrl).toBe("https://osuna-app.chinhae.cc");
+  });
+
+  test("does not assume TLS for a self-hosted relay endpoint", async () => {
+    const home = await createOsunaHome({
+      version: 1,
+      daemon: { relay: { endpoint: "relay.example.com:443" } },
+    });
+    const config = loadConfig(home, { env: {} });
+
+    expect(config.relayEndpoint).toBe("relay.example.com:443");
+    expect(config.relayUseTls).toBe(false);
+  });
+
   test("relayPublicUseTls falls back to relayUseTls when unset", async () => {
     const home = await createOsunaHome({ version: 1, daemon: { relay: {} } });
     // Default: both true (hosted relay)
