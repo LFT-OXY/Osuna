@@ -178,7 +178,7 @@ IPs and `localhost` are allowed by default.
 
 - Set `OSUNA_PASSWORD` for any published port or network-reachable deployment.
 - Prefer HTTPS at the reverse proxy for direct browser access.
-- Use the [official Osuna relay](https://github.com/LFT-OXY/Osuna-relay) for
+- Use the [Osuna relay](../public-docs/connectivity.md#osuna-relay) for
   untrusted networks or mobile access when you do not want to expose the daemon
   port directly.
 - The container is the isolation boundary for agents. Agents can read and write
@@ -205,15 +205,15 @@ docker build \
   .
 ```
 
-The Docker workflow builds the image on pull requests and on `main` as a
-non-publishing check. Stable `vX.Y.Z` tag pushes publish
+The Docker workflow builds the image on pushes to `main` as a non-publishing
+check. Stable `vX.Y.Z` tag pushes publish
 `ghcr.io/lft-oxy/osuna:X.Y.Z` and `ghcr.io/lft-oxy/osuna:latest`. Beta tags
 publish only the exact prerelease tag, such as
 `ghcr.io/lft-oxy/osuna:0.1.102-beta.1`, and do not update `latest`.
 
-To replace a Docker image in place without rebuilding desktop, APK, or EAS
-mobile release artifacts, dispatch the Docker workflow manually instead of
-pushing a `v*` release tag:
+To replace a Docker image in place without rebuilding the desktop release
+artifacts, dispatch the Docker workflow manually instead of pushing a `v*`
+release tag:
 
 ```bash
 gh workflow run docker.yml \

@@ -50,12 +50,11 @@ Pick the contribution that matches the request. Each row names the registration,
 
 ## Create the project
 
-Use an absolute path on the daemon machine. `init` writes files but does not install packages.
+Use an absolute path on the daemon machine. `init` writes files and installs nothing. Do not run `npm install`: `@osuna/plugin` and `@osuna/protocol` are not on the npm registry, so it fails. The plugin installs and runs without `node_modules`.
 
 ```bash
 osuna plugin init /absolute/path/to/my-plugin
 cd /absolute/path/to/my-plugin
-npm install
 ```
 
 The generated project contains:
@@ -248,8 +247,8 @@ Before writing imports, classify each module as shared, client, or server. Follo
 [SDK import boundaries](https://osuna.chinhae.cc/docs/plugins/reference.md#runtime-modules), including
 transitive and type dependencies. The root is shared-only; hooks and client contexts belong to
 `@osuna/plugin/client`, server contexts to `/server`, and host UI to `/client/react-native` or `/client/ui`.
-Install dependencies locally for typechecking; Osuna supplies host runtime modules. JSX uses the
-automatic runtime. Do not import `/client/host` from plugin code.
+Osuna supplies host runtime modules. Their type declarations are in `packages/plugin` and
+`packages/protocol` of the Osuna repository. JSX uses the automatic runtime. Do not import `/client/host` from plugin code.
 
 ## Works on mobile
 
@@ -306,7 +305,7 @@ function PullRequestAction() {
 }
 ```
 
-The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because Osuna owns the connection. Consult the current [SDK reference](https://osuna.chinhae.cc/docs/sdk/reference.md) for method details.
+The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because Osuna owns the connection. Its methods are the `OsunaApi` interface in [`packages/client/src/index.ts`](https://github.com/LFT-OXY/Osuna/blob/main/packages/client/src/index.ts); there is no published reference for it.
 
 ### Add daemon-side behavior
 
@@ -590,12 +589,11 @@ Do not edit a local config when the target is a remote daemon. Perform the edit 
 
 When the same sidebar contribution exists on several connected hosts, Osuna shows it once with a host picker. The selected host owns the bundle, SDK calls, RPCs, and query cache. An offline selected host does not fall through to another host. Attachment sources stay scoped to the composer's host.
 
-## Typecheck and manage
+## Install and manage
 
-Always typecheck before install or reload:
+Osuna compiles the plugin on install and reload. There is no local typecheck; compile errors appear in `osuna plugin ls` and `osuna plugin logs <id>`.
 
 ```bash
-npm run typecheck
 osuna plugin install /absolute/path/to/plugin
 osuna plugin install /absolute/path/to/plugin --id another-runtime-id
 osuna plugin add owner/repository              # Git source; append :path for a monorepo subdirectory
@@ -618,11 +616,10 @@ Do not restart the daemon to load source changes. Restarting it can kill the age
 
 After a change:
 
-1. Run `npm run typecheck`.
-2. Install or reload the exact runtime ID.
-3. Run `osuna plugin ls` and require `running` with no error.
-4. Confirm the contribution on the intended host. Open the Command Center with **⌘K** (macOS) or **Ctrl+K** (Windows/Linux). Type `/` in the composer for slash commands. For timeline work, run an agent turn that produces the source item and watch it while it streams, not only after it completes. For UI work, check a wide desktop window and a compact/mobile client, and switch theme to confirm text still uses `foreground` / `foregroundMuted`.
-5. Exercise the changed action or RPC, including its error state.
+1. Install or reload the exact runtime ID.
+2. Run `osuna plugin ls` and require `running` with no error. On a compile error, read `osuna plugin logs <id>`.
+3. Confirm the contribution on the intended host. Open the Command Center with **⌘K** (macOS) or **Ctrl+K** (Windows/Linux). Type `/` in the composer for slash commands. For timeline work, run an agent turn that produces the source item and watch it while it streams, not only after it completes. For UI work, check a wide desktop window and a compact/mobile client, and switch theme to confirm text still uses `foreground` / `foregroundMuted`.
+4. Exercise the changed action or RPC, including its error state.
 
 Common failures:
 

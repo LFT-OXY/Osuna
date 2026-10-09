@@ -18,7 +18,7 @@ Read the [product philosophy](docs/product.md) for the reasoning behind these ch
 
 Most specialized workflows and integrations are better served by plugins.
 
-Plugins let you build what you need, share it, and maintain it independently. Start with the [plugin documentation](https://osuna.chinhae.cc/docs/plugins). For applications and integrations built around Osuna, see the [SDK documentation](https://osuna.chinhae.cc/docs/sdk).
+Plugins let you build what you need, share it, and maintain it independently. Start with the [plugin documentation](https://osuna.chinhae.cc/docs/plugins). Applications and integrations built around Osuna talk to the daemon through the TypeScript client in [`packages/client`](packages/client), which is not published to npm.
 
 If an extension point is missing, describe the workflow in [Discussions](https://github.com/LFT-OXY/Osuna/discussions). A reusable capability that enables several plugins may be a better addition than implementing one particular workflow in core.
 

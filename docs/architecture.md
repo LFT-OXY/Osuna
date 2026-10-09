@@ -171,7 +171,7 @@ Enables remote access when the daemon is behind a firewall.
 - Optional E2EE capability negotiation preserves application frame kind: text plaintext uses base64 ciphertext text frames, while binary plaintext uses raw ciphertext binary frames; mixed-version peers remain base64-only
 - Self-hosted relays opt into TLS with `daemon.relay.useTls` or `OSUNA_RELAY_USE_TLS=true`; the public (client-facing) TLS setting can be overridden independently via `daemon.relay.publicUseTls` or `OSUNA_RELAY_PUBLIC_USE_TLS`
 
-The production relay server lives in [LFT-OXY/Osuna-relay](https://github.com/LFT-OXY/Osuna-relay). It is a distributed Elixir service. The Cloudflare relay implementation in this monorepo is retained as legacy code and is not deployed.
+The production relay is this package deployed as a Cloudflare Worker at `osuna-relay.chinhae.cc`, the daemon's default relay endpoint. `cloudflare-adapter.ts` is the Worker entry: it answers `/health` and hands each `/ws` connection to a `RelayDurableObject` keyed by protocol version and `serverId`. [release.md](release.md#cloudflare-deploys) covers how it deploys.
 
 See [SECURITY.md](../SECURITY.md) for the full threat model.
 

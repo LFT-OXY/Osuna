@@ -25,7 +25,7 @@ Establish two facts:
 
 1. **Where and how the daemon runs**
    - **Desktop-managed:** Osuna Desktop bundles, starts, and updates a daemon on that computer. No separate daemon install is required.
-   - **Standalone:** the daemon was installed separately, commonly through the npm CLI, and runs independently of the desktop app.
+   - **Standalone:** the daemon was built from a source checkout and runs independently of the desktop app. Osuna has no npm package.
    - **Docker:** the daemon, its home, provider CLIs, credentials, and code mounts live in the container runtime.
 2. **How the affected client reaches it**
    - same-machine local connection
@@ -42,7 +42,7 @@ Apply later checks to the daemon runtime, not automatically to the client device
 - Provider binaries, credentials, `PATH`, workspaces, config, and daemon logs live on the daemon machine or inside its container.
 - App version and app logs live on the client device.
 - A desktop-managed daemon follows the Desktop app lifecycle and update path.
-- A standalone daemon follows its own CLI/npm lifecycle and may use a different `OSUNA_HOME` or listen address.
+- A standalone daemon is updated by rebuilding its source checkout and may use a different `OSUNA_HOME` or listen address.
 - A Docker daemon uses container paths, volumes, user permissions, image versions, and container lifecycle commands.
 
 ## Diagnose before changing state

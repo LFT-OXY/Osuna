@@ -46,8 +46,9 @@ than downloading a published desktop release.
 
 `OSUNA_HOME` is the directory that holds runtime state (agents, worktrees, workspace config, sockets, daemon log). Resolution rules:
 
-- The **server itself** (e.g. when launched by the desktop app or `npm run start`) defaults to `~/.osuna` (see `packages/server/src/server/osuna-home.ts`).
-- **Repo dev scripts** default to `$ROOT/.dev/osuna-home`, where `$ROOT` is the current checkout or worktree root. This keeps all dev state scoped to the checkout instead of the packaged desktop app.
+- The **server itself** (e.g. when launched by the desktop app or `npm run start`) defaults to `~/.osuna` (see `packages/server/src/server/osuna-home.ts`). A launch that resolves to this default first moves a 0.14.x data directory into it; see [release.md](release.md#014x-数据迁移). That includes `npm run start` and `node packages/cli/bin/osuna` run without `OSUNA_HOME`.
+- **Repo dev scripts** default to `$ROOT/.dev/osuna-home`, where `$ROOT` is the current checkout or worktree root. This keeps all dev state scoped to the checkout instead of the packaged desktop app. They set `OSUNA_HOME`, so they never migrate.
+- **`npm run dev:server` still writes under `~/.osuna`.** Unless `OSUNA_LOCAL_MODELS_DIR` is set, `scripts/dev-daemon.sh` (and `scripts/dev.ps1` on Windows) creates `~/.osuna/models/local-speech` to share speech models with the installed app. The migration skips when `~/.osuna` exists, so on a machine that still holds un-migrated 0.14.x data, run the installed 1.0.0 app once before the first `npm run dev`, or set `OSUNA_LOCAL_MODELS_DIR`.
 - **`npm run cli -- ...`** runs through the same dev-home wrapper as the dev scripts, so the in-repo CLI automatically targets the current checkout's `.dev/osuna-home` and configured dev daemon endpoint.
 - **Osuna-created worktrees** seed `$OSUNA_WORKTREE_PATH/.dev/osuna-home` from `$OSUNA_SOURCE_CHECKOUT_PATH/.dev/osuna-home` by copying durable JSON metadata. Runtime files like pid files, sockets, and logs are not copied.
 - **This repo's worktree setup** also best-effort seeds `packages/app/ios` and the newest `.dev/ios-build` entry from the source checkout so iOS simulator services can reuse native project and Xcode cache state when it is safe enough to do so.
@@ -66,7 +67,7 @@ OSUNA_DEV_RESET_HOME=1 npm run dev            # clear and reseed the derived wor
 - Root checkout dev daemon: `localhost:6768`.
 - Root checkout Expo: `http://localhost:8081`.
 - Root checkout desktop dev Expo: first free port from `8082` through `8089`.
-- `npm run dev` (Windows): `localhost:6767` for the daemon.
+- Windows dev (`npm run dev:win`): `localhost:6768` for the daemon.
 
 In Osuna-managed worktree services, use the injected service environment rather than hardcoded root checkout ports.
 

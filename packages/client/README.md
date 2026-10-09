@@ -2,9 +2,7 @@
 
 TypeScript SDK for building integrations on top of a Osuna daemon.
 
-```bash
-npm install @osuna/client
-```
+`@osuna/client` is not published to npm. Inside this repository, build it with `npm run build:client`.
 
 ```ts
 import { createOsunaClient } from "@osuna/client";
@@ -26,7 +24,7 @@ await client.close();
 
 The public API is the package root. Imports under `@osuna/client/internal/*` are unsupported implementation details used by Osuna's own packages.
 
-Read the [SDK documentation](https://osuna.chinhae.cc/docs/sdk) for agents, workspaces, terminals, provider discovery, events, recipes, and the API reference. Runnable TypeScript patterns also live in [`examples/`](./examples/README.md).
+The API surface is the `OsunaApi` and `OsunaClient` interfaces in [`src/index.ts`](./src/index.ts); there is no published reference. Runnable TypeScript patterns live in [`examples/`](./examples/README.md).
 
 ## Runtime
 
@@ -36,8 +34,8 @@ Use a WebSocket URL ending in `/ws`, such as `ws://127.0.0.1:6767/ws`. Pass `pas
 
 The client advertises its supported protocol capabilities by default. Optional `capabilities`
 overrides extend or override that declaration; browser hosting must be supplied by the caller.
-Connecting alone does not subscribe to agent timelines or catalog events. See the
-[event guide](https://osuna.chinhae.cc/docs/sdk/events) for subscription lifetimes and timeline replacements.
+Connecting alone does not subscribe to agent timelines or catalog events. See
+[`examples/events-and-timeline.ts`](./examples/events-and-timeline.ts) for subscribing to events and refetching a timeline page.
 
 ## Stability
 

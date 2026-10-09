@@ -2,6 +2,8 @@
 
 All workspaces share one version and release together.
 
+A release is a `vX.Y.Z` tag pushed to `origin`. GitHub Actions builds the desktop apps and the Docker image from the tag and publishes the GitHub Release. Osuna publishes nothing to npm.
+
 ## Two steps
 
 A release has exactly two steps. The agent does the first, the user authorizes the second.
@@ -18,7 +20,8 @@ A release has exactly two steps. The agent does the first, the user authorizes t
 **Go-ahead** (user says "go ahead"):
 
 - commit the approved release inputs locally
-- run the release, which publishes npm and pushes the prepared branch and tag
+- run the release command, which pushes the prepared branch and tag
+- dispatch the Android APK build for the new tag
 - create the release heartbeat immediately and babysit it to completion
 
 Rules that apply to both steps:
@@ -90,47 +93,210 @@ ACP catalog work enters a release through an explicit user request:
 The release authorization covers the requested ACP commit. It ships in the same
 release push as the changelog and version commit.
 
-## Fork 分发（LFT-OXY/Osuna）
+## Two paths
 
-本仓库是 `LFT-OXY/Osuna` 的 fork，桌面端只发给内部小团队。fork 没有 `@osuna`
-的 npm 发布权限，也没有 Apple Developer 账号，因此走这条独立的发版路径。
+There are two supported release paths:
 
-### 发版
+1. **Direct stable release**: you are ready to ship the resolved release source to everyone immediately (default `origin/main`).
+2. **Beta flow**: release candidates on the `beta` channel. Each beta carries its own changelog entry, is published as a GitHub prerelease, and stays behind the Stable/Beta switch on `/download`.
 
-先在 `CHANGELOG.md` 顶部加本次版本的条目，格式是 `## X.Y.Z - YYYY-MM-DD`。再把 `npm run format`、
-`npm run lint`、`npm run typecheck` 跑绿并提交——`version:all:*` 底下是 `npm version`，
-工作区不干净同样会中断。major 不在这条路径里：按本文「Release
-version decision」，agent 不自选 major，需要时手工改版本号再走 `npm run release:push`。
+## Release version decision
+
+Every fresh release starts by classifying the full diff from the previous
+stable to the resolved release source. The highest-impact change determines the
+version:
+
+- **Minor** — a user would experience the release as a significant upgrade. This
+  includes substantial new workflows, providers, forges, platforms, integrations,
+  or meaningful expansions of existing capabilities. Foundational internal work
+  also qualifies when it materially changes reliability, performance,
+  compatibility, deployment, or operation; diff size alone does not.
+- **Patch** — fixes, polish, small enhancements, and reliability or performance
+  improvements within existing capabilities. Follow-up corrections to a minor
+  release are patches.
+
+The release agent selects patch or minor during preparation and presents the
+target version with the changelog for approval. Agents never select a major
+version autonomously. A major release requires an explicit user instruction and
+approval.
+
+Version bumps are never used to retry a failed build. Retry the existing version
+as described in **Fixing a failed release build**.
+
+## Standard release (stable)
+
+Before running any stable release command:
+
+- Make sure the resolved release source passed CI, the approved release inputs are committed locally on the intended branch, and the working tree is clean.
+- **Run `npm run format`, `npm run lint`, and `npm run typecheck` and commit any resulting changes before the release command.** `version:all:*` runs `npm version`, which aborts when the working tree is dirty.
+- Do not use a release command as a substitute for checking whether the current commit is actually ready.
 
 ```bash
-# 二选一，对应本次发布的版本跨度：
+# Run exactly one, matching the approved decision:
 npm run release:fork:patch
 npm run release:fork:minor
 ```
 
-它只做三件事：改所有工作区的版本号、打 tag、把分支和 tag 推到 `origin`。不碰 npm。
-tag 推上去之后由 `Desktop Release` 工作流接管，构建 macOS（arm64 + x64）与 Windows
-（x64 + arm64）产物，上传到 GitHub Release 并在清单齐全后把草稿转正。
+Each one runs `version:all:<bump>` and then `release:push`: it bumps the version in every workspace, commits, tags `vX.Y.Z`, and pushes the branch and the tag to `origin`. The `fork` in the script names dates from when Osuna shipped as a fork. They are the release commands.
 
-`Deploy App`、`Deploy Website`、`Deploy Relay` 依赖上游的 Cloudflare 账号，在 fork 下只保留
-手动触发，推 main、发布 Release 都不会跑它们。工作流文件留着，自建时把触发加回来即可。
+A major release has no wrapper script. After explicit approval, run the two halves yourself:
 
-`Android APK Release` 同样只有手动触发，推 tag 不会跑它：填一个已存在的 tag，签名 APK 会挂到
-对应的 Release 上，见 [android.md](android.md)。
+```bash
+npm run version:all:major && npm run release:push
+```
 
-想先出产物自己试装而不发布：在 Actions 里手动派发 `Desktop Release`，填已存在的
-tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
+Do not run `release:patch`, `release:minor`, `release:major`, `release:promote`, or any `release:beta:*` script. They call `npm publish` before they push.
 
-某个平台构建失败时，收尾作业会在上传清单之前就退出，Release 留在草稿。重跑用
-`desktop-vX.Y.Z` 这类全平台 tag，或手动派发时把 `platform` 留成 `all`：单平台重跑
-只有在该 Release 上已经存在其余平台的清单时才补得齐。
+The push starts these workflows:
+
+| Workflow                                       | Runs on                                                                           | Result                                                                                                                                                      |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Desktop Release`                              | the `v*` tag                                                                      | Builds macOS (arm64, x64) and Windows (x64, arm64), uploads them to a draft GitHub Release, and publishes the draft once every updater manifest is uploaded |
+| `Docker`                                       | the `v*` tag                                                                      | Publishes `ghcr.io/lft-oxy/osuna:X.Y.Z`. A stable tag also moves `latest`; a beta tag publishes only its exact version                                      |
+| `Release Notes Sync`                           | the `v*` tag                                                                      | Mirrors the matching changelog entry into the release body                                                                                                  |
+| `Deploy App`, `Deploy Website`, `Deploy Relay` | the release commit reaching `main`, see [Cloudflare deploys](#cloudflare-deploys) | Redeploys the web app, the website, and the relay                                                                                                           |
+
+`Android APK Release` has no tag trigger. Dispatch it once the tag is on `origin`:
+
+```bash
+gh workflow run "Android APK Release" -f tag=vX.Y.Z
+```
+
+It attaches `osuna-vX.Y.Z-android.apk` to that tag's GitHub Release. [android.md](android.md#release-apk-github-actions) covers the build. There is no iOS build and no store submission.
+
+To build desktop artifacts without publishing them, dispatch `Desktop Release` with an existing tag and `publish` set to `false`. The installers stay in the workflow artifacts.
+
+**Stable means stable.** If the user says "stable" or "ship stable", do not ask whether they want a beta first. They picked stable; treat it as a direct stable release. Only run the beta flow when the user explicitly says "beta".
+
+## Beta flow
+
+```bash
+npm run version:all:beta:patch && npm run release:push   # Start the next patch beta line
+npm run version:all:beta:minor && npm run release:push   # Start the next minor beta line
+# ... test the desktop prerelease assets from GitHub Releases ...
+npm run version:all:beta:next && npm run release:push    # Optional: cut X.Y.Z-beta.2, beta.3, ...
+npm run version:all:promote && npm run release:push      # Promote X.Y.Z-beta.N to stable X.Y.Z
+```
+
+- Beta tags are published GitHub prereleases like `v0.1.41-beta.1`
+- Betas publish desktop assets and a Docker image under the exact version tag. Dispatch `Android APK Release` for the beta tag when testers need an APK.
+- `version:all:promote` creates a fresh stable tag like `v0.1.41`; the final release never reuses the beta tag
+- Desktop assets now come from the Electron package at `packages/desktop`
+- The Linux artifact CI checks with both restricted and usable user namespaces run on pull requests that touch `packages/desktop`; see [packaged desktop smoke](testing.md#packaged-desktop-smoke). Keep the installed-package and AppImage checks together. They do not gate publication: the release workflow builds no Linux artifacts (see [加回 Linux](#加回-linux)).
+- Beta releases use Electron's `beta` update channel. Users on the stable channel only receive stable releases; users on the beta channel receive beta releases and the final stable release when it is published.
+- **Each beta carries its own changelog entry.** `Release Notes Sync` mirrors the matching `## X.Y.Z-beta.N` entry into that prerelease body. Promotion collapses every beta entry for the version into one final stable entry. See the Changelog policy section.
+
+Use the beta path when you need to:
+
+- smoke a build yourself before promoting it to everyone
+- test a build manually in a Windows VM
+- send a build to a user who is hitting a specific problem
+- iterate on `beta.1`, `beta.2`, `beta.3`, and so on before deciding to ship broadly
+
+## Staged rollout (stable channel)
+
+Stable desktop releases go out via a linear time-based rollout for automatic update checks: 0% admitted when the updater manifests appear, 100% admitted 36 hours later, linear ramp in between. Manual checks bypass the rollout so a user can install immediately when they click **Check**. Beta releases bypass the rollout entirely — beta users always receive updates immediately.
+
+The rollout is driven by a `rolloutHours` field stamped into the GitHub Release manifests (`latest-mac.yml`, `latest.yml`) by the `finalize-rollout` job in `desktop-release.yml`.
+
+Desktop release builds now publish in two phases:
+
+- The GitHub Release stays a draft while platform build jobs upload the installers (`.dmg`, `.zip`, `.exe`).
+- The final job merges and stamps every channel manifest, uploads them with the final `releaseDate` and `rolloutHours`, then publishes the GitHub Release.
+
+Drafts do not appear in GitHub's releases feed. Updater clients continue to see the previous complete release until every manifest named by `DESKTOP_RELEASE_PLATFORMS` is available. If a desktop build or manifest upload fails, the new release stays a draft.
+
+### Default behavior
+
+`npm run release:fork:patch` or `npm run release:fork:minor` → tag push → 36h ramp. No extra action needed.
+
+The `rollout_hours` input on `desktop-release.yml` is **only read on `workflow_dispatch`** — tag-push runs always default to 36. To get any other rollout duration on a fresh release, use the post-publish flip below.
+
+### Instant-admit release (rollout_hours=0 from publish)
+
+For a fresh release that should admit everyone immediately (low-risk change, doc-only, hotfix, or just a release you want out fast), cut the release normally and queue the rollout flip immediately after:
+
+```bash
+# 1. Cut and publish (default 36h ramp from tag push).
+npm run release:fork:patch
+
+# 2. Immediately queue the flip — runs as soon as finalize-rollout completes.
+gh workflow run desktop-rollout.yml \
+  -f tag=v0.1.64 \
+  -f rollout_hours=0
+```
+
+**Why this is gap-free:** `desktop-release.yml`'s `finalize-rollout` job and `desktop-rollout.yml` share the concurrency group `desktop-rollout-<tag>`. Dispatching `desktop-rollout.yml` while the tag-push pipeline is still running queues it safely behind `finalize-rollout`. The first public manifests already carry `rolloutHours=36`, then `desktop-rollout.yml` flips them to `rolloutHours=0` shortly afterward. The renderer polls every 30 minutes, so active stable users pick up the new manifest on their next check.
+
+Run the dispatch right after `release:fork:patch` or `release:fork:minor` returns. Don't wait for the tag-push CI to finish.
+
+### Adjusting an already-published release
+
+To change the rollout duration on a release that's already shipped — e.g. flip a hotfix to instant admit, or slow a release down — use the dedicated `desktop-rollout.yml` workflow. It edits the manifests in place on the GitHub release without rebuilding anything. It only rewrites `rolloutHours`; `releaseDate` is preserved, so the rollout clock keeps ticking from the original publish time.
+
+**Hotfix (instant admit) on an already-shipped release:**
+
+```bash
+gh workflow run desktop-rollout.yml \
+  -f tag=v0.1.42 \
+  -f rollout_hours=0
+```
+
+`rollout_hours=0` admits 100% of stable users on their next update check (within ~30 min for active clients).
+
+**Slow a rollout down** (e.g. extend total duration to 72h since the original release):
+
+```bash
+gh workflow run desktop-rollout.yml \
+  -f tag=v0.1.42 \
+  -f rollout_hours=72
+```
+
+`rollout_hours` is **total duration since the original release date**, not "extend by N more hours from now." If `v0.1.42` was published 2h ago and you set `rollout_hours=72`, the ramp finishes 70h from now.
+
+The dispatch is idempotent and shares the `desktop-rollout-<tag>` concurrency group with `desktop-release.yml`'s `finalize-rollout` job, so it serializes safely against an in-flight tag-push pipeline targeting the same release.
+
+### Custom ramp on a manually-dispatched build
+
+`desktop-release.yml` accepts `rollout_hours` only on `workflow_dispatch`, which is the path used to **rebuild an existing tag** (retry a failed release, force a rebuild on a different ref). When you go that route, you can stamp a non-default ramp directly:
+
+```bash
+gh workflow run desktop-release.yml \
+  -f tag=v0.1.43 \
+  -f rollout_hours=6
+```
+
+This does **not** apply to fresh releases cut via `npm run release:fork:patch` or `npm run release:fork:minor` — those paths always tag-push and stamp 36. For a fresh release with a custom ramp, cut normally and then dispatch `desktop-rollout.yml` (same pattern as the instant-admit flow above, with your chosen `rollout_hours`).
+
+### Releasing during an active rollout
+
+If you ship N+1 while N is still ramping, N+1 starts a fresh rollout from its own publish timestamp. N's rollout effectively ends — the newer manifest supersedes it. Rollout-aware clients revalidate the manifest for up to five seconds before installing a downloaded update on quit. If N+1 has replaced N but the client is not admitted to N+1 yet, it skips the downloaded N and waits rather than installing two updates in succession. If revalidation times out, the app exits without installing the cached update.
+
+If N+1 is a hotfix for a bug in N, dispatch `desktop-rollout.yml -f tag=v0.1.<N+1> -f rollout_hours=0` after N+1 publishes so the users who already got N reach the fix fast.
+
+### macOS system floor
+
+The desktop app requires macOS 13 or newer. Keep both release guards when the floor changes:
+
+- `packages/desktop/electron-builder.yml` writes the macOS version to `LSMinimumSystemVersion` for new installs.
+- `scripts/merge-mac-manifest.mjs` writes the matching Darwin kernel version to `minimumSystemVersion` in the update manifest. Existing clients check this before downloading an update.
+
+macOS 13 maps to Darwin 22. The two values use different version domains; do not copy the macOS version into the update manifest.
+
+### Limitations
+
+- **No pause / kill switch.** To stop new admissions, ship a superseding release. Clients revalidate on quit and will not install the superseded download, but a client that already completed installation cannot be recalled; ship a hotfix `+1` patch.
+- **No rollback.** `allowDowngrade = false`. Bad release = ship a hotfix. The one manual way back is from 1.0.0 to 0.14.x, see [回滚到 0.14.x](#回滚到-014x).
+- **Bootstrap caveat.** Clients running a build older than the rollout feature ignore `rolloutHours` and admit immediately. Rollout protection only applies to clients running the rollout-aware version or later.
+- **Up to ~30 min automatic admission latency.** Renderer polls every 30 minutes, so a stable user may take up to that long to be evaluated against the rollout window. Clicking **Check** is manual and bypasses rollout admission.
+
+## 分发细节
 
 ### 更新源
 
 `packages/desktop/electron-builder.yml` 的 `publish` 段指向 `LFT-OXY/Osuna`。
-electron-builder 把它烘进安装包内的 `app-update.yml`，客户端据此查更新。**从上游
-同步代码时必须保住这个值**——指回 `LFT-OXY/Osuna` 会让团队成员被静默升级成官方版，
-二次开发的功能全部消失，而且没有任何提示。
+electron-builder 把它烘进安装包内的 `app-update.yml`，客户端据此查更新。改这个值会改变
+此后每个安装包查更新的地址。
 
 ### macOS 签名证书
 
@@ -179,7 +345,7 @@ GitHub Release 上的 APK 用一把长期固定的 PKCS12 keystore 签名。Andr
 
 ### macOS 首次打开
 
-包用自签名证书签名，但没有公证。团队成员把应用拖进「应用程序」后首次打开会被
+包用自签名证书签名，但没有公证。用户把应用拖进「应用程序」后首次打开会被
 Gatekeeper 拦住，提示「无法验证开发者」或「已损坏，无法打开」。按顺序试：
 
 1. 在「应用程序」里右键点 Osuna → 打开 → 在弹窗里再点一次「打开」。
@@ -229,285 +395,52 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 对账循环只遍历 `DESKTOP_RELEASE_PLATFORMS`。要清就手动 `gh release delete-asset`。
 本仓库 `v0.8.1-beta.1` 上就留着一份 `beta-linux.yml`。
 
-## Two paths
+## 0.14.x 数据迁移
 
-> 本仓库是 fork，内部分发走 **Fork 分发（LFT-OXY/Osuna）**，不走本节。以下是上游的
-> 发布路径，需要 `@osuna` 的 npm 发布权限。
+1.0.0 首次启动时把 0.14.x 的数据搬到新名字下。成功不提示，每层只记一条 info 日志。
 
-There are two supported release paths:
+- 读旧布局的代码都带同一个标签：`COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first`。期限比[默认的六个月](protocol-compatibility.md#every-shim-is-tagged-and-dated)长，因为迁的是用户数据。
+- **daemon home**：`~/.paseo` 改名为 `~/.osuna`，原位留符号链接（Windows 用 junction）。代码在 `packages/server/src/server/legacy-home-migration.ts`，由拉起 daemon 的一方在读 home 之前调用：CLI 的本地命令、桌面端启动 daemon 之前、直接启动的 supervisor。daemon 进程自己不迁移。设了 `OSUNA_HOME` 或传了 `--home` 时跳过。
+- **Electron userData**：appData 下的 `Paseo` 目录改名为 `Osuna`，不留链接。代码在 `packages/desktop/src/settings/user-data-migration.ts`，调用点在 `main.ts` 写第一条日志之前。
+- **渲染层存储**：`paseo://app` 这个 origin 的 localStorage 与 IndexedDB 导入 `osuna://app`，旧 origin 不清空。代码在 `packages/desktop/src/settings/renderer-origin-migration/`，完成标记是 `desktop-settings.json` 的 `migrations.legacyRendererOriginImported`。
+- 残留的 `PASEO_*` 环境变量不生效，daemon 与 CLI 启动时逐个点名：`packages/server/src/server/legacy-env.ts`。
+- 迁移测试用的旧版样本在 `packages/desktop/e2e/fixtures/legacy-paseo/`。
+- 清理：`rg "COMPAT\(paseoDataMigration"` 列出全部位置。到期后把这些代码、上面的样本目录、`scripts/rename-guard.mjs` 里放行这个标签的规则一起删掉。
 
-1. **Direct stable release**: you are ready to ship the resolved release source to everyone immediately (default `origin/main`).
-2. **Beta flow**: release candidates on the `beta` channel. Each beta carries its own changelog entry, publishes npm only on the explicit `beta` dist-tag, and stays behind the Stable/Beta switch on `/download`.
+到期只删代码。旧 home 路径上的链接是用户数据，留在磁盘上：工作区记录、git worktree 的
+`gitdir` 指针和 `agents/` 目录名都还指着旧路径。删掉迁移代码的那个版本要在发布说明里写明：
+还停在 0.14.x 的用户须先升到带迁移的 1.x 版本。
 
-Osuna has one linear release track even though npm dist-tags are independent
-pointers. The npm invariant is:
+排查用户报告时要知道的两点：
 
-- A beta release moves only `beta`; `latest` remains on the newest stable.
-- A stable release moves both `latest` and `beta` to that stable version. This
-  keeps users who install `@osuna/cli@beta` on the newest Osuna release after
-  a beta is promoted or superseded by a direct stable release.
+- home 改名失败（比如跨分区）时退回复制。复制成功后旧目录原样留着，不建链接，已记录的
+  worktree 路径仍指向旧目录里的那一份。
+- userData 搬不动时 macOS 与 Windows 弹错误框后退出。Linux 没有错误框，只写 stderr。
 
-## Release version decision
+### 回滚到 0.14.x
 
-Every fresh release starts by classifying the full diff from the previous
-stable to the resolved release source. The highest-impact change determines the
-version:
+回滚是整版退回：桌面端连同它自带的 daemon 一起换回 0.14.x。更新器不降级
+（`allowDowngrade = false`），所以是用户从 Release 页下载 0.14.x 的安装包覆盖安装。
 
-- **Minor** — a user would experience the release as a significant upgrade. This
-  includes substantial new workflows, providers, forges, platforms, integrations,
-  or meaningful expansions of existing capabilities. Foundational internal work
-  also qualifies when it materially changes reliability, performance,
-  compatibility, deployment, or operation; diff size alone does not.
-- **Patch** — fixes, polish, small enhancements, and reliability or performance
-  improvements within existing capabilities. Follow-up corrections to a minor
-  release are patches.
+1. 退出 Osuna，用 `osuna daemon status` 确认 daemon 已停。两个版本的 pid 锁文件名不同，
+   互相看不见，同时运行会一起写同一个 home。
+2. 要带回主机列表与设置，在第一次打开 0.14.x 之前把 userData 目录改回上面列的旧名。
+   它在 macOS 的 `~/Library/Application Support/Osuna`、Windows 的 `%APPDATA%\Osuna`、
+   Linux 的 `~/.config/Osuna`。不改回去，0.14.x 以空的主机列表和默认设置启动。
+3. 安装并打开 0.14.x。
 
-The release agent selects patch or minor during preparation and presents the
-target version with the changelog for approval. Agents never select a major
-version autonomously. A major release requires an explicit user instruction and
-approval; Osuna remains on major version zero until that deliberate decision.
+回去之后能看到什么：
 
-Version bumps are never used to retry a failed build. Retry the existing version
-as described in **Fixing a failed release build**.
-
-## Standard release (stable)
-
-Before running any stable release command:
-
-- Make sure the resolved release source passed CI, the approved release inputs are committed locally on the intended branch, and the working tree is clean.
-- **Run `npm run format`, `npm run lint`, and `npm run typecheck` and commit any resulting changes BEFORE you start any `release:*` command.** `release:check` runs `npm install --workspaces --include-workspace-root` as part of `release:prepare`, which can mutate `package-lock.json` (e.g. churning `"dev": true` markers on optional deps). The next step, `version:all:*`, runs `npm version` which aborts when the working tree is dirty. If this happens mid-flight you have to commit the lockfile churn before retrying — and the pre-commit format hook will reject a lockfile-only commit because oxfmt internally skips `package-lock.json` while lefthook's glob still matches it. Avoid the whole mess by running format/lint/typecheck first, then `release:prepare` once on its own to absorb any lockfile churn into a normal commit, then start the release.
-- Do not use a release command as a substitute for checking whether the current commit is actually ready.
-
-```bash
-# Run exactly one, matching the approved decision:
-npm run release:patch
-npm run release:minor
-```
-
-This bumps the version across all workspaces, runs checks, publishes to npm, and pushes the branch + tag. The tag push triggers `Desktop Release`, `Android APK Release`, `Docker`, and `Release Notes Sync` on GitHub Actions. The workflows create the GitHub Release as a draft while builds and release-note sync run. EAS picks up the same tag via the EAS GitHub app and starts the iOS + Android store builds in parallel (see "Mobile builds (EAS)" below) — there is no mobile-release workflow under `.github/workflows`.
-
-After the stable release succeeds, move npm's `beta` pointer to the new stable
-version for every published package. This changes dist-tags only; do not
-republish the packages:
-
-```bash
-OSUNA_VERSION=$(node -p "require('./package.json').version")
-for package in highlight relay protocol client plugin server cli; do
-  npm dist-tag add "@osuna/$package@$OSUNA_VERSION" beta
-done
-```
-
-Verify both npm tags now resolve to `OSUNA_VERSION` before considering the
-stable release complete.
-
-The Docker workflow builds images from the checked-out source tree on pull requests and on `main` as non-publishing checks. Stable `vX.Y.Z` tag pushes publish `ghcr.io/lft-oxy/osuna:X.Y.Z` and `ghcr.io/lft-oxy/osuna:latest`; beta `vX.Y.Z-beta.N` tag pushes publish only `ghcr.io/lft-oxy/osuna:X.Y.Z-beta.N` and never move `latest`.
-
-The production relay is the Elixir service in [LFT-OXY/Osuna-relay](https://github.com/LFT-OXY/Osuna-relay), with its own deployment process. Osuna releases and pushes to this repository do not deploy it. The Cloudflare relay code and workflow in this repository are legacy and are not used in production.
-
-**Stable means stable.** If the user says "stable" or "ship stable", do not ask whether they want a beta first. They picked stable; treat it as a direct stable release. Only run the beta flow when the user explicitly says "beta".
-
-## Manual step-by-step
-
-```bash
-npm run typecheck            # Verify the exact commit you intend to release
-npm run release:check        # Typecheck, build, dry-run pack
-# Run exactly one approved version command:
-npm run version:all:patch
-npm run version:all:minor
-npm run release:publish      # Publish to npm
-npm run release:push         # Push HEAD + tag (triggers CI workflows)
-# Then move npm's beta dist-tag to this stable version using the command above.
-```
-
-## Beta flow
-
-```bash
-npm run release:beta:patch       # Start the next patch beta line
-npm run release:beta:minor       # Start the next minor beta line
-# ... test desktop and APK prerelease assets from GitHub Releases ...
-npm run release:beta:next        # Optional: cut X.Y.Z-beta.2, beta.3, ...
-npm run release:promote          # Promote X.Y.Z-beta.N to stable X.Y.Z
-```
-
-- Beta tags are published GitHub prereleases like `v0.1.41-beta.1`
-- Betas publish npm packages with `--tag beta`, so `npm install @osuna/cli@beta` opts in while plain `npm install @osuna/cli` stays on `latest`
-- Betas publish desktop assets and APKs for testing. They also build iOS, upload it to TestFlight, add it to the `Osuna Beta` external group, and submit it for Beta App Review. They do not submit mobile builds to the production stores.
-- `release:promote` creates a fresh stable tag like `v0.1.41`; the final release never reuses the beta tag
-- Desktop assets now come from the Electron package at `packages/desktop`
-- The Linux artifact CI checks with both restricted and usable user namespaces run on pull requests that touch `packages/desktop`; see [packaged desktop smoke](testing.md#packaged-desktop-smoke). Keep the installed-package and AppImage checks together. They no longer gate publication: this fork ships no Linux artifacts.
-- Beta releases use Electron's `beta` update channel. Users on the stable channel only receive stable releases; users on the beta channel receive beta releases and the final stable release when it is published.
-- **Each beta carries its own changelog entry.** `Release Notes Sync` mirrors the matching `## X.Y.Z-beta.N` entry into that prerelease body. Promotion collapses every beta entry for the version into one final stable entry. See the Changelog policy section.
-
-Use the beta path when you need to:
-
-- smoke a build yourself before promoting it to everyone
-- test a build manually in a Linux or Windows VM
-- send a build to a user who is hitting a specific problem
-- iterate on `beta.1`, `beta.2`, `beta.3`, and so on before deciding to ship broadly
-
-## Staged rollout (stable channel)
-
-Stable desktop releases go out via a linear time-based rollout for automatic update checks: 0% admitted when the updater manifests appear, 100% admitted 36 hours later, linear ramp in between. Manual checks bypass the rollout so a user can install immediately when they click **Check**. Beta releases bypass the rollout entirely — beta users always receive updates immediately.
-
-The rollout is driven by a `rolloutHours` field stamped into the GitHub Release manifests (`latest-mac.yml`, `latest.yml`) by the `finalize-rollout` job in `desktop-release.yml`.
-
-Desktop release builds now publish in two phases:
-
-- The GitHub Release stays a draft while platform build jobs upload the installers/packages (`.dmg`, `.zip`, `.exe`, `.AppImage`, etc.).
-- The final job merges and stamps every channel manifest, uploads them with the final `releaseDate` and `rolloutHours`, then publishes the GitHub Release.
-
-Drafts do not appear in GitHub's releases feed. Updater clients continue to see the previous complete release until every manifest named by `DESKTOP_RELEASE_PLATFORMS` is available. If a desktop build or manifest upload fails, the new release stays a draft.
-
-### Default behavior
-
-`npm run release:patch` or `npm run release:minor` → tag push → 36h ramp. No extra action needed.
-
-The `rollout_hours` input on `desktop-release.yml` is **only read on `workflow_dispatch`** — tag-push runs always default to 36. To get any other rollout duration on a fresh release, use the post-publish flip below.
-
-### Instant-admit release (rollout_hours=0 from publish)
-
-For a fresh release that should admit everyone immediately (low-risk change, doc-only, hotfix, or just a release you want out fast), cut the release normally and queue the rollout flip immediately after:
-
-```bash
-# 1. Cut and publish (default 36h ramp from tag push).
-npm run release:patch
-
-# 2. Immediately queue the flip — runs as soon as finalize-rollout completes.
-gh workflow run desktop-rollout.yml \
-  -f tag=v0.1.64 \
-  -f rollout_hours=0
-```
-
-**Why this is gap-free:** `desktop-release.yml`'s `finalize-rollout` job and `desktop-rollout.yml` share the concurrency group `desktop-rollout-<tag>`. Dispatching `desktop-rollout.yml` while the tag-push pipeline is still running queues it safely behind `finalize-rollout`. The first public manifests already carry `rolloutHours=36`, then `desktop-rollout.yml` flips them to `rolloutHours=0` shortly afterward. The renderer polls every 30 minutes, so active stable users pick up the new manifest on their next check.
-
-Run the dispatch right after `release:patch` or `release:minor` returns. Don't wait for the tag-push CI to finish.
-
-### Adjusting an already-published release
-
-To change the rollout duration on a release that's already shipped — e.g. flip a hotfix to instant admit, or slow a release down — use the dedicated `desktop-rollout.yml` workflow. It edits the manifests in place on the GitHub release without rebuilding anything. It only rewrites `rolloutHours`; `releaseDate` is preserved, so the rollout clock keeps ticking from the original publish time.
-
-**Hotfix (instant admit) on an already-shipped release:**
-
-```bash
-gh workflow run desktop-rollout.yml \
-  -f tag=v0.1.42 \
-  -f rollout_hours=0
-```
-
-`rollout_hours=0` admits 100% of stable users on their next update check (within ~30 min for active clients).
-
-**Slow a rollout down** (e.g. extend total duration to 72h since the original release):
-
-```bash
-gh workflow run desktop-rollout.yml \
-  -f tag=v0.1.42 \
-  -f rollout_hours=72
-```
-
-`rollout_hours` is **total duration since the original release date**, not "extend by N more hours from now." If `v0.1.42` was published 2h ago and you set `rollout_hours=72`, the ramp finishes 70h from now.
-
-The dispatch is idempotent and shares the `desktop-rollout-<tag>` concurrency group with `desktop-release.yml`'s `finalize-rollout` job, so it serializes safely against an in-flight tag-push pipeline targeting the same release.
-
-### Custom ramp on a manually-dispatched build
-
-`desktop-release.yml` accepts `rollout_hours` only on `workflow_dispatch`, which is the path used to **rebuild an existing tag** (retry a failed release, force a rebuild on a different ref). When you go that route, you can stamp a non-default ramp directly:
-
-```bash
-gh workflow run desktop-release.yml \
-  -f tag=v0.1.43 \
-  -f rollout_hours=6
-```
-
-This does **not** apply to fresh releases cut via `npm run release:patch` or `npm run release:minor` — those paths always tag-push and stamp 36. For a fresh release with a custom ramp, cut normally and then dispatch `desktop-rollout.yml` (same pattern as the instant-admit flow above, with your chosen `rollout_hours`).
-
-### Releasing during an active rollout
-
-If you ship N+1 while N is still ramping, N+1 starts a fresh rollout from its own publish timestamp. N's rollout effectively ends — the newer manifest supersedes it. Rollout-aware clients revalidate the manifest for up to five seconds before installing a downloaded update on quit. If N+1 has replaced N but the client is not admitted to N+1 yet, it skips the downloaded N and waits rather than installing two updates in succession. If revalidation times out, the app exits without installing the cached update.
-
-If N+1 is a hotfix for a bug in N, dispatch `desktop-rollout.yml -f tag=v0.1.<N+1> -f rollout_hours=0` after N+1 publishes so the users who already got N reach the fix fast.
-
-### macOS system floor
-
-The desktop app requires macOS 13 or newer. Keep both release guards when the floor changes:
-
-- `packages/desktop/electron-builder.yml` writes the macOS version to `LSMinimumSystemVersion` for new installs.
-- `scripts/merge-mac-manifest.mjs` writes the matching Darwin kernel version to `minimumSystemVersion` in the update manifest. Existing clients check this before downloading an update.
-
-macOS 13 maps to Darwin 22. The two values use different version domains; do not copy the macOS version into the update manifest.
-
-### Limitations
-
-- **No pause / kill switch.** To stop new admissions, ship a superseding release. Clients revalidate on quit and will not install the superseded download, but a client that already completed installation cannot be recalled; ship a hotfix `+1` patch.
-- **No rollback.** `allowDowngrade = false`. Bad release = ship a hotfix.
-- **Bootstrap caveat.** Clients running a build older than the rollout feature ignore `rolloutHours` and admit immediately. Rollout protection only applies to clients running the rollout-aware version or later.
-- **Up to ~30 min automatic admission latency.** Renderer polls every 30 minutes, so a stable user may take up to that long to be evaluated against the rollout window. Clicking **Check** is manual and bypasses rollout admission.
-
-## Mobile builds (EAS)
-
-iOS and Android store builds are not in `.github/workflows`. They are triggered by the EAS GitHub app the moment the `v*` tag is pushed:
-
-- **Android (Play Store)** — EAS builds with profile `production` and auto-submits to the Play Store via `eas submit` (EAS-managed credentials, no Fastlane).
-- **iOS (TestFlight + App Store)** — EAS builds with profile `production`, uploads to TestFlight, and a Fastlane lane submits the build for App Store review.
-- **Android APK (GitHub Release asset)** — separate, via `.github/workflows/android-apk-release.yml`. This is the only Android-related workflow that lives in this repo.
-
-EAS uses the local app version source. `packages/app/app.config.js` derives the native version from the package version. Android `versionCode` is `major * 1_000_000 + minor * 1_000 + patch`. iOS reserves 1,000 build slots per app version: beta `N` uses slot `N`, and stable uses slot `999`. For example, `0.2.6-beta.2` appears in App Store Connect as version `0.2.6` build `2006002`; stable uses build `2006999`. Rebuilding the same tag produces the same native build number; if a store has already accepted a binary and you need a different binary, cut the next beta or patch instead of relying on EAS remote auto-increment.
-
-Beta tags run `Release iOS Beta`. The workflow uploads the build to TestFlight, distributes it to the persistent `Osuna Beta` external group, and submits it for Beta App Review. Testers and the group are managed once in App Store Connect; releases require no dashboard action.
-
-There is no mobile-release workflow under `.github/workflows`. The EAS GitHub app reads the workflows under `packages/app/.eas/workflows` and handles tag triggering directly.
-
-### Watching mobile builds from the terminal
-
-Use the EAS CLI from `packages/app/`:
-
-```bash
-cd packages/app
-
-# Recent builds (newest first). Pipe to jq for status only.
-npx eas build:list --limit 8 --non-interactive --json | jq '.[] | {platform, status, appVersion, gitCommitHash}'
-
-# Recent EAS workflow runs. This is the source of truth for submit/review jobs.
-npx eas workflow:runs --json | jq '.[] | {status, workflowName, trigger, gitCommitHash, startedAt, finishedAt}'
-
-# Filter by platform.
-npx eas build:list --platform ios --limit 5 --non-interactive --json
-npx eas build:list --platform android --limit 5 --non-interactive --json
-
-# Inspect a specific build.
-npx eas build:view <build-id>
-
-# Inspect the full release workflow, including submit_ios, submit_android,
-# and submit_ios_for_review.
-npx eas workflow:view <workflow-run-id> --json
-
-# Read failed submit/review job logs.
-npx eas workflow:logs <workflow-job-id> --all-steps --non-interactive
-
-# Stream logs for a build.
-npx eas build:view <build-id> --json | jq '.logFiles[]'
-```
-
-A build's `gitCommitHash` must match the release tag commit. `status` walks through `NEW` → `IN_QUEUE` → `IN_PROGRESS` → `FINISHED` (or `ERRORED`/`CANCELED`). The EAS workflow run's `gitCommitHash` and `trigger` must also match the release tag.
-
-Once a build is `FINISHED`, EAS still has release-critical work to do: Android must submit to the Play Store, and iOS must upload to TestFlight **and** submit the build for App Store review. The release is not done until all platforms are on their way through the stores.
-
-For the `Release Mobile` EAS workflow, these jobs must pass:
-
-- `build_ios` — iOS binary built
-- `submit_ios` — iOS binary uploaded to App Store Connect/TestFlight
-- `submit_ios_for_review` — iOS build submitted for App Store review via Fastlane
-- `build_android` — Android store binary built
-- `submit_android` — Android binary submitted to the Play Store
-
-Do not treat `build_ios: SUCCESS` or `submit_ios: SUCCESS` as a completed iOS release. `submit_ios_for_review: FAILURE` means the iOS release is blocked even if the build is visible in TestFlight.
-
-To confirm the submission landed, inspect the EAS workflow with `npx eas workflow:view <workflow-run-id> --json`. App Store Connect (review state for the matching version/build) and the Play Console track are the final ground truth.
+- **daemon 数据**：0.14.x 经旧 home 路径上的链接读写同一份数据，不用任何操作。走了复制
+  回退的机器没有链接，0.14.x 看到的是升级那一刻的旧目录。
+- **渲染层存储**：旧 origin 的数据停在升级那一刻。1.0.0 里新加的主机、改过的设置和草稿
+  写在新 origin，0.14.x 读不到。
 
 ## Release completion and heartbeat
 
-A release is **in progress** after npm publication and tag push. Report it as
-**shipped** only after every applicable build, publication, asset, manifest, and
-store submission passes the completion checklist.
+A release is **in progress** after the tag push. Report it as **shipped** only
+after every applicable build, publication, asset, and manifest passes the
+completion checklist.
 
 Immediately after every beta, stable, or promotion tag push, create a heartbeat
 that resumes the release in the current conversation. Create it automatically
@@ -515,18 +448,15 @@ with `create_heartbeat`. The heartbeat owns the release until it either reaches
 the completion checklist or finds a failure that needs new user authority.
 
 Each heartbeat checks the release tag commit, all GitHub Actions runs for the
-release branch and tag, npm dist-tags, the GitHub Release body and assets,
-desktop updater manifests, the published Docker image, and the applicable EAS
-workflow. Inspect the GitHub Release itself and confirm that the macOS, Windows,
+release branch and tag, the dispatched `Android APK Release` run, the GitHub
+Release body and assets, desktop updater manifests, and the published Docker
+image. Inspect the GitHub Release itself and confirm that the macOS, Windows,
 and Android APK assets are present along with the channel manifests
 (`latest-mac.yml` and `latest.yml` for stable; `beta-mac.yml` and `beta.yml` for
 beta).
 
-For stable releases, also confirm every required mobile build, upload, store
-submission, and review-submission job for the release commit. For betas, confirm
-the beta EAS workflow completed its TestFlight distribution and Beta App Review
-path. Delete the heartbeat only after every applicable checklist item passes,
-then report the release as shipped.
+Delete the heartbeat only after every applicable checklist item passes, then
+report the release as shipped.
 
 Pattern:
 
@@ -538,7 +468,7 @@ Pattern:
   "timezone": "UTC",
   "maxRuns": 120,
   "expiresIn": "24h",
-  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check npm tags; every GitHub Actions run for the release branch and tag; the published GitHub Release body, expected desktop/APK assets, and channel manifests; the Docker image; and the matching EAS workflow. Completion requires every applicable checklist item. For stable, require build_ios, submit_ios, submit_ios_for_review, build_android, and submit_android to succeed. For beta, require the beta TestFlight distribution and Beta App Review path. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
+  "prompt": "Resume the vX.Y.Z release babysit for commit <sha>. Check every GitHub Actions run for the release branch and tag, including the dispatched Android APK Release run; the published GitHub Release body, expected desktop/APK assets, and channel manifests; and the Docker image. Completion requires every applicable checklist item. If work is pending, wait for the next heartbeat. If a failure can be retried safely for the same version, follow the failed-release procedure; otherwise report the blocker. When every applicable completion-checklist item passes, delete THIS heartbeat, report shipped, and stop.",
 }
 ```
 
@@ -549,15 +479,31 @@ later transitions and stops itself when the release is complete.
 
 The GitHub Release body is populated automatically by the `Release Notes Sync` workflow (`.github/workflows/release-notes-sync.yml`). It triggers on every `v*` tag push and on any push to `main` that touches `CHANGELOG.md`, then runs `scripts/sync-release-notes-from-changelog.mjs` to mirror the matching changelog entry into the release body. You don't need to write release notes on GitHub manually — keep `CHANGELOG.md` correct and the workflow will sync it. To force a re-sync, dispatch the workflow with the tag input.
 
+## Cloudflare deploys
+
+The relay, the web app, and the website deploy from `main`, not from release tags.
+
+| Workflow         | Deploys                                                                         | Runs on pushes to `main` that touch                                                             |
+| ---------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `Deploy Relay`   | Worker `osuna-relay` at `osuna-relay.chinhae.cc`. This is the production relay. | `packages/relay/**`                                                                             |
+| `Deploy App`     | Pages project `osuna-app`, the web app at `osuna-app.chinhae.cc`                | `packages/app/**`, the workspace packages bundled into it, the root package files, `patches/**` |
+| `Deploy Website` | Worker `osuna-website` at `osuna.chinhae.cc`                                    | `CHANGELOG.md`, `public-docs/**`, `packages/website/**`, the root package files, `patches/**`   |
+
+Each one also runs when its own workflow file changes and on manual dispatch. `Deploy Website` additionally subscribes to `release: published` and skips prereleases.
+
+All three read the `CLOUDFLARE_API_TOKEN` secret and the `CLOUDFLARE_ACCOUNT_ID` repository variable. The account id is a variable because `wrangler.toml` already carries it in the clear.
+
+A release commit bumps the version in every workspace `package.json`, so pushing one to `main` runs all three, relay included.
+
 ## Website behavior
 
 - The website download page defaults to GitHub's latest published **stable** release.
 - A published beta prerelease is offered behind the Stable/Beta switch on `/download` (`?channel=beta`), never as the default. The switch only appears while the newest prerelease leads stable on its core version, so promoting `X.Y.Z-beta.N` to `X.Y.Z` retires the beta channel from the page until the next beta line opens.
-- Homebrew, the Play Store, the App Store, and `osuna-app.chinhae.cc` have no beta. The Beta view drops those rows, and the whole Web section, rather than showing an inert "stable only" placeholder. When a surface gains a beta path — say a public TestFlight link — add its row back in `packages/website/src/routes/download.tsx`.
+- The web app at `osuna-app.chinhae.cc` has no beta. The Beta view drops the whole Web section rather than showing an inert "stable only" placeholder.
 - The default download target only moves when you publish the final stable release tag like `v0.1.41`.
 - The public `/changelog` page renders `CHANGELOG.md` as-is, so the in-flight `-beta.N` entry shows there once it lands on `main` — that's intended, it's where beta users check what's coming. Only the **default download target** stays pinned to the latest stable; the download links read GitHub's releases API, not the changelog, so a `-beta.N` heading on top never affects them.
 - The download page's "What's new" link deep-links the **minor group** anchor (`/changelog#release-0.3`), not the exact entry: promotion collapses the beta entries into one stable entry, so the minor group remains the durable target. A version with no entry in the bundled changelog — a tag whose changelog commit hasn't redeployed the site yet — links the plain `/changelog` instead of a dead anchor.
-- The website itself is deployed by `Deploy Website` (Cloudflare Workers), which redeploys on the `release: published` event emitted when a stable draft is published and on pushes to `main` that touch `CHANGELOG.md` or `packages/website/**`. Its job condition excludes beta prereleases.
+- The website itself is deployed by `Deploy Website`; see [Cloudflare deploys](#cloudflare-deploys).
 
 ## Fixing a failed release build
 
@@ -566,8 +512,8 @@ The GitHub Release body is populated automatically by the `Release Notes Sync` w
 **Do not rely on `workflow_dispatch` for tagged code fixes.** The `workflow_dispatch` trigger runs the workflow file from the default branch but checks out the code at the tag ref (`ref: ${{ inputs.tag }}`). That means fixes committed to `main` won't change the tagged source tree being built. `workflow_dispatch` only helps when the fix lives in the workflow file itself.
 
 For Docker-only retries, **do not push or force-push a `v*` release tag**.
-`v*` tag pushes rebuild desktop assets, the Android APK, Docker, release notes,
-and EAS mobile release builds. Use the Docker workflow dispatch instead:
+`v*` tag pushes rebuild desktop assets, Docker, and release notes. Use the
+Docker workflow dispatch instead:
 
 ```bash
 gh workflow run docker.yml \
@@ -577,27 +523,25 @@ gh workflow run docker.yml \
 ```
 
 This replaces `ghcr.io/lft-oxy/osuna:X.Y.Z-beta.N` in place without touching
-desktop, APK, or EAS release builders. The Docker exception is safe because the
+the desktop release builders. The Docker exception is safe because the
 dispatch runs from `--ref main` and uses the explicit `osuna_version`; it does
 not check out or move the `v*` release tag.
 
-To retry a failed non-Docker release workflow, push a retry tag on the commit
+To retry a failed desktop release workflow, push a retry tag on the commit
 you want to build. Reusing the same tag name is expected: move it with
 `git tag -f ...` and push it with `--force` so the workflow rebuilds the commit
 you actually want.
 
-A failed desktop build leaves the GitHub Release as a draft. `finalize-rollout`
-uploads manifests from successful platforms before it fails. A later
-single-platform retry reuses those manifests, stamps the complete set with one
-release date, and publishes the draft. Use `desktop-vX.Y.Z` when more than one
-platform failed. A `workflow_dispatch` rebuild with publishing enabled follows
-the same path against the existing draft.
+A failed desktop build leaves the GitHub Release as a draft: `finalize-rollout`
+exits before it uploads any manifest. Retry every platform with
+`desktop-vX.Y.Z`, or dispatch with `platform` left at `all`. A single-platform
+retry completes the release only when the other platform's manifest is already
+on the Release.
 
-Prefer a tag push over `workflow_dispatch` when rebuilding desktop or APK
-release assets. Prefer Docker workflow dispatch when rebuilding only the Docker
-image.
+Prefer a tag push over `workflow_dispatch` when rebuilding desktop release
+assets. Prefer Docker workflow dispatch when rebuilding only the Docker image.
 
-The retry tag patterns below still work and remain the supported way to rebuild specific release targets:
+The retry tag patterns below remain the supported way to rebuild specific release targets:
 
 ```bash
 # Desktop (all platforms)
@@ -607,11 +551,12 @@ git tag -f desktop-v0.1.28 HEAD && git push origin desktop-v0.1.28 --force
 git tag -f desktop-macos-v0.1.28 HEAD && git push origin desktop-macos-v0.1.28 --force
 git tag -f desktop-windows-v0.1.28 HEAD && git push origin desktop-windows-v0.1.28 --force
 
-# Android APK
-git tag -f android-v0.1.28 HEAD && git push origin android-v0.1.28 --force
-
 # Beta
 git tag -f v0.1.29-beta.2 HEAD && git push origin v0.1.29-beta.2 --force
+
+# Android APK: no workflow listens for this tag, so pushing it builds nothing. Dispatch with it.
+git tag -f android-v0.1.28 HEAD && git push origin android-v0.1.28 --force
+gh workflow run "Android APK Release" -f tag=android-v0.1.28
 ```
 
 This ensures the checkout ref matches the actual code on `main` with the fix included.
@@ -619,7 +564,7 @@ This ensures the checkout ref matches the actual code on `main` with the fix inc
 - `vX.Y.Z` or `vX.Y.Z-beta.N` rebuilds the full tagged release
 - `desktop-vX.Y.Z` rebuilds desktop for all desktop platforms only
 - `desktop-macos-vX.Y.Z` and `desktop-windows-vX.Y.Z` rebuild only that desktop platform
-- `android-vX.Y.Z` rebuilds the Android APK release only
+- `android-vX.Y.Z` names the commit the dispatched APK build checks out; the APK still lands on the `vX.Y.Z` Release. When the tagged source is fine, dispatch with `vX.Y.Z` itself.
 
 If you decide to publish a release without working desktop builds, inspect its
 assets first, then publish it manually:
@@ -642,8 +587,6 @@ intentionally unavailable to desktop updater clients.
 - `version:all:*` bumps root + syncs workspace versions and `@osuna/*` dependency versions
 - `release:prepare` refreshes workspace `node_modules` links to prevent stale types
 - `npm run dev:desktop` and `npm run build:desktop` target the Electron desktop package in `packages/desktop`
-- If `release:publish` partially fails, re-run it — npm skips already-published versions
-- If `release:publish:beta` partially fails, re-run it — npm skips already-published versions and keeps prereleases off `latest` because every publish uses `--tag beta`
 - The website uses GitHub's latest published release API for download links, so published beta prereleases do not replace the stable download target.
 
 ## Changelog format
@@ -675,7 +618,7 @@ No prefix (`v`), no extra text. `Release Notes Sync` matches the `## X.Y.Z` (or 
 
 ## Changelog wording
 
-The changelog is shown on the Osuna homepage. Each bullet is a compact factual record of
+The changelog is shown on the website's `/changelog` page and in the app's **What's new** sheet. Each bullet is a compact factual record of
 product behavior that changed.
 
 - **Name the exact change.** Prefer `Added <capability>`, `Removed <behavior>`,
@@ -787,16 +730,14 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Add a new `CHANGELOG.md` entry for this beta (heading `## X.Y.Z-beta.N - YYYY-MM-DD`), review it against the changelog policy, get approval, and commit it before cutting the release
 - [ ] The diff from the previous stable to the resolved release source is classified as patch or minor, with the target version and rationale approved
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
-- [ ] `npm run release:beta:patch`, `npm run release:beta:minor`, or `npm run release:beta:next` completes successfully
+- [ ] The `version:all:beta:*` command followed by `npm run release:push` completes successfully
 - [ ] Every GitHub Actions run for the complete release commit and tag is green
-- [ ] npm shows the version under the `beta` dist-tag, not `latest`
 - [ ] The GitHub prerelease was published only after both beta manifests were uploaded, and it has the changelog body and every expected macOS, Windows, and Android APK asset
 - [ ] GitHub `Desktop Release` workflow for the `v*-beta.N` tag is green
 - [ ] The GitHub prerelease contains `beta-mac.yml` and `beta.yml`
-- [ ] GitHub `Android APK Release` workflow for the same tag is green
+- [ ] GitHub `Android APK Release` was dispatched for the same tag and is green
 - [ ] GitHub `Docker` workflow is green and the versioned beta image is published without moving `latest`
 - [ ] GitHub `Release Notes Sync` mirrored the beta entry into the prerelease body
-- [ ] EAS `Release iOS Beta` completed its build, TestFlight distribution, external beta group, and Beta App Review path
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed
 
 ### Stable release (or promotion)
@@ -811,20 +752,13 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Refresh the bundled price snapshot with `npm run usage:pricing:refresh` and include it in the release-preparation commits
 - [ ] Verify the changelog heading follows strict `## X.Y.Z - YYYY-MM-DD` format
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
-- [ ] `npm run release:patch`, `npm run release:minor`, or `npm run release:promote` completes successfully
+- [ ] `npm run release:fork:patch`, `npm run release:fork:minor`, or `npm run version:all:promote && npm run release:push` completes successfully
 - [ ] Every GitHub Actions run for the complete release commit and tag is green
-- [ ] Move npm's `beta` dist-tag to the new stable version for every published package and verify both `latest` and `beta` resolve to it
 - [ ] The GitHub Release was published only after both stable manifests were uploaded, and it has the changelog body and every expected macOS, Windows, and Android APK asset
 - [ ] GitHub `Desktop Release` workflow for the `v*` tag is green
 - [ ] The GitHub Release contains `latest-mac.yml` and `latest.yml`
 - [ ] `latest-mac.yml` contains the current `minimumSystemVersion` guard
-- [ ] GitHub `Android APK Release` workflow for the same tag is green
+- [ ] GitHub `Android APK Release` was dispatched for the same tag and is green
 - [ ] GitHub `Docker` workflow is green and both the versioned and `latest` images are published
 - [ ] GitHub `Release Notes Sync` is green and the release body matches the stable changelog entry
-- [ ] EAS `Release Mobile` workflow for the same tag is green
-- [ ] EAS iOS `build_ios` completes for the same tag
-- [ ] EAS iOS `submit_ios` succeeds, uploading the build to App Store Connect/TestFlight
-- [ ] EAS iOS `submit_ios_for_review` succeeds, putting the build into App Store review
-- [ ] EAS Android `build_android` completes for the same tag
-- [ ] EAS Android `submit_android` succeeds, putting the build on its Play Store track
 - [ ] The release heartbeat was created after the tag push and deleted only after every item above passed

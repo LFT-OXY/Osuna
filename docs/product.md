@@ -68,7 +68,7 @@ Someone who needs a different agent provider, a specialized workspace panel, or 
 
 Osuna's role is to provide interfaces that make those contributions possible across the daemon and connected clients. The [plugin documentation](https://osuna.chinhae.cc/docs/plugins) describes what each released API supports.
 
-The [SDK](https://osuna.chinhae.cc/docs/sdk) lets applications and services use the daemon directly. A separate dashboard, automation service, or client can build on the same agent infrastructure. Those projects do not all need to become features of the main app.
+The daemon's WebSocket API lets applications and services use it directly. `packages/client` is the TypeScript client for that API, the same one the Osuna apps use; it is not published to npm. A separate dashboard, automation service, or client can build on the same agent infrastructure. Those projects do not all need to become features of the main app.
 
 Composition means useful pieces can be combined in ways the maintainer did not have to predict. Keeping the daemon independent, offering multiple connection methods, and exposing agent operations through APIs gives people room to choose those combinations.
 
