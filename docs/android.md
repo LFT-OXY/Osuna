@@ -9,13 +9,11 @@ Controlled by `APP_VARIANT` in `packages/app/app.config.js` (vanilla Expo, no cu
 | `production`  | Osuna       | `com.chinhae.osuna`       |
 | `development` | Osuna Debug | `com.chinhae.osuna.debug` |
 
-EAS profiles: `development`, `production`, and `production-apk` in `packages/app/eas.json`.
-
 `development` uses Android `debug`.
 
 ## Version codes
 
-`packages/app/native-release-version.js` is the single definition of native and F-Droid version-code math. Do not re-derive these numbers anywhere else — a drifted copy produces changelog files that match no published APK, and nothing fails loudly.
+`packages/app/native-release-version.js` is the single definition of native version-code math. Do not re-derive these numbers anywhere else.
 
 The base version code comes from the package version:
 
@@ -23,7 +21,7 @@ The base version code comes from the package version:
 major * 1_000_000 + minor * 1_000 + patch
 ```
 
-Prerelease metadata is ignored, so `0.1.102-beta.1` and `0.1.102` both produce `1102`. The same value is used as the iOS `buildNumber` because `packages/app/eas.json` uses EAS's local app version source. Do not re-enable EAS remote version counters or Android `autoIncrement`; F-Droid and other source-based builders need the native build number to be visible in the repo.
+Prerelease metadata is ignored, so `0.1.102-beta.1` and `0.1.102` both produce `1102`. Rebuilding a tag reproduces the same `versionCode`.
 
 The formula reserves three digits each for minor and patch. If either reaches `1000`, change the formula before cutting that release.
 
@@ -132,34 +130,37 @@ Keep `react` and `react-dom` pinned to the React version embedded by the current
 adb exec-out screencap -p > screenshot.png
 ```
 
-## Cloud build + submit (EAS)
+## Release APK (GitHub Actions)
 
-Stable tag pushes like `v0.1.0` trigger:
+`.github/workflows/android-apk-release.yml` builds the signed APK on a standard `ubuntu-latest` runner and attaches `osuna-<tag>-android.apk` to that tag's GitHub Release, creating a draft release when the tag has none. It runs `expo prebuild` and Gradle `assembleRelease` directly; there is no Expo account, EAS project, or store submission.
 
-- The EAS GitHub app on Expo servers (iOS + Android production builds + store submit). There is no workflow file in this repo for it.
-- `.github/workflows/android-apk-release.yml` on GitHub Actions (APK asset on GitHub Release).
-
-iOS auto-submits to App Store review via a Fastlane lane after EAS uploads to TestFlight. Android auto-submits to the Play Store via EAS-managed credentials.
-
-Beta tags like `v0.1.1-beta.1` only trigger the GitHub APK workflow. They publish a GitHub prerelease APK for testing and do not submit to the stores.
-
-The EAS `production-apk` profile uses the large Android resource class. Release builds compile the native ABIs and run Hermes bundling in the same Gradle invocation; the default worker can exhaust its remaining memory and kill Hermes with exit code 137 even when Gradle's own heap is correctly sized.
-
-`android-v*` tags also trigger only the GitHub APK workflow — useful when you want to ship an APK without going through stores. The GitHub APK workflow supports `workflow_dispatch` with an existing `tag` input so you can rebuild without cutting a new tag.
-
-### Useful commands
+The workflow only runs on `workflow_dispatch` with an existing tag. Pushing a tag does not start it.
 
 ```bash
-cd packages/app
-
-# Recent builds
-npx eas build:list --limit 10 --non-interactive --json | jq '.[] | {platform, status, appVersion, gitCommitHash}'
-
-# Inspect a build (the printed `Logs` URL opens the build's Expo dashboard page,
-# which has a Submissions section showing the auto-submit to the Play Store).
-npx eas build:view <build-id>
+gh workflow run "Android APK Release" -f tag=v1.0.0
 ```
 
-The Play Console (Internal testing → Production tracks) is the final confirmation that the binary reached the store.
+The APK has no push notifications, like every Osuna client. Desktop notifications and in-app attention are unaffected. See [glossary.md](glossary.md) for the three terms.
 
-See [docs/release.md](release.md) for the full mobile-build babysitting flow.
+### Signing
+
+`packages/app/plugins/with-android-release-signing.js` points the `release` build type at a `signingConfigs.release` that reads four environment variables. The workflow fills them from repository secrets:
+
+| Environment variable              | Secret                                                         |
+| --------------------------------- | -------------------------------------------------------------- |
+| `OSUNA_ANDROID_KEYSTORE_PATH`     | `ANDROID_KEYSTORE_BASE64`, decoded to a file in `$RUNNER_TEMP` |
+| `OSUNA_ANDROID_KEYSTORE_PASSWORD` | `ANDROID_KEYSTORE_PASSWORD`                                    |
+| `OSUNA_ANDROID_KEY_ALIAS`         | `ANDROID_KEY_ALIAS`                                            |
+| `OSUNA_ANDROID_KEY_PASSWORD`      | `ANDROID_KEY_PASSWORD`                                         |
+
+The plugin decides at prebuild time. If any of the four is unset or blank, it leaves the Expo template untouched and `release` stays signed with the debug keystore, which is what `npm run android:production` produces on a machine without the keystore. Set all four before prebuild and again for Gradle: the generated `build.gradle` holds the variable names, and Gradle reads the values when it runs.
+
+A GitHub secret that does not exist expands to an empty string, which would produce a debug-signed release APK. The workflow guards against that twice: it stops after prebuild when `build.gradle` has no release signing, and it stops before upload when `apksigner` reports a certificate other than the one recorded under "安卓签名 keystore" in [release.md](release.md). That section also covers where the keystore lives and how users check a downloaded APK.
+
+### Runner constraints
+
+- **Build the JS inputs before prebuild.** Metro bundles `@osuna/expo-two-way-audio` and the other workspace packages from their build output. The workflow runs `npm run build:app-deps` first; without it Metro cannot resolve those entry points when Gradle bundles the JS. It also regenerates the terminal WebView HTML with `build:terminal-webview`.
+- **Memory.** The runner has 4 vCPU and 16 GB. Release builds compile the native ABIs and run Hermes bundling in the same Gradle invocation, and Hermes can be killed with exit code 137 even when Gradle's own heap is correctly sized. The workflow passes `--no-daemon --max-workers=2`; drop to `--max-workers=1` if 137 shows up.
+- **Disk.** The runner guarantees 14 GB free, so the job deletes preinstalled toolchains it does not use before installing dependencies.
+- **NDK.** React Native pins an NDK version the runner image may not ship. The Android Gradle Plugin downloads it during the build.
+- **Timeout.** `timeout-minutes: 90` is an untested first value. Tighten it once a run has recorded the real duration.
