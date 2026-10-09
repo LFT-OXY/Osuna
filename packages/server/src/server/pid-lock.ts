@@ -148,6 +148,24 @@ async function writeNewPidLock(pidPath: string, lockInfo: PidLockInfo): Promise<
   }
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 0.14.x 的 daemon 把锁写在 paseo.pid，搬过来的 home 里可能还有一个活着的旧 daemon
+// （桌面端开了"退出后保持运行"）。它还活着就不能再起一个去写同一份数据；
+// 已经没人持有的旧锁文件是用户数据，原样留着。
+async function assertNoLiveLegacyDaemon(osunaHome: string): Promise<void> {
+  const legacyLock = await readLegacyPidLock(join(osunaHome, "paseo.pid"));
+  if (legacyLock && isPidRunning(legacyLock.pid)) throw createLockHeldError(legacyLock);
+}
+
+// 没有这个文件、或者读不出一把锁，都等于没有旧 daemon 持锁：这里只拦得住确实还活着的那一个。
+async function readLegacyPidLock(legacyPidPath: string): Promise<PidLockInfo | null> {
+  try {
+    return parsePidLockInfo(JSON.parse(await readFile(legacyPidPath, "utf-8")));
+  } catch {
+    return null;
+  }
+}
+
 export async function acquirePidLock(
   osunaHome: string,
   listen: string | null,
@@ -156,6 +174,7 @@ export async function acquirePidLock(
   const pidPath = getPidFilePath(osunaHome);
 
   ensurePrivateDirectory(osunaHome);
+  await assertNoLiveLegacyDaemon(osunaHome);
 
   // Try to read existing lock
   const existingLock = await readPidLock(pidPath);

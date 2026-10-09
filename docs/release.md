@@ -422,8 +422,10 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 回滚是整版退回：桌面端连同它自带的 daemon 一起换回 0.14.x。更新器不降级
 （`allowDowngrade = false`），所以是用户从 Release 页下载 0.14.x 的安装包覆盖安装。
 
-1. 退出 Osuna，用 `osuna daemon status` 确认 daemon 已停。两个版本的 pid 锁文件名不同，
-   互相看不见，同时运行会一起写同一个 home。
+1. 退出 Osuna，用 `osuna daemon status` 确认 daemon 已停。两个版本的 pid 锁文件名不同
+   （`osuna.pid` 与 `paseo.pid`）。1.0.0 认得还活着的 `paseo.pid`，不会在 0.14.x 的 daemon
+   旁边再起一个；0.14.x 不认得 `osuna.pid`，1.0.0 的 daemon 没停它也照样启动，两个一起写
+   同一个 home。
 2. 要带回主机列表与设置，在第一次打开 0.14.x 之前把 userData 目录从 `Osuna` 改回 `Paseo`。
    它在 macOS 的 `~/Library/Application Support/Osuna`、Windows 的 `%APPDATA%\Osuna`、
    Linux 的 `~/.config/Osuna`。不改回去，0.14.x 以空的主机列表和默认设置启动。

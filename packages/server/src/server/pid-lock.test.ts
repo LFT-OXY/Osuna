@@ -1,4 +1,4 @@
-import { mkdtemp, open, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, open, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -12,6 +12,9 @@ import {
   releasePidLock,
   updatePidLock,
 } from "./pid-lock.js";
+
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+const LEGACY_PID_FILE = "paseo.pid";
 
 describe("pid-lock ownership", () => {
   test("writes and releases lock for explicit owner pid", async () => {
@@ -252,6 +255,70 @@ describe("pid-lock ownership", () => {
       const lock = await getPidLockInfo(osunaHome);
       expect(lock?.pid).toBe(process.pid);
       expect(lock?.listen).toBe("127.0.0.1:6767");
+    } finally {
+      await rm(osunaHome, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses to start beside a live 0.14.x daemon that still holds its own lock file", async () => {
+    const osunaHome = await mkdtemp(join(tmpdir(), "osuna-pid-lock-legacy-live-"));
+    const legacyLock = JSON.stringify({
+      pid: process.pid,
+      startedAt: "2026-10-01T00:00:00.000Z",
+      hostname: "current-host",
+      uid: process.getuid?.() ?? 0,
+      listen: "127.0.0.1:6767",
+    });
+
+    try {
+      await writeFile(join(osunaHome, LEGACY_PID_FILE), legacyLock);
+
+      await expect(
+        acquirePidLock(osunaHome, null, { ownerPid: process.pid + 10_000 }),
+      ).rejects.toThrow(
+        `Another Osuna daemon is already running (PID ${process.pid}, started 2026-10-01T00:00:00.000Z)`,
+      );
+
+      expect(await getPidLockInfo(osunaHome)).toBeNull();
+      expect(await readFile(join(osunaHome, LEGACY_PID_FILE), "utf8")).toBe(legacyLock);
+    } finally {
+      await rm(osunaHome, { recursive: true, force: true });
+    }
+  });
+
+  test("starts when the 0.14.x lock file was left behind by a daemon that is gone", async () => {
+    const osunaHome = await mkdtemp(join(tmpdir(), "osuna-pid-lock-legacy-stale-"));
+    const ownerPid = process.pid + 10_000;
+    const abandonedLock = JSON.stringify({
+      pid: 2_147_483_646,
+      startedAt: "2026-10-01T00:00:00.000Z",
+      hostname: "current-host",
+      uid: process.getuid?.() ?? 0,
+      listen: "127.0.0.1:6767",
+    });
+
+    try {
+      await writeFile(join(osunaHome, LEGACY_PID_FILE), abandonedLock);
+
+      await acquirePidLock(osunaHome, null, { ownerPid });
+
+      expect((await getPidLockInfo(osunaHome))?.pid).toBe(ownerPid);
+      expect(await readFile(join(osunaHome, LEGACY_PID_FILE), "utf8")).toBe(abandonedLock);
+    } finally {
+      await rm(osunaHome, { recursive: true, force: true });
+    }
+  });
+
+  test("starts when the 0.14.x lock file is unreadable", async () => {
+    const osunaHome = await mkdtemp(join(tmpdir(), "osuna-pid-lock-legacy-garbled-"));
+    const ownerPid = process.pid + 10_000;
+
+    try {
+      await writeFile(join(osunaHome, LEGACY_PID_FILE), "{ truncated");
+
+      await acquirePidLock(osunaHome, null, { ownerPid });
+
+      expect((await getPidLockInfo(osunaHome))?.pid).toBe(ownerPid);
     } finally {
       await rm(osunaHome, { recursive: true, force: true });
     }
