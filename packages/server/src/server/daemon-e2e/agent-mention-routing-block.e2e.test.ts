@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { WebSocket } from "ws";
 import { afterEach, describe, expect, test } from "vitest";
-import { WSOutboundMessageSchema, type SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import { WSOutboundMessageSchema, type SessionOutboundMessage } from "@osuna/protocol/messages";
 import type {
   AgentMode,
   AgentModelDefinition,
@@ -18,12 +18,12 @@ import {
   type TestAgentClientOptions,
 } from "../test-utils/fake-agent-client.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { getAskModeConfig } from "./agent-configs.js";
 
 const WAIT_MS = 15_000;
-const CLAUDE = "[@Claude](paseo://agent/provider/claude)";
-const CODEX = "[@Codex](paseo://agent/provider/codex)";
+const CLAUDE = "[@Claude](osuna://agent/provider/claude)";
+const CODEX = "[@Codex](osuna://agent/provider/codex)";
 const CLAUDE_MODES: AgentMode[] = [
   { id: "auto", label: "Auto" },
   { id: "plan", label: "Plan" },
@@ -59,12 +59,12 @@ async function claudeCatalog(): Promise<ProviderCatalog> {
 }
 
 const tempDirs: string[] = [];
-let daemon: TestPaseoDaemon | null = null;
+let daemon: TestOsunaDaemon | null = null;
 let client: DaemonClient | null = null;
 let mcpClient: Client | null = null;
 
 interface Scenario {
-  daemon: TestPaseoDaemon;
+  daemon: TestOsunaDaemon;
   client: DaemonClient;
   cwd: string;
   prompts: string[];
@@ -76,14 +76,14 @@ function promptText(prompt: AgentPromptInput): string {
 }
 
 async function startDaemon(
-  options: Parameters<typeof createTestPaseoDaemon>[0] = {},
+  options: Parameters<typeof createTestOsunaDaemon>[0] = {},
   claudeOptions: TestAgentClientOptions = {},
 ): Promise<Scenario> {
-  const cwd = await mkdtemp(path.join(os.tmpdir(), "paseo-routing-block-"));
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "osuna-routing-block-"));
   tempDirs.push(cwd);
   const prompts: string[] = [];
   const onStartTurn = (prompt: AgentPromptInput) => prompts.push(promptText(prompt));
-  daemon = await createTestPaseoDaemon({
+  daemon = await createTestOsunaDaemon({
     agentClients: {
       codex: createTestAgentClient("codex", { supportsMcpServers: true, onStartTurn }),
       claude: createTestAgentClient("claude", {
@@ -249,7 +249,7 @@ async function persistedClaudeConfig(
   scenario: Scenario,
 ): Promise<PersistedProviderConfig | undefined> {
   const raw: { agents?: { providers?: Record<string, PersistedProviderConfig> } } = JSON.parse(
-    await readFile(path.join(scenario.daemon.paseoHome, "config.json"), "utf8"),
+    await readFile(path.join(scenario.daemon.osunaHome, "config.json"), "utf8"),
   );
   return raw.agents?.providers?.claude;
 }
@@ -274,8 +274,8 @@ describe("Routing block for agent mentions", () => {
 
     expect(scenario.prompts.at(-1)).toBe(`${text}
 
-<paseo-system>
-The user's message above mentions agents as links of the form [@Name](paseo://agent/...). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:
+<osuna-system>
+The user's message above mentions agents as links of the form [@Name](osuna://agent/...). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:
 
 1. @Claude -> provider "claude/haiku", settings {"modeId":"auto"}
 2. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}
@@ -289,7 +289,7 @@ Rules:
 - Keep \`notifyOnFinish\` at its default. You will be notified as each subagent finishes; then combine the results for the user.
 - If a subagent asks for permission, the user approves it in that subagent's session. Do not answer it with \`respond_to_permission\`.
 - Do any part of the message addressed to you (not to a mention) yourself, after the subagents are started.
-</paseo-system>`);
+</osuna-system>`);
     expect(await userMessages(scenario, parent.id)).toEqual([text]);
   });
 
@@ -309,10 +309,10 @@ Rules:
     expect(await userMessages(scenario, parent.id)).toEqual([first, second]);
   });
 
-  test("a message without mentions is recorded as written even when it ends in a paseo-system block", async () => {
+  test("a message without mentions is recorded as written even when it ends in a osuna-system block", async () => {
     const scenario = await startDaemon();
     const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
-    const text = "notes I pasted\n\n<paseo-system>\nquoted from a log\n</paseo-system>";
+    const text = "notes I pasted\n\n<osuna-system>\nquoted from a log\n</osuna-system>";
 
     await sendAndFinish({ scenario, agentId: parent.id, text });
 
@@ -373,7 +373,7 @@ Rules:
       providerOverrides: { claude: { enabled: false } },
     });
     const parent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
-    const text = `${CLAUDE} write, [@Grok](paseo://agent/provider/grok) plan, ${CODEX} review`;
+    const text = `${CLAUDE} write, [@Grok](osuna://agent/provider/grok) plan, ${CODEX} review`;
 
     await sendAndFinish({ scenario, agentId: parent.id, text });
 
@@ -409,7 +409,7 @@ Rules:
 
     expect(scenario.prompts).toEqual([
       text,
-      `<paseo-system>\nSchedule fired (id=${created.schedule.id}, run=${runId}).\n${text}\n</paseo-system>`,
+      `<osuna-system>\nSchedule fired (id=${created.schedule.id}, run=${runId}).\n${text}\n</osuna-system>`,
     ]);
   });
 });
@@ -425,7 +425,7 @@ describe("Routing block for the first message of a new agent", () => {
       await scenario.client.waitForFinish(agentId, WAIT_MS);
 
       expect(scenario.prompts).toHaveLength(1);
-      expect(scenario.prompts[0]?.startsWith(`${text}\n\n<paseo-system>\n`)).toBe(true);
+      expect(scenario.prompts[0]?.startsWith(`${text}\n\n<osuna-system>\n`)).toBe(true);
       expect(routedLines(scenario.prompts[0])).toEqual([
         '1. @Claude -> provider "claude/haiku", settings {"modeId":"auto"}',
         '2. @Codex -> provider "codex/gpt-5.4-mini", settings {"modeId":"bypassPermissions"}',
@@ -597,9 +597,9 @@ describe("Agent profile mentions", () => {
       ],
     });
     const text = [
-      "[@Fast reviewer](paseo://agent/profile/fast-reviewer) review,",
-      "[@Thinker](paseo://agent/profile/thinker) plan,",
-      "[@Tester](paseo://agent/profile/tester) test",
+      "[@Fast reviewer](osuna://agent/profile/fast-reviewer) review,",
+      "[@Thinker](osuna://agent/profile/thinker) plan,",
+      "[@Tester](osuna://agent/profile/tester) test",
     ].join(" ");
 
     await sendAndFinish({ scenario, agentId: parent.id, text });
@@ -634,8 +634,8 @@ describe("Agent profile mentions", () => {
       ],
     });
     const text = [
-      "[@Retired](paseo://agent/profile/retired) review,",
-      "[@Odd thinking](paseo://agent/profile/odd-thinking) plan",
+      "[@Retired](osuna://agent/profile/retired) review,",
+      "[@Odd thinking](osuna://agent/profile/odd-thinking) plan",
     ].join(" ");
 
     await sendAndFinish({ scenario, agentId: parent.id, text });
@@ -656,9 +656,9 @@ describe("Agent profile mentions", () => {
       ],
     });
     const text = [
-      "[@Gone](paseo://agent/profile/gone) plan,",
-      "[@Reviewer](paseo://agent/profile/reviewer) review,",
-      "[@Planner](paseo://agent/profile/planner) plan,",
+      "[@Gone](osuna://agent/profile/gone) plan,",
+      "[@Reviewer](osuna://agent/profile/reviewer) review,",
+      "[@Planner](osuna://agent/profile/planner) plan,",
       `${CODEX} test`,
     ].join(" ");
 

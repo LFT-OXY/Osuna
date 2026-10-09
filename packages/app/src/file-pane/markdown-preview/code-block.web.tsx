@@ -1,6 +1,6 @@
 /*
  * 代码块头部（语言图标、换行开关、复制）的结构与交互移植自 t3code
- * `apps/web/src/components/ChatMarkdown.tsx` 的 `MarkdownCodeBlock`；着色改用 @getpaseo/highlight，
+ * `apps/web/src/components/ChatMarkdown.tsx` 的 `MarkdownCodeBlock`；着色改用 @osuna/highlight，
  * 去掉了 Shiki、fence 标题与「Run in terminal」。
  *
  * MIT License

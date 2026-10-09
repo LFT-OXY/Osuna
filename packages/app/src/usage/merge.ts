@@ -10,7 +10,7 @@ import type {
   UsageSourceBreakdown,
   UsageSummary,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import { totalUsageTokens, usageSourceKey } from "./totals";
 
 /** A project row never merges across hosts, so it carries the host it came from. */

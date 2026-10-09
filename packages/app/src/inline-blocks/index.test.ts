@@ -86,7 +86,7 @@ describe("parseInlineSegments", () => {
   it("reads provider and profile agent mention links", () => {
     expect(
       parseInlineSegments(
-        "[@Claude](paseo://agent/provider/claude) and [@Reviewer](paseo://agent/profile/p%201)",
+        "[@Claude](osuna://agent/provider/claude) and [@Reviewer](osuna://agent/profile/p%201)",
         { skillNames: SKILLS },
       ),
     ).toEqual([
@@ -98,7 +98,7 @@ describe("parseInlineSegments", () => {
 
   it("keeps an agent link without the @, the kind, or the id as text", () => {
     const message =
-      "[Claude](paseo://agent/provider/claude) [@Claude](paseo://agent/provider/) [@Claude](paseo://agent/claude) [@](paseo://agent/provider/claude)";
+      "[Claude](osuna://agent/provider/claude) [@Claude](osuna://agent/provider/) [@Claude](osuna://agent/claude) [@](osuna://agent/provider/claude)";
     expect(parseInlineSegments(message, { skillNames: SKILLS })).toEqual([text(message)]);
   });
 
@@ -197,13 +197,13 @@ describe("serializeInlineSegments", () => {
     );
   });
 
-  it("writes an agent mention as a paseo agent link", () => {
+  it("writes an agent mention as a osuna agent link", () => {
     expect(
       serializeInlineSegments([
         block({ kind: "agent", target: CLAUDE, name: "Claude" }),
         text(" write the tests"),
       ]),
-    ).toBe("[@Claude](paseo://agent/provider/claude) write the tests");
+    ).toBe("[@Claude](osuna://agent/provider/claude) write the tests");
   });
 });
 

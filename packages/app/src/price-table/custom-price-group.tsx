@@ -1,4 +1,4 @@
-import type { UsagePricingModel } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingModel } from "@osuna/protocol/usage/types";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";

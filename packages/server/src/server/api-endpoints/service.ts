@@ -12,7 +12,7 @@ import {
   type ApiEndpointModelMapping,
   type ApiEndpointRef,
   type ApiEndpointTestConnectionResult,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
@@ -106,7 +106,7 @@ export interface ApiEndpointTestConnectionInput extends ApiEndpointUpstreamInput
 }
 
 export interface ApiEndpointServiceOptions {
-  paseoHome: string;
+  osunaHome: string;
   logger: pino.Logger;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
   env?: NodeJS.ProcessEnv;
@@ -172,7 +172,7 @@ export class ApiEndpointService {
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ApiEndpointServiceOptions) {
-    this.store = new ApiEndpointStore(options.paseoHome);
+    this.store = new ApiEndpointStore(options.osunaHome);
     this.logger = options.logger.child({ module: "api-endpoints" });
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();

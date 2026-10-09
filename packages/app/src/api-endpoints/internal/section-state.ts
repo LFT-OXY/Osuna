@@ -3,7 +3,7 @@ import type {
   ApiEndpointError,
   ApiEndpointHealthIssue,
   ApiEndpointListResponse,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 
 type ListPayload = ApiEndpointListResponse["payload"];
 

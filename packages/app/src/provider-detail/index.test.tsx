@@ -4,8 +4,8 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
+import type { AgentModelDefinition, ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
+import type { ProviderProfileModel } from "@osuna/protocol/provider-config";
 import { i18n } from "@/i18n/i18next";
 import { ProviderInstallGuideSurface, type ProviderInstallGuide } from "@/provider-install-guide";
 import {

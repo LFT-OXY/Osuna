@@ -9,9 +9,9 @@ import {
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Plus, Search, Trash2 } from "lucide-react-native";
-import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
-import type { AgentModelDefinition } from "@getpaseo/protocol/agent-types";
-import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
+import { compareMatchScores, scoreTextFields } from "@osuna/protocol/search/text-match";
+import type { AgentModelDefinition } from "@osuna/protocol/agent-types";
+import type { ProviderProfileModel } from "@osuna/protocol/provider-config";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";

@@ -141,7 +141,7 @@ const FadingLetter = memo(function FadingLetter({
 }) {
   const style = useMemo<CSSProperties>(
     () => ({
-      animationName: "paseo-word-fade",
+      animationName: "osuna-word-fade",
       animationDuration: `${FADE_DURATION_MS}ms`,
       animationDelay: `${delayMs}ms`,
       animationTimingFunction: "linear",
@@ -162,7 +162,7 @@ export function WordFadeText({ children, ...props }: TextProps) {
     if (!stylesheet) {
       stylesheet = document.createElement("style");
       stylesheet.textContent =
-        "@keyframes paseo-word-fade { from { opacity: 0 } to { opacity: 1 } }";
+        "@keyframes osuna-word-fade { from { opacity: 0 } to { opacity: 1 } }";
       document.head.appendChild(stylesheet);
     }
     return () => {

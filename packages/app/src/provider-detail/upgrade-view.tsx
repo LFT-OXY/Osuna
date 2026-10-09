@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { ArrowUp } from "lucide-react-native";
-import type { ProviderUpgradeErrorCode } from "@getpaseo/protocol/messages";
+import type { ProviderUpgradeErrorCode } from "@osuna/protocol/messages";
 import { Button } from "@/components/ui/button";
 import { ScrollableCodeSurface } from "@/components/ui/scrollable-code-surface";
 import { Text as UiText } from "@/components/ui/text";

@@ -1,4 +1,4 @@
-import type { ApiEndpointModel } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointModel } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointProvider } from "./store.js";
 import {
   ANTHROPIC_VERSION,

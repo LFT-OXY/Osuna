@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
-import type { AgentProvider } from "@getpaseo/protocol/agent-types";
+import type { AgentProvider } from "@osuna/protocol/agent-types";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SegmentedControl } from "@/components/ui/segmented-control";

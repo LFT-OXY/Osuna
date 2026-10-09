@@ -142,11 +142,11 @@ test.describe("Dispatch group", () => {
     page,
   }) => {
     const parentId = await seedDispatchParent(workspace, "Provider parent");
-    await seedDispatchChild(workspace, { parentId, callId: "call-paseo", title: "Paseo child" });
+    await seedDispatchChild(workspace, { parentId, callId: "call-osuna", title: "Osuna child" });
 
     await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: parentId });
     await emitDispatchCalls(workspace, parentId, [
-      { callId: "call-paseo", title: "Paseo child" },
+      { callId: "call-osuna", title: "Osuna child" },
       {
         callId: "toolu_native",
         providerSubagent: {

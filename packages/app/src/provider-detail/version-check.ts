@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { ProviderVersionCheckResult } from "@getpaseo/protocol/messages";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
+import type { ProviderVersionCheckResult } from "@osuna/protocol/messages";
 
 export type ProviderVersionCheckClient = Pick<DaemonClient, "checkProviderVersions">;
 

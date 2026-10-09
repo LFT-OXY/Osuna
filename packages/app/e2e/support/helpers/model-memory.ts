@@ -1,10 +1,10 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { expect, type Page } from "../fixtures";
 import { openModelPicker } from "./agent-profiles";
 import { selectComposerProvider } from "./provider-selector";
 
 export async function startWithoutRememberedModel(page: Page) {
-  await page.addInitScript(() => localStorage.removeItem("@paseo:create-agent-preferences"));
+  await page.addInitScript(() => localStorage.removeItem("@osuna:create-agent-preferences"));
 }
 
 export async function chooseModel(page: Page, provider: string, label: string) {
@@ -36,7 +36,7 @@ export async function expectSavedSelection(page: Page, provider: string, model: 
   await expect
     .poll(() =>
       page.evaluate(() =>
-        JSON.parse(localStorage.getItem("@paseo:create-agent-preferences") ?? "null"),
+        JSON.parse(localStorage.getItem("@osuna:create-agent-preferences") ?? "null"),
       ),
     )
     .toMatchObject({ provider, providerPreferences: { [provider]: { model } } });

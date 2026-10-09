@@ -30,9 +30,9 @@ Workspace archive runs lifecycle teardown from the exact `cwd` but removes only 
 `worktreeRoot` after its last active reference disappears. Worktree recovery recreates that backing
 checkout from `mainRepoRoot`, then restores the relative path from `worktreeRoot` to `cwd`.
 
-Paseo uses **file-based JSON persistence** instead of a traditional database. All data is validated at runtime with Zod schemas. Most stores write atomically (write to temp file, then rename); a few still use plain `writeFile` — see each section. There is no schema-versioning/migration framework — schemas rely on optional fields with defaults for forward compatibility, with a small amount of inline normalization in `persisted-config.ts` for legacy provider/speech entries.
+Osuna uses **file-based JSON persistence** instead of a traditional database. All data is validated at runtime with Zod schemas. Most stores write atomically (write to temp file, then rename); a few still use plain `writeFile` — see each section. There is no schema-versioning/migration framework — schemas rely on optional fields with defaults for forward compatibility, with a small amount of inline normalization in `persisted-config.ts` for legacy provider/speech entries.
 
-All server-side stores live under `$PASEO_HOME` (defaults to `~/.paseo`).
+All server-side stores live under `$OSUNA_HOME` (defaults to `~/.osuna`).
 
 ## Store Surface Rules
 
@@ -43,11 +43,11 @@ Store APIs own persistence atomicity and should not make services coordinate raw
 ## Directory layout
 
 ```
-$PASEO_HOME/
+$OSUNA_HOME/
 ├── config.json                          # Daemon configuration
 ├── server-id                            # Stable daemon identifier (plain text, "srv_<base64url>")
 ├── daemon-keypair.json                  # E2EE keypair for relay (mode 0600)
-├── paseo.pid                            # Daemon PID lock file
+├── osuna.pid                            # Daemon PID lock file
 ├── daemon.log                           # Default log file (path configurable)
 ├── agents/
 │   └── {sanitized-cwd}/
@@ -62,7 +62,7 @@ $PASEO_HOME/
 │   └── icons/                           # Host-local custom project icon images
 ├── runtime/
 │   └── managed-processes/
-│       └── {recordId}.json              # Helper processes owned by Paseo; reconciled on daemon bootstrap
+│       └── {recordId}.json              # Helper processes owned by Osuna; reconciled on daemon bootstrap
 ├── plugins/
 │   ├── sources.json                      # Git origin, ref, commit, and managed checkout ownership
 │   └── {pluginId}/{version}/checkout/    # Source checkout for one installed Git commit
@@ -88,7 +88,7 @@ The `agents/{sanitized-cwd}/` directory name is derived from the agent's `cwd` b
 
 ## 1. Agent Record
 
-**Path:** `$PASEO_HOME/agents/{project-dir}/{agentId}.json`
+**Path:** `$OSUNA_HOME/agents/{project-dir}/{agentId}.json`
 
 Each agent is stored as a separate JSON file, grouped by project directory.
 
@@ -103,7 +103,7 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `lastActivityAt`     | `string?` (ISO 8601)                     | Last activity timestamp                                                                                                                                                                                                                                                                                                                                                             |
 | `lastUserMessageAt`  | `string?` (ISO 8601)                     | Last user message timestamp                                                                                                                                                                                                                                                                                                                                                         |
 | `title`              | `string?`                                | User-visible title                                                                                                                                                                                                                                                                                                                                                                  |
-| `labels`             | `Record<string, string>`                 | Key-value labels (default `{}`). Paseo uses `paseo.parent-agent-id` for parentage, `paseo.parent-tool-call-id` for the parent's `create_agent` call, and client-scoped `paseo.open-agent-tab.*` labels while managed subagent tabs are open — see [agent-lifecycle.md](./agent-lifecycle.md)                                                                                        |
+| `labels`             | `Record<string, string>`                 | Key-value labels (default `{}`). Osuna uses `osuna.parent-agent-id` for parentage, `osuna.parent-tool-call-id` for the parent's `create_agent` call, and client-scoped `osuna.open-agent-tab.*` labels while managed subagent tabs are open — see [agent-lifecycle.md](./agent-lifecycle.md)                                                                                        |
 | `lastStatus`         | `AgentStatus`                            | One of: `"initializing"`, `"idle"`, `"running"`, `"error"`, `"closed"`. `closed` means the record is resumable but has no live provider runtime; archive remains represented separately by `archivedAt`.                                                                                                                                                                            |
 | `lastModeId`         | `string?`                                | Last active mode ID                                                                                                                                                                                                                                                                                                                                                                 |
 | `config`             | `SerializableConfig?`                    | Agent session configuration (see below)                                                                                                                                                                                                                                                                                                                                             |
@@ -191,7 +191,7 @@ Terminal activity contributes to the workspace status bucket **per `workspaceId`
 
 ## 2. Daemon Configuration
 
-**Path:** `$PASEO_HOME/config.json`
+**Path:** `$OSUNA_HOME/config.json`
 
 Single file, validated with `PersistedConfigSchema`.
 
@@ -199,7 +199,7 @@ Single file, validated with `PersistedConfigSchema`.
 `{ mode: "all" }`. Installed state is not persisted; the daemon derives it from its three managed
 skill directories and keeps config plus filesystem convergence behind one serialized owner.
 
-`paseo reload` reads and validates this file once inside the daemon. That snapshot drives resolution,
+`osuna reload` reads and validates this file once inside the daemon. That snapshot drives resolution,
 classification, application, and reload bookkeeping. `DaemonConfigStore` owns applying runtime-safe
 fields and their removal/default semantics; session handlers and the CLI only relay the structured
 result. Normal config patches persist only the requested fields, so launch overrides and resolved
@@ -226,7 +226,7 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
     baseUrl: string
   },
   worktrees?: {
-    root?: string            // optional root for new worktrees; defaults to $PASEO_HOME/worktrees
+    root?: string            // optional root for new worktrees; defaults to $OSUNA_HOME/worktrees
     servicePorts?: {         // optional dynamic service port allocation policy
       range?: string         // inclusive range, e.g. "3000-4000"
       portScript?: string    // executable that receives service/workspace context and prints one TCP port
@@ -273,7 +273,7 @@ All fields are optional with sensible defaults.
 Git-managed plugins still appear as directory sources in `config.json`. This keeps the plugin
 runtime and protocol config compatible with directory-only clients. `plugins/sources.json` owns the
 Git-specific origin, tracking ref, installed commit, repository subdirectory, and checkout root.
-Paseo writes it atomically. An update creates and validates a new version directory before changing
+Osuna writes it atomically. An update creates and validates a new version directory before changing
 the configured directory path; successful activation removes the old version.
 
 ### Profile lists
@@ -291,13 +291,13 @@ rather than storing something it cannot describe. That is why the client gates t
 UI on `server_info.features.agentProfiles` instead of letting a save appear to succeed against an
 older daemon.
 
-### Agent provider Paseo tools
+### Agent provider Osuna tools
 
 `agents.providers` is keyed by the exact provider ID used to launch the agent. The built-in IDs are
 `claude`, `codex`, `copilot`, `opencode`, `pi`, and `omp`. Custom provider IDs are their literal
 configuration keys, such as `my-claude` or `zai`, not the provider named by `extends`.
 
-Each entry may include a Paseo-tool policy:
+Each entry may include a Osuna-tool policy:
 
 ```json
 {
@@ -306,7 +306,7 @@ Each entry may include a Paseo-tool policy:
       "my-claude": {
         "extends": "claude",
         "label": "My Claude",
-        "paseoTools": {
+        "osunaTools": {
           "enabled": true,
           "disabledTools": ["browser_evaluate"]
         }
@@ -316,19 +316,19 @@ Each entry may include a Paseo-tool policy:
 }
 ```
 
-Absent `paseoTools`, or absent fields within it, means Paseo tools are enabled and all tools are
-allowed. `enabled: false` disables the provider's Paseo catalog; `disabledTools` lists exact tool
+Absent `osunaTools`, or absent fields within it, means Osuna tools are enabled and all tools are
+allowed. `enabled: false` disables the provider's Osuna catalog; `disabledTools` lists exact tool
 IDs to omit. The policy covers the core and browser catalog, not the voice-only `speak` tool.
 Browser tools also require `daemon.browserTools.enabled` and a connected browser host.
 This policy controls the catalog presented to an agent. It is not an authorization boundary for
 agents that can access the host through a shell.
 
 `daemon.mcp.injectIntoAgents` is the global override. When it is `false`, no provider receives
-Paseo tools; otherwise the provider policy applies. Provider and global policy are resolved when a
+Osuna tools; otherwise the provider policy applies. Provider and global policy are resolved when a
 session is created, resumed, imported, or reloaded, so configuration changes affect the next
 session rather than an already-running one.
 
-`agents.metadataGeneration.providers` controls the preferred structured-generation fallback order for daemon-side metadata tasks such as commit messages, PR text, branch names, and generated agent titles. Entries are tried first in the configured order, then Paseo falls through to dynamically discovered defaults and finally the current selection when available.
+`agents.metadataGeneration.providers` controls the preferred structured-generation fallback order for daemon-side metadata tasks such as commit messages, PR text, branch names, and generated agent titles. Entries are tried first in the configured order, then Osuna falls through to dynamically discovered defaults and finally the current selection when available.
 
 ### Mention defaults
 
@@ -379,15 +379,15 @@ Environment variables override `config.json`:
 
 | Environment variable                 | Setting                  |
 | ------------------------------------ | ------------------------ |
-| `PASEO_GIT_MAX_PROCESSES_PER_SECOND` | `maxProcessesPerSecond`  |
-| `PASEO_GIT_MAX_PROCESS_CONCURRENCY`  | `maxProcessConcurrency`  |
-| `PASEO_GIT_CONCURRENCY`              | Legacy concurrency alias |
+| `OSUNA_GIT_MAX_PROCESSES_PER_SECOND` | `maxProcessesPerSecond`  |
+| `OSUNA_GIT_MAX_PROCESS_CONCURRENCY`  | `maxProcessConcurrency`  |
+| `OSUNA_GIT_CONCURRENCY`              | Legacy concurrency alias |
 
-`PASEO_GIT_MAX_PROCESS_CONCURRENCY` wins when it and the legacy alias are both set. Run `paseo reload`
+`OSUNA_GIT_MAX_PROCESS_CONCURRENCY` wins when it and the legacy alias are both set. Run `osuna reload`
 after changing `config.json`. Environment changes require a daemon restart; the launch environment
 remains authoritative during reload.
 
-`agents.metadataGeneration.providers` controls the preferred structured-generation fallback order for daemon-side metadata tasks such as commit messages, PR text, branch names, and generated agent titles. Entries are tried first in the configured order, then Paseo falls through to dynamically discovered defaults and finally the current selection when available.
+`agents.metadataGeneration.providers` controls the preferred structured-generation fallback order for daemon-side metadata tasks such as commit messages, PR text, branch names, and generated agent titles. Entries are tried first in the configured order, then Osuna falls through to dynamically discovered defaults and finally the current selection when available.
 
 Local speech model ids are intentionally narrow: STT uses `parakeet-tdt-0.6b-v2-int8`, TTS uses `kokoro-en-v0_19`, and turn detection uses the bundled Silero VAD model.
 
@@ -395,9 +395,9 @@ Set these to select OpenAI instead of local speech:
 
 | Env var                        | Applies to                      |
 | ------------------------------ | ------------------------------- |
-| `PASEO_VOICE_STT_PROVIDER`     | Voice mode STT provider         |
-| `PASEO_DICTATION_STT_PROVIDER` | Composer dictation STT provider |
-| `PASEO_VOICE_TTS_PROVIDER`     | Voice mode TTS provider         |
+| `OSUNA_VOICE_STT_PROVIDER`     | Voice mode STT provider         |
+| `OSUNA_DICTATION_STT_PROVIDER` | Composer dictation STT provider |
+| `OSUNA_VOICE_TTS_PROVIDER`     | Voice mode TTS provider         |
 
 OpenAI speech can be configured under `providers.openai`. STT and TTS resolve independently, so they can point at different endpoints:
 
@@ -418,9 +418,9 @@ OpenAI speech can be configured under `providers.openai`. STT and TTS resolve in
 }
 ```
 
-`providers.openai.stt` is used for both composer dictation and voice mode speech-to-text; `providers.openai.tts` is used for voice mode text-to-speech. The equivalent env vars are `OPENAI_STT_API_KEY`/`OPENAI_STT_BASE_URL` and `OPENAI_TTS_API_KEY`/`OPENAI_TTS_BASE_URL`. Each feature falls back to `providers.openai.apiKey`/`providers.openai.baseUrl`, then `OPENAI_API_KEY`/`OPENAI_BASE_URL`, when its own fields are unset. These settings apply only to Paseo OpenAI speech features, not to Codex or other OpenAI-backed tools.
+`providers.openai.stt` is used for both composer dictation and voice mode speech-to-text; `providers.openai.tts` is used for voice mode text-to-speech. The equivalent env vars are `OPENAI_STT_API_KEY`/`OPENAI_STT_BASE_URL` and `OPENAI_TTS_API_KEY`/`OPENAI_TTS_BASE_URL`. Each feature falls back to `providers.openai.apiKey`/`providers.openai.baseUrl`, then `OPENAI_API_KEY`/`OPENAI_BASE_URL`, when its own fields are unset. These settings apply only to Osuna OpenAI speech features, not to Codex or other OpenAI-backed tools.
 
-Paseo uses these paths under the configured OpenAI base URL:
+Osuna uses these paths under the configured OpenAI base URL:
 
 - dictation STT: `/v1/audio/transcriptions`
 - voice mode STT: `/v1/audio/transcriptions`
@@ -430,7 +430,7 @@ Paseo uses these paths under the configured OpenAI base URL:
 
 ## 3. Schedule
 
-**Path:** `$PASEO_HOME/schedules/{id}.json`
+**Path:** `$OSUNA_HOME/schedules/{id}.json`
 
 One file per schedule. ID is 8 hex characters.
 
@@ -478,7 +478,7 @@ One file per schedule. ID is 8 hex characters.
 
 ## 4. Project Registry
 
-**Path:** `$PASEO_HOME/projects/projects.json`
+**Path:** `$OSUNA_HOME/projects/projects.json`
 
 Array of project records.
 
@@ -513,7 +513,7 @@ workspace together with its owning project.
 
 ## 5. Workspace Registry
 
-**Path:** `$PASEO_HOME/projects/workspaces.json`
+**Path:** `$OSUNA_HOME/projects/workspaces.json`
 
 Array of workspace records. A workspace is a specific working directory within a project.
 
@@ -528,7 +528,7 @@ Array of workspace records. A workspace is a specific working directory within a
 | `branch`                       | `string \| null`                                             | The current Git branch for git-backed workspaces. Separate from `displayName`/`title`; a background branch refresh never rewrites the name.                                                   |
 | `worktreeRoot`                 | `string \| null`                                             | Backing checkout/worktree root. May differ from `cwd` for exact subprojects and remains persisted after the worktree is deleted so restore can reproduce the placement.                       |
 | `baseBranch`                   | `string \| null`                                             | Comparison base retained across archive and restore. Branch-off creation stores the resolved ref; legacy and PR-checkout records hold a bare name. Null means no recorded base.               |
-| `isPaseoOwnedWorktree`         | `boolean`                                                    | Whether Paseo owns and may remove/recreate the backing `worktreeRoot`                                                                                                                         |
+| `isOsunaOwnedWorktree`         | `boolean`                                                    | Whether Osuna owns and may remove/recreate the backing `worktreeRoot`                                                                                                                         |
 | `mainRepoRoot`                 | `string \| null`                                             | Main repository root for worktree checkouts, independent of both exact `cwd` and backing `worktreeRoot`                                                                                       |
 | `createdAt`                    | `string` (ISO 8601)                                          |                                                                                                                                                                                               |
 | `updatedAt`                    | `string` (ISO 8601)                                          |                                                                                                                                                                                               |
@@ -542,7 +542,7 @@ Array of workspace records. A workspace is a specific working directory within a
 
 ### Workspace label catalog
 
-**Path:** `$PASEO_HOME/projects/workspace-labels.json`
+**Path:** `$OSUNA_HOME/projects/workspace-labels.json`
 
 The catalog is shared by every workspace on one host. A definition contains a display name and one
 of the ten identity colour names (`WORKSPACE_LABEL_COLORS` in
@@ -573,7 +573,7 @@ than treating it as valid.
 
 ## 6. Push Token Store
 
-**Path:** `$PASEO_HOME/push-tokens.json`
+**Path:** `$OSUNA_HOME/push-tokens.json`
 
 ```json
 {
@@ -632,7 +632,7 @@ The page groups sessions and days; this file answers "what did this one turn cos
 | `input` / `cachedInput` / `cacheWrite` / `output` / `reasoning` | `number`                               | Same columns as a bucket row                                            |
 | `startedAt` / `lastAt`                                          | `string`                               | The turn's span. **No duration is stored** — `lastAt - startedAt` is it |
 | `userMessageIds`                                                | `string[]`                             | What a client matches its own timeline rows against; empty for Codex    |
-| `turnId`                                                        | `string?`                              | Paseo's own turn id, stamped by the parse a finished turn triggered     |
+| `turnId`                                                        | `string?`                              | Osuna's own turn id, stamped by the parse a finished turn triggered     |
 
 `turnKey` is the CLI's: Claude's `promptId`, Codex's `turn_id`, the id of the Pi/OMP
 entry that opened the turn. A subagent's tokens join the turn that spawned it and start
@@ -697,7 +697,7 @@ request, and how user prices match.
 
 ## 8. Command Catalog
 
-**Path:** `$PASEO_HOME/command-catalog.json`
+**Path:** `$OSUNA_HOME/command-catalog.json`
 
 ```json
 {
@@ -718,7 +718,7 @@ The command list the provider's running process last reported, one entry per pro
 
 ## 9. API endpoints
 
-**Path:** `$PASEO_HOME/api-endpoints/`. Every file is written with mode `0600` through `private-files.ts`. Owned by `packages/server/src/server/api-endpoints/store.ts`; the rules for the CLI files it rewrites are in [ADR 0004](adr/0004-api-endpoint-rewrites-cli-config.md).
+**Path:** `$OSUNA_HOME/api-endpoints/`. Every file is written with mode `0600` through `private-files.ts`. Owned by `packages/server/src/server/api-endpoints/store.ts`; the rules for the CLI files it rewrites are in [ADR 0004](adr/0004-api-endpoint-rewrites-cli-config.md).
 
 | File                   | Shape                                                                                                                                                                                                     | Notes                                                                                                                                                                                                                              |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -733,13 +733,13 @@ The command list the provider's running process last reported, one entry per pro
 
 ## 10. Daemon meta files
 
-These small files are not validated as full Zod schemas but are persisted under `$PASEO_HOME` for daemon identity and runtime coordination.
+These small files are not validated as full Zod schemas but are persisted under `$OSUNA_HOME` for daemon identity and runtime coordination.
 
 | Path                  | Format                                                         | Notes                                                                             |
 | --------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `server-id`           | Plain text, e.g. `srv_<base64url>`                             | Stable per-`$PASEO_HOME` daemon ID. Overridable via `PASEO_SERVER_ID` env.        |
+| `server-id`           | Plain text, e.g. `srv_<base64url>`                             | Stable per-`$OSUNA_HOME` daemon ID. Overridable via `OSUNA_SERVER_ID` env.        |
 | `daemon-keypair.json` | `{ v: 2, publicKeyB64, secretKeyB64 }` (libsodium box keypair) | E2EE relay identity. Written with mode `0600`. Regenerated if file is unreadable. |
-| `paseo.pid`           | JSON `{ pid, startedAt, ... }`                                 | PID lock; prevents two daemons sharing one `$PASEO_HOME`.                         |
+| `osuna.pid`           | JSON `{ pid, startedAt, ... }`                                 | PID lock; prevents two daemons sharing one `$OSUNA_HOME`.                         |
 | `daemon.log`          | Pino log output                                                | Default location; path/rotation configurable via `log.file` in `config.json`.     |
 
 ---
@@ -753,7 +753,7 @@ These live in React Native `AsyncStorage` or browser `IndexedDB`, not on the dae
 Right-sidebar client state splits on whether it is determined by the directory or owned by the workspace (two workspaces can share one `cwd`). The split is enforced by the cache key, so changing a key changes the sharing semantics — see [architecture.md](architecture.md#right-sidebar-boundary-directory-backed-vs-workspace-owned) for the full table.
 
 - **Directory-backed** (shared by same-`cwd` workspaces): keyed by `(serverId, cwd)`. Git status/diff, GitHub PR status, PR timeline, file preview content. These are TanStack Query caches, not persisted stores.
-- **Workspace-owned** (independent per workspace): keyed by `workspaceId`, with `cwd` used only as a fallback when no `workspaceId` is present. Review draft comments (`@paseo:review-draft-store`), diff-mode overrides (in-memory), workspace composer attachments, and file-explorer nav/expand state. The `workspaceId` part of these keys is **opaque** — never parse it back into a path.
+- **Workspace-owned** (independent per workspace): keyed by `workspaceId`, with `cwd` used only as a fallback when no `workspaceId` is present. Review draft comments (`@osuna:review-draft-store`), diff-mode overrides (in-memory), workspace composer attachments, and file-explorer nav/expand state. The `workspaceId` part of these keys is **opaque** — never parse it back into a path.
 
 ### Replica row store
 
@@ -777,7 +777,7 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
 
 ### Draft Store
 
-**AsyncStorage key:** `paseo-drafts` (version 5)
+**AsyncStorage key:** `osuna-drafts` (version 5)
 
 ```typescript
 {
@@ -795,13 +795,13 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
 }
 ```
 
-Both schemas are strict: `PersistedDraftStoreSchema` (`stores/draft-store/migration.ts`) validates every read and write, and `CanonicalDraftInputSchema` (`state.ts`) is the in-memory shape. A new input field must be added to both as optional. If the persisted schema rejects a write, `createValidatedPersistStorage` removes the whole `paseo-drafts` key, so every draft is lost, not just the new field. The same happens when an older app build reads a draft with a field it does not know.
+Both schemas are strict: `PersistedDraftStoreSchema` (`stores/draft-store/migration.ts`) validates every read and write, and `CanonicalDraftInputSchema` (`state.ts`) is the in-memory shape. A new input field must be added to both as optional. If the persisted schema rejects a write, `createValidatedPersistStorage` removes the whole `osuna-drafts` key, so every draft is lost, not just the new field. The same happens when an older app build reads a draft with a field it does not know.
 
 To retire a field, drop it from `CanonicalDraftInputSchema` but keep it in `PersistedDraftStoreSchema` under a `COMPAT` tag. A stored record that still has it fails `isCanonicalDraftInput`, so startup hands it to `migrateDraftInput`, which rewrites it into the current shape. The old Skill chip `skills` field goes this way: its names become leading Skill blocks in `text` and `segments`.
 
 ### Attachment Store (Web)
 
-**IndexedDB database:** `paseo-attachment-bytes`, object store: `attachments`
+**IndexedDB database:** `osuna-attachment-bytes`, object store: `attachments`
 
 Stores binary attachment blobs keyed by attachment ID.
 

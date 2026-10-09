@@ -6,7 +6,7 @@ import type {
   UsageSessionHandle,
   UsageSessionRow,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import { createLocalTimeResolver, type LocalTimeResolver } from "./local-time.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
 import { matchesUsageFilters, type UsageReportPricing } from "./report.js";
@@ -28,7 +28,7 @@ export interface UsageSessionsRequest {
   filters?: UsageReportFilters;
 }
 
-/** The Paseo agent that owns a provider session, if one imported it. */
+/** The Osuna agent that owns a provider session, if one imported it. */
 export interface UsageSessionOwner {
   agentId: string;
   workspaceId: string | null;

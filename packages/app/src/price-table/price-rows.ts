@@ -1,4 +1,4 @@
-import type { UsagePricePerMillion } from "@getpaseo/protocol/usage/types";
+import type { UsagePricePerMillion } from "@osuna/protocol/usage/types";
 import { EMPTY_PRICE_DRAFT, buildPriceDraft, type PriceDraft, type PriceField } from "./pricing";
 
 export interface PriceRowError {

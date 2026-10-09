@@ -11,7 +11,7 @@ describe("writeConfigFileGuarded", () => {
   let committed: Array<{ fileAtCommit: string | null; value: string }>;
 
   beforeEach(() => {
-    directory = mkdtempSync(path.join(os.tmpdir(), "paseo-config-file-"));
+    directory = mkdtempSync(path.join(os.tmpdir(), "osuna-config-file-"));
     filePath = path.join(directory, "settings.json");
     committed = [];
   });

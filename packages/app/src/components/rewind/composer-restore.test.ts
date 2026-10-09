@@ -32,7 +32,7 @@ describe("shouldRestoreComposerForRewindMode", () => {
 
 describe("resolveRewoundComposerContent", () => {
   test("brings leading skills, file and agent mentions back as blocks", () => {
-    const rewound = "/atw-tdd ask [@Claude](paseo://agent/provider/claude) about [x.ts](src/x.ts)";
+    const rewound = "/atw-tdd ask [@Claude](osuna://agent/provider/claude) about [x.ts](src/x.ts)";
     expect(resolveRewoundComposerContent(rewound, new Set(["atw-tdd"]))).toEqual({
       text: rewound,
       segments: [

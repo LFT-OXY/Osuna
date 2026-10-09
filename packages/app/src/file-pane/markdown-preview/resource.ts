@@ -1,4 +1,4 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { parseLineFragment } from "@/assistant-file-links";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 // 拉取模型与 Claude 模型映射。上游是本地假 HTTP 服务，绝不访问真实的中转站。
@@ -69,20 +69,20 @@ function closeServer(server: Server): Promise<void> {
 }
 
 describe("API endpoint models over the daemon RPC", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let upstream: FakeUpstream;
   let settingsPath: string;
 
   beforeEach(async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-models-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-api-endpoint-models-"));
     tempRoots.push(root);
     const claudeConfigDir = path.join(root, "claude");
     settingsPath = path.join(claudeConfigDir, "settings.json");
     await mkdir(claudeConfigDir, { recursive: true });
     await writeFile(settingsPath, USER_SETTINGS);
     upstream = await startUpstream();
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root },
     });
     client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.12.1" });

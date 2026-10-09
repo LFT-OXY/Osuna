@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";

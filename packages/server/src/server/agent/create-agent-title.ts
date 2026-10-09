@@ -1,6 +1,6 @@
-import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "@getpaseo/protocol/agent-title-limits";
-import type { FirstAgentContext } from "@getpaseo/protocol/messages";
-import { findMarkdownLinks } from "@getpaseo/protocol/message-links";
+import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "@osuna/protocol/agent-title-limits";
+import type { FirstAgentContext } from "@osuna/protocol/messages";
+import { findMarkdownLinks } from "@osuna/protocol/message-links";
 
 const MAX_INITIAL_AGENT_TITLE_CHARS = Math.min(60, MAX_EXPLICIT_AGENT_TITLE_CHARS);
 

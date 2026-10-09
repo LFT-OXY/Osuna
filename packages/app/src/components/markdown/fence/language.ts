@@ -3,7 +3,7 @@ export function getMarkdownFenceLanguage(info: string | null | undefined): strin
 }
 
 // Fence info strings ("```ts", "```typescript", "```ts {1,3}") map to the
-// extension-based parser table in @getpaseo/highlight. Aliases here only
+// extension-based parser table in @osuna/highlight. Aliases here only
 // cover names that don't already match an extension key in parsers.ts.
 const LANGUAGE_ALIASES: Record<string, string> = {
   typescript: "ts",

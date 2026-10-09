@@ -15,7 +15,7 @@ import type {
   UsageTrend,
   UsageTrendGranularity,
   UsageTrendStackBy,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import {
   createLocalTimeResolver,
   dayDifference,

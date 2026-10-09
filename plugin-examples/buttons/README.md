@@ -6,7 +6,7 @@ those same registrations. Switching agents moves the example to that agent's wor
 
 | Command Center command                | Header                                | Composer                        | Try                                                                                                                   |
 | ------------------------------------- | ------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Button examples: action**           | Refresh icon only                     | Refresh icon and label          | Refresh reads the workspace from the daemon and updates the label and tooltip. Paseo owns pending and error feedback. |
+| **Button examples: action**           | Refresh icon only                     | Refresh icon and label          | Refresh reads the workspace from the daemon and updates the label and tooltip. Osuna owns pending and error feedback. |
 | **Button examples: menu**             | Wrench, Tools, chevron                | Wrench and Tools                | Refresh, a separator, custom details, a Display submenu, and a disabled item.                                         |
 | **Button examples: popover**          | Reactive status dot, Details, chevron | Reactive status dot and Details | Workspace data updates through `useWorkspace`; Done closes the surface.                                               |
 | **Button examples: hide / show**      | Hide or restore the button            | Hide or restore the pill        | Visibility changes through `registration.update({ visible })`.                                                        |
@@ -26,15 +26,15 @@ The client entry owns the active example. [client/examples.tsx](client/examples.
 descriptors, updates, and React content. Return `.remove()` cleanup when the example moves or stops.
 See the [button reference](../../public-docs/plugins/reference.md#button-descriptor).
 
-From the repository root, `npm run typecheck --workspace=@getpaseo/plugin` checks this example
-against the SDK. Existing plugin projects must update `@getpaseo/plugin` before running their own
+From the repository root, `npm run typecheck --workspace=@osuna/plugin` checks this example
+against the SDK. Existing plugin projects must update `@osuna/plugin` before running their own
 `npm run typecheck` to detect the old `Component`/`onPress` pill shape and callable cleanup handle.
 
 The browser regression installs this exact directory in an isolated daemon and exercises both
 layouts, updates, and cleanup:
 
 ```sh
-npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/plugin-button-example.spec.ts
+npm run test:e2e --workspace=@osuna/app -- e2e/browser/plugin-button-example.spec.ts
 ```
 
 The captures use Chromium at desktop and phone widths; native iOS and Android were not exercised.

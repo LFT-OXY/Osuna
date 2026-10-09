@@ -1,8 +1,8 @@
 const BLOCKS = ["p", "pre", "li", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"]
-  .map((tag) => `[data-paseo-markdown-tag="${tag}"]`)
+  .map((tag) => `[data-osuna-markdown-tag="${tag}"]`)
   .join(",");
 const IGNORED =
-  '[data-paseo-markdown-ignore="true"], [aria-hidden="true"], button, [role="button"], svg, script, style';
+  '[data-osuna-markdown-ignore="true"], [aria-hidden="true"], button, [role="button"], svg, script, style';
 
 /** Local offsets belong to the DOM that supplied the text, never to a host parser. */
 export function findRenderedMatches(row: HTMLElement, query: string): Range[] {

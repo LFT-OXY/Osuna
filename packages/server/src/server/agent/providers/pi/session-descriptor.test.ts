@@ -14,7 +14,7 @@ async function writeSession(root: string, lines: unknown[]): Promise<string> {
 }
 
 test("Pi cwd filtering continues past the global candidate overscan", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-cwd-limit-"));
+  const root = await mkdtemp(path.join(tmpdir(), "osuna-pi-session-cwd-limit-"));
   const sessionsDir = path.join(root, "sessions");
   const requestedCwd = path.join(root, "requested");
   const otherCwd = path.join(root, "other");
@@ -60,7 +60,7 @@ test("Pi cwd filtering continues past the global candidate overscan", async () =
 });
 
 test("Pi import config preserves the latest recorded model and thinking level", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-model-"));
+  const root = await mkdtemp(path.join(tmpdir(), "osuna-pi-session-model-"));
   const cwd = path.join(root, "repo");
   const sessionFile = await writeSession(root, [
     {
@@ -122,10 +122,10 @@ test("Pi import config preserves the latest recorded model and thinking level", 
 });
 
 test("Pi import previews drop the Routing block the provider received", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-routing-block-"));
+  const root = await mkdtemp(path.join(tmpdir(), "osuna-pi-session-routing-block-"));
   onTestFinished(() => rm(root, { recursive: true, force: true }));
   const cwd = path.join(root, "repo");
-  const original = "[@Claude](paseo://agent/provider/claude) write tests";
+  const original = "[@Claude](osuna://agent/provider/claude) write tests";
   await writeSession(root, [
     { type: "session", version: 3, id: "session-1", timestamp: "2026-06-09T00:00:00.000Z", cwd },
     {
@@ -138,7 +138,7 @@ test("Pi import previews drop the Routing block the provider received", async ()
           { type: "text", text: original },
           {
             type: "text",
-            text: '<paseo-system>\n1. @Claude -> provider "claude", settings {}\n</paseo-system>',
+            text: '<osuna-system>\n1. @Claude -> provider "claude", settings {}\n</osuna-system>',
           },
         ],
       },
@@ -154,7 +154,7 @@ test("Pi import previews drop the Routing block the provider received", async ()
 });
 
 test("Pi import config can infer model from assistant messages", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-message-model-"));
+  const root = await mkdtemp(path.join(tmpdir(), "osuna-pi-session-message-model-"));
   const cwd = path.join(root, "repo");
   const sessionFile = await writeSession(root, [
     {
@@ -194,7 +194,7 @@ test("Pi import config can infer model from assistant messages", async () => {
 });
 
 test("Pi import config preserves thinking before a later model in large sessions", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-large-thinking-"));
+  const root = await mkdtemp(path.join(tmpdir(), "osuna-pi-session-large-thinking-"));
   const cwd = path.join(root, "repo");
   const fillerMessages = Array.from({ length: 2_100 }, (_, index) => ({
     type: "message",

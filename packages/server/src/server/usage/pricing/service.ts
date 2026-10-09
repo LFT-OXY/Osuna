@@ -9,7 +9,7 @@ import type {
   UsagePricingRefreshResult,
   UsagePricingTableInfo,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import type { UsageStore } from "../store.js";
 import {
   buildPricingIndex,

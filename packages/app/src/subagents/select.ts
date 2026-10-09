@@ -4,9 +4,9 @@ import equal from "fast-deep-equal";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import { refreshProviderSubagents, useProviderSubagentStore } from "./provider-store";
-import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
-import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
-import { getProviderSubagentIdFromPermission } from "@getpaseo/protocol/provider-subagent-permission";
+import type { ProviderSubagentDescriptorPayload } from "@osuna/protocol/messages";
+import { PARENT_TOOL_CALL_ID_LABEL } from "@osuna/protocol/agent-labels";
+import { getProviderSubagentIdFromPermission } from "@osuna/protocol/provider-subagent-permission";
 import type { AgentToolCallItem } from "@/types/stream";
 import type { PendingPermission } from "@/types/shared";
 import {
@@ -14,8 +14,8 @@ import {
   type CreateAgentCallInput,
 } from "@/tool-calls/detail-level/dispatch/model";
 
-export interface PaseoSubagentRow {
-  kind: "paseo";
+export interface OsunaSubagentRow {
+  kind: "osuna";
   id: Agent["id"];
   provider: Agent["provider"];
   title: Agent["title"];
@@ -50,7 +50,7 @@ export interface ProviderSubagentRow {
   toolCallId: string | null;
 }
 
-export type SubagentRow = PaseoSubagentRow | ProviderSubagentRow;
+export type SubagentRow = OsunaSubagentRow | ProviderSubagentRow;
 
 type SessionStoreSnapshot = ReturnType<typeof useSessionStore.getState>;
 type ProviderSubagentStoreSnapshot = ReturnType<typeof useProviderSubagentStore.getState>;
@@ -71,9 +71,9 @@ export type ProviderSubagentPermissions = Readonly<Record<string, readonly strin
 export const NO_PROVIDER_SUBAGENT_PERMISSIONS: ProviderSubagentPermissions = {};
 const NO_PENDING_TOOLS: readonly string[] = [];
 
-function toSubagentRow(agent: Agent): PaseoSubagentRow {
+function toSubagentRow(agent: Agent): OsunaSubagentRow {
   return {
-    kind: "paseo",
+    kind: "osuna",
     id: agent.id,
     provider: agent.provider,
     title: agent.title,
@@ -253,7 +253,7 @@ export function selectProviderSubagentsForParent(
 
 export function useSubagentsForParent(params: SelectSubagentsParams): SubagentRow[] {
   const pendingArchiveIds = usePendingArchiveAgentIds(params.serverId);
-  const paseoRows = useStoreWithEqualityFn(
+  const osunaRows = useStoreWithEqualityFn(
     useSessionStore,
     (state) => selectSubagentsForParent(state, params, pendingArchiveIds),
     equal,
@@ -296,11 +296,11 @@ export function useSubagentsForParent(params: SelectSubagentsParams): SubagentRo
 
   return useMemo(() => {
     if (params.providerParentSubagentId) return providerRows;
-    if (providerRows.length === 0) return paseoRows;
-    const rows = [...paseoRows, ...providerRows];
+    if (providerRows.length === 0) return osunaRows;
+    const rows = [...osunaRows, ...providerRows];
     rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
     return rows;
-  }, [params.providerParentSubagentId, paseoRows, providerRows]);
+  }, [params.providerParentSubagentId, osunaRows, providerRows]);
 }
 
 /** 派发组一行需要的子智能体数据。状态与 Subagents track 同源，都从 `SubagentRow` 分桶。 */
@@ -345,7 +345,7 @@ export interface DispatchSubagentsParams {
   parentAgentId: string;
 }
 
-/** 本父智能体派出过的子智能体，按 `paseo.parent-tool-call-id` 的 callId 建索引。 */
+/** 本父智能体派出过的子智能体，按 `osuna.parent-tool-call-id` 的 callId 建索引。 */
 export function selectDispatchSubagents(
   state: SessionStoreSnapshot,
   params: DispatchSubagentsParams,
@@ -383,7 +383,7 @@ export function createDispatchSubagentsSelector(
   };
 }
 
-/** provider 子智能体没有模型、模式与归档这些 Paseo 字段。 */
+/** provider 子智能体没有模型、模式与归档这些 Osuna 字段。 */
 function toProviderDispatchSubagent(
   subagent: ProviderSubagentDescriptorPayload,
   pendingTools: readonly string[],
@@ -455,7 +455,7 @@ export type DispatchLookup =
 export const PENDING_DISPATCH_LOOKUP: DispatchLookup = { status: "pending" };
 
 /**
- * `key` 在一组里唯一：Paseo 子智能体一次调用一个，就用 callId；provider 的一次调用可能派出多个，
+ * `key` 在一组里唯一：Osuna 子智能体一次调用一个，就用 callId；provider 的一次调用可能派出多个，
  * 用 callId 加子智能体 id。provider 行没有 `create_agent` 入参。
  */
 export type DispatchCallState =

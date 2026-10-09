@@ -59,7 +59,7 @@ const TURN_FILE: UsageRowFile<UsageTurnRow> = {
 };
 
 /**
- * Owns `$PASEO_HOME/usage/`. Bucket and turn rows are append-only increments in
+ * Owns `$OSUNA_HOME/usage/`. Bucket and turn rows are append-only increments in
  * a file per month; the cursor is a single atomically written JSON file.
  */
 export class UsageStore {

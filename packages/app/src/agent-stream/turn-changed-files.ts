@@ -1,5 +1,5 @@
-import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
-import { stripCwdPrefix } from "@getpaseo/protocol/path-utils";
+import type { ToolCallDetail } from "@osuna/protocol/agent-types";
+import { stripCwdPrefix } from "@osuna/protocol/path-utils";
 import { describeToolCall } from "@/tool-calls/detail-level/grouping";
 import type { StreamItem, ToolCallItem } from "@/types/stream";
 import { parseUnifiedDiff } from "@/utils/tool-call-parsers";

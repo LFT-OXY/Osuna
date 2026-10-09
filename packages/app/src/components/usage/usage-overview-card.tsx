@@ -2,7 +2,7 @@ import type {
   UsageBackfill,
   UsageModelBreakdown,
   UsageSourceBreakdown,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import { ChevronLeft, ChevronRight, Info, Layers, RefreshCw } from "lucide-react-native";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";

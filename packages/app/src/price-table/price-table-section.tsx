@@ -1,4 +1,4 @@
-import type { UsagePricingOverride } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingOverride } from "@osuna/protocol/usage/types";
 import { useCallback, useMemo, useReducer, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";

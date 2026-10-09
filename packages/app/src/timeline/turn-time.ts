@@ -4,7 +4,7 @@ import { startsNewTurn } from "@/agent-stream/turn-membership";
 export interface TurnTiming {
   completedAt: Date;
   durationMs: number | null;
-  /** Paseo's own id for the turn, when the daemon watched it open. */
+  /** Osuna's own id for the turn, when the daemon watched it open. */
   turnId: string | null;
   /** Provider id of the user message that opened the turn. */
   userMessageId: string | null;

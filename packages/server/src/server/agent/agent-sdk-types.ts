@@ -4,13 +4,13 @@ import type {
   JsonValue,
   ProviderOptions,
   ToolPolicy,
-} from "@getpaseo/protocol/agent-types";
-import type { AgentAttachment } from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/agent-types";
+import type { AgentAttachment } from "@osuna/protocol/messages";
 import type {
   ApiEndpointModeMismatch,
   ApiEndpointRef,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { PaseoToolCatalog } from "./tools/types.js";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
+import type { OsunaToolCatalog } from "./tools/types.js";
 import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
 export type { AgentProviderNotice, AgentTaskItem };
@@ -201,7 +201,7 @@ export interface AgentCapabilityFlags {
   supportsMcpServers: boolean;
   /** 只用于 client：能否接 MCP 要按 cwd 起会话才知道（如 Pi 的 adapter），client 上的 supportsMcpServers 不算数。 */
   mcpServersDecidedPerSession?: boolean;
-  supportsNativePaseoTools?: boolean;
+  supportsNativeOsunaTools?: boolean;
   supportsReasoningStream: boolean;
   supportsToolInvocations: boolean;
   supportsRewindConversation?: boolean;
@@ -649,10 +649,10 @@ export interface AgentLaunchContext {
   agentId?: string;
   env?: Record<string, string>;
   /**
-   * Runtime-only internal Paseo tools. This must never be persisted into
+   * Runtime-only internal Osuna tools. This must never be persisted into
    * AgentSessionConfig; providers may adapt it to their native tool surface.
    */
-  paseoTools?: PaseoToolCatalog;
+  osunaTools?: OsunaToolCatalog;
 }
 
 export interface AgentCreateSessionOptions {
@@ -838,12 +838,12 @@ export interface AgentClient {
   getDiagnostic?(): Promise<{ diagnostic: string }>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().
-   * Called when Paseo archives an agent so the provider's own UI reflects the same state.
+   * Called when Osuna archives an agent so the provider's own UI reflects the same state.
    */
   archiveNativeSession?(handle: AgentPersistenceHandle): Promise<void>;
   /**
    * Unarchive a durable native session in the provider.
-   * Called before Paseo clears its archived flag so provider resume can succeed.
+   * Called before Osuna clears its archived flag so provider resume can succeed.
    */
   unarchiveNativeSession?(handle: AgentPersistenceHandle): Promise<void>;
   /**

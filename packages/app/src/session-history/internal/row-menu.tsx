@@ -46,7 +46,7 @@ export interface SessionHistoryRowActions {
   /** Test ids end with this; the row key. */
   rowKey: string;
   onCopyResumeCommand: () => void;
-  /** Absent when Paseo already owns the session: importing it again would make a second agent. */
+  /** Absent when Osuna already owns the session: importing it again would make a second agent. */
   onImport: (() => void) | null;
   importStatus: "idle" | "pending";
 }

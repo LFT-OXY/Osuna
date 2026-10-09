@@ -56,7 +56,7 @@ describe("claude agent commands E2E", () => {
   }, 60000);
 
   test("marks a draft list partial until a process has reported for that cwd", async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "paseo-claude-commands-draft-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "osuna-claude-commands-draft-"));
     try {
       const draftConfig = { provider: "claude" as const, cwd };
 
@@ -77,9 +77,9 @@ describe("claude agent commands E2E", () => {
   }, 60000);
 
   test("lists a stored agent's cached commands without loading the agent", async () => {
-    const paseoHomeRoot = await mkdtemp(path.join(tmpdir(), "paseo-home-stored-commands-"));
-    const paseoHome = path.join(paseoHomeRoot, ".paseo");
-    const cwd = await mkdtemp(path.join(tmpdir(), "paseo-claude-commands-stored-"));
+    const osunaHomeRoot = await mkdtemp(path.join(tmpdir(), "osuna-home-stored-commands-"));
+    const osunaHome = path.join(osunaHomeRoot, ".osuna");
+    const cwd = await mkdtemp(path.join(tmpdir(), "osuna-claude-commands-stored-"));
     const agentId = "22222222-2222-4222-8222-222222222222";
     const now = new Date("2026-09-28T00:00:00.000Z").toISOString();
     const cached = {
@@ -88,9 +88,9 @@ describe("claude agent commands E2E", () => {
       argumentHint: "",
       kind: "skill",
     };
-    await mkdir(path.join(paseoHome, "agents"), { recursive: true });
+    await mkdir(path.join(osunaHome, "agents"), { recursive: true });
     await writeFile(
-      path.join(paseoHome, "agents", `${agentId}.json`),
+      path.join(osunaHome, "agents", `${agentId}.json`),
       JSON.stringify({
         id: agentId,
         provider: "claude",
@@ -103,12 +103,12 @@ describe("claude agent commands E2E", () => {
       }),
     );
     await writeFile(
-      path.join(paseoHome, "command-catalog.json"),
+      path.join(osunaHome, "command-catalog.json"),
       JSON.stringify({
         entries: [{ provider: "claude", cwd, updatedAt: now, commands: [cached] }],
       }),
     );
-    const stored = await createDaemonTestContext({ paseoHomeRoot });
+    const stored = await createDaemonTestContext({ osunaHomeRoot });
 
     try {
       const result = await stored.client.listCommands({ agentId });

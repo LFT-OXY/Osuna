@@ -1,5 +1,5 @@
 import { Fragment, useMemo } from "react";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { selectActiveApiEndpoint } from "@/api-endpoints";

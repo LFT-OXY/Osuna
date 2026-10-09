@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { darkHighlightColors, resolveSyntaxColors } from "@getpaseo/highlight";
+import { darkHighlightColors, resolveSyntaxColors } from "@osuna/highlight";
 import {
   DEFAULT_MONO_FONT_STACK,
   DEFAULT_UI_FONT_STACK,

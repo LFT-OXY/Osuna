@@ -49,8 +49,8 @@ export function isPidRunning(pid: number): boolean {
   }
 }
 
-function getPidFilePath(paseoHome: string): string {
-  return join(paseoHome, "paseo.pid");
+function getPidFilePath(osunaHome: string): string {
+  return join(osunaHome, "osuna.pid");
 }
 
 async function touchPidLockFile(pidPath: string): Promise<void> {
@@ -95,7 +95,7 @@ export function isSamePidLock(left: PidLockInfo, right: PidLockInfo): boolean {
 
 function createLockHeldError(lock: PidLockInfo): PidLockError {
   return new PidLockError(
-    `Another Paseo daemon is already running (PID ${lock.pid}, started ${lock.startedAt})`,
+    `Another Osuna daemon is already running (PID ${lock.pid}, started ${lock.startedAt})`,
     lock,
   );
 }
@@ -138,7 +138,7 @@ async function writeNewPidLock(pidPath: string, lockInfo: PidLockInfo): Promise<
     const raceLock = await readPidLock(pidPath);
     if (raceLock) {
       throw new PidLockError(
-        `Another Paseo daemon is already running (PID ${raceLock.pid})`,
+        `Another Osuna daemon is already running (PID ${raceLock.pid})`,
         raceLock,
       );
     }
@@ -149,13 +149,13 @@ async function writeNewPidLock(pidPath: string, lockInfo: PidLockInfo): Promise<
 }
 
 export async function acquirePidLock(
-  paseoHome: string,
+  osunaHome: string,
   listen: string | null,
   options?: AcquirePidLockOptions,
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
 
-  ensurePrivateDirectory(paseoHome);
+  ensurePrivateDirectory(osunaHome);
 
   // Try to read existing lock
   const existingLock = await readPidLock(pidPath);
@@ -177,17 +177,17 @@ export async function acquirePidLock(
     uid: process.getuid?.() ?? 0,
     listen,
     heartbeat: true,
-    ...(process.env.PASEO_DESKTOP_MANAGED === "1" ? { desktopManaged: true } : {}),
+    ...(process.env.OSUNA_DESKTOP_MANAGED === "1" ? { desktopManaged: true } : {}),
   };
 
   await writeNewPidLock(pidPath, lockInfo);
 }
 
 export async function refreshPidLock(
-  paseoHome: string,
+  osunaHome: string,
   options?: { ownerPid?: number },
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
   const lockOwnerPid = resolveOwnerPid(options?.ownerPid);
   let fd;
   try {
@@ -242,7 +242,7 @@ async function readPidLockFromHandleWithRetry(fd: FileHandle): Promise<PidLockIn
 }
 
 export function startPidLockHeartbeat(
-  paseoHome: string,
+  osunaHome: string,
   options?: {
     ownerPid?: number;
     intervalMs?: number;
@@ -257,7 +257,7 @@ export function startPidLockHeartbeat(
       return;
     }
     refreshing = true;
-    refreshPidLock(paseoHome, { ownerPid: options?.ownerPid })
+    refreshPidLock(osunaHome, { ownerPid: options?.ownerPid })
       .catch((error) => {
         if (options?.onError) {
           options.onError(error);
@@ -276,11 +276,11 @@ export function startPidLockHeartbeat(
 }
 
 export async function updatePidLock(
-  paseoHome: string,
+  osunaHome: string,
   patch: { listen: string | null },
   options?: { ownerPid?: number },
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
   const lockOwnerPid = resolveOwnerPid(options?.ownerPid);
   const fd = await open(pidPath, "r+");
   try {
@@ -307,10 +307,10 @@ export async function updatePidLock(
 }
 
 export async function releasePidLock(
-  paseoHome: string,
+  osunaHome: string,
   options?: { ownerPid?: number; startedAt?: string },
 ): Promise<void> {
-  const pidPath = getPidFilePath(paseoHome);
+  const pidPath = getPidFilePath(osunaHome);
   const lockOwnerPid = resolveOwnerPid(options?.ownerPid);
   try {
     // Only remove if it's our lock
@@ -327,15 +327,15 @@ export async function releasePidLock(
   }
 }
 
-export async function getPidLockInfo(paseoHome: string): Promise<PidLockInfo | null> {
-  const pidPath = getPidFilePath(paseoHome);
+export async function getPidLockInfo(osunaHome: string): Promise<PidLockInfo | null> {
+  const pidPath = getPidFilePath(osunaHome);
   return readPidLock(pidPath);
 }
 
 export async function isLocked(
-  paseoHome: string,
+  osunaHome: string,
 ): Promise<{ locked: boolean; info?: PidLockInfo }> {
-  const info = await getPidLockInfo(paseoHome);
+  const info = await getPidLockInfo(osunaHome);
   if (!info) {
     return { locked: false };
   }

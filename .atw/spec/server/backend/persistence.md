@@ -1,6 +1,6 @@
 # Persistence
 
-There is no database. Daemon state is JSON files under `$PASEO_HOME` (`~/.paseo` in production, `.dev/paseo-home` in this checkout). `docs/data-model.md` is the authority for every record, its schema, and the directory layout; keep it current when you add a file.
+There is no database. Daemon state is JSON files under `$OSUNA_HOME` (`~/.osuna` in production, `.dev/osuna-home` in this checkout). `docs/data-model.md` is the authority for every record, its schema, and the directory layout; keep it current when you add a file.
 
 ## The store shape
 
@@ -40,7 +40,7 @@ only the last handle. Three rules make it safe without a migration.
   where the two answers start to diverge.
 - **Never write the derived value back.** The record stays as it was until
   something real changes it; a read-time backfill would rewrite every file in
-  `$PASEO_HOME` on the first start after an upgrade.
+  `$OSUNA_HOME` on the first start after an upgrade.
 
 Add the field to `docs/data-model.md` in the same change, including the sentence
 that says what readers do when it is missing.
@@ -100,7 +100,7 @@ A field users can change while the daemon runs needs five edits, and missing any
 
 1. `PersistedConfigSchema` in `server/persisted-config.ts` — the file shape. It is `.strict()`, so an unknown key makes the whole config unreadable.
 2. `MutableDaemonConfigSchema` in `packages/protocol/src/messages.ts` — the live shape, and a **separate** patch shape in `MutableDaemonConfigPatchSchema`. A `.default()` in the patch shape resurrects the default whenever someone edits a sibling field: patch `{ overrides }` and a defaulted `autoUpdate: true` rides along and switches auto-update back on. Defaults belong to the full schema only.
-3. `RELOADABLE_PATHS` **and** `PERSISTED_TO_MUTABLE_PATH` in `server/daemon-config-store.ts` — without both, `paseo reload` reports the path as restart-required.
+3. `RELOADABLE_PATHS` **and** `PERSISTED_TO_MUTABLE_PATH` in `server/daemon-config-store.ts` — without both, `osuna reload` reports the path as restart-required.
 4. A merge branch that writes the patch back into the persisted file. `mergeMutableDaemonPatch` covers `daemon.*` and `mergeMutableAgentPatch` covers `agents.*`; a field under `features.*` needs its own.
 5. Startup resolution in `server/config.ts`, plus the env override's path in `resolveOverrideControlledPaths` so the UI can tell the user why their edit will not stick.
 
@@ -110,7 +110,7 @@ Owners read the live value through one resolver rather than repeating `?? defaul
 ### Cache files: unreadable means empty, never "start the source"
 
 `CommandCatalog` (`server/agent/command-catalog.ts`, file
-`$PASEO_HOME/command-catalog.json`) holds data the daemon can rebuild: the
+`$OSUNA_HOME/command-catalog.json`) holds data the daemon can rebuild: the
 command list a provider process last reported, per provider and `path.resolve`d
 cwd. That makes it the one kind of store where a failed read is harmless — a
 missing, corrupt, or schema-invalid file loads as an empty map and is rewritten
@@ -135,8 +135,8 @@ same `commandCatalogPath` reads the entry back (daemon restart), and a
 ## Files and secrets
 
 - Keypairs and other private files go through `server/private-files.ts` (mode `0600`).
-- `paseo.pid` is a lock and endpoint record owned by the supervisor; read it, never write it from a feature (`docs/architecture.md` "Storage").
-- Temporary directories in tests come from `mkdtemp` and are removed in `afterEach`; the harness in `server/test-utils/paseo-daemon.ts` does this for you.
+- `osuna.pid` is a lock and endpoint record owned by the supervisor; read it, never write it from a feature (`docs/architecture.md` "Storage").
+- Temporary directories in tests come from `mkdtemp` and are removed in `afterEach`; the harness in `server/test-utils/osuna-daemon.ts` does this for you.
 
 ## Scenario: rewriting a config file another program owns
 
@@ -155,7 +155,7 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02, conflict 
 - Codex path: `resolveCodexConfigPath()` takes the directory of the Codex hooks installer path (`CODEX_HOME` wins) plus `config.toml`.
 - Guarded write (`config-file.ts`): `writeConfigFileGuarded<T>({ filePath, compute(current: Buffer | null) → { change: write{text} | delete | keep, value: T }, commit(value), rollback(), beforeRecheck? }) → { kind: "written", value } | { kind: "conflict" }`. The service wraps it as `writeConfigFile`, passes `compute(text, bytes)`, and turns `conflict` into `ApiEndpointRequestError("config_conflict")`. Every write and restore of `settings.json` / `config.toml` goes through it.
 - Inspect (pure, for health): `inspectClaudeSettings({ text, takeover }) → { kind: "parsed", modifiedKeys, baseUrl } | unparsable`; `inspectCodexConfig({ text, takeover, table }) → { kind: "parsed", modifiedKeys, profileOverride: { profile, keys } | null, baseUrl } | unparsable`. `takeover`/`table` are null in Official.
-- Injection: `PaseoDaemonConfig.apiEndpoints: { env?, homeDir?, beforeConfigRecheck? }`. `beforeConfigRecheck` is a test seam only: the daemon tests write the file from it to simulate another tool. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so no test daemon can touch the real `~/.claude` or `~/.codex`. `ApiEndpointServiceOptions.providerRuntimeSettings(provider)` is required; bootstrap wires it to `providerSnapshotManager.getRuntimeSettings(provider)` and the service itself calls `probeCodexVersion(this.providerRuntimeSettings("codex"))`, so a test sets `providerOverrides.codex.command` to a fake binary.
+- Injection: `OsunaDaemonConfig.apiEndpoints: { env?, homeDir?, beforeConfigRecheck? }`. `beforeConfigRecheck` is a test seam only: the daemon tests write the file from it to simulate another tool. `createTestOsunaDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so no test daemon can touch the real `~/.claude` or `~/.codex`. `ApiEndpointServiceOptions.providerRuntimeSettings(provider)` is required; bootstrap wires it to `providerSnapshotManager.getRuntimeSettings(provider)` and the service itself calls `probeCodexVersion(this.providerRuntimeSettings("codex"))`, so a test sets `providerOverrides.codex.command` to a fake binary.
 
 ### 3. Contracts
 

@@ -23,7 +23,7 @@ export async function prepareLocalPairingHost(
   additionalHosts: PairingHostInput[] = [],
 ): Promise<void> {
   await page.addInitScript((localServerId) => {
-    (window as unknown as { paseoDesktop: unknown }).paseoDesktop = {
+    (window as unknown as { osunaDesktop: unknown }).osunaDesktop = {
       platform: "darwin",
       invoke: async (command: string) => {
         if (command === "desktop_daemon_status") {
@@ -129,9 +129,9 @@ export async function closePairDeviceModal(page: Page): Promise<void> {
 
 export async function reloadAndOpenPairDevice(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const nonce = localStorage.getItem("@paseo:e2e-seed-nonce");
+    const nonce = localStorage.getItem("@osuna:e2e-seed-nonce");
     if (!nonce) throw new Error("Expected e2e seed nonce");
-    localStorage.setItem("@paseo:e2e-disable-default-seed-once", nonce);
+    localStorage.setItem("@osuna:e2e-disable-default-seed-once", nonce);
   });
   await page.reload();
   await openPairDeviceModal(page);
@@ -160,9 +160,9 @@ export async function retryRelayAndExpectFailure(
 
 export async function openPairDeviceFromHome(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const nonce = localStorage.getItem("@paseo:e2e-seed-nonce");
+    const nonce = localStorage.getItem("@osuna:e2e-seed-nonce");
     if (!nonce) throw new Error("Expected e2e seed nonce");
-    localStorage.setItem("@paseo:e2e-disable-default-seed-once", nonce);
+    localStorage.setItem("@osuna:e2e-disable-default-seed-once", nonce);
   });
   await page.goto("/open-project");
   await page.getByTestId("open-project-pair-device").click();

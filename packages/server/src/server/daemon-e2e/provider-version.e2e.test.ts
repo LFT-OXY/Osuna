@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 const tempRoots: string[] = [];
@@ -13,7 +13,7 @@ describe.skipIf(process.platform === "win32")(
   "installed CLI version in the provider snapshot",
   () => {
     let root: string;
-    let daemon: TestPaseoDaemon | undefined;
+    let daemon: TestOsunaDaemon | undefined;
     let client: DaemonClient | undefined;
     // 桩 registry：按包名返回 latest；不在表里的包一律失败，于是意外的联网会变成可见的 error。
     const registry = new Map<string, string>();
@@ -25,7 +25,7 @@ describe.skipIf(process.platform === "win32")(
 
     beforeEach(async () => {
       registry.clear();
-      root = await mkdtemp(path.join(os.tmpdir(), "paseo-provider-version-"));
+      root = await mkdtemp(path.join(os.tmpdir(), "osuna-provider-version-"));
       tempRoots.push(root);
       await mkdir(path.join(root, "bin"));
     });
@@ -53,10 +53,10 @@ describe.skipIf(process.platform === "win32")(
     // 用真实的提供方客户端（不注入假客户端），并关掉本机可能装着的其余内置提供方，避免探测真 CLI。
     async function startDaemon(
       providerOverrides: NonNullable<
-        Parameters<typeof createTestPaseoDaemon>[0]
+        Parameters<typeof createTestOsunaDaemon>[0]
       >["providerOverrides"],
     ): Promise<void> {
-      daemon = await createTestPaseoDaemon({
+      daemon = await createTestOsunaDaemon({
         agentClients: {},
         providerVersions: { fetchLatestVersion },
         providerOverrides: {

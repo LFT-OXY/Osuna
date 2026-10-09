@@ -17,8 +17,8 @@ import type {
   FetchRecentProviderSessionsRequestMessage,
   ImportAgentRequestMessageSchema,
   RecentProviderSessionDescriptorPayload,
-} from "@getpaseo/protocol/messages";
-import { getParentAgentIdFromLabels, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+} from "@osuna/protocol/messages";
+import { getParentAgentIdFromLabels, PARENT_AGENT_ID_LABEL } from "@osuna/protocol/agent-labels";
 import { createRealpathAwarePathMatcher } from "../../utils/path.js";
 
 type ImportAgentRequestMessage = z.infer<typeof ImportAgentRequestMessageSchema>;
@@ -75,10 +75,10 @@ export interface ListImportableProviderSessionsResult {
 }
 
 interface ImportedProviderSessions {
-  /** Handles owned by an active Paseo agent; these are hidden from a plain import listing. */
+  /** Handles owned by an active Osuna agent; these are hidden from a plain import listing. */
   handles: Set<string>;
   count: number;
-  /** Every handle Paseo ever owned, active first so an archived twin never shadows a live agent. */
+  /** Every handle Osuna ever owned, active first so an archived twin never shadows a live agent. */
   ownersByHandle: Map<string, ProviderSessionOwner>;
 }
 

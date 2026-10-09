@@ -17,9 +17,9 @@ $.verbose = false;
 
 const pollIntervalMs = 100;
 const testEnv = {
-  PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
-  PASEO_DICTATION_ENABLED: process.env.PASEO_DICTATION_ENABLED ?? "0",
-  PASEO_VOICE_MODE_ENABLED: process.env.PASEO_VOICE_MODE_ENABLED ?? "0",
+  OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
+  OSUNA_DICTATION_ENABLED: process.env.OSUNA_DICTATION_ENABLED ?? "0",
+  OSUNA_VOICE_MODE_ENABLED: process.env.OSUNA_VOICE_MODE_ENABLED ?? "0",
 };
 
 function sleep(ms: number): Promise<void> {
@@ -66,9 +66,9 @@ interface DaemonStatus {
   pid: number | null;
 }
 
-async function readDaemonStatus(paseoHome: string): Promise<DaemonStatus> {
+async function readDaemonStatus(osunaHome: string): Promise<DaemonStatus> {
   const result =
-    await $`PASEO_HOME=${paseoHome} PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD} PASEO_DICTATION_ENABLED=${testEnv.PASEO_DICTATION_ENABLED} PASEO_VOICE_MODE_ENABLED=${testEnv.PASEO_VOICE_MODE_ENABLED} npx paseo daemon status --home ${paseoHome} --json`.nothrow();
+    await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon status --home ${osunaHome} --json`.nothrow();
   if (result.exitCode !== 0) {
     return { localDaemon: null, pid: null };
   }
@@ -124,14 +124,14 @@ function waitForProcessExit(processRef: ChildProcess, timeoutMs: number): Promis
 console.log("=== Daemon SIGINT (supervisor regression) ===\n");
 
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-sigint-supervisor-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-sigint-supervisor-"));
 const cliRoot = join(import.meta.dirname, "..");
 
 let supervisorProcess: ChildProcess | null = null;
 let recentSupervisorLogs = "";
 
 try {
-  console.log("Test 1: start supervisor-entrypoint in dev mode with isolated PASEO_HOME");
+  console.log("Test 1: start supervisor-entrypoint in dev mode with isolated OSUNA_HOME");
 
   supervisorProcess = spawn(
     process.execPath,
@@ -141,9 +141,9 @@ try {
       env: {
         ...process.env,
         ...testEnv,
-        PASEO_HOME: paseoHome,
-        PASEO_LISTEN: `127.0.0.1:${port}`,
-        PASEO_RELAY_ENABLED: "false",
+        OSUNA_HOME: osunaHome,
+        OSUNA_LISTEN: `127.0.0.1:${port}`,
+        OSUNA_RELAY_ENABLED: "false",
         CI: "true",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -160,7 +160,7 @@ try {
 
   await waitFor(
     async () => {
-      const status = await readDaemonStatus(paseoHome);
+      const status = await readDaemonStatus(osunaHome);
       return (
         status.localDaemon === "running" && status.pid !== null && isProcessRunning(status.pid)
       );
@@ -188,7 +188,7 @@ try {
 
   await waitFor(
     async () => {
-      const status = await readDaemonStatus(paseoHome);
+      const status = await readDaemonStatus(osunaHome);
       return status.localDaemon === "stopped";
     },
     15000,
@@ -223,8 +223,8 @@ try {
     });
   }
 
-  await $`PASEO_HOME=${paseoHome} PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD} PASEO_DICTATION_ENABLED=${testEnv.PASEO_DICTATION_ENABLED} PASEO_VOICE_MODE_ENABLED=${testEnv.PASEO_VOICE_MODE_ENABLED} npx paseo daemon stop --home ${paseoHome} --force`.nothrow();
-  await rm(paseoHome, { recursive: true, force: true });
+  await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${osunaHome} --force`.nothrow();
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 if (recentSupervisorLogs.trim().length === 0) {

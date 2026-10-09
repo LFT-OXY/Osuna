@@ -3,7 +3,7 @@ import type {
   UsageAgentTurn,
   UsageModelAmount,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { renderUsageText } from "./text";
@@ -53,13 +53,13 @@ beforeAll(async () => {
 });
 
 describe("matchTurnUsage", () => {
-  const withTurnId = turn({ turnKey: "prompt-a", turnId: "paseo-turn-1", userMessageIds: ["u1"] });
+  const withTurnId = turn({ turnKey: "prompt-a", turnId: "osuna-turn-1", userMessageIds: ["u1"] });
   const withMessageIdOnly = turn({ turnKey: "prompt-b", turnId: null, userMessageIds: ["u2"] });
 
-  it("matches on the Paseo turn id first", () => {
+  it("matches on the Osuna turn id first", () => {
     expect(
       matchTurnUsage([withMessageIdOnly, withTurnId], {
-        turnId: "paseo-turn-1",
+        turnId: "osuna-turn-1",
         userMessageId: "u2",
       }),
     ).toEqual(withTurnId);
@@ -68,7 +68,7 @@ describe("matchTurnUsage", () => {
   it("falls back to the first user message id when no row carries the turn id", () => {
     expect(
       matchTurnUsage([withTurnId, withMessageIdOnly], {
-        turnId: "paseo-turn-missing",
+        turnId: "osuna-turn-missing",
         userMessageId: "u2",
       }),
     ).toEqual(withMessageIdOnly);

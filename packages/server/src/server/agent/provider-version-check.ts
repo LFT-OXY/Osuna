@@ -1,8 +1,8 @@
 import type { Logger } from "pino";
 import { z } from "zod";
-import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import type { ProviderVersionCheckResult } from "@getpaseo/protocol/messages";
+import { AGENT_PROVIDER_DEFINITIONS } from "@osuna/protocol/provider-manifest";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
+import type { ProviderVersionCheckResult } from "@osuna/protocol/messages";
 
 /*
  * 内置提供方的"有没有新版本"：已装版本取自提供方快照，最新版本查 npm registry 的 latest。

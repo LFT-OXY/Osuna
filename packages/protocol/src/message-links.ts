@@ -2,7 +2,7 @@ import { PROVIDER_ID_PATTERN } from "./provider-config.js";
 
 /**
  * 消息正文里的链接：Markdown 链接的匹配与写法，以及 Agent mention 链接
- * `[@名字](paseo://agent/<kind>/<id>)`。app 行内块与 daemon 共用这一份，格式写进历史后不再改（ADR 0005）。
+ * `[@名字](osuna://agent/<kind>/<id>)`。app 行内块与 daemon 共用这一份，格式写进历史后不再改（ADR 0005）。
  */
 
 export type AgentMentionKind = "provider" | "profile";
@@ -27,7 +27,7 @@ export interface MarkdownLink {
   target: string;
 }
 
-const AGENT_MENTION_HREF_PREFIX = "paseo://agent/";
+const AGENT_MENTION_HREF_PREFIX = "osuna://agent/";
 // label 与目标里的转义只认会破坏链接结构的字符；目标用 `<…>` 包时可含空格与括号，
 // 裸目标按 CommonMark 允许一层成对括号（如 `app/(tabs)/index.tsx`）。
 const LINK_PATTERN =

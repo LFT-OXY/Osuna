@@ -1,4 +1,4 @@
-import type { ProviderUsage } from "@getpaseo/protocol/messages";
+import type { ProviderUsage } from "@osuna/protocol/messages";
 import { expect, test, type Page } from "../support/fixtures";
 import { expectComposerVisible } from "../support/helpers/composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
@@ -112,7 +112,7 @@ async function openDraftTabOnDesktop(page: Page) {
 // 在 fixture 写入主机注册表之后运行。
 async function hideHostBadges(page: Page) {
   await page.addInitScript(() => {
-    const key = "@paseo:daemon-registry";
+    const key = "@osuna:daemon-registry";
     const hosts = JSON.parse(localStorage.getItem(key) ?? "[]") as Record<string, unknown>[];
     for (const host of hosts) {
       host.appearance = { color: "none", badgeDisplay: "hidden" };

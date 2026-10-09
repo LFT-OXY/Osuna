@@ -119,8 +119,8 @@ export function DiffSurface(props: DiffSurfaceProps) {
   const hasHoveredAffordanceRef = useRef(false);
   const family = resolveMonoFontStack(props.displayPreferences.monoFontFamily);
   useLayoutEffect(() => {
-    const stats = (window as typeof window & { __PASEO_DIFF_REACT_STATS__?: { commits: number } })
-      .__PASEO_DIFF_REACT_STATS__;
+    const stats = (window as typeof window & { __OSUNA_DIFF_REACT_STATS__?: { commits: number } })
+      .__OSUNA_DIFF_REACT_STATS__;
     if (stats) stats.commits += 1;
   });
   const desiredTypography = useMemo<DiffTypography>(

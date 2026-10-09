@@ -15,21 +15,21 @@ function mentionsIn(text: string): (AgentMention | null)[] {
 }
 
 describe("agent mention href", () => {
-  test("writes both kinds under the paseo agent prefix", () => {
+  test("writes both kinds under the osuna agent prefix", () => {
     expect(formatAgentMentionHref({ kind: "provider", id: "claude" })).toBe(
-      "paseo://agent/provider/claude",
+      "osuna://agent/provider/claude",
     );
     expect(formatAgentMentionHref({ kind: "profile", id: "agent_profile_1" })).toBe(
-      "paseo://agent/profile/agent_profile_1",
+      "osuna://agent/profile/agent_profile_1",
     );
   });
 
   test("reads both kinds back", () => {
-    expect(parseAgentMentionHref("paseo://agent/provider/codex")).toEqual({
+    expect(parseAgentMentionHref("osuna://agent/provider/codex")).toEqual({
       kind: "provider",
       id: "codex",
     });
-    expect(parseAgentMentionHref("paseo://agent/profile/agent_profile_1")).toEqual({
+    expect(parseAgentMentionHref("osuna://agent/profile/agent_profile_1")).toEqual({
       kind: "profile",
       id: "agent_profile_1",
     });
@@ -38,22 +38,22 @@ describe("agent mention href", () => {
   test("encodes and decodes ids with special characters", () => {
     const target = { kind: "profile", id: "Reviewer (fast) #1 ?ü%" } as const;
     const href = formatAgentMentionHref(target);
-    expect(href).toBe("paseo://agent/profile/Reviewer%20(fast)%20%231%20%3F%C3%BC%25");
+    expect(href).toBe("osuna://agent/profile/Reviewer%20(fast)%20%231%20%3F%C3%BC%25");
     expect(parseAgentMentionHref(href)).toEqual(target);
   });
 
   test("rejects an id that decodes to a slash", () => {
-    expect(parseAgentMentionHref("paseo://agent/profile/a%2Fb")).toBeNull();
-    expect(parseAgentMentionHref("paseo://agent/profile/a/b")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/profile/a%2Fb")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/profile/a/b")).toBeNull();
   });
 
   test("rejects other shapes", () => {
-    expect(parseAgentMentionHref("paseo://agent/claude")).toBeNull();
-    expect(parseAgentMentionHref("paseo://agent/provider/")).toBeNull();
-    expect(parseAgentMentionHref("paseo://agent/team/claude")).toBeNull();
-    expect(parseAgentMentionHref("paseo://agent/provider/My%20Agent")).toBeNull();
-    expect(parseAgentMentionHref("paseo://agent/")).toBeNull();
-    expect(parseAgentMentionHref("paseo://agent/profile/%E0%A4%A")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/claude")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/provider/")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/team/claude")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/provider/My%20Agent")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/")).toBeNull();
+    expect(parseAgentMentionHref("osuna://agent/profile/%E0%A4%A")).toBeNull();
     expect(parseAgentMentionHref("https://agent/provider/claude")).toBeNull();
   });
 });
@@ -71,12 +71,12 @@ describe("agent mention link", () => {
   test("writes the @ label and the href", () => {
     expect(
       formatAgentMentionLink({ target: { kind: "provider", id: "claude" }, name: "Claude" }),
-    ).toBe("[@Claude](paseo://agent/provider/claude)");
+    ).toBe("[@Claude](osuna://agent/provider/claude)");
   });
 
   test("needs an @ label with a name", () => {
     expect(
-      mentionsIn("[Claude](paseo://agent/provider/claude) [@](paseo://agent/provider/claude)"),
+      mentionsIn("[Claude](osuna://agent/provider/claude) [@](osuna://agent/provider/claude)"),
     ).toEqual([null, null]);
   });
 
@@ -102,7 +102,7 @@ describe("markdown links", () => {
   test("skips images and escaped brackets", () => {
     expect(
       findMarkdownLinks(
-        "![@Claude](paseo://agent/provider/claude) \\[@Claude](paseo://agent/provider/claude)",
+        "![@Claude](osuna://agent/provider/claude) \\[@Claude](osuna://agent/provider/claude)",
       ),
     ).toEqual([]);
   });

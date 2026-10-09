@@ -1,4 +1,4 @@
-import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
+import type { ScheduleSummary } from "@osuna/protocol/schedule/types";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import {

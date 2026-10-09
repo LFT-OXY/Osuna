@@ -4,13 +4,13 @@ import {
   TerminalStreamOpcode,
   encodeTerminalResizePayload,
   type TerminalStreamFrame,
-} from "@getpaseo/protocol/binary-frames/index";
+} from "@osuna/protocol/binary-frames/index";
 import { SessionDelivery } from "../server/session/owned-subscriptions/index.js";
 import type {
   SessionInboundMessage,
   SessionOutboundMessage,
   TerminalState,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 import type pino from "pino";
 
 import { TerminalSessionController } from "./terminal-session-controller.js";

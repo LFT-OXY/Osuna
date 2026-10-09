@@ -73,11 +73,11 @@ picks how wide to look and that choice follows them across projects. The daemon 
 event for provider logs, so the query pauses while the app or the panel is hidden and React
 Query refetches when either comes back or on the refresh button; search filters the fetched
 rows on the client and never reaches the daemon. Outside `workspace` scope each row shows its
-directory relative to the project root; Paseo worktrees live under `$PASEO_HOME/worktrees`,
+directory relative to the project root; Osuna worktrees live under `$OSUNA_HOME/worktrees`,
 outside the root, so they show in full.
 
-The view asks with `includeImported: true`, so sessions Paseo already owns stay in the list with
-their `importedAgentId` and `importedAgentWorkspaceId`. Such a row carries a Paseo badge and
+The view asks with `includeImported: true`, so sessions Osuna already owns stay in the list with
+their `importedAgentId` and `importedAgentWorkspaceId`. Such a row carries a Osuna badge and
 opens that agent through `navigateToAgent` with the workspace id and `pin`, the same call the
 History list makes; it never starts a terminal, because a provider session resumed in two
 processes writes two logs that cannot see each other. The workspace id travels on the wire

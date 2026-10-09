@@ -844,7 +844,7 @@ export const es: TranslationResources = {
       },
       routes: {
         public: "Proxy inverso",
-        paseo: "Memorable",
+        osuna: "Memorable",
         direct: "Directa",
       },
       states: {
@@ -1510,7 +1510,7 @@ export const es: TranslationResources = {
       fullStatus: {
         title: "Estado completo",
         modalTitle: "EstadoDaemon",
-        hint: "Ejecuta`paseo daemon status`y muestra la salida.",
+        hint: "Ejecuta`osuna daemon status`y muestra la salida.",
         view: "Ver estado",
         copied: "Estado copiado al portapapeles.",
         fetchFailed: "No se pudo recuperar el estado del demonio:{{message}}",
@@ -2059,7 +2059,7 @@ export const es: TranslationResources = {
         "Sin relé, conéctese directamente por TCP, Tailscale u otra VPN. No se crea ningún código QR.",
       updateRequired: "Actualice el host para habilitar el relé desde Osuna Desktop.",
       unavailable: "Oferta de maridaje no disponible.",
-      hint: "Escanee este códigoQRconPaseoen su teléfono o copie el enlace a continuación.",
+      hint: "Escanee este códigoQRconOsunaen su teléfono o copie el enlace a continuación.",
       securityWarning:
         "Trata este enlace de emparejamiento como una contraseña. Cualquiera que lo tenga puede acceder a este daemon.",
       qrUnavailable: "CódigoQRno disponible.",
@@ -2094,7 +2094,7 @@ export const es: TranslationResources = {
   serviceUrl: {
     title: "Servicio abiertoURL",
     message: "¿Abrir{{url}}?",
-    inPaseo: "En Osuna",
+    inOsuna: "En Osuna",
     externalBrowser: "Navegador externo",
     dontAskAgain: "no vuelvas a preguntar",
   },
@@ -2237,7 +2237,7 @@ export const es: TranslationResources = {
       },
       row: {
         opening: "Abriendo...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "Acciones de la sesión",
         copyResumeCommand: "Copiar comando de reanudación",
         importAsAgent: "Importar como agente de Osuna",
@@ -2290,7 +2290,7 @@ export const es: TranslationResources = {
       one: "usó {{count}} herramienta adicional",
       other: "usó {{count}} herramientas adicionales",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "llamó a Osuna {{count}} vez",
       other: "llamó a Osuna {{count}} veces",
     },
@@ -3363,13 +3363,13 @@ export const es: TranslationResources = {
         savedToast: "Proyecto actualizado",
       },
       readFailures: {
-        invalidTitle: "paseo.json no se pudo analizar",
+        invalidTitle: "osuna.json no se pudo analizar",
         invalidDescription: "Fije el archivo en el disco y luego vuelva a cargarlo.",
         missingTitle: "Este anfitrión no tiene este proyecto",
         missingSingleHost: "El anfitrión seleccionado no tiene registro de este proyecto.",
-        transportTitle: "No se pudo cargar paseo.json",
+        transportTitle: "No se pudo cargar osuna.json",
         transportFallback: "El anfitrión no respondió.",
-        failedTitle: "No se pudo cargar paseo.json",
+        failedTitle: "No se pudo cargar osuna.json",
         failedDescription: "Vuelva a cargar para intentarlo de nuevo.",
       },
       worktree: {
@@ -3377,7 +3377,7 @@ export const es: TranslationResources = {
         info: "Comandos que se ejecutan cuando se crea o elimina un árbol de trabajo para este proyecto",
         setup: "Configuración",
         setupAccessibility: "Comandos de configuración del árbol de trabajo",
-        uncommittedTitle: "Confirma los cambios de paseo.json",
+        uncommittedTitle: "Confirma los cambios de osuna.json",
         uncommittedDescription:
           "Los árboles de trabajo nuevos usan el script de configuración de la rama base que selecciones.",
         teardown: "Demoler",
@@ -3402,7 +3402,7 @@ export const es: TranslationResources = {
         newScript: "Nuevo guión",
         editScript: "Editar{{name}}",
         runAsService: "Ejecutar como servicio",
-        serviceHint: "Osuna supervisa el proceso y asigna un puerto vía $PASEO_PORT",
+        serviceHint: "Osuna supervisa el proceso y asigna un puerto vía $OSUNA_PORT",
         actions: {
           add: "Agregar guión",
           edit: "Editar",
@@ -3422,8 +3422,8 @@ export const es: TranslationResources = {
       },
       writeFailures: {
         staleTitle: "Configuración cambiada en el disco",
-        staleDescription: "Vuelva a cargar para obtener el último paseo.json antes de guardar.",
-        failedTitle: "No se pudo guardar paseo.json",
+        staleDescription: "Vuelva a cargar para obtener el último osuna.json antes de guardar.",
+        failedTitle: "No se pudo guardar osuna.json",
         failedDescription: "Inténtelo de nuevo o vuelva a cargar la última versión desde el disco.",
       },
       actions: {

@@ -57,27 +57,27 @@ import { setupApplicationMenu } from "./features/menu.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
   decideBrowserWindowOpenRequest,
-  getPaseoBrowserIdForWebContents,
-  getPaseoBrowserWebContentsForHostWindow,
-  getPaseoBrowserWebviewRegistry,
-  listRegisteredPaseoBrowserIds,
-  isPaseoBrowserWebviewAttach,
-  preparePaseoBrowserWebContents,
+  getOsunaBrowserIdForWebContents,
+  getOsunaBrowserWebContentsForHostWindow,
+  getOsunaBrowserWebviewRegistry,
+  listRegisteredOsunaBrowserIds,
+  isOsunaBrowserWebviewAttach,
+  prepareOsunaBrowserWebContents,
   PendingBrowserWindowOpenRequests,
   registerBrowserWebviewNavigationGuards,
-  unregisterPaseoBrowserFromHost,
-  registerAttachedPaseoBrowser,
-  setWorkspaceActivePaseoBrowserId,
-  unregisterPaseoBrowserHost,
+  unregisterOsunaBrowserFromHost,
+  registerAttachedOsunaBrowser,
+  setWorkspaceActiveOsunaBrowserId,
+  unregisterOsunaBrowserHost,
 } from "./features/browser-webviews/index.js";
 import {
-  clearPaseoBrowserProfile,
-  getLegacyPaseoBrowserProfileSession,
-  PASEO_BROWSER_PROFILE_PARTITION,
-  getPaseoBrowserProfileSession,
-  getPaseoBrowserProfileSessions,
-  listPaseoBrowserProfileGuests,
-  readLegacyPaseoBrowserIds,
+  clearOsunaBrowserProfile,
+  getLegacyOsunaBrowserProfileSession,
+  OSUNA_BROWSER_PROFILE_PARTITION,
+  getOsunaBrowserProfileSession,
+  getOsunaBrowserProfileSessions,
+  listOsunaBrowserProfileGuests,
+  readLegacyOsunaBrowserIds,
 } from "./features/browser-profile.js";
 import { parseOpenProjectPathFromArgv } from "./open-project-routing.js";
 import {
@@ -104,20 +104,20 @@ import {
   buildAgentDeepLinkRoute,
   parseAgentDeepLink,
   type AgentDeepLinkTarget,
-} from "@getpaseo/protocol/agent-deep-link";
+} from "@osuna/protocol/agent-deep-link";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
-const APP_SCHEME = "paseo";
-const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
-const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
-const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Osuna";
+const APP_SCHEME = "osuna";
+const OSUNA_DEBUG = process.env.OSUNA_DEBUG === "1";
+const DISABLE_SINGLE_INSTANCE_LOCK = process.env.OSUNA_DISABLE_SINGLE_INSTANCE_LOCK === "1";
+const APP_NAME = process.env.OSUNA_TEST_APP_NAME?.trim() || "Osuna";
 // userData / 日志目录名，有意保留改名前的拼写。渲染层的 host 列表与设置存在 userData 下，
 // 跟随 app 名迁移会丢数据（ADR 0002）。
-const USER_DATA_DIR_NAME = "Paseo";
+const USER_DATA_DIR_NAME = "Osuna";
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
-  override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
+  override: process.env.OSUNA_DESKTOP_WINDOW_CONTROLS,
   isPackaged: app.isPackaged,
 });
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
@@ -134,7 +134,7 @@ const bootstrapComplete = new Promise<void>((resolve) => {
 let bootstrapIsComplete = false;
 
 app.setName(APP_NAME);
-const forcedUserDataDir = process.env.PASEO_ELECTRON_USER_DATA_DIR?.trim();
+const forcedUserDataDir = process.env.OSUNA_ELECTRON_USER_DATA_DIR?.trim();
 // 必须早于首次写日志：electron-log 在首次写入时缓存路径。下方的 worktree 隔离会
 // 再次 setPath，因此保持更高优先级。显式指定目录时不解析 appData：Windows 上
 // USERPROFILE 被改写（打包冒烟即如此）时 getPath("appData") 会直接抛错。
@@ -192,7 +192,7 @@ function readActiveBrowserInput(
   return { workspaceId: record.workspaceId.trim(), browserId: browserId || null };
 }
 
-const browserKeyboard = new BrowserKeyboard(getPaseoBrowserWebviewRegistry());
+const browserKeyboard = new BrowserKeyboard(getOsunaBrowserWebviewRegistry());
 browserKeyboard.registerIpc();
 
 function showBrowserWebviewContextMenu(
@@ -211,7 +211,7 @@ function showBrowserWebviewContextMenu(
             click: () => {
               log.info("[browser-devtools] inspect-element.request", {
                 webContentsId: contents.id,
-                browserId: getPaseoBrowserIdForWebContents(contents),
+                browserId: getOsunaBrowserIdForWebContents(contents),
                 x: params.x,
                 y: params.y,
                 isDevToolsOpened: contents.isDevToolsOpened(),
@@ -237,7 +237,7 @@ function getBrowserPopupWindowOptions(
     show: true,
     autoHideMenuBar: true,
     webPreferences: {
-      partition: PASEO_BROWSER_PROFILE_PARTITION,
+      partition: OSUNA_BROWSER_PROFILE_PARTITION,
       nodeIntegration: false,
       nodeIntegrationInSubFrames: false,
       nodeIntegrationInWorker: false,
@@ -276,7 +276,7 @@ function installBrowserWindowOpenHandler(input: {
       };
     }
 
-    const sourceBrowserId = getPaseoBrowserIdForWebContents(sourceContents);
+    const sourceBrowserId = getOsunaBrowserIdForWebContents(sourceContents);
     if (sourceBrowserId) {
       mainWindow.webContents.send(BROWSER_NEW_TAB_REQUEST_EVENT, {
         sourceBrowserId,
@@ -315,7 +315,7 @@ if (forcedUserDataDir) {
       windowsHide: true,
     }).trim();
     devWorktreeName = path.basename(topLevel);
-    // Main checkout (e.g. "paseo") gets default userData — only worktrees diverge.
+    // Main checkout (e.g. "osuna") gets default userData — only worktrees diverge.
     const commonDir = path.resolve(
       topLevel,
       execFileSync("git", ["rev-parse", "--git-common-dir"], {
@@ -327,7 +327,7 @@ if (forcedUserDataDir) {
     );
     const isWorktree = path.resolve(topLevel, ".git") !== commonDir;
     if (isWorktree) {
-      app.setPath("userData", path.join(app.getPath("appData"), `Paseo-${devWorktreeName}`));
+      app.setPath("userData", path.join(app.getPath("appData"), `Osuna-${devWorktreeName}`));
       log.info("[worktree] isolated userData for worktree:", devWorktreeName);
     } else {
       devWorktreeName = null;
@@ -337,10 +337,10 @@ if (forcedUserDataDir) {
   }
 }
 
-// Allow users to pass Chromium flags via PASEO_ELECTRON_FLAGS for debugging
+// Allow users to pass Chromium flags via OSUNA_ELECTRON_FLAGS for debugging
 // rendering issues (e.g. "--disable-gpu --ozone-platform=x11").
 // Must run before app.whenReady().
-const electronFlags = process.env.PASEO_ELECTRON_FLAGS?.trim();
+const electronFlags = process.env.OSUNA_ELECTRON_FLAGS?.trim();
 if (electronFlags) {
   for (const token of electronFlags.split(/\s+/)) {
     const [key, ...rest] = token.replace(/^--/, "").split("=");
@@ -355,7 +355,7 @@ if (process.platform === "linux") {
   if (!app.commandLine.hasSwitch("class")) app.commandLine.appendSwitch("class", "Osuna");
   log.info("[linux-sandbox]", {
     enabled: !app.commandLine.hasSwitch("no-sandbox"),
-    reason: process.env.PASEO_DESKTOP_SANDBOX_REASON ?? "Chromium default",
+    reason: process.env.OSUNA_DESKTOP_SANDBOX_REASON ?? "Chromium default",
   });
 }
 
@@ -371,7 +371,7 @@ let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
 // racing a global.
 let desktopWindowOwner: DesktopWindowOwner<AgentDeepLinkTarget>;
 
-if (PASEO_DEBUG) {
+if (OSUNA_DEBUG) {
   log.info("[open-project] argv:", process.argv);
   log.info("[open-project] isDefaultApp:", process.defaultApp);
   log.info("[open-project] pendingOpenProjectPath:", pendingOpenProjectPath);
@@ -379,7 +379,7 @@ if (PASEO_DEBUG) {
 
 // The renderer pulls the pending path on mount via IPC — this avoids
 // a race where the push event arrives before React registers its listener.
-ipcMain.handle("paseo:get-pending-open-project", (event) => {
+ipcMain.handle("osuna:get-pending-open-project", (event) => {
   const webContentsId = event.sender.id;
   const result = desktopWindowOwner.takePendingProject(webContentsId);
   log.info("[open-project] renderer requested pending path:", {
@@ -389,19 +389,19 @@ ipcMain.handle("paseo:get-pending-open-project", (event) => {
   return result;
 });
 
-ipcMain.handle("paseo:agent-navigation:ready", (event) => {
+ipcMain.handle("osuna:agent-navigation:ready", (event) => {
   return agentNavigationInbox.windowReady(event.sender.id);
 });
 
-ipcMain.handle("paseo:browser:register-attached", (event, rawInput: unknown) => {
+ipcMain.handle("osuna:browser:register-attached", (event, rawInput: unknown) => {
   const input = readAttachedBrowserInput(rawInput);
   if (!input) {
     throw new Error("Invalid attached browser registration");
   }
-  const registered = registerAttachedPaseoBrowser({
+  const registered = registerAttachedOsunaBrowser({
     ...input,
     sender: event.sender,
-    profileSession: getPaseoBrowserProfileSession(session),
+    profileSession: getOsunaBrowserProfileSession(session),
     findWebContents: (webContentsId) => webContents.fromId(webContentsId) ?? null,
   });
   if (!registered) {
@@ -415,7 +415,7 @@ ipcMain.handle("paseo:browser:register-attached", (event, rawInput: unknown) => 
   log.info("[browser-webview] registered", {
     browserId: input.browserId,
     webContentsId: input.webContentsId,
-    registeredBrowserIds: listRegisteredPaseoBrowserIds(),
+    registeredBrowserIds: listRegisteredOsunaBrowserIds(),
   });
   for (const url of pendingBrowserWindowOpenRequests.take(input.webContentsId)) {
     event.sender.send(BROWSER_NEW_TAB_REQUEST_EVENT, {
@@ -425,21 +425,21 @@ ipcMain.handle("paseo:browser:register-attached", (event, rawInput: unknown) => 
   }
 });
 
-ipcMain.handle("paseo:browser:unregister-workspace-browser", async (event, browserId: unknown) => {
+ipcMain.handle("osuna:browser:unregister-workspace-browser", async (event, browserId: unknown) => {
   if (typeof browserId === "string" && browserId.trim().length > 0) {
     const normalizedBrowserId = browserId.trim();
-    const hasOtherHost = getPaseoBrowserWebviewRegistry().hasBrowserInOtherHostWindow(
+    const hasOtherHost = getOsunaBrowserWebviewRegistry().hasBrowserInOtherHostWindow(
       event.sender.id,
       normalizedBrowserId,
     );
-    unregisterPaseoBrowserFromHost(event.sender.id, normalizedBrowserId);
+    unregisterOsunaBrowserFromHost(event.sender.id, normalizedBrowserId);
     // COMPAT(browserProfile): added in v0.1.108; remove after 2027-01-15.
     const legacyProfile = hasOtherHost
       ? null
-      : getLegacyPaseoBrowserProfileSession(session, normalizedBrowserId);
+      : getLegacyOsunaBrowserProfileSession(session, normalizedBrowserId);
     if (legacyProfile) {
       try {
-        await clearPaseoBrowserProfile({
+        await clearOsunaBrowserProfile({
           profileSessions: [legacyProfile],
           listGuests: () => [],
           logReloadError: () => {},
@@ -454,18 +454,18 @@ ipcMain.handle("paseo:browser:unregister-workspace-browser", async (event, brows
   }
 });
 
-ipcMain.handle("paseo:browser:set-workspace-active-browser", (event, rawInput: unknown) => {
+ipcMain.handle("osuna:browser:set-workspace-active-browser", (event, rawInput: unknown) => {
   const input = readActiveBrowserInput(rawInput);
   if (input) {
-    setWorkspaceActivePaseoBrowserId({ ...input, hostWebContentsId: event.sender.id });
+    setWorkspaceActiveOsunaBrowserId({ ...input, hostWebContentsId: event.sender.id });
   }
 });
 
-ipcMain.handle("paseo:browser:focus", (event, browserId: unknown): boolean => {
+ipcMain.handle("osuna:browser:focus", (event, browserId: unknown): boolean => {
   if (typeof browserId !== "string" || browserId.trim().length === 0) {
     return false;
   }
-  const contents = getPaseoBrowserWebContentsForHostWindow(browserId, event.sender.id);
+  const contents = getOsunaBrowserWebContentsForHostWindow(browserId, event.sender.id);
   if (!contents) {
     return false;
   }
@@ -473,24 +473,24 @@ ipcMain.handle("paseo:browser:focus", (event, browserId: unknown): boolean => {
   return true;
 });
 
-ipcMain.handle("paseo:browser:open-devtools", (event, browserId: unknown) => {
+ipcMain.handle("osuna:browser:open-devtools", (event, browserId: unknown) => {
   if (typeof browserId !== "string" || browserId.trim().length === 0) {
     const result = {
       ok: false,
       reason: "invalid-browser-id",
       browserId,
-      registeredBrowserIds: listRegisteredPaseoBrowserIds(),
+      registeredBrowserIds: listRegisteredOsunaBrowserIds(),
     };
     log.warn("[browser-devtools] open-devtools.invalid", result);
     return result;
   }
-  const contents = getPaseoBrowserWebContentsForHostWindow(browserId, event.sender.id);
+  const contents = getOsunaBrowserWebContentsForHostWindow(browserId, event.sender.id);
   if (!contents) {
     const result = {
       ok: false,
       reason: "browser-webcontents-not-found",
       browserId,
-      registeredBrowserIds: listRegisteredPaseoBrowserIds(),
+      registeredBrowserIds: listRegisteredOsunaBrowserIds(),
     };
     log.warn("[browser-devtools] open-devtools.not-found", result);
     return result;
@@ -500,7 +500,7 @@ ipcMain.handle("paseo:browser:open-devtools", (event, browserId: unknown) => {
     webContentsId: contents.id,
     isDestroyed: contents.isDestroyed(),
     isDevToolsOpened: contents.isDevToolsOpened(),
-    registeredBrowserIds: listRegisteredPaseoBrowserIds(),
+    registeredBrowserIds: listRegisteredOsunaBrowserIds(),
   });
   contents.openDevTools({ mode: "detach" });
   const result = {
@@ -514,16 +514,16 @@ ipcMain.handle("paseo:browser:open-devtools", (event, browserId: unknown) => {
   return result;
 });
 
-ipcMain.handle("paseo:browser:clear-profile", async (_event, rawLegacyBrowserIds: unknown) => {
-  const profileSessions = getPaseoBrowserProfileSessions(
+ipcMain.handle("osuna:browser:clear-profile", async (_event, rawLegacyBrowserIds: unknown) => {
+  const profileSessions = getOsunaBrowserProfileSessions(
     session,
-    readLegacyPaseoBrowserIds(rawLegacyBrowserIds),
+    readLegacyOsunaBrowserIds(rawLegacyBrowserIds),
   );
   const profileSession = profileSessions[0];
-  await clearPaseoBrowserProfile({
+  await clearOsunaBrowserProfile({
     profileSessions,
     listGuests: () =>
-      listPaseoBrowserProfileGuests({
+      listOsunaBrowserProfileGuests({
         profileSession,
         webContents: webContents.getAllWebContents(),
       }),
@@ -534,7 +534,7 @@ ipcMain.handle("paseo:browser:clear-profile", async (_event, rawLegacyBrowserIds
 });
 
 const browserCapture = createBrowserCaptureService<Electron.NativeImage>({
-  findGuest: getPaseoBrowserWebContentsForHostWindow,
+  findGuest: getOsunaBrowserWebContentsForHostWindow,
   decodeImage: (dataUrl) => nativeImage.createFromDataURL(dataUrl),
   clipboard: {
     write: async ({ text, image }) => {
@@ -552,11 +552,11 @@ const browserCapture = createBrowserCaptureService<Electron.NativeImage>({
   warn: (event, details) => log.warn(`[browser-capture] ${event}`, details),
 });
 
-ipcMain.handle("paseo:browser:capture-element", (event, browserId: unknown, rect: unknown) =>
+ipcMain.handle("osuna:browser:capture-element", (event, browserId: unknown, rect: unknown) =>
   browserCapture.capture({ browserId, hostWebContentsId: event.sender.id, rect }),
 );
 
-ipcMain.handle("paseo:browser:copy-element", (_event, payload: unknown) =>
+ipcMain.handle("osuna:browser:copy-element", (_event, payload: unknown) =>
   browserCapture.copy(payload),
 );
 
@@ -619,7 +619,7 @@ function getDevBuildLabel(): string | null {
   if (app.isPackaged) {
     return null;
   }
-  return process.env.EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL?.trim() || null;
+  return process.env.EXPO_PUBLIC_OSUNA_DEV_BUILD_LABEL?.trim() || null;
 }
 
 let cachedEffectiveIconPath: string | null = null;
@@ -724,7 +724,7 @@ async function createWindow(
   mainWindow.on("closed", () => {
     options.onClosed?.(webContentsId);
     agentNavigationInbox.removeWindow(webContentsId);
-    unregisterPaseoBrowserHost(webContentsId);
+    unregisterOsunaBrowserHost(webContentsId);
     browserKeyboard.detachHost(webContentsId);
   });
 
@@ -744,7 +744,7 @@ async function createWindow(
   setupDefaultContextMenu(mainWindow);
   setupDragDropPrevention(mainWindow);
   mainWindow.webContents.on("will-attach-webview", (event, webPreferences, params) => {
-    if (!isPaseoBrowserWebviewAttach(params)) {
+    if (!isOsunaBrowserWebviewAttach(params)) {
       event.preventDefault();
       return;
     }
@@ -765,7 +765,7 @@ async function createWindow(
     webPreferences.preload = getBrowserKeyboardPreloadPath();
   });
   mainWindow.webContents.on("did-attach-webview", (_event, contents) => {
-    preparePaseoBrowserWebContents(contents);
+    prepareOsunaBrowserWebContents(contents);
     contents.once("destroyed", () => {
       pendingBrowserWindowOpenRequests.delete(contents.id);
     });
@@ -807,7 +807,7 @@ function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLin
     restore: () => win.restore(),
     show: () => win.show(),
     focus: () => win.focus(),
-    sendAgent: (target) => win.webContents.send("paseo:event:open-agent", target),
+    sendAgent: (target) => win.webContents.send("osuna:event:open-agent", target),
   };
 }
 
@@ -869,7 +869,7 @@ app.on("open-url", (event, url) => {
 
 function setupSingleInstanceLock(): boolean {
   if (DISABLE_SINGLE_INSTANCE_LOCK) {
-    log.info("[single-instance] disabled by PASEO_DISABLE_SINGLE_INSTANCE_LOCK");
+    log.info("[single-instance] disabled by OSUNA_DISABLE_SINGLE_INSTANCE_LOCK");
     return true;
   }
 
@@ -894,7 +894,7 @@ function setupSingleInstanceLock(): boolean {
       isDefaultApp: false,
     });
     log.info("[open-project] second-instance openProjectPath:", openProjectPath);
-    // Relaunching the app (CLI `paseo [path]`, double-click, etc.) opens a new
+    // Relaunching the app (CLI `osuna [path]`, double-click, etc.) opens a new
     // window rather than focusing the existing one. Wait for bootstrap (not just
     // app.whenReady) so the protocol + IPC handlers exist before the window loads.
     void bootstrapComplete
@@ -973,13 +973,13 @@ async function bootstrap(): Promise<void> {
   registerDialogHandlers();
   registerNotificationHandlers();
   const openExternalUrl = createExternalUrlOpener({ open: shell.openExternal });
-  ipcMain.handle("paseo:opener:openUrl", (_event, value: unknown) => openExternalUrl(value));
+  ipcMain.handle("osuna:opener:openUrl", (_event, value: unknown) => openExternalUrl(value));
   registerEditorTargetHandlers();
   registerBrowserAutomationIpc();
 
   // In-app "Open in new window": opens a window that lands on the given project
   // via the same open-project flow as a CLI launch (no move, no ownership).
-  ipcMain.handle("paseo:window:openNew", async (_event, options?: unknown) => {
+  ipcMain.handle("osuna:window:openNew", async (_event, options?: unknown) => {
     const pendingPath =
       options && typeof options === "object" && "pendingOpenProjectPath" in options
         ? (options as { pendingOpenProjectPath?: unknown }).pendingOpenProjectPath
@@ -1029,7 +1029,7 @@ void runDesktopStartup({
 
 function showDaemonShutdownDialog(): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send("paseo:event:quitting", {});
+    win.webContents.send("osuna:event:quitting", {});
   }
 }
 

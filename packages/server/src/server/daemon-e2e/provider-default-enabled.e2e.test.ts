@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
-let daemon: TestPaseoDaemon | undefined;
+let daemon: TestOsunaDaemon | undefined;
 let client: DaemonClient | undefined;
 
 async function startDaemonAndReadEnabled(
-  options: Parameters<typeof createTestPaseoDaemon>[0],
+  options: Parameters<typeof createTestOsunaDaemon>[0],
 ): Promise<Record<string, boolean | undefined>> {
-  daemon = await createTestPaseoDaemon(options);
+  daemon = await createTestOsunaDaemon(options);
   client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await client.connect();
   const snapshot = await client.getProvidersSnapshot();

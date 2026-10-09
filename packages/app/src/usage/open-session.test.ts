@@ -13,7 +13,7 @@ const SESSION: UsageSessionTarget = {
 };
 
 describe("resolveUsageSessionAction", () => {
-  it("opens the agent when Paseo owns the session", () => {
+  it("opens the agent when Osuna owns the session", () => {
     expect(
       resolveUsageSessionAction({
         session: {

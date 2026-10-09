@@ -1,6 +1,0 @@
-内部分发版。用于验证从 0.10.0 开始的 macOS 应用内自动更新，没有功能变化。
-
-Fixed
-- 下载页的版本标题显示为 Osuna，不再显示 Paseo
-
-Full notes: https://paseo.sh/changelog

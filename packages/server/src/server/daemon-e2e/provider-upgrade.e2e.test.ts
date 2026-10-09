@@ -12,7 +12,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 const tempRoots: string[] = [];
@@ -30,7 +30,7 @@ async function exists(filePath: string): Promise<boolean> {
 // 真实的升级命令不在测试范围内。它是 sh 脚本，所以这组只在 POSIX 上跑。
 describe.skipIf(process.platform === "win32")("one-click provider CLI upgrade", () => {
   let root: string;
-  let daemon: TestPaseoDaemon | undefined;
+  let daemon: TestOsunaDaemon | undefined;
   let client: DaemonClient | undefined;
   // 桩 registry：按包名返回 latest，不真的联网。
   const registry = new Map<string, string>();
@@ -42,7 +42,7 @@ describe.skipIf(process.platform === "win32")("one-click provider CLI upgrade", 
 
   beforeEach(async () => {
     registry.clear();
-    root = await mkdtemp(path.join(os.tmpdir(), "paseo-provider-upgrade-"));
+    root = await mkdtemp(path.join(os.tmpdir(), "osuna-provider-upgrade-"));
     tempRoots.push(root);
     await mkdir(path.join(root, "bin"));
   });
@@ -89,10 +89,10 @@ describe.skipIf(process.platform === "win32")("one-click provider CLI upgrade", 
     claude: string;
     upgradeTimeoutMs?: number;
     extraProviders?: NonNullable<
-      NonNullable<Parameters<typeof createTestPaseoDaemon>[0]>["providerOverrides"]
+      NonNullable<Parameters<typeof createTestOsunaDaemon>[0]>["providerOverrides"]
     >;
   }): Promise<void> {
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       agentClients: {},
       providerVersions: { fetchLatestVersion, upgradeTimeoutMs: input.upgradeTimeoutMs },
       providerOverrides: {

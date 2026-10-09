@@ -1,6 +1,6 @@
 /**
  * The usage page is a deliberate visual island: it copies the reference
- * dashboard's own neutral scale instead of the Paseo design tokens. The two
+ * dashboard's own neutral scale instead of the Osuna design tokens. The two
  * sets still ride on the theme as `theme.colors.usage`, because that is the
  * only value Unistyles tracks — a palette picked from `theme.colorScheme`
  * inside a style factory is computed once and never follows a theme change.

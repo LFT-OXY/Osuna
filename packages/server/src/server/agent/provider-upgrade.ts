@@ -2,11 +2,11 @@ import { once } from "node:events";
 import { realpath } from "node:fs/promises";
 import type { ChildProcess } from "node:child_process";
 import type { Logger } from "pino";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import type {
   ProviderUpgradeErrorCode,
   ProviderUpgradeResponsePayload,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 import { spawnProcess } from "../../utils/spawn.js";
 import { terminateWithTreeKill } from "../../utils/tree-kill.js";
 import type { ProviderCliLaunch } from "./provider-cli-version.js";

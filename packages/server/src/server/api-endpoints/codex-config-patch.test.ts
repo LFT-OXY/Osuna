@@ -19,7 +19,7 @@ const RELAY_TABLE: CodexProviderTable = {
   baseUrl: "https://relay.example/v1",
   auth: {
     command: "/bin/cat",
-    args: ["/home/me/.paseo/api-endpoints/codex-api-key"],
+    args: ["/home/me/.osuna/api-endpoints/codex-api-key"],
     timeoutMs: 5000,
   },
 };
@@ -46,7 +46,7 @@ wire_api = "responses"
 
 [model_providers.${ID}.auth]
 command = "/bin/cat"
-args = ["/home/me/.paseo/api-endpoints/codex-api-key"]
+args = ["/home/me/.osuna/api-endpoints/codex-api-key"]
 timeout_ms = 5000
 `;
 
@@ -413,7 +413,7 @@ describe("the dedicated provider id", () => {
         wire_api: "responses",
         auth: {
           command: "/bin/cat",
-          args: ["/home/me/.paseo/api-endpoints/codex-api-key"],
+          args: ["/home/me/.osuna/api-endpoints/codex-api-key"],
           timeout_ms: 5000,
         },
       },

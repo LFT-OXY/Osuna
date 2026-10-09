@@ -21,8 +21,8 @@ import type { DOMProps } from "expo/dom";
 import { useDOMImperativeHandle, type DOMImperativeFactory } from "expo/dom";
 import "@xterm/xterm/css/xterm.css";
 import type { ITheme } from "@xterm/xterm";
-import type { TerminalState } from "@getpaseo/protocol/messages";
-import type { TerminalInputModeState } from "@getpaseo/protocol/terminal-input-mode";
+import type { TerminalState } from "@osuna/protocol/messages";
+import type { TerminalInputModeState } from "@osuna/protocol/terminal-input-mode";
 import type { PendingTerminalModifiers } from "../utils/terminal-keys";
 import {
   TerminalEmulatorRuntime,
@@ -562,7 +562,7 @@ export default function TerminalEmulator({
   }, [resizeRequestToken]);
 
   const showTerminalContextMenu = useCallback(() => {
-    const showContextMenu = window.paseoDesktop?.menu?.showContextMenu;
+    const showContextMenu = window.osunaDesktop?.menu?.showContextMenu;
     if (typeof showContextMenu !== "function") {
       return;
     }

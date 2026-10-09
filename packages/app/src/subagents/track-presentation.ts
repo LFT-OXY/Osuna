@@ -7,7 +7,7 @@ import { isFinishedSubagent } from "./archive-finished";
 import { providerSubagentLifecycleStatus } from "./provider-store";
 
 function presentationStatus(row: SubagentRow) {
-  if (row.kind === "paseo") {
+  if (row.kind === "osuna") {
     if (row.turn.phase === "open") return "running";
     return row.status === "running" ? "idle" : row.status;
   }
@@ -165,7 +165,7 @@ export type DispatchRowTiming =
   | { kind: "frozen"; durationMs: number }
   | { kind: "none" };
 
-/** 点开一行去哪：Paseo 子智能体是普通 agent 标签，provider 子智能体是只读面板。 */
+/** 点开一行去哪：Osuna 子智能体是普通 agent 标签，provider 子智能体是只读面板。 */
 export type DispatchOpenTarget =
   | { kind: "agent"; agentId: string }
   | { kind: "provider_subagent"; parentAgentId: string; subagentId: string };
@@ -236,7 +236,7 @@ function openTarget(row: SubagentRow): DispatchOpenTarget {
 }
 
 /**
- * Paseo 子智能体的标题取 `create_agent` 入参的 title，后来被改名，行上仍是派发时写的任务；
+ * Osuna 子智能体的标题取 `create_agent` 入参的 title，后来被改名，行上仍是派发时写的任务；
  * provider 子智能体没有入参，与 track 一样先取 description。
  */
 export function buildDispatchRowPresentation({

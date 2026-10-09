@@ -1,7 +1,7 @@
 import {
   apiEndpointProtocolName,
   type ApiEndpointTestConnectionResult,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointProvider } from "./store.js";
 import {
   ANTHROPIC_VERSION,

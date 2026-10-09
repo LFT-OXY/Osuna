@@ -1,4 +1,4 @@
-import type { UsagePricingModel, UsagePricingTableInfo } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingModel, UsagePricingTableInfo } from "@osuna/protocol/usage/types";
 import { ChevronRight, RefreshCw } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

@@ -28,7 +28,7 @@ export const ProviderRuntimeSettingsSchema = z.object({
   disallowedTools: z.array(z.string()).optional(),
 });
 
-export const ProviderPaseoToolsPolicySchema = z.object({
+export const ProviderOsunaToolsPolicySchema = z.object({
   enabled: z.boolean().optional(),
   disabledTools: z.array(z.string()).optional(),
 });
@@ -65,7 +65,7 @@ export const ProviderOverrideSchema = z.object({
   models: z.array(ProviderProfileModelSchema).optional(),
   additionalModels: z.array(ProviderProfileModelSchema).optional(),
   disallowedTools: z.array(z.string()).optional(),
-  paseoTools: ProviderPaseoToolsPolicySchema.optional(),
+  osunaTools: ProviderOsunaToolsPolicySchema.optional(),
   mentionDefaults: ProviderMentionDefaultsSchema.optional(),
   enabled: z.boolean().optional(),
   order: z.number().optional(),
@@ -141,7 +141,7 @@ export const AgentProviderRuntimeSettingsMapSchema = z
 
 export type ProviderCommand = z.infer<typeof ProviderCommandSchema>;
 export type ProviderRuntimeSettings = z.infer<typeof ProviderRuntimeSettingsSchema>;
-export type ProviderPaseoToolsPolicy = z.infer<typeof ProviderPaseoToolsPolicySchema>;
+export type ProviderOsunaToolsPolicy = z.infer<typeof ProviderOsunaToolsPolicySchema>;
 export type ProviderMentionDefaults = z.infer<typeof ProviderMentionDefaultsSchema>;
 export type ProviderProfileModel = z.infer<typeof ProviderProfileModelSchema>;
 export type ProviderOverride = z.infer<typeof ProviderOverrideSchema>;

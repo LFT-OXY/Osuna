@@ -93,8 +93,8 @@ describe("Add Project navigation", () => {
   it("restores the GitHub destination query and active parent when reopening a repository", () => {
     const repository = {
       id: "repo-1",
-      nameWithOwner: "getpaseo/paseo",
-      cloneUrl: "git@github.com:getpaseo/paseo.git",
+      nameWithOwner: "LFT-OXY/Osuna",
+      cloneUrl: "git@github.com:LFT-OXY/Osuna.git",
       description: null,
       visibility: "public",
       updatedAt: null,
@@ -156,48 +156,48 @@ describe("Add Project options", () => {
   });
 
   it("offers manual URL and protocol-specific owner/repo clone choices", () => {
-    expect(buildManualGithubRepositoryChoices("git@github.com:getpaseo/paseo.git")).toEqual([
+    expect(buildManualGithubRepositoryChoices("git@github.com:LFT-OXY/Osuna.git")).toEqual([
       expect.objectContaining({
-        id: "manual:git@github.com:getpaseo/paseo.git",
-        nameWithOwner: "getpaseo/paseo",
-        cloneUrl: "git@github.com:getpaseo/paseo.git",
+        id: "manual:git@github.com:LFT-OXY/Osuna.git",
+        nameWithOwner: "LFT-OXY/Osuna",
+        cloneUrl: "git@github.com:LFT-OXY/Osuna.git",
         hint: { key: "addProject.rows.cloneRepositoryUrl" },
       }),
     ]);
-    expect(buildManualGithubRepositoryChoices("getpaseo/paseo")).toEqual([
+    expect(buildManualGithubRepositoryChoices("LFT-OXY/Osuna")).toEqual([
       expect.objectContaining({
         cloneProtocol: "https",
-        cloneUrl: "getpaseo/paseo",
+        cloneUrl: "LFT-OXY/Osuna",
         hint: { key: "addProject.rows.cloneOwnerRepoVia", params: { protocol: "HTTPS" } },
       }),
       expect.objectContaining({
         cloneProtocol: "ssh",
-        cloneUrl: "getpaseo/paseo",
+        cloneUrl: "LFT-OXY/Osuna",
         hint: { key: "addProject.rows.cloneOwnerRepoVia", params: { protocol: "SSH" } },
       }),
     ]);
-    expect(buildManualGithubRepositoryChoices("paseo")).toEqual([]);
+    expect(buildManualGithubRepositoryChoices("osuna")).toEqual([]);
   });
 
   it("shows final clone paths while retaining parent paths as values", () => {
     expect(
       buildCloneLocationOptions({
         parents: ["~/dev", "~/workspace"],
-        repositoryName: "paseo",
-        existingPaths: ["~/workspace/paseo"],
+        repositoryName: "osuna",
+        existingPaths: ["~/workspace/osuna"],
       }),
     ).toEqual([
       {
         id: "~/dev",
         path: "~/dev",
-        displayPath: "~/dev/paseo",
+        displayPath: "~/dev/osuna",
         secondaryText: { key: "addProject.rows.parentDirectory", params: { path: "~/dev" } },
         disabled: false,
       },
       {
         id: "~/workspace",
         path: "~/workspace",
-        displayPath: "~/workspace/paseo",
+        displayPath: "~/workspace/osuna",
         secondaryText: { key: "addProject.rows.alreadyExists" },
         disabled: true,
       },
@@ -284,18 +284,18 @@ describe("Add Project options rendered in English", () => {
     expect(render(addProjectMethodEmptyText(HOST))).toBe("No matching options");
     expect(render(addProjectMethodEmptyText(null))).toBe("No matching options");
     expect(
-      buildManualGithubRepositoryChoices("getpaseo/paseo").map((choice) => render(choice.hint)),
+      buildManualGithubRepositoryChoices("LFT-OXY/Osuna").map((choice) => render(choice.hint)),
     ).toEqual(["Clone owner/repo via HTTPS", "Clone owner/repo via SSH"]);
     expect(
-      buildManualGithubRepositoryChoices("https://github.com/getpaseo/paseo.git").map((choice) =>
+      buildManualGithubRepositoryChoices("https://github.com/LFT-OXY/Osuna.git").map((choice) =>
         render(choice.hint),
       ),
     ).toEqual(["Clone this repository URL"]);
     expect(
       buildCloneLocationOptions({
         parents: ["~/dev", "~/workspace"],
-        repositoryName: "paseo",
-        existingPaths: ["~/workspace/paseo"],
+        repositoryName: "osuna",
+        existingPaths: ["~/workspace/osuna"],
       }).map((option) => render(option.secondaryText)),
     ).toEqual(["Parent directory: ~/dev", "Already exists"]);
   });

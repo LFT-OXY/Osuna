@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import type { AgentProfile } from "@/agent-profiles";
 import { i18n } from "@/i18n/i18next";
 import {

@@ -7,7 +7,7 @@ import {
   API_ENDPOINT_MODEL_TIERS,
   type ApiEndpointModel,
   type ApiEndpointModelTier,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import {

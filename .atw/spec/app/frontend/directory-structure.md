@@ -1,6 +1,6 @@
 # Directory Structure
 
-Everything is under `packages/app/src/`, imported through the `@/` alias (`@/stores/session-store`). Workspace packages come in by subpath (`@getpaseo/protocol/agent-lifecycle`, `@getpaseo/client/internal/daemon-client`).
+Everything is under `packages/app/src/`, imported through the `@/` alias (`@/stores/session-store`). Workspace packages come in by subpath (`@osuna/protocol/agent-lifecycle`, `@osuna/client/internal/daemon-client`).
 
 ## Two kinds of directories
 
@@ -51,7 +51,7 @@ hooks/image-attachment-picker.ts / .native.ts
 desktop/browser/pane/index.tsx / .web.tsx / .electron.tsx
 ```
 
-`.electron.*` wins over `.web.*` when `PASEO_WEB_PLATFORM=electron`. Reserve inline `if (isWeb)` for a line or a few props (`CLAUDE.md` "Platform gating").
+`.electron.*` wins over `.web.*` when `OSUNA_WEB_PLATFORM=electron`. Reserve inline `if (isWeb)` for a line or a few props (`CLAUDE.md` "Platform gating").
 
 ## Tests sit next to code
 

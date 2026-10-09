@@ -6,7 +6,7 @@ import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "./agent-title-limits.js";
 import { AgentProviderSchema } from "./provider-manifest.js";
 import {
   ProviderMentionDefaultsSchema,
-  ProviderPaseoToolsPolicySchema,
+  ProviderOsunaToolsPolicySchema,
 } from "./provider-config.js";
 import { TOOL_CALL_ICON_NAMES } from "./agent-types.js";
 import { WORKSPACE_LABEL_COLORS } from "./workspace-labels.js";
@@ -101,33 +101,33 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
-  PaseoConfigRawSchema,
-  PaseoLifecycleCommandRawSchema,
-  PaseoMetadataGenerationEntrySchema,
-  PaseoMetadataGenerationSchema,
-  PaseoScriptEntryRawSchema,
-  PaseoWorktreeConfigRawSchema,
-  PaseoConfigRevisionSchema,
+  OsunaConfigRawSchema,
+  OsunaLifecycleCommandRawSchema,
+  OsunaMetadataGenerationEntrySchema,
+  OsunaMetadataGenerationSchema,
+  OsunaScriptEntryRawSchema,
+  OsunaWorktreeConfigRawSchema,
+  OsunaConfigRevisionSchema,
   ProjectConfigRpcErrorSchema,
-  type PaseoConfigRaw,
-  type PaseoConfigRevision,
-  type PaseoMetadataGeneration,
-  type PaseoMetadataGenerationEntry,
-  type PaseoScriptEntryRaw,
+  type OsunaConfigRaw,
+  type OsunaConfigRevision,
+  type OsunaMetadataGeneration,
+  type OsunaMetadataGenerationEntry,
+  type OsunaScriptEntryRaw,
   type ProjectConfigRpcError,
-} from "./paseo-config-schema.js";
+} from "./osuna-config-schema.js";
 export {
-  PaseoConfigRawSchema,
-  PaseoLifecycleCommandRawSchema,
-  PaseoMetadataGenerationEntrySchema,
-  PaseoMetadataGenerationSchema,
-  PaseoScriptEntryRawSchema,
-  PaseoWorktreeConfigRawSchema,
-  type PaseoConfigRaw,
-  type PaseoConfigRevision,
-  type PaseoMetadataGeneration,
-  type PaseoMetadataGenerationEntry,
-  type PaseoScriptEntryRaw,
+  OsunaConfigRawSchema,
+  OsunaLifecycleCommandRawSchema,
+  OsunaMetadataGenerationEntrySchema,
+  OsunaMetadataGenerationSchema,
+  OsunaScriptEntryRawSchema,
+  OsunaWorktreeConfigRawSchema,
+  type OsunaConfigRaw,
+  type OsunaConfigRevision,
+  type OsunaMetadataGeneration,
+  type OsunaMetadataGenerationEntry,
+  type OsunaScriptEntryRaw,
   type ProjectConfigRpcError,
 };
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ const MutableDaemonProviderModelSchema = z
 
 const MutableDaemonProviderConfigSchema = z
   .object({
-    paseoTools: ProviderPaseoToolsPolicySchema.optional(),
+    osunaTools: ProviderOsunaToolsPolicySchema.optional(),
     mentionDefaults: ProviderMentionDefaultsSchema.optional(),
     enabled: z.boolean().optional(),
     additionalModels: z.array(MutableDaemonProviderModelSchema).optional(),
@@ -233,7 +233,7 @@ const MutableRelayConfigSchema = z
 
 export const PluginIdSchema = z.string().regex(/^[a-z][a-z0-9-]*$/);
 // Semver validation belongs at the manifest/runtime boundary, not on the wire.
-export const PluginRequirementsSchema = z.object({ paseo: z.string().optional() });
+export const PluginRequirementsSchema = z.object({ osuna: z.string().optional() });
 export type PluginRequirements = z.infer<typeof PluginRequirementsSchema>;
 
 export const DirectoryPluginSourceSchema = z
@@ -1008,7 +1008,7 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   firstPromptPreview: z.string().nullable(),
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
-  // 该 Provider session 对应的 Paseo agent id；只有请求带 includeImported 时 daemon 才填写。
+  // 该 Provider session 对应的 Osuna agent id；只有请求带 includeImported 时 daemon 才填写。
   importedAgentId: z.string().optional(),
   // 该 agent 所属 workspace；打开它时要带上，否则已归档 agent 会退到 host 级详情路由。
   importedAgentWorkspaceId: z.string().optional(),
@@ -1198,7 +1198,7 @@ export const GitHubPrAttachmentSchema = z.object({
 
 export const ForgeChangeRequestAttachmentSchema = z.object({
   type: z.literal("forge_change_request"),
-  mimeType: z.literal("application/paseo-forge-change-request"),
+  mimeType: z.literal("application/osuna-forge-change-request"),
   forge: z.string().optional().default("github"),
   number: z.number().int().positive(),
   title: z.string(),
@@ -1223,7 +1223,7 @@ export const GitHubIssueAttachmentSchema = z.object({
 
 export const ForgeIssueAttachmentSchema = z.object({
   type: z.literal("forge_issue"),
-  mimeType: z.literal("application/paseo-forge-issue"),
+  mimeType: z.literal("application/osuna-forge-issue"),
   forge: z.string().optional().default("github"),
   number: z.number().int().positive(),
   title: z.string(),
@@ -1277,7 +1277,7 @@ export const ReviewAttachmentCommentSchema = z.object({
 
 export const ReviewAttachmentSchema = z.object({
   type: z.literal("review"),
-  mimeType: z.literal("application/paseo-review"),
+  mimeType: z.literal("application/osuna-review"),
   cwd: z.string(),
   mode: z.enum(["uncommitted", "base"]),
   baseRef: z.string().nullable().optional(),
@@ -1476,7 +1476,7 @@ export const FetchRecentProviderSessionsRequestMessageSchema = z.object({
   since: z.string().optional(),
   limit: z.number().int().positive().max(200).optional(),
   query: z.string().optional(),
-  // 为 true 时不剔除已被 Paseo 导入的会话，并在 descriptor 上标出其 agent id。
+  // 为 true 时不剔除已被 Osuna 导入的会话，并在 descriptor 上标出其 agent id。
   includeImported: z.boolean().optional(),
 });
 
@@ -1682,8 +1682,8 @@ export const WriteProjectConfigRequestMessageSchema = z.object({
   type: z.literal("write_project_config_request"),
   requestId: z.string(),
   repoRoot: z.string(),
-  config: PaseoConfigRawSchema,
-  expectedRevision: PaseoConfigRevisionSchema.nullable(),
+  config: OsunaConfigRawSchema,
+  expectedRevision: OsunaConfigRevisionSchema.nullable(),
 });
 
 // ============================================================================
@@ -2467,8 +2467,8 @@ export const StashPopRequestSchema = z.object({
 export const StashListRequestSchema = z.object({
   type: z.literal("stash_list_request"),
   cwd: z.string(),
-  /** If true, only return paseo-created stashes. Default true. */
-  paseoOnly: z.boolean().optional(),
+  /** If true, only return osuna-created stashes. Default true. */
+  osunaOnly: z.boolean().optional(),
   requestId: z.string(),
 });
 
@@ -2544,15 +2544,15 @@ export const DirectorySuggestionsRequestSchema = z.object({
   requestId: z.string(),
 });
 
-export const PaseoWorktreeListRequestSchema = z.object({
-  type: z.literal("paseo_worktree_list_request"),
+export const OsunaWorktreeListRequestSchema = z.object({
+  type: z.literal("osuna_worktree_list_request"),
   cwd: z.string().optional(),
   repoRoot: z.string().optional(),
   requestId: z.string(),
 });
 
-export const PaseoWorktreeArchiveRequestSchema = z.object({
-  type: z.literal("paseo_worktree_archive_request"),
+export const OsunaWorktreeArchiveRequestSchema = z.object({
+  type: z.literal("osuna_worktree_archive_request"),
   worktreePath: z.string().optional(),
   repoRoot: z.string().optional(),
   branchName: z.string().optional(),
@@ -2566,7 +2566,7 @@ export const PaseoWorktreeArchiveRequestSchema = z.object({
   // Scope of the archive operation. "workspace" archives a single workspace record
   // (today's default UI behavior). "worktree" archives every active workspace whose
   // cwd resolves to the target directory, then removes the directory if it is
-  // Paseo-owned. Omitted/unknown values default to "workspace" for old-client safety.
+  // Osuna-owned. Omitted/unknown values default to "workspace" for old-client safety.
   scope: z.enum(["workspace", "worktree"]).optional().default("workspace"),
   // COMPAT(worktreeDiskDeletion): added in v0.1.97, ignored as of v0.1.97
   // (disk removal derived from scope + last-reference + ownership); field
@@ -2580,8 +2580,8 @@ export const FirstAgentContextSchema = z.object({
   attachments: AgentAttachmentsSchema,
 });
 
-export const CreatePaseoWorktreeRequestSchema = z.object({
-  type: z.literal("create_paseo_worktree_request"),
+export const CreateOsunaWorktreeRequestSchema = z.object({
+  type: z.literal("create_osuna_worktree_request"),
   cwd: z.string(),
   projectId: z.string().optional(),
   worktreeSlug: z.string().optional(),
@@ -2683,7 +2683,7 @@ export const ArchiveWorkspaceRequestSchema = z.object({
 
 // Create a new workspace record. Unlike open_project, this never deduplicates by
 // directory: it always produces a fresh workspace. The source discriminates
-// between an existing local directory and a newly created paseo worktree.
+// between an existing local directory and a newly created osuna worktree.
 export const WorkspaceCreateRequestSchema = z.object({
   type: z.literal("workspace.create.request"),
   workspaceId: z
@@ -3317,9 +3317,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ForgeSearchRequestSchema,
   GitHubSearchRequestSchema,
   DirectorySuggestionsRequestSchema,
-  PaseoWorktreeListRequestSchema,
-  PaseoWorktreeArchiveRequestSchema,
-  CreatePaseoWorktreeRequestSchema,
+  OsunaWorktreeListRequestSchema,
+  OsunaWorktreeArchiveRequestSchema,
+  CreateOsunaWorktreeRequestSchema,
   WorkspaceSetupStatusRequestSchema,
   WorkspaceSetupRunRequestSchema,
   LegacyListAvailableEditorsRequestSchema,
@@ -3745,7 +3745,7 @@ export const ServerInfoStatusPayloadSchema = z
         // 快照带 canCreateAgents 与原因码，app 据此开放 @ 智能体分组。
         agentMentions: z.boolean().optional(),
         // COMPAT(subagentCallLinks): added in v0.13.0, remove gate after 2027-09-30.
-        // create_agent 的子智能体带 paseo.parent-tool-call-id，时间线工具名规范成 paseo.create_agent。
+        // create_agent 的子智能体带 osuna.parent-tool-call-id，时间线工具名规范成 osuna.create_agent。
         subagentCallLinks: z.boolean().optional(),
         // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
@@ -3891,7 +3891,7 @@ export const ProjectCheckoutLiteNotGitPayloadSchema = z
     currentBranch: z.null(),
     remoteUrl: z.null(),
     worktreeRoot: z.null().optional(),
-    isPaseoOwnedWorktree: z.literal(false),
+    isOsunaOwnedWorktree: z.literal(false),
     mainRepoRoot: z.null(),
   })
   .transform((value) => ({
@@ -3899,14 +3899,14 @@ export const ProjectCheckoutLiteNotGitPayloadSchema = z
     worktreeRoot: null,
   }));
 
-export const ProjectCheckoutLiteGitNonPaseoPayloadSchema = z
+export const ProjectCheckoutLiteGitNonOsunaPayloadSchema = z
   .object({
     cwd: z.string(),
     isGit: z.literal(true),
     currentBranch: z.string().nullable(),
     remoteUrl: z.string().nullable(),
     worktreeRoot: z.string().optional(),
-    isPaseoOwnedWorktree: z.literal(false),
+    isOsunaOwnedWorktree: z.literal(false),
     mainRepoRoot: z.string().nullable().optional().default(null),
   })
   .transform((value) => ({
@@ -3914,14 +3914,14 @@ export const ProjectCheckoutLiteGitNonPaseoPayloadSchema = z
     worktreeRoot: value.worktreeRoot ?? value.cwd,
   }));
 
-export const ProjectCheckoutLiteGitPaseoPayloadSchema = z
+export const ProjectCheckoutLiteGitOsunaPayloadSchema = z
   .object({
     cwd: z.string(),
     isGit: z.literal(true),
     currentBranch: z.string().nullable(),
     remoteUrl: z.string().nullable(),
     worktreeRoot: z.string().optional(),
-    isPaseoOwnedWorktree: z.literal(true),
+    isOsunaOwnedWorktree: z.literal(true),
     mainRepoRoot: z.string(),
   })
   .transform((value) => ({
@@ -3931,8 +3931,8 @@ export const ProjectCheckoutLiteGitPaseoPayloadSchema = z
 
 export const ProjectCheckoutLitePayloadSchema = z.union([
   ProjectCheckoutLiteNotGitPayloadSchema,
-  ProjectCheckoutLiteGitNonPaseoPayloadSchema,
-  ProjectCheckoutLiteGitPaseoPayloadSchema,
+  ProjectCheckoutLiteGitNonOsunaPayloadSchema,
+  ProjectCheckoutLiteGitOsunaPayloadSchema,
 ]);
 
 export const ProjectPlacementPayloadSchema = z.object({
@@ -3963,7 +3963,7 @@ const WorkspaceGitRuntimePayloadSchema = z
   .object({
     currentBranch: z.string().nullable().optional(),
     remoteUrl: z.string().nullable().optional(),
-    isPaseoOwnedWorktree: z.boolean().optional(),
+    isOsunaOwnedWorktree: z.boolean().optional(),
     isDirty: z.boolean().nullable().optional(),
     aheadBehind: z
       .object({
@@ -4040,7 +4040,7 @@ export const WorkspaceDescriptorPayloadSchema = z
     projectRootPath: z.string(),
     workspaceDirectory: z.string().optional(),
     // COMPAT(worktreeSlug): added in v0.2.6, remove optional after 2027-01-31.
-    // Present only for Paseo-owned worktrees; this is the basename of their root directory.
+    // Present only for Osuna-owned worktrees; this is the basename of their root directory.
     worktreeSlug: z.string().optional(),
     projectKind: z.enum(["git", "non_git", "directory"]),
     // COMPAT(workspaces): keep legacy directory workspace kind parseable.
@@ -5071,8 +5071,8 @@ export const ReadProjectConfigResponseMessageSchema = z.object({
       requestId: z.string(),
       repoRoot: z.string(),
       ok: z.literal(true),
-      config: PaseoConfigRawSchema.nullable(),
-      revision: PaseoConfigRevisionSchema.nullable(),
+      config: OsunaConfigRawSchema.nullable(),
+      revision: OsunaConfigRevisionSchema.nullable(),
       hasUncommittedWorktreeSetupChanges: z.boolean().optional(),
     }),
     z.object({
@@ -5093,8 +5093,8 @@ export const WriteProjectConfigResponseMessageSchema = z.object({
       requestId: z.string(),
       repoRoot: z.string(),
       ok: z.literal(true),
-      config: PaseoConfigRawSchema,
-      revision: PaseoConfigRevisionSchema,
+      config: OsunaConfigRawSchema,
+      revision: OsunaConfigRevisionSchema,
       hasUncommittedWorktreeSetupChanges: z.boolean().optional(),
     }),
     z.object({
@@ -5181,7 +5181,7 @@ const CheckoutStatusCommonSchema = z.object({
 
 const CheckoutStatusNotGitSchema = CheckoutStatusCommonSchema.extend({
   isGit: z.literal(false),
-  isPaseoOwnedWorktree: z.literal(false),
+  isOsunaOwnedWorktree: z.literal(false),
   repoRoot: z.null(),
   currentBranch: z.null(),
   isDirty: z.null(),
@@ -5193,9 +5193,9 @@ const CheckoutStatusNotGitSchema = CheckoutStatusCommonSchema.extend({
   remoteUrl: z.null(),
 });
 
-const CheckoutStatusGitNonPaseoSchema = CheckoutStatusCommonSchema.extend({
+const CheckoutStatusGitNonOsunaSchema = CheckoutStatusCommonSchema.extend({
   isGit: z.literal(true),
-  isPaseoOwnedWorktree: z.literal(false),
+  isOsunaOwnedWorktree: z.literal(false),
   repoRoot: z.string(),
   mainRepoRoot: z.string().nullable().optional().default(null),
   currentBranch: z.string().nullable(),
@@ -5208,9 +5208,9 @@ const CheckoutStatusGitNonPaseoSchema = CheckoutStatusCommonSchema.extend({
   remoteUrl: z.string().nullable(),
 });
 
-const CheckoutStatusGitPaseoSchema = CheckoutStatusCommonSchema.extend({
+const CheckoutStatusGitOsunaSchema = CheckoutStatusCommonSchema.extend({
   isGit: z.literal(true),
-  isPaseoOwnedWorktree: z.literal(true),
+  isOsunaOwnedWorktree: z.literal(true),
   repoRoot: z.string(),
   mainRepoRoot: z.string(),
   currentBranch: z.string().nullable(),
@@ -5227,8 +5227,8 @@ export const CheckoutStatusResponseSchema = z.object({
   type: z.literal("checkout_status_response"),
   payload: z.union([
     CheckoutStatusNotGitSchema,
-    CheckoutStatusGitNonPaseoSchema,
-    CheckoutStatusGitPaseoSchema,
+    CheckoutStatusGitNonOsunaSchema,
+    CheckoutStatusGitOsunaSchema,
   ]),
 });
 
@@ -5368,8 +5368,8 @@ export const CheckoutStatusUpdateSchema = z.object({
   payload: z
     .union([
       CheckoutStatusNotGitSchema,
-      CheckoutStatusGitNonPaseoSchema,
-      CheckoutStatusGitPaseoSchema,
+      CheckoutStatusGitNonOsunaSchema,
+      CheckoutStatusGitOsunaSchema,
     ])
     .and(CheckoutStatusUpdateMetadataSchema),
 });
@@ -5791,7 +5791,7 @@ const StashEntrySchema = z.object({
   index: z.number().int().min(0),
   message: z.string(),
   branch: z.string().nullable(),
-  isPaseo: z.boolean(),
+  isOsuna: z.boolean(),
 });
 
 export const StashSaveResponseSchema = z.object({
@@ -5903,24 +5903,24 @@ export const DirectorySuggestionsResponseSchema = z.object({
   }),
 });
 
-const PaseoWorktreeSchema = z.object({
+const OsunaWorktreeSchema = z.object({
   worktreePath: z.string(),
   createdAt: z.string(),
   branchName: z.string().nullable().optional(),
   head: z.string().nullable().optional(),
 });
 
-export const PaseoWorktreeListResponseSchema = z.object({
-  type: z.literal("paseo_worktree_list_response"),
+export const OsunaWorktreeListResponseSchema = z.object({
+  type: z.literal("osuna_worktree_list_response"),
   payload: z.object({
-    worktrees: z.array(PaseoWorktreeSchema),
+    worktrees: z.array(OsunaWorktreeSchema),
     error: CheckoutErrorSchema.nullable(),
     requestId: z.string(),
   }),
 });
 
-export const PaseoWorktreeArchiveResponseSchema = z.object({
-  type: z.literal("paseo_worktree_archive_response"),
+export const OsunaWorktreeArchiveResponseSchema = z.object({
+  type: z.literal("osuna_worktree_archive_response"),
   payload: z.object({
     success: z.boolean(),
     removedAgents: z.array(z.string()).optional(),
@@ -5929,8 +5929,8 @@ export const PaseoWorktreeArchiveResponseSchema = z.object({
   }),
 });
 
-export const CreatePaseoWorktreeResponseSchema = z.object({
-  type: z.literal("create_paseo_worktree_response"),
+export const CreateOsunaWorktreeResponseSchema = z.object({
+  type: z.literal("create_osuna_worktree_response"),
   payload: z.object({
     workspace: WorkspaceDescriptorPayloadSchema.nullable(),
     error: z.string().nullable(),
@@ -6815,9 +6815,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ForgeSearchResponseSchema,
   GitHubSearchResponseSchema,
   DirectorySuggestionsResponseSchema,
-  PaseoWorktreeListResponseSchema,
-  PaseoWorktreeArchiveResponseSchema,
-  CreatePaseoWorktreeResponseSchema,
+  OsunaWorktreeListResponseSchema,
+  OsunaWorktreeArchiveResponseSchema,
+  CreateOsunaWorktreeResponseSchema,
   FileExplorerResponseSchema,
   FileSubscribeResponseSchema,
   FileUnsubscribeResponseSchema,
@@ -7243,13 +7243,13 @@ export type GitHubSearchKind = z.infer<typeof GitHubSearchKindSchema>;
 export type GitHubSearchRequest = z.infer<typeof GitHubSearchRequestSchema>;
 export type GitHubSearchResponse = z.infer<typeof GitHubSearchResponseSchema>;
 export type ChangeRequestCheckoutSource = z.infer<typeof ChangeRequestCheckoutSourceSchema>;
-export type CreatePaseoWorktreeRequest = z.infer<typeof CreatePaseoWorktreeRequestSchema>;
+export type CreateOsunaWorktreeRequest = z.infer<typeof CreateOsunaWorktreeRequestSchema>;
 export type DirectorySuggestionsRequest = z.infer<typeof DirectorySuggestionsRequestSchema>;
 export type DirectorySuggestionsResponse = z.infer<typeof DirectorySuggestionsResponseSchema>;
-export type PaseoWorktreeListRequest = z.infer<typeof PaseoWorktreeListRequestSchema>;
-export type PaseoWorktreeListResponse = z.infer<typeof PaseoWorktreeListResponseSchema>;
-export type PaseoWorktreeArchiveRequest = z.infer<typeof PaseoWorktreeArchiveRequestSchema>;
-export type PaseoWorktreeArchiveResponse = z.infer<typeof PaseoWorktreeArchiveResponseSchema>;
+export type OsunaWorktreeListRequest = z.infer<typeof OsunaWorktreeListRequestSchema>;
+export type OsunaWorktreeListResponse = z.infer<typeof OsunaWorktreeListResponseSchema>;
+export type OsunaWorktreeArchiveRequest = z.infer<typeof OsunaWorktreeArchiveRequestSchema>;
+export type OsunaWorktreeArchiveResponse = z.infer<typeof OsunaWorktreeArchiveResponseSchema>;
 export type WorkspaceSetupStatusRequest = z.infer<typeof WorkspaceSetupStatusRequestSchema>;
 export type WorkspaceSetupRunRequest = z.infer<typeof WorkspaceSetupRunRequestSchema>;
 export type LegacyListAvailableEditorsRequest = z.infer<

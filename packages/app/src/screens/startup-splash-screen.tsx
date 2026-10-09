@@ -41,8 +41,8 @@ function openGithubIssue(): void {
   void openExternalUrl(GITHUB_ISSUE_URL);
 }
 
-const WEB_SPLASH_SHIMMER_KEYFRAME_ID = "paseo-splash-shimmer-keyframes";
-const WEB_SPLASH_SHIMMER_ANIMATION_NAME = "paseo-splash-shimmer";
+const WEB_SPLASH_SHIMMER_KEYFRAME_ID = "osuna-splash-shimmer-keyframes";
+const WEB_SPLASH_SHIMMER_ANIMATION_NAME = "osuna-splash-shimmer";
 
 const WEB_SPLASH_SHIMMER_KEYFRAME_CSS = `
   @keyframes ${WEB_SPLASH_SHIMMER_ANIMATION_NAME} {

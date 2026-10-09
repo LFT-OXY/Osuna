@@ -17,7 +17,7 @@ import { isDeepStrictEqual } from "node:util";
 import { createPathEquivalenceMatcher } from "../../../utils/path.js";
 import pLimit from "p-limit";
 import type { Logger } from "pino";
-import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-subagent-permission";
+import { providerSubagentPermissionMetadata } from "@osuna/protocol/provider-subagent-permission";
 import { z } from "zod";
 
 import {
@@ -354,7 +354,7 @@ type OpenCodeAgentConfig = Omit<AgentSessionConfig, "providerOptions"> & {
   providerOptions: OpenCodeProviderOptions;
 };
 
-const OPENCODE_SESSION_ENV_KEYS = new Set(["PASEO_AGENT_ID", "PASEO_AGENT_CWD"]);
+const OPENCODE_SESSION_ENV_KEYS = new Set(["OSUNA_AGENT_ID", "OSUNA_AGENT_CWD"]);
 
 function requiresDedicatedOpenCodeServer(
   config: OpenCodeAgentConfig,
@@ -1422,7 +1422,7 @@ export class OpenCodeAgentClient implements AgentClient {
     this.bridge = deps.bridge;
     this.capabilities = {
       ...OPENCODE_CAPABILITIES,
-      ...(this.bridge ? { supportsNativePaseoTools: true } : {}),
+      ...(this.bridge ? { supportsNativeOsunaTools: true } : {}),
     };
     this.runtimeSettings = runtimeSettings;
     this.createOpenCodeClient = deps.createClient ?? createSdkOpenCodeClient;
@@ -1576,7 +1576,7 @@ export class OpenCodeAgentClient implements AgentClient {
     return this.bridge.bindSession({
       sessionId,
       env: launchContext.env ?? {},
-      tools: launchContext.paseoTools,
+      tools: launchContext.osunaTools,
     });
   }
 

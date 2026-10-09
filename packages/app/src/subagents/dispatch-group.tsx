@@ -14,7 +14,7 @@ import { ChevronDown } from "lucide-react-native";
 import equal from "fast-deep-equal";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useStoreWithEqualityFn } from "zustand/traditional";
-import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { PARENT_TOOL_CALL_ID_LABEL } from "@osuna/protocol/agent-labels";
 import { getProviderIcon } from "@/components/provider-icons";
 import { LiveElapsed } from "@/components/message";
 import { Text } from "@/components/ui/text";
@@ -89,21 +89,21 @@ export function useDispatchGroupsEnabled(input: {
   return supportsCallLinks && input.canOpenSubagents;
 }
 
-/** 两种子智能体各自的 callId 索引：Paseo 按关联标签一对一，provider 按描述符的 `toolCallId` 一对多。 */
+/** 两种子智能体各自的 callId 索引：Osuna 按关联标签一对一，provider 按描述符的 `toolCallId` 一对多。 */
 interface DispatchSubagentIndex {
-  paseo: Record<string, DispatchSubagent>;
+  osuna: Record<string, DispatchSubagent>;
   provider: Record<string, DispatchSubagent[]>;
 }
 
-const EMPTY_PASEO_DISPATCH_SUBAGENTS: Record<string, DispatchSubagent> = {};
+const EMPTY_OSUNA_DISPATCH_SUBAGENTS: Record<string, DispatchSubagent> = {};
 const EMPTY_PROVIDER_DISPATCH_SUBAGENTS: Record<string, DispatchSubagent[]> = {};
 const EMPTY_DISPATCH_SUBAGENT_INDEX: DispatchSubagentIndex = {
-  paseo: EMPTY_PASEO_DISPATCH_SUBAGENTS,
+  osuna: EMPTY_OSUNA_DISPATCH_SUBAGENTS,
   provider: EMPTY_PROVIDER_DISPATCH_SUBAGENTS,
 };
 
-function selectNoPaseoDispatchSubagents(): Record<string, DispatchSubagent> {
-  return EMPTY_PASEO_DISPATCH_SUBAGENTS;
+function selectNoOsunaDispatchSubagents(): Record<string, DispatchSubagent> {
+  return EMPTY_OSUNA_DISPATCH_SUBAGENTS;
 }
 
 function selectNoProviderSubagentPermissions(): ProviderSubagentPermissions {
@@ -130,11 +130,11 @@ export function useDispatchSubagentIndex(input: {
   enabled: boolean;
 }): DispatchSubagentIndex {
   const { serverId, parentAgentId, enabled } = input;
-  const selectPaseo = useMemo(
+  const selectOsuna = useMemo(
     () =>
       enabled
         ? createDispatchSubagentsSelector({ serverId, parentAgentId })
-        : selectNoPaseoDispatchSubagents,
+        : selectNoOsunaDispatchSubagents,
     [enabled, parentAgentId, serverId],
   );
   // provider 子智能体的权限挂在父 agent 上，按 adapter 标的子智能体 id 归到各行。
@@ -157,9 +157,9 @@ export function useDispatchSubagentIndex(input: {
         : selectNoProviderDispatchSubagents,
     [enabled, parentAgentId, providerPermissions, serverId],
   );
-  const paseo = useStoreWithEqualityFn(useSessionStore, selectPaseo, equal);
+  const osuna = useStoreWithEqualityFn(useSessionStore, selectOsuna, equal);
   const provider = useStoreWithEqualityFn(useProviderSubagentStore, selectProvider, equal);
-  return useMemo(() => ({ paseo, provider }), [paseo, provider]);
+  return useMemo(() => ({ osuna, provider }), [osuna, provider]);
 }
 
 export function dispatchSubagentLookupQueryKey(input: {
@@ -240,7 +240,7 @@ export const DispatchGroupView = memo(function DispatchGroupView({
           return isCreateAgentCall(call) && isFinished;
         })
         .map((call) => call.payload.data.callId)
-        .filter((callId) => !linked.paseo[callId]),
+        .filter((callId) => !linked.osuna[callId]),
     [calls, linked],
   );
   const lookups = useArchivedDispatchLookups({
@@ -257,7 +257,7 @@ export const DispatchGroupView = memo(function DispatchGroupView({
             return resolveProviderDispatchCall({ call, subagents: linked.provider[callId] });
           }
           const lookup = lookups[callId] ?? PENDING_DISPATCH_LOOKUP;
-          return [resolveDispatchCall({ call, subagent: linked.paseo[callId], lookup })];
+          return [resolveDispatchCall({ call, subagent: linked.osuna[callId], lookup })];
         }),
       ),
     [calls, linked, lookups],

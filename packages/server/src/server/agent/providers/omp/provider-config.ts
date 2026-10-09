@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { OMP_MODES } from "@getpaseo/protocol/provider-manifest";
+import { OMP_MODES } from "@osuna/protocol/provider-manifest";
 import { z } from "zod";
 
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
@@ -156,7 +156,7 @@ export interface OmpSessionPaths {
 
 /**
  * Where OMP itself keeps sessions, derived from the environment exactly as upstream
- * `pi-utils/dirs.ts` does. Paseo-side overrides (provider params, `settings.json`) are applied by
+ * `pi-utils/dirs.ts` does. Osuna-side overrides (provider params, `settings.json`) are applied by
  * the caller before falling back here.
  */
 export function resolveOmpSessionPaths(options: OmpDirectoryOptions = {}): OmpSessionPaths {

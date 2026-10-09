@@ -843,7 +843,7 @@ export const ru: TranslationResources = {
       },
       routes: {
         public: "Обратный прокси",
-        paseo: "Запоминающийся адрес",
+        osuna: "Запоминающийся адрес",
         direct: "Прямой адрес",
       },
       states: {
@@ -1492,7 +1492,7 @@ export const ru: TranslationResources = {
       fullStatus: {
         title: "Полный статус",
         modalTitle: "Статус демона",
-        hint: "Выполняет команду `paseo daemon status` и показывает результат",
+        hint: "Выполняет команду `osuna daemon status` и показывает результат",
         view: "Посмотреть статус",
         copied: "Статус скопирован в буфер обмена.",
         fetchFailed: "Не удалось получить статус демона: {{message}}",
@@ -2041,7 +2041,7 @@ export const ru: TranslationResources = {
         "Без ретранслятора подключайтесь напрямую через TCP, Tailscale или другую VPN. QR-код создаваться не будет.",
       updateRequired: "Обновите хост, чтобы включить ретранслятор из Osuna Desktop.",
       unavailable: "Данные для сопряжения недоступны.",
-      hint: "Отсканируйте этот QR-код с помощью Paseo на телефоне или скопируйте ссылку ниже.",
+      hint: "Отсканируйте этот QR-код с помощью Osuna на телефоне или скопируйте ссылку ниже.",
       securityWarning:
         "Обращайтесь с этой ссылкой для сопряжения как с паролем. Любой, у кого она есть, может получить доступ к этому демону.",
       qrUnavailable: "QR-код недоступен.",
@@ -2076,7 +2076,7 @@ export const ru: TranslationResources = {
   serviceUrl: {
     title: "Открыть URL сервиса",
     message: "Открыть {{url}}?",
-    inPaseo: "В Osuna",
+    inOsuna: "В Osuna",
     externalBrowser: "Внешний браузер",
     dontAskAgain: "Больше не спрашивать",
   },
@@ -2220,7 +2220,7 @@ export const ru: TranslationResources = {
       },
       row: {
         opening: "Открытие...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "Действия с сессией",
         copyResumeCommand: "Копировать команду возобновления",
         importAsAgent: "Импортировать как агента Osuna",
@@ -2273,7 +2273,7 @@ export const ru: TranslationResources = {
       one: "использован {{count}} другой инструмент",
       other: "использованы другие инструменты ({{count}})",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "выполнен {{count}} вызов Osuna",
       other: "выполнены вызовы Osuna ({{count}})",
     },
@@ -3345,13 +3345,13 @@ export const ru: TranslationResources = {
         savedToast: "Проект обновлён",
       },
       readFailures: {
-        invalidTitle: "Не удалось разобрать paseo.json",
+        invalidTitle: "Не удалось разобрать osuna.json",
         invalidDescription: "Исправьте файл на диске, затем загрузите его заново.",
         missingTitle: "У этого хоста нет этого проекта",
         missingSingleHost: "У выбранного хоста нет записей об этом проекте.",
-        transportTitle: "Не удалось загрузить paseo.json.",
+        transportTitle: "Не удалось загрузить osuna.json.",
         transportFallback: "Хост не ответил.",
-        failedTitle: "Не удалось загрузить paseo.json.",
+        failedTitle: "Не удалось загрузить osuna.json.",
         failedDescription: "Загрузите данные заново, чтобы повторить попытку.",
       },
       worktree: {
@@ -3359,7 +3359,7 @@ export const ru: TranslationResources = {
         info: "Команды, которые выполняются при создании или удалении worktree для этого проекта.",
         setup: "Настройка",
         setupAccessibility: "Команды настройки worktree",
-        uncommittedTitle: "Закоммитьте изменения в paseo.json",
+        uncommittedTitle: "Закоммитьте изменения в osuna.json",
         uncommittedDescription:
           "Новые worktree используют скрипт настройки из выбранной базовой ветки.",
         teardown: "Удаление",
@@ -3384,7 +3384,7 @@ export const ru: TranslationResources = {
         newScript: "Новый скрипт",
         editScript: "Изменить {{name}}",
         runAsService: "Запускать как сервис",
-        serviceHint: "Osuna управляет процессом и назначает порт через переменную $PASEO_PORT.",
+        serviceHint: "Osuna управляет процессом и назначает порт через переменную $OSUNA_PORT.",
         actions: {
           add: "Добавить скрипт",
           edit: "Редактировать",
@@ -3405,9 +3405,9 @@ export const ru: TranslationResources = {
       },
       writeFailures: {
         staleTitle: "Конфигурация изменена на диске",
-        staleDescription: "Перед сохранением загрузите с диска последнюю версию paseo.json.",
-        failedTitle: "Не удалось сохранить paseo.json.",
-        failedDescription: "Повторите попытку или загрузите с диска последнюю версию paseo.json.",
+        staleDescription: "Перед сохранением загрузите с диска последнюю версию osuna.json.",
+        failedTitle: "Не удалось сохранить osuna.json.",
+        failedDescription: "Повторите попытку или загрузите с диска последнюю версию osuna.json.",
       },
       actions: {
         reload: "Загрузить заново",

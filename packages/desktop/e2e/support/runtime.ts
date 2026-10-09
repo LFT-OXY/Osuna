@@ -28,28 +28,28 @@ export interface RealDaemonState {
 
 /**
  * Reads live state from the running E2E test daemon: version from the HTTP
- * status endpoint, PID from the paseo.pid lock file, log path from the
- * E2E_PASEO_HOME directory. Call this in Node test code (not in the browser).
+ * status endpoint, PID from the osuna.pid lock file, log path from the
+ * E2E_OSUNA_HOME directory. Call this in Node test code (not in the browser).
  */
 export async function loadRealDaemonState(): Promise<RealDaemonState> {
   const port = getE2EDaemonPort();
-  const paseoHome = process.env.E2E_PASEO_HOME;
-  if (!paseoHome) throw new Error("E2E_PASEO_HOME not set — the worker fixture must run first");
+  const osunaHome = process.env.E2E_OSUNA_HOME;
+  if (!osunaHome) throw new Error("E2E_OSUNA_HOME not set — the worker fixture must run first");
 
   const resp = await fetch(`http://127.0.0.1:${port}/api/status`);
   const data: DaemonApiStatus = await resp.json();
 
   let pid: number | null = null;
   try {
-    const raw = readFileSync(`${paseoHome}/paseo.pid`, "utf8");
+    const raw = readFileSync(`${osunaHome}/osuna.pid`, "utf8");
     const pidContent: PidFileContent = JSON.parse(raw);
     pid = pidContent.pid ?? null;
   } catch (err) {
     // PID file may not be present yet on a very fresh daemon start
-    console.warn("[desktop-updates] paseo.pid not found:", err);
+    console.warn("[desktop-updates] osuna.pid not found:", err);
   }
 
-  return { version: data.version, pid, logPath: `${paseoHome}/daemon.log` };
+  return { version: data.version, pid, logPath: `${osunaHome}/daemon.log` };
 }
 
 export interface DesktopRuntimeConfig {
@@ -130,7 +130,7 @@ declare global {
 }
 
 /**
- * Injects window.paseoDesktop before app load so all Electron-gated code
+ * Injects window.osunaDesktop before app load so all Electron-gated code
  * activates. The update-check IPC is mocked at the boundary so the real
  * auto-updater never fires. Daemon start/stop commands are stateful: the mock
  * tracks running state and assigns a fresh PID on each start, letting tests
@@ -470,7 +470,7 @@ export async function installDesktopRuntime(
 
     window.__capturedDialogOpenCalls = [];
     window.__desktopInvokedCommands = [];
-    (window as unknown as { paseoDesktop: unknown }).paseoDesktop = desktopBridge;
+    (window as unknown as { osunaDesktop: unknown }).osunaDesktop = desktopBridge;
   }, config);
 }
 

@@ -12,7 +12,7 @@ const common = { cwd: "/repo", error: null, requestId: "req" };
 const localCheckout: CheckoutStatusPayload = {
   ...common,
   isGit: true,
-  isPaseoOwnedWorktree: false,
+  isOsunaOwnedWorktree: false,
   repoRoot: "/repo",
   mainRepoRoot: null,
   currentBranch: "main",
@@ -25,10 +25,10 @@ const localCheckout: CheckoutStatusPayload = {
   remoteUrl: null,
 };
 
-const paseoWorktree: CheckoutStatusPayload = {
+const osunaWorktree: CheckoutStatusPayload = {
   ...common,
   isGit: true,
-  isPaseoOwnedWorktree: true,
+  isOsunaOwnedWorktree: true,
   repoRoot: "/worktrees/ui",
   mainRepoRoot: "/repo",
   currentBranch: "feat/ui",
@@ -44,7 +44,7 @@ const paseoWorktree: CheckoutStatusPayload = {
 const plainDirectory: CheckoutStatusPayload = {
   ...common,
   isGit: false,
-  isPaseoOwnedWorktree: false,
+  isOsunaOwnedWorktree: false,
   repoRoot: null,
   currentBranch: null,
   isDirty: null,
@@ -61,8 +61,8 @@ describe("resolveComposerContext", () => {
     expect(resolveComposerContext(null)).toEqual({ workspaceKind: null, branch: null });
   });
 
-  it("names a Paseo worktree and its branch", () => {
-    expect(resolveComposerContext(paseoWorktree)).toEqual({
+  it("names a Osuna worktree and its branch", () => {
+    expect(resolveComposerContext(osunaWorktree)).toEqual({
       workspaceKind: "worktree",
       branch: "feat/ui",
     });
@@ -107,7 +107,7 @@ describe("resolveBranchSwitch", () => {
   });
 
   it("offers the switcher in a worktree too", () => {
-    expect(resolveBranchSwitch(resolveComposerContext(paseoWorktree), idleAgent)).toEqual({
+    expect(resolveBranchSwitch(resolveComposerContext(osunaWorktree), idleAgent)).toEqual({
       kind: "enabled",
     });
   });

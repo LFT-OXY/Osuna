@@ -1,5 +1,5 @@
 import { MockLoadTestAgentClient } from "./agent/providers/mock-load-test-agent.js";
-import { createPaseoApi } from "@getpaseo/client";
+import { createOsunaApi } from "@osuna/client";
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,9 +11,9 @@ import {
   encodeFileTransferFrame,
   FileTransferOpcode,
   TerminalStreamOpcode,
-} from "@getpaseo/protocol/binary-frames/index";
+} from "@osuna/protocol/binary-frames/index";
 import { DaemonClient } from "./test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "./test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "./test-utils/osuna-daemon.js";
 import {
   SessionInboundMessageSchema,
   type SessionInboundMessage,
@@ -119,7 +119,7 @@ class SubscriptionPeer {
 }
 
 test("a pure list reply belongs only to its source socket in a shared logical session", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const peers: SubscriptionPeer[] = [];
   try {
     const idle = await SubscriptionPeer.connect(daemon.port, "shared-owned-session");
@@ -140,7 +140,7 @@ test("a pure list reply belongs only to its source socket in a shared logical se
 });
 
 test("combined filtered agent lists create independent server-owned observations", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   let peer: SubscriptionPeer | undefined;
   try {
@@ -225,7 +225,7 @@ test("combined filtered agent lists create independent server-owned observations
 });
 
 test("workspace filters and identical queries coexist until their own release", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   let peer: SubscriptionPeer | undefined;
   try {
@@ -313,7 +313,7 @@ test("workspace filters and identical queries coexist until their own release", 
 });
 
 test("label lists are pure and label observers have independent lifetimes", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   let peer: SubscriptionPeer | undefined;
   try {
@@ -376,7 +376,7 @@ test("label lists are pure and label observers have independent lifetimes", asyn
 });
 
 test("identical file observations get server IDs and release independently", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   let peer: SubscriptionPeer | undefined;
   try {
     await writeFile(path.join(daemon.staticDir, "observed.txt"), "before");
@@ -430,7 +430,7 @@ test("identical file observations get server IDs and release independently", asy
 });
 
 test("checkout diff reads are snapshots and identical observers release independently", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   let peer: SubscriptionPeer | undefined;
   try {
     const cwd = daemon.staticDir;
@@ -507,7 +507,7 @@ test("checkout diff reads are snapshots and identical observers release independ
 });
 
 test("event-category observations use independent IDs without enabling other categories", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   let peer: SubscriptionPeer | undefined;
   try {
@@ -569,7 +569,7 @@ test("event-category observations use independent IDs without enabling other cat
 });
 
 test("timeline observers for the same agent survive an independent release", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   let peer: SubscriptionPeer | undefined;
   try {
@@ -638,7 +638,7 @@ test("timeline observers for the same agent survive an independent release", asy
 });
 
 test("same-workspace terminal directory observers do not share a teardown slot", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   let peer: SubscriptionPeer | undefined;
   try {
@@ -717,7 +717,7 @@ test("same-workspace terminal directory observers do not share a teardown slot",
 });
 
 test("terminal output has separate server IDs and binary slots, including in a shared session", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   const peers: SubscriptionPeer[] = [];
   try {
@@ -797,7 +797,7 @@ test("terminal output has separate server IDs and binary slots, including in a s
 });
 
 test("a modern connection and pure reads retain no client observation producers", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   let peer: SubscriptionPeer | undefined;
   try {
     peer = await SubscriptionPeer.connect(daemon.port, "no-demand-producers");
@@ -822,7 +822,7 @@ test("a modern connection and pure reads retain no client observation producers"
 });
 
 test("config changes require their own event demand and cannot escape to an idle socket", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   const peers: SubscriptionPeer[] = [];
   try {
@@ -865,7 +865,7 @@ test("config changes require their own event demand and cannot escape to an idle
 });
 
 test("status-shaped operation replies use actual source request provenance", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const peers: SubscriptionPeer[] = [];
   try {
     const idle = await SubscriptionPeer.connect(daemon.port, "status-reply-session");
@@ -901,7 +901,7 @@ test("status-shaped operation replies use actual source request provenance", asy
 });
 
 test("browser capability advertisement is passive and explicit hosts own command delivery", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const peers: SubscriptionPeer[] = [];
   try {
     const capability = { hostKind: "QA browser", supportedCommands: ["list_tabs"] };
@@ -953,7 +953,7 @@ test("browser capability advertisement is passive and explicit hosts own command
 });
 
 test("adding raw client listeners does not create server observation demand", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
     appVersion: "0.8.0",
@@ -976,7 +976,7 @@ test("adding raw client listeners does not create server observation demand", as
 });
 
 test("upload operations with identical request IDs belong to their source sockets", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const peers: SubscriptionPeer[] = [];
   try {
     const a = await SubscriptionPeer.connect(daemon.port, "upload-shared-session");
@@ -1036,7 +1036,7 @@ test("upload operations with identical request IDs belong to their source socket
 });
 
 test("notification ownership is separate from data demand and another socket's focus", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   const peers: SubscriptionPeer[] = [];
   try {
@@ -1116,7 +1116,7 @@ test("notification ownership is separate from data demand and another socket's f
 });
 
 test("protocol rejection is a source-only control reply on modern connections", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const peers: SubscriptionPeer[] = [];
   try {
     const sender = await SubscriptionPeer.connect(daemon.port, "invalid-message-sources");
@@ -1141,7 +1141,7 @@ test("protocol rejection is a source-only control reply on modern connections", 
 });
 
 test("dictation failure belongs only to its requesting source and releases speech demand", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const peers: SubscriptionPeer[] = [];
   try {
     const requester = await SubscriptionPeer.connect(daemon.port, "speech-sources");
@@ -1175,7 +1175,7 @@ test("dictation failure belongs only to its requesting source and releases speec
 });
 
 test("a legacy socket cannot borrow a modern sibling's directory observation", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   const peers: SubscriptionPeer[] = [];
   try {
@@ -1231,7 +1231,7 @@ test("a legacy socket cannot borrow a modern sibling's directory observation", a
 });
 
 test("archive and delete replies retain their historical names and reach only the requester", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   const peers: SubscriptionPeer[] = [];
   try {
@@ -1262,7 +1262,7 @@ test("archive and delete replies retain their historical names and reach only th
 });
 
 test("provider child changes require explicit event ownership and leave an idle peer quiet", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   let idle: SubscriptionPeer | undefined;
   let observer: SubscriptionPeer | undefined;
@@ -1305,7 +1305,7 @@ test("provider child changes require explicit event ownership and leave an idle 
 });
 
 test("request outcomes for import and attention reach only their requesting socket", async () => {
-  const daemon = await createTestPaseoDaemon({
+  const daemon = await createTestOsunaDaemon({
     mcpEnabled: false,
     isDev: true,
     agentClients: { mock: new MockLoadTestAgentClient() },
@@ -1376,7 +1376,7 @@ test("request outcomes for import and attention reach only their requesting sock
 });
 
 test("SDK import failure settles without waiting for the request timeout", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   try {
     await client.connect();
@@ -1390,7 +1390,7 @@ test("SDK import failure settles without waiting for the request timeout", async
 }, 5000);
 
 test("permission outcomes and domain observations keep independent source ownership", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const clients = [
     "permission-shared",
     "permission-shared",
@@ -1477,7 +1477,7 @@ test("permission outcomes and domain observations keep independent source owners
 });
 
 test("mark unread replies remain source-owned while directory observers receive attention", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   const peers: SubscriptionPeer[] = [];
   try {
@@ -1564,7 +1564,7 @@ test("mark unread replies remain source-owned while directory observers receive 
 });
 
 test("legacy event subscribers retain notifications without the new notifications flag", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   let legacy: SubscriptionPeer | undefined;
   try {
@@ -1621,9 +1621,9 @@ test("legacy event subscribers retain notifications without the new notification
 });
 
 test("public project subscriptions request updates and release their producer demand", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  const daemon = await createTestOsunaDaemon({ mcpEnabled: false });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
-  const api = createPaseoApi(client);
+  const api = createOsunaApi(client);
   try {
     await client.connect();
     const updates: unknown[] = [];

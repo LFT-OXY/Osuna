@@ -105,7 +105,7 @@ const EXTENSIONS = [
 ];
 
 // 输入框内部复制时连同块的结构一起写进剪贴板；外部只看得到 text/plain 的序列化文字。
-const INLINE_SEGMENTS_MIME = "application/x-paseo-inline-segments";
+const INLINE_SEGMENTS_MIME = "application/x-osuna-inline-segments";
 
 function clampOffset(offset: number, length: number): number {
   return Math.max(0, Math.min(length, offset));

@@ -1,6 +1,6 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ProviderVersionCheckResult } from "@getpaseo/protocol/messages";
+import type { ProviderVersionCheckResult } from "@osuna/protocol/messages";
 import { fetchQueryOptions } from "@/data/query";
 import {
   type ProviderVersionCheckClient,

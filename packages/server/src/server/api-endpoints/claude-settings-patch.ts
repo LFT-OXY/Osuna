@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   API_ENDPOINT_MODEL_TIERS,
   type ApiEndpointModelMapping,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。

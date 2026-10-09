@@ -5,24 +5,24 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
-import { PARENT_AGENT_ID_LABEL, PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { PARENT_AGENT_ID_LABEL, PARENT_TOOL_CALL_ID_LABEL } from "@osuna/protocol/agent-labels";
 import { createTestAgentClient } from "../test-utils/fake-agent-client.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 const tempDirs: string[] = [];
-let daemon: TestPaseoDaemon | null = null;
+let daemon: TestOsunaDaemon | null = null;
 let client: DaemonClient | null = null;
 let mcpClient: Client | null = null;
 
 async function startDaemon(): Promise<{
-  daemon: TestPaseoDaemon;
+  daemon: TestOsunaDaemon;
   client: DaemonClient;
   cwd: string;
 }> {
-  const cwd = await mkdtemp(path.join(os.tmpdir(), "paseo-subagent-call-links-"));
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "osuna-subagent-call-links-"));
   tempDirs.push(cwd);
-  daemon = await createTestPaseoDaemon({
+  daemon = await createTestOsunaDaemon({
     agentClients: { codex: createTestAgentClient("codex", { supportsMcpServers: true }) },
   });
   client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });

@@ -5,8 +5,8 @@ import type {
   TerminalStateSnapshot,
   TerminalStateSnapshotOptions,
 } from "./terminal.js";
-import type { TerminalState, TerminalViewAttributes } from "@getpaseo/protocol/messages";
-import type { TerminalActivity, TerminalActivityState } from "@getpaseo/protocol/terminal-activity";
+import type { TerminalState, TerminalViewAttributes } from "@osuna/protocol/messages";
+import type { TerminalActivity, TerminalActivityState } from "@osuna/protocol/terminal-activity";
 import type { CaptureTerminalLinesResult } from "./terminal-capture.js";
 
 export interface WorkerTerminalInfo {

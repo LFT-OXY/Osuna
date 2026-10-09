@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import type { UsageCli } from "@getpaseo/protocol/usage/types";
+import type { UsageCli } from "@osuna/protocol/usage/types";
 import { resolveOmpSessionPaths } from "../agent/providers/omp/provider-config.js";
 import { resolvePiSessionsDir } from "../agent/providers/pi/session-descriptor.js";
 

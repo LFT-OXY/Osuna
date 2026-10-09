@@ -5,7 +5,7 @@ import {
   upgradeProvider,
   useProviderUpgradeStore,
 } from "./upgrade";
-import type { ProviderUpgradeResponsePayload as ProviderUpgradeResponse } from "@getpaseo/protocol/messages";
+import type { ProviderUpgradeResponsePayload as ProviderUpgradeResponse } from "@osuna/protocol/messages";
 
 function readState(provider = "pi") {
   return selectProviderUpgrade(useProviderUpgradeStore.getState(), "server-1", provider);

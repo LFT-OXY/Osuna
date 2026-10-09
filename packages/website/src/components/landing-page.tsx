@@ -285,7 +285,7 @@ function TurnkeySection() {
   return (
     <FeatureSection
       title="Run it anywhere"
-      description="Use Paseo locally, from another machine, or with a team"
+      description="Use Osuna locally, from another machine, or with a team"
     >
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
         <div className="flex flex-col gap-6 border-b border-white/10 p-6 sm:flex-row sm:items-center sm:justify-between md:p-8">
@@ -314,7 +314,7 @@ function TurnkeySection() {
             <TurnkeyExtensionCard
               icon={Laptop}
               title="Remote machines"
-              description="Run Paseo on a home lab, or a cloud machine"
+              description="Run Osuna on a home lab, or a cloud machine"
               ctaHref="/docs#server--cli"
               ctaLabel="Docs"
             />
@@ -398,7 +398,7 @@ function AutomationSection() {
   return (
     <FeatureSection
       title="Built for automation"
-      description="Use MCP, the CLI, or the TypeScript SDK to automate Paseo"
+      description="Use MCP, the CLI, or the TypeScript SDK to automate Osuna"
       links={AUTOMATION_LINKS}
     >
       <div className="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
@@ -508,7 +508,7 @@ function CliAutomationExample() {
       <div className="space-y-6">
         <div>
           <ShellPrompt>
-            <span className="text-white">paseo run</span> <span className="text-white/35">\</span>
+            <span className="text-white">osuna run</span> <span className="text-white/35">\</span>
           </ShellPrompt>
           <div className="pl-5">
             <span className="text-sky-300/75">--provider</span>{" "}
@@ -521,7 +521,7 @@ function CliAutomationExample() {
 
         <div className="space-y-1">
           <ShellPrompt>
-            <span className="text-white">paseo ls</span>
+            <span className="text-white">osuna ls</span>
           </ShellPrompt>
           <AgentListOutput />
         </div>
@@ -529,7 +529,7 @@ function CliAutomationExample() {
         <div>
           <div className="text-white/30"># Target another host</div>
           <ShellPrompt>
-            <span className="text-white">paseo ls</span>{" "}
+            <span className="text-white">osuna ls</span>{" "}
             <span className="text-sky-300/75">--host</span>{" "}
             <span className="text-white/75">devbox:6767</span>
           </ShellPrompt>
@@ -566,11 +566,11 @@ function AgentListOutput() {
 function SdkAutomationExample() {
   return (
     <pre className="overflow-x-auto font-mono text-[11px] leading-5 text-white/60">
-      <span className="text-purple-300">import</span> {"{"} createPaseoClient {"}"}{" "}
+      <span className="text-purple-300">import</span> {"{"} createOsunaClient {"}"}{" "}
       <span className="text-purple-300">from</span>{" "}
-      <span className="text-emerald-300/80">{'"@getpaseo/client"'}</span>;{"\n\n"}
+      <span className="text-emerald-300/80">{'"@osuna/client"'}</span>;{"\n\n"}
       <span className="text-purple-300">const</span> client ={" "}
-      <span className="text-sky-300">createPaseoClient</span>({"{"}
+      <span className="text-sky-300">createOsunaClient</span>({"{"}
       {"\n"} url: <span className="text-emerald-300/80">{'"ws://127.0.0.1:6767/ws"'}</span>,{"\n"}
       {"}"});
       {"\n"}
@@ -582,7 +582,7 @@ function SdkAutomationExample() {
       <span className="text-sky-300">create</span>({"{"}
       {"\n"} config: {"{"} provider:{" "}
       <span className="text-emerald-300/80">{'"codex/gpt-5.6-sol"'}</span> {"}"},{"\n"} cwd:{" "}
-      <span className="text-emerald-300/80">{'"/Users/me/dev/paseo"'}</span>,{"\n"} prompt:{" "}
+      <span className="text-emerald-300/80">{'"/Users/me/dev/osuna"'}</span>,{"\n"} prompt:{" "}
       <span className="text-emerald-300/80">{'"Fix issue #412 and add tests."'}</span>,{"\n"}
       {"}"});
       {"\n\n"}
@@ -595,7 +595,7 @@ function SdkAutomationExample() {
 
 function ExtensibleSection() {
   return (
-    <FeatureSection title="Make it yours" description="Extend Paseo to work just the way you want">
+    <FeatureSection title="Make it yours" description="Extend Osuna to work just the way you want">
       <div className="grid gap-4 md:grid-cols-2">
         <ExtensibleCard
           icon={Puzzle}
@@ -606,7 +606,7 @@ function ExtensibleSection() {
         <ExtensibleCard
           icon={GitFork}
           title="Fork the repo"
-          description="Paseo is licensed under Apache 2.0. You can inspect the implementation, fork the project, and adapt it to your workflow or organization"
+          description="Osuna is licensed under Apache 2.0. You can inspect the implementation, fork the project, and adapt it to your workflow or organization"
           links={FORK_CARD_LINKS}
         />
       </div>
@@ -626,7 +626,7 @@ interface ExtensibleCardLink {
 const PLUGIN_CARD_LINKS: ReadonlyArray<ExtensibleCardLink> = [
   { href: "/docs/plugins", label: "Plugin documentation", icon: BookOpen },
   {
-    href: "https://paseo.cafe",
+    href: "https://osuna.cafe",
     label: "Community plugins",
     icon: Coffee,
     external: true,
@@ -636,7 +636,7 @@ const PLUGIN_CARD_LINKS: ReadonlyArray<ExtensibleCardLink> = [
 
 const FORK_CARD_LINKS: ReadonlyArray<ExtensibleCardLink> = [
   {
-    href: "https://github.com/getpaseo/paseo",
+    href: "https://github.com/LFT-OXY/Osuna",
     label: "View the repository",
     icon: GitHubIcon,
     external: true,
@@ -789,7 +789,7 @@ const SERVER_INSTALL_TRIGGER = (
 
 const SERVER_INSTALL_FOOTNOTE = (
   <>
-    Requires Node.js 18+. Run <span className="font-mono text-white/40">paseo</span> to start the
+    Requires Node.js 18+. Run <span className="font-mono text-white/40">osuna</span> to start the
     daemon.
   </>
 );
@@ -799,8 +799,8 @@ function ServerInstallButton() {
     <CommandDialog
       trigger={SERVER_INSTALL_TRIGGER}
       title="Run agents on a remote machine"
-      description="For headless machines you want to connect to from the Paseo apps. The desktop app already includes a built-in daemon"
-      command="npm install -g @getpaseo/cli && paseo"
+      description="For headless machines you want to connect to from the Osuna apps. The desktop app already includes a built-in daemon"
+      command="npm install -g @osuna/cli && osuna"
       footnote={SERVER_INSTALL_FOOTNOTE}
     />
   );
@@ -883,7 +883,7 @@ function PhoneShowcase() {
           style={leftPhoneStyle}
           className="w-[160px] md:w-[240px] absolute"
           role="img"
-          aria-label="Paseo workspace drawer"
+          aria-label="Osuna workspace drawer"
         >
           <PhoneFrame time="18:54" depth="right">
             <MobileSidebar />
@@ -897,7 +897,7 @@ function PhoneShowcase() {
           transition={EASE_OUT_06_DELAY_01}
           className="w-[220px] md:w-[240px] relative z-10"
           role="img"
-          aria-label="Paseo agent chat"
+          aria-label="Osuna agent chat"
         >
           <PhoneFrame time="18:53">
             <MobileChat />
@@ -909,7 +909,7 @@ function PhoneShowcase() {
           style={rightPhoneStyle}
           className="w-[160px] md:w-[240px] absolute"
           role="img"
-          aria-label="Paseo diff view"
+          aria-label="Osuna diff view"
         >
           <PhoneFrame time="18:55" depth="left">
             <MobileDiff />
@@ -932,12 +932,12 @@ function FAQ() {
       <h2 className="text-3xl font-medium">FAQ</h2>
       <div className="space-y-6">
         <FAQItem question="Is this free?">
-          Yes. Paseo is free and open source. You need agent providers installed with your own
+          Yes. Osuna is free and open source. You need agent providers installed with your own
           credentials. Voice is local-first by default and can optionally use cloud speech providers
           if you configure them.
         </FAQItem>
         <FAQItem question="Does my code leave my machine?">
-          Paseo doesn&apos;t send your code anywhere. Agents run locally and talk to their own APIs
+          Osuna doesn&apos;t send your code anywhere. Agents run locally and talk to their own APIs
           as they normally would. For remote access, you can use the optional{" "}
           <a href="/docs/security" className="underline hover:text-white/80">
             end-to-end encrypted relay
@@ -945,15 +945,15 @@ function FAQ() {
           , connect directly over your local network, or use your own tunnel.
         </FAQItem>
         <FAQItem question="What agents does it support?">
-          Paseo supports many providers. It has custom implementations for Claude, Codex, OpenCode,
+          Osuna supports many providers. It has custom implementations for Claude, Codex, OpenCode,
           Pi, and OMP, and supports many more via ACP. See the full list here:{" "}
           <a href="/docs/supported-providers" className="underline hover:text-white/80">
             all supported providers
           </a>
           .
         </FAQItem>
-        <FAQItem question="How does Paseo run providers?">
-          Paseo runs the providers installed on your machine as you&apos;d normally run them. Paseo
+        <FAQItem question="How does Osuna run providers?">
+          Osuna runs the providers installed on your machine as you&apos;d normally run them. Osuna
           doesn&apos;t modify or change their behavior.
         </FAQItem>
         <FAQItem question="Do I need the desktop app?">
@@ -970,7 +970,7 @@ function FAQ() {
           .
         </FAQItem>
         <FAQItem question="Can I connect from outside my network?">
-          Yes. You can use the hosted relay (end-to-end encrypted, Paseo can&apos;t read your
+          Yes. You can use the hosted relay (end-to-end encrypted, Osuna can&apos;t read your
           traffic), set up your own tunnel (Tailscale, Cloudflare Tunnel, etc.), or expose the
           daemon port directly. See{" "}
           <a href="/docs/configuration" className="underline hover:text-white/80">
@@ -979,16 +979,16 @@ function FAQ() {
           .
         </FAQItem>
         <FAQItem question="Do I need git or GitHub?">
-          No. Paseo works in any directory. Worktrees are optional and only relevant if you use git.
+          No. Osuna works in any directory. Worktrees are optional and only relevant if you use git.
           You can run agents anywhere you&apos;d normally work.
         </FAQItem>
-        <FAQItem question="Can I get banned for using Paseo?">
-          Paseo is designed to use each provider&apos;s officially supported integration and does
+        <FAQItem question="Can I get banned for using Osuna?">
+          Osuna is designed to use each provider&apos;s officially supported integration and does
           not attempt to bypass its terms of service. It doesn&apos;t extract tokens or call
           inference APIs directly.
         </FAQItem>
         <FAQItem question="How do worktrees work?">
-          When you launch an agent with the worktree option (from the app, desktop, or CLI), Paseo
+          When you launch an agent with the worktree option (from the app, desktop, or CLI), Osuna
           creates a git worktree and runs the agent inside it. The agent works on an isolated branch
           without touching your main working directory. See the{" "}
           <a href="/docs/worktrees" className="underline hover:text-white/80">

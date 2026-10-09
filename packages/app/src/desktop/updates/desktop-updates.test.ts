@@ -50,10 +50,10 @@ describe("desktop-updates helpers", () => {
     const { parseLocalDaemonVersionResult } = await loadModuleForPlatform("web");
 
     expect(
-      parseLocalDaemonVersionResult({ version: null, error: "paseo command not found in PATH" }),
+      parseLocalDaemonVersionResult({ version: null, error: "osuna command not found in PATH" }),
     ).toEqual({
       version: null,
-      error: "paseo command not found in PATH",
+      error: "osuna command not found in PATH",
     });
   });
 

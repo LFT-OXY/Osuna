@@ -1,4 +1,4 @@
-import type { UsageSessionRow, UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import type { UsageSessionRow, UsageTokenTotals } from "@osuna/protocol/usage/types";
 import { describe, expect, it } from "vitest";
 import { mergeUsageSessions, usageSessionKey } from "./sessions";
 

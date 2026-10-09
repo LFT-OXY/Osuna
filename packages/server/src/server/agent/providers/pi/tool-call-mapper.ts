@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PASEO_CREATE_AGENT_TOOL_NAME } from "@getpaseo/protocol/tool-name-normalization";
+import { OSUNA_CREATE_AGENT_TOOL_NAME } from "@osuna/protocol/tool-name-normalization";
 
 import type { ToolCallDetail } from "../../agent-sdk-types.js";
 
@@ -283,11 +283,11 @@ export function extractTextFromToolResult(result: PiToolResult): string | undefi
 }
 
 export function parseToolArgs(toolName: string, rawArgs: unknown): PiTrackedToolCall {
-  const createAgentInput = readPaseoCreateAgentInput(toolName, rawArgs);
+  const createAgentInput = readOsunaCreateAgentInput(toolName, rawArgs);
   if (createAgentInput) {
     return {
       kind: "unknown",
-      toolName: PASEO_CREATE_AGENT_TOOL_NAME,
+      toolName: OSUNA_CREATE_AGENT_TOOL_NAME,
       args: createAgentInput.input,
     };
   }
@@ -304,19 +304,19 @@ export function parseToolArgs(toolName: string, rawArgs: unknown): PiTrackedTool
   return { kind: "unknown", toolName, args: rawArgs ?? null };
 }
 
-// pi-mcp-adapter 调 Paseo create_agent 的形态：mcp 代理 {tool, server?, args}、
-// mcp__paseo 命名空间工具 {tool, args}、按前缀直连的 paseo_create_agent / mcp__paseo_create_agent。
-function readPaseoCreateAgentInput(toolName: string, rawArgs: unknown): { input: unknown } | null {
-  if (toolName === "paseo_create_agent" || toolName === "mcp__paseo_create_agent") {
+// pi-mcp-adapter 调 Osuna create_agent 的形态：mcp 代理 {tool, server?, args}、
+// mcp__osuna 命名空间工具 {tool, args}、按前缀直连的 osuna_create_agent / mcp__osuna_create_agent。
+function readOsunaCreateAgentInput(toolName: string, rawArgs: unknown): { input: unknown } | null {
+  if (toolName === "osuna_create_agent" || toolName === "mcp__osuna_create_agent") {
     return { input: rawArgs ?? null };
   }
-  if ((toolName !== "mcp" && toolName !== "mcp__paseo") || !isRecord(rawArgs)) {
+  if ((toolName !== "mcp" && toolName !== "mcp__osuna") || !isRecord(rawArgs)) {
     return null;
   }
   const requestedTool = readNonEmptyString(rawArgs.tool);
-  const targetsPaseo = toolName === "mcp__paseo" || readNonEmptyString(rawArgs.server) === "paseo";
+  const targetsOsuna = toolName === "mcp__osuna" || readNonEmptyString(rawArgs.server) === "osuna";
   const isCreateAgent =
-    requestedTool === "paseo_create_agent" || (targetsPaseo && requestedTool === "create_agent");
+    requestedTool === "osuna_create_agent" || (targetsOsuna && requestedTool === "create_agent");
   return isCreateAgent ? { input: parseMcpProxyArgs(rawArgs.args) } : null;
 }
 

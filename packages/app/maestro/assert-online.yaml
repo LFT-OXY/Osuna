@@ -1,8 +1,8 @@
-appId: sh.paseo
+appId: com.chinhae.osuna
 ---
 - runFlow:
     when:
-      visible: "Open in.*Paseo.*\\?"
+      visible: "Open in.*Osuna.*\\?"
     commands:
       - tapOn: "Open"
 

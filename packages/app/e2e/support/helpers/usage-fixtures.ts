@@ -70,8 +70,8 @@ export function createUsageFixtureRoots(prefix: string): UsageFixtureRoots {
       // OMP derives its sessions directory from the shared agent-dir variable;
       // Pi ignores it because its own session-dir variable above wins.
       PI_CODING_AGENT_DIR: path.join(root, "omp", "agent"),
-      PASEO_USAGE_SCAN_INTERVAL_MS: "1000",
-      PASEO_USAGE_PRICING_AUTO_UPDATE: "0",
+      OSUNA_USAGE_SCAN_INTERVAL_MS: "1000",
+      OSUNA_USAGE_PRICING_AUTO_UPDATE: "0",
     },
   };
 }

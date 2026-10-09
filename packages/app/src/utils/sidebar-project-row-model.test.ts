@@ -16,12 +16,12 @@ function workspace(overrides: Partial<SidebarWorkspaceEntry> = {}): SidebarWorks
     serverId: "srv",
     workspaceId: "ws-root",
     projectViewKey: "project-1",
-    projectName: "paseo",
+    projectName: "osuna",
     workspaceDirectory: "/repo",
     workspaceDirectoryLabel: "/repo",
     projectKind: "git",
     workspaceKind: "checkout",
-    name: "paseo",
+    name: "osuna",
     title: null,
     currentBranch: null,
     statusBucket: "done",
@@ -55,7 +55,7 @@ function project(overrides: ProjectOverrides = {}): SidebarProjectEntry {
   );
   return {
     viewKey: "project-1",
-    projectName: "paseo",
+    projectName: "osuna",
     projectKind,
     iconWorkingDir: "/repo",
     workspaces: [workspace()],

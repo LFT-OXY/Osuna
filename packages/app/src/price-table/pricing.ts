@@ -3,7 +3,7 @@ import type {
   UsagePricingModel,
   UsagePricingOverride,
   UsagePricingTableInfo,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import type { UsageText } from "@/usage/text";
 
 /**

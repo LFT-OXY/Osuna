@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { UsageProjectKind } from "@getpaseo/protocol/usage/types";
+import type { UsageProjectKind } from "@osuna/protocol/usage/types";
 import type { PersistedProjectRecord } from "../workspace-registry.js";
 import { isMissingPathError } from "./types.js";
 

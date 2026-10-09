@@ -17,7 +17,7 @@ Clients talk to the daemon over one WebSocket session. Every inbound message is 
    ```
 
 5. **Gate the feature, not the message.** If an old app must not see the new behavior, advertise it once in `server_info.features.*` (built in `server/websocket-server.ts`) and let the client branch on that. The server-side check stays fail-closed: an advertised capability means the runtime can do it now, not that a handler exists (`docs/coding-standards.md` "Errors").
-6. **Cover it with a daemon E2E** in `server/daemon-e2e/` using `createTestPaseoDaemon` + `DaemonClient` (see [Testing](./testing.md)) when the behavior crosses the wire, and a protocol test in `packages/protocol/src/messages.<domain>.test.ts` for schema acceptance of both old and new shapes.
+6. **Cover it with a daemon E2E** in `server/daemon-e2e/` using `createTestOsunaDaemon` + `DaemonClient` (see [Testing](./testing.md)) when the behavior crosses the wire, and a protocol test in `packages/protocol/src/messages.<domain>.test.ts` for schema acceptance of both old and new shapes.
 
 ## Compatibility rules
 
@@ -170,7 +170,7 @@ consumer while every old consumer keeps the filtered result.
 
 ### 1. Scope / Trigger
 
-- The import sheet needs the daemon to hide sessions Paseo already owns; the Session history
+- The import sheet needs the daemon to hide sessions Osuna already owns; the Session history
   view needs them shown and marked. One RPC, two consumers, no second RPC.
 
 ### 2. Signatures
@@ -190,11 +190,11 @@ consumer while every old consumer keeps the filtered result.
 ### 3. Contracts
 
 - `includeImported` absent or `false`: identical to before — rows owned by an active (non-archived)
-  Paseo agent are dropped and counted in `filteredAlreadyImportedCount`; no descriptor carries
+  Osuna agent are dropped and counted in `filteredAlreadyImportedCount`; no descriptor carries
   `importedAgentId`; the provider listing is asked for `limit + importedCount` rows so the filter
   can still fill `limit`.
 - `includeImported: true`: nothing is dropped, `filteredAlreadyImportedCount` is `0`, the listing
-  is asked for exactly `limit` rows, and every row Paseo ever owned carries `importedAgentId` plus
+  is asked for exactly `limit` rows, and every row Osuna ever owned carries `importedAgentId` plus
   `importedAgentWorkspaceId` when the record has one (legacy agents predate ownership stamping).
   The workspace id is not optional sugar: the app opens the row through `navigateToAgent`, which
   falls back to the host-level agent route (no `pin`) for an agent it cannot find in the session
@@ -204,12 +204,12 @@ consumer while every old consumer keeps the filtered result.
   twin therefore never shadows a live agent.
 - `AgentManager.listImportableSessions` runs `getProviderAvailability(provider)` on every
   candidate before the listing fan-out, and what an unavailable provider gets depends on who
-  asked for it. A Paseo-shipped provider the user never installed is dropped silently — no rows,
+  asked for it. A Osuna-shipped provider the user never installed is dropped silently — no rows,
   no error entry; nobody wants a Codex error for not having Codex. Anything else — a provider
   declared in daemon config, a plugin-contributed one — becomes a `providerErrors` entry and is
   never listed, so a typo in `command` surfaces as an error with Retry instead of an empty list.
   The signal is membership in `BUILTIN_PROVIDER_IDS` plus the ids in
-  `DEV_AGENT_PROVIDER_DEFINITIONS` (dev's `mock` is Paseo's, not the user's), never
+  `DEV_AGENT_PROVIDER_DEFINITIONS` (dev's `mock` is Osuna's, not the user's), never
   `derivedFromProviderId` — that is `null` for built-ins and for generic ACP custom providers
   alike. A probe that returns `false` with no error text synthesises
   `Provider '<id>' is not available`; the error path must not rely on the listing call throwing,
@@ -228,7 +228,7 @@ consumer while every old consumer keeps the filtered result.
 - Field sent to an old daemon -> cannot happen from the app (query disabled without the flag);
   a hand-built request just gets the filtered list.
 - Descriptor without `importedAgentId` -> parses; the row is external.
-- `client.isAvailable()` returns `false` or throws for a Paseo-shipped provider -> skipped,
+- `client.isAvailable()` returns `false` or throws for a Osuna-shipped provider -> skipped,
   absent from both `sessions` and `providerErrors`. Same for a config-declared or
   plugin-contributed provider -> no rows, one `providerErrors` entry carrying the probe's error
   text or the synthesised `Provider '<id>' is not available`. Available but
@@ -376,27 +376,27 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 ### 2. Signatures
 
 - Pure decision: `resolveCreateAgentsCapability(input)` in `server/agent/create-agents-capability.ts` → `{ canCreateAgents: true } | { canCreateAgents: false; unavailableReason }`.
-- Global gate: `AgentManager.setPaseoToolsGate({ mcpEnabled, injectIntoAgents })`, called from `bootstrap.ts` (initial, on listen, and in the `mcp.enabled` / `mcp.injectIntoAgents` field-change callbacks). There is no boolean setter any more.
+- Global gate: `AgentManager.setOsunaToolsGate({ mcpEnabled, injectIntoAgents })`, called from `bootstrap.ts` (initial, on listen, and in the `mcp.enabled` / `mcp.injectIntoAgents` field-change callbacks). There is no boolean setter any more.
 - Storage: `ManagedAgent.createAgentsCapability`, written only by `registerSession` (its `options.createAgentsCapability` is required); projected in `toAgentPayload`.
 - Wire: `AgentSnapshotPayloadSchema.canCreateAgents: z.boolean().optional()`, `createAgentsUnavailableReason: z.string().optional()`; `server_info.features.agentMentions`.
-- Prediction (ticket 10), for the new agent screen before any session exists: `predictCreateAgentsCapability({ gateReason, paseoToolPolicy, clientCapabilities })` → `CreateAgentsCapability | null`, wrapped by `AgentManager.predictCreateAgentsCapability(provider, clientCapabilities)`. `ProviderSnapshotManager.setCreateAgentsPredictor(predictor)` (wired once in `bootstrap.ts`) and `refreshCreateAgentsPredictions()`. Wire: the same two optional fields on `ProviderSnapshotEntrySchema` (and the hand-written `ProviderSnapshotEntry` in `protocol/agent-types.ts` and `server/agent/agent-sdk-types.ts`). Client flag `AgentCapabilityFlags.mcpServersDecidedPerSession?` (client only; Pi sets it in `capabilitiesForClient`).
+- Prediction (ticket 10), for the new agent screen before any session exists: `predictCreateAgentsCapability({ gateReason, osunaToolPolicy, clientCapabilities })` → `CreateAgentsCapability | null`, wrapped by `AgentManager.predictCreateAgentsCapability(provider, clientCapabilities)`. `ProviderSnapshotManager.setCreateAgentsPredictor(predictor)` (wired once in `bootstrap.ts`) and `refreshCreateAgentsPredictions()`. Wire: the same two optional fields on `ProviderSnapshotEntrySchema` (and the hand-written `ProviderSnapshotEntry` in `protocol/agent-types.ts` and `server/agent/agent-sdk-types.ts`). Client flag `AgentCapabilityFlags.mcpServersDecidedPerSession?` (client only; Pi sets it in `capabilitiesForClient`).
 
 ### 3. Contracts
 
 - Computed on all four registration paths — create, resume, import, reload — after the provider session exists, because Pi's MCP support is only known from `session.capabilities.supportsMcpServers`.
 - Reason precedence: `mcp_disabled` → `tools_not_injected` → `create_agent_not_allowed` → `tools_not_delivered`. The reason is present only when `canCreateAgents` is false.
-- Delivery: a native catalog on the launch context decides alone (`getTool("create_agent")`); OpenCode's bridge manifest is policy-free and never counts. Otherwise the launch config must hold the daemon's internal `paseo` MCP server and the session must accept MCP. A user-owned server named `paseo` is not delivery.
-- The gate is read once, in `prepareSessionConfig`, and folded into `paseoToolPolicy` (`{ enabled: false }` when closed). `buildLaunchContext` reads only that policy, so a toggle between the two awaits cannot make the catalog and the snapshot disagree.
+- Delivery: a native catalog on the launch context decides alone (`getTool("create_agent")`); OpenCode's bridge manifest is policy-free and never counts. Otherwise the launch config must hold the daemon's internal `osuna` MCP server and the session must accept MCP. A user-owned server named `osuna` is not delivery.
+- The gate is read once, in `prepareSessionConfig`, and folded into `osunaToolPolicy` (`{ enabled: false }` when closed). `buildLaunchContext` reads only that policy, so a toggle between the two awaits cannot make the catalog and the snapshot disagree.
 - Stored (not loaded) agents from `buildStoredAgentPayload` omit both fields; sending to them resumes, which decides.
-- Prediction uses the same gate and policy, then only the client's declared channel: `supportsNativePaseoTools || supportsMcpServers` → true; `mcpServersDecidedPerSession` → `null`, no fields written (Pi: the adapter probe needs a session per cwd; decided with the user on 2026-09-30 so a working Pi is not grayed out); otherwise `tools_not_delivered`. Gate and policy reasons are still written for Pi. The daemon decides for real once the session exists, and attaches the Routing block only then.
+- Prediction uses the same gate and policy, then only the client's declared channel: `supportsNativeOsunaTools || supportsMcpServers` → true; `mcpServersDecidedPerSession` → `null`, no fields written (Pi: the adapter probe needs a session per cwd; decided with the user on 2026-09-30 so a working Pi is not grayed out); otherwise `tools_not_delivered`. Gate and policy reasons are still written for Pi. The daemon decides for real once the session exists, and attaches the Routing block only then.
 - Fields are overlaid in `ProviderSnapshotManager.withCreateAgentsPrediction`, called from `publishTargets` and `getOrCreateTarget`. The overlaid record goes through `identifyEntry`, so the prediction is part of `contentHash`: a toggle pushes `providers_snapshot_update` and `ifNoneMatch` sees the change. A `WeakMap` keyed by the catalog record keeps the overlaid record stable while the prediction is unchanged. Disabled providers and providers without a materialized client get no fields.
-- Republishing: `bootstrap.ts` wraps every gate change in a local `setPaseoToolsGate` that calls `refreshCreateAgentsPredictions()`. Provider policy changes need nothing extra: `set_daemon_config` → `prepareMutableProviderConfig().commit()` → `installGeneration` → `publishTargets`, and the predictor reads `daemonConfigStore.get().providers` live.
+- Republishing: `bootstrap.ts` wraps every gate change in a local `setOsunaToolsGate` that calls `refreshCreateAgentsPredictions()`. Provider policy changes need nothing extra: `set_daemon_config` → `prepareMutableProviderConfig().commit()` → `installGeneration` → `publishTargets`, and the predictor reads `daemonConfigStore.get().providers` live.
 
 ### 4. Validation & Error Matrix
 
 - `mcp.enabled` false → `mcp_disabled`.
 - `mcp.enabled` true, `injectIntoAgents` false → `tools_not_injected`.
-- Provider `paseoTools.enabled: false` or `disabledTools` has `create_agent` → `create_agent_not_allowed`.
+- Provider `osunaTools.enabled: false` or `disabledTools` has `create_agent` → `create_agent_not_allowed`.
 - Session without MCP support, native catalog without `create_agent`, or internal server not injected → `tools_not_delivered`.
 - Config changed while running → snapshot unchanged until reload/resume. Known gap: turning `mcp.enabled` off in the config file kills the MCP endpoint immediately, but the snapshot still says `true` (the app cannot change that key).
 - Provider snapshot prediction, by contrast, follows config changes immediately. Known gap: before the daemon listens, `mcpBaseUrl` is null, so an MCP-channel prediction of `true` can precede a session that gets `tools_not_delivered`.
@@ -409,10 +409,10 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 
 ### 6. Tests Required
 
-- Daemon E2E `daemon-e2e/agent-create-agents-capability.e2e.test.ts`: each reason from one config (`mcpEnabled`, `mcpInjectIntoAgents`, `providerOverrides.<id>.paseoTools`, fake client `supportsMcpServers`), the true case with no reason, and `patchDaemonConfig` → unchanged → `refreshAgent` → updated.
-- Unit `agent/create-agents-capability.test.ts`: native catalog with/without `create_agent`, user-owned `paseo` server, internal server with/without session MCP support.
+- Daemon E2E `daemon-e2e/agent-create-agents-capability.e2e.test.ts`: each reason from one config (`mcpEnabled`, `mcpInjectIntoAgents`, `providerOverrides.<id>.osunaTools`, fake client `supportsMcpServers`), the true case with no reason, and `patchDaemonConfig` → unchanged → `refreshAgent` → updated.
+- Unit `agent/create-agents-capability.test.ts`: native catalog with/without `create_agent`, user-owned `osuna` server, internal server with/without session MCP support.
 - Protocol `messages.wire-compat.test.ts`: snapshot without the fields, with an unknown reason string, and `agentMentions` optional; provider snapshot entry likewise.
-- Daemon E2E `describe("provider snapshot create-agents prediction")` in the same file: each config → the predicted fields equal what `createAgent` then reports; `mcpServersDecidedPerSession` → no fields, session still decides; `patchDaemonConfig` of `mcp.injectIntoAgents` and `paseoTools` updates `getProvidersSnapshot` without a reload (`paseoTools` patches merge, so reset with `disabledTools: []`, not `{}`).
+- Daemon E2E `describe("provider snapshot create-agents prediction")` in the same file: each config → the predicted fields equal what `createAgent` then reports; `mcpServersDecidedPerSession` → no fields, session still decides; `patchDaemonConfig` of `mcp.injectIntoAgents` and `osunaTools` updates `getProvidersSnapshot` without a reload (`osunaTools` patches merge, so reset with `disabledTools: []`, not `{}`).
 - Unit `predictCreateAgentsCapability` in `agent/create-agents-capability.test.ts`: gate before policy, native channel, per-session channel → `null` unless gate/policy blocks.
 
 ### 7. Wrong vs Correct
@@ -422,7 +422,7 @@ Reference implementation: `canCreateAgents` / `createAgentsUnavailableReason` (m
 ```ts
 // Reads the live gate a second time; a toggle between prepare and launch leaves
 // the MCP server injected but no native catalog, and the snapshot misreports.
-if (this.paseoToolsEnabled && isPaseoToolPolicyEnabled(policy) && client.capabilities.supportsNativePaseoTools) {
+if (this.osunaToolsEnabled && isOsunaToolPolicyEnabled(policy) && client.capabilities.supportsNativeOsunaTools) {
 
 // Prediction added in the catalog session after hashing: snapshotHash and
 // sameSnapshotRecords never see it, so toggling injection pushes nothing.
@@ -440,12 +440,12 @@ const records = order.map((provider) => this.withCreateAgentsPrediction(record(p
 
 ```ts
 // prepareSessionConfig captured the gate and folded it into the policy.
-if (isPaseoToolPolicyEnabled(paseoToolPolicy) && client.capabilities.supportsNativePaseoTools) {
+if (isOsunaToolPolicyEnabled(osunaToolPolicy) && client.capabilities.supportsNativeOsunaTools) {
 ```
 
 ## Scenario: a daemon-owned agent label fed from the provider's tool call
 
-Reference implementation: `paseo.parent-tool-call-id` (multi-agent ticket 04). Reuse this shape when a Paseo tool needs a fact only the provider channel knows.
+Reference implementation: `osuna.parent-tool-call-id` (multi-agent ticket 04). Reuse this shape when a Osuna tool needs a fact only the provider channel knows.
 
 ### 1. Scope / Trigger
 
@@ -453,23 +453,23 @@ Reference implementation: `paseo.parent-tool-call-id` (multi-agent ticket 04). R
 
 ### 2. Signatures
 
-- `PaseoToolExecutionContext.providerToolCallId?: string` (`agent/tools/types.ts`).
-- Channel boundaries fill it: `mcp-server.ts` `readProviderToolCallId(context)` from `_meta` keys `claudecode/toolUseId` → `callId` → `pi-mcp-adapter/toolCallId`; `opencode/bridge-plugin.mjs` sends `context.callID` as header `X-Paseo-Tool-Call-Id`, `opencode/bridge.ts` reads it; `omp/host-tools.ts` passes `request.toolCallId`.
+- `OsunaToolExecutionContext.providerToolCallId?: string` (`agent/tools/types.ts`).
+- Channel boundaries fill it: `mcp-server.ts` `readProviderToolCallId(context)` from `_meta` keys `claudecode/toolUseId` → `callId` → `pi-mcp-adapter/toolCallId`; `opencode/bridge-plugin.mjs` sends `context.callID` as header `X-Osuna-Tool-Call-Id`, `opencode/bridge.ts` reads it; `omp/host-tools.ts` passes `request.toolCallId`.
 - `CreateAgentFromMcpInput.parentToolCallId?: string`; `withParentToolCallIdLabel({ labels, parentAgentId, parentToolCallId })` in `create-agent/intent.ts`, applied in `resolveMcpCreateAgent` only.
-- Constants: `PARENT_TOOL_CALL_ID_LABEL` (`@getpaseo/protocol/agent-labels`), `PASEO_CREATE_AGENT_TOOL_NAME = "paseo.create_agent"` (`@getpaseo/protocol/tool-name-normalization`).
+- Constants: `PARENT_TOOL_CALL_ID_LABEL` (`@osuna/protocol/agent-labels`), `OSUNA_CREATE_AGENT_TOOL_NAME = "osuna.create_agent"` (`@osuna/protocol/tool-name-normalization`).
 
 ### 3. Contracts
 
 - The tool-created path (`kind: "mcp"`) always drops a model-supplied value for the key (from `labels` or `childAgentDefaultLabels`), then writes it only when there is a parent agent and an id. Legacy detached create gets no label.
 - The WebSocket session create path (`session.ts`) does not strip it: that caller is the user/app, and app e2e seeds children through labels.
 - Detach keeps the label (`detachedAgentLabelPatch` clears only the parent and open-tab labels).
-- Timeline names: OpenCode `paseo_create_agent`, OMP bare `create_agent`, and Pi `mcp` proxy / `mcp__paseo` `{tool, args}` / direct `paseo_create_agent` / `mcp__paseo_create_agent` become `paseo.create_agent` with flat input, in the adapters' `parseToolArgs` / tool-call mapper so live and history share it. Other Paseo tools keep their names.
+- Timeline names: OpenCode `osuna_create_agent`, OMP bare `create_agent`, and Pi `mcp` proxy / `mcp__osuna` `{tool, args}` / direct `osuna_create_agent` / `mcp__osuna_create_agent` become `osuna.create_agent` with flat input, in the adapters' `parseToolArgs` / tool-call mapper so live and history share it. Other Osuna tools keep their names.
 
 ### 4. Validation & Error Matrix
 
 - No id (old Claude Code, Codex < 0.148, pi-mcp-adapter < 3.0, ACP providers) → no label, no error.
 - Id empty or whitespace → treated as absent; otherwise trimmed.
-- Pi proxy `{tool: "create_agent"}` without `server: "paseo"`, or Pi direct tool under `toolPrefix: "none"` → not renamed (ambiguous server).
+- Pi proxy `{tool: "create_agent"}` without `server: "osuna"`, or Pi direct tool under `toolPrefix: "none"` → not renamed (ambiguous server).
 - Pi end event without a tracked start → name may still resolve from `result.details`, but input is `null`.
 
 ### 5. Good/Base/Bad Cases
@@ -482,7 +482,7 @@ Reference implementation: `paseo.parent-tool-call-id` (multi-agent ticket 04). R
 
 - Unit `agent/mcp-server.test.ts` "parent tool call id label": each `_meta` key, override of a model value, no id → no label (in-memory MCP client, real `AgentManager` + `AgentStorage`).
 - `opencode/bridge.test.ts`: plugin with and without `callID` → `providerToolCallId` seen by the catalog. `omp/host-tools.test.ts`: `toolCallId` reaches the handler.
-- Mapper tests for OpenCode, Pi (all six shapes), OMP: name `paseo.create_agent`, detail `{ type: "unknown", input: <flat args>, output: null }`.
+- Mapper tests for OpenCode, Pi (all six shapes), OMP: name `osuna.create_agent`, detail `{ type: "unknown", input: <flat args>, output: null }`.
 - Daemon E2E `daemon-e2e/subagent-call-links.e2e.test.ts`: `features.subagentCallLinks`, real `/mcp/agents?callerAgentId=` with and without `_meta`.
 - Protocol `messages.wire-compat.test.ts`: `subagentCallLinks` optional.
 
@@ -516,7 +516,7 @@ Reference implementation: multi-agent ticket 13. Reuse this shape when a request
 
 ### 2. Signatures
 
-- `@getpaseo/protocol/provider-subagent-permission`: `PROVIDER_SUBAGENT_ID_METADATA_KEY = "providerSubagentId"`, `providerSubagentPermissionMetadata(subagentId): Record<string, string>` (write), `getProviderSubagentIdFromPermission(request: Pick<AgentPermissionRequest, "metadata">): string | null` (read).
+- `@osuna/protocol/provider-subagent-permission`: `PROVIDER_SUBAGENT_ID_METADATA_KEY = "providerSubagentId"`, `providerSubagentPermissionMetadata(subagentId): Record<string, string>` (write), `getProviderSubagentIdFromPermission(request: Pick<AgentPermissionRequest, "metadata">): string | null` (read).
 - Claude: `ClaudeTaskProtocolSource.resolveTaskSubagentId(taskId)` (`claude/subagents/live-source.ts`), called with `canUseTool`'s `options.agentID` in `handlePermissionRequest`.
 - Codex: `CodexAppServerAgentSession.providerSubagentMetadata(threadId)` spread into all four approval handlers (command, file change, `request_user_input`, MCP elicitation).
 - OpenCode: `appendOpenCodePermissionAsked` (parent translator) and the forwarded child `question` in `translateProviderSubagentEvent`.
@@ -584,7 +584,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 - Only client requests pass a resolver, built by `Session.routingBlockResolver(text)`: `handleSendAgentMessageRequest`, and `createSessionAgent` for the first message of `create_agent_request`, `agent.create.request`, and `workspace.create.request` (all three funnel into `createSessionAgent`). The create path resolves against the freshly registered `ManagedAgent`, so its real `createAgentsCapability` decides, not the provider snapshot prediction. MCP `send_agent_prompt` and `create_agent` (`kind: "mcp"`), schedule fires, and finish notifications never pass one, so a parent forwarding the user's text cannot chain-dispatch.
 - `startAgentRun` runs `tryRunOutOfBand` on the original first, then calls the resolver. Out-of-band commands never wait on the provider snapshot.
 - Array prompts get a trailing text block; string prompts get `\n\n` + block. The timeline records `submittedPrompt`, reconciled by `clientMessageId`.
-- A profile mention (`paseo://agent/profile/<id>`) resolves to its profile's `provider` and stacks layers: the profile's `model` / `thinkingOptionId` / `modeId` first, then that provider's Mention defaults (`resolveAgainstCatalog(entry, layers)`). Its non-empty `featureValues` go to `settings.features` as written; they are never validated.
+- A profile mention (`osuna://agent/profile/<id>`) resolves to its profile's `provider` and stacks layers: the profile's `model` / `thinkingOptionId` / `modeId` first, then that provider's Mention defaults (`resolveAgainstCatalog(entry, layers)`). Its non-empty `featureValues` go to `settings.features` as written; they are never validated.
 - Layers resolve per field against a `ready` snapshot, first valid layer wins: model → first layer model in the selectable catalog, else the default model; thinking option → first layer value the chosen model offers, skipping any layer whose own model is stale (a retired model takes its thinking option with it), else that model's default (an unset model means the current default model); mode → first layer mode in `entry.modes`, else `defaultModeId` if in `entry.modes`, else `modes[0]`; no modes at all → no `modeId`. A stale profile value therefore falls back to Mention defaults before runtime defaults (decided with the user in ticket 09). A valid lower-layer thinking option applies to a profile's model when that model offers it. Only catalog modes are written because `create_agent` rejects a mode outside `availableModes` and, given none, inherits the parent's mode (same provider) or throws (cross provider).
 - `DaemonConfigStore.applySupportedPatch` replaces a provider's `mentionDefaults` wholesale instead of deep-merging, so the card resets a field by omitting it. The persisted side already replaces it through the shallow spread in `applyMutableProviderConfigToOverrides`. `removeProviders` drops it with the entry. Changing it does not rebuild provider catalogs: `mentionDefaults` is not part of a provider definition's `configuration`.
 - `stripTrailingRoutingBlock` needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
@@ -600,8 +600,8 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 
 ### 5. Good/Base/Bad Cases
 
-- Good: `[@Claude](paseo://agent/provider/claude) write tests` → provider gets text + block; timeline shows the text.
-- Base: a message without mentions that ends in a user-written `<paseo-system>` block → sent and recorded unchanged.
+- Good: `[@Claude](osuna://agent/provider/claude) write tests` → provider gets text + block; timeline shows the text.
+- Base: a message without mentions that ends in a user-written `<osuna-system>` block → sent and recorded unchanged.
 - Bad: stripping in `submittedPromptText` — every entrypoint loses user-written trailing blocks, including MCP and schedule prompts that never carried one.
 
 ### 6. Tests Required
@@ -665,7 +665,7 @@ Reference implementations: `provider.api_endpoint.fetch_models` / `provider.api_
 - The key comes from the request, else from the saved endpoint; it is never in a response or a log. Echoed upstream text has the key replaced with `***` **before** it is truncated to 300 characters — truncating first can cut the key in half and leak the first half.
 - `test_connection` response: `{ requestId, result: { ok, status: number | null, durationMs, error } | null, error }`. `result` carries the upstream verdict (`status: null` when nothing came back); the top-level `error` is set only when the request itself was refused or cancelled, and then `result` is `null`.
 - Test requests mirror the CLI: Claude `POST <base>/v1/messages` with Bearer + `anthropic-version` only (no `x-api-key`, as Claude Code sends with `ANTHROPIC_AUTH_TOKEN`), body `{ model, max_tokens: 1, messages: [ping] }`; Codex `POST <base with /v1>/responses` with Bearer, body `{ model, input: [message] }` — no `store`, `previous_response_id`, or `max_output_tokens`. Timeout 30 s (`connectionTestTimeoutMs`), fetch is 15 s.
-- The protocol name shown to users comes from `apiEndpointProtocolName(provider)` in `@getpaseo/protocol/api-endpoint/rpc-schemas`; daemon and App both read it.
+- The protocol name shown to users comes from `apiEndpointProtocolName(provider)` in `@osuna/protocol/api-endpoint/rpc-schemas`; daemon and App both read it.
 - Read-only upstream calls stay out of the service's mutation queue.
 
 ### 4. Validation & Error Matrix
@@ -743,7 +743,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 
 - Good: activate → snapshot lists only `relay/*`, `isModelListAuthoritative: true`; a create with no model runs `relay/haiku`.
 - Base: back to Official → the next refresh publishes the provider's own catalogue and drops the field.
-- Bad: replacing models only in the snapshot — the picker looks right, but `paseo run` with no `--model` still sends `claude-opus-*` to the relay.
+- Bad: replacing models only in the snapshot — the picker looks right, but `osuna run` with no `--model` still sends `claude-opus-*` to the relay.
 
 ### 6. Tests Required
 
@@ -964,7 +964,7 @@ Example: `provider.version.check.request`, which compares each built-in CLI's in
 
 - Protocol: `ProviderVersionCheckRequestSchema { requestId, providers?: string[], force?: boolean }`; response `{ requestId, results: ProviderVersionCheckResult[] }`, result `{ provider, installedVersion?, latestVersion?, updateAvailable, error? }` (`packages/protocol/src/messages.ts`). Permission `daemon.read` both ways.
 - Package names: `AgentProviderDefinition.npmPackage` (`packages/protocol/src/provider-manifest.ts`), one per built-in provider.
-- Server: `ProviderVersionCheckService.check({ providers?, force? })`, `isNewerVersion({ installed, latest })`, `FetchLatestVersion = ({ npmPackage, signal }) => Promise<string>` (`agent/provider-version-check.ts`). `WebSocketServer` builds the service from `providerSnapshotManager.listProviders({ wait: true })`; the fetcher comes from `PaseoDaemonConfig.providerVersions.fetchLatestVersion`, default `fetchNpmLatestVersion` (`registry.npmjs.org/-/package/<pkg>/dist-tags`, zod-parsed, 15 s timeout).
+- Server: `ProviderVersionCheckService.check({ providers?, force? })`, `isNewerVersion({ installed, latest })`, `FetchLatestVersion = ({ npmPackage, signal }) => Promise<string>` (`agent/provider-version-check.ts`). `WebSocketServer` builds the service from `providerSnapshotManager.listProviders({ wait: true })`; the fetcher comes from `OsunaDaemonConfig.providerVersions.fetchLatestVersion`, default `fetchNpmLatestVersion` (`registry.npmjs.org/-/package/<pkg>/dist-tags`, zod-parsed, 15 s timeout).
 - Client: `DaemonClient.checkProviderVersions({ providers?, force? })`.
 
 ### 3. Contracts
@@ -973,7 +973,7 @@ Example: `provider.version.check.request`, which compares each built-in CLI's in
 - An entry without `version` (disabled, not installed, unreadable) returns `{ provider, updateAvailable: false }` and is never looked up.
 - Latest versions are cached in memory per provider for 1 hour; failures are not cached. Concurrent lookups for one provider share one request, `force` included. `force` skips the cache.
 - `updateAvailable` is a semver compare; either side unparseable → `false`.
-- No lookup at startup or on a timer. `createTestPaseoDaemon` injects a fetcher that throws, so a test daemon never reaches npm.
+- No lookup at startup or on a timer. `createTestOsunaDaemon` injects a fetcher that throws, so a test daemon never reaches npm.
 
 ### 4. Validation & Error Matrix
 
@@ -1029,7 +1029,7 @@ Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade sub
   - `detectCodexInstallMethod({ realPath, platform })` → `{ method: "standalone"; codexHome } | { method: "homebrew"; prefix } | { method: "npm"; prefix } | { method: "unknown" }`.
   - `clipUpgradeOutput(output, limit = 32_000)`.
 - Launch: `AgentClient.resolveCliLaunch?(): Promise<ProviderCliLaunch | null>` (`{ executable, args, source, env }`, built on `resolveProviderCliLaunch` in `agent/provider-cli-version.ts`), forwarded in `wrapClientProvider`, reached through `ProviderSnapshotManager.resolveCliLaunch(provider)` (null when disabled).
-- Service: `ProviderUpgradeService.upgrade(provider)` returns `Omit<ProviderUpgradeResponsePayload, "requestId">` (`agent/provider-upgrade.ts`). `createProviderVersionServices` in `websocket-server.ts` builds it next to the version check; `PaseoDaemonConfig.providerVersions.upgradeTimeoutMs` (default 10 min) is the test seam.
+- Service: `ProviderUpgradeService.upgrade(provider)` returns `Omit<ProviderUpgradeResponsePayload, "requestId">` (`agent/provider-upgrade.ts`). `createProviderVersionServices` in `websocket-server.ts` builds it next to the version check; `OsunaDaemonConfig.providerVersions.upgradeTimeoutMs` (default 10 min) is the test seam.
 - Client: `DaemonClient.upgradeProvider({ provider })`, request timeout 20 min.
 
 ### 3. Contracts

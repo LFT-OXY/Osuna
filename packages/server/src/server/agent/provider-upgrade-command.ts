@@ -1,4 +1,4 @@
-import { getAgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
+import { getAgentProviderDefinition } from "@osuna/protocol/provider-manifest";
 import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
 /*

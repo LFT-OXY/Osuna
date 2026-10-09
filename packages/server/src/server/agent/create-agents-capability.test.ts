@@ -4,18 +4,18 @@ import {
   predictCreateAgentsCapability,
   resolveCreateAgentsCapability,
 } from "./create-agents-capability.js";
-import type { PaseoToolCatalog, PaseoToolDefinition } from "./tools/types.js";
+import type { OsunaToolCatalog, OsunaToolDefinition } from "./tools/types.js";
 
 const baseConfig: AgentSessionConfig = { provider: "codex", cwd: "/tmp/project" };
-const internalPaseoConfig: AgentSessionConfig = {
+const internalOsunaConfig: AgentSessionConfig = {
   ...baseConfig,
   mcpServers: {
-    paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=a" },
+    osuna: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=a" },
   },
 };
 
-function catalogWith(toolNames: string[]): PaseoToolCatalog {
-  const tools = new Map<string, PaseoToolDefinition>(
+function catalogWith(toolNames: string[]): OsunaToolCatalog {
+  const tools = new Map<string, OsunaToolDefinition>(
     toolNames.map((name) => [
       name,
       {
@@ -41,7 +41,7 @@ describe("resolveCreateAgentsCapability", () => {
     expect(
       resolveCreateAgentsCapability({
         gateReason: "mcp_disabled",
-        paseoToolPolicy: { disabledTools: ["create_agent"] },
+        osunaToolPolicy: { disabledTools: ["create_agent"] },
         launchContext: { agentId: "a", env: {} },
         providerLaunchConfig: baseConfig,
         sessionSupportsMcpServers: false,
@@ -53,7 +53,7 @@ describe("resolveCreateAgentsCapability", () => {
     expect(
       resolveCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: { enabled: false },
+        osunaToolPolicy: { enabled: false },
         launchContext: { agentId: "a", env: {} },
         providerLaunchConfig: baseConfig,
         sessionSupportsMcpServers: true,
@@ -65,8 +65,8 @@ describe("resolveCreateAgentsCapability", () => {
     expect(
       resolveCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: undefined,
-        launchContext: { agentId: "a", env: {}, paseoTools: catalogWith(["create_agent"]) },
+        osunaToolPolicy: undefined,
+        launchContext: { agentId: "a", env: {}, osunaTools: catalogWith(["create_agent"]) },
         providerLaunchConfig: baseConfig,
         sessionSupportsMcpServers: false,
       }),
@@ -77,23 +77,23 @@ describe("resolveCreateAgentsCapability", () => {
     expect(
       resolveCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: undefined,
-        launchContext: { agentId: "a", env: {}, paseoTools: catalogWith(["list_agents"]) },
-        providerLaunchConfig: internalPaseoConfig,
+        osunaToolPolicy: undefined,
+        launchContext: { agentId: "a", env: {}, osunaTools: catalogWith(["list_agents"]) },
+        providerLaunchConfig: internalOsunaConfig,
         sessionSupportsMcpServers: true,
       }),
     ).toEqual({ canCreateAgents: false, unavailableReason: "tools_not_delivered" });
   });
 
-  test("a user-owned server named paseo does not count as delivery", () => {
+  test("a user-owned server named osuna does not count as delivery", () => {
     expect(
       resolveCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: undefined,
+        osunaToolPolicy: undefined,
         launchContext: { agentId: "a", env: {} },
         providerLaunchConfig: {
           ...baseConfig,
-          mcpServers: { paseo: { type: "stdio", command: "my-paseo" } },
+          mcpServers: { osuna: { type: "stdio", command: "my-osuna" } },
         },
         sessionSupportsMcpServers: true,
       }),
@@ -103,9 +103,9 @@ describe("resolveCreateAgentsCapability", () => {
   test("the internal MCP server needs a session that accepts MCP servers", () => {
     const input = {
       gateReason: null,
-      paseoToolPolicy: undefined,
+      osunaToolPolicy: undefined,
       launchContext: { agentId: "a", env: {} },
-      providerLaunchConfig: internalPaseoConfig,
+      providerLaunchConfig: internalOsunaConfig,
     };
     expect(resolveCreateAgentsCapability({ ...input, sessionSupportsMcpServers: true })).toEqual({
       canCreateAgents: true,
@@ -123,25 +123,25 @@ describe("predictCreateAgentsCapability", () => {
     expect(
       predictCreateAgentsCapability({
         gateReason: "tools_not_injected",
-        paseoToolPolicy: { enabled: false },
+        osunaToolPolicy: { enabled: false },
         clientCapabilities,
       }),
     ).toEqual({ canCreateAgents: false, unavailableReason: "tools_not_injected" });
     expect(
       predictCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: { disabledTools: ["create_agent"] },
+        osunaToolPolicy: { disabledTools: ["create_agent"] },
         clientCapabilities,
       }),
     ).toEqual({ canCreateAgents: false, unavailableReason: "create_agent_not_allowed" });
   });
 
-  test("a client with native Paseo tools delivers create_agent without MCP", () => {
+  test("a client with native Osuna tools delivers create_agent without MCP", () => {
     expect(
       predictCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: undefined,
-        clientCapabilities: { supportsMcpServers: false, supportsNativePaseoTools: true },
+        osunaToolPolicy: undefined,
+        clientCapabilities: { supportsMcpServers: false, supportsNativeOsunaTools: true },
       }),
     ).toEqual({ canCreateAgents: true });
   });
@@ -151,14 +151,14 @@ describe("predictCreateAgentsCapability", () => {
     expect(
       predictCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: undefined,
+        osunaToolPolicy: undefined,
         clientCapabilities: { supportsMcpServers: false, mcpServersDecidedPerSession: true },
       }),
     ).toBeNull();
     expect(
       predictCreateAgentsCapability({
         gateReason: "tools_not_injected",
-        paseoToolPolicy: undefined,
+        osunaToolPolicy: undefined,
         clientCapabilities: { supportsMcpServers: false, mcpServersDecidedPerSession: true },
       }),
     ).toEqual({ canCreateAgents: false, unavailableReason: "tools_not_injected" });
@@ -168,7 +168,7 @@ describe("predictCreateAgentsCapability", () => {
     expect(
       predictCreateAgentsCapability({
         gateReason: null,
-        paseoToolPolicy: undefined,
+        osunaToolPolicy: undefined,
         clientCapabilities: { supportsMcpServers: false },
       }),
     ).toEqual({ canCreateAgents: false, unavailableReason: "tools_not_delivered" });

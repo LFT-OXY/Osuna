@@ -14,12 +14,12 @@ import {
 } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { ITheme } from "@xterm/xterm";
-import type { TerminalState } from "@getpaseo/protocol/messages";
+import type { TerminalState } from "@osuna/protocol/messages";
 import {
   TerminalInputModeTracker,
   terminalInputModeStatesEqual,
   type TerminalInputModeState,
-} from "@getpaseo/protocol/terminal-input-mode";
+} from "@osuna/protocol/terminal-input-mode";
 import type { TerminalEmulatorHandle, TerminalEmulatorProps } from "./terminal-emulator-contract";
 import {
   createNativeHeadlessTerminal,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FetchRecentProviderSessionEntry } from "@getpaseo/client/internal/daemon-client";
+import type { FetchRecentProviderSessionEntry } from "@osuna/client/internal/daemon-client";
 import {
   buildResumeCommand,
   buildResumeTerminalLaunch,
@@ -55,7 +55,7 @@ describe("buildSessionHistoryRows", () => {
     expect(rows.map((row) => row.key)).toEqual(["claude:new", "claude:old"]);
   });
 
-  it("carries the owning Paseo agent id through to the row", () => {
+  it("carries the owning Osuna agent id through to the row", () => {
     const rows = buildSessionHistoryRows([
       entry({
         providerHandleId: "owned",

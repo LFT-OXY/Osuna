@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe("desktop updater diagnostics", () => {
   it("collects the staged version and existing ShipIt evidence", () => {
-    testDirectory = mkdtempSync(path.join(tmpdir(), "paseo-updater-diagnostics-"));
+    testDirectory = mkdtempSync(path.join(tmpdir(), "osuna-updater-diagnostics-"));
     const shipItDirectory = path.join(testDirectory, "com.chinhae.osuna.desktop.ShipIt");
     const updateBundlePath = path.join(shipItDirectory, "update.test", "Osuna.app");
     mkdirSync(shipItDirectory, { recursive: true });
@@ -54,7 +54,7 @@ describe("desktop updater diagnostics", () => {
   });
 
   it("reports malformed ShipIt state without hiding other evidence", () => {
-    testDirectory = mkdtempSync(path.join(tmpdir(), "paseo-updater-diagnostics-"));
+    testDirectory = mkdtempSync(path.join(tmpdir(), "osuna-updater-diagnostics-"));
     const shipItDirectory = path.join(testDirectory, "com.chinhae.osuna.desktop.ShipIt");
     mkdirSync(shipItDirectory, { recursive: true });
     writeFileSync(path.join(shipItDirectory, "ShipItState.plist"), "not JSON");
@@ -73,7 +73,7 @@ describe("desktop updater diagnostics", () => {
   });
 
   it("reports bundle version lookup failures", () => {
-    testDirectory = mkdtempSync(path.join(tmpdir(), "paseo-updater-diagnostics-"));
+    testDirectory = mkdtempSync(path.join(tmpdir(), "osuna-updater-diagnostics-"));
     const shipItDirectory = path.join(testDirectory, "com.chinhae.osuna.desktop.ShipIt");
     mkdirSync(shipItDirectory, { recursive: true });
     writeFileSync(
@@ -95,7 +95,7 @@ describe("desktop updater diagnostics", () => {
   });
 
   it("keeps readable ShipIt evidence when another file cannot be read", () => {
-    testDirectory = mkdtempSync(path.join(tmpdir(), "paseo-updater-diagnostics-"));
+    testDirectory = mkdtempSync(path.join(tmpdir(), "osuna-updater-diagnostics-"));
     const shipItDirectory = path.join(testDirectory, "com.chinhae.osuna.desktop.ShipIt");
     mkdirSync(path.join(shipItDirectory, "ShipIt_stdout.log"), { recursive: true });
     writeFileSync(path.join(shipItDirectory, "ShipIt_stderr.log"), "installer evidence\n");

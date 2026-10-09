@@ -1,4 +1,4 @@
-import type { UsageSessionRow } from "@getpaseo/protocol/usage/types";
+import type { UsageSessionRow } from "@osuna/protocol/usage/types";
 import { describe, expect, it } from "vitest";
 import {
   ALL_USAGE_SESSION_HOSTS_FAILED_MESSAGE,

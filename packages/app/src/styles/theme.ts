@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
+import { darkHighlightColors, lightHighlightColors } from "@osuna/highlight";
 import { hexColorWithAlpha, hexContrastRatio, mixHexColor } from "@/utils/color";
 import { USAGE_DARK_PALETTE, USAGE_LIGHT_PALETTE } from "./usage-palette";
 
@@ -680,7 +680,7 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
 // 侧栏行态按半透明白叠色设计，这里存为叠色后的不透明值：hover 与选中叠在侧栏上，选中描边叠在选中底色上。
 const DARK_SIDEBAR = "#000000";
 const DARK_SIDEBAR_SELECTED = mixHexColor(DARK_SIDEBAR, "#ffffff", 0.075);
-const paseoDarkColors = buildDarkSemanticColors({
+const osunaDarkColors = buildDarkSemanticColors({
   surface0: "#0a0a0a",
   surface1: "#111111",
   surface2: "#171717",
@@ -996,7 +996,7 @@ export function buildDarkTheme(semanticColors: ReturnType<typeof buildDarkSemant
   } as const;
 }
 
-export const darkTheme = buildDarkTheme(paseoDarkColors);
+export const darkTheme = buildDarkTheme(osunaDarkColors);
 export const darkZincTheme = buildDarkTheme(zincDarkColors);
 export const darkMidnightTheme = buildDarkTheme(midnightDarkColors);
 export const darkClaudeTheme = buildDarkTheme(claudeDarkColors);

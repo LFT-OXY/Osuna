@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { UsageCli } from "@getpaseo/protocol/usage/types";
+import type { UsageCli } from "@osuna/protocol/usage/types";
 import {
   createClaudeParserState,
   parseClaudeChunk,

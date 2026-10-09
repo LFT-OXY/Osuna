@@ -6,7 +6,7 @@ import {
   type ApiEndpoint,
   type ApiEndpointError,
   type ApiEndpointListResponse,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { confirmDialog, type ConfirmDialogInput } from "@/utils/confirm-dialog";

@@ -10,7 +10,7 @@ import { killProcessTree, spawnTsx } from "./spawn-node";
 export interface IsolatedHostDaemon {
   serverId: string;
   port: number;
-  paseoHome: string;
+  osunaHome: string;
   getPid(): number | undefined;
   restart(): Promise<void>;
   close(): Promise<void>;
@@ -22,7 +22,7 @@ export interface IsolatedHostDaemonOptions {
     enabled: boolean;
     endpoint?: string;
   };
-  paseoHome?: string;
+  osunaHome?: string;
   preserveHome?: boolean;
   publishedVersion?: string;
 }
@@ -79,8 +79,8 @@ async function waitForServer(port: number, child: ChildProcess): Promise<void> {
 }
 
 // OpenCode 默认停用，而 createIdleAgent 和 OpenCode 的 real spec 都要用它。spec 自己写了 enabled 的不动。
-async function enableOpenCode(paseoHome: string): Promise<void> {
-  const configPath = path.join(paseoHome, "config.json");
+async function enableOpenCode(osunaHome: string): Promise<void> {
+  const configPath = path.join(osunaHome, "config.json");
   const existing = existsSync(configPath)
     ? JSON.parse(await readFile(configPath, "utf8"))
     : { version: 1 };
@@ -113,11 +113,11 @@ export async function startIsolatedHostDaemon(
   const metroPort = process.env.E2E_METRO_PORT;
   if (!metroPort) throw new Error("E2E_METRO_PORT is required to start an isolated host daemon");
 
-  const paseoHome =
-    options.paseoHome ?? (await mkdtemp(path.join(tmpdir(), "paseo-e2e-secondary-host-")));
+  const osunaHome =
+    options.osunaHome ?? (await mkdtemp(path.join(tmpdir(), "osuna-e2e-secondary-host-")));
   let publishedPackageRoot: string | null = null;
   if (options.publishedVersion) {
-    publishedPackageRoot = await mkdtemp(path.join(tmpdir(), "paseo-e2e-published-server-"));
+    publishedPackageRoot = await mkdtemp(path.join(tmpdir(), "osuna-e2e-published-server-"));
     await writeFile(
       path.join(publishedPackageRoot, "package.json"),
       `${JSON.stringify({ private: true })}\n`,
@@ -137,13 +137,13 @@ export async function startIsolatedHostDaemon(
           "--no-audit",
           "--no-fund",
           "--no-package-lock",
-          `@getpaseo/server@${options.publishedVersion}`,
+          `@osuna/server@${options.publishedVersion}`,
         ],
         { cwd: publishedPackageRoot, stdio: "ignore" },
       );
     } catch (error) {
       if (!options.preserveHome) {
-        await rm(paseoHome, { recursive: true, force: true });
+        await rm(osunaHome, { recursive: true, force: true });
       }
       await rm(publishedPackageRoot, { recursive: true, force: true });
       throw error;
@@ -154,7 +154,7 @@ export async function startIsolatedHostDaemon(
       options.mutableRelay.endpoint ??
       (process.env.E2E_RELAY_PORT ? `127.0.0.1:${process.env.E2E_RELAY_PORT}` : "127.0.0.1:9");
     await writeFile(
-      path.join(paseoHome, "config.json"),
+      path.join(osunaHome, "config.json"),
       `${JSON.stringify({
         version: 1,
         daemon: {
@@ -169,9 +169,9 @@ export async function startIsolatedHostDaemon(
       })}\n`,
     );
   }
-  await enableOpenCode(paseoHome);
+  await enableOpenCode(osunaHome);
   const serverDir = publishedPackageRoot
-    ? path.join(publishedPackageRoot, "node_modules", "@getpaseo", "server")
+    ? path.join(publishedPackageRoot, "node_modules", "@osuna", "server")
     : path.resolve(__dirname, "../../../../server");
   const spawnDaemon = async (): Promise<ChildProcess> => {
     const spawnOptions: SpawnOptions = {
@@ -179,12 +179,12 @@ export async function startIsolatedHostDaemon(
       env: withDisabledE2ESpeechEnv({
         ...process.env,
         ...options.environment,
-        PASEO_HOME: paseoHome,
-        PASEO_SERVER_ID: serverId,
-        PASEO_LISTEN: `127.0.0.1:${port}`,
-        PASEO_CORS_ORIGINS: `http://localhost:${metroPort}`,
-        PASEO_RELAY_ENABLED: options.mutableRelay ? undefined : "0",
-        PASEO_NODE_ENV: "development",
+        OSUNA_HOME: osunaHome,
+        OSUNA_SERVER_ID: serverId,
+        OSUNA_LISTEN: `127.0.0.1:${port}`,
+        OSUNA_CORS_ORIGINS: `http://localhost:${metroPort}`,
+        OSUNA_RELAY_ENABLED: options.mutableRelay ? undefined : "0",
+        OSUNA_NODE_ENV: "development",
         NODE_ENV: "development",
       }),
       stdio: ["ignore", "ignore", "pipe"],
@@ -217,7 +217,7 @@ export async function startIsolatedHostDaemon(
     child = await spawnDaemon();
   } catch (error) {
     if (!options.preserveHome) {
-      await rm(paseoHome, { recursive: true, force: true });
+      await rm(osunaHome, { recursive: true, force: true });
     }
     if (publishedPackageRoot) {
       await rm(publishedPackageRoot, { recursive: true, force: true });
@@ -229,7 +229,7 @@ export async function startIsolatedHostDaemon(
   return {
     serverId,
     port,
-    paseoHome,
+    osunaHome,
     getPid: () => child.pid,
     restart: async () => {
       if (closed) throw new Error(`Cannot restart closed isolated daemon ${serverId}`);
@@ -241,7 +241,7 @@ export async function startIsolatedHostDaemon(
       closed = true;
       await killProcessTree(child);
       if (!options.preserveHome) {
-        await rm(paseoHome, { recursive: true, force: true });
+        await rm(osunaHome, { recursive: true, force: true });
       }
       if (publishedPackageRoot) {
         await rm(publishedPackageRoot, { recursive: true, force: true });

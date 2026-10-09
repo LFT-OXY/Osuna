@@ -1,4 +1,4 @@
-import type { ParsedDiffFile } from "@getpaseo/protocol/messages";
+import type { ParsedDiffFile } from "@osuna/protocol/messages";
 import { describe, expect, it } from "vitest";
 import {
   buildDiffDocumentModel,

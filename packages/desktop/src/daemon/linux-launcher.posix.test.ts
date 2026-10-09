@@ -22,7 +22,7 @@ async function launch(
     rerun?: boolean;
   } = {},
 ) {
-  const root = mkdtempSync(join(tmpdir(), "paseo-launcher-"));
+  const root = mkdtempSync(join(tmpdir(), "osuna-launcher-"));
   try {
     const app = join(root, "app with spaces");
     const commands = join(root, "commands");
@@ -47,7 +47,7 @@ async function launch(
     chmodSync(join(app, "chrome-sandbox"), 0o755);
     await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
     if (options.rerun) await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
-    const executablePath = options.symlink ? join(root, "paseo") : join(app, "Osuna");
+    const executablePath = options.symlink ? join(root, "osuna") : join(app, "Osuna");
     if (options.symlink) symlinkSync(join(app, "Osuna"), executablePath);
     const args = options.args ?? ["path with spaces", "$(touch never)", "semi;colon", "*.txt"];
     const result = spawnSync(executablePath, args, {
@@ -56,8 +56,8 @@ async function launch(
         ...process.env,
         FORCE_COLOR: undefined,
         PATH: `${commands}:${process.env.PATH}`,
-        APPIMAGE: "/tmp/Paseo.AppImage",
-        PASEO_DESKTOP_SMOKE: "0",
+        APPIMAGE: "/tmp/Osuna.AppImage",
+        OSUNA_DESKTOP_SMOKE: "0",
         ...options.env,
       },
     });
@@ -116,8 +116,8 @@ it("does not depend on APPIMAGE being present for an extracted portable app", as
 it("applies a debugging environment sandbox override before Chromium starts", async () => {
   const result = await launch({
     namespaces: true,
-    env: { PASEO_ELECTRON_FLAGS: "--disable-gpu\t--no-sandbox" },
+    env: { OSUNA_ELECTRON_FLAGS: "--disable-gpu\t--no-sandbox" },
   });
   expect(result.args).toEqual(["--no-sandbox", ...result.input]);
-  expect(result.stderr).toContain("requested by PASEO_ELECTRON_FLAGS");
+  expect(result.stderr).toContain("requested by OSUNA_ELECTRON_FLAGS");
 });

@@ -13,7 +13,7 @@ import type {
   UsageReport,
   UsageSessionHandle,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import type { PersistedProjectRecord } from "../workspace-registry.js";
 import type { UsageAgentBridge, UsageAgentTurnEvent } from "./agent-sessions.js";
 import { stampCodexTurnIds } from "./codex-turn-match.js";
@@ -51,7 +51,7 @@ import {
 } from "./types.js";
 
 export const DEFAULT_USAGE_SCAN_INTERVAL_MS = 60_000;
-const SCAN_INTERVAL_ENV = "PASEO_USAGE_SCAN_INTERVAL_MS";
+const SCAN_INTERVAL_ENV = "OSUNA_USAGE_SCAN_INTERVAL_MS";
 
 /** How long a file must stay untouched before an unfinished turn is settled. */
 const IDLE_TURN_SETTLE_MS = 10 * 60 * 1000;
@@ -72,7 +72,7 @@ const PROGRESS_INTERVAL_MS = 1000;
 const READ_CHUNK_BYTES = 1024 * 1024;
 
 export interface UsageServiceOptions {
-  paseoHome: string;
+  osunaHome: string;
   config: UsageConfig | undefined;
   logger: Logger;
   listProjects: () => Promise<PersistedProjectRecord[]>;
@@ -159,7 +159,7 @@ export class UsageService {
   constructor(options: UsageServiceOptions) {
     this.logger = options.logger.child({ module: "usage" });
     this.store = new UsageStore({
-      dir: path.join(options.paseoHome, "usage"),
+      dir: path.join(options.osunaHome, "usage"),
       logger: this.logger,
     });
     this.config = options.config;
@@ -287,7 +287,7 @@ export class UsageService {
     return buildAgentSummary(await this.agentReportInput(agentId));
   }
 
-  /** The agent's turns, oldest first, with Paseo's turn id where it is known. */
+  /** The agent's turns, oldest first, with Osuna's turn id where it is known. */
   async listAgentTurns(agentId: string): Promise<{ turns: UsageAgentTurn[]; complete: boolean }> {
     const { turns, complete } = buildAgentTurns(await this.agentReportInput(agentId));
     const timeline = await this.agents.listTurnTimestamps(agentId);
@@ -760,7 +760,7 @@ function appendRowSet(target: UsageRowSet, source: UsageRowSet): void {
 }
 
 /**
- * Stamp Paseo's turn id on the turn the targeted parse was asked about — the
+ * Stamp Osuna's turn id on the turn the targeted parse was asked about — the
  * newest one in the file. Returns null when the CLI is mid-turn, which is what
  * tells the caller to read the file again in a moment: a turn whose wall clock
  * is not fully settled has not seen its closing line yet.

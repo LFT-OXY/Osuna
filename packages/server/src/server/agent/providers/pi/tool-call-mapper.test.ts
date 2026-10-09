@@ -169,52 +169,52 @@ describe("Pi tool call mapper", () => {
 
   test("normalizes Pi MCP proxy calls from requested tool args while running", () => {
     const toolCall = parseToolArgs("mcp", {
-      tool: "paseo_list_models",
+      tool: "osuna_list_models",
       args: '{"provider":"pi"}',
     });
 
-    expect(resolveToolCallName(toolCall, null)).toBe("paseo.list_models");
+    expect(resolveToolCallName(toolCall, null)).toBe("osuna.list_models");
   });
 
   test("normalizes Pi MCP proxy calls from result details when completed", () => {
     const toolCall = parseToolArgs("mcp", {
-      tool: "paseo_list_models",
+      tool: "osuna_list_models",
       args: '{"provider":"pi"}',
     });
     const result = parseToolResult({
       content: [{ type: "text", text: "(empty result)" }],
       details: {
         mode: "call",
-        server: "paseo",
+        server: "osuna",
         tool: "list_models",
       },
     });
 
-    expect(resolveToolCallName(toolCall, result)).toBe("paseo.list_models");
+    expect(resolveToolCallName(toolCall, result)).toBe("osuna.list_models");
   });
 
-  describe("Paseo create_agent calls", () => {
+  describe("Osuna create_agent calls", () => {
     const createArgs = { title: "Review", provider: "codex/gpt-5.4", initialPrompt: "Review it" };
 
     test.each([
-      ["mcp proxy with a prefixed tool", "mcp", { tool: "paseo_create_agent", args: createArgs }],
+      ["mcp proxy with a prefixed tool", "mcp", { tool: "osuna_create_agent", args: createArgs }],
       [
         "mcp proxy with JSON string args",
         "mcp",
-        { tool: "paseo_create_agent", args: JSON.stringify(createArgs) },
+        { tool: "osuna_create_agent", args: JSON.stringify(createArgs) },
       ],
       [
         "mcp proxy with an explicit server",
         "mcp",
-        { server: "paseo", tool: "create_agent", args: createArgs },
+        { server: "osuna", tool: "create_agent", args: createArgs },
       ],
-      ["mcp__paseo namespace tool", "mcp__paseo", { tool: "create_agent", args: createArgs }],
-      ["server-prefixed direct tool", "paseo_create_agent", createArgs],
-      ["mcp-prefixed direct tool", "mcp__paseo_create_agent", createArgs],
-    ])("normalizes the %s to paseo.create_agent with flat input", (_shape, toolName, args) => {
+      ["mcp__osuna namespace tool", "mcp__osuna", { tool: "create_agent", args: createArgs }],
+      ["server-prefixed direct tool", "osuna_create_agent", createArgs],
+      ["mcp-prefixed direct tool", "mcp__osuna_create_agent", createArgs],
+    ])("normalizes the %s to osuna.create_agent with flat input", (_shape, toolName, args) => {
       const toolCall = parseToolArgs(toolName, args);
 
-      expect(resolveToolCallName(toolCall, null)).toBe("paseo.create_agent");
+      expect(resolveToolCallName(toolCall, null)).toBe("osuna.create_agent");
       expect(mapToolDetail(toolCall, null)).toEqual({
         type: "unknown",
         input: createArgs,
@@ -222,10 +222,10 @@ describe("Pi tool call mapper", () => {
       });
     });
 
-    test("leaves other Paseo tools behind the mcp proxy unchanged", () => {
-      const toolCall = parseToolArgs("mcp", { tool: "paseo_list_agents", args: {} });
+    test("leaves other Osuna tools behind the mcp proxy unchanged", () => {
+      const toolCall = parseToolArgs("mcp", { tool: "osuna_list_agents", args: {} });
 
-      expect(resolveToolCallName(toolCall, null)).toBe("paseo.list_agents");
+      expect(resolveToolCallName(toolCall, null)).toBe("osuna.list_agents");
     });
   });
 });

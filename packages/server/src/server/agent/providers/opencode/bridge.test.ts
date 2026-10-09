@@ -7,7 +7,7 @@ import { z } from "zod";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
-import type { PaseoToolCatalog, PaseoToolExecutionContext } from "../../tools/types.js";
+import type { OsunaToolCatalog, OsunaToolExecutionContext } from "../../tools/types.js";
 import { OpenCodeBridge, loadOpenCodeBridgePluginArtifact } from "./bridge.js";
 
 const temporaryDirectories: string[] = [];
@@ -20,7 +20,7 @@ afterEach(async () => {
   );
 });
 
-function createCatalog(): PaseoToolCatalog {
+function createCatalog(): OsunaToolCatalog {
   const tool = {
     name: "echo_context",
     title: "Echo context",
@@ -59,7 +59,7 @@ function readPluginOptions(env: Record<string, string>): {
 
 describe("OpenCodeBridge", () => {
   test("loads packaged bundle bytes without invoking source compilation", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "paseo-opencode-artifact-"));
+    const root = await mkdtemp(path.join(tmpdir(), "osuna-opencode-artifact-"));
     temporaryDirectories.push(root);
     const moduleUrl = pathToFileURL(path.join(root, "bridge.js")).href;
     const bundle = Buffer.from("export default async () => ({})");
@@ -94,17 +94,17 @@ describe("OpenCodeBridge", () => {
   });
 
   test("serves authenticated session context and caller-scoped tools", async () => {
-    const paseoHome = await mkdtemp(path.join(tmpdir(), "paseo-opencode-bridge-"));
-    temporaryDirectories.push(paseoHome);
+    const osunaHome = await mkdtemp(path.join(tmpdir(), "osuna-opencode-bridge-"));
+    temporaryDirectories.push(osunaHome);
     const catalog = createCatalog();
-    const bridge = new OpenCodeBridge({ paseoHome, logger: createTestLogger() });
+    const bridge = new OpenCodeBridge({ osunaHome, logger: createTestLogger() });
     await bridge.start();
     bridge.setManifestCatalog(catalog);
     const release = bridge.bindSession({
       sessionId: "ses_one",
       env: {
-        PASEO_AGENT_ID: "agent-one",
-        PASEO_AGENT_CWD: "/workspace/one",
+        OSUNA_AGENT_ID: "agent-one",
+        OSUNA_AGENT_CWD: "/workspace/one",
         CUSTOM_VALUE: "one",
       },
       tools: catalog,
@@ -125,8 +125,8 @@ describe("OpenCodeBridge", () => {
       });
       expect(await context.json()).toEqual({
         env: {
-          PASEO_AGENT_ID: "agent-one",
-          PASEO_AGENT_CWD: "/workspace/one",
+          OSUNA_AGENT_ID: "agent-one",
+          OSUNA_AGENT_CWD: "/workspace/one",
           CUSTOM_VALUE: "one",
         },
       });
@@ -169,7 +169,7 @@ describe("OpenCodeBridge", () => {
         },
       );
       await expect(
-        hooks.tool.paseo_echo_context.execute(
+        hooks.tool.osuna_echo_context.execute(
           { value: "through bundled plugin" },
           { sessionID: "ses_one" },
         ),
@@ -181,7 +181,7 @@ describe("OpenCodeBridge", () => {
         hooks["shell.env"]({ cwd: "/workspace/one", sessionID: "ses_one" }, { env: {} }),
       ).rejects.toThrow("not bound");
       expect(pluginError).toHaveBeenCalledWith(
-        "[paseo-opencode-plugin] shell.env failed",
+        "[osuna-opencode-plugin] shell.env failed",
         expect.objectContaining({ sessionID: "ses_one", error: expect.stringContaining("bound") }),
       );
       pluginError.mockRestore();
@@ -197,18 +197,18 @@ describe("OpenCodeBridge", () => {
   });
 
   test("forwards the OpenCode tool call id from the plugin context to the tool", async () => {
-    const paseoHome = await mkdtemp(path.join(tmpdir(), "paseo-opencode-bridge-call-id-"));
-    temporaryDirectories.push(paseoHome);
+    const osunaHome = await mkdtemp(path.join(tmpdir(), "osuna-opencode-bridge-call-id-"));
+    temporaryDirectories.push(osunaHome);
     const catalog = createCatalog();
-    const seenContexts: PaseoToolExecutionContext[] = [];
-    const recordingCatalog: PaseoToolCatalog = {
+    const seenContexts: OsunaToolExecutionContext[] = [];
+    const recordingCatalog: OsunaToolCatalog = {
       ...catalog,
       async executeTool(name, input, context) {
         seenContexts.push(context ?? {});
         return await catalog.executeTool(name, input, context);
       },
     };
-    const bridge = new OpenCodeBridge({ paseoHome, logger: createTestLogger() });
+    const bridge = new OpenCodeBridge({ osunaHome, logger: createTestLogger() });
     await bridge.start();
     bridge.setManifestCatalog(catalog);
     const release = bridge.bindSession({ sessionId: "ses_one", env: {}, tools: recordingCatalog });
@@ -220,11 +220,11 @@ describe("OpenCodeBridge", () => {
         { client: { session: { get: async () => ({ data: {} }) } } },
         { baseUrl: plugin.baseUrl, token: plugin.token },
       );
-      await hooks.tool.paseo_echo_context.execute(
+      await hooks.tool.osuna_echo_context.execute(
         { value: "with call id" },
         { sessionID: "ses_one", callID: "call_opencode" },
       );
-      await hooks.tool.paseo_echo_context.execute(
+      await hooks.tool.osuna_echo_context.execute(
         { value: "no call id" },
         { sessionID: "ses_one" },
       );
@@ -240,9 +240,9 @@ describe("OpenCodeBridge", () => {
   });
 
   test("preserves user OpenCode config while installing one content-addressed plugin", async () => {
-    const paseoHome = await mkdtemp(path.join(tmpdir(), "paseo-opencode-bridge-config-"));
-    temporaryDirectories.push(paseoHome);
-    const bridge = new OpenCodeBridge({ paseoHome, logger: createTestLogger() });
+    const osunaHome = await mkdtemp(path.join(tmpdir(), "osuna-opencode-bridge-config-"));
+    temporaryDirectories.push(osunaHome);
+    const bridge = new OpenCodeBridge({ osunaHome, logger: createTestLogger() });
     await bridge.start();
 
     try {
@@ -261,7 +261,7 @@ describe("OpenCodeBridge", () => {
       expect(config.model).toBe("provider/model");
       expect(config.plugin[0]).toBe("user-plugin");
       expect(config.plugin).toHaveLength(2);
-      expect(config.plugin[1]?.[0]).toMatch(/paseo-[a-f0-9]{64}\.mjs$/);
+      expect(config.plugin[1]?.[0]).toMatch(/osuna-[a-f0-9]{64}\.mjs$/);
     } finally {
       await bridge.close();
     }

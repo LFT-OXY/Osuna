@@ -118,11 +118,11 @@ describe("OMP tool call mapper", () => {
     });
   });
 
-  test("names Paseo create_agent host tool calls paseo.create_agent with flat input", () => {
+  test("names Osuna create_agent host tool calls osuna.create_agent with flat input", () => {
     const args = { title: "Review", provider: "codex/gpt-5.4", initialPrompt: "Review it" };
     const toolCall = parseToolArgs("create_agent", args);
 
-    expect(resolveToolCallName(toolCall, null)).toBe("paseo.create_agent");
+    expect(resolveToolCallName(toolCall, null)).toBe("osuna.create_agent");
     expect(mapOmpToolDetail(toolCall, null)).toEqual({
       type: "unknown",
       input: args,

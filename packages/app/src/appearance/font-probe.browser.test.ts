@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createFontProbe, type LocalFontSource } from "./font-probe";
 
 // 本机一定没有的字体名：canvas 会落到基准字体上。
-const MISSING_FAMILY = "Paseo Missing Font 7f3a";
+const MISSING_FAMILY = "Osuna Missing Font 7f3a";
 
 function countingSource(result: () => Promise<readonly string[] | null>) {
   const counter = { calls: 0 };

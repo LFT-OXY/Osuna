@@ -1,7 +1,7 @@
 import type pino from "pino";
 import { createHash } from "node:crypto";
-import { getErrorMessage } from "@getpaseo/protocol/error-utils";
-import { compactProviderSnapshot } from "@getpaseo/protocol/provider-snapshot-codec";
+import { getErrorMessage } from "@osuna/protocol/error-utils";
+import { compactProviderSnapshot } from "@osuna/protocol/provider-snapshot-codec";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
   isGlobalProviderSnapshotKey,
@@ -163,7 +163,7 @@ export class ProviderCatalogSession {
     const snapshotHash = createHash("sha256")
       .update(
         JSON.stringify([
-          "paseo.providers-snapshot/1",
+          "osuna.providers-snapshot/1",
           references ? "references" : "embedded",
           customModeIcons ? "icons" : "legacy-icons",
           records.map(({ entry, contentHash }) => [

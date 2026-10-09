@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import type { ProviderEvent, ProviderRegistration } from "@getpaseo/plugin/server/provider";
+import type { ProviderEvent, ProviderRegistration } from "@osuna/plugin/server/provider";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import type {
@@ -237,7 +237,7 @@ describe("ProviderSnapshotManager public surface", () => {
 
   test("the override leaves no rows from the Claude settings.json the endpoint rewrote", async () => {
     // 启用接口后 settings.json 里写着接口的模型；真实的 Claude 目录会把它们追加进来。
-    const configDir = await mkdtemp(join(tmpdir(), "paseo-snapshot-claude-"));
+    const configDir = await mkdtemp(join(tmpdir(), "osuna-snapshot-claude-"));
     await writeFile(
       join(configDir, "settings.json"),
       JSON.stringify({
@@ -835,8 +835,8 @@ describe("ProviderSnapshotManager public surface", () => {
     }
   });
 
-  test("PASEO_PROVIDER_REFRESH_TIMEOUT_MS env var is honored when no option is given", async () => {
-    vi.stubEnv("PASEO_PROVIDER_REFRESH_TIMEOUT_MS", "1");
+  test("OSUNA_PROVIDER_REFRESH_TIMEOUT_MS env var is honored when no option is given", async () => {
+    vi.stubEnv("OSUNA_PROVIDER_REFRESH_TIMEOUT_MS", "1");
     const isAvailable = vi.fn(waitUntilAborted);
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
@@ -863,8 +863,8 @@ describe("ProviderSnapshotManager public surface", () => {
     }
   });
 
-  test("PASEO_PROVIDER_REFRESH_TIMEOUT_MS env var is ignored when option is provided", async () => {
-    vi.stubEnv("PASEO_PROVIDER_REFRESH_TIMEOUT_MS", "1");
+  test("OSUNA_PROVIDER_REFRESH_TIMEOUT_MS env var is ignored when option is provided", async () => {
+    vi.stubEnv("OSUNA_PROVIDER_REFRESH_TIMEOUT_MS", "1");
     const isAvailable = vi.fn(waitUntilAborted);
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
@@ -1252,7 +1252,7 @@ describe("ProviderSnapshotManager public surface", () => {
   });
 
   test("getProviderDiagnostic reports a stuck catalog refresh inside the diagnostic", async () => {
-    await withEnv("PASEO_ENABLE_MOCK_SLOW", "true", async () => {
+    await withEnv("OSUNA_ENABLE_MOCK_SLOW", "true", async () => {
       vi.useFakeTimers();
       const manager = new ProviderSnapshotManager({
         logger: createTestLogger(),

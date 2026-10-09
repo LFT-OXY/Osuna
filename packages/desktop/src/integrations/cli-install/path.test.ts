@@ -7,10 +7,10 @@ describe("cli-install-path", () => {
       resolveCliInstallSourcePath({
         platform: "darwin",
         isPackaged: true,
-        executablePath: "/Applications/Paseo.app/Contents/MacOS/Paseo",
-        shimPath: "/Applications/Paseo.app/Contents/Resources/bin/paseo",
+        executablePath: "/Applications/Osuna.app/Contents/MacOS/Osuna",
+        shimPath: "/Applications/Osuna.app/Contents/Resources/bin/osuna",
       }),
-    ).toBe("/Applications/Paseo.app/Contents/Resources/bin/paseo");
+    ).toBe("/Applications/Osuna.app/Contents/Resources/bin/osuna");
   });
 
   it("prefers the original AppImage path on linux", () => {
@@ -18,11 +18,11 @@ describe("cli-install-path", () => {
       resolveCliInstallSourcePath({
         platform: "linux",
         isPackaged: true,
-        executablePath: "/tmp/.mount_paseo123/paseo",
-        shimPath: "/tmp/.mount_paseo123/resources/bin/paseo",
-        appImagePath: "/home/user/Applications/Paseo.AppImage",
+        executablePath: "/tmp/.mount_osuna123/osuna",
+        shimPath: "/tmp/.mount_osuna123/resources/bin/osuna",
+        appImagePath: "/home/user/Applications/Osuna.AppImage",
       }),
-    ).toBe("/home/user/Applications/Paseo.AppImage");
+    ).toBe("/home/user/Applications/Osuna.AppImage");
   });
 
   it("uses the bundled shim for packaged linux installs outside an AppImage", () => {
@@ -30,10 +30,10 @@ describe("cli-install-path", () => {
       resolveCliInstallSourcePath({
         platform: "linux",
         isPackaged: true,
-        executablePath: "/opt/Paseo/Paseo",
-        shimPath: "/opt/Paseo/resources/bin/paseo",
+        executablePath: "/opt/Osuna/Osuna",
+        shimPath: "/opt/Osuna/resources/bin/osuna",
       }),
-    ).toBe("/opt/Paseo/resources/bin/paseo");
+    ).toBe("/opt/Osuna/resources/bin/osuna");
   });
 
   it("falls back to the shim on windows and in development", () => {
@@ -41,18 +41,18 @@ describe("cli-install-path", () => {
       resolveCliInstallSourcePath({
         platform: "win32",
         isPackaged: true,
-        executablePath: "C:\\Users\\user\\AppData\\Local\\Programs\\Paseo\\Paseo.exe",
-        shimPath: "C:\\Users\\user\\AppData\\Local\\Programs\\Paseo\\resources\\bin\\paseo.cmd",
+        executablePath: "C:\\Users\\user\\AppData\\Local\\Programs\\Osuna\\Osuna.exe",
+        shimPath: "C:\\Users\\user\\AppData\\Local\\Programs\\Osuna\\resources\\bin\\osuna.cmd",
       }),
-    ).toBe("C:\\Users\\user\\AppData\\Local\\Programs\\Paseo\\resources\\bin\\paseo.cmd");
+    ).toBe("C:\\Users\\user\\AppData\\Local\\Programs\\Osuna\\resources\\bin\\osuna.cmd");
 
     expect(
       resolveCliInstallSourcePath({
         platform: "linux",
         isPackaged: false,
-        executablePath: "/opt/Paseo/paseo",
-        shimPath: "/opt/Paseo/resources/bin/paseo",
+        executablePath: "/opt/Osuna/osuna",
+        shimPath: "/opt/Osuna/resources/bin/osuna",
       }),
-    ).toBe("/opt/Paseo/resources/bin/paseo");
+    ).toBe("/opt/Osuna/resources/bin/osuna");
   });
 });

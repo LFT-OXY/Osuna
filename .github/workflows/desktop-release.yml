@@ -168,7 +168,7 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          # 不设 PASEO_DESKTOP_SMOKE：macOS 包没有自动冒烟，见 docs/testing.md。
+          # 不设 OSUNA_DESKTOP_SMOKE：macOS 包没有自动冒烟，见 docs/testing.md。
         run: |
           set -euo pipefail
           build_args=(-- --publish never --mac --${{ matrix.electron_arch }})
@@ -271,8 +271,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EP_GH_IGNORE_TIME: true
-          PASEO_DESKTOP_SMOKE: "1"
-          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
+          OSUNA_DESKTOP_SMOKE: "1"
+          OSUNA_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
         run: |
           set -euo pipefail
           build_args=(-- --publish never --win --x64 --arm64)

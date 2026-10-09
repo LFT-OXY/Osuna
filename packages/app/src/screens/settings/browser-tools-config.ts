@@ -1,4 +1,4 @@
-import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
+import type { MutableDaemonConfig } from "@osuna/protocol/messages";
 
 export interface BrowserToolsCardState {
   isVisible: boolean;

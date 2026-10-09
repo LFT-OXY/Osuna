@@ -1,4 +1,4 @@
-import type { UsagePricingModel } from "@getpaseo/protocol/usage/types";
+import type { UsagePricingModel } from "@osuna/protocol/usage/types";
 import { CircleAlert, Pencil, Undo2, X, type LucideIcon } from "lucide-react-native";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";

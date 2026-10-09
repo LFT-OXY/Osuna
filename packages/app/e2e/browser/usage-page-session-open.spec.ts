@@ -5,7 +5,7 @@ import {
 } from "../support/helpers/usage-fixtures";
 import { openUsagePage, waitForUsageTotal } from "../support/helpers/usage-page";
 
-const fixtures = createUsageFixtureRoots("paseo-usage-open-");
+const fixtures = createUsageFixtureRoots("osuna-usage-open-");
 
 test.use({ e2eDaemonEnvironment: fixtures.environment });
 

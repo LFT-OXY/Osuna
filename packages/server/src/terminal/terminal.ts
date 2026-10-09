@@ -6,17 +6,17 @@ import { tmpdir, userInfo } from "node:os";
 import { basename, delimiter, dirname, extname, join, resolve as resolvePath } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { createExternalProcessEnv } from "../server/paseo-env.js";
+import { createExternalProcessEnv } from "../server/osuna-env.js";
 import { writePrivateFileAtomicSync } from "../server/private-files.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
 import type {
   TerminalCell,
   TerminalState,
   TerminalViewAttributes,
-} from "@getpaseo/protocol/messages";
-import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
+} from "@osuna/protocol/messages";
+import { TerminalInputModeTracker } from "@osuna/protocol/terminal-input-mode";
 import { TerminalActivityTracker } from "./activity/terminal-activity-tracker.js";
-import type { TerminalActivity, TerminalActivityState } from "@getpaseo/protocol/terminal-activity";
+import type { TerminalActivity, TerminalActivityState } from "@osuna/protocol/terminal-activity";
 import {
   resolveTerminalColorScheme,
   resolveTerminalViewAttributes,
@@ -27,7 +27,7 @@ import {
 
 const { Terminal } = xterm;
 const require = createRequire(import.meta.url);
-const PASEO_CLI_BIN_ENTRY = "@getpaseo/cli/bin/paseo";
+const OSUNA_CLI_BIN_ENTRY = "@osuna/cli/bin/osuna";
 let nodePtySpawnHelperChecked = false;
 const TERMINAL_TITLE_DEBOUNCE_MS = 150;
 const TERMINAL_EXIT_OUTPUT_LINE_LIMIT = 12;
@@ -177,8 +177,8 @@ interface BuildTerminalEnvironmentInput {
   shell: string;
   env: Record<string, string>;
   zshShellIntegrationDir?: string;
-  paseoCliBinDir?: string | null;
-  paseoHookCliPath?: string | null;
+  osunaCliBinDir?: string | null;
+  osunaHookCliPath?: string | null;
 }
 
 interface EnsureNodePtySpawnHelperExecutableOptions {
@@ -413,18 +413,18 @@ function resolveExternalProcessPath(filePath: string): string {
   return filePath.replace(/\.asar(?=[/\\]|$)/, ".asar.unpacked");
 }
 
-export function resolvePaseoCliBinDir(): string | null {
-  const cliExecutable = resolvePaseoCliExecutablePath();
+export function resolveOsunaCliBinDir(): string | null {
+  const cliExecutable = resolveOsunaCliExecutablePath();
   return cliExecutable ? dirname(cliExecutable) : null;
 }
 
-export function resolvePaseoCliExecutablePath(): string | null {
-  const configuredCli = process.env.PASEO_CLI?.trim();
+export function resolveOsunaCliExecutablePath(): string | null {
+  const configuredCli = process.env.OSUNA_CLI?.trim();
   if (configuredCli) {
     return resolvePath(configuredCli);
   }
 
-  const cliEntrypoint = resolvePaseoCliBinEntrypoint();
+  const cliEntrypoint = resolveOsunaCliBinEntrypoint();
   if (!cliEntrypoint) {
     return null;
   }
@@ -432,7 +432,7 @@ export function resolvePaseoCliExecutablePath(): string | null {
   const externalCliEntrypoint = resolveExternalProcessPath(cliEntrypoint);
   const npmBinDir = findNpmBinDir(dirname(externalCliEntrypoint));
   if (npmBinDir) {
-    const shim = resolvePaseoCliShim(npmBinDir);
+    const shim = resolveOsunaCliShim(npmBinDir);
     if (shim) {
       return shim;
     }
@@ -441,9 +441,9 @@ export function resolvePaseoCliExecutablePath(): string | null {
   return externalCliEntrypoint;
 }
 
-function resolvePaseoCliBinEntrypoint(): string | null {
+function resolveOsunaCliBinEntrypoint(): string | null {
   try {
-    return require.resolve(PASEO_CLI_BIN_ENTRY);
+    return require.resolve(OSUNA_CLI_BIN_ENTRY);
   } catch {
     return null;
   }
@@ -453,7 +453,7 @@ function findNpmBinDir(startPath: string): string | null {
   let current = startPath;
   while (true) {
     const candidate = join(current, "node_modules", ".bin");
-    if (hasPaseoCliShim(candidate)) {
+    if (hasOsunaCliShim(candidate)) {
       return candidate;
     }
 
@@ -465,12 +465,12 @@ function findNpmBinDir(startPath: string): string | null {
   }
 }
 
-function hasPaseoCliShim(binDir: string): boolean {
-  return resolvePaseoCliShim(binDir) !== null;
+function hasOsunaCliShim(binDir: string): boolean {
+  return resolveOsunaCliShim(binDir) !== null;
 }
 
-function resolvePaseoCliShim(binDir: string): string | null {
-  for (const name of paseoCliShimNames()) {
+function resolveOsunaCliShim(binDir: string): string | null {
+  for (const name of osunaCliShimNames()) {
     const candidate = join(binDir, name);
     if (existsSync(candidate)) {
       return candidate;
@@ -479,8 +479,8 @@ function resolvePaseoCliShim(binDir: string): string | null {
   return null;
 }
 
-function paseoCliShimNames(): string[] {
-  return process.platform === "win32" ? ["paseo.cmd", "paseo.exe", "paseo"] : ["paseo"];
+function osunaCliShimNames(): string[] {
+  return process.platform === "win32" ? ["osuna.cmd", "osuna.exe", "osuna"] : ["osuna"];
 }
 
 function resolveZshShellIntegrationRuntimeDir(): string {
@@ -490,7 +490,7 @@ function resolveZshShellIntegrationRuntimeDir(): string {
   } catch {
     // keep fallback
   }
-  return join(tmpdir(), `${username}-paseo-zsh-${process.pid}`);
+  return join(tmpdir(), `${username}-osuna-zsh-${process.pid}`);
 }
 
 function prepareZshShellIntegrationRuntimeDir(sourceDir = resolveZshShellIntegrationDir()): string {
@@ -503,8 +503,8 @@ function prepareZshShellIntegrationRuntimeDir(sourceDir = resolveZshShellIntegra
     readFileSync(join(readableSourceDir, ".zshenv")),
   );
   writePrivateFileAtomicSync(
-    join(runtimeDir, "paseo-integration.zsh"),
-    readFileSync(join(readableSourceDir, "paseo-integration.zsh")),
+    join(runtimeDir, "osuna-integration.zsh"),
+    readFileSync(join(readableSourceDir, "osuna-integration.zsh")),
   );
   return runtimeDir;
 }
@@ -516,13 +516,13 @@ export function buildTerminalEnvironment(
     TERM: "xterm-256color",
     TERM_PROGRAM: "kitty",
   });
-  const envWithAgentHooks = prependPaseoCliToPath(
+  const envWithAgentHooks = prependOsunaCliToPath(
     baseEnv,
-    input.paseoCliBinDir === undefined ? resolvePaseoCliBinDir() : input.paseoCliBinDir,
+    input.osunaCliBinDir === undefined ? resolveOsunaCliBinDir() : input.osunaCliBinDir,
   );
-  const envWithHookCli = injectPaseoHookCli(
+  const envWithHookCli = injectOsunaHookCli(
     envWithAgentHooks,
-    input.paseoHookCliPath === undefined ? resolvePaseoCliExecutablePath() : input.paseoHookCliPath,
+    input.osunaHookCliPath === undefined ? resolveOsunaCliExecutablePath() : input.osunaHookCliPath,
   );
 
   if (basename(input.shell) !== "zsh") {
@@ -532,12 +532,12 @@ export function buildTerminalEnvironment(
   const originalZdotdir = envWithHookCli.ZDOTDIR ?? "";
   return {
     ...envWithHookCli,
-    PASEO_ZSH_ZDOTDIR: originalZdotdir,
+    OSUNA_ZSH_ZDOTDIR: originalZdotdir,
     ZDOTDIR: prepareZshShellIntegrationRuntimeDir(input.zshShellIntegrationDir),
   };
 }
 
-function injectPaseoHookCli(
+function injectOsunaHookCli(
   env: Record<string, string>,
   cliPath: string | null,
 ): Record<string, string> {
@@ -547,11 +547,11 @@ function injectPaseoHookCli(
 
   return {
     ...env,
-    PASEO_HOOK_CLI: resolvePath(resolveExternalProcessPath(cliPath)),
+    OSUNA_HOOK_CLI: resolvePath(resolveExternalProcessPath(cliPath)),
   };
 }
 
-function prependPaseoCliToPath(
+function prependOsunaCliToPath(
   env: Record<string, string>,
   cliBinDir: string | null,
 ): Record<string, string> {
@@ -973,7 +973,7 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
       env: {
         ...env,
         ...activityEnv,
-        PASEO_WORKSPACE_ID: workspaceId,
+        OSUNA_WORKSPACE_ID: workspaceId,
       },
     }),
   });

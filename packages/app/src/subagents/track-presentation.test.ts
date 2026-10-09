@@ -3,7 +3,7 @@ import { i18n } from "@/i18n/i18next";
 import type {
   DispatchRowState,
   DispatchSubagent,
-  PaseoSubagentRow,
+  OsunaSubagentRow,
   ProviderSubagentRow,
   SubagentRow,
 } from "./select";
@@ -17,10 +17,10 @@ import {
 } from "./track-presentation";
 
 function row(
-  overrides: Partial<PaseoSubagentRow> & Pick<PaseoSubagentRow, "id">,
-): PaseoSubagentRow {
+  overrides: Partial<OsunaSubagentRow> & Pick<OsunaSubagentRow, "id">,
+): OsunaSubagentRow {
   return {
-    kind: "paseo",
+    kind: "osuna",
     id: overrides.id,
     provider: overrides.provider ?? "codex",
     title: overrides.title ?? `Agent ${overrides.id}`,
@@ -200,7 +200,7 @@ describe("resolveRowLabel", () => {
 describe("buildSubagentRowPresentationData", () => {
   it("namespaces the key with a subagent prefix", () => {
     expect(buildSubagentRowPresentationData(row({ id: "child-a" })).key).toBe(
-      "paseo_subagent_child-a",
+      "osuna_subagent_child-a",
     );
   });
 
@@ -363,7 +363,7 @@ describe("dispatch group presentation", () => {
   const providerLabel = (provider: string) => (provider === "codex" ? "Codex" : provider);
 
   function subagent(
-    overrides: Partial<PaseoSubagentRow> & Pick<PaseoSubagentRow, "id">,
+    overrides: Partial<OsunaSubagentRow> & Pick<OsunaSubagentRow, "id">,
     extra: Partial<Omit<DispatchSubagent, "row">> = {},
   ): DispatchRowState {
     return {

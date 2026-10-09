@@ -1,4 +1,4 @@
-import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
+import { BUILTIN_PROVIDER_IDS } from "@osuna/protocol/provider-manifest";
 import {
   PROVIDER_INSTALL_GUIDES,
   type GuidedProvider,

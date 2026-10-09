@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import type { ListCommandsResponse } from "@getpaseo/protocol/messages";
+import type { ListCommandsResponse } from "@osuna/protocol/messages";
 import type { InlineBlockVariant } from "@/inline-blocks";
 import { daemonWsRoutePattern } from "./daemon-port";
 

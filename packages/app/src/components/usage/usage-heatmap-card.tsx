@@ -1,4 +1,4 @@
-import type { UsageHeatmapDay } from "@getpaseo/protocol/usage/types";
+import type { UsageHeatmapDay } from "@osuna/protocol/usage/types";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";

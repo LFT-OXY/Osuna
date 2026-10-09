@@ -1,4 +1,4 @@
-import type { UsageCli } from "@getpaseo/protocol/usage/types";
+import type { UsageCli } from "@osuna/protocol/usage/types";
 import {
   KEY_SEPARATOR,
   addTurnRow,

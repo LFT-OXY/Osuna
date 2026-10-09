@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginSurfaceProps } from "@osuna/plugin/client";
+import type { PluginTheme } from "@osuna/plugin";
 import { ChevronDown, X } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
@@ -22,7 +22,7 @@ import { useInstalledPlugin, usePluginInstallations } from "./registry";
 import { buildPluginSurfaceRoute } from "./routes";
 import { rememberPluginContributionHost } from "./contribution-host";
 import { SurfaceErrorBoundary } from "./surface-error-boundary";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { PluginRuntimeBoundary } from "./runtime-boundary";
 import {
   getPluginSurfaceContributionServerIds,

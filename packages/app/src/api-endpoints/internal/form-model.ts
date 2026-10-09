@@ -9,7 +9,7 @@ import {
   type ApiEndpointSaveRequest,
   type ApiEndpointTestConnectionRequest,
   type ApiEndpointTestConnectionResult,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 
 /*
  * 第三方接口的新建/编辑表单模型：纯 TypeScript，无 React（docs/forms.md）。

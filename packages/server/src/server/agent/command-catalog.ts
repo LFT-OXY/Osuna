@@ -50,7 +50,7 @@ export interface CommandCatalogRecordInput {
 }
 
 export interface CommandCatalogOptions {
-  /** JSON file under $PASEO_HOME; omit to keep the cache in memory only. */
+  /** JSON file under $OSUNA_HOME; omit to keep the cache in memory only. */
   filePath?: string;
   logger: Logger;
 }

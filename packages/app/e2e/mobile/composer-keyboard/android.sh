@@ -2,19 +2,19 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
-STATE_DIR="${PASEO_COMPOSER_KEYBOARD_STATE_DIR:-${REPO_ROOT}/.dev/agent-device-composer-keyboard}"
+STATE_DIR="${OSUNA_COMPOSER_KEYBOARD_STATE_DIR:-${REPO_ROOT}/.dev/agent-device-composer-keyboard}"
 ARTIFACTS_DIR="${REPO_ROOT}/.dev/agent-device-artifacts/composer-keyboard-android"
-SESSION="${PASEO_COMPOSER_KEYBOARD_SESSION:-composer-keyboard-android}"
-APP_ID="${PASEO_COMPOSER_KEYBOARD_APP_ID:-sh.paseo.debug}"
-DEVICE="${PASEO_COMPOSER_KEYBOARD_DEVICE:-paseo-api35}"
+SESSION="${OSUNA_COMPOSER_KEYBOARD_SESSION:-composer-keyboard-android}"
+APP_ID="${OSUNA_COMPOSER_KEYBOARD_APP_ID:-com.chinhae.osuna.debug}"
+DEVICE="${OSUNA_COMPOSER_KEYBOARD_DEVICE:-osuna-api35}"
 HELPER_IME="com.callstack.agentdevice.imehelper/.TestInputMethodService"
 GBOARD_IME="com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
 ASSERT="${REPO_ROOT}/packages/app/e2e/mobile/composer-keyboard/assert-composer-keyboard.mjs"
 STALL_HERMES="${REPO_ROOT}/packages/app/e2e/mobile/composer-keyboard/stall-hermes.mjs"
-METRO_PORT="${PASEO_MOBILE_E2E_METRO_PORT:-8082}"
-DAEMON_HOST="${PASEO_COMPOSER_KEYBOARD_DAEMON_HOST:-127.0.0.1:6770}"
-DAEMON_HOME="${PASEO_COMPOSER_KEYBOARD_DAEMON_HOME:-${REPO_ROOT}/.dev/composer-e2e-home}"
-SERVER_ID="${PASEO_COMPOSER_KEYBOARD_SERVER_ID:-}"
+METRO_PORT="${OSUNA_MOBILE_E2E_METRO_PORT:-8082}"
+DAEMON_HOST="${OSUNA_COMPOSER_KEYBOARD_DAEMON_HOST:-127.0.0.1:6770}"
+DAEMON_HOME="${OSUNA_COMPOSER_KEYBOARD_DAEMON_HOME:-${REPO_ROOT}/.dev/composer-e2e-home}"
+SERVER_ID="${OSUNA_COMPOSER_KEYBOARD_SERVER_ID:-}"
 MESSAGE=$'keyboard invariant line one\nline two\nline three\nline four'
 LONG_MESSAGE="$(node -e 'process.stdout.write(Array.from({ length: 180 }, (_, index) => `line${index + 1}`).join(" "))')"
 BLANK_LINE_DRAFT="$(node -e 'process.stdout.write("\n".repeat(22) + "ddjdj")')"
@@ -22,7 +22,7 @@ AGENT_TITLE="Keyboard dismiss QA $(date +%s)"
 
 if [[ -z "${SERVER_ID}" ]]; then
   if [[ ! -f "${DAEMON_HOME}/server-id" ]]; then
-    echo "Missing ${DAEMON_HOME}/server-id; set PASEO_COMPOSER_KEYBOARD_SERVER_ID" >&2
+    echo "Missing ${DAEMON_HOME}/server-id; set OSUNA_COMPOSER_KEYBOARD_SERVER_ID" >&2
     exit 1
   fi
   SERVER_ID="$(<"${DAEMON_HOME}/server-id")"
@@ -44,7 +44,7 @@ snapshot_json() {
 
 capture_ui_xml() {
   local output_path="$1"
-  local device_path="/sdcard/paseo-composer-keyboard-window.xml"
+  local device_path="/sdcard/osuna-composer-keyboard-window.xml"
   # Android exposes one UI Automation connection at a time. Release the
   # persistent agent-device snapshot helper before asking uiautomator for the
   # app and IME windows; agent-device reconnects it on the next interaction.
@@ -136,7 +136,7 @@ trap cleanup EXIT INT TERM
 cleanup
 mkdir -p "${STATE_DIR}" "${ARTIFACTS_DIR}"
 
-workspaces_json="$(env -u PASEO_CALLER_AGENT_ID -u PASEO_AGENT_ID -u PASEO_WORKSPACE_ID \
+workspaces_json="$(env -u OSUNA_CALLER_AGENT_ID -u OSUNA_AGENT_ID -u OSUNA_WORKSPACE_ID \
   npm run --silent cli -- workspace ls --json --host "${DAEMON_HOST}")"
 workspace_id="$(node -e '
   const workspaces = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
@@ -158,7 +158,7 @@ adb shell am start \
 sleep 3
 
 # Create the fixture while the client is connected so its directory replica observes the insert.
-run_json="$(env -u PASEO_CALLER_AGENT_ID -u PASEO_AGENT_ID -u PASEO_WORKSPACE_ID \
+run_json="$(env -u OSUNA_CALLER_AGENT_ID -u OSUNA_AGENT_ID -u OSUNA_WORKSPACE_ID \
   npm run --silent cli -- run "Exercise the composer keyboard invariant flow" \
   --background \
   --title "${AGENT_TITLE}" \
@@ -176,14 +176,14 @@ sleep 3
 
 adb shell am start \
   -a android.intent.action.VIEW \
-  -d "paseo://h/${SERVER_ID}/agent/${agent_id}" \
+  -d "osuna://h/${SERVER_ID}/agent/${agent_id}" \
   "${APP_ID}" >/dev/null
 sleep 5
 # The development-client bootstrap can consume the first link while Expo Router is mounting.
 # Deliver the target again after the root navigator is live.
 adb shell am start \
   -a android.intent.action.VIEW \
-  -d "paseo://h/${SERVER_ID}/agent/${agent_id}" \
+  -d "osuna://h/${SERVER_ID}/agent/${agent_id}" \
   "${APP_ID}" >/dev/null
 ad wait "text=\"${AGENT_TITLE}\"" 45000
 ad wait 'editable=true' 10000
@@ -288,7 +288,7 @@ node "${ASSERT}" xml-composer-contained \
 # report: grow to the cap, close and reopen the keyboard, hold delete from the middle of the
 # draft, jump to the end, hold delete again. The first hold-delete must start mid-draft: from
 # the end, the pre-fix input also returns to baseline. Backspace sits on Gboard's third key
-# row on the paseo-api35 layout.
+# row on the osuna-api35 layout.
 adb shell ime set "${HELPER_IME}" >/dev/null
 ad fill 'editable=true' "${BLANK_LINE_DRAFT}" --settle
 open_gboard "${input_x}" "${input_y}"

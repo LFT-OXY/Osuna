@@ -6,7 +6,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react-native";
 import type {
   ApiEndpoint,
   ApiEndpointHealthIssue,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

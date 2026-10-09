@@ -18,9 +18,9 @@ describe.each(["daemon", "app"] as const)("plugin requirements on %s", (runtime)
     [">=0.8.0-beta.1", "0.8.0-beta.1"],
     [">=0.8.0-beta.1", "0.8.0"],
     ["^0.8.0 || ^0.9.0", "0.9.2+build.42"],
-  ])("accepts %s on %s", (paseo, version) => {
+  ])("accepts %s on %s", (osuna, version) => {
     expect(() =>
-      assertPluginCompatibility({ id: "test", requirements: { paseo }, version, runtime }),
+      assertPluginCompatibility({ id: "test", requirements: { osuna }, version, runtime }),
     ).not.toThrow();
   });
 
@@ -30,16 +30,16 @@ describe.each(["daemon", "app"] as const)("plugin requirements on %s", (runtime)
     [">=0.8.0", "0.7.2"],
     ["^0.8.0", "0.9.0"],
     ["<0.8.0", "0.8.0-beta.1"],
-  ])("rejects %s on %s", (paseo, version) => {
+  ])("rejects %s on %s", (osuna, version) => {
     expect(() =>
-      assertPluginCompatibility({ id: "test", requirements: { paseo }, version, runtime }),
+      assertPluginCompatibility({ id: "test", requirements: { osuna }, version, runtime }),
     ).toThrow(`Your ${runtime} is ${version}`);
   });
 
   it.each(["", "   ", "latest", ">=potato", "0.8.0 nonsense"])(
     "rejects malformed range %s",
-    (paseo) => {
-      expect(() => validatePluginRequirements({ paseo })).toThrow("Invalid requirements.paseo");
+    (osuna) => {
+      expect(() => validatePluginRequirements({ osuna })).toThrow("Invalid requirements.osuna");
     },
   );
 
@@ -47,10 +47,10 @@ describe.each(["daemon", "app"] as const)("plugin requirements on %s", (runtime)
     expect(() =>
       assertPluginCompatibility({
         id: "test",
-        requirements: { paseo: "*" },
+        requirements: { osuna: "*" },
         version,
         runtime,
       }),
-    ).toThrow(`Paseo ${runtime} version is unknown`);
+    ).toThrow(`Osuna ${runtime} version is unknown`);
   });
 });

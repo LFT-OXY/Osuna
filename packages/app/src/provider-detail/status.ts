@@ -1,4 +1,4 @@
-import type { AgentModelDefinition, ProviderStatus } from "@getpaseo/protocol/agent-types";
+import type { AgentModelDefinition, ProviderStatus } from "@osuna/protocol/agent-types";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
 
 export type ProviderStatusTone = "success" | "warning" | "danger" | "muted" | "loading";

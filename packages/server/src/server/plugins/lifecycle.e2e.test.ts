@@ -3,16 +3,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 test("a plugin transforms workspace creation once across receipt replays and observes its committed lifecycle", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-lifecycle-"));
-  const daemon = await createTestPaseoDaemon({ daemonVersion: "0.8.0" });
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-lifecycle-"));
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "lifecycle", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "lifecycle", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),
@@ -73,13 +73,13 @@ export default function contribute(server) {
 }, 60_000);
 
 test("plugins observe turns, answer permissions, and observe archive without blocking the agent", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-turn-hooks-"));
-  const daemon = await createTestPaseoDaemon({ daemonVersion: "0.8.0" });
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-turn-hooks-"));
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "turn-hooks", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "turn-hooks", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),
@@ -93,7 +93,7 @@ export default function contribute(server) {
   });
   server.on("agent.permission_requested", async (event, context) => {
     console.log(JSON.stringify({ hook: "agent.permission_requested", event }));
-    await context.paseo.agents.ref(event.agent.id).respondToPermission({
+    await context.osuna.agents.ref(event.agent.id).respondToPermission({
       requestId: event.request.id,
       response: { behavior: "deny", message: "Declined by plugin" },
     });
@@ -165,13 +165,13 @@ export default function contribute(server) {
 }, 60_000);
 
 test("agent creation hooks change the provider and environment before the session opens", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-agent-hooks-"));
-  const daemon = await createTestPaseoDaemon({ daemonVersion: "0.8.0" });
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-agent-hooks-"));
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "agent-hooks", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "agent-hooks", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),
@@ -228,13 +228,13 @@ export default function contribute(server) {
 }, 60_000);
 
 test("invalid output from an untyped plugin rejects creation before later callbacks run", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-invalid-hook-"));
-  const daemon = await createTestPaseoDaemon({ daemonVersion: "0.8.0" });
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-invalid-hook-"));
+  const daemon = await createTestOsunaDaemon({ daemonVersion: "0.8.0" });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.8.0" });
   try {
     await writeFile(
-      path.join(directory, "paseo-plugin.json"),
-      JSON.stringify({ id: "invalid-hook", requirements: { paseo: ">=0.8.0" } }),
+      path.join(directory, "osuna-plugin.json"),
+      JSON.stringify({ id: "invalid-hook", requirements: { osuna: ">=0.8.0" } }),
     );
     await writeFile(
       path.join(directory, "index.server.ts"),

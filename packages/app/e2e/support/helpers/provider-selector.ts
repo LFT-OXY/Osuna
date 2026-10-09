@@ -1,6 +1,6 @@
 import type { Locator } from "@playwright/test";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import { expect, type Page } from "../fixtures";
 
 const PROVIDER_BUTTON = "agent-provider-selector";

@@ -27,8 +27,8 @@ const COMMANDS = [
 // plain words so no `@` or `/` list is open on Enter.
 const MESSAGE =
   "/atw-tdd read [x.ts](src/x.ts), [components](src/components/), [logo.png](assets/logo.png)" +
-  ' and [the helper](src/y.ts) not "src/z.ts" with [@Claude](paseo://agent/provider/claude)' +
-  " and [@Reviewer](paseo://agent/profile/deleted-profile) please";
+  ' and [the helper](src/y.ts) not "src/z.ts" with [@Claude](osuna://agent/provider/claude)' +
+  " and [@Reviewer](osuna://agent/profile/deleted-profile) please";
 
 const MESSAGE_BLOCKS = [
   { variant: "skill", label: "Skill: atw-tdd" },
@@ -345,7 +345,7 @@ test.describe("Inline blocks in the composer", () => {
 
   test("rewinding a message puts its blocks back in the composer", async ({ page }, testInfo) => {
     test.setTimeout(90_000);
-    const prompt = "ask [@Claude](paseo://agent/provider/claude) about [x.ts](src/x.ts) please";
+    const prompt = "ask [@Claude](osuna://agent/provider/claude) about [x.ts](src/x.ts) please";
     const agent = await seedMockAgentWorkspace({
       repoPrefix: `inline-blocks-rewind-${testInfo.workerIndex}-`,
       title: "Inline blocks rewind",

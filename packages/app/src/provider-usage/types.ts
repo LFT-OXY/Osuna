@@ -6,7 +6,7 @@ import type {
   ProviderUsageStatus,
   ProviderUsageTone,
   ProviderUsageWindow,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 import type { UsageText } from "@/usage/text";
 
 export type {

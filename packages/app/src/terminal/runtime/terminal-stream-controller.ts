@@ -1,9 +1,9 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import type {
   SubscribeTerminalRequest,
   TerminalState,
   TerminalViewAttributes,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 import type { TerminalOutputData } from "./terminal-emulator-runtime";
 import { i18n } from "@/i18n/i18next";
 

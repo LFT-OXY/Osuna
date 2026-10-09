@@ -7,7 +7,7 @@ import {
   readPersistedConfig,
   editPersistedConfig,
   resolveConfigFromPersisted,
-} from "@getpaseo/server";
+} from "@osuna/server";
 import { connectToDaemon } from "../../utils/client.js";
 import type { DaemonTarget } from "../../utils/daemon-target.js";
 import { addJsonAndDaemonHostOptions, withGlobalOptions } from "../../utils/command-options.js";
@@ -65,25 +65,25 @@ export function pairCommand(): Command {
 }
 
 export async function resolveLocalPairingOffer(options: {
-  paseoHome: string;
+  osunaHome: string;
   enableRelay?: boolean;
 }): Promise<PairingOffer> {
-  const instance = await readDaemonInstance(options.paseoHome);
+  const instance = await readDaemonInstance(options.osunaHome);
   if (instance)
     return resolveDaemonPairingOffer(
-      { kind: "instance", home: options.paseoHome },
+      { kind: "instance", home: options.osunaHome },
       options.enableRelay,
     );
   if (options.enableRelay)
-    editPersistedConfig(options.paseoHome, "daemon.relay.enabled", { value: true });
+    editPersistedConfig(options.osunaHome, "daemon.relay.enabled", { value: true });
   const config = resolveConfigFromPersisted(
-    options.paseoHome,
-    readPersistedConfig(options.paseoHome, { defaultsIfMissing: true }),
+    options.osunaHome,
+    readPersistedConfig(options.osunaHome, { defaultsIfMissing: true }),
     { env: {} },
   );
 
   return generateLocalPairingOffer({
-    paseoHome: options.paseoHome,
+    osunaHome: options.osunaHome,
     relayEnabled: config.relayEnabled,
     relayEndpoint: config.relayEndpoint,
     relayPublicEndpoint: config.relayPublicEndpoint,
@@ -106,7 +106,7 @@ async function resolveDaemonPairingOffer(
   try {
     const serverInfo = client.getLastServerInfoMessage();
     if (serverInfo?.features?.daemonStatusRpc !== true) {
-      throw new Error("Update the Paseo daemon before pairing from this command.");
+      throw new Error("Update the Osuna daemon before pairing from this command.");
     }
 
     let offer = await client.getDaemonPairingOffer({
@@ -114,7 +114,7 @@ async function resolveDaemonPairingOffer(
     });
     if (!offer.relayEnabled && enableRelay) {
       if (serverInfo.features.relayConfig !== true) {
-        throw new Error("Update the Paseo daemon before enabling relay from this command.");
+        throw new Error("Update the Osuna daemon before enabling relay from this command.");
       }
       await client.patchDaemonConfig({ relay: { enabled: true } });
       try {
@@ -137,7 +137,7 @@ async function resolveDaemonPairingOffer(
 }
 
 export async function confirmRelayPairing(): Promise<boolean> {
-  log.message("Your connection is end-to-end encrypted. Paseo cannot read your code or messages.");
+  log.message("Your connection is end-to-end encrypted. Osuna cannot read your code or messages.");
   const answer = await confirm({
     message: "Enable relay to pair a device?",
     initialValue: false,
@@ -157,14 +157,14 @@ export async function runPairCommand(options: PairOptions): Promise<void> {
   const target = options.daemonTarget;
   const resolveOffer = (enableRelay: boolean) =>
     target.kind === "instance"
-      ? resolveLocalPairingOffer({ paseoHome: target.home, enableRelay })
+      ? resolveLocalPairingOffer({ osunaHome: target.home, enableRelay })
       : resolveDaemonPairingOffer(target, enableRelay);
   const offline = target.kind === "instance" && !(await readDaemonInstance(target.home));
   const pairing = await resolveOffer(options.relay === true);
 
   if (offline)
     output.writeStderr(
-      `Offline pairing offer. Start with: paseo daemon start --home ${JSON.stringify(target.kind === "instance" ? target.home : "")}\n`,
+      `Offline pairing offer. Start with: osuna daemon start --home ${JSON.stringify(target.kind === "instance" ? target.home : "")}\n`,
     );
 
   outputPairingResult(pairing, options, output);
@@ -181,12 +181,12 @@ function outputPairingResult(
         `${JSON.stringify({
           code: "RELAY_DISABLED",
           message: "Relay pairing is disabled for this daemon.",
-          action: "Run paseo daemon pair --relay --json to enable it explicitly.",
+          action: "Run osuna daemon pair --relay --json to enable it explicitly.",
         })}\n`,
       );
     } else {
       output.writeStderr(`${chalk.red("Relay pairing is disabled for this daemon.")}\n`);
-      output.writeStderr(`${chalk.yellow("Run paseo daemon pair --relay to enable it.")}\n`);
+      output.writeStderr(`${chalk.yellow("Run osuna daemon pair --relay to enable it.")}\n`);
     }
     output.setExitCode(1);
     return;

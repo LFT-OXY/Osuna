@@ -1,7 +1,7 @@
 import type {
   UsageAgentGetResponse,
   UsageAgentTurnsListResponse,
-} from "@getpaseo/protocol/usage/rpc-schemas";
+} from "@osuna/protocol/usage/rpc-schemas";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useReplicaQuery } from "@/data/query";

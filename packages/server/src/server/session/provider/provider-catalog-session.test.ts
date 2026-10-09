@@ -17,7 +17,7 @@ import type { ProviderSnapshotEntry } from "../../agent/agent-sdk-types.js";
 import { ProviderUsageService } from "../../../services/quota-fetcher/service.js";
 import { ProviderVersionCheckService } from "../../agent/provider-version-check.js";
 import { ProviderUpgradeService } from "../../agent/provider-upgrade.js";
-import { expandProviderSnapshot } from "@getpaseo/protocol/provider-snapshot-codec";
+import { expandProviderSnapshot } from "@osuna/protocol/provider-snapshot-codec";
 
 type SnapshotChangeHandler = (transition: ProviderSnapshotTransition) => void;
 

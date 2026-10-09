@@ -1,4 +1,4 @@
-const CANONICAL_HOST = "paseo.sh";
+const CANONICAL_HOST = "osuna.chinhae.cc";
 
 export function getCanonicalRedirect(
   url: URL,

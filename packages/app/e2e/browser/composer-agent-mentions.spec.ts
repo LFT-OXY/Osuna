@@ -23,14 +23,14 @@ import { getServerId } from "../support/helpers/server-id";
 
 // 本文件的 worker daemon 注入 Osuna tools，mock 智能体可以派发。置灰用例在建智能体前关掉注入：
 // daemon 只在会话启动时判定一次。
-test.use({ e2eInjectPaseoTools: true });
+test.use({ e2eInjectOsunaTools: true });
 
 interface DaemonConfigClient {
   connect(): Promise<void>;
   close(): Promise<void>;
   patchDaemonConfig(config: {
     mcp?: { injectIntoAgents: boolean };
-    providers?: Record<string, { paseoTools: { disabledTools: string[] } }>;
+    providers?: Record<string, { osunaTools: { disabledTools: string[] } }>;
   }): Promise<unknown>;
 }
 
@@ -137,7 +137,7 @@ test.describe("@ list agent group", () => {
       await page.keyboard.press("Enter");
       await expectAgentIdle(page);
 
-      const sent = "ask [@Mock Load Test](paseo://agent/provider/mock) to check the build";
+      const sent = "ask [@Mock Load Test](osuna://agent/provider/mock) to check the build";
       const bubble = page.getByTestId("user-message").filter({ hasText: "check the build" }).last();
       await expectInlineBlocks(bubble, [{ variant: "agent", label: "Agent: Mock Load Test" }]);
       await bubble.getByTestId("user-message-bubble").hover();
@@ -205,7 +205,7 @@ test.describe("@ list agent profiles", () => {
       await page.keyboard.press("Enter");
       await expectAgentIdle(page);
 
-      const sent = "ask [@Careful reviewer](paseo://agent/profile/e2e-reviewer) to review the diff";
+      const sent = "ask [@Careful reviewer](osuna://agent/profile/e2e-reviewer) to review the diff";
       const bubble = page.getByTestId("user-message").filter({ hasText: "review the diff" }).last();
       await expectInlineBlocks(bubble, [{ variant: "agent", label: "Agent: Careful reviewer" }]);
       await bubble.getByTestId("user-message-bubble").hover();
@@ -240,7 +240,7 @@ test.describe("@ list agent group on the new agent screen", () => {
     try {
       await configClient.patchDaemonConfig({
         providers: {
-          [THINKING_MODES_PROVIDER.id]: { paseoTools: { disabledTools: ["create_agent"] } },
+          [THINKING_MODES_PROVIDER.id]: { osunaTools: { disabledTools: ["create_agent"] } },
         },
       });
       const composer = await openNewAgentDraft(page, workspace.workspaceId);

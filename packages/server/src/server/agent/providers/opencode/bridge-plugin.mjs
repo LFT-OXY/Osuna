@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 const INTERNAL_PREFIX = "/_internal/opencode";
-const TOOL_CALL_ID_HEADER = "X-Paseo-Tool-Call-Id";
+const TOOL_CALL_ID_HEADER = "X-Osuna-Tool-Call-Id";
 
-export default async function paseoPlugin(input, options) {
+export default async function osunaPlugin(input, options) {
   const request = async (pathname, init) => {
     const response = await fetch(new URL(pathname, options.baseUrl), {
       ...init,
@@ -14,7 +14,7 @@ export default async function paseoPlugin(input, options) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(payload.error ?? `Paseo OpenCode bridge failed: ${response.status}`);
+      const error = new Error(payload.error ?? `Osuna OpenCode bridge failed: ${response.status}`);
       error.status = response.status;
       throw error;
     }
@@ -30,7 +30,7 @@ export default async function paseoPlugin(input, options) {
   }
   const tools = {};
   for (const definition of manifest.tools ?? []) {
-    tools[`paseo_${definition.name}`] = {
+    tools[`osuna_${definition.name}`] = {
       description: definition.description,
       args: jsonSchemaObjectToZodShape(definition.inputSchema),
       execute: async (args, context) => {
@@ -54,7 +54,7 @@ export default async function paseoPlugin(input, options) {
         return {
           title: definition.title,
           output: formatToolResult(result),
-          metadata: { paseoTool: definition.name },
+          metadata: { osunaTool: definition.name },
         };
       },
     };
@@ -84,7 +84,7 @@ function toolCallIdHeader(callID) {
 }
 
 function logPluginError(stage, context, error) {
-  console.error(`[paseo-opencode-plugin] ${stage} failed`, {
+  console.error(`[osuna-opencode-plugin] ${stage} failed`, {
     ...context,
     error: error instanceof Error ? error.message : String(error),
   });

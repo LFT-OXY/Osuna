@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpoint } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import {
   createApiEndpointFormModel,
   type ApiEndpointFetchModelsRequestInput,

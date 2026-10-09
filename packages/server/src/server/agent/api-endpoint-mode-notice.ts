@@ -1,7 +1,7 @@
 import type {
   ApiEndpointCreatedRef,
   ApiEndpointModeMismatch,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 import type { AgentProvider, AgentTimelineItem, ApiEndpointModeSource } from "./agent-sdk-types.js";
 
 type ApiEndpointModeNotice = Extract<AgentTimelineItem, { type: "notification" }>;

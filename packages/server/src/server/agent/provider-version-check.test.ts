@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createTestLogger } from "../../test-utils/test-logger.js";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import {
   type FetchLatestVersionInput,
   isNewerVersion,

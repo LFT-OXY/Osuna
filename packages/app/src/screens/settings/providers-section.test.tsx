@@ -5,8 +5,8 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
+import type { MutableDaemonConfig } from "@osuna/protocol/messages";
 
 const {
   theme,
@@ -361,11 +361,11 @@ import {
   buildAcpProviderConfigPatch,
   getAcpProviderCatalog,
 } from "@/hooks/use-acp-provider-catalog";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { useSessionStore } from "@/stores/session-store";
 import { providerVersionCheckQueryKey } from "@/provider-detail/version-check";
 import { useProviderUpgradeStore } from "@/provider-detail/upgrade";
-import type { ProviderUpgradeResponsePayload as ProviderUpgradeResponse } from "@getpaseo/protocol/messages";
+import type { ProviderUpgradeResponsePayload as ProviderUpgradeResponse } from "@osuna/protocol/messages";
 import { ProvidersSection } from "./providers-section";
 
 const catalog = getAcpProviderCatalog();

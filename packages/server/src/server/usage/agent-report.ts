@@ -5,7 +5,7 @@ import type {
   UsageCli,
   UsageModelAmount,
   UsageTokenTotals,
-} from "@getpaseo/protocol/usage/types";
+} from "@osuna/protocol/usage/types";
 import type { UsageAgentBacking } from "./agent-sessions.js";
 import type { UsageReportPricing } from "./report.js";
 import { cursorKeyOfSession, sessionCursorKey } from "./sources.js";

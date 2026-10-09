@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, expect, test, vi } from "vitest";
-import { createPaseoApi, createPaseoClient } from "./index.js";
+import { createOsunaApi, createOsunaClient } from "./index.js";
 import { DaemonClient } from "./daemon-client.js";
-import type { PaseoAgent, PaseoClient, PaseoWorkspace } from "./index.js";
+import type { OsunaAgent, OsunaClient, OsunaWorkspace } from "./index.js";
 
 type FakeWebSocketHandler = (...args: unknown[]) => void;
 
@@ -101,8 +101,8 @@ async function connectClient(
     providersSnapshotCwd: true,
     ownedSubscriptions: true,
   },
-): Promise<{ client: PaseoClient; ws: FakeWebSocket }> {
-  const client = createPaseoClient({
+): Promise<{ client: OsunaClient; ws: FakeWebSocket }> {
+  const client = createOsunaClient({
     url: "ws://daemon.test",
     webSocketFactory: (url) => new FakeWebSocket(url),
     reconnect: { enabled: false },
@@ -117,7 +117,7 @@ async function connectClient(
     clientType: "cli",
     protocolVersion: 1,
   });
-  expect(hello.clientId).toEqual(expect.stringMatching(/^paseo-sdk-/));
+  expect(hello.clientId).toEqual(expect.stringMatching(/^osuna-sdk-/));
   ws.message(
     sessionMessage({
       type: "status",
@@ -150,13 +150,13 @@ function acknowledgeObservation(ws: FakeWebSocket, subscriptionId: string): void
   );
 }
 
-async function observeAgents(client: PaseoClient, ws: FakeWebSocket): Promise<string> {
+async function observeAgents(client: OsunaClient, ws: FakeWebSocket): Promise<string> {
   const ready = client.agents.list({ subscribe: {} });
   acknowledgeObservation(ws, "agents-sdk");
   return (await ready).subscriptionId!;
 }
 
-function createWorkspace(input: Partial<PaseoWorkspace> = {}): PaseoWorkspace {
+function createWorkspace(input: Partial<OsunaWorkspace> = {}): OsunaWorkspace {
   return {
     id: "workspace_sdk",
     projectId: "project_sdk",
@@ -177,7 +177,7 @@ function createWorkspace(input: Partial<PaseoWorkspace> = {}): PaseoWorkspace {
   };
 }
 
-function createAgent(input: Partial<PaseoAgent> = {}): PaseoAgent {
+function createAgent(input: Partial<OsunaAgent> = {}): OsunaAgent {
   return {
     id: "agent_sdk",
     provider: "codex",
@@ -209,7 +209,7 @@ function createAgent(input: Partial<PaseoAgent> = {}): PaseoAgent {
   };
 }
 
-test("createPaseoClient exposes workspace list through the daemon client", async () => {
+test("createOsunaClient exposes workspace list through the daemon client", async () => {
   const { client, ws } = await connectClient();
 
   const listPromise = client.workspaces.list({
@@ -254,16 +254,16 @@ test("createPaseoClient exposes workspace list through the daemon client", async
   await client.close();
 });
 
-test("createPaseoApi borrows daemon capabilities without exposing connection ownership", () => {
+test("createOsunaApi borrows daemon capabilities without exposing connection ownership", () => {
   const daemonClient = new DaemonClient({
     url: "ws://daemon.test",
     clientId: "borrowed-api",
     reconnect: { enabled: false },
   });
 
-  const paseo = createPaseoApi(daemonClient);
+  const osuna = createOsunaApi(daemonClient);
 
-  expect(Object.keys(paseo).sort()).toEqual([
+  expect(Object.keys(osuna).sort()).toEqual([
     "agents",
     "config",
     "dispose",
@@ -273,9 +273,9 @@ test("createPaseoApi borrows daemon capabilities without exposing connection own
     "terminals",
     "workspaces",
   ]);
-  expect("connect" in paseo).toBe(false);
-  expect("close" in paseo).toBe(false);
-  expect("skills" in paseo.agents).toBe(false);
+  expect("connect" in osuna).toBe(false);
+  expect("close" in osuna).toBe(false);
+  expect("skills" in osuna.agents).toBe(false);
 });
 
 test("agent handles send permission responses for their agent", async () => {
@@ -472,7 +472,7 @@ test("agent actions list the daemon directory without exposing the low-level cli
                 isGit: false,
                 currentBranch: null,
                 remoteUrl: null,
-                isPaseoOwnedWorktree: false,
+                isOsunaOwnedWorktree: false,
                 mainRepoRoot: null,
               },
             },
@@ -1618,14 +1618,14 @@ test("agent config requires provider/model syntax", async () => {
 test("canceled timeline handles and captured state are collectible while their API stays alive", async () => {
   const source = `
     import assert from "node:assert/strict";
-    import { createPaseoApi } from ${JSON.stringify(new URL("./index.ts", import.meta.url).href)};
+    import { createOsunaApi } from ${JSON.stringify(new URL("./index.ts", import.meta.url).href)};
     import { DaemonClient } from ${JSON.stringify(new URL("./daemon-client.ts", import.meta.url).href)};
     const drivers = [], apis = [];
     let errors = 0;
     async function batch(mode) {
       const driver = new DaemonClient({ url: "ws://127.0.0.1:1/ws", clientId: mode, reconnect: { enabled: false } });
       const scope = new AbortController();
-      const api = createPaseoApi(driver, { signal: scope.signal });
+      const api = createOsunaApi(driver, { signal: scope.signal });
       drivers.push(driver); apis.push(api);
       const refs = [], ready = [];
       for (let i = 0; i < 100; i++) {
@@ -1664,7 +1664,7 @@ test("canceled timeline handles and captured state are collectible while their A
     for (const result of Object.values(disposed)) assert.deepEqual(result, { handles: 0, states: 0 });
   `;
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !/^(PASEO_|EXPO_|E2E_|AGENT_BROWSER_)/.test(key)),
+    Object.entries(process.env).filter(([key]) => !/^(OSUNA_|EXPO_|E2E_|AGENT_BROWSER_)/.test(key)),
   );
   const result = await promisify(execFile)(
     process.execPath,

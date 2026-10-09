@@ -2,16 +2,16 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
-import type { AgentAttentionRequiredNotification } from "@getpaseo/client/internal/daemon-client";
+import { PARENT_AGENT_ID_LABEL } from "@osuna/protocol/agent-labels";
+import type { AgentAttentionRequiredNotification } from "@osuna/client/internal/daemon-client";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { getAskModeConfig, getFullAccessConfig } from "./agent-configs.js";
 
 const WAIT_MS = 15_000;
 
 const tempDirs: string[] = [];
-let daemon: TestPaseoDaemon | null = null;
+let daemon: TestOsunaDaemon | null = null;
 let client: DaemonClient | null = null;
 
 interface SubagentScenario {
@@ -23,9 +23,9 @@ interface SubagentScenario {
 }
 
 async function startScenario(): Promise<SubagentScenario> {
-  const cwd = await mkdtemp(path.join(os.tmpdir(), "paseo-subagent-permission-"));
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "osuna-subagent-permission-"));
   tempDirs.push(cwd);
-  daemon = await createTestPaseoDaemon();
+  daemon = await createTestOsunaDaemon();
   client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await client.connect();
   await client.fetchAgents({ subscribe: {} });

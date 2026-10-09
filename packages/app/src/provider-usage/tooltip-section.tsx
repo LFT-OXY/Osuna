@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointRef } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { renderUsageText } from "@/usage/text";

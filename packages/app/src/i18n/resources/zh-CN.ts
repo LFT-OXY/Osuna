@@ -827,7 +827,7 @@ export const zhCN: TranslationResources = {
       },
       routes: {
         public: "反向代理",
-        paseo: "易记地址",
+        osuna: "易记地址",
         direct: "直接地址",
       },
       states: {
@@ -1472,7 +1472,7 @@ export const zhCN: TranslationResources = {
       fullStatus: {
         title: "完整状态",
         modalTitle: "守护进程状态",
-        hint: "运行 `paseo daemon status` 并显示输出",
+        hint: "运行 `osuna daemon status` 并显示输出",
         view: "查看状态",
         copied: "状态已复制到剪贴板。",
         fetchFailed: "获取守护进程状态失败：{{message}}",
@@ -1999,7 +1999,7 @@ export const zhCN: TranslationResources = {
         "不使用中继时，请通过 TCP、Tailscale 或其他 VPN 直接连接。不会生成二维码。",
       updateRequired: "请更新主机，以便从 Osuna Desktop 启用中继。",
       unavailable: "配对信息不可用。",
-      hint: "用手机上的 Paseo 扫描此二维码，或复制下方链接。",
+      hint: "用手机上的 Osuna 扫描此二维码，或复制下方链接。",
       securityWarning: "请像保管密码一样保管此配对链接。任何获得此链接的人都可以访问此守护进程。",
       qrUnavailable: "二维码不可用。",
       qrAccessibility: "配对二维码",
@@ -2033,7 +2033,7 @@ export const zhCN: TranslationResources = {
   serviceUrl: {
     title: "打开服务 URL",
     message: "打开 {{url}}？",
-    inPaseo: "在 Osuna 中",
+    inOsuna: "在 Osuna 中",
     externalBrowser: "外部浏览器",
     dontAskAgain: "不再询问",
   },
@@ -2176,7 +2176,7 @@ export const zhCN: TranslationResources = {
       },
       row: {
         opening: "正在打开...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "会话操作",
         copyResumeCommand: "复制恢复命令",
         importAsAgent: "导入为 Osuna Agent",
@@ -2229,7 +2229,7 @@ export const zhCN: TranslationResources = {
       one: "使用了 {{count}} 个其他工具",
       other: "使用了 {{count}} 个其他工具",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "调用了 Osuna {{count}} 次",
       other: "调用了 Osuna {{count}} 次",
     },
@@ -3289,13 +3289,13 @@ export const zhCN: TranslationResources = {
         savedToast: "项目已更新",
       },
       readFailures: {
-        invalidTitle: "无法解析 paseo.json",
+        invalidTitle: "无法解析 osuna.json",
         invalidDescription: "修复磁盘上的文件，然后重新加载。",
         missingTitle: "这个主机没有这个项目",
         missingSingleHost: "所选主机没有这个项目的记录。",
-        transportTitle: "无法加载 paseo.json",
+        transportTitle: "无法加载 osuna.json",
         transportFallback: "主机没有响应。",
-        failedTitle: "无法加载 paseo.json",
+        failedTitle: "无法加载 osuna.json",
         failedDescription: "重新加载以重试。",
       },
       worktree: {
@@ -3303,7 +3303,7 @@ export const zhCN: TranslationResources = {
         info: "为此项目创建或清理工作树时运行的命令",
         setup: "初始化",
         setupAccessibility: "工作树初始化命令",
-        uncommittedTitle: "提交 paseo.json 更改",
+        uncommittedTitle: "提交 osuna.json 更改",
         uncommittedDescription: "新工作树使用所选基础分支中的初始化脚本。",
         teardown: "清理",
         teardownAccessibility: "工作树清理命令",
@@ -3327,7 +3327,7 @@ export const zhCN: TranslationResources = {
         newScript: "新建脚本",
         editScript: "编辑 {{name}}",
         runAsService: "作为服务运行",
-        serviceHint: "Osuna 会监管该进程，并通过 $PASEO_PORT 分配端口",
+        serviceHint: "Osuna 会监管该进程，并通过 $OSUNA_PORT 分配端口",
         actions: {
           add: "添加脚本",
           edit: "编辑",
@@ -3346,8 +3346,8 @@ export const zhCN: TranslationResources = {
       },
       writeFailures: {
         staleTitle: "磁盘上的配置已更改",
-        staleDescription: "保存前请重新加载最新的 paseo.json。",
-        failedTitle: "无法保存 paseo.json",
+        staleDescription: "保存前请重新加载最新的 osuna.json。",
+        failedTitle: "无法保存 osuna.json",
         failedDescription: "重试，或从磁盘重新加载最新版本。",
       },
       actions: {

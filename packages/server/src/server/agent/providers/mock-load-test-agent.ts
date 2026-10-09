@@ -32,8 +32,8 @@ import type {
   ToolCallTimelineItem,
 } from "../agent-sdk-types.js";
 import { importSessionFromPersistence } from "../provider-session-import.js";
-import { getAgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
-import { providerSubagentPermissionMetadata } from "@getpaseo/protocol/provider-subagent-permission";
+import { getAgentProviderDefinition } from "@osuna/protocol/provider-manifest";
+import { providerSubagentPermissionMetadata } from "@osuna/protocol/provider-subagent-permission";
 
 export const MOCK_LOAD_TEST_PROVIDER_ID = "mock";
 export const MOCK_LOAD_TEST_DEFAULT_MODEL_ID = "five-minute-stream";
@@ -279,7 +279,7 @@ const SyntheticDispatchStepsSchema = z.array(
 
 type SyntheticDispatchStep = z.infer<typeof SyntheticDispatchStepsSchema>[number];
 
-// 浏览器 e2e 用它往父时间线写带 callId 的 `paseo.create_agent` 调用；子智能体由测试按标签另外种入。
+// 浏览器 e2e 用它往父时间线写带 callId 的 `osuna.create_agent` 调用；子智能体由测试按标签另外种入。
 // `providerSubagent` 步骤写一次 provider 子智能体调用，连同带同一 `toolCallId` 的描述符一起发出。
 // 步骤依次执行，`runningMs` 让该调用停在执行中，好验证派发组的"启动中"与实时状态。带 `permission`
 // 的 provider 子智能体在父会话上发一条归属它的权限请求，回应后才完成。脚本写错直接抛错。
@@ -696,7 +696,7 @@ function buildCycleQueue(turnId: string, cycle: number): CycleEvent[] {
   const shellDetail: ToolCallDetail = {
     type: "shell",
     command: "node scripts/simulate-stream-burst.mjs",
-    cwd: "/tmp/paseo-mock-load",
+    cwd: "/tmp/osuna-mock-load",
     output:
       "[burst] tick 1 userIsAtBottom=true\n[burst] tick 2 userIsAtBottom=true\n[burst] drag-start isDragging=true\n[burst] tick 3 suppressed\n[burst] drag-end isDragging=false\n",
     exitCode: 0,
@@ -1252,7 +1252,7 @@ export class MockLoadTestAgentSession implements AgentSession {
       const detail: ToolCallDetail = {
         type: "shell",
         command: "sleep 5",
-        cwd: "/tmp/paseo-mock-load",
+        cwd: "/tmp/osuna-mock-load",
       };
       this.emitTimeline(
         turn.turnId,
@@ -1314,7 +1314,7 @@ export class MockLoadTestAgentSession implements AgentSession {
         },
         output: null,
       };
-      const name = "paseo.create_agent";
+      const name = "osuna.create_agent";
       this.emitTimeline(
         turn.turnId,
         createToolCall({ callId: step.callId, name, status: "running", detail }),

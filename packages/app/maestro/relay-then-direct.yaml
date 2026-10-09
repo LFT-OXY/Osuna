@@ -1,4 +1,4 @@
-appId: sh.paseo
+appId: com.chinhae.osuna
 ---
 - launchApp:
     clearState: true

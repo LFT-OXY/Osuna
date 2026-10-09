@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { UsageCli } from "@getpaseo/protocol/usage/types";
+import type { UsageCli } from "@osuna/protocol/usage/types";
 import { buildUsageReport, type UsageReportPricing, type UsageReportRequest } from "./report.js";
 import type { UsageProjectAttribution } from "./project-attribution.js";
 import { emptyBucketRow, type UsageBucketRow } from "./types.js";

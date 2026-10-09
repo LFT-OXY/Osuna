@@ -1,4 +1,4 @@
-import type { UsageSessionRow } from "@getpaseo/protocol/usage/types";
+import type { UsageSessionRow } from "@osuna/protocol/usage/types";
 /** A session row and the host it ran on; sessions never merge across hosts. */
 export interface MergedUsageSession extends UsageSessionRow {
   serverId: string;

@@ -2,8 +2,8 @@ import type {
   AgentModelDefinition,
   ProviderSnapshotEntry,
   ProviderStatus,
-} from "@getpaseo/protocol/agent-types";
-import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config";
+} from "@osuna/protocol/agent-types";
+import type { ProviderMentionDefaults } from "@osuna/protocol/provider-config";
 
 /**
  * 「提及 Agent 默认值」卡片的纯视图模型。回退规则与 daemon 的

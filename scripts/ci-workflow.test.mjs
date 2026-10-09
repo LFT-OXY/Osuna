@@ -118,11 +118,11 @@ test("focused contracts stay inside existing required checks", () => {
   assert.match(changes, /^        run: node scripts\/rename-guard\.mjs$/m);
   assert.doesNotMatch(changes, /Install dependencies|npm run build/);
 
-  assert.match(server, /npm run test --workspace=@getpaseo\/server/);
+  assert.match(server, /npm run test --workspace=@osuna\/server/);
 
   assert.match(desktop, /test:e2e:renderer/);
   assert.match(desktop, /test:e2e:browser-tabs/);
-  assert.match(desktop, /npm run test --workspace=@getpaseo\/desktop/);
+  assert.match(desktop, /npm run test --workspace=@osuna\/desktop/);
   assert.ok(!jobs.has("desktop-browser-bridge"));
   assert.ok(!jobs.has("playwright-desktop"));
 });
@@ -236,7 +236,7 @@ test("browser and desktop tests have exclusive, directory-owned suites", () => {
   for (const path of browserSpecs) {
     assert.doesNotMatch(
       readFileSync(new URL(path, repoRoot), "utf8"),
-      /paseoDesktop|injectDesktopBridge/,
+      /osunaDesktop|injectDesktopBridge/,
     );
   }
   for (const path of desktopSpecs) {

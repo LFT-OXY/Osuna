@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LegalPage, PaseoLegalIdentity } from "~/components/legal-page";
+import { LegalPage, OsunaLegalIdentity } from "~/components/legal-page";
 import { pageMeta } from "~/meta";
 
 export const Route = createFileRoute("/privacy")({
   head: () =>
     pageMeta(
-      "Privacy Policy - Paseo",
+      "Privacy Policy - Osuna",
       "What stays on your machines and what the encrypted relay can see.",
       "/privacy",
     ),
@@ -16,25 +16,25 @@ function Privacy() {
   return (
     <LegalPage title="Privacy Policy" lastUpdated="August 29, 2026">
       <p>
-        Paseo is local-first. Installing or using the open-source software does not send us your
+        Osuna is local-first. Installing or using the open-source software does not send us your
         code, prompts, files, terminal output, or agent conversations. This policy explains the
-        separate data boundaries for local Paseo, the optional official relay, and paseo.sh.
+        separate data boundaries for local Osuna, the optional official relay, and osuna.chinhae.cc.
       </p>
 
       <section>
         <h2>Who is responsible</h2>
-        <PaseoLegalIdentity />
+        <OsunaLegalIdentity />
         <p>
           Mohamed Boudra Ziani is the data controller for personal data processed through the
-          official Paseo website and relay. Independently self-hosted daemons and relays are
+          official Osuna website and relay. Independently self-hosted daemons and relays are
           controlled by their operators and are not covered by this policy.
         </p>
       </section>
 
       <section>
-        <h2>Local Paseo apps and daemons</h2>
+        <h2>Local Osuna apps and daemons</h2>
         <p>
-          Paseo runs on your machines. It does not send us analytics, telemetry, advertising
+          Osuna runs on your machines. It does not send us analytics, telemetry, advertising
           identifiers, or crash reports.
         </p>
         <p>
@@ -43,7 +43,7 @@ function Privacy() {
         </p>
         <p>
           Agents such as Claude Code, Codex, and OpenCode communicate with their providers using
-          credentials on your machine. Paseo does not manage or intercept those provider API calls.
+          credentials on your machine. Osuna does not manage or intercept those provider API calls.
         </p>
       </section>
 
@@ -134,9 +134,9 @@ function Privacy() {
         <h2>Security</h2>
         <p>
           We use access controls, encrypted transport, and limited service permissions. No online
-          service can guarantee absolute security. Read Paseo&apos;s{" "}
+          service can guarantee absolute security. Read Osuna&apos;s{" "}
           <a
-            href="https://github.com/getpaseo/paseo/blob/main/SECURITY.md"
+            href="https://github.com/LFT-OXY/Osuna/blob/main/SECURITY.md"
             target="_blank"
             rel="noopener noreferrer"
           >

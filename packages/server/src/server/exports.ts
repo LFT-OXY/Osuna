@@ -1,7 +1,7 @@
-// CLI exports for @getpaseo/server
-export { createPaseoDaemon, type PaseoDaemon, type PaseoDaemonConfig } from "./bootstrap.js";
+// CLI exports for @osuna/server
+export { createOsunaDaemon, type OsunaDaemon, type OsunaDaemonConfig } from "./bootstrap.js";
 export { loadConfig, type CliConfigOverrides } from "./config.js";
-export { resolvePaseoHome } from "./paseo-home.js";
+export { resolveOsunaHome } from "./osuna-home.js";
 export { getOrCreateServerId } from "./server-id.js";
 export { createRootLogger, type LogLevel, type LogFormat } from "./logger.js";
 export {
@@ -16,21 +16,21 @@ export {
   decodeOfferFragmentPayload,
   parseConnectionOfferFromUrl,
   type ConnectionOffer,
-} from "@getpaseo/protocol/connection-offer";
-export { buildRelayWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
+} from "@osuna/protocol/connection-offer";
+export { buildRelayWebSocketUrl } from "@osuna/protocol/daemon-endpoints";
 export {
   buildDaemonWebSocketUrl,
   deriveLabelFromEndpoint,
   normalizeHostPort,
   parseConnectionUri,
   shouldUseTlsForDefaultHostedRelay,
-} from "@getpaseo/protocol/daemon-endpoints";
-export { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+} from "@osuna/protocol/daemon-endpoints";
+export { PARENT_AGENT_ID_LABEL } from "@osuna/protocol/agent-labels";
 export {
   DirectTcpHostConnectionSchema,
   type DirectTcpHostConnection,
   type NormalizedDirectTcpHostConnection,
-} from "@getpaseo/protocol/host-connection-schema";
+} from "@osuna/protocol/host-connection-schema";
 export {
   ensureLocalSpeechModels,
   listLocalSpeechModels,
@@ -61,7 +61,7 @@ export {
   AGENT_PROVIDER_DEFINITIONS,
   BUILTIN_PROVIDER_IDS,
   type AgentProviderDefinition,
-} from "@getpaseo/protocol/provider-manifest";
+} from "@osuna/protocol/provider-manifest";
 
 // Agent SDK types for CLI commands
 export type {
@@ -95,7 +95,7 @@ export type {
   AgentSnapshotPayload,
   AgentStreamEventPayload,
   AgentStreamMessage,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 
 export {
   readDaemonInstance,

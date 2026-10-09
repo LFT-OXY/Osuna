@@ -844,7 +844,7 @@ export const fr: TranslationResources = {
       },
       routes: {
         public: "Proxy inverse",
-        paseo: "Memorable",
+        osuna: "Memorable",
         direct: "Directe",
       },
       states: {
@@ -1510,7 +1510,7 @@ export const fr: TranslationResources = {
       fullStatus: {
         title: "Statut complet",
         modalTitle: "StatutDaemon",
-        hint: "Exécute`paseo daemon status`et affiche la sortie",
+        hint: "Exécute`osuna daemon status`et affiche la sortie",
         view: "Afficher l'état",
         copied: "Statut copié dans le presse-papiers.",
         fetchFailed: "Échec de la récupération de l'état du démon:{{message}}",
@@ -2066,7 +2066,7 @@ export const fr: TranslationResources = {
         "Sans relais, connectez-vous directement via TCP, Tailscale ou un autre VPN. Aucun code QR n’est créé.",
       updateRequired: "Mettez à jour l’hôte pour activer le relais depuis Osuna Desktop.",
       unavailable: "Offre de jumelage indisponible.",
-      hint: "Scannez ce codeQRavecPaseosur votre téléphone ou copiez le lien ci-dessous.",
+      hint: "Scannez ce codeQRavecOsunasur votre téléphone ou copiez le lien ci-dessous.",
       securityWarning:
         "Traitez ce lien d’association comme un mot de passe. Toute personne qui le possède peut accéder à ce daemon.",
       qrUnavailable: "CodeQRindisponible.",
@@ -2101,7 +2101,7 @@ export const fr: TranslationResources = {
   serviceUrl: {
     title: "Service ouvertURL",
     message: "Ouvrir{{url}}?",
-    inPaseo: "Dans Osuna",
+    inOsuna: "Dans Osuna",
     externalBrowser: "Navigateur externe",
     dontAskAgain: "Ne demande plus",
   },
@@ -2245,7 +2245,7 @@ export const fr: TranslationResources = {
       },
       row: {
         opening: "Ouverture...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "Actions de la session",
         copyResumeCommand: "Copier la commande de reprise",
         importAsAgent: "Importer comme agent Osuna",
@@ -2298,7 +2298,7 @@ export const fr: TranslationResources = {
       one: "a utilisé {{count}} autre outil",
       other: "a utilisé {{count}} autres outils",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "a appelé Osuna {{count}} fois",
       other: "a appelé Osuna {{count}} fois",
     },
@@ -3371,13 +3371,13 @@ export const fr: TranslationResources = {
         savedToast: "Projet mis à jour",
       },
       readFailures: {
-        invalidTitle: "paseo.json n'a pas pu être analysé",
+        invalidTitle: "osuna.json n'a pas pu être analysé",
         invalidDescription: "Corrigez le fichier sur le disque, puis rechargez.",
         missingTitle: "Cet hôte n'a pas ce projet",
         missingSingleHost: "L'hôte sélectionné n'a aucune trace de ce projet.",
-        transportTitle: "Impossible de charger paseo.json",
+        transportTitle: "Impossible de charger osuna.json",
         transportFallback: "L'hôte n'a pas répondu.",
-        failedTitle: "Impossible de charger paseo.json",
+        failedTitle: "Impossible de charger osuna.json",
         failedDescription: "Rechargez pour réessayer.",
       },
       worktree: {
@@ -3385,7 +3385,7 @@ export const fr: TranslationResources = {
         info: "Commandes exécutées lorsqu'un arbre de travail est créé ou supprimé pour ce projet",
         setup: "Installation",
         setupAccessibility: "Commandes de configuration de Worktree",
-        uncommittedTitle: "Validez les modifications de paseo.json",
+        uncommittedTitle: "Validez les modifications de osuna.json",
         uncommittedDescription:
           "Les nouveaux worktrees utilisent le script de configuration de la branche de base sélectionnée.",
         teardown: "Démolir",
@@ -3410,7 +3410,7 @@ export const fr: TranslationResources = {
         newScript: "Nouveau scénario",
         editScript: "Modifier{{name}}",
         runAsService: "Exécuter en tant que service",
-        serviceHint: "Osuna supervise le processus et attribue un port via $PASEO_PORT",
+        serviceHint: "Osuna supervise le processus et attribue un port via $OSUNA_PORT",
         actions: {
           add: "Ajouter un script",
           edit: "Modifier",
@@ -3431,8 +3431,8 @@ export const fr: TranslationResources = {
       },
       writeFailures: {
         staleTitle: "Configuration modifiée sur le disque",
-        staleDescription: "Rechargez pour récupérer le dernier paseo.json avant de sauvegarder.",
-        failedTitle: "Impossible d'enregistrer paseo.json",
+        staleDescription: "Rechargez pour récupérer le dernier osuna.json avant de sauvegarder.",
+        failedTitle: "Impossible d'enregistrer osuna.json",
         failedDescription: "Réessayez ou rechargez la dernière version à partir du disque.",
       },
       actions: {

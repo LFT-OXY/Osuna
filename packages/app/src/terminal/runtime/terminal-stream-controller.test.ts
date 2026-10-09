@@ -1,4 +1,4 @@
-import type { SessionOutboundMessage, TerminalViewAttributes } from "@getpaseo/protocol/messages";
+import type { SessionOutboundMessage, TerminalViewAttributes } from "@osuna/protocol/messages";
 import { describe, expect, it } from "vitest";
 
 import {

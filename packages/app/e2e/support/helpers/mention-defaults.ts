@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
-import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config";
+import type { ProviderMentionDefaults } from "@osuna/protocol/provider-config";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { gotoAppShell, openSettings } from "./app";
 import { connectDaemonClient } from "./daemon-client-loader";

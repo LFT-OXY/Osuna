@@ -1,5 +1,5 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { UsagePricePerMillion, UsagePricingOverride } from "@getpaseo/protocol/usage/types";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
+import type { UsagePricePerMillion, UsagePricingOverride } from "@osuna/protocol/usage/types";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
@@ -12,7 +12,7 @@ import {
   installPricingRefreshFixture,
 } from "../support/helpers/usage-pricing";
 
-const fixtures = createUsageFixtureRoots("paseo-price-table-");
+const fixtures = createUsageFixtureRoots("osuna-price-table-");
 
 test.use({ e2eDaemonEnvironment: fixtures.environment });
 
@@ -297,7 +297,7 @@ test.describe("Price table", () => {
 
     const toggle = page.getByTestId("price-table-auto-update-switch");
     await expect(toggle).toBeVisible({ timeout: 30_000 });
-    // The worker daemon starts with PASEO_USAGE_PRICING_AUTO_UPDATE=0.
+    // The worker daemon starts with OSUNA_USAGE_PRICING_AUTO_UPDATE=0.
     expect(await readAutoUpdate()).toBe(false);
     await expect(toggle).not.toBeChecked();
 

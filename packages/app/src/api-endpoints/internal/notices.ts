@@ -1,8 +1,8 @@
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import type {
   ApiEndpointModeMismatch,
   ApiEndpointRef,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+} from "@osuna/protocol/api-endpoint/rpc-schemas";
 
 /*
  * 第三方接口在别处的提示：套餐用量、继承 claude 的自定义提供方、恢复会话。

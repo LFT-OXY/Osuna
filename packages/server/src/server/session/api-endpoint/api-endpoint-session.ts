@@ -1,5 +1,5 @@
 import type pino from "pino";
-import type { ApiEndpointError } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointError } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import { ApiEndpointRequestError, type ApiEndpointService } from "../../api-endpoints/service.js";
 

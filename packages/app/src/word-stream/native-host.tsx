@@ -8,4 +8,4 @@ interface WordFadeHostProps extends ViewProps {
   children: ReactNode;
 }
 
-export const WordFadeHost = requireNativeViewManager<WordFadeHostProps>("PaseoWordStream");
+export const WordFadeHost = requireNativeViewManager<WordFadeHostProps>("OsunaWordStream");

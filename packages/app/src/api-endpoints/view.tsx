@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpoint } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { ApiEndpointFormSheet } from "./form-sheet";
 import { ApiEndpointsSection } from "./index";
 import type { ApiEndpointFormSeed } from "./internal/form-model";

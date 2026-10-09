@@ -45,7 +45,7 @@ const ASSISTANT_MARKDOWN = [
   "",
   '[docs](https://docs.example.com "Reference") and <https://autolink.example.com>.',
   "",
-  "[workspace file](file:///tmp/paseo%20notes.md#L4)",
+  "[workspace file](file:///tmp/osuna%20notes.md#L4)",
   "",
   "`https://example.com/generated` stays code, not a generated link.",
   "",
@@ -128,13 +128,13 @@ async function selectAssistantListItemFromMarker(
     hasText: "Direct matches:",
   });
   const item = assistantMessage
-    .locator(`[data-paseo-markdown-tag="${listTag}"]`)
+    .locator(`[data-osuna-markdown-tag="${listTag}"]`)
     .filter({ hasText: itemText })
-    .locator(':scope > [data-paseo-markdown-tag="li"]')
+    .locator(':scope > [data-osuna-markdown-tag="li"]')
     .filter({ hasText: itemText });
 
   await item.evaluate((element, selectedEndText) => {
-    const marker = element.querySelector(':scope > [data-paseo-markdown-list-marker="true"]');
+    const marker = element.querySelector(':scope > [data-osuna-markdown-list-marker="true"]');
     const markerText = marker?.firstChild;
     if (!(markerText instanceof Text)) {
       throw new Error("Expected rendered list marker text");
@@ -174,7 +174,7 @@ async function doubleClickAssistantMarkdownText(
     hasText: "Direct matches:",
   });
   await assistantMessage
-    .locator(`[data-paseo-markdown-tag="${tag}"]`)
+    .locator(`[data-osuna-markdown-tag="${tag}"]`)
     .filter({ hasText: text })
     .dblclick({ position: { x: 5, y: 5 } });
 }
@@ -308,7 +308,7 @@ test("copying an assistant selection preserves Markdown structure and links", as
   page,
 }) => {
   await page.addInitScript(() => {
-    localStorage.setItem("@paseo:app-settings", JSON.stringify({ uiFontFamily: "serif" }));
+    localStorage.setItem("@osuna:app-settings", JSON.stringify({ uiFontFamily: "serif" }));
   });
   const agent = await seedMockAgentWorkspace({
     repoPrefix: "assistant-selection-copy-",
@@ -335,14 +335,14 @@ test("copying an assistant selection preserves Markdown structure and links", as
       ["s", "struck prose"],
     ]) {
       const formattedProse = assistantMessage
-        .locator(`[data-paseo-markdown-tag="${tag}"]`)
+        .locator(`[data-osuna-markdown-tag="${tag}"]`)
         .filter({ hasText: text });
       // 自选界面字体前插到默认字体栈。
       await expect(formattedProse).toHaveCSS("font-family", /^serif, /);
       await expect(formattedProse).not.toHaveAttribute("data-pmono");
     }
     const inlineCode = assistantMessage
-      .locator('[data-paseo-markdown-tag="code"]')
+      .locator('[data-osuna-markdown-tag="code"]')
       .filter({ hasText: "apply_patch" });
     await expect(inlineCode).toHaveAttribute("data-pmono", "");
 
@@ -370,7 +370,7 @@ test("copying an assistant selection preserves Markdown structure and links", as
       '<a href="https://autolink.example.com/">https://autolink.example.com</a>',
     );
     expect(clipboard.html).toContain(
-      '<a href="file:///tmp/paseo%20notes.md#L4">workspace file</a>',
+      '<a href="file:///tmp/osuna%20notes.md#L4">workspace file</a>',
     );
     expect(clipboard.html).toContain("<code>https://example.com/generated</code>");
     expect(clipboard.html).not.toContain(
@@ -543,7 +543,7 @@ test("copying an assistant selection preserves Markdown structure and links", as
     // contains every character in the block.
     await selectAssistantElement(
       page,
-      '[data-paseo-markdown-language="typescript"] [data-paseo-markdown-tag="code"]',
+      '[data-osuna-markdown-language="typescript"] [data-osuna-markdown-tag="code"]',
     );
     await copySelection(page);
 
@@ -568,7 +568,7 @@ test("copying an assistant selection preserves Markdown structure and links", as
 
     // The block's own Copy button had the same hazard: a Markdown fence body ends in
     // a newline, and the button copied it raw.
-    const typescriptFence = assistantMessage.locator('[data-paseo-markdown-language="typescript"]');
+    const typescriptFence = assistantMessage.locator('[data-osuna-markdown-language="typescript"]');
     // The header row names the language and holds the button; whole-selection copy above
     // already proved the label stays out of the clipboard.
     await expect(typescriptFence.getByText("typescript", { exact: true })).toBeVisible();
@@ -578,7 +578,7 @@ test("copying an assistant selection preserves Markdown structure and links", as
 
     // A blank line before the closing fence leaves the body ending in two newlines,
     // so stripping only the terminal one still hands the terminal an executable line.
-    const bashFence = assistantMessage.locator('[data-paseo-markdown-language="bash"]');
+    const bashFence = assistantMessage.locator('[data-osuna-markdown-language="bash"]');
     await bashFence.getByRole("button", { name: "Copy code" }).click();
 
     expect(await readPlainClipboard(page)).toBe("echo trailing");

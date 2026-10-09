@@ -3,12 +3,12 @@ import type {
   AgentPermissionResponse,
   AgentTimelineItem,
   AgentSessionConfig,
-} from "@getpaseo/protocol/agent-types";
-import type { PaseoApi } from "@getpaseo/client";
-import type { WorkspaceCreateRequest } from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/agent-types";
+import type { OsunaApi } from "@osuna/client";
+import type { WorkspaceCreateRequest } from "@osuna/protocol/messages";
 
 export interface PluginHookContext {
-  paseo: PaseoApi;
+  osuna: OsunaApi;
   signal: AbortSignal;
 }
 

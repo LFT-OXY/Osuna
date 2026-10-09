@@ -141,7 +141,7 @@ describe("draft persistence of legacy skill chips", () => {
   async function readBackLegacyInput(input: Record<string, unknown>) {
     const { storage, values } = createPersistedDrafts();
     values.set(
-      "paseo-drafts",
+      "osuna-drafts",
       JSON.stringify({
         state: {
           drafts: { "agent:a": { input, lifecycle: "active", updatedAt: 1, version: 1 } },
@@ -150,7 +150,7 @@ describe("draft persistence of legacy skill chips", () => {
         version: 5,
       }),
     );
-    const record = (await storage.getItem("paseo-drafts"))?.state.drafts?.["agent:a"];
+    const record = (await storage.getItem("osuna-drafts"))?.state.drafts?.["agent:a"];
     if (!record || !("input" in record)) throw new Error("the legacy draft did not read back");
     // 带 skills 的草稿不是当前形状，启动时走 hydrateDraftInput 的迁移。
     expect(isCanonicalDraftInput(record.input)).toBe(false);
@@ -213,7 +213,7 @@ describe("draft persistence of legacy skill chips", () => {
   it("reads a draft saved before skill chips existed as it was", async () => {
     const { storage, values } = createPersistedDrafts();
     values.set(
-      "paseo-drafts",
+      "osuna-drafts",
       JSON.stringify({
         state: {
           drafts: {
@@ -230,7 +230,7 @@ describe("draft persistence of legacy skill chips", () => {
       }),
     );
 
-    const restored = DraftStoreStateSchema.parse((await storage.getItem("paseo-drafts"))?.state);
+    const restored = DraftStoreStateSchema.parse((await storage.getItem("osuna-drafts"))?.state);
 
     expect(toDraftInputIfReady(restored.drafts["agent:a"])).toEqual({
       text: "hello",
@@ -261,18 +261,18 @@ describe("draft persistence of inline segments", () => {
 
   async function writeAndReadBack(record: DraftRecord): Promise<DraftRecord | undefined> {
     const { storage } = createPersistedDrafts();
-    await storage.setItem("paseo-drafts", {
+    await storage.setItem("osuna-drafts", {
       state: { drafts: { "agent:a": record }, createModalDraft: null },
       version: 5,
     });
     await storage.flush();
-    const restored = DraftStoreStateSchema.parse((await storage.getItem("paseo-drafts"))?.state);
+    const restored = DraftStoreStateSchema.parse((await storage.getItem("osuna-drafts"))?.state);
     return restored.drafts["agent:a"];
   }
 
   it("reads back the segments it wrote with the draft", async () => {
     const input = {
-      text: "see [x.ts](src/x.ts) and [@Claude](paseo://agent/provider/claude) typed [y](y)",
+      text: "see [x.ts](src/x.ts) and [@Claude](osuna://agent/provider/claude) typed [y](y)",
       attachments: [],
       segments: [
         { type: "text" as const, text: "see " },
@@ -362,7 +362,7 @@ describe("draft persistence of inline segments", () => {
   it("reads a draft saved before segments existed as plain text", async () => {
     const { storage, values } = createPersistedDrafts();
     values.set(
-      "paseo-drafts",
+      "osuna-drafts",
       JSON.stringify({
         state: {
           drafts: {
@@ -379,7 +379,7 @@ describe("draft persistence of inline segments", () => {
       }),
     );
 
-    const restored = DraftStoreStateSchema.parse((await storage.getItem("paseo-drafts"))?.state);
+    const restored = DraftStoreStateSchema.parse((await storage.getItem("osuna-drafts"))?.state);
 
     expect(toDraftInputIfReady(restored.drafts["agent:a"])).toEqual({
       text: "[x.ts](x.ts)",

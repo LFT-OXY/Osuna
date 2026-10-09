@@ -835,7 +835,7 @@ export const ko: TranslationResources = {
       },
       routes: {
         public: "역방향 프록시",
-        paseo: "간편 주소",
+        osuna: "간편 주소",
         direct: "직접",
       },
       states: {
@@ -1479,7 +1479,7 @@ export const ko: TranslationResources = {
       fullStatus: {
         title: "전체 상태",
         modalTitle: "데몬 상태",
-        hint: "`paseo daemon status`를 실행하고 출력을 표시합니다",
+        hint: "`osuna daemon status`를 실행하고 출력을 표시합니다",
         view: "상태 보기",
         copied: "상태가 클립보드에 복사되었습니다.",
         fetchFailed: "데몬 상태를 가져오지 못했습니다: {{message}}",
@@ -2021,7 +2021,7 @@ export const ko: TranslationResources = {
         "릴레이 없이 TCP, Tailscale 또는 다른 VPN을 통해 직접 연결하세요. QR 코드가 생성되지 않습니다.",
       updateRequired: "Osuna 데스크톱에서 릴레이를 활성화하려면 호스트를 업데이트하세요.",
       unavailable: "페어링 정보를 사용할 수 없습니다.",
-      hint: "휴대폰의 Paseo로 이 QR 코드를 스캔하거나 아래 링크를 복사하세요.",
+      hint: "휴대폰의 Osuna로 이 QR 코드를 스캔하거나 아래 링크를 복사하세요.",
       securityWarning:
         "이 페어링 링크는 비밀번호처럼 취급하세요. 링크를 가진 사람은 누구나 이 데몬에 접근할 수 있습니다.",
       qrUnavailable: "QR 코드를 사용할 수 없습니다.",
@@ -2056,7 +2056,7 @@ export const ko: TranslationResources = {
   serviceUrl: {
     title: "서비스 URL 열기",
     message: "{{url}}을(를) 열까요?",
-    inPaseo: "Osuna에서",
+    inOsuna: "Osuna에서",
     externalBrowser: "외부 브라우저",
     dontAskAgain: "다시 묻지 않기",
   },
@@ -2199,7 +2199,7 @@ export const ko: TranslationResources = {
       },
       row: {
         opening: "여는 중...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "세션 작업",
         copyResumeCommand: "재개 명령 복사",
         importAsAgent: "Osuna 에이전트로 가져오기",
@@ -2252,7 +2252,7 @@ export const ko: TranslationResources = {
       one: "기타 도구 {{count}}개 사용함",
       other: "기타 도구 {{count}}개 사용함",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "Osuna를 {{count}}회 호출함",
       other: "Osuna를 {{count}}회 호출함",
     },
@@ -3304,13 +3304,13 @@ export const ko: TranslationResources = {
         savedToast: "프로젝트가 업데이트되었습니다.",
       },
       readFailures: {
-        invalidTitle: "paseo.json을 파싱할 수 없습니다",
+        invalidTitle: "osuna.json을 파싱할 수 없습니다",
         invalidDescription: "디스크의 파일을 수정한 후 다시 로드하세요.",
         missingTitle: "이 호스트에는 이 프로젝트가 없습니다",
         missingSingleHost: "선택한 호스트에 이 프로젝트의 기록이 없습니다.",
-        transportTitle: "paseo.json을 불러올 수 없습니다",
+        transportTitle: "osuna.json을 불러올 수 없습니다",
         transportFallback: "호스트가 응답하지 않았습니다.",
-        failedTitle: "paseo.json을 불러올 수 없습니다",
+        failedTitle: "osuna.json을 불러올 수 없습니다",
         failedDescription: "다시 로드하여 재시도하세요.",
       },
       worktree: {
@@ -3318,7 +3318,7 @@ export const ko: TranslationResources = {
         info: "이 프로젝트에서 워크트리가 생성되거나 정리될 때 실행되는 명령",
         setup: "설정",
         setupAccessibility: "워크트리 설정 명령",
-        uncommittedTitle: "paseo.json 변경 사항을 커밋하세요",
+        uncommittedTitle: "osuna.json 변경 사항을 커밋하세요",
         uncommittedDescription: "새 워크트리는 선택한 기본 브랜치의 설정 스크립트를 사용합니다.",
         teardown: "정리",
         teardownAccessibility: "워크트리 정리 명령",
@@ -3342,7 +3342,7 @@ export const ko: TranslationResources = {
         newScript: "새 스크립트",
         editScript: "{{name}} 편집",
         runAsService: "서비스로 실행",
-        serviceHint: "Osuna가 프로세스를 감독하고 $PASEO_PORT를 통해 포트를 할당합니다",
+        serviceHint: "Osuna가 프로세스를 감독하고 $OSUNA_PORT를 통해 포트를 할당합니다",
         actions: {
           add: "스크립트 추가",
           edit: "편집",
@@ -3362,8 +3362,8 @@ export const ko: TranslationResources = {
       },
       writeFailures: {
         staleTitle: "디스크에서 구성이 변경되었습니다",
-        staleDescription: "저장하기 전에 다시 로드하여 최신 paseo.json을 가져오세요.",
-        failedTitle: "paseo.json을 저장할 수 없습니다",
+        staleDescription: "저장하기 전에 다시 로드하여 최신 osuna.json을 가져오세요.",
+        failedTitle: "osuna.json을 저장할 수 없습니다",
         failedDescription: "다시 시도하거나 디스크에서 최신 버전을 다시 로드하세요.",
       },
       actions: {

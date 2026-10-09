@@ -1,6 +1,6 @@
 ---
 title: Plugin quickstart
-description: Build, install, share, and update a trusted Paseo plugin.
+description: Build, install, share, and update a trusted Osuna plugin.
 nav: Quickstart
 order: 46
 category: Plugins
@@ -9,10 +9,10 @@ category: Plugins
 # Plugin quickstart
 
 > **Experimental:** The plugin API is still evolving, so expect breaking changes and updates to
-> your plugins as Paseo evolves. See the [plugin roadmap](https://github.com/getpaseo/paseo/labels/plugins)
+> your plugins as Osuna evolves. See the [plugin roadmap](https://github.com/LFT-OXY/Osuna/labels/plugins)
 > for planned contribution surfaces.
 
-A plugin is a TypeScript project installed into one Paseo daemon. It can add
+A plugin is a TypeScript project installed into one Osuna daemon. It can add
 [surfaces and sidebar items](/docs/plugins/reference#surfaces-and-sidebar-items),
 [workspace panels](/docs/plugins/reference#workspace-panels),
 [Command Center items](/docs/plugins/reference#command-center-items),
@@ -23,7 +23,7 @@ A plugin is a TypeScript project installed into one Paseo daemon. It can add
 [attachment sources](/docs/plugins/reference#add-a-composer-attachment-source), and
 [daemon-side RPCs](/docs/plugins/reference#add-plugin-specific-backend-behavior). It can also
 [connect a coding agent as a provider](/docs/plugins/providers). Client
-contributions run on every Paseo client connected to that daemon, including mobile.
+contributions run on every Osuna client connected to that daemon, including mobile.
 
 This guide scaffolds a plugin, runs it, and adds a workspace panel to it.
 
@@ -32,13 +32,13 @@ This guide scaffolds a plugin, runs it, and adds a workspace panel to it.
 Use an absolute path on the daemon machine:
 
 ```bash
-paseo plugin init /absolute/path/to/workspace-plugin
+osuna plugin init /absolute/path/to/workspace-plugin
 cd /absolute/path/to/workspace-plugin
 npm install
 ```
 
 `init` writes a strict TypeScript project and does not run the package manager. `npm install` adds
-development dependencies for typechecking and tests only; Paseo supplies the plugin SDK, React,
+development dependencies for typechecking and tests only; Osuna supplies the plugin SDK, React,
 React Native, TanStack Query, and Zod at runtime.
 
 The scaffold is a working plugin: a sidebar surface with a button that asks the daemon for a
@@ -46,8 +46,8 @@ greeting through an RPC.
 
 ```text
 workspace-plugin/
-  paseo-plugin.json      # plugin ID and supported Paseo versions
-  index.client.tsx       # runs in the Paseo app
+  osuna-plugin.json      # plugin ID and supported Osuna versions
+  index.client.tsx       # runs in the Osuna app
   index.server.ts        # runs in a daemon subprocess
   client/greeting.tsx    # the surface component
   client/web.ts          # the only file allowed to touch browser APIs
@@ -61,7 +61,7 @@ Each entry default-exports one function that registers contributions and returns
 function. `index.client.tsx` registers the surface and the sidebar item that opens it:
 
 ```tsx
-import type { PluginClientContext } from "@getpaseo/plugin/client";
+import type { PluginClientContext } from "@osuna/plugin/client";
 import { GreetingSurface } from "./client/greeting";
 
 export default function contribute(client: PluginClientContext) {
@@ -79,7 +79,7 @@ export default function contribute(client: PluginClientContext) {
 `index.server.ts` registers the handler for the contract in `shared/greeting.ts`:
 
 ```ts
-import type { PluginServerContext } from "@getpaseo/plugin/server";
+import type { PluginServerContext } from "@osuna/plugin/server";
 import { createGreeting } from "./server/greeting";
 import { greetingRpc } from "./shared/greeting";
 
@@ -103,28 +103,28 @@ API behind `Platform.OS` with a native fallback. See
 ## Install and try it
 
 Plugins are trusted, unsandboxed code: server code and Git preparation commands run with the daemon
-user's access on the daemon machine, and client code runs inside the Paseo app. Installing a plugin
+user's access on the daemon machine, and client code runs inside the Osuna app. Installing a plugin
 means you trust that codebase, its dependencies, and its future updates.
 
 Turn on **Enable plugins** under **Settings → Plugins** on the daemon you are installing into. It is
 the global switch for every plugin on that daemon. It is also the root `pluginsEnabled` field in the
-daemon's `config.json`; after editing the file, apply it with `paseo reload --json`. An automated
+daemon's `config.json`; after editing the file, apply it with `osuna reload --json`. An automated
 tool must read the current value and get your explicit permission before turning it on.
 
 Then typecheck and install:
 
 ```bash
 npm run typecheck
-paseo plugin install /absolute/path/to/workspace-plugin
-paseo plugin ls
+osuna plugin install /absolute/path/to/workspace-plugin
+osuna plugin ls
 ```
 
-`paseo plugin ls` should report the plugin as `running`. Open Paseo, choose **Greeting** in the
+`osuna plugin ls` should report the plugin as `running`. Open Osuna, choose **Greeting** in the
 sidebar, and press **Create greeting**. The message comes back from the daemon subprocess through
 the RPC.
 
 If the sidebar item is missing, check that **Enable plugins** is on, the plugin is `running`, and
-the client is viewing the host you installed into. `paseo plugin logs workspace-plugin` shows the
+the client is viewing the host you installed into. `osuna plugin logs workspace-plugin` shows the
 daemon-side output, including load errors.
 
 ## Add a workspace panel
@@ -132,7 +132,7 @@ daemon-side output, including load errors.
 A workspace panel opens as a tab next to agents, terminals, and files. Create `client/overview.tsx`:
 
 ```tsx
-import { type PluginWorkspacePanelProps, useWorkspace } from "@getpaseo/plugin/client";
+import { type PluginWorkspacePanelProps, useWorkspace } from "@osuna/plugin/client";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -168,7 +168,7 @@ export function WorkspaceOverview({ theme, layout, workspaceId }: PluginWorkspac
 
 `useWorkspace` reads the fields the panel renders from the app's cached state, without an RPC and
 without re-rendering when unrelated fields change. Every `Text` takes its color from
-`theme.colors`, and `layout.compact` drives spacing, so the panel works in every Paseo theme and on
+`theme.colors`, and `layout.compact` drives spacing, so the panel works in every Osuna theme and on
 phones. See [Theme and layout](/docs/plugins/reference#theme-and-layout) for the token list.
 
 Register the panel and a Command Center item that opens it by adding to `index.client.tsx`:
@@ -204,11 +204,11 @@ Source changes take effect only when you reload the plugin:
 
 ```bash
 npm run typecheck
-paseo plugin reload workspace-plugin
+osuna plugin reload workspace-plugin
 ```
 
 A reload stops the old plugin, runs its cleanup, compiles the current source, and starts it again.
-A failed reload stays failed and reports its error in `paseo plugin ls`; fix the source and reload
+A failed reload stays failed and reports its error in `osuna plugin ls`; fix the source and reload
 again.
 
 Open a workspace, press **⌘K** on macOS or **Ctrl+K** on Windows and Linux, and choose **Open
@@ -219,25 +219,25 @@ workspace overview**. The panel opens as a workspace tab.
 Plugins published in a Git repository install by shorthand or URL:
 
 ```bash
-paseo plugin add owner/repository
-paseo plugin add https://gitlab.com/group/repository.git
-paseo plugin add owner/monorepo:plugins/workspace
-paseo plugin add owner/repository --ref main
+osuna plugin add owner/repository
+osuna plugin add https://gitlab.com/group/repository.git
+osuna plugin add owner/monorepo:plugins/workspace
+osuna plugin add owner/repository --ref main
 ```
 
 Append `:relative/path` when the plugin lives below the repository root. Without `--ref`, the
 default branch is tracked; a branch tracks updates, while a tag or commit stays pinned.
 
 ```bash
-paseo plugin ls
-paseo plugin update workspace-plugin
-paseo plugin update --all
+osuna plugin ls
+osuna plugin update workspace-plugin
+osuna plugin update --all
 ```
 
 `ls` reports runtime state, source details, and the installed commit without contacting the remote.
 
-Paseo compiles TypeScript itself, so most plugins need no build step. A repository that must
-install a dependency Paseo does not provide, or generate files, declares
+Osuna compiles TypeScript itself, so most plugins need no build step. A repository that must
+install a dependency Osuna does not provide, or generate files, declares
 [`build` commands](/docs/plugins/reference#cli-reference) in its manifest.
 
 ## Read backend logs
@@ -252,11 +252,11 @@ console.error("Issue refresh failed", error);
 Read the recent output from **Settings → Plugins → Logs** or the CLI:
 
 ```bash
-paseo plugin logs workspace-plugin
-paseo plugin logs workspace-plugin --json
+osuna plugin logs workspace-plugin
+osuna plugin logs workspace-plugin --json
 ```
 
-The tail includes `[paseo]` loading, ready, stopping, and stopped entries, plus compilation and load
+The tail includes `[osuna]` loading, ready, stopping, and stopped entries, plus compilation and load
 failures, and it survives reloads and crashes. Client-side output stays in the app. See
 [Debug backend output](/docs/plugins/reference#debug-backend-output) for retention and what not to
 log.

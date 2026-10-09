@@ -1,8 +1,8 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { afterEach, describe, expect, it } from "vitest";
-import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { PARENT_TOOL_CALL_ID_LABEL } from "@osuna/protocol/agent-labels";
 import type { AgentToolCallItem } from "@/types/stream";
-import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
+import type { ProviderSubagentDescriptorPayload } from "@osuna/protocol/messages";
 import {
   createDispatchSubagentsSelector,
   createProviderDispatchSubagentsSelector,
@@ -22,7 +22,7 @@ import {
 } from "./select";
 import { useProviderSubagentStore } from "./provider-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
-import type { AgentPermissionRequest } from "@getpaseo/protocol/agent-types";
+import type { AgentPermissionRequest } from "@osuna/protocol/agent-types";
 
 const SERVER_ID = "server-1";
 const AGENT_TIMESTAMP = new Date("2026-03-08T10:00:00.000Z");
@@ -335,7 +335,7 @@ describe("selectSubagentsForParent", () => {
 
     expect(rows).toEqual([
       {
-        kind: "paseo",
+        kind: "osuna",
         id: "child",
         provider: "claude",
         title: "Review child",
@@ -477,7 +477,7 @@ function createAgentCall(
       data: {
         provider: "claude",
         callId,
-        name: "paseo.create_agent",
+        name: "osuna.create_agent",
         status,
         error: null,
         detail: {
@@ -560,7 +560,7 @@ describe("dispatch groups", () => {
     );
 
     expect(subagent).toMatchObject({
-      row: { kind: "paseo", id: "child", pendingPermissionCount: 1 },
+      row: { kind: "osuna", id: "child", pendingPermissionCount: 1 },
       model: "gpt-5.4",
       modeLabel: "Auto",
       pendingPermissionName: "Bash",
@@ -783,7 +783,7 @@ describe("provider subagents in dispatch groups", () => {
     }
   });
 
-  it("joins provider rows and Paseo rows in one group and splits at a generic call", () => {
+  it("joins provider rows and Osuna rows in one group and splits at a generic call", () => {
     upsertProviderSubagent({ id: "a", toolCallId: "call-a" });
     const providerSubagents = selectProviderDispatchSubagents(
       useProviderSubagentStore.getState(),

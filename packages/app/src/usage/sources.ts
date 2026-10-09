@@ -1,4 +1,4 @@
-import type { UsageCli, UsageSourceRef } from "@getpaseo/protocol/usage/types";
+import type { UsageCli, UsageSourceRef } from "@osuna/protocol/usage/types";
 
 /**
  * Source names are product names, not copy: they stay identical in every UI
@@ -12,7 +12,7 @@ const CLI_LABELS: Record<UsageCli, string> = {
 };
 
 /**
- * The four CLIs whose logs the scanner reads. A Paseo provider id outside this
+ * The four CLIs whose logs the scanner reads. A Osuna provider id outside this
  * set — OpenCode, Copilot, an ACP agent, a custom binary — never produces usage
  * rows, so an empty report for it means "nothing to read", not "not read yet".
  * Custom providers that wrap one of the four carry their own id and fall

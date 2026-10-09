@@ -1,5 +1,5 @@
-import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
-import { validateCronExpression } from "@getpaseo/protocol/schedule/cron-expression";
+import type { ScheduleCadence, ScheduleSummary } from "@osuna/protocol/schedule/types";
+import { validateCronExpression } from "@osuna/protocol/schedule/cron-expression";
 import type { TFunction } from "i18next";
 
 export type IntervalUnit = "minutes" | "hours" | "days";

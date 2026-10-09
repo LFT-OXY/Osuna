@@ -6,8 +6,8 @@ TypeScript is strict and `typecheck` runs `tsgo --noEmit` for the package. The r
 
 | Concept                   | Source                                                                                                | Do not                                        |
 | ------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Anything on the wire      | `@getpaseo/protocol/*` subpaths (`agent-lifecycle`, `messages`, `workspace-labels`, `forge-manifest`) | Redeclare a wire shape locally                |
-| Client API                | `@getpaseo/client/internal/daemon-client` (`DaemonClient`)                                            | Type the client as `any` in tests             |
+| Anything on the wire      | `@osuna/protocol/*` subpaths (`agent-lifecycle`, `messages`, `workspace-labels`, `forge-manifest`) | Redeclare a wire shape locally                |
+| Client API                | `@osuna/client/internal/daemon-client` (`DaemonClient`)                                            | Type the client as `any` in tests             |
 | Stream and timeline items | `types/stream.ts`, `types/shared.ts`, `types/agent-directory.ts`                                      | Add a parallel `StreamItem`-like union        |
 | Store state               | The `interface … State` next to `create<State>()`                                                     | Export `ReturnType<typeof useStore.getState>` |
 | Composer attachments      | `attachments/types.ts`                                                                                | Inline `{ id: string; mimeType: string }`     |
@@ -23,14 +23,14 @@ If a Zod schema exists (protocol, persisted settings, plugin manifests), the typ
 
 ## Boundaries
 
-Validate at the edges: the socket (protocol schemas), AsyncStorage / IndexedDB / SQLite rows (`runtime/replica-cache` parses and drops invalid rows), pasted or picked files (`hooks/picked-image-normalizer.ts`), deep links (`@getpaseo/protocol/agent-deep-link`). After the parse, no `?.` on fields the type guarantees.
+Validate at the edges: the socket (protocol schemas), AsyncStorage / IndexedDB / SQLite rows (`runtime/replica-cache` parses and drops invalid rows), pasted or picked files (`hooks/picked-image-normalizer.ts`), deep links (`@osuna/protocol/agent-deep-link`). After the parse, no `?.` on fields the type guarantees.
 
 Platform capability is also a type boundary: `constants/platform.ts` exports `isWeb`, `isNative`, `isDev`, `getIsElectron()`. Inside an `isWeb` block, DOM types are fine; outside it, casting a RN ref to `HTMLElement` is the red flag reviewers look for.
 
 ## Scenario: desktop app update (`check_app_update` / `download_app_update` / `cancel_app_update_download` / `install_app_update`)
 
 1. **Scope.** Cross-layer IPC contract between `packages/desktop/src/features/app-update-service.ts` (producer) and `packages/app/src/desktop/updates/` (consumer). Changing either side means changing both. Main and renderer ship in one desktop build, so no `COMPAT` shim.
-2. **Signatures.** Renderer (`desktop-updates.ts`): `checkDesktopAppUpdate({ intent }) → { …, state }`, `downloadDesktopAppUpdate() → DesktopAppUpdateState`, `cancelDesktopAppUpdateDownload() → DesktopAppUpdateState`, `installDesktopAppUpdate() → DesktopAppUpdateInstallResult`, `subscribeToDesktopAppUpdateState(listener)` on `paseo:event:app-update-state`. Main service: `checkForAppUpdate`, `downloadUpdate()`, `cancelDownload()`, `switchReleaseChannel({ currentVersion, releaseChannel })`, `installUpdate({ currentVersion }, onBeforeQuit)`, `installUpdateOnQuit`; runtime `downloadUpdate(targetVersion, signal: AbortSignal)` (the Electron runtime turns the signal into a `CancellationToken`); deps `createInstallHandoffDeadline(): AbortSignal` (60 s), `installsOnQuit`, `publishState(state)`. `createDaemonCommandHandlers({ appUpdates })` takes the update commands as a port (`AppUpdateCommands`, production `electronAppUpdateCommands`).
+2. **Signatures.** Renderer (`desktop-updates.ts`): `checkDesktopAppUpdate({ intent }) → { …, state }`, `downloadDesktopAppUpdate() → DesktopAppUpdateState`, `cancelDesktopAppUpdateDownload() → DesktopAppUpdateState`, `installDesktopAppUpdate() → DesktopAppUpdateInstallResult`, `subscribeToDesktopAppUpdateState(listener)` on `osuna:event:app-update-state`. Main service: `checkForAppUpdate`, `downloadUpdate()`, `cancelDownload()`, `switchReleaseChannel({ currentVersion, releaseChannel })`, `installUpdate({ currentVersion }, onBeforeQuit)`, `installUpdateOnQuit`; runtime `downloadUpdate(targetVersion, signal: AbortSignal)` (the Electron runtime turns the signal into a `CancellationToken`); deps `createInstallHandoffDeadline(): AbortSignal` (60 s), `installsOnQuit`, `publishState(state)`. `createDaemonCommandHandlers({ appUpdates })` takes the update commands as a port (`AppUpdateCommands`, production `electronAppUpdateCommands`).
 3. **Contract.** The main process owns the phase; the renderer mirrors it.
    ```ts
    type AppUpdateState = {

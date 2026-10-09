@@ -1,5 +1,5 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
+import type { ActiveTurnBehavior } from "@osuna/protocol/messages";
 import type { MessagePayload } from "@/composer/types";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 

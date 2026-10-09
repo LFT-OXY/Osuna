@@ -20,7 +20,7 @@ function candidate(input: {
     },
     project: {
       projectKey: "key",
-      projectName: input.projectName ?? "getpaseo/paseo",
+      projectName: input.projectName ?? "LFT-OXY/Osuna",
       workspaceName: input.workspaceName ?? null,
       checkout: {
         cwd: "/tmp/repo",
@@ -28,7 +28,7 @@ function candidate(input: {
         currentBranch: branch,
         remoteUrl: null,
         worktreeRoot: "/tmp/repo",
-        isPaseoOwnedWorktree: false,
+        isOsunaOwnedWorktree: false,
         mainRepoRoot: null,
       },
     },
@@ -71,7 +71,7 @@ describe("matchesAgentHistoryQuery", () => {
   });
 
   it("matches the project name", () => {
-    expect(matchesAgentHistoryQuery("paseo", candidate({ projectName: "getpaseo/paseo" }))).toBe(
+    expect(matchesAgentHistoryQuery("osuna", candidate({ projectName: "LFT-OXY/Osuna" }))).toBe(
       true,
     );
   });

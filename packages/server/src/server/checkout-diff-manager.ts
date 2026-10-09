@@ -67,7 +67,7 @@ export class CheckoutDiffManager {
 
   constructor(options: {
     logger: pino.Logger;
-    paseoHome: string;
+    osunaHome: string;
     workspaceGitService: CheckoutDiffWorkspace;
   }) {
     this.workspaceGitService = options.workspaceGitService;
@@ -193,7 +193,7 @@ export class CheckoutDiffManager {
       mainRepoRoot: snapshot.git.mainRepoRoot,
       currentBranch: snapshot.git.currentBranch,
       remoteUrl: snapshot.git.remoteUrl,
-      isPaseoOwnedWorktree: snapshot.git.isPaseoOwnedWorktree,
+      isOsunaOwnedWorktree: snapshot.git.isOsunaOwnedWorktree,
       baseRef: snapshot.git.baseRef,
       aheadBehind: snapshot.git.aheadBehind,
       aheadOfOrigin: snapshot.git.aheadOfOrigin,

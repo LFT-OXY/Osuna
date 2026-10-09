@@ -15,7 +15,7 @@ async function writeSession(root: string, relativePath: string, lines: unknown[]
 
 describe("OMP session descriptor", () => {
   test("cwd filtering continues past the global candidate overscan", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-cwd-limit-"));
+    const root = await mkdtemp(path.join(tmpdir(), "osuna-omp-session-cwd-limit-"));
     const sessionsDir = path.join(root, "sessions");
     const requestedCwd = path.join(root, "requested");
     const otherCwd = path.join(root, "other");
@@ -51,14 +51,14 @@ describe("OMP session descriptor", () => {
   });
 
   test("reads title-first sessions and OMP combined model identifiers", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-title-first-"));
+    const root = await mkdtemp(path.join(tmpdir(), "osuna-omp-session-title-first-"));
     const cwd = path.join(root, "repo");
     const sessionFile = await writeSession(root, "project/session.jsonl", [
       {
         type: "title",
         id: "title-1",
         timestamp: "2026-06-09T00:00:00.000Z",
-        title: "Deploy Paseo and verify",
+        title: "Deploy Osuna and verify",
       },
       {
         type: "session",
@@ -87,7 +87,7 @@ describe("OMP session descriptor", () => {
       expect.objectContaining({
         providerHandleId: sessionFile,
         cwd,
-        title: "Deploy Paseo and verify",
+        title: "Deploy Osuna and verify",
         firstPromptPreview: "import me",
       }),
     ]);
@@ -97,10 +97,10 @@ describe("OMP session descriptor", () => {
   });
 
   test("OMP import previews drop the Routing block the provider received", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-routing-block-"));
+    const root = await mkdtemp(path.join(tmpdir(), "osuna-omp-session-routing-block-"));
     onTestFinished(() => rm(root, { recursive: true, force: true }));
     const cwd = path.join(root, "repo");
-    const original = "[@Claude](paseo://agent/provider/claude) write tests";
+    const original = "[@Claude](osuna://agent/provider/claude) write tests";
     await writeSession(root, "project/session.jsonl", [
       {
         type: "session",
@@ -118,7 +118,7 @@ describe("OMP session descriptor", () => {
           content: [
             {
               type: "text",
-              text: `${original}\n\n<paseo-system>\n1. @Claude -> provider "claude", settings {}\n</paseo-system>`,
+              text: `${original}\n\n<osuna-system>\n1. @Claude -> provider "claude", settings {}\n</osuna-system>`,
             },
           ],
         },
@@ -136,7 +136,7 @@ describe("OMP session descriptor", () => {
   });
 
   test("keeps recent nested OMP subagent sessions importable", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-nested-"));
+    const root = await mkdtemp(path.join(tmpdir(), "osuna-omp-session-nested-"));
     const cwd = path.join(root, "repo");
     const parent = await writeSession(root, "project/parent.jsonl", [
       { type: "session", id: "parent", timestamp: "2026-06-10T00:00:00.000Z", cwd },
@@ -171,7 +171,7 @@ describe("OMP session descriptor", () => {
   });
 
   test("uses OMP's own default session directory", async () => {
-    const home = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-home-"));
+    const home = await mkdtemp(path.join(tmpdir(), "osuna-omp-session-home-"));
     const cwd = path.join(home, "repo");
     const sessionFile = path.join(home, ".omp", "agent", "sessions", "project", "session.jsonl");
     await mkdir(path.dirname(sessionFile), { recursive: true });
@@ -190,7 +190,7 @@ describe("OMP session descriptor", () => {
 describe("OMP sessions directory", () => {
   const tempDirs: string[] = [];
   // Only the XDG branch touches the filesystem; the other cases are pure path math.
-  const home = path.join(tmpdir(), "paseo-omp-unwritten-home");
+  const home = path.join(tmpdir(), "osuna-omp-unwritten-home");
 
   afterEach(async () => {
     await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
@@ -346,7 +346,7 @@ describe("OMP sessions directory", () => {
   });
 
   async function makeTempDir(): Promise<string> {
-    const dir = await mkdtemp(path.join(tmpdir(), "paseo-omp-sessions-dir-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "osuna-omp-sessions-dir-"));
     tempDirs.push(dir);
     return dir;
   }

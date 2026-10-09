@@ -16,7 +16,7 @@ import {
  * transcript the usage scanner can find is the one this test just produced —
  * the developer's own history never enters the numbers being asserted.
  */
-const claudeConfigDirectory = mkdtempSync(path.join(tmpdir(), "paseo-turn-usage-claude-"));
+const claudeConfigDirectory = mkdtempSync(path.join(tmpdir(), "osuna-turn-usage-claude-"));
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
 const PROMPT = "Reply with exactly TURN_USAGE_OK and nothing else. Do not use any tools.";
@@ -26,8 +26,8 @@ test.use({
     CLAUDE_CONFIG_DIR: claudeConfigDirectory,
     // The footer waits on `usage.updated`; a one-second scan keeps that wait
     // inside a test's patience instead of the default idle cadence.
-    PASEO_USAGE_SCAN_INTERVAL_MS: "1000",
-    PASEO_USAGE_PRICING_AUTO_UPDATE: "0",
+    OSUNA_USAGE_SCAN_INTERVAL_MS: "1000",
+    OSUNA_USAGE_PRICING_AUTO_UPDATE: "0",
   },
 });
 
@@ -49,7 +49,7 @@ test.describe("turn usage from a real Claude turn", () => {
     page,
   }, testInfo) => {
     const provider = "claude" satisfies RewindFlowProvider;
-    const cwd = realpathSync(mkdtempSync(path.join(tmpdir(), "paseo-turn-usage-")));
+    const cwd = realpathSync(mkdtempSync(path.join(tmpdir(), "osuna-turn-usage-")));
     let handle: AgentHandle | undefined;
 
     try {

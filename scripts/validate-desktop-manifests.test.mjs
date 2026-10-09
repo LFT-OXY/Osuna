@@ -13,7 +13,7 @@ const scriptPath = fileURLToPath(new URL("./validate-desktop-manifests.mjs", imp
 const validManifest = `version: 0.7.3\nreleaseDate: '${releaseDate}'\nrolloutHours: 36\nminimumSystemVersion: 22.0.0\n`;
 
 function withManifests(files, run) {
-  const dir = mkdtempSync(path.join(tmpdir(), "paseo-validate-desktop-manifest-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "osuna-validate-desktop-manifest-"));
   try {
     const paths = Object.entries(files).map(([name, contents]) => {
       const manifestPath = path.join(dir, name);

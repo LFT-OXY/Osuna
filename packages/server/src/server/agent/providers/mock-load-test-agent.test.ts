@@ -529,7 +529,7 @@ describe("MockLoadTestAgentClient", () => {
     unsubscribe();
   });
 
-  test("emits scripted paseo.create_agent calls with their call ids, holding one running", async () => {
+  test("emits scripted osuna.create_agent calls with their call ids, holding one running", async () => {
     vi.useFakeTimers();
     const client = new MockLoadTestAgentClient();
     const session = await client.createSession({
@@ -558,7 +558,7 @@ describe("MockLoadTestAgentClient", () => {
       expect.objectContaining({
         type: "tool_call",
         callId: "call-a",
-        name: "paseo.create_agent",
+        name: "osuna.create_agent",
         status: "completed",
         detail: expect.objectContaining({
           type: "unknown",
@@ -683,7 +683,7 @@ describe("MockLoadTestAgentClient", () => {
 
   test("agent manager coalesces adjacent assistant tokens into fewer messages", async () => {
     vi.useFakeTimers();
-    const workdir = mkdtempSync(join(tmpdir(), "paseo-mock-load-test-"));
+    const workdir = mkdtempSync(join(tmpdir(), "osuna-mock-load-test-"));
     try {
       const client = new MockLoadTestAgentClient();
       const manager = new AgentManager({

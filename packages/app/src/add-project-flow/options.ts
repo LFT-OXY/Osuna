@@ -2,7 +2,7 @@ import {
   isCompleteGitRemote,
   parseGitHubRemoteUrl,
   parseGitRemoteLocation,
-} from "@getpaseo/protocol/git-remote";
+} from "@osuna/protocol/git-remote";
 import type { TFunction } from "i18next";
 import { shortenPath } from "@/utils/shorten-path";
 import type { AddProjectHost, AddProjectPage, GithubRepositoryChoice } from "./model";

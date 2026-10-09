@@ -835,7 +835,7 @@ export const ar: TranslationResources = {
       },
       routes: {
         public: "الوكيل العكسي",
-        paseo: "Memorable",
+        osuna: "Memorable",
         direct: "مباشر",
       },
       states: {
@@ -1473,7 +1473,7 @@ export const ar: TranslationResources = {
       fullStatus: {
         title: "الوضع الكامل",
         modalTitle: "حالة Daemon",
-        hint: "يقوم بتشغيل`paseo daemon status`ويظهر الإخراج",
+        hint: "يقوم بتشغيل`osuna daemon status`ويظهر الإخراج",
         view: "عرض الحالة",
         copied: "تم نسخ الحالة إلى الحافظة.",
         fetchFailed: "فشل جلب حالة البرنامج الخفي:{{message}}",
@@ -2009,7 +2009,7 @@ export const ar: TranslationResources = {
         "بدون التتابع، اتصل مباشرة عبر TCP أو Tailscale أو شبكة VPN أخرى. لن يتم إنشاء رمز QR.",
       updateRequired: "حدّث المضيف لتمكين التتابع من Osuna Desktop.",
       unavailable: "عرض الاقتران غير متاح.",
-      hint: "قم بمسح رمز QR هذا باستخدام Paseo على هاتفك، أو انسخ الرابط أدناه.",
+      hint: "قم بمسح رمز QR هذا باستخدام Osuna على هاتفك، أو انسخ الرابط أدناه.",
       securityWarning:
         "تعامل مع رابط الاقتران هذا ككلمة مرور. يمكن لأي شخص يملكه الوصول إلى هذا البرنامج الخفي.",
       qrUnavailable: "رمز QR غير متاح.",
@@ -2044,7 +2044,7 @@ export const ar: TranslationResources = {
   serviceUrl: {
     title: "افتح الخدمة URL",
     message: "افتح{{url}}؟",
-    inPaseo: "في Osuna",
+    inOsuna: "في Osuna",
     externalBrowser: "متصفح خارجي",
     dontAskAgain: "لا تسأل مرة أخرى",
   },
@@ -2187,7 +2187,7 @@ export const ar: TranslationResources = {
       },
       row: {
         opening: "جارٍ الفتح...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "إجراءات الجلسة",
         copyResumeCommand: "نسخ أمر الاستئناف",
         importAsAgent: "استيراد كوكيل Osuna",
@@ -2240,7 +2240,7 @@ export const ar: TranslationResources = {
       one: "استخدم {{count}} أداة أخرى",
       other: "استخدم {{count}} أدوات أخرى",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "استدعى Osuna {{count}} مرة",
       other: "استدعى Osuna {{count}} مرات",
     },
@@ -3285,13 +3285,13 @@ export const ar: TranslationResources = {
         savedToast: "تم تحديث المشروع",
       },
       readFailures: {
-        invalidTitle: "تعذر تحليل paseo.json",
+        invalidTitle: "تعذر تحليل osuna.json",
         invalidDescription: "قم بإصلاح الملف على القرص، ثم أعد تحميله.",
         missingTitle: "هذا المضيف ليس لديه هذا المشروع",
         missingSingleHost: "المضيف المحدد ليس لديه سجل لهذا المشروع.",
-        transportTitle: "تعذر تحميل paseo.json",
+        transportTitle: "تعذر تحميل osuna.json",
         transportFallback: "المضيف لم يستجب.",
-        failedTitle: "تعذر تحميل paseo.json",
+        failedTitle: "تعذر تحميل osuna.json",
         failedDescription: "أعد التحميل للمحاولة مرة أخرى.",
       },
       worktree: {
@@ -3299,7 +3299,7 @@ export const ar: TranslationResources = {
         info: "الأوامر التي يتم تشغيلها عند إنشاء شجرة عمل أو هدمها لهذا المشروع",
         setup: "يثبت",
         setupAccessibility: "أوامر إعداد شجرة العمل",
-        uncommittedTitle: "ثبّت تغييرات paseo.json",
+        uncommittedTitle: "ثبّت تغييرات osuna.json",
         uncommittedDescription:
           "تستخدم أشجار العمل الجديدة نص الإعداد البرمجي من الفرع الأساسي الذي تحدده.",
         teardown: "هدم",
@@ -3324,7 +3324,7 @@ export const ar: TranslationResources = {
         newScript: "نص جديد",
         editScript: "تحرير{{name}}",
         runAsService: "تشغيل كخدمة",
-        serviceHint: "يشرف Osuna على العملية ويعين منفذًا عبر $PASEO_PORT",
+        serviceHint: "يشرف Osuna على العملية ويعين منفذًا عبر $OSUNA_PORT",
         actions: {
           add: "إضافة البرنامج النصي",
           edit: "يحرر",
@@ -3343,8 +3343,8 @@ export const ar: TranslationResources = {
       },
       writeFailures: {
         staleTitle: "تم تغيير التكوين على القرص",
-        staleDescription: "أعد التحميل لجلب أحدث ملف paseo.json قبل الحفظ.",
-        failedTitle: "تعذر حفظ paseo.json",
+        staleDescription: "أعد التحميل لجلب أحدث ملف osuna.json قبل الحفظ.",
+        failedTitle: "تعذر حفظ osuna.json",
         failedDescription: "حاول مرة أخرى، أو أعد تحميل الإصدار الأحدث من القرص.",
       },
       actions: {

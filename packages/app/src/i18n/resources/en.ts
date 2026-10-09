@@ -830,7 +830,7 @@ export const en = {
       },
       routes: {
         public: "Reverse proxy",
-        paseo: "Memorable",
+        osuna: "Memorable",
         direct: "Direct",
       },
       states: {
@@ -1497,7 +1497,7 @@ export const en = {
       fullStatus: {
         title: "Full status",
         modalTitle: "Daemon status",
-        hint: "Runs `paseo daemon status` and shows the output",
+        hint: "Runs `osuna daemon status` and shows the output",
         view: "View status",
         copied: "Status copied to clipboard.",
         fetchFailed: "Failed to fetch daemon status: {{message}}",
@@ -2034,7 +2034,7 @@ export const en = {
         "Without relay, connect directly over TCP, Tailscale, or another VPN. No QR code is created.",
       updateRequired: "Update the host to enable relay from Osuna Desktop.",
       unavailable: "Pairing offer unavailable.",
-      hint: "Scan this QR code with Paseo on your phone, or copy the link below.",
+      hint: "Scan this QR code with Osuna on your phone, or copy the link below.",
       securityWarning:
         "Treat this pairing link like a password. Anyone with it can access this daemon.",
       qrUnavailable: "QR code unavailable.",
@@ -2069,7 +2069,7 @@ export const en = {
   serviceUrl: {
     title: "Open service URL",
     message: "Open {{url}}?",
-    inPaseo: "In Osuna",
+    inOsuna: "In Osuna",
     externalBrowser: "External browser",
     dontAskAgain: "Don't ask again",
   },
@@ -2212,7 +2212,7 @@ export const en = {
       },
       row: {
         opening: "Opening...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "Session actions",
         copyResumeCommand: "Copy resume command",
         importAsAgent: "Import as Osuna agent",
@@ -2265,7 +2265,7 @@ export const en = {
       one: "used {{count}} other tool",
       other: "used {{count}} other tools",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "called Osuna {{count}} time",
       other: "called Osuna {{count}} times",
     },
@@ -2424,7 +2424,7 @@ export const en = {
       directoryLabel: "Plugin directory",
       directoryPlaceholder: "/absolute/path/on/host",
       idLabel: "Plugin installation ID",
-      idHint: "Leave blank to use paseo-plugin.json",
+      idHint: "Leave blank to use osuna-plugin.json",
       idPlaceholder: "Manifest default",
       install: "Install directory",
       installing: "Installing…",
@@ -3412,13 +3412,13 @@ export const en = {
         savedToast: "Project updated",
       },
       readFailures: {
-        invalidTitle: "paseo.json couldn't be parsed",
+        invalidTitle: "osuna.json couldn't be parsed",
         invalidDescription: "Fix the file on disk, then reload.",
         missingTitle: "This host doesn't have this project",
         missingSingleHost: "The selected host has no record of this project.",
-        transportTitle: "Couldn't load paseo.json",
+        transportTitle: "Couldn't load osuna.json",
         transportFallback: "The host didn't respond.",
-        failedTitle: "Couldn't load paseo.json",
+        failedTitle: "Couldn't load osuna.json",
         failedDescription: "Reload to try again.",
       },
       worktree: {
@@ -3426,7 +3426,7 @@ export const en = {
         info: "Commands that run when a worktree is created or torn down for this project",
         setup: "Setup",
         setupAccessibility: "Worktree setup commands",
-        uncommittedTitle: "Commit paseo.json changes",
+        uncommittedTitle: "Commit osuna.json changes",
         uncommittedDescription:
           "New worktrees use the setup script from the base branch you select.",
         teardown: "Teardown",
@@ -3451,7 +3451,7 @@ export const en = {
         newScript: "New script",
         editScript: "Edit {{name}}",
         runAsService: "Run as a service",
-        serviceHint: "Osuna supervises the process and assigns a port via $PASEO_PORT",
+        serviceHint: "Osuna supervises the process and assigns a port via $OSUNA_PORT",
         actions: {
           add: "Add script",
           edit: "Edit",
@@ -3470,8 +3470,8 @@ export const en = {
       },
       writeFailures: {
         staleTitle: "Config changed on disk",
-        staleDescription: "Reload to fetch the latest paseo.json before saving.",
-        failedTitle: "Couldn't save paseo.json",
+        staleDescription: "Reload to fetch the latest osuna.json before saving.",
+        failedTitle: "Couldn't save osuna.json",
         failedDescription: "Try again, or reload the latest version from disk.",
       },
       actions: {

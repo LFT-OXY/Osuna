@@ -17,7 +17,7 @@ describe("buildCodexAuthCommand", () => {
 
   // Codex 不经 shell 直接执行这条命令；这里同样用 execFile，在 CI 的 Windows 任务上跑 PowerShell 版本。
   it("prints the key file exactly on this platform, even with a space and a quote in the path", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo codex-auth '"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna codex-auth '"));
     roots.push(root);
     const keyFilePath = path.join(root, "codex-api-key");
     const key = "sk-or-v1-0123456789abcdef";
@@ -48,7 +48,7 @@ describe("buildCodexAuthCommand", () => {
     expect(
       buildCodexAuthCommand({
         platform: "win32",
-        keyFilePath: "C:\\Users\\O'Brien\\.paseo\\api-endpoints\\codex-api-key",
+        keyFilePath: "C:\\Users\\O'Brien\\.osuna\\api-endpoints\\codex-api-key",
         systemRoot: "D:\\Win",
       }),
     ).toEqual({
@@ -57,7 +57,7 @@ describe("buildCodexAuthCommand", () => {
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "[Console]::Out.Write([System.IO.File]::ReadAllText('C:\\Users\\O''Brien\\.paseo\\api-endpoints\\codex-api-key'))",
+        "[Console]::Out.Write([System.IO.File]::ReadAllText('C:\\Users\\O''Brien\\.osuna\\api-endpoints\\codex-api-key'))",
       ],
       timeoutMs: 15000,
     });

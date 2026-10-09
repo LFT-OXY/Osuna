@@ -25,18 +25,18 @@ describe("plugin manifest", () => {
   });
 
   it("reads and validates requirements before any plugin code runs", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-manifest-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-manifest-"));
     directories.push(directory);
-    const manifest = path.join(directory, "paseo-plugin.json");
-    await writeFile(manifest, JSON.stringify({ id: "example", requirements: { paseo: "^0.8.0" } }));
+    const manifest = path.join(directory, "osuna-plugin.json");
+    await writeFile(manifest, JSON.stringify({ id: "example", requirements: { osuna: "^0.8.0" } }));
     await expect(readPluginManifest(directory)).resolves.toEqual({
       id: "example",
-      requirements: { paseo: "^0.8.0" },
+      requirements: { osuna: "^0.8.0" },
     });
     for (const requirements of [
-      { paseo: "latest" },
-      { paseo: "" },
-      { paseo: 8 },
+      { osuna: "latest" },
+      { osuna: "" },
+      { osuna: 8 },
       { node: ">=20" },
       "0.8.0",
     ]) {
@@ -46,9 +46,9 @@ describe("plugin manifest", () => {
   });
 
   it("accepts only non-empty argv arrays for build commands", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-manifest-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-manifest-"));
     directories.push(directory);
-    const manifest = path.join(directory, "paseo-plugin.json");
+    const manifest = path.join(directory, "osuna-plugin.json");
 
     await writeFile(
       manifest,

@@ -1,15 +1,15 @@
 import { TEXT_SHIMMER_ANIMATION_NAME, TOOL_CALL_SHIMMER_ANIMATION_NAME } from "./animation-names";
 
-const KEYFRAME_ELEMENT_ID = "paseo-shimmer-keyframes";
+const KEYFRAME_ELEMENT_ID = "osuna-shimmer-keyframes";
 
 // 文字扫光的遮罩宽 40%，按百分比定位时 -67% 让峰完全在左侧之外，167% 完全在右侧之外。
 const KEYFRAME_CSS = `
   @keyframes ${TOOL_CALL_SHIMMER_ANIMATION_NAME} {
     0% {
-      background-position: var(--paseo-shimmer-start, -200px) 0;
+      background-position: var(--osuna-shimmer-start, -200px) 0;
     }
     100% {
-      background-position: var(--paseo-shimmer-end, 200px) 0;
+      background-position: var(--osuna-shimmer-end, 200px) 0;
     }
   }
   @keyframes ${TEXT_SHIMMER_ANIMATION_NAME} {

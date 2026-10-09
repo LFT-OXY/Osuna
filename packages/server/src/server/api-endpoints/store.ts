@@ -1,13 +1,13 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { ApiEndpointModelMappingSchema } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { ApiEndpointModelMappingSchema } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
 
 /*
- * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
+ * $OSUNA_HOME/api-endpoints/ 下的私有文件，全部 0600：
  * - endpoints.json：接口本身与每个提供方当前启用的接口，不含 key；
  * - keys.json：API key，只有 daemon 读，任何 RPC 都不返回；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
@@ -65,8 +65,8 @@ const CODEX_KEY_FILE = "codex-api-key";
 export class ApiEndpointStore {
   private readonly root: string;
 
-  constructor(paseoHome: string) {
-    this.root = path.join(paseoHome, "api-endpoints");
+  constructor(osunaHome: string) {
+    this.root = path.join(osunaHome, "api-endpoints");
   }
 
   /** 把首次改写前的字节原样存一份，返回副本路径；文件不存在时返回 null。 */

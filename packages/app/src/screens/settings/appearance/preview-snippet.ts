@@ -21,6 +21,6 @@ export const PREVIEW_AFTER: string[] = [
 export const CHANGED_LINE_INDICES: ReadonlySet<number> = new Set([1, 3]);
 
 // 终端样例的提示符。U+E0A0 是 Powerline 的分支图标，所有 Nerd Font 都带这个字形。
-export const PREVIEW_TERMINAL_DIRECTORY = "~/code/paseo";
+export const PREVIEW_TERMINAL_DIRECTORY = "~/code/osuna";
 export const PREVIEW_TERMINAL_BRANCH = "\uE0A0 main";
 export const PREVIEW_TERMINAL_COMMAND = "npm run dev";

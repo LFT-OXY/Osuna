@@ -38,7 +38,7 @@ export {
 
 let cachedStagingUserIdPromise: Promise<string> | null = null;
 
-const APP_UPDATE_STATE_EVENT = "paseo:event:app-update-state";
+const APP_UPDATE_STATE_EVENT = "osuna:event:app-update-state";
 const UPDATE_CHANNEL_NOT_PUBLISHED_CODE = "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND";
 // Squirrel.Mac 需要从本地代理取回整个更新 zip、解压并校验签名后才会开始退出。
 const INSTALL_HANDOFF_TIMEOUT_MS = 60_000;
@@ -156,7 +156,7 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
     // 不在用户不知情时下载：只有用户点了「更新」才调用 downloadUpdate。
     autoUpdater.autoDownload = false;
     autoUpdater.autoRunAppAfterInstall = true;
-    // Paseo revalidates the current manifest before explicitly installing on quit.
+    // Osuna revalidates the current manifest before explicitly installing on quit.
     // Electron's built-in handler would install an older download without checking
     // whether a newer release has superseded it.
     autoUpdater.autoInstallOnAppQuit = false;

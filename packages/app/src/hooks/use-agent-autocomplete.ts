@@ -3,8 +3,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/shallow";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import { isAgentMentionTarget, type AgentMentionTarget } from "@getpaseo/protocol/message-links";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
+import { isAgentMentionTarget, type AgentMentionTarget } from "@osuna/protocol/message-links";
 import type { AgentProfile } from "@/agent-profiles";
 import type {
   AutocompleteGroupNotice,

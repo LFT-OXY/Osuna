@@ -48,10 +48,10 @@ describe("plugin scaffold", () => {
       const cliPackageJson = JSON.parse(
         await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
       ) as { version: string };
-      expect(JSON.parse(await readFile(path.join(directory, "paseo-plugin.json"), "utf8"))).toEqual(
+      expect(JSON.parse(await readFile(path.join(directory, "osuna-plugin.json"), "utf8"))).toEqual(
         {
           id: "hello-plugin",
-          requirements: { paseo: `>=${cliPackageJson.version}` },
+          requirements: { osuna: `>=${cliPackageJson.version}` },
         },
       );
       expect(JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"))).toEqual({
@@ -60,7 +60,7 @@ describe("plugin scaffold", () => {
         version: "0.0.0",
         scripts: { typecheck: "tsc --noEmit" },
         devDependencies: {
-          "@getpaseo/plugin": cliPackageJson.version,
+          "@osuna/plugin": cliPackageJson.version,
           "@tanstack/react-query": "^5.90.11",
           "@types/react": "~19.2.0",
           react: "19.1.0",
@@ -69,7 +69,7 @@ describe("plugin scaffold", () => {
           zod: "^4.4.3",
         },
       });
-      expect(await readdir(directory)).not.toContain("paseo-plugin.d.ts");
+      expect(await readdir(directory)).not.toContain("osuna-plugin.d.ts");
       await expect(readFile(path.join(directory, "index.client.tsx"), "utf8")).resolves.toContain(
         'from "./client/greeting"',
       );
@@ -105,15 +105,15 @@ describe("plugin scaffold", () => {
     },
   );
 
-  it("typechecks client and server Paseo API access", async () => {
+  it("typechecks client and server Osuna API access", async () => {
     const parent = await mkdtemp(path.join(process.cwd(), ".plugin-scaffold-"));
     directories.push(parent);
-    const directory = path.join(parent, "paseo-api-plugin");
+    const directory = path.join(parent, "osuna-api-plugin");
     await scaffoldPluginDirectory(directory);
     await Promise.all([
       writeFile(
         path.join(directory, "shared", "inspect.ts"),
-        `import { defineRpc } from "@getpaseo/plugin";
+        `import { defineRpc } from "@osuna/plugin";
 import { z } from "zod";
 
 export const inspect = defineRpc({
@@ -125,15 +125,15 @@ export const inspect = defineRpc({
       ),
       writeFile(
         path.join(directory, "server", "inspect.ts"),
-        `import type { PluginHandlerContext } from "@getpaseo/plugin/server";
-import type { RpcInput } from "@getpaseo/plugin";
+        `import type { PluginHandlerContext } from "@osuna/plugin/server";
+import type { RpcInput } from "@osuna/plugin";
 import { inspect } from "../shared/inspect";
 
 export async function inspectConfig(
   _input: RpcInput<typeof inspect>,
-  { paseo }: PluginHandlerContext,
+  { osuna }: PluginHandlerContext,
 ) {
-  return { configured: Boolean((await paseo.config.get()).config) };
+  return { configured: Boolean((await osuna.config.get()).config) };
 }
 `,
       ),
@@ -141,20 +141,20 @@ export async function inspectConfig(
         path.join(directory, "client", "main.tsx"),
         `import React from "react";
 import { Text } from "react-native";
-import { Icon, Modal, useToast } from "@getpaseo/plugin/client/react-native";
-import { type PluginAgentPanelProps, type PluginClientContext, type PluginSurfaceProps, useAgent, usePaseo, useWorkspace } from "@getpaseo/plugin/client";
+import { Icon, Modal, useToast } from "@osuna/plugin/client/react-native";
+import { type PluginAgentPanelProps, type PluginClientContext, type PluginSurfaceProps, useAgent, useOsuna, useWorkspace } from "@osuna/plugin/client";
 import { inspect } from "../shared/inspect";
 
 export function Surface({ navigation }: PluginSurfaceProps) {
-  const paseo = usePaseo();
+  const osuna = useOsuna();
   const toast = useToast();
-  const createWorkspace = () => paseo.workspaces.create({
+  const createWorkspace = () => osuna.workspaces.create({
     source: { kind: "directory", path: "/repo" },
   });
   navigation?.openAgent({ agentId: "agent-1" });
   navigation?.openWorkspace({ workspaceId: "workspace-1" });
   void createWorkspace;
-  return <><Icon name="Settings" size={18} color="#123456" /><Text onPress={() => toast.show("Ready")}>Paseo API</Text><Modal title="Example" icon={<Icon name="Settings" />} open={false} onOpenChange={() => {}}><Modal.Content><Text>Modal</Text></Modal.Content></Modal></>;
+  return <><Icon name="Settings" size={18} color="#123456" /><Text onPress={() => toast.show("Ready")}>Osuna API</Text><Modal title="Example" icon={<Icon name="Settings" />} open={false} onOpenChange={() => {}}><Modal.Content><Text>Modal</Text></Modal.Content></Modal></>;
 }
 
 export function AgentPanel({ workspaceId, agentId }: PluginAgentPanelProps) {
@@ -211,7 +211,7 @@ export function contributeClient(client: PluginClientContext) {
       ),
       writeFile(
         path.join(directory, "index.client.tsx"),
-        `import type { PluginClientContext } from "@getpaseo/plugin/client";
+        `import type { PluginClientContext } from "@osuna/plugin/client";
 import { AgentPanel, contributeClient, Surface } from "./client/main";
 import { inspect } from "./shared/inspect";
 
@@ -229,8 +229,8 @@ export default function contribute(client: PluginClientContext) {
     title: "Open review",
     icon: "Scan",
     context: "agent",
-    async onSelect({ paseo, rpc, workspace, openPanel }) {
-      await paseo.workspaces.ref(workspace.id).setTitle("Review");
+    async onSelect({ osuna, rpc, workspace, openPanel }) {
+      await osuna.workspaces.ref(workspace.id).setTitle("Review");
       await rpc(inspect, {});
       openPanel("review");
     },
@@ -241,7 +241,7 @@ export default function contribute(client: PluginClientContext) {
       ),
       writeFile(
         path.join(directory, "index.server.ts"),
-        `import type { PluginServerContext } from "@getpaseo/plugin/server";
+        `import type { PluginServerContext } from "@osuna/plugin/server";
 import { inspectConfig } from "./server/inspect";
 import { inspect } from "./shared/inspect";
 
@@ -264,7 +264,7 @@ export default function contribute(server: PluginServerContext) {
     await writeFile(
       path.join(directory, "index.client.tsx"),
       `
-import type { PluginClientContext, PluginComposerPillProps } from "@getpaseo/plugin/client";
+import type { PluginClientContext, PluginComposerPillProps } from "@osuna/plugin/client";
 
 export default function contribute(client: PluginClientContext) {
   const oldPill = {
@@ -288,7 +288,7 @@ export default function contribute(client: PluginClientContext) {
   }, 20_000);
 
   it("refuses to write into a non-empty directory", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "paseo-plugin-scaffold-"));
+    const directory = await mkdtemp(path.join(tmpdir(), "osuna-plugin-scaffold-"));
     directories.push(directory);
     await writeFile(path.join(directory, "notes.txt"), "keep me");
 

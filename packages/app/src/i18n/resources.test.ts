@@ -69,7 +69,7 @@ const zhCNEnglishAllowlist = {
     "settings.providers.version.value",
     "settings.providers.version.update",
   ],
-  brands: ["sidebar.help.appName", "panels.sessionHistory.row.paseo"],
+  brands: ["sidebar.help.appName", "panels.sessionHistory.row.osuna"],
   namedThemes: [
     "settings.appearance.theme.options.zinc",
     "settings.appearance.theme.options.midnight",

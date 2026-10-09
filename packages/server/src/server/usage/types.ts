@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UsageCliSchema, type UsageTokenTotals } from "@getpaseo/protocol/usage/types";
+import { UsageCliSchema, type UsageTokenTotals } from "@osuna/protocol/usage/types";
 
 /** UTC bucket width. Fifteen minutes keeps a year of rows in the thousands. */
 export const USAGE_BUCKET_MS = 15 * 60 * 1000;
@@ -48,7 +48,7 @@ export const USAGE_TURN_ROW_SCHEMA = z.object({
   startedAt: z.string(),
   lastAt: z.string(),
   userMessageIds: z.array(z.string()),
-  /** Paseo's own turn id, stamped by the parse a finished turn triggered. */
+  /** Osuna's own turn id, stamped by the parse a finished turn triggered. */
   turnId: z.string().optional(),
 });
 export type UsageTurnRow = z.infer<typeof USAGE_TURN_ROW_SCHEMA>;
@@ -334,7 +334,7 @@ export type UsageTurnAmounts = Omit<
 
 /**
  * Fold an increment into the row it belongs to. Tokens add; the span widens to
- * hold both; the id lists union; a Paseo turn id is kept once it is known.
+ * hold both; the id lists union; a Osuna turn id is kept once it is known.
  */
 export function addTurnRow(target: UsageTurnAmounts, source: UsageTurnAmounts): void {
   target.input += source.input;

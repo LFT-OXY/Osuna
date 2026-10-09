@@ -15,9 +15,9 @@ import {
   PluginIdSchema,
   PluginSourceSchema,
   TerminalProfileSchema,
-} from "@getpaseo/protocol/messages";
-import { UsagePricingOverrideSchema } from "@getpaseo/protocol/usage/types";
-import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
+} from "@osuna/protocol/messages";
+import { UsagePricingOverrideSchema } from "@osuna/protocol/usage/types";
+import { OsunaServicePortAllocationSchema } from "@osuna/protocol/osuna-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
 export const LogFormatSchema = z.enum(["pretty", "json"]);
@@ -101,7 +101,7 @@ const ProvidersSchema = z
 const WorktreesConfigSchema = z
   .object({
     root: z.string().min(1).optional(),
-    servicePorts: PaseoServicePortAllocationSchema.optional(),
+    servicePorts: OsunaServicePortAllocationSchema.optional(),
   })
   .strict();
 
@@ -367,14 +367,14 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
   daemon: {
     listen: "127.0.0.1:6767",
     cors: {
-      allowedOrigins: ["https://app.paseo.sh"],
+      allowedOrigins: ["https://osuna-app.chinhae.cc"],
     },
     relay: {
       enabled: false,
     },
   },
   app: {
-    baseUrl: "https://app.paseo.sh",
+    baseUrl: "https://osuna-app.chinhae.cc",
   },
 }) as PersistedConfig;
 
@@ -383,8 +383,8 @@ interface LoggerLike {
   info(...args: unknown[]): void;
 }
 
-function getConfigPath(paseoHome: string): string {
-  return path.join(paseoHome, CONFIG_FILENAME);
+function getConfigPath(osunaHome: string): string {
+  return path.join(osunaHome, CONFIG_FILENAME);
 }
 
 function getLogger(logger: LoggerLike | undefined): LoggerLike | undefined {
@@ -430,9 +430,9 @@ function stripRemovedConfigFields(parsed: unknown): unknown {
   return root;
 }
 
-export function loadPersistedConfig(paseoHome: string, logger?: LoggerLike): PersistedConfig {
+export function loadPersistedConfig(osunaHome: string, logger?: LoggerLike): PersistedConfig {
   const log = getLogger(logger);
-  const configPath = getConfigPath(paseoHome);
+  const configPath = getConfigPath(osunaHome);
 
   if (!existsSync(configPath)) {
     try {
@@ -483,12 +483,12 @@ export function loadPersistedConfig(paseoHome: string, logger?: LoggerLike): Per
 
 /** Observe the file without initializing a home, identity, or default configuration. */
 export function readPersistedConfig(
-  paseoHome: string,
+  osunaHome: string,
   options: { defaultsIfMissing?: boolean } = {},
 ): PersistedConfig {
   let raw: string;
   try {
-    raw = readFileSync(getConfigPath(paseoHome), "utf8");
+    raw = readFileSync(getConfigPath(osunaHome), "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT")
       return options.defaultsIfMissing ? structuredClone(DEFAULT_PERSISTED_CONFIG) : {};
@@ -529,7 +529,7 @@ export function getPersistedConfigValue(config: PersistedConfig, field: string):
 }
 
 export function editPersistedConfig(
-  paseoHome: string,
+  osunaHome: string,
   field: string,
   edit: { value: unknown } | { unset: true },
 ): PersistedConfig {
@@ -537,7 +537,7 @@ export function editPersistedConfig(
   if (field === "daemon.auth" || field.startsWith("daemon.auth.")) {
     throw new Error("Use daemon set-password to change the daemon password.");
   }
-  const config = readPersistedConfig(paseoHome, { defaultsIfMissing: true });
+  const config = readPersistedConfig(osunaHome, { defaultsIfMissing: true });
   let object = config as Record<string, unknown>;
   for (const part of parts.slice(0, -1)) {
     object[part] ??= {};
@@ -555,17 +555,17 @@ export function editPersistedConfig(
   }
   if ("unset" in edit) delete object[key];
   else object[key] = edit.value;
-  savePersistedConfig(paseoHome, config);
+  savePersistedConfig(osunaHome, config);
   return config;
 }
 
 export function savePersistedConfig(
-  paseoHome: string,
+  osunaHome: string,
   config: PersistedConfig,
   logger?: LoggerLike,
 ): void {
   const log = getLogger(logger);
-  const configPath = getConfigPath(paseoHome);
+  const configPath = getConfigPath(osunaHome);
 
   const result = PersistedConfigSchema.safeParse(config);
   if (!result.success) {

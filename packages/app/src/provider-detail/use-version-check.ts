@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ProviderVersionCheckResult } from "@getpaseo/protocol/messages";
+import type { ProviderVersionCheckResult } from "@osuna/protocol/messages";
 import { useFetchQuery } from "@/data/query";
 import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";

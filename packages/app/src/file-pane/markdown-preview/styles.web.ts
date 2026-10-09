@@ -23,14 +23,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-import { lightHighlightColors } from "@getpaseo/highlight";
+import { lightHighlightColors } from "@osuna/highlight";
 import { contentTypeStep, type TextVariant, type Theme } from "@/styles/theme";
 
-export const MARKDOWN_PREVIEW_CLASS_NAME = "paseo-markdown-preview";
+export const MARKDOWN_PREVIEW_CLASS_NAME = "osuna-markdown-preview";
 
 // 与原生端 front matter 表格的行高一致。
 const FRONT_MATTER_LINE_HEIGHT = 20;
-const STYLE_ID = "paseo-markdown-preview-styles";
+const STYLE_ID = "osuna-markdown-preview-styles";
 const ROOT = `.${MARKDOWN_PREVIEW_CLASS_NAME}`;
 
 function px(value: number): string {

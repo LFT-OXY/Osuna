@@ -22,7 +22,7 @@ import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-bad
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import { ProviderIconFrame } from "./icon-frame";
 import type { ProviderGlyph } from "@/components/provider-icons";
 import type { ProviderStatusCopy, ProviderStatusDisplay, ProviderStatusTone } from "./status";

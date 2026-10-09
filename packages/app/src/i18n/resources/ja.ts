@@ -839,7 +839,7 @@ export const ja: TranslationResources = {
       },
       routes: {
         public: "リバースプロキシ",
-        paseo: "Memorable",
+        osuna: "Memorable",
         direct: "直接接続",
       },
       states: {
@@ -1487,7 +1487,7 @@ export const ja: TranslationResources = {
       fullStatus: {
         title: "詳細ステータス",
         modalTitle: "デーモンのステータス",
-        hint: "`paseo daemon status`を実行して出力を表示します",
+        hint: "`osuna daemon status`を実行して出力を表示します",
         view: "ステータスを表示",
         copied: "ステータスをクリップボードにコピーしました。",
         fetchFailed: "デーモンのステータスの取得に失敗しました: {{message}}",
@@ -2029,7 +2029,7 @@ export const ja: TranslationResources = {
         "リレーを使わない場合は、TCP、Tailscale、または別の VPN で直接接続してください。QR コードは作成されません。",
       updateRequired: "Osuna Desktop からリレーを有効にするにはホストを更新してください。",
       unavailable: "ペアリングオファーが利用できません。",
-      hint: "スマートフォンのPaseoでこのQRコードをスキャンするか、以下のリンクをコピーしてください。",
+      hint: "スマートフォンのOsunaでこのQRコードをスキャンするか、以下のリンクをコピーしてください。",
       securityWarning:
         "このペアリングリンクはパスワードと同様に扱ってください。リンクを知っている人は誰でもこのデーモンにアクセスできます。",
       qrUnavailable: "QRコードが利用できません。",
@@ -2064,7 +2064,7 @@ export const ja: TranslationResources = {
   serviceUrl: {
     title: "サービスURLを開く",
     message: "{{url}}を開きますか？",
-    inPaseo: "Osunaで",
+    inOsuna: "Osunaで",
     externalBrowser: "外部ブラウザ",
     dontAskAgain: "次回から確認しない",
   },
@@ -2208,7 +2208,7 @@ export const ja: TranslationResources = {
       },
       row: {
         opening: "開いています...",
-        paseo: "Osuna",
+        osuna: "Osuna",
         menu: "セッション操作",
         copyResumeCommand: "再開コマンドをコピー",
         importAsAgent: "Osuna エージェントとしてインポート",
@@ -2261,7 +2261,7 @@ export const ja: TranslationResources = {
       one: "その他のツールを{{count}}回使用",
       other: "その他のツールを{{count}}回使用",
     },
-    paseoCalls: {
+    osunaCalls: {
       one: "Osunaを{{count}}回呼び出し",
       other: "Osunaを{{count}}回呼び出し",
     },
@@ -3321,13 +3321,13 @@ export const ja: TranslationResources = {
         savedToast: "プロジェクトを更新しました",
       },
       readFailures: {
-        invalidTitle: "paseo.jsonを解析できませんでした",
+        invalidTitle: "osuna.jsonを解析できませんでした",
         invalidDescription: "ディスク上のファイルを修正してから再読み込みしてください。",
         missingTitle: "このホストにはこのプロジェクトがありません",
         missingSingleHost: "選択したホストにはこのプロジェクトの記録がありません。",
-        transportTitle: "paseo.jsonを読み込めませんでした",
+        transportTitle: "osuna.jsonを読み込めませんでした",
         transportFallback: "ホストが応答しませんでした。",
-        failedTitle: "paseo.jsonを読み込めませんでした",
+        failedTitle: "osuna.jsonを読み込めませんでした",
         failedDescription: "再読み込みして再試行してください。",
       },
       worktree: {
@@ -3335,7 +3335,7 @@ export const ja: TranslationResources = {
         info: "このプロジェクトのワークツリーが作成または削除されたときに実行されるコマンド",
         setup: "セットアップ",
         setupAccessibility: "ワークツリーセットアップコマンド",
-        uncommittedTitle: "paseo.json の変更をコミットしてください",
+        uncommittedTitle: "osuna.json の変更をコミットしてください",
         uncommittedDescription:
           "新しいワークツリーでは、選択したベースブランチのセットアップスクリプトが使われます。",
         teardown: "削除時",
@@ -3360,7 +3360,7 @@ export const ja: TranslationResources = {
         newScript: "新しいスクリプト",
         editScript: "{{name}}を編集",
         runAsService: "サービスとして実行",
-        serviceHint: "Osunaがプロセスを監督し、$PASEO_PORTを通じてポートを割り当てます",
+        serviceHint: "Osunaがプロセスを監督し、$OSUNA_PORTを通じてポートを割り当てます",
         actions: {
           add: "スクリプトを追加",
           edit: "編集",
@@ -3379,8 +3379,8 @@ export const ja: TranslationResources = {
       },
       writeFailures: {
         staleTitle: "設定がディスク上で変更されました",
-        staleDescription: "保存する前に最新のpaseo.jsonを取得するために再読み込みしてください。",
-        failedTitle: "paseo.jsonを保存できませんでした",
+        staleDescription: "保存する前に最新のosuna.jsonを取得するために再読み込みしてください。",
+        failedTitle: "osuna.jsonを保存できませんでした",
         failedDescription: "再試行するか、ディスクから最新バージョンを再読み込みしてください。",
       },
       actions: {

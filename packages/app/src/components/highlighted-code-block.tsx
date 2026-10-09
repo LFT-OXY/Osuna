@@ -17,7 +17,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { Check, Copy } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
-import type { HighlightToken } from "@getpaseo/highlight";
+import type { HighlightToken } from "@osuna/highlight";
 import { fenceLanguageToExtension } from "@/components/markdown/fence/language";
 import { isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";

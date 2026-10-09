@@ -49,8 +49,8 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { MarkdownRenderer, type MarkdownStyles } from "@/components/markdown/renderer";
 import type { TaskActivity, TodoEntry, UserMessageImageAttachment } from "@/types/stream";
-import type { AgentAttachment } from "@getpaseo/protocol/messages";
-import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
+import type { AgentAttachment } from "@osuna/protocol/messages";
+import type { ToolCallDetail } from "@osuna/protocol/agent-types";
 import { buildToolCallPresentation } from "@/tool-calls/presentation";
 import { resolveToolCallIcon } from "@/utils/tool-call-icon";
 import { getMarkdownListMarker, getMarkdownListSpacing } from "@/utils/markdown-list";
@@ -90,9 +90,9 @@ import {
   AttachmentThumbnail,
 } from "@/components/attachment-pill";
 import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attachment-lightbox";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { isWeb, isNative } from "@/constants/platform";
-import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
+import type { AgentCapabilityFlags } from "@osuna/protocol/agent-types";
 import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
@@ -2565,8 +2565,8 @@ function buildShimmerTextStyle(input: {
     WebkitTextFillColor: "transparent",
     animation: `${TOOL_CALL_SHIMMER_ANIMATION_NAME} ${input.shimmerDuration}s steps(${shimmerSteps(input.shimmerDuration)}) infinite`,
     animationPlayState: SHIMMER_PLAY_STATE,
-    "--paseo-shimmer-start": `${input.webShimmerTrackStart - input.offsetX}px`,
-    "--paseo-shimmer-end": `${input.webShimmerTrackEnd - input.offsetX}px`,
+    "--osuna-shimmer-start": `${input.webShimmerTrackStart - input.offsetX}px`,
+    "--osuna-shimmer-end": `${input.webShimmerTrackEnd - input.offsetX}px`,
   });
 }
 

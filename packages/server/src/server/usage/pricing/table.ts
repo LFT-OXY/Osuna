@@ -34,7 +34,7 @@ export const PRICING_TABLE_SCHEMA = z.object({
 });
 export type PricingTable = z.infer<typeof PRICING_TABLE_SCHEMA>;
 
-/** The upstream field names for the four columns Paseo keeps. */
+/** The upstream field names for the four columns Osuna keeps. */
 const UPSTREAM_COLUMNS = {
   input: "input_cost_per_token",
   cachedInput: "cache_read_input_token_cost",

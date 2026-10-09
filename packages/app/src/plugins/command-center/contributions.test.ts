@@ -1,12 +1,12 @@
 import { QueryClient } from "@tanstack/react-query";
-import { createPaseoApi, type PaseoApi } from "@getpaseo/client";
-import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { createOsunaApi, type OsunaApi } from "@osuna/client";
+import { DaemonClient } from "@osuna/client/internal/daemon-client";
 import {
   defineRpc,
   type PluginAgentSnapshot,
   type PluginWorkspaceSnapshot,
-} from "@getpaseo/plugin";
-import { type PluginCommandCenterItemContribution } from "@getpaseo/plugin/client";
+} from "@osuna/plugin";
+import { type PluginCommandCenterItemContribution } from "@osuna/plugin/client";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { InstalledPlugin } from "../types";
@@ -15,9 +15,9 @@ import { buildPluginCommandCenterContributions } from "./contributions";
 const workspace: PluginWorkspaceSnapshot = {
   id: "workspace-1",
   projectId: "project-1",
-  projectDisplayName: "Paseo",
-  projectRootPath: "/repo/paseo",
-  directory: "/repo/paseo/review",
+  projectDisplayName: "Osuna",
+  projectRootPath: "/repo/osuna",
+  directory: "/repo/osuna/review",
   projectKind: "git",
   kind: "worktree",
   name: "Review",
@@ -128,7 +128,7 @@ function createRuntime(installed: InstalledPlugin) {
     clientType: "cli",
   });
   return {
-    paseo: createPaseoApi(client),
+    osuna: createOsunaApi(client),
     invoke: async (method: string, input: unknown) => {
       expect(installed.id).toBe("review");
       expect(method).toBe("review.inspect");
@@ -179,11 +179,11 @@ describe("plugin Command Center contributions", () => {
   it("supplies the direct API, typed RPC, snapshots, and narrow navigation", async () => {
     const opened: string[] = [];
     let rpcValue = 0;
-    let receivedPaseo: PaseoApi | null = null;
+    let receivedOsuna: OsunaApi | null = null;
     const installed = plugin(async (context) => {
       expect(context.workspace).toBe(workspace);
       expect(context.agent).toBe(agent);
-      receivedPaseo = context.paseo;
+      receivedOsuna = context.osuna;
       rpcValue = (await context.rpc(inspect, { value: 4 })).value;
       context.openSurface("main");
       context.openPanel("details", { location: "explorer" });
@@ -215,7 +215,7 @@ describe("plugin Command Center contributions", () => {
     await actions.find((action) => action.id === "review:agent")?.run();
 
     expect(rpcValue).toBe(5);
-    expect(receivedPaseo).toBe(runtime.paseo);
+    expect(receivedOsuna).toBe(runtime.osuna);
     expect(opened).toEqual(["review/surface/main", "review/agent/details/agent-1/explorer"]);
   });
 

@@ -1,4 +1,4 @@
-import type { UsageBackfill } from "@getpaseo/protocol/usage/types";
+import type { UsageBackfill } from "@osuna/protocol/usage/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetchQuery } from "@/data/query";

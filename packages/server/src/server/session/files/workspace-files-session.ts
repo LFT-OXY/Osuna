@@ -1,12 +1,12 @@
 import type pino from "pino";
 import type { SessionDelivery } from "../owned-subscriptions/index.js";
-import type { FileVersion } from "@getpaseo/protocol/messages";
-import { getErrorMessage } from "@getpaseo/protocol/error-utils";
+import type { FileVersion } from "@osuna/protocol/messages";
+import { getErrorMessage } from "@osuna/protocol/error-utils";
 import {
   encodeFileTransferFrame,
   FileTransferOpcode,
   type FileTransferFrame,
-} from "@getpaseo/protocol/binary-frames/index";
+} from "@osuna/protocol/binary-frames/index";
 import type {
   FileDownloadTokenRequest,
   FileEntryCreateRequest,
@@ -52,7 +52,7 @@ export interface WorkspaceFilesSessionHost {
 export interface WorkspaceFilesSessionOptions {
   host: WorkspaceFilesSessionHost;
   downloadTokenStore: DownloadTokenStore;
-  paseoHome: string;
+  osunaHome: string;
   logger: pino.Logger;
   fileObserver?: FileObserver;
 }
@@ -75,7 +75,7 @@ export class WorkspaceFilesSession {
     this.host = options.host;
     this.downloadTokenStore = options.downloadTokenStore;
     this.logger = options.logger;
-    this.fileUploads = new FileUploadStore({ paseoHome: options.paseoHome });
+    this.fileUploads = new FileUploadStore({ osunaHome: options.osunaHome });
     this.fileObserver = options.fileObserver ?? workspaceFileObserver;
   }
 

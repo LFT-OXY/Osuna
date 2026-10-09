@@ -1,5 +1,5 @@
 import { UnistylesRuntime } from "react-native-unistyles";
-import { resolveSyntaxColors, type SyntaxThemeId } from "@getpaseo/highlight";
+import { resolveSyntaxColors, type SyntaxThemeId } from "@osuna/highlight";
 import { FONT_SIZE, REGISTERED_THEMES, TYPE_SCALE, type Theme } from "@/styles/theme";
 import { applyRootUiFont } from "./apply-root-font";
 import { resolveMonoFontStack, resolveUiFontStack } from "./font-stack";

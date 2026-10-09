@@ -506,8 +506,8 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
   });
 
   it("hides a trailing Routing block in provider-supplied titles and previews", () => {
-    const original = "[@Claude](paseo://agent/provider/claude) write tests";
-    const routed = `${original}\n\n<paseo-system>\n1. @Claude -> provider "claude", settings {}\n</paseo-system>`;
+    const original = "[@Claude](osuna://agent/provider/claude) write tests";
+    const routed = `${original}\n\n<osuna-system>\n1. @Claude -> provider "claude", settings {}\n</osuna-system>`;
     const session: ImportableProviderSession & { provider: string } = {
       provider: "codex",
       providerHandleId: "thread-with-mention",
@@ -530,7 +530,7 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
     });
   });
 
-  it("carries the owning Paseo agent id only when the caller supplies one", () => {
+  it("carries the owning Osuna agent id only when the caller supplies one", () => {
     const session: ImportableProviderSession & { provider: string } = {
       provider: "claude",
       providerHandleId: "provider-session-id",

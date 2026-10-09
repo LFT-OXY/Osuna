@@ -1,4 +1,4 @@
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonClient } from "@osuna/client/internal/daemon-client";
 import { test, expect, type Page } from "../support/fixtures";
 import {
   applyProfileFromPicker,
@@ -58,7 +58,7 @@ const OFFLINE = {
   id: "provider-menu-offline",
   label: "Offline agents",
   models: [{ id: "offline-one", label: "Offline one", description: "Never reachable" }],
-  command: ["/missing-paseo-provider-menu"],
+  command: ["/missing-osuna-provider-menu"],
 };
 const DISABLED = {
   id: "provider-menu-disabled",
@@ -82,7 +82,7 @@ async function rememberAlphaModel(page: Page) {
   await page.addInitScript(
     ({ provider, model }) => {
       localStorage.setItem(
-        "@paseo:create-agent-preferences",
+        "@osuna:create-agent-preferences",
         JSON.stringify({ provider, providerPreferences: { [provider]: { model } } }),
       );
     },

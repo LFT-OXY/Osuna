@@ -1,10 +1,10 @@
-import type { AgentProfile } from "@getpaseo/protocol/messages";
+import type { AgentProfile } from "@osuna/protocol/messages";
 import {
   findMarkdownLinks,
   parseAgentMentionLink,
   type AgentMentionTarget,
-} from "@getpaseo/protocol/message-links";
-import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config";
+} from "@osuna/protocol/message-links";
+import type { ProviderMentionDefaults } from "@osuna/protocol/provider-config";
 
 import { filterSelectableAgentModels, type ProviderSnapshotEntry } from "./agent-sdk-types.js";
 import type { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
@@ -43,7 +43,7 @@ export interface ResolveRoutingBlockInput {
 }
 
 const ROUTING_BLOCK_INTRO =
-  "The user's message above mentions agents as links of the form [@Name](paseo://agent/...). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:";
+  "The user's message above mentions agents as links of the form [@Name](osuna://agent/...). Each mention asks you to start a new subagent for the part of the message it refers to. Start them now, before any other work:";
 
 const ROUTING_BLOCK_RULES = [
   "Rules:",

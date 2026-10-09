@@ -547,7 +547,7 @@ describe("Inline blocks in the Composer text input", () => {
     const clipboardData = new DataTransfer();
     clipboardData.setData("text/plain", "plain");
     clipboardData.setData(
-      "application/x-paseo-inline-segments",
+      "application/x-osuna-inline-segments",
       JSON.stringify([{ type: "block", block: { kind: "file", path: "" } }]),
     );
     act(() => {
@@ -704,7 +704,7 @@ describe("Skill blocks in the Composer text input", () => {
     const clipboardData = new DataTransfer();
     clipboardData.setData("text/plain", "/atw-tdd x");
     clipboardData.setData(
-      "application/x-paseo-inline-segments",
+      "application/x-osuna-inline-segments",
       JSON.stringify([
         { type: "block", block: tddSkill },
         { type: "text", text: " x" },

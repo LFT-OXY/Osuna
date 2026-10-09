@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "@osuna/protocol/agent-types";
 import {
   describeApiEndpointModeMismatch,
   selectActiveApiEndpoint,

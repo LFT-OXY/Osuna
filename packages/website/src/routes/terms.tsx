@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LegalPage, PaseoLegalIdentity } from "~/components/legal-page";
+import { LegalPage, OsunaLegalIdentity } from "~/components/legal-page";
 import { pageMeta } from "~/meta";
 
 export const Route = createFileRoute("/terms")({
   head: () =>
-    pageMeta("Terms of Service - Paseo", "Terms for the official Paseo Relay service.", "/terms"),
+    pageMeta("Terms of Service - Osuna", "Terms for the official Osuna Relay service.", "/terms"),
   component: Terms,
 });
 
@@ -12,32 +12,32 @@ function Terms() {
   return (
     <LegalPage title="Terms of Service" lastUpdated="August 29, 2026">
       <p>
-        These Terms govern the official services operated at paseo.sh and relay.paseo.sh. By using
+        These Terms govern the official services operated at osuna.chinhae.cc and osuna-relay.chinhae.cc. By using
         the official relay, you agree to them. Our <a href="/privacy">Privacy Policy</a> explains
         how those services process data.
       </p>
 
       <section>
         <h2>Who provides the services</h2>
-        <PaseoLegalIdentity />
+        <OsunaLegalIdentity />
       </section>
 
       <section>
-        <h2>Paseo&apos;s open-source software</h2>
+        <h2>Osuna&apos;s open-source software</h2>
         <p>
-          Paseo is open-source software licensed under the Apache License 2.0. You can install,
+          Osuna is open-source software licensed under the Apache License 2.0. You can install,
           modify, and self-host it under that license without using the official relay.
         </p>
         <p>
           These Terms do not replace or restrict the open-source license. They apply only to
-          services operated by Paseo. A self-hosted relay is operated by whoever hosts it.
+          services operated by Osuna. A self-hosted relay is operated by whoever hosts it.
         </p>
       </section>
 
       <section>
         <h2>The official relay</h2>
         <p>
-          The relay is an optional service that connects Paseo clients to your daemon without
+          The relay is an optional service that connects Osuna clients to your daemon without
           requiring you to expose the daemon directly. Traffic is encrypted end-to-end between your
           client and daemon. The relay carries encrypted data but cannot read its contents.
         </p>
@@ -51,7 +51,7 @@ function Terms() {
         <h2>Your content</h2>
         <p>
           You keep ownership of your prompts, workflow configuration, code, messages, and outputs.
-          You give Paseo only the permission needed to receive, transmit, store, and process that
+          You give Osuna only the permission needed to receive, transmit, store, and process that
           content to operate the services you request.
         </p>
         <p>We do not sell your content, use it for advertising, or use it to train AI models.</p>
@@ -92,7 +92,7 @@ function Terms() {
           are non-refundable except where the law requires otherwise.
         </p>
         <p>
-          Stripe processes payments. Paseo does not store complete payment-card details. Nothing in
+          Stripe processes payments. Osuna does not store complete payment-card details. Nothing in
           these Terms removes cancellation, refund, withdrawal, or other rights given to you by
           applicable consumer law.
         </p>
@@ -101,8 +101,8 @@ function Terms() {
       <section>
         <h2>Third-party services</h2>
         <p>
-          Paseo can connect to services such as GitHub, Slack, Discord, Linear, Anthropic, and
-          OpenAI. Those services have their own terms and privacy policies. Paseo is not responsible
+          Osuna can connect to services such as GitHub, Slack, Discord, Linear, Anthropic, and
+          OpenAI. Those services have their own terms and privacy policies. Osuna is not responsible
           for their availability, output, or handling of data.
         </p>
       </section>
@@ -138,7 +138,7 @@ function Terms() {
         </p>
         <p>
           To the extent permitted by law, the official services are provided as available and
-          without implied warranties. Paseo is not liable for indirect or consequential losses
+          without implied warranties. Osuna is not liable for indirect or consequential losses
           caused by agent output, third-party services, or your workflow configuration. Our total
           liability relating to a paid service will not exceed the amount you paid for it during the
           preceding 12 months.

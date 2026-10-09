@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ProviderUpgradeResponsePayload } from "@getpaseo/protocol/messages";
+import type { ProviderUpgradeResponsePayload } from "@osuna/protocol/messages";
 
 /*
  * 一键升级的进行状态。列表行和详情页的版本一节显示同一个提供方的升级，

@@ -57,7 +57,7 @@ export function SiteFooter({ width = "default" }: SiteFooterProps) {
               Discord
             </a>
             <a
-              href="https://www.reddit.com/r/PaseoAI/"
+              href="https://www.reddit.com/r/OsunaAI/"
               target="_blank"
               rel="noopener noreferrer"
               className="block text-muted-foreground hover:text-foreground transition-colors"
@@ -65,7 +65,7 @@ export function SiteFooter({ width = "default" }: SiteFooterProps) {
               Reddit
             </a>
             <a
-              href="https://github.com/getpaseo/paseo"
+              href="https://github.com/LFT-OXY/Osuna"
               target="_blank"
               rel="noopener noreferrer"
               className="block text-muted-foreground hover:text-foreground transition-colors"
@@ -94,7 +94,7 @@ export function SiteFooter({ width = "default" }: SiteFooterProps) {
               Google Play
             </a>
             <a
-              href="https://github.com/getpaseo/paseo/releases"
+              href="https://github.com/LFT-OXY/Osuna/releases"
               target="_blank"
               rel="noopener noreferrer"
               className="block text-muted-foreground hover:text-foreground transition-colors"

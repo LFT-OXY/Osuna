@@ -3,10 +3,10 @@ import type {
   AgentTimelineItem,
   JsonValue,
   ToolCallDetail,
-} from "@getpaseo/protocol/agent-types";
-import { timelineItemIdentity } from "@getpaseo/protocol/timeline-identity";
-import type { ApiEndpointModeMismatch } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { AgentAttachment, AgentStreamEventPayload } from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/agent-types";
+import { timelineItemIdentity } from "@osuna/protocol/timeline-identity";
+import type { ApiEndpointModeMismatch } from "@osuna/protocol/api-endpoint/rpc-schemas";
+import type { AgentAttachment, AgentStreamEventPayload } from "@osuna/protocol/messages";
 import type { AttachmentMetadata } from "@/attachments/types";
 import { extractTaskEntriesFromToolCall } from "../utils/tool-call-parsers";
 

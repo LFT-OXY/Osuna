@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
+import type { ToolCallDetail } from "@osuna/protocol/agent-types";
 import type { StreamItem, ToolCallItem } from "@/types/stream";
 import {
   prepareToolCallHistory,
@@ -52,7 +52,7 @@ function createAgentCall(
   return toolCall(
     id,
     { type: "unknown", input: { title: `Task ${id}`, provider: "codex/gpt-5.4" }, output: null },
-    { name: options.name ?? "paseo.create_agent", status: options.status },
+    { name: options.name ?? "osuna.create_agent", status: options.status },
   );
 }
 
@@ -275,7 +275,7 @@ describe("tool call detail-level projection", () => {
         readFileCount: 2,
         searchCount: 0,
         otherToolCount: 0,
-        paseoCallCount: 0,
+        osunaCallCount: 0,
       },
     });
   });
@@ -287,7 +287,7 @@ describe("tool call detail-level projection", () => {
       toolCall("3", { type: "fetch", url: "https://github.com/org/repo" }),
       toolCall(
         "4",
-        { type: "search", query: "paseo", toolName: "web_search" },
+        { type: "search", query: "osuna", toolName: "web_search" },
         { status: "failed" },
       ),
       toolCall("5", { type: "fetch", url: "not a url" }),
@@ -328,40 +328,40 @@ describe("tool call detail-level projection", () => {
     });
   });
 
-  it("counts Paseo calls separately from other tools", () => {
+  it("counts Osuna calls separately from other tools", () => {
     const calls = [
-      toolCall("1", { type: "unknown", input: null, output: null }, { name: "paseo.list_agents" }),
+      toolCall("1", { type: "unknown", input: null, output: null }, { name: "osuna.list_agents" }),
       toolCall(
         "2",
         { type: "unknown", input: null, output: null },
-        { name: "mcp__paseo__list_worktrees" },
+        { name: "mcp__osuna__list_worktrees" },
       ),
-      toolCall("3", { type: "fetch", url: "https://paseo.sh" }),
-      toolCall("4", { type: "fetch", url: "https://github.com/getpaseo" }),
+      toolCall("3", { type: "fetch", url: "https://osuna.chinhae.cc" }),
+      toolCall("4", { type: "fetch", url: "https://github.com/LFT-OXY" }),
     ];
 
     const result = project({ level: "overview", head: calls });
 
     expect(result.groupsByHostId.get("1")).toMatchObject({
-      summary: { otherToolCount: 2, paseoCallCount: 2 },
+      summary: { otherToolCount: 2, osunaCallCount: 2 },
     });
   });
 
-  it("classifies direct Brave search and Paseo runtime tool names", () => {
+  it("classifies direct Brave search and Osuna runtime tool names", () => {
     const unknownDetail = { type: "unknown" as const, input: null, output: null };
     const calls = [
       toolCall("1", unknownDetail, { name: "brave-search_brave_web_search" }),
       toolCall("2", unknownDetail, { name: "brave-search_brave_llm_context" }),
-      toolCall("3", unknownDetail, { name: "paseo_list_providers" }),
-      toolCall("4", unknownDetail, { name: "paseo_list_worktrees" }),
-      toolCall("5", unknownDetail, { name: "paseo_list_worktrees" }),
+      toolCall("3", unknownDetail, { name: "osuna_list_providers" }),
+      toolCall("4", unknownDetail, { name: "osuna_list_worktrees" }),
+      toolCall("5", unknownDetail, { name: "osuna_list_worktrees" }),
       toolCall("6", unknownDetail, { name: "mcp__exa__web_search" }),
     ];
 
     const result = project({ level: "overview", head: calls });
 
     expect(result.groupsByHostId.get("1")).toMatchObject({
-      summary: { searchCount: 3, otherToolCount: 0, paseoCallCount: 3 },
+      summary: { searchCount: 3, otherToolCount: 0, osunaCallCount: 3 },
     });
   });
 
@@ -502,7 +502,7 @@ describe("dispatch groups", () => {
     (level) => {
       const calls = [
         createAgentCall("1"),
-        createAgentCall("2", { name: "mcp__paseo__create_agent" }),
+        createAgentCall("2", { name: "mcp__osuna__create_agent" }),
       ];
       const result = project({ level, tail: calls, dispatchGroups: true });
 
@@ -557,13 +557,13 @@ describe("dispatch groups", () => {
     expect(project({ level: "detailed", tail }).groupsByHostId.size).toBe(0);
     expect(project({ level: "overview", tail }).groupsByHostId.get("1")).toMatchObject({
       mode: "overview",
-      summary: { paseoCallCount: 2 },
+      summary: { osunaCallCount: 2 },
     });
   });
 
-  it("does not treat other Paseo tools or provider-native names as dispatches", () => {
+  it("does not treat other Osuna tools or provider-native names as dispatches", () => {
     const tail = [
-      toolCall("1", { type: "unknown", input: {}, output: null }, { name: "paseo.list_agents" }),
+      toolCall("1", { type: "unknown", input: {}, output: null }, { name: "osuna.list_agents" }),
       createAgentCall("2", { name: "create_agent" }),
     ];
 

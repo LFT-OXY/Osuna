@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { CODEX_API_ENDPOINT_PROVIDER_ID } from "../api-endpoints/codex-config-patch.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 const ID = CODEX_API_ENDPOINT_PROVIDER_ID;
@@ -29,7 +29,7 @@ const SECRET = "sk-relay-codex-secret";
 
 const tempRoots: string[] = [];
 
-async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+async function connect(daemon: TestOsunaDaemon): Promise<DaemonClient> {
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
     appVersion: "0.12.1",
@@ -43,7 +43,7 @@ async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
 // 它是 sh 脚本：Windows 上 execCommand 不经 shell 执行绝对路径，跑不了 .cmd，所以这组只在 POSIX 上跑；
 // Windows 上读 key 的命令由 codex-auth-command.test.ts 在 CI 的 Windows 任务里验证。
 describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemon RPC", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let codexHome: string;
   let configPath: string;
@@ -54,7 +54,7 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
 
   beforeEach(async () => {
     onRecheck = null;
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-api-endpoint-codex-"));
     tempRoots.push(root);
     codexHome = path.join(root, "codex-home");
     configPath = path.join(codexHome, "config.toml");
@@ -71,7 +71,7 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
     await writeFile(fakeCodex, `#!/bin/sh\ncat "$(dirname "$0")/codex-version"\n`);
     await chmod(fakeCodex, 0o755);
 
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       apiEndpoints: {
         env: { CODEX_HOME: codexHome },
         homeDir: root,
@@ -105,7 +105,7 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
   }
 
   function keyFilePath(): string {
-    return path.join(daemon.paseoHome, "api-endpoints", "codex-api-key");
+    return path.join(daemon.osunaHome, "api-endpoints", "codex-api-key");
   }
 
   test("activate → Official rewrites only the owned keys and never touches auth.json", async () => {
@@ -141,7 +141,7 @@ timeout_ms = 5000
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
 
     // 首次改写前留了一份完整副本。
-    const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
+    const backupsDir = path.join(daemon.osunaHome, "api-endpoints", "backups");
     const backups = await readdir(backupsDir);
     expect(backups).toHaveLength(1);
     expect(await readFile(path.join(backupsDir, backups[0]!), "utf8")).toBe(USER_CONFIG);

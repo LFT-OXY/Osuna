@@ -1,4 +1,4 @@
-import type { UsagePricingListResponse } from "@getpaseo/protocol/usage/rpc-schemas";
+import type { UsagePricingListResponse } from "@osuna/protocol/usage/rpc-schemas";
 import type { UsageText } from "@/usage/text";
 
 export type PriceTablePayload = UsagePricingListResponse["payload"];

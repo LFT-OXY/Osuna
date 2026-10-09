@@ -5,7 +5,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Text as UiText } from "@/components/ui/text";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointRef } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { selectActiveApiEndpoint } from "@/api-endpoints";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
@@ -27,7 +27,7 @@ interface ContextWindowMeterProps {
   usedTokens: number | null;
   showPercentage?: boolean;
   serverId?: string;
-  /** The Paseo provider key, e.g. "claude", "gemini", "codex" */
+  /** The Osuna provider key, e.g. "claude", "gemini", "codex" */
   provider?: string | null;
   /** Reserve the meter footprint and show a loading ring while usage is pending. */
   pending?: boolean;

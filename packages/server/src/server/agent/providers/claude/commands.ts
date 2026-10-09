@@ -9,7 +9,7 @@ const MAX_COMMAND_DIR_DEPTH = 5;
 
 /**
  * Commands the Claude CLI runs itself. All of them appear in SDK `supportedCommands()`
- * (checked against @anthropic-ai/claude-agent-sdk 0.3.246), so they work from Paseo.
+ * (checked against @anthropic-ai/claude-agent-sdk 0.3.246), so they work from Osuna.
  */
 export const CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS: readonly AgentSlashCommand[] = [
   {
@@ -79,7 +79,7 @@ export const CLAUDE_ROOT_ONLY_BUILTIN_COMMANDS: readonly AgentSlashCommand[] = [
 
 export const REWIND_COMMAND_NAME = "rewind";
 
-/** Paseo implements /rewind itself; the CLI never reports it. */
+/** Osuna implements /rewind itself; the CLI never reports it. */
 const REWIND_COMMAND: AgentSlashCommand = {
   name: REWIND_COMMAND_NAME,
   description: "Rewind tracked files to a previous user message",

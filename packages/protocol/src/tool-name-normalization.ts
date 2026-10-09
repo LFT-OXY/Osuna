@@ -1,5 +1,5 @@
 // OpenCode、Pi、OMP 的原生写法各不相同，adapter 统一改成这个名字，app 不认 provider 各自的拼法。
-export const PASEO_CREATE_AGENT_TOOL_NAME = "paseo.create_agent";
+export const OSUNA_CREATE_AGENT_TOOL_NAME = "osuna.create_agent";
 
 const TOOL_TOKEN_REGEX = /[a-z0-9]+/g;
 const STANDARD_NAMESPACE_SEPARATOR_REGEX = /[.:/]/;
@@ -42,7 +42,7 @@ export function isLikelyNamespacedToolName(name: string): boolean {
   return false;
 }
 
-export function isPaseoToolName(name: string): boolean {
+export function isOsunaToolName(name: string): boolean {
   const normalized = normalizeToolName(name);
   if (isSpeakToolName(normalized)) {
     return false;
@@ -52,24 +52,24 @@ export function isPaseoToolName(name: string): boolean {
     return (
       segments.length >= 3 &&
       segments[0] === "mcp" &&
-      (segments[1] === "paseo" || segments[1].startsWith("paseo_"))
+      (segments[1] === "osuna" || segments[1].startsWith("osuna_"))
     );
   }
   if (normalized.includes(".")) {
     const firstSegment = normalized.split(".")[0];
-    return firstSegment === "paseo" || firstSegment.startsWith("paseo_");
+    return firstSegment === "osuna" || firstSegment.startsWith("osuna_");
   }
   return false;
 }
 
-export function getPaseoToolLeafName(name: string): string | null {
+export function getOsunaToolLeafName(name: string): string | null {
   const normalized = normalizeToolName(name);
   if (normalized.includes("__")) {
     const segments = normalized.split("__").filter((s) => s.length > 0);
     if (
       segments.length >= 3 &&
       segments[0] === "mcp" &&
-      (segments[1] === "paseo" || segments[1].startsWith("paseo_"))
+      (segments[1] === "osuna" || segments[1].startsWith("osuna_"))
     ) {
       return segments.slice(2).join("__");
     }
@@ -77,7 +77,7 @@ export function getPaseoToolLeafName(name: string): string | null {
   }
   if (normalized.includes(".")) {
     const firstSegment = normalized.split(".")[0];
-    if (firstSegment === "paseo" || firstSegment.startsWith("paseo_")) {
+    if (firstSegment === "osuna" || firstSegment.startsWith("osuna_")) {
       return normalized.split(".").slice(1).join(".");
     }
     return null;

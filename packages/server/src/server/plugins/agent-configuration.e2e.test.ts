@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestAgentClient } from "../test-utils/fake-agent-client.js";
-import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 test("the configuration example adds MCP servers and overrides Codex options while preserving other configuration", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "paseo-config-example-"));
-  const daemon = await createTestPaseoDaemon({
+  const directory = await mkdtemp(path.join(tmpdir(), "osuna-config-example-"));
+  const daemon = await createTestOsunaDaemon({
     daemonVersion: "0.8.0",
     agentClients: { codex: createTestAgentClient("codex", { supportsMcpServers: true }) },
     mcpEnabled: false,

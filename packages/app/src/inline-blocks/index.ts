@@ -6,7 +6,7 @@ import {
   parseAgentMentionLink,
   type AgentMentionTarget,
   type MarkdownLink,
-} from "@getpaseo/protocol/message-links";
+} from "@osuna/protocol/message-links";
 import { getRasterImageMimeTypeFromPath } from "@/attachments/file-types";
 
 export type FileEntryKind = "file" | "directory";
@@ -75,7 +75,7 @@ export function isInlineSegment(value: unknown): value is InlineSegment {
 }
 
 const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]+:/i;
-// Paseo 发给 Codex 的 skill 会改写成 `$name`，从 Codex 历史导入时原样回来，与 `/name` 同样对待。
+// Osuna 发给 Codex 的 skill 会改写成 `$name`，从 Codex 历史导入时原样回来，与 `/name` 同样对待。
 const LEADING_SKILL_TOKEN_PATTERN = /^[/$](\S+)/;
 
 function stripTrailingSlashes(path: string): string {
@@ -449,7 +449,7 @@ export interface ParseInlineSegmentsOptions {
 }
 
 /**
- * 从已发出的文本认出块：`[basename](path)` 是 File mention，`[@名字](paseo://agent/…)` 是
+ * 从已发出的文本认出块：`[basename](path)` 是 File mention，`[@名字](osuna://agent/…)` 是
  * Agent mention，开头连续的已知 skill `/name`（或 Codex 的 `$name`）是 Skill block。skillNames
  * 为 null（列表拿不到）时开头的 `/name`、`$name` 保持文字；其余写法一律保持文字。
  */

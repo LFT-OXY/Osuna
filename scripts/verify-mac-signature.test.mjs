@@ -23,7 +23,7 @@ test("normalizes a colon-separated lowercase fingerprint", () => {
 test("accepts a self-signed certificate pinned as the chain root", () => {
   // 叶证书带 Organization 时，codesign 沿链上溯，自签证书的链只有一张，于是写成 root。
   const output = codesignOutput(
-    `identifier "sh.paseo.desktop" and certificate root = H"${SHA1.toLowerCase()}"`,
+    `identifier "com.chinhae.osuna.desktop" and certificate root = H"${SHA1.toLowerCase()}"`,
   );
   assert.equal(checkDesignatedRequirement(output, SHA1), null);
 });

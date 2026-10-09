@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import type { ProviderSnapshotEntry } from "./agent-sdk-types.js";
 import { resolveRoutingBlock, type RoutingBlockProviderSource } from "./routing-block.js";
 
-const TEXT = "[@Codex](paseo://agent/provider/codex) review it";
+const TEXT = "[@Codex](osuna://agent/provider/codex) review it";
 
 function providersReturning(entry: ProviderSnapshotEntry): RoutingBlockProviderSource {
   return {
@@ -155,7 +155,7 @@ test("a provider with no modes at all dispatches without a mode", async () => {
 
 test("a profile whose provider's catalog failed to load gets its fields over Mention defaults as written", async () => {
   const block = await resolveRoutingBlock({
-    text: "[@Reviewer](paseo://agent/profile/reviewer) review it",
+    text: "[@Reviewer](osuna://agent/profile/reviewer) review it",
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => ({ model: "gpt-9", modeId: "read-only" }),
@@ -184,7 +184,7 @@ test("a profile whose provider's catalog failed to load gets its fields over Men
 
 test("a profile whose provider is unavailable gets a cannot-start line", async () => {
   const block = await resolveRoutingBlock({
-    text: "[@Reviewer](paseo://agent/profile/reviewer) review it",
+    text: "[@Reviewer](osuna://agent/profile/reviewer) review it",
     cwd: "/tmp/project",
     canCreateAgents: true,
     mentionDefaults: () => undefined,

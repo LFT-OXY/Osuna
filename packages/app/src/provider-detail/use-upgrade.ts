@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ProviderVersionCheckResult } from "@getpaseo/protocol/messages";
+import type { ProviderVersionCheckResult } from "@osuna/protocol/messages";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import {
   dismissProviderUpgradeError,

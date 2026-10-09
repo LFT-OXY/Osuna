@@ -7,12 +7,12 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { LigaturesAddon } from "@xterm/addon-ligatures/lib/addon-ligatures.mjs";
 import { Terminal, type ITheme, type IMarker } from "@xterm/xterm";
-import type { TerminalState } from "@getpaseo/protocol/messages";
+import type { TerminalState } from "@osuna/protocol/messages";
 import {
   type TerminalInputModeState,
   TerminalInputModeTracker,
   terminalInputModeStatesEqual,
-} from "@getpaseo/protocol/terminal-input-mode";
+} from "@osuna/protocol/terminal-input-mode";
 import {
   type PendingTerminalModifiers,
   isAppleHandheldPlatform,
@@ -142,7 +142,7 @@ interface TerminalOutputOperation {
 
 declare global {
   interface Window {
-    __paseoTerminal?: Terminal;
+    __osunaTerminal?: Terminal;
   }
 }
 
@@ -583,7 +583,7 @@ export class TerminalEmulatorRuntime {
 
     this.terminal = terminal;
     this.fitAddon = fitAddon;
-    window.__paseoTerminal = terminal;
+    window.__osunaTerminal = terminal;
 
     const fitAndEmitResize = (resizeInput?: TerminalResizeRequest): void => {
       const forceRefresh = resizeInput?.forceRefresh ?? false;
@@ -963,8 +963,8 @@ export class TerminalEmulatorRuntime {
 
     this.cleanup?.();
     this.cleanup = null;
-    if (window.__paseoTerminal === this.terminal) {
-      window.__paseoTerminal = undefined;
+    if (window.__osunaTerminal === this.terminal) {
+      window.__osunaTerminal = undefined;
     }
     this.terminal = null;
     this.searchAddon = null;

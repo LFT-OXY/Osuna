@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 
 /**
- * Regression: `paseo daemon stop` must leave a reachable daemon alone when the
+ * Regression: `osuna daemon stop` must leave a reachable daemon alone when the
  * selected home points at a dead supervisor owner.
  */
 
@@ -19,9 +19,9 @@ $.verbose = false;
 
 const pollIntervalMs = 100;
 const testEnv = {
-  PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
-  PASEO_DICTATION_ENABLED: process.env.PASEO_DICTATION_ENABLED ?? "0",
-  PASEO_VOICE_MODE_ENABLED: process.env.PASEO_VOICE_MODE_ENABLED ?? "0",
+  OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD: process.env.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD ?? "0",
+  OSUNA_DICTATION_ENABLED: process.env.OSUNA_DICTATION_ENABLED ?? "0",
+  OSUNA_VOICE_MODE_ENABLED: process.env.OSUNA_VOICE_MODE_ENABLED ?? "0",
 };
 
 function sleep(ms: number): Promise<void> {
@@ -64,9 +64,9 @@ interface DaemonStatus {
   pid: number | null;
 }
 
-async function readDaemonStatus(paseoHome: string): Promise<DaemonStatus> {
+async function readDaemonStatus(osunaHome: string): Promise<DaemonStatus> {
   const result =
-    await $`PASEO_HOME=${paseoHome} PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD} PASEO_DICTATION_ENABLED=${testEnv.PASEO_DICTATION_ENABLED} PASEO_VOICE_MODE_ENABLED=${testEnv.PASEO_VOICE_MODE_ENABLED} npx paseo daemon status --home ${paseoHome} --json`.nothrow();
+    await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon status --home ${osunaHome} --json`.nothrow();
   if (result.exitCode !== 0) {
     return { localDaemon: null, connectedDaemon: null, pid: null };
   }
@@ -102,10 +102,10 @@ function findUnusedPid(): number {
 console.log("=== Daemon Stop (stale pid, reachable worker regression) ===\n");
 
 const port = await getAvailablePort();
-const paseoHome = await mkdtemp(join(tmpdir(), "paseo-stop-stale-reachable-"));
+const osunaHome = await mkdtemp(join(tmpdir(), "osuna-stop-stale-reachable-"));
 const cliRoot = join(import.meta.dirname, "..");
 const host = `127.0.0.1:${port}`;
-const pidPath = join(paseoHome, "paseo.pid");
+const pidPath = join(osunaHome, "osuna.pid");
 const stalePid = findUnusedPid();
 
 let workerProcess: ChildProcess | null = null;
@@ -136,9 +136,9 @@ try {
       env: {
         ...process.env,
         ...testEnv,
-        PASEO_HOME: paseoHome,
-        PASEO_LISTEN: host,
-        PASEO_RELAY_ENABLED: "false",
+        OSUNA_HOME: osunaHome,
+        OSUNA_LISTEN: host,
+        OSUNA_RELAY_ENABLED: "false",
         CI: "true",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -159,14 +159,14 @@ try {
     "unowned worker did not become reachable in time",
   );
 
-  const statusBeforeStop = await readDaemonStatus(paseoHome);
+  const statusBeforeStop = await readDaemonStatus(osunaHome);
   assert.strictEqual(statusBeforeStop.pid, null, "status should not claim a dead owner is running");
   assert(workerProcess.pid && isProcessRunning(workerProcess.pid), "worker should be running");
   console.log(`✓ fixture has stale pid ${stalePid} and live worker ${workerProcess.pid}\n`);
 
   console.log("Test 2: home-selected stop leaves the unowned reachable worker running");
   const stopResult =
-    await $`PASEO_HOME=${paseoHome} PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD} PASEO_DICTATION_ENABLED=${testEnv.PASEO_DICTATION_ENABLED} PASEO_VOICE_MODE_ENABLED=${testEnv.PASEO_VOICE_MODE_ENABLED} npx paseo daemon stop --home ${paseoHome} --json`.nothrow();
+    await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${osunaHome} --json`.nothrow();
   assert.strictEqual(stopResult.exitCode, 0, `stop should succeed: ${stopResult.stderr}`);
   const stopJson = JSON.parse(stopResult.stdout) as {
     action?: unknown;
@@ -193,8 +193,8 @@ try {
     });
   }
 
-  await $`PASEO_HOME=${paseoHome} PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD} PASEO_DICTATION_ENABLED=${testEnv.PASEO_DICTATION_ENABLED} PASEO_VOICE_MODE_ENABLED=${testEnv.PASEO_VOICE_MODE_ENABLED} npx paseo daemon stop --home ${paseoHome} --force`.nothrow();
-  await rm(paseoHome, { recursive: true, force: true });
+  await $`OSUNA_HOME=${osunaHome} OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD=${testEnv.OSUNA_LOCAL_SPEECH_AUTO_DOWNLOAD} OSUNA_DICTATION_ENABLED=${testEnv.OSUNA_DICTATION_ENABLED} OSUNA_VOICE_MODE_ENABLED=${testEnv.OSUNA_VOICE_MODE_ENABLED} npx osuna daemon stop --home ${osunaHome} --force`.nothrow();
+  await rm(osunaHome, { recursive: true, force: true });
 }
 
 console.log("=== Stale reachable stop regression test passed ===");

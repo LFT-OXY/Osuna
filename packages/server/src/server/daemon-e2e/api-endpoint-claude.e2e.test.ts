@@ -3,7 +3,7 @@ import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile, mkdir } from "n
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 // 用户手写的 settings.json：权限、hooks、插件、自己的中转站 URL，全都不能被 Osuna 弄丢。
@@ -41,7 +41,7 @@ const OFFICIAL_MODELS: ModelRow[] = [
 
 const tempRoots: string[] = [];
 
-async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+async function connect(daemon: TestOsunaDaemon): Promise<DaemonClient> {
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
     appVersion: "0.12.1",
@@ -52,7 +52,7 @@ async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
 }
 
 describe("Claude API endpoint over the daemon RPC", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let claudeConfigDir: string;
   let settingsPath: string;
@@ -61,13 +61,13 @@ describe("Claude API endpoint over the daemon RPC", () => {
 
   beforeEach(async () => {
     onRecheck = null;
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-api-endpoint-"));
     tempRoots.push(root);
     claudeConfigDir = path.join(root, "claude");
     settingsPath = path.join(claudeConfigDir, "settings.json");
     await mkdir(claudeConfigDir, { recursive: true });
     await writeFile(settingsPath, USER_SETTINGS);
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       apiEndpoints: {
         env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
         homeDir: root,
@@ -144,7 +144,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect((await client.apiEndpointList("claude")).activeEndpointId).toBe(endpointId);
 
     // 首次改写前留了一份完整副本。
-    const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
+    const backupsDir = path.join(daemon.osunaHome, "api-endpoints", "backups");
     const backups = await readdir(backupsDir);
     expect(backups).toHaveLength(1);
     expect(await readFile(path.join(backupsDir, backups[0]!), "utf8")).toBe(USER_SETTINGS);
@@ -170,7 +170,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
       models: [{ id: "relay/sonnet" }],
       defaultModelId: "relay/sonnet",
     });
-    const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
+    const backupsDir = path.join(daemon.osunaHome, "api-endpoints", "backups");
     expect(await readdir(backupsDir).catch(() => [])).toEqual([]);
 
     await client.apiEndpointSetActive("claude", null);
@@ -209,11 +209,11 @@ describe("Claude API endpoint over the daemon RPC", () => {
     await client.apiEndpointSetActive("claude", endpointId);
     expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN).toBe(SECRET);
 
-    const keysPath = path.join(daemon.paseoHome, "api-endpoints", "keys.json");
+    const keysPath = path.join(daemon.osunaHome, "api-endpoints", "keys.json");
     if (process.platform !== "win32") {
       expect((await stat(keysPath)).mode & 0o777).toBe(0o600);
     }
-    const daemonConfig = await readFile(path.join(daemon.paseoHome, "config.json"), "utf8").catch(
+    const daemonConfig = await readFile(path.join(daemon.osunaHome, "config.json"), "utf8").catch(
       () => "",
     );
     expect(daemonConfig).not.toContain(SECRET);
@@ -377,7 +377,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect(written.theme).toBe("dark");
     expect(written.env.ANTHROPIC_AUTH_TOKEN).toBe(SECRET);
     // 首次改写的完整副本只留一份：重算前做的那份随回滚收回。
-    const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
+    const backupsDir = path.join(daemon.osunaHome, "api-endpoints", "backups");
     const backups = await readdir(backupsDir);
     expect(backups).toHaveLength(1);
     expect(await readFile(path.join(backupsDir, backups[0]!), "utf8")).toContain('"theme": "dark"');
@@ -443,16 +443,16 @@ describe("Claude API endpoint over the daemon RPC", () => {
 });
 
 describe("provider snapshot follows the Claude API endpoint mode", () => {
-  let daemon: TestPaseoDaemon;
+  let daemon: TestOsunaDaemon;
   let client: DaemonClient;
   let cwd: string;
 
   beforeEach(async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-snapshot-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "osuna-api-endpoint-snapshot-"));
     tempRoots.push(root);
     cwd = path.join(root, "project");
     await mkdir(cwd);
-    daemon = await createTestPaseoDaemon({
+    daemon = await createTestOsunaDaemon({
       apiEndpoints: { env: { CLAUDE_CONFIG_DIR: path.join(root, "claude") }, homeDir: root },
     });
     client = await connect(daemon);
@@ -590,12 +590,12 @@ describe("provider snapshot follows the Claude API endpoint mode", () => {
 
 describe("an agent session remembers the Claude API endpoint mode it was created in", () => {
   let root: string;
-  let daemon: TestPaseoDaemon | null;
+  let daemon: TestOsunaDaemon | null;
   let client: DaemonClient | null;
   let cwd: string;
 
   beforeEach(async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-session-"));
+    root = await mkdtemp(path.join(os.tmpdir(), "osuna-api-endpoint-session-"));
     tempRoots.push(root);
     cwd = path.join(root, "project");
     await mkdir(cwd);
@@ -610,10 +610,10 @@ describe("an agent session remembers the Claude API endpoint mode it was created
     );
   });
 
-  // 同一个 PASEO_HOME 上重启 daemon：会话从持久化记录恢复，而不是还在内存里。
+  // 同一个 OSUNA_HOME 上重启 daemon：会话从持久化记录恢复，而不是还在内存里。
   async function startDaemon(): Promise<DaemonClient> {
-    daemon = await createTestPaseoDaemon({
-      paseoHomeRoot: root,
+    daemon = await createTestOsunaDaemon({
+      osunaHomeRoot: root,
       cleanup: false,
       apiEndpoints: { env: { CLAUDE_CONFIG_DIR: path.join(root, "claude") }, homeDir: root },
     });
@@ -644,7 +644,7 @@ describe("an agent session remembers the Claude API endpoint mode it was created
 
   async function readAgentRecord(agentId: string): Promise<Record<string, unknown>> {
     if (!daemon) throw new Error("Expected a running daemon");
-    const agentsDir = path.join(daemon.paseoHome, "agents");
+    const agentsDir = path.join(daemon.osunaHome, "agents");
     const files = await readdir(agentsDir, { recursive: true });
     const file = files.find((candidate) => path.basename(candidate) === `${agentId}.json`);
     if (!file) throw new Error(`No record for ${agentId}`);

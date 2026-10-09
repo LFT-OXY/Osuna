@@ -1,7 +1,7 @@
 import {
   TERMINAL_VIEW_ATTRIBUTE_COLOR_PATTERN,
   type TerminalViewAttributes,
-} from "@getpaseo/protocol/messages";
+} from "@osuna/protocol/messages";
 
 interface RgbColor {
   r: number;

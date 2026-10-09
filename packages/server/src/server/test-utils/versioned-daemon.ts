@@ -1,7 +1,7 @@
 // Browser compatibility tests run a real daemon in a separate Node runtime.
-import { createTestPaseoDaemon } from "./paseo-daemon.js";
+import { createTestOsunaDaemon } from "./osuna-daemon.js";
 
-const daemon = await createTestPaseoDaemon({
+const daemon = await createTestOsunaDaemon({
   daemonVersion: process.argv[2],
   pluginsEnabled: true,
   mcpEnabled: false,

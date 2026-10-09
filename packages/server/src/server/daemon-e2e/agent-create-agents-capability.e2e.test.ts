@@ -2,25 +2,25 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import type { AgentSnapshotPayload } from "@osuna/protocol/messages";
 import { createTestAgentClient } from "../test-utils/fake-agent-client.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
-import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { createTestOsunaDaemon, type TestOsunaDaemon } from "../test-utils/osuna-daemon.js";
 
 const tempDirs: string[] = [];
-let daemon: TestPaseoDaemon | null = null;
+let daemon: TestOsunaDaemon | null = null;
 let client: DaemonClient | null = null;
 
 async function startDaemon(
-  options: Parameters<typeof createTestPaseoDaemon>[0] & {
+  options: Parameters<typeof createTestOsunaDaemon>[0] & {
     supportsMcpServers?: boolean;
     mcpServersDecidedPerSession?: boolean;
   },
-): Promise<{ daemon: TestPaseoDaemon; client: DaemonClient; cwd: string }> {
+): Promise<{ daemon: TestOsunaDaemon; client: DaemonClient; cwd: string }> {
   const { supportsMcpServers = true, mcpServersDecidedPerSession, ...daemonOptions } = options;
-  const cwd = await mkdtemp(path.join(os.tmpdir(), "paseo-create-agents-cwd-"));
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "osuna-create-agents-cwd-"));
   tempDirs.push(cwd);
-  daemon = await createTestPaseoDaemon({
+  daemon = await createTestOsunaDaemon({
     agentClients: {
       codex: createTestAgentClient("codex", { supportsMcpServers, mcpServersDecidedPerSession }),
     },
@@ -71,7 +71,7 @@ describe("agent snapshot create-agents capability", () => {
     expect(started.client.getLastServerInfoMessage()?.features?.agentMentions).toBe(true);
   });
 
-  test("a session with the internal paseo MCP server delivered can create agents", async () => {
+  test("a session with the internal osuna MCP server delivered can create agents", async () => {
     const started = await startDaemon({});
 
     const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
@@ -110,7 +110,7 @@ describe("agent snapshot create-agents capability", () => {
 
   test("reports create_agent_not_allowed when the provider policy disables create_agent", async () => {
     const started = await startDaemon({
-      providerOverrides: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+      providerOverrides: { codex: { osunaTools: { disabledTools: ["create_agent"] } } },
     });
 
     const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
@@ -156,7 +156,7 @@ describe("agent snapshot create-agents capability", () => {
     const agent = await started.client.createAgent({ provider: "codex", cwd: started.cwd });
 
     await started.client.patchDaemonConfig({
-      providers: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+      providers: { codex: { osunaTools: { disabledTools: ["create_agent"] } } },
     });
 
     expect(await fetchCreateAgentsFields(started.client, agent.id)).toEqual({
@@ -189,7 +189,7 @@ describe("provider snapshot create-agents prediction", () => {
     {
       name: "provider policy disables create_agent",
       options: {
-        providerOverrides: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+        providerOverrides: { codex: { osunaTools: { disabledTools: ["create_agent"] } } },
       },
       expected: {
         canCreateAgents: false,
@@ -241,7 +241,7 @@ describe("provider snapshot create-agents prediction", () => {
 
     await started.client.patchDaemonConfig({
       mcp: { injectIntoAgents: true },
-      providers: { codex: { paseoTools: { disabledTools: ["create_agent"] } } },
+      providers: { codex: { osunaTools: { disabledTools: ["create_agent"] } } },
     });
     expect(await predictedCreateAgentsFields(started.client, started.cwd)).toEqual({
       canCreateAgents: false,
@@ -249,7 +249,7 @@ describe("provider snapshot create-agents prediction", () => {
     });
 
     await started.client.patchDaemonConfig({
-      providers: { codex: { paseoTools: { disabledTools: [] } } },
+      providers: { codex: { osunaTools: { disabledTools: [] } } },
     });
     expect(await predictedCreateAgentsFields(started.client, started.cwd)).toEqual({
       canCreateAgents: true,

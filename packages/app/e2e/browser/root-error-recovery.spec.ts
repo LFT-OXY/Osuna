@@ -44,7 +44,7 @@ async function openBrokenStartup(page: Page) {
       JSON.stringify({ state: { layoutByWorkspace: {} }, version: 1 }),
     );
     localStorage.setItem(
-      "paseo:last-workspace-route-selection",
+      "osuna:last-workspace-route-selection",
       JSON.stringify({ serverId: "fixture-host", workspaceId: "broken" }),
     );
   });
@@ -54,7 +54,7 @@ async function openBrokenStartup(page: Page) {
 async function readSavedWorkspaceState(page: Page) {
   return page.evaluate(() => ({
     layout: localStorage.getItem("workspace-layout-state"),
-    selection: localStorage.getItem("paseo:last-workspace-route-selection"),
+    selection: localStorage.getItem("osuna:last-workspace-route-selection"),
   }));
 }
 async function reloadToPicker(page: Page) {
