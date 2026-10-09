@@ -27,6 +27,9 @@ export interface DesktopSettingsStore {
   get(): Promise<DesktopSettings>;
   patch(patch: unknown): Promise<DesktopSettings>;
   migrateLegacyRendererSettings(legacySettings: unknown): Promise<DesktopSettings>;
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+  hasImportedLegacyRendererOrigin(): Promise<boolean>;
+  markLegacyRendererOriginImported(): Promise<void>;
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
@@ -69,10 +72,13 @@ const MigrationsSchema = z
   .looseObject({
     legacyRendererSettingsImported: z.boolean().catch(false),
     daemonStopOnQuitDefaultApplied: z.boolean().catch(false),
+    // COMPAT(paseoDataMigration): 0.14.x 渲染层存储已导入新 origin，或用户选择了放弃旧数据。
+    legacyRendererOriginImported: z.boolean().catch(false),
   })
   .catch(() => ({
     legacyRendererSettingsImported: false,
     daemonStopOnQuitDefaultApplied: false,
+    legacyRendererOriginImported: false,
   }));
 
 const PersistedDocumentSchema = z
@@ -118,6 +124,7 @@ function buildDefaultDocument(): PersistedDesktopSettingsDocument {
     migrations: {
       legacyRendererSettingsImported: false,
       daemonStopOnQuitDefaultApplied: true,
+      legacyRendererOriginImported: false,
     },
   };
 }
@@ -320,6 +327,19 @@ export function createDesktopSettingsStore({
         },
       });
       return toDesktopSettings(next);
+    },
+
+    async hasImportedLegacyRendererOrigin(): Promise<boolean> {
+      const document = await initializeLegacyRendererMigration();
+      return document.migrations.legacyRendererOriginImported;
+    },
+
+    async markLegacyRendererOriginImported(): Promise<void> {
+      const current = await initializeLegacyRendererMigration();
+      await persistDocument({
+        ...current,
+        migrations: { ...current.migrations, legacyRendererOriginImported: true },
+      });
     },
   };
 }

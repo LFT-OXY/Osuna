@@ -363,4 +363,49 @@ describe("desktop-settings", () => {
     expect(persisted.settings.releaseChannel).toBe("stable");
     expect(persisted.settings.tray).toEqual({ enabled: true });
   });
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
+  it("remembers the legacy renderer origin import across restarts without touching other keys", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    await writeFile(
+      settingsFilePath(userDataPath),
+      JSON.stringify({
+        version: 1,
+        settings: { releaseChannel: "beta" },
+        migrations: { legacyRendererSettingsImported: true, daemonStopOnQuitDefaultApplied: true },
+      }),
+    );
+    const store = createDesktopSettingsStore({ userDataPath });
+
+    const importedBefore = await store.hasImportedLegacyRendererOrigin();
+    await store.markLegacyRendererOriginImported();
+    await store.patch({ notifications: { playSound: false } });
+    const persisted = JSON.parse(await readFile(settingsFilePath(userDataPath), "utf8")) as {
+      settings: { releaseChannel: string };
+      migrations: Record<string, boolean>;
+    };
+
+    expect(importedBefore).toBe(false);
+    expect(
+      await createDesktopSettingsStore({ userDataPath }).hasImportedLegacyRendererOrigin(),
+    ).toBe(true);
+    expect(persisted.migrations).toEqual({
+      legacyRendererSettingsImported: true,
+      daemonStopOnQuitDefaultApplied: true,
+      legacyRendererOriginImported: true,
+    });
+    expect(persisted.settings.releaseChannel).toBe("beta");
+  });
+
+  it("treats a fresh install as not yet imported from the legacy renderer origin", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+
+    const imported = await createDesktopSettingsStore({
+      userDataPath,
+    }).hasImportedLegacyRendererOrigin();
+
+    expect(imported).toBe(false);
+  });
 });

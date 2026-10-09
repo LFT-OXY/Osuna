@@ -28,7 +28,7 @@ const MIGRATED_LOG_LINE = "[user-data-migration] moved legacy userData";
 // CFFIXED_USER_HOME there), and these launches run the real default-userData
 // path. Ask Electron where appData is before any migration code can run, and
 // refuse to continue unless the answer is inside the fixture.
-function resolveIsolatedAppData({ root, home, env }) {
+export function resolveIsolatedAppData({ root, home, env }) {
   const probe = spawnSync(electronBinary, ["--no-sandbox", path.join(root, "probe.cjs")], {
     cwd: root,
     env,
@@ -42,7 +42,7 @@ function resolveIsolatedAppData({ root, home, env }) {
   return appData;
 }
 
-function mainLogPath({ home, appData }) {
+export function mainLogPath({ home, appData }) {
   if (process.platform === "darwin") return path.join(home, "Library/Logs/Osuna/main.log");
   return path.join(appData, "Osuna/logs/main.log");
 }
