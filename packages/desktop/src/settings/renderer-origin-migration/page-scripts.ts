@@ -2,6 +2,7 @@
 import type {
   OriginStorageDatabase,
   OriginStorageObjectStore,
+  OriginStorageRecord,
   OriginStorageSnapshot,
 } from "./snapshot.js";
 
@@ -78,48 +79,54 @@ async function exportOriginStorage(): Promise<OriginStorageSnapshot> {
 
   const snapshot: OriginStorageSnapshot = { localStorage: [], databases: [], skippedRecords: [] };
 
+  async function exportObjectStore(
+    database: IDBDatabase,
+    storeName: string,
+  ): Promise<OriginStorageObjectStore> {
+    const store = database.transaction(storeName, "readonly").objectStore(storeName);
+    const indexes = Array.from(store.indexNames, (indexName) => {
+      const { keyPath, unique, multiEntry } = store.index(indexName);
+      return { name: indexName, keyPath, unique, multiEntry };
+    });
+    const [keys, values] = await Promise.all([
+      settled(store.getAllKeys()),
+      settled(store.getAll()),
+    ]);
+    const records: OriginStorageRecord[] = [];
+    keys.forEach((key, position) => {
+      const record = { key, value: values[position] };
+      const crossesIpc = detachBlobs(record.value, (next) => {
+        record.value = next;
+      });
+      if (crossesIpc) records.push(record);
+      else snapshot.skippedRecords.push({ database: database.name, store: storeName, key });
+    });
+    return {
+      name: storeName,
+      keyPath: store.keyPath,
+      autoIncrement: store.autoIncrement,
+      indexes,
+      records,
+    };
+  }
+
+  async function exportDatabase(name: string): Promise<OriginStorageDatabase> {
+    const database = await settled(indexedDB.open(name));
+    const stores: OriginStorageObjectStore[] = [];
+    for (const storeName of Array.from(database.objectStoreNames)) {
+      stores.push(await exportObjectStore(database, storeName));
+    }
+    database.close();
+    return { name, version: database.version, stores };
+  }
+
   for (let index = 0; index < localStorage.length; index += 1) {
     const key = localStorage.key(index);
     if (key !== null) snapshot.localStorage.push([key, localStorage.getItem(key) ?? ""]);
   }
 
   for (const { name } of await indexedDB.databases()) {
-    if (name === undefined) continue;
-    const database = await settled(indexedDB.open(name));
-    const exported: OriginStorageDatabase = {
-      name,
-      version: database.version,
-      stores: [],
-    };
-    for (const storeName of Array.from(database.objectStoreNames)) {
-      const store = database.transaction(storeName, "readonly").objectStore(storeName);
-      const indexes = Array.from(store.indexNames, (indexName) => {
-        const { keyPath, unique, multiEntry } = store.index(indexName);
-        return { name: indexName, keyPath, unique, multiEntry };
-      });
-      const [keys, values] = await Promise.all([
-        settled(store.getAllKeys()),
-        settled(store.getAll()),
-      ]);
-      const records: OriginStorageObjectStore["records"] = [];
-      keys.forEach((key, position) => {
-        const record = { key, value: values[position] };
-        const crossesIpc = detachBlobs(record.value, (next) => {
-          record.value = next;
-        });
-        if (crossesIpc) records.push(record);
-        else snapshot.skippedRecords.push({ database: name, store: storeName, key });
-      });
-      exported.stores.push({
-        name: storeName,
-        keyPath: store.keyPath,
-        autoIncrement: store.autoIncrement,
-        indexes,
-        records,
-      });
-    }
-    database.close();
-    snapshot.databases.push(exported);
+    if (name !== undefined) snapshot.databases.push(await exportDatabase(name));
   }
 
   await Promise.all(blobReads);

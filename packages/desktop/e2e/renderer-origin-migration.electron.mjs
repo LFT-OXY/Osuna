@@ -57,31 +57,27 @@ const CURRENT_DATABASE_NAMES = {
 };
 
 // seed.mjs 描述的库内容，换成 readOrigin 读回来的形状。
+function expectedRecordValue(record) {
+  if (!record.blobField) return record.value;
+  const blob = { blobText: record.blobText, type: record.blobType };
+  return { ...record.value, [record.blobField]: blob };
+}
+
+function expectedStore(store) {
+  return { keyPath: store.keyPath, values: store.records.map(expectedRecordValue) };
+}
+
+function expectedDatabase(database) {
+  const stores = database.stores.map((store) => [store.name, expectedStore(store)]);
+  return { version: database.version, stores: Object.fromEntries(stores) };
+}
+
 function expectedDatabases(renameDatabase) {
-  return Object.fromEntries(
-    LEGACY_DATABASES.map((database) => [
-      renameDatabase(database.name),
-      {
-        version: database.version,
-        stores: Object.fromEntries(
-          database.stores.map((store) => [
-            store.name,
-            {
-              keyPath: store.keyPath,
-              values: store.records.map((record) =>
-                record.blobField
-                  ? {
-                      ...record.value,
-                      [record.blobField]: { blobText: record.blobText, type: record.blobType },
-                    }
-                  : record.value,
-              ),
-            },
-          ]),
-        ),
-      },
-    ]),
-  );
+  const databases = LEGACY_DATABASES.map((database) => [
+    renameDatabase(database.name),
+    expectedDatabase(database),
+  ]);
+  return Object.fromEntries(databases);
 }
 
 // 在页面里执行：把当前 origin 的全部渲染层存储读成可以 JSON 化的形状。

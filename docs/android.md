@@ -163,4 +163,3 @@ A GitHub secret that does not exist expands to an empty string, which would prod
 - **Memory.** The runner has 4 vCPU and 16 GB. Release builds compile the native ABIs and run Hermes bundling in the same Gradle invocation, and Hermes can be killed with exit code 137 even when Gradle's own heap is correctly sized. The workflow passes `--no-daemon --max-workers=2`; drop to `--max-workers=1` if 137 shows up.
 - **Disk.** The runner guarantees 14 GB free, so the job deletes preinstalled toolchains it does not use before installing dependencies.
 - **NDK.** React Native pins an NDK version the runner image may not ship. The Android Gradle Plugin downloads it during the build.
-- **Timeout.** `timeout-minutes: 90` is an untested first value. Tighten it once a run has recorded the real duration.

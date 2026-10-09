@@ -6,7 +6,13 @@ export interface OriginStorageSnapshot {
   localStorage: Array<[key: string, value: string]>;
   databases: OriginStorageDatabase[];
   // 含有过不了 IPC 的宿主对象（CryptoKey、文件句柄等）而被跳过的记录。
-  skippedRecords: Array<{ database: string; store: string; key: IDBValidKey }>;
+  skippedRecords: OriginStorageSkippedRecord[];
+}
+
+export interface OriginStorageSkippedRecord {
+  database: string;
+  store: string;
+  key: IDBValidKey;
 }
 
 export interface OriginStorageDatabase {
@@ -20,7 +26,12 @@ export interface OriginStorageObjectStore {
   keyPath: string | string[] | null;
   autoIncrement: boolean;
   indexes: OriginStorageIndex[];
-  records: Array<{ key: IDBValidKey; value: unknown }>;
+  records: OriginStorageRecord[];
+}
+
+export interface OriginStorageRecord {
+  key: IDBValidKey;
+  value: unknown;
 }
 
 export interface OriginStorageIndex {

@@ -16,6 +16,7 @@ const LEGACY_SCHEME = "paseo";
 const APP_SCHEME = "osuna";
 const APP_ORIGIN = `${APP_SCHEME}://app`;
 const PULL_CHANNEL = "osuna:renderer-origin-migration:pull";
+const NO_CANCEL_BUTTON = -1;
 const EXPORT_TIMEOUT_MS = 30_000;
 const IMPORT_TIMEOUT_MS = 60_000;
 
@@ -146,24 +147,32 @@ export function createElectronRendererOriginPorts(input: {
     },
 
     async askAfterFailure(error) {
-      const { title, message, detail, options } = describeRendererOriginImportFailure(error);
+      // 原因先落日志：对话框只告诉用户去哪里看，用户选完之前进程可能就被杀掉了。
+      log.error("[renderer-origin-migration] import failed", error);
+      const { title, message, detail, options, defaultChoice } =
+        describeRendererOriginImportFailure({ logPath: log.transports.file.getFile().path });
+      const retryIndex = options.findIndex((option) => option.choice === defaultChoice);
       const { response } = await dialog.showMessageBox({
         type: "error",
         title,
         message,
         detail,
         buttons: options.map((option) => option.label),
-        // 直接关掉对话框等同「重试」：不替用户做放弃数据的决定。
-        defaultId: 0,
-        cancelId: 0,
+        defaultId: retryIndex,
+        // 两个按钮都不当取消键。把「重试」设成取消键的话 macOS 会把它排到最后并去掉默认高亮；
+        // 不设的话 Electron 自己会挑「放弃旧数据继续」当取消键，Esc 就成了放弃数据。
+        cancelId: NO_CANCEL_BUTTON,
         noLink: true,
       });
+      // 没点任何按钮就关掉对话框（Windows / Linux 的关闭按钮）等同「重试」：不替用户做放弃数据的决定。
+      const pickedAButton = response >= 0 && response < options.length;
+      if (!pickedAButton) return defaultChoice;
       return options[response].choice;
     },
   };
 }
 
-// 成功静默：只留一条 info。失败时用户已经在对话框里做了选择，这里只负责记下来。
+// 成功静默：只留一条 info。失败的原因在弹对话框之前已经记下，这里只记用户选了什么。
 export async function runLegacyRendererOriginMigration(
   marker: RendererOriginMigrationPorts["marker"],
 ): Promise<RendererOriginMigrationOutcome> {
@@ -181,9 +190,9 @@ export async function runLegacyRendererOriginMigration(
       log.warn("[renderer-origin-migration] skipped records that cannot cross IPC", skippedRecords);
     }
   } else if (outcome.kind === "abandoned") {
-    log.warn("[renderer-origin-migration] import failed, legacy data abandoned", outcome.error);
+    log.warn("[renderer-origin-migration] user abandoned the legacy renderer storage");
   } else if (outcome.kind === "retry-on-next-launch") {
-    log.error("[renderer-origin-migration] import failed, retrying next launch", outcome.error);
+    log.info("[renderer-origin-migration] user chose to retry the import on the next launch");
   }
   return outcome;
 }

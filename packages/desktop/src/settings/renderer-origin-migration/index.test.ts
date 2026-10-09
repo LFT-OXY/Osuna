@@ -178,9 +178,9 @@ describe("migrateLegacyRendererOrigin", () => {
 });
 
 describe("describeRendererOriginImportFailure", () => {
-  it("offers retry and abandon in Chinese and says the old data is still there", () => {
+  it("offers retry first, in Chinese, and sends the user to the log for the cause", () => {
     expect(
-      describeRendererOriginImportFailure(new Error("Exporting paseo://app timed out after 30s")),
+      describeRendererOriginImportFailure({ logPath: "/Users/me/Library/Logs/Osuna/main.log" }),
     ).toEqual({
       title: "Osuna 无法导入旧版数据",
       message: "旧版 Paseo 的主机列表、设置、草稿和面板布局没能导入 Osuna。",
@@ -190,12 +190,13 @@ describe("describeRendererOriginImportFailure", () => {
         "重试：退出 Osuna，下次启动时再导入一次。",
         "放弃旧数据继续：不再导入，直接启动 Osuna。主机需要重新添加，设置、草稿和面板布局回到默认状态。",
         "",
-        "原因：Exporting paseo://app timed out after 30s",
+        "失败原因已记入日志：/Users/me/Library/Logs/Osuna/main.log",
       ].join("\n"),
       options: [
         { choice: "retry", label: "重试" },
         { choice: "abandon", label: "放弃旧数据继续" },
       ],
+      defaultChoice: "retry",
     });
   });
 });

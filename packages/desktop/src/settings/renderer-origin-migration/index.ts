@@ -1,6 +1,10 @@
 // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first.
 import type { DesktopSettingsStore } from "../desktop-settings.js";
-import { isEmptySnapshot, type OriginStorageSnapshot } from "./snapshot.js";
+import {
+  isEmptySnapshot,
+  type OriginStorageSkippedRecord,
+  type OriginStorageSnapshot,
+} from "./snapshot.js";
 import { renameLegacySnapshot } from "./storage-names.js";
 
 // 0.14.x 的渲染器从 paseo://app 加载，1.0.0 从 osuna://app 加载。Chromium 按 origin 隔离存储，
@@ -25,7 +29,7 @@ export interface RendererOriginImported {
   localStorageKeys: number;
   databases: number;
   records: number;
-  skippedRecords: OriginStorageSnapshot["skippedRecords"];
+  skippedRecords: OriginStorageSkippedRecord[];
 }
 
 export type RendererOriginMigrationOutcome =
@@ -90,12 +94,18 @@ export interface RendererOriginImportFailureDialog {
   detail: string;
   // 顺序即对话框里按钮的顺序。
   options: RendererOriginImportFailureOption[];
+  // 回车选中的按钮。不可逆的那个选项不能是默认。
+  defaultChoice: RendererOriginImportChoice;
+}
+
+export interface RendererOriginImportFailureContext {
+  // 失败的具体原因是给排查用的英文调试信息，只进日志；对话框告诉用户去哪里看。
+  logPath: string;
 }
 
 export function describeRendererOriginImportFailure(
-  error: unknown,
+  context: RendererOriginImportFailureContext,
 ): RendererOriginImportFailureDialog {
-  const cause = error instanceof Error ? error.message : String(error);
   return {
     title: "Osuna 无法导入旧版数据",
     message: "旧版 Paseo 的主机列表、设置、草稿和面板布局没能导入 Osuna。",
@@ -105,11 +115,12 @@ export function describeRendererOriginImportFailure(
       "重试：退出 Osuna，下次启动时再导入一次。",
       "放弃旧数据继续：不再导入，直接启动 Osuna。主机需要重新添加，设置、草稿和面板布局回到默认状态。",
       "",
-      `原因：${cause}`,
+      `失败原因已记入日志：${context.logPath}`,
     ].join("\n"),
     options: [
       { choice: "retry", label: "重试" },
       { choice: "abandon", label: "放弃旧数据继续" },
     ],
+    defaultChoice: "retry",
   };
 }

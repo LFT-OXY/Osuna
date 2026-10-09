@@ -64,7 +64,6 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    # 保守初值，尚无实测耗时；首次跑通后按实际墙钟收紧。
     timeout-minutes: 90
     env:
       APP_VARIANT: production
