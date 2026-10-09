@@ -5,6 +5,7 @@
  * selected home points at a dead supervisor owner.
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";

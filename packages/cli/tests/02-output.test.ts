@@ -5,6 +5,7 @@
  * Verifies that renderers correctly format structured data.
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import {
   render,

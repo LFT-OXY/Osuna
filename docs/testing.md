@@ -176,6 +176,7 @@ Codex MultiAgentV2 real tests use local Codex authentication rather than the Ope
 
 ### Test setup
 
+- Root: `vitest.setup.ts` points `HOME` and `USERPROFILE` at a temporary directory for every package that uses the root Vitest config (CLI, client, desktop, and the rest without their own). The CLI writes `cli-client-id` into the default home whatever daemon it targets and moves a 0.14.x data directory there, so a test that runs a command in-process would otherwise do both to your machine. The standalone CLI scripts in `packages/cli/tests` get the same isolation from `helpers/isolated-os-home.ts`; import it first in every new one.
 - Server: `packages/server/src/test-utils/vitest-setup.ts` loads `.env.test`, sets `OSUNA_SUPERVISED=0`, and disables Git/SSH prompts. Add new global env shims here, not in individual tests.
 - App: `packages/app/vitest.setup.ts` provides `expo`/`__DEV__` shims and stubs a few native-only modules (`react-native-unistyles`, `react-native-svg`, `expo-linking`, `@xterm/addon-ligatures`). Stubbing here is for modules that have no meaningful Node behavior — not a license to mock app code.
 

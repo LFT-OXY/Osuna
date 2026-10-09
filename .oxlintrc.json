@@ -71,7 +71,8 @@
           "**/react-native",
           "**/@/styles/unistyles",
           "**/src/styles/unistyles",
-          "**/@/test/window-local-storage"
+          "**/@/test/window-local-storage",
+          "**/helpers/isolated-os-home.ts"
         ]
       }
     ],

@@ -5,6 +5,7 @@
  * must not discover/kill processes via home-scoped `ps` command heuristics.
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";

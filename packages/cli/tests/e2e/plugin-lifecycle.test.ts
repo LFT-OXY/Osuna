@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+import "../helpers/isolated-os-home.ts";
 import { resolveCliVersion } from "../../src/version.js";
 import { readPluginManifest } from "../../../server/src/server/plugins/manifest.js";
 

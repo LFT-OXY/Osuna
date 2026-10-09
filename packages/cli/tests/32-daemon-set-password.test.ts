@@ -1,5 +1,6 @@
 #!/usr/bin/env npx tsx
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

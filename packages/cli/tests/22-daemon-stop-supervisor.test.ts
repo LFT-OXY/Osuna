@@ -5,6 +5,7 @@
  * without allowing the supervisor entrypoint to respawn a new worker process.
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";

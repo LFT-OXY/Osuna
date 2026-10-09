@@ -21,6 +21,7 @@
  * - provider diagnostic --json returns structured output
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";

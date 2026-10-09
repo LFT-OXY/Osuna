@@ -1,3 +1,4 @@
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert/strict";
 import { createOsunaClient } from "@osuna/client";
 import { createE2ETestContext } from "./helpers/test-daemon.ts";

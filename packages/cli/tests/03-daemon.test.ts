@@ -15,6 +15,7 @@
  * - daemon status probes the live relay state over local IPC
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";

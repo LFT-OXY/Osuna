@@ -1,5 +1,6 @@
 #!/usr/bin/env npx tsx
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { runLocalOsuna } from "./helpers/local-cli.ts";
 import { mkdtemp, rm } from "node:fs/promises";

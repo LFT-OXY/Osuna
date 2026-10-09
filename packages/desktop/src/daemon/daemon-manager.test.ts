@@ -205,7 +205,9 @@ describe("daemon-manager commands", () => {
 
     await expect(handlers.start_desktop_daemon()).rejects.toThrow(refusal);
 
-    expect(mocks.migrateLegacyHomeIfDefault).toHaveBeenCalledWith({ env: process.env });
+    expect(mocks.migrateLegacyHomeIfDefault).toHaveBeenCalledWith({
+      explicitHome: process.env.OSUNA_HOME,
+    });
     expect(mocks.runExternalCliJsonCommand).not.toHaveBeenCalled();
     expect(mocks.startDaemonInstance).not.toHaveBeenCalled();
   });

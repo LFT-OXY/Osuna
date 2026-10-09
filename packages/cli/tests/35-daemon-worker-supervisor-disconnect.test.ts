@@ -5,6 +5,7 @@
  * channel closes, instead of becoming an orphaned daemon.
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";

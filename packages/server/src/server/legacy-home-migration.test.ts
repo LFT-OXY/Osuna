@@ -236,7 +236,7 @@ describe("migrateLegacyHomeIfDefault", () => {
   }
 
   test("moves the legacy home under the default home and records it once in daemon.log", async () => {
-    const result = await migrateLegacyHomeIfDefault({ env: {}, homeDir });
+    const result = await migrateLegacyHomeIfDefault({ explicitHome: undefined, homeDir });
 
     expect(result).toEqual({ outcome: "migrated", method: "rename" });
     expect(readFileSync(path.join(home, "config.json"), "utf8")).toBe('{"version":1}\n');
@@ -256,7 +256,7 @@ describe("migrateLegacyHomeIfDefault", () => {
   });
 
   test("never touches the legacy home when OSUNA_HOME is set", async () => {
-    const result = await migrateLegacyHomeIfDefault({ env: { OSUNA_HOME: home }, homeDir });
+    const result = await migrateLegacyHomeIfDefault({ explicitHome: home, homeDir });
 
     expect(result).toEqual({ outcome: "skipped", reason: "explicit-home" });
     expect(readdirSync(homeDir)).toEqual([".paseo"]);
@@ -268,7 +268,7 @@ describe("migrateLegacyHomeIfDefault", () => {
     writeFileSync(path.join(home, "config.json"), '{"version":2}\n');
     setTopLevelTimes(home, new Date("2026-01-01T00:00:00Z"));
 
-    const result = await migrateLegacyHomeIfDefault({ env: {}, homeDir });
+    const result = await migrateLegacyHomeIfDefault({ explicitHome: undefined, homeDir });
 
     expect(result).toEqual({ outcome: "skipped", reason: "home-exists", legacyHomeIsNewer: true });
     expect(readDaemonLog()).toEqual([
@@ -285,9 +285,9 @@ describe("migrateLegacyHomeIfDefault", () => {
   });
 
   test("stays silent once the link from an earlier run is in place", async () => {
-    await migrateLegacyHomeIfDefault({ env: {}, homeDir });
+    await migrateLegacyHomeIfDefault({ explicitHome: undefined, homeDir });
 
-    const result = await migrateLegacyHomeIfDefault({ env: {}, homeDir });
+    const result = await migrateLegacyHomeIfDefault({ explicitHome: undefined, homeDir });
 
     expect(result).toEqual({ outcome: "skipped", reason: "legacy-home-is-link" });
     expect(readDaemonLog()).toHaveLength(1);

@@ -39,17 +39,18 @@ export type LegacyHomeMigrationResult =
   | LegacyHomeMigrationKeptExistingHome;
 
 export interface DefaultHomeMigrationInput {
-  env: NodeJS.ProcessEnv;
+  // 用户显式选定的 home：OSUNA_HOME 或 --home 的值，两者都没给时是 undefined。
+  explicitHome: string | undefined;
   homeDir?: string;
   fs?: LegacyHomeFileSystem;
 }
 
-// 只有默认 home 才迁移：显式设了 OSUNA_HOME 的布局由用户自己负责，不去碰旧目录。
+// 只有默认 home 才迁移：显式选了 home 的布局由用户自己负责，不去碰旧目录。
 export async function migrateLegacyHomeIfDefault(
   input: DefaultHomeMigrationInput,
 ): Promise<LegacyHomeMigrationResult> {
-  const { env, homeDir = os.homedir(), fs } = input;
-  if (env.OSUNA_HOME !== undefined) return { outcome: "skipped", reason: "explicit-home" };
+  const { explicitHome, homeDir = os.homedir(), fs } = input;
+  if (explicitHome !== undefined) return { outcome: "skipped", reason: "explicit-home" };
 
   const legacyHome = path.join(homeDir, ".paseo");
   const home = path.join(homeDir, ".osuna");
@@ -64,7 +65,8 @@ export async function migrateLegacyHomeIfDefault(
     });
   }
   // 用户删掉链接后又跑过 0.14.x 才会出现：以新 home 为准，旧目录原样留着，只提醒一声。
-  if (result.outcome === "skipped" && result.reason === "home-exists" && result.legacyHomeIsNewer) {
+  const keptExistingHome = result.outcome === "skipped" && result.reason === "home-exists";
+  if (keptExistingHome && result.legacyHomeIsNewer) {
     await appendDaemonLog(home, {
       level: "warn",
       msg: "Detected an unmigrated Paseo data directory; using the Osuna home and leaving it untouched",
@@ -219,5 +221,6 @@ async function latestTopLevelWrite(fs: LegacyHomeFileSystem, directory: string):
   const entries = await fs.readdir(directory);
   const targets = [directory, ...entries.map((entry) => path.join(directory, entry))];
   const stats = await Promise.all(targets.map((target) => fs.lstat(target)));
-  return Math.max(...stats.map((stat) => stat.mtimeMs));
+  const writeTimes = stats.map((stat) => stat.mtimeMs);
+  return Math.max(...writeTimes);
 }

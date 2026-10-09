@@ -19,6 +19,7 @@
  * - osuna ls does not support --ui
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";

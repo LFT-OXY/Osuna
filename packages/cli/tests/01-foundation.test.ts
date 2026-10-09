@@ -8,6 +8,7 @@
  * - osuna --help shows commands
  */
 
+import "./helpers/isolated-os-home.ts";
 import { $ } from "zx";
 
 $.verbose = false;

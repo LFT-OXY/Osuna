@@ -1,5 +1,6 @@
 #!/usr/bin/env npx tsx
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { basename } from "node:path";
 import { createE2ETestContext } from "./helpers/test-daemon.ts";

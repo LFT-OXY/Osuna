@@ -21,6 +21,7 @@
  * - Clean up resources after test completes
  */
 
+import "../helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { createE2ETestContext, type TestDaemonContext } from "../helpers/test-daemon.ts";
 

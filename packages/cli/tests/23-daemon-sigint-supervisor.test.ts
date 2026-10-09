@@ -5,6 +5,7 @@
  * graceful daemon lifecycle shutdown to complete (no early forced exit path).
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";

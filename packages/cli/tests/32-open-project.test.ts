@@ -1,5 +1,6 @@
 #!/usr/bin/env npx zx
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";

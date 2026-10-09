@@ -61,6 +61,7 @@ export default defineConfig({
     env: {
       OSUNA_GIT_MAX_PROCESSES_PER_SECOND: "10000",
     },
+    setupFiles: [path.resolve(__dirname, "vitest.setup.ts")],
     exclude: [...configDefaults.exclude, "**/.claude/**", "**/.dev/**"],
   },
 });

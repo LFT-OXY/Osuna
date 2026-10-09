@@ -400,7 +400,7 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 1.0.0 首次启动时把 0.14.x 的数据搬到新名字下。成功不提示，每层只记一条 info 日志。
 
 - 读旧布局的代码都带同一个标签：`COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first`。期限比[默认的六个月](protocol-compatibility.md#every-shim-is-tagged-and-dated)长，因为迁的是用户数据。
-- **daemon home**：`~/.paseo` 改名为 `~/.osuna`，原位留符号链接（Windows 用 junction）。代码在 `packages/server/src/server/legacy-home-migration.ts`，由拉起 daemon 的一方在读 home 之前调用：CLI 的本地命令、桌面端启动 daemon 之前、直接启动的 supervisor。daemon 进程自己不迁移。设了 `OSUNA_HOME` 或传了 `--home` 时跳过。
+- **daemon home**：`~/.paseo` 改名为 `~/.osuna`，原位留符号链接（Windows 用 junction）。代码在 `packages/server/src/server/legacy-home-migration.ts`，由会读写 home 的一方在动手之前调用：CLI 的每条命令（`packages/cli/src/cli.ts` 的 `preAction` 钩子，连别的主机的命令也会把 `cli-client-id` 写进默认 home）、桌面端启动 daemon 之前、直接启动的 supervisor。daemon 进程自己不迁移。设了 `OSUNA_HOME` 或传了 `--home` 时跳过。
 - **Electron userData**：appData 下的 `Paseo` 目录改名为 `Osuna`，不留链接。代码在 `packages/desktop/src/settings/user-data-migration.ts`，调用点在 `main.ts` 写第一条日志之前。
 - **渲染层存储**：`paseo://app` 这个 origin 的 localStorage 与 IndexedDB 导入 `osuna://app`，旧 origin 不清空。代码在 `packages/desktop/src/settings/renderer-origin-migration/`，完成标记是 `desktop-settings.json` 的 `migrations.legacyRendererOriginImported`。
 - 残留的 `PASEO_*` 环境变量不生效，daemon 与 CLI 启动时逐个点名：`packages/server/src/server/legacy-env.ts`。

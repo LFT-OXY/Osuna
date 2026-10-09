@@ -111,7 +111,7 @@ async function main(): Promise<void> {
 
   // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
   // 必须排在读 home 里任何文件之前。经 CLI 或桌面端拉起时 OSUNA_HOME 已被显式写入，迁移由它们先做完。
-  await migrateLegacyHomeIfDefault({ env: workerEnv });
+  await migrateLegacyHomeIfDefault({ explicitHome: workerEnv.OSUNA_HOME });
 
   const osunaHome = resolveOsunaHome(workerEnv);
   const persistedConfig = loadPersistedConfig(osunaHome);

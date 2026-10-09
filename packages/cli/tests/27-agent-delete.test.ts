@@ -10,6 +10,7 @@
  * - All flags are accepted
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { runLocalOsuna } from "./helpers/local-cli.ts";
 import { getAvailablePort } from "./helpers/network.ts";

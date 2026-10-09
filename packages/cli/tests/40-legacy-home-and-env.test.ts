@@ -1,6 +1,7 @@
 #!/usr/bin/env npx tsx
 // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import {
   chmodSync,
@@ -211,6 +212,42 @@ try {
       await runOsuna(["daemon", "stop", "--force"], home, env);
     }
     console.log("✓ daemon.log has one line for the move and the daemon's own warning\n");
+  }
+
+  {
+    console.log("Test 8: a command aimed at another host moves the legacy home before it runs");
+    const home = userHome();
+    const legacyHome = seedLegacyHome(home);
+    const unusedPort = await getAvailablePort();
+
+    // 连远程主机的命令也会把 cli-client-id 写进默认 home；它抢先建出的空目录会让迁移被永久跳过。
+    const result = await runOsuna(["ls", "--host", `127.0.0.1:${unusedPort}`], home);
+
+    assert.strictEqual(result.exitCode, 1);
+    assert.strictEqual(lstatSync(legacyHome).isSymbolicLink(), true);
+    assert.deepStrictEqual(JSON.parse(readFileSync(join(home, ".osuna", "config.json"), "utf8")), {
+      version: 1,
+      daemon: { listen: "127.0.0.1:9999" },
+    });
+    assert.strictEqual(lstatSync(join(home, ".osuna", "cli-client-id")).isFile(), true);
+    console.log("✓ the client id lands next to the old data, not in a fresh empty home\n");
+  }
+
+  {
+    console.log("Test 9: pairing with no daemon running moves the legacy home before it runs");
+    const home = userHome();
+    const legacyHome = seedLegacyHome(home);
+
+    const result = await runOsuna(["daemon", "pair", "--relay", "--json"], home);
+
+    assert.strictEqual(result.exitCode, 0, result.stderr);
+    assert.strictEqual(JSON.parse(result.stdout).relayEnabled, true);
+    assert.strictEqual(lstatSync(legacyHome).isSymbolicLink(), true);
+    assert.deepStrictEqual(JSON.parse(readFileSync(join(home, ".osuna", "config.json"), "utf8")), {
+      version: 1,
+      daemon: { listen: "127.0.0.1:9999", relay: { enabled: true } },
+    });
+    console.log("✓ the relay choice is saved into the old config instead of a new one\n");
   }
 } finally {
   for (const target of cleanupPaths) rmSync(target, { recursive: true, force: true });

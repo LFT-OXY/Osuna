@@ -15,6 +15,7 @@
  * of "\" for the startsWith check.
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { isSameOrDescendantPath } from "../src/utils/paths.ts";
 

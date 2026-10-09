@@ -1,5 +1,6 @@
 import { pairCommand } from "./commands/daemon/pair.js";
 import { Command, Option } from "commander";
+import { migrateLegacyHomeIfDefault } from "@osuna/server";
 import { createAgentCommand } from "./commands/agent/index.js";
 import { createDaemonCommand } from "./commands/daemon/index.js";
 import { createPermitCommand } from "./commands/permit/index.js";
@@ -55,6 +56,15 @@ export function createCli(): Command {
     .option("--no-headers", "omit table headers")
     .option("--no-color", "disable colored output");
   addDaemonHostOption(program);
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  // 每条命令动手之前先搬。连别的主机的命令也会把 cli-client-id 写进默认 home，
+  // 它抢先建出的空目录会让之后的迁移被永久跳过。
+  program.hook("preAction", async (_program, actionCommand) => {
+    const explicitHome: string | undefined =
+      actionCommand.optsWithGlobals().home ?? process.env.OSUNA_HOME;
+    await migrateLegacyHomeIfDefault({ explicitHome });
+  });
 
   // Primary agent commands (top-level)
   addJsonAndDaemonHostOptions(addLsOptions(program.command("ls"))).action(withOutput(runLsCommand));

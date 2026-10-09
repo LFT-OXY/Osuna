@@ -17,6 +17,7 @@
  * - agent shows send in subcommands
  */
 
+import "./helpers/isolated-os-home.ts";
 import assert from "node:assert";
 import { getAvailablePort } from "./helpers/network.ts";
 import { $ } from "zx";
