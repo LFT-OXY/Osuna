@@ -3,52 +3,10 @@ const path = require("node:path");
 const pkg = require("./package.json");
 const withAndroidAsyncStorageSize = require("./plugins/with-android-async-storage-size");
 const withAndroidProfileable = require("./plugins/with-android-profileable");
-const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
-const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
-
-const buildProfile = isFdroidBuild
-  ? {
-      androidPermissions: [
-        "RECORD_AUDIO",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-      ],
-      cameraPlugins: [],
-      fdroidPlugins: [withFdroidAutolinking],
-      notificationPlugins: [],
-    }
-  : {
-      androidPermissions: [
-        "RECORD_AUDIO",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "CAMERA",
-        "android.permission.CAMERA",
-      ],
-      cameraPlugins: [
-        [
-          "expo-camera",
-          {
-            cameraPermission:
-              "Allow $(PRODUCT_NAME) to access your camera to scan pairing QR codes.",
-          },
-        ],
-      ],
-      fdroidPlugins: [],
-      notificationPlugins: [
-        [
-          "expo-notifications",
-          {
-            icon: "./assets/images/notification-icon.png",
-            color: "#346bf1",
-          },
-        ],
-      ],
-    };
 
 function resolveSecretFile(params) {
   const fromEnv = process.env[params.envKey];
@@ -126,7 +84,13 @@ export default {
       softwareKeyboardLayoutMode: "resize",
       // Allow HTTP connections for local network hosts (required for release builds)
       usesCleartextTraffic: true,
-      permissions: buildProfile.androidPermissions,
+      permissions: [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "CAMERA",
+        "android.permission.CAMERA",
+      ],
       package: variant.packageId,
       versionCode: nativeReleaseVersion.androidVersionCode,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
@@ -142,7 +106,12 @@ export default {
       "expo-router",
       withPasteInput,
       [withAndroidAsyncStorageSize, 64],
-      ...buildProfile.cameraPlugins,
+      [
+        "expo-camera",
+        {
+          cameraPermission: "Allow $(PRODUCT_NAME) to access your camera to scan pairing QR codes.",
+        },
+      ],
       [
         "expo-splash-screen",
         {
@@ -155,7 +124,6 @@ export default {
           },
         },
       ],
-      ...buildProfile.notificationPlugins,
       "expo-audio",
       [
         "expo-gradle-jvmargs",
@@ -175,7 +143,6 @@ export default {
           },
         },
       ],
-      ...buildProfile.fdroidPlugins,
       ...(isProfileBuild ? [withAndroidProfileable] : []),
     ],
     experiments: {
@@ -184,7 +151,6 @@ export default {
       autolinkingModuleResolution: true,
     },
     extra: {
-      fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       router: {},
       eas: {

@@ -583,6 +583,8 @@ than treating it as valid.
 
 Simple set of Expo push notification tokens. Loaded with permissive parsing (filters non-string entries). Persisted with atomic temp-file rename.
 
+No shipped client registers a token: Osuna provides push notifications on no platform (see [glossary.md](glossary.md)). With no tokens stored, the push service sends nothing.
+
 ---
 
 ## 7. Usage

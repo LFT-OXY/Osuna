@@ -80,6 +80,8 @@ This keeps the `sh.paseo` package id, release Hermes bundle, and release optimiz
 and daemon WebSocket traffic. The markers contain message types and sizes, never payload contents,
 and emit only while a system trace records the `sh.paseo` app (`perfetto -a sh.paseo ...`).
 
+`packages/app/app.config.js` always applies `expo-gradle-jvmargs` with `-Xmx4096m` and `-XX:MaxMetaspaceSize=1024m` so local Expo prebuilds have enough Gradle heap.
+
 Or from `packages/app`:
 
 ```bash
@@ -120,65 +122,7 @@ REACT_NATIVE_PACKAGER_HOSTNAME=localhost \
 
 This is the Android counterpart of the iOS local-simulator flow in [development.md](development.md): on iOS the simulator shares the Mac's loopback so `localhost:<port>` works directly; on Android you need `10.0.2.2` or `adb reverse`.
 
-## F-Droid / source-only Android builds
-
-F-Droid builds should set `PASEO_FDROID_BUILD=1` when running Expo prebuild:
-
-```bash
-cd packages/app
-PASEO_FDROID_BUILD=1 APP_VARIANT=production npx expo prebuild --platform android --clean --non-interactive
-cd android
-PASEO_FDROID_BUILD=1 ./gradlew assembleRelease --no-daemon --max-workers=1 -Dorg.gradle.parallel=false
-```
-
-The flag must be present for both prebuild and Gradle because Gradle starts Metro for the release bundle. Keep the source build serial and daemon-free as shown above: compiling every Expo module can exhaust memory when Gradle workers run in parallel. The profile enables source-built Expo modules, excludes the proprietary camera, Firebase notification, and Expo development-client native modules, disables Gradle dependency metadata, and substitutes JavaScript stubs for camera and notifications. The resulting app supports direct and pasted-link pairing but not QR scanning or push notifications.
-
-For a single-ABI APK, pass React Native's architecture property to Gradle:
-
-```bash
-PASEO_FDROID_BUILD=1 ./gradlew assembleRelease \
-  -PreactNativeArchitectures=arm64-v8a \
-  --no-daemon --max-workers=1 -Dorg.gradle.parallel=false
-```
-
-Supported values are `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64`. The F-Droid profile filters native libraries to that ABI and changes the APK version code to `baseVersionCode * 10 + abiSuffix`, where the suffixes are ordered `1` through `4` in that same sequence. F-Droid metadata should use four build blocks with `VercodeOperation` entries `10 * %c + 1` through `10 * %c + 4` and pass the matching `reactNativeArchitectures` value in each build command. Builds without a single architecture keep the base version code.
-
-Keep the excluded npm packages installed. Normal builds use them, while the F-Droid profile removes only their Android native modules and config plugins. Paseo always applies `expo-gradle-jvmargs` with `-Xmx4096m` and `-XX:MaxMetaspaceSize=1024m` so local Expo prebuilds have enough Gradle heap whether they use precompiled AARs or source-built Expo modules.
-
-The EAS `production-apk` profile uses the large Android resource class. Release builds compile the native ABIs and run Hermes bundling in the same Gradle invocation; the default worker can exhaust its remaining memory and kill Hermes with exit code 137 even when Gradle's own heap is correctly sized.
-
-### F-Droid store metadata
-
-F-Droid reads the store listing from `fastlane/metadata/android/<locale>/` **at the repo root**. This location provides the best compatibility with the F-Droid release process.
-
-```text
-fastlane/metadata/android/
-├── en-US/                      (F-Droid fallback locale, mandatory)
-│   ├── title.txt               (<=50 chars)
-│   ├── short_description.txt   (<=80 chars)
-│   ├── full_description.txt    (<=4000 chars, limited HTML)
-│   ├── images/
-│   │   ├── icon.png            (512x512)
-│   │   ├── featureGraphic.png  (1024x500)
-│   │   └── phoneScreenshots/   (1.png, 2.png, ...)
-│   └── changelogs/             (generated — see below)
-├── ja/
-└── zh-CN/
-```
-
-Locale directories generally match `packages/app/src/i18n/locales.ts`, but note that `en` becomes `en-US`.
-
-F-Droid changelogs are generated from `CHANGELOG.md`. Run `npm run fdroid:changelogs`; `npm run fdroid:changelogs:check` verifies without writing. It is wired into the npm `version` lifecycle, so a release picks it up automatically and `git add -A` stages the result.
-
-One changelog must be generated per-ABI-split, so each version will create **four** identical version-coded entries. F-Droid caps changelogs at 500 characters, so the generator strips some content and adds a link to the full notes.
-
-Stable sync fails loudly if `CHANGELOG.md` has no entry for the version being cut. That is intentional — the release checklist requires the entry to be committed first, so an abort here means the checklist was skipped.
-
-Because the generator runs off the version in `package.json`, it must run **before** the tag is created: fdroidserver only reads metadata from the tag it builds, so the file for version N has to exist in the commit N points at.
-
-Beta releases are an explicit no-op: they do not create or rewrite F-Droid changelog files. Stable releases and promotions generate the four ABI entries from their final changelog.
-
-### React version lockstep
+## React version lockstep
 
 Keep `react` and `react-dom` pinned to the React version embedded by the current `react-native` release. React Native `0.81.x` embeds `react-native-renderer` `19.1.0`, so `packages/app` must use React `19.1.0`. Bumping React to a newer patch can build successfully but crash at JS startup on Android with `Incompatible React versions`, leaving the app on the native splash screen.
 
@@ -198,6 +142,8 @@ Stable tag pushes like `v0.1.0` trigger:
 iOS auto-submits to App Store review via a Fastlane lane after EAS uploads to TestFlight. Android auto-submits to the Play Store via EAS-managed credentials.
 
 Beta tags like `v0.1.1-beta.1` only trigger the GitHub APK workflow. They publish a GitHub prerelease APK for testing and do not submit to the stores.
+
+The EAS `production-apk` profile uses the large Android resource class. Release builds compile the native ABIs and run Hermes bundling in the same Gradle invocation; the default worker can exhaust its remaining memory and kill Hermes with exit code 137 even when Gradle's own heap is correctly sized.
 
 `android-v*` tags also trigger only the GitHub APK workflow — useful when you want to ship an APK without going through stores. The GitHub APK workflow supports `workflow_dispatch` with an existing `tag` input so you can rebuild without cutting a new tag.
 
