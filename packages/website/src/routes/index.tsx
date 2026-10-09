@@ -5,8 +5,8 @@ import { pageMeta } from "~/meta";
 export const Route = createFileRoute("/")({
   head: () =>
     pageMeta(
-      "Osuna – Run Claude Code, Codex, Copilot, OpenCode from anywhere",
-      "Self-hosted daemon for Claude Code, Codex, Copilot, OpenCode, and Pi. Agents run on your machine with your full dev environment. Connect from phone, desktop, or web.",
+      "Osuna – 编程 Agent 的统一界面",
+      "在自己的机器上并行运行 Claude Code、Codex、Copilot、OpenCode 和 Pi，用桌面端、手机或浏览器随时接管。自托管，开源。",
       "/",
     ),
   component: Home,
@@ -17,16 +17,16 @@ function Home() {
     <LandingPage
       title={
         <>
-          The control plane
+          编程 Agent 的
           <br />
-          for coding agents
+          统一界面
         </>
       }
       subtitle={
         <>
-          Run any coding agent from anywhere.
+          在自己的机器上并行运行编程 Agent，
           <br />
-          Self-hosted, multi-provider, open source
+          在桌前或手机上都能推进交付
         </>
       }
     />

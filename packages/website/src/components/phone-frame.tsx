@@ -1,10 +1,13 @@
-// The iPhone frame every mobile mockup sits inside. Authored at a fixed
+// The iPhone frame the phone screenshots sit inside. Authored at a fixed
 // "design" size — iPhone 17 Pro points, 402 x 874 — and scaled to whatever
-// width its column gives it. The scale is pure CSS (`tan(atan2(100cqw, …))`,
-// the same trick the desktop hero uses), so the frame stays crisp at any width
-// with no JS and a correct server-rendered first paint.
+// width its column gives it. The scale is pure CSS (`tan(atan2(100cqw, …))`),
+// so the frame stays crisp at any width with no JS and a correct
+// server-rendered first paint.
+//
+// The frame draws the status bar itself, so a screenshot fills the 402 x 820
+// area below it. Capture the web app at that viewport.
 
-import type * as React from "react";
+import * as React from "react";
 
 export const PHONE_W = 402;
 export const PHONE_H = 874;
@@ -35,12 +38,10 @@ const GLASS_STYLE = {
 function StatusBar({ time }: { time: string }) {
   return (
     <div className="relative flex h-[54px] shrink-0 items-end justify-between px-[34px] pb-[13px]">
-      <span className="text-[17px] font-semibold tracking-tight text-mock-fg tabular-nums">
-        {time}
-      </span>
+      <span className="text-[17px] font-semibold tracking-tight tabular-nums">{time}</span>
       {/* Dynamic island. */}
       <div className="absolute top-[11px] left-1/2 h-[37px] w-[126px] -translate-x-1/2 rounded-full bg-black" />
-      <span className="flex items-center gap-[7px] text-mock-fg">
+      <span className="flex items-center gap-[7px]">
         <CellularIcon />
         <WifiIcon />
         <BatteryIcon />
@@ -82,7 +83,7 @@ function BatteryIcon() {
 
 function HomeIndicator() {
   return (
-    <div className="pointer-events-none absolute bottom-[9px] left-1/2 h-[5px] w-[140px] -translate-x-1/2 rounded-full bg-mock-fg/30" />
+    <div className="pointer-events-none absolute bottom-[9px] left-1/2 h-[5px] w-[140px] -translate-x-1/2 rounded-full bg-white/30" />
   );
 }
 
@@ -98,13 +99,17 @@ function FrontButtons() {
 
 export function PhoneFrame({
   time,
+  surface,
   children,
   depth = "front",
 }: {
   time: string;
+  /** The colour at the top of the screenshot, so the status bar continues it. */
+  surface: string;
   children: React.ReactNode;
   depth?: PhoneDepth;
 }) {
+  const screenStyle = React.useMemo(() => ({ backgroundColor: surface }), [surface]);
   return (
     <div className="relative w-full select-none [transform-style:preserve-3d]" style={FRAME_ASPECT}>
       <div
@@ -124,7 +129,10 @@ export function PhoneFrame({
       <div className="absolute inset-0 overflow-hidden rounded-[13.5%/6.2%] border-[3px] border-black bg-black shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] outline outline-[1px] outline-white/25">
         <div className="absolute -inset-[3px] [container-type:inline-size]">
           <div className="absolute top-0 left-0 origin-top-left" style={SCREEN_SCALE}>
-            <div className="relative flex h-[874px] w-[402px] flex-col overflow-hidden bg-mock-surface0 text-mock-fg antialiased">
+            <div
+              className="relative flex h-[874px] w-[402px] flex-col overflow-hidden text-white antialiased"
+              style={screenStyle}
+            >
               <StatusBar time={time} />
               <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                 {children}
