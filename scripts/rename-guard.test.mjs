@@ -152,7 +152,31 @@ test("lets migration code tagged COMPAT(paseoDataMigration) read the old layout"
   ]);
 });
 
-test("lets a file that opens with the tag keep the old spelling throughout, path included", async (t) => {
+test("lets a registered migration file that opens with the tag keep the old spelling throughout, path included", async (t) => {
+  const root = await makeTree(t, {
+    "packages/server/src/server/legacy-home-migration.ts": [
+      COMPAT_COMMENT,
+      'import os from "node:os";',
+      "",
+      'export const legacyHome = ".paseo";',
+    ].join("\n"),
+    "packages/desktop/src/settings/renderer-origin-migration/storage-names.ts": [
+      COMPAT_COMMENT,
+      "",
+      'export const LEGACY_ORIGIN = "paseo://app";',
+    ].join("\n"),
+    "packages/cli/tests/40-legacy-home-and-env.test.ts": [
+      "#!/usr/bin/env npx tsx",
+      COMPAT_COMMENT,
+      "",
+      'const legacyHome = ".paseo";',
+    ].join("\n"),
+  });
+
+  assert.deepEqual(summarize(await findRenameViolations(root)), []);
+});
+
+test("does not let an unregistered file exempt itself by opening with the tag", async (t) => {
   const root = await makeTree(t, {
     "packages/server/src/legacy-paseo-home.test.ts": [
       COMPAT_COMMENT,
@@ -166,16 +190,113 @@ test("lets a file that opens with the tag keep the old spelling throughout, path
       "",
       "mv ~/.paseo ~/.osuna",
     ].join("\n"),
-    "packages/server/src/paseo-other.ts": [
+  });
+
+  assert.deepEqual(summarize(await findRenameViolations(root)), [
+    "packages/server/src/legacy-paseo-home.test.ts",
+    "packages/server/src/legacy-paseo-home.test.ts:4",
+    "scripts/migrate.sh:4",
+  ]);
+});
+
+test("holds a registered migration file to the line rules once it stops opening with the tag", async (t) => {
+  const root = await makeTree(t, {
+    "packages/server/src/server/legacy-env.ts": [
       "export {};",
       "",
-      COMPAT_COMMENT,
-      "export const a = 1;",
+      'export const LEGACY_PREFIX = "PASEO_";',
     ].join("\n"),
   });
 
   assert.deepEqual(summarize(await findRenameViolations(root)), [
-    "packages/server/src/paseo-other.ts",
+    "packages/server/src/server/legacy-env.ts:3",
+  ]);
+});
+
+test("lets a registered docs section name the old spelling and nothing outside it", async (t) => {
+  const root = await makeTree(t, {
+    "public-docs/docker.md": [
+      "# Docker",
+      "",
+      "Run `paseo` in a container.",
+      "",
+      "## Upgrading from 0.14.x",
+      "",
+      "Rename the state directory:",
+      "",
+      "```bash",
+      "# inside the mounted home",
+      "mv .paseo .osuna",
+      "```",
+      "",
+      "### Variables",
+      "",
+      "Rename every `PASEO_*` variable.",
+      "",
+      "## Troubleshooting",
+      "",
+      "Check `~/.paseo/daemon.log`.",
+    ].join("\n"),
+  });
+
+  assert.deepEqual(summarize(await findRenameViolations(root)), [
+    "public-docs/docker.md:20",
+    "public-docs/docker.md:3",
+  ]);
+});
+
+test("matches a registered docs section whose heading is not ASCII", async (t) => {
+  const root = await makeTree(t, {
+    "docs/release.md": [
+      "# Release",
+      "",
+      "## 0.14.x 数据迁移",
+      "",
+      "`~/.paseo` 改名为 `~/.osuna`。",
+      "",
+      "### 回滚到 0.14.x",
+      "",
+      "0.14.x 经 `~/.paseo` 上的链接读写同一份数据。",
+      "",
+      "## Release notes",
+      "",
+      "Paseo",
+    ].join("\n"),
+  });
+
+  assert.deepEqual(summarize(await findRenameViolations(root)), ["docs/release.md:13"]);
+});
+
+test("lets a registered docs sentence name the old spelling once, not the rest of the file", async (t) => {
+  const root = await makeTree(t, {
+    "public-docs/plugins/index.md": [
+      "# Plugin quickstart",
+      "",
+      "Plugins written for upstream Paseo do not load in Osuna. The manifest file is `paseo-plugin.json`.",
+      "",
+      "Install the Paseo SDK.",
+    ].join("\n"),
+  });
+
+  assert.deepEqual(summarize(await findRenameViolations(root)), [
+    "public-docs/plugins/index.md:3",
+    "public-docs/plugins/index.md:5",
+  ]);
+});
+
+test("does not let a COMPAT tag exempt prose in a Markdown file", async (t) => {
+  const root = await makeTree(t, {
+    "docs/architecture.md": [
+      "# Architecture",
+      "",
+      `- Tagged \`${COMPAT_COMMENT.slice(3)}\`.`,
+      "- The old home is `~/.paseo`.",
+    ].join("\n"),
+  });
+
+  assert.deepEqual(summarize(await findRenameViolations(root)), [
+    "docs/architecture.md:3",
+    "docs/architecture.md:4",
   ]);
 });
 

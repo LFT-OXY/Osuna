@@ -10,8 +10,36 @@ const execFileAsync = promisify(execFile);
 const OLD_SPELLING = /paseo/i;
 
 // 迁移代码读旧布局的地方打这个标签（docs/protocol-compatibility.md 的 COMPAT 约定）。
-// 放行范围：标签所在行；标签行往下直到第一个空行；标签在文件首行（shebang 之后）时是整个文件连同路径。
+// 放行范围：标签所在行，以及标签行往下直到第一个空行。只对代码生效，Markdown 里的标签不放行任何东西。
 export const MIGRATION_COMPAT_TAG = "COMPAT(paseoDataMigration)";
+
+// 整份都在读旧布局的迁移文件。登记在这里并且首行（shebang 之后）带标签，才整文件连同路径放行；
+// 没登记的文件首行带标签也只按标签块放行，新文件不能靠一行注释把自己整个豁免掉。
+// 写法同下面的例外清单：以 "/" 结尾是整个目录，其余是单个文件。
+export const MIGRATION_FILES = [
+  "packages/server/src/server/legacy-home-migration.ts",
+  "packages/server/src/server/legacy-home-migration.test.ts",
+  "packages/server/src/server/legacy-env.ts",
+  "packages/server/src/server/legacy-env.test.ts",
+  "packages/server/src/server/daemon-e2e/legacy-home-migration.e2e.test.ts",
+  "packages/cli/tests/40-legacy-home-and-env.test.ts",
+  "packages/desktop/src/settings/user-data-migration.ts",
+  "packages/desktop/src/settings/user-data-migration.test.ts",
+  "packages/desktop/src/settings/renderer-origin-migration/",
+  "packages/desktop/e2e/user-data-migration.electron.mjs",
+  "packages/desktop/e2e/renderer-origin-migration.electron.mjs",
+];
+
+// 文档里必须点名旧拼写的段落。标签写进 Markdown 会被官网渲染出来，所以放行范围登记在这里：
+// `section` 放行从该标题到下一个同级或更高级标题之间的内容，`sentence` 只放行这一句原文。
+export const DOC_PASSAGE_EXCEPTIONS = [
+  { file: "public-docs/docker.md", section: "## Upgrading from 0.14.x" },
+  {
+    file: "public-docs/plugins/index.md",
+    sentence: "Plugins written for upstream Paseo do not load in Osuna.",
+  },
+  { file: "docs/release.md", section: "## 0.14.x 数据迁移" },
+];
 
 // 例外清单的出处：.atw/tasks/10-09-osuna-standalone/map-issues/07-rename-exception-list.md。
 // 改名脚本整文件跳过这些路径，守线检查放行它们。
@@ -29,10 +57,6 @@ export const RENAME_EXCEPTIONS = [
   ".atw/tasks/",
   ".atw/workspace/",
   "**/fixtures/legacy-paseo/",
-  // Public docs 里必须点名旧拼写的两篇：Docker 升级段要写出旧的目录、变量与挂载点，
-  // 插件快速上手要写明上游插件不兼容。两篇的其余内容靠人工保持 Osuna 拼写。
-  "public-docs/docker.md",
-  "public-docs/plugins/index.md",
   // 改名与守线工具自身：规则里必须写出旧拼写。
   "scripts/rename-guard.mjs",
   "scripts/rename-guard.test.mjs",
@@ -48,12 +72,18 @@ export function isOutsideRenameScope(file) {
   return file.split("/").some((segment) => SKIPPED_DIRECTORIES.has(segment));
 }
 
+function matchesPathPattern(file, pattern) {
+  if (pattern.startsWith("**/")) return `/${file}`.includes(`/${pattern.slice(3)}`);
+  if (pattern.endsWith("/")) return file.startsWith(pattern);
+  return file === pattern;
+}
+
 export function isRenameException(file) {
-  return RENAME_EXCEPTIONS.some((pattern) => {
-    if (pattern.startsWith("**/")) return `/${file}`.includes(`/${pattern.slice(3)}`);
-    if (pattern.endsWith("/")) return file.startsWith(pattern);
-    return file === pattern;
-  });
+  return RENAME_EXCEPTIONS.some((pattern) => matchesPathPattern(file, pattern));
+}
+
+function isRegisteredMigrationFile(file) {
+  return MIGRATION_FILES.some((pattern) => matchesPathPattern(file, pattern));
 }
 
 // 已跟踪文件加未被忽略的新文件：本机的构建产物与其他 worktree 不进扫描范围。
@@ -97,6 +127,51 @@ function findUntaggedLines(lines) {
   return hits;
 }
 
+const MARKDOWN_HEADING = /^(#{1,6}) /;
+
+// 代码块里以 "#" 开头的行是注释不是标题，所以要跟着围栏走。
+function findSectionLines(lines, heading) {
+  const level = heading.match(MARKDOWN_HEADING)[1].length;
+  const sectionLines = new Set();
+  let insideSection = false;
+  let insideFence = false;
+  lines.forEach((text, index) => {
+    if (text.trimStart().startsWith("```")) insideFence = !insideFence;
+    const headingLevel = insideFence ? undefined : text.match(MARKDOWN_HEADING)?.[1].length;
+    if (text === heading) insideSection = true;
+    else if (headingLevel <= level) insideSection = false;
+    if (insideSection) sectionLines.add(index);
+  });
+  return sectionLines;
+}
+
+// 文件内容按 latin1 读进来（二进制文件也不会解码失败），登记的原文要换成同一种读法才对得上。
+function asGuardedText(text) {
+  return Buffer.from(text, "utf8").toString("latin1");
+}
+
+function findUnregisteredProse(file, lines) {
+  const passages = DOC_PASSAGE_EXCEPTIONS.filter((passage) => passage.file === file);
+  const sections = passages.flatMap((passage) => passage.section ?? []).map(asGuardedText);
+  const sentences = passages.flatMap((passage) => passage.sentence ?? []).map(asGuardedText);
+  const exemptLines = new Set(sections.flatMap((section) => [...findSectionLines(lines, section)]));
+  const hits = [];
+  lines.forEach((text, index) => {
+    if (exemptLines.has(index)) return;
+    const unregistered = sentences.reduce(
+      (remaining, sentence) => remaining.replace(sentence, ""),
+      text,
+    );
+    if (OLD_SPELLING.test(unregistered)) hits.push({ line: index + 1, text });
+  });
+  return hits;
+}
+
+function findContentViolations(file, lines) {
+  if (file.endsWith(".md")) return findUnregisteredProse(file, lines);
+  return findUntaggedLines(lines);
+}
+
 export async function findRenameViolations(root) {
   const violations = [];
   for (const file of await listRepoFiles(root)) {
@@ -104,9 +179,9 @@ export async function findRenameViolations(root) {
     const content = await readGuardedContent(join(root, file));
     if (content === null) continue;
     const lines = content.split("\n");
-    if (opensWithMigrationTag(lines)) continue;
+    if (isRegisteredMigrationFile(file) && opensWithMigrationTag(lines)) continue;
     if (OLD_SPELLING.test(file)) violations.push({ file, text: file });
-    for (const hit of findUntaggedLines(lines)) violations.push({ file, ...hit });
+    for (const hit of findContentViolations(file, lines)) violations.push({ file, ...hit });
   }
   return violations;
 }
@@ -131,7 +206,7 @@ async function main(argv) {
   console.error(violations.map(formatViolation).join("\n"));
   console.error(
     `\n${violations.length} old spellings in ${fileCount} files. Rename them to the Osuna spelling. ` +
-      `Only the exception list in scripts/rename-guard.mjs and code tagged ${MIGRATION_COMPAT_TAG} may keep the old one.`,
+      `Only the lists in scripts/rename-guard.mjs and code tagged ${MIGRATION_COMPAT_TAG} may keep the old one.`,
   );
   process.exitCode = 1;
 }

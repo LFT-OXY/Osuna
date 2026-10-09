@@ -405,10 +405,10 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 - **渲染层存储**：`paseo://app` 这个 origin 的 localStorage 与 IndexedDB 导入 `osuna://app`，旧 origin 不清空。代码在 `packages/desktop/src/settings/renderer-origin-migration/`，完成标记是 `desktop-settings.json` 的 `migrations.legacyRendererOriginImported`。
 - 残留的 `PASEO_*` 环境变量不生效，daemon 与 CLI 启动时逐个点名：`packages/server/src/server/legacy-env.ts`。
 - 迁移测试用的旧版样本在 `packages/desktop/e2e/fixtures/legacy-paseo/`。
-- 清理：`rg "COMPAT\(paseoDataMigration"` 列出全部位置。到期后把这些代码、上面的样本目录、`scripts/rename-guard.mjs` 里放行这个标签的规则一起删掉。
+- 清理：`rg "COMPAT\(paseoDataMigration"` 列出全部位置。到期后把这些代码、上面的样本目录、`scripts/rename-guard.mjs` 里放行这个标签的规则、`MIGRATION_FILES` 登记表和本节在 `DOC_PASSAGE_EXCEPTIONS` 里的那一行一起删掉。
 
-到期只删代码。旧 home 路径上的链接是用户数据，留在磁盘上：工作区记录、git worktree 的
-`gitdir` 指针和 `agents/` 目录名都还指着旧路径。删掉迁移代码的那个版本要在发布说明里写明：
+到期只删代码。`~/.paseo` 这个链接是用户数据，留在磁盘上：工作区记录、git worktree 的
+`gitdir` 指针和 `agents/` 目录名都还指着 `~/.paseo`。删掉迁移代码的那个版本要在发布说明里写明：
 还停在 0.14.x 的用户须先升到带迁移的 1.x 版本。
 
 排查用户报告时要知道的两点：
@@ -424,15 +424,16 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 
 1. 退出 Osuna，用 `osuna daemon status` 确认 daemon 已停。两个版本的 pid 锁文件名不同，
    互相看不见，同时运行会一起写同一个 home。
-2. 要带回主机列表与设置，在第一次打开 0.14.x 之前把 userData 目录改回上面列的旧名。
+2. 要带回主机列表与设置，在第一次打开 0.14.x 之前把 userData 目录从 `Osuna` 改回 `Paseo`。
    它在 macOS 的 `~/Library/Application Support/Osuna`、Windows 的 `%APPDATA%\Osuna`、
    Linux 的 `~/.config/Osuna`。不改回去，0.14.x 以空的主机列表和默认设置启动。
 3. 安装并打开 0.14.x。
 
 回去之后能看到什么：
 
-- **daemon 数据**：0.14.x 经旧 home 路径上的链接读写同一份数据，不用任何操作。走了复制
-  回退的机器没有链接，0.14.x 看到的是升级那一刻的旧目录。
+- **daemon 数据**：0.14.x 读写 `~/.paseo`。它现在是指向 `~/.osuna` 的链接，两个版本用的是
+  同一份数据，不用任何操作。走了复制回退的机器没有链接，`~/.paseo` 还是升级那一刻的旧目录，
+  0.14.x 看到的就是它。
 - **渲染层存储**：旧 origin 的数据停在升级那一刻。1.0.0 里新加的主机、改过的设置和草稿
   写在新 origin，0.14.x 读不到。
 
