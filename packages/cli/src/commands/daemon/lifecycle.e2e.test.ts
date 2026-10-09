@@ -135,9 +135,10 @@ test("managed two-home restart retains its supervisor and never routes ordinary 
     const beforeA = await f.liveStatus(a);
     const beforeB = await f.liveStatus(b, poisoned);
     if (process.platform !== "win32") {
-      for (const home of [a, b, path.join(f.root, ".osuna")])
-        expect((await stat(home)).mode & 0o777).toBe(0o700);
+      for (const home of [a, b]) expect((await stat(home)).mode & 0o777).toBe(0o700);
     }
+    // 每条命令都显式选了 home，client id 跟着它走，默认 home 下什么都不该出现。
+    await expect(stat(path.join(f.root, ".osuna"))).rejects.toMatchObject({ code: "ENOENT" });
 
     const repoB = path.join(f.root, "project-b");
     await mkdir(repoB);

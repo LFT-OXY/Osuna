@@ -782,7 +782,7 @@ export class VoiceAssistantWebSocketServer {
     const pushLogger = this.logger.child({ module: "push" });
     this.pushNotifications = createPushNotifications({
       logger: pushLogger,
-      filePath: join(osunaHome, "push-tokens.json"),
+      home: osunaHome,
     });
     this.pushNotificationSender = pushNotificationSender ?? this.pushNotifications;
 

@@ -24,6 +24,7 @@ import {
   migrateLegacyHomeIfDefault,
   type LegacyHomeFileSystem,
 } from "./legacy-home-migration.js";
+import { LegacyDaemonRunningError } from "./legacy-daemon.js";
 import { isOsunaOwnedWorktreeCwd } from "../utils/worktree.js";
 
 describe("migrateLegacyHome", () => {
@@ -208,6 +209,51 @@ describe("migrateLegacyHome", () => {
     expect(readdirSync(root)).toEqual([".paseo"]);
     expect(lstatSync(legacyHome).isDirectory()).toBe(true);
     expect(readdirSync(legacyHome).sort()).toEqual(["agents", "config.json"]);
+  });
+
+  const lockWrittenAt = new Date().toISOString();
+
+  function writeLegacyLock(pid: number): string {
+    const lock = JSON.stringify({
+      pid,
+      startedAt: lockWrittenAt,
+      hostname: "current-host",
+      uid: process.getuid?.() ?? 0,
+      listen: "127.0.0.1:6767",
+      desktopManaged: true,
+    });
+    writeFileSync(path.join(legacyHome, "paseo.pid"), lock);
+    return lock;
+  }
+
+  test("leaves the legacy home where it is while a live 0.14.x daemon holds its lock file", async () => {
+    seedLegacyHome();
+    const lock = writeLegacyLock(process.pid);
+
+    const refusal = await migrateLegacyHome({ legacyHome, home }).catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(LegacyDaemonRunningError);
+    expect((refusal as LegacyDaemonRunningError).daemon).toEqual({
+      home: legacyHome,
+      pid: process.pid,
+      startedAt: lockWrittenAt,
+      listen: "127.0.0.1:6767",
+      desktopManaged: true,
+    });
+    expect(readdirSync(root)).toEqual([".paseo"]);
+    expect(lstatSync(legacyHome).isDirectory()).toBe(true);
+    expect(readFileSync(path.join(legacyHome, "paseo.pid"), "utf8")).toBe(lock);
+  });
+
+  test("moves a legacy home whose lock file was left behind by a daemon that is gone", async () => {
+    seedLegacyHome();
+    const lock = writeLegacyLock(2_147_483_646);
+
+    expect(await migrateLegacyHome({ legacyHome, home })).toEqual({
+      outcome: "migrated",
+      method: "rename",
+    });
+    expect(readFileSync(path.join(home, "paseo.pid"), "utf8")).toBe(lock);
   });
 });
 

@@ -144,6 +144,12 @@ review as "old worktrees lost their base ref" and "tool restrictions in
 - Read the new name first. Fall back to the old name only when the new one is
   absent. Write the new name only. Never rewrite or delete what the old version
   wrote: a rollback to that version must still find its data.
+- The one deliberate exception reads nothing back. The push token store moved
+  from `push-tokens.json` to `push-subscriptions.json` (`server/push/index.ts`)
+  so that tokens the upstream mobile app registered with 0.14.x are never sent
+  to. Use a new name with no fallback only when the old data must stop taking
+  effect, say so in a comment at the constant, and record it in
+  `docs/data-model.md`.
 - Tag every fallback with the migration's `COMPAT` tag, written in full on the
   line above it. `findStoredMetadataPath` in `utils/worktree-metadata.ts` is the
   shape for a file path; `persisted-config.ts` has the shape for a JSON key.
@@ -166,14 +172,118 @@ already put that string on disk or on the wire.
 ### Gotcha: anything that resolves the default home moves the old one
 
 `migrateLegacyHomeIfDefault` (`server/legacy-home-migration.ts`) runs in the
-launcher, not in the daemon: the CLI `preAction` hook, `startDaemon()` in the
-desktop app, and the supervisor entrypoint. A managed daemon always receives an
-explicit `OSUNA_HOME` and its stderr is discarded, so it could neither detect
-the default case nor report a failure.
+launcher, not in the daemon: the CLI `preAction` hook, `startDaemon()` and the
+first attachment write in the desktop app, and the supervisor entrypoint. A
+managed daemon always receives an explicit `OSUNA_HOME` and its stderr is
+discarded, so it could neither detect the default case nor report a failure.
 
 It runs before every CLI command, including ones that target a remote host,
-because those write `cli-client-id` into the default home and an empty new home
-makes the move skip forever.
+because without an explicit home those write `cli-client-id` into the default
+home and an empty new home makes the move skip forever.
+
+The rule behind both: **nothing may create the default home before the move.**
+A new code path that writes under `resolveOsunaHome(process.env)` from a
+launcher (desktop main process, CLI, a repo script) either calls
+`migrateLegacyHomeIfDefault` first or writes into the home the user selected.
+`connectToDaemon` keeps the client id in the selected home for that reason, and
+`scripts/dev-home.sh` only reuses `~/.osuna/models/local-speech` when it is
+already there.
+
+## Scenario: a 0.14.x daemon still running at upgrade
+
+### 1. Scope / Trigger
+
+"Keep running after quit" leaves the 0.14.x supervisor alive on the old data
+directory when the desktop app updates. Moving the directory under it, or
+starting a second daemon on the same data, corrupts state. Every launcher goes
+through the same detection.
+
+### 2. Signatures
+
+```ts
+// server/legacy-daemon.ts (exported from @osuna/server)
+findRunningLegacyDaemon(input: { explicitHome: string | undefined; homeDir?: string }): Promise<LegacyDaemon | null>
+stopLegacyDaemon(daemon: LegacyDaemon, options?: { force?: boolean; timeoutMs?: number; killTimeoutMs?: number }): Promise<{ pid: number; forced: boolean }>
+legacyDaemonStopCommand(daemon: LegacyDaemon, force?: boolean): string
+class LegacyDaemonRunningError extends Error { code: "LEGACY_DAEMON_RUNNING"; daemon: LegacyDaemon }
+
+// server/pid-lock.ts
+readLiveLegacyPidLock(home: string): Promise<PidLockInfo | null>
+```
+
+### 3. Contracts
+
+- `LegacyDaemon`: `home` (the directory holding its lock file), `pid`,
+  `startedAt`, `listen`, `desktopManaged`.
+- Where it looks: an explicit home → only that home. Default home → `~/.osuna`
+  when it exists (0.14.x runs through the link), otherwise the unmoved old
+  directory. Two real directories side by side → the old one is ignored; the new
+  home wins and the daemon on the old one uses different data.
+- Alive means: the lock parses, its pid is running, and the process is not
+  provably a different one. A process that started more than 5 s after the
+  lock's `startedAt` and does not carry the old supervisor's process title is a
+  reused pid (`server/legacy-daemon-process.ts`). Anything that cannot be
+  determined counts as alive.
+- `migrateLegacyHome` throws `LegacyDaemonRunningError` instead of moving. No
+  launcher can bypass it.
+- `stopLegacyDaemon` signals by pid. The 1.0.0 client refuses 0.14.x at the
+  handshake, so there is no shutdown RPC. It never deletes the old lock file.
+- The stop command in every message names `--home <daemon.home>`. The bare form
+  targets another host when `OSUNA_HOST` is set.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|-----------|--------|
+| CLI command other than `daemon status` / `status` / `daemon stop` on a local target | `LEGACY_DAEMON_RUNNING`, exit 1, nothing moved or created |
+| `daemon status` | `localDaemon: "legacy_running"`, no connection attempt, exit 0 |
+| `daemon stop` | stops by pid; data is not moved until the next start |
+| Desktop start, lock has `desktopManaged` | stop (15 s, forced on Windows), then move, then start |
+| Desktop start, lock without `desktopManaged` | start command fails with `LegacyDaemonRunningError` |
+| Daemon does not exit in time | `DaemonInstanceError("STOP_NOT_CONFIRMED")` |
+| Windows without `force` | `DaemonInstanceError("STOP_NO_GRACEFUL_CHANNEL")` |
+| Supervisor started directly on the default home | message on stderr, exit 1, no stack |
+| Lock already inside the selected home at `acquirePidLock` | `PidLockError` naming the stop command |
+
+### 5. Good/Base/Bad Cases
+
+- Good: desktop-managed 0.14.x daemon alive → first 1.0.0 start stops it,
+  moves the home, runs the new daemon.
+- Base: no old lock, or its owner is gone → the move proceeds as before.
+- Bad: stale lock whose pid now belongs to an unrelated process → not treated
+  as a daemon; never signalled.
+
+### 6. Tests Required
+
+- `legacy-home-migration.test.ts`: live lock → throws, directory and lock bytes
+  unchanged; dead owner → moves.
+- `legacy-daemon.test.ts`: the four lookup cases above, reused pid, stop with a
+  real child process (graceful, timeout, forced).
+- `packages/cli/tests/41-legacy-daemon-running.test.ts`: refusal text, status,
+  stop, next start moves; nothing appears under the user home besides the old
+  directory.
+- `packages/desktop/e2e/legacy-home-migration.electron.mjs`: foreign daemon,
+  daemon that will not stop, takeover.
+- Write the lock **after** the stand-in process is up and stamp it with the
+  current time. A fixed past `startedAt` with a fresh pid is the reused-pid case
+  and is ignored.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Trusts the pid alone and looks in one place.
+const lock = await readOldLockFile(home);
+if (lock && isPidRunning(lock.pid)) process.kill(lock.pid, "SIGTERM");
+```
+
+#### Correct
+
+```ts
+const legacyDaemon = await findRunningLegacyDaemon({ explicitHome });
+if (legacyDaemon) await stopLegacyDaemon(legacyDaemon, { timeoutMs: 15_000 });
+```
 
 The consequence for development: any process started from this repo without
 `OSUNA_HOME` or `--home` renames the developer's real 0.14.x data directory.

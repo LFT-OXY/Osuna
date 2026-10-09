@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { daemonLogPath } from "./daemon-instance.js";
+import { findLegacyDaemonInHome, LegacyDaemonRunningError } from "./legacy-daemon.js";
 
 export type LegacyHomeFileSystem = Pick<
   typeof nodeFs,
@@ -118,6 +119,10 @@ export async function migrateLegacyHome(
       legacyHomeIsNewer: legacyWrittenAt > homeWrittenAt,
     };
   }
+
+  // 旧 daemon 还活着就不搬：它按旧路径开着日志、数据库和 worktree，脚下的目录不能换。
+  const runningDaemon = await findLegacyDaemonInHome(legacyHome);
+  if (runningDaemon) throw new LegacyDaemonRunningError(runningDaemon);
 
   try {
     await fs.rename(legacyHome, home);

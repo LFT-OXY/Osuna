@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { DaemonConnectionError } from "@osuna/client/internal/daemon-client";
 import {
+  legacyDaemonStopCommand,
   readDaemonInstance,
   readPersistedConfig,
   resolveConfigFromPersisted,
@@ -12,6 +13,7 @@ import { connectToDaemon, buildDaemonConnectionCommandError } from "../../utils/
 import { withOutput, toCommandError, type CommandOptions } from "../../output/index.js";
 import { addJsonAndDaemonHostOptions } from "../../utils/command-options.js";
 import { describeDaemonTarget, type DaemonTarget } from "../../utils/daemon-target.js";
+import { findLegacyDaemonFor } from "../../utils/legacy-daemon.js";
 
 export function daemonStatusCommand(): Command {
   return addJsonAndDaemonHostOptions(
@@ -19,8 +21,24 @@ export function daemonStatusCommand(): Command {
   ).action(withOutput(runStatusCommand));
 }
 
-export async function runStatusCommand(options: CommandOptions, _command: Command) {
+export async function runStatusCommand(options: CommandOptions, command: Command) {
   const target = options.daemonTarget;
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  // 握手会拒绝 0.14.x，所以不去连它，只报锁文件里记的那些；也不读新 home，免得把它建出来。
+  const legacyDaemon = target.kind === "instance" ? await findLegacyDaemonFor(command) : null;
+  if (legacyDaemon) {
+    return statusResult({
+      home: legacyDaemon.home,
+      pid: legacyDaemon.pid,
+      startedAt: legacyDaemon.startedAt,
+      listen: legacyDaemon.listen,
+      localDaemon: "legacy_running",
+      desktopManaged: legacyDaemon.desktopManaged,
+      connectedDaemon: "not_probed",
+      note: `A 0.14.x daemon is still running. Osuna 1.0.0 cannot connect to it or use its data until it stops. Stop it with: ${legacyDaemonStopCommand(legacyDaemon)}`,
+    });
+  }
+
   const instance = target.kind === "instance" ? await readDaemonInstance(target.home) : null;
   const local =
     target.kind === "instance"
@@ -30,7 +48,10 @@ export async function runStatusCommand(options: CommandOptions, _command: Comman
     target.kind === "endpoint" || instance?.listen
       ? await probeDaemonStatus(target, instance, local)
       : { connectedDaemon: "not_probed" };
-  const data: Record<string, unknown> = { ...local, ...observed };
+  return statusResult({ ...local, ...observed });
+}
+
+function statusResult(data: Record<string, unknown>) {
   return {
     type: "single" as const,
     data,

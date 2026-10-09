@@ -262,9 +262,10 @@ describe("pid-lock ownership", () => {
 
   test("refuses to start beside a live 0.14.x daemon that still holds its own lock file", async () => {
     const osunaHome = await mkdtemp(join(tmpdir(), "osuna-pid-lock-legacy-live-"));
+    const startedAt = new Date().toISOString();
     const legacyLock = JSON.stringify({
       pid: process.pid,
-      startedAt: "2026-10-01T00:00:00.000Z",
+      startedAt,
       hostname: "current-host",
       uid: process.getuid?.() ?? 0,
       listen: "127.0.0.1:6767",
@@ -276,7 +277,7 @@ describe("pid-lock ownership", () => {
       await expect(
         acquirePidLock(osunaHome, null, { ownerPid: process.pid + 10_000 }),
       ).rejects.toThrow(
-        `Another Osuna daemon is already running (PID ${process.pid}, started 2026-10-01T00:00:00.000Z)`,
+        `A 0.14.x daemon is still running in ${osunaHome} (PID ${process.pid}, started ${startedAt}). Stop it first: osuna daemon stop --home "${osunaHome}"`,
       );
 
       expect(await getPidLockInfo(osunaHome)).toBeNull();
@@ -285,6 +286,33 @@ describe("pid-lock ownership", () => {
       await rm(osunaHome, { recursive: true, force: true });
     }
   });
+
+  test.skipIf(process.platform === "win32")(
+    "starts when the pid in the 0.14.x lock file now belongs to a process started after it",
+    async () => {
+      const osunaHome = await mkdtemp(join(tmpdir(), "osuna-pid-lock-legacy-reused-"));
+      const ownerPid = process.pid + 10_000;
+      // 这个测试进程是今天才起的，锁却写于它之前：pid 被别的进程复用了。
+      const reusedPidLock = JSON.stringify({
+        pid: process.pid,
+        startedAt: "2026-01-01T00:00:00.000Z",
+        hostname: "current-host",
+        uid: process.getuid?.() ?? 0,
+        listen: "127.0.0.1:6767",
+      });
+
+      try {
+        await writeFile(join(osunaHome, LEGACY_PID_FILE), reusedPidLock);
+
+        await acquirePidLock(osunaHome, null, { ownerPid });
+
+        expect((await getPidLockInfo(osunaHome))?.pid).toBe(ownerPid);
+        expect(await readFile(join(osunaHome, LEGACY_PID_FILE), "utf8")).toBe(reusedPidLock);
+      } finally {
+        await rm(osunaHome, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("starts when the 0.14.x lock file was left behind by a daemon that is gone", async () => {
     const osunaHome = await mkdtemp(join(tmpdir(), "osuna-pid-lock-legacy-stale-"));

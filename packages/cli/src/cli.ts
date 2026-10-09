@@ -1,6 +1,10 @@
 import { pairCommand } from "./commands/daemon/pair.js";
 import { Command, Option } from "commander";
-import { migrateLegacyHomeIfDefault } from "@osuna/server";
+import {
+  findRunningLegacyDaemon,
+  LegacyDaemonRunningError,
+  migrateLegacyHomeIfDefault,
+} from "@osuna/server";
 import { createAgentCommand } from "./commands/agent/index.js";
 import { createDaemonCommand } from "./commands/daemon/index.js";
 import { createPermitCommand } from "./commands/permit/index.js";
@@ -38,6 +42,7 @@ import {
   addJsonAndDaemonHostOptions,
   withGlobalOptions,
 } from "./utils/command-options.js";
+import { explicitHomeOf, managesLegacyDaemon } from "./utils/legacy-daemon.js";
 import { resolveCliVersion } from "./version.js";
 
 const VERSION = resolveCliVersion();
@@ -58,12 +63,17 @@ export function createCli(): Command {
   addDaemonHostOption(program);
 
   // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
-  // 每条命令动手之前先搬。连别的主机的命令也会把 cli-client-id 写进默认 home，
+  // 每条命令动手之前先搬。没有显式选 home 时，连别的主机的命令也会把 cli-client-id 写进默认 home，
   // 它抢先建出的空目录会让之后的迁移被永久跳过。
+  // 0.14.x 的 daemon 还在跑时不搬也不往下走：只放行能认出它、停掉它的 status 与 stop。
   program.hook("preAction", async (_program, actionCommand) => {
-    const explicitHome: string | undefined =
-      actionCommand.optsWithGlobals().home ?? process.env.OSUNA_HOME;
-    await migrateLegacyHomeIfDefault({ explicitHome });
+    const explicitHome = explicitHomeOf(actionCommand);
+    const legacyDaemon = await findRunningLegacyDaemon({ explicitHome });
+    if (!legacyDaemon) {
+      await migrateLegacyHomeIfDefault({ explicitHome });
+      return;
+    }
+    if (!managesLegacyDaemon(actionCommand)) throw new LegacyDaemonRunningError(legacyDaemon);
   });
 
   // Primary agent commands (top-level)

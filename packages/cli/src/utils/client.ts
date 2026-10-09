@@ -288,7 +288,11 @@ async function connectSelectedDaemon(options: ConnectOptions): Promise<DaemonCli
             instance: options.instance,
           })
         ).listen;
-  const clientId = await getOrCreateCliClientId(resolveOsunaHome({}));
+  // 身份跟着选定的 home 走。显式给了 --home 或 OSUNA_HOME 时，默认 home 下什么都不写：
+  // 那里抢先建出的目录会让 0.14.x 的数据再也搬不过来。
+  const clientIdHome =
+    options.target.kind === "instance" ? options.target.home : resolveOsunaHome(process.env);
+  const clientId = await getOrCreateCliClientId(clientIdHome);
   const nodeWebSocketFactory = createNodeWebSocketFactory();
 
   if (explicitHost?.trim().startsWith("ssh://")) {

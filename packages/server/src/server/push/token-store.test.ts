@@ -29,11 +29,11 @@ function modeOf(filePath: string): number {
 describe.skipIf(process.platform === "win32")("PushTokenStore file permissions", () => {
   test("persists push tokens with private permissions", () => {
     const home = mkdtempSync(path.join(tmpdir(), "osuna-push-tokens-"));
-    const tokenPath = path.join(home, "push-tokens.json");
+    const tokenPath = path.join(home, "push-subscriptions.json");
     try {
       const pushNotifications = createPushNotifications({
         logger: createLogger(),
-        filePath: tokenPath,
+        home,
       });
 
       pushNotifications.renew("ExponentPushToken[test]");
@@ -46,7 +46,7 @@ describe.skipIf(process.platform === "win32")("PushTokenStore file permissions",
 
   test("repairs existing push token file permissions when loading", async () => {
     const home = mkdtempSync(path.join(tmpdir(), "osuna-push-tokens-"));
-    const tokenPath = path.join(home, "push-tokens.json");
+    const tokenPath = path.join(home, "push-subscriptions.json");
     try {
       writeFileSync(tokenPath, JSON.stringify({ tokens: ["ExponentPushToken[test]"] }));
       chmodSync(tokenPath, PERMISSIVE_FILE_MODE);
@@ -54,7 +54,7 @@ describe.skipIf(process.platform === "win32")("PushTokenStore file permissions",
       const deliveries: string[][] = [];
       const pushNotifications = createPushNotifications({
         logger: createLogger(),
-        filePath: tokenPath,
+        home,
         deliver: async (tokens) => deliveries.push(tokens),
       });
       await pushNotifications.send({ title: "Agent finished", body: "Done" });

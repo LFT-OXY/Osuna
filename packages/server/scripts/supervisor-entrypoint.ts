@@ -8,7 +8,9 @@ import {
   startPidLockHeartbeat,
   updatePidLock,
 } from "../src/server/pid-lock.js";
+import { recordDaemonStartRefusal } from "../src/server/daemon-instance.js";
 import { resolveOsunaHome } from "../src/server/osuna-home.js";
+import { LegacyDaemonRunningError } from "../src/server/legacy-daemon.js";
 import { migrateLegacyHomeIfDefault } from "../src/server/legacy-home-migration.js";
 import { loadPersistedConfig } from "../src/server/persisted-config.js";
 import { runSupervisor } from "./supervisor.js";
@@ -124,6 +126,7 @@ async function main(): Promise<void> {
   } catch (error) {
     if (error instanceof PidLockError) {
       process.stderr.write(`${error.message}\n`);
+      await recordDaemonStartRefusal(osunaHome, error.message);
       process.exit(1);
       return;
     }
@@ -187,6 +190,13 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error) => {
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  // 这是给用户的拒绝理由，不是崩溃：只报原因和下一步，不带调用栈。
+  if (error instanceof LegacyDaemonRunningError) {
+    process.stderr.write(`${error.message}\n`);
+    process.exit(1);
+  }
+
   const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);
   process.exit(1);

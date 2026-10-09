@@ -5,9 +5,11 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { rm } from "node:fs/promises";
 import net from "node:net";
@@ -15,7 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 
-import { readDaemonInstance } from "../daemon-instance.js";
+import { readDaemonInstance, startDaemonInstance } from "../daemon-instance.js";
 import {
   createDaemonTestContext,
   DaemonClient,
@@ -212,4 +214,82 @@ test.skipIf(process.platform === "win32")(
     expect(assistantText).toBe("still here");
   },
   180_000,
+);
+
+// 0.14.x 的 daemon 把自己的 pid 写在旧名字的锁文件里。用这个测试进程的 pid 代替一个还活着的旧 daemon。
+const LEGACY_STARTED_AT = new Date().toISOString();
+
+function writeLiveLegacyLock(directory: string): string {
+  const lock = JSON.stringify({
+    pid: process.pid,
+    startedAt: LEGACY_STARTED_AT,
+    hostname: "current-host",
+    uid: process.getuid?.() ?? 0,
+    listen: "127.0.0.1:6767",
+    desktopManaged: true,
+    heartbeat: true,
+  });
+  writeFileSync(path.join(directory, "paseo.pid"), lock);
+  return lock;
+}
+
+test.skipIf(process.platform === "win32")(
+  "a daemon started directly on the default home refuses while a 0.14.x daemon still runs there",
+  async () => {
+    const userHome = tempDir("legacy-daemon-direct-");
+    const legacyHome = path.join(userHome, ".paseo");
+    mkdirSync(legacyHome);
+    const lock = writeLiveLegacyLock(legacyHome);
+    const env = defaultHomeEnvironment(userHome, await getAvailablePort());
+    assertUserHomeIsIsolated(env, userHome);
+
+    const supervisor = spawn(
+      process.execPath,
+      ["--import", "tsx", SUPERVISOR_ENTRYPOINT, "--no-relay"],
+      { cwd: SERVER_ROOT, env, stdio: ["ignore", "ignore", "pipe"] },
+    );
+    cleanupSupervisors.add(supervisor);
+    const stderr: string[] = [];
+    supervisor.stderr.on("data", (chunk: Buffer) => stderr.push(chunk.toString()));
+    const [exitCode] = await once(supervisor, "exit");
+
+    expect(exitCode).toBe(1);
+    expect(stderr.join("")).toBe(
+      [
+        `A 0.14.x daemon is still running from ${legacyHome} (PID ${process.pid}, started ${LEGACY_STARTED_AT}).`,
+        "Osuna 1.0.0 will not move or share its data while it runs. Stop it, then try again:",
+        `  osuna daemon stop --home "${legacyHome}"`,
+        "",
+      ].join("\n"),
+    );
+    expect(readdirSync(userHome)).toEqual([".paseo"]);
+    expect(readdirSync(legacyHome)).toEqual(["paseo.pid"]);
+    expect(readFileSync(path.join(legacyHome, "paseo.pid"), "utf8")).toBe(lock);
+  },
+  60_000,
+);
+
+test.skipIf(process.platform === "win32")(
+  "a daemon launched in the background reports why it refused to start",
+  async () => {
+    const home = tempDir("legacy-daemon-background-");
+    writeLiveLegacyLock(home);
+    const env = defaultHomeEnvironment(path.dirname(home), await getAvailablePort());
+
+    const failure = await startDaemonInstance({
+      home,
+      command: process.execPath,
+      args: ["--import", "tsx", SUPERVISOR_ENTRYPOINT, "--no-relay"],
+      env,
+      mode: "managed",
+      timeoutMs: 30_000,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ code: "DAEMON_START_FAILED" });
+    expect((failure as Error).message.split("\n")[0]).toBe(
+      `Daemon failed to start: A 0.14.x daemon is still running in ${home} (PID ${process.pid}, started ${LEGACY_STARTED_AT}). Stop it first: osuna daemon stop --home "${home}"`,
+    );
+    expect(await readDaemonInstance(home)).toBeNull();
+  },
+  60_000,
 );

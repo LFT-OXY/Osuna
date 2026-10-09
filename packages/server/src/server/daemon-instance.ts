@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -12,6 +12,7 @@ import {
 import { daemonLaunchEnvironment } from "./config-environment.js";
 import { readPersistedConfig } from "./persisted-config.js";
 import treeKill from "tree-kill";
+import { z } from "zod";
 const killTree = (pid: number, signal: string): Promise<void> =>
   new Promise((resolve, reject) =>
     treeKill(pid, signal, (error) => {
@@ -48,6 +49,47 @@ export function daemonLogPath(home: string): string {
     return path.resolve(home, readPersistedConfig(home).log?.file?.path ?? "daemon.log");
   } catch {
     return path.join(home, "daemon.log");
+  }
+}
+
+// 后台拉起的 supervisor 没有 stderr 通道，拒绝启动的原因只能经日志文件带回给拉起方。
+// 不建目录：home 还不存在时写日志会抢在 0.14.x 的数据搬迁之前把它建出来。
+export async function recordDaemonStartRefusal(home: string, reason: string): Promise<void> {
+  const line = {
+    level: "error",
+    time: new Date().toISOString(),
+    pid: process.pid,
+    name: "DaemonRunner",
+    msg: reason,
+  };
+  try {
+    await appendFile(daemonLogPath(home), `${JSON.stringify(line)}\n`, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
+const startRefusalLineSchema = z.object({
+  level: z.literal("error"),
+  pid: z.number(),
+  msg: z.string(),
+});
+
+function findStartRefusal(logLines: string[], supervisorPid: number | undefined): string | null {
+  for (let index = logLines.length - 1; index >= 0; index -= 1) {
+    const entry = startRefusalLineSchema.safeParse(parseLogLine(logLines[index]));
+    if (entry.success && entry.data.pid === supervisorPid) return entry.data.msg;
+  }
+  return null;
+}
+
+// 日志里混着 worker 的非 JSON 输出。
+function parseLogLine(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
   }
 }
 
@@ -260,10 +302,12 @@ export async function startDaemonInstance(input: {
       if (exit) {
         const logPath = daemonLogPath(input.home);
         const log = await readFile(logPath, "utf8").catch(() => "");
-        throw new DaemonInstanceError(
-          "DAEMON_START_FAILED",
-          `Daemon failed to start (${exit.error?.message ?? `exit ${exit.code}`}). Logs: ${logPath}\n${log.split("\n").slice(-30).join("\n")}`,
-        );
+        const logTail = log.split("\n").slice(-30);
+        const refusal = findStartRefusal(logTail, child.pid);
+        const summary = refusal
+          ? `Daemon failed to start: ${refusal}\nLogs: ${logPath}`
+          : `Daemon failed to start (${exit.error?.message ?? `exit ${exit.code}`}). Logs: ${logPath}`;
+        throw new DaemonInstanceError("DAEMON_START_FAILED", `${summary}\n${logTail.join("\n")}`);
       }
       if (instance?.listen) {
         const ready = { ...instance, listen: instance.listen };

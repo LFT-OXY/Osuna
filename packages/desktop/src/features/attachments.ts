@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { resolveOsunaHome } from "@osuna/server";
+import { migrateLegacyHomeIfDefault, resolveOsunaHome } from "@osuna/server";
 
 const ATTACHMENTS_DIRNAME = "desktop-attachments";
 const ATTACHMENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -16,6 +16,10 @@ function attachmentsDirPath(): string {
 }
 
 async function ensureAttachmentsDir(): Promise<string> {
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  // 内置 daemon 没启动过时，这里是桌面端第一个往默认 home 写东西的地方。先搬，
+  // 不然抢先建出的目录会让 0.14.x 的数据再也搬不过来。
+  await migrateLegacyHomeIfDefault({ explicitHome: process.env.OSUNA_HOME });
   const dirPath = attachmentsDirPath();
   await mkdir(dirPath, { recursive: true });
   return dirPath;

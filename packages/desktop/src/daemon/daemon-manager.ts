@@ -3,11 +3,15 @@ import path from "node:path";
 import { app, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
 import {
+  findRunningLegacyDaemon,
+  legacyDaemonStopCommand,
+  LegacyDaemonRunningError,
   migrateLegacyHomeIfDefault,
   resolveOsunaHome,
   startDaemonInstance,
   DaemonInstanceError,
   stopDaemonInstance,
+  stopLegacyDaemon,
   readDaemonInstance,
   isSameDaemonInstance,
   type DaemonInstance,
@@ -257,12 +261,40 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
   }
 }
 
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 开着"退出后保持运行"升级上来时，上一版桌面端拉起的 0.14.x daemon 还活着。和托管 daemon 版本过旧时
+// 一样先把它停掉，数据才能搬。用户自己另外起的那种不替他停；停不掉就带着原因让启动命令失败。
+async function stopLegacyDaemonLeftRunning(explicitHome: string | undefined): Promise<void> {
+  const legacyDaemon = await findRunningLegacyDaemon({ explicitHome });
+  if (!legacyDaemon) return;
+  if (!legacyDaemon.desktopManaged) throw new LegacyDaemonRunningError(legacyDaemon);
+  logDesktopDaemonLifecycle("stopping 0.14.x daemon left running by the previous version", {
+    reason: "version_mismatch",
+    pid: legacyDaemon.pid,
+    home: legacyDaemon.home,
+  });
+  try {
+    // 握手拒绝 0.14.x，Windows 上没有能让它自己收尾的通道，只能强杀。
+    await stopLegacyDaemon(legacyDaemon, {
+      timeoutMs: 15_000,
+      force: process.platform === "win32",
+    });
+  } catch (error) {
+    if (!(error instanceof DaemonInstanceError)) throw error;
+    throw new DaemonInstanceError(
+      error.code,
+      `${error.message}\nStop it yourself, then start Osuna again:\n  ${legacyDaemonStopCommand(legacyDaemon, true)}`,
+    );
+  }
+}
+
 async function startDaemon(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
 
   // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
   // 赶在查状态与拉起 daemon 之前搬。搬不动就让启动命令原样失败：detached 的 supervisor 没有 stderr 通道，
   // 只有这里抛出的错误能到达渲染层的 daemon 错误状态面。
+  await stopLegacyDaemonLeftRunning(process.env.OSUNA_HOME);
   await migrateLegacyHomeIfDefault({ explicitHome: process.env.OSUNA_HOME });
 
   const current = await resolveDesktopDaemonStatus();

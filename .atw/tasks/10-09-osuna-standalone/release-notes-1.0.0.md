@@ -23,13 +23,13 @@ Osuna 从这一版起是独立产品，不再是 Paseo 的 fork。命令、数�
 
 **多台主机：** 1.0.0 的桌面端、网页端和命令行只能连接 1.0.0 及以上的主机，0.14.x 的客户端也用不了 1.0.0 的主机。改名连同两边互发的消息一起改了，两个版本之间不做兼容。还没升级的主机在设置里它的「连接」页显示「{主机名} 需要更新」，其余主机照常可用；在那台主机上升级到 1.0.0 之后它会自动重新连接，不用删除重加。命令行连到 0.14.x 的主机时报出同样的原因并退出。
 
-**桌面端：** 照常在侧栏的更新卡片里升级。首次启动时 Osuna 把 `~/.paseo` 改名为 `~/.osuna` 并在原位留一个链接，把应用数据目录从 `Paseo` 改名为 `Osuna`，再把主机列表、设置、草稿和面板布局导入新位置。成功时没有任何提示。数据目录搬不动时 daemon 不会启动，应用数据目录搬不动时 Osuna 弹出错误后退出，两种错误信息里都有可以手动执行的命令，下次启动会再试。主机列表和设置导入失败时可以选「重试」或「放弃旧数据继续」。
+**桌面端：** 照常在侧栏的更新卡片里升级。首次启动时 Osuna 把 `~/.paseo` 改名为 `~/.osuna` 并在原位留一个链接，把应用数据目录从 `Paseo` 改名为 `Osuna`，再把主机列表、设置、草稿和面板布局导入新位置。成功时没有任何提示。数据目录搬不动时 daemon 不会启动，应用数据目录搬不动时 Osuna 弹出错误后退出，两种错误信息里都有可以手动执行的命令，下次启动会再试。主机列表和设置导入失败时可以选「重试」或「放弃旧数据继续」。开着「退出后保持运行」升级时，上一版留下的 daemon 还在运行，Osuna 首次启动会先停掉它再搬数据（Windows 上是强制结束它和它拉起的进程）；停不掉时 daemon 不会启动，错误信息里有原因和可以手动执行的命令。
 
-**命令行：** 命令从 `paseo` 改名为 `osuna`。0.14.x 通过桌面端装的 `~/.local/bin/paseo`（Windows 是 `paseo.cmd`）升级后失效，删掉它，再到 设置 → 集成 → 命令行 点「安装」。从源码构建的，检出 `v1.0.0` 后重新执行 `npm ci` 和 `npm run build:server`，入口改为 `node packages/cli/bin/osuna`。环境变量前缀从 `PASEO_` 改为 `OSUNA_`，旧名字不再生效，daemon 日志和命令行会逐个提示对应的新名字。
+**命令行：** 命令从 `paseo` 改名为 `osuna`。0.14.x 通过桌面端装的 `~/.local/bin/paseo`（Windows 是 `paseo.cmd`）升级后失效，删掉它，再到 设置 → 集成 → 命令行 点「安装」。从源码构建的，检出 `v1.0.0` 后重新执行 `npm ci` 和 `npm run build:server`，入口改为 `node packages/cli/bin/osuna`。环境变量前缀从 `PASEO_` 改为 `OSUNA_`，旧名字不再生效，daemon 日志和命令行会逐个提示对应的新名字。0.14.x 的 daemon 还在运行时，`osuna` 不会动它的数据：`osuna daemon status` 会报出它，`osuna daemon stop` 停掉它（Windows 上要加 `--force`），其余命令给出停掉它的完整命令后退出。
 
 **Docker：** 镜像从 `ghcr.io/lft-oxy/paseo` 改为 `ghcr.io/lft-oxy/osuna`，容器内的用户和 home 改为 `osuna` 与 `/home/osuna`。容器不会自动迁移，启动新镜像之前按 [Docker 升级说明](https://osuna.chinhae.cc/docs/docker#upgrading-from-014x) 改卷挂载、环境变量并重命名数据目录。
 
-**手机：** 上游的 Paseo 手机 App 不再受支持。远程使用请改用网页端 [osuna-app.chinhae.cc](https://osuna-app.chinhae.cc) 或安卓 APK。安卓包没有推送通知，需要被动提醒请用桌面端或网页端的桌面通知。
+**手机：** 上游的 Paseo 手机 App 不再受支持。远程使用请改用网页端 [osuna-app.chinhae.cc](https://osuna-app.chinhae.cc) 或安卓 APK。安卓包没有推送通知，需要被动提醒请用桌面端或网页端的桌面通知。升级后的主机不会再向上游 App 注册过的设备发推送，也不为此联网；0.14.x 留下的令牌文件 `push-tokens.json` 原样保留。
 
 **上游 Paseo 桌面 App：** 机器上如果还装着它，请卸载。迁移会把它的应用数据目录一并搬走，它再打开时主机列表和设置是空的。
 
@@ -39,6 +39,7 @@ Osuna 从这一版起是独立产品，不再是 Paseo 的 fork。命令、数�
 
 - 0.14.x 的数据在首次启动时自动迁移到新位置，成功时不提示
 - 迁移失败时显示旧路径、新路径和可以手动执行的命令，下次启动自动重试
+- 升级时仍在运行的 0.14.x daemon 由桌面端自动停掉后再迁移，命令行用 `osuna daemon status` 与 `osuna daemon stop` 查看和停掉它
 - daemon 和命令行启动时逐个提示仍在使用的 `PASEO_*` 环境变量及对应的 `OSUNA_*` 名字
 - 安卓 APK，包名 `com.chinhae.osuna`
 - 官网 `osuna.chinhae.cc`，包含下载页、文档和更新日志
@@ -60,7 +61,7 @@ Osuna 从这一版起是独立产品，不再是 Paseo 的 fork。命令、数�
 ### Removed
 
 - Hub 和命令行的 `hub` 子命令
-- 手机端的推送通知注册
+- 手机端的推送通知注册，以及向 0.14.x 时注册过的设备发送推送
 - 对上游 Paseo 手机 App 和 Paseo 插件的支持
 
 ---
@@ -69,9 +70,7 @@ Osuna 从这一版起是独立产品，不再是 Paseo 的 fork。命令、数�
 
 下面是已知的升级缺口，怎么处理还没定。每条写的是现状，定下来之前不要写进上面的条目。
 
-- `npm run dev:server` 在没设 `OSUNA_LOCAL_MODELS_DIR` 时会建出 `~/.osuna/models/local-speech`，抢先建出的目录会让之后的迁移被跳过（本票核对 `scripts/dev-daemon.sh` 与 `scripts/dev.ps1` 时发现）。只影响从源码跑开发 daemon 的机器。
 - 回滚到 0.14.x 时两个版本仍可能同时写同一个 home：1.0.0 认得还活着的 `paseo.pid` 不会再起一个，但 0.14.x 不认得 `osuna.pid`。
-- 随迁移带过来的 `push-tokens.json` 如果非空，daemon 仍会向推送服务发请求。
 - Docker 容器内不留符号链接，升级后记录在旧路径下的 worktree 失效。
 - Release 目前没有 Linux 桌面包，也没有安卓 APK；`Android APK Release` 只能手动派发。
 - 官网的隐私页与条款页还有待补的法律信息（处理数据的法律依据、适用法律与争议解决地）。

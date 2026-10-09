@@ -385,7 +385,15 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 1.0.0 首次启动时把 0.14.x 的数据搬到新名字下。成功不提示，每层只记一条 info 日志。
 
 - 为 0.14.x 而存在、必须写出旧名字的代码都带同一个标签：`COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first`。期限比[默认的六个月](protocol-compatibility.md#every-shim-is-tagged-and-dated)长，因为迁的是用户数据。读旧布局的迁移代码是大头；握手时一并提供的旧密码子协议名、喂入 0.14.x 旧消息名的 daemon 测试也算在内（见 [The floor: 1.0.0](protocol-compatibility.md#the-floor-100)），到期一起删。
-- **daemon home**：`~/.paseo` 改名为 `~/.osuna`，原位留符号链接（Windows 用 junction）。代码在 `packages/server/src/server/legacy-home-migration.ts`，由会读写 home 的一方在动手之前调用：CLI 的每条命令（`packages/cli/src/cli.ts` 的 `preAction` 钩子，连别的主机的命令也会把 `cli-client-id` 写进默认 home）、桌面端启动 daemon 之前、直接启动的 supervisor。daemon 进程自己不迁移。设了 `OSUNA_HOME` 或传了 `--home` 时跳过。
+- **daemon home**：`~/.paseo` 改名为 `~/.osuna`，原位留符号链接（Windows 用 junction）。代码在 `packages/server/src/server/legacy-home-migration.ts`，由会读写 home 的一方在动手之前调用：CLI 的每条命令（`packages/cli/src/cli.ts` 的 `preAction` 钩子，没有显式选 home 时，连别的主机的命令也会把 `cli-client-id` 写进默认 home；显式选了就写进选定的那个）、桌面端启动 daemon 之前与写第一个附件之前（`packages/desktop/src/features/attachments.ts`）、直接启动的 supervisor。daemon 进程自己不迁移。设了 `OSUNA_HOME` 或传了 `--home` 时跳过。
+- **仍在运行的 0.14.x daemon**：桌面端开着「退出后保持运行」升级上来时，旧 daemon 还占着 `~/.paseo`。它的 `paseo.pid` 还被活着的进程持有时，迁移不搬目录，三个拉起方各自处理（`packages/server/src/server/legacy-daemon.ts`）：
+  - 桌面端先停掉它再搬、再起新 daemon，用户不用操作。只停锁文件里标着 `desktopManaged` 的那种，也就是上一版桌面端自己拉起的；用户另外起的不替他停。停不掉或不该停时启动命令带着原因失败，显示在 daemon 错误状态面。
+  - CLI 的 `osuna daemon status` 报 `localDaemon: legacy_running`，`osuna daemon stop` 按 pid 停掉它，其余命令报出原因和停掉它的命令后以非零退出。1.0.0 的客户端在握手处就拒绝 0.14.x，所以这两条命令都不去连它。
+  - 直接启动的 supervisor 把同一段原因写到 stderr 后退出。
+  - 提示里的停止命令带着 `--home <锁文件所在目录>`。不带的写法在设了 `OSUNA_HOST` 时指向别的主机，停不到它。
+  - 停掉之后不立刻搬，下一次启动照常迁移。Windows 上没有让它自己收尾的信号，桌面端直接强杀进程树，CLI 要求带 `--force`。
+  - 只管占着 1.0.0 要用的那份数据的旧 daemon。`~/.osuna` 与 `~/.paseo` 是两个真实目录时以新 home 为准，旧目录上的 daemon 不拦也不停。
+  - 「还活着」不只看 pid 在不在：比锁里的 `startedAt` 还晚启动的进程不算（崩溃或断电留下的旧锁，pid 后来被别的进程复用）。启动时刻查不出来时按还活着处理。代码在 `packages/server/src/server/legacy-daemon-process.ts`。被强杀的旧 daemon 留下的 `paseo.pid` 不删。
 - **Electron userData**：appData 下的 `Paseo` 目录改名为 `Osuna`，不留链接。代码在 `packages/desktop/src/settings/user-data-migration.ts`，调用点在 `main.ts` 写第一条日志之前。
 - **渲染层存储**：`paseo://app` 这个 origin 的 localStorage 与 IndexedDB 导入 `osuna://app`，旧 origin 不清空。代码在 `packages/desktop/src/settings/renderer-origin-migration/`，完成标记是 `desktop-settings.json` 的 `migrations.legacyRendererOriginImported`。
 - **内嵌浏览器分区**：userData 搬完后把 `Partitions/paseo-browser*` 改名为 `osuna-browser*`，登录态与 Cookie 跟着走。代码只认新分区名。和搬目录在同一个文件里，每次以默认 userData 启动都再试一遍。
@@ -397,7 +405,8 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
   - 历史消息里 `paseo://agent/…` 的 mention 链接（`packages/protocol/src/message-links.ts`）。
   - 历史时间线里 `mcp__paseo__*`、`paseo.*`、`paseo_*` 的工具名（`packages/protocol/src/tool-name-normalization.ts`）。
   - 用户仓库里 `paseo-auto-stash:` 前缀的自动 stash（`workspace-git-service.ts`）。
-  - home 里的 `paseo.pid`：持有它的 daemon 还活着时 1.0.0 不启动（`pid-lock.ts`）。
+  - home 里的 `paseo.pid`：持有它的 daemon 还活着时 1.0.0 不启动（`pid-lock.ts`）。这是迁移之后的兜底，比如回滚到 0.14.x 又升回来；还没搬的目录由上一条拦在前面。
+- **推送令牌**：0.14.x 留下的 `push-tokens.json` 不读也不写，见 [data-model.md](data-model.md#6-push-token-store)。这一处没有读旧布局的代码，到期没有东西要删。
 - 不回退的两项：用户仓库里的 `paseo.json` 与 MCP server 名 `paseo` 是规格定下的改名，升级后要用户自己改，写在发布说明的 Changed 里。
 - 残留的 `PASEO_*` 环境变量不生效，daemon 与 CLI 启动时逐个点名：`packages/server/src/server/legacy-env.ts`。
 - 迁移测试用的旧版样本在 `packages/desktop/e2e/fixtures/legacy-paseo/`。
@@ -407,21 +416,24 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 `gitdir` 指针和 `agents/` 目录名都还指着 `~/.paseo`。删掉迁移代码的那个版本要在发布说明里写明：
 还停在 0.14.x 的用户须先升到带迁移的 1.x 版本。
 
-排查用户报告时要知道的两点：
+排查用户报告时要知道的三点：
 
 - home 改名失败（比如跨分区）时退回复制。复制成功后旧目录原样留着，不建链接，已记录的
   worktree 路径仍指向旧目录里的那一份。
 - userData 搬不动时 macOS 与 Windows 弹错误框后退出。Linux 没有错误框，只写 stderr。
+- 后台拉起的 supervisor 没有 stderr 通道。它拒绝启动时把原因作为一条 `error` 写进
+  `daemon.log`，拉起方（`startDaemonInstance`）从日志尾部取回，报成
+  `Daemon failed to start: <原因>`。home 目录还不存在时不写，免得抢在迁移之前把它建出来。
 
 ### 回滚到 0.14.x
 
 回滚是整版退回：桌面端连同它自带的 daemon 一起换回 0.14.x。更新器不降级
 （`allowDowngrade = false`），所以是用户从 Release 页下载 0.14.x 的安装包覆盖安装。
 
-1. 退出 Osuna，用 `osuna daemon status` 确认 daemon 已停。两个版本的 pid 锁文件名不同
-   （`osuna.pid` 与 `paseo.pid`）。1.0.0 认得还活着的 `paseo.pid`，不会在 0.14.x 的 daemon
-   旁边再起一个；0.14.x 不认得 `osuna.pid`，1.0.0 的 daemon 没停它也照样启动，两个一起写
-   同一个 home。
+1. 退出 Osuna，用 `osuna daemon status` 确认 daemon 已停，没停就 `osuna daemon stop`。
+   两个版本的 pid 锁文件名不同（`osuna.pid` 与 `paseo.pid`）。1.0.0 认得还活着的
+   `paseo.pid`，不会在 0.14.x 的 daemon 旁边再起一个；0.14.x 不认得 `osuna.pid`，1.0.0 的
+   daemon 没停它也照样启动，两个一起写同一个 home。
 2. 要带回主机列表与设置，在第一次打开 0.14.x 之前把 userData 目录从 `Osuna` 改回 `Paseo`。
    它在 macOS 的 `~/Library/Application Support/Osuna`、Windows 的 `%APPDATA%\Osuna`、
    Linux 的 `~/.config/Osuna`。不改回去，0.14.x 以空的主机列表和默认设置启动。
@@ -434,6 +446,8 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
   0.14.x 看到的就是它。
 - **渲染层存储**：旧 origin 的数据停在升级那一刻。1.0.0 里新加的主机、改过的设置和草稿
   写在新 origin，0.14.x 读不到。
+- **再升回 1.0.0**：0.14.x 经链接跑在 `~/.osuna` 上，它的 `paseo.pid` 也在那里。开着
+  「退出后保持运行」再升级时，处理方式和首次升级一样，见上面「仍在运行的 0.14.x daemon」。
 
 ## Release completion and heartbeat
 

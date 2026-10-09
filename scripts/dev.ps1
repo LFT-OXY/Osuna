@@ -26,18 +26,21 @@ if (-not $env:OSUNA_HOME) {
     }
 }
 
-# Share speech models with the main install to avoid duplicate downloads
-if (-not $env:OSUNA_LOCAL_MODELS_DIR) {
-    $env:OSUNA_LOCAL_MODELS_DIR = "$env:USERPROFILE\.osuna\models\local-speech"
-    New-Item -ItemType Directory -Force -Path $env:OSUNA_LOCAL_MODELS_DIR | Out-Null
+# Share speech models with the main install to avoid duplicate downloads. Only when that
+# directory is already there: creating anything under the default home makes a later
+# 0.14.x data migration skip itself.
+$SharedModelsDir = "$env:USERPROFILE\.osuna\models\local-speech"
+if (-not $env:OSUNA_LOCAL_MODELS_DIR -and (Test-Path -PathType Container $SharedModelsDir)) {
+    $env:OSUNA_LOCAL_MODELS_DIR = $SharedModelsDir
 }
+$ModelsDir = if ($env:OSUNA_LOCAL_MODELS_DIR) { $env:OSUNA_LOCAL_MODELS_DIR } else { Join-Path $env:OSUNA_HOME "models\local-speech" }
 
 Write-Host @"
 ======================================================
   Osuna Dev (Windows)
 ======================================================
   Home:    $($env:OSUNA_HOME)
-  Models:  $($env:OSUNA_LOCAL_MODELS_DIR)
+  Models:  $ModelsDir
   Daemon:  localhost:6768
 ======================================================
 "@

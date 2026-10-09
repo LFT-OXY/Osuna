@@ -94,6 +94,13 @@ Osuna 是 Paseo 的 fork，但对外仍处处是 Paseo：CLI 叫 `paseo`，数�
 - 成功静默：不弹提示，`daemon.log` 一条 info。
 - Docker（镜像显式设 home）与手装 CLI 不走自动迁移：Docker 手工步骤（卷挂 `/home/osuna`、环境变量改名、首启前在卷里 `mv .paseo .osuna`）写进 Public docs 的 docker 页升级段；CLI 卸旧装新只写发布说明。
 - 迁移代码统一标 `COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first`，三层（daemon home、Electron userData、origin 导入）同一标签。
+- 旧 daemon 仍在运行时的升级（16 号票，2026-10-10 确认）：
+  - 触发点从"daemon 启动时"落到拉起方：CLI 每条命令之前、桌面端启动 daemon 与写第一个附件之前、直接启动的 supervisor。任何入口都不得在迁移之前建出默认 home；CLI 的 client id 跟随选定的 home（显式给了 `--home` 或 `OSUNA_HOME` 就写进那里），dev 脚本只在共享模型目录已存在时才用它。
+  - 旧 home 的 `paseo.pid` 仍被存活的 0.14.x daemon 持有时不搬目录。桌面端只自动停掉上一版桌面端自己拉起的那一个（锁里标着 `desktopManaged`），停掉后照常迁移并启动；用户另外起的、或停不掉的，启动命令带着原因和停止命令失败，走 daemon 错误状态面。CLI 的 `daemon status` 认得出它、`daemon stop` 按 pid 停掉它，其余命令给出原因与停止命令后非零退出。握手下限不为此开口子。
+  - "存活"要过进程身份核对：比锁的 `startedAt` 晚启动、且不是旧 supervisor 进程名的，是被复用的 pid，不算旧 daemon；查不出来按存活处理。旧锁文件永不删除。
+  - 只管占着 1.0.0 要用的那份数据的旧 daemon：新旧两个真实目录并存时以新为准，旧目录上的 daemon 不拦不停。
+  - 停止命令的提示一律带 `--home <锁所在目录>`；Windows 没有优雅关停通道，桌面端强杀进程树，CLI 要求 `--force`。
+  - 后台拉起的 supervisor 拒绝启动时把原因写进 `daemon.log`，拉起方取回后报 `Daemon failed to start: <原因>`。
 
 ### C. 桌面端迁移（Q6、02、08）
 
@@ -126,6 +133,7 @@ Osuna 是 Paseo 的 fork，但对外仍处处是 Paseo：CLI 叫 `paseo`，数�
 
 - Osuna 任何端都不提供推送通知。1.0.0 安卓包不接 Expo / Firebase。
 - daemon 侧 push 服务、`register_push_token` / `push.unregister.*` 协议消息、`features.pushTokenRevocation`、push token 存储只随改名，不删不加 COMPAT（删要动协议，留着零令牌时是空操作、无外呼）。
+- 例外（16 号票，2026-10-10 确认）：令牌存储的文件名从 `push-tokens.json` 换成 `push-subscriptions.json`。迁移过来的 home 里那份旧文件装着上游手机 App 注册的令牌，"零令牌"对升级用户不成立；换名之后旧文件不读不写，daemon 不向这些令牌外呼，回滚到 0.14.x 时文件原样。没有读旧布局的代码，所以仍然不加 COMPAT。
 - App 侧推送代码整删：`expo-notifications` 依赖与 config plugin、原生订阅实现、原生通知处理器、通知图标；原生入口与 web 一样空操作；通知点击路由只留桌面 / 网页端。效果：首次连主机不再弹权限请求，APK 不再打包 Firebase Messaging。
 - F-Droid 构建档整删：对应环境变量、autolinking 插件、相机与通知桩、`extra.fdroidBuild`。Osuna 只剩一个安卓档：相机保留（QR 配对）、无推送。
 - 桌面通知与应用内提醒不受影响。
@@ -188,7 +196,7 @@ Osuna 是 Paseo 的 fork，但对外仍处处是 Paseo：CLI 叫 `paseo`，数�
 接缝（从高到低，优先复用）：
 
 1. **改名守线（唯一新接缝）**：仓库脚本级检查，输入整棵树与例外清单，输出违规文件列表。测试用临时目录造几个文件验证例外与非例外。先例：仓库脚本在每个 PR 跑的现有检查。
-2. **Daemon home 迁移**：home 解析模块已有测试（用真实临时目录）。迁移逻辑作为纯函数接收旧路径、新路径与文件系统操作，在临时目录里测：真实目录→搬迁并留链接；旧是链接→跳过；新已存在→跳过并 warn；rename 失败→退回 copy；两者都失败→抛带手工命令的错误。`OSUNA_HOME` 显式设置→不迁移。`PASEO_*` 残留→warn 列表。整条链路用 ad-hoc 进程内 daemon 从带旧目录的临时 home 启动，断言启动后数据可读。先例：`paseo-home.test`、bootstrap 系列测试、`docs/ad-hoc-daemon-testing.md`。
+2. **Daemon home 迁移**：旧 daemon 仍在运行的场景用一个存活的替身进程持有旧锁，在 server 单测、CLI 进程级测试、真实 Electron e2e 三层各测一遍；锁要在替身进程起来之后按当前时刻写，否则会被当成复用的 pid。home 解析模块已有测试（用真实临时目录）。迁移逻辑作为纯函数接收旧路径、新路径与文件系统操作，在临时目录里测：真实目录→搬迁并留链接；旧是链接→跳过；新已存在→跳过并 warn；rename 失败→退回 copy；两者都失败→抛带手工命令的错误。`OSUNA_HOME` 显式设置→不迁移。`PASEO_*` 残留→warn 列表。整条链路用 ad-hoc 进程内 daemon 从带旧目录的临时 home 启动，断言启动后数据可读。先例：`paseo-home.test`、bootstrap 系列测试、`docs/ad-hoc-daemon-testing.md`。
 3. **CLI**：现有 CLI 测试套件（`packages/cli/tests`）改为 `osuna` 命令名；新增一条启动时 `PASEO_*` 警告的断言；删 Hub 子命令测试。
 4. **桌面端 userData 与 origin 迁移**：键名 / 库名映射表对 02 研究列出的全部 23 个键与 4 个库做单测；导出 / 导入脚本在 Node + `fake-indexeddb` 下做往返（含 Blob）。userData 目录搬迁同 2 的方式在临时目录测。端到端复用现有 `*.electron.mjs` 的隔离 userData 机制：把一份 0.14.x 的 `Paseo` userData 固定为 `fixtures/legacy-paseo/` 样本（约 1 MB 以内），以副本启动 1.0.0，断言主机列表、草稿、面板布局出现，完成标记已写，旧 origin 数据仍在；失败注入（导出页 404、导入抛错）断言不写标记且下次启动成功。先例：`desktop-settings.test`、`daemon-lifecycle.e2e.mjs`、`docs/browser-capture-harness.md`。
 5. **远程默认值**：现有 config 与 relay 配置测试断言默认端点与网页端基址；现有 `pair-device-relay` e2e 断言 offer URL 落在 `osuna-app.chinhae.cc`。中继 cutover 代理测试随代码删。
@@ -215,6 +223,8 @@ Osuna 是 Paseo 的 fork，但对外仍处处是 Paseo：CLI 叫 `paseo`，数�
 - [ ] 任一 `PASEO_*` 变量存在时 daemon 与 CLI 启动各打一条 warn，逐个列出 `OSUNA_*` 对应名。
 - [ ] 迁移后原有工作区、worktree、Agent 历史可用，无需 `git worktree repair`。
 - [ ] 三层迁移代码均带 `COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first`。
+- [ ] 旧 `paseo.pid` 仍被存活的 0.14.x daemon 持有时，任何拉起方都不搬目录、不建默认 home；桌面端自动停掉自己上一版拉起的那一个后完成迁移，CLI 的 `daemon status` / `daemon stop` 认得出并停得掉，其余命令给出原因与停止命令后非零退出。
+- [ ] 显式选了 home 的 CLI 命令与不设变量的 dev 脚本不在默认 home 下创建任何东西。
 
 ### 桌面端迁移
 - [ ] 0.14.x 的 `Paseo` userData 在首次启动 1.0.0 后出现在 `Osuna` 目录，主机列表、设置、草稿、面板布局原样；完成标记写在桌面设置文档 `migrations`；`paseo://app` 旧数据未被清空。
@@ -234,7 +244,7 @@ Osuna 是 Paseo 的 fork，但对外仍处处是 Paseo：CLI 叫 `paseo`，数�
 
 ### 推送与安卓档
 - [ ] App 不再依赖 `expo-notifications`；原生入口为空操作；F-Droid 构建档全部删除；只剩一个安卓档。
-- [ ] daemon push 服务与协议消息保留，仅改名。
+- [ ] daemon push 服务与协议消息保留，仅改名；令牌存储文件为 `push-subscriptions.json`，0.14.x 留下的 `push-tokens.json` 不读不写、零外呼。
 - [ ] 安卓首次连主机不弹通知权限请求：免验收（无实机环境），以依赖与 plugin 删除为准。
 
 ### 安卓构建

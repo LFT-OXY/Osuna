@@ -249,6 +249,25 @@ try {
     });
     console.log("✓ the relay choice is saved into the old config instead of a new one\n");
   }
+
+  {
+    console.log("Test 10: a command on an explicit home writes nothing into the default home");
+    const home = userHome();
+    const legacyHome = seedLegacyHome(home);
+    const explicitHome = join(home, "custom-home");
+    const unusedPort = await getAvailablePort();
+
+    // 显式选了 home 就不迁移。client id 这时要是还写进默认 home，抢先建出的目录会让旧数据再也搬不过来。
+    const result = await runOsuna(["ls", "--host", `127.0.0.1:${unusedPort}`], home, {
+      OSUNA_HOME: explicitHome,
+    });
+
+    assert.strictEqual(result.exitCode, 1);
+    assert.strictEqual(lstatSync(join(explicitHome, "cli-client-id")).isFile(), true);
+    assert.throws(() => lstatSync(join(home, ".osuna")), { code: "ENOENT" });
+    assert.strictEqual(lstatSync(legacyHome).isDirectory(), true);
+    console.log("✓ the client id lands in the chosen home and the legacy home stays in place\n");
+  }
 } finally {
   for (const target of cleanupPaths) rmSync(target, { recursive: true, force: true });
 }

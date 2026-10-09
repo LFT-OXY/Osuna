@@ -79,7 +79,7 @@ $OSUNA_HOME/
 │   ├── turns-YYYY-MM.jsonl               # Token increments per (source, session, turn, model)
 │   ├── scan-state.json                   # One cursor per scanned CLI log file
 │   └── pricing-table.json                # Last price table fetched from LiteLLM
-└── push-tokens.json                     # Expo push notification tokens
+└── push-subscriptions.json              # Expo push notification tokens
 ```
 
 The `agents/{sanitized-cwd}/` directory name is derived from the agent's `cwd` by stripping the filesystem root and replacing path separators with `-` (Windows drive letters become a `C-` style prefix). Persistent server stores write atomically by writing a temp file in the target directory and then renaming it into place.
@@ -573,7 +573,7 @@ than treating it as valid.
 
 ## 6. Push Token Store
 
-**Path:** `$OSUNA_HOME/push-tokens.json`
+**Path:** `$OSUNA_HOME/push-subscriptions.json`
 
 ```json
 {
@@ -584,6 +584,8 @@ than treating it as valid.
 Simple set of Expo push notification tokens. Loaded with permissive parsing (filters non-string entries). Persisted with atomic temp-file rename.
 
 No shipped client registers a token: Osuna provides push notifications on no platform (see [glossary.md](glossary.md)). With no tokens stored, the push service sends nothing.
+
+A home that came from 0.14.x also holds `push-tokens.json`, the same store under its old file name, with tokens the upstream mobile app registered. 1.0.0 neither reads nor writes it, so those tokens are never sent to and a rollback to 0.14.x finds the file as it left it.
 
 ---
 

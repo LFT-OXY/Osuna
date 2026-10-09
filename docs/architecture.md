@@ -453,7 +453,7 @@ $OSUNA_HOME/
 ├── schedules/                                  # Scheduled-agent definitions and runs
 ├── config.json                                 # Daemon config (mutable)
 ├── daemon-keypair.json                         # Daemon identity for relay/E2EE
-├── push-tokens.json                            # Mobile push tokens
+├── push-subscriptions.json                     # Mobile push tokens
 ├── osuna.pid                                   # Supervisor identity and published bound endpoint
 └── daemon.log                                  # Daemon trace logs (rotated)
 ```

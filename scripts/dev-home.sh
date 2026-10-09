@@ -122,6 +122,19 @@ configure_dev_osuna_home() {
   configure_dev_daemon_config
 }
 
+# 和正式安装共用语音模型，省得每个检出各下一份。只在那个目录已经存在时才用：
+# 在默认 home 下建任何东西，都会让之后 0.14.x 数据的搬迁以为新 home 已经有了而跳过。
+configure_dev_local_models_dir() {
+  if [ -n "${OSUNA_LOCAL_MODELS_DIR:-}" ]; then
+    return
+  fi
+
+  local shared_models_dir="$HOME/.osuna/models/local-speech"
+  if [ -d "$shared_models_dir" ]; then
+    export OSUNA_LOCAL_MODELS_DIR="$shared_models_dir"
+  fi
+}
+
 configure_dev_command_env() {
   if [ -z "${OSUNA_LISTEN:-}" ]; then
     if [ -n "${OSUNA_SERVICE_DAEMON_PORT:-}" ]; then

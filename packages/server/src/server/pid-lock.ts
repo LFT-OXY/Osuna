@@ -1,5 +1,6 @@
 import { open, readFile, unlink, utimes } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
+import { isLegacyDaemonProcess } from "./legacy-daemon-process.js";
 import { ensurePrivateDirectory } from "./private-files.js";
 import { join } from "node:path";
 import { hostname } from "node:os";
@@ -153,16 +154,40 @@ async function writeNewPidLock(pidPath: string, lockInfo: PidLockInfo): Promise<
 // （桌面端开了"退出后保持运行"）。它还活着就不能再起一个去写同一份数据；
 // 已经没人持有的旧锁文件是用户数据，原样留着。
 async function assertNoLiveLegacyDaemon(osunaHome: string): Promise<void> {
-  const legacyLock = await readLegacyPidLock(join(osunaHome, "paseo.pid"));
-  if (legacyLock && isPidRunning(legacyLock.pid)) throw createLockHeldError(legacyLock);
+  const legacyLock = await readLiveLegacyPidLock(osunaHome);
+  if (!legacyLock) return;
+  throw new PidLockError(
+    `A 0.14.x daemon is still running in ${osunaHome} (PID ${legacyLock.pid}, started ${legacyLock.startedAt}). Stop it first: osuna daemon stop --home ${JSON.stringify(osunaHome)}`,
+    legacyLock,
+  );
 }
 
-// 没有这个文件、或者读不出一把锁，都等于没有旧 daemon 持锁：这里只拦得住确实还活着的那一个。
-async function readLegacyPidLock(legacyPidPath: string): Promise<PidLockInfo | null> {
+// COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+// 没有这个文件、一直读不出一把锁、持有者已经不在、或者那个 pid 已经换了进程，都等于没有旧 daemon 持锁。
+// 读不出时多读几次：旧 daemon 改写锁文件不是原子的，正好撞上会读到半截内容。
+export async function readLiveLegacyPidLock(home: string): Promise<PidLockInfo | null> {
+  const legacyPidPath = join(home, "paseo.pid");
+  for (let attempt = 0; attempt < PID_LOCK_READ_RETRY_ATTEMPTS; attempt += 1) {
+    let content: string;
+    try {
+      content = await readFile(legacyPidPath, "utf-8");
+    } catch (error) {
+      if (isErrnoException(error) && error.code === "ENOENT") return null;
+      throw error;
+    }
+    const lock = parsePidLockJson(content);
+    if (lock) return isPidRunning(lock.pid) && (await isLegacyDaemonProcess(lock)) ? lock : null;
+    await new Promise((resolve) => setTimeout(resolve, PID_LOCK_READ_RETRY_DELAY_MS));
+  }
+  return null;
+}
+
+function parsePidLockJson(content: string): PidLockInfo | null {
   try {
-    return parsePidLockInfo(JSON.parse(await readFile(legacyPidPath, "utf-8")));
-  } catch {
-    return null;
+    return parsePidLockInfo(JSON.parse(content));
+  } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
   }
 }
 

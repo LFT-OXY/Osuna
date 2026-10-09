@@ -11,6 +11,8 @@ Throw classes that carry the fields a caller will read. The daemon has dozens; t
 | `WorktreeRequestError` | `server/worktree-errors.ts` | `code: WorktreeWireErrorCode` (a string-literal union) plus message |
 | `SessionRequestError` | `server/session.ts` | error code + message for a session RPC failure |
 | `PidLockError` | `server/pid-lock.ts` | why the lock could not be taken |
+| `DaemonInstanceError` | `server/daemon-instance.ts` | `code` for a start/stop outcome (`DAEMON_START_FAILED`, `STOP_NOT_CONFIRMED`, …) |
+| `LegacyDaemonRunningError` | `server/legacy-daemon.ts` | the 0.14.x daemon that blocks the move, with the command that stops it |
 | `CursorError` | `server/pagination/cursor.ts` | invalid pagination cursor |
 | `WorkspaceAutomationBlockedError` | `server/workspace-automation-gate.ts` | the gate that refused an automated action |
 | `MissingCheckoutTargetError`, `UnsupportedForgeCheckoutTargetError` | `server/resolve-worktree-creation-intent.ts` | which part of a checkout intent was unusable |
@@ -50,6 +52,7 @@ Domain errors become wire errors at the handler boundary through a `toXWireError
 - **Log with the `err` key**, `logger.error({ err: error }, "message")`, so pino serializes the stack. See [Logging](./logging.md).
 - **User-facing copy and log strings are different strings.** The wire `message` is what the app shows; log lines carry context objects.
 - **Process exits are deliberate.** Supervisor and worker lifecycle reasons are enumerated in `server/lifecycle-reasons.ts`; do not `process.exit` from a feature module.
+- **A supervisor that refuses to start says why in `daemon.log`.** A background launch discards its stderr, so before exiting it calls `recordDaemonStartRefusal(home, reason)` (`server/daemon-instance.ts`). `startDaemonInstance` reads the last `error` line written by the pid it spawned and reports `Daemon failed to start: <reason>`. The call never creates the log directory: a home that does not exist yet must stay absent until the 0.14.x data has moved.
 
 ## Anti-patterns
 

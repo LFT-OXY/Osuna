@@ -1,5 +1,8 @@
 import { verifyAttachedDaemonControls } from "./daemon-lifecycle-renderer.electron.mjs";
-import { verifyLegacyHomeMigrationThroughDesktop } from "./legacy-home-migration.electron.mjs";
+import {
+  verifyLegacyDaemonTakeoverThroughDesktop,
+  verifyLegacyHomeMigrationThroughDesktop,
+} from "./legacy-home-migration.electron.mjs";
 import { verifyLegacyRendererOriginMigration } from "./renderer-origin-migration.electron.mjs";
 import { verifyLegacyUserDataMigration } from "./user-data-migration.electron.mjs";
 import { once } from "node:events";
@@ -93,6 +96,7 @@ try {
     await verifyLegacyUserDataMigration({ repo, env });
     await verifyLegacyRendererOriginMigration({ repo, env });
     await verifyLegacyHomeMigrationThroughDesktop({ repo, env });
+    await verifyLegacyDaemonTakeoverThroughDesktop({ repo, env });
   }
   // Simulate a legacy independent launch that carries the old Desktop flag.
   const launch = await startDaemonInstance({

@@ -9,16 +9,13 @@ source "$SCRIPT_DIR/dev-home.sh"
 export OSUNA_LISTEN="${OSUNA_LISTEN:-127.0.0.1:6768}"
 configure_dev_osuna_home
 
-if [ -z "${OSUNA_LOCAL_MODELS_DIR}" ]; then
-  export OSUNA_LOCAL_MODELS_DIR="$HOME/.osuna/models/local-speech"
-  mkdir -p "$OSUNA_LOCAL_MODELS_DIR"
-fi
+configure_dev_local_models_dir
 
 echo "══════════════════════════════════════════════════════"
 echo "  Osuna Dev Daemon"
 echo "══════════════════════════════════════════════════════"
 echo "  Home:    ${OSUNA_HOME}"
-echo "  Models:  ${OSUNA_LOCAL_MODELS_DIR}"
+echo "  Models:  ${OSUNA_LOCAL_MODELS_DIR:-$OSUNA_HOME/models/local-speech}"
 echo "  Listen:  ${OSUNA_LISTEN}"
 echo "══════════════════════════════════════════════════════"
 
