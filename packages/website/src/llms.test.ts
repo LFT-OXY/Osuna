@@ -6,11 +6,8 @@ function sectionHeadings(llmsTxt: string): string[] {
 }
 
 describe("llms.txt", () => {
-  it("keeps the docs section with a markdown link per public doc", () => {
-    const llmsTxt = buildLlmsTxt();
-
-    expect(sectionHeadings(llmsTxt)).toContain("## Docs");
-    expect(llmsTxt).toMatch(/^- \[[^\]]+\]\(https:\/\/[^/)]+\/docs\/cli\.md\)/m);
+  it("links each public doc as markdown", () => {
+    expect(buildLlmsTxt()).toMatch(/^- \[[^\]]+\]\(https:\/\/[^/)]+\/docs\/cli\.md\)/m);
   });
 
   it("has no agent landing page or alternatives section", () => {

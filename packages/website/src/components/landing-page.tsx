@@ -50,7 +50,14 @@ const AGENT_LIST_GRID_STYLE = {
 const PHONE_PERSPECTIVE_STYLE = { minHeight: 480, perspective: 700 };
 import { CursorFieldProvider } from "~/components/butterfly";
 import { CommandDialog } from "~/components/command-dialog";
-import { getDesktopDownload, getMobileDownload, AndroidIcon, TerminalIcon } from "~/downloads";
+import {
+  getDesktopDownload,
+  getMobileDownload,
+  AndroidIcon,
+  TerminalIcon,
+  type PrimaryDownload,
+} from "~/downloads";
+import type { ReleaseInfo } from "~/latest-release";
 import type { VisitorPlatform } from "~/platform";
 import { isMobilePlatform } from "~/platform";
 import { useRelease, useVisitorPlatform } from "~/routes/__root";
@@ -287,7 +294,7 @@ function TurnkeySection() {
             <div className="space-y-0.5">
               <h3 className="text-xl font-medium text-white/90">桌面端</h3>
               <p className="max-w-lg text-sm leading-relaxed text-white/50">
-                下载后打开就能用，daemon 已经内置
+                下载后打开就能用，守护进程已经内置
               </p>
             </div>
           </div>
@@ -656,18 +663,20 @@ const PRIMARY_CTA_CLASS =
 const SECONDARY_CTA_CLASS =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 px-3 py-2.5 text-sm text-white hover:bg-white/10 transition-colors";
 
+const NEW_TAB_LINK_PROPS = { target: "_blank", rel: "noopener noreferrer" };
+const SAME_TAB_LINK_PROPS = {};
+
+function getPrimaryDownload(release: ReleaseInfo, platform: VisitorPlatform): PrimaryDownload {
+  if (isMobilePlatform(platform)) return getMobileDownload(release, platform);
+  return getDesktopDownload(release, platform);
+}
+
 function PrimaryDownloadButton({ platform }: { platform: VisitorPlatform }) {
-  const release = useRelease();
-  const download = isMobilePlatform(platform)
-    ? getMobileDownload(release, platform)
-    : getDesktopDownload(release, platform);
+  const download = getPrimaryDownload(useRelease(), platform);
   const Icon = download.icon;
-  // 站内链接（没有对应安装包时退到下载页）留在当前标签页。
-  const external = download.href.startsWith("/")
-    ? {}
-    : { target: "_blank", rel: "noopener noreferrer" };
+  const linkProps = download.external ? NEW_TAB_LINK_PROPS : SAME_TAB_LINK_PROPS;
   return (
-    <a href={download.href} {...external} className={PRIMARY_CTA_CLASS}>
+    <a href={download.href} {...linkProps} className={PRIMARY_CTA_CLASS}>
       <Icon className="h-4 w-4" />
       {download.label}
     </a>
@@ -696,7 +705,7 @@ function AndroidLink() {
 const SERVER_INSTALL_TRIGGER = (
   <span
     className="inline-flex items-center justify-center rounded-lg border border-white/12 px-3 py-2.5 text-white hover:bg-white/10 transition-colors"
-    aria-label="在远程机器上运行 daemon"
+    aria-label="在远程机器上运行守护进程"
   >
     <TerminalIcon className="h-5 w-5" />
   </span>
@@ -707,7 +716,7 @@ const SERVER_INSTALL_COMMAND =
 
 const SERVER_INSTALL_FOOTNOTE = (
   <>
-    镜像不含 Agent CLI。Compose 与反向代理的配置见{" "}
+    镜像不含提供方的 CLI。Compose 与反向代理的配置见{" "}
     <a href="/docs/docker" className="underline hover:text-white/60">
       Docker 文档
     </a>
@@ -720,14 +729,14 @@ function ServerInstallButton() {
     <CommandDialog
       trigger={SERVER_INSTALL_TRIGGER}
       title="在远程机器上运行 Agent"
-      description="用于没有界面的服务器，之后从 Osuna 的各个客户端连接。桌面端已经内置 daemon"
+      description="用于没有界面的服务器，之后从 Osuna 的各个客户端连接。桌面端已经内置守护进程"
       command={SERVER_INSTALL_COMMAND}
       footnote={SERVER_INSTALL_FOOTNOTE}
     />
   );
 }
 
-interface PhoneShotInfo {
+interface PhoneScreenshot {
   src: string;
   alt: string;
   /** The colour at the top edge of the screenshot; the frame's status bar continues it. */
@@ -751,9 +760,9 @@ const PHONE_SHOTS = {
     alt: "Osuna 手机端的改动差异",
     surface: "#030403",
   },
-} satisfies Record<string, PhoneShotInfo>;
+} satisfies Record<string, PhoneScreenshot>;
 
-function PhoneShot({ shot }: { shot: PhoneShotInfo }) {
+function PhoneShot({ shot }: { shot: PhoneScreenshot }) {
   return <img src={shot.src} alt={shot.alt} width={402} height={820} className="h-full w-full" />;
 }
 
@@ -872,8 +881,8 @@ function FAQ() {
       <h2 className="text-3xl font-medium">常见问题</h2>
       <div className="space-y-6">
         <FAQItem question="免费吗？">
-          免费。Osuna 是开源软件。你需要自己安装 Agent
-          的命令行工具，并使用自己的凭据。语音默认在本地处理，也可以按需配置云端语音服务。
+          免费。Osuna
+          是开源软件。你需要自己安装提供方的命令行工具，并使用自己的凭据。语音默认在本地处理，也可以按需配置云端语音服务。
         </FAQItem>
         <FAQItem question="我的代码会离开我的机器吗？">
           Osuna 不会把你的代码发到任何地方。Agent 在本机运行，照常访问各自的
@@ -883,18 +892,18 @@ function FAQ() {
           </a>
           、局域网直连，或你自己的隧道。
         </FAQItem>
-        <FAQItem question="支持哪些 Agent？">
+        <FAQItem question="支持哪些提供方？">
           Osuna 为 Claude、Codex、OpenCode、Pi 和 OMP 做了专门适配，其余通过 ACP 接入。完整列表见
           <a href="/docs/supported-providers" className="underline hover:text-white/80">
             支持的提供方
           </a>
           。
         </FAQItem>
-        <FAQItem question="Osuna 怎么运行这些 Agent？">
+        <FAQItem question="Osuna 怎么运行这些提供方？">
           直接运行你机器上已经装好的命令行工具，和你平时的用法一样。Osuna 不修改它们的行为。
         </FAQItem>
         <FAQItem question="必须用桌面端吗？">
-          不必。daemon 可以不带界面运行，再用任意客户端连接。桌面端只是把 daemon 和界面打包在一起。
+          不必。守护进程可以不带界面运行，再用任意客户端连接。桌面端只是把守护进程和界面打包在一起。
         </FAQItem>
         <FAQItem question="语音是怎么工作的？">
           语音默认在你的设备上处理：你说话，应用转写成文字发给 Agent。也可以配置 OpenAI
@@ -906,8 +915,8 @@ function FAQ() {
         </FAQItem>
         <FAQItem question="能从外网连接吗？">
           可以。使用官方中继（端到端加密，Osuna
-          读不到你的流量）、自己搭的隧道（Tailscale、Cloudflare Tunnel 等），或者直接暴露 daemon
-          端口。见
+          读不到你的流量）、自己搭的隧道（Tailscale、Cloudflare Tunnel
+          等），或者直接暴露守护进程端口。见
           <a href="/docs/configuration" className="underline hover:text-white/80">
             配置文档
           </a>

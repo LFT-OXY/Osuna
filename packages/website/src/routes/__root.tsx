@@ -18,6 +18,7 @@ const ReleaseCtx = createContext<ReleaseChannels>({
     linuxAppImageAsset: null,
     windowsX64Asset: null,
     windowsArm64Asset: null,
+    androidApkAsset: null,
   },
   beta: null,
 });

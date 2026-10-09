@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  getLatestAndroidVersionFromReleases,
-  selectReleaseChannels,
-  type GitHubRelease,
-} from "./latest-release";
+import { selectReleaseChannels, type GitHubRelease } from "./latest-release";
 
 function release({
   version,
@@ -45,18 +41,6 @@ function desktopRelease({
   };
 }
 
-describe("getLatestAndroidVersionFromReleases", () => {
-  it("selects the latest stable release that contains an Android APK", () => {
-    const releases = [
-      release({ version: "0.1.109", hasApk: true, prerelease: true }),
-      release({ version: "0.1.108", hasApk: false }),
-      release({ version: "0.1.107", hasApk: true }),
-    ];
-
-    expect(getLatestAndroidVersionFromReleases(releases)).toBe("0.1.107");
-  });
-});
-
 describe("selectReleaseChannels", () => {
   it("offers a release that ships macOS and Windows installers but no Linux build", () => {
     const channels = selectReleaseChannels([
@@ -79,6 +63,22 @@ describe("selectReleaseChannels", () => {
       linuxAppImageAsset: null,
       windowsX64Asset: "Osuna-Setup-0.14.2-x64.exe",
       windowsArm64Asset: "Osuna-Setup-0.14.2-arm64.exe",
+      androidApkAsset: null,
+    });
+  });
+
+  it("offers the Android APK once it has been attached to the release", () => {
+    const withoutApk = desktopRelease({ version: "1.0.0" });
+    const channels = selectReleaseChannels([
+      { ...withoutApk, assets: [...withoutApk.assets, { name: "osuna-v1.0.0-android.apk" }] },
+    ]);
+
+    expect(channels.stable).toEqual({
+      version: "1.0.0",
+      linuxAppImageAsset: "Osuna-x86_64.AppImage",
+      windowsX64Asset: "Osuna-Setup-1.0.0-x64.exe",
+      windowsArm64Asset: "Osuna-Setup-1.0.0-arm64.exe",
+      androidApkAsset: "osuna-v1.0.0-android.apk",
     });
   });
 

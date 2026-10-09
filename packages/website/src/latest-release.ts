@@ -17,6 +17,8 @@ export interface ReleaseInfo {
   linuxAppImageAsset: string | null;
   windowsX64Asset: string | null;
   windowsArm64Asset: string | null;
+  /** Null until the Android APK Release workflow has attached the APK. */
+  androidApkAsset: string | null;
 }
 
 export interface ReleaseChannels {
@@ -32,8 +34,7 @@ const LINUX_APPIMAGE_ASSET_PATTERN =
 const REQUIRED_ASSET_PATTERNS = [/Osuna-.*-arm64\.dmg$/, /Osuna-Setup-.*\.exe$/];
 
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/LFT-OXY/Osuna/releases?per_page=10";
-const RELEASE_CACHE_KEY = "github-release:v2";
-const ANDROID_RELEASE_CACHE_KEY = "github-android-release:v1";
+const RELEASE_CACHE_KEY = "github-release:v3";
 
 function hasRequiredAssets(release: GitHubRelease): boolean {
   return REQUIRED_ASSET_PATTERNS.every((pattern) =>
@@ -58,6 +59,12 @@ function pickWindowsAssets(assets: GitHubAsset[]) {
 
 function pickLinuxAppImageAsset(assets: GitHubAsset[]) {
   return assets.find((asset) => LINUX_APPIMAGE_ASSET_PATTERN.test(asset.name))?.name ?? null;
+}
+
+// APK 由单独触发的工作流事后挂到 Release 上，桌面包发布时它还不在。
+function pickAndroidApkAsset(release: GitHubRelease) {
+  const apkName = `osuna-${release.tag_name}-android.apk`;
+  return release.assets.find((asset) => asset.name === apkName)?.name ?? null;
 }
 
 function versionFromTag(tag: string): string {
@@ -90,6 +97,7 @@ function toReleaseInfo(release: GitHubRelease): ReleaseInfo | null {
     linuxAppImageAsset: pickLinuxAppImageAsset(release.assets),
     windowsX64Asset: windowsAssets.x64,
     windowsArm64Asset: windowsAssets.arm64,
+    androidApkAsset: pickAndroidApkAsset(release),
   };
 }
 
@@ -132,27 +140,6 @@ async function fetchReleaseChannels(): Promise<ReleaseChannels> {
   return selectReleaseChannels(await fetchGitHubReleases());
 }
 
-export function getLatestAndroidVersionFromReleases(releases: GitHubRelease[]): string {
-  const release = releases.find((candidate) => {
-    if (candidate.prerelease || candidate.draft) return false;
-    const version = versionFromTag(candidate.tag_name);
-    if (!/^\d+\.\d+\.\d+$/.test(version)) return false;
-    return candidate.assets.some(
-      (asset) => asset.name === `osuna-${candidate.tag_name}-android.apk`,
-    );
-  });
-  if (!release) throw new Error("no stable GitHub release with an Android APK found");
-  return versionFromTag(release.tag_name);
-}
-
-async function fetchLatestAndroidVersion(): Promise<string> {
-  return getLatestAndroidVersionFromReleases(await fetchGitHubReleases());
-}
-
-function isAndroidVersion(value: unknown): value is string {
-  return typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value);
-}
-
 function isReleaseInfo(value: unknown): value is ReleaseInfo {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
@@ -174,7 +161,9 @@ function isReleaseInfo(value: unknown): value is ReleaseInfo {
     (record.windowsArm64Asset === null ||
       new RegExp(`^Osuna-Setup-${record.version.replaceAll(".", "\\.")}-arm64\\.exe$`).test(
         record.windowsArm64Asset,
-      ))
+      )) &&
+    (record.androidApkAsset === null ||
+      record.androidApkAsset === `osuna-v${record.version}-android.apk`)
   );
 }
 
@@ -190,14 +179,5 @@ export async function getReleaseChannels(context: WebsiteCacheContext): Promise<
     key: RELEASE_CACHE_KEY,
     isValue: isReleaseChannels,
     fetchFresh: fetchReleaseChannels,
-  });
-}
-
-export async function getLatestAndroidVersion(context: WebsiteCacheContext): Promise<string> {
-  return getBlockingColdCache({
-    context,
-    key: ANDROID_RELEASE_CACHE_KEY,
-    isValue: isAndroidVersion,
-    fetchFresh: fetchLatestAndroidVersion,
   });
 }

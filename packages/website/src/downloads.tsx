@@ -1,70 +1,106 @@
 import * as React from "react";
+import type { ReleaseInfo } from "~/latest-release";
 import type { DesktopPlatform, MobilePlatform } from "~/platform";
 
 export function releaseBase(version: string) {
   return `https://github.com/LFT-OXY/Osuna/releases/download/v${version}`;
 }
 
-export interface ReleaseAssetInfo {
-  version: string;
-  linuxAppImageAsset: string | null;
-  windowsX64Asset: string | null;
-  windowsArm64Asset: string | null;
+export interface LinuxDownloadUrls {
+  appImage: string;
+  deb: string;
+  rpm: string;
 }
 
-export function downloadUrls(release: ReleaseAssetInfo) {
-  const { version, linuxAppImageAsset, windowsX64Asset, windowsArm64Asset } = release;
+export interface DownloadUrls {
+  macAppleSilicon: string;
+  macIntel: string;
+  /** Null when the release ships no Linux build. */
+  linux: LinuxDownloadUrls | null;
+  windowsExeX64: string;
+  windowsExeArm64: string | null;
+  /** Null until the APK has been attached to the release. */
+  androidApk: string | null;
+}
+
+function assetUrl(base: string, asset: string | null): string | null {
+  if (asset === null) return null;
+  return `${base}/${asset}`;
+}
+
+// AppImage、DEB、RPM 出自同一条 Linux 构建，没有 AppImage 就是这一版没出 Linux 包。
+function linuxDownloadUrls(base: string, release: ReleaseInfo): LinuxDownloadUrls | null {
+  if (release.linuxAppImageAsset === null) return null;
+  return {
+    appImage: `${base}/${release.linuxAppImageAsset}`,
+    deb: `${base}/Osuna-${release.version}-amd64.deb`,
+    rpm: `${base}/Osuna-${release.version}-x86_64.rpm`,
+  };
+}
+
+export function downloadUrls(release: ReleaseInfo): DownloadUrls {
+  const { version, windowsX64Asset, windowsArm64Asset, androidApkAsset } = release;
   const base = releaseBase(version);
-  // AppImage、DEB、RPM 出自同一条 Linux 构建，没有 AppImage 就是这一版没出 Linux 包。
-  const hasLinux = linuxAppImageAsset !== null;
+  const windowsX64Name = windowsX64Asset ?? `Osuna-Setup-${version}.exe`;
   return {
     macAppleSilicon: `${base}/Osuna-${version}-arm64.dmg`,
     macIntel: `${base}/Osuna-${version}-x64.dmg`,
-    linuxAppImage: hasLinux ? `${base}/${linuxAppImageAsset}` : null,
-    linuxDeb: hasLinux ? `${base}/Osuna-${version}-amd64.deb` : null,
-    linuxRpm: hasLinux ? `${base}/Osuna-${version}-x86_64.rpm` : null,
-    windowsExeX64: `${base}/${windowsX64Asset ?? `Osuna-Setup-${version}.exe`}`,
-    windowsExeArm64: windowsArm64Asset ? `${base}/${windowsArm64Asset}` : null,
-    androidApk: `${base}/osuna-v${version}-android.apk`,
+    linux: linuxDownloadUrls(base, release),
+    windowsExeX64: `${base}/${windowsX64Name}`,
+    windowsExeArm64: assetUrl(base, windowsArm64Asset),
+    androidApk: assetUrl(base, androidApkAsset),
   };
 }
 
 export const webAppUrl = "https://osuna-app.chinhae.cc";
 
+type DownloadIcon = (props: React.SVGProps<SVGSVGElement>) => React.ReactElement;
+
 export interface PrimaryDownload {
   /** The full call-to-action text, e.g. "下载 Mac 版". */
   label: string;
   href: string;
-  icon: (props: React.SVGProps<SVGSVGElement>) => React.ReactElement;
+  icon: DownloadIcon;
+  /** False for a link into this site, which stays in the current tab. */
+  external: boolean;
+}
+
+// 这一版没有访客平台的安装包时，主按钮退到下载页，那里写着还有哪些方式。
+function downloadPageFallback(icon: DownloadIcon): PrimaryDownload {
+  return { label: "查看下载方式", href: "/download", icon, external: false };
 }
 
 export function getDesktopDownload(
-  release: ReleaseAssetInfo,
+  release: ReleaseInfo,
   platform: DesktopPlatform,
 ): PrimaryDownload {
   const urls = downloadUrls(release);
   switch (platform) {
     case "windows":
-      return { label: "下载 Windows 版", href: urls.windowsExeX64, icon: WindowsIcon };
+      return {
+        label: "下载 Windows 版",
+        href: urls.windowsExeX64,
+        icon: WindowsIcon,
+        external: true,
+      };
     case "linux":
-      return urls.linuxAppImage
-        ? { label: "下载 Linux 版", href: urls.linuxAppImage, icon: LinuxIcon }
-        : { label: "查看下载方式", href: "/download", icon: LinuxIcon };
+      if (urls.linux === null) return downloadPageFallback(LinuxIcon);
+      return { label: "下载 Linux 版", href: urls.linux.appImage, icon: LinuxIcon, external: true };
     case "mac":
-      return { label: "下载 Mac 版", href: urls.macAppleSilicon, icon: AppleIcon };
+      return { label: "下载 Mac 版", href: urls.macAppleSilicon, icon: AppleIcon, external: true };
   }
 }
 
 // 手机端只有安卓 APK；没有 iOS 包，iPhone 访客走网页端。
-export function getMobileDownload(
-  release: ReleaseAssetInfo,
-  platform: MobilePlatform,
-): PrimaryDownload {
+export function getMobileDownload(release: ReleaseInfo, platform: MobilePlatform): PrimaryDownload {
   switch (platform) {
-    case "android":
-      return { label: "下载安卓 APK", href: downloadUrls(release).androidApk, icon: AndroidIcon };
+    case "android": {
+      const { androidApk } = downloadUrls(release);
+      if (androidApk === null) return downloadPageFallback(AndroidIcon);
+      return { label: "下载安卓 APK", href: androidApk, icon: AndroidIcon, external: true };
+    }
     case "ios":
-      return { label: "打开网页端", href: webAppUrl, icon: GlobeIcon };
+      return { label: "打开网页端", href: webAppUrl, icon: GlobeIcon, external: true };
   }
 }
 

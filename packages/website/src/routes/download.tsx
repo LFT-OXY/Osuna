@@ -30,7 +30,7 @@ export const Route = createFileRoute("/download")({
   head: () =>
     pageMeta(
       "下载 Osuna – 桌面端与安卓",
-      "下载 Osuna 桌面端与安卓 APK，或用 Docker 把 daemon 跑在服务器上。自托管，开源，免费。",
+      "下载 Osuna 桌面端与安卓 APK，或用 Docker 把守护进程跑在服务器上。自托管，开源，免费。",
       "/download",
     ),
   component: Download,
@@ -51,21 +51,22 @@ function Download() {
 
   return (
     <SiteShell width="default">
-      <div className="mb-10 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mb-2">下载</h1>
-          <p className="text-muted-foreground">
-            v{version}
-            <span className="mx-2 text-muted-foreground/40">·</span>
-            <Link
-              {...changelogLink(version)}
-              className="underline underline-offset-4 decoration-border hover:text-foreground hover:decoration-current transition-colors"
-            >
-              更新内容
-            </Link>
-          </p>
+      <div className="mb-10">
+        {/* 切换器钉在标题行右侧，版本号独占一行：版本号再长也挤不动它。 */}
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">下载</h1>
+          {beta && <ChannelSwitch onBeta={onBeta} />}
         </div>
-        {beta && <ChannelSwitch onBeta={onBeta} />}
+        <p className="text-muted-foreground">
+          v{version}
+          <span className="mx-2 text-muted-foreground/40">·</span>
+          <Link
+            {...changelogLink(version)}
+            className="underline underline-offset-4 decoration-border hover:text-foreground hover:decoration-current transition-colors"
+          >
+            更新内容
+          </Link>
+        </p>
       </div>
 
       {onBeta && <BetaNotice />}
@@ -102,16 +103,14 @@ function Download() {
           </PlatformRow>
 
           <PlatformRow icon={LinuxIcon} label="Linux">
-            {urls.linuxAppImage && urls.linuxDeb && urls.linuxRpm ? (
+            {urls.linux ? (
               <PillGroup>
-                <DownloadPill href={urls.linuxAppImage} label="AppImage" />
-                <DownloadPill href={urls.linuxDeb} label="DEB" />
-                <DownloadPill href={urls.linuxRpm} label="RPM" />
+                <DownloadPill href={urls.linux.appImage} label="AppImage" />
+                <DownloadPill href={urls.linux.deb} label="DEB" />
+                <DownloadPill href={urls.linux.rpm} label="RPM" />
               </PillGroup>
             ) : (
-              <span className="text-sm text-muted-foreground">
-                这一版没有 Linux 安装包，可以用 Docker 或源码构建
-              </span>
+              <MissingBuildNote>这一版没有 Linux 安装包，可以用 Docker 或源码构建</MissingBuildNote>
             )}
           </PlatformRow>
         </div>
@@ -126,9 +125,13 @@ function Download() {
 
         <div className="divide-y divide-border">
           <PlatformRow icon={AndroidIcon} label="安卓">
-            <PillGroup>
-              <DownloadPill href={urls.androidApk} label="APK" />
-            </PillGroup>
+            {urls.androidApk ? (
+              <PillGroup>
+                <DownloadPill href={urls.androidApk} label="APK" />
+              </PillGroup>
+            ) : (
+              <MissingBuildNote>这一版没有安卓 APK，可以用网页端</MissingBuildNote>
+            )}
           </PlatformRow>
         </div>
       </section>
@@ -160,7 +163,7 @@ function Download() {
           <div>
             <h2 className="text-2xl font-semibold">服务器</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              把 daemon 跑在任意机器上，再用任意客户端连接
+              把守护进程跑在任意机器上，再用任意客户端连接
             </p>
           </div>
           <TerminalIcon className="h-5 w-5 text-muted-foreground mt-1.5" />
@@ -269,6 +272,10 @@ function PlatformRow({
       {children}
     </div>
   );
+}
+
+function MissingBuildNote({ children }: { children: ReactNode }) {
+  return <span className="text-sm text-muted-foreground">{children}</span>;
 }
 
 function PillGroup({ children }: { children: ReactNode }) {

@@ -26,27 +26,27 @@ function Privacy() {
         <h2>谁负责</h2>
         <OsunaLegalIdentity />
         <p>
-          LFT-OXY 负责官方网站与官方中继所处理的个人数据。自行托管的 daemon
-          与中继由各自的运营者负责，不在本政策范围内。
+          LFT-OXY
+          负责官方网站与官方中继所处理的个人数据。自行托管的守护进程与中继由各自的运营者负责，不在本政策范围内。
         </p>
       </section>
 
       <section>
-        <h2>本地的 Osuna 应用与 daemon</h2>
+        <h2>本地的 Osuna 应用与守护进程</h2>
         <p>Osuna 运行在你自己的机器上，不向我们发送统计、遥测、广告标识或崩溃报告。</p>
         <p>
           打包的桌面端会向 GitHub Releases 检查更新。GitHub
           会按它自己的隐私政策，收到响应这次请求所需的常规网络信息。
         </p>
         <p>
-          Claude Code、Codex、OpenCode 等 Agent 使用你机器上的凭据与各自的提供方通信。Osuna
+          Claude Code、Codex、OpenCode 等提供方使用你机器上的凭据与各自的服务通信。Osuna
           不管理也不拦截这些 API 调用。
         </p>
       </section>
 
       <section>
         <h2>官方中继</h2>
-        <p>中继是可选的。为了把你的客户端和 daemon 连起来，它会处理：</p>
+        <p>中继是可选的。为了把你的客户端和守护进程连起来，它会处理：</p>
         <ul>
           <li>IP 地址与连接时间</li>
           <li>会话标识与握手用的公钥</li>
@@ -54,7 +54,7 @@ function Privacy() {
           <li>临时的连接与路由状态</li>
         </ul>
         <p>
-          你的客户端与 daemon 之间用 NaCl box
+          你的客户端与守护进程之间用 NaCl box
           做端到端加密。中继只转发密文，读不到你的代码、提示词、终端输出或 Agent
           对话。数据只在转发期间存在于中继的内存里，我们不存储消息内容。基础设施可能为安全、容量规划和排查问题保留有限的运行日志与汇总指标。
         </p>
