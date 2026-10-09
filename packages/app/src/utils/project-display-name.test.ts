@@ -7,7 +7,7 @@ import {
 describe("projectDisplayNameFromProjectId", () => {
   it("shows owner and repo for GitHub remote ids", () => {
     expect(projectDisplayNameFromProjectId("remote:github.com/lft-oxy/osuna")).toBe(
-      "LFT-OXY/Osuna",
+      "lft-oxy/osuna",
     );
   });
 
@@ -18,7 +18,7 @@ describe("projectDisplayNameFromProjectId", () => {
 
 describe("projectIconPlaceholderLabelFromDisplayName", () => {
   it("uses repo name instead of owner for GitHub-style display names", () => {
-    expect(projectIconPlaceholderLabelFromDisplayName("LFT-OXY/Osuna")).toBe("osuna");
+    expect(projectIconPlaceholderLabelFromDisplayName("LFT-OXY/Osuna")).toBe("Osuna");
   });
 
   it("returns the original display name when it has no path separator", () => {

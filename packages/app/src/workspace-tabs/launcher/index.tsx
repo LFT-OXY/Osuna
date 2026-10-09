@@ -25,10 +25,7 @@ import {
   type PanelPresentation,
 } from "@/panels/panel-registry";
 import { ensurePanelsRegistered } from "@/panels/register-panels";
-import {
-  getTerminalProfileIcon,
-  resolveTerminalProfiles,
-} from "@osuna/protocol/terminal-profiles";
+import { getTerminalProfileIcon, resolveTerminalProfiles } from "@osuna/protocol/terminal-profiles";
 import { getBuiltInLaunchOrder, type BuiltInLaunchItemId } from "./internal/catalog";
 
 export type WorkspaceTabLaunchPurpose = "primary" | "supporting";

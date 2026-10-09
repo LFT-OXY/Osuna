@@ -218,8 +218,7 @@ function runtimeRequire(name: string): unknown {
   if (name === "@osuna/plugin/server") return {};
   if (name === "@osuna/plugin/server/provider") return pluginProviderRuntime;
   if (name === "@osuna/plugin/server/acp") return pluginAcpRuntime;
-  if (name === "@osuna/plugin/client/host")
-    throw new Error(`${name} is private to the app host`);
+  if (name === "@osuna/plugin/client/host") throw new Error(`${name} is private to the app host`);
   return nodeRequire(name);
 }
 

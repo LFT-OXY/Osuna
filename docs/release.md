@@ -97,8 +97,7 @@ release push as the changelog and version commit.
 
 ### 发版
 
-先在 `CHANGELOG.md` 顶部加本次版本的条目，格式是 `## X.Y.Z - YYYY-MM-DD`——`npm version`
-的生命周期钩子会跑 F-Droid changelog 同步，查不到条目就直接中断。再把 `npm run format`、
+先在 `CHANGELOG.md` 顶部加本次版本的条目，格式是 `## X.Y.Z - YYYY-MM-DD`。再把 `npm run format`、
 `npm run lint`、`npm run typecheck` 跑绿并提交——`version:all:*` 底下是 `npm version`，
 工作区不干净同样会中断。major 不在这条路径里：按本文「Release
 version decision」，agent 不自选 major，需要时手工改版本号再走 `npm run release:push`。
@@ -639,7 +638,6 @@ intentionally unavailable to desktop updater clients.
 ## Notes
 
 - `version:all:*` bumps root + syncs workspace versions and `@osuna/*` dependency versions
-- The npm `version` lifecycle regenerates F-Droid changelog files from `CHANGELOG.md` for stable releases only (`npm run fdroid:changelogs`) and stages them, so the release tag carries them. Betas are a no-op. A stable run **aborts the release** if `CHANGELOG.md` has no entry for the version being cut — commit the changelog entry first. See [docs/android.md](android.md) for why these files are generated per ABI.
 - `release:prepare` refreshes workspace `node_modules` links to prevent stale types
 - `npm run dev:desktop` and `npm run build:desktop` target the Electron desktop package in `packages/desktop`
 - If `release:publish` partially fails, re-run it — npm skips already-published versions

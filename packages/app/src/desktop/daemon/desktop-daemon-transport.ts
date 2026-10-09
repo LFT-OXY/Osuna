@@ -1,7 +1,4 @@
-import type {
-  DaemonTransport,
-  DaemonTransportFactory,
-} from "@osuna/client/internal/daemon-client";
+import type { DaemonTransport, DaemonTransportFactory } from "@osuna/client/internal/daemon-client";
 import { validatePort, validateSshHost } from "@osuna/protocol/ssh-transport";
 import type { DesktopDaemonTransportTarget } from "./desktop-daemon";
 import {

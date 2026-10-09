@@ -4920,10 +4920,10 @@ describe("session pull request timeline handling", () => {
   test.each([
     { prNumber: 0, repoOwner: "LFT-OXY", repoName: "Osuna" },
     { prNumber: -1, repoOwner: "LFT-OXY", repoName: "Osuna" },
-    { prNumber: 42, repoOwner: "get osuna", repoName: "Osuna" },
+    { prNumber: 42, repoOwner: "LFT OXY", repoName: "Osuna" },
     { prNumber: 42, repoOwner: "LFT-OXY/cli", repoName: "Osuna" },
-    { prNumber: 42, repoOwner: "get$osuna", repoName: "Osuna" },
-    { prNumber: 42, repoOwner: "LFT-OXY", repoName: "pa seo" },
+    { prNumber: 42, repoOwner: "LFT$OXY", repoName: "Osuna" },
+    { prNumber: 42, repoOwner: "LFT-OXY", repoName: "Osu na" },
     { prNumber: 42, repoOwner: "LFT-OXY", repoName: "osuna/app" },
     { prNumber: 42, repoOwner: "LFT-OXY", repoName: "osuna!" },
   ])("returns an unknown error when request identity is invalid: %j", async (identity) => {

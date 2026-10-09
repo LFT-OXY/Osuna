@@ -316,10 +316,7 @@ function runtimeSpecifierError(
   let kind: string | null = null;
   if (specifier === "@osuna/plugin/client/host") kind = "host-private";
   else if (
-    (specifier === "@osuna/plugin" ||
-      specifier.startsWith("@osuna/plugin/") ||
-      specifier === "@osuna/plugin" ||
-      specifier.startsWith("@osuna/plugin/")) &&
+    (specifier === "@osuna/plugin" || specifier.startsWith("@osuna/plugin/")) &&
     !(PLUGIN_SDK_SPECIFIERS as readonly string[]).includes(specifier)
   )
     kind = "Unknown SDK";

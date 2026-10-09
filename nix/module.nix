@@ -94,7 +94,7 @@ in
         description = ''
           How the daemon reaches the relay when `relay.enable = true`:
 
-          - `"hosted"` (default): use the upstream `osuna-app.chinhae.cc` relay.
+          - `"hosted"` (default): use the hosted `osuna-relay.chinhae.cc` relay.
             Preserves the current behavior; no extra options needed.
           - `"remote"`: connect to a self-hosted relay at
             `relay.host:relay.port`. Sets `OSUNA_RELAY_ENDPOINT` and

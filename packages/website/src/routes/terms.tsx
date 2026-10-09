@@ -12,9 +12,9 @@ function Terms() {
   return (
     <LegalPage title="Terms of Service" lastUpdated="August 29, 2026">
       <p>
-        These Terms govern the official services operated at osuna.chinhae.cc and osuna-relay.chinhae.cc. By using
-        the official relay, you agree to them. Our <a href="/privacy">Privacy Policy</a> explains
-        how those services process data.
+        These Terms govern the official services operated at osuna.chinhae.cc and
+        osuna-relay.chinhae.cc. By using the official relay, you agree to them. Our{" "}
+        <a href="/privacy">Privacy Policy</a> explains how those services process data.
       </p>
 
       <section>

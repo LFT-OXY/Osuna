@@ -61,9 +61,9 @@ describe("createMarkdownParser", () => {
   });
 
   it("linkifies bare URLs only when asked", () => {
-    expect(createMarkdownParser({ linkify: true }).render("see https://osuna.chinhae.cc now")).toContain(
-      'href="https://osuna.chinhae.cc"',
-    );
+    expect(
+      createMarkdownParser({ linkify: true }).render("see https://osuna.chinhae.cc now"),
+    ).toContain('href="https://osuna.chinhae.cc"');
     expect(
       createMarkdownParser({ linkify: false }).render("see https://osuna.chinhae.cc now"),
     ).not.toContain("href");

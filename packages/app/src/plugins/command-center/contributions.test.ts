@@ -1,11 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createOsunaApi, type OsunaApi } from "@osuna/client";
 import { DaemonClient } from "@osuna/client/internal/daemon-client";
-import {
-  defineRpc,
-  type PluginAgentSnapshot,
-  type PluginWorkspaceSnapshot,
-} from "@osuna/plugin";
+import { defineRpc, type PluginAgentSnapshot, type PluginWorkspaceSnapshot } from "@osuna/plugin";
 import { type PluginCommandCenterItemContribution } from "@osuna/plugin/client";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";

@@ -9,11 +9,7 @@ import { fileURLToPath } from "node:url";
 import { createExternalProcessEnv } from "../server/osuna-env.js";
 import { writePrivateFileAtomicSync } from "../server/private-files.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
-import type {
-  TerminalCell,
-  TerminalState,
-  TerminalViewAttributes,
-} from "@osuna/protocol/messages";
+import type { TerminalCell, TerminalState, TerminalViewAttributes } from "@osuna/protocol/messages";
 import { TerminalInputModeTracker } from "@osuna/protocol/terminal-input-mode";
 import { TerminalActivityTracker } from "./activity/terminal-activity-tracker.js";
 import type { TerminalActivity, TerminalActivityState } from "@osuna/protocol/terminal-activity";

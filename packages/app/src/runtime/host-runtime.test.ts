@@ -1069,7 +1069,9 @@ describe("HostRuntimeController", () => {
       status: "available",
       latencyMs: 12,
     });
-    expect(snapshot.probeByConnectionId.get("relay:osuna-relay.chinhae.cc:443")).toEqual(initialRelayProbe);
+    expect(snapshot.probeByConnectionId.get("relay:osuna-relay.chinhae.cc:443")).toEqual(
+      initialRelayProbe,
+    );
   });
 
   it("switches only after the faster alternative wins consecutive probes", async () => {
@@ -1100,7 +1102,8 @@ describe("HostRuntimeController", () => {
     await controller.runProbeCycleNow();
     expect(controller.getSnapshot().activeConnectionId).toBe("direct:lan:6767");
 
-    let switched = controller.getSnapshot().activeConnectionId === "relay:osuna-relay.chinhae.cc:443";
+    let switched =
+      controller.getSnapshot().activeConnectionId === "relay:osuna-relay.chinhae.cc:443";
     for (let index = 0; index < 6 && !switched; index += 1) {
       await vi.advanceTimersByTimeAsync(120_000);
       await controller.runProbeCycleNow();
@@ -1152,7 +1155,8 @@ describe("HostRuntimeController", () => {
     await controller.runProbeCycleNow();
     expect(controller.getSnapshot().activeConnectionId).toBe("direct:lan:6767");
 
-    let switched = controller.getSnapshot().activeConnectionId === "relay:osuna-relay.chinhae.cc:443";
+    let switched =
+      controller.getSnapshot().activeConnectionId === "relay:osuna-relay.chinhae.cc:443";
     for (let index = 0; index < 6 && !switched; index += 1) {
       await vi.advanceTimersByTimeAsync(120_000);
       await controller.runProbeCycleNow();

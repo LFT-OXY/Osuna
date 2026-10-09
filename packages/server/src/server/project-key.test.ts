@@ -18,7 +18,7 @@ describe("deriveProjectKey", () => {
   });
 
   test("normalizes GitHub casing", () => {
-    expect(derive("git@github.com:GetOsuna/Osuna.git")).toBe("remote:github.com/lft-oxy/osuna");
+    expect(derive("git@github.com:Lft-Oxy/OSUNA.git")).toBe("remote:github.com/lft-oxy/osuna");
   });
 
   test("preserves self-hosted paths and explicit ports", () => {

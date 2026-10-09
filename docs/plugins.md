@@ -174,8 +174,8 @@ Classify every SDK export before adding it. All client entry points and implemen
 Zod schemas, and functions that run in both runtimes. A type-only import is still an architectural
 dependency; shared types must not refer to React components, hooks, Node APIs, or server contexts.
 
-| Entry                                                | Owns                                                                       | May depend on          |
-| ---------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------- |
+| Entry                                             | Owns                                                                       | May depend on          |
+| ------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------- |
 | `@osuna/plugin`                                   | Shared data, schemas, RPC/settings definitions, runtime-neutral helpers    | Shared code only       |
 | `@osuna/plugin/server`                            | Server contribution/handler contexts and lifecycle contracts               | Shared and server code |
 | `@osuna/plugin/server/provider`, `/server/acp`    | Server provider contracts and adapters                                     | Shared and server code |

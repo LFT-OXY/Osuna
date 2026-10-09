@@ -192,9 +192,7 @@ function Download() {
 
           <PlatformRow icon={TerminalIcon} label="Nix">
             <CodeBlock size="sm">
-              {onBeta
-                ? `nix run github:LFT-OXY/Osuna/v${version}`
-                : "nix run github:LFT-OXY/Osuna"}
+              {onBeta ? `nix run github:LFT-OXY/Osuna/v${version}` : "nix run github:LFT-OXY/Osuna"}
             </CodeBlock>
           </PlatformRow>
         </div>

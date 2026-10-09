@@ -3,10 +3,7 @@ import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Pencil, Plus, Trash2 } from "lucide-react-native";
-import type {
-  ApiEndpoint,
-  ApiEndpointHealthIssue,
-} from "@osuna/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpoint, ApiEndpointHealthIssue } from "@osuna/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

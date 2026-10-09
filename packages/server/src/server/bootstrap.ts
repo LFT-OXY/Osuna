@@ -1598,7 +1598,8 @@ export async function createOsunaDaemon(
             const relayEnabled = config.relayEnabled ?? true;
             const relayEndpoint = config.relayEndpoint ?? "osuna-relay.chinhae.cc:443";
             const relayPublicEndpoint = config.relayPublicEndpoint ?? relayEndpoint;
-            const relayUseTls = config.relayUseTls ?? relayEndpoint === "osuna-relay.chinhae.cc:443";
+            const relayUseTls =
+              config.relayUseTls ?? relayEndpoint === "osuna-relay.chinhae.cc:443";
             const relayPublicUseTls = config.relayPublicUseTls ?? relayUseTls;
             if (boundListenTarget.type === "tcp") {
               logger.info(

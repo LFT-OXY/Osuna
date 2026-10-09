@@ -153,18 +153,17 @@ describe("plugin runtime entries", () => {
     await expect(compilePlugin(entries)).rejects.toThrow("client-only module");
   });
 
-  it.each([
-    "@osuna/plugin/server",
-    "@osuna/plugin/server/provider",
-    "@osuna/plugin/server/acp",
-  ])("rejects %s from client code", async (specifier) => {
-    const entries = await createSplitPlugin();
-    await writeFile(
-      entries.client,
-      `import * as value from "${specifier}"; export default function contribute() { return value; }`,
-    );
-    await expect(compilePlugin(entries)).rejects.toThrow("server-only module");
-  });
+  it.each(["@osuna/plugin/server", "@osuna/plugin/server/provider", "@osuna/plugin/server/acp"])(
+    "rejects %s from client code",
+    async (specifier) => {
+      const entries = await createSplitPlugin();
+      await writeFile(
+        entries.client,
+        `import * as value from "${specifier}"; export default function contribute() { return value; }`,
+      );
+      await expect(compilePlugin(entries)).rejects.toThrow("server-only module");
+    },
+  );
 
   it.each([
     "react",
@@ -429,7 +428,6 @@ export type Value = string;`,
   });
 
   it.each([
-    "@osuna/plugin",
     "@osuna/plugin/react-native",
     "@osuna/plugin/ui",
     "@osuna/plugin/provider",

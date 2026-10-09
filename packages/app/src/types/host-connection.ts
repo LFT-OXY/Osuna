@@ -1,7 +1,4 @@
-import {
-  normalizeHostPort,
-  normalizeLoopbackToLocalhost,
-} from "@osuna/protocol/daemon-endpoints";
+import { normalizeHostPort, normalizeLoopbackToLocalhost } from "@osuna/protocol/daemon-endpoints";
 import {
   DirectTcpHostConnectionSchema,
   type DirectTcpHostConnection,

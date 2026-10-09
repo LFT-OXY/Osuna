@@ -227,7 +227,7 @@ export class DaemonSession {
     }
   }
 
-  // npm 自更新会把 daemon 换成上游的 @osuna/cli，Osuna 一律拒绝。
+  // Osuna 的包不发 npm，daemon 没有 npm 自更新这条路，一律拒绝。
   handleUpdateRequest(
     msg: Extract<SessionInboundMessage, { type: "daemon.update.request" }>,
   ): void {

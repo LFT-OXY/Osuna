@@ -115,17 +115,17 @@ dependencies. `/client/host` is private to the app host; plugins cannot import i
 
 Osuna provides these modules to client code:
 
-| Module                                 | Use it for                                                                                        |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Module                              | Use it for                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `@osuna/plugin`                     | Shared data, `defineRpc`, `defineSettings`, `defineAttachmentSource`, `RpcInput`, and `RpcOutput` |
 | `@osuna/plugin/client/ui`           | Named, composable settings components                                                             |
 | `@osuna/plugin/client/react-native` | Osuna UI components and UI hooks                                                                  |
 | `@osuna/plugin/client`              | Client contribution contexts, `useOsuna`, `useRpc`, `useSettings`, and data hooks                 |
-| `@tanstack/react-query`                | Request state and caching                                                                         |
-| `react`                                | Components and hooks                                                                              |
-| `react/jsx-runtime`                    | Compiled JSX                                                                                      |
-| `react-native`                         | Cross-platform UI                                                                                 |
-| `zod`                                  | Shared schemas                                                                                    |
+| `@tanstack/react-query`             | Request state and caching                                                                         |
+| `react`                             | Components and hooks                                                                              |
+| `react/jsx-runtime`                 | Compiled JSX                                                                                      |
+| `react-native`                      | Cross-platform UI                                                                                 |
+| `zod`                               | Shared schemas                                                                                    |
 
 The host owns its paired React and renderer versions. The SDK's React peer range permits patch
 versions for tooling and Node consumers; it does not change the app's pinned React version or
@@ -549,8 +549,8 @@ saved; environment overrides are not persisted with it.
 
 ### Complete examples
 
-| Plugin                                                                                                 | Includes                                                                     |
-| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Plugin                                                                                                | Includes                                                                     |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | [lifecycle-logger](https://github.com/LFT-OXY/Osuna/tree/main/plugin-examples/lifecycle-logger)       | All eleven hooks; JSON logs with environment values redacted                 |
 | [lifecycle-actions](https://github.com/LFT-OXY/Osuna/tree/main/plugin-examples/lifecycle-actions)     | Follow-ups, permissions, environment, provider switching, worktree selection |
 | [agent-configuration](https://github.com/LFT-OXY/Osuna/tree/main/plugin-examples/agent-configuration) | MCP injection and Codex sandbox/approval options                             |

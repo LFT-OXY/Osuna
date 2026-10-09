@@ -34,9 +34,9 @@ describe("path equivalence", () => {
   });
 
   test("checks Windows root containment case-insensitively", () => {
-    expect(
-      isPathInsideRoot("C:\\Osuna\\node_modules", "c:/osuna/node_modules/@osuna/server"),
-    ).toBe(true);
+    expect(isPathInsideRoot("C:\\Osuna\\node_modules", "c:/osuna/node_modules/@osuna/server")).toBe(
+      true,
+    );
     expect(isPathInsideRoot("C:\\Osuna\\node_modules", "C:\\Osuna\\node_modules-other")).toBe(
       false,
     );

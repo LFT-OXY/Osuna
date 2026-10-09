@@ -1,7 +1,4 @@
-import {
-  encodeTerminalKeyInput,
-  type TerminalKeyInput,
-} from "@osuna/protocol/terminal-key-input";
+import { encodeTerminalKeyInput, type TerminalKeyInput } from "@osuna/protocol/terminal-key-input";
 import type { TerminalInputModeState } from "@osuna/protocol/terminal-input-mode";
 import { normalizeTerminalTransportKey } from "@/utils/terminal-keys";
 

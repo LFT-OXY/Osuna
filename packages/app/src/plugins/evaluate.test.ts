@@ -539,7 +539,6 @@ describe("evaluatePluginClientBundle", () => {
     "@osuna/plugin/react-native",
     "@osuna/plugin/ui",
     "@osuna/plugin/host",
-    "@osuna/plugin",
   ])("rejects %s in the client loader", (specifier) => {
     expect(() =>
       evaluatePluginClientBundle(

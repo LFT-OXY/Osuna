@@ -16,7 +16,7 @@ describe("buildWorkingDirectorySuggestions", () => {
     const results = buildWorkingDirectorySuggestions({
       recommendedPaths: ["/Users/me/projects/osuna-desktop", "/Users/me/documents"],
       serverPaths: ["/Users/me/projects/osuna-plan", "/Users/me/projects/osuna-desktop"],
-      query: "pso",
+      query: "oua",
     });
 
     expect(results).toEqual(["/Users/me/projects/osuna-desktop", "/Users/me/projects/osuna-plan"]);
@@ -39,7 +39,7 @@ describe("buildWorkingDirectorySuggestions", () => {
         "/Users/me/projects/osuna-desktop",
       ],
       serverPaths: [],
-      query: "projects/pso",
+      query: "projects/oua",
     });
 
     expect(results).toEqual([

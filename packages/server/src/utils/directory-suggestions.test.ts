@@ -97,7 +97,7 @@ describe("searchDirectoryEntries", () => {
   it("applies result paths and entry kinds as parameters of one search", async () => {
     const directories = await searchDirectoryEntries({
       root: configuredSearchRoot,
-      query: "pso",
+      query: "oua",
       pathFormat: "absolute",
       includeFiles: false,
       includeDirectories: true,
@@ -567,7 +567,7 @@ describe("absolute directory-path configuration", () => {
 
     const results = await searchAbsoluteDirectoryPaths({
       homeDir: symlinkHome,
-      query: "pso",
+      query: "oua",
       limit: 10,
     });
 
@@ -622,7 +622,7 @@ describe("absolute directory-path configuration", () => {
   it("supports home-relative path query syntax", async () => {
     const result = await searchAbsoluteDirectoryPaths({
       homeDir,
-      query: "~/projects/pa",
+      query: "~/projects/o",
       limit: 10,
     });
 

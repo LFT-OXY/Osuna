@@ -112,8 +112,7 @@ const APP_SCHEME = "osuna";
 const OSUNA_DEBUG = process.env.OSUNA_DEBUG === "1";
 const DISABLE_SINGLE_INSTANCE_LOCK = process.env.OSUNA_DISABLE_SINGLE_INSTANCE_LOCK === "1";
 const APP_NAME = process.env.OSUNA_TEST_APP_NAME?.trim() || "Osuna";
-// userData / 日志目录名，有意保留改名前的拼写。渲染层的 host 列表与设置存在 userData 下，
-// 跟随 app 名迁移会丢数据（ADR 0002）。
+// userData / 日志目录名。渲染层的 host 列表与设置存在 userData 下。
 const USER_DATA_DIR_NAME = "Osuna";
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,

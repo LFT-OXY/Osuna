@@ -48,7 +48,7 @@ describe("deriveProjectDisplayName", () => {
         projectKey: "remote:github.com/lft-oxy/osuna",
         projectName: "osuna",
       }),
-    ).toBe("LFT-OXY/Osuna");
+    ).toBe("lft-oxy/osuna");
   });
 
   it("shows remote path for non-GitHub remote keys", () => {

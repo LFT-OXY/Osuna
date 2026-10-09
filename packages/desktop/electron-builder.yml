@@ -1,6 +1,5 @@
 npmRebuild: false
-# 显示身份改为 Osuna，scheme 仍为 osuna（ADR 0002）。appId 与签名证书共同构成更新身份，
-# 改动它会让所有已装副本停止自动更新。
+# appId 与签名证书共同构成更新身份，改动它会让所有已装副本停止自动更新。
 appId: com.chinhae.osuna.desktop
 productName: Osuna
 executableName: Osuna

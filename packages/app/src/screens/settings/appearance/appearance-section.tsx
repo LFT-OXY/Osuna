@@ -4,11 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Monitor, Moon, Sun } from "lucide-react-native";
-import {
-  SYNTAX_THEME_OPTIONS,
-  type SyntaxThemeId,
-  type SyntaxThemeOption,
-} from "@osuna/highlight";
+import { SYNTAX_THEME_OPTIONS, type SyntaxThemeId, type SyntaxThemeOption } from "@osuna/highlight";
 import {
   DropdownMenu,
   DropdownMenuContent,

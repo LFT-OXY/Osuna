@@ -1,8 +1,5 @@
 import type { DaemonClient } from "@osuna/client/internal/daemon-client";
-import {
-  workspaceLabelKey,
-  type WorkspaceLabelDefinition,
-} from "@osuna/protocol/workspace-labels";
+import { workspaceLabelKey, type WorkspaceLabelDefinition } from "@osuna/protocol/workspace-labels";
 import { useMemo } from "react";
 import { create } from "zustand";
 import { HostWorkspaceLabelReplica } from "./internal/host-replica";
