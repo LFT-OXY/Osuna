@@ -9,6 +9,7 @@ import {
   updatePidLock,
 } from "../src/server/pid-lock.js";
 import { resolveOsunaHome } from "../src/server/osuna-home.js";
+import { migrateLegacyHomeIfDefault } from "../src/server/legacy-home-migration.js";
 import { loadPersistedConfig } from "../src/server/persisted-config.js";
 import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
@@ -107,6 +108,10 @@ async function main(): Promise<void> {
       : null;
 
   applySherpaLoaderEnv(workerEnv);
+
+  // COMPAT(paseoDataMigration): added in v1.0.0, remove after 2027-10-09 or in 2.0.0, whichever first
+  // 必须排在读 home 里任何文件之前。经 CLI 或桌面端拉起时 OSUNA_HOME 已被显式写入，迁移由它们先做完。
+  await migrateLegacyHomeIfDefault({ env: workerEnv });
 
   const osunaHome = resolveOsunaHome(workerEnv);
   const persistedConfig = loadPersistedConfig(osunaHome);
