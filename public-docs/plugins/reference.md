@@ -8,10 +8,6 @@ category: Plugins
 
 # Plugin reference
 
-> **For Paseo v0.8 beta.** Return to the [v0.8 quickstart](/docs/plugins/v0.8).
-
-Migrating an existing plugin? Follow the standalone [runtime-entry migration guide](/docs/plugins/v0.8/migration).
-
 Local plugins are directory sources installed into one Paseo daemon. A plugin can contribute:
 
 - React Native surfaces and sidebar items to Paseo clients;
@@ -52,7 +48,7 @@ The required root manifest is `paseo-plugin.json`. It contains the default plugi
 
 `requirements` is an optional object. Its currently supported key, `paseo`, accepts an npm semver
 range. An omitted `requirements.paseo` means `<0.8.0`: the plugin predates the first breaking
-plugin release. Paseo 0.8 and later reject it with a link to the [migration guide](migration).
+plugin release. Paseo 0.8 and later reject it.
 Empty strings, invalid ranges, and unknown manifest requirement keys are rejected.
 
 | Range            | Compatible releases                                                          |
@@ -85,7 +81,7 @@ and cannot show this new diagnostic.
 | `index.server.ts`  | Daemon subprocess     | `PluginServerContext` | When the plugin contributes handlers, hooks, settings persistence, or providers |
 
 At least one entry is required; both accept `.ts` or `.tsx`. A directory that still has only the
-old `index.ts` fails to load and points at the [migration guide](/docs/plugins/v0.8/migration).
+old `index.ts` fails to load.
 
 Plugin, surface, sidebar-item, workspace-panel, Command Center item, attachment-source, and
 slash-command IDs start with a lowercase letter and contain lowercase letters, numbers, or hyphens.
@@ -191,7 +187,7 @@ process, credential, and other machine-local work under `server/`. A plugin with
 
 ### Providers
 
-Follow [Build a provider plugin](/docs/plugins/v0.8/providers) for direct and ACP implementations,
+Follow [Build a provider plugin](/docs/plugins/providers) for direct and ACP implementations,
 session lifecycle, composer settings, timeline renderers, testing, and distribution.
 
 Call `server.registerProvider()` with a `ProviderRegistration` from
@@ -1388,7 +1384,7 @@ const pill = client.addComposerPill({
 });
 ```
 
-For pills that follow the agent directory, use an explicit [owned list subscription](/docs/sdk/events#follow-one-agents-status).
+For pills that follow the agent directory, use an explicit owned list subscription.
 The [local plugin example](https://github.com/getpaseo/paseo/blob/main/plugin-examples/local-plugin/client/main.tsx)
 replaces registrations on each snapshot and aborts the observation during entry cleanup, including pending bootstrap.
 
@@ -1525,7 +1521,7 @@ function PullRequestAction({ theme }: PluginSurfaceProps) {
 }
 ```
 
-The returned API covers projects, workspaces, agents, terminals, providers, and daemon config. See the [SDK API reference](/docs/sdk/reference) for its methods. Connection lifecycle methods are intentionally absent because Paseo owns the connection.
+The returned API covers projects, workspaces, agents, terminals, providers, and daemon config. Connection lifecycle methods are intentionally absent because Paseo owns the connection.
 
 ## Add plugin-specific backend behavior
 
@@ -1597,7 +1593,7 @@ export default function contribute(server: PluginServerContext) {
 
 Inputs and outputs are validated on both sides. RPC names start with a lowercase letter and contain lowercase letters, numbers, dots, hyphens, or underscores. `useRpc()` returns a typed async function. Use TanStack Query for request state, caching, and mutations.
 
-Backend handlers receive the same `PaseoApi` as `{ paseo }`. Their connection belongs to the subprocess and closes when the plugin stops. It does not subscribe to timelines or catalog events until plugin code subscribes. Follow the [SDK event contract](../../sdk/events.md) for cleanup and timeline replacements. Backend code can use Node APIs and dependencies installed in the plugin directory.
+Backend handlers receive the same `PaseoApi` as `{ paseo }`. Their connection belongs to the subprocess and closes when the plugin stops. It does not subscribe to timelines or catalog events until plugin code subscribes. Backend code can use Node APIs and dependencies installed in the plugin directory.
 
 ## Debug backend output
 
@@ -1790,7 +1786,7 @@ Use `paseo plugin ls` to read the current status and error.
 
 | Symptom                                                               | Check                                                                                                                                   |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `This plugin was made for an older version of Paseo`                  | The directory has only an `index.ts` entry. Follow the [migration guide](/docs/plugins/v0.8/migration).                                 |
+| `This plugin was made for an older version of Paseo`                  | The directory has only an `index.ts` entry.                                                                                             |
 | `Plugin entry points are missing`                                     | Neither `index.client.tsx` nor `index.server.ts` exists with that exact name.                                                           |
 | `server-only module cannot be imported into the plugin client bundle` | Client code imports `server/`. Move the work behind an RPC and import its contract from `shared/`.                                      |
 | `client-only module cannot be imported into the plugin server bundle` | Server code imports `client/`. Register that contribution from `index.client.tsx` instead.                                              |

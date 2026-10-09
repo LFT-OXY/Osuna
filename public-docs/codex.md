@@ -81,4 +81,3 @@ Codex also works inside the Paseo terminal. Open a terminal in your workspace an
 
 - [Supported providers](/docs/supported-providers), for other agents you can run alongside Codex.
 - [Custom providers](/docs/custom-providers), for custom binaries, third-party endpoints, or multiple Codex profiles.
-- [Paseo vs Codex app](/alternatives/codex-app), for a feature comparison.

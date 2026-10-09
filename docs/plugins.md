@@ -68,7 +68,7 @@ runtime modules, so consumers do not install these packages when adding the plug
 ```
 
 Declare the supported Paseo range and keep it current when adopting newer APIs. See the
-[requirements contract](../public-docs/plugins/v0.8/reference.md#requirements), including legacy
+[requirements contract](../public-docs/plugins/reference.md#requirements), including legacy
 manifests and prerelease matching.
 
 The config key is the runtime plugin ID. The manifest ID is the default selected during install;
@@ -162,10 +162,10 @@ Shared files import contract helpers and types from `@getpaseo/plugin`. Server h
 set; an unknown name renders nothing so it cannot break the plugin surface.
 Its controlled modal keeps presentation metadata on `<Modal title="…" icon={…}>` and body UI in
 `<Modal.Content>`. Body layout, sheet-aware scrolling, and clipboard actions follow the
-[host UI contract](../public-docs/plugins/v0.8/reference.md#host-ui).
+[host UI contract](../public-docs/plugins/reference.md#host-ui).
 Plugin UI runs on desktop and mobile across multiple themes: color every `Text` from
 `theme.colors.foreground` or `theme.colors.foregroundMuted`, and size layout from `layout.compact`.
-See `public-docs/plugins/v0.8/reference.md`.
+See `public-docs/plugins/reference.md`.
 
 ### SDK import boundaries
 
@@ -190,7 +190,7 @@ React, React Native, JSX runtimes, and client hooks must never be reachable from
 server entry. Node and platform-specific code must never be reachable from the shared root.
 
 The SDK boundary checks and real plugin-subprocess tests enforce these rules. Every SDK change
-must preserve them and update the public reference, migration guide, scaffold, and examples when
+must preserve them and update the public reference, scaffold, and examples when
 an author-facing import changes. The plugin compiler enforces the same runtime entry rules for
 plugin-authored code. Keep the package export map and host-provided module maps consistent.
 
@@ -206,7 +206,7 @@ The scaffold omits `"DOM"` from `tsconfig.json` and does not use `/// <reference
 browser globals are not available across the plugin. Put sanctioned web-only APIs in
 `client/web.ts`, declare only the globals that module uses, gate each export with
 `Platform.OS === "web"`, and provide a native implementation or no-op. See the
-[public plugin reference](../public-docs/plugins/v0.8/reference.md#works-on-mobile) for the complete
+[public plugin reference](../public-docs/plugins/reference.md#works-on-mobile) for the complete
 pattern.
 
 ```ts
@@ -286,7 +286,7 @@ Plugins do not receive Expo Router or workspace-layout store access.
 ## Lifecycle hooks
 
 Server entries register lifecycle observers with `server.on()` and request transforms with
-`server.before()`. The [public reference](../public-docs/plugins/v0.8/reference.md#lifecycle-hooks)
+`server.before()`. The [public reference](../public-docs/plugins/reference.md#lifecycle-hooks)
 owns callback shapes, ordering, and failure behavior. `plugin-examples/lifecycle-logger` registers all
 eleven hooks; `plugin-examples/lifecycle-actions` demonstrates common automation callbacks.
 
@@ -334,7 +334,7 @@ and `plugin-examples/provider-acp-transformer`.
 Provider-emitted plugin timeline items use the same renderer registration as transformed and
 daemon-appended plugin items. The direct example includes both sides. The renderer-only
 `plugin-examples/inline-thinking` example shows that timeline presentation remains independent of a
-provider implementation. The public [provider plugin guide](../public-docs/plugins/v0.8/providers.md)
+provider implementation. The public [provider plugin guide](../public-docs/plugins/providers.md)
 owns author workflow, lifecycle, testing, and distribution guidance.
 
 `ProviderRegistration.icon` is a file path relative to the plugin directory, such as `icon.svg`.
@@ -347,7 +347,7 @@ SVG or URL.
 ## Contribute buttons
 
 Header buttons and composer pills share the client-only descriptor and registration lifecycle in
-`packages/app/src/plugins/buttons/`. The [public button reference](../public-docs/plugins/v0.8/reference.md#header-buttons)
+`packages/app/src/plugins/buttons/`. The [public button reference](../public-docs/plugins/reference.md#header-buttons)
 owns the author API and placement rules. Keep presentation policy in this module so another
 placement can reuse behavior without copying registration or action state.
 
@@ -471,7 +471,7 @@ drops the optional presentation fields.
 
 Register ordinary components with `client.addSettingsScreen` and open them with `openSettings`.
 The host settings shell owns navigation and layout; plugin content must not add another page
-scroll view or header. See the [author contract](../public-docs/plugins/v0.8/reference.md#settings-screens)
+scroll view or header. See the [author contract](../public-docs/plugins/reference.md#settings-screens)
 and `plugin-examples/settings` for the named UI components and persistence API.
 
 Settings storage is scoped to the runtime installation ID, never the source path or manifest ID.
@@ -513,8 +513,6 @@ not repaint the app. Without a preference the sorted registry snapshot decides, 
 stable rather than arrival-ordered. The app resolves that id
 against the installed catalog on every change; an id nothing contributes falls back to the default
 preference instead of painting the reserved slot's placeholder colors.
-
-Existing plugin authors should follow the standalone [v0.8 runtime-entry migration guide](../public-docs/plugins/v0.8/migration.md).
 
 See `plugin-examples/local-plugin` for a native surface, `plugin-examples/linear` for a complete
 attachment-source example, `plugin-examples/timeline-items` for timeline projection, and

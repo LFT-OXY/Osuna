@@ -8,8 +8,7 @@ category: Plugins
 
 # Build a provider plugin
 
-> **For Paseo v0.8 beta.** Start with the
-> [plugin quickstart](/docs/plugins/v0.8) if you have not built a Paseo plugin before.
+> Start with the [plugin quickstart](/docs/plugins) if you have not built a Paseo plugin before.
 
 A provider plugin connects a coding agent to Paseo without adding it to Paseo core. Publish the
 plugin in a Git repository and users can install and update it with `paseo plugin add` and
@@ -408,5 +407,5 @@ paseo plugin update my-provider-plugin
 Keep vendor compatibility and releases in that repository. Paseo core should only change when the
 provider boundary cannot express a user-facing capability shared by more than one provider.
 
-See the [plugin reference](/docs/plugins/v0.8/reference#providers) for the exact runtime and SVG
+See the [plugin reference](/docs/plugins/reference#providers) for the exact runtime and SVG
 rules.

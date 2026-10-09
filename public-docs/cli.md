@@ -145,7 +145,7 @@ Creation defaults to the workspace directory. Add `--cwd <absolute-path>` to cha
 
 Without `--workspace`, creation opens the project at `--cwd` or the current directory and reuses its oldest active workspace. Listing without `--workspace` filters by `--cwd` or the current directory and can include multiple workspaces. `ls --all` lists every terminal on the host and cannot be combined with directory or workspace filters.
 
-Create and list results include `id`, `name`, `cwd`, and `workspaceId`. Use `--json` for structured output and the global `--host` option to target another daemon. These commands require a host that supports the [workspace terminal API](/docs/sdk/reference#clientterminals); older hosts return an update message.
+Create and list results include `id`, `name`, `cwd`, and `workspaceId`. Use `--json` for structured output and the global `--host` option to target another daemon. These commands require a host that supports the workspace terminal API; older hosts return an update message.
 
 ## Workspace scripts
 
@@ -187,7 +187,7 @@ GitHub shorthand checks an existing host directory first. Append `:<directory>` 
 monorepo. `paseo plugin ls [id]` does not contact the remote. `paseo plugin logs <id>` returns the
 plugin's recent daemon-side stdout and stderr. Add `--json` for structured entries, or run
 `paseo --host <target> plugin logs <id>` for another daemon. See the
-[Plugin reference](/docs/plugins/v0.7/reference) for installation, trust, lifecycle, and log-retention
+[Plugin reference](/docs/plugins/reference) for installation, trust, lifecycle, and log-retention
 behavior.
 
 ## Listing agents

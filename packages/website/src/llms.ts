@@ -1,6 +1,4 @@
-import { getAlternativePages } from "~/data/alternative-pages";
-import { AGENT_PAGES } from "~/data/agent-pages";
-import { type Doc, getDocs } from "~/docs";
+import { type Doc, getDocs } from "./docs";
 
 const SITE_URL = "https://paseo.sh";
 
@@ -24,43 +22,22 @@ function docLine(doc: Doc): string {
   return `- [${doc.frontmatter.title}](${url})${suffix}`;
 }
 
-function agentLine(agent: (typeof AGENT_PAGES)[number]): string {
-  return `- [${agent.name}](${SITE_URL}/${agent.slug}): ${agent.subtitle}`;
-}
-
-function alternativeLine(page: ReturnType<typeof getAlternativePages>[number]): string {
-  const description = page.description.trim();
-  const suffix = description ? `: ${description}` : "";
-  return `- [${page.title}](${SITE_URL}${page.href})${suffix}`;
-}
-
 function topLevelDocs(): Doc[] {
   return getDocs().filter((d) => !d.slug.includes("/"));
 }
 
 export function buildLlmsTxt(): string {
   const docs = topLevelDocs().map(docLine).join("\n");
-  const alternatives = getAlternativePages().map(alternativeLine).join("\n");
-  const agents = AGENT_PAGES.map(agentLine).join("\n");
 
   return `${PRODUCT_PREAMBLE}
 ## Docs
 
 ${docs}
 
-## Alternatives
-
-${alternatives}
-
-## Supported agents
-
-${agents}
-
 ## Optional
 
 - [Changelog](${SITE_URL}/changelog): Release notes for the Paseo daemon, CLI, desktop, and mobile apps.
 - [Download](${SITE_URL}/download): Install Paseo on Mac, Windows, Linux, iOS, Android, or run the web app.
-- [Blog](${SITE_URL}/blog): Updates and technical posts from the Paseo team.
 - [Privacy](${SITE_URL}/privacy): Privacy policy.
 - [Terms](${SITE_URL}/terms): Terms for the official relay.
 - [GitHub](https://github.com/getpaseo/paseo): Source code, issues, and releases.

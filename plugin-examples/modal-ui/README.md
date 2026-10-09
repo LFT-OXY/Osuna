@@ -4,7 +4,7 @@ Install this directory as a local plugin, then open **Modal examples** from the 
 
 The examples demonstrate default and custom padding, a full-width body, author-owned ScrollView and
 FlatList scrolling, horizontal tabs, and clipboard actions with a keyboard-aware input. See the
-[host UI reference](../../public-docs/plugins/v0.8/reference.md#host-ui) for the API contract.
+[host UI reference](../../public-docs/plugins/reference.md#host-ui) for the API contract.
 
 The browser regression installs this exact example in an isolated daemon:
 

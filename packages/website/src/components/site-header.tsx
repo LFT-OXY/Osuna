@@ -12,12 +12,6 @@ export function SiteHeader() {
       </a>
       <div className="flex flex-wrap items-center justify-center gap-4">
         <a
-          href="/blog"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Blog
-        </a>
-        <a
           href="/docs"
           className="text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -34,12 +28,6 @@ export function SiteHeader() {
           className="text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           Download
-        </a>
-        <a
-          href="/sponsor"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Sponsor
         </a>
         <a
           href="https://discord.gg/jz8T2uahpH"

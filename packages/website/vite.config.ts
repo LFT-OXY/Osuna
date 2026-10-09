@@ -34,62 +34,13 @@ function discoverDocsRoutes(): string[] {
   return [...routes].sort();
 }
 
-function discoverAgentRoutes(): string[] {
-  const routesDir = path.join(__dirname, "src/routes");
-  const reserved = new Set([
-    "__root",
-    "agents",
-    "blog",
-    "changelog",
-    "docs",
-    "download",
-    "index",
-    "sponsor",
-    "privacy",
-    "terms",
-  ]);
-  return fs
-    .readdirSync(routesDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".tsx"))
-    .map((entry) => entry.name.replace(/\.tsx$/, ""))
-    .filter((name) => !reserved.has(name))
-    .sort()
-    .map((slug) => `/${slug}`);
-}
-
-function discoverAlternativeRoutes(): string[] {
-  const alternativesDir = path.join(__dirname, "src/routes/alternatives");
-  if (!fs.existsSync(alternativesDir)) return [];
-  const slugs = fs
-    .readdirSync(alternativesDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".tsx"))
-    .map((entry) => entry.name.replace(/\.tsx$/, ""))
-    .sort();
-  return ["/alternatives", ...slugs.map((slug) => `/alternatives/${slug}`)];
-}
-
-function discoverBlogRoutes(): string[] {
-  const postsDir = path.join(__dirname, "posts");
-  if (!fs.existsSync(postsDir)) return ["/blog"];
-  const slugs = fs
-    .readdirSync(postsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => entry.name.replace(/\.md$/, ""))
-    .sort();
-  return ["/blog", ...slugs.map((slug) => `/blog/${slug}`)];
-}
-
 const sitemapPages = [
   "/",
-  "/agents",
   "/changelog",
   "/download",
   "/privacy",
   "/terms",
-  ...discoverAgentRoutes(),
-  ...discoverAlternativeRoutes(),
   ...discoverDocsRoutes(),
-  ...discoverBlogRoutes(),
 ].map((routePath) => ({
   path: routePath,
 }));

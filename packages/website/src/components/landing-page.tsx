@@ -52,7 +52,6 @@ const AGENT_LIST_GRID_STYLE = {
 const PHONE_PERSPECTIVE_STYLE = { minHeight: 480, perspective: 700 };
 import { CursorFieldProvider } from "~/components/butterfly";
 import { CommandDialog } from "~/components/command-dialog";
-import { AGENT_PAGES } from "~/data/agent-pages";
 import {
   appStoreUrl,
   playStoreUrl,
@@ -116,13 +115,11 @@ export function LandingPage({ title, subtitle }: LandingPageProps) {
       <div className="landing-content bg-background">
         <main className="p-6 md:p-20 md:pt-40 max-w-5xl mx-auto">
           <div className="space-y-24">
-            <SocialProofWall />
             <MultiProviderSection />
             <TurnkeySection />
             <AutomationSection />
             <ExtensibleSection />
             <FAQ />
-            <SponsorCTA />
           </div>
         </main>
         <SiteFooter />
@@ -155,91 +152,6 @@ const CODEX_BADGE_ICON = <CodexIcon className="h-6 w-6" />;
 const OPENCODE_BADGE_ICON = <OpenCodeIcon className="h-6 w-6" />;
 const PI_BADGE_ICON = <PiIcon className="h-6 w-6" />;
 const CURSOR_BADGE_ICON = <CursorIcon className="h-6 w-6" />;
-
-const FEATURED_AGENT_COUNT = 5;
-const ADDITIONAL_AGENT_COUNT = AGENT_PAGES.length - FEATURED_AGENT_COUNT;
-
-const SOCIAL_PROOF_TWEETS = [
-  {
-    name: "Cam",
-    handle: "@ceeebeeebeee",
-    date: "Apr 6, 2026",
-    avatar: "/social-proof/ceeebeeebeee.jpg",
-    url: "https://x.com/ceeebeeebeee/status/2041008798798864537",
-    text: "without a doubt the most slept on orchestrator right now. Open source, every OS, and a mobile experience that truly blew me away.",
-  },
-  {
-    name: "Erik Sherman",
-    handle: "@erikksherman",
-    date: "Apr 11, 2026",
-    avatar: "/social-proof/erikksherman.jpg",
-    url: "https://x.com/erikksherman/status/2043011630590751008",
-    text: "control agents from anywhere - mac, phone, web. one simple change transformed my health while INCREASING productivity",
-  },
-  {
-    name: "Aman Kumar Jagdev",
-    handle: "@amankumarjagdev",
-    date: "Apr 16, 2026",
-    avatar: "/social-proof/amankumarjagdev.jpg",
-    url: "https://x.com/amankumarjagdev/status/2044815258414674307",
-    text: "I have tried 100s of agent orchestrator, cli and gui. the best one i have found. Please give it a try! it's really good",
-  },
-  {
-    name: "RUI",
-    handle: "@tietougongshiba",
-    date: "May 3, 2026",
-    avatar: "/social-proof/tietougongshiba.jpg",
-    url: "https://x.com/tietougongshiba/status/2050886374941925754",
-    text: "Being able to check and manage agent progress from my phone while I'm out is so convenient.",
-  },
-  {
-    name: "Jason Torres",
-    handle: "@jasontorres",
-    date: "May 11, 2026",
-    avatar: "/social-proof/jasontorres.jpg",
-    url: "https://x.com/jasontorres/status/2053875385515790731",
-    text: "Can interchange between Codex, Claude Code, Opencode, Pi. Stable mobile and desktop apps connected through a secure relay from your VMs.",
-  },
-  {
-    name: "A9",
-    handle: "@aadtyn",
-    date: "May 29, 2026",
-    avatar: "/social-proof/aadtyn.jpg",
-    url: "https://x.com/aadtyn/status/2060371229773803943",
-    text: "cross platform agent orchestration with inbuilt relay and tailscale / self host daemon options + the best UI ive seen in this segment",
-  },
-  {
-    name: "boris evstratov",
-    handle: "@bevstratov",
-    date: "May 30, 2026",
-    avatar: "/social-proof/bevstratov.jpg",
-    url: "https://x.com/bevstratov/status/2060733983042781550",
-    text: "It’s an incredible piece of software. The last building block I needed to fully work from my phone. everything super smooth.",
-  },
-  {
-    name: "Arnold Gamboa",
-    handle: "@arnoldgamboa",
-    date: "May 28, 2026",
-    avatar: "/social-proof/arnoldgamboa.jpg",
-    url: "https://x.com/arnoldgamboa/status/2059832028099436921",
-    text: "Paseo is a really good interface for Pi. It’s not the only thing it does, but that’s my current use case for now.",
-  },
-  {
-    name: "Dong",
-    handle: "@dongnaebi",
-    date: "Apr 12, 2026",
-    avatar: "/social-proof/dongnaebi.jpg",
-    url: "https://x.com/dongnaebi/status/2043162391941398735",
-    text: "Paseo is the best software I've used this year. Absolutely amazing!",
-  },
-] as const;
-
-const SOCIAL_PROOF_ROWS = [
-  { id: "top", tweets: SOCIAL_PROOF_TWEETS.slice(0, 5), reverse: false },
-  { id: "bottom", tweets: SOCIAL_PROOF_TWEETS.slice(5), reverse: true },
-] as const;
-
-type SocialProofTweet = (typeof SOCIAL_PROOF_TWEETS)[number];
 
 function AgentBadge({ name, icon }: { name: string; icon: React.ReactNode }) {
   const [hovered, setHovered] = React.useState(false);
@@ -338,84 +250,6 @@ function SectionTitle({
   );
 }
 
-function SocialProofWall() {
-  return (
-    <motion.section
-      initial={FADE_IN_UP}
-      whileInView={FADE_IN}
-      viewport={VIEWPORT_60}
-      transition={EASE_OUT_05}
-    >
-      <SectionTitle
-        title="Loved by developers"
-        description="See what developers are saying about Paseo"
-      />
-
-      <div className="social-proof-marquee space-y-4 overflow-hidden">
-        {SOCIAL_PROOF_ROWS.map((row) => (
-          <SocialProofRow key={row.id} tweets={row.tweets} reverse={row.reverse} />
-        ))}
-      </div>
-    </motion.section>
-  );
-}
-
-function SocialProofRow({
-  tweets,
-  reverse,
-}: {
-  tweets: readonly SocialProofTweet[];
-  reverse: boolean;
-}) {
-  return (
-    <div className="social-proof-row">
-      <div className={`social-proof-track ${reverse ? "social-proof-track-reverse" : ""}`}>
-        <div className="flex shrink-0 gap-4 pr-4">
-          {tweets.map((tweet) => (
-            <SocialProofCard key={tweet.url} tweet={tweet} />
-          ))}
-        </div>
-        <div className="flex shrink-0 gap-4 pr-4" aria-hidden="true">
-          {tweets.map((tweet) => (
-            <SocialProofCard key={`${tweet.url}-clone`} tweet={tweet} inert />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SocialProofCard({ tweet, inert }: { tweet: SocialProofTweet; inert?: boolean }) {
-  return (
-    <a
-      href={tweet.url}
-      target="_blank"
-      rel="noreferrer"
-      tabIndex={inert ? -1 : undefined}
-      className="group flex h-[154px] w-[320px] shrink-0 flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-colors hover:border-white/20 hover:bg-white/[0.05] md:w-[420px]"
-      aria-label={`Read ${tweet.name}'s original post`}
-    >
-      <div>
-        <div className="flex min-w-0 items-center gap-3">
-          <img
-            src={tweet.avatar}
-            alt=""
-            width={28}
-            height={28}
-            loading="lazy"
-            decoding="async"
-            className="h-7 w-7 shrink-0 rounded-full bg-white/10 object-cover"
-          />
-          <p className="truncate text-sm font-medium text-white/60">{tweet.handle}</p>
-        </div>
-        <p className="social-proof-card-text mt-4 text-sm leading-relaxed text-white/72">
-          {tweet.text}
-        </p>
-      </div>
-    </a>
-  );
-}
-
 const PROVIDER_ICON_CLASS = "h-5 w-5 sm:h-7 sm:w-7";
 
 function MultiProviderSection() {
@@ -442,12 +276,6 @@ function MultiProviderSection() {
             <span className="truncate text-sm font-medium sm:text-base">{p.name}</span>
           </div>
         ))}
-        <a
-          href="/agents"
-          className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.01] px-3 py-3 text-white/50 hover:text-white/80 hover:border-white/20 hover:bg-white/[0.03] transition-colors sm:gap-3 sm:px-5 sm:py-4"
-        >
-          <span className="text-sm font-medium sm:text-base">+{ADDITIONAL_AGENT_COUNT} more</span>
-        </a>
       </div>
     </FeatureSection>
   );
@@ -882,12 +710,6 @@ function GetStarted() {
           <AgentBadge name="Pi" icon={PI_BADGE_ICON} />
           <AgentBadge name="Cursor" icon={CURSOR_BADGE_ICON} />
         </div>
-        <a
-          href="/agents"
-          className="whitespace-nowrap text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          +{ADDITIONAL_AGENT_COUNT} more
-        </a>
       </div>
     </div>
   );
@@ -1125,7 +947,7 @@ function FAQ() {
         <FAQItem question="What agents does it support?">
           Paseo supports many providers. It has custom implementations for Claude, Codex, OpenCode,
           Pi, and OMP, and supports many more via ACP. See the full list here:{" "}
-          <a href="/agents" className="underline hover:text-white/80">
+          <a href="/docs/supported-providers" className="underline hover:text-white/80">
             all supported providers
           </a>
           .
@@ -1174,48 +996,6 @@ function FAQ() {
           </a>
           .
         </FAQItem>
-      </div>
-    </motion.div>
-  );
-}
-
-function SponsorCTA() {
-  return (
-    <motion.div
-      initial={FADE_IN_UP}
-      whileInView={FADE_IN}
-      viewport={VIEWPORT_60}
-      transition={EASE_OUT_05}
-      className="rounded-xl bg-white/5 border border-white/10 p-8 md:p-10 text-left space-y-4 max-w-xl mx-auto"
-    >
-      <div className="text-sm text-muted-foreground leading-relaxed space-y-3">
-        <p>Paseo is an independent open source project for running coding agents.</p>
-        <p>Its guiding principle is optionality and freedom of choice.</p>
-        <p>
-          I wanted to use any provider without being locked into any ecosystem, run it on my own
-          infrastructure, access it from anywhere, and have it be fully automatable.
-        </p>
-        <p>I am hoping that you will enjoy Paseo as much as I do.</p>
-        <p>If you like Paseo, sponsorship is the best way to support continued development.</p>
-        <p>- Mo</p>
-      </div>
-      <div className="pt-2">
-        <a
-          href="/sponsor"
-          className="inline-flex items-center gap-2 rounded-lg bg-white/10 border border-white/20 px-5 py-2.5 text-sm font-medium text-white hover:bg-white/15 transition-colors"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="text-pink-400"
-          >
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-          </svg>
-          Sponsor Paseo
-        </a>
       </div>
     </motion.div>
   );
