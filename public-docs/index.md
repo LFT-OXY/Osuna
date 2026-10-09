@@ -34,7 +34,7 @@ The builds are not notarized by Apple and the Windows installer is not code-sign
 
 ### Linux
 
-There is no Linux desktop build. Run the daemon with [Docker](#docker) or [build it from source](#build-from-source), then use the web app or the CLI.
+Releases do not include a Linux desktop build. Run the daemon with [Docker](#docker) or [build it from source](#build-from-source), then use the web app or the CLI.
 
 ## Docker
 
