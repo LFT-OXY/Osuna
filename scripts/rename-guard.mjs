@@ -26,6 +26,7 @@ export const MIGRATION_FILES = [
   "packages/desktop/src/settings/user-data-migration.ts",
   "packages/desktop/src/settings/user-data-migration.test.ts",
   "packages/desktop/src/settings/renderer-origin-migration/",
+  "packages/desktop/e2e/legacy-home-migration.electron.mjs",
   "packages/desktop/e2e/user-data-migration.electron.mjs",
   "packages/desktop/e2e/renderer-origin-migration.electron.mjs",
 ];
@@ -132,7 +133,7 @@ const MARKDOWN_HEADING = /^(#{1,6}) /;
 // 代码块里以 "#" 开头的行是注释不是标题，所以要跟着围栏走。
 function findSectionLines(lines, heading) {
   const level = heading.match(MARKDOWN_HEADING)[1].length;
-  const sectionLines = new Set();
+  const sectionLines = [];
   let insideSection = false;
   let insideFence = false;
   lines.forEach((text, index) => {
@@ -140,7 +141,7 @@ function findSectionLines(lines, heading) {
     const headingLevel = insideFence ? undefined : text.match(MARKDOWN_HEADING)?.[1].length;
     if (text === heading) insideSection = true;
     else if (headingLevel <= level) insideSection = false;
-    if (insideSection) sectionLines.add(index);
+    if (insideSection) sectionLines.push(index);
   });
   return sectionLines;
 }
@@ -154,7 +155,7 @@ function findUnregisteredProse(file, lines) {
   const passages = DOC_PASSAGE_EXCEPTIONS.filter((passage) => passage.file === file);
   const sections = passages.flatMap((passage) => passage.section ?? []).map(asGuardedText);
   const sentences = passages.flatMap((passage) => passage.sentence ?? []).map(asGuardedText);
-  const exemptLines = new Set(sections.flatMap((section) => [...findSectionLines(lines, section)]));
+  const exemptLines = new Set(sections.flatMap((section) => findSectionLines(lines, section)));
   const hits = [];
   lines.forEach((text, index) => {
     if (exemptLines.has(index)) return;
