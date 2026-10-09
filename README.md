@@ -27,20 +27,17 @@ Run agents in parallel on your own machines. Ship from your phone or your desk.
 - **Cross-device:** Desktop, web, CLI, and your phone. Start work at your desk, check in from your phone, script it from the terminal.
 - **Privacy-first:** Osuna doesn't have any telemetry, tracking, or forced log-ins.
 
-> [!NOTE]
-> Osuna is a fork of [Paseo](https://github.com/getpaseo/paseo). Internal names keep the upstream spelling: the CLI command is still `paseo`, data lives in `~/.paseo`, and environment variables start with `PASEO_`.
-
 ## Plugins
 
 Add themes, workspace panels, commands, settings screens, and coding-agent providers with trusted
-TypeScript plugins. Install from a local directory or Git repository with `paseo plugin add <source>`.
+TypeScript plugins. Install from a local directory or Git repository with `osuna plugin add <source>`.
 
 See the [plugin docs](docs/plugins.md). Plugins run with access to your daemon machine and inside
 connected clients; install only code you trust.
 
 ## Getting Started
 
-Osuna runs a local server called the daemon that manages your coding agents. Clients like the desktop app, web app, CLI, and the Paseo mobile app connect to it.
+Osuna runs a local server called the daemon that manages your coding agents. Clients like the desktop app, web app, CLI, and mobile app connect to it.
 
 ### Prerequisites
 
@@ -56,13 +53,9 @@ You need at least one agent CLI installed and configured with your credentials:
 
 Download it from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases). Open the app and the daemon starts automatically. Nothing else to install.
 
-To connect from your phone, install the official Paseo mobile app, then open **Settings → your host → Pair Device** in Osuna.
+To connect from your phone, open **Settings → your host → Pair Device** and scan the QR code. The link opens the Osuna web app. On Android you can also install the APK from the releases page. The upstream Paseo mobile app is not a supported client.
 
-### CLI
-
-Open **Settings → Integrations → Command line** in the desktop app and click **Install**. This links the `paseo` command into `~/.local/bin`.
-
-Don't install `@getpaseo/cli` from npm. That package is upstream Paseo, not Osuna.
+To use the `osuna` command in a terminal, open **Settings → Integrations → Command line** and click **Install**. This links the command into `~/.local/bin`.
 
 ### Docker
 
@@ -71,31 +64,47 @@ Run the Osuna daemon and self-hosted web UI in Docker. This path is useful for s
 ```bash
 docker run -d --name osuna \
   -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
+  -e OSUNA_PASSWORD=change-me \
+  -v "$PWD/osuna-home:/home/osuna" \
   -v "$PWD:/workspace" \
-  ghcr.io/lft-oxy/paseo:latest
+  ghcr.io/lft-oxy/osuna:latest
 ```
 
-Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
+Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/osuna` volume. See the [Docker documentation](docs/docker.md) for full setup details.
+
+### Build from source
+
+On a server or headless machine without Docker, build the daemon and CLI from this repository. Use the Node.js version in `.tool-versions`.
+
+```bash
+git clone https://github.com/LFT-OXY/Osuna.git
+cd Osuna
+npm ci
+npm run build:server
+node packages/cli/bin/osuna
+```
+
+The last command starts the daemon and offers to print a pairing QR code. Run `node packages/cli/bin/osuna --help` for the other commands.
+
+Don't install `@getpaseo/cli` from npm. That package is upstream Paseo, not Osuna.
 
 ## CLI usage
 
 Everything you can do in the app, you can do from the terminal.
 
 ```bash
-paseo run --provider claude/opus-4.6 "implement user authentication"
-paseo run --provider codex/gpt-5.5 --worktree feature-x "implement feature X"
+osuna run --provider claude/opus-4.6 "implement user authentication"
+osuna run --provider codex/gpt-5.5 --worktree feature-x "implement feature X"
 
-paseo ls                           # list running agents
-paseo attach abc123                # stream live output
-paseo send abc123 "also add tests" # follow-up task
+osuna ls                           # list running agents
+osuna attach abc123                # stream live output
+osuna send abc123 "also add tests" # follow-up task
 
 # run on a remote daemon; --cwd is a path on that host
-paseo run --host workstation.local:6767 --cwd /workspace "run the full test suite"
+osuna run --host workstation.local:6767 --cwd /workspace "run the full test suite"
 ```
 
-Run `paseo --help` for the full command list.
+Run `osuna --help` for the full command list.
 
 ## Skills
 
@@ -107,9 +116,9 @@ npx skills add LFT-OXY/Osuna
 
 Then use them in any agent conversation:
 
-- `/paseo-handoff` — hand off work between agents. I use this to plan with Claude and then handoff to Codex to implement.
-- `/paseo-advisor` — spin up a single agent as an advisor for a second opinion, without delegating the work itself.
-- `/paseo-committee` — form a committee of two contrasting agents to step back, do root cause analysis, and produce a plan.
+- `/osuna-handoff` — hand off work between agents. I use this to plan with Claude and then handoff to Codex to implement.
+- `/osuna-advisor` — spin up a single agent as an advisor for a second opinion, without delegating the work itself.
+- `/osuna-committee` — form a committee of two contrasting agents to step back, do root cause analysis, and produce a plan.
 
 ## Development
 
@@ -117,10 +126,10 @@ Quick monorepo package map:
 
 - `packages/server`: Osuna daemon (agent process orchestration, WebSocket API, MCP server)
 - `packages/app`: Expo client (iOS, Android, web)
-- `packages/cli`: `paseo` CLI for daemon and agent workflows
+- `packages/cli`: `osuna` CLI for daemon and agent workflows
 - `packages/desktop`: Electron desktop app
 - `packages/relay`: Relay transport and encryption used by the daemon and clients
-- `packages/website`: Upstream marketing site and documentation (`paseo.sh`); this fork doesn't deploy it
+- `packages/website`: Website and public docs (`osuna.chinhae.cc`)
 
 Common commands:
 
@@ -146,3 +155,5 @@ See [docs/development.md](docs/development.md) for full setup.
 ## License
 
 Apache-2.0
+
+Osuna started as a fork of [Paseo](https://github.com/getpaseo/paseo) and is now developed independently. See [NOTICE](NOTICE).
