@@ -9,8 +9,10 @@ category: Plugins
 # Plugin quickstart
 
 > **Experimental:** The plugin API is still evolving, so expect breaking changes and updates to
-> your plugins as Osuna evolves. See the [plugin roadmap](https://github.com/LFT-OXY/Osuna/labels/plugins)
-> for planned contribution surfaces.
+> your plugins as Osuna evolves.
+
+Plugins written for upstream Paseo do not load in Osuna. The manifest file is `osuna-plugin.json`,
+its requirements key is `osuna`, and the SDK modules are `@osuna/plugin`.
 
 A plugin is a TypeScript project installed into one Osuna daemon. It can add
 [surfaces and sidebar items](/docs/plugins/reference#surfaces-and-sidebar-items),
@@ -33,13 +35,15 @@ Use an absolute path on the daemon machine:
 
 ```bash
 osuna plugin init /absolute/path/to/workspace-plugin
-cd /absolute/path/to/workspace-plugin
-npm install
 ```
 
-`init` writes a strict TypeScript project and does not run the package manager. `npm install` adds
-development dependencies for typechecking and tests only; Osuna supplies the plugin SDK, React,
-React Native, TanStack Query, and Zod at runtime.
+`init` writes a strict TypeScript project. Osuna compiles it and supplies the plugin SDK, React,
+React Native, TanStack Query, and Zod at runtime, so the plugin installs and runs without a
+`node_modules` directory.
+
+The generated `package.json` lists development dependencies for a local `npm run typecheck`. One of
+them, `@osuna/plugin`, is [not on the npm registry](/docs/plugins/reference#sdk-packages), so
+`npm install` fails in a scaffolded plugin and the local typecheck is unavailable.
 
 The scaffold is a working plugin: a sidebar surface with a button that asks the daemon for a
 greeting through an RPC.
@@ -111,10 +115,9 @@ the global switch for every plugin on that daemon. It is also the root `pluginsE
 daemon's `config.json`; after editing the file, apply it with `osuna reload --json`. An automated
 tool must read the current value and get your explicit permission before turning it on.
 
-Then typecheck and install:
+Then install:
 
 ```bash
-npm run typecheck
 osuna plugin install /absolute/path/to/workspace-plugin
 osuna plugin ls
 ```
@@ -203,7 +206,6 @@ client.addCommandCenterItem({
 Source changes take effect only when you reload the plugin:
 
 ```bash
-npm run typecheck
 osuna plugin reload workspace-plugin
 ```
 

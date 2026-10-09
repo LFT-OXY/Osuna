@@ -23,7 +23,7 @@ Clients connect to the daemon over WebSocket. There are two ways to establish th
 
 ## Relay connections (recommended)
 
-The relay is the simplest way to connect from your phone. It requires no VPN setup, no port forwarding, and no firewall configuration. The daemon can stay bound to localhost or a socket file, it connects _outbound_ to the relay, and your phone meets it there. The official relay server is the open-source Elixir service at [LFT-OXY/Osuna-relay](https://github.com/LFT-OXY/Osuna-relay).
+The relay is the simplest way to connect from your phone. It requires no VPN setup, no port forwarding, and no firewall configuration. The daemon can stay bound to localhost or a socket file, it connects _outbound_ to the relay, and your phone meets it there. The official relay runs at `osuna-relay.chinhae.cc`. It is a Cloudflare Worker whose source is in [`packages/relay`](https://github.com/LFT-OXY/Osuna/tree/main/packages/relay) of the Osuna repository.
 
 Relay is off on new installations. When you pair a device from `osuna`, `osuna daemon pair`, or Osuna Desktop, Osuna asks before enabling it. Choosing not to enable relay leaves the daemon available for direct TCP, Tailscale, or other VPN connections and does not create a pairing QR code. Use `--relay` with the CLI pairing or startup command to opt in without an interactive prompt.
 
@@ -64,7 +64,7 @@ For maximum isolation, you can configure the daemon to listen on a Unix socket f
 
 ### VPN access
 
-Use a VPN such as [Tailscale](https://tailscale.com) when you want a direct connection outside your local network. The VPN encrypts the traffic and keeps the daemon off the public internet. Bind the daemon to its VPN address, set a Osuna password, then add that address as a direct connection in the client.
+Use a VPN such as [Tailscale](https://tailscale.com) when you want a direct connection outside your local network. The VPN encrypts the traffic and keeps the daemon off the public internet. Bind the daemon to its VPN address, set an Osuna password, then add that address as a direct connection in the client.
 
 ### Binding to 0.0.0.0
 

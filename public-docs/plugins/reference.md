@@ -86,9 +86,18 @@ old `index.ts` fails to load.
 Plugin, surface, sidebar-item, workspace-panel, Command Center item, attachment-source, and
 slash-command IDs start with a lowercase letter and contain lowercase letters, numbers, or hyphens.
 
-The generated `package.json` installs `@osuna/plugin` and the other host modules as development
-dependencies for local typechecking and tests. Osuna supplies their runtime instances. Consumers do
-not install them when adding the plugin.
+### SDK packages
+
+The generated `package.json` lists `@osuna/plugin` and the other host modules as development
+dependencies for local typechecking and tests. Osuna supplies their runtime instances, so a plugin
+installs and runs without them, and consumers do not install them when adding the plugin.
+
+`@osuna/plugin` and `@osuna/protocol` are not published to the npm registry. `npm install` fails in
+a scaffolded plugin, and with it the local `npm run typecheck`. Their type declarations are in
+[`packages/plugin`](https://github.com/LFT-OXY/Osuna/tree/main/packages/plugin) and
+[`packages/protocol`](https://github.com/LFT-OXY/Osuna/tree/main/packages/protocol) of the Osuna
+repository. Compile errors from Osuna's own build still appear in `osuna plugin ls` and
+`osuna plugin logs <id>`.
 
 Every other module lives in one of three directories. Nesting inside them is fine; a module at the
 plugin root is a compile error.
@@ -340,9 +349,10 @@ and directory lookup/import operations are unaffected.
 ### Send a follow-up when a turn ends
 
 Copy [server/inspect.ts](https://github.com/LFT-OXY/Osuna/blob/main/plugin-examples/lifecycle-actions/server/inspect.ts)
-into your plugin. The helper imports types from `@osuna/protocol/agent-types`; add
-`@osuna/protocol` at the same version as your plugin SDK to your development dependencies
-and install them before loading the plugin. `latestOutputText` joins text chunks after the latest user message.
+into your plugin. The helper imports types from `@osuna/protocol/agent-types`, and Osuna resolves
+type imports when it loads a plugin. That package is [not on the npm registry](#sdk-packages), so
+outside a checkout of the Osuna repository replace the two imported types with local declarations.
+`latestOutputText` joins text chunks after the latest user message.
 
 ```ts
 import type { PluginServerContext } from "@osuna/plugin/server";
@@ -1521,7 +1531,7 @@ function PullRequestAction({ theme }: PluginSurfaceProps) {
 }
 ```
 
-The returned API covers projects, workspaces, agents, terminals, providers, and daemon config. Connection lifecycle methods are intentionally absent because Osuna owns the connection.
+The returned API covers projects, workspaces, agents, terminals, providers, and daemon config. Its methods are the `OsunaApi` interface in [`packages/client/src/index.ts`](https://github.com/LFT-OXY/Osuna/blob/main/packages/client/src/index.ts); there is no published reference for it. Connection lifecycle methods are intentionally absent because Osuna owns the connection.
 
 ## Add plugin-specific backend behavior
 
@@ -1774,7 +1784,7 @@ compilation, activation, or replacement. A failing command reports its output, d
 candidate, and leaves the installed/running version intact. The daemon log records each command and
 output; with the global `--host` option, execution is on that daemon host.
 
-Run `npm run typecheck` before install or reload. Manage plugin source entries with the CLI or Settings.
+Manage plugin source entries with the CLI or Settings.
 
 The daemon-wide **Enable plugins** switch lives under **Settings → Plugins**. A configured plugin remains `disabled` until that switch and the plugin's own enabled state are both on.
 
@@ -1794,6 +1804,6 @@ Use `osuna plugin ls` to read the current status and error.
 | Sidebar item is missing                                               | The plugin is `running`, the item references an existing surface, the icon name is valid, and the client is on the installation's host. |
 | Client module is unavailable                                          | Import only the host-provided client modules listed above.                                                                              |
 | RPC rejects                                                           | Check both Zod schemas and the daemon-side handler error.                                                                               |
-| Edited code does not appear                                           | Run `npm run typecheck`, then `osuna plugin reload <id>`.                                                                               |
+| Edited code does not appear                                           | Run `osuna plugin reload <id>`.                                                                                                         |
 | Reload fails                                                          | Read `osuna plugin ls` and `osuna plugin logs <id>`, fix the source error, then reload; Osuna does not restore the previous bundle.     |
 | Plugin exits unexpectedly                                             | Read `osuna plugin logs <id>` for retained initialization, cleanup, stderr, and final crash output.                                     |

@@ -16,7 +16,18 @@ This is useful when you want to:
 - Put it behind your own reverse proxy, HTTPS, or tunnel.
 - Keep the setup self-hosted end to end, with no dependency on the hosted web app.
 
-The web app ships inside the daemon package, so the UI you serve always matches your daemon version. There's no separate build to keep in sync and no UI-vs-daemon version skew to manage.
+The web app is built from the same source tree as the daemon, so the UI you serve matches your daemon version.
+
+## Where it is available
+
+- **Docker:** the [official image](/docs/docker) includes the web UI and turns it on.
+- **Source build:** run one more build step from the repository root after `npm run build:server`, then enable it as described below:
+
+  ```bash
+  npm run build:daemon-web-ui
+  ```
+
+- **Desktop app:** the bundled daemon does not include the web UI files, so it cannot serve them.
 
 ## Enable it
 
@@ -50,8 +61,6 @@ Then open the daemon's address in a browser:
 ```
 http://localhost:6767/
 ```
-
-If your daemon doesn't recognize `--web-ui`, update it, the flag was added with the bundled web UI.
 
 ## How the connection works
 
@@ -223,11 +232,11 @@ For the full threat model, relay encryption, and DNS-rebinding details, see [Sec
 
 ## Troubleshooting
 
-- **Blank page or 404 at `/`.** The web UI isn't enabled. Start the daemon with `--web-ui` and confirm with `osuna daemon status` that it's the daemon you're hitting.
+- **Blank page or 404 at `/`.** The web UI isn't enabled, or a source build is missing the `npm run build:daemon-web-ui` step. Set `features.webUi.enabled` to `true`, restart the daemon, and confirm with `osuna daemon status` that it's the daemon you're hitting.
 - **Page loads but never connects.** The proxy isn't forwarding the WebSocket upgrade, or it's stripping the `Host` header. Check the upgrade headers in your proxy config.
 - **Connects, then output freezes.** Response buffering is on, or read timeouts are too short. Disable buffering and raise the timeouts.
 - **"Mixed content" / connection blocked over HTTPS.** The app fell back to `ws://`. Either the proxy isn't sending `X-Forwarded-Proto: https`, or the daemon doesn't trust the proxy address. Forward the header and configure `daemon.trustedProxies` if the proxy is not loopback.
-- **`403 Invalid Host header`.** Your domain isn't in the allowlist. Add it with `--hostnames` or `daemon.hostnames`, see [DNS rebinding protection](/docs/security#dns-rebinding-protection).
+- **`403 Invalid Host header`.** Your domain isn't in the allowlist. Add it to `daemon.hostnames`, see [DNS rebinding protection](/docs/security#dns-rebinding-protection).
 - **Large prompts or uploads fail.** Raise the proxy's max body size (`client_max_body_size` in Nginx).
 
 ## See also

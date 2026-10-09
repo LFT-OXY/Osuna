@@ -29,6 +29,10 @@ export const RENAME_EXCEPTIONS = [
   ".atw/tasks/",
   ".atw/workspace/",
   "**/fixtures/legacy-paseo/",
+  // Public docs 里必须点名旧拼写的两篇：Docker 升级段要写出旧的目录、变量与挂载点，
+  // 插件快速上手要写明上游插件不兼容。两篇的其余内容靠人工保持 Osuna 拼写。
+  "public-docs/docker.md",
+  "public-docs/plugins/index.md",
   // 改名与守线工具自身：规则里必须写出旧拼写。
   "scripts/rename-guard.mjs",
   "scripts/rename-guard.test.mjs",

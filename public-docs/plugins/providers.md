@@ -8,7 +8,7 @@ category: Plugins
 
 # Build a provider plugin
 
-> Start with the [plugin quickstart](/docs/plugins) if you have not built a Osuna plugin before.
+> Start with the [plugin quickstart](/docs/plugins) if you have not built an Osuna plugin before.
 
 A provider plugin connects a coding agent to Osuna without adding it to Osuna core. Publish the
 plugin in a Git repository and users can install and update it with `osuna plugin add` and

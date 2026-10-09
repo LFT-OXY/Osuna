@@ -1,6 +1,6 @@
 ---
 title: Connectivity
-description: Connect a Osuna client to your daemon through SSH, the relay, or Tailscale.
+description: Connect an Osuna client to your daemon through SSH, the relay, or Tailscale.
 nav: Connectivity
 order: 4
 category: Getting started
@@ -55,7 +55,7 @@ Relay is disabled until you enable it.
 
 1. Open **Settings → your host → Pair a device**.
 2. Select **Enable relay**.
-3. Scan the QR code with Osuna on your phone, or copy the pairing link and paste it into the phone app.
+3. Scan the QR code with your phone. The link opens the Osuna web app in the browser. In the Android app, choose **Scan QR code** or **Paste pairing link** instead.
 
 ### Enable relay from the CLI
 
@@ -65,7 +65,7 @@ Run:
 osuna daemon pair
 ```
 
-Confirm when prompted. Osuna prints a QR code and pairing link. Scan the QR code with Osuna on your phone, or choose **Paste pairing link** in the phone app.
+Confirm when prompted. Osuna prints a QR code and pairing link. Open them the same way as above.
 
 ## Tailscale
 

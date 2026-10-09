@@ -12,9 +12,9 @@ Osuna is a self-hostable platform for running and orchestrating coding agents. I
 
 ## Architecture
 
-- Daemon-client architecture. The daemon manages agents; clients (mobile, desktop, web, CLI) connect locally or over a relay. Remote access isn't an add-on.
-- macOS, Windows, and Linux are all primary targets. None of them are a port or an afterthought.
-- Mobile, desktop, and web are separate native clients. The mobile app is built in React Native, not a webview.
+- Daemon-client architecture. The daemon manages agents; clients (desktop, web, Android, CLI) connect locally or over a relay. Remote access isn't an add-on.
+- The daemon and CLI run on macOS, Windows, and Linux. The desktop app is published for macOS and Windows.
+- Desktop, web, and Android are separate clients. The Android app is built in React Native, not a webview.
 
 ## Providers
 

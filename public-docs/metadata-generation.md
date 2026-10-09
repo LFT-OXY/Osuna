@@ -60,7 +60,7 @@ To configure more than one preferred model or control the exact order, set `agen
 
 Each entry accepts:
 
-- `provider` (required) — the provider id. Built-in ids are `claude`, `codex`, `copilot`, `opencode`, and `pi`; custom providers use the id you gave them.
+- `provider` (required) — the provider id. Built-in ids are `claude`, `codex`, `copilot`, `opencode`, `pi`, and `omp`; custom providers use the id you gave them.
 - `model` (optional) — a specific model id. Omit it to use that provider's default model.
 - `thinkingOptionId` (optional) — a reasoning/thinking level for models that support one. Falls back to the model's default if the value isn't valid for that model.
 
@@ -68,7 +68,7 @@ The Settings screen replaces only the first entry and preserves the rest of a cu
 
 ## Per-project instructions
 
-You can steer the wording of each kind of metadata per repository with a `osuna.json` file at your repo root. Osuna reads it from the committed version of the base branch, the same way it reads worktree config.
+You can steer the wording of each kind of metadata per repository with an `osuna.json` file at your repo root. Osuna reads it from the committed version of the base branch, the same way it reads worktree config.
 
 ```json
 {

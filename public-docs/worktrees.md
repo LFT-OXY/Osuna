@@ -80,7 +80,7 @@ Add `--forge <name>` when Osuna cannot infer the forge from the source checkout.
 
 ## osuna.json
 
-Drop a `osuna.json` in your repo root. Osuna reads it from the committed version of the base branch you picked, so uncommitted changes in other branches don't apply.
+Drop an `osuna.json` in your repo root. Osuna reads it from the committed version of the base branch you picked, so uncommitted changes in other branches don't apply.
 
 ```json
 {

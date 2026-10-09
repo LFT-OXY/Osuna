@@ -60,11 +60,13 @@ In the desktop app:
 
 The app will check for beta updates from then on.
 
-## App stores
+## Android, Docker, and source builds
 
-Desktop releases and the CLI are usually available first. App Store and Play Store releases can lag behind because they go through review.
+The channels above apply to the desktop app, which updates itself. The other install methods update by hand:
 
-There is no beta channel in the app stores right now — only stable builds are submitted. If you want early Android builds, download the APK from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases).
+- **Android:** Osuna is not in an app store. Download the APK for the new version from the [GitHub releases page](https://github.com/LFT-OXY/Osuna/releases) and install it over the current one. The APK for a release can appear after the desktop builds.
+- **Docker:** pull the new tag and recreate the container. `latest` follows stable releases; a beta is published only under its exact version tag. See [Docker](/docs/docker).
+- **Source build:** check out the new release tag, then run `npm ci` and `npm run build:server` again and restart the daemon.
 
 ## What to do if something breaks
 

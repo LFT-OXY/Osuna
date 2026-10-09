@@ -12,6 +12,8 @@ The official Osuna Docker image runs the daemon and serves the bundled browser U
 
 Docker images follow the stable Osuna release cadence. `ghcr.io/lft-oxy/osuna:latest` points at the latest stable release, not an arbitrary `main` build.
 
+If you already run a 0.14.x container, follow [Upgrading from 0.14.x](#upgrading-from-014x) before you start the new image.
+
 ```bash
 docker run -d --name osuna \
   -p 6767:6767 \
@@ -156,6 +158,44 @@ The static web UI is public on the daemon origin. The daemon API and WebSocket a
 Agents can access whatever you mount into `/workspace` and whatever credentials you place in `/home/osuna`. Keep those mounts scoped to what the agents should be able to use.
 
 See [Security](/docs/security) for the full daemon trust model.
+
+## Upgrading from 0.14.x
+
+Osuna 1.0.0 renamed the image, the container user, its home directory, the state directory, and every environment variable. The desktop app and a locally run CLI move their data on first start. A container does not: the image sets `OSUNA_HOME`, and the daemon never migrates into a home that was chosen explicitly. Make these changes yourself before the new container starts for the first time.
+
+| 0.14.x                    | 1.0.0                         |
+| ------------------------- | ----------------------------- |
+| Home mount `/home/paseo`  | `/home/osuna`                 |
+| State directory `.paseo`  | `.osuna`                      |
+| Variables named `PASEO_*` | `OSUNA_*`                     |
+| Container user `paseo`    | `osuna`, still uid/gid `1000` |
+| Image                     | `ghcr.io/lft-oxy/osuna`       |
+
+1. Stop and remove the old container. The data stays in the mounted directory.
+2. Rename the state directory inside the directory you mounted as the container home. With the `paseo-home` bind mount from the old examples:
+
+   ```bash
+   mv paseo-home/.paseo paseo-home/.osuna
+   ```
+
+   For a named volume, run the same rename from any container that mounts it. Agent credentials such as `.claude` and `.codex` sit next to the state directory and need no change.
+
+3. Mount that directory at `/home/osuna` and switch to the new image.
+4. Rename every `PASEO_*` variable to its `OSUNA_*` name, for example `PASEO_PASSWORD` to `OSUNA_PASSWORD` and `PASEO_HOSTNAMES` to `OSUNA_HOSTNAMES`. Osuna ignores the old names, so a container that still passes only `PASEO_PASSWORD` runs without a password. The daemon log names each leftover variable.
+5. Rebuild child images from the new base, and use `--user osuna` with `docker exec`.
+
+```bash
+docker run -d --name osuna \
+  -p 6767:6767 \
+  -e OSUNA_PASSWORD=change-me \
+  -v "$PWD/paseo-home:/home/osuna" \
+  -v "$PWD:/workspace" \
+  ghcr.io/lft-oxy/osuna:latest
+```
+
+If the new container started before the rename, it created an empty `.osuna` and came up with no agents or workspaces. Your data is still in `.paseo`. Stop the container, move the new `.osuna` aside, then do the rename.
+
+The daemon does not rewrite stored paths. Workspaces under `/workspace` carry over unchanged. Worktree workspaces live under the state directory, so their recorded paths still start with `/home/paseo/.paseo/worktrees`, which no longer exists in the new container. Merge or push their branches and archive those workspaces before you upgrade.
 
 ## Troubleshooting
 

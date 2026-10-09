@@ -12,12 +12,14 @@ For the concept and how Osuna manages providers, see [Providers](/docs/providers
 
 ## Native support
 
-Work out of the box once the underlying CLI is installed and authenticated.
+Built in. Claude Code, Codex, Pi, and Oh My Pi work once the underlying CLI is installed and authenticated. GitHub Copilot and OpenCode are off until you [enable them](/docs/custom-providers#enabling-and-disabling-providers).
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Anthropic's coding agent with MCP support, streaming, and deep reasoning.
 - [Codex](/docs/codex). OpenAI's workspace agent with sandbox controls and optional network access.
+- [GitHub Copilot](https://github.com/features/copilot/cli/). GitHub's AI pair programmer, driven over ACP.
 - [OpenCode](https://opencode.ai/). Open-source coding assistant with multi-provider model support.
 - [Pi](https://pi.dev). Minimal terminal-based coding agent with multi-provider LLM support.
+- Oh My Pi. Multi-provider coding agent with native approvals, host tools, and subagents.
 
 ## ACP catalog
 
@@ -41,7 +43,6 @@ Pick any of these from the in-app provider catalog. Each entry is a one-click in
 - [fast-agent](https://fast-agent.ai/acp/), multi-provider coding agent.
 - [Gajae Code](https://gajae-code.com), subscription-based coding agent with plan-before-mutation workflows.
 - [Gemini CLI](https://geminicli.com), Google's official Gemini CLI.
-- [GitHub Copilot](https://github.com/features/copilot/cli/), GitHub's AI pair programmer via ACP.
 - [GLM Agent](https://github.com/stefandevo/glm-acp-agent), Zhipu AI's GLM coding agent.
 - [goose](https://block.github.io/goose/), Block's local open-source AI agent.
 - [Grok](https://docs.x.ai/build/overview), xAI's Grok Build agentic coding CLI.

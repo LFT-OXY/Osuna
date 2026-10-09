@@ -16,8 +16,8 @@ A provider is the contract between Osuna and one external agent CLI: how to laun
 
 ## Two tiers
 
-- **Native support**, Osuna ships a bundled adapter for the major agents (Claude Code, Codex, OpenCode, pi). Auto-discovered when the underlying CLI is installed, with mode metadata and voice support where applicable.
-- **ACP catalog**, any agent speaking the [Agent Client Protocol](https://agentclientprotocol.com) is supported through a generic adapter. Osuna ships a curated catalog of one-click installs (Cursor, Gemini, GitHub Copilot, Hermes, Kimi, Qwen Code, and 25+ more), and you can add any other ACP agent yourself.
+- **Native support**, Osuna ships a bundled adapter for the major agents (Claude Code, Codex, GitHub Copilot, OpenCode, Pi, Oh My Pi). Auto-discovered when the underlying CLI is installed, with mode metadata and voice support where applicable.
+- **ACP catalog**, any agent speaking the [Agent Client Protocol](https://agentclientprotocol.com) is supported through a generic adapter. Osuna ships a curated catalog of one-click installs (Cursor, Gemini, Hermes, Kimi, Qwen Code, and 30+ more), and you can add any other ACP agent yourself.
 
 Either way, **you install the underlying CLI**. Osuna runs it.
 

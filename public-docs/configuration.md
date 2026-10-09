@@ -176,10 +176,10 @@ osuna daemon set-password
 
 This prompts for a password, writes the bcrypt hash to `config.json`, and tells you to restart the daemon. Authentication is a startup setting, so `osuna reload` will also report it as restart-required.
 
-Alternatively, set the `OSUNA_PASSWORD` environment variable (plaintext, hashed automatically at startup):
+Alternatively, set the `OSUNA_PASSWORD` environment variable (plaintext, hashed automatically at startup) for a foreground deployment or a container. Managed `start` ignores it:
 
 ```bash
-OSUNA_PASSWORD=my-secret osuna daemon start
+OSUNA_PASSWORD=my-secret osuna daemon run
 ```
 
 Or write the hash directly in `config.json`:
