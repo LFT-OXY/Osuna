@@ -24,6 +24,7 @@ import {
   type AgentRunOptions,
   type AgentRunResult,
   type AgentRuntimeInfo,
+  type AgentSelectOption,
   type AgentSession,
   type AgentSessionConfig,
   type AgentSlashCommand,
@@ -377,63 +378,6 @@ function parseAutoCompactMode(value: string | undefined): AutoCompactMode {
     return "toggle";
   }
   return "unknown";
-}
-
-// 与 Pi 的 getSupportedThinkingLevels 保持一致；非推理模型在 Paseo 里不给档位
-function getSupportedPiThinkingLevels(model: PiModel): PiThinkingLevel[] {
-  if (!model.reasoning) {
-    return [];
-  }
-  return PI_THINKING_OPTIONS.map((option) => option.id).filter((level) => {
-    const mapped = model.thinkingLevelMap?.[level];
-    if (mapped === null) {
-      return false;
-    }
-    if (level === "xhigh" || level === "max") {
-      return mapped !== undefined;
-    }
-    return true;
-  });
-}
-
-// 与 Pi 的 clampThinkingLevel 保持一致：先往高档找，再往低档找
-function clampPiThinkingLevel(
-  supportedLevels: readonly PiThinkingLevel[],
-  level: PiThinkingLevel,
-): PiThinkingLevel {
-  if (supportedLevels.includes(level)) {
-    return level;
-  }
-  const orderedLevels = PI_THINKING_OPTIONS.map((option) => option.id);
-  const requestedIndex = orderedLevels.indexOf(level);
-  const higher = orderedLevels.slice(requestedIndex + 1);
-  const lower = orderedLevels.slice(0, requestedIndex).toReversed();
-  return (
-    [...higher, ...lower].find((candidate) => supportedLevels.includes(candidate)) ??
-    supportedLevels[0] ??
-    "off"
-  );
-}
-
-function mapThinkingOption({
-  option,
-  isDefault,
-}: {
-  option: (typeof PI_THINKING_OPTIONS)[number];
-  isDefault: boolean;
-}) {
-  const mappedOption = {
-    id: option.id,
-    label: option.label,
-    description: option.description,
-  };
-  if (isDefault) {
-    return {
-      ...mappedOption,
-      isDefault: true,
-    };
-  }
-  return mappedOption;
 }
 
 function piModelSupportsImageInput(model: PiModel | null | undefined): boolean {
@@ -839,14 +783,6 @@ function isPiRequestAbortError(error: unknown): boolean {
   return /\brequest was aborted\b|\babort(ed)?\b/i.test(toDiagnosticErrorMessage(error));
 }
 
-function resolveThinkingOptionId(
-  cachedThinkingOptionId: string | null,
-  sessionThinkingLevel: PiThinkingLevel,
-): PiThinkingLevel | null {
-  const currentThinking = cachedThinkingOptionId ?? sessionThinkingLevel;
-  return normalizePiThinkingOption(currentThinking);
-}
-
 function modelToId(model: PiModel | null | undefined): string | null {
   return model?.provider && model.id ? `${model.provider}/${model.id}` : null;
 }
@@ -1243,7 +1179,62 @@ function buildExtensionUiResponse(
   return { value: answer };
 }
 
+function resolvePiThinkingConfig(
+  model: PiModel,
+): Pick<AgentModelDefinition, "thinkingOptions" | "defaultThinkingOptionId"> {
+  if (!model.reasoning) {
+    return { thinkingOptions: undefined, defaultThinkingOptionId: undefined };
+  }
+
+  const supportedOptions = PI_THINKING_OPTIONS.filter((option) => {
+    const mapped = model.thinkingLevelMap?.[option.id];
+    if (mapped === null) {
+      return false;
+    }
+    if (option.id === "xhigh" || option.id === "max") {
+      return mapped !== undefined;
+    }
+    return true;
+  });
+  // 所有档都被映射成 null 的推理模型按非推理模型处理，不给档位
+  if (supportedOptions.length === 0) {
+    return { thinkingOptions: undefined, defaultThinkingOptionId: undefined };
+  }
+  const defaultIndex = PI_THINKING_OPTIONS.findIndex(
+    (option) => option.id === DEFAULT_PI_THINKING_LEVEL,
+  );
+  // Pi clamps upward first, then falls back to the highest remaining lower level.
+  const higherDefault = supportedOptions.find(
+    (option) => PI_THINKING_OPTIONS.indexOf(option) >= defaultIndex,
+  );
+  const defaultOption = higherDefault ?? supportedOptions.at(-1);
+  const defaultThinkingOptionId = defaultOption?.id ?? "off";
+  return {
+    thinkingOptions: supportedOptions.map((option) => {
+      const mappedOption: AgentSelectOption = {
+        id: option.id,
+        label: option.label,
+        description: option.description,
+      };
+      if (option.id === defaultThinkingOptionId) {
+        mappedOption.isDefault = true;
+      }
+      return mappedOption;
+    }),
+    defaultThinkingOptionId,
+  };
+}
+
+// 没有 model 表示还不知道当前模型，按有档位处理，以 Pi 报的档位为准
+function piModelHasThinkingLevels(model: PiModel | null | undefined): boolean {
+  if (!model) {
+    return true;
+  }
+  return resolvePiThinkingConfig(model).thinkingOptions !== undefined;
+}
+
 function mapPiModel(model: PiModel, provider: AgentProvider): AgentModelDefinition {
+  const { thinkingOptions, defaultThinkingOptionId } = resolvePiThinkingConfig(model);
   return {
     provider,
     id: `${model.provider}/${model.id}`,
@@ -1253,25 +1244,9 @@ function mapPiModel(model: PiModel, provider: AgentProvider): AgentModelDefiniti
       provider: model.provider,
       modelId: model.id,
     },
-    ...resolvePiThinkingConfig(model),
+    thinkingOptions,
+    defaultThinkingOptionId,
   };
-}
-
-function resolvePiThinkingConfig(
-  model: PiModel,
-): Pick<AgentModelDefinition, "thinkingOptions" | "defaultThinkingOptionId"> {
-  const supportedLevels = getSupportedPiThinkingLevels(model);
-  if (supportedLevels.length === 0) {
-    return { thinkingOptions: undefined, defaultThinkingOptionId: undefined };
-  }
-  const defaultThinkingOptionId = clampPiThinkingLevel(supportedLevels, DEFAULT_PI_THINKING_LEVEL);
-  const supportedOptions = PI_THINKING_OPTIONS.filter((option) =>
-    supportedLevels.includes(option.id),
-  );
-  const thinkingOptions = supportedOptions.map((option) =>
-    mapThinkingOption({ option, isDefault: option.id === defaultThinkingOptionId }),
-  );
-  return { thinkingOptions, defaultThinkingOptionId };
 }
 
 function createRuntime(
@@ -1308,7 +1283,6 @@ export class PiRpcAgentSession implements AgentSession {
   private activePromptRequestId: string | null = null;
   private readonly pendingPromptResults = new Map<string, boolean>();
   private readonly pendingSteerSubmissions: PiPendingSteerSubmission[] = [];
-  private lastKnownThinkingOptionId: string | null;
   currentLeafOverrideId: string | null | undefined;
   private readonly capturedUserEntries: PiCapturedEntry[] = [];
   private readonly capturedUserEntriesById = new Map<string, PiCapturedEntry>();
@@ -1319,6 +1293,9 @@ export class PiRpcAgentSession implements AgentSession {
   private commandCache: AgentSlashCommand[] | null = null;
   private processExited = false;
   private state: PiSessionState;
+  // Pi 切模型会把档位重置成它设置里的默认值，这里记着要重新下发的那一档。
+  // 当前模型没有档位时 Pi 报 off，不拿它覆盖这一档。
+  private selectedThinkingLevel: PiThinkingLevel | null;
   private readonly currentModeId: string | null;
   private readonly logger: Logger;
   private readonly usagePoller: PiUsagePoller;
@@ -1331,14 +1308,12 @@ export class PiRpcAgentSession implements AgentSession {
     this.runtimeSession = options.runtimeSession;
     this.config = options.config;
     this.state = options.initialState;
+    this.selectedThinkingLevel = normalizePiThinkingOption(options.config.thinkingOptionId);
+    this.syncThinkingOption();
     this.capabilities = options.capabilities;
     this.provider = PI_PROVIDER;
     this.currentModeId = options.currentModeId ?? null;
     this.cleanup = options.cleanup;
-    this.lastKnownThinkingOptionId =
-      normalizePiThinkingOption(options.config.thinkingOptionId) ??
-      this.state.thinkingLevel ??
-      null;
     this.extensionTimeoutMs = options.extensionTimeoutMs ?? DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS;
     this.logger = options.logger;
     this.usagePoller = new PiUsagePoller({
@@ -1537,10 +1512,7 @@ export class PiRpcAgentSession implements AgentSession {
       provider: this.provider,
       sessionId: this.state.sessionId,
       model: modelToId(this.state.model),
-      thinkingOptionId: resolveThinkingOptionId(
-        this.lastKnownThinkingOptionId,
-        this.state.thinkingLevel,
-      ),
+      thinkingOptionId: this.currentThinkingLevel(),
       modeId: this.currentModeId,
     };
   }
@@ -1767,39 +1739,39 @@ export class PiRpcAgentSession implements AgentSession {
       throw new Error(`Pi model id must include a provider: ${modelId}`);
     }
 
-    const reportedThinkingLevel = resolveThinkingOptionId(
-      this.lastKnownThinkingOptionId,
-      this.state.thinkingLevel,
-    );
+    const reportedThinkingLevel = this.currentThinkingLevel();
+    // Pi 切模型会把档位重置为 Pi 设置里的默认值；重新下发切换前的档位（没有记着的档位时用 medium），由 Pi 按新模型收敛
+    const desiredThinkingLevel = this.selectedThinkingLevel ?? DEFAULT_PI_THINKING_LEVEL;
     const model = await this.runtimeSession.setModel(parsedReference.provider, parsedReference.id);
-    this.state = {
-      ...this.state,
-      model,
-    };
+    try {
+      await this.refreshState();
+    } catch (error) {
+      // Pi 已经换了模型，读不到状态也按切换成功记，免得 agent manager 还记着旧模型
+      this.logger.warn({ err: error }, "Failed to read the Pi state after a model switch");
+      this.state = { ...this.state, model };
+      this.syncThinkingOption();
+    }
     this.config.model = `${model.provider}/${model.id}`;
-    if (getSupportedPiThinkingLevels(model).length === 0) {
+    if (!piModelHasThinkingLevels(model)) {
       return;
     }
 
-    // Pi 切模型会把档位重置为 Pi 设置里的默认值；重新下发用户选择的档位（未选过则为启动默认档），由 Pi 按新模型收敛
-    const desiredThinkingLevel =
-      normalizePiThinkingOption(this.config.thinkingOptionId) ?? DEFAULT_PI_THINKING_LEVEL;
-    let appliedThinkingLevel: PiThinkingLevel;
     try {
-      appliedThinkingLevel = await this.applyThinkingLevel(desiredThinkingLevel);
+      await this.applyThinkingLevel(desiredThinkingLevel);
     } catch (error) {
       // 模型已切换成功，档位对齐失败不回滚也不报错
       this.logger.warn(
         { err: error },
         "Failed to re-apply the Pi thinking level after a model switch",
       );
-      return;
     }
-    if (appliedThinkingLevel !== reportedThinkingLevel) {
+    // 对齐失败时档位停在 Pi 重置后的值，同样要告诉界面
+    const currentThinkingLevel = this.currentThinkingLevel();
+    if (currentThinkingLevel !== reportedThinkingLevel) {
       this.emit({
         type: "thinking_option_changed",
         provider: this.provider,
-        thinkingOptionId: appliedThinkingLevel,
+        thinkingOptionId: currentThinkingLevel,
       });
     }
   }
@@ -1810,23 +1782,15 @@ export class PiRpcAgentSession implements AgentSession {
     );
   }
 
-  private async applyThinkingLevel(thinkingLevel: PiThinkingLevel): Promise<PiThinkingLevel> {
+  private async applyThinkingLevel(thinkingLevel: PiThinkingLevel): Promise<void> {
     await this.runtimeSession.setThinkingLevel(thinkingLevel);
-    const appliedThinkingLevel = await this.readAppliedThinkingLevel(thinkingLevel);
-    this.lastKnownThinkingOptionId = appliedThinkingLevel;
-    this.config.thinkingOptionId = appliedThinkingLevel;
-    return appliedThinkingLevel;
-  }
-
-  private async readAppliedThinkingLevel(
-    requestedThinkingLevel: PiThinkingLevel,
-  ): Promise<PiThinkingLevel> {
     try {
       await this.refreshState();
-      return this.state.thinkingLevel;
     } catch (error) {
+      // 档位已经下发成功，回读失败时按请求的档位记，不让设置失败
       this.logger.warn({ err: error }, "Failed to read the Pi thinking level after setting it");
-      return requestedThinkingLevel;
+      this.state = { ...this.state, thinkingLevel };
+      this.syncThinkingOption();
     }
   }
 
@@ -2623,6 +2587,18 @@ export class PiRpcAgentSession implements AgentSession {
 
   private async refreshState(): Promise<void> {
     this.state = await this.runtimeSession.getState();
+    this.syncThinkingOption();
+  }
+
+  private syncThinkingOption(): void {
+    if (piModelHasThinkingLevels(this.state.model)) {
+      this.selectedThinkingLevel = this.state.thinkingLevel;
+    }
+    this.config.thinkingOptionId = this.currentThinkingLevel();
+  }
+
+  private currentThinkingLevel(): PiThinkingLevel {
+    return this.selectedThinkingLevel ?? this.state.thinkingLevel;
   }
 
   private async refreshAfterTurn(finalUsage: Promise<void>): Promise<void> {
@@ -2669,8 +2645,7 @@ export class PiRpcAgentClient implements AgentClient {
       runtimeSession = await this.runtime.startSession({
         cwd: config.cwd,
         model: config.model,
-        thinkingOptionId:
-          normalizePiThinkingOption(config.thinkingOptionId) ?? DEFAULT_PI_THINKING_LEVEL,
+        thinkingOptionId: normalizePiThinkingOption(config.thinkingOptionId) ?? undefined,
         noSession: config.internal === true,
         env: launchContext?.env,
         mcpConfigPath: mcpConfig?.path,
