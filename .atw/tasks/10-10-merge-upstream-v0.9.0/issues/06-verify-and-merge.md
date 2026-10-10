@@ -4,7 +4,7 @@
 
 **Blocked by:** 04, 05
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 合并分支已吸收 main 在此期间的新提交（用 merge，不用 rebase），并且包含上游 `7f7e60bcb`。
 - [x] 所有工作区版本号为 `0.14.2`；`CHANGELOG.md` 不含上游的 0.9.0 系列条目。
@@ -16,10 +16,10 @@
 - [x] PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。
 - [x] 手动派发一次桌面发版工作流（不发布），macOS 两个架构通过签名断言，Windows 通过打包冒烟。
 - [x] 实测并截图，Osuna 功能：提供方版本显示与一键升级。
-- [ ] 实测并截图，Osuna 功能：输入框 @ 提及智能体与 Routing block。
-- [ ] 实测并截图，Osuna 功能：第三方接口切换与确认。
+- [x] 实测并截图，Osuna 功能：输入框 @ 提及智能体与 Routing block。
+- [x] 实测并截图，Osuna 功能：第三方接口切换与确认。
 - [x] 实测并截图，Osuna 功能：侧栏会话历史，仍是默认标签。
-- [ ] 实测并截图，Osuna 功能：Pi 思考档位，含切换模型后对齐。
+- [x] 实测并截图，Osuna 功能：Pi 思考档位，含切换模型后对齐。
 - [x] 实测并截图，上游新功能：聊天内查找——Command+F 打开、流式回复可搜。
 - [x] 实测并截图，上游新功能：附件上传显示。
 - [x] 实测并截图，上游新功能：检测到 PR 时自动打开一次 PR 标签页。
@@ -28,12 +28,12 @@
 - [x] UI：侧栏帮助菜单、欢迎页、更新分区 / 桌面 1280——没有上游文档站、Sponsor、Discord 入口。
 - [x] UI：聊天 / 查找条打开且有匹配 / 桌面 1280——显示匹配总数，匹配项高亮可见。
 - [x] UI：聊天与草稿标签页 / 输入框 / 桌面 1280——输入框旁的套餐用量栏与 Skill block 都在。
-- [ ] UI：终端 / 桌面 1280——内容四边留有对称内边距，字体是 Osuna 的等宽栈。
+- [x] UI：终端 / 桌面 1280——内容四边留有对称内边距，字体是 Osuna 的等宽栈。
 - [x] 截图存入任务目录的 `screenshots/`。
 - [x] PR 正文按 `docs/qa.md` 的证据要求写好，含三段的冲突裁决摘要、Osuna 测试改动说明、平台矩阵；原生端标注免验收。
 - [x] 原生端（iOS / Android）免验收。
-- [ ] 维护者看过截图并明确同意并入。
-- [ ] PR 以 merge commit 并入 main；并入后 `7f7e60bcb` 是 main 的祖先。
+- [x] 维护者看过截图并明确同意并入。
+- [x] PR 以 merge commit 并入 main；并入后 `7f7e60bcb` 是 main 的祖先。
 
 ## Comments
 
@@ -203,7 +203,7 @@ git diff origin/main HEAD -- '*.test.*' '*.spec.*' | rg '^\+.*\.(skip|only|todo|
 
 ### 验收项说明
 
-- 没有勾的 6 条：`@ 提及智能体与 Routing block`、`第三方接口切换与确认`、`Pi 思考档位，含切换模型后对齐`、`终端 / 桌面 1280`——见「待维护者决定」；`维护者看过截图并明确同意并入`、`PR 以 merge commit 并入 main`——等维护者。
+- 评审之后没有勾的 6 条：`@ 提及智能体与 Routing block`、`第三方接口切换与确认`、`Pi 思考档位，含切换模型后对齐`、`终端 / 桌面 1280`——见「待维护者决定」；`维护者看过截图并明确同意并入`、`PR 以 merge commit 并入 main`——等维护者。前五条在维护者确认后勾上，见「维护者的确认」；最后一条在并入后勾。
 - `PR 上 CI 全绿`：勾的是 `484971027` 这一轮。
 - 第 1 条"已吸收 main 在此期间的新提交"：main 期间没有新提交，没有需要吸收的。并入前若 main 有变化，要再 merge 一次并重看 CI。
 
@@ -211,3 +211,18 @@ git diff origin/main HEAD -- '*.test.*' '*.spec.*' | rg '^\+.*\.(skip|only|todo|
 
 - `.atw/spec/server/backend/testing.md`「Running」：PR 的 CI 不跑大多数 `*.e2e.test.ts`（`test:unit` 排除、`test:integration` 是固定清单），引用前先查清单、本机单独跑并写明是本机结果。
 - `.atw/spec/app/frontend/testing.md`「Running」：桌面端的 `confirmDialog` 是原生确认框，CDP 截不到，用 `screencapture -l` 截、用 System Events 按名字点取消；dev 桌面端实测时，真实提供方的草稿里不按回车选自动补全项。
+
+### 维护者的确认（2026-10-10）
+
+- 维护者在 dev 桌面端按清单亲手测了一遍（清单 19 项：Osuna 原有功能 8 项、上游新功能 7 项、外观与文案 4 项），答复"没什么问题"。
+- 随后明确选择：**并入 main，「待维护者决定」里的第 1–4 项按现状接受**（第三方接口只走到确认框、Pi 运行中会话的切模型对齐只有测试依据、Routing block 没有屏幕证据、终端右侧留白偏宽）。这四条验收项据此勾上，依据是维护者的手测与接受，不是新增的证据。
+- 截图里的主机名、项目名、Claude 套餐档位与用量：维护者选择保留现状。
+- 第 5 项（实测中看到的老问题是否另开任务）没有答复，不挡并入。
+
+### 并入结果（2026-10-10）
+
+- 并入前：`730cb0522`（本工单的记录与截图提交）上 CI 18 项加 Desktop Packages `linux` 共 19 项全部通过，没有重跑；`origin/main` 仍是 `d38d186bd`；PR 状态 `MERGEABLE` / `CLEAN`。
+- `gh pr ready 13` 后 `gh pr merge 13 --merge`：PR #13 于 2026-10-10T07:59:48Z 并入。merge commit 是 `0cb350cb5`，双亲 `d38d186bd`（并入前的 main）与 `730cb0522`。远端分支 `identify-fork-base` 没有删。
+- 并入后核对：`7c1958f5b`、`e9d32a17d`、`7f7e60bcb` 都是 `origin/main` 的祖先；`git merge-base origin/main upstream/main` = `7f7e60bcb`，与 `docs/release.md` 写的当前同步点一致；main 上根 `package.json` 的版本号仍是 `0.14.2`。
+- 推 main 触发了 CI、Desktop Packages、Docker、Nix、Nix Update Hash。Nix Update Hash 当即失败、Nix 预期失败，都是已知红灯（PRD：Nix 依赖哈希不追）。
+- 本节与「维护者的确认」是并入之后才提交的，在 `identify-fork-base` 上、比 main 多一个提交，随任务归档进入 main。
