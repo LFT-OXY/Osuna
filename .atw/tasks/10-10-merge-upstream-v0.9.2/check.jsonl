@@ -13,4 +13,3 @@
 {"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "App 质量检查与禁止模式"}
 {"file": ".atw/spec/app/frontend/testing.md", "reason": "App 单元测试与浏览器测试写法"}
 {"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon 与 App 两侧冲突的跨层检查"}
-{"file": ".atw/tasks/10-10-merge-upstream-v0.9.2/issues/03-verify-and-merge.md", "reason": "ATW current ticket"}
