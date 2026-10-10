@@ -248,6 +248,10 @@ git 不报冲突、结果却不对的：
 - 上游给某个提供方的客户端套了一层新的包装时，Osuna 加在 `AgentClient` 上的可选方法
   （`discoverCommands`、`resolveInstalledVersion`、`resolveCliLaunch`）不转交也不报类型
   错，功能只是静默消失。对照接口逐个补上（`opencode/runtime-client.ts`）。
+- 上游修某个提供方取指令列表、读提供方目录的行为时，改的是会话级的 `listCommands()`。Osuna 的草稿菜单走
+  客户端级的 `discoverCommands()`（[ADR 0003](adr/0003-command-list-never-spawns.md)），上游的修复落不到它
+  上面。对照上游的改动给 `discoverCommands()` 补上同样的行为并加用例（v0.10.1 的 #5450：Codex 按提供方自己的
+  `CODEX_HOME` 读提示词与技能）。
 - 两边各往同一个函数里加一个分支，合起来超过 lint 的复杂度上限。动 Osuna 自己加的那一行，
   不动上游的。
 - 两边都改过的共用组件，要跑引用它的 Osuna 页面测试，不只跑冲突文件自己的测试。

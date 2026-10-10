@@ -7121,7 +7121,7 @@ export class CodexAppServerAgentClient implements AgentClient {
     // peekRepoRoot reads only a cached snapshot; resolveRepoRoot could run git.
     return await discoverCodexCommands({
       cwd,
-      codexHome: resolveCodexHomeDir(process.env),
+      codexHome: resolveCodexHomeDir(buildCodexAppServerEnv(this.runtimeSettings)),
       goalsEnabled: this.probedGoalsEnabled,
       repoRoot: this.deps.workspaceGitService?.peekRepoRoot(cwd) ?? null,
     });

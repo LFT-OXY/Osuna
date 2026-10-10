@@ -2598,6 +2598,61 @@ describe("Codex app-server provider", () => {
     }
   });
 
+  test("discovers prompts and skills from the CODEX_HOME a custom provider runs Codex with", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "codex-discover-provider-home-"));
+    const daemonCodexHome = path.join(tempDir, "daemon-codex-home");
+    const providerCodexHome = path.join(tempDir, "provider-codex-home");
+    const projectCwd = path.join(tempDir, "project");
+    mkdirSync(projectCwd, { recursive: true });
+    for (const [home, owner] of [
+      [daemonCodexHome, "daemon"],
+      [providerCodexHome, "provider"],
+    ]) {
+      mkdirSync(path.join(home, "prompts"), { recursive: true });
+      writeFileSync(
+        path.join(home, "prompts", `${owner}-prompt.md`),
+        `---\ndescription: Prompt from the ${owner} home\n---\nbody\n`,
+      );
+      mkdirSync(path.join(home, "skills", `${owner}-skill`), { recursive: true });
+      writeFileSync(
+        path.join(home, "skills", `${owner}-skill`, "SKILL.md"),
+        `---\nname: ${owner}-skill\ndescription: Skill from the ${owner} home\n---\n`,
+      );
+    }
+    vi.stubEnv("CODEX_HOME", daemonCodexHome);
+    const provider = new CodexAppServerAgentClient(createTestLogger(), {
+      env: { CODEX_HOME: providerCodexHome },
+    });
+
+    try {
+      const commands = await provider.discoverCommands(projectCwd);
+
+      expect(commands).toEqual([
+        {
+          name: "compact",
+          description: "Summarize conversation to prevent hitting the context limit",
+          argumentHint: "",
+          kind: "command",
+        },
+        {
+          name: "prompts:provider-prompt",
+          description: "Prompt from the provider home",
+          argumentHint: "",
+          kind: "command",
+        },
+        {
+          name: "provider-skill",
+          description: "Skill from the provider home",
+          argumentHint: "",
+          kind: "skill",
+        },
+      ]);
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("reports the connected app-server's command list when a turn starts", async () => {
     const session = createSession();
     session.activeForegroundTurnId = null;
