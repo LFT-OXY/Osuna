@@ -817,3 +817,54 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 - 远端分支 identify-fork-base 与这个 worktree 的内容已全部进 main，可以删
 - 可另开票（都不是这次合并带来的）：中文文件名的附件上传后变成下划线（file-upload/index.ts:225）；查找条开着时流式输出不刷新匹配总数（上游行为）；Online、running、High/Medium 等英文界面文字
 - 上游已到 v0.11.2，v0.10 之后还没合；做法见 docs/release.md「从上游同步」
+
+
+## Session 30: 合并上游 Paseo v0.9.1 与 v0.9.2：两段合并、整体验收、并入 main 与任务归档
+<!-- atw-session: v=2 fp=488051b5bc409709 -->
+
+**Date**: 2026-10-10
+**Task**: 合并上游 Paseo v0.9.1 与 v0.9.2：两段合并、整体验收、并入 main 与任务归档
+**Package**: app
+**Branch**: `merge-upstream-v0.9.2`
+
+### Summary
+
+把上游 v0.9.0 到 v0.9.2 的提交分两段合并进分支，逐条核对硬指标并在 dev 桌面端实测截图；维护者同意后 PR #14 以 merge commit 并入 main。并入后 worktree 被 daemon 自动归档，收尾改在主工作树补做，三张工单全部完成并归档。
+
+### Main Changes
+
+- 两段各一个 merge commit：v0.9.1（818658520）→ 2887a73f6，v0.9.2（c67b7158b）→ 381896b91；版本号仍是 0.14.2，package-lock.json 与 CHANGELOG.md 与合并前逐字节相同
+- Opus 5.5 取上游的清单写法，默认思考档位由 high 改为 medium（改了 Osuna 的一条断言）；问题卡片以 Osuna 的卡片为底，「多选题互相替换」那条用例经维护者确认改为单选题
+- 智能体管理照收上游「刷新时先收集历史事件再统一处理」的流程，Osuna 的去掉末尾 Routing block 与 Paseo 工具门控原因落在新流程里
+- docs/release.md「从上游同步」的当前同步点更新为 v0.9.2（c67b7158b），并在表里加了一行
+- PR #14 以 merge commit 0bfa35fda 并入 main（双亲 9010d774c 与 9eae0db74）；git merge-base origin/main upstream/main = c67b7158b
+- 并入 15 秒后正式 daemon 的「合并后自动归档」归档了 worktree 并关掉里面的 Agent；工单 03 的确认、CI 与并入结果三节是之后根据会话记录在主工作树补记的，关票与归档两个提交以快进方式推到 main（373ff74a9）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2887a73f6` | merge: 合并上游 Paseo v0.9.1（818658520） |
+| `381896b91` | merge: 合并上游 Paseo v0.9.2（c67b7158b） |
+| `d5dcb2916` | chore(merge): 合并 v0.9.2 之后的适配——改写一句上游注释，补充踩过的坑 |
+| `9eae0db74` | docs(merge): 同步点更新到上游 v0.9.2，记录整体验收、截图与规范补充 |
+| `0bfa35fda` | Merge pull request #14 from LFT-OXY/merge-upstream-v0.9.2 |
+| `b63629f7d` | chore(task): 关闭工单 03，记录维护者的确认与并入结果 |
+
+### Testing
+
+- [OK] [OK] PR 的 CI 在 9eae0db74 上首轮 20 项里 19 项通过，playwright 第 1 分片的 agent-message-rewind.spec.ts:48 失败；重跑该分片后 20 项全绿
+- [OK] [OK] 本机对照：合并前的 main 与合并分支交替各跑 3 轮，同一条用例分别 9 次里失败 5 次与 6 次，判为用例对时间敏感、不是合并带来的；原因没有查
+- [OK] [OK] dev 桌面端实测 14 张截图（Electron 1280、中文）：Opus 5.5 默认档位、重新加载 Agent 无重复、两次回退对话、多选与单选问题卡片；原生端免验收
+- [OK] [!] 补记时本机一度连不上 GitHub，PR 与 CI 页面没有重新查；重跑结果里的 1 flaky 是哪一条没有核对；推 main 触发的 CI 没有看
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 正式 daemon 的「合并后自动归档」还开着：在 Paseo worktree 里合并 PR 会立刻收走 worktree，收尾要放在合并之前或回主工作树做
+- worktree subdued-rat 已由维护者恢复，内容全部在 main 里，可以再归档；远端分支 merge-upstream-v0.9.2 可以删
+- 可另开票（都不是这次合并带来的）：重新加载或回退后 Claude 自带 Subagent 的卡片降级为普通工具标记；重放后各轮页脚的 token 数与费用变化或消失；agent-message-rewind.spec.ts:48 在本机容易超时
+- 上游 v0.9.2 之后的版本还没合（上次核对时上游已到 v0.11.2）；做法见 docs/release.md「从上游同步」
