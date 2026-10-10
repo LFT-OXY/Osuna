@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] `upstream` remote 已抓到 `818658520` 与 `c67b7158b`，仍配置为不抓取 tag；合并前后本地 tag 列表不变。
 - [x] 合并前按 `docs/release.md`「合并后核对」的口径统计一次应用与 CLI 源码中指向上游站点的链接数，记在本工单的 `## Comments` 下，作为 02 与 03 的基线。
@@ -20,7 +20,7 @@
 - [x] 对本段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
 - [x] typecheck 和 lint 通过。
 - [x] Claude 模型清单的测试文件单独跑过并通过。
-- [ ] 合并分支已推到 `origin`，并开出指向 main 的草稿 PR（推送与开 PR 前先向维护者说明并取得同意）。
+- [x] 合并分支已推到 `origin`，并开出指向 main 的草稿 PR（推送与开 PR 前先向维护者说明并取得同意）。
 
 ## Comments
 
@@ -132,4 +132,7 @@ Opus 5.5；Osuna 的旧版 CLI（`2.1.279`）不出现 Opus 5.5。
 规范补充：`.atw/spec/server/backend/quality-guidelines.md` 加一条"Claude 模型的默认思考档位来自清单条目"；
 `prd.md`「冲突裁决 → Opus 5.5 模型」补两句实际做法。
 
-**未完成。** 最后一条验收（推到 `origin`、开草稿 PR）等维护者同意后再做，工单保持 `doing`。
+**推送与草稿 PR。** 推送前向维护者说明了会发生什么（分支推到 `LFT-OXY/Osuna`、开草稿 PR、main 不变、
+CI 会跑整套测试并占用 macOS runner），维护者 2026-10-10 选择"同意，推送并开草稿 PR"。分支已推到
+`origin/merge-upstream-v0.9.2`，草稿 PR 是 [#14](https://github.com/LFT-OXY/Osuna/pull/14)，目标分支 main。
+推送后本地 tag 列表仍不变。
