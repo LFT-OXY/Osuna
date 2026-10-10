@@ -51,6 +51,15 @@ These guides help you **ask the right questions before coding**.
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
 
+### When Merging Upstream Paseo
+
+- [ ] You are about to `git fetch upstream`, merge an upstream release, or resolve a conflict against upstream code
+- [ ] A file Osuna deleted or rewrote comes back changed from upstream
+- [ ] An upstream test fails on an Osuna default, theme value, or link target
+- [ ] An incoming `COMPAT(...)` tag carries an upstream version number
+
+→ Read `docs/release.md`, "从上游同步": tag and SHA handling, stage points, the three conflict rules, the invariants to re-check after each stage, and the pitfalls from the v0.9.0 sync. That section owns the procedure; layer specs only keep the rule that belongs to their layer.
+
 ### When Verifying AI Cross-Review Results
 
 - [ ] Reviewer claims "user input can be malicious" → Check the actual data source (internal manifest? user config? external API?)

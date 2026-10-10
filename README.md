@@ -33,7 +33,7 @@ Run agents in parallel on your own machines. Ship from your phone or your desk.
 ## Plugins
 
 Add themes, workspace panels, commands, settings screens, and coding-agent providers with trusted
-TypeScript plugins. Install from a local directory or Git repository with `paseo plugin add <source>`.
+TypeScript plugins. Install from npm, Git, or a local directory with `paseo plugin install <source>`.
 
 See the [plugin docs](docs/plugins.md). Plugins run with access to your daemon machine and inside
 connected clients; install only code you trust.

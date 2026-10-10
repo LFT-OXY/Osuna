@@ -2,6 +2,8 @@
 
 Clients talk to the daemon over one WebSocket session. Every inbound message is a discriminated union on `type`, validated by generated zod-aot code before it reaches a handler (`docs/protocol-validation.md`). Schemas live in `packages/protocol`; the daemon re-exports them through `server/messages.ts` and adds serializers.
 
+Config-shaped schemas that the daemon also persists live in leaf modules, not in `messages.ts`: `AgentProfileSchema` and `AgentSkillSelectionSchema` in `protocol/src/agent-profile.ts`, `PluginIdSchema` / `PluginRequirementsSchema` / `PluginSourceSchema` in `plugin-config.ts`, `TerminalProfileSchema` in `terminal-profile.ts`. `messages.ts` imports and re-exports them, so wire consumers keep their import path; daemon config code (`server/persisted-config.ts`) imports the leaf module so it does not load the whole message union. Upstream owns that split: don't move one of these back into `messages.ts`, and put a fork-only schema that sits beside them (`MutableUsage*`) in `messages.ts` or its own module, not inside an upstream leaf module.
+
 ## Adding a session RPC
 
 1. **Schema first, in `packages/protocol/src/`.** Add the request and response message schemas to the inbound/outbound unions. Wire types are `z.infer<typeof Schema>`; never hand-write a parallel interface. Schemas stay pure: no `.transform()`, `.catch()`, `.preprocess()`.

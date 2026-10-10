@@ -1,0 +1,17 @@
+{"file": ".atw/tasks/10-10-merge-upstream-v0.9.0/research/discovery.md", "reason": "模拟合并数据、冲突清单、Osuna 侧改动来源、访谈确认的决定"}
+{"file": "docs/release.md", "reason": "「Fork 分发」：更新源必须指向本仓库、签名与手动触发的工作流；本次要在此加入从上游同步的做法"}
+{"file": "docs/adr/0001-macos-self-signed-certificate.md", "reason": "macOS 签名与签名断言不得被上游发版流程改动冲掉"}
+{"file": "docs/adr/0002-rename-stops-at-app-identity.md", "reason": "桌面身份为 Osuna、其余保持 paseo 拼写；手机端用官方 Paseo App"}
+{"file": "docs/protocol-compatibility.md", "reason": "两边新增消息与字段的兼容约束、COMPAT 标签写法"}
+{"file": "docs/i18n.md", "reason": "9 语言文案、zh-CN 规则"}
+{"file": "docs/glossary.md", "reason": "界面用词"}
+{"file": "docs/design.md", "reason": "上游新增设置界面向 Osuna 设置页外观靠拢"}
+{"file": "docs/testing.md", "reason": "本机只跑单个测试文件，整套交给 CI"}
+{"file": "docs/qa.md", "reason": "PR 证据要求与平台矩阵"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "协议消息冲突的裁决依据"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "Pi provider 测试写法"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "设置页原语、i18n 规则、设计禁止项"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "App 质量检查与禁止模式"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 测试写法"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "协议 → daemon → App 的跨层冲突检查"}
+{"file": ".atw/tasks/10-10-merge-upstream-v0.9.0/issues/06-verify-and-merge.md", "reason": "ATW current ticket"}

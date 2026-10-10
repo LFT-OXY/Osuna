@@ -23,6 +23,7 @@ type NewWorkspaceDaemonClient = Pick<
   | "getPaseoWorktreeList"
   | "getDaemonConfig"
   | "installDirectoryPlugin"
+  | "installPluginSource"
   | "disablePlugin"
   | "enablePlugin"
   | "inspectWorkspaceRecovery"

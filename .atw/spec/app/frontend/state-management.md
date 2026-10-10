@@ -148,6 +148,8 @@ Cases:
 - Base: new workspace never persisted → default layout already has the tab; the first save writes the marker.
 - Bad handled: marker present, tab absent → left absent (user closed it). v1 payload → migration rebuilds the Explorer pane from the defaults, so the backfill is a no-op; `migrateVersionOneWorkspaceLayout` treats every default kind as Explorer furniture via `isDefaultExplorerSidebarTabKind`, never as a user tab to move into a side pane.
 
+A test that asserts an Explorer pane's whole `tabIds` lists every default, Session history included. Upstream's tests are written against upstream's two defaults; when one arrives through a merge and fails on an extra `session_history`, correct its expected list and keep the default (`workspace-tabs/open-supporting-view.test.ts`: `[files, changes_tree, pull_request, session_history, …]`). Automatic PR placement goes after Changes, or last when Changes is closed, so Session history sits after the PR tab in the first case and before it in the second.
+
 Tests live in `stores/workspace-layout-store.test.ts` ("backfills Session history once…", "leaves Session history closed…", "keeps Session history closed across reloads…"): assert the pane's tab kinds and focus after `persist.rehydrate()`, and the persisted marker after the next save. Every assertion of the seed list in that file changes when the list does; `contentTabs` filters the defaults out.
 
 Wrong: bump `WORKSPACE_LAYOUT_PERSIST_VERSION` and add the tab in `migrate`. Correct: optional marker field plus `merge` backfill. The schema is `strictObject`, and a version bump re-runs the v1 migration path for every user while still lacking the "user closed it" signal.

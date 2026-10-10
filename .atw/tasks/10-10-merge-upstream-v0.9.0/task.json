@@ -1,0 +1,28 @@
+{
+  "id": "merge-upstream-v0.9.0",
+  "name": "merge-upstream-v0.9.0",
+  "title": "合并上游 Paseo v0.9.0",
+  "description": "把上游 getpaseo/paseo 从 fork 基点 0f20e6dfe 到 v0.9.0 的 29 次提交整版合并进 main，处理 46 个冲突文件并验证 Osuna 自有功能不受损",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-10-10",
+  "completedAt": null,
+  "branch": "identify-fork-base",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": "https://github.com/LFT-OXY/Osuna/pull/13",
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "d38d186bd971c0c80519226eb0ad599cd00eee15"
+  }
+}
