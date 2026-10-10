@@ -147,7 +147,8 @@ export function legacyDaemonStopCommand(
   daemon: LegacyDaemon,
   force = process.platform === "win32",
 ): string {
-  return `osuna daemon stop --home ${JSON.stringify(daemon.home)}${force ? " --force" : ""}`;
+  // 路径原样放进引号：JSON 转义会把 Windows 路径的反斜杠翻倍。
+  return `osuna daemon stop --home "${daemon.home}"${force ? " --force" : ""}`;
 }
 
 export class LegacyDaemonRunningError extends Error {

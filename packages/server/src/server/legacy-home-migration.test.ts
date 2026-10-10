@@ -33,7 +33,8 @@ describe("migrateLegacyHome", () => {
   let home: string;
 
   beforeEach(() => {
-    root = realpathSync(mkdtempSync(path.join(tmpdir(), "legacy-home-migration-")));
+    // Windows 的临时目录是 8.3 短名，git 报回来的是长名。
+    root = realpathSync.native(mkdtempSync(path.join(tmpdir(), "legacy-home-migration-")));
     legacyHome = path.join(root, ".paseo");
     home = path.join(root, ".osuna");
   });
