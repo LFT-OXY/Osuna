@@ -5430,7 +5430,7 @@ export class DaemonClient {
     ref?: string;
   }): Promise<PluginListItem> {
     const requestId = this.createRequestId();
-    // COMPAT(pluginSourceInstallation): added in v0.8.0; remove after 2027-03-16 once daemon floor supports source identifiers.
+    // COMPAT(pluginSourceInstallation): added in v0.15.0; remove after 2027-03-16 once daemon floor supports source identifiers.
     if (this.getLastServerInfoMessage()?.features?.pluginSourceInstallation !== true) {
       throw new Error("Update the host to install plugin sources.");
     }
@@ -5464,7 +5464,7 @@ export class DaemonClient {
   }
 
   private requirePluginUpdates(): void {
-    // COMPAT(pluginSourceUpdates): added in v0.8.0; remove after 2027-03-16 once daemon floor supports reviewed updates.
+    // COMPAT(pluginSourceUpdates): added in v0.15.0; remove after 2027-03-16 once daemon floor supports reviewed updates.
     if (this.getLastServerInfoMessage()?.features?.pluginSourceUpdates !== true)
       throw new Error("Update the host to review plugin updates.");
   }

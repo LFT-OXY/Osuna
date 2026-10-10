@@ -21,7 +21,7 @@ import { acquireNpm, isNpmSource, readNpmArtifact, resolveNpm } from "./managed-
 
 const GIT_TIMEOUT_MS = 120_000;
 const GIT_ENV = { GIT_TERMINAL_PROMPT: "0" } as const;
-// COMPAT(plugin-source-record): v0.8.0; accept and strip pre-correction selector/revision/root copies until daemon floor supports artifact-derived metadata.
+// COMPAT(plugin-source-record): v0.15.0; accept and strip pre-correction selector/revision/root copies until daemon floor supports artifact-derived metadata.
 const ManagedPluginRecordSchema = z.union([
   z.object({ kind: z.literal("git").default("git"), remote: z.string().min(1) }),
   z.object({ kind: z.literal("npm") }),
@@ -67,7 +67,7 @@ export class ManagedPluginSources {
     if (!record) throw new Error(`Plugin is a local directory: ${pluginId}`);
     const pluginRoot = path.join(this.root, PluginIdSchema.parse(pluginId));
     const parts = path.relative(pluginRoot, path.resolve(configuredPath)).split(path.sep);
-    // COMPAT(plugin-git-layout): added in v0.8.0; retain while pre-correction installations exist.
+    // COMPAT(plugin-git-layout): added in v0.15.0; retain while pre-correction installations exist.
     // Git originally used <12-hex-commit>-<uuid>; the prefix is a directory name, never revision truth.
     const versionId =
       record.kind === "git" ? (parts[0] ?? "").replace(/^[0-9a-f]{12}-/, "") : (parts[0] ?? "");

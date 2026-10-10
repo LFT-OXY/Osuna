@@ -246,17 +246,20 @@ async function expectPluginSourceDocsOpen(page: Page): Promise<void> {
     .context()
     .waitForEvent(
       "request",
-      (request) => request.isNavigationRequest() && request.url().startsWith("https://paseo.sh/"),
+      (request) =>
+        request.isNavigationRequest() &&
+        request.url().startsWith("https://github.com/LFT-OXY/Osuna/"),
     );
   const docsPagePromise = page.context().waitForEvent("page");
   await page.getByRole("link", { name: "Docs", exact: true }).click();
   const request = await requestedPage;
   const docsPage = await docsPagePromise;
   try {
-    expect(new URL(request.url()).pathname).toBe("/docs/plugins/reference");
-    // The deployed site can redirect while the matching website change is still in this PR.
+    expect(new URL(request.url()).pathname).toBe(
+      "/LFT-OXY/Osuna/blob/main/public-docs/plugins/reference.md",
+    );
     await docsPage.waitForURL(
-      (url) => url.origin === "https://paseo.sh" && url.hash === "#plugin-sources",
+      (url) => url.origin === "https://github.com" && url.hash === "#plugin-sources",
       { waitUntil: "commit" },
     );
   } finally {
@@ -381,9 +384,10 @@ async function expectSourceHierarchy(page: Page, description: string, source: st
   const sourceSize = await sourceText.evaluate((element) =>
     Number.parseFloat(getComputedStyle(element).fontSize),
   );
-  expect(sourceSize).toBeLessThan(descriptionSize);
-  await expect(sourceText).toHaveCSS("color", "rgb(161, 161, 170)");
-  await expect(descriptionText).toHaveCSS("color", "rgb(113, 113, 122)");
+  // Osuna 的设置行说明只有一种样式（caption + foregroundMuted），说明与来源两行相同
+  expect(sourceSize).toBe(descriptionSize);
+  await expect(sourceText).toHaveCSS("color", "rgb(113, 113, 123)");
+  await expect(descriptionText).toHaveCSS("color", "rgb(113, 113, 123)");
 }
 
 async function installLocalPluginWithStatusExamples(

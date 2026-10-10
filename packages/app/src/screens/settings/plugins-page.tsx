@@ -3,7 +3,7 @@ import { PluginSettingsMenuItems } from "@/plugins/settings";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useMutation } from "@tanstack/react-query";
 import type { PluginListItem, PluginLogEntry } from "@getpaseo/protocol/messages";
 import { MoreHorizontal, Trash2 } from "lucide-react-native";
@@ -20,6 +20,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  type DropdownMenuTriggerState,
 } from "@/components/ui/dropdown-menu";
 import { useFetchQuery } from "@/data/query";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
@@ -30,11 +31,36 @@ import { resolvePluginPageState } from "@/screens/settings/plugins-page-state";
 import { openPluginInstallForm } from "@/screens/settings/plugin-install-form-model";
 import { pluginRegistry, useInstalledPlugins } from "@/plugins/registry";
 import { settingsStyles } from "@/styles/settings";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { confirmDialog } from "@/utils/confirm-dialog";
 
 const pluginQueryKey = (serverId: string) => ["plugins", serverId] as const;
-const PLUGIN_SOURCE_DOCS_URL = "https://paseo.sh/docs/plugins/reference#plugin-sources";
+const PLUGIN_SOURCE_DOCS_URL =
+  "https://github.com/LFT-OXY/Osuna/blob/main/public-docs/plugins/reference.md#plugin-sources";
 type PluginRowAction = "reload" | "enable" | "disable" | "remove";
+
+const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
+const ThemedTrash2 = withUnistyles(Trash2);
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
+
+function menuTriggerStyle({ pressed, hovered, open }: DropdownMenuTriggerState) {
+  return [
+    styles.menuButton,
+    (hovered || open) && styles.menuButtonHovered,
+    pressed && styles.menuButtonPressed,
+  ];
+}
+
+function renderMenuTriggerIcon({ hovered, open }: DropdownMenuTriggerState) {
+  return (
+    <ThemedMoreHorizontal
+      size={ICON_SIZE.sm}
+      uniProps={hovered || open ? foregroundColorMapping : foregroundMutedColorMapping}
+    />
+  );
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -68,7 +94,10 @@ function PluginActionsMenu({
   const reload = useCallback(() => onAction("reload", plugin), [onAction, plugin]);
   const remove = useCallback(() => onAction("remove", plugin), [onAction, plugin]);
   const openLogs = useCallback(() => onOpenLogs(plugin.id), [onOpenLogs, plugin.id]);
-  const removeIcon = useMemo(() => <Trash2 size={16} color={styles.dangerIcon.color} />, []);
+  const removeIcon = useMemo(
+    () => <ThemedTrash2 size={ICON_SIZE.md} uniProps={dangerColorMapping} />,
+    [],
+  );
   const menuLabel = t("settings.plugins.actions.menu", { id: plugin.id });
 
   return (
@@ -78,9 +107,9 @@ function PluginActionsMenu({
         accessibilityLabel={menuLabel}
         disabled={pending}
         hitSlop={8}
-        style={styles.menuButton}
+        style={menuTriggerStyle}
       >
-        <MoreHorizontal size={18} color={styles.menuIcon.color} />
+        {renderMenuTriggerIcon}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" width={220} sheetTitle={menuLabel}>
         <PluginSettingsMenuItems serverId={serverId} pluginId={plugin.id} disabled={pending} />
@@ -150,10 +179,12 @@ function PluginRow({
       plugin.description || plugin.installation ? (
         <View>
           {plugin.description ? (
-            <Text style={styles.pluginDescription}>{plugin.description}</Text>
+            <Text style={settingsStyles.rowHint}>{plugin.description}</Text>
           ) : null}
           {plugin.installation ? (
-            <Text style={styles.pluginSource}>{formatPluginInstallation(plugin.installation)}</Text>
+            <Text style={settingsStyles.rowHint}>
+              {formatPluginInstallation(plugin.installation)}
+            </Text>
           ) : null}
         </View>
       ) : undefined,
@@ -268,7 +299,7 @@ export function HostPluginsPage({ serverId }: { serverId: string }) {
   const client = useHostRuntimeClient(serverId);
   const connected = useHostRuntimeIsConnected(serverId);
   const supported = useHostFeature(serverId, "pluginManagement");
-  // COMPAT(pluginSourceInstallation): added in v0.8.0; remove gate after 2027-03-16 once daemon floor supports source identifiers.
+  // COMPAT(pluginSourceInstallation): added in v0.15.0; remove gate after 2027-03-16 once daemon floor supports source identifiers.
   const sourceInstallSupported = useHostFeature(serverId, "pluginSourceInstallation");
   // COMPAT(pluginLogs): added in v0.4.0, remove gate after 2027-08-16.
   const logsSupported = useHostFeature(serverId, "pluginLogs");
@@ -532,21 +563,17 @@ export function HostPluginsPage({ serverId }: { serverId: string }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  pluginDescription: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    marginTop: theme.spacing[1],
-  },
-  pluginSource: {
-    color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize.sm,
-    marginTop: theme.spacing[1],
-  },
   install: { padding: theme.spacing[4], gap: theme.spacing[3] },
   pluginControls: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
-  menuButton: { padding: theme.spacing[1], borderRadius: theme.borderRadius.sm },
-  menuIcon: { color: theme.colors.foregroundMuted },
-  dangerIcon: { color: theme.colors.statusDanger },
+  menuButton: {
+    width: 28,
+    height: 28,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuButtonHovered: { backgroundColor: theme.colors.surface2 },
+  menuButtonPressed: { backgroundColor: theme.colors.surface3 },
   empty: { padding: theme.spacing[4], alignItems: "center" },
   logsState: {
     color: theme.colors.foregroundMuted,

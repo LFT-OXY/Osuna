@@ -301,7 +301,7 @@ export class PluginService {
     });
   }
 
-  // COMPAT(plugin-immediate-update): added in v0.8.0; remove after 2027-03-16 when clients use reviewed targets.
+  // COMPAT(plugin-immediate-update): added in v0.15.0; remove after 2027-03-16 when clients use reviewed targets.
   async updateSources(_pluginId?: string): Promise<PluginSourceUpdateItem[]> {
     throw new Error("Update the client to review plugin updates before applying them.");
   }

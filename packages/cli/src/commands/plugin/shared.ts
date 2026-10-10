@@ -55,7 +55,7 @@ export async function withPluginSourceClient<T>(
   target: DaemonTarget,
   run: (client: DaemonClient) => Promise<T>,
 ): Promise<T> {
-  // COMPAT(pluginSourceInstallation): added in v0.8.0; remove gate after 2027-03-16 once daemon floor supports source identifiers.
+  // COMPAT(pluginSourceInstallation): added in v0.15.0; remove gate after 2027-03-16 once daemon floor supports source identifiers.
   return withPluginClient(
     target,
     "pluginSourceInstallation",
@@ -68,7 +68,7 @@ export async function withPluginUpdateClient<T>(
   target: DaemonTarget,
   run: (client: DaemonClient) => Promise<T>,
 ): Promise<T> {
-  // COMPAT(pluginSourceUpdates): added in v0.8.0; remove after 2027-03-16 once daemon floor supports reviewed updates.
+  // COMPAT(pluginSourceUpdates): added in v0.15.0; remove after 2027-03-16 once daemon floor supports reviewed updates.
   return withPluginClient(
     target,
     "pluginSourceUpdates",
