@@ -18,3 +18,4 @@
 {"file": ".atw/tasks/10-09-osuna-standalone/research/renderer-storage-migration.md", "reason": "桌面端 userData 与 origin 迁移的键清单、步骤、失败模式、测试建议"}
 {"file": ".atw/tasks/10-09-osuna-standalone/research/android-build-path.md", "reason": "安卓 GitHub Actions 工作流骨架、签名 config plugin、配套改动清单"}
 {"file": ".atw/tasks/10-09-osuna-standalone/map.md", "reason": "11 张决策票索引，细节在 map-issues/"}
+{"file": ".atw/tasks/10-09-osuna-standalone/issues/14-pre-merge-verification.md", "reason": "ATW current ticket"}
