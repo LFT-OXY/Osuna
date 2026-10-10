@@ -93,7 +93,8 @@ release push as the changelog and version commit.
 ## Fork 分发（LFT-OXY/Osuna）
 
 本仓库是 `getpaseo/paseo` 的 fork，桌面端只发给内部小团队。fork 没有 `@getpaseo`
-的 npm 发布权限，也没有 Apple Developer 账号，因此走这条独立的发版路径。
+的 npm 发布权限，也没有 Apple Developer 账号，因此走这条独立的发版路径。上游的新版本
+靠合并拿进来，见[从上游同步](#从上游同步)。
 
 ### 发版
 
@@ -123,6 +124,137 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 某个平台构建失败时，收尾作业会在上传清单之前就退出，Release 留在草稿。重跑用
 `desktop-vX.Y.Z` 这类全平台 tag，或手动派发时把 `platform` 留成 `all`：单平台重跑
 只有在该 Release 上已经存在其余平台的清单时才补得齐。
+
+### 从上游同步
+
+上游的新版本用 `git merge` 合进来，保留上游的提交历史，下一次从上一次的同步点接着合。
+当前已同步到上游 v0.9.0（`7f7e60bcb`）。每次并入 main 后更新这一句；抓取上游后
+`git merge-base main upstream/main` 给出的应是同一个提交。
+
+v0.9.0 那次分了三段，merge commit 是 `503a3e7cb`、`0798c61c8`、`e0373b2ff`，各段的
+冲突裁决摘要在 [PR #13](https://github.com/LFT-OXY/Osuna/pull/13) 的正文里。
+
+#### 抓取与引用
+
+- `upstream` remote 指向 `https://github.com/getpaseo/paseo.git`，并配成不抓 tag：
+  `git config remote.upstream.tagOpt --no-tags`。Osuna 自己发过 `v0.9.0`、`v0.10.0`
+  等版本，与上游的同名 tag 指向不同的提交，抓进来会相撞。
+- 上游的发布点用提交 SHA 引用。`git ls-remote --tags upstream 'v0.10*'` 列出 tag 与
+  提交的对应。上游打的是附注 tag：带 `^{}` 后缀的那一行是提交，另一行是 tag 对象。
+- 有了 `upstream` remote，`gh` 会把默认仓库解析成 `getpaseo/paseo`。`gh` 命令带上
+  `--repo LFT-OXY/Osuna`。
+
+#### 分段与并入
+
+- 从 main 开一条合并分支，按上游自己的发布点（各个 beta、正式版）分段，每段一个
+  merge commit。出问题时能看出是哪一段带进来的，并只退回那一段。
+- 每段的 merge commit 本身要通过 typecheck、lint 和该段冲突文件对应的测试。冲突之外
+  的适配（文案、外观、`COMPAT` 标签）紧跟在后面单独提交，进入下一段之前做完。
+- 第一段合完就开草稿 PR，之后每段推送后看 CI。整套测试只在 CI 上跑。
+- 并入 main 用 merge commit。squash 和 rebase 都会丢掉上游的祖先关系，下一次合并会
+  重新遇到已经解过的冲突。
+- 合并期间 main 有新提交，就把 main 合进合并分支，不对合并分支做 rebase，原因同上。
+
+#### 版本号与发版元数据
+
+这些文件两边都会改，内容归 Osuna：
+
+| 文件                                                          | 处理                                                                                                                                   |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 各工作区的 `package.json`                                     | 版本号（本包版本与 `@getpaseo/*` 内部依赖）保持 Osuna 的。只取版本号那一块：整个文件取 Osuna 一侧会丢掉上游对依赖项和 `exports` 的改动 |
+| `package-lock.json`                                           | 不手工合并。各 `package.json` 解完后用 `npm install --package-lock-only --ignore-scripts` 重新生成                                     |
+| `CHANGELOG.md`                                                | 只留 Osuna 的条目。上游带来的内容写进 Osuna 下次发版的条目                                                                             |
+| 安卓商店说明（`fastlane/metadata/android/en-US/changelogs/`） | 与上游同名的文件留 Osuna 的。文件名由版本号算出，两边版本号重叠就会同名                                                                |
+| `README.md`                                                   | 冲突块取 Osuna 的                                                                                                                      |
+| `nix/npm-deps.hash`                                           | 不追。Nix 与 Nix Update Hash 两项检查在本仓库是已知红灯                                                                                |
+
+上游在某一段里没有改外部依赖时，解完的 `package.json` 与 `package-lock.json` 与合并前
+逐字节相同，拿这一点自检。
+
+#### 冲突裁决
+
+按顺序适用，前一条优先：
+
+1. Osuna 有意做的产品决定原样保留：桌面身份与数据目录、macOS 签名与签名断言、更新源、
+   外链只指向本仓库、设置界面文案走翻译键（都在[合并后核对](#合并后核对)里），以及
+   设置页外观（[design.md](design.md)）。
+2. 两边重复实现同一功能时，以上游写法为底，补回 Osuna 多出的行为，并用测试证明行为
+   没丢。以 Osuna 的写法为底，上游以后每次改这块都要重新解一次冲突。
+3. 其余冲突两边都保留。
+
+规则裁决不了时停下来问维护者：两条规则互相矛盾，或保留两边会改变用户可见的行为。
+
+Osuna 原有的测试不删除、不跳过、不放宽断言。上游带来的测试与 Osuna 的决定矛盾时改
+上游的测试，并在 PR 里写明是哪条决定。
+
+#### 合并后核对
+
+每段合完逐项核对。这些地方自动合并成功时也可能已经变了。
+
+- **更新源**：`packages/desktop/electron-builder.yml` 的 `publish` 段
+  （[更新源](#更新源)）。
+- **桌面身份与数据目录**：`electron-builder.yml` 的 `appId`、`productName` 是 Osuna
+  的；`packages/desktop/src/main.ts` 仍把 userData 固定在 `Paseo` 目录
+  （[ADR 0002](adr/0002-rename-stops-at-app-identity.md)）。
+- **签名与签名断言**：`desktop-release.yml` 里的 `mac-sign.js` 签名钩子、
+  `OSUNA_MAC_SIGNING_SHA1`、上传前的 `Verify macOS signature` 都在，上游的 Apple
+  公证变量没有收进来（[macOS 签名证书](#macos-签名证书)）。
+- **只手动触发的部署工作流**：`android-apk-release.yml`、`deploy-app.yml`、
+  `deploy-website.yml`、`deploy-relay.yml` 的 `on:` 只有 `workflow_dispatch`
+  （[发版](#发版)）。
+- **外链只指向本仓库**：应用与 CLI 源码里指向上游站点的链接数不增加，合并前后对
+  `packages/app/src` 与 `packages/cli/src` 各数一次。上游新代码里的固定链接，本仓库
+  有对应内容就指过来，没有就连同承载它的按钮一起去掉。
+
+  ```bash
+  PAT='(https?://|www\.)[^"'"'"'`\s)]*(paseo\.sh|getpaseo|discord\.gg|discord\.com|github\.com/sponsors|opencollective)|(^|[^@/\w.-])(app\.|docs\.)?paseo\.sh'
+  rg -n -i "$PAT" packages/app/src | wc -l                                   # 全部
+  rg -n -i "$PAT" packages/app/src -g '!*.test.*' -g '!*.spec.*' | wc -l     # 非测试
+  ```
+
+- **翻译键**：上游新增的键九种语言齐全，zh-CN 是真实翻译，由
+  `packages/app/src/i18n/resources.test.ts` 守着。上游在设置界面新增的硬编码英文改走
+  翻译键（[i18n.md](i18n.md)）。
+- **`COMPAT(...)` 标签**：上游新带进来的标签写的是上游的版本号，改写成合并后的首个
+  Osuna 版本号，日期不动，清理兼容代码时才能按 Osuna 的版本线判断
+  （[protocol-compatibility.md](protocol-compatibility.md#every-shim-is-tagged-and-dated)）。
+  用 `git diff <合并前> <merge commit> | rg '^\+.*COMPAT\('` 列出；标签名在合并前的
+  main 上不存在的才是上游新带来的，Osuna 已有的不动。v0.9.0 那次写的是 `v0.15.0`，
+  发版时版本号若不同，统一改掉。
+
+#### 踩过的坑
+
+git 不报冲突、结果却不对的：
+
+- 两边各加了一个同名字段，自动合并后重复一份。lint 的 `no-dupe-keys` 会报。
+- zh-CN 的翻译区块是展开写的，上游删掉的旧键会留在里面。连同 `zhCNEnglishAllowlist`
+  里对应的条目一起删。
+- 上游的新测试不知道 Osuna 的默认值，例如 Explorer 标签列表里的会话历史。按 Osuna 的
+  行为改预期。
+- 上游改旧用例的断言不会报冲突。用 `git diff <合并前> -- <测试文件>` 找被删掉的断言行。
+- 上游的 e2e 写死上游主题的色值，差 1 也会挂。合并后 `rg toHaveCSS packages/app/e2e`，
+  对照 `packages/app/src/styles/theme.ts` 重算。
+- 上游新增的设置界面里，说明文字与操作菜单按钮要对回 `settingsStyles` 和设置页已有的
+  写法（[design.md](design.md)）。
+
+解冲突时：
+
+- 打包产物冲突时重新生成，不手工合并。
+  `packages/app/src/terminal/webview/terminal-emulator-webview-html.ts` 在
+  `packages/app` 下用 `npm run build:terminal-webview` 生成，再过一遍格式化。
+- Osuna 已删除、上游又改了的东西：上游的新代码需要它才恢复（`ExternalLink` 组件），
+  否则保持删除（`publish-linux` 作业）。
+- 两边各做了一遍的功能，除了源码还要逐条对两边的测试。同一场景下两边用例结论相反时，
+  动手前问维护者。
+- 两边各做了一遍的发版设置（构建的 Node 堆上限）取上游的写法。数值留 Osuna 的话，
+  在那一行写注释说明；上游再改那一行时会再冲突一次。
+
+本机复核时：
+
+- 先挪开 `packages/app/.expo` 与 `packages/app/node_modules/.vite`。前者放宽类型检查，
+  后者是旧的预构建缓存，都会掩盖 CI 上会挂的问题。
+- `chat-find.spec.ts`、`pane-find.spec.ts` 各有一条涉及 Control+F 的用例在 macOS 本机
+  会挂，以 CI（Linux）为准。
 
 ### 更新源
 
