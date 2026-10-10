@@ -66,6 +66,54 @@ describe("question form card core", () => {
     });
   });
 
+  test("keeps checked options and appends the other answer for multi-select", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Which fruits do you like?",
+          header: "Fruits",
+          options: [{ label: "Apple" }, { label: "Banana" }, { label: "Cherry" }],
+          multiSelect: true,
+          allowOther: true,
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    expect(buildQuestionFormAnswers(questions, { 0: new Set([0, 2]) }, { 0: " durian " })).toEqual({
+      Fruits: "Apple, Cherry, durian",
+    });
+    expect(buildQuestionFormAnswers(questions, { 0: new Set([0, 2]) }, {})).toEqual({
+      Fruits: "Apple, Cherry",
+    });
+    expect(buildQuestionFormAnswers(questions, { 0: new Set() }, { 0: "durian" })).toEqual({
+      Fruits: "durian",
+    });
+    expect(buildQuestionFormAnswers(questions, {}, { 0: "durian" })).toEqual({ Fruits: "durian" });
+  });
+
+  test("replaces the selected option with the other answer for single-select", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Which provider?",
+          header: "Provider",
+          options: [{ label: "Claude Code" }, { label: "Codex" }],
+          multiSelect: false,
+          allowOther: true,
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    expect(buildQuestionFormAnswers(questions, { 0: new Set([1]) }, { 0: "OpenCode" })).toEqual({
+      Provider: "OpenCode",
+    });
+    expect(buildQuestionFormAnswers(questions, { 0: new Set([1]) }, {})).toEqual({
+      Provider: "Codex",
+    });
+  });
+
   test("shows text input for explicit other questions", () => {
     const questions = parseQuestionFormQuestions({
       questions: [
@@ -172,7 +220,7 @@ describe("question form progression", () => {
 
     // 先答最后一题，剩下唯一未处理的题在它前面。
     const onlyRolloutPending = markQuestionAnswered(
-      setQuestionOtherText(afterSurface, 2, "It ships"),
+      setQuestionOtherText(afterSurface, surfaceRolloutSuccess, 2, "It ships"),
       2,
     );
     expect(resolveNextQuestionFormStep(surfaceRolloutSuccess, 2, onlyRolloutPending)).toEqual({
@@ -190,7 +238,7 @@ describe("question form progression", () => {
   test("re-answering an earlier question submits when every other question is handled", () => {
     let state = pickQuestionOption(EMPTY_QUESTION_FORM_STATE, surfaceRolloutSuccess, 0, 0);
     state = pickQuestionOption(state, surfaceRolloutSuccess, 1, 0);
-    state = markQuestionAnswered(setQuestionOtherText(state, 2, "Done"), 2);
+    state = markQuestionAnswered(setQuestionOtherText(state, surfaceRolloutSuccess, 2, "Done"), 2);
 
     const changed = pickQuestionOption(state, surfaceRolloutSuccess, 0, 1);
 
@@ -203,7 +251,7 @@ describe("question form progression", () => {
   test("skipping clears the question and leaves it out of the answers", () => {
     let state = pickQuestionOption(EMPTY_QUESTION_FORM_STATE, surfaceRolloutSuccess, 0, 0);
     state = pickQuestionOption(state, surfaceRolloutSuccess, 1, 1);
-    state = skipQuestion(setQuestionOtherText(state, 2, "Half-typed"), 2);
+    state = skipQuestion(setQuestionOtherText(state, surfaceRolloutSuccess, 2, "Half-typed"), 2);
 
     expect(state.otherTexts[2]).toBeUndefined();
     expect(resolveNextQuestionFormStep(surfaceRolloutSuccess, 2, state)).toEqual({
@@ -294,7 +342,30 @@ describe("question form progression", () => {
     });
   });
 
-  test("typed other text and preset options replace each other", () => {
+  test("typed other text and preset options replace each other on a single-select question", () => {
+    const questions = parseOrThrow({
+      questions: [
+        {
+          question: "Pick or type",
+          header: "Response",
+          options: [{ label: "A" }, { label: "B" }],
+          allowOther: true,
+          multiSelect: false,
+        },
+      ],
+    });
+    const picked = pickQuestionOption(EMPTY_QUESTION_FORM_STATE, questions, 0, 1);
+    const typed = setQuestionOtherText(picked, questions, 0, "custom");
+    expect(typed.selections[0]?.size ?? 0).toBe(0);
+
+    const repicked = pickQuestionOption(typed, questions, 0, 0);
+    expect(repicked.otherTexts[0]).toBeUndefined();
+    expect(buildQuestionFormAnswers(questions, repicked.selections, repicked.otherTexts)).toEqual({
+      Response: "A",
+    });
+  });
+
+  test("typed other text and checked options are kept together on a multi-select question", () => {
     const questions = parseOrThrow({
       questions: [
         {
@@ -306,15 +377,22 @@ describe("question form progression", () => {
         },
       ],
     });
-    const picked = pickQuestionOption(EMPTY_QUESTION_FORM_STATE, questions, 0, 1);
-    const typed = setQuestionOtherText(picked, 0, "custom");
-    expect(typed.selections[0]?.size ?? 0).toBe(0);
 
-    const repicked = pickQuestionOption(typed, questions, 0, 0);
-    expect(repicked.otherTexts[0]).toBeUndefined();
-    expect(buildQuestionFormAnswers(questions, repicked.selections, repicked.otherTexts)).toEqual({
-      Response: "A",
+    // 先勾选项再输入。
+    const picked = pickQuestionOption(EMPTY_QUESTION_FORM_STATE, questions, 0, 1);
+    const typed = setQuestionOtherText(picked, questions, 0, "custom");
+    expect(typed.selections[0]).toEqual(new Set([1]));
+    expect(buildQuestionFormAnswers(questions, typed.selections, typed.otherTexts)).toEqual({
+      Response: "B, custom",
     });
+
+    // 先输入再勾选项。
+    const typedFirst = setQuestionOtherText(EMPTY_QUESTION_FORM_STATE, questions, 0, "custom");
+    const pickedAfter = pickQuestionOption(typedFirst, questions, 0, 0);
+    expect(pickedAfter.otherTexts[0]).toBe("custom");
+    expect(
+      buildQuestionFormAnswers(questions, pickedAfter.selections, pickedAfter.otherTexts),
+    ).toEqual({ Response: "A, custom" });
   });
 
   test("editing an answered question sends it back to pending until confirmed again", () => {
@@ -338,7 +416,7 @@ describe("question form progression", () => {
     const emptied = pickQuestionOption(confirmed, questions, 0, 0);
     expect(emptied.statuses[0]).toBeUndefined();
 
-    const retyped = setQuestionOtherText(confirmed, 0, "custom");
+    const retyped = setQuestionOtherText(confirmed, questions, 0, "custom");
     expect(retyped.statuses[0]).toBeUndefined();
 
     // 改过的题退回未处理，答完另一题会回到它。
@@ -390,9 +468,9 @@ describe("question form progression", () => {
     const picked = pickQuestionOption(EMPTY_QUESTION_FORM_STATE, questions, 0, 0);
     expect(canConfirmQuestion(questions, 0, picked, true)).toBe(false);
     expect(canConfirmQuestion(questions, 0, picked, false)).toBe(true);
-    expect(canConfirmQuestion(questions, 0, setQuestionOtherText(picked, 0, "typed"), true)).toBe(
-      true,
-    );
+    expect(
+      canConfirmQuestion(questions, 0, setQuestionOtherText(picked, questions, 0, "typed"), true),
+    ).toBe(true);
 
     // 多选题的「提交」本来就确认勾选项，展开"其他..."不改变这一点。
     const toggled = pickQuestionOption(EMPTY_QUESTION_FORM_STATE, questions, 1, 0);
