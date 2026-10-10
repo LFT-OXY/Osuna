@@ -551,12 +551,13 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
   const handlePickOption = useCallback(
     (optIndex: number) => {
       if (!questions || !activeQuestion || isResponding) return;
-      collapseOther(activeIndex);
       const next = pickQuestionOption(formState, questions, activeIndex, optIndex);
       if (activeQuestion.multiSelect) {
         setFormState(next);
         return;
       }
+      // 单选题的选项替换掉"其他..."，输入行跟着收起；多选题两者并存，输入行不动。
+      collapseOther(activeIndex);
       advance(next, { kind: "option", optIndex });
     },
     [questions, activeQuestion, isResponding, collapseOther, activeIndex, formState, advance],
@@ -568,9 +569,10 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
 
   const handleActiveTextChange = useCallback(
     (text: string) => {
-      setFormState((prev) => setQuestionOtherText(prev, activeIndex, text));
+      if (!questions) return;
+      setFormState((prev) => setQuestionOtherText(prev, questions, activeIndex, text));
     },
-    [activeIndex],
+    [questions, activeIndex],
   );
 
   const canConfirm =

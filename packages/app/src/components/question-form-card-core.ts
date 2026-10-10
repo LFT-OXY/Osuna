@@ -123,10 +123,13 @@ export function buildQuestionFormAnswers(
     const q = questions[i];
     const selected = selections[i];
     const otherText = otherTexts[i]?.trim();
+    const labels = selected ? Array.from(selected).map((idx) => q.options[idx].label) : [];
 
     if (questionShowsTextInput(q)) {
       if (otherText && otherText.length > 0) {
-        answers[q.header] = otherText;
+        // Multi-select keeps the checked options and appends the custom answer, the way
+        // Claude Code's own AskUserQuestion UI does. Single-select replaces the option.
+        answers[q.header] = q.multiSelect ? [...labels, otherText].join(", ") : otherText;
         continue;
       }
       if (q.allowEmpty && q.options.length === 0) {
@@ -135,8 +138,7 @@ export function buildQuestionFormAnswers(
       }
     }
 
-    if (selected && selected.size > 0) {
-      const labels = Array.from(selected).map((idx) => q.options[idx].label);
+    if (labels.length > 0) {
       answers[q.header] = labels.join(", ");
     }
   }
@@ -161,7 +163,10 @@ function omitKey<T>(record: Record<number, T>, key: number): Record<number, T> {
   return next;
 }
 
-/** 单选题直接作答；多选题只切换选中，退回未处理等用户确认。两者都会清掉自由输入。 */
+/**
+ * 单选题直接作答，选项替换掉自由输入；多选题只切换选中，退回未处理等用户确认，
+ * 自由输入留着，和勾选项一起提交。
+ */
 export function pickQuestionOption(
   state: QuestionFormState,
   questions: QuestionFormQuestion[],
@@ -170,11 +175,10 @@ export function pickQuestionOption(
 ): QuestionFormState {
   const question = questions[qIndex];
   if (!question) return state;
-  const otherTexts = omitKey(state.otherTexts, qIndex);
   if (!question.multiSelect) {
     return {
       selections: { ...state.selections, [qIndex]: new Set([optIndex]) },
-      otherTexts,
+      otherTexts: omitKey(state.otherTexts, qIndex),
       statuses: { ...state.statuses, [qIndex]: "answered" },
     };
   }
@@ -186,19 +190,26 @@ export function pickQuestionOption(
   }
   return {
     selections: { ...state.selections, [qIndex]: next },
-    otherTexts,
+    otherTexts: state.otherTexts,
     statuses: omitKey(state.statuses, qIndex),
   };
 }
 
-/** 改动输入后这道题要重新确认，否则标签页的勾和实际提交的答案会对不上。 */
+/**
+ * 改动输入后这道题要重新确认，否则标签页的勾和实际提交的答案会对不上。
+ * 单选题里自由输入替换掉选项；多选题的勾选项留着。
+ */
 export function setQuestionOtherText(
   state: QuestionFormState,
+  questions: QuestionFormQuestion[],
   qIndex: number,
   text: string,
 ): QuestionFormState {
+  const question = questions[qIndex];
+  if (!question) return state;
+  const replacesSelection = text.length > 0 && !question.multiSelect;
   return {
-    selections: text.length > 0 ? omitKey(state.selections, qIndex) : state.selections,
+    selections: replacesSelection ? omitKey(state.selections, qIndex) : state.selections,
     otherTexts: { ...state.otherTexts, [qIndex]: text },
     statuses: omitKey(state.statuses, qIndex),
   };

@@ -1,0 +1,16 @@
+{"file": ".atw/tasks/10-10-merge-upstream-v0.9.2/research/discovery.md", "reason": "模拟合并数据、冲突清单、两处重复实现的差异、访谈确认的决定"}
+{"file": "docs/release.md", "reason": "「Fork 分发 → 从上游同步」：分段、版本号与发版元数据、冲突裁决、合并后核对、踩过的坑；本次要更新其中的同步点"}
+{"file": "docs/adr/0001-macos-self-signed-certificate.md", "reason": "macOS 签名与签名断言不得被合并改动"}
+{"file": "docs/adr/0002-rename-stops-at-app-identity.md", "reason": "桌面身份为 Osuna、数据目录不变；手机端用官方 Paseo App"}
+{"file": "docs/protocol-compatibility.md", "reason": "协议兼容约束与 COMPAT 标签写法，合并后核对用"}
+{"file": "docs/i18n.md", "reason": "上游新增的设置界面文案走翻译键"}
+{"file": "docs/design.md", "reason": "问题卡片保持 Osuna 外观"}
+{"file": "docs/testing.md", "reason": "本机只跑单个测试文件，整套交给 CI"}
+{"file": "docs/qa.md", "reason": "PR 证据要求与平台矩阵"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "Claude provider 与智能体管理的测试写法"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "server 侧冲突解决后的质量检查"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "问题卡片的组件与 i18n 规则"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "App 质量检查与禁止模式"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 单元测试与浏览器测试写法"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon 与 App 两侧冲突的跨层检查"}
+{"file": ".atw/tasks/10-10-merge-upstream-v0.9.2/issues/03-verify-and-merge.md", "reason": "ATW current ticket"}
