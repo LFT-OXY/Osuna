@@ -25,6 +25,7 @@ export async function createProjectPickerFixture(): Promise<ProjectPickerFixture
     fixture: {
       projectPath,
       projectName: path.basename(projectPath),
+      // 必须是上面目录名的子序列，目录名改了要跟着改。
       fuzzyQuery: `ouadfzt${nonce}`,
     },
     removeDirectory: () => rm(root, { recursive: true, force: true }),

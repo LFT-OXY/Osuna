@@ -15,7 +15,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { findRunningLegacyDaemon, stopLegacyDaemon, type LegacyDaemon } from "./legacy-daemon.js";
+import {
+  findRunningLegacyDaemon,
+  legacyDaemonStopCommand,
+  stopLegacyDaemon,
+  type LegacyDaemon,
+} from "./legacy-daemon.js";
 import { isPidRunning } from "./pid-lock.js";
 
 // 锁是 daemon 起来之后才写的，所以写锁的时刻不早于持有它的进程的启动时刻。
@@ -181,5 +186,27 @@ describe.skipIf(process.platform === "win32")("stopLegacyDaemon", () => {
 
     expect(result).toEqual({ pid: child.pid, forced: true });
     expect(isPidRunning(child.pid!)).toBe(false);
+  });
+});
+
+describe("legacyDaemonStopCommand", () => {
+  const daemon: LegacyDaemon = {
+    home: "C:\\Users\\dev\\.paseo",
+    pid: 4242,
+    startedAt: STARTED_AT,
+    listen: null,
+    desktopManaged: false,
+  };
+
+  test("names a Windows home exactly as it is on disk", () => {
+    expect(legacyDaemonStopCommand(daemon, true)).toBe(
+      'osuna daemon stop --home "C:\\Users\\dev\\.paseo" --force',
+    );
+  });
+
+  test("leaves out --force where the daemon can be asked to exit", () => {
+    expect(legacyDaemonStopCommand(daemon, false)).toBe(
+      'osuna daemon stop --home "C:\\Users\\dev\\.paseo"',
+    );
   });
 });
