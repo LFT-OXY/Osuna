@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 上游新增的页面与分组（聊天、终端、「发送」分组、「打开位置」分组）用 Osuna 的设置组件搭成，不带上游的行高与分割线。
 - [x] 上游对下拉触发器、侧栏标题行、控件尺寸的纯外观调整没有进来；上游新页面要用到的属性与能力可用。
@@ -12,7 +12,7 @@
 - [x] 指向已去掉的「布局」栏目的旧地址落到默认栏目，已实测，结果记在 `## Comments` 下。
 - [x] 提示框的排布是上游的，颜色、圆角、浮层质感是 Osuna 的。
 - [x] typecheck 和 lint 通过；控件尺寸的测试、上游为状态徽标带来的浏览器测试通过。
-- [ ] 草稿 PR 上本段推送后的 CI 已看过，设置相关的 Playwright 用例通过；失败项逐个有结论。
+- [x] 草稿 PR 上本段推送后的 CI 已看过，设置相关的 Playwright 用例通过；失败项逐个有结论。
 - [x] UI：设置 / 应用级栏目 / 桌面 1280 — 左侧有「侧边栏」「聊天」「终端」「浏览器」，没有「布局」。
 - [x] UI：设置 → 外观 / 桌面 1280 — 字体分组里有界面字体、代码字体、终端字体与终端字号，旁边的预览里有终端样例。
 - [x] UI：设置 → 聊天 / 桌面 1280 — 有聊天大纲、详情级别、自动展开思考、工具调用详情四项。（实际是三项设置，见 Comments「规格里两处措辞」）
@@ -90,3 +90,14 @@
 - 主机概览页状态徽标的英文 `Error`（Spec 与 Visual 都提到；合并前就有）。
 - 连接页顶部提示「需要密码 / 密码不正确」时，同屏的连接行写「超时」；直接连接弹窗的报错首行是「无法连接到 tcp://…」，实际是密码被拒；该弹窗的输入框高 42、按钮没有页脚条、报错是两行正文字号的红字。这几处都是合并前就有的或上游的写法，本工单没有动。
 - Standards 的判断项：密码被拒的分支在四处各写了一遍；`authFailureMessageKey` 只是查表；键放在 `pairing.hostPassword.errors` 下而主机页也在用。保持现状。
+
+#### 推送后的 CI（2026-10-11）
+
+提交 `9be046d8c` 推到 `origin/merge-upstream-v0.10.3`，草稿 PR #15 上 20 项作业全部通过（运行 38066104677，`linux` 为 38066104673）：format、lint、typecheck、app-tests、server-tests（三个平台）、desktop-tests（两个平台）、cli-tests（三个分片）、sdk-tests、relay-tests、playwright（四个分片）、linux。上一次失败的 `app-tests` 已通过。
+
+设置相关的 Playwright 用例都在分片 3：`settings-navigation`、`settings-host-page`、`settings-providers-list-detail`、`settings-toggle-tab-regression`、`settings-refresh`、`settings-host-selection`，全部通过。
+
+首次失败、重试后通过的两条，逐个的结论：
+
+- `settings-providers-list-detail.spec.ts:58`「pushes the detail and returns through the breadcrumb on a wide window」：首次点提供方行后 10 秒内地址没变成详情页，重试通过。合并前 main 最近三次 CI（`56cccc196`、`373ff74a9`、`0bfa35fda`）与第一段那次推送里，这条都是同样的首次失败、重试通过。合并前就有，与本次合并和本工单无关，没有处理。
+- `add-project-flow.spec.ts:217`「keyboard directory search adds the selected Project」（分片 1）：重试通过，与设置页和本工单的改动无关。
