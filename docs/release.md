@@ -241,6 +241,26 @@ git 不报冲突、结果却不对的：
 - `packages/app/src/i18n/resources.test.ts` 的「已迁移英文字面量」守卫按 `"文字"` 与
   `` `文字 `` 开头扫描源码，注释也算。上游注释里的 `` `BackHandler` `` 会被当成 `Back`。
   改写上游那句注释，不放宽守卫。每段合完单独跑这个文件。
+- server 与 desktop 的 typecheck 不含测试文件。上游删掉一个导入或构造选项后，Osuna 仍在
+  用它的测试只有跑了才挂；上游的新用例调用 Osuna 改过签名的函数也一样。每段合完，把这一段
+  新增或改动过的测试文件逐个跑一遍：
+  `git diff <合并前> --name-only --diff-filter=AM -- 'packages/**/*.test.ts' 'packages/**/*.test.tsx'`。
+- 上游给某个提供方的客户端套了一层新的包装时，Osuna 加在 `AgentClient` 上的可选方法
+  （`discoverCommands`、`resolveInstalledVersion`、`resolveCliLaunch`）不转交也不报类型
+  错，功能只是静默消失。对照接口逐个补上（`opencode/runtime-client.ts`）。
+- 上游修某个提供方取指令列表、读提供方目录的行为时，改的是会话级的 `listCommands()`。Osuna 的草稿菜单走
+  客户端级的 `discoverCommands()`（[ADR 0003](adr/0003-command-list-never-spawns.md)），上游的修复落不到它
+  上面。对照上游的改动给 `discoverCommands()` 补上同样的行为并加用例（v0.10.1 的 #5450：Codex 按提供方自己的
+  `CODEX_HOME` 读提示词与技能）。
+- 上游整套新写的提供方路径按原样收下时，它的会话级 `listCommands()` 不会冲突，但上游的写法是先重连再取列表，
+  服务退出后会为取列表重新拉起进程，违反 ADR 0003。逐个打开看，改成服务不在就返回 `null` 并加用例
+  （v0.10.2 时核实的 OpenCode 2.x：`opencode/v2/session.ts`）。
+- 两边各往同一个函数里加一个分支，合起来超过 lint 的复杂度上限。动 Osuna 自己加的那一行，
+  不动上游的。
+- 两边都改过的共用组件，要跑引用它的 Osuna 页面测试，不只跑冲突文件自己的测试。
+  `components/ui/alert.tsx` 取了上游的 `import` 行后少了 `import React`，typecheck 与 lint
+  都过，三个页面的 jsdom 测试到 CI 才挂。`rg -l "<组件路径>" packages/app/src --glob '*.test.tsx'`
+  找出来逐个跑。
 
 解冲突时：
 
@@ -251,6 +271,9 @@ git 不报冲突、结果却不对的：
   否则保持删除（`publish-linux` 作业）。
 - 两边各做了一遍的功能，除了源码还要逐条对两边的测试。同一场景下两边用例结论相反时，
   动手前问维护者。
+- 调研阶段写「哪一边加了什么」要对照合并基点。只比两边的差异，会把基点原有、Osuna 有意
+  删掉的东西认成上游新加的，据此定出「两边都留」的裁决（v0.10.0-beta.1 的新会话指令查询键）。
+  `git show $(git merge-base HEAD <上游提交>):<文件>` 看基点。
 - 已定的裁决也要拿 Osuna 自己的旧用例对一遍。问题卡片那次定了「多选题两者都保留」，
   Osuna 有一条标题里没写多选的用例断言的正相反，解冲突时才发现。
 - Osuna 把组件里的状态挪进了纯逻辑模块、上游又改了组件里那段状态时，冲突块取 Osuna 的，

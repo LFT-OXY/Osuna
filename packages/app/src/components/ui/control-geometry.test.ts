@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buttonControlHeight,
+  buttonIconSize,
   createControlGeometry,
   getControlInteractionPhase,
   switchGeometry,
@@ -12,6 +13,7 @@ const theme = {
     md: 6,
     lg: 8,
     xl: 12,
+    "2xl": 16,
     full: 9999,
   },
   radius: { sm: 6, md: 8, lg: 10, xl: 14, "2xl": 18, "3xl": 22, full: 9999 },
@@ -34,10 +36,13 @@ const theme = {
   },
   spacing: {
     0: 0,
+    0.5: 2,
+    1: 4,
     2: 8,
     3: 12,
     4: 16,
     6: 24,
+    8: 32,
   },
 } as unknown as Theme;
 
@@ -173,5 +178,44 @@ describe("control geometry", () => {
       thumbSize: 14,
       thumbTravel: 14,
     });
+  });
+
+  it("gives alert title and description one font size and a tight gap per size", () => {
+    const { alert } = createControlGeometry(theme);
+
+    expect(alert.xs.text).toEqual({ fontSize: 12 });
+    expect(alert.sm.text).toEqual({ fontSize: 14 });
+    expect(alert.md.text).toEqual(alert.sm.text);
+    expect(alert.lg.text).toEqual(alert.sm.text);
+    for (const size of ["xs", "sm", "md", "lg"] as const) {
+      expect(alert[size].container.gap).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("starts alert text below the lead row at the lead text's left edge", () => {
+    const { alert } = createControlGeometry(theme);
+
+    for (const size of ["xs", "sm", "md", "lg"] as const) {
+      expect(alert[size].iconSlot.width).toBe(buttonIconSize[size]);
+      expect(alert[size].indent.marginLeft).toBe(alert[size].iconSlot.width + alert[size].lead.gap);
+    }
+  });
+
+  // 上游这条用例断言 sm 的圆角是 16（上游原提示框的圆角）。Osuna 的提示框一直是 12，
+  // 尺寸只改内边距，不改圆角。
+  it("keeps sm alerts as roomy and round as the original alert, and scales the rest around it", () => {
+    const { alert } = createControlGeometry(theme);
+
+    expect(alert.sm.container).toMatchObject({
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+    });
+    expect(alert.xs.container.paddingVertical).toBeLessThan(alert.sm.container.paddingVertical);
+    expect(alert.md.container.paddingVertical).toBeGreaterThan(alert.sm.container.paddingVertical);
+    expect(alert.lg.container.paddingVertical).toBeGreaterThan(alert.md.container.paddingVertical);
+    for (const size of ["xs", "sm", "md", "lg"] as const) {
+      expect(alert[size].container.borderRadius).toBe(12);
+    }
   });
 });

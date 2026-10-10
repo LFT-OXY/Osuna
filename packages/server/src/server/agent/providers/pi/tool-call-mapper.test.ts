@@ -1,11 +1,25 @@
 import { describe, expect, test } from "vitest";
 
+import { createPiExtensionHost } from "./extensions/index.js";
 import {
   mapToolDetail,
   parseToolArgs,
   parseToolResult,
-  resolveToolCallName,
+  type PiToolResult,
+  type PiTrackedToolCall,
 } from "./tool-call-mapper.js";
+
+// 时间线上的工具名与 agent.ts 的 emitToolCallEvent 同一口径：扩展给了名字用扩展的，否则用解析出的工具名。
+function resolveToolCallName(toolCall: PiTrackedToolCall, result: PiToolResult): string {
+  const mapping = createPiExtensionHost().mapToolCall({
+    callId: "call-1",
+    toolName: toolCall.toolName,
+    args: toolCall.args,
+    status: result ? "completed" : "running",
+    result,
+  });
+  return mapping?.name ?? toolCall.toolName;
+}
 
 describe("Pi tool call mapper", () => {
   test("maps bash args and result to shell detail", () => {
@@ -50,81 +64,6 @@ describe("Pi tool call mapper", () => {
     });
   });
 
-  test("maps executed xdev writes to their wrapped tool detail", () => {
-    const toolCall = parseToolArgs("write", {
-      path: "xd://browser",
-      content: "{}",
-    });
-    const result = parseToolResult({
-      content: [{ type: "text", text: "Opened Example Domain" }],
-      details: {
-        xdev: {
-          tool: "browser",
-          mode: "execute",
-          args: { action: "open", url: "https://example.com" },
-          inner: { title: "Example Domain" },
-        },
-      },
-    });
-
-    expect(mapToolDetail(toolCall, result)).toEqual({
-      type: "unknown",
-      input: { action: "open", url: "https://example.com" },
-      output: {
-        content: [{ type: "text", text: "Opened Example Domain" }],
-        details: { title: "Example Domain" },
-      },
-    });
-    expect(resolveToolCallName(toolCall, result)).toBe("browser");
-  });
-
-  test("does not treat xdev help metadata as an executed inner tool", () => {
-    const toolCall = parseToolArgs("write", {
-      path: "xd://browser",
-      content: "",
-    });
-    const result = parseToolResult({
-      details: {
-        xdev: {
-          tool: "browser",
-          mode: "help",
-          inner: "Browser help",
-        },
-      },
-    });
-
-    expect(mapToolDetail(toolCall, result)).toEqual({
-      type: "unknown",
-      input: { path: "xd://browser", content: "" },
-      output: result,
-    });
-    expect(resolveToolCallName(toolCall, result)).toBe("write");
-  });
-
-  test("does not treat malformed xdev metadata as an executed inner tool", () => {
-    const toolCall = parseToolArgs("write", {
-      path: "xd://browser",
-      content: "{}",
-    });
-    const result = parseToolResult({
-      details: {
-        xdev: {
-          tool: "",
-          mode: "execute",
-          args: { action: "open" },
-          inner: { title: "must not surface" },
-        },
-      },
-    });
-
-    expect(mapToolDetail(toolCall, result)).toEqual({
-      type: "unknown",
-      input: { path: "xd://browser", content: "{}" },
-      output: result,
-    });
-    expect(resolveToolCallName(toolCall, result)).toBe("write");
-  });
-
   test("preserves unknown tool input and parsed output", () => {
     const toolCall = parseToolArgs("custom_tool", { value: 42 });
     const result = parseToolResult({ text: "custom result" });
@@ -134,63 +73,6 @@ describe("Pi tool call mapper", () => {
       input: { value: 42 },
       output: { text: "custom result" },
     });
-  });
-
-  test("maps task calls to sub-agent detail while running", () => {
-    const toolCall = parseToolArgs("task", {
-      agent: "explore",
-      task: "Trace the Pi provider tool mapper",
-    });
-
-    expect(mapToolDetail(toolCall, null)).toEqual({
-      type: "sub_agent",
-      subAgentType: "explore",
-      description: "Trace the Pi provider tool mapper",
-      log: "",
-    });
-  });
-
-  test("maps completed subagent calls with task input to sub-agent detail", () => {
-    const toolCall = parseToolArgs("subagent", {
-      agent: "reviewer",
-      task: "Review the Pi mapper change",
-    });
-    const result = parseToolResult({
-      content: [{ type: "text", text: "The mapper change preserves provider status." }],
-    });
-
-    expect(mapToolDetail(toolCall, result)).toEqual({
-      type: "sub_agent",
-      subAgentType: "reviewer",
-      description: "Review the Pi mapper change",
-      log: "The mapper change preserves provider status.",
-    });
-  });
-
-  test("normalizes Pi MCP proxy calls from requested tool args while running", () => {
-    const toolCall = parseToolArgs("mcp", {
-      tool: "paseo_list_models",
-      args: '{"provider":"pi"}',
-    });
-
-    expect(resolveToolCallName(toolCall, null)).toBe("paseo.list_models");
-  });
-
-  test("normalizes Pi MCP proxy calls from result details when completed", () => {
-    const toolCall = parseToolArgs("mcp", {
-      tool: "paseo_list_models",
-      args: '{"provider":"pi"}',
-    });
-    const result = parseToolResult({
-      content: [{ type: "text", text: "(empty result)" }],
-      details: {
-        mode: "call",
-        server: "paseo",
-        tool: "list_models",
-      },
-    });
-
-    expect(resolveToolCallName(toolCall, result)).toBe("paseo.list_models");
   });
 
   describe("Paseo create_agent calls", () => {

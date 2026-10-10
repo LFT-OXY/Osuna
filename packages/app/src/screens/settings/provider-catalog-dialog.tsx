@@ -146,6 +146,7 @@ export function ProviderCatalogDialog({
       {addState.status === "failed" ? (
         <View style={styles.error}>
           <Alert
+            size="sm"
             variant="error"
             title={t("settings.providers.addErrorTitle")}
             description={addState.message}
