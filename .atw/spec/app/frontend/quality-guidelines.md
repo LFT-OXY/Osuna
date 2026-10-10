@@ -25,7 +25,7 @@
 - `console.log` left behind; `debugger`.
 - A component defined inside a component.
 - Array index as `key` on reorderable or filterable lists.
-- `vi.mock` / JSDOM / `@testing-library` in new tests.
+- `vi.mock` / JSDOM / `@testing-library` in new tests. A test that arrives with an upstream merge keeps what it was written with (`components/question-form-card.browser.test.tsx` uses `within` from `@testing-library/dom`).
 - `npm run test` for the workspace; the full Playwright suite locally.
 - Composer internals outside `composer/`.
 
