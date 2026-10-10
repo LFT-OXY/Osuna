@@ -4,25 +4,25 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
-- [ ] 合并分支包含一个以上一段结果与 `7f7e60bcb` 为双亲的 merge commit；`7c1958f5b`、`e9d32a17d`、`7f7e60bcb` 各对应一个 merge commit。
-- [ ] 所有冲突按 `prd.md` 的三条裁决规则处理，每个代码冲突文件的裁决与依据记在 `## Comments` 下；裁决不了的已问过维护者。
-- [ ] Pi 采用上游的形态：模型定义直接携带思考档位列表与默认档位，上游在 agent 管理、输入框 agent 控件和 e2e 上的配套改动一并保留。
-- [ ] Pi 行为，各有通过的测试：非推理模型不给思考档位。
-- [ ] Pi 行为，各有通过的测试：模型档位映射里标为不可用的档位不出现。
-- [ ] Pi 行为，各有通过的测试：最高的两档只在模型显式映射了才出现。
-- [ ] Pi 行为，各有通过的测试：切换模型后当前档位若不被支持，先往更高档、再往更低档对齐到最近的可用档位。
-- [ ] Pi 行为，各有通过的测试：设置档位后以回读到的实际生效档位为准；回读失败时退回请求的档位并记日志，设置操作不失败。
-- [ ] Osuna 原有的 Pi 测试用例与合并后的用例逐条对应，对应表记在 `## Comments` 下；改写后覆盖的行为不少于改写前。
-- [ ] 终端里的查找可用，同时 Osuna 的终端四边内边距、对比度修正与等宽字体栈保留，对应的现有测试通过。
-- [ ] 安卓商店说明里与上游同名的四个文件是 Osuna 的版本；所有工作区版本号仍是 `0.14.2`；`CHANGELOG.md` 不含上游的 0.9.0 系列条目；`package-lock.json` 是重新生成的。
-- [ ] 这一段带进来的上游 `COMPAT(...)` 标签版本号已改写；新增翻译键九种语言齐全、zh-CN 为真实翻译；翻译资源测试通过。
-- [ ] 应用与 CLI 源码中的上游站点链接数不多于 01 记下的基线。
-- [ ] Osuna 原有的测试没有被删除、跳过或放宽断言。
-- [ ] typecheck 和 lint 通过；本段每个代码冲突文件对应的测试文件单独跑过并通过。
-- [ ] 草稿 PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。
-- [ ] 本工单的界面截图验收并入 06 统一做。
+- [x] 合并分支包含一个以上一段结果与 `7f7e60bcb` 为双亲的 merge commit；`7c1958f5b`、`e9d32a17d`、`7f7e60bcb` 各对应一个 merge commit。
+- [x] 所有冲突按 `prd.md` 的三条裁决规则处理，每个代码冲突文件的裁决与依据记在 `## Comments` 下；裁决不了的已问过维护者。
+- [x] Pi 采用上游的形态：模型定义直接携带思考档位列表与默认档位，上游在 agent 管理、输入框 agent 控件和 e2e 上的配套改动一并保留。
+- [x] Pi 行为，各有通过的测试：非推理模型不给思考档位。
+- [x] Pi 行为，各有通过的测试：模型档位映射里标为不可用的档位不出现。
+- [x] Pi 行为，各有通过的测试：最高的两档只在模型显式映射了才出现。
+- [x] Pi 行为，各有通过的测试：切换模型后当前档位若不被支持，先往更高档、再往更低档对齐到最近的可用档位。
+- [x] Pi 行为，各有通过的测试：设置档位后以回读到的实际生效档位为准；回读失败时退回请求的档位并记日志，设置操作不失败。
+- [x] Osuna 原有的 Pi 测试用例与合并后的用例逐条对应，对应表记在 `## Comments` 下；改写后覆盖的行为不少于改写前。
+- [x] 终端里的查找可用，同时 Osuna 的终端四边内边距、对比度修正与等宽字体栈保留，对应的现有测试通过。
+- [x] 安卓商店说明里与上游同名的四个文件是 Osuna 的版本；所有工作区版本号仍是 `0.14.2`；`CHANGELOG.md` 不含上游的 0.9.0 系列条目；`package-lock.json` 是重新生成的。
+- [x] 这一段带进来的上游 `COMPAT(...)` 标签版本号已改写；新增翻译键九种语言齐全、zh-CN 为真实翻译；翻译资源测试通过。
+- [x] 应用与 CLI 源码中的上游站点链接数不多于 01 记下的基线。
+- [x] Osuna 原有的测试没有被删除、跳过或放宽断言。
+- [x] typecheck 和 lint 通过；本段每个代码冲突文件对应的测试文件单独跑过并通过。
+- [x] 草稿 PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。
+- [x] 本工单的界面截图验收并入 06 统一做。
 
 ## Comments
 
@@ -201,3 +201,18 @@ Pi 两边做法不同、用户能感觉到的三处。一开始按规则 2 自�
 - 05：值得写进文档的——打包产物（`terminal-emulator-webview-html.ts`）冲突时重新生成，不手工合并；两边各做了一遍的功能，除了源码还要对两边的测试逐条过一遍，结论相反的用例就是要问维护者的地方，别等评审指出来；上游改旧用例的断言不会报冲突，要主动用 `git diff <合并前> -- <测试文件>` 找被删的断言行。
 - 06：PR 正文列「Pi 测试对应表」的两张表和「问过维护者的三件事」；Pi 思考档位的截图要覆盖"切换模型后对齐"。本工单的界面截图并入 06。
 - 06：堆上限（工单 03 留下的 arm64 取 8192 还是 4096）仍待维护者答复。
+
+### 推送与 CI
+
+- 推送 `e0373b2ff`（merge commit）、`2fb2ee869`（COMPAT 版本号）与 `c2ed3e794`（本工单记录）到 `identify-fork-base`（草稿 PR #13），只推这一条分支，没有推 tag。依据是 PRD「每段推送后看 CI」和本工单的 CI 验收项。
+- `c2ed3e794` 上 CI 工作流 18 项全部通过，整轮没有重跑：changes、format、lint、typecheck、app-tests、sdk-tests、relay-tests、server-tests（ubuntu / windows）、desktop-tests（ubuntu / windows）、cli-tests 三片、playwright 四片。Desktop Packages 的 `linux` 也通过。Nix 与 Nix Update Hash 这次没有被触发。
+- 本机因宿主机是 macOS 而失败的两条 e2e，在 CI（Linux）上都通过：`chat-find.spec.ts`「opens and refocuses Find with Control+f from the composer」、`pane-find.spec.ts`「macOS › opens Find with Meta+f and leaves Control+f to text editing」。
+- playwright 有 3 条用例第一次失败、由 Playwright 自己重试后通过（计为 flaky，不算失败）：`agent-tab-image-stability.spec.ts`「a real assistant PNG remains reachable through pagination and remount」、`creation-idempotency.spec.ts`「retrying failed agent initialization preserves its workspace」、`settings-providers-list-detail.spec.ts`「pushes the detail and returns through the breadcrumb on a wide window」。都不在本段手工改过的文件里；工单 03 那次 CI 同样有 3 条重试后通过，其中两条在相同的文件里。`creation-idempotency` 那条是这次新出现的，06 看 CI 时留意它是否反复出现。
+- `9ba17ecfe`（工单 03 的关票提交）上的那次 CI 显示"已取消"：是被这次推送顶掉的，不是失败。
+
+### 验收项说明
+
+- 第 2 条"裁决不了的已问过维护者"：Pi 的三处已问，见「问过维护者的三件事」。
+- 第 8 条"设置操作不失败"：在 Pi 会话这一层成立并有用例；Pi 的状态一直读不出来时，上游 agent 管理层的读取仍会报错。维护者 2026-10-10 选择维持这样。
+- 第 14 条"Osuna 原有的测试没有被删除、跳过或放宽断言"：Osuna 自己写的用例一条没动。分叉基点之前就有的 3 条上游用例，被上游自己去掉了 `--thinking medium` 的断言，随合并进来；维护者同意跟上游的这个行为。
+- 最后一条：本工单没有截图，界面截图验收在 06 做。
