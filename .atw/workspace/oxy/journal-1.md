@@ -770,3 +770,50 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 - 805353437 与归档提交尚未推送
 - 可另开票：升级失败时按安装方式预选「安装与升级」的标签（WinGet、apk 装的 Claude 默认标签仍是刚失败的 claude update；需改协议）
 - 改动前就有的视觉问题未处理：失败块「关闭」不在右对齐线上、单行输出框下半截留空、输出框与命令行等宽字号不一致
+
+
+## Session 29: 合并上游 Paseo v0.9.0：工单 06 整体验收、并入 main 与任务归档
+<!-- atw-session: v=2 fp=0d4b976984b1c003 -->
+
+**Date**: 2026-10-10
+**Task**: 合并上游 Paseo v0.9.0：工单 06 整体验收、并入 main 与任务归档
+**Package**: app
+**Branch**: `identify-fork-base`
+
+### Summary
+
+逐条核对硬指标、在 dev 桌面端实测并截图、写好 PR 正文；维护者手测后同意，PR #13 以 merge commit 并入 main，任务六张工单全部完成并归档。
+
+### Main Changes
+
+- 硬指标对 484971027 全部通过：三个上游发布点都是祖先、版本号 0.14.2、更新源与签名未动、上游站点链接 70/1 与 13/3、COMPAT 全是 v0.15.0、Osuna 写的测试行只被删 1 行（收紧）
+- 桌面发版工作流不发布演练通过：arm64（堆上限 4096 第一次实际构建）与 x64 的签名断言、Windows 打包冒烟；没有动任何 Release
+- dev 桌面端实测 52 张截图（Electron 1280、中文），缩到 1920 宽并做调色板压缩后入库；PR #13 正文按 docs/qa.md 重写
+- PR #13 以 merge commit 0cb350cb5 并入 main；git merge-base main upstream/main = 7f7e60bcb；关票与归档两个提交以快进方式推到 main（224afa9ae）
+- 规范补充：server 的多数 *.e2e.test.ts 不在 PR 的 CI 里；桌面端原生确认框的截法；dev 实测时不在真实提供方草稿里按回车
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `730cb0522` | docs(task): 工单 06 的验收记录、截图与规范补充 |
+| `0cb350cb5` | Merge pull request #13 from LFT-OXY/identify-fork-base |
+| `b387a41d2` | chore(task): 关闭工单 06，记录维护者的确认与并入结果 |
+
+### Testing
+
+- [OK] [OK] PR 的 CI 在 484971027 与 730cb0522 上各 19 项全绿，没有重跑；playwright 有 2 条重试后通过
+- [OK] [OK] 本机单独跑 i18n/resources.test.ts（38 条）与 api-endpoint-claude、agent-create-agents-capability 两个 e2e 加 routing-block 两个单测（53 条）
+- [OK] [OK] 评审三轴（规范、规格、视觉）：硬问题已修并复查一次；四条证据不完整的验收项由维护者手测后按现状接受
+- [OK] [!] 实测失误：在 Claude 草稿里按回车误发消息，起了一个真实 Claude 会话约 15 秒，已停掉，没有改文件
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- main 上合并提交 0cb350cb5 的 CI 还剩 3 个 playwright 分片在跑，归档提交 224afa9ae 的一轮刚触发；Nix 与 Nix Update Hash 是已知红灯
+- 远端分支 identify-fork-base 与这个 worktree 的内容已全部进 main，可以删
+- 可另开票（都不是这次合并带来的）：中文文件名的附件上传后变成下划线（file-upload/index.ts:225）；查找条开着时流式输出不刷新匹配总数（上游行为）；Online、running、High/Medium 等英文界面文字
+- 上游已到 v0.11.2，v0.10 之后还没合；做法见 docs/release.md「从上游同步」
