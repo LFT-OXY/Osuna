@@ -23,11 +23,6 @@ export function LegalPage({ title, lastUpdated, children }: LegalPageProps) {
   );
 }
 
-// 仓库里没有的法律信息不自拟，统一用这个占位；上线前搜 LegalPlaceholder 逐个补上。
-export function LegalPlaceholder({ children }: { children: ReactNode }) {
-  return <span className="text-white/50">〔待补充：{children}〕</span>;
-}
-
 export function LegalContactLink() {
   return <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>;
 }
@@ -37,7 +32,7 @@ export function OsunaLegalIdentity() {
     <address className="not-italic">
       <strong className="font-medium text-white">LFT-OXY</strong>，Osuna 的维护者
       <br />
-      <LegalPlaceholder>运营主体的法定名称与通讯地址</LegalPlaceholder>
+      Osuna 由个人维护，没有注册公司或其他法人主体。
       <br />
       邮箱：
       <LegalContactLink />

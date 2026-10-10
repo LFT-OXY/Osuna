@@ -1,10 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  LegalContactLink,
-  LegalPage,
-  LegalPlaceholder,
-  OsunaLegalIdentity,
-} from "~/components/legal-page";
+import { LegalContactLink, LegalPage, OsunaLegalIdentity } from "~/components/legal-page";
 import { pageMeta } from "~/meta";
 
 export const Route = createFileRoute("/terms")({
@@ -14,7 +9,7 @@ export const Route = createFileRoute("/terms")({
 
 function Terms() {
   return (
-    <LegalPage title="服务条款" lastUpdated="2026 年 10 月 9 日">
+    <LegalPage title="服务条款" lastUpdated="2026 年 10 月 10 日">
       <p>
         本条款适用于在 osuna.chinhae.cc 与 osuna-relay.chinhae.cc
         上运营的官方服务。使用官方中继即表示你同意本条款。这些服务如何处理数据，见
@@ -104,7 +99,7 @@ function Terms() {
       <section>
         <h2>适用法律</h2>
         <p>
-          <LegalPlaceholder>适用法律与争议解决地</LegalPlaceholder>
+          本条款适用维护者住所地的法律。因本条款或官方服务产生的争议，先协商解决；协商不成的，由维护者住所地有管辖权的法院处理。
         </p>
         <p>如果你是消费者，你仍然享有居住地法律赋予的强制性保护。</p>
       </section>

@@ -1,10 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  LegalContactLink,
-  LegalPage,
-  LegalPlaceholder,
-  OsunaLegalIdentity,
-} from "~/components/legal-page";
+import { LegalContactLink, LegalPage, OsunaLegalIdentity } from "~/components/legal-page";
 import { pageMeta } from "~/meta";
 
 export const Route = createFileRoute("/privacy")({
@@ -15,7 +10,7 @@ export const Route = createFileRoute("/privacy")({
 
 function Privacy() {
   return (
-    <LegalPage title="隐私政策" lastUpdated="2026 年 10 月 9 日">
+    <LegalPage title="隐私政策" lastUpdated="2026 年 10 月 10 日">
       <p>
         Osuna 以本地优先的方式工作。安装或使用这款开源软件，不会把你的代码、提示词、文件、终端输出或
         Agent 对话发给我们。本政策分别说明本地运行的 Osuna、可选的官方中继，以及 osuna.chinhae.cc
@@ -68,7 +63,8 @@ function Privacy() {
           <li>防止滥用并保护服务</li>
         </ul>
         <p>
-          <LegalPlaceholder>处理数据的法律依据</LegalPlaceholder>
+          在要求说明处理依据的地区（例如适用 GDPR
+          的地区），提供中继连接的依据是履行你所请求的服务，防止滥用与保护服务的依据是我们维护服务安全的正当利益。
         </p>
       </section>
 
@@ -85,7 +81,8 @@ function Privacy() {
         <h2>保留与删除</h2>
         <p>Osuna 没有账户，我们不保存用户资料。中继不存储消息内容。</p>
         <p>
-          <LegalPlaceholder>基础设施运行日志的保留期限</LegalPlaceholder>
+          中继与官网的运行日志保存在 Cloudflare，按其平台期限自动过期，最长
+          7&nbsp;天。我们不另行导出或长期保存这些日志。
         </p>
       </section>
 
@@ -101,7 +98,7 @@ function Privacy() {
           <LegalContactLink />。
         </p>
         <p>
-          <LegalPlaceholder>数据保护监管机构与投诉渠道</LegalPlaceholder>
+          如果你认为我们处理你个人数据的方式不符合适用法律，请先联系我们；你也可以向你居住地的数据保护监管机构投诉。
         </p>
       </section>
 

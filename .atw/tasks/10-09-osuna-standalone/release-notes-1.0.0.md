@@ -73,4 +73,3 @@ Osuna 从这一版起是独立产品，不再是 Paseo 的 fork。命令、数�
 - 回滚到 0.14.x 时两个版本仍可能同时写同一个 home：1.0.0 认得还活着的 `paseo.pid` 不会再起一个，但 0.14.x 不认得 `osuna.pid`。
 - Docker 容器内不留符号链接，升级后记录在旧路径下的 worktree 失效。
 - Release 目前没有 Linux 桌面包，也没有安卓 APK；`Android APK Release` 只能手动派发。
-- 官网的隐私页与条款页还有待补的法律信息（处理数据的法律依据、适用法律与争议解决地）。
