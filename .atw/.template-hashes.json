@@ -237,7 +237,7 @@
     ".atw/scripts/init_developer.py": "ef872f95bdbccfef813760c78d48c2f800f6c1d0f4df40e4fa362229b671b202",
     ".atw/scripts/task.py": "99e187d08d13cd9cfd7a4a66cf30db71d35daf452cfd417c940201f58a310826",
     ".atw/scripts/tickets.py": "120c57cedfe654379e1212a9df0a711d98c7ee8a0574a081e0eb8ce837c5939d",
-    ".atw/workflow.md": "18ec33896a66c69a7238ec5511394814d4849ea0305ac4d4b1bf99e00b91d184",
+    ".atw/workflow.md": "d3c20b494589d5f28bff158e96dc70a3567769b81f4641550204694aabdeaec7",
     ".claude/skills/atw-prototype/assets/style-explorer.html": "91077edcdf6cf58ee49cc84bdb94339d0c06d51a2ae5e5146178e7fbf42ec2e5",
     ".claude/skills/atw-prototype/references/design-direction.md": "a2e12405d0c4b7605c05debd4d3e2c6a0c6459c39e14cc1f424b65f41088d6b3",
     ".claude/skills/atw-prototype/references/style-explorer.md": "7da1a3d47ef6a3d1d6d806b31b0eea4cb984738b73eb3b595bf294661be32b03",
@@ -272,11 +272,11 @@
     ".claude/skills/atw-implement-spec/agents/openai.yaml": "72fa6f2cbc9369ec9d9244b5dc8b9d5127f22ffee4d6dc7d28e40c480cbb0c5e",
     ".claude/skills/atw-implement-spec/SKILL.md": "515112e48a8aa5029b11df41147f1c677b02e2f7570d8527889b840f14e3fd60",
     ".claude/skills/atw-noob-mode/agents/openai.yaml": "8075ece4becf5503d17a76882fe636f5ca726d26ac8e2586cdf52e699eccc772",
-    ".claude/skills/atw-noob-mode/SKILL.md": "8ae6ce45f7e2c48707e068ca8a1829d2a21aee70d215766c0928f61d4feb5a88",
+    ".claude/skills/atw-noob-mode/SKILL.md": "03fbd32fe47f6a0607da819f511e155ba7fd8efd8c52eb21654f23d093cc6c06",
     ".agents/skills/atw-domain-modeling/GLOSSARY-FORMAT.md": "db66898bf9d1ee9a4f8b556548fdad293a2c49b8e243b6e79065048808b5c99b",
     ".agents/skills/atw-implement-spec/agents/openai.yaml": "72fa6f2cbc9369ec9d9244b5dc8b9d5127f22ffee4d6dc7d28e40c480cbb0c5e",
     ".agents/skills/atw-implement-spec/SKILL.md": "515112e48a8aa5029b11df41147f1c677b02e2f7570d8527889b840f14e3fd60",
     ".agents/skills/atw-noob-mode/agents/openai.yaml": "8075ece4becf5503d17a76882fe636f5ca726d26ac8e2586cdf52e699eccc772",
-    ".agents/skills/atw-noob-mode/SKILL.md": "8ae6ce45f7e2c48707e068ca8a1829d2a21aee70d215766c0928f61d4feb5a88"
+    ".agents/skills/atw-noob-mode/SKILL.md": "03fbd32fe47f6a0607da819f511e155ba7fd8efd8c52eb21654f23d093cc6c06"
   }
 }

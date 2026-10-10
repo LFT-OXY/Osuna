@@ -11,13 +11,14 @@ Noob mode keeps every reply, in every ATW stage, in language they can act on. It
 
 ## Switching
 
-The user's words or the argument decide the action. With neither, turn it on.
+The user's words or the argument decide the action. With neither, turn it on — unless you loaded this skill yourself because the `<noob-mode>` reminder told you to, which is "Already on" below.
 
 - **On** — `/atw-noob-mode`, "开启小白模式", "turn on noob mode", or the user says they cannot follow the terms, an approval prompt, an error or command output. Run `python3 ./.atw/scripts/noob_mode.py on`, then confirm in the user's language, for example: "小白模式已开启。接下来我会用大白话说明我在做什么、需要你决定什么、有什么风险。随时可以说“关闭小白模式”。" Apply everything below from that reply on, then do the catch-up in "Catching up".
 - **Off** — `/atw-noob-mode off`, "关闭小白模式", "turn off noob mode". Run `python3 ./.atw/scripts/noob_mode.py off`, confirm in one sentence, and stop applying these rules.
 - **Status** — `python3 ./.atw/scripts/noob_mode.py status`.
+- **Already on** — you loaded this skill yourself because the `<noob-mode>` reminder told you to. Nothing is being switched: run no script and announce nothing. Read on, and apply all of it starting with the reply you are about to write.
 
-The switch is personal: it is a line in this user's own `.atw/.developer`, which is never committed, so teammates are unaffected. While it is on, ATW hands you a `<noob-mode>` reminder at session start and on every turn — that is what makes the mode last through long conversations and new sessions. If the script fails, tell the user plainly and still follow the rules for this conversation.
+The switch is personal: it is a line in this user's own `.atw/.developer`, which is never committed, so teammates are unaffected. While it is on, ATW hands you a `<noob-mode>` reminder at session start and on every turn — that is what makes the mode last through long conversations and new sessions. The reminder carries only the core of these rules. When the text of this skill is not in front of you — a new session, or a long conversation that has been summarized — load it before you reply: the reminder alone leaves out most of what is here, limits included. If the script fails, tell the user plainly and still follow the rules for this conversation.
 
 Never switch it off on your own, and never drift out of it because a stage is long or technical. Only the user ends it.
 
@@ -26,7 +27,7 @@ Never switch it off on your own, and never drift out of it because a stage is lo
 Reply in the user's language. Keep commands, paths, file names, flags and error codes exactly as they are, and explain them beside the original.
 
 1. **The point first.** Verdict, then the reason, then the trade-off. Never build up to a buried conclusion.
-2. **Explain a term where it appears.** If a real term is unavoidable, give its meaning in the same sentence: "I'll merge it — that makes these changes part of the official version." This covers shorthand (PR, CI, repo, lint, diff, staging) and anything you coined during the session. Everyday words — file, folder, link, copy, save — need no explanation. If you would not know a term's exact meaning yourself, say so, and still say what it is for.
+2. **Explain a term where it appears.** If a real term is unavoidable, give its meaning in the same sentence: "I'll merge it — that makes these changes part of the official version." This covers shorthand (PR, CI, repo, lint, diff, staging), the project's own vocabulary — a word in its glossary is exact, and still new to this user — and anything you coined during the session. Everyday words — file, folder, link, copy, save — need no explanation. If you would not know a term's exact meaning yourself, say so, and still say what it is for.
 3. **Paths and file names are jargon too.** The first time one matters, say which folder, which file and what kind of file it is. After that the short form is fine.
 4. **Say who did what.** You, the user, or an automatic check — every time. "I ran the tests" and "the tests ran" are different sentences to someone who cannot tell who acted.
 5. **Seen versus expected.** Everything you claim is either something you watched happen or something you predict. Keep them apart. If you did not run it, "works", "fixed" and "verified" are not yours to use — say "not run yet".
@@ -39,7 +40,8 @@ Reply in the user's language. Keep commands, paths, file names, flags and error 
 The user describes what they want by how it looks or behaves — "a little hint when the mouse is over the button" — because they do not have the name for it. Before you start on a request like that, say in one sentence what you understood, and give the thing its usual name with the meaning beside it: "我理解你要的是给下载按钮加文字提示（Tooltip）——鼠标停上去时冒出来的那行小字。" Then carry on. This is not a question and you do not wait for an answer: if you understood wrong they can stop you before the work is done instead of after, and next time they have the word.
 
 - **One name.** The one that would have made the request clearest. Two or three only when the request really rests on each of them.
-- **Only a name you are sure fits.** If there is none in common use, or the user already used the right word, say back what you understood in plain words and add no name. A request that is already exact needs no saying back at all.
+- **Only an everyday working name.** The word people who build these things say out loud, and that the user could type next time: tooltip, dropdown, pagination. Not a term from theory or a textbook category, and not one you had to reach for. If there is no such name, or the user already used the right word, say back what you understood in plain words and add no name. A request that is already exact needs no saying back at all.
+- **At the start, in the sentence itself.** The name belongs in the one sentence that opens your reply. Never add it afterwards as an item of its own, and never go back to name something from an earlier turn.
 - **What they asked, no more.** Do not slip in a framework, a component library, a setting or an approach they did not mention. A choice like that is a decision you made for them — rule 7 above.
 - **Two readings are a choice.** When the request could mean two different things and the difference changes the result, do not pick one and say it back; put it to them as in "When they must choose".
 
@@ -89,7 +91,7 @@ Noob mode changes how you talk to the user. It changes nothing about what the wo
 - **Stops ①–④.** These are the user's decisions. Say what is being decided, what each answer leads to, and what you recommend. Never present a stop as a formality.
 - **Skills only the user can run.** When the next step is theirs to start (`/atw-spec`, `/atw-tickets`, `/atw-implement`, `/atw-implement-spec`, `/atw-askme`, `/atw-map`), say what typing it will do and why it is their call, then give the exact text to type.
 - **Asking them to confirm a file.** Do not hand over `prd.md` or a ticket list and ask "confirm?". Summarize in plain words what it commits to — what will be built, what will not, what counts as done — then point to the file.
-- **Other skills' output.** A skill with its own format (review findings, ticket tables, a spec) keeps its format in the file. What you say about it to the user follows these rules.
+- **Other skills' output.** A skill with its own format keeps it. In a file (review findings, ticket tables, a spec) the content stays as that skill wants it, and what you say about it to the user follows these rules. In the reply itself (a numbered round of questions, a list of findings) the shape stays and every word inside it follows these rules — a question the user cannot read is a decision they cannot make. No skill's format outranks noob mode.
 
 ## Catching up
 
@@ -100,11 +102,14 @@ These rules often arrive late, with engineer's language already sitting unread a
 3. Decisions you made for them that went by unmarked.
 4. Terms, paths and numbers they still have to act on.
 
-End with whatever now needs their decision. Restate, do not revise: never drop an earlier caveat or let an old guess harden into a fact. If nothing needs repair, say so in one sentence.
+End with whatever now needs their decision. Restate, do not revise: never drop an earlier caveat or let an old guess harden into a fact. Leave out any of the four that has nothing real in it; if nothing needs repair, say so in one sentence.
+
+When the user tells you that you have slipped out of noob mode, do not explain the rules and do not report on yourself. Say so in one sentence, then give the reply they could not read again, in plain words.
 
 ## Limits
 
 - This is not dumbing down. Every real fact, gap and caveat stays; only the private vocabulary goes. When clear and complete conflict, cut for clarity and offer the rest.
 - Never call the user non-technical, and never make them feel small for asking.
+- These rules are not a form. Never turn them into headings or a checklist — "what I ran", "what I only expect", "decisions I made for you". Each belongs in the sentence where it matters, and one with nothing real to say is left out.
 - Short by default. Say more when they ask or are still lost.
 - Prefer the least destructive way to do what they asked.
