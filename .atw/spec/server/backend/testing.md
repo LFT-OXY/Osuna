@@ -74,3 +74,5 @@ npx vitest run <file> --bail=1 > /tmp/test-output.txt 2>&1   # broad or noisy ru
 ```
 
 Never `npm run test` for the workspace; it freezes the machine. Never re-run a suite another agent already reported green. Full-suite confidence comes from CI, which routes suites by `.github/ci-paths.yml`.
+
+CI does not run most `*.e2e.test.ts` files. The `server-tests` job runs `npm run test`, which is `test:unit` (it excludes `**/*.e2e.test.ts`) followed by `test:integration` (a fixed list of files in `packages/server/package.json`). An E2E file outside that list has no CI result: `daemon-e2e/api-endpoint-claude.e2e.test.ts` and `daemon-e2e/agent-create-agents-capability.e2e.test.ts` are two such files. Before you cite one as evidence, check the list, run the file locally, and say the run was local.

@@ -125,6 +125,10 @@ A control revealed on hover and hidden with `opacity: 0` + `pointerEvents: "none
 
 A screenshot taken over CDP from the dev Electron window ends the hover: the hovered control is present before `Page.captureScreenshot` and gone after it. You cannot screenshot a hover state that way; assert it from the DOM instead.
 
+A `confirmDialog` on desktop is a native sheet (`dialog.showMessageBox` in `packages/desktop/src/features/dialogs.ts`), so CDP neither sees nor screenshots it. Capture the dev window with `screencapture -x -o -l <CGWindowID>` (find the id with `CGWindowListCopyWindowInfo` filtered by the Electron main pid). Read and dismiss the sheet through System Events: `value of every static text of sheet 1 of window`, then `click button "取消" of sheet 1 of window`. Click the cancel button by name; never send Return to a sheet whose confirm action rewrites provider config.
+
+During dev-desktop QA, do not press Enter to pick a composer autocomplete item while a real provider is selected. When the highlighted group is disabled (Agent mentions gray out while the host's Paseo tools are off), Enter submits the draft and starts a real session with that provider. Click the option with the mouse, and press Enter only in a draft whose provider is `mock`.
+
 A schema edit is invisible to client and app tests until `npm run build:client` runs (`CLAUDE.md` "Build workspace packages"); the symptom is a passing protocol test next to a client test that cannot see the new field.
 
 Never run the whole Playwright suite locally; it is CI's job. Never `npm run test` for the workspace. Metro readiness for Playwright means `/status` returns `packager-status:running` and the bundle has been fetched; the global setup handles it.
