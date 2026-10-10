@@ -102,8 +102,12 @@ jobs:
         include:
           - runner: macos-14
             electron_arch: arm64
+            # 上游这里是 4096（按 7GB 的 runner 定的，见上游 0e965bcd7）。Osuna 自 v0.8.2
+            # 起两个架构都用 8192 发版，没有在 4096 下构建过，不跟着降。
+            node_heap_mb: 8192
           - runner: macos-15-intel
             electron_arch: x64
+            node_heap_mb: 8192
     permissions:
       contents: write
       packages: read
@@ -161,8 +165,8 @@ jobs:
           EP_GH_IGNORE_TIME: true
           # macOS runner 给 node 的默认堆约 2GB，`expo export --platform web` 在
           # app 的 5138 个模块中途耗尽（v0.8.1 的 arm64 与 v0.8.1-beta.1 的 x64
-          # 都死在这里）。两个架构都要抬。
-          NODE_OPTIONS: "--max-old-space-size=8192"
+          # 都死在这里）。两个架构都要抬，取值在上面的 matrix 里。
+          NODE_OPTIONS: --max-old-space-size=${{ matrix.node_heap_mb }}
           # 自签证书（ADR 0001），由 scripts/mac-sign.js 签名，钩子只在这里注入。
           # 关掉自动发现，免得 electron-builder 从 runner 的钥匙串里挑别的身份。
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -191,16 +195,8 @@ jobs:
         run: |
           set -euo pipefail
           release_dir="${DESKTOP_PACKAGE_PATH}/release"
-          files=()
-          while IFS= read -r -d '' f; do
-            files+=("$f")
-          done < <(find "$release_dir" -maxdepth 1 -type f ! -name '*.yml' -print0 | sort -z)
-          if (( ${#files[@]} == 0 )); then
-            echo "::error::No release artifacts found in $release_dir"
-            exit 1
-          fi
           release_lookup="$(node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG")"
-          gh release upload "$release_lookup" "${files[@]}" --clobber --repo "${{ github.repository }}"
+          node scripts/upload-release-assets.mjs "$release_lookup" "$release_dir" "${{ github.repository }}"
 
       - name: Upload desktop artifacts to workflow
         if: env.SHOULD_PUBLISH != 'true'
@@ -297,16 +293,8 @@ jobs:
         run: |
           set -euo pipefail
           release_dir="${DESKTOP_PACKAGE_PATH}/release"
-          files=()
-          while IFS= read -r -d '' f; do
-            files+=("$f")
-          done < <(find "$release_dir" -maxdepth 1 -type f ! -name '*.yml' -print0 | sort -z)
-          if (( ${#files[@]} == 0 )); then
-            echo "::error::No release artifacts found in $release_dir"
-            exit 1
-          fi
           release_lookup="$(node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG")"
-          gh release upload "$release_lookup" "${files[@]}" --clobber --repo "${{ github.repository }}"
+          node scripts/upload-release-assets.mjs "$release_lookup" "$release_dir" "${{ github.repository }}"
 
       - name: Upload desktop artifacts to workflow
         if: env.SHOULD_PUBLISH != 'true'
