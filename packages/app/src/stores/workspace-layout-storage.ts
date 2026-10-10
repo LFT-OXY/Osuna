@@ -112,6 +112,7 @@ export const WorkspaceLayoutPersistedStateSchema = z.strictObject({
   // Explorer default tab kinds already offered to each workspace; a saved layout
   // missing a kind here gets it once on load. Absent means none were offered.
   explorerSidebarSeededTabKindsByWorkspace: z.record(z.string(), z.array(z.string())).optional(),
+  pullRequestTabAutoOpenedByWorkspace: z.record(z.string(), z.literal(true)).optional(),
   // COMPAT(pullRequestAutoAdd): PR detection stopped opening a tab in v0.5; accepted
   // and ignored so upgrading does not discard the layout. Remove after 2027-08-20.
   acknowledgedPullRequestByWorkspace: z.record(z.string(), z.string()).optional(),

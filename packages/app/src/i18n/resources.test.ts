@@ -90,7 +90,6 @@ const zhCNEnglishAllowlist = {
     "settings.appearance.theme.options.githubLight",
   ],
   placeholders: [
-    "settings.plugins.directoryPlaceholder",
     "settings.host.appearance.preview.workspaceName",
     "settings.host.terminalProfiles.namePlaceholder",
     "settings.host.terminalProfiles.commandPlaceholder",
