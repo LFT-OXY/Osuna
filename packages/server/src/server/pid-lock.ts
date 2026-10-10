@@ -1,6 +1,6 @@
 import { open, readFile, unlink, utimes } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import { isLegacyDaemonProcess } from "./legacy-daemon-process.js";
+import { isLegacyDaemonProcess, legacyDaemonStopCommand } from "./legacy-daemon-process.js";
 import { ensurePrivateDirectory } from "./private-files.js";
 import { join } from "node:path";
 import { hostname } from "node:os";
@@ -157,7 +157,7 @@ async function assertNoLiveLegacyDaemon(osunaHome: string): Promise<void> {
   const legacyLock = await readLiveLegacyPidLock(osunaHome);
   if (!legacyLock) return;
   throw new PidLockError(
-    `A 0.14.x daemon is still running in ${osunaHome} (PID ${legacyLock.pid}, started ${legacyLock.startedAt}). Stop it first: osuna daemon stop --home "${osunaHome}"`,
+    `A 0.14.x daemon is still running in ${osunaHome} (PID ${legacyLock.pid}, started ${legacyLock.startedAt}). Stop it first: ${legacyDaemonStopCommand({ home: osunaHome })}`,
     legacyLock,
   );
 }

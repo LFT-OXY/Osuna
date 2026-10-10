@@ -277,7 +277,7 @@ describe("pid-lock ownership", () => {
       await expect(
         acquirePidLock(osunaHome, null, { ownerPid: process.pid + 10_000 }),
       ).rejects.toThrow(
-        `A 0.14.x daemon is still running in ${osunaHome} (PID ${process.pid}, started ${startedAt}). Stop it first: osuna daemon stop --home "${osunaHome}"`,
+        `A 0.14.x daemon is still running in ${osunaHome} (PID ${process.pid}, started ${startedAt}). Stop it first: osuna daemon stop --home "${osunaHome}"${process.platform === "win32" ? " --force" : ""}`,
       );
 
       expect(await getPidLockInfo(osunaHome)).toBeNull();

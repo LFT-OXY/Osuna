@@ -15,6 +15,16 @@ export interface LegacyLockOwner {
   startedAt: string;
 }
 
+// 停掉它的命令。把它的锁文件所在的目录点出来：不带 --home 的写法在设了 OSUNA_HOST 时指向别的主机。
+// Windows 上没有让它自己收尾的通道，stop 要带 --force 才肯动手。
+export function legacyDaemonStopCommand(
+  daemon: { home: string },
+  force = process.platform === "win32",
+): string {
+  // 路径原样放进引号：JSON 转义会把 Windows 路径的反斜杠翻倍。
+  return `osuna daemon stop --home "${daemon.home}"${force ? " --force" : ""}`;
+}
+
 interface ObservedProcess {
   startedAt: number;
   title: string | null;

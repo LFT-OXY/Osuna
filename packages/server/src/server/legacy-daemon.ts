@@ -6,8 +6,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import treeKill from "tree-kill";
 
 import { DaemonInstanceError } from "./daemon-instance.js";
+import { legacyDaemonStopCommand } from "./legacy-daemon-process.js";
 import { resolveOsunaHome } from "./osuna-home.js";
 import { isPidRunning, readLiveLegacyPidLock } from "./pid-lock.js";
+
+export { legacyDaemonStopCommand };
 
 // 仍在运行的 0.14.x daemon：桌面端开了"退出后保持运行"的用户升级后，它还占着数据目录。
 export interface LegacyDaemon {
@@ -139,16 +142,6 @@ async function waitForExit(pid: number, waitMs: number): Promise<boolean> {
     await delay(100);
   }
   return true;
-}
-
-// 停掉它的命令。把它的锁文件所在的目录点出来：不带 --home 的写法在设了 OSUNA_HOST 时指向别的主机。
-// Windows 上没有让它自己收尾的通道，stop 要带 --force 才肯动手。
-export function legacyDaemonStopCommand(
-  daemon: LegacyDaemon,
-  force = process.platform === "win32",
-): string {
-  // 路径原样放进引号：JSON 转义会把 Windows 路径的反斜杠翻倍。
-  return `osuna daemon stop --home "${daemon.home}"${force ? " --force" : ""}`;
 }
 
 export class LegacyDaemonRunningError extends Error {
