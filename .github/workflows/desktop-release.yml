@@ -102,9 +102,7 @@ jobs:
         include:
           - runner: macos-14
             electron_arch: arm64
-            # 上游这里是 4096（按 7GB 的 runner 定的，见上游 0e965bcd7）。Osuna 自 v0.8.2
-            # 起两个架构都用 8192 发版，没有在 4096 下构建过，不跟着降。
-            node_heap_mb: 8192
+            node_heap_mb: 4096
           - runner: macos-15-intel
             electron_arch: x64
             node_heap_mb: 8192
