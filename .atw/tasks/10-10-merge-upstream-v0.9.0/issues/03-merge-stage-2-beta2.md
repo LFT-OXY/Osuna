@@ -4,18 +4,18 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
-- [ ] 合并分支包含一个以上一段结果与 `e9d32a17d` 为双亲的 merge commit。
-- [ ] 所有冲突按 `prd.md` 的三条裁决规则处理，每个代码冲突文件的裁决与依据记在 `## Comments` 下；裁决不了的已问过维护者。
-- [ ] 桌面发版工作流保留 Osuna 的身份、签名步骤和上传前的签名断言；吸收了上游的堆上限与上传重试改进；堆上限设置只剩一处。
-- [ ] 只在 fork 下手动触发的部署工作流触发条件未变；更新源配置仍指向 `LFT-OXY/Osuna`。
-- [ ] "只订阅本会话打开过的聊天"生效的同时，Osuna 的子智能体 track、@ 提及智能体、第三方接口相关的 agent 快照与投影行为未变，对应的现有测试通过。
-- [ ] 所有工作区版本号仍是 `0.14.2`；`CHANGELOG.md` 不含上游的 0.9.0 系列条目；`package-lock.json` 是重新生成的。
-- [ ] 这一段带进来的上游 `COMPAT(...)` 标签版本号已改写；新增翻译键九种语言齐全、zh-CN 为真实翻译。
-- [ ] Osuna 原有的测试没有被删除、跳过或放宽断言。
-- [ ] typecheck 和 lint 通过；本段每个代码冲突文件对应的测试文件单独跑过并通过。
-- [ ] 草稿 PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。
+- [x] 合并分支包含一个以上一段结果与 `e9d32a17d` 为双亲的 merge commit。
+- [x] 所有冲突按 `prd.md` 的三条裁决规则处理，每个代码冲突文件的裁决与依据记在 `## Comments` 下；裁决不了的已问过维护者。
+- [x] 桌面发版工作流保留 Osuna 的身份、签名步骤和上传前的签名断言；吸收了上游的堆上限与上传重试改进；堆上限设置只剩一处。
+- [x] 只在 fork 下手动触发的部署工作流触发条件未变；更新源配置仍指向 `LFT-OXY/Osuna`。
+- [x] "只订阅本会话打开过的聊天"生效的同时，Osuna 的子智能体 track、@ 提及智能体、第三方接口相关的 agent 快照与投影行为未变，对应的现有测试通过。
+- [x] 所有工作区版本号仍是 `0.14.2`；`CHANGELOG.md` 不含上游的 0.9.0 系列条目；`package-lock.json` 是重新生成的。
+- [x] 这一段带进来的上游 `COMPAT(...)` 标签版本号已改写；新增翻译键九种语言齐全、zh-CN 为真实翻译。
+- [x] Osuna 原有的测试没有被删除、跳过或放宽断言。
+- [x] typecheck 和 lint 通过；本段每个代码冲突文件对应的测试文件单独跑过并通过。
+- [x] 草稿 PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。
 
 ## Comments
 
@@ -117,3 +117,13 @@ merge commit 是 `0798c61c8`，双亲 `237a17969`（上一段的结果）与 `e9
 - 04：本工作树有 `packages/app/.expo`，跑 typecheck 前挪到仓库外、跑完放回。
 - 05：值得写进文档的——没有依赖改动的一段，`package.json` 与 `package-lock.json` 解完应与合并前逐字节相同，可以拿这一点当自检；两边各做了一遍的发版设置（堆上限）取上游写法、数值另议；上游删改 Osuna 已删除的作业（`publish-linux`）时保持删除。
 - 06：PR 正文里列出 arm64 堆上限的选择；本段没有因 Osuna 的决定而改动的上游测试。
+
+### 推送与 CI
+
+- 推送 `0798c61c8`（merge commit）与 `6bf8e47db`（本工单记录）到 `identify-fork-base`（草稿 PR #13），只推这一条分支，没有推 tag。依据是 PRD「每段推送后看 CI」和本工单的 CI 验收项，没有另行询问。
+- `6bf8e47db` 上 CI 工作流 18 项全部通过，没有重跑：changes、format、lint、typecheck、app-tests、sdk-tests、relay-tests、server-tests（ubuntu / windows）、desktop-tests（ubuntu / windows）、cli-tests 三片、playwright 四片。Desktop Packages 的 `linux` 也通过（工单 02 记的那次 AppImage 自检偶发失败这一轮没有出现）。Nix 与 Nix Update Hash 这次没有被触发。
+- `237a17969`（工单 02 的收尾提交）上的那次 CI 显示"已取消"：是被这次推送顶掉的，不是失败。
+
+### 验收项说明
+
+- 第 2 条"裁决不了的已问过维护者"：本段没有规则裁决不了的冲突。arm64 堆上限的取值是规则 2 之内的判断，已在交付时上报，**维护者尚未答复**，维持 8192；答复若是 4096，在进入 06 之前另起一个提交改掉。
