@@ -1943,6 +1943,10 @@ export const fr: TranslationResources = {
     hostPassword: {
       title: "Mot de passe pour {{host}}",
       label: "Mot de passe de l’hôte",
+      errors: {
+        required: "Mot de passe requis",
+        incorrect: "Mot de passe incorrect",
+      },
     },
     connectionMethods: {
       title: "Ajouter une connexion",

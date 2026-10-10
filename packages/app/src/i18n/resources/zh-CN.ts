@@ -1881,6 +1881,10 @@ export const zhCN: TranslationResources = {
     hostPassword: {
       title: "{{host}} 的密码",
       label: "主机密码",
+      errors: {
+        required: "需要密码",
+        incorrect: "密码不正确",
+      },
     },
     connectionMethods: {
       title: "添加连接",
@@ -2322,31 +2326,31 @@ export const zhCN: TranslationResources = {
         },
         sources: {
           explorerFiles: {
-            label: "在资源管理器中选择文件",
+            label: "点击资源管理器侧栏中的文件",
             description: "在工作内容旁打开资源管理器侧栏中选中的文件",
           },
           diffs: {
-            label: "打开差异",
+            label: "点击资源管理器侧栏或对话中的更改",
             description: "在工作内容旁打开来自资源管理器和 Agent 对话的差异",
           },
           chatFiles: {
-            label: "从 Agent 对话中打开文件",
+            label: "点击 Agent 对话中的文件",
             description: "在对话旁打开文件链接和工具调用涉及的文件",
           },
           diffFiles: {
-            label: "从更改中打开文件",
+            label: "点击差异中的文件",
             description: "在差异旁打开从中选中的源文件",
           },
           subagents: {
-            label: "打开 Subagent",
+            label: "点击 Agent 对话中的 Subagent",
             description: "在父 Agent 旁打开 Subagent",
           },
           pullRequests: {
-            label: "从更改中打开拉取请求",
+            label: "点击资源管理器侧栏中的拉取请求",
             description: "在更改旁打开拉取请求详情",
           },
           serviceUrls: {
-            label: "打开脚本的服务 URL",
+            label: "点击脚本的服务 URL",
           },
         },
       },

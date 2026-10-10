@@ -116,6 +116,16 @@ export function getConnectionAuthFailureReason(error: unknown): DaemonAuthFailur
   return getDaemonAuthFailureReason(error);
 }
 
+const AUTH_FAILURE_MESSAGE_KEYS: Record<DaemonAuthFailureReason, string> = {
+  password_required: "pairing.hostPassword.errors.required",
+  incorrect_password: "pairing.hostPassword.errors.incorrect",
+};
+
+/** 密码被拒的原因对应的翻译键；客户端包里的错误消息是写死的英文，界面不直接显示它。 */
+export function authFailureMessageKey(reason: DaemonAuthFailureReason): string {
+  return AUTH_FAILURE_MESSAGE_KEYS[reason];
+}
+
 function resolveConnectionCredentials(
   connection: HostConnection,
   options:

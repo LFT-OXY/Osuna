@@ -26,6 +26,7 @@ import { AgentSkillsSection } from "@/agent-skills";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
+import { authFailureMessageKey } from "@/utils/test-daemon-connection";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
@@ -239,13 +240,20 @@ function HostConnectionError({ serverId }: { serverId: string }) {
   const connectionError =
     typeof lastError === "string" && lastError.trim().length > 0 ? lastError.trim() : null;
   if (!connectionError) return null;
+  const authFailureReason = snapshot?.authFailureReason;
+  let title = connectionError;
+  let description: string | undefined;
+  if (authFailureReason) {
+    title = t(authFailureMessageKey(authFailureReason));
+    description = t("settings.host.password.guidance");
+  }
   return (
     <View style={styles.connectionError}>
       <InlineAlert
         size="sm"
         variant="error"
-        title={connectionError}
-        description={snapshot?.authFailureReason ? t("settings.host.password.guidance") : undefined}
+        title={title}
+        description={description}
         testID="host-connection-error"
       />
     </View>

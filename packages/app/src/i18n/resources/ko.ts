@@ -1900,6 +1900,10 @@ export const ko: TranslationResources = {
     hostPassword: {
       title: "{{host}}의 비밀번호",
       label: "호스트 비밀번호",
+      errors: {
+        required: "비밀번호가 필요합니다",
+        incorrect: "비밀번호가 올바르지 않습니다",
+      },
     },
     connectionMethods: {
       title: "연결 추가",

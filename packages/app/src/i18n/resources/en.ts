@@ -1913,6 +1913,10 @@ export const en = {
     hostPassword: {
       title: "Password for {{host}}",
       label: "Host password",
+      errors: {
+        required: "Password required",
+        incorrect: "Incorrect password",
+      },
     },
     connectionMethods: {
       title: "Add connection",

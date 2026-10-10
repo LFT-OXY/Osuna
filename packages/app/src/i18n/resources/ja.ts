@@ -1906,6 +1906,10 @@ export const ja: TranslationResources = {
     hostPassword: {
       title: "{{host}} のパスワード",
       label: "ホストのパスワード",
+      errors: {
+        required: "パスワードが必要です",
+        incorrect: "パスワードが正しくありません",
+      },
     },
     connectionMethods: {
       title: "接続を追加",

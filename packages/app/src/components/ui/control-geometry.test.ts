@@ -201,19 +201,21 @@ describe("control geometry", () => {
     }
   });
 
+  // 上游这条用例断言 sm 的圆角是 16（上游原提示框的圆角）。Osuna 的提示框一直是 12，
+  // 尺寸只改内边距，不改圆角。
   it("keeps sm alerts as roomy and round as the original alert, and scales the rest around it", () => {
     const { alert } = createControlGeometry(theme);
 
     expect(alert.sm.container).toMatchObject({
       paddingVertical: 12,
       paddingHorizontal: 16,
-      borderRadius: 16,
+      borderRadius: 12,
     });
     expect(alert.xs.container.paddingVertical).toBeLessThan(alert.sm.container.paddingVertical);
     expect(alert.md.container.paddingVertical).toBeGreaterThan(alert.sm.container.paddingVertical);
     expect(alert.lg.container.paddingVertical).toBeGreaterThan(alert.md.container.paddingVertical);
     for (const size of ["xs", "sm", "md", "lg"] as const) {
-      expect(alert[size].container.borderRadius).toBeGreaterThanOrEqual(12);
+      expect(alert[size].container.borderRadius).toBe(12);
     }
   });
 });

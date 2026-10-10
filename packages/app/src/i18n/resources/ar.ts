@@ -1888,6 +1888,10 @@ export const ar: TranslationResources = {
     hostPassword: {
       title: "كلمة المرور لـ {{host}}",
       label: "كلمة مرور المضيف",
+      errors: {
+        required: "كلمة المرور مطلوبة",
+        incorrect: "كلمة المرور غير صحيحة",
+      },
     },
     connectionMethods: {
       title: "إضافة اتصال",

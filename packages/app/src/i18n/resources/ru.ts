@@ -1917,6 +1917,10 @@ export const ru: TranslationResources = {
     hostPassword: {
       title: "Пароль для {{host}}",
       label: "Пароль хоста",
+      errors: {
+        required: "Требуется пароль",
+        incorrect: "Неверный пароль",
+      },
     },
     connectionMethods: {
       title: "Добавить подключение",

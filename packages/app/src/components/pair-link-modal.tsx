@@ -9,7 +9,10 @@ import { useHosts, useHostMutations } from "@/runtime/host-runtime";
 import { parseRelayConnectionUri } from "@/utils/daemon-endpoints";
 import { parseConnectionOfferFromUrl } from "@getpaseo/protocol/connection-offer";
 import { AdaptiveModalSheet, AdaptiveTextInput, type SheetHeader } from "./adaptive-modal-sheet";
-import { getConnectionAuthFailureReason } from "@/utils/test-daemon-connection";
+import {
+  authFailureMessageKey,
+  getConnectionAuthFailureReason,
+} from "@/utils/test-daemon-connection";
 import { PairingTargetTracker } from "./pair-link-credentials";
 import { Button } from "@/components/ui/button";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
@@ -170,13 +173,15 @@ function PairLinkModalContent({
         onSaved?.({ profile, serverId, hostname, isNewHost });
         handleClose();
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : t("pairing.link.errors.unableToPair");
-        setErrorMessage(message);
-        if (getConnectionAuthFailureReason(error)) {
+        const authFailureReason = getConnectionAuthFailureReason(error);
+        if (authFailureReason) {
+          setErrorMessage(t(authFailureMessageKey(authFailureReason)));
           setNeedsPassword(true);
           return;
         }
+        const message =
+          error instanceof Error ? error.message : t("pairing.link.errors.unableToPair");
+        setErrorMessage(message);
         if (!isMobile) {
           Alert.alert(t("pairing.link.alert.failedTitle"), message);
         }

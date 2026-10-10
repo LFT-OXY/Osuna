@@ -250,6 +250,10 @@ git 不报冲突、结果却不对的：
   错，功能只是静默消失。对照接口逐个补上（`opencode/runtime-client.ts`）。
 - 两边各往同一个函数里加一个分支，合起来超过 lint 的复杂度上限。动 Osuna 自己加的那一行，
   不动上游的。
+- 两边都改过的共用组件，要跑引用它的 Osuna 页面测试，不只跑冲突文件自己的测试。
+  `components/ui/alert.tsx` 取了上游的 `import` 行后少了 `import React`，typecheck 与 lint
+  都过，三个页面的 jsdom 测试到 CI 才挂。`rg -l "<组件路径>" packages/app/src --glob '*.test.tsx'`
+  找出来逐个跑。
 
 解冲突时：
 

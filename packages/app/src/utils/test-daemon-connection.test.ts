@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DaemonClientConfig } from "@getpaseo/client/internal/daemon-client";
 import { DaemonAuthenticationError } from "@getpaseo/client/internal/daemon-client";
+import { i18n } from "@/i18n/i18next";
 import type { DaemonConnectionDependencies, DaemonProbeClient } from "./test-daemon-connection";
 
 class FakeDaemonClient implements DaemonProbeClient {
@@ -279,5 +280,26 @@ describe("test-daemon-connection connectToDaemon", () => {
     ).rejects.toMatchObject({
       message: "Transport error",
     });
+  });
+});
+
+describe("test-daemon-connection authFailureMessageKey", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+  });
+
+  it.each([
+    ["password_required", "Password required", "需要密码"],
+    ["incorrect_password", "Incorrect password", "密码不正确"],
+  ] as const)("names a %s rejection in the app language", async (reason, english, chinese) => {
+    const { authFailureMessageKey } = await import("./test-daemon-connection");
+
+    const key = authFailureMessageKey(reason);
+
+    expect(i18n.exists(key)).toBe(true);
+    expect(i18n.t(key, { lng: "en" })).toBe(english);
+    expect(i18n.t(key, { lng: "zh-CN" })).toBe(chinese);
   });
 });

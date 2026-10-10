@@ -1936,6 +1936,10 @@ export const es: TranslationResources = {
     hostPassword: {
       title: "Contraseña de {{host}}",
       label: "Contraseña del host",
+      errors: {
+        required: "Se requiere contraseña",
+        incorrect: "Contraseña incorrecta",
+      },
     },
     connectionMethods: {
       title: "Agregar conexión",

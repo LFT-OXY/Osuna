@@ -104,6 +104,7 @@ function fieldVerticalPadding(
  * The icon and the first text sit in one centered lead row; everything below is indented
  * by the icon slot plus its gap so it starts at the lead text's left edge. Title and
  * description use one font size; only the container gap separates them.
+ * 圆角四档都是 Osuna 提示框原来的 12；上游给 sm 及以上用的是 16。
  */
 function createAlertGeometry(theme: Theme) {
   function alertSize(input: {
@@ -145,7 +146,7 @@ function createAlertGeometry(theme: Theme) {
       fontSize: theme.fontSize.base,
       paddingVertical: theme.spacing[3],
       paddingHorizontal: theme.spacing[4],
-      borderRadius: theme.borderRadius["2xl"],
+      borderRadius: theme.borderRadius.xl,
       iconGap: theme.spacing[3],
       textGap: theme.spacing[0.5],
     }),
@@ -154,7 +155,7 @@ function createAlertGeometry(theme: Theme) {
       fontSize: theme.fontSize.base,
       paddingVertical: theme.spacing[4],
       paddingHorizontal: theme.spacing[6],
-      borderRadius: theme.borderRadius["2xl"],
+      borderRadius: theme.borderRadius.xl,
       iconGap: theme.spacing[3],
       textGap: theme.spacing[0.5],
     }),
@@ -163,7 +164,7 @@ function createAlertGeometry(theme: Theme) {
       fontSize: theme.fontSize.base,
       paddingVertical: theme.spacing[6],
       paddingHorizontal: theme.spacing[8],
-      borderRadius: theme.borderRadius["2xl"],
+      borderRadius: theme.borderRadius.xl,
       iconGap: theme.spacing[4],
       textGap: theme.spacing[1],
     }),

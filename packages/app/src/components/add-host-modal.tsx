@@ -11,8 +11,10 @@ import {
   serializeConnectionUri,
   serializeConnectionUriForStorage,
 } from "@/utils/daemon-endpoints";
+import type { DaemonAuthFailureReason } from "@getpaseo/client/internal/daemon-client";
 import {
   DaemonConnectionTestError,
+  authFailureMessageKey,
   getConnectionAuthFailureReason,
 } from "@/utils/test-daemon-connection";
 import { AdaptiveModalSheet, AdaptiveTextInput, type SheetHeader } from "./adaptive-modal-sheet";
@@ -47,6 +49,7 @@ interface DirectConnectionLabels {
   hostUnreachable: string;
   tlsError: string;
   unableToConnect: string;
+  authFailure: (reason: DaemonAuthFailureReason) => string;
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -251,12 +254,17 @@ function buildConnectionFailureCopy(input: {
     return null;
   })();
 
+  const authFailureReason = getConnectionAuthFailureReason(error);
+  if (authFailureReason) {
+    // 密码被拒时只给本地化的原因；客户端包里的英文原文不再作为「详情」重复一遍。
+    const detail = labels.authFailure(authFailureReason);
+    return { title, detail, raw: null };
+  }
+
   const rawLower = raw?.toLowerCase() ?? "";
   let detail: string | null = null;
 
-  if (getConnectionAuthFailureReason(error)) {
-    detail = error instanceof Error ? error.message : raw;
-  } else if (rawLower.includes("timed out")) {
+  if (rawLower.includes("timed out")) {
     detail = labels.timedOut;
   } else if (
     rawLower.includes("econnrefused") ||
@@ -353,6 +361,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
       hostUnreachable: t("pairing.direct.errors.hostUnreachable"),
       tlsError: t("pairing.direct.errors.tlsError"),
       unableToConnect: t("pairing.direct.errors.unableToConnect"),
+      authFailure: (reason) => t(authFailureMessageKey(reason)),
     }),
     [t],
   );
@@ -385,6 +394,11 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
         onSaved?.({ profile, serverId, hostname, isNewHost });
         handleClose();
       } catch (error) {
+        const authFailureReason = getConnectionAuthFailureReason(error);
+        if (authFailureReason) {
+          setErrorMessage(directConnectionLabels.authFailure(authFailureReason));
+          return;
+        }
         setErrorMessage(
           error instanceof Error ? error.message : directConnectionLabels.invalidConnection,
         );
@@ -394,7 +408,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
     },
     [
       daemons,
-      directConnectionLabels.invalidConnection,
+      directConnectionLabels,
       handleClose,
       onSaved,
       password,

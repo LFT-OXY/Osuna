@@ -1922,6 +1922,10 @@ export const ptBR: TranslationResources = {
     hostPassword: {
       title: "Senha de {{host}}",
       label: "Senha do host",
+      errors: {
+        required: "Senha obrigatória",
+        incorrect: "Senha incorreta",
+      },
     },
     connectionMethods: {
       title: "Adicionar conexão",
