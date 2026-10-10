@@ -76,3 +76,15 @@ npx vitest run <file> --bail=1 > /tmp/test-output.txt 2>&1   # broad or noisy ru
 Never `npm run test` for the workspace; it freezes the machine. Never re-run a suite another agent already reported green. Full-suite confidence comes from CI, which routes suites by `.github/ci-paths.yml`.
 
 CI does not run most `*.e2e.test.ts` files. The `server-tests` job runs `npm run test`, which is `test:unit` (it excludes `**/*.e2e.test.ts`) followed by `test:integration` (a fixed list of files in `packages/server/package.json`). An E2E file outside that list has no CI result: `daemon-e2e/api-endpoint-claude.e2e.test.ts` and `daemon-e2e/agent-create-agents-capability.e2e.test.ts` are two such files. Before you cite one as evidence, check the list, run the file locally, and say the run was local.
+
+### Manual QA against a real Claude session
+
+Rewind and "Reload agent" run provider code a mock cannot reach. When a ticket asks for them on the dev desktop, keep the run small and say what it cost:
+
+- Create the agent from the CLI with `--provider claude --model claude-haiku-4-5 --mode default --cwd <throwaway git repo>` and one-word prompts ("Reply with exactly the single word ALPHA"). `default` is "Always ask", so a `create_agent` call waits for `paseo permit allow <agent> <full id from permit ls --json>`.
+- A turn with no reply: type in the composer, click "发送消息", and click "停止 Agent" within about half a second. Two CLI calls are too slow; Haiku answers first.
+- A subagent whose frames stream live: write "in the FOREGROUND (run_in_background must be false)" in the prompt. Haiku backgrounds a subagent by default, and a backgrounded one emits no sidechain frames.
+- A Routing block in provider history: send `[@Mock Load Test](paseo://agent/provider/mock) …`. Claude calls `create_agent` for a mock subagent; stop that subagent to end the turn. Confirm the block from the provider transcript (the user entry ends with `</paseo-system>`), then check the chat text for its absence.
+- The rewind fork point: each rewind writes a new transcript under `~/.claude/projects/<cwd slug>/`; its last entry is the message the fork stopped at, and `isSidechain` tells you whether that was a subagent message. Read these files, never edit or delete them.
+
+Reload and rewind both clear the in-memory timeline and replay provider history (`reloadAgentSession(..., { rehydrateFromDisk: true })`, `hydrateTimelineFromProvider`). The replay is not the live stream: a Claude-native subagent's card comes back as a plain `Agent` tool call (the card is built live by `buildSubagentToolCallCard`), the Subagents track count can drop, and turn footers change or lose their token and cost figures. A before/after difference of this kind is not evidence of a regression. Before you attribute one to a change under test, read the handler on the base branch (`git show <base>:packages/server/src/server/session.ts`, `agent-manager.ts`) and state whether you ran the base build or only read it.
