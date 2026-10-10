@@ -1886,6 +1886,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     }
   }
 
+  const PROMPTED_AGENT_NOTIFICATION_GUIDANCE =
+    "You will get notified when the prompted agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives.";
+
   registerTool(
     "send_agent_prompt",
     {
@@ -1908,7 +1911,19 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       background = Boolean(callerAgentId),
       notifyOnFinish = Boolean(callerAgentId),
     }) => {
-      const shouldNotifyOnFinish = Boolean(callerAgentId && notifyOnFinish && background);
+      function armFinishNotification(): boolean {
+        if (!callerAgentId || !notifyOnFinish) {
+          return false;
+        }
+        setupFinishNotification({
+          agentManager,
+          agentStorage,
+          childAgentId: agentId,
+          callerAgentId,
+          logger: childLogger,
+        });
+        return true;
+      }
 
       await sendPromptToAgent({
         agentManager,
@@ -1919,27 +1934,24 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         logger: childLogger,
       });
 
-      if (shouldNotifyOnFinish && callerAgentId) {
-        setupFinishNotification({
-          agentManager,
-          agentStorage,
-          childAgentId: agentId,
-          callerAgentId,
-          logger: childLogger,
-        });
-      }
-
       // If not running in background, wait for completion
       if (!background) {
         const result = await waitForAgentWithTimeout(agentManager, agentId, {
           waitForActive: true,
         });
+        // The wait ran out while the agent keeps working, so its result arrives as a
+        // finish notification instead of in this response.
+        const notifying =
+          result.timedOut &&
+          agentManager.getAgent(agentId)?.lifecycle === "running" &&
+          armFinishNotification();
 
         const responseData = {
           success: true,
           status: result.status,
           lastMessage: result.lastMessage,
           permission: sanitizePermissionRequest(result.permission),
+          ...(notifying ? { guidance: PROMPTED_AGENT_NOTIFICATION_GUIDANCE } : {}),
         };
         const validJson = ensureValidJson(responseData);
 
@@ -1950,6 +1962,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         return response;
       }
 
+      const notifying = armFinishNotification();
+
       // Return immediately if background=true
       // Re-fetch snapshot since the state may have changed
       const currentSnapshot = agentManager.getAgent(agentId);
@@ -1959,12 +1973,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         status: currentSnapshot?.lifecycle ?? "idle",
         lastMessage: null,
         permission: null,
-        ...(shouldNotifyOnFinish
-          ? {
-              guidance:
-                "You will get notified when the prompted agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives.",
-            }
-          : {}),
+        ...(notifying ? { guidance: PROMPTED_AGENT_NOTIFICATION_GUIDANCE } : {}),
       };
       const validJson = ensureValidJson(responseData);
 

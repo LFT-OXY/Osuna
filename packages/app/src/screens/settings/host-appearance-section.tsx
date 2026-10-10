@@ -110,6 +110,7 @@ function ColorMenuItem({
 function ColorRow({ color, onChange }: { color: HostColor; onChange: (color: HostColor) => void }) {
   const { t } = useTranslation();
   const selectedLabel = colorLabel(t, color);
+  const leading = useMemo(() => <ColorSwatch color={color} />, [color]);
   return (
     <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
       <View style={settingsStyles.rowContent}>
@@ -121,9 +122,9 @@ function ColorRow({ color, onChange }: { color: HostColor; onChange: (color: Hos
           accessibilityLabel={t("settings.host.appearance.color.accessibilityLabel", {
             value: selectedLabel,
           })}
+          leading={leading}
         >
-          <ColorSwatch color={color} />
-          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          {selectedLabel}
         </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {HOST_COLORS.map((option) => (
@@ -162,7 +163,7 @@ function BadgeDisplayRow({
             value: selectedLabel,
           })}
         >
-          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          {selectedLabel}
         </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {HOST_BADGE_DISPLAYS.map((option) => (
@@ -299,10 +300,6 @@ export function HostAppearanceSection({ host }: { host: HostProfile }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  triggerText: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-  },
   swatch: {
     width: ICON_SIZE.md,
     height: ICON_SIZE.md,

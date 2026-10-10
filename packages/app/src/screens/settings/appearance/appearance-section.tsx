@@ -18,7 +18,6 @@ import {
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { FormTextInput } from "@/components/ui/form-field";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { SettingsCard, SettingsSwitch } from "@/components/settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { localFontProbe } from "@/appearance/font-probe";
 import { useContributedThemes } from "@/appearance/provider";
@@ -56,7 +55,6 @@ import { settingsStyles } from "@/styles/settings";
 import { AppearancePreview } from "./appearance-preview";
 import { FontPickerRow } from "./font-picker-row";
 import { FontSizeRow } from "./font-size-row";
-import { SidebarNavSection } from "./sidebar-nav-section";
 
 // ---------------------------------------------------------------------------
 // Theme-reactive leaf icons (withUnistyles + uniProps color mapping — no
@@ -200,6 +198,15 @@ function ThemeRow({
   const selectedLabel = selectedPluginTheme
     ? getPluginThemeLabel(t, selectedPluginTheme)
     : getBuiltInThemeLabel(t, builtInValue);
+  const leading = useMemo(
+    () =>
+      selectedPluginTheme ? (
+        <ThemeSwatch color={selectedPluginTheme.swatch} />
+      ) : (
+        <ThemeLeading themeValue={builtInValue} />
+      ),
+    [builtInValue, selectedPluginTheme],
+  );
   return (
     <View style={settingsStyles.row}>
       <View style={settingsStyles.rowContent}>
@@ -210,15 +217,11 @@ function ThemeRow({
           accessibilityLabel={t("settings.appearance.theme.accessibilityLabel", {
             value: selectedLabel,
           })}
+          leading={leading}
         >
-          {selectedPluginTheme ? (
-            <ThemeSwatch color={selectedPluginTheme.swatch} />
-          ) : (
-            <ThemeLeading themeValue={builtInValue} />
-          )}
-          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          {selectedLabel}
         </DropdownTrigger>
-        <DropdownMenuContent side="bottom" align="end" width={200}>
+        <DropdownMenuContent side="bottom" align="end" width={200} scrollable>
           {THEME_OPTIONS.map((option, index) => {
             const previousOption = THEME_OPTIONS[index - 1];
             return (
@@ -265,6 +268,7 @@ function SystemPairingRow<T extends ThemeName>({
 }: SystemPairingRowProps<T>) {
   const { t } = useTranslation();
   const selectedLabel = getBuiltInThemeLabel(t, value);
+  const leading = useMemo(() => <ThemeLeading themeValue={value} />, [value]);
   return (
     <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
       <View style={settingsStyles.rowContent}>
@@ -275,116 +279,15 @@ function SystemPairingRow<T extends ThemeName>({
           accessibilityLabel={t("settings.appearance.theme.accessibilityLabel", {
             value: selectedLabel,
           })}
+          leading={leading}
         >
-          <ThemeLeading themeValue={value} />
-          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          {selectedLabel}
         </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {options.map((option) => (
             <ThemeMenuItem
               key={option}
               themeValue={option}
-              selected={value === option}
-              onChange={onChange}
-            />
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </View>
-  );
-}
-
-interface AutoExpandReasoningRowProps {
-  value: boolean;
-  onChange: (value: boolean) => void;
-}
-
-function AutoExpandReasoningRow({ value, onChange }: AutoExpandReasoningRowProps) {
-  const { t } = useTranslation();
-  return (
-    <SettingsSwitch
-      label={t("settings.general.autoExpandReasoning.label")}
-      hint={t("settings.general.autoExpandReasoning.description")}
-      value={value}
-      onValueChange={onChange}
-    />
-  );
-}
-
-interface ChatOutlineRowProps {
-  value: boolean;
-  onChange: (value: boolean) => void;
-}
-
-function ChatOutlineRow({ value, onChange }: ChatOutlineRowProps) {
-  const { t } = useTranslation();
-  return (
-    <SettingsSwitch
-      label={t("settings.appearance.chatOutline.title")}
-      hint={t("settings.appearance.chatOutline.description")}
-      value={value}
-      onValueChange={onChange}
-    />
-  );
-}
-
-const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
-  "detailed",
-  "overview",
-];
-
-function getToolCallDetailLevelLabel(
-  t: TFunction,
-  value: AppSettings["toolCallDetailLevel"],
-): string {
-  return t(`settings.general.toolCallDetail.options.${value}`);
-}
-
-interface ToolCallDetailMenuItemProps {
-  value: AppSettings["toolCallDetailLevel"];
-  selected: boolean;
-  onChange: (value: AppSettings["toolCallDetailLevel"]) => void;
-}
-
-function ToolCallDetailMenuItem({ value, selected, onChange }: ToolCallDetailMenuItemProps) {
-  const { t } = useTranslation();
-  const handleSelect = useCallback(() => onChange(value), [onChange, value]);
-  return (
-    <DropdownMenuItem selected={selected} onSelect={handleSelect}>
-      {getToolCallDetailLevelLabel(t, value)}
-    </DropdownMenuItem>
-  );
-}
-
-interface ToolCallDetailRowProps {
-  value: AppSettings["toolCallDetailLevel"];
-  onChange: (value: AppSettings["toolCallDetailLevel"]) => void;
-}
-
-function ToolCallDetailRow({ value, onChange }: ToolCallDetailRowProps) {
-  const { t } = useTranslation();
-  const selectedLabel = getToolCallDetailLevelLabel(t, value);
-  return (
-    <View style={settingsStyles.row}>
-      <View style={settingsStyles.rowContent}>
-        <Text style={settingsStyles.rowTitle}>{t("settings.general.toolCallDetail.label")}</Text>
-        <Text style={settingsStyles.rowHint}>
-          {t("settings.general.toolCallDetail.description")}
-        </Text>
-      </View>
-      <DropdownMenu>
-        <DropdownTrigger
-          accessibilityLabel={t("settings.general.toolCallDetail.accessibilityLabel", {
-            value: selectedLabel,
-          })}
-        >
-          <Text style={styles.triggerText}>{selectedLabel}</Text>
-        </DropdownTrigger>
-        <DropdownMenuContent side="bottom" align="end" width={200}>
-          {TOOL_CALL_DETAIL_LEVELS.map((option) => (
-            <ToolCallDetailMenuItem
-              key={option}
-              value={option}
               selected={value === option}
               onChange={onChange}
             />
@@ -509,7 +412,7 @@ function SyntaxRow({ value, onChange }: SyntaxRowProps) {
             value: selectedLabel,
           })}
         >
-          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          {selectedLabel}
         </DropdownTrigger>
         <DropdownMenuContent side="bottom" align="end" width={200}>
           {SYNTAX_THEME_OPTIONS.map((option) => (
@@ -605,27 +508,6 @@ export function AppearanceSection() {
   const handleSyntaxThemeChange = useCallback(
     (syntaxTheme: SyntaxThemeId) => {
       void updateSettings({ syntaxTheme });
-    },
-    [updateSettings],
-  );
-
-  const handleAutoExpandReasoningChange = useCallback(
-    (autoExpandReasoning: boolean) => {
-      void updateSettings({ autoExpandReasoning });
-    },
-    [updateSettings],
-  );
-
-  const handleToolCallDetailLevelChange = useCallback(
-    (toolCallDetailLevel: AppSettings["toolCallDetailLevel"]) => {
-      void updateSettings({ toolCallDetailLevel });
-    },
-    [updateSettings],
-  );
-
-  const handleChatOutlineChange = useCallback(
-    (chatOutlineEnabled: boolean) => {
-      void updateSettings({ chatOutlineEnabled });
     },
     [updateSettings],
   );
@@ -811,25 +693,6 @@ export function AppearanceSection() {
           ) : null}
         </View>
       </SettingsSection>
-      <SettingsSection title={t("settings.appearance.detailLevel.title")}>
-        <SettingsCard>
-          <AutoExpandReasoningRow
-            value={settings.autoExpandReasoning}
-            onChange={handleAutoExpandReasoningChange}
-          />
-          <ToolCallDetailRow
-            value={settings.toolCallDetailLevel}
-            onChange={handleToolCallDetailLevelChange}
-          />
-          {!isNative ? (
-            <ChatOutlineRow
-              value={settings.chatOutlineEnabled}
-              onChange={handleChatOutlineChange}
-            />
-          ) : null}
-        </SettingsCard>
-      </SettingsSection>
-      <SidebarNavSection />
       <SettingsSection title={t("settings.appearance.fonts.title")}>
         <View style={settingsStyles.card}>
           {showFontPickers ? (
@@ -939,10 +802,6 @@ export function AppearanceSection() {
 const styles = StyleSheet.create((theme) => ({
   preview: {
     marginTop: theme.spacing[4],
-  },
-  triggerText: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
   },
   swatch: {
     width: ICON_SIZE.md,

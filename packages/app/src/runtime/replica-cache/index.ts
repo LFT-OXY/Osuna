@@ -380,6 +380,21 @@ const DirectoryCheckpointSchema = z.strictObject({
   agents: DirectoryCursorSchema.optional(),
 });
 
+// Old checkpoints could describe a baseline that an overlapping refresh had discarded.
+// Revalidate directory contents once without evicting cached rows or timelines.
+const StoredDirectoryCheckpointSchema = z.strictObject({
+  version: z.literal(1),
+  cursors: DirectoryCheckpointSchema,
+});
+
+function serializeDirectoryCheckpoint(cursors: DirectoryCheckpoint) {
+  return { version: 1 as const, cursors };
+}
+
+function deserializeDirectoryCheckpoint(payload: string): DirectoryCheckpoint {
+  return parseStoredPayload(StoredDirectoryCheckpointSchema, payload).cursors;
+}
+
 function deserializeTimeline(stored: StoredTimeline | null): CachedTimeline | null {
   if (!stored) {
     return null;
@@ -853,7 +868,7 @@ function applyDirectoryRow(
       if (row.id !== REPLICA_SINGLETON_ROW_ID) {
         throw new Error("Replica checkpoint row id mismatch");
       }
-      result.checkpoint = parseStoredPayload(DirectoryCheckpointSchema, row.payload);
+      result.checkpoint = deserializeDirectoryCheckpoint(row.payload);
       return;
     default:
       return;
@@ -1019,7 +1034,7 @@ export class ReplicaCache {
     let checkpoint: DirectoryCheckpoint | undefined;
     if (checkpointRow) {
       try {
-        checkpoint = parseStoredPayload(DirectoryCheckpointSchema, checkpointRow.payload);
+        checkpoint = deserializeDirectoryCheckpoint(checkpointRow.payload);
         checkpoint = { ...checkpoint };
         delete checkpoint[invalidEntity];
       } catch {
@@ -1035,7 +1050,7 @@ export class ReplicaCache {
                 serverId: row.serverId,
                 kind: "checkpoint",
                 id: REPLICA_SINGLETON_ROW_ID,
-                payload: JSON.stringify(checkpoint),
+                payload: JSON.stringify(serializeDirectoryCheckpoint(checkpoint)),
               },
             ]
           : [],
@@ -1061,7 +1076,7 @@ export class ReplicaCache {
                 serverId,
                 kind: "checkpoint",
                 id: REPLICA_SINGLETON_ROW_ID,
-                payload: JSON.stringify(checkpoint),
+                payload: JSON.stringify(serializeDirectoryCheckpoint(checkpoint)),
               },
             ]
           : [],
@@ -1327,7 +1342,7 @@ export class ReplicaCache {
         if (!value) return null;
         break;
       case "checkpoint":
-        value = upsert.value;
+        value = serializeDirectoryCheckpoint(upsert.value);
         break;
     }
     return {

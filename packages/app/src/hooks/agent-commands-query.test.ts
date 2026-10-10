@@ -48,7 +48,7 @@ describe("agent command query keys", () => {
         serverId: "server-1",
         draftConfig: { provider: "codex", cwd: "/repo" },
       }),
-    ).toEqual(["agentCommands", "server-1", "draft", "codex", "cwd", "/repo"]);
+    ).toEqual(["agentCommands", "server-1", "draft", "cwd", "/repo", "provider", "codex"]);
   });
 
   it("normalizes cwd values so equivalent workspace paths share one draft scope", () => {
