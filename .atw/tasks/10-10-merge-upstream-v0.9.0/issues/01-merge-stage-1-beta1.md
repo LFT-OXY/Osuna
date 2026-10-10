@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 新增名为 `upstream` 的 remote 指向上游仓库，并配置为不抓取 tag；合并前后本地 tag 列表不变，没有混入上游 tag。
 - [x] 合并前统计一次应用与 CLI 源码中指向上游站点的链接数，记在本工单的 `## Comments` 下，作为 02 与 06 的基线。
@@ -19,7 +19,7 @@
 - [x] Osuna 原有的测试没有被删除、跳过或放宽断言。
 - [x] typecheck 和 lint 通过。
 - [x] 本段每个代码冲突文件对应的测试文件单独跑过并通过。
-- [ ] 合并分支已推到 `origin`，并开出指向 main 的草稿 PR（推送与开 PR 前先向维护者说明并取得同意）。
+- [x] 合并分支已推到 `origin`，并开出指向 main 的草稿 PR（推送与开 PR 前先向维护者说明并取得同意）。
 
 ## Comments
 
@@ -122,6 +122,7 @@ git 没报冲突，但自动合并的结果不对或与 Osuna 的决定相撞：
 - 02：上游这一段带进来的 `COMPAT(...)` 标签写的是上游版本号，例如 `messages.ts` 里的 `COMPAT(pluginSourceInstallation): added in v0.8.0`、`COMPAT(pluginSourceUpdates): added in v0.8.0`。用 `git diff d38d186bd 503a3e7cb | rg '^\+.*COMPAT\('` 列全。
 - 05：值得写进文档的坑——上游 tag 与本地同名；`package.json` 冲突只取版本号那一块、别整文件取 Osuna（会丢上游的依赖改动）；自动合并不报冲突但会出错的三类（两边加同名字段、展开写的 zh-CN 区块留下上游已删的键、上游新测试不知道 Osuna 的默认标签）。
 
-### 未完成
+### 推送与草稿 PR
 
-- 最后一条验收项（推到 `origin` 并开草稿 PR）等维护者同意后再做；同意之前本工单保持 `doing`。
+- 维护者 2026-10-10 同意后推送 `identify-fork-base`，开出草稿 PR：https://github.com/LFT-OXY/Osuna/pull/13 （base `main`）。只推了这一条分支，没有推 tag。
+- 坑：加了 `upstream` remote 之后，`gh` 会把默认仓库解析成 `getpaseo/paseo`，`gh pr create` 第一次因此失败（没有建出任何东西）。已执行 `gh repo set-default LFT-OXY/Osuna`；之后的 `gh` 命令仍建议显式带 `--repo LFT-OXY/Osuna`。05 写文档时收进去。
