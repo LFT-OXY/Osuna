@@ -4,19 +4,19 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
-- [ ] 合并分支包含一个以合并前的分支头与 `c5236c00d` 为双亲的 merge commit。
-- [ ] 每个冲突文件怎么裁的、依据哪条规则，逐个记在 `## Comments` 下；规则裁决不了的已停下来问过维护者。
-- [ ] Codex 两边都留：上游的回退保留提供方与工具、按提供方读提示词、归档同步；Osuna 的接口切换、子智能体权限归属、指令目录上报、已装版本与一键升级。Codex 会话与提供方注册的测试通过，Osuna 的断言无一改动。
-- [ ] Sonnet 5.5 的清单条目是上游的写法，上游为它带来的测试通过。
-- [ ] OpenCode 1.x 换模型清思考档位的上游改动已收；01 里对取指令列表的裁决没有被这一段冲掉。
-- [ ] 与 Osuna 同名的安卓商店说明文件留 Osuna 的；版本号仍是 `0.14.2`；`CHANGELOG.md` 与合并前逐字节相同。
-- [ ] `docs/release.md`「合并后核对」逐项过完，结果记在 `## Comments` 下。
-- [ ] 对本段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
-- [ ] typecheck 和 lint 通过；本段冲突文件对应的测试文件逐个单独跑过并通过。
-- [ ] 已推送，草稿 PR 上本段的 CI 已看过；失败项逐个有结论。
-- [ ] UI：新建智能体 / Claude 模型列表 / 桌面 1280 — 列表里有 Sonnet 5.5。截图存入 `screenshots/`。
+- [x] 合并分支包含一个以合并前的分支头与 `c5236c00d` 为双亲的 merge commit。
+- [x] 每个冲突文件怎么裁的、依据哪条规则，逐个记在 `## Comments` 下；规则裁决不了的已停下来问过维护者。
+- [x] Codex 两边都留：上游的回退保留提供方与工具、按提供方读提示词、归档同步；Osuna 的接口切换、子智能体权限归属、指令目录上报、已装版本与一键升级。Codex 会话与提供方注册的测试通过，Osuna 的断言无一改动。
+- [x] Sonnet 5.5 的清单条目是上游的写法，上游为它带来的测试通过。
+- [x] OpenCode 1.x 换模型清思考档位的上游改动已收；01 里对取指令列表的裁决没有被这一段冲掉。
+- [x] 与 Osuna 同名的安卓商店说明文件留 Osuna 的；版本号仍是 `0.14.2`；`CHANGELOG.md` 与合并前逐字节相同。
+- [x] `docs/release.md`「合并后核对」逐项过完，结果记在 `## Comments` 下。
+- [x] 对本段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
+- [x] typecheck 和 lint 通过；本段冲突文件对应的测试文件逐个单独跑过并通过。
+- [x] 已推送，草稿 PR 上本段的 CI 已看过；失败项逐个有结论。
+- [x] UI：新建智能体 / Claude 模型列表 / 桌面 1280 — 列表里有 Sonnet 5.5。截图存入 `screenshots/`。
 
 ## Comments
 
@@ -24,7 +24,7 @@
 
 **本段上游的 12 个提交。** `0c1814496`（Codex 回退后保留自定义提供方与 Paseo 工具）、`c938e1cf4`（#5379，运行 `cursor-agent` 的终端配置显示 Cursor 图标）、`b013e0d42`（#5450，Codex 从提供方自己的 `CODEX_HOME` 读提示词）、`09f87df1b`（#5386，后台 `send_agent_prompt` 对已接受的提示返回运行中）、`b44e7b0b9`（#5451，子智能体开在打开它的分屏里）、`437aef1a7`（#1987，Windows 上文件链接显示相对路径）、`006bae289`（#5572，归档智能体时一并归档自定义 Codex 提供方的会话）、`2c6d4e528`（#5577，流式回复里以缩进结尾的分片保留换行）、`12cd5345d`（#5583，Sonnet 5.5）、`9f387873b`（#5587，OpenCode 换模型时清掉不支持的思考档位）、`d1443064d`（更新日志）、`c5236c00d`（发版提交，只改版本号）。
 
-**提交。** merge commit `260c79631`（双亲 `586d716fa` 与 `c5236c00d`）；紧跟的适配提交见文末「推送后的 CI」。两次提交的钩子（lint、format、typecheck）都通过。合并后本地 tag 仍是 14 个，`git tag | shasum` 不变。
+**提交。** merge commit `260c79631`（双亲 `586d716fa` 与 `c5236c00d`）；紧跟的适配 `23cbde607`。两次提交的钩子（lint、format、typecheck）都通过。合并后本地 tag 仍是 14 个，`git tag | shasum` 不变。
 
 #### 冲突（22 个：18 个机械性 + 4 个代码）
 
@@ -116,3 +116,18 @@ Osuna 一侧核对过仍在的：`listCommands()` 不重连（用例「does not 
 
 - `.atw/spec/server/backend/quality-guidelines.md`「Provider directories」补上 Codex 的写法与对应用例。
 - `docs/release.md`「踩过的坑」补一条：上游修会话级的取指令列表时，Osuna 客户端级的 `discoverCommands()` 要对照补上。
+
+#### 推送后的 CI（2026-10-11）
+
+merge commit `260c79631` 与适配 `23cbde607` 推到 `origin/merge-upstream-v0.10.3`，草稿 PR #15 上 CI 的 19 项作业全部通过（运行 38079909604），另一个工作流 `Desktop Packages`（运行 38079909606）也通过：format、lint、typecheck、app-tests、server-tests（三个平台）、desktop-tests（两个平台）、cli-tests（三个分片）、sdk-tests、relay-tests、playwright（四个分片）、changes。没有失败项。
+
+playwright 里首次失败、重试后通过的 4 条，都不是本段带来的：
+
+- `plugin-buttons.spec.ts:4`：已知的 CI 偶发。
+- `settings-providers-list-detail.spec.ts:58`：与 02、03 记录的是同一条，合并前 main 上就有。
+- `agent-consecutive-turns.spec.ts:814`「keeps the first prompt of a new agent in place through authoritative hydration」：合并前 main 的 `373ff74a9`（运行 38058653740）与第一段的 `125aca1c9`（运行 38064080720）上都出现过同样的首次失败、重试通过。
+- `command-center-file-search.spec.ts:45`「workspace file search stays geometrically stable through delayed loading and results」：合并前 main 的 `373ff74a9` 上出现过。
+
+本段没有改这四个用例的文件。
+
+顺带记一条 03 收尾之后才出现的结果：03 的关票提交 `586d716fa`（只改了任务目录）那次运行 38071614134 里，server-tests（windows-latest）失败 1 条，`opencode-bridge.local.e2e.test.ts`「versioned runtime v2 discovers models and preserves a native session handle」15 秒超时。同样的代码在 `6cac3ad8b` 上通过，本次运行在 Windows 上也通过，判断为偶发；再出现时要看是不是 2.x 路径在 Windows 上启动慢。
