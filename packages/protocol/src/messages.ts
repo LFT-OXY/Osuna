@@ -4789,7 +4789,7 @@ export const AgentTimelineSearchResponseMessageSchema = z.object({
         seq: z.number().int().nonnegative(),
         role: z.enum(["user", "assistant"]),
         // Estimated occurrences in the message; the client verifies against rendered text.
-        // COMPAT(timelineSearchCount): added in v0.9.0, remove optional after 2027-09-22.
+        // COMPAT(timelineSearchCount): added in v0.15.0, remove optional after 2027-09-22.
         count: z.number().int().positive().optional(),
       }),
     ),
