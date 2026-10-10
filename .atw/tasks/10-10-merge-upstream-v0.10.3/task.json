@@ -1,0 +1,28 @@
+{
+  "id": "merge-upstream-v0.10.3",
+  "name": "merge-upstream-v0.10.3",
+  "title": "合并上游 Paseo v0.10.0 至 v0.10.3",
+  "description": "把上游 getpaseo/paseo 从 v0.9.2 到 v0.10.3 的 62 个提交分五段合并进 main",
+  "status": "implement",
+  "dev_type": null,
+  "scope": null,
+  "package": "app",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-10-10",
+  "completedAt": null,
+  "branch": "merge-upstream-v0.10.3",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "56cccc196386b5f0ea89d71a7dd67087f207f9a0"
+  }
+}
