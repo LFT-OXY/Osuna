@@ -492,7 +492,7 @@ export function normalizeStoredHostProfile(entry: unknown): HostProfile | null {
   }
   const record = result.data;
   const serverId = record.serverId;
-  // COMPAT(connectionPassword): added in v0.9.1, remove after 2027-03-24 once stored direct passwords have migrated.
+  // COMPAT(connectionPassword): added in v0.15.0, remove after 2027-03-24 once stored direct passwords have migrated.
   const legacyPassword = record.connections.find(
     (connection) => connection.type === "directTcp" && connection.password,
   );

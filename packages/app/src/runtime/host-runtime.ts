@@ -1570,7 +1570,7 @@ export class HostRuntimeStore {
             normalizedProfiles.length = 0;
             break;
           }
-          // COMPAT(connectionPassword): added in v0.9.1, remove after 2027-03-24 with stored-password migration.
+          // COMPAT(connectionPassword): added in v0.15.0, remove after 2027-03-24 with stored-password migration.
           if (
             entry.connections.some(
               (connection) => connection.type === "directTcp" && connection.password,

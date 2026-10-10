@@ -4,12 +4,14 @@ import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { SettingsSection } from "@/components/settings";
 import { FormTextInput } from "@/components/ui/form-field";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { parseTerminalScrollbackLines, useAppSettings } from "@/hooks/use-settings";
 import { settingsStyles } from "@/styles/settings";
 
 export function TerminalSection() {
   const { t } = useTranslation();
   const { settings, updateSettings } = useAppSettings();
+  const isCompact = useIsCompactFormFactor();
   const [scrollbackValue, setScrollbackValue] = useState(String(settings.terminalScrollbackLines));
 
   const handleChangeText = useCallback((value: string) => {
@@ -42,7 +44,7 @@ export function TerminalSection() {
             </Text>
           </View>
           <FormTextInput
-            size="sm"
+            size={isCompact ? "md" : "sm"}
             initialValue={scrollbackValue}
             onChangeText={handleChangeText}
             onBlur={commitScrollback}

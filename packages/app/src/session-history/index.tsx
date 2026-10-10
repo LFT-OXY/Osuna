@@ -275,7 +275,13 @@ function ActionErrorAlert({
   }
   return (
     <View style={styles.alertRegion}>
-      <Alert variant="error" title={title} description={errorMessage(error)} testID={testID} />
+      <Alert
+        size="sm"
+        variant="error"
+        title={title}
+        description={errorMessage(error)}
+        testID={testID}
+      />
     </View>
   );
 }
@@ -296,6 +302,7 @@ function ProviderErrorsNotice({ errors }: { errors: ReadonlyArray<SessionHistory
   return (
     <View style={styles.alertRegion}>
       <Alert
+        size="sm"
         variant="warning"
         title={t("panels.sessionHistory.providerErrors.title", { providers })}
         description={details}
@@ -529,6 +536,7 @@ export function SessionHistorySurface({
     body = (
       <View style={styles.alertRegion}>
         <Alert
+          size="sm"
           variant="error"
           title={t("panels.sessionHistory.errors.loadFailed")}
           description={errorMessage(sessionsQuery.error)}

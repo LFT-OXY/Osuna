@@ -981,7 +981,7 @@ export class VoiceAssistantWebSocketServer {
     // pending hello handler so an eager client cannot lose its first message.
     ws.pause();
     try {
-      // COMPAT(headerAuth): added in v0.9.1, remove after 2027-03-24.
+      // COMPAT(headerAuth): added in v0.15.0, remove after 2027-03-24.
       const protocol = extractWsBearerProtocol(request.headers["sec-websocket-protocol"]);
       const token =
         extractHttpBearerToken(request.headers.authorization) ?? extractWsBearerToken(protocol);

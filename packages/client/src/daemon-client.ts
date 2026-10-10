@@ -260,7 +260,7 @@ function chooseConnectionAuth(
   else if (password) helloAuth = { kind: "password", password };
   const headers: Record<string, string> = {};
   const compatibleBearer = localCredential ? null : compatibleBearerPassword(password);
-  // COMPAT(headerAuth): added in v0.9.1, remove after 2027-03-24.
+  // COMPAT(headerAuth): added in v0.15.0, remove after 2027-03-24.
   if (compatibleBearer) headers.Authorization = `Bearer ${compatibleBearer}`;
   else if (!localCredential && config.authHeader) headers.Authorization = config.authHeader;
   return {
