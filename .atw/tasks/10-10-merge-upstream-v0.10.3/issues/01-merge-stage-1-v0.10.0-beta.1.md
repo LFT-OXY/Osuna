@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] `upstream` remote 已抓到五个发布点的提交，仍配置为不抓取 tag；合并前后本地 tag 列表不变。
 - [x] 合并前按 `docs/release.md`「合并后核对」的口径统计一次应用与 CLI 源码中指向上游站点的链接数，记在本工单的 `## Comments` 下，作为后续各段的基线。
@@ -25,11 +25,13 @@
 - [x] 翻译资源测试通过；上游新增的键九种语言齐全。
 - [x] 对本段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉；因分栏变化必须跟着改的断言逐条记在 `## Comments` 下。
 - [x] typecheck 和 lint 通过；本段冲突文件对应的测试文件逐个单独跑过并通过。
-- [ ] 合并分支已推到 `origin`，并开出指向 main 的草稿 PR（推送与开 PR 前先向维护者说明并取得同意）。
+- [x] 合并分支已推到 `origin`，并开出指向 main 的草稿 PR（推送与开 PR 前先向维护者说明并取得同意）。
 
 ## Comments
 
 ### 2026-10-10 实施记录
+
+**推送与 PR。** 维护者同意后推到 `origin/merge-upstream-v0.10.3`，草稿 PR：[#15](https://github.com/LFT-OXY/Osuna/pull/15)，目标分支 main。文档与任务记录的提交是 `538450f0a`。
 
 **提交。** merge commit `0535af41b`（双亲 `56cccc196` 与 `52d345db7`）；紧跟的适配 `0cfd79d03`。两次提交的钩子（lint、format、typecheck）都通过。合并后本地 tag 仍是 14 个，`git tag | shasum` 不变。
 
