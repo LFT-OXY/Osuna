@@ -358,7 +358,8 @@ export class OpenCodeV2Session implements AgentSession {
           await this.respondToPermission(request.id, { behavior: "allow" });
   }
   async listCommands() {
-    await this.reconnectIfExited();
+    // 只用这个会话已持有的服务：服务退出后不为取列表重新拉起（ADR 0003）。
+    if (this.closed || this.exited) return null;
     return commands(this.client, this.config.cwd);
   }
   describePersistence(): AgentPersistenceHandle {

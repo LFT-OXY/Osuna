@@ -506,6 +506,75 @@ describe("OpenCode v2 session lifecycle", () => {
     }
     await expect(session.startTurn("after close")).rejects.toThrow("OpenCode session is closed");
   });
+  test("lists commands only from the helper the session already holds", async () => {
+    const harness = new V2Harness();
+    const location = { directory: "/tmp/project" };
+    harness.api.command.list = async () => ({
+      location,
+      data: [{ name: "review", description: "Review the change" }],
+    });
+    harness.api.skill.list = async () => ({
+      location,
+      data: [
+        {
+          id: "validation",
+          name: "validation",
+          description: "Validate the change",
+          path: "/tmp/project/.opencode/skills/validation/SKILL.md",
+          content: "",
+        },
+      ],
+    });
+    let exit!: (error: Error) => void;
+    const exited = new Promise<Error>((resolve) => {
+      exit = resolve;
+    });
+    let acquisitions = 0;
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: {
+        acquire: async () => {
+          acquisitions += 1;
+          if (acquisitions > 1) throw new Error("Listing commands must not start a helper");
+          return { ...harness.connection, exited };
+        },
+        shutdown: async () => undefined,
+      },
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    try {
+      expect(await session.listCommands?.()).toEqual([
+        {
+          name: "compact",
+          description: "Compact the current session",
+          argumentHint: "",
+          kind: "command",
+        },
+        {
+          name: "summarize",
+          description: "Compact the current session",
+          argumentHint: "",
+          kind: "command",
+        },
+        { name: "review", description: "Review the change", argumentHint: "", kind: "command" },
+        {
+          name: "validation",
+          description: "Validate the change",
+          argumentHint: "",
+          kind: "skill",
+        },
+      ]);
+
+      exit(new Error("helper exited"));
+      await exited;
+
+      expect(await session.listCommands?.()).toBeNull();
+      expect(acquisitions).toBe(1);
+    } finally {
+      await session.close();
+    }
+    expect(await session.listCommands?.()).toBeNull();
+  });
   test("fails initialization when the event stream ends before connecting", async () => {
     const harness = new V2Harness();
     harness.api.event.subscribe = async function* () {};

@@ -252,6 +252,9 @@ git 不报冲突、结果却不对的：
   客户端级的 `discoverCommands()`（[ADR 0003](adr/0003-command-list-never-spawns.md)），上游的修复落不到它
   上面。对照上游的改动给 `discoverCommands()` 补上同样的行为并加用例（v0.10.1 的 #5450：Codex 按提供方自己的
   `CODEX_HOME` 读提示词与技能）。
+- 上游整套新写的提供方路径按原样收下时，它的会话级 `listCommands()` 不会冲突，但上游的写法是先重连再取列表，
+  服务退出后会为取列表重新拉起进程，违反 ADR 0003。逐个打开看，改成服务不在就返回 `null` 并加用例
+  （v0.10.2 时核实的 OpenCode 2.x：`opencode/v2/session.ts`）。
 - 两边各往同一个函数里加一个分支，合起来超过 lint 的复杂度上限。动 Osuna 自己加的那一行，
   不动上游的。
 - 两边都改过的共用组件，要跑引用它的 Osuna 页面测试，不只跑冲突文件自己的测试。
