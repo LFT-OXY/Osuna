@@ -4,10 +4,10 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 设置 → Providers 的列表里有 Muse Code 与 Antigravity，点进去是 Osuna 的详情页，图标取上游的。列表 → 详情两级结构不变。
-- [ ] 本机没有装这两个 CLI 时，列表与详情页显示的是「不可用」一类的正常状态，没有报错或空白。（未勾：实际是上游原样的「错误」态——红点加「无法启动」错误卡，页面完整、没有空白。原因见 Comments「CLI 缺失时的状态」；是改验收句还是改代码，交维护者定。）
+- [x] 本机没有装这两个 CLI 时，列表与详情页显示上游原样的「错误」态（红点加「无法启动」错误卡，带刷新与运行诊断），页面完整、没有空白。（维护者 2026-10-11 决定：接受上游原样，本次不改代码；原句「显示『不可用』一类的正常状态」据此改写，原因见 Comments「CLI 缺失时的状态」，改成「未安装」的做法留在后续任务。）
 - [x] 逐项核实并记在 `## Comments` 下：已装版本、一键升级、安装指引这三项在两个提供方上各显示什么（缺失、空白、还是错误的内容）。显示成错误内容或会误导用户的，改成不显示；其余按缺口记录。
 - [x] 两个新提供方缺口的后续任务已建，内容含上面的核实结果；任务编号记在 `## Comments` 下。
 - [x] dev daemon 启动日志里内置插件全部加载成功；有加载失败的已查清原因。
@@ -38,7 +38,7 @@
 
 全部记进后续任务。
 
-**CLI 缺失时的状态。** 列表行显示红点「错误」，详情页头部徽章「错误」，正文顶部是错误卡「Muse Code 无法启动 / muse not found on PATH」加「刷新」「运行诊断」，模型卡片写「启动失败，没有检测到模型」，诊断一节正常；Antigravity 同样（`agy not found on PATH`）。内置提供方在同样情况下是黄点「未安装」（同页的 Mock Slow Provider）。触发点在快照刷新的第一步：`provider-snapshot-manager.ts` 先调 `client.getCatalogCacheKey`，两个插件都声明了 `getCatalogCacheKey`，它经 `agent/plugin-provider.ts` 的 `catalogCacheKey()` → `resolveLaunch()`，命令不在 PATH 时 `throw new Error("muse not found on PATH")`，快照在这一步就记成 `error`，还没走到后面会问 `isAvailable()`（即插件 `status().available`，这里会得到 `false` → 「未安装」）的那一段。这几处在上游 v0.11.0-beta.1 与 v0.11.2 里相同，Osuna 对 `plugin-provider.ts` 的改动只有指令列表那几处（ADR 0003），所以是上游原样的表现，按 `prd.md`「Out of Scope：修上游自己的缺陷」没有动。验收项第二条因此没有勾：要改成「未安装」得让 `catalogCacheKey` 在命令缺失时不抛错（返回 undefined 或让快照先问可用性），是对上游文件的一处偏离；改验收句还是改代码，交维护者定，已记进后续任务。
+**CLI 缺失时的状态。** 列表行显示红点「错误」，详情页头部徽章「错误」，正文顶部是错误卡「Muse Code 无法启动 / muse not found on PATH」加「刷新」「运行诊断」，模型卡片写「启动失败，没有检测到模型」，诊断一节正常；Antigravity 同样（`agy not found on PATH`）。内置提供方在同样情况下是黄点「未安装」（同页的 Mock Slow Provider）。触发点在快照刷新的第一步：`provider-snapshot-manager.ts` 先调 `client.getCatalogCacheKey`，两个插件都声明了 `getCatalogCacheKey`，它经 `agent/plugin-provider.ts` 的 `catalogCacheKey()` → `resolveLaunch()`，命令不在 PATH 时 `throw new Error("muse not found on PATH")`，快照在这一步就记成 `error`，还没走到后面会问 `isAvailable()`（即插件 `status().available`，这里会得到 `false` → 「未安装」）的那一段。这几处在上游 v0.11.0-beta.1 与 v0.11.2 里相同，Osuna 对 `plugin-provider.ts` 的改动只有指令列表那几处（ADR 0003），所以是上游原样的表现，按 `prd.md`「Out of Scope：修上游自己的缺陷」没有动。要改成「未安装」得让 `catalogCacheKey` 在命令缺失时不抛错（返回 undefined 或让快照先问可用性），是对上游文件的一处偏离。维护者 2026-10-11 决定接受上游原样、改验收句，不在这次合并里改代码；改法记在后续任务。
 
 **⋯ 菜单里的「移除提供方」。** 两个提供方的 ⋯ 菜单都有「诊断」和「移除提供方」两项（截图 `04-settings-provider-muse-menu-*`）。「移除」出现是因为 Osuna 的 `provider-detail/header.tsx` 里 `canRemove = hostSupportsRemoval && providerSource === "custom"`，而快照把插件提供方标为 `custom`；上游列表页用的是同一条规则（`canRemove={supportsProviderRemoval && entry.source === "custom"}`，beta.1 与 v0.11.2 都如此）。点它会发 `removeProviders: ["muse"]`，daemon 只删这个提供方在 `config.json` 里的覆盖项，插件注册的提供方本身还在，刷新后行还在。它不在本票「已装版本、一键升级、安装指引」三项的范围里，没有改，记进后续任务。
 
@@ -63,6 +63,6 @@
 #### 评审（Standards、Spec、Visual 三个维度，各一轮；修复后只复查修过的，各一次）
 
 - **已修（Standards 硬违规 + Spec）：** 「CLI 缺失时的状态」原先把触发点写成取模型目录，实际是快照第一步的 `getCatalogCacheKey` → `catalogCacheKey()` → `resolveLaunch()` 抛错（本文与后续任务 `prd.md` 都已改写，改法也随之改）。
-- **已修（Spec）：** 验收项第二条取消勾选并注明待维护者裁决；「移除提供方」不改的理由改为「不在本票三项范围」，不再援引上游缺陷豁免。
+- **已修（Spec）：** 验收项第二条先取消勾选并注明待维护者裁决，维护者随后决定接受上游原样，验收句已改写并勾上；「移除提供方」不改的理由改为「不在本票三项范围」，不再援引上游缺陷豁免。
 - **已修（Standards 判断项）：** 去掉开头重复的一句；后续任务 `task.json` 的描述口径与 `prd.md` 统一为「v0.11.0-beta.1（第一段）」，所属包改为 `server`（三项缺口的改动点主要在 daemon）。
 - **Visual：** 三条界面验收标准满足。报的几处都不是本票带来的：详情页「错误」徽章看起来灰底红字——`StatusBadge` 的 `error` 变体用的就是 `statusDangerTint` 12% 淡红底，截图 128 色压缩后偏灰；详情页模型空卡与插件页空卡高度不同、同一动作多处入口（头部「刷新」/错误卡「刷新」、错误卡「运行诊断」/诊断卡/⋯ 菜单）是 Osuna 详情页已有的设计（`provider-detail/index.tsx` 文件头注释写明错误卡带两个恢复动作）；插件页标题下紧接分区标签「插件」是上游页面的原样。插件页列表里看不到内置插件是上游行为，上面「设置 → 插件页」已写明。⋯ 菜单截图下方的灰色残影是弹层阴影被 128 色压扁，两张菜单截图改用 256 色重截。
