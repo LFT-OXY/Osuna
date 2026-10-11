@@ -913,7 +913,7 @@ Example: `ProviderSnapshotEntry.version`, the installed CLI version of a built-i
 ### 3. Contracts
 
 - `version` is the first plain `x.y.z` in stdout+stderr; prerelease suffixes are dropped.
-- Filled only when `entry.source === "builtin"` and the catalog probe succeeded; `error`, `unavailable`, disabled, custom and ACP entries omit it.
+- Filled only when `entry.source === "builtin"` and the catalog probe succeeded; `error`, `unavailable`, disabled, custom and ACP entries omit it. A plugin-registered provider (Muse Code, Antigravity from the built-in plugins) is `custom` too — `createGeneration` marks every id in `pluginProviders` that way — so it never carries `version`, never appears in `provider.version.check` results, and `provider.upgrade` answers `unsupported`. When its command is off PATH the entry is `error` (`<cmd> not found on PATH`), not `unavailable`: the refresh's first step calls `getCatalogCacheKey`, which the plugin runtime resolves through `resolveLaunch()`, and that throws before `isAvailable()` is ever asked.
 - The probe runs the command the provider actually launches (config `command` + `env`), after the refresh deadline, with its own 5 s exec timeout.
 - A provider that already ran `--version` during `fetchCatalog` (Claude) reports it through `ProviderCatalog.installedVersion`; the manager then skips its own probe.
 - The daemon advertises `providerVersions: true` unconditionally; the app gates the list row and the detail "Version" section on it (`COMPAT(providerVersions)`).
