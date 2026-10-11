@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 合并分支已吸收 main 在此期间的新提交（用 merge，不用 rebase）；五个发布点各对应一个 merge commit；`b4af508e2` 是分支头的祖先，分支与上游 main 的共同祖先是 `c481ecf3e`。
 - [x] 所有工作区版本号为 `0.14.2`；`package-lock.json` 相对 main 的差异只有上游新增的那个外部依赖及其传递依赖；`CHANGELOG.md` 不含上游的 0.10.0 – 0.10.3 条目。
@@ -21,8 +21,8 @@
 - [x] OpenCode 2.x 缺口的后续任务已记下（向维护者说明记在哪里）。
 - [x] 收尾在并入之前做完：各工单的验收项逐条对照后勾上，journal 已记，任务归档的准备已做；已告知维护者并入后这个 worktree 会被自动归档。
 - [x] 原生端（iOS / Android）免验收。
-- [ ] 维护者看过截图并明确同意并入。
-- [ ] PR 以 merge commit 并入 main；并入后 `b4af508e2` 是 main 的祖先。
+- [x] 维护者看过截图并明确同意并入。
+- [x] PR 以 merge commit 并入 main；并入后 `b4af508e2` 是 main 的祖先。
 
 ## Comments
 
@@ -159,3 +159,14 @@
 2. `python3 ./.atw/scripts/tickets.py --task-dir .atw/tasks/10-10-merge-upstream-v0.10.3 done 07`，再 `task.py set-status .atw/tasks/10-10-merge-upstream-v0.10.3 accept`。
 3. 对照 `prd.md`「验收清单」做一遍只读的验收检查，维护者确认后 `task.py archive`。
 4. 拉完 main 先 `npm run build:server` 再提交，否则提交钩子的 typecheck 会因旧的 `dist` 声明报错。
+
+#### 维护者的确认与并入结果（2026-10-11）
+
+在主仓库里补记，这个 worktree 并入后已被自动归档。
+
+- 维护者自己把 PR #15 并入了 main，随后在主仓库的会话里说明「刚才用 PR 合并了代码」，并要求勾上本工单的验收项、关闭工单、归档任务。倒数第二项据此勾上；维护者有没有逐张看过截图没有另外问。
+- `gh pr view 15`：`MERGED`，2026-10-11T09:33:17Z，合并者 `LFT-OXY`。merge commit 是 `a8002a587`，双亲 `56cccc196`（并入前的 main）与 `3d4478d0b`（分支头，比上面记 CI 的 `a28121772` 多一个只记工单与 journal 的提交）。并入后查 `gh pr checks 15`，20 项全部 `pass`。
+- 并入后核对（主仓库，`git pull --ff-only` 快进 82 个提交之后）：`git merge-base --is-ancestor b4af508e2 main` 成功；`git merge-base main upstream/main` = `c481ecf3e`，与 `docs/release.md` 写的一致；`git tag` 仍是 14 个。
+- 本机分支 `merge-upstream-v0.10.3` 已删；远端同名分支还在，本机的 Safety Net 钩子拦 `git push --delete`，留给维护者手动删。
+- 上面第 4 步少一步：这次合并带进一个新的外部依赖（`@opencode/client`），主仓库拉完 main 直接 `npm run build:server` 会报 `TS2307: Cannot find module '@opencode/client'`，要先 `npm ci`。
+- 推 main 触发的那一轮 CI 没有看。
