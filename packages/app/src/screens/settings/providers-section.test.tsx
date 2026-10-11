@@ -264,9 +264,9 @@ vi.mock("@/components/settings/headings/settings-info-tip", () => ({
 }));
 
 vi.mock("@/components/provider-icons", () => ({
-  getProviderIcon: (provider: string) => () =>
+  useProviderIcon: (provider: string) => () =>
     React.createElement("span", { "data-icon": `provider-${provider}` }),
-  resolveProviderGlyph: ({ provider, tone }: { provider: string; tone: string }) => ({
+  useProviderGlyph: ({ provider, tone }: { provider: string; tone: string }) => ({
     Icon: () => React.createElement("span", { "data-icon": `provider-${provider}-${tone}` }),
     brandColor: null,
   }),

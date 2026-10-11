@@ -17,8 +17,10 @@ import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useProvidersSnapshot } from "./use-providers-snapshot";
 import {
   useAgentCommandsQuery,
+  type AgentCommandsState,
   type AgentSlashCommand,
   type DraftCommandConfig,
+  type DraftCommandTarget,
 } from "./use-agent-commands-query";
 import { orderAutocompleteGroups } from "@/components/ui/autocomplete-utils";
 import { useAutocomplete } from "./use-autocomplete";
@@ -52,7 +54,7 @@ interface UseAgentAutocompleteInput {
   setUserInput: (nextValue: string) => void;
   serverId: string;
   agentId: string;
-  draftConfig?: DraftCommandConfig;
+  draft?: DraftCommandTarget;
   /** Composer input 聚焦且可显示菜单时为真，用于预取指令列表。 */
   prefetchCommands: boolean;
   onAutocompleteApplied?: () => void;
@@ -143,18 +145,13 @@ type AvailableCommand =
   | { source: "plugin"; command: PluginClientSlashCommand }
   | { source: "provider"; command: AgentSlashCommand };
 
-function normalizeDraftCommandConfig(
-  draftConfig?: DraftCommandConfig,
-): DraftCommandConfig | undefined {
-  if (!draftConfig) {
+function resolveDraftQueryConfig(draft?: DraftCommandTarget): DraftCommandConfig | undefined {
+  if (draft?.status !== "ready") {
     return undefined;
   }
 
+  const draftConfig = draft.config;
   const cwd = draftConfig.cwd.trim();
-  if (!cwd) {
-    return undefined;
-  }
-
   const modeId = draftConfig.modeId?.trim() ?? "";
   const model = draftConfig.model?.trim() ?? "";
   const thinkingOptionId = draftConfig.thinkingOptionId?.trim() ?? "";
@@ -654,7 +651,19 @@ interface AutocompleteTexts {
 interface AutocompleteTextsInput {
   mode: AutocompleteMode;
   isCommandListPartial: boolean;
+  /** 草稿还缺项目或模型时，空列表的提示改成该先选什么。 */
+  draft?: DraftCommandTarget;
   t: TFunction;
+}
+
+function resolveCommandsEmptyText(args: AutocompleteTextsInput): string {
+  if (args.draft?.status === "needs-project") {
+    return args.t("agentAutocomplete.chooseProjectForCommands");
+  }
+  if (args.draft?.status === "needs-provider") {
+    return args.t("agentAutocomplete.chooseModelForCommands");
+  }
+  return args.t("agentAutocomplete.noCommands");
 }
 
 export function resolveAutocompleteTexts(args: AutocompleteTextsInput): AutocompleteTexts {
@@ -666,11 +675,50 @@ export function resolveAutocompleteTexts(args: AutocompleteTextsInput): Autocomp
   }
   return {
     loadingText: args.t("agentAutocomplete.loadingCommands"),
-    emptyText: args.t("agentAutocomplete.noCommands"),
+    emptyText: resolveCommandsEmptyText(args),
     footerText:
       args.mode === "command" && args.isCommandListPartial
         ? args.t("agentAutocomplete.partialCommands")
         : undefined,
+  };
+}
+
+// A draft's agentId is a draft key the daemon does not know, so a draft lists
+// commands by its config only, and not at all until that config is complete.
+function resolveDraftCommandContext(draft: DraftCommandTarget | undefined) {
+  const queryDraftConfig = resolveDraftQueryConfig(draft);
+  const isDraftContext = draft !== undefined;
+  return {
+    isDraftContext,
+    queryDraftConfig,
+    canListCommands: !isDraftContext || queryDraftConfig !== undefined,
+  };
+}
+
+function resolveCommandsView({
+  commandsState,
+  canListCommands,
+}: {
+  commandsState: AgentCommandsState;
+  canListCommands: boolean;
+}) {
+  const ready = commandsState.status === "ready" ? commandsState : null;
+  // 草稿还缺项目或模型时不向 daemon 要指令列表：菜单照常打开，只有本地指令和「先选什么」的提示。
+  if (!canListCommands) {
+    return {
+      commands: EMPTY_COMMANDS,
+      isCommandListPartial: false,
+      commandsAvailable: true,
+      isCommandsLoading: false,
+      commandError: null,
+    };
+  }
+  return {
+    commands: ready?.commands ?? EMPTY_COMMANDS,
+    isCommandListPartial: ready?.partial ?? false,
+    commandsAvailable: commandsState.status !== "unavailable",
+    isCommandsLoading: commandsState.status === "loading",
+    commandError: commandsState.status === "error" ? commandsState.error : null,
   };
 }
 
@@ -683,7 +731,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     setUserInput,
     serverId,
     agentId,
-    draftConfig,
+    draft,
     prefetchCommands,
     onAutocompleteApplied,
     onPickSkill,
@@ -724,13 +772,10 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     return () => clearTimeout(timer);
   }, [fileFilterQuery]);
 
-  const normalizedDraftConfig = useMemo(
-    () => normalizeDraftCommandConfig(draftConfig),
-    [draftConfig],
+  const { isDraftContext, queryDraftConfig, canListCommands } = useMemo(
+    () => resolveDraftCommandContext(draft),
+    [draft],
   );
-
-  const isDraftContext = normalizedDraftConfig !== undefined;
-  const queryDraftConfig = normalizedDraftConfig;
   const canLoadCommands = resolveCanLoadCommands({ serverId, agentId, isDraftContext });
 
   const agentCwd = useSessionStore(
@@ -750,15 +795,12 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const commandsState = useAgentCommandsQuery({
     serverId,
     agentId,
-    isMenuOpen: mode === "command" && canLoadCommands,
-    prefetch: prefetchCommands && canLoadCommands,
+    isMenuOpen: mode === "command" && canLoadCommands && canListCommands,
+    prefetch: prefetchCommands && canLoadCommands && canListCommands,
     draftConfig: queryDraftConfig,
   });
-  const commands = commandsState.status === "ready" ? commandsState.commands : EMPTY_COMMANDS;
-  const isCommandListPartial = commandsState.status === "ready" && commandsState.partial;
-  const commandsAvailable = commandsState.status !== "unavailable";
-  const isCommandsLoading = commandsState.status === "loading";
-  const commandError = commandsState.status === "error" ? commandsState.error : null;
+  const { commands, isCommandListPartial, commandsAvailable, isCommandsLoading, commandError } =
+    resolveCommandsView({ commandsState, canListCommands });
 
   const isVisible = resolveAutocompleteIsVisible({
     mode,
@@ -807,7 +849,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const { options: agentMentionOptions, groupNotices } = useAgentMentionGroup({
     serverId,
     agentId,
-    draftProvider: normalizedDraftConfig?.provider,
+    draftProvider: queryDraftConfig?.provider,
     cwd: autocompleteCwd,
     query: fileFilterQuery,
     enabled: mode === "file",
@@ -955,6 +997,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const { loadingText, emptyText, footerText } = resolveAutocompleteTexts({
     mode,
     isCommandListPartial,
+    draft,
     t,
   });
 

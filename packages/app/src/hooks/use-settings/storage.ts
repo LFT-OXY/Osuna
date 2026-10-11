@@ -5,6 +5,11 @@ import type { DesktopSettings } from "@/desktop/settings/desktop-settings";
 import type { AppLanguage } from "@/i18n/locales";
 import type { SidebarNavPreference } from "@/sidebar-nav/model";
 import {
+  DEFAULT_USAGE_PREFERENCES,
+  UsagePreferencesSchema,
+  type UsagePreferences,
+} from "@/usage/preferences";
+import {
   DEFAULT_SIDEBAR_CHECKS_DISPLAY,
   type SidebarChecksDisplay,
 } from "@/components/sidebar/display-preferences/checks-display";
@@ -16,6 +21,7 @@ import {
 import { isNative } from "@/constants/platform";
 import {
   DARK_THEME_NAMES,
+  DEFAULT_CONTENT_MAX_WIDTH,
   FONT_SIZE,
   LIGHT_THEME_NAMES,
   PLUGIN_THEME_PREFERENCE,
@@ -72,6 +78,9 @@ export const DEFAULT_CODE_FONT_SIZE = 12; // == FONT_SIZE.code
 export const MIN_CODE_FONT_SIZE = 9;
 export const MAX_CODE_FONT_SIZE = 22; // line-height 1.5×22=33 stays safe
 export const MAX_FONT_FAMILY_LENGTH = 200;
+export { DEFAULT_CONTENT_MAX_WIDTH };
+export const MIN_CONTENT_MAX_WIDTH = 600;
+export const MAX_CONTENT_MAX_WIDTH = 4000;
 
 export interface AppSettings {
   theme: ThemePreference;
@@ -93,6 +102,8 @@ export interface AppSettings {
   codeFontSize: number; // clamped px, default 12
   terminalFontFamily: string; // "" 表示跟随 monoFontFamily
   terminalFontSize: number | null; // 按 Code size 的范围 clamp，null 表示跟随 codeFontSize
+  /** Max width of chat and markdown content in px; null follows the current default. */
+  contentMaxWidth: number | null;
   syntaxTheme: SyntaxThemeId; // default "one"
   workspaceTitleSource: WorkspaceTitleSource;
   sidebarWorkspaceTrailing: SidebarWorkspaceTrailing;
@@ -100,6 +111,10 @@ export interface AppSettings {
   sidebarChecksDisplay: SidebarChecksDisplay;
   /** Top-level sidebar rows in display order; empty means the default order, all visible. */
   sidebarNavItems: SidebarNavPreference[];
+  /** Sidebar footer items in display order; empty means the default order, all visible. */
+  sidebarFooterItems: SidebarNavPreference[];
+  /** How usage reads and which windows the sidebar summary shows. */
+  usage: UsagePreferences;
   autoExpandReasoning: boolean;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
@@ -151,12 +166,15 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
   terminalFontFamily: "",
   terminalFontSize: null,
+  contentMaxWidth: null,
   syntaxTheme: "one",
   workspaceTitleSource: "title",
   sidebarWorkspaceTrailing: "diff",
   sidebarRowItems: DEFAULT_SIDEBAR_ROW_ITEMS,
   sidebarChecksDisplay: DEFAULT_SIDEBAR_CHECKS_DISPLAY,
   sidebarNavItems: [],
+  sidebarFooterItems: [],
+  usage: DEFAULT_USAGE_PREFERENCES,
   autoExpandReasoning: false,
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
@@ -241,6 +259,10 @@ const StoredAppSettingsSchema = z
     ),
     terminalFontFamily: sanitizedFontFamily().catch(""),
     terminalFontSize: clampedNumber(MIN_CODE_FONT_SIZE, MAX_CODE_FONT_SIZE).nullable().catch(null),
+    contentMaxWidth: z
+      .null()
+      .or(clampedNumber(MIN_CONTENT_MAX_WIDTH, MAX_CONTENT_MAX_WIDTH))
+      .catch(null),
     syntaxTheme: z.string().refine(isSyntaxThemeId).catch("one"),
     workspaceTitleSource: z.enum(["title", "branch"]).catch("title"),
     sidebarWorkspaceTrailing: z.enum(["diff", "timestamp", "none"]).catch("diff"),
@@ -250,6 +272,8 @@ const StoredAppSettingsSchema = z
       .optional()
       .catch(DEFAULT_SIDEBAR_CHECKS_DISPLAY),
     sidebarNavItems: z.array(z.object({ key: z.string(), visible: z.boolean() })).catch([]),
+    sidebarFooterItems: z.array(z.object({ key: z.string(), visible: z.boolean() })).catch([]),
+    usage: UsagePreferencesSchema,
     autoExpandReasoning: z.boolean().catch(false),
     toolCallDetailLevel: z
       .enum(["overview", "detailed"])
@@ -478,6 +502,14 @@ export function parseTerminalScrollbackLines(value: unknown): number | null {
     MAX_TERMINAL_SCROLLBACK_LINES,
     Math.max(MIN_TERMINAL_SCROLLBACK_LINES, Math.floor(numericValue)),
   );
+}
+
+export function parseContentMaxWidth(value: unknown): number | null {
+  return parseClampedFontSize(value, { min: MIN_CONTENT_MAX_WIDTH, max: MAX_CONTENT_MAX_WIDTH });
+}
+
+export function resolveContentMaxWidth(settings: Pick<AppSettings, "contentMaxWidth">): number {
+  return settings.contentMaxWidth ?? DEFAULT_CONTENT_MAX_WIDTH;
 }
 
 export function parseClampedFontSize(

@@ -1,7 +1,6 @@
 import { useInsertionEffect, useMemo, type ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { MAX_CONTENT_WIDTH } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
 import { DomMarkdown } from "./dom-markdown.web";
 import { parseMarkdownPreviewDocument, type MarkdownFrontMatterRow } from "./document";
@@ -86,7 +85,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   readingFrame: {
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
+    maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
   },

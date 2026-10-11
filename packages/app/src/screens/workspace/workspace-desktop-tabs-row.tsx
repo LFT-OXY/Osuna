@@ -68,7 +68,8 @@ import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import { ICON_SIZE, SPACING, type Theme } from "@/styles/theme";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
-import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { formatCompactTimeAgoAsProse } from "@/utils/time";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
@@ -157,12 +158,6 @@ function formatAgentTooltipTitle(singleLineTitle: string): string {
   return `${singleLineTitle.slice(0, AGENT_TOOLTIP_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
-function formatAgentTooltipActivity(compactActivity: string): string {
-  if (compactActivity === "now") return "just now";
-  if (/^\d/.test(compactActivity)) return `${compactActivity} ago`;
-  return compactActivity;
-}
-
 function AgentTabTooltipBody({
   serverId,
   agentId,
@@ -178,7 +173,7 @@ function AgentTabTooltipBody({
     return state.agentLastActivity.get(agentId) ?? agent?.lastActivityAt ?? null;
   });
   const compactActivity = useCompactTimeAgo(lastActivityAt);
-  const activity = formatAgentTooltipActivity(compactActivity);
+  const activity = formatCompactTimeAgoAsProse(compactActivity);
 
   return (
     <View style={styles.tooltipAgentContent}>
@@ -865,9 +860,8 @@ function TabChip({
               {...(dragHandleProps?.listeners as object | undefined)}
               testID={`workspace-tab-${testIdentity}`}
               triggerRef={dragHandleProps?.setActivatorNodeRef as unknown as undefined}
-              enabledOnMobile={false}
               style={tabChipStyle}
-              onPressIn={handleNavigateTab}
+              onPressIn={isWeb ? handleNavigateTab : undefined}
               onPress={handleNavigateTab}
               accessibilityRole="button"
               accessibilityLabel={accessibilityLabel}

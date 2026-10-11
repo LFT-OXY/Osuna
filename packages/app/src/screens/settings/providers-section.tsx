@@ -10,7 +10,7 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useReduceMotionEnabled } from "@/hooks/use-reduce-motion-enabled";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
-import { resolveProviderGlyph } from "@/components/provider-icons";
+import { useProviderGlyph } from "@/components/provider-icons";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -66,7 +66,7 @@ function ProviderRow({
 }: ProviderRowProps) {
   const { t } = useTranslation();
   const upgrade = useProviderUpgrade(serverId, def.id);
-  const glyph = resolveProviderGlyph({ provider: def.id, serverId, tone: "brand" });
+  const glyph = useProviderGlyph({ provider: def.id, serverId, tone: "brand" });
   const modelCount = countSelectableModels(entry.models);
   const activeApiEndpointName = entry.activeApiEndpoint?.name ?? null;
   const statusLine = resolveProviderStatusLine({

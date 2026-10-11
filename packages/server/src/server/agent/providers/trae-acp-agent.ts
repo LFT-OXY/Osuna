@@ -8,7 +8,6 @@ interface TraeACPAgentClientOptions {
   env?: Record<string, string>;
   providerId?: string;
   label?: string;
-  providerParams?: unknown;
 }
 
 export class TraeACPAgentClient extends GenericACPAgentClient {
@@ -19,7 +18,6 @@ export class TraeACPAgentClient extends GenericACPAgentClient {
       env: options.env,
       providerId: options.providerId,
       label: options.label,
-      providerParams: options.providerParams,
     });
   }
 }

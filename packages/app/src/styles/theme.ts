@@ -941,7 +941,10 @@ export const DEFAULT_MONO_FONT_STACK: string = Platform.select({
   web: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 });
 
-// `fontSize`, `fontFamily`, `lineHeight`, and `typeScale` are deliberately widened to plain
+// Chat and markdown content column; the appearance updater patches the user's width in.
+export const DEFAULT_CONTENT_MAX_WIDTH = 820;
+
+// `fontSize`, `fontFamily`, `lineHeight`, `typeScale`, and `contentMaxWidth` are deliberately widened to plain
 // `number`/`string` (not narrowed by `as const`) so the appearance updater can patch
 // them at runtime via `UnistylesRuntime.updateTheme`. The remaining tokens keep their
 // literal types.
@@ -951,6 +954,7 @@ interface CommonTheme {
   fontFamily: { ui: string; mono: string };
   lineHeight: Record<keyof typeof LINE_HEIGHT, number>;
   typeScale: Record<TextVariant, { fontSize: number; lineHeight: number }>;
+  contentMaxWidth: number;
   iconSize: typeof ICON_SIZE;
   fontWeight: typeof FONT_WEIGHT;
   borderRadius: typeof BORDER_RADIUS;
@@ -966,6 +970,7 @@ const commonTheme: CommonTheme = {
   fontFamily: { ui: DEFAULT_UI_FONT_STACK, mono: DEFAULT_MONO_FONT_STACK },
   lineHeight: LINE_HEIGHT,
   typeScale: TYPE_SCALE,
+  contentMaxWidth: DEFAULT_CONTENT_MAX_WIDTH,
   iconSize: ICON_SIZE,
   fontWeight: FONT_WEIGHT,
   borderRadius: BORDER_RADIUS,

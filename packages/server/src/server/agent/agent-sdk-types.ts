@@ -1,4 +1,7 @@
 import type {
+  AgentFeature,
+  AgentFeatureSelect,
+  AgentFeatureToggle,
   AgentProviderNotice,
   AgentTaskItem,
   JsonValue,
@@ -13,7 +16,13 @@ import type {
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
-export type { AgentProviderNotice, AgentTaskItem };
+export type {
+  AgentFeature,
+  AgentFeatureSelect,
+  AgentFeatureToggle,
+  AgentProviderNotice,
+  AgentTaskItem,
+};
 
 export type AgentProvider = string;
 
@@ -168,29 +177,6 @@ export interface AgentCreateConfigUnattendedInput {
   features?: AgentFeature[];
   availableModes: AgentMode[];
 }
-
-export interface AgentFeatureToggle {
-  type: "toggle";
-  id: string;
-  label: string;
-  description?: string;
-  tooltip?: string;
-  icon?: string;
-  value: boolean;
-}
-
-export interface AgentFeatureSelect {
-  type: "select";
-  id: string;
-  label: string;
-  description?: string;
-  tooltip?: string;
-  icon?: string;
-  value: string | null;
-  options: AgentSelectOption[];
-}
-
-export type AgentFeature = AgentFeatureToggle | AgentFeatureSelect;
 
 export interface AgentCapabilityFlags {
   [capability: string]: boolean | undefined;
@@ -569,6 +555,7 @@ export interface AgentSlashCommand {
 }
 
 export interface ListImportableSessionsOptions {
+  providerOptions?: ProviderOptions;
   limit?: number;
   /** Optional case-insensitive descriptor search text. */
   query?: string;
@@ -736,7 +723,7 @@ export interface AgentSession {
   } | null;
 }
 
-export type FetchCatalogOptions =
+export type FetchCatalogOptions = { providerOptions?: ProviderOptions } & (
   | {
       scope: "global";
       force: boolean;
@@ -745,7 +732,8 @@ export type FetchCatalogOptions =
       scope: "workspace";
       cwd: string;
       force: boolean;
-    };
+    }
+);
 
 export interface ProviderRefreshContext {
   readonly signal: AbortSignal;

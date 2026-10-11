@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { isNative } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
@@ -25,7 +25,7 @@ import {
   resolveScheduleDisplayTitle,
   scheduleProductName,
 } from "@/utils/schedule-format";
-import { formatTimeAgo } from "@/utils/time";
+import { useTimeAgo } from "@/hooks/use-time-ago";
 import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 
 // Themed lucide wrappers — module-scope so only the icon re-renders on theme
@@ -101,17 +101,22 @@ function stateBadge(state: ScheduleDerivedState): {
 // next. Status lives on the badge, never repeated here.
 function buildMeta(
   t: TFunction,
-  schedule: ScheduleSummary,
-  state: ScheduleDerivedState,
-  serverName: string | undefined,
-  singleHost: boolean,
+  input: {
+    schedule: ScheduleSummary;
+    state: ScheduleDerivedState;
+    createdAgo: string;
+    lastRunAgo: string;
+    serverName: string | undefined;
+    singleHost: boolean;
+  },
 ): string {
-  // formatTimeAgo（"5m ago"）是全局共用且有意保留英文的，这里只本地化「创建于」「上次运行」前缀。
+  const { schedule, state, serverName, singleHost } = input;
+  // 相对时间（"5m ago"）是全局共用且有意保留英文的，这里只本地化「创建于」「上次运行」前缀。
   const parts = [
     renderScheduleDescription(t, formatCadence(schedule.cadence)),
-    t("schedules.row.created", { ago: formatTimeAgo(new Date(schedule.createdAt)) }),
+    t("schedules.row.created", { ago: input.createdAgo }),
     schedule.lastRunAt
-      ? t("schedules.row.lastRun", { ago: formatTimeAgo(new Date(schedule.lastRunAt)) })
+      ? t("schedules.row.lastRun", { ago: input.lastRunAgo })
       : t("schedules.row.neverRun"),
   ];
   if (state === "active") {
@@ -126,8 +131,30 @@ function buildMeta(
   return parts.join(" · ");
 }
 
+function ScheduleMeta({
+  schedule,
+  state,
+  serverName,
+  singleHost,
+}: {
+  schedule: ScheduleSummary;
+  state: ScheduleDerivedState;
+  serverName: string | undefined;
+  singleHost: boolean;
+}) {
+  const { t } = useTranslation();
+  const createdAgo = useTimeAgo(new Date(schedule.createdAt));
+  const lastRunAgo = useTimeAgo(schedule.lastRunAt ? new Date(schedule.lastRunAt) : null);
+  const meta = buildMeta(t, { schedule, state, createdAgo, lastRunAgo, serverName, singleHost });
+  return (
+    <Text style={settingsStyles.rowHint} numberOfLines={1}>
+      {meta}
+    </Text>
+  );
+}
+
 /** Small provider glyph. Reads the icon color off a StyleSheet object so the
- * dynamic component (getProviderIcon) stays compliant without useUnistyles. */
+ * dynamic component (useProviderIcon) stays compliant without useUnistyles. */
 function ProviderGlyph({
   provider,
   serverId,
@@ -135,10 +162,10 @@ function ProviderGlyph({
   provider: string | null;
   serverId: string;
 }): ReactElement | null {
+  const Icon = useProviderIcon(provider ?? "", serverId);
   if (!provider) {
     return null;
   }
-  const Icon = getProviderIcon(provider, serverId);
   return <Icon size={PROVIDER_ICON_SIZE} color={styles.providerIcon.color} />;
 }
 
@@ -176,7 +203,6 @@ export function ScheduleRow({
   const product = scheduleProductName(schedule);
   const title = resolveScheduleDisplayTitle(t, schedule);
   const badge = stateBadge(state);
-  const meta = buildMeta(t, schedule, state, serverName, singleHost ?? false);
   const canRun = schedule.target.type === "new-agent" && (state === "active" || state === "paused");
 
   const rowStyle = useCallback(
@@ -214,9 +240,12 @@ export function ScheduleRow({
             <Text style={styles.target} numberOfLines={1}>
               {targetLabel}
             </Text>
-            <Text style={settingsStyles.rowHint} numberOfLines={1}>
-              {meta}
-            </Text>
+            <ScheduleMeta
+              schedule={schedule}
+              state={state}
+              serverName={serverName}
+              singleHost={singleHost ?? false}
+            />
           </View>
         </View>
 

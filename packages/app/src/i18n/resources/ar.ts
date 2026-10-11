@@ -26,6 +26,7 @@ export const ar: TranslationResources = {
     total: "{{total}} تطابقات",
   },
   common: {
+    bottomSheetBackdrop: "خلفية اللوحة السفلية",
     back: "خلف",
     loading: "تحميل...",
     actions: {
@@ -504,7 +505,9 @@ export const ar: TranslationResources = {
       recovery: {
         archivedTitle: "مساحة العمل مؤرشفة",
         restoreDescription:
-          "تمت أرشفة {{workspaceName}} وإزالة شجرة العمل الخاصة بها. استعد الفرع {{branch}} لفتحها مجددًا.",
+          "استعد {{workspaceName}} للعودة إلى وكلائها. ستستخدم شجرة العمل الفرع {{branch}}.",
+        restoreWithoutBranchDescription:
+          "استعد {{workspaceName}} للعودة إلى وكلائها. سيبدأ فرع جديد من الفرع الأساسي المحفوظ أو الفرع الافتراضي للمستودع.",
         unarchiveDescription: "{{workspaceName}} مؤرشفة. ألغِ أرشفتها لفتحها مجددًا.",
         restoreAction: "استعادة",
         unarchiveAction: "إلغاء الأرشفة",
@@ -1258,6 +1261,9 @@ export const ar: TranslationResources = {
       settings: "إعدادات",
       closeSidebar: "إغلاق الشريط الجانبي",
     },
+    footer: {
+      usage: "الاستخدام",
+    },
     help: {
       trigger: "المساعدة والدعم",
       sectionHelp: "المساعدة",
@@ -1791,6 +1797,8 @@ export const ar: TranslationResources = {
       unknownReason: "لا يستطيع هذا الوكيل تشغيل وكلاء فرعيين",
       hostOutdated: "حدّث المضيف لتتمكن من الإشارة إلى الوكلاء",
     },
+    chooseProjectForCommands: "اختر مشروعًا لعرض الأوامر",
+    chooseModelForCommands: "اختر نموذجًا لعرض الأوامر",
   },
   loadOlderHistory: {
     failed: "تعذر تحميل السجل الأقدم",
@@ -2549,8 +2557,15 @@ export const ar: TranslationResources = {
         description: "عرض مخطط للتنقل بين المطالبات",
       },
       sidebar: {
-        title: "الشريط الجانبي",
-        description: "اختر العناصر التي تظهر أعلى الشريط الجانبي وترتيبها",
+        header: {
+          title: "الرأس",
+          description: "اختر العناصر التي تظهر أعلى الشريط الجانبي وترتيبها",
+        },
+        footer: {
+          title: "التذييل",
+          description:
+            "اختر الصفوف التي تظهر أسفل الشريط الجانبي وترتيبها. يظهر «إضافة مشروع» وصف الأيقونات دائمًا",
+        },
         moveUp: "نقل لأعلى",
         moveDown: "نقل لأسفل",
       },
@@ -2586,6 +2601,14 @@ export const ar: TranslationResources = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "لم يُعثر على هذا الخط على هذا الجهاز؛ سيُستخدم خط بديل",
         notMonospaceWarning: "ليس خطًا ثابت العرض؛ قد يختل محاذاة النص",
+      },
+      layout: {
+        title: "التخطيط",
+        contentWidth: "عرض المحتوى",
+        contentWidthHint: "أقصى عرض للمحادثة وملفات Markdown على الشاشات العريضة",
+        contentWidthAccessibility: "عرض المحتوى بالبكسل",
+        reset: "إعادة تعيين",
+        resetAccessibility: "إعادة عرض المحتوى إلى الافتراضي",
       },
       syntax: {
         title: "بناء الجملة",

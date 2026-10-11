@@ -1,13 +1,23 @@
 import type { PluginSidebarGroup } from "@/plugins/sidebar-groups";
+import type { PluginSidebarSection } from "@/plugins/types";
 
-export const BUILTIN_SIDEBAR_NAV_IDS = [
-  "new-workspace",
-  "history",
-  "search",
-  "schedules",
-  "usage",
-] as const;
-export type BuiltinSidebarNavId = (typeof BUILTIN_SIDEBAR_NAV_IDS)[number];
+export type SidebarSection = PluginSidebarSection;
+
+/**
+ * Each section's built-in items in their default order. The footer's bottom line
+ * (Add project and the Hosts, Help and support, Settings icons) is fixed.
+ *
+ * 顶部组在上游的四项之后是 Osuna 的「用量」（打开 Usage 页）；底部组是上游的套餐用量摘要。两者的编号
+ * 同为 usage，两组各自保存顺序与显隐，凡是两者不同的地方（文案、图标、默认显隐）都按所在的组区分。
+ */
+export const BUILTIN_SIDEBAR_ITEM_IDS = {
+  header: ["new-workspace", "history", "search", "schedules", "usage"],
+  footer: ["usage"],
+} as const satisfies Record<SidebarSection, readonly string[]>;
+
+export type BuiltinSidebarItemId<Section extends SidebarSection = SidebarSection> =
+  (typeof BUILTIN_SIDEBAR_ITEM_IDS)[Section][number];
+export type BuiltinSidebarNavId = BuiltinSidebarItemId<"header">;
 
 /** Persisted shape. Array order is the display order. */
 export interface SidebarNavPreference {
@@ -15,10 +25,10 @@ export interface SidebarNavPreference {
   visible: boolean;
 }
 
-export interface BuiltinSidebarNavItem {
+export interface BuiltinSidebarNavItem<Section extends SidebarSection = SidebarSection> {
   kind: "builtin";
-  key: BuiltinSidebarNavId;
-  id: BuiltinSidebarNavId;
+  key: BuiltinSidebarItemId<Section>;
+  id: BuiltinSidebarItemId<Section>;
   visible: boolean;
 }
 
@@ -29,18 +39,28 @@ export interface PluginSidebarNavItem {
   visible: boolean;
 }
 
-export type SidebarNavItem = BuiltinSidebarNavItem | PluginSidebarNavItem;
+export type SidebarNavItem<Section extends SidebarSection = SidebarSection> =
+  | BuiltinSidebarNavItem<Section>
+  | PluginSidebarNavItem;
 
-const BUILTIN_LABEL_KEYS: Record<BuiltinSidebarNavId, string> = {
+const BUILTIN_LABEL_KEYS: Record<BuiltinSidebarItemId, string> = {
   "new-workspace": "sidebar.actions.newWorkspace",
   history: "sidebar.sections.sessions",
   search: "sidebar.sections.search",
   schedules: "sidebar.sections.schedules",
+  usage: "sidebar.footer.usage",
+};
+
+const HEADER_LABEL_KEYS: Partial<Record<BuiltinSidebarItemId<"header">, string>> = {
   usage: "sidebar.sections.usage",
 };
 
-export function builtinSidebarNavLabelKey(id: BuiltinSidebarNavId): string {
-  return BUILTIN_LABEL_KEYS[id];
+/** 两组里编号同为 usage 的条目文案不同，所以要说明取哪一组的。 */
+export function builtinSidebarNavLabelKey(
+  id: BuiltinSidebarItemId,
+  section: SidebarSection,
+): string {
+  return (section === "header" ? HEADER_LABEL_KEYS[id] : undefined) ?? BUILTIN_LABEL_KEYS[id];
 }
 
 /**
@@ -48,7 +68,7 @@ export function builtinSidebarNavLabelKey(id: BuiltinSidebarNavId): string {
  * Both the sidebar row and the Appearance settings row read the badge from here so the
  * two never disagree about which shortcut belongs to which item.
  */
-const BUILTIN_SHORTCUT_ACTIONS: Record<BuiltinSidebarNavId, string | null> = {
+const BUILTIN_SHORTCUT_ACTIONS: Record<BuiltinSidebarItemId, string | null> = {
   "new-workspace": "new-workspace",
   history: null,
   search: "toggle-command-center",
@@ -56,8 +76,22 @@ const BUILTIN_SHORTCUT_ACTIONS: Record<BuiltinSidebarNavId, string | null> = {
   usage: null,
 };
 
-export function builtinSidebarNavShortcutAction(id: BuiltinSidebarNavId): string | null {
+export function builtinSidebarNavShortcutAction(id: BuiltinSidebarItemId): string | null {
   return BUILTIN_SHORTCUT_ACTIONS[id];
+}
+
+/**
+ * Builtins that start hidden on compact layouts, until the user turns them on. A phone's footer
+ * has no room to spare for the Usage summary.
+ */
+const HIDDEN_BY_DEFAULT_ON_COMPACT: ReadonlySet<BuiltinSidebarItemId> = new Set(["usage"]);
+
+function builtinVisibleByDefault(
+  section: SidebarSection,
+  id: BuiltinSidebarItemId,
+  compact: boolean,
+): boolean {
+  return !(compact && section === "footer" && HIDDEN_BY_DEFAULT_ON_COMPACT.has(id));
 }
 
 export function pluginSidebarNavKey(
@@ -66,18 +100,27 @@ export function pluginSidebarNavKey(
   return `plugin:${group.pluginId}:${group.contributionId}`;
 }
 
-function isBuiltinSidebarNavId(key: string): key is BuiltinSidebarNavId {
-  return (BUILTIN_SIDEBAR_NAV_IDS as readonly string[]).includes(key);
+function isBuiltinSidebarItemId<Section extends SidebarSection>(
+  section: Section,
+  key: string,
+): key is BuiltinSidebarItemId<Section> {
+  const ids: readonly string[] = BUILTIN_SIDEBAR_ITEM_IDS[section];
+  return ids.includes(key);
 }
 
-export function resolveSidebarNavItems(input: {
+export function resolveSidebarNavItems<Section extends SidebarSection>(input: {
+  section: Section;
+  /** Compact layouts start some builtins hidden; a stored preference always wins. */
+  compact: boolean;
   pluginGroups: readonly PluginSidebarGroup[];
   preferences: readonly SidebarNavPreference[];
-}): SidebarNavItem[] {
+}): SidebarNavItem<Section>[] {
+  const builtinIds: readonly BuiltinSidebarItemId<Section>[] =
+    BUILTIN_SIDEBAR_ITEM_IDS[input.section];
   const groupsByKey = new Map(
     input.pluginGroups.map((group) => [pluginSidebarNavKey(group), group] as const),
   );
-  const items: SidebarNavItem[] = [];
+  const items: SidebarNavItem<Section>[] = [];
   const placed = new Set<string>();
 
   for (const preference of input.preferences) {
@@ -86,7 +129,7 @@ export function resolveSidebarNavItems(input: {
     if (group) {
       placed.add(preference.key);
       items.push({ kind: "plugin", key: preference.key, group, visible: preference.visible });
-    } else if (isBuiltinSidebarNavId(preference.key)) {
+    } else if (isBuiltinSidebarItemId(input.section, preference.key)) {
       placed.add(preference.key);
       items.push({
         kind: "builtin",
@@ -97,9 +140,14 @@ export function resolveSidebarNavItems(input: {
     }
   }
 
-  for (const id of BUILTIN_SIDEBAR_NAV_IDS) {
+  for (const id of builtinIds) {
     if (placed.has(id)) continue;
-    items.push({ kind: "builtin", key: id, id, visible: true });
+    items.push({
+      kind: "builtin",
+      key: id,
+      id,
+      visible: builtinVisibleByDefault(input.section, id, input.compact),
+    });
   }
   for (const [key, group] of groupsByKey) {
     if (placed.has(key)) continue;

@@ -27,6 +27,7 @@ export const ja: TranslationResources = {
     total: "{{total}} 件の一致",
   },
   common: {
+    bottomSheetBackdrop: "ボトムシートの背景",
     back: "戻る",
     loading: "読み込み中...",
     actions: {
@@ -509,7 +510,9 @@ export const ja: TranslationResources = {
       recovery: {
         archivedTitle: "ワークスペースはアーカイブ済みです",
         restoreDescription:
-          "{{workspaceName}} はアーカイブされ、worktree が削除されました。ブランチ {{branch}} を復元して再度開きます。",
+          "{{workspaceName}} を復元してエージェントに戻ります。worktree ではブランチ {{branch}} を使用します。",
+        restoreWithoutBranchDescription:
+          "{{workspaceName}} を復元してエージェントに戻ります。保存されたベース、またはリポジトリのデフォルトブランチから新しいブランチを作成します。",
         unarchiveDescription:
           "{{workspaceName}} はアーカイブされています。再度開くにはアーカイブを解除してください。",
         restoreAction: "復元",
@@ -1272,6 +1275,9 @@ export const ja: TranslationResources = {
       settings: "設定",
       closeSidebar: "サイドバーを閉じる",
     },
+    footer: {
+      usage: "使用状況",
+    },
     help: {
       trigger: "ヘルプとサポート",
       sectionHelp: "ヘルプ",
@@ -1809,6 +1815,8 @@ export const ja: TranslationResources = {
       unknownReason: "このエージェントはサブエージェントを起動できません",
       hostOutdated: "エージェントをメンションするには Host を更新してください",
     },
+    chooseProjectForCommands: "コマンドを表示するにはプロジェクトを選択してください",
+    chooseModelForCommands: "コマンドを表示するにはモデルを選択してください",
   },
   loadOlderHistory: {
     failed: "古い履歴を読み込めませんでした",
@@ -2569,8 +2577,15 @@ export const ja: TranslationResources = {
         description: "プロンプト間を移動するためのアウトラインを表示します",
       },
       sidebar: {
-        title: "サイドバー",
-        description: "サイドバー上部に表示する項目とその順序を選択します",
+        header: {
+          title: "ヘッダー",
+          description: "サイドバー上部に表示する項目とその順序を選択します",
+        },
+        footer: {
+          title: "フッター",
+          description:
+            "サイドバー下部に表示する行とその順序を選択します。プロジェクトを追加とアイコンの行は常に表示されます",
+        },
         moveUp: "上に移動",
         moveDown: "下に移動",
       },
@@ -2607,6 +2622,14 @@ export const ja: TranslationResources = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "このデバイスでフォントが見つかりません。代替フォントが使われます",
         notMonospaceWarning: "等幅フォントではありません。表示がずれる可能性があります",
+      },
+      layout: {
+        title: "レイアウト",
+        contentWidth: "コンテンツ幅",
+        contentWidthHint: "ワイド画面でのチャットと Markdown ファイルの最大幅",
+        contentWidthAccessibility: "コンテンツ幅 (ピクセル)",
+        reset: "リセット",
+        resetAccessibility: "コンテンツ幅をデフォルトに戻す",
       },
       syntax: {
         title: "構文ハイライト",

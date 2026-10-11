@@ -22,6 +22,7 @@ export const en = {
     total: "{{total}} matches",
   },
   common: {
+    bottomSheetBackdrop: "Bottom sheet backdrop",
     back: "Back",
     loading: "Loading...",
     actions: {
@@ -501,7 +502,9 @@ export const en = {
       recovery: {
         archivedTitle: "Workspace archived",
         restoreDescription:
-          "{{workspaceName}} was archived and its worktree was removed. Restore branch {{branch}} to open it again.",
+          "Restore {{workspaceName}} to return to its agents. Its worktree will use branch {{branch}}.",
+        restoreWithoutBranchDescription:
+          "Restore {{workspaceName}} to return to its agents. A new branch will start from the saved base or the repository default.",
         unarchiveDescription: "{{workspaceName}} is archived. Unarchive it to open it again.",
         restoreAction: "Restore",
         unarchiveAction: "Unarchive",
@@ -1266,6 +1269,9 @@ export const en = {
       settings: "Settings",
       closeSidebar: "Close sidebar",
     },
+    footer: {
+      usage: "Usage",
+    },
     help: {
       trigger: "Help and support",
       sectionHelp: "Help",
@@ -1816,6 +1822,8 @@ export const en = {
       unknownReason: "This agent can't start subagents",
       hostOutdated: "Update the host to mention agents",
     },
+    chooseProjectForCommands: "Choose a project to see commands",
+    chooseModelForCommands: "Select a model to see commands",
   },
   loadOlderHistory: {
     failed: "Couldn't load older history",
@@ -2441,6 +2449,7 @@ export const en = {
         offline: "Connect to this host to open plugin settings.",
         update: "Update this host to use plugin settings.",
         unavailable: "This plugin settings screen is unavailable.",
+        backToPlugins: "Back to plugins",
       },
       trustedTitle: "Plugins are trusted code",
       trustedDescription:
@@ -2672,8 +2681,15 @@ export const en = {
         description: "Show an outline for jumping between prompts",
       },
       sidebar: {
-        title: "Sidebar",
-        description: "Choose which items appear at the top of the sidebar and in what order",
+        header: {
+          title: "Header",
+          description: "Choose which items appear at the top of the sidebar and in what order",
+        },
+        footer: {
+          title: "Footer",
+          description:
+            "Choose which rows appear at the bottom of the sidebar and in what order. Add project and the icon row always show",
+        },
         moveUp: "Move up",
         moveDown: "Move down",
       },
@@ -2709,6 +2725,14 @@ export const en = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "This font was not found on this device; a fallback font will be used",
         notMonospaceWarning: "Not a monospace font; text may misalign",
+      },
+      layout: {
+        title: "Layout",
+        contentWidth: "Content width",
+        contentWidthHint: "Max width of chat and Markdown files on wide screens",
+        contentWidthAccessibility: "Content width in pixels",
+        reset: "Reset",
+        resetAccessibility: "Reset content width to default",
       },
       syntax: {
         title: "Syntax",

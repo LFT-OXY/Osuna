@@ -41,7 +41,7 @@ import {
   Paperclip,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
-import { FOOTER_HEIGHT, MAX_CONTENT_WIDTH } from "@/constants/layout";
+import { FOOTER_HEIGHT } from "@/constants/layout";
 import {
   AgentControls,
   DraftAgentControls,
@@ -68,7 +68,7 @@ import {
 import type { ComposerLiveSelection } from "./input/text-input.types";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "./types";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import type { DraftCommandConfig } from "@/hooks/use-agent-commands-query";
+import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { encodeImages } from "@/utils/encode-images";
 import { focusWithRetries } from "@/utils/web-focus";
 import {
@@ -294,8 +294,8 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
       status: agent?.status ?? null,
       contextWindowMaxTokens: agent?.lastUsage?.contextWindowMaxTokens ?? null,
       contextWindowUsedTokens: agent?.lastUsage?.contextWindowUsedTokens ?? null,
-      model: agent?.model ?? null,
       provider: agent?.provider ?? null,
+      model: agent?.model ?? null,
     };
   };
 }
@@ -1075,8 +1075,8 @@ interface ComposerProps {
   autoFocusKey?: string;
   /** Callback to expose a focus function to parent components (desktop only). */
   onFocusInput?: (focus: () => void) => void;
-  /** Optional draft context for listing commands before an agent exists. */
-  commandDraftConfig?: DraftCommandConfig;
+  /** Draft context for listing commands before an agent exists. Omitted for running agents. */
+  commandDraft?: DraftCommandTarget;
   /** Called when a message is about to be sent (any path: keyboard, dictation, queued). */
   onMessageSent?: () => void;
   onComposerHeightChange?: (height: number) => void;
@@ -1419,7 +1419,7 @@ function ComposerContentImpl({
   autoFocus = false,
   autoFocusKey,
   onFocusInput,
-  commandDraftConfig,
+  commandDraft,
   onMessageSent,
   onComposerHeightChange,
   onAttentionInputFocus,
@@ -2334,12 +2334,15 @@ function ComposerContentImpl({
     ],
   );
   const beforeVoiceContent = useMemo(
-    () =>
-      resolveContextWindowPlacement({
-        meter: contextWindowMeter,
-        reserveSlot: hasAgent,
-        showTokenLabel: showContextWindowTokenLabel,
-      }),
+    () => (
+      <>
+        {resolveContextWindowPlacement({
+          meter: contextWindowMeter,
+          reserveSlot: hasAgent,
+          showTokenLabel: showContextWindowTokenLabel,
+        })}
+      </>
+    ),
     [contextWindowMeter, hasAgent, showContextWindowTokenLabel],
   );
 
@@ -2589,7 +2592,7 @@ function ComposerContentImpl({
       setUserInput: replaceUserInput,
       serverId,
       agentId,
-      draftConfig: commandDraftConfig,
+      draft: commandDraft,
       prefetchCommands: isMessageInputFocused && mode.showAutocomplete,
       onPickSkill: handlePickSkill,
       onPickMention: handlePickMention,
@@ -2605,7 +2608,7 @@ function ComposerContentImpl({
       replaceUserInput,
       serverId,
       agentId,
-      commandDraftConfig,
+      commandDraft,
       isMessageInputFocused,
       mode.showAutocomplete,
       buildOutgoingAttachments,
@@ -2804,7 +2807,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
   inputAreaContent: {
     flexShrink: 1,
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
+    maxWidth: theme.contentMaxWidth,
     gap: theme.spacing[3],
   },
   messageInputContainer: {

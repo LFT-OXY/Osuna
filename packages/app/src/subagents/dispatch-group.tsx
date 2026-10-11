@@ -15,7 +15,7 @@ import equal from "fast-deep-equal";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon, type ProviderIconComponent } from "@/components/provider-icons";
 import { LiveElapsed } from "@/components/message";
 import { Text } from "@/components/ui/text";
 import { ComposerTrackMark } from "@/composer/tracks";
@@ -372,9 +372,10 @@ function DispatchGroupRow({
 }): ReactElement {
   const { open } = presentation;
   const openable = open !== null;
+  const providerIcon = useProviderIcon(presentation.provider ?? "", serverId);
   const iconPresentation = useMemo(
-    () => buildIconPresentation(presentation, serverId),
-    [presentation, serverId],
+    () => buildIconPresentation(presentation, providerIcon),
+    [presentation, providerIcon],
   );
   const handlePress = useCallback(() => {
     if (open) {
@@ -428,9 +429,8 @@ function DispatchGroupRow({
 
 function buildIconPresentation(
   presentation: DispatchRowPresentation,
-  serverId: string,
+  icon: ProviderIconComponent,
 ): WorkspaceTabPresentation {
-  const icon = getProviderIcon(presentation.provider ?? "", serverId);
   return {
     key: presentation.key,
     kind: "agent",

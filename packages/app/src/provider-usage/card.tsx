@@ -9,7 +9,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Text } from "@/components/ui/text";
 import type { Theme } from "@/styles/theme";
@@ -32,7 +32,7 @@ interface ProviderUsageIconProps {
 }
 
 export function ProviderUsageIcon({ iconKey, size, color = "" }: ProviderUsageIconProps) {
-  const Icon = getProviderIcon(iconKey);
+  const Icon = useProviderIcon(iconKey);
   return <Icon size={size} color={color} />;
 }
 

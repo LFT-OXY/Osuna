@@ -39,7 +39,7 @@ import type { SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { resolveProviderGlyph, type ProviderIconTone } from "@/components/provider-icons";
+import { useProviderGlyph, type ProviderIconTone } from "@/components/provider-icons";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import {
@@ -229,7 +229,7 @@ export function ModelProviderGlyph({
   size: number;
   tone?: ProviderIconTone;
 }) {
-  const { Icon, brandColor } = resolveProviderGlyph({ provider, serverId, tone });
+  const { Icon, brandColor } = useProviderGlyph({ provider, serverId, tone });
   const themeColor =
     tone === "muted" ? styles.providerIconMuted.color : styles.providerIconForeground.color;
   return <Icon size={size} color={brandColor ?? themeColor} />;

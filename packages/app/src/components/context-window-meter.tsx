@@ -254,7 +254,6 @@ export function ContextWindowMeter({
                 width={svgSize}
                 height={svgSize}
                 viewBox={`0 0 ${svgSize} ${svgSize}`}
-                style={styles.svg}
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
               >
@@ -276,6 +275,8 @@ export function ContextWindowMeter({
                   strokeLinecap="round"
                   strokeDasharray={circumference}
                   strokeDashoffset={dashOffset}
+                  // SVG strokes start at three o'clock; the ring reads clockwise from twelve.
+                  transform={`rotate(-90 ${center} ${center})`}
                 />
               </Svg>
               {showPercentage ? (
@@ -425,7 +426,6 @@ function PendingContextWindowMeter({
         width={geometry.svgSize}
         height={geometry.svgSize}
         viewBox={`0 0 ${geometry.svgSize} ${geometry.svgSize}`}
-        style={styles.svg}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
@@ -564,9 +564,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[1],
     borderRadius: theme.borderRadius.full,
-  },
-  svg: {
-    transform: [{ rotate: "-90deg" }],
   },
   percentageLabel: {
     color: theme.colors.foregroundMuted,

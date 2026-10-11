@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { shallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { AgentStreamView } from "@/agent-stream/view";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import {
   resolveComposerTrackControlClearance,
   resolveComposerTrackTailClearance,
@@ -114,7 +114,7 @@ function useProviderSubagentDescriptor(
       subagentType && subagentType !== label ? `${subagentType} · ${providerLabel}` : providerLabel,
     tooltip: label,
     titleState: descriptor ? "ready" : "loading",
-    icon: getProviderIcon(provider, context.serverId),
+    icon: useProviderIcon(provider, context.serverId),
     statusBucket: descriptor
       ? deriveSidebarStateBucket({
           status: providerSubagentLifecycleStatus(descriptor.status),

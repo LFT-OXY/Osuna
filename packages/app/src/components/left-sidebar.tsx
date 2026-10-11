@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { GitBranch, Import, Plus, Server, Settings, X } from "lucide-react-native";
+import { CircleGauge, GitBranch, Plus, Server, Settings, X } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
@@ -44,12 +44,16 @@ import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels"
 import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model";
 import { type SidebarGroupMode, useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { useHosts } from "@/runtime/host-runtime";
+import { PluginSidebarItem } from "@/plugins/sidebar-items";
+import { builtinSidebarNavLabelKey } from "@/sidebar-nav/model";
+import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
 import { usePanelStore } from "@/stores/panel-store";
 import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { buildSettingsAddHostRoute, buildSettingsRoute } from "@/utils/host-routes";
 import { openHostOverview } from "@/navigation/settings-navigation";
+import { UsageSidebarItem, useOpenUsageScreen } from "@/usage";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
@@ -86,9 +90,9 @@ interface SidebarSharedProps {
 interface SidebarLabels {
   addProject: string;
   hosts: string;
-  importSession: string;
   settings: string;
   searchHosts: string;
+  usage: string;
   closeSidebar: string;
 }
 
@@ -193,9 +197,9 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     (): SidebarLabels => ({
       addProject: t("sidebar.actions.addProject"),
       hosts: t("sidebar.actions.hosts"),
-      importSession: t("importSession.title"),
       settings: t("sidebar.actions.settings"),
       searchHosts: t("sidebar.host.searchPlaceholder"),
+      usage: t(builtinSidebarNavLabelKey("usage", "footer")),
       closeSidebar: t("sidebar.actions.closeSidebar"),
     }),
     [t],
@@ -288,6 +292,7 @@ function FooterIconButton({
   testID: string;
   label: string;
   icon: typeof Plus;
+  /** Only for a glyph that reads larger than the others at the same size. */
   iconSize?: number;
   shortcutKeys?: ReturnType<typeof useShortcutKeys>;
   theme: SidebarTheme;
@@ -315,7 +320,7 @@ function FooterIconButton({
           )}
         </Pressable>
       </TooltipTrigger>
-      <TooltipContent side="top" align="center" offset={8}>
+      <TooltipContent side="top" align="center" offset={8} testID={`${testID}-tooltip`}>
         <IconTooltipContent label={label} shortcutKeys={shortcutKeys} />
       </TooltipContent>
     </Tooltip>
@@ -370,7 +375,8 @@ function SidebarHostPicker({
         testID="sidebar-hosts-trigger"
         label={label}
         icon={Server}
-        iconSize={theme.iconSize.sm}
+        // Server's two boxes fill more of the square than the other glyphs.
+        iconSize={theme.iconSize.md - 1}
         theme={theme}
       />
     </HostPicker>
@@ -395,32 +401,35 @@ function IconTooltipContent({
 function SidebarFooter({
   theme,
   handleOpenProject,
-  handleImportSession,
   handleSettings,
   labels,
   handleAddHost,
   handleOpenHostSettings,
+  onBeforeNavigate,
 }: {
   theme: SidebarTheme;
   handleOpenProject: () => void;
-  handleImportSession: () => void;
   handleSettings: () => void;
   labels: {
     addProject: string;
     hosts: string;
-    importSession: string;
     settings: string;
     searchHosts: string;
+    usage: string;
   };
   handleAddHost: () => void;
   handleOpenHostSettings: (serverId: string) => void;
+  onBeforeNavigate?: () => void;
 }) {
   const newAgentKeys = useShortcutKeys("new-agent");
   const settingsKeys = useShortcutKeys("toggle-settings");
+  const openUsageScreen = useOpenUsageScreen();
 
+  // One line of icons: Add project, Usage, Hosts, then Help and Settings at the end.
   return (
-    <View style={styles.sidebarFooter}>
-      <View style={styles.footerIconRow}>
+    <View testID="sidebar-footer">
+      <SidebarFooterRows onBeforeNavigate={onBeforeNavigate} />
+      <View style={styles.sidebarFooter} testID="sidebar-footer-bottom-line">
         <FooterIconButton
           onPress={handleOpenProject}
           testID="sidebar-add-project"
@@ -429,19 +438,20 @@ function SidebarFooter({
           shortcutKeys={newAgentKeys}
           theme={theme}
         />
+        <FooterIconButton
+          onPress={openUsageScreen}
+          testID="sidebar-usage-icon"
+          label={labels.usage}
+          icon={CircleGauge}
+          theme={theme}
+        />
         <SidebarHostPicker
           theme={theme}
           label={labels.hosts}
           onAddHost={handleAddHost}
           onOpenHostSettings={handleOpenHostSettings}
         />
-        <FooterIconButton
-          onPress={handleImportSession}
-          testID="sidebar-import-session"
-          label={labels.importSession}
-          icon={Import}
-          theme={theme}
-        />
+        <View style={styles.footerSpacer} />
         <SidebarHelpMenu />
         <FooterIconButton
           onPress={handleSettings}
@@ -452,6 +462,32 @@ function SidebarFooter({
           theme={theme}
         />
       </View>
+    </View>
+  );
+}
+
+/** The footer rows in the user's `sidebarFooterItems` order: the Usage item and plugin rows. */
+function SidebarFooterRows({ onBeforeNavigate }: { onBeforeNavigate?: () => void }) {
+  const { items } = useSidebarNavItems("footer");
+  const rowsRef = useRef<View | null>(null);
+  const visibleItems = items.filter((item) => item.visible);
+  if (visibleItems.length === 0) return null;
+  // 上游在这些行与图标行之间画一条分割线；Osuna 的侧栏不画横向分割线。
+  return (
+    <View ref={rowsRef} collapsable={false} style={styles.footerRows}>
+      {visibleItems.map((item) =>
+        item.kind === "plugin" ? (
+          <PluginSidebarItem
+            key={item.key}
+            group={item.group}
+            section="footer"
+            fallbackAnchorRef={rowsRef}
+            onBeforeNavigate={onBeforeNavigate}
+          />
+        ) : (
+          <UsageSidebarItem key={item.key} />
+        ),
+      )}
     </View>
   );
 }
@@ -509,7 +545,11 @@ function MobileSidebar({
       <View style={styles.sidebarContent} pointerEvents="auto">
         <WindowChromeSafeArea placement="below" />
         <SidebarNavRows style={styles.sidebarHeaderGroup} onBeforeNavigate={closeSidebar} />
-        <WindowChromeSafeArea placement="inline" style={styles.mobileCloseButtonRow}>
+        <WindowChromeSafeArea
+          placement="inline"
+          pointerEvents="box-none"
+          style={styles.mobileCloseButtonRow}
+        >
           <Pressable
             style={styles.mobileCloseButton}
             onPress={closeSidebar}
@@ -558,11 +598,11 @@ function MobileSidebar({
         <SidebarFooter
           theme={theme}
           handleOpenProject={handleOpenProject}
-          handleImportSession={handleImportSession}
           handleSettings={handleSettings}
           labels={labels}
           handleAddHost={handleAddHost}
           handleOpenHostSettings={handleOpenHostSettings}
+          onBeforeNavigate={closeSidebar}
         />
       </View>
     </MobilePanelOverlay>
@@ -735,7 +775,6 @@ function DesktopSidebar({
         <SidebarFooter
           theme={theme}
           handleOpenProject={handleOpenProject}
-          handleImportSession={handleImportSession}
           handleSettings={handleSettings}
           labels={labels}
           handleAddHost={handleAddHost}
@@ -830,7 +869,6 @@ const styles = StyleSheet.create((theme) => ({
     right: 0,
     zIndex: 2,
     alignItems: "flex-end",
-    pointerEvents: "box-none",
   },
   mobileCloseButton: {
     // The 16px X paints farther inside its 32px hit target than the 14px Settings2 glyph.
@@ -878,18 +916,23 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
   },
+  // 底部图标行。Osuna 的侧栏不画横向分割线，上游 footerContainer 的上边框没有收。
   sidebarFooter: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: theme.spacing[0.5],
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[2],
   },
-  footerIconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[0.5],
-    flexShrink: 0,
+  // Pushes Help and Settings to the end of the icon line.
+  footerSpacer: {
+    flex: 1,
+  },
+  // Usage and plugin rows sit above the footer's icon line, spaced like the header nav rows.
+  footerRows: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1.5],
+    gap: 2,
   },
   // 与同一行里 sidebar-help-menu.tsx 的 Help 按钮取同一套框（controlHeight.md、radius.md）。
   footerIconButton: {

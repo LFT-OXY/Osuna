@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react-native";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModelProviderGlyph } from "@/components/model-browser";
-import { resolveProviderGlyph } from "@/components/provider-icons";
+import { useProviderGlyph } from "@/components/provider-icons";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import type { ProviderMenuGroups } from "@/provider-selection/provider-selection";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -73,7 +73,7 @@ export function AgentProviderControl({
   const [moreExpanded, setMoreExpanded] = useState(false);
 
   const hasProvider = provider.trim().length > 0;
-  const glyph = resolveProviderGlyph({ provider, serverId, tone: "brand" });
+  const glyph = useProviderGlyph({ provider, serverId, tone: "brand" });
   const canOpen =
     !disabled &&
     menu !== null &&

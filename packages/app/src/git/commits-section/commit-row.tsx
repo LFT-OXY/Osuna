@@ -8,14 +8,13 @@ import { WORKSPACE_TREE_ROW_HEIGHT, WORKSPACE_TREE_ROW_INSET } from "@/component
 import { ThemedChevron, chevronColorMapping } from "@/git/themed-chevron";
 import type { ClassifiedCheckoutCommit } from "@/git/use-commits-query";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
-import { formatTimeAgo } from "@/utils/time";
+import { useTimeAgo } from "@/hooks/use-time-ago";
 import { CommitGraphNode } from "./commit-graph-node";
 
 interface CommitRowProps {
   commit: ClassifiedCheckoutCommit;
   isFirst: boolean;
   isLast: boolean;
-  now: Date;
   onCommitPress: (sha: string) => void;
 }
 
@@ -30,7 +29,6 @@ export const CommitRow = memo(function CommitRow({
   commit,
   isFirst,
   isLast,
-  now,
   onCommitPress,
 }: CommitRowProps) {
   const handlePress = useCallback(() => {
@@ -53,13 +51,18 @@ export const CommitRow = memo(function CommitRow({
           {commit.subject}
         </UiText>
       </View>
-      <Text style={styles.timestamp}>{formatTimeAgo(new Date(commit.authorDate), now)}</Text>
+      <CommitTimestamp authorDate={commit.authorDate} />
       <View style={styles.caret}>
         <ThemedChevron size={ICON_SIZE.sm} uniProps={chevronColorMapping} />
       </View>
     </Pressable>
   );
 });
+
+function CommitTimestamp({ authorDate }: { authorDate: string }) {
+  const label = useTimeAgo(new Date(authorDate));
+  return <Text style={styles.timestamp}>{label}</Text>;
+}
 
 const styles = StyleSheet.create((theme) => ({
   // 与上方改动文件树的行同高、同样两侧收进，收进量从内边距扣回，提交图节点不挪位。

@@ -102,6 +102,12 @@ describe("OpenCodeBridge", () => {
     const paseoHome = await mkdtemp(path.join(tmpdir(), "paseo-opencode-bridge-"));
     temporaryDirectories.push(paseoHome);
     const catalog = createCatalog();
+    const executedInputs: unknown[] = [];
+    const executeTool = catalog.executeTool;
+    catalog.executeTool = async (name, input, context) => {
+      executedInputs.push(input);
+      return await executeTool(name, input, context);
+    };
     const bridge = new OpenCodeBridge({ paseoHome, logger: createTestLogger() });
     await bridge.start();
     bridge.setManifestCatalog(catalog);
@@ -173,12 +179,30 @@ describe("OpenCodeBridge", () => {
           token: plugin.token,
         },
       );
+      const asked: unknown[] = [];
       await expect(
         hooks.tool.paseo_echo_context.execute(
           { value: "through bundled plugin" },
-          { sessionID: "ses_one" },
+          { sessionID: "ses_one", ask: async (request: unknown) => void asked.push(request) },
         ),
       ).resolves.toMatchObject({ output: "through bundled plugin" });
+      expect(asked).toEqual([
+        { permission: "paseo_echo_context", patterns: ["*"], always: ["*"], metadata: {} },
+      ]);
+
+      executedInputs.length = 0;
+      await expect(
+        hooks.tool.paseo_echo_context.execute(
+          { value: "rejected" },
+          {
+            sessionID: "ses_one",
+            ask: async () => {
+              throw new Error("The user rejected permission to use this specific tool call.");
+            },
+          },
+        ),
+      ).rejects.toThrow("rejected permission");
+      expect(executedInputs).toEqual([]);
 
       release();
       const pluginError = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -225,13 +249,15 @@ describe("OpenCodeBridge", () => {
         { client: { session: { get: async () => ({ data: {} }) } } },
         { baseUrl: plugin.baseUrl, token: plugin.token },
       );
+      // 上游的插件在执行前先向 OpenCode 请求权限；真实上下文总带 ask，这里放行。
+      const ask = async () => undefined;
       await hooks.tool.paseo_echo_context.execute(
         { value: "with call id" },
-        { sessionID: "ses_one", callID: "call_opencode" },
+        { sessionID: "ses_one", callID: "call_opencode", ask },
       );
       await hooks.tool.paseo_echo_context.execute(
         { value: "no call id" },
-        { sessionID: "ses_one" },
+        { sessionID: "ses_one", ask },
       );
 
       expect(seenContexts.map((context) => context.providerToolCallId)).toEqual([

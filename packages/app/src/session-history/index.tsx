@@ -6,7 +6,7 @@ import { History, RotateCw } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { resolveImportTarget } from "@/components/import-session-sheet-view-model";
-import { getProviderIcon, type ProviderIconProps } from "@/components/provider-icons";
+import { useProviderIcon, type ProviderIconProps } from "@/components/provider-icons";
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -161,7 +161,7 @@ function SessionHistoryRowItem({
 }) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
-  const ProviderIcon = getProviderIcon(row.providerId, serverId);
+  const ProviderIcon = useProviderIcon(row.providerId, serverId);
   const disabled = status !== "idle";
   // docs/hover.md: hover on a plain View; press on the trigger inside it.
   const [isHovered, setIsHovered] = useState(false);
