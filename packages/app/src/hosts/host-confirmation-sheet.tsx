@@ -15,11 +15,31 @@ export function HostConfirmationSheet() {
   const cancel = useCallback(() => answer(false), [answer]);
   const connect = useCallback(() => answer(true), [answer]);
   const header = useMemo<SheetHeader>(() => ({ title: t("pairing.hostConfirmation.title") }), [t]);
+  // Osuna：按钮放在对话框底部按钮区（docs/design.md），上游放在正文里。
+  const footer = useMemo(
+    () => (
+      <View style={styles.confirmActions}>
+        <Button variant="secondary" size="sm" onPress={cancel} testID="host-confirmation-cancel">
+          {t("common.actions.cancel")}
+        </Button>
+        <Button variant="default" size="sm" onPress={connect} testID="host-confirmation-connect">
+          {t("pairing.hostConfirmation.connect")}
+        </Button>
+      </View>
+    ),
+    [cancel, connect, t],
+  );
 
   if (!pending) return null;
 
   return (
-    <AdaptiveModalSheet header={header} visible onClose={cancel} testID="host-confirmation">
+    <AdaptiveModalSheet
+      header={header}
+      visible
+      onClose={cancel}
+      footer={footer}
+      testID="host-confirmation"
+    >
       <Text style={styles.confirmText}>
         {pending.kind === "changedConnection"
           ? t("pairing.hostConfirmation.descriptionChanged")
@@ -43,26 +63,6 @@ export function HostConfirmationSheet() {
           testID="host-confirmation-relay"
           showBorder
         />
-      </View>
-      <View style={styles.confirmActions}>
-        <Button
-          variant="secondary"
-          size="sm"
-          style={FLEX_1_STYLE}
-          onPress={cancel}
-          testID="host-confirmation-cancel"
-        >
-          {t("common.actions.cancel")}
-        </Button>
-        <Button
-          variant="default"
-          size="sm"
-          style={FLEX_1_STYLE}
-          onPress={connect}
-          testID="host-confirmation-connect"
-        >
-          {t("pairing.hostConfirmation.connect")}
-        </Button>
       </View>
     </AdaptiveModalSheet>
   );
@@ -99,11 +99,10 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
   },
   confirmActions: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: theme.spacing[2],
-    marginTop: theme.spacing[4],
   },
 }));
-
-const FLEX_1_STYLE = { flex: 1 };

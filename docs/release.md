@@ -238,6 +238,9 @@ git 不报冲突、结果却不对的：
   对照 `packages/app/src/styles/theme.ts` 重算。
 - 上游新增的设置界面里，说明文字与操作菜单按钮要对回 `settingsStyles` 和设置页已有的
   写法（[design.md](design.md)）。
+- 上游新增的确认类对话框把操作按钮放在正文里、等宽。挪进 `AdaptiveModalSheet` 的 `footer`，
+  按自身宽度靠右，`testID` 不动（[design.md](design.md)；v0.10.3 的
+  `hosts/host-confirmation-sheet.tsx`，对照 `screens/settings/host-page.tsx` 的移除确认）。
 - `packages/app/src/i18n/resources.test.ts` 的「已迁移英文字面量」守卫按 `"文字"` 与
   `` `文字 `` 开头扫描源码，注释也算。上游注释里的 `` `BackHandler` `` 会被当成 `Back`。
   改写上游那句注释，不放宽守卫。每段合完单独跑这个文件。
