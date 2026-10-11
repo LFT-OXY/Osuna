@@ -233,23 +233,41 @@ const FOOTER_ICON_TEST_IDS = [
 /**
  * One line of same-size icons: Add project, Plan usage and Hosts together on the left, Help and
  * Settings together at the end. Osuna 的图标按钮之间留 2px（上游是 0）。
+ * 窄屏侧栏是滑入的：逐个量框会量到滑动中途的位置，宽度也会带亚像素小数，所以轮询到一帧里
+ * 的数值稳定为止，并按整数比较（CI 上量到过 27.9999995 与 28、中途间距 30.2）。
  */
 export async function expectFooterIconRow(page: Page): Promise<void> {
-  const boxes = (
-    await Promise.all(
-      FOOTER_ICON_TEST_IDS.map((testID) =>
-        page.locator(`[data-testid="${testID}"]:visible`).first().boundingBox(),
-      ),
+  await expect
+    .poll(
+      async () => {
+        const boxes = await Promise.all(
+          FOOTER_ICON_TEST_IDS.map((testID) =>
+            page.locator(`[data-testid="${testID}"]:visible`).first().boundingBox(),
+          ),
+        );
+        if (boxes.some((box) => box === null)) return null;
+        const measured = boxes.map((box) => box!);
+        const [first] = measured;
+        const gaps = measured
+          .slice(1)
+          .map((box, index) => Math.round(box.x - (measured[index]!.x + measured[index]!.width)));
+        return {
+          sameWidth: measured.every((box) => Math.round(box.width) === Math.round(first!.width)),
+          sameLine: measured.every(
+            (box) => Math.abs(box.y + box.height / 2 - first!.y - first!.height / 2) < 2,
+          ),
+          gaps,
+          wideMiddleGap: gaps[2]! > first!.width,
+        };
+      },
+      { timeout: 10_000 },
     )
-  ).map((box) => box!);
-  const [first] = boxes;
-  for (const box of boxes) {
-    expect(Math.abs(box.y + box.height / 2 - first!.y - first!.height / 2)).toBeLessThan(2);
-    expect(box.width).toBe(first!.width);
-  }
-  const gaps = boxes.slice(1).map((box, index) => box.x - (boxes[index]!.x + boxes[index]!.width));
-  expect(gaps).toEqual([2, 2, expect.any(Number), 2]);
-  expect(gaps[2]).toBeGreaterThan(first!.width);
+    .toEqual({
+      sameWidth: true,
+      sameLine: true,
+      gaps: [2, 2, expect.any(Number), 2],
+      wideMiddleGap: true,
+    });
 }
 
 /**
