@@ -23,3 +23,9 @@
 - [ ] 原生端（iOS / Android）免验收。
 - [ ] 维护者看过截图并明确同意并入。
 - [ ] PR 以 merge commit 并入 main；并入后 `b4af508e2` 是 main 的祖先。
+
+## Comments
+
+### 2026-10-11 工单 06 留下的口径
+
+验收项里的「上游站点链接数不多于 01 的基线」按非测试数算（维护者 2026-10-11 裁决，见 06 的记录）。06 合完后是 app 73 / 1、cli 13 / 3；01 的基线是 app 70 / 1、cli 13 / 3。全部数多出的 3 处都在上游带来的测试里（`components/pair-link-credentials.test.ts` 2 处、`hosts/pair-scan-model.test.ts` 1 处），是配对链接样例用的假地址。

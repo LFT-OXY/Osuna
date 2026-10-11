@@ -206,7 +206,8 @@ Osuna 原有的测试不删除、不跳过、不放宽断言。上游带来的�
   （[发版](#发版)）。
 - **外链只指向本仓库**：应用与 CLI 源码里指向上游站点的链接数不增加，合并前后对
   `packages/app/src` 与 `packages/cli/src` 各数一次。上游新代码里的固定链接，本仓库
-  有对应内容就指过来，没有就连同承载它的按钮一起去掉。
+  有对应内容就指过来，没有就连同承载它的按钮一起去掉。把关的是非测试数；上游测试里
+  用作配对链接样例的假地址会让全部数变多，记下出处，不改上游的测试。
 
   ```bash
   PAT='(https?://|www\.)[^"'"'"'`\s)]*(paseo\.sh|getpaseo|discord\.gg|discord\.com|github\.com/sponsors|opencollective)|(^|[^@/\w.-])(app\.|docs\.)?paseo\.sh'
