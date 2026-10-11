@@ -51,16 +51,49 @@ const BUILTIN_LABEL_KEYS: Record<BuiltinSidebarItemId, string> = {
   usage: "sidebar.footer.usage",
 };
 
-const HEADER_LABEL_KEYS: Partial<Record<BuiltinSidebarItemId<"header">, string>> = {
-  usage: "sidebar.sections.usage",
-};
+/**
+ * 顶部组的 usage 是 Osuna 的「用量」（打开 Usage 页），底部组的 usage 是上游的套餐用量摘要。两者在文案、
+ * 设置页的标签与 testID 上的差别都从这里取，不在别处再判断「usage 在哪一组」。
+ */
+const HEADER_USAGE_STATS = {
+  labelKey: "sidebar.sections.usage",
+  testKey: "usage-stats",
+} as const;
+
+/** 设置 → 侧边栏里底部摘要的开关叫「套餐用量摘要」，侧栏里那一行与底部图标只叫「套餐用量」。 */
+const FOOTER_USAGE_SUMMARY_LABEL_KEY = "sidebar.footer.usageSummary";
+
+function isHeaderUsageStats(id: BuiltinSidebarItemId, section: SidebarSection): boolean {
+  return id === "usage" && section === "header";
+}
+
+function isFooterUsageSummary(id: BuiltinSidebarItemId, section: SidebarSection): boolean {
+  return id === "usage" && section === "footer";
+}
 
 /** 两组里编号同为 usage 的条目文案不同，所以要说明取哪一组的。 */
 export function builtinSidebarNavLabelKey(
   id: BuiltinSidebarItemId,
   section: SidebarSection,
 ): string {
-  return (section === "header" ? HEADER_LABEL_KEYS[id] : undefined) ?? BUILTIN_LABEL_KEYS[id];
+  return isHeaderUsageStats(id, section) ? HEADER_USAGE_STATS.labelKey : BUILTIN_LABEL_KEYS[id];
+}
+
+/** The label of the item's row on the Sidebar settings page. */
+export function builtinSidebarNavSettingsLabelKey(
+  id: BuiltinSidebarItemId,
+  section: SidebarSection,
+): string {
+  if (isFooterUsageSummary(id, section)) return FOOTER_USAGE_SUMMARY_LABEL_KEY;
+  return builtinSidebarNavLabelKey(id, section);
+}
+
+/** The key the settings rows build their testIDs from; the two usage items must not collide. */
+export function builtinSidebarNavTestKey(
+  id: BuiltinSidebarItemId,
+  section: SidebarSection,
+): string {
+  return isHeaderUsageStats(id, section) ? HEADER_USAGE_STATS.testKey : id;
 }
 
 /**
@@ -80,18 +113,11 @@ export function builtinSidebarNavShortcutAction(id: BuiltinSidebarItemId): strin
   return BUILTIN_SHORTCUT_ACTIONS[id];
 }
 
-/**
- * Builtins that start hidden on compact layouts, until the user turns them on. A phone's footer
- * has no room to spare for the Usage summary.
- */
-const HIDDEN_BY_DEFAULT_ON_COMPACT: ReadonlySet<BuiltinSidebarItemId> = new Set(["usage"]);
+/** Builtins that start hidden until the user turns them on: the footer's Plan usage summary is opt-in. */
+const HIDDEN_BY_DEFAULT: ReadonlySet<BuiltinSidebarItemId> = new Set(["usage"]);
 
-function builtinVisibleByDefault(
-  section: SidebarSection,
-  id: BuiltinSidebarItemId,
-  compact: boolean,
-): boolean {
-  return !(compact && section === "footer" && HIDDEN_BY_DEFAULT_ON_COMPACT.has(id));
+function builtinVisibleByDefault(section: SidebarSection, id: BuiltinSidebarItemId): boolean {
+  return !(section === "footer" && HIDDEN_BY_DEFAULT.has(id));
 }
 
 export function pluginSidebarNavKey(
@@ -110,8 +136,6 @@ function isBuiltinSidebarItemId<Section extends SidebarSection>(
 
 export function resolveSidebarNavItems<Section extends SidebarSection>(input: {
   section: Section;
-  /** Compact layouts start some builtins hidden; a stored preference always wins. */
-  compact: boolean;
   pluginGroups: readonly PluginSidebarGroup[];
   preferences: readonly SidebarNavPreference[];
 }): SidebarNavItem<Section>[] {
@@ -146,7 +170,7 @@ export function resolveSidebarNavItems<Section extends SidebarSection>(input: {
       kind: "builtin",
       key: id,
       id,
-      visible: builtinVisibleByDefault(input.section, id, input.compact),
+      visible: builtinVisibleByDefault(input.section, id),
     });
   }
   for (const [key, group] of groupsByKey) {

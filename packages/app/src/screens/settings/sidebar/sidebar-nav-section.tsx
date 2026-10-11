@@ -21,8 +21,9 @@ import { Switch } from "@/components/ui/switch";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import {
-  builtinSidebarNavLabelKey,
+  builtinSidebarNavSettingsLabelKey,
   builtinSidebarNavShortcutAction,
+  builtinSidebarNavTestKey,
   type BuiltinSidebarItemId,
   type SidebarNavItem,
   type SidebarSection,
@@ -48,7 +49,7 @@ const BUILTIN_ICONS: Record<BuiltinSidebarItemId, LucideIcon> = {
   usage: Gauge,
 };
 
-// 顶部组的 usage 是 Osuna 的「用量」，与底部组上游的套餐用量摘要编号相同、图标不同。
+// 顶部组的 usage 是 Osuna 的「用量」，图标与底部组上游的套餐用量摘要不同；文案与 testID 的差别在模型里。
 const HEADER_ICONS: Partial<Record<BuiltinSidebarItemId<"header">, LucideIcon>> = {
   usage: BarChart3,
 };
@@ -71,8 +72,14 @@ function navItemIcon(item: SidebarNavItem, section: SidebarSection): LucideIcon 
 
 function navItemLabel(t: TFunction, item: SidebarNavItem, section: SidebarSection): string {
   return item.kind === "builtin"
-    ? t(builtinSidebarNavLabelKey(item.id, section))
+    ? t(builtinSidebarNavSettingsLabelKey(item.id, section))
     : item.group.title;
+}
+
+/** Plugin rows keep their preference key; the two builtin usage items get keys of their own. */
+function navItemTestKey(item: SidebarNavItem, section: SidebarSection): string {
+  if (item.kind === "builtin") return builtinSidebarNavTestKey(item.id, section);
+  return item.key;
 }
 
 /** Own component so the row can stay hook-free about which items have a shortcut. */
@@ -102,6 +109,7 @@ function SidebarNavRow({
 }: SidebarNavRowProps): ReactElement {
   const { t } = useTranslation();
   const label = navItemLabel(t, item, section);
+  const testKey = navItemTestKey(item, section);
 
   const handleMoveUp = useCallback(() => onMove(item.key, "up"), [item.key, onMove]);
   const handleMoveDown = useCallback(() => onMove(item.key, "down"), [item.key, onMove]);
@@ -116,7 +124,7 @@ function SidebarNavRow({
   );
 
   return (
-    <View style={rowStyle} testID={`sidebar-nav-item-${item.key}`}>
+    <View style={rowStyle} testID={`sidebar-nav-item-${testKey}`}>
       <View style={styles.rowMain}>
         <ThemedNavIcon Icon={navItemIcon(item, section)} uniProps={mutedColorMapping} />
         <Text style={settingsStyles.rowTitle} numberOfLines={1}>
@@ -132,7 +140,7 @@ function SidebarNavRow({
           onPress={handleMoveUp}
           disabled={isFirst}
           accessibilityLabel={t("settings.appearance.sidebar.moveUp")}
-          testID={`sidebar-nav-move-up-${item.key}`}
+          testID={`sidebar-nav-move-up-${testKey}`}
         />
         <Button
           variant="ghost"
@@ -141,13 +149,13 @@ function SidebarNavRow({
           onPress={handleMoveDown}
           disabled={isLast}
           accessibilityLabel={t("settings.appearance.sidebar.moveDown")}
-          testID={`sidebar-nav-move-down-${item.key}`}
+          testID={`sidebar-nav-move-down-${testKey}`}
         />
         <Switch
           value={item.visible}
           onValueChange={handleVisibleChange}
           accessibilityLabel={label}
-          testID={`sidebar-nav-toggle-${item.key}`}
+          testID={`sidebar-nav-toggle-${testKey}`}
         />
       </View>
     </View>

@@ -1299,7 +1299,8 @@ export const es: TranslationResources = {
       closeSidebar: "Cerrar barra lateral",
     },
     footer: {
-      usage: "Uso",
+      usage: "Uso del plan",
+      usageSummary: "Resumen del uso del plan",
     },
     help: {
       trigger: "Ayuda y soporte",
@@ -3708,6 +3709,17 @@ export const es: TranslationResources = {
     planUsage: {
       apiEndpointNote: "Usando el endpoint de API {{name}}. Esta cuota no refleja el consumo real.",
       title: "Uso del plan",
+      options: "Opciones de uso del plan",
+      refreshFailed: "No se pudo actualizar el uso",
+      noHosts: "No hay hosts conectados",
+      retry: "Intentar de nuevo",
+      connectHostToSee: "Conéctate a {{host}} para ver el uso",
+      updateHostToSee: "Actualiza {{host}} para ver el uso",
+      pin: "Fijar",
+      displayAs: "Mostrar",
+      displayUsed: "Usado",
+      displayRemaining: "Restante",
+      showInSidebar: "Mostrar en la barra lateral",
       refresh: "Actualizar",
       refreshing: "Actualizando...",
       loading: "Cargando uso...",

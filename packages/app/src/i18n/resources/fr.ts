@@ -1299,7 +1299,8 @@ export const fr: TranslationResources = {
       closeSidebar: "Fermer la barre latérale",
     },
     footer: {
-      usage: "Utilisation",
+      usage: "Consommation du forfait",
+      usageSummary: "Résumé de la consommation du forfait",
     },
     help: {
       trigger: "Aide et assistance",
@@ -3720,6 +3721,17 @@ export const fr: TranslationResources = {
       apiEndpointNote:
         "Endpoint d'API {{name}} utilisé. Ce quota ne reflète pas la consommation réelle.",
       title: "Consommation du forfait",
+      options: "Options de consommation du forfait",
+      refreshFailed: "Impossible d'actualiser l'utilisation",
+      noHosts: "Aucun hôte connecté",
+      retry: "Réessayer",
+      connectHostToSee: "Connectez-vous à {{host}} pour voir l'utilisation",
+      updateHostToSee: "Mettez à jour {{host}} pour voir l'utilisation",
+      pin: "Épingler",
+      displayAs: "Afficher",
+      displayUsed: "Utilisé",
+      displayRemaining: "Restant",
+      showInSidebar: "Afficher dans la barre latérale",
       refresh: "Actualiser",
       refreshing: "Actualisation...",
       loading: "Chargement de l'utilisation...",

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
+import { builtinSidebarNavTestKey } from "@/sidebar-nav/model";
 import { openSettings } from "./app";
 import { clickSettingsBackToWorkspace, openSettingsSection } from "./settings";
 
@@ -11,7 +12,8 @@ const SHELL_ROW_TEST_IDS = {
   history: "sidebar-sessions",
   search: "sidebar-search",
   schedules: "sidebar-schedules",
-  usage: "sidebar-usage",
+  // Osuna 的「用量」行；上游底部的套餐用量摘要行是 sidebar-usage。
+  usage: "sidebar-usage-stats",
 } as const;
 
 export type SidebarNavKey = keyof typeof SHELL_ROW_TEST_IDS;
@@ -27,8 +29,9 @@ function shellRow(page: Page, key: SidebarNavKey): Locator {
   return page.locator(`[data-testid="${SHELL_ROW_TEST_IDS[key]}"]:visible`).first();
 }
 
+/** The Header card's rows; its Usage row takes a testID apart from the Footer card's usage row. */
 function settingsRow(page: Page, key: SidebarNavKey): Locator {
-  return page.getByTestId(`sidebar-nav-item-${key}`);
+  return page.getByTestId(`sidebar-nav-item-${builtinSidebarNavTestKey(key, "header")}`);
 }
 
 function itemLabel(key: SidebarNavKey): string {
@@ -229,8 +232,8 @@ const FOOTER_ICON_TEST_IDS = [
 ];
 
 /**
- * One line of same-size icons: Add project, Usage and Hosts together on the left, Help and
- * Settings together at the end.
+ * One line of same-size icons: Add project, Plan usage and Hosts together on the left, Help and
+ * Settings together at the end. Osuna 的图标按钮之间留 2px（上游是 0）。
  */
 export async function expectFooterIconRow(page: Page): Promise<void> {
   const boxes = (
@@ -246,26 +249,24 @@ export async function expectFooterIconRow(page: Page): Promise<void> {
     expect(box.width).toBe(first!.width);
   }
   const gaps = boxes.slice(1).map((box, index) => box.x - (boxes[index]!.x + boxes[index]!.width));
-  expect(gaps).toEqual([0, 0, expect.any(Number), 0]);
+  expect(gaps).toEqual([2, 2, expect.any(Number), 2]);
   expect(gaps[2]).toBeGreaterThan(first!.width);
 }
 
-export async function expectFooterSeparator(page: Page, shown: boolean): Promise<void> {
+/**
+ * Osuna 的侧栏不画横向分割线（`docs/design.md`）：底部容器没有上边框，摘要行与图标行之间也没有
+ * 分割线，不论摘要行显示与否。上游在这里断言有一条。
+ */
+export async function expectNoFooterRule(page: Page): Promise<void> {
   await expect(page.locator('[data-testid="sidebar-footer"]:visible')).toHaveCSS(
     "border-top-width",
-    "1px",
+    "0px",
   );
   await expect(page.locator('[data-testid="sidebar-footer-bottom-line"]:visible')).toHaveCSS(
     "border-top-width",
     "0px",
   );
-  const separator = page.locator('[data-testid="sidebar-footer-separator"]:visible');
-  await expect(separator).toHaveCount(shown ? 1 : 0);
-  expect(
-    await separator.evaluateAll((elements) =>
-      elements.map((element) => getComputedStyle(element).borderBottomWidth),
-    ),
-  ).toEqual(shown ? ["1px"] : []);
+  await expect(page.locator('[data-testid="sidebar-footer-separator"]:visible')).toHaveCount(0);
 }
 
 export async function hoverFooterAddProject(page: Page): Promise<void> {

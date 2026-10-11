@@ -1276,7 +1276,8 @@ export const ja: TranslationResources = {
       closeSidebar: "サイドバーを閉じる",
     },
     footer: {
-      usage: "使用状況",
+      usage: "プラン使用量",
+      usageSummary: "プラン使用量の概要",
     },
     help: {
       trigger: "ヘルプとサポート",
@@ -3667,6 +3668,17 @@ export const ja: TranslationResources = {
       apiEndpointNote:
         "API エンドポイント {{name}} を使用中です。この枠は実際の消費量を表しません。",
       title: "プラン使用量",
+      options: "プラン使用量のオプション",
+      refreshFailed: "使用状況を更新できません",
+      noHosts: "接続中のホストがありません",
+      retry: "再試行",
+      connectHostToSee: "{{host}} に接続すると使用状況を表示できます",
+      updateHostToSee: "{{host}} を更新すると使用状況を表示できます",
+      pin: "ピン留め",
+      displayAs: "表示",
+      displayUsed: "使用済み",
+      displayRemaining: "残り",
+      showInSidebar: "サイドバーに表示",
       refresh: "更新",
       refreshing: "更新中...",
       loading: "使用状況を読み込み中...",

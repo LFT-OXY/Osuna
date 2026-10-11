@@ -1269,7 +1269,8 @@ export const ko: TranslationResources = {
       closeSidebar: "사이드바 닫기",
     },
     footer: {
-      usage: "사용량",
+      usage: "플랜 사용량",
+      usageSummary: "플랜 사용량 요약",
     },
     help: {
       trigger: "도움말 및 지원",
@@ -3649,6 +3650,17 @@ export const ko: TranslationResources = {
       apiEndpointNote:
         "API 엔드포인트 {{name}}을(를) 사용 중입니다. 이 한도는 실제 사용량을 나타내지 않습니다.",
       title: "플랜 사용량",
+      options: "플랜 사용량 옵션",
+      refreshFailed: "사용량을 새로고침할 수 없습니다",
+      noHosts: "연결된 호스트가 없습니다",
+      retry: "다시 시도",
+      connectHostToSee: "{{host}}에 연결하면 사용량을 볼 수 있습니다",
+      updateHostToSee: "{{host}}을(를) 업데이트하면 사용량을 볼 수 있습니다",
+      pin: "고정",
+      displayAs: "표시",
+      displayUsed: "사용됨",
+      displayRemaining: "남음",
+      showInSidebar: "사이드바에 표시",
       refresh: "새로고침",
       refreshing: "새로고침 중...",
       loading: "사용량 불러오는 중...",

@@ -1262,7 +1262,8 @@ export const ar: TranslationResources = {
       closeSidebar: "إغلاق الشريط الجانبي",
     },
     footer: {
-      usage: "الاستخدام",
+      usage: "استهلاك الخطة",
+      usageSummary: "ملخص استهلاك الخطة",
     },
     help: {
       trigger: "المساعدة والدعم",
@@ -3629,6 +3630,17 @@ export const ar: TranslationResources = {
     planUsage: {
       apiEndpointNote: "تستخدم نقطة نهاية API {{name}}. هذه الحصة لا تعكس الاستهلاك الفعلي.",
       title: "استهلاك الخطة",
+      options: "خيارات استهلاك الخطة",
+      refreshFailed: "تعذّر تحديث الاستخدام",
+      noHosts: "لا توجد مضيفات متصلة",
+      retry: "أعد المحاولة",
+      connectHostToSee: "اتصل بـ {{host}} لعرض الاستخدام",
+      updateHostToSee: "حدّث {{host}} لعرض الاستخدام",
+      pin: "تثبيت",
+      displayAs: "عرض",
+      displayUsed: "المستخدم",
+      displayRemaining: "المتبقي",
+      showInSidebar: "عرض في الشريط الجانبي",
       refresh: "تحديث",
       refreshing: "جارٍ التحديث...",
       loading: "جارٍ تحميل الاستخدام...",

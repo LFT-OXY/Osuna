@@ -14,7 +14,7 @@ export async function openUsagePage(page: Page): Promise<void> {
 export async function openUsagePageFromShell(page: Page): Promise<void> {
   // A reload keeps the route, so the row is only needed when we are elsewhere.
   if (!page.url().endsWith("/usage")) {
-    const sidebarRow = page.locator('[data-testid="sidebar-usage"]:visible').first();
+    const sidebarRow = page.locator('[data-testid="sidebar-usage-stats"]:visible').first();
     await expect(sidebarRow).toBeVisible({ timeout: 30_000 });
     await sidebarRow.click();
   }
@@ -23,7 +23,7 @@ export async function openUsagePageFromShell(page: Page): Promise<void> {
   // The app chrome has to survive the navigation. While "/usage" was missing
   // from the route list that enables it, the page landed with no sidebar and no
   // way back out.
-  await expect(page.locator('[data-testid="sidebar-usage"]:visible').first()).toBeVisible();
+  await expect(page.locator('[data-testid="sidebar-usage-stats"]:visible').first()).toBeVisible();
 }
 
 async function usageHeroTokens(page: Page): Promise<string> {

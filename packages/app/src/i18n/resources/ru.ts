@@ -1280,7 +1280,8 @@ export const ru: TranslationResources = {
       closeSidebar: "Закрыть боковую панель",
     },
     footer: {
-      usage: "Использование",
+      usage: "Расход по тарифу",
+      usageSummary: "Сводка расхода по тарифу",
     },
     help: {
       trigger: "Помощь и поддержка",
@@ -3693,6 +3694,17 @@ export const ru: TranslationResources = {
       apiEndpointNote:
         "Используется API-эндпоинт {{name}}. Этот лимит не отражает реальный расход.",
       title: "Расход по тарифу",
+      options: "Параметры расхода по тарифу",
+      refreshFailed: "Не удалось обновить данные об использовании",
+      noHosts: "Нет подключённых хостов",
+      retry: "Повторить",
+      connectHostToSee: "Подключитесь к {{host}}, чтобы увидеть использование",
+      updateHostToSee: "Обновите {{host}}, чтобы увидеть использование",
+      pin: "Закрепить",
+      displayAs: "Показывать",
+      displayUsed: "Использовано",
+      displayRemaining: "Осталось",
+      showInSidebar: "Показывать в боковой панели",
       refresh: "Обновить",
       refreshing: "Обновление...",
       loading: "Загрузка данных об использовании...",

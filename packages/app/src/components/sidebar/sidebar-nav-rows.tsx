@@ -196,7 +196,8 @@ function SidebarUsageRow({ onBeforeNavigate }: SidebarNavRowProps) {
       label={t(builtinSidebarNavLabelKey("usage", "header"))}
       onPress={handlePress}
       isActive={pathname.includes("/usage")}
-      testID="sidebar-usage"
+      // 上游底部的套餐用量摘要行用 sidebar-usage，Osuna 的「用量」行另取一个。
+      testID="sidebar-usage-stats"
       variant="compact"
     />
   );

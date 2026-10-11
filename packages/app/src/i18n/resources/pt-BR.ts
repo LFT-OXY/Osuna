@@ -1290,7 +1290,8 @@ export const ptBR: TranslationResources = {
       closeSidebar: "Fechar barra lateral",
     },
     footer: {
-      usage: "Uso",
+      usage: "Uso do plano",
+      usageSummary: "Resumo do uso do plano",
     },
     help: {
       trigger: "Ajuda e suporte",
@@ -3686,6 +3687,17 @@ export const ptBR: TranslationResources = {
     planUsage: {
       apiEndpointNote: "Usando o endpoint de API {{name}}. Esta cota não reflete o consumo real.",
       title: "Uso do plano",
+      options: "Opções de uso do plano",
+      refreshFailed: "Não foi possível atualizar o uso",
+      noHosts: "Nenhum host conectado",
+      retry: "Tentar novamente",
+      connectHostToSee: "Conecte-se a {{host}} para ver o uso",
+      updateHostToSee: "Atualize {{host}} para ver o uso",
+      pin: "Fixar",
+      displayAs: "Mostrar",
+      displayUsed: "Usado",
+      displayRemaining: "Restante",
+      showInSidebar: "Mostrar na barra lateral",
       refresh: "Atualizar",
       refreshing: "Atualizando...",
       loading: "Carregando uso...",

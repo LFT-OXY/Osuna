@@ -150,6 +150,16 @@ function findRetiredZhCNTerms(): string[] {
 const appSourceRoot = join(__dirname, "..");
 // 已迁移到翻译键的英文字面量，app 源码里不应再出现；后续迁移按界面追加分组
 const migratedSourceLiterals = {
+  planUsage: [
+    "Plan usage",
+    "Usage options",
+    "Unable to refresh usage",
+    "Loading usage...",
+    "No usage data",
+    "Unable to load usage",
+    "Host connection is not ready",
+    "Show in sidebar",
+  ],
   connectionErrors: [
     "Daemon unavailable",
     "Daemon client unavailable",

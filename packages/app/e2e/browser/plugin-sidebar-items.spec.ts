@@ -20,6 +20,7 @@ import {
 import {
   leaveSettings,
   openSidebarNavSettings,
+  seedSidebarFooterPreferences,
   setFooterItemVisible,
 } from "../support/helpers/sidebar-nav-settings";
 import { seedWorkspace } from "../support/helpers/seed-client";
@@ -153,6 +154,8 @@ test.describe("Plugin sidebar items", () => {
   }) => {
     test.setTimeout(180_000);
     await page.setViewportSize(WIDE);
+    // Osuna：底部的套餐用量摘要默认隐藏，这条用例要看到它在插件行旁边，先打开。
+    await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
     await gotoWorkspace(page, workspaceId);
     const row = headerRow(page, SHOWCASE_PLUGIN_ID, "deploys");
     const sync = footerItem(page, SHOWCASE_PLUGIN_ID, "sync");

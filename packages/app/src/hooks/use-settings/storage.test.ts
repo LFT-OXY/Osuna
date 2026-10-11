@@ -315,6 +315,28 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.sidebarNavItems).toEqual([]);
   });
 
+  // Osuna 的「用量」是顶部条目、与上游底部摘要的编号同为 usage：顶部存的顺序与显隐升级后原样读出，
+  // 不会被挪到底部列表，底部列表也不会凭空多出它。
+  it("keeps a stored header order with Usage hidden or moved, and leaves the footer alone", async () => {
+    const sidebarNavItems = [
+      { key: "usage", visible: false },
+      { key: "search", visible: true },
+      { key: "new-workspace", visible: true },
+      { key: "history", visible: true },
+      { key: "schedules", visible: true },
+    ];
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ sidebarNavItems }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sidebarNavItems).toEqual(sidebarNavItems);
+    expect(result.sidebarFooterItems).toEqual([]);
+  });
+
   it("loads stored sidebar footer items in order and defaults them to empty", async () => {
     expect((await loadAppSettingsFromStorage(makeDeps())).sidebarFooterItems).toEqual([]);
 

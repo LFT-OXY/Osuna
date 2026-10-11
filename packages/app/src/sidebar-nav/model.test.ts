@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PluginSidebarGroup } from "@/plugins/sidebar-groups";
 import {
+  builtinSidebarNavLabelKey,
+  builtinSidebarNavSettingsLabelKey,
   builtinSidebarNavShortcutAction,
+  builtinSidebarNavTestKey,
   moveSidebarNavItem,
   pluginSidebarNavKey,
   resolveSidebarNavItems,
@@ -34,7 +37,6 @@ describe("resolveSidebarNavItems", () => {
   it("yields builtins then plugins, all visible, when nothing is stored", () => {
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [kanban, notes],
       preferences: [],
     });
@@ -60,7 +62,6 @@ describe("resolveSidebarNavItems", () => {
   it("keeps the stored order and appends newly available items as visible", () => {
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [notes, kanban],
       preferences: [
         { key: kanbanKey, visible: false },
@@ -83,7 +84,6 @@ describe("resolveSidebarNavItems", () => {
   it("skips keys that are unknown or not currently available", () => {
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [],
       preferences: [
         { key: notesKey, visible: false },
@@ -104,7 +104,6 @@ describe("resolveSidebarNavItems", () => {
   it("lets the first of duplicate keys win", () => {
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [],
       preferences: [
         { key: "history", visible: false },
@@ -122,18 +121,71 @@ describe("resolveSidebarNavItems", () => {
   });
 });
 
-describe("resolveSidebarNavItems on compact layouts", () => {
-  it("hides the Usage item until it is turned on", () => {
-    const resolve = (compact: boolean, preferences: SidebarNavPreference[]) =>
-      summarize(
-        resolveSidebarNavItems({ section: "footer", compact, pluginGroups: [], preferences }),
-      );
+describe("the footer Plan usage summary", () => {
+  it("starts hidden until it is turned on", () => {
+    const resolve = (preferences: SidebarNavPreference[]) =>
+      summarize(resolveSidebarNavItems({ section: "footer", pluginGroups: [], preferences }));
 
-    expect(resolve(true, [])).toEqual([{ key: "usage", visible: false }]);
-    expect(resolve(false, [])).toEqual([{ key: "usage", visible: true }]);
-    expect(resolve(true, [{ key: "usage", visible: true }])).toEqual([
+    expect(resolve([])).toEqual([{ key: "usage", visible: false }]);
+    expect(resolve([{ key: "usage", visible: true }])).toEqual([{ key: "usage", visible: true }]);
+  });
+});
+
+// Osuna 的「用量」条目与上游的套餐用量摘要编号同为 usage，分属顶部与底部两组。
+describe("the header Usage item", () => {
+  it("reads a stored header order with Usage hidden back as-is", () => {
+    const stored: SidebarNavPreference[] = [
+      { key: "new-workspace", visible: true },
+      { key: "history", visible: true },
+      { key: "search", visible: true },
+      { key: "schedules", visible: true },
+      { key: "usage", visible: false },
+    ];
+
+    expect(
+      summarize(
+        resolveSidebarNavItems({ section: "header", pluginGroups: [], preferences: stored }),
+      ),
+    ).toEqual(stored);
+  });
+
+  it("reads a stored header order with Usage moved to the top back as-is", () => {
+    const stored: SidebarNavPreference[] = [
       { key: "usage", visible: true },
-    ]);
+      { key: "search", visible: true },
+      { key: "new-workspace", visible: true },
+      { key: "history", visible: true },
+      { key: "schedules", visible: true },
+    ];
+
+    expect(
+      summarize(
+        resolveSidebarNavItems({ section: "header", pluginGroups: [], preferences: stored }),
+      ),
+    ).toEqual(stored);
+  });
+
+  it("is visible by default while the footer summary starts hidden", () => {
+    const header = resolveSidebarNavItems({ section: "header", pluginGroups: [], preferences: [] });
+    const footer = resolveSidebarNavItems({ section: "footer", pluginGroups: [], preferences: [] });
+
+    expect(summarize(header).at(-1)).toEqual({ key: "usage", visible: true });
+    expect(summarize(footer)).toEqual([{ key: "usage", visible: false }]);
+  });
+
+  it("takes its own copy, settings label and testID, apart from the footer summary", () => {
+    expect(builtinSidebarNavLabelKey("usage", "header")).toBe("sidebar.sections.usage");
+    expect(builtinSidebarNavLabelKey("usage", "footer")).toBe("sidebar.footer.usage");
+    expect(builtinSidebarNavSettingsLabelKey("usage", "header")).toBe("sidebar.sections.usage");
+    expect(builtinSidebarNavSettingsLabelKey("usage", "footer")).toBe(
+      "sidebar.footer.usageSummary",
+    );
+    expect(builtinSidebarNavSettingsLabelKey("history", "header")).toBe(
+      builtinSidebarNavLabelKey("history", "header"),
+    );
+    expect(builtinSidebarNavTestKey("usage", "header")).toBe("usage-stats");
+    expect(builtinSidebarNavTestKey("usage", "footer")).toBe("usage");
+    expect(builtinSidebarNavTestKey("history", "header")).toBe("history");
   });
 });
 
@@ -141,7 +193,6 @@ describe("setSidebarNavItemVisible", () => {
   it("toggles one item and writes the full resolved order", () => {
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [kanban],
       preferences: [],
     });
@@ -165,7 +216,6 @@ describe("setSidebarNavItemVisible", () => {
     ];
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [],
       preferences: previous,
     });
@@ -193,7 +243,6 @@ describe("setSidebarNavItemVisible", () => {
     ];
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [],
       preferences: previous,
     });
@@ -212,7 +261,6 @@ describe("setSidebarNavItemVisible", () => {
       summarize(
         resolveSidebarNavItems({
           section: "header",
-          compact: false,
           pluginGroups: [notes],
           preferences: next,
         }),
@@ -223,7 +271,6 @@ describe("setSidebarNavItemVisible", () => {
   it("returns the normalized list unchanged for an unknown key", () => {
     const items = resolveSidebarNavItems({
       section: "header",
-      compact: false,
       pluginGroups: [],
       preferences: [],
     });
@@ -237,7 +284,6 @@ describe("setSidebarNavItemVisible", () => {
 describe("moveSidebarNavItem", () => {
   const items = resolveSidebarNavItems({
     section: "header",
-    compact: false,
     pluginGroups: [kanban],
     preferences: [],
   });
@@ -318,13 +364,13 @@ describe("footer section", () => {
   it("resolves the Usage item first, then plugin rows", () => {
     const items = resolveSidebarNavItems({
       section: "footer",
-      compact: false,
       pluginGroups: [sync],
       preferences: [],
     });
 
+    // Osuna：底部的套餐用量摘要默认隐藏（上游此时默认可见）。
     expect(summarize(items)).toEqual([
-      { key: "usage", visible: true },
+      { key: "usage", visible: false },
       { key: syncKey, visible: true },
     ]);
   });
@@ -332,18 +378,17 @@ describe("footer section", () => {
   it("ignores header built-ins stored in footer preferences", () => {
     const items = resolveSidebarNavItems({
       section: "footer",
-      compact: false,
       pluginGroups: [],
       preferences: [{ key: "history", visible: false }],
     });
 
-    expect(summarize(items)).toEqual([{ key: "usage", visible: true }]);
+    // Osuna：底部的套餐用量摘要默认隐藏（上游此时默认可见）。
+    expect(summarize(items)).toEqual([{ key: "usage", visible: false }]);
   });
 
   it("ignores the footer icon buttons, which are fixed and not items", () => {
     const items = resolveSidebarNavItems({
       section: "footer",
-      compact: false,
       pluginGroups: [sync],
       preferences: [
         { key: "add-project", visible: false },
@@ -366,7 +411,6 @@ describe("footer section", () => {
     const previous: SidebarNavPreference[] = [notesPreference];
     const items = resolveSidebarNavItems({
       section: "footer",
-      compact: false,
       pluginGroups: [sync],
       preferences: previous,
     });
@@ -375,7 +419,6 @@ describe("footer section", () => {
     const hidden = setSidebarNavItemVisible({
       items: resolveSidebarNavItems({
         section: "footer",
-        compact: false,
         pluginGroups: [sync],
         preferences: moved,
       }),

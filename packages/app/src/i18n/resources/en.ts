@@ -1270,7 +1270,8 @@ export const en = {
       closeSidebar: "Close sidebar",
     },
     footer: {
-      usage: "Usage",
+      usage: "Plan usage",
+      usageSummary: "Plan usage summary",
     },
     help: {
       trigger: "Help and support",
@@ -3760,6 +3761,17 @@ export const en = {
     planUsage: {
       apiEndpointNote: "Using the API endpoint {{name}}. This quota doesn't reflect actual usage.",
       title: "Plan usage",
+      options: "Plan usage options",
+      refreshFailed: "Unable to refresh usage",
+      noHosts: "No connected hosts",
+      retry: "Try again",
+      connectHostToSee: "Connect to {{host}} to see usage",
+      updateHostToSee: "Update {{host}} to see usage",
+      pin: "Pin",
+      displayAs: "Show",
+      displayUsed: "Used",
+      displayRemaining: "Remaining",
+      showInSidebar: "Show in sidebar",
       refresh: "Refresh",
       refreshing: "Refreshing...",
       loading: "Loading usage...",

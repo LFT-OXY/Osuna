@@ -157,10 +157,10 @@ export async function expectPinnedUsage(page: Page, windows: string[]): Promise<
   await expect(pinned).toHaveText(windows);
 }
 
-/** Without pinned windows the Usage item is a plain row that reads "Usage". */
+/** Without pinned windows the Usage item is a plain row that reads "Plan usage" (Osuna 的叫法). */
 export async function expectNoPinnedUsage(page: Page): Promise<void> {
   await expect(page.locator('[data-testid="sidebar-usage-pinned-window"]:visible')).toHaveCount(0);
-  await expect(usageItem(page)).toHaveText("Usage");
+  await expect(usageItem(page)).toHaveText("Plan usage");
 }
 
 /** A window row, which is itself the pin toggle: "Claude", "Session". */

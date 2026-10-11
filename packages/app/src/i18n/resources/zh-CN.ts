@@ -1250,7 +1250,8 @@ export const zhCN: TranslationResources = {
       closeSidebar: "关闭侧边栏",
     },
     footer: {
-      usage: "使用情况",
+      usage: "套餐用量",
+      usageSummary: "套餐用量摘要",
     },
     help: {
       trigger: "帮助与支持",
@@ -3633,6 +3634,17 @@ export const zhCN: TranslationResources = {
     planUsage: {
       apiEndpointNote: "当前使用第三方接口 {{name}}，此额度不代表实际消耗。",
       title: "套餐用量",
+      options: "套餐用量选项",
+      refreshFailed: "无法刷新套餐用量",
+      noHosts: "没有已连接的主机",
+      retry: "重试",
+      connectHostToSee: "连接 {{host}} 后可查看套餐用量",
+      updateHostToSee: "更新 {{host}} 后可查看套餐用量",
+      pin: "固定",
+      displayAs: "显示",
+      displayUsed: "已用",
+      displayRemaining: "剩余",
+      showInSidebar: "在侧栏显示",
       refresh: "刷新",
       refreshing: "刷新中…",
       loading: "正在加载用量…",

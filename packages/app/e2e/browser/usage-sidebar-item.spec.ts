@@ -81,7 +81,9 @@ test.describe("Usage item", () => {
       await source.cleanup();
     }
   });
-  test("pinned windows show in the sidebar, follow the used/remaining toggle and persist", async ({
+  // Osuna：这条要点进上游占用 `/usage` 的套餐用量独立页面（报告卡片、固定窗口、页面上的选项菜单、
+  // 主机设置页的套餐用量区块），Osuna 没有接这个页面，无从进入。上游在 v0.11.0 把它换成弹窗，届时随上游处理。
+  test.skip("pinned windows show in the sidebar, follow the used/remaining toggle and persist", async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -248,13 +250,18 @@ test.describe("Usage item", () => {
   });
 });
 
+// Osuna：选项菜单在上游的套餐用量独立页面与窄屏的底部弹层上，Osuna 只接了后者，这条改在弹层里走；
+// 底部摘要默认隐藏，先打开。摘要藏起来后弹层随之消失，再打开走设置 → 侧边栏里的同一个开关。
 test("the Usage options show and hide the sidebar Usage item", async ({ page }) => {
+  test.setTimeout(120_000);
   await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
-  await page.setViewportSize(WIDE);
+  await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
+  await page.setViewportSize(COMPACT);
   await gotoAppShell(page);
+  await openCompactSidebar(page);
   await expect(usageItem(page)).toBeVisible({ timeout: 30_000 });
   await usageItem(page).click();
-  await expectOnUsageScreen(page);
+  await expect(usageSheet(page)).toBeVisible();
 
   await openUsageOptions(page);
   const toggle = page.getByTestId("usage-show-in-sidebar");
@@ -263,18 +270,27 @@ test("the Usage options show and hide the sidebar Usage item", async ({ page }) 
   await expect(page.locator('[data-testid="sidebar-usage"]:visible')).toHaveCount(0);
 
   await page.reload();
-  await expectOnUsageScreen(page);
-  await openUsageOptions(page);
-  await expect(toggle).toHaveAttribute("aria-checked", "false");
-  await toggle.click();
+  await openCompactSidebar(page);
+  await expect(page.locator('[data-testid="sidebar-add-project"]:visible')).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.locator('[data-testid="sidebar-usage"]:visible')).toHaveCount(0);
+
+  await page.setViewportSize(WIDE);
+  await openSidebarNavSettings(page);
+  await setFooterItemVisible(page, "usage", true);
+  await leaveSettings(page);
   await expect(usageItem(page)).toBeVisible();
 });
 
+// Osuna：上游这条的后半段要点进占用 `/usage` 的套餐用量独立页面看报告卡片，Osuna 没有接这个页面；
+// 只保留前半段（侧栏摘要行里的来源图标），底部摘要默认隐藏，先打开。
 test("released hosts supply source logos through the client conversion", async ({ page }) => {
   await installUsageReportsFixture(page, {
     lists: [() => claudeAndCodexReports()],
     providerUsageListOnly: true,
   });
+  await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
   await page.setViewportSize(WIDE);
   await gotoAppShell(page);
   await expectPinnedUsage(page, ["31% 5h", "54% wk", "7% 5h", "12% wk"]);
@@ -286,14 +302,4 @@ test("released hosts supply source logos through the client conversion", async (
   await expect(summary.nth(0).locator("svg path").first()).toHaveAttribute("d", claudePath);
   await expect(summary.nth(1).locator("svg path").first()).toHaveAttribute("d", codexPath);
   await qaScreenshot(page, "released-host-footer", { kind: "footer" });
-  await usageItem(page).click();
-  await expectOnUsageScreen(page);
-  const screen = page.getByTestId(`usage-host-${getServerId()}`);
-  await expect(
-    screen.getByTestId("usage-report-claude").locator("svg path").first(),
-  ).toHaveAttribute("d", claudePath);
-  await expect(
-    screen.getByTestId("usage-report-codex").locator("svg path").first(),
-  ).toHaveAttribute("d", codexPath);
-  await qaScreenshot(page, "released-host-usage-screen");
 });
