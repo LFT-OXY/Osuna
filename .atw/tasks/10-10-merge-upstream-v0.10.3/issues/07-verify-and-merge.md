@@ -11,15 +11,15 @@
 - [x] `docs/release.md`「合并后核对」对分支头再逐项过一遍：更新源、桌面身份与数据目录、签名与签名断言、只手动触发的部署工作流、上游站点链接数不多于 01 的基线、翻译键、`COMPAT(...)` 标签。
 - [x] 协议新增的字段都是可选的，协议的现有测试无一改动断言。
 - [x] 对比 main 与合并分支，Osuna 侧测试的删改逐条有说明；除因分栏变化必须跟着改的断言外，没有断言被删除、跳过或放宽。
-- [ ] PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。
+- [x] PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。
 - [x] 02、04、06 存入 `screenshots/` 的截图对分支头复看一遍，结果一致。
 - [x] UI：新会话 / 输入 `/` / 桌面 1280 — 指令菜单立刻出现；在没跑过的目录里列表下方有「列表不全」的提示。截图存入 `screenshots/`。
 - [x] dev 桌面端快速冒烟：侧栏、输入框、终端、Providers 页、关于页打开正常，无报错。不逐项截图。
 - [x] `prd.md`「UI and Design」的截图验收点全部满足。
 - [x] `docs/release.md`「从上游同步」：同步点那一句更新为 v0.10.3 及其提交，表里加一行（五段的发布点、merge commit 与 PR 编号）；自检命令换成对补丁分支也成立的写法；补丁分支的后果、合 v0.11 时要重解的文件与固定裁决已写进去；本次新踩到、下次还会遇到的坑补进「踩过的坑」，没有就不加。
-- [ ] PR 正文按 `docs/qa.md` 的证据要求写好，含：各段冲突裁决摘要；没有收的两处上游指令列表改动、原因（ADR 0003）与由此带来的行为差异；05 核实出的 OpenCode 2.x 缺口清单；因分栏变化改动的断言；按 Osuna 决定改写的上游测试；平台矩阵，原生端标注免验收。
+- [x] PR 正文按 `docs/qa.md` 的证据要求写好，含：各段冲突裁决摘要；没有收的两处上游指令列表改动、原因（ADR 0003）与由此带来的行为差异；05 核实出的 OpenCode 2.x 缺口清单；因分栏变化改动的断言；按 Osuna 决定改写的上游测试；平台矩阵，原生端标注免验收。
 - [x] OpenCode 2.x 缺口的后续任务已记下（向维护者说明记在哪里）。
-- [ ] 收尾在并入之前做完：各工单的验收项逐条对照后勾上，journal 已记，任务归档的准备已做；已告知维护者并入后这个 worktree 会被自动归档。
+- [x] 收尾在并入之前做完：各工单的验收项逐条对照后勾上，journal 已记，任务归档的准备已做；已告知维护者并入后这个 worktree 会被自动归档。
 - [x] 原生端（iOS / Android）免验收。
 - [ ] 维护者看过截图并明确同意并入。
 - [ ] PR 以 merge commit 并入 main；并入后 `b4af508e2` 是 main 的祖先。
@@ -126,3 +126,36 @@
 - Spec：`docs/release.md` 的六个子项、PR 正文的必含项、OpenCode 2.x 后续任务都齐。指出并已改的：PR 正文「测试的改动」漏了 `pi/tool-call-mapper.test.ts` 里新加的同名辅助函数（01 记过，这次的机械比对只数删改行）；OpenCode 1.x 上报指令列表的时机是每轮开始后，不是每轮结束（`opencode-agent.ts` 在 `turn_started` 之后调 `reportRunningCommands()`）；第三段的摘要把三个测试文件说成了两个；新任务的 `prd.md` 说 `opencode/v2/` 只有一处与上游不同，漏了 `agent.test.ts` 里守着它的那条用例。没有范围蔓延。
 - Visual：两条界面验收都满足，没有残留的英文。指出的三处都在这次合并没有动过的文件里（指令菜单与输入框的组件、相关的 zh-CN 文案相对 main 没有差异），没有处理，报给维护者：分组标题写「命令」而提示行写「指令」，同一个面板里两个叫法；第 7 行的指令名被截成 `/lo…` 而同一行的说明占了大半宽度；输入框左上角露出半个被菜单盖住的按钮。口味一条：提示行只有滚到底才看得到。
 - 复查：改过的每一句对回代码或 01 – 06 的记录。复查时另改正一处评审没有提的：`protocolVersion` 是 `server_info` 里新增的可选字段，不是 `hello` 里的。
+
+#### 规范回写
+
+- `.atw/spec/app/frontend/testing.md`「Running」补两条：截图里隐藏套餐用量读数要按 `data-testid="composer-plan-usage"` 选（按文字找会先命中一份用于测宽、没有标识的副本，隐藏它不起作用）；对已入库的截图做「对分支头复看」时的像素对比做法与阈值。
+- `docs/release.md` 的改动见上面「`docs/release.md`」。
+
+#### 推送后的 CI（2026-10-11）
+
+提交 `a28121772`（只改 `docs/release.md` 与 `.atw/`）推到 `origin/merge-upstream-v0.10.3`。草稿 PR #15 上 20 项检查全部通过：CI（运行 38124467106）19 项，`Desktop Packages`（运行 38124467090）的 `linux` 1 项。这个 PR 的检查里没有 Nix 两项。
+
+- `linux` 第一次失败，失败的步骤只有最后的「Upload packaged smoke diagnostics」：GitHub 的制品服务 `CreateArtifact` 连续 5 次请求超时。`gh run rerun --failed` 后通过，没有改代码。这一条在前几段的记录里没有出现过。
+- playwright 四个分片 724 条通过、18 条跳过。首次失败、重试后通过的 3 条：`settings-providers-list-detail.spec.ts:58`（02 – 06 每次都在的那一条）、`chat-find.spec.ts:122`「loads older history through prompt navigation and finds repeated rendered Markdown」、`file-explorer-context-actions.spec.ts:114`「creates, renames, copies, and deletes entries through the file explorer」。后两条在前几次推送的记录里没有出现过；这次推送相对上一次全部通过的 `b215a3f36` 没有改 `packages/` 下的任何文件。
+- 其余：format、lint、typecheck、app-tests、sdk-tests、relay-tests、server-tests（三个平台）、desktop-tests（两个平台）、cli-tests（三个分片）第一次就通过。
+
+#### PR 正文
+
+已发布到 [PR #15](https://github.com/LFT-OXY/Osuna/pull/15)，替换了第一段时写的草稿正文。六张截图用 `a28121772` 的固定地址内嵌，其余给了目录。PR 仍是草稿状态，等维护者发话再转为可合并。
+
+#### 并入之前做完的收尾
+
+- 01 – 06 的验收项全部是勾上的状态，逐张看过，没有未勾的。07 里有依据的已勾。
+- journal 已记（`.atw/workspace/oxy/`）。
+- 归档的准备：`task.json` 的 `branch` 是 `merge-upstream-v0.10.3`、`base_branch` 是 `main`，`implementation_base_sha` 仍是任务起点 `56cccc196`（这次会话跑 `task.py start` 时被改成了当前分支头，已设回）。
+- 已告知维护者：并入后正式 daemon 会自动归档这个 worktree 并关掉里面的 Agent。
+
+#### 并入之后要做的（在主仓库里，不在这个 worktree 里）
+
+并入会让这个 worktree 消失，下面几步只能在主仓库拉取 main 之后做：
+
+1. `git merge-base --is-ancestor b4af508e2 main` 成功，勾上最后一项；把维护者的确认记在这张工单里，勾上倒数第二项。
+2. `python3 ./.atw/scripts/tickets.py --task-dir .atw/tasks/10-10-merge-upstream-v0.10.3 done 07`，再 `task.py set-status .atw/tasks/10-10-merge-upstream-v0.10.3 accept`。
+3. 对照 `prd.md`「验收清单」做一遍只读的验收检查，维护者确认后 `task.py archive`。
+4. 拉完 main 先 `npm run build:server` 再提交，否则提交钩子的 typecheck 会因旧的 `dist` 声明报错。
