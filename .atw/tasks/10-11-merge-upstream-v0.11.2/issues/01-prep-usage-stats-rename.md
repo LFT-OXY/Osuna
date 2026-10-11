@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 合并分支就是这个 worktree 当前的分支 `merge-upstream-v0-11-all`（Paseo 按会话标题自动改的名，与 main `802b17d8c` 同一提交），不另开分支、不再改名；任务记录里的分支名与它一致；任务目录的文件随第一个提交进入该分支。
 - [x] `upstream` remote 仍配置为不抓取 tag；八个发布点（`4aa2f2817`、`8498c7416`、`6166a7aca`、`6b00310f7`、`15d774d4a`、`22488d450`、`ab10a6694`、`759532509`）都已在本机；本地 tag 列表与开工前相同。
