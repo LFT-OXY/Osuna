@@ -1948,6 +1948,17 @@ export const fr: TranslationResources = {
         incorrect: "Mot de passe incorrect",
       },
     },
+    hostConfirmation: {
+      title: "Se connecter à cet hôte ?",
+      description:
+        "Cet hôte pourra exécuter du code dans cette application et accéder à vos autres hôtes connectés. Connectez-vous uniquement si vous le reconnaissez.",
+      descriptionChanged:
+        "Ce lien modifie la façon dont vous vous connectez à cet hôte. L'hôte pourra exécuter du code dans cette application et accéder à vos autres hôtes connectés. Connectez-vous uniquement si vous le reconnaissez.",
+      hostLabel: "Hôte",
+      fingerprintLabel: "Empreinte de la clé",
+      relayLabel: "Relais",
+      connect: "Se connecter",
+    },
     connectionMethods: {
       title: "Ajouter une connexion",
       direct: {

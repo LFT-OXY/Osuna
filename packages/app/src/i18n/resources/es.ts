@@ -1941,6 +1941,17 @@ export const es: TranslationResources = {
         incorrect: "Contraseña incorrecta",
       },
     },
+    hostConfirmation: {
+      title: "¿Conectar con este host?",
+      description:
+        "Este host podrá ejecutar código en esta app y acceder a tus otros hosts conectados. Conéctate solo si lo reconoces.",
+      descriptionChanged:
+        "Este enlace cambia cómo te conectas a este host. El host podrá ejecutar código en esta app y acceder a tus otros hosts conectados. Conéctate solo si lo reconoces.",
+      hostLabel: "Host",
+      fingerprintLabel: "Huella de la clave",
+      relayLabel: "Relay",
+      connect: "Conectar",
+    },
     connectionMethods: {
       title: "Agregar conexión",
       direct: {

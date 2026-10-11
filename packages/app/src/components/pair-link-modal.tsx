@@ -5,7 +5,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { Link } from "lucide-react-native";
 import type { HostProfile } from "@/types/host-connection";
-import { useHosts, useHostMutations } from "@/runtime/host-runtime";
+import { useHosts, useHostMutations, type PasswordRequiredPairing } from "@/runtime/host-runtime";
 import { parseRelayConnectionUri } from "@/utils/daemon-endpoints";
 import { parseConnectionOfferFromUrl } from "@getpaseo/protocol/connection-offer";
 import { AdaptiveModalSheet, AdaptiveTextInput, type SheetHeader } from "./adaptive-modal-sheet";
@@ -65,8 +65,8 @@ const styles = StyleSheet.create((theme) => ({
 
 export interface PairLinkModalProps {
   visible: boolean;
-  initialUrl?: string;
-  initialPasswordRequired?: boolean;
+  /** Continues a confirmed pairing whose host asked for a password. */
+  passwordRequired?: PasswordRequiredPairing;
   onClose: () => void;
   onCancel?: () => void;
   onSaved?: (result: {
@@ -79,18 +79,16 @@ export interface PairLinkModalProps {
 
 export function PairLinkModal({
   visible,
-  initialUrl,
-  initialPasswordRequired = false,
+  passwordRequired,
   onClose,
   onCancel,
   onSaved,
 }: PairLinkModalProps) {
   return (
     <PairLinkModalContent
-      key={`${visible}:${initialUrl ?? ""}:${initialPasswordRequired}`}
+      key={`${visible}:${passwordRequired?.link ?? ""}`}
       visible={visible}
-      initialUrl={initialUrl}
-      initialPasswordRequired={initialPasswordRequired}
+      passwordRequired={passwordRequired}
       onClose={onClose}
       onCancel={onCancel}
       onSaved={onSaved}
@@ -100,8 +98,7 @@ export function PairLinkModal({
 
 function PairLinkModalContent({
   visible,
-  initialUrl,
-  initialPasswordRequired = false,
+  passwordRequired,
   onClose,
   onCancel,
   onSaved,
@@ -109,7 +106,9 @@ function PairLinkModalContent({
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const daemons = useHosts();
-  const { probeAndUpsertConnectionFromOfferUrl } = useHostMutations();
+  const { beginLinkPairing } = useHostMutations();
+  const [pairing] = useState(() => passwordRequired?.pairing ?? beginLinkPairing());
+  const initialUrl = passwordRequired?.link;
   const isMobile = useIsCompactFormFactor();
 
   const offerUrlRef = useRef(initialUrl ?? "");
@@ -118,7 +117,7 @@ function PairLinkModalContent({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [password, setPassword] = useState("");
-  const [needsPassword, setNeedsPassword] = useState(initialPasswordRequired);
+  const [needsPassword, setNeedsPassword] = useState(passwordRequired !== undefined);
   const [passwordResetKey, resetPasswordInput] = useReducer((key: number) => key + 1, 0);
 
   const clearInput = useCallback(() => {
@@ -165,10 +164,9 @@ function PairLinkModalContent({
       try {
         setIsSaving(true);
         setErrorMessage("");
-        const { profile, serverId, hostname } = await probeAndUpsertConnectionFromOfferUrl(
-          raw,
-          password || undefined,
-        );
+        const result = await pairing.submit(raw, password || undefined);
+        if (result.status === "cancelled") return;
+        const { profile, serverId, hostname } = result;
         const isNewHost = !daemons.some((daemon) => daemon.serverId === serverId);
         onSaved?.({ profile, serverId, hostname, isNewHost });
         handleClose();
@@ -189,16 +187,7 @@ function PairLinkModalContent({
         setIsSaving(false);
       }
     },
-    [
-      daemons,
-      handleClose,
-      isMobile,
-      isSaving,
-      onSaved,
-      password,
-      t,
-      probeAndUpsertConnectionFromOfferUrl,
-    ],
+    [daemons, handleClose, isMobile, isSaving, onSaved, password, t, pairing],
   );
 
   const handleChangeOfferUrl = useCallback((next: string) => {
