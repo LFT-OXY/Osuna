@@ -5,6 +5,7 @@ import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { getServerId } from "../support/helpers/server-id";
 import { openSettingsHostSection } from "../support/helpers/settings";
 import {
+  expectNoFooterRule,
   leaveSettings,
   openSidebarNavSettings,
   setFooterItemVisible,
@@ -12,6 +13,7 @@ import {
 import { installUsageReportsFixture } from "../support/helpers/usage-reports";
 import {
   claudeAndCodexReports,
+  expectNoUsageItem,
   expectOnUsageScreen,
   expectPinnedUsage,
   leaveUsageScreen,
@@ -248,6 +250,37 @@ test.describe("Usage item", () => {
       await leaveSettings(page);
     });
   });
+});
+
+// Osuna：底部摘要默认隐藏，先打开；分割线的断言按 Osuna 的外观（不画横向分割线）；图标点开的是 Osuna 的 Usage 页，仍在 `/usage`。
+test("without summary data the footer drops the Usage item and keeps the Usage icon", async ({
+  page,
+}) => {
+  await installUsageReportsFixture(page, {
+    lists: [
+      [
+        {
+          id: "alpha:a",
+          account: {},
+          fetchedAt: new Date().toISOString(),
+          sourceId: "alpha",
+          sourceLabel: "Alpha plan",
+          report: { status: "unavailable", windows: [] },
+        },
+      ],
+    ],
+  });
+  await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
+  await page.setViewportSize(WIDE);
+  await gotoAppShell(page);
+  await expect(page.locator('[data-testid="sidebar-usage-icon"]:visible')).toBeVisible({
+    timeout: 30_000,
+  });
+  await expectNoUsageItem(page);
+  await expectNoFooterRule(page);
+  await qaScreenshot(page, "desktop-footer-no-summary", { kind: "footer" });
+  await page.locator('[data-testid="sidebar-usage-icon"]:visible').click();
+  await expectOnUsageScreen(page);
 });
 
 // Osuna：选项菜单在上游的套餐用量独立页面与窄屏的底部弹层上，Osuna 只接了后者，这条改在弹层里走；

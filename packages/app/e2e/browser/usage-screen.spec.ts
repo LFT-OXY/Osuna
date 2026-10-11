@@ -186,7 +186,8 @@ test.describe.skip("usage screen", () => {
     const usage = await installUsageReportsFixture(page, { usageSupported: false });
 
     await gotoAppShell(page);
-    await page.locator('[data-testid="sidebar-usage"]:visible').first().click();
+    // Without reports the footer has no Usage item; its Usage icon opens the screen.
+    await page.locator('[data-testid="sidebar-usage-icon"]:visible').first().click();
 
     await expect(
       page.getByTestId(`usage-host-${serverId}`).getByText(/^Update .+ to see usage$/),

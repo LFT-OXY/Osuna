@@ -25,6 +25,8 @@ import {
 } from "../support/helpers/sidebar-nav-settings";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
+import { installUsageReportsFixture } from "../support/helpers/usage-reports";
+import { claudeAndCodexReports } from "../support/helpers/usage-sidebar-item";
 
 const APP_SETTINGS_KEY = "@paseo:app-settings";
 
@@ -153,6 +155,8 @@ test.describe("Plugin sidebar items", () => {
     page,
   }) => {
     test.setTimeout(180_000);
+    // The Usage item shows only with summary data.
+    await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
     await page.setViewportSize(WIDE);
     // Osuna：底部的套餐用量摘要默认隐藏，这条用例要看到它在插件行旁边，先打开。
     await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);

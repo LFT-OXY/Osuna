@@ -191,6 +191,8 @@ test.describe("Sidebar footer rows in Appearance settings", () => {
 
   test("owner reorders and hides footer rows; the icon row stays fixed", async ({ page }) => {
     test.setTimeout(120_000);
+    // The Usage item shows only with summary data.
+    await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
     // Keys for the fixed footer icon buttons are ignored.
     // Osuna：底部的套餐用量摘要默认隐藏，这条用例要看到它，先打开。
     await seedSidebarFooterPreferences(page, [
