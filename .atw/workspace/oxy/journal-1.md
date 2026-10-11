@@ -911,3 +911,48 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 
 - 维护者看过截图并发话后：PR 转为可合并，以 merge commit 并入 main
 - 并入后在主仓库：核对 b4af508e2 是 main 的祖先、关闭工单 07、set-status accept、验收检查、归档任务（步骤写在工单 07 末尾）
+
+
+## Session 32: 合并上游 v0.10.3：PR #15 并入 main 后的收尾——关闭工单 07 与任务归档
+<!-- atw-session: v=2 fp=687aa68e3791dab7 -->
+
+**Date**: 2026-10-11
+**Task**: 合并上游 v0.10.3：PR #15 并入 main 后的收尾——关闭工单 07 与任务归档
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+维护者自己把 PR #15 并入 main；在主工作树拉取 main、核对并入结果、勾上工单 07 最后两项并关闭、归档任务 10-10-merge-upstream-v0.10.3，清掉两个用完的本机分支。
+
+### Main Changes
+
+- PR #15 以 merge commit a8002a587 并入 main（双亲 56cccc196 与 3d4478d0b）；b4af508e2 是 main 的祖先，git merge-base main upstream/main = c481ecf3e，tag 仍是 14 个
+- 主工作树 git pull --ff-only 快进 82 个提交；工单 07 补记「维护者的确认与并入结果」，七张工单全部完成，任务归档到 archive/2026-10/（093b94498）
+- 删掉本机分支 merge-upstream-v0.10.3 与 lousy-bedbug（都已并入 main，用 git branch -d）；远端分支 merge-upstream-v0.10.3 被 Safety Net 钩子拦下，留给维护者手动删
+- 工单 07 末尾的并入后步骤少一步：这次合并带进新的外部依赖 @opencode/client，主工作树要先 npm ci 再 npm run build:server
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a8002a587` | Merge pull request #15 from LFT-OXY/merge-upstream-v0.10.3 |
+| `2e527cb23` | chore(task): 关闭工单 07，记录维护者的确认与并入结果 |
+
+### Testing
+
+- [OK] [OK] gh pr view 15 为 MERGED（2026-10-11T09:33:17Z），gh pr checks 15 的 20 项全部 pass
+- [OK] [OK] npm ci 后 npm run build:server 通过；两次提交的钩子（lint、format、typecheck）通过
+- [OK] [!] 「维护者看过截图并明确同意并入」是按维护者自己合并 PR 并要求勾选来勾的，有没有逐张看过截图没有另外问
+- [OK] [!] 推 main 触发的 CI 没有看；关票与归档两个提交记录时还没有推送
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 把本机 main 上的关票、归档与 journal 提交推到 origin（等维护者发话）
+- 远端分支 merge-upstream-v0.10.3 由维护者手动删：git push origin --delete merge-upstream-v0.10.3
+- 任务 10-11-opencode-v2-osuna-gaps 还在 discover，没有动
+- 上游 v0.10.3 之后的版本还没合；合 v0.11 时补丁分支与主线分叉处要重解的文件见 docs/release.md「上游的补丁分支」
