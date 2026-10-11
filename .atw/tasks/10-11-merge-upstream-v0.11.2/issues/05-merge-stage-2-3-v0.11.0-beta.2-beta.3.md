@@ -4,7 +4,7 @@
 
 **Blocked by:** 03, 04
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 合并分支包含两个 merge commit，第二双亲分别是 `8498c7416` 与 `6166a7aca`，各自独立通过下面的检查后才做下一个。
 - [x] 每个冲突文件怎么裁的、依据哪条规则，按段记在 `## Comments` 下；没有冲突的段也写明。规则裁决不了的没有自行取舍。
