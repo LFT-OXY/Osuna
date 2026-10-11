@@ -290,7 +290,9 @@ const loginWindows: UsageReportEntry["report"] = {
   ],
 };
 
-test("expired login refreshes to windows with visible pin toggles", async ({ page }) => {
+// Osuna：下面两条要进上游占用 `/usage` 的套餐用量独立页面（`openUsage` 直接打开 `/usage`），Osuna 没有接这个页面，
+// 无从进入。上游在 v0.11.0 把它换成弹窗并删掉本文件，届时随上游处理。
+test.skip("expired login refreshes to windows with visible pin toggles", async ({ page }) => {
   const fixture = await installLoginUsage({
     status: "unavailable",
     problem: {
@@ -343,7 +345,7 @@ test("expired login refreshes to windows with visible pin toggles", async ({ pag
   }
 });
 
-test("compact usage rows always show the pin glyph", async ({ page }) => {
+test.skip("compact usage rows always show the pin glyph", async ({ page }) => {
   const fixture = await installLoginUsage(loginWindows);
   try {
     await page.setViewportSize({ width: 390, height: 844 });

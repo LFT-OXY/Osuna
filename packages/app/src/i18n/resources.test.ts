@@ -159,6 +159,9 @@ const migratedSourceLiterals = {
     "Unable to load usage",
     "Host connection is not ready",
     "Show in sidebar",
+    "Sign in again.",
+    "Login expired ",
+    "Login rejected (HTTP ",
   ],
   connectionErrors: [
     "Daemon unavailable",
