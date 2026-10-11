@@ -40,7 +40,7 @@ export function createPluginCapabilities(
       navigation.openSettings(plugin.id, screenId);
     },
     openScreen,
-    // COMPAT(pluginSidebarAliases): added in v0.11.0, remove after 2027-03-29
+    // COMPAT(pluginSidebarAliases): added in v0.15.0, remove after 2027-03-29
     openSurface: (screenId) => openScreen({ screenId }),
   };
 }

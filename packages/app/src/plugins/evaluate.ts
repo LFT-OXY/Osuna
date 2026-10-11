@@ -227,7 +227,7 @@ export function runPluginClientBundle(
     addSidebarFooterItem(contribution: PluginSidebarItemContribution) {
       return addSidebarItem("footer", contribution);
     },
-    // COMPAT(pluginSidebarAliases): added in v0.11.0, remove after 2027-03-29
+    // COMPAT(pluginSidebarAliases): added in v0.15.0, remove after 2027-03-29
     // Titled by its id; a legacy item pointing at it lends the header its own title instead.
     addSurface(surfaceId: string, Component: ComponentType<PluginSurfaceProps>) {
       if (!isComponentType(Component)) throw new Error(`Screen ${surfaceId} is not a component`);
@@ -237,7 +237,7 @@ export function runPluginClientBundle(
         Component: (props: PluginScreenProps) => React.createElement(Component, props),
       });
     },
-    // COMPAT(pluginSidebarAliases): added in v0.11.0, remove after 2027-03-29
+    // COMPAT(pluginSidebarAliases): added in v0.15.0, remove after 2027-03-29
     addSidebarItem(contribution: PluginSidebarContribution) {
       const normalizedId = requireId(contribution.id, "sidebar item id");
       if (!contribution.icon.trim()) throw new Error(`Sidebar item ${normalizedId} has no icon`);

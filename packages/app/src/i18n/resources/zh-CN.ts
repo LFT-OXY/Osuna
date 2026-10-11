@@ -1790,8 +1790,8 @@ export const zhCN: TranslationResources = {
       unknownReason: "当前 Agent 无法派发 Subagent",
       hostOutdated: "更新主机后可以提及 Agent",
     },
-    chooseProjectForCommands: "选择项目以查看命令",
-    chooseModelForCommands: "选择模型以查看命令",
+    chooseProjectForCommands: "选择项目以查看指令",
+    chooseModelForCommands: "选择模型以查看指令",
   },
   loadOlderHistory: {
     failed: "无法加载更早历史",

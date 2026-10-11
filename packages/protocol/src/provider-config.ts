@@ -62,7 +62,7 @@ export const ProviderOverrideSchema = z.object({
   command: z.array(z.string().min(1)).min(1).optional(),
   env: z.record(z.string(), z.string()).optional(),
   options: z.record(z.string(), z.unknown()).optional(),
-  // COMPAT(providerParams): added in v0.10.0, remove after 2027-03-30 once configs use options.
+  // COMPAT(providerParams): added in v0.15.0, remove after 2027-03-30 once configs use options.
   params: z.record(z.string(), z.unknown()).optional(),
   models: z.array(ProviderProfileModelSchema).optional(),
   additionalModels: z.array(ProviderProfileModelSchema).optional(),

@@ -6,7 +6,7 @@ import { resolvePluginIcon } from "../icons";
 import { buildPluginSurfaceRoute, hostIdFromPathname } from "../routes";
 import { selectPluginSidebarTarget, type PluginSidebarGroup } from "../sidebar-groups";
 
-// COMPAT(pluginSidebarAliases): added in v0.11.0, remove after 2027-03-29
+// COMPAT(pluginSidebarAliases): added in v0.15.0, remove after 2027-03-29
 /**
  * An `addSidebarItem({ id, title, icon, surface })` row. It opens `/sidebar/<id>`, so the screen's
  * header and host switcher belong to this item.

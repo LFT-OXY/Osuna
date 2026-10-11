@@ -1022,7 +1022,7 @@ export async function shutdownAgentClients(
 function configuredProviderOptions(
   override: ProviderOverride | undefined,
 ): ProviderOptions | undefined {
-  // COMPAT(providerParams): added in v0.10.0, remove after 2027-03-30 once configs use options.
+  // COMPAT(providerParams): added in v0.15.0, remove after 2027-03-30 once configs use options.
   // options wins as a whole record when both spellings are supplied.
   return override?.options ?? override?.params;
 }

@@ -3866,7 +3866,7 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   private reconcileServiceTier(): void {
     const tiers = this.currentServiceTiers();
-    // COMPAT(codexFastPreference): added in v0.10.0, remove after 2027-03-29 once saved Fast preferences have migrated.
+    // COMPAT(codexFastPreference): added in v0.15.0, remove after 2027-03-29 once saved Fast preferences have migrated.
     if (this.serviceTier === "fast" && !tiers.some((tier) => tier.id === "fast")) {
       this.serviceTier = tiers.find((tier) => tier.name.toLowerCase() === "fast")?.id ?? null;
     }
@@ -4645,7 +4645,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {
-    // COMPAT(codexFastPreference): added in v0.10.0, remove after 2027-03-29 once clients use service_tier.
+    // COMPAT(codexFastPreference): added in v0.15.0, remove after 2027-03-29 once clients use service_tier.
     if (featureId === "fast_mode") {
       const fast = this.currentServiceTiers().find((tier) => tier.name.toLowerCase() === "fast");
       if (value && !fast)

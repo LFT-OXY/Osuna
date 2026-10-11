@@ -122,7 +122,7 @@ export interface PluginClientOpenPanelOptions extends PluginOpenPanelOptions {
   agentId?: string;
 }
 
-// COMPAT(pluginSidebarAliases): added in v0.11.0, remove after 2027-03-29
+// COMPAT(pluginSidebarAliases): added in v0.15.0, remove after 2027-03-29
 interface PluginClientContextAliases {
   /** @deprecated Use `addScreen`. */
   addSurface(id: string, Component: ComponentType<PluginSurfaceProps>): PluginCleanup;

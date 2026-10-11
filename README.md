@@ -51,8 +51,8 @@ You need at least one agent CLI installed and configured with your credentials:
 - [GitHub Copilot](https://github.com/features/copilot/cli/)
 - [OpenCode](https://github.com/anomalyco/opencode)
 - [Pi](https://pi.dev)
-- [Antigravity](https://paseo.sh/docs/supported-providers#antigravity)
-- [Muse Code](https://paseo.sh/docs/muse-code)
+- [Antigravity](public-docs/supported-providers.md#antigravity)
+- [Muse Code](public-docs/muse-code.md)
 
 ### Desktop app (recommended)
 

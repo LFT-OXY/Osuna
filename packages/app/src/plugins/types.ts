@@ -32,7 +32,7 @@ export interface EvaluatedPlugin {
   surfaces: PluginScreenContribution[];
   settingsScreens: PluginSettingsScreenContribution[];
   sidebarItems: Record<PluginSidebarSection, PluginSidebarItemContribution[]>;
-  // COMPAT(pluginSidebarAliases): added in v0.11.0, remove after 2027-03-29
+  // COMPAT(pluginSidebarAliases): added in v0.15.0, remove after 2027-03-29
   /** `addSidebarItem` registrations, so `/plugin/<id>/sidebar/<item>` routes keep resolving. */
   legacySidebarItems: PluginSidebarContribution[];
   workspacePanels: EvaluatedPluginWorkspacePanelContribution[];

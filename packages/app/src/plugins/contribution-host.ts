@@ -16,7 +16,7 @@ export function pluginScreensHostKey(pluginId: string): string {
   return `${pluginId}/screens`;
 }
 
-// COMPAT(pluginSidebarAliases): added in v0.11.0, remove after 2027-03-29
+// COMPAT(pluginSidebarAliases): added in v0.15.0, remove after 2027-03-29
 /** The host an `addSidebarItem` row last opened, which its screen's host switcher also sets. */
 export function legacySidebarItemHostKey(pluginId: string, itemId: string): string {
   return `${pluginId}/sidebar/${itemId}`;

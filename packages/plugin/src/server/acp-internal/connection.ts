@@ -393,7 +393,7 @@ class AcpRuntime {
     let stream: Stream;
     let closeConnector = async () => {};
     if (options.options.command) {
-      // COMPAT(pluginProviderLaunch): added in v0.10.0, remove after 2027-03-29 once plugin host floor >= v0.10.0.
+      // COMPAT(pluginProviderLaunch): added in v0.15.0, remove after 2027-03-29 once plugin host floor >= v0.15.0.
       // Standalone callers and older hosts do not send a daemon-resolved launch.
       const launch = options.launch ?? {
         command: options.options.command[0],
