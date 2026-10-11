@@ -220,6 +220,7 @@ function HealthAlert({
   const firstText = describe(first);
   return (
     <Alert
+      size="sm"
       variant={alert.variant}
       title={firstText ?? first.message}
       testID="api-endpoints-health"

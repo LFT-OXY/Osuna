@@ -442,7 +442,11 @@ export function LocalDaemonSection() {
 
           {daemonVersionMismatch ? (
             <View style={styles.warning}>
-              <InlineAlert variant="warning" description={t("desktop.daemon.versionMismatch")} />
+              <InlineAlert
+                size="sm"
+                variant="warning"
+                description={t("desktop.daemon.versionMismatch")}
+              />
             </View>
           ) : null}
         </>

@@ -61,6 +61,7 @@ const mockState = vi.hoisted(() => {
     isCommandAvailable: vi.fn(async (_command: string) => false),
     runtimeModels: new Map<string, AgentModelDefinition[]>(),
     cursorListFeaturesConfigs: [] as AgentSessionConfig[],
+    codexNativeArchiveCalls: [] as Array<{ state: "archive" | "restore"; handle: unknown }>,
     reset() {
       this.constructorArgs.claude = [];
       this.constructorArgs.codex = [];
@@ -74,6 +75,7 @@ const mockState = vi.hoisted(() => {
       this.isCommandAvailable.mockImplementation(async (_command: string) => false);
       this.runtimeModels.clear();
       this.cursorListFeaturesConfigs = [];
+      this.codexNativeArchiveCalls = [];
     },
   };
 });
@@ -183,6 +185,14 @@ vi.mock("./providers/codex-app-server-agent.js", () => ({
         models: mockState.runtimeModels.get(this.provider) ?? [],
         modes: [],
       };
+    }
+
+    async archiveNativeSession(handle: unknown): Promise<void> {
+      mockState.codexNativeArchiveCalls.push({ state: "archive", handle });
+    }
+
+    async unarchiveNativeSession(handle: unknown): Promise<void> {
+      mockState.codexNativeArchiveCalls.push({ state: "restore", handle });
     }
 
     async isAvailable(): Promise<boolean> {
@@ -702,6 +712,22 @@ test("wrapped claude profile keeps the CLI launch the upgrade runs with", async 
     source: "default",
     env: { envOverlay: {} },
   });
+});
+
+test("new provider extending codex archives and unarchives its native sessions", async () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: { "my-codex": { extends: "codex", label: "My Codex" } },
+  });
+  const client = registry["my-codex"].createClient(logger);
+  const handle = { provider: "my-codex", sessionId: "thread-1", nativeHandle: "thread-1" };
+
+  await client.archiveNativeSession?.(handle);
+  await client.unarchiveNativeSession?.(handle);
+
+  expect(mockState.codexNativeArchiveCalls).toEqual([
+    { state: "archive", handle: { ...handle, provider: "codex" } },
+    { state: "restore", handle: { ...handle, provider: "codex" } },
+  ]);
 });
 
 test("built-in OMP override keeps the real OMP adapter enabled and launchable", async () => {

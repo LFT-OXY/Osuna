@@ -128,13 +128,14 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 ### 从上游同步
 
 上游的新版本用 `git merge` 合进来，保留上游的提交历史，下一次从上一次的同步点接着合。
-当前已同步到上游 v0.9.2（`c67b7158b`）。每次并入 main 后更新这一句，并在下表加一行；抓取上游后
-`git merge-base main upstream/main` 给出的应是同一个提交。
+当前已同步到上游 v0.10.3（`b4af508e2`）。每次并入 main 后更新这一句，并在下表加一行；
+`git merge-base --is-ancestor <同步点> main` 应当成功。
 
-| 同步到 | 分段：上游发布点 → merge commit                                                                                    | 冲突裁决摘要                                       |
-| ------ | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
-| v0.9.0 | v0.9.0-beta.1 `7c1958f5b` → `503a3e7cb`，v0.9.0-beta.2 `e9d32a17d` → `0798c61c8`，v0.9.0 `7f7e60bcb` → `e0373b2ff` | [PR #13](https://github.com/LFT-OXY/Osuna/pull/13) |
-| v0.9.2 | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                 | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
+| 同步到  | 分段：上游发布点 → merge commit                                                                                                                                                      | 冲突裁决摘要                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| v0.9.0  | v0.9.0-beta.1 `7c1958f5b` → `503a3e7cb`，v0.9.0-beta.2 `e9d32a17d` → `0798c61c8`，v0.9.0 `7f7e60bcb` → `e0373b2ff`                                                                   | [PR #13](https://github.com/LFT-OXY/Osuna/pull/13) |
+| v0.9.2  | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                                                                                   | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
+| v0.10.3 | v0.10.0-beta.1 `52d345db7` → `0535af41b`，v0.10.0 `c481ecf3e` → `6cac3ad8b`，v0.10.1 `c5236c00d` → `260c79631`，v0.10.2 `919c737c1` → `a36ecb8de`，v0.10.3 `b4af508e2` → `e8738aa16` | [PR #15](https://github.com/LFT-OXY/Osuna/pull/15) |
 
 #### 抓取与引用
 
@@ -145,6 +146,23 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
   提交的对应。上游打的是附注 tag：带 `^{}` 后缀的那一行是提交，另一行是 tag 对象。
 - 有了 `upstream` remote，`gh` 会把默认仓库解析成 `getpaseo/paseo`。`gh` 命令带上
   `--repo LFT-OXY/Osuna`。
+
+#### 上游的补丁分支
+
+上游的补丁版本不在它的 main 上。v0.10.1 – v0.10.3 在从 v0.10.0 分出的 `release/0.10.1`、
+`release/0.10.2`、`hotfix/0.10.3` 上，照常按 SHA 合并。合过补丁版本之后：
+
+- `git merge-base main upstream/main` 给出的是分叉点 v0.10.0（`c481ecf3e`），不是同步点。
+- 下一次合上游主线的版本时，补丁分支与主线分叉的地方会再冲突一次。补丁分支上的修复在主线上
+  有内容等价的提交，git 仍把它们当成两边各改了一遍。裁决固定：上游的部分取主线一侧，Osuna
+  的改动保留。
+- 合 v0.11 时要重解的文件，来自上游自己的 v0.10.3 对 v0.11.0（`22488d450`）的模拟合并，
+  版本号类文件之外有 10 个：`e2e/browser/file-editing.spec.ts`、
+  `components/adaptive-modal-sheet.tsx`、`i18n/resources/fr.ts`、
+  `runtime/host-runtime.test.ts`、`provider-registry.ts`、`codex-app-server-agent.ts`
+  及其测试、`codex/rewind.ts`、`opencode/v2/agent.test.ts`、`opencode/v2/turns.ts`。
+  下一次用同一条命令对要合的版本重算：
+  `git merge-tree --write-tree --name-only --no-messages <同步点> <上游发布点>`。
 
 #### 分段与并入
 
@@ -206,7 +224,8 @@ Osuna 原有的测试不删除、不跳过、不放宽断言。上游带来的�
   （[发版](#发版)）。
 - **外链只指向本仓库**：应用与 CLI 源码里指向上游站点的链接数不增加，合并前后对
   `packages/app/src` 与 `packages/cli/src` 各数一次。上游新代码里的固定链接，本仓库
-  有对应内容就指过来，没有就连同承载它的按钮一起去掉。
+  有对应内容就指过来，没有就连同承载它的按钮一起去掉。把关的是非测试数；上游测试里
+  用作配对链接样例的假地址会让全部数变多，记下出处，不改上游的测试。
 
   ```bash
   PAT='(https?://|www\.)[^"'"'"'`\s)]*(paseo\.sh|getpaseo|discord\.gg|discord\.com|github\.com/sponsors|opencollective)|(^|[^@/\w.-])(app\.|docs\.)?paseo\.sh'
@@ -238,9 +257,32 @@ git 不报冲突、结果却不对的：
   对照 `packages/app/src/styles/theme.ts` 重算。
 - 上游新增的设置界面里，说明文字与操作菜单按钮要对回 `settingsStyles` 和设置页已有的
   写法（[design.md](design.md)）。
+- 上游新增的确认类对话框把操作按钮放在正文里、等宽。挪进 `AdaptiveModalSheet` 的 `footer`，
+  按自身宽度靠右，`testID` 不动（[design.md](design.md)；v0.10.3 的
+  `hosts/host-confirmation-sheet.tsx`，对照 `screens/settings/host-page.tsx` 的移除确认）。
 - `packages/app/src/i18n/resources.test.ts` 的「已迁移英文字面量」守卫按 `"文字"` 与
   `` `文字 `` 开头扫描源码，注释也算。上游注释里的 `` `BackHandler` `` 会被当成 `Back`。
   改写上游那句注释，不放宽守卫。每段合完单独跑这个文件。
+- server 与 desktop 的 typecheck 不含测试文件。上游删掉一个导入或构造选项后，Osuna 仍在
+  用它的测试只有跑了才挂；上游的新用例调用 Osuna 改过签名的函数也一样。每段合完，把这一段
+  新增或改动过的测试文件逐个跑一遍：
+  `git diff <合并前> --name-only --diff-filter=AM -- 'packages/**/*.test.ts' 'packages/**/*.test.tsx'`。
+- 上游给某个提供方的客户端套了一层新的包装时，Osuna 加在 `AgentClient` 上的可选方法
+  （`discoverCommands`、`resolveInstalledVersion`、`resolveCliLaunch`）不转交也不报类型
+  错，功能只是静默消失。对照接口逐个补上（`opencode/runtime-client.ts`）。
+- 上游修某个提供方取指令列表、读提供方目录的行为时，改的是会话级的 `listCommands()`。Osuna 的草稿菜单走
+  客户端级的 `discoverCommands()`（[ADR 0003](adr/0003-command-list-never-spawns.md)），上游的修复落不到它
+  上面。对照上游的改动给 `discoverCommands()` 补上同样的行为并加用例（v0.10.1 的 #5450：Codex 按提供方自己的
+  `CODEX_HOME` 读提示词与技能）。
+- 上游整套新写的提供方路径按原样收下时，它的会话级 `listCommands()` 不会冲突，但上游的写法是先重连再取列表，
+  服务退出后会为取列表重新拉起进程，违反 ADR 0003。逐个打开看，改成服务不在就返回 `null` 并加用例
+  （v0.10.2 时核实的 OpenCode 2.x：`opencode/v2/session.ts`）。
+- 两边各往同一个函数里加一个分支，合起来超过 lint 的复杂度上限。动 Osuna 自己加的那一行，
+  不动上游的。
+- 两边都改过的共用组件，要跑引用它的 Osuna 页面测试，不只跑冲突文件自己的测试。
+  `components/ui/alert.tsx` 取了上游的 `import` 行后少了 `import React`，typecheck 与 lint
+  都过，三个页面的 jsdom 测试到 CI 才挂。`rg -l "<组件路径>" packages/app/src --glob '*.test.tsx'`
+  找出来逐个跑。
 
 解冲突时：
 
@@ -251,6 +293,9 @@ git 不报冲突、结果却不对的：
   否则保持删除（`publish-linux` 作业）。
 - 两边各做了一遍的功能，除了源码还要逐条对两边的测试。同一场景下两边用例结论相反时，
   动手前问维护者。
+- 调研阶段写「哪一边加了什么」要对照合并基点。只比两边的差异，会把基点原有、Osuna 有意
+  删掉的东西认成上游新加的，据此定出「两边都留」的裁决（v0.10.0-beta.1 的新会话指令查询键）。
+  `git show $(git merge-base HEAD <上游提交>):<文件>` 看基点。
 - 已定的裁决也要拿 Osuna 自己的旧用例对一遍。问题卡片那次定了「多选题两者都保留」，
   Osuna 有一条标题里没写多选的用例断言的正相反，解冲突时才发现。
 - Osuna 把组件里的状态挪进了纯逻辑模块、上游又改了组件里那段状态时，冲突块取 Osuna 的，

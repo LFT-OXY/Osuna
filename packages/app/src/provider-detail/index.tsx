@@ -98,6 +98,7 @@ function ProviderStartErrorAlert({
   return (
     <View style={settingsStyles.section}>
       <Alert
+        size="sm"
         variant="error"
         title={t("settings.providers.startErrorTitle", { name: providerLabel })}
         testID="provider-start-error"
@@ -220,6 +221,7 @@ export function ProviderDetailSurface({
       {removalError ? (
         <View style={settingsStyles.section}>
           <Alert
+            size="sm"
             variant="error"
             title={t("settings.providers.remove.errorTitle")}
             description={removalError}
@@ -234,6 +236,7 @@ export function ProviderDetailSurface({
       {enablementError ? (
         <View style={settingsStyles.section}>
           <Alert
+            size="sm"
             variant="error"
             title={t(
               enablementError.enabled
@@ -277,6 +280,7 @@ export function ProviderDetailSurface({
       {inheritedApiEndpoint ? (
         <View style={settingsStyles.section}>
           <Alert
+            size="sm"
             variant="warning"
             title={t("settings.providers.apiEndpoints.inheritedTitle", {
               name: inheritedApiEndpoint.name,

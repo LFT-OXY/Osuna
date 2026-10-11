@@ -252,7 +252,7 @@ describe("ProviderSnapshotManager public surface", () => {
     }
     const claude = new InstalledClaudeClient({
       logger: createTestLogger(),
-      configDir,
+      runtimeSettings: { env: { CLAUDE_CONFIG_DIR: configDir } },
       resolveVersion: async () => "2.1.0",
     });
     let override: AgentModelDefinition[] | null = null;

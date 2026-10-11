@@ -2,7 +2,6 @@ import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { promises } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import {
   type AgentDefinition,
@@ -36,7 +35,6 @@ import {
   findClaudeModel,
   getClaudeModelsWithSettings,
   normalizeClaudeRuntimeModelId,
-  resolveClaudeConfigDir,
   resolveConfiguredClaudeModel,
 } from "./models.js";
 import {
@@ -91,7 +89,7 @@ import {
   REWIND_COMMAND_NAME,
 } from "./commands.js";
 import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
-import { claudeProjectDirSync } from "./project-dir.js";
+import { claudeConfigDir, claudeProjectDirSync } from "./project-dir.js";
 import { THINKING_APPLIES_NEXT_TURN_NOTICE } from "../../provider-notices.js";
 import {
   isProviderImageMarkdown,
@@ -398,7 +396,6 @@ interface ClaudeAgentClientOptions {
   queryFactory?: ClaudeQueryFactory;
   resolveBinary?: () => Promise<string>;
   resolveVersion?: (signal?: AbortSignal) => Promise<string>;
-  configDir?: string;
   rewindSdk?: ClaudeRewindSdk;
 }
 
@@ -1495,7 +1492,6 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
   private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
-  private readonly configDir?: string;
   private readonly rewindSdk: ClaudeRewindSdk;
 
   constructor(options: ClaudeAgentClientOptions) {
@@ -1507,7 +1503,6 @@ export class ClaudeAgentClient implements AgentClient {
     this.resolveVersion =
       options.resolveVersion ??
       ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
-    this.configDir = options.configDir;
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
   }
 
@@ -1581,12 +1576,11 @@ export class ClaudeAgentClient implements AgentClient {
     } catch (error) {
       this.logger.warn({ err: error }, "Failed to resolve Claude Code version for model catalog");
     }
+    const env = this.buildProviderEnv();
     const models = await runProviderRefreshActivity(context, "settings", () =>
-      getClaudeModelsWithSettings(this.logger, this.configDir, claudeCodeVersion),
+      getClaudeModelsWithSettings(this.logger, claudeConfigDir(env), claudeCodeVersion),
     );
-    const modeCatalog = claudeModeCatalog(
-      createProviderEnv({ baseEnv: process.env, runtimeSettings: this.runtimeSettings }),
-    );
+    const modeCatalog = claudeModeCatalog(env);
     let installedVersion: DiscoveredCliVersion = { status: "unreadable" };
     if (claudeCodeVersion) {
       installedVersion = { status: "found", version: claudeCodeVersion };
@@ -1606,16 +1600,22 @@ export class ClaudeAgentClient implements AgentClient {
   }
 
   async resolveDefaultModeId({ env: launchEnv }: ResolveAgentDefaultModeInput): Promise<string> {
-    const env = createProviderEnv({
+    return claudeModeCatalog(this.buildProviderEnv(launchEnv)).defaultModeId;
+  }
+
+  private buildProviderEnv(launchEnv?: Record<string, string>): NodeJS.ProcessEnv {
+    return createProviderEnv({
       baseEnv: process.env,
       runtimeSettings: this.runtimeSettings,
       overlays: [launchEnv],
     });
-    return claudeModeCatalog(env).defaultModeId;
   }
 
   async discoverCommands(cwd: string): Promise<AgentSlashCommand[]> {
-    return await discoverClaudeCommands({ configDir: resolveClaudeConfigDir(this.configDir), cwd });
+    return await discoverClaudeCommands({
+      configDir: claudeConfigDir(this.buildProviderEnv()),
+      cwd,
+    });
   }
 
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
@@ -1629,7 +1629,7 @@ export class ClaudeAgentClient implements AgentClient {
   async listImportableSessions(
     options?: ListImportableSessionsOptions,
   ): Promise<ImportableProviderSession[]> {
-    const configDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), ".claude");
+    const configDir = claudeConfigDir(this.buildProviderEnv());
     const sessionsRoot = options?.cwd
       ? claudeProjectDirSync(options.cwd, { configDir })
       : path.join(configDir, "projects");
@@ -5095,7 +5095,7 @@ class ClaudeAgentSession implements AgentSession {
   private resolveHistoryPath(sessionId: string): string | null {
     const cwd = this.config.cwd;
     if (!cwd) return null;
-    const configDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), ".claude");
+    const configDir = claudeConfigDir(this.buildSdkEnv());
     const candidates = [cwd];
     try {
       const realCwd = fs.realpathSync(cwd);

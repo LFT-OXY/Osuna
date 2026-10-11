@@ -1897,6 +1897,25 @@ export const ko: TranslationResources = {
     },
   },
   pairing: {
+    hostPassword: {
+      title: "{{host}}의 비밀번호",
+      label: "호스트 비밀번호",
+      errors: {
+        required: "비밀번호가 필요합니다",
+        incorrect: "비밀번호가 올바르지 않습니다",
+      },
+    },
+    hostConfirmation: {
+      title: "이 호스트에 연결할까요?",
+      description:
+        "이 호스트는 이 앱에서 코드를 실행하고 연결된 다른 호스트에 접근할 수 있게 됩니다. 알고 있는 호스트인 경우에만 연결하세요.",
+      descriptionChanged:
+        "이 링크는 이 호스트에 연결하는 방식을 변경합니다. 호스트는 이 앱에서 코드를 실행하고 연결된 다른 호스트에 접근할 수 있게 됩니다. 알고 있는 호스트인 경우에만 연결하세요.",
+      hostLabel: "호스트",
+      fingerprintLabel: "키 지문",
+      relayLabel: "릴레이",
+      connect: "연결",
+    },
     connectionMethods: {
       title: "연결 추가",
       direct: {
@@ -2318,8 +2337,11 @@ export const ko: TranslationResources = {
     groupInfo: "{{title}} 정보",
     sections: {
       general: "일반",
+      chat: "채팅",
       appearance: "모양",
-      layout: en.settings.sections.layout,
+      sidebar: "사이드바",
+      terminal: "터미널",
+      browser: "브라우저",
       editor: "편집기",
       shortcuts: "단축키",
       integrations: "통합",
@@ -2377,6 +2399,7 @@ export const ko: TranslationResources = {
     },
     general: {
       title: "일반",
+      sending: "전송",
       browserData: {
         title: "브라우저 데이터",
         siteData: "쿠키 및 사이트 데이터",
@@ -2405,8 +2428,6 @@ export const ko: TranslationResources = {
         },
       },
       serviceUrls: {
-        label: "서비스 URL",
-        description: "실행 중인 스크립트의 URL을 열 위치",
         options: {
           ask: "물어보기",
           inApp: "Osuna에서",
@@ -2425,7 +2446,6 @@ export const ko: TranslationResources = {
       toolCallDetail: {
         label: "도구 호출 표시",
         description: "타임라인에 도구 호출이 표시되는 방식",
-        accessibilityLabel: "도구 호출 표시 선택({{value}})",
         options: {
           overview: "요약",
           detailed: "전체 세부정보",
@@ -2686,6 +2706,9 @@ export const ko: TranslationResources = {
       },
     },
     host: {
+      password: {
+        guidance: "이 호스트를 제거한 뒤 이 데몬이 요구하는 비밀번호로 다시 추가하세요.",
+      },
       appearance: {
         title: "모양",
         name: {

@@ -868,3 +868,46 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 - worktree subdued-rat 已由维护者恢复，内容全部在 main 里，可以再归档；远端分支 merge-upstream-v0.9.2 可以删
 - 可另开票（都不是这次合并带来的）：重新加载或回退后 Claude 自带 Subagent 的卡片降级为普通工具标记；重放后各轮页脚的 token 数与费用变化或消失；agent-message-rewind.spec.ts:48 在本机容易超时
 - 上游 v0.9.2 之后的版本还没合（上次核对时上游已到 v0.11.2）；做法见 docs/release.md「从上游同步」
+
+
+## Session 31: 合并上游 v0.10.3 工单 07：整体验收，等维护者发话并入
+<!-- atw-session: v=2 fp=a72d8c4bf0c3be0f -->
+
+**Date**: 2026-10-11
+**Task**: 合并上游 v0.10.3 工单 07：整体验收，等维护者发话并入
+**Package**: app
+**Branch**: `merge-upstream-v0.10.3`
+
+### Summary
+
+对合并分支头逐条核对硬指标，dev 桌面端复看 21 张截图并补 / 指令菜单两张，更新 docs/release.md 的同步点与补丁分支一节，重写 PR #15 正文；PR 仍是草稿，未并入
+
+### Main Changes
+
+- docs/release.md：同步点改为上游 v0.10.3（b4af508e2），表里加一行，自检改为祖先关系，新增「上游的补丁分支」（合 v0.11 要重解的 10 个文件与固定裁决）
+- 新建后续任务 10-11-opencode-v2-osuna-gaps，记下 OpenCode 2.x 路径上缺的三项 Osuna 行为与两处差异
+- .atw/spec/app/frontend/testing.md：截图隐藏用量读数的选择器、对已入库截图做像素复看的做法
+- PR #15 正文按 docs/qa.md 重写并发布：各段裁决、三处没收的上游指令列表写法、2.x 缺口、测试改动、平台矩阵、两个方向的版本错位
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a28121772` | docs(merge): 同步点更新到上游 v0.10.3，记录整体验收、指令菜单截图与补丁分支的后果 |
+
+### Testing
+
+- [OK] 硬指标：五段 merge commit、祖先关系、版本号 0.14.2、锁文件只多 15 个包、CHANGELOG 与 main 相同、桌面身份与签名与部署工作流相对 main 无差异
+- [OK] 测试文件机械比对：新增 35、修改 71、删除 0；非上游自己删改的 6 行逐条有说明
+- [OK] dev 桌面端（Electron 1280）：21 张旧截图对应页面重走并做像素对比，差异不超过 0.3%（模型列表换了工作区，对的是内容）；/ 菜单 88 毫秒出现；冒烟无报错
+- [OK] i18n/resources.test.ts 38 条通过；npm run typecheck 通过
+- [OK] PR #15 上 20 项检查全部通过（CI 38124467106、Desktop Packages 38124467090，linux 因 GitHub 制品服务超时重跑一次）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 维护者看过截图并发话后：PR 转为可合并，以 merge commit 并入 main
+- 并入后在主仓库：核对 b4af508e2 是 main 的祖先、关闭工单 07、set-status accept、验收检查、归档任务（步骤写在工单 07 末尾）

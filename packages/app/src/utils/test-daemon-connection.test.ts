@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DaemonClientConfig } from "@getpaseo/client/internal/daemon-client";
+import { DaemonAuthenticationError } from "@getpaseo/client/internal/daemon-client";
+import { i18n } from "@/i18n/i18next";
 import type { DaemonConnectionDependencies, DaemonProbeClient } from "./test-daemon-connection";
 
 class FakeDaemonClient implements DaemonProbeClient {
@@ -169,16 +171,15 @@ describe("test-daemon-connection connectToDaemon", () => {
     });
   });
 
-  it("passes direct TCP connection passwords into the client config", async () => {
+  it("passes the host password into the client config", async () => {
     const { connectToDaemon } = await import("./test-daemon-connection");
     const result = await connectToDaemon(
       {
         id: "direct:lan:6767",
         type: "directTcp",
         endpoint: "lan:6767",
-        password: "shared-secret",
       },
-      undefined,
+      { password: "shared-secret" },
       probe.deps,
     );
     await result.client.close();
@@ -242,7 +243,7 @@ describe("test-daemon-connection connectToDaemon", () => {
   it("surfaces auth rejection as an incorrect password", async () => {
     const { connectToDaemon } = await import("./test-daemon-connection");
     probe.failNextConnection(
-      new Error("Transport closed (code 4001)"),
+      new DaemonAuthenticationError("incorrect_password"),
       "Transport closed (code 4001)",
     );
 
@@ -252,13 +253,13 @@ describe("test-daemon-connection connectToDaemon", () => {
           id: "direct:lan:6767",
           type: "directTcp",
           endpoint: "lan:6767",
-          password: "wrong-secret",
         },
-        undefined,
+        { password: "wrong-secret" },
         probe.deps,
       ),
     ).rejects.toMatchObject({
       message: "Incorrect password",
+      authFailureReason: "incorrect_password",
     });
   });
 
@@ -272,13 +273,33 @@ describe("test-daemon-connection connectToDaemon", () => {
           id: "direct:lan:6767",
           type: "directTcp",
           endpoint: "lan:6767",
-          password: "shared-secret",
         },
-        undefined,
+        { password: "shared-secret" },
         probe.deps,
       ),
     ).rejects.toMatchObject({
       message: "Transport error",
     });
+  });
+});
+
+describe("test-daemon-connection authFailureMessageKey", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+  });
+
+  it.each([
+    ["password_required", "Password required", "需要密码"],
+    ["incorrect_password", "Incorrect password", "密码不正确"],
+  ] as const)("names a %s rejection in the app language", async (reason, english, chinese) => {
+    const { authFailureMessageKey } = await import("./test-daemon-connection");
+
+    const key = authFailureMessageKey(reason);
+
+    expect(i18n.exists(key)).toBe(true);
+    expect(i18n.t(key, { lng: "en" })).toBe(english);
+    expect(i18n.t(key, { lng: "zh-CN" })).toBe(chinese);
   });
 });

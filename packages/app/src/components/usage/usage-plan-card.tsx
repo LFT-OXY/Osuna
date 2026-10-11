@@ -85,6 +85,7 @@ function PlanUsageBody({
   if (view.kind === "error") {
     return (
       <Alert
+        size="sm"
         variant="error"
         title={t("usage.planUsage.errorTitle")}
         description={renderUsageText(t, view.message)}
