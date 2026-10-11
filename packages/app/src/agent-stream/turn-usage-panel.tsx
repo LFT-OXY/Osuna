@@ -7,14 +7,14 @@ import { mutedIconColorMapping } from "@/components/ui/icon-color";
 import { Text } from "@/components/ui/text";
 import { TooltipContent } from "@/components/ui/tooltip";
 import { ICON_SIZE } from "@/styles/theme";
-import { formatSessionCost, formatUsageTokensCompact } from "@/usage/format";
-import { renderUsageText } from "@/usage/text";
+import { formatSessionCost, formatUsageTokensCompact } from "@/usage-stats/format";
+import { renderUsageText } from "@/usage-stats/text";
 import {
   describeUnpricedWarning,
   type TurnUsageModelRow,
   type TurnUsageModels,
   type TurnUsagePanelModel,
-} from "@/usage/turn-usage";
+} from "@/usage-stats/turn-usage";
 import { formatDuration } from "@/utils/time";
 
 /** The popover sets its own width; the tooltip default (280) is for one-line hints. */

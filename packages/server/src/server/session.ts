@@ -177,7 +177,10 @@ import {
   createGitMetadataGenerator,
 } from "./session/checkout/git-metadata-generator.js";
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
-import { createUsageSession, type UsageSession } from "./session/usage/usage-session.js";
+import {
+  createUsageStatsSession,
+  type UsageStatsSession,
+} from "./session/usage-stats/usage-stats-session.js";
 import type { UsageService } from "./usage/service.js";
 import type { ApiEndpointService } from "./api-endpoints/service.js";
 import {
@@ -793,7 +796,7 @@ export class Session {
   private readonly voiceSessions: VoiceSessions;
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
-  private readonly usageSession: UsageSession | null;
+  private readonly usageStatsSession: UsageStatsSession | null;
   private readonly apiEndpointSession: ApiEndpointSession | null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
@@ -974,7 +977,7 @@ export class Session {
       scheduleService,
       logger: this.sessionLogger,
     });
-    this.usageSession = createUsageSession({
+    this.usageStatsSession = createUsageStatsSession({
       host: { emit: (msg) => this.emit(msg) },
       usageService,
       logger: this.sessionLogger,
@@ -3145,8 +3148,8 @@ export class Session {
       }
     >,
   ): Promise<void> {
-    const usageSession = this.usageSession;
-    if (!usageSession) {
+    const usageStatsSession = this.usageStatsSession;
+    if (!usageStatsSession) {
       this.emit({
         type: "rpc_error",
         payload: {
@@ -3159,26 +3162,26 @@ export class Session {
       return;
     }
     if (msg.type === "usage.sessions.list.request") {
-      await usageSession.handleUsageSessionsListRequest(msg);
+      await usageStatsSession.handleUsageSessionsListRequest(msg);
       return;
     }
     if (msg.type === "usage.pricing.list.request") {
-      await usageSession.handleUsagePricingListRequest(msg);
+      await usageStatsSession.handleUsagePricingListRequest(msg);
       return;
     }
     if (msg.type === "usage.pricing.refresh.request") {
-      await usageSession.handleUsagePricingRefreshRequest(msg);
+      await usageStatsSession.handleUsagePricingRefreshRequest(msg);
       return;
     }
     if (msg.type === "usage.agent.get.request") {
-      await usageSession.handleUsageAgentGetRequest(msg);
+      await usageStatsSession.handleUsageAgentGetRequest(msg);
       return;
     }
     if (msg.type === "usage.agent.turns.list.request") {
-      await usageSession.handleUsageAgentTurnsListRequest(msg);
+      await usageStatsSession.handleUsageAgentTurnsListRequest(msg);
       return;
     }
-    await usageSession.handleUsageReportGetRequest(msg);
+    await usageStatsSession.handleUsageReportGetRequest(msg);
   }
 
   public resetPeakInflight(): void {

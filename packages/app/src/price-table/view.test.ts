@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import { renderUsageText } from "@/usage/text";
+import { renderUsageText } from "@/usage-stats/text";
 import { resolvePriceTableView, type PriceTablePayload } from "./view";
 
 const PAYLOAD: PriceTablePayload = {

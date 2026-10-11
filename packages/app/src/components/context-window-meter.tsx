@@ -11,15 +11,23 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
 import type { ProviderUsageView } from "@/provider-usage/types";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
-import { formatSessionCost, formatTokenArrows, formatUsageTokensCompact } from "@/usage/format";
-import { isUsageTrackedProvider } from "@/usage/sources";
-import { addRunningTurnElapsed, hasAgentUsage, resolveSessionSpanMs } from "@/usage/turn-usage";
+import {
+  formatSessionCost,
+  formatTokenArrows,
+  formatUsageTokensCompact,
+} from "@/usage-stats/format";
+import { isUsageTrackedProvider } from "@/usage-stats/sources";
+import {
+  addRunningTurnElapsed,
+  hasAgentUsage,
+  resolveSessionSpanMs,
+} from "@/usage-stats/turn-usage";
 import {
   useAgentUsageEvents,
   useAgentUsageSummary,
   type AgentUsageScope,
   type AgentUsageSummaryPayload,
-} from "@/usage/use-agent-usage";
+} from "@/usage-stats/use-agent-usage";
 import { formatDuration } from "@/utils/time";
 
 interface ContextWindowMeterProps {

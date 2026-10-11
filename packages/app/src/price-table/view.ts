@@ -1,5 +1,5 @@
 import type { UsagePricingListResponse } from "@getpaseo/protocol/usage/rpc-schemas";
-import type { UsageText } from "@/usage/text";
+import type { UsageText } from "@/usage-stats/text";
 
 export type PriceTablePayload = UsagePricingListResponse["payload"];
 

@@ -7,7 +7,7 @@ import type {
   ProviderUsageTone,
   ProviderUsageWindow,
 } from "@getpaseo/protocol/messages";
-import type { UsageText } from "@/usage/text";
+import type { UsageText } from "@/usage-stats/text";
 
 export type {
   ProviderUsage,

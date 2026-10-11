@@ -16,9 +16,9 @@ import {
   formatUsageShare,
   formatUsageTokensCompact,
   formatGroupedNumber,
-} from "@/usage/format";
-import type { UsageHostOption, UsageHostSelection } from "@/usage/host-options";
-import type { MergedUsageReport } from "@/usage/merge";
+} from "@/usage-stats/format";
+import type { UsageHostOption, UsageHostSelection } from "@/usage-stats/host-options";
+import type { MergedUsageReport } from "@/usage-stats/merge";
 import {
   canShiftUsageRangeForward,
   resolveUsageRange,
@@ -26,10 +26,10 @@ import {
   USAGE_PERIODS,
   type UsageCustomRange,
   type UsagePeriod,
-} from "@/usage/period";
-import { describeUsageCustomTab, describeUsageRange } from "@/usage/range-label";
-import { usageSourceColor, usageSourceLabel } from "@/usage/sources";
-import { totalUsageTokens, usageSourceKey } from "@/usage/totals";
+} from "@/usage-stats/period";
+import { describeUsageCustomTab, describeUsageRange } from "@/usage-stats/range-label";
+import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
+import { totalUsageTokens, usageSourceKey } from "@/usage-stats/totals";
 
 /** `all` is the first source card, not a source, so it needs a key of its own. */
 export const ALL_USAGE_SOURCES = "all";

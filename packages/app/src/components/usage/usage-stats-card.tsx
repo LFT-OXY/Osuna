@@ -3,10 +3,10 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { UsageCard } from "@/components/usage/usage-card";
-import { formatUsageShare, formatUsageTokensCompact } from "@/usage/format";
-import type { MergedUsageReport } from "@/usage/merge";
-import { formatUsageDay } from "@/usage/range-label";
-import { deriveUsageStats, type UsageTopModel } from "@/usage/stats";
+import { formatUsageShare, formatUsageTokensCompact } from "@/usage-stats/format";
+import type { MergedUsageReport } from "@/usage-stats/merge";
+import { formatUsageDay } from "@/usage-stats/range-label";
+import { deriveUsageStats, type UsageTopModel } from "@/usage-stats/stats";
 
 interface UsageStatsCardProps {
   report: MergedUsageReport;

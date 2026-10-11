@@ -4,7 +4,7 @@ import type {
   UsagePricingOverride,
   UsagePricingTableInfo,
 } from "@getpaseo/protocol/usage/types";
-import type { UsageText } from "@/usage/text";
+import type { UsageText } from "@/usage-stats/text";
 
 /**
  * 四列的字段名与表头键成对放在一处：表头和单元格分开各列一遍时，重排或改名会让

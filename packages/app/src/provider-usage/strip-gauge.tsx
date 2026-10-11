@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { BORDER_WIDTH, ICON_SIZE, type Theme } from "@/styles/theme";
-import { renderUsageText } from "@/usage/text";
+import { renderUsageText } from "@/usage-stats/text";
 import { subscribeToRelativeTimeTick } from "@/utils/relative-time-ticker";
 import { ProviderUsageCard, ProviderUsageIcon } from "./card";
 import {

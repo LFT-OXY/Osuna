@@ -14,8 +14,8 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
 import { ICON_SIZE } from "@/styles/theme";
 import { settingsStyles } from "@/styles/settings";
-import { describeTimeAgo } from "@/usage/relative-time";
-import { renderUsageText } from "@/usage/text";
+import { describeTimeAgo } from "@/usage-stats/relative-time";
+import { renderUsageText } from "@/usage-stats/text";
 import { PRICE_COLUMN_GAP, priceColumns, type PriceTableLayout } from "./price-columns";
 import { ModelIdText, PriceTableHeader, PriceValue } from "./price-row";
 import {

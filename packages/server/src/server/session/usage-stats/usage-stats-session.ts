@@ -2,38 +2,40 @@ import type pino from "pino";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import type { UsageService } from "../../usage/service.js";
 
-export interface UsageSessionHost {
+export interface UsageStatsSessionHost {
   emit(msg: SessionOutboundMessage): void;
 }
 
-export interface UsageSessionOptions {
-  host: UsageSessionHost;
+export interface UsageStatsSessionOptions {
+  host: UsageStatsSessionHost;
   usageService: UsageService;
   logger: pino.Logger;
 }
 
-export interface CreateUsageSessionOptions {
-  host: UsageSessionHost;
+export interface CreateUsageStatsSessionOptions {
+  host: UsageStatsSessionHost;
   usageService: UsageService | undefined;
   logger: pino.Logger;
 }
 
 /** Null when the daemon has no usage service, which also hides the feature flag. */
-export function createUsageSession(options: CreateUsageSessionOptions): UsageSession | null {
+export function createUsageStatsSession(
+  options: CreateUsageStatsSessionOptions,
+): UsageStatsSession | null {
   if (!options.usageService) return null;
-  return new UsageSession({
+  return new UsageStatsSession({
     host: options.host,
     usageService: options.usageService,
     logger: options.logger,
   });
 }
 
-export class UsageSession {
-  private readonly host: UsageSessionHost;
+export class UsageStatsSession {
+  private readonly host: UsageStatsSessionHost;
   private readonly usageService: UsageService;
   private readonly logger: pino.Logger;
 
-  constructor(options: UsageSessionOptions) {
+  constructor(options: UsageStatsSessionOptions) {
     this.host = options.host;
     this.usageService = options.usageService;
     this.logger = options.logger;

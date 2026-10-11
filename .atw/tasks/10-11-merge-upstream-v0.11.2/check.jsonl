@@ -1,0 +1,27 @@
+{"file": ".atw/tasks/10-11-merge-upstream-v0.11.2/research/discovery.md", "reason": "模拟合并数据、冲突清单、用量两边的三方对比与撞名清单、访谈确认的十四条决定"}
+{"file": "docs/release.md", "reason": "「Fork 分发 → 从上游同步」：分段、补丁分支的固定裁决、版本号与发版元数据、冲突裁决、合并后核对、踩过的坑；本次要更新其中的同步点与补丁分支清单"}
+{"file": "docs/glossary.md", "reason": "Usage、Plan usage、Usage source 的现有定义；界面叫法以它为准，本次要把上游的套餐用量词条按同一原则收进来"}
+{"file": "docs/usage.md", "reason": "Osuna 的 Usage（token 与估算花费）怎么统计；合并后原样保留"}
+{"file": "docs/adr/0001-macos-self-signed-certificate.md", "reason": "macOS 签名与签名断言不得被合并改动"}
+{"file": "docs/adr/0002-rename-stops-at-app-identity.md", "reason": "桌面身份为 Osuna、数据目录不变；手机端用官方 Paseo App"}
+{"file": "docs/adr/0003-command-list-never-spawns.md", "reason": "指令列表不启动进程；上游对提供方取指令列表的改动据此核对"}
+{"file": "docs/design.md", "reason": "上游带来的新界面（弹窗、悬浮卡、Explorer 标签、内容宽度、速度菜单）保持 Osuna 外观"}
+{"file": "docs/i18n.md", "reason": "上游新增文案走翻译键，九种语言齐全；套餐用量的叫法"}
+{"file": "docs/explorer-sidebar.md", "reason": "Explorer 侧栏与标签的宿主约定；上游换了标签写法，Osuna 的会话历史视图要补回"}
+{"file": "docs/menus.md", "reason": "Explorer 的 + 菜单与 Codex 速度菜单按菜单引擎的约定"}
+{"file": "docs/floating-panels.md", "reason": "上下文圆环悬浮卡与套餐用量弹窗的浮层约定"}
+{"file": "docs/plugins.md", "reason": "插件清单、来源与原生界面位置；插件登记处与内置插件的核对"}
+{"file": "docs/protocol-compatibility.md", "reason": "协议兼容约束与 COMPAT 标签写法，合并后核对用"}
+{"file": "docs/providers.md", "reason": "提供方接入约定；Claude、Codex、Pi、OMP、ACP 的冲突裁决参照"}
+{"file": "docs/testing.md", "reason": "本机只跑单个测试文件，整套交给 CI"}
+{"file": "docs/qa.md", "reason": "PR 证据要求与平台矩阵"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "提供方与会话处理器的测试写法"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "server 侧冲突解决后的质量检查"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "上游新增协议内容与 Osuna 的 Usage 消息并存的核对"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "新界面的组件与 i18n 规则"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "弹窗、悬浮卡、标签与设置项的样式规则"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "侧栏条目偏好与套餐用量偏好的存储"}
+{"file": ".atw/spec/app/frontend/quality-guidelines.md", "reason": "App 质量检查与禁止模式"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "App 单元测试与浏览器测试写法"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon 与 App 两侧冲突的跨层检查"}
+{"file": ".atw/tasks/10-11-merge-upstream-v0.11.2/issues/01-prep-usage-stats-rename.md", "reason": "ATW current ticket"}

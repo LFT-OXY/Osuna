@@ -10,9 +10,9 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ProviderUsageList } from "@/provider-usage/list";
 import type { ProviderUsageView } from "@/provider-usage/types";
 import { useProviderUsageHosts } from "@/provider-usage/use-provider-usage-hosts";
-import type { UsageHostInput } from "@/usage/aggregated-usage";
-import { describeTimeAgo } from "@/usage/relative-time";
-import { renderUsageText } from "@/usage/text";
+import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
+import { describeTimeAgo } from "@/usage-stats/relative-time";
+import { renderUsageText } from "@/usage-stats/text";
 
 interface UsagePlanCardProps {
   hosts: readonly UsageHostInput[];

@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFetchQueries } from "@/data/query";
 import { useHostFeatureMap } from "@/runtime/host-features";
 import { getHostRuntimeStore, useHostRuntimeConnectionStatuses } from "@/runtime/host-runtime";
-import type { UsageHostInput } from "@/usage/aggregated-usage";
+import type { UsageHostInput } from "@/usage-stats/aggregated-usage";
 import { PROVIDER_USAGE_STALE_TIME_MS, providerUsageQueryKey } from "./use-provider-usage";
 import type { ProviderUsageListPayload, ProviderUsageView } from "./types";
 import { PROVIDER_USAGE_CLIENT_UNAVAILABLE_KEY, resolveProviderUsageView } from "./view";

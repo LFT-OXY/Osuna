@@ -7,7 +7,7 @@ import { ScrollView } from "@/components/ui/scroll-view";
 import { UsageCard } from "@/components/usage/usage-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
-import { formatGroupedNumber } from "@/usage/format";
+import { formatGroupedNumber } from "@/usage-stats/format";
 import {
   buildUsageHeatmap,
   formatUsageMonthLabel,
@@ -17,9 +17,9 @@ import {
   usageHeatmapWeekdayLabels,
   type UsageHeatmapCell,
   type UsageHeatmapLevel,
-} from "@/usage/heatmap";
-import { formatUsageTimeZoneLabel } from "@/usage/period";
-import { formatUsageDay } from "@/usage/range-label";
+} from "@/usage-stats/heatmap";
+import { formatUsageTimeZoneLabel } from "@/usage-stats/period";
+import { formatUsageDay } from "@/usage-stats/range-label";
 
 const CELL_SIZE = 11;
 const CELL_GAP = 3;

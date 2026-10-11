@@ -114,7 +114,7 @@ import { recordRenderProfileReasons } from "@/utils/render-profiler";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins/timeline";
-import { AgentUsageScopeProvider } from "@/usage/agent-scope";
+import { AgentUsageScopeProvider } from "@/usage-stats/agent-scope";
 import { useAgentSkillNames } from "@/inline-blocks/view";
 
 function renderLiveAuxiliaryNode(input: {

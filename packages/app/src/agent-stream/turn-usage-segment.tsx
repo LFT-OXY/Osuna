@@ -4,16 +4,20 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { STREAM_METADATA_FONT_SIZE } from "@/components/message";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAgentUsageScope } from "@/usage/agent-scope";
-import { formatSessionCost, formatTokenArrows, formatUsageTokensCompact } from "@/usage/format";
+import { useAgentUsageScope } from "@/usage-stats/agent-scope";
+import {
+  formatSessionCost,
+  formatTokenArrows,
+  formatUsageTokensCompact,
+} from "@/usage-stats/format";
 import {
   buildTurnUsagePanel,
   isTurnUsagePending,
   matchTurnUsage,
   summarizeTurnUsage,
   type TurnUsageIdentity,
-} from "@/usage/turn-usage";
-import { useAgentUsageTurns, type AgentUsageScope } from "@/usage/use-agent-usage";
+} from "@/usage-stats/turn-usage";
+import { useAgentUsageTurns, type AgentUsageScope } from "@/usage-stats/use-agent-usage";
 import { TurnUsagePanel } from "./turn-usage-panel";
 
 /** The one place hover styles a Pressable: the segment tints its own background. */

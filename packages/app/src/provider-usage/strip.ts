@@ -1,5 +1,5 @@
-import { formatShortDuration } from "@/usage/relative-time";
-import type { UsageText } from "@/usage/text";
+import { formatShortDuration } from "@/usage-stats/relative-time";
+import type { UsageText } from "@/usage-stats/text";
 import { resolveWindowRow, type ProviderUsageWindowTrailing } from "./format";
 import { findProviderUsage } from "./view";
 import type { ProviderUsageTone, ProviderUsageView, ProviderUsageWindow } from "./types";

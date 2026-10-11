@@ -13,7 +13,7 @@ import { getProviderIcon } from "@/components/provider-icons";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Text } from "@/components/ui/text";
 import type { Theme } from "@/styles/theme";
-import { renderUsageText } from "@/usage/text";
+import { renderUsageText } from "@/usage-stats/text";
 import {
   describeBalanceAmount,
   describeFetchedAt,

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import type { UsageText } from "@/usage/text";
+import type { UsageText } from "@/usage-stats/text";
 import {
   fitPlanUsageStripSegments,
   resolvePlanUsageStrip,

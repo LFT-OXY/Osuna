@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import { renderUsageText } from "@/usage/text";
+import { renderUsageText } from "@/usage-stats/text";
 import type { ProviderUsageListPayload } from "./types";
 import {
   PROVIDER_USAGE_CLIENT_UNAVAILABLE_KEY,

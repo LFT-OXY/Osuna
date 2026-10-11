@@ -1,8 +1,8 @@
 import type { UsagePricingModel, UsagePricingOverride } from "@getpaseo/protocol/usage/types";
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import { describeTimeAgo } from "@/usage/relative-time";
-import { renderUsageText } from "@/usage/text";
+import { describeTimeAgo } from "@/usage-stats/relative-time";
+import { renderUsageText } from "@/usage-stats/text";
 import { resolvePriceTableLayout } from "./price-columns";
 import {
   EMPTY_PRICE_DRAFT,

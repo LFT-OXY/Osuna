@@ -1,6 +1,6 @@
-import { formatUsageTokensCompact } from "@/usage/format";
-import { describeTimeAgo, formatShortDuration } from "@/usage/relative-time";
-import type { UsageText } from "@/usage/text";
+import { formatUsageTokensCompact } from "@/usage-stats/format";
+import { describeTimeAgo, formatShortDuration } from "@/usage-stats/relative-time";
+import type { UsageText } from "@/usage-stats/text";
 import { deriveTone } from "./tone";
 import type {
   ProviderUsageBalance,

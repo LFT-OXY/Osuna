@@ -14,7 +14,7 @@ import {
   type BuiltinSidebarNavId,
 } from "@/sidebar-nav/model";
 import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
-import { useUsageHosts } from "@/usage/use-usage-hosts";
+import { useUsageHosts } from "@/usage-stats/use-usage-hosts";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";

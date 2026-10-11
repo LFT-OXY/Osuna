@@ -5,11 +5,15 @@ import { StyleSheet } from "react-native-unistyles";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useOpenUsageSession } from "@/hooks/use-open-usage-session";
 import { useUsageSessions } from "@/hooks/use-usage-sessions";
-import type { UsageHostsView } from "@/usage/details";
-import { formatGroupedNumber, formatUsageCost, formatUsageTokensCompact } from "@/usage/format";
-import type { MergedUsageSession } from "@/usage/sessions";
-import { usageSourceColor, usageSourceLabel } from "@/usage/sources";
-import { totalUsageTokens } from "@/usage/totals";
+import type { UsageHostsView } from "@/usage-stats/details";
+import {
+  formatGroupedNumber,
+  formatUsageCost,
+  formatUsageTokensCompact,
+} from "@/usage-stats/format";
+import type { MergedUsageSession } from "@/usage-stats/sessions";
+import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
+import { totalUsageTokens } from "@/usage-stats/totals";
 import { toErrorMessage } from "@/utils/error-messages";
 import { formatDuration } from "@/utils/time";
 

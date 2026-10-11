@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
-import { renderUsageText, type UsageText } from "@/usage/text";
+import { renderUsageText, type UsageText } from "@/usage-stats/text";
 import {
   describeBalanceAmount,
   describeFetchedAt,

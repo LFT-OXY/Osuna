@@ -1,4 +1,4 @@
-import type { UsageText } from "@/usage/text";
+import type { UsageText } from "@/usage-stats/text";
 import type { ProviderUsage, ProviderUsageListPayload, ProviderUsageView } from "./types";
 
 /**
