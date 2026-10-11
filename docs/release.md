@@ -128,13 +128,14 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 ### 从上游同步
 
 上游的新版本用 `git merge` 合进来，保留上游的提交历史，下一次从上一次的同步点接着合。
-当前已同步到上游 v0.9.2（`c67b7158b`）。每次并入 main 后更新这一句，并在下表加一行；抓取上游后
-`git merge-base main upstream/main` 给出的应是同一个提交。
+当前已同步到上游 v0.10.3（`b4af508e2`）。每次并入 main 后更新这一句，并在下表加一行；
+`git merge-base --is-ancestor <同步点> main` 应当成功。
 
-| 同步到 | 分段：上游发布点 → merge commit                                                                                    | 冲突裁决摘要                                       |
-| ------ | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
-| v0.9.0 | v0.9.0-beta.1 `7c1958f5b` → `503a3e7cb`，v0.9.0-beta.2 `e9d32a17d` → `0798c61c8`，v0.9.0 `7f7e60bcb` → `e0373b2ff` | [PR #13](https://github.com/LFT-OXY/Osuna/pull/13) |
-| v0.9.2 | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                 | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
+| 同步到  | 分段：上游发布点 → merge commit                                                                                                                                                      | 冲突裁决摘要                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| v0.9.0  | v0.9.0-beta.1 `7c1958f5b` → `503a3e7cb`，v0.9.0-beta.2 `e9d32a17d` → `0798c61c8`，v0.9.0 `7f7e60bcb` → `e0373b2ff`                                                                   | [PR #13](https://github.com/LFT-OXY/Osuna/pull/13) |
+| v0.9.2  | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                                                                                   | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
+| v0.10.3 | v0.10.0-beta.1 `52d345db7` → `0535af41b`，v0.10.0 `c481ecf3e` → `6cac3ad8b`，v0.10.1 `c5236c00d` → `260c79631`，v0.10.2 `919c737c1` → `a36ecb8de`，v0.10.3 `b4af508e2` → `e8738aa16` | [PR #15](https://github.com/LFT-OXY/Osuna/pull/15) |
 
 #### 抓取与引用
 
@@ -145,6 +146,23 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
   提交的对应。上游打的是附注 tag：带 `^{}` 后缀的那一行是提交，另一行是 tag 对象。
 - 有了 `upstream` remote，`gh` 会把默认仓库解析成 `getpaseo/paseo`。`gh` 命令带上
   `--repo LFT-OXY/Osuna`。
+
+#### 上游的补丁分支
+
+上游的补丁版本不在它的 main 上。v0.10.1 – v0.10.3 在从 v0.10.0 分出的 `release/0.10.1`、
+`release/0.10.2`、`hotfix/0.10.3` 上，照常按 SHA 合并。合过补丁版本之后：
+
+- `git merge-base main upstream/main` 给出的是分叉点 v0.10.0（`c481ecf3e`），不是同步点。
+- 下一次合上游主线的版本时，补丁分支与主线分叉的地方会再冲突一次。补丁分支上的修复在主线上
+  有内容等价的提交，git 仍把它们当成两边各改了一遍。裁决固定：上游的部分取主线一侧，Osuna
+  的改动保留。
+- 合 v0.11 时要重解的文件，来自上游自己的 v0.10.3 对 v0.11.0（`22488d450`）的模拟合并，
+  版本号类文件之外有 10 个：`e2e/browser/file-editing.spec.ts`、
+  `components/adaptive-modal-sheet.tsx`、`i18n/resources/fr.ts`、
+  `runtime/host-runtime.test.ts`、`provider-registry.ts`、`codex-app-server-agent.ts`
+  及其测试、`codex/rewind.ts`、`opencode/v2/agent.test.ts`、`opencode/v2/turns.ts`。
+  下一次用同一条命令对要合的版本重算：
+  `git merge-tree --write-tree --name-only --no-messages <同步点> <上游发布点>`。
 
 #### 分段与并入
 

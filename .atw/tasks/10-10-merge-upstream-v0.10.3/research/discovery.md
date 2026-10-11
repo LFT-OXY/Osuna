@@ -32,7 +32,7 @@ v0.10.1 – v0.10.3 在上游从 v0.10.0 分出的补丁分支上，互为祖先
 - 并入后 `git merge-base main upstream/main` 给出 v0.10.0，不再等于同步点。`docs/release.md` 里那句自检要改成
   `git merge-base --is-ancestor <同步点> main`。
 - 以后合 v0.11 时，上游补丁分支与主线分叉处会再冲突一次。上游自身 `b4af508e2` 对 `22488d450`（v0.11.0）
-  的模拟合并，除版本号类文件外冲突 9 个代码文件：`file-editing.spec.ts`、`adaptive-modal-sheet.tsx`、
+  的模拟合并，除版本号类文件外冲突 10 个代码文件：`file-editing.spec.ts`、`adaptive-modal-sheet.tsx`、
   `i18n/resources/fr.ts`、`host-runtime.test.ts`、`provider-registry.ts`、`codex-app-server-agent.ts` 及其测试、
   `codex/rewind.ts`、`opencode/v2/agent.test.ts`、`opencode/v2/turns.ts`。裁决固定：上游部分取主线一侧。
 
