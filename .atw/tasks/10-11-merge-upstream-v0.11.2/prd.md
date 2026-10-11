@@ -263,6 +263,7 @@ Osuna 已下线，保持删除：上游改过的那五个文件不恢复，`serv
 
 - 上游给协议加的内容照收，并按 `docs/protocol-compatibility.md` 核对：新字段都是可选的，没有收窄、删除或改成必填。上游在客户端本地偏好的读取里用了转换，那不是线上 schema，不在此限。
 - Osuna 的 Usage 消息与上游的报告列表消息名字不同，各自保留。
+- 「新字段都是可选的」只约束 Osuna 已发布版本会收发的消息。上游在 Osuna 两次发版之间引入又改了形状的消息（第 3 段：`usage.list_reports` 的报告改成按 `status` 区分、`unavailable` 必带 `problem`）照上游收下，在工单与 PR 正文写明；旧的 `provider.usage.list` 形状不变。
 - 上游新带进来的 `COMPAT(...)` 标签写的是上游的版本号，按「合并后核对」改写成合并后 Osuna 的首个版本。模拟合并里看到的有：`codexFastPreference`、`oldRelayOfferTls`、`ompLatePromptRejection`、`pluginProviderLaunch`、`pluginSidebarAliases`、`providerParams`、`providerUsageList`、`usageLoginErrors`、`usageLoginHarness`、`usagePinSelection`。以实际合并后的差异为准。
 - 官方 Paseo 手机 App 与旧版 Osuna 桌面端连合并后的 daemon 照常工作，由协议的现有测试与上游随合并带来的测试守着。
 

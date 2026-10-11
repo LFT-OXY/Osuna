@@ -32,6 +32,7 @@ Config-shaped schemas that the daemon also persists live in leaf modules, not in
 
   `rg "COMPAT\("` is the cleanup backlog. Untagged back-compat is permanent by accident. The daemon currently carries well over a hundred tagged sites; follow the exact `COMPAT(name): added in vX, remove after <date>` form so the backlog stays greppable.
 
+- "Never narrow" guards messages some released Osuna version can send or parse. A message upstream introduced after Osuna's last release and that Osuna has not shipped yet (v0.11.0-beta.1's `usage.list_reports.*`, narrowed to a `status` discriminated union in beta.3) may change shape when the upstream merge brings the change; take it as-is, and say so in the merge ticket and PR body because the checklist line "new fields are optional" reads as failed. The old message it replaced (`provider.usage.list`) keeps its shape.
 - Read `docs/protocol-compatibility.md` before touching `packages/protocol`.
 
 ## Scenario: optional request field gated by a daemon feature flag
