@@ -216,3 +216,15 @@
 - 上游把「取值函数」换成 hook 时，Osuna 的测试里对该模块的替换（mock）要跟着换导出名，否则整个文件的用例一起挂。
 - 上游的浏览器用例写死了上游的外观（分割线、图标间距）与中间设计的落点，不只是色值。
 - 补丁分支与主线各带来一份相同的翻译键时，自动合并后对象里重复一份（`TS1117`）。
+
+#### 推送后的 CI（`7d6392d74`）与补修
+
+CI 20 项里 17 项通过（format、lint、typecheck、app-tests、server-tests 三个平台、desktop-tests 两个平台、cli-tests 三片、sdk-tests、relay-tests、linux、playwright 第 1 片）；playwright 第 2、3、4 片失败。失败的用例分四类：
+
+- **预告过的侧栏两个 spec**（`sidebar-nav-settings.spec.ts` 3 条、`usage-sidebar-item.spec.ts` 4 条）：03 已处理（提交 `367e1b3cc`）。
+- **设置页标题的定位（8 条，没有预告到）**：`metadata-generation-settings`、`settings-host-page`、`settings-navigation`、`plugin-management` 都经 `e2e/support/helpers/settings.ts` 的 `expectSettingsHeader`。上游把它改成找 `PageLayout` 的 `page-title`，自动合入；Osuna 的设置详情页保留了自己的页头（`settings-detail-header-title`）。改回原来的 testID。
+- **`content-width.spec.ts`（1 条，没有预告到）**：上游给 Markdown 预览的阅读框加了 `testID="markdown-preview-frame"`，加在 `markdown-preview/index.tsx`；Osuna 的 Web 端走自己的 `index.web.tsx`，没有这个标识。补上（宽度已在合并时改为跟随 `theme.contentMaxWidth`）。
+- **Osuna 的 `settings-providers-list-detail.spec.ts`「keeps a failed switch at the top of the detail until dismissed」（没有预告到）**：这条用例借「daemon 拒绝写 `providers.mock.*`」造一次真实的写入失败。上游这一段去掉了「自定义提供方必须声明 `extends`」的校验（没有 `extends` 的条目算作对插件提供方的覆盖，`packages/protocol/src/provider-config.ts`），写入因此成功、失败条不再出现。产品行为没有坏；改用现成的 `installDaemonConfigFailureFixture` 让第一次配置写入以 `rpc_error` 应答，断言一行没动。**这是 Osuna 测试里因上游行为变化而改的一处，列进 PR 正文。**
+- 偶发、重试后通过：`rewind-menu.ui-contract.spec.ts`（已知）、`provider-settings-refresh.spec.ts`「provider model update age says just now」（上游这一段新增的用例）。
+
+本机复核（`--project=browser`）：上述六个文件 25 条通过；`settings-providers-list-detail.spec.ts` 另有两条（宽窗与窄窗的面包屑）本机失败、CI 通过——它们取列表里的前两个提供方，本机取到的是 `codex`（报错里期望的地址是 `…/providers/codex`）；推断是本机装着真实的 Codex CLI、与 CI 的环境不同，没有进一步核实。

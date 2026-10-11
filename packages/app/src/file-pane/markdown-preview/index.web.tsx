@@ -62,7 +62,7 @@ export function FileMarkdownPreview({ source, resources }: FileMarkdownPreviewPr
 
   return (
     <View style={styles.outerGutter}>
-      <View style={styles.readingFrame}>
+      <View style={styles.readingFrame} testID="markdown-preview-frame">
         <ThemedMarkdownPreviewSurface uniProps={mapThemeVariables}>
           {document.frontMatter.length > 0 ? (
             <FrontMatterTable rows={document.frontMatter} />
