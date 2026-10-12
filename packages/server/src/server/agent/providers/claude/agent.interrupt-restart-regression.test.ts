@@ -230,6 +230,8 @@ function subscribeToEvents(session: {
 }) {
   const queue = createAsyncQueue<AgentStreamEvent>();
   const unsubscribe = session.subscribe((event) => {
+    // Osuna：每个 init 都会上报一次指令列表（commands_changed），这些用例只看轮次事件。
+    if (event.type === "commands_changed") return;
     queue.push(event);
   });
 
