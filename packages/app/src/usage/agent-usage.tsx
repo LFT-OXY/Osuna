@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { UsageCard } from "./card";
@@ -15,17 +16,21 @@ export function AgentUsage({
   serverId,
   agentId,
   refreshable,
+  renderHeader,
 }: {
   serverId: string;
   agentId: string;
   /** Whether each card has a Refresh button; a surface that cannot be pressed hides it. */
   refreshable: boolean;
+  /** Osuna：接在分隔线后面的段首（上下文圆环详情里的「套餐用量」小标题）。 */
+  renderHeader?: () => ReactNode;
 }) {
   const view = useAgentUsage(serverId, agentId);
   if (view.kind === "none") return null;
   return (
     <>
       <View style={styles.divider} />
+      {renderHeader?.()}
       {view.kind === "ready" ? (
         <AgentUsageCards serverId={serverId} reports={view.reports} refreshable={refreshable} />
       ) : (

@@ -10,6 +10,7 @@ import { isNative } from "@/constants/platform";
 import { useHostReportsUsage } from "@/usage";
 import { formatUsageTokensCompact } from "@/usage-stats/format";
 import { useAgentUsageEvents, type AgentUsageScope } from "@/usage-stats/use-agent-usage";
+import { popoverSurfaceStyle } from "@/styles/floating-surface";
 import type { Theme } from "@/styles/theme";
 import { ContextWindowDetails } from "./context-window-details";
 import { ContextWindowSheet } from "./context-window-sheet";
@@ -140,6 +141,26 @@ const ContextWindowRing = withUnistyles(function ContextWindowRing({
   );
 });
 
+/** `84K / 200K` beside the ring; darkens while the pointer is on the meter. */
+function ContextWindowTokenLabel({
+  usedTokens,
+  maxTokens,
+  hovered,
+}: {
+  usedTokens: number;
+  maxTokens: number;
+  hovered: boolean;
+}) {
+  return (
+    <Text
+      style={[styles.tokenLabel, hovered && styles.tokenLabelHovered]}
+      testID="context-window-token-label"
+    >
+      {`${formatUsageTokensCompact(usedTokens)} / ${formatUsageTokensCompact(maxTokens)}`}
+    </Text>
+  );
+}
+
 export function ContextWindowMeter({
   serverId,
   agentId,
@@ -154,14 +175,19 @@ export function ContextWindowMeter({
 }: ContextWindowMeterProps) {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
-  // Usage cards need a wider popover; without them it keeps the plain tooltip shape.
+  // Usage cards need a fixed width; without them the card is as wide as its rows.
   const showsUsage = useHostReportsUsage(serverId);
   const popoverWidth = Math.min(USAGE_POPOVER_WIDTH, width - 24);
+  const usageWidthStyle = useMemo(() => ({ width: popoverWidth }), [popoverWidth]);
   // Compact screens open the details in a sheet, which can hold a pressable Refresh.
   const isCompact = useIsCompactFormFactor();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const openSheet = useCallback(() => setIsSheetOpen(true), []);
   const closeSheet = useCallback(() => setIsSheetOpen(false), []);
+  // 圆环旁的 token 标签随悬停变深；悬停只在 Web 上有（docs/hover.md）。
+  const [isHovered, setIsHovered] = useState(false);
+  const handlePointerEnter = useCallback(() => setIsHovered(true), []);
+  const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const percentage =
     maxTokens !== null && usedTokens !== null ? getUsagePercentage(maxTokens, usedTokens) : null;
   const geometry = getMeterGeometry(showPercentage, glyphSize);
@@ -205,9 +231,11 @@ export function ContextWindowMeter({
     ) : null;
   const tokenLabel =
     hasTokenLabel && context ? (
-      <Text style={styles.tokenLabel} testID="context-window-token-label">
-        {`${formatUsageTokensCompact(context.usedTokens)} / ${formatUsageTokensCompact(context.maxTokens)}`}
-      </Text>
+      <ContextWindowTokenLabel
+        usedTokens={context.usedTokens}
+        maxTokens={context.maxTokens}
+        hovered={isHovered}
+      />
     ) : null;
   const accessibilityLabel = context
     ? t("contextWindow.accessibility", { percentage: context.percentage })
@@ -246,9 +274,7 @@ export function ContextWindowMeter({
     );
   }
 
-  const popoverStyle = showsUsage
-    ? [styles.usagePopover, { width: popoverWidth }]
-    : styles.plainPopover;
+  const popoverStyle = [styles.popover, showsUsage && usageWidthStyle];
 
   // Native wide screens have no hover, so the details open in a tooltip on press. The tooltip
   // takes no presses, so its usage cards have no Refresh.
@@ -289,6 +315,8 @@ export function ContextWindowMeter({
           testID="context-window-meter"
           accessibilityRole="image"
           accessibilityLabel={accessibilityLabel}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
         >
           {ring}
           {percentageLabel}
@@ -297,6 +325,8 @@ export function ContextWindowMeter({
       </HoverCardTrigger>
       <HoverCardContent
         placement="top"
+        // 右缘对齐圆环：圆环靠近输入框右端，居中会让卡片伸出输入框。
+        alignment="end"
         offset={8}
         role="dialog"
         accessibilityLabel={t("contextWindow.title")}
@@ -336,7 +366,13 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontVariant: ["tabular-nums"],
   },
-  // Plain details use a small inset; account usage cards have their own content density.
-  plainPopover: { paddingVertical: theme.spacing[1], paddingHorizontal: theme.spacing[2] },
-  usagePopover: { padding: theme.spacing[3], gap: theme.spacing[3] },
+  tokenLabelHovered: {
+    color: theme.colors.foreground,
+  },
+  // 与菜单、提示同一套浮层外框（docs/design.md §6），不透明：卡里是成排的数字。
+  popover: {
+    ...popoverSurfaceStyle(theme, { glass: false }),
+    padding: theme.spacing[3],
+    gap: theme.spacing[3],
+  },
 }));

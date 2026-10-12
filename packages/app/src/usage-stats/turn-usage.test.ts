@@ -15,6 +15,7 @@ import {
   isTurnUsagePending,
   matchTurnUsage,
   resolveSessionSpanMs,
+  resolveSessionTotal,
   summarizeTurnUsage,
 } from "./turn-usage";
 
@@ -41,6 +42,20 @@ function turn(overrides: Partial<UsageAgentTurn> = {}): UsageAgentTurn {
     totals: totals(),
     estimatedCost: 0,
     priced: true,
+    ...overrides,
+  };
+}
+
+function summary(overrides: Partial<UsageAgentSummary> = {}): UsageAgentSummary {
+  return {
+    byModel: [],
+    totals: totals(),
+    estimatedCost: 0,
+    turns: 0,
+    durationMs: 0,
+    firstAt: null,
+    lastAt: null,
+    complete: true,
     ...overrides,
   };
 }
@@ -263,20 +278,6 @@ describe("addRunningTurnElapsed", () => {
 });
 
 describe("resolveSessionSpanMs", () => {
-  function summary(overrides: Partial<UsageAgentSummary> = {}): UsageAgentSummary {
-    return {
-      byModel: [],
-      totals: totals(),
-      estimatedCost: 0,
-      turns: 0,
-      durationMs: 0,
-      firstAt: null,
-      lastAt: null,
-      complete: true,
-      ...overrides,
-    };
-  }
-
   it("says nothing is known about an agent the scanner never reports on", () => {
     expect(hasAgentUsage(summary())).toBe(false);
     expect(hasAgentUsage(summary({ turns: 1 }))).toBe(true);
@@ -294,5 +295,51 @@ describe("resolveSessionSpanMs", () => {
   it("has no span until both ends are known", () => {
     expect(resolveSessionSpanMs(summary({ firstAt: "2026-09-19T00:00:00.000Z" }))).toBe(null);
     expect(resolveSessionSpanMs(summary())).toBe(null);
+  });
+});
+
+describe("resolveSessionTotal", () => {
+  const spent = summary({ turns: 3, totals: totals({ input: 14_300, output: 4_600 }) });
+
+  it("says nothing while the host has not said whether it tracks usage", () => {
+    expect(
+      resolveSessionTotal({ usageSupport: null, summary: undefined, provider: "claude" }),
+    ).toBe(null);
+    expect(resolveSessionTotal({ usageSupport: null, summary: spent, provider: "claude" })).toBe(
+      null,
+    );
+  });
+
+  it("asks for a host update when the host predates usage, instead of showing zeroes", () => {
+    expect(
+      resolveSessionTotal({ usageSupport: false, summary: undefined, provider: "claude" }),
+    ).toEqual({ kind: "hostUpgradeRequired" });
+  });
+
+  it("reports what the agent spent once the daemon answers", () => {
+    expect(
+      resolveSessionTotal({ usageSupport: true, summary: undefined, provider: "claude" }),
+    ).toBe(null);
+    expect(resolveSessionTotal({ usageSupport: true, summary: spent, provider: "claude" })).toEqual(
+      { kind: "summary", summary: spent },
+    );
+  });
+
+  it("shows a tracked CLI's zeroes, so an unfinished scan reads as incomplete", () => {
+    const unread = summary({ complete: false });
+    expect(resolveSessionTotal({ usageSupport: true, summary: unread, provider: "codex" })).toEqual(
+      { kind: "summary", summary: unread },
+    );
+  });
+
+  it("hides zeroes for a provider the scanner never reads, where they would read as free", () => {
+    const zeroes = summary();
+    expect(resolveSessionTotal({ usageSupport: true, summary: zeroes, provider: "opencode" })).toBe(
+      null,
+    );
+    expect(resolveSessionTotal({ usageSupport: true, summary: zeroes, provider: null })).toBe(null);
+    expect(
+      resolveSessionTotal({ usageSupport: true, summary: spent, provider: "opencode" }),
+    ).toEqual({ kind: "summary", summary: spent });
   });
 });

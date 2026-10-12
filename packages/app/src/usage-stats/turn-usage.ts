@@ -3,6 +3,7 @@ import type {
   UsageAgentTurn,
   UsageTokenTotals,
 } from "@getpaseo/protocol/usage/types";
+import { isUsageTrackedProvider } from "./sources";
 import type { UsageText } from "./text";
 
 /**
@@ -171,6 +172,32 @@ export function addRunningTurnElapsed(
  */
 export function hasAgentUsage(summary: UsageAgentSummary): boolean {
   return summary.turns > 0 || summary.firstAt !== null;
+}
+
+export type SessionTotalState =
+  | { kind: "hostUpgradeRequired" }
+  | { kind: "summary"; summary: UsageAgentSummary };
+
+/**
+ * What this agent has spent across every provider session it ran in. A host
+ * that predates `features.usage` says so instead of showing nothing, so the
+ * missing numbers read as an old daemon rather than as a zero.
+ */
+export function resolveSessionTotal(input: {
+  /** `features.usage`; `null` while the host has not said. */
+  usageSupport: boolean | null;
+  summary: UsageAgentSummary | undefined;
+  provider: string | null;
+}): SessionTotalState | null {
+  const { usageSupport, summary, provider } = input;
+  if (usageSupport === null) return null;
+  if (usageSupport === false) return { kind: "hostUpgradeRequired" };
+  if (!summary) return null;
+  // Zero for a CLI the scanner reads means the scan has not reached this agent —
+  // the section shows and marks itself incomplete. Zero for any other provider
+  // means there is nothing to read, and a row of zeroes would read as "free".
+  const hasSomethingToShow = hasAgentUsage(summary) || isUsageTrackedProvider(provider);
+  return hasSomethingToShow ? { kind: "summary", summary } : null;
 }
 
 /** Wall-clock distance between the agent's first and last logged activity. */

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { selectActiveApiEndpoint } from "@/api-endpoints";
@@ -7,17 +7,13 @@ import { Text as UiText } from "@/components/ui/text";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { AgentUsage } from "@/usage";
 import { formatSessionCost, formatTokenArrows } from "@/usage-stats/format";
-import { isUsageTrackedProvider } from "@/usage-stats/sources";
 import {
   addRunningTurnElapsed,
-  hasAgentUsage,
   resolveSessionSpanMs,
+  resolveSessionTotal,
+  type SessionTotalState,
 } from "@/usage-stats/turn-usage";
-import {
-  useAgentUsageSummary,
-  type AgentUsageScope,
-  type AgentUsageSummaryPayload,
-} from "@/usage-stats/use-agent-usage";
+import { useAgentUsageSummary, type AgentUsageScope } from "@/usage-stats/use-agent-usage";
 import { formatDuration } from "@/utils/time";
 import { formatTokenCount } from "./context-window-meter.utils";
 
@@ -58,24 +54,30 @@ export function ContextWindowDetails({
   refreshable,
 }: ContextWindowDetailsProps) {
   const { t } = useTranslation();
+  const renderPlanUsageHeader = useCallback(
+    () => <SectionTitle>{t("usage.planUsage.title")}</SectionTitle>,
+    [t],
+  );
   return (
     <>
-      <View style={styles.summary}>
-        {showTitle ? <Text style={styles.title}>{t("contextWindow.title")}</Text> : null}
+      <View style={styles.context}>
+        {showTitle ? <SectionTitle>{t("contextWindow.title")}</SectionTitle> : null}
         {context ? (
           <>
-            <Text style={styles.text}>
+            <UiText variant="body">
               {t("contextWindow.used", { percentage: context.percentage })}
-            </Text>
-            <Text style={styles.detail}>
+            </UiText>
+            <UiText variant="caption" color="foregroundMuted">
               {t("contextWindow.tokens", {
                 used: formatTokenCount(context.usedTokens),
                 max: formatTokenCount(context.maxTokens),
               })}
-            </Text>
+            </UiText>
           </>
         ) : (
-          <Text style={styles.detail}>{t("contextWindow.noData")}</Text>
+          <UiText variant="caption" color="foregroundMuted">
+            {t("contextWindow.noData")}
+          </UiText>
         )}
       </View>
       <SessionTotal
@@ -86,32 +88,23 @@ export function ContextWindowDetails({
         runningTurnStartedAt={runningTurnStartedAt}
       />
       <ActiveApiEndpointNote serverId={serverId} provider={provider} />
-      <AgentUsage serverId={serverId} agentId={agentId} refreshable={refreshable} />
+      <AgentUsage
+        serverId={serverId}
+        agentId={agentId}
+        refreshable={refreshable}
+        renderHeader={renderPlanUsageHeader}
+      />
     </>
   );
 }
 
-type SessionTotalState =
-  | { kind: "hostUpgradeRequired" }
-  | { kind: "summary"; summary: AgentUsageSummaryPayload };
-
-/**
- * What this agent has spent across every provider session it ran in. A host
- * that predates `features.usage` says so instead of showing nothing, so the
- * missing numbers read as an old daemon rather than as a zero.
- */
-function resolveSessionTotal(
-  usageSupport: boolean | null,
-  summary: AgentUsageSummaryPayload | undefined,
-  provider: string | null,
-): SessionTotalState | null {
-  if (usageSupport === null) return null;
-  if (usageSupport === false) return { kind: "hostUpgradeRequired" };
-  // Zero for a CLI the scanner reads means the scan has not reached this agent —
-  // the section shows and marks itself incomplete. Zero for any other provider
-  // means there is nothing to read, and a row of zeroes would read as "free".
-  if (!summary || !(hasAgentUsage(summary) || isUsageTrackedProvider(provider))) return null;
-  return { kind: "summary", summary };
+/** 卡里三段（上下文窗口、本会话合计、套餐用量）共用的小标题。 */
+function SectionTitle({ children }: { children: string }) {
+  return (
+    <UiText variant="micro" weight="medium" color="foregroundMuted">
+      {children}
+    </UiText>
+  );
 }
 
 /** Osuna 的本会话合计。详情只在打开时挂载，所以这里直接读汇总；事件订阅在圆环上。 */
@@ -133,7 +126,7 @@ function SessionTotal({
     [agentId, serverId, usageSupport],
   );
   const { payload: summary } = useAgentUsageSummary(usageScope);
-  const state = resolveSessionTotal(usageSupport, summary, provider);
+  const state = resolveSessionTotal({ usageSupport, summary, provider });
   if (!state) return null;
   return (
     <>
@@ -154,9 +147,7 @@ function SessionTotalSection({
   if (state.kind === "hostUpgradeRequired") {
     return (
       <View style={styles.section} testID="context-window-session-total">
-        <UiText variant="micro" weight="medium" color="foregroundExtraMuted">
-          {t("contextWindow.sessionTotal.title")}
-        </UiText>
+        <SectionTitle>{t("contextWindow.sessionTotal.title")}</SectionTitle>
         <UiText variant="caption" color="foregroundMuted">
           {t("contextWindow.sessionTotal.hostUpgradeRequired")}
         </UiText>
@@ -172,9 +163,7 @@ function SessionTotalSection({
   return (
     <View style={styles.section} testID="context-window-session-total">
       <View style={styles.sectionHeader}>
-        <UiText variant="micro" weight="medium" color="foregroundExtraMuted">
-          {t("contextWindow.sessionTotal.title")}
-        </UiText>
+        <SectionTitle>{t("contextWindow.sessionTotal.title")}</SectionTitle>
         {summary.complete ? null : (
           <UiText variant="micro" color="statusWarning">
             {t("contextWindow.sessionTotal.incomplete")}
@@ -225,7 +214,7 @@ function ActiveApiEndpointNote({
 /** 文字值按等宽数字排；组件值（如跳动的运行时长）自己负责排版。 */
 function KeyValueRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <View style={styles.keyValueRow}>
+    <View style={styles.keyValueRow} testID="context-window-session-total-row">
       <UiText variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.keyLabel}>
         {label}
       </UiText>
@@ -266,25 +255,11 @@ function AgentRuntimeValue({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  summary: {
+  context: {
     gap: theme.spacing[1.5],
     minWidth: 200,
   },
-  title: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-  },
-  text: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    lineHeight: theme.fontSize.base * 1.4,
-  },
-  detail: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    lineHeight: theme.fontSize.sm * 1.4,
-  },
-  // 与 AgentUsage 的分隔线同一条：浮层描边用的就是 borderAccent。
+  // 与 AgentUsage 画的分隔线同一种颜色，两条线在卡里读成一套。
   divider: { height: 1, backgroundColor: theme.colors.borderAccent },
   section: {
     gap: theme.spacing[1.5],
