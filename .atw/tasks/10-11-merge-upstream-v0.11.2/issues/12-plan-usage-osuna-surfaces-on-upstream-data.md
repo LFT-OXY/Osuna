@@ -4,7 +4,7 @@
 
 **Blocked by:** 11
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] Usage 页的套餐卡片用上游的报告数据与上游的额度卡片；标题、刷新按钮、「多久前更新」保留；按页面的主机筛选显示，计入不止一台主机时按主机分组并报出主机名；主机不可用时有说明。
 - [x] Composer 用量条用上游的报告数据：新认出的登录与 OpenCode Go 出现在用量条里；用量条的取舍规则（显示哪个窗口、空间不够时怎么收）与合并前一致，Osuna 用量条的现有测试在新数据上通过。
@@ -18,7 +18,7 @@
 - [x] Osuna 用量条与视图的单元测试通过；改动的断言逐条记在 `## Comments` 下。
 - [x] 翻译资源测试通过；不再被引用的翻译键连同 zh-CN 的英文白名单条目一起删掉。
 - [x] typecheck 和 lint 通过；改动涉及的测试文件逐个跑过并通过。
-- [ ] 推到 `origin` 后草稿 PR 上的 CI 结果已看过并记在 `## Comments` 下。
+- [x] 推到 `origin` 后草稿 PR 上的 CI 结果已看过并记在 `## Comments` 下。
 - [x] UI：Usage 页 / 套餐卡片有数据 / 桌面 1280 — 卡片里是每个账号的额度窗口，卡片外框、标题行与同页其他卡片一致。
 - [x] UI：Composer / 用量条有数据 / 桌面 1280 — 用量条在输入框上方，样子与合并前一致。
 - [x] UI：上下文圆环悬浮卡 / 有数据 / 桌面 1280 — 套餐用量一段带刷新按钮。
@@ -144,3 +144,10 @@
 - `plan-usage/` 直接引 `usage/` 里的文件、`TONE_COLOR_TOKEN` 与上游窗口条的配色各写一份、`planUsageProviderId` 与 `planUsageAgentId` 两个属性并排往下传、卡片里 `t()` 与 `usageCopy` 并用。
 - 视觉：Usage 页卡片标题行右侧的「刚刚 / 刷新」比标题低约 6px、右缘没收到卡片内容的右边线（这一行是改动前就有的头部）；切到剩余后额度窗口的条按剩余填充、余额（Extra usage）的条仍按已用填充（上游的行为）；余额行比窗口行紧。都交给 14。
 - 范围外看到的：英文界面 Usage 页明细表的表头溢出成「ReasoningSe」；鼠标刚从上下文圆环移开、悬浮卡还没收起时就切到别的页面，悬浮卡会留在新页面上（一次性探测里 3 秒后仍在）。都交给 14。
+
+### CI（2026-10-12）
+
+提交 `b88f77699` 推到 `origin/merge-upstream-v0-11-all`（草稿 PR #16；一并推上去的还有 10、11 收尾时没推的 `e45ed950a`、`85a24b6d6`、`7c1e862c4`）。
+
+- **Desktop Packages**（run 38245666748）：通过。
+- **CI**（run 38245666814）：第一次 18 项通过、2 项失败，都与这次改动无关——`server-tests (ubuntu-latest)` 是 `src/server/file-observer/internal/native-recursive.test.ts`「shallow scans recover coalesced deletes of new files in nested scopes」断言列表多出一项（文件监视的时序用例；这次没有改 `packages/server`），`desktop-tests (windows-latest)` 是下载 Electron 时 GitHub 返回 504。`gh run rerun --failed` 重跑后两项通过，全部 20 项为绿：format、lint、typecheck、app-tests、playwright 四个分片、server-tests 三个平台、desktop-tests 两个平台、cli-tests 三个分片、sdk-tests、relay-tests、linux、changes。
