@@ -24,3 +24,10 @@
 - [ ] UI：上下文圆环悬浮卡 / 有数据 / 桌面 1280 — 套餐用量一段带刷新按钮。
 - [ ] UI：设置 → 某台主机 / 桌面 1280 — 是价格表，没有套餐用量区块。
 - [ ] UI：切到「剩余」后 / 桌面 1280 — 弹窗、Usage 页卡片、用量条上的百分比都是剩余值。
+
+## Comments
+
+### 来自 10 的交接（2026-10-12）
+
+- `e2e/browser/usage-settings.spec.ts` 仍是 02 标的 `test.describe.skip`（主机设置页不挂上游的套餐用量区块）。上游的额度卡片接到 Usage 页的套餐卡片之后，把这组用例改到那里。
+- `e2e/browser/usage-sidebar-item.spec.ts`「pinned windows show in the sidebar…」里，上游「去主机设置页的套餐用量区块核对固定项与已用 / 剩余」那一步在 10 去掉了（主机设置页是价格表）。Usage 页的套餐卡片接上上游数据后，可以把这一步改到 Usage 页上补回来。

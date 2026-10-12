@@ -30,3 +30,12 @@
 - **与上游不同的行为：** 速度菜单的功能名与普通 / 快速 / 超快按界面语言显示（`docs/i18n.md` 已写明这条例外）；选择型功能的菜单在选项不超过 6 个时不带搜索框。
 - **「踩过的坑」候选：** 规格按「标志性文件首次出现在冲突清单里」推断功能落在哪一段会偏——速度菜单在第 1 段就自动合并进来了，到第 5 段才第一次冲突；`plugins/antigravity-provider/server/provider.test.ts`「reports startup auth…」在 macOS 本机报 `kill EPERM`（对只剩僵尸进程的进程组发信号），Linux 不会，合并前就如此，以 CI 为准；截图用 128 色量化时，画面里没有别的蓝色就会把提供方彩色图标压成灰色，这类图用 256 色。
 - **并入前看一眼：** `e2e/browser/agent-timeline-scroll-smoothness.spec.ts:137`「…during slow upward scrolling」从第四段起连续四次 CI 首跑失败（三次重试通过，`ed5f82e5e` 那次首跑与重试都挂、`rerun --failed` 后通过），本机单跑通过。失败形状固定：图片行加载后高度 560 → 225，可见文字位移 -175。没有查原因——是 runner 慢，还是 Osuna 的图片行高度与上游 #5970 预留的不一致。
+
+### 来自 10 的交接（2026-10-12，写 PR 正文与 `docs/release.md` 用）
+
+- **按 Osuna 决定改写的上游测试（第六段）、因换成上游实现而改动的 Osuna 断言：** 逐条在 10 的 `## Comments` 里（各 6 条与 4 条）。前面各段为上游的中间页面写的跳过与改写在这一段全部消失：`usage-screen.spec.ts`（已随上游改名 `usage-modal.spec.ts`）与 `usage-sidebar-item.spec.ts` 取上游整份，02、06、09 交接里与这两个文件有关的条目写 PR 正文时以 10 的为准。06 里 `sidebar-help.spec.ts` 的 `Math.round` 改写也被上游自己的修法取代。
+- **与上游不同的行为：** PR 面板检查汇总的分隔符随语言变、标题栏无障碍名称走翻译模板（上游写死 `", "` 与 `". "`）；中文界面里检查汇总与「已工作 …」保持 Osuna 的译法。
+- **用户看得见、要写进更新日志的：** 侧栏底部的「套餐用量」图标与摘要改成在当前页面上打开弹窗（之前进 Usage 页）；插件登记处安装默认开启，`PASEO_PLUGIN_REGISTRY_ENABLED` 开关取消（上游 #6224）；法文界面整份重译（上游 #6004）；PR 面板、侧栏状态分组在其余七种非英文语言里由英文占位变成译文。
+- **`docs/release.md`「上游的补丁分支」要改的事实：** 那一节列的十个文件，分叉在第 1 段就全部过完——6 个在第 1 段报冲突（其中 `codex-app-server-agent.ts` 在第 4 段又冲突一次，`fr.ts` 在第 6 段因上游重译再冲突一次），4 个六段都没有报冲突、git 自己合对了（`host-runtime.test.ts`、`provider-registry.ts`、`opencode/v2/agent.test.ts`、`opencode/v2/turns.ts`）。第 1 段合完后合并基点落到上游主线上，后面各段的基点是上一段的发布点。落点表在 10 的 `## Comments`。
+- **「踩过的坑」候选：** 两边原先各写了一模一样的行，上游删掉时不报冲突、Osuna 那一份跟着消失（这次是 `app/_layout.tsx` 与 `utils/host-routes.ts` 里 `/usage` 的路由接线）；上游整份重译某种语言时（`fr.ts` 57 个冲突块），冲突块先取上游、再把基点 / Osuna / 上游三份资源摊平成键值做按键的三方合并并逐键比对，合完查自动合并出来的重复键；上游的新用例拿 `session.listCommands()` 当「确保进程在」用，在 Osuna 里不启动进程，换成 `setModel(null)`；上游按顺序读订阅事件的用例会被 Osuna 在 init 之后发的 `commands_changed` 挤错位；`packages/cli/tests/e2e/plugin-lifecycle.test.ts` 在 macOS 上要 `TMPDIR="$(cd "$TMPDIR" && pwd -P)"`（`/var` 是 `/private/var` 的软链接）；`daemon-client.e2e.test.ts` 会启动本机真实的提供方，而且不在 CI 的测试脚本里，本机不要整份跑。
+- **并入前看一眼（第六段新出现的两条 CI 首跑失败、重试通过）：** `usage-sidebar-item.spec.ts:173` 与本机偶发的「Usage Settings cog desktop」是同一个现象——齿轮的选项浮层打开后自己收起，`closeUsageOptions` 读不到它的位置（已记给 11）；`context-window-meter.spec.ts:245`（dark）报「The test scripts every agent usage request」，悬浮卡多取了一次数，本机跑过一次是通过的。按 Osuna 决定改写的上游测试在第六段是 7 条（第 7 条是 CI 报出来的 `packages/desktop/e2e/browser-tabs.e2e.mjs`：Composer 是 contenteditable，不能用 `inputValue()`）。

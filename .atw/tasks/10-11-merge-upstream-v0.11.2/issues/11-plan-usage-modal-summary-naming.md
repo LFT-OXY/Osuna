@@ -24,3 +24,11 @@
 - [ ] UI：侧栏 / 摘要打开且有固定窗口 / 桌面 1280 — 底部显示来源图标与百分比，位置在图标行上方。
 - [ ] UI：设置 → 侧边栏 / 桌面 1280 — 有「套餐用量摘要」开关。
 - [ ] UI：界面语言为中文 — 弹窗、摘要、设置项里没有残留的英文，也没有把订阅额度写成「用量」的地方。
+
+## Comments
+
+### 来自 10 的交接（2026-10-12）
+
+- **弹窗标题已经是「套餐用量 / Plan usage」。** 上游的 `usage/usage-modal.tsx` 用 `builtinSidebarNavLabelKey("usage")` 取标题，Osuna 的这个函数必须说明取哪一组，10 为了通过 typecheck 写成了 `("usage", "footer")`。标题之外的叫法、侧栏摘要与外观都没有动，仍在这张工单。
+- **10 之后已经按 Osuna 叫法通过的上游用例**（改写处见 10 的「按 Osuna 决定改写的上游测试」）：`e2e/browser/usage-modal.spec.ts`「Usage Settings cog」四条里齿轮的无障碍名称是 `Plan usage options`；`e2e/browser/usage-sidebar-item.spec.ts` 里设置 → 侧边栏的底部条目叫 `Plan usage summary`。这张工单再改文案时，这两处的期望值跟着改。
+- **「Usage Settings cog desktop light / dark」本机偶发**：7 次里 2 次、另一轮 12 次里 1 次，挂在 `closeUsageOptions`（`e2e/support/helpers/usage-sidebar-item.ts`）读不到刚打开的选项浮层的位置——浮层打开后自己又收起了；窄屏两条稳定。Osuna 对 `adaptive-modal-sheet.tsx`、`dropdown-menu.tsx` 相对上游只有外观改动，没有查到原因。做弹窗外观时在 dev 桌面端手动试一下「切换已用 / 剩余后再打开齿轮菜单」会不会自己收起。CI 第二轮（run 38227801363）在 Linux 上也撞到一次同样的现象：`usage-sidebar-item.spec.ts:173`「a reload keeps the pins and the toggle」这一步（上游原样）首跑挂在同一处、重试通过，所以不是本机环境问题。
