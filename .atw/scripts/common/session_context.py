@@ -10,6 +10,7 @@ Provides:
     output_json               - Print JSON
     output_text               - Print text
     get_update_hint           - Once-per-session "update available" line
+    conventions_context       - A general project's `<conventions>` block
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import sys
 from pathlib import Path
 
 from .active_task import resolve_context_key
-from .config import get_git_packages
+from .config import get_git_packages, get_project_mode
 from .git import run_git
 from .noob_mode import noob_mode_reminder
 from .packages_context import get_packages_section
@@ -264,12 +265,18 @@ def _collect_package_git_info(
     return discovered
 
 
-def _append_root_git_context(lines: list[str], root_git_info: dict) -> None:
+def _append_root_git_context(
+    lines: list[str], root_git_info: dict, package_git_info: list[dict]
+) -> None:
     """Append root Git status without misleading non-Git roots."""
     lines.append("## GIT STATUS")
     if not root_git_info["isRepo"]:
         lines.append("Root is not a Git repository.")
-        lines.append("Run Git commands from the package repository paths listed below.")
+        # 普通文件夹下面没有列出任何仓库，这句指路只在确实列了仓库时才说。
+        if package_git_info:
+            lines.append(
+                "Run Git commands from the package repository paths listed below."
+            )
     else:
         lines.append(f"Branch: {root_git_info['branch']}")
         if root_git_info["isClean"]:
@@ -489,6 +496,54 @@ def get_update_hint(repo_root: Path, context_key: str | None = None) -> str | No
 
 
 # =============================================================================
+# Conventions (general projects)
+# =============================================================================
+
+# The one flat place a `general` project keeps what its user asked for more
+# than once. A `dev` project spreads coding guidelines over per-package,
+# per-layer directories under spec/ and lists their indexes at session start;
+# a general project has this single file, handed to the AI in full instead.
+#
+# It sits under spec/ on purpose: that directory is already the user's own
+# content everywhere it matters — never overwritten by `atw update`, never
+# hash-tracked, checked for uncommitted work before `atw uninstall`.
+FILE_CONVENTIONS = "conventions.md"
+
+# Project-relative, as the AI should read and write it.
+CONVENTIONS_PATH = f"{DIR_WORKFLOW}/{DIR_SPEC}/{FILE_CONVENTIONS}"
+
+_CONVENTIONS_HEADER = (
+    f"Source: {CONVENTIONS_PATH} — what this project's user asked for more than "
+    "once. Follow it in every reply."
+)
+
+
+def conventions_context(repo_root: Path) -> str:
+    """The `<conventions>` block for a `general` project, "" for a `dev` one.
+
+    The session-start hooks and `get_context.py` all take the block from here,
+    so every platform says the same thing; the OpenCode plugin has its own port
+    (`lib/session-utils.js`) — keep the two in step.
+
+    A general project always gets the block: with the file missing or empty it
+    still names the place, so the AI knows where the first entry goes.
+    """
+    if get_project_mode(repo_root) != "general":
+        return ""
+    body = ""
+    try:
+        body = (repo_root / CONVENTIONS_PATH).read_text(encoding="utf-8").strip()
+    except OSError:
+        pass
+    if not body:
+        return (
+            f"<conventions>\n{_CONVENTIONS_HEADER} Nothing is written there yet."
+            "\n</conventions>"
+        )
+    return f"<conventions>\n{_CONVENTIONS_HEADER}\n\n{body}\n</conventions>"
+
+
+# =============================================================================
 # JSON Output
 # =============================================================================
 
@@ -607,6 +662,13 @@ def get_context_text(repo_root: Path | None = None) -> str:
     lines.append(f"Name: {developer}")
     lines.append("")
 
+    # A general project's conventions reach platforms without a hook the same
+    # way the noob-mode reminder below does.
+    conventions = conventions_context(repo_root)
+    if conventions:
+        lines.append(conventions)
+        lines.append("")
+
     # Platforms without a hook learn about noob mode from this output alone.
     noob_mode = noob_mode_reminder(repo_root)
     if noob_mode:
@@ -614,16 +676,14 @@ def get_context_text(repo_root: Path | None = None) -> str:
         lines.append("")
 
     root_git_info = _collect_root_git_info(repo_root)
-    _append_root_git_context(lines, root_git_info)
+    package_git_info = _collect_package_git_info(
+        repo_root,
+        discover_unconfigured=not root_git_info["isRepo"],
+    )
+    _append_root_git_context(lines, root_git_info, package_git_info)
 
     # Package git repos — independent sub-repositories
-    _append_package_git_context(
-        lines,
-        _collect_package_git_info(
-            repo_root,
-            discover_unconfigured=not root_git_info["isRepo"],
-        ),
-    )
+    _append_package_git_context(lines, package_git_info)
 
     # Current task
     lines.append("## CURRENT TASK")
@@ -851,16 +911,14 @@ def get_context_text_record(repo_root: Path | None = None) -> str:
     lines.append("")
 
     root_git_info = _collect_root_git_info(repo_root)
-    _append_root_git_context(lines, root_git_info)
+    package_git_info = _collect_package_git_info(
+        repo_root,
+        discover_unconfigured=not root_git_info["isRepo"],
+    )
+    _append_root_git_context(lines, root_git_info, package_git_info)
 
     # Package git repos — independent sub-repositories
-    _append_package_git_context(
-        lines,
-        _collect_package_git_info(
-            repo_root,
-            discover_unconfigured=not root_git_info["isRepo"],
-        ),
-    )
+    _append_package_git_context(lines, package_git_info)
 
     # CURRENT TASK
     lines.append("## CURRENT TASK")

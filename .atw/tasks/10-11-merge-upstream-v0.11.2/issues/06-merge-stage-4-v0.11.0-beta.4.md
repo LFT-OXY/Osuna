@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 合并分支包含一个以合并前的分支头与 `6b00310f7` 为双亲的 merge commit。
 - [x] 每个冲突文件怎么裁的、依据哪条规则，逐个记在 `## Comments` 下。规则裁决不了、或保留两边会改变用户可见行为的冲突没有自行取舍。
@@ -22,7 +22,7 @@
 - [x] 翻译资源测试通过；指令目录的现有测试通过，无一改动断言。
 - [x] 对本段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
 - [x] typecheck 和 lint 通过；本段冲突文件对应的测试文件、本段新增或改动过的测试文件逐个单独跑过并通过。
-- [ ] 推到 `origin` 后草稿 PR 上的 CI 结果已看过并记在 `## Comments` 下。
+- [x] 推到 `origin` 后草稿 PR 上的 CI 结果已看过并记在 `## Comments` 下。
 
 ## Comments
 
@@ -79,3 +79,5 @@
   - `playwright (shard 4/4)`：6 条失败，都在 `usage-screen.spec.ts`，都要进上游占用 `/usage` 的独立页面（**按 Osuna 决定改写的上游测试，给 15**）：「Codex seven-day-only / Spark windows use provider durations on the card and sidebar」两条只保留侧栏摘要那一半（`expectPinnedUsage(["11% wk"])`，窗口名由数据模型推出），卡片上的固定行与 Spark 窗口的勾选随页面不可达去掉；「Usage Settings cog」四条（desktop/compact × light/dark）整条 `test.skip` 并注明原因，与 02 跳过的那组相同。上游在 v0.11.0 把这个页面换成弹窗，届时随上游处理。
   - 本机复跑：`sidebar-help.spec.ts` 两条、`usage-screen.spec.ts` 的 Codex 两条、`sidebar-nav-settings.spec.ts`「footer rows」、`usage-sidebar-item.spec.ts` 两条，7 条通过。
 - **第二轮（`175b8c867`，run 38197398620）：** 20 项里 19 项通过，`playwright (shard 4/4)` 这次绿了。`playwright (shard 3/4)` 仍 1 条失败：还是 `sidebar-help.spec.ts` 那条，这次量到宽度 43.99998 对 44——窄屏侧栏滑入时的亚像素小数（05 在 `expectFooterIconRow` 上遇到过同一件事）。**按 Osuna 决定改写的上游测试：** 该用例的宽高断言改成 `Math.round` 后比较，并注明原因。另 4 条偶发、重试后过：`provider-settings-refresh`、`rewind-menu.ui-contract`、`settings-providers-list-detail`（wide 那条）、`sidebar-context-menu.spec.ts`「right-clicking workspace and project rows opens their actions at the pointer」（都不在本次改动范围；最后一条是新出现的偶发，记下）。
+- **第三轮（`f8181cc92`，run 38199828863）：** 20 项全部通过（format、lint、typecheck、app-tests、server-tests 三个平台、desktop-tests 两个平台、cli-tests 三片、sdk-tests、relay-tests、linux、changes、playwright 四片）。
+- 指令目录（ADR 0003）：`command-catalog.ts` 及其调用方本工单没有改动；`agent/agent-manager.test.ts` 与 `claude/agent-commands.e2e.test.ts` 本机单独跑过通过，断言未动。本段 merge commit 用了提交钩子（lint、format、typecheck 在钩子里各过一遍），没有 `--no-verify`。

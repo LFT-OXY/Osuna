@@ -23,6 +23,8 @@ DEFAULT_SESSION_COMMIT_MESSAGE = "chore: record journal"
 DEFAULT_MAX_JOURNAL_LINES = 2000
 DEFAULT_SESSION_AUTO_COMMIT = True
 DEFAULT_CODEX_DISPATCH_MODE = "auto"
+DEFAULT_PROJECT_MODE = "dev"
+PROJECT_MODES = ("dev", "general")
 
 CONFIG_FILE = "config.yaml"
 
@@ -135,6 +137,17 @@ def get_session_auto_commit(repo_root: Path | None = None) -> bool:
     return coerce_config_bool(
         raw, DEFAULT_SESSION_AUTO_COMMIT, "session_auto_commit"
     )
+
+
+def get_project_mode(repo_root: Path | None = None) -> str:
+    """The project's mode: ``dev`` or ``general``.
+
+    A committed, project-wide ``mode:`` key. A config without it — every
+    project older than modes — is ``dev``, and so is any value that is not a
+    known mode. No warning for those: hooks read this on every turn.
+    """
+    mode = _load_config(repo_root).get("mode")
+    return mode if mode in PROJECT_MODES else DEFAULT_PROJECT_MODE
 
 
 def get_codex_dispatch_mode(repo_root: Path | None = None) -> str:

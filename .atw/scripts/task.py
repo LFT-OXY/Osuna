@@ -9,6 +9,7 @@ Usage:
     python3 task.py validate <dir>              # Validate jsonl files
     python3 task.py list-context <dir>          # List jsonl entries
     python3 task.py start <dir>                 # Set active task, record current branch
+    python3 task.py resume <dir>                # Set active task, leave its status as it is
     python3 task.py current [--source] [--json] # Show active task
     python3 task.py finish                      # Clear active task
     python3 task.py set-branch <dir> <branch>   # Set git branch
@@ -48,6 +49,7 @@ from common.active_task import (
     resolve_context_key,
     set_active_task,
 )
+from common.config import get_project_mode
 from common.git import current_branch_name
 from common.io import (
     describe_json_read_failure,
@@ -186,14 +188,13 @@ def _record_start_state(
         )
 
 
-def cmd_start(args: argparse.Namespace) -> int:
-    """Set active task."""
-    repo_root = get_repo_root()
-    task_input = args.dir
-
+def _resolve_session_task(task_input: str, repo_root: Path) -> tuple[Path, str] | None:
+    """Resolve a task ref to its directory and the repo-relative path stored
+    in the session pointer. Prints the reason and returns None when it cannot.
+    """
     if not task_input:
         print(colored("Error: task directory or name required", Colors.RED))
-        return 1
+        return None
 
     # Resolve task directory (supports task name, relative path, or absolute path)
     full_path = resolve_task_dir(task_input, repo_root)
@@ -202,19 +203,70 @@ def cmd_start(args: argparse.Namespace) -> int:
         # resolve_task_dir already named the exact reason on stderr. A second,
         # generic line on stdout would split one diagnosis across two streams
         # and bury the specific message.
-        return 1
+        return None
 
     if not full_path.is_dir():
         print(colored(f"Error: Task not found: {task_input}", Colors.RED))
         print("Hint: Use task name (e.g., 'my-task') or full path (e.g., '.atw/tasks/01-31-my-task')")
+        return None
+
+    # Convert to relative path for storage. repo_root is resolved because
+    # full_path already is (resolve_task_dir only returns paths inside the
+    # resolved root), so an unresolved repo_root would mismatch under a
+    # symlink (e.g. /tmp on macOS) and reject a perfectly normal task.
+    try:
+        task_dir = full_path.relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        # resolve_task_dir already refused everything outside the repo, so
+        # this is unreachable in practice. Refuse rather than fall back to
+        # str(full_path) — that fallback (a lexical relative_to() paired with
+        # an absolute-path fallback) is exactly the pattern that let a `..`
+        # ref escape into storage before this fix.
+        print(colored(f"Error: Task not found: {task_input}", Colors.RED))
+        print("Hint: Use task name (e.g., 'my-task') or full path (e.g., '.atw/tasks/01-31-my-task')")
+        return None
+
+    return full_path, task_dir
+
+
+def _print_no_session_identity(command: str) -> None:
+    # Degraded mode: no session identity available.
+    # Hook didn't inject ATW_CONTEXT_ID (common on Windows + Claude Code,
+    # --continue resume path, fork distribution, hooks disabled, etc.). Skip
+    # per-session pointer write; AI continues based on conversation context.
+    print(colored(
+        "ℹ Session identity not available; active-task pointer not persisted "
+        "this session (degraded mode). AI continues based on conversation context.",
+        Colors.YELLOW,
+    ))
+    print(colored(
+        "Hint: run inside an AI IDE/session that exposes session identity, "
+        f"or set ATW_CONTEXT_ID before running task.py {command}.",
+        Colors.YELLOW,
+    ))
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    """Set active task."""
+    repo_root = get_repo_root()
+    task_input = args.dir
+
+    resolved = _resolve_session_task(task_input, repo_root)
+    if resolved is None:
         return 1
+    full_path, task_dir = resolved
 
     # Context-manifest gate: a seeded-but-uncurated implement/check
     # manifest means every sub-agent dispatched for this task runs with zero
     # spec context, and nothing downstream surfaces that to the main session.
     # An absent manifest is not gated — create seeds the files only on
     # sub-agent-capable platforms, so absence means no sub-agent reads them.
-    if not getattr(args, "allow_empty_context", False):
+    # Nor is a general project: it installs no sub-agents, and a task brought
+    # over from dev may still carry an empty manifest.
+    if (
+        not getattr(args, "allow_empty_context", False)
+        and get_project_mode(repo_root) != "general"
+    ):
         empty_manifests = [
             name
             for name in ("implement.jsonl", "check.jsonl")
@@ -232,39 +284,10 @@ def cmd_start(args: argparse.Namespace) -> int:
             print("  Intentionally empty? Re-run start with --allow-empty-context")
             return 1
 
-    # Convert to relative path for storage. repo_root is resolved because
-    # full_path already is (resolve_task_dir only returns paths inside the
-    # resolved root), so an unresolved repo_root would mismatch under a
-    # symlink (e.g. /tmp on macOS) and reject a perfectly normal task.
-    try:
-        task_dir = full_path.relative_to(repo_root.resolve()).as_posix()
-    except ValueError:
-        # resolve_task_dir already refused everything outside the repo, so
-        # this is unreachable in practice. Refuse rather than fall back to
-        # str(full_path) — that fallback (a lexical relative_to() paired with
-        # an absolute-path fallback) is exactly the pattern that let a `..`
-        # ref escape into storage before this fix.
-        print(colored(f"Error: Task not found: {task_input}", Colors.RED))
-        print("Hint: Use task name (e.g., 'my-task') or full path (e.g., '.atw/tasks/01-31-my-task')")
-        return 1
-
     task_json_path = full_path / FILE_TASK_JSON
 
     if not resolve_context_key():
-        # Degraded mode: no session identity available.
-        # Hook didn't inject ATW_CONTEXT_ID (common on Windows + Claude Code,
-        # --continue resume path, fork distribution, hooks disabled, etc.). Skip
-        # per-session pointer write; AI continues based on conversation context.
-        print(colored(
-            "ℹ Session identity not available; active-task pointer not persisted "
-            "this session (degraded mode). AI continues based on conversation context.",
-            Colors.YELLOW,
-        ))
-        print(colored(
-            "Hint: run inside an AI IDE/session that exposes session identity, "
-            "or set ATW_CONTEXT_ID before running task.py start.",
-            Colors.YELLOW,
-        ))
+        _print_no_session_identity("start")
 
         # Still flip task.json status: discover → implement so downstream phases proceed.
         if task_json_path.is_file():
@@ -288,6 +311,36 @@ def cmd_start(args: argparse.Namespace) -> int:
     else:
         print(colored("Error: Failed to set current task", Colors.RED))
         return 1
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    """Set active task without touching its record.
+
+    `start` is also "begin the work": it moves a planning-stage task to
+    `implement`. Picking a task up in a later session must not do that — a
+    task still being discussed would read as started before it was agreed.
+    So this writes the session pointer and nothing else: no status, no branch,
+    no manifest gate, no `after_start` hook.
+    """
+    repo_root = get_repo_root()
+
+    resolved = _resolve_session_task(args.dir, repo_root)
+    if resolved is None:
+        return 1
+    _, task_dir = resolved
+
+    if not resolve_context_key():
+        _print_no_session_identity("resume")
+        return 0
+
+    active = set_active_task(task_dir, repo_root)
+    if not active:
+        print(colored("Error: Failed to set current task", Colors.RED))
+        return 1
+
+    print(colored(f"✓ Current task set to: {task_dir}", Colors.GREEN))
+    print(f"Source: {active.source}")
+    return 0
 
 
 def cmd_finish(args: argparse.Namespace) -> int:
@@ -556,6 +609,7 @@ Usage:
   python3 task.py validate <dir>                     Validate jsonl files
   python3 task.py list-context <dir>                 List jsonl entries
   python3 task.py start <dir>                        Set active task; records the checked-out branch when unset
+  python3 task.py resume <dir>                       Set active task; its status and record stay as they are
   python3 task.py current [--source]                 Show active task
   python3 task.py finish                             Clear active task
   python3 task.py set-branch <dir> <branch>          Set git branch
@@ -713,6 +767,12 @@ def main() -> int:
         help="Start even when implement.jsonl / check.jsonl have no curated entries",
     )
 
+    # resume
+    p_resume = subparsers.add_parser(
+        "resume", help="Set active task, leave its status as it is"
+    )
+    p_resume.add_argument("dir", help="Task directory")
+
     # current
     p_current = subparsers.add_parser("current", help="Show active task")
     p_current.add_argument("--source", action="store_true",
@@ -807,6 +867,7 @@ def main() -> int:
         "validate": cmd_validate,
         "list-context": cmd_list_context,
         "start": cmd_start,
+        "resume": cmd_resume,
         "current": cmd_current,
         "finish": cmd_finish,
         "set-branch": cmd_set_branch,

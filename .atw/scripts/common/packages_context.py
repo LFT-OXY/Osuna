@@ -13,7 +13,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .config import _is_true_config_value, get_default_package, get_packages, get_spec_scope
+from .config import (
+    _is_true_config_value,
+    get_default_package,
+    get_packages,
+    get_project_mode,
+    get_spec_scope,
+)
 from .paths import (
     DIR_SPEC,
     DIR_WORKFLOW,
@@ -126,13 +132,16 @@ def get_packages_section(repo_root: Path) -> str:
     """Build the PACKAGES section for text output."""
     spec_dir = repo_root / DIR_WORKFLOW / DIR_SPEC
     pkg_info = get_packages_info(repo_root)
+    # A general project has no per-package, per-layer guidelines; whatever a
+    # switch from dev left under spec/ is not listed.
+    show_layers = get_project_mode(repo_root) != "general"
 
     lines: list[str] = []
     lines.append("## PACKAGES")
 
     if not pkg_info:
         lines.append("(single-repo mode)")
-        layers = _scan_spec_layers(spec_dir)
+        layers = _scan_spec_layers(spec_dir) if show_layers else []
         if layers:
             lines.append(f"Spec layers: {', '.join(layers)}")
         return "\n".join(lines)
@@ -140,7 +149,11 @@ def get_packages_section(repo_root: Path) -> str:
     default_pkg = get_default_package(repo_root)
 
     for pkg in pkg_info:
-        layers_str = f"  [{', '.join(pkg['specLayers'])}]" if pkg["specLayers"] else ""
+        layers_str = (
+            f"  [{', '.join(pkg['specLayers'])}]"
+            if show_layers and pkg["specLayers"]
+            else ""
+        )
         submodule_tag = "  (submodule)" if pkg["isSubmodule"] else ""
         git_repo_tag = "  (git repo)" if pkg["isGitRepo"] else ""
         default_tag = "  *" if pkg["default"] else ""

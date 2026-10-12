@@ -1,14 +1,20 @@
 """Noob mode — a per-developer switch for plain-language replies.
 
-A non-technical user turns it on once (the `atw-noob-mode` skill runs
-`noob_mode.py on`). From then on the hooks that already speak to the AI at
-session start and on every turn append a short reminder, so the mode holds
-across long conversations, compaction and new sessions instead of fading the
-way a skill loaded once does.
+While it is on, the hooks that already speak to the AI at session start and
+on every turn append a short reminder, so the mode holds across long
+conversations, compaction and new sessions instead of fading the way a skill
+loaded once does.
 
-The switch is a `noob_mode=on` line in `.atw/.developer`. That file is
-gitignored and personal by design, so one developer's choice never reaches a
-teammate, and no new ignore rule is needed in existing projects.
+Each developer is in one of three states. `noob_mode=on` or `noob_mode=off`
+in `.atw/.developer` is a choice they made (the `atw-noob-mode` skill runs
+`noob_mode.py on|off`) and always wins. No such line means they never chose,
+and the project mode's default applies: on in a `general` project, off in a
+`dev` one. A file written before the off line existed reads the same way —
+an on line is a choice, no line is none.
+
+`.atw/.developer` is gitignored and personal by design, so one developer's
+choice never reaches a teammate, survives a change of project mode, and needs
+no new ignore rule in existing projects.
 
 The reminder text itself lives in workflow.md, in a
 `[workflow-state:noob_mode]` block next to the per-status breadcrumbs — the
@@ -20,6 +26,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .config import get_project_mode
 from .git import main_worktree_root
 from .paths import DIR_WORKFLOW, FILE_DEVELOPER
 
@@ -54,15 +61,27 @@ def _developer_file(repo_root: Path) -> Path | None:
     return inherited if inherited.is_file() else None
 
 
-def is_noob_mode_on(repo_root: Path) -> bool:
+def noob_mode_choice(repo_root: Path) -> bool | None:
+    """What this developer said: True (on), False (off), or None — never chose."""
     dev_file = _developer_file(repo_root)
     if dev_file is None:
-        return False
+        return None
     try:
         match = _FIELD_RE.search(dev_file.read_text(encoding="utf-8"))
     except OSError:
-        return False
-    return match is not None and match.group(1).strip() == "on"
+        return None
+    if match is None:
+        return None
+    return match.group(1).strip() == "on"
+
+
+def is_noob_mode_on(repo_root: Path) -> bool:
+    """The one place that decides. The developer's own choice wins; without
+    one, the project mode's default applies — on for `general`, off for `dev`."""
+    choice = noob_mode_choice(repo_root)
+    if choice is not None:
+        return choice
+    return get_project_mode(repo_root) == "general"
 
 
 def set_noob_mode(repo_root: Path, on: bool) -> bool:
@@ -79,8 +98,9 @@ def set_noob_mode(repo_root: Path, on: bool) -> bool:
         for line in dev_file.read_text(encoding="utf-8").splitlines()
         if not line.startswith(f"{FIELD}=")
     ]
-    if on:
-        lines.append(f"{FIELD}=on")
+    # Off is written down, not erased: a missing line means "never chose",
+    # and that follows the project default.
+    lines.append(f"{FIELD}={'on' if on else 'off'}")
     dev_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return True
 
