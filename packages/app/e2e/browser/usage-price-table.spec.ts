@@ -141,7 +141,8 @@ test.describe("Price table", () => {
       const card = page.getByTestId("host-page-price-table-card");
       await expect(card).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("price-table-litellm-group")).toContainText(LITELLM_SUBTITLE);
-      await expect(page.getByTestId("provider-usage-card")).toHaveCount(0);
+      // 上游的套餐用量区块（HostUsageSection，`usage-card`）没有挂在主机设置页。
+      await expect(page.getByTestId("usage-card")).toHaveCount(0);
     });
 
     const model = await topRowModel(page);

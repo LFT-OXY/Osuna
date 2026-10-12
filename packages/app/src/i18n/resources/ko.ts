@@ -3719,9 +3719,7 @@ export const ko: TranslationResources = {
       empty: "플랜 사용량 데이터 없음",
       errorTitle: "플랜 사용량을 불러올 수 없습니다",
       hostUnavailable: "이 호스트에 연결하면 플랜 사용량을 볼 수 있습니다",
-      hostUpgradeRequired: "호스트를 업데이트하면 플랜 사용량을 볼 수 있습니다",
       clientUnavailable: "호스트 연결이 준비되지 않았습니다",
-      tooltipLoading: "플랜 사용량 불러오는 중…",
       updated: "{{ago}} 업데이트됨",
       resets: "{{duration}} 후 초기화",
       resettingNow: "초기화 중",
@@ -3742,6 +3740,8 @@ export const ko: TranslationResources = {
         planA11y: "{{provider}} 플랜: {{plan}}",
         windowA11y: "{{label}}: {{percent}} 사용, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: {{percent}} 사용",
+        windowA11yLeft: "{{label}}: {{percent}} 남음, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: {{percent}} 남음",
       },
       status: {
         error: "오류",

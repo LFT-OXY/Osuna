@@ -68,6 +68,7 @@ desktop/browser/pane/index.tsx / .web.tsx / .electron.tsx
 | A persisted preference one feature owns                 | The same store shape inside that feature's `internal/` (`session-history/internal/scope-store.ts`); `stores/` cannot import a feature's `internal/`, see State Management |
 | A fetched daemon value                                  | A query hook in `data/` or the feature, built on `data/query.ts`                                                                                                          |
 | Osuna Usage logic (tokens and estimated cost)           | `usage-stats/`. `usage/` is reserved for upstream's Plan usage code; see `docs/adr/0006-usage-in-code-is-upstream-plan-usage.md`                                          |
+| A Plan usage surface upstream does not have             | `plan-usage/` (the Composer strip gauge, the Usage page card's data). It renders upstream's `usage/card.tsx` and reads upstream's queries; it does not add files to `usage/` |
 | User-visible copy                                       | A key in `i18n/resources/en.ts` plus the other locales                                                                                                                    |
 
 ## Anti-patterns

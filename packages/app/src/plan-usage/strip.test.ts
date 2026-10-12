@@ -1,13 +1,15 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import type { UsageText } from "@/usage-stats/text";
+import type { AvailableUsageReport, UsageReportEntry, UsageWindow } from "@/usage/types";
 import {
   fitPlanUsageStripSegments,
   resolvePlanUsageStrip,
+  selectPlanUsageStripReport,
   type PlanUsageStripInput,
   type PlanUsageStripMeasuredSegment,
+  type PlanUsageStripReportInput,
 } from "./strip";
-import type { ProviderUsage, ProviderUsageView, ProviderUsageWindow } from "./types";
 
 const NOW = Date.parse("2026-10-01T10:00:00.000Z");
 const HOUR_MS = 60 * 60 * 1000;
@@ -17,59 +19,74 @@ function at(offsetMs: number): string {
   return new Date(NOW + offsetMs).toISOString();
 }
 
-function claudeUsage(overrides: Partial<ProviderUsage> = {}): ProviderUsage {
+const CLAUDE_ICON = '<svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>';
+
+function claudeUsage(overrides: Partial<AvailableUsageReport> = {}): UsageReportEntry {
   return {
-    providerId: "claude",
-    displayName: "Claude",
-    status: "available",
-    planLabel: "Max 20x",
-    windows: [
-      {
-        id: "five_hour",
-        label: "Session",
-        usedPct: 0,
-        resetsAt: at(4 * HOUR_MS),
-        tone: "ok",
-      },
-      { id: "weekly", label: "Weekly", usedPct: 45, resetsAt: at(4 * DAY_MS), tone: "ok" },
-      {
-        id: "weekly_model_fable",
-        label: "Weekly · Fable",
-        usedPct: 0,
-        resetsAt: at(4 * DAY_MS),
-        tone: "ok",
-      },
-    ],
-    balances: [{ id: "extra", label: "Extra usage", unit: "usd", used: 3, limit: 50 }],
-    details: [{ id: "extra-state", label: "Extra usage", value: "Disabled" }],
-    ...overrides,
+    id: "claude:work",
+    sourceId: "claude",
+    sourceLabel: "Claude",
+    icon: CLAUDE_ICON,
+    account: { label: "work@example.com" },
+    fetchedAt: at(0),
+    report: {
+      status: "available",
+      planLabel: "Max 20x",
+      windows: [
+        {
+          id: "five_hour",
+          label: "Session",
+          usedPct: 0,
+          resetsAt: at(4 * HOUR_MS),
+          tone: "ok",
+        },
+        { id: "weekly", label: "Weekly", usedPct: 45, resetsAt: at(4 * DAY_MS), tone: "ok" },
+        {
+          id: "weekly_model_fable",
+          label: "Weekly · Fable",
+          usedPct: 0,
+          resetsAt: at(4 * DAY_MS),
+          tone: "ok",
+        },
+      ],
+      balances: [{ id: "extra", label: "Extra usage", unit: "usd", used: 3, limit: 50 }],
+      details: [{ id: "extra-state", label: "Extra usage", value: "Disabled" }],
+      ...overrides,
+    },
   };
 }
 
-function ready(providers: ProviderUsage[]): ProviderUsageView {
-  return {
-    kind: "ready",
-    isRefreshing: false,
-    payload: { requestId: "req-1", fetchedAt: at(0), providers },
-  };
+function report(
+  id: string,
+  sourceId: string,
+  overrides: Partial<UsageReportEntry> = {},
+): UsageReportEntry {
+  return { ...claudeUsage(), id, sourceId, sourceLabel: sourceId, ...overrides };
 }
 
-function resolve(overrides: Partial<PlanUsageStripInput> = {}) {
-  return resolvePlanUsageStrip({
-    view: ready([claudeUsage()]),
+type ResolveOverrides = Partial<Omit<PlanUsageStripInput, "entry"> & PlanUsageStripReportInput>;
+
+// 草稿的情形：没有可问的 Agent，账号从主机的列表里按提供方找。
+function resolve(overrides: ResolveOverrides = {}) {
+  const { providerId, agentReports, hostReports, ...strip } = {
     providerId: "claude",
+    agentReports: null,
+    hostReports: [claudeUsage()],
     hasActiveApiEndpoint: false,
+    displayAs: "used" as const,
     now: NOW,
     ...overrides,
-  });
+  };
+  const entry = selectPlanUsageStripReport({ providerId, agentReports, hostReports });
+  return resolvePlanUsageStrip({ entry, ...strip });
 }
 
 function firstWindow(segments: ReturnType<typeof resolve>) {
   return segments?.find((segment) => segment.kind === "window");
 }
 
-function onlyWindow(window: ProviderUsageWindow) {
-  return firstWindow(resolve({ view: ready([claudeUsage({ windows: [window] })]) }));
+function onlyWindow(window: UsageWindow, overrides: ResolveOverrides = {}) {
+  return firstWindow(resolve({ hostReports: [claudeUsage({ windows: [window] })], ...overrides }));
 }
 
 beforeAll(async () => {
@@ -84,7 +101,7 @@ describe("the plan usage gauge in the composer context strip", () => {
       {
         kind: "plan",
         key: "plan",
-        providerId: "claude",
+        icon: CLAUDE_ICON,
         label: "Max 20x",
         accessibilityLabel: {
           key: "usage.planUsage.strip.planA11y",
@@ -150,7 +167,7 @@ describe("the plan usage gauge in the composer context strip", () => {
   });
 
   it("drops the plan segment when the provider reports no plan name", () => {
-    const segments = resolve({ view: ready([claudeUsage({ planLabel: null })]) });
+    const segments = resolve({ hostReports: [claudeUsage({ planLabel: undefined })] });
     expect(segments?.map((segment) => segment.key)).toEqual([
       "five_hour",
       "weekly",
@@ -159,19 +176,8 @@ describe("the plan usage gauge in the composer context strip", () => {
   });
 
   describe("stays quiet", () => {
-    it("while the first fetch is loading", () => {
-      expect(resolve({ view: { kind: "loading" } })).toBeNull();
-    });
-
-    it("when the fetch failed, the host is offline, or the host is too old", () => {
-      for (const key of [
-        "usage.planUsage.hostUnavailable",
-        "usage.planUsage.hostUpgradeRequired",
-        "usage.planUsage.clientUnavailable",
-      ]) {
-        expect(resolve({ view: { kind: "error", message: { key } } })).toBeNull();
-      }
-      expect(resolve({ view: { kind: "error", message: { text: "boom" } } })).toBeNull();
+    it("while the first fetch is loading, and when it failed, the host is offline, or too old", () => {
+      expect(resolve({ hostReports: null })).toBeNull();
     });
 
     it("when the provider has no entry in the list", () => {
@@ -179,12 +185,18 @@ describe("the plan usage gauge in the composer context strip", () => {
     });
 
     it("when the provider's entry is not available", () => {
-      expect(resolve({ view: ready([claudeUsage({ status: "error" })]) })).toBeNull();
-      expect(resolve({ view: ready([claudeUsage({ status: "unavailable" })]) })).toBeNull();
+      const failed = report("claude:work", "claude", {
+        report: { status: "error", error: "boom" },
+      });
+      const signedOut = report("claude:work", "claude", {
+        report: { status: "unavailable", problem: { kind: "no_quota", detail: "No plan" } },
+      });
+      expect(resolve({ hostReports: [failed] })).toBeNull();
+      expect(resolve({ hostReports: [signedOut] })).toBeNull();
     });
 
     it("when the provider has only balances and no windows", () => {
-      expect(resolve({ view: ready([claudeUsage({ windows: [] })]) })).toBeNull();
+      expect(resolve({ hostReports: [claudeUsage({ windows: [] })] })).toBeNull();
     });
 
     it("when the provider runs through a third-party API endpoint", () => {
@@ -196,11 +208,47 @@ describe("the plan usage gauge in the composer context strip", () => {
     });
   });
 
-  it("keeps showing the last answer while a refresh is in flight", () => {
-    const view = ready([claudeUsage()]);
-    if (view.kind !== "ready") throw new Error("expected a ready view");
-    const refreshing: ProviderUsageView = { ...view, isRefreshing: true };
-    expect(resolve({ view: refreshing })).toEqual(resolve());
+  describe("which account it shows", () => {
+    const personal = report("claude:personal", "claude", {
+      account: { label: "personal@example.com" },
+    });
+    const work = report("claude:work", "claude", { account: { label: "work@example.com" } });
+    const codex = report("codex:work", "codex");
+
+    function select(overrides: Partial<PlanUsageStripReportInput>) {
+      return selectPlanUsageStripReport({
+        providerId: "claude",
+        agentReports: null,
+        hostReports: [codex, personal, work],
+        ...overrides,
+      })?.id;
+    }
+
+    it("is the account the daemon says the agent runs under, not the host's first", () => {
+      expect(select({ agentReports: [work] })).toBe("claude:work");
+    });
+
+    it("follows the agent's account even when another provider's login backs it", () => {
+      expect(select({ providerId: "pi", agentReports: [work] })).toBe("claude:work");
+    });
+
+    it("is the provider's first account on the host for a draft, which has no agent to ask", () => {
+      expect(select({ agentReports: null })).toBe("claude:personal");
+    });
+
+    it("falls back to the host's list when the daemon knows no account for the agent", () => {
+      expect(select({ agentReports: [] })).toBe("claude:personal");
+    });
+
+    it("shows OpenCode Go for OpenCode, whose subscription is a source of another name", () => {
+      const go = report("opencode-go:key", "opencode-go");
+      expect(select({ providerId: "opencode", hostReports: [codex, go] })).toBe("opencode-go:key");
+    });
+
+    it("shows nothing for a provider with no account on the host", () => {
+      expect(select({ providerId: "pi" })).toBeUndefined();
+      expect(select({ hostReports: null })).toBeUndefined();
+    });
   });
 
   describe("short names", () => {
@@ -267,6 +315,30 @@ describe("the plan usage gauge in the composer context strip", () => {
         percentText: "100%",
       });
     });
+
+    it("shows the share left when plan usage is set to read as remaining", () => {
+      const window = onlyWindow(
+        { id: "weekly", label: "Weekly", usedPct: 31, tone: "warning" },
+        { displayAs: "remaining" },
+      );
+      expect(window).toMatchObject({ ringPct: 69, percentText: "69%", tone: "warning" });
+      expect(window?.accessibilityLabel).toEqual({
+        key: "usage.planUsage.strip.windowA11yLeftNoTrailing",
+        params: { label: "Weekly", percent: "69%" },
+      });
+      const resetting = onlyWindow(
+        { id: "weekly", label: "Weekly", usedPct: 31, resetsAt: at(4 * DAY_MS) },
+        { displayAs: "remaining" },
+      );
+      expect(resetting?.accessibilityLabel).toEqual({
+        key: "usage.planUsage.strip.windowA11yLeft",
+        params: {
+          label: "Weekly",
+          percent: "69%",
+          trailing: { key: "usage.planUsage.resets", params: { duration: "4d" } },
+        },
+      });
+    });
   });
 
   describe("trailing text", () => {
@@ -322,13 +394,13 @@ describe("the plan usage gauge in the composer context strip", () => {
     });
 
     it("counts down from the clock it is given", () => {
-      const window: ProviderUsageWindow = {
+      const window: UsageWindow = {
         id: "weekly",
         label: "Weekly",
         resetsAt: at(2 * HOUR_MS),
       };
       const segments = resolve({
-        view: ready([claudeUsage({ windows: [window] })]),
+        hostReports: [claudeUsage({ windows: [window] })],
         now: NOW + HOUR_MS + 30 * 60_000,
       });
       expect(firstWindow(segments)?.trailing).toEqual({
@@ -347,13 +419,17 @@ describe("the plan usage gauge in the composer context strip", () => {
         if (typeof param === "object") collect(param);
       }
     };
-    const windows: ProviderUsageWindow[] = [
+    const windows: UsageWindow[] = [
       { id: "five_hour", label: "Session", resetsAt: at(HOUR_MS) },
       { id: "session", label: "Session", resetsAt: at(-HOUR_MS) },
       { id: "weekly", label: "Weekly", runsOutAt: at(HOUR_MS), shortfallPct: 5 },
       { id: "code_review", label: "Code review" },
     ];
-    for (const segment of resolve({ view: ready([claudeUsage({ windows })]) }) ?? []) {
+    const segments = [
+      ...(resolve({ hostReports: [claudeUsage({ windows })] }) ?? []),
+      ...(resolve({ hostReports: [claudeUsage({ windows })], displayAs: "remaining" }) ?? []),
+    ];
+    for (const segment of segments) {
       collect(segment.accessibilityLabel);
       if (segment.kind === "window") {
         collect(segment.shortName);

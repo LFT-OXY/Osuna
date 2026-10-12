@@ -1,17 +1,19 @@
 import type { UsageReportEntry } from "@getpaseo/protocol/messages";
 import { expect, test } from "../support/fixtures";
-import { gotoAppShell, openSettings } from "../support/helpers/app";
-import { getServerId } from "../support/helpers/server-id";
-import { openSettingsHostSection } from "../support/helpers/settings";
+import { gotoAppShell } from "../support/helpers/app";
+import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
+import { openUsagePageFromShell } from "../support/helpers/usage-page";
 import {
   installUsageReportsFixture,
   type UsageReportsFixture,
 } from "../support/helpers/usage-reports";
-import {
-  openUsageFromIcon,
-  refreshAllUsage,
-  showUsageAs,
-} from "../support/helpers/usage-sidebar-item";
+import { closeUsage, openUsageFromIcon, showUsageAs } from "../support/helpers/usage-sidebar-item";
+
+// Osuna：主机设置页保持价格表，不挂载上游的套餐用量区块（HostUsageSection）。上游的额度卡片
+// 接在 Usage 页的套餐卡片里，这组用例改到那里跑；Usage 页要有数据才渲染，daemon 指向用量夹具。
+const fixtures = createUsageFixtureRoots("paseo-usage-settings-");
+
+test.use({ e2eDaemonEnvironment: fixtures.environment });
 
 const ICON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>';
 
@@ -44,12 +46,9 @@ function report(input: {
   };
 }
 
-// Osuna：主机设置页保持价格表，不挂载上游的套餐用量区块（HostUsageSection），这组用例在 Osuna 里无从进入。
-// 上游的额度卡片接到 Usage 页的套餐卡片之后，再把这些用例改到那里。
-test.describe.skip("usage settings", () => {
+test.describe("usage settings", () => {
   test("renders every report returned by usage.list_reports", async ({ page }) => {
     test.setTimeout(120_000);
-    const serverId = getServerId();
     const usage = await installUsageReportsFixture(page, {
       lists: [
         [
@@ -87,11 +86,10 @@ test.describe.skip("usage settings", () => {
     });
 
     await gotoAppShell(page);
-    await openSettings(page);
-    await openSettingsHostSection(page, serverId, "usage");
+    await openUsagePageFromShell(page);
     await usage.waitForListRequests(1);
 
-    const card = page.getByTestId("usage-card");
+    const card = page.getByTestId("usage-plan-usage-card");
     await expect(card.getByText("Alpha plan", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(card.getByText("dev@example.com", { exact: true })).toBeVisible();
     await expect(card.getByText("Beta plan", { exact: true })).toBeVisible();
@@ -101,20 +99,17 @@ test.describe.skip("usage settings", () => {
     await expect(card.getByText("2026-12-31", { exact: true })).toBeVisible();
     await expect(card.getByText("Gamma auth expired", { exact: true })).toBeVisible();
 
-    // The shared percentages setting applies to the host section.
-    await expect(page.getByTestId("usage-options-menu")).toBeVisible();
-    const hostUsageUrl = page.url();
-    await gotoAppShell(page);
+    // The shared percentages setting applies to the usage page's card. Osuna：卡片头部没有
+    // 上游的设置齿轮，偏好在套餐用量弹窗里改；弹窗盖在当前页面上，关掉就回到卡片。
     await openUsageFromIcon(page);
     await showUsageAs(page, "remaining");
-    await page.goto(hostUsageUrl);
+    await closeUsage(page);
     await expect(card.getByText("30% left")).toBeVisible();
     await expect(card.getByText("93% left")).toBeVisible();
   });
 
   test("refresh forces a fresh report", async ({ page }) => {
     test.setTimeout(120_000);
-    const serverId = getServerId();
     const windows = (usedPct: number) => [{ id: "w", label: "Weekly", usedPct }];
     // The sidebar summary and the section each load reports; only Refresh forces one.
     const usage = await installUsageReportsFixture(page, {
@@ -130,29 +125,35 @@ test.describe.skip("usage settings", () => {
     });
 
     await gotoAppShell(page);
-    await openSettings(page);
-    await openSettingsHostSection(page, serverId, "usage");
-    const card = page.getByTestId("usage-card");
+    await openUsagePageFromShell(page);
+    const card = page.getByTestId("usage-plan-usage-card");
     await expect(card.getByText("23%")).toBeVisible({ timeout: 10_000 });
 
-    await refreshAllUsage(page);
+    // Osuna：Usage 页的卡片头部是自己的「Refresh」按钮，作用与上游的「全部刷新」相同。
+    await card.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect.poll(() => forcedRefreshCount(usage)).toBe(1);
     await expect(card.getByText("64%")).toBeVisible();
   });
 
   test("asks to update a host without usage support and never calls it", async ({ page }) => {
     test.setTimeout(120_000);
-    const serverId = getServerId();
     const usage = await installUsageReportsFixture(page, { usageSupported: false });
 
     await gotoAppShell(page);
-    await openSettings(page);
-    await openSettingsHostSection(page, serverId, "usage");
+    await openUsagePageFromShell(page);
 
     await expect(
       // Names the host: "Update Laptop to see plan usage".
-      page.getByTestId("usage-card").getByText(/^Update (?!the host ).+ to see plan usage$/),
+      page
+        .getByTestId("usage-plan-usage-card")
+        .getByText(/^Update (?!the host ).+ to see plan usage$/),
     ).toBeVisible({ timeout: 10_000 });
+    // Osuna：卡片头部的刷新此时没有可刷新的主机，按不动。
+    await expect(
+      page
+        .getByTestId("usage-plan-usage-card")
+        .getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeDisabled();
     expect(usage.listRequests()).toHaveLength(0);
   });
 });

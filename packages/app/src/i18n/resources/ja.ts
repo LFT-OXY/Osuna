@@ -3737,9 +3737,7 @@ export const ja: TranslationResources = {
       empty: "プラン使用量のデータがありません",
       errorTitle: "プラン使用量を読み込めません",
       hostUnavailable: "このホストに接続するとプラン使用量を表示できます",
-      hostUpgradeRequired: "ホストを更新するとプラン使用量を表示できます",
       clientUnavailable: "ホスト接続の準備ができていません",
-      tooltipLoading: "プラン使用状況を読み込み中…",
       updated: "{{ago}}に更新",
       resets: "{{duration}}後にリセット",
       resettingNow: "リセット中",
@@ -3760,6 +3758,8 @@ export const ja: TranslationResources = {
         planA11y: "{{provider}} プラン：{{plan}}",
         windowA11y: "{{label}}：{{percent}} 使用、{{trailing}}",
         windowA11yNoTrailing: "{{label}}：{{percent}} 使用",
+        windowA11yLeft: "{{label}}：残り {{percent}}、{{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}：残り {{percent}}",
       },
       status: {
         error: "エラー",

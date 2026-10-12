@@ -1283,6 +1283,7 @@ function ComposerSurfaceStack({
   gitStatus,
   branchSwitchConditions,
   planUsageProviderId,
+  planUsageAgentId,
   showContextStrip,
   children,
 }: {
@@ -1292,6 +1293,7 @@ function ComposerSurfaceStack({
   gitStatus: CheckoutStatusPayload | null;
   branchSwitchConditions: BranchSwitchConditions;
   planUsageProviderId: string | null;
+  planUsageAgentId: string | null;
   showContextStrip: boolean;
   children: ReactNode;
 }) {
@@ -1306,6 +1308,7 @@ function ComposerSurfaceStack({
           gitStatus={gitStatus}
           branchSwitchConditions={branchSwitchConditions}
           planUsageProviderId={planUsageProviderId}
+          planUsageAgentId={planUsageAgentId}
         />
       ) : null}
     </View>
@@ -1760,8 +1763,9 @@ function ComposerContentImpl({
     if (resolveAgentControlsMode(agentControls) === "draft") agent = "draft";
     return { agent, isHostConnected: isConnected };
   }, [agentControls, isAgentRunning, isConnected]);
-  // 草稿还没有 agent，套餐用量跟着草稿里选中的提供方走。
+  // 草稿还没有 agent，套餐用量跟着草稿里选中的提供方走；有 agent 时跟着它实际所用的账号走。
   const planUsageProviderId = agentControls ? agentControls.selectedProvider : agentState.provider;
+  const planUsageAgentId = hasAgent ? agentId : null;
 
   const queueWriter = useMemo<QueueWriter>(
     () => ({
@@ -2615,6 +2619,7 @@ function ComposerContentImpl({
                 gitStatus={checkoutStatusQuery.status}
                 branchSwitchConditions={branchSwitchConditions}
                 planUsageProviderId={planUsageProviderId}
+                planUsageAgentId={planUsageAgentId}
                 showContextStrip={isContextStripVisible}
               >
                 <StableMessageInput

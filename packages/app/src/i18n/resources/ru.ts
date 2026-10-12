@@ -3763,9 +3763,7 @@ export const ru: TranslationResources = {
       empty: "Нет данных о расходе по тарифу",
       errorTitle: "Не удалось загрузить расход по тарифу",
       hostUnavailable: "Подключитесь к этому хосту, чтобы увидеть расход по тарифу",
-      hostUpgradeRequired: "Обновите хост, чтобы увидеть расход по тарифу",
       clientUnavailable: "Соединение с хостом не готово",
-      tooltipLoading: "Загрузка использования тарифа…",
       updated: "Обновлено {{ago}}",
       resets: "сброс через {{duration}}",
       resettingNow: "сбрасывается",
@@ -3786,6 +3784,8 @@ export const ru: TranslationResources = {
         planA11y: "Тариф {{provider}}: {{plan}}",
         windowA11y: "{{label}}: использовано {{percent}}, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: использовано {{percent}}",
+        windowA11yLeft: "{{label}}: осталось {{percent}}, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: осталось {{percent}}",
       },
       status: {
         error: "Ошибка",

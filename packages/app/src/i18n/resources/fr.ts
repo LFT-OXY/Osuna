@@ -3787,9 +3787,7 @@ export const fr: TranslationResources = {
       empty: "Aucune donnée de consommation du forfait",
       errorTitle: "Impossible de charger la consommation du forfait",
       hostUnavailable: "Connectez-vous à cet hôte pour voir la consommation du forfait",
-      hostUpgradeRequired: "Mettez à jour l'hôte pour voir la consommation du forfait",
       clientUnavailable: "La connexion à l'hôte n'est pas prête",
-      tooltipLoading: "Chargement de l'utilisation du forfait…",
       updated: "Mis à jour {{ago}}",
       resets: "réinitialisation dans {{duration}}",
       resettingNow: "réinitialisation en cours",
@@ -3810,6 +3808,8 @@ export const fr: TranslationResources = {
         planA11y: "Forfait {{provider}} : {{plan}}",
         windowA11y: "{{label}} : {{percent}} utilisé, {{trailing}}",
         windowA11yNoTrailing: "{{label}} : {{percent}} utilisé",
+        windowA11yLeft: "{{label}} : {{percent}} restants, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}} : {{percent}} restants",
       },
       status: {
         error: "Erreur",

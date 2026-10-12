@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type LayoutChangeEvent } from "react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -10,21 +10,22 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { BORDER_WIDTH, ICON_SIZE, type Theme } from "@/styles/theme";
+import { UsageCard } from "@/usage/card";
+import { useUsageDisplay } from "@/usage/display";
+import { UsageSourceIcon } from "@/usage/source-icon";
+import type { UsageTone } from "@/usage/types";
 import { renderUsageText } from "@/usage-stats/text";
 import { subscribeToRelativeTimeTick } from "@/utils/relative-time-ticker";
-import { ProviderUsageCard, ProviderUsageIcon } from "./card";
 import {
   fitPlanUsageStripSegments,
   resolvePlanUsageStrip,
+  selectPlanUsageStripReport,
   type PlanUsageStripPlanSegment,
   type PlanUsageStripSegment,
   type PlanUsageStripSpace,
   type PlanUsageStripWindowSegment,
 } from "./strip";
-import { TONE_COLOR_TOKEN } from "./tone";
-import type { ProviderUsageTone } from "./types";
-import { useProviderUsage } from "./use-provider-usage";
-import { findProviderUsage } from "./view";
+import { useStripUsage } from "./use-strip-usage";
 
 const RING_SIZE = ICON_SIZE.xs;
 const RING_STROKE = 1.75;
@@ -36,14 +37,20 @@ const GAUGE_FRAME_WIDTH = 2 * BORDER_WIDTH[1];
 // 悬停卡片的宽度；Tooltip 默认的 280 是给一两行提示用的。
 const HOVER_CARD_WIDTH = 300;
 
-const ThemedProviderUsageIcon = withUnistyles(ProviderUsageIcon);
+// 圆环的进度色，与上游额度卡片里窗口条的四种颜色一致。
+const TONE_COLOR_TOKEN = {
+  ok: "statusSuccess",
+  warning: "statusWarning",
+  danger: "statusDanger",
+  default: "foregroundMuted",
+} as const satisfies Record<UsageTone, keyof Theme["colors"]>;
 
 interface RingColors {
   trackColor: string;
   progressColor: string;
 }
 
-function toneRingColors(tone: ProviderUsageTone) {
+function toneRingColors(tone: UsageTone) {
   return function mapRingColors(theme: Theme): RingColors {
     return {
       trackColor: theme.colors.surface3,
@@ -52,16 +59,12 @@ function toneRingColors(tone: ProviderUsageTone) {
   };
 }
 
-const TONE_RING_COLORS: Record<ProviderUsageTone, (theme: Theme) => RingColors> = {
+const TONE_RING_COLORS: Record<UsageTone, (theme: Theme) => RingColors> = {
   ok: toneRingColors("ok"),
   warning: toneRingColors("warning"),
   danger: toneRingColors("danger"),
   default: toneRingColors("default"),
 };
-
-function mutedIconColor(theme: Theme) {
-  return { color: theme.colors.foregroundMuted };
-}
 
 /**
  * 倒计时跟着全局的分钟时钟走，不为每个窄栏单开定时器；面板隐藏时不订阅，回来时先对一次表。
@@ -113,17 +116,21 @@ function selectVisibleSegments(input: {
 }
 
 /**
- * Composer context strip 右侧的套餐仪表：只显示当前提供方，窄栏可见时每 5 分钟刷新。
- * 取数没就绪或不适用时什么也不渲染，窄栏其余内容不受影响。放不下时按
- * `fitPlanUsageStripSegments` 隐藏分段；每段的宽度由一层看不见的完整副本量出。
+ * Composer context strip 右侧的套餐仪表：显示当前 Agent 所用账号的额度（草稿按选中的
+ * 提供方），窄栏可见时每 5 分钟刷新。取数没就绪或不适用时什么也不渲染，窄栏其余内容
+ * 不受影响。放不下时按 `fitPlanUsageStripSegments` 隐藏分段；每段的宽度由一层看不见的
+ * 完整副本量出。
  */
 export function PlanUsageStripGauge({
   serverId,
   providerId,
+  agentId,
   space,
 }: {
   serverId: string;
   providerId: string;
+  /** 草稿还没有 Agent 时为 null。 */
+  agentId: string | null;
   /** 窄栏量出的可用空间；还没量到时为 null，先不显示。 */
   space: PlanUsageStripSpace | null;
 }) {
@@ -131,32 +138,39 @@ export function PlanUsageStripGauge({
   const retainedPanelActive = useRetainedPanelActive();
   const appVisible = useAppActivelyVisible();
   const isVisible = retainedPanelActive && appVisible;
-  const { view, refresh } = useProviderUsage(serverId, { enabled: isVisible, autoRefresh: true });
+  const { agentReports, hostReports, refresh } = useStripUsage({ serverId, agentId, isVisible });
   // 能报套餐用量的主机（v0.1.98+）都有提供方快照（v0.1.48+），所以快照没到就是还在加载。
   const { entries } = useProvidersSnapshot(serverId);
   const now = useMinuteClock(retainedPanelActive);
+  const entry = selectPlanUsageStripReport({ providerId, agentReports, hostReports });
+  const shownReports = useMemo(() => (entry ? [entry] : []), [entry]);
+  const { preferences, display } = useUsageDisplay(shownReports);
   const { widths, handleMeasure } = useSegmentWidths();
   const [isCardOpen, setIsCardOpen] = useState(false);
   const isCardOpenRef = useRef(false);
-  // 和上下文圆环弹层一样，每次打开都再取一次；daemon 的缓存挡住了对提供方接口的重复请求。
+  // 每次打开都再取一次；daemon 的缓存挡住了对来源接口的重复请求。
   // 普通 View 上 pointerenter 和 mouseenter 都会报「打开」，只在从关到开时取数。
   const handleCardOpenChange = useCallback(
     (nextOpen: boolean) => {
       const wasOpen = isCardOpenRef.current;
       isCardOpenRef.current = nextOpen;
       setIsCardOpen(nextOpen);
-      if (nextOpen && !wasOpen) void refresh().catch(() => {});
+      if (nextOpen && !wasOpen) refresh();
     },
     [refresh],
   );
 
   let hasActiveApiEndpoint: boolean | null = null;
   if (entries) hasActiveApiEndpoint = selectActiveApiEndpoint(entries, providerId) !== null;
-  const segments = resolvePlanUsageStrip({ view, providerId, hasActiveApiEndpoint, now });
+  const segments = resolvePlanUsageStrip({
+    entry,
+    hasActiveApiEndpoint,
+    displayAs: preferences.displayAs,
+    now,
+  });
+  // 没有账号时 `resolvePlanUsageStrip` 也是 null；这里先收窄，下面的悬停卡片要用它。
+  if (!entry) return null;
   if (!segments) return null;
-  // 有分段就说明结果里有这个提供方的条目；卡片拿的是同一条。
-  const usage =
-    view.kind === "ready" ? findProviderUsage(view.payload.providers, providerId) : null;
   const visibleSegments = selectVisibleSegments({
     segments,
     widths,
@@ -179,7 +193,7 @@ export function PlanUsageStripGauge({
           />
         ))}
       </View>
-      {visibleSegments.length > 0 && usage ? (
+      {visibleSegments.length > 0 ? (
         <Tooltip
           open={isCardOpen}
           onOpenChange={handleCardOpenChange}
@@ -208,7 +222,15 @@ export function PlanUsageStripGauge({
             style={styles.hoverCard}
             testID="composer-plan-usage-card"
           >
-            <ProviderUsageCard usage={usage} activeApiEndpoint={null} />
+            {/* 悬停卡片不接受点按，所以不带刷新按钮；卡片底部写着多久前更新。 */}
+            <UsageCard
+              serverId={serverId}
+              entry={entry}
+              display={display}
+              compact
+              pinnable={false}
+              refreshable={false}
+            />
           </TooltipContent>
         </Tooltip>
       ) : null}
@@ -273,11 +295,7 @@ function SegmentContent({ segment }: { segment: PlanUsageStripSegment }) {
 function PlanSegmentContent({ segment }: { segment: PlanUsageStripPlanSegment }) {
   return (
     <>
-      <ThemedProviderUsageIcon
-        iconKey={segment.providerId}
-        size={ICON_SIZE.xs}
-        uniProps={mutedIconColor}
-      />
+      <UsageSourceIcon svg={segment.icon} size={ICON_SIZE.xs} />
       <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
         {segment.label}
       </Text>

@@ -3703,9 +3703,7 @@ export const zhCN: TranslationResources = {
       empty: "暂无套餐用量数据",
       errorTitle: "无法加载套餐用量",
       hostUnavailable: "连接到这台主机后可查看套餐用量",
-      hostUpgradeRequired: "更新这台主机后可查看套餐用量",
       clientUnavailable: "主机连接尚未就绪",
-      tooltipLoading: "正在加载套餐用量…",
       updated: "{{ago}}更新",
       resets: "{{duration}} 后重置",
       resettingNow: "正在重置",
@@ -3726,6 +3724,8 @@ export const zhCN: TranslationResources = {
         planA11y: "{{provider}} 套餐：{{plan}}",
         windowA11y: "{{label}}：已用 {{percent}}，{{trailing}}",
         windowA11yNoTrailing: "{{label}}：已用 {{percent}}",
+        windowA11yLeft: "{{label}}：剩余 {{percent}}，{{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}：剩余 {{percent}}",
       },
       status: {
         error: "错误",

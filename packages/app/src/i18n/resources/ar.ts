@@ -3699,9 +3699,7 @@ export const ar: TranslationResources = {
       empty: "لا توجد بيانات عن استهلاك الخطة",
       errorTitle: "تعذّر تحميل استهلاك الخطة",
       hostUnavailable: "اتصل بهذا المضيف لعرض استهلاك الخطة",
-      hostUpgradeRequired: "حدّث المضيف لعرض استهلاك الخطة",
       clientUnavailable: "اتصال المضيف غير جاهز",
-      tooltipLoading: "جارٍ تحميل استخدام الخطة…",
       updated: "تم التحديث {{ago}}",
       resets: "إعادة التعيين بعد {{duration}}",
       resettingNow: "تتم إعادة التعيين الآن",
@@ -3722,6 +3720,8 @@ export const ar: TranslationResources = {
         planA11y: "خطة {{provider}}: {{plan}}",
         windowA11y: "{{label}}: مستخدم {{percent}}، {{trailing}}",
         windowA11yNoTrailing: "{{label}}: مستخدم {{percent}}",
+        windowA11yLeft: "{{label}}: المتبقي {{percent}}، {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: المتبقي {{percent}}",
       },
       status: {
         error: "خطأ",

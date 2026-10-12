@@ -293,8 +293,19 @@ test.describe("Usage item", () => {
       await closeUsageOptions(page);
     });
 
-    // Osuna：上游在这里有一步去主机设置页的套餐用量区块核对固定项。Osuna 的主机设置页是价格表，
-    // 不挂载那个区块（HostUsageSection），这一步去掉；弹窗此时仍开着，后面的步骤接着用。
+    // Osuna：上游在这里去主机设置页的套餐用量区块核对。Osuna 的主机设置页是价格表，不挂载那个
+    // 区块（HostUsageSection）；上游的额度卡片接在 Usage 页的套餐卡片里，这一步改到那里。
+    await test.step("the usage page's plan usage card shares the pins and the toggle", async () => {
+      const workspaceUrl = page.url();
+      await closeUsage(page);
+      await page.locator('[data-testid="sidebar-usage-stats"]:visible').first().click();
+      const section = page.getByTestId("usage-plan-usage-card");
+      await expect(section.getByText("69% left")).toBeVisible({ timeout: 30_000 });
+      await expect(pinRow(section, "Codex", "Weekly")).toBeChecked();
+      await page.goto(workspaceUrl);
+      await openUsageFromItem(page);
+      await expect(screen.getByText("Claude", { exact: true })).toBeVisible({ timeout: 10_000 });
+    });
 
     await test.step("unpinning everything stays empty after a reload", async () => {
       await togglePin(screen, "Claude", "Session");

@@ -3830,9 +3830,7 @@ export const en = {
       empty: "No plan usage data",
       errorTitle: "Unable to load plan usage",
       hostUnavailable: "Connect to this host to see plan usage",
-      hostUpgradeRequired: "Update the host to see plan usage",
       clientUnavailable: "Host connection is not ready",
-      tooltipLoading: "Loading plan usage…",
       updated: "Updated {{ago}}",
       resets: "resets {{duration}}",
       resettingNow: "resetting now",
@@ -3853,6 +3851,8 @@ export const en = {
         planA11y: "{{provider}} plan: {{plan}}",
         windowA11y: "{{label}}: {{percent}} used, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: {{percent}} used",
+        windowA11yLeft: "{{label}}: {{percent}} left, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: {{percent}} left",
       },
       status: {
         error: "Error",

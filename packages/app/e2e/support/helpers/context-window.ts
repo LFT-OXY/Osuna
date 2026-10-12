@@ -3,7 +3,11 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import type { UsageReportEntry } from "@getpaseo/protocol/messages";
 import { expectComposerVisible } from "./composer";
 import { openAgentRoute, seedMockAgentWorkspace } from "./mock-agent";
-import { installUsageReportsFixture, type UsageListResponse } from "./usage-reports";
+import {
+  installUsageReportsFixture,
+  type UsageListRequest,
+  type UsageListResponse,
+} from "./usage-reports";
 import { claudeAndCodexReports } from "./usage-sidebar-item";
 
 // 32,000 of the mock's 128,000-token window.
@@ -138,34 +142,68 @@ export interface AgentUsageScript {
   refreshedAgents(): string[];
 }
 
+// The narrowest viewport that lays the app out for desktop (the theme's `md` breakpoint).
+const DESKTOP_MIN_WIDTH = 720;
+
 /**
  * Scripts the host's usage: the host's own list is Claude and Codex on its default login; each
  * agent request and each Refresh takes the next scripted answer.
+ *
+ * Osuna：桌面宽度下 Composer 用量条一挂载就问一次这个 Agent 的账号，早于任何打开详情的操作，
+ * 所以每次连接上第一个按 Agent 的请求是用量条的。它不占用编排好的应答，答「没有账号」，
+ * 用量条随后改看主机的列表（mock 提供方在里面没有账号，不显示）；它也不计入详情的请求。
  */
 export async function scriptAgentUsage(page: Page): Promise<AgentUsageScript> {
   let supported = true;
   const answers: UsageListResponse[] = [];
+  const stripLookups = new Set<UsageListRequest>();
+  let connection = 0;
+  let connectionWithStripLookup = 0;
+  page.on("websocket", () => {
+    connection += 1;
+  });
+  /** Whether the Composer strip has yet to ask about its agent on this connection. */
+  function awaitsStripLookup(): boolean {
+    const width = page.viewportSize()?.width ?? 0;
+    if (width < DESKTOP_MIN_WIDTH) return false;
+    return connectionWithStripLookup !== connection;
+  }
+  function nextScriptedAnswer(): UsageListResponse {
+    const next = answers.shift();
+    if (!next) throw new Error("The test scripts every agent usage request.");
+    return next;
+  }
+  function answerAgentRequest(request: UsageListRequest): UsageListResponse {
+    // A Refresh is forced and the strip never forces, so a forced request is the details'.
+    if (request.forceRefresh) return nextScriptedAnswer();
+    if (!awaitsStripLookup()) return nextScriptedAnswer();
+    connectionWithStripLookup = connection;
+    stripLookups.add(request);
+    return [];
+  }
   const usage = await installUsageReportsFixture(page, {
     usageSupported: () => supported,
     lists: [
       (request) => {
-        if (!request.agentId && !request.reportIds) return claudeAndCodexReports();
-        const next = answers.shift();
-        if (!next) throw new Error("The test scripts every agent usage request.");
-        return next;
+        if (request.agentId) return answerAgentRequest(request);
+        if (request.reportIds) return nextScriptedAnswer();
+        return claudeAndCodexReports();
       },
     ],
   });
+  function detailRequests(): UsageListRequest[] {
+    return usage.listRequests().filter((request) => !stripLookups.has(request));
+  }
   return {
     answerNext: (response) => answers.push(response),
     stopReportingUsage: () => {
       supported = false;
     },
-    agentRequests: () => usage.listRequests().flatMap((request) => request.agentId ?? []),
+    agentRequests: () => detailRequests().flatMap((request) => request.agentId ?? []),
     refreshedAgents: () =>
-      usage
-        .listRequests()
-        .flatMap((request) => (request.forceRefresh && request.agentId ? [request.agentId] : [])),
+      detailRequests().flatMap((request) =>
+        request.forceRefresh && request.agentId ? [request.agentId] : [],
+      ),
   };
 }
 

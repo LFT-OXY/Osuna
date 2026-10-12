@@ -3778,9 +3778,7 @@ export const es: TranslationResources = {
       empty: "Sin datos de uso del plan",
       errorTitle: "No se pudo cargar el uso del plan",
       hostUnavailable: "Conéctate a este host para ver el uso del plan",
-      hostUpgradeRequired: "Actualiza el host para ver el uso del plan",
       clientUnavailable: "La conexión con el host no está lista",
-      tooltipLoading: "Cargando el uso del plan…",
       updated: "Actualizado {{ago}}",
       resets: "se reinicia en {{duration}}",
       resettingNow: "reiniciándose ahora",
@@ -3801,6 +3799,8 @@ export const es: TranslationResources = {
         planA11y: "Plan de {{provider}}: {{plan}}",
         windowA11y: "{{label}}: {{percent}} usado, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: {{percent}} usado",
+        windowA11yLeft: "{{label}}: queda {{percent}}, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: queda {{percent}}",
       },
       status: {
         error: "Error",

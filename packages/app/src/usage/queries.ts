@@ -251,3 +251,14 @@ export function useReportRefresh(
   const refresh = useCallback(() => mutate(), [mutate]);
   return { refresh, refreshState: resolveUsageRefresh(mutation) };
 }
+
+// Osuna：Usage 页的套餐卡片（一次看几台主机）与 Composer 用量条在这个模块之外订阅同一份
+// 报告。键、取数与强制刷新从这里拿，两处不另起一套取数逻辑。
+export {
+  hostUsageQueryKey,
+  usageReportsQueryKey,
+  requireClient as requireUsageClient,
+  listReports as listHostUsageReports,
+  refreshReports as refreshHostUsageReports,
+  REPORTS_STALE_TIME_MS as USAGE_REPORTS_STALE_TIME_MS,
+};

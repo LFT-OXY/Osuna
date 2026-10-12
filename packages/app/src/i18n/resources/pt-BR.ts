@@ -3756,9 +3756,7 @@ export const ptBR: TranslationResources = {
       empty: "Sem dados de uso do plano",
       errorTitle: "Não foi possível carregar o uso do plano",
       hostUnavailable: "Conecte-se a este host para ver o uso do plano",
-      hostUpgradeRequired: "Atualize o host para ver o uso do plano",
       clientUnavailable: "A conexão com o host não está pronta",
-      tooltipLoading: "Carregando o uso do plano…",
       updated: "Atualizado {{ago}}",
       resets: "reinicia em {{duration}}",
       resettingNow: "reiniciando agora",
@@ -3779,6 +3777,8 @@ export const ptBR: TranslationResources = {
         planA11y: "Plano {{provider}}: {{plan}}",
         windowA11y: "{{label}}: {{percent}} usado, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: {{percent}} usado",
+        windowA11yLeft: "{{label}}: {{percent}} restantes, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: {{percent}} restantes",
       },
       status: {
         error: "Erro",
