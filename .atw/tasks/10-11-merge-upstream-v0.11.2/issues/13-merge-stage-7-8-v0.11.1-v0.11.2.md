@@ -4,7 +4,7 @@
 
 **Blocked by:** 12
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 合并分支包含两个 merge commit，第二双亲分别是 `ab10a6694` 与 `759532509`，各自独立通过下面的检查后才做下一个。
 - [ ] `759532509` 是合并分支的祖先；合并分支与上游 main 的共同祖先是 `22488d450`。
