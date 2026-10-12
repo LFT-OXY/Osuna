@@ -150,8 +150,8 @@ test.describe.skip("usage settings", () => {
     await openSettingsHostSection(page, serverId, "usage");
 
     await expect(
-      // Names the host: "Update Laptop to see usage".
-      page.getByTestId("usage-card").getByText(/^Update (?!the host ).+ to see usage$/),
+      // Names the host: "Update Laptop to see plan usage".
+      page.getByTestId("usage-card").getByText(/^Update (?!the host ).+ to see plan usage$/),
     ).toBeVisible({ timeout: 10_000 });
     expect(usage.listRequests()).toHaveLength(0);
   });

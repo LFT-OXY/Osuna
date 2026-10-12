@@ -24,7 +24,7 @@ import { UsageWindowBar } from "./window-bar";
 
 function statusText(report: UsageReport): string | null {
   if (report.status === "available") return null;
-  return report.status === "error" ? "Error" : "Unavailable";
+  return report.status === "error" ? usageCopy.statusError : usageCopy.statusUnavailable;
 }
 
 function reportContent(report: UsageReport) {

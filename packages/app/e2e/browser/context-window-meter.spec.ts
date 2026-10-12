@@ -190,14 +190,14 @@ async function expectCardsToStreamIn(
     stream: [first.promise, onWorkLogin(claude!), second.promise, onWorkLogin(codex!)],
   });
   const details = await openDetails(page);
-  await expect(details.getByText("Loading usage...", { exact: true })).toBeVisible();
+  await expect(details.getByText("Loading plan usage...", { exact: true })).toBeVisible();
   await shot("loading");
 
   first.open();
   await expect(
     usageCard(details, "claude:work").getByText("work@example.com", { exact: true }),
   ).toBeVisible();
-  await expect(details.getByText("Loading usage...", { exact: true })).toHaveCount(0);
+  await expect(details.getByText("Loading plan usage...", { exact: true })).toHaveCount(0);
   await expect(usageCard(details, "codex:work")).toHaveCount(0);
   await shot("streaming");
 
@@ -221,7 +221,7 @@ async function expectFailedRequestSentence(
   await reloadAgent(page);
   const details = await openDetails(page);
   await expect(
-    details.getByText("Unable to load usage: Unknown agent", { exact: true }),
+    details.getByText("Unable to load plan usage: Unknown agent", { exact: true }),
   ).toBeVisible();
   await shot("error");
 }
@@ -236,7 +236,7 @@ async function expectOnlyContextWindowWithoutUsage(
   await reloadAgent(page);
   const details = await openDetails(page);
   await expect(details.getByText("25% used", { exact: true })).toBeVisible();
-  await expect(details.getByText("Loading usage...", { exact: true })).toHaveCount(0);
+  await expect(details.getByText("Loading plan usage...", { exact: true })).toHaveCount(0);
   await expect(details.getByText("work@example.com", { exact: true })).toHaveCount(0);
   await shot("unsupported");
 }
@@ -290,7 +290,7 @@ for (const theme of ["light", "dark"] as const) {
       const slowSource = gate();
       usage.answerNext({ stream: [slowSource.promise, onWorkLogin(claude!)] });
       const closedEarly = await hoverContextWindowMeter(page);
-      await expect(closedEarly.getByText("Loading usage...", { exact: true })).toBeVisible();
+      await expect(closedEarly.getByText("Loading plan usage...", { exact: true })).toBeVisible();
       await leaveContextWindowMeter(page);
 
       const resumed = gate();
@@ -299,7 +299,7 @@ for (const theme of ["light", "dark"] as const) {
         stream: [resumed.promise, onPersonalLogin(claude!), finished.promise],
       });
       const card = await hoverContextWindowMeter(page);
-      await expect(card.getByText("Loading usage...", { exact: true })).toBeVisible();
+      await expect(card.getByText("Loading plan usage...", { exact: true })).toBeVisible();
       await expect(card.getByText("work@example.com", { exact: true })).toHaveCount(0);
 
       // The old login's report lands during the new request, before the new login's.

@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { builtinSidebarNavLabelKey } from "@/sidebar-nav/model";
+import { usageCopy } from "./copy";
 import { useUsagePreferences } from "./display";
 import { useUsageHostId } from "./hosts";
 import { useUsageHostReports } from "./queries";
@@ -36,7 +37,9 @@ import { UsageModal } from "./usage-modal";
 function useUsageSummary(): readonly PinnedUsageSource[] {
   const { preferences } = useUsagePreferences();
   const reports = useUsageHostReports(useUsageHostId());
-  return useMemo(() => resolvePinnedUsage(reports, preferences), [preferences, reports]);
+  // Osuna：窗口的无障碍说明按界面语言写；t 列进依赖，切换语言后重算。
+  const { t } = useTranslation();
+  return useMemo(() => resolvePinnedUsage(reports, preferences, t), [preferences, reports, t]);
 }
 
 /** Whether the sidebar Usage item has anything to show. */
@@ -92,7 +95,10 @@ export function useOpenSidebarUsage(): () => void {
 
 function pinnedUsageLabel(label: string, sources: readonly PinnedUsageSource[]): string {
   const windows = sources.flatMap((source) => source.windows);
-  return `${label}: ${windows.map((window) => window.label).join(", ")}`;
+  return usageCopy.summary(
+    label,
+    windows.map((window) => window.label),
+  );
 }
 
 function triggerStyle({ hovered }: PressableStateCallbackType & { hovered?: boolean }) {

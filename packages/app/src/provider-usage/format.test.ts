@@ -171,15 +171,13 @@ describe("plan usage English stays what it was", () => {
     expect(i18n.t("usage.planUsage.title")).toBe("Plan usage");
     expect(i18n.t("usage.planUsage.refresh")).toBe("Refresh");
     expect(i18n.t("usage.planUsage.refreshing")).toBe("Refreshing...");
-    expect(i18n.t("usage.planUsage.loading")).toBe("Loading usage...");
-    expect(i18n.t("usage.planUsage.empty")).toBe("No usage data");
-    expect(i18n.t("usage.planUsage.errorTitle")).toBe("Unable to load usage");
+    expect(i18n.t("usage.planUsage.loading")).toBe("Loading plan usage...");
+    expect(i18n.t("usage.planUsage.empty")).toBe("No plan usage data");
+    expect(i18n.t("usage.planUsage.errorTitle")).toBe("Unable to load plan usage");
     expect(i18n.t("usage.planUsage.hostUnavailable")).toBe(
-      "Connect to this host to see provider usage",
+      "Connect to this host to see plan usage",
     );
-    expect(i18n.t("usage.planUsage.hostUpgradeRequired")).toBe(
-      "Update the host to see provider usage",
-    );
+    expect(i18n.t("usage.planUsage.hostUpgradeRequired")).toBe("Update the host to see plan usage");
     expect(i18n.t("usage.planUsage.clientUnavailable")).toBe("Host connection is not ready");
     expect(i18n.t("usage.planUsage.tooltipLoading")).toBe("Loading plan usage…");
   });

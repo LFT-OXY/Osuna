@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import {
   displayPercent,
   formatUsageFreshness,
@@ -50,7 +51,7 @@ describe("resolveUsageView", () => {
         supportsUsage: false,
         query: ready([entry({})]),
       }),
-    ).toEqual({ kind: "unavailable", message: "Update Laptop to see usage" });
+    ).toEqual({ kind: "unavailable", message: "Update Laptop to see plan usage" });
   });
 
   it("asks for a connection before anything else", () => {
@@ -61,7 +62,7 @@ describe("resolveUsageView", () => {
         supportsUsage: false,
         query: undefined,
       }),
-    ).toEqual({ kind: "unavailable", message: "Connect to Laptop to see usage" });
+    ).toEqual({ kind: "unavailable", message: "Connect to Laptop to see plan usage" });
   });
 
   it("moves from loading to ready to error", () => {
@@ -190,6 +191,18 @@ describe("formatUsageFreshness", () => {
     expect(formatUsageFreshness("3m")).toBe("Updated 3m ago");
     expect(formatUsageFreshness("Jan 15")).toBe("Updated Jan 15");
   });
+
+  it("reads in the app's language", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(formatUsageFreshness("now")).toBe("刚刚更新");
+      expect(formatUsageFreshness("3m")).toBe("3 分钟前更新");
+      expect(formatUsageFreshness("2h")).toBe("2 小时前更新");
+      expect(formatUsageFreshness("4d")).toBe("4 天前更新");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
 });
 
 describe("resolveUsageRefresh", () => {
@@ -297,7 +310,7 @@ describe("resolveAgentUsageView", () => {
         canReport: true,
         query: { ...idle, error: new Error("Unknown agent") },
       }),
-    ).toEqual({ kind: "error", message: "Unable to load usage: Unknown agent" });
+    ).toEqual({ kind: "error", message: "Unable to load plan usage: Unknown agent" });
   });
 
   it("says the request failed instead of showing the reports from before it", () => {
@@ -306,6 +319,6 @@ describe("resolveAgentUsageView", () => {
         canReport: true,
         query: { data: [report], error: new Error("Unknown agent"), isFetching: false },
       }),
-    ).toEqual({ kind: "error", message: "Unable to load usage: Unknown agent" });
+    ).toEqual({ kind: "error", message: "Unable to load plan usage: Unknown agent" });
   });
 });

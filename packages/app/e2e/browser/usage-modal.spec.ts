@@ -245,7 +245,7 @@ test.describe("usage modal", () => {
     await openUsageFromIcon(page);
 
     await expect(
-      page.getByTestId(`usage-host-${serverId}`).getByText(/^Update .+ to see usage$/),
+      page.getByTestId(`usage-host-${serverId}`).getByText(/^Update .+ to see plan usage$/),
     ).toBeVisible({ timeout: 10_000 });
     await qaScreenshot(page, "phase7-usage-update-host");
     await expect(page.getByTestId("usage-options-menu")).toHaveCount(0);

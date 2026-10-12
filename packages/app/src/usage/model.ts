@@ -1,4 +1,3 @@
-import { formatCompactTimeAgoAsProse } from "@/utils/time";
 import { usageCopy } from "./copy";
 import type { UsageDisplayAs } from "./preferences";
 import type { UsageReportEntry, UsageView, UsageWindow } from "./types";
@@ -33,7 +32,7 @@ export function usageWindowRowLabel(input: {
 
 /** When a report was fetched, from its compact relative time: "Updated 3m ago". */
 export function formatUsageFreshness(compactTimeAgo: string): string {
-  return usageCopy.updated(formatCompactTimeAgoAsProse(compactTimeAgo));
+  return usageCopy.updated(usageCopy.ago(compactTimeAgo));
 }
 
 /** A user-requested refresh of one report. The previous report stays on screen throughout. */

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import type { UsagePreferences } from "./preferences";
 import {
   choosePinnedUsageLayout,
@@ -212,6 +213,25 @@ describe("resolvePinnedUsage", () => {
       "Claude Session 69% left",
       "Codex Weekly 88% left",
     ]);
+  });
+
+  it("describes each window in the app's language", async () => {
+    const pins = [
+      { sourceId: "claude", windowId: "five-hour" },
+      { sourceId: "codex", windowId: "weekly" },
+    ];
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(windows([claude, codex], preferences(pins)).map((item) => item.label)).toEqual([
+        "Claude Session 已用 31%",
+        "Codex Weekly 已用 12%",
+      ]);
+      expect(
+        windows([claude, codex], preferences(pins, "remaining")).map((item) => item.label),
+      ).toEqual(["Claude Session 剩余 69%", "Codex Weekly 剩余 88%"]);
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 
   it("leaves out a pinned window that no report has, or that reports no percent", () => {

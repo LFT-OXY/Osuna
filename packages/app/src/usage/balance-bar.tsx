@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { usageCopy } from "./copy";
 import { clampPct, formatAmount, formatResetLabel } from "./format";
 import type { UsageBalance, UsageTone } from "./types";
 
@@ -20,7 +21,7 @@ function resolveBalance(balance: UsageBalance, locale: string): ResolvedBalance 
     return { amountText: `${usedText} / ${format(limit)}`, usedPct };
   }
   if (remaining != null) {
-    return { amountText: `${format(remaining)} left`, usedPct: null };
+    return { amountText: usageCopy.balanceLeft(format(remaining)), usedPct: null };
   }
   if (used != null) {
     return { amountText: format(used), usedPct: null };

@@ -4,7 +4,7 @@ import { Pressable, Text, View, type StyleProp, type ViewStyle } from "react-nat
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usageCopy } from "./copy";
-import { formatDisplayPct, formatResetLabel } from "./format";
+import { formatDisplayPct, formatResetLabel, formatRunsOutLabel } from "./format";
 import { UsageMeter } from "./meter";
 import { displayPercent, usageWindowRowLabel } from "./model";
 import type { UsageDisplayAs } from "./preferences";
@@ -40,10 +40,13 @@ export function UsageWindowBar({
   const shownPct = displayPercent(window, displayAs);
   const tone = windowTone(window);
 
-  const isAtRisk = window.runsOutAt != null && window.shortfallPct != null;
-  const trailing = isAtRisk
-    ? `runs out ${formatResetLabel(window.runsOutAt)?.replace("resets ", "") ?? ""}`.trim()
-    : formatResetLabel(window.resetsAt);
+  // Osuna：文案走翻译键，不能再从「resets 2h」里截字。用完时间已过时退回显示重置时间。
+  const runsOut =
+    window.runsOutAt != null && window.shortfallPct != null
+      ? formatRunsOutLabel(window.runsOutAt)
+      : null;
+  const isAtRisk = runsOut != null;
+  const trailing = runsOut ?? formatResetLabel(window.resetsAt);
 
   const value = shownPct != null ? formatDisplayPct(shownPct, displayAs) : "—";
   const accessibilityState = useMemo(() => ({ checked: pinned }), [pinned]);

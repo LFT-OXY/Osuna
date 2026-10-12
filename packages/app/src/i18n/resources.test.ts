@@ -125,7 +125,7 @@ function findStaleAllowlistKeys(resource: unknown, allowlist: ReadonlySet<string
 
 // zh-CN 界面名词的旧写法，统一后不应再出现；插值、行内代码和占位示例值不算界面名词
 const zhCNRetiredTermPattern =
-  /智能体|供应商|变更|思考模式|思考强度|Agent Provider|\b(?:worktrees?|daemons?|diffs?|prompts?|models?|modes?|projects?|commits?|push|pull|providers?|setup|teardown|beta|hosts?|workspaces?|terminals?|merge|auto-merge|features?|thinking|scripts?|issues?|reviews?|stash(?:ed)?|relay|server|runtime|app|refs?|remote|repository|composer)\b/gi;
+  /智能体|供应商|变更|思考模式|思考强度|提供方用量|Agent Provider|\b(?:worktrees?|daemons?|diffs?|prompts?|models?|modes?|projects?|commits?|push|pull|providers?|setup|teardown|beta|hosts?|workspaces?|terminals?|merge|auto-merge|features?|thinking|scripts?|issues?|reviews?|stash(?:ed)?|relay|server|runtime|app|refs?|remote|repository|composer)\b/gi;
 
 // 值里的英文是配置键名、斜杠命令或占位示例，原样保留
 const zhCNRetiredTermExemptKeys = [
@@ -162,6 +162,10 @@ const migratedSourceLiterals = {
     "Sign in again.",
     "Login expired ",
     "Login rejected (HTTP ",
+    "resetting now",
+    "resets ",
+    "runs out ",
+    "Unavailable",
   ],
   connectionErrors: [
     "Daemon unavailable",
