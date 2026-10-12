@@ -41,14 +41,14 @@ test("browses from the directory into a category, a plugin, and its author", asy
   await page.getByRole("link", { name: /Fresh Worktrees/ }).click();
   await expect(page).toHaveURL(/\/plugins\/omercnet\/fresh-worktrees$/);
   await expect(page.getByRole("heading", { name: "Fresh Worktrees" })).toHaveCount(1);
-  await expect(page.getByText("paseo plugin install omercnet/fresh-worktrees")).toHaveCount(1);
+  await expect(page.getByText("paseo plugin add omercnet/fresh-worktrees")).toHaveCount(1);
   await expect(
     page.getByRole("heading", { level: 2, name: "Behavior", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Copy to clipboard" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __copied?: string }).__copied))
-    .toBe("paseo plugin install omercnet/fresh-worktrees");
+    .toBe("paseo plugin add omercnet/fresh-worktrees");
   await expect(page.getByRole("link", { name: "Git", exact: true })).toHaveAttribute(
     "href",
     "/plugins/category/git",
@@ -242,7 +242,7 @@ test.describe("search engine visits without JavaScript", () => {
     expect(response?.status()).toBe(200);
     expect(response?.headers()["cache-control"]).toBe("private, no-store");
     expect(response?.headers()["x-robots-tag"]).toBeUndefined();
-    await expect(page.getByText("paseo plugin install omercnet/fresh-worktrees")).toBeVisible();
+    await expect(page.getByText("paseo plugin add omercnet/fresh-worktrees")).toBeVisible();
     await expect(
       page.getByRole("heading", { level: 2, name: "Behavior", exact: true }),
     ).toBeVisible();
@@ -388,19 +388,18 @@ async function expectPageMetadata(page: Page, title: string, path: string) {
   );
 }
 
-test("keeps the directory unlinked until the coordinated announcement", async ({ page }) => {
+test("links the directory from the site navigation", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("banner").getByRole("link", { name: "Plugins", exact: true }),
-  ).toHaveCount(0);
+    page.getByRole("navigation").getByRole("link", { name: "Plugins", exact: true }),
+  ).toHaveAttribute("href", "/plugins");
   await expect(
     page.getByRole("contentinfo").getByRole("link", { name: "Plugins", exact: true }),
-  ).toHaveCount(0);
+  ).toHaveAttribute("href", "/plugins");
   await expect(page.getByRole("link", { name: "Browse plugins" })).toHaveAttribute(
     "href",
-    "https://paseo.cafe",
+    "/plugins",
   );
-  await expect(page.locator('a[href="/plugins"]')).toHaveCount(0);
   const response = await page.goto("/plugins");
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { level: 1, name: /^Plugins/ })).toBeVisible();
