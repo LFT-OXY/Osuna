@@ -233,6 +233,13 @@ export const ja: TranslationResources = {
       on: "オン",
       off: "オフ",
     },
+    speed: {
+      label: "速度",
+      select: "速度を選択",
+      normal: "標準",
+      fast: "高速",
+      ultrafast: "超高速",
+    },
     mode: {
       title: "モード",
       selectWithValue: "エージェントモードを選択（{{value}}）",

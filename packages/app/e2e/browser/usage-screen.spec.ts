@@ -25,7 +25,9 @@ import {
   claudeAndCodexReports,
   expectPinnedUsage,
   pinRow,
+  openCompactSidebar,
   openUsageOptions,
+  openUsageSheetFromIcon,
   closeUsageOptions,
   expectUsageOptionsFitContent,
   showUsageAs,
@@ -481,9 +483,12 @@ async function captureSettingsState(
   await testInfo.attach(name, { body: await page.screenshot(), contentType: "image/png" });
 }
 
+// Osuna：`/usage` 是 Osuna 的 Usage 页，上游占用它的套餐用量独立页面没有接路由。这条改到窄屏的
+// 套餐用量抽屉里验：抽屉里是同一张卡片，登录失败的逐条原因与刷新后的结果都在上面。
 test("an account with all logins failing shows each harness and remedy, then only usage when one succeeds", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const fixture = await installLoginUsage([
     { harness: "Codex", report: { status: "error", error: "Usage API returned 500. Try again." } },
     {
@@ -507,7 +512,8 @@ test("an account with all logins failing shows each harness and remedy, then onl
   ]);
   try {
     await gotoAppShell(page);
-    await openUsage(page);
+    await openCompactSidebar(page);
+    await openUsageSheetFromIcon(page);
     await expectLoginErrors(page, [
       "Codex: Usage API returned 500. Try again.",
       "OpenCode: Login rejected (HTTP 401). Run opencode to refresh it.",

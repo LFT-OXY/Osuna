@@ -231,6 +231,13 @@ export const ar: TranslationResources = {
       on: "على",
       off: "عن",
     },
+    speed: {
+      label: "السرعة",
+      select: "اختيار السرعة",
+      normal: "عادي",
+      fast: "سريع",
+      ultrafast: "فائق السرعة",
+    },
     mode: {
       title: "وضع",
       selectWithValue: "حدد وضع الوكيل ({{value}})",

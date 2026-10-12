@@ -26,9 +26,10 @@ test.use({
   },
 });
 
-// Rendered light-theme colors: palette yellow 400 for Fast and Ultrafast, muted foreground for Normal.
-const ACTIVE_SPEED_COLOR = "rgb(251, 191, 36)";
-const NORMAL_SPEED_COLOR = "rgb(113, 113, 122)";
+// Osuna：Fast 与 Ultrafast 沿用快速模式的样式——实心闪电、Codex 的品牌色（#3941ff），不取上游的黄色；
+// Normal 是浅色主题的 foregroundMuted（#71717b）。
+const ACTIVE_SPEED_COLOR = "rgb(57, 65, 255)";
+const NORMAL_SPEED_COLOR = "rgb(113, 113, 123)";
 
 async function openSpeedSelector(page: Page): Promise<void> {
   const speed = page.getByRole("button", { name: /^(Select speed|Speed: .+)$/ });
@@ -59,7 +60,9 @@ async function expectSpeedIconColor(page: Page, color: string): Promise<void> {
   const trigger = page
     .getByRole("button", { name: /^(Speed: .+|Select speed)$/ })
     .filter({ visible: true });
-  await expect(trigger.locator("svg").first()).toHaveCSS("stroke", color);
+  const icon = trigger.locator("svg").first();
+  await expect(icon).toHaveCSS("stroke", color);
+  await expect(icon).toHaveCSS("fill", color === ACTIVE_SPEED_COLOR ? color : "none");
 }
 
 async function expectSpeedChoices(page: Page, choices: string[]): Promise<void> {

@@ -52,6 +52,7 @@ import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manife
 import {
   getFeatureHighlightColor,
   isFeatureActive,
+  localizeSpeedFeature,
   getFeatureTooltip,
   getAgentControlHintKey,
   resolveAgentModelSelection,
@@ -1241,7 +1242,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
 }
 
 function DesktopFeatureItem({
-  feature,
+  feature: daemonFeature,
   provider,
   disabled,
   openSelector,
@@ -1257,6 +1258,7 @@ function DesktopFeatureItem({
   onSetFeature?: (featureId: string, value: unknown) => void;
   onActionComplete?: () => void;
 }) {
+  const feature = useMemo(() => localizeSpeedFeature(daemonFeature), [daemonFeature]);
   const featureIconColorMapping = useFeatureIconColorMapping(feature, provider);
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
@@ -1353,6 +1355,7 @@ function DesktopFeatureItem({
           onOpenChange={handleFeatureOpenChange}
           anchorRef={featureAnchorRef}
           desktopPlacement="top-start"
+          searchable={comboboxOptions.length > 6}
         />
       </>
     );
@@ -1362,7 +1365,7 @@ function DesktopFeatureItem({
 }
 
 function SheetFeatureItem({
-  feature,
+  feature: daemonFeature,
   provider,
   disabled,
   openSelector,
@@ -1376,6 +1379,7 @@ function SheetFeatureItem({
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
 }) {
+  const feature = useMemo(() => localizeSpeedFeature(daemonFeature), [daemonFeature]);
   const featureIconColorMapping = useFeatureIconColorMapping(feature, provider);
   const { t } = useTranslation();
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
@@ -1465,6 +1469,7 @@ function SheetFeatureItem({
           onOpenChange={handleFeatureOpenChange}
           anchorRef={featureAnchorRef}
           presentation="push"
+          searchable={comboboxOptions.length > 6}
           header={sheetHeader}
         />
       </>

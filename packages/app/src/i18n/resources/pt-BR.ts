@@ -234,6 +234,13 @@ export const ptBR: TranslationResources = {
       on: "Ativado",
       off: "Desativado",
     },
+    speed: {
+      label: "Velocidade",
+      select: "Selecionar velocidade",
+      normal: "Normal",
+      fast: "Rápido",
+      ultrafast: "Ultrarrápido",
+    },
     mode: {
       title: "Modo",
       selectWithValue: "Selecionar modo do agente ({{value}})",

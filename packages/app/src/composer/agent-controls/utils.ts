@@ -39,6 +39,35 @@ export function getFeatureTooltip(feature: Pick<AgentFeature, "label" | "tooltip
   return feature.tooltip ?? feature.label;
 }
 
+// daemon 给 Codex 速度菜单的文字是英文，档位名来自模型目录。已知的几项按界面语言显示，其余档位名原样。
+const SPEED_OPTION_LABEL_KEYS = {
+  normal: "agentControls.speed.normal",
+  fast: "agentControls.speed.fast",
+  ultrafast: "agentControls.speed.ultrafast",
+} as const;
+
+function localizeSpeedOptionLabel(label: string): string {
+  const key = Object.entries(SPEED_OPTION_LABEL_KEYS).find(
+    ([name]) => name === label.trim().toLowerCase(),
+  )?.[1];
+  return key ? i18n.t(key) : label;
+}
+
+export function localizeSpeedFeature(feature: AgentFeature): AgentFeature {
+  if (feature.id !== SPEED_FEATURE_ID || feature.type !== "select") {
+    return feature;
+  }
+  return {
+    ...feature,
+    label: i18n.t("agentControls.speed.label"),
+    tooltip: i18n.t("agentControls.speed.select"),
+    options: feature.options.map((option) => ({
+      ...option,
+      label: localizeSpeedOptionLabel(option.label),
+    })),
+  };
+}
+
 export function isFeatureActive(feature: AgentFeature): boolean {
   if (feature.type === "toggle") return feature.value;
   const selectedOption = feature.options.find((option) => option.id === feature.value);

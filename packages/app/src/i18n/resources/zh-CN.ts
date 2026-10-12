@@ -231,6 +231,13 @@ export const zhCN: TranslationResources = {
       on: "开启",
       off: "关闭",
     },
+    speed: {
+      label: "速度",
+      select: "选择速度",
+      normal: "普通",
+      fast: "快速",
+      ultrafast: "超快",
+    },
     mode: {
       title: "模式",
       selectWithValue: "选择 Agent 模式（{{value}}）",

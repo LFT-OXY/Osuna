@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { AgentFeature } from "@getpaseo/protocol/agent-types";
+import { i18n } from "@/i18n/i18next";
 import {
   getFeatureHighlightColor,
   getFeatureTooltip,
   getAgentControlHintKey,
   isFeatureActive,
+  localizeSpeedFeature,
   normalizeModelId,
   resolveAgentModelSelection,
 } from "./utils";
@@ -61,6 +64,53 @@ describe("feature metadata helpers", () => {
         value: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("localizeSpeedFeature", () => {
+  // daemon 给的 Codex 速度菜单：档位名来自模型目录。
+  const speed: AgentFeature = {
+    type: "select",
+    id: "service_tier",
+    label: "Speed",
+    tooltip: "Select speed",
+    icon: "zap",
+    desktopTrigger: "icon",
+    value: "priority",
+    options: [
+      { id: "default", label: "Normal", isDefault: true },
+      { id: "priority", label: "Fast" },
+      { id: "ultrafast", label: "Ultrafast" },
+      { id: "flex", label: "Flex" },
+    ],
+  };
+
+  it("shows the speed menu in the app language and keeps unknown tier names", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(localizeSpeedFeature(speed)).toEqual({
+        ...speed,
+        label: "速度",
+        tooltip: "选择速度",
+        options: [
+          { id: "default", label: "普通", isDefault: true },
+          { id: "priority", label: "快速" },
+          { id: "ultrafast", label: "超快" },
+          { id: "flex", label: "Flex" },
+        ],
+      });
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
+  it("keeps the daemon's wording in English", () => {
+    expect(localizeSpeedFeature(speed)).toEqual(speed);
+  });
+
+  it("leaves other features untouched", () => {
+    const plan: AgentFeature = { type: "toggle", id: "plan_mode", label: "Plan", value: false };
+    expect(localizeSpeedFeature(plan)).toBe(plan);
   });
 });
 

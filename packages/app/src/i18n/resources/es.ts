@@ -234,6 +234,13 @@ export const es: TranslationResources = {
       on: "En",
       off: "Apagado",
     },
+    speed: {
+      label: "Velocidad",
+      select: "Seleccionar velocidad",
+      normal: "Normal",
+      fast: "Rápido",
+      ultrafast: "Ultrarrápido",
+    },
     mode: {
       title: "Modo",
       selectWithValue: "Seleccione el modo de agente ({{value}})",

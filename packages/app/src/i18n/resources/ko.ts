@@ -231,6 +231,13 @@ export const ko: TranslationResources = {
       on: "켜짐",
       off: "꺼짐",
     },
+    speed: {
+      label: "속도",
+      select: "속도 선택",
+      normal: "보통",
+      fast: "빠르게",
+      ultrafast: "매우 빠르게",
+    },
     mode: {
       title: "모드",
       selectWithValue: "에이전트 모드 선택 ({{value}})",

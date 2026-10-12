@@ -188,7 +188,7 @@ export class UsageSourceRegistry {
           for (const account of accounts) {
             const id = `${source.id}:${account.key}`;
             const known = reports.get(id);
-            // COMPAT(usageLoginHarness): added in v0.11.0, remove after 2027-04-05 once plugin floor >= v0.11.0.
+            // COMPAT(usageLoginHarness): added in v0.15.0, remove after 2027-04-05 once plugin floor >= v0.15.0.
             const login = { input: account.input, harness: account.harness ?? source.label };
             if (known) {
               if (!known.logins.some((existing) => loginKey(existing) === loginKey(login)))
@@ -300,7 +300,7 @@ export class UsageSourceRegistry {
       if (report.status === "available") return { report };
       loginErrors.push({ harness: login.harness, report });
     }
-    // COMPAT(usageLoginErrors): added in v0.11.0, remove after 2027-04-05 once app floor >= v0.11.0.
+    // COMPAT(usageLoginErrors): added in v0.15.0, remove after 2027-04-05 once app floor >= v0.15.0.
     // Keep the final single report so older apps still parse and display failed accounts.
     return { report: loginErrors[loginErrors.length - 1]!.report, loginErrors };
   }

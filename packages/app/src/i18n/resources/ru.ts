@@ -233,6 +233,13 @@ export const ru: TranslationResources = {
       on: "Включено",
       off: "Выключено",
     },
+    speed: {
+      label: "Скорость",
+      select: "Выбрать скорость",
+      normal: "Обычный",
+      fast: "Быстрый",
+      ultrafast: "Сверхбыстрый",
+    },
     mode: {
       title: "Режим",
       selectWithValue: "Выбрать режим агента ({{value}})",

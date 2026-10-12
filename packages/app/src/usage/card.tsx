@@ -46,7 +46,7 @@ function reportMessages(entry: UsageReportEntry): string[] {
     return entry.loginErrors.map(
       (login) => `${login.harness}: ${reportContent(login.report).message}`,
     );
-  // COMPAT(usageLoginErrors): added in v0.11.0, remove after 2027-04-05 once daemon floor >= v0.11.0.
+  // COMPAT(usageLoginErrors): added in v0.15.0, remove after 2027-04-05 once daemon floor >= v0.15.0.
   return [
     entry.report.status === "error" ? entry.report.error : usageCopy.problem(entry.report.problem),
   ];

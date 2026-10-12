@@ -227,6 +227,13 @@ export const en = {
       on: "On",
       off: "Off",
     },
+    speed: {
+      label: "Speed",
+      select: "Select speed",
+      normal: "Normal",
+      fast: "Fast",
+      ultrafast: "Ultrafast",
+    },
     mode: {
       title: "Mode",
       selectWithValue: "Select agent mode ({{value}})",
