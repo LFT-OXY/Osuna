@@ -4,20 +4,20 @@
 
 **Blocked by:** 12
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
-- [ ] 合并分支包含两个 merge commit，第二双亲分别是 `ab10a6694` 与 `759532509`，各自独立通过下面的检查后才做下一个。
-- [ ] `759532509` 是合并分支的祖先；合并分支与上游 main 的共同祖先是 `ab10a6694`（v0.11.1 在上游 main 上；原写 `22488d450`，更正见 Comments）。
-- [ ] 每个冲突文件怎么裁的、依据哪条规则，按段记在 `## Comments` 下。规则裁决不了的没有自行取舍。
-- [ ] Claude：模型列表里有 Haiku 5.5；上游的三处修复对应的测试通过；Osuna 的已装版本、一键升级、CLI 启动解析对应的现有测试通过，无一改动断言。
-- [ ] 冲突的三个测试文件里两边的用例都在；上游的新用例调用 Osuna 改过签名的函数时，改的是调用方式，不是断言。（实际这三个文件没有冲突、自动合并，见 Comments；两边的用例都在，没有改调用方式也没有改断言。）
-- [ ] 每段合完：所有工作区版本号是 `0.14.2`；`CHANGELOG.md` 与合并前逐字节相同；上游没有改外部依赖的那一段，`package.json` 与 `package-lock.json` 与合并前逐字节相同。
-- [ ] 每段合完：`docs/release.md`「合并后核对」逐项过完，结果记在 `## Comments` 下；上游站点链接的非测试数不多于基线；新带进来的 `COMPAT(...)` 标签已改写版本号。
-- [ ] 每段合完：翻译资源测试通过；指令目录的现有测试通过，无一改动断言。
-- [ ] 每段合完：对该段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
-- [ ] 每段合完：typecheck 和 lint 通过；该段冲突文件对应的测试文件、该段新增或改动过的测试文件逐个单独跑过并通过。
-- [ ] 两段都推到 `origin` 后，草稿 PR 上的 CI 结果已看过并记在 `## Comments` 下。
-- [ ] UI：Composer 的模型选择 / Claude 智能体 / 桌面 1280 — 列表里有 Haiku 5.5。本机 Claude Code 版本不到 2.1.293 而看不到时写明版本，以模型清单的测试为证。
+- [x] 合并分支包含两个 merge commit，第二双亲分别是 `ab10a6694` 与 `759532509`，各自独立通过下面的检查后才做下一个。
+- [x] `759532509` 是合并分支的祖先；合并分支与上游 main 的共同祖先是 `ab10a6694`（v0.11.1 在上游 main 上；原写 `22488d450`，更正见 Comments）。
+- [x] 每个冲突文件怎么裁的、依据哪条规则，按段记在 `## Comments` 下。规则裁决不了的没有自行取舍。
+- [x] Claude：模型列表里有 Haiku 5.5；上游的三处修复对应的测试通过；Osuna 的已装版本、一键升级、CLI 启动解析对应的现有测试通过，无一改动断言。
+- [x] 冲突的三个测试文件里两边的用例都在；上游的新用例调用 Osuna 改过签名的函数时，改的是调用方式，不是断言。（实际这三个文件没有冲突、自动合并，见 Comments；两边的用例都在，没有改调用方式也没有改断言。）
+- [x] 每段合完：所有工作区版本号是 `0.14.2`；`CHANGELOG.md` 与合并前逐字节相同；上游没有改外部依赖的那一段，`package.json` 与 `package-lock.json` 与合并前逐字节相同。
+- [x] 每段合完：`docs/release.md`「合并后核对」逐项过完，结果记在 `## Comments` 下；上游站点链接的非测试数不多于基线；新带进来的 `COMPAT(...)` 标签已改写版本号。
+- [x] 每段合完：翻译资源测试通过；指令目录的现有测试通过，无一改动断言。
+- [x] 每段合完：对该段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
+- [x] 每段合完：typecheck 和 lint 通过；该段冲突文件对应的测试文件、该段新增或改动过的测试文件逐个单独跑过并通过。
+- [x] 两段都推到 `origin` 后，草稿 PR 上的 CI 结果已看过并记在 `## Comments` 下。
+- [x] UI：Composer 的模型选择 / Claude 智能体 / 桌面 1280 — 列表里有 Haiku 5.5。本机 Claude Code 版本不到 2.1.293 而看不到时写明版本，以模型清单的测试为证。
 
 ## Comments
 
@@ -69,3 +69,12 @@
 - **Visual：** 唯一的界面验收项通过，新增的 Haiku 5.5 一行与相邻行在图标、字色、行高、对齐上一致，没有可观察到的缺陷。评审另记了三处与本次改动无关、菜单原本就有的现象，交给 14：模型说明以型号名开头（「Haiku 5.5 · Fastest…」）并在弹层右边缘之前约 68 逻辑像素处就截断；列表滚到底时最后一行下方留白约 31、顶部只有约 5；中文界面里 Composer 的「Medium」「Auto mode」与侧栏的「now」是英文。
 - **复查（只查已修的三条，一次）：** `prd.md` 与工单 13、15 里说共同祖先与补丁分支的句子逐条 `grep` 过，没有残留的旧说法；断言行数与文件数对照补丁重数过；CI 作业名对照 `.github/workflows/ci.yml` 第 126 – 133 行。
 - **规范更新：** `.atw/spec/` 没有要改的——这两段没有手工改代码，没有新的约定；下次合并用得上的两条（`CHANGELOG.md` 冲突块之外的自动合并、模拟合并数字会随前面各段变化）记在给 15 的交接里，由 15 写进 `docs/release.md`。
+
+#### 推送后的 CI（草稿 PR #16）
+
+- **推送的提交 `55f2e92a0`（两个 merge commit 加记录），CI run 38253415392：**
+  - 第一轮：21 项里 20 项通过（format、lint、typecheck、app-tests、server-tests 的 ubuntu 与 macos-14、desktop-tests 两个平台、cli-tests 三片、sdk-tests、relay-tests、changes、playwright 四片）；`server-tests (windows-latest)` 红，6628 条里 1 条失败——`src/utils/worktree.test.ts`「branches from the cached ref when the remote accepts but never answers」在 `afterEach` 清理临时目录时报 `EBUSY: resource busy or locked, rmdir …\worktree-manager-test-…\test-repo`。这条用例与 `packages/server/src/utils/` 这两段都没有改动，是上游原样的用例在 Windows 上清理临时目录的时序问题（之前各段没有出现过），记给 15 并入前看。
+  - 第二轮（`gh run rerun --failed`，只重跑失败的那一项）：`server-tests (windows-latest)` 通过，整轮结论 success。
+  - 同一提交上的 Desktop Packages（run 38253415413）通过。
+- **本机没跑、由 CI 覆盖的两个文件：** `packages/cli/tests/15-provider.test.ts` 在 cli-tests 里通过（模型清单里有 Haiku 5.5）；`packages/website/e2e/plugins.spec.ts` 在 `typecheck` 作业的「Verify website mockups」一步里通过。上游新增的 `claude-history-other-project-dir.e2e.test.ts` 与本段改动的其余测试文件在 server-tests、app-tests 里通过。
+- **首跑失败、重试后通过的：** playwright 第 1 片 1 条——`agent-timeline-scroll-smoothness.spec.ts:137`（之前各段每轮都是它，09 记给 15 的那条）；第 2、4 片没有重试；第 3 片结论是通过，它的日志用 `gh run view --job … --log` 取了两次都是空内容，重试清单没有取到。之前各段记过的其余几条这一轮在第 1、2、4 片里都是一次通过。
