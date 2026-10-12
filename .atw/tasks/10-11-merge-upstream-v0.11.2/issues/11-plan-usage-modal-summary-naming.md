@@ -4,7 +4,7 @@
 
 **Blocked by:** 10
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 弹窗标题、侧栏底部图标的提示、设置 → 侧边栏的开关（「套餐用量摘要」）、偏好项的说明、空状态与错误文案都写「套餐用量 / Plan usage」，九种语言沿用 Osuna 已有的译法，zh-CN 是真实翻译。代码里上游的命名没有改。
 - [x] zh-CN 下全应用标着「用量」的入口只有 Usage 页一个；用 `rg` 在翻译资源里核对过上游新增的键，结果记在 `## Comments` 下。

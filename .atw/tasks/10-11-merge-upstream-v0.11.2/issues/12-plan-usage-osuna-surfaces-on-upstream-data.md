@@ -31,3 +31,10 @@
 
 - `e2e/browser/usage-settings.spec.ts` 仍是 02 标的 `test.describe.skip`（主机设置页不挂上游的套餐用量区块）。上游的额度卡片接到 Usage 页的套餐卡片之后，把这组用例改到那里。
 - `e2e/browser/usage-sidebar-item.spec.ts`「pinned windows show in the sidebar…」里，上游「去主机设置页的套餐用量区块核对固定项与已用 / 剩余」那一步在 10 去掉了（主机设置页是价格表）。Usage 页的套餐卡片接上上游数据后，可以把这一步改到 Usage 页上补回来。
+
+### 来自 11 的交接（2026-10-12）
+
+- **九种语言里说订阅额度的提示都已写成「套餐用量 / plan usage」**（维护者 2026-10-12 决定）。Osuna 旧模块用的几个键也在内：`usage.planUsage.loading`、`empty`、`errorTitle`、`refreshFailed`、`hostUnavailable`、`hostUpgradeRequired`。`provider-usage/format.test.ts` 里断言英文的 5 处已跟着改；这张工单删旧模块时，这几条断言随被删的代码一起走，不用再改回。
+- zh-CN 的 `usage.planUsage.updated` 由「更新于 {{ago}}」改成「{{ago}}更新」。Usage 页的套餐卡片也用这个键。
+- 上游额度卡片的文案都从 `usage/copy.ts` 的 `usageCopy` 取；「已用 / 剩余」的百分比用 `formatDisplayPct`，重置与用完的说法用 `formatResetLabel` / `formatRunsOutLabel`（`usage/format.ts`）。Usage 页卡片与用量条改接上游数据时沿用这几个，不另写一套。会被缓存的本地化结果要把 `t` 传进去，见 `.atw/spec/app/frontend/component-guidelines.md`「Copy」。
+- 造上游报告数据的夹具与中文截图的写法记在 `.atw/spec/app/frontend/testing.md`（`installUsageReportsFixture`）。
