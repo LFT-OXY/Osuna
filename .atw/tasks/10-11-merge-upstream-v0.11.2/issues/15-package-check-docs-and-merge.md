@@ -9,7 +9,7 @@
 - [ ] 本机按 `docs/release.md`「本地出一个 macOS 包」打出一个包（只在本机生成，不发布、不推 tag）。包里有内置插件目录；打开应用后套餐用量有数据，Providers 列表里有 Muse Code 与 Antigravity。包的路径与核对结果记在 `## Comments` 下并交给维护者。
 - [ ] 内置插件没有进包时，原因已查清并修好（Osuna 的打包流程与上游不同之处），修法写进 `docs/release.md`「踩过的坑」。
 - [ ] `docs/release.md`「从上游同步」：同步点那一句更新为 v0.11.2（`759532509`）；表里加一行，含八段的发布点、各自的 merge commit 与 PR 编号。
-- [ ] `docs/release.md`「上游的补丁分支」按 v0.11.1、v0.11.2 重写：并入后与上游 main 的共同祖先是 v0.11.0；用上游自己的 v0.11.2 对上游 main 模拟合并得出的、合 v0.12 时要重解的文件清单。
+- [ ] `docs/release.md`「上游的补丁分支」按 v0.11.2 重写（v0.11.1 在上游 main 上，13 更正）：并入后与上游 main 的共同祖先是 v0.11.1（`ab10a6694`）；用上游自己的 v0.11.2 对上游 main 模拟合并得出的、合 v0.12 时要重解的文件清单。
 - [ ] 本次新踩到的、下次还会遇到的坑补进「踩过的坑」，至少包括：上游的 beta 里有它后来删掉的中间设计；上游新增的内置插件要核对进包。没有别的就不加。
 - [ ] Osuna 讲 Usage 的文档里，提到上游用量来源的地方用链接，不重述；仓库说明里的文档表与实际一致。
 - [ ] ADR 0006（`docs/adr/0006-usage-in-code-is-upstream-plan-usage.md`）已从 `docs/glossary.md` 的套餐用量词条与 `docs/release.md`「从上游同步」链入。01 的评审提出；这两个文件都在冲突清单里，所以没有在 01 里加。
@@ -39,3 +39,11 @@
 - **`docs/release.md`「上游的补丁分支」要改的事实：** 那一节列的十个文件，分叉在第 1 段就全部过完——6 个在第 1 段报冲突（其中 `codex-app-server-agent.ts` 在第 4 段又冲突一次，`fr.ts` 在第 6 段因上游重译再冲突一次），4 个六段都没有报冲突、git 自己合对了（`host-runtime.test.ts`、`provider-registry.ts`、`opencode/v2/agent.test.ts`、`opencode/v2/turns.ts`）。第 1 段合完后合并基点落到上游主线上，后面各段的基点是上一段的发布点。落点表在 10 的 `## Comments`。
 - **「踩过的坑」候选：** 两边原先各写了一模一样的行，上游删掉时不报冲突、Osuna 那一份跟着消失（这次是 `app/_layout.tsx` 与 `utils/host-routes.ts` 里 `/usage` 的路由接线）；上游整份重译某种语言时（`fr.ts` 57 个冲突块），冲突块先取上游、再把基点 / Osuna / 上游三份资源摊平成键值做按键的三方合并并逐键比对，合完查自动合并出来的重复键；上游的新用例拿 `session.listCommands()` 当「确保进程在」用，在 Osuna 里不启动进程，换成 `setModel(null)`；上游按顺序读订阅事件的用例会被 Osuna 在 init 之后发的 `commands_changed` 挤错位；`packages/cli/tests/e2e/plugin-lifecycle.test.ts` 在 macOS 上要 `TMPDIR="$(cd "$TMPDIR" && pwd -P)"`（`/var` 是 `/private/var` 的软链接）；`daemon-client.e2e.test.ts` 会启动本机真实的提供方，而且不在 CI 的测试脚本里，本机不要整份跑。
 - **并入前看一眼（第六段新出现的两条 CI 首跑失败、重试通过）：** `usage-sidebar-item.spec.ts:173` 与本机偶发的「Usage Settings cog desktop」是同一个现象——齿轮的选项浮层打开后自己收起，`closeUsageOptions` 读不到它的位置（已记给 11）；`context-window-meter.spec.ts:245`（dark）报「The test scripts every agent usage request」，悬浮卡多取了一次数，本机跑过一次是通过的。按 Osuna 决定改写的上游测试在第六段是 7 条（第 7 条是 CI 报出来的 `packages/desktop/e2e/browser-tabs.e2e.mjs`：Composer 是 contenteditable，不能用 `inputValue()`）。
+
+### 来自 13 的交接（2026-10-12，写 PR 正文与 `docs/release.md` 用）
+
+- **规格里关于补丁分支的事实已更正：** v0.11.1（`ab10a6694`）的发版提交在上游 main 上，只有 v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁分支上；合完后 `git merge-base HEAD upstream/main` 是 `ab10a6694`。`prd.md` 与本工单的那条验收项已按此改写。`docs/release.md`「上游的补丁分支」开头那句「上游的补丁版本不在它的 main 上」对 v0.11.1 不成立，重写时一并改。
+- **合 v0.12 时要重解的文件：** 2026-10-12 用上游自己的 v0.11.2 对上游 main（`7321d8a48`）模拟合并（`git merge-tree --write-tree --name-only --no-messages 759532509 upstream/main`），没有冲突文件。动笔时按当时的上游 main 重算一次。
+- **第七、八段的冲突裁决摘要：** 两段各 15 个文件，全是版本号与发版元数据（`CHANGELOG.md`、13 个 `package.json`、`package-lock.json`），取 Osuna 一侧，解完与合并前逐字节相同；没有适配提交，没有改动任何断言，没有按 Osuna 决定改写的上游测试。规格预计的 3 个冲突的测试文件实际自动合并了。
+- **「踩过的坑」候选：** `CHANGELOG.md` 的冲突块取 Osuna 一侧之后，文件仍可能比合并前多出上游在冲突块之外改的行（这次是上游给 0.11.0 条目补的两段说明），解完与合并前 `cmp`，不同就整份恢复；模拟合并的冲突数是对合并前的 main 算的，前面各段解过之后后面的段可能不再冲突（这次第七段少了 3 个）。
+- **推送后的 CI** 记在 13 的 Comments 里。
