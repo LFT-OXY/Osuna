@@ -603,7 +603,8 @@ async function verifyBackgroundTypingStaysInGuest({ page, client, serverId, brow
       })
     ).resultJson,
   );
-  const composerValue = await composer.inputValue();
+  // Osuna：Composer 是 contenteditable 的编辑器（Tiptap），不是 textarea，inputValue() 读不了它。
+  const composerValue = await composer.evaluate((element) => element.textContent);
   assert(
     composerValue === draft,
     `browser_type and browser_keypress in a background tab changed the focused composer: ${JSON.stringify(composerValue)}`,
