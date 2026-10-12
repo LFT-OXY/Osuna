@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 会话历史是新写法里的一种标签：默认标签列表里有它；关闭后 + 菜单里出现它，点一下重新打开；能拖动排序。
 - [x] Files、Changes 可关闭并能从 + 菜单打开；PR 标签的行为与上游一致。
