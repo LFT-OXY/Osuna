@@ -16,6 +16,8 @@ export interface WorkspaceTabLayoutMetrics {
 export interface WorkspaceTabLayoutInput {
   viewportWidth: number;
   tabLabelWidths: number[];
+  /** 逐 tab 是否画关闭按钮；缺省当作都画。不画的 tab 不留关闭槽（`closeButtonWidth`）。 */
+  tabCloseSlots?: boolean[];
   metrics: WorkspaceTabLayoutMetrics;
 }
 
@@ -69,13 +71,17 @@ export function computeWorkspaceTabLayout(
   const rowOverhead =
     input.metrics.rowPaddingHorizontal * 2 + Math.max(tabCount - 1, 0) * input.metrics.tabGap;
   const availableTabsWidth = Math.max(0, availableWidth - rowOverhead);
-  const tabChromeWidth =
+  const baseChromeWidth =
     input.metrics.tabIconWidth +
     input.metrics.tabContentGap +
-    input.metrics.tabHorizontalPadding * 2 +
-    input.metrics.closeButtonWidth;
-  const naturalWidths = input.tabLabelWidths.map((labelWidth) =>
-    clamp(tabChromeWidth + labelWidth, input.metrics.minTabWidth, input.metrics.maxTabWidth),
+    input.metrics.tabHorizontalPadding * 2;
+  const chromeWidths = input.tabLabelWidths.map(
+    (_, index) =>
+      baseChromeWidth +
+      (input.tabCloseSlots?.[index] === false ? 0 : input.metrics.closeButtonWidth),
+  );
+  const naturalWidths = input.tabLabelWidths.map((labelWidth, index) =>
+    clamp(chromeWidths[index] + labelWidth, input.metrics.minTabWidth, input.metrics.maxTabWidth),
   );
   const naturalTotalWidth = naturalWidths.reduce((total, width) => total + width, 0);
   const minimumTotalWidth = input.metrics.minTabWidth * tabCount;
@@ -98,9 +104,9 @@ export function computeWorkspaceTabLayout(
   );
 
   return {
-    items: roundedWidths.map((width) => ({
+    items: roundedWidths.map((width, index) => ({
       width,
-      showLabel: width > tabChromeWidth,
+      showLabel: width > chromeWidths[index],
     })),
     closeButtonPolicy: "all",
     requiresHorizontalScrollFallback,

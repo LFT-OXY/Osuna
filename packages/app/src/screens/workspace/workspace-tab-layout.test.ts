@@ -124,6 +124,21 @@ describe("computeWorkspaceTabLayout", () => {
     expect(result.items).toEqual([]);
   });
 
+  it("reserves the close slot only for tabs that draw a close button", () => {
+    // Explorer 的 Files / Changes / 会话历史不画关闭按钮：它们的 chip 不留关闭槽，标签居中、不多出右侧空白。
+    const result = computeWorkspaceTabLayout({
+      viewportWidth: 1200,
+      tabLabelWidths: [40, 40],
+      tabCloseSlots: [true, false],
+      metrics: { ...metrics, closeButtonWidth: 18 },
+    });
+
+    expect(result.items).toEqual([
+      { width: 92, showLabel: true },
+      { width: 74, showLabel: true },
+    ]);
+  });
+
   it("uses rendered label width rather than character count", () => {
     const result = computeWorkspaceTabLayout({
       viewportWidth: 1200,

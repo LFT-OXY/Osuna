@@ -96,6 +96,15 @@ test.describe("Explorer sidebar", () => {
       );
       await expect(activeExplorerTab).toHaveCSS("background-color", mainFill);
       await expect(idleExplorerTab).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      // Explorer 的标签行画在侧栏底色上，与它下面的面板同一种，不是主画布的底色。
+      const dockFill = await explorer.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      );
+      expect(dockFill).not.toBe("rgba(0, 0, 0, 0)");
+      await expect(explorer.getByTestId("workspace-tabs-row")).toHaveCSS(
+        "background-color",
+        dockFill,
+      );
     } finally {
       await workspace.cleanup();
     }

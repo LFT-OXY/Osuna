@@ -671,16 +671,21 @@ function useMiddleClickClose(onClose: () => void) {
   return ref;
 }
 
+/** 静止 tab 下面的底色：主 pane 的标签行是画布，Explorer 坞是侧栏。 */
+type TabRestBackdrop = Extract<SurfaceBackdrop, "surface0" | "surfaceSidebar">;
+
 /** The chip fill the running-status ring has to knock out of. Mirrors `styles.tab*` exactly. */
 function resolveChipBackdrop({
   isActiveFocused,
   isFilled,
+  restBackdrop,
 }: {
   isActiveFocused: boolean;
   isFilled: boolean;
+  restBackdrop: TabRestBackdrop;
 }): SurfaceBackdrop {
   if (isActiveFocused) return "surfaceTabActive";
-  return isFilled ? "surfaceTabHover" : "surface0";
+  return isFilled ? "surfaceTabHover" : restBackdrop;
 }
 
 function TabHandleContent({
@@ -749,6 +754,7 @@ function TabChip({
   showCloseButton,
   isCloseHovered,
   isClosingTab,
+  restBackdrop,
   presentation,
   tooltipLabel,
   accessibilityLabel,
@@ -768,6 +774,7 @@ function TabChip({
   showCloseButton: boolean;
   isCloseHovered: boolean;
   isClosingTab: boolean;
+  restBackdrop: TabRestBackdrop;
   presentation: WorkspaceTabPresentation;
   tooltipLabel: string;
   accessibilityLabel: string;
@@ -791,6 +798,7 @@ function TabChip({
   const chipBackdrop: SurfaceBackdrop = resolveChipBackdrop({
     isActiveFocused,
     isFilled: isActive || isHovered,
+    restBackdrop,
   });
   // 选中的 tab 常显关闭按钮；其余 tab 悬停时出现，原生端与紧凑布局没有悬停，常显。
   const showCloseControl =
@@ -1110,6 +1118,13 @@ function ResolvedWorkspaceDesktopTabsRow({
   );
 
   const panePanelKinds = useMemo(() => tabs.map(({ tab }) => tab.kind), [tabs]);
+  // Explorer 坞画在侧栏底色上：标签行、静止 tab 的状态环挖空与滚动遮罩都跟着侧栏，不取主画布的底色。
+  const onSidebar = host === "explorer";
+  const restBackdrop: TabRestBackdrop = onSidebar ? "surfaceSidebar" : "surface0";
+  const tabsContainerStyle = useMemo(
+    () => (onSidebar ? [styles.tabsContainer, styles.tabsContainerSidebar] : styles.tabsContainer),
+    [onSidebar],
+  );
 
   const fallbackTabLabels = useMemo(
     () => ({
@@ -1230,8 +1245,14 @@ function ResolvedWorkspaceDesktopTabsRow({
     });
   }, [tabLabels, tabs, trackSnapshot]);
 
+  // 与 labelWidths 同一份快照、同一顺序；不画关闭按钮的 tab（Explorer 的导航视图）不留关闭槽。
+  const tabCloseSlots = useMemo(
+    () => trackSnapshot?.tabs.map(({ presentation }) => presentation.showCloseButton) ?? [],
+    [trackSnapshot],
+  );
   const { layout } = useWorkspaceTabLayout({
     tabLabelWidths: trackSnapshot?.labelWidths ?? [],
+    tabCloseSlots,
     viewportWidthOverride: tabsContainerWidth > 0 ? tabsContainerWidth : null,
     metrics: layoutMetrics,
   });
@@ -1318,6 +1339,7 @@ function ResolvedWorkspaceDesktopTabsRow({
           resolvedTabWidth={resolvedTabWidth}
           showLabel={showLabel}
           showCloseButton={shouldShowCloseButton}
+          restBackdrop={restBackdrop}
           setHoveredCloseTabKey={setHoveredCloseTabKey}
           onNavigateTab={onNavigateTab}
           onCloseTab={onCloseTab}
@@ -1332,6 +1354,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       activeDragTabId,
       isFocused,
       layout.closeButtonPolicy,
+      restBackdrop,
       layout.items,
       normalizedServerId,
       onCloseOtherTabs,
@@ -1364,7 +1387,7 @@ function ResolvedWorkspaceDesktopTabsRow({
 
   const row = (
     <View
-      style={styles.tabsContainer}
+      style={tabsContainerStyle}
       testID="workspace-tabs-row"
       onLayout={handleTabsContainerLayout}
     >
@@ -1426,7 +1449,7 @@ function ResolvedWorkspaceDesktopTabsRow({
         </Animated.ScrollView>
         <HorizontalScrollBoundaryShades
           visible={layout.requiresHorizontalScrollFallback}
-          backdrop="surface"
+          backdrop={onSidebar ? "sidebar" : "surface"}
           testIDPrefix="workspace-tabs-scroll-shade"
           leftStyle={tabScrollBoundary.leftShadeStyle}
           rightStyle={tabScrollBoundary.rightShadeStyle}
@@ -1471,6 +1494,7 @@ function ResolvedDesktopTabChip({
   resolvedTabWidth,
   showLabel,
   showCloseButton,
+  restBackdrop,
   setHoveredCloseTabKey,
   onNavigateTab,
   onCloseTab,
@@ -1497,6 +1521,7 @@ function ResolvedDesktopTabChip({
   resolvedTabWidth: number;
   showLabel: boolean;
   showCloseButton: boolean;
+  restBackdrop: TabRestBackdrop;
   setHoveredCloseTabKey: Dispatch<SetStateAction<string | null>>;
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
@@ -1570,6 +1595,7 @@ function ResolvedDesktopTabChip({
         showCloseButton={showCloseButton}
         isCloseHovered={item.isCloseHovered}
         isClosingTab={item.isClosingTab}
+        restBackdrop={restBackdrop}
         presentation={presentation}
         tooltipLabel={tooltipLabel}
         accessibilityLabel={accessibilityLabel}
@@ -1594,6 +1620,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     overflow: "visible",
+  },
+  tabsContainerSidebar: {
+    backgroundColor: theme.colors.surfaceSidebar,
   },
   tabsScroll: {
     minWidth: 0,
