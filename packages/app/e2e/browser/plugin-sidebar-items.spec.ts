@@ -155,8 +155,9 @@ test.describe("Plugin sidebar items", () => {
     page,
   }) => {
     test.setTimeout(180_000);
-    // The Usage item shows only with summary data.
+    // The Usage item shows only with summary data, once it is turned on.
     await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
+    await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
     await page.setViewportSize(WIDE);
     // Osuna：底部的套餐用量摘要默认隐藏，这条用例要看到它在插件行旁边，先打开。
     await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);

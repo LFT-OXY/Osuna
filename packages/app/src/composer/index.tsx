@@ -27,6 +27,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useHasFinePointer } from "@/hooks/use-fine-pointer";
 import { useShallow } from "zustand/shallow";
 import {
   ArrowUp,
@@ -47,10 +48,7 @@ import {
   DraftAgentControls,
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
-import {
-  ContextWindowMeter,
-  type ContextWindowPopoverLayout,
-} from "@/components/context-window-meter";
+import { ContextWindowMeter } from "@/components/context-window-meter";
 import { ComposerContextStrip } from "./context-strip";
 import type { BranchSwitchConditions, ComposerAgentPhase } from "./context-strip/model";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
@@ -298,57 +296,6 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
       model: agent?.model ?? null,
     };
   };
-}
-
-interface ContextWindowMeterArgs {
-  maxTokens: number | null;
-  usedTokens: number | null;
-  serverId: string;
-  agentId: string;
-  provider: string | null;
-  pending: boolean;
-  glyphSize: number;
-  usageSupport: boolean | null;
-  runningTurnStartedAt: Date | null;
-  showTokenLabel: boolean;
-  showPlanUsage: boolean;
-  popoverLayout: ContextWindowPopoverLayout;
-}
-
-function renderContextWindowMeter(args: ContextWindowMeterArgs): ReactElement | null {
-  const hasData = args.maxTokens !== null && args.usedTokens !== null;
-  if (!hasData && !args.pending) {
-    return null;
-  }
-  return (
-    <ContextWindowMeter
-      maxTokens={args.maxTokens}
-      usedTokens={args.usedTokens}
-      showPercentage={false}
-      serverId={args.serverId}
-      agentId={args.agentId}
-      provider={args.provider}
-      pending={args.pending}
-      glyphSize={args.glyphSize}
-      usageSupport={args.usageSupport}
-      runningTurnStartedAt={args.runningTurnStartedAt}
-      showTokenLabel={args.showTokenLabel}
-      showPlanUsage={args.showPlanUsage}
-      popoverLayout={args.popoverLayout}
-    />
-  );
-}
-
-function resolveContextWindowPlacement(input: {
-  meter: ReactElement | null;
-  reserveSlot: boolean;
-  showTokenLabel: boolean;
-}): ReactNode {
-  if (!input.reserveSlot) return null;
-  const slotStyle = input.showTokenLabel
-    ? styles.contextWindowMeterLabelSlot
-    : styles.contextWindowMeterSlot;
-  return <View style={slotStyle}>{input.meter}</View>;
 }
 
 interface RenderLeftContentArgs {
@@ -1107,16 +1054,6 @@ interface ComposerProps {
 const EMPTY_ARRAY: readonly QueuedMessage[] = [];
 const StableMessageInput = memo(MessageInput);
 
-function resolveContextWindowValues(
-  rawMax: number | null,
-  rawUsed: number | null,
-): { contextWindowMaxTokens: number | null; contextWindowUsedTokens: number | null } {
-  if (typeof rawMax === "number" && typeof rawUsed === "number") {
-    return { contextWindowMaxTokens: rawMax, contextWindowUsedTokens: rawUsed };
-  }
-  return { contextWindowMaxTokens: null, contextWindowUsedTokens: null };
-}
-
 interface OutgoingComposerMessage {
   message: string;
   /** 输入框的分段结构，原生端为 null。 */
@@ -1465,6 +1402,7 @@ function ComposerContentImpl({
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompactLayout = resolveCompactLayout(isCompactLayoutOverride, isCompactFormFactor);
   const isDesktopWebBreakpoint = resolveIsDesktopWebBreakpoint(isCompactFormFactor);
+  const hasFinePointer = useHasFinePointer();
   const isDesktopLayout = resolveIsDesktopWebBreakpoint(isCompactLayout);
   const isContextStripVisible = showContextStrip && !isCompactFormFactor;
   const messagePlaceholder = resolveMessagePlaceholder(inputMode, isDesktopLayout, t, placeholder);
@@ -2283,67 +2221,49 @@ function ComposerContentImpl({
     ],
   );
 
-  const { contextWindowMaxTokens, contextWindowUsedTokens } = resolveContextWindowValues(
-    agentState.contextWindowMaxTokens,
-    agentState.contextWindowUsedTokens,
-  );
-
-  const contextWindowPending = agentState.status === "initializing" || isAgentRunning;
   const contextWindowMeterGlyphSize = isCompactLayout ? ICON_SIZE.md : buttonIconSize;
   // A phone keeps the ring alone; the toolbar has no room for `84K / 200K`.
   const showContextWindowTokenLabel = !isCompactLayout;
-  const contextWindowPopoverLayout: ContextWindowPopoverLayout = isCompactLayout
-    ? "stacked"
-    : "columns";
   // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
   const usageSupport = useHostFeatureAvailability(serverId, "usage");
   const runningTurnStartedAt = useSessionStore(
     (state) => selectAgentTurnPresentation(state.sessions[serverId], agentId).startedAt,
   );
-
-  const contextWindowMeter = useMemo(
+  const beforeVoiceContent = useMemo(
     () =>
-      renderContextWindowMeter({
-        maxTokens: contextWindowMaxTokens,
-        usedTokens: contextWindowUsedTokens,
-        serverId,
-        agentId,
-        provider: agentState.provider,
-        pending: contextWindowPending,
-        glyphSize: contextWindowMeterGlyphSize,
-        usageSupport,
-        runningTurnStartedAt,
-        showTokenLabel: showContextWindowTokenLabel,
-        // 窄栏可见时套餐用量在窄栏上，弹层不再重复；没有窄栏的输入框照旧放在弹层里。
-        showPlanUsage: !isContextStripVisible,
-        popoverLayout: contextWindowPopoverLayout,
-      }),
+      hasAgent ? (
+        <View
+          style={
+            showContextWindowTokenLabel
+              ? styles.contextWindowMeterLabelSlot
+              : styles.contextWindowMeterSlot
+          }
+        >
+          <ContextWindowMeter
+            serverId={serverId}
+            agentId={agentId}
+            maxTokens={agentState.contextWindowMaxTokens}
+            usedTokens={agentState.contextWindowUsedTokens}
+            provider={agentState.provider}
+            glyphSize={contextWindowMeterGlyphSize}
+            usageSupport={usageSupport}
+            runningTurnStartedAt={runningTurnStartedAt}
+            showTokenLabel={showContextWindowTokenLabel}
+          />
+        </View>
+      ) : null,
     [
-      agentId,
-      contextWindowMaxTokens,
-      contextWindowUsedTokens,
+      hasAgent,
       serverId,
+      agentId,
+      agentState.contextWindowMaxTokens,
+      agentState.contextWindowUsedTokens,
       agentState.provider,
-      contextWindowPending,
       contextWindowMeterGlyphSize,
-      contextWindowPopoverLayout,
-      isContextStripVisible,
       runningTurnStartedAt,
       showContextWindowTokenLabel,
       usageSupport,
     ],
-  );
-  const beforeVoiceContent = useMemo(
-    () => (
-      <>
-        {resolveContextWindowPlacement({
-          meter: contextWindowMeter,
-          reserveSlot: hasAgent,
-          showTokenLabel: showContextWindowTokenLabel,
-        })}
-      </>
-    ),
-    [contextWindowMeter, hasAgent, showContextWindowTokenLabel],
   );
 
   const hasGithubAttachment = useMemo(
@@ -2636,7 +2556,8 @@ function ComposerContentImpl({
     { disabled: isSubmitLoadingVisible },
   );
 
-  const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint;
+  // Focusing the composer on a touch screen raises the on-screen keyboard over the conversation.
+  const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint && hasFinePointer;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
   const sendErrorNode = useMemo(
     () =>

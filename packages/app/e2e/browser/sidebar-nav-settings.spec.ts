@@ -34,7 +34,6 @@ import {
 test("fixed footer line keeps its five icons, Help and Settings at the end", async ({ page }) => {
   test.setTimeout(120_000);
   await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
-  // Osuna：底部的套餐用量摘要默认隐藏，这条用例要看到它，先打开。
   await seedSidebarFooterPreferences(page, [
     { key: "add-project", visible: false },
     { key: "usage", visible: true },
@@ -196,6 +195,7 @@ test.describe("Sidebar footer rows in Appearance settings", () => {
     // Keys for the fixed footer icon buttons are ignored.
     // Osuna：底部的套餐用量摘要默认隐藏，这条用例要看到它，先打开。
     await seedSidebarFooterPreferences(page, [
+      { key: "usage", visible: true },
       { key: "help", visible: false },
       { key: "hosts", visible: false },
       { key: "import", visible: false },

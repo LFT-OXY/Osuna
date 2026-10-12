@@ -401,6 +401,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.fetch_models.response": "daemon.manage",
   "provider.api_endpoint.test_connection.response": "daemon.manage",
   "provider.api_endpoint.cancel.response": "daemon.manage",
+  "usage.list_reports.update": "daemon.read",
   "usage.list_reports.response": "daemon.read",
   provider_diagnostic_response: "daemon.read",
   providers_snapshot_update: ["daemon.read", "hub.execute"],

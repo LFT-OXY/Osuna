@@ -382,7 +382,6 @@ describe("footer section", () => {
       preferences: [{ key: "history", visible: false }],
     });
 
-    // Osuna：底部的套餐用量摘要默认隐藏（上游此时默认可见）。
     expect(summarize(items)).toEqual([{ key: "usage", visible: false }]);
   });
 
@@ -406,7 +405,7 @@ describe("footer section", () => {
     ]);
   });
 
-  it("moves and hides footer rows while keeping an unavailable plugin's entry", () => {
+  it("moves and shows footer rows while keeping an unavailable plugin's entry", () => {
     const notesPreference = { key: notesKey, visible: false };
     const previous: SidebarNavPreference[] = [notesPreference];
     const items = resolveSidebarNavItems({
@@ -416,21 +415,21 @@ describe("footer section", () => {
     });
 
     const moved = moveSidebarNavItem({ items, key: syncKey, direction: "up", previous });
-    const hidden = setSidebarNavItemVisible({
+    const shown = setSidebarNavItemVisible({
       items: resolveSidebarNavItems({
         section: "footer",
         pluginGroups: [sync],
         preferences: moved,
       }),
       key: "usage",
-      visible: false,
+      visible: true,
       previous: moved,
     });
 
-    expect(hidden).toEqual([
+    expect(shown).toEqual([
       notesPreference,
       { key: syncKey, visible: true },
-      { key: "usage", visible: false },
+      { key: "usage", visible: true },
     ]);
   });
 });

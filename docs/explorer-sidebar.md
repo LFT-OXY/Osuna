@@ -16,11 +16,13 @@ panel type for another. Tab moves reject unsupported destinations, and placement
 a compatible pane.
 
 Files, Changes, and Session history are the Explorer defaults: every workspace is born with the
-three, Changes focused. Session history arrived after layouts were already being saved, so a
-saved layout gets it once on load and `explorerSidebarSeededTabKindsByWorkspace`
-(`packages/app/src/stores/workspace-layout-storage.ts`) records the offer; a user who closes it
-does not find it back. Session history cannot leave Explorer. Other compatible tabs, including
-agents, terminals, files, and diffs, can move between Explorer and main panes.
+three, Changes focused. Their panel manifests mark them as singletons, so a pane's + menu omits
+each while that pane already contains it. Closing one makes its menu item available again. Session
+history arrived after layouts were already being saved, so a saved layout gets it once on load and
+`explorerSidebarSeededTabKindsByWorkspace` (`packages/app/src/stores/workspace-layout-storage.ts`)
+records the offer; a user who closes it does not find it back. Session history cannot leave
+Explorer. Other compatible tabs, including agents, terminals, files, and diffs, can move between
+Explorer and main panes.
 Keep panel implementations independent of either shell. `WorkspacePanelHost` owns mounting and
 retention, while each shell owns its tabs, focus, dragging, resizing, and shortcuts.
 
@@ -45,11 +47,13 @@ The persisted layout still contains the Explorer pane so tabs survive reloads. T
 that pane from the workspace split tree and docks it separately. Persisted identifiers retain the
 literal `"explorer"` pane id and `explorerPaneIdByWorkspace` key for compatibility.
 
-The tab rail has no inline add or close controls. Its context menu opens a New Tab launcher and
-toggles Files, Changes, Session history, and Explorer-compatible workspace-scoped plugin panels
-from the shared launch catalog. Individual tab menus close instances or move compatible tabs to main. Explorer tabs
-can be reordered, but the dock cannot be split. Selecting an Explorer tab does not change workspace
-focus.
+Explorer uses the shared workspace tab row and ordinary tab context menus. Files, Changes, and
+Session history hide their close buttons through the panel manifest; close them from the tab
+context menu. Other tabs reveal the close control on hover. The + menu opens compatible panels in
+the dock and omits Agent and terminal profiles. Agents and terminals can still be dragged into
+Explorer. Bulk-close actions apply only to the dock's tabs. Explorer tabs can be reordered and
+dragged between compatible panes, but the dock cannot be split or maximized. Selecting an Explorer
+tab does not change workspace focus.
 
 Cmd+E shows or hides Explorer without changing its selected view. Compact layouts use the combined
 full-screen Explorer overlay for Changes, Files, pull requests, and Session history, and close it

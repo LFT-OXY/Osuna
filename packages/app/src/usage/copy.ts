@@ -76,4 +76,14 @@ export const usageCopy = {
   get showInSidebar(): string {
     return i18n.t(key("showInSidebar"));
   },
+  get showInSidebarHint(): string {
+    return i18n.t(key("showInSidebarHint"));
+  },
+  get refreshAll(): string {
+    return i18n.t(key("refreshAll"));
+  },
+  get unpin(): string {
+    return i18n.t(key("unpin"));
+  },
+  agentError: (reason: string): string => i18n.t(key("agentError"), { reason }),
 } as const;

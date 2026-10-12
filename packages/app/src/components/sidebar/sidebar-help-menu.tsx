@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
 import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
@@ -72,6 +73,7 @@ function HostVersionHint({ host }: { host: HostProfile }) {
 }
 
 export function SidebarHelpMenu() {
+  const isCompact = useIsCompactFormFactor();
   const { t } = useTranslation();
   const shortcutsAvailable = useKeyboardShortcutsAvailable();
   const openAppDiagnostic = useAppDiagnosticStore((state) => state.open);
@@ -101,7 +103,7 @@ export function SidebarHelpMenu() {
             >
               {({ hovered }) => (
                 <ThemedCircleHelp
-                  size={ICON_SIZE.md}
+                  size={isCompact ? ICON_SIZE.lg : ICON_SIZE.md}
                   uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
                 />
               )}

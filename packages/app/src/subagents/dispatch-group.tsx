@@ -438,6 +438,7 @@ function buildIconPresentation(
     subtitle: presentation.subtitle,
     tooltip: presentation.label,
     modified: false,
+    showCloseButton: true,
     titleState: "ready",
     icon,
     statusBucket: markBucket(presentation.bucket),

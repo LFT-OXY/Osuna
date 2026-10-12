@@ -66,14 +66,46 @@ export async function verifySubagentFixture(
     // Osuna：display:false 的 custom 消息不进时间线，实时与回放一致；其余照常显示成助手消息。
     for (const message of fixture.messages) {
       if (message.role !== "custom" || typeof message.content !== "string") continue;
-      const text = message.content;
-      const showsAsAssistantText = (event: AgentStreamEvent) =>
-        event.type === "timeline" &&
-        event.item.type === "assistant_message" &&
-        event.item.text === text;
-      const shown = message.display !== false;
-      expect(live.some(showsAsAssistantText)).toBe(shown);
-      expect(replay.some(showsAsAssistantText)).toBe(shown);
+      for (const events of [live, replay]) {
+        const tools = events.flatMap((event) =>
+          event.type === "timeline" &&
+          event.item.type === "tool_call" &&
+          event.item.detail.type === "plain_text" &&
+          event.item.detail.text === message.content
+            ? [event.item]
+            : [],
+        );
+        expect(tools).toEqual(
+          message.display === false
+            ? []
+            : [
+                {
+                  type: "tool_call",
+                  callId: expect.stringMatching(/^pi-custom-/),
+                  name: message.customType ?? "custom-message",
+                  status: "completed",
+                  detail: {
+                    type: "plain_text",
+                    text: message.content,
+                  },
+                  metadata: {
+                    synthetic: true,
+                    customType: message.customType ?? "custom-message",
+                    ...(message.details === undefined ? {} : { details: message.details }),
+                  },
+                  error: null,
+                },
+              ],
+        );
+        expect(
+          events.filter(
+            (event) =>
+              event.type === "timeline" &&
+              event.item.type === "assistant_message" &&
+              event.item.text === message.content,
+          ),
+        ).toEqual([]);
+      }
     }
     const liveSubagents = live.filter((event) => event.type === "provider_subagent");
     const firstTimeline = liveSubagents.findIndex((event) => event.event.type === "timeline");

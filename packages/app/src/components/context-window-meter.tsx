@@ -1,74 +1,43 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Text as UiText } from "@/components/ui/text";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { selectActiveApiEndpoint } from "@/api-endpoints";
-import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
-import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
-import type { ProviderUsageView } from "@/provider-usage/types";
-import { useProviderUsage } from "@/provider-usage/use-provider-usage";
-import {
-  formatSessionCost,
-  formatTokenArrows,
-  formatUsageTokensCompact,
-} from "@/usage-stats/format";
-import { isUsageTrackedProvider } from "@/usage-stats/sources";
-import {
-  addRunningTurnElapsed,
-  hasAgentUsage,
-  resolveSessionSpanMs,
-} from "@/usage-stats/turn-usage";
-import {
-  useAgentUsageEvents,
-  useAgentUsageSummary,
-  type AgentUsageScope,
-  type AgentUsageSummaryPayload,
-} from "@/usage-stats/use-agent-usage";
-import { formatDuration } from "@/utils/time";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { isNative } from "@/constants/platform";
+import { useHostReportsUsage } from "@/usage";
+import { formatUsageTokensCompact } from "@/usage-stats/format";
+import { useAgentUsageEvents, type AgentUsageScope } from "@/usage-stats/use-agent-usage";
+import type { Theme } from "@/styles/theme";
+import { ContextWindowDetails } from "./context-window-details";
+import { ContextWindowSheet } from "./context-window-sheet";
 
 interface ContextWindowMeterProps {
+  serverId: string;
+  agentId: string;
   maxTokens: number | null;
   usedTokens: number | null;
   showPercentage?: boolean;
-  serverId?: string;
-  /** The Paseo provider key, e.g. "claude", "gemini", "codex" */
-  provider?: string | null;
-  /** Reserve the meter footprint and show a loading ring while usage is pending. */
-  pending?: boolean;
   /** Optional glyph envelope for icon-toolbar alignment. */
   glyphSize?: number;
-  /** The agent whose session total the popover reports. */
-  agentId?: string | null;
+  /** The Paseo provider key, e.g. "claude", "codex"; names the API endpoint the agent runs on. */
+  provider?: string | null;
   /** `features.usage`; `null` while the host has not said (disconnected, or no `server_info` yet). */
   usageSupport?: boolean | null;
   /** Start of the turn in flight, added to the agent's settled runtime as a stopwatch. */
   runningTurnStartedAt?: Date | null;
   /** `84K / 200K` beside the ring. Phones keep the ring alone. */
   showTokenLabel?: boolean;
-  /** 弹层末尾是否接套餐用量卡片；所在输入框的窄栏可见时由窄栏承担，弹层不再重复。 */
-  showPlanUsage: boolean;
-  popoverLayout: ContextWindowPopoverLayout;
 }
 
-/** 宽屏左右两栏（上下文 | 本会话合计），紧凑布局单栏叠放。 */
-export type ContextWindowPopoverLayout = "columns" | "stacked";
-
 const SVG_SIZE = 14;
+const USAGE_POPOVER_WIDTH = 300;
 const COMPACT_SVG_SIZE = 12;
-const COMPACT_CENTER = COMPACT_SVG_SIZE / 2;
 const COMPACT_RADIUS = 5;
 const STROKE_WIDTH = 2;
 const COMPACT_STROKE_WIDTH = 1.75;
-const COMPACT_CIRCUMFERENCE = 2 * Math.PI * COMPACT_RADIUS;
-// 两栏各 192，加上间距、竖线和内边距约 440。
-const POPOVER_COLUMN_WIDTH = 192;
-const COLUMNS_POPOVER_MAX_WIDTH = 440;
-// 单栏与「用量」页、窄栏悬停卡片的套餐卡片同宽。
-const STACKED_POPOVER_WIDTH = 300;
 
 function isValidMaxTokens(value: number): boolean {
   return Number.isFinite(value) && value > 0;
@@ -89,57 +58,22 @@ function clampPercentage(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
-function getMeterColors(
-  percentage: number,
-  theme: ReturnType<typeof useUnistyles>["theme"],
-): { progress: string; track: string } {
-  const track = theme.colors.surface3;
+function getProgressColor(percentage: number, theme: Theme): string {
   if (percentage > 90) {
-    return { progress: theme.colors.destructive, track };
+    return theme.colors.destructive;
   }
   if (percentage >= 70) {
-    return { progress: theme.colors.palette.amber[500], track };
+    return theme.colors.palette.amber[500];
   }
-  return { progress: theme.colors.foregroundMuted, track };
+  return theme.colors.foregroundMuted;
 }
 
-type SessionTotalState =
-  | { kind: "hostUpgradeRequired" }
-  | { kind: "summary"; summary: AgentUsageSummaryPayload };
-
-/**
- * What this agent has spent across every provider session it ran in. A host
- * that predates `features.usage` says so instead of showing nothing, so the
- * missing numbers read as an old daemon rather than as a zero.
- */
-function resolveSessionTotal(
-  usageSupport: boolean | null,
-  summary: AgentUsageSummaryPayload | undefined,
-  provider: string | null | undefined,
-): SessionTotalState | null {
-  if (usageSupport === null) return null;
-  if (usageSupport === false) return { kind: "hostUpgradeRequired" };
-  // Zero for a CLI the scanner reads means the scan has not reached this agent —
-  // the section shows and marks itself incomplete. Zero for any other provider
-  // means there is nothing to read, and a row of zeroes would read as "free".
-  if (!summary || !(hasAgentUsage(summary) || isUsageTrackedProvider(provider))) return null;
-  return { kind: "summary", summary };
-}
-
-interface MeterGeometryInput {
-  showPercentage: boolean;
-  showTokenLabel: boolean;
-  glyphSize?: number;
-}
-
-function getMeterGeometry({ showPercentage, showTokenLabel, glyphSize }: MeterGeometryInput) {
+function getMeterGeometry(showPercentage: boolean, glyphSize?: number) {
   if (showPercentage) {
     return {
       svgSize: COMPACT_SVG_SIZE,
-      center: COMPACT_CENTER,
       radius: COMPACT_RADIUS,
       strokeWidth: COMPACT_STROKE_WIDTH,
-      circumference: COMPACT_CIRCUMFERENCE,
       containerStyle: styles.containerWithLabel,
     };
   }
@@ -147,404 +81,231 @@ function getMeterGeometry({ showPercentage, showTokenLabel, glyphSize }: MeterGe
   const resolvedStrokeWidth = glyphSize ? 2 : STROKE_WIDTH;
   return {
     svgSize: resolvedSize,
-    center: resolvedSize / 2,
     radius: (resolvedSize - resolvedStrokeWidth) / 2,
     strokeWidth: resolvedStrokeWidth,
-    circumference: Math.PI * (resolvedSize - resolvedStrokeWidth),
-    containerStyle: showTokenLabel ? styles.containerWithLabel : styles.container,
+    containerStyle: styles.container,
   };
 }
 
+// Wrap the whole SVG: withUnistyles adds a div on web, which cannot sit inside an SVG.
+const ContextWindowRing = withUnistyles(function ContextWindowRing({
+  size,
+  radius,
+  strokeWidth,
+  percentage,
+  trackColor,
+  progressColor,
+}: {
+  size: number;
+  radius: number;
+  strokeWidth: number;
+  percentage: number | null;
+  trackColor: string;
+  progressColor: string;
+}) {
+  const center = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Circle
+        cx={center}
+        cy={center}
+        r={radius}
+        fill="none"
+        stroke={trackColor}
+        strokeWidth={strokeWidth}
+      />
+      {percentage !== null ? (
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke={progressColor}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference - (clampPercentage(percentage) / 100) * circumference}
+          // SVG strokes start at three o'clock; the ring reads clockwise from twelve.
+          transform={`rotate(-90 ${center} ${center})`}
+        />
+      ) : null}
+    </Svg>
+  );
+});
+
 export function ContextWindowMeter({
+  serverId,
+  agentId,
   maxTokens,
   usedTokens,
   showPercentage = false,
-  serverId,
-  provider,
-  pending = false,
   glyphSize,
-  agentId,
+  provider = null,
   usageSupport = null,
   runningTurnStartedAt = null,
   showTokenLabel = false,
-  showPlanUsage,
-  popoverLayout,
 }: ContextWindowMeterProps) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
-  const isPlanUsageShown = isTooltipOpen && showPlanUsage;
-  const { view: providerUsageView, refresh: refreshProviderUsage } = useProviderUsage(
-    serverId ?? null,
-    { enabled: isPlanUsageShown },
-  );
-  const { entries: providerEntries } = useProvidersSnapshot(serverId ?? null, {
-    enabled: isPlanUsageShown,
-  });
-  const activeApiEndpoint = selectActiveApiEndpoint(providerEntries, provider);
-  const usageScope = useMemo<AgentUsageScope | null>(
-    () => (usageSupport === true && serverId && agentId ? { serverId, agentId } : null),
-    [agentId, serverId, usageSupport],
-  );
-  // The meter owns its own refetch: the stream view's subscription covers the
-  // turn footers, and the composer is its sibling, not its descendant.
-  useAgentUsageEvents(usageScope);
-  const { payload: agentUsage } = useAgentUsageSummary(usageScope, { enabled: isTooltipOpen });
+  const { width } = useWindowDimensions();
+  // Usage cards need a wider popover; without them it keeps the plain tooltip shape.
+  const showsUsage = useHostReportsUsage(serverId);
+  const popoverWidth = Math.min(USAGE_POPOVER_WIDTH, width - 24);
+  // Compact screens open the details in a sheet, which can hold a pressable Refresh.
+  const isCompact = useIsCompactFormFactor();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const openSheet = useCallback(() => setIsSheetOpen(true), []);
+  const closeSheet = useCallback(() => setIsSheetOpen(false), []);
   const percentage =
     maxTokens !== null && usedTokens !== null ? getUsagePercentage(maxTokens, usedTokens) : null;
-  const handleTooltipOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      setIsTooltipOpen(nextOpen);
-      if (nextOpen && showPlanUsage) {
-        void refreshProviderUsage().catch(() => {});
-      }
-    },
-    [refreshProviderUsage, showPlanUsage],
+  const geometry = getMeterGeometry(showPercentage, glyphSize);
+  // Osuna 的本会话合计：圆环常驻，由它订阅用量事件刷新；详情只在打开时读汇总。
+  // The meter owns its own refetch: the stream view's subscription covers the
+  // turn footers, and the composer is its sibling, not its descendant.
+  const usageScope = useMemo<AgentUsageScope | null>(
+    () => (usageSupport === true ? { serverId, agentId } : null),
+    [agentId, serverId, usageSupport],
+  );
+  useAgentUsageEvents(usageScope);
+
+  const context = useMemo(
+    () =>
+      percentage !== null && maxTokens !== null && usedTokens !== null
+        ? { percentage: Math.round(percentage), maxTokens, usedTokens }
+        : null,
+    [percentage, maxTokens, usedTokens],
+  );
+  const meterColors = useCallback(
+    (theme: Theme) => ({
+      progressColor: getProgressColor(percentage ?? 0, theme),
+      trackColor: theme.colors.surface3,
+    }),
+    [percentage],
+  );
+  const hasTokenLabel = showTokenLabel && !showPercentage && context !== null;
+  const containerStyle = hasTokenLabel ? styles.containerWithLabel : geometry.containerStyle;
+  const ring = (
+    <ContextWindowRing
+      size={geometry.svgSize}
+      radius={geometry.radius}
+      strokeWidth={geometry.strokeWidth}
+      percentage={percentage}
+      uniProps={meterColors}
+    />
+  );
+  const percentageLabel =
+    showPercentage && context ? (
+      <Text style={styles.percentageLabel}>{`${context.percentage}%`}</Text>
+    ) : null;
+  const tokenLabel =
+    hasTokenLabel && context ? (
+      <Text style={styles.tokenLabel} testID="context-window-token-label">
+        {`${formatUsageTokensCompact(context.usedTokens)} / ${formatUsageTokensCompact(context.maxTokens)}`}
+      </Text>
+    ) : null;
+  const accessibilityLabel = context
+    ? t("contextWindow.accessibility", { percentage: context.percentage })
+    : t("contextWindow.accessibilityNoData");
+  const details = (refreshable: boolean, showTitle: boolean) => (
+    <ContextWindowDetails
+      serverId={serverId}
+      agentId={agentId}
+      context={context}
+      provider={provider}
+      usageSupport={usageSupport}
+      runningTurnStartedAt={runningTurnStartedAt}
+      showTitle={showTitle}
+      refreshable={refreshable}
+    />
   );
 
-  const geometry = getMeterGeometry({ showPercentage, showTokenLabel, glyphSize });
-
-  // No usage yet: reserve the footprint with a track-only ring while a session is
-  // active so the real ring fades in without shifting siblings. Render nothing when
-  // no usage is expected.
-  if (percentage === null || maxTokens === null || usedTokens === null) {
-    if (!pending) {
-      return null;
-    }
+  if (isCompact) {
     return (
-      <PendingContextWindowMeter
-        geometry={geometry}
-        trackColor={theme.colors.surface3}
-        showLabel={showPercentage || showTokenLabel}
-      />
-    );
-  }
-
-  const clampedPercentage = clampPercentage(percentage);
-  const roundedPercentage = Math.round(percentage);
-  const { svgSize, center, radius, strokeWidth, circumference, containerStyle } = geometry;
-  const dashOffset = circumference - (clampedPercentage / 100) * circumference;
-  const colors = getMeterColors(clampedPercentage, theme);
-  const formattedUsedTokens = formatUsageTokensCompact(usedTokens);
-  const formattedMaxTokens = formatUsageTokensCompact(maxTokens);
-  const sessionTotal = resolveSessionTotal(usageSupport, agentUsage, provider);
-
-  return (
-    <Tooltip
-      open={isTooltipOpen}
-      onOpenChange={handleTooltipOpenChange}
-      delayDuration={0}
-      enabledOnDesktop
-      enabledOnMobile
-    >
-      <TooltipTrigger asChild triggerRefProp="ref">
+      <>
         <Pressable
           style={containerStyle}
           testID="context-window-meter"
-          accessibilityRole="image"
-          accessibilityLabel={t("contextWindow.accessibility", {
-            percentage: roundedPercentage,
-            used: formattedUsedTokens,
-            max: formattedMaxTokens,
-          })}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          onPress={openSheet}
         >
-          {({ hovered }) => (
-            <>
-              <Svg
-                width={svgSize}
-                height={svgSize}
-                viewBox={`0 0 ${svgSize} ${svgSize}`}
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-              >
-                <Circle
-                  cx={center}
-                  cy={center}
-                  r={radius}
-                  fill="none"
-                  stroke={colors.track}
-                  strokeWidth={strokeWidth}
-                />
-                <Circle
-                  cx={center}
-                  cy={center}
-                  r={radius}
-                  fill="none"
-                  stroke={colors.progress}
-                  strokeWidth={strokeWidth}
-                  strokeLinecap="round"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={dashOffset}
-                  // SVG strokes start at three o'clock; the ring reads clockwise from twelve.
-                  transform={`rotate(-90 ${center} ${center})`}
-                />
-              </Svg>
-              {showPercentage ? (
-                <Text style={styles.percentageLabel}>{`${roundedPercentage}%`}</Text>
-              ) : null}
-              {showTokenLabel && !showPercentage ? (
-                <Text
-                  style={[styles.tokenLabel, hovered ? styles.tokenLabelHovered : null]}
-                  testID="context-window-token-label"
-                >{`${formattedUsedTokens} / ${formattedMaxTokens}`}</Text>
-              ) : null}
-            </>
-          )}
+          {ring}
+          {percentageLabel}
+          {tokenLabel}
         </Pressable>
-      </TooltipTrigger>
-      <ContextWindowPopover
-        layout={popoverLayout}
-        roundedPercentage={roundedPercentage}
-        clampedPercentage={clampedPercentage}
-        progressColor={colors.progress}
-        usedTokensLabel={formattedUsedTokens}
-        maxTokensLabel={formattedMaxTokens}
-        sessionTotal={sessionTotal}
-        runningTurnStartedAt={runningTurnStartedAt}
-        showPlanUsage={showPlanUsage}
-        providerUsageView={providerUsageView}
-        provider={provider}
-        activeApiEndpoint={activeApiEndpoint}
-      />
-    </Tooltip>
-  );
-}
-
-interface ContextWindowPopoverProps {
-  layout: ContextWindowPopoverLayout;
-  roundedPercentage: number;
-  clampedPercentage: number;
-  progressColor: string;
-  usedTokensLabel: string;
-  maxTokensLabel: string;
-  sessionTotal: SessionTotalState | null;
-  runningTurnStartedAt: Date | null;
-  showPlanUsage: boolean;
-  providerUsageView: ProviderUsageView;
-  provider: string | null | undefined;
-  activeApiEndpoint: ApiEndpointRef | null;
-}
-
-/**
- * 上下文圆环的弹层：上下文窗口和本会话合计，宽屏左右两栏、紧凑布局单栏叠放；
- * 没有窄栏的输入框在末尾接套餐用量卡片。
- */
-function ContextWindowPopover({
-  layout,
-  roundedPercentage,
-  clampedPercentage,
-  progressColor,
-  usedTokensLabel,
-  maxTokensLabel,
-  sessionTotal,
-  runningTurnStartedAt,
-  showPlanUsage,
-  providerUsageView,
-  provider,
-  activeApiEndpoint,
-}: ContextWindowPopoverProps) {
-  const { t } = useTranslation();
-  const isColumns = layout === "columns";
-  // 宽屏但没有窄栏时，套餐卡片接在两栏下面。
-  const hasPlanUsageBelowColumns = isColumns && showPlanUsage;
-  return (
-    <TooltipContent
-      side="top"
-      align="end"
-      offset={8}
-      maxWidth={isColumns ? COLUMNS_POPOVER_MAX_WIDTH : STACKED_POPOVER_WIDTH}
-      style={[
-        styles.popover,
-        isColumns ? null : styles.popoverStacked,
-        hasPlanUsageBelowColumns ? styles.popoverColumnsWithPlanUsage : null,
-      ]}
-      testID="context-window-popover"
-    >
-      <View style={isColumns ? styles.popoverColumns : styles.popoverStack}>
-        <View style={isColumns ? styles.popoverColumn : null}>
-          <View style={styles.popoverSection} testID="context-window-context">
-            <UiText variant="micro" weight="medium" color="foregroundExtraMuted">
-              {t("contextWindow.title")}
-            </UiText>
-            <View style={styles.heroRow}>
-              <UiText variant="display" style={styles.number}>
-                {`${roundedPercentage}%`}
-              </UiText>
-              <UiText variant="label" color="foregroundMuted">
-                {t("contextWindow.usedLabel")}
-              </UiText>
-            </View>
-            <View style={styles.contextTrack}>
-              <View
-                style={[
-                  styles.contextFill,
-                  { width: `${clampedPercentage}%`, backgroundColor: progressColor },
-                ]}
-              />
-            </View>
-            <PopoverKeyValueRow label={t("contextWindow.tokens")}>
-              {`${usedTokensLabel} / ${maxTokensLabel}`}
-            </PopoverKeyValueRow>
-          </View>
-        </View>
-        {sessionTotal ? (
-          <>
-            <View style={isColumns ? styles.columnDivider : styles.stackDivider} />
-            <View style={isColumns ? styles.popoverColumn : null}>
-              <SessionTotalSection
-                state={sessionTotal}
-                runningTurnStartedAt={runningTurnStartedAt}
-              />
-            </View>
-          </>
-        ) : null}
-      </View>
-      {showPlanUsage ? (
-        <ProviderUsageTooltipSection
-          view={providerUsageView}
-          activeProviderId={provider}
-          activeApiEndpoint={activeApiEndpoint}
-        />
-      ) : null}
-    </TooltipContent>
-  );
-}
-
-/** A track-only ring holding the footprint until the first usage report lands. */
-function PendingContextWindowMeter({
-  geometry,
-  trackColor,
-  showLabel,
-}: {
-  geometry: ReturnType<typeof getMeterGeometry>;
-  trackColor: string;
-  showLabel: boolean;
-}) {
-  return (
-    <View style={geometry.containerStyle}>
-      <Svg
-        width={geometry.svgSize}
-        height={geometry.svgSize}
-        viewBox={`0 0 ${geometry.svgSize} ${geometry.svgSize}`}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
-        <Circle
-          cx={geometry.center}
-          cy={geometry.center}
-          r={geometry.radius}
-          fill="none"
-          stroke={trackColor}
-          strokeWidth={geometry.strokeWidth}
-        />
-      </Svg>
-      {showLabel ? <View style={styles.skeletonLabel} /> : null}
-    </View>
-  );
-}
-
-function SessionTotalSection({
-  state,
-  runningTurnStartedAt,
-}: {
-  state: SessionTotalState;
-  runningTurnStartedAt: Date | null;
-}) {
-  const { t } = useTranslation();
-  if (state.kind === "hostUpgradeRequired") {
-    return (
-      <View style={styles.popoverSection} testID="context-window-session-total">
-        <UiText variant="micro" weight="medium" color="foregroundExtraMuted">
-          {t("contextWindow.sessionTotal.title")}
-        </UiText>
-        <UiText variant="caption" color="foregroundMuted">
-          {t("contextWindow.sessionTotal.hostUpgradeRequired")}
-        </UiText>
-      </View>
+        <ContextWindowSheet open={isSheetOpen} onClose={closeSheet}>
+          {details(true, false)}
+        </ContextWindowSheet>
+      </>
     );
   }
 
-  const { summary } = state;
-  const spanMs = resolveSessionSpanMs(summary);
-  const turnsValue = runningTurnStartedAt
-    ? t("contextWindow.sessionTotal.turnsRunning", { turns: summary.turns })
-    : String(summary.turns);
-  return (
-    <View style={styles.popoverSection} testID="context-window-session-total">
-      <View style={styles.sessionTotalHeader}>
-        <UiText variant="micro" weight="medium" color="foregroundExtraMuted">
-          {t("contextWindow.sessionTotal.title")}
-        </UiText>
-        {summary.complete ? null : (
-          <UiText variant="micro" color="statusWarning">
-            {t("contextWindow.sessionTotal.incomplete")}
-          </UiText>
-        )}
-      </View>
-      <PopoverKeyValueRow label={t("contextWindow.sessionTotal.tokens")}>
-        {formatTokenArrows(summary.totals.input, summary.totals.output)}
-      </PopoverKeyValueRow>
-      <PopoverKeyValueRow label={t("contextWindow.sessionTotal.estimatedCost")}>
-        {formatSessionCost(summary.estimatedCost)}
-      </PopoverKeyValueRow>
-      <PopoverKeyValueRow label={t("contextWindow.sessionTotal.turns")}>
-        {turnsValue}
-      </PopoverKeyValueRow>
-      <PopoverKeyValueRow label={t("contextWindow.sessionTotal.agentRuntime")}>
-        <AgentRuntimeValue
-          durationMs={summary.durationMs}
-          runningTurnStartedAt={runningTurnStartedAt}
-        />
-      </PopoverKeyValueRow>
-      {spanMs === null ? null : (
-        <PopoverKeyValueRow label={t("contextWindow.sessionTotal.sessionSpan")}>
-          {formatDuration(spanMs)}
-        </PopoverKeyValueRow>
-      )}
-    </View>
-  );
-}
+  const popoverStyle = showsUsage
+    ? [styles.usagePopover, { width: popoverWidth }]
+    : styles.plainPopover;
 
-/** 文字值按等宽数字排；组件值（如跳动的运行时长）自己负责排版。 */
-function PopoverKeyValueRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <View style={styles.keyValueRow}>
-      <UiText variant="caption" color="foregroundMuted" numberOfLines={1} style={styles.keyLabel}>
-        {label}
-      </UiText>
-      {typeof children === "string" ? (
-        <UiText variant="caption" numberOfLines={1} style={styles.number}>
-          {children}
-        </UiText>
-      ) : (
-        children
-      )}
-    </View>
-  );
-}
-
-/** Ticks only while a turn is in flight; a settled agent renders one string. */
-function AgentRuntimeValue({
-  durationMs,
-  runningTurnStartedAt,
-}: {
-  durationMs: number;
-  runningTurnStartedAt: Date | null;
-}) {
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const runningStartedAtMs = runningTurnStartedAt ? runningTurnStartedAt.getTime() : null;
-
-  useEffect(() => {
-    if (runningStartedAtMs === null) return;
-    setNowMs(Date.now());
-    const handle = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(handle);
-  }, [runningStartedAtMs]);
+  // Native wide screens have no hover, so the details open in a tooltip on press. The tooltip
+  // takes no presses, so its usage cards have no Refresh.
+  if (isNative) {
+    return (
+      <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile>
+        <TooltipTrigger asChild triggerRefProp="ref">
+          <Pressable
+            style={containerStyle}
+            testID="context-window-meter"
+            accessibilityRole="image"
+            accessibilityLabel={accessibilityLabel}
+          >
+            {ring}
+            {percentageLabel}
+            {tokenLabel}
+          </Pressable>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          align="center"
+          offset={8}
+          maxWidth={showsUsage ? popoverWidth : undefined}
+          style={popoverStyle}
+          testID="context-window-meter-tooltip"
+        >
+          {details(false, true)}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
-    <UiText variant="caption" numberOfLines={1} style={styles.number}>
-      {formatDuration(addRunningTurnElapsed(durationMs, runningStartedAtMs, nowMs))}
-    </UiText>
+    <HoverCard>
+      <HoverCardTrigger focusable accessibilityLabel={accessibilityLabel}>
+        <View
+          style={containerStyle}
+          testID="context-window-meter"
+          accessibilityRole="image"
+          accessibilityLabel={accessibilityLabel}
+        >
+          {ring}
+          {percentageLabel}
+          {tokenLabel}
+        </View>
+      </HoverCardTrigger>
+      <HoverCardContent
+        placement="top"
+        offset={8}
+        role="dialog"
+        accessibilityLabel={t("contextWindow.title")}
+        testID="context-window-details"
+        style={popoverStyle}
+      >
+        {details(true, true)}
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
@@ -575,81 +336,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontVariant: ["tabular-nums"],
   },
-  tokenLabelHovered: {
-    color: theme.colors.foreground,
-  },
-  skeletonLabel: {
-    width: 22,
-    height: theme.fontSize.base,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surface3,
-  },
-  popover: {
-    paddingVertical: theme.spacing[3],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.radius.lg,
-  },
-  popoverStacked: {
-    width: STACKED_POPOVER_WIDTH,
-  },
-  // 宽屏但没有窄栏时套餐卡片接在两栏下面，卡片的表格需要这么宽。
-  popoverColumnsWithPlanUsage: {
-    minWidth: STACKED_POPOVER_WIDTH,
-  },
-  popoverColumns: {
-    flexDirection: "row",
-    gap: theme.spacing[3],
-  },
-  popoverStack: {
-    gap: theme.spacing[3],
-  },
-  popoverColumn: {
-    width: POPOVER_COLUMN_WIDTH,
-  },
-  popoverSection: {
-    gap: theme.spacing[1.5],
-  },
-  // 浮层描边用的就是 borderAccent；`border` 与浮层底色相同，画出来看不见。
-  columnDivider: {
-    width: theme.borderWidth[1],
-    backgroundColor: theme.colors.borderAccent,
-  },
-  stackDivider: {
-    height: theme.borderWidth[1],
-    backgroundColor: theme.colors.borderAccent,
-    // 抵消浮层的左右内边距，分隔线横贯整个弹层。
-    marginHorizontal: -theme.spacing[3],
-  },
-  heroRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: theme.spacing[1.5],
-  },
-  contextTrack: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.colors.surface3,
-    overflow: "hidden",
-  },
-  contextFill: {
-    height: 4,
-    borderRadius: 2,
-  },
-  sessionTotalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1.5],
-  },
-  keyValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing[3],
-  },
-  keyLabel: {
-    flexShrink: 1,
-  },
-  number: {
-    fontVariant: ["tabular-nums"],
-  },
+  // Plain details use a small inset; account usage cards have their own content density.
+  plainPopover: { paddingVertical: theme.spacing[1], paddingHorizontal: theme.spacing[2] },
+  usagePopover: { padding: theme.spacing[3], gap: theme.spacing[3] },
 }));
