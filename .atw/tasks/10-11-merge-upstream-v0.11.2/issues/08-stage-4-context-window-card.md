@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 悬浮卡里有：上下文占用百分比与 token 数、本智能体的 token（输入与输出）、估算花费、用时、当前接口。Osuna 原提示里的每一项都在，清单与对照记在 `## Comments` 下。
 - [x] 进行中的轮次，用时在走表；轮次结束后停在结算值。
