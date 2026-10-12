@@ -1970,6 +1970,12 @@ export const zhCN: TranslationResources = {
       helper: "连接到远程主机上运行的 Osuna 守护进程。",
       fields: {
         target: "SSH 主机",
+        password: "守护进程密码",
+        optional: "可选",
+      },
+      passwordVisibility: {
+        show: "显示密码",
+        hide: "隐藏密码",
       },
       actions: {
         cancel: "取消",
