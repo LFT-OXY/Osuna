@@ -21,12 +21,16 @@ export const PRESENTATION_ORDER = [
 export type ChecksOutcome = "actionRequired" | "failure" | "pending" | "success" | "none";
 
 const COPY = "workspace.git.pr.checksOverview";
-// 计数短语之间的分隔符随语言变（中文是全角逗号），上游写死了 ", "。
+// Osuna：计数短语之间的分隔符随语言变（中文是全角逗号），标题栏的无障碍名称也走翻译模板；
+// 上游把这两处写死成 ", " 与 ". "。
 const SEPARATOR_KEY = "workspace.git.pr.checks.countSeparator";
+const ACCESSIBILITY_LABEL_KEY = "workspace.git.pr.checks.accessibilityLabel";
 
 export interface ChecksCountPart {
   status: CheckPresentation;
   count: number;
+  /** 这一段前面的分隔符：第一段为空，其后是随语言变的逗号。 */
+  lead: string;
   /** e.g. "2 failing" */
   text: string;
 }
@@ -50,8 +54,8 @@ export interface ChecksSummary {
    */
   detailLead: string;
   detailTrail: string;
-  /** 两个计数短语之间的分隔符，英文是 ", "。 */
-  separator: string;
+  /** 标题栏按钮的无障碍名称：标题加明细行，没有检查时只有标题。 */
+  accessibilityLabel: string;
   /** The whole line: "2 failing, 4 in progress, 1 successful checks". Empty with no checks. */
   detail: string;
   total: number;
@@ -67,6 +71,7 @@ export interface ChecksSummary {
 export function summarizeChecks(checks: readonly PrPaneCheck[], t: TFunction): ChecksSummary {
   const groups: ChecksGroup[] = [];
   const parts: ChecksCountPart[] = [];
+  const separator = t(SEPARATOR_KEY);
 
   for (const status of PRESENTATION_ORDER) {
     const matching = checks.filter((check) => classifyCheck(check) === status);
@@ -83,22 +88,26 @@ export function summarizeChecks(checks: readonly PrPaneCheck[], t: TFunction): C
     parts.push({
       status,
       count: matching.length,
+      lead: parts.length === 0 ? "" : separator,
       text: t(`${COPY}.count.${status}`, { count: matching.length }),
     });
   }
 
   const outcome = selectOutcome(checks);
   const { lead, trail } = detailFrame(checks.length, t);
-  const separator = t(SEPARATOR_KEY);
+  const headline = t(`${COPY}.headline.${outcome}`);
+  const detail =
+    parts.length === 0
+      ? ""
+      : `${lead}${parts.map((part) => `${part.lead}${part.text}`).join("")}${trail}`;
   return {
     outcome,
-    headline: t(`${COPY}.headline.${outcome}`),
+    headline,
     parts,
     detailLead: lead,
     detailTrail: trail,
-    separator,
-    detail:
-      parts.length === 0 ? "" : `${lead}${parts.map((part) => part.text).join(separator)}${trail}`,
+    accessibilityLabel: detail ? t(ACCESSIBILITY_LABEL_KEY, { headline, detail }) : headline,
+    detail,
     total: checks.length,
     groups,
   };

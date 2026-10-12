@@ -17,6 +17,7 @@ describe("summarizeChecks", () => {
     expect(summary.headline).toBe("No checks");
     expect(summary.detail).toBe("");
     expect(summary.parts).toEqual([]);
+    expect(summary.accessibilityLabel).toBe("No checks");
     expect(summary.total).toBe(0);
     expect(summary.groups).toEqual([]);
   });
@@ -31,10 +32,13 @@ describe("summarizeChecks", () => {
     expect(summary.headline).toBe("Some checks were not successful");
     expect(summary.detail).toBe("1 failing, 1 in progress, 1 successful checks");
     expect(summary.parts).toEqual([
-      { status: "failure", count: 1, text: "1 failing" },
-      { status: "pending", count: 1, text: "1 in progress" },
-      { status: "success", count: 1, text: "1 successful" },
+      { status: "failure", count: 1, lead: "", text: "1 failing" },
+      { status: "pending", count: 1, lead: ", ", text: "1 in progress" },
+      { status: "success", count: 1, lead: ", ", text: "1 successful" },
     ]);
+    expect(summary.accessibilityLabel).toBe(
+      "Some checks were not successful. 1 failing, 1 in progress, 1 successful checks",
+    );
     expect(summary.groups.map((group) => group.status)).toEqual(["failure", "pending", "success"]);
   });
 
@@ -56,8 +60,8 @@ describe("summarizeChecks", () => {
     expect(summary.headline).toBe("All checks have passed");
     expect(summary.detail).toBe("1 successful, 1 skipped checks");
     expect(summary.parts).toEqual([
-      { status: "success", count: 1, text: "1 successful" },
-      { status: "ignored", count: 1, text: "1 skipped" },
+      { status: "success", count: 1, lead: "", text: "1 successful" },
+      { status: "ignored", count: 1, lead: ", ", text: "1 skipped" },
     ]);
   });
 
@@ -130,8 +134,12 @@ describe("summarizeChecks", () => {
         i18n.t,
       );
 
-      expect(summary.separator).toBe("，");
+      expect(summary.parts.map((part) => `${part.lead}${part.text}`)).toEqual([
+        "2 项失败",
+        "，1 项成功",
+      ]);
       expect(summary.detail).toBe("2 项失败，1 项成功");
+      expect(summary.accessibilityLabel).toBe("部分检查未通过。2 项失败，1 项成功");
       expect(summary.groups.map((group) => group.label)).toEqual(["2 项失败", "1 项成功"]);
     } finally {
       await i18n.changeLanguage("en");

@@ -475,9 +475,14 @@ describe("translation resources", () => {
   });
 
   it("separates French interpolation placeholders from neighboring words", () => {
-    // Osuna：版本号前的 "v" 紧贴占位符是有意的（v{{version}} 显示成 v1.2.3），不算粘连。
-    const glued = Object.entries(flattenStrings(fr)).filter(([, value]) =>
-      /\p{L}\{\{|\}\}\p{L}{2,}/u.test(value.replace(/(?<!\p{L})v\{\{/gu, "{{")),
+    // Osuna：已装版本与一键升级的这三个键把版本号前缀 v 紧贴在占位符前（显示成 v1.2.3），是有意的。
+    const versionPrefixed = new Set([
+      "settings.providers.version.value",
+      "settings.providers.version.update",
+      "settings.providers.upgrade.actionTo",
+    ]);
+    const glued = Object.entries(flattenStrings(fr)).filter(
+      ([key, value]) => !versionPrefixed.has(key) && /\p{L}\{\{|\}\}\p{L}{2,}/u.test(value),
     );
     expect(glued).toEqual([]);
   });

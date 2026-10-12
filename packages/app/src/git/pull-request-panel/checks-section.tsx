@@ -82,14 +82,7 @@ export function ChecksSection({
         onPress={onToggle}
         style={headerPressableStyle}
         accessibilityRole="button"
-        accessibilityLabel={
-          summary.detail
-            ? t("workspace.git.pr.checks.accessibilityLabel", {
-                headline: summary.headline,
-                detail: summary.detail,
-              })
-            : summary.headline
-        }
+        accessibilityLabel={summary.accessibilityLabel}
       >
         <ChecksRing summary={summary} size={ICON_SIZE.lg} />
         <View style={styles.headerText}>
@@ -99,9 +92,9 @@ export function ChecksSection({
           {summary.parts.length > 0 ? (
             <Text style={styles.detail} numberOfLines={1} testID="pr-pane-check-summary">
               {summary.detailLead}
-              {summary.parts.map((part, index) => (
+              {summary.parts.map((part) => (
                 <Text key={part.status}>
-                  {index > 0 ? summary.separator : ""}
+                  {part.lead}
                   <Text testID={PART_TEST_ID[part.status]}>{part.text}</Text>
                 </Text>
               ))}

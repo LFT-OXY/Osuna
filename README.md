@@ -40,6 +40,8 @@ Run agents in parallel on your own machines. Ship from your phone or your desk.
 Plugins run on the daemon and show up in every client you connect, with the same UI on desktop, web,
 iOS, and Android. Write a plugin once and it is on your phone.
 
+Install from the registry with `paseo plugin add owner/slug`, or from Git or a local directory.
+
 See the [plugin docs](docs/plugins.md). Plugins run with access to your daemon machine and inside
 connected clients; install only code you trust.
 
